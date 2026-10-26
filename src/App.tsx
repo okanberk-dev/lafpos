@@ -86,8 +86,14 @@ function Authed() {
 
   if (REMOTE && !REMOTE_PATHS.includes(location.pathname) && !location.pathname.startsWith('/adisyon/')) return <Navigate to="/patron" replace />;
 
+  const demo = REMOTE && sessionStorage.getItem('lafpos.demo') === '1';
   return (
     <AppShell>
+      {demo && (
+        <div role="note" className="mb-3 rounded-xl border border-[var(--admin-warning)]/30 bg-[var(--admin-warning-soft)] px-3 py-2 text-sm text-[var(--admin-warning)]">
+          Demo verileri: kafedeki kasa bağlanınca gerçek veriler gelir ve giriş parolası devreye girer
+        </div>
+      )}
       <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/" element={<Navigate to={homePath(can)} replace />} />

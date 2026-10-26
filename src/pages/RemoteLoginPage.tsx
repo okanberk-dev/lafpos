@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, CircleAlert } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { LafMark } from '@/components/LafMark';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +12,8 @@ interface Setup {
   password: boolean;
   redis: boolean;
   snapshotAt: number | null;
+  /** Kafe bağlanmadı: örnek gün parolasız açılır */
+  demo?: boolean;
 }
 
 /** Kurulum adımları: eksik olan varsa giriş yerine ne yapılacağı görünür (parolayı denemeye gerek kalmaz) */
@@ -47,6 +49,23 @@ export function RemoteLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const setup = useQuery({ queryKey: ['uzaktan', 'kurulum'], queryFn: () => get<Setup>('/uzaktan/kurulum'), retry: false });
   const ready = !!setup.data && setup.data.secret && setup.data.password && setup.data.redis;
+  const demoTried = useRef(false);
+
+  // Demo: parola sorulmaz, örnek güne doğrudan girilir
+  useEffect(() => {
+    if (!setup.data?.demo || demoTried.current) return;
+    demoTried.current = true;
+    void (async () => {
+      try {
+        const res = await post<{ token: string }>('/uzaktan/giris', {});
+        sessionStorage.setItem('lafpos.demo', '1');
+        setToken(res.token);
+        await init();
+      } catch (err) {
+        setError(errorMessage(err));
+      }
+    })();
+  }, [setup.data, init]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +74,7 @@ export function RemoteLoginPage() {
     setError(null);
     try {
       const res = await post<{ token: string }>('/uzaktan/giris', { parola: password });
+      sessionStorage.removeItem('lafpos.demo');
       setToken(res.token);
       await init();
     } catch (err) {
