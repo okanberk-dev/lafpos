@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { percentOf, tl } from '@shared/money';
-import { amountForItems, lineGross } from '@shared/order-calc';
+import { amountForItems, lineGross, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, can, need, needDirect } from '../lib/auth';
@@ -696,6 +696,41 @@ export interface PaymentInput {
   items?: { itemId: string; qty: number }[] | null;
   customerId?: string | null;
   note?: string | null;
+  /** Paylaşımlı hesapta sıradaki payı al: tutarı sunucu hesaplar (splitState) */
+  share?: boolean;
+}
+
+/** Ödenmiş paylar (iptal edilmemiş, payı olan ödemeler) */
+function sharePayments(t: Tx | DB, orderId: string) {
+  return orderPayments(t, orderId).filter((p) => !p.refundedAt && p.shareNo != null);
+}
+
+/**
+ * Hesabı kişilere eşit böler (paylaşımlı hesap) ya da bölmeyi kaldırır. Kalan tutar ödenmemiş paylara eşit
+ * dağılır; ödenmiş pay sayısından aza indirilemez.
+ */
+export function setSplit(t: Tx, actor: Actor, fx: Effects, orderId: string, people: number | null): OrderRow {
+  needDirect(actor, 'odeme.al');
+  const o = loadOrder(t, orderId);
+  assertOpen(o);
+  assertPosOrder(o);
+  if (people != null) {
+    const n = Math.trunc(people);
+    if (n < 2 || n > 30) throw bad('Kişi sayısı 2 ile 30 arasında olmalı', 'split_people');
+    const paid = sharePayments(t, orderId).length;
+    if (n <= paid) throw bad(`${paid} pay ödendi; kişi sayısı en az ${paid + 1} olmalı`, 'split_people');
+    people = n;
+  }
+  t.update(schema.orders).set({ splitPeople: people, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` }).where(eq(schema.orders.id, orderId)).run();
+  fx.audit(t, {
+    userId: actor.user.id,
+    action: 'order.split',
+    orderId,
+    message: people ? `#${o.no} hesap ${people} kişiye bölündü` : `#${o.no} hesap paylaşımı kaldırıldı`,
+  });
+  const updated = loadOrder(t, orderId);
+  orderEvents(fx, updated, actor.user.id, 'order.split');
+  return updated;
 }
 
 /** Aynı kalem birden çok kez seçildiyse adetleri birleştirir (kalem bazlı ödeme ve cihaz sepeti) */
@@ -775,6 +810,20 @@ export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, in
   let selection: { itemId: string; qty: number }[] | null = null;
   // Aynı kalem iki kez gönderilirse adetler birleşir: iki kez ücret alınmaz
   const wanted = mergeSelection(input.items ?? []);
+  let share: { no: number; of: number } | null = null;
+  if (input.share) {
+    if (!o.splitPeople) throw bad('Hesap paylaşılmadı; önce kişi sayısını seçin', 'split_off');
+    if (wanted.length) throw bad('Pay ödemesinde kalem seçilmez', 'split_items');
+    const paid = sharePayments(t, orderId);
+    const state = splitState(o.splitPeople, paid.length, remaining);
+    if (!state.shares.length) throw conflict('Bütün paylar ödendi; kalan tutarı "Tutar" ile alın', 'split_done');
+    // Pay tutarını sunucu belirler; numara ilk boş pay (iptal edilen payın numarası yeniden kullanılır)
+    amount = state.shares[0];
+    const used = new Set(paid.map((p) => p.shareNo));
+    let no = 1;
+    while (used.has(no)) no++;
+    share = { no, of: o.splitPeople };
+  }
   if (wanted.length) {
     const lines = items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty }));
     const sel = wanted.map((s) => ({ lineId: s.itemId, qty: s.qty }));
@@ -836,6 +885,8 @@ export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, in
       items: selection,
       customerId,
       note: input.note?.trim() || null,
+      shareNo: share?.no ?? null,
+      shareOf: share?.of ?? null,
       userId: actor.user.id,
       createdAt: Date.now(),
     })

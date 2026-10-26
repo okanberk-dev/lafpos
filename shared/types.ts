@@ -1,4 +1,4 @@
-import type { OrderTotals } from './order-calc';
+import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
@@ -258,6 +258,9 @@ export interface PaymentDTO {
   createdAt: number;
   refundedAt: number | null;
   refundReason: string | null;
+  /** Paylaşımlı hesapta pay: 2/4 */
+  shareNo: number | null;
+  shareOf: number | null;
 }
 
 export interface CustomerLite {
@@ -317,6 +320,8 @@ export interface OrderDTO {
   cancelReason: string | null;
   items: OrderItemDTO[];
   payments: PaymentDTO[];
+  /** Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar); bölünmediyse null */
+  split: SplitState | null;
   room: RoomSessionDTO | null;
   version: number;
   updatedAt: number;

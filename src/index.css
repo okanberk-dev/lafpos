@@ -260,6 +260,10 @@
     background: var(--admin-primary-soft);
     color: var(--admin-text);
   }
+  /* Innex ikonları ince çizgi (1.75): lucide'nin stroke-width özniteliğini CSS ezer */
+  svg.lucide {
+    stroke-width: 1.75;
+  }
 }
 
 @layer utilities {
@@ -283,10 +287,10 @@
 
 @keyframes lp-pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgb(232 137 28 / 0.5);
+    box-shadow: 0 0 0 0 rgb(21 128 61 / 0.45);
   }
   100% {
-    box-shadow: 0 0 0 14px rgb(232 137 28 / 0);
+    box-shadow: 0 0 0 10px rgb(21 128 61 / 0);
   }
 }
 .animate-ring {

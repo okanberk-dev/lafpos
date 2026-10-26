@@ -48,7 +48,8 @@ function Header({ boot, title }: { boot: BootstrapDTO; title: string }) {
 }
 
 /** Adisyon / hesap fişi. Mali değeri yoktur: mali fiş ÖKC'den (yazarkasa) kesilir. */
-export function BillReceipt({ order, boot, sizeLabel }: { order: OrderDTO; boot: BootstrapDTO; sizeLabel: (s: string) => string }) {
+/** Adisyon (bilgi fişi). `share`: paylaşımlı hesapta kişinin payı da basılır */
+export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO; boot: BootstrapDTO; sizeLabel: (s: string) => string; share?: { no: number; of: number; amount: number } }) {
   const t = order.totals;
   const live = order.items.filter((i) => !i.voided);
   return (
@@ -79,6 +80,13 @@ export function BillReceipt({ order, boot, sizeLabel }: { order: OrderDTO; boot:
         <>
           <Row l="Ödenen" r={tlPlain(order.paid)} />
           <Row l="Kalan" r={tlPlain(order.total - order.paid)} bold />
+        </>
+      )}
+      {share && (
+        <>
+          <Hr />
+          <Row l={`PAYINIZ (${share.no}/${share.of})`} r={`${tlPlain(share.amount)} TL`} bold />
+          <div style={{ fontSize: 10 }}>Hesap {share.of} kişiye eşit bölündü</div>
         </>
       )}
       <div style={{ marginTop: 4, fontSize: 10 }}>

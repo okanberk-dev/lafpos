@@ -1,4 +1,4 @@
-import { allocate, type Kurus, percentOf, splitKdv } from './money';
+import { allocate, type Kurus, percentOf, splitEven, splitKdv } from './money';
 
 /** Servis ücretinin KDV oranı (yiyecek-içecek servisi; yazarkasa sepetindeki servis satırı da bunu kullanır) */
 export const SERVICE_KDV_RATE = 10;
@@ -171,4 +171,24 @@ export function paidTotal(payments: PaymentLike[]): Kurus {
 
 export function remainingDue(total: Kurus, payments: PaymentLike[]): Kurus {
   return total - paidTotal(payments);
+}
+
+export interface SplitState {
+  /** Hesabın bölündüğü kişi sayısı */
+  people: number;
+  /** Ödenmiş pay sayısı */
+  paid: number;
+  /** Ödenmemiş pay sayısı */
+  left: number;
+  /** Ödenmemiş payların tutarları (toplamları kalan tutara eşit; kuruş artığı baştakilere) */
+  shares: Kurus[];
+}
+
+/**
+ * Paylaşımlı hesap: kalan tutar ödenmemiş paylara eşit bölünür. Bölündükten sonra kalem eklenir ya da bir pay
+ * iptal edilirse paylar kendiliğinden yeniden dağılır; sunucu da ödemeyi bu hesapla alır (istemciye güvenilmez).
+ */
+export function splitState(people: number, paidShares: number, remaining: Kurus): SplitState {
+  const left = Math.max(0, people - paidShares);
+  return { people, paid: paidShares, left, shares: left > 0 && remaining > 0 ? splitEven(remaining, left) : [] };
 }

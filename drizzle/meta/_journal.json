@@ -22,6 +22,13 @@
       "when": 1793009559789,
       "tag": "0002_gun_yeniden_acma",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793015129729,
+      "tag": "0003_hesap_paylasimi",
+      "breakpoints": true
     }
   ]
 }

@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router';
 import { cn } from '@/lib/cn';
 import { errorMessage, get } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { fmtTime } from '@shared/time';
+import { businessDate, fmtDateLong, fmtTime } from '@shared/time';
 
 interface LoginInfo {
   users: { id: string; name: string; role: string; color: string }[];
@@ -69,57 +69,56 @@ export function LoginPage() {
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  const today = businessDate(now);
   return (
-    <div className="flex min-h-full flex-col bg-brand-800 text-paper lg:flex-row">
-      <div className="relative flex flex-1 flex-col justify-between overflow-hidden p-8 lg:p-12">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-brand-600/40 blur-3xl" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-16 size-96 rounded-full bg-danger-600/25 blur-3xl" />
-        <div className="relative flex items-center gap-3">
-          <div className="grid size-12 place-items-center rounded-2xl bg-paper/10 ring-1 ring-paper/20">
-            <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-xl font-bold">L’Af</span>
+    // Innex: gri zemin, beyaz kartlar. Solda kim ve ne zaman, sağda PIN
+    <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
+      <div className="grid w-full max-w-4xl gap-3 lg:grid-cols-[1fr_minmax(360px,420px)]">
+        <section className="flex flex-col justify-between gap-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
+              <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-[15px] font-bold">L’Af</span>
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] font-semibold">{info.data?.businessName ?? "L'Affogato"}</span>
+              <span className="block text-xs text-muted">LafPOS · kasa</span>
+            </span>
           </div>
           <div>
-            <div className="text-lg font-semibold">{info.data?.businessName ?? "L'Affogato"}</div>
-            <div className="text-xs tracking-[0.2em] text-paper/60">SINCE 1897, BOLOGNA</div>
+            <div className="tabular text-6xl font-semibold tracking-[-0.03em] sm:text-7xl">{fmtTime(now)}</div>
+            <div className="mt-1 text-sm text-muted">{fmtDateLong(today)}</div>
           </div>
-        </div>
-        <div className="relative my-10 lg:my-0">
-          <div className="tabular text-7xl font-semibold tracking-tight lg:text-8xl">{fmtTime(now)}</div>
-          <div className="mt-2 text-paper/70">LafPOS · PIN ile giriş</div>
-        </div>
-        <div className="relative hidden flex-wrap gap-2 lg:flex">
-          {info.data?.users.map((u) => (
-            <span key={u.id} className="inline-flex items-center gap-2 rounded-full bg-paper/10 px-3 py-1.5 text-sm">
-              <span className="size-2.5 rounded-full" style={{ background: u.color }} />
-              {u.name}
-            </span>
-          ))}
-        </div>
-      </div>
+          {!!info.data?.users.length && (
+            <div className="hidden flex-wrap gap-1.5 lg:flex">
+              {info.data.users.map((u) => (
+                <span key={u.id} className="inline-flex items-center gap-1.5 rounded-md bg-surface-3 px-2 py-1 text-xs font-medium text-ink-2">
+                  <span className="size-2 rounded-full" style={{ background: u.color }} />
+                  {u.name}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
 
-      <div className="flex flex-1 items-center justify-center bg-bg p-6 text-ink lg:max-w-xl">
-        <div className="w-full max-w-sm">
-          <div className="mb-6 text-center">
-            <h1 className="text-2xl font-semibold">Hoş geldiniz</h1>
-            <p className="mt-1 text-sm text-muted">PIN kodunuzu girin</p>
+        <section className="rounded-2xl border border-line bg-surface p-5 sm:p-6">
+          <div className="mb-5 text-center">
+            <h1 className="text-lg font-semibold tracking-[-0.01em]">Hoş geldiniz</h1>
+            <p className="mt-0.5 text-[13px] text-muted">PIN kodunuzu girin</p>
           </div>
-          <div className="mb-3 flex justify-center gap-3" aria-live="polite" aria-label={`${pin.length} hane girildi`}>
+          <div className="mb-2 flex justify-center gap-3" aria-live="polite" aria-label={`${pin.length} hane girildi`}>
             {Array.from({ length: 6 }, (_, i) => (
-              <span
-                key={i}
-                className={cn('size-4 rounded-full transition', i < pin.length ? 'scale-110 bg-brand-700 dark:bg-brand-300' : 'bg-line-strong', i >= 4 && i >= pin.length && 'opacity-40')}
-              />
+              <span key={i} className={cn('size-3.5 rounded-full transition', i < pin.length ? 'bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-line', i >= 4 && i >= pin.length && 'opacity-50')} />
             ))}
           </div>
-          <div className="mb-4 h-5 text-center text-sm text-danger-500">{error}</div>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mb-3 h-5 text-center text-[13px] font-medium text-[var(--admin-danger-ink)]">{error}</div>
+          <div className="grid grid-cols-3 gap-2">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((k) => (
               <PadKey key={k} onClick={() => press(k)}>
                 {k}
               </PadKey>
             ))}
             <PadKey onClick={() => press('back')} aria-label="Sil">
-              <Delete className="mx-auto size-7" />
+              <Delete className="mx-auto size-6" />
             </PadKey>
             <PadKey onClick={() => press('0')}>0</PadKey>
             <PadKey onClick={() => press('ok')} primary disabled={pin.length < 4 || busy}>
@@ -127,21 +126,21 @@ export function LoginPage() {
             </PadKey>
           </div>
           {info.data?.demoPins && (
-            <div className="mt-6 rounded-2xl border border-dashed border-warn-400 bg-warn-50 p-3 text-xs text-warn-700 dark:bg-warn-700/15 dark:text-warn-100">
+            <div className="mt-5 rounded-xl bg-[var(--admin-warning-soft)] p-3 text-xs text-[var(--admin-warning)]">
               <div className="mb-1 flex items-center gap-1.5 font-semibold">
                 <Coffee className="size-3.5" /> Kurulum modu: örnek PIN'ler
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {info.data.demoPins.map((d) => (
-                  <button key={d.name} className="inline-flex items-center underline-offset-2 hover:underline pointer-coarse:min-h-11" onClick={() => submit(d.pin)}>
+                  <button key={d.name} className="inline-flex items-center gap-1 underline-offset-2 hover:underline pointer-coarse:min-h-11" onClick={() => submit(d.pin)}>
                     {d.name}: <b className="tabular">{d.pin}</b>
                   </button>
                 ))}
               </div>
-              <div className="mt-1.5 opacity-80">Canlıya geçmeden önce Yönetim › Personel'den PIN'leri değiştirip kurulum modunu kapatın</div>
+              <div className="mt-1.5 text-ink-2">Canlıya geçmeden önce Yönetim › Personel'den PIN'leri değiştirip kurulum modunu kapatın</div>
             </div>
           )}
-        </div>
+        </section>
       </div>
     </div>
   );
@@ -152,8 +151,8 @@ function PadKey({ children, primary, className, ...rest }: React.ButtonHTMLAttri
     <button
       type="button"
       className={cn(
-        'h-[72px] rounded-2xl text-2xl font-semibold shadow-sm transition active:scale-95 disabled:opacity-40',
-        primary ? 'bg-primary text-lg text-primary-ink' : 'border border-line bg-surface text-ink active:bg-surface-3',
+        'tabular h-16 rounded-xl text-2xl font-semibold transition active:scale-[0.97] disabled:opacity-40 sm:h-[68px]',
+        primary ? 'bg-primary text-base text-primary-ink hover:bg-[var(--admin-primary-hover)]' : 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:bg-surface-2 active:bg-surface-3',
         className,
       )}
       {...rest}
