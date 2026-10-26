@@ -57,7 +57,7 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
               type="button"
               disabled={busy === p.id}
               onClick={() => set(p.id, p.name, !p.active)}
-              className={cn('h-11 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50', p.active ? 'border border-danger-300 text-danger-600 dark:text-danger-200' : 'bg-brand-600 text-white')}
+              className={cn('h-11 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50', p.active ? 'border border-danger-200 text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)]' : 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)]')}
             >
               {p.active ? 'Tükendi' : 'Satışa aç'}
             </button>

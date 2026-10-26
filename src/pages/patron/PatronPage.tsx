@@ -37,10 +37,10 @@ export interface PatronData {
 }
 
 function Change({ value }: { value: number | null }) {
-  if (value == null) return <span className="whitespace-nowrap text-xs text-paper/60">veri yok</span>;
+  if (value == null) return <span className="whitespace-nowrap text-xs text-muted">veri yok</span>;
   const up = value >= 0;
   return (
-    <span className={cn('inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold', up ? 'bg-brand-100 text-brand-700 dark:bg-brand-800 dark:text-brand-100' : 'bg-danger-100 text-danger-600')}>
+    <span className={cn('tabular inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold', up ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
       {up ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}%{Math.abs(value).toLocaleString('tr-TR')}
     </span>
   );
@@ -74,17 +74,17 @@ export default function PatronPage() {
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className={cn('size-2.5 rounded-full', d.dayOpen ? 'animate-pulse bg-brand-500' : 'bg-muted')} />
+        <span className={cn('size-2.5 rounded-full', d.dayOpen ? 'animate-pulse bg-success-600 dark:bg-success-300' : 'bg-muted')} />
         <span className="text-sm text-muted">
           {d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · {fmtTime(now)} itibarıyla · canlı
         </span>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-3xl bg-brand-700 p-6 text-paper shadow-[var(--shadow-card)]">
-          <div className="text-sm text-paper/70">Bugünkü ciro</div>
-          <div className="mt-1 text-6xl font-semibold tracking-tight">{tl(d.netSales)}</div>
-          <div className="mt-1 text-sm text-paper/70">
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
+          <div className="tabular mt-1 text-5xl font-bold tracking-tight sm:text-6xl">{tl(d.netSales)}</div>
+          <div className="mt-1 text-sm text-muted">
             {d.orders} adisyon · ortalama {tl(d.avgCheck)}
             {d.open.count > 0 && ` · açıkta ${tl(d.open.total)}`}
           </div>
@@ -240,8 +240,8 @@ export default function PatronPage() {
 
 function CompareRow({ label, value, change }: { label: string; value: number; change: number | null }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl bg-paper/10 px-4 py-3">
-      <span className="text-sm text-paper/80">{label}</span>
+    <div className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-4 py-3">
+      <span className="text-[13px] text-ink-2">{label}</span>
       <span className="flex items-center gap-2">
         <span className="tabular font-semibold">{tl(value)}</span>
         <Change value={change} />

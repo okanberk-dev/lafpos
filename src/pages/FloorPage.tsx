@@ -67,7 +67,7 @@ export default function FloorPage() {
     <div className="flex h-full flex-col gap-2 p-2 md:p-0 lg:flex-row">
       <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface">
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
             <h1 className="text-lg font-semibold tracking-[-0.01em]">{section?.name ?? 'Masalar'}</h1>
             <p className="text-[13px] text-muted">{summary}</p>
           </div>

@@ -93,7 +93,7 @@ export default function CustomersPage() {
         <ul className="scroll-thin min-h-0 flex-1 divide-y divide-line overflow-y-auto">
           {(list.data ?? []).map((x) => (
             <li key={x.id}>
-              <button onClick={() => setSelected(x.id)} className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2 ${selected === x.id ? 'bg-brand-50 dark:bg-brand-800' : ''}`}>
+              <button onClick={() => setSelected(x.id)} className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2 ${selected === x.id ? 'bg-[var(--admin-primary-soft)]' : ''}`}>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{x.name}</span>
                   <span className="text-xs text-muted">

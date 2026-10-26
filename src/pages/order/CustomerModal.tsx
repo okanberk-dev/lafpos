@@ -46,7 +46,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
     <Modal open onClose={onClose} title="Müşteri" subtitle="Telefon ya da adla bulun; damga kartı ve açık hesap için" size="md">
       <div className="space-y-3 p-4">
         {current && (
-          <div className="flex items-center gap-3 rounded-2xl border border-brand-300 bg-brand-50 p-3 dark:bg-brand-800">
+          <div className="flex items-center gap-3 rounded-2xl border border-brand-200 bg-[var(--admin-primary-soft)] p-3 dark:border-transparent">
             <div className="min-w-0 flex-1">
               <div className="font-semibold">{current.name}</div>
               <div className="text-xs text-muted">

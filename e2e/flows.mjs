@@ -169,6 +169,40 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Tablette kasiyer: hesabı üç kişiye böler, payları nakit ve kartla ayrı ayrı alır',
+      async () => {
+        const product = (name) => seed.boot.products.find((p) => p.name === name);
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 3 }, { productId: product('Türk kahvesi').id, qty: 1 }] });
+        await withPage(ctx, 'tablet', 'kasa', async (page) => {
+          await go(ctx, page, `/adisyon/${o.id}`);
+          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: 'Paylaş', exact: true }).click();
+          await page.getByRole('button', { name: 'Kişi artır' }).click();
+          await page.getByRole('button', { name: 'Hesabı 3 kişiye böl' }).click();
+          await page.getByText('Pay 1 · sıradaki').waitFor();
+          const cash = async () => {
+            await page.getByRole('button', { name: 'Nakit', exact: true }).click();
+            await page.getByRole('button', { name: 'Tam', exact: true }).click();
+            await page.getByRole('button', { name: /Nakit al$/ }).click();
+          };
+          await cash();
+          await page.getByRole('button', { name: 'Sıradaki pay' }).click();
+          await page.getByText('Pay 2 · sıradaki').waitFor();
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-paylas.png` });
+          await page.getByRole('button', { name: 'Kredi kartı', exact: true }).click();
+          await page.getByRole('button', { name: /Kredi kartı al$/ }).click();
+          await page.getByText('Pay 3 · sıradaki').waitFor();
+          await cash();
+          await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor();
+        });
+        const done = await api.call('mudur', 'GET', `/orders/${o.id}`);
+        const shares = done.payments.filter((p) => !p.refundedAt).map((p) => `${p.shareNo}/${p.shareOf} ${p.methodName}`);
+        assert(done.status === 'kapali', `adisyon kapanmadı: ${done.status}`);
+        assert(shares.join(', ') === '1/3 Nakit, 2/3 Kredi kartı, 3/3 Nakit', `paylar beklenen gibi değil: ${shares.join(', ')}`);
+      },
+    ],
+    [
       // Günü kapattığı için en sonda
       'Tablette kasiyer: gece gün sonundan sonra günü müdürün PIN onayıyla yeniden açar',
       async () => {

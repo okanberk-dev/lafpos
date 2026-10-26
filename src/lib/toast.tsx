@@ -28,10 +28,11 @@ export const toast = {
 
 const icons = { ok: CheckCircle2, err: AlertTriangle, info: Info, warn: AlertTriangle };
 const tones: Record<Tone, string> = {
-  ok: 'bg-brand-700 text-white',
+  // Innex araç ipucu gibi koyu; durum rengi ikonda (uyarı ve hata kendi renginde)
+  ok: 'bg-night text-white [&>svg:first-child]:text-success-300 dark:bg-surface-3 dark:text-ink',
   err: 'bg-danger-600 text-white',
-  info: 'bg-night text-paper',
-  warn: 'bg-warn-500 text-night',
+  info: 'bg-night text-white dark:bg-surface-3 dark:text-ink',
+  warn: 'border border-warn-200 bg-warn-100 text-warn-700 dark:border-transparent dark:bg-warn-800 dark:text-warn-300',
 };
 
 export function Toaster() {
@@ -42,7 +43,7 @@ export function Toaster() {
       {list.map((t) => {
         const Icon = icons[t.tone];
         return (
-          <div key={t.id} className={cn('animate-in pointer-events-auto flex max-w-md items-start gap-3 rounded-2xl px-4 py-3 text-sm shadow-[var(--shadow-pop)]', tones[t.tone])}>
+          <div key={t.id} className={cn('animate-in pointer-events-auto flex max-w-md items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)]', tones[t.tone])}>
             <Icon className="mt-0.5 size-4 shrink-0" />
             <span className="flex-1 leading-snug">{t.text}</span>
             <button onClick={() => drop(t.id)} aria-label="Kapat" className="opacity-70 hover:opacity-100">

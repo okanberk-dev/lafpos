@@ -108,7 +108,7 @@ export function OptionsModal({
                 <button
                   key={s}
                   onClick={() => setSize(s)}
-                  className={cn('rounded-2xl border-2 p-3 text-left transition', size === s ? 'border-brand-600 bg-brand-50 dark:bg-brand-800' : 'border-line bg-surface')}
+                  className={cn('rounded-xl border p-3 text-left transition-colors', size === s ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}
                 >
                   <div className="font-semibold">{boot.settings.sizeLabels[s]}</div>
                   <div className="tabular text-sm text-muted">{tlShort(s === 'L' ? product.priceL! : product.price)}</div>
@@ -124,17 +124,17 @@ export function OptionsModal({
             {g.kind === 'counter' ? (
               <div className="flex flex-wrap gap-2">
                 {g.items.map((i) => (
-                  <div key={i.id} className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2">
+                  <div key={i.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-1.5">
                     <span className="font-medium">
                       {i.name}
                       {i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
                     </span>
                     <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-2" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
+                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-3 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
                         <Minus className="size-4" />
                       </button>
                       <span className="tabular w-6 text-center font-semibold">{picks[i.id] ?? 0}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-2" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
+                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-3 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
                         <Plus className="size-4" />
                       </button>
                     </div>
@@ -149,11 +149,11 @@ export function OptionsModal({
                     <button
                       key={i.id}
                       onClick={() => (g.kind === 'single' ? pickSingle(g, i.id) : setCount(i.id, on ? 0 : 1))}
-                      className={cn('rounded-xl border-2 px-3.5 py-2 text-sm font-medium transition', on ? 'border-brand-600 bg-brand-600 text-white' : 'border-line bg-surface text-ink')}
+                      className={cn('min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors pointer-fine:min-h-10', on ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)]')}
                     >
                       {i.name}
-                      {i.price > 0 && <span className={cn('ml-1', on ? 'text-white/80' : 'text-muted')}>+{tlCompact(i.price)}</span>}
-                      {i.allergens.includes('nuts') && <span className={cn('ml-1 text-[11px]', on ? 'text-white/80' : 'text-warn-600')}>(kuruyemiş)</span>}
+                      {i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>}
+                      {i.allergens.includes('nuts') && <span className="ml-1 text-[11px] text-[var(--admin-warning)]">(kuruyemiş)</span>}
                     </button>
                   );
                 })}

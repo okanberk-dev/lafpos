@@ -84,7 +84,7 @@ export function ApprovalHost() {
         </div>
         <div className="flex justify-center gap-3 py-1" aria-label="PIN">
           {Array.from({ length: 6 }, (_, i) => (
-            <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? 'bg-brand-700 dark:bg-brand-300' : 'bg-line-strong'} ${i >= 4 && i >= pin.length ? 'opacity-40' : ''}`} />
+            <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? 'bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-line'} ${i >= 4 && i >= pin.length ? 'opacity-40' : ''}`} />
           ))}
         </div>
         <Numpad
