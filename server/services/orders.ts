@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
-import { amountForItems, lineGross, splitState } from '@shared/order-calc';
+import { amountForItems, lineGross, type OrderTotals, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, can, need, needDirect } from '../lib/auth';
@@ -436,8 +436,42 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   return updated;
 }
 
-function discountApproval(actor: Actor, pct: number): string | null {
-  const approverId = need(actor, 'siparis.indirim', 'İndirim yetkili onayı gerektirir');
+/**
+ * Adisyondaki bütün indirimlerin (kalem + adisyon) brüt tutara oranı. İndirim sınırı tek tek indirime değil bu
+ * toplam etkiye uygulanır: %10 sınırlı kişi kaleme %10, adisyona %10 verip %19 indirim yapamaz (denetim, 26 Eki 2026).
+ */
+function totalDiscountPct(totals: Pick<OrderTotals, 'gross' | 'lineDiscounts' | 'orderDiscount'>): number {
+  return totals.gross > 0 ? ((totals.lineDiscounts + totals.orderDiscount) * 100) / totals.gross : 0;
+}
+
+/** Adisyonların bugünkü kalemleriyle hesaplanan adisyon indirimi toplamı */
+function orderDiscountOf(t: Tx | DB, ...orderIds: string[]): number {
+  return orderIds.reduce((a, id) => a + calcFor(loadOrder(t, id), orderItems(t, id)).orderDiscount, 0);
+}
+
+/**
+ * Birleştirme ve kalem taşıma, hedefin adisyon indirimini gelen kalemlere de uygular. İndirim toplamı büyüdüyse bu
+ * yeni bir indirimdir: indirim yetkisi ya da yetkili onayı ister ve denetime yazılır. Yoksa yalnız `masa.islem`'i
+ * olan garson başka masanın hesabını indirimli adisyona alıp indirimsiz kalemleri indirimli kapatırdı.
+ */
+function approveDiscountGrowth(t: Tx, actor: Actor, fx: Effects, target: OrderRow, growth: number, what: string) {
+  // Aynı oranlı iki indirimli adisyon birleşince yüzdenin yuvarlaması toplamı 1-2 kuruş oynatabilir: indirim büyümesi değil
+  if (growth <= 2) return;
+  const pct = totalDiscountPct(calcFor(target, orderItems(t, target.id)));
+  const approverId = discountApproval(actor, pct, 'İndirimli adisyona gelen kalemler de indirimli olur; yetkili onayı gerektirir');
+  fx.audit(t, {
+    userId: actor.user.id,
+    approverId,
+    action: 'order.discount',
+    severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+    orderId: target.id,
+    amount: growth,
+    message: `${actor.user.name} ${what}; #${target.no} adisyonun indirimi gelen kalemlere de uygulandı (${tl(growth)}, adisyonda toplam %${Math.round(pct)})`,
+  });
+}
+
+function discountApproval(actor: Actor, pct: number, reason = 'İndirim yetkili onayı gerektirir'): string | null {
+  const approverId = need(actor, 'siparis.indirim', reason);
   if (!approverId && pct > actor.user.maxDiscountPct) {
     // Kullanıcının indirim yetkisi var ama sınırı aşıyor: üst sınırı yeten bir yetkili onaylamalı
     if (!actor.approver) {
@@ -471,9 +505,12 @@ export function setItemDiscount(
   const gross = lineGross(it);
   const amount = input.type === 'percent' ? percentOf(gross, Math.min(100, Math.max(0, input.value))) : Math.min(gross, Math.max(0, Math.trunc(input.value)));
   const pct = gross > 0 ? (amount * 100) / gross : 0;
+  // Sınır adisyondaki toplam indirime de uygulanır: kalem indirimi adisyon indiriminin üstüne biner
+  const total = totalDiscountPct(calcFor(o, orderItems(t, orderId).map((i) => (i.id === it.id ? { ...i, discount: amount } : i))));
+  const limitPct = Math.max(pct, total);
   const reason = input.reason.trim();
   if (amount > 0 && !reason) throw bad('İndirim nedeni seçilmeli', 'reason_required');
-  const approverId = amount > 0 ? discountApproval(actor, pct) : null;
+  const approverId = amount > 0 ? discountApproval(actor, limitPct) : null;
   t.update(schema.orderItems)
     .set({ discount: amount, discountReason: amount > 0 ? reason : null })
     .where(eq(schema.orderItems.id, it.id))
@@ -484,11 +521,11 @@ export function setItemDiscount(
       userId: actor.user.id,
       approverId,
       action: 'item.discount',
-      severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+      severity: limitPct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
       orderId,
       entityId: it.id,
       amount,
-      message: `${actor.user.name} #${o.no} adisyonda ${it.name} için ${tl(amount)} indirim yaptı (%${Math.round(pct)}, ${reason})`,
+      message: `${actor.user.name} #${o.no} adisyonda ${it.name} için ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
     });
   }
   orderEvents(fx, updated, actor.user.id, 'item.discount');
@@ -516,13 +553,16 @@ export function setOrderDiscount(
   const reason = input.reason.trim();
   if (!reason) throw bad('İndirim nedeni seçilmeli', 'reason_required');
   const value = input.type === 'percent' ? Math.min(100, Math.max(0, Math.round(input.value))) : Math.max(0, Math.trunc(input.value));
-  const before = calcFor({ ...o, discountType: null, discountValue: null }, orderItems(t, orderId));
+  const items = orderItems(t, orderId);
+  const before = calcFor({ ...o, discountType: null, discountValue: null }, items);
   const subtotal = before.gross - before.lineDiscounts;
   // Boş adisyona indirim verilmez: yetki ve uyarı eşiği tutara göre ölçülür, sonra eklenen kalemlere sessizce uygulanırdı
   if (subtotal <= 0) throw bad('Önce ürün ekleyin; indirim boş adisyona verilmez', 'empty_order');
   const amount = input.type === 'percent' ? percentOf(subtotal, value) : Math.min(subtotal, value);
   const pct = subtotal > 0 ? (amount * 100) / subtotal : 0;
-  const approverId = discountApproval(actor, pct);
+  // Sınır kalem indirimleriyle birlikte toplam etkiye uygulanır (toplam oran, kalem indirimi varken adisyonunkinden büyük)
+  const total = totalDiscountPct(calcFor({ ...o, discountType: input.type, discountValue: value }, items));
+  const approverId = discountApproval(actor, Math.max(pct, total));
   t.update(schema.orders)
     .set({ discountType: input.type, discountValue: value, discountReason: reason, discountBy: approverId ?? actor.user.id })
     .where(eq(schema.orders.id, orderId))
@@ -533,10 +573,10 @@ export function setOrderDiscount(
     userId: actor.user.id,
     approverId,
     action: 'order.discount',
-    severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+    severity: Math.max(pct, total) >= getSettings().alertDiscountPct ? 'uyari' : 'info',
     orderId,
     amount,
-    message: `${actor.user.name} #${o.no} adisyona ${tl(amount)} indirim yaptı (%${Math.round(pct)}, ${reason})`,
+    message: `${actor.user.name} #${o.no} adisyona ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
   });
   orderEvents(fx, updated, actor.user.id, 'order.discount');
   return updated;
@@ -610,6 +650,7 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
   assertPosOrder(source);
   assertNoPendingDevice(t, targetId);
   assertNoPendingDevice(t, sourceId);
+  const discountBefore = orderDiscountOf(t, targetId, sourceId);
   t.update(schema.orderItems).set({ orderId: targetId }).where(eq(schema.orderItems.orderId, sourceId)).run();
   t.update(schema.payments).set({ orderId: targetId }).where(eq(schema.payments.orderId, sourceId)).run();
   t.update(schema.roomSessions).set({ orderId: targetId }).where(eq(schema.roomSessions.orderId, sourceId)).run();
@@ -624,6 +665,7 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
     .run();
   recalc(t, sourceId);
   const updated = recalc(t, targetId);
+  approveDiscountGrowth(t, actor, fx, updated, orderDiscountOf(t, targetId) - discountBefore, `#${source.no} adisyonu #${target.no} ile birleştirdi`);
   fx.audit(t, { userId: actor.user.id, approverId, action: 'order.merge', orderId: targetId, message: `#${source.no} adisyon #${target.no} ile birleştirildi` });
   orderEvents(fx, updated, actor.user.id, 'order.merged');
   orderEvents(fx, source, actor.user.id, 'order.merged');
@@ -671,6 +713,7 @@ export function transferItems(
       });
   }
   if (target.id === source.id) throw bad('Kaynak ve hedef aynı');
+  const discountBefore = orderDiscountOf(t, orderId, target.id);
 
   for (const sel of input.items) {
     const it = loadItem(t, orderId, sel.itemId);
@@ -684,6 +727,7 @@ export function transferItems(
 
   const src = recalc(t, orderId);
   const dst = recalc(t, target.id);
+  approveDiscountGrowth(t, actor, fx, dst, orderDiscountOf(t, orderId, target.id) - discountBefore, `#${source.no} adisyondan #${dst.no} adisyona kalem taşıdı`);
   const remaining = orderItems(t, orderId).filter((i) => !i.voided);
   const hasPayments = orderPayments(t, orderId).some((p) => !p.refundedAt);
   if (!remaining.length && !hasPayments) {
