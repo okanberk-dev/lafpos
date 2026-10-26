@@ -80,7 +80,7 @@ describe('rapor mutabakatı', () => {
       tips: number;
     }>('mudur', 'GET', '/reports/summary');
     const products = await h.ok<{ total: number; service: number; categories: { revenue: number }[] }>('mudur', 'GET', '/reports/products');
-    const hourly = await h.ok<{ total: number; hours: { revenue: number }[] }>('mudur', 'GET', '/reports/hourly');
+    const hourly = await h.ok<{ total: number; hours: { revenue: number }[]; week: { days: number; hours: number[] }[] }>('mudur', 'GET', '/reports/hourly');
     const patron = await h.ok<{ netSales: number; orders: number }>('patron', 'GET', '/reports/patron');
 
     const N = summary.netSales;
@@ -91,6 +91,9 @@ describe('rapor mutabakatı', () => {
     expect(products.categories.reduce((x, r) => x + r.revenue, 0)).toBe(products.total);
     expect(hourly.total).toBe(N);
     expect(hourly.hours.reduce((x, r) => x + r.revenue, 0)).toBe(N);
+    // Tek gün: haftanın günü × saat haritası da aynı ciroyu verir (ortalama bölmesi yok)
+    expect(hourly.week.filter((w) => w.days === 1)).toHaveLength(1);
+    expect(hourly.week.flatMap((w) => w.hours).reduce((x, v) => x + v, 0)).toBe(N);
     expect(summary.byDay.reduce((x, r) => x + r.netSales, 0)).toBe(N);
     expect(patron.netSales).toBe(N);
     expect(patron.orders).toBe(summary.receipts);

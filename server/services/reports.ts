@@ -269,6 +269,20 @@ export function hourlyReport(range: Range) {
   }
   const total = hours.reduce((a, h) => a + h.revenue, 0);
   const active = hours.filter((h) => h.orders > 0);
+  // Haftanın günü × saat: iş gününün (gece yarısından sonraki satış o güne yazılır) haftanın günü, adisyonun açıldığı
+  // saat; hücre o günün ortalama cirosu (dönemde 2 salı varsa salı hücreleri 2'ye bölünür)
+  const dates = dayOf(ds);
+  const weekdayOf = (date: string) => {
+    const [y, m, d] = date.split('-').map(Number);
+    return ((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7) + 1;
+  };
+  const week = Array.from({ length: 7 }, (_, i) => ({ weekday: i + 1, days: 0, hours: Array.from({ length: 24 }, () => 0) }));
+  for (const d of ds.days) week[weekdayOf(d.date) - 1].days += 1;
+  for (const o of closed) {
+    const date = dates.get(o.dayId);
+    if (date) week[weekdayOf(date) - 1].hours[istanbulParts(o.openedAt).hour] += totalsOf(o).total;
+  }
+  for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
   const parts = PARTS.map((p) => {
     const hs = hours.filter((h) => (h.hour >= p.from && h.hour < p.to) || (p.to > 24 && h.hour < p.to - 24));
     const revenue = hs.reduce((a, h) => a + h.revenue, 0);
@@ -283,6 +297,7 @@ export function hourlyReport(range: Range) {
     busiest: active.length ? active.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null,
     quietest: active.length ? active.reduce((a, b) => (b.revenue < a.revenue ? b : a)) : null,
     peaks: [...active].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
+    week,
   };
 }
 

@@ -15,27 +15,52 @@ import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { fmtShortDate, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 
-type ReportKey = 'ciro' | 'satis' | 'kategori' | 'saatlik' | 'hazirlama' | 'adisyon' | 'iptal' | 'ikram' | 'indirim' | 'happy' | 'iade' | 'personel' | 'aktarim';
+type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'kayip' | 'happy' | 'personel' | 'aktarim';
+type ProductView = 'urun' | 'kategori';
+type LossKind = 'iptal' | 'ikram' | 'indirim' | 'iade';
 
 const REPORTS: { key: ReportKey; label: string; hint: string; perm?: 'rapor.maliyet' }[] = [
-  { key: 'ciro', label: 'Ciro', hint: 'Gelir özeti ve önceki dönem' },
-  { key: 'satis', label: 'Satış', hint: 'Ürün bazında' },
-  { key: 'kategori', label: 'Kategori', hint: 'Kategori payları' },
+  { key: 'ciro', label: 'Ciro', hint: 'Gelir özeti, döküm ve önceki dönem' },
+  { key: 'urunler', label: 'Ürünler', hint: 'Ürün ve kategori satışları' },
   { key: 'saatlik', label: 'Saatlik', hint: 'Yoğun saatler, gün dilimleri' },
   { key: 'hazirlama', label: 'Hazırlama süresi', hint: 'Bar ve mutfak hızı' },
   { key: 'adisyon', label: 'Adisyonlar', hint: 'Kapanan ve iptal' },
-  { key: 'iptal', label: 'İptaller', hint: 'Silinen kalemler' },
-  { key: 'ikram', label: 'İkramlar', hint: 'Ciro dışı' },
-  { key: 'indirim', label: 'İndirimler', hint: 'Kalem ve adisyon' },
+  { key: 'kayip', label: 'İptal ve indirim', hint: 'İptal, ikram, indirim, ödeme iptali' },
   { key: 'happy', label: 'Happy hour', hint: 'Kampanya etkisi' },
-  { key: 'iade', label: 'Ödeme iptalleri', hint: 'İade edilen ödemeler' },
   { key: 'personel', label: 'Personel', hint: 'Satış, iptal, ikram', perm: 'rapor.maliyet' },
   { key: 'aktarim', label: 'lafmaliyet aktarımı', hint: 'Satışlar listesi' },
 ];
 
+/** Eski sürümde kaydedilmiş sekme anahtarları: birleşen sekmeler yeni yerine açılır */
+const LEGACY: Record<string, { key: ReportKey; product?: ProductView; loss?: LossKind }> = {
+  satis: { key: 'urunler', product: 'urun' },
+  kategori: { key: 'urunler', product: 'kategori' },
+  iptal: { key: 'kayip', loss: 'iptal' },
+  ikram: { key: 'kayip', loss: 'ikram' },
+  indirim: { key: 'kayip', loss: 'indirim' },
+  iade: { key: 'kayip', loss: 'iade' },
+};
+
+const LOSS_TABS: { value: LossKind; label: string }[] = [
+  { value: 'iptal', label: 'İptaller' },
+  { value: 'ikram', label: 'İkramlar' },
+  { value: 'indirim', label: 'İndirimler' },
+  { value: 'iade', label: 'Ödeme iptalleri' },
+];
+
 export default function ReportsPage() {
   const can = useCan();
-  const [report, setReport] = useLocalPref<ReportKey>('reports.key', 'ciro');
+  const [saved, setReport] = useLocalPref<ReportKey>('reports.key', 'ciro');
+  const legacy = LEGACY[saved];
+  const report = legacy?.key ?? saved;
+  const [productView, setProductView] = useLocalPref<ProductView>('reports.products', legacy?.product ?? 'urun');
+  const [loss, setLoss] = useLocalPref<LossKind>('reports.loss', legacy?.loss ?? 'iptal');
+  const open = (key: ReportKey, sub?: { product?: ProductView; loss?: LossKind }) => {
+    if (sub?.product) setProductView(sub.product);
+    if (sub?.loss) setLoss(sub.loss);
+    setReport(key);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const [period, setPeriod] = useLocalPref<PeriodKey>('reports.period', 'bugun');
   const [custom, setCustom] = useState(() => periodRange('hafta'));
   const range = period === 'ozel' ? custom : periodRange(period);
@@ -81,16 +106,23 @@ export default function ReportsPage() {
         )}
       </PageHeader>
       <StatusTabs label="Rapor" value={current.key} onChange={setReport} tabs={visible.map((r) => ({ value: r.key, label: r.label }))} />
-      {current.key === 'ciro' && <SummaryReport range={range} />}
-      {current.key === 'satis' && <ProductsReport range={range} onExport={() => exportCsv('urunler')} />}
-      {current.key === 'kategori' && <CategoryReport range={range} />}
+      {current.key === 'ciro' && <SummaryReport range={range} onOpen={open} />}
+      {current.key === 'urunler' && (
+        <div className="space-y-3">
+          <Segmented label="Görünüm" value={productView} onChange={setProductView} options={[{ value: 'urun', label: 'Ürün' }, { value: 'kategori', label: 'Kategori' }]} />
+          {productView === 'urun' ? <ProductsReport range={range} onExport={() => exportCsv('urunler')} /> : <CategoryReport range={range} />}
+        </div>
+      )}
       {current.key === 'saatlik' && <HourlyReport range={range} onExport={() => exportCsv('saatlik')} />}
       {current.key === 'hazirlama' && <PrepReport range={range} />}
       {current.key === 'adisyon' && <ChecksReport range={range} onExport={() => exportCsv('adisyonlar')} />}
-      {(current.key === 'iptal' || current.key === 'ikram' || current.key === 'indirim' || current.key === 'happy') && (
-        <ItemsReport range={range} kind={current.key} onExport={current.key === 'happy' ? undefined : () => exportCsv(current.key)} />
+      {current.key === 'kayip' && (
+        <div className="space-y-3">
+          <Segmented label="Tür" value={loss} onChange={setLoss} options={LOSS_TABS} className="max-sm:w-full" />
+          {loss === 'iade' ? <RefundsReport range={range} /> : <ItemsReport range={range} kind={loss} onExport={() => exportCsv(loss)} />}
+        </div>
       )}
-      {current.key === 'iade' && <RefundsReport range={range} />}
+      {current.key === 'happy' && <ItemsReport range={range} kind="happy" />}
       {current.key === 'personel' && <StaffReport range={range} />}
       {current.key === 'aktarim' && <ExportReport range={range} onDownload={() => exportCsv('', `/api/sync/lafmaliyet/satislar.csv?from=${range.from}&to=${range.to}`)} />}
     </AdminShell>
@@ -148,7 +180,7 @@ function ReportError({ error, onRetry }: { error: unknown; onRetry: () => void }
   );
 }
 
-function SummaryReport({ range }: { range: Range }) {
+function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKey, sub?: { product?: ProductView; loss?: LossKind }) => void }) {
   const q = useQuery({ queryKey: ['reports', 'summary', range], queryFn: () => get<Summary>(`/reports/summary?${qs(range)}`) });
   const hourly = useQuery({ queryKey: ['reports', 'hourly', range], queryFn: () => get<HourlyData>(`/reports/hourly?${qs(range)}`), enabled: range.from === range.to });
   if (q.isLoading) return <PageLoading />;
@@ -168,9 +200,9 @@ function SummaryReport({ range }: { range: Range }) {
             delta: s.previous.change == null ? null : { text: `${s.previous.change >= 0 ? '▲' : '▼'} %${Math.abs(s.previous.change).toLocaleString('tr-TR')}`, good: s.previous.change >= 0 },
             reference: s.previous.change == null ? `Kıyas (${s.previous.label}) satışsız` : `${s.previous.label}: ${tl(s.previous.netSales)}`,
           },
-          { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)}${s.perGuest != null ? ` · kişi başı ${tl(s.perGuest)}` : ''} · önceki ${s.previous.receipts}` },
-          { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü' },
-          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary)} · iptal ${tl(s.voided)}` },
+          { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)}${s.perGuest != null ? ` · kişi başı ${tl(s.perGuest)}` : ''} · önceki ${s.previous.receipts}`, onClick: () => onOpen('adisyon') },
+          { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü', onClick: () => onOpen('urunler', { product: 'urun' }) },
+          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary)} · iptal ${tl(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
           { key: 'online', label: 'Online (sitede ödendi)', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `${s.online.orders} sipariş, ciroya dahil değil` },
         ]}
       />
@@ -352,6 +384,8 @@ interface HourlyData {
   busiest: { hour: number; revenue: number; orders: number } | null;
   quietest: { hour: number; revenue: number; orders: number } | null;
   peaks: { hour: number; revenue: number; orders: number }[];
+  /** Haftanın günü (1 pazartesi) × saat, o günün ortalama cirosu */
+  week: { weekday: number; days: number; hours: number[] }[];
 }
 
 function HourlyReport({ range, onExport }: { range: Range; onExport: () => void }) {
@@ -374,6 +408,7 @@ function HourlyReport({ range, onExport }: { range: Range; onExport: () => void 
           <ColumnChart data={h.hours.map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro dağılımı" />
         </div>
       </Card>
+      {h.days >= 7 && <WeekHeatmap week={h.week} />}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card flush title="Gün dilimleri">
           <div className="p-4">
@@ -397,6 +432,72 @@ function HourlyReport({ range, onExport }: { range: Range; onExport: () => void 
         </Card>
       </div>
     </div>
+  );
+}
+
+const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const WEEKDAY_LONG = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+/** Tek renk, açıktan koyuya 5 basamak (sıfır boş kalır); koyu temada da aynı token'dan */
+const HEAT_STEPS = [16, 32, 50, 70, 92];
+
+/** Haftanın günü × saat ısı haritası: personel planı için hangi gün hangi saat yoğun */
+function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
+  const all = week.flatMap((w) => w.hours);
+  const max = Math.max(0, ...all);
+  if (max === 0) return null;
+  const used = all.map((v, i) => (v > 0 ? i % 24 : -1)).filter((x) => x >= 0);
+  const from = Math.min(...used);
+  const to = Math.max(...used);
+  const cols = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  const step = (v: number) => (v <= 0 ? -1 : Math.min(HEAT_STEPS.length - 1, Math.floor((v / max) * HEAT_STEPS.length)));
+  return (
+    <Card flush title="Haftanın günü × saat · günlük ortalama ciro">
+      <div className="overflow-x-auto p-4">
+        <table className="w-full border-separate border-spacing-[3px] text-[11px]" aria-label="Haftanın günlerine ve saatlere göre ortalama ciro">
+          <thead>
+            <tr>
+              <th className="w-10" />
+              {cols.map((c) => (
+                <th key={c} scope="col" className="tabular font-medium text-muted">
+                  {String(c).padStart(2, '0')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {week.map((w, wi) => (
+              <tr key={w.weekday}>
+                <th scope="row" className="pr-1 text-left font-medium text-muted">
+                  {WEEKDAY_SHORT[wi]}
+                </th>
+                {cols.map((c) => {
+                  const v = w.hours[c] ?? 0;
+                  const k = step(v);
+                  const label = `${WEEKDAY_LONG[wi]} ${String(c).padStart(2, '0')}:00 · ${v > 0 ? tl(v) : 'satış yok'}${w.days > 1 ? ` (${w.days} günün ortalaması)` : ''}`;
+                  return (
+                    <td
+                      key={c}
+                      title={label}
+                      className="h-7 min-w-7 rounded-[4px]"
+                      style={{ background: k < 0 ? 'var(--admin-surface-2)' : `color-mix(in oklab, var(--admin-primary) ${HEAT_STEPS[k]}%, var(--admin-surface))` }}
+                    >
+                      <span className="sr-only">{label}</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-3 flex items-center gap-1.5 text-xs text-muted" aria-hidden>
+          <span>Az</span>
+          {HEAT_STEPS.map((p) => (
+            <span key={p} className="size-3.5 rounded-[3px]" style={{ background: `color-mix(in oklab, var(--admin-primary) ${p}%, var(--admin-surface))` }} />
+          ))}
+          <span>Çok · en yüksek {tl(max)}</span>
+        </div>
+      </div>
+    </Card>
   );
 }
 
