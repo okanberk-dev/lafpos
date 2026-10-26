@@ -1140,11 +1140,16 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
 
 const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazirlaniyor', hazirlaniyor: 'hazir', hazir: 'servis' };
 
+/**
+ * Bar ve mutfak durumları. Başlamış kalem bekleyene ("yeni") dönmez ve başlama zamanı silinmez: onaysız iptal
+ * "hiç başlanmamış" kaleme (yanlış giriş penceresi) özgüdür. Garson kalemi "yeni"ye çekip bardan çıkmış içeceği
+ * onaysız, zayi sayılmadan iptal ediyordu (denetim, 26 Eki 2026). Bardaki "Geri al" en çok "hazırlanıyor"a döner.
+ */
 export function setItemsStatus(
   t: Tx,
   actor: Actor,
   fx: Effects,
-  input: { itemIds: string[]; status?: 'hazirlaniyor' | 'hazir' | 'servis' | 'yeni' },
+  input: { itemIds: string[]; status?: 'hazirlaniyor' | 'hazir' | 'servis' },
 ): void {
   if (!can(actor.user, 'mutfak.ekran') && !can(actor.user, 'siparis.al')) needDirect(actor, 'mutfak.ekran');
   if (!input.itemIds.length) return;
@@ -1160,7 +1165,6 @@ export function setItemsStatus(
     if (!status || status === it.status) continue;
     if (status === 'hazir') readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
     const patch: Partial<ItemRow> = { status };
-    if (status === 'yeni') Object.assign(patch, { startedAt: null, readyAt: null, servedAt: null });
     if (status === 'hazirlaniyor') patch.startedAt = it.startedAt ?? now;
     if (status === 'hazir') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: now });
     if (status === 'servis') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: it.readyAt ?? now, servedAt: now });

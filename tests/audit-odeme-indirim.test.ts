@@ -124,3 +124,29 @@ describe('indirim', () => {
     expect((await h.ok<OrderDTO>('garson', 'POST', `/orders/${d.id}/merge`, { sourceOrderId: e.id })).totals.orderDiscount).toBe(2799);
   });
 });
+
+describe('iptal onayı', () => {
+  it('state-05, auth-55: bar hazırlamaya başladığı kalemi garson "yeni"ye geri alıp onaysız iptal edemez', async () => {
+    const o = await tableOrder('garson', [{ name: 'Latte', size: 'M' }]);
+    const item = o.items[0]!;
+    const voidPath = `/orders/${o.id}/items/${item.id}/void`;
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: [item.id], status: 'hazirlaniyor' });
+    expect((await h.call<{ code: string }>('garson', 'POST', voidPath, { reason: 'Vazgeçti' })).json.code).toBe('approval_required');
+
+    // Başlamış kalem bekleyene ("yeni") çevrilemez: başlama zamanı silinip iptal "yanlış giriş" sayılırdı
+    for (const who of ['garson', 'bar']) {
+      expect((await h.call(who, 'POST', '/kitchen/status', { itemIds: [item.id], status: 'yeni' })).status, who).toBe(422);
+    }
+    expect((await getOrder(o.id)).items[0]).toMatchObject({ status: 'hazirlaniyor' });
+    expect((await h.call<{ code: string }>('garson', 'POST', voidPath, { reason: 'Vazgeçti' })).json.code).toBe('approval_required');
+    expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${o.id}/cancel`, { reason: 'Vazgeçti' })).json.code).toBe('approval_required');
+
+    // Bardaki "Geri al" (hazır → hazırlanıyor) başlama zamanını korur: onaylı iptal hazırlandıktan sonra sayılır, uyarı yazar
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: [item.id], status: 'hazir' });
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: [item.id], status: 'hazirlaniyor' });
+    expect((await h.call<{ code: string }>('garson', 'POST', voidPath, { reason: 'Vazgeçti' })).json.code).toBe('approval_required');
+    const voided = await h.ok<OrderDTO>('garson', 'POST', voidPath, { reason: 'Vazgeçti', approverPin: MUDUR });
+    expect(voided.items.find((i) => i.id === item.id)).toMatchObject({ voided: true, voidAfterSend: true });
+    expect((await audits(o.id, 'item.void'))[0]).toMatchObject({ severity: 'uyari', approverName: 'Müdür', data: { afterSend: true, fresh: false } });
+  });
+});
