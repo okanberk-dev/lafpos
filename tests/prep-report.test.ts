@@ -19,7 +19,7 @@ describe('hazırlama süresi', () => {
     const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, {
       items: [
         { productId: product('Latte').id, size: 'M', qty: 1 },
-        { productId: product('Türk kahvesi').id, qty: 1 },
+        { productId: product('Türk Kahvesi').id, qty: 1 },
       ],
     });
     const latte = sent.items.find((i) => i.name === 'Latte')!;

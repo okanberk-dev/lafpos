@@ -173,7 +173,7 @@ export async function runFlows(ctx) {
       async () => {
         const product = (name) => seed.boot.products.find((p) => p.name === name);
         const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
-        await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 3 }, { productId: product('Türk kahvesi').id, qty: 1 }] });
+        await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 3 }, { productId: product('Türk Kahvesi').id, qty: 1 }] });
         await withPage(ctx, 'tablet', 'kasa', async (page) => {
           await go(ctx, page, `/adisyon/${o.id}`);
           await page.getByRole('button', { name: /^Ödeme · / }).click();
