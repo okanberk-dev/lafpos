@@ -13,6 +13,7 @@ import { onLive } from '@/lib/live';
 import { beep, unlockAudio } from '@/lib/sound';
 import { useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
+import { REMOTE } from '@/lib/remote';
 
 function mmss(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -120,6 +121,7 @@ export default function KitchenPage() {
           </button>
         )}
         <button
+          hidden={REMOTE}
           onClick={() => window.open('/cagri', 'lafpos-cagri')}
           title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)"
           className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] px-3 text-sm font-medium transition-colors hover:bg-surface-2 pointer-fine:min-h-9"
@@ -209,7 +211,7 @@ export default function KitchenPage() {
                   {t.items.map((i) => (
                     <li key={i.id}>
                       <button
-                        disabled={i.voided || online}
+                        disabled={i.voided || online || REMOTE}
                         onClick={() => setStatus([i.id], history ? 'hazirlaniyor' : undefined)}
                         className={cn('flex w-full items-start gap-3 px-3 py-2.5 text-left', !i.voided && !online && 'active:bg-surface-2', i.voided && 'bg-[var(--admin-danger-soft)]')}
                       >
@@ -228,7 +230,7 @@ export default function KitchenPage() {
                     </li>
                   ))}
                 </ul>
-                <footer className="flex gap-2 border-t border-[var(--admin-divider)] p-2">
+                <footer className={cn('flex gap-2 border-t border-[var(--admin-divider)] p-2', REMOTE && 'hidden')}>
                   {online ? (
                     <>
                       {!allStarted && (

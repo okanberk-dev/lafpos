@@ -12,6 +12,7 @@ import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
 import { toast } from '@/lib/toast';
+import { REMOTE } from '@/lib/remote';
 
 export interface PatronData {
   now: number;
@@ -52,7 +53,7 @@ export default function PatronPage() {
   const navigate = useNavigate();
   const now = useTick(30_000);
   const [table, setTable] = useState(false);
-  const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: 60_000 });
+  const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: REMOTE ? 10_000 : 60_000 });
 
   // Satış ve kasa olaylarında yenile; uyarılar anında bildirim olarak düşer
   useEffect(

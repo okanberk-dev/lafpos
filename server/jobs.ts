@@ -13,6 +13,7 @@ import { getOpenDay } from './services/orders';
 import { enqueueDay, flushOutbox } from './sync/lafmaliyet';
 import { onlineOrdersTick, pushSoldOut } from './sync/laffogato-orders';
 import { runMenuSync } from './sync/menu-sync';
+import { startCloudSync } from './sync/cloud';
 
 /** Senkron bütçesi: laffogato'nun veritabanına giden otomatik istekler 5 dakikadan sık değil (senkron.md). */
 export const SYNC_INTERVAL_MS = 5 * 60_000;
@@ -90,6 +91,8 @@ export function startJobs() {
   timers.push(setInterval(() => void flushOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setTimeout(backupTick, 30_000));
+  // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
+  timers.push(...startCloudSync());
   // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır
   timers.push(
     setInterval(() => {

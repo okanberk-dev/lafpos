@@ -438,6 +438,8 @@ export interface NetworkInfoDTO {
   lan: NetAddressDTO[];
   /** Tailscale adresleri (100.64.0.0/10): telefon Tailscale açıkken her yerden */
   tailscale: NetAddressDTO[];
+  /** LafPOS Uzaktan (Vercel): canlı özetin son gönderimi */
+  cloud?: { configured: boolean; url: string | null; lastSuccessAt?: number; lastError?: string | null };
 }
 
 /** Çağrı ekranı (televizyon ya da tablet): gel-al ve tezgâh siparişleri, numara ve yalnız ad */

@@ -17,5 +17,5 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["server", "shared", "tests", "scripts", "drizzle.config.ts", "vitest.config.ts", "vite.config.ts"]
+  "include": ["server", "shared", "api", "tests", "scripts", "drizzle.config.ts", "vitest.config.ts", "vite.config.ts"]
 }

@@ -61,6 +61,10 @@ export const env = {
   lafmaliyetUrl: (process.env.LAFMALIYET_URL ?? '').replace(/\/$/, ''),
   /** lafmaliyet'in imzalı POS uçları: paneldeki LAFPOS_SYNC_SECRET değeri */
   lafmaliyetToken: (process.env.LAFMALIYET_SYNC_SECRET ?? '').trim(),
+
+  /** LafPOS Uzaktan (Vercel): canlı özetin gittiği adres ve imza anahtarı (Vercel'deki LAFPOS_CLOUD_SECRET) */
+  cloudUrl: (process.env.LAFPOS_CLOUD_URL ?? '').replace(/\/$/, ''),
+  cloudSecret: (process.env.LAFPOS_CLOUD_SECRET ?? '').trim(),
 };
 
 mkdirSync(env.uploadsDir, { recursive: true });

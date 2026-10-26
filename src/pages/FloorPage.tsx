@@ -15,6 +15,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref, useMediaQuery, useTick } from '@/lib/hooks';
 import { toast } from '@/lib/toast';
+import { REMOTE } from '@/lib/remote';
 
 export default function FloorPage() {
   const boot = useBoot();
@@ -26,7 +27,7 @@ export default function FloorPage() {
   const [choose, setChoose] = useState<{ table: TableDTO; orders: FloorOrderSummary[] } | null>(null);
   const [takeaway, setTakeaway] = useState<null | 'gelal' | 'paket'>(null);
   const now = useTick(30_000);
-  const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), refetchInterval: 60_000 });
+  const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), refetchInterval: REMOTE ? 10_000 : 60_000 });
 
   const section = boot.sections.find((s) => s.id === sectionId) ?? boot.sections[0];
   const tables = boot.tables.filter((t) => t.sectionId === section?.id);
@@ -98,6 +99,8 @@ export default function FloorPage() {
                 ))}
               </div>
             )}
+            {!REMOTE && (
+            <>
             <Button icon={<ShoppingBag className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('gelal')} className="hidden sm:inline-flex">
               Gel-al
             </Button>
@@ -109,6 +112,8 @@ export default function FloorPage() {
             <Button variant="primary" icon={<Store className="size-4" strokeWidth={1.75} />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
               Tezgâh satışı
             </Button>
+            </>
+            )}
           </div>
         </header>
 

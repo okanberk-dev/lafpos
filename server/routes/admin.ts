@@ -9,6 +9,7 @@ import { Effects } from '../lib/effects';
 import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
+import { cloudState } from '../sync/cloud';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
 import { readdirSync, statSync } from 'node:fs';
@@ -641,7 +642,8 @@ adminRoutes.get('/audit', (c) => {
 adminRoutes.get('/network', (c) => {
   const user = c.get('user');
   if (!can(user, 'ayar.yonet')) requirePermission(user, 'patron.panel');
-  return c.json(networkInfo());
+  const { lastSize: _size, ...cloud } = cloudState();
+  return c.json({ ...networkInfo(), cloud });
 });
 
 adminRoutes.get('/backups', (c) => {

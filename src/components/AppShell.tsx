@@ -15,6 +15,7 @@ import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
 import { LafMark } from './LafMark';
 import { Modal } from './ui/Modal';
+import { REMOTE, REMOTE_PATHS } from '@/lib/remote';
 
 function useClock() {
   const [now, setNow] = useState(Date.now());
@@ -73,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     else void document.documentElement.requestFullscreen().catch(() => toast.warn('Tarayıcı tam ekrana izin vermedi'));
   };
 
-  const items = POS_NAV.filter((n) => n.perms.some((p) => can(p)));
+  const items = POS_NAV.filter((n) => n.perms.some((p) => can(p)) && (!REMOTE || REMOTE_PATHS.includes(n.to)));
   const primary = items.filter((n) => n.primary).slice(0, 4);
   const rest = items.filter((n) => !primary.includes(n));
   const admin = isAdminArea(location.pathname);
@@ -87,7 +88,12 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Bağlantı ve gün durumu. 84 px'lik rayda alt alta (yan yana "Gün kapalı" taşar)
   const liveLabel = live === 'canli' ? 'Canlı bağlantı' : live === 'baglaniyor' ? 'Bağlanıyor' : 'Bağlantı koptu; yeniden deneniyor';
-  const status = (rail = false) => (
+  const status = (rail = false) =>
+    REMOTE ? (
+      <span title="Kafeden gelen canlı özet; 10 sn'de bir yenilenir" className="rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-primary)]">
+        Uzaktan
+      </span>
+    ) : (
     <div className={cn('flex items-center text-xs', rail ? 'flex-col gap-1.5' : 'gap-1')}>
       <span title={liveLabel} aria-label={liveLabel} className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-1', live === 'kopuk' ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'text-muted')}>
         {live === 'kopuk' ? <WifiOff className="size-3.5" /> : <span className={cn('size-2 rounded-full', live === 'canli' ? 'bg-success-600 dark:bg-success-300' : 'bg-warn-500')} />}
@@ -101,7 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       </NavLink>
     </div>
-  );
+    );
   const avatar = (size: 'sm' | 'md') => (
     <span className={cn('grid place-items-center rounded-full font-semibold text-white', size === 'md' ? 'size-9 text-xs' : 'size-8 text-[11px]')} style={{ background: me.color }}>
       {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}

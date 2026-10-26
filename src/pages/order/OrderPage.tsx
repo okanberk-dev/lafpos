@@ -49,6 +49,7 @@ import { PaymentModal } from './PaymentModal';
 import { ProductPanel } from './ProductPanel';
 import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal } from './TableOps';
 import { useOrder } from './useOrder';
+import { REMOTE } from '@/lib/remote';
 
 type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
 
@@ -64,7 +65,7 @@ export default function OrderPage() {
   const { order, isLoading, isError, act } = useOrder(id);
   const pending = usePending(id);
   const cart = useCart();
-  const [tab, setTab] = useState<'menu' | 'adisyon'>('menu');
+  const [tab, setTab] = useState<'menu' | 'adisyon'>(REMOTE ? 'adisyon' : 'menu');
   const [dialog, setDialog] = useState<Dialog>(null);
   const [options, setOptions] = useState<{ product: ProductDTO; size: Size; editing: PendingLine | null } | null>(null);
   const [sending, setSending] = useState(false);
@@ -93,7 +94,7 @@ export default function OrderPage() {
 
   const isOpen = order.status === 'acik';
   const isOnline = order.source === 'laffogato';
-  const editable = isOpen && !isOnline && can('siparis.al');
+  const editable = !REMOTE && isOpen && !isOnline && can('siparis.al');
   const due = order.total - order.paid;
   const backPath = order.tableId ? '/masalar' : '/siparisler';
   const title = order.tableName ?? (isOnline ? (order.extLabel ?? 'Online') : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? `Gel-al${order.deliveryName ? ` · ${order.deliveryName}` : ''}` : `Paket${order.deliveryName ? ` · ${order.deliveryName}` : ''}`);
@@ -188,9 +189,11 @@ export default function OrderPage() {
           {order.note && ` · Not: ${order.note}`}
         </div>
       </div>
-      <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
-        <MoreVertical className="size-5" strokeWidth={1.75} />
-      </button>
+      {!REMOTE && (
+        <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
+          <MoreVertical className="size-5" strokeWidth={1.75} />
+        </button>
+      )}
     </div>
   );
 
@@ -215,7 +218,7 @@ export default function OrderPage() {
             Gönder ({pendingCount})
           </Button>
         </>
-      ) : isOpen && !isOnline ? (
+      ) : isOpen && !isOnline && !REMOTE ? (
         <>
           <Button size="lg" icon={<Printer className="size-4" />} onClick={printBill} disabled={!order.items.some((i) => !i.voided)}>
             Hesap
@@ -270,10 +273,13 @@ export default function OrderPage() {
       {wide ? (
         // Innex: iki beyaz kart; solda katalog, sağda adisyon (başlığıyla)
         <div className="flex min-h-0 flex-1 gap-2">
-          <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface">
-            <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
-          </section>
-          <section className="flex w-[clamp(320px,42vw,440px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+          {/* Uzaktan salt okunur: katalog yok, adisyon tam genişlikte */}
+          {!REMOTE && (
+            <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface">
+              <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
+            </section>
+          )}
+          <section className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface', REMOTE ? 'mx-auto w-full max-w-2xl' : 'w-[clamp(320px,42vw,440px)]')}>
             {header}
             {right}
           </section>
@@ -281,7 +287,7 @@ export default function OrderPage() {
       ) : (
         <>
           {header}
-          <div role="tablist" aria-label="Adisyon görünümü" className="grid grid-cols-2 border-b border-line bg-surface">
+          <div role="tablist" aria-label="Adisyon görünümü" className={cn('grid grid-cols-2 border-b border-line bg-surface', REMOTE && 'hidden')}>
             {(['menu', 'adisyon'] as const).map((k) => (
               <button
                 key={k}

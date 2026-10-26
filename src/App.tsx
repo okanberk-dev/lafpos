@@ -8,7 +8,9 @@ import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
 import { homePath } from './lib/nav';
 import { onLive, startLive, stopLive } from './lib/live';
+import { REMOTE, REMOTE_PATHS } from './lib/remote';
 import { LoginPage } from './pages/LoginPage';
+import { RemoteLoginPage } from './pages/RemoteLoginPage';
 
 const FloorPage = lazy(() => import('./pages/FloorPage'));
 const OrderPage = lazy(() => import('./pages/order/OrderPage'));
@@ -38,6 +40,8 @@ function Authed() {
   const location = useLocation();
 
   useEffect(() => {
+    // Uzaktan görünümde canlı bağlantı yok: veri kafeden gelen özette, sorgular kısa aralıkla yenilenir
+    if (REMOTE) return;
     startLive(qc);
     // Rol ya da kişi yetkisi değişince açık ekranın yetkileri de hemen değişsin
     const off = onLive((e) => {
@@ -63,6 +67,8 @@ function Authed() {
       </div>
     );
   }
+
+  if (REMOTE && !REMOTE_PATHS.includes(location.pathname) && !location.pathname.startsWith('/adisyon/')) return <Navigate to="/patron" replace />;
 
   // Müşteriye dönük ekranlar kasa menüsü olmadan tam sayfa açılır (otomatik kilit de yok)
   if (location.pathname === '/musteri-ekrani') {
@@ -115,7 +121,7 @@ export function App() {
   if (!ready) return <PageLoading label="LafPOS açılıyor" />;
   if (!me) {
     if (location.pathname !== '/giris') return <Navigate to="/giris" replace state={{ from: location.pathname }} />;
-    return <LoginPage />;
+    return REMOTE ? <RemoteLoginPage /> : <LoginPage />;
   }
   if (location.pathname === '/giris') return <Navigate to="/" replace />;
   return <Authed />;
