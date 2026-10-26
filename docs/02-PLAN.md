@@ -151,6 +151,13 @@ iptal edilen pay kalanlara dağılır (`orders.split_people`, `payments.share_no
 `docs/05-KASA-BILGISAYARI.md` §2); **uzaktan canlı erişim** Tailscale ile ve Yönetim › Ağ ve uzaktan erişim
 (`docs/07-UZAKTAN-ERISIM.md`, `tests/network.test.ts`); logo laffogato.net'in L'Af vektörü.
 
+Simpra ve robotPOS karşılaştırmasından (26 Ekim gece, `claude/ust-duzey-kasa`): tezgâhta tek ekran (Öde gönderir
+ve ödemeyi açar, satış bitince yeni satış; boş tezgâh adisyonu yeniden kullanılır, gün sonunda boşlar kapanır), bar
+ekranında Toplam görünümü, Hazır çağrı ekranı (`/cagri`), hazırlama süresi raporu, siparişi alana hazır bildirimi,
+elle fiyat, müşteri ekranı (`/musteri-ekrani`), adisyonda görselli ürün kartları ve kategori listesi, LafPOS Uzaktan
+(Vercel, salt okunur; `docs/07-UZAKTAN-ERISIM.md` §4). Sırada: patronun telefonuna alarm bildirimi (lafmaliyet Web
+Push), vardiya kasa sayımı, personel giriş-çıkış, kampanya kuralları (fiyatın sahibi site; karar gerekir).
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

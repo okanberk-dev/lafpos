@@ -172,6 +172,8 @@ export interface PublicSettings {
   autoLockMinutes: number;
   /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */
   keepAwake: boolean;
+  /** Ürün kartlarında sitedeki görsel (küçük kopyası kasa sunucusunda) */
+  productImages: boolean;
   voidReasons: string[];
   compReasons: string[];
   discountReasons: string[];
@@ -436,4 +438,35 @@ export interface NetworkInfoDTO {
   lan: NetAddressDTO[];
   /** Tailscale adresleri (100.64.0.0/10): telefon Tailscale açıkken her yerden */
   tailscale: NetAddressDTO[];
+  /** LafPOS Uzaktan (Vercel): canlı özetin son gönderimi */
+  cloud?: { configured: boolean; url: string | null; lastSuccessAt?: number; lastError?: string | null };
 }
+
+/** Çağrı ekranı (televizyon ya da tablet): gel-al ve tezgâh siparişleri, numara ve yalnız ad */
+export interface PickupEntryDTO {
+  id: string;
+  no: number;
+  /** Online siparişte müşterinin adı (soyadı gelmez); tezgâhta yok, numara söylenir */
+  name: string | null;
+  online: boolean;
+}
+
+export interface PickupBoardDTO {
+  preparing: PickupEntryDTO[];
+  /** En yeni üstte; hazır olduktan 10 dakika sonra ya da teslim edilince düşer */
+  ready: (PickupEntryDTO & { readyAt: number })[];
+}
+
+/** Müşteri ekranı: kasadaki adisyonun müşteriye gösterilen hâli (sunucu bellekte tutar, kaydetmez) */
+export interface DisplayLineDTO {
+  name: string;
+  size: string | null;
+  qty: number;
+  options: string;
+  total: number;
+}
+
+export type DisplayStateDTO =
+  | { kind: 'idle'; at: number }
+  | { kind: 'order'; at: number; label: string; lines: DisplayLineDTO[]; discount: number; total: number; paid: number; due: number }
+  | { kind: 'thanks'; at: number; total: number };

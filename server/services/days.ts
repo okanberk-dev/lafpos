@@ -10,7 +10,7 @@ import type { Effects } from '../lib/effects';
 import { bad, conflict, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
-import { getOpenDay, requireOpenDay } from './orders';
+import { getOpenDay, isEmptyOrder, requireOpenDay } from './orders';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
 
@@ -272,11 +272,19 @@ export function closeDay(
 ): DayRow {
   if (actor) needDirect(actor, 'kasa.gun');
   const day = requireOpenDay(t);
-  const openPos = t
-    .select({ no: schema.orders.no })
+  const open = t
+    .select({ id: schema.orders.id, no: schema.orders.no })
     .from(schema.orders)
     .where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos')))
     .all();
+  // Kalemsiz ve ödemesiz adisyon parasal iz bırakmaz: gün sonunu tutmaz, kendiliğinden kapanır
+  const emptyAt = Date.now();
+  const openPos = open.filter((o) => {
+    if (!isEmptyOrder(t, o.id)) return true;
+    t.update(schema.orders).set({ status: 'iptal', cancelReason: 'Boş adisyon (gün sonu)', closedAt: emptyAt, closedBy: actor?.user.id ?? null, updatedAt: emptyAt }).where(eq(schema.orders.id, o.id)).run();
+    fx.audit(t, { userId: actor?.user.id ?? null, action: 'order.cancel', severity: 'info', orderId: o.id, amount: 0, message: `#${o.no} boş adisyon gün sonunda kapatıldı` });
+    return false;
+  });
   if (openPos.length) {
     throw conflict(`Açık adisyon var: ${openPos.map((o) => `#${o.no}`).join(', ')}. Gün sonundan önce kapatın ya da iptal edin`, 'open_orders');
   }

@@ -46,7 +46,26 @@ LafPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kaf
   yalnız patron ve yönetici cihazlarını ekleyin.
 - **Bağlantı kopunca** ekranın üstündeki durum noktası kırmızıya döner, LafPOS kendini yeniden bağlar.
 
-## 4. Sorun giderme
+## 4. LafPOS Uzaktan (Vercel): kurulumsuz, salt okunur
+
+Telefona uygulama kurmadan, herhangi bir tarayıcıdan: `https://lafpos.vercel.app`, patron parolasıyla. Patron
+paneli, masalar, açık adisyonların kalemleri ve bar kuyruğu; işlem yapılmaz (iptal, ödeme, Tükendi kafedeki kasadan
+ya da Tailscale ile). Kafedeki sunucu canlı özeti değişiklikte en sık 15 sn'de bir, boşta 5 dk'da bir iter
+(`server/sync/cloud.ts`); bulut onu Upstash Redis'te tutar (`api/uzaktan.ts`), ekran 10 sn'de bir yenilenir.
+Maliyet ve kâr, PIN'ler, müşteri telefonları gitmez.
+
+| Nerede | Ne |
+|---|---|
+| Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
+| Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter), `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
+| Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
+
+Neden kasa Neon'a taşınmadı: kasa internet kesilince de çalışmalı; Neon'un ücretsiz planındaki aylık işlem süresi
+açık saatler boyunca uyanık bir veritabanına yetmez ve lafmaliyet'in veritabanını da durdururdu. Kalıcı geçmiş gün
+sonunda lafmaliyet'e (Neon) gider; anlık görünüm için Redis yeterli ve ucuz. Parola denemesi IP başına 15 dakikada 8.
+Durum: Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan.
+
+## 5. Sorun giderme
 
 | Belirti | Bakılacak yer |
 |---|---|
@@ -54,5 +73,7 @@ LafPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kaf
 | Telefonda sayfa açılmıyor | Telefonda Tailscale açık mı, iki cihaz aynı hesapta mı; Tailscale uygulamasında kasa bilgisayarı "Connected" mı |
 | Kafede açılıyor, dışarıda açılmıyor | Kasa bilgisayarı uykuda olabilir: Windows kurulumundaki "Prizdeyken uyku kapalı" seçeneği |
 | "Bu işlem için yetkiniz yok" | Uzaktan da rol yetkileri geçerli (Yönetim › Roller ve yetkiler) |
+| LafPOS Uzaktan "Kafeden henüz veri gelmedi" | Kafede `LAFPOS_CLOUD_URL` ve `LAFPOS_CLOUD_SECRET`, Vercel'de aynı anahtar; Yönetim › Ağ'daki son hata |
+| LafPOS Uzaktan "Upstash Redis bağlı değil" | Vercel › lafpos › Storage'dan Upstash Redis ekleyip yeniden yayınlayın |
 
-Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, test `tests/network.test.ts`.
+Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, bulut `api/uzaktan.ts` ve `server/sync/cloud.ts`; testler `tests/network.test.ts`, `tests/cloud-api.test.ts`.

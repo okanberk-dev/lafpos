@@ -16,6 +16,7 @@ interface OkcStatus {
   mode: 'anlik' | 'liste';
   sectionMap: Record<string, number>;
   operatorMethods: Record<string, string>;
+  active: { label: string; configured: boolean; capabilities: { instant: boolean; list: boolean; splitPayment: boolean; docKinds: string[] } } | null;
   tokenx: { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean };
   lastError: { message: string; at: number } | null;
 }
@@ -27,6 +28,16 @@ interface TestResult {
 }
 
 const RATES = ['1', '10', '20'];
+
+const DOC_LABEL: Record<string, string> = { okc_fis: 'mali fiş', bilgi_fisi: 'bilgi fişi', e_arsiv: 'e-Arşiv', e_fatura: 'e-Fatura' };
+
+/** Bağlantısı henüz olmayan markalar: neden ve üreticiden ne istenecek (docs/04-OKC.md'de ayrıntı) */
+const OTHER_VENDORS: { name: string; channel: string; state: string }[] = [
+  { name: 'Hugin', channel: 'Cloud Link (TSM)', state: 'Açık belge eksik: satış sonucunun ödeme, Z ve fiş alanları istenecek' },
+  { name: 'Pavo', channel: 'IP REST, bulut', state: 'Yalnız iş ortaklarına belge veriyor; e-Arşiv hesabı gerekir' },
+  { name: 'Ingenico', channel: 'GMP-3 DLL (Windows)', state: 'Geliştirici programı ve sürüm başına kayıt gerekir' },
+  { name: 'Verifone, Inpos, Profilo, PayGo, Vera', channel: 'TSM ya da kablolu', state: 'Açık belge yok; üreticiden istenecek' },
+];
 
 export default function OkcAdmin() {
   const boot = useBoot();
@@ -78,9 +89,25 @@ export default function OkcAdmin() {
             options={[
               { value: 'kapali', label: 'Kapalı' },
               { value: 'simulator', label: 'Eğitim cihazı' },
-              { value: 'tokenx', label: 'Token (TokenX Connect)' },
+              { value: 'tokenx', label: 'Token · Beko (TokenX Connect)' },
             ]}
           />
+          {s.active && (
+            <div className="flex flex-wrap gap-1.5 text-xs">
+              {[
+                s.active.capabilities.instant && 'Kasada ödeme',
+                s.active.capabilities.list && 'Masada ödeme',
+                s.active.capabilities.splitPayment && 'Bölünmüş ödeme',
+                s.active.capabilities.docKinds.map((d) => DOC_LABEL[d] ?? d).join(', '),
+              ]
+                .filter(Boolean)
+                .map((t) => (
+                  <span key={String(t)} className="rounded-md bg-surface-2 px-2 py-1 text-ink-2">
+                    {t}
+                  </span>
+                ))}
+            </div>
+          )}
           {s.provider === 'simulator' && (
             <p className="text-sm text-muted">
               Gerçek cihaz bağlanana kadar akışı denemek ve personeli eğitmek için. Sepetler <Link to="/cihaz" className="font-semibold text-brand-600 underline">eğitim cihazı</Link> ekranında ödenir
@@ -186,6 +213,32 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
           </div>
         </Card>
       )}
+
+      <Card flush title="Diğer markalar">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted">
+              <tr className="border-b border-line">
+                <th className="px-4 py-2">Marka</th>
+                <th className="px-2 py-2">Kanal</th>
+                <th className="px-4 py-2">Durum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {OTHER_VENDORS.map((v) => (
+                <tr key={v.name} className="border-b border-line/60 last:border-0">
+                  <td className="px-4 py-2 font-medium">{v.name}</td>
+                  <td className="px-2 py-2 text-ink-2">{v.channel}</td>
+                  <td className="px-4 py-2 text-muted">{v.state}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-line px-4 py-3 text-xs text-muted">
+          LafPOS'ta her marka ayrı bir sağlayıcıdır; üretici belgeyi ve test bilgilerini verince sağlayıcı eklenir, adisyon ve ödeme akışı değişmez. Masada ödemede GMP-3 §6.1 gereği üreticinin bulut kanalının bilgi fişi ve TSM kaydını desteklediği yazılı teyit edilmeli.
+        </p>
+      </Card>
 
       <Card flush title="Nasıl çalışır">
         <div className="flex gap-3 p-4 text-sm text-ink-2">

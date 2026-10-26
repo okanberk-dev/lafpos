@@ -4,7 +4,7 @@ import { tlPlain } from '@shared/money';
 import { businessDate, fmtDateTime } from '@shared/time';
 import { type AppEnv, can, requirePermission } from '../lib/auth';
 import { query } from '../lib/http';
-import { checksReport, hourlyReport, itemListReport, patronLive, productReport, refundReport, staffReport, summaryReport } from '../services/reports';
+import { checksReport, hourlyReport, itemListReport, patronLive, prepReport, productReport, refundReport, staffReport, summaryReport } from '../services/reports';
 
 export const reportRoutes = new Hono<AppEnv>();
 
@@ -24,6 +24,7 @@ reportRoutes.use('*', async (c, next) => {
 reportRoutes.get('/summary', (c) => c.json(summaryReport(range(c))));
 reportRoutes.get('/products', (c) => c.json(productReport(range(c), can(c.get('user'), 'rapor.maliyet'))));
 reportRoutes.get('/hourly', (c) => c.json(hourlyReport(range(c))));
+reportRoutes.get('/prep', (c) => c.json(prepReport(range(c))));
 reportRoutes.get('/staff', (c) => {
   requirePermission(c.get('user'), 'rapor.maliyet');
   return c.json(staffReport(range(c)));

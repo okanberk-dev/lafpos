@@ -164,14 +164,21 @@ export interface SalePayment {
  * yuvarlama) kırpılır; eksik kalan kısım için kalem üretilmez (adisyon açık kalır, kalan LafPOS'ta alınır).
  */
 export function salePayments(sale: TokenxSale, basketAmount: number): SalePayment[] {
-  const out: SalePayment[] = [];
+  const raw = (sale.paymentItems ?? [])
+    .filter((p) => p.type !== TOKENX_PAYMENT.IKRAM && p.type !== TOKENX_PAYMENT.ODEMESIZ)
+    .map((p) => ({ kind: methodKindFor(p.type), type: p.type, amount: Math.round(p.amount), operatorId: p.operatorId ?? null, description: p.description ?? null }));
+  return clampPayments(raw, basketAmount);
+}
+
+/** Ödemeleri sepet tutarına kırpar: toplamı aşan kısım atılır, sıfır ve eksi kalemler düşer (her sağlayıcı için) */
+export function clampPayments<T extends { amount: number }>(payments: T[], basketAmount: number): T[] {
+  const out: T[] = [];
   let left = basketAmount;
-  for (const p of sale.paymentItems ?? []) {
+  for (const p of payments) {
     if (left <= 0) break;
-    if (p.type === TOKENX_PAYMENT.IKRAM || p.type === TOKENX_PAYMENT.ODEMESIZ) continue;
     const amount = Math.min(Math.round(p.amount), left);
     if (amount <= 0) continue;
-    out.push({ kind: methodKindFor(p.type), type: p.type, amount, operatorId: p.operatorId ?? null, description: p.description ?? null });
+    out.push({ ...p, amount });
     left -= amount;
   }
   return out;

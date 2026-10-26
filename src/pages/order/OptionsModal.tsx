@@ -1,6 +1,6 @@
 import { Minus, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { tl, tlCompact, tlShort } from '@shared/money';
+import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -43,6 +43,8 @@ export function OptionsModal({
   const [picks, setPicks] = useState<Picks>({});
   const [note, setNote] = useState('');
   const [qty, setQty] = useState(1);
+  // Elle fiyat (açık ürün, pazarlıklı satış): boşsa menü fiyatı. Sunucu yetki ister, denetim kaydına yazar
+  const [priceText, setPriceText] = useState('');
 
   useEffect(() => {
     if (!product) return;
@@ -51,11 +53,13 @@ export function OptionsModal({
       setPicks(Object.fromEntries(editing.options.map((o) => [o.itemId, o.qty ?? 1])));
       setNote(editing.note);
       setQty(editing.qty);
+      setPriceText(editing.priceOverride != null ? String(editing.priceOverride / 100).replace('.', ',') : '');
     } else {
       setSize(product.priceL != null ? (initialSize === 'L' ? 'L' : 'M') : 'TEK');
       setPicks(defaultPicks(groups));
       setNote('');
       setQty(1);
+      setPriceText('');
     }
   }, [product, editing, initialSize, groups]);
 
@@ -63,7 +67,8 @@ export function OptionsModal({
   const options = Object.entries(picks)
     .filter(([, n]) => n > 0)
     .map(([itemId, n]) => ({ itemId, qty: n }));
-  const unit = estimateUnit(boot, product, size, options);
+  const override = priceText.trim() ? parseTL(priceText) : null;
+  const unit = override ?? estimateUnit(boot, product, size, options);
 
   // Tek seçimlik grup radyo düğmesi gibi davranır: dokunulan seçilir, gruptaki diğerleri kalkar
   const pickSingle = (g: OptionGroupDTO, itemId: string) => {
@@ -93,7 +98,7 @@ export function OptionsModal({
             </button>
           </div>
           <div className="flex-1" />
-          <Button variant="primary" size="lg" onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim() })}>
+          <Button variant="primary" size="lg" onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
             {editing ? 'Güncelle' : 'Ekle'} · {tl(unit * qty)}
           </Button>
         </div>
@@ -181,6 +186,18 @@ export function OptionsModal({
             placeholder="Bara/mutfağa not"
             className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-brand-500"
           />
+        </section>
+        <section>
+          <h3 className="mb-2 text-sm font-semibold text-ink-2">Fiyat</h3>
+          <input
+            value={priceText}
+            onChange={(e) => setPriceText(e.target.value.replace(/[^\d.,]/g, '').slice(0, 9))}
+            inputMode="decimal"
+            placeholder={`${tl(estimateUnit(boot, product, size, options))} (menü fiyatı)`}
+            aria-label="Elle birim fiyat"
+            className="tabular h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-primary"
+          />
+          <p className="mt-1 text-xs text-muted">Boş bırakın; yalnız açık ürün ya da istisna için. Yetkili onayı ister ve denetim kaydına düşer</p>
         </section>
         {product.allergens && product.allergens.length > 0 && <p className="text-xs text-muted">Alerjen: {product.allergens.join(', ')}</p>}
       </div>

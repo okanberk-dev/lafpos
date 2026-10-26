@@ -11,7 +11,7 @@ sonu, müşteri/cari, paket, rezervasyon, karaoke odası, raporlar ve patron pan
 - Entegrasyon sözleşmesi: [docs/03-ENTEGRASYON.md](docs/03-ENTEGRASYON.md)
 - Yazarkasa POS (TokenX Connect): [docs/04-YAZARKASA.md](docs/04-YAZARKASA.md)
 - Kasa bilgisayarı (Windows kurulum dosyası, Chrome kiosk, sessiz fiş yazdırma, otomatik başlatma): [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md)
-- Uzaktan canlı erişim (Tailscale): [docs/07-UZAKTAN-ERISIM.md](docs/07-UZAKTAN-ERISIM.md)
+- Uzaktan canlı erişim (Tailscale; Vercel'de salt okunur LafPOS Uzaktan): [docs/07-UZAKTAN-ERISIM.md](docs/07-UZAKTAN-ERISIM.md)
 - Karar: tek sistem, iki yüz (ürünler laffogato panelinde): [docs/06-TEK-SISTEM.md](docs/06-TEK-SISTEM.md)
 - Tasarım sistemi (kasa ekranları, Innex yönetim paneli, telefon ve tablet): [DESIGN.md](DESIGN.md), ürün bağlamı [PRODUCT.md](PRODUCT.md), Innex tarifi [docs/ADMIN-INNEX.md](docs/ADMIN-INNEX.md)
 - Claude Code skill'leri: [docs/SKILLS.md](docs/SKILLS.md)

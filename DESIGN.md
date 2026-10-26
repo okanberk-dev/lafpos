@@ -25,6 +25,10 @@ Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (
 - **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş (hesap N
   kişiye eşit bölünür, paylar sırayla ve istenen yöntemle alınır; pay tutarını sunucu hesaplar,
   `shared/order-calc.ts` `splitState`). Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme.
+- **Adisyon:** geniş ekranda kategoriler solda dikey liste (sayılarıyla), ürün kartında sitedeki görsel (dekupaj gri
+  sahnede, fotoğraf sahneyi doldurur, görseli olmayanda baş harfler); "/" aramaya götürür.
+- **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok): çağrı ekranı `/cagri` (Hazırlanıyor ve
+  büyük numaralı Hazır), müşteri ekranı `/musteri-ekrani` (kalemler ve büyük tutar; teşekkür; hoş geldiniz).
 - **Grafik:** tek seri tek renk (birincil mavi), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli
   adım yok, verisi olmayan dönemde eksen değil "Bu dönemde veri yok" çizilir (`src/components/charts.tsx`).
 

@@ -9,32 +9,58 @@ import { Button } from '@/components/ui/Button';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { Card, KpiStrip, PageHeader, Segmented, StatusTabs } from '@/components/admin/ui';
 import { EmptyState, PageLoading, Stat } from '@/components/ui/misc';
-import { get, getToken } from '@/lib/api';
+import { errorMessage, get, getToken } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { fmtShortDate, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 
-type ReportKey = 'ciro' | 'satis' | 'kategori' | 'saatlik' | 'adisyon' | 'iptal' | 'ikram' | 'indirim' | 'happy' | 'iade' | 'personel' | 'aktarim';
+type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'kayip' | 'happy' | 'personel' | 'aktarim';
+type ProductView = 'urun' | 'kategori';
+type LossKind = 'iptal' | 'ikram' | 'indirim' | 'iade';
 
 const REPORTS: { key: ReportKey; label: string; hint: string; perm?: 'rapor.maliyet' }[] = [
-  { key: 'ciro', label: 'Ciro', hint: 'Gelir özeti ve önceki dönem' },
-  { key: 'satis', label: 'Satış', hint: 'Ürün bazında' },
-  { key: 'kategori', label: 'Kategori', hint: 'Kategori payları' },
+  { key: 'ciro', label: 'Ciro', hint: 'Gelir özeti, döküm ve önceki dönem' },
+  { key: 'urunler', label: 'Ürünler', hint: 'Ürün ve kategori satışları' },
   { key: 'saatlik', label: 'Saatlik', hint: 'Yoğun saatler, gün dilimleri' },
+  { key: 'hazirlama', label: 'Hazırlama süresi', hint: 'Bar ve mutfak hızı' },
   { key: 'adisyon', label: 'Adisyonlar', hint: 'Kapanan ve iptal' },
-  { key: 'iptal', label: 'İptaller', hint: 'Silinen kalemler' },
-  { key: 'ikram', label: 'İkramlar', hint: 'Ciro dışı' },
-  { key: 'indirim', label: 'İndirimler', hint: 'Kalem ve adisyon' },
+  { key: 'kayip', label: 'İptal ve indirim', hint: 'İptal, ikram, indirim, ödeme iptali' },
   { key: 'happy', label: 'Happy hour', hint: 'Kampanya etkisi' },
-  { key: 'iade', label: 'Ödeme iptalleri', hint: 'İade edilen ödemeler' },
   { key: 'personel', label: 'Personel', hint: 'Satış, iptal, ikram', perm: 'rapor.maliyet' },
   { key: 'aktarim', label: 'lafmaliyet aktarımı', hint: 'Satışlar listesi' },
 ];
 
+/** Eski sürümde kaydedilmiş sekme anahtarları: birleşen sekmeler yeni yerine açılır */
+const LEGACY: Record<string, { key: ReportKey; product?: ProductView; loss?: LossKind }> = {
+  satis: { key: 'urunler', product: 'urun' },
+  kategori: { key: 'urunler', product: 'kategori' },
+  iptal: { key: 'kayip', loss: 'iptal' },
+  ikram: { key: 'kayip', loss: 'ikram' },
+  indirim: { key: 'kayip', loss: 'indirim' },
+  iade: { key: 'kayip', loss: 'iade' },
+};
+
+const LOSS_TABS: { value: LossKind; label: string }[] = [
+  { value: 'iptal', label: 'İptaller' },
+  { value: 'ikram', label: 'İkramlar' },
+  { value: 'indirim', label: 'İndirimler' },
+  { value: 'iade', label: 'Ödeme iptalleri' },
+];
+
 export default function ReportsPage() {
   const can = useCan();
-  const [report, setReport] = useLocalPref<ReportKey>('reports.key', 'ciro');
+  const [saved, setReport] = useLocalPref<ReportKey>('reports.key', 'ciro');
+  const legacy = LEGACY[saved];
+  const report = legacy?.key ?? saved;
+  const [productView, setProductView] = useLocalPref<ProductView>('reports.products', legacy?.product ?? 'urun');
+  const [loss, setLoss] = useLocalPref<LossKind>('reports.loss', legacy?.loss ?? 'iptal');
+  const open = (key: ReportKey, sub?: { product?: ProductView; loss?: LossKind }) => {
+    if (sub?.product) setProductView(sub.product);
+    if (sub?.loss) setLoss(sub.loss);
+    setReport(key);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   const [period, setPeriod] = useLocalPref<PeriodKey>('reports.period', 'bugun');
   const [custom, setCustom] = useState(() => periodRange('hafta'));
   const range = period === 'ozel' ? custom : periodRange(period);
@@ -80,15 +106,23 @@ export default function ReportsPage() {
         )}
       </PageHeader>
       <StatusTabs label="Rapor" value={current.key} onChange={setReport} tabs={visible.map((r) => ({ value: r.key, label: r.label }))} />
-      {current.key === 'ciro' && <SummaryReport range={range} />}
-      {current.key === 'satis' && <ProductsReport range={range} onExport={() => exportCsv('urunler')} />}
-      {current.key === 'kategori' && <CategoryReport range={range} />}
-      {current.key === 'saatlik' && <HourlyReport range={range} onExport={() => exportCsv('saatlik')} />}
-      {current.key === 'adisyon' && <ChecksReport range={range} onExport={() => exportCsv('adisyonlar')} />}
-      {(current.key === 'iptal' || current.key === 'ikram' || current.key === 'indirim' || current.key === 'happy') && (
-        <ItemsReport range={range} kind={current.key} onExport={current.key === 'happy' ? undefined : () => exportCsv(current.key)} />
+      {current.key === 'ciro' && <SummaryReport range={range} onOpen={open} />}
+      {current.key === 'urunler' && (
+        <div className="space-y-3">
+          <Segmented label="Görünüm" value={productView} onChange={setProductView} options={[{ value: 'urun', label: 'Ürün' }, { value: 'kategori', label: 'Kategori' }]} />
+          {productView === 'urun' ? <ProductsReport range={range} onExport={() => exportCsv('urunler')} /> : <CategoryReport range={range} />}
+        </div>
       )}
-      {current.key === 'iade' && <RefundsReport range={range} />}
+      {current.key === 'saatlik' && <HourlyReport range={range} onExport={() => exportCsv('saatlik')} />}
+      {current.key === 'hazirlama' && <PrepReport range={range} />}
+      {current.key === 'adisyon' && <ChecksReport range={range} onExport={() => exportCsv('adisyonlar')} />}
+      {current.key === 'kayip' && (
+        <div className="space-y-3">
+          <Segmented label="Tür" value={loss} onChange={setLoss} options={LOSS_TABS} className="max-sm:w-full" />
+          {loss === 'iade' ? <RefundsReport range={range} /> : <ItemsReport range={range} kind={loss} onExport={() => exportCsv(loss)} />}
+        </div>
+      )}
+      {current.key === 'happy' && <ItemsReport range={range} kind="happy" />}
       {current.key === 'personel' && <StaffReport range={range} />}
       {current.key === 'aktarim' && <ExportReport range={range} onDownload={() => exportCsv('', `/api/sync/lafmaliyet/satislar.csv?from=${range.from}&to=${range.to}`)} />}
     </AdminShell>
@@ -123,15 +157,34 @@ interface Summary {
   payments: { name: string; amount: number; count: number; share: number }[];
   types: { type: string; orders: number; amount: number }[];
   online: { orders: number; amount: number };
-  previous: { netSales: number; receipts: number; change: number | null };
+  previous: { netSales: number; receipts: number; change: number | null; label: string };
+  asOf: number;
+  waterfall: { list: number; complimentary: number; discounts: number; service: number; revenue: number; kdv: number; netExKdv: number };
+  kdv: { rate: number; gross: number; base: number; kdv: number }[];
+  reconciliation: { paidClosed: number; difference: number; paidOpen: number };
+  perGuest: number | null;
 }
 
 const TYPE_LABEL: Record<string, string> = ORDER_TYPE_LABEL;
 
-function SummaryReport({ range }: { range: Range }) {
+/** Rapor alınamadı: sıfır ya da "satış yok" gösterilmez (yanlış rakam gibi okunur), neden ve yeniden dene */
+function ReportError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  return (
+    <div role="alert" className="rounded-xl border border-[var(--admin-danger-soft)] bg-[var(--admin-danger-soft)] p-4 text-sm text-[var(--admin-danger-ink)]">
+      <p className="font-semibold">Rapor alınamadı; rakamlar gösterilmiyor</p>
+      <p className="mt-1">{errorMessage(error)}</p>
+      <Button size="sm" className="mt-3" onClick={onRetry}>
+        Yeniden dene
+      </Button>
+    </div>
+  );
+}
+
+function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKey, sub?: { product?: ProductView; loss?: LossKind }) => void }) {
   const q = useQuery({ queryKey: ['reports', 'summary', range], queryFn: () => get<Summary>(`/reports/summary?${qs(range)}`) });
   const hourly = useQuery({ queryKey: ['reports', 'hourly', range], queryFn: () => get<HourlyData>(`/reports/hourly?${qs(range)}`), enabled: range.from === range.to });
   if (q.isLoading) return <PageLoading />;
+  if (q.isError) return <ReportError error={q.error} onRetry={() => void q.refetch()} />;
   const s = q.data;
   if (!s) return null;
   return (
@@ -140,16 +193,16 @@ function SummaryReport({ range }: { range: Range }) {
         cells={[
           {
             key: 'ciro',
-            label: 'Net ciro',
+            label: 'Ciro (KDV dahil)',
             icon: <CircleDollarSign />,
             hue: 'blue',
             value: tl(s.netSales),
             delta: s.previous.change == null ? null : { text: `${s.previous.change >= 0 ? '▲' : '▼'} %${Math.abs(s.previous.change).toLocaleString('tr-TR')}`, good: s.previous.change >= 0 },
-            reference: s.previous.change == null ? 'Önceki dönemde satış yok' : `Önceki aynı uzunlukta dönem ${tl(s.previous.netSales)}`,
+            reference: s.previous.change == null ? `Kıyas (${s.previous.label}) satışsız` : `${s.previous.label}: ${tl(s.previous.netSales)}`,
           },
-          { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)} · önceki ${s.previous.receipts}` },
-          { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü' },
-          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary)} · iptal ${tl(s.voided)}` },
+          { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)}${s.perGuest != null ? ` · kişi başı ${tl(s.perGuest)}` : ''} · önceki ${s.previous.receipts}`, onClick: () => onOpen('adisyon') },
+          { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü', onClick: () => onOpen('urunler', { product: 'urun' }) },
+          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary)} · iptal ${tl(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
           { key: 'online', label: 'Online (sitede ödendi)', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `${s.online.orders} sipariş, ciroya dahil değil` },
         ]}
       />
@@ -170,6 +223,50 @@ function SummaryReport({ range }: { range: Range }) {
           </div>
         </Card>
       </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card flush title="Ciro dökümü" subtitle="Kapanmış adisyonlar; iptaller düşülmez, bilgi olarak">
+          <dl className="divide-y divide-[var(--admin-divider)] text-sm">
+            {[
+              ['Liste değeri', s.waterfall.list, false],
+              ['İkram', -s.waterfall.complimentary, false],
+              ['İndirim', -s.waterfall.discounts, false],
+              ...(s.waterfall.service ? [['Servis ücreti', s.waterfall.service, false] as const] : []),
+              ['Ciro (KDV dahil)', s.waterfall.revenue, true],
+              ['KDV', -s.waterfall.kdv, false],
+              ['Net satış (KDV hariç)', s.waterfall.netExKdv, true],
+            ].map(([label, value, strong]) => (
+              <div key={String(label)} className={cn('flex justify-between px-4 py-2.5', strong === true && 'font-semibold')}>
+                <dt>{label}</dt>
+                <dd className="tabular">{(value as number) < 0 ? `−${tl(-(value as number))}` : tl(value as number)}</dd>
+              </div>
+            ))}
+            <div className="flex justify-between px-4 py-2.5 text-muted">
+              <dt>İptal edilen (bilgi)</dt>
+              <dd className="tabular">{tl(s.voided)}</dd>
+            </div>
+          </dl>
+        </Card>
+        <Card flush title="KDV oranlarına göre" subtitle="Matrah + KDV = ciro">
+          <dl className="divide-y divide-[var(--admin-divider)] text-sm">
+            {s.kdv.length === 0 && <p className="px-4 py-3 text-muted">Bu dönemde satış yok</p>}
+            {s.kdv.map((k) => (
+              <div key={k.rate} className="grid grid-cols-[4rem_1fr_1fr_1fr] gap-2 px-4 py-2.5">
+                <dt className="font-medium">%{k.rate}</dt>
+                <dd className="tabular text-right text-muted">{tl(k.base)}</dd>
+                <dd className="tabular text-right text-muted">{tl(k.kdv)}</dd>
+                <dd className="tabular text-right font-medium">{tl(k.gross)}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className={cn('mx-4 mb-4 mt-2 rounded-lg px-3 py-2 text-xs', s.reconciliation.difference === 0 ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
+            {s.reconciliation.difference === 0
+              ? `Mutabık: kapanmış adisyonların ödemeleri ciroya eşit (${tl(s.reconciliation.paidClosed)})`
+              : `Fark var: ödemeler ${tl(s.reconciliation.paidClosed)}, ciro ${tl(s.waterfall.revenue)}; fark ${tl(s.reconciliation.difference)}`}
+            {s.reconciliation.paidOpen > 0 && ` · açık adisyonlardan alınan ${tl(s.reconciliation.paidOpen)} ayrı`}
+          </div>
+        </Card>
+      </div>
+      <p className="text-xs text-muted">{fmtDateTime(s.asOf)} itibarıyla · ciro kapanmış adisyonlardan, adisyonun açıldığı iş gününe göre</p>
       <Card flush title="Satış türleri">
         <div className="p-4">
           <BarList items={s.types.map((t) => ({ key: t.type, label: TYPE_LABEL[t.type] ?? t.type, value: t.amount, sub: `${t.orders} adisyon` }))} format={tl} />
@@ -181,6 +278,8 @@ function SummaryReport({ range }: { range: Range }) {
 
 interface ProductsData {
   total: number;
+  /** Ürüne ait olmayan servis ücreti; ürün cirosu + servis = toplam ciro */
+  service: number;
   products: { key: string; name: string; size: string; category: string; qty: number; revenue: number; share: number; avgPrice: number; complimentary: number; voided: number; cost: number | null; margin: number | null }[];
   categories: { name: string; qty: number; revenue: number; share: number }[];
 }
@@ -191,11 +290,12 @@ function ProductsReport({ range, onExport }: { range: Range; onExport: () => voi
   const data = useQuery({ queryKey: ['reports', 'products', range], queryFn: () => get<ProductsData>(`/reports/products?${qs(range)}`) });
   const rows = useMemo(() => (data.data?.products ?? []).filter((p) => p.name.toLocaleLowerCase('tr-TR').includes(q.toLocaleLowerCase('tr-TR'))), [data.data, q]);
   if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const max = Math.max(1, ...rows.map((r) => r.revenue));
   const withCost = can('rapor.maliyet');
   return (
     <Card flush
-      title={`Ürün satışları · ${tl(data.data?.total ?? 0)}`}
+      title={`Ürün satışları · ${tl(data.data?.total ?? 0)}${data.data?.service ? ` · servis ücreti ${tl(data.data.service)} ayrı` : ''}`}
       actions={
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -265,6 +365,7 @@ function ProductsReport({ range, onExport }: { range: Range; onExport: () => voi
 function CategoryReport({ range }: { range: Range }) {
   const data = useQuery({ queryKey: ['reports', 'products', range], queryFn: () => get<ProductsData>(`/reports/products?${qs(range)}`) });
   if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const cats = data.data?.categories ?? [];
   return (
     <Card flush title="Kategori payları">
@@ -283,11 +384,14 @@ interface HourlyData {
   busiest: { hour: number; revenue: number; orders: number } | null;
   quietest: { hour: number; revenue: number; orders: number } | null;
   peaks: { hour: number; revenue: number; orders: number }[];
+  /** Haftanın günü (1 pazartesi) × saat, o günün ortalama cirosu */
+  week: { weekday: number; days: number; hours: number[] }[];
 }
 
 function HourlyReport({ range, onExport }: { range: Range; onExport: () => void }) {
   const data = useQuery({ queryKey: ['reports', 'hourly', range], queryFn: () => get<HourlyData>(`/reports/hourly?${qs(range)}`) });
   if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const h = data.data;
   if (!h) return null;
   const hh = (n: number) => `${String(n).padStart(2, '0')}:00`;
@@ -299,11 +403,12 @@ function HourlyReport({ range, onExport }: { range: Range; onExport: () => void 
         <Stat label="En sakin saat" value={h.quietest ? hh(h.quietest.hour) : '—'} hint={h.quietest ? `${tl(h.quietest.revenue)} · ${h.quietest.orders} adisyon` : undefined} />
         <Stat label="Gün sayısı" value={String(h.days)} />
       </div>
-      <Card flush title="24 saat dağılımı" actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
+      <Card flush title="24 saat dağılımı · adisyonun açıldığı saate göre" actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
         <div className="p-4">
           <ColumnChart data={h.hours.map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro dağılımı" />
         </div>
       </Card>
+      {h.days >= 7 && <WeekHeatmap week={h.week} />}
       <div className="grid gap-4 lg:grid-cols-2">
         <Card flush title="Gün dilimleri">
           <div className="p-4">
@@ -330,6 +435,163 @@ function HourlyReport({ range, onExport }: { range: Range; onExport: () => void 
   );
 }
 
+const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const WEEKDAY_LONG = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+/** Tek renk, açıktan koyuya 5 basamak (sıfır boş kalır); koyu temada da aynı token'dan */
+const HEAT_STEPS = [16, 32, 50, 70, 92];
+
+/** Haftanın günü × saat ısı haritası: personel planı için hangi gün hangi saat yoğun */
+function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
+  const all = week.flatMap((w) => w.hours);
+  const max = Math.max(0, ...all);
+  if (max === 0) return null;
+  const used = all.map((v, i) => (v > 0 ? i % 24 : -1)).filter((x) => x >= 0);
+  const from = Math.min(...used);
+  const to = Math.max(...used);
+  const cols = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  const step = (v: number) => (v <= 0 ? -1 : Math.min(HEAT_STEPS.length - 1, Math.floor((v / max) * HEAT_STEPS.length)));
+  return (
+    <Card flush title="Haftanın günü × saat · günlük ortalama ciro">
+      <div className="overflow-x-auto p-4">
+        <table className="w-full border-separate border-spacing-[3px] text-[11px]" aria-label="Haftanın günlerine ve saatlere göre ortalama ciro">
+          <thead>
+            <tr>
+              <th className="w-10" />
+              {cols.map((c) => (
+                <th key={c} scope="col" className="tabular font-medium text-muted">
+                  {String(c).padStart(2, '0')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {week.map((w, wi) => (
+              <tr key={w.weekday}>
+                <th scope="row" className="pr-1 text-left font-medium text-muted">
+                  {WEEKDAY_SHORT[wi]}
+                </th>
+                {cols.map((c) => {
+                  const v = w.hours[c] ?? 0;
+                  const k = step(v);
+                  const label = `${WEEKDAY_LONG[wi]} ${String(c).padStart(2, '0')}:00 · ${v > 0 ? tl(v) : 'satış yok'}${w.days > 1 ? ` (${w.days} günün ortalaması)` : ''}`;
+                  return (
+                    <td
+                      key={c}
+                      title={label}
+                      className="h-7 min-w-7 rounded-[4px]"
+                      style={{ background: k < 0 ? 'var(--admin-surface-2)' : `color-mix(in oklab, var(--admin-primary) ${HEAT_STEPS[k]}%, var(--admin-surface))` }}
+                    >
+                      <span className="sr-only">{label}</span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-3 flex items-center gap-1.5 text-xs text-muted" aria-hidden>
+          <span>Az</span>
+          {HEAT_STEPS.map((p) => (
+            <span key={p} className="size-3.5 rounded-[3px]" style={{ background: `color-mix(in oklab, var(--admin-primary) ${p}%, var(--admin-surface))` }} />
+          ))}
+          <span>Çok · en yüksek {tl(max)}</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+interface PrepStats {
+  count: number;
+  avg: number;
+  median: number;
+  p90: number;
+  max: number;
+}
+interface PrepData {
+  overall: PrepStats;
+  products: (PrepStats & { name: string; size: string })[];
+  hours: (PrepStats & { hour: number })[];
+  slowest: { orderNo: number; name: string; size: string; sentAt: number; sec: number }[];
+}
+
+/** Saniye → "3 dk 20 sn" */
+function dur(sec: number): string {
+  if (sec < 60) return `${sec} sn`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m >= 60 ? `${Math.floor(m / 60)} sa ${m % 60} dk` : s ? `${m} dk ${s} sn` : `${m} dk`;
+}
+
+/** Bar ve mutfakta hazırlama süresi: gönderilmesinden "Hazır"a. Ortalama ve en yavaş %10 (p90) */
+function PrepReport({ range }: { range: Range }) {
+  const data = useQuery({ queryKey: ['reports', 'prep', range], queryFn: () => get<PrepData>(`/reports/prep?${qs(range)}`) });
+  if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
+  const p = data.data;
+  if (!p) return null;
+  if (!p.overall.count) return <EmptyState title="Bu dönemde hazırlanan kalem yok">Bar ve mutfak ekranında "Hazır"a basılan kalemler burada sayılır</EmptyState>;
+  const hh = (n: number) => `${String(n).padStart(2, '0')}:00`;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Ortalama" value={dur(p.overall.avg)} hint={`${p.overall.count} kalem`} />
+        <Stat label="Ortanca" value={dur(p.overall.median)} hint="Kalemlerin yarısı bundan kısa" />
+        <Stat label="En yavaş %10" value={dur(p.overall.p90)} hint="Bu süreyi aşan her 10 kalemden biri" />
+        <Stat label="En uzun" value={dur(p.overall.max)} />
+      </div>
+      <Card flush title="Saate göre ortalama süre">
+        <div className="p-4">
+          <ColumnChart data={p.hours.map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.avg }))} format={dur} seriesLabel="Ortalama süre" ariaLabel="Saate göre ortalama hazırlama süresi" />
+        </div>
+      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card flush title="Ürünler (en yavaş önce)">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-2 font-medium">Ürün</th>
+                  <th className="px-2 py-2 text-right font-medium">Adet</th>
+                  <th className="px-2 py-2 text-right font-medium">Ortalama</th>
+                  <th className="px-4 py-2 text-right font-medium">En yavaş %10</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {p.products.map((r) => (
+                  <tr key={`${r.name}|${r.size}`}>
+                    <td className="px-4 py-2 font-medium">
+                      {r.name}
+                      {r.size !== 'TEK' && <span className="ml-1.5 rounded-md bg-surface-3 px-1.5 text-xs font-semibold">{r.size}</span>}
+                    </td>
+                    <td className="tabular px-2 py-2 text-right text-muted">{r.count}</td>
+                    <td className="tabular px-2 py-2 text-right">{dur(r.avg)}</td>
+                    <td className="tabular px-4 py-2 text-right font-semibold">{dur(r.p90)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+        <Card flush title="En uzun bekleyen 10 kalem">
+          <ol className="divide-y divide-line">
+            {p.slowest.map((s, i) => (
+              <li key={`${s.orderNo}-${s.sentAt}-${i}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="tabular w-12 text-muted">#{s.orderNo}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {s.name} {s.size !== 'TEK' && <span className="text-muted">{s.size}</span>}
+                </span>
+                <span className="tabular text-muted">{fmtTime(s.sentAt)}</span>
+                <span className="tabular w-24 text-right font-semibold">{dur(s.sec)}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 interface ChecksData {
   rows: { id: string; no: number; status: string; type: string; place: string | null; openedAt: number; closedAt: number | null; waiter: string | null; qty: number; total: number; methods: string[] }[];
 }
@@ -337,6 +599,7 @@ interface ChecksData {
 function ChecksReport({ range, onExport }: { range: Range; onExport: () => void }) {
   const data = useQuery({ queryKey: ['reports', 'checks', range], queryFn: () => get<ChecksData>(`/reports/checks?${qs(range)}`) });
   if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const rows = data.data?.rows ?? [];
   return (
     <Card flush title={`Adisyonlar (${rows.length})`} actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
@@ -392,6 +655,7 @@ const ITEM_TITLES = { iptal: 'İptal edilen kalemler', ikram: 'İkram edilen kal
 function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 'ikram' | 'indirim' | 'happy'; onExport?: () => void }) {
   const data = useQuery({ queryKey: ['reports', 'items', kind, range], queryFn: () => get<ItemsData>(`/reports/items?kind=${kind}&${qs(range)}`) });
   if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const d = data.data;
   if (!d) return null;
   return (
@@ -443,6 +707,7 @@ function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 
 function RefundsReport({ range }: { range: Range }) {
   const data = useQuery({ queryKey: ['reports', 'refunds', range], queryFn: () => get<{ total: number; count: number; rows: { id: string; at: number; orderNo: number | null; method: string; amount: number; reason: string | null; by: string | null }[] }>(`/reports/refunds?${qs(range)}`) });
   if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const d = data.data;
   if (!d) return null;
   return (
@@ -472,6 +737,7 @@ function StaffReport({ range }: { range: Range }) {
     queryFn: () => get<{ staff: { userId: string; name: string; orders: number; revenue: number; voids: number; voidValue: number; comps: number; compValue: number; discounts: number }[] }>(`/reports/staff?${qs(range)}`),
   });
   if (data.isLoading) return <PageLoading />;
+  if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const rows = data.data?.staff ?? [];
   return (
     <Card flush title="Personel">

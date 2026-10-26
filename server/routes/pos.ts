@@ -71,6 +71,7 @@ posRoutes.post('/orders', async (c) => {
       customerId: z.string().nullish(),
       note: z.string().max(300).nullish(),
       newCheck: z.boolean().optional(),
+      reuse: z.string().max(40).nullish(),
       deliveryName: z.string().max(80).nullish(),
       deliveryPhone: z.string().max(30).nullish(),
       deliveryAddress: z.string().max(400).nullish(),
@@ -274,6 +275,7 @@ posRoutes.get('/kitchen', (c) => {
   if (!actor.user.permissions.has('mutfak.ekran') && !actor.user.permissions.has('siparis.al')) needDirect(actor, 'mutfak.ekran');
   return c.json(kitchenTickets(db, { stationId: q.station || null, history: q.history === '1' }));
 });
+
 
 posRoutes.post('/kitchen/status', async (c) => {
   const input = await body(

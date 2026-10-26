@@ -6,12 +6,14 @@ import { tl } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Card, PageLoading, Stat } from '@/components/ui/misc';
-import { get } from '@/lib/api';
+import { Button } from '@/components/ui/Button';
+import { errorMessage, get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
 import { toast } from '@/lib/toast';
+import { REMOTE } from '@/lib/remote';
 
 export interface PatronData {
   now: number;
@@ -52,7 +54,7 @@ export default function PatronPage() {
   const navigate = useNavigate();
   const now = useTick(30_000);
   const [table, setTable] = useState(false);
-  const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: 60_000 });
+  const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: REMOTE ? 10_000 : 60_000 });
 
   // Satış ve kasa olaylarında yenile; uyarılar anında bildirim olarak düşer
   useEffect(
@@ -65,6 +67,20 @@ export default function PatronPage() {
   );
 
   if (data.isLoading) return <PageLoading />;
+  // Rakamlar alınamadıysa ₺0 gösterilmez: patron "satış yok" sanmasın
+  if (data.isError && !data.data) {
+    return (
+      <div className="grid h-full place-items-center p-6 text-center">
+        <div role="alert">
+          <p className="font-semibold">Canlı rakamlar alınamadı</p>
+          <p className="mt-1 text-sm text-muted">{errorMessage(data.error)}</p>
+          <Button className="mt-4" onClick={() => void data.refetch()}>
+            Yeniden dene
+          </Button>
+        </div>
+      </div>
+    );
+  }
   const d = data.data;
   if (!d) return null;
   const hours = d.hourly.map((v, h) => ({ label: String(h).padStart(2, '0'), value: v, compare: d.hourlyLastWeek[h] }));
@@ -89,8 +105,8 @@ export default function PatronPage() {
             {d.open.count > 0 && ` · açıkta ${tl(d.open.total)}`}
           </div>
           <div className="mt-5 grid gap-2 sm:grid-cols-2">
-            <CompareRow label="Geçen hafta aynı saat" value={d.compare.lastWeek.netSales} change={d.compare.lastWeek.change} />
-            <CompareRow label="4 hafta önce aynı saat" value={d.compare.fourWeeks.netSales} change={d.compare.fourWeeks.change} />
+            <CompareRow label="Geçen hafta bu saate kadar" value={d.compare.lastWeek.netSales} change={d.compare.lastWeek.change} />
+            <CompareRow label="4 hafta önce bu saate kadar" value={d.compare.fourWeeks.netSales} change={d.compare.fourWeeks.change} />
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">

@@ -10,11 +10,13 @@ import { authRoutes } from './routes/auth';
 import { cashRoutes } from './routes/cash';
 import { eventRoutes } from './routes/events';
 import { customerRoutes } from './routes/customers';
+import { displayPublicRoutes, displayRoutes } from './routes/display';
 import { okcPublicRoutes, okcRoutes } from './routes/okc';
 import { posRoutes } from './routes/pos';
 import { reportRoutes } from './routes/reports';
 import { reservationRoutes } from './routes/reservations';
 import { syncRoutes } from './routes/sync';
+import { productImage, thumbFor } from './services/media';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -34,6 +36,14 @@ export function createApp() {
   app.use('/api/*', authMiddleware);
 
   app.get('/api/health', (c) => c.json({ ok: true, time: Date.now() }));
+
+  // Ürün kartındaki görselin küçük kopyası. /api dışında: tarayıcı önbelleğe alır, <img> oturum taşımaz;
+  // görseller sitede de herkese açık. Adres değişince arayüz ?v= ile yenisini ister
+  app.get('/media/products/:id', async (c) => {
+    const thumb = await thumbFor(productImage(c.req.param('id')) ?? '');
+    if (!thumb) return c.body(null, 404);
+    return c.body(new Uint8Array(thumb.body), 200, { 'content-type': thumb.type, 'cache-control': 'public, max-age=604800' });
+  });
   app.route('/api/auth', authRoutes);
   app.route('/api/events', eventRoutes);
   app.route('/api/cash', cashRoutes);
@@ -41,6 +51,8 @@ export function createApp() {
   app.route('/api/public/okc', okcPublicRoutes);
   app.route('/api/customers', customerRoutes);
   app.route('/api/sync', syncRoutes);
+  app.route('/api/display', displayRoutes);
+  app.route('/api/public', displayPublicRoutes);
   app.route('/api/reports', reportRoutes);
   app.route('/api/admin', adminRoutes);
   app.route('/api/reservations', reservationRoutes);
@@ -52,6 +64,8 @@ export function createApp() {
     const root = relative(process.cwd(), env.webDist) || '.';
     const indexHtml = readFileSync(resolve(env.webDist, 'index.html'), 'utf8');
     app.use('/*', serveStatic({ root }));
+    // Olmayan derleme dosyası 404'tür: arayüz sayfası JS yerine dönerse tarayıcı boş ekranda kalır (güncellemeden sonra)
+    app.get('/assets/*', (c) => c.text('Bulunamadı', 404));
     app.get('*', (c) => c.html(indexHtml));
   }
   return app;

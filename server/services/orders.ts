@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
 import { amountForItems, lineGross, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
@@ -72,6 +73,18 @@ function assertNoPendingDevice(t: Tx | DB, orderId: string) {
     .where(and(eq(schema.fiscalReceipts.orderId, orderId), inArray(schema.fiscalReceipts.status, ['gonderildi', 'kilitli'])))
     .get();
   if (pending) throw conflict('Bu adisyonun sepeti yazarkasada bekliyor; önce cihazda ödeyin ya da sepeti iptal edin', 'okc_pending');
+}
+
+/**
+ * Parasal izi olmayan adisyon: kalem ve ödeme satırı yok, oda sayacı çalışmıyor, yazarkasada sepeti yok.
+ * Gün sonu ve otomatik gün sonu bunları kendiliğinden kapatır; tek ölçüt burada (inceleme, 26 Eki 2026 gece).
+ */
+export function isEmptyOrder(t: Tx | DB, orderId: string): boolean {
+  if (orderItems(t, orderId).length || orderPayments(t, orderId).length) return false;
+  const room = t.select({ id: schema.roomSessions.id }).from(schema.roomSessions).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).get();
+  if (room) return false;
+  const basket = t.select({ id: schema.fiscalReceipts.id }).from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.orderId, orderId)).get();
+  return !basket;
 }
 
 export function assertNoActiveRoom(t: Tx | DB, orderId: string) {
@@ -149,6 +162,8 @@ export interface CreateOrderInput {
   note?: string | null;
   /** Masada açık adisyon varken ikinci (ayrı) adisyon aç */
   newCheck?: boolean;
+  /** Tezgâh: bu cihazın son boş tezgâh adisyonu (sessionStorage); boşsa yeniden kullanılır */
+  reuse?: string | null;
   deliveryName?: string | null;
   deliveryPhone?: string | null;
   deliveryAddress?: string | null;
@@ -170,6 +185,26 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
         .orderBy(schema.orders.openedAt)
         .get();
       if (existing) return existing;
+    }
+  }
+  if (input.type === 'tezgah' && input.reuse) {
+    // Yalnız bu cihazın kendi boş tezgâh adisyonu yeniden kullanılır (istemci kimliğini verir): aynı PIN'le açık
+    // iki kasa aynı adisyonu almasın. İndirimli, bölünmüş, müşterili ya da notlu adisyon yeni satış değildir
+    const prev = t.select().from(schema.orders).where(eq(schema.orders.id, input.reuse)).get();
+    if (
+      prev &&
+      prev.status === 'acik' &&
+      prev.type === 'tezgah' &&
+      prev.source === 'pos' &&
+      prev.dayId === day.id &&
+      prev.openedBy === actor.user.id &&
+      !prev.customerId &&
+      !prev.note &&
+      prev.discountType == null &&
+      prev.splitPeople == null &&
+      isEmptyOrder(t, prev.id)
+    ) {
+      return prev;
     }
   }
   if (input.type === 'paket') needDirect(actor, 'paket.yonet');
@@ -483,6 +518,8 @@ export function setOrderDiscount(
   const value = input.type === 'percent' ? Math.min(100, Math.max(0, Math.round(input.value))) : Math.max(0, Math.trunc(input.value));
   const before = calcFor({ ...o, discountType: null, discountValue: null }, orderItems(t, orderId));
   const subtotal = before.gross - before.lineDiscounts;
+  // Boş adisyona indirim verilmez: yetki ve uyarı eşiği tutara göre ölçülür, sonra eklenen kalemlere sessizce uygulanırdı
+  if (subtotal <= 0) throw bad('Önce ürün ekleyin; indirim boş adisyona verilmez', 'empty_order');
   const amount = input.type === 'percent' ? percentOf(subtotal, value) : Math.min(subtotal, value);
   const pct = subtotal > 0 ? (amount * 100) / subtotal : 0;
   const approverId = discountApproval(actor, pct);
@@ -1071,10 +1108,13 @@ export function setItemsStatus(
   const now = Date.now();
   const orders = new Set<string>();
   const stations = new Set<string>();
+  /** Adisyon başına bu dokunuşta "Hazır" olan adet: siparişi alana uyarı */
+  const readyCount = new Map<string, number>();
   for (const it of items) {
     if (it.voided) continue;
     const status = input.status ?? NEXT[it.status];
     if (!status || status === it.status) continue;
+    if (status === 'hazir') readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
     const patch: Partial<ItemRow> = { status };
     if (status === 'yeni') Object.assign(patch, { startedAt: null, readyAt: null, servedAt: null });
     if (status === 'hazirlaniyor') patch.startedAt = it.startedAt ?? now;
@@ -1087,6 +1127,12 @@ export function setItemsStatus(
   for (const id of orders) {
     const o = loadOrder(t, id);
     orderEvents(fx, o, actor.user.id, 'item.status');
+    const ready = readyCount.get(id);
+    if (ready && o.waiterId) {
+      const table = o.tableId ? t.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, o.tableId)).get() : null;
+      const place = table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
+      fx.emit({ topic: 'orders', kind: 'items.ready', orderId: id, tableId: o.tableId ?? undefined, message: `${place} · ${ready} ürün hazır`, forUserId: o.waiterId, byUserId: actor.user.id });
+    }
   }
   for (const s of stations) fx.emit({ topic: 'kitchen', kind: 'ticket.status', stationId: s, byUserId: actor.user.id });
 }

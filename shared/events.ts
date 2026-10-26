@@ -29,4 +29,6 @@ export interface LiveEvent {
   message?: string;
   /** Olayı yapan kullanıcı (kendi ekranında bildirim çalmasın diye) */
   byUserId?: string;
+  /** Bildirimin hedefi: "hazır" uyarısı siparişi alan kişinin ekranında çalar */
+  forUserId?: string;
 }

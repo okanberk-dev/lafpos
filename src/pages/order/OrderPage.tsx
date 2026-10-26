@@ -6,6 +6,7 @@ import {
   Globe,
   Merge,
   Mic2,
+  MonitorUp,
   MoreVertical,
   PackageX,
   Percent,
@@ -16,6 +17,7 @@ import {
   Split,
   Square,
   StickyNote,
+  Trash2,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -27,6 +29,7 @@ import type { OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { Toggle } from '@/components/ui/Field';
 import { Badge, PageLoading } from '@/components/ui/misc';
 import { errorMessage, patch, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -36,7 +39,9 @@ import { cn } from '@/lib/cn';
 import { useMediaQuery, useTick } from '@/lib/hooks';
 import { BillReceipt, printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
-import { CartPanel } from './CartPanel';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { sendDisplay, useCustomerDisplay, useDisplayCode } from '@/lib/display';
+import { CartPanel, previewTotals } from './CartPanel';
 import { CustomerModal } from './CustomerModal';
 import { OnlineOrderBar } from './OnlineOrderBar';
 import { OptionsModal } from './OptionsModal';
@@ -44,8 +49,10 @@ import { PaymentModal } from './PaymentModal';
 import { ProductPanel } from './ProductPanel';
 import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal } from './TableOps';
 import { useOrder } from './useOrder';
+import { REMOTE } from '@/lib/remote';
+import { openCounterSale } from '@/lib/counter';
 
-type Dialog = null | 'tukendi' | 'menu' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
+type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
 
 export default function OrderPage() {
   const { id = '' } = useParams();
@@ -59,7 +66,7 @@ export default function OrderPage() {
   const { order, isLoading, isError, act } = useOrder(id);
   const pending = usePending(id);
   const cart = useCart();
-  const [tab, setTab] = useState<'menu' | 'adisyon'>('menu');
+  const [tab, setTab] = useState<'menu' | 'adisyon'>(REMOTE ? 'adisyon' : 'menu');
   const [dialog, setDialog] = useState<Dialog>(null);
   const [options, setOptions] = useState<{ product: ProductDTO; size: Size; editing: PendingLine | null } | null>(null);
   const [sending, setSending] = useState(false);
@@ -67,6 +74,10 @@ export default function OrderPage() {
 
   const table = useMemo(() => boot.tables.find((t) => t.id === order?.tableId), [boot.tables, order?.tableId]);
   const pendingCount = pending.reduce((a, l) => a + l.qty, 0);
+  // Müşteri ekranı (bu cihaz yansıtıyorsa): kalemler ve gönderilmemişler dahil tahmini tutar
+  const [displayCode, setDisplayCode] = useDisplayCode();
+  const displayLabel = order ? (table?.name ?? ORDER_TYPE_LABEL[order.type]) : '';
+  useCustomerDisplay(boot, order, pending, displayLabel, order ? (previewTotals(boot, order, pending)?.total ?? order.total) : 0);
 
   if (isLoading) return <PageLoading />;
   if (isError || !order) {
@@ -84,7 +95,7 @@ export default function OrderPage() {
 
   const isOpen = order.status === 'acik';
   const isOnline = order.source === 'laffogato';
-  const editable = isOpen && !isOnline && can('siparis.al');
+  const editable = !REMOTE && isOpen && !isOnline && can('siparis.al');
   const due = order.total - order.paid;
   const backPath = order.tableId ? '/masalar' : '/siparisler';
   const title = order.tableName ?? (isOnline ? (order.extLabel ?? 'Online') : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? `Gel-al${order.deliveryName ? ` · ${order.deliveryName}` : ''}` : `Paket${order.deliveryName ? ` · ${order.deliveryName}` : ''}`);
@@ -94,22 +105,36 @@ export default function OrderPage() {
     if (navigator.vibrate) navigator.vibrate(8);
   };
 
-  const send = async () => {
-    if (!pending.length) return;
+  const send = async (): Promise<boolean> => {
+    if (!pending.length) return false;
     setSending(true);
     const res = await act(
       (pin) =>
         post<OrderDTO>(`/orders/${order.id}/items`, {
-          items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: l.options, note: l.note || null })),
+          items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: l.options, note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
           approverPin: pin,
         }),
       `${pendingCount} ürün gönderildi`,
     );
     setSending(false);
-    if (res) {
-      cart.clear(order.id);
-      qc.invalidateQueries({ queryKey: ['kitchen'] });
-      if (!wide) setTab('adisyon');
+    if (!res) return false;
+    cart.clear(order.id);
+    qc.invalidateQueries({ queryKey: ['kitchen'] });
+    if (!wide) setTab('adisyon');
+    return true;
+  };
+
+  // Tezgâhta tek ekran: "Öde" kalemleri bara gönderir ve ödemeyi açar; satış kapanınca ekran yeni satışa hazırdır
+  const counter = order.type === 'tezgah' && !isOnline;
+  const sendAndPay = async () => {
+    if (await send()) setDialog('odeme');
+  };
+  const nextSale = async () => {
+    try {
+      const next = await openCounterSale();
+      navigate(`/adisyon/${next.id}`, { replace: true });
+    } catch {
+      navigate(backPath);
     }
   };
 
@@ -133,6 +158,7 @@ export default function OrderPage() {
     { icon: <Percent className="size-5" />, label: order.discountType ? 'Adisyon indirimini değiştir' : 'Adisyon indirimi', onClick: () => setDialog('indirim'), show: editable },
     { icon: <Users className="size-5" />, label: `Kişi sayısı (${order.guests})`, onClick: () => setDialog('kisi'), show: editable },
     { icon: <UserRound className="size-5" />, label: order.customer ? `Müşteri: ${order.customer.name}` : 'Müşteri ekle', hint: 'Açık hesap ve damga kartı için', onClick: () => setDialog('musteri'), show: isOpen && !isOnline },
+    { icon: <MonitorUp className="size-5" />, label: displayCode ? 'Müşteri ekranı: açık' : 'Müşteri ekranı', hint: 'İkinci ekran ya da müşteriye dönük tablet', onClick: () => setDialog('ekran'), show: !isOnline },
     { icon: <StickyNote className="size-5" />, label: 'Adisyon notu', onClick: () => { setNoteText(order.note ?? ''); setDialog('not'); }, show: editable },
     { icon: <Printer className="size-5" />, label: 'Hesap yazdır', onClick: printBill, show: !isOnline && order.items.some((i) => !i.voided) },
     { icon: <CircleDollarSign className="size-5" />, label: 'Sıfır tutarlı adisyonu kapat', onClick: () => act(() => post(`/orders/${order.id}/close`), 'Adisyon kapandı').then((r) => r && navigate(backPath)), show: isOpen && !isOnline && order.total === 0 && order.items.length > 0 },
@@ -164,24 +190,36 @@ export default function OrderPage() {
           {order.note && ` · Not: ${order.note}`}
         </div>
       </div>
-      <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
-        <MoreVertical className="size-5" strokeWidth={1.75} />
-      </button>
+      {!REMOTE && (
+        <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
+          <MoreVertical className="size-5" strokeWidth={1.75} />
+        </button>
+      )}
     </div>
   );
 
   const actionBar = (
     <div className="safe-bottom grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface p-3">
-      {pending.length > 0 ? (
+      {pending.length > 0 && counter && can('odeme.al') ? (
+        <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2">
+          <Button size="lg" aria-label="Gönderilmemişleri sil" title="Vazgeç" icon={<Trash2 className="size-4" />} onClick={() => cart.clear(order.id)} />
+          <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={() => void send()}>
+            Gönder
+          </Button>
+          <Button size="lg" variant="primary" loading={sending} onClick={() => void sendAndPay()}>
+            Öde · {tl((previewTotals(boot, order, pending)?.total ?? order.total) - order.paid)}
+          </Button>
+        </div>
+      ) : pending.length > 0 ? (
         <>
           <Button size="lg" onClick={() => cart.clear(order.id)}>
             Vazgeç
           </Button>
-          <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={send}>
+          <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={() => void send()}>
             Gönder ({pendingCount})
           </Button>
         </>
-      ) : isOpen && !isOnline ? (
+      ) : isOpen && !isOnline && !REMOTE ? (
         <>
           <Button size="lg" icon={<Printer className="size-4" />} onClick={printBill} disabled={!order.items.some((i) => !i.voided)}>
             Hesap
@@ -236,10 +274,13 @@ export default function OrderPage() {
       {wide ? (
         // Innex: iki beyaz kart; solda katalog, sağda adisyon (başlığıyla)
         <div className="flex min-h-0 flex-1 gap-2">
-          <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface">
-            <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
-          </section>
-          <section className="flex w-[clamp(320px,42vw,440px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+          {/* Uzaktan salt okunur: katalog yok, adisyon tam genişlikte */}
+          {!REMOTE && (
+            <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface">
+              <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
+            </section>
+          )}
+          <section className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface', REMOTE ? 'mx-auto w-full max-w-2xl' : 'w-[clamp(320px,42vw,440px)]')}>
             {header}
             {right}
           </section>
@@ -247,7 +288,7 @@ export default function OrderPage() {
       ) : (
         <>
           {header}
-          <div role="tablist" aria-label="Adisyon görünümü" className="grid grid-cols-2 border-b border-line bg-surface">
+          <div role="tablist" aria-label="Adisyon görünümü" className={cn('grid grid-cols-2 border-b border-line bg-surface', REMOTE && 'hidden')}>
             {(['menu', 'adisyon'] as const).map((k) => (
               <button
                 key={k}
@@ -256,7 +297,7 @@ export default function OrderPage() {
                 onClick={() => setTab(k)}
                 className={cn('relative min-h-12 py-2.5 text-sm font-medium', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'text-muted')}
               >
-                {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(order.total)}`}
+                {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(previewTotals(boot, order, pending)?.total ?? order.total)}`}
               </button>
             ))}
           </div>
@@ -314,6 +355,25 @@ export default function OrderPage() {
 
       <SoldOutDialog open={dialog === 'tukendi'} onClose={() => setDialog(null)} />
 
+      <Modal open={dialog === 'ekran'} onClose={() => setDialog(null)} title="Müşteri ekranı" subtitle="Müşteri siparişini ve tutarı görür; ödeme bitince teşekkür eder" size="sm">
+        <div className="space-y-4 p-5">
+          <Toggle
+            checked={!!displayCode}
+            onChange={(v) => {
+              if (!v) sendDisplay(displayCode, { kind: 'idle' });
+              setDisplayCode(v ? 'kasa' : '');
+            }}
+            label="Bu cihazdaki adisyonlar müşteri ekranına yansısın"
+          />
+          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open('/musteri-ekrani?ekran=kasa', 'lafpos-musteri')}>
+            Ekranı yeni pencerede aç
+          </Button>
+          <p className="text-xs text-muted">
+            İkinci monitörde pencereyi oraya taşıyıp tam ekran yapın. Müşteriye dönük tablette tarayıcıda {window.location.origin}/musteri-ekrani adresini açın; personel girişi gerekmez.
+          </p>
+        </div>
+      </Modal>
+
       <PaymentModal
         order={order}
         open={dialog === 'odeme'}
@@ -323,7 +383,9 @@ export default function OrderPage() {
           setDialog(null);
           if (closed) {
             cart.clear(order.id);
-            navigate(backPath);
+            sendDisplay(displayCode, { kind: 'thanks', total: order.total });
+            if (counter) void nextSale();
+            else navigate(backPath);
           }
         }}
       />

@@ -1,9 +1,9 @@
-import { Check, ChefHat, CircleDot, Gift, Minus, Pencil, Percent, Plus, Trash2, Undo2, XCircle } from 'lucide-react';
+import { Check, ChefHat, CircleDot, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
-import type { OrderDTO, OrderItemDTO } from '@shared/types';
+import type { BootstrapDTO, OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
@@ -22,6 +22,23 @@ const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
   servis: { label: 'Serviste', cls: 'text-muted' },
 };
 
+/** Gönderilmemiş kalemlerle birlikte tahmini toplam (gösterim için; kesin tutar gönderince sunucudan gelir) */
+export function previewTotals(boot: BootstrapDTO, order: OrderDTO, pending: PendingLine[]) {
+  if (pending.length === 0) return null;
+  const pendingTotal = pending.reduce((a, l) => {
+    const p = boot.products.find((x) => x.id === l.productId);
+    return a + (p ? (l.priceOverride ?? estimateUnit(boot, p, l.size, l.options)) * l.qty : 0);
+  }, 0);
+  return calcOrder({
+    lines: [
+      ...order.items.map((i) => ({ id: i.id, qty: i.qty, unitPrice: i.unitPrice, kdvRate: i.kdvRate, discount: i.discount, complimentary: i.complimentary, voided: i.voided })),
+      { id: '__pending', qty: 1, unitPrice: pendingTotal, kdvRate: 10, discount: 0, complimentary: false, voided: false },
+    ],
+    discount: order.discountType && order.discountValue != null ? { type: order.discountType, value: order.discountValue } : null,
+    serviceRate: order.serviceRate,
+  });
+}
+
 export function CartPanel({
   order,
   pending,
@@ -39,22 +56,7 @@ export function CartPanel({
   const t = order.totals;
   const due = order.total - order.paid;
 
-  // Gönderilmemiş kalemlerle birlikte tahmini toplam (gösterim için; kesin tutar gönderince sunucudan gelir)
-  const pendingTotal = pending.reduce((a, l) => {
-    const p = boot.products.find((x) => x.id === l.productId);
-    return a + (p ? estimateUnit(boot, p, l.size, l.options) * l.qty : 0);
-  }, 0);
-  const preview =
-    pending.length > 0
-      ? calcOrder({
-          lines: [
-            ...order.items.map((i) => ({ id: i.id, qty: i.qty, unitPrice: i.unitPrice, kdvRate: i.kdvRate, discount: i.discount, complimentary: i.complimentary, voided: i.voided })),
-            { id: '__pending', qty: 1, unitPrice: pendingTotal, kdvRate: 10, discount: 0, complimentary: false, voided: false },
-          ],
-          discount: order.discountType && order.discountValue != null ? { type: order.discountType, value: order.discountValue } : null,
-          serviceRate: order.serviceRate,
-        })
-      : null;
+  const preview = previewTotals(boot, order, pending);
 
   const visibleItems = order.items.filter((i) => !i.voided || i.voidAfterSend || Date.now() - (i.createdAt ?? 0) < 3600_000);
 
@@ -62,8 +64,12 @@ export function CartPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {visibleItems.length === 0 && pending.length === 0 && (
-          <div className="px-6 py-14 text-center text-sm text-muted">
-            Adisyon boş. Soldan ürün seçin; ürünler "Gönder"e basınca bara/mutfağa gider
+          <div className="flex flex-col items-center px-6 py-14 text-center">
+            <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-surface-3 text-muted">
+              <ReceiptText className="size-6" strokeWidth={1.5} />
+            </span>
+            <p className="mt-3 text-sm font-semibold text-ink">Adisyon boş</p>
+            <p className="mt-1 max-w-[30ch] text-[13px] text-muted">Ürüne dokunun; "Gönder"e basınca bara ve mutfağa gider</p>
           </div>
         )}
         <ul className="divide-y divide-[var(--admin-divider)]">
@@ -124,8 +130,8 @@ export function CartPanel({
               {pending.map((l) => {
                 const p = boot.products.find((x) => x.id === l.productId);
                 if (!p) return null;
-                const unit = estimateUnit(boot, p, l.size, l.options);
-                const text = pendingOptionsText(boot, p, l.options);
+                const unit = l.priceOverride ?? estimateUnit(boot, p, l.size, l.options);
+                const text = [pendingOptionsText(boot, p, l.options), l.priceOverride != null ? 'elle fiyat' : ''].filter(Boolean).join(' · ');
                 return (
                   <li key={l.key} className="flex items-center gap-2 px-3 py-2">
                     <div className="flex items-center rounded-lg border border-[var(--admin-border-strong)] bg-surface">

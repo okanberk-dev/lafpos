@@ -13,6 +13,8 @@ export interface PendingLine {
   qty: number;
   options: { itemId: string; qty?: number }[];
   note: string;
+  /** Elle girilen birim fiyat (kuruş); sunucu siparis.fiyat ister, yoksa yetkili PIN'i sorar */
+  priceOverride?: number | null;
 }
 
 interface CartState {
@@ -27,6 +29,7 @@ const sameLine = (a: Omit<PendingLine, 'key'>, b: Omit<PendingLine, 'key'>) =>
   a.productId === b.productId &&
   a.size === b.size &&
   a.note === b.note &&
+  (a.priceOverride ?? null) === (b.priceOverride ?? null) &&
   JSON.stringify([...a.options].sort((x, y) => x.itemId.localeCompare(y.itemId))) === JSON.stringify([...b.options].sort((x, y) => x.itemId.localeCompare(y.itemId)));
 
 const safeStorage = createJSONStorage(() => {

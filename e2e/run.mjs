@@ -30,6 +30,8 @@ const ROUTES = {
     '/masalar',
     '/siparisler',
     '/mutfak',
+    '/cagri',
+    '/musteri-ekrani',
     '/kasa',
     '/cihaz',
     '/musteriler',

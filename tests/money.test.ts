@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocate, changeDue, parseTL, percentOf, roundHalfUp, splitEven, splitKdv, tl } from '@shared/money';
+import { allocate, changeDue, parseTL, percentOf, roundHalfUp, splitEven, splitKdv, suggestCash, tl } from '@shared/money';
 
 describe('para', () => {
   it('tl biçimi Türkçe', () => {
@@ -51,5 +51,13 @@ describe('para', () => {
   it('para üstü', () => {
     expect(changeDue(8500, 10000)).toBe(1500);
     expect(changeDue(8500, 5000)).toBe(0);
+  });
+
+  it('nakit önerisi banknota yuvarlar, tam tutarı ve küçüğünü önermez', () => {
+    const fixed = [10000, 20000, 50000, 100000, 200000];
+    expect(suggestCash(18750, fixed)).toEqual([19000, 20000, 50000, 100000]);
+    expect(suggestCash(4500, fixed)).toEqual([5000, 6000, 10000, 20000]);
+    expect(suggestCash(20000, fixed)).toEqual([50000, 100000, 200000]);
+    expect(suggestCash(0, fixed)).toEqual([]);
   });
 });

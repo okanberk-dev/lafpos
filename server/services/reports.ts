@@ -54,10 +54,33 @@ const dayOf = (ds: Dataset) => new Map(ds.days.map((d) => [d.id, d.date]));
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 const change = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
-/** Aynı uzunlukta önceki dönem */
-export function previousRange(r: Range): Range {
+/**
+ * Kıyas dönemi: aynı uzunlukta ve aynı haftanın günlerine hizalı. Ayın 1'inden başlayan dönem önceki ayın aynı
+ * günleriyle (1-26 Ekim → 1-26 Eylül), diğerleri bütün haftalar kadar geriyle (Çarşamba Çarşambayla) kıyaslanır.
+ * Bugünü içeren dönemde önceki dönem de aynı saate kadar sayılır (yarım gün bütün günle kıyaslanmaz).
+ */
+export function comparison(r: Range, nowMs = Date.now()): { range: Range; label: string; cutoffMs: number | null } {
   const len = Math.round((Date.parse(`${r.to}T00:00:00Z`) - Date.parse(`${r.from}T00:00:00Z`)) / 86400_000) + 1;
-  return { from: addDays(r.from, -len), to: addDays(r.from, -1) };
+  const today = businessDate(nowMs);
+  const [fy, fm, fd] = r.from.split('-').map(Number);
+  let range: Range;
+  let label: string;
+  let shiftMs: number;
+  if (fd === 1 && len <= 31 && r.to.slice(0, 7) === r.from.slice(0, 7)) {
+    const prevMonthStart = new Date(Date.UTC(fy!, fm! - 2, 1)).toISOString().slice(0, 10);
+    const prevMonthDays = new Date(Date.UTC(fy!, fm! - 1, 0)).getUTCDate();
+    range = { from: prevMonthStart, to: addDays(prevMonthStart, Math.min(len, prevMonthDays) - 1) };
+    label = 'önceki ayın aynı günleri';
+    shiftMs = Date.parse(`${r.from}T00:00:00Z`) - Date.parse(`${prevMonthStart}T00:00:00Z`);
+  } else {
+    const back = Math.ceil(len / 7) * 7;
+    range = { from: addDays(r.from, -back), to: addDays(r.to, -back) };
+    label = back === 7 ? 'geçen haftanın aynı günleri' : `${back / 7} hafta önceki aynı günler`;
+    shiftMs = back * 86400_000;
+  }
+  const partial = r.to === today;
+  if (partial) label += ', aynı saate kadar';
+  return { range, label, cutoffMs: partial ? nowMs - shiftMs : null };
 }
 
 // ─── Ciro ───────────────────────────────────────────────────────────────────
@@ -92,14 +115,47 @@ export function summaryReport(range: Range) {
     types.set(o.type, row);
   }
   const online = ds.orders.filter((o) => o.source === 'laffogato');
-  const prev = load(previousRange(range));
-  const prevClosed = prev.orders.filter((o) => o.status === 'kapali' && o.source === 'pos');
+  const cmp = comparison(range);
+  const prev = load(cmp.range);
+  const prevClosed = prev.orders.filter((o) => o.status === 'kapali' && o.source === 'pos' && (cmp.cutoffMs == null || (o.closedAt ?? o.openedAt) <= cmp.cutoffMs));
   const prevNet = prevClosed.reduce((a, o) => a + totalsOf(o).total, 0);
   const prevReceipts = prevClosed.filter((o) => o.total > 0).length;
   const itemsSold = ds.items.filter((i) => !i.voided && closed.some((o) => o.id === i.orderId)).reduce((a, i) => a + i.qty, 0);
   const totalPaid = [...payMap.values()].reduce((a, p) => a + p.amount, 0);
+  // Ciro dökümü: liste değeri − ikram − indirim (+ servis) = ciro (KDV dahil); − KDV = net satış (KDV hariç)
+  const kdvByRate = new Map<number, { rate: number; gross: number; base: number; kdv: number }>();
+  for (const o of closed) {
+    for (const k of totalsOf(o).kdv) {
+      const row = kdvByRate.get(k.rate) ?? { rate: k.rate, gross: 0, base: 0, kdv: 0 };
+      row.gross += k.gross;
+      row.base += k.base;
+      row.kdv += k.kdv;
+      kdvByRate.set(k.rate, row);
+    }
+  }
+  const kdvTotal = [...kdvByRate.values()].reduce((a, k) => a + k.kdv, 0);
+  // Kapanmış adisyonların ödemeleri ciroya eşit olmalı (bahşiş hariç); açık adisyonlardan alınan ödeme ayrı
+  const closedIds = new Set(closed.map((o) => o.id));
+  const paidClosed = salesPays.filter((p) => closedIds.has(p.orderId!)).reduce((a, p) => a + p.amount, 0);
+  const paidOpen = salesPays.filter((p) => !closedIds.has(p.orderId!)).reduce((a, p) => a + p.amount, 0);
+  const tableOrders = closed.filter((o) => o.type === 'masa');
+  const tableGuests = tableOrders.reduce((a, o) => a + o.guests, 0);
+  const tableSales = tableOrders.reduce((a, o) => a + totalsOf(o).total, 0);
   return {
     range,
+    asOf: Date.now(),
+    waterfall: {
+      list: sum((o) => totalsOf(o).gross + totalsOf(o).complimentary),
+      complimentary: sum((o) => totalsOf(o).complimentary),
+      discounts: sum((o) => totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount),
+      service: sum((o) => totalsOf(o).service),
+      revenue: netSales,
+      kdv: kdvTotal,
+      netExKdv: netSales - kdvTotal,
+    },
+    kdv: [...kdvByRate.values()].sort((a, b) => a.rate - b.rate),
+    reconciliation: { paidClosed, difference: paidClosed - netSales, paidOpen },
+    perGuest: tableGuests ? Math.round(tableSales / tableGuests) : null,
     days: ds.days.length,
     netSales,
     gross: sum((o) => totalsOf(o).gross),
@@ -115,7 +171,7 @@ export function summaryReport(range: Range) {
     payments: [...payMap.values()].sort((a, b) => b.amount - a.amount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
     types: [...types.values()].sort((a, b) => b.amount - a.amount),
     online: { orders: online.length, amount: online.reduce((a, o) => a + (o.extTotal ?? 0), 0) },
-    previous: { range: previousRange(range), netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
+    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
   };
 }
 
@@ -182,9 +238,12 @@ export function productReport(range: Range, withCost: boolean) {
     c.revenue += r.revenue;
     cats.set(k, c);
   }
+  // Servis ücreti bir ürüne ait değil: ürün cirosu + servis = toplam ciro (özet ve Z ile mutabakat)
+  const service = [...closedIds].reduce((a, id) => a + (totals.get(id)?.service ?? 0), 0);
   return {
     range,
     total,
+    service,
     products: products_,
     categories: [...cats.values()].sort((a, b) => b.revenue - a.revenue).map((c) => ({ ...c, share: pct(c.revenue, total) })),
   };
@@ -210,6 +269,20 @@ export function hourlyReport(range: Range) {
   }
   const total = hours.reduce((a, h) => a + h.revenue, 0);
   const active = hours.filter((h) => h.orders > 0);
+  // Haftanın günü × saat: iş gününün (gece yarısından sonraki satış o güne yazılır) haftanın günü, adisyonun açıldığı
+  // saat; hücre o günün ortalama cirosu (dönemde 2 salı varsa salı hücreleri 2'ye bölünür)
+  const dates = dayOf(ds);
+  const weekdayOf = (date: string) => {
+    const [y, m, d] = date.split('-').map(Number);
+    return ((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7) + 1;
+  };
+  const week = Array.from({ length: 7 }, (_, i) => ({ weekday: i + 1, days: 0, hours: Array.from({ length: 24 }, () => 0) }));
+  for (const d of ds.days) week[weekdayOf(d.date) - 1].days += 1;
+  for (const o of closed) {
+    const date = dates.get(o.dayId);
+    if (date) week[weekdayOf(date) - 1].hours[istanbulParts(o.openedAt).hour] += totalsOf(o).total;
+  }
+  for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
   const parts = PARTS.map((p) => {
     const hs = hours.filter((h) => (h.hour >= p.from && h.hour < p.to) || (p.to > 24 && h.hour < p.to - 24));
     const revenue = hs.reduce((a, h) => a + h.revenue, 0);
@@ -224,6 +297,47 @@ export function hourlyReport(range: Range) {
     busiest: active.length ? active.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null,
     quietest: active.length ? active.reduce((a, b) => (b.revenue < a.revenue ? b : a)) : null,
     peaks: [...active].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
+    week,
+  };
+}
+
+// ─── Hazırlama süresi (bara gönderilmesinden "Hazır"a) ───────────────────────
+
+/** Sıralı dizide yüzdelik (en yakın sıra) */
+function percentile(sorted: number[], p: number): number {
+  if (!sorted.length) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))];
+}
+
+/**
+ * Bar ve mutfakta hazırlama süresi: kalemin gönderildiği andan "Hazır"a basıldığı ana (saniye). Ürün, saat ve
+ * en yavaş fişler; yoğun saatte kaç barista gerektiğini gösterir. Açık adisyonlar da sayılır (hazırlanmışsa).
+ */
+export function prepReport(range: Range) {
+  const ds = load(range, { includeOpen: true });
+  const orderNo = new Map(ds.orders.map((o) => [o.id, o.no]));
+  const done = ds.items
+    .filter((i) => !i.voided && i.stationId && i.readyAt && i.readyAt >= i.sentAt)
+    .map((i) => ({ id: i.id, orderId: i.orderId, name: i.name, size: i.size, sentAt: i.sentAt, sec: Math.round((i.readyAt! - i.sentAt) / 1000) }));
+  const stats = (secs: number[]) => {
+    const s = [...secs].sort((a, b) => a - b);
+    return { count: s.length, avg: s.length ? Math.round(s.reduce((a, b) => a + b, 0) / s.length) : 0, median: percentile(s, 50), p90: percentile(s, 90), max: s.at(-1) ?? 0 };
+  };
+  const byProduct = new Map<string, { name: string; size: string; secs: number[] }>();
+  for (const d of done) {
+    const key = `${d.name}|${d.size}`;
+    const row = byProduct.get(key) ?? { name: d.name, size: d.size, secs: [] };
+    row.secs.push(d.sec);
+    byProduct.set(key, row);
+  }
+  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, secs: [] as number[] }));
+  for (const d of done) hours[istanbulParts(d.sentAt).hour].secs.push(d.sec);
+  return {
+    range,
+    overall: stats(done.map((d) => d.sec)),
+    products: [...byProduct.values()].map((r) => ({ name: r.name, size: r.size, ...stats(r.secs) })).sort((a, b) => b.p90 - a.p90 || b.count - a.count),
+    hours: hours.filter((h) => h.secs.length).map((h) => ({ hour: h.hour, ...stats(h.secs) })),
+    slowest: [...done].sort((a, b) => b.sec - a.sec).slice(0, 10).map((d) => ({ orderNo: orderNo.get(d.orderId) ?? 0, name: d.name, size: d.size, sentAt: d.sentAt, sec: d.sec })),
   };
 }
 
@@ -427,8 +541,9 @@ export function patronLive(withCost: boolean) {
     date: today,
     dayOpen: !!openDay,
     netSales,
-    orders: closed.length,
-    avgCheck: closed.length ? Math.round(netSales / closed.length) : 0,
+    // Raporlarla aynı ölçüt: tutarı olan kapanmış adisyon (tamamı ikram edilen ortalamayı düşürmez)
+    orders: closed.filter((o) => o.total > 0).length,
+    avgCheck: closed.some((o) => o.total > 0) ? Math.round(netSales / closed.filter((o) => o.total > 0).length) : 0,
     open: { count: open.length, total: openTotal },
     compare: {
       lastWeek: { ...lastWeek, change: change(netSales, lastWeek.netSales) },

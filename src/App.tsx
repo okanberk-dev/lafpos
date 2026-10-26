@@ -8,7 +8,9 @@ import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
 import { homePath } from './lib/nav';
 import { onLive, startLive, stopLive } from './lib/live';
+import { REMOTE, REMOTE_PATHS } from './lib/remote';
 import { LoginPage } from './pages/LoginPage';
+import { RemoteLoginPage } from './pages/RemoteLoginPage';
 
 const FloorPage = lazy(() => import('./pages/FloorPage'));
 const OrderPage = lazy(() => import('./pages/order/OrderPage'));
@@ -21,6 +23,8 @@ const ReservationsPage = lazy(() => import('./pages/ReservationsPage'));
 const ReportsPage = lazy(() => import('./pages/reports/ReportsPage'));
 const PatronPage = lazy(() => import('./pages/patron/PatronPage'));
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
+const PickupBoardPage = lazy(() => import('./pages/PickupBoardPage'));
+const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
   const can = useCan();
@@ -33,8 +37,11 @@ function Authed() {
   const qc = useQueryClient();
   const boot = useBootQuery();
   const can = useCan();
+  const location = useLocation();
 
   useEffect(() => {
+    // Uzaktan görünümde canlı bağlantı yok: veri kafeden gelen özette, sorgular kısa aralıkla yenilenir
+    if (REMOTE) return;
     startLive(qc);
     // Rol ya da kişi yetkisi değişince açık ekranın yetkileri de hemen değişsin
     const off = onLive((e) => {
@@ -60,6 +67,8 @@ function Authed() {
       </div>
     );
   }
+
+  if (REMOTE && !REMOTE_PATHS.includes(location.pathname) && !location.pathname.startsWith('/adisyon/')) return <Navigate to="/patron" replace />;
 
   return (
     <AppShell>
@@ -92,10 +101,15 @@ export function App() {
     init();
   }, [init]);
 
+  // Müşteriye dönük ekranlar (çağrı, müşteri ekranı) personel girişi istemez: tablette ya da televizyonda kimsenin
+  // oturumu açık kalmaz; kasa menüsü ve otomatik kilit yok. Uzaktan görünümde yoklar
+  if (!REMOTE && (location.pathname === '/cagri' || location.pathname === '/musteri-ekrani')) {
+    return <Suspense fallback={<PageLoading />}>{location.pathname === '/cagri' ? <PickupBoardPage /> : <CustomerDisplayPage />}</Suspense>;
+  }
   if (!ready) return <PageLoading label="LafPOS açılıyor" />;
   if (!me) {
     if (location.pathname !== '/giris') return <Navigate to="/giris" replace state={{ from: location.pathname }} />;
-    return <LoginPage />;
+    return REMOTE ? <RemoteLoginPage /> : <LoginPage />;
   }
   if (location.pathname === '/giris') return <Navigate to="/" replace />;
   return <Authed />;

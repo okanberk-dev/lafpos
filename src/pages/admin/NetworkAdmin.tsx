@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CircleAlert } from 'lucide-react';
 import { useMemo } from 'react';
 import { encode } from 'uqr';
+import { fmtDateTime } from '@shared/time';
 import type { NetAddressDTO, NetworkInfoDTO } from '@shared/types';
 import { Badge, Card, DefRow, LABEL, PageHeader, TONE_SOFT } from '@/components/admin/ui';
 import { PageLoading } from '@/components/ui/misc';
@@ -107,6 +108,24 @@ export default function NetworkAdmin() {
           <p className={cn(HINT, 'mt-4')}>LafPOS'u modemden port açarak internete açmayın; dışarıdan yalnız Tailscale ile</p>
         </Card>
       </div>
+
+      <Card
+        title="LafPOS Uzaktan (Vercel)"
+        subtitle="Kurulum gerektirmeyen salt okunur görünüm: patron paneli, masalar, bar"
+        actions={n.cloud?.configured ? <Badge tone={n.cloud.lastError ? 'warning' : 'success'} dot>{n.cloud.lastError ? 'Gönderilemiyor' : 'Açık'}</Badge> : <Badge>Kapalı</Badge>}
+      >
+        {n.cloud?.configured ? (
+          <>
+            <DefRow label="Adres">
+              <span className="break-all">{n.cloud.url}</span>
+            </DefRow>
+            <DefRow label="Son gönderim">{n.cloud.lastSuccessAt ? fmtDateTime(n.cloud.lastSuccessAt) : 'Henüz yok'}</DefRow>
+            {n.cloud.lastError && <DefRow label="Son hata">{n.cloud.lastError}</DefRow>}
+          </>
+        ) : (
+          <p className={HINT}>Açmak için ayarlara LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET yazın (docs/07-UZAKTAN-ERISIM.md); Vercel'de aynı anahtar ve bir parola tanımlanır</p>
+        )}
+      </Card>
 
       <Card title="Bu bilgisayar">
         <DefRow label="Bilgisayar adı">{n.hostname}</DefRow>

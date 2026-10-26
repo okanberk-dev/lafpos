@@ -12,7 +12,7 @@ allowed-tools:
 
 ## Bu projede (LafPOS): bu bölüm aşağıdakilerin hepsinden önce gelir
 
-LafPOS'ta bu skill **telefon ve tablet uyarlaması** içindir: ana rehber `adapt`, teslimden önce `audit` ve `polish`, kenar durumları için `harden`. Yüzey modu her ekranda **Operate**'tir (iş gören ekran); yönetim ekranlarının görünümü `ui-ux-pro-max` kararından gelir.
+LafPOS'ta bu skill **telefon ve tablet uyarlaması** içindir: ana rehber `adapt`, teslimden önce `audit` ve `polish`, kenar durumları için `harden`. Yüzey modu her ekranda **Operate**'tir (iş gören ekran); yönetim ekranlarının görünümü Innex tarifinden gelir (`DESIGN.md`, `build-admin-panel`; ui-ux-pro-max denendi, bırakıldı: `docs/SKILLS.md`).
 
 - **Başlatıcı yok:** `scripts/impeccable` depoya alınmadı. Aşağıdaki "Launcher unavailable" yolunu izle: kökteki `PRODUCT.md` (kim, nerede, hangi ışıkta) ve `DESIGN.md`'yi doğrudan oku, eksik bağlamı uydurma.
 - **Kullanım sahnesi:** garson telefonda tek elle sipariş alır, kasiyer tablette ya da dokunmatik ekranda öder, bar ekranı tablette durur, patron telefondan canlı panele bakar. Bu yüzden dokunma hedefi en az 44 px (`pointer-coarse:`), birincil eylem başparmak bölgesinde, telefonda modal yerine alt sayfa, tablo yerine satır kartı, yatay kaydırma yalnız bilinçli şeritlerde.
