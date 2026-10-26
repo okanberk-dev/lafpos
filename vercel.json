@@ -20,5 +20,10 @@
     "api/uzaktan.ts": {
       "includeFiles": "api/demo-ozet.json"
     }
+  },
+  "git": {
+    "deploymentEnabled": {
+      "claude/**": false
+    }
   }
 }
