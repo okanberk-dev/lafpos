@@ -1,0 +1,214 @@
+@import 'tailwindcss';
+@import '@fontsource/poppins/latin-400.css';
+@import '@fontsource/poppins/latin-ext-400.css';
+@import '@fontsource/poppins/latin-500.css';
+@import '@fontsource/poppins/latin-ext-500.css';
+@import '@fontsource/poppins/latin-600.css';
+@import '@fontsource/poppins/latin-ext-600.css';
+@import '@fontsource/poppins/latin-700.css';
+@import '@fontsource/poppins/latin-ext-700.css';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* L'Affogato renkleri: orman yeşili #1E4031, bordo #6B1A2B, krem #FFF2E4, pembe #F59BBE,
+   fıstık #9FCB82, espresso #2E1A12, pirinç #C9983F */
+@theme {
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --color-forest-50: #eef5f1;
+  --color-forest-100: #d5e7dd;
+  --color-forest-200: #abcfbb;
+  --color-forest-300: #7db497;
+  --color-forest-400: #4f9472;
+  --color-forest-500: #2f7354;
+  --color-forest-600: #245c43;
+  --color-forest-700: #1e4031;
+  --color-forest-800: #152e23;
+  --color-forest-900: #0e2218;
+
+  --color-burgundy-50: #fbeff1;
+  --color-burgundy-100: #f4d5db;
+  --color-burgundy-200: #e8abb7;
+  --color-burgundy-300: #d67a8c;
+  --color-burgundy-400: #b94a62;
+  --color-burgundy-500: #8f2a40;
+  --color-burgundy-600: #6b1a2b;
+  --color-burgundy-700: #561522;
+  --color-burgundy-800: #40101a;
+
+  --color-brass-50: #fbf6e8;
+  --color-brass-100: #f7e2a8;
+  --color-brass-200: #efd38b;
+  --color-brass-300: #e8c877;
+  --color-brass-400: #d9ae55;
+  --color-brass-500: #c9983f;
+  --color-brass-600: #a87c2e;
+  --color-brass-700: #866224;
+
+  --color-pistachio-100: #e6f2dd;
+  --color-pistachio-300: #c3e0ae;
+  --color-pistachio-500: #9fcb82;
+  --color-pistachio-700: #5e8f45;
+
+  --color-rose-100: #fde6ef;
+  --color-rose-300: #f9c3d8;
+  --color-rose-500: #f59bbe;
+  --color-rose-700: #c9638a;
+
+  --color-espresso: #2e1a12;
+  --color-cream: #fff2e4;
+
+  --radius-xl2: 1.125rem;
+  --shadow-card: 0 1px 2px rgb(46 26 18 / 0.06), 0 4px 16px rgb(46 26 18 / 0.06);
+  --shadow-pop: 0 10px 40px rgb(46 26 18 / 0.22);
+}
+
+/* Yüzey ve metin renkleri temaya göre değişir (açık: krem, koyu: espresso). */
+:root {
+  --bg: #f7f1ea;
+  --surface: #ffffff;
+  --surface-2: #f3ebe2;
+  --surface-3: #eae0d5;
+  --ink: #2e1a12;
+  --ink-2: #5a4a40;
+  --muted: #8a7b70;
+  --line: #e6dbcf;
+  --line-strong: #d4c5b6;
+  --primary: #1e4031;
+  --primary-ink: #fff8ef;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #15100d;
+  --surface: #201814;
+  --surface-2: #2a201b;
+  --surface-3: #352a23;
+  --ink: #f7efe7;
+  --ink-2: #d9cabd;
+  --muted: #a8988b;
+  --line: #3a2f28;
+  --line-strong: #4b3d34;
+  --primary: #4f9472;
+  --primary-ink: #0e2218;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-primary: var(--primary);
+  --color-primary-ink: var(--primary-ink);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* Dokunmatik ekranda çift dokunmayla yakınlaşma ve metin seçimi POS'u bozar */
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+  button {
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-brass-500);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+@keyframes lp-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(201 152 63 / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgb(201 152 63 / 0);
+  }
+}
+.animate-ring {
+  animation: lp-pulse-ring 1.4s ease-out infinite;
+}
+
+@keyframes lp-slide-up {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.animate-in {
+  animation: lp-slide-up 0.18s ease-out;
+}
+
+/* 80 mm termal yazıcı için fiş çıktısı (tarayıcıdan yazdırma) */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 76mm;
+    padding: 2mm;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 11px;
+    color: #000;
+    background: #fff;
+  }
+}

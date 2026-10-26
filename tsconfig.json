@@ -1,0 +1,21 @@
+{
+  "//": "Sunucu, ortak kod ve testler. tsx bu dosyadaki paths'i okur; istemci için tsconfig.app.json.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["shared/*"]
+    }
+  },
+  "include": ["server", "shared", "tests", "scripts", "drizzle.config.ts", "vitest.config.ts", "vite.config.ts"]
+}
