@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bike, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
@@ -108,7 +109,7 @@ export default function OrdersPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
-                      {o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.type === 'tezgah' ? 'Tezgâh' : o.type === 'gelal' ? 'Gel-al' : 'Paket')}{' '}
+                      {o.tableName ?? o.extLabel ?? o.deliveryName ?? ORDER_TYPE_LABEL[o.type]}{' '}
                       <span className="font-normal text-muted">#{o.extNo ?? o.no}</span>
                     </span>
                     <span className="block text-xs text-muted">

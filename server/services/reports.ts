@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs, istanbulParts } from '@shared/time';
 import { db, schema } from '../db/client';
@@ -280,7 +281,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         at: kind === 'iptal' ? (i.voidedAt ?? i.createdAt) : i.createdAt,
         orderId: o.id,
         orderNo: o.no,
-        place: o.tableId ? (tables.get(o.tableId) ?? '') : o.type,
+        place: o.tableId ? (tables.get(o.tableId) ?? '') : ORDER_TYPE_LABEL[o.type],
         name: i.name,
         size: i.size,
         qty: i.qty,
@@ -303,7 +304,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         at: o.closedAt ?? o.updatedAt,
         orderId: o.id,
         orderNo: o.no,
-        place: o.tableId ? (tables.get(o.tableId) ?? '') : o.type,
+        place: o.tableId ? (tables.get(o.tableId) ?? '') : ORDER_TYPE_LABEL[o.type],
         name: 'Adisyon indirimi',
         size: 'TEK',
         qty: 1,
@@ -408,7 +409,7 @@ export function patronLive(withCost: boolean) {
   const tables = new Map(db.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((t) => [t.id, t.name]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   const openChecks = open
-    .map((o) => ({ id: o.id, no: o.no, place: o.tableId ? (tables.get(o.tableId) ?? '') : o.type, total: o.total, paid: o.paid, openedAt: o.openedAt, waiter: o.waiterId ? (users.get(o.waiterId) ?? null) : null, billPrinted: !!o.billPrintedAt }))
+    .map((o) => ({ id: o.id, no: o.no, place: o.tableId ? (tables.get(o.tableId) ?? '') : ORDER_TYPE_LABEL[o.type], total: o.total, paid: o.paid, openedAt: o.openedAt, waiter: o.waiterId ? (users.get(o.waiterId) ?? null) : null, billPrinted: !!o.billPrintedAt }))
     .sort((a, b) => a.openedAt - b.openedAt);
 
   const since = businessDayStartMs(today);

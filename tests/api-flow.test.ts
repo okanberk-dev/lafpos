@@ -159,6 +159,13 @@ describe('LafPOS uçtan uca', () => {
     expect(s.receipts).toBeGreaterThanOrEqual(3);
     const live = await ok<{ netSales: number; anomalies: unknown[] }>('patron', 'GET', '/reports/patron');
     expect(live.netSales).toBe(s.netSales);
+
+    // Masasız açık adisyon patron panelinde türünün adıyla görünür, ham anahtarla ("tezgah") değil
+    const t = await ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const withItem = await ok<OrderDTO>('kasa', 'POST', `/orders/${t.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    const after = await ok<{ openChecks: { id: string; place: string }[] }>('patron', 'GET', '/reports/patron');
+    expect(after.openChecks.find((c) => c.id === t.id)?.place).toBe('Tezgâh');
+    await ok('kasa', 'POST', `/orders/${t.id}/payments`, { methodId: method('Nakit').id, amount: withItem.total });
   });
 
   it('kör kasa: kasiyer ara raporu görmez; rol yetkisi verilince görür (rol matrisi)', async () => {

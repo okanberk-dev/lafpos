@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownRight, ArrowUpRight, BadgePercent, CircleDollarSign, Download, FileSpreadsheet, Package, Receipt, Search, ShoppingBag } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl } from '@shared/money';
 import { fmtDateTime, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
@@ -125,7 +126,7 @@ interface Summary {
   previous: { netSales: number; receipts: number; change: number | null };
 }
 
-const TYPE_LABEL: Record<string, string> = { masa: 'Masa', tezgah: 'Tezgâh', gelal: 'Gel-al', paket: 'Paket' };
+const TYPE_LABEL: Record<string, string> = ORDER_TYPE_LABEL;
 
 function SummaryReport({ range }: { range: Range }) {
   const q = useQuery({ queryKey: ['reports', 'summary', range], queryFn: () => get<Summary>(`/reports/summary?${qs(range)}`) });
