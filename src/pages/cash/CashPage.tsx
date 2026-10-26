@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownToLine, ArrowUpFromLine, CalendarCheck, Coins, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, Coins, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { parseTL, tl } from '@shared/money';
@@ -26,6 +26,8 @@ interface DayResponse {
   blind?: boolean;
   /** Açık gün yokken bugünün kapanmış günü: bir iş gününe tek Z, yeni gün 05:00'ten sonra */
   closedToday?: BusinessDayDTO | null;
+  /** Açık gün dünden kalmışsa uyarı metni: yeni satış alınmaz, önce gün sonu */
+  stale?: string | null;
 }
 interface DayListItem extends BusinessDayDTO {
   netSales: number | null;
@@ -256,6 +258,15 @@ export default function CashPage() {
 
       {tab === 'bugun' && day && (
         <div className="space-y-4">
+          {current.data?.stale && (
+            <div role="alert" className="flex items-start gap-3 rounded-2xl border border-warn-200 bg-warn-100 px-4 py-3 text-warn-700 dark:border-transparent dark:bg-warn-800 dark:text-warn-300">
+              <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+              <div className="min-w-0 text-sm">
+                <p className="font-semibold">{current.data.stale}</p>
+                <p>Bu güne yeni adisyon ve ürün eklenmez; açık adisyonların ödemesi alınır. Gün sonundan sonra bugünün gününü açın</p>
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {can('kasa.hareket') && (
               <>
