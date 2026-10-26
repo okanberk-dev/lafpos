@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router';
 import type { Permission } from '@shared/permissions';
 import { AppShell } from './components/AppShell';
 import { PageLoading } from './components/ui/misc';
+import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
 import { homePath } from './lib/nav';
@@ -55,14 +56,29 @@ function Authed() {
 
   if (boot.isLoading) return <PageLoading label="LafPOS hazırlanıyor" />;
   if (boot.isError || !boot.data) {
+    // Uzaktan görünümde giriş çalışır ama kafeden özet gelmemiş olabilir: ağ değil, kasa kurulumu söylenir
+    const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
     return (
       <div className="grid h-full place-items-center p-6 text-center">
-        <div>
-          <p className="font-semibold">Sunucuya bağlanılamadı</p>
-          <p className="mt-1 text-sm text-muted">Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun</p>
-          <button className="mt-4 rounded-xl bg-primary px-4 py-2 text-primary-ink" onClick={() => boot.refetch()}>
-            Tekrar dene
-          </button>
+        <div className="max-w-md">
+          <p className="font-semibold">{noSnapshot ? 'Kafeden henüz veri gelmedi' : 'Sunucuya bağlanılamadı'}</p>
+          <p className="mt-1 text-sm text-muted">
+            {noSnapshot
+              ? 'Giriş çalışıyor. Kafedeki kasa bilgisayarında LafPOS 0.2.0 açılıp uzaktan erişim satırları ayarlara girilince canlı görünüm birkaç saniyede başlar'
+              : REMOTE
+                ? errorMessage(boot.error)
+                : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button className="min-h-11 rounded-xl bg-primary px-4 py-2 text-primary-ink" onClick={() => boot.refetch()}>
+              Tekrar dene
+            </button>
+            {REMOTE && (
+              <button className="min-h-11 rounded-xl border border-line px-4 py-2" onClick={() => void useAuth.getState().logout()}>
+                Çıkış
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
