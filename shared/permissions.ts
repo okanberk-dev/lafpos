@@ -55,6 +55,7 @@ export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
     'siparis.ikram',
     'masa.islem',
     'odeme.al',
+    'kasa.gun',
     'kasa.hareket',
     'cari.yonet',
     'paket.yonet',

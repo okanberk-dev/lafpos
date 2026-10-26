@@ -1,0 +1,1141 @@
+{
+ "source": "https://laffogato.net/api/mobile/v1/menu",
+ "fetchedAt": "2026-10-26T06:13:39Z",
+ "updatedAt": "2026-08-27T13:12:30.763Z",
+ "categories": [
+  {
+   "key": "matcha",
+   "title": "Matcha Bar",
+   "subtitle": "Strawberry Aşkı",
+   "items": [
+    {
+     "id": "mnu-0001",
+     "categoryKey": "matcha",
+     "name": "Matcha Latte",
+     "description": "Çırpılmış matcha, ipeksi süt ve buz.",
+     "priceMinor": 21500,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/matcha-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0002",
+     "categoryKey": "matcha",
+     "name": "Çilekli Matcha",
+     "description": "Taze çilek katmanı üzerine matcha ve soğuk süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": null,
+     "tags": [
+      "signature",
+      "new"
+     ],
+     "image": "https://laffogato.net/menu/strawberry-matcha.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0003",
+     "categoryKey": "matcha",
+     "name": "Matcha Affogato",
+     "description": "Buzlu matcha latte üzerine bir top dondurma ve matcha tozu.",
+     "priceMinor": 24500,
+     "priceLargeMinor": null,
+     "tags": [
+      "signature"
+     ],
+     "image": "https://laffogato.net/menu/matcha-affogato.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "espresso",
+   "title": "Espresso",
+   "subtitle": "Dalla macchina",
+   "items": [
+    {
+     "id": "mnu-0004",
+     "categoryKey": "espresso",
+     "name": "L'Affogato",
+     "description": "Bir top dondurma üzerine sıcak espresso. Evin imzası.",
+     "priceMinor": 28000,
+     "priceLargeMinor": null,
+     "tags": [
+      "signature"
+     ],
+     "image": "https://laffogato.net/menu/affogato.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0005",
+     "categoryKey": "espresso",
+     "name": "Espresso",
+     "description": "Tek shot, yoğun crema. Klasik İtalyan usulü.",
+     "priceMinor": 11000,
+     "priceLargeMinor": 14000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/espresso.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0006",
+     "categoryKey": "espresso",
+     "name": "Americano",
+     "description": "Espresso ve sıcak su; ince crema katmanı.",
+     "priceMinor": 16500,
+     "priceLargeMinor": 18500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/americano.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0007",
+     "categoryKey": "espresso",
+     "name": "Latte",
+     "description": "Espresso üzerine buharlı süt ve ince köpük.",
+     "priceMinor": 19500,
+     "priceLargeMinor": 21000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/caffe-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0008",
+     "categoryKey": "espresso",
+     "name": "Flat White",
+     "description": "Çift ristretto ve yoğun mikroköpük; sütü az, kahvesi baskın.",
+     "priceMinor": 19000,
+     "priceLargeMinor": 20000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/flat-white.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0009",
+     "categoryKey": "espresso",
+     "name": "Mocha",
+     "description": "Espresso, bitter çikolata sosu ve süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/mocha.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0010",
+     "categoryKey": "espresso",
+     "name": "Cappuccino",
+     "description": "Espresso, buharlı süt ve bol köpük - eşit üç katman.",
+     "priceMinor": 19500,
+     "priceLargeMinor": 21000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/cappuccino.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0011",
+     "categoryKey": "espresso",
+     "name": "Espresso Macchiato",
+     "description": "Espresso üzerine bir dokunuş süt köpüğü.",
+     "priceMinor": 11500,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/espresso-macchiato.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0012",
+     "categoryKey": "espresso",
+     "name": "İspanyol Latte",
+     "description": "Yoğunlaştırılmış sütle hazırlanan tatlı latte.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/spanish-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0013",
+     "categoryKey": "espresso",
+     "name": "Cortado",
+     "description": "Espresso ve eşit ölçüde ılık süt.",
+     "priceMinor": 20000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/cortado.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0014",
+     "categoryKey": "espresso",
+     "name": "Beyaz Çikolatalı Mocha",
+     "description": "Beyaz çikolata sosu, espresso ve süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/white-chocolate-mocha.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0015",
+     "categoryKey": "espresso",
+     "name": "Karamel Latte",
+     "description": "Karamel şurubu, espresso ve buharlı süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/caramel-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0016",
+     "categoryKey": "espresso",
+     "name": "Tuzlu Karamel Latte",
+     "description": "Tuzlu karamel sosu, espresso ve süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/salted-caramel-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0017",
+     "categoryKey": "espresso",
+     "name": "Toffeenut Latte",
+     "description": "Fındıklı toffee şurubu, espresso ve buharlı süt.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "nuts"
+     ],
+     "image": "https://laffogato.net/menu/toffee-nut-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0018",
+     "categoryKey": "espresso",
+     "name": "Balkabağı Latte",
+     "description": "Balkabağı ve tarçın-zencefil baharatı, espresso, süt.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/pumpkin-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0019",
+     "categoryKey": "espresso",
+     "name": "Türk Kahvesi",
+     "description": "Bol köpüklü, geleneksel usul Türk kahvesi.",
+     "priceMinor": 13000,
+     "priceLargeMinor": 15000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/turkish-coffee.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0020",
+     "categoryKey": "espresso",
+     "name": "Filtre Kahve",
+     "description": "Günün demlemesi. Origin için baristaya sorun.",
+     "priceMinor": 16500,
+     "priceLargeMinor": 18500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/filter-coffee.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "ice-coffee",
+   "title": "Soğuk Kahve",
+   "subtitle": "Buzlu kahveler",
+   "items": [
+    {
+     "id": "mnu-0021",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Chai",
+     "description": "Baharatlı chai demlemesi, buz üzerine.",
+     "priceMinor": 21000,
+     "priceLargeMinor": 22500,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/iced-chai.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0022",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Americano",
+     "description": "Espresso, soğuk su ve buz.",
+     "priceMinor": 16500,
+     "priceLargeMinor": 18500,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/iced-americano.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0023",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Caffè Latte",
+     "description": "Espresso, soğuk süt ve buz.",
+     "priceMinor": 19500,
+     "priceLargeMinor": 21000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/iced-caffe-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0024",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Caffè Mocha",
+     "description": "Bitter çikolata sosu, espresso ve soğuk süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/iced-mocha.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0025",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Beyaz Çikolatalı Mocha",
+     "description": "Beyaz çikolata sosu, espresso ve soğuk süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/iced-white-mocha.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0026",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Tuzlu Karamel Latte",
+     "description": "Tuzlu karamel, espresso, soğuk süt ve buz.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/iced-salted-caramel-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0027",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Toffeenut Latte",
+     "description": "Toffee-fındık şurubu, espresso ve soğuk süt.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced",
+      "nuts"
+     ],
+     "image": "https://laffogato.net/menu/iced-toffee-nut-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0028",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu Balkabağı Latte",
+     "description": "Balkabağı baharatı, espresso ve soğuk süt.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0029",
+     "categoryKey": "ice-coffee",
+     "name": "Buzlu İspanyol Latte",
+     "description": "Yoğunlaştırılmış süt, espresso ve buz.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/iced-spanish-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0030",
+     "categoryKey": "ice-coffee",
+     "name": "Cold Brew",
+     "description": "Uzun süre soğuk demlenmiş kahve; yumuşak ve düşük asitli.",
+     "priceMinor": 20000,
+     "priceLargeMinor": 22000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/cold-brew.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0031",
+     "categoryKey": "ice-coffee",
+     "name": "Çıtır Latte",
+     "description": "Karamelize çıtır katmanlı buzlu latte.",
+     "priceMinor": 25000,
+     "priceLargeMinor": null,
+     "tags": [
+      "iced",
+      "new"
+     ],
+     "image": "https://laffogato.net/menu/crunchy-latte.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "cold",
+   "title": "Soğuk İçecekler",
+   "subtitle": "Soğuk içecekler",
+   "items": [
+    {
+     "id": "mnu-0032",
+     "categoryKey": "cold",
+     "name": "Sürpriz İçecek",
+     "description": "Baristanın günlük sürpriz karışımı.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced",
+      "new"
+     ],
+     "image": "https://laffogato.net/menu/surprise-drink.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0033",
+     "categoryKey": "cold",
+     "name": "Cool Lime",
+     "description": "Limon, nane ve soda ile ferahlatıcı buzlu içecek.",
+     "priceMinor": 20000,
+     "priceLargeMinor": 22000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/cool-lime.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0034",
+     "categoryKey": "cold",
+     "name": "L'Af Limon",
+     "description": "Ev yapımı limonata.",
+     "priceMinor": 18000,
+     "priceLargeMinor": null,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/lemonade.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0035",
+     "categoryKey": "cold",
+     "name": "Soda",
+     "description": "Soğuk maden suyu.",
+     "priceMinor": 8000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/soda.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0036",
+     "categoryKey": "cold",
+     "name": "Su",
+     "description": "0,5 lt içme suyu.",
+     "priceMinor": 6000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/water.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "hot",
+   "title": "Sıcak İçecekler",
+   "subtitle": "Sıcak içecekler",
+   "items": [
+    {
+     "id": "mnu-0037",
+     "categoryKey": "hot",
+     "name": "Chai Latte",
+     "description": "Baharatlı chai ve buharlı süt.",
+     "priceMinor": 23500,
+     "priceLargeMinor": 25000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/chai-latte.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0038",
+     "categoryKey": "hot",
+     "name": "Sıcak Çikolata",
+     "description": "Sıcak sütle çırpılmış bitter çikolata.",
+     "priceMinor": 23000,
+     "priceLargeMinor": 25000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/hot-chocolate.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0039",
+     "categoryKey": "hot",
+     "name": "Beyaz Sıcak Çikolata",
+     "description": "Beyaz çikolata ve sıcak süt.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/white-hot-chocolate.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0040",
+     "categoryKey": "hot",
+     "name": "Karamelli Sıcak Çikolata",
+     "description": "Karamel soslu sıcak çikolata.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [],
+     "image": "https://laffogato.net/menu/caramel-hot-chocolate.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0041",
+     "categoryKey": "hot",
+     "name": "Salep",
+     "description": "Tarçınla servis edilen geleneksel salep.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0042",
+     "categoryKey": "hot",
+     "name": "Çay",
+     "description": "Demlik çay.",
+     "priceMinor": 6000,
+     "priceLargeMinor": 9000,
+     "tags": [],
+     "image": "https://laffogato.net/menu/turkish-tea.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "frappe",
+   "title": "Frappe",
+   "subtitle": "Buzla çırpılmış",
+   "items": [
+    {
+     "id": "mnu-0043",
+     "categoryKey": "frappe",
+     "name": "Frappe",
+     "description": "Buzla çırpılmış klasik frappe.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/frappe.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0044",
+     "categoryKey": "frappe",
+     "name": "Espresso Frappe",
+     "description": "Espresso, süt ve buz; yoğun köpüklü.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/espresso-frappe.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0045",
+     "categoryKey": "frappe",
+     "name": "Mocha Frappe",
+     "description": "Çikolata soslu buzlu frappe.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/mocha-frappe.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0046",
+     "categoryKey": "frappe",
+     "name": "Karamel Frappe",
+     "description": "Karamel soslu buzlu frappe.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/caramel-frappe.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "smoothie",
+   "title": "Smoothie",
+   "subtitle": "Meyve & süt",
+   "items": [
+    {
+     "id": "mnu-0047",
+     "categoryKey": "smoothie",
+     "name": "Yaban Mersini",
+     "description": "Yaban mersini ve sütle çırpılmış smoothie.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/blueberry-smoothie.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0048",
+     "categoryKey": "smoothie",
+     "name": "Mango",
+     "description": "Mango püresi ve süt.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/mango-smoothie.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0049",
+     "categoryKey": "smoothie",
+     "name": "Elma",
+     "description": "Yeşil elma smoothie.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/apple-smoothie.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0050",
+     "categoryKey": "smoothie",
+     "name": "Protein Shake",
+     "description": "Protein tozu, süt ve muz.",
+     "priceMinor": 27000,
+     "priceLargeMinor": null,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/protein-shake.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "frozen",
+   "title": "Frozen",
+   "subtitle": "Meyveli frozen",
+   "items": [
+    {
+     "id": "mnu-0051",
+     "categoryKey": "frozen",
+     "name": "Çilek",
+     "description": "Çilek ve buzun frozen kıvamı.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/strawberry-frozen.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0052",
+     "categoryKey": "frozen",
+     "name": "Frambuaz",
+     "description": "Ahududulu frozen.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/raspberry-frozen.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0053",
+     "categoryKey": "frozen",
+     "name": "Çarkıfelek",
+     "description": "Çarkıfelek meyveli frozen.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0054",
+     "categoryKey": "frozen",
+     "name": "Ananas",
+     "description": "Ananaslı frozen.",
+     "priceMinor": 25000,
+     "priceLargeMinor": 27000,
+     "tags": [
+      "iced"
+     ],
+     "image": null,
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "ice-tea",
+   "title": "Soğuk Çay",
+   "subtitle": "Buzlu çay",
+   "items": [
+    {
+     "id": "mnu-0055",
+     "categoryKey": "ice-tea",
+     "name": "Limonlu Soğuk Çay",
+     "description": "Limonlu buzlu çay.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [
+      "iced"
+     ],
+     "image": "https://laffogato.net/menu/lemon-iced-tea.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0056",
+     "categoryKey": "ice-tea",
+     "name": "Şeftalili Soğuk Çay",
+     "description": "Şeftalili buzlu çay.",
+     "priceMinor": 24500,
+     "priceLargeMinor": 26500,
+     "tags": [
+      "iced"
+     ],
+     "image": null,
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "dessert",
+   "title": "Tatlılar",
+   "subtitle": "Vitrinden",
+   "items": [
+    {
+     "id": "mnu-0057",
+     "categoryKey": "dessert",
+     "name": "Donostia (L'Af Özel)",
+     "description": "Evin özel San Sebastian dilimi.",
+     "priceMinor": 16000,
+     "priceLargeMinor": null,
+     "tags": [
+      "signature"
+     ],
+     "image": "https://laffogato.net/menu/donostia-cheesecake.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0058",
+     "categoryKey": "dessert",
+     "name": "San Sebastian",
+     "description": "Yüksek ateşte pişmiş, ortası akışkan cheesecake.",
+     "priceMinor": 29000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/san-sebastian-cheesecake.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0059",
+     "categoryKey": "dessert",
+     "name": "Yaban Mersinli San Sebastian",
+     "description": "Yaban mersinli San Sebastian cheesecake.",
+     "priceMinor": 29500,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0060",
+     "categoryKey": "dessert",
+     "name": "L'Af Mango",
+     "description": "Mangolu evin özel pastası.",
+     "priceMinor": 27000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/mango-cake.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0061",
+     "categoryKey": "dessert",
+     "name": "L'Af Kahve",
+     "description": "Kahveli evin özel pastası.",
+     "priceMinor": 29000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0062",
+     "categoryKey": "dessert",
+     "name": "L'Af Antep Fıstığı",
+     "description": "Antep fıstıklı evin özel pastası.",
+     "priceMinor": 30000,
+     "priceLargeMinor": null,
+     "tags": [
+      "nuts"
+     ],
+     "image": "https://laffogato.net/menu/pistachio-cake.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0063",
+     "categoryKey": "dessert",
+     "name": "Çilek Magnolia",
+     "description": "Çilekli magnolia, bisküvi kırığıyla.",
+     "priceMinor": 24000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0064",
+     "categoryKey": "dessert",
+     "name": "Muz Magnolia",
+     "description": "Muzlu magnolia, bisküvi kırığıyla.",
+     "priceMinor": 24000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/banana-magnolia.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0065",
+     "categoryKey": "dessert",
+     "name": "Lotus Magnolia",
+     "description": "Lotus bisküvili magnolia.",
+     "priceMinor": 25000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/lotus-magnolia.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0066",
+     "categoryKey": "dessert",
+     "name": "Marlenka",
+     "description": "Ballı katmanlı Marlenka dilimi.",
+     "priceMinor": 27000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/marlenka-honey-cake.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0067",
+     "categoryKey": "dessert",
+     "name": "Klasik Spoonful",
+     "description": "Kaşık kaşık kremalı klasik tatlı.",
+     "priceMinor": 22000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0068",
+     "categoryKey": "dessert",
+     "name": "Frambuazlı Cheesecake",
+     "description": "Frambuaz soslu cheesecake.",
+     "priceMinor": 26000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/raspberry-cheesecake.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0069",
+     "categoryKey": "dessert",
+     "name": "Limonlu Cheesecake",
+     "description": "Limonlu cheesecake.",
+     "priceMinor": 26000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/lemon-cheesecake.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0070",
+     "categoryKey": "dessert",
+     "name": "Brownie",
+     "description": "Yoğun çikolatalı brownie.",
+     "priceMinor": 28000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/brownie.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0071",
+     "categoryKey": "dessert",
+     "name": "Cookie Aşkı (Dondurmalı)",
+     "description": "Sıcak cookie üzerine bir top dondurma.",
+     "priceMinor": 29000,
+     "priceLargeMinor": null,
+     "tags": [
+      "signature"
+     ],
+     "image": "https://laffogato.net/menu/cookie-ice-cream.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0072",
+     "categoryKey": "dessert",
+     "name": "Tiramisu",
+     "description": "Mascarpone, kedidili ve espresso.",
+     "priceMinor": 28000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/tiramisu.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "snack",
+   "title": "Atıştırmalıklar",
+   "subtitle": "Yanında",
+   "items": [
+    {
+     "id": "mnu-0073",
+     "categoryKey": "snack",
+     "name": "Karabuğday Simit",
+     "description": "Karabuğday unlu simit.",
+     "priceMinor": 9000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0074",
+     "categoryKey": "snack",
+     "name": "Rosbeef Sandviç",
+     "description": "Rosbif, taze yeşillik ve sos.",
+     "priceMinor": 39000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0075",
+     "categoryKey": "snack",
+     "name": "Hindi Fümeli Sandviç",
+     "description": "Hindi füme, kaşar ve taze yeşillik.",
+     "priceMinor": 35000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/smoked-turkey-sandwich.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0076",
+     "categoryKey": "snack",
+     "name": "Çıtır Granola Bar (Kenya)",
+     "description": "Çıtır granola bar.",
+     "priceMinor": 15000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/granola-bar.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0077",
+     "categoryKey": "snack",
+     "name": "Hindistan Cevizli Bar",
+     "description": "Hindistan cevizli bar.",
+     "priceMinor": 9000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/coconut-bar.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0078",
+     "categoryKey": "snack",
+     "name": "Kakao Protein Bar",
+     "description": "Kakaolu protein bar.",
+     "priceMinor": 9000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0079",
+     "categoryKey": "snack",
+     "name": "Koska Fındık",
+     "description": "Fındıklı Koska bar.",
+     "priceMinor": 9000,
+     "priceLargeMinor": null,
+     "tags": [
+      "nuts"
+     ],
+     "image": "https://laffogato.net/menu/hazelnuts.webp",
+     "taxRatePct": 10
+    }
+   ]
+  },
+  {
+   "key": "extras",
+   "title": "Ekstralar",
+   "subtitle": "Ekstralar",
+   "items": [
+    {
+     "id": "mnu-0080",
+     "categoryKey": "extras",
+     "name": "Şurup",
+     "description": "Dilediğiniz içeceğe ilave aroma şurubu.",
+     "priceMinor": 5000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": null,
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0081",
+     "categoryKey": "extras",
+     "name": "Ekstra Shot",
+     "description": "İçeceğinize ek espresso shot.",
+     "priceMinor": 5000,
+     "priceLargeMinor": null,
+     "tags": [],
+     "image": "https://laffogato.net/menu/extra-shot.webp",
+     "taxRatePct": 10
+    },
+    {
+     "id": "mnu-0082",
+     "categoryKey": "extras",
+     "name": "Alternatif Süt",
+     "description": "Yulaf, badem veya laktozsuz süt seçeneği.",
+     "priceMinor": 2500,
+     "priceLargeMinor": null,
+     "tags": [
+      "nuts"
+     ],
+     "image": null,
+     "taxRatePct": 10
+    }
+   ]
+  }
+ ],
+ "customization": {
+  "milks": [
+   {
+    "id": "normal",
+    "label": "Normal",
+    "priceMinor": 0,
+    "allergens": []
+   },
+   {
+    "id": "lactose-free",
+    "label": "Laktozsuz",
+    "priceMinor": 0,
+    "allergens": []
+   },
+   {
+    "id": "oat",
+    "label": "Yulaf",
+    "priceMinor": 2500,
+    "allergens": []
+   },
+   {
+    "id": "almond",
+    "label": "Badem",
+    "priceMinor": 2500,
+    "allergens": [
+     "nuts"
+    ]
+   }
+  ],
+  "roasts": [
+   {
+    "id": "intense",
+    "label": "Yoğun"
+   },
+   {
+    "id": "light",
+    "label": "Hafif"
+   }
+  ],
+  "syrups": [
+   {
+    "id": "none",
+    "label": "Şurup yok",
+    "priceMinor": 0,
+    "allergens": []
+   },
+   {
+    "id": "vanilla",
+    "label": "Vanilya",
+    "priceMinor": 5000,
+    "allergens": []
+   },
+   {
+    "id": "caramel",
+    "label": "Karamel",
+    "priceMinor": 5000,
+    "allergens": []
+   },
+   {
+    "id": "hazelnut",
+    "label": "Fındık",
+    "priceMinor": 5000,
+    "allergens": [
+     "nuts"
+    ]
+   }
+  ],
+  "extraShotMinor": 5000,
+  "sugarMax": 3
+ }
+}

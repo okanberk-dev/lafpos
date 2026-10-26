@@ -76,6 +76,10 @@
   --line-strong: #d4c5b6;
   --primary: #1e4031;
   --primary-ink: #fff8ef;
+  --chart-accent: #178a56;
+  --chart-context: #b3a597;
+  --chart-grid: #ece3d9;
+  --chart-track: #efe7de;
   color-scheme: light;
 }
 
@@ -91,6 +95,10 @@
   --line-strong: #4b3d34;
   --primary: #4f9472;
   --primary-ink: #0e2218;
+  --chart-accent: #2f9e6a;
+  --chart-context: #6d5f55;
+  --chart-grid: #2f2620;
+  --chart-track: #2c231e;
   color-scheme: dark;
 }
 

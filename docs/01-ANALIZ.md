@@ -2,14 +2,62 @@
 
 Tarih: 26 Eki 2026.
 
-## 1. Gafgidi panelleri
+## 1. ModPOS (Modpos Integra): bugün kafede kullanılan sistem
 
-`patron.gafgidi.com` ve `panel.gafgidi.com` adresleri ile denenen bütün varyantlar (`gafgidi.com`, `.com.tr`,
-`.net`, `.app`, `.io`, `kafgidi.com`) DNS'te kayıtlı değil; Chrome da "sayfa açılamadı" verdi. Web aramasında
-bu adla bir POS ürünü çıkmadı. lafmaliyet belgeleri ModPOS'un arka ofisinin adını "Patron" olarak geçiriyor;
-adres büyük olasılıkla ModPOS Patron paneline ait ve yazımı farklı. **Doğru adres gelince bu bölüm ekran ekran
-özellik karşılaştırmasıyla güncellenecek.** O zamana kadar karşılaştırma aşağıdaki yayımlanmış kaynaklarla
-yapıldı.
+Doğru adresler `patron.gafdigi.com` (patron uygulaması, "modboss") ve `panel.gafdigi.com` (şube/marka yönetim paneli).
+26 Eki 2026'da kullanıcının oturumuyla, yalnız okuyarak incelendi; hiçbir ayar değiştirilmedi. Kasa yazılımı
+Windows bilgisayarda çalışıyor, iş günü 06:00'da otomatik kapanıyor.
+
+**Patron uygulaması (mobil web, koyu tema)**
+
+- Genel: bugünkü ciro canlı, "Kıyas · 09:40 itibarıyla" ile geçen haftanın ve geçen ayın aynı gün aynı saatine
+  göre fark; dünkü ciro (eğri), sepet ortalaması, sipariş sayısı, ödeme yöntemleri, en çok satanlar.
+- Açık Hesaplar: o an açık masalar ve tutarları.
+- Raporlar (dönem: bugün, dün, hafta, bu ay, geçen ay, yıl, özel; şube filtresi), 15 tür: **Ciro** (toplam,
+  günlük ortalama, ciro dışı/ödenmez, bekleyen paketler, ödeme yöntemi ve kanal kırılımı), **Kasa Föyü** (Z no,
+  sistem nakit/kart, personelin girdiği kasa defteri, açılış, beklenen çekmece, ödeme türü bazında sistem − föy
+  farkı), **Adisyon** (adisyon listesi; açınca ödemeler, kalemler, KDV hariç ara toplam, servis, kuver),
+  **Satış** (ürün bazında adet, ortalama fiyat, ciro, pay), Kategori, Kampanyalar, İndirim, **Silinenler**,
+  **Ödenmez**, İkram, İade, Değişim, **Saatlik** (en yoğun/sakin saat, 24 saat dağılımı, gün dilimleri, ilk 5
+  pik saat), Zayiler, Cari Ekstre (Logo ERP).
+- Bildirim tercihleri, profil (2FA, passkey, tema), "Integra AI" asistanı (henüz "çok yakında").
+
+**Yönetim paneli (masaüstü, açık tema)**
+
+- Şube paneli: toplam ciro, adisyon sayısı ve ortalaması, ürün adedi, ciro grafiği, ödeme yöntemleri, kategori
+  ve personel satışları.
+- Ürün yönetimi: şube menüsünde ürün başına "Satışa açık", "Ekranda gizle", "Kısayol", toplu işlemler (100 ürün).
+  Varyantlar (seçenek grupları): bardak seçimi, Türk kahvesi bardağı ve şekeri (4 seviye), çay bardağı,
+  şurup (10), süt (3).
+- Sipariş yönetimi: paket servis panosu (Paket servis, Trendyol, Yemeksepeti, Getir sekmeleri), gün sonu al,
+  banka POS'u için "Batch EOD", günlük kopya, elle sipariş ekleme, sipariş geçmişi.
+- Stok (depolar, zayi tanımları, eldeki stok, transfer): L'Affogato'da kullanılmıyor (0 kalem); stok
+  lafmaliyet'te.
+- Markaya geri bildirim formları, ⌘K arama, Integra AI kredisi.
+
+**L'Affogato'nun kullanım biçimi (dünkü veriden)**
+
+- Adisyonların tamamı "Paket" tipinde: kafe pratikte **tezgâhta hızlı satış** yapıyor; ödemelerin büyük
+  çoğunluğu kredi kartı.
+- ModPOS'taki ürün adları sitedekinden farklı ve büyük harf ("TEA" ↔ Çay, "ICED AMERICANO" ↔ Buzlu Americano);
+  içeceklerin çoğu **tek boy** ve fiyatlar siteyle uyuşmuyor (Latte 200 ₺ ↔ sitede 195/210 ₺, alternatif süt
+  50 ₺ ↔ sitede 25 ₺). Üçüncü kopya sorunu bu.
+- Kasaya özel kalemler: Karaoke kişi başı (150 ₺), Karaoke toplu (1.000 ₺), Etkinlik ücreti, Yenilebilir bardak,
+  Türk kahvesi (sitede yok).
+
+**LafPOS'a yansıyanlar (tasarım farklı, yaklaşım karşılanıyor)**
+
+| ModPOS'ta | LafPOS'ta |
+| --- | --- |
+| Saat itibarıyla geçen hafta/ay kıyası | Patron paneli aynı kıyas + uyarı akışı + anomali kuralları |
+| 15 rapor türü | Aynı kapsam (Ciro, Kasa föyü, Adisyon, Satış, Kategori, Happy hour, İndirim, İptal, İkram, İade, Saatlik…) |
+| Kasa föyü: ödeme türü bazında sistem − föy | Gün sonunda ödeme türü bazında sayım (banka POS slipi, yemek kartları) ve fark |
+| 06:00 otomatik gün sonu | Ayarlanabilir otomatik gün sonu (açık adisyon yoksa) |
+| Bardak seçimi, Türk kahvesi şekeri | Yerel seçenek grupları (siteninkilere ek) |
+| Kasaya özel ürünler | Yerel ürünler (senkron dokunmaz) |
+| Tek boy, elle fiyat | Sitenin M/L fiyatları, tek kaynak |
+| Tezgâh satışında adisyon + ödeme | Tezgâhta tek dokunuş: "Gönder ve öde", "Kartla tamamı" |
+| Integra AI "çok yakında" | Sonraki adım: lafmaliyet'in Claude bağlantısıyla birlikte patron asistanı |
 
 ## 2. Referans ürünlerin özellikleri
 

@@ -54,11 +54,13 @@ export const env = {
 
   /** laffogato (site + mobil uygulama API'si) */
   laffogatoUrl: (process.env.LAFFOGATO_URL ?? 'https://laffogato.net').replace(/\/$/, ''),
-  laffogatoToken: process.env.LAFFOGATO_POS_TOKEN ?? '',
+  /** Sitenin imzalı uçları: sitedeki LAFPOS_SYNC_SECRET değeri (en az 32 karakter) */
+  laffogatoPanelSecret: (process.env.LAFFOGATO_SYNC_SECRET ?? process.env.LAFFOGATO_PANEL_SECRET ?? '').trim(),
 
   /** lafmaliyet (maliyet / arka ofis paneli) */
   lafmaliyetUrl: (process.env.LAFMALIYET_URL ?? '').replace(/\/$/, ''),
-  lafmaliyetToken: process.env.LAFMALIYET_POS_TOKEN ?? '',
+  /** lafmaliyet'in imzalı POS uçları: paneldeki LAFPOS_SYNC_SECRET değeri */
+  lafmaliyetToken: (process.env.LAFMALIYET_SYNC_SECRET ?? '').trim(),
 };
 
 mkdirSync(env.uploadsDir, { recursive: true });

@@ -36,8 +36,9 @@ npm run build && npm start   # http://<bilgisayar-ip>:4000
 | --- | --- |
 | `LAFPOS_PORT` | Sunucu portu (varsayılan 4000) |
 | `LAFFOGATO_URL` | Site adresi (varsayılan https://laffogato.net) |
-| `LAFFOGATO_PANEL_SECRET` | Sitenin imzalı panel uçları için anahtar (Tükendi yazma, online siparişler) |
-| `LAFMALIYET_URL`, `LAFMALIYET_POS_SECRET` | lafmaliyet'e günlük satış/Z itmek için (lafmaliyet tarafındaki uç yazılınca) |
+| `LAFFOGATO_SYNC_SECRET` | Sitenin imzalı uçları (Tükendi yazma, online siparişler); sitedeki `LAFPOS_SYNC_SECRET` |
+| `LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET` | lafmaliyet'e günlük satış/Z itme, maliyet çekme; paneldeki `LAFPOS_SYNC_SECRET` |
+| `TOKENX_*` | Yazarkasa POS (Token ÖKC) bağlantısı, bkz. `docs/04-YAZARKASA.md` |
 
 ## Komutlar
 

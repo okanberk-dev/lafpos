@@ -1,20 +1,32 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router';
+import { App } from './App';
+import { ApprovalHost } from './lib/approval';
+import { PrintHost } from './lib/print';
+import { initTheme } from './lib/theme';
+import { Toaster } from './lib/toast';
 import './index.css';
 
-function Placeholder() {
-  return (
-    <main className="grid h-full place-items-center p-6 text-center">
-      <div>
-        <h1 className="text-3xl font-semibold text-forest-700">LafPOS</h1>
-        <p className="mt-2 text-muted">Dalga 0: plan ve iskelet hazır, çekirdek POS Dalga 1'de</p>
-      </div>
-    </main>
-  );
-}
+initTheme();
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, refetchOnWindowFocus: true, staleTime: 15_000 },
+    mutations: { retry: 0 },
+  },
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Placeholder />
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <App />
+        <ApprovalHost />
+        <Toaster />
+        <PrintHost />
+      </BrowserRouter>
+    </QueryClientProvider>
   </StrictMode>,
 );

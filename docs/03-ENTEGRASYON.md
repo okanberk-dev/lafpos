@@ -47,7 +47,10 @@ Uygulama tek veritabanı işleminde yapılır, `audit_log`'a "menü senkronu" ol
 
 ### 2.3 İmzalı panel uçları (anahtar verilirse)
 
-`.env`: `LAFFOGATO_PANEL_SECRET` (bugün sitenin `KARAOKE_SYNC_SECRET` değeri; ayrı anahtar için bkz. §6).
+`.env`: `LAFFOGATO_SYNC_SECRET`. Değeri sitenin **`LAFPOS_SYNC_SECRET`** ortam değişkeniyle aynıdır (en az 32
+karakter). Site bu anahtarı panel uçlarında `KARAOKE_SYNC_SECRET`'a ek olarak kabul eder (laffogato
+`claude/lafpos-baglantisi` PR'ı); böylece panelin anahtarı kafedeki makinede durmaz ve iki anahtar ayrı
+döndürülebilir. Site değişikliği yayına girene kadar geçici olarak `KARAOKE_SYNC_SECRET` değeri de çalışır.
 
 İmza sitenin `src/lib/panel/karaoke-sync-core.ts` kuralının aynısı:
 
@@ -66,7 +69,12 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı | 5 dk'da bir + ekran açılınca + elle |
 | `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi | kullanıcı işlemi |
 
-`actor` LafPOS kullanıcısının adıdır; site olay kaydına "Panel · Ad" diye düşer.
+`actor` LafPOS kullanıcısının adıdır. LafPOS anahtarıyla gelen yazımlar site olay kaydına `lafpos:<ad>` diye düşer.
+
+**Sipariş sürüm sinyali:** `GET /api/pos/orders/version` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version": "<metin>" }`.
+Sitenin veri önbelleğinden (`live:orders` etiketi) gelir, veritabanına dokunmaz; sipariş yazımı etiketi
+düşürünce değer değişir. LafPOS bunu 20 saniyede bir sorar, değer değişince `GET /api/panel/orders`'ı çeker.
+Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım).
@@ -128,7 +136,7 @@ idempotent). İstek giden kutusunda (`outbox`) bekler; internet yoksa sonra gide
 
 ```
 POST {LAFMALIYET_URL}/api/pos/gun
-x-laf-timestamp, x-laf-signature (aynı kural, ayrı anahtar: LAFMALIYET_POS_SECRET)
+x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYNC_SECRET, LafPOS'ta LAFMALIYET_SYNC_SECRET)
 {
   "version": 1,
   "source": "lafpos",
@@ -144,9 +152,17 @@ x-laf-timestamp, x-laf-signature (aynı kural, ayrı anahtar: LAFMALIYET_POS_SEC
   ],
   "ikram": [
     { "posName": "TIRAMISU", "siteMenuId": "mnu-0090", "slot": "M", "qty": 1, "menuValue": 260, "reason": "Doğum günü" }
+  ],
+  "payments": [
+    { "name": "Pluxee", "zField": "meal_card", "channel": "pluxee", "count": 7, "amount": 1850 }
   ]
 }
 ```
+
+- Gövde en çok 256 KB, katı JSON. `date` aynı olan ikinci istek öncekinin yerine geçer (idempotent).
+- `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,
+  `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`…); Komisyon ekranı aylık kanal satışını buradan
+  doldurabilir.
 
 - Tutarlar TL (lafmaliyet'in para biçimi), iki ondalık. `lines` lafmaliyet'in planladığı
   `DailyProductSale` biçimiyle birebir (`date` gövdede, `productId` lafmaliyet'in `site_menu_id + slot`
@@ -154,9 +170,24 @@ x-laf-timestamp, x-laf-signature (aynı kural, ayrı anahtar: LAFMALIYET_POS_SEC
 - Kişisel veri yok: müşteri, personel adı, telefon gitmez.
 - lafmaliyet tarafı: `pos_daily_sales` tablosu, `loadDailyProductSales` yükleyicisi (bugün `null`),
   Kasa raporunda `CashPrefill { source: "lafpos" }` ile ön doldurma, `ikram` → `waste_entries`
-  (`kind = 'ikram'`) önerisi. Yanıt: 200 `{ ok: true }`, 401, 413, 422 `{ field }`.
+  (`kind = 'ikram'`) önerisi. Yanıt: 200 `{ ok: true, date, lines }`, 400 `{ error: "invalid", field }`, 401, 413, 503.
+  400 ve 413 kalıcıdır: LafPOS tekrar denemez, kaydı giden kutusunda hata olarak gösterir.
+- Aynı gün içinde `posName` tekildir (LafPOS satırları zaten ada göre toplar). lafmaliyet karşılığı:
+  [RiosenBeq/lafmaliyet#34](https://github.com/RiosenBeq/lafmaliyet/pull/34).
 
-LafPOS istemcisi hazırdır; `LAFMALIYET_URL` ve `LAFMALIYET_POS_SECRET` verilince giden kutusu çalışır.
+LafPOS istemcisi hazırdır; `LAFMALIYET_URL` ve `LAFMALIYET_SYNC_SECRET` verilince giden kutusu çalışır.
+
+### 4.1 Ürün maliyetleri (lafmaliyet → LafPOS)
+
+```
+GET {LAFMALIYET_URL}/api/panel/pos/urunler     (imzalı, aynı anahtar)
+{ "version": 1, "now": "…", "items": [
+  { "siteMenuId": "mnu-0003", "slot": "M", "name": "Latte", "size": "M", "costMinor": 4210, "active": true }
+] }
+```
+
+`costMinor`: reçeteden birim maliyet, kuruş, KDV hariç. LafPOS bunu yalnız `rapor.maliyet` yetkisi olanlara
+gösterir (patron panelinde ürün kârlılığı). Başka alan gitmez.
 
 ## 5. Sıklık ve bütçe
 
@@ -168,9 +199,16 @@ LafPOS istemcisi hazırdır; `LAFMALIYET_URL` ve `LAFMALIYET_POS_SECRET` verilin
 | Tükendi / aşama yazma | kullanıcı işlemi | tek yazım |
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme) | tek yazım |
 
-## 6. Önerilen sonraki adımlar (diğer repolar)
+## 6. Diğer repolardaki işler
 
-1. laffogato: ayrı anahtarlı `/api/pos/menu`, `/api/pos/orders` (kafe makinesinde panel anahtarı durmasın).
-2. laffogato: online sipariş için ucuz sinyal (ör. CDN'de "son değişiklik" sayacı) ya da ikinci ping hedefi.
-3. lafmaliyet: §4'teki uç ve `GET /api/panel/pos/urunler` (boy bazında reçete maliyeti).
-4. laffogato: kasada damga (M2M) ucu.
+| Repo | Dal | İş |
+| --- | --- | --- |
+| laffogato | `claude/lafpos-baglantisi` | `LAFPOS_SYNC_SECRET` panel uçlarında ek anahtar; `GET /api/pos/orders/version` |
+| lafmaliyet | `claude/lafpos-baglantisi` | `POST /api/pos/gun`, `GET /api/panel/pos/urunler`, `pos_daily_sales` ve `loadDailyProductSales`, Kasa raporunda "LafPOS'tan doldur" |
+| laffogato (sonra) | | Kasada damga (M2M) ucu |
+
+## 7. Yazarkasa POS (ÖKC) bağlantısı
+
+Mali fiş ÖKC'den kesilir; LafPOS adisyonu cihaza "sepet" olarak gönderir, ödeme ve fiş cihazda olur, sonuç
+(Z no, fiş no, ödeme kalemleri) LafPOS'a döner ve adisyonun ödemesi olarak kaydedilir. Ayrıntı:
+`docs/04-YAZARKASA.md`.
