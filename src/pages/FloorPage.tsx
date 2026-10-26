@@ -69,7 +69,7 @@ export default function FloorPage() {
                 key={s.id}
                 onClick={() => setSectionId(s.id)}
                 className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition',
+                  'flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition pointer-coarse:min-h-11',
                   s.id === section?.id ? 'bg-forest-700 text-cream' : 'bg-surface-2 text-ink-2 hover:bg-surface-3',
                 )}
               >
@@ -81,10 +81,10 @@ export default function FloorPage() {
           <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
             {wide && (
               <div className="flex rounded-xl border border-line bg-surface-2 p-1">
-                <button aria-label="Plan görünümü" onClick={() => setView('plan')} className={cn('rounded-lg p-1.5', view === 'plan' && 'bg-surface shadow-sm')}>
+                <button aria-label="Plan görünümü" aria-pressed={view === 'plan'} onClick={() => setView('plan')} className={cn('grid size-7 place-items-center rounded-lg pointer-coarse:size-11', view === 'plan' && 'bg-surface shadow-sm')}>
                   <LayoutGrid className="size-4" />
                 </button>
-                <button aria-label="Liste görünümü" onClick={() => setView('liste')} className={cn('rounded-lg p-1.5', view === 'liste' && 'bg-surface shadow-sm')}>
+                <button aria-label="Liste görünümü" aria-pressed={view === 'liste'} onClick={() => setView('liste')} className={cn('grid size-7 place-items-center rounded-lg pointer-coarse:size-11', view === 'liste' && 'bg-surface shadow-sm')}>
                   <List className="size-4" />
                 </button>
               </div>
@@ -267,7 +267,7 @@ function TableTile({
             {orders[0]?.waiterName && !round && <span className="truncate">· {orders[0].waiterName}</span>}
           </div>
           {(pending > 0 || ready > 0) && (
-            <div className={cn('mt-1 flex gap-1 text-[10px] font-semibold', round && 'justify-center')}>
+            <div className={cn('mt-1 flex gap-1 text-[11px] font-semibold', round && 'justify-center')}>
               {pending > 0 && (
                 <span className="inline-flex items-center gap-0.5 rounded-full bg-black/20 px-1.5 py-0.5">
                   <ChefHat className="size-3" />

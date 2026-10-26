@@ -1,16 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Globe, Plus, RefreshCw, Search, Star } from 'lucide-react';
+import { Ban, CircleCheck, Eye, EyeOff, Globe, Pencil, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import type { ProductDTO } from '@shared/types';
-import { Button } from '@/components/ui/Button';
+import { ActionMenu, ActionRow, ActionRows, Badge, BTN, Card, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, StatusTabs } from '@/components/admin/ui';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, Card, PageHeader, PageLoading } from '@/components/ui/misc';
+import { PageLoading } from '@/components/ui/misc';
 import { del, errorMessage, get, patch, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { fold } from '@/lib/shell';
 import { toast } from '@/lib/toast';
 
 interface AdminMenu {
@@ -23,30 +25,78 @@ interface Preview {
   preview?: { changes: { kind: string; productId: string | null; extId: string; name: string; detail: string }[]; newCategories: string[]; itemCount: number; siteUpdatedAt: string | null };
   result?: { created: number; updated: number; deactivated: number };
 }
+type Category = AdminMenu['categories'][number];
+type Tab = 'tumu' | 'satista' | 'tukendi' | 'gizli' | 'site' | 'yerel';
 
 const CHANGE_LABEL: Record<string, string> = { yeni: 'Yeni', fiyat: 'Fiyat', ad: 'Ad', kdv: 'KDV', boy: 'Boy', kalkti: 'Satışta değil', geri: 'Yeniden satışta', diger: 'Diğer' };
 
+const status = (p: ProductDTO) => (p.hidden ? { tone: 'neutral' as const, label: 'POS’ta gizli' } : p.active ? { tone: 'success' as const, label: 'Satışta' } : { tone: 'danger' as const, label: 'Tükendi' });
+
+/** Ürünün kategori renginde baş harfleri (Innex tablosundaki avatar yerine) */
+function ProductMark({ name, color }: { name: string; color: string }) {
+  return (
+    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-lg text-xs font-semibold text-white" style={{ background: color || '#616367' }}>
+      {name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w) => w[0])
+        .join('')
+        .toLocaleUpperCase('tr-TR')}
+    </span>
+  );
+}
+
+/**
+ * Ürünler (Innex): durum sekmeleri sayılı, tek satır araç çubuğu, kart içinde tablo, satıra tıklayınca sağdan
+ * hızlı bakış ve düzenleme (Innex §3 fikir 8). Siteden gelen ürünün adı, fiyatı, boyu ve KDV'si sitede değişir;
+ * burada kasa alanları düzenlenir. Adres ?urun=<id> ile açılır, geri tuşu çekmeceyi kapatır.
+ */
 export default function MenuAdmin() {
-  const boot = useBoot();
   const can = useCan();
   const qc = useQueryClient();
+  const [params, setParams] = useSearchParams();
   const data = useQuery({ queryKey: ['admin', 'menu'], queryFn: () => get<AdminMenu>('/admin/menu') });
-  const [catId, setCatId] = useState<string>('');
+  const [tab, setTab] = useState<Tab>('tumu');
+  const [catId, setCatId] = useState('');
   const [q, setQ] = useState('');
-  const [edit, setEdit] = useState<ProductDTO | null>(null);
-  const [creating, setCreating] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const openId = params.get('urun');
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['admin', 'menu'] });
     qc.invalidateQueries({ queryKey: ['bootstrap'] });
   };
+  const open = (id: string | null) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set('urun', id);
+    else next.delete('urun');
+    setParams(next, { replace: !id && !!openId });
+  };
 
-  const products = useMemo(() => {
-    const all = data.data?.products ?? [];
-    const k = q.trim().toLocaleLowerCase('tr-TR');
-    return all.filter((p) => (k ? p.name.toLocaleLowerCase('tr-TR').includes(k) : !catId || p.categoryId === catId));
-  }, [data.data, q, catId]);
+  const all = useMemo(() => data.data?.products ?? [], [data.data]);
+  const cats = data.data?.categories ?? [];
+  const catOf = (p: ProductDTO) => cats.find((c) => c.id === p.categoryId);
+  const counts: Record<Tab, number> = {
+    tumu: all.length,
+    satista: all.filter((p) => p.active && !p.hidden).length,
+    tukendi: all.filter((p) => !p.active && !p.hidden).length,
+    gizli: all.filter((p) => p.hidden).length,
+    site: all.filter((p) => p.extSource).length,
+    yerel: all.filter((p) => !p.extSource).length,
+  };
+  const rows = useMemo(() => {
+    const k = fold(q.trim());
+    return all.filter((p) => {
+      if (k && !fold(`${p.name} ${p.shortName ?? ''} ${p.posName ?? ''}`).includes(k)) return false;
+      if (catId && p.categoryId !== catId) return false;
+      if (tab === 'satista') return p.active && !p.hidden;
+      if (tab === 'tukendi') return !p.active && !p.hidden;
+      if (tab === 'gizli') return p.hidden;
+      if (tab === 'site') return !!p.extSource;
+      if (tab === 'yerel') return !p.extSource;
+      return true;
+    });
+  }, [all, q, catId, tab]);
 
   const availability = async (p: ProductDTO, active: boolean) => {
     try {
@@ -57,9 +107,10 @@ export default function MenuAdmin() {
       toast.err(errorMessage(e));
     }
   };
-  const quick = async (p: ProductDTO, body: Record<string, unknown>) => {
+  const quick = async (p: ProductDTO, body: Record<string, unknown>, done?: string) => {
     try {
       await patch(`/admin/products/${p.id}`, body);
+      if (done) toast.ok(done);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -90,128 +141,151 @@ export default function MenuAdmin() {
   };
 
   if (data.isLoading) return <PageLoading />;
-  const cats = data.data?.categories ?? [];
+  const selected = openId && openId !== 'yeni' ? all.find((p) => p.id === openId) ?? null : null;
+  const cat = cats.find((c) => c.id === catId);
+
+  const columns: Column<ProductDTO>[] = [
+    {
+      key: 'urun',
+      header: 'Ürün',
+      cell: (p) => (
+        <span className="flex items-center gap-3">
+          <ProductMark name={p.name} color={catOf(p)?.color ?? ''} />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 font-medium text-[var(--admin-text)]">
+              <span className="truncate">{p.name}</span>
+              {p.favorite && <Star aria-label="Sık kullanılan" className="size-3.5 shrink-0 fill-[var(--admin-warning)] text-[var(--admin-warning)]" />}
+            </span>
+            <span className="block truncate text-xs text-[var(--admin-text-mute)]">
+              {[p.extSource ? 'Siteden' : 'Yerel', p.shortName && `kısa: ${p.shortName}`, p.posName && `lafmaliyet: ${p.posName}`].filter(Boolean).join(' · ')}
+            </span>
+          </span>
+        </span>
+      ),
+    },
+    { key: 'kategori', header: 'Kategori', cell: (p) => <span className="whitespace-nowrap text-[var(--admin-text-soft)]">{catOf(p)?.name ?? '-'}</span>, hideOnPhone: true, hideBelow: 'xl' },
+    {
+      key: 'fiyat',
+      header: 'Fiyat',
+      align: 'right',
+      cell: (p) => (
+        <span className="whitespace-nowrap tabular-nums">
+          {tl(p.price)}
+          {p.priceL != null && <span className="text-[var(--admin-text-mute)]"> / {tl(p.priceL)}</span>}
+          {can('rapor.maliyet') && p.cost != null && <span className="block text-xs text-[var(--admin-text-mute)]">maliyet {tl(p.cost)}</span>}
+        </span>
+      ),
+    },
+    { key: 'kdv', header: 'KDV', align: 'right', cell: (p) => <span className="tabular-nums">%{p.kdvRate}</span>, hideOnPhone: true, hideBelow: 'lg' },
+    { key: 'porsiyon', header: 'Porsiyon', align: 'right', cell: (p) => <span className="tabular-nums">{p.portionsLeft ?? '-'}</span>, hideOnPhone: true, hideBelow: 'lg' },
+    { key: 'durum', header: 'Durum', cell: (p) => <Badge tone={status(p).tone}>{status(p).label}</Badge> },
+  ];
 
   return (
-    <div>
+    <>
       <PageHeader
-        title="Menü"
-        subtitle="Siteden gelen ürünlerin fiyatı, adı ve KDV'si sitede değişir; burada kasa alanları (istasyon, kısa ad, renk, sık kullanılan, porsiyon) düzenlenir"
+        title="Ürünler"
+        description="Siteden gelen ürünün adı, fiyatı, boyu ve KDV'si laffogato panelinde değişir; burada satış durumu, istasyon, kısa ad, porsiyon ve seçenek grupları düzenlenir"
         actions={
           <>
-            <Button icon={<RefreshCw className={cn('size-4', syncing && 'animate-spin')} />} onClick={syncPreview} disabled={syncing}>
+            <button type="button" className={BTN.ghost} onClick={syncPreview} disabled={syncing}>
+              <RefreshCw className={cn('size-4', syncing && 'animate-spin')} aria-hidden="true" />
               Siteyle eşitle
-            </Button>
-            <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
+            </button>
+            <button type="button" className={BTN.primary} onClick={() => open('yeni')}>
+              <Plus className="size-4" aria-hidden="true" />
               Yerel ürün
-            </Button>
+            </button>
           </>
         }
       />
+
+      <StatusTabs
+        label="Ürün durumu"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { value: 'tumu', label: 'Tümü', count: counts.tumu },
+          { value: 'satista', label: 'Satışta', count: counts.satista },
+          { value: 'tukendi', label: 'Tükendi', count: counts.tukendi },
+          { value: 'gizli', label: 'POS’ta gizli', count: counts.gizli },
+          { value: 'site', label: 'Siteden', count: counts.site },
+          { value: 'yerel', label: 'Yerel', count: counts.yerel },
+        ]}
+      />
+
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ürün ara" className="w-56 pl-9" />
-        </div>
-        <div className="no-scrollbar flex gap-1 overflow-x-auto">
-          <button onClick={() => setCatId('')} className={cn('shrink-0 rounded-lg px-3 py-1.5 text-sm', !catId ? 'bg-forest-700 text-cream' : 'bg-surface-2')}>
-            Tümü
-          </button>
-          {cats.map((c) => (
-            <button key={c.id} onClick={() => setCatId(c.id)} className={cn('shrink-0 rounded-lg px-3 py-1.5 text-sm', catId === c.id ? 'bg-forest-700 text-cream' : 'bg-surface-2', !c.active && 'opacity-50')}>
-              {c.name}
-            </button>
-          ))}
-        </div>
+        <SearchField value={q} onChange={setQ} placeholder="Ürün, kısa ad ya da lafmaliyet adı" label="Ürün ara" />
+        <label className="min-w-0 flex-1 sm:w-56 sm:flex-none">
+          <span className="sr-only">Kategori</span>
+          <Select value={catId} onChange={(e) => setCatId(e.target.value)} className="text-sm pointer-fine:h-9">
+            <option value="">Bütün kategoriler</option>
+            {cats.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.active ? '' : ' (gizli)'}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <span className="ml-auto text-xs text-[var(--admin-text-mute)] tabular-nums">{rows.length} ürün</span>
       </div>
-      {catId && (
-        <CategoryBar
-          cat={cats.find((c) => c.id === catId)!}
-          onChange={async (body) => {
-            try {
-              await patch(`/admin/categories/${catId}`, body);
-              refresh();
-            } catch (e) {
-              toast.err(errorMessage(e));
-            }
+
+      {cat && <CategoryBar cat={cat} onChange={(body) => patch(`/admin/categories/${cat.id}`, body).then(refresh, (e) => toast.err(errorMessage(e)))} />}
+
+      <DataTable
+        caption="Ürünler"
+        rows={rows}
+        columns={columns}
+        rowKey={(p) => p.id}
+        onOpen={(p) => open(p.id)}
+        selectedKey={openId}
+        rowClassName={(p) => p.hidden && 'opacity-70'}
+        phoneTitle={(p) => columns[0].cell(p)}
+        phoneMeta={(p) => (
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Badge tone={status(p).tone}>{status(p).label}</Badge>
+            <span className="tabular-nums text-[var(--admin-text-soft)]">
+              {tl(p.price)}
+              {p.priceL != null && ` / ${tl(p.priceL)}`}
+            </span>
+          </span>
+        )}
+        actions={(p) => (
+          <ActionMenu
+            label={`${p.name} eylemleri`}
+            items={[
+              { key: 'ac', label: 'Hızlı bakış ve düzenle', icon: <Pencil />, onSelect: () => open(p.id) },
+              p.active
+                ? { key: 'tukendi', label: 'Tükendi işaretle', icon: <Ban />, onSelect: () => availability(p, false) }
+                : { key: 'satis', label: 'Satışa aç', icon: <CircleCheck />, onSelect: () => availability(p, true) },
+              { key: 'sik', label: p.favorite ? 'Sık kullanılandan çıkar' : 'Sık kullanılana ekle', icon: <Star />, onSelect: () => quick(p, { favorite: !p.favorite }) },
+              { key: 'gizle', label: p.hidden ? 'POS’ta göster' : 'POS’ta gizle', icon: p.hidden ? <Eye /> : <EyeOff />, onSelect: () => quick(p, { hidden: !p.hidden }) },
+            ]}
+          />
+        )}
+        empty={
+          <EmptyState title="Bu süzgeçle ürün yok" action={<button type="button" className={BTN.ghost} onClick={() => (setQ(''), setCatId(''), setTab('tumu'))}>Süzgeci temizle</button>}>
+            Arama ya da kategori seçimini değiştirin
+          </EmptyState>
+        }
+      />
+
+      {(selected || openId === 'yeni') && (
+        <ProductDrawer
+          key={openId}
+          product={selected}
+          cats={cats}
+          groups={data.data?.optionGroups ?? []}
+          onClose={() => open(null)}
+          onSaved={() => {
+            refresh();
+            open(null);
           }}
+          onAvailability={availability}
+          onQuick={quick}
         />
       )}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted">
-              <tr className="border-b border-line">
-                <th className="px-4 py-2">Ürün</th>
-                <th className="px-2 py-2">Fiyat</th>
-                <th className="px-2 py-2">KDV</th>
-                <th className="px-2 py-2">Satışta</th>
-                <th className="px-2 py-2">İstasyon</th>
-                <th className="px-2 py-2 text-center">Sık</th>
-                <th className="px-2 py-2 text-center">POS'ta gizle</th>
-                <th className="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr key={p.id} className={cn('border-b border-line/60 last:border-0', p.hidden && 'opacity-60')}>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-2 font-medium">
-                      {p.name}
-                      {p.extSource ? (
-                        <Badge tone="green">
-                          <Globe className="size-3" /> Site
-                        </Badge>
-                      ) : (
-                        <Badge>Yerel</Badge>
-                      )}
-                      {p.isService && <Badge tone="pink">Hizmet</Badge>}
-                    </div>
-                    <div className="text-xs text-muted">
-                      {[p.shortName && `Kısa: ${p.shortName}`, p.posName && `lafmaliyet: ${p.posName}`, p.portionsLeft != null && `Porsiyon: ${p.portionsLeft}`].filter(Boolean).join(' · ')}
-                    </div>
-                  </td>
-                  <td className="tabular px-2 py-2">
-                    {tl(p.price)}
-                    {p.priceL != null && <span className="text-muted"> / {tl(p.priceL)}</span>}
-                    {can('rapor.maliyet') && p.cost != null && <div className="text-xs text-muted">maliyet {tl(p.cost)}</div>}
-                  </td>
-                  <td className="px-2 py-2">%{p.kdvRate}</td>
-                  <td className="px-2 py-2">
-                    <Toggle checked={p.active} onChange={(v) => availability(p, v)} />
-                  </td>
-                  <td className="px-2 py-2">
-                    <select value={p.stationId ?? ''} onChange={(e) => quick(p, { stationId: e.target.value || null })} className="h-9 rounded-lg border border-line bg-surface px-2 text-sm">
-                      <option value="">Kategoriden</option>
-                      {boot.stations.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    <button aria-label="Sık kullanılan" onClick={() => quick(p, { favorite: !p.favorite })}>
-                      <Star className={cn('size-5', p.favorite ? 'fill-brass-400 text-brass-500' : 'text-line-strong')} />
-                    </button>
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    <input type="checkbox" checked={p.hidden} onChange={(e) => quick(p, { hidden: e.target.checked })} className="size-4" />
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <Button size="sm" variant="ghost" onClick={() => setEdit(p)}>
-                      Düzenle
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {edit && <ProductModal product={edit} groups={data.data?.optionGroups ?? []} cats={cats} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); refresh(); }} />}
-      {creating && <ProductModal product={null} groups={data.data?.optionGroups ?? []} cats={cats} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); refresh(); }} />}
 
       <Modal
         open={!!preview}
@@ -221,11 +295,13 @@ export default function MenuAdmin() {
         subtitle={preview?.status === 'degismedi' ? 'Son eşitlemeden beri sitede değişiklik yok' : `${preview?.preview?.itemCount ?? 0} ürün · ${preview?.preview?.changes.length ?? 0} değişiklik`}
         footer={
           <div className="flex justify-end gap-2">
-            <Button onClick={() => setPreview(null)}>Kapat</Button>
+            <button type="button" className={BTN.ghost} onClick={() => setPreview(null)}>
+              Kapat
+            </button>
             {preview?.status === 'onizleme' && (
-              <Button variant="primary" loading={syncing} onClick={syncApply}>
+              <button type="button" className={BTN.primary} disabled={syncing} onClick={syncApply}>
                 Değişiklikleri uygula
-              </Button>
+              </button>
             )}
           </div>
         }
@@ -233,63 +309,75 @@ export default function MenuAdmin() {
         <div className="p-4">
           {preview?.preview?.newCategories.length ? <p className="mb-2 text-sm">Yeni kategoriler: {preview.preview.newCategories.join(', ')}</p> : null}
           {preview?.preview?.changes.length ? (
-            <ul className="divide-y divide-line rounded-2xl border border-line">
+            <ul className="divide-y divide-[var(--admin-divider)] rounded-xl border border-[var(--admin-border)]">
               {preview.preview.changes.map((ch) => (
                 <li key={`${ch.extId}-${ch.kind}`} className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <Badge tone={ch.kind === 'yeni' || ch.kind === 'geri' ? 'green' : ch.kind === 'kalkti' ? 'red' : 'brass'}>{CHANGE_LABEL[ch.kind] ?? ch.kind}</Badge>
+                  <Badge tone={ch.kind === 'yeni' || ch.kind === 'geri' ? 'success' : ch.kind === 'kalkti' ? 'danger' : 'warning'}>{CHANGE_LABEL[ch.kind] ?? ch.kind}</Badge>
                   <span className="flex-1 font-medium">{ch.name}</span>
-                  <span className="tabular text-muted">{ch.detail}</span>
+                  <span className="tabular-nums text-[var(--admin-text-mute)]">{ch.detail}</span>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted">LafPOS menüsü sitedekiyle aynı</p>
+            <p className="text-sm text-[var(--admin-text-mute)]">LafPOS menüsü sitedekiyle aynı</p>
           )}
         </div>
       </Modal>
-    </div>
+    </>
   );
 }
 
-function CategoryBar({ cat, onChange }: { cat: AdminMenu['categories'][number]; onChange: (b: Record<string, unknown>) => void }) {
+function CategoryBar({ cat, onChange }: { cat: Category; onChange: (b: Record<string, unknown>) => void }) {
   const boot = useBoot();
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface px-4 py-2.5 text-sm">
-      <span className="font-semibold">{cat.name}</span>
-      {cat.extSource && <Badge tone="green">Site kategorisi</Badge>}
-      <label className="flex items-center gap-2">
-        Renk <input type="color" value={cat.color} onChange={(e) => onChange({ color: e.target.value })} className="h-8 w-10 rounded" />
+    <Card className="mb-3" bodyClassName="flex flex-wrap items-center gap-x-5 gap-y-3 py-3 sm:py-3">
+      <span className="flex items-center gap-2 text-sm font-semibold">
+        <span aria-hidden="true" className="size-3 rounded-full" style={{ background: cat.color }} />
+        {cat.name}
+        {cat.extSource && <Badge tone="info">Site kategorisi</Badge>}
+      </span>
+      <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--admin-text-soft)]">
+        Renk
+        <input type="color" value={cat.color} onChange={(e) => onChange({ color: e.target.value })} className="h-9 w-11 cursor-pointer rounded-md border border-[var(--admin-border)]" />
       </label>
-      <label className="flex items-center gap-2">
+      <label className="flex items-center gap-2 text-sm text-[var(--admin-text-soft)]">
         İstasyon
-        <select value={cat.stationId ?? ''} onChange={(e) => onChange({ stationId: e.target.value || null })} className="h-8 rounded-lg border border-line bg-surface px-2">
-          <option value="">Yok (bara/mutfağa gitmez)</option>
+        <Select value={cat.stationId ?? ''} onChange={(e) => onChange({ stationId: e.target.value || null })} className="w-auto text-sm pointer-fine:h-9">
+          <option value="">Yok (bara ya da mutfağa gitmez)</option>
           {boot.stations.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
-      <Toggle checked={cat.active} onChange={(v) => onChange({ active: v })} label="POS'ta göster" />
-    </div>
+      <Toggle checked={cat.active} onChange={(v) => onChange({ active: v })} label="POS’ta göster" />
+    </Card>
   );
 }
 
-function ProductModal({
+/** Hızlı bakış çekmecesi: üstte satış durumu ve fiyat, ortada işlem satırları, altta kasa alanları formu */
+function ProductDrawer({
   product,
   cats,
   groups,
   onClose,
   onSaved,
+  onAvailability,
+  onQuick,
 }: {
   product: ProductDTO | null;
-  cats: AdminMenu['categories'];
+  cats: Category[];
   groups: AdminMenu['optionGroups'];
   onClose: () => void;
   onSaved: () => void;
+  onAvailability: (p: ProductDTO, active: boolean) => Promise<void>;
+  onQuick: (p: ProductDTO, body: Record<string, unknown>, done?: string) => Promise<void>;
 }) {
+  const boot = useBoot();
+  const can = useCan();
   const synced = !!product?.extSource;
+  const [saving, setSaving] = useState(false);
   const [f, setF] = useState({
     categoryId: product?.categoryId ?? cats.find((c) => !c.extSource)?.id ?? cats[0]?.id ?? '',
     name: product?.name ?? '',
@@ -301,110 +389,169 @@ function ProductModal({
     posName: product?.posName ?? '',
     barcode: product?.barcode ?? '',
     portionsLeft: product?.portionsLeft != null ? String(product.portionsLeft) : '',
+    stationId: product?.stationId ?? '',
     color: product?.color ?? '',
     groupIds: product?.optionGroupIds ?? [],
   });
+  const valid = !!f.name.trim() && (synced || !!parseTL(f.price || '0'));
+
   const save = async () => {
+    setSaving(true);
     try {
       const pos = {
         shortName: f.shortName || null,
         posName: f.posName || null,
         barcode: f.barcode || null,
         portionsLeft: f.portionsLeft === '' ? null : Number(f.portionsLeft),
+        stationId: f.stationId || null,
         color: f.color || null,
       };
+      const own = { categoryId: f.categoryId, name: f.name, price: parseTL(f.price) ?? 0, priceL: f.priceL ? parseTL(f.priceL) : null, kdvRate: f.kdvRate, isService: f.isService };
       let id = product?.id;
-      if (!product) {
-        const r = await post<{ id: string }>('/admin/products', { categoryId: f.categoryId, name: f.name, price: parseTL(f.price) ?? 0, priceL: f.priceL ? parseTL(f.priceL) : null, kdvRate: f.kdvRate, isService: f.isService, ...pos });
-        id = r.id;
-      } else if (synced) {
-        await patch(`/admin/products/${product.id}`, pos);
-      } else {
-        await patch(`/admin/products/${product.id}`, { categoryId: f.categoryId, name: f.name, price: parseTL(f.price) ?? 0, priceL: f.priceL ? parseTL(f.priceL) : null, kdvRate: f.kdvRate, isService: f.isService, ...pos });
-      }
+      if (!product) id = (await post<{ id: string }>('/admin/products', { ...own, ...pos })).id;
+      else await patch(`/admin/products/${product.id}`, synced ? pos : { ...own, ...pos });
       await put(`/admin/products/${id}/groups`, { groupIds: f.groupIds });
-      toast.ok('Ürün kaydedildi');
+      toast.ok(product ? `${f.name} kaydedildi` : `${f.name} eklendi`);
       onSaved();
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setSaving(false);
     }
   };
   const remove = async () => {
     if (!product || !window.confirm(`${product.name} kaldırılsın mı? Satıldıysa gizlenir, satılmadıysa silinir`)) return;
     try {
       await del(`/admin/products/${product.id}`);
+      toast.ok(`${product.name} kaldırıldı`);
       onSaved();
     } catch (e) {
       toast.err(errorMessage(e));
     }
   };
+  const cat = cats.find((c) => c.id === (product?.categoryId ?? f.categoryId));
+  const st = product ? status(product) : null;
+
   return (
-    <Modal
+    <QuickLook
       open
       onClose={onClose}
-      size="lg"
-      title={product ? product.name : 'Yerel ürün'}
-      subtitle={synced ? 'Siteden geliyor: ad, fiyat, boy ve KDV laffogato yönetim panelinde değişir' : 'Yalnız LafPOS\'ta satılan ürün (ör. karaoke, etkinlik ücreti)'}
+      label={product ? `${product.name} ayrıntısı` : 'Yeni yerel ürün'}
+      title={product ? product.name : 'Yeni yerel ürün'}
+      subtitle={product ? `${synced ? 'Siteden' : 'Yerel'} · ${cat?.name ?? ''}` : 'Yalnız LafPOS’ta satılan ürün (karaoke, etkinlik ücreti gibi)'}
       footer={
-        <div className="flex items-center gap-2">
+        <>
           {product && !synced && (
-            <Button variant="ghost" className="text-burgundy-500" onClick={remove}>
+            <button type="button" className={BTN.danger} onClick={remove}>
+              <Trash2 className="size-4" aria-hidden="true" />
               Kaldır
-            </Button>
+            </button>
           )}
           <div className="flex-1" />
-          <Button onClick={onClose}>Vazgeç</Button>
-          <Button variant="primary" onClick={save} disabled={!f.name.trim() || (!synced && !parseTL(f.price || '0'))}>
+          <button type="button" className={BTN.ghost} onClick={onClose}>
+            Vazgeç
+          </button>
+          <button type="button" className={BTN.primary} onClick={save} disabled={!valid || saving}>
             Kaydet
-          </Button>
-        </div>
+          </button>
+        </>
       }
     >
-      <div className="grid gap-3 p-5 sm:grid-cols-2">
-        <Field label="Ad">
-          <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} disabled={synced} />
-        </Field>
-        <Field label="Kategori">
-          <Select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })} disabled={synced}>
-            {cats.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Fiyat (M ya da tek boy, ₺)">
-          <Input value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} inputMode="decimal" disabled={synced} />
-        </Field>
-        <Field label="L fiyatı (₺)" hint="boş = tek boy">
-          <Input value={f.priceL} onChange={(e) => setF({ ...f, priceL: e.target.value })} inputMode="decimal" disabled={synced} />
-        </Field>
-        <Field label="KDV">
-          <Select value={f.kdvRate} onChange={(e) => setF({ ...f, kdvRate: Number(e.target.value) })} disabled={synced}>
-            {[0, 1, 10, 20].map((r) => (
-              <option key={r} value={r}>
-                %{r}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Hizmet" hint="karaoke gibi; lafmaliyet'te HİZMET">
-          <Toggle checked={f.isService} onChange={(v) => setF({ ...f, isService: v })} disabled={synced} label={f.isService ? 'Evet' : 'Hayır'} />
-        </Field>
-        <Field label="Kısa ad" hint="düğme ve fişte">
-          <Input value={f.shortName} onChange={(e) => setF({ ...f, shortName: e.target.value })} />
-        </Field>
-        <Field label="lafmaliyet adı" hint="boşsa AD BOY">
-          <Input value={f.posName} onChange={(e) => setF({ ...f, posName: e.target.value })} placeholder="ör. LATTE MEDIUM" />
-        </Field>
-        <Field label="Barkod">
-          <Input value={f.barcode} onChange={(e) => setF({ ...f, barcode: e.target.value })} />
-        </Field>
-        <Field label="Günlük porsiyon" hint="boş = takip yok; 0'da tükenir">
-          <Input value={f.portionsLeft} onChange={(e) => setF({ ...f, portionsLeft: e.target.value.replace(/\D/g, '') })} inputMode="numeric" />
-        </Field>
-        <div className="sm:col-span-2">
-          <div className="mb-1.5 text-sm font-medium text-ink-2">Seçenek grupları</div>
+      {product && st && (
+        <div className="mb-5 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-[var(--admin-border)] p-3">
+              <div className="text-xs text-[var(--admin-text-mute)]">Satış durumu</div>
+              <div className="mt-1">
+                <Badge tone={st.tone} dot>
+                  {st.label}
+                </Badge>
+              </div>
+            </div>
+            <div className="rounded-xl border border-[var(--admin-border)] p-3">
+              <div className="text-xs text-[var(--admin-text-mute)]">Fiyat {product.priceL != null ? '(M / L)' : ''}</div>
+              <div className="mt-1 text-lg font-bold tabular-nums">
+                {tl(product.price)}
+                {product.priceL != null && <span className="text-sm font-medium text-[var(--admin-text-mute)]"> / {tl(product.priceL)}</span>}
+              </div>
+              {can('rapor.maliyet') && product.cost != null && (
+                <div className="text-xs text-[var(--admin-text-mute)]">
+                  maliyet {tl(product.cost)} · marj %{Math.round(((product.price - product.cost) / product.price) * 100)}
+                </div>
+              )}
+            </div>
+          </div>
+          <ActionRows>
+            {product.active ? (
+              <ActionRow icon={<Ban />} hue="rose" label="Tükendi işaretle" value={synced ? 'site de güncellenir' : undefined} onClick={() => onAvailability(product, false)} />
+            ) : (
+              <ActionRow icon={<CircleCheck />} hue="green" label="Satışa aç" value={synced ? 'site de güncellenir' : undefined} onClick={() => onAvailability(product, true)} />
+            )}
+            <ActionRow icon={<Star />} hue="amber" label={product.favorite ? 'Sık kullanılandan çıkar' : 'Sık kullanılana ekle'} onClick={() => onQuick(product, { favorite: !product.favorite }, product.favorite ? 'Sık kullanılandan çıktı' : 'Sık kullanılana eklendi')} />
+            <ActionRow icon={product.hidden ? <Eye /> : <EyeOff />} hue="violet" label={product.hidden ? 'POS’ta göster' : 'POS’ta gizle'} value={product.hidden ? 'şu an gizli' : undefined} onClick={() => onQuick(product, { hidden: !product.hidden })} />
+            {synced && <ActionRow icon={<Globe />} hue="blue" label="Ad, fiyat ve KDV" value="laffogato panelinde" />}
+          </ActionRows>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold">{product ? 'Kasa alanları' : 'Ürün bilgisi'}</h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Ad" className="sm:col-span-2">
+            <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} disabled={synced} autoFocus={!product} />
+          </Field>
+          <Field label="Kategori">
+            <Select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })} disabled={synced}>
+              {cats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="KDV">
+            <Select value={f.kdvRate} onChange={(e) => setF({ ...f, kdvRate: Number(e.target.value) })} disabled={synced}>
+              {[0, 1, 10, 20].map((r) => (
+                <option key={r} value={r}>
+                  %{r}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Fiyat (₺)" hint="M ya da tek boy">
+            <Input value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} inputMode="decimal" disabled={synced} />
+          </Field>
+          <Field label="L fiyatı (₺)" hint="boş = tek boy">
+            <Input value={f.priceL} onChange={(e) => setF({ ...f, priceL: e.target.value })} inputMode="decimal" disabled={synced} />
+          </Field>
+          <Field label="Kısa ad" hint="düğme ve fişte">
+            <Input value={f.shortName} onChange={(e) => setF({ ...f, shortName: e.target.value })} />
+          </Field>
+          <Field label="lafmaliyet adı" hint="boşsa AD BOY">
+            <Input value={f.posName} onChange={(e) => setF({ ...f, posName: e.target.value })} placeholder="ör. LATTE MEDIUM" />
+          </Field>
+          <Field label="İstasyon" hint="boşsa kategoriden">
+            <Select value={f.stationId} onChange={(e) => setF({ ...f, stationId: e.target.value })}>
+              <option value="">Kategoriden</option>
+              {boot.stations.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Günlük porsiyon" hint="boş = takip yok">
+            <Input value={f.portionsLeft} onChange={(e) => setF({ ...f, portionsLeft: e.target.value.replace(/\D/g, '') })} inputMode="numeric" />
+          </Field>
+          <Field label="Barkod">
+            <Input value={f.barcode} onChange={(e) => setF({ ...f, barcode: e.target.value })} />
+          </Field>
+          <Field label="Hizmet" hint="karaoke gibi">
+            <Toggle checked={f.isService} onChange={(v) => setF({ ...f, isService: v })} disabled={synced} label={f.isService ? 'Evet' : 'Hayır'} />
+          </Field>
+        </div>
+        <div>
+          <div className="mb-1.5 text-sm font-medium text-[var(--admin-text-soft)]">Seçenek grupları</div>
           <div className="flex flex-wrap gap-1.5">
             {groups
               .filter((g) => g.active)
@@ -413,8 +560,13 @@ function ProductModal({
                 return (
                   <button
                     key={g.id}
+                    type="button"
+                    aria-pressed={on}
                     onClick={() => setF({ ...f, groupIds: on ? f.groupIds.filter((x) => x !== g.id) : [...f.groupIds, g.id] })}
-                    className={cn('rounded-full border px-3 py-1.5 text-sm', on ? 'border-forest-600 bg-forest-600 text-white' : 'border-line')}
+                    className={cn(
+                      'min-h-11 rounded-full border px-3 text-[13px] font-medium pointer-fine:min-h-8',
+                      on ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'border-[var(--admin-border-strong)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)]',
+                    )}
                   >
                     {g.name}
                     {g.extSource && <span className="ml-1 text-xs opacity-70">site</span>}
@@ -424,6 +576,6 @@ function ProductModal({
           </div>
         </div>
       </div>
-    </Modal>
+    </QuickLook>
   );
 }

@@ -72,8 +72,8 @@ export function LoginPage() {
   return (
     <div className="flex min-h-full flex-col bg-forest-800 text-cream lg:flex-row">
       <div className="relative flex flex-1 flex-col justify-between overflow-hidden p-8 lg:p-12">
-        <div className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-forest-600/40 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-32 -left-16 size-96 rounded-full bg-burgundy-600/25 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-forest-600/40 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-16 size-96 rounded-full bg-burgundy-600/25 blur-3xl" />
         <div className="relative flex items-center gap-3">
           <div className="grid size-12 place-items-center rounded-2xl bg-cream/10 ring-1 ring-cream/20">
             <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-xl font-bold">L’Af</span>
@@ -133,7 +133,7 @@ export function LoginPage() {
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {info.data.demoPins.map((d) => (
-                  <button key={d.name} className="underline-offset-2 hover:underline" onClick={() => submit(d.pin)}>
+                  <button key={d.name} className="inline-flex items-center underline-offset-2 hover:underline pointer-coarse:min-h-11" onClick={() => submit(d.pin)}>
                     {d.name}: <b className="tabular">{d.pin}</b>
                   </button>
                 ))}

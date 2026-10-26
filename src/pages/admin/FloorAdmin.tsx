@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { parseTL } from '@shared/money';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select } from '@/components/ui/Field';
-import { PageHeader, PageLoading } from '@/components/ui/misc';
+import { PageLoading } from '@/components/ui/misc';
+import { PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, patch, post, put } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
@@ -130,7 +131,7 @@ export default function FloorAdmin() {
     <div>
       <PageHeader
         title="Masa planı"
-        subtitle="Masaları sürükleyin, köşesinden boyutlandırın. Karaoke odası gibi saatlik alanlar için türü 'oda' seçin"
+        description="Masaları sürükleyin, köşesinden boyutlandırın. Karaoke odası gibi saatlik alanlar için türü 'oda' seçin"
         actions={
           <>
             <Button icon={<Plus className="size-4" />} onClick={addTable}>
@@ -142,13 +143,26 @@ export default function FloorAdmin() {
           </>
         }
       />
-      <div className="no-scrollbar mb-3 flex gap-1.5 overflow-x-auto">
-        {sections.map((s) => (
-          <button key={s.id} onClick={() => setSectionId(s.id)} className={cn('shrink-0 rounded-xl px-4 py-2 text-sm font-medium', s.id === sectionId ? 'bg-forest-700 text-cream' : 'bg-surface-2')}>
-            {s.name}
-          </button>
-        ))}
-        <button onClick={addSection} className="shrink-0 rounded-xl border border-dashed border-line-strong px-4 py-2 text-sm text-muted">
+      <div role="tablist" aria-label="Bölüm" className="no-scrollbar -mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
+        {sections.map((s) => {
+          const on = s.id === sectionId;
+          return (
+            <button
+              key={s.id}
+              role="tab"
+              aria-selected={on}
+              onClick={() => setSectionId(s.id)}
+              className={cn(
+                'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border bg-[var(--admin-surface)] px-2.5 text-[13px] pointer-coarse:min-h-11',
+                on ? 'border-[var(--admin-text)] font-semibold text-[var(--admin-text)]' : 'border-[var(--admin-border)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)]',
+              )}
+            >
+              {s.name}
+              <span className={cn('min-w-5 rounded-md px-1.5 text-center text-xs tabular-nums', on ? 'bg-[var(--admin-text)] text-[var(--admin-surface)]' : 'bg-[var(--admin-panel)]')}>{tables.filter((t) => t.sectionId === s.id && t.active).length}</span>
+            </button>
+          );
+        })}
+        <button onClick={addSection} className="inline-flex min-h-9 shrink-0 items-center rounded-lg border border-dashed border-[var(--admin-border-field)] px-3 text-[13px] text-[var(--admin-text-mute)] hover:text-[var(--admin-text)] pointer-coarse:min-h-11">
           + Bölüm
         </button>
       </div>
@@ -158,7 +172,7 @@ export default function FloorAdmin() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerDown={() => setSelected(null)}
-          className="relative aspect-[16/10] w-full touch-none select-none rounded-3xl border border-line bg-[radial-gradient(circle_at_1px_1px,var(--line-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-surface"
+          className="relative aspect-[16/10] w-full touch-none select-none rounded-xl border border-[var(--admin-border)] bg-[radial-gradient(circle_at_1px_1px,var(--admin-border-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-[var(--admin-surface-2)]"
         >
           {visible.map((t) => (
             <div
@@ -166,19 +180,19 @@ export default function FloorAdmin() {
               onPointerDown={(e) => onPointerDown(e, t, 'move')}
               style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
               className={cn(
-                'absolute flex cursor-grab flex-col items-center justify-center border-2 bg-forest-50 text-center text-sm font-semibold active:cursor-grabbing dark:bg-forest-800',
-                t.shape === 'round' ? 'rounded-full' : 'rounded-xl',
-                selected === t.id ? 'border-brass-500 shadow-[var(--shadow-pop)]' : 'border-forest-400',
-                t.kind === 'oda' && 'bg-burgundy-50 dark:bg-burgundy-800/40',
+                'absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
+                t.shape === 'round' ? 'rounded-full' : 'rounded-lg',
+                selected === t.id ? 'border-[var(--admin-primary)] ring-2 ring-[var(--admin-primary)]/30' : 'border-[var(--admin-border-field)]/60',
+                t.kind === 'oda' && 'bg-[var(--admin-accent-soft)]',
               )}
             >
               {t.name}
-              <span className="text-[10px] font-normal text-muted">{t.kind === 'oda' ? 'oda' : `${t.seats} kişi`}</span>
-              <span onPointerDown={(e) => onPointerDown(e, t, 'size')} className="absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize rounded-sm border-b-2 border-r-2 border-brass-500" />
+              <span className="text-[11px] font-normal text-[var(--admin-text-mute)]">{t.kind === 'oda' ? 'oda' : `${t.seats} kişi`}</span>
+              <span onPointerDown={(e) => onPointerDown(e, t, 'size')} aria-hidden="true" className="absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize rounded-sm border-b-2 border-r-2 border-[var(--admin-primary)]" />
             </div>
           ))}
         </div>
-        <div className="rounded-2xl border border-line bg-surface p-4">
+        <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] p-4">
           {!sel ? (
             <p className="text-sm text-muted">Düzenlemek için bir masaya dokunun</p>
           ) : (

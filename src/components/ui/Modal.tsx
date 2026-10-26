@@ -76,7 +76,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
           </div>
         )}
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
-        {footer && <div className="safe-bottom border-t border-line bg-surface-2/60 px-5 py-3">{footer}</div>}
+        {footer && <div className="border-t border-line bg-surface-2/60 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
       </div>
     </div>,
     document.body,

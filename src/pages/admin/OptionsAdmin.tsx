@@ -6,7 +6,8 @@ import type { HappyHourDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, Card, PageHeader, PageLoading } from '@/components/ui/misc';
+import { PageLoading } from '@/components/ui/misc';
+import { Badge, Card, PageHeader } from '@/components/admin/ui';
 import { del, errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -84,21 +85,21 @@ export default function OptionsAdmin() {
     <div className="space-y-6">
       <PageHeader
         title="Seçenek grupları"
-        subtitle="Süt, kavrum, şurup, ekstra shot ve şeker siteden gelir; bardak seçimi, Türk kahvesi şekeri gibi kasaya özel gruplar burada"
+        description="Süt, kavrum, şurup, ekstra shot ve şeker siteden gelir; bardak seçimi, Türk kahvesi şekeri gibi kasaya özel gruplar burada"
         actions={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setEdit({ name: '', kind: 'single', required: false, maxSelect: 1, active: true, items: [{ name: '', price: '', isDefault: true, maxQty: 1 }] })}>Grup ekle</Button>}
       />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((g) => {
           const its = items.filter((i) => i.groupId === g.id && i.active);
           return (
-            <Card
+            <Card flush
               key={g.id}
               className={cn(!g.active && 'opacity-60')}
               title={
                 <span className="flex items-center gap-2">
                   {g.name}
                   {g.extSource ? (
-                    <Badge tone="green">
+                    <Badge tone="success">
                       <Globe className="size-3" /> Site
                     </Badge>
                   ) : (
@@ -136,15 +137,15 @@ export default function OptionsAdmin() {
 
       <PageHeader
         title="Happy hour"
-        subtitle="Saat ve güne göre otomatik indirim; kasada elle indirim gerekmez (sitede bugün elle yapılıyor)"
+        description="Saat ve güne göre otomatik indirim; kasada elle indirim gerekmez (sitede bugün elle yapılıyor)"
         actions={<Button icon={<Plus className="size-4" />} onClick={() => setHappy({ name: '', days: [1, 2, 3, 4, 5], start: '15:00', end: '17:00', percent: 15, categoryIds: [], productIds: [], active: true })}>Kural ekle</Button>}
       />
-      <Card>
+      <Card flush>
         <ul className="divide-y divide-line">
           {(hh.data ?? []).map((h) => (
             <li key={h.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
               <span className="min-w-0 flex-1">
-                <span className="font-semibold">{h.name}</span> <Badge tone={h.active ? 'green' : 'neutral'}>{h.active ? 'Açık' : 'Kapalı'}</Badge>
+                <span className="font-semibold">{h.name}</span> <Badge tone={h.active ? 'success' : 'neutral'}>{h.active ? 'Açık' : 'Kapalı'}</Badge>
                 <span className="block text-muted">
                   %{h.percent} · {h.days.map((d) => DAYS[d - 1]).join(', ')} · {h.start}–{h.end} · {h.categoryIds.length ? h.categoryIds.map((c) => boot.categories.find((x) => x.id === c)?.name).filter(Boolean).join(', ') : 'bütün menü'}
                 </span>
@@ -201,7 +202,7 @@ export default function OptionsAdmin() {
                   {edit.kind === 'counter' && (
                     <Input type="number" min={1} max={9} value={it.maxQty} onChange={(e) => setEdit({ ...edit, items: edit.items.map((x, j) => (j === i ? { ...x, maxQty: Number(e.target.value) || 1 } : x)) })} className="w-20" />
                   )}
-                  <button aria-label="Sil" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-surface-2" onClick={() => setEdit({ ...edit, items: edit.items.filter((_, j) => j !== i) })}>
+                  <button aria-label="Sil" className="grid size-11 place-items-center rounded-lg text-muted hover:bg-surface-2" onClick={() => setEdit({ ...edit, items: edit.items.filter((_, j) => j !== i) })}>
                     <Trash2 className="size-4" />
                   </button>
                 </div>

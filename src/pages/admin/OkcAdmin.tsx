@@ -5,7 +5,8 @@ import { Link } from 'react-router';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Segmented } from '@/components/ui/Field';
-import { Card, PageHeader, PageLoading } from '@/components/ui/misc';
+import { PageLoading } from '@/components/ui/misc';
+import { Card, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { toast } from '@/lib/toast';
@@ -68,8 +69,8 @@ export default function OkcAdmin() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Yazarkasa POS" subtitle="Adisyon cihaza sepet olarak gider; ödeme ve mali fiş cihazda alınır, sonuç (Z no, fiş no, ödemeler) adisyona işlenir" />
-      <Card title="Bağlantı">
+      <PageHeader title="Yazarkasa POS" description="Adisyon cihaza sepet olarak gider; ödeme ve mali fiş cihazda alınır, sonuç (Z no, fiş no, ödemeler) adisyona işlenir" />
+      <Card flush title="Bağlantı">
         <div className="space-y-4 p-4">
           <Segmented
             value={s.provider}
@@ -103,7 +104,7 @@ export default function OkcAdmin() {
       </Card>
 
       {s.provider === 'tokenx' && (
-        <Card title="TokenX Connect (Cloud)">
+        <Card flush title="TokenX Connect (Cloud)">
           <div className="space-y-3 p-4 text-sm">
             <div className="flex items-center gap-2">
               {s.tokenx.configured ? <CheckCircle2 className="size-5 text-forest-500" /> : <XCircle className="size-5 text-burgundy-500" />}
@@ -169,7 +170,7 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
       )}
 
       {s.provider !== 'kapali' && (
-        <Card title="KDV oranı → cihazdaki kısım">
+        <Card flush title="KDV oranı → cihazdaki kısım">
           <div className="space-y-3 p-4">
             <p className="text-sm text-muted">Her KDV oranı cihazda tanımlı bir kısma (departman) gider. Menüde kullanılan oranlar: {usedRates.map((r) => `%${r}`).join(', ')}</p>
             <div className="grid grid-cols-3 gap-3 sm:max-w-md">
@@ -186,7 +187,7 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
         </Card>
       )}
 
-      <Card title="Nasıl çalışır">
+      <Card flush title="Nasıl çalışır">
         <div className="flex gap-3 p-4 text-sm text-ink-2">
           <MonitorSmartphone className="size-5 shrink-0 text-forest-600" />
           <ol className="list-decimal space-y-1 pl-4">

@@ -5,7 +5,8 @@ import { parseTL, tl } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Textarea, Toggle } from '@/components/ui/Field';
-import { Card, PageHeader, PageLoading } from '@/components/ui/misc';
+import { PageLoading } from '@/components/ui/misc';
+import { Card, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
@@ -74,7 +75,7 @@ export default function SettingsAdmin() {
         </div>
       )}
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card title="İşletme ve fiş">
+        <Card flush title="İşletme ve fiş">
           <div className="grid gap-3 p-4">
             <Field label="İşletme adı">
               <Input value={s.businessName} onChange={(e) => set({ businessName: e.target.value })} />
@@ -98,7 +99,7 @@ export default function SettingsAdmin() {
             </div>
           </div>
         </Card>
-        <Card title="Kasa ve gün">
+        <Card flush title="Kasa ve gün">
           <div className="grid gap-3 p-4">
             <Toggle checked={s.requireDayOpen} onChange={(v) => set({ requireDayOpen: v })} label="Satış için gün açılmış olmalı" />
             <div className="flex flex-wrap items-center gap-3">
@@ -119,7 +120,7 @@ export default function SettingsAdmin() {
             </div>
           </div>
         </Card>
-        <Card title="Nedenler">
+        <Card flush title="Nedenler">
           <div className="grid gap-3 p-4 sm:grid-cols-3">
             <Field label="İptal">
               <Textarea value={lines(s.voidReasons)} onChange={(e) => set({ voidReasons: fromLines(e.target.value) })} className="min-h-36" />
@@ -132,7 +133,7 @@ export default function SettingsAdmin() {
             </Field>
           </div>
         </Card>
-        <Card title="Bar ekranı, karaoke, damga, uyarılar">
+        <Card flush title="Bar ekranı, karaoke, damga, uyarılar">
           <div className="grid grid-cols-2 gap-3 p-4">
             <Field label="Bar uyarı (dk)">
               <Input type="number" value={s.kitchenWarnMinutes} onChange={(e) => set({ kitchenWarnMinutes: Number(e.target.value) || 1 })} />
@@ -164,7 +165,7 @@ export default function SettingsAdmin() {
           </div>
         </Card>
       </div>
-      <Card
+      <Card flush
         title="Yedek"
         actions={
           <Button

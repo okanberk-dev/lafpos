@@ -51,7 +51,8 @@ export default function OrderPage() {
   const can = useCan();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const wide = useMediaQuery('(min-width: 1024px)');
+  // Tablet dikeyde de ürünler ve adisyon yan yana (impeccable adapt: tablette liste + ayrıntı)
+  const wide = useMediaQuery('(min-width: 768px)');
   const now = useTick(30_000);
   const { order, isLoading, isError, act } = useOrder(id);
   const pending = usePending(id);
@@ -223,13 +224,13 @@ export default function OrderPage() {
           <div className="min-w-0 flex-1 bg-bg">
             <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
           </div>
-          <div className="flex w-[430px] shrink-0 flex-col border-l border-line">{right}</div>
+          <div className="flex w-[clamp(300px,42vw,430px)] shrink-0 flex-col border-l border-line">{right}</div>
         </div>
       ) : (
         <>
           <div className="grid grid-cols-2 border-b border-line bg-surface">
             {(['menu', 'adisyon'] as const).map((k) => (
-              <button key={k} onClick={() => setTab(k)} className={cn('py-2.5 text-sm font-semibold', tab === k ? 'border-b-2 border-forest-600 text-forest-700 dark:text-forest-300' : 'text-muted')}>
+              <button key={k} onClick={() => setTab(k)} className={cn('min-h-12 py-2.5 text-sm font-semibold', tab === k ? 'border-b-2 border-forest-600 text-forest-700 dark:text-forest-300' : 'text-muted')}>
                 {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(order.total)}`}
               </button>
             ))}

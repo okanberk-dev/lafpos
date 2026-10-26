@@ -16,8 +16,9 @@ const variants: Record<Variant, string> = {
 };
 
 const sizes: Record<Size, string> = {
-  sm: 'h-9 px-3 text-sm gap-1.5 rounded-lg',
-  md: 'h-11 px-4 text-[15px] gap-2 rounded-xl',
+  // Dokunmatikte en az 44 px (AGENTS.md kural 8); yönetim panelinde fareyle Innex'in 36 px'i
+  sm: 'h-9 px-3 text-sm gap-1.5 rounded-lg pointer-coarse:h-11 pointer-coarse:min-w-11',
+  md: 'h-11 px-4 text-[15px] gap-2 rounded-xl [[data-area=admin]_&]:text-sm [[data-area=admin]_&]:pointer-fine:h-9',
   lg: 'h-14 px-5 text-base gap-2 rounded-xl',
   xl: 'h-16 px-6 text-lg gap-3 rounded-2xl',
 };

@@ -6,6 +6,7 @@ import { AppShell } from './components/AppShell';
 import { PageLoading } from './components/ui/misc';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
+import { homePath } from './lib/nav';
 import { startLive, stopLive } from './lib/live';
 import { LoginPage } from './pages/LoginPage';
 
@@ -20,15 +21,6 @@ const ReservationsPage = lazy(() => import('./pages/ReservationsPage'));
 const ReportsPage = lazy(() => import('./pages/reports/ReportsPage'));
 const PatronPage = lazy(() => import('./pages/patron/PatronPage'));
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
-
-/** Rolüne göre açılış sayfası */
-export function homePath(can: (p: Permission) => boolean): string {
-  if (can('siparis.al')) return '/masalar';
-  if (can('mutfak.ekran')) return '/mutfak';
-  if (can('patron.panel')) return '/patron';
-  if (can('paket.yonet')) return '/siparisler';
-  return '/kasa';
-}
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
   const can = useCan();

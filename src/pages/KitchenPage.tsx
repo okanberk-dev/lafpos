@@ -90,10 +90,10 @@ export default function KitchenPage() {
             <span className="text-forest-300">{counts.making} hazırlanıyor</span>
           </div>
         )}
-        <button onClick={() => setHistory(!history)} className={cn('inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm', history ? 'bg-brass-500 text-espresso' : 'bg-surface-2')}>
+        <button onClick={() => setHistory(!history)} className={cn('inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm pointer-coarse:min-h-11', history ? 'bg-brass-500 text-espresso' : 'bg-surface-2')}>
           <History className="size-4" /> {history ? 'Aktif fişler' : 'Geçmiş'}
         </button>
-        <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} className="grid size-10 place-items-center rounded-xl bg-surface-2">
+        <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} className="grid size-11 place-items-center rounded-xl bg-surface-2">
           {sound ? <Bell className="size-4" /> : <BellOff className="size-4 text-muted" />}
         </button>
       </div>
@@ -206,7 +206,7 @@ export default function KitchenPage() {
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={cn('rounded-xl px-3.5 py-2 text-sm font-medium', active ? 'bg-forest-600 text-white' : 'bg-surface-2 text-ink-2')}>
+    <button onClick={onClick} className={cn('rounded-xl px-3.5 py-2 text-sm font-medium pointer-coarse:min-h-11', active ? 'bg-forest-600 text-white' : 'bg-surface-2 text-ink-2')}>
       {children}
     </button>
   );
@@ -220,7 +220,7 @@ function StatusDot({ status }: { status: KitchenTicketItem['status'] }) {
     servis: { cls: 'bg-muted', label: 'Serviste' },
   }[status];
   return (
-    <span className="mt-1 flex flex-col items-center gap-1 text-[10px] text-muted">
+    <span className="mt-1 flex flex-col items-center gap-1 text-[11px] text-muted">
       <span className={cn('size-4 rounded-full', map.cls)} />
       {map.label}
     </span>

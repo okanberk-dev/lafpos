@@ -73,11 +73,11 @@ export default function ReservationsPage() {
         actions={
           <>
             <div className="flex items-center rounded-xl border border-line bg-surface">
-              <button aria-label="Önceki gün" className="grid size-10 place-items-center" onClick={() => setDate(addDays(date, -1))}>
+              <button aria-label="Önceki gün" className="grid size-11 place-items-center" onClick={() => setDate(addDays(date, -1))}>
                 <ChevronLeft className="size-4" />
               </button>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-10 bg-transparent px-1 text-sm" />
-              <button aria-label="Sonraki gün" className="grid size-10 place-items-center" onClick={() => setDate(addDays(date, 1))}>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 bg-transparent px-1 text-sm" />
+              <button aria-label="Sonraki gün" className="grid size-11 place-items-center" onClick={() => setDate(addDays(date, 1))}>
                 <ChevronRight className="size-4" />
               </button>
             </div>

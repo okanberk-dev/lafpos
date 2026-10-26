@@ -1,11 +1,14 @@
-import { BadgePercent, ClipboardList, Coffee, CreditCard, Layers, LayoutGrid, MonitorSmartphone, PlugZap, Settings2, Users } from 'lucide-react';
-import { lazy, Suspense } from 'react';
-import { Navigate, NavLink, Route, Routes } from 'react-router';
-import type { Permission } from '@shared/permissions';
+import { ChevronRight } from 'lucide-react';
+import { lazy, type ReactNode, Suspense } from 'react';
+import { Link, Navigate, Route, Routes } from 'react-router';
+import { AdminShell } from '@/components/admin/AdminShell';
+import { ADMIN_GROUPS, ADMIN_SECTIONS, visibleSections } from '@/components/admin/sections';
+import { CARD, IconBox, PageHeader } from '@/components/admin/ui';
 import { PageLoading } from '@/components/ui/misc';
 import { useCan } from '@/lib/auth';
-import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/hooks';
 
+const OverviewAdmin = lazy(() => import('./OverviewAdmin'));
 const MenuAdmin = lazy(() => import('./MenuAdmin'));
 const OptionsAdmin = lazy(() => import('./OptionsAdmin'));
 const FloorAdmin = lazy(() => import('./FloorAdmin'));
@@ -16,51 +19,83 @@ const OkcAdmin = lazy(() => import('./OkcAdmin'));
 const IntegrationAdmin = lazy(() => import('./IntegrationAdmin'));
 const AuditAdmin = lazy(() => import('./AuditAdmin'));
 
-const SECTIONS: { to: string; label: string; icon: typeof Coffee; perm: Permission[] }[] = [
-  { to: 'menu', label: 'Menü', icon: Coffee, perm: ['menu.yonet'] },
-  { to: 'secenekler', label: 'Seçenek ve happy hour', icon: BadgePercent, perm: ['menu.yonet'] },
-  { to: 'masa-plani', label: 'Masa planı', icon: LayoutGrid, perm: ['ayar.yonet'] },
-  { to: 'personel', label: 'Personel ve yetki', icon: Users, perm: ['personel.yonet'] },
-  { to: 'odeme', label: 'Ödeme türleri', icon: CreditCard, perm: ['ayar.yonet'] },
-  { to: 'yazarkasa', label: 'Yazarkasa POS', icon: MonitorSmartphone, perm: ['ayar.yonet'] },
-  { to: 'entegrasyon', label: 'Site ve lafmaliyet', icon: PlugZap, perm: ['senkron.yonet', 'ayar.yonet'] },
-  { to: 'ayarlar', label: 'Ayarlar ve yedek', icon: Settings2, perm: ['ayar.yonet'] },
-  { to: 'denetim', label: 'Denetim kaydı', icon: ClipboardList, perm: ['ayar.yonet', 'patron.panel'] },
-];
+const PAGES: Record<string, ReactNode> = {
+  genel: <OverviewAdmin />,
+  menu: <MenuAdmin />,
+  secenekler: <OptionsAdmin />,
+  'masa-plani': <FloorAdmin />,
+  personel: <UsersAdmin />,
+  odeme: <PaymentsAdmin />,
+  yazarkasa: <OkcAdmin />,
+  entegrasyon: <IntegrationAdmin />,
+  ayarlar: <SettingsAdmin />,
+  denetim: <AuditAdmin />,
+};
+
+/** Bölümün izni yoksa yönetim listesine döner (asıl denetim sunucuda) */
+function SectionRoute({ sectionKey }: { sectionKey: string }) {
+  const can = useCan();
+  const section = ADMIN_SECTIONS.find((s) => s.key === sectionKey)!;
+  if (!section.perm.some((p) => can(p))) return <Navigate to="/yonetim" replace />;
+  return <>{PAGES[sectionKey]}</>;
+}
+
+/**
+ * Telefonda yönetimin girişi bölüm listesidir (kenar çubuğu yok); tablet ve bilgisayarda kenar çubuğu
+ * göründüğü için ilk bölüme geçilir.
+ */
+function AdminIndex() {
+  const can = useCan();
+  const wide = useMediaQuery('(min-width: 768px)');
+  const sections = visibleSections(can);
+  if (!sections.length) return <Navigate to="/" replace />;
+  if (wide) return <Navigate to={sections[0].to} replace />;
+  return (
+    <>
+      <PageHeader title="Yönetim" description="Menü, masa planı, personel, cihazlar ve bağlantılar" />
+      <div className="space-y-5">
+        {ADMIN_GROUPS.map((g) => {
+          const list = sections.filter((s) => s.group === g.key);
+          if (!list.length) return null;
+          return (
+            <section key={g.key}>
+              <h2 className="px-1 pb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</h2>
+              <ul className={`${CARD} divide-y divide-[var(--admin-divider)] overflow-hidden`}>
+                {list.map((s) => (
+                  <li key={s.key}>
+                    <Link to={s.to} className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-[var(--admin-surface-2)]">
+                      <IconBox hue={s.hue}>
+                        <s.icon />
+                      </IconBox>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-[var(--admin-text)]">{s.label}</span>
+                        <span className="block truncate text-xs text-[var(--admin-text-mute)]">{s.desc}</span>
+                      </span>
+                      <ChevronRight className="size-4 shrink-0 text-[var(--admin-text-mute)]" aria-hidden="true" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })}
+      </div>
+    </>
+  );
+}
 
 export default function AdminPage() {
-  const can = useCan();
-  const visible = SECTIONS.filter((s) => s.perm.some((p) => can(p)));
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      <nav className="no-scrollbar flex gap-1 overflow-x-auto border-b border-line bg-surface p-2 lg:w-60 lg:flex-col lg:border-b-0 lg:border-r lg:p-3">
-        <h1 className="hidden px-2 pb-2 text-xl font-semibold lg:flex lg:items-center lg:gap-2">
-          <Layers className="size-5 text-forest-600" /> Yönetim
-        </h1>
-        {visible.map((s) => (
-          <NavLink key={s.to} to={s.to} className={({ isActive }) => cn('flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium', isActive ? 'bg-forest-700 text-cream' : 'text-ink-2 hover:bg-surface-2')}>
-            <s.icon className="size-4" />
-            {s.label}
-          </NavLink>
-        ))}
-      </nav>
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
-        <Suspense fallback={<PageLoading />}>
-          <Routes>
-            <Route index element={<Navigate to={visible[0]?.to ?? 'menu'} replace />} />
-            <Route path="menu" element={<MenuAdmin />} />
-            <Route path="secenekler" element={<OptionsAdmin />} />
-            <Route path="masa-plani" element={<FloorAdmin />} />
-            <Route path="personel" element={<UsersAdmin />} />
-            <Route path="odeme" element={<PaymentsAdmin />} />
-            <Route path="yazarkasa" element={<OkcAdmin />} />
-            <Route path="entegrasyon" element={<IntegrationAdmin />} />
-            <Route path="ayarlar" element={<SettingsAdmin />} />
-            <Route path="denetim" element={<AuditAdmin />} />
-            <Route path="*" element={<Navigate to="." replace />} />
-          </Routes>
-        </Suspense>
-      </div>
-    </div>
+    <AdminShell title="Yönetim">
+      <Suspense fallback={<PageLoading />}>
+        <Routes>
+          <Route index element={<AdminIndex />} />
+          {Object.keys(PAGES).map((key) => (
+            <Route key={key} path={key} element={<SectionRoute sectionKey={key} />} />
+          ))}
+          <Route path="*" element={<Navigate to="/yonetim" replace />} />
+        </Routes>
+      </Suspense>
+    </AdminShell>
   );
 }

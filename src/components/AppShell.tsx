@@ -1,51 +1,16 @@
-import {
-  BarChart3,
-  CalendarClock,
-  ChefHat,
-  ClipboardList,
-  Gauge,
-  LayoutGrid,
-  Lock,
-  LogOut,
-  MoreHorizontal,
-  Moon,
-  Settings,
-  Sun,
-  Users,
-  Wallet,
-  Wifi,
-  WifiOff,
-} from 'lucide-react';
+import { Lock, LogOut, MoreHorizontal, Moon, Search, Sun, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import type { Permission } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLive } from '@/lib/live';
+import { isAdminArea, POS_NAV } from '@/lib/nav';
+import { useShell } from '@/lib/shell';
 import { useTheme } from '@/lib/theme';
+import { CommandPalette } from './CommandPalette';
 import { Modal } from './ui/Modal';
-
-interface NavItem {
-  to: string;
-  label: string;
-  icon: typeof LayoutGrid;
-  perms: Permission[];
-  primary?: boolean;
-}
-
-const NAV: NavItem[] = [
-  { to: '/masalar', label: 'Masalar', icon: LayoutGrid, perms: ['siparis.al'], primary: true },
-  { to: '/siparisler', label: 'Siparişler', icon: ClipboardList, perms: ['siparis.al', 'paket.yonet'], primary: true },
-  { to: '/mutfak', label: 'Bar', icon: ChefHat, perms: ['mutfak.ekran'], primary: true },
-  { to: '/kasa', label: 'Kasa', icon: Wallet, perms: ['kasa.gun', 'kasa.hareket', 'odeme.al'], primary: true },
-  { to: '/musteriler', label: 'Müşteri', icon: Users, perms: ['cari.yonet'] },
-  { to: '/rezervasyon', label: 'Rezerv.', icon: CalendarClock, perms: ['rezervasyon.yonet'] },
-  { to: '/raporlar', label: 'Rapor', icon: BarChart3, perms: ['rapor.gor'] },
-  { to: '/patron', label: 'Patron', icon: Gauge, perms: ['patron.panel'], primary: true },
-  { to: '/yonetim', label: 'Yönetim', icon: Settings, perms: ['menu.yonet', 'ayar.yonet', 'personel.yonet', 'senkron.yonet'] },
-];
 
 function useClock() {
   const [now, setNow] = useState(Date.now());
@@ -85,14 +50,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const now = useClock();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const menuOpen = useShell((s) => s.userMenuOpen);
+  const setMenuOpen = useShell((s) => s.setUserMenu);
+  const setPalette = useShell((s) => s.setPalette);
   const [moreOpen, setMoreOpen] = useState(false);
   useAutoLock(boot.settings.autoLockMinutes);
 
-  const items = NAV.filter((n) => n.perms.some((p) => can(p)));
+  const items = POS_NAV.filter((n) => n.perms.some((p) => can(p)));
   const primary = items.filter((n) => n.primary).slice(0, 4);
   const rest = items.filter((n) => !primary.includes(n));
-  const fullBleed = location.pathname.startsWith('/adisyon/') || location.pathname === '/mutfak';
+  const admin = isAdminArea(location.pathname);
+  const fullBleed = admin || location.pathname.startsWith('/adisyon/') || location.pathname === '/mutfak';
   const lock = async () => {
     setMenuOpen(false);
     await logout();
@@ -109,12 +77,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         {live === 'kopuk' ? <WifiOff className="size-3.5" /> : <Wifi className="size-3.5" />}
       </span>
       {boot.day ? (
-        <NavLink to="/kasa" className="rounded-full bg-forest-100 px-2 py-1 font-medium text-forest-700 dark:bg-forest-800 dark:text-forest-100">
-          Z {boot.day.zNo}
+        <NavLink to="/kasa" title="Kasa ve gün sonu" className="inline-flex min-h-11 min-w-11 items-center justify-center pointer-fine:min-h-0 pointer-fine:min-w-0">
+          <span className="rounded-full bg-forest-100 px-2 py-1 font-medium text-forest-700 dark:bg-forest-800 dark:text-forest-100">Z {boot.day.zNo}</span>
         </NavLink>
       ) : (
-        <NavLink to="/kasa" className="rounded-full bg-brass-100 px-2 py-1 font-medium text-brass-700">
-          Gün kapalı
+        <NavLink to="/kasa" title="Kasa ve gün sonu" className="inline-flex min-h-11 min-w-11 items-center justify-center pointer-fine:min-h-0 pointer-fine:min-w-0">
+          <span className="rounded-full bg-brass-100 px-2 py-1 font-medium text-brass-700">Gün kapalı</span>
         </NavLink>
       )}
     </div>
@@ -123,7 +91,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-full">
       {/* Tablet ve bilgisayar: sol menü */}
-      <aside className="hidden w-[84px] shrink-0 flex-col items-center border-r border-line bg-surface py-3 md:flex">
+      <aside className={cn('hidden w-[84px] shrink-0 flex-col items-center border-r border-line bg-surface py-3', !admin && 'md:flex')}>
         <NavLink to="/" className="mb-3 grid size-12 place-items-center rounded-2xl bg-forest-700 text-cream" title="LafPOS">
           <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-[15px] font-bold">L’Af</span>
         </NavLink>
@@ -145,6 +113,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="mt-2 flex flex-col items-center gap-2">
+          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-2xl text-ink-2 hover:bg-surface-2">
+            <Search className="size-5" />
+          </button>
           <div className="tabular text-xs text-muted">{fmtTime(now)}</div>
           {status}
           <button onClick={() => setMenuOpen(true)} className="grid size-11 place-items-center rounded-full text-sm font-semibold text-white" style={{ background: me.color }} title={me.name}>
@@ -156,13 +127,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Telefon: üst şerit */}
         {!fullBleed && (
-          <header className="flex items-center gap-3 border-b border-line bg-surface px-4 py-2 md:hidden">
+          <header className="flex items-center gap-2 border-b border-line bg-surface py-1 pl-4 pr-2 md:hidden">
             <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-lg font-bold text-forest-700 dark:text-forest-300">L’Af</span>
             <span className="tabular text-sm text-muted">{fmtTime(now)}</span>
             <div className="flex-1" />
+            <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full text-ink-2">
+              <Search className="size-5" />
+            </button>
             {status}
-            <button onClick={() => setMenuOpen(true)} className="grid size-9 place-items-center rounded-full text-xs font-semibold text-white" style={{ background: me.color }}>
-              {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
+            <button onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 place-items-center">
+              <span className="grid size-9 place-items-center rounded-full text-xs font-semibold text-white" style={{ background: me.color }}>
+                {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
+              </span>
             </button>
           </header>
         )}
@@ -220,6 +196,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </Modal>
+      <CommandPalette />
     </div>
   );
 }

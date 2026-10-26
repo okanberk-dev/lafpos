@@ -88,7 +88,7 @@ function CategoryChip({ active, color, onClick, children }: { active: boolean; c
   return (
     <button
       onClick={onClick}
-      className={cn('flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium transition', active ? 'text-white shadow-sm' : 'bg-surface-2 text-ink-2 hover:bg-surface-3')}
+      className={cn('flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium transition pointer-coarse:min-h-11', active ? 'text-white shadow-sm' : 'bg-surface-2 text-ink-2 hover:bg-surface-3')}
       style={active ? { background: color } : undefined}
     >
       {children}
@@ -150,7 +150,7 @@ function ProductTile({
             disabled={soldOut || disabled}
             onClick={() => onCustomize(p, twoSizes ? 'M' : 'TEK')}
             aria-label={`${label} seçenekleri`}
-            className="grid w-11 place-items-center border-l border-line text-muted hover:bg-surface-2 hover:text-forest-600"
+            className="grid w-11 place-items-center border-l border-line text-muted hover:bg-surface-2 hover:text-forest-600 pointer-coarse:min-h-11"
           >
             <SlidersHorizontal className="size-4" />
           </button>

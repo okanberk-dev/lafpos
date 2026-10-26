@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { AlertOctagon, AlertTriangle, Info } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { tl } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
-import { Segmented } from '@/components/ui/Field';
-import { Card, PageHeader, PageLoading } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, PageHeader, SearchField, StatusTabs, Timeline, type TimelineItem } from '@/components/admin/ui';
+import { PageLoading } from '@/components/ui/misc';
 import { get } from '@/lib/api';
+import { fold } from '@/lib/shell';
 
 interface AuditRow {
   id: number;
@@ -18,48 +19,57 @@ interface AuditRow {
   approverName: string | null;
 }
 
+/** Denetim kaydı: Innex zaman çizelgesi (§1.5 "Zaman çizelgesi"), önem derecesine göre sayılı sekmeler */
 export default function AuditAdmin() {
   const [severity, setSeverity] = useState<'tum' | 'uyari' | 'alarm'>('tum');
-  const data = useQuery({ queryKey: ['admin', 'audit', severity], queryFn: () => get<AuditRow[]>(`/admin/audit?severity=${severity}&limit=300`) });
+  const [q, setQ] = useState('');
+  const data = useQuery({ queryKey: ['admin', 'audit'], queryFn: () => get<AuditRow[]>('/admin/audit?severity=tum&limit=300') });
+  const all = useMemo(() => data.data ?? [], [data.data]);
+  const rows = useMemo(() => {
+    const k = fold(q.trim());
+    return all.filter((a) => (severity === 'tum' || a.severity === severity) && (!k || fold(`${a.message} ${a.action} ${a.userName ?? ''} ${a.approverName ?? ''}`).includes(k)));
+  }, [all, severity, q]);
+
+  const items: TimelineItem[] = rows.map((a) => ({
+    key: String(a.id),
+    tone: a.severity === 'alarm' ? 'danger' : a.severity === 'uyari' ? 'warning' : 'neutral',
+    icon: a.severity === 'alarm' ? <AlertOctagon /> : a.severity === 'uyari' ? <AlertTriangle /> : <Info />,
+    title: a.message,
+    description: [a.userName && `${a.userName}`, a.approverName && `onaylayan ${a.approverName}`].filter(Boolean).join(' · ') || undefined,
+    time: fmtDateTime(a.at),
+    meta: (
+      <span className="flex flex-wrap gap-1.5">
+        <Badge>{a.action}</Badge>
+        {a.amount != null && <Badge tone={a.severity === 'alarm' ? 'danger' : 'neutral'}>{tl(a.amount)}</Badge>}
+      </span>
+    ),
+  }));
+
   return (
-    <div>
-      <PageHeader
-        title="Denetim kaydı"
-        subtitle="İptal, ikram, indirim, ödeme iptali, yeniden açma, kasa hareketi, gün sonu, fiyat ve ayar değişiklikleri"
-        actions={
-          <Segmented
-            value={severity}
-            onChange={setSeverity}
-            options={[
-              { value: 'tum', label: 'Tümü' },
-              { value: 'uyari', label: 'Uyarı' },
-              { value: 'alarm', label: 'Alarm' },
-            ]}
-          />
-        }
+    <>
+      <PageHeader title="Denetim kaydı" description="İptal, ikram, indirim, ödeme iptali, yeniden açma, kasa hareketi, gün sonu, fiyat ve ayar değişiklikleri; son 300 kayıt" />
+      <StatusTabs
+        label="Önem"
+        value={severity}
+        onChange={setSeverity}
+        tabs={[
+          { value: 'tum', label: 'Tümü', count: all.length },
+          { value: 'uyari', label: 'Uyarı', count: all.filter((a) => a.severity === 'uyari').length },
+          { value: 'alarm', label: 'Alarm', count: all.filter((a) => a.severity === 'alarm').length },
+        ]}
       />
+      <div className="mb-3 flex items-center gap-2">
+        <SearchField value={q} onChange={setQ} placeholder="Kayıt, işlem ya da kişi" label="Denetim kaydında ara" />
+      </div>
       {data.isLoading ? (
         <PageLoading />
-      ) : (
+      ) : items.length ? (
         <Card>
-          <ul className="divide-y divide-line">
-            {(data.data ?? []).map((a) => (
-              <li key={a.id} className="flex items-start gap-3 px-4 py-2.5 text-sm">
-                {a.severity === 'alarm' ? <AlertOctagon className="mt-0.5 size-4 shrink-0 text-burgundy-500" /> : a.severity === 'uyari' ? <AlertTriangle className="mt-0.5 size-4 shrink-0 text-brass-500" /> : <Info className="mt-0.5 size-4 shrink-0 text-muted" />}
-                <span className="min-w-0 flex-1">
-                  <span className="block">{a.message}</span>
-                  <span className="text-xs text-muted">
-                    {fmtDateTime(a.at)} · {a.action}
-                    {a.approverName && ` · onaylayan ${a.approverName}`}
-                  </span>
-                </span>
-                {a.amount != null && <span className="tabular whitespace-nowrap font-semibold">{tl(a.amount)}</span>}
-              </li>
-            ))}
-            {data.data?.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted">Kayıt yok</li>}
-          </ul>
+          <Timeline items={items} />
         </Card>
+      ) : (
+        <EmptyState title="Kayıt yok">Seçili süzgeçte denetim kaydı bulunmuyor</EmptyState>
       )}
-    </div>
+    </>
   );
 }

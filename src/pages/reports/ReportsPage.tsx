@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownRight, ArrowUpRight, Download, FileSpreadsheet, Search } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BadgePercent, CircleDollarSign, Download, FileSpreadsheet, Package, Receipt, Search, ShoppingBag } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { tl } from '@shared/money';
 import { fmtDateTime, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
-import { Card, EmptyState, PageLoading, Stat } from '@/components/ui/misc';
+import { AdminShell } from '@/components/admin/AdminShell';
+import { Card, KpiStrip, PageHeader, Segmented, StatusTabs } from '@/components/admin/ui';
+import { EmptyState, PageLoading, Stat } from '@/components/ui/misc';
 import { get, getToken } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -49,51 +51,46 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      <nav className="no-scrollbar flex gap-1 overflow-x-auto border-b border-line bg-surface p-2 lg:w-60 lg:flex-col lg:overflow-y-auto lg:border-b-0 lg:border-r lg:p-3">
-        <h1 className="hidden px-2 pb-2 text-xl font-semibold lg:block">Raporlar</h1>
-        {visible.map((r) => (
-          <button
-            key={r.key}
-            onClick={() => setReport(r.key)}
-            className={cn('shrink-0 rounded-xl px-3 py-2 text-left text-sm transition lg:py-2.5', current.key === r.key ? 'bg-forest-700 text-cream' : 'text-ink-2 hover:bg-surface-2')}
-          >
-            <span className="block font-medium">{r.label}</span>
-            <span className={cn('hidden text-xs lg:block', current.key === r.key ? 'text-cream/70' : 'text-muted')}>{r.hint}</span>
-          </button>
-        ))}
-      </nav>
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <div className="no-scrollbar flex gap-1 overflow-x-auto rounded-xl border border-line bg-surface-2 p-1">
-            {(Object.keys(PERIOD_LABELS) as PeriodKey[]).map((k) => (
-              <button key={k} onClick={() => setPeriod(k)} className={cn('shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium', period === k ? 'bg-surface text-ink shadow-sm' : 'text-muted')}>
-                {PERIOD_LABELS[k]}
-              </button>
-            ))}
+    <AdminShell title="Raporlar">
+      <PageHeader
+        title="Raporlar"
+        description={`${current.hint} · ${rangeLabel(range)}`}
+        actions={
+          <Segmented
+            label="Dönem"
+            value={period}
+            onChange={setPeriod}
+            options={(Object.keys(PERIOD_LABELS) as PeriodKey[]).map((k) => ({ value: k, label: PERIOD_LABELS[k] }))}
+            className="max-sm:w-full"
+          />
+        }
+      >
+        {period === 'ozel' && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <label className="flex items-center gap-1.5">
+              <span className="text-[var(--admin-text-mute)]">Başlangıç</span>
+              <input type="date" value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className="h-11 rounded-lg border border-line-strong bg-surface px-2 pointer-fine:h-9" />
+            </label>
+            <label className="flex items-center gap-1.5">
+              <span className="text-[var(--admin-text-mute)]">Bitiş</span>
+              <input type="date" value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className="h-11 rounded-lg border border-line-strong bg-surface px-2 pointer-fine:h-9" />
+            </label>
           </div>
-          {period === 'ozel' && (
-            <div className="flex items-center gap-1.5 text-sm">
-              <input type="date" value={custom.from} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className="h-9 rounded-lg border border-line-strong bg-surface px-2" />
-              <span>–</span>
-              <input type="date" value={custom.to} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className="h-9 rounded-lg border border-line-strong bg-surface px-2" />
-            </div>
-          )}
-          <span className="text-sm text-muted">{rangeLabel(range)}</span>
-        </div>
-        {current.key === 'ciro' && <SummaryReport range={range} />}
-        {current.key === 'satis' && <ProductsReport range={range} onExport={() => exportCsv('urunler')} />}
-        {current.key === 'kategori' && <CategoryReport range={range} />}
-        {current.key === 'saatlik' && <HourlyReport range={range} onExport={() => exportCsv('saatlik')} />}
-        {current.key === 'adisyon' && <ChecksReport range={range} onExport={() => exportCsv('adisyonlar')} />}
-        {(current.key === 'iptal' || current.key === 'ikram' || current.key === 'indirim' || current.key === 'happy') && (
-          <ItemsReport range={range} kind={current.key} onExport={current.key === 'happy' ? undefined : () => exportCsv(current.key)} />
         )}
-        {current.key === 'iade' && <RefundsReport range={range} />}
-        {current.key === 'personel' && <StaffReport range={range} />}
-        {current.key === 'aktarim' && <ExportReport range={range} onDownload={() => exportCsv('', `/api/sync/lafmaliyet/satislar.csv?from=${range.from}&to=${range.to}`)} />}
-      </div>
-    </div>
+      </PageHeader>
+      <StatusTabs label="Rapor" value={current.key} onChange={setReport} tabs={visible.map((r) => ({ value: r.key, label: r.label }))} />
+      {current.key === 'ciro' && <SummaryReport range={range} />}
+      {current.key === 'satis' && <ProductsReport range={range} onExport={() => exportCsv('urunler')} />}
+      {current.key === 'kategori' && <CategoryReport range={range} />}
+      {current.key === 'saatlik' && <HourlyReport range={range} onExport={() => exportCsv('saatlik')} />}
+      {current.key === 'adisyon' && <ChecksReport range={range} onExport={() => exportCsv('adisyonlar')} />}
+      {(current.key === 'iptal' || current.key === 'ikram' || current.key === 'indirim' || current.key === 'happy') && (
+        <ItemsReport range={range} kind={current.key} onExport={current.key === 'happy' ? undefined : () => exportCsv(current.key)} />
+      )}
+      {current.key === 'iade' && <RefundsReport range={range} />}
+      {current.key === 'personel' && <StaffReport range={range} />}
+      {current.key === 'aktarim' && <ExportReport range={range} onDownload={() => exportCsv('', `/api/sync/lafmaliyet/satislar.csv?from=${range.from}&to=${range.to}`)} />}
+    </AdminShell>
   );
 }
 
@@ -138,23 +135,25 @@ function SummaryReport({ range }: { range: Range }) {
   if (!s) return null;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className="col-span-2 rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-          <div className="text-sm text-muted">Net ciro</div>
-          <div className="mt-1 text-5xl font-semibold tracking-tight">{tl(s.netSales)}</div>
-          <div className="mt-2 text-sm">
-            <Delta value={s.previous.change} /> <span className="text-muted">({tl(s.previous.netSales)})</span>
-          </div>
-        </div>
-        <Stat label="Adisyon" value={s.receipts.toLocaleString('tr-TR')} hint={`ortalama ${tl(s.avgCheck)}`} />
-        <Stat label="Satılan ürün" value={s.itemsSold.toLocaleString('tr-TR')} hint={s.days > 1 ? `${s.days} iş günü` : undefined} />
-        <Stat label="İndirim" value={tl(s.discounts)} />
-        <Stat label="İkram (ciro dışı)" value={tl(s.complimentary)} />
-        <Stat label="İptal" value={tl(s.voided)} />
-        <Stat label="Online (sitede ödendi)" value={tl(s.online.amount)} hint={`${s.online.orders} sipariş, ciroya dahil değil`} />
-      </div>
+      <KpiStrip
+        cells={[
+          {
+            key: 'ciro',
+            label: 'Net ciro',
+            icon: <CircleDollarSign />,
+            hue: 'blue',
+            value: tl(s.netSales),
+            delta: s.previous.change == null ? null : { text: `${s.previous.change >= 0 ? '▲' : '▼'} %${Math.abs(s.previous.change).toLocaleString('tr-TR')}`, good: s.previous.change >= 0 },
+            reference: s.previous.change == null ? 'Önceki dönemde satış yok' : `Önceki aynı uzunlukta dönem ${tl(s.previous.netSales)}`,
+          },
+          { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)} · önceki ${s.previous.receipts}` },
+          { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü' },
+          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary)} · iptal ${tl(s.voided)}` },
+          { key: 'online', label: 'Online (sitede ödendi)', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `${s.online.orders} sipariş, ciroya dahil değil` },
+        ]}
+      />
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <Card title={range.from === range.to ? 'Saatlik ciro' : 'Günlük ciro'}>
+        <Card flush title={range.from === range.to ? 'Saatlik ciro' : 'Günlük ciro'}>
           <div className="p-4">
             {range.from === range.to ? (
               hourly.data && <ColumnChart data={hourly.data.hours.map((h) => ({ label: String(h.hour).padStart(2, '0'), value: h.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro" />
@@ -163,14 +162,14 @@ function SummaryReport({ range }: { range: Range }) {
             )}
           </div>
         </Card>
-        <Card title="Ödeme türleri">
+        <Card flush title="Ödeme türleri">
           <div className="p-4">
             {s.payments.length ? <BarList items={s.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')} · ${p.count} işlem` }))} format={tl} /> : <p className="text-sm text-muted">Ödeme yok</p>}
             {s.tips > 0 && <p className="mt-3 text-xs text-muted">Bahşiş {tl(s.tips)} (ciro dışı)</p>}
           </div>
         </Card>
       </div>
-      <Card title="Satış türleri">
+      <Card flush title="Satış türleri">
         <div className="p-4">
           <BarList items={s.types.map((t) => ({ key: t.type, label: TYPE_LABEL[t.type] ?? t.type, value: t.amount, sub: `${t.orders} adisyon` }))} format={tl} />
         </div>
@@ -194,7 +193,7 @@ function ProductsReport({ range, onExport }: { range: Range; onExport: () => voi
   const max = Math.max(1, ...rows.map((r) => r.revenue));
   const withCost = can('rapor.maliyet');
   return (
-    <Card
+    <Card flush
       title={`Ürün satışları · ${tl(data.data?.total ?? 0)}`}
       actions={
         <div className="flex items-center gap-2">
@@ -267,7 +266,7 @@ function CategoryReport({ range }: { range: Range }) {
   if (data.isLoading) return <PageLoading />;
   const cats = data.data?.categories ?? [];
   return (
-    <Card title="Kategori payları">
+    <Card flush title="Kategori payları">
       <div className="p-4">
         {cats.length ? <BarList items={cats.map((c) => ({ key: c.name, label: c.name, value: c.revenue, sub: `%${c.share.toLocaleString('tr-TR')} · ${c.qty} adet` }))} format={tl} /> : <p className="text-sm text-muted">Bu dönemde satış yok</p>}
       </div>
@@ -299,19 +298,19 @@ function HourlyReport({ range, onExport }: { range: Range; onExport: () => void 
         <Stat label="En sakin saat" value={h.quietest ? hh(h.quietest.hour) : '—'} hint={h.quietest ? `${tl(h.quietest.revenue)} · ${h.quietest.orders} adisyon` : undefined} />
         <Stat label="Gün sayısı" value={String(h.days)} />
       </div>
-      <Card title="24 saat dağılımı" actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
+      <Card flush title="24 saat dağılımı" actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
         <div className="p-4">
           <ColumnChart data={h.hours.map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro dağılımı" />
         </div>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Gün dilimleri">
+        <Card flush title="Gün dilimleri">
           <div className="p-4">
             <BarList items={h.parts.map((p) => ({ key: p.key, label: p.label, value: p.revenue, sub: `%${p.share.toLocaleString('tr-TR')} · ${p.orders} adisyon` }))} format={tl} />
             <p className="mt-3 text-xs text-muted">Sabah 06-12 · Öğle 12-17 · Akşam 17-22 · Gece 22-06</p>
           </div>
         </Card>
-        <Card title="Pik saatler">
+        <Card flush title="Pik saatler">
           <ol className="divide-y divide-line">
             {h.peaks.map((p, i) => (
               <li key={p.hour} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -339,7 +338,7 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
   if (data.isLoading) return <PageLoading />;
   const rows = data.data?.rows ?? [];
   return (
-    <Card title={`Adisyonlar (${rows.length})`} actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
+    <Card flush title={`Adisyonlar (${rows.length})`} actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
       {rows.length === 0 ? (
         <EmptyState title="Bu dönemde adisyon yok" />
       ) : (
@@ -395,7 +394,7 @@ function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 
   const d = data.data;
   if (!d) return null;
   return (
-    <Card title={`${ITEM_TITLES[kind]} · ${d.count} kayıt · ${tl(d.total)}`} actions={onExport && <Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
+    <Card flush title={`${ITEM_TITLES[kind]} · ${d.count} kayıt · ${tl(d.total)}`} actions={onExport && <Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
       {d.rows.length === 0 ? (
         <EmptyState title="Bu dönemde kayıt yok" />
       ) : (
@@ -446,7 +445,7 @@ function RefundsReport({ range }: { range: Range }) {
   const d = data.data;
   if (!d) return null;
   return (
-    <Card title={`Ödeme iptalleri · ${d.count} · ${tl(d.total)}`}>
+    <Card flush title={`Ödeme iptalleri · ${d.count} · ${tl(d.total)}`}>
       {d.rows.length === 0 ? (
         <EmptyState title="Bu dönemde ödeme iptali yok" />
       ) : (
@@ -474,7 +473,7 @@ function StaffReport({ range }: { range: Range }) {
   if (data.isLoading) return <PageLoading />;
   const rows = data.data?.staff ?? [];
   return (
-    <Card title="Personel">
+    <Card flush title="Personel">
       <div className="overflow-x-auto">
         <table className="tabular w-full text-sm">
           <thead className="text-left text-xs text-muted">
@@ -513,7 +512,7 @@ function StaffReport({ range }: { range: Range }) {
 
 function ExportReport({ range, onDownload }: { range: Range; onDownload: () => void }) {
   return (
-    <Card title="lafmaliyet aktarımı">
+    <Card flush title="lafmaliyet aktarımı">
       <div className="space-y-3 p-5 text-sm">
         <p>
           Seçili dönemin ürün satış listesi lafmaliyet'in <b>Satışlar</b> ekranının okuduğu biçimde iner (Ürün; Adet; Tutar, KDV dahil). İkram, iptal ve sitede ödenmiş online siparişler listeye girmez; ekstra shot, şurup ve alternatif süt ayrı satır olarak çıkar.

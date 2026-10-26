@@ -7,6 +7,15 @@
 @import '@fontsource/poppins/latin-ext-600.css';
 @import '@fontsource/poppins/latin-700.css';
 @import '@fontsource/poppins/latin-ext-700.css';
+/* Yönetim paneli yazısı (Innex, docs/ADMIN-INNEX.md §1.4): Inter, rakamlar tablo hizalı */
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-ext-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-ext-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-ext-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/inter/latin-ext-700.css';
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -14,6 +23,7 @@
    fıstık #9FCB82, espresso #2E1A12, pirinç #C9983F */
 @theme {
   --font-sans: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --color-forest-50: #eef5f1;
   --color-forest-100: #d5e7dd;
@@ -71,7 +81,8 @@
   --surface-3: #eae0d5;
   --ink: #2e1a12;
   --ink-2: #5a4a40;
-  --muted: #8a7b70;
+  /* Küçük yardımcı metin de okunsun: zeminde ve yüzeyde en az 4.5:1 (tests/design-tokens.test.ts) */
+  --muted: #75665b;
   --line: #e6dbcf;
   --line-strong: #d4c5b6;
   --primary: #1e4031;
@@ -100,6 +111,138 @@
   --chart-grid: #2f2620;
   --chart-track: #2c231e;
   color-scheme: dark;
+}
+
+/*
+ * Yönetim paneli (Innex; docs/ADMIN-INNEX.md, DESIGN.md "Yönetim paneli"). <html data-area="admin"> iken
+ * geçerli (AdminShell). Adlar laffogato'nun panelindekiyle aynı (src/app/admin/layout.tsx), değerler de
+ * aynı: gri zemin üstünde beyaz kartlar, Inter, mavi birincil. LafPOS'un ortak değerleri (--bg, --ink...)
+ * panelde bunlara döner; düğme, alan ve pencere gibi ortak bileşenler de Innex görünür.
+ */
+:root[data-area='admin'] {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 0.75rem;
+  --shadow-card: none;
+  --shadow-pop: 0 12px 32px rgb(12 14 27 / 0.12), 0 0 0 1px rgb(12 14 27 / 0.04);
+
+  --admin-bg: #edeff1;
+  --admin-surface: #ffffff;
+  --admin-surface-2: #f9fbfc;
+  --admin-panel: #f3f5f7;
+  --admin-border: #e8e8e8;
+  --admin-border-strong: #e3e3e3;
+  --admin-divider: #f2f2f2;
+  --admin-border-field: #898d94;
+  --admin-text: #0c0e1b;
+  --admin-text-soft: #3d4048;
+  --admin-text-mute: #616367;
+  --admin-primary: #2f58f7;
+  --admin-primary-hover: #2449e0;
+  --admin-on-primary: #ffffff;
+  --admin-primary-soft: #ecf1ff;
+  --admin-neutral-soft: #f3f5f7;
+  --admin-accent: #794ffd;
+  --admin-accent-ink: #6d3fea;
+  --admin-accent-soft: #f6f1ff;
+  --admin-info: #0b7392;
+  --admin-info-soft: #eaf8fd;
+  --admin-success: #15803d;
+  --admin-success-soft: #e1faed;
+  --admin-warning: #b45309;
+  --admin-warning-soft: #fff2e6;
+  --admin-danger: #dc2626;
+  --admin-danger-ink: #b42318;
+  --admin-danger-soft: #feebed;
+  --admin-hue-blue: #3346d3;
+  --admin-hue-blue-soft: #eff1fe;
+  --admin-hue-amber: #a1500b;
+  --admin-hue-amber-soft: #fff6e5;
+  --admin-hue-rose: #c0264a;
+  --admin-hue-rose-soft: #feeff1;
+  --admin-hue-violet: #6d3fea;
+  --admin-hue-violet-soft: #f6f1ff;
+  --admin-hue-green: #15803d;
+  --admin-hue-green-soft: #eefbf2;
+  --admin-chart-line: #2132ba;
+  --admin-chart-fill: #e3e7ff;
+
+  --bg: var(--admin-bg);
+  --surface: var(--admin-surface);
+  --surface-2: var(--admin-surface-2);
+  --surface-3: var(--admin-panel);
+  --ink: var(--admin-text);
+  --ink-2: var(--admin-text-soft);
+  --muted: var(--admin-text-mute);
+  --line: var(--admin-border);
+  --line-strong: var(--admin-border-field);
+  --primary: var(--admin-primary);
+  --primary-ink: var(--admin-on-primary);
+  --chart-accent: var(--admin-chart-line);
+  --chart-context: #b4b9c2;
+  --chart-grid: #eef0f3;
+  --chart-track: var(--admin-panel);
+}
+
+/* Koyu panel (LafPOS eklemesi; Innex ve laffogato yalnız açık): aynı roller, gece kafesi için koyu yüzey */
+:root.dark[data-area='admin'] {
+  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --admin-bg: #0d0f13;
+  --admin-surface: #16191f;
+  --admin-surface-2: #1b1f26;
+  --admin-panel: #232832;
+  --admin-border: #2a2f38;
+  --admin-border-strong: #353b46;
+  --admin-divider: #20242c;
+  --admin-border-field: #6f7682;
+  --admin-text: #f2f4f7;
+  --admin-text-soft: #c9cdd4;
+  --admin-text-mute: #9aa1ac;
+  --admin-primary: #7b93ff;
+  --admin-primary-hover: #96a8ff;
+  --admin-on-primary: #0b1020;
+  --admin-primary-soft: #1d2547;
+  --admin-neutral-soft: #232832;
+  --admin-accent: #a78bfa;
+  --admin-accent-ink: #c4b5fd;
+  --admin-accent-soft: #261f42;
+  --admin-info: #5cc8ee;
+  --admin-info-soft: #0f2a36;
+  --admin-success: #5ad48a;
+  --admin-success-soft: #13301f;
+  --admin-warning: #f2b14a;
+  --admin-warning-soft: #33260f;
+  --admin-danger: #f87171;
+  --admin-danger-ink: #fca5a5;
+  --admin-danger-soft: #3a1d22;
+  --admin-hue-blue: #9aa8ff;
+  --admin-hue-blue-soft: #1d2547;
+  --admin-hue-amber: #f5b04c;
+  --admin-hue-amber-soft: #33260f;
+  --admin-hue-rose: #ff8fa8;
+  --admin-hue-rose-soft: #3a1d27;
+  --admin-hue-violet: #c4b5fd;
+  --admin-hue-violet-soft: #261f42;
+  --admin-hue-green: #6ee7a0;
+  --admin-hue-green-soft: #13301f;
+  --admin-chart-line: #9aa8ff;
+  --admin-chart-fill: #1d2547;
+  --chart-context: #5b6270;
+  --chart-grid: #232832;
+}
+
+:root[data-area='admin'] :focus-visible {
+  outline-color: var(--admin-primary);
+}
+
+/* Dokunmatikte iOS odaklanınca yakınlaştırmasın: alan yazısı en az 16 px (katmansız, sınıfları ezer) */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
 }
 
 @theme inline {

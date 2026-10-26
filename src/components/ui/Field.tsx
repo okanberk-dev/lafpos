@@ -2,7 +2,7 @@ import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAt
 import { cn } from '@/lib/cn';
 
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted/70 outline-none transition focus:border-forest-500 focus:ring-2 focus:ring-forest-500/20 disabled:opacity-60';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60 [[data-area=admin]_&]:text-sm';
 
 export function Label({ children, hint, className }: { children: ReactNode; hint?: ReactNode; className?: string }) {
   return (
@@ -24,7 +24,7 @@ export function Field({ label, hint, error, children, className }: { label?: Rea
 }
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, ...rest }, ref) {
-  return <input ref={ref} className={cn(base, 'h-11', className)} {...rest} />;
+  return <input ref={ref} className={cn(base, 'h-11 [[data-area=admin]_&]:pointer-fine:h-10', className)} {...rest} />;
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...rest }, ref) {
@@ -33,7 +33,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(base, 'h-11 appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a7b70' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")" }} {...rest}>
+    <select className={cn(base, 'h-11 [[data-area=admin]_&]:pointer-fine:h-10 appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a7b70' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")" }} {...rest}>
       {children}
     </select>
   );
@@ -47,9 +47,9 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="inline-flex items-center gap-3 text-[15px] disabled:opacity-50"
+      className="inline-flex min-h-11 items-center gap-3 text-[15px] disabled:opacity-50 pointer-fine:min-h-0 [[data-area=admin]_&]:text-sm"
     >
-      <span className={cn('relative h-7 w-12 rounded-full transition', checked ? 'bg-forest-500' : 'bg-line-strong')}>
+      <span className={cn('relative h-7 w-12 shrink-0 rounded-full transition', checked ? 'bg-primary' : 'bg-line-strong')}>
         <span className={cn('absolute top-0.5 size-6 rounded-full bg-white shadow transition-all', checked ? 'left-[22px]' : 'left-0.5')} />
       </span>
       {label && <span className="text-ink">{label}</span>}
@@ -79,7 +79,7 @@ export function Segmented<T extends string>({
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            'rounded-lg font-medium transition',
+            'rounded-lg font-medium transition pointer-coarse:min-h-11',
             size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
             value === o.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink',
           )}

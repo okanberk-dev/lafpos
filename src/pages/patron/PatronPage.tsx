@@ -13,7 +13,7 @@ import { useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
 import { toast } from '@/lib/toast';
 
-interface PatronData {
+export interface PatronData {
   now: number;
   date: string;
   dayOpen: boolean;
@@ -147,7 +147,7 @@ export default function PatronPage() {
         <Card
           title="Saat saat bugün"
           actions={
-            <button onClick={() => setTable(!table)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-ink-2 hover:bg-surface-2">
+            <button onClick={() => setTable(!table)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-ink-2 hover:bg-surface-2 pointer-fine:min-h-0">
               <Table2 className="size-4" /> {table ? 'Grafik' : 'Tablo'}
             </button>
           }

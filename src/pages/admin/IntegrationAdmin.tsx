@@ -3,7 +3,8 @@ import { CheckCircle2, CircleAlert, CloudDownload, RefreshCw } from 'lucide-reac
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Toggle } from '@/components/ui/Field';
-import { Card, PageHeader, PageLoading } from '@/components/ui/misc';
+import { PageLoading } from '@/components/ui/misc';
+import { Card, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -53,8 +54,8 @@ export default function IntegrationAdmin() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Site ve lafmaliyet" subtitle="Ürünler siteden gelir, satış ve Z lafmaliyet'e gider. Sözleşme: docs/03-ENTEGRASYON.md" />
-      <Card title={`laffogato · menü (${boot.integrations.laffogatoUrl})`}>
+      <PageHeader title="Site ve lafmaliyet" description="Ürünler siteden gelir, satış ve Z lafmaliyet'e gider. Sözleşme: docs/03-ENTEGRASYON.md" />
+      <Card flush title={`laffogato · menü (${boot.integrations.laffogatoUrl})`}>
         <div className="space-y-2 p-4">
           <Status ok={!s.menu.state?.lastError}>
             {s.menu.state?.lastSuccessAt ? `Son başarılı kontrol ${fmtDateTime(s.menu.state.lastSuccessAt)}` : 'Henüz eşitlenmedi'}
@@ -69,7 +70,7 @@ export default function IntegrationAdmin() {
           </div>
         </div>
       </Card>
-      <Card title="laffogato · online siparişler ve Tükendi">
+      <Card flush title="laffogato · online siparişler ve Tükendi">
         <div className="space-y-2 p-4">
           <Status ok={s.online.configured}>{s.online.configured ? 'İmzalı bağlantı açık (LAFFOGATO_SYNC_SECRET)' : 'Anahtar yok: online siparişler gelmez, Tükendi yalnız LafPOS\'ta değişir'}</Status>
           {s.online.configured && (
@@ -84,7 +85,7 @@ export default function IntegrationAdmin() {
           )}
         </div>
       </Card>
-      <Card title="lafmaliyet · günlük satış, Z ve maliyet">
+      <Card flush title="lafmaliyet · günlük satış, Z ve maliyet">
         <div className="space-y-2 p-4">
           <Status ok={s.lafmaliyet.configured}>{s.lafmaliyet.configured ? `Bağlı: ${s.lafmaliyet.url}` : 'Anahtar yok (LAFMALIYET_SYNC_SECRET): Satışlar listesi ve Z alanları elle aktarılır (Raporlar › lafmaliyet aktarımı, Kasa › Z)'}</Status>
           {s.lafmaliyet.configured && (

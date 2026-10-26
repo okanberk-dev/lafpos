@@ -20,7 +20,8 @@ function niceStep(raw: number): number {
 /** Ekseni gösterim biriminde (₺) kurar; döndürülen değerler ham birimde (kuruş) */
 function niceScale(maxRaw: number, divisor: number, targetTicks = 4) {
   const maxDisplay = Math.max(1, maxRaw / divisor);
-  const step = niceStep(maxDisplay / targetTicks);
+  // Tutar ekseninde kesirli adım olmasın (0,3 ₺ gibi)
+  const step = Math.max(1, niceStep(maxDisplay / targetTicks));
   const top = Math.ceil(maxDisplay / step) * step;
   const ticks: number[] = [];
   for (let v = 0; v <= top + step / 2; v += step) ticks.push(v * divisor);
@@ -65,6 +66,7 @@ export function ColumnChart({
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const empty = data.every((d) => !d.value && !d.compare);
   const hasCompare = !!compareLabel && data.some((d) => d.compare != null);
   const scale = niceScale(Math.max(1, ...data.map((d) => Math.max(d.value, d.compare ?? 0))), unitDivisor);
   const max = scale.max;
@@ -90,6 +92,13 @@ export function ColumnChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, hasCompare, band, max, plotH]);
 
+  if (empty) {
+    return (
+      <div className="grid place-items-center rounded-lg border border-dashed border-line text-sm text-muted" style={{ height: Math.min(height, 160) }}>
+        Bu dönemde veri yok
+      </div>
+    );
+  }
   return (
     <div className="w-full">
       {hasCompare && (
