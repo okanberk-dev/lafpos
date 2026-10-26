@@ -8,7 +8,8 @@
  * server/lib/signature.ts ile aynı (tests/cloud-api.test.ts denetler). Ayrıntı: docs/07-UZAKTAN-ERISIM.md
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import demoSnapshot from './demo-ozet.json';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 const SNAPSHOT_KEY = 'lafpos:snapshot';
@@ -113,12 +114,29 @@ async function snapshot(): Promise<Snapshot | null> {
  * Kafe bağlanana kadar (Redis'te kafeden gelmiş özet yokken) örnek gün parolasız gösterilir. Kafe ilk özeti itince
  * demo biter; gerçek veri her zaman parolalıdır. LAFPOS_UZAKTAN_DEMO=0 demoyu kapatır.
  */
-const demoAllowed = () => env('LAFPOS_UZAKTAN_DEMO') !== '0';
+const demoAllowed = () => env('LAFPOS_UZAKTAN_DEMO') !== '0' && demoBase() != null;
 const demoKey = () => `${secret()}:demo`;
 
+/**
+ * Demo özeti ilk gerektiğinde diskten okunur (vercel.json includeFiles). JSON import'u Vercel'in Node ESM'inde
+ * öznitelik ister ve açılışta işlevi düşürür; okunamazsa yalnız demo kapanır.
+ */
+let demoCache: Snapshot | null | undefined;
+function demoBase(): Snapshot | null {
+  if (demoCache === undefined) {
+    try {
+      demoCache = JSON.parse(readFileSync(join(process.cwd(), 'api/demo-ozet.json'), 'utf8')) as Snapshot;
+    } catch {
+      demoCache = null;
+    }
+  }
+  return demoCache;
+}
+
 /** Demo özetinin zaman damgaları şimdiye kaydırılır (süreler ve saatler taze görünsün) */
-function demoNow(): Snapshot {
-  const base = demoSnapshot as unknown as Snapshot;
+function demoNow(): Snapshot | null {
+  const base = demoBase();
+  if (!base) return null;
   const delta = Date.now() - base.at;
   const shift = (v: unknown): unknown => {
     if (typeof v === 'number') return v > 1.6e12 && v < 2.2e12 ? v + delta : v;
