@@ -1,4 +1,4 @@
-# Kasa bilgisayarı: Chrome'da sürekli açık LafPOS
+# Kasa bilgisayarı: Windows kurulumu, Chrome'da sürekli açık LafPOS
 
 LafPOS'un sunucusu kafedeki **kasa bilgisayarında** çalışır; kasa ekranı aynı bilgisayarda Chrome'da tam ekran
 (kiosk) açık durur. Tezgâh tableti, garson telefonları ve bar ekranı aynı sunucuya kafenin ağından bağlanır
@@ -10,13 +10,56 @@ sessizce çıkar. Neden tek sistem: `docs/06-TEK-SISTEM.md`.
 | | |
 |---|---|
 | Bilgisayar | Windows 10/11 (önerilen) ya da macOS; SSD, 8 GB bellek yeter |
-| Yazılım | Google Chrome (güncel), Node.js 24 LTS (en az 22.11), Git |
+| Yazılım | Google Chrome (güncel; yoksa Windows'un Edge'i kullanılır). Kurulum dosyasıyla başka bir şey gerekmez; git ile kurulumda Node.js 24 LTS (en az 22.11) ve Git |
 | Fiş yazıcısı | 80 mm termal; Windows'ta **varsayılan yazıcı** yapılır, kağıt 80 mm |
 | Para çekmecesi | Yazıcıya bağlı; açılması yazıcı sürücüsünün "belge yazdırılınca çekmeceyi aç" ayarıyla (tarayıcı çekmece açamaz) |
 | Ağ | Kasa bilgisayarına sabit IP (modemde DHCP rezervasyonu); tablet ve telefonlar aynı ağda |
-| Yazarkasa POS | TokenX Connect bilgileri `.env`'de |
+| Yazarkasa POS | TokenX Connect bilgileri `.env`'de (kurulum dosyasıyla: Başlat › LafPOS › LafPOS ayarları) |
 
 ## 2. Kurulum (bir kez)
+
+### Windows: kurulum dosyası (önerilen)
+
+`LafPOS-Kurulum-<sürüm>.exe` GitHub'daki sürüm sayfasından (Releases) indirilir; Node, Git ya da komut satırı
+gerekmez. Dosya imzasız olduğu için Windows "Bilgisayarınız korundu" der: **Ek bilgi › Yine de çalıştır**.
+Kurulum yönetici izni ister ve şunları yapar:
+
+| | |
+|---|---|
+| Uygulama | `C:\Program Files\LafPOS`: Node 24 LTS, sunucu, arayüz, kasa kısayolu. Yalnız yöneticiler değiştirir |
+| Veri | `C:\ProgramData\LafPOS`: veritabanı, `secret.key`, günlük yedekler (`backups\`), `ayarlar.env`, sunucu günlüğü (`logs\`). Yalnız SYSTEM ve yöneticiler açar |
+| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır, bekçi düşerse görev dakikada bir |
+| Güvenlik duvarı | TCP 4000 yalnız kafenin ağına ve Tailscale'e (`100.64.0.0/10`) açık |
+| Kısayollar | Masaüstünde ve Başlangıç'ta "LafPOS Kasa" (seçilebilir); Başlat › LafPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır |
+| Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyuyan bilgisayara tablet bağlanamaz |
+
+- **Ayarlar** (site, lafmaliyet, yazarkasa anahtarları): Başlat › LafPOS › LafPOS ayarları. `ayarlar.env`
+  Not Defteri'nde açılır, kaydedip kapatınca sunucu yeniden başlar.
+- **Güncelleme:** yeni kurulum dosyasını çalıştırın. Sunucuyu durdurur, veritabanını
+  `backups\lafpos-guncelleme-<tarih>.db` olarak kopyalar, uygulamayı değiştirir, sunucuyu başlatır; veri ve
+  ayarlar kalır.
+- **Kaldırma:** Ayarlar › Uygulamalar › LafPOS. Görev, güvenlik duvarı kuralı ve kısayollar gider, veri
+  klasörü kalır.
+- **Daha önce git ile kurduysanız:** önce `kur.ps1 -Kaldir` ve bilgisayarı yeniden başlatın; eski `data\`'daki
+  `lafpos.db`, `secret.key` ve `uploads\`'ı `C:\ProgramData\LafPOS`'a kopyalayıp kurulumu çalıştırın
+  (`secret.key` olmadan eski PIN'ler çalışmaz).
+
+**Kurulum dosyasını derlemek** (macOS, Linux ya da Windows): `npm run kurulum:windows`; gereken NSIS
+(`brew install makensis`, `apt install nsis`). Betik (`scripts/kasa/windows/kurulum/derle.mjs`) arayüzü derler,
+sunucuyu esbuild'le tek dosyaya paketler, nodejs.org'dan Node'u (SHA-256 denetimiyle) ve better-sqlite3'ün
+Windows ikilisini indirir, paketi bu bilgisayarın Node'uyla bekçi üzerinden açıp dener (giriş, açılış verisi,
+arayüz, günlük), sonra `dist/windows/LafPOS-Kurulum-<sürüm>.exe`'yi üretir. Windows'a giden Node sürümü betiğin
+başında (`NODE_VERSION`, `NODE_ABI`). Sunucuya çalışırken diskten dosya okuyan yeni bir şey eklenirse (göç,
+anlık görüntü gibi) betikte pakete de eklenir.
+
+**İlk gerçek Windows kurulumunda bakılacaklar.** Kurulum dosyası macOS'ta derlendi; paket Node 24.22.1 ile
+satış akışından geçti, görev XML'i ve Windows ikilileri denetlendi. Windows'a özgü adımlar (kurulum, görev,
+güvenlik duvarı, kiosk) henüz gerçek bir Windows'ta koşmadı. İlk kurulumda: Görev Zamanlayıcı'da "LafPOS
+Sunucu" çalışıyor; `http://localhost:4000` açılıyor; tablet kafenin ağından bağlanıyor;
+`C:\ProgramData\LafPOS\logs\sunucu.log` yazılıyor; bilgisayar yeniden başlayınca sunucu ve kasa ekranı
+kendiliğinden geliyor; LafPOS ayarları kaydedilince sunucu yeniden başlıyor.
+
+### Git ile (geliştirici; Windows ya da macOS)
 
 ```bash
 git clone https://github.com/RiosenBeq/lafpos.git
@@ -51,6 +94,9 @@ Windows'ta ayrıca: Ayarlar › Hesaplar › Oturum açma seçeneklerinde otomat
 Güç ayarlarında "ekranı kapatma: hiçbir zaman", "uyku: hiçbir zaman"ı seçin.
 
 ## 3. Kiosk Chrome'un ayarları (`scripts/kasa/*/LafPOS-Kasa.*`)
+
+Windows'ta Chrome yoksa aynı bayraklarla Edge açılır (`--kiosk <adres> --edge-kiosk-type=fullscreen`, profil
+`…\LafPOS\edge`).
 
 | Bayrak | Neden |
 |---|---|
@@ -87,14 +133,15 @@ kullanıcı hesabı önerilir.
 
 ## 5. Tabletler, telefonlar, patron
 
-- Aynı ağdaki cihazlar: `http://<kasa-ip>:4000`. Chrome menüsünden "Ana ekrana ekle" ile uygulama gibi açılır.
+- Aynı ağdaki cihazlar: `http://<kasa-ip>:4000`; adres ve karekod Yönetim › Ağ ve uzaktan erişim'de. Chrome
+  menüsünden "Ana ekrana ekle" ile uygulama gibi açılır.
 - Bar ekranı tableti: rol "Mutfak / Bar" olan personelle girilir, açılışta bar ekranı gelir.
-- Patronun dışarıdan erişimi: kasa bilgisayarına Tailscale gibi bir VPN ya da tünel; LafPOS'u doğrudan
-  internete açmayın.
+- Patronun dışarıdan erişimi: Tailscale (`docs/07-UZAKTAN-ERISIM.md`). LafPOS'u modemden port açarak internete
+  açmayın.
 
 ## 6. Yedek ve güncelleme
 
-- Yedekler `data/backups/` altında günlük alınır (Yönetim › Ayarlar ve yedek). Haftada bir harici diske ya da
-  buluta kopyalayın.
-- Güncelleme: `git pull`, `npm ci`, `npm run build`, ardından sunucuyu yeniden başlatın (Windows'ta Görev
+- Yedekler veri klasörünün `backups/`'ında günlük alınır (Yönetim › Ayarlar ve yedek): kurulum dosyasıyla
+  `C:\ProgramData\LafPOS\backups`, git ile `data/backups/`. Haftada bir harici diske ya da buluta kopyalayın.
+- Güncelleme: kurulum dosyasıyla yeni sürümü çalıştırın (§2). Git ile: `git pull`, `npm ci`, `npm run build`, ardından sunucuyu yeniden başlatın (Windows'ta Görev
   Zamanlayıcı'da "LafPOS Sunucu"yu Sonlandır › Çalıştır; macOS'ta `launchctl kickstart -k gui/$UID/net.laffogato.lafpos`).

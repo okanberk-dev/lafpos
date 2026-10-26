@@ -121,8 +121,8 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 Dalga 1-6 tamam ve birleşti (RiosenBeq/lafpos#1, 26 Ekim 2026; laffogato#263 ve lafmaliyet#34/#36 aynı gün canlıda). Planın üstüne yapılanlar: yazarkasa POS (TokenX Connect,
 `docs/04-YAZARKASA.md`), Innex yönetim paneli ve telefon/tablet uyarlaması (`DESIGN.md`), düzenlenebilir
 roller, kör kasa ve kasadan tükendi (Yönetim › Roller ve yetkiler), kasa bilgisayarı kurulumu
-(`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama: 100 birim ve API
-testi, gerçek Chrome'da 117 ekran ve 9 akış (`npm run e2e`, CI'da da).
+(`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama (akşam turundan sonra): 107
+birim ve API testi, gerçek Chrome'da 121 ekran ve 10 akış (`npm run e2e`, CI'da da).
 
 Bağımsız inceleme (26 Ekim 2026) ve düzeltmeleri, her biri `tests/review-fixes.test.ts`'te bir testle:
 yazarkasada sepeti bekleyen adisyonun tutarı ve ödemesi kilitli; indirim, ikram ve iptal ödenmiş tutarın altına
@@ -144,8 +144,17 @@ döndüren bütün uçlarda; indirim kayması cihaza "Servis ücreti" diye gitme
 yayılır ve otomatik gün sonu onu hemen kapatmaz (`business_days.reopened_at`); oda sayacı çalışırken hesap cihaza
 gitmez, kapanmış adisyona oda ücreti yazılmaz; lafmaliyet'e gönderim sürerken basılan "Gönder" gerçekten gönderir.
 
+Aynı gün akşam (RiosenBeq/lafpos `claude/kasa-sade-tasarim`): kasa ekranları da Innex'e geçti (`DESIGN.md` §1);
+**paylaşımlı hesap**: hesap N kişiye kuruşu kuruşuna bölünür, her pay ayrı ödenir, sonradan eklenen kalem ya da
+iptal edilen pay kalanlara dağılır (`orders.split_people`, `payments.share_no/share_of`, göç 0003;
+`tests/split-bill.test.ts` ve e2e akışı); **Windows kurulum dosyası** (`npm run kurulum:windows`,
+`docs/05-KASA-BILGISAYARI.md` §2); **uzaktan canlı erişim** Tailscale ile ve Yönetim › Ağ ve uzaktan erişim
+(`docs/07-UZAKTAN-ERISIM.md`, `tests/network.test.ts`); logo laffogato.net'in L'Af vektörü.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
-bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu.
+bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
+kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum
+dosyasının kod imzası (imzasız dosyada Windows SmartScreen uyarır).
 
 ## 5. Diğer repolarda gereken işler (ayrı PR, kullanıcı onayıyla)
 

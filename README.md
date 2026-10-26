@@ -10,7 +10,8 @@ sonu, müşteri/cari, paket, rezervasyon, karaoke odası, raporlar ve patron pan
 - Mimari, veri modeli, dalgalar: [docs/02-PLAN.md](docs/02-PLAN.md)
 - Entegrasyon sözleşmesi: [docs/03-ENTEGRASYON.md](docs/03-ENTEGRASYON.md)
 - Yazarkasa POS (TokenX Connect): [docs/04-YAZARKASA.md](docs/04-YAZARKASA.md)
-- Kasa bilgisayarı (Chrome kiosk, sessiz fiş yazdırma, otomatik başlatma): [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md)
+- Kasa bilgisayarı (Windows kurulum dosyası, Chrome kiosk, sessiz fiş yazdırma, otomatik başlatma): [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md)
+- Uzaktan canlı erişim (Tailscale): [docs/07-UZAKTAN-ERISIM.md](docs/07-UZAKTAN-ERISIM.md)
 - Karar: tek sistem, iki yüz (ürünler laffogato panelinde): [docs/06-TEK-SISTEM.md](docs/06-TEK-SISTEM.md)
 - Tasarım sistemi (kasa ekranları, Innex yönetim paneli, telefon ve tablet): [DESIGN.md](DESIGN.md), ürün bağlamı [PRODUCT.md](PRODUCT.md), Innex tarifi [docs/ADMIN-INNEX.md](docs/ADMIN-INNEX.md)
 - Claude Code skill'leri: [docs/SKILLS.md](docs/SKILLS.md)
@@ -33,7 +34,9 @@ Kafede tek süreç olarak:
 npm run build && npm start   # http://<bilgisayar-ip>:4000
 ```
 
-Kasa bilgisayarında otomatik başlatma ve kiosk Chrome: `docs/05-KASA-BILGISAYARI.md`
+Windows kasa bilgisayarı için tek dosyalık kurulum: `npm run kurulum:windows` →
+`dist/windows/LafPOS-Kurulum-<sürüm>.exe` (Node gerekmez; sunucu açılışta SYSTEM olarak başlar, veri
+`C:\ProgramData\LafPOS`). Git ile otomatik başlatma ve kiosk Chrome: `docs/05-KASA-BILGISAYARI.md`
 (`scripts/kasa/windows/kur.ps1`, `scripts/kasa/mac/kur.sh`).
 
 ## Ortam değişkenleri
@@ -58,4 +61,5 @@ Kasa bilgisayarında otomatik başlatma ve kiosk Chrome: `docs/05-KASA-BILGISAYA
 | `npm test` | birim ve API testleri (Vitest): para, adisyon hesabı, imza, yazarkasa sepeti, uçtan uca API akışı, renk kontrastı, arayüz kuralları, skill'ler |
 | `npm run e2e` | gerçek tarayıcı (sistemdeki Chrome): her rol, her ekran telefon, tablet, bilgisayar ve koyu temada; akışlar (telefonda sipariş, tablette ödeme, yönetimde düzenleme, komut paleti). Önce `npm run build`; görüntüler `e2e/out/` |
 | `npm run typecheck` | TypeScript denetimi (sunucu + arayüz) |
+| `npm run kurulum:windows` | Windows kurulum dosyası (`dist/windows/`); NSIS gerekir (`brew install makensis`) |
 | `npm run db:generate` | şema değişince SQL göçü üret |

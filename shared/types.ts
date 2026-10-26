@@ -418,3 +418,22 @@ export interface ZSummary {
   byUser: { userId: string; name: string; orders: number; amount: number }[];
   openOrdersAtClose: number;
 }
+
+/** Yönetim › Ağ ve uzaktan erişim: sunucunun dinlediği adresler */
+export interface NetAddressDTO {
+  /** Ağ kartının adı (Wi-Fi, Ethernet, Tailscale) */
+  name: string;
+  address: string;
+  url: string;
+}
+
+export interface NetworkInfoDTO {
+  hostname: string;
+  port: number;
+  /** Sunucu yalnız bu bilgisayarı dinliyor (LAFPOS_HOST): tabletler bağlanamaz */
+  loopbackOnly: boolean;
+  /** Kafenin ağındaki adresler; sanal ağ kartları (WSL, Hyper-V, VirtualBox) sonda */
+  lan: NetAddressDTO[];
+  /** Tailscale adresleri (100.64.0.0/10): telefon Tailscale açıkken her yerden */
+  tailscale: NetAddressDTO[];
+}

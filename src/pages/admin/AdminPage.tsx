@@ -18,6 +18,7 @@ const SettingsAdmin = lazy(() => import('./SettingsAdmin'));
 const PaymentsAdmin = lazy(() => import('./PaymentsAdmin'));
 const OkcAdmin = lazy(() => import('./OkcAdmin'));
 const IntegrationAdmin = lazy(() => import('./IntegrationAdmin'));
+const NetworkAdmin = lazy(() => import('./NetworkAdmin'));
 const AuditAdmin = lazy(() => import('./AuditAdmin'));
 
 const PAGES: Record<string, ReactNode> = {
@@ -30,6 +31,7 @@ const PAGES: Record<string, ReactNode> = {
   odeme: <PaymentsAdmin />,
   yazarkasa: <OkcAdmin />,
   entegrasyon: <IntegrationAdmin />,
+  ag: <NetworkAdmin />,
   ayarlar: <SettingsAdmin />,
   denetim: <AuditAdmin />,
 };

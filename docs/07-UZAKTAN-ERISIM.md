@@ -1,0 +1,58 @@
+# Uzaktan erişim: LafPOS'a kafenin dışından canlı bakmak
+
+LafPOS'un sunucusu kafedeki kasa bilgisayarında çalışır (`docs/05-KASA-BILGISAYARI.md`). Kafenin Wi-Fi'ındaki
+tabletler ona yerel adresle bağlanır. Patron evden ya da yoldan aynı ekranları **Tailscale** ile açar: masalar,
+adisyonlar, bar ekranı, kasa, raporlar, patron paneli ve yönetim, kafedeki ekranlarla aynı anda güncellenir
+(sunucu olayları anlık iletir). Uzaktan yapılan her işlem kafedeki gibi PIN ve yetkiyle olur, denetim
+kaydına düşer.
+
+## 1. Neden Tailscale
+
+| Yol | Durum |
+|---|---|
+| **Tailscale** (önerilen) | Kasa bilgisayarı ve telefon aynı özel ağa girer; bağlantı uçtan uca şifreli, yalnız sizin hesabınızdaki cihazlar görür. Modemde ayar yok, sabit IP gerekmez. Kişisel kullanım ücretsiz |
+| Modemden port açmak | **Yapmayın.** LafPOS internete açılır, PIN'i tahmin etmeye çalışan herkes kapıya gelir |
+| Bulut sunucusu | Kafede internet kesilince kasa durur; LafPOS bilerek yerelde çalışır (`docs/06-TEK-SISTEM.md`) |
+
+Gün sonu rakamları lafmaliyet'e zaten gider (`docs/03-ENTEGRASYON.md`); Tailscale anlık ekranlar ve uzaktan
+işlem içindir.
+
+## 2. Kurulum (bir kez, 10 dakika)
+
+1. **Kasa bilgisayarı:** https://tailscale.com/download adresinden Windows sürümünü kurun, Google ya da
+   Apple hesabınızla girin. Saat yanındaki Tailscale simgesinden **Preferences › Run unattended**'ı açın:
+   Windows'a kimse girmeden de (elektrik kesintisinden sonra) bağlı kalır.
+2. **Telefon:** App Store ya da Google Play'den Tailscale'i kurun, **aynı hesapla** girin.
+3. Kafede LafPOS'ta **Yönetim › Ağ ve uzaktan erişim**'i açın. "Dışarıdan (Tailscale)" kartında "Bağlı"
+   yazar; adres `http://100.x.y.z:4000` ve karekodu oradadır.
+4. Telefonda Tailscale açıkken karekodu okutun ya da adresi yazın, PIN'inizle girin. Tarayıcı menüsünden
+   "Ana ekrana ekle" ile uygulama gibi açılır.
+
+LafPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kafenin ağına ve Tailscale aralığına
+(`100.64.0.0/10`) açar; başka ayar gerekmez. Git ile kurulan bilgisayarda Windows ilk açılışta izin sorar:
+"Özel ağlar"ı işaretleyin.
+
+## 3. Ayrıntılar
+
+- **Adres değişmez:** Tailscale cihaza sabit bir `100.x` adresi verir. Tailscale'de MagicDNS açıksa
+  bilgisayarın adıyla da açılır (`http://<bilgisayar-adı>:4000`).
+- **HTTPS (isteğe bağlı):** kasa bilgisayarında yönetici komut isteminde `tailscale serve --bg 4000` LafPOS'u
+  `https://<bilgisayar-adı>.<tailnet>.ts.net` adresinde geçerli sertifikayla sunar. Tarayıcı bu adreste ekran
+  kilidini ve panoyu da açar. Bu yolda bütün uzak istekler sunucuya bilgisayarın kendisinden gelmiş görünür:
+  PIN deneme sınırı uzaktaki cihazları birbirinden ayıramaz, adres yine yalnız sizin Tailscale ağınıza açıktır.
+  Kapatmak: `tailscale serve reset`.
+- **Funnel kullanmayın:** `tailscale funnel` LafPOS'u herkese açık internete çıkarır.
+- **Personel telefonları** uzaktan erişime gerek duymaz; kafede yerel adresle bağlanır. Tailscale hesabına
+  yalnız patron ve yönetici cihazlarını ekleyin.
+- **Bağlantı kopunca** ekranın üstündeki durum noktası kırmızıya döner, LafPOS kendini yeniden bağlar.
+
+## 4. Sorun giderme
+
+| Belirti | Bakılacak yer |
+|---|---|
+| Kartta "Kurulmadı" | Kasa bilgisayarında Tailscale kurulu ve girişli mi; sayfa 15 sn'de bir yenilenir |
+| Telefonda sayfa açılmıyor | Telefonda Tailscale açık mı, iki cihaz aynı hesapta mı; Tailscale uygulamasında kasa bilgisayarı "Connected" mı |
+| Kafede açılıyor, dışarıda açılmıyor | Kasa bilgisayarı uykuda olabilir: Windows kurulumundaki "Prizdeyken uyku kapalı" seçeneği |
+| "Bu işlem için yetkiniz yok" | Uzaktan da rol yetkileri geçerli (Yönetim › Roller ve yetkiler) |
+
+Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, test `tests/network.test.ts`.

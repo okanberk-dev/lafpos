@@ -31,7 +31,9 @@ Gerçek cihazla deneme yapılmaz: önce eğitim cihazı, sonra Token'ın test or
 | `LAFPOS_PUBLIC_URL` | Webhook için LafPOS'un internetten erişilen adresi (yoksa yoklama) |
 | `TOKENX_WEBHOOK_SECRET` | Webhook'un `Authorization: Bearer` anahtarı, en az 16 karakter |
 
-Değerler yalnız kasa bilgisayarındaki `.env` dosyasında durur; depoya girmez.
+Değerler yalnız kasa bilgisayarındaki `.env` dosyasında durur; depoya girmez. Windows kurulum dosyasıyla
+kurulan bilgisayarda bu dosya `C:\ProgramData\LafPOS\ayarlar.env`: Başlat › LafPOS › LafPOS ayarları açar,
+kaydedip kapatınca sunucu yeniden başlar.
 
 ## 3. Kurulum adımları
 
@@ -65,6 +67,10 @@ Değerler yalnız kasa bilgisayarındaki `.env` dosyasında durur; depoya girmez
 - Aynı adisyon için açık bir sepet varken ikincisi gönderilmez (409). Sepet cihazda beklerken adisyonun tutarı ve
   ödemeleri kilitlidir (iptal, ikram, indirim, ödeme, taşıma, birleştirme, iptal: 409 `okc_pending`); kalem
   eklenebilir. Karaoke oda sayacı çalışırken hesap cihaza gönderilmez (`room_running`).
+- **Paylaşımlı hesap:** hesap kişilere bölünmüş olsa da cihaza tek sepet gider, mali fiş tek kesilir; paylar
+  cihazda ayrı ödemeler olarak alınır (kişi başı nakit ya da kart). Adisyondaki Yazarkasa bölümü pay tutarlarını
+  sırayla gösterir. Kişiye ayrı fiş gerekiyorsa paylar yerine **Kalem** ile ödenir: her kişinin kalemleri ayrı
+  sepet olur.
 
 ## 6. Sonuç
 
