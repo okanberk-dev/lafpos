@@ -3,7 +3,7 @@ import { ArrowDownRight, ArrowUpRight, BadgePercent, CircleDollarSign, Download,
 import { useMemo, useState } from 'react';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl } from '@shared/money';
-import { fmtDateTime, fmtTime } from '@shared/time';
+import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { AdminShell } from '@/components/admin/AdminShell';
@@ -11,9 +11,10 @@ import { Card, KpiStrip, PageHeader, Segmented, StatusTabs } from '@/components/
 import { EmptyState, PageLoading, Stat } from '@/components/ui/misc';
 import { errorMessage, get, getToken } from '@/lib/api';
 import { useCan } from '@/lib/auth';
+import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
-import { fmtShortDate, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
+import { byBusinessHour, fmtShortDate, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 
 type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'kayip' | 'happy' | 'personel' | 'aktarim';
 type ProductView = 'urun' | 'kategori';
@@ -62,8 +63,11 @@ export default function ReportsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const [period, setPeriod] = useLocalPref<PeriodKey>('reports.period', 'bugun');
-  const [custom, setCustom] = useState(() => periodRange('hafta'));
-  const range = period === 'ozel' ? custom : periodRange(period);
+  const boot = useBoot();
+  // "Bugün" açık iş günüdür (gün 05:00'te kapanmadıysa satış ona yazılır); patron paneli ve sunucuyla aynı kural
+  const today = currentBusinessDate(boot.day?.date);
+  const [custom, setCustom] = useState(() => periodRange('hafta', today));
+  const range = period === 'ozel' ? custom : periodRange(period, today);
   const visible = REPORTS.filter((r) => !r.perm || can(r.perm));
   const current = visible.find((r) => r.key === report) ?? visible[0];
 
@@ -210,7 +214,7 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
         <Card flush title={range.from === range.to ? 'Saatlik ciro' : 'Günlük ciro'}>
           <div className="p-4">
             {range.from === range.to ? (
-              hourly.data && <ColumnChart data={hourly.data.hours.map((h) => ({ label: String(h.hour).padStart(2, '0'), value: h.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro" />
+              hourly.data && <ColumnChart data={byBusinessHour(hourly.data.hours).map((h) => ({ label: String(h.hour).padStart(2, '0'), value: h.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro" />
             ) : (
               <ColumnChart data={s.byDay.map((d) => ({ label: fmtShortDate(d.date), value: d.netSales }))} format={tl} seriesLabel="Ciro" ariaLabel="Günlük ciro" />
             )}
@@ -241,7 +245,7 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
               </div>
             ))}
             <div className="flex justify-between px-4 py-2.5 text-muted">
-              <dt>İptal edilen (bilgi)</dt>
+              <dt>İptal edilen (bilgi, açık adisyonlar dahil)</dt>
               <dd className="tabular">{tl(s.voided)}</dd>
             </div>
           </dl>
@@ -405,7 +409,7 @@ function HourlyReport({ range, onExport }: { range: Range; onExport: () => void 
       </div>
       <Card flush title="24 saat dağılımı · adisyonun açıldığı saate göre" actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
         <div className="p-4">
-          <ColumnChart data={h.hours.map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro dağılımı" />
+          <ColumnChart data={byBusinessHour(h.hours).map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.revenue }))} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro dağılımı" />
         </div>
       </Card>
       {h.days >= 7 && <WeekHeatmap week={h.week} />}
@@ -440,15 +444,13 @@ const WEEKDAY_LONG = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', '
 /** Tek renk, açıktan koyuya 5 basamak (sıfır boş kalır); koyu temada da aynı token'dan */
 const HEAT_STEPS = [16, 32, 50, 70, 92];
 
-/** Haftanın günü × saat ısı haritası: personel planı için hangi gün hangi saat yoğun */
+/** Haftanın günü × saat ısı haritası: personel planı için hangi gün hangi saat yoğun (sütunlar iş günü sırasıyla) */
 function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
   const all = week.flatMap((w) => w.hours);
   const max = Math.max(0, ...all);
   if (max === 0) return null;
-  const used = all.map((v, i) => (v > 0 ? i % 24 : -1)).filter((x) => x >= 0);
-  const from = Math.min(...used);
-  const to = Math.max(...used);
-  const cols = Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  const used = all.map((v, i) => (v > 0 ? businessHourIndex(i % 24) : -1)).filter((x) => x >= 0);
+  const cols = BUSINESS_HOURS.slice(Math.min(...used), Math.max(...used) + 1);
   const step = (v: number) => (v <= 0 ? -1 : Math.min(HEAT_STEPS.length - 1, Math.floor((v / max) * HEAT_STEPS.length)));
   return (
     <Card flush title="Haftanın günü × saat · günlük ortalama ciro">
@@ -542,7 +544,7 @@ function PrepReport({ range }: { range: Range }) {
       </div>
       <Card flush title="Saate göre ortalama süre">
         <div className="p-4">
-          <ColumnChart data={p.hours.map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.avg }))} format={dur} seriesLabel="Ortalama süre" ariaLabel="Saate göre ortalama hazırlama süresi" />
+          <ColumnChart data={byBusinessHour(p.hours).map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.avg }))} format={dur} seriesLabel="Ortalama süre" ariaLabel="Saate göre ortalama hazırlama süresi" />
         </div>
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -593,6 +595,8 @@ function PrepReport({ range }: { range: Range }) {
 }
 
 interface ChecksData {
+  /** Dönemin bütün adisyonları; `rows` en yenileriyle sınırlı */
+  count: number;
   rows: { id: string; no: number; status: string; type: string; place: string | null; openedAt: number; closedAt: number | null; waiter: string | null; qty: number; total: number; methods: string[] }[];
 }
 
@@ -601,8 +605,14 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
   if (data.isLoading) return <PageLoading />;
   if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const rows = data.data?.rows ?? [];
+  const count = data.data?.count ?? rows.length;
   return (
-    <Card flush title={`Adisyonlar (${rows.length})`} actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
+    <Card
+      flush
+      title={`Adisyonlar (${count.toLocaleString('tr-TR')})`}
+      subtitle={rows.length < count ? `En yeni ${rows.length.toLocaleString('tr-TR')} adisyon gösteriliyor; hepsi CSV'de` : undefined}
+      actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}
+    >
       {rows.length === 0 ? (
         <EmptyState title="Bu dönemde adisyon yok" />
       ) : (

@@ -53,6 +53,28 @@ export function businessDayStartMs(date: string): number {
   return Date.UTC(y, m - 1, d, DAY_ROLLOVER_HOUR - 3, 0, 0);
 }
 
+/**
+ * Raporların ve patron panelinin "bugün"ü: açık iş günü varsa onun tarihi (gün 05:00'te kapanmadıysa satış hâlâ
+ * ona yazılır), yoksa şu anın iş günü. Sunucu ve istemci aynı kuralı kullanır.
+ */
+export function currentBusinessDate(openDayDate: string | null | undefined, now = Date.now()): string {
+  return openDayDate ?? businessDate(now);
+}
+
+/** "YYYY-MM-DD" gerçek bir takvim günü mü (2026-02-30, 2026-13-01 değil; yıl 1000'den küçük değil) */
+export function isCalendarDate(s: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return y >= 1000 && t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+
+/** Saatin iş günündeki sırası: 05 → 0, 23 → 18, gece yarısından sonrası en sonda (04 → 23) */
+export const businessHourIndex = (hour: number) => (hour - DAY_ROLLOVER_HOUR + 24) % 24;
+
+/** İş gününün saatleri sırayla: 05, 06, …, 23, 00, …, 04 (saatlik grafik ve döküm bu sırayla) */
+export const BUSINESS_HOURS: readonly number[] = Array.from({ length: 24 }, (_, i) => (i + DAY_ROLLOVER_HOUR) % 24);
+
 const timeFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
 const dateTimeFmt = new Intl.DateTimeFormat('tr-TR', {
   timeZone: TZ,

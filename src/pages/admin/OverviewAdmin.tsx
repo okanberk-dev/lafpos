@@ -10,6 +10,7 @@ import { PageLoading } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { onLive } from '@/lib/live';
+import { hourBars } from '@/lib/period';
 import type { PatronData } from '@/pages/patron/PatronPage';
 
 interface SyncStatus {
@@ -100,8 +101,8 @@ export default function OverviewAdmin() {
   if (s?.okc.lastError) attention.push({ key: 'okc', tone: 'warning', title: 'Yazarkasa hatası', detail: `${s.okc.lastError.message} · ${fmtTime(s.okc.lastError.at)}` });
   if (d && !d.dayOpen) attention.push({ key: 'gun', tone: 'neutral', title: 'Gün kapalı', detail: 'Satış için kasadan gün açılmalı' });
 
-  const hours = d ? d.hourly.map((v, h) => ({ label: String(h).padStart(2, '0'), value: v, compare: d.hourlyLastWeek[h] })) : [];
-  const first = Math.max(0, Math.min(8, ...hours.map((h, i) => (h.value || h.compare ? i : 24))));
+  // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış günün sonunda
+  const hours = d ? hourBars(d.hourly, d.hourlyLastWeek, 8) : [];
   const lastBackup = backups.data?.files[0];
 
   const health: { key: string; icon: React.ReactNode; label: string; tone: Tone; state: string; detail: string }[] = s
@@ -178,7 +179,7 @@ export default function OverviewAdmin() {
           <div className="space-y-4 xl:col-span-2">
             {d && (
               <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü">
-                <ColumnChart data={hours.slice(first)} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} />
+                <ColumnChart data={hours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} />
               </Card>
             )}
             {d && (

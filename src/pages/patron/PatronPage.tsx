@@ -12,6 +12,7 @@ import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
+import { hourBars } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 
@@ -83,9 +84,8 @@ export default function PatronPage() {
   }
   const d = data.data;
   if (!d) return null;
-  const hours = d.hourly.map((v, h) => ({ label: String(h).padStart(2, '0'), value: v, compare: d.hourlyLastWeek[h] }));
-  const firstActive = Math.max(0, Math.min(7, ...hours.map((h, i) => (h.value || h.compare ? i : 24))));
-  const visibleHours = hours.slice(firstActive);
+  // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış sabahın değil, günün sonunda
+  const visibleHours = hourBars(d.hourly, d.hourlyLastWeek);
 
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">

@@ -72,6 +72,11 @@ describe('rapor mutabakatı', () => {
     const summary = await h.ok<{
       netSales: number;
       receipts: number;
+      avgCheck: number;
+      itemsSold: number;
+      voided: number;
+      complimentary: number;
+      types: { orders: number }[];
       byDay: { netSales: number }[];
       payments: { amount: number }[];
       waterfall: { list: number; complimentary: number; discounts: number; service: number; revenue: number; kdv: number; netExKdv: number };
