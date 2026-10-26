@@ -60,6 +60,10 @@ Maliyet ve kâr, PIN'ler, müşteri telefonları gitmez.
 | Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter), `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
 | Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
 
+Vercel yalnız `main`'i dağıtır: `vercel.json` `git.deploymentEnabled` `claude/**` dallarına önizleme açmaz (26 Ekim
+2026: ekip Hobby planın 24 saatte 100 dağıtım sınırına takıldı ve canlı dağıtımlar da reddedildi). Dalda değişiklik
+yerelde `npm run build` ile denenir.
+
 Neden kasa Neon'a taşınmadı: kasa internet kesilince de çalışmalı; Neon'un ücretsiz planındaki aylık işlem süresi
 açık saatler boyunca uyanık bir veritabanına yetmez ve lafmaliyet'in veritabanını da durdururdu. Kalıcı geçmiş gün
 sonunda lafmaliyet'e (Neon) gider; anlık görünüm için Redis yeterli ve ucuz. Parola denemesi IP başına 15 dakikada 8.
