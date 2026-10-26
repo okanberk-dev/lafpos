@@ -103,4 +103,22 @@ describe('LafPOS Uzaktan', () => {
     for (let i = 0; i < 9; i++) last = (await POST(req('uzaktan/giris', { method: 'POST', body: '{"parola":"x"}', headers: { 'x-forwarded-for': '9.9.9.9' } }))).status;
     expect(last).toBe(429);
   });
+  it('kurulum durumu anahtarsız da açık; yalnız var/yok döner, değer sızdırmaz', async () => {
+    const { GET } = await api();
+    const read = async () => (await GET(req('uzaktan/kurulum'))).json() as Promise<Record<string, unknown>>;
+    expect(await read()).toMatchObject({ secret: true, password: true, redis: true });
+    const saved = { s: process.env.LAFPOS_CLOUD_SECRET, k: process.env.KV_REST_API_URL };
+    try {
+      delete process.env.LAFPOS_CLOUD_SECRET;
+      delete process.env.KV_REST_API_URL;
+      const body = await read();
+      expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null });
+      expect(JSON.stringify(body)).not.toContain(PASSWORD);
+      // Diğer uçlar anahtarsız kapalı kalır
+      expect((await GET(req('health'))).status).toBe(503);
+    } finally {
+      process.env.LAFPOS_CLOUD_SECRET = saved.s;
+      process.env.KV_REST_API_URL = saved.k;
+    }
+  });
 });

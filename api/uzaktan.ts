@@ -120,6 +120,21 @@ const ME = {
 async function handle(req: Request): Promise<Response> {
   const url = originalUrl(req.url);
   const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/+$/, '');
+  // Kurulum durumu (giriş ekranı gösterir): yalnız var/yok, hiçbir değer dönmez; anahtar olmadan da açıktır
+  if (path === 'uzaktan/kurulum') {
+    const redisSet = !!((env('KV_REST_API_URL') || env('UPSTASH_REDIS_REST_URL')) && (env('KV_REST_API_TOKEN') || env('UPSTASH_REDIS_REST_TOKEN')));
+    let snapshotAt: number | null = null;
+    let redisOk = false;
+    if (redisSet) {
+      try {
+        snapshotAt = (await snapshot())?.at ?? null;
+        redisOk = true;
+      } catch {
+        redisOk = false;
+      }
+    }
+    return json({ secret: secret().length >= 32, password: env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt });
+  }
   if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
 
   if (path === 'health') return json({ ok: true, remote: true, time: Date.now() });
