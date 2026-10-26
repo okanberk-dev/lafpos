@@ -142,9 +142,11 @@ adminRoutes.patch('/products/:id', async (c) => {
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
   }
-  if (input.posName !== undefined) {
-    assertPosNameFree({ ...p, name: input.name ?? p.name, priceL: input.priceL !== undefined ? input.priceL : p.priceL, posName: input.posName });
-  }
+  // Yalnız lafmaliyet adı değişiyorsa denetlenir: eski bir çakışma istasyon ya da renk kaydını engellemesin
+  const next = { ...p, name: input.name ?? p.name, priceL: input.priceL !== undefined ? input.priceL : p.priceL, posName: input.posName !== undefined ? input.posName : p.posName };
+  const suffix = getSettings().posSizeSuffix;
+  const namesOf = (x: typeof next) => posNamesOf(x, suffix).map((n) => `${n.size}:${posNameKey(n.name)}`).join('|');
+  if (namesOf(next) !== namesOf(p)) assertPosNameFree(next);
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
   if (patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0) (patch as Record<string, unknown>).active = true;
   db.update(schema.products).set({ ...patch, updatedAt: Date.now() }).where(eq(schema.products.id, p.id)).run();

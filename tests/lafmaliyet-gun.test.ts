@@ -351,6 +351,17 @@ describe('yönetim doğrulamaları', () => {
     expect((await h.call('patron', 'POST', '/admin/products', { categoryId: cat.id, name: 'Kuzu Kulağı (büyük)', price: 4000, kdvRate: 10, posName: 'kuzu  kulağı' })).status).toBe(200);
   });
 
+  it('eski bir çakışma, adı değiştirmeyen kaydı (renk, istasyon) engellemez', async () => {
+    const { db, schema } = modules;
+    const [a, b] = [product('Cappuccino'), product('Flat White')];
+    for (const p of [a, b]) db.update(schema.products).set({ posName: 'SÜTLÜ' }).where(eq(schema.products.id, p.id)).run();
+    // Formdan gelen kayıt posName'i de taşır; ad değişmediği için çakışma denetlenmez
+    expect((await h.call('patron', 'PATCH', `/admin/products/${a.id}`, { color: '#3f6b8a', posName: 'SÜTLÜ' })).status).toBe(200);
+    expect((await h.call<{ code: string }>('patron', 'PATCH', `/admin/products/${a.id}`, { posName: 'SÜTLÜ KAHVE' })).status).toBe(200);
+    expect((await h.call<{ code: string }>('patron', 'PATCH', `/admin/products/${a.id}`, { posName: 'sütlü' })).json.code).toBe('pos_name_taken');
+    for (const p of [a, b]) db.update(schema.products).set({ posName: null }).where(eq(schema.products.id, p.id)).run();
+  });
+
   it('KDV %1 reddedilir', async () => {
     const cat = h.boot.categories.find((c) => !c.extKey)!;
     const r = await h.call('patron', 'POST', '/admin/products', { categoryId: cat.id, name: 'Bir', price: 1000, kdvRate: 1 });
