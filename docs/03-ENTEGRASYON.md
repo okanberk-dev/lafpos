@@ -139,8 +139,9 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 İş günü tarihi lafmaliyet ile aynı kuralla belirlenir: gün 05:00'ten önce açıldıysa önceki takvim günü.
 **Dünden açık kalan güne satış yazılmaz:** gün sonu alınmadan 05:00 geçerse yeni adisyon, kalem ve oda sayacı
 409 `stale_day` ile reddedilir ("Dünün günü açık (25 Ekim, Z 14). Önce gün sonunu alın"; Kasa ekranında aynı
-bant). Ödeme, iptal ve gün sonu serbesttir; böylece bugünün satışı lafmaliyet'e dünün tarihiyle gitmez.
-Otomatik gün sonu varsayılan kapalı kalır (sayımsız kapatır).
+bant). Ödeme, iptal, hesap bölme (kalemi yeni adisyona taşımak yeni satış değildir) ve gün sonu serbesttir;
+böylece bugünün satışı lafmaliyet'e dünün tarihiyle gitmez. Otomatik gün sonu varsayılan kapalı kalır (sayımsız
+kapatır).
 **Bir iş gününe tek Z:** gün sonu alındıktan sonra aynı tarihte yeni gün açılmaz; kapanıştan sonra satış
 gerekirse kasa ekranındaki "Günü yeniden aç" (yetkili onayı, neden zorunlu, denetim kaydına alarm) aynı Z
 numarasıyla günü açar. Gün yeniden kapanınca lafmaliyet'e aynı tarih ve Z ile gider, öncekinin yerine geçer.

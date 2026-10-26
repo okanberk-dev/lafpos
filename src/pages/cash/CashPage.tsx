@@ -263,7 +263,7 @@ export default function CashPage() {
               <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
               <div className="min-w-0 text-sm">
                 <p className="font-semibold">{current.data.stale}</p>
-                <p>Bu güne yeni adisyon ve ürün eklenmez; açık adisyonların ödemesi alınır. Gün sonundan sonra bugünün gününü açın</p>
+                <p>Bu güne yeni adisyon ve ürün eklenmez; açık adisyonların ödemesi alınır. Gün sonunu aldıktan sonra yeni günü açın</p>
               </div>
             </div>
           )}
