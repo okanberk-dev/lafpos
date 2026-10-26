@@ -6,7 +6,8 @@ import type { Effects } from '../lib/effects';
 import { bad, conflict, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
-import { loadOrder, recalc } from './orders';
+import { posNameFor } from './menu';
+import { loadOrder, recalc, requireCurrentDay } from './orders';
 
 /**
  * Karaoke odası gibi süreli alanlar: sayaç başlar, durunca süre faturalama adımına yukarı yuvarlanır
@@ -31,6 +32,7 @@ export function startRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
   if (!table || table.kind !== 'oda' || !table.hourlyRate) throw bad('Bu masa saatlik oda değil');
   const running = t.select().from(schema.roomSessions).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).get();
   if (running) throw conflict('Oda sayacı zaten çalışıyor');
+  requireCurrentDay(t);
   t.insert(schema.roomSessions).values({ id: ulid(), orderId, tableId: table.id, hourlyRate: table.hourlyRate, startedAt: Date.now(), startedBy: actor.user.id }).run();
   fx.audit(t, { userId: actor.user.id, action: 'room.start', orderId, message: `${table.name} sayacı başladı (saatlik ${tl(table.hourlyRate)})` });
   fx.emit({ topic: 'orders', kind: 'room.started', orderId, tableId: table.id, byUserId: actor.user.id });
@@ -72,7 +74,8 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
       sentAt: now,
       servedAt: now,
       isService: true,
-      posName: product.posName ?? product.name.toLocaleUpperCase('tr-TR'),
+      // Boş ya da boşluklu posName de lafmaliyet'in okuyacağı bir ada döner (yönetimde boş bırakılan oda ürünü)
+      posName: posNameFor(product, 'TEK'),
       createdBy: actor.user.id,
       createdAt: now,
     })

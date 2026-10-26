@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
 import { amountForItems, lineGross, splitState } from '@shared/order-calc';
+import { staleDayMessage } from '@shared/time';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, can, need, needDirect } from '../lib/auth';
@@ -39,6 +40,17 @@ export function getOpenDay(t: Tx | DB) {
 export function requireOpenDay(t: Tx | DB) {
   const day = getOpenDay(t);
   if (!day) throw new HttpError(409, 'Gün açılmamış. Kasa ekranından günü açın', 'day_closed');
+  return day;
+}
+
+/**
+ * Yeni satış (adisyon açma, kalem ekleme, oda sayacı) yalnız bugünün iş gününe: dünden açık kalan güne yazılan satış
+ * lafmaliyet'e dünün tarihiyle gider. Ödeme, iptal ve gün sonu engellenmez; gün kapanınca yeni gün açılır.
+ */
+export function requireCurrentDay(t: Tx | DB) {
+  const day = requireOpenDay(t);
+  const stale = staleDayMessage(day);
+  if (stale) throw new HttpError(409, stale, 'stale_day');
   return day;
 }
 
@@ -172,7 +184,7 @@ export interface CreateOrderInput {
 
 export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrderInput): OrderRow {
   needDirect(actor, 'siparis.al');
-  const day = requireOpenDay(t);
+  const day = requireCurrentDay(t);
   if (input.type === 'masa') {
     if (!input.tableId) throw bad('Masa seçilmeli');
     const table = t.select().from(schema.tables).where(eq(schema.tables.id, input.tableId)).get();
@@ -254,6 +266,7 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  requireCurrentDay(t);
   if (!lines.length) throw bad('Eklenecek ürün yok');
   const now = Date.now();
   const batch = nextBatch(t, orderId);

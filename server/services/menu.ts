@@ -1,4 +1,5 @@
 import { asc, eq, inArray } from 'drizzle-orm';
+import { posNameOf } from '@shared/pos-name';
 import { hmToMinutes, istanbulParts } from '@shared/time';
 import type { SelectedOption, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
@@ -148,13 +149,12 @@ export function happyHourPercent(t: Tx | DB, product: Product, nowMs = Date.now(
   return best;
 }
 
-const upperTR = (s: string) => s.toLocaleUpperCase('tr-TR');
-
-/** lafmaliyet satış listesindeki ad: ürünün posName'i, yoksa "AD BOYEKİ" */
-export function posNameFor(product: Pick<Product, 'name' | 'posName'>, size: Size): string {
-  if (product.posName?.trim()) return product.posName.trim();
-  const suffix = getSettings().posSizeSuffix[size] ?? '';
-  return [upperTR(product.name.trim()), suffix].filter(Boolean).join(' ');
+/**
+ * lafmaliyet satış listesindeki ad: tek boylu üründe posName'i, iki boylu üründe posName taban ad + boy eki; posName
+ * yoksa "AD BOYEKİ". Kural `shared/pos-name.ts`'te (docs/03-ENTEGRASYON.md §3.1).
+ */
+export function posNameFor(product: Pick<Product, 'name' | 'posName' | 'priceL'>, size: Size): string {
+  return posNameOf(product, size, getSettings().posSizeSuffix);
 }
 
 /** Ürünün istasyonu: ürüne özel, yoksa kategorininki */

@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { posNameKey, posNamesOf, posSlotOf } from '@shared/pos-name';
+import { PAYMENT_CHANNELS } from '@shared/labels';
 import { ALL_PERMISSIONS, effectivePermissions, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
@@ -78,7 +80,8 @@ const productLocal = z.object({
   description: z.string().max(300).nullish(),
   price: kurus,
   priceL: kurus.nullish(),
-  kdvRate: z.number().int().refine((v) => [0, 1, 10, 20].includes(v), 'KDV 0, 1, 10 ya da 20 olmalı'),
+  // %1 kullanılmaz: köşkün sattığı bütün gıda %10 (laffogato kuralı, docs/03-ENTEGRASYON.md §1)
+  kdvRate: z.number().int().refine((v) => [0, 10, 20].includes(v), 'KDV 0, 10 ya da 20 olmalı'),
   isService: z.boolean().optional(),
 });
 const productPos = z.object({
@@ -93,11 +96,34 @@ const productPos = z.object({
   sort: z.number().int().optional(),
 });
 
+type ProductRow = typeof schema.products.$inferSelect;
+
+/**
+ * lafmaliyet adı başka bir ürünün ya da boyun adıyla çakışmasın: lafmaliyet bir günde bir ada bir satır ister ve adı
+ * büyük / küçük harf farkı gözetmeden eşleştirir. Aynı adı taşıyan iki yerel ürün tek satırda toplanır (ModPOS'taki
+ * gibi), çakışma sayılmaz; siteye bağlı bir kalemin ya da boyun adını almak sayılır.
+ */
+function assertPosNameFree(self: Pick<ProductRow, 'name' | 'posName' | 'priceL' | 'extSource' | 'extId'> & { id: string | null }) {
+  if (!self.posName?.trim()) return;
+  const suffix = getSettings().posSizeSuffix;
+  const extOf = (p: Pick<ProductRow, 'extSource' | 'extId'>) => (p.extSource === 'laffogato' ? p.extId : null);
+  const rowKey = (p: Pick<ProductRow, 'extSource' | 'extId'>, size: 'M' | 'L' | 'TEK') => `${extOf(p) ?? ''}|${posSlotOf(extOf(p), size) ?? ''}`;
+  const mine = posNamesOf(self, suffix).map((n) => ({ ...n, key: posNameKey(n.name), row: rowKey(self, n.size) }));
+  const others = db.select().from(schema.products).all().filter((p) => p.id !== self.id);
+  for (const o of others) {
+    for (const n of posNamesOf(o, suffix)) {
+      const hit = mine.find((m) => m.key === posNameKey(n.name) && m.row !== rowKey(o, n.size));
+      if (hit) throw conflict(`"${hit.name}" lafmaliyet adı ${o.name}${n.size === 'TEK' ? '' : ` (${n.size})`} ürününde kullanılıyor; başka bir ad yazın`, 'pos_name_taken');
+    }
+  }
+}
+
 adminRoutes.post('/products', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'menu.yonet');
   const input = await body(c, productLocal.merge(productPos));
   if (!db.select().from(schema.categories).where(eq(schema.categories.id, input.categoryId)).get()) throw notFound('Kategori');
+  assertPosNameFree({ id: null, name: input.name, posName: input.posName ?? null, priceL: input.priceL ?? null, extSource: null, extId: null });
   const id = ulid();
   db.insert(schema.products)
     .values({ id, ...input, priceL: input.priceL ?? null, isService: input.isService ?? false, active: true })
@@ -115,6 +141,9 @@ adminRoutes.patch('/products/:id', async (c) => {
   const synced = p.extSource === 'laffogato';
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
+  }
+  if (input.posName !== undefined) {
+    assertPosNameFree({ ...p, name: input.name ?? p.name, priceL: input.priceL !== undefined ? input.priceL : p.priceL, posName: input.posName });
   }
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
   if (patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0) (patch as Record<string, unknown>).active = true;
@@ -524,11 +553,20 @@ const methodShape = z.object({
   name: z.string().min(1).max(30),
   kind: z.enum(['nakit', 'kart', 'yemek', 'havale', 'cari', 'online', 'diger']),
   zField: z.enum(['cash', 'card', 'meal_card', 'online', 'other']),
-  channel: z.string().max(30).nullish(),
+  // lafmaliyet'in komisyon anahtarı: serbest metin değil, seçim (lafmaliyet src/lib/commission/channels.ts)
+  channel: z.enum(PAYMENT_CHANNELS).nullish(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#245c43'),
   sort: z.number().int().default(20),
   active: z.boolean().default(true),
 });
+/**
+ * Beklenen nakit tür (`kind = 'nakit'`) üzerinden, Z'nin nakit alanı `zField` üzerinden sayılır (services/days.ts):
+ * ikisi ayrışırsa lafmaliyet'e giden nakit ile kasadaki beklenen nakit tutmaz. Nakit türü yalnız Nakit alanına gider.
+ */
+function assertCashPair(kind: string, zField: string) {
+  if ((kind === 'nakit') !== (zField === 'cash')) throw bad('Nakit türü yalnız lafmaliyet\'in Nakit alanına bağlanır; Nakit alanına da yalnız nakit türü', 'cash_pair');
+}
+
 adminRoutes.get('/payment-methods', (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   return c.json(db.select().from(schema.paymentMethods).orderBy(asc(schema.paymentMethods.sort)).all());
@@ -537,6 +575,7 @@ adminRoutes.post('/payment-methods', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, methodShape);
+  assertCashPair(input.kind, input.zField);
   const id = ulid();
   db.insert(schema.paymentMethods).values({ id, ...input, channel: input.channel ?? null }).run();
   changed('settings', 'method.created', user.id);
@@ -546,6 +585,9 @@ adminRoutes.patch('/payment-methods/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, patchOf(methodShape));
+  const m = db.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, c.req.param('id'))).get();
+  if (!m) throw notFound('Ödeme türü');
+  assertCashPair(input.kind ?? m.kind, input.zField ?? m.zField);
   db.update(schema.paymentMethods).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.paymentMethods.id, c.req.param('id'))).run();
   changed('settings', 'method.updated', user.id);
   return c.json({ ok: true });
