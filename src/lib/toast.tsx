@@ -28,10 +28,10 @@ export const toast = {
 
 const icons = { ok: CheckCircle2, err: AlertTriangle, info: Info, warn: AlertTriangle };
 const tones: Record<Tone, string> = {
-  ok: 'bg-forest-700 text-white',
-  err: 'bg-burgundy-600 text-white',
-  info: 'bg-espresso text-cream',
-  warn: 'bg-brass-500 text-espresso',
+  ok: 'bg-brand-700 text-white',
+  err: 'bg-danger-600 text-white',
+  info: 'bg-night text-paper',
+  warn: 'bg-warn-500 text-night',
 };
 
 export function Toaster() {

@@ -233,7 +233,7 @@ export default function CashPage() {
         <div className="mx-auto max-w-md">
           <Card>
             <div className="space-y-4 p-6 text-center">
-              <CalendarCheck className="mx-auto size-12 text-forest-500" />
+              <CalendarCheck className="mx-auto size-12 text-brand-500" />
               <div>
                 <h2 className="text-xl font-semibold">Günü aç</h2>
                 <p className="text-sm text-muted">Çekmecedeki açılış nakitini girin. Gün 05:00 kuralıyla lafmaliyet'teki tarihe yazılır</p>
@@ -247,7 +247,7 @@ export default function CashPage() {
                   </Button>
                 </>
               ) : (
-                <p className="text-sm text-burgundy-500">Günü kasiyer, müdür ya da patron açabilir</p>
+                <p className="text-sm text-danger-500">Günü kasiyer, müdür ya da patron açabilir</p>
               )}
             </div>
           </Card>
@@ -323,7 +323,7 @@ export default function CashPage() {
                       <span className="block">{fmtDateLong(d.date)}</span>
                       <span className="text-xs text-muted">{d.closedAt ? `${d.receipts ?? 0} adisyon` : 'Açık'}</span>
                     </span>
-                    {d.closedAt && d.cashDiff == null && <Badge tone="brass">Föy girilmedi</Badge>}
+                    {d.closedAt && d.cashDiff == null && <Badge tone="warn">Föy girilmedi</Badge>}
                     {d.cashDiff != null && d.cashDiff !== 0 && <Badge tone="red">Fark {tl(d.cashDiff)}</Badge>}
                     <span className="tabular w-28 text-right font-semibold">{d.netSales != null ? tl(d.netSales) : '—'}</span>
                   </button>

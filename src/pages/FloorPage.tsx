@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Mic2, Plus, Receipt, ShoppingBag, Store } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { tlCompact } from '@shared/money';
+import { tlShort } from '@shared/money';
 import { fmtElapsed } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, OrderDTO, TableDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -70,11 +70,11 @@ export default function FloorPage() {
                 onClick={() => setSectionId(s.id)}
                 className={cn(
                   'flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition pointer-coarse:min-h-11',
-                  s.id === section?.id ? 'bg-forest-700 text-cream' : 'bg-surface-2 text-ink-2 hover:bg-surface-3',
+                  s.id === section?.id ? 'bg-brand-700 text-paper' : 'bg-surface-2 text-ink-2 hover:bg-surface-3',
                 )}
               >
                 {s.name}
-                {!!counts.get(s.id) && <span className={cn('rounded-full px-1.5 text-xs', s.id === section?.id ? 'bg-cream/20' : 'bg-forest-100 text-forest-700')}>{counts.get(s.id)}</span>}
+                {!!counts.get(s.id) && <span className={cn('rounded-full px-1.5 text-xs', s.id === section?.id ? 'bg-paper/20' : 'bg-brand-100 text-brand-700')}>{counts.get(s.id)}</span>}
               </button>
             ))}
           </div>
@@ -128,8 +128,8 @@ export default function FloorPage() {
           )}
           <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted">
             <Legend className="border-2 border-dashed border-line-strong bg-surface" label="Boş" />
-            <Legend className="bg-forest-600" label="Dolu" />
-            <Legend className="bg-brass-500" label="Hesap istendi" />
+            <Legend className="bg-brand-600" label="Dolu" />
+            <Legend className="bg-warn-500" label="Hesap istendi" />
             <Legend className="bg-rose-500" label="Kısmen ödendi" />
             <Legend className="border-2 border-rose-500 bg-surface" label="Rezerve" />
           </div>
@@ -145,7 +145,7 @@ export default function FloorPage() {
           {others.length === 0 && <p className="px-2 py-6 text-center text-sm text-muted">Açık tezgâh, gel-al, paket ya da online sipariş yok</p>}
           {others.map((o) => (
             <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface p-3 text-left hover:bg-surface-2">
-              <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', o.source === 'laffogato' ? 'bg-rose-100 text-rose-700' : 'bg-forest-100 text-forest-700')}>
+              <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', o.source === 'laffogato' ? 'bg-rose-100 text-rose-700' : 'bg-brand-100 text-brand-700')}>
                 {o.source === 'laffogato' ? <Globe className="size-5" /> : o.type === 'paket' ? <Bike className="size-5" /> : o.type === 'gelal' ? <ShoppingBag className="size-5" /> : <Store className="size-5" />}
               </span>
               <span className="min-w-0 flex-1">
@@ -155,7 +155,7 @@ export default function FloorPage() {
                 </span>
               </span>
               <span className="tabular text-right font-semibold">
-                {tlCompact(o.total)} ₺{o.pendingKitchen > 0 && <span className="block text-xs font-normal text-brass-600">{o.pendingKitchen} hazırlanıyor</span>}
+                {tlShort(o.total)}{o.pendingKitchen > 0 && <span className="block text-xs font-normal text-warn-600">{o.pendingKitchen} hazırlanıyor</span>}
               </span>
             </button>
           ))}
@@ -183,7 +183,7 @@ export default function FloorPage() {
               <span className="font-medium">
                 Hesap {i + 1} <span className="text-sm text-muted">#{o.no}</span>
               </span>
-              <span className="tabular font-semibold">{tlCompact(o.total)} ₺</span>
+              <span className="tabular font-semibold">{tlShort(o.total)}</span>
             </button>
           ))}
           <Button block icon={<Plus className="size-4" />} onClick={() => choose && open.mutate({ type: 'masa', tableId: choose.table.id, newCheck: true })}>
@@ -243,9 +243,9 @@ function TableTile({
       className={cn(
         '@container group flex flex-col justify-between overflow-hidden p-2 text-left transition active:scale-[0.97]',
         round ? 'items-center rounded-[999px] text-center' : 'rounded-2xl',
-        tone === 'free' && (reservation ? 'border-2 border-rose-500 bg-surface' : 'border-2 border-dashed border-line-strong bg-surface hover:border-forest-400'),
-        tone === 'busy' && 'bg-forest-600 text-white shadow-[var(--shadow-card)]',
-        tone === 'billed' && 'bg-brass-500 text-espresso shadow-[var(--shadow-card)]',
+        tone === 'free' && (reservation ? 'border-2 border-rose-500 bg-surface' : 'border-2 border-dashed border-line-strong bg-surface hover:border-brand-400'),
+        tone === 'busy' && 'bg-brand-600 text-white shadow-[var(--shadow-card)]',
+        tone === 'billed' && 'bg-warn-500 text-night shadow-[var(--shadow-card)]',
         tone === 'partial' && 'bg-rose-500 text-white shadow-[var(--shadow-card)]',
         className,
       )}
@@ -261,7 +261,7 @@ function TableTile({
       </div>
       {busy ? (
         <div className={cn('w-full', round && 'text-center')}>
-          <div className="tabular text-sm font-semibold leading-none @min-[6rem]:text-lg">{tlCompact(total)} ₺</div>
+          <div className="tabular text-sm font-semibold leading-none @min-[6rem]:text-lg">{tlShort(total)}</div>
           <div className={cn('mt-1 hidden items-center gap-1.5 text-[11px] opacity-90 @min-[6.5rem]:flex', round && 'justify-center')}>
             <span className="whitespace-nowrap">{room ? `Oda ${fmtElapsed(room, now)}` : fmtElapsed(openedAt, now)}</span>
             {orders[0]?.waiterName && !round && <span className="truncate">· {orders[0].waiterName}</span>}
@@ -274,7 +274,7 @@ function TableTile({
                   {pending}
                 </span>
               )}
-              {ready > 0 && <span className="animate-ring rounded-full bg-white px-1.5 py-0.5 text-forest-700">{ready} hazır</span>}
+              {ready > 0 && <span className="animate-ring rounded-full bg-white px-1.5 py-0.5 text-brand-700">{ready} hazır</span>}
             </div>
           )}
         </div>

@@ -27,7 +27,7 @@ interface Reservation {
   note: string | null;
 }
 
-const STATUS = { bekliyor: { label: 'Bekliyor', tone: 'brass' }, geldi: { label: 'Geldi', tone: 'green' }, iptal: { label: 'İptal', tone: 'neutral' }, gelmedi: { label: 'Gelmedi', tone: 'red' } } as const;
+const STATUS = { bekliyor: { label: 'Bekliyor', tone: 'warn' }, geldi: { label: 'Geldi', tone: 'green' }, iptal: { label: 'İptal', tone: 'neutral' }, gelmedi: { label: 'Gelmedi', tone: 'red' } } as const;
 
 export default function ReservationsPage() {
   const boot = useBoot();
@@ -104,7 +104,7 @@ export default function ReservationsPage() {
                   </span>
                   {r.tableName && <span>{r.tableName}</span>}
                   {r.phone && (
-                    <a href={`tel:${r.phone}`} className="inline-flex items-center gap-1 text-forest-600">
+                    <a href={`tel:${r.phone}`} className="inline-flex items-center gap-1 text-brand-600">
                       <Phone className="size-3.5" /> {r.phone}
                     </a>
                   )}

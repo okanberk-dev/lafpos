@@ -93,7 +93,7 @@ export default function CustomersPage() {
         <ul className="scroll-thin min-h-0 flex-1 divide-y divide-line overflow-y-auto">
           {(list.data ?? []).map((x) => (
             <li key={x.id}>
-              <button onClick={() => setSelected(x.id)} className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2 ${selected === x.id ? 'bg-forest-50 dark:bg-forest-800' : ''}`}>
+              <button onClick={() => setSelected(x.id)} className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2 ${selected === x.id ? 'bg-brand-50 dark:bg-brand-800' : ''}`}>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{x.name}</span>
                   <span className="text-xs text-muted">
@@ -101,10 +101,10 @@ export default function CustomersPage() {
                   </span>
                 </span>
                 <span className="text-right text-xs">
-                  <span className="block font-semibold text-brass-600">
+                  <span className="block font-semibold text-warn-600">
                     {x.stamps}/{goal}
                   </span>
-                  {x.balance !== 0 && <span className={x.balance > 0 ? 'text-burgundy-500' : 'text-forest-500'}>{tl(x.balance)}</span>}
+                  {x.balance !== 0 && <span className={x.balance > 0 ? 'text-danger-500' : 'text-brand-500'}>{tl(x.balance)}</span>}
                 </span>
               </button>
             </li>
@@ -132,7 +132,7 @@ export default function CustomersPage() {
               </div>
               {c.stamps >= goal && (
                 <Button
-                  variant="brass"
+                  variant="warn"
                   icon={<Gift className="size-4" />}
                   onClick={async () => {
                     try {

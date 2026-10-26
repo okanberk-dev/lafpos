@@ -79,7 +79,7 @@ export function AdminShell({ title, children }: { title: string; children: React
   const sidebar = (narrow: boolean) => (
     <nav aria-label="Yönetim" className="flex h-full flex-col">
       <div className={cn('flex items-center gap-2.5 px-3 pb-3 pt-3.5', narrow && 'justify-center px-0')}>
-        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-forest-700 font-[Didot,'Bodoni_72',Georgia,serif] text-[11px] font-bold text-cream">L’Af</span>
+        <span className="grid size-8 shrink-0 place-items-center rounded-full bg-brand-700 font-[Didot,'Bodoni_72',Georgia,serif] text-[11px] font-bold text-paper">L’Af</span>
         {!narrow && (
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-[var(--admin-text)]">{boot.settings.businessName}</span>

@@ -1,6 +1,6 @@
 import { Minus, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { tl, tlCompact } from '@shared/money';
+import { tl, tlCompact, tlShort } from '@shared/money';
 import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -108,10 +108,10 @@ export function OptionsModal({
                 <button
                   key={s}
                   onClick={() => setSize(s)}
-                  className={cn('rounded-2xl border-2 p-3 text-left transition', size === s ? 'border-forest-600 bg-forest-50 dark:bg-forest-800' : 'border-line bg-surface')}
+                  className={cn('rounded-2xl border-2 p-3 text-left transition', size === s ? 'border-brand-600 bg-brand-50 dark:bg-brand-800' : 'border-line bg-surface')}
                 >
                   <div className="font-semibold">{boot.settings.sizeLabels[s]}</div>
-                  <div className="tabular text-sm text-muted">{tlCompact(s === 'L' ? product.priceL! : product.price)} ₺</div>
+                  <div className="tabular text-sm text-muted">{tlShort(s === 'L' ? product.priceL! : product.price)}</div>
                 </button>
               ))}
             </div>
@@ -127,7 +127,7 @@ export function OptionsModal({
                   <div key={i.id} className="flex items-center gap-3 rounded-2xl border border-line bg-surface px-3 py-2">
                     <span className="font-medium">
                       {i.name}
-                      {i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlCompact(i.price)} ₺</span>}
+                      {i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
                     </span>
                     <div className="flex items-center gap-1">
                       <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-2" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
@@ -149,11 +149,11 @@ export function OptionsModal({
                     <button
                       key={i.id}
                       onClick={() => (g.kind === 'single' ? pickSingle(g, i.id) : setCount(i.id, on ? 0 : 1))}
-                      className={cn('rounded-xl border-2 px-3.5 py-2 text-sm font-medium transition', on ? 'border-forest-600 bg-forest-600 text-white' : 'border-line bg-surface text-ink')}
+                      className={cn('rounded-xl border-2 px-3.5 py-2 text-sm font-medium transition', on ? 'border-brand-600 bg-brand-600 text-white' : 'border-line bg-surface text-ink')}
                     >
                       {i.name}
                       {i.price > 0 && <span className={cn('ml-1', on ? 'text-white/80' : 'text-muted')}>+{tlCompact(i.price)}</span>}
-                      {i.allergens.includes('nuts') && <span className={cn('ml-1 text-[11px]', on ? 'text-white/80' : 'text-brass-600')}>(kuruyemiş)</span>}
+                      {i.allergens.includes('nuts') && <span className={cn('ml-1 text-[11px]', on ? 'text-white/80' : 'text-warn-600')}>(kuruyemiş)</span>}
                     </button>
                   );
                 })}
@@ -169,7 +169,7 @@ export function OptionsModal({
               <button
                 key={n}
                 onClick={() => setNote(note.includes(n) ? note.replace(n, '').replace(/\s*·\s*$/, '').replace(/^\s*·\s*/, '').trim() : note ? `${note} · ${n}` : n)}
-                className={cn('rounded-full border px-3 py-1 text-sm', note.includes(n) ? 'border-brass-500 bg-brass-50 text-brass-700' : 'border-line text-ink-2')}
+                className={cn('rounded-full border px-3 py-1 text-sm', note.includes(n) ? 'border-warn-500 bg-warn-50 text-warn-700' : 'border-line text-ink-2')}
               >
                 {n}
               </button>
@@ -179,7 +179,7 @@ export function OptionsModal({
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 200))}
             placeholder="Bara/mutfağa not"
-            className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-forest-500"
+            className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-brand-500"
           />
         </section>
         {product.allergens && product.allergens.length > 0 && <p className="text-xs text-muted">Alerjen: {product.allergens.join(', ')}</p>}

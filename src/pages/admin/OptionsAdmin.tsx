@@ -122,7 +122,7 @@ export default function OptionsAdmin() {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {its.map((i) => (
-                    <span key={i.id} className={cn('rounded-full border px-2.5 py-1 text-xs', i.isDefault ? 'border-forest-400 bg-forest-50 dark:bg-forest-800' : 'border-line')}>
+                    <span key={i.id} className={cn('rounded-full border px-2.5 py-1 text-xs', i.isDefault ? 'border-brand-400 bg-brand-50 dark:bg-brand-800' : 'border-line')}>
                       {i.name}
                       {i.price > 0 && ` +${tl(i.price)}`}
                       {g.kind === 'counter' && i.maxQty > 1 && ` (en çok ${i.maxQty})`}
@@ -156,7 +156,7 @@ export default function OptionsAdmin() {
               <Button
                 size="sm"
                 variant="ghost"
-                className="text-burgundy-500"
+                className="text-danger-500"
                 onClick={async () => {
                   if (!window.confirm(`${h.name} silinsin mi?`)) return;
                   await del(`/admin/happy-hours/${h.id}`).catch((e) => toast.err(errorMessage(e)));
@@ -239,7 +239,7 @@ export default function OptionsAdmin() {
                 {DAYS.map((d, i) => {
                   const on = happy.days.includes(i + 1);
                   return (
-                    <button key={d} onClick={() => setHappy({ ...happy, days: on ? happy.days.filter((x) => x !== i + 1) : [...happy.days, i + 1].sort() })} className={cn('rounded-lg border px-3 py-1.5 text-sm', on ? 'border-forest-600 bg-forest-600 text-white' : 'border-line')}>
+                    <button key={d} onClick={() => setHappy({ ...happy, days: on ? happy.days.filter((x) => x !== i + 1) : [...happy.days, i + 1].sort() })} className={cn('rounded-lg border px-3 py-1.5 text-sm', on ? 'border-brand-600 bg-brand-600 text-white' : 'border-line')}>
                       {d}
                     </button>
                   );
@@ -252,7 +252,7 @@ export default function OptionsAdmin() {
                 {boot.categories.map((c) => {
                   const on = happy.categoryIds.includes(c.id);
                   return (
-                    <button key={c.id} onClick={() => setHappy({ ...happy, categoryIds: on ? happy.categoryIds.filter((x) => x !== c.id) : [...happy.categoryIds, c.id] })} className={cn('rounded-full border px-3 py-1 text-sm', on ? 'border-forest-600 bg-forest-600 text-white' : 'border-line')}>
+                    <button key={c.id} onClick={() => setHappy({ ...happy, categoryIds: on ? happy.categoryIds.filter((x) => x !== c.id) : [...happy.categoryIds, c.id] })} className={cn('rounded-full border px-3 py-1 text-sm', on ? 'border-brand-600 bg-brand-600 text-white' : 'border-line')}>
                       {c.name}
                     </button>
                   );

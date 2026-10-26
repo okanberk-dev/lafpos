@@ -2,26 +2,27 @@ import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-type Tone = 'neutral' | 'green' | 'red' | 'brass' | 'pink' | 'blue';
+type Tone = 'neutral' | 'green' | 'red' | 'warn' | 'pink' | 'blue';
+// Innex durum rozeti: 6 px köşe, açık zemin üstünde koyu ton (AA, tests/design-tokens.test.ts)
 const tones: Record<Tone, string> = {
-  neutral: 'bg-surface-3 text-ink-2',
-  green: 'bg-forest-100 text-forest-700 dark:bg-forest-800 dark:text-forest-100',
-  red: 'bg-burgundy-100 text-burgundy-600 dark:bg-burgundy-800 dark:text-burgundy-100',
-  brass: 'bg-brass-100 text-brass-700 dark:bg-brass-700 dark:text-brass-50',
-  pink: 'bg-rose-100 text-rose-700',
-  blue: 'bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-100',
+  neutral: 'bg-[var(--admin-neutral-soft)] text-ink-2',
+  green: 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]',
+  red: 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]',
+  warn: 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]',
+  pink: 'bg-[var(--admin-hue-rose-soft)] text-[var(--admin-hue-rose)]',
+  blue: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
 };
 
 export function Badge({ tone = 'neutral', children, className }: { tone?: Tone; children: ReactNode; className?: string }) {
-  return <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium', tones[tone], className)}>{children}</span>;
+  return <span className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium', tones[tone], className)}>{children}</span>;
 }
 
 export function Card({ children, className, title, actions }: { children: ReactNode; className?: string; title?: ReactNode; actions?: ReactNode }) {
   return (
-    <section className={cn('rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]', className)}>
+    <section className={cn('rounded-2xl border border-line bg-surface', className)}>
       {(title || actions) && (
-        <header className="flex items-center gap-3 border-b border-line px-4 py-3">
-          <h3 className="min-w-0 flex-1 truncate font-semibold">{title}</h3>
+        <header className="flex min-h-12 items-center gap-3 border-b border-[var(--admin-divider)] px-4 py-2.5">
+          <h3 className="min-w-0 flex-1 truncate text-[15px] font-semibold">{title}</h3>
           {actions}
         </header>
       )}
@@ -58,11 +59,11 @@ export function EmptyState({ icon, title, children, action }: { icon?: ReactNode
 
 export function Stat({ label, value, hint, tone }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: 'up' | 'down' | 'flat' }) {
   return (
-    <div className="rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
-      <div className="text-sm text-muted">{label}</div>
-      <div className="tabular mt-1 text-2xl font-semibold tracking-tight">{value}</div>
+    <div className="rounded-2xl border border-line bg-surface p-4">
+      <div className="text-[13px] font-medium text-muted">{label}</div>
+      <div className="tabular mt-1 text-2xl font-bold tracking-tight">{value}</div>
       {hint && (
-        <div className={cn('mt-1 text-xs', tone === 'up' ? 'text-forest-500' : tone === 'down' ? 'text-burgundy-500' : 'text-muted')}>{hint}</div>
+        <div className={cn('mt-1 text-xs', tone === 'up' ? 'text-brand-500' : tone === 'down' ? 'text-danger-500' : 'text-muted')}>{hint}</div>
       )}
     </div>
   );
@@ -72,7 +73,7 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
   return (
     <div className="flex flex-wrap items-end gap-3 pb-4">
       <div className="min-w-0 flex-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
         {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

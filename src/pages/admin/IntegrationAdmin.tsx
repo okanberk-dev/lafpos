@@ -19,7 +19,7 @@ interface SyncStatus {
 function Status({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2 text-sm">
-      {ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-forest-500" /> : <CircleAlert className="mt-0.5 size-4 shrink-0 text-brass-500" />}
+      {ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-brand-500" /> : <CircleAlert className="mt-0.5 size-4 shrink-0 text-warn-500" />}
       <span>{children}</span>
     </div>
   );
@@ -59,7 +59,7 @@ export default function IntegrationAdmin() {
         <div className="space-y-2 p-4">
           <Status ok={!s.menu.state?.lastError}>
             {s.menu.state?.lastSuccessAt ? `Son başarılı kontrol ${fmtDateTime(s.menu.state.lastSuccessAt)}` : 'Henüz eşitlenmedi'}
-            {s.menu.state?.lastError && <span className="block text-burgundy-500">Hata: {s.menu.state.lastError}</span>}
+            {s.menu.state?.lastError && <span className="block text-danger-500">Hata: {s.menu.state.lastError}</span>}
           </Status>
           <p className="text-xs text-muted">Herkese açık menü ucu CDN'den gelir, sitenin veritabanını uyandırmaz; 5 dakikada bir ETag ile kontrol edilir</p>
           <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -78,7 +78,7 @@ export default function IntegrationAdmin() {
               <Status ok={s.online.versionSignal}>{s.online.versionSignal ? 'Sipariş sürüm sinyali çalışıyor: 20 sn içinde düşer' : 'Sürüm sinyali yok (site PR\'ı yayında değil): 5 dk\'da bir kontrol'}</Status>
               <Status ok={!s.online.state?.lastError}>
                 {s.online.state?.lastSuccessAt ? `Son çekim ${fmtDateTime(s.online.state.lastSuccessAt)} · ${s.online.open} açık online sipariş` : 'Henüz çekilmedi'}
-                {s.online.state?.lastError && <span className="block text-burgundy-500">Hata: {s.online.state.lastError}</span>}
+                {s.online.state?.lastError && <span className="block text-danger-500">Hata: {s.online.state.lastError}</span>}
               </Status>
               <Toggle checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />
             </>
@@ -92,7 +92,7 @@ export default function IntegrationAdmin() {
             <>
               <Status ok={!s.lafmaliyet.pending}>
                 {s.lafmaliyet.pending ? `Giden kutusunda ${s.lafmaliyet.pending} gün bekliyor (${s.lafmaliyet.pendingDays.join(', ')})` : 'Giden kutusu boş'}
-                {s.lafmaliyet.lastError && <span className="block text-burgundy-500">Son hata: {s.lafmaliyet.lastError}</span>}
+                {s.lafmaliyet.lastError && <span className="block text-danger-500">Son hata: {s.lafmaliyet.lastError}</span>}
               </Status>
               <Status ok={!!s.lafmaliyet.costsAt}>{s.lafmaliyet.costsAt ? `Maliyetler ${fmtDateTime(s.lafmaliyet.costsAt)} tarihinde çekildi` : 'Maliyetler henüz çekilmedi'}</Status>
               <Button size="sm" icon={<CloudDownload className="size-4" />} disabled={!canSync} onClick={() => run('/sync/lafmaliyet/costs/pull', 'Maliyetler çekildi')}>

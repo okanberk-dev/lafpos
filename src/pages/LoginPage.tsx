@@ -70,26 +70,26 @@ export function LoginPage() {
   });
 
   return (
-    <div className="flex min-h-full flex-col bg-forest-800 text-cream lg:flex-row">
+    <div className="flex min-h-full flex-col bg-brand-800 text-paper lg:flex-row">
       <div className="relative flex flex-1 flex-col justify-between overflow-hidden p-8 lg:p-12">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-forest-600/40 blur-3xl" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-16 size-96 rounded-full bg-burgundy-600/25 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -right-24 -top-24 size-96 rounded-full bg-brand-600/40 blur-3xl" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-32 -left-16 size-96 rounded-full bg-danger-600/25 blur-3xl" />
         <div className="relative flex items-center gap-3">
-          <div className="grid size-12 place-items-center rounded-2xl bg-cream/10 ring-1 ring-cream/20">
+          <div className="grid size-12 place-items-center rounded-2xl bg-paper/10 ring-1 ring-paper/20">
             <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-xl font-bold">L’Af</span>
           </div>
           <div>
             <div className="text-lg font-semibold">{info.data?.businessName ?? "L'Affogato"}</div>
-            <div className="text-xs tracking-[0.2em] text-cream/60">SINCE 1897, BOLOGNA</div>
+            <div className="text-xs tracking-[0.2em] text-paper/60">SINCE 1897, BOLOGNA</div>
           </div>
         </div>
         <div className="relative my-10 lg:my-0">
           <div className="tabular text-7xl font-semibold tracking-tight lg:text-8xl">{fmtTime(now)}</div>
-          <div className="mt-2 text-cream/70">LafPOS · PIN ile giriş</div>
+          <div className="mt-2 text-paper/70">LafPOS · PIN ile giriş</div>
         </div>
         <div className="relative hidden flex-wrap gap-2 lg:flex">
           {info.data?.users.map((u) => (
-            <span key={u.id} className="inline-flex items-center gap-2 rounded-full bg-cream/10 px-3 py-1.5 text-sm">
+            <span key={u.id} className="inline-flex items-center gap-2 rounded-full bg-paper/10 px-3 py-1.5 text-sm">
               <span className="size-2.5 rounded-full" style={{ background: u.color }} />
               {u.name}
             </span>
@@ -107,11 +107,11 @@ export function LoginPage() {
             {Array.from({ length: 6 }, (_, i) => (
               <span
                 key={i}
-                className={cn('size-4 rounded-full transition', i < pin.length ? 'scale-110 bg-forest-700 dark:bg-forest-300' : 'bg-line-strong', i >= 4 && i >= pin.length && 'opacity-40')}
+                className={cn('size-4 rounded-full transition', i < pin.length ? 'scale-110 bg-brand-700 dark:bg-brand-300' : 'bg-line-strong', i >= 4 && i >= pin.length && 'opacity-40')}
               />
             ))}
           </div>
-          <div className="mb-4 h-5 text-center text-sm text-burgundy-500">{error}</div>
+          <div className="mb-4 h-5 text-center text-sm text-danger-500">{error}</div>
           <div className="grid grid-cols-3 gap-3">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((k) => (
               <PadKey key={k} onClick={() => press(k)}>
@@ -127,7 +127,7 @@ export function LoginPage() {
             </PadKey>
           </div>
           {info.data?.demoPins && (
-            <div className="mt-6 rounded-2xl border border-dashed border-brass-400 bg-brass-50 p-3 text-xs text-brass-700 dark:bg-brass-700/15 dark:text-brass-100">
+            <div className="mt-6 rounded-2xl border border-dashed border-warn-400 bg-warn-50 p-3 text-xs text-warn-700 dark:bg-warn-700/15 dark:text-warn-100">
               <div className="mb-1 flex items-center gap-1.5 font-semibold">
                 <Coffee className="size-3.5" /> Kurulum modu: örnek PIN'ler
               </div>

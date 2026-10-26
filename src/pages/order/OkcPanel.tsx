@@ -114,12 +114,12 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
   return (
     <div className="rounded-2xl border border-line bg-surface-2/60 p-3">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <MonitorSmartphone className="size-4 text-forest-600" />
-        Yazarkasa POS {provider === 'simulator' && <span className="rounded-full bg-brass-100 px-2 py-0.5 text-[11px] text-brass-700">eğitim cihazı</span>}
+        <MonitorSmartphone className="size-4 text-brand-600" />
+        Yazarkasa POS {provider === 'simulator' && <span className="rounded-full bg-warn-100 px-2 py-0.5 text-[11px] text-warn-700">eğitim cihazı</span>}
       </div>
       {pending ? (
         <div className="flex items-center gap-3">
-          <Loader2 className="size-5 animate-spin text-forest-600" />
+          <Loader2 className="size-5 animate-spin text-brand-600" />
           <div className="min-w-0 flex-1 text-sm">
             <div className="font-medium">{pending.status === 'kilitli' ? 'Cihazda açıldı, ödeme alınıyor' : 'Cihazda ödeme bekleniyor'}</div>
             <div className="text-xs text-muted">
@@ -127,7 +127,7 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
               {provider === 'simulator' && (
                 <>
                   {' · '}
-                  <Link to="/cihaz" className="font-semibold text-forest-600 underline">
+                  <Link to="/cihaz" className="font-semibold text-brand-600 underline">
                     Eğitim cihazını aç
                   </Link>
                 </>
@@ -139,13 +139,13 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
               <RefreshCw className="size-4" />
             </Button>
           )}
-          <Button size="sm" variant="ghost" className="text-burgundy-500" onClick={() => cancel(pending.id)}>
+          <Button size="sm" variant="ghost" className="text-danger-500" onClick={() => cancel(pending.id)}>
             İptal
           </Button>
         </div>
       ) : (
         <>
-          <Button block variant="brass" loading={busy} onClick={send} disabled={order.total - order.paid <= 0}>
+          <Button block variant="warn" loading={busy} onClick={send} disabled={order.total - order.paid <= 0}>
             {items?.length ? 'Seçilen kalemleri' : 'Hesabı'} yazarkasaya gönder
           </Button>
           <p className="mt-1.5 text-xs text-muted">Ödeme ve mali fiş cihazda alınır; sonuç gelince adisyon kendiliğinden kapanır</p>
@@ -153,7 +153,7 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
       )}
       {last && !pending && last.status !== 'gonderildi' && (
         <div className="mt-2 flex items-center gap-1.5 text-xs">
-          {last.status === 'tamamlandi' ? <CheckCircle2 className="size-3.5 text-forest-500" /> : <XCircle className="size-3.5 text-burgundy-500" />}
+          {last.status === 'tamamlandi' ? <CheckCircle2 className="size-3.5 text-brand-500" /> : <XCircle className="size-3.5 text-danger-500" />}
           <span className="text-muted">
             Son sepet: {last.status === 'tamamlandi' ? `ödendi${last.zNo != null ? ` · Z ${last.zNo}` : ''}${last.receiptNo != null ? ` · fiş ${last.receiptNo}` : ''}` : last.status === 'hata' ? (last.error ?? 'hata') : last.status === 'fis_iptal' ? 'fiş iptal edildi' : 'iptal edildi'}
           </span>

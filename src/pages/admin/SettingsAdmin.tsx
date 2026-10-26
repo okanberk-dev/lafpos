@@ -70,7 +70,7 @@ export default function SettingsAdmin() {
     <div className="space-y-4">
       <PageHeader title="Ayarlar" actions={<Button variant="primary" icon={<Save className="size-4" />} onClick={save}>Kaydet</Button>} />
       {s.demoMode && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-brass-400 bg-brass-50 p-4 text-sm text-brass-700 dark:bg-brass-700/20 dark:text-brass-100">
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warn-400 bg-warn-50 p-4 text-sm text-warn-700 dark:bg-warn-700/20 dark:text-warn-100">
           <span className="flex-1">Kurulum modu açık: giriş ekranında örnek PIN'ler görünüyor. Canlıya geçmeden önce Personel'den PIN'leri değiştirip bunu kapatın</span>
           <Toggle checked={s.demoMode} onChange={(v) => set({ demoMode: v })} label="Kurulum modu" />
         </div>

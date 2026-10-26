@@ -101,7 +101,7 @@ function Delta({ value }: { value: number | null }) {
   if (value == null) return <span className="text-muted">önceki dönem yok</span>;
   const up = value >= 0;
   return (
-    <span className={cn('inline-flex items-center gap-0.5 font-medium', up ? 'text-forest-500' : 'text-burgundy-500')}>
+    <span className={cn('inline-flex items-center gap-0.5 font-medium', up ? 'text-brand-500' : 'text-danger-500')}>
       {up ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}%{Math.abs(value).toLocaleString('tr-TR')} önceki döneme göre
     </span>
   );
@@ -359,7 +359,7 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
               {rows.map((o) => (
                 <tr key={o.id} className="border-b border-line/60 last:border-0">
                   <td className="px-4 py-2 font-medium">
-                    #{o.no} {o.status === 'iptal' && <span className="ml-1 rounded bg-burgundy-100 px-1.5 text-xs text-burgundy-600">iptal</span>}
+                    #{o.no} {o.status === 'iptal' && <span className="ml-1 rounded bg-danger-100 px-1.5 text-xs text-danger-600">iptal</span>}
                   </td>
                   <td className="px-2 py-2">{o.place ?? TYPE_LABEL[o.type] ?? o.type}</td>
                   <td className="px-2 py-2 text-muted">
@@ -420,7 +420,7 @@ function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 
                   <td className="px-2 py-2 font-medium">
                     {r.qty}× {r.name}
                     {kind === 'iptal' && (r.afterSend || r.billPrinted) && (
-                      <span className="ml-1.5 rounded bg-burgundy-100 px-1.5 text-xs text-burgundy-600">{r.billPrinted ? 'hesap sonrası' : 'hazırlandıktan sonra'}</span>
+                      <span className="ml-1.5 rounded bg-danger-100 px-1.5 text-xs text-danger-600">{r.billPrinted ? 'hesap sonrası' : 'hazırlandıktan sonra'}</span>
                     )}
                   </td>
                   <td className="px-2 py-2 text-ink-2">{r.reason ?? '—'}</td>

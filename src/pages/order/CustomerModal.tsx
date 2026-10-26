@@ -46,7 +46,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
     <Modal open onClose={onClose} title="Müşteri" subtitle="Telefon ya da adla bulun; damga kartı ve açık hesap için" size="md">
       <div className="space-y-3 p-4">
         {current && (
-          <div className="flex items-center gap-3 rounded-2xl border border-forest-300 bg-forest-50 p-3 dark:bg-forest-800">
+          <div className="flex items-center gap-3 rounded-2xl border border-brand-300 bg-brand-50 p-3 dark:bg-brand-800">
             <div className="min-w-0 flex-1">
               <div className="font-semibold">{current.name}</div>
               <div className="text-xs text-muted">
@@ -55,7 +55,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
               </div>
             </div>
             {current.stamps >= goal && (
-              <Button size="sm" variant="brass" icon={<Gift className="size-4" />} onClick={() => act((pin) => post(`/customers/${current.id}/redeem`, { approverPin: pin }), `${goal} damga kullanıldı; bir içeceği ikram edin`)}>
+              <Button size="sm" variant="warn" icon={<Gift className="size-4" />} onClick={() => act((pin) => post(`/customers/${current.id}/redeem`, { approverPin: pin }), `${goal} damga kullanıldı; bir içeceği ikram edin`)}>
                 Hediye
               </Button>
             )}
@@ -73,7 +73,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
             <ul className="divide-y divide-line rounded-2xl border border-line">
               {(list.data ?? []).map((c) => (
                 <li key={c.id}>
-                  <button onClick={() => attach(c.id)} className={cn('flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-2', current?.id === c.id && 'bg-forest-50')}>
+                  <button onClick={() => attach(c.id)} className={cn('flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-2', current?.id === c.id && 'bg-brand-50')}>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{c.name}</span>
                       <span className="text-xs text-muted">
@@ -81,10 +81,10 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
                       </span>
                     </span>
                     <span className="text-right text-xs">
-                      <span className="block font-semibold text-brass-600">
+                      <span className="block font-semibold text-warn-600">
                         {c.stamps}/{goal} damga
                       </span>
-                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-burgundy-500' : 'text-forest-500'}>{tl(c.balance)}</span>}
+                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-danger-500' : 'text-brand-500'}>{tl(c.balance)}</span>}
                     </span>
                   </button>
                 </li>

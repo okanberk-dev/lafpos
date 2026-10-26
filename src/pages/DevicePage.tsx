@@ -34,9 +34,9 @@ interface SimReceipt {
 }
 
 const TYPES = [
-  { type: 1, label: 'Nakit', icon: Banknote, color: 'bg-forest-600' },
+  { type: 1, label: 'Nakit', icon: Banknote, color: 'bg-brand-600' },
   { type: 3, label: 'Kredi kartı', icon: CreditCard, color: 'bg-sky-700' },
-  { type: 7, label: 'Yemek kartı', icon: Utensils, color: 'bg-brass-600' },
+  { type: 7, label: 'Yemek kartı', icon: Utensils, color: 'bg-warn-600' },
 ];
 
 /**
@@ -122,9 +122,9 @@ export default function DevicePage() {
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <PageHeader title="Eğitim cihazı" subtitle="Token ÖKC benzeri: kasadan gönderilen sepetler burada ödenir. Gerçek cihaz bağlanınca bu ekran kullanılmaz" />
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
-        <div className="mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[10px] border-espresso bg-espresso p-1 shadow-[var(--shadow-pop)]">
+        <div className="mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[10px] border-night bg-night p-1 shadow-[var(--shadow-pop)]">
           <div className="min-h-[560px] overflow-hidden rounded-[1.6rem] bg-[#0f1512] text-[#e8f0eb]">
-            <div className="flex items-center justify-between bg-forest-700 px-4 py-2 text-xs">
+            <div className="flex items-center justify-between bg-brand-700 px-4 py-2 text-xs">
               <span className="font-semibold tracking-wide">TOKEN ÖKC · EĞİTİM</span>
               <span>{fmtTime(Date.now())}</span>
             </div>
@@ -135,7 +135,7 @@ export default function DevicePage() {
                 <div className="space-y-2">
                   {baskets.data?.map((b) => (
                     <button key={b.id} onClick={() => open(b)} className="flex w-full items-center gap-3 rounded-xl bg-[#1a2420] p-3 text-left active:bg-[#22302a]">
-                      <Receipt className="size-5 text-forest-300" />
+                      <Receipt className="size-5 text-brand-300" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold">{b.basket.title ?? 'Sepet'}</div>
                         <div className="text-xs text-[#8fa89a]">
@@ -143,7 +143,7 @@ export default function DevicePage() {
                         </div>
                       </div>
                       <div className="tabular font-semibold">{tl(b.amount)}</div>
-                      {b.status === 'kilitli' && <Lock className="size-4 text-brass-300" />}
+                      {b.status === 'kilitli' && <Lock className="size-4 text-warn-300" />}
                     </button>
                   ))}
                 </div>
@@ -188,7 +188,7 @@ export default function DevicePage() {
                     <button onClick={() => setSplit([{ type: 3, amount: '' }, { type: 1, amount: '' }])} className="flex h-14 items-center justify-center gap-2 rounded-xl bg-[#26332d] font-semibold">
                       <Split className="size-5" /> Böl
                     </button>
-                    <button onClick={() => cancel(current.id)} className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-xl text-sm text-burgundy-300">
+                    <button onClick={() => cancel(current.id)} className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-xl text-sm text-danger-300">
                       <XCircle className="size-4" /> Ödemeden vazgeç
                     </button>
                   </div>
@@ -207,10 +207,10 @@ export default function DevicePage() {
                       </div>
                     ))}
                     <div className="flex justify-between text-sm">
-                      <button className="text-forest-300" onClick={() => setSplit([...split, { type: 3, amount: '' }])}>
+                      <button className="text-brand-300" onClick={() => setSplit([...split, { type: 3, amount: '' }])}>
                         + Ödeme ekle
                       </button>
-                      <span className={splitTotal === current.amount ? 'text-forest-300' : 'text-brass-300'}>
+                      <span className={splitTotal === current.amount ? 'text-brand-300' : 'text-warn-300'}>
                         {tl(splitTotal)} / {tl(current.amount)}
                       </span>
                     </div>
@@ -220,7 +220,7 @@ export default function DevicePage() {
                       </button>
                       <button
                         disabled={splitTotal !== current.amount}
-                        className="h-12 rounded-xl bg-forest-600 font-semibold disabled:opacity-40"
+                        className="h-12 rounded-xl bg-brand-600 font-semibold disabled:opacity-40"
                         onClick={() => pay(split.map((s) => ({ type: s.type, amount: parseTL(s.amount) ?? 0 })).filter((s) => s.amount > 0))}
                       >
                         Öde ve fiş bas
@@ -256,7 +256,7 @@ export default function DevicePage() {
                   </span>
                   <span className="tabular font-semibold">{tl(r.amount)}</span>
                   {r.status === 'tamamlandi' && (
-                    <Button size="sm" variant="ghost" className="text-burgundy-500" onClick={() => cancel(r.id, true)}>
+                    <Button size="sm" variant="ghost" className="text-danger-500" onClick={() => cancel(r.id, true)}>
                       Fiş iptal
                     </Button>
                   )}

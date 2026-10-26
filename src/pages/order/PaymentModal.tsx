@@ -1,6 +1,6 @@
 import { CheckCircle2, Minus, Plus, Printer, RotateCcw, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { parseTL, splitEven, tl, tlCompact } from '@shared/money';
+import { parseTL, splitEven, tl, tlShort } from '@shared/money';
 import { amountForItems } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import type { OrderDTO, PaymentMethodDTO } from '@shared/types';
@@ -123,13 +123,13 @@ export function PaymentModal({
     return (
       <Modal open onClose={() => onDone(result.closed)} size="sm" persistent>
         <div className="p-6 text-center">
-          <CheckCircle2 className="mx-auto size-14 text-forest-500" />
+          <CheckCircle2 className="mx-auto size-14 text-brand-500" />
           <h2 className="mt-3 text-xl font-semibold">{result.closed ? 'Adisyon kapandı' : 'Ödeme alındı'}</h2>
           <p className="mt-1 text-muted">
             {tl(result.amount)} · {result.method}
           </p>
           {result.change > 0 && (
-            <div className="mt-5 rounded-3xl bg-brass-100 p-5 text-espresso">
+            <div className="mt-5 rounded-3xl bg-warn-100 p-5 text-night">
               <div className="text-sm font-medium">Para üstü</div>
               <div className="tabular text-5xl font-semibold">{tl(result.change)}</div>
             </div>
@@ -171,7 +171,7 @@ export function PaymentModal({
           </div>
 
           {mode === 'tutar' && (
-            <button onClick={() => setFocus('tutar')} className={cn('tabular mb-3 w-full rounded-2xl border-2 px-4 py-3 text-right text-4xl font-semibold', focus === 'tutar' ? 'border-forest-600' : 'border-line')}>
+            <button onClick={() => setFocus('tutar')} className={cn('tabular mb-3 w-full rounded-2xl border-2 px-4 py-3 text-right text-4xl font-semibold', focus === 'tutar' ? 'border-brand-600' : 'border-line')}>
               {amountText || '0'} ₺
             </button>
           )}
@@ -181,7 +181,7 @@ export function PaymentModal({
                 const left = i.qty - i.paidQty;
                 const sel = selection[i.id] ?? 0;
                 return (
-                  <div key={i.id} className={cn('flex items-center gap-2 rounded-xl border px-3 py-2', sel ? 'border-forest-600 bg-forest-50 dark:bg-forest-800' : 'border-line')}>
+                  <div key={i.id} className={cn('flex items-center gap-2 rounded-xl border px-3 py-2', sel ? 'border-brand-600 bg-brand-50 dark:bg-brand-800' : 'border-line')}>
                     <button className="min-w-0 flex-1 text-left" onClick={() => setSelection({ ...selection, [i.id]: sel === left ? 0 : left })}>
                       <span className="block truncate font-medium">
                         {i.name} {i.size !== 'TEK' && <span className="text-sm text-muted">{boot.settings.sizeLabels[i.size]}</span>}
@@ -263,24 +263,24 @@ export function PaymentModal({
                 </button>
               ))}
             </div>
-            {cariBlocked && <p className="mt-2 text-sm text-burgundy-500">Açık hesap için önce adisyona müşteri ekleyin (İşlemler › Müşteri)</p>}
+            {cariBlocked && <p className="mt-2 text-sm text-danger-500">Açık hesap için önce adisyona müşteri ekleyin (İşlemler › Müşteri)</p>}
           </div>
 
           {method?.kind === 'nakit' && (
             <div>
               <div className="mb-2 flex items-center justify-between text-sm font-medium text-ink-2">
                 <span>Verilen</span>
-                {change != null && change >= 0 && <span className="tabular text-base text-forest-600">Para üstü {tl(change)}</span>}
-                {change != null && change < 0 && <span className="text-base text-burgundy-500">Eksik {tl(-change)}</span>}
+                {change != null && change >= 0 && <span className="tabular text-base text-brand-600">Para üstü {tl(change)}</span>}
+                {change != null && change < 0 && <span className="text-base text-danger-500">Eksik {tl(-change)}</span>}
               </div>
-              <button onClick={() => setFocus('verilen')} className={cn('tabular w-full rounded-2xl border-2 px-4 py-2.5 text-right text-2xl font-semibold', focus === 'verilen' ? 'border-forest-600' : 'border-line')}>
+              <button onClick={() => setFocus('verilen')} className={cn('tabular w-full rounded-2xl border-2 px-4 py-2.5 text-right text-2xl font-semibold', focus === 'verilen' ? 'border-brand-600' : 'border-line')}>
                 {givenText || '—'} ₺
               </button>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <QuickButton onClick={() => setGivenText(toInput(amount + tip))}>Tam</QuickButton>
                 {boot.settings.quickCash.filter((c) => c >= amount + tip).slice(0, 4).map((c) => (
                   <QuickButton key={c} onClick={() => setGivenText(toInput(c))}>
-                    {tlCompact(c)} ₺
+                    {tlShort(c)}
                   </QuickButton>
                 ))}
               </div>
@@ -288,7 +288,7 @@ export function PaymentModal({
           )}
 
           <div className="flex items-center justify-between text-sm">
-            <button onClick={() => setFocus(focus === 'bahsis' ? 'tutar' : 'bahsis')} className={cn('rounded-xl border px-3 py-1.5', focus === 'bahsis' ? 'border-forest-600 text-forest-600' : 'border-line text-ink-2')}>
+            <button onClick={() => setFocus(focus === 'bahsis' ? 'tutar' : 'bahsis')} className={cn('rounded-xl border px-3 py-1.5', focus === 'bahsis' ? 'border-brand-600 text-brand-600' : 'border-line text-ink-2')}>
               Bahşiş {tip > 0 ? tl(tip) : 'ekle'}
             </button>
             <span className="text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
@@ -311,7 +311,7 @@ export function PaymentModal({
                     </span>
                     <span className="tabular font-semibold">{tl(p.amount)}</span>
                     {!p.refundedAt && (can('odeme.iade') || can('odeme.al')) && (
-                      <button aria-label="Ödemeyi iptal et" title="Ödemeyi iptal et" onClick={() => refund(p.id)} className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-burgundy-500">
+                      <button aria-label="Ödemeyi iptal et" title="Ödemeyi iptal et" onClick={() => refund(p.id)} className="rounded-lg p-1.5 text-muted hover:bg-surface-2 hover:text-danger-500">
                         <RotateCcw className="size-4" />
                       </button>
                     )}

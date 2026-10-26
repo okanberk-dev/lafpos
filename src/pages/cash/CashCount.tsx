@@ -131,7 +131,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
                     placeholder="Slip"
                     className="tabular h-11 w-28 rounded-lg border border-line-strong bg-surface px-2 text-right"
                   />
-                  {!blind && <span className={cn('tabular w-24 text-right text-sm font-semibold', d == null ? 'text-muted' : d === 0 ? 'text-forest-500' : 'text-burgundy-500')}>{d == null ? '—' : tl(d)}</span>}
+                  {!blind && <span className={cn('tabular w-24 text-right text-sm font-semibold', d == null ? 'text-muted' : d === 0 ? 'text-brand-500' : 'text-danger-500')}>{d == null ? '—' : tl(d)}</span>}
                 </div>
               );
             })}
@@ -144,7 +144,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
 
 function Cell({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' | 'bad' }) {
   return (
-    <div className={cn('rounded-xl border px-3 py-2', tone === 'bad' ? 'border-burgundy-300 bg-burgundy-50 dark:bg-burgundy-800/30' : tone === 'warn' ? 'border-brass-300 bg-brass-50 dark:bg-brass-700/20' : tone === 'ok' ? 'border-forest-300 bg-forest-50 dark:bg-forest-800' : 'border-line')}>
+    <div className={cn('rounded-xl border px-3 py-2', tone === 'bad' ? 'border-danger-300 bg-danger-50 dark:bg-danger-800/30' : tone === 'warn' ? 'border-warn-300 bg-warn-50 dark:bg-warn-700/20' : tone === 'ok' ? 'border-brand-300 bg-brand-50 dark:bg-brand-800' : 'border-line')}>
       <div className="text-xs text-muted">{label}</div>
       <div className="tabular font-semibold">{value}</div>
     </div>

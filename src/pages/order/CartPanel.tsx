@@ -15,9 +15,9 @@ import { cn } from '@/lib/cn';
 import { parseTL } from '@shared/money';
 
 const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
-  yeni: { label: 'Bara gitti', cls: 'text-brass-600' },
-  hazirlaniyor: { label: 'Hazırlanıyor', cls: 'text-brass-600' },
-  hazir: { label: 'Hazır', cls: 'text-forest-500' },
+  yeni: { label: 'Bara gitti', cls: 'text-warn-600' },
+  hazirlaniyor: { label: 'Hazırlanıyor', cls: 'text-warn-600' },
+  hazir: { label: 'Hazır', cls: 'text-brand-500' },
   servis: { label: 'Serviste', cls: 'text-muted' },
 };
 
@@ -72,7 +72,7 @@ export function CartPanel({
                 onClick={() => !i.voided && !order.extPaid && order.status === 'acik' && setItemSheet(i)}
                 className={cn('flex w-full items-start gap-3 px-4 py-2.5 text-left', !i.voided && order.status === 'acik' && 'hover:bg-surface-2')}
               >
-                <span className={cn('tabular mt-0.5 min-w-7 rounded-lg px-1.5 py-0.5 text-center text-sm font-semibold', i.voided ? 'bg-burgundy-100 text-burgundy-600' : 'bg-surface-3')}>
+                <span className={cn('tabular mt-0.5 min-w-7 rounded-lg px-1.5 py-0.5 text-center text-sm font-semibold', i.voided ? 'bg-danger-100 text-danger-600' : 'bg-surface-3')}>
                   {i.qty}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -81,10 +81,10 @@ export function CartPanel({
                     {i.size !== 'TEK' && <span className="ml-1 text-sm font-normal text-muted">{boot.settings.sizeLabels[i.size]}</span>}
                   </span>
                   {i.optionsText && <span className="block text-xs text-ink-2">{i.optionsText}</span>}
-                  {i.note && <span className="block text-xs italic text-brass-600">"{i.note}"</span>}
+                  {i.note && <span className="block text-xs italic text-warn-600">"{i.note}"</span>}
                   <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
                     {i.voided ? (
-                      <span className="font-semibold text-burgundy-500">İptal: {i.voidReason}</span>
+                      <span className="font-semibold text-danger-500">İptal: {i.voidReason}</span>
                     ) : (
                       <>
                         {i.stationId && (
@@ -100,9 +100,9 @@ export function CartPanel({
                             İkram
                           </span>
                         )}
-                        {i.discount > 0 && <span className="font-semibold text-forest-500">−{tl(i.discount)}</span>}
-                        {i.happyHour && <span className="font-semibold text-brass-600">Happy hour</span>}
-                        {i.paidQty > 0 && <span className="font-semibold text-forest-500">{i.paidQty === i.qty ? 'Ödendi' : `${i.paidQty} ödendi`}</span>}
+                        {i.discount > 0 && <span className="font-semibold text-brand-500">−{tl(i.discount)}</span>}
+                        {i.happyHour && <span className="font-semibold text-warn-600">Happy hour</span>}
+                        {i.paidQty > 0 && <span className="font-semibold text-brand-500">{i.paidQty === i.qty ? 'Ödendi' : `${i.paidQty} ödendi`}</span>}
                       </>
                     )}
                   </span>
@@ -114,8 +114,8 @@ export function CartPanel({
         </ul>
 
         {pending.length > 0 && (
-          <div className="border-y-2 border-dashed border-brass-400 bg-brass-50/60 dark:bg-brass-700/10">
-            <div className="px-4 pt-2 text-xs font-semibold uppercase tracking-wide text-brass-700 dark:text-brass-200">Gönderilmedi</div>
+          <div className="border-y-2 border-dashed border-warn-400 bg-warn-50/60 dark:bg-warn-700/10">
+            <div className="px-4 pt-2 text-xs font-semibold uppercase tracking-wide text-warn-700 dark:text-warn-200">Gönderilmedi</div>
             <ul>
               {pending.map((l) => {
                 const p = boot.products.find((x) => x.id === l.productId);
@@ -126,7 +126,7 @@ export function CartPanel({
                   <li key={l.key} className="flex items-center gap-2 px-3 py-2">
                     <div className="flex items-center rounded-xl border border-line bg-surface">
                       <button aria-label="Azalt" className="grid size-9 place-items-center" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
-                        {l.qty > 1 ? <Minus className="size-4" /> : <Trash2 className="size-4 text-burgundy-500" />}
+                        {l.qty > 1 ? <Minus className="size-4" /> : <Trash2 className="size-4 text-danger-500" />}
                       </button>
                       <span className="tabular w-6 text-center font-semibold">{l.qty}</span>
                       <button aria-label="Artır" className="grid size-9 place-items-center" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
@@ -171,7 +171,7 @@ export function CartPanel({
             <Row l={<b>Kalan</b>} r={<b>{tl(due)}</b>} />
           </div>
         )}
-        {preview && <div className="mt-1 text-xs text-brass-700 dark:text-brass-200">Gönderilmemiş {pending.reduce((a, l) => a + l.qty, 0)} ürün dahil, tahmini</div>}
+        {preview && <div className="mt-1 text-xs text-warn-700 dark:text-warn-200">Gönderilmemiş {pending.reduce((a, l) => a + l.qty, 0)} ürün dahil, tahmini</div>}
       </div>
 
       <ItemSheet item={itemSheet} order={order} onClose={() => setItemSheet(null)} act={act} />
@@ -239,13 +239,13 @@ function ItemSheet({
     >
       {!mode ? (
         <div className="grid gap-2 p-4">
-          <SheetButton icon={<XCircle className="size-5 text-burgundy-500" />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
+          <SheetButton icon={<XCircle className="size-5 text-danger-500" />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
           {item.complimentary ? (
             <SheetButton icon={<Undo2 className="size-5 text-rose-700" />} title="İkramı geri al" onClick={async () => (await act((pin) => post(`/orders/${order.id}/items/${item.id}/comp`, { undo: true, reason: '', approverPin: pin }), 'İkram geri alındı')) && close()} />
           ) : (
             <SheetButton icon={<Gift className="size-5 text-rose-700" />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
           )}
-          <SheetButton icon={<Percent className="size-5 text-forest-600" />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
+          <SheetButton icon={<Percent className="size-5 text-brand-600" />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
           {item.paidQty > 0 && <p className="px-1 text-xs text-muted">{item.paidQty} adedin ödemesi alındı; bu adetler değiştirilemez</p>}
         </div>
       ) : (
@@ -268,7 +268,7 @@ function ItemSheet({
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 {(['percent', 'amount'] as const).map((k) => (
-                  <button key={k} onClick={() => setDiscType(k)} className={cn('rounded-xl border-2 py-2 font-medium', discType === k ? 'border-forest-600 bg-forest-50 dark:bg-forest-800' : 'border-line')}>
+                  <button key={k} onClick={() => setDiscType(k)} className={cn('rounded-xl border-2 py-2 font-medium', discType === k ? 'border-brand-600 bg-brand-50 dark:bg-brand-800' : 'border-line')}>
                     {k === 'percent' ? 'Yüzde (%)' : 'Tutar (₺)'}
                   </button>
                 ))}
@@ -283,12 +283,12 @@ function ItemSheet({
             <div className="mb-2 text-sm font-medium text-ink-2">Neden</div>
             <div className="flex flex-wrap gap-1.5">
               {reasons.map((r) => (
-                <button key={r} onClick={() => setReason(r)} className={cn('rounded-full border px-3 py-1.5 text-sm', reason === r ? 'border-forest-600 bg-forest-600 text-white' : 'border-line')}>
+                <button key={r} onClick={() => setReason(r)} className={cn('rounded-full border px-3 py-1.5 text-sm', reason === r ? 'border-brand-600 bg-brand-600 text-white' : 'border-line')}>
                   {r}
                 </button>
               ))}
             </div>
-            <input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="ya da yazın" className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-forest-500" />
+            <input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="ya da yazın" className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-brand-500" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={() => setMode(null)}>Geri</Button>

@@ -1,6 +1,6 @@
 import { Search, SlidersHorizontal, Star, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { tlCompact } from '@shared/money';
+import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -53,7 +53,7 @@ export function ProductPanel({
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Ürün ara"
-            className="h-11 w-full rounded-xl border border-line bg-surface pl-9 pr-9 text-[15px] outline-none focus:border-forest-500"
+            className="h-11 w-full rounded-xl border border-line bg-surface pl-9 pr-9 text-[15px] outline-none focus:border-brand-500"
           />
           {q && (
             <button onClick={() => setQ('')} aria-label="Aramayı temizle" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted hover:bg-surface-2">
@@ -130,9 +130,9 @@ function ProductTile({
       >
         <span className="line-clamp-2 text-[15px] font-semibold leading-tight">{label}</span>
         {soldOut ? (
-          <span className="mt-1 rounded-full bg-burgundy-100 px-2 py-0.5 text-[11px] font-semibold text-burgundy-600">Tükendi</span>
+          <span className="mt-1 rounded-full bg-danger-100 px-2 py-0.5 text-[11px] font-semibold text-danger-600">Tükendi</span>
         ) : p.portionsLeft != null ? (
-          <span className="mt-1 rounded-full bg-brass-100 px-2 py-0.5 text-[11px] font-semibold text-brass-700">Son {p.portionsLeft}</span>
+          <span className="mt-1 rounded-full bg-warn-100 px-2 py-0.5 text-[11px] font-semibold text-warn-700">Son {p.portionsLeft}</span>
         ) : null}
       </button>
       <div className="flex items-stretch border-t border-line">
@@ -143,14 +143,14 @@ function ProductTile({
             <SizeButton disabled={soldOut || disabled} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => onQuickAdd(p, 'L')} />
           </>
         ) : (
-          <div className="tabular flex flex-1 items-center px-3 py-2 text-sm font-semibold text-ink-2">{tlCompact(p.price)} ₺</div>
+          <div className="tabular flex flex-1 items-center px-3 py-2 text-sm font-semibold text-ink-2">{tlShort(p.price)}</div>
         )}
         {hasOptions && (
           <button
             disabled={soldOut || disabled}
             onClick={() => onCustomize(p, twoSizes ? 'M' : 'TEK')}
             aria-label={`${label} seçenekleri`}
-            className="grid w-11 place-items-center border-l border-line text-muted hover:bg-surface-2 hover:text-forest-600 pointer-coarse:min-h-11"
+            className="grid w-11 place-items-center border-l border-line text-muted hover:bg-surface-2 hover:text-brand-600 pointer-coarse:min-h-11"
           >
             <SlidersHorizontal className="size-4" />
           </button>
@@ -162,9 +162,9 @@ function ProductTile({
 
 function SizeButton({ label, price, onClick, disabled }: { label: string; price: number; onClick: () => void; disabled?: boolean }) {
   return (
-    <button disabled={disabled} onClick={onClick} className="flex flex-1 flex-col items-center py-1.5 leading-tight hover:bg-forest-50 active:bg-forest-100 dark:hover:bg-forest-800">
+    <button disabled={disabled} onClick={onClick} className="flex flex-1 flex-col items-center py-1.5 leading-tight hover:bg-brand-50 active:bg-brand-100 dark:hover:bg-brand-800">
       <span className="text-[11px] text-muted">{label}</span>
-      <span className="tabular text-sm font-semibold">{tlCompact(price)} ₺</span>
+      <span className="tabular text-sm font-semibold">{tlShort(price)}</span>
     </button>
   );
 }

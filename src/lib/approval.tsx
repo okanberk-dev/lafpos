@@ -78,13 +78,13 @@ export function ApprovalHost() {
   return (
     <Modal open onClose={cancel} size="sm" title="Yetkili onayı" subtitle={pending.permission ? PERMISSIONS[pending.permission] : undefined}>
       <div className="space-y-4 p-5">
-        <div className="flex items-start gap-3 rounded-2xl bg-brass-50 p-3 text-sm text-brass-700 dark:bg-brass-700/20 dark:text-brass-100">
+        <div className="flex items-start gap-3 rounded-2xl bg-warn-50 p-3 text-sm text-warn-700 dark:bg-warn-700/20 dark:text-warn-100">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" />
           <span>{pending.error ?? pending.message}. Yetkili kişi PIN'ini girsin</span>
         </div>
         <div className="flex justify-center gap-3 py-1" aria-label="PIN">
           {Array.from({ length: 6 }, (_, i) => (
-            <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? 'bg-forest-700 dark:bg-forest-300' : 'bg-line-strong'} ${i >= 4 && i >= pin.length ? 'opacity-40' : ''}`} />
+            <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? 'bg-brand-700 dark:bg-brand-300' : 'bg-line-strong'} ${i >= 4 && i >= pin.length ? 'opacity-40' : ''}`} />
           ))}
         </div>
         <Numpad
