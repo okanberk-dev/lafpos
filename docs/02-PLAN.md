@@ -116,14 +116,45 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 2. Uçtan uca tarayıcı denemesi (tablet ve telefon genişliği)
 3. Kurulum kılavuzu (kafe bilgisayarı, tabletler, uzaktan patron erişimi), otomatik yedek
 
+### Durum (26 Ekim 2026)
+
+Dalga 1-6 tamam (RiosenBeq/lafpos#1). Planın üstüne yapılanlar: yazarkasa POS (TokenX Connect,
+`docs/04-YAZARKASA.md`), Innex yönetim paneli ve telefon/tablet uyarlaması (`DESIGN.md`), düzenlenebilir
+roller, kör kasa ve kasadan tükendi (Yönetim › Roller ve yetkiler), kasa bilgisayarı kurulumu
+(`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama: 100 birim ve API
+testi, gerçek Chrome'da 117 ekran ve 9 akış (`npm run e2e`, CI'da da).
+
+Bağımsız inceleme (26 Ekim 2026) ve düzeltmeleri, her biri `tests/review-fixes.test.ts`'te bir testle:
+yazarkasada sepeti bekleyen adisyonun tutarı ve ödemesi kilitli; indirim, ikram ve iptal ödenmiş tutarın altına
+inemez; QR siparişine kalem taşınmaz; aynı kalem iki kez seçilince bir kez ücretlenir; yeniden açma ve ödeme
+iptali müşterinin ziyaret, harcama ve damgasını geri alır; cihazda açık hesap müşterisiz ya da sınır aşınca
+alarm, fiş iptali cari ekstresini düzeltir; iptal sayılan sepete geç gelen "ödendi" alarm verir; servis ücreti
+cihaza ayrı satır; kör kasada kapanmış adisyonun ödeme dökümü gizli; fiş iptali ve kaydedilmiş sayımı
+değiştirmek yetkili onayı ister; yetki yükseltme, kendi rolünü değiştirme ve son patronu kapatma yok; PIN
+sınırı `X-Forwarded-For`'a bakmaz, ağ genelinde de sınır var; bir iş gününe tek Z, kapanıştan sonra "Günü
+yeniden aç"; lafmaliyet'e `cashIn` ve `expectedCash` gider, 409 kalıcıdır. Ayrıca düzenleme uçları
+`patchOf` kullanır: Zod 4'te `.partial()` varsayılanı uyguladığı için masanın adı değişince konumu ve türü,
+rezervasyonun durumu değişince kişi sayısı ve süresi sıfırlanıyordu.
+
+İkinci bağımsız inceleme (aynı gün, düzeltmelerin üstüne; `tests/review-round2*.test.ts`): patron olmayan yetkili
+üstündekinin PIN'ini değiştiremez, onu kapatamaz, rolünü boşaltamaz, kendi indirim sınırının üstünde sınır
+veremez; ağ geneli PIN kilidi kayan pencereyle sayar ve doğru PIN'le girmiş cihazları ve yetkili onayını durdurmaz
+(alarm yazar); Token kesintisinde takılan sepet yetkili onayıyla LafPOS'ta iptal sayılır; kör kasa süzgeci adisyon
+döndüren bütün uçlarda; indirim kayması cihaza "Servis ücreti" diye gitmez; yeniden açılan gün öbür cihazlara
+yayılır ve otomatik gün sonu onu hemen kapatmaz (`business_days.reopened_at`); oda sayacı çalışırken hesap cihaza
+gitmez, kapanmış adisyona oda ücreti yazılmaz; lafmaliyet'e gönderim sürerken basılan "Gönder" gerçekten gönderir.
+
+Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
+bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu.
+
 ## 5. Diğer repolarda gereken işler (ayrı PR, kullanıcı onayıyla)
 
 | Repo | İş | Neden |
 | --- | --- | --- |
-| lafmaliyet | İmzalı `POST /api/pos/gun` ucu: günlük satış satırları + Z alanları + ikram; `pos_daily_sales` tablosu ve `loadDailyProductSales` yükleyicisi; Kasa raporunda `CashPrefill { source: "lafpos" }` | Elle Z ve aylık liste girişini bitirir; sözleşme `docs/03-ENTEGRASYON.md` §4 |
+| lafmaliyet | (RiosenBeq/lafmaliyet#34) İmzalı `POST /api/pos/gun` ucu: günlük satış satırları + Z alanları + ikram; `pos_daily_sales` tablosu ve `loadDailyProductSales` yükleyicisi; Kasa raporunda `CashPrefill { source: "lafpos" }` | Elle Z ve aylık liste girişini bitirir; sözleşme `docs/03-ENTEGRASYON.md` §4 |
 | lafmaliyet | İmzalı `GET /api/panel/pos/urunler`: ürün, boy, reçete maliyeti | Patron panelinde ürün kârlılığı (yalnız `rapor.maliyet` yetkisi) |
-| laffogato | Ayrı anahtarlı `/api/pos/*` (ortak `KARAOKE_SYNC_SECRET` yerine) | Kafedeki makineye panel anahtarı koymamak, ayrı döndürülebilir anahtar |
-| laffogato | Online sipariş için ucuz "değişti mi" sinyali ya da ikinci ping hedefi | 5 dk sorgu sınırı varken siparişi saniyesinde görmek |
+| laffogato | Ayrı anahtarlı `/api/pos/*` (ortak `KARAOKE_SYNC_SECRET` yerine): RiosenBeq/laffogato#263 | Kafedeki makineye panel anahtarı koymamak, ayrı döndürülebilir anahtar |
+| laffogato | Online sipariş için ucuz "değişti mi" sinyali: `GET /api/pos/orders/version` (#263) | 5 dk sorgu sınırı varken siparişi saniyesinde görmek |
 | laffogato | Kasada damga (M2M) | Uygulama üyesine kasada damga vermek |
 
 ## 6. Riskler
@@ -132,6 +163,6 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 | --- | --- |
 | Neon kotası (site) | Yalnız CDN'deki menü ucu sık çekilir; imzalı uçlar en sık 5 dakikada bir ya da elle |
 | Ortak anahtarın kafe makinesinde durması | Opsiyonel; `.env`'de, dosya izinleri 600; ayrı anahtar için laffogato PR'ı önerildi |
-| Mali mevzuat | Adisyon "mali değeri yoktur" bilgi fişi; mali fiş ÖKC'den. ÖKC entegrasyonu ayrı proje |
+| Mali mevzuat | Adisyon "mali değeri yoktur" bilgi fişi; mali fiş ÖKC'den (TokenX Connect bağlantısı, `docs/04-YAZARKASA.md`) |
 | Tek makine arızası | Günlük otomatik SQLite yedeği; kurulum kılavuzunda yedeğin başka diske/buluta kopyası |
 | Online siparişin çift sayımı | `extPaid` siparişler tahsil edilmez, lafmaliyet satış listesine girmez |

@@ -12,7 +12,8 @@ export type LiveTopic =
   | 'stock'
   | 'customers'
   | 'users'
-  | 'alerts';
+  | 'alerts'
+  | 'okc';
 
 export interface LiveEvent {
   seq: number;

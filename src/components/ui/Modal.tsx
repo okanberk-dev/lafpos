@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
 
@@ -26,6 +26,7 @@ const widths = {
 
 export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', persistent, className }: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -54,6 +55,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         className={cn(
           'animate-in flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-surface shadow-[var(--shadow-pop)] outline-none sm:max-h-[92dvh] sm:rounded-3xl',
           widths[size],
@@ -63,20 +65,24 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         {(title || subtitle) && (
           <div className="flex items-start gap-3 border-b border-line px-5 py-4">
             <div className="min-w-0 flex-1">
-              {title && <h2 className="truncate text-lg font-semibold">{title}</h2>}
+              {title && (
+                <h2 id={titleId} className="truncate text-lg font-semibold">
+                  {title}
+                </h2>
+              )}
               {subtitle && <p className="mt-0.5 text-sm text-muted">{subtitle}</p>}
             </div>
             <button
               onClick={onClose}
               aria-label="Kapat"
-              className="-mr-1 grid size-10 place-items-center rounded-full text-muted hover:bg-surface-2"
+              className="-mr-1 grid size-11 place-items-center rounded-full text-muted hover:bg-surface-2"
             >
               <X className="size-5" />
             </button>
           </div>
         )}
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
-        {footer && <div className="safe-bottom border-t border-line bg-surface-2/60 px-5 py-3">{footer}</div>}
+        {footer && <div className="border-t border-line bg-surface-2/60 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
       </div>
     </div>,
     document.body,

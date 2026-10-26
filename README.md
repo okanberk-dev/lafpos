@@ -9,6 +9,11 @@ sonu, müşteri/cari, paket, rezervasyon, karaoke odası, raporlar ve patron pan
 - Referans POS'lar ve iki repo analizi: [docs/01-ANALIZ.md](docs/01-ANALIZ.md)
 - Mimari, veri modeli, dalgalar: [docs/02-PLAN.md](docs/02-PLAN.md)
 - Entegrasyon sözleşmesi: [docs/03-ENTEGRASYON.md](docs/03-ENTEGRASYON.md)
+- Yazarkasa POS (TokenX Connect): [docs/04-YAZARKASA.md](docs/04-YAZARKASA.md)
+- Kasa bilgisayarı (Chrome kiosk, sessiz fiş yazdırma, otomatik başlatma): [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md)
+- Karar: tek sistem, iki yüz (ürünler laffogato panelinde): [docs/06-TEK-SISTEM.md](docs/06-TEK-SISTEM.md)
+- Tasarım sistemi (kasa ekranları, Innex yönetim paneli, telefon ve tablet): [DESIGN.md](DESIGN.md), ürün bağlamı [PRODUCT.md](PRODUCT.md), Innex tarifi [docs/ADMIN-INNEX.md](docs/ADMIN-INNEX.md)
+- Claude Code skill'leri: [docs/SKILLS.md](docs/SKILLS.md)
 
 ## Çalıştırma
 
@@ -28,6 +33,9 @@ Kafede tek süreç olarak:
 npm run build && npm start   # http://<bilgisayar-ip>:4000
 ```
 
+Kasa bilgisayarında otomatik başlatma ve kiosk Chrome: `docs/05-KASA-BILGISAYARI.md`
+(`scripts/kasa/windows/kur.ps1`, `scripts/kasa/mac/kur.sh`).
+
 ## Ortam değişkenleri
 
 `.env.example` dosyasını `.env` olarak kopyalayın. Hepsi isteğe bağlıdır; boş bırakılan entegrasyon kapalı kalır.
@@ -36,8 +44,10 @@ npm run build && npm start   # http://<bilgisayar-ip>:4000
 | --- | --- |
 | `LAFPOS_PORT` | Sunucu portu (varsayılan 4000) |
 | `LAFFOGATO_URL` | Site adresi (varsayılan https://laffogato.net) |
-| `LAFFOGATO_PANEL_SECRET` | Sitenin imzalı panel uçları için anahtar (Tükendi yazma, online siparişler) |
-| `LAFMALIYET_URL`, `LAFMALIYET_POS_SECRET` | lafmaliyet'e günlük satış/Z itmek için (lafmaliyet tarafındaki uç yazılınca) |
+| `LAFFOGATO_SYNC_SECRET` | Sitenin imzalı uçları (Tükendi yazma, online siparişler); sitedeki `LAFPOS_SYNC_SECRET` |
+| `LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET` | lafmaliyet'e günlük satış/Z itme, maliyet çekme; paneldeki `LAFPOS_SYNC_SECRET` |
+| `TOKENX_*` | Yazarkasa POS (Token ÖKC) bağlantısı, bkz. `docs/04-YAZARKASA.md` |
+| `LAFPOS_PUBLIC_URL`, `TOKENX_WEBHOOK_SECRET` | Yazarkasa sonucunun webhook ile gelmesi (yoksa LafPOS sorar) |
 
 ## Komutlar
 
@@ -45,6 +55,7 @@ npm run build && npm start   # http://<bilgisayar-ip>:4000
 | --- | --- |
 | `npm run dev` | geliştirme (API + arayüz, sıcak yenileme) |
 | `npm run build` / `npm start` | üretim derlemesi ve tek süreç sunucu |
-| `npm test` | birim testleri (Vitest) |
+| `npm test` | birim ve API testleri (Vitest): para, adisyon hesabı, imza, yazarkasa sepeti, uçtan uca API akışı, renk kontrastı, arayüz kuralları, skill'ler |
+| `npm run e2e` | gerçek tarayıcı (sistemdeki Chrome): her rol, her ekran telefon, tablet, bilgisayar ve koyu temada; akışlar (telefonda sipariş, tablette ödeme, yönetimde düzenleme, komut paleti). Önce `npm run build`; görüntüler `e2e/out/` |
 | `npm run typecheck` | TypeScript denetimi (sunucu + arayüz) |
 | `npm run db:generate` | şema değişince SQL göçü üret |

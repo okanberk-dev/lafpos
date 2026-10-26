@@ -1,0 +1,80 @@
+# LafPOS tasarım sistemi
+
+> Ürün bağlamı `PRODUCT.md`'de. İki görünüm var: **kasa ekranları** (L'Affogato'nun renkleri, Poppins) ve
+> **yönetim paneli** (Innex). Değerler `src/index.css`'te; erişilebilirlik oranları
+> `tests/design-tokens.test.ts`'te sabit. Test düşerse değeri düzelt, eşiği gevşetme.
+
+## 1. Kasa ekranları (masalar, adisyon, bar, kasa, patron)
+
+- **Renk:** orman yeşili `#1E4031` birincil, krem zemin `#F7F1EA`, espresso mürekkep `#2E1A12`; durum
+  renkleri pirinç (hesap istendi), bordo (iptal, alarm), pembe (kısmen ödendi). Koyu tema espresso zemin.
+- **Yazı:** Poppins 400-700. Tutarlar tablo rakamıyla (`.tabular`).
+- **Ölçü:** dokunmatik hedef en az 44 px (AGENTS.md kural 8), POS düğmeleri 44-64 px, kart köşesi 16-24 px.
+- **Grafik:** tek seri tek renk (yeşil), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli adım
+  yok, verisi olmayan dönemde eksen değil "Bu dönemde veri yok" çizilir (`src/components/charts.tsx`).
+
+## 2. Yönetim paneli (Innex)
+
+Kaynak `docs/ADMIN-INNEX.md` (Filllo'nun Innex serisinin ölçülmüş tarifi) ve laffogato'nun aynı tarifle
+yaptığı panel (değer adları aynı: `--admin-*`). Panel açıkken `<html data-area="admin">`; LafPOS'un ortak
+değerleri (`--bg`, `--ink`, `--primary`...) Innex'e döner, ortak bileşenler de Innex görünür.
+
+| Rol | Açık | Koyu (LafPOS eklemesi) |
+|---|---|---|
+| Zemin (kartların arası) | `#EDEFF1` | `#0D0F13` |
+| Kart | `#FFFFFF` | `#16191F` |
+| Kuyu (tablo başlığı) | `#F9FBFC` | `#1B1F26` |
+| Gri (etkin menü, sayaç, segment rayı) | `#F3F5F7` | `#232832` |
+| Çizgi / satır ayracı / alan kenarı | `#E8E8E8` / `#F2F2F2` / `#898D94` | `#2A2F38` / `#20242C` / `#6F7682` |
+| Mürekkep / gövde / etiket | `#0C0E1B` / `#3D4048` / `#616367` | `#F2F4F7` / `#C9CDD4` / `#9AA1AC` |
+| Birincil | `#2F58F7` (üstünde beyaz) | `#7B93FF` (üstünde `#0B1020`) |
+| Durum tonları | yeşil `#15803D`, turuncu `#B45309`, kırmızı `#B42318`, camgöbeği `#0B7392`, mor `#6D3FEA` (açık zeminleriyle) | aynı roller, açık tonlar |
+
+- **Yerleşim** (Innex §1.1): gri zemin üstünde iki beyaz kart, köşe 12, pencereye 8 px, aralarında 12 px.
+  Kenar çubuğu 15.5rem; sayfa kartının ilk şeridi üst çubuk (yol, ⌘K arama, sıkı görünüm, canlı bağlantı),
+  altında sayfa başlığı şeridi (18 px başlık, 13 px açıklama, sağda önce ikincil sonra birincil düğme).
+- **Kenar çubuğu:** gruplar büyük harfli küçük etiketle (Genel, Menü, Salon ve kasa, Ekip, Bağlantılar,
+  Sistem), etkin satır gri ve renksiz, sayaç yalnız iş bekleyen yerde (tükenen ürün, gönderilemeyen gün).
+  Altta "Kasa ekranlarına dön", "Menüyü daralt" ve kullanıcı.
+- **Yazı:** Inter 400-700 (`@fontsource/inter`, çevrimdışı), rakamlar tablo hizalı. Etiketler cümle
+  düzeninde; büyük harf yalnız kenar çubuğu grup etiketlerinde.
+- **Bileşenler** (`src/components/admin/ui.tsx`): `PageHeader`, `Card`, `KpiStrip` (tek kart, hücreler
+  arası 1 px, her rakamın yanında referans), `StatusTabs` (sayılı kutu çipler), `Segmented` (gri ray, beyaz
+  hap), `DataTable` (kuyuda başlık, satır ayracı, yapışkan eylem sütunu), `ActionMenu` (⋯, köşe 10, portalda),
+  `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, karartma %20), `ActionRows`, `Timeline`, `Badge`,
+  `EmptyState`, `SearchField`. Düğme köşe 8, 14 px; dokunmatikte 44, farede 36, sıkı görünümde 32 px.
+- **Sayfalar:** Genel bakış (KPI şeridi: net ciro geçen haftanın aynı günü aynı saatine göre, adisyon,
+  açık adisyon, indirim ve ikram, online sipariş; saatlik grafik; en çok satanlar; dikkat isteyenler;
+  sistem sağlığı), Ürünler, Seçenekler, Masa planı, Ödeme türleri, Personel ve yetki, Yazarkasa, Site ve
+  lafmaliyet, Ayarlar, Denetim kaydı (zaman çizelgesi), Raporlar (dönem segmenti, rapor sekmeleri, önceki
+  dönemle KPI şeridi).
+
+### LafPOS'un Innex'e ve laffogato'ya göre eklemeleri ("biraz daha geliştir")
+
+1. **Koyu tema:** Innex ve laffogato paneli yalnız açık. LafPOS kafede gece de açık; aynı roller koyu
+   değerlerle, her çift AA'da test ediliyor.
+2. **⌘K komut paleti** (Innex §1.2 önerisi): ekranlara, yönetim bölümlerine, ürünlere ve personele atlar;
+   "Yerel ürün ekle", "Personel ekle", tema, kilit gibi eylemler. Türkçe harfleri katlayarak arar
+   ("cay" Çay'ı, "sut" Süt'ü bulur). Kasa ekranlarında da çalışır (Ctrl K ya da sol menüdeki büyüteç).
+3. **Daraltılabilen kenar çubuğu** ve **sıkı görünüm** (Innex §4 "yoğunluğu bir ayar olarak düşün"):
+   cihazda saklanır. Sıkı görünüm yalnız fareyle etkilidir; dokunmatikte hedefler 44 px kalır.
+4. **Telefon ve tablet** (Innex'in hiç çizmediği; impeccable `adapt`): telefonda kart yok, yönetimin
+   girişi gruplu bölüm listesi, tablo satır kartına, çekmece alt sayfaya döner; tablette dar ikon menüsü
+   ve sığmayan ikincil sütunlar gizlenir.
+5. **Derin bağlantı:** hızlı bakış adresle açılır (`?urun=`, `?kisi=`); geri tuşu çekmeceyi kapatır, komut
+   paleti doğrudan kayda götürür.
+6. **Sistem sağlığı kartı** (Innex §3 fikir 5): site menüsü, online sipariş, lafmaliyet, yazarkasa ve
+   yedeğin durumu tek yerde.
+
+## 3. Telefon ve tablet (impeccable `adapt`)
+
+- Kırılımlar: telefon `< 768`, tablet `768-1023`, bilgisayar `1024+`. Giriş türü genişlikten değil
+  `pointer-coarse` / `pointer-fine` sorgusundan: dokunmatikte her hedef en az 44 px.
+- Telefon: tek sütun, alt sekme çubuğu (en çok 4 ekran + "Daha"), birincil eylem altta (adisyonda
+  Gönder / Ödeme şeridi), modal yerine alt sayfa, tablo yerine satır kartı, çentik için `safe-area`.
+- Tablet: adisyonda ürünler ve hesap yan yana (`min-width: 768px`), yönetimde dar ikon menüsü.
+- Dokunmatikte alan yazısı en az 16 px (iOS odaklanınca yakınlaştırmasın).
+- **Doğrulama:** `npm run build && npm run e2e`. Tarama her rolün her ekranını 390 px (dokunmatik), 768 px
+  (dokunmatik), 1280 px ve koyu temada açar; konsol ve ağ hatası, yatay taşma ve 44 px altı hedefi hata
+  sayar; görüntüler `e2e/out/`. Emülasyon gerçek iPhone ve Android dokunuşunu, Safari'yi kanıtlamaz; ilk
+  kurulumda gerçek cihazda bir tur atılmalı.

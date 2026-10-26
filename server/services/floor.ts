@@ -1,0 +1,133 @@
+import { and, asc, eq, gt, inArray, isNull, or } from 'drizzle-orm';
+import { businessDate } from '@shared/time';
+import type { FloorOrderSummary, FloorStateDTO, KitchenTicket } from '@shared/types';
+import { type DB, schema, type Tx } from '../db/client';
+import { userNameMap } from './dto';
+import { getOpenDay } from './orders';
+
+const TYPE_LABEL: Record<string, string> = { tezgah: 'Tezgâh', gelal: 'Gel-al', paket: 'Paket', online: 'Online', masa: 'Masa' };
+
+export function orderLabel(o: { type: string; no: number; deliveryName: string | null; extLabel: string | null; source: string }, tableName?: string | null): string {
+  if (tableName) return tableName;
+  if (o.source === 'laffogato') return o.extLabel ?? 'Online';
+  if (o.deliveryName) return `${TYPE_LABEL[o.type] ?? o.type} · ${o.deliveryName}`;
+  return `${TYPE_LABEL[o.type] ?? o.type} #${o.no}`;
+}
+
+export function floorState(t: Tx | DB): FloorStateDTO {
+  const open = t.select().from(schema.orders).where(eq(schema.orders.status, 'acik')).orderBy(asc(schema.orders.openedAt)).all();
+  const ids = open.map((o) => o.id);
+  const items = ids.length ? t.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, ids)).all() : [];
+  const rooms = ids.length
+    ? t
+        .select()
+        .from(schema.roomSessions)
+        .where(and(inArray(schema.roomSessions.orderId, ids), isNull(schema.roomSessions.endedAt)))
+        .all()
+    : [];
+  const names = userNameMap(t);
+  const tableNames = new Map(t.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((x) => [x.id, x.name]));
+
+  const result: FloorStateDTO = { tables: {}, reservations: [], others: [] };
+  for (const o of open) {
+    const mine = items.filter((i) => i.orderId === o.id && !i.voided);
+    const summary: FloorOrderSummary = {
+      id: o.id,
+      no: o.no,
+      total: o.extPaid ? (o.extTotal ?? 0) : o.total,
+      paid: o.extPaid ? (o.extTotal ?? 0) : o.paid,
+      guests: o.guests,
+      openedAt: o.openedAt,
+      waiterId: o.waiterId,
+      waiterName: o.waiterId ? (names.get(o.waiterId) ?? null) : null,
+      billPrintedAt: o.billPrintedAt,
+      itemCount: mine.reduce((a, i) => a + i.qty, 0),
+      pendingKitchen: mine.filter((i) => i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length,
+      readyToServe: mine.filter((i) => i.status === 'hazir').length,
+      source: o.source,
+      roomStartedAt: rooms.find((r) => r.orderId === o.id)?.startedAt ?? null,
+    };
+    if (o.tableId) (result.tables[o.tableId] ??= []).push(summary);
+    else result.others.push({ ...summary, type: o.type, label: orderLabel(o, o.tableId ? tableNames.get(o.tableId) : null) });
+  }
+
+  const today = businessDate(Date.now());
+  result.reservations = t
+    .select()
+    .from(schema.reservations)
+    .where(and(eq(schema.reservations.date, today), inArray(schema.reservations.status, ['bekliyor', 'geldi'])))
+    .orderBy(asc(schema.reservations.time))
+    .all()
+    .map((r) => ({ id: r.id, tableId: r.tableId, time: r.time, name: r.name, guests: r.guests, status: r.status }));
+  return result;
+}
+
+/** Bar/mutfak ekranı: istasyona düşen ve henüz hazır olmayan kalemler, fiş (adisyon + gönderim) başına gruplu. */
+export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; history?: boolean } = {}): KitchenTicket[] {
+  const now = Date.now();
+  const day = getOpenDay(t);
+  const since = day ? Math.min(day.openedAt, now - 12 * 3600_000) : now - 24 * 3600_000;
+
+  const base = and(gt(schema.orderItems.sentAt, since), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
+  const where = opts.history
+    ? and(base, eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['hazir', 'servis']), gt(schema.orderItems.readyAt, now - 90 * 60_000))
+    : and(
+        base,
+        or(
+          and(eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['yeni', 'hazirlaniyor'])),
+          // Hazırlanırken iptal edilen kalem 10 dakika boyunca üstü çizili görünür
+          and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
+        ),
+      );
+
+  const rows = t
+    .select({ item: schema.orderItems, order: schema.orders })
+    .from(schema.orderItems)
+    .innerJoin(schema.orders, eq(schema.orders.id, schema.orderItems.orderId))
+    .where(and(where, inArray(schema.orders.status, ['acik', 'kapali'])))
+    .orderBy(asc(schema.orderItems.sentAt))
+    .all()
+    .filter((r) => r.item.stationId);
+
+  const names = userNameMap(t);
+  const tableNames = new Map(t.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((x) => [x.id, x.name]));
+  const tickets = new Map<string, KitchenTicket>();
+  for (const { item, order } of rows) {
+    const key = `${order.id}:${item.batch}`;
+    let ticket = tickets.get(key);
+    if (!ticket) {
+      ticket = {
+        key,
+        orderId: order.id,
+        orderNo: order.source === 'laffogato' ? (order.extNo ?? order.no) : order.no,
+        batch: item.batch,
+        label: orderLabel(order, order.tableId ? tableNames.get(order.tableId) : null),
+        type: order.type,
+        source: order.source,
+        waiterName: order.waiterId ? (names.get(order.waiterId) ?? null) : null,
+        note: order.note,
+        sentAt: item.sentAt,
+        scheduledFor: order.scheduledFor,
+        items: [],
+      };
+      tickets.set(key, ticket);
+    }
+    ticket.items.push({
+      id: item.id,
+      name: item.name,
+      size: item.size,
+      optionsText: item.optionsText,
+      qty: item.qty,
+      note: item.note,
+      status: item.status,
+      voided: item.voided,
+      stationId: item.stationId,
+      sentAt: item.sentAt,
+      startedAt: item.startedAt,
+      readyAt: item.readyAt,
+    });
+  }
+  // Yalnız iptal satırı kalan fişte bile iptal bildirimi gösterilsin; ama hiç kalemi kalmayan fiş yok
+  const list = [...tickets.values()].filter((tk) => tk.items.length);
+  return opts.history ? list.sort((a, b) => b.sentAt - a.sentAt) : list;
+}

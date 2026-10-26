@@ -1,0 +1,415 @@
+import type { OrderTotals } from './order-calc';
+import type { Permission, Role } from './permissions';
+
+/** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
+
+export type Size = 'M' | 'L' | 'TEK';
+
+export interface SelectedOption {
+  groupId: string;
+  /** Grup adı: "Süt" */
+  group: string;
+  /** Sitedeki grup anahtarı: milk | roast | syrup | extraShot | sugar */
+  groupKey: string | null;
+  itemId: string;
+  /** Seçenek adı: "Yulaf" */
+  name: string;
+  /** Sitedeki kimlik: "oat" */
+  code: string | null;
+  /** Birim başına fark fiyatı */
+  price: number;
+  qty: number;
+}
+
+export interface MeDTO {
+  id: string;
+  name: string;
+  role: Role;
+  color: string;
+  permissions: Permission[];
+  maxDiscountPct: number;
+}
+
+export interface UserLite {
+  id: string;
+  name: string;
+  role: Role;
+  color: string;
+  active: boolean;
+}
+
+export interface SectionDTO {
+  id: string;
+  name: string;
+  sort: number;
+}
+
+export interface TableDTO {
+  id: string;
+  sectionId: string;
+  name: string;
+  seats: number;
+  shape: 'square' | 'rect' | 'round' | 'bar';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  kind: 'masa' | 'oda';
+  hourlyRate: number | null;
+  siteTableCode: string | null;
+  sort: number;
+}
+
+export interface StationDTO {
+  id: string;
+  name: string;
+  kind: 'bar' | 'mutfak' | 'diger';
+  color: string;
+}
+
+export interface CategoryDTO {
+  id: string;
+  name: string;
+  subtitle: string | null;
+  color: string;
+  sort: number;
+  stationId: string | null;
+  customizable: boolean;
+  extKey: string | null;
+  active: boolean;
+}
+
+export interface ProductDTO {
+  id: string;
+  categoryId: string;
+  name: string;
+  shortName: string | null;
+  description: string | null;
+  price: number;
+  priceL: number | null;
+  kdvRate: number;
+  stationId: string | null;
+  color: string | null;
+  image: string | null;
+  active: boolean;
+  hidden: boolean;
+  favorite: boolean;
+  sort: number;
+  tags: string[];
+  allergens: string[] | null;
+  barcode: string | null;
+  isService: boolean;
+  portionsLeft: number | null;
+  extSource: 'laffogato' | null;
+  extId: string | null;
+  posName: string | null;
+  /** Yalnız rapor.maliyet yetkisi olana dolu gelir */
+  cost?: number | null;
+  /** Bağlı seçenek grupları (sıralı) */
+  optionGroupIds: string[];
+}
+
+export interface OptionItemDTO {
+  id: string;
+  name: string;
+  code: string | null;
+  price: number;
+  isDefault: boolean;
+  maxQty: number;
+  allergens: string[];
+}
+
+export interface OptionGroupDTO {
+  id: string;
+  name: string;
+  kind: 'single' | 'multi' | 'counter';
+  required: boolean;
+  maxSelect: number;
+  extKey: string | null;
+  items: OptionItemDTO[];
+}
+
+export interface PaymentMethodDTO {
+  id: string;
+  name: string;
+  kind: 'nakit' | 'kart' | 'yemek' | 'havale' | 'cari' | 'online' | 'diger';
+  zField: 'cash' | 'card' | 'meal_card' | 'online' | 'other';
+  channel: string | null;
+  color: string;
+}
+
+export interface HappyHourDTO {
+  id: string;
+  name: string;
+  days: number[];
+  start: string;
+  end: string;
+  percent: number;
+  categoryIds: string[];
+  productIds: string[];
+  active: boolean;
+}
+
+export interface BusinessDayDTO {
+  id: string;
+  date: string;
+  zNo: number;
+  openedAt: number;
+  openedByName: string | null;
+  openingCash: number;
+  closedAt: number | null;
+  /** Gün sonundan sonra yeniden açıldıysa son açılış anı */
+  reopenedAt?: number | null;
+}
+
+export interface PublicSettings {
+  businessName: string;
+  businessAddress: string;
+  businessPhone: string;
+  receiptHeader: string;
+  receiptFooter: string;
+  serviceRate: number;
+  autoLockMinutes: number;
+  /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */
+  keepAwake: boolean;
+  voidReasons: string[];
+  compReasons: string[];
+  discountReasons: string[];
+  quickCash: number[];
+  sizeLabels: { M: string; L: string };
+  requireDayOpen: boolean;
+  kitchenWarnMinutes: number;
+  kitchenAlarmMinutes: number;
+  roomBillingStepMinutes: number;
+  roomMinimumMinutes: number;
+  stampGoal: number;
+  stampCategoryKeys: string[];
+  /** Kurulum modu: giriş ekranında örnek PIN'ler yazar. Canlıya geçince kapatılır */
+  demoMode: boolean;
+}
+
+export interface BootstrapDTO {
+  me: MeDTO;
+  settings: PublicSettings;
+  sections: SectionDTO[];
+  tables: TableDTO[];
+  stations: StationDTO[];
+  categories: CategoryDTO[];
+  products: ProductDTO[];
+  optionGroups: OptionGroupDTO[];
+  paymentMethods: PaymentMethodDTO[];
+  happyHours: HappyHourDTO[];
+  users: UserLite[];
+  day: BusinessDayDTO | null;
+  integrations: {
+    okc: { provider: 'kapali' | 'tokenx' | 'simulator'; mode: 'anlik' | 'liste' };
+    laffogatoPanel: boolean;
+    lafmaliyetPush: boolean;
+    laffogatoUrl: string;
+  };
+  serverTime: number;
+}
+
+export interface OrderItemDTO {
+  id: string;
+  productId: string | null;
+  name: string;
+  size: Size;
+  options: SelectedOption[];
+  optionsText: string;
+  qty: number;
+  unitPrice: number;
+  basePrice: number;
+  kdvRate: number;
+  discount: number;
+  discountReason: string | null;
+  happyHour: boolean;
+  complimentary: boolean;
+  compReason: string | null;
+  voided: boolean;
+  voidReason: string | null;
+  voidAfterSend: boolean;
+  note: string | null;
+  stationId: string | null;
+  status: 'yeni' | 'hazirlaniyor' | 'hazir' | 'servis';
+  batch: number;
+  sentAt: number;
+  readyAt: number | null;
+  paidQty: number;
+  isService: boolean;
+  createdBy: string | null;
+  createdAt: number;
+}
+
+export interface PaymentDTO {
+  id: string;
+  methodId: string;
+  methodName: string;
+  zField: string;
+  amount: number;
+  tip: number;
+  given: number | null;
+  change: number | null;
+  items: { itemId: string; qty: number }[] | null;
+  customerId: string | null;
+  note: string | null;
+  userId: string | null;
+  userName: string | null;
+  createdAt: number;
+  refundedAt: number | null;
+  refundReason: string | null;
+}
+
+export interface CustomerLite {
+  id: string;
+  name: string;
+  phone: string | null;
+  balance: number;
+  stamps: number;
+  creditLimit: number | null;
+}
+
+export interface RoomSessionDTO {
+  id: string;
+  startedAt: number;
+  endedAt: number | null;
+  hourlyRate: number;
+}
+
+export interface OrderDTO {
+  id: string;
+  dayId: string;
+  no: number;
+  type: 'masa' | 'tezgah' | 'gelal' | 'paket' | 'online';
+  status: 'acik' | 'kapali' | 'iptal' | 'birlesti';
+  tableId: string | null;
+  tableName: string | null;
+  customer: CustomerLite | null;
+  waiterId: string | null;
+  waiterName: string | null;
+  guests: number;
+  note: string | null;
+  openedAt: number;
+  closedAt: number | null;
+  discountType: 'percent' | 'amount' | null;
+  discountValue: number | null;
+  discountReason: string | null;
+  serviceRate: number;
+  total: number;
+  paid: number;
+  totals: OrderTotals;
+  billPrintedAt: number | null;
+  billPrints: number;
+  source: 'pos' | 'laffogato';
+  extId: string | null;
+  extNo: number | null;
+  extStage: 'new' | 'preparing' | 'ready' | 'done' | null;
+  extFulfillment: 'table' | 'pickup' | 'delivery' | null;
+  extLabel: string | null;
+  extPaid: boolean;
+  extTotal: number | null;
+  scheduledFor: string | null;
+  deliveryName: string | null;
+  deliveryPhone: string | null;
+  deliveryAddress: string | null;
+  deliveryStatus: 'hazirlaniyor' | 'hazir' | 'yolda' | 'teslim' | null;
+  courierId: string | null;
+  cancelReason: string | null;
+  items: OrderItemDTO[];
+  payments: PaymentDTO[];
+  room: RoomSessionDTO | null;
+  version: number;
+  updatedAt: number;
+}
+
+/** Masa planındaki bir masanın canlı durumu */
+export interface FloorOrderSummary {
+  id: string;
+  no: number;
+  total: number;
+  paid: number;
+  guests: number;
+  openedAt: number;
+  waiterId: string | null;
+  waiterName: string | null;
+  billPrintedAt: number | null;
+  itemCount: number;
+  /** Bar/mutfakta bekleyen kalem sayısı */
+  pendingKitchen: number;
+  /** Hazır olup servis bekleyen kalem */
+  readyToServe: number;
+  source: 'pos' | 'laffogato';
+  roomStartedAt: number | null;
+}
+
+export interface FloorStateDTO {
+  tables: Record<string, FloorOrderSummary[]>;
+  reservations: { id: string; tableId: string | null; time: string; name: string; guests: number; status: string }[];
+  /** Masaya bağlı olmayan açık siparişler (tezgah, gel-al, paket, online) */
+  others: (FloorOrderSummary & { type: string; label: string })[];
+}
+
+export interface KitchenTicketItem {
+  id: string;
+  name: string;
+  size: Size;
+  optionsText: string;
+  qty: number;
+  note: string | null;
+  status: 'yeni' | 'hazirlaniyor' | 'hazir' | 'servis';
+  voided: boolean;
+  stationId: string | null;
+  sentAt: number;
+  startedAt: number | null;
+  readyAt: number | null;
+}
+
+export interface KitchenTicket {
+  key: string;
+  orderId: string;
+  orderNo: number;
+  batch: number;
+  label: string;
+  type: string;
+  source: 'pos' | 'laffogato';
+  waiterName: string | null;
+  note: string | null;
+  sentAt: number;
+  scheduledFor: string | null;
+  items: KitchenTicketItem[];
+}
+
+/** lafmaliyet Kasa raporundaki ödeme alanı */
+export type ZField = 'cash' | 'card' | 'meal_card' | 'online' | 'other';
+
+/** Gün sonu (Z) ya da ara rapor (X) özeti. Tutarlar kuruş. */
+export interface ZSummary {
+  orders: number;
+  receipts: number;
+  guests: number;
+  gross: number;
+  discounts: number;
+  complimentary: number;
+  voided: number;
+  voidAfterSendCount: number;
+  service: number;
+  netSales: number;
+  payments: { methodId: string; name: string; zField: ZField; channel: string | null; count: number; amount: number; tips: number }[];
+  byZField: Record<ZField, number>;
+  kdv: { rate: number; gross: number; base: number; kdv: number }[];
+  tips: number;
+  cariSales: number;
+  cariCollections: number;
+  cashIn: number;
+  cashOut: number;
+  handedOver: number;
+  openingCash: number;
+  expectedCash: number;
+  countedCash: number | null;
+  cashDiff: number | null;
+  onlineOrders: number;
+  onlineTotal: number;
+  topProducts: { name: string; qty: number; amount: number }[];
+  byUser: { userId: string; name: string; orders: number; amount: number }[];
+  openOrdersAtClose: number;
+}

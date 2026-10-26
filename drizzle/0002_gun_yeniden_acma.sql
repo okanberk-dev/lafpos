@@ -1,0 +1,1 @@
+ALTER TABLE `business_days` ADD `reopened_at` integer;
