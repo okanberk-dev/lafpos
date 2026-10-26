@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, inArray, isNull, or } from 'drizzle-orm';
 import { businessDate } from '@shared/time';
-import type { FloorOrderSummary, FloorStateDTO, KitchenTicket } from '@shared/types';
+import type { FloorOrderSummary, FloorStateDTO, KitchenTicket, PickupBoardDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { userNameMap } from './dto';
 import { getOpenDay } from './orders';
@@ -63,6 +63,42 @@ export function floorState(t: Tx | DB): FloorStateDTO {
 }
 
 /** Bar/mutfak ekranı: istasyona düşen ve henüz hazır olmayan kalemler, fiş (adisyon + gönderim) başına gruplu. */
+/** Hazır olan sipariş çağrı ekranında bu kadar kalır (teslim edilince hemen düşer) */
+export const PICKUP_READY_MS = 10 * 60_000;
+
+/**
+ * Çağrı ekranı: tezgâh ve gel-al siparişleri ile sitenin gel-al siparişleri. Bar "Hazır"a basınca sipariş
+ * "Hazırlanıyor"dan "Hazır"a geçer; masaya ya da kuryeye giden siparişler burada görünmez.
+ */
+export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
+  const day = getOpenDay(t);
+  const since = day ? Math.min(day.openedAt, now - 12 * 3600_000) : now - 24 * 3600_000;
+  const orders = t
+    .select()
+    .from(schema.orders)
+    .where(and(gt(schema.orders.openedAt, since), inArray(schema.orders.status, ['acik', 'kapali'])))
+    .all()
+    .filter((o) => (o.source === 'pos' && (o.type === 'tezgah' || o.type === 'gelal')) || (o.source === 'laffogato' && o.extFulfillment === 'pickup'));
+  const items = orders.length
+    ? t.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, orders.map((o) => o.id)), eq(schema.orderItems.voided, false))).all()
+    : [];
+  const board: PickupBoardDTO = { preparing: [], ready: [] };
+  for (const o of orders) {
+    const mine = items.filter((i) => i.orderId === o.id && i.stationId);
+    if (!mine.length) continue;
+    const entry = { id: o.id, no: o.source === 'laffogato' ? (o.extNo ?? o.no) : o.no, name: o.deliveryName?.trim().split(/\s+/)[0] || null, online: o.source === 'laffogato' };
+    if (mine.some((i) => i.status === 'yeni' || i.status === 'hazirlaniyor')) {
+      board.preparing.push(entry);
+      continue;
+    }
+    if (mine.every((i) => i.status === 'servis')) continue;
+    const readyAt = Math.max(...mine.map((i) => i.readyAt ?? 0), o.source === 'laffogato' ? o.updatedAt : 0);
+    if (now - readyAt < PICKUP_READY_MS) board.ready.push({ ...entry, readyAt });
+  }
+  board.ready.sort((a, b) => b.readyAt - a.readyAt);
+  return board;
+}
+
 export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; history?: boolean } = {}): KitchenTicket[] {
   const now = Date.now();
   const day = getOpenDay(t);

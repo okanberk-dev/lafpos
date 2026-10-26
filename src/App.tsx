@@ -21,6 +21,7 @@ const ReservationsPage = lazy(() => import('./pages/ReservationsPage'));
 const ReportsPage = lazy(() => import('./pages/reports/ReportsPage'));
 const PatronPage = lazy(() => import('./pages/patron/PatronPage'));
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
+const PickupBoardPage = lazy(() => import('./pages/PickupBoardPage'));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
   const can = useCan();
@@ -33,6 +34,7 @@ function Authed() {
   const qc = useQueryClient();
   const boot = useBootQuery();
   const can = useCan();
+  const location = useLocation();
 
   useEffect(() => {
     startLive(qc);
@@ -58,6 +60,16 @@ function Authed() {
           </button>
         </div>
       </div>
+    );
+  }
+
+  // Müşteriye dönük ekranlar kasa menüsü olmadan tam sayfa açılır (otomatik kilit de yok)
+  if (location.pathname === '/cagri') {
+    if (!can('mutfak.ekran') && !can('siparis.al')) return <Navigate to={homePath(can)} replace />;
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <PickupBoardPage />
+      </Suspense>
     );
   }
 

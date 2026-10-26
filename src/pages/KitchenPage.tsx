@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, PackageX, RotateCcw, Undo2 } from 'lucide-react';
+import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, Layers, MonitorUp, PackageX, RotateCcw, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { kitchenTotals } from '@shared/kitchen';
 import type { KitchenTicket, KitchenTicketItem } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { errorMessage, get, post } from '@/lib/api';
@@ -28,6 +29,8 @@ export default function KitchenPage() {
   const [soldOut, setSoldOut] = useState(false);
   const can = useCan();
   const [sound, setSound] = useLocalPref<boolean>('kds.sound', true);
+  // "Toplam": açık fişlerdeki ürünler toplu (6 latte, 2'si yulaflı); yoğunlukta topluca hazırlamak için
+  const [totalsView, setTotalsView] = useLocalPref<boolean>('kds.toplam', false);
   const now = useTick(5_000);
 
   useEffect(() => {
@@ -70,6 +73,8 @@ export default function KitchenPage() {
   };
 
   const list = useMemo(() => tickets.data ?? [], [tickets.data]);
+  const totals = useMemo(() => kitchenTotals(list), [list]);
+  const showTotals = totalsView && !history;
   const counts = useMemo(() => ({ waiting: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'yeni').length, 0), making: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'hazirlaniyor').length, 0) }), [list]);
 
   return (
@@ -96,6 +101,16 @@ export default function KitchenPage() {
             <span className="tabular rounded-md bg-[var(--admin-primary-soft)] px-2 py-1 text-[var(--admin-primary)]">{counts.making} hazırlanıyor</span>
           </div>
         )}
+        {!history && (
+          <button
+            onClick={() => setTotalsView(!totalsView)}
+            aria-pressed={totalsView}
+            title="Açık fişlerdeki ürünleri topla"
+            className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors pointer-fine:min-h-9', totalsView ? 'border-ink text-ink' : 'border-[var(--admin-border-strong)] hover:bg-surface-2')}
+          >
+            <Layers className="size-4" /> {totalsView ? 'Fişler' : 'Toplam'}
+          </button>
+        )}
         <button onClick={() => setHistory(!history)} className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors pointer-fine:min-h-9', history ? 'border-ink text-ink' : 'border-[var(--admin-border-strong)] hover:bg-surface-2')}>
           <History className="size-4" /> {history ? 'Aktif fişler' : 'Geçmiş'}
         </button>
@@ -104,6 +119,13 @@ export default function KitchenPage() {
             <PackageX className="size-4" /> Tükendi
           </button>
         )}
+        <button
+          onClick={() => window.open('/cagri', 'lafpos-cagri')}
+          title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] px-3 text-sm font-medium transition-colors hover:bg-surface-2 pointer-fine:min-h-9"
+        >
+          <MonitorUp className="size-4" /> Çağrı ekranı
+        </button>
         <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} className="grid size-11 place-items-center rounded-xl border border-[var(--admin-border-strong)] transition-colors hover:bg-surface-2">
           {sound ? <Bell className="size-4" /> : <BellOff className="size-4 text-muted" />}
         </button>
@@ -118,7 +140,36 @@ export default function KitchenPage() {
             </div>
           </div>
         )}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] items-start gap-2">
+        {showTotals && list.length > 0 && (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] items-start gap-2">
+            {totals.map((r) => (
+              <article key={r.key} className="rounded-2xl border border-line bg-surface p-3">
+                <div className="flex items-start gap-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[19px] font-semibold leading-tight">
+                      {r.name}
+                      {r.size !== 'TEK' && <span className="ml-1.5 rounded-md bg-surface-3 px-1.5 text-sm font-semibold">{r.size}</span>}
+                    </span>
+                    <span className="tabular mt-1 block text-[13px] text-muted">
+                      {[r.waiting && `${r.waiting} bekliyor`, r.making && `${r.making} hazırlanıyor`].filter(Boolean).join(' · ')}
+                    </span>
+                  </span>
+                  <span className="tabular text-4xl font-bold leading-none tracking-tight">×{r.qty}</span>
+                </div>
+                {r.options.length > 0 && (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {r.options.map((o) => (
+                      <span key={o.text} className="tabular rounded-md bg-[var(--admin-warning-soft)] px-2 py-0.5 text-sm font-medium text-[var(--admin-warning)]">
+                        {o.text} {o.qty}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] items-start gap-2', showTotals && 'hidden')}>
           {list.map((t) => {
             const live = t.items.filter((i) => !i.voided);
             const age = now - t.sentAt;

@@ -7,7 +7,7 @@ import { Effects } from '../lib/effects';
 import { body, kurus, query } from '../lib/http';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
-import { floorState, kitchenTickets } from '../services/floor';
+import { floorState, kitchenTickets, pickupBoard } from '../services/floor';
 import * as orders from '../services/orders';
 import { startRoom, stopRoom } from '../services/rooms';
 
@@ -273,6 +273,13 @@ posRoutes.get('/kitchen', (c) => {
   const actor = actorFrom(c);
   if (!actor.user.permissions.has('mutfak.ekran') && !actor.user.permissions.has('siparis.al')) needDirect(actor, 'mutfak.ekran');
   return c.json(kitchenTickets(db, { stationId: q.station || null, history: q.history === '1' }));
+});
+
+/** Çağrı ekranı: numara ve yalnız ad; bar ekranıyla aynı yetki */
+posRoutes.get('/kitchen/board', (c) => {
+  const actor = actorFrom(c);
+  if (!actor.user.permissions.has('mutfak.ekran') && !actor.user.permissions.has('siparis.al')) needDirect(actor, 'mutfak.ekran');
+  return c.json(pickupBoard(db));
 });
 
 posRoutes.post('/kitchen/status', async (c) => {

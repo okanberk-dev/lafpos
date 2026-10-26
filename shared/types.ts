@@ -439,3 +439,18 @@ export interface NetworkInfoDTO {
   /** Tailscale adresleri (100.64.0.0/10): telefon Tailscale açıkken her yerden */
   tailscale: NetAddressDTO[];
 }
+
+/** Çağrı ekranı (televizyon ya da tablet): gel-al ve tezgâh siparişleri, numara ve yalnız ad */
+export interface PickupEntryDTO {
+  id: string;
+  no: number;
+  /** Online siparişte müşterinin adı (soyadı gelmez); tezgâhta yok, numara söylenir */
+  name: string | null;
+  online: boolean;
+}
+
+export interface PickupBoardDTO {
+  preparing: PickupEntryDTO[];
+  /** En yeni üstte; hazır olduktan 10 dakika sonra ya da teslim edilince düşer */
+  ready: (PickupEntryDTO & { readyAt: number })[];
+}
