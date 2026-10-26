@@ -114,8 +114,8 @@ describe('LafPOS Uzaktan', () => {
       const body = await read();
       expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null, demo: true });
       expect(JSON.stringify(body)).not.toContain(PASSWORD);
-      // Diğer uçlar anahtarsız kapalı kalır
-      expect((await GET(req('health'))).status).toBe(503);
+      // Kafe bağlanmamışken anahtarsız yalnız demo açılır
+      expect(await (await GET(req('health'))).json()).toMatchObject({ ok: true, demo: true });
     } finally {
       process.env.LAFPOS_CLOUD_SECRET = saved.s;
       process.env.KV_REST_API_URL = saved.k;
@@ -125,8 +125,13 @@ describe('LafPOS Uzaktan', () => {
     const { GET, POST } = await api();
     const saved = new Map(store);
     store.clear();
+    const secretSaved = process.env.LAFPOS_CLOUD_SECRET;
     try {
       expect(await (await GET(req('uzaktan/kurulum'))).json()).toMatchObject({ demo: true });
+      // Demo ortak anahtar olmadan da açılır
+      delete process.env.LAFPOS_CLOUD_SECRET;
+      expect((await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }))).status).toBe(200);
+      process.env.LAFPOS_CLOUD_SECRET = secretSaved;
       const login = await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }));
       const { token, demo } = (await login.json()) as { token: string; demo: boolean };
       expect(demo).toBe(true);
@@ -142,6 +147,7 @@ describe('LafPOS Uzaktan', () => {
       process.env.LAFPOS_UZAKTAN_DEMO = '0';
       expect((await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }))).status).toBe(401);
     } finally {
+      process.env.LAFPOS_CLOUD_SECRET = secretSaved;
       delete process.env.LAFPOS_UZAKTAN_DEMO;
       store.clear();
       for (const [k, v] of saved) store.set(k, v);
