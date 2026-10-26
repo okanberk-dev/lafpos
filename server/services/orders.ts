@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
 import { amountForItems, lineGross, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
@@ -1082,10 +1083,13 @@ export function setItemsStatus(
   const now = Date.now();
   const orders = new Set<string>();
   const stations = new Set<string>();
+  /** Adisyon başına bu dokunuşta "Hazır" olan adet: siparişi alana uyarı */
+  const readyCount = new Map<string, number>();
   for (const it of items) {
     if (it.voided) continue;
     const status = input.status ?? NEXT[it.status];
     if (!status || status === it.status) continue;
+    if (status === 'hazir') readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
     const patch: Partial<ItemRow> = { status };
     if (status === 'yeni') Object.assign(patch, { startedAt: null, readyAt: null, servedAt: null });
     if (status === 'hazirlaniyor') patch.startedAt = it.startedAt ?? now;
@@ -1098,6 +1102,12 @@ export function setItemsStatus(
   for (const id of orders) {
     const o = loadOrder(t, id);
     orderEvents(fx, o, actor.user.id, 'item.status');
+    const ready = readyCount.get(id);
+    if (ready && o.waiterId) {
+      const table = o.tableId ? t.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, o.tableId)).get() : null;
+      const place = table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
+      fx.emit({ topic: 'orders', kind: 'items.ready', orderId: id, tableId: o.tableId ?? undefined, message: `${place} · ${ready} ürün hazır`, forUserId: o.waiterId, byUserId: actor.user.id });
+    }
   }
   for (const s of stations) fx.emit({ topic: 'kitchen', kind: 'ticket.status', stationId: s, byUserId: actor.user.id });
 }

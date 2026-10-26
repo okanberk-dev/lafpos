@@ -10,6 +10,7 @@ import { isAdminArea, POS_NAV } from '@/lib/nav';
 import { useShell } from '@/lib/shell';
 import { useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
+import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
 import { LafMark } from './LafMark';
@@ -59,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [moreOpen, setMoreOpen] = useState(false);
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
+  useReadyAlerts();
   const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
     const on = () => setFull(!!document.fullscreenElement);

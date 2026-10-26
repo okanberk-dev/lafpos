@@ -15,13 +15,14 @@ import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { fmtShortDate, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 
-type ReportKey = 'ciro' | 'satis' | 'kategori' | 'saatlik' | 'adisyon' | 'iptal' | 'ikram' | 'indirim' | 'happy' | 'iade' | 'personel' | 'aktarim';
+type ReportKey = 'ciro' | 'satis' | 'kategori' | 'saatlik' | 'hazirlama' | 'adisyon' | 'iptal' | 'ikram' | 'indirim' | 'happy' | 'iade' | 'personel' | 'aktarim';
 
 const REPORTS: { key: ReportKey; label: string; hint: string; perm?: 'rapor.maliyet' }[] = [
   { key: 'ciro', label: 'Ciro', hint: 'Gelir özeti ve önceki dönem' },
   { key: 'satis', label: 'Satış', hint: 'Ürün bazında' },
   { key: 'kategori', label: 'Kategori', hint: 'Kategori payları' },
   { key: 'saatlik', label: 'Saatlik', hint: 'Yoğun saatler, gün dilimleri' },
+  { key: 'hazirlama', label: 'Hazırlama süresi', hint: 'Bar ve mutfak hızı' },
   { key: 'adisyon', label: 'Adisyonlar', hint: 'Kapanan ve iptal' },
   { key: 'iptal', label: 'İptaller', hint: 'Silinen kalemler' },
   { key: 'ikram', label: 'İkramlar', hint: 'Ciro dışı' },
@@ -84,6 +85,7 @@ export default function ReportsPage() {
       {current.key === 'satis' && <ProductsReport range={range} onExport={() => exportCsv('urunler')} />}
       {current.key === 'kategori' && <CategoryReport range={range} />}
       {current.key === 'saatlik' && <HourlyReport range={range} onExport={() => exportCsv('saatlik')} />}
+      {current.key === 'hazirlama' && <PrepReport range={range} />}
       {current.key === 'adisyon' && <ChecksReport range={range} onExport={() => exportCsv('adisyonlar')} />}
       {(current.key === 'iptal' || current.key === 'ikram' || current.key === 'indirim' || current.key === 'happy') && (
         <ItemsReport range={range} kind={current.key} onExport={current.key === 'happy' ? undefined : () => exportCsv(current.key)} />
@@ -321,6 +323,96 @@ function HourlyReport({ range, onExport }: { range: Range; onExport: () => void 
                 </span>
                 <span className="text-muted">{p.orders} adisyon</span>
                 <span className="tabular w-24 text-right font-semibold">{tl(p.revenue)}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+interface PrepStats {
+  count: number;
+  avg: number;
+  median: number;
+  p90: number;
+  max: number;
+}
+interface PrepData {
+  overall: PrepStats;
+  products: (PrepStats & { name: string; size: string })[];
+  hours: (PrepStats & { hour: number })[];
+  slowest: { orderNo: number; name: string; size: string; sentAt: number; sec: number }[];
+}
+
+/** Saniye → "3 dk 20 sn" */
+function dur(sec: number): string {
+  if (sec < 60) return `${sec} sn`;
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return m >= 60 ? `${Math.floor(m / 60)} sa ${m % 60} dk` : s ? `${m} dk ${s} sn` : `${m} dk`;
+}
+
+/** Bar ve mutfakta hazırlama süresi: gönderilmesinden "Hazır"a. Ortalama ve en yavaş %10 (p90) */
+function PrepReport({ range }: { range: Range }) {
+  const data = useQuery({ queryKey: ['reports', 'prep', range], queryFn: () => get<PrepData>(`/reports/prep?${qs(range)}`) });
+  if (data.isLoading) return <PageLoading />;
+  const p = data.data;
+  if (!p) return null;
+  if (!p.overall.count) return <EmptyState title="Bu dönemde hazırlanan kalem yok">Bar ve mutfak ekranında "Hazır"a basılan kalemler burada sayılır</EmptyState>;
+  const hh = (n: number) => `${String(n).padStart(2, '0')}:00`;
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Ortalama" value={dur(p.overall.avg)} hint={`${p.overall.count} kalem`} />
+        <Stat label="Ortanca" value={dur(p.overall.median)} hint="Kalemlerin yarısı bundan kısa" />
+        <Stat label="En yavaş %10" value={dur(p.overall.p90)} hint="Bu süreyi aşan her 10 kalemden biri" />
+        <Stat label="En uzun" value={dur(p.overall.max)} />
+      </div>
+      <Card flush title="Saate göre ortalama süre">
+        <div className="p-4">
+          <ColumnChart data={p.hours.map((x) => ({ label: String(x.hour).padStart(2, '0'), value: x.avg }))} format={dur} seriesLabel="Ortalama süre" ariaLabel="Saate göre ortalama hazırlama süresi" />
+        </div>
+      </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card flush title="Ürünler (en yavaş önce)">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted">
+                <tr className="border-b border-line">
+                  <th className="px-4 py-2 font-medium">Ürün</th>
+                  <th className="px-2 py-2 text-right font-medium">Adet</th>
+                  <th className="px-2 py-2 text-right font-medium">Ortalama</th>
+                  <th className="px-4 py-2 text-right font-medium">En yavaş %10</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {p.products.map((r) => (
+                  <tr key={`${r.name}|${r.size}`}>
+                    <td className="px-4 py-2 font-medium">
+                      {r.name}
+                      {r.size !== 'TEK' && <span className="ml-1.5 rounded-md bg-surface-3 px-1.5 text-xs font-semibold">{r.size}</span>}
+                    </td>
+                    <td className="tabular px-2 py-2 text-right text-muted">{r.count}</td>
+                    <td className="tabular px-2 py-2 text-right">{dur(r.avg)}</td>
+                    <td className="tabular px-4 py-2 text-right font-semibold">{dur(r.p90)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+        <Card flush title="En uzun bekleyen 10 kalem">
+          <ol className="divide-y divide-line">
+            {p.slowest.map((s, i) => (
+              <li key={`${s.orderNo}-${s.sentAt}-${i}`} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="tabular w-12 text-muted">#{s.orderNo}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {s.name} {s.size !== 'TEK' && <span className="text-muted">{s.size}</span>}
+                </span>
+                <span className="tabular text-muted">{fmtTime(s.sentAt)}</span>
+                <span className="tabular w-24 text-right font-semibold">{dur(s.sec)}</span>
               </li>
             ))}
           </ol>

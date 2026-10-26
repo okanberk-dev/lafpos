@@ -246,7 +246,8 @@ function ProductTile({
     >
       <button
         disabled={off}
-        onClick={() => (twoSizes || !hasOptions ? onQuickAdd(p, twoSizes ? 'M' : 'TEK') : onCustomize(p, 'TEK'))}
+        // Fiyatı 0 olan açık ürün (etkinlik ücreti, özel pasta) fiyat girilsin diye pencereyle açılır
+        onClick={() => ((twoSizes || !hasOptions) && (twoSizes || p.price > 0) ? onQuickAdd(p, twoSizes ? 'M' : 'TEK') : onCustomize(p, 'TEK'))}
         className={cn('flex flex-1 flex-col items-stretch rounded-xl text-left active:bg-surface-2', !withImage && hasOptions && 'pr-11')}
       >
         {withImage && (

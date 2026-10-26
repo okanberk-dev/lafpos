@@ -30,7 +30,16 @@ describe('çağrı ekranı', () => {
     expect(board.preparing.some((e) => e.id === dine.id)).toBe(false);
 
     const ids = sent.items.map((i) => i.id);
+    // "Hazır" siparişi alan kişiye uyarı olarak gider
+    const { bus } = await import('../server/lib/events');
+    const seen: { kind: string; message?: string; forUserId?: string }[] = [];
+    const listen = (e: { kind: string; message?: string; forUserId?: string }) => seen.push(e);
+    bus.on('event', listen);
     await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids, status: 'hazir' });
+    bus.off('event', listen);
+    const alert = seen.find((e) => e.kind === 'items.ready');
+    expect(alert?.message).toBe(`Tezgâh #${counter.no} · 1 ürün hazır`);
+    expect(alert?.forUserId).toBe(counter.waiterId);
     board = await h.ok<PickupBoardDTO>('bar', 'GET', '/kitchen/board');
     expect(board.ready.map((e) => e.id)).toEqual([counter.id]);
     expect(board.preparing.map((e) => e.id)).toEqual([pickup.id]);

@@ -101,7 +101,7 @@ export default function OrderPage() {
     const res = await act(
       (pin) =>
         post<OrderDTO>(`/orders/${order.id}/items`, {
-          items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: l.options, note: l.note || null })),
+          items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: l.options, note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
           approverPin: pin,
         }),
       `${pendingCount} ürün gönderildi`,

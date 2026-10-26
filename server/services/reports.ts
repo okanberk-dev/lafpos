@@ -227,6 +227,46 @@ export function hourlyReport(range: Range) {
   };
 }
 
+// ─── Hazırlama süresi (bara gönderilmesinden "Hazır"a) ───────────────────────
+
+/** Sıralı dizide yüzdelik (en yakın sıra) */
+function percentile(sorted: number[], p: number): number {
+  if (!sorted.length) return 0;
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))];
+}
+
+/**
+ * Bar ve mutfakta hazırlama süresi: kalemin gönderildiği andan "Hazır"a basıldığı ana (saniye). Ürün, saat ve
+ * en yavaş fişler; yoğun saatte kaç barista gerektiğini gösterir. Açık adisyonlar da sayılır (hazırlanmışsa).
+ */
+export function prepReport(range: Range) {
+  const ds = load(range, { includeOpen: true });
+  const orderNo = new Map(ds.orders.map((o) => [o.id, o.no]));
+  const done = ds.items
+    .filter((i) => !i.voided && i.stationId && i.readyAt && i.readyAt >= i.sentAt)
+    .map((i) => ({ id: i.id, orderId: i.orderId, name: i.name, size: i.size, sentAt: i.sentAt, sec: Math.round((i.readyAt! - i.sentAt) / 1000) }));
+  const stats = (secs: number[]) => {
+    const s = [...secs].sort((a, b) => a - b);
+    return { count: s.length, avg: s.length ? Math.round(s.reduce((a, b) => a + b, 0) / s.length) : 0, median: percentile(s, 50), p90: percentile(s, 90), max: s.at(-1) ?? 0 };
+  };
+  const byProduct = new Map<string, { name: string; size: string; secs: number[] }>();
+  for (const d of done) {
+    const key = `${d.name}|${d.size}`;
+    const row = byProduct.get(key) ?? { name: d.name, size: d.size, secs: [] };
+    row.secs.push(d.sec);
+    byProduct.set(key, row);
+  }
+  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, secs: [] as number[] }));
+  for (const d of done) hours[istanbulParts(d.sentAt).hour].secs.push(d.sec);
+  return {
+    range,
+    overall: stats(done.map((d) => d.sec)),
+    products: [...byProduct.values()].map((r) => ({ name: r.name, size: r.size, ...stats(r.secs) })).sort((a, b) => b.p90 - a.p90 || b.count - a.count),
+    hours: hours.filter((h) => h.secs.length).map((h) => ({ hour: h.hour, ...stats(h.secs) })),
+    slowest: [...done].sort((a, b) => b.sec - a.sec).slice(0, 10).map((d) => ({ orderNo: orderNo.get(d.orderId) ?? 0, name: d.name, size: d.size, sentAt: d.sentAt, sec: d.sec })),
+  };
+}
+
 // ─── Personel (maliyet yetkisi: personel tutarları) ─────────────────────────
 
 export function staffReport(range: Range) {

@@ -27,7 +27,7 @@ export function previewTotals(boot: BootstrapDTO, order: OrderDTO, pending: Pend
   if (pending.length === 0) return null;
   const pendingTotal = pending.reduce((a, l) => {
     const p = boot.products.find((x) => x.id === l.productId);
-    return a + (p ? estimateUnit(boot, p, l.size, l.options) * l.qty : 0);
+    return a + (p ? (l.priceOverride ?? estimateUnit(boot, p, l.size, l.options)) * l.qty : 0);
   }, 0);
   return calcOrder({
     lines: [
@@ -130,8 +130,8 @@ export function CartPanel({
               {pending.map((l) => {
                 const p = boot.products.find((x) => x.id === l.productId);
                 if (!p) return null;
-                const unit = estimateUnit(boot, p, l.size, l.options);
-                const text = pendingOptionsText(boot, p, l.options);
+                const unit = l.priceOverride ?? estimateUnit(boot, p, l.size, l.options);
+                const text = [pendingOptionsText(boot, p, l.options), l.priceOverride != null ? 'elle fiyat' : ''].filter(Boolean).join(' · ');
                 return (
                   <li key={l.key} className="flex items-center gap-2 px-3 py-2">
                     <div className="flex items-center rounded-lg border border-[var(--admin-border-strong)] bg-surface">
