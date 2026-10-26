@@ -178,7 +178,7 @@ export function PaymentModal({
           )}
           <div className="mt-6 grid gap-2">
             <Button variant="primary" size="lg" onClick={() => (result.closed ? onDone(true) : setResult(null))}>
-              {result.closed ? 'Tamam' : result.share ? 'Sıradaki pay' : 'Kalanı al'}
+              {result.closed ? (order.type === 'tezgah' ? 'Yeni satış' : 'Tamam') : result.share ? 'Sıradaki pay' : 'Kalanı al'}
             </Button>
             <Button icon={<Printer className="size-4" />} onClick={() => void printBill()}>
               Fiş yazdır

@@ -16,6 +16,7 @@ import {
   Split,
   Square,
   StickyNote,
+  Trash2,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -94,8 +95,8 @@ export default function OrderPage() {
     if (navigator.vibrate) navigator.vibrate(8);
   };
 
-  const send = async () => {
-    if (!pending.length) return;
+  const send = async (): Promise<boolean> => {
+    if (!pending.length) return false;
     setSending(true);
     const res = await act(
       (pin) =>
@@ -106,10 +107,24 @@ export default function OrderPage() {
       `${pendingCount} ürün gönderildi`,
     );
     setSending(false);
-    if (res) {
-      cart.clear(order.id);
-      qc.invalidateQueries({ queryKey: ['kitchen'] });
-      if (!wide) setTab('adisyon');
+    if (!res) return false;
+    cart.clear(order.id);
+    qc.invalidateQueries({ queryKey: ['kitchen'] });
+    if (!wide) setTab('adisyon');
+    return true;
+  };
+
+  // Tezgâhta tek ekran: "Öde" kalemleri bara gönderir ve ödemeyi açar; satış kapanınca ekran yeni satışa hazırdır
+  const counter = order.type === 'tezgah' && !isOnline;
+  const sendAndPay = async () => {
+    if (await send()) setDialog('odeme');
+  };
+  const nextSale = async () => {
+    try {
+      const next = await post<OrderDTO>('/orders', { type: 'tezgah' });
+      navigate(`/adisyon/${next.id}`, { replace: true });
+    } catch {
+      navigate(backPath);
     }
   };
 
@@ -172,12 +187,22 @@ export default function OrderPage() {
 
   const actionBar = (
     <div className="safe-bottom grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface p-3">
-      {pending.length > 0 ? (
+      {pending.length > 0 && counter && can('odeme.al') ? (
+        <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2">
+          <Button size="lg" aria-label="Gönderilmemişleri sil" title="Vazgeç" icon={<Trash2 className="size-4" />} onClick={() => cart.clear(order.id)} />
+          <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={() => void send()}>
+            Gönder
+          </Button>
+          <Button size="lg" variant="primary" loading={sending} onClick={() => void sendAndPay()}>
+            Öde · {tl((previewTotals(boot, order, pending)?.total ?? order.total) - order.paid)}
+          </Button>
+        </div>
+      ) : pending.length > 0 ? (
         <>
           <Button size="lg" onClick={() => cart.clear(order.id)}>
             Vazgeç
           </Button>
-          <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={send}>
+          <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={() => void send()}>
             Gönder ({pendingCount})
           </Button>
         </>
@@ -323,7 +348,8 @@ export default function OrderPage() {
           setDialog(null);
           if (closed) {
             cart.clear(order.id);
-            navigate(backPath);
+            if (counter) void nextSale();
+            else navigate(backPath);
           }
         }}
       />

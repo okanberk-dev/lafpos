@@ -172,6 +172,17 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
       if (existing) return existing;
     }
   }
+  if (input.type === 'tezgah') {
+    // Kasiyerin boş tezgâh adisyonu yeniden kullanılır: "Tezgâh satışı"na her basış ya da satış sonrası "Yeni satış"
+    // yeni boş adisyon açmasın (boşlar birikip gün sonunu tutmasın)
+    const empty = t
+      .select()
+      .from(schema.orders)
+      .where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.status, 'acik'), eq(schema.orders.type, 'tezgah'), eq(schema.orders.source, 'pos'), eq(schema.orders.openedBy, actor.user.id)))
+      .all()
+      .find((o) => !o.customerId && !o.note && orderItems(t, o.id).length === 0 && orderPayments(t, o.id).length === 0);
+    if (empty) return empty;
+  }
   if (input.type === 'paket') needDirect(actor, 'paket.yonet');
   const now = Date.now();
   const settings = getSettings();
