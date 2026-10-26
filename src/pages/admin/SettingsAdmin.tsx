@@ -19,6 +19,7 @@ type Settings = Record<string, unknown> & {
   serviceRate: number;
   autoLockMinutes: number;
   keepAwake: boolean;
+  productImages: boolean;
   voidReasons: string[];
   compReasons: string[];
   discountReasons: string[];
@@ -104,6 +105,7 @@ export default function SettingsAdmin() {
           <div className="grid gap-3 p-4">
             <Toggle checked={s.requireDayOpen} onChange={(v) => set({ requireDayOpen: v })} label="Satış için gün açılmış olmalı" />
             <Toggle checked={s.keepAwake} onChange={(v) => set({ keepAwake: v })} label="Ekran kararmasın (kasa bilgisayarı, bar ve tablet ekranları)" />
+            <Toggle checked={s.productImages} onChange={(v) => set({ productImages: v })} label="Ürün kartlarında görsel (sitedeki fotoğraf; kasa bilgisayarında saklanır)" />
             <div className="flex flex-wrap items-center gap-3">
               <Toggle checked={s.autoDayEnd} onChange={(v) => set({ autoDayEnd: v })} label="Otomatik gün sonu saat" />
               <Input type="number" min={0} max={23} value={s.autoDayEndHour} onChange={(e) => set({ autoDayEndHour: Number(e.target.value) || 0 })} className="w-20" />

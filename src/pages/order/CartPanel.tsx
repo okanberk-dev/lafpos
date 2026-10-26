@@ -1,4 +1,4 @@
-import { Check, ChefHat, CircleDot, Gift, Minus, Pencil, Percent, Plus, Trash2, Undo2, XCircle } from 'lucide-react';
+import { Check, ChefHat, CircleDot, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
@@ -62,8 +62,12 @@ export function CartPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {visibleItems.length === 0 && pending.length === 0 && (
-          <div className="px-6 py-14 text-center text-sm text-muted">
-            Adisyon boş. Soldan ürün seçin; ürünler "Gönder"e basınca bara/mutfağa gider
+          <div className="flex flex-col items-center px-6 py-14 text-center">
+            <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-surface-3 text-muted">
+              <ReceiptText className="size-6" strokeWidth={1.5} />
+            </span>
+            <p className="mt-3 text-sm font-semibold text-ink">Adisyon boş</p>
+            <p className="mt-1 max-w-[30ch] text-[13px] text-muted">Ürüne dokunun; "Gönder"e basınca bara ve mutfağa gider</p>
           </div>
         )}
         <ul className="divide-y divide-[var(--admin-divider)]">

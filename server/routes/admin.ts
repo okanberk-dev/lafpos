@@ -567,6 +567,7 @@ const settingsShape = patchOf(
     serviceRate: z.number().int().min(0).max(30),
     autoLockMinutes: z.number().int().min(0).max(120),
     keepAwake: z.boolean(),
+    productImages: z.boolean(),
     voidReasons: z.array(z.string().max(40)).max(12),
     compReasons: z.array(z.string().max(40)).max(12),
     discountReasons: z.array(z.string().max(40)).max(12),

@@ -8,6 +8,7 @@ import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings } from './lib/settings';
 import { closeDay } from './services/days';
+import { warmProductThumbs } from './services/media';
 import { getOpenDay } from './services/orders';
 import { enqueueDay, flushOutbox } from './sync/lafmaliyet';
 import { onlineOrdersTick, pushSoldOut } from './sync/laffogato-orders';
@@ -26,6 +27,9 @@ async function menuTick() {
   } catch (e) {
     console.warn('[senkron] site menüsü alınamadı:', e instanceof Error ? e.message : e);
   }
+  // Yeni ya da değişen ürün görsellerinin küçük kopyası (kart için); eksik yoksa istek gitmez
+  const fetched = await warmProductThumbs().catch(() => 0);
+  if (fetched) console.log(`[görsel] ${fetched} ürün görseli indirildi`);
 }
 
 /** Günlük SQLite yedeği: data/backups/lafpos-YYYY-MM-DD.db, son N gün tutulur. */

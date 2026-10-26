@@ -13,6 +13,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   serviceRate: 0,
   autoLockMinutes: 0,
   keepAwake: true,
+  productImages: true,
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
   discountReasons: ['Öğrenci', 'Personel', 'Müdavim', 'Kampanya', 'Şikâyet telafisi'],

@@ -172,6 +172,8 @@ export interface PublicSettings {
   autoLockMinutes: number;
   /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */
   keepAwake: boolean;
+  /** Ürün kartlarında sitedeki görsel (küçük kopyası kasa sunucusunda) */
+  productImages: boolean;
   voidReasons: string[];
   compReasons: string[];
   discountReasons: string[];
