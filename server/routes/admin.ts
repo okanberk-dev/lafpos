@@ -80,7 +80,7 @@ const productLocal = z.object({
   description: z.string().max(300).nullish(),
   price: kurus,
   priceL: kurus.nullish(),
-  // %1 kullanılmaz: köşkün sattığı bütün gıda %10 (laffogato kuralı, docs/03-ENTEGRASYON.md §1)
+  // %1 kullanılmaz: köşkün sattığı bütün gıda %10 (laffogato CLAUDE.md "KDV": %1 hiçbir üründe kullanılmaz)
   kdvRate: z.number().int().refine((v) => [0, 10, 20].includes(v), 'KDV 0, 10 ya da 20 olmalı'),
   isService: z.boolean().optional(),
 });
@@ -589,7 +589,8 @@ adminRoutes.patch('/payment-methods/:id', async (c) => {
   const input = await body(c, patchOf(methodShape));
   const m = db.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, c.req.param('id'))).get();
   if (!m) throw notFound('Ödeme türü');
-  assertCashPair(input.kind ?? m.kind, input.zField ?? m.zField);
+  // Yalnız tür ya da alan değişiyorsa: eski bir uyumsuz kayıt kapatılabilsin ("Kapat" yalnız `active` gönderir)
+  if (input.kind !== undefined || input.zField !== undefined) assertCashPair(input.kind ?? m.kind, input.zField ?? m.zField);
   db.update(schema.paymentMethods).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.paymentMethods.id, c.req.param('id'))).run();
   changed('settings', 'method.updated', user.id);
   return c.json({ ok: true });

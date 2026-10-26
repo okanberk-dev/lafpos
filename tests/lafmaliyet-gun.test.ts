@@ -295,6 +295,7 @@ describe('dünden açık kalan gün', () => {
     const open = await sell([{ name: 'Espresso', size: 'M' }]);
     const idle = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: room.id });
     const toCancel = await sell([{ name: 'Americano', size: 'M' }]);
+    const toSplit = await sell([{ name: 'Espresso', size: 'M' }, { name: 'Americano', size: 'M' }]);
     // 05:00 geçti, gün sonu alınmadı: günün tarihi dün
     const today = businessDate(Date.now());
     const [y, m, d] = today.split('-').map(Number);
@@ -315,6 +316,12 @@ describe('dünden açık kalan gün', () => {
 
     expect((await pay(open, 'Nakit')).closed).toBe(true);
     await h.ok('mudur', 'POST', `/orders/${toCancel.id}/cancel`, { reason: 'Müşteri gitti' });
+    // Hesap bölme yeni satış değil: kalem yeni adisyona taşınır, iki adisyon da ödenir
+    const moved = await h.ok<{ source: OrderDTO; target: OrderDTO }>('kasa', 'POST', `/orders/${toSplit.id}/transfer`, { items: [{ itemId: toSplit.items[1]!.id, qty: 1 }] });
+    expect(moved.target.id).not.toBe(toSplit.id);
+    expect(moved.target.items.map((i) => i.name)).toEqual(['Americano']);
+    expect((await pay(moved.source, 'Nakit')).closed).toBe(true);
+    expect((await pay(moved.target, 'Nakit')).closed).toBe(true);
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
     const closed = db.select().from(schema.businessDays).where(and(eq(schema.businessDays.id, day.id))).get()!;
     expect(closed.closedAt).not.toBeNull();
@@ -378,5 +385,10 @@ describe('yönetim doğrulamaları', () => {
     // Düzenlemede de kayıtlı değerle birlikte denetlenir: yalnız türü nakde çevirmek reddedilir
     expect((await h.call<{ code: string }>('patron', 'PATCH', `/admin/payment-methods/${ok.id}`, { kind: 'nakit' })).json.code).toBe('cash_pair');
     expect((await h.call('patron', 'PATCH', `/admin/payment-methods/${ok.id}`, { kind: 'nakit', zField: 'cash', channel: null })).status).toBe(200);
+    // Kuraldan önce kaydedilmiş uyumsuz tür kapatılabilir (yalnız `active`); türü ya da alanı değişince denetlenir
+    const { db, schema } = modules;
+    db.update(schema.paymentMethods).set({ kind: 'kart', zField: 'cash' }).where(eq(schema.paymentMethods.id, ok.id)).run();
+    expect((await h.call('patron', 'PATCH', `/admin/payment-methods/${ok.id}`, { active: false })).status).toBe(200);
+    expect((await h.call<{ code: string }>('patron', 'PATCH', `/admin/payment-methods/${ok.id}`, { zField: 'cash', kind: 'kart' })).json.code).toBe('cash_pair');
   });
 });

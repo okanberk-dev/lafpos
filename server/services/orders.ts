@@ -182,9 +182,13 @@ export interface CreateOrderInput {
   scheduledFor?: string | null;
 }
 
-export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrderInput): OrderRow {
+/**
+ * `staleOk`: yalnız hesap bölme (kalem taşıma) için. Taşınan kalemler o günün satışıdır, yeni satış değil: dünden açık
+ * kalan günde de hesap bölünebilsin, yoksa adisyon kapanmaz ve gün sonu alınamaz. İstemciden gelmez (rota gövdesi değil).
+ */
+export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrderInput, opts: { staleOk?: boolean } = {}): OrderRow {
   needDirect(actor, 'siparis.al');
-  const day = requireCurrentDay(t);
+  const day = opts.staleOk ? requireOpenDay(t) : requireCurrentDay(t);
   if (input.type === 'masa') {
     if (!input.tableId) throw bad('Masa seçilmeli');
     const table = t.select().from(schema.tables).where(eq(schema.tables.id, input.tableId)).get();
@@ -676,12 +680,18 @@ export function transferItems(
         : undefined;
     target =
       existing ??
-      createOrder(t, actor, fx, {
-        type: tableId ? 'masa' : source.type === 'masa' ? 'tezgah' : (source.type as 'tezgah' | 'gelal' | 'paket'),
-        tableId,
-        guests: 1,
-        newCheck: true,
-      });
+      createOrder(
+        t,
+        actor,
+        fx,
+        {
+          type: tableId ? 'masa' : source.type === 'masa' ? 'tezgah' : (source.type as 'tezgah' | 'gelal' | 'paket'),
+          tableId,
+          guests: 1,
+          newCheck: true,
+        },
+        { staleOk: true },
+      );
   }
   if (target.id === source.id) throw bad('Kaynak ve hedef aynı');
 
