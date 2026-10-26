@@ -23,7 +23,7 @@ describe('çağrı ekranı', () => {
     const dine = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table.id });
     await h.ok('garson', 'POST', `/orders/${dine.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
 
-    let board = await h.ok<PickupBoardDTO>('bar', 'GET', '/kitchen/board');
+    let board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
     expect(board.preparing.map((e) => e.no).sort()).toEqual([counter.no, pickup.no].sort());
     // Yalnız ad: soyadı çağrı ekranına çıkmaz
     expect(board.preparing.find((e) => e.id === pickup.id)?.name).toBe('Ayşe');
@@ -40,7 +40,7 @@ describe('çağrı ekranı', () => {
     const alert = seen.find((e) => e.kind === 'items.ready');
     expect(alert?.message).toBe(`Tezgâh #${counter.no} · 1 ürün hazır`);
     expect(alert?.forUserId).toBe(counter.waiterId);
-    board = await h.ok<PickupBoardDTO>('bar', 'GET', '/kitchen/board');
+    board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
     expect(board.ready.map((e) => e.id)).toEqual([counter.id]);
     expect(board.preparing.map((e) => e.id)).toEqual([pickup.id]);
 
@@ -49,8 +49,9 @@ describe('çağrı ekranı', () => {
     expect(pickupBoard(db, Date.now() + PICKUP_READY_MS + 1000).ready).toEqual([]);
 
     await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids, status: 'servis' });
-    board = await h.ok<PickupBoardDTO>('bar', 'GET', '/kitchen/board');
+    board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
     expect(board.ready).toEqual([]);
-    expect((await h.call('', 'GET', '/kitchen/board')).status).toBe(401);
+    // Eski oturumlu uç yok; çağrı ekranı oturumsuz okur
+    expect((await h.call('bar', 'GET', '/kitchen/board')).status).toBe(404);
   });
 });

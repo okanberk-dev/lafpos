@@ -1,13 +1,11 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router';
 import { tl } from '@shared/money';
 import type { DisplayStateDTO } from '@shared/types';
 import { LafMark } from '@/components/LafMark';
 import { get } from '@/lib/api';
-import { useBoot } from '@/lib/boot';
 import { useTick } from '@/lib/hooks';
-import { onLive } from '@/lib/live';
+import { useBusinessName } from '@/lib/publicInfo';
 import { useWakeLock } from '@/lib/wakelock';
 
 /** "Teşekkürler" bu kadar kalır, sonra hoş geldiniz */
@@ -15,24 +13,16 @@ const THANKS_MS = 10_000;
 
 /**
  * Müşteri ekranı (ikinci monitör ya da müşteriye dönük tablet): kasadaki adisyonun kalemleri ve tutarı, ödeme
- * bitince teşekkür, boşta hoş geldiniz. Kasa Adisyon › İşlemler › Müşteri ekranı'ndan yansıtır; ekran adı ?ekran=.
+ * bitince teşekkür, boşta hoş geldiniz. Kasa Adisyon › İşlemler › Müşteri ekranı'ndan yansıtır; ekran adı ?ekran=. Personel girişi istemez.
  */
 export default function CustomerDisplayPage() {
-  const boot = useBoot();
-  const qc = useQueryClient();
+  const businessName = useBusinessName();
   const now = useTick(2_000);
   const [params] = useSearchParams();
   const code = (params.get('ekran') ?? 'kasa').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || 'kasa';
   useWakeLock(true);
-  const q = useQuery({ queryKey: ['display', code], queryFn: () => get<DisplayStateDTO>(`/display/${code}`), refetchInterval: 15_000 });
-
-  useEffect(
-    () =>
-      onLive((e) => {
-        if (e.kind === 'display.update' && e.message === code) void qc.invalidateQueries({ queryKey: ['display', code] });
-      }),
-    [qc, code],
-  );
+  // Oturumsuz ekran: canlı bağlantı yok, sık yoklanır (yalnız bellekten okunan küçük bir yanıt)
+  const q = useQuery({ queryKey: ['display', code], queryFn: () => get<DisplayStateDTO>(`/public/display/${code}`), refetchInterval: 1_500 });
 
   const s = q.data;
   const state: DisplayStateDTO = !s || (s.kind === 'thanks' && now - s.at > THANKS_MS) ? { kind: 'idle', at: 0 } : s;
@@ -69,7 +59,7 @@ export default function CustomerDisplayPage() {
           <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6">
             <div className="flex flex-1 flex-col items-center justify-center text-center">
               <LafMark className="h-16 text-ink" />
-              <p className="mt-4 text-lg font-medium text-ink-2">{boot.settings.businessName}</p>
+              <p className="mt-4 text-lg font-medium text-ink-2">{businessName}</p>
             </div>
             {state.discount > 0 && (
               <div className="tabular flex justify-between text-lg text-muted">
@@ -103,7 +93,7 @@ export default function CustomerDisplayPage() {
             ) : (
               <>
                 <h1 className="mt-8 text-4xl font-semibold tracking-tight md:text-5xl">Hoş geldiniz</h1>
-                <p className="mt-3 text-xl text-muted">{boot.settings.businessName}</p>
+                <p className="mt-3 text-xl text-muted">{businessName}</p>
               </>
             )}
           </div>

@@ -9,7 +9,7 @@ import { bus } from './lib/events';
 import { getSettings } from './lib/settings';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
-import { getOpenDay } from './services/orders';
+import { getOpenDay, isEmptyOrder } from './services/orders';
 import { enqueueDay, flushOutbox } from './sync/lafmaliyet';
 import { onlineOrdersTick, pushSoldOut } from './sync/laffogato-orders';
 import { runMenuSync } from './sync/menu-sync';
@@ -66,7 +66,13 @@ function autoDayEndTick() {
   const day = getOpenDay(db);
   // Yeni açılmış (ya da gün sonundan sonra yeniden açılmış) gün hemen kapatılmaz
   if (!day || Date.now() - Math.max(day.openedAt, day.reopenedAt ?? 0) < 3 * 3600_000) return;
-  const open = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos'))).all();
+  // Boş adisyonlar (satış sonrası açılan yeni tezgâh gibi) engel değil: gün sonu onları kapatır
+  const open = db
+    .select({ id: schema.orders.id })
+    .from(schema.orders)
+    .where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos')))
+    .all()
+    .filter((o) => !isEmptyOrder(db, o.id));
   const fx = new Effects();
   if (open.length) {
     if (Date.now() - lastAutoWarn > 30 * 60_000) {

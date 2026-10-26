@@ -70,23 +70,6 @@ function Authed() {
 
   if (REMOTE && !REMOTE_PATHS.includes(location.pathname) && !location.pathname.startsWith('/adisyon/')) return <Navigate to="/patron" replace />;
 
-  // Müşteriye dönük ekranlar kasa menüsü olmadan tam sayfa açılır (otomatik kilit de yok)
-  if (location.pathname === '/musteri-ekrani') {
-    return (
-      <Suspense fallback={<PageLoading />}>
-        <CustomerDisplayPage />
-      </Suspense>
-    );
-  }
-  if (location.pathname === '/cagri') {
-    if (!can('mutfak.ekran') && !can('siparis.al')) return <Navigate to={homePath(can)} replace />;
-    return (
-      <Suspense fallback={<PageLoading />}>
-        <PickupBoardPage />
-      </Suspense>
-    );
-  }
-
   return (
     <AppShell>
       <Suspense fallback={<PageLoading />}>
@@ -118,6 +101,11 @@ export function App() {
     init();
   }, [init]);
 
+  // Müşteriye dönük ekranlar (çağrı, müşteri ekranı) personel girişi istemez: tablette ya da televizyonda kimsenin
+  // oturumu açık kalmaz; kasa menüsü ve otomatik kilit yok. Uzaktan görünümde yoklar
+  if (!REMOTE && (location.pathname === '/cagri' || location.pathname === '/musteri-ekrani')) {
+    return <Suspense fallback={<PageLoading />}>{location.pathname === '/cagri' ? <PickupBoardPage /> : <CustomerDisplayPage />}</Suspense>;
+  }
   if (!ready) return <PageLoading label="LafPOS açılıyor" />;
   if (!me) {
     if (location.pathname !== '/giris') return <Navigate to="/giris" replace state={{ from: location.pathname }} />;

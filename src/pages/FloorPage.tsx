@@ -16,6 +16,7 @@ import { cn } from '@/lib/cn';
 import { useLocalPref, useMediaQuery, useTick } from '@/lib/hooks';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
+import { openCounterSale } from '@/lib/counter';
 
 export default function FloorPage() {
   const boot = useBoot();
@@ -34,7 +35,7 @@ export default function FloorPage() {
   const effectiveView = wide ? view : 'liste';
 
   const open = useMutation({
-    mutationFn: (body: Record<string, unknown>) => post<OrderDTO>('/orders', body),
+    mutationFn: (body: Record<string, unknown>) => (body.type === 'tezgah' ? openCounterSale() : post<OrderDTO>('/orders', body)),
     onSuccess: (o) => navigate(`/adisyon/${o.id}`),
     onError: (e) => toast.err(errorMessage(e)),
   });

@@ -50,6 +50,7 @@ import { ProductPanel } from './ProductPanel';
 import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal } from './TableOps';
 import { useOrder } from './useOrder';
 import { REMOTE } from '@/lib/remote';
+import { openCounterSale } from '@/lib/counter';
 
 type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
 
@@ -130,7 +131,7 @@ export default function OrderPage() {
   };
   const nextSale = async () => {
     try {
-      const next = await post<OrderDTO>('/orders', { type: 'tezgah' });
+      const next = await openCounterSale();
       navigate(`/adisyon/${next.id}`, { replace: true });
     } catch {
       navigate(backPath);
@@ -368,7 +369,7 @@ export default function OrderPage() {
             Ekranı yeni pencerede aç
           </Button>
           <p className="text-xs text-muted">
-            İkinci monitörde pencereyi oraya taşıyıp tam ekran yapın. Müşteriye dönük tablette tarayıcıda {window.location.origin}/musteri-ekrani adresini açıp bir personel PIN'iyle girin.
+            İkinci monitörde pencereyi oraya taşıyıp tam ekran yapın. Müşteriye dönük tablette tarayıcıda {window.location.origin}/musteri-ekrani adresini açın; personel girişi gerekmez.
           </p>
         </div>
       </Modal>

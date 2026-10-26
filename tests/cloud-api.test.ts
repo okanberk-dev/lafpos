@@ -87,6 +87,16 @@ describe('LafPOS Uzaktan', () => {
     expect(((await write.json()) as { code: string }).code).toBe('remote_readonly');
   });
 
+  it('buluta kişisel veri gitmez: müşteri ve teslimat kişisinin yalnız adı', async () => {
+    const { buildSnapshot } = await import('../server/sync/cloud');
+    const cust = await h.ok<{ id: string }>('patron', 'POST', '/customers', { name: 'Mehmet Kaya', phone: '05321112233' });
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Ayşe Demir', deliveryPhone: '05449998877', deliveryAddress: 'Moda Cd. No:5', customerId: cust.id });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: h.boot.products.find((p) => p.name === 'Latte')!.id, size: 'M', qty: 1 }] });
+    const text = JSON.stringify(buildSnapshot());
+    for (const secret of ['05321112233', '05449998877', 'Moda Cd', 'Kaya', 'Demir', 'creditLimit', 'pinHash']) expect(text).not.toContain(secret);
+    expect(text).toContain('Ayşe');
+  });
+
   it('parola denemesi IP başına sınırlı', async () => {
     const { POST } = await api();
     let last = 0;

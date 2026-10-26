@@ -53,7 +53,7 @@ async function download(src: URL): Promise<Thumb | null> {
   // Küçültme ucu yanıt vermezse görselin aslı (boyut sınırıyla)
   for (const target of [optimized, src.href]) {
     try {
-      const res = await fetch(target, { headers: { accept: 'image/webp,image/png,image/*;q=0.8' }, signal: AbortSignal.timeout(15_000) });
+      const res = await fetch(target, { headers: { accept: 'image/webp,image/png,image/*;q=0.8' }, signal: AbortSignal.timeout(15_000), redirect: 'error' });
       const type = res.headers.get('content-type')?.split(';')[0].trim() ?? '';
       if (!res.ok || !Object.values(TYPES).includes(type)) continue;
       const body = Buffer.from(await res.arrayBuffer());

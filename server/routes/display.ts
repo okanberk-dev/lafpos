@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { DisplayStateDTO } from '@shared/types';
-import { type AppEnv, can, requirePermission } from '../lib/auth';
+import { db } from '../db/client';
+import { pickupBoard } from '../services/floor';
+import { type AppEnv, requirePermission } from '../lib/auth';
 import { bus } from '../lib/events';
 import { bad, body, kurus } from '../lib/http';
 
@@ -10,6 +12,9 @@ import { bad, body, kurus } from '../lib/http';
  * Durum yalnız bellekte; sunucu yeniden başlarsa ekran "hoş geldiniz"e döner. Ekran adı ile birden çok kasa.
  */
 export const displayRoutes = new Hono<AppEnv>();
+/** Ekranın okuması oturumsuz: müşteriye dönük tablet ya da televizyon personel PIN'iyle açık durmasın */
+export const displayPublicRoutes = new Hono<AppEnv>();
+const MAX_DISPLAYS = 20;
 
 const states = new Map<string, DisplayStateDTO>();
 /** Ekran adı: küçük harf, rakam, tire */
@@ -33,17 +38,22 @@ const stateShape = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('thanks'), total: kurus }),
 ]);
 
-displayRoutes.get('/:code', (c) => {
+displayPublicRoutes.get('/display/:code', (c) => {
   const k = codeOf(c.req.param('code'));
   return c.json(states.get(k) ?? ({ kind: 'idle', at: 0 } satisfies DisplayStateDTO));
 });
 
 displayRoutes.put('/:code', async (c) => {
+  // Müşterinin gördüğü tutarı yalnız ödeme alan değiştirir (garson tableti değil)
   const user = c.get('user');
-  if (!can(user, 'odeme.al')) requirePermission(user, 'siparis.al');
+  requirePermission(user, 'odeme.al');
   const k = codeOf(c.req.param('code'));
+  if (!states.has(k) && states.size >= MAX_DISPLAYS) throw bad('Çok fazla ekran adı', 'display_limit');
   const state = { ...(await body(c, stateShape)), at: Date.now() } as DisplayStateDTO;
   states.set(k, state);
   bus.publish({ topic: 'orders', kind: 'display.update', message: k, byUserId: user.id });
   return c.json({ ok: true });
 });
+
+/** Çağrı ekranı (oturumsuz): numara ve yalnız ad; televizyonda zaten herkes görür */
+displayPublicRoutes.get('/board', (c) => c.json(pickupBoard(db)));

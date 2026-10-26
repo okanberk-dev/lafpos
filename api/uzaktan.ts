@@ -74,16 +74,19 @@ export function originalUrl(raw: string): URL {
 
 // ─── Oturum belirteci: süre.nonce.imza ───────────────────────────────────────
 
+/** İmzaya parolanın özeti de girer: parola değişince bütün uzaktan oturumlar düşer */
+const passwordTag = () => createHash('sha256').update(`uzaktan-parola:${env('LAFPOS_UZAKTAN_PAROLA')}`).digest('hex').slice(0, 16);
+
 export function issueToken(key: string, nowMs = Date.now()): string {
   const exp = Math.floor(nowMs / 1000) + TOKEN_HOURS * 3600;
   const body = `${exp}.${randomBytes(9).toString('base64url')}`;
-  return `${body}.${createHmac('sha256', key).update(`uzaktan:${body}`).digest('base64url')}`;
+  return `${body}.${createHmac('sha256', key).update(`uzaktan:${passwordTag()}:${body}`).digest('base64url')}`;
 }
 
 export function tokenValid(key: string, token: string, nowMs = Date.now()): boolean {
   const [exp, nonce, sig] = token.split('.');
   if (!exp || !nonce || !sig || Number(exp) * 1000 < nowMs) return false;
-  return sameText(sig, createHmac('sha256', key).update(`uzaktan:${exp}.${nonce}`).digest('base64url'));
+  return sameText(sig, createHmac('sha256', key).update(`uzaktan:${passwordTag()}:${exp}.${nonce}`).digest('base64url'));
 }
 
 // ─── Upstash Redis (REST) ────────────────────────────────────────────────────
@@ -132,6 +135,9 @@ async function handle(req: Request): Promise<Response> {
     } catch {
       return fail(400, 'Özet okunamadı', 'bad_body');
     }
+    // Eski (yeniden gönderilen) özet yenisini ezmez
+    const current = await snapshot();
+    if (current && typeof snap.at === 'number' && snap.at <= current.at) return json({ ok: true, stale: true });
     await redis('SET', SNAPSHOT_KEY, JSON.stringify(snap), 'EX', 7 * 86400);
     return json({ ok: true });
   }

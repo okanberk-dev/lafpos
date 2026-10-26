@@ -75,6 +75,18 @@ function assertNoPendingDevice(t: Tx | DB, orderId: string) {
   if (pending) throw conflict('Bu adisyonun sepeti yazarkasada bekliyor; önce cihazda ödeyin ya da sepeti iptal edin', 'okc_pending');
 }
 
+/**
+ * Parasal izi olmayan adisyon: kalem ve ödeme satırı yok, oda sayacı çalışmıyor, yazarkasada sepeti yok.
+ * Gün sonu ve otomatik gün sonu bunları kendiliğinden kapatır; tek ölçüt burada (inceleme, 26 Eki 2026 gece).
+ */
+export function isEmptyOrder(t: Tx | DB, orderId: string): boolean {
+  if (orderItems(t, orderId).length || orderPayments(t, orderId).length) return false;
+  const room = t.select({ id: schema.roomSessions.id }).from(schema.roomSessions).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).get();
+  if (room) return false;
+  const basket = t.select({ id: schema.fiscalReceipts.id }).from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.orderId, orderId)).get();
+  return !basket;
+}
+
 export function assertNoActiveRoom(t: Tx | DB, orderId: string) {
   const active = t
     .select()
@@ -150,6 +162,8 @@ export interface CreateOrderInput {
   note?: string | null;
   /** Masada açık adisyon varken ikinci (ayrı) adisyon aç */
   newCheck?: boolean;
+  /** Tezgâh: bu cihazın son boş tezgâh adisyonu (sessionStorage); boşsa yeniden kullanılır */
+  reuse?: string | null;
   deliveryName?: string | null;
   deliveryPhone?: string | null;
   deliveryAddress?: string | null;
@@ -173,16 +187,25 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
       if (existing) return existing;
     }
   }
-  if (input.type === 'tezgah') {
-    // Kasiyerin boş tezgâh adisyonu yeniden kullanılır: "Tezgâh satışı"na her basış ya da satış sonrası "Yeni satış"
-    // yeni boş adisyon açmasın (boşlar birikip gün sonunu tutmasın)
-    const empty = t
-      .select()
-      .from(schema.orders)
-      .where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.status, 'acik'), eq(schema.orders.type, 'tezgah'), eq(schema.orders.source, 'pos'), eq(schema.orders.openedBy, actor.user.id)))
-      .all()
-      .find((o) => !o.customerId && !o.note && orderItems(t, o.id).length === 0 && orderPayments(t, o.id).length === 0);
-    if (empty) return empty;
+  if (input.type === 'tezgah' && input.reuse) {
+    // Yalnız bu cihazın kendi boş tezgâh adisyonu yeniden kullanılır (istemci kimliğini verir): aynı PIN'le açık
+    // iki kasa aynı adisyonu almasın. İndirimli, bölünmüş, müşterili ya da notlu adisyon yeni satış değildir
+    const prev = t.select().from(schema.orders).where(eq(schema.orders.id, input.reuse)).get();
+    if (
+      prev &&
+      prev.status === 'acik' &&
+      prev.type === 'tezgah' &&
+      prev.source === 'pos' &&
+      prev.dayId === day.id &&
+      prev.openedBy === actor.user.id &&
+      !prev.customerId &&
+      !prev.note &&
+      prev.discountType == null &&
+      prev.splitPeople == null &&
+      isEmptyOrder(t, prev.id)
+    ) {
+      return prev;
+    }
   }
   if (input.type === 'paket') needDirect(actor, 'paket.yonet');
   const now = Date.now();
@@ -495,6 +518,8 @@ export function setOrderDiscount(
   const value = input.type === 'percent' ? Math.min(100, Math.max(0, Math.round(input.value))) : Math.max(0, Math.trunc(input.value));
   const before = calcFor({ ...o, discountType: null, discountValue: null }, orderItems(t, orderId));
   const subtotal = before.gross - before.lineDiscounts;
+  // Boş adisyona indirim verilmez: yetki ve uyarı eşiği tutara göre ölçülür, sonra eklenen kalemlere sessizce uygulanırdı
+  if (subtotal <= 0) throw bad('Önce ürün ekleyin; indirim boş adisyona verilmez', 'empty_order');
   const amount = input.type === 'percent' ? percentOf(subtotal, value) : Math.min(subtotal, value);
   const pct = subtotal > 0 ? (amount * 100) / subtotal : 0;
   const approverId = discountApproval(actor, pct);

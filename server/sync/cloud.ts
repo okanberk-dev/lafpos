@@ -1,6 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { eq } from 'drizzle-orm';
 import type { Permission } from '@shared/permissions';
+import type { OrderDTO } from '@shared/types';
 import { db, schema } from '../db/client';
 import { env } from '../env';
 import type { AuthUser } from '../lib/auth';
@@ -32,17 +33,38 @@ const VIEWER: AuthUser = {
 
 export const cloudEnabled = () => !!env.cloudUrl && env.cloudSecret.length >= MIN_SECRET_LENGTH;
 
+/** Kişisel veri buluta gitmez: müşteri ve teslimat kişisinin yalnız adı; telefon, adres, cari bakiye ve limit yok */
+const firstName = (s: string | null | undefined) => (s ? (s.trim().split(/\s+/)[0] ?? null) : null);
+
+function remoteOrder(o: OrderDTO): OrderDTO {
+  return {
+    ...o,
+    customer: o.customer ? ({ id: o.customer.id, name: firstName(o.customer.name) ?? '' } as OrderDTO['customer']) : null,
+    deliveryName: firstName(o.deliveryName),
+    deliveryPhone: null,
+    deliveryAddress: null,
+    extId: null,
+  };
+}
+
 export function buildSnapshot(now = Date.now()) {
   const open = db.select().from(schema.orders).where(eq(schema.orders.status, 'acik')).all();
+  // Etiketlerdeki tam ad (Gel-al · Ayşe Yılmaz) yalnız ada iner
+  const shorten = (label: string) => open.reduce((l, o) => (o.deliveryName && l.includes(o.deliveryName) ? l.replace(o.deliveryName, firstName(o.deliveryName) ?? '') : l), label);
+  const floor = floorState(db);
   return {
     v: 1,
     at: now,
     bootstrap: bootstrap(db, VIEWER),
     patron: patronLive(false),
-    floor: floorState(db),
-    kitchen: kitchenTickets(db),
+    floor: {
+      ...floor,
+      others: floor.others.map((x) => ({ ...x, label: shorten(x.label) })),
+      reservations: floor.reservations.map((r) => ({ ...r, name: firstName(r.name) ?? '' })),
+    },
+    kitchen: kitchenTickets(db).map((k) => ({ ...k, label: shorten(k.label) })),
     board: pickupBoard(db, now),
-    orders: Object.fromEntries(open.map((o) => [o.id, orderToDTO(db, o)])),
+    orders: Object.fromEntries(open.map((o) => [o.id, remoteOrder(orderToDTO(db, o))])),
   };
 }
 

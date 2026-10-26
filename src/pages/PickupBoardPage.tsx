@@ -1,13 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { fmtTime } from '@shared/time';
 import type { PickupBoardDTO, PickupEntryDTO } from '@shared/types';
 import { LafMark } from '@/components/LafMark';
 import { get } from '@/lib/api';
-import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
-import { onLive } from '@/lib/live';
+import { useBusinessName } from '@/lib/publicInfo';
 import { beep, unlockAudio } from '@/lib/sound';
 import { useWakeLock } from '@/lib/wakelock';
 
@@ -17,22 +16,14 @@ const FRESH_MS = 45_000;
 /**
  * Çağrı ekranı (televizyon ya da müşteriye dönük tablet): tezgâh ve gel-al siparişlerinin numarası, online
  * siparişte yalnız ad. Bar "Hazır"a basınca numara sağa geçer, ses çalar; 10 dakika sonra ya da teslim edilince
- * düşer. Kasa menüsü olmadan tam ekran açılır (Bar ekranındaki "Çağrı ekranı" düğmesi yeni pencerede açar).
+ * düşer. Kasa menüsü olmadan tam ekran açılır, personel girişi istemez (Bar ekranındaki "Çağrı ekranı" düğmesi yeni pencerede açar).
  */
 export default function PickupBoardPage() {
-  const boot = useBoot();
-  const qc = useQueryClient();
+  const businessName = useBusinessName();
   const now = useTick(5_000);
   useWakeLock(true);
-  const board = useQuery({ queryKey: ['pickup-board'], queryFn: () => get<PickupBoardDTO>('/kitchen/board'), refetchInterval: 10_000 });
-
-  useEffect(
-    () =>
-      onLive((e) => {
-        if (e.topic === 'kitchen' || e.topic === 'orders') void qc.invalidateQueries({ queryKey: ['pickup-board'] });
-      }),
-    [qc],
-  );
+  // Oturumsuz ekran: canlı bağlantı yok, birkaç saniyede bir yoklanır
+  const board = useQuery({ queryKey: ['pickup-board'], queryFn: () => get<PickupBoardDTO>('/public/board'), refetchInterval: 3_000 });
 
   // Yeni hazır olan için ses (ilk yüklemede çalmaz)
   const known = useRef<Set<string> | null>(null);
@@ -53,7 +44,7 @@ export default function PickupBoardPage() {
           <LafMark className="h-5" bean="#e8c877" />
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-semibold tracking-[-0.01em] md:text-2xl">{boot.settings.businessName}</h1>
+          <h1 className="truncate text-xl font-semibold tracking-[-0.01em] md:text-2xl">{businessName}</h1>
           <p className="text-sm text-muted md:text-base">Numaranız sağdaki listeye geçince siparişiniz hazırdır</p>
         </div>
         <button type="button" onClick={() => setSound(!sound)} className="min-h-11 rounded-xl px-3 text-sm text-muted hover:bg-surface-3" aria-pressed={sound}>

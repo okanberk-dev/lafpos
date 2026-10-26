@@ -17,21 +17,37 @@ const product = (name: string) => h.boot.products.find((p) => p.name === name)!;
 const method = (name: string) => h.boot.paymentMethods.find((m) => m.name === name)!;
 
 describe('tezgâh satışı', () => {
-  it('boş tezgâh adisyonu yeniden kullanılır; kalem eklenince sonraki satış yeni adisyon', async () => {
+  it("yalnız bu cihazın boş tezgâh adisyonu yeniden kullanılır; aynı PIN'le iki kasa ayrı adisyon alır", async () => {
     const a = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
-    const b = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
-    expect(b.id).toBe(a.id);
-
-    // Başka kişinin boş adisyonu kullanılmaz
-    const other = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'tezgah' });
-    expect(other.id).not.toBe(a.id);
+    expect((await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: a.id })).id).toBe(a.id);
+    // İkinci kasa aynı PIN'le girer ama kendi kimliğini vermez: ayrı adisyon (iki müşteri tek hesapta birleşmez)
+    await h.login('kasa2', '1111');
+    expect((await h.ok<OrderDTO>('kasa2', 'POST', '/orders', { type: 'tezgah' })).id).not.toBe(a.id);
+    // Başka kişi bu adisyonun kimliğini verse de alamaz
+    expect((await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'tezgah', reuse: a.id })).id).not.toBe(a.id);
 
     const sold = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${a.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
-    const next = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const next = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: a.id });
     expect(next.id).not.toBe(a.id);
     await h.ok('kasa', 'POST', `/orders/${a.id}/payments`, { methodId: method('Nakit').id, amount: sold.total });
-    // Satış kapandı; "Yeni satış" yine aynı boş adisyonu açar
-    expect((await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' })).id).toBe(next.id);
+    expect((await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: next.id })).id).toBe(next.id);
+
+    // Boş adisyona indirim verilmez (sonraki satışa sessizce geçerdi)
+    const disc = await h.call<{ code: string }>('kasa', 'POST', `/orders/${next.id}/discount`, { type: 'percent', value: 50, reason: 'Kampanya', approverPin: '2468' });
+    expect(disc.json.code).toBe('empty_order');
+  });
+
+  it('sayacı çalışan oda adisyonu boş sayılmaz: gün sonunu tutar', async () => {
+    const room = h.boot.tables.find((t) => t.kind === 'oda')!;
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: room.id });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/room/start`, {});
+    const { isEmptyOrder } = await import('../server/services/orders');
+    const { db } = await import('../server/db/client');
+    expect(isEmptyOrder(db, o.id)).toBe(false);
+    const blocked = await h.call<{ code: string }>('mudur', 'POST', '/cash/day/close', { countedCash: 0 });
+    expect(blocked.json.code).toBe('open_orders');
+    const stopped = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/room/stop`, {});
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Kredi kartı').id, amount: stopped.total });
   });
 
   it('elle fiyat: yetkisi olmayan kasiyerde yetkili PIN ister, fiyat kaleme yazılır ve denetime düşer', async () => {
