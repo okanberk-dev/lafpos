@@ -115,3 +115,18 @@ export function splitEven(total: Kurus, parts: number): Kurus[] {
 export function changeDue(due: Kurus, given: Kurus): Kurus {
   return Math.max(0, given - due);
 }
+
+/** Türk lirası banknotları (kuruş) */
+const NOTES: Kurus[] = [1000, 2000, 5000, 10000, 20000];
+
+/**
+ * Nakitte müşterinin büyük olasılıkla vereceği tutarlar: tutar her banknotun katına yukarı yuvarlanır (₺187,50 →
+ * ₺190, ₺200), eksik kalırsa ayarlardaki sabit tutarlarla tamamlanır. Tam tutar ayrı düğmede olduğundan dışarıda.
+ */
+export function suggestCash(due: Kurus, fixed: Kurus[] = [], max = 4): Kurus[] {
+  if (due <= 0) return [];
+  const out = new Set<Kurus>();
+  for (const n of NOTES) out.add(Math.ceil(due / n) * n);
+  for (const f of fixed) out.add(f);
+  return [...out].filter((v) => v > due).sort((a, b) => a - b).slice(0, max);
+}

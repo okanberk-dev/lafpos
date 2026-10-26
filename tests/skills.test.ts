@@ -26,7 +26,14 @@ function frontmatter(text: string): Record<string, string> {
 
 describe('proje skill\'leri', () => {
   it('beklenen skill\'ler var', () => {
-    expect(skills.sort()).toEqual(['build-admin-panel', 'impeccable', 'verification-before-completion', 'webapp-testing']);
+    expect(skills.sort()).toEqual([
+      'build-admin-panel',
+      'impeccable',
+      'validate-data',
+      'verification-before-completion',
+      'web-interface-guidelines',
+      'webapp-testing',
+    ]);
   });
 
   for (const name of skills) {
@@ -47,6 +54,23 @@ describe('proje skill\'leri', () => {
     expect(existsSync(join(dir, 'impeccable/NOTICE.md'))).toBe(true);
     expect(existsSync(join(dir, 'webapp-testing/LICENSE.txt'))).toBe(true);
     expect(existsSync(join(dir, 'verification-before-completion/LICENSE'))).toBe(true);
+    expect(existsSync(join(dir, 'validate-data/LICENSE'))).toBe(true);
+    expect(existsSync(join(dir, 'web-interface-guidelines/LICENSE'))).toBe(true);
+  });
+
+  it('"Bu projede" bölümü alınan metinden önce gelir', () => {
+    const upstream: Record<string, string> = {
+      'validate-data': '# /validate-data - Validate Analysis Before Sharing',
+      'web-interface-guidelines': '# Web Interface Guidelines',
+      'verification-before-completion': '# Verification Before Completion',
+      'webapp-testing': '# Web Application Testing',
+    };
+    for (const [name, heading] of Object.entries(upstream)) {
+      const text = readFileSync(join(dir, name, 'SKILL.md'), 'utf8');
+      const ours = text.indexOf('## Bu projede');
+      expect(ours, name).toBeGreaterThan(0);
+      expect(text.indexOf(heading), name).toBeGreaterThan(ours);
+    }
   });
 
   it('impeccable rehberlerinin bağlantıları kırık değil (alınan rehberler)', () => {

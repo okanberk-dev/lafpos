@@ -21,6 +21,8 @@ export interface ReceiptDTO {
   amount: number;
   zNo: number | null;
   receiptNo: number | null;
+  docKind: 'okc_fis' | 'bilgi_fisi' | 'e_arsiv' | 'e_fatura' | null;
+  docId: string | null;
   error: string | null;
   lockedBy: string | null;
   createdAt: number;
@@ -165,7 +167,7 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
         <div className="mt-2 flex items-center gap-1.5 text-xs">
           {last.status === 'tamamlandi' ? <CheckCircle2 className="size-3.5 text-[var(--admin-success)]" /> : <XCircle className="size-3.5 text-[var(--admin-danger-ink)]" />}
           <span className="text-muted">
-            Son sepet: {last.status === 'tamamlandi' ? `ödendi${last.zNo != null ? ` · Z ${last.zNo}` : ''}${last.receiptNo != null ? ` · fiş ${last.receiptNo}` : ''}` : last.status === 'hata' ? (last.error ?? 'hata') : last.status === 'fis_iptal' ? 'fiş iptal edildi' : 'iptal edildi'}
+            Son sepet: {last.status === 'tamamlandi' ? `ödendi${last.zNo != null ? ` · Z ${last.zNo}` : ''}${last.receiptNo != null ? ` · ${last.docKind === 'bilgi_fisi' ? 'bilgi fişi' : 'fiş'} ${last.receiptNo}` : ''}${last.docId ? ` · ${last.docKind === 'e_fatura' ? 'e-Fatura' : 'e-Arşiv'} ${last.docId}` : ''}` : last.status === 'hata' ? (last.error ?? 'hata') : last.status === 'fis_iptal' ? 'fiş iptal edildi' : 'iptal edildi'}
           </span>
         </div>
       )}

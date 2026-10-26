@@ -1,6 +1,6 @@
 import { Check, CheckCircle2, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { parseTL, tl, tlShort } from '@shared/money';
+import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
 import { amountForItems } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import type { OrderDTO, PaymentMethodDTO } from '@shared/types';
@@ -315,10 +315,7 @@ export function PaymentModal({
               </button>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <QuickButton onClick={() => setGivenText(toInput(amount + tip))}>Tam</QuickButton>
-                {boot.settings.quickCash
-                  .filter((c) => c >= amount + tip)
-                  .slice(0, 4)
-                  .map((c) => (
+                {suggestCash(amount + tip, boot.settings.quickCash).map((c) => (
                     <QuickButton key={c} onClick={() => setGivenText(toInput(c))}>
                       {tlShort(c)}
                     </QuickButton>

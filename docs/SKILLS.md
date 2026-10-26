@@ -10,6 +10,8 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
 | `impeccable` | Telefon ve tablet uyarlaması (`adapt`), teslim öncesi `audit` ve `polish`, kenar durumları (`harden`) | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) @ `3671d50` | Apache-2.0 |
 | `webapp-testing` | Yerel uygulamayı gerçek tarayıcıyla sınamak (sunucu yaşam döngüsü, önce gözle sonra eylem) | [anthropics/skills](https://github.com/anthropics/skills) @ `b9e19e6` | Apache-2.0 |
 | `verification-before-completion` | "Bitti" demeden önce kanıt: typecheck, test, build, e2e çıktısı | [obra/superpowers](https://github.com/obra/superpowers) @ `3be5aad` | MIT |
+| `validate-data` | Rapor ve KPI asla yanlış değil: tanımlar, kıyas dönemi, mutabakat değişmezleri, hata ₺0 gösterilmez | [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins) `data/skills/validate-data` @ `33d3dea` | Apache-2.0 |
+| `web-interface-guidelines` | Arayüzü sade ve hatasız tutmak: erişilebilirlik, odak, form, dokunma, taşma, metin denetimi | [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) `command.md` @ `434b7f9` | MIT |
 
 ## Kararlar (26 Ekim 2026, operatör)
 
@@ -24,6 +26,11 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
    daha geliştir"_: panel görünümü Innex'e döndü; ui-ux-pro-max'in önerdiği "Swiss + Fira" yönü ve skill'in
    kendisi kaldırıldı. Mobil, test ve doğrulama skill'leri kaldı. Geliştirmeler `DESIGN.md`
    "Yönetim paneli"nde.
+4. _"yurt dışındaki sistemleri de araştır ve bunlara göre skills md dosyası varsa internette bak"_ (26 Ekim
+   2026): raporların hiç yanlış olmaması için Anthropic'in veri eklentisinden `validate-data`, arayüzün sade
+   kalması için Vercel'in Web Interface Guidelines'ı (`web-interface-guidelines`) alındı. İkisinin de "Bu
+   projede" bölümü LafPOS kurallarına bağlar; Vercel kurallarından Title Case, `&`, `overflow-x-hidden`,
+   `…` ile biten yer tutucu ve doğrudan `Intl` LafPOS kurallarıyla çakışır, LafPOS'unki geçerli.
 
 ## Nasıl kullanılır
 
@@ -32,3 +39,5 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
   (impeccable'ın başlatıcısı depoda yok, "Launcher unavailable" yolu izlenir).
 - Arayüz değişikliğini doğrulamak: `npm run build && npm run e2e` (`webapp-testing`), sonra
   `verification-before-completion` tablosundaki komutlar.
+- Ekranı sadeleştirmek ya da gözden geçirmek: `web-interface-guidelines` (çakışan kurallar skill'in başında).
+- Rapor ya da KPI eklemek, değiştirmek: `validate-data`; değişmez `tests/report-reconciliation.test.ts`'e eklenir.

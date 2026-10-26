@@ -65,7 +65,7 @@ describe('akış', () => {
     expect(paid.payments).toHaveLength(1);
     expect(paid.payments[0]!.note).toBe('Yazarkasa e-Arşiv LAF2026000000042');
     const [receipt] = await h.ok<{ status: string }[]>('kasa', 'GET', `/okc/orders/${o.id}/receipts`);
-    expect(receipt).toMatchObject({ status: 'tamamlandi' });
+    expect(receipt).toMatchObject({ status: 'tamamlandi', docKind: 'e_arsiv', docId: 'LAF2026000000042' });
   });
 
   it('Token seçili ama bilgileri yoksa sepet gitmez, eksik ayarlar adıyla söylenir', async () => {

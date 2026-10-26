@@ -51,6 +51,9 @@ export function receiptDTO(r: ReceiptRow) {
     items: r.items,
     zNo: r.zNo,
     receiptNo: r.receiptNo,
+    /** Kesilen belge (ortak sonuçtan): tür ve e-belge no; eski kayıtlarda yok */
+    docKind: (r.result as Partial<FiscalResult> | null)?.docKind ?? null,
+    docId: (r.result as Partial<FiscalResult> | null)?.docId ?? null,
     error: r.error,
     lockedBy: r.lockedBy,
     createdAt: r.createdAt,
