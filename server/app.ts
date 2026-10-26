@@ -10,6 +10,7 @@ import { authRoutes } from './routes/auth';
 import { cashRoutes } from './routes/cash';
 import { eventRoutes } from './routes/events';
 import { customerRoutes } from './routes/customers';
+import { displayRoutes } from './routes/display';
 import { okcPublicRoutes, okcRoutes } from './routes/okc';
 import { posRoutes } from './routes/pos';
 import { reportRoutes } from './routes/reports';
@@ -50,6 +51,7 @@ export function createApp() {
   app.route('/api/public/okc', okcPublicRoutes);
   app.route('/api/customers', customerRoutes);
   app.route('/api/sync', syncRoutes);
+  app.route('/api/display', displayRoutes);
   app.route('/api/reports', reportRoutes);
   app.route('/api/admin', adminRoutes);
   app.route('/api/reservations', reservationRoutes);

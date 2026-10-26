@@ -31,6 +31,7 @@ const ROUTES = {
     '/siparisler',
     '/mutfak',
     '/cagri',
+    '/musteri-ekrani',
     '/kasa',
     '/cihaz',
     '/musteriler',

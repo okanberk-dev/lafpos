@@ -454,3 +454,17 @@ export interface PickupBoardDTO {
   /** En yeni üstte; hazır olduktan 10 dakika sonra ya da teslim edilince düşer */
   ready: (PickupEntryDTO & { readyAt: number })[];
 }
+
+/** Müşteri ekranı: kasadaki adisyonun müşteriye gösterilen hâli (sunucu bellekte tutar, kaydetmez) */
+export interface DisplayLineDTO {
+  name: string;
+  size: string | null;
+  qty: number;
+  options: string;
+  total: number;
+}
+
+export type DisplayStateDTO =
+  | { kind: 'idle'; at: number }
+  | { kind: 'order'; at: number; label: string; lines: DisplayLineDTO[]; discount: number; total: number; paid: number; due: number }
+  | { kind: 'thanks'; at: number; total: number };

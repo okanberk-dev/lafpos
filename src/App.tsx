@@ -22,6 +22,7 @@ const ReportsPage = lazy(() => import('./pages/reports/ReportsPage'));
 const PatronPage = lazy(() => import('./pages/patron/PatronPage'));
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
 const PickupBoardPage = lazy(() => import('./pages/PickupBoardPage'));
+const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
   const can = useCan();
@@ -64,6 +65,13 @@ function Authed() {
   }
 
   // Müşteriye dönük ekranlar kasa menüsü olmadan tam sayfa açılır (otomatik kilit de yok)
+  if (location.pathname === '/musteri-ekrani') {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <CustomerDisplayPage />
+      </Suspense>
+    );
+  }
   if (location.pathname === '/cagri') {
     if (!can('mutfak.ekran') && !can('siparis.al')) return <Navigate to={homePath(can)} replace />;
     return (

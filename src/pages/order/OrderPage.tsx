@@ -6,6 +6,7 @@ import {
   Globe,
   Merge,
   Mic2,
+  MonitorUp,
   MoreVertical,
   PackageX,
   Percent,
@@ -28,6 +29,7 @@ import type { OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
+import { Toggle } from '@/components/ui/Field';
 import { Badge, PageLoading } from '@/components/ui/misc';
 import { errorMessage, patch, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -37,6 +39,8 @@ import { cn } from '@/lib/cn';
 import { useMediaQuery, useTick } from '@/lib/hooks';
 import { BillReceipt, printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { sendDisplay, useCustomerDisplay, useDisplayCode } from '@/lib/display';
 import { CartPanel, previewTotals } from './CartPanel';
 import { CustomerModal } from './CustomerModal';
 import { OnlineOrderBar } from './OnlineOrderBar';
@@ -46,7 +50,7 @@ import { ProductPanel } from './ProductPanel';
 import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal } from './TableOps';
 import { useOrder } from './useOrder';
 
-type Dialog = null | 'tukendi' | 'menu' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
+type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
 
 export default function OrderPage() {
   const { id = '' } = useParams();
@@ -68,6 +72,10 @@ export default function OrderPage() {
 
   const table = useMemo(() => boot.tables.find((t) => t.id === order?.tableId), [boot.tables, order?.tableId]);
   const pendingCount = pending.reduce((a, l) => a + l.qty, 0);
+  // Müşteri ekranı (bu cihaz yansıtıyorsa): kalemler ve gönderilmemişler dahil tahmini tutar
+  const [displayCode, setDisplayCode] = useDisplayCode();
+  const displayLabel = order ? (table?.name ?? ORDER_TYPE_LABEL[order.type]) : '';
+  useCustomerDisplay(boot, order, pending, displayLabel, order ? (previewTotals(boot, order, pending)?.total ?? order.total) : 0);
 
   if (isLoading) return <PageLoading />;
   if (isError || !order) {
@@ -148,6 +156,7 @@ export default function OrderPage() {
     { icon: <Percent className="size-5" />, label: order.discountType ? 'Adisyon indirimini değiştir' : 'Adisyon indirimi', onClick: () => setDialog('indirim'), show: editable },
     { icon: <Users className="size-5" />, label: `Kişi sayısı (${order.guests})`, onClick: () => setDialog('kisi'), show: editable },
     { icon: <UserRound className="size-5" />, label: order.customer ? `Müşteri: ${order.customer.name}` : 'Müşteri ekle', hint: 'Açık hesap ve damga kartı için', onClick: () => setDialog('musteri'), show: isOpen && !isOnline },
+    { icon: <MonitorUp className="size-5" />, label: displayCode ? 'Müşteri ekranı: açık' : 'Müşteri ekranı', hint: 'İkinci ekran ya da müşteriye dönük tablet', onClick: () => setDialog('ekran'), show: !isOnline },
     { icon: <StickyNote className="size-5" />, label: 'Adisyon notu', onClick: () => { setNoteText(order.note ?? ''); setDialog('not'); }, show: editable },
     { icon: <Printer className="size-5" />, label: 'Hesap yazdır', onClick: printBill, show: !isOnline && order.items.some((i) => !i.voided) },
     { icon: <CircleDollarSign className="size-5" />, label: 'Sıfır tutarlı adisyonu kapat', onClick: () => act(() => post(`/orders/${order.id}/close`), 'Adisyon kapandı').then((r) => r && navigate(backPath)), show: isOpen && !isOnline && order.total === 0 && order.items.length > 0 },
@@ -339,6 +348,25 @@ export default function OrderPage() {
 
       <SoldOutDialog open={dialog === 'tukendi'} onClose={() => setDialog(null)} />
 
+      <Modal open={dialog === 'ekran'} onClose={() => setDialog(null)} title="Müşteri ekranı" subtitle="Müşteri siparişini ve tutarı görür; ödeme bitince teşekkür eder" size="sm">
+        <div className="space-y-4 p-5">
+          <Toggle
+            checked={!!displayCode}
+            onChange={(v) => {
+              if (!v) sendDisplay(displayCode, { kind: 'idle' });
+              setDisplayCode(v ? 'kasa' : '');
+            }}
+            label="Bu cihazdaki adisyonlar müşteri ekranına yansısın"
+          />
+          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open('/musteri-ekrani?ekran=kasa', 'lafpos-musteri')}>
+            Ekranı yeni pencerede aç
+          </Button>
+          <p className="text-xs text-muted">
+            İkinci monitörde pencereyi oraya taşıyıp tam ekran yapın. Müşteriye dönük tablette tarayıcıda {window.location.origin}/musteri-ekrani adresini açıp bir personel PIN'iyle girin.
+          </p>
+        </div>
+      </Modal>
+
       <PaymentModal
         order={order}
         open={dialog === 'odeme'}
@@ -348,6 +376,7 @@ export default function OrderPage() {
           setDialog(null);
           if (closed) {
             cart.clear(order.id);
+            sendDisplay(displayCode, { kind: 'thanks', total: order.total });
             if (counter) void nextSale();
             else navigate(backPath);
           }
