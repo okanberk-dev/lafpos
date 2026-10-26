@@ -7,6 +7,7 @@ import {
   Merge,
   Mic2,
   MoreVertical,
+  PackageX,
   Percent,
   Play,
   Printer,
@@ -23,6 +24,7 @@ import { useNavigate, useParams } from 'react-router';
 import { tl } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
 import type { OrderDTO, ProductDTO, Size } from '@shared/types';
+import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, PageLoading } from '@/components/ui/misc';
@@ -43,7 +45,7 @@ import { ProductPanel } from './ProductPanel';
 import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal } from './TableOps';
 import { useOrder } from './useOrder';
 
-type Dialog = null | 'menu' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
+type Dialog = null | 'tukendi' | 'menu' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
 
 export default function OrderPage() {
   const { id = '' } = useParams();
@@ -135,6 +137,7 @@ export default function OrderPage() {
     { icon: <Printer className="size-5" />, label: 'Hesap yazdır', onClick: printBill, show: !isOnline && order.items.some((i) => !i.voided) },
     { icon: <CircleDollarSign className="size-5" />, label: 'Sıfır tutarlı adisyonu kapat', onClick: () => act(() => post(`/orders/${order.id}/close`), 'Adisyon kapandı').then((r) => r && navigate(backPath)), show: isOpen && !isOnline && order.total === 0 && order.items.length > 0 },
     { icon: <RotateCcw className="size-5" />, label: 'Yeniden aç', hint: 'Yetkili onayı ister', onClick: () => setDialog('yenidenac'), show: order.status === 'kapali' && !isOnline },
+    { icon: <PackageX className="size-5" />, label: 'Tükenen ürünler', hint: 'Ürünü tükendi işaretle ya da satışa aç', onClick: () => setDialog('tukendi'), show: can('urun.tukendi') || can('menu.yonet') },
     { icon: <Ban className="size-5" />, label: 'Adisyonu iptal et', hint: 'Bütün kalemler iptal olur', onClick: () => setDialog('iptal'), show: editable && order.paid === 0, danger: true },
   ];
 
@@ -286,6 +289,8 @@ export default function OrderPage() {
             ))}
         </div>
       </Modal>
+
+      <SoldOutDialog open={dialog === 'tukendi'} onClose={() => setDialog(null)} />
 
       <PaymentModal
         order={order}

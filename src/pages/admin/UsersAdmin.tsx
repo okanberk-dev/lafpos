@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Pencil, Plus, Power } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { ALL_PERMISSIONS, effectivePermissions, type Permission, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, ROLES } from '@shared/permissions';
+import { ALL_PERMISSIONS, effectivePermissions, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, type RoleMatrix, ROLES } from '@shared/permissions';
 import { fmtDateTime } from '@shared/time';
 import { ActionMenu, Badge, BTN, type Column, DataTable, DefRow, PageHeader, QuickLook, SearchField, StatusTabs, type Tone } from '@/components/admin/ui';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
@@ -56,6 +56,9 @@ export default function UsersAdmin() {
   const me = useAuth((s) => s.me);
   const [params, setParams] = useSearchParams();
   const data = useQuery({ queryKey: ['users', 'admin'], queryFn: () => get<UserRow[]>('/admin/users') });
+  // Rol yetkileri Roller sayfasında değişebilir: "rol varsayılanı" o anki rol setidir
+  const roles = useQuery({ queryKey: ['admin', 'roles'], queryFn: () => get<{ roles: { role: Role; permissions: Permission[]; custom: boolean }[] }>('/admin/roles') });
+  const matrix: RoleMatrix = Object.fromEntries((roles.data?.roles ?? []).filter((r) => r.custom).map((r) => [r.role, r.permissions]));
   const [tab, setTab] = useState<'tumu' | 'etkin' | 'kapali'>('etkin');
   const [q, setQ] = useState('');
   const openId = params.get('kisi');
@@ -181,6 +184,7 @@ export default function UsersAdmin() {
           key={openId}
           user={selected}
           isMe={selected?.id === me?.id}
+          matrix={matrix}
           onClose={() => open(null)}
           onSaved={() => {
             refresh();
@@ -192,13 +196,14 @@ export default function UsersAdmin() {
   );
 }
 
-function UserDrawer({ user, isMe, onClose, onSaved }: { user: UserRow | null; isMe: boolean; onClose: () => void; onSaved: () => void }) {
+function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | null; isMe: boolean; matrix: RoleMatrix; onClose: () => void; onSaved: () => void }) {
   const [d, setD] = useState<Draft>(user ? { ...user, pin: '' } : { name: '', role: 'garson', color: COLORS[3], active: true, permGrant: [], permRevoke: [], maxDiscountPct: 10, pin: '' });
   const [saving, setSaving] = useState(false);
-  const effective = effectivePermissions(d.role, { grant: d.permGrant, revoke: d.permRevoke });
+  const effective = effectivePermissions(d.role, { grant: d.permGrant, revoke: d.permRevoke }, matrix);
+  const roleBase = (role: Role) => (role === 'patron' ? ALL_PERMISSIONS : (matrix[role] ?? ROLE_DEFAULTS[role]));
   const pinOk = user ? !d.pin || /^\d{4,6}$/.test(d.pin) : /^\d{4,6}$/.test(d.pin);
   const toggle = (p: Permission) => {
-    const byRole = ROLE_DEFAULTS[d.role].includes(p);
+    const byRole = roleBase(d.role).includes(p);
     const on = effective.has(p);
     if (byRole) setD({ ...d, permRevoke: on ? [...d.permRevoke, p] : d.permRevoke.filter((x) => x !== p) });
     else setD({ ...d, permGrant: on ? d.permGrant.filter((x) => x !== p) : [...d.permGrant, p] });
@@ -247,7 +252,7 @@ function UserDrawer({ user, isMe, onClose, onSaved }: { user: UserRow | null; is
         <div className="mb-4 rounded-xl border border-[var(--admin-border)] px-3">
           <DefRow label="Rol">{ROLE_LABELS[user.role]}</DefRow>
           <DefRow label="İndirim sınırı">%{user.maxDiscountPct} · üstü yetkili onayı ister</DefRow>
-          <DefRow label="Etkin yetki">{effectivePermissions(user.role, { grant: user.permGrant, revoke: user.permRevoke }).size} / {ALL_PERMISSIONS.length}</DefRow>
+          <DefRow label="Etkin yetki">{effectivePermissions(user.role, { grant: user.permGrant, revoke: user.permRevoke }, matrix).size} / {ALL_PERMISSIONS.length}</DefRow>
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -284,20 +289,26 @@ function UserDrawer({ user, isMe, onClose, onSaved }: { user: UserRow | null; is
         </div>
       </div>
 
-      <h3 className="mb-2 mt-5 text-sm font-semibold">Yetkiler</h3>
-      <div className="overflow-hidden rounded-xl border border-[var(--admin-border)]">
-        {ALL_PERMISSIONS.map((p) => {
-          const on = effective.has(p);
-          const byRole = ROLE_DEFAULTS[d.role].includes(p);
-          const source = byRole ? (on ? null : { tone: 'danger' as const, text: 'rolden kaldırıldı' }) : on ? { tone: 'primary' as const, text: 'ek yetki' } : null;
-          return (
-            <label key={p} className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-[var(--admin-divider)] px-3 py-2 text-sm last:border-0 hover:bg-[var(--admin-surface-2)]">
-              <input type="checkbox" checked={on} onChange={() => toggle(p)} className="size-4 accent-[var(--admin-primary)]" />
-              <span className="min-w-0 flex-1">{PERMISSIONS[p]}</span>
-              {source && <Badge tone={source.tone}>{source.text}</Badge>}
-            </label>
-          );
-        })}
+      <h3 className="mb-1 mt-5 text-sm font-semibold">Yetkiler</h3>
+      <p className="mb-2 text-xs text-[var(--admin-text-mute)]">İşaretliler rolden gelir; burada değiştirilen yalnız bu kişiye uygulanır (rol setleri: Roller ve yetkiler)</p>
+      <div className="space-y-3">
+        {PERMISSION_GROUPS.map((g) => (
+          <div key={g.key} className="overflow-hidden rounded-xl border border-[var(--admin-border)]">
+            <div className="bg-[var(--admin-panel)] px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</div>
+            {g.permissions.map((p) => {
+              const on = effective.has(p);
+              const byRole = roleBase(d.role).includes(p);
+              const source = byRole ? (on ? null : { tone: 'danger' as const, text: 'kişiden kaldırıldı' }) : on ? { tone: 'primary' as const, text: 'kişiye ek' } : null;
+              return (
+                <label key={p} className="flex min-h-11 cursor-pointer items-center gap-3 border-t border-[var(--admin-divider)] px-3 py-2 text-sm hover:bg-[var(--admin-surface-2)]">
+                  <input type="checkbox" checked={on} onChange={() => toggle(p)} className="size-4 accent-[var(--admin-primary)]" />
+                  <span className="min-w-0 flex-1">{PERMISSIONS[p]}</span>
+                  {source && <Badge tone={source.tone}>{source.text}</Badge>}
+                </label>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </QuickLook>
   );

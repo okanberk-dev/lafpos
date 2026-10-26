@@ -7,7 +7,7 @@ import { PageLoading } from './components/ui/misc';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
 import { homePath } from './lib/nav';
-import { startLive, stopLive } from './lib/live';
+import { onLive, startLive, stopLive } from './lib/live';
 import { LoginPage } from './pages/LoginPage';
 
 const FloorPage = lazy(() => import('./pages/FloorPage'));
@@ -36,7 +36,14 @@ function Authed() {
 
   useEffect(() => {
     startLive(qc);
-    return () => stopLive();
+    // Rol ya da kişi yetkisi değişince açık ekranın yetkileri de hemen değişsin
+    const off = onLive((e) => {
+      if (e.topic === 'users') void useAuth.getState().init();
+    });
+    return () => {
+      off();
+      stopLive();
+    };
   }, [qc]);
 
   if (boot.isLoading) return <PageLoading label="LafPOS hazırlanıyor" />;

@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import type { RoleMatrix } from '@shared/permissions';
 import type { PublicSettings } from '@shared/types';
 import { db, schema } from '../db/client';
 
@@ -11,6 +12,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   receiptFooter: 'Bizi tercih ettiğiniz için teşekkürler\nlaffogato.net',
   serviceRate: 0,
   autoLockMinutes: 0,
+  keepAwake: true,
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
   discountReasons: ['Öğrenci', 'Personel', 'Müdavim', 'Kampanya', 'Şikâyet telafisi'],
@@ -50,6 +52,8 @@ export interface PrivateSettings {
   okcSectionMap: Record<string, number>;
   /** Yemek kartı operatör kimliği -> LafPOS ödeme türü (ör. "1005" -> Multinet) */
   okcOperatorMethods: Record<string, string>;
+  /** Yönetim › Roller ve yetkiler'de düzenlenen rol yetki setleri; olmayan rol varsayılanını kullanır */
+  rolePermissions: RoleMatrix;
 }
 
 export const PRIVATE_DEFAULTS: PrivateSettings = {
@@ -65,6 +69,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcMode: 'anlik',
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
+  rolePermissions: {},
 };
 
 export type AllSettings = PublicSettings & PrivateSettings;

@@ -29,11 +29,13 @@ export const PERMISSIONS = {
   'odeme.al': 'Ödeme alma ve adisyon kapatma',
   'odeme.iade': 'Ödeme iptali, kapanmış adisyonu yeniden açma',
   'kasa.gun': 'Gün açma, gün sonu (Z) alma',
+  'kasa.rakam': 'Ara rapor (X) ve kasa rakamlarını görme; kapalıysa sayım kör yapılır',
   'kasa.hareket': 'Kasaya para girişi ve çıkışı',
   'cari.yonet': 'Müşteri ve açık hesap (veresiye) işlemleri',
   'paket.yonet': 'Paket servis ve gel-al siparişleri',
   'rezervasyon.yonet': 'Rezervasyon',
   'mutfak.ekran': 'Mutfak / bar ekranı',
+  'urun.tukendi': 'Ürünü kasadan ya da bardan tükendi işaretleme, satışa açma',
   'rapor.gor': 'Satış raporları',
   'rapor.maliyet': 'Maliyet, kâr ve personel tutarları',
   'menu.yonet': 'Menü, fiyat ve seçenek yönetimi',
@@ -61,19 +63,44 @@ export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
     'paket.yonet',
     'rezervasyon.yonet',
     'mutfak.ekran',
+    'urun.tukendi',
   ],
   garson: ['siparis.al', 'masa.islem', 'rezervasyon.yonet'],
-  mutfak: ['mutfak.ekran'],
+  mutfak: ['mutfak.ekran', 'urun.tukendi'],
   kurye: ['paket.yonet'],
 };
+
+/**
+ * Yetki grupları (ModPOS'un "Özel Yetkiler" kategorileri gibi): rol ve personel ekranında bu sırayla görünür.
+ * Her yetki tam bir grupta (tests/permissions.test.ts).
+ */
+export const PERMISSION_GROUPS: { key: string; label: string; permissions: Permission[] }[] = [
+  { key: 'satis', label: 'Satış işlemleri', permissions: ['siparis.al', 'siparis.iptal', 'siparis.ikram', 'siparis.indirim', 'siparis.fiyat', 'masa.islem', 'paket.yonet', 'rezervasyon.yonet'] },
+  { key: 'odeme', label: 'Ödeme ve kasa', permissions: ['odeme.al', 'odeme.iade', 'kasa.gun', 'kasa.rakam', 'kasa.hareket', 'cari.yonet'] },
+  { key: 'bar', label: 'Bar ve mutfak', permissions: ['mutfak.ekran', 'urun.tukendi'] },
+  { key: 'rapor', label: 'Raporlar', permissions: ['rapor.gor', 'rapor.maliyet', 'patron.panel'] },
+  { key: 'yonetim', label: 'Yönetim', permissions: ['menu.yonet', 'stok.yonet', 'ayar.yonet', 'personel.yonet', 'senkron.yonet'] },
+];
+
+/** Patron rolü her yetkiye sahiptir ve değiştirilemez: kimse kendini paneldan dışarıda bırakamasın */
+export const LOCKED_ROLES: Role[] = ['patron'];
+
+/** Rollerin yönetimden düzenlenmiş yetki setleri (ayarlarda `rolePermissions`); olmayan rol varsayılanını kullanır */
+export type RoleMatrix = Partial<Record<Role, Permission[]>>;
+
+export function rolePermissions(role: Role, matrix?: RoleMatrix | null): Permission[] {
+  if (LOCKED_ROLES.includes(role)) return ALL_PERMISSIONS;
+  const custom = matrix?.[role];
+  return custom ? custom.filter((p) => p in PERMISSIONS) : (ROLE_DEFAULTS[role] ?? []);
+}
 
 export interface PermissionOverrides {
   grant?: Permission[];
   revoke?: Permission[];
 }
 
-export function effectivePermissions(role: Role, overrides?: PermissionOverrides | null): Set<Permission> {
-  const set = new Set<Permission>(ROLE_DEFAULTS[role] ?? []);
+export function effectivePermissions(role: Role, overrides?: PermissionOverrides | null, matrix?: RoleMatrix | null): Set<Permission> {
+  const set = new Set<Permission>(rolePermissions(role, matrix));
   for (const p of overrides?.grant ?? []) if (p in PERMISSIONS) set.add(p);
   for (const p of overrides?.revoke ?? []) set.delete(p);
   return set;

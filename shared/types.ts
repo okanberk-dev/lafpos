@@ -168,6 +168,8 @@ export interface PublicSettings {
   receiptFooter: string;
   serviceRate: number;
   autoLockMinutes: number;
+  /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */
+  keepAwake: boolean;
   voidReasons: string[];
   compReasons: string[];
   discountReasons: string[];

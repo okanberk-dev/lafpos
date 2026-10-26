@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { ALL_PERMISSIONS, type Permission, ROLES } from '@shared/permissions';
+import { ALL_PERMISSIONS, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
 import { db, schema, tx } from '../db/client';
 import { backupNow } from '../jobs';
 import { type AppEnv, can, hashPin, isValidPin, requirePermission } from '../lib/auth';
@@ -356,6 +356,59 @@ const userShape = z.object({
   permRevoke: permList.default([]),
 });
 
+
+// ─── Roller (ModPOS "Pozisyonlar" gibi) ───────────────────────────────────────
+
+adminRoutes.get('/roles', (c) => {
+  requirePermission(c.get('user'), 'personel.yonet');
+  const matrix = getSettings().rolePermissions;
+  const counts = db
+    .select({ role: schema.users.role, n: sql<number>`count(*)` })
+    .from(schema.users)
+    .where(eq(schema.users.active, true))
+    .groupBy(schema.users.role)
+    .all();
+  return c.json({
+    groups: PERMISSION_GROUPS,
+    roles: ROLES.map((role) => ({
+      role,
+      label: ROLE_LABELS[role],
+      locked: LOCKED_ROLES.includes(role),
+      permissions: rolePermissions(role, matrix),
+      defaults: ROLE_DEFAULTS[role],
+      custom: !!matrix[role],
+      users: counts.find((x) => x.role === role)?.n ?? 0,
+    })),
+  });
+});
+
+/** Rolün yetki setini yazar; varsayılanla aynıysa özel kaydı siler. Patron rolü kilitli. */
+adminRoutes.put('/roles/:role', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'personel.yonet');
+  const role = ROLES.find((r) => r === c.req.param('role'));
+  if (!role) throw notFound('Rol bulunamadı');
+  if (LOCKED_ROLES.includes(role)) throw bad('Patron rolü her yetkiye sahiptir, değiştirilemez', 'role_locked');
+  const input = await body(c, z.object({ permissions: permList }));
+  const next = ALL_PERMISSIONS.filter((p) => (input.permissions as string[]).includes(p));
+  const matrix = { ...getSettings().rolePermissions };
+  const before = rolePermissions(role, matrix);
+  const defaults = ROLE_DEFAULTS[role];
+  if (next.length === defaults.length && next.every((p) => defaults.includes(p))) delete matrix[role];
+  else matrix[role] = next;
+  updateSettings({ rolePermissions: matrix });
+  const added = next.filter((p) => !before.includes(p));
+  const removed = before.filter((p) => !next.includes(p));
+  if (added.length || removed.length) {
+    const parts = [added.length && `eklenen: ${added.map((p) => PERMISSIONS[p]).join(', ')}`, removed.length && `kaldırılan: ${removed.map((p) => PERMISSIONS[p]).join(', ')}`].filter(Boolean);
+    const fx = new Effects();
+    fx.audit(db, { userId: user.id, action: 'role.permissions', severity: 'uyari', message: `${ROLE_LABELS[role]} rolünün yetkileri değişti (${parts.join('; ')})` });
+    fx.emit({ topic: 'users', kind: 'roles', byUserId: user.id });
+    fx.flush();
+  }
+  return c.json({ role, permissions: rolePermissions(role, matrix), custom: !!matrix[role] });
+});
+
 function pinFree(pin: string, exceptUserId?: string) {
   if (!isValidPin(pin)) throw bad('PIN 4-6 haneli rakam olmalı', 'pin_invalid');
   const other = db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get();
@@ -450,6 +503,7 @@ const settingsShape = z
     receiptFooter: z.string().max(300),
     serviceRate: z.number().int().min(0).max(30),
     autoLockMinutes: z.number().int().min(0).max(120),
+    keepAwake: z.boolean(),
     voidReasons: z.array(z.string().max(40)).max(12),
     compReasons: z.array(z.string().max(40)).max(12),
     discountReasons: z.array(z.string().max(40)).max(12),

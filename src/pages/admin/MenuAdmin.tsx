@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, CircleCheck, Eye, EyeOff, Globe, Pencil, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
+import { Ban, CircleCheck, ExternalLink, Eye, EyeOff, Globe, Pencil, Plus, RefreshCw, Star, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { parseTL, tl } from '@shared/money';
@@ -52,6 +52,7 @@ function ProductMark({ name, color }: { name: string; color: string }) {
  * burada kasa alanları düzenlenir. Adres ?urun=<id> ile açılır, geri tuşu çekmeceyi kapatır.
  */
 export default function MenuAdmin() {
+  const boot = useBoot();
   const can = useCan();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -185,17 +186,21 @@ export default function MenuAdmin() {
     <>
       <PageHeader
         title="Ürünler"
-        description="Siteden gelen ürünün adı, fiyatı, boyu ve KDV'si laffogato panelinde değişir; burada satış durumu, istasyon, kısa ad, porsiyon ve seçenek grupları düzenlenir"
+        description="Ürünler tek yerde, laffogato panelinde yüklenir; site, uygulama ve kasa aynı menüyü okur (docs/06-TEK-SISTEM.md). Burada satış durumu, istasyon, kısa ad, porsiyon ve seçenek grupları düzenlenir; yerel ürün yalnız kafede satılan hizmetler içindir"
         actions={
           <>
             <button type="button" className={BTN.ghost} onClick={syncPreview} disabled={syncing}>
               <RefreshCw className={cn('size-4', syncing && 'animate-spin')} aria-hidden="true" />
               Siteyle eşitle
             </button>
-            <button type="button" className={BTN.primary} onClick={() => open('yeni')}>
+            <button type="button" className={BTN.ghost} onClick={() => open('yeni')}>
               <Plus className="size-4" aria-hidden="true" />
               Yerel ürün
             </button>
+            <a href={`${boot.integrations.laffogatoUrl.replace(/\/+$/, '')}/admin/menu/yeni`} target="_blank" rel="noreferrer" className={BTN.primary}>
+              <ExternalLink className="size-4" aria-hidden="true" />
+              Sitede ürün ekle
+            </a>
           </>
         }
       />

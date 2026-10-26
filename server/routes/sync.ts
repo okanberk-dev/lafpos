@@ -67,7 +67,7 @@ syncRoutes.post('/online/:orderId/stage', async (c) => {
 /** Tükendi / Satışa aç: kasiyer de yapabilir (müşteri beklerken menü yöneticisi aranmasın) */
 syncRoutes.post('/products/:id/availability', async (c) => {
   const user = c.get('user');
-  if (!can(user, 'menu.yonet') && !can(user, 'kasa.gun')) requirePermission(user, 'menu.yonet');
+  if (!can(user, 'menu.yonet')) requirePermission(user, 'urun.tukendi');
   const input = await body(c, z.object({ active: z.boolean() }));
   return c.json(await setAvailability(c.req.param('id'), input.active, user.name));
 });

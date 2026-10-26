@@ -1,4 +1,4 @@
-import { Lock, LogOut, MoreHorizontal, Moon, Search, Sun, Wifi, WifiOff } from 'lucide-react';
+import { Expand, Lock, LogOut, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { fmtTime } from '@shared/time';
@@ -9,6 +9,8 @@ import { useLive } from '@/lib/live';
 import { isAdminArea, POS_NAV } from '@/lib/nav';
 import { useShell } from '@/lib/shell';
 import { useTheme } from '@/lib/theme';
+import { toast } from '@/lib/toast';
+import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
 import { Modal } from './ui/Modal';
 
@@ -55,6 +57,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setPalette = useShell((s) => s.setPalette);
   const [moreOpen, setMoreOpen] = useState(false);
   useAutoLock(boot.settings.autoLockMinutes);
+  useWakeLock(boot.settings.keepAwake);
+  const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
+  useEffect(() => {
+    const on = () => setFull(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', on);
+    return () => document.removeEventListener('fullscreenchange', on);
+  }, []);
+  const toggleFull = () => {
+    setMenuOpen(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => null);
+    else void document.documentElement.requestFullscreen().catch(() => toast.warn('Tarayıcı tam ekrana izin vermedi'));
+  };
 
   const items = POS_NAV.filter((n) => n.perms.some((p) => can(p)));
   const primary = items.filter((n) => n.primary).slice(0, 4);
@@ -191,6 +205,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             {dark ? <Sun className="size-5 text-brass-500" /> : <Moon className="size-5 text-forest-600" />}
             <div className="font-medium">{dark ? 'Açık tema' : 'Koyu tema'}</div>
           </button>
+          {typeof document !== 'undefined' && document.fullscreenEnabled && (
+            <button onClick={toggleFull} className="flex w-full items-center gap-3 rounded-2xl border border-line p-4 text-left hover:bg-surface-2">
+              {full ? <Shrink className="size-5 text-forest-600" /> : <Expand className="size-5 text-forest-600" />}
+              <div>
+                <div className="font-medium">{full ? 'Tam ekrandan çık' : 'Tam ekran'}</div>
+                <div className="text-xs text-muted">Kasa bilgisayarında kiosk başlatıcısı bunu kendisi yapar</div>
+              </div>
+            </button>
+          )}
           <button onClick={lock} className="flex w-full items-center gap-3 rounded-2xl p-3 text-left text-sm text-muted hover:bg-surface-2">
             <LogOut className="size-4" /> Çıkış yap
           </button>

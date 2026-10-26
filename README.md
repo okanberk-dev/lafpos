@@ -10,6 +10,8 @@ sonu, müşteri/cari, paket, rezervasyon, karaoke odası, raporlar ve patron pan
 - Mimari, veri modeli, dalgalar: [docs/02-PLAN.md](docs/02-PLAN.md)
 - Entegrasyon sözleşmesi: [docs/03-ENTEGRASYON.md](docs/03-ENTEGRASYON.md)
 - Yazarkasa POS (TokenX Connect): [docs/04-YAZARKASA.md](docs/04-YAZARKASA.md)
+- Kasa bilgisayarı (Chrome kiosk, sessiz fiş yazdırma, otomatik başlatma): [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md)
+- Karar: tek sistem, iki yüz (ürünler laffogato panelinde): [docs/06-TEK-SISTEM.md](docs/06-TEK-SISTEM.md)
 - Tasarım sistemi (kasa ekranları, Innex yönetim paneli, telefon ve tablet): [DESIGN.md](DESIGN.md), ürün bağlamı [PRODUCT.md](PRODUCT.md), Innex tarifi [docs/ADMIN-INNEX.md](docs/ADMIN-INNEX.md)
 - Claude Code skill'leri: [docs/SKILLS.md](docs/SKILLS.md)
 
@@ -30,6 +32,9 @@ Kafede tek süreç olarak:
 ```bash
 npm run build && npm start   # http://<bilgisayar-ip>:4000
 ```
+
+Kasa bilgisayarında otomatik başlatma ve kiosk Chrome: `docs/05-KASA-BILGISAYARI.md`
+(`scripts/kasa/windows/kur.ps1`, `scripts/kasa/mac/kur.sh`).
 
 ## Ortam değişkenleri
 

@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { and, eq, gt } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 import { effectivePermissions, type Permission, type Role } from '@shared/permissions';
+import { getSettings } from './settings';
 import { db, schema } from '../db/client';
 import { env } from '../env';
 import { HttpError } from './http';
@@ -90,7 +91,7 @@ export function toAuthUser(u: UserRow, sessionId = ''): AuthUser {
     name: u.name,
     role: u.role,
     color: u.color,
-    permissions: effectivePermissions(u.role, { grant: u.permGrant, revoke: u.permRevoke }),
+    permissions: effectivePermissions(u.role, { grant: u.permGrant, revoke: u.permRevoke }, getSettings().rolePermissions),
     maxDiscountPct: u.maxDiscountPct,
     sessionId,
   };

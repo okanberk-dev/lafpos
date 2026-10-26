@@ -1,8 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, RotateCcw, Undo2 } from 'lucide-react';
+import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, PackageX, RotateCcw, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { KitchenTicket, KitchenTicketItem } from '@shared/types';
+import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { errorMessage, get, post } from '@/lib/api';
+import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref, useTick } from '@/lib/hooks';
@@ -23,6 +25,8 @@ export default function KitchenPage() {
   const setForceDark = useTheme((s) => s.setForceDark);
   const [station, setStation] = useLocalPref<string>('kds.station', '');
   const [history, setHistory] = useState(false);
+  const [soldOut, setSoldOut] = useState(false);
+  const can = useCan();
   const [sound, setSound] = useLocalPref<boolean>('kds.sound', true);
   const now = useTick(5_000);
 
@@ -93,6 +97,11 @@ export default function KitchenPage() {
         <button onClick={() => setHistory(!history)} className={cn('inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm pointer-coarse:min-h-11', history ? 'bg-brass-500 text-espresso' : 'bg-surface-2')}>
           <History className="size-4" /> {history ? 'Aktif fişler' : 'Geçmiş'}
         </button>
+        {(can('urun.tukendi') || can('menu.yonet')) && (
+          <button onClick={() => setSoldOut(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-surface-2 px-3 py-2 text-sm pointer-coarse:min-h-11">
+            <PackageX className="size-4" /> Tükendi
+          </button>
+        )}
         <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} className="grid size-11 place-items-center rounded-xl bg-surface-2">
           {sound ? <Bell className="size-4" /> : <BellOff className="size-4 text-muted" />}
         </button>
@@ -200,6 +209,7 @@ export default function KitchenPage() {
           <RotateCcw className="size-4" /> Bağlantı sorunu; yeniden deneniyor
         </div>
       )}
+      <SoldOutDialog open={soldOut} onClose={() => setSoldOut(false)} />
     </div>
   );
 }

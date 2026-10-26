@@ -114,6 +114,31 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Tablette kasiyer: yönetim kapalı, kasa kör sayım, ürünü tükendi işaretler',
+      () =>
+        withPage(ctx, 'tablet', 'kasa', async (page) => {
+          await go(ctx, page, '/masalar');
+          const rail = await page.locator('aside').first().innerText();
+          assert(!/Yönetim|Rapor|Patron/.test(rail), `kasiyer menüsünde olmaması gereken: ${rail.replace(/\s+/g, ' ')}`);
+          await go(ctx, page, '/yonetim/menu');
+          assert(!new URL(page.url()).pathname.startsWith('/yonetim'), 'kasiyer yönetime girebildi');
+          await go(ctx, page, '/kasa');
+          await page.getByText('Kör kasa', { exact: true }).waitFor();
+          assert((await page.getByText('Beklenen nakit', { exact: true }).count()) === 0, 'kör kasada beklenen nakit görünüyor');
+          await go(ctx, page, `/adisyon/${seed.s2.id}`);
+          await page.getByRole('button', { name: 'İşlemler' }).click();
+          await page.getByRole('button', { name: /Tükenen ürünler/ }).click();
+          const dialog = page.getByRole('dialog', { name: /Tükenen ürünler/ });
+          await dialog.getByPlaceholder('Ürün ara').fill('Americano');
+          await dialog.getByRole('button', { name: 'Tükendi', exact: true }).first().click();
+          await dialog.getByRole('button', { name: 'Satışa aç', exact: true }).first().waitFor({ timeout: 8000 });
+          const boot = await api.call('kasa', 'GET', '/bootstrap');
+          assert(boot.products.find((p) => p.name === 'Americano')?.active === false, 'Americano tükenmedi');
+          await dialog.getByRole('button', { name: 'Satışa aç', exact: true }).first().click();
+          await dialog.getByRole('button', { name: 'Tükendi', exact: true }).first().waitFor({ timeout: 8000 });
+        }),
+    ],
+    [
       'Bilgisayarda komut paleti: Ctrl K ile personel sayfasına gider',
       () =>
         withPage(ctx, 'bilgisayar', 'patron', async (page) => {

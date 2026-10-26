@@ -2,6 +2,7 @@ import { Minus, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import type { ZSummary } from '@shared/types';
+import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 
 /** Türk lirası banknot ve madeni paralar (kuruş) */
@@ -15,12 +16,17 @@ export interface CountResult {
 
 /**
  * Kasa föyü: banknot sayacıyla nakit, ödeme türü bazında sayılan tutar (banka POS gün sonu slipi, yemek kartı
- * raporları). Sistemle farkı anında gösterir.
+ * raporları). Sistemle farkı anında gösterir. `summary` yoksa kör sayımdır (kasiyer `kasa.rakam` yetkisiz):
+ * beklenen tutar ve fark gösterilmez, yalnız sayılan yazılır; fark yöneticinin ekranında.
  */
-export function CashCount({ summary, value, onChange }: { summary: ZSummary; value: CountResult; onChange: (v: CountResult) => void }) {
+export function CashCount({ summary, value, onChange }: { summary: ZSummary | null; value: CountResult; onChange: (v: CountResult) => void }) {
+  const boot = useBoot();
   const [mode, setMode] = useState<'banknot' | 'toplam'>('banknot');
   const [totalText, setTotalText] = useState(value.countedCash ? String(value.countedCash / 100).replace('.', ',') : '');
-  const methods = summary.payments.filter((p) => p.zField !== 'cash');
+  const blind = !summary;
+  const methods: { methodId: string; name: string; amount: number | null; count: number | null }[] = summary
+    ? summary.payments.filter((p) => p.zField !== 'cash')
+    : boot.paymentMethods.filter((m) => m.zField !== 'cash' && m.kind !== 'cari').map((m) => ({ methodId: m.id, name: m.name, amount: null, count: null }));
   const fromNotes = useMemo(() => DENOMINATIONS.reduce((a, d) => a + d * (value.banknotes[String(d)] ?? 0), 0), [value.banknotes]);
 
   const setNote = (d: number, n: number) => {
@@ -28,7 +34,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary; val
     const countedCash = DENOMINATIONS.reduce((a, x) => a + x * (banknotes[String(x)] ?? 0), 0);
     onChange({ ...value, banknotes, countedCash });
   };
-  const diff = value.countedCash - summary.expectedCash;
+  const diff = summary ? value.countedCash - summary.expectedCash : 0;
 
   return (
     <div className="space-y-5">
@@ -37,7 +43,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary; val
           <h3 className="font-semibold">Nakit sayımı</h3>
           <div className="flex rounded-lg bg-surface-2 p-0.5 text-xs">
             {(['banknot', 'toplam'] as const).map((m) => (
-              <button key={m} onClick={() => setMode(m)} className={cn('rounded-md px-2.5 py-1', mode === m && 'bg-surface shadow-sm')}>
+              <button key={m} onClick={() => setMode(m)} className={cn('rounded-md px-2.5 py-1 pointer-coarse:min-h-11', mode === m && 'bg-surface shadow-sm')}>
                 {m === 'banknot' ? 'Banknot banknot' : 'Toplam tutar'}
               </button>
             ))}
@@ -50,17 +56,17 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary; val
               return (
                 <div key={d} className="flex items-center gap-2 rounded-xl border border-line bg-surface px-2 py-1.5">
                   <span className="tabular w-14 text-sm font-semibold">{d >= 100 ? `${d / 100} ₺` : `${d} kr`}</span>
-                  <button aria-label="Azalt" className="grid size-8 place-items-center rounded-lg bg-surface-2" onClick={() => setNote(d, n - 1)}>
+                  <button aria-label="Azalt" className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 pointer-coarse:size-11" onClick={() => setNote(d, n - 1)}>
                     <Minus className="size-3.5" />
                   </button>
                   <input
                     value={n || ''}
                     onChange={(e) => setNote(d, Number(e.target.value.replace(/\D/g, '')) || 0)}
                     inputMode="numeric"
-                    className="tabular h-8 w-full min-w-0 rounded-lg border border-line bg-surface text-center text-sm"
+                    className="tabular h-8 w-full min-w-0 rounded-lg border border-line bg-surface text-center text-sm pointer-coarse:h-11"
                     placeholder="0"
                   />
-                  <button aria-label="Artır" className="grid size-8 place-items-center rounded-lg bg-surface-2" onClick={() => setNote(d, n + 1)}>
+                  <button aria-label="Artır" className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 pointer-coarse:size-11" onClick={() => setNote(d, n + 1)}>
                     <Plus className="size-3.5" />
                   </button>
                 </div>
@@ -80,28 +86,37 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary; val
             className="tabular h-14 w-full rounded-2xl border border-line-strong bg-surface px-4 text-right text-2xl font-semibold"
           />
         )}
-        <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-          <Cell label="Beklenen" value={tl(summary.expectedCash)} />
-          <Cell label="Sayılan" value={tl(value.countedCash)} />
-          <Cell label="Fark" value={tl(diff)} tone={diff === 0 ? 'ok' : Math.abs(diff) < 5000 ? 'warn' : 'bad'} />
-        </div>
+        {summary ? (
+          <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+            <Cell label="Beklenen" value={tl(summary.expectedCash)} />
+            <Cell label="Sayılan" value={tl(value.countedCash)} />
+            <Cell label="Fark" value={tl(diff)} tone={diff === 0 ? 'ok' : Math.abs(diff) < 5000 ? 'warn' : 'bad'} />
+          </div>
+        ) : (
+          <div className="mt-3 grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:items-center">
+            <Cell label="Sayılan" value={tl(value.countedCash)} />
+            <p className="text-xs text-muted">Kör sayım: beklenen tutar ve fark bu rolde görünmez; yöneticinin ekranında ve Z raporunda</p>
+          </div>
+        )}
       </section>
 
       {methods.length > 0 && (
         <section>
           <h3 className="mb-1 font-semibold">Diğer ödeme türleri</h3>
-          <p className="mb-2 text-xs text-muted">Banka POS gün sonu slipindeki ve yemek kartı raporlarındaki tutarları yazın; boş bırakılan karşılaştırılmaz</p>
+          <p className="mb-2 text-xs text-muted">Banka POS gün sonu slipindeki ve yemek kartı raporlarındaki tutarları yazın; boş bırakılan {blind ? 'kaydedilmez' : 'karşılaştırılmaz'}</p>
           <div className="space-y-2">
             {methods.map((m) => {
               const counted = value.methodCounts[m.methodId];
-              const d = counted == null ? null : counted - m.amount;
+              const d = counted == null || m.amount == null ? null : counted - m.amount;
               return (
                 <div key={m.methodId} className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2">
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="font-medium">{m.name}</span>
-                    <span className="block text-xs text-muted">
-                      Sistem {tl(m.amount)} · {m.count} işlem
-                    </span>
+                    {m.amount != null && (
+                      <span className="block text-xs text-muted">
+                        Sistem {tl(m.amount)} · {m.count} işlem
+                      </span>
+                    )}
                   </span>
                   <input
                     defaultValue={counted != null ? String(counted / 100).replace('.', ',') : ''}
@@ -114,9 +129,9 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary; val
                     }}
                     inputMode="decimal"
                     placeholder="Slip"
-                    className="tabular h-10 w-28 rounded-lg border border-line-strong bg-surface px-2 text-right"
+                    className="tabular h-11 w-28 rounded-lg border border-line-strong bg-surface px-2 text-right"
                   />
-                  <span className={cn('tabular w-24 text-right text-sm font-semibold', d == null ? 'text-muted' : d === 0 ? 'text-forest-500' : 'text-burgundy-500')}>{d == null ? '—' : tl(d)}</span>
+                  {!blind && <span className={cn('tabular w-24 text-right text-sm font-semibold', d == null ? 'text-muted' : d === 0 ? 'text-forest-500' : 'text-burgundy-500')}>{d == null ? '—' : tl(d)}</span>}
                 </div>
               );
             })}

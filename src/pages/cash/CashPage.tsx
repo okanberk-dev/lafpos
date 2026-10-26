@@ -22,6 +22,8 @@ interface DayResponse {
   day: BusinessDayDTO | null;
   summary: ZSummary | null;
   movements: { id: string; kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string; userName: string | null; createdAt: number }[];
+  /** Kör kasa: bu kullanıcı kasa rakamlarını görmez */
+  blind?: boolean;
 }
 interface DayListItem extends BusinessDayDTO {
   netSales: number | null;
@@ -101,14 +103,15 @@ export default function CashPage() {
         ...Object.fromEntries(Object.entries(count.banknotes).filter(([, n]) => n > 0).map(([k, n]) => [`b:${k}`, n])),
         ...Object.fromEntries(Object.entries(count.methodCounts).map(([k, v]) => [`m:${k}`, v])),
       };
-      const res = await post<{ day: BusinessDayDTO; summary: ZSummary; lafmaliyet: Record<string, unknown> }>('/cash/day/close', {
+      const res = await post<{ day: BusinessDayDTO; summary: ZSummary | null; lafmaliyet: Record<string, unknown> | null; blind?: boolean }>('/cash/day/close', {
         countedCash: counted ? count.countedCash : null,
         cashCounts,
         note: note || null,
       });
       setClosing(false);
       setCount(emptyCount());
-      setZResult({ day: res.day, summary: res.summary, lafmaliyet: res.lafmaliyet, movements: [] });
+      if (res.summary) setZResult({ day: res.day, summary: res.summary, lafmaliyet: res.lafmaliyet ?? {}, movements: [] });
+      else toast.ok(`Gün kapandı (Z ${res.day.zNo}); sayım kaydedildi, fark yöneticinin ekranında`);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -136,6 +139,8 @@ export default function CashPage() {
   if (current.isLoading) return <PageLoading />;
   const day = current.data?.day ?? null;
   const summary = current.data?.summary ?? null;
+  // Kör kasa: kasiyerin `kasa.rakam` yetkisi yoksa sunucu ara raporu ve beklenen nakdi göndermez
+  const blind = current.data?.blind ?? false;
   const movements = current.data?.movements ?? [];
 
   return (
@@ -216,7 +221,15 @@ export default function CashPage() {
             )}
           </div>
 
-          {summary ? <ZView day={day} summary={summary} lafmaliyet={null} title={`Ara rapor (X) · Z ${day.zNo}`} /> : <p className="text-sm text-muted">Özet için rapor yetkisi gerekir</p>}
+          {summary ? (
+            <ZView day={day} summary={summary} lafmaliyet={null} title={`Ara rapor (X) · Z ${day.zNo}`} />
+          ) : (
+            <Card title="Kör kasa">
+              <p className="px-4 py-4 text-sm text-muted">
+                Ara rapor ve beklenen nakit bu rolde görünmez. Gün sonunda çekmeceyi sayıp yazın; fark yöneticinin ekranında ve Z raporunda. Rakamları görmek için yöneticiden "Ara rapor (X) ve kasa rakamlarını görme" yetkisi isteyin
+              </p>
+            </Card>
+          )}
 
           <Card title="Kasa hareketleri">
             {movements.length === 0 ? (
@@ -298,7 +311,7 @@ export default function CashPage() {
       </Modal>
 
       <Modal
-        open={closing && !!summary}
+        open={closing && (!!summary || blind)}
         onClose={() => setClosing(false)}
         size="lg"
         title={`Gün sonu · Z ${day?.zNo ?? ''}`}
@@ -318,7 +331,7 @@ export default function CashPage() {
         }
       >
         <div className="space-y-4 p-5">
-          {summary && counted && <CashCount summary={summary} value={count} onChange={setCount} />}
+          {counted && <CashCount summary={summary} value={count} onChange={setCount} />}
           <Field label="Not">
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ör. kart slipinde 1 işlem eksik" />
           </Field>

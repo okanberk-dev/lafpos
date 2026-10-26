@@ -22,13 +22,19 @@ function movementsOf(dayId: string) {
     .map((m) => ({ ...m, userName: m.userId ? (names.get(m.userId) ?? null) : null }));
 }
 
+/**
+ * Kör kasa (ModPOS "Kör Kasa" gibi): `kasa.rakam` ya da `rapor.gor` yetkisi olmayan kasiyer ara raporu,
+ * beklenen nakdi ve kasa farkını görmez; gün sonunda saydığını yazar, fark yöneticinin ekranındadır.
+ */
+const seesNumbers = (user: AppEnv['Variables']['user']) => user.permissions.has('kasa.rakam') || user.permissions.has('rapor.gor');
+
 /** Açık gün, ara rapor (X) ve kasa hareketleri */
 cashRoutes.get('/day', (c) => {
   const user = c.get('user');
   const day = getOpenDay(db);
-  if (!day) return c.json({ day: null, summary: null, movements: [] });
-  const canSee = user.permissions.has('kasa.gun') || user.permissions.has('rapor.gor');
-  return c.json({ day: dayToDTO(db, day), summary: canSee ? computeSummary(db, day) : null, movements: movementsOf(day.id) });
+  const blind = !seesNumbers(user);
+  if (!day) return c.json({ day: null, summary: null, movements: [], blind });
+  return c.json({ day: dayToDTO(db, day), summary: blind ? null : computeSummary(db, day), movements: movementsOf(day.id), blind });
 });
 
 cashRoutes.post('/day/open', async (c) => {
@@ -46,7 +52,8 @@ cashRoutes.post('/day/close', async (c) => {
   const actor = actorFrom(c);
   const day = write((t, fx) => closeDay(t, actor, fx, input));
   if (enqueueDay(day.id)) void flushOutbox();
-  return c.json({ day: dayToDTO(db, day), summary: day.summary, lafmaliyet: day.summary ? lafmaliyetZ(day, day.summary) : null });
+  if (!seesNumbers(c.get('user'))) return c.json({ day: dayToDTO(db, day), summary: null, lafmaliyet: null, blind: true });
+  return c.json({ day: dayToDTO(db, day), summary: day.summary, lafmaliyet: day.summary ? lafmaliyetZ(day, day.summary) : null, blind: false });
 });
 
 cashRoutes.post('/days/:id/count', async (c) => {
@@ -62,7 +69,8 @@ cashRoutes.post('/days/:id/count', async (c) => {
   const actor = actorFrom(c);
   const day = write((t, fx) => recordCount(t, actor, fx, c.req.param('id'), input));
   if (enqueueDay(day.id)) void flushOutbox();
-  return c.json({ day: dayToDTO(db, day), summary: day.summary });
+  const blind = !seesNumbers(c.get('user'));
+  return c.json({ day: dayToDTO(db, day), summary: blind ? null : day.summary, blind });
 });
 
 cashRoutes.post('/movements', async (c) => {

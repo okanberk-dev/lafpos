@@ -13,6 +13,7 @@ const MenuAdmin = lazy(() => import('./MenuAdmin'));
 const OptionsAdmin = lazy(() => import('./OptionsAdmin'));
 const FloorAdmin = lazy(() => import('./FloorAdmin'));
 const UsersAdmin = lazy(() => import('./UsersAdmin'));
+const RolesAdmin = lazy(() => import('./RolesAdmin'));
 const SettingsAdmin = lazy(() => import('./SettingsAdmin'));
 const PaymentsAdmin = lazy(() => import('./PaymentsAdmin'));
 const OkcAdmin = lazy(() => import('./OkcAdmin'));
@@ -25,6 +26,7 @@ const PAGES: Record<string, ReactNode> = {
   secenekler: <OptionsAdmin />,
   'masa-plani': <FloorAdmin />,
   personel: <UsersAdmin />,
+  roller: <RolesAdmin />,
   odeme: <PaymentsAdmin />,
   yazarkasa: <OkcAdmin />,
   entegrasyon: <IntegrationAdmin />,

@@ -156,9 +156,42 @@ describe('LafPOS uçtan uca', () => {
     expect(live.netSales).toBe(s.netSales);
   });
 
-  it('gün sonu Z ve lafmaliyet paketi (ekler ayrı satır, TL)', async () => {
-    const x = await ok<{ summary: { expectedCash: number } }>('kasa', 'GET', '/cash/day');
-    const z = await ok<{ day: { id: string }; summary: { cashDiff: number; netSales: number }; lafmaliyet: Record<string, number> }>('kasa', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash });
+  it('kör kasa: kasiyer ara raporu görmez; rol yetkisi verilince görür (rol matrisi)', async () => {
+    const blind = await ok<{ summary: unknown; blind: boolean }>('kasa', 'GET', '/cash/day');
+    expect(blind.blind).toBe(true);
+    expect(blind.summary).toBeNull();
+    const roles = await ok<{ roles: { role: string; permissions: string[]; defaults: string[]; locked: boolean }[] }>('patron', 'GET', '/admin/roles');
+    const kasiyer = roles.roles.find((r) => r.role === 'kasiyer')!;
+    expect(kasiyer.permissions).not.toContain('kasa.rakam');
+    await ok('patron', 'PUT', '/admin/roles/kasiyer', { permissions: [...kasiyer.permissions, 'kasa.rakam'] });
+    const seen = await ok<{ summary: { expectedCash: number } | null; blind: boolean }>('kasa', 'GET', '/cash/day');
+    expect(seen.blind).toBe(false);
+    expect(seen.summary?.expectedCash).toBeGreaterThan(0);
+    // Varsayılana dönünce özel kayıt silinir, kasiyer yine kör sayar
+    const back = await ok<{ custom: boolean }>('patron', 'PUT', '/admin/roles/kasiyer', { permissions: kasiyer.defaults });
+    expect(back.custom).toBe(false);
+    expect((await ok<{ blind: boolean }>('kasa', 'GET', '/cash/day')).blind).toBe(true);
+    // Patron rolü kilitli; personel yetkisi olmayan rol değiştiremez; denetim kaydına uyarı düşer
+    expect((await call<{ code: string }>('patron', 'PUT', '/admin/roles/patron', { permissions: [] })).json.code).toBe('role_locked');
+    expect((await call('kasa', 'PUT', '/admin/roles/garson', { permissions: [] })).status).toBe(403);
+    const audit = await ok<{ action: string; severity: string }[]>('patron', 'GET', '/admin/audit?severity=uyari&limit=50');
+    expect(audit.some((a) => a.action === 'role.permissions')).toBe(true);
+  });
+
+  it('kasiyer ürünü kasadan tükendi işaretler; garson işaretleyemez', async () => {
+    const espresso = product('Espresso');
+    expect((await call('garson', 'POST', `/sync/products/${espresso.id}/availability`, { active: false })).status).toBe(403);
+    await ok('kasa', 'POST', `/sync/products/${espresso.id}/availability`, { active: false });
+    expect((await ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).products.find((p) => p.id === espresso.id)?.active).toBe(false);
+    await ok('kasa', 'POST', `/sync/products/${espresso.id}/availability`, { active: true });
+  });
+
+  it('gün sonu Z ve lafmaliyet paketi (ekler ayrı satır, TL); kasiyer kör kapatır', async () => {
+    const x = await ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
+    const closed = await ok<{ day: { id: string }; summary: unknown; blind: boolean }>('kasa', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash });
+    expect(closed.blind).toBe(true);
+    expect(closed.summary).toBeNull();
+    const z = await ok<{ day: { id: string }; summary: { cashDiff: number; netSales: number }; lafmaliyet: Record<string, number> }>('patron', 'GET', `/cash/days/${closed.day.id}`);
     expect(z.summary.cashDiff).toBe(0);
     expect(z.lafmaliyet.z_total).toBeCloseTo(z.summary.netSales / 100, 2);
     const payload = await ok<{ lines: { posName: string; siteMenuId: string | null; slot: string | null; qty: number; revenue: number }[]; z: { zTotal: number } }>('patron', 'GET', `/sync/lafmaliyet/gun/${z.day.id}`);

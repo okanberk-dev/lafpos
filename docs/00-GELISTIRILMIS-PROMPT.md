@@ -125,9 +125,59 @@ yapılabilecek, dokunmatik tablet, telefon ve bilgisayarda çalışan bir POS si
 
 ## Kapsam dışı (bilinçli)
 
-- **ÖKC / yazarkasa entegrasyonu:** mali fiş GİB onaylı cihazdan kesilir. LafPOS'un adisyonu "mali değeri
-  yoktur" bilgi fişidir (ModPOS ile aynı konum). Cihaz entegrasyonu ayrı bir proje.
+- ~~ÖKC / yazarkasa entegrasyonu~~ (ilk planda kapsam dışıydı; operatör isteğiyle yapıldı: TokenX Connect,
+  `docs/04-YAZARKASA.md`). Mali fiş yine GİB onaylı cihazdan kesilir; LafPOS'un adisyonu bilgi fişidir.
 - **e-Arşiv / e-Fatura:** lafmaliyet'te ve Paraşüt tarafında kalır.
 - **Yemek platformları (Yemeksepeti, Getir, Trendyol) canlı entegrasyonu:** platform anlaşması ve anahtar
   gerektirir; adaptör arayüzü hazırlanır.
 - **Reçete, hammadde, tedarikçi, maliyet yönetimi:** lafmaliyet'in işi; LafPOS kopyalamaz.
+
+---
+
+## Ek istek 2 (26 Ekim 2026): kasa bilgisayarı, roller, tek sistem mi iki sistem mi
+
+**Operatörün sözü:** _"Kasa bilgisayarında açık olacak bu Chrome, ona göre ayarla ve POS cihazına vs gidecek
+ödeme olacak rapor olacak falan; ModPOS'a gir bak ne zaman istersen. Ayrıca rol yetki tanımlama yap, kasiyer
+olarak girince belli şeyleri görecek. NarPOS, robotPOS falan bak veya yurt dışı muadillerine: eğer 2 farklı
+sistem oluyorsa ürün yüklemek ve kasa için öyle yap, tek sistem oluyorsa öyle yap, hangisi daha iyiyse.
+laffogato ve lafmaliyet repolarında da istediğin değişikliği yapabilirsin, uyumlu olacak şekilde; md
+dosyalarına not edip merge et."_
+
+### Geliştirilmiş hâli
+
+Sen LafPOS'un baş geliştiricisisin. LafPOS kafedeki **kasa bilgisayarında Chrome'da** sürekli açık duracak;
+tablet ve telefonlar aynı sunucuya ağdan bağlanır. Şunları yap ve her birini gerçek tarayıcıda doğrula:
+
+1. **Kasa bilgisayarı:** Chrome'u kiosk (tam ekran, adres çubuksuz) ve sessiz fiş yazdırma ile açan
+   başlatıcılar (Windows öncelikli, macOS da), bilgisayar açılınca LafPOS sunucusunun ve Chrome'un kendiliğinden
+   başlaması, ekranın kararmaması (Wake Lock), yanlışlıkla geri gitme ve yakınlaştırmanın engellenmesi, fiş
+   yazıcısı ve para çekmecesi notları. Kurulum belgesi: `docs/05-KASA-BILGISAYARI.md`.
+2. **Ödeme cihazı ve raporlar:** ödeme yazarkasa POS'a (TokenX Connect) sepet olarak gider, sonuç adisyona
+   işlenir; X/Z ve satış raporları rolün izin verdiği kadar görünür.
+3. **Roller ve yetkiler (ModPOS "Pozisyonlar" ve "Özel Yetkiler" gibi):** rol yetki setleri yönetimden
+   düzenlenebilir (patron rolü kilitli), kişiye ek ya da kaldırılan yetki kalır. Yeni yetkiler: kör kasa
+   (kasiyer sayımda sistem rakamlarını görmez), ara rapor (X), ürünü kasadan tükendi işaretleme. Kasiyer
+   girince yalnız işinin ekranlarını görür; adresle girmeye çalıştığı yönetim sayfası açılmaz, sunucu da
+   reddeder.
+4. **Tek sistem mi iki sistem mi:** NarPOS, robotPOS, ModPOS, Toast, Square, Lightspeed'e bak; kararı ve
+   gerekçesini `docs/06-TEK-SISTEM.md`'ye yaz, ürün yükleme ve kasa akışını karara göre düzenle.
+5. **laffogato ve lafmaliyet:** bağlantı PR'larını (laffogato#263, lafmaliyet#34) güncel ana dala göre
+   tamamla, bağımsız incelemeden geçir, CI yeşilken birleştir; değişiklikleri iki reponun md belgelerine
+   yaz. Üretim yalnız ana daldan yayınlanır; birleştirme sonrası canlıda kontrol et.
+6. **Kapanış:** typecheck, birim testleri, derleme ve e2e (telefon, tablet, bilgisayar, koyu tema, akışlar)
+   yeşil; LafPOS PR'ı açılıp birleştirilir; açık kalan ve operatörün yapması gereken adımlar (Vercel ortam
+   değişkeni, gerçek cihaz turu) ayrıca listelenir.
+
+### Görevler (açık işlerle birlikte)
+
+| # | Görev | Durum |
+|---|---|---|
+| 1 | Innex yönetim paneli, telefon ve tablet uyarlaması, e2e ve birim testleri | Tamam (commit `0022871`) |
+| 2 | Yazarkasa belgesi (`docs/04-YAZARKASA.md`) ve `.env` örneği | Tamam |
+| 3 | Bu bölüm: geliştirilmiş istek ve görevler | Tamam |
+| 4 | Tek sistem / iki sistem araştırması ve kararı (`docs/06-TEK-SISTEM.md`) | Açık |
+| 5 | Roller: düzenlenebilir rol yetkileri, kör kasa, X raporu, kasadan tükendi; kasiyer görünümü ve testleri | Açık |
+| 6 | Kasa bilgisayarı: Chrome kiosk başlatıcıları, otomatik başlatma, Wake Lock, yazdırma; belge | Açık |
+| 7 | laffogato#263 ve lafmaliyet#34: güncelle, incele, CI, md notları, birleştir | Açık |
+| 8 | LafPOS PR'ı: bütün kapılar, inceleme, birleştir | Açık |
+| 9 | Operatöre kalanlar: `LAFPOS_SYNC_SECRET` (laffogato Vercel ve lafmaliyet), kasa `.env`, gerçek cihaz turu | Açık |

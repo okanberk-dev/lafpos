@@ -41,6 +41,7 @@ const ROUTES = {
     '/yonetim/secenekler',
     '/yonetim/masa-plani',
     '/yonetim/personel',
+    '/yonetim/roller',
     '/yonetim/odeme',
     '/yonetim/yazarkasa',
     '/yonetim/entegrasyon',

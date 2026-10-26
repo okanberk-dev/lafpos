@@ -17,7 +17,9 @@ Bu repoda çalışan her ajan ve geliştirici için.
 2. **Fiyatlar KDV dahildir.** KDV oranı satış anında kaleme dondurulur; ürünün oranı sonradan değişse de
    eski kalem değişmez.
 3. **Yetki sunucuda denetlenir.** Her uç `requirePermission` ile korunur; istemcideki gizleme yalnız kolaylık.
-   Personel maliyet ve kârı görmez (`rapor.maliyet`).
+   Personel maliyet ve kârı görmez (`rapor.maliyet`). Rol yetki setleri ayarlarda (`rolePermissions`,
+   Yönetim › Roller ve yetkiler); patron rolü kilitli. `kasa.rakam` yoksa kasa uçları ara raporu ve beklenen
+   nakdi göndermez (kör kasa).
 4. **Hassas işlem denetim kaydına yazılır:** iptal, ikram, indirim, ödeme iptali, yeniden açma, kasa
    hareketi, gün sonu, fiyat değişikliği, senkron.
 5. **Her yazma işlemi tek veritabanı işlemidir** ve bittikten sonra `bus.publish` ile ilgili konuya olay yayar.
