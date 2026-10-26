@@ -61,7 +61,7 @@ export function PaymentModal({
     setTipText('');
     setFocus('tutar');
     setSelection({});
-    setPeople(order.split?.people ?? Math.max(2, order.guests));
+    setPeople(order.split?.people ?? Math.min(30, Math.max(2, order.guests)));
     setResult(null);
     // Yalnız pencere açılınca sıfırla
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,7 +92,9 @@ export function PaymentModal({
   const given = parseTL(givenText);
   const change = method?.kind === 'nakit' && given != null ? given - amount - tip : null;
   const cariBlocked = method?.kind === 'cari' && !order.customer;
-  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked;
+  // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
+  const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
+  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !splitBlocks;
 
   const keyTarget = focus === 'verilen' ? [givenText, setGivenText] : focus === 'bahsis' ? [tipText, setTipText] : [amountText, setAmountText];
   const pressKey = (k: string) => {
@@ -110,15 +112,16 @@ export function PaymentModal({
   const pay = async () => {
     if (!method || !valid) return;
     setBusy(true);
-    const shareLabel = mode === 'paylas' && split ? `${freeNos[0]}/${split.people}` : null;
+    const sharing = mode === 'paylas' && !!split;
     const res = await act((pin) =>
-      post<{ order: OrderDTO; closed: boolean; change: number }>(`/orders/${order.id}/payments`, {
+      post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null }>(`/orders/${order.id}/payments`, {
         methodId: method.id,
         amount,
         tip,
         given: method.kind === 'nakit' && given != null ? given : null,
         items: mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null,
-        share: mode === 'paylas' || undefined,
+        // Pay: ekrandaki tutar ve numara gider; sunucunun hesabı tutmazsa 409 split_changed, ekran yenilenir
+        ...(sharing ? { share: true, shareNo: freeNos[0] } : {}),
         approverPin: pin,
       }),
     );
@@ -131,7 +134,9 @@ export function PaymentModal({
     setTipText('');
     setMethod(null);
     setFocus('tutar');
-    if (res.closed || method.kind === 'nakit') setResult({ change: res.change, closed: res.closed, amount, method: method.name, share: shareLabel });
+    // Sonuç ekranı sunucunun kaydettiğini gösterir (kör kasada kapanan adisyonun dökümü gelmez)
+    const shareLabel = res.share ? `${res.share.no}/${res.share.of}` : null;
+    if (res.closed || method.kind === 'nakit') setResult({ change: res.change, closed: res.closed, amount: res.amount, method: method.name, share: shareLabel });
   };
 
   const refund = async (paymentId: string) => {
@@ -140,8 +145,17 @@ export function PaymentModal({
     await act((pin) => post(`/orders/${order.id}/payments/${paymentId}/refund`, { reason, approverPin: pin }), 'Ödeme iptal edildi');
   };
 
-  const printShare = (no: number, shareAmount: number) =>
-    split && printNow(<BillReceipt order={order} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} share={{ no, of: split.people, amount: shareAmount }} />);
+  // Pay fişi de hesap yazdırmadır: sunucuya işlenir (denetim kaydı, masada "hesap istendi", sonraki iptal alarmı)
+  const printShare = async (no: number, shareAmount: number) => {
+    if (!split) return;
+    const billed = await act(() => post<OrderDTO>(`/orders/${order.id}/bill`));
+    if (billed) printNow(<BillReceipt order={billed} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} share={{ no, of: split.people, amount: shareAmount }} />);
+  };
+  const printBill = async () => {
+    // Açık adisyonun hesabı yazdırılırken sunucuya işlenir; kapanmışın fişi doğrudan
+    const billed = order.status === 'acik' ? await act(() => post<OrderDTO>(`/orders/${order.id}/bill`)) : order;
+    if (billed) printNow(<BillReceipt order={billed} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} />);
+  };
 
   if (!open) return null;
 
@@ -166,7 +180,7 @@ export function PaymentModal({
             <Button variant="primary" size="lg" onClick={() => (result.closed ? onDone(true) : setResult(null))}>
               {result.closed ? 'Tamam' : result.share ? 'Sıradaki pay' : 'Kalanı al'}
             </Button>
-            <Button icon={<Printer className="size-4" />} onClick={() => printNow(<BillReceipt order={order} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} />)}>
+            <Button icon={<Printer className="size-4" />} onClick={() => void printBill()}>
               Fiş yazdır
             </Button>
           </div>
@@ -324,7 +338,7 @@ export function PaymentModal({
           </div>
 
           <Button variant="primary" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
-            {method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
+            {splitBlocks ? 'Hesap bölünmüş: payları Paylaş\'tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
           </Button>
 
           <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null} onCompleted={(closed) => onDone(closed)} />

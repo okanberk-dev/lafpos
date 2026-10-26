@@ -26,8 +26,9 @@ SetCompressorDictSize 64
 
 Name "LafPOS"
 OutFile "${OUTFILE}"
+; Klasör sabit (seçim sayfası yok): görev bu klasördeki node.exe'yi SYSTEM olarak çalıştırır; standart kullanıcının
+; yazabildiği bir klasöre (C:\LafPOS gibi) kurulursa kasiyer hesabı dosyayı değiştirip SYSTEM yetkisi alabilirdi
 InstallDir "$PROGRAMFILES64\LafPOS"
-InstallDirRegKey HKLM "${UNINST_KEY}" "InstallLocation"
 RequestExecutionLevel admin
 BrandingText "LafPOS ${VERSION}"
 
@@ -47,7 +48,6 @@ Var DATA ; C:\ProgramData\LafPOS
 !define MUI_WELCOMEPAGE_TEXT "LafPOS bu bilgisayara kurulacak. Sunucu Windows açılınca arka planda kendiliğinden çalışır; kasa ekranı tam ekran açılır, tablet ve telefonlar kafenin ağından bağlanır.$\r$\n$\r$\nVeriler C:\ProgramData\LafPOS klasöründe durur. Güncelleme önce veritabanının kopyasını alır; kaldırma verilere dokunmaz."
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_COMPONENTS
-!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_TITLE "LafPOS hazır"
 !define MUI_FINISHPAGE_TEXT "Sunucu çalışıyor ve Windows her açıldığında kendiliğinden başlar.$\r$\n$\r$\nTablet ve telefonlar: http://<bu bilgisayarın IP adresi>:${PORT}. Adres ve karekod Yönetim › Ağ ve uzaktan erişim sayfasında.$\r$\n$\r$\nÖrnek PIN'leri canlıya geçmeden Yönetim › Personel'den değiştirin."
@@ -89,26 +89,48 @@ Function .onInit
   ${EndIf}
   SetShellVarContext all
   StrCpy $DATA "$APPDATA\LafPOS"
+  ; /D= ile verilen klasör de yok sayılır (yukarıdaki neden)
+  StrCpy $INSTDIR "$PROGRAMFILES64\LafPOS"
+FunctionEnd
+
+; Kurulum yarıda kalırsa eski sürümün sunucusu yeniden açılır: kafe sunucusuz kalmasın
+Function RestoreServer
+  !insertmacro Run '"$SYSDIR\schtasks.exe" /Change /TN "${TASK}" /ENABLE'
+  !insertmacro Run '"$SYSDIR\schtasks.exe" /Run /TN "${TASK}"'
 FunctionEnd
 
 Section "LafPOS sunucusu ve kasa ekranı" SecMain
   SectionIn RO
   InitPluginsDir
 
-  ; Güncellemede çalışan sunucuyu durdur: dosyalar kilitli kalmasın, veritabanı kopyası tutarlı olsun
+  ; Güncellemede çalışan sunucuyu durdur: dosyalar kilitli kalmasın, veritabanı kopyası tutarlı olsun. Önce görev
+  ; kapatılır, yoksa beş dakikalık güvence tetiği kurulum sürerken eski sürümü yeniden başlatabilir
   DetailPrint "Çalışan LafPOS sunucusu durduruluyor"
+  !insertmacro Run '"$SYSDIR\schtasks.exe" /Change /TN "${TASK}" /DISABLE'
+  StrCpy $R9 $0 ; 0: eski görev vardı ve kapatıldı
   !insertmacro Run '"$SYSDIR\schtasks.exe" /End /TN "${TASK}"'
-  Sleep 2000
+  Sleep 3000
 
   ${If} ${FileExists} "$DATA\lafpos.db"
     ${GetTime} "" "L" $1 $2 $3 $4 $5 $6 $7
-    StrCpy $8 "$DATA\backups\lafpos-guncelleme-$3-$2-$1-$5$6.db"
+    StrCpy $8 "$DATA\backups\lafpos-guncelleme-$3-$2-$1-$5$6$7.db"
     CreateDirectory "$DATA\backups"
+    ClearErrors
     CopyFiles /SILENT "$DATA\lafpos.db" "$8"
     ${If} ${FileExists} "$DATA\lafpos.db-wal"
       CopyFiles /SILENT "$DATA\lafpos.db-wal" "$8-wal"
     ${EndIf}
-    DetailPrint "Veritabanının kopyası: $8"
+    ${If} ${Errors}
+    ${OrIfNot} ${FileExists} "$8"
+      MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Veritabanının kopyası alınamadı ($8). Güncelleme yeni sürümde veritabanını dönüştürebilir.$\r$\n$\r$\nTamam: kopyasız devam et. İptal: güncellemeyi bırak, eski sürüm çalışmaya devam etsin." /SD IDCANCEL IDOK backup_skip
+      ${If} $R9 == 0
+        Call RestoreServer
+      ${EndIf}
+      Abort "Güncelleme bırakıldı; eski sürüm çalışıyor"
+      backup_skip:
+    ${Else}
+      DetailPrint "Veritabanının kopyası: $8"
+    ${EndIf}
   ${EndIf}
 
   ; Uygulama klasörlerinde veri yok; eski sürümün dosyaları kalmasın
@@ -130,7 +152,12 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   !insertmacro TaskLine '<?xml version="1.0" encoding="UTF-16"?>'
   !insertmacro TaskLine '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">'
   !insertmacro TaskLine '  <RegistrationInfo><Description>LafPOS yerel sunucusu: kasa, tablet ve telefonlar buna bağlanır</Description></RegistrationInfo>'
-  !insertmacro TaskLine '  <Triggers><BootTrigger><Enabled>true</Enabled></BootTrigger></Triggers>'
+  ; Öğe sırası Görev Zamanlayıcı'nın dışa aktardığıyla aynı. Açılış tetiği, bir de beş dakikada bir güvence: görev çalışıyorsa bir şey yapmaz (IgnoreNew), bekçi bir
+  ; nedenle düşmüşse sunucuyu yeniden açar (RestartOnFailure yalnız açılamayan görevde devreye girer)
+  !insertmacro TaskLine '  <Triggers>'
+  !insertmacro TaskLine '    <BootTrigger><Enabled>true</Enabled></BootTrigger>'
+  !insertmacro TaskLine '    <TimeTrigger><Repetition><Interval>PT5M</Interval><StopAtDurationEnd>false</StopAtDurationEnd></Repetition><StartBoundary>2026-01-01T00:00:00</StartBoundary><Enabled>true</Enabled></TimeTrigger>'
+  !insertmacro TaskLine '  </Triggers>'
   !insertmacro TaskLine '  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>'
   !insertmacro TaskLine '  <Settings>'
   !insertmacro TaskLine '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>'
@@ -147,7 +174,7 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   !insertmacro TaskLine '    <WakeToRun>false</WakeToRun>'
   !insertmacro TaskLine '    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>'
   !insertmacro TaskLine '    <Priority>5</Priority>'
-  !insertmacro TaskLine '    <RestartOnFailure><Interval>PT1M</Interval><Count>999</Count></RestartOnFailure>'
+  !insertmacro TaskLine '    <RestartOnFailure><Interval>PT1M</Interval><Count>255</Count></RestartOnFailure>'
   !insertmacro TaskLine '  </Settings>'
   !insertmacro TaskLine '  <Actions Context="Author"><Exec>'
   !insertmacro TaskLine '    <Command>"$INSTDIR\node\node.exe"</Command>'
@@ -159,6 +186,8 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   !insertmacro Run '"$SYSDIR\schtasks.exe" /Create /TN "${TASK}" /XML "$PLUGINSDIR\gorev.xml" /RU SYSTEM /F'
   ${If} $0 != 0
     MessageBox MB_ICONEXCLAMATION "Sunucu görevi oluşturulamadı (kod $0). Kurulumu yönetici olarak yeniden çalıştırın." /SD IDOK
+    ; Eski görev kaldıysa yeniden açılır (yeni dosyalarla çalışır)
+    !insertmacro Run '"$SYSDIR\schtasks.exe" /Change /TN "${TASK}" /ENABLE'
   ${EndIf}
 
   ; Güvenlik duvarı: yalnız kafenin ağı ve Tailscale (100.64.0.0/10); internete açık port yok

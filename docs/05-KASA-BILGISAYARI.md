@@ -28,21 +28,28 @@ Kurulum yönetici izni ister ve şunları yapar:
 |---|---|
 | Uygulama | `C:\Program Files\LafPOS`: Node 24 LTS, sunucu, arayüz, kasa kısayolu. Yalnız yöneticiler değiştirir |
 | Veri | `C:\ProgramData\LafPOS`: veritabanı, `secret.key`, günlük yedekler (`backups\`), `ayarlar.env`, sunucu günlüğü (`logs\`). Yalnız SYSTEM ve yöneticiler açar |
-| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır, bekçi düşerse görev dakikada bir |
+| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar |
 | Güvenlik duvarı | TCP 4000 yalnız kafenin ağına ve Tailscale'e (`100.64.0.0/10`) açık |
 | Kısayollar | Masaüstünde ve Başlangıç'ta "LafPOS Kasa" (seçilebilir); Başlat › LafPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır |
 | Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyuyan bilgisayara tablet bağlanamaz |
 
 - **Ayarlar** (site, lafmaliyet, yazarkasa anahtarları): Başlat › LafPOS › LafPOS ayarları. `ayarlar.env`
-  Not Defteri'nde açılır, kaydedip kapatınca sunucu yeniden başlar.
+  Not Defteri'nde açılır; kaydedince (Ctrl+S) bekçi değişikliği görür ve sunucuyu yeni ayarlarla yeniden başlatır.
 - **Güncelleme:** yeni kurulum dosyasını çalıştırın. Sunucuyu durdurur, veritabanını
   `backups\lafpos-guncelleme-<tarih>.db` olarak kopyalar, uygulamayı değiştirir, sunucuyu başlatır; veri ve
   ayarlar kalır.
 - **Kaldırma:** Ayarlar › Uygulamalar › LafPOS. Görev, güvenlik duvarı kuralı ve kısayollar gider, veri
   klasörü kalır.
 - **Daha önce git ile kurduysanız:** önce `kur.ps1 -Kaldir` ve bilgisayarı yeniden başlatın; eski `data\`'daki
-  `lafpos.db`, `secret.key` ve `uploads\`'ı `C:\ProgramData\LafPOS`'a kopyalayıp kurulumu çalıştırın
-  (`secret.key` olmadan eski PIN'ler çalışmaz).
+  `lafpos.db`, `lafpos.db-wal` (varsa), `secret.key` ve `uploads\`'ı `C:\ProgramData\LafPOS`'a kopyalayıp
+  kurulumu çalıştırın. Veritabanı WAL kipinde: son işlemler `-wal` dosyasında durabilir, onsuz kopya eksik kalır
+  (sunucu beş dakikada bir ve düzgün kapanırken bunları ana dosyaya yazar). `secret.key` olmadan eski PIN'ler
+  çalışmaz.
+- **Kurulum klasörü sabit** (`C:\Program Files\LafPOS`, seçim yok): görev oradaki `node.exe`'yi SYSTEM olarak
+  çalıştırır; standart kullanıcının yazabildiği bir klasörde kasiyer hesabı SYSTEM yetkisi alabilirdi.
+- **Açılmıyorsa:** imzasız dosyada Windows "Bilgisayarınız korundu" der (Ek bilgi › Yine de çalıştır). Windows
+  11'de Akıllı Uygulama Denetimi açıksa imzasız dosyalar (kurulum ve `better_sqlite3.node`) engellenir:
+  Windows Güvenliği › Uygulama ve tarayıcı denetimi'nden bakın. Kalıcı çözüm kod imzası.
 
 **Kurulum dosyasını derlemek** (macOS, Linux ya da Windows): `npm run kurulum:windows`; gereken NSIS
 (`brew install makensis`, `apt install nsis`). Betik (`scripts/kasa/windows/kurulum/derle.mjs`) arayüzü derler,

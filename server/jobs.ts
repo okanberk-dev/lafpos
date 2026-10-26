@@ -86,6 +86,16 @@ export function startJobs() {
   timers.push(setInterval(() => void flushOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setTimeout(backupTick, 30_000));
+  // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır
+  timers.push(
+    setInterval(() => {
+      try {
+        sqlite.pragma('wal_checkpoint(PASSIVE)');
+      } catch {
+        /* veritabanı meşgulse bir sonraki turda */
+      }
+    }, 5 * 60_000),
+  );
   timers.push(setInterval(backupTick, 60 * 60_000));
   // Porsiyonu biten ürün sitede de tükensin
   bus.on('event', (e) => {

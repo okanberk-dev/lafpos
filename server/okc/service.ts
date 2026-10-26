@@ -8,7 +8,7 @@ import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
-import { addExternalPayments, assertNoActiveRoom, getOpenDay, loadOrder, mergeSelection, refundExternalPayments } from '../services/orders';
+import { addExternalPayments, assertNoActiveRoom, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { buildBasket, type MethodKind, salePayments } from './basket';
 import { TokenxClient, TokenxError, type TokenxSale } from './tokenx';
 
@@ -111,6 +111,11 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     .where(and(eq(schema.fiscalReceipts.orderId, orderId), inArray(schema.fiscalReceipts.status, [...PENDING])))
     .get();
   if (pending) throw conflict('Bu adisyonun cihazda bekleyen sepeti var; önce onu tamamlayın ya da iptal edin', 'okc_pending');
+  // Hesap kişilere bölünmüşken kalem seçerek göndermek payları düşürmez (masa eksik öder): paylar Paylaş'tan
+  const paidNow = orderPayments(db, orderId).reduce((a, p) => a + (p.refundedAt ? 0 : p.amount), 0);
+  if (selection?.length && splitActive(db, order, order.total - paidNow)) {
+    throw conflict('Hesap kişilere bölünmüş: payları "Paylaş"tan alın ya da paylaşımı kaldırın', 'split_active');
+  }
   const amountPayments = orderPayments(db, orderId).filter((p) => !p.refundedAt && !p.items?.length);
   if (amountPayments.length && !selection?.length) {
     throw conflict('Adisyonda tutar olarak alınmış ödeme var. Kalanı LafPOS\'ta alın ya da "Kalem seç" ile cihaza gönderin', 'okc_partial');

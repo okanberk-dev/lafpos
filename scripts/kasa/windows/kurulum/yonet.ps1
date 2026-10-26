@@ -1,5 +1,5 @@
 # LafPOS yonetim kisayollari (Baslat > LafPOS). Veri klasoru yalniz yoneticilere acik, bu yuzden izin ister.
-#   ayarlar          ayarlar.env Not Defteri'nde acilir; kaydedip kapatinca sunucu yeniden baslar
+#   ayarlar          ayarlar.env Not Defteri'nde acilir; kaydedince (Ctrl+S) bekci sunucuyu yeni ayarlarla baslatir
 #   yeniden-baslat   sunucuyu yeniden baslatir
 #   gunluk           sunucu gunlugunu acar
 # Dosya ASCII kalir: Windows PowerShell 5.1 BOM'suz dosyayi yerel kod sayfasiyla okur.
@@ -21,10 +21,8 @@ function Restart-LafPOS {
 }
 
 switch ($Islem) {
-  'ayarlar' {
-    Start-Process notepad.exe -ArgumentList "`"$data\ayarlar.env`"" -Wait
-    Restart-LafPOS
-  }
+  # Yeniden baslatmayi bekci yapar (dosyayi izler): Windows 11 Not Defteri sekmeyle acildiginda -Wait beklemez
+  'ayarlar' { Start-Process notepad.exe -ArgumentList "`"$data\ayarlar.env`"" }
   'yeniden-baslat' { Restart-LafPOS }
   'gunluk' { Start-Process notepad.exe -ArgumentList "`"$data\logs\sunucu.log`"" }
 }

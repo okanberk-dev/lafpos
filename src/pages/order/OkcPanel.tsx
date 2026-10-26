@@ -150,8 +150,9 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
           <Button block variant="secondary" icon={<MonitorSmartphone className="size-4" />} loading={busy} onClick={send} disabled={order.total - order.paid <= 0}>
             {items?.length ? 'Seçilen kalemleri' : 'Hesabı'} yazarkasaya gönder
           </Button>
-          {/* Paylaşımlı hesap cihazda tek mali fiştir: paylar cihazda ayrı ayrı ödeme olarak alınır */}
-          {!items?.length && order.split && order.split.shares.length > 1 ? (
+          {/* Paylaşımlı hesap cihazda tek mali fiştir: paylar cihazda ayrı ayrı ödeme olarak alınır. LafPOS'ta pay
+              alındıysa hesap artık bütün olarak gitmez (sunucu okc_partial der); ipucu yalnız hiç ödeme yokken */}
+          {!items?.length && order.paid === 0 && order.split && order.split.shares.length > 1 ? (
             <p className="tabular mt-1.5 text-xs text-ink-2">
               Paylaşımlı hesap: cihazda {order.split.shares.length} ayrı ödeme alın ({order.split.shares.map((s) => tlShort(s)).join(' · ')}); fiş tek kesilir
             </p>

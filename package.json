@@ -12,7 +12,7 @@
     "dev:api": "tsx watch --clear-screen=false server/index.ts",
     "dev:web": "vite",
     "build": "vite build",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "start": "tsx server/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx server/db/seed.ts",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",

@@ -580,8 +580,9 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
     .set({ status: 'birlesti', mergedInto: targetId, closedAt: Date.now(), closedBy: actor.user.id, updatedAt: Date.now() })
     .where(eq(schema.orders.id, sourceId))
     .run();
+  // Paylaşım birleşmede kalkar: iki hesabın pay numaraları karışır (ödenmiş payların etiketi kalır)
   t.update(schema.orders)
-    .set({ guests: target.guests + source.guests, customerId: target.customerId ?? source.customerId })
+    .set({ guests: target.guests + source.guests, customerId: target.customerId ?? source.customerId, splitPeople: null })
     .where(eq(schema.orders.id, targetId))
     .run();
   recalc(t, sourceId);
@@ -698,11 +699,18 @@ export interface PaymentInput {
   note?: string | null;
   /** Paylaşımlı hesapta sıradaki payı al: tutarı sunucu hesaplar (splitState) */
   share?: boolean;
+  /** Pay ödemesinde kasiyerin ekranda gördüğü pay numarası; tutar da `amount` olarak gelir, ikisi tutmalı */
+  shareNo?: number;
 }
 
 /** Ödenmiş paylar (iptal edilmemiş, payı olan ödemeler) */
 function sharePayments(t: Tx | DB, orderId: string) {
   return orderPayments(t, orderId).filter((p) => !p.refundedAt && p.shareNo != null);
+}
+
+/** Hesap kişilere bölünmüş ve ödenmemiş pay kalmış mı (kalan tutar paylara dağılır) */
+export function splitActive(t: Tx | DB, o: OrderRow, remaining: number): boolean {
+  return !!o.splitPeople && splitState(o.splitPeople, sharePayments(t, o.id).length, remaining).shares.length > 0;
 }
 
 /**
@@ -789,7 +797,13 @@ export function closeOrderRow(t: Tx, o: OrderRow, userId: string) {
   }
 }
 
-export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, input: PaymentInput): { order: OrderRow; closed: boolean; change: number } {
+export function addPayment(
+  t: Tx,
+  actor: Actor,
+  fx: Effects,
+  orderId: string,
+  input: PaymentInput,
+): { order: OrderRow; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null } {
   needDirect(actor, 'odeme.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
@@ -811,6 +825,10 @@ export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, in
   // Aynı kalem iki kez gönderilirse adetler birleşir: iki kez ücret alınmaz
   const wanted = mergeSelection(input.items ?? []);
   let share: { no: number; of: number } | null = null;
+  // Bölünmüş hesapta pay dışı ödeme payları düşürmez: masa paylarını ödeyip kalkar, kalan kimseye kalmaz
+  if (!input.share && splitActive(t, o, remaining)) {
+    throw conflict('Hesap kişilere bölünmüş: payları "Paylaş"tan alın ya da paylaşımı kaldırın', 'split_active');
+  }
   if (input.share) {
     if (!o.splitPeople) throw bad('Hesap paylaşılmadı; önce kişi sayısını seçin', 'split_off');
     if (wanted.length) throw bad('Pay ödemesinde kalem seçilmez', 'split_items');
@@ -818,10 +836,15 @@ export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, in
     const state = splitState(o.splitPeople, paid.length, remaining);
     if (!state.shares.length) throw conflict('Bütün paylar ödendi; kalan tutarı "Tutar" ile alın', 'split_done');
     // Pay tutarını sunucu belirler; numara ilk boş pay (iptal edilen payın numarası yeniden kullanılır)
-    amount = state.shares[0];
     const used = new Set(paid.map((p) => p.shareNo));
     let no = 1;
     while (used.has(no)) no++;
+    // Kasiyerin ekranda gördüğü pay sunucununkiyle aynı olmalı: başka cihazda kalem eklendiyse, kişi sayısı
+    // değiştiyse ya da yanıtı kaybolan istek yeniden geldiyse kart terminaline yanlış tutar girilmesin
+    if (Math.trunc(input.amount) !== state.shares[0] || (input.shareNo != null && input.shareNo !== no)) {
+      throw conflict(`Paylar değişti: sıradaki pay ${no}/${o.splitPeople}, ${tl(state.shares[0])}. Ekran yenilendi, yeniden alın`, 'split_changed');
+    }
+    amount = state.shares[0];
     share = { no, of: o.splitPeople };
   }
   if (wanted.length) {
@@ -902,7 +925,7 @@ export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, in
   orderEvents(fx, updated, actor.user.id, closed ? 'order.closed' : 'payment.added');
   fx.emit({ topic: 'cash', kind: 'payment.added', orderId, byUserId: actor.user.id });
   if (customerId) fx.emit({ topic: 'customers', kind: 'ledger', byUserId: actor.user.id });
-  return { order: updated, closed, change };
+  return { order: updated, closed, change, amount, share };
 }
 
 /** Ödenecek tutarı sıfır olan (tamamı ikram/iptal) adisyonu kapatır. */

@@ -187,6 +187,17 @@ async function smokeTest() {
       const data = boot.ok ? await boot.json() : null;
       if (!data?.products?.length) fail('Açılış verisinde ürün yok (menü anlık görüntüsü yüklenmedi)');
       console.log(`  tamam: ${data.products.length} ürün, ${data.tables?.length ?? 0} masa`);
+
+      // ayarlar.env kaydedilince bekçi sunucuyu yeni ayarlarla yeniden başlatır
+      writeFileSync(join(home, 'ayarlar.env'), '\uFEFF# deneme\r\nLAFPOS_SESSION_HOURS=13\r\n');
+      const logText = () => (existsSync(join(home, 'logs/sunucu.log')) ? readFileSync(join(home, 'logs/sunucu.log'), 'utf8') : '');
+      for (let i = 0; ; i++) {
+        if (i > 100) fail('ayarlar.env değişince sunucu yeniden başlamadı');
+        const restarted = logText().split('LafPOS sunucusu hazır').length > 2;
+        if (restarted && (await fetch(`${base}/api/health`).then((r) => r.ok, () => false))) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      console.log('  tamam: ayar değişince sunucu yeni ayarlarla açıldı');
     } finally {
       child.kill();
       if (child.exitCode == null) await once(child, 'exit');
@@ -194,6 +205,9 @@ async function smokeTest() {
     const log = readFileSync(join(home, 'logs/sunucu.log'), 'utf8');
     if (!log.includes('LafPOS sunucusu hazır')) throw new Error(`Günlükte sunucunun açıldığı yazmıyor:\n${log}`);
     for (const f of ['lafpos.db', 'secret.key']) if (!existsSync(join(home, f))) throw new Error(`${f} veri klasöründe yok`);
+    // Bekçi durunca sunucu veritabanını düzgün kapatır: WAL ana dosyaya yazılır, -wal dosyası kalmaz
+    if (existsSync(join(home, 'lafpos.db-wal'))) throw new Error(`Sunucu kapanırken veritabanını kapatmadı (lafpos.db-wal kaldı):\n${log}`);
+    console.log('  tamam: bekçi durunca veritabanı düzgün kapandı');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

@@ -28,13 +28,18 @@ DIŞARIDAN (İNTERNETTEN) CANLI ERİŞİM
 - LafPOS'u modemden port açarak internete açmayın.
 
 AYARLAR (site, lafmaliyet, yazarkasa POS)
-- Başlat › LafPOS › LafPOS ayarları: ayarlar.env Not Defteri'nde açılır; kaydedip kapatınca sunucu
-  yeniden başlar.
+- Başlat › LafPOS › LafPOS ayarları: ayarlar.env Not Defteri'nde açılır. Kaydedin (Ctrl+S); sunucu birkaç
+  saniye içinde yeni ayarlarla kendiliğinden yeniden başlar.
 - Sunucu günlüğü: Başlat › LafPOS › Sunucu günlüğü.
 
 GÜNCELLEME
 - Yeni LafPOS-Kurulum dosyasını çalıştırın. Önce veritabanının bir kopyası alınır
   (C:\ProgramData\LafPOS\backups\lafpos-guncelleme-...), sonra sunucu yeni sürümle başlar.
+
+KURULUM AÇILMIYORSA
+- "Bilgisayarınız korundu" uyarısında Ek bilgi › Yine de çalıştır.
+- Windows 11'de Akıllı Uygulama Denetimi (Windows Güvenliği › Uygulama ve tarayıcı denetimi) açıksa imzasız
+  dosyalar engellenir; kapatmak ya da imzalı sürüm beklemek gerekir.
 
 KALDIRMA
 - Ayarlar › Uygulamalar › LafPOS › Kaldır. Veriler ve yedekler silinmez.
@@ -42,5 +47,6 @@ KALDIRMA
 DAHA ÖNCE GIT İLE KURDUYSANIZ
 - Önce eski otomatik başlatmayı kaldırın (scripts\kasa\windows\kur.ps1 -Kaldir) ve bilgisayarı yeniden
   başlatın.
-- C:\ProgramData\LafPOS klasörünü oluşturup eski data klasöründeki lafpos.db, secret.key ve uploads'ı içine
-  kopyalayın, sonra bu kurulumu çalıştırın. secret.key olmadan eski PIN'ler çalışmaz.
+- C:\ProgramData\LafPOS klasörünü oluşturup eski data klasöründeki lafpos.db, lafpos.db-wal (varsa),
+  secret.key ve uploads'ı içine kopyalayın, sonra bu kurulumu çalıştırın. lafpos.db-wal son satışları taşır,
+  onsuz kopya eksik kalabilir; secret.key olmadan eski PIN'ler çalışmaz.
