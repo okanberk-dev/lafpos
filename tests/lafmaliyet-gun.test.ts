@@ -84,8 +84,6 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş)', () => {
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 150000 });
     const day = openDayRow()!;
     expect(day.zNo).toBe(1);
-    // Paket tarihi saatten bağımsız olsun: gün açıldıktan hemen sonra sabit bir iş gününe alınır
-    db.update(schema.businessDays).set({ date: GOLDEN_DATE }).where(eq(schema.businessDays.id, day.id)).run();
 
     const table = h.boot.tables.find((t) => t.kind === 'masa')!;
     // Masa: iki boy Latte (yulaf + vanilya; laktozsuz + ekstra shot), Türk kahvesi; kartla, bahşişli
@@ -129,6 +127,9 @@ describe('altın gövde (iki boy, ek, ikram, karaoke, cari, bahşiş)', () => {
 
     await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 12000, description: 'Buz' });
     const x = await h.ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
+    // Paket tarihi saatten bağımsız olsun: satışlar bugünün gününe yazılır (eski güne satış engeli), gün kapanmadan
+    // hemen önce sabit bir iş gününe alınır. Gün sonu eski günde de alınır; kapanış ve paket bu tarihi görür.
+    db.update(schema.businessDays).set({ date: GOLDEN_DATE }).where(eq(schema.businessDays.id, day.id)).run();
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash - 1000 });
 
     const payload = await payloadOf(day.id);
@@ -390,5 +391,27 @@ describe('yönetim doğrulamaları', () => {
     db.update(schema.paymentMethods).set({ kind: 'kart', zField: 'cash' }).where(eq(schema.paymentMethods.id, ok.id)).run();
     expect((await h.call('patron', 'PATCH', `/admin/payment-methods/${ok.id}`, { active: false })).status).toBe(200);
     expect((await h.call<{ code: string }>('patron', 'PATCH', `/admin/payment-methods/${ok.id}`, { zField: 'cash', kind: 'kart' })).json.code).toBe('cash_pair');
+  });
+
+  it('ödeme almış nakit türü karta çevrilse de beklenen nakit Z nakdiyle tutar (ödemenin dondurulan alanı)', async () => {
+    const day = await freshDay();
+    const m = await h.ok<{ id: string }>('patron', 'POST', '/admin/payment-methods', { name: 'Çekmece', kind: 'nakit', zField: 'cash', color: '#245c43' });
+    const payWith = (o: OrderDTO) => h.ok<{ closed: boolean }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: m.id, amount: o.total - o.paid });
+    const first = await sell([{ name: 'Americano', size: 'M' }]);
+    expect((await payWith(first)).closed).toBe(true);
+    // Gün açıkken tür nakitten karta çevrilir (eşleşme kuralına uyar): alınmış nakit çekmecede kalır
+    expect((await h.call('patron', 'PATCH', `/admin/payment-methods/${m.id}`, { kind: 'kart', zField: 'card' })).status).toBe(200);
+    const second = await sell([{ name: 'Espresso', size: 'M' }]);
+    expect((await payWith(second)).closed).toBe(true);
+
+    type S = { openingCash: number; expectedCash: number; byZField: Record<string, number> };
+    const s = (await h.ok<{ summary: S }>('mudur', 'GET', '/cash/day')).summary;
+    expect(s.byZField.cash).toBe(first.total);
+    expect(s.byZField.card).toBe(second.total);
+    expect(s.expectedCash).toBe(s.openingCash + s.byZField.cash);
+    const z = (await payloadOf(day.id)).z;
+    expect(z.expectedCash).toBeCloseTo(z.openingCash! + z.cash!, 2);
+    expect(z.cashIn).toBe(0);
+    await h.ok('patron', 'PATCH', `/admin/payment-methods/${m.id}`, { active: false });
   });
 });

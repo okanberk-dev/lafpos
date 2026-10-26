@@ -562,8 +562,9 @@ const methodShape = z.object({
   active: z.boolean().default(true),
 });
 /**
- * Beklenen nakit tür (`kind = 'nakit'`) üzerinden, Z'nin nakit alanı `zField` üzerinden sayılır (services/days.ts):
- * ikisi ayrışırsa lafmaliyet'e giden nakit ile kasadaki beklenen nakit tutmaz. Nakit türü yalnız Nakit alanına gider.
+ * Nakit türü (`kind = 'nakit'`; para üstü, çekmece) yalnız Z'nin Nakit alanına gider, Nakit alanına da yalnız nakit
+ * türü. Beklenen nakit ve Z nakdi ikisi de ödemeye dondurulan `zField`'dan sayılır (services/days.ts); eşleşme,
+ * kasada nakit alınan paranın beklenen nakde de girmesini sağlar.
  */
 function assertCashPair(kind: string, zField: string) {
   if ((kind === 'nakit') !== (zField === 'cash')) throw bad('Nakit türü yalnız lafmaliyet\'in Nakit alanına bağlanır; Nakit alanına da yalnız nakit türü', 'cash_pair');

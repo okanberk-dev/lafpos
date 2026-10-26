@@ -201,8 +201,9 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`, `trendyol`, `getir`, `migros`; kanalsız türde
   `null`, alan her zaman var). LafPOS'ta kanal serbest metin değil bu listeden seçilir (`shared/labels.ts`
   `PAYMENT_CHANNELS`); Komisyon ekranı aylık kanal satışını buradan doldurabilir. Nakit türü (`kind = nakit`)
-  yalnız `zField = cash`'e bağlanır, `cash`'e de yalnız nakit türü: beklenen nakit türden, Z'nin nakit alanı
-  `zField`'dan sayılır, ayrışırsa iki rakam tutmaz.
+  yalnız `zField = cash`'e bağlanır, `cash`'e de yalnız nakit türü. Beklenen nakit de Z'nin nakit alanı da
+  ödemeye dondurulan `zField`'dan sayılır: ödeme almış bir tür sonradan nakitten karta çevrilse de iki rakam
+  ayrışmaz.
 
 - Tutarlar TL (lafmaliyet'in para biçimi), iki ondalık. `lines` lafmaliyet'in planladığı
   `DailyProductSale` biçimiyle birebir (`date` gövdede, `productId` lafmaliyet'in `site_menu_id + slot`
