@@ -54,10 +54,33 @@ const dayOf = (ds: Dataset) => new Map(ds.days.map((d) => [d.id, d.date]));
 const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
 const change = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
-/** Aynı uzunlukta önceki dönem */
-export function previousRange(r: Range): Range {
+/**
+ * Kıyas dönemi: aynı uzunlukta ve aynı haftanın günlerine hizalı. Ayın 1'inden başlayan dönem önceki ayın aynı
+ * günleriyle (1-26 Ekim → 1-26 Eylül), diğerleri bütün haftalar kadar geriyle (Çarşamba Çarşambayla) kıyaslanır.
+ * Bugünü içeren dönemde önceki dönem de aynı saate kadar sayılır (yarım gün bütün günle kıyaslanmaz).
+ */
+export function comparison(r: Range, nowMs = Date.now()): { range: Range; label: string; cutoffMs: number | null } {
   const len = Math.round((Date.parse(`${r.to}T00:00:00Z`) - Date.parse(`${r.from}T00:00:00Z`)) / 86400_000) + 1;
-  return { from: addDays(r.from, -len), to: addDays(r.from, -1) };
+  const today = businessDate(nowMs);
+  const [fy, fm, fd] = r.from.split('-').map(Number);
+  let range: Range;
+  let label: string;
+  let shiftMs: number;
+  if (fd === 1 && len <= 31 && r.to.slice(0, 7) === r.from.slice(0, 7)) {
+    const prevMonthStart = new Date(Date.UTC(fy!, fm! - 2, 1)).toISOString().slice(0, 10);
+    const prevMonthDays = new Date(Date.UTC(fy!, fm! - 1, 0)).getUTCDate();
+    range = { from: prevMonthStart, to: addDays(prevMonthStart, Math.min(len, prevMonthDays) - 1) };
+    label = 'önceki ayın aynı günleri';
+    shiftMs = Date.parse(`${r.from}T00:00:00Z`) - Date.parse(`${prevMonthStart}T00:00:00Z`);
+  } else {
+    const back = Math.ceil(len / 7) * 7;
+    range = { from: addDays(r.from, -back), to: addDays(r.to, -back) };
+    label = back === 7 ? 'geçen haftanın aynı günleri' : `${back / 7} hafta önceki aynı günler`;
+    shiftMs = back * 86400_000;
+  }
+  const partial = r.to === today;
+  if (partial) label += ', aynı saate kadar';
+  return { range, label, cutoffMs: partial ? nowMs - shiftMs : null };
 }
 
 // ─── Ciro ───────────────────────────────────────────────────────────────────
@@ -92,14 +115,47 @@ export function summaryReport(range: Range) {
     types.set(o.type, row);
   }
   const online = ds.orders.filter((o) => o.source === 'laffogato');
-  const prev = load(previousRange(range));
-  const prevClosed = prev.orders.filter((o) => o.status === 'kapali' && o.source === 'pos');
+  const cmp = comparison(range);
+  const prev = load(cmp.range);
+  const prevClosed = prev.orders.filter((o) => o.status === 'kapali' && o.source === 'pos' && (cmp.cutoffMs == null || (o.closedAt ?? o.openedAt) <= cmp.cutoffMs));
   const prevNet = prevClosed.reduce((a, o) => a + totalsOf(o).total, 0);
   const prevReceipts = prevClosed.filter((o) => o.total > 0).length;
   const itemsSold = ds.items.filter((i) => !i.voided && closed.some((o) => o.id === i.orderId)).reduce((a, i) => a + i.qty, 0);
   const totalPaid = [...payMap.values()].reduce((a, p) => a + p.amount, 0);
+  // Ciro dökümü: liste değeri − ikram − indirim (+ servis) = ciro (KDV dahil); − KDV = net satış (KDV hariç)
+  const kdvByRate = new Map<number, { rate: number; gross: number; base: number; kdv: number }>();
+  for (const o of closed) {
+    for (const k of totalsOf(o).kdv) {
+      const row = kdvByRate.get(k.rate) ?? { rate: k.rate, gross: 0, base: 0, kdv: 0 };
+      row.gross += k.gross;
+      row.base += k.base;
+      row.kdv += k.kdv;
+      kdvByRate.set(k.rate, row);
+    }
+  }
+  const kdvTotal = [...kdvByRate.values()].reduce((a, k) => a + k.kdv, 0);
+  // Kapanmış adisyonların ödemeleri ciroya eşit olmalı (bahşiş hariç); açık adisyonlardan alınan ödeme ayrı
+  const closedIds = new Set(closed.map((o) => o.id));
+  const paidClosed = salesPays.filter((p) => closedIds.has(p.orderId!)).reduce((a, p) => a + p.amount, 0);
+  const paidOpen = salesPays.filter((p) => !closedIds.has(p.orderId!)).reduce((a, p) => a + p.amount, 0);
+  const tableOrders = closed.filter((o) => o.type === 'masa');
+  const tableGuests = tableOrders.reduce((a, o) => a + o.guests, 0);
+  const tableSales = tableOrders.reduce((a, o) => a + totalsOf(o).total, 0);
   return {
     range,
+    asOf: Date.now(),
+    waterfall: {
+      list: sum((o) => totalsOf(o).gross + totalsOf(o).complimentary),
+      complimentary: sum((o) => totalsOf(o).complimentary),
+      discounts: sum((o) => totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount),
+      service: sum((o) => totalsOf(o).service),
+      revenue: netSales,
+      kdv: kdvTotal,
+      netExKdv: netSales - kdvTotal,
+    },
+    kdv: [...kdvByRate.values()].sort((a, b) => a.rate - b.rate),
+    reconciliation: { paidClosed, difference: paidClosed - netSales, paidOpen },
+    perGuest: tableGuests ? Math.round(tableSales / tableGuests) : null,
     days: ds.days.length,
     netSales,
     gross: sum((o) => totalsOf(o).gross),
@@ -115,7 +171,7 @@ export function summaryReport(range: Range) {
     payments: [...payMap.values()].sort((a, b) => b.amount - a.amount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
     types: [...types.values()].sort((a, b) => b.amount - a.amount),
     online: { orders: online.length, amount: online.reduce((a, o) => a + (o.extTotal ?? 0), 0) },
-    previous: { range: previousRange(range), netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
+    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
   };
 }
 
@@ -182,9 +238,12 @@ export function productReport(range: Range, withCost: boolean) {
     c.revenue += r.revenue;
     cats.set(k, c);
   }
+  // Servis ücreti bir ürüne ait değil: ürün cirosu + servis = toplam ciro (özet ve Z ile mutabakat)
+  const service = [...closedIds].reduce((a, id) => a + (totals.get(id)?.service ?? 0), 0);
   return {
     range,
     total,
+    service,
     products: products_,
     categories: [...cats.values()].sort((a, b) => b.revenue - a.revenue).map((c) => ({ ...c, share: pct(c.revenue, total) })),
   };
@@ -467,8 +526,9 @@ export function patronLive(withCost: boolean) {
     date: today,
     dayOpen: !!openDay,
     netSales,
-    orders: closed.length,
-    avgCheck: closed.length ? Math.round(netSales / closed.length) : 0,
+    // Raporlarla aynı ölçüt: tutarı olan kapanmış adisyon (tamamı ikram edilen ortalamayı düşürmez)
+    orders: closed.filter((o) => o.total > 0).length,
+    avgCheck: closed.some((o) => o.total > 0) ? Math.round(netSales / closed.filter((o) => o.total > 0).length) : 0,
     open: { count: open.length, total: openTotal },
     compare: {
       lastWeek: { ...lastWeek, change: change(netSales, lastWeek.netSales) },
