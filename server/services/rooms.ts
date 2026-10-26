@@ -40,6 +40,7 @@ export function startRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
 export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
   needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
+  if (o.status !== 'acik') throw conflict('Adisyon kapalı; oda ücretini yazmak için önce adisyonu yeniden açın', 'order_closed');
   const session = t.select().from(schema.roomSessions).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).get();
   if (!session) throw notFound('Çalışan oda sayacı');
   // Oda ücreti ürünü: POS'ta gizli hizmet ürünü ("Karaoke odası"); kişi başı karaoke gibi görünür hizmetler değil

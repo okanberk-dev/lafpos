@@ -175,9 +175,9 @@ tablet ve telefonlar aynı sunucuya ağdan bağlanır. Şunları yap ve her biri
 | 1 | Innex yönetim paneli, telefon ve tablet uyarlaması, e2e ve birim testleri | Tamam (commit `0022871`) |
 | 2 | Yazarkasa belgesi (`docs/04-YAZARKASA.md`) ve `.env` örneği | Tamam |
 | 3 | Bu bölüm: geliştirilmiş istek ve görevler | Tamam |
-| 4 | Tek sistem / iki sistem araştırması ve kararı (`docs/06-TEK-SISTEM.md`) | Açık |
-| 5 | Roller: düzenlenebilir rol yetkileri, kör kasa, X raporu, kasadan tükendi; kasiyer görünümü ve testleri | Açık |
-| 6 | Kasa bilgisayarı: Chrome kiosk başlatıcıları, otomatik başlatma, Wake Lock, yazdırma; belge | Açık |
-| 7 | laffogato#263 ve lafmaliyet#34: güncelle, incele, CI, md notları, birleştir | Açık |
-| 8 | LafPOS PR'ı: bütün kapılar, inceleme, birleştir | Açık |
+| 4 | Tek sistem / iki sistem araştırması ve kararı (`docs/06-TEK-SISTEM.md`) | Tamam: tek sistem, iki yüz (`ca92717`) |
+| 5 | Roller: düzenlenebilir rol yetkileri, kör kasa, X raporu, kasadan tükendi; kasiyer görünümü ve testleri | Tamam (`ca92717`; inceleme düzeltmeleri `6f3bdca`) |
+| 6 | Kasa bilgisayarı: Chrome kiosk başlatıcıları, otomatik başlatma, Wake Lock, yazdırma; belge | Tamam (`ca92717`) |
+| 7 | laffogato#263 ve lafmaliyet#34: güncelle, incele, CI, md notları, birleştir | İncelendi, yerel kapılar yeşil (GitHub Actions hesap faturası yüzünden çalışmıyor); birleştirme sırası 263 → 34 → lafpos#1 |
+| 8 | LafPOS PR'ı: bütün kapılar, inceleme, birleştir | İki bağımsız inceleme: 13 + 8 bulgu düzeltildi (`tests/review-fixes.test.ts`, `tests/review-round2*.test.ts`); 100 test, 117 ekran, 9 akış |
 | 9 | Operatöre kalanlar: `LAFPOS_SYNC_SECRET` (laffogato Vercel ve lafmaliyet), kasa `.env`, gerçek cihaz turu | Açık |

@@ -59,7 +59,8 @@ function autoDayEndTick() {
   const p = istanbulParts(Date.now());
   if (p.hour !== s.autoDayEndHour || p.minute > 15) return;
   const day = getOpenDay(db);
-  if (!day || Date.now() - day.openedAt < 3 * 3600_000) return;
+  // Yeni açılmış (ya da gün sonundan sonra yeniden açılmış) gün hemen kapatılmaz
+  if (!day || Date.now() - Math.max(day.openedAt, day.reopenedAt ?? 0) < 3 * 3600_000) return;
   const open = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos'))).all();
   const fx = new Effects();
   if (open.length) {

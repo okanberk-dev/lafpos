@@ -121,7 +121,7 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 Dalga 1-6 tamam (RiosenBeq/lafpos#1). Planın üstüne yapılanlar: yazarkasa POS (TokenX Connect,
 `docs/04-YAZARKASA.md`), Innex yönetim paneli ve telefon/tablet uyarlaması (`DESIGN.md`), düzenlenebilir
 roller, kör kasa ve kasadan tükendi (Yönetim › Roller ve yetkiler), kasa bilgisayarı kurulumu
-(`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama: 92 birim ve API
+(`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama: 100 birim ve API
 testi, gerçek Chrome'da 117 ekran ve 9 akış (`npm run e2e`, CI'da da).
 
 Bağımsız inceleme (26 Ekim 2026) ve düzeltmeleri, her biri `tests/review-fixes.test.ts`'te bir testle:
@@ -135,6 +135,14 @@ sınırı `X-Forwarded-For`'a bakmaz, ağ genelinde de sınır var; bir iş gün
 yeniden aç"; lafmaliyet'e `cashIn` ve `expectedCash` gider, 409 kalıcıdır. Ayrıca düzenleme uçları
 `patchOf` kullanır: Zod 4'te `.partial()` varsayılanı uyguladığı için masanın adı değişince konumu ve türü,
 rezervasyonun durumu değişince kişi sayısı ve süresi sıfırlanıyordu.
+
+İkinci bağımsız inceleme (aynı gün, düzeltmelerin üstüne; `tests/review-round2*.test.ts`): patron olmayan yetkili
+üstündekinin PIN'ini değiştiremez, onu kapatamaz, rolünü boşaltamaz, kendi indirim sınırının üstünde sınır
+veremez; ağ geneli PIN kilidi kayan pencereyle sayar ve doğru PIN'le girmiş cihazları ve yetkili onayını durdurmaz
+(alarm yazar); Token kesintisinde takılan sepet yetkili onayıyla LafPOS'ta iptal sayılır; kör kasa süzgeci adisyon
+döndüren bütün uçlarda; indirim kayması cihaza "Servis ücreti" diye gitmez; yeniden açılan gün öbür cihazlara
+yayılır ve otomatik gün sonu onu hemen kapatmaz (`business_days.reopened_at`); oda sayacı çalışırken hesap cihaza
+gitmez, kapanmış adisyona oda ücreti yazılmaz; lafmaliyet'e gönderim sürerken basılan "Gönder" gerçekten gönderir.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu.

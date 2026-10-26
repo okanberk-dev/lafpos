@@ -394,6 +394,7 @@ adminRoutes.put('/roles/:role', async (c) => {
   const matrix = { ...getSettings().rolePermissions };
   const before = rolePermissions(role, matrix);
   const defaults = ROLE_DEFAULTS[role];
+  assertCanManage(user, before, undefined, 'rolü');
   assertCanGrant(user, next.filter((p) => !before.includes(p)));
   if (next.length === defaults.length && next.every((p) => defaults.includes(p))) delete matrix[role];
   else matrix[role] = next;
@@ -417,6 +418,24 @@ adminRoutes.put('/roles/:role', async (c) => {
 function assertCanGrant(actor: AuthUser, gained: Permission[]) {
   const missing = gained.filter((p) => !actor.permissions.has(p));
   if (missing.length) throw new HttpError(403, `Sahip olmadığınız yetkiyi veremezsiniz: ${missing.map((p) => PERMISSIONS[p]).join(', ')}`, 'escalation');
+}
+
+/**
+ * Üstündekine dokunulmaz (inceleme, 26 Eki 2026): patron olmayan yetkili yalnız yetkileri kendi yetkilerinin içinde
+ * kalan kişiyi ve rolü değiştirebilir. Yoksa üstündekinin PIN'ini değiştirip onun hesabıyla girer, onu kapatır ya da
+ * rolünü boşaltırdı. İndirim sınırı da kendi sınırını aşamaz (kukla hesapla sınırsız indirim olmasın).
+ */
+function assertCanManage(actor: AuthUser, targetPerms: Iterable<Permission>, targetDiscountPct?: number, what = 'kişiyi') {
+  if (actor.role === 'patron') return;
+  const missing = [...targetPerms].filter((p) => !actor.permissions.has(p));
+  if (missing.length) throw new HttpError(403, `Sizden fazla yetkisi olan ${what} değiştiremezsiniz (${missing.map((p) => PERMISSIONS[p]).join(', ')})`, 'escalation');
+  assertDiscountCap(actor, targetDiscountPct);
+}
+
+function assertDiscountCap(actor: AuthUser, pct: number | undefined) {
+  if (actor.role !== 'patron' && pct !== undefined && pct > actor.maxDiscountPct) {
+    throw new HttpError(403, `İndirim sınırı sizinkini (%${actor.maxDiscountPct}) aşamaz`, 'escalation');
+  }
 }
 
 /** Kişinin kayıt sonrası etkin yetkileri (rol seti + kişiye özel) */
@@ -448,6 +467,7 @@ adminRoutes.post('/users', async (c) => {
   const input = await body(c, userShape.extend({ pin: z.string() }));
   if (input.role === 'patron' && user.role !== 'patron') throw conflict('Patron hesabını yalnız patron açabilir');
   assertCanGrant(user, [...userPermissions({ role: input.role, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[] })]);
+  assertDiscountCap(user, input.maxDiscountPct);
   pinFree(input.pin);
   const id = ulid();
   db.insert(schema.users).values({ id, name: input.name, role: input.role, color: input.color, maxDiscountPct: input.maxDiscountPct, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[], pinHash: hashPin(input.pin) }).run();
@@ -473,6 +493,8 @@ adminRoutes.patch('/users/:id', async (c) => {
   const after = userPermissions(next);
   const permsChange = next.role !== target.role || [...before].some((p) => !after.has(p)) || [...after].some((p) => !before.has(p)) || (input.maxDiscountPct !== undefined && input.maxDiscountPct !== target.maxDiscountPct);
   if (target.id === user.id && permsChange) throw new HttpError(403, 'Kendi rolünüzü, yetkilerinizi ve indirim sınırınızı değiştiremezsiniz; başka bir yetkili değiştirsin', 'self_edit');
+  if (target.id !== user.id) assertCanManage(user, before, target.maxDiscountPct);
+  assertDiscountCap(user, input.maxDiscountPct);
   assertCanGrant(user, [...after].filter((p) => !before.has(p)));
   if (target.role === 'patron') assertPatronRemains(db, target.id, next);
   const patch: Partial<typeof schema.users.$inferInsert> = {};

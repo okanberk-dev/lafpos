@@ -15,6 +15,13 @@
       "when": 1792996547678,
       "tag": "0001_yazarkasa",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793009559789,
+      "tag": "0002_gun_yeniden_acma",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,7 @@ import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
-import { addExternalPayments, getOpenDay, loadOrder, mergeSelection, refundExternalPayments } from '../services/orders';
+import { addExternalPayments, assertNoActiveRoom, getOpenDay, loadOrder, mergeSelection, refundExternalPayments } from '../services/orders';
 import { buildBasket, type MethodKind, salePayments } from './basket';
 import { TokenxClient, TokenxError, type TokenxSale } from './tokenx';
 
@@ -102,6 +102,8 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
   const order = loadOrder(db, orderId);
   if (order.status !== 'acik') throw conflict('Adisyon kapalı');
   if (order.extPaid) throw conflict('Bu sipariş sitede ödendi');
+  // Oda sayacı çalışırken hesap kapanmaz: cihazda ödenen adisyona sonradan oda ücreti yazılırdı
+  assertNoActiveRoom(db, orderId);
   if (!getOpenDay(db)) throw new HttpError(409, 'Gün açılmamış', 'day_closed');
   const pending = db
     .select()
@@ -184,25 +186,52 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
   return receiptDTO(loadReceipt(basketId));
 }
 
-/** Cihazdaki sepeti siler (ödeme alınmadıysa). */
-export async function cancelDeviceBasket(actor: Actor, receiptId: string): Promise<ReceiptDTO> {
+/**
+ * Cihazdaki sepeti siler (ödeme alınmadıysa). `force`: internet ya da Token kesintisinde silme isteği gitmiyorsa
+ * sepet yetkili onayıyla LafPOS'ta iptal sayılır; yoksa adisyon ödenemez, iptal edilemez, gün kapanmaz (inceleme,
+ * 26 Eki 2026). Cihazda yine de ödeme alınırsa geç gelen sonuç `okc.late_paid` alarmı verir.
+ */
+export async function cancelDeviceBasket(actor: Actor, receiptId: string, force = false): Promise<ReceiptDTO> {
   needDirect(actor, 'odeme.al');
+  const approverId = force ? need(actor, 'odeme.iade', 'Cihaza ulaşılamadan sepeti iptal saymak yetkili onayı gerektirir') : null;
   const r = loadReceipt(receiptId);
   if (!PENDING.includes(r.status as (typeof PENDING)[number]) && r.status !== 'hata') throw conflict('Bu sepet artık iptal edilemez');
+  let unreachable: string | null = null;
   if (r.provider === 'tokenx' && r.status !== 'hata') {
     const c = tokenx();
-    if (!c) throw conflict('TokenX bağlantısı yok');
     try {
+      if (!c) throw new Error('TokenX bağlantısı yok');
       if (r.status === 'kilitli') await c.unlockBasket(r.id);
       await c.deleteBasket(r.id);
     } catch (e) {
       // Sepet bu arada ödendiyse sonucu işlemek için durumu sorgula
       await refreshReceipt(r.id).catch(() => undefined);
-      throw new HttpError(502, `Cihazdaki sepet silinemedi: ${e instanceof Error ? e.message : e}`, 'okc_delete');
+      const message = e instanceof Error ? e.message : String(e);
+      if (!force) throw new HttpError(502, `Cihazdaki sepet silinemedi: ${message}`, 'okc_delete');
+      const now = loadReceipt(r.id);
+      if (now.status === 'tamamlandi') throw conflict('Sepet bu arada cihazda ödendi; adisyona işlendi', 'okc_paid');
+      unreachable = message;
     }
   }
-  db.update(schema.fiscalReceipts).set({ status: 'silindi', updatedAt: Date.now() }).where(eq(schema.fiscalReceipts.id, r.id)).run();
-  publish(r.orderId, 'okc.cancelled', 'Cihaz sepeti iptal edildi', actor.user.id);
+  db.update(schema.fiscalReceipts)
+    .set({ status: 'silindi', error: unreachable ? `Cihaza ulaşılamadı, LafPOS'ta iptal sayıldı: ${unreachable}` : null, updatedAt: Date.now() })
+    .where(eq(schema.fiscalReceipts.id, r.id))
+    .run();
+  if (unreachable) {
+    const order = loadOrder(db, r.orderId);
+    const fx = new Effects();
+    fx.audit(db, {
+      userId: actor.user.id,
+      approverId,
+      action: 'okc.force_cancel',
+      severity: 'alarm',
+      orderId: r.orderId,
+      amount: r.amount,
+      message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihaza ulaşılamadan LafPOS'ta iptal sayıldı. Cihazda ödeme alındıysa mali fişi cihazdan iptal edin`,
+    });
+    fx.flush();
+  }
+  publish(r.orderId, 'okc.cancelled', unreachable ? "Cihaza ulaşılamadı; sepet LafPOS'ta iptal sayıldı" : 'Cihaz sepeti iptal edildi', actor.user.id);
   return receiptDTO(loadReceipt(r.id));
 }
 

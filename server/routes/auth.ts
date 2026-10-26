@@ -41,14 +41,14 @@ authRoutes.get('/users', (c) => {
 
 authRoutes.post('/login', async (c) => {
   const { pin, device } = await body(c, z.object({ pin: z.string(), device: z.string().max(120).optional() }));
-  const key = `giris:${clientKey(c)}`;
-  assertNotLocked(key);
+  const addr = clientKey(c);
+  assertNotLocked('giris', addr);
   const row = isValidPin(pin) ? db.select().from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get() : undefined;
   if (!row || !row.active) {
-    recordFailure(key);
+    recordFailure('giris', addr);
     throw new HttpError(401, 'PIN hatalı', 'pin_invalid');
   }
-  clearFailures(key);
+  clearFailures('giris', addr);
   const token = createSession(row.id, device ?? c.req.header('user-agent') ?? '');
   return c.json({ token, me: meDTO(toAuthUser(row)) });
 });

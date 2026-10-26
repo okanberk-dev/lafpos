@@ -30,15 +30,17 @@ export interface BuildBasketInput {
   filter?: string;
   note?: string;
   items: BasketSourceItem[];
-  totals: Pick<OrderTotals, 'lineNet'>;
+  totals: Pick<OrderTotals, 'lineNet'> & Partial<Pick<OrderTotals, 'service'>>;
   /** Seçilmezse ödenmemiş bütün adetler */
   selection?: { itemId: string; qty: number }[] | null;
   sectionMap: Record<string, number>;
   sizeLabels: { M: string; L: string };
   callbackUrl?: string;
   /**
-   * Seçimsiz (bütün adisyon) gönderimde adisyonun kalan tutarı. Kalemlerin net payı servis ücretini taşımaz;
-   * kalanın kalemlerle karşılanmayan kısmı "Servis ücreti" satırı olarak gider, cihaz toplamı adisyonu kapatır.
+   * Seçimsiz (bütün adisyon) gönderimde adisyonun kalan tutarı; sepet toplamı buna eşitlenir, cihaz adisyonu kapatır.
+   * Servis ücreti (`totals.service`, kalemlerin net payında yok) ayrı satır olarak gider. Kalem bazlı ödemeden sonra
+   * kalem eklenince adisyon indirimi kalemlere yeniden dağılır ve birkaç kuruş kayar; bu kayma kalemlerin indirim
+   * payına işlenir, "Servis ücreti" diye gitmez (inceleme, 26 Eki 2026).
    */
   remainingDue?: number;
   /** Servis ücretinin KDV oranı (shared/order-calc.ts ile aynı) */
@@ -54,7 +56,7 @@ export interface BuiltBasket {
 const MAX_NAME = 32;
 
 export function buildBasket(input: BuildBasketInput): BuiltBasket {
-  const items: TokenxItem[] = [];
+  const parts: { item: TokenxItem; gross: number; net: number }[] = [];
   const lines: { itemId: string; qty: number }[] = [];
   let amount = 0;
   for (const it of input.items) {
@@ -81,20 +83,35 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
       quantity: qty * 1000,
       unit: 'Adet',
     };
-    const discount = gross - partNet;
-    if (discount > 0) item.adjust = { description: 'İndirim', discountOrSurcharge: 0, type: 0, totalValue: discount };
-    items.push(item);
+    parts.push({ item, gross, net: partNet });
     lines.push({ itemId: it.id, qty });
     amount += partNet;
   }
-  const rest = !input.selection && input.remainingDue != null ? input.remainingDue - amount : 0;
-  if (rest > 0) {
-    const rate = input.serviceKdvRate ?? SERVICE_KDV_RATE;
-    const section = input.sectionMap[String(rate)];
-    if (section == null) throw new Error(`Cihazda %${rate} KDV kısmı eşlenmemiş (Yönetim › Yazarkasa POS)`);
-    items.push({ name: 'Servis ücreti', price: rest, sectionNo: section, taxPercent: rate * 100, quantity: 1000, unit: 'Adet' });
-    amount += rest;
+  let serviceItem: TokenxItem | null = null;
+  if (!input.selection && input.remainingDue != null && parts.length) {
+    const service = Math.max(0, input.totals.service ?? 0);
+    if (service > 0) {
+      const rate = input.serviceKdvRate ?? SERVICE_KDV_RATE;
+      const section = input.sectionMap[String(rate)];
+      if (section == null) throw new Error(`Cihazda %${rate} KDV kısmı eşlenmemiş (Yönetim › Yazarkasa POS)`);
+      serviceItem = { name: 'Servis ücreti', price: service, sectionNo: section, taxPercent: rate * 100, quantity: 1000, unit: 'Adet' };
+      amount += service;
+    }
+    // Kalan kayma: en büyük kalemden başlayarak indirim payına; kalem liste fiyatını aşmaz, sıfırın altına inmez
+    let drift = input.remainingDue - amount;
+    for (const p of [...parts].sort((a, b) => b.net - a.net)) {
+      if (drift === 0) break;
+      const d = drift > 0 ? Math.min(drift, p.gross - p.net) : Math.max(drift, -p.net);
+      p.net += d;
+      amount += d;
+      drift -= d;
+    }
+    if (drift !== 0) throw new Error("Cihaz sepeti adisyonun kalanını tutmuyor; kalanı kalem seçerek ya da LafPOS'ta alın");
   }
+  const items: TokenxItem[] = parts.map(({ item, gross, net }) =>
+    gross - net > 0 ? { ...item, adjust: { description: 'İndirim', discountOrSurcharge: 0, type: 0, totalValue: gross - net } } : item,
+  );
+  if (serviceItem) items.push(serviceItem);
   if (!items.length) throw new Error('Cihaza gönderilecek ücretli kalem yok');
   const basket: TokenxBasket = {
     basketID: input.basketId,

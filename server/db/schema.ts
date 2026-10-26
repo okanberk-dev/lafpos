@@ -284,6 +284,8 @@ export const businessDays = sqliteTable(
     summary: text('summary', { mode: 'json' }).$type<ZSummary | null>(),
     lastOrderNo: integer('last_order_no').notNull().default(0),
     exportedAt: integer('exported_at'),
+    /** Gün sonundan sonra "Günü yeniden aç" ile açıldığı son an (otomatik gün sonu buna da bakar) */
+    reopenedAt: integer('reopened_at'),
   },
   (t) => [index('business_days_date_idx').on(t.date)],
 );

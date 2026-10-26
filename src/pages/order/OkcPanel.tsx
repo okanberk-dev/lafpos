@@ -5,7 +5,8 @@ import { Link } from 'react-router';
 import { tl } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { errorMessage, get, post } from '@/lib/api';
+import { ApiError, errorMessage, get, post } from '@/lib/api';
+import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { onLive } from '@/lib/live';
@@ -80,6 +81,22 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
       await post(`/okc/receipts/${id}/cancel`);
       await qc.invalidateQueries({ queryKey: ['okc', order.id] });
     } catch (e) {
+      // İnternet ya da Token kesintisi: sepet cihazdan silinemiyor. Yetkili onayıyla LafPOS'ta iptal sayılır ki adisyon
+      // nakit alınabilsin ve gün kapanabilsin; cihazda yine de ödeme alınırsa yönetici alarm görür
+      if (e instanceof ApiError && e.code === 'okc_delete') {
+        const ok = window.confirm(`${e.message}\n\nCihaza ulaşılamıyor. Sepet LafPOS'ta iptal sayılsın mı? Cihazda bu sepetten ödeme alınmadığından emin olun.`);
+        if (!ok) return;
+        try {
+          const done = await withApproval((pin) => post(`/okc/receipts/${id}/cancel`, { force: true, approverPin: pin }));
+          if (done === null) return;
+          toast.warn("Sepet LafPOS'ta iptal sayıldı; adisyonu kasadan alabilirsiniz");
+          await qc.invalidateQueries({ queryKey: ['okc', order.id] });
+          await qc.invalidateQueries({ queryKey: ['order', order.id] });
+        } catch (err) {
+          toast.err(errorMessage(err));
+        }
+        return;
+      }
       toast.err(errorMessage(e));
     }
   };

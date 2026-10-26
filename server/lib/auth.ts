@@ -2,6 +2,8 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { and, eq, gt } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 import { effectivePermissions, type Permission, type Role } from '@shared/permissions';
+import type { OrderDTO } from '@shared/types';
+import { Effects } from './effects';
 import { getSettings } from './settings';
 import { db, schema } from '../db/client';
 import { env } from '../env';
@@ -30,50 +32,84 @@ export function isValidPin(pin: string): boolean {
 
 // ─── Deneme sınırı ───────────────────────────────────────────────────────────
 
+/** Giriş PIN'i ya da yetkili onayı PIN'i; sayaçlar ayrı */
+export type PinKind = 'giris' | 'onay';
+
+/** Cihaz (bağlantı adresi) başına: 5 hatadan sonra 15 sn, her yeni hatada ikiye katlanarak en çok 5 dk; doğru PIN sıfırlar */
 const failures = new Map<string, { count: number; until: number; last: number }>();
+const keyOf = (kind: PinKind, addr: string) => `${kind}:${addr}`;
 
 /**
- * Bütün ağ için ortak sayaç: aygıt başına sınır, ağdaki birçok aygıttan (ya da adres değiştirerek) deneme
- * yapılmasını durdurmaz. 4 haneli PIN'ler taranmasın diye 10 dakikada 30 hatadan sonra herkes için kilit.
+ * Ağ geneli: 10 dakikalık kayan pencerede 30 hatalı PIN, ağdaki birçok adresten PIN taranıyor demektir. Kilit yalnız
+ * son 7 günde bu sunucuya doğru PIN'le girmemiş adresleri durdurur; kafenin kasası, tabletleri ve telefonları çalışır
+ * (inceleme, 26 Eki 2026: ortak kilit doğru PIN'leri ve yetkili onaylarını da durduruyordu). Onay PIN'ini oturumu
+ * açık cihaz sorar, ağ kilidine takılmaz; cihaz başına sınır onda da geçerli. Kilit denetim kaydına alarm yazar.
  */
-const GLOBAL = '*';
 const GLOBAL_LIMIT = 30;
 const WINDOW_MS = 10 * 60_000;
+const TRUST_MS = 7 * 86400_000;
+const globalFails: number[] = [];
+let globalUntil = 0;
+let globalTrips = 0;
+let lastTripAt = 0;
+const trusted = new Map<string, number>();
 
-export function assertNotLocked(key: string) {
-  for (const k of [key, GLOBAL]) {
-    const f = failures.get(k);
-    if (f && f.until > Date.now()) {
-      const sec = Math.ceil((f.until - Date.now()) / 1000);
-      throw new HttpError(429, `Çok fazla hatalı PIN. ${sec} saniye sonra tekrar deneyin`, 'rate_limited');
-    }
-  }
+const isTrusted = (addr: string, now: number) => (trusted.get(addr) ?? 0) > now - TRUST_MS;
+
+function locked(ms: number): HttpError {
+  return new HttpError(429, `Çok fazla hatalı PIN. ${Math.ceil(ms / 1000)} saniye sonra tekrar deneyin`, 'rate_limited');
 }
 
-export function recordFailure(key: string) {
+export function assertNotLocked(kind: PinKind, addr: string) {
   const now = Date.now();
+  const f = failures.get(keyOf(kind, addr));
+  if (f && f.until > now) throw locked(f.until - now);
+  if (kind === 'giris' && globalUntil > now && !isTrusted(addr, now)) throw locked(globalUntil - now);
+}
+
+export function recordFailure(kind: PinKind, addr: string) {
+  const now = Date.now();
+  const key = keyOf(kind, addr);
   const f = failures.get(key) ?? { count: 0, until: 0, last: now };
   if (now - f.last > WINDOW_MS) f.count = 0;
   f.count += 1;
   f.last = now;
-  // 5 hatadan sonra 15 sn, sonra her hatada ikiye katlanarak en çok 5 dk kilit
   if (f.count >= 5) f.until = now + Math.min(300_000, 15_000 * 2 ** (f.count - 5));
   failures.set(key, f);
-  const g = failures.get(GLOBAL) ?? { count: 0, until: 0, last: now };
-  if (now - g.last > WINDOW_MS) g.count = 0;
-  g.count += 1;
-  g.last = now;
-  if (g.count >= GLOBAL_LIMIT) g.until = now + Math.min(600_000, 60_000 * 2 ** (g.count - GLOBAL_LIMIT));
-  failures.set(GLOBAL, g);
+
+  globalFails.push(now);
+  while (globalFails.length && now - globalFails[0] > WINDOW_MS) globalFails.shift();
+  if (globalFails.length >= GLOBAL_LIMIT && globalUntil <= now) {
+    // Bir saat içinde yeniden dolarsa kilit ikiye katlanır (1, 2, 4, 8, en çok 10 dk)
+    globalTrips = now - lastTripAt > 60 * 60_000 ? 1 : globalTrips + 1;
+    lastTripAt = now;
+    const ms = Math.min(600_000, 60_000 * 2 ** (globalTrips - 1));
+    globalUntil = now + ms;
+    globalFails.length = 0;
+    const fx = new Effects();
+    fx.audit(db, {
+      action: 'auth.global_lock',
+      severity: 'alarm',
+      message: `10 dakikada ${GLOBAL_LIMIT} hatalı PIN denemesi: bu sunucuya son 7 günde girmemiş cihazlar ${Math.round(ms / 60_000)} dakika giriş yapamaz. Kafedeki cihazlar etkilenmez; ağa bilinmeyen bir cihaz bağlı olabilir`,
+    });
+    fx.flush();
+  }
 }
 
-/** Testler için: sayaçları sıfırlar */
+/** Doğru PIN: cihazın sayacı sıfırlanır; giriş yapan adres ağ kilidinden muaf olur */
+export function clearFailures(kind: PinKind, addr: string) {
+  failures.delete(keyOf(kind, addr));
+  if (kind === 'giris') trusted.set(addr, Date.now());
+}
+
+/** Testler için: sayaçları ve güvenilen adresleri sıfırlar */
 export function resetFailures() {
   failures.clear();
-}
-
-export function clearFailures(key: string) {
-  failures.delete(key);
+  globalFails.length = 0;
+  globalUntil = 0;
+  globalTrips = 0;
+  lastTripAt = 0;
+  trusted.clear();
 }
 
 /**
@@ -170,14 +206,14 @@ export interface Actor {
 }
 
 /** Yetkili PIN'ini doğrular: kişi etkin olmalı. Yetkinin kendisi `need` ile işlem anında denetlenir. */
-export function findApprover(pin: string, key: string): AuthUser {
-  assertNotLocked(`onay:${key}`);
+export function findApprover(pin: string, addr: string): AuthUser {
+  assertNotLocked('onay', addr);
   const row = isValidPin(pin) ? db.select().from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get() : undefined;
   if (!row || !row.active) {
-    recordFailure(`onay:${key}`);
+    recordFailure('onay', addr);
     throw new HttpError(403, 'Yetkili PIN hatalı', 'approval_invalid');
   }
-  clearFailures(`onay:${key}`);
+  clearFailures('onay', addr);
   return toAuthUser(row);
 }
 
@@ -187,6 +223,14 @@ export function findApprover(pin: string, key: string): AuthUser {
  */
 export function seesCashNumbers(user: AuthUser): boolean {
   return user.permissions.has('kasa.rakam') || user.permissions.has('rapor.gor');
+}
+
+/**
+ * Kör kasa: kapanmış adisyonun ödeme dökümü kasa rakamlarını görmeyene gitmez. Adisyon döndüren her uç bundan
+ * geçer (okuma, hesap yazdırma, teslimat, ödeme...); yalnız okuma uçlarını süzmek yetmedi (inceleme, 26 Eki 2026).
+ */
+export function blindOrder(user: AuthUser, dto: OrderDTO): OrderDTO {
+  return dto.status !== 'acik' && !seesCashNumbers(user) ? { ...dto, payments: [] } : dto;
 }
 
 export function actorFrom(c: Context<AppEnv>, approverPin?: string | null): Actor {

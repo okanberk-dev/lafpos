@@ -171,7 +171,11 @@ export default function CashPage() {
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <PageHeader
         title="Kasa"
-        subtitle={day ? `Z ${day.zNo} · ${fmtDateLong(day.date)} · ${day.openedByName ?? ''} ${fmtTime(day.openedAt)}'de açtı` : 'Gün kapalı'}
+        subtitle={
+          day
+            ? `Z ${day.zNo} · ${fmtDateLong(day.date)} · ${day.openedByName ?? ''} ${fmtTime(day.openedAt)}'de açtı${day.reopenedAt ? ` · ${fmtTime(day.reopenedAt)}'de yeniden açıldı` : ''}`
+            : 'Gün kapalı'
+        }
         actions={
           <>
             {boot.integrations.okc.provider === 'simulator' && (

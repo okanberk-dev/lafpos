@@ -158,6 +158,8 @@ export interface BusinessDayDTO {
   openedByName: string | null;
   openingCash: number;
   closedAt: number | null;
+  /** Gün sonundan sonra yeniden açıldıysa son açılış anı */
+  reopenedAt?: number | null;
 }
 
 export interface PublicSettings {

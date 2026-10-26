@@ -1,9 +1,8 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { z } from 'zod';
-import type { OrderDTO } from '@shared/types';
 import { db, schema, tx } from '../db/client';
-import { type AppEnv, actorFrom, type AuthUser, needDirect, seesCashNumbers } from '../lib/auth';
+import { type AppEnv, actorFrom, blindOrder, needDirect } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, kurus, query } from '../lib/http';
 import { bootstrap } from '../services/bootstrap';
@@ -28,10 +27,8 @@ function write<T>(fn: (t: Parameters<Parameters<typeof tx>[0]>[0], fx: Effects) 
 posRoutes.get('/bootstrap', (c) => c.json(bootstrap(db, c.get('user'))));
 posRoutes.get('/floor', (c) => c.json(floorState(db)));
 
-/** Kör kasa: kasa rakamlarını görmeyen kullanıcıya kapanmış adisyonun ödeme dökümü gitmez */
-function blind(user: AuthUser, dto: OrderDTO): OrderDTO {
-  return dto.status !== 'acik' && !seesCashNumbers(user) ? { ...dto, payments: [] } : dto;
-}
+/** Adisyon yanıtı: kör kasada kapanmış adisyonun ödeme dökümü süzülür (blindOrder) */
+const dto = (c: Context<AppEnv>, id: string) => blindOrder(c.get('user'), orders.getOrderDTO(db, id));
 
 posRoutes.get('/orders', (c) => {
   const q = query(
@@ -59,10 +56,10 @@ posRoutes.get('/orders', (c) => {
     .limit(q.limit)
     .all();
   const user = c.get('user');
-  return c.json(rows.map((r) => blind(user, orderToDTO(db, r))));
+  return c.json(rows.map((r) => blindOrder(user, orderToDTO(db, r))));
 });
 
-posRoutes.get('/orders/:id', (c) => c.json(blind(c.get('user'), orders.getOrderDTO(db, c.req.param('id')))));
+posRoutes.get('/orders/:id', (c) => c.json(dto(c, c.req.param('id'))));
 
 posRoutes.post('/orders', async (c) => {
   const input = await body(
@@ -82,7 +79,7 @@ posRoutes.post('/orders', async (c) => {
   );
   const actor = actorFrom(c);
   const order = write((t, fx) => orders.createOrder(t, actor, fx, input));
-  return c.json(orders.getOrderDTO(db, order.id));
+  return c.json(dto(c, order.id));
 });
 
 posRoutes.patch('/orders/:id', async (c) => {
@@ -98,7 +95,7 @@ posRoutes.patch('/orders/:id', async (c) => {
   );
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.updateOrder(t, actor, fx, c.req.param('id'), input));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 const optionPick = z.object({ itemId: z.string(), qty: z.number().int().min(0).max(9).optional() });
@@ -125,21 +122,21 @@ posRoutes.post('/orders/:id/items', async (c) => {
   );
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.addItems(t, actor, fx, c.req.param('id'), input.items));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/items/:itemId/void', async (c) => {
   const input = await body(c, z.object({ qty: z.number().int().min(1).optional(), reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.voidItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason }));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/items/:itemId/comp', async (c) => {
   const input = await body(c, z.object({ qty: z.number().int().min(1).optional(), reason, undo: z.boolean().optional(), ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.compItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason, undo: input.undo }));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 const discountShape = { type: z.enum(['percent', 'amount']), value: z.number().min(0).max(1_000_000_000), reason, ...approver };
@@ -148,28 +145,28 @@ posRoutes.post('/orders/:id/items/:itemId/discount', async (c) => {
   const input = await body(c, z.object(discountShape));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.setItemDiscount(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), type: input.type, value: input.value, reason: input.reason }));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/discount', async (c) => {
   const input = await body(c, z.object({ ...discountShape, remove: z.boolean().optional() }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.setOrderDiscount(t, actor, fx, c.req.param('id'), input.remove ? null : { type: input.type, value: input.value, reason: input.reason }));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/move', async (c) => {
   const input = await body(c, z.object({ tableId: z.string(), ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.moveOrder(t, actor, fx, c.req.param('id'), input.tableId));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/merge', async (c) => {
   const input = await body(c, z.object({ sourceOrderId: z.string(), ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.mergeOrders(t, actor, fx, c.req.param('id'), input.sourceOrderId));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/transfer', async (c) => {
@@ -184,13 +181,13 @@ posRoutes.post('/orders/:id/transfer', async (c) => {
   );
   const actor = actorFrom(c, input.approverPin);
   const res = write((t, fx) => orders.transferItems(t, actor, fx, c.req.param('id'), input));
-  return c.json({ source: orders.getOrderDTO(db, res.source.id), target: orders.getOrderDTO(db, res.target.id) });
+  return c.json({ source: dto(c, res.source.id), target: dto(c, res.target.id) });
 });
 
 posRoutes.post('/orders/:id/bill', (c) => {
   const actor = actorFrom(c);
   write((t, fx) => orders.printBill(t, actor, fx, c.req.param('id')));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/payments', async (c) => {
@@ -209,53 +206,53 @@ posRoutes.post('/orders/:id/payments', async (c) => {
   );
   const actor = actorFrom(c, input.approverPin);
   const res = write((t, fx) => orders.addPayment(t, actor, fx, c.req.param('id'), input));
-  return c.json({ order: orders.getOrderDTO(db, res.order.id), closed: res.closed, change: res.change });
+  return c.json({ order: dto(c, res.order.id), closed: res.closed, change: res.change });
 });
 
 posRoutes.post('/orders/:id/payments/:paymentId/refund', async (c) => {
   const input = await body(c, z.object({ reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.refundPayment(t, actor, fx, c.req.param('id'), { paymentId: c.req.param('paymentId'), reason: input.reason }));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/close', (c) => {
   const actor = actorFrom(c);
   write((t, fx) => orders.closeOrder(t, actor, fx, c.req.param('id')));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/reopen', async (c) => {
   const input = await body(c, z.object({ reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.reopenOrder(t, actor, fx, c.req.param('id'), input.reason));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/cancel', async (c) => {
   const input = await body(c, z.object({ reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.cancelOrder(t, actor, fx, c.req.param('id'), input.reason));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/delivery', async (c) => {
   const input = await body(c, z.object({ deliveryStatus: z.enum(['hazirlaniyor', 'hazir', 'yolda', 'teslim']).optional(), courierId: z.string().nullish() }));
   const actor = actorFrom(c);
   write((t, fx) => orders.setDelivery(t, actor, fx, c.req.param('id'), input));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/room/start', (c) => {
   const actor = actorFrom(c);
   write((t, fx) => startRoom(t, actor, fx, c.req.param('id')));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/room/stop', (c) => {
   const actor = actorFrom(c);
   write((t, fx) => stopRoom(t, actor, fx, c.req.param('id')));
-  return c.json(orders.getOrderDTO(db, c.req.param('id')));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 // ─── Bar / mutfak ekranı ─────────────────────────────────────────────────────

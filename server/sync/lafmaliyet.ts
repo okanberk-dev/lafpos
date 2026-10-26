@@ -164,61 +164,64 @@ export function enqueueDay(dayId: string) {
   return true;
 }
 
-let flushing = false;
-/** Gönderim sürerken kuyruğa giren gün: o gönderim bitince hemen gider (dakikalık işi beklemez) */
-let again = false;
+/** Süren gönderim. Bu sırada gelen istek onun bitmesini bekleyip yeniden gönderir: kuyruğa yeni giren gün dakikalık
+ * işi beklemez, "Gönder" de gerçekten gönderilmeden "gönderildi" demez (inceleme, 26 Eki 2026). */
+let running: Promise<{ sent: number; failed: number }> | null = null;
 
 /** Giden kutusunu gönderir; başarısız olan artan beklemeyle tekrar denenir (internet yokken satış durmaz). */
-export async function flushOutbox() {
-  if (!configured()) return { sent: 0, failed: 0 };
-  if (flushing) {
-    again = true;
-    return { sent: 0, failed: 0 };
-  }
-  flushing = true;
-  again = false;
+export function flushOutbox(): Promise<{ sent: number; failed: number }> {
+  if (!configured()) return Promise.resolve({ sent: 0, failed: 0 });
+  if (running) return running.then(() => flushOutbox());
+  running = sendDue()
+    // Arka planda çağrılır (`void flushOutbox()`): beklenmeyen hata süreci düşürmesin, sonraki tur yine dener
+    .catch((e) => {
+      console.warn('[lafmaliyet] giden kutusu gönderilemedi:', e instanceof Error ? e.message : e);
+      return { sent: 0, failed: 0 };
+    })
+    .finally(() => {
+      running = null;
+    });
+  return running;
+}
+
+async function sendDue(): Promise<{ sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
-  try {
-    const due = db
-      .select()
-      .from(schema.outbox)
-      .where(and(isNull(schema.outbox.sentAt), lte(schema.outbox.nextAttemptAt, Date.now())))
-      .orderBy(asc(schema.outbox.id))
-      .limit(20)
-      .all();
-    for (const row of due) {
-      try {
-        const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL(`${env.lafmaliyetUrl}/api/pos/gun`), row.payload, 15_000);
-        const detail = json && typeof json === 'object' ? ` (${[(json as { error?: unknown }).error, (json as { field?: unknown }).field].filter(Boolean).join(': ')})` : '';
-        // 400/413 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
-        // elle düzeltilip yeniden gönderilir
-        if (status === 400 || status === 409 || status === 413 || status === 422) {
-          db.update(schema.outbox)
-            .set({ attempts: row.attempts + 1, lastError: `lafmaliyet reddetti: HTTP ${status}${detail}`, nextAttemptAt: Date.now() + 365 * 86400_000 })
-            .where(eq(schema.outbox.id, row.id))
-            .run();
-          failed++;
-          continue;
-        }
-        if (status !== 200) throw new Error(`HTTP ${status}${detail}`);
-        db.update(schema.outbox).set({ sentAt: Date.now(), lastError: null, attempts: row.attempts + 1 }).where(eq(schema.outbox.id, row.id)).run();
-        sent++;
-      } catch (e) {
-        const attempts = row.attempts + 1;
-        const wait = Math.min(6 * 3600_000, 60_000 * 2 ** Math.min(attempts, 8));
+  const due = db
+    .select()
+    .from(schema.outbox)
+    .where(and(isNull(schema.outbox.sentAt), lte(schema.outbox.nextAttemptAt, Date.now())))
+    .orderBy(asc(schema.outbox.id))
+    .limit(20)
+    .all();
+  for (const row of due) {
+    try {
+      const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL(`${env.lafmaliyetUrl}/api/pos/gun`), row.payload, 15_000);
+      const detail = json && typeof json === 'object' ? ` (${[(json as { error?: unknown }).error, (json as { field?: unknown }).field].filter(Boolean).join(': ')})` : '';
+      // 400/413 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
+      // elle düzeltilip yeniden gönderilir
+      if (status === 400 || status === 409 || status === 413 || status === 422) {
         db.update(schema.outbox)
-          .set({ attempts, lastError: e instanceof Error ? e.message : String(e), nextAttemptAt: Date.now() + wait })
+          .set({ attempts: row.attempts + 1, lastError: `lafmaliyet reddetti: HTTP ${status}${detail}`, nextAttemptAt: Date.now() + 365 * 86400_000 })
           .where(eq(schema.outbox.id, row.id))
           .run();
         failed++;
+        continue;
       }
+      if (status !== 200) throw new Error(`HTTP ${status}${detail}`);
+      db.update(schema.outbox).set({ sentAt: Date.now(), lastError: null, attempts: row.attempts + 1 }).where(eq(schema.outbox.id, row.id)).run();
+      sent++;
+    } catch (e) {
+      const attempts = row.attempts + 1;
+      const wait = Math.min(6 * 3600_000, 60_000 * 2 ** Math.min(attempts, 8));
+      db.update(schema.outbox)
+        .set({ attempts, lastError: e instanceof Error ? e.message : String(e), nextAttemptAt: Date.now() + wait })
+        .where(eq(schema.outbox.id, row.id))
+        .run();
+      failed++;
     }
-  } finally {
-    flushing = false;
   }
   if (sent || failed) setSyncState('lafmaliyet.push', { lastRunAt: Date.now(), sent, failed });
-  if (again) void flushOutbox();
   return { sent, failed };
 }
 

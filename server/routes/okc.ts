@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/client';
-import { type AppEnv, actorFrom, requirePermission } from '../lib/auth';
+import { type AppEnv, actorFrom, blindOrder, requirePermission } from '../lib/auth';
 import { body, conflict } from '../lib/http';
 import { updateSettings } from '../lib/settings';
 import {
@@ -67,14 +67,15 @@ okcRoutes.post('/orders/:id/send', async (c) => {
   const input = await body(c, z.object({ items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).nullish() }));
   const actor = actorFrom(c);
   const receipt = await sendOrderToDevice(actor, c.req.param('id'), input.items?.length ? input.items : null);
-  return c.json({ receipt, order: getOrderDTO(db, c.req.param('id')) });
+  return c.json({ receipt, order: blindOrder(c.get('user'), getOrderDTO(db, c.req.param('id'))) });
 });
 
 okcRoutes.get('/orders/:id/receipts', (c) => c.json(receiptsForOrder(c.req.param('id'))));
 
 okcRoutes.post('/receipts/:id/cancel', async (c) => {
-  const actor = actorFrom(c);
-  return c.json(await cancelDeviceBasket(actor, c.req.param('id')));
+  const input = await body(c, z.object({ force: z.boolean().optional(), approverPin: z.string().nullish() }));
+  const actor = actorFrom(c, input.approverPin);
+  return c.json(await cancelDeviceBasket(actor, c.req.param('id'), input.force));
 });
 
 okcRoutes.post('/receipts/:id/refresh', async (c) => c.json(await refreshReceipt(c.req.param('id'))));

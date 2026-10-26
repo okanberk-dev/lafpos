@@ -58,9 +58,13 @@ Değerler yalnız kasa bilgisayarındaki `.env` dosyasında durur; depoya girmez
 - Tutarlar kuruş; `taxPercent` oran × 100, `quantity` adet × 1000, kısım KDV oranından.
 - İkram ve iptal edilen kalem gitmez; ödenmiş adet düşülür; istenirse yalnız seçili kalemler gönderilir
   (kalem bazlı ödeme).
-- Adisyon indirimi ve servis payı satırlara en büyük kalan yöntemiyle dağıtılır; cihazın toplamı LafPOS'un
-  toplamıyla kuruşu kuruşuna aynı olsun diye son satırda `totalValue` düzeltilir.
-- Aynı adisyon için açık bir sepet varken ikincisi gönderilmez (409).
+- Adisyon indirimi satırlara en büyük kalan yöntemiyle dağıtılır (`adjust.totalValue`). Servis ücreti yalnız
+  adisyonda servis varsa ayrı "Servis ücreti" satırıdır. Bütün adisyon gönderilince sepet toplamı adisyonun
+  kalanına eşitlenir: kalem bazlı ödemeden sonra kalem eklenip indirim yeniden dağıldığında kalan birkaç
+  kuruşluk kayma kalemlerin indirim payına işlenir.
+- Aynı adisyon için açık bir sepet varken ikincisi gönderilmez (409). Sepet cihazda beklerken adisyonun tutarı ve
+  ödemeleri kilitlidir (iptal, ikram, indirim, ödeme, taşıma, birleştirme, iptal: 409 `okc_pending`); kalem
+  eklenebilir. Karaoke oda sayacı çalışırken hesap cihaza gönderilmez (`room_running`).
 
 ## 6. Sonuç
 
@@ -80,3 +84,7 @@ Her sonuç denetim kaydına yazılır; son hata Genel bakış › Sistem sağlı
 - **1106 terminal bulunamadı**: `TOKENX_TERMINAL_ID` yanlış ya da cihaz Token'da tanımlı değil.
 - **Toplam farkı**: kısım eşlemesindeki KDV oranı cihazdakiyle aynı olmalı.
 - **Sonuç gelmiyor**: webhook adresine dışarıdan erişilemiyorsa anahtarı kaldırın; LafPOS yoklamaya döner.
+- **İnternet ya da Token kesik, sepet silinemiyor** (`okc_delete`): adisyondaki "İptal"e basınca LafPOS sorar;
+  onaylanırsa sepet yetkili PIN'iyle LafPOS'ta iptal sayılır, adisyon kasadan alınır ve gün kapanabilir. Denetim
+  kaydına alarm düşer (`okc.force_cancel`). Cihazda yine de o sepetten ödeme alındıysa geç gelen sonuç ikinci bir
+  alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir.

@@ -74,7 +74,7 @@ function assertNoPendingDevice(t: Tx | DB, orderId: string) {
   if (pending) throw conflict('Bu adisyonun sepeti yazarkasada bekliyor; önce cihazda ödeyin ya da sepeti iptal edin', 'okc_pending');
 }
 
-function assertNoActiveRoom(t: Tx | DB, orderId: string) {
+export function assertNoActiveRoom(t: Tx | DB, orderId: string) {
   const active = t
     .select()
     .from(schema.roomSessions)

@@ -378,8 +378,8 @@ describe('inceleme düzeltmeleri', () => {
     expect(locked.json.code).toBe('rate_limited');
 
     resetFailures();
-    for (let i = 0; i < 30; i++) recordFailure(`giris:192.168.1.${i}`);
-    expect(() => assertNotLocked('giris:192.168.1.200')).toThrow(/Çok fazla hatalı PIN/);
+    for (let i = 0; i < 30; i++) recordFailure('giris', `192.168.1.${i}`);
+    expect(() => assertNotLocked('giris', '192.168.1.200')).toThrow(/Çok fazla hatalı PIN/);
     resetFailures();
     expect((await h.call('', 'POST', '/auth/login', { pin: PINS.kasa })).status).toBe(200);
   });

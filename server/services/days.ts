@@ -17,7 +17,7 @@ type DayRow = typeof schema.businessDays.$inferSelect;
 export function dayToDTO(t: Tx | DB, d: DayRow | undefined | null): BusinessDayDTO | null {
   if (!d) return null;
   const opener = d.openedBy ? t.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, d.openedBy)).get() : null;
-  return { id: d.id, date: d.date, zNo: d.zNo, openedAt: d.openedAt, openedByName: opener?.name ?? null, openingCash: d.openingCash, closedAt: d.closedAt };
+  return { id: d.id, date: d.date, zNo: d.zNo, openedAt: d.openedAt, openedByName: opener?.name ?? null, openingCash: d.openingCash, closedAt: d.closedAt, reopenedAt: d.reopenedAt };
 }
 
 export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: number }): DayRow {
@@ -234,7 +234,7 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
     throw conflict('Yalnız bugünün son gün sonu yeniden açılabilir', 'day_not_reopenable');
   }
   t.update(schema.businessDays)
-    .set({ closedAt: null, closedBy: null, countedCash: null, cashCounts: null, expectedCash: null, cashDiff: null, summary: null, exportedAt: null })
+    .set({ closedAt: null, closedBy: null, countedCash: null, cashCounts: null, expectedCash: null, cashDiff: null, summary: null, exportedAt: null, reopenedAt: Date.now() })
     .where(eq(schema.businessDays.id, dayId))
     .run();
   // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer
@@ -247,6 +247,8 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
     message: `${actor.user.name} Z ${day.zNo} gün sonunu geri aldı ve günü yeniden açtı (${reason.trim()})`,
   });
   fx.emit({ topic: 'cash', kind: 'day.reopened', byUserId: actor.user.id });
+  // Masa planı ve tabletler açık günü kurulum verisinden okur (açma ve kapamadaki gibi)
+  fx.emit({ topic: 'settings', kind: 'day.reopened', byUserId: actor.user.id });
   return getDay(t, dayId);
 }
 
