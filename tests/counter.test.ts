@@ -34,6 +34,18 @@ describe('tezgâh satışı', () => {
     expect((await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' })).id).toBe(next.id);
   });
 
+  it('elle fiyat: yetkisi olmayan kasiyerde yetkili PIN ister, fiyat kaleme yazılır ve denetime düşer', async () => {
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
+    const line = { productId: product('Türk kahvesi').id, qty: 1, priceOverride: 5000 };
+    const denied = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/items`, { items: [line] });
+    expect(denied.json.code).toBe('approval_required');
+    const done = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [line], approverPin: '2468' });
+    expect(done.items[0]!.unitPrice).toBe(5000);
+    const audit = await h.ok<{ action: string }[]>('patron', 'GET', '/admin/audit?limit=20');
+    expect(audit.some((a) => a.action === 'item.price_override')).toBe(true);
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: done.total });
+  });
+
   it('gün sonunda kalemsiz ve ödemesiz adisyonlar kapanır, dolu adisyon yine engeller', async () => {
     const full = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
     const withItem = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${full.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
