@@ -8,6 +8,7 @@
  * server/lib/signature.ts ile aynı (tests/cloud-api.test.ts denetler). Ayrıntı: docs/07-UZAKTAN-ERISIM.md
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import demoSnapshot from './demo-ozet.json';
 import { gunzipSync } from 'node:zlib';
 
 const SNAPSHOT_KEY = 'lafpos:snapshot';
@@ -106,6 +107,36 @@ async function snapshot(): Promise<Snapshot | null> {
   return raw ? (JSON.parse(raw) as Snapshot) : null;
 }
 
+// ─── Demo ────────────────────────────────────────────────────────────────────
+
+/**
+ * Kafe bağlanana kadar (Redis'te kafeden gelmiş özet yokken) örnek gün parolasız gösterilir. Kafe ilk özeti itince
+ * demo biter; gerçek veri her zaman parolalıdır. LAFPOS_UZAKTAN_DEMO=0 demoyu kapatır.
+ */
+const demoAllowed = () => env('LAFPOS_UZAKTAN_DEMO') !== '0';
+const demoKey = () => `${secret()}:demo`;
+
+/** Demo özetinin zaman damgaları şimdiye kaydırılır (süreler ve saatler taze görünsün) */
+function demoNow(): Snapshot {
+  const base = demoSnapshot as unknown as Snapshot;
+  const delta = Date.now() - base.at;
+  const shift = (v: unknown): unknown => {
+    if (typeof v === 'number') return v > 1.6e12 && v < 2.2e12 ? v + delta : v;
+    if (Array.isArray(v)) return v.map(shift);
+    if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shift(x)]));
+    return v;
+  };
+  return shift(base) as Snapshot;
+}
+
+async function realSnapshot(): Promise<Snapshot | null> {
+  try {
+    return await snapshot();
+  } catch {
+    return null;
+  }
+}
+
 // ─── Uçlar ───────────────────────────────────────────────────────────────────
 
 const ME = {
@@ -133,7 +164,7 @@ async function handle(req: Request): Promise<Response> {
         redisOk = false;
       }
     }
-    return json({ secret: secret().length >= 32, password: env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt });
+    return json({ secret: secret().length >= 32, password: env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null });
   }
   if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
 
@@ -159,6 +190,8 @@ async function handle(req: Request): Promise<Response> {
 
   // Patron girişi: parola, IP başına 15 dakikada en çok 8 deneme
   if (path === 'uzaktan/giris' && req.method === 'POST') {
+    // Kafe bağlanmadıysa demo: parolasız, yalnız demo özetine açılan jeton
+    if (demoAllowed() && !(await realSnapshot())) return json({ token: issueToken(demoKey()), me: ME, demo: true });
     const password = env('LAFPOS_UZAKTAN_PAROLA');
     if (password.length < 10) return fail(503, 'Uzaktan parola tanımlı değil (LAFPOS_UZAKTAN_PAROLA)', 'not_configured');
     const ip = (req.headers.get('x-forwarded-for') ?? 'yok').split(',')[0]!.trim();
@@ -174,13 +207,15 @@ async function handle(req: Request): Promise<Response> {
     return json({ token: issueToken(secret()), me: ME });
   }
 
-  const auth = req.headers.get('authorization') ?? '';
-  if (!tokenValid(secret(), auth.replace(/^Bearer\s+/i, ''))) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
+  const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const real = await realSnapshot();
+  const demo = !real && demoAllowed() && tokenValid(demoKey(), auth);
+  if (!demo && !tokenValid(secret(), auth)) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
   if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
 
   if (path === 'auth/me') return json(ME);
-  const snap = await snapshot();
-  if (path === 'uzaktan/durum') return json({ at: snap?.at ?? null });
+  const snap = demo ? demoNow() : real;
+  if (path === 'uzaktan/durum') return json({ at: snap?.at ?? null, demo });
   if (!snap) return fail(503, 'Kafeden henüz veri gelmedi; kasa bilgisayarı açık ve LAFPOS_CLOUD_URL tanımlı mı?', 'no_snapshot');
   if (path === 'bootstrap') return json({ ...snap.bootstrap, me: ME });
   if (path === 'reports/patron') return json(snap.patron);

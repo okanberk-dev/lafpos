@@ -112,13 +112,39 @@ describe('LafPOS Uzaktan', () => {
       delete process.env.LAFPOS_CLOUD_SECRET;
       delete process.env.KV_REST_API_URL;
       const body = await read();
-      expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null });
+      expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null, demo: true });
       expect(JSON.stringify(body)).not.toContain(PASSWORD);
       // Diğer uçlar anahtarsız kapalı kalır
       expect((await GET(req('health'))).status).toBe(503);
     } finally {
       process.env.LAFPOS_CLOUD_SECRET = saved.s;
       process.env.KV_REST_API_URL = saved.k;
+    }
+  });
+  it('kafe bağlanana kadar demo parolasız; kafe özeti gelince demo jetonu geçmez, parola gerekir', async () => {
+    const { GET, POST } = await api();
+    const saved = new Map(store);
+    store.clear();
+    try {
+      expect(await (await GET(req('uzaktan/kurulum'))).json()).toMatchObject({ demo: true });
+      const login = await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }));
+      const { token, demo } = (await login.json()) as { token: string; demo: boolean };
+      expect(demo).toBe(true);
+      const boot = await GET(req('bootstrap', { headers: { authorization: `Bearer ${token}` } }));
+      expect(boot.status).toBe(200);
+      expect(((await boot.json()) as { products: unknown[] }).products.length).toBeGreaterThan(0);
+      // Demo jetonu gerçek anahtarla geçmez; kafe özeti gelince demo biter
+      for (const [k, v] of saved) store.set(k, v);
+      expect((await GET(req('bootstrap', { headers: { authorization: `Bearer ${token}` } }))).status).toBe(401);
+      expect((await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }))).status).toBe(401);
+      // LAFPOS_UZAKTAN_DEMO=0: özet yokken de parola gerekir
+      store.clear();
+      process.env.LAFPOS_UZAKTAN_DEMO = '0';
+      expect((await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }))).status).toBe(401);
+    } finally {
+      delete process.env.LAFPOS_UZAKTAN_DEMO;
+      store.clear();
+      for (const [k, v] of saved) store.set(k, v);
     }
   });
 });
