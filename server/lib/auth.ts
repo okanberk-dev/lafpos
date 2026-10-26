@@ -30,32 +30,59 @@ export function isValidPin(pin: string): boolean {
 
 // ─── Deneme sınırı ───────────────────────────────────────────────────────────
 
-const failures = new Map<string, { count: number; until: number }>();
+const failures = new Map<string, { count: number; until: number; last: number }>();
+
+/**
+ * Bütün ağ için ortak sayaç: aygıt başına sınır, ağdaki birçok aygıttan (ya da adres değiştirerek) deneme
+ * yapılmasını durdurmaz. 4 haneli PIN'ler taranmasın diye 10 dakikada 30 hatadan sonra herkes için kilit.
+ */
+const GLOBAL = '*';
+const GLOBAL_LIMIT = 30;
+const WINDOW_MS = 10 * 60_000;
 
 export function assertNotLocked(key: string) {
-  const f = failures.get(key);
-  if (f && f.until > Date.now()) {
-    const sec = Math.ceil((f.until - Date.now()) / 1000);
-    throw new HttpError(429, `Çok fazla hatalı PIN. ${sec} saniye sonra tekrar deneyin`, 'rate_limited');
+  for (const k of [key, GLOBAL]) {
+    const f = failures.get(k);
+    if (f && f.until > Date.now()) {
+      const sec = Math.ceil((f.until - Date.now()) / 1000);
+      throw new HttpError(429, `Çok fazla hatalı PIN. ${sec} saniye sonra tekrar deneyin`, 'rate_limited');
+    }
   }
 }
 
 export function recordFailure(key: string) {
-  const f = failures.get(key) ?? { count: 0, until: 0 };
+  const now = Date.now();
+  const f = failures.get(key) ?? { count: 0, until: 0, last: now };
+  if (now - f.last > WINDOW_MS) f.count = 0;
   f.count += 1;
+  f.last = now;
   // 5 hatadan sonra 15 sn, sonra her hatada ikiye katlanarak en çok 5 dk kilit
-  if (f.count >= 5) f.until = Date.now() + Math.min(300_000, 15_000 * 2 ** (f.count - 5));
+  if (f.count >= 5) f.until = now + Math.min(300_000, 15_000 * 2 ** (f.count - 5));
   failures.set(key, f);
+  const g = failures.get(GLOBAL) ?? { count: 0, until: 0, last: now };
+  if (now - g.last > WINDOW_MS) g.count = 0;
+  g.count += 1;
+  g.last = now;
+  if (g.count >= GLOBAL_LIMIT) g.until = now + Math.min(600_000, 60_000 * 2 ** (g.count - GLOBAL_LIMIT));
+  failures.set(GLOBAL, g);
+}
+
+/** Testler için: sayaçları sıfırlar */
+export function resetFailures() {
+  failures.clear();
 }
 
 export function clearFailures(key: string) {
   failures.delete(key);
 }
 
+/**
+ * Deneme sayacının anahtarı: bağlantının gerçek adresi. `X-Forwarded-For` istemcinin kendi yazdığı başlıktır ve
+ * LafPOS'un önünde vekil sunucu yoktur; ona güvenilirse her denemede başlığı değiştirerek kilit aşılır.
+ */
 export function clientKey(c: Context): string {
-  const fwd = c.req.header('x-forwarded-for')?.split(',')[0]?.trim();
   const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming;
-  return fwd || incoming?.socket?.remoteAddress || 'yerel';
+  return incoming?.socket?.remoteAddress || 'yerel';
 }
 
 // ─── Oturum ──────────────────────────────────────────────────────────────────
@@ -152,6 +179,14 @@ export function findApprover(pin: string, key: string): AuthUser {
   }
   clearFailures(`onay:${key}`);
   return toAuthUser(row);
+}
+
+/**
+ * Kör kasa: `kasa.rakam` ya da `rapor.gor` yetkisi olmayan kullanıcı ara raporu, beklenen nakdi, kasa farkını ve
+ * kapanmış adisyonların ödeme dökümünü görmez (toplayıp beklenen nakdi bulamasın).
+ */
+export function seesCashNumbers(user: AuthUser): boolean {
+  return user.permissions.has('kasa.rakam') || user.permissions.has('rapor.gor');
 }
 
 export function actorFrom(c: Context<AppEnv>, approverPin?: string | null): Actor {

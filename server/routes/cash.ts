@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client';
-import { type AppEnv, actorFrom, requirePermission } from '../lib/auth';
+import { type AppEnv, actorFrom, requirePermission, seesCashNumbers } from '../lib/auth';
 import { body, kurus, query } from '../lib/http';
-import { addCashMovement, closeDay, collectCustomerPayment, computeSummary, dayToDTO, getDay, lafmaliyetZ, listDays, openDay, recordCount } from '../services/days';
+import { addCashMovement, closeDay, closedToday, collectCustomerPayment, computeSummary, dayToDTO, getDay, lafmaliyetZ, listDays, openDay, recordCount, reopenDay } from '../services/days';
 import { enqueueDay, flushOutbox } from '../sync/lafmaliyet';
 import { getOpenDay } from '../services/orders';
 import { write } from './pos';
@@ -26,14 +26,17 @@ function movementsOf(dayId: string) {
  * Kör kasa (ModPOS "Kör Kasa" gibi): `kasa.rakam` ya da `rapor.gor` yetkisi olmayan kasiyer ara raporu,
  * beklenen nakdi ve kasa farkını görmez; gün sonunda saydığını yazar, fark yöneticinin ekranındadır.
  */
-const seesNumbers = (user: AppEnv['Variables']['user']) => user.permissions.has('kasa.rakam') || user.permissions.has('rapor.gor');
+const seesNumbers = seesCashNumbers;
 
 /** Açık gün, ara rapor (X) ve kasa hareketleri */
 cashRoutes.get('/day', (c) => {
   const user = c.get('user');
   const day = getOpenDay(db);
   const blind = !seesNumbers(user);
-  if (!day) return c.json({ day: null, summary: null, movements: [], blind });
+  if (!day) {
+    const closed = closedToday(db);
+    return c.json({ day: null, summary: null, movements: [], blind, closedToday: closed ? dayToDTO(db, closed) : null });
+  }
   return c.json({ day: dayToDTO(db, day), summary: blind ? null : computeSummary(db, day), movements: movementsOf(day.id), blind });
 });
 
@@ -56,6 +59,13 @@ cashRoutes.post('/day/close', async (c) => {
   return c.json({ day: dayToDTO(db, day), summary: day.summary, lafmaliyet: day.summary ? lafmaliyetZ(day, day.summary) : null, blind: false });
 });
 
+cashRoutes.post('/days/:id/reopen', async (c) => {
+  const input = await body(c, z.object({ reason: z.string().max(200), approverPin: z.string().nullish() }));
+  const actor = actorFrom(c, input.approverPin);
+  const day = write((t, fx) => reopenDay(t, actor, fx, c.req.param('id'), input.reason));
+  return c.json(dayToDTO(db, day));
+});
+
 cashRoutes.post('/days/:id/count', async (c) => {
   const input = await body(
     c,
@@ -64,9 +74,10 @@ cashRoutes.post('/days/:id/count', async (c) => {
       methodCounts: z.record(z.string(), kurus).optional(),
       banknotes: z.record(z.string(), z.number().int().min(0).max(100000)).optional(),
       note: z.string().max(500).nullish(),
+      approverPin: z.string().nullish(),
     }),
   );
-  const actor = actorFrom(c);
+  const actor = actorFrom(c, input.approverPin);
   const day = write((t, fx) => recordCount(t, actor, fx, c.req.param('id'), input));
   if (enqueueDay(day.id)) void flushOutbox();
   const blind = !seesNumbers(c.get('user'));

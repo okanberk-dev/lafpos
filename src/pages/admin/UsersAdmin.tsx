@@ -259,8 +259,8 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
         <Field label="Ad">
           <Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus={!user} />
         </Field>
-        <Field label="Rol">
-          <Select value={d.role} onChange={(e) => setD({ ...d, role: e.target.value as Role, permGrant: [], permRevoke: [] })}>
+        <Field label="Rol" hint={isMe ? 'başka bir yetkili değiştirir' : undefined}>
+          <Select value={d.role} disabled={isMe} onChange={(e) => setD({ ...d, role: e.target.value as Role, permGrant: [], permRevoke: [] })}>
             {ROLES.map((r) => (
               <option key={r} value={r}>
                 {ROLE_LABELS[r]}
@@ -275,7 +275,7 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
           </div>
         </Field>
         <Field label="İndirim sınırı (%)" hint="üstü onay ister">
-          <Input type="number" min={0} max={100} value={d.maxDiscountPct} onChange={(e) => setD({ ...d, maxDiscountPct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
+          <Input type="number" min={0} max={100} value={d.maxDiscountPct} disabled={isMe} onChange={(e) => setD({ ...d, maxDiscountPct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
         </Field>
         <div className="sm:col-span-2">
           <div className="mb-1.5 text-sm font-medium text-[var(--admin-text-soft)]">Renk</div>
@@ -290,7 +290,11 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
       </div>
 
       <h3 className="mb-1 mt-5 text-sm font-semibold">Yetkiler</h3>
-      <p className="mb-2 text-xs text-[var(--admin-text-mute)]">İşaretliler rolden gelir; burada değiştirilen yalnız bu kişiye uygulanır (rol setleri: Roller ve yetkiler)</p>
+      <p className="mb-2 text-xs text-[var(--admin-text-mute)]">
+        {isMe
+          ? 'Kendi rolünüzü, yetkilerinizi ve indirim sınırınızı başka bir yetkili değiştirir; burada adınızı, renginizi ve PIN\'inizi değiştirebilirsiniz'
+          : 'İşaretliler rolden gelir; burada değiştirilen yalnız bu kişiye uygulanır (rol setleri: Roller ve yetkiler)'}
+      </p>
       <div className="space-y-3">
         {PERMISSION_GROUPS.map((g) => (
           <div key={g.key} className="overflow-hidden rounded-xl border border-[var(--admin-border)]">
@@ -300,8 +304,8 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
               const byRole = roleBase(d.role).includes(p);
               const source = byRole ? (on ? null : { tone: 'danger' as const, text: 'kişiden kaldırıldı' }) : on ? { tone: 'primary' as const, text: 'kişiye ek' } : null;
               return (
-                <label key={p} className="flex min-h-11 cursor-pointer items-center gap-3 border-t border-[var(--admin-divider)] px-3 py-2 text-sm hover:bg-[var(--admin-surface-2)]">
-                  <input type="checkbox" checked={on} onChange={() => toggle(p)} className="size-4 accent-[var(--admin-primary)]" />
+                <label key={p} className={cn('flex min-h-11 items-center gap-3 border-t border-[var(--admin-divider)] px-3 py-2 text-sm', isMe ? 'opacity-70' : 'cursor-pointer hover:bg-[var(--admin-surface-2)]')}>
+                  <input type="checkbox" checked={on} disabled={isMe} onChange={() => toggle(p)} className="size-4 accent-[var(--admin-primary)]" />
                   <span className="min-w-0 flex-1">{PERMISSIONS[p]}</span>
                   {source && <Badge tone={source.tone}>{source.text}</Badge>}
                 </label>

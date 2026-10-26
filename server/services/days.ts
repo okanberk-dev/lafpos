@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { businessDate } from '@shared/time';
@@ -24,6 +24,14 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
   needDirect(actor, 'kasa.gun');
   if (getOpenDay(t)) throw conflict('Açık bir gün zaten var', 'day_open');
   const now = Date.now();
+  // Bir iş gününe tek Z: gece gün sonu alındıktan sonra satış gerekirse aynı gün yeniden açılır (lafmaliyet her
+  // tarihe tek Z kaydeder; ikinci Z ilkinin yerine geçerdi, inceleme 26 Eki 2026)
+  const closedToday = t
+    .select({ zNo: schema.businessDays.zNo })
+    .from(schema.businessDays)
+    .where(and(eq(schema.businessDays.date, businessDate(now)), isNotNull(schema.businessDays.closedAt)))
+    .get();
+  if (closedToday) throw conflict(`Bugünün gün sonu alındı (Z ${closedToday.zNo}). Satış gerekiyorsa günü yeniden açın; yeni gün 05:00'ten sonra açılır`, 'day_closed_today');
   const last = t.select({ z: sql<number>`coalesce(max(${schema.businessDays.zNo}), 0)` }).from(schema.businessDays).get();
   const day = {
     id: ulid(now),
@@ -210,6 +218,50 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   };
 }
 
+/**
+ * Bugünün kapanmış gününü yeniden açar (gece Z alındıktan sonra gelen müşteri). Yalnız son gün, yalnız bugünün
+ * tarihi ve açık gün yokken; ödeme iptaliyle aynı yetki (yetkili onayı). Z numarası aynı kalır, gün yeniden
+ * kapanınca lafmaliyet'e aynı tarih ve Z ile yeniden gider (öncekinin yerine geçer).
+ */
+export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reason: string): DayRow {
+  needDirect(actor, 'kasa.gun');
+  const approverId = need(actor, 'odeme.iade', 'Kapanmış günü yeniden açmak yetkili onayı gerektirir');
+  if (!reason.trim()) throw bad('Neden yazılmalı', 'reason_required');
+  if (getOpenDay(t)) throw conflict('Açık bir gün var', 'day_open');
+  const day = getDay(t, dayId);
+  const last = t.select({ z: sql<number>`max(${schema.businessDays.zNo})` }).from(schema.businessDays).get();
+  if (!day.closedAt || day.zNo !== last?.z || day.date !== businessDate(Date.now())) {
+    throw conflict('Yalnız bugünün son gün sonu yeniden açılabilir', 'day_not_reopenable');
+  }
+  t.update(schema.businessDays)
+    .set({ closedAt: null, closedBy: null, countedCash: null, cashCounts: null, expectedCash: null, cashDiff: null, summary: null, exportedAt: null })
+    .where(eq(schema.businessDays.id, dayId))
+    .run();
+  // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer
+  t.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, `gun:${day.date}`), isNull(schema.outbox.sentAt))).run();
+  fx.audit(t, {
+    userId: actor.user.id,
+    approverId,
+    action: 'day.reopen',
+    severity: 'alarm',
+    message: `${actor.user.name} Z ${day.zNo} gün sonunu geri aldı ve günü yeniden açtı (${reason.trim()})`,
+  });
+  fx.emit({ topic: 'cash', kind: 'day.reopened', byUserId: actor.user.id });
+  return getDay(t, dayId);
+}
+
+/** Açık gün yokken bugünün kapanmış günü (kasa ekranındaki "Günü yeniden aç" için) */
+export function closedToday(t: Tx | DB): DayRow | null {
+  return (
+    t
+      .select()
+      .from(schema.businessDays)
+      .where(and(eq(schema.businessDays.date, businessDate(Date.now())), isNotNull(schema.businessDays.closedAt)))
+      .orderBy(desc(schema.businessDays.zNo))
+      .get() ?? null
+  );
+}
+
 export function closeDay(
   t: Tx,
   actor: Actor | null,
@@ -290,6 +342,10 @@ export function lafmaliyetZ(day: DayRow, s: ZSummary) {
     cash_out: toTL(s.cashOut),
     counted_cash: s.countedCash == null ? null : toTL(s.countedCash),
     handed_over: toTL(s.handedOver),
+    // Satış dışında çekmeceye giren nakit (giriş, nakit cari tahsilatı, nakit bahşiş): lafmaliyet beklenen nakdi
+    // bununla LafPOS'unkine eşitler (açılış + nakit satış + kasaya giren − harcama − teslim)
+    cash_in: toTL(Math.max(0, s.expectedCash - s.openingCash - s.byZField.cash + s.cashOut + s.handedOver)),
+    expected_cash: toTL(s.expectedCash),
     cash_diff: s.cashDiff == null ? null : toTL(s.cashDiff),
   };
 }
@@ -308,6 +364,8 @@ export function recordCount(
   needDirect(actor, 'kasa.gun');
   const day = getDay(t, dayId);
   if (!day.closedAt) throw conflict('Gün henüz kapanmadı; sayım gün sonunda girilir', 'day_open');
+  // İlk sayım kasiyerin işi; kaydedilmiş sayımı değiştirmek (farkı yeniden yazmak) yetkili onayı ister
+  const approverId = day.countedCash != null ? need(actor, 'rapor.gor', 'Kaydedilmiş kasa sayımını değiştirmek yetkili onayı gerektirir') : null;
   const summary = day.summary ?? computeSummary(t, day);
   const counted = Math.max(0, Math.trunc(input.countedCash));
   const diff = counted - summary.expectedCash;
@@ -323,10 +381,14 @@ export function recordCount(
   const threshold = getSettings().alertCashDiffKurus;
   fx.audit(t, {
     userId: actor.user.id,
-    action: 'day.count',
-    severity: Math.abs(diff) >= threshold ? 'alarm' : diff !== 0 ? 'uyari' : 'info',
+    approverId,
+    action: approverId || day.countedCash != null ? 'day.recount' : 'day.count',
+    severity: Math.abs(diff) >= threshold || day.countedCash != null ? 'alarm' : diff !== 0 ? 'uyari' : 'info',
     amount: diff,
-    message: `${actor.user.name} Z ${day.zNo} kasa föyünü girdi: sayılan ${tl(counted)}, fark ${diff === 0 ? 'yok' : tl(diff)}`,
+    message:
+      day.countedCash != null
+        ? `${actor.user.name} Z ${day.zNo} kasa sayımını değiştirdi: ${tl(day.countedCash)} → ${tl(counted)}, fark ${diff === 0 ? 'yok' : tl(diff)}`
+        : `${actor.user.name} Z ${day.zNo} kasa föyünü girdi: sayılan ${tl(counted)}, fark ${diff === 0 ? 'yok' : tl(diff)}`,
   });
   fx.emit({ topic: 'cash', kind: 'day.counted', byUserId: actor.user.id });
   return getDay(t, dayId);

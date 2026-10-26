@@ -93,8 +93,8 @@ okcRoutes.post('/simulator/baskets/:id/pay', async (c) => {
 });
 
 okcRoutes.post('/simulator/baskets/:id/cancel', async (c) => {
-  const input = await body(c, z.object({ voidReceipt: z.boolean().optional() }));
-  return c.json(simulatorCancel(actorFrom(c), c.req.param('id'), input.voidReceipt));
+  const input = await body(c, z.object({ voidReceipt: z.boolean().optional(), approverPin: z.string().nullish() }));
+  return c.json(simulatorCancel(actorFrom(c, input.approverPin), c.req.param('id'), input.voidReceipt));
 });
 
 okcRoutes.post('/simulator/baskets/:id/lock', async (c) => {

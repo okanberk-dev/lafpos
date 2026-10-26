@@ -121,8 +121,20 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 Dalga 1-6 tamam (RiosenBeq/lafpos#1). Planın üstüne yapılanlar: yazarkasa POS (TokenX Connect,
 `docs/04-YAZARKASA.md`), Innex yönetim paneli ve telefon/tablet uyarlaması (`DESIGN.md`), düzenlenebilir
 roller, kör kasa ve kasadan tükendi (Yönetim › Roller ve yetkiler), kasa bilgisayarı kurulumu
-(`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama: 78 birim ve API
-testi, gerçek Chrome'da 117 ekran ve 8 akış (`npm run e2e`, CI'da da).
+(`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama: 92 birim ve API
+testi, gerçek Chrome'da 117 ekran ve 9 akış (`npm run e2e`, CI'da da).
+
+Bağımsız inceleme (26 Ekim 2026) ve düzeltmeleri, her biri `tests/review-fixes.test.ts`'te bir testle:
+yazarkasada sepeti bekleyen adisyonun tutarı ve ödemesi kilitli; indirim, ikram ve iptal ödenmiş tutarın altına
+inemez; QR siparişine kalem taşınmaz; aynı kalem iki kez seçilince bir kez ücretlenir; yeniden açma ve ödeme
+iptali müşterinin ziyaret, harcama ve damgasını geri alır; cihazda açık hesap müşterisiz ya da sınır aşınca
+alarm, fiş iptali cari ekstresini düzeltir; iptal sayılan sepete geç gelen "ödendi" alarm verir; servis ücreti
+cihaza ayrı satır; kör kasada kapanmış adisyonun ödeme dökümü gizli; fiş iptali ve kaydedilmiş sayımı
+değiştirmek yetkili onayı ister; yetki yükseltme, kendi rolünü değiştirme ve son patronu kapatma yok; PIN
+sınırı `X-Forwarded-For`'a bakmaz, ağ genelinde de sınır var; bir iş gününe tek Z, kapanıştan sonra "Günü
+yeniden aç"; lafmaliyet'e `cashIn` ve `expectedCash` gider, 409 kalıcıdır. Ayrıca düzenleme uçları
+`patchOf` kullanır: Zod 4'te `.partial()` varsayılanı uyguladığı için masanın adı değişince konumu ve türü,
+rezervasyonun durumu değişince kişi sayısı ve süresi sıfırlanıyordu.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu.

@@ -1,8 +1,9 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { OrderDTO } from '@shared/types';
 import { db, schema, tx } from '../db/client';
-import { type AppEnv, actorFrom, needDirect } from '../lib/auth';
+import { type AppEnv, actorFrom, type AuthUser, needDirect, seesCashNumbers } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, kurus, query } from '../lib/http';
 import { bootstrap } from '../services/bootstrap';
@@ -26,6 +27,11 @@ function write<T>(fn: (t: Parameters<Parameters<typeof tx>[0]>[0], fx: Effects) 
 
 posRoutes.get('/bootstrap', (c) => c.json(bootstrap(db, c.get('user'))));
 posRoutes.get('/floor', (c) => c.json(floorState(db)));
+
+/** Kör kasa: kasa rakamlarını görmeyen kullanıcıya kapanmış adisyonun ödeme dökümü gitmez */
+function blind(user: AuthUser, dto: OrderDTO): OrderDTO {
+  return dto.status !== 'acik' && !seesCashNumbers(user) ? { ...dto, payments: [] } : dto;
+}
 
 posRoutes.get('/orders', (c) => {
   const q = query(
@@ -52,10 +58,11 @@ posRoutes.get('/orders', (c) => {
     .orderBy(desc(schema.orders.openedAt))
     .limit(q.limit)
     .all();
-  return c.json(rows.map((r) => orderToDTO(db, r)));
+  const user = c.get('user');
+  return c.json(rows.map((r) => blind(user, orderToDTO(db, r))));
 });
 
-posRoutes.get('/orders/:id', (c) => c.json(orders.getOrderDTO(db, c.req.param('id'))));
+posRoutes.get('/orders/:id', (c) => c.json(blind(c.get('user'), orders.getOrderDTO(db, c.req.param('id')))));
 
 posRoutes.post('/orders', async (c) => {
   const input = await body(

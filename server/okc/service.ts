@@ -3,12 +3,12 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
-import { type Actor, needDirect, toAuthUser } from '../lib/auth';
+import { type Actor, need, needDirect, toAuthUser } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
-import { addExternalPayments, getOpenDay, loadOrder, refundExternalPayments } from '../services/orders';
+import { addExternalPayments, getOpenDay, loadOrder, mergeSelection, refundExternalPayments } from '../services/orders';
 import { buildBasket, type MethodKind, salePayments } from './basket';
 import { TokenxClient, TokenxError, type TokenxSale } from './tokenx';
 
@@ -128,7 +128,8 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       note: `LafPOS #${order.no}`,
       items,
       totals: order.totals ?? { lineNet: {} },
-      selection,
+      selection: selection?.length ? mergeSelection(selection) : null,
+      remainingDue: order.total - order.paid,
       sectionMap: s.okcSectionMap,
       sizeLabels: s.sizeLabels,
       callbackUrl: s.okcProvider === 'tokenx' ? (webhookUrl() ?? undefined) : undefined,
@@ -220,7 +221,7 @@ function methodFor(kind: MethodKind, operatorId: number | null): string | null {
  * Cihaz sonucunu işler (webhook, sorgulama ya da simülatör). Aynı sonuç birden çok kez gelebilir; işlem
  * tekrarlanmaz. 0 = ödendi, -1 = cihazda vazgeçildi, 99 = mali fiş iptal edildi.
  */
-export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook' | 'sorgu' | 'simulator') {
+export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook' | 'sorgu' | 'simulator', by?: { userId: string; approverId: string | null }) {
   const r = db.select().from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.id, receiptId)).get();
   if (!r) return;
   const now = Date.now();
@@ -228,6 +229,19 @@ export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook'
 
   if (sale.status === 0) {
     if (r.status === 'tamamlandi') return;
+    if (r.status === 'iptal' || r.status === 'fis_iptal' || r.status === 'silindi') {
+      // İptal sayılan sepete geç ya da yeniden gelen "ödendi": adisyon kendiliğinden yeniden kapanmaz, yönetici bakar
+      fx.audit(db, {
+        userId: by?.userId ?? null,
+        action: 'okc.late_paid',
+        severity: 'alarm',
+        orderId: r.orderId,
+        amount: r.amount,
+        message: `Yazarkasada iptal sayılan sepet için "ödendi" bildirimi geldi (${tl(r.amount)}, ${source}); cihazdaki fişi kontrol edin`,
+      });
+      fx.flush();
+      return;
+    }
     const sender = r.sentBy ? db.select().from(schema.users).where(eq(schema.users.id, r.sentBy)).get() : null;
     const userId = sender?.id ?? 'sistem';
     const payments = salePayments(sale, r.amount)
@@ -265,9 +279,17 @@ export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook'
   if (sale.status === 99) {
     if (r.status === 'tamamlandi' && r.paymentIds.length) {
       tx((t) => {
-        refundExternalPayments(t, null, fx, r.orderId, r.paymentIds, 'Yazarkasada fiş iptal edildi');
+        refundExternalPayments(t, by?.userId ?? null, fx, r.orderId, r.paymentIds, 'Yazarkasada fiş iptal edildi');
         t.update(schema.fiscalReceipts).set({ status: 'fis_iptal', result: sale, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
-        fx.audit(t, { action: 'okc.void', severity: 'alarm', orderId: r.orderId, amount: r.amount, message: `Yazarkasada mali fiş iptal edildi; ${tl(r.amount)} ödeme geri alındı ve adisyon yeniden açıldı` });
+        fx.audit(t, {
+          userId: by?.userId ?? null,
+          approverId: by?.approverId ?? null,
+          action: 'okc.void',
+          severity: 'alarm',
+          orderId: r.orderId,
+          amount: r.amount,
+          message: `Yazarkasada mali fiş iptal edildi; ${tl(r.amount)} ödeme geri alındı ve adisyon yeniden açıldı`,
+        });
       });
     } else {
       db.update(schema.fiscalReceipts).set({ status: 'iptal', result: sale, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
@@ -409,7 +431,15 @@ export function simulatorCancel(actor: Actor, receiptId: string, voidReceipt = f
   needDirect(actor, 'odeme.al');
   const r = loadReceipt(receiptId);
   if (r.provider !== 'simulator') throw bad('Bu sepet simülatöre ait değil');
-  applySale(r.id, { basketID: r.id, status: voidReceipt ? 99 : -1, message: 'CANCELLED' }, 'simulator');
+  let approverId: string | null = null;
+  if (voidReceipt) {
+    // Fiş iptali ödeme iptalidir: LafPOS'taki ödeme iptaliyle aynı yetki ve aynı gün kuralı
+    approverId = need(actor, 'odeme.iade', 'Fiş iptali yetkili onayı gerektirir');
+    const day = getOpenDay(db);
+    const paidDays = r.paymentIds.length ? db.select({ dayId: schema.payments.dayId }).from(schema.payments).where(inArray(schema.payments.id, r.paymentIds)).all() : [];
+    if (!day || paidDays.some((p) => p.dayId !== day.id)) throw conflict('Kapanmış bir güne ait fiş iptal edilemez', 'day_closed');
+  }
+  applySale(r.id, { basketID: r.id, status: voidReceipt ? 99 : -1, message: 'CANCELLED' }, 'simulator', { userId: actor.user.id, approverId });
   return receiptDTO(loadReceipt(r.id));
 }
 

@@ -82,8 +82,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
   const dark = document.documentElement.classList.contains('dark');
 
-  const status = (
-    <div className="flex items-center gap-2 text-xs">
+  // 84 px'lik menü çubuğunda alt alta: yan yana "Gün kapalı" çubuktan taşar
+  const status = (rail = false) => (
+    <div className={cn('flex items-center text-xs', rail ? 'flex-col gap-1' : 'gap-2')}>
       <span
         title={live === 'canli' ? 'Canlı bağlantı' : live === 'baglaniyor' ? 'Bağlanıyor' : 'Bağlantı koptu; yeniden deneniyor'}
         className={cn('inline-flex items-center gap-1 rounded-full px-2 py-1', live === 'canli' ? 'text-forest-500' : live === 'kopuk' ? 'bg-burgundy-100 text-burgundy-600' : 'text-muted')}
@@ -96,7 +97,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </NavLink>
       ) : (
         <NavLink to="/kasa" title="Kasa ve gün sonu" className="inline-flex min-h-11 min-w-11 items-center justify-center pointer-fine:min-h-0 pointer-fine:min-w-0">
-          <span className="rounded-full bg-brass-100 px-2 py-1 font-medium text-brass-700">Gün kapalı</span>
+          <span className={cn('rounded-full bg-brass-100 px-2 py-1 font-medium text-brass-700', rail && 'max-w-[72px] text-center leading-tight')}>Gün kapalı</span>
         </NavLink>
       )}
     </div>
@@ -131,7 +132,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Search className="size-5" />
           </button>
           <div className="tabular text-xs text-muted">{fmtTime(now)}</div>
-          {status}
+          {status(true)}
           <button onClick={() => setMenuOpen(true)} className="grid size-11 place-items-center rounded-full text-sm font-semibold text-white" style={{ background: me.color }} title={me.name}>
             {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
           </button>
@@ -148,7 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full text-ink-2">
               <Search className="size-5" />
             </button>
-            {status}
+            {status()}
             <button onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 place-items-center">
               <span className="grid size-9 place-items-center rounded-full text-xs font-semibold text-white" style={{ background: me.color }}>
                 {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}

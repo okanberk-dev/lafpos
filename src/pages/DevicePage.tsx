@@ -6,6 +6,7 @@ import { fmtTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, PageHeader } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
+import { withApproval } from '@/lib/approval';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { onLive } from '@/lib/live';
@@ -104,7 +105,9 @@ export default function DevicePage() {
   };
   const cancel = async (id: string, voidReceipt = false) => {
     try {
-      await post(`/okc/simulator/baskets/${id}/cancel`, { voidReceipt });
+      // Fiş iptali ödeme iptalidir: yetkisi yoksa yetkili PIN'i istenir
+      const done = await withApproval((pin) => post(`/okc/simulator/baskets/${id}/cancel`, { voidReceipt, approverPin: pin }));
+      if (done === null) return;
       toast.warn(voidReceipt ? 'Fiş iptal edildi; LafPOS ödemesi geri alındı' : 'Cihazda ödemeden vazgeçildi');
       setOpenId(null);
       qc.invalidateQueries({ queryKey: ['okc'] });

@@ -134,6 +134,9 @@ export function buildDayPayload(dayId: string) {
       countedCash: z.counted_cash,
       handedOver: z.handed_over,
       cashDiff: z.cash_diff,
+      // lafmaliyet beklenen nakdi bunlarla LafPOS'unkine eşitler (docs/03-ENTEGRASYON.md §4)
+      cashIn: z.cash_in,
+      expectedCash: z.expected_cash,
     },
     lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), isService: l.isService })),
     ikram: comps.map((i) => ({
@@ -162,11 +165,18 @@ export function enqueueDay(dayId: string) {
 }
 
 let flushing = false;
+/** Gönderim sürerken kuyruğa giren gün: o gönderim bitince hemen gider (dakikalık işi beklemez) */
+let again = false;
 
 /** Giden kutusunu gönderir; başarısız olan artan beklemeyle tekrar denenir (internet yokken satış durmaz). */
 export async function flushOutbox() {
-  if (flushing || !configured()) return { sent: 0, failed: 0 };
+  if (!configured()) return { sent: 0, failed: 0 };
+  if (flushing) {
+    again = true;
+    return { sent: 0, failed: 0 };
+  }
   flushing = true;
+  again = false;
   let sent = 0;
   let failed = 0;
   try {
@@ -181,8 +191,9 @@ export async function flushOutbox() {
       try {
         const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL(`${env.lafmaliyetUrl}/api/pos/gun`), row.payload, 15_000);
         const detail = json && typeof json === 'object' ? ` (${[(json as { error?: unknown }).error, (json as { field?: unknown }).field].filter(Boolean).join(': ')})` : '';
-        // 400/413 kalıcıdır (veri hatalı ya da büyük): tekrar denenmez, elle düzeltilip yeniden gönderilir
-        if (status === 400 || status === 413 || status === 422) {
+        // 400/413 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
+        // elle düzeltilip yeniden gönderilir
+        if (status === 400 || status === 409 || status === 413 || status === 422) {
           db.update(schema.outbox)
             .set({ attempts: row.attempts + 1, lastError: `lafmaliyet reddetti: HTTP ${status}${detail}`, nextAttemptAt: Date.now() + 365 * 86400_000 })
             .where(eq(schema.outbox.id, row.id))
@@ -207,6 +218,7 @@ export async function flushOutbox() {
     flushing = false;
   }
   if (sent || failed) setSyncState('lafmaliyet.push', { lastRunAt: Date.now(), sent, failed });
+  if (again) void flushOutbox();
   return { sent, failed };
 }
 

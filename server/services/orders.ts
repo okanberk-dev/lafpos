@@ -61,6 +61,19 @@ function assertPosOrder(o: OrderRow) {
   if (o.extPaid) throw conflict('Bu sipariş sitede ödendi; tutarı LafPOS\'ta değiştirilemez', 'online_order');
 }
 
+/**
+ * Sepeti yazarkasada bekleyen adisyonun tutarı ve ödemeleri değişmez: cihazın sonucu geldiğinde ödenen kalemler
+ * kayar, aynı kalem iki kez ödenir (inceleme, 26 Eki 2026). Kalem eklemek serbest; cihazdaki sepet aynı kalır.
+ */
+function assertNoPendingDevice(t: Tx | DB, orderId: string) {
+  const pending = t
+    .select({ id: schema.fiscalReceipts.id })
+    .from(schema.fiscalReceipts)
+    .where(and(eq(schema.fiscalReceipts.orderId, orderId), inArray(schema.fiscalReceipts.status, ['gonderildi', 'kilitli'])))
+    .get();
+  if (pending) throw conflict('Bu adisyonun sepeti yazarkasada bekliyor; önce cihazda ödeyin ya da sepeti iptal edin', 'okc_pending');
+}
+
 function assertNoActiveRoom(t: Tx | DB, orderId: string) {
   const active = t
     .select()
@@ -81,6 +94,8 @@ export function recalc(t: Tx | DB, orderId: string): OrderRow {
   const items = orderItems(t, orderId);
   const totals = calcFor(o, items);
   const paid = orderPayments(t, orderId).reduce((a, p) => a + (p.refundedAt ? 0 : p.amount), 0);
+  // İptal, ikram, indirim ya da taşıma ödenmiş tutarın altına indiremez: önce fazla ödeme iptal edilir
+  if (paid > totals.total) throw conflict(`Ödenen ${tl(paid)} yeni toplamı (${tl(totals.total)}) aşıyor; önce fazla ödemeyi iptal edin`, 'overpaid');
   t.update(schema.orders)
     .set({ total: totals.total, paid, totals, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` })
     .where(eq(schema.orders.id, orderId))
@@ -303,6 +318,7 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  assertNoPendingDevice(t, orderId);
   const it = loadItem(t, orderId, input.itemId);
   if (it.voided) throw conflict('Kalem zaten iptal edilmiş');
   const reason = input.reason.trim();
@@ -347,6 +363,7 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  assertNoPendingDevice(t, orderId);
   const it = loadItem(t, orderId, input.itemId);
   if (it.voided) throw conflict('İptal edilmiş kalem ikram edilemez');
   const approverId = need(actor, 'siparis.ikram', 'İkram yetkili onayı gerektirir');
@@ -412,6 +429,7 @@ export function setItemDiscount(
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  assertNoPendingDevice(t, orderId);
   const it = loadItem(t, orderId, input.itemId);
   if (it.voided || it.complimentary) throw conflict('İptal ya da ikram kalemine indirim yapılamaz');
   if (it.paidQty > 0) throw conflict('Ödemesi alınmış kaleme indirim yapılamaz', 'item_paid');
@@ -452,6 +470,7 @@ export function setOrderDiscount(
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  assertNoPendingDevice(t, orderId);
   if (!input || input.value <= 0) {
     t.update(schema.orders).set({ discountType: null, discountValue: null, discountReason: null, discountBy: null }).where(eq(schema.orders.id, orderId)).run();
     const updated = recalc(t, orderId);
@@ -552,6 +571,8 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
   assertOpen(source);
   assertPosOrder(target);
   assertPosOrder(source);
+  assertNoPendingDevice(t, targetId);
+  assertNoPendingDevice(t, sourceId);
   t.update(schema.orderItems).set({ orderId: targetId }).where(eq(schema.orderItems.orderId, sourceId)).run();
   t.update(schema.payments).set({ orderId: targetId }).where(eq(schema.payments.orderId, sourceId)).run();
   t.update(schema.roomSessions).set({ orderId: targetId }).where(eq(schema.roomSessions.orderId, sourceId)).run();
@@ -583,6 +604,7 @@ export function transferItems(
   const source = loadOrder(t, orderId);
   assertOpen(source);
   assertPosOrder(source);
+  assertNoPendingDevice(t, orderId);
   if (!input.items.length) throw bad('Taşınacak kalem seçilmedi');
 
   let target: OrderRow;
@@ -594,7 +616,12 @@ export function transferItems(
     const tableId = input.tableId ?? source.tableId;
     const existing =
       input.tableId && input.tableId !== source.tableId
-        ? t.select().from(schema.orders).where(and(eq(schema.orders.tableId, input.tableId), eq(schema.orders.status, 'acik'))).get()
+        ? // Sitede ödenmiş QR siparişine kalem taşınmaz (tahsil edilemez, ciroya girmez): yalnız kasa adisyonu
+          t
+            .select()
+            .from(schema.orders)
+            .where(and(eq(schema.orders.tableId, input.tableId), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos'), eq(schema.orders.extPaid, false)))
+            .get()
         : undefined;
     target =
       existing ??
@@ -671,27 +698,50 @@ export interface PaymentInput {
   note?: string | null;
 }
 
+/** Aynı kalem birden çok kez seçildiyse adetleri birleştirir (kalem bazlı ödeme ve cihaz sepeti) */
+export function mergeSelection(list: { itemId: string; qty: number }[]): { itemId: string; qty: number }[] {
+  const merged = new Map<string, number>();
+  for (const s of list) merged.set(s.itemId, (merged.get(s.itemId) ?? 0) + Math.trunc(s.qty));
+  return [...merged].filter(([, qty]) => qty > 0).map(([itemId, qty]) => ({ itemId, qty }));
+}
+
+/** Adisyonun damga sayılan adedi (ayarlardaki damga kategorileri, iptal ve ikram hariç) */
+function stampQtyOf(t: Tx, orderId: string): number {
+  const settings = getSettings();
+  if (!settings.stampCategoryKeys.length) return 0;
+  const items = orderItems(t, orderId).filter((i) => !i.voided && !i.complimentary);
+  const productIds = [...new Set(items.map((i) => i.productId).filter((x): x is string => !!x))];
+  if (!productIds.length) return 0;
+  const cats = t
+    .select({ id: schema.products.id, key: schema.categories.extKey })
+    .from(schema.products)
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.products.categoryId))
+    .where(inArray(schema.products.id, productIds))
+    .all();
+  const stampProducts = new Set(cats.filter((c) => c.key && settings.stampCategoryKeys.includes(c.key)).map((c) => c.id));
+  return items.filter((i) => i.productId && stampProducts.has(i.productId)).reduce((a, i) => a + i.qty, 0);
+}
+
+/** Kapanışta müşteriye yazılan ziyaret, harcama ve damgayı geri alır (yeniden açma, ödeme ya da fiş iptali) */
+function uncreditCustomer(t: Tx, o: OrderRow) {
+  if (!o.customerId || o.status !== 'kapali') return;
+  const stampQty = stampQtyOf(t, o.id);
+  t.update(schema.customers)
+    .set({
+      visits: sql`max(0, ${schema.customers.visits} - 1)`,
+      totalSpent: sql`max(0, ${schema.customers.totalSpent} - ${o.total})`,
+      stamps: sql`max(0, ${schema.customers.stamps} - ${stampQty})`,
+    })
+    .where(eq(schema.customers.id, o.customerId))
+    .run();
+}
+
 export function closeOrderRow(t: Tx, o: OrderRow, userId: string) {
   const now = Date.now();
   t.update(schema.orders).set({ status: 'kapali', closedAt: now, closedBy: userId, updatedAt: now }).where(eq(schema.orders.id, o.id)).run();
   // Masada bekleyen (istasyonsuz) kalemler servis edilmiş sayılır
   if (o.customerId) {
-    const settings = getSettings();
-    const items = orderItems(t, o.id).filter((i) => !i.voided && !i.complimentary);
-    let stampQty = 0;
-    if (settings.stampCategoryKeys.length) {
-      const productIds = [...new Set(items.map((i) => i.productId).filter((x): x is string => !!x))];
-      const cats = productIds.length
-        ? t
-            .select({ id: schema.products.id, key: schema.categories.extKey })
-            .from(schema.products)
-            .innerJoin(schema.categories, eq(schema.categories.id, schema.products.categoryId))
-            .where(inArray(schema.products.id, productIds))
-            .all()
-        : [];
-      const stampProducts = new Set(cats.filter((c) => c.key && settings.stampCategoryKeys.includes(c.key)).map((c) => c.id));
-      stampQty = items.filter((i) => i.productId && stampProducts.has(i.productId)).reduce((a, i) => a + i.qty, 0);
-    }
+    const stampQty = stampQtyOf(t, o.id);
     t.update(schema.customers)
       .set({
         visits: sql`${schema.customers.visits} + 1`,
@@ -710,6 +760,7 @@ export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, in
   assertOpen(o);
   assertPosOrder(o);
   assertNoActiveRoom(t, orderId);
+  assertNoPendingDevice(t, orderId);
   const day = requireOpenDay(t);
   const method = t.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, input.methodId)).get();
   if (!method || !method.active) throw bad('Ödeme türü geçersiz');
@@ -722,17 +773,19 @@ export function addPayment(t: Tx, actor: Actor, fx: Effects, orderId: string, in
 
   let amount = Math.trunc(input.amount);
   let selection: { itemId: string; qty: number }[] | null = null;
-  if (input.items?.length) {
+  // Aynı kalem iki kez gönderilirse adetler birleşir: iki kez ücret alınmaz
+  const wanted = mergeSelection(input.items ?? []);
+  if (wanted.length) {
     const lines = items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty }));
-    const sel = input.items.map((s) => ({ lineId: s.itemId, qty: Math.trunc(s.qty) }));
+    const sel = wanted.map((s) => ({ lineId: s.itemId, qty: s.qty }));
     const expected = amountForItems(totals, lines, sel);
     if (expected <= 0) throw bad('Seçilen kalemler ödenmiş ya da ücretsiz');
     amount = Math.min(expected, remaining);
     selection = [];
-    for (const s of input.items) {
+    for (const s of wanted) {
       const it = items.find((i) => i.id === s.itemId);
       if (!it) throw notFound('Kalem');
-      const qty = Math.min(Math.trunc(s.qty), it.qty - it.paidQty);
+      const qty = Math.min(s.qty, it.qty - it.paidQty);
       if (qty <= 0) continue;
       t.update(schema.orderItems).set({ paidQty: it.paidQty + qty }).where(eq(schema.orderItems.id, it.id)).run();
       selection.push({ itemId: it.id, qty });
@@ -818,6 +871,7 @@ export function refundPayment(t: Tx, actor: Actor, fx: Effects, orderId: string,
   const approverId = need(actor, 'odeme.iade', 'Ödeme iptali yetkili onayı gerektirir');
   const o = loadOrder(t, orderId);
   assertPosOrder(o);
+  assertNoPendingDevice(t, orderId);
   const p = t.select().from(schema.payments).where(and(eq(schema.payments.id, input.paymentId), eq(schema.payments.orderId, orderId))).get();
   if (!p) throw notFound('Ödeme');
   if (p.refundedAt) throw conflict('Ödeme zaten iptal edilmiş');
@@ -845,7 +899,10 @@ export function refundPayment(t: Tx, actor: Actor, fx: Effects, orderId: string,
     }
   }
   const wasClosed = o.status === 'kapali';
-  if (wasClosed) t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, orderId)).run();
+  if (wasClosed) {
+    uncreditCustomer(t, o);
+    t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, orderId)).run();
+  }
   const updated = recalc(t, orderId);
   fx.audit(t, {
     userId: actor.user.id,
@@ -870,6 +927,8 @@ export function reopenOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
   const day = requireOpenDay(t);
   if (o.dayId !== day.id) throw conflict('Önceki günün adisyonu açılamaz', 'day_closed');
   if (!reason.trim()) throw bad('Neden yazılmalı', 'reason_required');
+  // Kapanışta verilen ziyaret, harcama ve damga geri alınır: aç-kapa ile damga biriktirilmesin
+  uncreditCustomer(t, o);
   t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null, updatedAt: Date.now() }).where(eq(schema.orders.id, orderId)).run();
   const updated = recalc(t, orderId);
   fx.audit(t, {
@@ -889,6 +948,7 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  assertNoPendingDevice(t, orderId);
   if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Önce alınan ödemeleri iptal edin', 'has_payments');
   const live = orderItems(t, orderId).filter((i) => !i.voided);
   const now = Date.now();
@@ -1000,8 +1060,23 @@ export function addExternalPayments(
     if (!method) throw notFound('Ödeme türü');
     const id = ulid(now);
     let customerId: string | null = null;
+    if (method.kind === 'cari' && !o.customerId) {
+      // Cihazda açık hesap seçildi ama adisyonda müşteri yok: alacak kaybolmasın, yönetici müşteriyi bağlasın
+      fx.audit(t, {
+        userId,
+        action: 'okc.cari_no_customer',
+        severity: 'alarm',
+        orderId,
+        amount: p.amount,
+        message: `#${o.no} adisyon yazarkasada açık hesaba ${tl(p.amount)} kapandı ama adisyonda müşteri yok; müşteriyi bağlayıp cariye işleyin`,
+      });
+    }
     if (method.kind === 'cari' && o.customerId) {
       customerId = o.customerId;
+      const cust = t.select().from(schema.customers).where(eq(schema.customers.id, customerId)).get();
+      if (cust?.creditLimit != null && cust.balance + p.amount > cust.creditLimit) {
+        fx.audit(t, { userId, action: 'okc.credit_limit', severity: 'alarm', orderId, amount: p.amount, message: `${cust.name} yazarkasada açık hesap sınırını aştı (sınır ${tl(cust.creditLimit)}, bakiye ${tl(cust.balance)})` });
+      }
       t.update(schema.customers).set({ balance: sql`${schema.customers.balance} + ${p.amount}` }).where(eq(schema.customers.id, customerId)).run();
       t.insert(schema.customerLedger)
         .values({ id: ulid(now), customerId, kind: 'borc', amount: p.amount, orderId, paymentId: id, methodId: method.id, dayId: day.id, note: `#${o.no} adisyon (yazarkasa)`, userId, createdAt: now })
@@ -1043,6 +1118,7 @@ export function addExternalPayments(
 export function refundExternalPayments(t: Tx, userId: string | null, fx: Effects, orderId: string, paymentIds: string[], reason: string) {
   const o = loadOrder(t, orderId);
   const now = Date.now();
+  const openDay = getOpenDay(t);
   for (const pid of paymentIds) {
     const p = t.select().from(schema.payments).where(eq(schema.payments.id, pid)).get();
     if (!p || p.refundedAt) continue;
@@ -1053,9 +1129,16 @@ export function refundExternalPayments(t: Tx, userId: string | null, fx: Effects
     }
     if (p.customerId) {
       t.update(schema.customers).set({ balance: sql`${schema.customers.balance} - ${p.amount}` }).where(eq(schema.customers.id, p.customerId)).run();
+      // Normal ödeme iptaliyle aynı: bakiye ile cari ekstresi ayrışmasın
+      t.insert(schema.customerLedger)
+        .values({ id: ulid(now), customerId: p.customerId, kind: 'duzeltme', amount: -p.amount, orderId, paymentId: p.id, dayId: openDay?.id ?? p.dayId, note: `Yazarkasa fiş iptali: ${reason}`, userId, createdAt: now })
+        .run();
     }
   }
-  if (o.status === 'kapali') t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, orderId)).run();
+  if (o.status === 'kapali') {
+    uncreditCustomer(t, o);
+    t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, orderId)).run();
+  }
   const updated = recalc(t, orderId);
   orderEvents(fx, updated, userId ?? 'sistem', 'payment.refunded');
   fx.emit({ topic: 'cash', kind: 'payment.refunded', orderId });

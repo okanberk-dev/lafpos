@@ -1,5 +1,5 @@
 import { allocate } from '@shared/money';
-import type { OrderTotals } from '@shared/order-calc';
+import { type OrderTotals, SERVICE_KDV_RATE } from '@shared/order-calc';
 import { TOKENX_PAYMENT, type TokenxBasket, type TokenxItem, type TokenxSale } from './tokenx';
 
 /**
@@ -36,6 +36,13 @@ export interface BuildBasketInput {
   sectionMap: Record<string, number>;
   sizeLabels: { M: string; L: string };
   callbackUrl?: string;
+  /**
+   * Seçimsiz (bütün adisyon) gönderimde adisyonun kalan tutarı. Kalemlerin net payı servis ücretini taşımaz;
+   * kalanın kalemlerle karşılanmayan kısmı "Servis ücreti" satırı olarak gider, cihaz toplamı adisyonu kapatır.
+   */
+  remainingDue?: number;
+  /** Servis ücretinin KDV oranı (shared/order-calc.ts ile aynı) */
+  serviceKdvRate?: number;
 }
 
 export interface BuiltBasket {
@@ -79,6 +86,14 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
     items.push(item);
     lines.push({ itemId: it.id, qty });
     amount += partNet;
+  }
+  const rest = !input.selection && input.remainingDue != null ? input.remainingDue - amount : 0;
+  if (rest > 0) {
+    const rate = input.serviceKdvRate ?? SERVICE_KDV_RATE;
+    const section = input.sectionMap[String(rate)];
+    if (section == null) throw new Error(`Cihazda %${rate} KDV kısmı eşlenmemiş (Yönetim › Yazarkasa POS)`);
+    items.push({ name: 'Servis ücreti', price: rest, sectionNo: section, taxPercent: rate * 100, quantity: 1000, unit: 'Adet' });
+    amount += rest;
   }
   if (!items.length) throw new Error('Cihaza gönderilecek ücretli kalem yok');
   const basket: TokenxBasket = {

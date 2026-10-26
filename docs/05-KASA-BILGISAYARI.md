@@ -75,8 +75,12 @@ kullanıcı hesabı önerilir.
   Wake Lock); tabletler ve bar ekranı da gün boyu açık kalır.
 - **Otomatik kilit** (dk): dokunulmazsa ekran PIN ekranına döner; kasa paylaşılıyorsa 2-5 dk önerilir.
 - **Tam ekran**: kiosk kullanılmayan tablet ya da bilgisayarda kullanıcı menüsünden.
-- Kasiyer rolü varsayılan olarak **kör kasa** sayar: ara raporu ve beklenen nakdi görmez, gün sonunda
-  çekmeceyi sayıp yazar; fark yöneticinin ekranında (Yönetim › Roller ve yetkiler).
+- Kasiyer rolü varsayılan olarak **kör kasa** sayar: ara raporu, beklenen nakdi ve kapanmış adisyonların
+  ödeme dökümünü görmez, gün sonunda çekmeceyi sayıp yazar; fark yöneticinin ekranında (Yönetim › Roller ve
+  yetkiler).
+- **Bir iş gününe tek Z.** Gece gün sonu alındıktan sonra satış gerekirse Kasa ekranında "Günü yeniden aç"
+  (neden ve yetkili PIN'i ister, denetim kaydına alarm düşer); Z numarası aynı kalır, gün yeniden kapanınca
+  lafmaliyet'teki kayıt güncellenir. Yeni gün 05:00'ten sonra açılır.
 
 ## 5. Tabletler, telefonlar, patron
 

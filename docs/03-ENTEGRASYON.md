@@ -124,9 +124,14 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 | `cash_out` | harcama türü kasa hareketleri |
 | `counted_cash` | gün sonu sayımı |
 | `handed_over` | teslim türü kasa hareketleri |
+| `cash_in` | nakit satış dışında çekmeceye giren nakit: giriş türü kasa hareketleri, nakit cari tahsilatı, nakit bahşiş |
+| `expected_cash` | beklenen nakit: açılış + nakit satış + `cash_in` − harcama − teslim |
 | `cash_diff` | sayılan − beklenen nakit |
 
 İş günü tarihi lafmaliyet ile aynı kuralla belirlenir: gün 05:00'ten önce açıldıysa önceki takvim günü.
+**Bir iş gününe tek Z:** gün sonu alındıktan sonra aynı tarihte yeni gün açılmaz; kapanıştan sonra satış
+gerekirse kasa ekranındaki "Günü yeniden aç" (yetkili onayı, neden zorunlu, denetim kaydına alarm) aynı Z
+numarasıyla günü açar. Gün yeniden kapanınca lafmaliyet'e aynı tarih ve Z ile gider, öncekinin yerine geçer.
 
 ## 4. LafPOS → lafmaliyet: önerilen imzalı uç (lafmaliyet PR'ı gerekir)
 
@@ -145,7 +150,8 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     "zNo": 128, "receipts": 214, "zTotal": 45210.5,
     "cash": 12000, "card": 29110.5, "mealCard": 3100, "online": 0, "other": 1000,
     "offRevenue": 640, "discounts": 380,
-    "openingCash": 1500, "cashOut": 450, "countedCash": 12980, "handedOver": 0, "cashDiff": -70
+    "openingCash": 1500, "cashOut": 450, "countedCash": 12980, "handedOver": 0, "cashDiff": -70,
+    "cashIn": 0, "expectedCash": 13050
   },
   "lines": [
     { "posName": "LATTE MEDIUM", "siteMenuId": "mnu-0003", "slot": "M", "qty": 42, "revenue": 8190, "isService": false }
@@ -159,7 +165,12 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
 }
 ```
 
-- Gövde en çok 256 KB, katı JSON. `date` aynı olan ikinci istek öncekinin yerine geçer (idempotent).
+- Gövde en çok 256 KB, katı JSON. `date` ve `zNo` aynı olan ikinci istek öncekinin yerine geçer (idempotent,
+  yeniden açılıp kapanan gün). Aynı `date` başka bir `zNo` ile gelirse lafmaliyet hiçbir şey yazmaz, 409
+  `{ error: "z_conflict", date, zNo }` döner (`zNo` kayıtlı olanınki); LafPOS bir tarihe tek Z verdiği için bu
+  yalnız elle karışıklıkta olur.
+- `cashIn` ve `expectedCash` isteğe bağlıdır (eski gövdede yok): lafmaliyet beklenen nakdi bunlarla
+  LafPOS'unkine eşitler; `cashIn` yoksa 0 sayar.
 - `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,
   `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`…); Komisyon ekranı aylık kanal satışını buradan
   doldurabilir.
@@ -170,8 +181,10 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
 - Kişisel veri yok: müşteri, personel adı, telefon gitmez.
 - lafmaliyet tarafı: `pos_daily_sales` tablosu, `loadDailyProductSales` yükleyicisi (bugün `null`),
   Kasa raporunda `CashPrefill { source: "lafpos" }` ile ön doldurma, `ikram` → `waste_entries`
-  (`kind = 'ikram'`) önerisi. Yanıt: 200 `{ ok: true, date, lines }`, 400 `{ error: "invalid", field }`, 401, 413, 503.
-  400 ve 413 kalıcıdır: LafPOS tekrar denemez, kaydı giden kutusunda hata olarak gösterir.
+  (`kind = 'ikram'`) önerisi. Yanıt: 200 `{ ok: true, date, lines }`, 400 `{ error: "invalid", field }`, 401,
+  409 `{ error: "z_conflict" }`, 413, 503. 400, 409 ve 413 kalıcıdır: LafPOS tekrar denemez, kaydı giden
+  kutusunda hata olarak gösterir (Yönetim › Genel bakış ve Entegrasyon); düzeltilince Kasa › Geçmiş günler'de
+  günün Z raporundaki "Gönder" ile yeniden gider.
 - Aynı gün içinde `posName` tekildir (LafPOS satırları zaten ada göre toplar). lafmaliyet karşılığı:
   [RiosenBeq/lafmaliyet#34](https://github.com/RiosenBeq/lafmaliyet/pull/34).
 

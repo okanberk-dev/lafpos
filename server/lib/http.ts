@@ -13,6 +13,19 @@ export class HttpError extends Error {
   }
 }
 
+type Undefault<T> = T extends z.ZodDefault<infer I extends z.ZodType> ? I : T;
+
+/**
+ * Düzenleme (PATCH) şeması: bütün alanlar isteğe bağlı ve varsayılansız. Zod 4'te `.partial()` alanın
+ * `.default()`'unu yine uygular; gönderilmeyen alan varsayılanla ezilirdi (masanın adı değişince konumu ve türü,
+ * rezervasyonun durumu değişince kişi sayısı ve süresi, kişinin adı değişince özel yetkileri).
+ */
+export function patchOf<S extends z.ZodRawShape>(schema: z.ZodObject<S>) {
+  const shape: Record<string, z.ZodType> = {};
+  for (const [k, v] of Object.entries(schema.shape)) shape[k] = (v instanceof z.ZodDefault ? (v.unwrap() as z.ZodType) : (v as z.ZodType)).optional();
+  return z.object(shape) as unknown as z.ZodObject<{ [K in keyof S]: z.ZodOptional<Extract<Undefault<S[K]>, z.ZodType>> }>;
+}
+
 export const bad = (msg: string, code?: string) => new HttpError(400, msg, code);
 export const notFound = (what = 'Kayıt') => new HttpError(404, `${what} bulunamadı`, 'not_found');
 export const conflict = (msg: string, code?: string) => new HttpError(409, msg, code);

@@ -119,7 +119,9 @@ describe('LafPOS uçtan uca', () => {
       ],
     });
     expect(done.status).toBe('tamamlandi');
-    const after = await ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`);
+    // Kör kasa: kasiyer kapanmış adisyonun ödeme dökümünü görmez, müdür görür
+    expect((await ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).payments).toEqual([]);
+    const after = await ok<OrderDTO>('mudur', 'GET', `/orders/${o.id}`);
     expect(after.status).toBe('kapali');
     expect(after.payments.map((p) => p.methodName).sort()).toEqual(['Kredi kartı', 'Nakit']);
     expect(after.items.every((i) => i.paidQty === i.qty)).toBe(true);
@@ -130,7 +132,10 @@ describe('LafPOS uçtan uca', () => {
     o = await ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 1 }] });
     const sent = await ok<{ receipt: { id: string } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     await ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 3, amount: o.total }] });
-    await ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/cancel`, { voidReceipt: true });
+    // Fiş iptali ödeme iptalidir: yetkili onayı ister
+    const denied = await call<{ code: string }>('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/cancel`, { voidReceipt: true });
+    expect(denied.json.code).toBe('approval_required');
+    await ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/cancel`, { voidReceipt: true, approverPin: '2468' });
     const after = await ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`);
     expect(after.status).toBe('acik');
     expect(after.paid).toBe(0);

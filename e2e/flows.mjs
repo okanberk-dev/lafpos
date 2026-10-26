@@ -3,7 +3,7 @@
  * Her akış kendi bağlamını açar, sonucu API'den doğrular ve tarayıcıda konsol ya da ağ hatası bırakmaz.
  */
 import { mkdirSync } from 'node:fs';
-import { openContext, ROOT, settle } from './lib.mjs';
+import { openContext, overflowReport, PINS, ROOT, settle, smallTargets } from './lib.mjs';
 
 mkdirSync(`${ROOT}/e2e/out`, { recursive: true });
 
@@ -11,8 +11,11 @@ function assert(cond, message) {
   if (!cond) throw new Error(message);
 }
 
-/** Tarayıcı bağlamını açar, akışı çalıştırır, konsol ve ağ hatası varsa akışı düşürür */
-async function withPage(ctx, viewport, role, fn) {
+/**
+ * Tarayıcı bağlamını açar, akışı çalıştırır, konsol ve ağ hatası varsa akışı düşürür. `allow`: akışın bilerek
+ * ürettiği hatalar (yetkili onayı isteyen ilk istek 403 `approval_required` döner, PIN'le tekrarlanır).
+ */
+async function withPage(ctx, viewport, role, fn, allow = []) {
   const { context, page, problems } = await openContext(ctx.browser, viewport, role ? ctx.api.tokens[role] : null);
   try {
     await fn(page).catch(async (e) => {
@@ -20,7 +23,7 @@ async function withPage(ctx, viewport, role, fn) {
       await page.screenshot({ path: `${ROOT}/e2e/out/hata-${viewport}-${role ?? 'giris'}.png` }).catch(() => null);
       throw e;
     });
-    const real = problems.filter((p) => !/istek 4\d\d: GET \/api\/auth\/me/.test(p));
+    const real = problems.filter((p) => ![/istek 4\d\d: GET \/api\/auth\/me/, ...allow].some((re) => re.test(p)));
     assert(real.length === 0, real.join(' | '));
   } finally {
     await context.close();
@@ -164,6 +167,34 @@ export async function runFlows(ctx) {
           const density = await page.evaluate(() => document.documentElement.dataset.density);
           assert(density === 'compact', `sıkı görünüm kalmadı: ${density}`);
         }),
+    ],
+    [
+      // Günü kapattığı için en sonda
+      'Tablette kasiyer: gece gün sonundan sonra günü müdürün PIN onayıyla yeniden açar',
+      async () => {
+        for (const o of await api.call('mudur', 'GET', '/orders')) {
+          if (o.source === 'pos') await api.call('mudur', 'POST', `/orders/${o.id}/cancel`, { reason: 'Uçtan uca test' });
+        }
+        const x = await api.call('mudur', 'GET', '/cash/day');
+        const closed = await api.call('mudur', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash });
+        await withPage(ctx, 'tablet', 'kasa', async (page) => {
+          await go(ctx, page, '/kasa');
+          await page.getByRole('heading', { name: 'Bugünün gün sonu alındı' }).waitFor();
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-gun-kapandi.png` });
+          const overflow = await overflowReport(page);
+          assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+          const small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await page.getByPlaceholder('Ör. kapanıştan sonra gelen müşteri').fill('Kapanıştan sonra gelen müşteri');
+          await page.getByRole('button', { name: 'Günü yeniden aç', exact: true }).click();
+          const dialog = page.getByRole('dialog', { name: 'Yetkili onayı' });
+          for (const d of PINS.mudur) await dialog.getByRole('button', { name: d, exact: true }).click();
+          await dialog.getByRole('button', { name: 'Onayla', exact: true }).click();
+          await page.getByRole('button', { name: /Gün sonu \(Z\)/ }).waitFor({ timeout: 8000 });
+        }, [/istek 403: POST \/api\/cash\/days\/[^/]+\/reopen/, /konsol: Failed to load resource: .*403/]);
+        const now = await api.call('kasa', 'GET', '/cash/day');
+        assert(now.day?.id === closed.day.id && now.day.zNo === closed.day.zNo, 'gün aynı Z ile yeniden açılmadı');
+      },
     ],
   ];
 

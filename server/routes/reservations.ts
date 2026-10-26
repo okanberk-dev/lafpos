@@ -5,7 +5,7 @@ import { businessDate } from '@shared/time';
 import { db, schema } from '../db/client';
 import { type AppEnv, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { body, notFound, query } from '../lib/http';
+import { body, notFound, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { normalizePhone } from '../services/customers';
 
@@ -63,7 +63,7 @@ reservationRoutes.post('/', async (c) => {
 reservationRoutes.patch('/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'rezervasyon.yonet');
-  const input = await body(c, shape.partial().extend({ status: z.enum(['bekliyor', 'geldi', 'iptal', 'gelmedi']).optional() }));
+  const input = await body(c, patchOf(shape).extend({ status: z.enum(['bekliyor', 'geldi', 'iptal', 'gelmedi']).optional() }));
   const r = db.select().from(schema.reservations).where(eq(schema.reservations.id, c.req.param('id'))).get();
   if (!r) throw notFound('Rezervasyon');
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));

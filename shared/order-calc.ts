@@ -1,5 +1,8 @@
 import { allocate, type Kurus, percentOf, splitKdv } from './money';
 
+/** Servis ücretinin KDV oranı (yiyecek-içecek servisi; yazarkasa sepetindeki servis satırı da bunu kullanır) */
+export const SERVICE_KDV_RATE = 10;
+
 /**
  * Adisyon hesabının tek kaynağı. Sunucu her yazmada bunu çalıştırıp sonucu saklar (otoriter); istemci aynı
  * fonksiyonla gönderilmemiş kalemleri anında gösterir. Fiyatlar KDV dahildir.
@@ -108,7 +111,7 @@ export function calcOrder(input: CalcInput): OrderTotals {
   const afterDiscount = subtotal - orderDiscount;
   const service = input.serviceRate ? percentOf(afterDiscount, input.serviceRate) : 0;
   if (service > 0) {
-    const r = input.serviceKdvRate ?? 10;
+    const r = input.serviceKdvRate ?? SERVICE_KDV_RATE;
     byRate.set(r, (byRate.get(r) ?? 0) + service);
   }
 

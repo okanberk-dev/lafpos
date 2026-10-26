@@ -1,12 +1,12 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { ALL_PERMISSIONS, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
-import { db, schema, tx } from '../db/client';
+import { ALL_PERMISSIONS, effectivePermissions, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
+import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
-import { type AppEnv, can, hashPin, isValidPin, requirePermission } from '../lib/auth';
+import { type AppEnv, type AuthUser, can, hashPin, isValidPin, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { bad, body, conflict, kurus, notFound, query } from '../lib/http';
+import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
@@ -60,7 +60,7 @@ adminRoutes.post('/categories', async (c) => {
 adminRoutes.patch('/categories/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'menu.yonet');
-  const input = await body(c, categoryShape.partial());
+  const input = await body(c, patchOf(categoryShape));
   const cat = db.select().from(schema.categories).where(eq(schema.categories.id, c.req.param('id'))).get();
   if (!cat) throw notFound('Kategori');
   // Siteden gelen kategoride ad ve sıra sitenin; LafPOS'ta yalnız renk, istasyon ve görünürlük değişir
@@ -109,7 +109,7 @@ adminRoutes.patch('/products/:id', async (c) => {
   requirePermission(user, 'menu.yonet');
   const p = db.select().from(schema.products).where(eq(schema.products.id, c.req.param('id'))).get();
   if (!p) throw notFound('Ürün');
-  const input = await body(c, productLocal.partial().merge(productPos));
+  const input = await body(c, patchOf(productLocal).merge(patchOf(productPos)));
   const synced = p.extSource === 'laffogato';
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
@@ -286,7 +286,7 @@ adminRoutes.post('/tables', async (c) => {
 adminRoutes.patch('/tables/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
-  const input = await body(c, tableShape.partial());
+  const input = await body(c, patchOf(tableShape));
   const id = c.req.param('id');
   if (input.active === false) {
     const open = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.tableId, id), eq(schema.orders.status, 'acik'))).get();
@@ -394,6 +394,7 @@ adminRoutes.put('/roles/:role', async (c) => {
   const matrix = { ...getSettings().rolePermissions };
   const before = rolePermissions(role, matrix);
   const defaults = ROLE_DEFAULTS[role];
+  assertCanGrant(user, next.filter((p) => !before.includes(p)));
   if (next.length === defaults.length && next.every((p) => defaults.includes(p))) delete matrix[role];
   else matrix[role] = next;
   updateSettings({ rolePermissions: matrix });
@@ -409,6 +410,32 @@ adminRoutes.put('/roles/:role', async (c) => {
   return c.json({ role, permissions: rolePermissions(role, matrix), custom: !!matrix[role] });
 });
 
+/**
+ * Yetki yükseltme yok: kimse sahip olmadığı yetkiyi bir role ya da kişiye veremez (inceleme, 26 Eki 2026).
+ * Patron her yetkiye sahip olduğu için onu kısıtlamaz.
+ */
+function assertCanGrant(actor: AuthUser, gained: Permission[]) {
+  const missing = gained.filter((p) => !actor.permissions.has(p));
+  if (missing.length) throw new HttpError(403, `Sahip olmadığınız yetkiyi veremezsiniz: ${missing.map((p) => PERMISSIONS[p]).join(', ')}`, 'escalation');
+}
+
+/** Kişinin kayıt sonrası etkin yetkileri (rol seti + kişiye özel) */
+function userPermissions(u: { role: Role; permGrant: Permission[]; permRevoke: Permission[] }): Set<Permission> {
+  return effectivePermissions(u.role, { grant: u.permGrant, revoke: u.permRevoke }, getSettings().rolePermissions);
+}
+
+/** En az bir etkin patron, personel yönetimiyle kalmalı: panel kimseye kilitlenmesin */
+function assertPatronRemains(t: Tx | DB, changedId: string, next: { role: Role; active: boolean; permGrant: Permission[]; permRevoke: Permission[] }) {
+  const others = t
+    .select()
+    .from(schema.users)
+    .where(and(eq(schema.users.role, 'patron'), eq(schema.users.active, true)))
+    .all()
+    .filter((u) => u.id !== changedId && userPermissions(u).has('personel.yonet'));
+  const stays = next.role === 'patron' && next.active && userPermissions(next).has('personel.yonet');
+  if (!stays && !others.length) throw conflict('Personel yönetimi olan son etkin patron hesabı kapatılamaz, rolü değiştirilemez', 'last_patron');
+}
+
 function pinFree(pin: string, exceptUserId?: string) {
   if (!isValidPin(pin)) throw bad('PIN 4-6 haneli rakam olmalı', 'pin_invalid');
   const other = db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get();
@@ -420,6 +447,7 @@ adminRoutes.post('/users', async (c) => {
   requirePermission(user, 'personel.yonet');
   const input = await body(c, userShape.extend({ pin: z.string() }));
   if (input.role === 'patron' && user.role !== 'patron') throw conflict('Patron hesabını yalnız patron açabilir');
+  assertCanGrant(user, [...userPermissions({ role: input.role, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[] })]);
   pinFree(input.pin);
   const id = ulid();
   db.insert(schema.users).values({ id, name: input.name, role: input.role, color: input.color, maxDiscountPct: input.maxDiscountPct, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[], pinHash: hashPin(input.pin) }).run();
@@ -430,11 +458,23 @@ adminRoutes.post('/users', async (c) => {
 adminRoutes.patch('/users/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'personel.yonet');
-  const input = await body(c, userShape.partial().extend({ pin: z.string().optional(), active: z.boolean().optional() }));
+  const input = await body(c, patchOf(userShape).extend({ pin: z.string().optional(), active: z.boolean().optional() }));
   const target = db.select().from(schema.users).where(eq(schema.users.id, c.req.param('id'))).get();
   if (!target) throw notFound('Personel');
   if ((target.role === 'patron' || input.role === 'patron') && user.role !== 'patron') throw conflict('Patron hesabını yalnız patron değiştirebilir');
   if (input.active === false && target.id === user.id) throw conflict('Kendi hesabınızı kapatamazsınız');
+  const next = {
+    role: input.role ?? target.role,
+    active: input.active ?? target.active,
+    permGrant: (input.permGrant as Permission[] | undefined) ?? target.permGrant,
+    permRevoke: (input.permRevoke as Permission[] | undefined) ?? target.permRevoke,
+  };
+  const before = userPermissions(target);
+  const after = userPermissions(next);
+  const permsChange = next.role !== target.role || [...before].some((p) => !after.has(p)) || [...after].some((p) => !before.has(p)) || (input.maxDiscountPct !== undefined && input.maxDiscountPct !== target.maxDiscountPct);
+  if (target.id === user.id && permsChange) throw new HttpError(403, 'Kendi rolünüzü, yetkilerinizi ve indirim sınırınızı değiştiremezsiniz; başka bir yetkili değiştirsin', 'self_edit');
+  assertCanGrant(user, [...after].filter((p) => !before.has(p)));
+  if (target.role === 'patron') assertPatronRemains(db, target.id, next);
   const patch: Partial<typeof schema.users.$inferInsert> = {};
   for (const k of ['name', 'role', 'color', 'maxDiscountPct', 'active'] as const) if (input[k] !== undefined) (patch as Record<string, unknown>)[k] = input[k];
   if (input.permGrant) patch.permGrant = input.permGrant as Permission[];
@@ -481,7 +521,7 @@ adminRoutes.post('/payment-methods', async (c) => {
 adminRoutes.patch('/payment-methods/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
-  const input = await body(c, methodShape.partial());
+  const input = await body(c, patchOf(methodShape));
   db.update(schema.paymentMethods).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.paymentMethods.id, c.req.param('id'))).run();
   changed('settings', 'method.updated', user.id);
   return c.json({ ok: true });
@@ -494,8 +534,8 @@ adminRoutes.get('/settings', (c) => {
   return c.json(getSettings());
 });
 
-const settingsShape = z
-  .object({
+const settingsShape = patchOf(
+  z.object({
     businessName: z.string().max(60),
     businessAddress: z.string().max(200),
     businessPhone: z.string().max(30),
@@ -525,8 +565,8 @@ const settingsShape = z
     backupKeep: z.number().int().min(1).max(365),
     autoDayEnd: z.boolean(),
     autoDayEndHour: z.number().int().min(0).max(23),
-  })
-  .partial();
+  }),
+);
 
 adminRoutes.put('/settings', async (c) => {
   const user = c.get('user');

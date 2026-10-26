@@ -24,6 +24,8 @@ interface DayResponse {
   movements: { id: string; kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string; userName: string | null; createdAt: number }[];
   /** Kör kasa: bu kullanıcı kasa rakamlarını görmez */
   blind?: boolean;
+  /** Açık gün yokken bugünün kapanmış günü: bir iş gününe tek Z, yeni gün 05:00'ten sonra */
+  closedToday?: BusinessDayDTO | null;
 }
 interface DayListItem extends BusinessDayDTO {
   netSales: number | null;
@@ -60,6 +62,7 @@ export default function CashPage() {
   const [note, setNote] = useState('');
   const [zResult, setZResult] = useState<DayDetail | null>(null);
   const [fillFor, setFillFor] = useState<DayDetail | null>(null);
+  const [reopenReason, setReopenReason] = useState('');
   const [busy, setBusy] = useState(false);
 
   const refresh = () => {
@@ -73,6 +76,22 @@ export default function CashPage() {
       await post('/cash/day/open', { openingCash: parseTL(opening || '0') ?? 0 });
       toast.ok('Gün açıldı, satışa hazır');
       setOpening('');
+      refresh();
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Gece Z alındıktan sonra gelen müşteri: aynı gün yetkili onayıyla yeniden açılır, Z numarası değişmez
+  const reopen = async (id: string) => {
+    setBusy(true);
+    try {
+      const res = await withApproval((pin) => post(`/cash/days/${id}/reopen`, { reason: reopenReason, approverPin: pin }));
+      if (res === null) return;
+      toast.ok('Gün yeniden açıldı; kapatınca Z raporu ve lafmaliyet kaydı güncellenir');
+      setReopenReason('');
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -124,7 +143,11 @@ export default function CashPage() {
     if (!fillFor) return;
     setBusy(true);
     try {
-      await post(`/cash/days/${fillFor.day.id}/count`, { countedCash: count.countedCash, methodCounts: count.methodCounts, banknotes: count.banknotes, note: note || null });
+      // Kaydedilmiş sayımı değiştirmek yetkili onayı ister
+      const done = await withApproval((pin) =>
+        post(`/cash/days/${fillFor.day.id}/count`, { countedCash: count.countedCash, methodCounts: count.methodCounts, banknotes: count.banknotes, note: note || null, approverPin: pin }),
+      );
+      if (done === null) return;
       toast.ok('Kasa föyü kaydedildi');
       setFillFor(null);
       setCount(emptyCount());
@@ -142,6 +165,7 @@ export default function CashPage() {
   // Kör kasa: kasiyerin `kasa.rakam` yetkisi yoksa sunucu ara raporu ve beklenen nakdi göndermez
   const blind = current.data?.blind ?? false;
   const movements = current.data?.movements ?? [];
+  const closedDay = day ? null : (current.data?.closedToday ?? null);
 
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
@@ -172,7 +196,36 @@ export default function CashPage() {
         }
       />
 
-      {tab === 'bugun' && !day && (
+      {tab === 'bugun' && !day && closedDay && (
+        <div className="mx-auto max-w-md">
+          <Card>
+            <div className="space-y-4 p-6 text-center">
+              <Lock className="mx-auto size-12 text-muted" />
+              <div>
+                <h2 className="text-xl font-semibold">Bugünün gün sonu alındı</h2>
+                <p className="text-sm text-muted">
+                  Z {closedDay.zNo} · {closedDay.closedAt ? `${fmtTime(closedDay.closedAt)}'de kapandı` : ''}. Yeni gün 05:00'ten sonra açılır; kapanıştan sonra satış gerekirse günü yeniden açın
+                </p>
+              </div>
+              {can('kasa.gun') ? (
+                <>
+                  <Field label="Neden">
+                    <Input value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} maxLength={200} placeholder="Ör. kapanıştan sonra gelen müşteri" />
+                  </Field>
+                  <Button variant="primary" size="xl" block loading={busy} disabled={!reopenReason.trim()} onClick={() => reopen(closedDay.id)}>
+                    Günü yeniden aç
+                  </Button>
+                  <p className="text-xs text-muted">Yetkili onayı gerekir. Gün yeniden kapanınca Z raporu ve lafmaliyet'teki kayıt güncellenir</p>
+                </>
+              ) : (
+                <p className="text-sm text-muted">Günü kasiyer, müdür ya da patron yeniden açabilir</p>
+              )}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'bugun' && !day && !closedDay && (
         <div className="mx-auto max-w-md">
           <Card>
             <div className="space-y-4 p-6 text-center">
