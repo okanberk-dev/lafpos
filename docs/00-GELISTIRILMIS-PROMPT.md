@@ -178,6 +178,6 @@ tablet ve telefonlar aynı sunucuya ağdan bağlanır. Şunları yap ve her biri
 | 4 | Tek sistem / iki sistem araştırması ve kararı (`docs/06-TEK-SISTEM.md`) | Tamam: tek sistem, iki yüz (`ca92717`) |
 | 5 | Roller: düzenlenebilir rol yetkileri, kör kasa, X raporu, kasadan tükendi; kasiyer görünümü ve testleri | Tamam (`ca92717`; inceleme düzeltmeleri `6f3bdca`) |
 | 6 | Kasa bilgisayarı: Chrome kiosk başlatıcıları, otomatik başlatma, Wake Lock, yazdırma; belge | Tamam (`ca92717`) |
-| 7 | laffogato#263 ve lafmaliyet#34: güncelle, incele, CI, md notları, birleştir | İncelendi, yerel kapılar yeşil (GitHub Actions hesap faturası yüzünden çalışmıyor); birleştirme sırası 263 → 34 → lafpos#1 |
-| 8 | LafPOS PR'ı: bütün kapılar, inceleme, birleştir | İki bağımsız inceleme: 13 + 8 bulgu düzeltildi (`tests/review-fixes.test.ts`, `tests/review-round2*.test.ts`); 100 test, 117 ekran, 9 akış |
+| 7 | laffogato#263 ve lafmaliyet#34: güncelle, incele, CI, md notları, birleştir | Tamam: laffogato#263 (`d1de10f`, canlıda doğrulandı), lafmaliyet#34 (`81e79ad`) ve göç düzeltmesi lafmaliyet#36 (`df8ba6d`, canlı derleme 42 migration) |
+| 8 | LafPOS PR'ı: bütün kapılar, inceleme, birleştir | Tamam: lafpos#1 (`e562a2a`); iki bağımsız inceleme, 13 + 8 bulgu testleriyle düzeltildi; 100 test, 117 ekran, 9 akış (GitHub Actions hesap faturası yüzünden çalışmıyor, kapılar yerelde) |
 | 9 | Operatöre kalanlar: `LAFPOS_SYNC_SECRET` (laffogato Vercel ve lafmaliyet), kasa `.env`, gerçek cihaz turu | Açık |

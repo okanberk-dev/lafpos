@@ -118,7 +118,7 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 
 ### Durum (26 Ekim 2026)
 
-Dalga 1-6 tamam (RiosenBeq/lafpos#1). Planın üstüne yapılanlar: yazarkasa POS (TokenX Connect,
+Dalga 1-6 tamam ve birleşti (RiosenBeq/lafpos#1, 26 Ekim 2026; laffogato#263 ve lafmaliyet#34/#36 aynı gün canlıda). Planın üstüne yapılanlar: yazarkasa POS (TokenX Connect,
 `docs/04-YAZARKASA.md`), Innex yönetim paneli ve telefon/tablet uyarlaması (`DESIGN.md`), düzenlenebilir
 roller, kör kasa ve kasadan tükendi (Yönetim › Roller ve yetkiler), kasa bilgisayarı kurulumu
 (`docs/05-KASA-BILGISAYARI.md`), tek sistem kararı (`docs/06-TEK-SISTEM.md`). Doğrulama: 100 birim ve API
