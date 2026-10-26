@@ -1,8 +1,43 @@
+import { useQuery } from '@tanstack/react-query';
+import { CheckCircle2, CircleAlert } from 'lucide-react';
 import { useState } from 'react';
+import { fmtDateTime } from '@shared/time';
 import { LafMark } from '@/components/LafMark';
 import { Button } from '@/components/ui/Button';
-import { errorMessage, post, setToken } from '@/lib/api';
+import { errorMessage, get, post, setToken } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+
+interface Setup {
+  secret: boolean;
+  password: boolean;
+  redis: boolean;
+  snapshotAt: number | null;
+}
+
+/** Kurulum adımları: eksik olan varsa giriş yerine ne yapılacağı görünür (parolayı denemeye gerek kalmaz) */
+function SetupChecklist({ s }: { s: Setup }) {
+  const steps = [
+    { ok: s.secret, label: 'Ortak anahtar (LAFPOS_CLOUD_SECRET)' },
+    { ok: s.password, label: 'Uzaktan giriş parolası (LAFPOS_UZAKTAN_PAROLA)' },
+    { ok: s.redis, label: 'Upstash Redis bağlantısı' },
+  ];
+  return (
+    <div className="mt-5 rounded-xl border border-line bg-surface-2 p-4 text-sm">
+      <p className="font-semibold">Uzaktan erişimin kurulumu bitmemiş</p>
+      <ul className="mt-2 space-y-1.5">
+        {steps.map((x) => (
+          <li key={x.label} className="flex items-center gap-2">
+            {x.ok ? <CheckCircle2 className="size-4 shrink-0 text-[var(--admin-success)]" /> : <CircleAlert className="size-4 shrink-0 text-[var(--admin-warning)]" />}
+            <span className={x.ok ? 'text-muted' : ''}>{x.label}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-muted">
+        Eksikleri Mac'te <code className="rounded bg-surface px-1 py-0.5 text-[12px]">scripts/vercel/baglanti-kur.sh</code> tek seferde tamamlar; sonra kafedeki kasaya aynı anahtar girilir
+      </p>
+    </div>
+  );
+}
 
 /** Uzaktan giriş: patron parolası (Vercel'de LAFPOS_UZAKTAN_PAROLA). PIN'ler kafedeki kasada kalır */
 export function RemoteLoginPage() {
@@ -10,6 +45,8 @@ export function RemoteLoginPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setup = useQuery({ queryKey: ['uzaktan', 'kurulum'], queryFn: () => get<Setup>('/uzaktan/kurulum'), retry: false });
+  const ready = !!setup.data && setup.data.secret && setup.data.password && setup.data.redis;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +72,12 @@ export function RemoteLoginPage() {
         </span>
         <h1 className="mt-4 text-xl font-semibold tracking-[-0.01em]">LafPOS Uzaktan</h1>
         <p className="mt-1 text-sm text-muted">Kafenin canlı durumu: patron paneli, masalar, bar. Salt okunur; işlemler kafedeki kasadan</p>
+        {setup.data && !ready && <SetupChecklist s={setup.data} />}
+        {ready && setup.data && (
+          <p className="mt-3 text-xs text-muted">
+            {setup.data.snapshotAt ? `Kafeden son veri: ${fmtDateTime(setup.data.snapshotAt)}` : 'Kafeden henüz veri gelmedi; kasa bilgisayarına aynı anahtar girilince başlar'}
+          </p>
+        )}
         <label className="mt-5 block text-sm font-medium" htmlFor="parola">
           Parola
         </label>
@@ -47,7 +90,7 @@ export function RemoteLoginPage() {
           className="mt-1.5 h-11 w-full rounded-xl border border-[var(--admin-border-strong)] bg-surface px-3.5 text-base outline-none focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]"
         />
         {error && <p className="mt-2 text-sm text-[var(--admin-danger-ink)]">{error}</p>}
-        <Button type="submit" variant="primary" size="lg" block className="mt-4" loading={busy}>
+        <Button type="submit" variant="primary" size="lg" block className="mt-4" loading={busy} disabled={!!setup.data && !ready}>
           Giriş
         </Button>
       </form>

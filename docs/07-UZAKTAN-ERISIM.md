@@ -63,7 +63,14 @@ Maliyet ve kâr, PIN'ler, müşteri telefonları gitmez.
 Neden kasa Neon'a taşınmadı: kasa internet kesilince de çalışmalı; Neon'un ücretsiz planındaki aylık işlem süresi
 açık saatler boyunca uyanık bir veritabanına yetmez ve lafmaliyet'in veritabanını da durdururdu. Kalıcı geçmiş gün
 sonunda lafmaliyet'e (Neon) gider; anlık görünüm için Redis yeterli ve ucuz. Parola denemesi IP başına 15 dakikada 8.
-Durum: Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan.
+Durum: Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan. Giriş ekranı kurulumu baştan sorar (`GET
+/api/uzaktan/kurulum`, yalnız var/yok döner): eksik adım varsa parola alanı yerine kontrol listesi görünür.
+
+**Tek komutla kurulum** (operatörün Mac'inde, Vercel CLI girişiyle): `scripts/vercel/baglanti-kur.sh`. Üç ortak
+anahtarı üretir ve Vercel'e yazar (laffogato ve lafmaliyet'e `LAFPOS_SYNC_SECRET`, lafpos'a `LAFPOS_CLOUD_SECRET`),
+parolayı sorar (tanımlıysa dokunmaz), Upstash Redis'i ekler (koşulları operatör onaylar), üç projenin main'den gelen
+son üretim dağıtımını yeniden derler ve kafe bilgisayarına girecek satırları `~/Downloads/lafpos-kasa-ayarlari.env`
+dosyasına yazar (izin 600). Anahtarlar ekrana basılmaz; tanımlı bir değişkene `--yenile` olmadan dokunmaz.
 
 ## 5. Sorun giderme
 
