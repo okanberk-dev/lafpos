@@ -512,8 +512,13 @@ export const payments = sqliteTable(
     refundedAt: integer('refunded_at'),
     refundedBy: text('refunded_by'),
     refundReason: text('refund_reason'),
+    /**
+     * Ödeme denemesinin istemcide üretilen kimliği: yanıtı kaybolan istek yeniden gelirse ödeme ikinci kez yazılmaz,
+     * ilk sonuç döner (adisyon başına tekil)
+     */
+    requestId: text('request_id'),
   },
-  (t) => [index('payments_order_idx').on(t.orderId), index('payments_day_idx').on(t.dayId)],
+  (t) => [index('payments_order_idx').on(t.orderId), index('payments_day_idx').on(t.dayId), uniqueIndex('payments_request_idx').on(t.orderId, t.requestId)],
 );
 
 export const roomSessions = sqliteTable('room_sessions', {

@@ -150,3 +150,37 @@ describe('iptal onayı', () => {
     expect((await audits(o.id, 'item.void'))[0]).toMatchObject({ severity: 'uyari', approverName: 'Müdür', data: { afterSend: true, fresh: false } });
   });
 });
+
+type PayResult = { order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null };
+
+describe('ödeme', () => {
+  it('state-07: yanıtı kaybolup yeniden gönderilen ödeme isteği iki kez yazılmaz; ilk sonuç döner', async () => {
+    // Tutar: iki kahvelik masanın yarısı nakit; aynı istek ikinci kez gelir
+    const o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const half = { methodId: method('Nakit').id, amount: 14000, given: 20000, requestId: 'odeme-istegi-0001' };
+    expect(await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, half)).toMatchObject({ closed: false, amount: 14000, change: 6000 });
+    expect(await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, half)).toMatchObject({ closed: false, amount: 14000, change: 6000 });
+    let after = await getOrder(o.id);
+    expect(after).toMatchObject({ status: 'acik', paid: 14000 });
+    expect(after.payments).toHaveLength(1);
+
+    // Kalem: iki adetlik satırın biri iki kez gönderilir; ikinci adet ödenmiş sayılmaz
+    const p = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const one = { methodId: method('Kredi kartı').id, amount: 14000, items: [{ itemId: p.items[0]!.id, qty: 1 }], requestId: 'odeme-istegi-0002' };
+    await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, one);
+    await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, one);
+    after = await getOrder(p.id);
+    expect(after.payments).toHaveLength(1);
+    expect(after.items[0]).toMatchObject({ paidQty: 1 });
+    expect(after.status).toBe('acik');
+
+    // Yeni istek kalan yarıyı alıp adisyonu kapatır; kapandıktan sonra gelen tekrarı "kapalı" hatası değil ilk sonuçtur
+    const rest = { methodId: method('Nakit').id, amount: 14000, requestId: 'odeme-istegi-0003' };
+    expect((await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, rest)).closed).toBe(true);
+    expect(await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, rest)).toMatchObject({ closed: true, amount: 14000 });
+    expect((await getOrder(o.id)).payments).toHaveLength(2);
+
+    // İstek kimliği olmayan eski istemci eskisi gibi çalışır; kimlik biçimi denetlenir
+    expect((await h.call('kasa', 'POST', `/orders/${p.id}/payments`, { ...one, requestId: 'kısa' })).status).toBe(422);
+  });
+});

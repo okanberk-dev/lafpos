@@ -782,6 +782,8 @@ export interface PaymentInput {
   share?: boolean;
   /** Pay ödemesinde kasiyerin ekranda gördüğü pay numarası; tutar da `amount` olarak gelir, ikisi tutmalı */
   shareNo?: number;
+  /** Ödeme denemesinin istemcideki kimliği: aynı kimlikle gelen istek yeniden yazılmaz, ilk sonuç döner */
+  requestId?: string | null;
 }
 
 /** Ödenmiş paylar (iptal edilmemiş, payı olan ödemeler) */
@@ -886,6 +888,20 @@ export function addPayment(
   input: PaymentInput,
 ): { order: OrderRow; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null } {
   needDirect(actor, 'odeme.al');
+  // Yanıtı kaybolan istek yeniden geldiyse (kasiyer "Öde"ye tekrar bastı) ödeme ikinci kez yazılmaz: ilk sonuç döner.
+  // Yoksa yarım ödeme iki kez yazılıp adisyon yarısı alınmış hâlde kapanıyordu (denetim, 26 Eki 2026)
+  if (input.requestId) {
+    const prev = t
+      .select()
+      .from(schema.payments)
+      .where(and(eq(schema.payments.orderId, orderId), eq(schema.payments.requestId, input.requestId)))
+      .get();
+    if (prev) {
+      const order = loadOrder(t, orderId);
+      const share = prev.shareNo != null ? { no: prev.shareNo, of: prev.shareOf ?? prev.shareNo } : null;
+      return { order, closed: order.status === 'kapali', change: prev.change ?? 0, amount: prev.amount, share };
+    }
+  }
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
@@ -993,6 +1009,7 @@ export function addPayment(
       shareOf: share?.of ?? null,
       userId: actor.user.id,
       createdAt: Date.now(),
+      requestId: input.requestId ?? null,
     })
     .run();
 

@@ -19,6 +19,12 @@ type Mode = 'tutar' | 'kalem' | 'paylas';
 
 const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFixed(2).replace('.', ','));
 
+/**
+ * Ödeme denemesinin kimliği: yanıt kaybolup "Öde"ye yeniden basılırsa sunucu ödemeyi ikinci kez yazmaz, ilk sonucu
+ * döner. Ödeme alınınca yenilenir. Kafe ağında sayfa http ile açılır; randomUUID yalnız güvenli bağlamda var
+ */
+const newRequestId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+
 /** Innex seçim kartı/çipi: seçili mavi kenar ve açık mavi zemin */
 const choice = (on: boolean) =>
   cn('rounded-xl border transition-colors', on ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2');

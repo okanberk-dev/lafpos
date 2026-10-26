@@ -29,6 +29,13 @@
       "when": 1793015129729,
       "tag": "0003_hesap_paylasimi",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793047133046,
+      "tag": "0004_odeme_istegi",
+      "breakpoints": true
     }
   ]
 }
