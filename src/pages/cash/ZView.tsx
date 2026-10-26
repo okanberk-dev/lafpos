@@ -180,7 +180,7 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
 
 function Tile({ label, value, hint, strong, tone }: { label: string; value: string; hint?: string; strong?: boolean; tone?: 'ok' | 'bad' }) {
   return (
-    <div className={`rounded-2xl border p-4 ${tone === 'bad' ? 'border-burgundy-300 bg-burgundy-50 dark:bg-burgundy-800/30' : tone === 'ok' ? 'border-forest-300 bg-forest-50 dark:bg-forest-800' : 'border-line bg-surface'}`}>
+    <div className={`rounded-2xl border p-4 ${tone === 'bad' ? 'border-danger-200 bg-[var(--admin-danger-soft)] dark:border-transparent' : tone === 'ok' ? 'border-success-200 bg-[var(--admin-success-soft)] dark:border-transparent' : 'border-line bg-surface'}`}>
       <div className="text-sm text-muted">{label}</div>
       <div className={`tabular mt-1 font-semibold ${strong ? 'text-3xl' : 'text-2xl'}`}>{value}</div>
       {hint && <div className="text-xs text-muted">{hint}</div>}

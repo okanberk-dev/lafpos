@@ -1,6 +1,6 @@
 import { Search, SlidersHorizontal, Star, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { tlCompact } from '@shared/money';
+import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -46,26 +46,27 @@ export function ProductPanel({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 px-3 pt-3">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+      <div className="px-3 pt-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" strokeWidth={1.75} />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Ürün ara"
-            className="h-11 w-full rounded-xl border border-line bg-surface pl-9 pr-9 text-[15px] outline-none focus:border-forest-500"
+            aria-label="Ürün ara"
+            className="h-11 w-full rounded-xl border border-[var(--admin-border-strong)] bg-surface pl-9 pr-11 text-[15px] outline-none transition placeholder:text-muted focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]"
           />
           {q && (
-            <button onClick={() => setQ('')} aria-label="Aramayı temizle" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted hover:bg-surface-2">
+            <button onClick={() => setQ('')} aria-label="Aramayı temizle" className="absolute right-0 top-0 grid size-11 place-items-center rounded-xl text-muted hover:text-ink">
               <X className="size-4" />
             </button>
           )}
         </div>
       </div>
-      <div className="no-scrollbar flex gap-1.5 overflow-x-auto px-3 py-3">
+      <div role="tablist" aria-label="Kategoriler" className="no-scrollbar flex gap-1.5 overflow-x-auto px-3 py-3">
         {showFavorites && (
-          <CategoryChip active={!q && current === FAVORITES} color="#c9983f" onClick={() => setCategoryId(FAVORITES)}>
-            <Star className="size-3.5" /> Sık
+          <CategoryChip active={!q && current === FAVORITES} onClick={() => setCategoryId(FAVORITES)}>
+            <Star className="size-3.5" strokeWidth={1.75} /> Sık
           </CategoryChip>
         )}
         {categories.map((c) => (
@@ -74,7 +75,7 @@ export function ProductPanel({
           </CategoryChip>
         ))}
       </div>
-      <div className="scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-2.5 overflow-y-auto px-3 pb-4">
+      <div className="scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-2 overflow-y-auto border-t border-[var(--admin-divider)] bg-surface-2 p-3">
         {list.map((p) => (
           <ProductTile key={p.id} p={p} disabled={disabled} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
         ))}
@@ -84,18 +85,29 @@ export function ProductPanel({
   );
 }
 
-function CategoryChip({ active, color, onClick, children }: { active: boolean; color: string; onClick: () => void; children: React.ReactNode }) {
+/** Kategori çipi: Innex durum sekmesi gibi (beyaz, ince kenar; seçili koyu kenar). Kategori rengi yalnız küçük nokta */
+function CategoryChip({ active, color, onClick, children }: { active: boolean; color?: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
+      type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
-      className={cn('flex shrink-0 items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-medium transition pointer-coarse:min-h-11', active ? 'text-white shadow-sm' : 'bg-surface-2 text-ink-2 hover:bg-surface-3')}
-      style={active ? { background: color } : undefined}
+      className={cn(
+        'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border bg-surface px-3 text-sm whitespace-nowrap transition-[color,border-color] pointer-fine:min-h-9',
+        active ? 'border-ink font-semibold text-ink' : 'border-line font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
+      )}
     >
+      {color && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: color }} />}
       {children}
     </button>
   );
 }
 
+/**
+ * Ürün kartı: dokununca eklenir (iki boyluda boy düğmeleri). Seçenekli üründe köşede seçenek düğmesi;
+ * renkli şerit ve bölünmüş alt satır yok, durum (tükendi, son porsiyon) küçük rozet.
+ */
 function ProductTile({
   p,
   disabled,
@@ -111,60 +123,55 @@ function ProductTile({
   const soldOut = !p.active;
   const hasOptions = p.optionGroupIds.length > 0;
   const twoSizes = p.priceL != null;
-  const cat = boot.categories.find((c) => c.id === p.categoryId);
-  const accent = p.color ?? cat?.color ?? '#245c43';
   const label = p.shortName?.trim() || p.name;
+  const off = soldOut || disabled;
 
   return (
-    <div
-      className={cn(
-        'relative flex min-h-[104px] flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]',
-        (soldOut || disabled) && 'opacity-50',
-      )}
-    >
-      <span className="absolute inset-y-0 left-0 w-1" style={{ background: accent }} />
+    <div className={cn('relative flex min-h-[104px] flex-col rounded-xl border border-line bg-surface transition-colors hover:border-[var(--admin-border-field)]', off && 'opacity-50')}>
       <button
-        disabled={soldOut || disabled}
+        disabled={off}
         onClick={() => (twoSizes || !hasOptions ? onQuickAdd(p, twoSizes ? 'M' : 'TEK') : onCustomize(p, 'TEK'))}
-        className="flex flex-1 flex-col items-start px-3 pb-1 pt-2.5 text-left active:bg-surface-2"
+        className={cn('flex flex-1 flex-col items-start gap-1 rounded-xl px-3 pb-2.5 pt-2.5 text-left active:bg-surface-2', hasOptions && 'pr-11')}
       >
-        <span className="line-clamp-2 text-[15px] font-semibold leading-tight">{label}</span>
+        <span className="line-clamp-2 text-sm font-semibold leading-snug">{label}</span>
         {soldOut ? (
-          <span className="mt-1 rounded-full bg-burgundy-100 px-2 py-0.5 text-[11px] font-semibold text-burgundy-600">Tükendi</span>
+          <span className="rounded-md bg-[var(--admin-danger-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]">Tükendi</span>
         ) : p.portionsLeft != null ? (
-          <span className="mt-1 rounded-full bg-brass-100 px-2 py-0.5 text-[11px] font-semibold text-brass-700">Son {p.portionsLeft}</span>
+          <span className="tabular rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-warning)]">Son {p.portionsLeft}</span>
         ) : null}
+        {!twoSizes && <span className="tabular mt-auto text-sm font-semibold text-ink-2">{tlShort(p.price)}</span>}
       </button>
-      <div className="flex items-stretch border-t border-line">
-        {twoSizes ? (
-          <>
-            <SizeButton disabled={soldOut || disabled} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => onQuickAdd(p, 'M')} />
-            <span className="w-px bg-line" />
-            <SizeButton disabled={soldOut || disabled} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => onQuickAdd(p, 'L')} />
-          </>
-        ) : (
-          <div className="tabular flex flex-1 items-center px-3 py-2 text-sm font-semibold text-ink-2">{tlCompact(p.price)} ₺</div>
-        )}
-        {hasOptions && (
-          <button
-            disabled={soldOut || disabled}
-            onClick={() => onCustomize(p, twoSizes ? 'M' : 'TEK')}
-            aria-label={`${label} seçenekleri`}
-            className="grid w-11 place-items-center border-l border-line text-muted hover:bg-surface-2 hover:text-forest-600 pointer-coarse:min-h-11"
-          >
-            <SlidersHorizontal className="size-4" />
-          </button>
-        )}
-      </div>
+      {hasOptions && (
+        <button
+          disabled={off}
+          onClick={() => onCustomize(p, twoSizes ? 'M' : 'TEK')}
+          aria-label={`${label} seçenekleri`}
+          title="Seçenekler"
+          className="absolute right-0 top-0 grid size-11 place-items-center rounded-xl text-muted transition-colors hover:text-primary"
+        >
+          <SlidersHorizontal className="size-4" strokeWidth={1.75} />
+        </button>
+      )}
+      {twoSizes && (
+        <div className="grid grid-cols-2 gap-1 px-1.5 pb-1.5">
+          <SizeButton disabled={off} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => onQuickAdd(p, 'M')} />
+          <SizeButton disabled={off} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => onQuickAdd(p, 'L')} />
+        </div>
+      )}
     </div>
   );
 }
 
 function SizeButton({ label, price, onClick, disabled }: { label: string; price: number; onClick: () => void; disabled?: boolean }) {
   return (
-    <button disabled={disabled} onClick={onClick} className="flex flex-1 flex-col items-center py-1.5 leading-tight hover:bg-forest-50 active:bg-forest-100 dark:hover:bg-forest-800">
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={`${label} ${tlShort(price)}`}
+      className="flex min-h-11 flex-col items-center justify-center rounded-lg bg-surface-3 leading-tight transition-colors hover:bg-[var(--admin-primary-soft)] hover:text-primary active:bg-[var(--admin-primary-soft)] pointer-fine:min-h-10"
+    >
       <span className="text-[11px] text-muted">{label}</span>
-      <span className="tabular text-sm font-semibold">{tlCompact(price)} ₺</span>
+      <span className="tabular text-[13px] font-semibold">{tlShort(price)}</span>
     </button>
   );
 }

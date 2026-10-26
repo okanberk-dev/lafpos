@@ -45,6 +45,7 @@ const ROUTES = {
     '/yonetim/odeme',
     '/yonetim/yazarkasa',
     '/yonetim/entegrasyon',
+    '/yonetim/ag',
     '/yonetim/ayarlar',
     '/yonetim/denetim',
   ],

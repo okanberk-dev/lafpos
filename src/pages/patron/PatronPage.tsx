@@ -37,10 +37,10 @@ export interface PatronData {
 }
 
 function Change({ value }: { value: number | null }) {
-  if (value == null) return <span className="whitespace-nowrap text-xs text-cream/60">veri yok</span>;
+  if (value == null) return <span className="whitespace-nowrap text-xs text-muted">veri yok</span>;
   const up = value >= 0;
   return (
-    <span className={cn('inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold', up ? 'bg-forest-100 text-forest-700 dark:bg-forest-800 dark:text-forest-100' : 'bg-burgundy-100 text-burgundy-600')}>
+    <span className={cn('tabular inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold', up ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
       {up ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}%{Math.abs(value).toLocaleString('tr-TR')}
     </span>
   );
@@ -74,17 +74,17 @@ export default function PatronPage() {
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className={cn('size-2.5 rounded-full', d.dayOpen ? 'animate-pulse bg-forest-500' : 'bg-muted')} />
+        <span className={cn('size-2.5 rounded-full', d.dayOpen ? 'animate-pulse bg-success-600 dark:bg-success-300' : 'bg-muted')} />
         <span className="text-sm text-muted">
           {d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · {fmtTime(now)} itibarıyla · canlı
         </span>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-3xl bg-forest-700 p-6 text-cream shadow-[var(--shadow-card)]">
-          <div className="text-sm text-cream/70">Bugünkü ciro</div>
-          <div className="mt-1 text-6xl font-semibold tracking-tight">{tl(d.netSales)}</div>
-          <div className="mt-1 text-sm text-cream/70">
+        <div className="rounded-2xl border border-line bg-surface p-6">
+          <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
+          <div className="tabular mt-1 text-5xl font-bold tracking-tight sm:text-6xl">{tl(d.netSales)}</div>
+          <div className="mt-1 text-sm text-muted">
             {d.orders} adisyon · ortalama {tl(d.avgCheck)}
             {d.open.count > 0 && ` · açıkta ${tl(d.open.total)}`}
           </div>
@@ -109,10 +109,10 @@ export default function PatronPage() {
               <ul className="divide-y divide-line">
                 {d.anomalies.map((a, i) => (
                   <li key={i} className="flex items-start gap-3 px-4 py-3 text-sm">
-                    {a.level === 'alarm' ? <AlertOctagon className="mt-0.5 size-5 shrink-0 text-burgundy-500" /> : <AlertTriangle className="mt-0.5 size-5 shrink-0 text-brass-500" />}
+                    {a.level === 'alarm' ? <AlertOctagon className="mt-0.5 size-5 shrink-0 text-danger-500" /> : <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warn-500" />}
                     <span>
                       <span className="block font-semibold">
-                        {a.title} <span className={cn('ml-1 rounded px-1.5 text-[11px]', a.level === 'alarm' ? 'bg-burgundy-100 text-burgundy-600' : 'bg-brass-100 text-brass-700')}>{a.level === 'alarm' ? 'Alarm' : 'Uyarı'}</span>
+                        {a.title} <span className={cn('ml-1 rounded px-1.5 text-[11px]', a.level === 'alarm' ? 'bg-danger-100 text-danger-600' : 'bg-warn-100 text-warn-700')}>{a.level === 'alarm' ? 'Alarm' : 'Uyarı'}</span>
                       </span>
                       <span className="text-muted">{a.detail}</span>
                     </span>
@@ -127,7 +127,7 @@ export default function PatronPage() {
                 {d.alerts.map((a) => (
                   <li key={a.id}>
                     <button onClick={() => a.orderId && navigate(`/adisyon/${a.orderId}`)} className="flex w-full items-start gap-3 px-4 py-2.5 text-left text-sm hover:bg-surface-2">
-                      {a.severity === 'alarm' ? <AlertOctagon className="mt-0.5 size-4 shrink-0 text-burgundy-500" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0 text-brass-500" />}
+                      {a.severity === 'alarm' ? <AlertOctagon className="mt-0.5 size-4 shrink-0 text-danger-500" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn-500" />}
                       <span className="min-w-0 flex-1">
                         <span className="block">{a.message}</span>
                         <span className="text-xs text-muted">
@@ -201,7 +201,7 @@ export default function PatronPage() {
                   <span className="text-muted">{p.qty} adet</span>
                   <span className="tabular w-24 text-right font-semibold">{tl(p.revenue)}</span>
                   {can('rapor.maliyet') && p.margin != null && (
-                    <span className="tabular hidden w-24 text-right text-xs text-forest-600 sm:block">
+                    <span className="tabular hidden w-24 text-right text-xs text-brand-600 sm:block">
                       <TrendingUp className="mr-0.5 inline size-3" />
                       {tl(p.margin)}
                     </span>
@@ -219,7 +219,7 @@ export default function PatronPage() {
               {d.openChecks.map((o) => (
                 <li key={o.id}>
                   <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-surface-2">
-                    {o.billPrinted ? <Receipt className="size-4 text-brass-500" /> : <Globe className="size-4 opacity-0" />}
+                    {o.billPrinted ? <Receipt className="size-4 text-warn-500" /> : <Globe className="size-4 opacity-0" />}
                     <span className="min-w-0 flex-1">
                       <span className="font-medium">{o.place}</span> <span className="text-muted">#{o.no}</span>
                       <span className="block text-xs text-muted">
@@ -240,8 +240,8 @@ export default function PatronPage() {
 
 function CompareRow({ label, value, change }: { label: string; value: number; change: number | null }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl bg-cream/10 px-4 py-3">
-      <span className="text-sm text-cream/80">{label}</span>
+    <div className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-4 py-3">
+      <span className="text-[13px] text-ink-2">{label}</span>
       <span className="flex items-center gap-2">
         <span className="tabular font-semibold">{tl(value)}</span>
         <Change value={change} />

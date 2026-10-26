@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Loader2, MonitorSmartphone, RefreshCw, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { tl } from '@shared/money';
+import { tl, tlShort } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { ApiError, errorMessage, get, post } from '@/lib/api';
@@ -112,14 +112,16 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
   const last = receipts.data?.[0];
 
   return (
-    <div className="rounded-2xl border border-line bg-surface-2/60 p-3">
+    <div className="rounded-xl border border-line p-3">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <MonitorSmartphone className="size-4 text-forest-600" />
-        Yazarkasa POS {provider === 'simulator' && <span className="rounded-full bg-brass-100 px-2 py-0.5 text-[11px] text-brass-700">eğitim cihazı</span>}
+        <span className="grid size-7 place-items-center rounded-lg bg-surface-3 text-ink-2">
+          <MonitorSmartphone className="size-4" />
+        </span>
+        Yazarkasa POS {provider === 'simulator' && <span className="rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-warning)]">eğitim cihazı</span>}
       </div>
       {pending ? (
         <div className="flex items-center gap-3">
-          <Loader2 className="size-5 animate-spin text-forest-600" />
+          <Loader2 className="size-5 animate-spin text-primary" />
           <div className="min-w-0 flex-1 text-sm">
             <div className="font-medium">{pending.status === 'kilitli' ? 'Cihazda açıldı, ödeme alınıyor' : 'Cihazda ödeme bekleniyor'}</div>
             <div className="text-xs text-muted">
@@ -127,7 +129,7 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
               {provider === 'simulator' && (
                 <>
                   {' · '}
-                  <Link to="/cihaz" className="font-semibold text-forest-600 underline">
+                  <Link to="/cihaz" className="font-semibold text-primary underline">
                     Eğitim cihazını aç
                   </Link>
                 </>
@@ -139,21 +141,29 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
               <RefreshCw className="size-4" />
             </Button>
           )}
-          <Button size="sm" variant="ghost" className="text-burgundy-500" onClick={() => cancel(pending.id)}>
+          <Button size="sm" variant="ghost" className="text-[var(--admin-danger-ink)]" onClick={() => cancel(pending.id)}>
             İptal
           </Button>
         </div>
       ) : (
         <>
-          <Button block variant="brass" loading={busy} onClick={send} disabled={order.total - order.paid <= 0}>
+          <Button block variant="secondary" icon={<MonitorSmartphone className="size-4" />} loading={busy} onClick={send} disabled={order.total - order.paid <= 0}>
             {items?.length ? 'Seçilen kalemleri' : 'Hesabı'} yazarkasaya gönder
           </Button>
-          <p className="mt-1.5 text-xs text-muted">Ödeme ve mali fiş cihazda alınır; sonuç gelince adisyon kendiliğinden kapanır</p>
+          {/* Paylaşımlı hesap cihazda tek mali fiştir: paylar cihazda ayrı ayrı ödeme olarak alınır. LafPOS'ta pay
+              alındıysa hesap artık bütün olarak gitmez (sunucu okc_partial der); ipucu yalnız hiç ödeme yokken */}
+          {!items?.length && order.paid === 0 && order.split && order.split.shares.length > 1 ? (
+            <p className="tabular mt-1.5 text-xs text-ink-2">
+              Paylaşımlı hesap: cihazda {order.split.shares.length} ayrı ödeme alın ({order.split.shares.map((s) => tlShort(s)).join(' · ')}); fiş tek kesilir
+            </p>
+          ) : (
+            <p className="mt-1.5 text-xs text-muted">Ödeme ve mali fiş cihazda alınır; sonuç gelince adisyon kendiliğinden kapanır</p>
+          )}
         </>
       )}
       {last && !pending && last.status !== 'gonderildi' && (
         <div className="mt-2 flex items-center gap-1.5 text-xs">
-          {last.status === 'tamamlandi' ? <CheckCircle2 className="size-3.5 text-forest-500" /> : <XCircle className="size-3.5 text-burgundy-500" />}
+          {last.status === 'tamamlandi' ? <CheckCircle2 className="size-3.5 text-[var(--admin-success)]" /> : <XCircle className="size-3.5 text-[var(--admin-danger-ink)]" />}
           <span className="text-muted">
             Son sepet: {last.status === 'tamamlandi' ? `ödendi${last.zNo != null ? ` · Z ${last.zNo}` : ''}${last.receiptNo != null ? ` · fiş ${last.receiptNo}` : ''}` : last.status === 'hata' ? (last.error ?? 'hata') : last.status === 'fis_iptal' ? 'fiş iptal edildi' : 'iptal edildi'}
           </span>

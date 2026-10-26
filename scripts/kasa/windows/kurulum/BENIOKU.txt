@@ -1,0 +1,52 @@
+LafPOS (Windows)
+================
+
+NE KURULDU
+- Sunucu: Windows açılınca arka planda kendiliğinden çalışır (Görev Zamanlayıcı: "LafPOS Sunucu").
+  Kimse oturum açmasa da tabletler bağlanabilir. Düşerse birkaç saniye içinde yeniden başlar.
+- Kasa ekranı: masaüstündeki "LafPOS Kasa". Chrome (yoksa Edge) tam ekran açılır, fişler önizlemesiz
+  varsayılan yazıcıdan çıkar. Kiosktan çıkmak için Alt+F4.
+- Veriler: C:\ProgramData\LafPOS (veritabanı, günlük yedekler, ayarlar, sunucu günlüğü). Güncelleme ve
+  kaldırma bu klasöre dokunmaz. Klasörü yalnız yöneticiler açabilir.
+
+İLK AÇILIŞ
+- Giriş ekranındaki örnek PIN'ler (Patron 1897, Müdür 2468, Kasa 1111, Garson 2222, Bar 3333) herkesçe
+  bilinir. Canlıya geçmeden Yönetim › Personel'den değiştirin.
+- Fiş yazıcısını (80 mm) Windows'ta varsayılan yazıcı yapın.
+- Güç ayarlarında "ekranı kapatma: hiçbir zaman" seçin; otomatik oturum açma isteğe bağlı.
+
+TABLET VE TELEFONLAR (kafenin ağında)
+- Adres: http://<bu bilgisayarın IP adresi>:4000
+  Yönetim › Ağ ve uzaktan erişim sayfasında adres ve karekod yazar; tabletin kamerasıyla okutun.
+- Modemde bu bilgisayara sabit IP verin (DHCP rezervasyonu); yoksa adres zamanla değişir.
+
+DIŞARIDAN (İNTERNETTEN) CANLI ERİŞİM
+- Bu bilgisayara ve telefonunuza Tailscale kurun, ikisinde de aynı hesapla girin:
+  https://tailscale.com/download
+- Telefonda Yönetim › Ağ ve uzaktan erişim'deki "Uzaktan" adresini açın. Masalar, adisyonlar, kasa ve
+  patron paneli kafedeki ekranlarla aynı anda güncellenir.
+- LafPOS'u modemden port açarak internete açmayın.
+
+AYARLAR (site, lafmaliyet, yazarkasa POS)
+- Başlat › LafPOS › LafPOS ayarları: ayarlar.env Not Defteri'nde açılır. Kaydedin (Ctrl+S); sunucu birkaç
+  saniye içinde yeni ayarlarla kendiliğinden yeniden başlar.
+- Sunucu günlüğü: Başlat › LafPOS › Sunucu günlüğü.
+
+GÜNCELLEME
+- Yeni LafPOS-Kurulum dosyasını çalıştırın. Önce veritabanının bir kopyası alınır
+  (C:\ProgramData\LafPOS\backups\lafpos-guncelleme-...), sonra sunucu yeni sürümle başlar.
+
+KURULUM AÇILMIYORSA
+- "Bilgisayarınız korundu" uyarısında Ek bilgi › Yine de çalıştır.
+- Windows 11'de Akıllı Uygulama Denetimi (Windows Güvenliği › Uygulama ve tarayıcı denetimi) açıksa imzasız
+  dosyalar engellenir; kapatmak ya da imzalı sürüm beklemek gerekir.
+
+KALDIRMA
+- Ayarlar › Uygulamalar › LafPOS › Kaldır. Veriler ve yedekler silinmez.
+
+DAHA ÖNCE GIT İLE KURDUYSANIZ
+- Önce eski otomatik başlatmayı kaldırın (scripts\kasa\windows\kur.ps1 -Kaldir) ve bilgisayarı yeniden
+  başlatın.
+- C:\ProgramData\LafPOS klasörünü oluşturup eski data klasöründeki lafpos.db, lafpos.db-wal (varsa),
+  secret.key ve uploads'ı içine kopyalayın, sonra bu kurulumu çalıştırın. lafpos.db-wal son satışları taşır,
+  onsuz kopya eksik kalabilir; secret.key olmadan eski PIN'ler çalışmaz.

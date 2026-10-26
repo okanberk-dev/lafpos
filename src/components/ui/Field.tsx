@@ -2,7 +2,7 @@ import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAt
 import { cn } from '@/lib/cn';
 
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-60 [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)] disabled:opacity-60 [[data-area=admin]_&]:text-sm';
 
 export function Label({ children, hint, className }: { children: ReactNode; hint?: ReactNode; className?: string }) {
   return (
@@ -18,7 +18,7 @@ export function Field({ label, hint, error, children, className }: { label?: Rea
     <label className={cn('block', className)}>
       {label && <Label hint={hint}>{label}</Label>}
       {children}
-      {error && <span className="mt-1 block text-xs text-burgundy-500">{error}</span>}
+      {error && <span className="mt-1 block text-xs text-danger-500">{error}</span>}
     </label>
   );
 }
@@ -72,16 +72,16 @@ export function Segmented<T extends string>({
   size?: 'sm' | 'md';
 }) {
   return (
-    <div className={cn('inline-flex rounded-xl border border-line bg-surface-2 p-1', className)}>
+    <div className={cn('inline-flex rounded-xl bg-surface-3 p-1', className)}>
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
           className={cn(
-            'rounded-lg font-medium transition pointer-coarse:min-h-11',
+            'rounded-md font-medium transition pointer-coarse:min-h-11',
             size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
-            value === o.value ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink',
+            value === o.value ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08)]' : 'text-muted hover:text-ink',
           )}
         >
           {o.label}

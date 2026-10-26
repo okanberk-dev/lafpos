@@ -51,13 +51,13 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
           <li key={p.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{p.name}</span>
-              {!p.active && <span className="text-xs font-semibold text-burgundy-500">Tükendi</span>}
+              {!p.active && <span className="text-xs font-semibold text-danger-500">Tükendi</span>}
             </span>
             <button
               type="button"
               disabled={busy === p.id}
               onClick={() => set(p.id, p.name, !p.active)}
-              className={cn('h-11 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50', p.active ? 'border border-burgundy-300 text-burgundy-600 dark:text-burgundy-200' : 'bg-forest-600 text-white')}
+              className={cn('h-11 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50', p.active ? 'border border-danger-200 text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)]' : 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)]')}
             >
               {p.active ? 'Tükendi' : 'Satışa aç'}
             </button>

@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * Renk değerlerinin erişilebilirliği (WCAG 2.2): okunan metin zeminde en az 4.5:1, alan kenarı 3:1.
- * Değerler src/index.css'ten okunur; kasa (açık, koyu) ve yönetim paneli (Innex açık, LafPOS koyu) ayrı.
+ * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı Innex değerlerini kullanır
+ * (açık `:root`, koyu `.dark`); kasa ekranlarının adları (`--bg`, `--ink`...) Innex'e bağlanır.
  * Test düşerse değeri düzelt, eşiği gevşetme.
  */
 const css = readFileSync(join(__dirname, '../src/index.css'), 'utf8');
@@ -45,10 +46,10 @@ function resolver(...layers: Record<string, string>[]) {
 
 const posLight = resolver(block(':root'));
 const posDark = resolver(block('.dark'), block(':root'));
-const adminLight = resolver(block(":root[data-area='admin']"), block(':root'));
-const adminDark = resolver(block(":root.dark[data-area='admin']"), block(":root[data-area='admin']"), block(':root'));
+const adminLight = posLight;
+const adminDark = posDark;
 
-describe('kasa ekranları', () => {
+describe('kasa ekranları (Innex)', () => {
   for (const [name, get] of [
     ['açık', posLight],
     ['koyu', posDark],
@@ -99,6 +100,13 @@ describe('yönetim paneli (Innex)', () => {
       expect(contrast(get('admin-border-field'), get('admin-surface'))).toBeGreaterThanOrEqual(3);
     });
   }
+
+  it('kasa ekranları da Innex: adlar Innex değerlerine bağlı', () => {
+    expect(posLight('bg')).toBe('#edeff1');
+    expect(posLight('primary')).toBe('#2f58f7');
+    expect(posLight('ink')).toBe('#0c0e1b');
+    expect(css).not.toMatch(/poppins/i);
+  });
 
   it('laffogato paneliyle aynı açık değerler (docs/ADMIN-INNEX.md)', () => {
     expect(adminLight('admin-bg')).toBe('#edeff1');

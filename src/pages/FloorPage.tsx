@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Mic2, Plus, Receipt, ShoppingBag, Store } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { tlCompact } from '@shared/money';
+import { tlShort } from '@shared/money';
 import { fmtElapsed } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, OrderDTO, TableDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -58,54 +58,89 @@ export default function FloorPage() {
   if (floor.isLoading) return <PageLoading />;
   const others = floor.data?.others ?? [];
   const reservations = floor.data?.reservations ?? [];
+  const busyTables = tables.filter((t) => (floor.data?.tables[t.id]?.length ?? 0) > 0);
+  const billed = busyTables.filter((t) => floor.data?.tables[t.id]?.some((o) => o.billPrintedAt)).length;
+  const summary = [`${tables.length} masa`, `${busyTables.length} dolu`, billed ? `${billed} hesap bekliyor` : null].filter(Boolean).join(' · ');
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-3">
-          <div className="no-scrollbar flex w-full gap-1.5 overflow-x-auto xl:w-auto xl:flex-1">
-            {boot.sections.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setSectionId(s.id)}
-                className={cn(
-                  'flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition pointer-coarse:min-h-11',
-                  s.id === section?.id ? 'bg-forest-700 text-cream' : 'bg-surface-2 text-ink-2 hover:bg-surface-3',
-                )}
-              >
-                {s.name}
-                {!!counts.get(s.id) && <span className={cn('rounded-full px-1.5 text-xs', s.id === section?.id ? 'bg-cream/20' : 'bg-forest-100 text-forest-700')}>{counts.get(s.id)}</span>}
-              </button>
-            ))}
+    // Innex: gri zemin üstünde iki beyaz kart; telefonda kartlar kenara yapışmasın diye zeminde 8 px
+    <div className="flex h-full flex-col gap-2 p-2 md:p-0 lg:flex-row">
+      <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface">
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3">
+          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
+            <h1 className="text-lg font-semibold tracking-[-0.01em]">{section?.name ?? 'Masalar'}</h1>
+            <p className="text-[13px] text-muted">{summary}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 xl:flex-nowrap">
+          <div className="flex flex-wrap items-center gap-2">
             {wide && (
-              <div className="flex rounded-xl border border-line bg-surface-2 p-1">
-                <button aria-label="Plan görünümü" aria-pressed={view === 'plan'} onClick={() => setView('plan')} className={cn('grid size-7 place-items-center rounded-lg pointer-coarse:size-11', view === 'plan' && 'bg-surface shadow-sm')}>
-                  <LayoutGrid className="size-4" />
-                </button>
-                <button aria-label="Liste görünümü" aria-pressed={view === 'liste'} onClick={() => setView('liste')} className={cn('grid size-7 place-items-center rounded-lg pointer-coarse:size-11', view === 'liste' && 'bg-surface shadow-sm')}>
-                  <List className="size-4" />
-                </button>
+              <div role="radiogroup" aria-label="Görünüm" className="inline-flex rounded-lg bg-surface-3 p-0.5">
+                {(
+                  [
+                    ['plan', 'Plan görünümü', LayoutGrid],
+                    ['liste', 'Liste görünümü', List],
+                  ] as const
+                ).map(([v, label, Icon]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={view === v}
+                    aria-label={label}
+                    title={label}
+                    onClick={() => setView(v)}
+                    className={cn(
+                      'grid size-9 place-items-center rounded-md transition-colors pointer-coarse:size-11',
+                      view === v ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08),0_0_0_1px_rgb(12_14_27/0.04)]' : 'text-muted hover:text-ink',
+                    )}
+                  >
+                    <Icon className="size-4" strokeWidth={1.75} />
+                  </button>
+                ))}
               </div>
             )}
-            <Button variant="primary" icon={<Store className="size-4" />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
-              Tezgâh satışı
-            </Button>
-            <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="hidden sm:inline-flex">
+            <Button icon={<ShoppingBag className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('gelal')} className="hidden sm:inline-flex">
               Gel-al
             </Button>
             {can('paket.yonet') && (
-              <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="hidden sm:inline-flex">
+              <Button icon={<Bike className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('paket')} className="hidden sm:inline-flex">
                 Paket
               </Button>
             )}
+            <Button variant="primary" icon={<Store className="size-4" strokeWidth={1.75} />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
+              Tezgâh satışı
+            </Button>
           </div>
-        </div>
+        </header>
+
+        {boot.sections.length > 1 && (
+          <div role="tablist" aria-label="Bölümler" className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 pt-3">
+            {boot.sections.map((s) => {
+              const on = s.id === section?.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setSectionId(s.id)}
+                  className={cn(
+                    'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border bg-surface px-3 text-sm whitespace-nowrap transition-[color,border-color] pointer-fine:min-h-9',
+                    on ? 'border-ink font-semibold text-ink' : 'border-line font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
+                  )}
+                >
+                  {s.name}
+                  {!!counts.get(s.id) && (
+                    <span className={cn('tabular min-w-5 rounded-md px-1.5 py-px text-center text-xs font-medium', on ? 'bg-ink text-surface' : 'bg-surface-3 text-ink-2')}>{counts.get(s.id)}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <div className="scroll-thin min-h-0 flex-1 overflow-auto p-4">
           {effectiveView === 'plan' ? (
-            <div className="relative mx-auto aspect-[16/10] w-full max-w-6xl rounded-3xl border border-line bg-[radial-gradient(circle_at_1px_1px,var(--line)_1px,transparent_0)] bg-[length:24px_24px] bg-surface/60">
+            <div className="relative mx-auto aspect-[16/10] w-full max-w-6xl">
               {tables.map((t) => (
                 <TableTile
                   key={t.id}
@@ -120,55 +155,56 @@ export default function FloorPage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
               {tables.map((t) => (
-                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservations.find((r) => r.tableId === t.id)} now={now} onClick={() => tapTable(t)} className="h-32" />
+                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservations.find((r) => r.tableId === t.id)} now={now} onClick={() => tapTable(t)} className="h-28" />
               ))}
             </div>
           )}
-          <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-muted">
-            <Legend className="border-2 border-dashed border-line-strong bg-surface" label="Boş" />
-            <Legend className="bg-forest-600" label="Dolu" />
-            <Legend className="bg-brass-500" label="Hesap istendi" />
-            <Legend className="bg-rose-500" label="Kısmen ödendi" />
-            <Legend className="border-2 border-rose-500 bg-surface" label="Rezerve" />
-          </div>
         </div>
-      </div>
+        <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-4 py-2.5 text-xs text-muted">
+          <Legend className="border border-line bg-surface" label="Boş" />
+          <Legend className="border border-brand-200 bg-brand-50" label="Dolu" />
+          <Legend className="border border-warn-200 bg-warn-100" label="Hesap istendi" />
+          <Legend className="border border-rose-300 bg-rose-100" label="Kısmen ödendi" />
+          <Legend className="border border-line bg-surface" dot="bg-brand-600" label="Rezerve" />
+        </footer>
+      </section>
 
-      <aside className="flex max-h-[40%] flex-col border-t border-line bg-surface lg:max-h-none lg:w-80 lg:border-l lg:border-t-0">
-        <div className="flex items-center justify-between px-4 py-3">
-          <h2 className="font-semibold">Masasız siparişler</h2>
-          <span className="text-sm text-muted">{others.length}</span>
+      <aside className="flex max-h-[40%] flex-col rounded-2xl border border-line bg-surface lg:max-h-none lg:w-80">
+        <div className="flex min-h-12 items-center gap-2 border-b border-[var(--admin-divider)] px-4 py-2.5">
+          <h2 className="flex-1 text-[15px] font-semibold">Masasız siparişler</h2>
+          <span className="tabular min-w-5 rounded-md bg-surface-3 px-1.5 py-px text-center text-xs font-medium text-ink-2">{others.length}</span>
         </div>
-        <div className="scroll-thin flex-1 space-y-2 overflow-y-auto px-3 pb-3">
-          {others.length === 0 && <p className="px-2 py-6 text-center text-sm text-muted">Açık tezgâh, gel-al, paket ya da online sipariş yok</p>}
+        <div className="scroll-thin flex-1 overflow-y-auto p-2">
+          {others.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">Açık tezgâh, gel-al, paket ya da online sipariş yok</p>}
           {others.map((o) => (
-            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface p-3 text-left hover:bg-surface-2">
-              <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl', o.source === 'laffogato' ? 'bg-rose-100 text-rose-700' : 'bg-forest-100 text-forest-700')}>
-                {o.source === 'laffogato' ? <Globe className="size-5" /> : o.type === 'paket' ? <Bike className="size-5" /> : o.type === 'gelal' ? <ShoppingBag className="size-5" /> : <Store className="size-5" />}
+            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-surface-2">
+              <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
+                {o.source === 'laffogato' ? <Globe strokeWidth={1.75} /> : o.type === 'paket' ? <Bike strokeWidth={1.75} /> : o.type === 'gelal' ? <ShoppingBag strokeWidth={1.75} /> : <Store strokeWidth={1.75} />}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{o.label}</span>
+                <span className="block truncate text-sm font-medium">{o.label}</span>
                 <span className="text-xs text-muted">
                   #{o.no} · {fmtElapsed(o.openedAt, now)} · {o.itemCount} ürün
                 </span>
               </span>
-              <span className="tabular text-right font-semibold">
-                {tlCompact(o.total)} ₺{o.pendingKitchen > 0 && <span className="block text-xs font-normal text-brass-600">{o.pendingKitchen} hazırlanıyor</span>}
+              <span className="tabular text-right text-sm font-semibold">
+                {tlShort(o.total)}
+                {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-[var(--admin-warning)]">{o.pendingKitchen} hazırlanıyor</span>}
               </span>
             </button>
           ))}
           {reservations.length > 0 && (
-            <div className="pt-3">
-              <h3 className="flex items-center gap-1.5 px-1 pb-2 text-sm font-semibold">
-                <CalendarClock className="size-4" /> Bugünkü rezervasyonlar
+            <div className="mt-2 border-t border-[var(--admin-divider)] px-2 pt-3">
+              <h3 className="flex items-center gap-1.5 pb-1.5 text-xs font-medium text-muted">
+                <CalendarClock className="size-3.5" strokeWidth={1.75} /> Bugünkü rezervasyonlar
               </h3>
               {reservations.map((r) => (
-                <div key={r.id} className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm">
+                <div key={r.id} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-sm">
                   <span className="tabular font-semibold">{r.time}</span>
                   <span className="flex-1 truncate">{r.name}</span>
-                  <span className="text-muted">{r.guests} kişi</span>
+                  <span className="text-xs text-muted">{r.guests} kişi</span>
                 </div>
               ))}
             </div>
@@ -179,11 +215,11 @@ export default function FloorPage() {
       <Modal open={!!choose} onClose={() => setChoose(null)} title={choose ? `${choose.table.name}: ayrı hesaplar` : ''} size="sm">
         <div className="space-y-2 p-4">
           {choose?.orders.map((o, i) => (
-            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center justify-between rounded-2xl border border-line p-4 hover:bg-surface-2">
-              <span className="font-medium">
-                Hesap {i + 1} <span className="text-sm text-muted">#{o.no}</span>
+            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between rounded-xl border border-line px-4 transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2">
+              <span className="text-sm font-medium">
+                Hesap {i + 1} <span className="text-muted">#{o.no}</span>
               </span>
-              <span className="tabular font-semibold">{tlCompact(o.total)} ₺</span>
+              <span className="tabular font-semibold">{tlShort(o.total)}</span>
             </button>
           ))}
           <Button block icon={<Plus className="size-4" />} onClick={() => choose && open.mutate({ type: 'masa', tableId: choose.table.id, newCheck: true })}>
@@ -197,15 +233,19 @@ export default function FloorPage() {
   );
 }
 
-function Legend({ className, label }: { className: string; label: string }) {
+function Legend({ className, dot, label }: { className: string; dot?: string; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={cn('size-3 rounded', className)} />
+      <span className={cn('relative size-3 rounded-[4px]', className)}>{dot && <span className={cn('absolute -right-0.5 -top-0.5 size-1.5 rounded-full', dot)} />}</span>
       {label}
     </span>
   );
 }
 
+/**
+ * Masa: durum dolguyla değil açık tonla (Innex durum rozeti gibi). Boş beyaz, dolu mavi ton, hesap istendi amber,
+ * kısmen ödendi pembe; bara gitmiş ve hazır kalemler küçük rozet, hazır olan yeşil ve dikkat çeker.
+ */
 function TableTile({
   table,
   orders,
@@ -241,47 +281,47 @@ function TableTile({
       onClick={onClick}
       style={style}
       className={cn(
-        '@container group flex flex-col justify-between overflow-hidden p-2 text-left transition active:scale-[0.97]',
-        round ? 'items-center rounded-[999px] text-center' : 'rounded-2xl',
-        tone === 'free' && (reservation ? 'border-2 border-rose-500 bg-surface' : 'border-2 border-dashed border-line-strong bg-surface hover:border-forest-400'),
-        tone === 'busy' && 'bg-forest-600 text-white shadow-[var(--shadow-card)]',
-        tone === 'billed' && 'bg-brass-500 text-espresso shadow-[var(--shadow-card)]',
-        tone === 'partial' && 'bg-rose-500 text-white shadow-[var(--shadow-card)]',
+        '@container group flex flex-col justify-between overflow-hidden border p-2.5 text-left transition-[border-color,background-color,transform] active:scale-[0.98]',
+        round ? 'items-center rounded-[999px] text-center' : 'rounded-xl',
+        tone === 'free' && 'border-line bg-surface hover:border-[var(--admin-border-field)]',
+        tone === 'busy' && 'border-brand-200 bg-brand-50 hover:border-brand-300 dark:border-brand-800 dark:bg-[var(--admin-primary-soft)]',
+        tone === 'billed' && 'border-warn-200 bg-warn-100 hover:border-warn-300 dark:border-warn-800 dark:bg-[var(--admin-warning-soft)]',
+        tone === 'partial' && 'border-rose-300 bg-rose-100 hover:border-rose-500 dark:border-transparent dark:bg-[var(--admin-hue-rose-soft)]',
         className,
       )}
     >
       <div className={cn('flex w-full items-start gap-1', round && 'justify-center')}>
-        <span className="truncate text-sm font-semibold leading-tight @min-[6rem]:text-base">{table.name}</span>
+        <span className="truncate text-sm font-semibold leading-tight @min-[6rem]:text-[15px]">{table.name}</span>
         {!round && <span className="flex-1" />}
-        <span className="hidden gap-1 @min-[6rem]:flex">
-          {billed && <Receipt className="size-4 shrink-0 opacity-80" />}
-          {online && <Globe className="size-4 shrink-0 opacity-80" />}
-          {table.kind === 'oda' && <Mic2 className="size-4 shrink-0 opacity-80" />}
+        <span className="hidden gap-1 text-ink-2 @min-[6rem]:flex">
+          {billed && <Receipt className="size-4 shrink-0" strokeWidth={1.75} />}
+          {online && <Globe className="size-4 shrink-0" strokeWidth={1.75} />}
+          {table.kind === 'oda' && <Mic2 className="size-4 shrink-0" strokeWidth={1.75} />}
         </span>
       </div>
       {busy ? (
         <div className={cn('w-full', round && 'text-center')}>
-          <div className="tabular text-sm font-semibold leading-none @min-[6rem]:text-lg">{tlCompact(total)} ₺</div>
-          <div className={cn('mt-1 hidden items-center gap-1.5 text-[11px] opacity-90 @min-[6.5rem]:flex', round && 'justify-center')}>
-            <span className="whitespace-nowrap">{room ? `Oda ${fmtElapsed(room, now)}` : fmtElapsed(openedAt, now)}</span>
+          <div className="tabular text-sm font-bold leading-none @min-[6rem]:text-lg">{tlShort(total)}</div>
+          <div className={cn('mt-1 hidden items-center gap-1.5 text-xs text-ink-2 @min-[6.5rem]:flex', round && 'justify-center')}>
+            <span className="tabular whitespace-nowrap">{room ? `Oda ${fmtElapsed(room, now)}` : fmtElapsed(openedAt, now)}</span>
             {orders[0]?.waiterName && !round && <span className="truncate">· {orders[0].waiterName}</span>}
           </div>
           {(pending > 0 || ready > 0) && (
-            <div className={cn('mt-1 flex gap-1 text-[11px] font-semibold', round && 'justify-center')}>
+            <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
               {pending > 0 && (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-black/20 px-1.5 py-0.5">
-                  <ChefHat className="size-3" />
+                <span className="tabular inline-flex items-center gap-0.5 rounded-md bg-surface/80 px-1.5 py-0.5 text-ink-2 dark:bg-surface-3">
+                  <ChefHat className="size-3" strokeWidth={1.75} />
                   {pending}
                 </span>
               )}
-              {ready > 0 && <span className="animate-ring rounded-full bg-white px-1.5 py-0.5 text-forest-700">{ready} hazır</span>}
+              {ready > 0 && <span className="animate-ring tabular rounded-md bg-success-600 px-1.5 py-0.5 text-white">{ready} hazır</span>}
             </div>
           )}
         </div>
       ) : reservation ? (
-        <div className="w-full text-xs text-rose-700">
-          <div className="font-semibold">{reservation.time}</div>
-          <div className="hidden truncate @min-[6rem]:block">{reservation.name}</div>
+        <div className="w-full">
+          <span className="tabular inline-flex rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-primary)]">{reservation.time}</span>
+          <div className="mt-0.5 hidden truncate text-xs text-ink-2 @min-[6rem]:block">{reservation.name}</div>
         </div>
       ) : (
         <div className="hidden text-xs text-muted @min-[5rem]:block">{table.kind === 'oda' ? 'Oda · saatlik' : `${table.seats} kişilik`}</div>

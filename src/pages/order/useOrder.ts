@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import type { OrderDTO } from '@shared/types';
-import { errorMessage, get } from '@/lib/api';
+import { ApiError, errorMessage, get } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { toast } from '@/lib/toast';
 
@@ -29,10 +29,12 @@ export function useOrder(id: string) {
         return res;
       } catch (e) {
         toast.err(errorMessage(e));
+        // Çakışma: adisyon başka cihazda değişmiş (pay, kalem, durum); ekran güncel hâli göstersin
+        if (e instanceof ApiError && e.status === 409) void qc.invalidateQueries({ queryKey: ['order', id] });
         return null;
       }
     },
-    [qc, setOrder],
+    [qc, setOrder, id],
   );
 
   return { ...query, order: query.data, act, setOrder };

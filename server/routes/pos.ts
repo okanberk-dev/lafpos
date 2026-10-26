@@ -201,12 +201,23 @@ posRoutes.post('/orders/:id/payments', async (c) => {
       items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).nullish(),
       customerId: z.string().nullish(),
       note: z.string().max(200).nullish(),
+      share: z.boolean().optional(),
+      shareNo: z.number().int().min(1).max(30).optional(),
       ...approver,
     }),
   );
   const actor = actorFrom(c, input.approverPin);
   const res = write((t, fx) => orders.addPayment(t, actor, fx, c.req.param('id'), input));
-  return c.json({ order: dto(c, res.order.id), closed: res.closed, change: res.change });
+  // Kaydedilen tutar ve pay da döner: kör kasada kapanan adisyonun ödeme dökümü gizlidir, ekran bunu gösterir
+  return c.json({ order: dto(c, res.order.id), closed: res.closed, change: res.change, amount: res.amount, share: res.share });
+});
+
+/** Hesap paylaşımı: kişi sayısı (2-30) ya da kaldırmak için null */
+posRoutes.put('/orders/:id/split', async (c) => {
+  const input = await body(c, z.object({ people: z.number().int().nullable() }));
+  const actor = actorFrom(c);
+  write((t, fx) => orders.setSplit(t, actor, fx, c.req.param('id'), input.people));
+  return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/payments/:paymentId/refund', async (c) => {

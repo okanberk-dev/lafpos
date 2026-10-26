@@ -1,13 +1,5 @@
 @import 'tailwindcss';
-@import '@fontsource/poppins/latin-400.css';
-@import '@fontsource/poppins/latin-ext-400.css';
-@import '@fontsource/poppins/latin-500.css';
-@import '@fontsource/poppins/latin-ext-500.css';
-@import '@fontsource/poppins/latin-600.css';
-@import '@fontsource/poppins/latin-ext-600.css';
-@import '@fontsource/poppins/latin-700.css';
-@import '@fontsource/poppins/latin-ext-700.css';
-/* Yönetim paneli yazısı (Innex, docs/ADMIN-INNEX.md §1.4): Inter, rakamlar tablo hizalı */
+/* Inter (Innex, docs/ADMIN-INNEX.md §1.4): kasa ekranları ve yönetim paneli aynı yazıyla, rakamlar tablo hizalı */
 @import '@fontsource/inter/latin-400.css';
 @import '@fontsource/inter/latin-ext-400.css';
 @import '@fontsource/inter/latin-500.css';
@@ -19,114 +11,83 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* L'Affogato renkleri: orman yeşili #1E4031, bordo #6B1A2B, krem #FFF2E4, pembe #F59BBE,
-   fıstık #9FCB82, espresso #2E1A12, pirinç #C9983F */
+/*
+ * LafPOS tek tasarım dilinde: Innex (docs/ADMIN-INNEX.md, DESIGN.md). Gri zemin üstünde beyaz kartlar, 1 px
+ * kenarlık, 12 px köşe, mavi birincil. Kasa ekranları ve yönetim paneli aynı değerleri kullanır; panel yalnız
+ * daha sık (fareyle 36 px düğme). Durum ölçekleri anlamıyla adlandırılır:
+ *   brand   mavi: birincil eylem, seçim, dolu masa
+ *   success yeşil: hazır, ödendi, canlı bağlantı
+ *   warn    amber: hesap istendi, geciken sipariş
+ *   danger  kırmızı: iptal, alarm, hata
+ *   rose    pembe: kısmen ödendi
+ * L'Affogato'nun kendisi logoda (L'Af).
+ */
 @theme {
-  --font-sans: 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --color-forest-50: #eef5f1;
-  --color-forest-100: #d5e7dd;
-  --color-forest-200: #abcfbb;
-  --color-forest-300: #7db497;
-  --color-forest-400: #4f9472;
-  --color-forest-500: #2f7354;
-  --color-forest-600: #245c43;
-  --color-forest-700: #1e4031;
-  --color-forest-800: #152e23;
-  --color-forest-900: #0e2218;
+  --color-brand-50: #f5f7ff;
+  --color-brand-100: #ecf1ff;
+  --color-brand-200: #d9e2ff;
+  --color-brand-300: #a9bbff;
+  --color-brand-400: #7b93ff;
+  --color-brand-500: #3f63f5;
+  --color-brand-600: #2f58f7;
+  --color-brand-700: #2449e0;
+  --color-brand-800: #1d2f8c;
+  --color-brand-900: #151f55;
 
-  --color-burgundy-50: #fbeff1;
-  --color-burgundy-100: #f4d5db;
-  --color-burgundy-200: #e8abb7;
-  --color-burgundy-300: #d67a8c;
-  --color-burgundy-400: #b94a62;
-  --color-burgundy-500: #8f2a40;
-  --color-burgundy-600: #6b1a2b;
-  --color-burgundy-700: #561522;
-  --color-burgundy-800: #40101a;
+  --color-success-50: #f1fcf5;
+  --color-success-100: #e1faed;
+  --color-success-200: #c1f0d3;
+  --color-success-300: #7fd8a3;
+  --color-success-400: #3cb86e;
+  --color-success-500: #178a47;
+  --color-success-600: #15803d;
+  --color-success-700: #166534;
+  --color-success-800: #13301f;
 
-  --color-brass-50: #fbf6e8;
-  --color-brass-100: #f7e2a8;
-  --color-brass-200: #efd38b;
-  --color-brass-300: #e8c877;
-  --color-brass-400: #d9ae55;
-  --color-brass-500: #c9983f;
-  --color-brass-600: #a87c2e;
-  --color-brass-700: #866224;
+  --color-warn-50: #fffaf3;
+  --color-warn-100: #fff2e6;
+  --color-warn-200: #fde2c3;
+  --color-warn-300: #f8c27e;
+  --color-warn-400: #f2a23f;
+  --color-warn-500: #e8891c;
+  --color-warn-600: #b45309;
+  --color-warn-700: #92400e;
+  --color-warn-800: #33260f;
 
-  --color-pistachio-100: #e6f2dd;
-  --color-pistachio-300: #c3e0ae;
-  --color-pistachio-500: #9fcb82;
-  --color-pistachio-700: #5e8f45;
+  --color-danger-50: #fff6f7;
+  --color-danger-100: #feebed;
+  --color-danger-200: #fbd2d7;
+  --color-danger-300: #f4a3ad;
+  --color-danger-400: #ec6b7a;
+  --color-danger-500: #dc2626;
+  --color-danger-600: #b42318;
+  --color-danger-700: #912018;
+  --color-danger-800: #3a1d22;
 
-  --color-rose-100: #fde6ef;
-  --color-rose-300: #f9c3d8;
-  --color-rose-500: #f59bbe;
-  --color-rose-700: #c9638a;
+  --color-rose-50: #fff6f8;
+  --color-rose-100: #feeff1;
+  --color-rose-300: #f7b3c4;
+  --color-rose-500: #e0557f;
+  --color-rose-700: #c0264a;
 
-  --color-espresso: #2e1a12;
-  --color-cream: #fff2e4;
+  --color-night: #0c0e1b;
+  --color-paper: #ffffff;
 
-  --radius-xl2: 1.125rem;
-  --shadow-card: 0 1px 2px rgb(46 26 18 / 0.06), 0 4px 16px rgb(46 26 18 / 0.06);
-  --shadow-pop: 0 10px 40px rgb(46 26 18 / 0.22);
-}
-
-/* Yüzey ve metin renkleri temaya göre değişir (açık: krem, koyu: espresso). */
-:root {
-  --bg: #f7f1ea;
-  --surface: #ffffff;
-  --surface-2: #f3ebe2;
-  --surface-3: #eae0d5;
-  --ink: #2e1a12;
-  --ink-2: #5a4a40;
-  /* Küçük yardımcı metin de okunsun: zeminde ve yüzeyde en az 4.5:1 (tests/design-tokens.test.ts) */
-  --muted: #75665b;
-  --line: #e6dbcf;
-  --line-strong: #d4c5b6;
-  --primary: #1e4031;
-  --primary-ink: #fff8ef;
-  --chart-accent: #178a56;
-  --chart-context: #b3a597;
-  --chart-grid: #ece3d9;
-  --chart-track: #efe7de;
-  color-scheme: light;
-}
-
-.dark {
-  --bg: #15100d;
-  --surface: #201814;
-  --surface-2: #2a201b;
-  --surface-3: #352a23;
-  --ink: #f7efe7;
-  --ink-2: #d9cabd;
-  --muted: #a8988b;
-  --line: #3a2f28;
-  --line-strong: #4b3d34;
-  --primary: #4f9472;
-  --primary-ink: #0e2218;
-  --chart-accent: #2f9e6a;
-  --chart-context: #6d5f55;
-  --chart-grid: #2f2620;
-  --chart-track: #2c231e;
-  color-scheme: dark;
-}
-
-/*
- * Yönetim paneli (Innex; docs/ADMIN-INNEX.md, DESIGN.md "Yönetim paneli"). <html data-area="admin"> iken
- * geçerli (AdminShell). Adlar laffogato'nun panelindekiyle aynı (src/app/admin/layout.tsx), değerler de
- * aynı: gri zemin üstünde beyaz kartlar, Inter, mavi birincil. LafPOS'un ortak değerleri (--bg, --ink...)
- * panelde bunlara döner; düğme, alan ve pencere gibi ortak bileşenler de Innex görünür.
- */
-:root[data-area='admin'] {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Innex köşeleri: düğme ve alan 8, kart 12 (sınıf adları aynı kaldı: rounded-xl düğme, rounded-2xl kart) */
   --radius-xl: 0.5rem;
   --radius-2xl: 0.75rem;
   --radius-3xl: 0.75rem;
+  --radius-xl2: 0.75rem;
+  /* Kartta gölge yok, ayrımı 1 px kenarlık yapar; gölge yalnız yüzen katmanda (pencere, menü) */
   --shadow-card: none;
   --shadow-pop: 0 12px 32px rgb(12 14 27 / 0.12), 0 0 0 1px rgb(12 14 27 / 0.04);
+}
 
+/* Innex açık: değerler laffogato'nun paneliyle aynı (src/app/admin/layout.tsx) */
+:root {
   --admin-bg: #edeff1;
   --admin-surface: #ffffff;
   --admin-surface-2: #f9fbfc;
@@ -139,6 +100,8 @@
   --admin-text-soft: #3d4048;
   --admin-text-mute: #616367;
   --admin-primary: #2f58f7;
+  /* L'Af logosundaki çekirdek: açık zeminde koyu pirinç (açık pirinç 1.5:1 kalır), koyuda uygulama ikonunun pirinci */
+  --laf-bean: #b08a2e;
   --admin-primary-hover: #2449e0;
   --admin-on-primary: #ffffff;
   --admin-primary-soft: #ecf1ff;
@@ -183,10 +146,11 @@
   --chart-context: #b4b9c2;
   --chart-grid: #eef0f3;
   --chart-track: var(--admin-panel);
+  color-scheme: light;
 }
 
-/* Koyu panel (LafPOS eklemesi; Innex ve laffogato yalnız açık): aynı roller, gece kafesi için koyu yüzey */
-:root.dark[data-area='admin'] {
+/* Koyu (LafPOS eklemesi; Innex yalnız açık): aynı roller, gece kafesi ve bar ekranı için koyu yüzey */
+.dark {
   --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
   --admin-bg: #0d0f13;
   --admin-surface: #16191f;
@@ -200,6 +164,7 @@
   --admin-text-soft: #c9cdd4;
   --admin-text-mute: #9aa1ac;
   --admin-primary: #7b93ff;
+  --laf-bean: #e8c877;
   --admin-primary-hover: #96a8ff;
   --admin-on-primary: #0b1020;
   --admin-primary-soft: #1d2547;
@@ -230,8 +195,10 @@
   --admin-chart-fill: #1d2547;
   --chart-context: #5b6270;
   --chart-grid: #232832;
+  color-scheme: dark;
 }
 
+/* Yönetim paneli: aynı değerler; yalnız odak rengi ve sıklık (bileşenlerde [data-area=admin]) */
 :root[data-area='admin'] :focus-visible {
   outline-color: var(--admin-primary);
 }
@@ -289,8 +256,16 @@
     font: inherit;
   }
   :focus-visible {
-    outline: 2px solid var(--color-brass-500);
+    outline: 2px solid var(--admin-primary);
     outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--admin-primary-soft);
+    color: var(--admin-text);
+  }
+  /* Innex ikonları ince çizgi (1.75): lucide'nin stroke-width özniteliğini CSS ezer */
+  svg.lucide {
+    stroke-width: 1.75;
   }
 }
 
@@ -315,10 +290,10 @@
 
 @keyframes lp-pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgb(201 152 63 / 0.55);
+    box-shadow: 0 0 0 0 rgb(21 128 61 / 0.45);
   }
   100% {
-    box-shadow: 0 0 0 14px rgb(201 152 63 / 0);
+    box-shadow: 0 0 0 10px rgb(21 128 61 / 0);
   }
 }
 .animate-ring {

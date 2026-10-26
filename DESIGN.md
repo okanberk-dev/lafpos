@@ -1,17 +1,32 @@
 # LafPOS tasarım sistemi
 
-> Ürün bağlamı `PRODUCT.md`'de. İki görünüm var: **kasa ekranları** (L'Affogato'nun renkleri, Poppins) ve
-> **yönetim paneli** (Innex). Değerler `src/index.css`'te; erişilebilirlik oranları
-> `tests/design-tokens.test.ts`'te sabit. Test düşerse değeri düzelt, eşiği gevşetme.
+> Ürün bağlamı `PRODUCT.md`'de. Kasa ekranları da yönetim paneli de **Innex**'te (26 Ekim 2026, operatör:
+> "İnnex skills dosyası gibi olabilir, daha estetik ve modern"). Değerler `src/index.css`'te; erişilebilirlik
+> oranları `tests/design-tokens.test.ts`'te sabit. Test düşerse değeri düzelt, eşiği gevşetme.
 
 ## 1. Kasa ekranları (masalar, adisyon, bar, kasa, patron)
 
-- **Renk:** orman yeşili `#1E4031` birincil, krem zemin `#F7F1EA`, espresso mürekkep `#2E1A12`; durum
-  renkleri pirinç (hesap istendi), bordo (iptal, alarm), pembe (kısmen ödendi). Koyu tema espresso zemin.
-- **Yazı:** Poppins 400-700. Tutarlar tablo rakamıyla (`.tabular`).
-- **Ölçü:** dokunmatik hedef en az 44 px (AGENTS.md kural 8), POS düğmeleri 44-64 px, kart köşesi 16-24 px.
-- **Grafik:** tek seri tek renk (yeşil), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli adım
-  yok, verisi olmayan dönemde eksen değil "Bu dönemde veri yok" çizilir (`src/components/charts.tsx`).
+Yönetimle aynı Innex değerleri (§2 tablosu): gri zemin üstünde beyaz kartlar, 1 px çizgi, köşe 12, gölge yok,
+Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (koyu); ortak adlar (`--bg`, `--ink`,
+`--primary`...) onlara çözülür.
+
+- **Yerleşim:** tablet ve bilgisayarda 84 px beyaz ikon rayı, yanında ekranın kendi kartları (pencereye 8 px);
+  telefonda üst şerit ve alt sekme çubuğu. Adisyon iki kart: ürünler | hesap.
+- **Durum renkleri** (Tailwind ölçekleri `brand` mavi, `success`, `warn`, `danger`, `rose`): masa boş beyaz,
+  dolu açık mavi, hesap istendi amber, kısmen ödendi pembe; bar ekranında hazır yeşil halka, bekleyen fiş
+  ayardaki dakikalarda amber sonra kırmızı. Renk durumu tek başına taşımaz, yanında yazı ya da ikon olur.
+- **Logo:** L'Af, laffogato.net ve uygulama ikonuyla aynı vektör (`src/components/LafMark.tsx`): harfler
+  yazının rengi, çekirdek pirinç (açık zeminde `#B08A2E`, koyuda ve gece karosunda `#E8C877`). Yazı tipine
+  bağlı değil, Didot'u olmayan Windows ve Android'de de aynı. Favicon, PWA ikonları ve Windows simgesi sitenin
+  uygulama ikonu (yeşil kare, krem harfler).
+- **Yazı:** Inter 400-700; tutarlar tablo rakamıyla (`.tabular`), `₺1.250` biçiminde (`tlShort`). İkon
+  çizgisi 1.75.
+- **Ölçü:** dokunmatik hedef en az 44 px (AGENTS.md kural 8), POS düğmeleri 44-64 px.
+- **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş (hesap N
+  kişiye eşit bölünür, paylar sırayla ve istenen yöntemle alınır; pay tutarını sunucu hesaplar,
+  `shared/order-calc.ts` `splitState`). Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme.
+- **Grafik:** tek seri tek renk (birincil mavi), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli
+  adım yok, verisi olmayan dönemde eksen değil "Bu dönemde veri yok" çizilir (`src/components/charts.tsx`).
 
 ## 2. Yönetim paneli (Innex)
 
@@ -46,7 +61,7 @@ değerleri (`--bg`, `--ink`, `--primary`...) Innex'e döner, ortak bileşenler d
 - **Sayfalar:** Genel bakış (KPI şeridi: net ciro geçen haftanın aynı günü aynı saatine göre, adisyon,
   açık adisyon, indirim ve ikram, online sipariş; saatlik grafik; en çok satanlar; dikkat isteyenler;
   sistem sağlığı), Ürünler, Seçenekler, Masa planı, Ödeme türleri, Personel ve yetki, Yazarkasa, Site ve
-  lafmaliyet, Ayarlar, Denetim kaydı (zaman çizelgesi), Raporlar (dönem segmenti, rapor sekmeleri, önceki
+  lafmaliyet, Ağ ve uzaktan erişim (yerel adres ve Tailscale karekodu), Ayarlar, Denetim kaydı (zaman çizelgesi), Raporlar (dönem segmenti, rapor sekmeleri, önceki
   dönemle KPI şeridi).
 
 ### LafPOS'un Innex'e ve laffogato'ya göre eklemeleri ("biraz daha geliştir")

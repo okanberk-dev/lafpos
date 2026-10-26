@@ -33,6 +33,8 @@ Bu repoda çalışan her ajan ve geliştirici için.
 10. Commit öncesi: `npm run typecheck && npm test`. Arayüze dokunduysan ayrıca `npm run build && npm run e2e`
     (telefon, tablet, bilgisayar ve koyu temada tarama ve akışlar; 44 px altı hedef ve yatay taşma hata sayılır).
 11. Yeni ekran ya da yönetim bölümü `e2e/run.mjs` `ROUTES`'a eklenir (`tests/ui-rules.test.ts` denetler).
+12. Sunucu çalışırken diskten dosya okuyan yeni kod (göç, anlık görüntü gibi; yolu `ROOT`'tan) Windows paketine
+    de girer: `scripts/kasa/windows/kurulum/derle.mjs`. `npm run kurulum:windows` paketi açıp dener.
 
 ## Git
 

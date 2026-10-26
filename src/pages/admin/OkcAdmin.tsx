@@ -83,7 +83,7 @@ export default function OkcAdmin() {
           />
           {s.provider === 'simulator' && (
             <p className="text-sm text-muted">
-              Gerçek cihaz bağlanana kadar akışı denemek ve personeli eğitmek için. Sepetler <Link to="/cihaz" className="font-semibold text-forest-600 underline">eğitim cihazı</Link> ekranında ödenir
+              Gerçek cihaz bağlanana kadar akışı denemek ve personeli eğitmek için. Sepetler <Link to="/cihaz" className="font-semibold text-brand-600 underline">eğitim cihazı</Link> ekranında ödenir
             </p>
           )}
           {s.provider !== 'kapali' && (
@@ -107,7 +107,7 @@ export default function OkcAdmin() {
         <Card flush title="TokenX Connect (Cloud)">
           <div className="space-y-3 p-4 text-sm">
             <div className="flex items-center gap-2">
-              {s.tokenx.configured ? <CheckCircle2 className="size-5 text-forest-500" /> : <XCircle className="size-5 text-burgundy-500" />}
+              {s.tokenx.configured ? <CheckCircle2 className="size-5 text-brand-500" /> : <XCircle className="size-5 text-danger-500" />}
               {s.tokenx.configured ? `Bilgiler tanımlı · terminal ${s.tokenx.terminalId ?? '—'}${s.tokenx.branchId ? ` · şube ${s.tokenx.branchId}` : ''}` : 'Token bilgileri .env dosyasında eksik'}
             </div>
             {!s.tokenx.configured && (
@@ -144,7 +144,7 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
               {s.tokenx.webhookUrl ? `Webhook adresi: ${s.tokenx.webhookUrl}` : 'Webhook adresi yok: kafedeki sunucu internetten erişilemiyorsa LafPOS sepet durumunu 2,5 sn\'de bir sorgular; sonuç yine gelir'}
             </p>
             {s.lastError && (
-              <p className="rounded-xl bg-burgundy-50 p-2 text-xs text-burgundy-600 dark:bg-burgundy-800/30">
+              <p className="rounded-xl bg-danger-50 p-2 text-xs text-danger-600 dark:bg-danger-800/30">
                 Son hata ({fmtDateTime(s.lastError.at)}): {s.lastError.message}
               </p>
             )}
@@ -189,7 +189,7 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
 
       <Card flush title="Nasıl çalışır">
         <div className="flex gap-3 p-4 text-sm text-ink-2">
-          <MonitorSmartphone className="size-5 shrink-0 text-forest-600" />
+          <MonitorSmartphone className="size-5 shrink-0 text-brand-600" />
           <ol className="list-decimal space-y-1 pl-4">
             <li>Ödeme penceresinde "Hesabı yazarkasaya gönder"e basılır (kalem seçerek bölünmüş hesap da gönderilebilir).</li>
             <li>Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar.</li>

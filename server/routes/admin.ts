@@ -8,6 +8,7 @@ import { type AppEnv, type AuthUser, can, hashPin, isValidPin, requirePermission
 import { Effects } from '../lib/effects';
 import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
+import { networkInfo } from '../lib/network';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
 import { readdirSync, statSync } from 'node:fs';
@@ -633,6 +634,13 @@ adminRoutes.get('/audit', (c) => {
     .all()
     .map((a) => ({ ...a, userName: a.userId ? (names.get(a.userId) ?? null) : null, approverName: a.approverId ? (names.get(a.approverId) ?? null) : null }));
   return c.json(rows);
+});
+
+/** Tablet ve telefonların bağlanacağı adresler (Yönetim › Ağ ve uzaktan erişim); patron uzaktan da açar */
+adminRoutes.get('/network', (c) => {
+  const user = c.get('user');
+  if (!can(user, 'ayar.yonet')) requirePermission(user, 'patron.panel');
+  return c.json(networkInfo());
 });
 
 adminRoutes.get('/backups', (c) => {

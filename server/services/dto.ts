@@ -1,5 +1,5 @@
 import { asc, eq, inArray } from 'drizzle-orm';
-import { calcOrder } from '@shared/order-calc';
+import { calcOrder, splitState } from '@shared/order-calc';
 import type { OrderDTO, OrderItemDTO, PaymentDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 
@@ -58,6 +58,8 @@ export function paymentToDTO(p: PaymentRow, userNames: Map<string, string>): Pay
     createdAt: p.createdAt,
     refundedAt: p.refundedAt,
     refundReason: p.refundReason,
+    shareNo: p.shareNo,
+    shareOf: p.shareOf,
   };
 }
 
@@ -140,6 +142,7 @@ export function orderToDTO(t: Tx | DB, order: OrderRow): OrderDTO {
     cancelReason: order.cancelReason,
     items: items.map(itemToDTO),
     payments: pays.map((p) => paymentToDTO(p, names)),
+    split: order.splitPeople ? splitState(order.splitPeople, pays.filter((p) => !p.refundedAt && p.shareNo != null).length, order.total - order.paid) : null,
     room: activeRoom ? { id: activeRoom.id, startedAt: activeRoom.startedAt, endedAt: activeRoom.endedAt, hourlyRate: activeRoom.hourlyRate } : null,
     version: order.version,
     updatedAt: order.updatedAt,

@@ -73,10 +73,12 @@ export default function KitchenPage() {
   const counts = useMemo(() => ({ waiting: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'yeni').length, 0), making: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'hazirlaniyor').length, 0) }), [list]);
 
   return (
-    <div className="flex h-full flex-col bg-bg" onPointerDown={unlockAudio}>
-      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-3">
-        <ChefHat className="size-6 text-brass-400" />
-        <h1 className="mr-2 text-xl font-semibold">Bar ve mutfak</h1>
+    <div className="flex h-full flex-col gap-2 bg-bg p-2 md:p-0" onPointerDown={unlockAudio}>
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface px-4 py-2.5">
+        <span className="grid size-9 place-items-center rounded-lg bg-surface-3 text-ink-2">
+          <ChefHat className="size-5" />
+        </span>
+        <h1 className="mr-2 text-lg font-semibold tracking-[-0.01em]">Bar ve mutfak</h1>
         <div className="flex gap-1.5">
           <Chip active={!station} onClick={() => setStation('')}>
             Tümü
@@ -89,25 +91,25 @@ export default function KitchenPage() {
         </div>
         <div className="flex-1" />
         {!history && (
-          <div className="flex gap-3 text-sm">
-            <span className="text-brass-400">{counts.waiting} bekliyor</span>
-            <span className="text-forest-300">{counts.making} hazırlanıyor</span>
+          <div className="flex gap-1.5 text-xs font-medium">
+            <span className="tabular rounded-md bg-[var(--admin-warning-soft)] px-2 py-1 text-[var(--admin-warning)]">{counts.waiting} bekliyor</span>
+            <span className="tabular rounded-md bg-[var(--admin-primary-soft)] px-2 py-1 text-[var(--admin-primary)]">{counts.making} hazırlanıyor</span>
           </div>
         )}
-        <button onClick={() => setHistory(!history)} className={cn('inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm pointer-coarse:min-h-11', history ? 'bg-brass-500 text-espresso' : 'bg-surface-2')}>
+        <button onClick={() => setHistory(!history)} className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors pointer-fine:min-h-9', history ? 'border-ink text-ink' : 'border-[var(--admin-border-strong)] hover:bg-surface-2')}>
           <History className="size-4" /> {history ? 'Aktif fişler' : 'Geçmiş'}
         </button>
         {(can('urun.tukendi') || can('menu.yonet')) && (
-          <button onClick={() => setSoldOut(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-surface-2 px-3 py-2 text-sm pointer-coarse:min-h-11">
+          <button onClick={() => setSoldOut(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] px-3 text-sm font-medium transition-colors hover:bg-surface-2 pointer-fine:min-h-9">
             <PackageX className="size-4" /> Tükendi
           </button>
         )}
-        <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} className="grid size-11 place-items-center rounded-xl bg-surface-2">
+        <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} className="grid size-11 place-items-center rounded-xl border border-[var(--admin-border-strong)] transition-colors hover:bg-surface-2">
           {sound ? <Bell className="size-4" /> : <BellOff className="size-4 text-muted" />}
         </button>
       </div>
 
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {list.length === 0 && (
           <div className="grid h-full place-items-center text-center text-muted">
             <div>
@@ -116,7 +118,7 @@ export default function KitchenPage() {
             </div>
           </div>
         )}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] items-start gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] items-start gap-2">
           {list.map((t) => {
             const live = t.items.filter((i) => !i.voided);
             const age = now - t.sentAt;
@@ -124,76 +126,81 @@ export default function KitchenPage() {
             const online = t.source === 'laffogato';
             const allStarted = live.every((i) => i.status !== 'yeni');
             return (
-              <article key={t.key} className={cn('overflow-hidden rounded-2xl border bg-surface shadow-[var(--shadow-card)]', level === 'alarm' && !history ? 'border-burgundy-400' : 'border-line')}>
-                <header
-                  className={cn(
-                    'flex items-center gap-2 px-3 py-2',
-                    history ? 'bg-surface-3' : level === 'alarm' ? 'bg-burgundy-600 text-white' : level === 'warn' ? 'bg-brass-500 text-espresso' : online ? 'bg-rose-500 text-white' : 'bg-forest-600 text-white',
+              // Fiş: başlık nötr; süre rozeti yalnız gecikince renklenir (amber uyarı, kırmızı alarm)
+              <article key={t.key} className={cn('overflow-hidden rounded-2xl border bg-surface', level === 'alarm' && !history ? 'border-danger-300 ring-2 ring-[var(--admin-danger-soft)] dark:border-danger-400' : 'border-line')}>
+                <header className="flex items-center gap-2 border-b border-[var(--admin-divider)] px-3 py-2.5">
+                  {online && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-[var(--admin-hue-violet-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-hue-violet)]">
+                      <Globe className="size-3.5" /> Online
+                    </span>
                   )}
-                >
-                  {online && <Globe className="size-4" />}
-                  <span className="truncate text-lg font-semibold">{t.label}</span>
-                  <span className="text-sm opacity-80">#{t.orderNo}</span>
+                  <span className="truncate text-base font-semibold">{t.label}</span>
+                  <span className="tabular text-[13px] text-muted">#{t.orderNo}</span>
                   <span className="flex-1" />
-                  <span className="tabular inline-flex items-center gap-1 text-sm font-semibold">
+                  <span
+                    className={cn(
+                      'tabular inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[13px] font-semibold',
+                      history ? 'bg-surface-3 text-muted' : level === 'alarm' ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : level === 'warn' ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-ink-2',
+                    )}
+                  >
                     <Clock className="size-3.5" />
                     {mmss(age)}
                   </span>
                 </header>
                 {(t.waiterName || t.note || t.scheduledFor) && (
-                  <div className="border-b border-line px-3 py-1.5 text-xs text-muted">
+                  <div className="border-b border-[var(--admin-divider)] px-3 py-1.5 text-xs text-muted">
                     {t.waiterName && <span>{t.waiterName}</span>}
-                    {t.scheduledFor && <span className="ml-2 font-semibold text-brass-400">Saat {new Date(t.scheduledFor).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>}
-                    {t.note && <div className="mt-0.5 text-sm italic text-brass-300">"{t.note}"</div>}
+                    {t.scheduledFor && <span className="ml-2 font-semibold text-[var(--admin-warning)]">Saat {new Date(t.scheduledFor).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                    {t.note && <div className="mt-0.5 text-sm italic text-[var(--admin-warning)]">"{t.note}"</div>}
                   </div>
                 )}
-                <ul className="divide-y divide-line">
+                <ul className="divide-y divide-[var(--admin-divider)]">
                   {t.items.map((i) => (
                     <li key={i.id}>
                       <button
                         disabled={i.voided || online}
                         onClick={() => setStatus([i.id], history ? 'hazirlaniyor' : undefined)}
-                        className={cn('flex w-full items-start gap-3 px-3 py-2.5 text-left', !i.voided && !online && 'active:bg-surface-2', i.voided && 'bg-burgundy-600/15')}
+                        className={cn('flex w-full items-start gap-3 px-3 py-2.5 text-left', !i.voided && !online && 'active:bg-surface-2', i.voided && 'bg-[var(--admin-danger-soft)]')}
                       >
-                        <span className={cn('tabular min-w-8 rounded-lg px-1.5 py-0.5 text-center text-lg font-bold', i.voided ? 'bg-burgundy-600 text-white' : 'bg-surface-3')}>{i.qty}</span>
+                        <span className={cn('tabular min-w-8 rounded-md px-1.5 py-0.5 text-center text-lg font-bold', i.voided ? 'bg-danger-600 text-white' : 'bg-surface-3')}>{i.qty}</span>
                         <span className="min-w-0 flex-1">
                           <span className={cn('block text-[17px] font-semibold leading-tight', i.voided && 'line-through opacity-70')}>
                             {i.name}
-                            {i.size !== 'TEK' && <span className="ml-1.5 rounded bg-surface-3 px-1.5 text-sm font-semibold">{i.size}</span>}
+                            {i.size !== 'TEK' && <span className="ml-1.5 rounded-md bg-surface-3 px-1.5 text-sm font-semibold">{i.size}</span>}
                           </span>
-                          {i.optionsText && <span className="block text-sm text-brass-300">{i.optionsText}</span>}
-                          {i.note && <span className="block text-sm italic text-rose-300">"{i.note}"</span>}
-                          {i.voided && <span className="block text-sm font-bold text-burgundy-300">İPTAL EDİLDİ, YAPMAYIN</span>}
+                          {i.optionsText && <span className="block text-sm font-medium text-[var(--admin-warning)]">{i.optionsText}</span>}
+                          {i.note && <span className="block text-sm italic text-[var(--admin-hue-rose)]">"{i.note}"</span>}
+                          {i.voided && <span className="block text-sm font-bold text-[var(--admin-danger-ink)]">İPTAL EDİLDİ, YAPMAYIN</span>}
                         </span>
                         {!i.voided && <StatusDot status={i.status} />}
                       </button>
                     </li>
                   ))}
                 </ul>
-                <footer className="flex gap-2 border-t border-line p-2">
+                <footer className="flex gap-2 border-t border-[var(--admin-divider)] p-2">
                   {online ? (
                     <>
                       {!allStarted && (
-                        <button onClick={() => onlineStage(t.orderId, 'preparing')} className="h-11 flex-1 rounded-xl bg-surface-2 text-sm font-semibold">
+                        <button onClick={() => onlineStage(t.orderId, 'preparing')} className="h-11 flex-1 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors hover:bg-surface-2">
                           Hazırlanıyor
                         </button>
                       )}
-                      <button onClick={() => onlineStage(t.orderId, 'ready')} className="h-11 flex-1 rounded-xl bg-rose-500 text-sm font-semibold text-white">
+                      <button onClick={() => onlineStage(t.orderId, 'ready')} className="h-11 flex-1 rounded-xl bg-success-600 text-sm font-semibold text-white transition-colors hover:bg-success-700">
                         Hazır (siteye bildir)
                       </button>
                     </>
                   ) : history ? (
-                    <button onClick={() => setStatus(live.map((i) => i.id), 'hazirlaniyor')} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-surface-2 text-sm font-semibold">
+                    <button onClick={() => setStatus(live.map((i) => i.id), 'hazirlaniyor')} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors hover:bg-surface-2">
                       <Undo2 className="size-4" /> Geri al
                     </button>
                   ) : (
                     <>
                       {!allStarted && (
-                        <button onClick={() => setStatus(live.filter((i) => i.status === 'yeni').map((i) => i.id), 'hazirlaniyor')} className="h-11 flex-1 rounded-xl bg-surface-2 text-sm font-semibold">
+                        <button onClick={() => setStatus(live.filter((i) => i.status === 'yeni').map((i) => i.id), 'hazirlaniyor')} className="h-11 flex-1 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors hover:bg-surface-2">
                           Başla
                         </button>
                       )}
-                      <button onClick={() => setStatus(live.map((i) => i.id), 'hazir')} className="h-11 flex-[2] rounded-xl bg-forest-600 text-sm font-semibold text-white">
+                      <button onClick={() => setStatus(live.map((i) => i.id), 'hazir')} className="h-11 flex-[2] rounded-xl bg-success-600 text-sm font-semibold text-white transition-colors hover:bg-success-700">
                         Hepsi hazır
                       </button>
                     </>
@@ -205,7 +212,7 @@ export default function KitchenPage() {
         </div>
       </div>
       {tickets.isError && (
-        <div className="flex items-center gap-2 bg-burgundy-600 px-4 py-2 text-sm text-white">
+        <div className="flex items-center gap-2 rounded-xl bg-danger-600 px-4 py-2 text-sm text-white">
           <RotateCcw className="size-4" /> Bağlantı sorunu; yeniden deneniyor
         </div>
       )}
@@ -216,7 +223,13 @@ export default function KitchenPage() {
 
 function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className={cn('rounded-xl px-3.5 py-2 text-sm font-medium pointer-coarse:min-h-11', active ? 'bg-forest-600 text-white' : 'bg-surface-2 text-ink-2')}>
+    <button
+      onClick={onClick}
+      className={cn(
+        'inline-flex min-h-9 items-center rounded-lg border px-3 text-sm transition-[color,border-color] pointer-coarse:min-h-11',
+        active ? 'border-ink font-semibold text-ink' : 'border-line font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
+      )}
+    >
       {children}
     </button>
   );
@@ -224,9 +237,9 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
 
 function StatusDot({ status }: { status: KitchenTicketItem['status'] }) {
   const map = {
-    yeni: { cls: 'border-2 border-brass-400', label: 'Bekliyor' },
-    hazirlaniyor: { cls: 'bg-brass-400 animate-pulse', label: 'Hazırlanıyor' },
-    hazir: { cls: 'bg-forest-400', label: 'Hazır' },
+    yeni: { cls: 'border-2 border-[var(--admin-warning)]', label: 'Bekliyor' },
+    hazirlaniyor: { cls: 'bg-warn-500 animate-pulse', label: 'Hazırlanıyor' },
+    hazir: { cls: 'bg-success-600 dark:bg-success-300', label: 'Hazır' },
     servis: { cls: 'bg-muted', label: 'Serviste' },
   }[status];
   return (

@@ -45,7 +45,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
   if (!open) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-espresso/45 backdrop-blur-[2px] sm:items-center sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-night/40 sm:items-center sm:p-4"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget && !persistent) onClose();
       }}
@@ -57,16 +57,16 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         className={cn(
-          'animate-in flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-3xl bg-surface shadow-[var(--shadow-pop)] outline-none sm:max-h-[92dvh] sm:rounded-3xl',
+          'animate-in flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-surface shadow-[var(--shadow-pop)] outline-none sm:max-h-[92dvh] sm:rounded-2xl',
           widths[size],
           className,
         )}
       >
         {(title || subtitle) && (
-          <div className="flex items-start gap-3 border-b border-line px-5 py-4">
+          <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-5 py-3.5">
             <div className="min-w-0 flex-1">
               {title && (
-                <h2 id={titleId} className="truncate text-lg font-semibold">
+                <h2 id={titleId} className="truncate text-base font-semibold">
                   {title}
                 </h2>
               )}
@@ -75,14 +75,14 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
             <button
               onClick={onClose}
               aria-label="Kapat"
-              className="-mr-1 grid size-11 place-items-center rounded-full text-muted hover:bg-surface-2"
+              className="-mr-1.5 grid size-11 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-ink"
             >
               <X className="size-5" />
             </button>
           </div>
         )}
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
-        {footer && <div className="border-t border-line bg-surface-2/60 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
+        {footer && <div className="border-t border-[var(--admin-divider)] bg-surface-2 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
       </div>
     </div>,
     document.body,

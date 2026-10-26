@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bike, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
@@ -103,12 +104,12 @@ export default function OrdersPage() {
             return (
               <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
                 <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex items-start gap-3 text-left">
-                  <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', o.source === 'laffogato' ? 'bg-rose-100 text-rose-700' : 'bg-forest-100 text-forest-700')}>
+                  <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', o.source === 'laffogato' ? 'bg-rose-100 text-rose-700' : 'bg-brand-100 text-brand-700')}>
                     <Icon className="size-5" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
-                      {o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.type === 'tezgah' ? 'Tezgâh' : o.type === 'gelal' ? 'Gel-al' : 'Paket')}{' '}
+                      {o.tableName ?? o.extLabel ?? o.deliveryName ?? ORDER_TYPE_LABEL[o.type]}{' '}
                       <span className="font-normal text-muted">#{o.extNo ?? o.no}</span>
                     </span>
                     <span className="block text-xs text-muted">
@@ -122,14 +123,14 @@ export default function OrdersPage() {
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {o.extPaid && <Badge tone="pink">Sitede ödendi</Badge>}
-                  {pendingKitchen > 0 && <Badge tone="brass">{pendingKitchen} hazırlanıyor</Badge>}
+                  {pendingKitchen > 0 && <Badge tone="warn">{pendingKitchen} hazırlanıyor</Badge>}
                   {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
                   {o.payments.length > 0 && <Badge>{[...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))].join(', ')}</Badge>}
                 </div>
                 {(o.deliveryAddress || o.deliveryPhone) && (
                   <div className="mt-2 rounded-xl bg-surface-2 p-2.5 text-sm">
                     {o.deliveryPhone && (
-                      <a href={`tel:${o.deliveryPhone}`} className="flex items-center gap-1.5 font-medium text-forest-600">
+                      <a href={`tel:${o.deliveryPhone}`} className="flex items-center gap-1.5 font-medium text-brand-600">
                         <Phone className="size-3.5" /> {o.deliveryPhone}
                       </a>
                     )}

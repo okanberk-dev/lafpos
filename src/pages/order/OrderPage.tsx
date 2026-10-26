@@ -141,15 +141,16 @@ export default function OrderPage() {
     { icon: <Ban className="size-5" />, label: 'Adisyonu iptal et', hint: 'Bütün kalemler iptal olur', onClick: () => setDialog('iptal'), show: editable && order.paid === 0, danger: true },
   ];
 
+  // Innex başlık şeridi: geri, başlık ve künye, sağda işlemler
   const header = (
-    <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-2.5">
-      <button onClick={goBack} aria-label="Geri" className="grid size-11 place-items-center rounded-xl hover:bg-surface-2">
-        <ArrowLeft className="size-5" />
+    <div className="flex items-center gap-1.5 border-b border-[var(--admin-divider)] bg-surface px-2 py-2">
+      <button onClick={goBack} aria-label="Geri" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
+        <ArrowLeft className="size-5" strokeWidth={1.75} />
       </button>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h1 className="truncate text-lg font-semibold">{title}</h1>
-          <span className="text-sm text-muted">#{isOnline ? (order.extNo ?? order.no) : order.no}</span>
+          <h1 className="truncate text-base font-semibold tracking-[-0.01em]">{title}</h1>
+          <span className="tabular text-[13px] text-muted">#{isOnline ? (order.extNo ?? order.no) : order.no}</span>
           {order.status !== 'acik' && <Badge tone={order.status === 'kapali' ? 'green' : 'red'}>{order.status === 'kapali' ? 'Kapandı' : order.status === 'iptal' ? 'İptal' : 'Birleşti'}</Badge>}
           {isOnline && (
             <Badge tone="pink">
@@ -163,23 +164,14 @@ export default function OrderPage() {
           {order.note && ` · Not: ${order.note}`}
         </div>
       </div>
-      {table?.kind === 'oda' && editable && (
-        <Button
-          variant={order.room ? 'danger' : 'brass'}
-          icon={order.room ? <Square className="size-4" /> : <Play className="size-4" />}
-          onClick={() => roomAction(order.room ? 'stop' : 'start')}
-        >
-          {order.room ? `Odayı durdur · ${fmtElapsed(order.room.startedAt, now)}` : 'Oda sayacını başlat'}
-        </Button>
-      )}
-      <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 place-items-center rounded-xl hover:bg-surface-2">
-        <MoreVertical className="size-5" />
+      <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
+        <MoreVertical className="size-5" strokeWidth={1.75} />
       </button>
     </div>
   );
 
   const actionBar = (
-    <div className="safe-bottom grid grid-cols-2 gap-2 border-t border-line bg-surface p-3">
+    <div className="safe-bottom grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface p-3">
       {pending.length > 0 ? (
         <>
           <Button size="lg" onClick={() => cart.clear(order.id)}>
@@ -209,9 +201,29 @@ export default function OrderPage() {
   const right = (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       {isOnline && <OnlineOrderBar order={order} act={act} />}
-      {table?.kind === 'oda' && order.room && (
-        <div className="flex items-center gap-2 border-b border-line bg-burgundy-50 px-4 py-2 text-sm text-burgundy-600 dark:bg-burgundy-800/40 dark:text-burgundy-100">
-          <Mic2 className="size-4" /> Oda {fmtTime(order.room.startedAt)}'den beri açık · saatlik {tl(order.room.hourlyRate)}
+      {table?.kind === 'oda' && (order.room || editable) && (
+        // Karaoke odası: sayaç durumu ve tek düğme (başlat / durdur) adisyonun üstünde
+        <div className={cn('flex items-center gap-3 border-b border-[var(--admin-divider)] px-4 py-2', order.room && 'bg-[var(--admin-hue-violet-soft)]')}>
+          <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg', order.room ? 'bg-surface text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
+            <Mic2 className="size-4" strokeWidth={1.75} />
+          </span>
+          <span className="min-w-0 flex-1 text-[13px]">
+            {order.room ? (
+              <>
+                <span className="tabular block font-semibold">Oda açık · {fmtElapsed(order.room.startedAt, now)}</span>
+                <span className="block text-muted">
+                  {fmtTime(order.room.startedAt)}'den beri · saatlik {tl(order.room.hourlyRate)}
+                </span>
+              </>
+            ) : (
+              <span className="font-medium text-ink-2">Oda sayacı kapalı</span>
+            )}
+          </span>
+          {editable && (
+            <Button size="sm" variant={order.room ? 'danger' : 'secondary'} icon={order.room ? <Square className="size-3.5" /> : <Play className="size-3.5" />} onClick={() => roomAction(order.room ? 'stop' : 'start')}>
+              {order.room ? 'Durdur' : 'Başlat'}
+            </Button>
+          )}
         </div>
       )}
       <CartPanel order={order} pending={pending} onEditPending={(l) => { const p = boot.products.find((x) => x.id === l.productId); if (p) setOptions({ product: p, size: l.size, editing: l }); }} act={act} />
@@ -221,19 +233,29 @@ export default function OrderPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {header}
       {wide ? (
-        <div className="flex min-h-0 flex-1">
-          <div className="min-w-0 flex-1 bg-bg">
+        // Innex: iki beyaz kart; solda katalog, sağda adisyon (başlığıyla)
+        <div className="flex min-h-0 flex-1 gap-2">
+          <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface">
             <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
-          </div>
-          <div className="flex w-[clamp(300px,42vw,430px)] shrink-0 flex-col border-l border-line">{right}</div>
+          </section>
+          <section className="flex w-[clamp(320px,42vw,440px)] shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+            {header}
+            {right}
+          </section>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 border-b border-line bg-surface">
+          {header}
+          <div role="tablist" aria-label="Adisyon görünümü" className="grid grid-cols-2 border-b border-line bg-surface">
             {(['menu', 'adisyon'] as const).map((k) => (
-              <button key={k} onClick={() => setTab(k)} className={cn('min-h-12 py-2.5 text-sm font-semibold', tab === k ? 'border-b-2 border-forest-600 text-forest-700 dark:text-forest-300' : 'text-muted')}>
+              <button
+                key={k}
+                role="tab"
+                aria-selected={tab === k}
+                onClick={() => setTab(k)}
+                className={cn('relative min-h-12 py-2.5 text-sm font-medium', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'text-muted')}
+              >
                 {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(order.total)}`}
               </button>
             ))}
@@ -278,11 +300,11 @@ export default function OrderPage() {
                   setDialog(null);
                   m.onClick();
                 }}
-                className={cn('flex items-center gap-3 rounded-2xl px-4 py-3 text-left hover:bg-surface-2', m.danger && 'text-burgundy-500')}
+                className={cn('flex min-h-12 items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-surface-2', m.danger && 'text-[var(--admin-danger-ink)]')}
               >
-                {m.icon}
+                <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', m.danger ? 'bg-[var(--admin-danger-soft)]' : 'bg-surface-3 text-ink-2')}>{m.icon}</span>
                 <span>
-                  <span className="block font-medium">{m.label}</span>
+                  <span className="block text-sm font-medium">{m.label}</span>
                   {m.hint && <span className="block text-xs text-muted">{m.hint}</span>}
                 </span>
               </button>
@@ -340,7 +362,7 @@ export default function OrderPage() {
       />
       <Modal open={dialog === 'not'} onClose={() => setDialog(null)} title="Adisyon notu" size="sm">
         <div className="space-y-3 p-4">
-          <textarea value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 300))} className="min-h-24 w-full rounded-xl border border-line-strong bg-surface p-3 outline-none focus:border-forest-500" placeholder="Ör. Doğum günü, pastayı 21:00'de getir" />
+          <textarea value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 300))} className="min-h-24 w-full rounded-xl border border-line-strong bg-surface p-3 outline-none focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]" placeholder="Ör. Doğum günü, pastayı 21:00'de getir" />
           <Button
             variant="primary"
             block
@@ -365,7 +387,7 @@ export default function OrderPage() {
           <Button size="lg" onClick={() => navigate(backPath)}>
             Bu cihazda beklesin
           </Button>
-          <Button variant="ghost" className="text-burgundy-500" onClick={() => { cart.clear(order.id); navigate(backPath); }}>
+          <Button variant="ghost" className="text-[var(--admin-danger-ink)]" onClick={() => { cart.clear(order.id); navigate(backPath); }}>
             Sil ve çık
           </Button>
         </div>

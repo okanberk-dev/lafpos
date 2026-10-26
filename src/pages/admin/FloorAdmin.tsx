@@ -230,7 +230,7 @@ export default function FloorAdmin() {
               </Field>
               <Button
                 variant="ghost"
-                className="text-burgundy-500"
+                className="text-danger-500"
                 onClick={() => {
                   if (window.confirm(`${sel.name} plandan kaldırılsın mı?`)) updateTable(sel.id, { active: false });
                   setSelected(null);

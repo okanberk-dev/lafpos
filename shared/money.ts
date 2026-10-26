@@ -28,6 +28,11 @@ export function tlCompact(k: Kurus): string {
   return compact.format(k / 100);
 }
 
+/** 8500 -> "₺85", 8550 -> "₺85,50": dar yerler (masa, ürün kartı) için kısa tutar; simge tl() ile aynı yerde */
+export function tlShort(k: Kurus): string {
+  return k % 100 === 0 ? `₺${compact.format(k / 100)}` : tl(k);
+}
+
 /**
  * Kullanıcının yazdığı tutarı kuruşa çevirir. "12", "12,5", "12.50", "1.234,56", "₺ 1 234,56" kabul edilir.
  * Tanınmayan girdi için null döner.

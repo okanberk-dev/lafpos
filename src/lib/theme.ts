@@ -15,7 +15,7 @@ function read(): Theme {
 function apply(theme: Theme, forceDark: boolean) {
   const dark = forceDark || theme === 'koyu' || (theme === 'sistem' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.classList.toggle('dark', dark);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#15100d' : '#1e4031');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0d0f13' : '#edeff1');
 }
 
 export const useTheme = create<{ theme: Theme; forceDark: boolean; setTheme: (t: Theme) => void; setForceDark: (v: boolean) => void }>((set, get) => ({

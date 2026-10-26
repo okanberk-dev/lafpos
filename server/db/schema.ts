@@ -384,6 +384,8 @@ export const orders = sqliteTable(
     customerId: text('customer_id').references(() => customers.id),
     waiterId: text('waiter_id').references(() => users.id),
     guests: integer('guests').notNull().default(1),
+    /** Hesap paylaşımı: kaç kişiye eşit bölündü (yoksa null). Paylar ödemelerdeki shareNo/shareOf'tan sayılır */
+    splitPeople: integer('split_people'),
     note: text('note'),
     openedAt: integer('opened_at').notNull(),
     openedBy: text('opened_by').references(() => users.id),
@@ -500,6 +502,9 @@ export const payments = sqliteTable(
     change: integer('change'),
     /** Kalem bazlı ödemede seçilen kalemler */
     items: text('items', { mode: 'json' }).$type<{ itemId: string; qty: number }[] | null>(),
+    /** Paylaşımlı hesapta bu ödemenin payı: shareNo / shareOf (ör. 2/4) */
+    shareNo: integer('share_no'),
+    shareOf: integer('share_of'),
     customerId: text('customer_id'),
     note: text('note'),
     userId: text('user_id'),

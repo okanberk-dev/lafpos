@@ -2,17 +2,18 @@ import { Loader2 } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'brass' | 'outline';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success' | 'warn' | 'outline';
 type Size = 'sm' | 'md' | 'lg' | 'xl';
 
+// Innex (docs/ADMIN-INNEX.md §1.5): birincil dolu mavi, ikincil beyaz ve ince kenarlı, ghost yalnız metin
 const variants: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-ink hover:brightness-110 active:brightness-95',
-  secondary: 'bg-surface-2 text-ink hover:bg-surface-3 border border-line',
-  ghost: 'bg-transparent text-ink-2 hover:bg-surface-2',
-  outline: 'bg-surface text-ink border border-line-strong hover:bg-surface-2',
-  danger: 'bg-burgundy-600 text-white hover:bg-burgundy-500 active:bg-burgundy-700',
-  success: 'bg-forest-500 text-white hover:bg-forest-400',
-  brass: 'bg-brass-500 text-espresso hover:bg-brass-400',
+  primary: 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)]',
+  secondary: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2',
+  ghost: 'bg-transparent text-ink-2 hover:bg-surface-3 hover:text-ink',
+  outline: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2',
+  danger: 'bg-danger-600 text-white hover:bg-danger-700',
+  success: 'bg-success-600 text-white hover:bg-success-700',
+  warn: 'border border-warn-200 bg-warn-100 text-warn-700 hover:bg-warn-200 dark:border-transparent dark:bg-warn-800 dark:text-warn-300',
 };
 
 const sizes: Record<Size, string> = {
@@ -48,7 +49,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex select-none items-center justify-center font-medium transition-[filter,background-color,transform] duration-100 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100',
+        'inline-flex select-none items-center justify-center font-medium transition-[background-color,border-color,transform] duration-100 active:scale-[0.98] disabled:opacity-45 disabled:active:scale-100',
         variants[variant],
         sizes[size],
         block && 'w-full',
