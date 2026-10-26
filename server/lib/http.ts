@@ -26,6 +26,16 @@ export function patchOf<S extends z.ZodRawShape>(schema: z.ZodObject<S>) {
   return z.object(shape) as unknown as z.ZodObject<{ [K in keyof S]: z.ZodOptional<Extract<Undefault<S[K]>, z.ZodType>> }>;
 }
 
+/**
+ * Düzenlemenin değiştirdiği alanlar: gönderilmeyen (undefined) alanlar atılır. Hiç alan kalmazsa 422; Drizzle boş
+ * `set` ile "No values to set" atar ve uç 500 dönerdi (denetim, 26 Eki 2026).
+ */
+export function patchFields<T extends object>(patch: T): { [K in keyof T]?: Exclude<T[K], undefined> } {
+  const fields = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined));
+  if (!Object.keys(fields).length) throw new HttpError(422, 'Değiştirilecek alan gönderilmedi', 'validation');
+  return fields as { [K in keyof T]?: Exclude<T[K], undefined> };
+}
+
 export const bad = (msg: string, code?: string) => new HttpError(400, msg, code);
 export const notFound = (what = 'Kayıt') => new HttpError(404, `${what} bulunamadı`, 'not_found');
 export const conflict = (msg: string, code?: string) => new HttpError(409, msg, code);
@@ -58,3 +68,8 @@ export function query<T extends z.ZodType>(c: Context, schema: T): z.infer<T> {
 
 /** Kuruş alanları için ortak şema: negatif olmayan tam sayı */
 export const kurus = z.number().int().min(0).max(1_000_000_000);
+
+/** Takvimde olan tarih (YYYY-AA-GG): 2026-02-30 ya da 2026-99-99 geçmez, yalnız biçim denetimi yetmiyordu */
+export const isoDate = z.iso.date({ error: 'Geçerli bir tarih olmalı (YYYY-AA-GG)' });
+/** Saat ve dakika (SS:DD, 00:00-23:59) */
+export const clockTime = z.iso.time({ precision: -1, error: 'Geçerli bir saat olmalı (SS:DD)' });
