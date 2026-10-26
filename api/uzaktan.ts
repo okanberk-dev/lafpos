@@ -115,7 +115,8 @@ async function snapshot(): Promise<Snapshot | null> {
  * demo biter; gerçek veri her zaman parolalıdır. LAFPOS_UZAKTAN_DEMO=0 demoyu kapatır.
  */
 const demoAllowed = () => env('LAFPOS_UZAKTAN_DEMO') !== '0' && demoBase() != null;
-const demoKey = () => `${secret()}:demo`;
+/** Demo jetonunun anahtarı gizli değildir: yalnız örnek güne açılır, gerçek özet hiçbir zaman demo jetonuyla verilmez */
+const demoKey = () => 'lafpos-uzaktan-demo';
 
 /**
  * Demo özeti ilk gerektiğinde diskten okunur (vercel.json includeFiles). JSON import'u Vercel'in Node ESM'inde
@@ -184,6 +185,15 @@ async function handle(req: Request): Promise<Response> {
     }
     return json({ secret: secret().length >= 32, password: env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null });
   }
+  // Kafe bağlanmadıysa demo: anahtar ve parola gerekmez, yalnız örnek gün açılır (kafe itmesi aşağıda, anahtarla)
+  if (path !== 'uzaktan/push' && demoAllowed() && !(await realSnapshot())) {
+    if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now() });
+    if (path === 'uzaktan/giris' && req.method === 'POST') return json({ token: issueToken(demoKey()), me: ME, demo: true });
+    const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+    if (!tokenValid(demoKey(), auth)) return fail(401, 'Oturum kapalı. Yeniden girin', 'unauthorized');
+    if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
+    return serve(demoNow(), path, url, true);
+  }
   if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
 
   if (path === 'health') return json({ ok: true, remote: true, time: Date.now() });
@@ -208,8 +218,6 @@ async function handle(req: Request): Promise<Response> {
 
   // Patron girişi: parola, IP başına 15 dakikada en çok 8 deneme
   if (path === 'uzaktan/giris' && req.method === 'POST') {
-    // Kafe bağlanmadıysa demo: parolasız, yalnız demo özetine açılan jeton
-    if (demoAllowed() && !(await realSnapshot())) return json({ token: issueToken(demoKey()), me: ME, demo: true });
     const password = env('LAFPOS_UZAKTAN_PAROLA');
     if (password.length < 10) return fail(503, 'Uzaktan parola tanımlı değil (LAFPOS_UZAKTAN_PAROLA)', 'not_configured');
     const ip = (req.headers.get('x-forwarded-for') ?? 'yok').split(',')[0]!.trim();
@@ -226,13 +234,14 @@ async function handle(req: Request): Promise<Response> {
   }
 
   const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  const real = await realSnapshot();
-  const demo = !real && demoAllowed() && tokenValid(demoKey(), auth);
-  if (!demo && !tokenValid(secret(), auth)) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
+  if (!tokenValid(secret(), auth)) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
   if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
+  return serve(await snapshot(), path, url, false);
+}
 
+/** Salt okunur uçlar: kafeden gelen ya da demo özetinden */
+function serve(snap: Snapshot | null, path: string, url: URL, demo: boolean): Response {
   if (path === 'auth/me') return json(ME);
-  const snap = demo ? demoNow() : real;
   if (path === 'uzaktan/durum') return json({ at: snap?.at ?? null, demo });
   if (!snap) return fail(503, 'Kafeden henüz veri gelmedi; kasa bilgisayarı açık ve LAFPOS_CLOUD_URL tanımlı mı?', 'no_snapshot');
   if (path === 'bootstrap') return json({ ...snap.bootstrap, me: ME });
