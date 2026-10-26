@@ -9,48 +9,33 @@ import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
 import { addExternalPayments, assertNoActiveRoom, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
-import { buildBasket, type MethodKind, salePayments } from './basket';
-import { TokenxClient, TokenxError, type TokenxSale } from './tokenx';
+import { buildBasket, clampPayments, type MethodKind } from './basket';
+import { type FiscalProvider, type FiscalResult, providerFor } from './providers';
+import type { PendingReceipt } from './providers/types';
+import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
+import { TokenxError, type TokenxSale } from './tokenx';
 
 /**
- * Yazarkasa POS (ÖKC) bağlantısı. Sağlayıcılar:
- * - `tokenx`: Token ÖKC'ler, TokenX Connect Cloud API (gerçek cihaz)
- * - `simulator`: eğitim ve deneme için LafPOS içinde sanal cihaz (/cihaz ekranı)
- * Adisyon sepet olarak cihaza gider, ödeme ve mali fiş cihazda olur, sonuç adisyonun ödemesi olarak işlenir.
+ * Yazarkasa POS (ÖKC) bağlantısı. Sağlayıcılar `providers/` altında (Token, eğitim cihazı...); burası markadan
+ * bağımsız: adisyon sepet olarak cihaza gider, ödeme ve belge cihazda olur, sonuç (`FiscalResult`) adisyonun
+ * ödemesi olarak işlenir. Bekleyen sepet, kilit, zorla iptal ve geç gelen sonuç kuralları her marka için aynıdır.
  */
 
 type ReceiptRow = typeof schema.fiscalReceipts.$inferSelect;
 const PENDING = ['gonderildi', 'kilitli'] as const;
 
-let client: TokenxClient | null | undefined;
-export function tokenx(): TokenxClient | null {
-  if (client === undefined) {
-    const cfg = TokenxClient.configFromEnv(process.env);
-    client = cfg ? new TokenxClient(cfg) : null;
-  }
-  return client;
-}
-
-export function webhookUrl(): string | null {
-  const base = (process.env.LAFPOS_PUBLIC_URL ?? '').replace(/\/+$/, '');
-  return base ? `${base}/api/public/okc/tokenx/webhook` : null;
-}
+export { tokenx, webhookUrl };
 
 export function okcStatus() {
   const s = getSettings();
-  const c = tokenx();
+  const p = providerFor(s.okcProvider);
   return {
     provider: s.okcProvider,
     mode: s.okcMode,
     sectionMap: s.okcSectionMap,
     operatorMethods: s.okcOperatorMethods,
-    tokenx: {
-      configured: !!c,
-      terminalId: c?.terminalId || null,
-      branchId: c?.branchId || null,
-      webhookUrl: webhookUrl(),
-      webhookSecret: (process.env.TOKENX_WEBHOOK_SECRET ?? '').length >= 16,
-    },
+    active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
+    tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
     lastError: getSyncState<{ message: string; at: number }>('okc.lastError'),
   };
 }
@@ -75,6 +60,10 @@ export function receiptDTO(r: ReceiptRow) {
 }
 export type ReceiptDTO = ReturnType<typeof receiptDTO>;
 
+function pendingOf(r: ReceiptRow): PendingReceipt {
+  return { id: r.id, status: r.status, mode: r.mode, basket: r.basket as PendingReceipt['basket'], amount: r.amount };
+}
+
 function loadReceipt(id: string): ReceiptRow {
   const r = db.select().from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.id, id)).get();
   if (!r) throw notFound('Cihaz sepeti');
@@ -97,7 +86,12 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
   needDirect(actor, 'odeme.al');
   const s = getSettings();
   if (s.okcProvider === 'kapali') throw conflict('Yazarkasa POS bağlantısı kapalı (Yönetim › Yazarkasa POS)', 'okc_off');
-  if (s.okcProvider === 'tokenx' && !tokenx()) throw conflict('TokenX bilgileri .env dosyasında eksik (TOKENX_*)', 'okc_not_configured');
+  const provider: FiscalProvider | null = providerFor(s.okcProvider);
+  if (!provider) throw conflict('Bu yazarkasa sağlayıcısı bu sürümde yok (Yönetim › Yazarkasa POS)', 'okc_off');
+  if (!provider.configured()) throw conflict(provider.notConfigured, 'okc_not_configured');
+  if (s.okcMode === 'liste' ? !provider.capabilities.list : !provider.capabilities.instant) {
+    throw conflict(`${provider.label} ${s.okcMode === 'liste' ? 'masada ödeme' : 'kasada ödeme'} modunu desteklemiyor (Yönetim › Yazarkasa POS)`, 'okc_mode');
+  }
 
   const order = loadOrder(db, orderId);
   if (order.status !== 'acik') throw conflict('Adisyon kapalı');
@@ -154,7 +148,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       orderId,
       provider: s.okcProvider,
       mode: s.okcMode,
-      terminalId: s.okcProvider === 'tokenx' ? tokenx()!.terminalId : 'SIMULATOR',
+      terminalId: provider.terminalId(),
       status: 'gonderildi',
       amount: built.amount,
       items: built.lines,
@@ -165,10 +159,9 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     })
     .run();
 
-  if (s.okcProvider === 'tokenx') {
+  if (provider.capabilities.transport === 'push') {
     try {
-      if (s.okcMode === 'anlik') await tokenx()!.sendInstantBasket(built.basket);
-      else await tokenx()!.sendListBasket(built.basket);
+      await provider.send({ id: basketId, status: 'gonderildi', mode: s.okcMode, basket: built.basket, amount: built.amount });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       db.update(schema.fiscalReceipts).set({ status: 'hata', error: message, updatedAt: Date.now() }).where(eq(schema.fiscalReceipts.id, basketId)).run();
@@ -176,15 +169,15 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       publish(orderId, 'okc.error', message, actor.user.id);
       throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : 'okc_send');
     }
-    ensurePolling();
   }
+  if (provider.poll) ensurePolling();
   const fx = new Effects();
   fx.audit(db, {
     userId: actor.user.id,
     action: 'okc.send',
     orderId,
     amount: built.amount,
-    message: `#${order.no} adisyon yazarkasaya gönderildi (${tl(built.amount)}, ${s.okcProvider === 'simulator' ? 'simülatör' : s.okcMode === 'anlik' ? 'kasada ödeme' : 'masada ödeme'})`,
+    message: `#${order.no} adisyon yazarkasaya gönderildi (${tl(built.amount)}, ${s.okcProvider === 'simulator' ? 'simülatör' : `${provider.label}, ${s.okcMode === 'anlik' ? 'kasada ödeme' : 'masada ödeme'}`})`,
   });
   fx.flush();
   publish(orderId, 'okc.sent', undefined, actor.user.id);
@@ -202,12 +195,11 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
   const r = loadReceipt(receiptId);
   if (!PENDING.includes(r.status as (typeof PENDING)[number]) && r.status !== 'hata') throw conflict('Bu sepet artık iptal edilemez');
   let unreachable: string | null = null;
-  if (r.provider === 'tokenx' && r.status !== 'hata') {
-    const c = tokenx();
+  const provider = providerFor(r.provider);
+  if (r.provider !== 'simulator' && r.status !== 'hata') {
     try {
-      if (!c) throw new Error('TokenX bağlantısı yok');
-      if (r.status === 'kilitli') await c.unlockBasket(r.id);
-      await c.deleteBasket(r.id);
+      if (!provider) throw new Error(`${r.provider} bağlantısı bu sürümde yok`);
+      await provider.cancel(pendingOf(r));
     } catch (e) {
       // Sepet bu arada ödendiyse sonucu işlemek için durumu sorgula
       await refreshReceipt(r.id).catch(() => undefined);
@@ -251,17 +243,30 @@ function methodFor(kind: MethodKind, operatorId: number | null): string | null {
   return methods.find((m) => m.kind === 'diger' || m.zField === 'other')?.id ?? null;
 }
 
+type ResultSource = 'webhook' | 'sorgu' | 'simulator' | 'cihaz';
+const DOC_LABEL: Record<string, string> = { okc_fis: 'fiş', bilgi_fisi: 'bilgi fişi', e_arsiv: 'e-Arşiv', e_fatura: 'e-Fatura' };
+
+/** Token sonucunu işler (webhook, sorgu, eğitim cihazı); ortak sonuca çevirip `applyResult`'a verir */
+export function applySale(receiptId: string, sale: TokenxSale, source: ResultSource, by?: { userId: string; approverId: string | null }) {
+  const r = db.select().from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.id, receiptId)).get();
+  if (!r) return;
+  applyResult(receiptId, fromTokenxSale(sale, r.amount), source, by);
+}
+
 /**
- * Cihaz sonucunu işler (webhook, sorgulama ya da simülatör). Aynı sonuç birden çok kez gelebilir; işlem
- * tekrarlanmaz. 0 = ödendi, -1 = cihazda vazgeçildi, 99 = mali fiş iptal edildi.
+ * Cihaz sonucunu işler (her sağlayıcı). Aynı sonuç birden çok kez gelebilir; işlem tekrarlanmaz.
+ * paid = ödendi ve belge kesildi, cancelled = cihazda vazgeçildi, voided = belge cihazda iptal edildi.
  */
-export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook' | 'sorgu' | 'simulator', by?: { userId: string; approverId: string | null }) {
+export function applyResult(receiptId: string, result: FiscalResult, source: ResultSource, by?: { userId: string; approverId: string | null }) {
   const r = db.select().from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.id, receiptId)).get();
   if (!r) return;
   const now = Date.now();
   const fx = new Effects();
+  const doc = [result.zNo != null ? `Z${result.zNo}` : '', result.receiptNo != null ? `${DOC_LABEL[result.docKind ?? 'okc_fis']} ${result.receiptNo}` : '', result.docId ? `${DOC_LABEL[result.docKind ?? 'e_arsiv']} ${result.docId}` : '']
+    .filter(Boolean)
+    .join(' ');
 
-  if (sale.status === 0) {
+  if (result.status === 'paid') {
     if (r.status === 'tamamlandi') return;
     if (r.status === 'iptal' || r.status === 'fis_iptal' || r.status === 'silindi') {
       // İptal sayılan sepete geç ya da yeniden gelen "ödendi": adisyon kendiliğinden yeniden kapanmaz, yönetici bakar
@@ -278,14 +283,14 @@ export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook'
     }
     const sender = r.sentBy ? db.select().from(schema.users).where(eq(schema.users.id, r.sentBy)).get() : null;
     const userId = sender?.id ?? 'sistem';
-    const payments = salePayments(sale, r.amount)
-      .map((p) => ({ methodId: methodFor(p.kind, p.operatorId), amount: p.amount, note: `Yazarkasa${sale.zNo != null ? ` Z${sale.zNo}` : ''}${sale.receiptNo != null ? ` fiş ${sale.receiptNo}` : ''}` }))
+    const payments = clampPayments(result.payments, r.amount)
+      .map((p) => ({ methodId: methodFor(p.kind, p.operatorId), amount: p.amount, note: `Yazarkasa${doc ? ` ${doc}` : ''}` }))
       .filter((p): p is { methodId: string; amount: number; note: string } => !!p.methodId);
     try {
       const res = tx((t) => {
         const out = addExternalPayments(t, userId, fx, r.orderId, { payments, items: r.items });
         t.update(schema.fiscalReceipts)
-          .set({ status: 'tamamlandi', zNo: sale.zNo ?? null, receiptNo: sale.receiptNo ?? null, result: sale, paymentIds: out.paymentIds, completedAt: now, updatedAt: now, error: null })
+          .set({ status: 'tamamlandi', zNo: result.zNo, receiptNo: result.receiptNo, result, paymentIds: out.paymentIds, completedAt: now, updatedAt: now, error: null })
           .where(eq(schema.fiscalReceipts.id, r.id))
           .run();
         fx.audit(t, {
@@ -293,7 +298,7 @@ export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook'
           action: 'okc.paid',
           orderId: r.orderId,
           amount: r.amount,
-          message: `#${out.order.no} yazarkasada ödendi: ${tl(r.amount)}${sale.zNo != null ? `, Z ${sale.zNo}` : ''}${sale.receiptNo != null ? `, fiş ${sale.receiptNo}` : ''} (${source})`,
+          message: `#${out.order.no} yazarkasada ödendi: ${tl(r.amount)}${doc ? `, ${doc}` : ''} (${source})`,
         });
         return out;
       });
@@ -301,7 +306,7 @@ export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook'
       fx.flush();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      db.update(schema.fiscalReceipts).set({ status: 'hata', result: sale, error: `Ödeme alındı ama LafPOS'a işlenemedi: ${message}`, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+      db.update(schema.fiscalReceipts).set({ status: 'hata', result, error: `Ödeme alındı ama LafPOS'a işlenemedi: ${message}`, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
       const fx2 = new Effects();
       fx2.audit(db, { action: 'okc.apply_failed', severity: 'alarm', orderId: r.orderId, amount: r.amount, message: `Yazarkasada ${tl(r.amount)} ödendi ama LafPOS'a işlenemedi: ${message}` });
       fx2.emit({ topic: 'okc', kind: 'okc.error', orderId: r.orderId, message });
@@ -310,11 +315,11 @@ export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook'
     return;
   }
 
-  if (sale.status === 99) {
+  if (result.status === 'voided') {
     if (r.status === 'tamamlandi' && r.paymentIds.length) {
       tx((t) => {
         refundExternalPayments(t, by?.userId ?? null, fx, r.orderId, r.paymentIds, 'Yazarkasada fiş iptal edildi');
-        t.update(schema.fiscalReceipts).set({ status: 'fis_iptal', result: sale, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+        t.update(schema.fiscalReceipts).set({ status: 'fis_iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
         fx.audit(t, {
           userId: by?.userId ?? null,
           approverId: by?.approverId ?? null,
@@ -326,16 +331,16 @@ export function applySale(receiptId: string, sale: TokenxSale, source: 'webhook'
         });
       });
     } else {
-      db.update(schema.fiscalReceipts).set({ status: 'iptal', result: sale, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+      db.update(schema.fiscalReceipts).set({ status: 'iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
     }
     fx.emit({ topic: 'okc', kind: 'okc.void', orderId: r.orderId, message: 'Yazarkasada fiş iptal edildi' });
     fx.flush();
     return;
   }
 
-  // -1 ya da bilinmeyen: cihazda vazgeçildi
+  // Cihazda vazgeçildi
   if (r.status === 'tamamlandi') return;
-  db.update(schema.fiscalReceipts).set({ status: 'iptal', result: sale, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+  db.update(schema.fiscalReceipts).set({ status: 'iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
   fx.emit({ topic: 'okc', kind: 'okc.cancelled', orderId: r.orderId, message: 'Cihazda ödemeden vazgeçildi' });
   fx.emit({ topic: 'orders', kind: 'okc.cancelled', orderId: r.orderId });
   fx.flush();
@@ -351,30 +356,29 @@ export function setLock(receiptId: string, locked: boolean, by?: string | null) 
   publish(r.orderId, locked ? 'okc.locked' : 'okc.unlocked', locked ? 'Sepet cihazda açıldı' : undefined);
 }
 
-/** TokenX'te sepetin durumunu sorgular (webhook ulaşmadığında). */
+/** Sepetin durumunu sağlayıcıdan sorgular (webhook ulaşmadığında). */
 export async function refreshReceipt(receiptId: string) {
   const r = loadReceipt(receiptId);
-  if (r.provider !== 'tokenx' || !PENDING.includes(r.status as (typeof PENDING)[number])) return receiptDTO(r);
-  const c = tokenx();
-  if (!c) return receiptDTO(r);
-  const d = await c.getBasket(r.id);
-  if (d?.sale) applySale(r.id, d.sale, 'sorgu');
-  else if (d?.deletedAt) {
+  const provider = providerFor(r.provider);
+  if (!provider?.poll || !provider.configured() || !PENDING.includes(r.status as (typeof PENDING)[number])) return receiptDTO(r);
+  const out = await provider.poll(pendingOf(r));
+  if (out.kind === 'result') applyResult(r.id, out.result, 'sorgu');
+  else if (out.kind === 'deleted') {
     db.update(schema.fiscalReceipts).set({ status: 'silindi', updatedAt: Date.now() }).where(eq(schema.fiscalReceipts.id, r.id)).run();
     publish(r.orderId, 'okc.cancelled', 'Sepet cihazdan silindi');
-  } else {
-    const locked = !!(d?.isLocked ?? d?.islocked);
-    if (locked !== (r.status === 'kilitli')) setLock(r.id, locked, d?.lockedBy ?? null);
-  }
+  } else if (out.locked !== (r.status === 'kilitli')) setLock(r.id, out.locked, out.lockedBy);
   return receiptDTO(loadReceipt(r.id));
 }
+
+/** Durumu sorgulanabilen sağlayıcılar (sorgu döngüsü yalnız bunların sepetlerine bakar) */
+const POLLED = ['tokenx'] as const;
 
 // ─── Sorgulama döngüsü ──────────────────────────────────────────────────────
 
 let pollTimer: NodeJS.Timeout | null = null;
 let polling = false;
 
-/** Bekleyen TokenX sepeti varken 2,5 sn'de bir (liste modunda 10 sn) durum sorar; kalmayınca durur. */
+/** Bekleyen (sorgulanabilir) sepet varken 2,5 sn'de bir (liste modunda 10 sn) durum sorar; kalmayınca durur. */
 export function ensurePolling() {
   if (pollTimer) return;
   pollTimer = setInterval(async () => {
@@ -384,7 +388,7 @@ export function ensurePolling() {
       const pending = db
         .select()
         .from(schema.fiscalReceipts)
-        .where(and(eq(schema.fiscalReceipts.provider, 'tokenx'), inArray(schema.fiscalReceipts.status, [...PENDING])))
+        .where(and(inArray(schema.fiscalReceipts.provider, [...POLLED]), inArray(schema.fiscalReceipts.status, [...PENDING])))
         .all();
       if (!pending.length) {
         clearInterval(pollTimer!);
@@ -482,19 +486,12 @@ export function simulatorLock(actor: Actor, receiptId: string, locked: boolean) 
   setLock(receiptId, locked, locked ? 'SIMULATOR' : null);
 }
 
-/** Cihaz bağlantısını dener: terminal, kısımlar ve önerilen KDV → kısım eşlemesi */
-export async function testTokenx() {
-  const c = tokenx();
-  if (!c) throw conflict('TokenX bilgileri .env dosyasında eksik (TOKENX_AUTH_URL, TOKENX_BASKET_URL, TOKENX_CLIENT_ID, TOKENX_CLIENT_SECRET, TOKENX_TERMINAL_ID)', 'okc_not_configured');
-  const [terminal, fiscal] = await Promise.all([c.getTerminal().catch((e) => ({ error: e.message })), c.getFiscalSections()]);
-  let terminals: unknown = null;
-  try {
-    terminals = await c.getTerminals();
-  } catch {
-    terminals = null;
-  }
-  const { autoSectionMap } = await import('./basket');
-  return { terminal, sections: fiscal.sections, suggestedSectionMap: autoSectionMap(fiscal.sections), terminals };
+/** Seçili cihaz bağlantısını dener (Token'da terminal, kısımlar ve önerilen KDV → kısım eşlemesi) */
+export async function testProvider() {
+  const provider = providerFor(getSettings().okcProvider);
+  if (!provider?.test) throw conflict('Bu sağlayıcı için bağlantı denemesi yok', 'okc_no_test');
+  if (!provider.configured()) throw conflict(provider.notConfigured, 'okc_not_configured');
+  return provider.test();
 }
 
 export function receiptActor(userId: string): Actor | null {

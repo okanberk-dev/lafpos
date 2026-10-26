@@ -16,7 +16,7 @@ import {
   simulatorComplete,
   simulatorLock,
   simulatorRecent,
-  testTokenx,
+  testProvider,
   tokenx,
   webhookUrl,
 } from '../okc/service';
@@ -48,7 +48,7 @@ okcRoutes.put('/settings', async (c) => {
 
 okcRoutes.post('/test', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
-  return c.json(await testTokenx());
+  return c.json(await testProvider());
 });
 
 /** Webhook adresini Token'a kaydeder (LAFPOS_PUBLIC_URL ve TOKENX_WEBHOOK_SECRET gerekir) */
