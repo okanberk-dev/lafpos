@@ -52,8 +52,10 @@ redeploy() {
   local url
   url="$(cd "$TMP/$1" && "${VC[@]}" ls "$1" --prod --scope "$SCOPE" 2>/dev/null | grep -o "https://$1-[a-z0-9]*-$SCOPE.vercel.app" | head -1)"
   [[ -n "$url" ]] || { printf '  %s: üretim dağıtımı bulunamadı; main'"'"'e bir sonraki birleştirme değişkenleri alır\n' "$1"; return; }
-  # inspect çıktısını stderr'e yazar
-  if ! (cd "$TMP/$1" && "${VC[@]}" inspect "$url" --scope "$SCOPE" 2>&1) | grep -q -- "-git-main-"; then
+  # inspect çıktısını stderr'e yazar; önce değişkene alınır (grep -q erken çıkınca CLI çöküyordu)
+  local info
+  info="$(cd "$TMP/$1" && "${VC[@]}" inspect "$url" --scope "$SCOPE" 2>&1 || true)"
+  if ! grep -q -- "-git-main-" <<<"$info"; then
     printf '  %s: son üretim dağıtımı main'"'"'den değil (%s). Vercel panelinde main'"'"'in son üretim dağıtımını Redeploy edin\n' "$1" "$url"
     return
   fi
