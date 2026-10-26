@@ -36,7 +36,7 @@ import { cn } from '@/lib/cn';
 import { useMediaQuery, useTick } from '@/lib/hooks';
 import { BillReceipt, printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
-import { CartPanel } from './CartPanel';
+import { CartPanel, previewTotals } from './CartPanel';
 import { CustomerModal } from './CustomerModal';
 import { OnlineOrderBar } from './OnlineOrderBar';
 import { OptionsModal } from './OptionsModal';
@@ -256,7 +256,7 @@ export default function OrderPage() {
                 onClick={() => setTab(k)}
                 className={cn('relative min-h-12 py-2.5 text-sm font-medium', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'text-muted')}
               >
-                {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(order.total)}`}
+                {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(previewTotals(boot, order, pending)?.total ?? order.total)}`}
               </button>
             ))}
           </div>

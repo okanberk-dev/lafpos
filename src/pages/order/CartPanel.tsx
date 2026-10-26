@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
-import type { OrderDTO, OrderItemDTO } from '@shared/types';
+import type { BootstrapDTO, OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
@@ -22,6 +22,23 @@ const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
   servis: { label: 'Serviste', cls: 'text-muted' },
 };
 
+/** Gönderilmemiş kalemlerle birlikte tahmini toplam (gösterim için; kesin tutar gönderince sunucudan gelir) */
+export function previewTotals(boot: BootstrapDTO, order: OrderDTO, pending: PendingLine[]) {
+  if (pending.length === 0) return null;
+  const pendingTotal = pending.reduce((a, l) => {
+    const p = boot.products.find((x) => x.id === l.productId);
+    return a + (p ? estimateUnit(boot, p, l.size, l.options) * l.qty : 0);
+  }, 0);
+  return calcOrder({
+    lines: [
+      ...order.items.map((i) => ({ id: i.id, qty: i.qty, unitPrice: i.unitPrice, kdvRate: i.kdvRate, discount: i.discount, complimentary: i.complimentary, voided: i.voided })),
+      { id: '__pending', qty: 1, unitPrice: pendingTotal, kdvRate: 10, discount: 0, complimentary: false, voided: false },
+    ],
+    discount: order.discountType && order.discountValue != null ? { type: order.discountType, value: order.discountValue } : null,
+    serviceRate: order.serviceRate,
+  });
+}
+
 export function CartPanel({
   order,
   pending,
@@ -39,22 +56,7 @@ export function CartPanel({
   const t = order.totals;
   const due = order.total - order.paid;
 
-  // Gönderilmemiş kalemlerle birlikte tahmini toplam (gösterim için; kesin tutar gönderince sunucudan gelir)
-  const pendingTotal = pending.reduce((a, l) => {
-    const p = boot.products.find((x) => x.id === l.productId);
-    return a + (p ? estimateUnit(boot, p, l.size, l.options) * l.qty : 0);
-  }, 0);
-  const preview =
-    pending.length > 0
-      ? calcOrder({
-          lines: [
-            ...order.items.map((i) => ({ id: i.id, qty: i.qty, unitPrice: i.unitPrice, kdvRate: i.kdvRate, discount: i.discount, complimentary: i.complimentary, voided: i.voided })),
-            { id: '__pending', qty: 1, unitPrice: pendingTotal, kdvRate: 10, discount: 0, complimentary: false, voided: false },
-          ],
-          discount: order.discountType && order.discountValue != null ? { type: order.discountType, value: order.discountValue } : null,
-          serviceRate: order.serviceRate,
-        })
-      : null;
+  const preview = previewTotals(boot, order, pending);
 
   const visibleItems = order.items.filter((i) => !i.voided || i.voidAfterSend || Date.now() - (i.createdAt ?? 0) < 3600_000);
 
