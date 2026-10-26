@@ -17,7 +17,8 @@
     "db:seed": "tsx server/db/seed.ts",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "vitest run",
-    "e2e": "node e2e/run.mjs"
+    "e2e": "node e2e/run.mjs",
+    "kurulum:windows": "node scripts/kasa/windows/kurulum/derle.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -43,6 +44,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.7.0",
     "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.25.12",
     "playwright-core": "^1.64.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",

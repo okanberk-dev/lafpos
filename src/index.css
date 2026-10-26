@@ -100,6 +100,8 @@
   --admin-text-soft: #3d4048;
   --admin-text-mute: #616367;
   --admin-primary: #2f58f7;
+  /* L'Af logosundaki çekirdek: açık zeminde koyu pirinç (açık pirinç 1.5:1 kalır), koyuda uygulama ikonunun pirinci */
+  --laf-bean: #b08a2e;
   --admin-primary-hover: #2449e0;
   --admin-on-primary: #ffffff;
   --admin-primary-soft: #ecf1ff;
@@ -162,6 +164,7 @@
   --admin-text-soft: #c9cdd4;
   --admin-text-mute: #9aa1ac;
   --admin-primary: #7b93ff;
+  --laf-bean: #e8c877;
   --admin-primary-hover: #96a8ff;
   --admin-on-primary: #0b1020;
   --admin-primary-soft: #1d2547;

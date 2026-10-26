@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Coffee, Delete } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { LafMark } from '@/components/LafMark';
 import { cn } from '@/lib/cn';
 import { errorMessage, get } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -77,7 +78,7 @@ export function LoginPage() {
         <section className="flex flex-col justify-between gap-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-              <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-[15px] font-bold">L’Af</span>
+              <LafMark className="h-4" bean="#e8c877" />
             </span>
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-semibold">{info.data?.businessName ?? "L'Affogato"}</span>

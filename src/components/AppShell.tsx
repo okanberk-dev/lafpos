@@ -12,6 +12,7 @@ import { useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
+import { LafMark } from './LafMark';
 import { Modal } from './ui/Modal';
 
 function useClock() {
@@ -113,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Tablet ve bilgisayar: ikon rayı (Innex'in daraltılmış kenar çubuğu, docs/ADMIN-INNEX.md §1.2) */}
       <aside className={cn('hidden w-[84px] shrink-0 flex-col items-center rounded-2xl border border-line bg-surface py-3', !admin && 'md:flex')}>
         <NavLink to="/" className="mb-3 grid size-11 place-items-center rounded-xl bg-night text-white dark:bg-surface-3" title="LafPOS">
-          <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-[14px] font-bold">L’Af</span>
+          <LafMark className="h-4" bean="#e8c877" />
         </NavLink>
         <nav className="scroll-thin flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-2">
           {items.map((n) => (
@@ -148,7 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Telefon: üst şerit */}
         {!fullBleed && (
           <header className="flex items-center gap-1 border-b border-line bg-surface py-1 pl-4 pr-1 md:hidden">
-            <span className="font-[Didot,'Bodoni_72',Georgia,serif] text-lg font-bold text-ink">L’Af</span>
+            <LafMark className="h-[18px] text-ink" title="L'Affogato" />
             <span className="tabular ml-1.5 text-sm text-muted">{fmtTime(now)}</span>
             <div className="flex-1" />
             <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted">

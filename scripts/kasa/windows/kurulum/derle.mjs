@@ -1,0 +1,224 @@
+// LafPOS Windows kurulum dosyasını derler: dist/windows/LafPOS-Kurulum-<sürüm>.exe
+// Sunucu esbuild ile tek dosyaya paketlenir; yanına Windows için Node (LTS), better-sqlite3'ün win32-x64
+// ikilisi, derlenmiş arayüz, göçler ve menü anlık görüntüsü konur; makensis lafpos.nsi ile kurulumu üretir.
+// Kurulumdan önce aynı paket bu bilgisayarın Node'uyla açılıp denenir (giriş, açılış verisi, arayüz, günlük).
+// Gerekenler: makensis (macOS: brew install makensis, Linux: apt install nsis, Windows: NSIS 3).
+// Kullanım: npm run kurulum:windows            arayüzü derler, dener, kurulumu üretir
+//           npm run kurulum:windows -- --hizli arayüzü yeniden derlemez, denemeyi atlar
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, '../../../..');
+/** Windows'a giden Node. Değişirse NODE_ABI de değişir: nodejs.org/dist/index.json'da "modules" */
+const NODE_VERSION = '24.22.1';
+const NODE_ABI = '137';
+const OUT = join(ROOT, 'dist/windows');
+const STAGE = join(OUT, 'stage');
+const APP = join(STAGE, 'app');
+const CACHE = join(ROOT, 'node_modules/.cache/lafpos-windows');
+const fast = process.argv.includes('--hizli');
+const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+
+const step = (s) => console.log(`\n▸ ${s}`);
+const run = (cmd, args, env) => execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT, env: env && { ...process.env, ...env } });
+const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+const crlf = (s) => s.replace(/\r?\n/g, '\r\n');
+
+async function download(url, file) {
+  if (existsSync(file)) return file;
+  console.log(`  indiriliyor: ${url}`);
+  mkdirSync(dirname(file), { recursive: true });
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url}: ${res.status}`);
+  writeFileSync(`${file}.part`, Buffer.from(await res.arrayBuffer()));
+  renameSync(`${file}.part`, file);
+  return file;
+}
+
+/** Dosya Windows x64 ikilisi mi (MZ + PE başlığı, makine 0x8664) */
+function assertWinX64(file) {
+  const b = readFileSync(file);
+  const pe = b.readUInt32LE(0x3c);
+  if (b.toString('latin1', 0, 2) !== 'MZ' || b.toString('latin1', pe, pe + 4) !== 'PE\0\0' || b.readUInt16LE(pe + 4) !== 0x8664) {
+    throw new Error(`${file} Windows x64 ikilisi değil`);
+  }
+}
+
+function freePort() {
+  return new Promise((ok, fail) => {
+    const s = createServer();
+    s.on('error', fail);
+    s.listen(0, '127.0.0.1', () => {
+      const { port } = s.address();
+      s.close(() => ok(port));
+    });
+  });
+}
+
+/** .env.example'dan Windows ayar dosyası: sunucu ve veri yolu satırları kurulumun işi, çıkar */
+function envSample() {
+  const lines = readFileSync(join(ROOT, '.env.example'), 'utf8').split('\n');
+  lines[0] = "# LafPOS ayarları (Windows kurulumu). Kaydedip Not Defteri'ni kapatınca sunucu yeniden başlar.";
+  return lines
+    .filter((l) => !/^#?\s*LAFPOS_(PORT|HOST|DATA_DIR)=/.test(l))
+    .join('\n')
+    .replace('data/secret.key', 'C:\\ProgramData\\LafPOS\\secret.key')
+    .replace("yalnız kasa bilgisayarındaki .env'de durur", 'yalnız bu dosyada durur');
+}
+
+async function bundleServer() {
+  step('Sunucu tek dosyaya paketleniyor');
+  await build({
+    entryPoints: [join(ROOT, 'server/index.ts')],
+    outfile: join(APP, 'server/index.mjs'),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+    tsconfig: join(ROOT, 'tsconfig.server.json'),
+    external: ['better-sqlite3'],
+    // Paketin içindeki CommonJS bağımlılıklar require'ı bulsun
+    banner: { js: "import { createRequire as __lafposRequire } from 'node:module'; const require = __lafposRequire(import.meta.url);" },
+    legalComments: 'none',
+    logLevel: 'warning',
+  });
+  // Sunucu ROOT'u paketin bir üstü sayar (server/env.ts): göçler, menü ve arayüz app/ altında
+  cpSync(join(ROOT, 'drizzle'), join(APP, 'drizzle'), { recursive: true });
+  mkdirSync(join(APP, 'server/db'), { recursive: true });
+  cpSync(join(ROOT, 'server/db/menu-snapshot.json'), join(APP, 'server/db/menu-snapshot.json'));
+  cpSync(join(ROOT, 'dist/web'), join(APP, 'dist/web'), { recursive: true });
+  cpSync(join(HERE, 'bekci.mjs'), join(APP, 'bekci.mjs'));
+  writeFileSync(join(APP, 'package.json'), `${JSON.stringify({ name: 'lafpos', version: pkg.version, private: true, type: 'module' }, null, 2)}\n`);
+}
+
+async function nativeSqlite() {
+  step('better-sqlite3 (win32-x64, Node ABI ' + NODE_ABI + ')');
+  for (const name of ['better-sqlite3', 'bindings', 'file-uri-to-path']) {
+    const src = join(ROOT, 'node_modules', name);
+    cpSync(src, join(APP, 'node_modules', name), { recursive: true, filter: (p) => !/^[\\/](build|deps|src|test)([\\/]|$)/.test(p.slice(src.length)) });
+  }
+  const { version } = JSON.parse(readFileSync(join(ROOT, 'node_modules/better-sqlite3/package.json'), 'utf8'));
+  const name = `better-sqlite3-v${version}-node-v${NODE_ABI}-win32-x64.tar.gz`;
+  const tgz = await download(`https://github.com/WiseLibs/better-sqlite3/releases/download/v${version}/${name}`, join(CACHE, name));
+  const dir = join(APP, 'node_modules/better-sqlite3');
+  run('tar', ['-xzf', tgz, '-C', dir]);
+  assertWinX64(join(dir, 'build/Release/better_sqlite3.node'));
+}
+
+async function windowsNode() {
+  step(`Node ${NODE_VERSION} (win-x64)`);
+  const zipName = `node-v${NODE_VERSION}-win-x64.zip`;
+  const sums = await download(`https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt`, join(CACHE, `SHASUMS256-v${NODE_VERSION}.txt`));
+  const zip = await download(`https://nodejs.org/dist/v${NODE_VERSION}/${zipName}`, join(CACHE, zipName));
+  const want = readFileSync(sums, 'utf8')
+    .split('\n')
+    .find((l) => l.trim().endsWith(`  ${zipName}`))
+    ?.split(/\s+/)[0];
+  if (!want || sha256(zip) !== want) {
+    rmSync(zip, { force: true });
+    throw new Error(`${zipName} SHA-256 özeti nodejs.org'dakiyle tutmadı; dosya silindi, yeniden deneyin`);
+  }
+  const tmp = mkdtempSync(join(tmpdir(), 'lafpos-node-'));
+  const members = [`node-v${NODE_VERSION}-win-x64/node.exe`, `node-v${NODE_VERSION}-win-x64/LICENSE`];
+  if (process.platform === 'linux') run('unzip', ['-q', '-o', zip, ...members, '-d', tmp]);
+  else run('tar', ['-xf', zip, '-C', tmp, ...members]);
+  mkdirSync(join(STAGE, 'node'), { recursive: true });
+  for (const m of members) cpSync(join(tmp, m), join(STAGE, 'node', m.split('/').pop()));
+  rmSync(tmp, { recursive: true, force: true });
+  assertWinX64(join(STAGE, 'node/node.exe'));
+}
+
+function windowsFiles() {
+  step('Kısayollar, yönetim betiği, notlar');
+  cpSync(join(ROOT, 'scripts/kasa/windows/LafPOS-Kasa.bat'), join(STAGE, 'LafPOS-Kasa.bat'));
+  cpSync(join(HERE, 'lafpos.ico'), join(STAGE, 'lafpos.ico'));
+  writeFileSync(join(STAGE, 'yonet.ps1'), crlf(readFileSync(join(HERE, 'yonet.ps1'), 'utf8')));
+  // Eski Not Defteri UTF-8'i BOM'la tanır
+  writeFileSync(join(STAGE, 'BENIOKU.txt'), `\uFEFF${crlf(readFileSync(join(HERE, 'BENIOKU.txt'), 'utf8'))}`);
+  writeFileSync(join(STAGE, 'ayarlar.env.ornek'), `\uFEFF${crlf(envSample())}`);
+}
+
+/** Paketi bu bilgisayarın Node'u ve sqlite ikilisiyle bekçi üzerinden açar; Windows'ta çalışacak olanın aynısı */
+async function smokeTest() {
+  step('Paket deneniyor (bekçi, göçler, ilk kurulum, giriş, arayüz, günlük)');
+  const tmp = mkdtempSync(join(tmpdir(), 'lafpos-deneme-'));
+  const home = join(tmp, 'veri');
+  try {
+    cpSync(APP, join(tmp, 'app'), { recursive: true });
+    cpSync(join(ROOT, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'), join(tmp, 'app/node_modules/better-sqlite3/build/Release/better_sqlite3.node'));
+    const port = await freePort();
+    const base = `http://127.0.0.1:${port}`;
+    const child = spawn(process.execPath, [join(tmp, 'app/bekci.mjs')], {
+      cwd: tmp,
+      env: { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1' },
+      stdio: 'ignore',
+    });
+    const fail = (msg) => {
+      const log = existsSync(join(home, 'logs/sunucu.log')) ? readFileSync(join(home, 'logs/sunucu.log'), 'utf8') : '(günlük yok)';
+      throw new Error(`${msg}\n--- sunucu.log ---\n${log}`);
+    };
+    try {
+      for (let i = 0; ; i++) {
+        if (i > 150) fail('Sunucu 30 sn içinde açılmadı');
+        const ok = await fetch(`${base}/api/health`).then((r) => r.ok, () => false);
+        if (ok) break;
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      const html = await (await fetch(`${base}/`)).text();
+      if (!html.includes('id="root"')) fail('Arayüz sayfası gelmedi');
+      if (!(await (await fetch(`${base}/yonetim/genel`)).text()).includes('id="root"')) fail('Derin bağlantı arayüze düşmedi');
+      const asset = html.match(/\/assets\/[^"]+\.js/)?.[0];
+      if (!asset || !(await fetch(`${base}${asset}`)).ok) fail('Arayüz dosyaları gelmedi');
+      // Arayüzün yedek sayfası API'yi yutmasın: bilinmeyen uç JSON hata döner (girişsiz 401)
+      const unknown = await fetch(`${base}/api/olmayan-uc`);
+      if (unknown.ok || !unknown.headers.get('content-type')?.includes('json')) fail(`Bilinmeyen API ucu JSON hata vermedi (${unknown.status})`);
+      const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '1897' }) });
+      if (!login.ok) fail(`Örnek PIN'le giriş olmadı (${login.status})`);
+      const { token } = await login.json();
+      const boot = await fetch(`${base}/api/bootstrap`, { headers: { authorization: `Bearer ${token}` } });
+      const data = boot.ok ? await boot.json() : null;
+      if (!data?.products?.length) fail('Açılış verisinde ürün yok (menü anlık görüntüsü yüklenmedi)');
+      console.log(`  tamam: ${data.products.length} ürün, ${data.tables?.length ?? 0} masa`);
+    } finally {
+      child.kill();
+      if (child.exitCode == null) await once(child, 'exit');
+    }
+    const log = readFileSync(join(home, 'logs/sunucu.log'), 'utf8');
+    if (!log.includes('LafPOS sunucusu hazır')) throw new Error(`Günlükte sunucunun açıldığı yazmıyor:\n${log}`);
+    for (const f of ['lafpos.db', 'secret.key']) if (!existsSync(join(home, f))) throw new Error(`${f} veri klasöründe yok`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function makeInstaller() {
+  step('Kurulum dosyası (makensis)');
+  const outfile = join(OUT, `LafPOS-Kurulum-${pkg.version}.exe`);
+  const makensis = process.env.MAKENSIS || 'makensis';
+  // macOS ve Linux'ta makensis Türkçe harfleri ancak UTF-8 yereliyle okur ("Bad text encoding")
+  const utf8 = /utf-?8/i.test(process.env.LC_ALL || process.env.LC_CTYPE || process.env.LANG || '');
+  const locale = process.platform === 'win32' || utf8 ? undefined : { LC_ALL: process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8' };
+  run(makensis, ['-V2', '-INPUTCHARSET', 'UTF8', `-DVERSION=${pkg.version}`, `-DSTAGE=${STAGE}`, `-DOUTFILE=${outfile}`, join(HERE, 'lafpos.nsi')], locale);
+  const mb = (statSync(outfile).size / 1024 / 1024).toFixed(1);
+  console.log(`\n✓ ${outfile}\n  ${mb} MB · SHA-256 ${sha256(outfile)}`);
+}
+
+if (!fast || !existsSync(join(ROOT, 'dist/web/index.html'))) {
+  step('Arayüz derleniyor');
+  run(process.execPath, [join(ROOT, 'node_modules/vite/bin/vite.js'), 'build']);
+}
+rmSync(STAGE, { recursive: true, force: true });
+await bundleServer();
+await nativeSqlite();
+await windowsNode();
+windowsFiles();
+if (!fast) await smokeTest();
+makeInstaller();

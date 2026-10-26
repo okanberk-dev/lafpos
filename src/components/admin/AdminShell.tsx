@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeftRight, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Rows3, Rows4, Search } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
+import { LafMark } from '@/components/LafMark';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -79,7 +80,9 @@ export function AdminShell({ title, children }: { title: string; children: React
   const sidebar = (narrow: boolean) => (
     <nav aria-label="Yönetim" className="flex h-full flex-col">
       <div className={cn('flex items-center gap-2.5 px-3 pb-3 pt-3.5', narrow && 'justify-center px-0')}>
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-night font-[Didot,'Bodoni_72',Georgia,serif] text-[11px] font-bold text-white dark:bg-surface-3">L’Af</span>
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-night text-white dark:bg-surface-3">
+          <LafMark className="h-3" bean="#e8c877" />
+        </span>
         {!narrow && (
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold text-[var(--admin-text)]">{boot.settings.businessName}</span>
