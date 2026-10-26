@@ -100,7 +100,8 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 2. Gel-al ve paket panosu: kurye, durumlar
 3. Rezervasyon: gün görünümü, masa ataması, planda gösterim
 4. Karaoke odası sayacı: başlat/durdur, saatlik ücret, HİZMET satırı
-5. Porsiyon sayacı: günlük adet, sıfırda otomatik Tükendi (ve siteye bildirim)
+5. Porsiyon sayacı: günlük adet, sıfırda otomatik Tükendi (ve siteye bildirim); hazırlanmadan iptal edilen kalemin
+   porsiyonu geri döner
 
 ### Dalga 5: raporlar, patron paneli, yönetim
 
@@ -143,6 +144,14 @@ veremez; ağ geneli PIN kilidi kayan pencereyle sayar ve doğru PIN'le girmiş c
 döndüren bütün uçlarda; indirim kayması cihaza "Servis ücreti" diye gitmez; yeniden açılan gün öbür cihazlara
 yayılır ve otomatik gün sonu onu hemen kapatmaz (`business_days.reopened_at`); oda sayacı çalışırken hesap cihaza
 gitmez, kapanmış adisyona oda ücreti yazılmaz; lafmaliyet'e gönderim sürerken basılan "Gönder" gerçekten gönderir.
+
+Denetim düzeltmeleri, adisyon ve oda (`tests/audit-adisyon-oda.test.ts`): çalışan oda sayacı faturalanacak ücrettir.
+Sayacı çalışan adisyon iptal edilmez (`room_running`; önce durdurulur, oda ücretinin iptali yetkili onayı ister),
+kalemlerinin hepsi taşınınca kapanmaz (sayaç kaynakta kalır), yazarkasada ödenince kapanmaz (uyarı düşer). Sepet
+cihazda beklerken ve sitede ödenmiş siparişte sayaç başlamaz; sitede ödenmiş sipariş masaya taşınmaz, kasadan
+kapatılmaz. Masayı açmak QR siparişini değil masadaki kasa adisyonunu döndürür (yoksa yenisini açar). Adisyon iptali
+boş adisyonda da `siparis.al` ister. Hazırlanmaya başlanmamış kalem iptal edilince porsiyonu geri döner; sıfırdan
+dönen ürün yeniden satışa açılır, sitede de.
 
 Aynı gün akşam (RiosenBeq/lafpos `claude/kasa-sade-tasarim`): kasa ekranları da Innex'e geçti (`DESIGN.md` §1);
 **paylaşımlı hesap**: hesap N kişiye kuruşu kuruşuna bölünür, her pay ayrı ödenir, sonradan eklenen kalem ya da

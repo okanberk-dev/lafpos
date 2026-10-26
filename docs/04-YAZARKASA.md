@@ -104,7 +104,9 @@ kaydedip kapatınca sunucu yeniden başlar.
   kuruşluk kayma kalemlerin indirim payına işlenir.
 - Aynı adisyon için açık bir sepet varken ikincisi gönderilmez (409). Sepet cihazda beklerken adisyonun tutarı ve
   ödemeleri kilitlidir (iptal, ikram, indirim, ödeme, taşıma, birleştirme, iptal: 409 `okc_pending`); kalem
-  eklenebilir. Karaoke oda sayacı çalışırken hesap cihaza gönderilmez (`room_running`).
+  eklenebilir. Karaoke oda sayacı çalışırken hesap cihaza gönderilmez (`room_running`), sepet cihazda beklerken de
+  sayaç başlamaz (`okc_pending`). Sayaç yine de çalışıyorsa (eski veri, gönderimi hata görünen sepet) cihazdan gelen
+  ödeme adisyonu kapatmaz: adisyon açık kalır, uyarı düşer, oda ücreti sayaç durunca ayrıca alınır.
 - **Paylaşımlı hesap:** hesap kişilere bölünmüş olsa da cihaza tek sepet gider, mali fiş tek kesilir; paylar
   cihazda ayrı ödemeler olarak alınır (kişi başı nakit ya da kart). Adisyondaki Yazarkasa bölümü pay tutarlarını
   sırayla gösterir. Kişiye ayrı fiş gerekiyorsa paylar yerine **Kalem** ile ödenir: her kişinin kalemleri ayrı
@@ -116,7 +118,7 @@ Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` �
 
 | Cihazdan gelen (Token) | LafPOS'ta |
 |---|---|
-| `sale.status = 0` | Ödeme kalemleri adisyona işlenir (1 nakit, 3 kart, 7 yemek kartı, 17 açık hesap, 18 havale; ödeme türü eşlemesi Yönetim › Yazarkasa'da), Z ve fiş no yazılır, kalan yoksa adisyon kapanır |
+| `sale.status = 0` | Ödeme kalemleri adisyona işlenir (1 nakit, 3 kart, 7 yemek kartı, 17 açık hesap, 18 havale; ödeme türü eşlemesi Yönetim › Yazarkasa'da), Z ve fiş no yazılır, kalan yoksa (oda sayacı çalışmıyorsa) adisyon kapanır |
 | `-1` | Kasiyer cihazda vazgeçti; sepet kapanır, adisyon açık kalır |
 | `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir |
 | `BASKET_LOCKED` / `UNLOCKED` | Sepet cihazda açıkken LafPOS'ta kilit gösterilir |

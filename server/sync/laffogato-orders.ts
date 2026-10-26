@@ -220,12 +220,16 @@ export async function setAvailability(productId: string, active: boolean, actorN
   return { site };
 }
 
-/** Porsiyonu biten ürünleri siteye bildirir (adisyon akışından gelen olaylar için) */
+/**
+ * Porsiyon sayacıyla değişen Satışta bilgisini siteye bildirir (adisyon akışından gelen olaylar için): porsiyonu biten
+ * ürün sitede de tükenir, hazırlanmadan iptal edilen kalemle porsiyonu geri dönen ürün yeniden satışa açılır. Ürünün
+ * gönderim anındaki durumu gider.
+ */
 export async function pushSoldOut(productIds: string[]) {
   for (const id of productIds) {
     const p = db.select().from(schema.products).where(eq(schema.products.id, id)).get();
     if (!p || p.extSource !== 'laffogato' || !p.extId || !configured()) continue;
-    await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: false, actor: 'LafPOS porsiyon' }).catch(() => undefined);
+    await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: p.active, actor: 'LafPOS porsiyon' }).catch(() => undefined);
   }
 }
 
