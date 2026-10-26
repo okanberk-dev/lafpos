@@ -1,5 +1,5 @@
 import { Search, SlidersHorizontal, Star, X } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
 import { useBoot } from '@/lib/boot';
@@ -57,6 +57,21 @@ export function ProductPanel({
   const boot = useBoot();
   const [categoryId, setCategoryId] = useLocalPref<string>('order.category', FAVORITES);
   const [q, setQ] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Klavyede "/" ürün aramasına götürür (yazı alanındayken değil); Esc aramayı temizler
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+      if (document.querySelector('[role="dialog"]')) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const visible = useMemo(() => boot.products.filter((p) => !p.hidden), [boot.products]);
   const categories = useMemo(() => boot.categories.filter((c) => c.active && visible.some((p) => p.categoryId === c.id)), [boot.categories, visible]);
@@ -101,16 +116,27 @@ export function ProductPanel({
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" strokeWidth={1.75} />
             <input
+              ref={searchRef}
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && q) {
+                  e.stopPropagation();
+                  setQ('');
+                }
+              }}
               placeholder="Ürün ara"
               aria-label="Ürün ara"
               className="h-11 w-full rounded-xl border border-[var(--admin-border-strong)] bg-surface pl-9 pr-11 text-[15px] outline-none transition placeholder:text-muted focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]"
             />
-            {q && (
+            {q ? (
               <button onClick={() => setQ('')} aria-label="Aramayı temizle" className="absolute right-0 top-0 grid size-11 place-items-center rounded-xl text-muted hover:text-ink">
                 <X className="size-4" />
               </button>
+            ) : (
+              <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-2 px-1.5 text-xs font-medium text-muted pointer-fine:inline-block">
+                /
+              </kbd>
             )}
           </div>
         </div>
