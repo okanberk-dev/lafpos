@@ -9,7 +9,7 @@ import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
-import { addExternalPayments, assertNoActiveRoom, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
+import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
 import { type FiscalProvider, type FiscalResult, providerFor } from './providers';
 import type { PendingReceipt } from './providers/types';
@@ -109,14 +109,25 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     .where(and(eq(schema.fiscalReceipts.orderId, orderId), inArray(schema.fiscalReceipts.status, [...PENDING])))
     .get();
   if (pending) throw conflict('Bu adisyonun cihazda bekleyen sepeti var; önce onu tamamlayın ya da iptal edin', 'okc_pending');
-  const unresolved = db
-    .select()
-    .from(schema.fiscalReceipts)
-    .where(and(eq(schema.fiscalReceipts.orderId, orderId), eq(schema.fiscalReceipts.status, 'hata')))
-    .all()
-    .some(hasDocument);
-  if (unresolved) {
-    throw conflict('Bu adisyonun cihazda kesilmiş ama LafPOS\'a tam işlenmemiş fişi var; kalanı kasadan alın ya da fişi cihazdan iptal edin', 'okc_unresolved');
+  // Cihazda fişi kesilmiş ama LafPOS'a tam işlenmemiş kalemler yeniden gitmez (ikinci fişe girerdi); adisyonun
+  // fişe girmemiş kalemleri kalem seçilerek gidebilir (inceleme, 27 Eki 2026)
+  const held = fiscalHeldQty(db, orderId);
+  if (held.size) {
+    const current = orderItems(db, orderId).filter((i) => !i.voided && !i.complimentary);
+    const blocked = selection?.length
+      ? mergeSelection(selection).some((sel) => {
+          const it = current.find((i) => i.id === sel.itemId);
+          return !!it && held.has(it.id) && sel.qty > freeQty(it, held);
+        })
+      : current.some((i) => held.has(i.id) && i.qty - i.paidQty > 0);
+    if (blocked) {
+      throw conflict(
+        selection?.length
+          ? "Seçilen kalem cihazda kesilmiş ama LafPOS'a tam işlenmemiş bir fişte; yeniden gönderilmez. Kalanı kasadan alın ya da fişi cihazdan iptal edin"
+          : 'Bu adisyonun cihazda kesilmiş ama LafPOS\'a tam işlenmemiş fişi var; o fişin kalemleri yeniden gönderilmez. Kalanı kasadan alın, diğer kalemleri "Kalem seç" ile gönderin ya da fişi cihazdan iptal edin',
+        'okc_unresolved',
+      );
+    }
   }
   // Hesap kişilere bölünmüşken kalem seçerek göndermek payları düşürmez (masa eksik öder): paylar Paylaş'tan
   const paidNow = orderPayments(db, orderId).reduce((a, p) => a + (p.refundedAt ? 0 : p.amount), 0);

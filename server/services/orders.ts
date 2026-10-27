@@ -76,6 +76,30 @@ function assertNoPendingDevice(t: Tx | DB, orderId: string) {
 }
 
 /**
+ * Cihazda fişi kesilmiş ama LafPOS'a tam işlenememiş (hata, sonucu "ödendi": eksik ödendi ya da işlenemedi)
+ * sepetlerdeki kalemler, kalem başına adet. Bu adetler LafPOS'ta ödenmiş sayılmaz ama mali fişe girdi: cihaza
+ * yeniden gönderilmez, başka adisyona taşınmaz (aynı kalem ikinci fişe girerdi; inceleme, 27 Eki 2026).
+ */
+export function fiscalHeldQty(t: Tx | DB, orderId: string): Map<string, number> {
+  const held = new Map<string, number>();
+  const rows = t
+    .select({ items: schema.fiscalReceipts.items, result: schema.fiscalReceipts.result })
+    .from(schema.fiscalReceipts)
+    .where(and(eq(schema.fiscalReceipts.orderId, orderId), eq(schema.fiscalReceipts.status, 'hata')))
+    .all();
+  for (const r of rows) {
+    if ((r.result as { status?: string } | null)?.status !== 'paid') continue;
+    for (const l of r.items) held.set(l.itemId, (held.get(l.itemId) ?? 0) + l.qty);
+  }
+  return held;
+}
+
+/** Kalemin cihaza gidebilecek ya da taşınabilecek adedi: ödenmemiş ve belgeli hata fişinde olmayan */
+export function freeQty(it: Pick<ItemRow, 'id' | 'qty' | 'paidQty'>, held: Map<string, number>): number {
+  return Math.max(0, it.qty - it.paidQty - (held.get(it.id) ?? 0));
+}
+
+/**
  * Parasal izi olmayan adisyon: kalem ve ödeme satırı yok, oda sayacı çalışmıyor, yazarkasada sepeti yok.
  * Gün sonu ve otomatik gün sonu bunları kendiliğinden kapatır; tek ölçüt burada (inceleme, 26 Eki 2026 gece).
  */
@@ -674,10 +698,15 @@ export function transferItems(
   }
   if (target.id === source.id) throw bad('Kaynak ve hedef aynı');
 
+  const held = fiscalHeldQty(t, orderId);
   for (const sel of input.items) {
     const it = loadItem(t, orderId, sel.itemId);
     if (it.voided) continue;
     const unpaid = it.qty - it.paidQty;
+    // Cihazda fişi kesilmiş ama LafPOS'a işlenmemiş adet taşınmaz: öbür adisyondan ikinci kez fişe girerdi
+    if (held.has(it.id) && Math.trunc(sel.qty) > freeQty(it, held)) {
+      throw conflict(`${it.name} cihazda kesilmiş ama LafPOS'a tam işlenmemiş bir fişte; taşınamaz. Kalanı kasadan alın ya da fişi cihazdan iptal edin`, 'okc_unresolved');
+    }
     const qty = Math.min(Math.trunc(sel.qty), unpaid);
     if (qty <= 0) throw conflict(`${it.name} ödenmiş; taşınamaz`, 'item_paid');
     if (qty >= it.qty) t.update(schema.orderItems).set({ orderId: target.id }).where(eq(schema.orderItems.id, it.id)).run();

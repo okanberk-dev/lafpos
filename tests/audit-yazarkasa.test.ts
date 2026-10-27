@@ -560,6 +560,44 @@ describe('yazarkasa denetimi', () => {
     expect(r2.basket.items.find((i) => i.name.startsWith('Karaoke'))?.adjust?.totalValue).toBeGreaterThan(0);
   });
 
+  it('ödemesiz kalan fişin açığı kasadan alınınca masanın fişe girmemiş kalemleri cihaza gider; fişteki kalem gitmez', async () => {
+    const o = await order([{ name: 'Türk kahvesi', qty: 2 }, { name: 'Latte', size: 'M' }], { type: 'masa', tableId: tables()[5].id });
+    const coffee = o.items.find((i) => i.name === 'Türk kahvesi')!;
+    const latte = o.items.find((i) => i.name === 'Latte')!;
+    const r = await send(o.id, [{ itemId: coffee.id, qty: 2 }]);
+    await simPay(r.id, [{ type: 9, amount: 14000 }, { type: 3, amount: r.amount - 14000 }]);
+    expect((await receipts(o.id))[0].status).toBe('hata');
+    // Açık (ikram edilen 140 TL) kasadan alınır
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: 14000 });
+    // Fişteki kahve yine gitmez; bütün adisyon da gitmez (kahve içinde)
+    const coffeeAgain = await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: [{ itemId: coffee.id, qty: 1 }] });
+    expect(coffeeAgain.json.code).toBe('okc_unresolved');
+    // Hiçbir fişte olmayan Latte gider; ödenince adisyon kapanır
+    const res = await h.call<{ receipt: Receipt; code?: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: [{ itemId: latte.id, qty: 1 }] });
+    expect(res.status).toBe(200);
+    expect(res.json.receipt.basket.items.map((i) => i.name.startsWith('Latte'))).toEqual([true]);
+    await simPay(res.json.receipt.id, [{ type: 3, amount: res.json.receipt.amount }]);
+    expect(await getOrder(o.id)).toMatchObject({ status: 'kapali' });
+  });
+
+  it('ödemesiz kalan fişin kalemi başka masaya taşınamaz; fişe girmemiş kalem taşınır', async () => {
+    const [ta, tb] = [tables()[6], tables()[7]];
+    const o = await order([{ name: 'Türk kahvesi', qty: 2 }, { name: 'Latte', size: 'M' }], { type: 'masa', tableId: ta.id });
+    const coffee = o.items.find((i) => i.name === 'Türk kahvesi')!;
+    const latte = o.items.find((i) => i.name === 'Latte')!;
+    const r = await send(o.id, [{ itemId: coffee.id, qty: 2 }]);
+    await simPay(r.id, [{ type: 9, amount: 14000 }, { type: 3, amount: r.amount - 14000 }]);
+    const moved = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/transfer`, { items: [{ itemId: coffee.id, qty: 1 }], tableId: tb.id, approverPin: MUDUR });
+    expect(moved.status).toBe(409);
+    expect(moved.json.code).toBe('okc_unresolved');
+    expect((await getOrder(o.id)).items.find((i) => i.id === coffee.id)?.qty).toBe(2);
+    const ok = await h.call<{ target: OrderDTO }>('kasa', 'POST', `/orders/${o.id}/transfer`, { items: [{ itemId: latte.id, qty: 1 }], tableId: tb.id, approverPin: MUDUR });
+    expect(ok.status).toBe(200);
+    expect(ok.json.target.items.map((i) => i.name)).toEqual(['Latte']);
+    await h.ok('kasa', 'POST', `/orders/${ok.json.target.id}/cancel`, { reason: 'deneme', approverPin: MUDUR });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: 14000 });
+  });
+
   // Gün kapanır: bundan sonra test yok
   it('kapanmış güne ait fiş iptali (webhook) Z’yi değiştirmez; ödeme geri alınmaz, yöneticiye alarm düşer', async () => {
     const o = await order([{ name: 'Latte', size: 'L', qty: 2 }]);
