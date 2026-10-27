@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNull } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, or } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { ALL_PERMISSIONS } from '@shared/permissions';
 import { PLATFORM_LABEL, type PlatformId, type PlatformLiveStatus, type PlatformOrderPayload, PLATFORMS } from '@shared/platforms';
@@ -7,7 +7,8 @@ import type { AuthUser } from '../lib/auth';
 import { type AuditEntry, Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
-import { type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
+import { type PlatformAdapter, PlatformHttpError, type PlatformNotify, type PollResult } from './adapter';
+import { deciding } from './locks';
 import { adapterFor } from './registry';
 import { ingestPlatformOrder, platformCancelled, platformSettings } from './service';
 
@@ -58,6 +59,34 @@ const STEP_LABEL: Record<PlatformNotify, string> = { hazir: 'Hazır', yolda: 'Yo
 export function liveAdapter(platform: PlatformId): PlatformAdapter | null {
   const a = adapterFor(platform);
   return a && a.configured() && platformSettings()[platform].mode === 'canli' ? a : null;
+}
+
+/** Platformda süren gerçek sipariş var mı: onay bekleyen ya da adisyonu açık kabul edilmiş (deneme siparişi sayılmaz) */
+function hasOpenReal(platform: PlatformId): boolean {
+  const pending = db
+    .select({ payload: schema.platformOrders.payload })
+    .from(schema.platformOrders)
+    .where(and(eq(schema.platformOrders.platform, platform), eq(schema.platformOrders.status, 'bekliyor')))
+    .all();
+  if (pending.some((r) => !r.payload.simulated)) return true;
+  return db
+    .select({ payload: schema.platformOrders.payload })
+    .from(schema.platformOrders)
+    .innerJoin(schema.orders, eq(schema.orders.id, schema.platformOrders.orderId))
+    .where(and(eq(schema.platformOrders.platform, platform), eq(schema.platformOrders.status, 'kabul'), eq(schema.orders.status, 'acik')))
+    .all()
+    .some((r) => !r.payload.simulated);
+}
+
+/**
+ * Yoklanacak mı ve yeni sipariş kayda girecek mi: Canlı'da ikisi de. Kapalı ya da Deneme'de yalnız platformda süren
+ * gerçek sipariş varken yoklanır (platformun iptali kasaya ulaşsın), yeni sipariş kayda girmez.
+ */
+function pollTarget(platform: PlatformId): { a: PlatformAdapter; intake: boolean } | null {
+  const a = adapterFor(platform);
+  if (!a?.configured()) return null;
+  if (platformSettings()[platform].mode === 'canli') return { a, intake: true };
+  return hasOpenReal(platform) ? { a, intake: false } : null;
 }
 
 /**
@@ -121,8 +150,6 @@ function patchRow(id: string, set: Partial<PlatformRow>, audit?: AuditEntry) {
   fx.emit({ topic: 'delivery', kind: 'platform.sync' });
   fx.flush();
 }
-
-const deciding = new Set<string>();
 
 /**
  * Aynı platform siparişine iki ekrandan aynı anda kabul ya da ret gitmesin: platform çağrısı yerel karardan önce
@@ -247,13 +274,16 @@ export function reconcileNotifications(now?: number): Promise<{ sent: number; fa
 async function reconcileOnce(now: number): Promise<{ sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
-  const rows = db
-    .select()
+  // Son 48 saatte kabul edilenler; platform iptali kasada bekleyenler yaşından bağımsız
+  const ids = db
+    .select({ id: schema.platformOrders.id })
     .from(schema.platformOrders)
-    .where(and(eq(schema.platformOrders.status, 'kabul'), gte(schema.platformOrders.decidedAt, now - RECONCILE_WINDOW_MS), isNull(schema.platformOrders.notifyParkedAt)))
+    .where(and(eq(schema.platformOrders.status, 'kabul'), or(isNotNull(schema.platformOrders.cancelPendingAt), gte(schema.platformOrders.decidedAt, now - RECONCILE_WINDOW_MS))))
     .all();
-  for (const row of rows) {
-    if (row.payload.simulated || !row.orderId) continue;
+  for (const { id } of ids) {
+    // Tur ağ beklerken yoklama kaydı değiştirmiş olabilir (platform iptali): her kayıt işlemden hemen önce okunur
+    const row = db.select().from(schema.platformOrders).where(eq(schema.platformOrders.id, id)).get();
+    if (!row || row.status !== 'kabul' || row.payload.simulated || !row.orderId) continue;
     // Platform iptal etmişti, kasada ödeme vardı: ödeme geri alındıysa şimdi kapanır
     if (row.cancelPendingAt != null) {
       retryCancellation(row);
@@ -277,6 +307,8 @@ async function reconcileOnce(now: number): Promise<{ sent: number; failed: numbe
       else failed++;
       continue;
     }
+    // Platform bu siparişin bir aşamasını kalıcı olarak reddetti: aşama bildirimi durur (iptal dalları sürer)
+    if (row.notifyParkedAt != null) continue;
     const want = desiredStep(o.deliveryStatus, row.payload.courier);
     if (!want) continue;
     const have = STEPS.indexOf((row.notifiedStatus as PlatformNotify | 'picked' | null) ?? 'picked');
@@ -312,8 +344,9 @@ async function reconcileOnce(now: number): Promise<{ sent: number; failed: numbe
 }
 
 /**
- * Kabul edilmiş sipariş kasada iptal edildi: platforma "tedarik edilemedi" gider ve kayıt kapanır. Platform kabul
- * etmezse (ör. kurye yolda) yeniden denenmez, patrona alarm: sipariş platform uygulamasından iptal edilir.
+ * Kabul edilmiş sipariş kasada iptal edildi: platforma "tedarik edilemedi" gider ve kayıt kapanır. Platform kalıcı
+ * olarak reddederse (ör. kurye yolda) kayıt yine kapanır, hata kayıtta kalır ve patrona alarm: sipariş platform
+ * uygulamasından iptal edilir. Geçici hata sonraki turda yeniden denenir.
  */
 async function announceLocalCancel(a: PlatformAdapter, row: PlatformRow, cancelReason: string | null): Promise<boolean> {
   const reason = cancelReason?.trim() || 'Diğer';
@@ -325,7 +358,7 @@ async function announceLocalCancel(a: PlatformAdapter, row: PlatformRow, cancelR
     const why = `${a.label}: kasada iptal edilen sipariş platforma bildirilemedi (${message(e)})`;
     patchRow(
       row.id,
-      { lastError: why, notifyParkedAt: permanent ? Date.now() : null },
+      permanent ? { status: 'iptal', decidedAt: Date.now(), lastError: why, reason: `Kasada iptal edildi: ${reason}; platforma bildirilemedi` } : { lastError: why },
       permanent
         ? { action: 'platform.cancel_unsynced', severity: 'alarm', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why}: siparişi platform uygulamasından iptal edin (${ref})` }
         : !row.lastError
@@ -401,13 +434,17 @@ function reportInvalid(platform: PlatformId, bad: { externalId: string; error: s
   }
 }
 
-/** Bir platformu yoklar: yeni siparişler kayda girer (tekilleştirilir), iptaller uygulanır; durum sync_state'te */
+/**
+ * Bir platformu yoklar: yeni siparişler kayda girer (tekilleştirilir; Kapalı'da girmez), iptaller uygulanır; durum
+ * sync_state'te
+ */
 export async function pollPlatform(platform: PlatformId, now = Date.now()): Promise<{ created: number; cancelled: number } | null> {
-  const a = liveAdapter(platform);
-  if (!a) return null;
+  const target = pollTarget(platform);
+  if (!target) return null;
+  const { a, intake } = target;
   const state = readState(platform);
   const since = state.lastOkAt ?? now - 2 * 3600_000;
-  let res: Awaited<ReturnType<PlatformAdapter['poll']>>;
+  let res: PollResult;
   try {
     res = await a.poll(since, now);
   } catch (e) {
@@ -421,10 +458,16 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
     }
     throw e;
   }
-  // Tek paketin kaydı düşerse ötekiler durmaz
-  const bad = [...(res.invalid ?? [])];
+  // Tek paketin kaydı düşerse ötekiler durmaz. Kapalı'da yeni sipariş kayda girmez (siparişi iten platformda
+  // aktarıcının gelen kutusunda kalır), bozuk paket de bildirilmez
+  const bad = intake ? [...(res.invalid ?? [])] : [];
+  const skipped = new Set<string>();
   let created = 0;
   for (const payload of res.orders) {
+    if (!intake) {
+      skipped.add(payload.externalId);
+      continue;
+    }
     const fx = new Effects();
     try {
       const r = tx((t) => ingestPlatformOrder(t, fx, payload, now));
@@ -437,7 +480,7 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
   reportInvalid(platform, bad);
   const n = applyCancellations(platform, res.cancelled);
   // Yerelde işlendi: aktarıcıdaki kayıtlar artık silinebilir (silinemezse yeniden gelir, tekilleştirilir)
-  await res.commit?.().catch((e) => console.warn(`[platform] ${a.label} gelen kutusu temizlenemedi`, message(e)));
+  await res.commit?.(skipped).catch((e) => console.warn(`[platform] ${a.label} gelen kutusu temizlenemedi`, message(e)));
   writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: null, failures: 0 });
   return { created, cancelled: n };
 }
@@ -458,7 +501,7 @@ export async function liveTick(now = Date.now()): Promise<void> {
   running = true;
   try {
     for (const p of PLATFORMS) {
-      if (!liveAdapter(p) || !pollDue(p, now)) continue;
+      if (!pollTarget(p) || !pollDue(p, now)) continue;
       await pollPlatform(p, now).catch(() => undefined);
     }
     await reconcileNotifications(now).catch((e) => console.warn('[platform] aşama bildirimi', message(e)));

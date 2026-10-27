@@ -14,6 +14,7 @@ import {
   type PlatformProductDTO,
   type PlatformSettings,
 } from '@shared/platforms';
+import { deciding } from './locks';
 import { adapterFor } from './registry';
 import { type DB, schema, type Tx } from '../db/client';
 import type { Actor, AuthUser } from '../lib/auth';
@@ -223,8 +224,9 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
   if (existing) return { row: existing, created: false };
   if (platformSettings()[payload.platform].mode === 'kapali') throw conflict(`${PLATFORM_LABEL[payload.platform]} kapalı`, 'platform_off');
   const secs = ACCEPT_SECONDS[payload.platform];
-  // Platform kabul süresini verdiyse (Yemeksepeti expiryDate) o, yoksa platformun bilinen süresi
-  const expiresAt = typeof payload.expiresAt === 'number' && payload.expiresAt > now ? payload.expiresAt : secs ? now + secs * 1000 : null;
+  // Platform kabul süresini verdiyse (Yemeksepeti expiryDate) o (geçmişse sipariş gelir gelmez süresi dolmuştur; geç
+  // çekilen sipariş taze süre almaz), yoksa platformun bilinen süresi
+  const expiresAt = typeof payload.expiresAt === 'number' ? payload.expiresAt : secs ? now + secs * 1000 : null;
   const row: PlatformRow = {
     id: ulid(now),
     platform: payload.platform,
@@ -262,10 +264,12 @@ export function expirePlatformOrders(t: Tx, fx: Effects, now = Date.now()): numb
     // Platforma kabulü gitmiş kayıt (adisyonu açılamamış) süre dolunca iptal sayılmaz: platformda yaşıyor
     .where(and(eq(schema.platformOrders.status, 'bekliyor'), isNull(schema.platformOrders.notifiedStatus), isNotNull(schema.platformOrders.expiresAt), lt(schema.platformOrders.expiresAt, now)))
     .all();
-  if (!stale.length) return 0;
-  t.update(schema.platformOrders).set({ status: 'suresi_doldu', decidedAt: now }).where(inArray(schema.platformOrders.id, stale.map((s) => s.id))).run();
+  // Kabul ya da ret o an platforma gidiyor: karar bitince ya kabul edilir ya da sonraki turda dolar
+  const ids = stale.map((s) => s.id).filter((id) => !deciding.has(id));
+  if (!ids.length) return 0;
+  t.update(schema.platformOrders).set({ status: 'suresi_doldu', decidedAt: now }).where(inArray(schema.platformOrders.id, ids)).run();
   fx.emit({ topic: 'delivery', kind: 'platform.expired' });
-  return stale.length;
+  return ids.length;
 }
 
 export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: string, prepMinutes?: number, opts: { notifiedStatus?: string | null } = {}) {
@@ -284,6 +288,8 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
     deliveryPhone: p.customer.phone,
     deliveryAddress: p.customer.address,
     note: [`${label} ${p.code}`, p.paymentLabel, p.note].filter(Boolean).join(' · '),
+    // İleri tarihli sipariş: saat mutfak fişinde ve sipariş şeridinde görünür
+    scheduledFor: p.scheduledFor ? new Date(p.scheduledFor).toISOString() : null,
   });
   t.update(schema.orders).set({ platform: p.platform, platformCode: p.code }).where(eq(schema.orders.id, order.id)).run();
   const matched = matchLines(t, p);
@@ -427,5 +433,29 @@ export function platformCancelled(t: Tx, user: AuthUser, fx: Effects, id: string
   }
   t.update(schema.platformOrders).set({ status: 'iptal', decidedAt: Date.now(), reason: why, cancelPendingAt: null, lastError: null }).where(eq(schema.platformOrders.id, id)).run();
   fx.audit(t, { userId: user.id, action: 'platform.cancel', severity: 'uyari', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why} (${row.payload.code}, ${tl(row.payload.customerTotal)})` });
+  fx.emit({ topic: 'delivery', kind: 'platform.cancelled', orderId: row.orderId ?? undefined, byUserId: user.id });
+}
+
+/**
+ * Platform iptal etti ama adisyon kasada kapatılamıyor (ödeme kapanmış güne ait ya da geri alınmayacak): yetkili kaydı
+ * elle kapatır. Para yerinde kalır, denetim kaydına alarm düşer: hesabı patron düzeltir.
+ */
+export function closeCancelPending(t: Tx, user: AuthUser, fx: Effects, id: string) {
+  const row = loadRow(t, id);
+  if (row.status !== 'kabul' || row.cancelPendingAt == null) throw conflict('Bu siparişte bekleyen platform iptali yok', 'not_cancel_pending');
+  const label = PLATFORM_LABEL[row.platform];
+  const o = row.orderId ? t.select({ no: schema.orders.no, status: schema.orders.status }).from(schema.orders).where(eq(schema.orders.id, row.orderId)).get() : null;
+  t.update(schema.platformOrders)
+    .set({ status: 'iptal', cancelPendingAt: null, decidedAt: Date.now(), reason: `${label} iptal etti; kasada elle kapatıldı`, lastError: null })
+    .where(eq(schema.platformOrders.id, id))
+    .run();
+  fx.audit(t, {
+    userId: user.id,
+    action: 'platform.cancel_closed',
+    severity: 'alarm',
+    orderId: row.orderId,
+    amount: row.payload.customerTotal,
+    message: `${user.name} ${label} iptalini elle kayda aldı (${row.payload.code}); adisyon${o ? ` #${o.no}` : ''} kasada iptal edilmedi, alınan ödeme yerinde: hesabı elle düzeltin`,
+  });
   fx.emit({ topic: 'delivery', kind: 'platform.cancelled', orderId: row.orderId ?? undefined, byUserId: user.id });
 }

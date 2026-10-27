@@ -241,9 +241,19 @@ describe('canlı bağlantı', () => {
     expect((await h.ok<{ live: Record<string, { lastError: string | null }> }>('kasa', 'GET', '/platforms')).live.trendyol.lastError).toBeNull();
   });
 
-  it('deneme siparişi canlı modda üretilmez; kapalı modda yoklama yok', async () => {
+  it('deneme siparişi canlı modda üretilmez; Kapalı modda yeni paket kayda girmez, açık gerçek sipariş kalmayınca yoklama da durur', async () => {
     expect((await h.call<{ code: string }>('kasa', 'POST', '/platforms/trendyol/test-order')).json.code).toBe('not_test_mode');
     await h.ok('patron', 'PUT', '/platforms/trendyol', { mode: 'kapali' });
+    const fresh = pkg();
+    fake.packages.push(fresh);
+    // Kendi kuryemizin adisyonu hâlâ açık: platformun iptali gelsin diye yoklama sürer, yeni paket kayda girmez
+    expect(await live.pollPlatform('trendyol')).toEqual({ created: 0, cancelled: 0 });
+    expect((await list()).some((o) => o.payload.externalId === String(fresh.id))).toBe(false);
+    const nakit = h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+    for (const o of (await list()).filter((x) => x.status === 'kabul' && x.orderId)) {
+      const order = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.orderId}`);
+      if (order.status === 'acik') await h.ok('kasa', 'POST', `/orders/${order.id}/payments`, { methodId: nakit.id, amount: order.total - order.paid });
+    }
     const before = fake.calls.length;
     expect(await live.pollPlatform('trendyol')).toBeNull();
     await live.liveTick();

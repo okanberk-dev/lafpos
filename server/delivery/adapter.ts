@@ -6,8 +6,8 @@ export type PlatformNotify = 'hazir' | 'yolda' | 'teslim';
 /**
  * Gerçek platform bağlantısı: siparişi tek biçime çevirir (`PlatformOrderPayload`) ve kabul / ret / aşama çağrılarını
  * yapar. Akış, ödeme ve kilit `service.ts`'te; bağdaştırıcı yalnız platformla konuşur. Yoklama yapanlar (Trendyol Go)
- * `poll` ile yeni siparişleri ve platformun iptallerini getirir; siparişi iten platformlarda (Yemeksepeti) `poll` LafPOS
- * Uzaktan aktarıcısının gelen kutusundan çeker, `commit` kayıtlar kasada yazılınca gelen kutusunu temizler.
+ * `poll` ile yeni siparişleri ve platformun iptallerini getirir; siparişi iten platformlar (Yemeksepeti, Getir) için
+ * `poll` LafPOS Uzaktan aktarıcısından çeker (sonraki iş).
  */
 export interface PollResult {
   orders: PlatformOrderPayload[];
@@ -15,9 +15,10 @@ export interface PollResult {
   invalid?: { externalId: string; error: string }[];
   /**
    * Kayıtlar yerelde işlendikten sonra çağrılır (siparişi iten platformlarda aktarıcının gelen kutusu burada silinir):
-   * kasa düşerse kayıt silinmemiş olur, sonraki çekimde yeniden gelir ve tekilleştirilir
+   * kasa düşerse kayıt silinmemiş olur, sonraki çekimde yeniden gelir ve tekilleştirilir. `skipped`: kayda alınmayan
+   * siparişler (platform Kapalı'yken): gelen kutusunda kalır
    */
-  commit?: () => Promise<void>;
+  commit?: (skipped: ReadonlySet<string>) => Promise<void>;
 }
 
 export interface PlatformAdapter {
@@ -54,9 +55,15 @@ export class PlatformHttpError extends Error {
   }
 }
 
-/** fetch'in ağ hatasını (İngilizce, "fetch failed" / zaman aşımı) kasada okunur metne çevirir */
+/**
+ * fetch'in hatasını (İngilizce) kasada okunur metne çevirir: zaman aşımı "yanıt gelmedi", ağ ("fetch failed")
+ * "bağlantı kurulamadı". İstek hiç çıkmadıysa (geçersiz adres ya da başlık: ayar hatası) ağ sorunu gibi gösterilmez.
+ */
 export function networkError(e: unknown, timeoutMs: number): PlatformHttpError {
   if (e instanceof PlatformHttpError) return e;
-  const aborted = e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError');
-  return new PlatformHttpError(0, aborted ? `yanıt gelmedi (${Math.round(timeoutMs / 1000)} sn)` : 'bağlantı kurulamadı');
+  const err = e instanceof Error ? e : new Error(String(e));
+  if (err.name === 'AbortError' || err.name === 'TimeoutError') return new PlatformHttpError(0, `yanıt gelmedi (${Math.round(timeoutMs / 1000)} sn)`);
+  // Node fetch'i ağ hatasını hep "fetch failed" ile verir (nedeni ECONNREFUSED, ENOTFOUND…); geçersiz adres ayrı
+  if (err.message === 'fetch failed') return new PlatformHttpError(0, 'bağlantı kurulamadı');
+  return new PlatformHttpError(0, `istek gönderilemedi, ayarı denetleyin (${err.message})`);
 }

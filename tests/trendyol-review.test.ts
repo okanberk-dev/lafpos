@@ -222,25 +222,130 @@ describe('Trendyol Go gözden geçirme bulguları', () => {
   });
 
   it('açık sipariş sayısı yalnız adisyonu açık kabul edilmişleri sayar', async () => {
-    const { orders, live: status } = await list();
-    const accepted = orders.filter((o) => o.status === 'kabul' && o.orderId);
-    const open = await Promise.all(accepted.map((o) => h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.orderId}`)));
-    expect(accepted.length).toBeGreaterThan(open.filter((o) => o.status === 'acik').length);
-    expect(status.trendyol.openOrders).toBe(open.filter((o) => o.status === 'acik').length);
+    const before = (await list()).live.trendyol.openOrders;
+    const open = await arrive();
+    await h.ok('kasa', 'POST', `/platforms/orders/${open.row.id}/accept`, {});
+    const closed = await arrive();
+    const c = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${closed.row.id}/accept`, {});
+    // Platform kuryesi aldı: platform ödemesiyle kapanır, sayıdan düşer
+    await h.ok('kasa', 'POST', `/orders/${c.orderId}/delivery`, { deliveryStatus: 'yolda' });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${c.orderId}`)).status).toBe('kapali');
+    expect((await list()).live.trendyol.openOrders).toBe(before + 1);
   });
 
   it('Ürün eşleme ile bağlanan ürün menüden gizlense de o ürün olarak açılır', async () => {
+    // Kasada adı olmayan kalem: eşleme olmadan "Platform ürünü" satırı olurdu
+    const line = { productId: 77, name: 'TY Özel Latte', price: 200, quantity: 1 };
+    await arrive({ lines: [line] });
     const products = (await h.ok<{ products: PlatformProductDTO[] }>('patron', 'GET', '/platforms/products')).products;
-    const latte = products.find((x) => x.externalId === '55')!;
+    const mapped = products.find((x) => x.externalId === '77')!;
     const americano = product('Americano');
-    await h.ok('patron', 'PUT', `/platforms/products/${latte.id}`, { productId: americano.id });
+    await h.ok('patron', 'PUT', `/platforms/products/${mapped.id}`, { productId: americano.id });
     await h.ok('patron', 'PATCH', `/admin/products/${americano.id}`, { hidden: true });
-    const { row } = await arrive();
+    const { row } = await arrive({ lines: [line] });
     expect(row.unmatched).toEqual([]);
     const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
     const o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
     expect(o.items[0]).toMatchObject({ productId: americano.id, unitPrice: 20000 });
     await h.ok('patron', 'PATCH', `/admin/products/${americano.id}`, { hidden: false });
-    await h.ok('patron', 'PUT', `/platforms/products/${latte.id}`, { productId: null });
+    await h.ok('patron', 'PUT', `/platforms/products/${mapped.id}`, { productId: null });
+  });
+
+  it('Kapalı modda da platformun iptali gelir (açık gerçek sipariş varken); yeni paket kayda girmez', async () => {
+    const { p, row } = await arrive();
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    await h.ok('patron', 'PUT', '/platforms/trendyol', { mode: 'kapali' });
+    const fresh = pkg();
+    fake.packages.push(fresh);
+    p.packageStatus = 'Cancelled';
+    p.packageModificationDate = Date.now();
+    // Zamanlayıcı turu (yoklama aralığı dolmuş)
+    await live.liveTick(Date.now() + 60_000);
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).status).toBe('iptal');
+    expect((await byExt(p.id)).status).toBe('iptal');
+    expect((await list()).orders.some((o) => o.payload.externalId === String(fresh.id))).toBe(false);
+    await h.ok('patron', 'PUT', '/platforms/trendyol', { mode: 'canli' });
+    // Canlı'ya dönünce yeni paket gelir
+    await live.pollPlatform('trendyol');
+    await h.ok('kasa', 'POST', `/platforms/orders/${(await byExt(fresh.id)).id}/reject`, { reason: 'Çok yoğunuz' });
+  });
+
+  it('aşaması kalıcı reddedilen siparişte de kasada iptal platforma gider', async () => {
+    const { p, row } = await arrive(ownCourierCash);
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    await h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'hazir' });
+    fake.statusFor.invoiced = [400];
+    await live.reconcileNotifications();
+    expect((await audit()).find((a) => a.action === 'platform.notify_rejected' && a.orderId === orderId)?.severity).toBe('alarm');
+    await h.ok('patron', 'POST', `/orders/${orderId}/cancel`, { reason: 'Müşteri vazgeçti' });
+    await live.reconcileNotifications();
+    expect(fake.count(`PUT ${p.id} unsupplied`)).toBe(1);
+    expect((await byExt(p.id)).status).toBe('iptal');
+    // Park edilen aşama yeniden denenmez
+    expect(fake.count(`PUT ${p.id} invoiced`)).toBe(1);
+  });
+
+  it('tur ağ beklerken platform başka siparişi iptal ederse o sipariş "kasada iptal" sanılmaz', async () => {
+    const first = await arrive();
+    const a = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${first.row.id}/accept`, {});
+    const second = await arrive();
+    await h.ok('kasa', 'POST', `/platforms/orders/${second.row.id}/accept`, {});
+    await h.ok('kasa', 'POST', `/orders/${a.orderId}/delivery`, { deliveryStatus: 'hazir' });
+    fake.delayFor.invoiced = 300;
+    const turn = live.reconcileNotifications();
+    await new Promise((r) => setTimeout(r, 80));
+    second.p.packageStatus = 'Cancelled';
+    second.p.packageModificationDate = Date.now();
+    await live.pollPlatform('trendyol');
+    await turn;
+    fake.delayFor.invoiced = 0;
+    expect((await byExt(second.p.id)).status).toBe('iptal');
+    expect(fake.count(`PUT ${second.p.id} unsupplied`)).toBe(0);
+    expect((await audit()).some((x) => x.action === 'platform.cancel_sent' && x.message.includes(second.row.payload.code))).toBe(false);
+  });
+
+  it('ödeme geri alınamayan platform iptalini yetkili kayda alır; kasiyer alamaz; alarm', async () => {
+    const { p, row } = await arrive(ownCourierCash);
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    await h.ok('kasa', 'POST', `/orders/${orderId}/payments`, { methodId: method('Nakit').id, amount: 5000 });
+    p.packageStatus = 'Cancelled';
+    p.packageModificationDate = Date.now();
+    await live.pollPlatform('trendyol');
+    expect((await byExt(p.id)).cancelPending).toBe(true);
+    expect((await h.call('kasa', 'POST', `/platforms/orders/${row.id}/cancel-close`, {})).status).toBe(403);
+    await h.ok('mudur', 'POST', `/platforms/orders/${row.id}/cancel-close`, {});
+    expect(await byExt(p.id)).toMatchObject({ status: 'iptal', cancelPending: false });
+    expect((await audit()).find((x) => x.action === 'platform.cancel_closed' && x.orderId === orderId)?.severity).toBe('alarm');
+    // Para yerinde: adisyon ve ödeme dokunulmadı
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).paid).toBe(5000);
+    const again = await h.call<{ code: string }>('mudur', 'POST', `/platforms/orders/${row.id}/cancel-close`, {});
+    expect([again.status, again.json.code]).toEqual([409, 'not_cancel_pending']);
+  });
+
+  it('kabul platforma giderken süre dolumu kaydı kapatmaz', async () => {
+    const { p, row } = await arrive();
+    const { expirePlatformOrders } = await import('../server/delivery/service');
+    const { Effects } = await import('../server/lib/effects');
+    const { tx } = await import('../server/db/client');
+    fake.delayFor.picked = 250;
+    const accepting = h.call<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    await new Promise((r) => setTimeout(r, 80));
+    tx((t) => expirePlatformOrders(t, new Effects(), Date.now() + 3600_000));
+    expect((await accepting).status).toBe(200);
+    fake.delayFor.picked = 0;
+    expect((await byExt(p.id)).status).toBe('kabul');
+  });
+
+  it('istek hiç çıkmadıysa (geçersiz adres) ağ sorunu gibi gösterilmez', async () => {
+    const { row } = await arrive();
+    const { setAdapter, adapterFor } = await import('../server/delivery/registry');
+    const { trendyolAdapter } = await import('../server/delivery/trendyol');
+    const real = adapterFor('trendyol')!;
+    setAdapter('trendyol', trendyolAdapter({ ...KEYS, apiUrl: 'adres-yok', agentName: 'LafPOS' }));
+    const r = await h.call<{ error: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    setAdapter('trendyol', real);
+    expect(r.status).toBe(502);
+    expect(r.json.error).toMatch(/istek gönderilemedi, ayarı denetleyin/);
+    await h.ok('kasa', 'POST', `/platforms/orders/${row.id}/reject`, { reason: 'Çok yoğunuz' });
   });
 });
