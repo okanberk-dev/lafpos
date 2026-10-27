@@ -62,6 +62,11 @@ function assertPosOrder(o: OrderRow) {
   if (o.extPaid) throw conflict('Bu sipariş sitede ödendi; tutarı LafPOS\'ta değiştirilemez', 'online_order');
 }
 
+/** Masadaki açık kasa adisyonu koşulu: sitede ödenmiş online (QR) sipariş masada görünür ama masayı tutmaz */
+function openCheckOn(tableId: string) {
+  return and(eq(schema.orders.tableId, tableId), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos'), eq(schema.orders.extPaid, false));
+}
+
 /**
  * Sepeti yazarkasada bekleyen adisyonun tutarı ve ödemeleri değişmez: cihazın sonucu geldiğinde ödenen kalemler
  * kayar, aynı kalem iki kez ödenir (inceleme, 26 Eki 2026). Kalem eklemek serbest; cihazdaki sepet aynı kalır.
@@ -178,12 +183,9 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
     const table = t.select().from(schema.tables).where(eq(schema.tables.id, input.tableId)).get();
     if (!table || !table.active) throw notFound('Masa');
     if (!input.newCheck) {
-      const existing = t
-        .select()
-        .from(schema.orders)
-        .where(and(eq(schema.orders.tableId, input.tableId), eq(schema.orders.status, 'acik')))
-        .orderBy(schema.orders.openedAt)
-        .get();
+      // Masanın kasa adisyonu: sitede ödenmiş QR siparişi masada dursa da garsonun adisyonu değildir
+      // (kalem eklenemez, tahsil edilmez); yalnız o varsa yeni adisyon açılır
+      const existing = t.select().from(schema.orders).where(openCheckOn(input.tableId)).orderBy(schema.orders.openedAt).get();
       if (existing) return existing;
     }
   }
@@ -584,7 +586,8 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
   const table = t.select().from(schema.tables).where(eq(schema.tables.id, tableId)).get();
   if (!table || !table.active) throw notFound('Masa');
   if (o.tableId === tableId) return o;
-  const busy = t.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.tableId, tableId), eq(schema.orders.status, 'acik'))).get();
+  // Masada yalnız sitede ödenmiş online sipariş varsa masa dolu sayılmaz (onunla birleştirilemez de)
+  const busy = t.select({ id: schema.orders.id }).from(schema.orders).where(openCheckOn(tableId)).get();
   if (busy) throw conflict(`${table.name} dolu. Birleştirmek için "Birleştir"i kullanın`, 'table_busy');
   const fromTable = o.tableId;
   t.update(schema.orders)
@@ -655,11 +658,7 @@ export function transferItems(
     const existing =
       input.tableId && input.tableId !== source.tableId
         ? // Sitede ödenmiş QR siparişine kalem taşınmaz (tahsil edilemez, ciroya girmez): yalnız kasa adisyonu
-          t
-            .select()
-            .from(schema.orders)
-            .where(and(eq(schema.orders.tableId, input.tableId), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos'), eq(schema.orders.extPaid, false)))
-            .get()
+          t.select().from(schema.orders).where(openCheckOn(input.tableId)).get()
         : undefined;
     target =
       existing ??

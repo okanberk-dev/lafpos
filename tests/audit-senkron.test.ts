@@ -172,6 +172,36 @@ describe('online siparişler', () => {
     expect((await onlineRow('ord-masa2'))?.tableId).toBe(b3.id);
     expect((await onlineRow('ord-masa3'))?.tableId).toBeNull();
   });
+
+  it('masada yalnız sitede ödenmiş online sipariş varken garson masaya kendi adisyonunu açar ve masaya adisyon taşınır', async () => {
+    const { upsertOnlineOrders } = await import('../server/sync/laffogato-orders');
+    const s3 = h.boot.tables.find((t) => t.name === 'S3')!;
+    const s4 = h.boot.tables.find((t) => t.name === 'S4')!;
+    const b1 = h.boot.tables.find((t) => t.name === 'B1')!;
+    // QR'dan masa siparişleri (sitede ödendi), masa adıyla masaya düşer
+    upsertOnlineOrders([panelOrder('ord-qr-77', { fulfillment: 'table', label: 'Masa S3', stage: 'preparing' }), panelOrder('ord-qr-78', { fulfillment: 'table', label: 'B1' })], false);
+    expect((await onlineRow('ord-qr-77'))?.tableId).toBe(s3.id);
+    expect((await onlineRow('ord-qr-78'))?.tableId).toBe(b1.id);
+
+    // Garson masa planında S3'e dokunur (POST /orders masa): online sipariş değil, kasa adisyonu açılır
+    type Opened = { id: string; source: string; extPaid: boolean; tableId: string | null };
+    const opened = await h.ok<Opened>('garson', 'POST', '/orders', { type: 'masa', tableId: s3.id, guests: 2 });
+    expect(opened).toMatchObject({ source: 'pos', extPaid: false, tableId: s3.id });
+    const water = h.boot.products.find((p) => !p.extSource && p.active) ?? h.boot.products.find((p) => p.active)!;
+    expect((await h.call('garson', 'POST', `/orders/${opened.id}/items`, { items: [{ productId: water.id, qty: 1 }] })).status).toBe(200);
+    // Masaya yeniden dokunmak aynı kasa adisyonuna götürür
+    expect((await h.ok<Opened>('garson', 'POST', '/orders', { type: 'masa', tableId: s3.id })).id).toBe(opened.id);
+
+    // Yalnız online siparişi olan masa taşımada dolu sayılmaz; kasa adisyonu olan masa dolu
+    const other = await h.ok<Opened>('garson', 'POST', '/orders', { type: 'masa', tableId: s4.id });
+    expect((await h.ok<Opened>('mudur', 'POST', `/orders/${other.id}/move`, { tableId: b1.id })).tableId).toBe(b1.id);
+    const busy = await h.call<{ code: string }>('mudur', 'POST', `/orders/${other.id}/move`, { tableId: s3.id });
+    expect(busy.status).toBe(409);
+    expect(busy.json.code).toBe('table_busy');
+
+    // Gün sonunu tutmasın
+    await h.ok('mudur', 'POST', `/orders/${opened.id}/cancel`, { reason: 'Deneme' });
+  });
 });
 
 // ─── Menü ───────────────────────────────────────────────────────────────────

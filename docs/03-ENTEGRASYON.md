@@ -100,7 +100,8 @@ tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesi
 yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşınır.
 `fulfillment = 'table'` olan sipariş, `tables.siteTableCode` ya da `label` içindeki masa adı eşlemesiyle
 ("S2", "Masa S2"; büyük/küçük harf farkı yok, birden çok masaya uyan ad eşlenmez) masa planında ilgili masada
-rozet olarak görünür.
+rozet olarak görünür. Masayı tutmaz: garson masaya dokununca kendi adisyonunu açar (masada yalnız online
+sipariş varsa seçimde "Yeni hesap aç"), masa taşımada dolu sayılmaz ve online siparişle birleştirilmez.
 
 ## 3. LafPOS → lafmaliyet: bugün (kod değişmeden)
 

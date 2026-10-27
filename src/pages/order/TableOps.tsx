@@ -20,8 +20,10 @@ export function MoveModal({ order, open, onClose, act, onMoved }: { order: Order
   if (!open) return null;
   const tables = boot.tables.filter((t) => t.sectionId === sectionId && t.id !== order.tableId);
 
+  // Masadaki kasa adisyonu; sitede ödenmiş online sipariş masayı tutmaz, onunla birleştirilmez
+  const checkOn = (tableId: string) => floor.data?.tables[tableId]?.find((o) => o.source === 'pos');
   const pick = async (tableId: string) => {
-    const busy = floor.data?.tables[tableId]?.[0];
+    const busy = checkOn(tableId);
     if (busy) {
       if (!window.confirm(`${boot.tables.find((t) => t.id === tableId)?.name} dolu. Bu adisyon oradakiyle birleştirilsin mi?`)) return;
       const res = await act((pin) => post<OrderDTO>(`/orders/${busy.id}/merge`, { sourceOrderId: order.id, approverPin: pin }), 'Masalar birleştirildi');
@@ -44,7 +46,7 @@ export function MoveModal({ order, open, onClose, act, onMoved }: { order: Order
         </div>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
           {tables.map((t) => {
-            const busy = floor.data?.tables[t.id]?.[0];
+            const busy = checkOn(t.id);
             return (
               <button key={t.id} onClick={() => pick(t.id)} className={cn('h-20 rounded-xl border p-2 text-left transition-colors', busy ? 'border-brand-200 bg-brand-50 dark:border-transparent dark:bg-[var(--admin-primary-soft)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}>
                 <div className="font-semibold">{t.name}</div>
