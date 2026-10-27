@@ -5,6 +5,7 @@ import { db, schema, tx } from '../db/client';
 import { type AppEnv, actorFrom, blindOrder, needDirect } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, isoDateTime, kurus, query } from '../lib/http';
+import { afterDelivery } from '../delivery/service';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets } from '../services/floor';
@@ -268,7 +269,11 @@ posRoutes.post('/orders/:id/cancel', async (c) => {
 posRoutes.post('/orders/:id/delivery', async (c) => {
   const input = await body(c, z.object({ deliveryStatus: z.enum(['hazirlaniyor', 'hazir', 'yolda', 'teslim']).optional(), courierId: z.string().nullish() }));
   const actor = actorFrom(c);
-  write((t, fx) => orders.setDelivery(t, actor, fx, c.req.param('id'), input));
+  write((t, fx) => {
+    orders.setDelivery(t, actor, fx, c.req.param('id'), input);
+    // Platform siparişi: tahsilatı platform yapıyorsa kuryeye verilince / teslimde kapanır
+    afterDelivery(t, actor.user, fx, c.req.param('id'));
+  });
   return c.json(dto(c, c.req.param('id')));
 });
 

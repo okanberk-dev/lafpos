@@ -59,6 +59,7 @@ import { asksNumarator, callFor, callText, numaratorLabel } from '@shared/servic
 import { useServiceMode } from '@/lib/serviceMode';
 import { NumaratorModal } from './NumaratorModal';
 import { appUrl } from '@/lib/demo';
+import { PlatformBadge } from '@/components/PlatformBadge';
 
 type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'ikram' | 'odenmez' | 'yenidenac' | 'not' | 'musteri' | 'cikis' | 'numarator';
 
@@ -122,6 +123,7 @@ export default function OrderPage() {
         : order.type === 'gelal'
           ? `Gel-al${order.deliveryName ? ` · ${order.deliveryName}` : ''}${order.numarator ? ` · ${numaratorLabel(order.numarator)}` : ''}`
           : `Paket${order.deliveryName ? ` · ${order.deliveryName}` : ''}`);
+  const titleBadge = order.platform ? <PlatformBadge platform={order.platform} code={order.platformCode} className="shrink-0" /> : null;
 
   const quickAdd = (p: ProductDTO, size: Size) => {
     cart.add(order.id, { productId: p.id, size, qty: 1, options: [], note: '' });
@@ -252,7 +254,10 @@ export default function OrderPage() {
       </button>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h1 className="truncate text-base font-semibold tracking-[-0.01em]">{title}</h1>
+          <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-[-0.01em]">
+            {titleBadge}
+            <span className="truncate">{title}</span>
+          </h1>
           <span className="tabular text-[13px] text-muted">#{isOnline ? (order.extNo ?? order.no) : order.no}</span>
           {order.status !== 'acik' && <Badge tone={order.status === 'kapali' ? 'green' : 'red'}>{order.status === 'kapali' ? 'Kapandı' : order.status === 'iptal' ? 'İptal' : 'Birleşti'}</Badge>}
           {isOnline && (

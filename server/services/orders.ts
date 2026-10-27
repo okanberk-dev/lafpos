@@ -301,7 +301,11 @@ export interface AddItemLine {
   priceOverride?: number | null;
 }
 
-export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, lines: AddItemLine[]): OrderRow {
+/**
+ * `platformPrice`: paket platformundan gelen satırlar (server/delivery). Fiyat platformun: `priceOverride` yetki
+ * onayı ve fiyat değişikliği kaydı istemez, happy hour uygulanmaz.
+ */
+export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, lines: AddItemLine[], { platformPrice = false }: { platformPrice?: boolean } = {}): OrderRow {
   needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
@@ -325,7 +329,11 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
     let unit = base + optionsUnitTotal(opts);
     let happy = false;
 
-    if (line.priceOverride != null) {
+    if (line.priceOverride != null && platformPrice) {
+      const override = Math.trunc(line.priceOverride);
+      if (override < 0) throw bad('Fiyat negatif olamaz');
+      unit = override;
+    } else if (line.priceOverride != null) {
       const approverId = need(actor, 'siparis.fiyat', 'Fiyat değiştirmek yetkili onayı gerektirir');
       const override = Math.trunc(line.priceOverride);
       if (override < 0) throw bad('Fiyat negatif olamaz');

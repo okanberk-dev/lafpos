@@ -12,6 +12,7 @@ import { eventRoutes } from './routes/events';
 import { customerRoutes } from './routes/customers';
 import { displayPublicRoutes, displayRoutes } from './routes/display';
 import { okcPublicRoutes, okcRoutes } from './routes/okc';
+import { platformRoutes } from './routes/platforms';
 import { posRoutes } from './routes/pos';
 import { reportRoutes } from './routes/reports';
 import { reservationRoutes } from './routes/reservations';
@@ -61,6 +62,7 @@ export function createApp() {
   app.route('/api/reports', reportRoutes);
   app.route('/api/admin', adminRoutes);
   app.route('/api/reservations', reservationRoutes);
+  app.route('/api/platforms', platformRoutes);
   app.route('/api', posRoutes);
   app.all('/api/*', (c) => c.json({ error: 'Böyle bir uç yok', code: 'not_found' }, 404));
 

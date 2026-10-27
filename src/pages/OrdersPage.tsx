@@ -16,6 +16,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
 import { toast } from '@/lib/toast';
+import { PlatformBadge } from '@/components/PlatformBadge';
 
 type Tab = 'acik' | 'online' | 'paket' | 'kapanan';
 
@@ -123,6 +124,7 @@ export default function OrdersPage() {
                   </span>
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1.5">
+                  {o.platform && <PlatformBadge platform={o.platform} code={o.platformCode} />}
                   {o.extPaid && <Badge tone="pink">Sitede ödendi</Badge>}
                   {pendingKitchen > 0 && <Badge tone="warn">{pendingKitchen} hazırlanıyor</Badge>}
                   {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
@@ -144,7 +146,8 @@ export default function OrdersPage() {
                       <select
                         value={o.courierId ?? ''}
                         onChange={(e) => delivery(o, { courierId: e.target.value || null })}
-                        className="h-10 min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-2 text-sm"
+                        aria-label="Kurye"
+                        className="h-10 min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-2 text-sm pointer-coarse:h-11"
                       >
                         <option value="">Kurye seç</option>
                         {couriers.map((u) => (

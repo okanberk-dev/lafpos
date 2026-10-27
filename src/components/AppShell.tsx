@@ -15,6 +15,7 @@ import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
 import { LafMark } from './LafMark';
+import { PlatformInbox } from './PlatformInbox';
 import { Modal } from './ui/Modal';
 import { REMOTE, REMOTE_PATHS } from '@/lib/remote';
 
@@ -173,6 +174,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
           </header>
         )}
+        {!REMOTE && <PlatformInbox />}
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         {/* Telefon: alt sekmeler */}
         <nav className="safe-bottom flex border-t border-line bg-surface md:hidden">
