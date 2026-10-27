@@ -143,14 +143,15 @@ posRoutes.post('/orders/:id/items/:itemId/void', async (c) => {
 });
 
 posRoutes.post('/orders/:id/items/:itemId/comp', async (c) => {
-  const input = await body(c, z.object({ qty: z.number().int().min(1).optional(), reason, undo: z.boolean().optional(), ...approver }));
+  // kind: ikram (varsayılan) ya da zayi; geri almada (undo) tür kalemin kendisinden
+  const input = await body(c, z.object({ qty: z.number().int().min(1).optional(), reason, undo: z.boolean().optional(), kind: z.enum(['ikram', 'zayi']).optional(), ...approver }));
   const actor = actorFrom(c, input.approverPin);
-  write((t, fx) => orders.compItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason, undo: input.undo }));
+  write((t, fx) => orders.compItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason, undo: input.undo, kind: input.kind }));
   return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/comp', async (c) => {
-  const input = await body(c, z.object({ kind: z.enum(['ikram', 'odenmez']), reason, ...approver }));
+  const input = await body(c, z.object({ kind: z.enum(['ikram', 'odenmez', 'zayi']), reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => orders.compOrder(t, actor, fx, c.req.param('id'), { kind: input.kind, reason: input.reason }));
   return c.json(dto(c, c.req.param('id')));
