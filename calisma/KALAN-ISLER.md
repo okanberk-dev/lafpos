@@ -7,6 +7,12 @@ Bu dosya kaldığın yerden devam etmek içindir. Her şey GitHub'da (`RiosenBeq
 ## Kullanıcı kararları (27 Ekim 2026)
 - **Bahşiş yok.** Ödeme ekranında alan yok, sunucu `tip > 0`'ı 400 `tip_disabled` ile reddeder (Ayarlar
   `tipsEnabled` varsayılan kapalı). Eski kayıtlardaki bahşiş raporlarda okunur. Yeni işte bahşiş ekleme.
+- **İşletme self servis (27 Ekim):** "masa, salon olmasın, menüler gözüksün; masalı olanı da yap ama bana self
+  servis ekranı gözüksün" (#20'de yapıldı). Aynı gün ek istekler (aşağıda 0. madde): ödeme ekranına İkram, Ödenmez,
+  Zayi; varyant eklemede seçenek; "QR + self servis" modu ve masaya özel QR'ı LafPOS'ta üretip kaydetme; ölü CSS.
+- **Vercel değişkenleri (27 Ekim, kullanıcı onayıyla):** lafpos projesindeki kullanılmayan kafe değişkenleri silindi;
+  `LAFPOS_CLOUD_SECRET` 48 karakterle yenilendi (`/api/uzaktan/kurulum` → `secret:true`); kafe satırı Mac'te
+  `~/Downloads/lafpos-kasa-ayarlari.env` (600). laffogato ve lafmaliyet'te `LAFPOS_SYNC_SECRET` zaten var.
 - **Satışı geliştir (27 Ekim, yeni istek):** "menüler laffogato ya da lafmaliyet'ten otomatik gelsin ama sistem
   gelişmiş olsun; self servis ve yarı selfe uygun; ikram, ödenmez, yemek kartı vs.; Yemeksepeti, Uber Eats alt
   yapısı ve bu tarz ne varsa". Aşağıda 1. madde.
@@ -21,6 +27,8 @@ Bu dosya kaldığın yerden devam etmek içindir. Her şey GitHub'da (`RiosenBeq
 | #14 | Servis modu (masaya servis, yarı self, self) + gözden geçirmenin 6 bulgusu, her biri testle. Göç `0005_servis_modu` |
 | #15 | Bahşiş yok |
 | #16 | LafPOS Uzaktan ilk etapta parolasız |
+| #20 | **Self servis varsayılan:** yeni kurulum ve demo satış ekranında (menü) açılır, Masalar menüde yok; masalı sürüm demo şeridinden / Ayarlar'dan. Demonun ilk günü self servis (tezgâh satışları, çağrı ekranında numaralar, platform siparişleri) |
+| #21 | Demo: ilk gün değişince kayıtlı demo yeni ilk günle açılır (eski masalı kayıt kalmasın) |
 | #19 | **Paket platformları alt yapısı** (Yemeksepeti, Getir, Trendyol Go / Uber Eats, Migros): onay şeridi, kabul / ret, platform fiyatıyla paket adisyonu, platform tahsil ediyorsa kuryeye verilince online ödemeyle kapanış (yalnız platformun tutarı; fark varsa alarm), içerik kilidi, deneme modu (yalnız kurulum modunda), Yönetim › Paket platformları, göç `0008`. **Demo:** şeritte servis modu ve "Platform siparişi"; kafe bağlanana dek `lafpos.vercel.app` doğrudan demoyu açar (`?uzaktan=1` uzaktan görünüm). main'deki #12 birleşti; sql.js projesinde düşen media testi düzeldi |
 | #18 | **Ödenmez** ve **hepsini ikram et**: adisyonun tamamı ciro dışı (`POST /orders/:id/comp`), yetki `siparis.odenmez`, göç `0006_odenmez` (`comp_kind`), Z/X'te ayrı satır, lafmaliyet `ikram[]`'de "Ödenmez: <neden>". Çekişmeli gözden geçirme: 6 bulgu kapandı |
 | #17 | Web kasa demosu (`/demo`): gerçek LafPOS sunucusu tarayıcıda (Hono + sql.js), PIN'siz, rol şeridi, Sıfırla, örnek ilk gün, çok sekme (Web Locks + BroadcastChannel). Sunucu testlerinin hepsi sql.js ile de koşar. `docs/DEMO.md`, AGENTS kural 13 |
@@ -35,6 +43,28 @@ platformlar `lafpos.vercel.app`'te. Günde birkaç birleştirme kuralı sürüyo
 Kullanıcı GitHub › Settings › Billing'den düzeltmeli. O zamana kadar kapılar yerelde çalıştırılıp PR'a yazılır.
 
 ## Sırayla yapılacaklar
+
+### 0. Kullanıcının 27 Ekim akşam istekleri (sırayla; her biri ayrı PR, para değiştirenler çekişmeli gözden geçirmeyle)
+1. **Ödeme ekranında İkram, Ödenmez, Zayi** ("ödeme kısımlarına ödenmez, ikram da ekle ve zayi kısmı da ekle"):
+   - `CompKind`'a `zayi` (comp_kind metin; göç gerekmez ama tür ve rapor güncellenir), `zayiReasons` ayarı
+     (Döküldü, Yanlış hazırlandı, Bozuk / bayat, Müşteri iade etti), yetki `siparis.odenmez` (zayi de).
+   - `PaymentModal` ödeme türü ızgarasının sonunda üç düğme: İkram / Ödenmez / Zayi → gerekçe → `POST
+     /orders/:id/comp` (#18'deki `compOrder`; ödeme alınmışsa kapalı, ipucuyla). İşlemler menüsüne "Zayi" de.
+   - Z/X: İkram, Ödenmez, Zayi ayrı satır (`odenmez` gibi `zayi` alanı); rapor özeti, ikram listesi türü, CSV;
+     lafmaliyet `ikram[]` reason `"Zayi: …"` (sözleşmede alan yok; `docs/03-ENTEGRASYON.md`'ye not). İsterse
+     kalem düzeyinde de (CartPanel kalem sayfası: İkram et yanında Zayi).
+2. **"QR + self servis" servis modu** (`shared/service-mode.ts` yeni mod, ör. `qr_self`): kasada self servis (satış
+   ekranı, menü) ama masalar görünür, çünkü laffogato uygulamasından masaya özel QR ile gelen siparişler masaya
+   düşer (`server/sync/laffogato-orders.ts` masa eşlemesi). Self modda masalar gizli kalır.
+   - **Masaya özel QR**: LafPOS üretir ve kaydeder (masa başına kalıcı kod/jeton, `tables` tablosunda alan; göç
+     `npm run db:generate`). QR içeriği sitenin/uygulamanın masa adresiyle aynı biçimde olmalı: önce laffogato'nun
+     QR biçimini ve `docs/03-ENTEGRASYON.md`'yi oku (sitede masa QR'ı nasıl çözülüyor), sözleşmede yoksa ekle.
+     `uqr` paketi bağımlılıklarda var. Yönetim › Masa planı'nda masa başına QR, toplu yazdırma (A4, masa adı).
+3. **Varyant eklemede seçenek** ("varyant ekleme de seçenekli olsun"): Yönetim › Ürünler'de boy/varyant ekleme ve
+   seçenek grubu bağlama akışını incele; kullanıcıya kısa sor ya da en olası anlamı (ürüne varyant eklerken hazır
+   seçenek gruplarından seçmek) uygula. Belirsizse önce AskUserQuestion.
+4. **Ölü CSS temizliği**: `src/index.css` ve sınıf kullanımı; kullanılmayan değişken, sınıf ve keyframe'ler
+   (tasarım belirteç testi `tests/design-tokens.test.ts` geçmeli). e2e taraması değişmemeli.
 
 ### 1. Paket platformları B2: gerçek API (kullanıcı: "yemek sepeti uber API de ekle")
 - B1 (#19) hazır: `server/delivery/` (service, simulator), `shared/platforms.ts` (`PlatformOrderPayload` tek biçim),
