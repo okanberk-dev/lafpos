@@ -204,6 +204,8 @@ posRoutes.post('/orders/:id/payments', async (c) => {
       note: z.string().max(200).nullish(),
       share: z.boolean().optional(),
       shareNo: z.number().int().min(1).max(30).optional(),
+      // Ödeme denemesinin kimliği (istemci üretir): yeniden gelen istek ikinci kez yazılmaz
+      requestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).nullish(),
       ...approver,
     }),
   );

@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
-import { percentOf, tl } from '@shared/money';
-import { amountForItems, lineGross, splitState } from '@shared/order-calc';
+import { allocate, percentOf, tl } from '@shared/money';
+import { discountGrowth, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
@@ -229,6 +229,10 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
     }
   }
   if (input.type === 'paket') needDirect(actor, 'paket.yonet');
+  if (input.customerId) {
+    const c = t.select({ id: schema.customers.id }).from(schema.customers).where(eq(schema.customers.id, input.customerId)).get();
+    if (!c) throw notFound('Müşteri');
+  }
   const now = Date.now();
   const settings = getSettings();
   const row: typeof schema.orders.$inferInsert = {
@@ -415,6 +419,7 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   const approverId = fresh ? null : need(actor, 'siparis.iptal', 'Gönderilmiş kalemi iptal etmek yetkili onayı gerektirir');
   const afterSend = !fresh && it.status !== 'yeni';
   const value = qty * it.unitPrice;
+  const before = calcFor(o, orderItems(t, orderId));
 
   splitItem(t, it, qty, {
     voided: true,
@@ -438,6 +443,7 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} iptal etti (${tl(value)}, ${reason})${o.billPrintedAt ? ', hesap yazdırıldıktan sonra' : ''}`,
     data: { afterSend, fresh },
   });
+  approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} iptal etti`);
   orderEvents(fx, updated, actor.user.id, 'item.voided');
   if (it.stationId) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: it.stationId, byUserId: actor.user.id });
   return updated;
@@ -468,6 +474,7 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   const qty = Math.max(1, Math.min(input.qty ?? unpaid, it.qty));
   if (qty > unpaid) throw conflict('Ödenmiş kalem ikram edilemez', 'item_paid');
   const value = qty * it.unitPrice;
+  const before = calcFor(o, orderItems(t, orderId));
   splitItem(t, it, qty, { complimentary: true, compReason: reason, compBy: actor.user.id, discount: 0 });
   const updated = recalc(t, orderId);
   fx.audit(t, {
@@ -481,12 +488,77 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     amount: value,
     message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ikram etti (${tl(value)}, ${reason})`,
   });
+  approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} ikram etti`);
   orderEvents(fx, updated, actor.user.id, 'item.comped');
   return updated;
 }
 
-function discountApproval(actor: Actor, pct: number): string | null {
-  const approverId = need(actor, 'siparis.indirim', 'İndirim yetkili onayı gerektirir');
+/**
+ * Adisyondaki bütün indirimlerin (kalem + adisyon) brüt tutara oranı. İndirim sınırı tek tek indirime değil bu
+ * toplam etkiye uygulanır: %10 sınırlı kişi kaleme %10, adisyona %10 verip %19 indirim yapamaz (denetim, 26 Eki 2026).
+ */
+function totalDiscountPct(totals: Pick<OrderTotals, 'gross' | 'lineDiscounts' | 'orderDiscount'>): number {
+  return totals.gross > 0 ? ((totals.lineDiscounts + totals.orderDiscount) * 100) / totals.gross : 0;
+}
+
+/** Adisyonların bugünkü kalemleriyle hesaplanan adisyon indirimi toplamı */
+function orderDiscountOf(t: Tx | DB, ...orderIds: string[]): number {
+  return orderIds.reduce((a, id) => a + calcFor(loadOrder(t, id), orderItems(t, id)).orderDiscount, 0);
+}
+
+/**
+ * Birleştirme ve kalem taşıma, hedefin adisyon indirimini gelen kalemlere de uygular. İndirim toplamı büyüdüyse bu
+ * yeni bir indirimdir: indirim yetkisi ya da yetkili onayı ister ve denetime yazılır. Yoksa yalnız `masa.islem`'i
+ * olan garson başka masanın hesabını indirimli adisyona alıp indirimsiz kalemleri indirimli kapatırdı.
+ */
+function approveDiscountGrowth(t: Tx, actor: Actor, fx: Effects, target: OrderRow, growth: number, what: string) {
+  // Aynı oranlı iki indirimli adisyon birleşince yüzdenin yuvarlaması toplamı 1-2 kuruş oynatabilir: indirim büyümesi değil
+  if (growth <= 2) return;
+  const pct = totalDiscountPct(calcFor(target, orderItems(t, target.id)));
+  const approverId = discountApproval(actor, pct, 'İndirimli adisyona gelen kalemler de indirimli olur; yetkili onayı gerektirir');
+  fx.audit(t, {
+    userId: actor.user.id,
+    approverId,
+    action: 'order.discount',
+    severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+    orderId: target.id,
+    amount: growth,
+    message: `${actor.user.name} ${what}; #${target.no} adisyonun indirimi gelen kalemlere de uygulandı (${tl(growth)}, adisyonda toplam %${Math.round(pct)})`,
+  });
+}
+
+/**
+ * Adisyonu küçülten işlem (kalem iptali, ikram, başka adisyona taşıma) saklı indirimi kalan kalemlerde büyütür: tutar
+ * indirimi aynı kalır, kalem indirimi kalanın daha büyük payı olur. Sınır yalnız indirim anında denetlendiği için %10
+ * sınırlı kasiyer 10 lattelik adisyona %10 tutar indirimi verip 9 latteyi "yanlış giriş" diye iptal edince 1 latte
+ * bedava kapanıyordu (gözden geçirme, 27 Eki 2026). Önceki orandan fazlası yeni indirimdir: kalan kalemlerdeki toplam
+ * oran işlemi yapanın sınırında olmalı ya da yetkili onaylamalı, denetime yazılır. Yüzde adisyon indirimi oranını
+ * korur, onay istemez. Adisyon iptali bütün kalemleri iptal eder; geride indirim kalmaz.
+ */
+function approveDiscountShrink(t: Tx, actor: Actor, fx: Effects, orderId: string, before: OrderTotals, what: string) {
+  const o = loadOrder(t, orderId);
+  const after = calcFor(o, orderItems(t, orderId));
+  const growth = discountGrowth(before, after);
+  // Yüzde indirimlerin yuvarlaması 1-2 kuruş oynatabilir: indirim büyümesi değil
+  if (growth <= 2) return;
+  const was = Math.round(totalDiscountPct(before) * 10) / 10;
+  const pct = totalDiscountPct(after);
+  const shown = Math.round(pct * 10) / 10;
+  const approverId = discountApproval(actor, pct, `Kalan kalemlerde indirim %${shown} olur; yetkili onayı gerektirir`);
+  fx.audit(t, {
+    userId: actor.user.id,
+    approverId,
+    action: 'order.discount',
+    severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+    orderId,
+    amount: growth,
+    message: `${actor.user.name} ${what}; #${o.no} adisyonda kalan kalemlerin indirimi %${was} iken %${shown} oldu (${tl(growth)} fazla indirim)`,
+    data: { beforePct: was, pct: shown },
+  });
+}
+
+function discountApproval(actor: Actor, pct: number, reason = 'İndirim yetkili onayı gerektirir'): string | null {
+  const approverId = need(actor, 'siparis.indirim', reason);
   if (!approverId && pct > actor.user.maxDiscountPct) {
     // Kullanıcının indirim yetkisi var ama sınırı aşıyor: üst sınırı yeten bir yetkili onaylamalı
     if (!actor.approver) {
@@ -522,9 +594,12 @@ export function setItemDiscount(
   const gross = lineGross(it);
   const amount = input.type === 'percent' ? percentOf(gross, Math.min(100, Math.max(0, input.value))) : Math.min(gross, Math.max(0, Math.trunc(input.value)));
   const pct = gross > 0 ? (amount * 100) / gross : 0;
+  // Sınır adisyondaki toplam indirime de uygulanır: kalem indirimi adisyon indiriminin üstüne biner
+  const total = totalDiscountPct(calcFor(o, orderItems(t, orderId).map((i) => (i.id === it.id ? { ...i, discount: amount } : i))));
+  const limitPct = Math.max(pct, total);
   const reason = input.reason.trim();
   if (amount > 0 && !reason) throw bad('İndirim nedeni seçilmeli', 'reason_required');
-  const approverId = amount > 0 ? discountApproval(actor, pct) : null;
+  const approverId = amount > 0 ? discountApproval(actor, limitPct) : null;
   t.update(schema.orderItems)
     .set({ discount: amount, discountReason: amount > 0 ? reason : null })
     .where(eq(schema.orderItems.id, it.id))
@@ -546,11 +621,11 @@ export function setItemDiscount(
       userId: actor.user.id,
       approverId,
       action: 'item.discount',
-      severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+      severity: limitPct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
       orderId,
       entityId: it.id,
       amount,
-      message: `${actor.user.name} #${o.no} adisyonda ${it.name} için ${tl(amount)} indirim yaptı (%${Math.round(pct)}, ${reason})`,
+      message: `${actor.user.name} #${o.no} adisyonda ${it.name} için ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
     });
   }
   orderEvents(fx, updated, actor.user.id, 'item.discount');
@@ -591,13 +666,16 @@ export function setOrderDiscount(
   const reason = input.reason.trim();
   if (!reason) throw bad('İndirim nedeni seçilmeli', 'reason_required');
   const value = input.type === 'percent' ? Math.min(100, Math.max(0, Math.round(input.value))) : Math.max(0, Math.trunc(input.value));
-  const before = calcFor({ ...o, discountType: null, discountValue: null }, orderItems(t, orderId));
+  const items = orderItems(t, orderId);
+  const before = calcFor({ ...o, discountType: null, discountValue: null }, items);
   const subtotal = before.gross - before.lineDiscounts;
   // Boş adisyona indirim verilmez: yetki ve uyarı eşiği tutara göre ölçülür, sonra eklenen kalemlere sessizce uygulanırdı
   if (subtotal <= 0) throw bad('Önce ürün ekleyin; indirim boş adisyona verilmez', 'empty_order');
   const amount = input.type === 'percent' ? percentOf(subtotal, value) : Math.min(subtotal, value);
   const pct = subtotal > 0 ? (amount * 100) / subtotal : 0;
-  const approverId = discountApproval(actor, pct);
+  // Sınır kalem indirimleriyle birlikte toplam etkiye uygulanır (toplam oran, kalem indirimi varken adisyonunkinden büyük)
+  const total = totalDiscountPct(calcFor({ ...o, discountType: input.type, discountValue: value }, items));
+  const approverId = discountApproval(actor, Math.max(pct, total));
   t.update(schema.orders)
     .set({ discountType: input.type, discountValue: value, discountReason: reason, discountBy: approverId ?? actor.user.id })
     .where(eq(schema.orders.id, orderId))
@@ -608,10 +686,10 @@ export function setOrderDiscount(
     userId: actor.user.id,
     approverId,
     action: 'order.discount',
-    severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+    severity: Math.max(pct, total) >= getSettings().alertDiscountPct ? 'uyari' : 'info',
     orderId,
     amount,
-    message: `${actor.user.name} #${o.no} adisyona ${tl(amount)} indirim yaptı (%${Math.round(pct)}, ${reason})`,
+    message: `${actor.user.name} #${o.no} adisyona ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
   });
   orderEvents(fx, updated, actor.user.id, 'order.discount');
   return updated;
@@ -687,6 +765,7 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
   assertPosOrder(source);
   assertNoPendingDevice(t, targetId);
   assertNoPendingDevice(t, sourceId);
+  const discountBefore = orderDiscountOf(t, targetId, sourceId);
   t.update(schema.orderItems).set({ orderId: targetId }).where(eq(schema.orderItems.orderId, sourceId)).run();
   t.update(schema.payments).set({ orderId: targetId }).where(eq(schema.payments.orderId, sourceId)).run();
   t.update(schema.roomSessions).set({ orderId: targetId }).where(eq(schema.roomSessions.orderId, sourceId)).run();
@@ -701,6 +780,7 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
     .run();
   recalc(t, sourceId);
   const updated = recalc(t, targetId);
+  approveDiscountGrowth(t, actor, fx, updated, orderDiscountOf(t, targetId) - discountBefore, `#${source.no} adisyonu #${target.no} ile birleştirdi`);
   fx.audit(t, { userId: actor.user.id, approverId, action: 'order.merge', orderId: targetId, message: `#${source.no} adisyon #${target.no} ile birleştirildi` });
   orderEvents(fx, updated, actor.user.id, 'order.merged');
   orderEvents(fx, source, actor.user.id, 'order.merged');
@@ -754,6 +834,8 @@ export function transferItems(
       );
   }
   if (target.id === source.id) throw bad('Kaynak ve hedef aynı');
+  const discountBefore = orderDiscountOf(t, orderId, target.id);
+  const sourceBefore = calcFor(source, orderItems(t, orderId));
 
   for (const sel of input.items) {
     const it = loadItem(t, orderId, sel.itemId);
@@ -767,6 +849,9 @@ export function transferItems(
 
   const src = recalc(t, orderId);
   const dst = recalc(t, target.id);
+  approveDiscountGrowth(t, actor, fx, dst, orderDiscountOf(t, orderId, target.id) - discountBefore, `#${source.no} adisyondan #${dst.no} adisyona kalem taşıdı`);
+  // Kaynakta kalan kalemler: tutar indirimi kaynakta kalır, taşınan kalemlerin payı da kalanlara biner
+  approveDiscountShrink(t, actor, fx, orderId, sourceBefore, `#${source.no} adisyondan #${dst.no} adisyona kalem taşıdı`);
   const remaining = orderItems(t, orderId).filter((i) => !i.voided);
   const hasPayments = orderPayments(t, orderId).some((p) => !p.refundedAt);
   const emptied = !remaining.length && !hasPayments;
@@ -831,6 +916,25 @@ export interface PaymentInput {
   share?: boolean;
   /** Pay ödemesinde kasiyerin ekranda gördüğü pay numarası; tutar da `amount` olarak gelir, ikisi tutmalı */
   shareNo?: number;
+  /** Ödeme denemesinin istemcideki kimliği: aynı kimlikle gelen istek yeniden yazılmaz, ilk sonuç döner */
+  requestId?: string | null;
+}
+
+/**
+ * Aynı deneme kimliğiyle gelen istek kaydedilen ödemeyle aynı mı: tür, tutar, bahşiş, pay numarası ve kalemler.
+ * Kaydedilen tutar istemcinin gönderdiğiyle aynıdır (pay ve kalem ödemesinde tutmayan tutar 409 alır).
+ */
+function sameRequest(prev: typeof schema.payments.$inferSelect, input: PaymentInput): boolean {
+  if (prev.methodId !== input.methodId || prev.amount !== Math.trunc(input.amount)) return false;
+  if (prev.tip !== Math.max(0, Math.trunc(input.tip ?? 0))) return false;
+  if (!!input.share !== (prev.shareNo != null)) return false;
+  if (input.share && input.shareNo != null && input.shareNo !== prev.shareNo) return false;
+  const key = (list: { itemId: string; qty: number }[]) =>
+    list
+      .map((s) => `${s.itemId}:${s.qty}`)
+      .sort()
+      .join(',');
+  return key(mergeSelection(input.items ?? [])) === key(prev.items ?? []);
 }
 
 /** Ödenmiş paylar (iptal edilmemiş, payı olan ödemeler) */
@@ -935,6 +1039,25 @@ export function addPayment(
   input: PaymentInput,
 ): { order: OrderRow; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null } {
   needDirect(actor, 'odeme.al');
+  // Yanıtı kaybolan istek yeniden geldiyse (kasiyer "Öde"ye tekrar bastı) ödeme ikinci kez yazılmaz: ilk sonuç döner.
+  // Yoksa yarım ödeme iki kez yazılıp adisyon yarısı alınmış hâlde kapanıyordu (denetim, 26 Eki 2026)
+  if (input.requestId) {
+    const prev = t
+      .select()
+      .from(schema.payments)
+      .where(and(eq(schema.payments.orderId, orderId), eq(schema.payments.requestId, input.requestId)))
+      .get();
+    if (prev) {
+      // İlk sonuç yalnız aynı istek için döner. Ekran yenilenip başka pay, tutar ya da kalem aynı kimlikle geldiyse ya
+      // da o ödeme iptal edildiyse "alındı" denmez: kart terminalinde çekilen para LafPOS'a hiç yazılmıyordu
+      // (gözden geçirme, 27 Eki 2026). 409'da istemci yeni kimlik üretir, ekran yenilenir
+      if (prev.refundedAt) throw conflict('Bu deneme iptal edilen ödemeye ait; ekran yenilendi, ödemeyi yeniden alın', 'request_refunded');
+      if (!sameRequest(prev, input)) throw conflict('Ödeme ekranı değişti; ekran yenilendi, ödemeyi yeniden alın', 'request_reused');
+      const order = loadOrder(t, orderId);
+      const share = prev.shareNo != null ? { no: prev.shareNo, of: prev.shareOf ?? prev.shareNo } : null;
+      return { order, closed: order.status === 'kapali', change: prev.change ?? 0, amount: prev.amount, share };
+    }
+  }
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
@@ -951,7 +1074,7 @@ export function addPayment(
   if (remaining <= 0) throw conflict('Bu adisyonun ödenecek tutarı kalmadı', 'nothing_due');
 
   let amount = Math.trunc(input.amount);
-  let selection: { itemId: string; qty: number }[] | null = null;
+  let selection: PaidItem[] | null = null;
   // Aynı kalem iki kez gönderilirse adetler birleşir: iki kez ücret alınmaz
   const wanted = mergeSelection(input.items ?? []);
   let share: { no: number; of: number } | null = null;
@@ -978,24 +1101,43 @@ export function addPayment(
     share = { no, of: o.splitPeople };
   }
   if (wanted.length) {
-    const lines = items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty }));
-    const sel = wanted.map((s) => ({ lineId: s.itemId, qty: s.qty }));
-    const expected = amountForItems(totals, lines, sel);
-    if (expected <= 0) throw bad('Seçilen kalemler ödenmiş ya da ücretsiz');
-    amount = Math.min(expected, remaining);
-    selection = [];
     for (const s of wanted) {
       const it = items.find((i) => i.id === s.itemId);
       if (!it) throw notFound('Kalem');
-      const qty = Math.min(s.qty, it.qty - it.paidQty);
-      if (qty <= 0) continue;
-      t.update(schema.orderItems).set({ paidQty: it.paidQty + qty }).where(eq(schema.orderItems.id, it.id)).run();
-      selection.push({ itemId: it.id, qty });
+      // İptal, ikram ya da tamamen indirimli kalem ödemeye seçilmez: ücretsizken ödenmiş işaretlenirse ikramı geri
+      // alınınca borçlu olur ama ne kalemle ödenir ne iptal edilir (denetim, 26 Eki 2026)
+      if (it.voided || it.complimentary || (totals.lineNet[it.id] ?? 0) <= 0) {
+        throw conflict(`${it.name} ücretsiz; ödemeye seçilmez. Ekran yenilendi, yeniden seçin`, 'item_free');
+      }
+    }
+    // Satır satır tutar ödemeye yazılır: ödeme iptal edilip adet yeniden ödenince kalemin kalanı kuruşu kuruşuna alınır
+    const lines = itemPayLines(items, orderPayments(t, orderId));
+    const breakdown = itemsBreakdown(
+      totals,
+      lines,
+      wanted.map((s) => ({ lineId: s.itemId, qty: s.qty })),
+    );
+    const expected = breakdown.reduce((a, l) => a + l.amount, 0);
+    if (expected <= 0) throw bad('Seçilen kalemler ödenmiş ya da ücretsiz');
+    amount = Math.min(expected, remaining);
+    // Kasiyerin ekranda gördüğü ve kart terminaline girdiği tutar sunucununkiyle aynı olmalı (pay ödemesindeki gibi):
+    // başka cihazda indirim kalktıysa ya da kalem eklenip indirim yeniden dağıldıysa başka tutar sessizce yazılmasın
+    if (Math.trunc(input.amount) !== amount) {
+      throw conflict(`Seçilen kalemlerin tutarı değişti: ${tl(amount)}. Ekran yenilendi, yeniden alın`, 'items_changed');
+    }
+    // Kalan tutar seçilenden azsa (araya tutar ödemesi girdi) satır tutarları alınana oranla iner
+    const lineAmounts = amount < expected ? allocate(amount, breakdown.map((l) => l.amount)) : breakdown.map((l) => l.amount);
+    selection = breakdown.map((l, i) => ({ itemId: l.lineId, qty: l.qty, amount: lineAmounts[i] ?? 0 }));
+    for (const l of breakdown) {
+      const it = items.find((i) => i.id === l.lineId)!;
+      t.update(schema.orderItems).set({ paidQty: it.paidQty + l.qty }).where(eq(schema.orderItems.id, it.id)).run();
     }
   }
   if (amount <= 0) throw bad('Tutar sıfırdan büyük olmalı');
   if (amount > remaining) throw bad(`En fazla ${tl(remaining)} alınabilir`, 'overpay');
   const tip = Math.max(0, Math.trunc(input.tip ?? 0));
+  // Açık hesapta para alınmaz: bahşiş Z'de alınmış görünür ama ne çekmecededir ne müşterinin borcunda (denetim, 26 Eki 2026)
+  if (tip > 0 && method.kind === 'cari') throw bad('Açık hesaba bahşiş yazılmaz; bahşişi kaldırın', 'tip_on_account');
 
   let given: number | null = null;
   let change = 0;
@@ -1042,6 +1184,7 @@ export function addPayment(
       shareOf: share?.of ?? null,
       userId: actor.user.id,
       createdAt: Date.now(),
+      requestId: input.requestId ?? null,
     })
     .run();
 
@@ -1255,7 +1398,7 @@ export function addExternalPayments(
   userId: string,
   fx: Effects,
   orderId: string,
-  input: { payments: { methodId: string; amount: number; note?: string | null }[]; items: { itemId: string; qty: number }[] },
+  input: { payments: { methodId: string; amount: number; note?: string | null }[]; items: PaidItem[] },
 ): { order: OrderRow; closed: boolean; paymentIds: string[] } {
   const o = loadOrder(t, orderId);
   if (o.status !== 'acik') throw conflict('Adisyon artık açık değil', 'order_closed');
@@ -1267,14 +1410,25 @@ export function addExternalPayments(
   const sum = input.payments.reduce((a, p) => a + p.amount, 0);
   if (sum > remaining) throw conflict(`Cihazdaki ödeme (${tl(sum)}) kalan tutarı (${tl(remaining)}) aşıyor`, 'overpay');
 
-  const marked: { itemId: string; qty: number }[] = [];
+  const marked: PaidItem[] = [];
   for (const sel of input.items) {
     const it = items.find((i) => i.id === sel.itemId);
     if (!it) continue;
     const qty = Math.min(sel.qty, it.qty - it.paidQty);
     if (qty <= 0) continue;
     t.update(schema.orderItems).set({ paidQty: it.paidQty + qty }).where(eq(schema.orderItems.id, it.id)).run();
-    marked.push({ itemId: it.id, qty });
+    marked.push({ itemId: it.id, qty, amount: qty === sel.qty ? sel.amount : undefined });
+  }
+  // Sepetin satır tutarları kalem işaretine yazılır (addPayment gibi): ödeme iptal edilip adet yeniden ödenince
+  // satırın kalanı kuruşu kuruşuna alınır. Cihaz sepetten az aldıysa tutarlar alınana oranla iner; biri
+  // bilinmiyorsa (eski sepet) hiçbiri yazılmaz, adet payları sırayla sayılır
+  const lineAmounts = marked.map((m) => m.amount);
+  if (lineAmounts.every((a): a is number => a != null)) {
+    const expected = lineAmounts.reduce((a, b) => a + b, 0);
+    const scaled = sum < expected ? allocate(sum, lineAmounts) : lineAmounts;
+    marked.forEach((m, i) => (m.amount = scaled[i] ?? 0));
+  } else {
+    for (const m of marked) delete m.amount;
   }
 
   const ids: string[] = [];

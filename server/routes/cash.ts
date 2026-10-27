@@ -94,7 +94,18 @@ cashRoutes.post('/movements', async (c) => {
 });
 
 cashRoutes.post('/collect', async (c) => {
-  const input = await body(c, z.object({ customerId: z.string(), methodId: z.string(), amount: kurus, note: z.string().max(200).nullish(), approverPin: z.string().nullish() }));
+  const input = await body(
+    c,
+    z.object({
+      customerId: z.string(),
+      methodId: z.string(),
+      amount: kurus,
+      note: z.string().max(200).nullish(),
+      // Tahsilat denemesinin kimliği (istemci üretir): yeniden gelen istek ikinci kez yazılmaz
+      requestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).nullish(),
+      approverPin: z.string().nullish(),
+    }),
+  );
   const actor = actorFrom(c, input.approverPin);
   write((t, fx) => collectCustomerPayment(t, actor, fx, input));
   return c.json({ ok: true });

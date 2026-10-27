@@ -30,6 +30,21 @@ export const bad = (msg: string, code?: string) => new HttpError(400, msg, code)
 export const notFound = (what = 'Kayıt') => new HttpError(404, `${what} bulunamadı`, 'not_found');
 export const conflict = (msg: string, code?: string) => new HttpError(409, msg, code);
 
+/**
+ * Veritabanı kısıtı ihlali istemcinin gönderdiği kimlikten doğar (kaydı yok ya da aynısı zaten var): 500 değil
+ * 422/409 döner. Uçlar kimlikleri kendisi denetler; bu, denetimi unutulan uç için son çare (denetim, 26 Eki 2026).
+ */
+export function constraintError(err: unknown): HttpError | null {
+  for (let e: unknown = err, depth = 0; e && depth < 3; e = (e as { cause?: unknown }).cause, depth++) {
+    const code = (e as { code?: unknown }).code;
+    if (code === 'SQLITE_CONSTRAINT_FOREIGNKEY') {
+      return new HttpError(422, 'Gönderilen kayıtlardan biri bulunamadı (silinmiş olabilir); ekranı yenileyip yeniden deneyin', 'invalid_reference');
+    }
+    if (code === 'SQLITE_CONSTRAINT_UNIQUE' || code === 'SQLITE_CONSTRAINT_PRIMARYKEY') return new HttpError(409, 'Bu kayıt zaten var', 'duplicate');
+  }
+  return null;
+}
+
 /** Gövdeyi zod şemasıyla doğrular; hata mesajını Türkçe ve alan adlı döndürür. */
 export async function body<T extends z.ZodType>(c: Context, schema: T): Promise<z.infer<T>> {
   let raw: unknown;

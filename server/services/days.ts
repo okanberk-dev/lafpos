@@ -74,19 +74,59 @@ export function addCashMovement(t: Tx, actor: Actor, fx: Effects, input: { kind:
 }
 
 /** Cari (açık hesap) tahsilatı: satış değildir, Z cirosuna girmez ama nakitse kasaya girer. */
-export function collectCustomerPayment(t: Tx, actor: Actor, fx: Effects, input: { customerId: string; methodId: string; amount: number; note?: string | null }) {
+/**
+ * Açık hesap tahsilatı: ödeme satırı (adisyonsuz), cari ekstresine tahsilat ve bakiye. Yanıtı kaybolan istek aynı
+ * deneme kimliğiyle yeniden gelirse ikinci kez yazılmaz (ödemedeki gibi); yoksa borç iki kez düşüyor, beklenen nakit
+ * iki kez artıyordu. Bakiyeden fazlası tahsil edilmez: fazlası müşteriye alacak olarak yazılır, sonraki açık hesap
+ * satışında harcanırdı (gözden geçirme, 27 Eki 2026). Kimlik yalnız aynı müşteri, tür ve tutarda ilk sonucu döner.
+ */
+export function collectCustomerPayment(
+  t: Tx,
+  actor: Actor,
+  fx: Effects,
+  input: { customerId: string; methodId: string; amount: number; note?: string | null; requestId?: string | null },
+) {
   need(actor, 'cari.yonet');
   const day = requireOpenDay(t);
+  const amount = Math.trunc(input.amount);
+  if (input.requestId) {
+    const prev = t
+      .select()
+      .from(schema.payments)
+      .where(and(isNull(schema.payments.orderId), eq(schema.payments.requestId, input.requestId)))
+      .get();
+    if (prev) {
+      if (prev.customerId !== input.customerId || prev.methodId !== input.methodId || prev.amount !== amount) {
+        throw conflict('Tahsilat ekranı değişti; bakiyeye bakıp yeniden alın', 'request_reused');
+      }
+      return;
+    }
+  }
   const cust = t.select().from(schema.customers).where(eq(schema.customers.id, input.customerId)).get();
   if (!cust) throw notFound('Müşteri');
   const method = t.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, input.methodId)).get();
   if (!method || !method.active || method.kind === 'cari') throw bad('Tahsilat için nakit, kart ya da havale seçin');
-  const amount = Math.trunc(input.amount);
   if (amount <= 0) throw bad('Tutar sıfırdan büyük olmalı');
+  if (amount > cust.balance) {
+    throw conflict(cust.balance > 0 ? `${cust.name} açık hesabında ${tl(cust.balance)} borç var; en çok bu kadar tahsil edilir` : `${cust.name} açık hesabında borç yok`, 'over_balance');
+  }
   const now = Date.now();
   const paymentId = ulid(now);
   t.insert(schema.payments)
-    .values({ id: paymentId, orderId: null, dayId: day.id, methodId: method.id, methodName: method.name, zField: method.zField, amount, customerId: cust.id, note: input.note?.trim() || 'Açık hesap tahsilatı', userId: actor.user.id, createdAt: now })
+    .values({
+      id: paymentId,
+      orderId: null,
+      dayId: day.id,
+      methodId: method.id,
+      methodName: method.name,
+      zField: method.zField,
+      amount,
+      customerId: cust.id,
+      note: input.note?.trim() || 'Açık hesap tahsilatı',
+      userId: actor.user.id,
+      createdAt: now,
+      requestId: input.requestId ?? null,
+    })
     .run();
   t.insert(schema.customerLedger)
     .values({ id: ulid(now), customerId: cust.id, kind: 'tahsilat', amount: -amount, paymentId, methodId: method.id, dayId: day.id, note: input.note?.trim() || null, userId: actor.user.id, createdAt: now })

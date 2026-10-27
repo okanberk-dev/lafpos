@@ -97,7 +97,10 @@ kaydedip kapatınca sunucu yeniden başlar.
 
 - Tutarlar kuruş; `taxPercent` oran × 100, `quantity` adet × 1000, kısım KDV oranından.
 - İkram ve iptal edilen kalem gitmez; ödenmiş adet düşülür; istenirse yalnız seçili kalemler gönderilir
-  (kalem bazlı ödeme).
+  (kalem bazlı ödeme). Seçilen adetlerin tutarı ödeme ekranıyla aynı hesaptır (`itemsBreakdown`): satırın kalan
+  bütün adetleri satırın kalanını alır (net pay eksi canlı ödemelerin bu satıra ödediği), kısmi adetler adet
+  paylarından sırayla. Sepetin satır tutarları cihaz ödemesinin kalem işaretine yazılır; ödeme iptal edilip adet
+  yeniden ödenince kuruş kalmaz.
 - Adisyon indirimi satırlara en büyük kalan yöntemiyle dağıtılır (`adjust.totalValue`). Servis ücreti yalnız
   adisyonda servis varsa ayrı "Servis ücreti" satırıdır. Bütün adisyon gönderilince sepet toplamı adisyonun
   kalanına eşitlenir: kalem bazlı ödemeden sonra kalem eklenip indirim yeniden dağıldığında kalan birkaç
