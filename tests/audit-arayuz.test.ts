@@ -2,10 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { percentOf } from '@shared/money';
 import { happyHourPercentAt, happyHourUnit } from '@shared/order-calc';
 import { istanbulParts } from '@shared/time';
-import type { BootstrapDTO, OrderDTO } from '@shared/types';
+import type { BootstrapDTO, DisplayStateDTO, OrderDTO } from '@shared/types';
 import { estimateUnit, menuUnit } from '../src/lib/boot';
 import type { PendingLine } from '../src/lib/cart';
-import { previewTotals } from '../src/lib/estimate';
+import { type DisplayOrder, displayOrder, previewTotals } from '../src/lib/estimate';
 import { type Harness, startApp } from './harness';
 
 /**
@@ -51,6 +51,8 @@ describe('happy hour: istemci tahmini sunucunun fiyatı', () => {
       // Elle fiyatın karşılaştırıldığı menü fiyatı happy hour öncesi
       expect(menuUnit(boot, pr, size, [])).toBe(sent.items[0].basePrice);
     }
+    // Sonraki testler happy hour'suz fiyatla
+    for (const r of await h.ok<{ id: string }[]>('patron', 'GET', '/admin/happy-hours')) await h.ok('patron', 'DELETE', `/admin/happy-hours/${r.id}`);
   });
 
   it('kural eşleşmesi: gece yarısını aşan aralık önceki güne ait, kapsam ve kapalı kural', () => {
@@ -69,5 +71,58 @@ describe('happy hour: istemci tahmini sunucunun fiyatı', () => {
     expect(happyHourUnit(14000, 20)).toBe(11200);
     expect(happyHourUnit(14500, 15)).toBe(14500 - percentOf(14500, 15));
     expect(happyHourUnit(14000, 0)).toBe(14000);
+  });
+});
+
+describe('müşteri ekranı dökümü', () => {
+  const MUDUR = '2468';
+  const sum = (d: DisplayOrder) => d.lines.reduce((a, l) => a + l.total, 0);
+  /** Ekrandaki satırlar: kalemler − İndirim + Servis = Toplam */
+  const addsUp = (d: DisplayOrder) => sum(d) - d.discount + d.service;
+
+  it('indirim bir kez düşülür: kalemler − indirim (+ servis) = toplam, gönderilmemişler dahil', async () => {
+    const boot = h.boot;
+    const tk = product(boot, 'Türk kahvesi');
+    const latte = product(boot, 'Latte');
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: tk.id, qty: 2 }, { productId: latte.id, size: 'M', qty: 1 }] });
+    const latteLine = o.items.find((i) => i.productId === latte.id)!;
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items/${latteLine.id}/discount`, { type: 'percent', value: 15, reason: 'Müdavim', approverPin: MUDUR });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 10, reason: 'Müdavim', approverPin: MUDUR });
+    expect(o.totals.orderDiscount).toBeGreaterThan(0);
+
+    const shown = displayOrder(boot, o, [], 'Gel al')!;
+    expect(shown.total).toBe(o.total);
+    expect(addsUp(shown)).toBe(shown.total);
+    // Kalem müşterinin menüde gördüğü fiyatla: 2 × Türk kahvesi
+    expect(shown.lines.find((l) => l.name === o.items[0].name)!.total).toBe(2 * o.items[0].unitPrice);
+
+    // Gönderilmemiş kalem: indirim onu da kapsar, ekran yine tutarlı; gönderince sunucunun toplamı
+    const pending: PendingLine[] = [{ key: 'k1', productId: tk.id, size: 'TEK', qty: 1, options: [], note: '' }];
+    const withPending = displayOrder(boot, o, pending, 'Gel al')!;
+    expect(addsUp(withPending)).toBe(withPending.total);
+    const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: pending.map(({ key: _k, ...l }) => l) });
+    expect(withPending.total).toBe(sent.total);
+    expect(withPending.discount).toBe(sent.totals.lineDiscounts + sent.totals.orderDiscount);
+  });
+
+  it('servis ücreti ve ikram: ekranın satırları yine toplamı verir', async () => {
+    await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 10 });
+    const table = h.boot.tables.find((t) => t.kind !== 'oda')!;
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 2 });
+    await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 0 });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product(h.boot, 'Türk kahvesi').id, qty: 3 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/comp`, { qty: 1, reason: 'Müdavim', approverPin: MUDUR });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 2000, reason: 'Müdavim', approverPin: MUDUR });
+    expect(o.totals.service).toBeGreaterThan(0);
+    const shown = displayOrder(h.boot, o, [], table.name)!;
+    expect(shown.total).toBe(o.total);
+    expect(addsUp(shown)).toBe(o.total);
+    // Ekran servis satırını alır; servis göndermeyen eski kasa sürümü de kabul edilir
+    await h.ok('kasa', 'PUT', '/display/audit', shown);
+    expect(await h.ok<DisplayStateDTO>('', 'GET', '/public/display/audit')).toMatchObject({ kind: 'order', service: o.totals.service, total: o.total });
+    const { service: _s, ...old } = shown;
+    await h.ok('kasa', 'PUT', '/display/audit', old);
+    expect(await h.ok<DisplayStateDTO>('', 'GET', '/public/display/audit')).toMatchObject({ kind: 'order', service: 0 });
   });
 });

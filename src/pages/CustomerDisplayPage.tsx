@@ -67,6 +67,12 @@ export default function CustomerDisplayPage() {
                 <span>−{tl(state.discount)}</span>
               </div>
             )}
+            {state.service > 0 && (
+              <div className="tabular flex justify-between text-lg text-muted">
+                <span>Servis</span>
+                <span>{tl(state.service)}</span>
+              </div>
+            )}
             {state.paid > 0 && (
               <div className="tabular flex justify-between text-lg text-muted">
                 <span>Ödenen</span>

@@ -78,7 +78,7 @@ export default function OrderPage() {
   // Müşteri ekranı (bu cihaz yansıtıyorsa): kalemler ve gönderilmemişler dahil tahmini tutar
   const [displayCode, setDisplayCode] = useDisplayCode();
   const displayLabel = order ? (table?.name ?? ORDER_TYPE_LABEL[order.type]) : '';
-  useCustomerDisplay(boot, order, pending, displayLabel, order ? (previewTotals(boot, order, pending)?.total ?? order.total) : 0);
+  useCustomerDisplay(boot, order, pending, displayLabel);
 
   if (isLoading) return <PageLoading />;
   if (isError || !order) {
