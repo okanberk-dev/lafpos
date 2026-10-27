@@ -201,6 +201,38 @@ describe('yazarkasa denetimi', () => {
     await provider('simulator');
   });
 
+  it('cihaz ödemesi sepeti karşılamıyorsa (ikram, ödemesiz) kalemler ödenmiş sayılmaz, alarm düşer, yeniden gönderilmez', async () => {
+    const o = await order([{ name: 'Türk kahvesi', qty: 2 }]);
+    const r = await send(o.id);
+    await simPay(r.id, [{ type: 9, amount: 14000 }, { type: 3, amount: r.amount - 14000 }]);
+    const after = await getOrder(o.id);
+    expect(after).toMatchObject({ status: 'acik', paid: r.amount - 14000 });
+    expect(after.items.map((i) => i.paidQty)).toEqual([0]);
+    expect(after.payments.map((p) => [p.methodName, p.amount, p.items ?? null])).toEqual([['Kredi kartı', r.amount - 14000, null]]);
+    expect((await receipts(o.id))[0].status).toBe('hata');
+    expect((await audits()).find((a) => a.action === 'okc.underpaid' && a.orderId === o.id)).toMatchObject({ severity: 'alarm', amount: 14000 });
+    const again = await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: [{ itemId: o.items[0].id, qty: 1 }] });
+    expect(again.json.code).toBe('okc_unresolved');
+    // Aynı sonuç ikinci kez gelirse ödeme ikinci kez yazılmaz
+    const { applySale } = await import('../server/okc/service');
+    applySale(r.id, { basketID: r.id, status: 0, paymentItems: [{ type: 9, amount: 14000 }, { type: 3, amount: r.amount - 14000 }] }, 'webhook');
+    expect((await getOrder(o.id)).paid).toBe(r.amount - 14000);
+    expect((await h.ok<{ closed: boolean }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: 14000 })).closed).toBe(true);
+
+    // Tamamı ikram: ödeme yok, kalem işaretlenmez; fiş iptali sepeti kapatır, adisyon yeniden gönderilebilir
+    const o2 = await order([{ name: 'Türk kahvesi' }]);
+    const r2 = await send(o2.id);
+    await simPay(r2.id, [{ type: 9, amount: r2.amount }]);
+    expect(await getOrder(o2.id)).toMatchObject({ status: 'acik', paid: 0 });
+    expect((await getOrder(o2.id)).items[0].paidQty).toBe(0);
+    expect((await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o2.id}/send`, {})).json.code).toBe('okc_unresolved');
+    expect((await simVoid(r2.id)).status).toBe(200);
+    expect((await receipts(o2.id))[0].status).toBe('fis_iptal');
+    const r3 = await send(o2.id);
+    await simPay(r3.id, [{ type: 3, amount: r3.amount }]);
+    expect(await getOrder(o2.id)).toMatchObject({ status: 'kapali', paid: o2.total });
+  });
+
   // Gün kapanır: bundan sonra test yok
   it('kapanmış güne ait fiş iptali (webhook) Z’yi değiştirmez; ödeme geri alınmaz, yöneticiye alarm düşer', async () => {
     const o = await order([{ name: 'Latte', size: 'L', qty: 2 }]);

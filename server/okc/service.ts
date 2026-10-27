@@ -108,6 +108,15 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     .where(and(eq(schema.fiscalReceipts.orderId, orderId), inArray(schema.fiscalReceipts.status, [...PENDING])))
     .get();
   if (pending) throw conflict('Bu adisyonun cihazda bekleyen sepeti var; önce onu tamamlayın ya da iptal edin', 'okc_pending');
+  const unresolved = db
+    .select()
+    .from(schema.fiscalReceipts)
+    .where(and(eq(schema.fiscalReceipts.orderId, orderId), eq(schema.fiscalReceipts.status, 'hata')))
+    .all()
+    .some(hasDocument);
+  if (unresolved) {
+    throw conflict('Bu adisyonun cihazda kesilmiş ama LafPOS\'a tam işlenmemiş fişi var; kalanı kasadan alın ya da fişi cihazdan iptal edin', 'okc_unresolved');
+  }
   // Hesap kişilere bölünmüşken kalem seçerek göndermek payları düşürmez (masa eksik öder): paylar Paylaş'tan
   const paidNow = orderPayments(db, orderId).reduce((a, p) => a + (p.refundedAt ? 0 : p.amount), 0);
   if (selection?.length && splitActive(db, order, order.total - paidNow)) {
@@ -301,7 +310,8 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
     .join(' ');
 
   if (result.status === 'paid') {
-    if (r.status === 'tamamlandi') return;
+    // Aynı "ödendi" ikinci kez: işlenmiş (ya da işlenip hataya düşmüş) sonuç tekrarlanmaz
+    if (r.status === 'tamamlandi' || hasDocument(r)) return;
     if (r.status === 'iptal' || r.status === 'fis_iptal' || r.status === 'silindi') {
       // İptal sayılan sepete geç ya da yeniden gelen "ödendi": adisyon kendiliğinden yeniden kapanmaz, yönetici bakar
       fx.audit(db, {
@@ -320,6 +330,11 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
     const payments = clampPayments(result.payments, r.amount)
       .map((p) => ({ methodId: methodFor(p.kind, p.operatorId), amount: p.amount, note: `Yazarkasa${doc ? ` ${doc}` : ''}` }))
       .filter((p): p is { methodId: string; amount: number; note: string } => !!p.methodId);
+    const gap = r.amount - payments.reduce((a, p) => a + p.amount, 0);
+    if (gap > 0) {
+      applyUnderpaid(r, result, payments, gap, userId, source, doc);
+      return;
+    }
     try {
       const res = tx((t) => {
         const out = addExternalPayments(t, userId, fx, r.orderId, { payments, items: r.items });
@@ -351,7 +366,9 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
 
   if (result.status === 'voided') {
     if (r.status === 'fis_iptal') return;
-    const closedDay = r.status === 'tamamlandi' ? closedDayOf(r) : null;
+    // Belge kesilmişti: tamamlanan ya da cihazda kapanıp LafPOS'a tam işlenemeyen (hata) sepet
+    const documented = r.status === 'tamamlandi' || hasDocument(r);
+    const closedDay = documented ? closedDayOf(r) : null;
     if (closedDay) {
       // Kapanmış günün Z'si değişmez: ödeme o günden geri alınmaz, adisyon o günde açılmaz. İade bugünün işidir,
       // yönetici alarmı görür ve parayı geri verdiyse bugünün kasasından çıkış olarak işler (inceleme, 27 Eki 2026)
@@ -371,7 +388,7 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
           message: `#${order.no} adisyonun ${closedDay.date} tarihli yazarkasa fişi (${tl(r.amount)}) cihazda iptal edildi; gün kapandığı için ödeme LafPOS'ta geri alınmadı. Müşteriye iade yapıldıysa bugünün kasasından çıkış olarak işleyin`,
         });
       });
-    } else if (r.status === 'tamamlandi' && r.paymentIds.length) {
+    } else if (documented) {
       tx((t) => {
         const out = refundExternalPayments(t, by?.userId ?? null, fx, r.paymentIds, 'Yazarkasada fiş iptal edildi');
         t.update(schema.fiscalReceipts).set({ status: 'fis_iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
@@ -386,7 +403,9 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
           amount: r.amount,
           message: out.refunded
             ? `#${target.no} adisyonun yazarkasa fişi iptal edildi; ${tl(out.refunded)} ödeme geri alındı${reopened ? ' ve adisyon yeniden açıldı' : ''}`
-            : `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; ödemesi LafPOS'ta zaten iptal edilmişti, adisyon değişmedi`,
+            : r.paymentIds.length
+              ? `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; ödemesi LafPOS'ta zaten iptal edilmişti, adisyon değişmedi`
+              : `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; LafPOS'a işlenmiş ödemesi yoktu, adisyon değişmedi`,
         });
       });
     } else {
@@ -403,6 +422,65 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
   fx.emit({ topic: 'okc', kind: 'okc.cancelled', orderId: r.orderId, message: 'Cihazda ödemeden vazgeçildi' });
   fx.emit({ topic: 'orders', kind: 'okc.cancelled', orderId: r.orderId });
   fx.flush();
+}
+
+/** Cihazda belge kesildi ama LafPOS'a tam işlenemedi (hata durumunda, sonuç saklı) */
+function hasDocument(r: ReceiptRow): boolean {
+  return r.status === 'hata' && (r.result as Partial<FiscalResult> | null)?.status === 'paid';
+}
+
+/**
+ * Cihaz belgeyi sepet tutarıyla kesti ama ödemelerin bir kısmının LafPOS'ta karşılığı yok (ikram, ödemesiz ya da
+ * eşlenmemiş tür). Alınan ödemeler tutar olarak işlenir (kasa sayımı doğru kalsın, fiş iptali onları geri alsın);
+ * kalemler ödenmiş sayılmaz, sepet hataya düşer ve yöneticiye alarm gider. Bu adisyon kalan çözülene kadar cihaza
+ * yeniden gönderilmez: aynı kalemler ikinci fişe girerdi (inceleme, 27 Eki 2026).
+ */
+function applyUnderpaid(
+  r: ReceiptRow,
+  result: FiscalResult,
+  payments: { methodId: string; amount: number; note: string }[],
+  gap: number,
+  userId: string,
+  source: ResultSource,
+  doc: string,
+) {
+  const now = Date.now();
+  const fx = new Effects();
+  try {
+    tx((t) => {
+      const out = payments.length ? addExternalPayments(t, userId, fx, r.orderId, { payments, items: [] }) : { order: loadOrder(t, r.orderId), paymentIds: [] as string[] };
+      t.update(schema.fiscalReceipts)
+        .set({
+          status: 'hata',
+          zNo: result.zNo,
+          receiptNo: result.receiptNo,
+          result,
+          paymentIds: out.paymentIds,
+          completedAt: now,
+          updatedAt: now,
+          error: `Cihazda ${tl(gap)} ödemesiz kapandı (ikram, ödemesiz ya da eşlenmemiş tür); kalemler ödenmiş sayılmadı`,
+        })
+        .where(eq(schema.fiscalReceipts.id, r.id))
+        .run();
+      fx.audit(t, {
+        userId,
+        action: 'okc.underpaid',
+        severity: 'alarm',
+        orderId: r.orderId,
+        amount: gap,
+        message: `#${out.order.no} adisyon yazarkasada ${tl(r.amount)} fişle kapandı${doc ? ` (${doc})` : ''} ama ${tl(gap)} için LafPOS'ta karşılığı olan ödeme yok (ikram, ödemesiz ya da eşlenmemiş tür; ${source}). Kalanı kasadan alın ya da fişi cihazdan iptal edin`,
+      });
+    });
+    fx.emit({ topic: 'okc', kind: 'okc.error', orderId: r.orderId, message: `Yazarkasada ${tl(gap)} ödemesiz kapandı; adisyonu kontrol edin` });
+    fx.flush();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    db.update(schema.fiscalReceipts).set({ status: 'hata', result, error: `Ödeme alındı ama LafPOS'a işlenemedi: ${message}`, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+    const fx2 = new Effects();
+    fx2.audit(db, { action: 'okc.apply_failed', severity: 'alarm', orderId: r.orderId, amount: r.amount, message: `Yazarkasada ${tl(r.amount)} fiş kesildi ama LafPOS'a işlenemedi: ${message}` });
+    fx2.emit({ topic: 'okc', kind: 'okc.error', orderId: r.orderId, message });
+    fx2.flush();
+  }
 }
 
 /** Fişin (iade edilmemiş) ödemelerinden biri açık gün dışındaysa o günün tarihi ve ödemenin adisyonu */
