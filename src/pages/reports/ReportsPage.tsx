@@ -240,7 +240,7 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
           <dl className="divide-y divide-[var(--admin-divider)] text-sm">
             {[
               ['Liste değeri', s.waterfall.list, false],
-              ['İkram', -s.waterfall.complimentary, false],
+              [s.odenmez ? 'İkram ve ödenmez' : 'İkram', -s.waterfall.complimentary, false],
               ['İndirim', -s.waterfall.discounts, false],
               ...(s.waterfall.service ? [['Servis ücreti', s.waterfall.service, false] as const] : []),
               ['Ciro (KDV dahil)', s.waterfall.revenue, true],

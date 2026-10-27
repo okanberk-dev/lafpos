@@ -216,7 +216,9 @@ export default function OrderPage() {
     await act((pin) => post<OrderDTO>(`/orders/${order.id}/room/${action}`, { approverPin: pin }), action === 'start' ? 'Oda sayacı başladı' : 'Oda ücreti adisyona eklendi');
   };
 
-  const billable = order.items.some((i) => !i.voided && !i.complimentary);
+  // Ciro dışı kapanış sunucudaki kalemlere uygulanır: gönderilmemiş satırlar önce gönderilir ya da silinir (sessizce düşmesin)
+  const compable = editable && order.paid === 0 && !order.room && (pending.length > 0 || order.items.some((i) => !i.voided && !i.complimentary));
+  const compAll = (kind: 'ikram' | 'odenmez') => (pending.length ? toast.warn('Önce gönderilmemiş kalemleri gönderin ya da silin') : setDialog(kind));
   const menuItems: { icon: React.ReactNode; label: string; hint?: string; onClick: () => void; show: boolean; danger?: boolean }[] = [
     { icon: <Merge className="size-5" />, label: 'Masa taşı / birleştir', onClick: () => setDialog('tasi'), show: editable },
     { icon: <Split className="size-5" />, label: 'Hesabı böl / kalem taşı', onClick: () => setDialog('bol'), show: editable && order.items.some((i) => !i.voided) },
@@ -237,8 +239,8 @@ export default function OrderPage() {
     { icon: <RotateCcw className="size-5" />, label: 'Yeniden aç', hint: 'Yetkili onayı ister', onClick: () => setDialog('yenidenac'), show: order.status === 'kapali' && !isOnline },
     { icon: <PackageX className="size-5" />, label: 'Tükenen ürünler', hint: 'Ürünü tükendi işaretle ya da satışa aç', onClick: () => setDialog('tukendi'), show: can('urun.tukendi') || can('menu.yonet') },
     // Ciro dışı kapanış: ödeme alınmamış adisyonun bütün kalemleri (kısmen ödenmişte kalan kalem kalem ikram edilir)
-    { icon: <Gift className="size-5" />, label: 'Hepsini ikram et', hint: 'Adisyon ücretsiz kapanır, ikram raporuna girer', onClick: () => setDialog('ikram'), show: editable && order.paid === 0 && billable },
-    { icon: <HandCoins className="size-5" />, label: 'Ödenmez kapat', hint: 'Personel yemeği, zayi, patron hesabı', onClick: () => setDialog('odenmez'), show: editable && order.paid === 0 && billable },
+    { icon: <Gift className="size-5" />, label: 'Hepsini ikram et', hint: 'Adisyon ücretsiz kapanır, ikram raporuna girer', onClick: () => compAll('ikram'), show: compable },
+    { icon: <HandCoins className="size-5" />, label: 'Ödenmez kapat', hint: 'Personel yemeği, zayi, patron hesabı', onClick: () => compAll('odenmez'), show: compable },
     { icon: <Ban className="size-5" />, label: 'Adisyonu iptal et', hint: 'Bütün kalemler iptal olur', onClick: () => setDialog('iptal'), show: editable && order.paid === 0, danger: true },
   ];
 

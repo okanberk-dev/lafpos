@@ -160,7 +160,7 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 | `meal_card` | `zField = meal_card` (Pluxee, Multinet, Edenred, Setcard, Metropol) |
 | `online` | `zField = online` (yemek platformları) |
 | `other` | `zField = other` (havale, açık hesap/cari dahil) |
-| `off_revenue` | kapanmış adisyonlarda ikram edilen kalemlerin menü değeri |
+| `off_revenue` | kapanmış adisyonlarda ikram edilen ve ödenmez kapanan kalemlerin menü değeri |
 | `discounts` | kalem + adisyon indirimleri |
 | `opening_cash` | gün açılış nakiti |
 | `cash_out` | harcama türü kasa hareketleri |
@@ -232,7 +232,9 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   arasında liste fiyatları oranında bölünür.
 - `ikram` yalnız **kapanmış** POS adisyonlarından gelir (Z'nin `offRevenue`'uyla aynı kapsam; iptal edilen
   adisyonun ikramı tüketim değildir); ikram edilen içeceğin ekleri ayrı kayıttır, menü değeri satıştaki oranla
-  bölünür. `ikram` menü değerlerinin toplamı `offRevenue`'a eşittir.
+  bölünür. `ikram` menü değerlerinin toplamı `offRevenue`'a eşittir. Ödenmez kapanan adisyonun kalemleri
+  (personel yemeği, zayi, patron hesabı) de buradadır; ayrı alan yoktur, `reason` "Ödenmez: " ile başlar
+  (ör. `"Ödenmez: Personel yemeği"`).
 - `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,
   `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`, `trendyol`, `getir`, `migros`; kanalsız türde
   `null`, alan her zaman var). LafPOS'ta kanal serbest metin değil bu listeden seçilir (`shared/labels.ts`

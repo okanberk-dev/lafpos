@@ -29,6 +29,7 @@ const day = () => h.ok<{ summary: ZSummary; day: { id: string } }>('patron', 'GE
 describe('adisyonu ciro dışı kapatma', () => {
   let ikramValue = 0;
   let odenmezValue = 0;
+  let odenmezExtra = 0;
 
   it('hepsini ikram et: garson yetkili onayıyla, adisyon sıfırla kapanır', async () => {
     await h.pinPrice('Americano', 15000);
@@ -75,25 +76,44 @@ describe('adisyonu ciro dışı kapatma', () => {
     const r2 = await h.call<{ code: string }>('patron', 'POST', `/orders/${empty.id}/comp`, { kind: 'ikram', reason: 'Tadım' });
     expect([r2.status, r2.json.code]).toEqual([409, 'nothing_to_comp']);
 
-    const r3 = await h.call<{ code: string }>('patron', 'POST', `/orders/${paid.id}/comp`, { kind: 'odenmez', reason: '  ' });
-    expect(r3.status).toBe(409);
+    const blank = await table([{ name: 'Americano', qty: 1 }], 'kasa');
+    const r3 = await h.call<{ code: string }>('patron', 'POST', `/orders/${blank.id}/comp`, { kind: 'odenmez', reason: '  ' });
+    expect([r3.status, r3.json.code]).toEqual([400, 'reason_required']);
+    await h.ok('patron', 'POST', `/orders/${blank.id}/comp`, { kind: 'odenmez', reason: 'Zayi' });
+    odenmezExtra += 15000;
 
     const device = await table([{ name: 'Americano', qty: 1 }], 'kasa');
-    await h.ok('kasa', 'POST', `/okc/orders/${device.id}/send`, {});
+    const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${device.id}/send`, {});
     const r4 = await h.call<{ code: string }>('patron', 'POST', `/orders/${device.id}/comp`, { kind: 'ikram', reason: 'Tadım' });
     expect(r4.status).toBe(409);
+    // Cihaz fişi kesti ama ödeme LafPOS'a işlenmedi (ödemesiz kapanış): kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 9, amount: sent.receipt.amount }] });
+    const r5 = await h.call<{ code: string }>('patron', 'POST', `/orders/${device.id}/comp`, { kind: 'odenmez', reason: 'Zayi' });
+    expect([r5.status, r5.json.code]).toEqual([409, 'okc_unresolved']);
+  });
+
+  it('hesap yazdırıldıktan sonra ciro dışı kapanış alarmdır', async () => {
+    const o = await table([{ name: 'Americano', qty: 1 }], 'kasa');
+    await h.ok('kasa', 'POST', `/orders/${o.id}/bill`, {});
+    await h.ok('kasa', 'POST', `/orders/${o.id}/comp`, { kind: 'ikram', reason: 'Gecikme özrü' });
+    ikramValue += 15000;
+    const audit = await h.ok<{ action: string; orderId: string | null; severity: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=20');
+    const entry = audit.find((a) => a.action === 'order.comp' && a.orderId === o.id)!;
+    expect(entry.severity).toBe('alarm');
+    expect(entry.message).toContain('hesap yazdırıldıktan sonra');
   });
 
   it('raporlar: ikram listesinde tür, özetde ödenmez ayrı; denetim kaydı', async () => {
     const today = (await day()).day as unknown as { date: string };
     const list = await h.ok<{ rows: { compKind: string | null; reason: string | null; value: number }[] }>('patron', 'GET', `/reports/items?kind=ikram&from=${today.date}&to=${today.date}`);
-    expect(list.rows.filter((r) => r.compKind === 'odenmez').reduce((a, r) => a + r.value, 0)).toBe(odenmezValue);
+    expect(list.rows.filter((r) => r.compKind === 'odenmez').reduce((a, r) => a + r.value, 0)).toBe(odenmezValue + odenmezExtra);
     expect(list.rows.filter((r) => r.compKind === 'ikram').reduce((a, r) => a + r.value, 0)).toBe(ikramValue);
     const summary = await h.ok<{ complimentary: number; odenmez: number }>('patron', 'GET', `/reports/summary?from=${today.date}&to=${today.date}`);
-    expect(summary).toMatchObject({ complimentary: ikramValue + odenmezValue, odenmez: odenmezValue });
-    const audit = await h.ok<{ rows: { action: string; approver: string | null }[] } | { action: string }[]>('patron', 'GET', '/admin/audit?limit=50');
-    const actions = (Array.isArray(audit) ? audit : audit.rows).map((a) => a.action);
-    expect(actions).toEqual(expect.arrayContaining(['order.comp', 'order.odenmez']));
+    expect(summary).toMatchObject({ complimentary: ikramValue + odenmezValue + odenmezExtra, odenmez: odenmezValue + odenmezExtra });
+    const audit = await h.ok<{ action: string; userName: string | null; approverName: string | null }[]>('patron', 'GET', '/admin/audit?limit=50');
+    expect(audit.find((a) => a.action === 'order.odenmez' && a.userName === 'Kasa')?.approverName).toBe('Müdür');
+    const csv = await h.call<string>('patron', 'GET', `/reports/export.csv?type=ikram&from=${today.date}&to=${today.date}`);
+    expect(csv.json).toContain('Ödenmez');
   });
 
   it('lafmaliyet gün paketi: ödenmez ikram satırında nedeniyle, toplam off_revenue ile aynı', async () => {
@@ -103,5 +123,20 @@ describe('adisyonu ciro dışı kapatma', () => {
     expect(payload.ikram.some((i) => i.reason === 'Ödenmez: Personel yemeği')).toBe(true);
     expect(payload.ikram.some((i) => i.reason === 'Doğum günü')).toBe(true);
     expect(payload.ikram.reduce((a, i) => a + i.menuValue, 0)).toBeCloseTo(payload.z.offRevenue, 2);
+  });
+});
+
+describe('sonradan eklenen yetki', () => {
+  it('kayıtlı müdür seti ödenmez yetkisini bir kez alır; patron kaldırırsa geri gelmez', async () => {
+    const { ROLE_DEFAULTS } = await import('@shared/permissions');
+    const old = ROLE_DEFAULTS.mudur.filter((p) => p !== 'siparis.odenmez' && p !== 'rapor.maliyet');
+    await h.ok('patron', 'PUT', '/admin/roles/mudur', { permissions: old });
+    const { upgradeRoleSets, getSettings, setSyncState } = await import('../server/lib/settings');
+    setSyncState('rol-yetki-eklemeleri', []);
+    upgradeRoleSets();
+    expect(getSettings().rolePermissions.mudur).toContain('siparis.odenmez');
+    await h.ok('patron', 'PUT', '/admin/roles/mudur', { permissions: old });
+    upgradeRoleSets();
+    expect(getSettings().rolePermissions.mudur).not.toContain('siparis.odenmez');
   });
 });

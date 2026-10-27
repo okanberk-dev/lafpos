@@ -400,13 +400,13 @@ export interface KitchenTicket {
   items: KitchenTicketItem[];
 }
 
-/** lafmaliyet Kasa raporundaki ödeme alanı */
 /**
  * Ciro dışı kapanan kalemin türü: müşteriye ikram ya da ödenmez (personel yemeği, zayi, patron hesabı). İkisi de
  * ödenmez, cirodan düşer; raporda ve Z'de ayrı görünür.
  */
 export type CompKind = 'ikram' | 'odenmez';
 
+/** lafmaliyet Kasa raporundaki ödeme alanı */
 export type ZField = 'cash' | 'card' | 'meal_card' | 'online' | 'other';
 
 /** Gün sonu (Z) ya da ara rapor (X) özeti. Tutarlar kuruş. */

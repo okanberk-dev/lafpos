@@ -128,11 +128,8 @@ describe('demo: yayın ayarları', () => {
     expect(demo).toBeGreaterThanOrEqual(0);
     expect(demo).toBeLessThan(all);
   });
-  it('derleme dosyaları (adında içerik özeti) bir yıl önbellekte kalır', () => {
-    const headers = (JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')) as { headers: { source: string; headers: { key: string; value: string }[] }[] }).headers;
-    for (const source of ['/assets/(.*)', '/demo/assets/(.*)']) {
-      expect(headers.find((h) => h.source === source)?.headers).toContainEqual({ key: 'cache-control', value: 'public, max-age=31536000, immutable' });
-    }
+  it('olmayan derleme dosyası sayfaya düşmez (404): yeni sürümde eski sekme yenilenir', () => {
+    expect(vercel.rewrites.find((r) => r.destination === '/index.html')?.source).toBe('/((?!api/|assets/).*)');
   });
   it('demo yalnız Vercel derlemesinde; kasa derlemesine ve Windows paketine girmez', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> };

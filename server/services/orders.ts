@@ -533,6 +533,8 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
   assertNoPendingDevice(t, orderId);
   // Çalışan oda sayacı kalem görünmeyen ücrettir: önce durdurulup satıra yazılır, sonra ikram edilir
   assertNoActiveRoom(t, orderId);
+  // Cihazda kesilmiş ama LafPOS'a işlenmemiş fiş: kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
+  if (fiscalHeldQty(t, orderId).size) throw conflict('Adisyonda yazarkasada kesilmiş ama işlenmemiş bir fiş var. Kalanı kasadan alın ya da fişi cihazdan iptal edin', 'okc_unresolved');
   const odenmez = input.kind === 'odenmez';
   const approverId = need(actor, odenmez ? 'siparis.odenmez' : 'siparis.ikram', odenmez ? 'Ödenmez kapatmak yetkili onayı gerektirir' : 'İkram yetkili onayı gerektirir');
   if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Ödeme alınmış adisyonun kalanı kalem kalem ikram edilir', 'has_payments');
@@ -554,10 +556,11 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
     userId: actor.user.id,
     approverId,
     action: odenmez ? 'order.odenmez' : 'order.comp',
-    severity: 'uyari',
+    // Hesap yazdırıldıktan sonra sıfırlamak, parayı alıp adisyonu ücretsiz kapatma örüntüsüdür (iptaldeki gibi)
+    severity: o.billPrintedAt ? 'alarm' : 'uyari',
     orderId,
     amount: value,
-    message: `${actor.user.name} #${o.no} adisyonu ${label} (${tl(value)}, ${reason})`,
+    message: `${actor.user.name} #${o.no} adisyonu ${label} (${tl(value)}, ${reason})${o.billPrintedAt ? ', hesap yazdırıldıktan sonra' : ''}`,
     data: { kind: input.kind, items: live.length },
   });
   const closed = loadOrder(t, orderId);
