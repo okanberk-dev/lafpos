@@ -153,6 +153,29 @@ describe('iptal onayı', () => {
 
 type PayResult = { order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null };
 
+describe('bahşiş', () => {
+  it('money-16, reports-36: açık hesap ödemesine bahşiş yazılmaz; raporda alınmamış bahşiş görünmez', async () => {
+    const cust = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Ahmet Bey' });
+    const o = await counterOrder('kasa', [{ name: 'Türk kahvesi' }], { customerId: cust.id });
+    const cari = h.boot.paymentMethods.find((m) => m.kind === 'cari')!;
+    const tipped = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, tip: 2000, customerId: cust.id });
+    expect(tipped.status).toBe(400);
+    expect(tipped.json.code).toBe('tip_on_account');
+    expect((await getOrder(o.id)).payments).toHaveLength(0);
+    const tipsBefore = (await h.ok<{ summary: { tips: number } }>('patron', 'GET', '/cash/day')).summary.tips;
+
+    // Bahşişsiz açık hesap eskisi gibi; müşterinin borcu tutar kadar, raporda bahşiş artmaz
+    expect((await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, customerId: cust.id })).closed).toBe(true);
+    expect((await getOrder(o.id)).customer).toMatchObject({ balance: o.total });
+    expect((await h.ok<{ summary: { tips: number } }>('patron', 'GET', '/cash/day')).summary.tips).toBe(tipsBefore);
+
+    // Kart ödemesinde bahşiş eskisi gibi alınır
+    const p = await counterOrder('kasa', [{ name: 'Türk kahvesi' }]);
+    await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: method('Kredi kartı').id, amount: p.total, tip: 2000 });
+    expect((await h.ok<{ summary: { tips: number } }>('patron', 'GET', '/cash/day')).summary.tips).toBe(tipsBefore + 2000);
+  });
+});
+
 describe('ödeme', () => {
   it('state-07: yanıtı kaybolup yeniden gönderilen ödeme isteği iki kez yazılmaz; ilk sonuç döner', async () => {
     // Tutar: iki kahvelik masanın yarısı nakit; aynı istek ikinci kez gelir

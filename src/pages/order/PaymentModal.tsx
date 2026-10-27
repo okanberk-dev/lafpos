@@ -112,9 +112,11 @@ export function PaymentModal({
   const given = parseTL(givenText);
   const change = method?.kind === 'nakit' && given != null ? given - amount - tip : null;
   const cariBlocked = method?.kind === 'cari' && !order.customer;
+  // Açık hesapta para alınmaz; bahşiş yazılırsa raporda alınmış görünür (sunucu da reddeder)
+  const tipBlocked = method?.kind === 'cari' && tip > 0;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
-  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !splitBlocks;
+  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
 
   const keyTarget = focus === 'verilen' ? [givenText, setGivenText] : focus === 'bahsis' ? [tipText, setTipText] : [amountText, setAmountText];
   const pressKey = (k: string) => {
@@ -358,7 +360,11 @@ export function PaymentModal({
             >
               Bahşiş {tip > 0 ? tl(tip) : 'ekle'}
             </button>
-            <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
+            {tipBlocked ? (
+              <span className="text-right text-[var(--admin-danger-ink)]">Açık hesaba bahşiş yazılmaz</span>
+            ) : (
+              <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
+            )}
           </div>
 
           <Button variant="primary" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
