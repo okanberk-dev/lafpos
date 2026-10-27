@@ -61,8 +61,15 @@
     {
       "idx": 8,
       "version": "6",
-      "when": 1793100956373,
-      "tag": "0008_lafmaliyet_yanit",
+      "when": 1793101383703,
+      "tag": "0008_paket_platformlari",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793102883973,
+      "tag": "0009_lafmaliyet_yanit",
       "breakpoints": true
     }
   ]

@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { Permission, Role, RoleMatrix } from '@shared/permissions';
+import { PLATFORM_DEFAULTS } from '@shared/platforms';
 import { DEFAULT_SERVICE_MODE } from '@shared/service-mode';
 import type { PublicSettings } from '@shared/types';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
@@ -34,6 +35,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   // Var olan kurulumlarda hiçbir şey değişmesin: patron Yönetim › Ayarlar'dan seçer
   serviceMode: DEFAULT_SERVICE_MODE,
   tipsEnabled: false,
+  platforms: PLATFORM_DEFAULTS,
 };
 
 /** Yalnız sunucuda kullanılan ayarlar */

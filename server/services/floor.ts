@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, inArray, isNull, or } from 'drizzle-orm';
+import { PLATFORM_LABEL, type PlatformId } from '@shared/platforms';
 import { numaratorLabel } from '@shared/service-mode';
 import { businessDate } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, KitchenTicket, PickupBoardDTO } from '@shared/types';
@@ -9,13 +10,15 @@ import { getOpenDay } from './orders';
 const TYPE_LABEL: Record<string, string> = { tezgah: 'Tezgâh', gelal: 'Gel-al', paket: 'Paket', online: 'Online', masa: 'Masa' };
 
 export function orderLabel(
-  o: { type: string; no: number; deliveryName: string | null; extLabel: string | null; source: string; numarator?: string | null },
+  o: { type: string; no: number; deliveryName: string | null; extLabel: string | null; source: string; numarator?: string | null; platform?: PlatformId | null; platformCode?: string | null },
   tableName?: string | null,
 ): string {
   if (tableName) return tableName;
   if (o.source === 'laffogato') return o.extLabel ?? 'Online';
   // Yarı self servis: kasada girilen masa no / numaratör ("Masa 12"); personel siparişi oraya götürür
   if (o.numarator) return numaratorLabel(o.numarator);
+  // Paket platformu: kurye ve bar platformla kısa kodu söyler ("Yemeksepeti A7KX")
+  if (o.platform) return `${PLATFORM_LABEL[o.platform]} ${o.platformCode ?? ''}`.trim();
   if (o.deliveryName) return `${TYPE_LABEL[o.type] ?? o.type} · ${o.deliveryName}`;
   return `${TYPE_LABEL[o.type] ?? o.type} #${o.no}`;
 }

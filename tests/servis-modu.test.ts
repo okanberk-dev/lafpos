@@ -133,18 +133,18 @@ const product = (name: string) => h.boot.products.find((p) => p.name === name)!;
 type Audit = { action: string; message: string; data: { from: string; to: string } | null };
 
 describe('servis modu ayarı (sunucu)', () => {
-  it('varsayılan masaya servis ve açılış verisinde herkese gider', async () => {
-    expect(h.boot.settings.serviceMode).toBe('masa');
+  it('yeni kurulum self serviste açılır (işletme self servis) ve açılış verisinde herkese gider', async () => {
+    expect(h.boot.settings.serviceMode).toBe('self');
     const boot = await h.ok<BootstrapDTO>('garson', 'GET', '/bootstrap');
-    expect(boot.settings.serviceMode).toBe('masa');
+    expect(boot.settings.serviceMode).toBe('self');
   });
 
   it('yalnız ayar yetkisi olan değiştirir', async () => {
     for (const who of ['kasa', 'garson', 'bar']) {
-      const r = await h.call(who, 'PUT', '/admin/settings', { serviceMode: 'self' });
+      const r = await h.call(who, 'PUT', '/admin/settings', { serviceMode: 'masa' });
       expect(r.status, who).toBe(403);
     }
-    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).settings.serviceMode).toBe('masa');
+    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).settings.serviceMode).toBe('self');
   });
 
   it('tanınmayan mod reddedilir', async () => {
@@ -158,16 +158,16 @@ describe('servis modu ayarı (sunucu)', () => {
     const seen: { topic: string; kind: string }[] = [];
     const listen = (e: { topic: string; kind: string }) => seen.push(e);
     bus.on('event', listen);
-    const saved = await h.ok<{ serviceMode: string }>('patron', 'PUT', '/admin/settings', { serviceMode: 'self' });
+    const saved = await h.ok<{ serviceMode: string }>('patron', 'PUT', '/admin/settings', { serviceMode: 'masa' });
     bus.off('event', listen);
-    expect(saved.serviceMode).toBe('self');
+    expect(saved.serviceMode).toBe('masa');
     expect(seen.some((e) => e.topic === 'settings')).toBe(true);
-    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).settings.serviceMode).toBe('self');
+    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).settings.serviceMode).toBe('masa');
 
     let audit = await h.ok<Audit[]>('patron', 'GET', '/admin/audit?limit=50');
     const entry = audit.find((a) => a.action === 'settings.servis_modu');
-    expect(entry?.message).toBe('Patron servis modunu değiştirdi: Masaya servis → Self servis');
-    expect(entry?.data).toEqual({ from: 'masa', to: 'self' });
+    expect(entry?.message).toBe('Patron servis modunu değiştirdi: Self servis → Masaya servis');
+    expect(entry?.data).toEqual({ from: 'self', to: 'masa' });
 
     // Müdür de ayar yetkisiyle değiştirir; aynı modu yeniden göndermek yeni kayıt yazmaz
     await h.ok('mudur', 'PUT', '/admin/settings', { serviceMode: 'yari_self' });
@@ -175,8 +175,8 @@ describe('servis modu ayarı (sunucu)', () => {
     audit = await h.ok<Audit[]>('patron', 'GET', '/admin/audit?limit=50');
     const modes = audit.filter((a) => a.action === 'settings.servis_modu');
     expect(modes.map((a) => a.data)).toEqual([
-      { from: 'self', to: 'yari_self' },
-      { from: 'masa', to: 'self' },
+      { from: 'masa', to: 'yari_self' },
+      { from: 'self', to: 'masa' },
     ]);
     // Başka ayar değişince servis modu kaydı yazılmaz, mod korunur
     await h.ok('patron', 'PUT', '/admin/settings', { kitchenWarnMinutes: 8 });

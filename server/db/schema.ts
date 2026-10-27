@@ -3,6 +3,7 @@ import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from
 import type { Role } from '@shared/permissions';
 import type { Permission } from '@shared/permissions';
 import type { OrderTotals } from '@shared/order-calc';
+import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
 import type { CompKind, SelectedOption, ZField, ZSummary } from '@shared/types';
 
 export type { CompKind, ZField, ZSummary };
@@ -427,6 +428,9 @@ export const orders = sqliteTable(
     cancelReason: text('cancel_reason'),
     /** Yarı self servis: kasada girilen masa no / numaratör ("12"); bar fişinde, çağrı ekranında numara yerine */
     numarator: text('numarator'),
+    /** Paket platformundan gelen sipariş (shared/platforms.ts): platform ve kuryenin söylediği kısa kod */
+    platform: text('platform').$type<PlatformId>(),
+    platformCode: text('platform_code'),
     updatedAt: integer('updated_at').notNull(),
     version: integer('version').notNull().default(1),
   },
@@ -654,4 +658,29 @@ export const fiscalReceipts = sqliteTable(
     completedAt: integer('completed_at'),
   },
   (t) => [index('fiscal_order_idx').on(t.orderId), index('fiscal_status_idx').on(t.status)],
+);
+
+/**
+ * Paket platformlarından gelen siparişler (shared/platforms.ts). Kabul edilene dek burada bekler; kabulde POS
+ * adisyonu (paket ya da gel-al) açılır ve `orderId` ona bağlanır. Aynı platform kimliği ikinci kez gelirse
+ * (platformlar yeniden dener) yeni kayıt açılmaz.
+ */
+export const platformOrders = sqliteTable(
+  'platform_orders',
+  {
+    id: text('id').primaryKey(),
+    platform: text('platform').$type<PlatformId>().notNull(),
+    externalId: text('external_id').notNull(),
+    status: text('status').$type<PlatformOrderStatus>().notNull().default('bekliyor'),
+    payload: text('payload', { mode: 'json' }).$type<PlatformOrderPayload>().notNull(),
+    receivedAt: integer('received_at').notNull(),
+    expiresAt: integer('expires_at'),
+    orderId: text('order_id').references(() => orders.id),
+    decidedAt: integer('decided_at'),
+    decidedBy: text('decided_by').references(() => users.id),
+    reason: text('reason'),
+    /** Platforma son bildirimin hatası (gerçek bağlantıda; denemede boş) */
+    lastError: text('last_error'),
+  },
+  (t) => [uniqueIndex('platform_orders_ext_idx').on(t.platform, t.externalId), index('platform_orders_status_idx').on(t.status)],
 );

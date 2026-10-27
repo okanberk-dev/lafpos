@@ -14,6 +14,13 @@ import { acquireLead, follow, lead, resetAll, route } from './tabs';
  * Veritabanı sql.js (bellekte SQLite); her yazmadan sonra IndexedDB'ye kaydedilir. Dış sistemlere (laffogato,
  * lafmaliyet, LafPOS Uzaktan) istek gitmez. Birden çok sekmede sunucuyu biri çalıştırır (demo/tabs.ts).
  */
+/**
+ * Demonun ilk gününün sürümü (demo/scenario.ts). İlk gün değişince (ör. self servise geçiş) kayıtlı demo yeni ilk
+ * günle açılır: eski kayıt eski kurguyu (masalı gün) göstermeye devam etmesin
+ */
+const DEMO_DAY_VERSION = 2;
+const VERSION_KEY = 'demo.ilk-gun-surumu';
+
 let persistent = true;
 let resetting = false;
 let saving: Promise<void> | null = null;
@@ -98,19 +105,22 @@ async function startServer() {
     import('../server/lib/events'),
     import('./scenario'),
   ]);
-  const { upgradeRoleSets } = await import('../server/lib/settings');
   runMigrations();
   // Kayıt önceki bir iş gününden kaldıysa demo yeni günle açılır: dünden açık gün yeni satışı durdururdu
   // (stale_day), kapanmış günün ertesinde de kasa boş açılırdı
+  const { getSyncState, setSyncState, upgradeRoleSets } = await import('../server/lib/settings');
   const last = saved && db.select({ date: schema.businessDays.date }).from(schema.businessDays).orderBy(desc(schema.businessDays.date)).limit(1).get();
-  if (last && last.date < businessDate(Date.now())) {
+  if ((last && last.date < businessDate(Date.now())) || (saved && getSyncState<number>(VERSION_KEY) !== DEMO_DAY_VERSION)) {
     openDatabase();
     runMigrations();
   }
   const fresh = seedIfEmpty();
   upgradeRoleSets();
   const app = createApp();
-  if (fresh) await seedDemoDay((req) => app.fetch(req));
+  if (fresh) {
+    await seedDemoDay((req) => app.fetch(req));
+    setSyncState(VERSION_KEY, DEMO_DAY_VERSION);
+  }
   // Zamanlayıcıyla yazan işler de (yazarkasa simülatörü gibi) olay yayar: onlar da kaydedilir. Dışa aktarma hiçbir
   // zaman olayın içinde yapılmaz (sql.js bağlantıyı kapatıp açar); istek sürüyorsa onun kaydı alır
   bus.on('event', () => {

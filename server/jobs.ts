@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import type { LiveEvent } from '@shared/events';
 import { businessDate, istanbulParts } from '@shared/time';
 import { db, schema, sqlite, tx } from './db/client';
+import { expirePlatformOrders } from './delivery/service';
 import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
@@ -113,6 +114,17 @@ export function menuSyncSoon(delayMs = AFTER_WRITE_SYNC_MS) {
   }, delayMs);
 }
 
+/** Paket platformları: kabul süresi geçen bekleyen sipariş platformda iptal olmuştur */
+function platformTick() {
+  try {
+    const fx = new Effects();
+    tx((t) => expirePlatformOrders(t, fx));
+    fx.flush();
+  } catch (e) {
+    console.error('[platform] süre denetimi', e);
+  }
+}
+
 export function startJobs() {
   if (process.env.LAFPOS_NO_JOBS === '1') return;
   timers.push(setTimeout(() => void menuTick(), 8_000));
@@ -124,6 +136,7 @@ export function startJobs() {
   // Siteye bildirilemeyen Satışta yazımları (porsiyon sayacı): dakikada bir, bekleme süresi dolanlar
   timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
+  timers.push(setInterval(platformTick, 30_000));
   timers.push(setTimeout(backupTick, 30_000));
   // Yeniden başlatmadan önce yazarkasaya gönderilmiş, sonucu beklenen sepetler sorgulanmaya devam eder
   resumePolling();

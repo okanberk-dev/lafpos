@@ -77,6 +77,14 @@ export function assertPosOrder(o: OrderRow) {
   if (o.extPaid) throw conflict('Bu sipariş sitede ödendi; tutarı LafPOS\'ta değiştirilemez', 'online_order');
 }
 
+/**
+ * Paket platformu siparişinin içeriği platformda belirlenir: ürün eklenmez, başka adisyonla birleşmez, kalem taşınmaz
+ * (platformun ödediği tutar değişmesin; server/delivery/service.ts `afterDelivery`)
+ */
+function assertNotPlatform(o: OrderRow) {
+  if (o.platform) throw conflict('Platform siparişinin içeriği platformda belirlenir; ürün eklenmez, birleştirilmez, taşınmaz', 'platform_order');
+}
+
 /** Masadaki açık kasa adisyonu koşulu: sitede ödenmiş online (QR) sipariş masada görünür ama masayı tutmaz */
 function openCheckOn(tableId: string) {
   return and(eq(schema.orders.tableId, tableId), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos'), eq(schema.orders.extPaid, false));
@@ -303,11 +311,16 @@ export interface AddItemLine {
   priceOverride?: number | null;
 }
 
-export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, lines: AddItemLine[]): OrderRow {
+/**
+ * `platformPrice`: paket platformundan gelen satırlar (server/delivery). Fiyat platformun: `priceOverride` yetki
+ * onayı ve fiyat değişikliği kaydı istemez, happy hour uygulanmaz.
+ */
+export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, lines: AddItemLine[], { platformPrice = false }: { platformPrice?: boolean } = {}): OrderRow {
   needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  if (!platformPrice) assertNotPlatform(o);
   requireCurrentDay(t);
   if (!lines.length) throw bad('Eklenecek ürün yok');
   const now = Date.now();
@@ -323,11 +336,16 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
     if (!p.active) throw conflict(`${p.name} tükendi`, 'sold_out');
     const size = normalizeSize(p, line.size);
     const base = sizePrice(p, size);
-    const opts = resolveOptions(sp, line.options ?? []);
+    // Platform satırının seçenekleri notta yazar (platformun seçimi); zorunlu seçenek kasada sorulmaz
+    const opts = resolveOptions(sp, line.options ?? [], { lenient: platformPrice });
     let unit = base + optionsUnitTotal(opts);
     let happy = false;
 
-    if (line.priceOverride != null) {
+    if (line.priceOverride != null && platformPrice) {
+      const override = Math.trunc(line.priceOverride);
+      if (override < 0) throw bad('Fiyat negatif olamaz');
+      unit = override;
+    } else if (line.priceOverride != null) {
       const approverId = need(actor, 'siparis.fiyat', 'Fiyat değiştirmek yetkili onayı gerektirir');
       const override = Math.trunc(line.priceOverride);
       if (override < 0) throw bad('Fiyat negatif olamaz');
@@ -889,6 +907,8 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
   assertOpen(source);
   assertPosOrder(target);
   assertPosOrder(source);
+  assertNotPlatform(target);
+  assertNotPlatform(source);
   assertNoPendingDevice(t, targetId);
   assertNoPendingDevice(t, sourceId);
   const discountBefore = orderDiscountOf(t, targetId, sourceId);
@@ -927,6 +947,7 @@ export function transferItems(
   const source = loadOrder(t, orderId);
   assertOpen(source);
   assertPosOrder(source);
+  assertNotPlatform(source);
   assertNoPendingDevice(t, orderId);
   if (!input.items.length) throw bad('Taşınacak kalem seçilmedi');
 
@@ -935,6 +956,7 @@ export function transferItems(
     target = loadOrder(t, input.targetOrderId);
     assertOpen(target);
     assertPosOrder(target);
+    assertNotPlatform(target);
   } else {
     const tableId = input.tableId ?? source.tableId;
     const existing =

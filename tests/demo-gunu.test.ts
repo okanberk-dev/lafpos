@@ -20,24 +20,24 @@ beforeAll(async () => {
 
 afterAll(() => h.cleanup());
 
-describe('demonun ilk günü', () => {
-  it('gün açık; kapanmış satışlar raporda', async () => {
+describe('demonun ilk günü (self servis)', () => {
+  it('self serviste açılır; gün açık, teslim edilmiş ve barda bekleyen satışlar raporda', async () => {
+    expect(boot.settings.serviceMode).toBe('self');
     expect(boot.day?.zNo).toBe(1);
     const today = boot.day!.date;
     const summary = await h.ok<{ receipts: number; netSales: number }>('patron', 'GET', `/reports/summary?from=${today}&to=${today}`);
-    expect(summary.receipts).toBe(6);
+    expect(summary.receipts).toBe(9);
     expect(summary.netSales).toBeGreaterThan(0);
   });
 
-  it('açık masalar, mutfakta bekleyen ve hazır kalemler, kısmen ödenmiş masa, çalışan karaoke sayacı', async () => {
+  it('masa yok; çağrı ekranında hazırlanan ve hazır numaralar; bir platform siparişi barda, biri onay bekliyor', async () => {
     const floor = await h.ok<FloorStateDTO>('patron', 'GET', '/floor');
-    const open = (name: string) => floor.tables[boot.tables.find((t) => t.name === name)!.id]?.[0];
-    for (const name of ['S1', 'S4', 'B1', 'B3', 'Ü2', 'Karaoke odası']) expect(open(name), name).toBeTruthy();
-    expect(open('S1').pendingKitchen).toBeGreaterThan(0);
-    expect(open('S4').readyToServe).toBeGreaterThan(0);
-    expect(open('B3').paid).toBeGreaterThan(0);
-    expect(open('B3').paid).toBeLessThan(open('B3').total);
-    expect(open('Karaoke odası').roomStartedAt).not.toBeNull();
+    expect(Object.values(floor.tables).flat()).toEqual([]);
+    const board = await h.ok<{ preparing: unknown[]; ready: unknown[] }>('', 'GET', '/public/board');
+    expect(board.preparing.length).toBeGreaterThanOrEqual(2);
+    expect(board.ready.length).toBeGreaterThanOrEqual(1);
+    const platforms = await h.ok<{ orders: { platform: string; status: string }[] }>('patron', 'GET', '/platforms');
+    expect(platforms.orders.map((o) => `${o.platform}:${o.status}`).sort()).toEqual(['trendyol:kabul', 'yemeksepeti:bekliyor']);
   });
 
   it('kurulumun oturumları kapanır; demoyu açan kendi rolüyle girer', async () => {

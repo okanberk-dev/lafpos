@@ -1,0 +1,116 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { Send } from 'lucide-react';
+import { useState } from 'react';
+import { tl } from '@shared/money';
+import { PLATFORM_LABEL, PLATFORM_STATUS_LABEL, PLATFORMS, type PlatformId, type PlatformSettings } from '@shared/platforms';
+import { fmtTime } from '@shared/time';
+import { Badge, BTN, Card, PageHeader, Segmented } from '@/components/admin/ui';
+import { PlatformBadge } from '@/components/PlatformBadge';
+import { usePlatforms } from '@/components/PlatformInbox';
+import { Field, Input } from '@/components/ui/Field';
+import { PageLoading } from '@/components/ui/misc';
+import { errorMessage, post, put } from '@/lib/api';
+import { useCan } from '@/lib/auth';
+import { toast } from '@/lib/toast';
+
+/** Gerçek bağlantı için gerekenler (calisma/arastirma/paket-platformlari, 27 Ekim 2026) */
+const LIVE_NEEDS: Record<PlatformId, string> = {
+  yemeksepeti: 'Delivery Hero ile gizlilik sözleşmesi ve yerel sorumlu; siparişler herkese açık bir adrese gelir (LafPOS Uzaktan aktarır)',
+  getir: 'Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber\'e geçti, yol Trendyol Go\'ya dönebilir',
+  trendyol: 'Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar. Uber Eats Türkiye siparişleri de buradan gelir; kasa doğrudan bağlanır',
+  migros: 'Belgeler herkese açık değil; Migros Yemek ile görüşme gerekir',
+};
+
+export default function PlatformsAdmin() {
+  const data = usePlatforms();
+  const can = useCan();
+  if (data.isLoading || !data.data) return <PageLoading />;
+  const recent = data.data.orders.filter((o) => o.status !== 'bekliyor').slice(0, 20);
+  return (
+    <>
+      <PageHeader
+        title="Paket platformları"
+        description="Yemeksepeti, Getir Yemek, Trendyol Go (Uber Eats) ve Migros Yemek siparişleri kasaya düşer, onaylanınca bara gider. Tahsilatı platform yapıyorsa kuryeye verilince ya da teslimde platformun online ödemesiyle kapanır; kasada tahsil edilmez. Deneme siparişleri gerçek satış gibi ciroya girer: deneme modu yalnız kurulum modunda açılır"
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        {PLATFORMS.map((p) => (
+          <PlatformCard key={p} platform={p} settings={data.data!.settings[p]} canEdit={can('senkron.yonet') || can('ayar.yonet')} canTest={can('paket.yonet')} />
+        ))}
+      </div>
+      <Card title="Son 12 saat" subtitle="Kabul, ret ve platform iptalleri" className="mt-4" flush>
+        {recent.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-[var(--admin-text-mute)]">Henüz platform siparişi yok</p>
+        ) : (
+          <ul className="divide-y divide-[var(--admin-divider)]">
+            {recent.map((o) => (
+              <li key={o.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm">
+                <PlatformBadge platform={o.platform} code={o.payload.code} />
+                <span className="tabular text-[var(--admin-text-mute)]">{fmtTime(o.receivedAt)}</span>
+                <span className="tabular">{tl(o.payload.customerTotal)}</span>
+                <span className="flex-1" />
+                <Badge tone={o.status === 'kabul' ? 'success' : o.status === 'ret' ? 'warning' : 'neutral'}>{PLATFORM_STATUS_LABEL[o.status]}</Badge>
+                {o.reason && <span className="text-xs text-[var(--admin-text-mute)]">{o.reason}</span>}
+                {o.decidedBy && <span className="text-xs text-[var(--admin-text-mute)]">{o.decidedBy}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+    </>
+  );
+}
+
+function PlatformCard({ platform, settings, canEdit, canTest }: { platform: PlatformId; settings: PlatformSettings; canEdit: boolean; canTest: boolean }) {
+  const qc = useQueryClient();
+  const [prep, setPrep] = useState(String(settings.prepMinutes));
+  const [commission, setCommission] = useState(String(settings.commissionPct));
+  const save = async (patch: Partial<PlatformSettings>) => {
+    try {
+      await put(`/platforms/${platform}`, patch);
+      qc.invalidateQueries({ queryKey: ['platforms'] });
+      qc.invalidateQueries({ queryKey: ['bootstrap'] });
+      toast.ok(`${PLATFORM_LABEL[platform]} kaydedildi`);
+    } catch (e) {
+      toast.err(errorMessage(e));
+    }
+  };
+  const test = async () => {
+    try {
+      await post(`/platforms/${platform}/test-order`);
+      qc.invalidateQueries({ queryKey: ['platforms'] });
+      toast.ok('Deneme siparişi geldi: üstteki şeritten onaylayın');
+    } catch (e) {
+      toast.err(errorMessage(e));
+    }
+  };
+  return (
+    <Card title={<PlatformBadge platform={platform} />} actions={<Badge tone={settings.mode === 'deneme' ? 'info' : 'neutral'} dot>{settings.mode === 'deneme' ? 'Deneme' : 'Kapalı'}</Badge>}>
+      <div className="space-y-3">
+        <Segmented
+          label={`${PLATFORM_LABEL[platform]} modu`}
+          value={settings.mode}
+          onChange={(mode) => canEdit && save({ mode })}
+          options={[
+            { value: 'kapali', label: 'Kapalı' },
+            { value: 'deneme', label: 'Deneme' },
+          ]}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Hazırlık süresi (dk)">
+            <Input type="number" min={5} max={120} value={prep} disabled={!canEdit} onChange={(e) => setPrep(e.target.value)} onBlur={() => Number(prep) !== settings.prepMinutes && save({ prepMinutes: Math.min(120, Math.max(5, Number(prep) || 20)) })} />
+          </Field>
+          <Field label="Tahmini komisyon (%)">
+            <Input type="number" min={0} max={60} value={commission} disabled={!canEdit} onChange={(e) => setCommission(e.target.value)} onBlur={() => Number(commission) !== settings.commissionPct && save({ commissionPct: Math.min(60, Math.max(0, Number(commission) || 0)) })} />
+          </Field>
+        </div>
+        <p className="text-xs text-[var(--admin-text-mute)]">Gerçek bağlantı: {LIVE_NEEDS[platform]}</p>
+        {settings.mode === 'deneme' && canTest && (
+          <button type="button" className={BTN.soft} onClick={() => void test()}>
+            <Send className="size-4" aria-hidden="true" />
+            Deneme siparişi gönder
+          </button>
+        )}
+      </div>
+    </Card>
+  );
+}
