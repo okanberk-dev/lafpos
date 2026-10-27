@@ -15,6 +15,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { byBusinessHour, fmtShortDate, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
+import { toast } from '@/lib/toast';
 
 type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'kayip' | 'happy' | 'personel' | 'aktarim';
 type ProductView = 'urun' | 'kategori';
@@ -72,7 +73,13 @@ export default function ReportsPage() {
   const current = visible.find((r) => r.key === report) ?? visible[0];
 
   const exportCsv = async (type: string, path = `/api/reports/export.csv?type=${type}&from=${range.from}&to=${range.to}`) => {
-    const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}` } });
+    const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}` } }).catch(() => null);
+    if (!res?.ok) {
+      // Hata (ör. dönem 400 günden uzun) dosya olarak inmez, sunucunun metniyle bildirilir
+      const body = (await res?.json().catch(() => null)) as { error?: string } | null;
+      toast.err(body?.error ?? 'CSV alınamadı; bağlantıyı kontrol edip yeniden deneyin');
+      return;
+    }
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);

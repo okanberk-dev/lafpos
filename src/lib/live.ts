@@ -107,6 +107,8 @@ function handleChunk(qc: QueryClient, chunk: string) {
   }
   useLive.getState().set({ lastEventAt: Date.now() });
   for (const key of INVALIDATE[e.topic] ?? []) qc.invalidateQueries({ queryKey: key });
+  // Gün açılıp kapanınca açılış verisindeki açık gün (Z no, raporların "Bugün"ü) her cihazda yenilenir
+  if (e.topic === 'cash' && e.kind.startsWith('day.')) qc.invalidateQueries({ queryKey: ['bootstrap'] });
   if (e.orderId) qc.invalidateQueries({ queryKey: ['order', e.orderId] });
   for (const fn of listeners) fn(e);
 }

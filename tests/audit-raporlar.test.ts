@@ -243,6 +243,9 @@ describe('raporlar denetimi', () => {
     // Gün kapanınca "bugün" saatin iş günüdür
     expect(currentBusinessDate(null, Date.parse('2026-10-27T11:00:00+03:00'))).toBe('2026-10-27');
     expect(currentBusinessDate(null, Date.parse('2026-10-27T04:59:00+03:00'))).toBe('2026-10-26');
+    // Raporlar ekranı bu kuralı açılış verisindeki açık günle kullanır; gün açılıp kapanınca açılış verisi yenilenir
+    expect(readFileSync(join(root, 'src/pages/reports/ReportsPage.tsx'), 'utf8')).toContain('currentBusinessDate(boot.day?.date)');
+    expect(readFileSync(join(root, 'src/lib/live.ts'), 'utf8')).toMatch(/startsWith\('day\.'\)\) qc\.invalidateQueries\(\{ queryKey: \['bootstrap'\] \}\)/);
   });
 
   it('dönem en çok 400 gün; olmayan tarih 500 değil 422 (input-66, input-72)', async () => {
