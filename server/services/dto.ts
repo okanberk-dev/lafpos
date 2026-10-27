@@ -24,6 +24,7 @@ export function itemToDTO(i: ItemRow): OrderItemDTO {
     happyHour: i.happyHour,
     complimentary: i.complimentary,
     compReason: i.compReason,
+    compKind: i.complimentary ? (i.compKind ?? 'ikram') : null,
     voided: i.voided,
     voidReason: i.voidReason,
     voidAfterSend: i.voidAfterSend,

@@ -196,6 +196,7 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     gross: sum((o) => totalsOf(o).gross),
     discounts: sum((o) => totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount),
     complimentary: sum((o) => totalsOf(o).complimentary),
+    odenmez: odenmezOf(ds, closedIds),
     voided: voidedItems(ds).reduce((a, i) => a + i.qty * i.unitPrice, 0),
     receipts,
     avgCheck: receipts ? Math.round(netSales / receipts) : 0,
@@ -447,6 +448,11 @@ export function staffReport(range: Range) {
   return { range, staff: [...rows.values()].sort((a, b) => b.revenue - a.revenue) };
 }
 
+/** Kapanmış adisyonlardaki ciro dışı kalemlerin ödenmez kısmı (Z'deki `odenmez` ile aynı kural) */
+function odenmezOf(ds: { items: ItemRow[] }, closedIds: Set<string>): number {
+  return ds.items.filter((i) => !i.voided && i.complimentary && i.compKind === 'odenmez' && closedIds.has(i.orderId)).reduce((a, i) => a + i.qty * i.unitPrice, 0);
+}
+
 // ─── Kalem listeleri: iptal, ikram, indirim, iade, happy hour ───────────────
 
 /** Bütün POS adisyonlarından (açık ve kalemleri taşınmış olanlar dahil): iptal listesi X/Z'nin iptal tutarını verir */
@@ -474,6 +480,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         qty: i.qty,
         value,
         reason: kind === 'iptal' ? i.voidReason : kind === 'ikram' ? i.compReason : kind === 'indirim' ? i.discountReason : 'Happy hour',
+        compKind: kind === 'ikram' ? (i.compKind ?? 'ikram') : null,
         by: users.get((kind === 'iptal' ? i.voidBy : kind === 'ikram' ? i.compBy : i.createdBy) ?? '') ?? null,
         approvedBy: kind === 'iptal' && i.voidApprovedBy ? (users.get(i.voidApprovedBy) ?? null) : null,
         afterSend: i.voidAfterSend,
@@ -497,6 +504,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         qty: 1,
         value: t.orderDiscount,
         reason: o.discountReason,
+        compKind: null,
         by: o.discountBy ? (users.get(o.discountBy) ?? null) : null,
         approvedBy: null,
         afterSend: false,
@@ -654,6 +662,7 @@ export function patronLive(withCost: boolean) {
     payments: summary.payments,
     discounts: summary.discounts,
     complimentary: summary.complimentary,
+    odenmez: summary.odenmez,
     voided: summary.voided,
     online: summary.online,
     top: products,

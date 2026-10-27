@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
-import type { RoleMatrix } from '@shared/permissions';
+import type { Permission, Role, RoleMatrix } from '@shared/permissions';
 import { DEFAULT_SERVICE_MODE } from '@shared/service-mode';
 import type { PublicSettings } from '@shared/types';
-import { type DB, db, schema, type Tx } from '../db/client';
+import { type DB, db, schema, type Tx, tx } from '../db/client';
 
 /** Arayüze giden ayarlar (herkes görür) */
 export const PUBLIC_DEFAULTS: PublicSettings = {
@@ -17,6 +17,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   productImages: true,
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
+  odenmezReasons: ['Personel yemeği', 'Patron / ortak', 'Zayi', 'Müşteri şikâyeti', 'Deneme'],
   discountReasons: ['Öğrenci', 'Personel', 'Müdavim', 'Kampanya', 'Şikâyet telafisi'],
   quickCash: [10000, 20000, 50000, 100000, 200000],
   sizeLabels: { M: 'Orta', L: 'Büyük' },
@@ -123,4 +124,33 @@ export function setSyncState(key: string, value: unknown) {
     .values({ key, value, updatedAt: now })
     .onConflictDoUpdate({ target: schema.syncState.key, set: { value, updatedAt: now } })
     .run();
+}
+
+/**
+ * Sonradan eklenen yetkiler, yönetimden özelleştirilmiş (kayıtlı) rol setlerine bir kez eklenir: kayıtlı set
+ * kaydedildiği günün yetkilerini sayar, yeni yetki o rolde sessizce kapalı kalırdı (ör. müdür ödenmez onaylayamazdı).
+ * Benzer yetkileri (`like`) taşıyan rollere eklenir; patron sonra kaldırırsa bir daha eklenmez.
+ */
+const ADDED_PERMISSIONS: { permission: Permission; like: Permission[] }[] = [{ permission: 'siparis.odenmez', like: ['siparis.ikram', 'odeme.iade'] }];
+const ADDED_KEY = 'rol-yetki-eklemeleri';
+
+export function upgradeRoleSets() {
+  const done = new Set(getSyncState<string[]>(ADDED_KEY) ?? []);
+  const todo = ADDED_PERMISSIONS.filter((a) => !done.has(a.permission));
+  if (!todo.length) return;
+  const matrix: RoleMatrix = { ...getSettings().rolePermissions };
+  let changed = false;
+  for (const role of Object.keys(matrix) as Role[]) {
+    for (const a of todo) {
+      const set = matrix[role] ?? [];
+      if (a.like.every((p) => set.includes(p)) && !set.includes(a.permission)) {
+        matrix[role] = [...set, a.permission];
+        changed = true;
+      }
+    }
+  }
+  tx((t) => {
+    if (changed) updateSettings({ rolePermissions: matrix }, t);
+    setSyncState(ADDED_KEY, [...done, ...todo.map((a) => a.permission)]);
+  });
 }

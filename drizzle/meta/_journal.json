@@ -43,6 +43,13 @@
       "when": 1793084891102,
       "tag": "0005_servis_modu",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793098066413,
+      "tag": "0006_odenmez",
+      "breakpoints": true
     }
   ]
 }

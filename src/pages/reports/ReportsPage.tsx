@@ -158,6 +158,7 @@ interface Summary {
   gross: number;
   discounts: number;
   complimentary: number;
+  odenmez: number;
   voided: number;
   receipts: number;
   avgCheck: number;
@@ -213,7 +214,7 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
           },
           { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)}${s.perGuest != null ? ` · kişi başı ${tl(s.perGuest)}` : ''} · önceki ${s.previous.receipts}`, onClick: () => onOpen('adisyon') },
           { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü', onClick: () => onOpen('urunler', { product: 'urun' }) },
-          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary)} · iptal ${tl(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
+          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary - s.odenmez)}${s.odenmez ? ` · ödenmez ${tl(s.odenmez)}` : ''} · iptal ${tl(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
           { key: 'online', label: 'Online (sitede ödendi)', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `${s.online.orders} sipariş, ciroya dahil değil` },
         ]}
       />
@@ -239,7 +240,7 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
           <dl className="divide-y divide-[var(--admin-divider)] text-sm">
             {[
               ['Liste değeri', s.waterfall.list, false],
-              ['İkram', -s.waterfall.complimentary, false],
+              [s.odenmez ? 'İkram ve ödenmez' : 'İkram', -s.waterfall.complimentary, false],
               ['İndirim', -s.waterfall.discounts, false],
               ...(s.waterfall.service ? [['Servis ücreti', s.waterfall.service, false] as const] : []),
               ['Ciro (KDV dahil)', s.waterfall.revenue, true],
@@ -692,7 +693,7 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
 interface ItemsData {
   total: number;
   count: number;
-  rows: { id: string; at: number; orderNo: number; place: string; name: string; size: string; qty: number; value: number; reason: string | null; by: string | null; approvedBy: string | null; afterSend: boolean; billPrinted: boolean }[];
+  rows: { id: string; at: number; orderNo: number; place: string; name: string; size: string; qty: number; value: number; reason: string | null; compKind: 'ikram' | 'odenmez' | null; by: string | null; approvedBy: string | null; afterSend: boolean; billPrinted: boolean }[];
 }
 
 const ITEM_TITLES = { iptal: 'İptal edilen kalemler', ikram: 'İkram edilen kalemler', indirim: 'İndirimler', happy: 'Happy hour satışları' };
@@ -729,6 +730,7 @@ function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 
                   </td>
                   <td className="px-2 py-2 font-medium">
                     {r.qty}× {r.name}
+                    {r.compKind === 'odenmez' && <span className="ml-1.5 rounded bg-[var(--admin-warning-soft)] px-1.5 text-xs text-[var(--admin-warning)]">ödenmez</span>}
                     {kind === 'iptal' && (r.afterSend || r.billPrinted) && (
                       <span className="ml-1.5 rounded bg-danger-100 px-1.5 text-xs text-danger-600">{r.billPrinted ? 'hesap sonrası' : 'hazırlandıktan sonra'}</span>
                     )}

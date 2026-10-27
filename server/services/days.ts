@@ -176,6 +176,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   let gross = 0;
   let discounts = 0;
   let complimentary = 0;
+  let odenmez = 0;
   let service = 0;
   let netSales = 0;
   const kdv = new Map<number, { gross: number; base: number; kdv: number }>();
@@ -198,6 +199,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
       kdv.set(r.rate, k);
     }
     for (const i of its) {
+      if (!i.voided && i.complimentary && i.compKind === 'odenmez') odenmez += i.qty * i.unitPrice;
       if (i.voided || i.complimentary) continue;
       const key = `${i.name}|${i.size}`;
       const p = products.get(key) ?? { name: i.size === 'TEK' ? i.name : `${i.name} ${i.size}`, qty: 0, amount: 0 };
@@ -255,6 +257,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
     gross,
     discounts,
     complimentary,
+    odenmez,
     voided,
     voidAfterSendCount,
     service,

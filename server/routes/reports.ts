@@ -79,7 +79,12 @@ reportRoutes.get('/export.csv', (c) => {
     rows = [['Saat', 'Adisyon', 'Ciro'], ...rep.hours.map((h) => [`${String(h.hour).padStart(2, '0')}:00${h.nextDay ? ' (ertesi gün)' : ''}`, h.orders, money(h.revenue)])];
   } else {
     const rep = itemListReport(r, type);
-    rows = [['Zaman', 'Adisyon', 'Yer', 'Ürün', 'Adet', 'Tutar', 'Neden', 'Yapan', 'Onaylayan'], ...rep.rows.map((x) => [fmtDateTime(x.at), x.orderNo, x.place, x.name, x.qty, money(x.value), x.reason ?? '', x.by ?? '', x.approvedBy ?? ''])];
+    // İkram listesinde tür (ikram ya da ödenmez) Excel'de süzülebilsin
+    const kind = type === 'ikram';
+    rows = [
+      ['Zaman', 'Adisyon', 'Yer', 'Ürün', 'Adet', 'Tutar', ...(kind ? ['Tür'] : []), 'Neden', 'Yapan', 'Onaylayan'],
+      ...rep.rows.map((x) => [fmtDateTime(x.at), x.orderNo, x.place, x.name, x.qty, money(x.value), ...(kind ? [x.compKind === 'odenmez' ? 'Ödenmez' : 'İkram'] : []), x.reason ?? '', x.by ?? '', x.approvedBy ?? '']),
+    ];
   }
   c.header('content-type', 'text/csv; charset=utf-8');
   c.header('content-disposition', `attachment; filename="lafpos-${type}-${r.from}_${r.to}.csv"`);
