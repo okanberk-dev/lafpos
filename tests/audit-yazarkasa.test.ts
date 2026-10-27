@@ -356,8 +356,8 @@ describe('yazarkasa denetimi', () => {
     });
     expect(built.amount).toBe(1000);
     expect(built.basket.items.map((i) => i.name)).toEqual(['b']);
-    // Eksi fark servis satırını sıfırlarsa sıfır tutarlı satır gitmez
-    const zero = buildBasket({
+    // Ödenmiş orana düşen eksi fark servis satırına yazılmaz: servis LafPOS'unkiyle aynı, fark diğer oranın indirimine
+    const withService = buildBasket({
       basketId: 'c',
       orderNo: 1,
       title: 'T',
@@ -368,8 +368,27 @@ describe('yazarkasa denetimi', () => {
       remainingDue: 1800,
       prior: { byRate: { '10': 1100 }, service: 0 },
     });
-    expect(zero.amount).toBe(1800);
-    expect(zero.basket.items.map((i) => [i.name, i.price])).toEqual([['b', 2000]]);
+    expect(withService.amount).toBe(1800);
+    expect(withService.basket.items.map((i) => [i.name, i.price, i.adjust?.totalValue ?? 0])).toEqual([
+      ['b', 2000, 300],
+      ['Servis ücreti', 100, 0],
+    ]);
+    // Sepette indirimi taşıyacak kalem kalmadıysa (yalnız servis) fark son çare servis satırına yazılır; sıfırlanan
+    // satır gitmez
+    const onlyService = (due: number) =>
+      buildBasket({
+        basketId: 'd',
+        orderNo: 1,
+        title: 'T',
+        sectionMap: { '10': 1, '20': 2 },
+        sizeLabels: { M: 'Orta', L: 'Büyük' },
+        items: [line('a', 10, 1100, 1)],
+        totals: { lineNet: { a: 900 }, service: 300, kdv: [{ rate: 10, gross: 1200, base: 1091, kdv: 109 }] },
+        remainingDue: due,
+        prior: { byRate: { '10': 1100 }, service: 0 },
+      });
+    expect(onlyService(100).basket.items.map((i) => [i.name, i.price])).toEqual([['Servis ücreti', 100]]);
+    expect(() => onlyService(0)).toThrow(/ücretli kalem yok/);
   });
 
   it('her cihaz sonucu denetim kaydına yazılır: cihazda vazgeçme ve LafPOS’tan sepet iptali', async () => {
@@ -420,6 +439,33 @@ describe('yazarkasa denetimi', () => {
     expect(await c.sendInstantBasket({ basketID: 'reject-1', items: [] }).catch((e: unknown) => e)).toMatchObject({ code: '1100', uncertain: false });
     instant = 'ok';
     await provider('simulator');
+  });
+
+  it('kalem ödemesinden sonra kalem iptali indirimi yeniden dağıtsa da cihazdaki servis LafPOS servisine eşit', async () => {
+    await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 10 });
+    let o = await order(
+      [
+        { name: 'Karaoke kişi başı', qty: 2 },
+        { name: 'Yenilebilir bardak', qty: 2 },
+        { name: 'Etkinlik ücreti', qty: 1 },
+      ],
+      { type: 'masa', tableId: tables()[8].id },
+    );
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 8682, reason: 'Kampanya', approverPin: MUDUR });
+    const cup = o.items.find((i) => i.name === 'Yenilebilir bardak')!;
+    const r1 = await send(o.id, [{ itemId: cup.id, qty: 2 }]);
+    await simPay(r1.id, [{ type: 3, amount: r1.amount }]);
+    const ev = o.items.find((i) => i.name === 'Etkinlik ücreti')!;
+    await h.ok('mudur', 'POST', `/orders/${o.id}/items/${ev.id}/void`, { reason: 'Vazgeçti' });
+    const r2 = await send(o.id);
+    await simPay(r2.id, [{ type: 3, amount: r2.amount }]);
+    const fin = await getOrder(o.id);
+    const onDevice = [...r1.basket.items, ...r2.basket.items].filter((i) => i.name === 'Servis ücreti').reduce((a, i) => a + i.price, 0);
+    await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 0 });
+    expect(fin.status).toBe('kapali');
+    expect(onDevice).toBe(fin.totals.service);
+    // Ödenmiş orana (%10) düşen eksi fark diğer oranın (Karaoke, %20) indirimine yazıldı
+    expect(r2.basket.items.find((i) => i.name.startsWith('Karaoke'))?.adjust?.totalValue).toBeGreaterThan(0);
   });
 
   // Gün kapanır: bundan sonra test yok

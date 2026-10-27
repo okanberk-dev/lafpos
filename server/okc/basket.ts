@@ -132,15 +132,18 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
       for (const p of slots) if (!target.has(p.rate)) target.set(p.rate, 0);
       for (const [rate, want] of target) {
         const own = slots.filter((p) => p.rate === rate);
-        const left = absorb(own, want - own.reduce((a, p) => a + p.net, 0));
+        // Fark yalnız kalemlerin indirim payına yazılır; servis satırı LafPOS'un servisi olarak kalır (inceleme, 27 Eki 2026)
+        const left = absorb(own.filter((p) => p.kind === 'kalem'), want - own.reduce((a, p) => a + p.net, 0));
         // Kalem başına en çok 2 kuruşluk kayma indirim yuvarlamasıdır; oranlar arasında dengelenir
         const rounding = 2 * input.items.filter((i) => i.kdvRate === rate && !i.voided && !i.complimentary).length;
         if (left > rounding) flat(rate, ADJUST_LINE, left, 'fark');
       }
     }
 
-    // Kalan kayma (yuvarlama, eksi fark): en büyük satırdan başlayarak indirim payına
-    if (absorb(slots.filter((p) => p.kind !== 'fark'), input.remainingDue - sum()) !== 0) {
+    // Kalan kayma (yuvarlama, eksi fark): en büyük kalemden başlayarak indirim payına. Sepette indirimi taşıyacak
+    // kalem kalmadıysa (yalnız servis) son çare servis satırına: cihazın toplamı adisyonun kalanından sapmaz
+    const drift = absorb(slots.filter((p) => p.kind === 'kalem'), input.remainingDue - sum());
+    if (absorb(slots.filter((p) => p.kind === 'servis'), drift) !== 0) {
       throw new Error("Cihaz sepeti adisyonun kalanını tutmuyor; kalanı kalem seçerek ya da LafPOS'ta alın");
     }
   }
