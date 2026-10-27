@@ -2,9 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { percentOf } from '@shared/money';
 import { happyHourPercentAt, happyHourUnit } from '@shared/order-calc';
 import { istanbulParts } from '@shared/time';
-import type { BootstrapDTO, DisplayStateDTO, OrderDTO } from '@shared/types';
+import type { BootstrapDTO, DisplayStateDTO, OrderDTO, ZSummary } from '@shared/types';
 import { estimateUnit, menuUnit } from '../src/lib/boot';
 import type { PendingLine } from '../src/lib/cart';
+import { slipDiff, slipRows } from '../src/lib/cashCount';
 import { type DisplayOrder, displayOrder, previewTotals } from '../src/lib/estimate';
 import { type Harness, startApp } from './harness';
 
@@ -124,5 +125,30 @@ describe('müşteri ekranı dökümü', () => {
     const { service: _s, ...old } = shown;
     await h.ok('kasa', 'PUT', '/display/audit', old);
     expect(await h.ok<DisplayStateDTO>('', 'GET', '/public/display/audit')).toMatchObject({ kind: 'order', service: 0 });
+  });
+});
+
+describe('gün sonu kasa föyü: slip karşılaştırması', () => {
+  it('kartla alınan bahşiş slipte tutarla birlikte görünür; fark sayılmaz', async () => {
+    const tk = product(h.boot, 'Türk kahvesi');
+    const card = h.boot.paymentMethods.find((m) => m.name === 'Kredi kartı')!;
+    const cash = h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
+    const before = (await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day')).summary.payments.find((p) => p.methodId === card.id);
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: tk.id, qty: 1 }] });
+    // Müşteri ₺140'ı kartla öder, ₺20 bahşişi de karta ekletir: banka POS'u ₺160 çeker
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card.id, amount: o.total, tip: 2000 });
+    const summary = (await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day')).summary;
+    const rows = slipRows(summary, h.boot.paymentMethods);
+    const row = rows.find((r) => r.methodId === card.id)!;
+    const slip = (before ? before.amount + before.tips : 0) + o.total + 2000;
+    expect(row.expected).toBe(slip);
+    expect(slipDiff(row, slip)).toBe(0);
+    expect(slipDiff(row, slip - 2000)).toBe(-2000);
+    // Nakit föyde ayrı sayılır (bahşiş beklenen nakitte); kör sayımda beklenen yok
+    expect(rows.some((r) => r.methodId === cash.id)).toBe(false);
+    const blind = slipRows(null, h.boot.paymentMethods);
+    expect(blind.find((r) => r.methodId === card.id)).toMatchObject({ expected: null });
+    expect(slipDiff(blind[0]!, 1000)).toBeNull();
   });
 });

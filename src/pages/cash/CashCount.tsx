@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import type { ZSummary } from '@shared/types';
 import { useBoot } from '@/lib/boot';
+import { slipDiff, slipRows } from '@/lib/cashCount';
 import { cn } from '@/lib/cn';
 
 /** Türk lirası banknot ve madeni paralar (kuruş) */
@@ -24,9 +25,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
   const [mode, setMode] = useState<'banknot' | 'toplam'>('banknot');
   const [totalText, setTotalText] = useState(value.countedCash ? String(value.countedCash / 100).replace('.', ',') : '');
   const blind = !summary;
-  const methods: { methodId: string; name: string; amount: number | null; count: number | null }[] = summary
-    ? summary.payments.filter((p) => p.zField !== 'cash')
-    : boot.paymentMethods.filter((m) => m.zField !== 'cash' && m.kind !== 'cari').map((m) => ({ methodId: m.id, name: m.name, amount: null, count: null }));
+  const methods = slipRows(summary, boot.paymentMethods);
   const fromNotes = useMemo(() => DENOMINATIONS.reduce((a, d) => a + d * (value.banknotes[String(d)] ?? 0), 0), [value.banknotes]);
 
   const setNote = (d: number, n: number) => {
@@ -107,14 +106,15 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
           <div className="space-y-2">
             {methods.map((m) => {
               const counted = value.methodCounts[m.methodId];
-              const d = counted == null || m.amount == null ? null : counted - m.amount;
+              const d = slipDiff(m, counted);
               return (
                 <div key={m.methodId} className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2">
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="font-medium">{m.name}</span>
-                    {m.amount != null && (
+                    {m.expected != null && (
                       <span className="block text-xs text-muted">
-                        Sistem {tl(m.amount)} · {m.count} işlem
+                        Sistem {tl(m.expected)}
+                        {m.tips ? ` (${tl(m.tips)} bahşiş dahil)` : ''} · {m.count} işlem
                       </span>
                     )}
                   </span>
