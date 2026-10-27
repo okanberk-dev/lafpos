@@ -19,6 +19,8 @@ interface SyncStatus {
     state: { lastSuccessAt?: number; lastError?: string | null; count?: number } | null;
     open: number;
     soldOutPush: { pending: number; rejected: number; lastError: string | null };
+    /** Masa QR kodlarının siteye gidişi; eski sunucu göndermez, anahtar yokken null */
+    tablesPush?: { lastSentAt?: number; lastTriedAt?: number; unsupported?: boolean; lastError?: string | null } | null;
   };
   lafmaliyet: { configured: boolean; url: string | null; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null; costsAt: number | null };
 }
@@ -122,6 +124,19 @@ export default function IntegrationAdmin() {
                   Sitenin reddettiği Satışta bilgisi: {s.online.soldOutPush.rejected} ürün (yeniden denenmeyecek; ürün LafPOS'ta açılınca ya da site aynı duruma gelince kalkar)
                   {!s.online.soldOutPush.pending && s.online.soldOutPush.lastError && <span className="block text-danger-500">Son hata: {s.online.soldOutPush.lastError}</span>}
                 </Status>
+              )}
+              {s.online.tablesPush?.unsupported && (
+                <Status ok={false} idle>
+                  Masa QR kodları siteye gönderildi ama site henüz almıyor (PUT /api/panel/tables yok): QR'lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer
+                </Status>
+              )}
+              {s.online.tablesPush?.lastError && !s.online.tablesPush.unsupported && (
+                <Status ok={false}>
+                  Masa QR kodları siteye gidemedi: {s.online.tablesPush.lastError}
+                </Status>
+              )}
+              {s.online.tablesPush?.lastSentAt && !s.online.tablesPush.lastError && !s.online.tablesPush.unsupported && (
+                <Status ok>Masa QR kodları sitede: {fmtDateTime(s.online.tablesPush.lastSentAt)}</Status>
               )}
               <Toggle checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />
             </>

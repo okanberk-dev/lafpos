@@ -64,6 +64,13 @@
       "when": 1793101383703,
       "tag": "0008_paket_platformlari",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793104346100,
+      "tag": "0009_masa_qr",
+      "breakpoints": true
     }
   ]
 }

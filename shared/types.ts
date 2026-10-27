@@ -59,6 +59,8 @@ export interface TableDTO {
   kind: 'masa' | 'oda';
   hourlyRate: number | null;
   siteTableCode: string | null;
+  /** Masanın QR kodu (shared/table-qr.ts); yoksa null */
+  qrCode: string | null;
   sort: number;
 }
 

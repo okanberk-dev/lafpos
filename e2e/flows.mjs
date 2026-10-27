@@ -326,6 +326,28 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Bilgisayarda patron: Masa planı\'nda masaya QR üretir, kart önizlemesi ve adres görünür; kod yenilenince değişir',
+      async () => {
+        // Plan ilk bölümle açılır: o bölümün ilk etkin masası
+        const floor = await api.call('patron', 'GET', '/admin/floor');
+        const table = floor.tables.find((x) => x.sectionId === floor.sections[0].id && x.active && x.kind === 'masa');
+        assert(table, 'ilk bölümde masa yok');
+        await withPage(ctx, 'bilgisayar', 'patron', async (page) => {
+          await go(ctx, page, '/yonetim/masa-plani');
+          await page.getByLabel(`${table.name} masası`, { exact: true }).click();
+          await page.getByRole('button', { name: 'QR üret', exact: true }).click();
+          await page.getByRole('img', { name: `${table.name} QR kodu` }).waitFor({ timeout: 8000 });
+          await page.getByText(/^https:\/\/laffogato\.net\/masa\/[0-9A-Z]{10}$/).waitFor();
+          await page.screenshot({ path: `${ROOT}/e2e/out/bilgisayar-patron-masa-qr.png` });
+        });
+        const boot = await api.call('kasa', 'GET', '/bootstrap');
+        const row = boot.tables.find((t) => t.id === table.id);
+        assert(/^[0-9A-HJKMNP-TV-Z]{10}$/.test(row?.qrCode ?? ''), `masa kodu üretilmedi: ${row?.qrCode}`);
+        const rotated = await api.call('patron', 'POST', `/admin/tables/${table.id}/qr`, { rotate: true });
+        assert(rotated.qrCode && rotated.qrCode !== row.qrCode, 'kod yenilenmedi');
+      },
+    ],
+    [
       'Bilgisayarda kasiyer: Yemeksepeti deneme siparişini şeritten kabul eder; kuryeye verince platform ödemesiyle kapanır',
       async () => {
         await api.call('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'deneme' });

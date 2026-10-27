@@ -10,23 +10,25 @@ import { callFor, callText, numaratorLabel, serviceModeOf } from '@shared/servic
  * Tarayıcıdan 80 mm termal yazıcıya çıktı. İçerik `.print-area`ya çizilir, `window.print()` çağrılır;
  * sayfanın geri kalanı yazdırmada gizlidir (index.css @media print).
  */
-const usePrint = create<{ content: ReactNode | null; set: (c: ReactNode | null) => void }>((set) => ({ content: null, set: (content) => set({ content }) }));
+const usePrint = create<{ content: ReactNode | null; sheet: boolean; set: (c: ReactNode | null, sheet?: boolean) => void }>((set) => ({ content: null, sheet: false, set: (content, sheet = false) => set({ content, sheet }) }));
 
-export function printNow(content: ReactNode) {
-  usePrint.getState().set(content);
+/** `sheet`: 80 mm fiş değil A4 sayfa (masa kartları); index.css `.print-sheet` */
+export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}) {
+  usePrint.getState().set(content, !!opts.sheet);
   // İçerik çizilsin diye bir kare bekle
   requestAnimationFrame(() => setTimeout(() => window.print(), 30));
 }
 
 export function PrintHost() {
   const content = usePrint((s) => s.content);
+  const sheet = usePrint((s) => s.sheet);
   useEffect(() => {
     const done = () => usePrint.getState().set(null);
     window.addEventListener('afterprint', done);
     return () => window.removeEventListener('afterprint', done);
   }, []);
   if (!content) return null;
-  return <div className="print-area hidden print:block">{content}</div>;
+  return <div className={sheet ? 'print-area print-sheet hidden print:block' : 'print-area hidden print:block'}>{content}</div>;
 }
 
 const Row = ({ l, r, bold }: { l: ReactNode; r?: ReactNode; bold?: boolean }) => (

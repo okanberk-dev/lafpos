@@ -142,6 +142,21 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   yerel `S4` ↔ sitedeki `Masa S4`). Büyük-küçük harf ve boşluk farkı gözetilmez, birden çok masaya uyan ad eşlenmez;
   sitenin masa QR kodu gerekmez. Masayı tutmaz: garson masaya dokununca kendi adisyonunu açar (masada yalnız online
   sipariş varsa seçimde "Yeni hesap aç"), masa taşımada dolu sayılmaz ve online siparişle birleştirilmez.
+- **Masa QR'ı LafPOS üretir** (27 Ekim 2026, `claude/qr-self-servis`): Yönetim › Masa planı'nda masa başına 10 simgelik
+  Crockford kod (`tables.qrCode`; sitenin `cafe_tables.code` kuralıyla aynı: `shared/table-qr.ts`, laffogato
+  `src/lib/admin/cafe-tables-core.ts`), QR içeriği sitenin masa adresi `https://laffogato.net/masa/<kod>` (apex'e
+  sabit; basılı kart adres değişse de çalışır). A4 masa kartları aynı ekrandan yazdırılır; "Kodu yenile" eski kartı o
+  anda geçersiz kılar. Sipariş eşlemesi önce `tableCode` (aşağıda), sonra yukarıdaki etiket kuralı.
+  Sitenin LafPOS'un kodunu tanıması için sözleşmeye iki alan eklendi; ikisi de **laffogato işi, bu sürümde sitede yok**:
+  1. `GET /api/panel/orders` masa siparişinde `tableCode` (siparişin `orders.tableCode` anlık görüntüsü; eski site
+     göndermez, LafPOS etiketle eşlemeye düşer).
+  2. İmzalı `PUT /api/panel/tables` (LafPOS'un anahtarı) `{ tables: [{ code, name, active }], actor }`: kodu
+     `cafe_tables`'a ekler (yeni satır, `rotatedAt` boş) ya da aynı kodlu satırın adını ve etkinliğini günceller;
+     listede olmayan, sitede tanımlı masaya dokunmaz; `active: false` sitede devre dışı bırakır. 200 `{ ok: true,
+     count }`, 400 `{ error: "invalid", field }`, 401, 413. LafPOS kod üretince, yenileyince ve QR'lı masanın adı ya
+     da etkinliği değişince tam listeyi giden kutusundan gönderir (kind `tables.sync`, tek kayıt, son liste geçerli).
+     Site 404 / 405 / 501 dönerse "site henüz almıyor" sayılır, yeniden denenmez (sonraki üretimde yine denenir) ve
+     Yönetim › Entegrasyon'da görünür; 400 / 403 / 409 / 413 / 422 park edilir.
 - **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) ya da okunamayan kalem varsa LafPOS hiçbir
   siparişi kapatmaz. Bütün listede olmayan açık online sipariş "Siteden kalktı" diye kapanır (`extStage = 'gone'`:
   sitede tamamlandı, iptal edildi ya da süresi geçti): servis edilmiş sayılmaz, bar ve çağrı ekranından düşer, denetim
