@@ -13,7 +13,7 @@ import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
-import { dropSiteSoldOut, enqueueSiteTables } from '../sync/site-outbox';
+import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
@@ -399,7 +399,10 @@ adminRoutes.post('/tables/qr', (c) => {
     for (const r of rows) assignTableCode(t, r.id);
     if (rows.length) enqueueSiteTables(t);
   });
-  if (rows.length) changed('tables', 'table.qr', user.id, { action: 'table.qr_created', message: `${user.name} ${rows.length} masaya QR kodu üretti` });
+  if (rows.length) {
+    changed('tables', 'table.qr', user.id, { action: 'table.qr_created', message: `${user.name} ${rows.length} masaya QR kodu üretti` });
+    void flushSiteOutbox();
+  }
   return c.json({ created: rows.length });
 });
 
@@ -410,17 +413,32 @@ adminRoutes.post('/tables/:id/qr', async (c) => {
   const input = await body(c, z.object({ rotate: z.boolean().optional() }));
   const table = db.select().from(schema.tables).where(eq(schema.tables.id, c.req.param('id'))).get();
   if (!table) throw notFound('Masa');
+  // Oda (karaoke) sitede masa değildir: QR yalnız masaya (toplu üretim ve kart sayfasıyla aynı kural)
+  if (table.kind !== 'masa') throw bad('QR yalnız masaya üretilir; odaya değil', 'not_table');
   if (table.qrCode && !input.rotate) return c.json({ qrCode: table.qrCode, url: tableQrUrl(table.qrCode), changed: false });
   const code = tx((t) => {
+    // Eski kod sitede de kapansın: pasif olarak listeye girer
+    if (table.qrCode) retireTableCode(table.qrCode);
     const next = assignTableCode(t, table.id);
     enqueueSiteTables(t);
     return next;
   });
   changed('tables', 'table.qr', user.id, {
     action: table.qrCode ? 'table.qr_rotated' : 'table.qr_created',
-    message: table.qrCode ? `${user.name} ${table.name} masasının QR kodunu yeniledi; basılı eski kart geçersiz` : `${user.name} ${table.name} masasına QR kodu üretti`,
+    message: table.qrCode ? `${user.name} ${table.name} masasının QR kodunu yeniledi; eski kod siteye pasif olarak bildirilir` : `${user.name} ${table.name} masasına QR kodu üretti`,
   });
+  void flushSiteOutbox();
   return c.json({ qrCode: code, url: tableQrUrl(code), changed: true });
+});
+
+/** Yönetim › Entegrasyon: masa kodlarını siteye yeniden gönder (site ucu sonradan açıldıysa beklemeden) */
+adminRoutes.post('/tables/qr/sync', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  const queued = enqueueSiteTables(db);
+  if (!queued) throw conflict('Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
+  const r = await flushSiteOutbox();
+  return c.json({ ok: true, sent: r.sent, failed: r.failed });
 });
 
 /** Plan düzenleyiciden toplu konum kaydı */

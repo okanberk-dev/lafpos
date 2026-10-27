@@ -145,8 +145,10 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
 - **Masa QR'ı LafPOS üretir** (27 Ekim 2026, `claude/qr-self-servis`): Yönetim › Masa planı'nda masa başına 10 simgelik
   Crockford kod (`tables.qrCode`; sitenin `cafe_tables.code` kuralıyla aynı: `shared/table-qr.ts`, laffogato
   `src/lib/admin/cafe-tables-core.ts`), QR içeriği sitenin masa adresi `https://laffogato.net/masa/<kod>` (apex'e
-  sabit; basılı kart adres değişse de çalışır). A4 masa kartları aynı ekrandan yazdırılır; "Kodu yenile" eski kartı o
-  anda geçersiz kılar. Sipariş eşlemesi önce `tableCode` (aşağıda), sonra yukarıdaki etiket kuralı.
+  sabit; basılı kart adres değişse de çalışır). A4 masa kartları aynı ekrandan yazdırılır; "Kodu yenile" yeni kod
+  üretir, eski kod siteye `active: false` ile gider (sitede de kapanır; site ucu gelene dek eski kart menüyü açmaya
+  devam eder, sipariş kodla değil etiketle eşlenir). Sipariş eşlemesi önce `tableCode` (yalnız etkin masa; aşağıda),
+  sonra yukarıdaki etiket kuralı.
   Sitenin LafPOS'un kodunu tanıması için sözleşmeye iki alan eklendi; ikisi de **laffogato işi, bu sürümde sitede yok**:
   1. `GET /api/panel/orders` masa siparişinde `tableCode` (siparişin `orders.tableCode` anlık görüntüsü; eski site
      göndermez, LafPOS etiketle eşlemeye düşer).
@@ -155,8 +157,9 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
      listede olmayan, sitede tanımlı masaya dokunmaz; `active: false` sitede devre dışı bırakır. 200 `{ ok: true,
      count }`, 400 `{ error: "invalid", field }`, 401, 413. LafPOS kod üretince, yenileyince ve QR'lı masanın adı ya
      da etkinliği değişince tam listeyi giden kutusundan gönderir (kind `tables.sync`, tek kayıt, son liste geçerli).
-     Site 404 / 405 / 501 dönerse "site henüz almıyor" sayılır, yeniden denenmez (sonraki üretimde yine denenir) ve
-     Yönetim › Entegrasyon'da görünür; 400 / 403 / 409 / 413 / 422 park edilir.
+     Site 404 / 405 / 501 dönerse "site henüz almıyor" sayılır, kayıt kalır ve 6 saatte bir yeniden denenir (kod
+     üretimi ve Yönetim › Entegrasyon'daki "Şimdi yeniden gönder" (`POST /api/admin/tables/qr/sync`) hemen dener);
+     400 / 403 / 409 / 413 / 422 park edilir.
 - **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) ya da okunamayan kalem varsa LafPOS hiçbir
   siparişi kapatmaz. Bütün listede olmayan açık online sipariş "Siteden kalktı" diye kapanır (`extStage = 'gone'`:
   sitede tamamlandı, iptal edildi ya da süresi geçti): servis edilmiş sayılmaz, bar ve çağrı ekranından düşer, denetim

@@ -334,7 +334,7 @@ export async function runFlows(ctx) {
         assert(table, 'ilk bölümde masa yok');
         await withPage(ctx, 'bilgisayar', 'patron', async (page) => {
           await go(ctx, page, '/yonetim/masa-plani');
-          await page.getByLabel(`${table.name} masası`, { exact: true }).click();
+          await page.locator(`[data-table-id="${table.id}"]`).click();
           await page.getByRole('button', { name: 'QR üret', exact: true }).click();
           await page.getByRole('img', { name: `${table.name} QR kodu` }).waitFor({ timeout: 8000 });
           await page.getByText(/^https:\/\/laffogato\.net\/masa\/[0-9A-Z]{10}$/).waitFor();

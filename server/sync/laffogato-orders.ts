@@ -85,7 +85,8 @@ export function tableForLabel(tables: TableRow[], label: string): TableRow | und
  */
 export function tableForOrder(tables: TableRow[], o: Pick<PanelOrder, 'label' | 'tableCode'>): TableRow | undefined {
   const code = normalizeTableCode(o.tableCode);
-  const byQr = code ? tables.find((x) => x.qrCode === code) : undefined;
+  // Yalnız etkin masa (oda değil): plandan kaldırılmış masanın kodu gelirse sipariş masasız kalır, etiketiyle görünür
+  const byQr = code ? tables.find((x) => x.qrCode === code && x.active && x.kind === 'masa') : undefined;
   return byQr ?? tableForLabel(tables, o.label ?? '');
 }
 

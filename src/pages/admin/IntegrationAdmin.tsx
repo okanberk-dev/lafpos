@@ -54,6 +54,17 @@ export default function IntegrationAdmin() {
       toast.err(errorMessage(e));
     }
   };
+  /** Masa QR kodlarını siteye yeniden gönder (site ucu sonradan açıldıysa 6 saatlik turu beklemeden) */
+  const resendTables = async () => {
+    try {
+      const r = await post<{ sent: number; failed: number }>('/admin/tables/qr/sync');
+      if (r.sent) toast.ok('Masa kodları siteye gönderildi');
+      else toast.warn('Site masa kodlarını henüz almıyor; 6 saatte bir yeniden denenecek');
+      qc.invalidateQueries({ queryKey: ['sync'] });
+    } catch (e) {
+      toast.err(errorMessage(e));
+    }
+  };
   const run = async (path: string, ok: string) => {
     try {
       const r = await post<{ warning?: string }>(path);
@@ -127,7 +138,10 @@ export default function IntegrationAdmin() {
               )}
               {s.online.tablesPush?.unsupported && (
                 <Status ok={false} idle>
-                  Masa QR kodları siteye gönderildi ama site henüz almıyor (PUT /api/panel/tables yok): QR'lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer
+                  Masa QR kodları siteye gönderildi ama site henüz almıyor (PUT /api/panel/tables yok): QR'lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer; 6 saatte bir yeniden denenir.{' '}
+                  <button type="button" className="min-h-11 font-medium text-primary underline underline-offset-2 pointer-fine:min-h-6" onClick={() => void resendTables()}>
+                    Şimdi yeniden gönder
+                  </button>
                 </Status>
               )}
               {s.online.tablesPush?.lastError && !s.online.tablesPush.unsupported && (

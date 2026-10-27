@@ -24,6 +24,16 @@ const PARKED = Number.MAX_SAFE_INTEGER;
 const TABLES_KEY = 'tables';
 const TABLES_KIND = 'tables.sync';
 export const TABLES_PUSH_STATE = 'laffogato.tablesPush';
+/** Yenilenen (emekli) masa kodları: siteye `active: false` ile gider ki eski kart sitede de kapansın */
+export const RETIRED_CODES_STATE = 'laffogato.retiredTableCodes';
+const RETIRED_MAX = 200;
+/** Site ucu henüz yoksa (404) liste bu aralıkla yeniden denenir; kod üretimi ve "yeniden gönder" hemen dener */
+const UNSUPPORTED_RETRY_MS = 6 * 3600_000;
+
+export function retireTableCode(code: string) {
+  const list = (getSyncState<string[]>(RETIRED_CODES_STATE) ?? []).filter((c) => c !== code);
+  setSyncState(RETIRED_CODES_STATE, [...list, code].slice(-RETIRED_MAX));
+}
 
 export interface TablesPushState {
   lastSentAt?: number;
@@ -40,13 +50,17 @@ export interface TablesPushState {
  */
 export function enqueueSiteTables(t: Tx | DB): boolean {
   if (!siteSigned()) return false;
-  const tables = t
+  const live = t
     .select({ qrCode: schema.tables.qrCode, name: schema.tables.name, active: schema.tables.active, kind: schema.tables.kind })
     .from(schema.tables)
-    .where(isNotNull(schema.tables.qrCode))
+    .where(and(isNotNull(schema.tables.qrCode), eq(schema.tables.kind, 'masa')))
     .orderBy(asc(schema.tables.sort))
     .all()
     .map((x) => ({ code: x.qrCode!, name: x.name, active: x.active }));
+  const current = new Set(live.map((x) => x.code));
+  // Yenilenen kodlar pasif olarak gider: sitede eski kart da kapanır
+  const retired = (getSyncState<string[]>(RETIRED_CODES_STATE) ?? []).filter((c) => !current.has(c)).map((code) => ({ code, name: 'Eski kart', active: false }));
+  const tables = [...live, ...retired];
   const now = Date.now();
   t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, TABLES_KEY), isNull(schema.outbox.sentAt))).run();
   t.insert(schema.outbox).values({ target: 'laffogato', kind: TABLES_KIND, dedupeKey: TABLES_KEY, payload: { tables, actor: 'LafPOS' }, createdAt: now, nextAttemptAt: now }).run();
@@ -195,8 +209,9 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
 }
 
 /**
- * Masa listesini siteye yazar (`PUT /api/panel/tables`). Site ucu henüz tanımıyorsa (404, 405, 501) kayıt düşer ve
- * durum "site henüz almıyor" olur: her dakika denenmez, sonraki kod üretiminde yeniden denenir. Kalıcı ret park edilir.
+ * Masa listesini siteye yazar (`PUT /api/panel/tables`). Site ucu henüz tanımıyorsa (404, 405, 501) kayıt kalır, durum
+ * "site henüz almıyor" olur ve 6 saatte bir yeniden denenir (kod üretimi ve Entegrasyon'daki "yeniden gönder" hemen
+ * dener). Kalıcı ret park edilir.
  */
 async function sendTables(row: typeof schema.outbox.$inferSelect): Promise<'sent' | 'failed' | 'skipped'> {
   const now = Date.now();
@@ -209,7 +224,8 @@ async function sendTables(row: typeof schema.outbox.$inferSelect): Promise<'sent
       return 'sent';
     }
     if (status === 404 || status === 405 || status === 501) {
-      db.delete(schema.outbox).where(eq(schema.outbox.id, row.id)).run();
+      // Site ucu henüz yok: kayıt düşmez, 6 saatte bir yeniden denenir (kod üretimi ve "yeniden gönder" hemen dener)
+      db.update(schema.outbox).set({ attempts: row.attempts + 1, lastError: null, nextAttemptAt: now + UNSUPPORTED_RETRY_MS }).where(eq(schema.outbox.id, row.id)).run();
       setSyncState(TABLES_PUSH_STATE, { ...state(), lastTriedAt: now, unsupported: true, lastError: null });
       return 'skipped';
     }

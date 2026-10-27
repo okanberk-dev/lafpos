@@ -46,7 +46,7 @@ function TableCardsSheet({ tables, businessName }: { tables: Table[]; businessNa
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10mm' }}>
       {tables.map((t) => (
         <section key={t.id} style={{ breakInside: 'avoid', border: '1px solid #999', borderRadius: 12, padding: 18, textAlign: 'center', color: '#0c0e1b', background: '#fff' }}>
-          <QrCode value={tableQrUrl(t.qrCode ?? '')} label={`${t.name} QR kodu`} className="mx-auto size-auto w-full max-w-56 border-0" />
+          <QrCode value={tableQrUrl(t.qrCode ?? '')} label={`${t.name} QR kodu`} className="mx-auto w-full max-w-56 border-0" />
           <div style={{ marginTop: 10, fontSize: 22, fontWeight: 700 }}>{t.name}</div>
           <div style={{ marginTop: 4, fontSize: 13, color: '#5f594e' }}>Menü · Uygulamadan masaya sipariş</div>
           <div style={{ marginTop: 2, fontSize: 12, color: '#5f594e' }}>{businessName}</div>
@@ -149,7 +149,7 @@ export default function FloorAdmin() {
 
   /** Masa QR'ı: üret ya da yenile (yenilemede basılı eski kart o anda geçersiz olur) */
   const makeQr = async (t: Table, rotate = false) => {
-    if (rotate && !window.confirm(`${t.name} masasının kodu yenilensin mi? Basılı eski kart hemen geçersiz olur; kartı yeniden yazdırın`)) return;
+    if (rotate && !window.confirm(`${t.name} masasının kodu yenilensin mi? Eski kod siteye pasif olarak bildirilir (site alana dek eski kart menüyü açmaya devam eder); kartı yeniden yazdırın`)) return;
     try {
       const r = await post<{ qrCode: string; changed: boolean }>(`/admin/tables/${t.id}/qr`, { rotate });
       setTables((all) => all.map((x) => (x.id === t.id ? { ...x, qrCode: r.qrCode } : x)));
@@ -241,7 +241,7 @@ export default function FloorAdmin() {
             <div
               key={t.id}
               onPointerDown={(e) => onPointerDown(e, t, 'move')}
-              aria-label={`${t.name} masası`}
+              data-table-id={t.id}
               style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
               className={cn(
                 'absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
@@ -293,6 +293,7 @@ export default function FloorAdmin() {
               <Field label="Sitedeki masa adı" hint="Sitede ayrı adla tanımlı masanın online siparişini bu masaya düşürür; QR kodu olan masada gerekmez">
                 <Input defaultValue={sel.siteTableCode ?? ''} key={`c${sel.id}`} placeholder='ör. "Masa 4"' onBlur={(e) => updateTable(sel.id, { siteTableCode: e.target.value.trim() || null })} />
               </Field>
+              {sel.kind === 'masa' && (
               <div className="space-y-2 rounded-xl border border-[var(--admin-border)] p-3">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-[var(--admin-text-soft)]">Masa QR</span>
@@ -326,6 +327,7 @@ export default function FloorAdmin() {
                   </>
                 )}
               </div>
+              )}
               <Button
                 variant="ghost"
                 className="text-danger-500"
