@@ -251,30 +251,37 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
     }
   }
   // Yalnız hâlâ bekleyen (ya da hatalı) sepet silinmiş sayılır: silme sürerken gelen "ödendi" ezilmez
-  const changed = db
-    .update(schema.fiscalReceipts)
-    .set({ status: 'silindi', error: unreachable ? `Cihaza ulaşılamadı, LafPOS'ta iptal sayıldı: ${unreachable}` : null, updatedAt: Date.now() })
-    .where(and(eq(schema.fiscalReceipts.id, r.id), inArray(schema.fiscalReceipts.status, [...PENDING, 'hata'])))
-    .run().changes;
+  const fx = new Effects();
+  const changed = tx((t) => {
+    const n = t
+      .update(schema.fiscalReceipts)
+      .set({ status: 'silindi', error: unreachable ? `Cihaza ulaşılamadı, LafPOS'ta iptal sayıldı: ${unreachable}` : null, updatedAt: Date.now() })
+      .where(and(eq(schema.fiscalReceipts.id, r.id), inArray(schema.fiscalReceipts.status, [...PENDING, 'hata'])))
+      .run().changes;
+    if (!n) return 0;
+    const order = loadOrder(t, r.orderId);
+    fx.audit(
+      t,
+      unreachable
+        ? {
+            userId: actor.user.id,
+            approverId,
+            action: 'okc.force_cancel',
+            severity: 'alarm',
+            orderId: r.orderId,
+            amount: r.amount,
+            message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihaza ulaşılamadan LafPOS'ta iptal sayıldı. Cihazda ödeme alındıysa mali fişi cihazdan iptal edin`,
+          }
+        : { userId: actor.user.id, action: 'okc.delete', orderId: r.orderId, amount: r.amount, message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) LafPOS'tan iptal edildi` },
+    );
+    return n;
+  });
   if (!changed) {
     const now = loadReceipt(r.id);
     if (now.status === 'tamamlandi') throw conflict('Sepet bu arada cihazda ödendi; adisyona işlendi', 'okc_paid');
     return receiptDTO(now);
   }
-  if (unreachable) {
-    const order = loadOrder(db, r.orderId);
-    const fx = new Effects();
-    fx.audit(db, {
-      userId: actor.user.id,
-      approverId,
-      action: 'okc.force_cancel',
-      severity: 'alarm',
-      orderId: r.orderId,
-      amount: r.amount,
-      message: `#${order.no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihaza ulaşılamadan LafPOS'ta iptal sayıldı. Cihazda ödeme alındıysa mali fişi cihazdan iptal edin`,
-    });
-    fx.flush();
-  }
+  fx.flush();
   publish(r.orderId, 'okc.cancelled', unreachable ? "Cihaza ulaşılamadı; sepet LafPOS'ta iptal sayıldı" : 'Cihaz sepeti iptal edildi', actor.user.id);
   return receiptDTO(loadReceipt(r.id));
 }
@@ -457,16 +464,36 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
         });
       });
     } else {
-      db.update(schema.fiscalReceipts).set({ status: 'iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+      // Belge kesilmemiş sepet için iptal: sepet kapanır, ödeme yok
+      tx((t) => {
+        t.update(schema.fiscalReceipts).set({ status: 'iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+        fx.audit(t, {
+          userId: by?.userId ?? null,
+          approverId: by?.approverId ?? null,
+          action: 'okc.cancelled',
+          orderId: r.orderId,
+          amount: r.amount,
+          message: `#${loadOrder(t, r.orderId).no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihazda iptal edildi; fiş kesilmemişti (${source})`,
+        });
+      });
     }
     fx.emit({ topic: 'okc', kind: 'okc.void', orderId: r.orderId, message: 'Yazarkasada fiş iptal edildi' });
     fx.flush();
     return;
   }
 
-  // Cihazda vazgeçildi
-  if (r.status === 'tamamlandi') return;
-  db.update(schema.fiscalReceipts).set({ status: 'iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+  // Cihazda vazgeçildi: yalnız bekleyen sepet kapanır (işlenmiş ya da iptal sayılmış sepet değişmez)
+  if (!PENDING.includes(r.status as (typeof PENDING)[number])) return;
+  tx((t) => {
+    t.update(schema.fiscalReceipts).set({ status: 'iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+    fx.audit(t, {
+      userId: by?.userId ?? null,
+      action: 'okc.cancelled',
+      orderId: r.orderId,
+      amount: r.amount,
+      message: `#${loadOrder(t, r.orderId).no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihazda ödenmeden kapatıldı (${source})`,
+    });
+  });
   fx.emit({ topic: 'okc', kind: 'okc.cancelled', orderId: r.orderId, message: 'Cihazda ödemeden vazgeçildi' });
   fx.emit({ topic: 'orders', kind: 'okc.cancelled', orderId: r.orderId });
   fx.flush();
@@ -565,16 +592,30 @@ export async function refreshReceipt(receiptId: string) {
   const out = await provider.poll(pendingOf(r));
   const stillPending = and(eq(schema.fiscalReceipts.id, r.id), inArray(schema.fiscalReceipts.status, [...PENDING]));
   if (out.kind === 'result') applyResult(r.id, out.result, 'sorgu');
-  else if (out.kind === 'deleted') {
-    db.update(schema.fiscalReceipts).set({ status: 'silindi', updatedAt: Date.now() }).where(stillPending).run();
-    publish(r.orderId, 'okc.cancelled', 'Sepet cihazdan silindi');
-  } else if (out.kind === 'missing') {
-    // Yanıtı alınamayan gönderim cihaza hiç ulaşmamış: adisyonun kilidi açılır
-    db.update(schema.fiscalReceipts)
-      .set({ status: 'hata', error: `Sepet cihaza ulaşmadı${r.error ? ` (${r.error})` : ''}`, updatedAt: Date.now() })
-      .where(stillPending)
-      .run();
-    publish(r.orderId, 'okc.error', 'Sepet cihaza ulaşmadı; hesabı yeniden gönderin ya da kasadan alın');
+  else if (out.kind === 'deleted' || out.kind === 'missing') {
+    // Silindi: sepet cihazdan kaldırıldı. Yok: yanıtı alınamayan gönderim cihaza hiç ulaşmamış; adisyonun kilidi açılır
+    const deleted = out.kind === 'deleted';
+    const fx = new Effects();
+    const changed = tx((t) => {
+      const n = t
+        .update(schema.fiscalReceipts)
+        .set(deleted ? { status: 'silindi', updatedAt: Date.now() } : { status: 'hata', error: `Sepet cihaza ulaşmadı${r.error ? ` (${r.error})` : ''}`, updatedAt: Date.now() })
+        .where(stillPending)
+        .run().changes;
+      if (n) {
+        const no = loadOrder(t, r.orderId).no;
+        fx.audit(t, {
+          action: deleted ? 'okc.cancelled' : 'okc.not_delivered',
+          severity: deleted ? 'info' : 'uyari',
+          orderId: r.orderId,
+          amount: r.amount,
+          message: deleted ? `#${no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihazdan silindi (sorgu)` : `#${no} adisyonun yazarkasa sepeti (${tl(r.amount)}) cihaza ulaşmadı; adisyon kasadan alınabilir`,
+        });
+      }
+      return n;
+    });
+    fx.flush();
+    if (changed) publish(r.orderId, deleted ? 'okc.cancelled' : 'okc.error', deleted ? 'Sepet cihazdan silindi' : 'Sepet cihaza ulaşmadı; hesabı yeniden gönderin ya da kasadan alın');
   } else if (out.locked !== (r.status === 'kilitli')) setLock(r.id, out.locked, out.lockedBy);
   return receiptDTO(loadReceipt(r.id));
 }

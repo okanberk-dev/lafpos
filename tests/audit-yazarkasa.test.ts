@@ -347,6 +347,22 @@ describe('yazarkasa denetimi', () => {
     expect(built.basket.items.map((i) => i.name)).toEqual(['b']);
   });
 
+  it('her cihaz sonucu denetim kaydına yazılır: cihazda vazgeçme ve LafPOS’tan sepet iptali', async () => {
+    const o = await order([{ name: 'Türk kahvesi' }]);
+    const r1 = await send(o.id);
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${r1.id}/cancel`, {});
+    const r2 = await send(o.id);
+    await h.ok('kasa', 'POST', `/okc/receipts/${r2.id}/cancel`, {});
+    const mine = (await audits()).filter((a) => a.orderId === o.id).map((a) => a.action);
+    expect(mine).toEqual(expect.arrayContaining(['okc.send', 'okc.cancelled', 'okc.delete']));
+    // Aynı vazgeçme ikinci kez gelirse kayıt ve durum değişmez
+    const { applySale } = await import('../server/okc/service');
+    applySale(r1.id, { basketID: r1.id, status: -1 }, 'webhook');
+    expect((await audits()).filter((a) => a.orderId === o.id && a.action === 'okc.cancelled')).toHaveLength(1);
+    expect((await receipts(o.id)).map((x) => x.status)).toEqual(['silindi', 'iptal']);
+    await h.ok('kasa', 'POST', `/orders/${o.id}/cancel`, { reason: 'Vazgeçti', approverPin: MUDUR });
+  });
+
   // Gün kapanır: bundan sonra test yok
   it('kapanmış güne ait fiş iptali (webhook) Z’yi değiştirmez; ödeme geri alınmaz, yöneticiye alarm düşer', async () => {
     const o = await order([{ name: 'Latte', size: 'L', qty: 2 }]);

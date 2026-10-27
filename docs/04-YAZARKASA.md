@@ -133,7 +133,11 @@ Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` �
 | `99`, fiş kapanmış güne ait | Kapanmış günün Z'si değişmez: ödeme geri alınmaz, adisyon açılmaz, fiş `fis_iptal` olur ve yöneticiye alarm düşer (`okc.void_closed_day`). Müşteriye para iade edildiyse bugünün kasasından çıkış olarak işlenir. Eğitim cihazında bu iptal hiç yapılamaz (`day_closed`) |
 | `BASKET_LOCKED` / `UNLOCKED` | Sepet cihazda açıkken LafPOS'ta kilit gösterilir |
 
-Her sonuç denetim kaydına yazılır; son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında görünür.
+Her sonuç denetim kaydına yazılır: gönderim (`okc.send`), ödendi (`okc.paid`), cihazda vazgeçme ya da cihazdan
+silinme (`okc.cancelled`), LafPOS'tan sepet iptali (`okc.delete`, ulaşılamadıysa `okc.force_cancel`), cihaza
+ulaşmayan gönderim (`okc.not_delivered`), fiş iptali (`okc.void`, `okc.void_closed_day`) ve alarmlar
+(`okc.underpaid`, `okc.apply_failed`, `okc.late_paid`). Aynı sonuç ikinci kez gelirse işlem ve kayıt tekrarlanmaz.
+Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında görünür.
 
 ## 7. Sık sorunlar
 
