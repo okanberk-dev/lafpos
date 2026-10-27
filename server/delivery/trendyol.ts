@@ -352,20 +352,21 @@ export function trendyolAdapter(c: TrendyolConfig): PlatformAdapter {
       const cancelled = await fetchPackages(c, TRENDYOL_STATUS.cancelled, start, now);
       return { orders: created.map((p) => fromTrendyolPackage(p, now)), cancelled: cancelled.map((p) => String(p.id)) };
     },
-    accept: (externalId, prepMinutes) => put(c, TRENDYOL_PATHS.picked(c.supplierId, externalId), { preparationTime: prepMinutes }),
-    reject: (externalId, reason) => put(c, TRENDYOL_PATHS.unsupplied(c.supplierId, externalId), { reasonCode: TRENDYOL_REASON_CODES[reason] ?? TRENDYOL_REASON_OTHER }),
-    async notify(externalId, status: PlatformNotify, courier) {
+    accept: (order, prepMinutes) => put(c, TRENDYOL_PATHS.picked(c.supplierId, order.externalId), { preparationTime: prepMinutes }),
+    reject: (order, reason) => put(c, TRENDYOL_PATHS.unsupplied(c.supplierId, order.externalId), { reasonCode: TRENDYOL_REASON_CODES[reason] ?? TRENDYOL_REASON_OTHER }),
+    async notify(order, status: PlatformNotify, courier) {
+      const id = order.externalId;
       if (status === 'hazir') {
-        await put(c, TRENDYOL_PATHS.invoiced(c.supplierId, externalId), {});
+        await put(c, TRENDYOL_PATHS.invoiced(c.supplierId, id), {});
         return true;
       }
       // Platform kuryesi alınca ve teslim edince platform kendi yazar; kendi kuryemiz ve gel-al bizden
       if (courier === 'platform') return false;
       if (status === 'yolda') {
-        await put(c, TRENDYOL_PATHS.shipped(c.supplierId, externalId), {});
+        await put(c, TRENDYOL_PATHS.shipped(c.supplierId, id), {});
         return true;
       }
-      await put(c, TRENDYOL_PATHS.delivered(c.supplierId, externalId), {});
+      await put(c, TRENDYOL_PATHS.delivered(c.supplierId, id), {});
       return true;
     },
   };

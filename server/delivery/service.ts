@@ -217,6 +217,8 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
   if (existing) return { row: existing, created: false };
   if (platformSettings()[payload.platform].mode === 'kapali') throw conflict(`${PLATFORM_LABEL[payload.platform]} kapalı`, 'platform_off');
   const secs = ACCEPT_SECONDS[payload.platform];
+  // Platform kabul süresini verdiyse (Yemeksepeti expiryDate) o, yoksa platformun bilinen süresi
+  const expiresAt = typeof payload.expiresAt === 'number' && payload.expiresAt > now ? payload.expiresAt : secs ? now + secs * 1000 : null;
   const row: PlatformRow = {
     id: ulid(now),
     platform: payload.platform,
@@ -224,7 +226,7 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
     status: 'bekliyor',
     payload,
     receivedAt: now,
-    expiresAt: secs ? now + secs * 1000 : null,
+    expiresAt,
     orderId: null,
     decidedAt: null,
     decidedBy: null,

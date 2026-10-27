@@ -17,9 +17,9 @@ export interface PlatformAdapter {
   /** Son başarılı yoklamadan beri yeni (onay bekleyen) siparişler ve platformun iptal ettiği paketlerin kimlikleri */
   poll(sinceMs: number, now: number): Promise<{ orders: PlatformOrderPayload[]; cancelled: string[] }>;
   /** Kabul, hazırlık süresiyle; platform reddederse fırlatır (yerelde kabul edilmez) */
-  accept(externalId: string, prepMinutes: number): Promise<void>;
+  accept(order: PlatformOrderPayload, prepMinutes: number): Promise<void>;
   /** Ret (kasadaki neden metniyle; bağdaştırıcı platformun koduna çevirir) */
-  reject(externalId: string, reason: string): Promise<void>;
+  reject(order: PlatformOrderPayload, reason: string): Promise<void>;
   /** Teslim aşaması; platformda karşılığı yoksa (platform kuryesi kendi yazar) false döner, istek gitmez */
-  notify(externalId: string, status: PlatformNotify, courier: PlatformCourier): Promise<boolean>;
+  notify(order: PlatformOrderPayload, status: PlatformNotify, courier: PlatformCourier): Promise<boolean>;
 }

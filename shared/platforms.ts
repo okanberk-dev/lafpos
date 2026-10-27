@@ -117,6 +117,10 @@ export interface PlatformOrderPayload {
   platformDiscount: number;
   /** Müşterinin ödediği */
   customerTotal: number;
+  /** Platformun verdiği kabul süresi sonu (ms); yoksa ACCEPT_SECONDS */
+  expiresAt?: number | null;
+  /** Bağdaştırıcının kendi verisi (sipariş belirteci, geri çağrı adresleri gibi); kasa yorumlamaz */
+  platformData?: Record<string, unknown>;
 }
 
 export type PlatformOrderStatus = 'bekliyor' | 'kabul' | 'ret' | 'iptal' | 'suresi_doldu';

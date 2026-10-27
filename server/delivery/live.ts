@@ -94,7 +94,7 @@ export async function announceAccept(row: PlatformRow, prepMinutes: number): Pro
   const a = liveFor(row);
   if (!a) return null;
   try {
-    await a.accept(row.externalId, prepMinutes);
+    await a.accept(row.payload, prepMinutes);
     return 'picked';
   } catch (e) {
     const why = `${a.label}'a kabul bildirilemedi: ${message(e)}`;
@@ -108,7 +108,7 @@ export async function announceReject(row: PlatformRow, reason: string): Promise<
   const a = liveFor(row);
   if (!a) return null;
   try {
-    await a.reject(row.externalId, reason);
+    await a.reject(row.payload, reason);
     return 'unsupplied';
   } catch (e) {
     const why = `${a.label}'a ret bildirilemedi: ${message(e)}`;
@@ -149,7 +149,7 @@ export async function reconcileNotifications(now = Date.now()): Promise<{ sent: 
     try {
       for (let i = have + 1; i <= target; i++) {
         const step = STEPS[i] as PlatformNotify;
-        await a.notify(row.externalId, step, row.payload.courier);
+        await a.notify(row.payload, step, row.payload.courier);
         current = step;
         db.update(schema.platformOrders).set({ notifiedStatus: step, lastError: null }).where(eq(schema.platformOrders.id, row.id)).run();
       }

@@ -31,6 +31,18 @@ export function configFrom(vars: Record<string, string | undefined>) {
      * Trendyol Go Yemek (Uber Eats Türkiye): satıcı panelinden satıcı no, API anahtarı ve gizli anahtar; yalnız kasa
      * bilgisayarının .env'inde. Üçü de yoksa canlı mod seçilemez (server/delivery/trendyol.ts)
      */
+    /**
+     * Yemeksepeti (Delivery Hero POS middleware): siparişler LafPOS Uzaktan aktarıcısına (Vercel) iter, kasa oradan çeker
+     * (LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET de gerekir); kabul, ret ve aşama kasadan middleware'e
+     */
+    yemeksepeti: {
+      /** Delivery Hero'nun verdiği middleware adresi (ör. https://integration-middleware.stg.restaurant-partners.com) */
+      mwUrl: (vars.YEMEKSEPETI_MW_URL ?? '').trim().replace(/\/+$/, ''),
+      username: (vars.YEMEKSEPETI_USERNAME ?? '').trim(),
+      password: (vars.YEMEKSEPETI_PASSWORD ?? '').trim(),
+      /** Restoranın Delivery Hero'daki POS kimliği (remoteId); aktarıcı yalnız bunu kabul eder */
+      remoteId: (vars.YEMEKSEPETI_REMOTE_ID ?? '').trim(),
+    },
     trendyol: {
       supplierId: (vars.TRENDYOL_SUPPLIER_ID ?? '').trim(),
       apiKey: (vars.TRENDYOL_API_KEY ?? '').trim(),

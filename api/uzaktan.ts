@@ -4,6 +4,8 @@
  *
  * Ortam: LAFPOS_CLOUD_SECRET (kafedekiyle aynı, en az 32), LAFPOS_UZAKTAN_PAROLA (en az 10), Upstash Redis
  * (KV_REST_API_URL + KV_REST_API_TOKEN ya da UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
+ * Yemeksepeti aktarıcısı (`/api/yemeksepeti/*`, aşağıda): YEMEKSEPETI_PLUGIN_SECRET (Delivery Hero'nun JWT anahtarı),
+ * isteğe bağlı YEMEKSEPETI_REMOTE_ID (yalnız bu restoranın siparişleri).
  * Kendi içinde: Vercel her dosyayı ayrı derler, göreli içe aktarma çalışma anında kırılabilir. İmza kuralı
  * server/lib/signature.ts ile aynı (tests/cloud-api.test.ts denetler). Ayrıntı: docs/07-UZAKTAN-ERISIM.md
  */
@@ -108,6 +110,126 @@ async function snapshot(): Promise<Snapshot | null> {
   return raw ? (JSON.parse(raw) as Snapshot) : null;
 }
 
+// ─── Yemeksepeti aktarıcısı: Delivery Hero POS plugin uçları ────────────────
+
+/**
+ * Kasa kafe ağında olduğu için Delivery Hero siparişi buraya iter (plugin.yaml `POST /order/{remoteId}` ve
+ * `PUT /remoteId/{remoteId}/remoteOrder/{remoteOrderId}/posOrderStatus`); istek `service: middleware` iddialı, bize
+ * verilen anahtarla imzalı bir JWT taşır. Kayıt Redis listesine girer ve sipariş `remoteOrderId` (= sipariş belirteci)
+ * ile saniyeler içinde onaylanır; kasa listeyi imzalı olarak çeker (`GET /api/yemeksepeti/inbox`) ve işlediğini siler
+ * (`POST /api/yemeksepeti/inbox/ack`). Kabul ve ret kasadan middleware'e gider (server/delivery/yemeksepeti.ts).
+ */
+const YS_INBOX_KEY = 'lafpos:ys:inbox';
+const YS_INBOX_MAX = 200;
+const YS_INBOX_TTL_S = 2 * 86400;
+
+/** Delivery Hero'nun JWT'si: HS512 (ya da HS256), `service: middleware` iddiası, süresi varsa geçmemiş */
+export function verifyMiddlewareJwt(secret: string, authorization: string | null, nowMs = Date.now()): boolean {
+  if (!secret) return false;
+  const token = (authorization ?? '').replace(/^Bearer\s+/i, '').trim();
+  const [h, p, s] = token.split('.');
+  if (!h || !p || !s) return false;
+  let header: { alg?: string };
+  let payload: { service?: string; exp?: number };
+  try {
+    header = JSON.parse(Buffer.from(h, 'base64url').toString('utf8')) as { alg?: string };
+    payload = JSON.parse(Buffer.from(p, 'base64url').toString('utf8')) as { service?: string; exp?: number };
+  } catch {
+    return false;
+  }
+  const alg = header.alg === 'HS512' ? 'sha512' : header.alg === 'HS256' ? 'sha256' : null;
+  if (!alg || payload.service !== 'middleware') return false;
+  if (typeof payload.exp === 'number' && payload.exp * 1000 < nowMs) return false;
+  return sameText(createHmac(alg, secret).update(`${h}.${p}`).digest('base64url'), s);
+}
+
+async function inboxPush(item: Record<string, unknown>) {
+  await redis('RPUSH', YS_INBOX_KEY, JSON.stringify(item));
+  await redis('LTRIM', YS_INBOX_KEY, -YS_INBOX_MAX, -1);
+  await redis('EXPIRE', YS_INBOX_KEY, YS_INBOX_TTL_S);
+}
+
+async function yemeksepeti(req: Request, url: URL, path: string): Promise<Response> {
+  const pluginSecret = env('YEMEKSEPETI_PLUGIN_SECRET');
+  const wantRemote = env('YEMEKSEPETI_REMOTE_ID');
+  const now = Date.now();
+  // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (LAFPOS_CLOUD_SECRET)
+  if (path === 'yemeksepeti/inbox' || path === 'yemeksepeti/inbox/ack') {
+    if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
+    const body = await req.text();
+    if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
+    const raw = ((await redis('LRANGE', YS_INBOX_KEY, 0, -1)) as string[] | null) ?? [];
+    if (path === 'yemeksepeti/inbox' && req.method === 'GET') {
+      const items: unknown[] = [];
+      for (const r of raw.slice(0, 50)) {
+        try {
+          items.push(JSON.parse(r));
+        } catch {
+          await redis('LREM', YS_INBOX_KEY, 1, r);
+        }
+      }
+      return json({ items, total: raw.length });
+    }
+    if (path === 'yemeksepeti/inbox/ack' && req.method === 'POST') {
+      let ids: string[] = [];
+      try {
+        const parsed = JSON.parse(body) as { ids?: unknown };
+        ids = Array.isArray(parsed.ids) ? parsed.ids.filter((x): x is string => typeof x === 'string') : [];
+      } catch {
+        return fail(400, 'Gövde okunamadı', 'bad_body');
+      }
+      let removed = 0;
+      for (const r of raw) {
+        let id: unknown;
+        try {
+          id = (JSON.parse(r) as { id?: unknown }).id;
+        } catch {
+          continue;
+        }
+        if (typeof id === 'string' && ids.includes(id)) removed += Number(await redis('LREM', YS_INBOX_KEY, 1, r)) || 0;
+      }
+      return json({ ok: true, removed });
+    }
+    return fail(404, 'Yok', 'not_found');
+  }
+  // Delivery Hero'nun itmesi: JWT
+  if (!pluginSecret) return fail(503, 'Yemeksepeti aktarıcısı kurulmamış (YEMEKSEPETI_PLUGIN_SECRET)', 'not_configured');
+  if (!verifyMiddlewareJwt(pluginSecret, req.headers.get('authorization'), now)) return json({ reason: 'TECHNICAL_PROBLEM', message: 'Unauthorized' }, 401);
+  const order = /^yemeksepeti\/order\/([^/]+)$/.exec(path);
+  if (order && req.method === 'POST') {
+    const remoteId = decodeURIComponent(order[1]!);
+    if (wantRemote && remoteId !== wantRemote) return json({ reason: 'MENU_ACCOUNT_SETTINGS', message: 'Unknown remoteId' }, 400);
+    const body = await req.text();
+    if (body.length > 1_000_000) return json({ reason: 'TECHNICAL_PROBLEM', message: 'payload-limit-exceeded' }, 400);
+    let dh: { token?: unknown };
+    try {
+      dh = JSON.parse(body) as { token?: unknown };
+    } catch {
+      return json({ reason: 'TECHNICAL_PROBLEM', message: 'json-not-readable' }, 400);
+    }
+    if (typeof dh.token !== 'string' || !dh.token) return json({ reason: 'TECHNICAL_PROBLEM', message: 'order-validation-error: token' }, 400);
+    await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'order', remoteId, receivedAt: now, order: dh });
+    // remoteOrderId: siparişin kasadaki kimliği olarak belirtecin kendisi (tekil); durum bildirimleri bununla gelir
+    return json({ remoteResponse: { remoteOrderId: dh.token } });
+  }
+  const status = /^yemeksepeti\/remoteId\/([^/]+)\/remoteOrder\/([^/]+)\/posOrderStatus$/.exec(path);
+  if (status && (req.method === 'PUT' || req.method === 'POST')) {
+    const remoteId = decodeURIComponent(status[1]!);
+    const remoteOrderId = decodeURIComponent(status[2]!);
+    if (wantRemote && remoteId !== wantRemote) return fail(404, 'Unknown remoteId', 'not_found');
+    let dh: { status?: unknown; message?: unknown };
+    try {
+      dh = JSON.parse(await req.text()) as { status?: unknown; message?: unknown };
+    } catch {
+      return fail(400, 'json-not-readable', 'bad_body');
+    }
+    if (typeof dh.status !== 'string') return fail(400, 'status', 'bad_body');
+    await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'status', remoteId, receivedAt: now, remoteOrderId, status: dh.status, message: typeof dh.message === 'string' ? dh.message.slice(0, 500) : '' });
+    return json({ ok: true });
+  }
+  return fail(404, 'Yok', 'not_found');
+}
+
 // ─── Demo ────────────────────────────────────────────────────────────────────
 
 /**
@@ -188,8 +310,10 @@ async function handle(req: Request): Promise<Response> {
         redisOk = false;
       }
     }
-    return json({ secret: secret().length >= 32, password: !passwordRequired() || env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null, open: !passwordRequired() });
+    return json({ secret: secret().length >= 32, password: !passwordRequired() || env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null, open: !passwordRequired(), yemeksepeti: !!env('YEMEKSEPETI_PLUGIN_SECRET') });
   }
+  // Yemeksepeti aktarıcısı: makineden makineye, demo ve parola kapısından önce
+  if (path.startsWith('yemeksepeti/')) return yemeksepeti(req, url, path);
   // Kafe bağlanmadıysa demo: anahtar ve parola gerekmez, yalnız örnek gün açılır (kafe itmesi aşağıda, anahtarla)
   if (path !== 'uzaktan/push' && demoAllowed() && !(await realSnapshot())) {
     if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now() });
