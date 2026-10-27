@@ -5,6 +5,7 @@ import type { Permission } from '@shared/permissions';
 import type { OrderTotals } from '@shared/order-calc';
 import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
 import type { CompKind, SelectedOption, ZField, ZSummary } from '@shared/types';
+import type { RoomBookingSnapshot } from '@shared/karaoke';
 
 export type { CompKind, ZField, ZSummary };
 
@@ -561,6 +562,27 @@ export const roomSessions = sqliteTable('room_sessions', {
   endedAt: integer('ended_at'),
   itemId: text('item_id'),
   startedBy: text('started_by'),
+  /**
+   * Sayaç sitedeki bir karaoke rezervasyonuna bağlandıysa onun kimliği ("krk-00042"; docs/03-ENTEGRASYON.md §2.4).
+   * Bağlı oturum durunca blok rezervasyonun koşuluyla ücretlenir: sitede ödendiyse yalnız aşan süre
+   */
+  bookingId: text('booking_id'),
+  /**
+   * Bağlanırken rezervasyonun kasaya ait kısmı (ad ve not yok): sayaç durduğunda rezervasyon artık okunan listede
+   * değilse (gün döndü, panel başka güne taşıdı, site ulaşılamıyor) ücret bununla hesaplanır. Durunca: ücretin
+   * dayandığı koşul; blok sayılmadıysa (iptal, ödenmemiş, başka güne taşındı) null
+   */
+  booking: text('booking', { mode: 'json' }).$type<RoomBookingSnapshot>(),
+  /**
+   * Rezervasyon bloğunun bu oturuma düşen dakikası: sayaç çalışırken bloğun kalanı (aynı rezervasyonun önceki
+   * oturumları düşülmüş), durunca bloğun gerçekten karşıladığı dakika (blok yok sayıldıysa 0)
+   */
+  prepaidMinutes: integer('prepaid_minutes'),
+  /**
+   * Durunca: köşkte ödenecek bloğun (`paymentStatus: 'none'`) bu oturumun satırına yazılan tutarı (kuruş). Blok tutarı
+   * yalnız bu satır duruyorsa (iptal edilmemiş, adisyonu iptal değil) alınmış sayılır; yoksa sonraki oturum yeniden yazar
+   */
+  blockCharge: integer('block_charge'),
 });
 
 export const reservations = sqliteTable(

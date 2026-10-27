@@ -55,6 +55,24 @@ describe('LAFFOGATO_URL yokken site bağlantısı kapalı', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('karaoke (L4): rezervasyon okunmaz, oda kutusu ve masa planı bugünkü gibi, sayaç rezervasyona bağlanmaz', async () => {
+    fetchSpy.mockClear();
+    expect(boot.integrations.siteKaraoke).toBe(false);
+    expect((await h.ok<{ siteKaraoke?: unknown[] }>('garson', 'GET', '/floor')).siteKaraoke).toEqual([]);
+    expect(await h.ok('garson', 'GET', '/sync/karaoke?fresh=1')).toMatchObject({ state: 'kapali', bookings: [] });
+    const refresh = await h.call<{ code: string }>('garson', 'POST', '/sync/karaoke/refresh');
+    expect(refresh.status).toBe(409);
+    expect(refresh.json.code).toBe('not_configured');
+    expect(await h.ok('patron', 'GET', '/admin/floor/site-karaoke-price')).toEqual({ linked: false, hourlyMinor: null, error: null });
+    const room = boot.tables.find((t) => t.kind === 'oda')!;
+    const o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: room.id });
+    const linked = await h.call<{ code: string }>('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00044' });
+    expect(linked.json.code).toBe('not_configured');
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`);
+    expect((await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`)).items.filter((i) => i.name === 'Karaoke odası')).toHaveLength(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('zamanlayıcı iki saat boyunca hiç fetch çağırmaz (gün açık, otomatik eşitleme açık)', async () => {
     fetchSpy.mockClear();
     const jobs = await import('../server/jobs');

@@ -158,14 +158,17 @@ export default function ReservationsPage() {
             <Field label="Telefon">
               <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" />
             </Field>
-            <Field label="Masa / oda">
+            <Field label="Masa" hint={boot.tables.some((t) => t.kind === 'oda') ? "Karaoke odası sitedeki /karaoke'den rezerve edilir" : undefined}>
               <Select value={form.tableId} onChange={(e) => setForm({ ...form, tableId: e.target.value })}>
                 <option value="">Sonra belirlenecek</option>
-                {boot.tables.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {boot.sections.find((s) => s.id === t.sectionId)?.name} · {t.name}
-                  </option>
-                ))}
+                {/* Oda yerel rezervasyona verilmez: karaoke sitede alınır ve ödenir (docs/03-ENTEGRASYON.md §2.4) */}
+                {boot.tables
+                  .filter((t) => t.kind !== 'oda')
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {boot.sections.find((s) => s.id === t.sectionId)?.name} · {t.name}
+                    </option>
+                  ))}
               </Select>
             </Field>
             <Field label="Süre (dk)">

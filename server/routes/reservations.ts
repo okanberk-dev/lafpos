@@ -5,7 +5,7 @@ import { businessDate } from '@shared/time';
 import { db, schema } from '../db/client';
 import { type AppEnv, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { body, clockTime, isoDate, notFound, patchFields, patchOf, query } from '../lib/http';
+import { body, clockTime, conflict, isoDate, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { normalizePhone } from '../services/customers';
 
@@ -46,10 +46,25 @@ const shape = z.object({
   note: z.string().max(300).nullish(),
 });
 
+/**
+ * Karaoke odası (oda türündeki masa) yerel rezervasyona verilmez: karaoke rezervasyonu sitede alınır ve ödenir, kasa
+ * onu siteden okur (docs/03-ENTEGRASYON.md §2.4). Burada yazılan oda rezervasyonu sitedekiyle çakışırdı. Masa
+ * rezervasyonu (kafenin kendi defteri) olduğu gibi kalır.
+ */
+export const ROOM_RESERVATION_REFUSED = "Karaoke rezervasyonu sitedeki /karaoke'den alınır; burada yalnız masa rezervasyonu yazılır";
+
+function refuseRoom(tableId: string | null | undefined) {
+  if (!tableId) return;
+  const table = db.select({ kind: schema.tables.kind }).from(schema.tables).where(eq(schema.tables.id, tableId)).get();
+  // Bilinmeyen masa kimliği yazımda kısıta takılır (422 invalid_reference)
+  if (table?.kind === 'oda') throw conflict(ROOM_RESERVATION_REFUSED, 'room_reservation');
+}
+
 reservationRoutes.post('/', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'rezervasyon.yonet');
   const input = await body(c, shape);
+  refuseRoom(input.tableId);
   const phone = normalizePhone(input.phone);
   const customer = phone ? db.select({ id: schema.customers.id }).from(schema.customers).where(eq(schema.customers.phone, phone)).get() : undefined;
   const id = ulid();
@@ -66,6 +81,8 @@ reservationRoutes.patch('/:id', async (c) => {
   const input = await body(c, patchOf(shape).extend({ status: z.enum(['bekliyor', 'geldi', 'iptal', 'gelmedi']).optional() }));
   const r = db.select().from(schema.reservations).where(eq(schema.reservations.id, c.req.param('id'))).get();
   if (!r) throw notFound('Rezervasyon');
+  // Masası değişen rezervasyon odaya taşınamaz; var olan eski oda rezervasyonunun durumu yine değişir
+  if (input.tableId && input.tableId !== r.tableId) refuseRoom(input.tableId);
   const patch = patchFields(input);
   if (input.phone !== undefined) patch.phone = normalizePhone(input.phone);
   db.update(schema.reservations).set(patch).where(and(eq(schema.reservations.id, r.id))).run();
