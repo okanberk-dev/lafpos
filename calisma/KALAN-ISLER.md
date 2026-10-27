@@ -21,12 +21,13 @@ Bu dosya kaldığın yerden devam etmek içindir. Her şey GitHub'da (`RiosenBeq
 | #14 | Servis modu (masaya servis, yarı self, self) + gözden geçirmenin 6 bulgusu, her biri testle. Göç `0005_servis_modu` |
 | #15 | Bahşiş yok |
 | #16 | LafPOS Uzaktan ilk etapta parolasız |
+| #18 | **Ödenmez** ve **hepsini ikram et**: adisyonun tamamı ciro dışı (`POST /orders/:id/comp`), yetki `siparis.odenmez`, göç `0006_odenmez` (`comp_kind`), Z/X'te ayrı satır, lafmaliyet `ikram[]`'de "Ödenmez: <neden>". Çekişmeli gözden geçirme: 6 bulgu kapandı |
 | #17 | Web kasa demosu (`/demo`): gerçek LafPOS sunucusu tarayıcıda (Hono + sql.js), PIN'siz, rol şeridi, Sıfırla, örnek ilk gün, çok sekme (Web Locks + BroadcastChannel). Sunucu testlerinin hepsi sql.js ile de koşar. `docs/DEMO.md`, AGENTS kural 13 |
 
 Her PR'da kapılar yerelde geçti: `npm run typecheck && npm test && npm run build && npm run e2e` (son durum 38 test
 dosyası × 2 proje (better-sqlite3, sql.js) = 604 test; 132 ekran 0 sorun; 12/12 akış; demo 39 ekran, 5/5 akış).
 
-**Vercel günlük dağıtım sınırı doldu (27 Ekim):** #17'nin main dağıtımı "Deployment rate limited — retry in 24
+**Vercel günlük dağıtım sınırı doldu (27 Ekim):** canlıdaki son main dağıtımı #13; #14-#18'in dağıtımları ve #17'nin main dağıtımı "Deployment rate limited — retry in 24
 hours" ile reddedildi; demo henüz canlıda değil. Sınır açılınca main'e ilk push dağıtır ya da Vercel'de son main
 dağıtımında Redeploy. Canlıda `/demo` ve Uzaktan'daki "Kasa ekranını dene" bağlantısını dene.
 
@@ -38,12 +39,16 @@ Kullanıcı GitHub › Settings › Billing'den düzeltmeli. O zamana kadar kap�
 ### 1. Satışı geliştir: ödenmez, paket platformları, self ve yarı self (kullanıcının 27 Ekim isteği)
 - Var olan: site menüsü otomatik (ETag), servis modları (#14), kalem ikramı, yemek kartları ödeme türü, site online
   siparişleri (`server/sync/laffogato-orders.ts`).
-- Yapılacak: **Ödenmez** kapanış (gerekçe, yetki, denetim kaydı, cirodan ayrı rapor, lafmaliyet'e sözleşmeye göre);
-  **paket platformları alt yapısı** (Yemeksepeti, Getir Yemek, Trendyol Yemek, Migros Yemek, Uber Eats): ortak
+- ~~Ödenmez kapanış~~ (#18'de bitti).
+- Yapılacak: **paket platformları alt yapısı** (Yemeksepeti, Getir Yemek, Trendyol Yemek, Migros Yemek, Uber Eats): ortak
   sağlayıcı arayüzü, simülatör (demoda da), sipariş al / kabul / durum, menü ve stok kapatma, komisyon raporu;
   self ve yarı self için eksikler; POS araştırmasının "şimdi yap" listesi (3. madde) bununla birlikte.
-- Önce plan: var olanın envanteri, `docs/03-ENTEGRASYON.md` sınırları, platformların herkese açık entegrasyon
-  belgeleri. Gerçek anahtarlar kullanıcıdan; Claude yazmaz.
+- Araştırma bitti: `calisma/arastirma/paket-platformlari/README.md` (Uber Eats Türkiye'de Trendyol Go API'si
+  üzerinden; Yemeksepeti ve Getir push, Trendyol yoklama; Migros kapalı). Plan: B1 ortak arayüz + simülatör +
+  kabul/ret/hazır/teslim akışı + Yönetim › Paket platformları + Siparişler'de bekleyen siparişler + demo; B2 gerçek
+  bağdaştırıcılar (önce Trendyol Go, sonra Getir; Yemeksepeti push için Vercel aktarıcı). Platform siparişi POS
+  satışıdır: ön ödemeli olanın ödemesi platformun `online` yöntemiyle (kanal = platform) yazılır, kasada tahsil
+  edilmez. Gerçek anahtarlar kullanıcıdan; Claude yazmaz.
 
 ### 2. Tasarım yenilemesi (kullanıcının seçimi: "Aydınlık ve sade")
 Apple tarzı: beyaz zemin, az renk, bol boşluk, ince tipografi, her şey tek bakışta okunur. Varsayılan tema açık,
