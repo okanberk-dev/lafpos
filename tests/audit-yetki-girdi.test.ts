@@ -379,7 +379,7 @@ describe('auth-56: PIN tekilliği PIN taraması için kullanılamaz', () => {
   });
 });
 
-describe.skip('input-71: boş düzenleme gövdesi', () => {
+describe('input-71: boş düzenleme gövdesi', () => {
   it('değişecek alan yoksa 422; olmayan kayıt 404; dolu düzenleme çalışır', async () => {
     const floor = await h.ok<{ sections: { id: string; name: string }[]; tables: { id: string; name: string }[] }>('patron', 'GET', '/admin/floor');
     const menu = await h.ok<{ categories: { id: string; extSource: string | null }[] }>('patron', 'GET', '/admin/menu');

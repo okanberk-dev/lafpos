@@ -6,7 +6,7 @@ import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
 import { type AppEnv, assertNotLocked, type AuthUser, can, clientKey, hashPin, isValidPin, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from '../lib/http';
+import { bad, body, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
@@ -67,7 +67,7 @@ adminRoutes.patch('/categories/:id', async (c) => {
   if (!cat) throw notFound('Kategori');
   // Siteden gelen kategoride ad ve sıra sitenin; LafPOS'ta yalnız renk, istasyon ve görünürlük değişir
   const patch = cat.extSource ? { color: input.color, stationId: input.stationId, active: input.active } : input;
-  db.update(schema.categories).set(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))).where(eq(schema.categories.id, cat.id)).run();
+  db.update(schema.categories).set(patchFields(patch)).where(eq(schema.categories.id, cat.id)).run();
   changed('menu', 'category.updated', user.id);
   return c.json({ ok: true });
 });
@@ -254,7 +254,9 @@ adminRoutes.patch('/sections/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, z.object({ name: z.string().min(1).max(40).optional(), active: z.boolean().optional(), sort: z.number().int().optional() }));
-  db.update(schema.sections).set(input).where(eq(schema.sections.id, c.req.param('id'))).run();
+  const section = db.select({ id: schema.sections.id }).from(schema.sections).where(eq(schema.sections.id, c.req.param('id'))).get();
+  if (!section) throw notFound('Bölüm');
+  db.update(schema.sections).set(patchFields(input)).where(eq(schema.sections.id, section.id)).run();
   changed('tables', 'section.updated', user.id);
   return c.json({ ok: true });
 });
@@ -289,12 +291,15 @@ adminRoutes.patch('/tables/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, patchOf(tableShape));
-  const id = c.req.param('id');
+  const table = db.select({ id: schema.tables.id }).from(schema.tables).where(eq(schema.tables.id, c.req.param('id'))).get();
+  if (!table) throw notFound('Masa');
+  const id = table.id;
+  const fields = patchFields(input);
   if (input.active === false) {
     const open = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.tableId, id), eq(schema.orders.status, 'acik'))).get();
     if (open) throw conflict('Açık adisyonu olan masa kaldırılamaz');
   }
-  db.update(schema.tables).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.tables.id, id)).run();
+  db.update(schema.tables).set(fields).where(eq(schema.tables.id, id)).run();
   changed('tables', 'table.updated', user.id);
   return c.json({ ok: true });
 });
@@ -330,7 +335,9 @@ adminRoutes.patch('/stations/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, z.object({ name: z.string().min(1).max(30).optional(), active: z.boolean().optional(), color: z.string().optional(), printerId: z.string().nullish() }));
-  db.update(schema.stations).set(input).where(eq(schema.stations.id, c.req.param('id'))).run();
+  const station = db.select({ id: schema.stations.id }).from(schema.stations).where(eq(schema.stations.id, c.req.param('id'))).get();
+  if (!station) throw notFound('İstasyon');
+  db.update(schema.stations).set(patchFields(input)).where(eq(schema.stations.id, station.id)).run();
   changed('menu', 'station.updated', user.id);
   return c.json({ ok: true });
 });
@@ -535,8 +542,9 @@ adminRoutes.patch('/users/:id', async (c) => {
     pinFree(c, input.pin, target);
     patch.pinHash = hashPin(input.pin);
   }
+  const fields = patchFields(patch);
   tx((t) => {
-    t.update(schema.users).set(patch).where(eq(schema.users.id, target.id)).run();
+    t.update(schema.users).set(fields).where(eq(schema.users.id, target.id)).run();
     // Yetki ya da PIN değişince açık oturumlar kapanır
     if (input.pin || input.role || input.permGrant || input.permRevoke || input.active === false) t.delete(schema.sessions).where(eq(schema.sessions.userId, target.id)).run();
   });
@@ -576,7 +584,9 @@ adminRoutes.patch('/payment-methods/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, patchOf(methodShape));
-  db.update(schema.paymentMethods).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.paymentMethods.id, c.req.param('id'))).run();
+  const m = db.select({ id: schema.paymentMethods.id }).from(schema.paymentMethods).where(eq(schema.paymentMethods.id, c.req.param('id'))).get();
+  if (!m) throw notFound('Ödeme türü');
+  db.update(schema.paymentMethods).set(patchFields(input)).where(eq(schema.paymentMethods.id, m.id)).run();
   changed('settings', 'method.updated', user.id);
   return c.json({ ok: true });
 });
