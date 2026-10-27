@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
-import { percentOf, tl } from '@shared/money';
-import { amountForItems, lineGross, type OrderTotals, splitState } from '@shared/order-calc';
+import { allocate, percentOf, tl } from '@shared/money';
+import { itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, can, need, needDirect } from '../lib/auth';
@@ -918,7 +918,7 @@ export function addPayment(
   if (remaining <= 0) throw conflict('Bu adisyonun ödenecek tutarı kalmadı', 'nothing_due');
 
   let amount = Math.trunc(input.amount);
-  let selection: { itemId: string; qty: number }[] | null = null;
+  let selection: PaidItem[] | null = null;
   // Aynı kalem iki kez gönderilirse adetler birleşir: iki kez ücret alınmaz
   const wanted = mergeSelection(input.items ?? []);
   let share: { no: number; of: number } | null = null;
@@ -954,9 +954,14 @@ export function addPayment(
         throw conflict(`${it.name} ücretsiz; ödemeye seçilmez. Ekran yenilendi, yeniden seçin`, 'item_free');
       }
     }
-    const lines = items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty }));
-    const sel = wanted.map((s) => ({ lineId: s.itemId, qty: s.qty }));
-    const expected = amountForItems(totals, lines, sel);
+    // Satır satır tutar ödemeye yazılır: ödeme iptal edilip adet yeniden ödenince kalemin kalanı kuruşu kuruşuna alınır
+    const lines = itemPayLines(items, orderPayments(t, orderId));
+    const breakdown = itemsBreakdown(
+      totals,
+      lines,
+      wanted.map((s) => ({ lineId: s.itemId, qty: s.qty })),
+    );
+    const expected = breakdown.reduce((a, l) => a + l.amount, 0);
     if (expected <= 0) throw bad('Seçilen kalemler ödenmiş ya da ücretsiz');
     amount = Math.min(expected, remaining);
     // Kasiyerin ekranda gördüğü ve kart terminaline girdiği tutar sunucununkiyle aynı olmalı (pay ödemesindeki gibi):
@@ -964,13 +969,12 @@ export function addPayment(
     if (Math.trunc(input.amount) !== amount) {
       throw conflict(`Seçilen kalemlerin tutarı değişti: ${tl(amount)}. Ekran yenilendi, yeniden alın`, 'items_changed');
     }
-    selection = [];
-    for (const s of wanted) {
-      const it = items.find((i) => i.id === s.itemId)!;
-      const qty = Math.min(s.qty, it.qty - it.paidQty);
-      if (qty <= 0) continue;
-      t.update(schema.orderItems).set({ paidQty: it.paidQty + qty }).where(eq(schema.orderItems.id, it.id)).run();
-      selection.push({ itemId: it.id, qty });
+    // Kalan tutar seçilenden azsa (araya tutar ödemesi girdi) satır tutarları alınana oranla iner
+    const lineAmounts = amount < expected ? allocate(amount, breakdown.map((l) => l.amount)) : breakdown.map((l) => l.amount);
+    selection = breakdown.map((l, i) => ({ itemId: l.lineId, qty: l.qty, amount: lineAmounts[i] ?? 0 }));
+    for (const l of breakdown) {
+      const it = items.find((i) => i.id === l.lineId)!;
+      t.update(schema.orderItems).set({ paidQty: it.paidQty + l.qty }).where(eq(schema.orderItems.id, it.id)).run();
     }
   }
   if (amount <= 0) throw bad('Tutar sıfırdan büyük olmalı');

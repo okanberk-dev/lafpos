@@ -136,16 +136,59 @@ export function calcOrder(input: CalcInput): OrderTotals {
   };
 }
 
+/** Kalem bazlı ödemenin bir satırı: kaç adet ve (tutarı yazılan ödemelerde) bu adetlere düşen tutar */
+export interface PaidItem {
+  itemId: string;
+  qty: number;
+  amount?: Kurus;
+}
+
+/** Kalem bazlı ödeme için satır: ödenen adet ve, biliniyorsa, canlı ödemelerin bu satıra ödediği tutar */
+export interface ItemPayLine {
+  id: string;
+  qty: number;
+  paidQty: number;
+  /** Bilinmiyorsa (tutarı yazılmamış eski ya da yazarkasa ödemesi) null: adet payları sırayla sayılır */
+  paidAmount?: Kurus | null;
+}
+
 /**
- * Kalem bazlı ödemede seçilen adetlerin tutarı. Bir kalemin tamamı seçildiyse kalan payının tamamı
- * alınır (yuvarlama artığı kalmasın diye); kısmi adetler orantılı yuvarlanır.
+ * Kalemlerin ödeme satırları. Satırın ödenmiş tutarı ancak bütün ödenmiş adetleri tutarı yazılmış canlı
+ * ödemelerden geliyorsa bilinir; iptal edilen ödeme sayılmaz. Sunucu ve ödeme ekranı aynı hesabı kullanır.
  */
-export function amountForItems(
+export function itemPayLines(
+  items: { id: string; qty: number; paidQty: number }[],
+  payments: { items: PaidItem[] | null; refundedAt?: number | null }[],
+): ItemPayLine[] {
+  const paid = new Map<string, { qty: number; amount: Kurus | null }>();
+  for (const p of payments) {
+    if (p.refundedAt) continue;
+    for (const s of p.items ?? []) {
+      const cur = paid.get(s.itemId) ?? { qty: 0, amount: 0 };
+      paid.set(s.itemId, { qty: cur.qty + s.qty, amount: cur.amount != null && s.amount != null ? cur.amount + s.amount : null });
+    }
+  }
+  return items.map((i) => {
+    const p = paid.get(i.id);
+    const paidAmount = i.paidQty === 0 ? 0 : p && p.qty === i.paidQty ? p.amount : null;
+    return { id: i.id, qty: i.qty, paidQty: i.paidQty, paidAmount };
+  });
+}
+
+/**
+ * Kalem bazlı ödemede seçilen adetlerin satır satır tutarı. Kısmi adetler kalemin net payının adetlere bölünmüş
+ * paylarından sırayla alınır. Kalemin kalan bütün adetleri seçildiyse kalan payının tamamı alınır: net pay eksi
+ * bu satıra şimdiye kadar ödenen (yuvarlama artığı kalmasın). Ödenen tutar bilinmiyorsa paylar sırayla sayılır;
+ * daha önce ödenen adetler baştaki payları tüketmiş sayılır. Bilinmesi önemli: baştaki (büyük) payı ödeyen ödeme
+ * iptal edilip adet yeniden ödenirse sıradaki pay 1 kuruş küçük kalır, bütün kalemler ödendiği hâlde adisyonda
+ * 0,01 ₺ borç kalıyordu (denetim, 26 Eki 2026).
+ */
+export function itemsBreakdown(
   totals: Pick<OrderTotals, 'lineNet'>,
-  lines: { id: string; qty: number; paidQty: number }[],
+  lines: ItemPayLine[],
   selection: { lineId: string; qty: number }[],
-): Kurus {
-  let sum = 0;
+): { lineId: string; qty: number; amount: Kurus }[] {
+  const out: { lineId: string; qty: number; amount: Kurus }[] = [];
   for (const sel of selection) {
     const line = lines.find((l) => l.id === sel.lineId);
     if (!line || sel.qty <= 0) continue;
@@ -153,11 +196,20 @@ export function amountForItems(
     const unpaid = line.qty - line.paidQty;
     const qty = Math.min(sel.qty, unpaid);
     if (qty <= 0) continue;
-    const perUnitShares = allocate(net, Array.from({ length: line.qty }, () => 1));
-    // Daha önce ödenen adetler baştaki payları tüketmiş say; sıradaki `qty` payı topla.
-    for (let i = line.paidQty; i < line.paidQty + qty; i++) sum += perUnitShares[i] ?? 0;
+    let amount = 0;
+    if (qty === unpaid && line.paidAmount != null) amount = Math.max(0, net - line.paidAmount);
+    else {
+      const perUnitShares = allocate(net, Array.from({ length: line.qty }, () => 1));
+      for (let i = line.paidQty; i < line.paidQty + qty; i++) amount += perUnitShares[i] ?? 0;
+    }
+    out.push({ lineId: line.id, qty, amount });
   }
-  return sum;
+  return out;
+}
+
+/** Kalem bazlı ödemede seçilen adetlerin tutarı (`itemsBreakdown` toplamı) */
+export function amountForItems(totals: Pick<OrderTotals, 'lineNet'>, lines: ItemPayLine[], selection: { lineId: string; qty: number }[]): Kurus {
+  return itemsBreakdown(totals, lines, selection).reduce((a, l) => a + l.amount, 0);
 }
 
 export interface PaymentLike {

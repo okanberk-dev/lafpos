@@ -1,7 +1,7 @@
 import { Check, CheckCircle2, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
-import { amountForItems } from '@shared/order-calc';
+import { amountForItems, itemPayLines } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import type { OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -92,7 +92,7 @@ export function PaymentModal({
     () =>
       amountForItems(
         order.totals,
-        order.items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty })),
+        itemPayLines(order.items, order.payments),
         picked.map((s) => ({ lineId: s.itemId, qty: s.qty })),
       ),
     [order, picked],

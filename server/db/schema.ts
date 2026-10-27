@@ -500,8 +500,11 @@ export const payments = sqliteTable(
     /** Nakitte müşterinin verdiği ve para üstü */
     given: integer('given'),
     change: integer('change'),
-    /** Kalem bazlı ödemede seçilen kalemler */
-    items: text('items', { mode: 'json' }).$type<{ itemId: string; qty: number }[] | null>(),
+    /**
+     * Kalem bazlı ödemede seçilen kalemler; `amount` bu adetlere düşen tutar (yazarkasa ve eski ödemelerde yok).
+     * Ödeme iptal edilip adet yeniden ödenince kalemin kalanı bununla kuruşu kuruşuna alınır
+     */
+    items: text('items', { mode: 'json' }).$type<{ itemId: string; qty: number; amount?: number }[] | null>(),
     /** Paylaşımlı hesapta bu ödemenin payı: shareNo / shareOf (ör. 2/4) */
     shareNo: integer('share_no'),
     shareOf: integer('share_of'),

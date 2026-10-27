@@ -252,7 +252,8 @@ export interface PaymentDTO {
   tip: number;
   given: number | null;
   change: number | null;
-  items: { itemId: string; qty: number }[] | null;
+  /** Kalem bazlı ödemede kalemler; `amount` bu adetlere düşen tutar (yazarkasa ve eski ödemelerde yok) */
+  items: { itemId: string; qty: number; amount?: number }[] | null;
   customerId: string | null;
   note: string | null;
   userId: string | null;

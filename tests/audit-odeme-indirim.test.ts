@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { amountForItems, itemPayLines } from '@shared/order-calc';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, PINS, startApp } from './harness';
 
@@ -253,5 +254,49 @@ describe('ödeme', () => {
     expect(after.items.find((i) => i.id === comped!.id)).toMatchObject({ complimentary: false, paidQty: 0 });
     const paid = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount: 14000, items: [{ itemId: comped!.id, qty: 1 }] });
     expect(paid.order.items.find((i) => i.id === comped!.id)).toMatchObject({ paidQty: 1 });
+  });
+
+  it('money-17: önceki adet ödemesi iptal edilip adet yeniden ödenince kuruş kalmaz; bütün kalemler ödenince adisyon kapanır', async () => {
+    // 3 kahvelik satır 1 kuruş indirimle 41999 (adet payları 14000, 14000, 13999), tek kahvelik satır 14000
+    let o = await tableOrder('garson', [{ name: 'Türk kahvesi', qty: 3 }]);
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: lines([{ name: 'Türk kahvesi' }]) });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 1, reason: 'Yuvarlama', approverPin: MUDUR });
+    const [a, b] = o.items;
+    expect([o.total, o.totals.lineNet[a!.id], o.totals.lineNet[b!.id]]).toEqual([55999, 41999, 14000]);
+    const card = method('Kredi kartı').id;
+    // Ödeme ekranının hesabı (PaymentModal): sunucu aynı tutarı bekler
+    const pay = async (itemId: string, qty: number) => {
+      const amount = amountForItems(o.totals, itemPayLines(o.items, o.payments), [{ lineId: itemId, qty }]);
+      const r = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount, items: [{ itemId, qty }] });
+      o = r.order;
+      return r;
+    };
+
+    const p1 = await pay(a!.id, 1);
+    const p2 = await pay(a!.id, 2);
+    expect([p1.amount, p2.amount]).toEqual([14000, 27999]);
+    // Ödeme satır tutarını taşır
+    expect(o.payments.map((p) => p.items)).toEqual([[{ itemId: a!.id, qty: 1, amount: 14000 }], [{ itemId: a!.id, qty: 2, amount: 27999 }]]);
+
+    // İlk (büyük paylı) ödeme iptal edilir, adet yeniden ödenir: satırın kalanı 14000, 13999 değil
+    const first = o.payments.find((p) => p.amount === 14000)!;
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/payments/${first.id}/refund`, { reason: 'Yanlış kart', approverPin: MUDUR });
+    expect((await pay(a!.id, 1)).amount).toBe(14000);
+    const last = await pay(b!.id, 1);
+    expect(last.closed).toBe(true);
+    expect(last.order.total - last.order.paid).toBe(0);
+  });
+
+  it('money-17: ödenen tutarı bilinmeyen satırda (yazarkasa ya da eski ödeme) adet payları eskisi gibi sırayla sayılır', () => {
+    const totals = { lineNet: { a: 41999 } };
+    const item = { id: 'a', qty: 3, paidQty: 2 };
+    // Tutarlı ödemeler: kalan, net pay eksi ödenen
+    expect(amountForItems(totals, itemPayLines([item], [{ items: [{ itemId: 'a', qty: 2, amount: 27999 }] }]), [{ lineId: 'a', qty: 1 }])).toBe(14000);
+    // Tutarı yazılmamış ödeme (yazarkasa) ya da adedi tutmayan kayıt: sıradaki pay
+    expect(itemPayLines([item], [{ items: [{ itemId: 'a', qty: 2 }] }])[0]!.paidAmount).toBeNull();
+    expect(itemPayLines([item], [{ items: [{ itemId: 'a', qty: 1, amount: 14000 }] }])[0]!.paidAmount).toBeNull();
+    expect(amountForItems(totals, itemPayLines([item], [{ items: [{ itemId: 'a', qty: 2 }] }]), [{ lineId: 'a', qty: 1 }])).toBe(13999);
+    // İptal edilen ödeme sayılmaz
+    expect(itemPayLines([{ ...item, paidQty: 1 }], [{ items: [{ itemId: 'a', qty: 1, amount: 14000 }], refundedAt: 1 }, { items: [{ itemId: 'a', qty: 1, amount: 13999 }] }])[0]!.paidAmount).toBe(13999);
   });
 });
