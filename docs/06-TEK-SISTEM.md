@@ -35,9 +35,12 @@ Verisi ayrı iki sistem (ürünü bir yerde yükleyip kasaya elle aktarmak) hiç
 3. **Yalnız kafede satılan hizmetler** (karaoke odası saatlik ücreti, etkinlik ücreti) LafPOS'ta
    "yerel ürün"dür; sitede satılmadıkları için laffogato'ya girmez.
 4. **Maliyet, reçete, stok ve muhasebenin kaynağı lafmaliyet'tir.** LafPOS gün sonunu oraya gönderir,
-   maliyeti oradan okur (`docs/03-ENTEGRASYON.md`); kopyalamaz.
+   maliyeti oradan günde bir okur (`docs/03-ENTEGRASYON.md` §4); kopyalamaz. LafPOS'taki `products.cost`
+   yalnız gösterim için önbellektir (lafmaliyet'te olmayan ürününki boşalır); hangi günün hesaplara girdiğine de
+   lafmaliyet'in "LafPOS'a geçiş günü" karar verir, LafPOS kendi tarihini tutmaz.
 5. **Neden bulut değil kafedeki bilgisayar:** internet giderken de satış sürmeli (ModPOS ve Lightspeed'in
-   çevrimdışı çalışma gereği). Patronun dışarıdan erişimi tünel ya da VPN ile (`docs/05`).
+   çevrimdışı çalışma gereği). Patronun dışarıdan erişimi Tailscale ve salt okunur LafPOS Uzaktan ile
+   (`docs/07-UZAKTAN-ERISIM.md`).
 
 ## Sonuçları
 
