@@ -18,7 +18,6 @@ let h: Harness;
 
 type Route = (path: string, init: RequestInit) => Response | Promise<Response> | undefined;
 let site: Route = () => undefined;
-const calls: string[] = [];
 /** Sahte Upstash (LafPOS Uzaktan) */
 const redis = new Map<string, string>();
 let realFetch: typeof fetch;
@@ -36,7 +35,6 @@ beforeAll(async () => {
     }
     if (!url.startsWith(SITE)) return realFetch(input, init);
     const path = url.slice(SITE.length);
-    calls.push(`${init.method ?? 'GET'} ${path}`);
     return (await site(path, init)) ?? json({ error: 'not_found' }, 404);
   });
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 100000 });
