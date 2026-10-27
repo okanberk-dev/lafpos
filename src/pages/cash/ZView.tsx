@@ -22,7 +22,7 @@ const LAF_FIELDS: [string, string][] = [
   ['meal_card', 'Yemek kartı'],
   ['online', 'Online'],
   ['other', 'Diğer'],
-  ['off_revenue', 'Ödenmez / ikram'],
+  ['off_revenue', 'Ödenmez / ikram / zayi'],
   ['discounts', 'İndirimler'],
   ['opening_cash', 'Açılış kasası'],
   ['cash_out', 'Kasadan çıkan'],
@@ -117,8 +117,9 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
           <ul className="divide-y divide-line text-sm">
             <Line l="Brüt satış" r={tl(summary.gross)} />
             <Line l="İndirim" r={`−${tl(summary.discounts)}`} />
-            <Line l="İkram (ciro dışı)" r={tl(summary.complimentary - (summary.odenmez ?? 0))} />
+            <Line l="İkram (ciro dışı)" r={tl(summary.complimentary - (summary.odenmez ?? 0) - (summary.zayi ?? 0))} />
             {(summary.odenmez ?? 0) > 0 && <Line l="Ödenmez (ciro dışı)" r={tl(summary.odenmez ?? 0)} />}
+            {(summary.zayi ?? 0) > 0 && <Line l="Zayi (ciro dışı)" r={tl(summary.zayi ?? 0)} />}
             <Line l={`İptal (${summary.voidAfterSendCount} hazırlandıktan sonra)`} r={tl(summary.voided)} />
             <Line l="Kasa girişi / harcama / teslim" r={`${tl(summary.cashIn)} / ${tl(summary.cashOut)} / ${tl(summary.handedOver)}`} />
             {summary.cariCollections > 0 && <Line l="Açık hesap tahsilatı" r={tl(summary.cariCollections)} />}

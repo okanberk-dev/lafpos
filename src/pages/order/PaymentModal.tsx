@@ -1,9 +1,10 @@
-import { Check, CheckCircle2, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Check, CheckCircle2, Droplets, Gift, HandCoins, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, COMP_LABEL, compCloseSubtitle, compReasonsOf } from '@shared/comp';
 import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
 import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
-import type { OrderDTO, PaymentMethodDTO } from '@shared/types';
+import type { CompKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
@@ -17,8 +18,12 @@ import { BillReceipt, printNow } from '@/lib/print';
 import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
 import { OkcPanel } from './OkcPanel';
+import { ReasonModal } from './TableOps';
 
 type Mode = 'tutar' | 'kalem' | 'paylas';
+
+/** Ciro dışı kapanış düğmeleri: ikram hediye, ödenmez el, zayi damla (İşlemler menüsüyle aynı) */
+const COMP_ICON: Record<CompKind, ReactNode> = { ikram: <Gift className="size-4" />, odenmez: <HandCoins className="size-4" />, zayi: <Droplets className="size-4" /> };
 
 const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFixed(2).replace('.', ','));
 
@@ -55,6 +60,8 @@ export function PaymentModal({
   const [people, setPeople] = useState(2);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; method: string; share: string | null } | null>(null);
+  /** Ciro dışı kapanış: gerekçe penceresi açık olan tür */
+  const [comp, setComp] = useState<CompKind | null>(null);
   /** Süren ödeme denemesi: ekranda görülenler (tür, tutar, pay, kalemler, bahşiş, ödeme listesi) ve kimliği */
   const attempt = useRef<{ key: string; id: string } | null>(null);
 
@@ -71,6 +78,7 @@ export function PaymentModal({
     setSelection({});
     setPeople(order.split?.people ?? Math.min(30, Math.max(2, order.guests)));
     setResult(null);
+    setComp(null);
     // Yalnız pencere açılınca sıfırla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -116,6 +124,16 @@ export function PaymentModal({
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
   const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
+  // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
+  const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
+  const closeComp = async (reason: string) => {
+    if (!comp) return;
+    const kind = comp;
+    const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), COMP_DONE_TOAST[kind]);
+    if (!res) return;
+    setComp(null);
+    onDone(true);
+  };
 
   const keyTarget = focus === 'verilen' ? [givenText, setGivenText] : focus === 'bahsis' ? [tipText, setTipText] : [amountText, setAmountText];
   const pressKey = (k: string) => {
@@ -236,7 +254,7 @@ export function PaymentModal({
   }
 
   return (
-    <Modal open onClose={onClose} size="xl" title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
+    <Modal open onClose={onClose} size="xl" persistent={!!comp} title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
       <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
         <div className="border-b border-[var(--admin-divider)] p-5 lg:border-b-0 lg:border-r">
           <div className="mb-4 flex items-center justify-between gap-3">
@@ -347,6 +365,28 @@ export function PaymentModal({
             {cariBlocked && <p className="mt-2 text-sm text-[var(--admin-danger-ink)]">Açık hesap için önce adisyona müşteri ekleyin (İşlemler › Müşteri)</p>}
           </div>
 
+          {/* Ciro dışı kapanış: ücret alınmadan kapanır; ikram, ödenmez ve zayi raporda ve Z'de ayrı (shared/comp.ts) */}
+          {order.status === 'acik' && order.source === 'pos' && (
+            <div>
+              <div className="mb-2 text-[13px] font-medium text-muted">Ciro dışı kapat</div>
+              <div className="grid grid-cols-3 gap-2">
+                {COMP_KINDS.map((k) => (
+                  <button key={k} onClick={() => setComp(k)} disabled={!compable} title={COMP_HINT[k]} className={cn('flex h-14 items-center justify-center gap-2 px-3 text-sm font-semibold disabled:opacity-40', choice(false))}>
+                    {COMP_ICON[k]}
+                    {COMP_LABEL[k]}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                {order.paid > 0
+                  ? 'Ödeme alınmış adisyon ciro dışı kapanmaz; kalan kalemi hesap listesinden tek tek ikram ya da zayi yazın'
+                  : order.room
+                    ? 'Oda sayaçlı adisyon ciro dışı kapanmaz; kalemleri hesap listesinden tek tek yazın'
+                    : 'Adisyon ücret alınmadan kapanır; ikram, ödenmez ve zayi raporda ve Z\'de ayrı görünür'}
+              </p>
+            </div>
+          )}
+
           {method?.kind === 'nakit' && (
             <div>
               <div className="mb-2 flex items-center justify-between text-[13px] font-medium text-muted">
@@ -393,6 +433,18 @@ export function PaymentModal({
           </Button>
 
           <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />
+
+          {comp && (
+            <ReasonModal
+              open
+              title={COMP_CLOSE_LABEL[comp]}
+              subtitle={compCloseSubtitle(comp, tl(order.total))}
+              reasons={compReasonsOf(boot.settings, comp)}
+              confirmLabel={COMP_CONFIRM_LABEL[comp]}
+              onClose={() => setComp(null)}
+              onConfirm={(reason) => void closeComp(reason)}
+            />
+          )}
 
           {order.payments.length > 0 && (
             <div>

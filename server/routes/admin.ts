@@ -686,6 +686,7 @@ const settingsShape = patchOf(
     voidReasons: z.array(z.string().max(40)).max(12),
     compReasons: z.array(z.string().max(40)).max(12),
     odenmezReasons: z.array(z.string().max(40)).max(12),
+    zayiReasons: z.array(z.string().max(40)).max(12),
     discountReasons: z.array(z.string().max(40)).max(12),
     quickCash: z.array(kurus).max(8),
     sizeLabels: z.object({ M: z.string().max(12), L: z.string().max(12) }),

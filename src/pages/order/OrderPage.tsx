@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Ban,
   CircleDollarSign,
+  Droplets,
   Gift,
   Globe,
   HandCoins,
@@ -26,9 +27,10 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
+import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, compCloseSubtitle, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
-import type { OrderDTO, ProductDTO, Size } from '@shared/types';
+import type { CompKind, OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -61,7 +63,10 @@ import { NumaratorModal } from './NumaratorModal';
 import { appUrl } from '@/lib/demo';
 import { PlatformBadge } from '@/components/PlatformBadge';
 
-type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'ikram' | 'odenmez' | 'yenidenac' | 'not' | 'musteri' | 'cikis' | 'numarator';
+type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | CompKind | 'yenidenac' | 'not' | 'musteri' | 'cikis' | 'numarator';
+
+/** İşlemler menüsündeki ciro dışı kapanış ikonları (ödeme ekranıyla aynı) */
+const COMP_ICON: Record<CompKind, React.ReactNode> = { ikram: <Gift className="size-5" />, odenmez: <HandCoins className="size-5" />, zayi: <Droplets className="size-5" /> };
 
 export default function OrderPage() {
   const { id = '' } = useParams();
@@ -220,7 +225,7 @@ export default function OrderPage() {
 
   // Ciro dışı kapanış sunucudaki kalemlere uygulanır: gönderilmemiş satırlar önce gönderilir ya da silinir (sessizce düşmesin)
   const compable = editable && order.paid === 0 && !order.room && (pending.length > 0 || order.items.some((i) => !i.voided && !i.complimentary));
-  const compAll = (kind: 'ikram' | 'odenmez') => (pending.length ? toast.warn('Önce gönderilmemiş kalemleri gönderin ya da silin') : setDialog(kind));
+  const compAll = (kind: CompKind) => (pending.length ? toast.warn('Önce gönderilmemiş kalemleri gönderin ya da silin') : setDialog(kind));
   const menuItems: { icon: React.ReactNode; label: string; hint?: string; onClick: () => void; show: boolean; danger?: boolean }[] = [
     { icon: <Merge className="size-5" />, label: 'Masa taşı / birleştir', onClick: () => setDialog('tasi'), show: editable },
     { icon: <Split className="size-5" />, label: 'Hesabı böl / kalem taşı', onClick: () => setDialog('bol'), show: editable && order.items.some((i) => !i.voided) },
@@ -240,9 +245,8 @@ export default function OrderPage() {
     { icon: <CircleDollarSign className="size-5" />, label: 'Sıfır tutarlı adisyonu kapat', onClick: () => act(() => post(`/orders/${order.id}/close`), 'Adisyon kapandı').then((r) => r && navigate(backPath)), show: isOpen && !isOnline && order.total === 0 && order.items.length > 0 },
     { icon: <RotateCcw className="size-5" />, label: 'Yeniden aç', hint: 'Yetkili onayı ister', onClick: () => setDialog('yenidenac'), show: order.status === 'kapali' && !isOnline },
     { icon: <PackageX className="size-5" />, label: 'Tükenen ürünler', hint: 'Ürünü tükendi işaretle ya da satışa aç', onClick: () => setDialog('tukendi'), show: can('urun.tukendi') || can('menu.yonet') },
-    // Ciro dışı kapanış: ödeme alınmamış adisyonun bütün kalemleri (kısmen ödenmişte kalan kalem kalem ikram edilir)
-    { icon: <Gift className="size-5" />, label: 'Hepsini ikram et', hint: 'Adisyon ücretsiz kapanır, ikram raporuna girer', onClick: () => compAll('ikram'), show: compable },
-    { icon: <HandCoins className="size-5" />, label: 'Ödenmez kapat', hint: 'Personel yemeği, zayi, patron hesabı', onClick: () => compAll('odenmez'), show: compable },
+    // Ciro dışı kapanış (ikram, ödenmez, zayi): ödeme alınmamış adisyonun bütün kalemleri (kısmen ödenmişte kalan kalem kalem yazılır)
+    ...COMP_KINDS.map((kind) => ({ icon: COMP_ICON[kind], label: COMP_CLOSE_LABEL[kind], hint: COMP_HINT[kind], onClick: () => compAll(kind), show: compable })),
     { icon: <Ban className="size-5" />, label: 'Adisyonu iptal et', hint: 'Bütün kalemler iptal olur', onClick: () => setDialog('iptal'), show: editable && order.paid === 0, danger: true },
   ];
 
@@ -502,21 +506,17 @@ export default function OrderPage() {
           }
         }}
       />
-      {(['ikram', 'odenmez'] as const).map((kind) => (
+      {COMP_KINDS.map((kind) => (
         <ReasonModal
           key={kind}
           open={dialog === kind}
-          title={kind === 'ikram' ? 'Hepsini ikram et' : 'Ödenmez kapat'}
-          subtitle={
-            kind === 'ikram'
-              ? `${tl(order.total)} ücret alınmadan kapanır; ikram raporuna ve patron paneline düşer`
-              : `${tl(order.total)} ciro dışı kapanır; ödenmez olarak raporda ve Z'de ayrı görünür`
-          }
-          reasons={kind === 'ikram' ? boot.settings.compReasons : boot.settings.odenmezReasons}
-          confirmLabel={kind === 'ikram' ? 'İkram et ve kapat' : 'Ödenmez kapat'}
+          title={COMP_CLOSE_LABEL[kind]}
+          subtitle={compCloseSubtitle(kind, tl(order.total))}
+          reasons={compReasonsOf(boot.settings, kind)}
+          confirmLabel={COMP_CONFIRM_LABEL[kind]}
           onClose={() => setDialog(null)}
           onConfirm={async (reason) => {
-            const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), kind === 'ikram' ? 'Adisyon ikram edildi' : 'Adisyon ödenmez kapandı');
+            const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), COMP_DONE_TOAST[kind]);
             if (res) {
               cart.clear(order.id);
               navigate(backPath);

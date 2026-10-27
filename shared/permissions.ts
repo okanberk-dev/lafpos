@@ -23,7 +23,7 @@ export const PERMISSIONS = {
   'siparis.al': 'Masa açma, ürün ekleme, mutfağa gönderme',
   'siparis.iptal': 'Gönderilmiş kalemi iptal etme',
   'siparis.ikram': 'İkram etme',
-  'siparis.odenmez': 'Adisyonu ödenmez kapatma (personel yemeği, zayi, patron hesabı)',
+  'siparis.odenmez': 'Adisyonu ya da kalemi ödenmez ve zayi kapatma (personel yemeği, patron hesabı, dökülen ürün)',
   'siparis.indirim': 'İndirim uygulama',
   'siparis.fiyat': 'Fiyatı elle değiştirme',
   'masa.islem': 'Masa taşıma, birleştirme, bölme',

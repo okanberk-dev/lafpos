@@ -4,6 +4,7 @@ import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
 import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
+import { COMP_LABEL, compPermission } from '@shared/comp';
 import type { CompKind, OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, approverFor, can, need, needDirect } from '../lib/auth';
@@ -508,54 +509,66 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   return updated;
 }
 
-export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { itemId: string; qty?: number; reason: string; undo?: boolean }): OrderRow {
+/**
+ * Kalemi ciro dışı yazar: müşteriye ikram (`siparis.ikram`) ya da zayi (döküldü, yanlış hazırlandı; `siparis.odenmez`).
+ * Geri alma yazanın yetkisini ister: ödenmez ya da zayi kaydını yalnız ikram yetkisi olan geri alamaz.
+ */
+export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { itemId: string; qty?: number; reason: string; undo?: boolean; kind?: 'ikram' | 'zayi' }): OrderRow {
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
   assertNoPendingDevice(t, orderId);
   const it = loadItem(t, orderId, input.itemId);
-  if (it.voided) throw conflict('İptal edilmiş kalem ikram edilemez');
-  const approverId = need(actor, 'siparis.ikram', 'İkram yetkili onayı gerektirir');
+  if (it.voided) throw conflict('İptal edilmiş kalem ikram ya da zayi yazılamaz');
 
   if (input.undo) {
-    if (!it.complimentary) throw conflict('Kalem ikram değil');
+    if (!it.complimentary) throw conflict('Kalem ikram ya da zayi değil');
+    const was: CompKind = it.compKind ?? 'ikram';
+    const approverId = need(actor, compPermission(was), `${COMP_LABEL[was]} kaydını geri almak yetkili onayı gerektirir`);
     t.update(schema.orderItems).set({ complimentary: false, compReason: null, compBy: null, compKind: null }).where(eq(schema.orderItems.id, it.id)).run();
     const updated = recalc(t, orderId);
-    fx.audit(t, { userId: actor.user.id, approverId, action: 'item.uncomp', orderId, entityId: it.id, message: `${actor.user.name} #${o.no} adisyonda ${it.name} ikramını geri aldı` });
+    const what = was === 'ikram' ? 'ikramını' : `${COMP_LABEL[was].toLocaleLowerCase('tr-TR')} kaydını`;
+    fx.audit(t, { userId: actor.user.id, approverId, action: 'item.uncomp', orderId, entityId: it.id, message: `${actor.user.name} #${o.no} adisyonda ${it.name} ${what} geri aldı`, data: { kind: was } });
     orderEvents(fx, updated, actor.user.id, 'item.uncomped');
     return updated;
   }
 
-  if (it.complimentary) throw conflict('Kalem zaten ikram');
+  const kind: CompKind = input.kind ?? 'ikram';
+  const zayi = kind === 'zayi';
+  const approverId = need(actor, compPermission(kind), zayi ? 'Zayi yazmak yetkili onayı gerektirir' : 'İkram yetkili onayı gerektirir');
+  if (it.complimentary) throw conflict('Kalem zaten ikram ya da zayi');
   const reason = input.reason.trim();
-  if (!reason) throw bad('İkram nedeni yazılmalı', 'reason_required');
+  if (!reason) throw bad(zayi ? 'Zayi nedeni yazılmalı' : 'İkram nedeni yazılmalı', 'reason_required');
   const unpaid = it.qty - it.paidQty;
   const qty = Math.max(1, Math.min(input.qty ?? unpaid, it.qty));
-  if (qty > unpaid) throw conflict('Ödenmiş kalem ikram edilemez', 'item_paid');
+  if (qty > unpaid) throw conflict(zayi ? 'Ödenmiş kalem zayi yazılamaz' : 'Ödenmiş kalem ikram edilemez', 'item_paid');
   const value = qty * it.unitPrice;
   const before = calcFor(o, orderItems(t, orderId));
-  splitItem(t, it, qty, { complimentary: true, compReason: reason, compBy: actor.user.id, compKind: 'ikram', discount: 0 });
+  splitItem(t, it, qty, { complimentary: true, compReason: reason, compBy: actor.user.id, compKind: kind, discount: 0 });
   const updated = recalc(t, orderId);
+  const did = zayi ? 'zayi yazdı' : 'ikram etti';
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
-    action: 'item.comp',
+    action: zayi ? 'item.zayi' : 'item.comp',
     severity: 'uyari',
     orderId,
     entity: 'order_item',
     entityId: it.id,
     amount: value,
-    message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ikram etti (${tl(value)}, ${reason})`,
+    message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ${did} (${tl(value)}, ${reason})`,
+    data: { kind },
   });
-  approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} ikram etti`);
+  approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} ${did}`);
   orderEvents(fx, updated, actor.user.id, 'item.comped');
   return updated;
 }
 
 /**
- * Adisyonun tamamı ciro dışı kapanır: müşteriye ikram ya da ödenmez (personel yemeği, zayi, patron hesabı). Ödenmemiş
- * bütün kalemler ikram işaretlenir (türüyle), adisyon sıfır tutarla kapanır. Yalnız hiç ödeme alınmamış adisyonda:
- * tutarla alınan ödeme kaleme bağlı değildir, kalanı kalem kalem ikram edilir. Ödenmez ayrı yetki ister.
+ * Adisyonun tamamı ciro dışı kapanır: müşteriye ikram, ödenmez (personel yemeği, patron hesabı) ya da zayi (döküldü,
+ * yanlış hazırlandı). Ödenmemiş bütün kalemler ikram işaretlenir (türüyle), adisyon sıfır tutarla kapanır. Yalnız hiç
+ * ödeme alınmamış adisyonda: tutarla alınan ödeme kaleme bağlı değildir, kalanı kalem kalem ikram edilir. Ödenmez ve
+ * zayi ayrı yetki ister (`siparis.odenmez`).
  */
 export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { kind: CompKind; reason: string }): OrderRow {
   needDirect(actor, 'siparis.al');
@@ -567,11 +580,11 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
   assertNoActiveRoom(t, orderId);
   // Cihazda kesilmiş ama LafPOS'a işlenmemiş fiş: kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
   if (fiscalHeldQty(t, orderId).size) throw conflict('Adisyonda yazarkasada kesilmiş ama işlenmemiş bir fiş var. Kalanı kasadan alın ya da fişi cihazdan iptal edin', 'okc_unresolved');
-  const odenmez = input.kind === 'odenmez';
-  const approverId = need(actor, odenmez ? 'siparis.odenmez' : 'siparis.ikram', odenmez ? 'Ödenmez kapatmak yetkili onayı gerektirir' : 'İkram yetkili onayı gerektirir');
-  if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Ödeme alınmış adisyonun kalanı kalem kalem ikram edilir', 'has_payments');
+  const label = COMP_LABEL[input.kind];
+  const approverId = need(actor, compPermission(input.kind), input.kind === 'ikram' ? 'İkram yetkili onayı gerektirir' : `${label} kapatmak yetkili onayı gerektirir`);
+  if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Ödeme alınmış adisyonun kalanı kalem kalem ikram ya da zayi yazılır', 'has_payments');
   const reason = input.reason.trim();
-  if (!reason) throw bad(odenmez ? 'Ödenmez nedeni yazılmalı' : 'İkram nedeni yazılmalı', 'reason_required');
+  if (!reason) throw bad(`${label} nedeni yazılmalı`, 'reason_required');
   const live = orderItems(t, orderId).filter((i) => !i.voided && !i.complimentary);
   if (!live.length) throw conflict('Ücretli kalem yok', 'nothing_to_comp');
   for (const it of live) {
@@ -583,16 +596,16 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
   const updated = recalc(t, orderId);
   if (updated.total !== 0) throw conflict(`Ödenecek ${tl(updated.total)} kaldı`, 'due');
   closeOrderRow(t, updated, actor.user.id);
-  const label = odenmez ? 'ödenmez kapattı' : 'tamamını ikram etti';
+  const did = input.kind === 'ikram' ? 'tamamını ikram etti' : `${label.toLocaleLowerCase('tr-TR')} kapattı`;
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
-    action: odenmez ? 'order.odenmez' : 'order.comp',
+    action: input.kind === 'ikram' ? 'order.comp' : `order.${input.kind}`,
     // Hesap yazdırıldıktan sonra sıfırlamak, parayı alıp adisyonu ücretsiz kapatma örüntüsüdür (iptaldeki gibi)
     severity: o.billPrintedAt ? 'alarm' : 'uyari',
     orderId,
     amount: value,
-    message: `${actor.user.name} #${o.no} adisyonu ${label} (${tl(value)}, ${reason})${o.billPrintedAt ? ', hesap yazdırıldıktan sonra' : ''}`,
+    message: `${actor.user.name} #${o.no} adisyonu ${did} (${tl(value)}, ${reason})${o.billPrintedAt ? ', hesap yazdırıldıktan sonra' : ''}`,
     data: { kind: input.kind, items: live.length },
   });
   const closed = loadOrder(t, orderId);
