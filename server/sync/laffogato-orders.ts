@@ -248,7 +248,9 @@ export type SiteAvailability = 'guncellendi' | 'bagli_degil' | 'anahtar_yok';
 export async function writeSiteAvailability(p: { extSource: string | null; extId: string | null }, active: boolean, actorName: string): Promise<SiteAvailability> {
   if (p.extSource !== 'laffogato' || !p.extId) return 'bagli_degil';
   if (!configured()) return 'anahtar_yok';
-  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) });
+  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) }).catch(() => {
+    throw new HttpError(502, "Siteye ulaşılamadı; LafPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
+  });
   if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
   return 'guncellendi';
 }

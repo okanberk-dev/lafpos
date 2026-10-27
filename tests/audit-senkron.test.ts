@@ -278,11 +278,17 @@ describe('menü senkronu', () => {
     await pushSoldOut([cake.id]);
     expect(siteActive.get('mnu-0058')).toBe(false);
 
-    // Site yanıt vermezse sayaç da değişmez (önce site, sonra LafPOS)
+    // Site kabul etmezse ya da ulaşılamazsa sayaç da değişmez (önce site, sonra LafPOS)
     rejectPost = true;
     const failed = await h.call('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 8 });
     rejectPost = false;
     expect(failed.status).toBe(502);
+    const offline = site;
+    site = (path, init) => (path === '/api/panel/menu' && init.method === 'POST' ? Promise.reject(new TypeError('fetch failed')) : offline(path, init));
+    const unreachable = await h.call<{ code: string }>('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 8 });
+    site = offline;
+    expect(unreachable.status).toBe(502);
+    expect(unreachable.json.code).toBe('site_menu');
     expect((await product('mnu-0058')).portionsLeft).toBe(0);
 
     await h.ok('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 8 });
