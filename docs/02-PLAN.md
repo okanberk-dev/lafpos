@@ -46,7 +46,7 @@ lafpos/
 | `happy_hours` | saat/gün/kategori indirim kuralı | |
 | `payment_methods` | nakit, kart, yemek kartları, havale, cari | `zField` → lafmaliyet Z alanı (`cash`, `card`, `meal_card`, `online`, `other`), `channel` → komisyon kanalı (`pluxee`…) |
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |
-| `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`) |
+| `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`); ödemede istemcinin deneme kimliği (`request_id`, adisyon başına tekil: yanıtı kaybolup yeniden gelen istek ikinci kez yazılmaz, göç 0004) |
 | `cash_movements` | harcama, teslim, giriş | lafmaliyet `cash_outs` türleriyle uyumlu |
 | `room_sessions` | karaoke odası sayacı | |
 | `customers`, `customer_addresses`, `customer_ledger` | müşteri, adres, açık hesap | damga kartı sayacı |

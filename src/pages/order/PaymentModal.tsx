@@ -1,5 +1,5 @@
 import { Check, CheckCircle2, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
 import { amountForItems } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
@@ -21,7 +21,8 @@ const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFi
 
 /**
  * Ödeme denemesinin kimliği: yanıt kaybolup "Öde"ye yeniden basılırsa sunucu ödemeyi ikinci kez yazmaz, ilk sonucu
- * döner. Ödeme alınınca yenilenir. Kafe ağında sayfa http ile açılır; randomUUID yalnız güvenli bağlamda var
+ * döner. Kasiyer tutarı, türü, kalemleri ya da bahşişi değiştirirse yeni deneme sayılır; ödeme alınınca yenilenir.
+ * Kafe ağında sayfa http ile açılır; randomUUID yalnız güvenli bağlamda var
  */
 const newRequestId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 
@@ -56,9 +57,12 @@ export function PaymentModal({
   const [people, setPeople] = useState(2);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; method: string; share: string | null } | null>(null);
+  /** Süren ödeme denemesi: kasiyerin girdileri (sunucudan gelen yenilemeyle değişen tutar değil) ve kimliği */
+  const attempt = useRef<{ key: string; id: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    attempt.current = null;
     // Hesap daha önce bölündüyse pencere doğrudan paylarla açılır
     setMode(order.split ? 'paylas' : 'tutar');
     setAmountText(toInput(Math.max(0, remaining)));
@@ -119,20 +123,27 @@ export function PaymentModal({
     if (!method || !valid) return;
     setBusy(true);
     const sharing = mode === 'paylas' && !!split;
+    const items = mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null;
+    // Aynı girdilerle yeniden basılan "Öde" aynı denemedir (yanıtı kaybolan istek ikinci kez yazılmaz)
+    const key = JSON.stringify([mode, method.id, mode === 'tutar' ? amountText : null, items, tipText]);
+    if (attempt.current?.key !== key) attempt.current = { key, id: newRequestId() };
+    const requestId = attempt.current.id;
     const res = await act((pin) =>
       post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null }>(`/orders/${order.id}/payments`, {
         methodId: method.id,
         amount,
         tip,
         given: method.kind === 'nakit' && given != null ? given : null,
-        items: mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null,
+        items,
         // Pay: ekrandaki tutar ve numara gider; sunucunun hesabı tutmazsa 409 split_changed, ekran yenilenir
         ...(sharing ? { share: true, shareNo: freeNos[0] } : {}),
+        requestId,
         approverPin: pin,
       }),
     );
     setBusy(false);
     if (!res) return;
+    attempt.current = null;
     // Parçalı ödeme sürüyorsa pencere açık kalır: kalan tutara (ya da sıradaki paya) dönülür
     setAmountText(toInput(res.order.total - res.order.paid));
     setSelection({});
