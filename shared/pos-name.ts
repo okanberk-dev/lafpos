@@ -56,6 +56,17 @@ export function posNameOf(product: { name: string; posName: string | null; price
   return [base, (suffix[size] ?? '').trim()].filter(Boolean).join(' ');
 }
 
+/**
+ * Satılmış kalemin lafmaliyet adı: satışta dondurulan ad, iki boylu kalemde (M, L) satılan boyun ekiyle. Boy eki
+ * olmadan saklanmış eski kalem ("LATTE") ya da başka boyun ekini taşıyan ad da kendi boyunun satırına gider; M ve L
+ * hiçbir zaman tek satırda birleşmez. Doğru ekli ad değişmez.
+ */
+export function soldPosName(posName: string | null | undefined, name: string, size: PosSize, suffix: PosSizeSuffix): string {
+  const frozen = normalizePosName(posName, name);
+  if (size === 'TEK') return frozen;
+  return [stripSizeSuffix(frozen, suffix), (suffix[size] ?? '').trim()].filter(Boolean).join(' ');
+}
+
 /** Ürünün satılabildiği boyların POS adları (yönetimin çakışma denetimi) */
 export function posNamesOf(product: { name: string; posName: string | null; priceL: number | null }, suffix: PosSizeSuffix): { size: PosSize; name: string }[] {
   const sizes: PosSize[] = product.priceL != null ? ['M', 'L'] : ['TEK'];

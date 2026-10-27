@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import { allocate } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
-import { normalizePosName, posNameKey, posSlotOf } from '@shared/pos-name';
+import { posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
 import type { SelectedOption } from '@shared/types';
 import { db, schema } from '../db/client';
 import { env } from '../env';
@@ -32,6 +32,8 @@ type AddonKey = 'extraShot' | 'syrup' | 'milk';
 
 /** Seçenek eklerinin lafmaliyet'teki ürün adları (ModPOS'taki adlarla aynı) */
 const ADDON_NAMES: Record<AddonKey, string> = { extraShot: 'EXTRA SHOT', syrup: 'SYRUP', milk: 'ALTERNATIF SÜT' };
+/** Masa servis ücreti: ürün değil, lafmaliyet'te HİZMET satırı (satırların toplamı Z toplamını tutsun) */
+export const SERVICE_POS_NAME = 'SERVİS ÜCRETİ';
 /** Eklerin sitedeki sabit kalemleri (laffogato menüsü, `extras` kategorisi; server/db/menu-snapshot.json) */
 const ADDON_SITE_IDS: Record<AddonKey, string> = { syrup: 'mnu-0080', extraShot: 'mnu-0081', milk: 'mnu-0082' };
 /** Ek sayılmayan varsayılan seçenek kodları (sitenin `customization` kimlikleri) */
@@ -85,7 +87,7 @@ function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string 
   const shares = allocate(value, weights);
   const size = i.size === 'L' ? 'L' : i.size === 'M' ? 'M' : 'TEK';
   return [
-    { posName: normalizePosName(i.posName, i.name), siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService: i.isService },
+    { posName: soldPosName(i.posName, i.name, size, getSettings().posSizeSuffix), siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService: i.isService },
     ...addons.map((op, k) => ({
       posName: ADDON_NAMES[op.key],
       siteMenuId: addonIds[op.key],
@@ -158,10 +160,15 @@ function salesOf(dayIds: string[], addonIds = addonSiteIds()) {
     if (i.voided || i.complimentary) continue;
     parts.push(...itemParts(i, totals.get(i.orderId)?.lineNet[i.id] ?? 0, addonIds));
   }
+  // Servis ücreti ayrı hizmet satırı, adedi servis ücretli adisyon sayısı
+  for (const t of totals.values()) {
+    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, isService: true });
+  }
   return mergeParts(parts);
 }
 
-/** Kapanmış POS adisyonlarından ürün satış satırları (iptal, ikram ve online siparişler hariç) */
+/** Kapanmış POS adisyonlarından ürün satış satırları (iptal, ikram ve online siparişler hariç); servis ücreti
+ * varsa ayrı hizmet satırı. Satırların toplamı adisyonların toplamına (Z toplamına) eşittir. */
 export function salesLines(dayIds: string[]): SaleLine[] {
   return salesOf(dayIds).lines;
 }

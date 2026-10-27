@@ -76,21 +76,51 @@ export async function fetchPublicMenu(force = false): Promise<{ status: 'degisme
   return { status: 'yeni', menu, etag: res.headers.get('etag') };
 }
 
+/** İmzalı panelin kalemleri: Tükendi olanlar dahil, CDN önbelleği yok (sitenin Satışta bilgisinin güncel hali) */
+export type PanelMenu = Map<string, { isActive: boolean; priceMinor: number; priceMinorL: number }>;
+
 /** İmzalı panel ucundan Tükendi kalemler dahil liste (anahtar varsa). */
-export async function fetchPanelMenu(): Promise<Map<string, { isActive: boolean; priceMinor: number; priceMinorL: number }> | null> {
+export async function fetchPanelMenu(): Promise<PanelMenu | null> {
   if (env.laffogatoPanelSecret.length < 32) return null;
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/menu`));
   if (status !== 200) throw new Error(`Panel menüsü alınamadı (HTTP ${status})`);
-  const items = (json as { items?: { id: string; isActive: boolean; priceMinor: number; priceMinorL: number }[] }).items ?? [];
-  return new Map(items.map((i) => [i.id, i]));
+  const items = (json as { items?: unknown } | null)?.items;
+  if (!Array.isArray(items)) throw new Error('Panel menüsü beklenen biçimde değil');
+  return new Map(
+    (items as { id?: unknown; isActive?: unknown; priceMinor: number; priceMinorL: number }[])
+      .filter((i) => typeof i?.id === 'string' && typeof i.isActive === 'boolean')
+      .map((i) => [i.id as string, i as { isActive: boolean; priceMinor: number; priceMinorL: number }]),
+  );
+}
+
+type LocalProduct = typeof schema.products.$inferSelect;
+
+/** Son eşitlemenin anı: listelenen her bağlı ürünün `syncedAt`'i o eşitlemede yazılır */
+function lastSyncAt(local: LocalProduct[]): number {
+  return local.reduce((a, p) => Math.max(a, p.syncedAt ?? 0), 0);
+}
+
+/**
+ * Bağlı ürün LafPOS'ta satışta mı olmalı. Porsiyon sayacı biten ürünü site açamaz (sayaç LafPOS'un). Anahtar
+ * varsa imzalı panelin Satışta bilgisi geçerlidir: herkese açık menü CDN'den birkaç dakika eski gelebilir.
+ * Panel yoksa herkese açık menüde listelenen satışta sayılır; yalnız son eşitlemede de listelenmiş ve o
+ * zamandan beri LafPOS'ta (anahtarsız) Tükendi yapılmış ürün, site değişmedikçe kapalı kalır.
+ */
+function shouldBeActive(p: LocalProduct, listed: boolean, panel: PanelMenu | null, lastSync: number): boolean {
+  if (p.portionsLeft === 0) return false;
+  const onPanel = panel?.get(p.extId!);
+  if (onPanel) return onPanel.isActive;
+  if (!listed) return false;
+  return p.active || (p.syncedAt ?? 0) < lastSync;
 }
 
 function siteItems(menu: SiteMenu): SiteMenuItem[] {
   return menu.categories.flatMap((c) => c.items.map((i) => ({ ...i, categoryKey: i.categoryKey ?? c.key })));
 }
 
-export function previewMenu(t: Tx | DB, menu: SiteMenu, panel: Map<string, { isActive: boolean }> | null = null): MenuPreview {
+export function previewMenu(t: Tx | DB, menu: SiteMenu, panel: PanelMenu | null = null): MenuPreview {
   const local = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
+  const lastSync = lastSyncAt(local);
   const byExt = new Map(local.map((p) => [p.extId!, p]));
   const cats = new Set(t.select({ k: schema.categories.extKey }).from(schema.categories).where(eq(schema.categories.extSource, 'laffogato')).all().map((c) => c.k));
   const changes: MenuChange[] = [];
@@ -103,7 +133,9 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panel: Map<string, { isA
       changes.push({ kind: 'yeni', productId: null, extId: i.id, name: i.name, detail: `${tl(i.priceMinor)}${i.priceLargeMinor ? ` / ${tl(i.priceLargeMinor)}` : ''}` });
       continue;
     }
-    if (!p.active && p.portionsLeft !== 0) changes.push({ kind: 'geri', productId: p.id, extId: i.id, name: i.name, detail: 'Sitede yeniden satışta' });
+    const active = shouldBeActive(p, true, panel, lastSync);
+    if (!p.active && active) changes.push({ kind: 'geri', productId: p.id, extId: i.id, name: i.name, detail: 'Sitede yeniden satışta' });
+    if (p.active && !active) changes.push({ kind: 'kalkti', productId: p.id, extId: i.id, name: i.name, detail: 'Sitede Tükendi' });
     if (p.price !== i.priceMinor) changes.push({ kind: 'fiyat', productId: p.id, extId: i.id, name: i.name, detail: `${tl(p.price)} → ${tl(i.priceMinor)}` });
     if ((p.priceL ?? null) !== (i.priceLargeMinor ?? null)) {
       changes.push({ kind: 'boy', productId: p.id, extId: i.id, name: i.name, detail: `L: ${p.priceL ? tl(p.priceL) : 'yok'} → ${i.priceLargeMinor ? tl(i.priceLargeMinor) : 'yok'}` });
@@ -115,9 +147,10 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panel: Map<string, { isA
     }
   }
   for (const p of local) {
-    if (seen.has(p.extId!) || !p.active) continue;
-    const onPanel = panel?.get(p.extId!);
-    changes.push({ kind: 'kalkti', productId: p.id, extId: p.extId!, name: p.name, detail: onPanel ? 'Sitede Tükendi' : 'Sitede satışta değil' });
+    if (seen.has(p.extId!)) continue;
+    const active = shouldBeActive(p, false, panel, lastSync);
+    if (!p.active && active) changes.push({ kind: 'geri', productId: p.id, extId: p.extId!, name: p.name, detail: 'Sitede yeniden satışta' });
+    if (p.active && !active) changes.push({ kind: 'kalkti', productId: p.id, extId: p.extId!, name: p.name, detail: panel?.get(p.extId!) ? 'Sitede Tükendi' : 'Sitede satışta değil' });
   }
   return {
     changes,
@@ -162,15 +195,18 @@ function upsertOptionGroups(t: Tx | DB, menu: SiteMenu): string[] {
 }
 
 /**
- * Menüyü uygular (tek işlem). Fiyat, ad, KDV, açıklama, görsel siteden gelir; POS alanları korunur.
- * Listede olmayan bağlı ürün Tükendi yapılır (silinmez, geçmiş satışlar bozulmasın).
+ * Menüyü uygular (tek işlem). Fiyat, ad, KDV, açıklama, görsel siteden gelir; POS alanları (sıra dahil) korunur.
+ * Satışta bilgisi `shouldBeActive` kuralıyla: listede olmayan bağlı ürün Tükendi yapılır (silinmez, geçmiş
+ * satışlar bozulmasın), imzalı panel verildiyse onun Satışta bilgisi geçerlidir.
  */
 export function applyMenu(
   t: Tx,
   menu: SiteMenu,
-  opts: { barStationId?: string | null; kitchenStationId?: string | null } = {},
+  opts: { barStationId?: string | null; kitchenStationId?: string | null; panel?: PanelMenu | null } = {},
 ): { created: number; updated: number; deactivated: number } {
   const now = Date.now();
+  const panel = opts.panel ?? null;
+  const lastSync = lastSyncAt(t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all());
   const groupIds = upsertOptionGroups(t, menu);
   const catIdByKey = new Map<string, string>();
   menu.categories.forEach((c, ci) => {
@@ -218,7 +254,6 @@ export function applyMenu(
       image: i.image ?? null,
       tags: i.tags ?? [],
       allergens: i.allergens ?? null,
-      sort: idx,
       extHash: hashItem(i),
       syncedAt: now,
       updatedAt: now,
@@ -226,14 +261,15 @@ export function applyMenu(
     const existing = t.select().from(schema.products).where(and(eq(schema.products.extSource, 'laffogato'), eq(schema.products.extId, i.id))).get();
     let productId: string;
     if (existing) {
-      // Porsiyonu bittiği için LafPOS'ta tükenen ürünü site yeniden açamaz; o sayaç LafPOS'un
-      const active = existing.portionsLeft === 0 ? false : true;
+      const active = shouldBeActive(existing, true, panel, lastSync);
       t.update(schema.products).set({ ...values, active }).where(eq(schema.products.id, existing.id)).run();
       productId = existing.id;
       updated++;
     } else {
       productId = ulid();
-      t.insert(schema.products).values({ id: productId, ...values, active: true, extSource: 'laffogato', extId: i.id, createdAt: now }).run();
+      // POS sırası LafPOS'un (docs/03 §1): yalnız ürün ilk gelirken sitenin sırası verilir
+      const active = panel?.get(i.id)?.isActive ?? true;
+      t.insert(schema.products).values({ id: productId, ...values, sort: idx, active, extSource: 'laffogato', extId: i.id, createdAt: now }).run();
       created++;
     }
     // Site seçenekleri (süt, şurup…) yalnız ürün ilk kez gelirken bağlanır; sonra yöneticinin seçimi korunur
@@ -245,9 +281,11 @@ export function applyMenu(
   let deactivated = 0;
   const local = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
   for (const p of local) {
-    if (seen.has(p.extId!) || !p.active) continue;
-    t.update(schema.products).set({ active: false, updatedAt: now }).where(eq(schema.products.id, p.id)).run();
-    deactivated++;
+    if (seen.has(p.extId!)) continue;
+    const active = shouldBeActive(p, false, panel, lastSync);
+    if (active === p.active) continue;
+    t.update(schema.products).set({ active, updatedAt: now }).where(eq(schema.products.id, p.id)).run();
+    if (!active) deactivated++;
   }
   return { created, updated, deactivated };
 }
