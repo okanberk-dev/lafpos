@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { schema, type Tx } from '../db/client';
 import { type Actor, needDirect } from '../lib/auth';
@@ -33,7 +33,17 @@ export function startRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
   if (!table || table.kind !== 'oda' || !table.hourlyRate) throw bad('Bu masa saatlik oda değil');
   // Sepet cihazda beklerken sayaç başlamaz: cihaz ödemesi adisyonu kapatır, oda ücreti kapanmış adisyona yazılamazdı
   assertNoPendingDevice(t, orderId);
-  if (activeRoom(t, orderId)) throw conflict('Oda sayacı zaten çalışıyor');
+  if (activeRoom(t, orderId)) throw conflict('Oda sayacı zaten çalışıyor', 'room_running');
+  // Bir odada aynı anda tek sayaç: odanın başka hesabında ("Yeni hesap", aynı odada ayrı hesaba taşıma) sayaç
+  // çalışırken ikincisi başlarsa oda iki kez faturalanır (inceleme, 27 Eki 2026). Kapanmış adisyonda kalmış eski sayaç
+  // odayı tutmaz: ücret yazılamaz, durdurulamaz
+  const holder = t
+    .select({ no: schema.orders.no })
+    .from(schema.roomSessions)
+    .innerJoin(schema.orders, eq(schema.orders.id, schema.roomSessions.orderId))
+    .where(and(eq(schema.roomSessions.tableId, table.id), isNull(schema.roomSessions.endedAt), eq(schema.orders.status, 'acik')))
+    .get();
+  if (holder) throw conflict(`${table.name} sayacı #${holder.no} adisyonda çalışıyor; oda ücreti o hesaba yazılır`, 'room_running');
   t.insert(schema.roomSessions).values({ id: ulid(), orderId, tableId: table.id, hourlyRate: table.hourlyRate, startedAt: Date.now(), startedBy: actor.user.id }).run();
   fx.audit(t, { userId: actor.user.id, action: 'room.start', orderId, message: `${table.name} sayacı başladı (saatlik ${tl(table.hourlyRate)})` });
   fx.emit({ topic: 'orders', kind: 'room.started', orderId, tableId: table.id, byUserId: actor.user.id });

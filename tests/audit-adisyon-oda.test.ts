@@ -18,6 +18,10 @@ import { type Harness, PINS, startApp } from './harness';
  * ödenmiş sipariş input-67; masa açma sync-44; iptal yetkisi auth-57; porsiyon state-08. Gün sonu (state-02,
  * money-10'un gün sonu yarısı) ve otomatik gün sonu (state-06) 0e41785'te düzeldi (`isEmptyOrder`); testleri
  * gerilemeye karşı burada.
+ *
+ * İnceleme bulguları (27 Eki 2026): bir odada tek sayaç (aynı odada ayrı hesaba taşıma ya da "Yeni hesap" odayı iki kez
+ * faturalamaz); indirimi kaldırmak sipariş yetkisi ister ve denetime yazılır (auth-57'nin eşi); başlamış kalem "yeni"ye
+ * çekilip porsiyonu geri alınamaz (state-05/auth-55 ile aynı düzeltme, odeme-indirim dalıyla birebir).
  */
 let h: Harness;
 const MUDUR = PINS.mudur;
@@ -495,7 +499,7 @@ describe('porsiyon sayacı', () => {
     // Garson (yalnız siparis.al) ya da bar kalemi bekleyene çekip "hiç başlanmamış" gösteremez: başlama zamanı kalır
     for (const who of ['garson', 'bar']) {
       const r = await h.call(who, 'POST', '/kitchen/status', { itemIds: [ready.id, served.id], status: 'yeni' });
-      expect(r.status, who).toBe(400);
+      expect(r.status, who).toBe(422);
     }
     const after = await h.ok<OrderDTO>('garson', 'GET', `/orders/${o.id}`);
     expect(after.items.map((i) => i.status)).toEqual(['hazir', 'servis']);

@@ -493,6 +493,8 @@ export function setItemDiscount(
   orderId: string,
   input: { itemId: string; type: 'percent' | 'amount'; value: number; reason: string },
 ): OrderRow {
+  // İndirimi kaldırmak da adisyonu değiştirir: sipariş yetkisi ister (bar ekranı onaylı indirimi geri alamasın)
+  needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
@@ -511,6 +513,17 @@ export function setItemDiscount(
     .where(eq(schema.orderItems.id, it.id))
     .run();
   const updated = recalc(t, orderId);
+  // Kaldırılan indirim de denetime yazılır: onaylı indirimi kimin geri aldığı görünür
+  if (amount === 0 && it.discount > 0) {
+    fx.audit(t, {
+      userId: actor.user.id,
+      action: 'item.discount_removed',
+      orderId,
+      entityId: it.id,
+      amount: it.discount,
+      message: `${actor.user.name} #${o.no} adisyonda ${it.name} kalemindeki ${tl(it.discount)} indirimi kaldırdı`,
+    });
+  }
   if (amount > 0) {
     fx.audit(t, {
       userId: actor.user.id,
@@ -534,14 +547,27 @@ export function setOrderDiscount(
   orderId: string,
   input: { type: 'percent' | 'amount'; value: number; reason: string } | null,
 ): OrderRow {
+  // İndirimi kaldırmak da adisyonu değiştirir: sipariş yetkisi ister (bar ekranı onaylı indirimi geri alamasın)
+  needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
   assertNoPendingDevice(t, orderId);
   if (!input || input.value <= 0) {
+    const removed = o.discountType ? calcFor(o, orderItems(t, orderId)).orderDiscount : 0;
     t.update(schema.orders).set({ discountType: null, discountValue: null, discountReason: null, discountBy: null }).where(eq(schema.orders.id, orderId)).run();
     const updated = recalc(t, orderId);
     if (updated.paid > updated.total) throw conflict('Alınan ödeme yeni tutarı aşıyor');
+    // Kaldırılan indirim de denetime yazılır: onaylı indirimi kimin geri aldığı görünür
+    if (o.discountType) {
+      fx.audit(t, {
+        userId: actor.user.id,
+        action: 'order.discount_removed',
+        orderId,
+        amount: removed,
+        message: `${actor.user.name} #${o.no} adisyondaki ${tl(removed)} indirimi kaldırdı`,
+      });
+    }
     orderEvents(fx, updated, actor.user.id, 'order.discount');
     return updated;
   }
@@ -720,9 +746,17 @@ export function transferItems(
   const dst = recalc(t, target.id);
   const remaining = orderItems(t, orderId).filter((i) => !i.voided);
   const hasPayments = orderPayments(t, orderId).some((p) => !p.refundedAt);
+  const emptied = !remaining.length && !hasPayments;
   // Oda sayacı çalışan kaynak kapanmaz: sayaç odanın hesabında kalır, durunca ücreti yazılır (kapanmış adisyona
-  // yazılamazdı, oda ücreti kaybolurdu)
-  if (!remaining.length && !hasPayments && !activeRoom(t, orderId)) {
+  // yazılamazdı, oda ücreti kaybolurdu). Bütün kalemler aynı odadaki başka hesaba geçtiyse sayaç da onlarla gider:
+  // kalemleri tutan hesapta görünür, orada ikinci sayaç başlatılmaz, boşalan kaynak kapanır (inceleme, 27 Eki 2026)
+  const room = activeRoom(t, orderId);
+  let roomMoved = false;
+  if (emptied && room && dst.tableId === room.tableId && !activeRoom(t, target.id)) {
+    t.update(schema.roomSessions).set({ orderId: target.id }).where(eq(schema.roomSessions.id, room.id)).run();
+    roomMoved = true;
+  }
+  if (emptied && (!room || roomMoved)) {
     t.update(schema.orders)
       .set({ status: 'birlesti', mergedInto: target.id, closedAt: Date.now(), closedBy: actor.user.id })
       .where(eq(schema.orders.id, orderId))
@@ -733,7 +767,7 @@ export function transferItems(
     approverId,
     action: 'order.transfer',
     orderId,
-    message: `#${source.no} adisyondan ${input.items.length} kalem #${dst.no} adisyona taşındı`,
+    message: `#${source.no} adisyondan ${input.items.length} kalem #${dst.no} adisyona taşındı${roomMoved ? ', oda sayacı da' : ''}`,
   });
   orderEvents(fx, src, actor.user.id, 'order.items_moved');
   orderEvents(fx, dst, actor.user.id, 'order.items_moved');
@@ -1139,11 +1173,16 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
 
 const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazirlaniyor', hazirlaniyor: 'hazir', hazir: 'servis' };
 
+/**
+ * Bar ve mutfak durumları. Başlamış kalem bekleyene ("yeni") dönmez ve başlama zamanı silinmez: onaysız iptal
+ * "hiç başlanmamış" kaleme (yanlış giriş penceresi) özgüdür. Garson kalemi "yeni"ye çekip bardan çıkmış içeceği
+ * onaysız, zayi sayılmadan iptal ediyordu (denetim, 26 Eki 2026). Bardaki "Geri al" en çok "hazırlanıyor"a döner.
+ */
 export function setItemsStatus(
   t: Tx,
   actor: Actor,
   fx: Effects,
-  input: { itemIds: string[]; status?: 'hazirlaniyor' | 'hazir' | 'servis' | 'yeni' },
+  input: { itemIds: string[]; status?: 'hazirlaniyor' | 'hazir' | 'servis' },
 ): void {
   if (!can(actor.user, 'mutfak.ekran') && !can(actor.user, 'siparis.al')) needDirect(actor, 'mutfak.ekran');
   if (!input.itemIds.length) return;
@@ -1159,7 +1198,6 @@ export function setItemsStatus(
     if (!status || status === it.status) continue;
     if (status === 'hazir') readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
     const patch: Partial<ItemRow> = { status };
-    if (status === 'yeni') Object.assign(patch, { startedAt: null, readyAt: null, servedAt: null });
     if (status === 'hazirlaniyor') patch.startedAt = it.startedAt ?? now;
     if (status === 'hazir') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: now });
     if (status === 'servis') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: it.readyAt ?? now, servedAt: now });

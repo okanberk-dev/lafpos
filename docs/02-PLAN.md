@@ -147,11 +147,16 @@ gitmez, kapanmış adisyona oda ücreti yazılmaz; lafmaliyet'e gönderim sürer
 
 Denetim düzeltmeleri, adisyon ve oda (`tests/audit-adisyon-oda.test.ts`): çalışan oda sayacı faturalanacak ücrettir.
 Sayacı çalışan adisyon iptal edilmez (`room_running`; önce durdurulur, oda ücretinin iptali yetkili onayı ister),
-kalemlerinin hepsi taşınınca kapanmaz (sayaç kaynakta kalır), yazarkasada ödenince kapanmaz (uyarı düşer). Sepet
-cihazda beklerken ve sitede ödenmiş siparişte sayaç başlamaz; sitede ödenmiş sipariş masaya taşınmaz, kasadan
-kapatılmaz. Masayı açmak QR siparişini değil masadaki kasa adisyonunu döndürür (yoksa yenisini açar). Adisyon iptali
-boş adisyonda da `siparis.al` ister. Hazırlanmaya başlanmamış kalem iptal edilince porsiyonu geri döner; sıfırdan
-dönen ürün yeniden satışa açılır, sitede de.
+kalemlerinin hepsi başka masaya taşınınca kapanmaz (sayaç kaynakta kalır), yazarkasada ödenince kapanmaz (uyarı
+düşer). Bir odada aynı anda tek sayaç çalışır: odanın öbür hesabında başlatılmaz (`room_running`, sayacı tutan
+adisyonun numarasıyla); kalemlerin hepsi aynı odadaki başka hesaba taşınınca sayaç da oraya geçer, boşalan kaynak
+kapanır. Sepet cihazda beklerken ve sitede ödenmiş siparişte sayaç başlamaz; sitede ödenmiş sipariş masaya taşınmaz,
+kasadan kapatılmaz. Masayı açmak QR siparişini değil masadaki kasa adisyonunu döndürür (yoksa yenisini açar).
+Adisyon iptali boş adisyonda da, adisyon ve kalem indirimini kaldırmak da `siparis.al` ister; kaldırılan indirim
+denetime yazılır (`order.discount_removed`, `item.discount_removed`). Hazırlanmaya başlanmamış kalem iptal edilince
+porsiyonu geri döner; sıfırdan dönen ürün yeniden satışa açılır, sitede de. Başlamış kalem bekleyene ("yeni")
+çekilemez, başlama zamanı silinmez: hazırlanmış ya da servis edilmiş kalem "hiç başlanmamış" gösterilip porsiyonu
+geri alınamaz.
 
 Aynı gün akşam (RiosenBeq/lafpos `claude/kasa-sade-tasarim`): kasa ekranları da Innex'e geçti (`DESIGN.md` §1);
 **paylaşımlı hesap**: hesap N kişiye kuruşu kuruşuna bölünür, her pay ayrı ödenir, sonradan eklenen kalem ya da
