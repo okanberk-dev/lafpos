@@ -26,5 +26,17 @@ export function configFrom(vars: Record<string, string | undefined>) {
     /** LafPOS Uzaktan (Vercel): canlı özetin gittiği adres ve imza anahtarı (Vercel'deki LAFPOS_CLOUD_SECRET) */
     cloudUrl: (vars.LAFPOS_CLOUD_URL ?? '').replace(/\/$/, ''),
     cloudSecret: (vars.LAFPOS_CLOUD_SECRET ?? '').trim(),
+
+    /**
+     * Trendyol Go Yemek (Uber Eats Türkiye): satıcı panelinden satıcı no, API anahtarı ve gizli anahtar; yalnız kasa
+     * bilgisayarının .env'inde. Üçü de yoksa canlı mod seçilemez (server/delivery/trendyol.ts)
+     */
+    trendyol: {
+      supplierId: (vars.TRENDYOL_SUPPLIER_ID ?? '').trim(),
+      apiKey: (vars.TRENDYOL_API_KEY ?? '').trim(),
+      apiSecret: (vars.TRENDYOL_API_SECRET ?? '').trim(),
+      apiUrl: ((vars.TRENDYOL_API_URL ?? '').trim() || 'https://api.tgoapps.com').replace(/\/+$/, ''),
+      agentName: (vars.TRENDYOL_AGENT_NAME ?? '').trim() || 'LafPOS',
+    },
   };
 }
