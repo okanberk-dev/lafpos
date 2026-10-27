@@ -35,14 +35,9 @@
   --color-brand-600: #2f58f7;
   --color-brand-700: #2449e0;
   --color-brand-800: #1d2f8c;
-  --color-brand-900: #151f55;
 
-  --color-success-50: #f1fcf5;
-  --color-success-100: #e1faed;
   --color-success-200: #c1f0d3;
   --color-success-300: #7fd8a3;
-  --color-success-400: #3cb86e;
-  --color-success-500: #178a47;
   --color-success-600: #15803d;
   --color-success-700: #166534;
   --color-success-800: #13301f;
@@ -74,13 +69,11 @@
   --color-rose-700: #c0264a;
 
   --color-night: #0c0e1b;
-  --color-paper: #ffffff;
 
   /* Innex köşeleri: düğme ve alan 8, kart 12 (sınıf adları aynı kaldı: rounded-xl düğme, rounded-2xl kart) */
   --radius-xl: 0.5rem;
   --radius-2xl: 0.75rem;
   --radius-3xl: 0.75rem;
-  --radius-xl2: 0.75rem;
   /* Kartta gölge yok, ayrımı 1 px kenarlık yapar; gölge yalnız yüzen katmanda (pencere, menü) */
   --shadow-card: none;
   --shadow-pop: 0 12px 32px rgb(12 14 27 / 0.12), 0 0 0 1px rgb(12 14 27 / 0.04);
@@ -129,7 +122,6 @@
   --admin-hue-green: #15803d;
   --admin-hue-green-soft: #eefbf2;
   --admin-chart-line: #2132ba;
-  --admin-chart-fill: #e3e7ff;
 
   --bg: var(--admin-bg);
   --surface: var(--admin-surface);
@@ -192,7 +184,6 @@
   --admin-hue-green: #6ee7a0;
   --admin-hue-green-soft: #13301f;
   --admin-chart-line: #9aa8ff;
-  --admin-chart-fill: #1d2547;
   --chart-context: #5b6270;
   --chart-grid: #232832;
   color-scheme: dark;
