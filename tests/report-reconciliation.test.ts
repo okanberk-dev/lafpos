@@ -85,10 +85,11 @@ describe('rapor mutabakatı', () => {
       tips: number;
     }>('mudur', 'GET', '/reports/summary');
     const products = await h.ok<{ total: number; service: number; categories: { revenue: number }[]; products: { qty: number; complimentary: number; voided: number }[] }>('mudur', 'GET', '/reports/products');
-    const hourly = await h.ok<{ total: number; hours: { revenue: number }[]; week: { days: number; hours: number[] }[] }>('mudur', 'GET', '/reports/hourly');
+    const hourly = await h.ok<{ total: number; hours: { revenue: number; orders: number }[]; parts: { orders: number }[]; week: { days: number; hours: number[] }[] }>('mudur', 'GET', '/reports/hourly');
+    const saatlik = (await h.call<string>('mudur', 'GET', '/reports/export.csv?type=saatlik')).json.replace(/^\uFEFF/, '').trim().split('\r\n').slice(1);
     const patron = await h.ok<{ netSales: number; orders: number; avgCheck: number; voided: number }>('patron', 'GET', '/reports/patron');
     const voids = await h.ok<{ total: number; rows: { qty: number }[] }>('mudur', 'GET', '/reports/items?kind=iptal');
-    const staff = await h.ok<{ staff: { voids: number; voidValue: number }[] }>('patron', 'GET', '/reports/staff');
+    const staff = await h.ok<{ staff: { orders: number; revenue: number; voids: number; voidValue: number }[] }>('patron', 'GET', '/reports/staff');
     const checks = await h.ok<{ count: number; rows: { status: string; total: number }[] }>('mudur', 'GET', '/reports/checks');
 
     const N = summary.netSales;
@@ -110,6 +111,12 @@ describe('rapor mutabakatı', () => {
     expect(patron.avgCheck).toBe(summary.avgCheck);
     expect(summary.avgCheck).toBe(Math.round(N / summary.receipts));
     expect(summary.types.reduce((x, t) => x + t.orders, 0)).toBe(summary.receipts);
+    // Personel ve saatlik raporun "adisyon"u da (ortalama, en yoğun saat, gün dilimleri, saatlik CSV)
+    expect(staff.staff.reduce((x, r) => x + r.orders, 0)).toBe(summary.receipts);
+    expect(staff.staff.reduce((x, r) => x + r.revenue, 0)).toBe(N);
+    expect(hourly.hours.reduce((x, r) => x + r.orders, 0)).toBe(summary.receipts);
+    expect(hourly.parts.reduce((x, r) => x + r.orders, 0)).toBe(summary.receipts);
+    expect(saatlik.reduce((x, line) => x + Number(line.split(';')[1]), 0)).toBe(summary.receipts);
     // Adisyon listesi: dönemin bütün kapanan adisyonları, tutarları ciroyu verir
     expect(checks.count).toBe(checks.rows.length);
     expect(checks.rows.filter((r) => r.status === 'kapali').reduce((x, r) => x + r.total, 0)).toBe(N);

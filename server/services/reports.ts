@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
-import { addDays, businessDate, businessDayStartMs, currentBusinessDate, istanbulParts } from '@shared/time';
+import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
 import { db, schema } from '../db/client';
 import { costMap } from '../sync/lafmaliyet';
 import { getOpenDay } from './orders';
@@ -309,21 +309,36 @@ function hourMemo() {
   };
 }
 
+/**
+ * Saatlik ciro, adisyonun açıldığı saate göre; `hours` iş günü sırasıyla (05:00 ilk, gece yarısından sonrası son).
+ * Satır, iş gününün başından (05:00) geçen saattir (`offset`). Tek günde gün 24 saati aşarsa (05:00'te kapanmadı,
+ * masa açık kaldı) ertesi günün saatleri kendi satırlarıyla sonda gelir (`nextDay`): 27 Ekim 06:30 satışı 26 Ekim
+ * sabahının 06'sına karışmaz, gecenin ardından çizilir. Çok günlük dönemde satır günün saatidir (dağılım), 24 satır.
+ * Adisyon sayısı Adisyon kutusuyla aynı ölçütle: tutarı olan adisyon (tamamı ikram edilen ₺0 adisyon sayılmaz).
+ */
 export function hourlyReport(range: Range) {
   const ds = load(range, ORDERS_ONLY);
   const closed = ds.orders.filter(isSale);
   const hourOf = hourMemo();
-  const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, revenue: 0, orders: 0 }));
-  for (const o of closed) {
-    const h = hourOf(o.openedAt);
-    hours[h].revenue += totalsOf(o).total;
-    hours[h].orders += 1;
+  const dates = dayOf(ds);
+  const dayStart = new Map(ds.days.map((d) => [d.id, businessDayStartMs(d.date)]));
+  const single = range.from === range.to;
+  const offsetOf = (o: OrderRow) => {
+    const raw = Math.max(0, Math.floor((o.openedAt - (dayStart.get(o.dayId) ?? o.openedAt)) / 3_600_000));
+    return single ? raw : raw % 24;
+  };
+  const offsets = closed.map(offsetOf);
+  const length = offsets.reduce((a, x) => Math.max(a, x + 1), 24);
+  const hours = Array.from({ length }, (_, offset) => ({ hour: (offset + DAY_ROLLOVER_HOUR) % 24, offset, nextDay: offset >= 24, revenue: 0, orders: 0 }));
+  for (const [k, o] of closed.entries()) {
+    const row = hours[offsets[k]!]!;
+    row.revenue += totalsOf(o).total;
+    if (o.total > 0) row.orders += 1;
   }
   const total = hours.reduce((a, h) => a + h.revenue, 0);
   const active = hours.filter((h) => h.orders > 0);
   // Haftanın günü × saat: iş gününün (gece yarısından sonraki satış o güne yazılır) haftanın günü, adisyonun açıldığı
   // saat; hücre o günün ortalama cirosu (dönemde 2 salı varsa salı hücreleri 2'ye bölünür)
-  const dates = dayOf(ds);
   const weekdayOf = (date: string) => {
     const [y, m, d] = date.split('-').map(Number);
     return ((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7) + 1;
@@ -408,7 +423,9 @@ export function staffReport(range: Range) {
   const closed = ds.orders.filter(isSale);
   for (const o of closed) {
     const r = row(o.waiterId);
-    r.orders += 1;
+    // Adisyon kutusuyla aynı ölçüt: tamamı ikram edilen ₺0 adisyon sayılmaz (ortalamayı düşürmez); indirimi ve
+    // ikramı yine garsona yazılır
+    if (o.total > 0) r.orders += 1;
     r.revenue += totalsOf(o).total;
     r.discounts += totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount;
   }
@@ -585,9 +602,17 @@ export function patronLive(withCost: boolean) {
   const fourWeeks = salesUntil(addDays(today, -28), elapsed);
   const yesterday = summaryReport({ from: addDays(today, -1), to: addDays(today, -1) }, now);
 
-  // Saat dizisi saat numarasıyla (0-23) sıralı; grafik iş günü sırasıyla çizer (src/lib/period.ts hourBars)
-  const hourly = hourlyReport({ from: today, to: today }).hours.map((h) => h.revenue);
-  const hourlyLastWeek = hourlyReport({ from: addDays(today, -7), to: addDays(today, -7) }).hours.map((h) => h.revenue);
+  // Saat dizisi saat numarasıyla (0-23); gün 05:00'i geçip 24 saati aştıysa ertesi günün saatleri `…NextDay`de
+  // ([0] ertesi gün 05:00). Grafik iş günü sırasıyla çizer (src/lib/period.ts hourBars): gecenin ardından ertesi gün.
+  // Eski istemci yalnız 24 saati okur, ertesi günü göstermez ama saatleri kaymaz (LafPOS Uzaktan sürüm farkı)
+  const byHour = (date: string) => {
+    const rows = hourlyReport({ from: date, to: date }).hours;
+    const day = Array.from({ length: 24 }, () => 0);
+    for (const r of rows) if (!r.nextDay) day[r.hour] = r.revenue;
+    return { day, next: rows.filter((r) => r.nextDay).map((r) => r.revenue) };
+  };
+  const todayHours = byHour(today);
+  const lastWeekHours = byHour(addDays(today, -7));
   const products = productReport({ from: today, to: today }, withCost).products.slice(0, 6);
   const summary = summaryReport({ from: today, to: today }, now);
 
@@ -621,8 +646,10 @@ export function patronLive(withCost: boolean) {
       fourWeeks: { ...fourWeeks, change: change(netSales, fourWeeks.netSales) },
     },
     yesterday: { netSales: yesterday.netSales, receipts: yesterday.receipts },
-    hourly,
-    hourlyLastWeek,
+    hourly: todayHours.day,
+    hourlyLastWeek: lastWeekHours.day,
+    hourlyNextDay: todayHours.next,
+    hourlyLastWeekNextDay: lastWeekHours.next,
     payments: summary.payments,
     discounts: summary.discounts,
     complimentary: summary.complimentary,

@@ -46,13 +46,50 @@ export function rangeLabel(r: { from: string; to: string }) {
   return r.from === r.to ? fmtShortDate(r.from) : `${fmtShortDate(r.from)} – ${fmtShortDate(r.to)}`;
 }
 
+/** Patron panelinin saat dizileri (server/services/reports.ts patronLive) */
+export interface HourlySeries {
+  /** Bugün, saat numarasıyla (0-23) */
+  hourly: number[];
+  hourlyLastWeek?: number[];
+  /** Gün 05:00'i geçip 24 saati aştıysa ertesi günün saatleri: [0] ertesi gün 05:00, [1] 06:00… */
+  hourlyNextDay?: number[];
+  hourlyLastWeekNextDay?: number[];
+}
+
+export interface HourBar {
+  key: string;
+  /** Eksen: saat ("06") */
+  label: string;
+  /** İpucu ve tablo: "06:00", ertesi günse "06:00 · ertesi gün" */
+  title: string;
+  nextDay: boolean;
+  value: number;
+  compare: number;
+}
+
+/** "06:00" ya da "06:00 · ertesi gün" (gün 05:00'te kapanmadı, satış hâlâ açık güne yazıldı) */
+export const hourTitle = (hour: number, nextDay = false) => `${String(hour).padStart(2, '0')}:00${nextDay ? ' · ertesi gün' : ''}`;
+
 /**
  * Bugünün saat saat grafiği (patron paneli, genel bakış): çubuklar iş günü sırasıyla, 05:00'ten ertesi 05:00'e;
- * gece yarısından sonraki satış günün sonunda durur. `values` ve `compare` saat numarasıyla (0-23) dizili. Boş
- * sabah saatleri `from`a kadar, boş gece saatleri 23:00'ten sonra gösterilmez.
+ * gece yarısından sonraki satış günün sonunda durur. Gün 24 saati aştıysa (masa açık kaldı, gün kapanmadı) ertesi
+ * sabahın satışı aynı saatin sabahki çubuğuna karışmaz, gecenin ardından kendi çubuğunda çizilir. Boş sabah saatleri
+ * `from`a kadar, boş gece saatleri 23:00'ten sonra gösterilmez.
  */
-export function hourBars(values: number[], compare: number[] = [], from = 7): { label: string; value: number; compare: number }[] {
-  const bars = BUSINESS_HOURS.map((hour) => ({ label: String(hour).padStart(2, '0'), value: values[hour] ?? 0, compare: compare[hour] ?? 0 }));
+export function hourBars(s: HourlySeries, from = 7): HourBar[] {
+  const bar = (key: string, hour: number, nextDay: boolean, value: number | undefined, compare: number | undefined): HourBar => ({
+    key,
+    label: String(hour).padStart(2, '0'),
+    title: hourTitle(hour, nextDay),
+    nextDay,
+    value: value ?? 0,
+    compare: compare ?? 0,
+  });
+  const next = Math.max(s.hourlyNextDay?.length ?? 0, s.hourlyLastWeekNextDay?.length ?? 0);
+  const bars = [
+    ...BUSINESS_HOURS.map((hour) => bar(`g${hour}`, hour, false, s.hourly[hour], s.hourlyLastWeek?.[hour])),
+    ...Array.from({ length: next }, (_, i) => bar(`e${i}`, BUSINESS_HOURS[i % 24]!, true, s.hourlyNextDay?.[i], s.hourlyLastWeekNextDay?.[i])),
+  ];
   const active = bars.flatMap((b, i) => (b.value || b.compare ? [i] : []));
   const start = Math.min(businessHourIndex(from), active[0] ?? 24);
   const end = Math.max(businessHourIndex(23), active.at(-1) ?? 0);

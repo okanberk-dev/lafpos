@@ -102,7 +102,7 @@ export default function OverviewAdmin() {
   if (d && !d.dayOpen) attention.push({ key: 'gun', tone: 'neutral', title: 'Gün kapalı', detail: 'Satış için kasadan gün açılmalı' });
 
   // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış günün sonunda
-  const hours = d ? hourBars(d.hourly, d.hourlyLastWeek, 8) : [];
+  const hours = d ? hourBars(d, 8) : [];
   const lastBackup = backups.data?.files[0];
 
   const health: { key: string; icon: React.ReactNode; label: string; tone: Tone; state: string; detail: string }[] = s

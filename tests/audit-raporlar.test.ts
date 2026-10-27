@@ -1,17 +1,22 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { tlPlain } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
-import { currentBusinessDate } from '@shared/time';
+import { BUSINESS_HOURS, currentBusinessDate } from '@shared/time';
 import type { BootstrapDTO, OrderDTO, ZSummary } from '@shared/types';
 import { hourBars, periodRange } from '../src/lib/period';
 import { type Harness, PINS, startApp } from './harness';
 
 /**
  * Raporlar denetimi (26 Eki 2026), her bulgu bir testle: iptaller her adisyondan (açık, başka masaya taşınmış)
- * sayılır; adisyon sayısı ve satılan ürün her ekranda aynı tanımla; CSV'de formül ve satır bölme yok, ondalık
- * virgüllü; saatlik grafik iş günü sırasıyla (05:00'ten); "Bugün" açık iş günü; dönem en çok 400 gün ve gerçek
- * tarih; 32.766'dan çok adisyonlu dönem ve adisyon listesinin gerçek sayısı.
+ * sayılır; adisyon sayısı ve satılan ürün her ekranda (personel ve saatlik dahil) aynı tanımla; CSV'de formül ve
+ * satır bölme yok, ondalık virgüllü; saatlik grafik iş günü sırasıyla (05:00'ten), 24 saati aşan günün ertesi sabahı
+ * gecenin ardından; "Bugün" açık iş günü; dönem en çok 400 gün ve gerçek tarih; 32.766'dan çok adisyonlu dönem ve
+ * adisyon listesinin gerçek sayısı.
+ *
+ * İnceleme turu (27 Eki 2026) bulguları da burada: ₺0 adisyonun personel ve saatlik raporda sayılması, 05:00'i geçen
+ * günün saatlik grafiği, Raporlar › Aktarım'daki lafmaliyet satış listesi, Z ürün listesinin ilk 15 olması.
  *
  * Saat sahte (yalnız Date): geçen pazartesi bir gün, bu pazartesi açık kalan bir gün. Oturum 14 saat; her saat
  * sıçramasında yeniden giriş yapılır.
@@ -174,6 +179,32 @@ describe('raporlar denetimi', () => {
     expect(patron.compare.lastWeek.orders).toBe(1);
   });
 
+  it('personel ve saatlik raporun "adisyon"u da ₺0 adisyonu saymaz: ortalama ve saatlik CSV Adisyon kutusuyla aynı (reports-35, client-63)', async () => {
+    // Geçen pazartesi: kasa bir ödenmiş, bir tamamı ikram adisyon; bugün de ₺0 adisyon var
+    for (const q of ['from=2026-10-19&to=2026-10-19', 'from=2026-10-26&to=2026-10-26', 'from=2026-10-19&to=2026-10-26']) {
+      const summary = await h.ok<{ receipts: number; avgCheck: number }>('mudur', 'GET', `/reports/summary?${q}`);
+      const staff = await h.ok<{ staff: { name: string; orders: number; revenue: number; comps: number }[] }>('patron', 'GET', `/reports/staff?${q}`);
+      const hourly = await h.ok<{ hours: { orders: number }[]; parts: { orders: number }[]; busiest: { orders: number } | null }>('mudur', 'GET', `/reports/hourly?${q}`);
+      const saatlik = await csv(`type=saatlik&${q}`);
+      const col = saatlik[0]!.indexOf('Adisyon');
+      expect(summary.receipts, q).toBeGreaterThan(0);
+      expect(staff.staff.reduce((a, r) => a + r.orders, 0), `${q} personel adisyon`).toBe(summary.receipts);
+      expect(hourly.hours.reduce((a, r) => a + r.orders, 0), `${q} saatlik adisyon`).toBe(summary.receipts);
+      expect(hourly.parts.reduce((a, r) => a + r.orders, 0), `${q} gün dilimleri`).toBe(summary.receipts);
+      expect(saatlik.slice(1).reduce((a, r) => a + Number(r[col]), 0), `${q} saatlik CSV`).toBe(summary.receipts);
+    }
+    // Geçen pazartesi yalnız kasa sattı: personel ortalaması ciro ortalamasıyla aynı; ₺0 adisyonun ikramı yine yazılır
+    const q = 'from=2026-10-19&to=2026-10-19';
+    const summary = await h.ok<{ receipts: number; avgCheck: number }>('mudur', 'GET', `/reports/summary?${q}`);
+    const staff = await h.ok<{ staff: { name: string; orders: number; revenue: number; comps: number }[] }>('patron', 'GET', `/reports/staff?${q}`);
+    const kasa = staff.staff.find((r) => r.name === 'Kasa')!;
+    expect(kasa.orders).toBe(1);
+    expect(Math.round(kasa.revenue / kasa.orders)).toBe(summary.avgCheck);
+    expect(kasa.comps).toBe(1);
+    const hourly = await h.ok<{ busiest: { hour: number; orders: number } | null }>('mudur', 'GET', `/reports/hourly?${q}`);
+    expect(hourly.busiest).toMatchObject({ hour: 9, orders: 1 });
+  });
+
   it('CSV: hücre formül gibi başlamaz, CR ve LF satır bölmez, sayılar virgüllü ondalık (reports-32, input-69, reports-37)', async () => {
     await at('2026-10-26T12:00:00+03:00');
     // Garson kendi yeni kalemini onaysız iptal eder; neden serbest metin
@@ -208,7 +239,7 @@ describe('raporlar denetimi', () => {
     expect(patron.date).toBe('2026-10-26');
     expect(patron.hourly[1]).toBe(2 * product('Türk kahvesi').price);
 
-    const bars = hourBars(patron.hourly, patron.hourlyLastWeek);
+    const bars = hourBars(patron);
     const labels = bars.map((b) => b.label);
     expect(labels.indexOf('01')).toBeGreaterThan(labels.indexOf('10'));
     expect(labels.indexOf('01')).toBeGreaterThan(labels.indexOf('23'));
@@ -217,6 +248,54 @@ describe('raporlar denetimi', () => {
     expect(bars.reduce((a, b) => a + b.value, 0)).toBe(patron.hourly.reduce((a, v) => a + v, 0));
     // Ekranlar bu sırayı kullanır
     for (const f of ['src/pages/patron/PatronPage.tsx', 'src/pages/admin/OverviewAdmin.tsx']) expect(readFileSync(join(root, f), 'utf8'), f).toContain('hourBars(');
+  });
+
+  it('gün 05:00\'i geçince ertesi sabahın satışı grafikte gecenin ardından, sabahki saate karışmadan (client-64 varyantı, client-59 senaryosu)', async () => {
+    // Gün kapanmadı (masa açık kaldı): 27 Ekim 06:30 satışı hâlâ 26 Ekim iş gününe yazılır
+    await at('2026-10-27T06:30:00+03:00');
+    await sale([{ name: 'Türk kahvesi', qty: 3 }]);
+    await at('2026-10-27T06:45:00+03:00');
+    const price = product('Türk kahvesi').price;
+
+    const patron = await h.ok<{ date: string; netSales: number; hourly: number[]; hourlyLastWeek: number[]; hourlyNextDay: number[]; hourlyLastWeekNextDay: number[] }>('patron', 'GET', '/reports/patron');
+    expect(patron.date).toBe('2026-10-26');
+    expect(patron.hourly[1]).toBe(2 * price);
+    // 26 Ekim'in 06'sı (sabah, satış yok) ile 27 Ekim'in 06'sı ayrı: ikincisi iş gününün 25. saati
+    expect(patron.hourly[6]).toBe(0);
+    expect(patron.hourlyNextDay[1]).toBe(3 * price);
+    expect([...patron.hourly, ...patron.hourlyNextDay].reduce((a, v) => a + v, 0)).toBe(patron.netSales);
+
+    const bars = hourBars(patron);
+    const keys = bars.map((b) => b.key);
+    const late = bars.findIndex((b) => b.nextDay && b.label === '06');
+    expect(late, keys.join(',')).toBeGreaterThan(-1);
+    expect(bars[late]).toMatchObject({ value: 3 * price, title: '06:00 · ertesi gün' });
+    // Grafikte 01:30 ve 10:00 satışlarından sonra, en sonda
+    expect(late).toBeGreaterThan(bars.findIndex((b) => !b.nextDay && b.label === '01'));
+    expect(late).toBeGreaterThan(bars.findIndex((b) => !b.nextDay && b.label === '10'));
+    expect(late).toBe(bars.length - 1);
+    expect(bars.filter((b) => b.label === '06' && b.value > 0)).toHaveLength(1);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(bars.reduce((a, b) => a + b.value, 0)).toBe(patron.netSales);
+
+    // Tek günlük saatlik rapor ve CSV aynı sırayla: iş gününün saatleri, gün uzadıysa ertesi günün saatleri sonda
+    const rep = await h.ok<{ total: number; hours: { hour: number; offset: number; nextDay: boolean; revenue: number }[] }>('mudur', 'GET', '/reports/hourly?from=2026-10-26&to=2026-10-26');
+    expect(rep.hours.map((x) => x.offset)).toEqual(rep.hours.map((_, i) => i));
+    expect(rep.hours[0]).toMatchObject({ hour: 5, offset: 0, nextDay: false });
+    expect(rep.hours.at(-1)).toMatchObject({ hour: 6, offset: 25, nextDay: true, revenue: 3 * price });
+    expect(rep.hours.find((x) => x.offset === 1)).toMatchObject({ hour: 6, revenue: 0 });
+    expect(rep.hours.reduce((a, x) => a + x.revenue, 0)).toBe(rep.total);
+    const saatlik = await csv('type=saatlik&from=2026-10-26&to=2026-10-26');
+    expect(saatlik.slice(1).map((r) => r[0])).toEqual(rep.hours.map((x) => `${String(x.hour).padStart(2, '0')}:00${x.nextDay ? ' (ertesi gün)' : ''}`));
+    expect(saatlik.at(-1)).toEqual(['06:00 (ertesi gün)', '1', tlPlain(3 * price)]);
+
+    // Çok günlük dönemde saat günün saatidir (dağılım): 24 satır, 06:30 satışı 06'da
+    const week = await h.ok<{ total: number; hours: { hour: number; nextDay: boolean; revenue: number }[] }>('mudur', 'GET', '/reports/hourly?from=2026-10-19&to=2026-10-26');
+    expect(week.hours).toHaveLength(24);
+    expect(week.hours.map((x) => x.hour)).toEqual([...BUSINESS_HOURS]);
+    expect(week.hours.some((x) => x.nextDay)).toBe(false);
+    expect(week.hours.find((x) => x.hour === 6)!.revenue).toBe(3 * price);
+    expect(week.hours.reduce((a, x) => a + x.revenue, 0)).toBe(week.total);
   });
 
   it('"Bugün" açık iş günüdür: gün 05:00\'i geçince de raporlar patron paneliyle aynı günü gösterir (client-59)', async () => {

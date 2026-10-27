@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { BUSINESS_HOURS, fmtDateTime, isCalendarDate } from '@shared/time';
+import { fmtDateTime, isCalendarDate } from '@shared/time';
 import { type AppEnv, can, requirePermission } from '../lib/auth';
 import { type CsvValue, money, toCsv } from '../lib/csv';
 import { HttpError, query } from '../lib/http';
@@ -68,9 +68,9 @@ reportRoutes.get('/export.csv', (c) => {
     const rep = checksReport(r, null);
     rows = [['No', 'Durum', 'Tür', 'Yer', 'Açılış', 'Kapanış', 'Garson', 'Adet', 'Tutar', 'Ödeme'], ...rep.rows.map((o) => [o.no, o.status, o.type, o.place ?? '', fmtDateTime(o.openedAt), o.closedAt ? fmtDateTime(o.closedAt) : '', o.waiter ?? '', o.qty, money(o.total), o.methods.join(', ')])];
   } else if (type === 'saatlik') {
-    // İş günü sırasıyla: 05:00'ten başlar, gece yarısından sonraki saatler en sonda
+    // İş günü sırasıyla: 05:00'ten başlar, gece yarısından sonraki saatler, gün uzadıysa ertesi günün saatleri en sonda
     const rep = hourlyReport(r);
-    rows = [['Saat', 'Adisyon', 'Ciro'], ...BUSINESS_HOURS.map((hour) => [`${String(hour).padStart(2, '0')}:00`, rep.hours[hour]!.orders, money(rep.hours[hour]!.revenue)])];
+    rows = [['Saat', 'Adisyon', 'Ciro'], ...rep.hours.map((h) => [`${String(h.hour).padStart(2, '0')}:00${h.nextDay ? ' (ertesi gün)' : ''}`, h.orders, money(h.revenue)])];
   } else {
     const rep = itemListReport(r, type);
     rows = [['Zaman', 'Adisyon', 'Yer', 'Ürün', 'Adet', 'Tutar', 'Neden', 'Yapan', 'Onaylayan'], ...rep.rows.map((x) => [fmtDateTime(x.at), x.orderNo, x.place, x.name, x.qty, money(x.value), x.reason ?? '', x.by ?? '', x.approvedBy ?? ''])];
