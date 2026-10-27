@@ -5,8 +5,8 @@ import { type Harness, startApp } from './harness';
 
 /**
  * Senkron denetiminin bulguları (27 Eki 2026), her biri bir testle: online siparişlerin sürüm sinyali, bozuk
- * yanıt ve masa eşlemesi; menü eşitlemesinde Tükendi, porsiyon sayacı ve POS sırası. Site sahte: `fetch`
- * sitenin adresinde bu dosyanın yönlendiricisine düşer.
+ * yanıt ve masa eşlemesi; menü eşitlemesinde Tükendi, porsiyon sayacı ve POS sırası; lafmaliyet satış listesinde
+ * boylar, servis ücreti ve beklenen nakit. Site sahte: `fetch` sitenin adresinde bu dosyanın yönlendiricisine düşer.
  */
 const SITE = 'https://laffogato.test';
 const KEY = 's'.repeat(40);
@@ -289,5 +289,85 @@ describe('menü senkronu', () => {
     await h.ok('mudur', 'PATCH', `/admin/products/${latte.id}`, { sort: -5 });
     await applyMenu();
     expect((await product('mnu-0007')).sort).toBe(-5);
+  });
+});
+
+// ─── lafmaliyet ─────────────────────────────────────────────────────────────
+
+type DayPayload = {
+  z: Record<string, number | null>;
+  lines: { posName: string; siteMenuId: string | null; slot: string | null; qty: number; revenue: number; isService: boolean }[];
+  ikram: { posName: string; slot: string | null }[];
+};
+const nakit = () => h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+async function paidSale(items: { productId: string; size?: 'M' | 'L'; qty?: number }[], extra: Record<string, unknown> = { type: 'tezgah' }) {
+  const o = await h.ok<{ id: string }>('kasa', 'POST', '/orders', extra);
+  const withItems = await h.ok<{ id: string; total: number; totals: { service: number }; items: { id: string; posName?: string }[] }>('kasa', 'POST', `/orders/${o.id}/items`, {
+    items: items.map((i) => ({ qty: 1, ...i })),
+  });
+  await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: nakit().id, amount: withItems.total });
+  return withItems;
+}
+const todayPayload = async () => {
+  const { day } = await h.ok<{ day: { id: string } }>('mudur', 'GET', '/cash/day');
+  return h.ok<DayPayload>('mudur', 'GET', `/sync/lafmaliyet/gun/${day.id}`);
+};
+const kurus = (tl: number) => Math.round(tl * 100);
+
+describe('lafmaliyet satış listesi', () => {
+  it('lafmaliyet adı verilmiş iki boylu ürünün M ve L satışları ayrı satırda, kendi boyuyla gider', async () => {
+    const latte = await product('mnu-0007');
+    const espresso = await product('mnu-0005');
+    // Yönetim'deki örnek gibi boyuyla yazılmış ad ve boysuz ad
+    await h.ok('mudur', 'PATCH', `/admin/products/${latte.id}`, { posName: 'LATTE MEDIUM' });
+    await h.ok('mudur', 'PATCH', `/admin/products/${espresso.id}`, { posName: 'ESPRESSO' });
+    await paidSale([{ productId: latte.id, size: 'L' }, { productId: latte.id, size: 'M', qty: 2 }, { productId: espresso.id, size: 'L' }, { productId: espresso.id, size: 'M' }]);
+    // Düzeltmeden önce satılmış kalem boy eki olmadan saklandı: rapor yine boyuna göre ayırır
+    const old = await paidSale([{ productId: latte.id, size: 'L' }]);
+    const { db: d, schema, eq } = await db();
+    d.update(schema.orderItems).set({ posName: 'LATTE' }).where(eq(schema.orderItems.id, old.items[0]!.id)).run();
+
+    const { lines } = await todayPayload();
+    const of = (id: string) => lines.filter((l) => l.siteMenuId === id).map((l) => ({ posName: l.posName, slot: l.slot, qty: l.qty }));
+    expect(of('mnu-0007')).toEqual(expect.arrayContaining([{ posName: 'LATTE LARGE', slot: 'L', qty: 2 }, { posName: 'LATTE MEDIUM', slot: 'M', qty: 2 }]));
+    expect(of('mnu-0007')).toHaveLength(2);
+    expect(of('mnu-0005')).toEqual(expect.arrayContaining([{ posName: 'ESPRESSO LARGE', slot: 'L', qty: 1 }, { posName: 'ESPRESSO MEDIUM', slot: 'M', qty: 1 }]));
+    expect(new Set(lines.map((l) => l.posName)).size).toBe(lines.length);
+    const csv = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv');
+    expect(csv.json).toContain('LATTE LARGE;2;');
+    expect(csv.json).toContain('LATTE MEDIUM;2;');
+  });
+
+  it('servis ücreti ayrı hizmet satırı olarak gider: satırların toplamı Z toplamına eşit', async () => {
+    await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 10 });
+    try {
+      const table = h.boot.tables.find((t) => t.name === 'S5')!;
+      const latte = await product('mnu-0007');
+      const order = await paidSale([{ productId: latte.id, size: 'M', qty: 3 }], { type: 'masa', tableId: table.id, guests: 2 });
+      expect(order.totals.service).toBeGreaterThan(0);
+      const { z, lines } = await todayPayload();
+      const service = lines.find((l) => l.posName === 'SERVİS ÜCRETİ');
+      expect(service).toMatchObject({ siteMenuId: null, slot: null, isService: true, qty: 1, revenue: order.totals.service / 100 });
+      expect(lines.reduce((a, l) => a + kurus(l.revenue), 0)).toBe(kurus(z.zTotal!));
+      const csv = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv');
+      expect(csv.json).toContain('SERVİS ÜCRETİ;1;');
+    } finally {
+      await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 0 });
+    }
+  });
+
+  it('Z\'de nakit sayılan ödeme türü Nakit türünde olmalı: beklenen nakit lafmaliyet\'te de aynı hesaplanır', async () => {
+    const bad = await h.call<{ code: string }>('patron', 'POST', '/admin/payment-methods', { name: 'Döviz', kind: 'diger', zField: 'cash' });
+    expect(bad.status).toBe(400);
+    expect(bad.json.code).toBe('cash_kind');
+    const doviz = await h.ok<{ id: string }>('patron', 'POST', '/admin/payment-methods', { name: 'Döviz', kind: 'diger', zField: 'other' });
+    expect((await h.call('patron', 'PATCH', `/admin/payment-methods/${doviz.id}`, { zField: 'cash' })).status).toBe(400);
+    expect((await h.call('patron', 'PATCH', `/admin/payment-methods/${nakit().id}`, { kind: 'diger' })).status).toBe(400);
+    await h.ok('patron', 'PATCH', `/admin/payment-methods/${nakit().id}`, { name: 'Nakit' });
+
+    // Günün paketi: lafmaliyet'in formülü (açılış + nakit + giren − harcama − teslim) LafPOS'un beklenen nakdini verir
+    await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 5000, description: 'Buz' });
+    const { z } = await todayPayload();
+    expect(kurus(z.openingCash! + z.cash! + z.cashIn! - z.cashOut! - z.handedOver!)).toBe(kurus(z.expectedCash!));
   });
 });

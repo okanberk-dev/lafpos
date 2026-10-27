@@ -543,10 +543,21 @@ adminRoutes.get('/payment-methods', (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   return c.json(db.select().from(schema.paymentMethods).orderBy(asc(schema.paymentMethods.sort)).all());
 });
+/**
+ * Z'de nakit sayılan ödeme türü Nakit türünde olmalı: çekmecenin beklenen nakdi Nakit türünden, Z'nin nakdi
+ * `zField = cash`'ten hesaplanır; ikisi ayrışınca lafmaliyet'in beklenen nakdi LafPOS'unkini tutmaz
+ * (`cash_in` eksiye düşer). docs/03-ENTEGRASYON.md §3.2
+ */
+function assertCashKind(m: { kind: string; zField: string }) {
+  if (m.zField === 'cash' && m.kind !== 'nakit') {
+    throw bad('Z\'de nakit sayılan ödeme türünün türü Nakit olmalı. Döviz gibi çekmeceye ayrı giren ödemeyi "Diğer" alanına yazın', 'cash_kind');
+  }
+}
 adminRoutes.post('/payment-methods', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, methodShape);
+  assertCashKind(input);
   const id = ulid();
   db.insert(schema.paymentMethods).values({ id, ...input, channel: input.channel ?? null }).run();
   changed('settings', 'method.created', user.id);
@@ -556,7 +567,10 @@ adminRoutes.patch('/payment-methods/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, patchOf(methodShape));
-  db.update(schema.paymentMethods).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.paymentMethods.id, c.req.param('id'))).run();
+  const cur = db.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, c.req.param('id'))).get();
+  if (!cur) throw notFound('Ödeme türü');
+  assertCashKind({ kind: input.kind ?? cur.kind, zField: input.zField ?? cur.zField });
+  db.update(schema.paymentMethods).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.paymentMethods.id, cur.id)).run();
   changed('settings', 'method.updated', user.id);
   return c.json({ ok: true });
 });

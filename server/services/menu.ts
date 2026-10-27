@@ -150,9 +150,28 @@ export function happyHourPercent(t: Tx | DB, product: Product, nowMs = Date.now(
 
 const upperTR = (s: string) => s.toLocaleUpperCase('tr-TR');
 
-/** lafmaliyet satış listesindeki ad: ürünün posName'i, yoksa "AD BOYEKİ" */
+/**
+ * İki boylu ürünün (M, L) satış adı boy ekiyle biter: lafmaliyet her boyu ayrı satırda, kendi boyuyla alır ve
+ * bir günde aynı adı iki kez kabul etmez. Ad bir boy ekiyle bitiyorsa ("LATTE MEDIUM") o ek satılan boyunkiyle
+ * değişir, bitmiyorsa ("LATTE") eklenir. Tek boyda ad olduğu gibi kalır. Zaten doğru ekli ad değişmez.
+ */
+export function sizedPosName(name: string, size: Size): string {
+  const base = name.trim();
+  if (size !== 'M' && size !== 'L') return base;
+  const suffixes = getSettings().posSizeSuffix;
+  let stem = base;
+  for (const sfx of [suffixes.M, suffixes.L].map((x) => x.trim()).filter(Boolean)) {
+    if (upperTR(stem).endsWith(` ${upperTR(sfx)}`)) {
+      stem = stem.slice(0, stem.length - sfx.length - 1).trimEnd();
+      break;
+    }
+  }
+  return [stem, suffixes[size].trim()].filter(Boolean).join(' ');
+}
+
+/** lafmaliyet satış listesindeki ad: ürünün posName'i (iki boylu üründe boy ekiyle), yoksa "AD BOYEKİ" */
 export function posNameFor(product: Pick<Product, 'name' | 'posName'>, size: Size): string {
-  if (product.posName?.trim()) return product.posName.trim();
+  if (product.posName?.trim()) return sizedPosName(product.posName, size);
   const suffix = getSettings().posSizeSuffix[size] ?? '';
   return [upperTR(product.name.trim()), suffix].filter(Boolean).join(' ');
 }

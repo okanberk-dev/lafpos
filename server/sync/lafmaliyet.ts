@@ -7,6 +7,7 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { computeSummary, lafmaliyetZ } from '../services/days';
+import { sizedPosName } from '../services/menu';
 
 /**
  * LafPOS → lafmaliyet. Bugün: Satışlar ekranına yüklenen "Ürün;Adet;Tutar" listesi ve Kasa raporu alanları.
@@ -26,6 +27,20 @@ export interface SaleLine {
 
 /** Seçenek eklerinin lafmaliyet'teki ürün adları (ModPOS'taki adlarla aynı) */
 const ADDON_NAMES: Record<string, string> = { extraShot: 'EXTRA SHOT', syrup: 'SYRUP', milk: 'ALTERNATIF SÜT' };
+/** Masa servis ücreti: ürün değil, lafmaliyet'te HİZMET satırı (satırların toplamı Z toplamını tutsun) */
+export const SERVICE_POS_NAME = 'SERVİS ÜCRETİ';
+
+type ItemRow = typeof schema.orderItems.$inferSelect;
+
+/** Kalemin lafmaliyet adı ve boyu. Ad satışta dondurulur; düzeltmeden önce boy eki olmadan saklanmış iki boylu
+ * kalemin adına da boy eki eklenir (M ve L ayrı satırda kalsın). */
+export function saleName(i: Pick<ItemRow, 'posName' | 'name' | 'size' | 'extProductId'>): Pick<SaleLine, 'posName' | 'siteMenuId' | 'slot'> {
+  return {
+    posName: sizedPosName(i.posName ?? i.name.toLocaleUpperCase('tr-TR'), i.size),
+    siteMenuId: i.extProductId,
+    slot: i.extProductId ? (i.size === 'L' ? 'L' : 'M') : null,
+  };
+}
 
 function addonSiteIds(): Record<string, string | null> {
   const extras = db
@@ -38,7 +53,8 @@ function addonSiteIds(): Record<string, string | null> {
   return { extraShot: find(/shot/), syrup: find(/şurup|syrup/), milk: find(/süt/) };
 }
 
-/** Kapanmış POS adisyonlarından ürün satış satırları (iptal, ikram ve online siparişler hariç) */
+/** Kapanmış POS adisyonlarından ürün satış satırları (iptal, ikram ve online siparişler hariç); servis ücreti
+ * varsa ayrı hizmet satırı. Satırların toplamı adisyonların toplamına (Z toplamına) eşittir. */
 export function salesLines(dayIds: string[]): SaleLine[] {
   if (!dayIds.length) return [];
   const orders = db
@@ -57,9 +73,15 @@ export function salesLines(dayIds: string[]): SaleLine[] {
       cur.revenue += l.revenue;
     } else lines.set(l.posName, { ...l });
   };
+  let service = 0;
+  let serviceOrders = 0;
   for (const o of orders) {
     const its = items.filter((i) => i.orderId === o.id);
     const totals = o.totals ?? calcOrder({ lines: [] });
+    if (totals.service > 0) {
+      service += totals.service;
+      serviceOrders += 1;
+    }
     for (const i of its) {
       if (i.voided || i.complimentary) continue;
       const net = totals.lineNet[i.id] ?? 0;
@@ -68,9 +90,7 @@ export function salesLines(dayIds: string[]): SaleLine[] {
       const weights = [i.unitPrice - addons.reduce((a, op) => a + op.price * op.qty, 0), ...addons.map((op) => op.price * op.qty)];
       const shares = allocate(net, weights);
       add({
-        posName: i.posName ?? i.name.toLocaleUpperCase('tr-TR'),
-        siteMenuId: i.extProductId,
-        slot: i.extProductId ? (i.size === 'L' ? 'L' : 'M') : null,
+        ...saleName(i),
         qty: i.qty,
         revenue: shares[0] ?? net,
         isService: i.isService,
@@ -80,6 +100,7 @@ export function salesLines(dayIds: string[]): SaleLine[] {
       });
     }
   }
+  if (service > 0) add({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: serviceOrders, revenue: service, isService: true });
   return [...lines.values()].sort((a, b) => b.revenue - a.revenue);
 }
 
@@ -140,9 +161,7 @@ export function buildDayPayload(dayId: string) {
     },
     lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), isService: l.isService })),
     ikram: comps.map((i) => ({
-      posName: i.posName ?? i.name.toLocaleUpperCase('tr-TR'),
-      siteMenuId: i.extProductId,
-      slot: i.extProductId ? (i.size === 'L' ? 'L' : 'M') : null,
+      ...saleName(i),
       qty: i.qty,
       menuValue: toTL(i.qty * i.unitPrice),
       reason: i.compReason ?? '',

@@ -116,11 +116,15 @@ KARAOKE ODASI;3;3.000,00
 - lafmaliyet'in ayrıştırıcısı (`src/lib/calc/pos-paste.ts`) başlıktaki "Ürün / Adet / Tutar"ı tanır,
   noktalı virgülü ve Türkçe ondalığı okur. Tutar KDV dahil.
 - **POS adı:** ürünün `posName` alanı doluysa o; yoksa `BÜYÜK HARF ad + boy eki` (M → `MEDIUM`,
-  L → `LARGE`, tek boy ek yok). Ekler ayarlardan değişir. lafmaliyet I/İ ve büyük/küçük harf farkını yok
-  saydığı için ModPOS'tan öğrenilmiş `pos_mappings` kayıtları çalışmaya devam eder; tutmayan ad bir kez
-  eşlenir.
+  L → `LARGE`, tek boy ek yok). Ekler ayarlardan değişir. İki boylu üründe `posName` de boy ekiyle biter: ad bir
+  boy ekiyle bitiyorsa satılan boyun ekiyle değişir, bitmiyorsa eklenir (`LATTE` ya da `LATTE MEDIUM` →
+  `LATTE MEDIUM` / `LATTE LARGE`); M ve L hiçbir zaman tek satırda birleşmez. lafmaliyet I/İ ve büyük/küçük
+  harf farkını yok saydığı için ModPOS'tan öğrenilmiş `pos_mappings` kayıtları çalışmaya devam eder; tutmayan ad
+  bir kez eşlenir.
 - İkram ve iptal satırları listeye girmez (ciro değil); online ödenmiş siparişler girmez.
 - Karaoke gibi `isService` ürünler aynı listede çıkar; lafmaliyet bunları HİZMET olarak eşler.
+- Masa servis ücreti `SERVİS ÜCRETİ` adıyla ayrı hizmet satırıdır (adet: servis ücretli adisyon sayısı).
+  Satırların toplamı günün Z toplamına (`z_total`) eşittir.
 
 ### 3.2 Z özeti (Kasa raporu formuna)
 
@@ -132,7 +136,7 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 | `z_no` | `business_days.zNo` |
 | `receipts` | kapanan adisyon sayısı (online hariç) |
 | `z_total` | ödemelerin toplamı (cari tahsilat ve bahşiş hariç) |
-| `cash` | `zField = cash` ödeme türleri |
+| `cash` | `zField = cash` ödeme türleri (türü Nakit olmalı: beklenen nakit de Nakit türünden hesaplanır, Yönetim başka türe izin vermez) |
 | `card` | `zField = card` |
 | `meal_card` | `zField = meal_card` (Pluxee, Multinet, Edenred, Setcard, Metropol) |
 | `online` | `zField = online` (yemek platformları) |
