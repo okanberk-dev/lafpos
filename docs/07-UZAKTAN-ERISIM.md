@@ -59,6 +59,7 @@ Maliyet ve kâr, PIN'ler, müşteri telefonları gitmez.
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
 | Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter); parolayı açmak için `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
 | Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
+| Vercel › lafpos › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_REMOTE_ID`; aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 
 **İlk etapta parolasız** (27 Ekim 2026 kararı): `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` yokken kafe bağlıyken de giriş parola
 sormaz; bağlantıyı bilen herkes gerçek ciroyu ve personel adlarını salt okunur görür. Gerçek kullanıma geçmeden

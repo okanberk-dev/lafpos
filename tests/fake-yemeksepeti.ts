@@ -12,6 +12,8 @@ export interface FakeYemeksepeti {
   close: () => Promise<void>;
   inbox: InboxItem[];
   acked: string[];
+  /** Silme isteği gelince, yanıttan önce (kasanın kaydı o an yazılmış mı) */
+  beforeAck?: (ids: string[]) => void;
   /** "POST /v2/login", "POST /cb/accepted/tok-1" gibi */
   calls: string[];
   bodies: Record<string, unknown[]>;
@@ -51,6 +53,7 @@ export async function startFakeYemeksepeti(creds: { username: string; password: 
       f.calls.push('POST ack');
       if (!req.headers['x-laf-signature']) return send(401, { error: 'imza' });
       const ids = (JSON.parse(raw) as { ids: string[] }).ids;
+      f.beforeAck?.(ids);
       f.acked.push(...ids);
       f.inbox = f.inbox.filter((i) => !ids.includes(i.id));
       return send(200, { ok: true, removed: ids.length });

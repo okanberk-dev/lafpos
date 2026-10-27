@@ -1,6 +1,6 @@
 import { PLATFORM_LABEL, type PlatformCourier, type PlatformOrderPayload } from '@shared/platforms';
 import { signedFetch } from '../lib/signature';
-import type { PlatformAdapter, PlatformNotify } from './adapter';
+import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
 
 /**
  * Yemeksepeti (Delivery Hero POS middleware) bağdaştırıcısı. Platform siparişi kasaya değil herkese açık bir adrese
@@ -221,21 +221,19 @@ export const DH_REJECT_OTHER = 'TOO_BUSY';
 
 // ─── Middleware istemcisi ───────────────────────────────────────────────────
 
-export class YemeksepetiHttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export class YemeksepetiHttpError extends PlatformHttpError {}
 
 async function request(url: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<{ status: number; json: unknown }> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), init.timeoutMs ?? 8000);
+  const timeoutMs = init.timeoutMs ?? 8000;
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { ...init, signal: ctrl.signal });
-    const raw = await res.text();
+    const res = await fetch(url, { ...init, signal: ctrl.signal }).catch((e) => {
+      throw networkError(e, timeoutMs);
+    });
+    const raw = await res.text().catch((e) => {
+      throw networkError(e, timeoutMs);
+    });
     let json: unknown = null;
     try {
       json = raw ? JSON.parse(raw) : null;
@@ -297,7 +295,9 @@ export class YemeksepetiClient {
 
 /** Gelen kutusunu çeker (imzalı; en çok 50 kayıt) */
 export async function fetchInbox(c: YemeksepetiConfig): Promise<InboxItem[]> {
-  const { status, json } = await signedFetch(c.cloudSecret, 'GET', new URL(`${c.cloudUrl}/api/yemeksepeti/inbox`));
+  const { status, json } = await signedFetch(c.cloudSecret, 'GET', new URL(`${c.cloudUrl}/api/yemeksepeti/inbox`)).catch((e) => {
+    throw networkError(e, 8000);
+  });
   if (status !== 200) throw new YemeksepetiHttpError(status, `aktarıcı gelen kutusu alınamadı (${explain(status, json)})`);
   const body = json as { items?: unknown } | null;
   if (!body || !Array.isArray(body.items)) throw new YemeksepetiHttpError(502, 'aktarıcı gelen kutusu beklenen biçimde gelmedi');
@@ -311,7 +311,7 @@ export async function ackInbox(c: YemeksepetiConfig, ids: string[]): Promise<voi
   if (status !== 200) throw new YemeksepetiHttpError(status, 'aktarıcı gelen kutusu temizlenemedi');
 }
 
-type Data = { token?: string; callbackUrls?: { orderAcceptedUrl?: string; orderRejectedUrl?: string; orderPickedUpUrl?: string; orderPreparedUrl?: string }; expeditionType?: string };
+type Data = { token?: string; callbackUrls?: { orderAcceptedUrl?: string; orderRejectedUrl?: string; orderPickedUpUrl?: string; orderPreparedUrl?: string }; expeditionType?: string; test?: boolean };
 const dataOf = (o: PlatformOrderPayload): Data => (o.platformData ?? {}) as Data;
 
 /** Kabulde bildirilen süre: hazırlık + (kendi kuryemizde yol); en az 2 dakika sonra olmalı */
@@ -329,17 +329,23 @@ export function yemeksepetiAdapter(c: YemeksepetiConfig, client = new Yemeksepet
       const items = await fetchInbox(c);
       const orders: PlatformOrderPayload[] = [];
       const cancelled: string[] = [];
+      const invalid: { externalId: string; error: string }[] = [];
       const done: string[] = [];
       for (const item of items) {
         done.push(item.id);
         if (item.remoteId && c.remoteId && item.remoteId !== c.remoteId) continue;
         if (item.kind === 'order') {
-          if (item.order && typeof item.order.token === 'string') orders.push(fromDhOrder(item.order, item.remoteId, now));
+          // Bozuk sipariş ötekileri durdurmaz: atlanır, kimliğiyle bildirilir
+          try {
+            if (!item.order || typeof item.order.token !== 'string') throw new Error('sipariş belirteci yok');
+            orders.push(fromDhOrder(item.order, item.remoteId, now));
+          } catch (e) {
+            invalid.push({ externalId: item.order && typeof item.order.token === 'string' ? item.order.token : item.id, error: e instanceof Error ? e.message : String(e) });
+          }
         } else if (item.status === 'ORDER_CANCELLED') cancelled.push(item.remoteOrderId);
       }
-      // Kayıtlar yerelde işlendikten sonra silinir; silme başarısızsa yeniden gelir, sipariş tekilleştirilir
-      await ackInbox(c, done).catch(() => undefined);
-      return { orders, cancelled };
+      // Kayıtlar kasada işlendikten sonra silinir (commit); silme başarısızsa yeniden gelir, sipariş tekilleştirilir
+      return { orders, cancelled, invalid, commit: () => ackInbox(c, done) };
     },
     async accept(order, prepMinutes) {
       const d = dataOf(order);
@@ -349,7 +355,10 @@ export function yemeksepetiAdapter(c: YemeksepetiConfig, client = new Yemeksepet
     async reject(order, reason) {
       const d = dataOf(order);
       const token = d.token ?? order.externalId;
-      await client.post(d.callbackUrls?.orderRejectedUrl || client.statusUrl(token), { status: 'order_rejected', reason: DH_REJECT_REASONS[reason] ?? DH_REJECT_OTHER, message: reason });
+      // Test siparişi belgenin istediği kodla reddedilir; kabulden sonraki ret (kasada iptal) platform kabul etmezse kalıcı
+      // hata olur ve patrona "platform uygulamasından iptal edin" alarmı düşer (server/delivery/live.ts)
+      const code = d.test ? 'TEST_ORDER' : (DH_REJECT_REASONS[reason] ?? DH_REJECT_OTHER);
+      await client.post(d.callbackUrls?.orderRejectedUrl || client.statusUrl(token), { status: 'order_rejected', reason: code, message: reason });
     },
     async notify(order, status: PlatformNotify, courier) {
       const d = dataOf(order);
@@ -360,8 +369,9 @@ export function yemeksepetiAdapter(c: YemeksepetiConfig, client = new Yemeksepet
         await client.post(d.callbackUrls.orderPreparedUrl, {});
         return true;
       }
-      // Kendi kuryemiz ve gel-al: "alındı" (yolda ya da teslim) bir kez; hazır platforma gitmez
-      if (status === 'hazir') return false;
+      // Kendi kuryemiz ve gel-al: "alındı" bir kez, yolda adımında (teslime doğrudan geçilse de aşama turu yoldan
+      // geçer); hazır ve teslim platforma gitmez
+      if (status !== 'yolda') return false;
       await client.post(d.callbackUrls?.orderPickedUpUrl || client.statusUrl(token), { status: 'order_picked_up' });
       return true;
     },

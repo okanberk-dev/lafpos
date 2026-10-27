@@ -6,8 +6,8 @@ import { yemeksepetiAdapter } from './yemeksepeti';
 
 /**
  * Gerçek bağdaştırıcılar: anahtarları `.env`'den (server/env-config.ts) okur. Anahtarı olmayan platformun canlı
- * modu seçilemez; tarayıcı demosunda ortam boştur, hiçbiri yapılandırılmış değildir. Yemeksepeti ve Getir (siparişi
- * iten platformlar) LafPOS Uzaktan aktarıcısıyla sonraki iş (docs/PAKET-PLATFORMLARI.md).
+ * modu seçilemez; tarayıcı demosunda ortam boştur, hiçbiri yapılandırılmış değildir. Yemeksepeti siparişi iter:
+ * LafPOS Uzaktan aktarır, kasa oradan çeker. Getir sonraki iş (docs/PAKET-PLATFORMLARI.md).
  */
 const adapters: Partial<Record<PlatformId, PlatformAdapter>> = {
   trendyol: trendyolAdapter(env.trendyol),

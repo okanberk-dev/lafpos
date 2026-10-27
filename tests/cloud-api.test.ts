@@ -112,7 +112,8 @@ describe('LafPOS Uzaktan', () => {
       delete process.env.LAFPOS_CLOUD_SECRET;
       delete process.env.KV_REST_API_URL;
       const body = await read();
-      expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null, demo: true, open: false });
+      // Yemeksepeti aktarıcısının anahtarı tanımlı mı (var/yok; değeri asla)
+      expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null, demo: true, open: false, yemeksepeti: false });
       expect(JSON.stringify(body)).not.toContain(PASSWORD);
       // Kafe bağlanmamışken anahtarsız yalnız demo açılır
       expect(await (await GET(req('health'))).json()).toMatchObject({ ok: true, demo: true });

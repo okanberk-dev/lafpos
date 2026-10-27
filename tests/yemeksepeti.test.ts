@@ -191,6 +191,48 @@ describe('canlı bağlantı', () => {
     expect(fake.inbox).toHaveLength(0);
   });
 
+  it('gelen kutusu kayıt kasada yazıldıktan sonra silinir; bozuk sipariş ötekileri durdurmaz, bir kez denetim kaydına düşer', async () => {
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const good = dhOrder();
+    const bad = dhOrder({ products: 5 as unknown as DhOrder['products'] });
+    fake.inbox.push(inboxOrder(bad), inboxOrder(good));
+    let atAck: unknown = null;
+    fake.beforeAck = () => {
+      atAck = db.select({ id: schema.platformOrders.id }).from(schema.platformOrders).where(eq(schema.platformOrders.externalId, good.token)).get() ?? null;
+    };
+    const r = await live.pollPlatform('yemeksepeti');
+    fake.beforeAck = undefined;
+    expect(r?.created).toBe(1);
+    expect(atAck).not.toBeNull();
+    expect(fake.acked).toEqual(expect.arrayContaining([`in-${bad.token}`, `in-${good.token}`]));
+    const audit = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=50');
+    expect(audit.filter((a) => a.action === 'platform.package_invalid' && a.message.includes(bad.token))).toHaveLength(1);
+    await h.ok('kasa', 'POST', `/platforms/orders/${(await byExt(good.token)).id}/reject`, { reason: 'Çok yoğunuz' });
+  });
+
+  it('kasada iptal edilen kabul edilmiş sipariş Yemeksepeti\'ne order_rejected gider; platform reddederse yeniden denenmez, alarm', async () => {
+    const o = dhOrder();
+    fake.inbox.push(inboxOrder(o));
+    await live.pollPlatform('yemeksepeti');
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${(await byExt(o.token)).id}/accept`, {});
+    await h.ok('patron', 'POST', `/orders/${orderId}/cancel`, { reason: 'Müşteri vazgeçti' });
+    fake.statusFor.rejected = [409];
+    await live.reconcileNotifications();
+    await live.reconcileNotifications();
+    expect(fake.calls.filter((c) => c === `POST /cb/rejected/${o.token}`)).toHaveLength(1);
+    const audit = await h.ok<{ action: string; severity: string; orderId: string | null }[]>('patron', 'GET', '/admin/audit?limit=50');
+    expect(audit.find((a) => a.action === 'platform.cancel_unsynced' && a.orderId === orderId)?.severity).toBe('alarm');
+  });
+
+  it('test siparişi TEST_ORDER koduyla reddedilir', async () => {
+    const o = dhOrder({ test: true });
+    fake.inbox.push(inboxOrder(o));
+    await live.pollPlatform('yemeksepeti');
+    await h.ok('kasa', 'POST', `/platforms/orders/${(await byExt(o.token)).id}/reject`, { reason: 'Çok yoğunuz' });
+    expect(fake.bodies.rejected?.at(-1)).toMatchObject({ status: 'order_rejected', reason: 'TEST_ORDER' });
+  });
+
   it('aktarıcı erişilemezse yoklama hatası kaydedilir; anahtar eksikse canlı seçilemez', async () => {
     fake.statusFor.inbox = [503];
     await expect(live.pollPlatform('yemeksepeti')).rejects.toThrow(/gelen kutusu/);

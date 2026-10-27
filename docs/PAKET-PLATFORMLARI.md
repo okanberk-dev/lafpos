@@ -66,8 +66,30 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     bağlanmayan ada göre eşlenir, kasada yoksa kabulde "Platform ürünü" satırı olur. Bağlanan ürün sonradan menüden
     gizlense de o ürün olarak açılır (ada göre eşlemede yalnız menüdeki ürünler). Uçlar `GET /api/platforms/products`,
     `PUT /api/platforms/products/:id { productId }` (menü ya da bağlantı yetkisi).
-  - **Sonraki:** Yemeksepeti ve Getir siparişi push ile gönderir; kasa kafe ağında olduğu için LafPOS Uzaktan (Vercel)
-    aktarıcı olur, kasa oradan çeker.
+  - **Yemeksepeti** (Delivery Hero POS middleware; `server/delivery/yemeksepeti.ts`, aktarıcı `api/uzaktan.ts`):
+    platform siparişi kasaya değil herkese açık bir adrese iter. LafPOS Uzaktan (Vercel) aktarıcıdır: Delivery Hero'nun
+    JWT'sini (`service: middleware`, HS512/HS256) `YEMEKSEPETI_PLUGIN_SECRET` ile doğrular, siparişi Upstash Redis'teki
+    gelen kutusuna koyar ve hemen `remoteOrderId` (sipariş belirteci) ile yanıtlar. Delivery Hero'ya verilecek adresler:
+    sipariş `POST https://lafpos.vercel.app/api/yemeksepeti/order/{remoteId}`, durum bildirimi
+    `PUT https://lafpos.vercel.app/api/yemeksepeti/remoteId/{remoteId}/remoteOrder/{remoteOrderId}/posOrderStatus`
+    (iptal `ORDER_CANCELLED` gelen kutusundan kasaya gelir, adisyonu iptal eder). Kasa gelen kutusunu kafe anahtarıyla
+    (`LAFPOS_CLOUD_SECRET`) imzalı olarak 20 saniyede bir çeker; kayıtlar kasada yazıldıktan sonra silinir (kasa düşerse
+    yeniden gelir, tekilleştirilir). Gelen kutusu en çok 200 kayıt ve 2 gün tutar.
+    Kabul ve ret kasadan middleware'e gider (`POST /v2/login` jetonuyla, 401'de bir kez yeniden giriş; siparişin
+    `callbackUrls` adresleri varsa onlara): kabulde `order_accepted` + `acceptanceTime` (hazırlık süresi, kendi
+    kuryemizde +20 dk yol) + `remoteOrderId`, retde `order_rejected` + neden kodu (`ITEM_UNAVAILABLE`, `TOO_BUSY`,
+    `CLOSED`, `OUTSIDE_DELIVERY_AREA`; test siparişinde `TEST_ORDER`). Kabul süresi platformun `expiryDate`'i.
+    Aşamalar: Yemeksepeti kuryesinde yalnız hazır → `preparation-completed` (adres verildiyse); kendi kuryemizde ve
+    gel-alda yolda → `order_picked_up` bir kez. Kasada iptal edilen kabul edilmiş sipariş `order_rejected` olarak
+    gider; Delivery Hero kabulden sonra reddi almazsa alarm düşer, sipariş platform uygulamasından iptal edilir.
+    Kurye: `expeditionType: pickup` gel-al; `riderPickupTime` doluysa Yemeksepeti kuryesi, boşsa kendi kuryemiz
+    (adres ve telefon yalnız o zaman kasaya gelir; teslimat ücreti adisyonda ayrı satır). İndirimlerin restoran payı
+    `VENDOR` sponsorluğu.
+    Kafede `.env`: `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`, `YEMEKSEPETI_PASSWORD`, `YEMEKSEPETI_REMOTE_ID` ve
+    LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
+    Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_REMOTE_ID` (başka restoranın siparişi 400). Kurulum
+    durumu `GET /api/uzaktan/kurulum`'da `yemeksepeti: true|false` (değer asla).
+  - **Sonraki:** Getir siparişi push ile gönderir; Yemeksepeti'deki gibi LafPOS Uzaktan aktarıcı olur.
 
 ## Uçlar
 `GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·

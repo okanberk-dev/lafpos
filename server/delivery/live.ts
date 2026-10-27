@@ -436,6 +436,8 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
   }
   reportInvalid(platform, bad);
   const n = applyCancellations(platform, res.cancelled);
+  // Yerelde işlendi: aktarıcıdaki kayıtlar artık silinebilir (silinemezse yeniden gelir, tekilleştirilir)
+  await res.commit?.().catch((e) => console.warn(`[platform] ${a.label} gelen kutusu temizlenemedi`, message(e)));
   writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: null, failures: 0 });
   return { created, cancelled: n };
 }

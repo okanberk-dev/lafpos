@@ -106,7 +106,7 @@ describe('canlı bağlantı', () => {
   let createdExt = '';
 
   it('canlı mod yalnız bağdaştırıcısı ve anahtarı olan platformda; durum GET /platforms içinde', async () => {
-    expect((await h.call<{ code: string }>('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'canli' })).json.code).toBe('not_supported');
+    expect((await h.call<{ code: string }>('patron', 'PUT', '/platforms/getir', { mode: 'canli' })).json.code).toBe('not_supported');
     const { setAdapter, adapterFor } = await import('../server/delivery/registry');
     const real = adapterFor('trendyol')!;
     setAdapter('trendyol', { ...real, configured: () => false });
@@ -115,7 +115,7 @@ describe('canlı bağlantı', () => {
     await h.ok('patron', 'PUT', '/platforms/trendyol', { mode: 'canli', prepMinutes: 25 });
     const r = await h.ok<{ live: Record<string, { supported: boolean; configured: boolean; lastPollAt: number | null }> }>('kasa', 'GET', '/platforms');
     expect(r.live.trendyol).toMatchObject({ supported: true, configured: true, lastPollAt: null });
-    expect(r.live.yemeksepeti.supported).toBe(false);
+    expect(r.live.getir.supported).toBe(false);
     const audit = await h.ok<{ action: string; severity: string }[]>('patron', 'GET', '/admin/audit?limit=5');
     expect(audit.find((a) => a.action === 'platform.settings')?.severity).toBe('uyari');
   });
