@@ -9,6 +9,7 @@ import { Button, IconButton } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Badge } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
+import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { REMOTE } from '@/lib/remote';
@@ -53,7 +54,9 @@ function blockLine(booking: Pick<SiteKaraokeBooking, 'status' | 'paymentStatus' 
 export function RoomBox({ order, table, editable, act, now }: { order: OrderDTO; table: TableDTO; editable: boolean; act: Act; now: number }) {
   const boot = useBoot();
   const qc = useQueryClient();
-  const siteOn = boot.integrations.siteKaraoke;
+  const can = useCan();
+  // Liste siparişi alan ya da rezervasyonu yöneten role açık (sunucu da aynı kapıyı uygular)
+  const siteOn = boot.integrations.siteKaraoke && (can('siparis.al') || can('rezervasyon.yonet'));
   const karaoke = useSiteKaraoke(siteOn);
   const [choose, setChoose] = useState<SiteKaraokeBookingDTO[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
