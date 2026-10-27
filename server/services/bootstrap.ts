@@ -34,6 +34,7 @@ export function menuProducts(t: Tx | DB, withCost: boolean): ProductDTO[] {
       color: p.color,
       image: p.image,
       active: p.active,
+      soldOutBy: p.soldOutBy ?? null,
       hidden: p.hidden,
       favorite: p.favorite,
       sort: p.sort,

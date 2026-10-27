@@ -317,7 +317,7 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
       if (p.portionsLeft < qty) throw conflict(`${p.name}: son ${p.portionsLeft} porsiyon kaldı`, 'portions');
       const left = p.portionsLeft - qty;
       t.update(schema.products)
-        .set({ portionsLeft: left, active: left > 0, updatedAt: now })
+        .set({ portionsLeft: left, active: left > 0, ...(left > 0 ? {} : { soldOutBy: 'lafpos' as const }), updatedAt: now })
         .where(eq(schema.products.id, p.id))
         .run();
       if (left === 0) soldOut.push(p.id);

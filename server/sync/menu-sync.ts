@@ -18,7 +18,7 @@ function stations() {
 export async function runMenuSync(opts: { apply: boolean; force?: boolean; userId?: string | null; userName?: string }): Promise<{
   status: 'degismedi' | 'onizleme' | 'uygulandi';
   preview?: MenuPreview;
-  result?: { created: number; updated: number; deactivated: number };
+  result?: { created: number; updated: number; deactivated: number; reactivated: number };
 }> {
   // Bağlantı yoksa (LAFFOGATO_URL) hiçbir istek gitmez; durum kaydına hata da yazılmaz, "kurulmadı" hata değildir
   requireSiteLinked();
@@ -30,22 +30,19 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
         recordMenuSync({ changes: 0 });
         return { status: 'degismedi' as const };
       }
-      let panel: Awaited<ReturnType<typeof fetchPanelMenu>> = null;
-      try {
-        panel = await fetchPanelMenu();
-      } catch {
-        panel = null;
-      }
+      // Anahtar varken panel listesi şart: Satışta bilgisinin taze kaynağı o (CDN'deki liste bayat olabilir). Alınamazsa
+      // bu tur uygulanmaz, ETag yazılmaz; sonraki tur yeniden dener (bayat listeyle Tükendi ürün yeniden açılmasın)
+      const panel = await fetchPanelMenu();
       const preview = previewMenu(db, fetched.menu, panel);
       if (!opts.apply) return { status: 'onizleme' as const, preview };
       const fx = new Effects();
       const result = tx((t) => {
-        const r = applyMenu(t, fetched.menu, stations());
+        const r = applyMenu(t, fetched.menu, { ...stations(), panel });
         if (preview.changes.length || preview.newCategories.length) {
           fx.audit(t, {
             userId: opts.userId ?? null,
             action: 'menu.sync',
-            message: `Site menüsü ${opts.userName ? `${opts.userName} tarafından ` : ''}eşitlendi: ${preview.changes.length} değişiklik (${r.created} yeni, ${r.deactivated} satışta değil)`,
+            message: `Site menüsü ${opts.userName ? `${opts.userName} tarafından ` : ''}eşitlendi: ${preview.changes.length} değişiklik (${r.created} yeni, ${r.deactivated} satışta değil${r.reactivated ? `, ${r.reactivated} yeniden satışta` : ''})`,
             data: { changes: preview.changes.slice(0, 100) },
           });
         }

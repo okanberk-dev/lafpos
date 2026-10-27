@@ -52,6 +52,7 @@ export interface FakeSite {
   version: string;
   /** Sırayla kullanılacak durum kodları; boşsa 200 */
   ordersStatus: number[];
+  panelMenuStatus: number[];
   menuPostStatus: number[];
   stageStatus: number[];
   /** Gelen istekler: "GET /api/panel/orders" gibi */
@@ -77,6 +78,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     orders: (({ complete, orders }) => ({ complete, orders }))(siteOrdersFixture()),
     version: 'v1',
     ordersStatus: [],
+    panelMenuStatus: [],
     menuPostStatus: [],
     stageStatus: [],
     calls: [],
@@ -125,6 +127,8 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       return send(200, { order: order && change.action === 'preparing' ? { ...order, stage: 'preparing' } : null });
     }
     if (call === 'GET /api/panel/menu') {
+      const code = site.panelMenuStatus.shift() ?? 200;
+      if (code !== 200) return send(code, { error: 'unavailable' });
       return send(200, { ...panelMenu, items: panelMenu.items.map((i) => ({ ...i, isActive: site.panelActive.get(i.id) ?? i.isActive })) });
     }
     if (call === 'POST /api/panel/menu') {

@@ -30,7 +30,12 @@ type Tab = 'tumu' | 'satista' | 'tukendi' | 'gizli' | 'site' | 'yerel';
 
 const CHANGE_LABEL: Record<string, string> = { yeni: 'Yeni', fiyat: 'Fiyat', ad: 'Ad', kdv: 'KDV', boy: 'Boy', kalkti: 'Satışta değil', geri: 'Yeniden satışta', diger: 'Diğer' };
 
-const status = (p: ProductDTO) => (p.hidden ? { tone: 'neutral' as const, label: 'POS’ta gizli' } : p.active ? { tone: 'success' as const, label: 'Satışta' } : { tone: 'danger' as const, label: 'Tükendi' });
+const status = (p: ProductDTO) =>
+  p.hidden
+    ? { tone: 'neutral' as const, label: 'POS’ta gizli' }
+    : p.active
+      ? { tone: 'success' as const, label: 'Satışta' }
+      : { tone: 'danger' as const, label: p.soldOutBy === 'site' ? 'Sitede satışta değil' : 'Tükendi' };
 
 /** Ürünün kategori renginde baş harfleri (Innex tablosundaki avatar yerine) */
 function ProductMark({ name, color }: { name: string; color: string }) {

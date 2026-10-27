@@ -148,7 +148,7 @@ adminRoutes.patch('/products/:id', async (c) => {
   const namesOf = (x: typeof next) => posNamesOf(x, suffix).map((n) => `${n.size}:${posNameKey(n.name)}`).join('|');
   if (namesOf(next) !== namesOf(p)) assertPosNameFree(next);
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
-  if (patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0) (patch as Record<string, unknown>).active = true;
+  if (patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0) Object.assign(patch, { active: true, soldOutBy: null });
   db.update(schema.products).set({ ...patch, updatedAt: Date.now() }).where(eq(schema.products.id, p.id)).run();
   if (input.price !== undefined && input.price !== p.price) {
     changed('menu', 'product.updated', user.id, { action: 'menu.price', message: `${user.name} ${p.name} fiyatını değiştirdi` });

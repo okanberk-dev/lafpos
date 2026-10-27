@@ -155,6 +155,11 @@ export const products = sqliteTable(
     image: text('image'),
     /** Satışta (false = Tükendi) */
     active: bool('active').notNull().default(true),
+    /**
+     * Tükendi'yi kim kapattı: 'lafpos' (kasadan, bardan ya da porsiyon bitince) ya da 'site' (sitede satıştan
+     * kalktı, senkron kapattı). Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar; menü yöneticisi hepsini
+     */
+    soldOutBy: text('sold_out_by').$type<'lafpos' | 'site'>(),
     /** POS ekranında gösterme (sitede durabilir) */
     hidden: bool('hidden').notNull().default(false),
     favorite: bool('favorite').notNull().default(false),

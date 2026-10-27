@@ -67,12 +67,16 @@ syncRoutes.post('/online/:orderId/stage', async (c) => {
   return c.json({ ok: true });
 });
 
-/** Tükendi / Satışa aç: kasiyer de yapabilir (müşteri beklerken menü yöneticisi aranmasın) */
+/**
+ * Tükendi / Satışa aç: kasiyer de yapabilir (müşteri beklerken menü yöneticisi aranmasın). Sitenin kapattığını
+ * yalnız menü yetkisi olan açar (Tükendi kilidi, `products.soldOutBy`)
+ */
 syncRoutes.post('/products/:id/availability', async (c) => {
   const user = c.get('user');
-  if (!can(user, 'menu.yonet')) requirePermission(user, 'urun.tukendi');
+  const manager = can(user, 'menu.yonet');
+  if (!manager) requirePermission(user, 'urun.tukendi');
   const input = await body(c, z.object({ active: z.boolean() }));
-  return c.json(await setAvailability(c.req.param('id'), input.active, user.name));
+  return c.json(await setAvailability(c.req.param('id'), input.active, { name: user.name, manager }));
 });
 
 syncRoutes.get('/lafmaliyet/satislar.csv', (c) => {

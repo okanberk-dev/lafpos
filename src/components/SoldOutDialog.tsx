@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { errorMessage, post } from '@/lib/api';
+import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { fold } from '@/lib/shell';
@@ -10,10 +11,13 @@ import { Modal } from './ui/Modal';
 
 /**
  * Kasadan ve bardan "tükendi" (ModPOS "Ürünü Satışa Kapatma" yetkisi gibi, `urun.tukendi`). Siteden gelen ürün
- * sitede ve uygulamada da tükenir; tükenenler listenin başında.
+ * sitede ve uygulamada da tükenir; tükenenler listenin başında. Sitenin kapattığı ürünü ("Sitede satışta değil")
+ * yalnız menü yetkisi olan açar: kasiyerde düğmesi yok, sunucu da reddeder.
  */
 export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const boot = useBoot();
+  const can = useCan();
+  const manager = can('menu.yonet');
   const qc = useQueryClient();
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -47,22 +51,29 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
         </label>
       </div>
       <ul className="divide-y divide-line">
-        {rows.map((p) => (
-          <li key={p.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{p.name}</span>
-              {!p.active && <span className="text-xs font-semibold text-danger-500">Tükendi</span>}
-            </span>
-            <button
-              type="button"
-              disabled={busy === p.id}
-              onClick={() => set(p.id, p.name, !p.active)}
-              className={cn('h-11 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50', p.active ? 'border border-danger-200 text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)]' : 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)]')}
-            >
-              {p.active ? 'Tükendi' : 'Satışa aç'}
-            </button>
-          </li>
-        ))}
+        {rows.map((p) => {
+          const siteClosed = !p.active && p.soldOutBy === 'site';
+          return (
+            <li key={p.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{p.name}</span>
+                {!p.active && <span className="text-xs font-semibold text-danger-500">{siteClosed ? 'Sitede satışta değil' : 'Tükendi'}</span>}
+              </span>
+              {siteClosed && !manager ? (
+                <span className="shrink-0 text-xs text-muted">Yönetici açar</span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy === p.id}
+                  onClick={() => set(p.id, p.name, !p.active)}
+                  className={cn('h-11 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50', p.active ? 'border border-danger-200 text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)]' : 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)]')}
+                >
+                  {p.active ? 'Tükendi' : 'Satışa aç'}
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </Modal>
   );

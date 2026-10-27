@@ -92,6 +92,8 @@ export interface ProductDTO {
   color: string | null;
   image: string | null;
   active: boolean;
+  /** Tükendi'yi kim kapattı: 'site' ise kasiyer açamaz (Sitede satışta değil), yalnız menü yetkisi olan */
+  soldOutBy: 'lafpos' | 'site' | null;
   hidden: boolean;
   favorite: boolean;
   sort: number;

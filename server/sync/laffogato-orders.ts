@@ -243,14 +243,21 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
   fx.flush();
 }
 
+export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok';
+
 /**
  * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir (site Satışta bilgisinin
  * sahibi), 2xx gelince yerelde kaydedilir. Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir.
+ * Tükendi kilidi: sitenin kapattığı ürünü ("Sitede satışta değil", `soldOutBy = 'site'`) kasiyer açamaz; menü
+ * yetkisi olan (`manager`) açar, denetim kaydına "sitede kapatılmıştı" diye düşer.
  */
-export async function setAvailability(productId: string, active: boolean, actorName: string): Promise<{ site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok' }> {
+export async function setAvailability(productId: string, active: boolean, actor: { name: string; manager: boolean }): Promise<{ site: SiteWrite }> {
   const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
   if (!p) throw notFound('Ürün');
-  let site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok' = 'bagli_degil';
+  const actorName = actor.name;
+  const siteClosed = active && !p.active && p.soldOutBy === 'site';
+  if (siteClosed && !actor.manager) throw new HttpError(403, `${p.name} sitede satışta değil; yalnız menü yetkisi olan biri satışa açabilir`, 'site_closed');
+  let site: SiteWrite = 'bagli_degil';
   if (p.extSource === 'laffogato' && p.extId) {
     if (!siteLinked()) site = 'baglanti_yok';
     else if (!configured()) site = 'anahtar_yok';
@@ -263,10 +270,15 @@ export async function setAvailability(productId: string, active: boolean, actorN
   const fx = new Effects();
   tx((t) => {
     t.update(schema.products)
-      .set({ active, portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
+      .set({ active, soldOutBy: active ? null : 'lafpos', portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
       .where(eq(schema.products.id, productId))
       .run();
-    fx.audit(t, { action: active ? 'product.available' : 'product.sold_out', entity: 'product', entityId: productId, message: `${actorName}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}` });
+    fx.audit(t, {
+      action: active ? 'product.available' : 'product.sold_out',
+      entity: 'product',
+      entityId: productId,
+      message: `${actorName}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+    });
   });
   fx.emit({ topic: 'menu', kind: active ? 'product.available' : 'product.sold_out' });
   fx.flush();
