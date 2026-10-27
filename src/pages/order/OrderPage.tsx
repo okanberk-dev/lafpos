@@ -56,6 +56,7 @@ import { openCounterSale } from '@/lib/counter';
 import { asksNumarator, callFor, callText, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
 import { NumaratorModal } from './NumaratorModal';
+import { appUrl } from '@/lib/demo';
 
 type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis' | 'numarator';
 
@@ -433,7 +434,7 @@ export default function OrderPage() {
             }}
             label="Bu cihazdaki adisyonlar müşteri ekranına yansısın"
           />
-          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open('/musteri-ekrani?ekran=kasa', 'lafpos-musteri')}>
+          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open(appUrl('/musteri-ekrani?ekran=kasa'), 'lafpos-musteri')}>
             Ekranı yeni pencerede aç
           </Button>
           <p className="text-xs text-muted">

@@ -11,7 +11,8 @@ export class ApiError extends Error {
   }
 }
 
-const TOKEN_KEY = 'lafpos.token';
+// Tarayıcı demosu (/demo) aynı alan adında Uzaktan'la ya da kasayla yan yana açılır: oturumları birbirini ezmesin
+const TOKEN_KEY = import.meta.env.MODE === 'demo' ? 'lafpos.demo.token' : 'lafpos.token';
 
 export function getToken(): string | null {
   try {

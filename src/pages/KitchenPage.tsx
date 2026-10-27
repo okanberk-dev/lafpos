@@ -16,6 +16,7 @@ import { useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 import { useServiceMode } from '@/lib/serviceMode';
+import { appUrl } from '@/lib/demo';
 
 function mmss(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -125,7 +126,7 @@ export default function KitchenPage() {
         )}
         <button
           hidden={REMOTE}
-          onClick={() => window.open('/cagri', 'lafpos-cagri')}
+          onClick={() => window.open(appUrl('/cagri'), 'lafpos-cagri')}
           title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)"
           className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] px-3 text-sm font-medium transition-colors hover:bg-surface-2 pointer-fine:min-h-9"
         >

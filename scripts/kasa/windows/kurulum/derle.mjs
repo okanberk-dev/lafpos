@@ -94,7 +94,8 @@ async function bundleServer() {
   cpSync(join(ROOT, 'drizzle'), join(APP, 'drizzle'), { recursive: true });
   mkdirSync(join(APP, 'server/db'), { recursive: true });
   cpSync(join(ROOT, 'server/db/menu-snapshot.json'), join(APP, 'server/db/menu-snapshot.json'));
-  cpSync(join(ROOT, 'dist/web'), join(APP, 'dist/web'), { recursive: true });
+  // Tarayıcı demosu (dist/web/demo) yalnız Vercel'de; kasaya girmez
+  cpSync(join(ROOT, 'dist/web'), join(APP, 'dist/web'), { recursive: true, filter: (src) => !src.startsWith(join(ROOT, 'dist/web/demo')) });
   cpSync(join(HERE, 'bekci.mjs'), join(APP, 'bekci.mjs'));
   writeFileSync(join(APP, 'package.json'), `${JSON.stringify({ name: 'lafpos', version: pkg.version, private: true, type: 'module' }, null, 2)}\n`);
 }

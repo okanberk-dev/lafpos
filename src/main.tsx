@@ -3,7 +3,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { App } from './App';
+import { PageLoading } from './components/ui/misc';
+import { DemoFailed, DemoFrame } from './demo/DemoBar';
 import { ApprovalHost } from './lib/approval';
+import { DEMO, startDemo } from './lib/demo';
 import { PrintHost } from './lib/print';
 import { initTheme } from './lib/theme';
 import { Toaster } from './lib/toast';
@@ -32,15 +35,35 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <App />
-        <ApprovalHost />
-        <Toaster />
-        <PrintHost />
-      </BrowserRouter>
-    </QueryClientProvider>
-  </StrictMode>,
-);
+const root = createRoot(document.getElementById('root')!);
+// Demo /demo altında yayınlanır (vite.config.ts); kasada kök
+const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || undefined;
+
+function render() {
+  root.render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter basename={basename}>
+          {DEMO ? (
+            <DemoFrame>
+              <App />
+            </DemoFrame>
+          ) : (
+            <App />
+          )}
+          <ApprovalHost />
+          <Toaster />
+          <PrintHost />
+        </BrowserRouter>
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+}
+
+if (DEMO) {
+  // Tarayıcı demosu: önce sayfanın içindeki LafPOS sunucusu açılır (ilk açılışta örnek gün kurulur)
+  root.render(<PageLoading label="LafPOS demosu hazırlanıyor" />);
+  startDemo().then(render, (e: unknown) => root.render(<DemoFailed error={e} />));
+} else {
+  render();
+}

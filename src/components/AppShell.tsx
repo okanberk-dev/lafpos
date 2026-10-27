@@ -1,4 +1,4 @@
-import { Expand, Lock, LogOut, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
+import { Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { fmtTime } from '@shared/time';
@@ -210,6 +210,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Modal open={menuOpen} onClose={() => setMenuOpen(false)} title={me.name} subtitle={boot.settings.businessName} size="sm">
         <div className="space-y-2 p-4">
+          {REMOTE && (
+            // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
+            <a href="/demo/" className={sheetRow}>
+              <span className={sheetIcon}>
+                <MonitorPlay strokeWidth={1.75} />
+              </span>
+              <span>
+                <span className="block text-sm font-medium">Kasa ekranını dene</span>
+                <span className="block text-xs text-muted">Gerçek LafPOS tarayıcıda çalışır; PIN yok, veriler yalnız bu tarayıcıda</span>
+              </span>
+            </a>
+          )}
           <button onClick={lock} className={sheetRow}>
             <span className={sheetIcon}>
               <Lock strokeWidth={1.75} />

@@ -5,6 +5,7 @@ import type { ProductDTO, Size } from '@shared/types';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
+import { DEMO, demoProductImage } from '@/lib/demo';
 
 const FAVORITES = '__sik__';
 
@@ -234,7 +235,7 @@ function ProductTile({
   const twoSizes = p.priceL != null;
   const label = p.shortName?.trim() || p.name;
   const off = soldOut || disabled;
-  const src = p.image && !broken ? `/media/products/${p.id}?v=${imageVersion(p.image)}` : null;
+  const src = !p.image || broken ? null : DEMO ? demoProductImage(p.image) : `/media/products/${p.id}?v=${imageVersion(p.image)}`;
 
   return (
     <div

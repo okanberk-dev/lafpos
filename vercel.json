@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "VITE_LAFPOS_UZAKTAN=1 npm run build",
+  "buildCommand": "VITE_LAFPOS_UZAKTAN=1 npm run build && npm run build:demo",
   "outputDirectory": "dist/web",
   "installCommand": "npm ci",
   "regions": [
@@ -10,6 +10,14 @@
     {
       "source": "/api/:yol*",
       "destination": "/api/uzaktan?yol=:yol*"
+    },
+    {
+      "source": "/demo",
+      "destination": "/demo/index.html"
+    },
+    {
+      "source": "/demo/((?!assets/).*)",
+      "destination": "/demo/index.html"
     },
     {
       "source": "/((?!api/).*)",

@@ -5,13 +5,15 @@
  *    bilgisayar (1280 px) boyutunda, patronun ekranlarını ayrıca koyu temada açar. Konsol ve sayfa hatası, 4xx/5xx istek, yatay taşma ve dokunmatik
  *    ekranda 44 px'ten küçük hedef arar; her ekranın görüntüsünü e2e/out/ altına kaydeder.
  * 2. Akışlar: e2e/flows.mjs (telefonda sipariş, ödeme, yönetimde düzenleme).
+ * 3. Tarayıcı demosu: e2e/demo.mjs (dist/web/demo; tarama, PIN'siz akışlar, iki sekme).
  *
- * Seçenekler: --only=tarama|akis  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu
+ * Seçenekler: --only=tarama|akis|demo  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu
  *             --targets=warn (küçük hedefleri yalnız raporla)
  * Sorun varsa çıkış kodu 1'dir.
  */
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { runDemo } from './demo.mjs';
 import { runFlows } from './flows.mjs';
 import { apiClient, launchBrowser, openContext, overflowReport, ROOT, seedFloor, settle, smallTargets, startServer, VIEWPORTS } from './lib.mjs';
 
@@ -113,18 +115,25 @@ try {
   const seed = await seedFloor(api);
   const browser = await launchBrowser();
   try {
-    if (args.only !== 'akis') {
+    if (!args.only || args.only === 'tarama') {
       const { failures, warnings, pages } = await sweep(server, api, seed, browser);
       for (const w of warnings) console.log(`  uyarı  ${w}`);
       for (const f of failures) console.log(`  HATA   ${f}`);
       console.log(`Tarama: ${pages} ekran, ${failures.length} sorun${warnings.length ? `, ${warnings.length} uyarı` : ''}`);
       if (failures.length) exitCode = 1;
     }
-    if (args.only !== 'tarama') {
+    if (!args.only || args.only === 'akis') {
       const results = await runFlows({ server, api, seed, browser });
       for (const r of results) console.log(`  ${r.ok ? 'tamam' : 'HATA '}  ${r.name}${r.ok ? '' : `: ${r.error}`}`);
       const failed = results.filter((r) => !r.ok).length;
       console.log(`Akışlar: ${results.length - failed}/${results.length} geçti`);
+      if (failed) exitCode = 1;
+    }
+    if (!args.only || args.only === 'demo') {
+      const results = await runDemo(browser);
+      for (const r of results) console.log(`  ${r.ok ? 'tamam' : 'HATA '}  ${r.name}${r.ok ? '' : `: ${r.error}`}`);
+      const failed = results.filter((r) => !r.ok).length;
+      console.log(`Demo: ${results.length - failed}/${results.length} geçti`);
       if (failed) exitCode = 1;
     }
   } finally {
