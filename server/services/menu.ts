@@ -149,24 +149,40 @@ export function happyHourPercent(t: Tx | DB, product: Product, nowMs = Date.now(
 }
 
 const upperTR = (s: string) => s.toLocaleUpperCase('tr-TR');
+const spaced = (s: string) => s.normalize('NFC').trim().replace(/\s+/g, ' ');
+
+/**
+ * lafmaliyet'in POS adı eşleştirme anahtarı (`posMatchKey`): büyük-küçük harf, I / İ / ı farkı ve fazla boşluk
+ * yok sayılır. "LATTE MEDIUM", "Latte Medium" ve "LATTE MEDİUM" lafmaliyet'te aynı üründür.
+ */
+export function posMatchKey(name: string): string {
+  return spaced(name)
+    .replace(/[’‘`´]/g, "'")
+    .toLocaleUpperCase('tr-TR')
+    .replace(/İ/g, 'I')
+    .replace(/̇/g, '');
+}
 
 /**
  * İki boylu ürünün (M, L) satış adı boy ekiyle biter: lafmaliyet her boyu ayrı satırda, kendi boyuyla alır ve
- * bir günde aynı adı iki kez kabul etmez. Ad bir boy ekiyle bitiyorsa ("LATTE MEDIUM") o ek satılan boyunkiyle
- * değişir, bitmiyorsa ("LATTE") eklenir. Tek boyda ad olduğu gibi kalır. Zaten doğru ekli ad değişmez.
+ * bir günde aynı adı iki kez kabul etmez. Ad bir boy ekiyle bitiyorsa ("LATTE MEDIUM", "Latte Medium",
+ * Türkçe klavyede "LATTE MEDİUM") o ek satılan boyunkiyle değişir, bitmiyorsa ("LATTE") eklenir; ek
+ * `posMatchKey` ile karşılaştırılır. Tek boyda ad olduğu gibi kalır. Zaten doğru ekli ad değişmez.
  */
 export function sizedPosName(name: string, size: Size): string {
-  const base = name.trim();
+  const base = spaced(name);
   if (size !== 'M' && size !== 'L') return base;
   const suffixes = getSettings().posSizeSuffix;
+  const words = base.split(' ');
   let stem = base;
-  for (const sfx of [suffixes.M, suffixes.L].map((x) => x.trim()).filter(Boolean)) {
-    if (upperTR(stem).endsWith(` ${upperTR(sfx)}`)) {
-      stem = stem.slice(0, stem.length - sfx.length - 1).trimEnd();
+  for (const sfx of [suffixes.M, suffixes.L].map(spaced).filter(Boolean)) {
+    const n = sfx.split(' ').length;
+    if (words.length > n && posMatchKey(words.slice(-n).join(' ')) === posMatchKey(sfx)) {
+      stem = words.slice(0, -n).join(' ');
       break;
     }
   }
-  return [stem, suffixes[size].trim()].filter(Boolean).join(' ');
+  return [stem, spaced(suffixes[size])].filter(Boolean).join(' ');
 }
 
 /** lafmaliyet satış listesindeki ad: ürünün posName'i (iki boylu üründe boy ekiyle), yoksa "AD BOYEKİ" */

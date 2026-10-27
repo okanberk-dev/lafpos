@@ -7,7 +7,7 @@ import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { computeSummary, lafmaliyetZ } from '../services/days';
-import { sizedPosName } from '../services/menu';
+import { posMatchKey, sizedPosName } from '../services/menu';
 
 /**
  * LafPOS → lafmaliyet. Bugün: Satışlar ekranına yüklenen "Ürün;Adet;Tutar" listesi ve Kasa raporu alanları.
@@ -65,13 +65,16 @@ export function salesLines(dayIds: string[]): SaleLine[] {
   if (!orders.length) return [];
   const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, orders.map((o) => o.id))).all();
   const addonIds = addonSiteIds();
+  // lafmaliyet adı posMatchKey ile eşler ve bir günde aynı adı iki kez kabul etmez: yazımı farklı aynı ad
+  // ("LATTE MEDIUM" ve gün içinde düzeltilmiş "Latte MEDIUM") tek satırda, ilk görülen yazımla gider
   const lines = new Map<string, SaleLine>();
   const add = (l: SaleLine) => {
-    const cur = lines.get(l.posName);
+    const key = posMatchKey(l.posName);
+    const cur = lines.get(key);
     if (cur) {
       cur.qty += l.qty;
       cur.revenue += l.revenue;
-    } else lines.set(l.posName, { ...l });
+    } else lines.set(key, { ...l });
   };
   let service = 0;
   let serviceOrders = 0;

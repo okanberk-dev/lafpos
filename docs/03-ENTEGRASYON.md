@@ -120,9 +120,11 @@ KARAOKE ODASI;3;3.000,00
 - **POS adı:** ürünün `posName` alanı doluysa o; yoksa `BÜYÜK HARF ad + boy eki` (M → `MEDIUM`,
   L → `LARGE`, tek boy ek yok). Ekler ayarlardan değişir. İki boylu üründe `posName` de boy ekiyle biter: ad bir
   boy ekiyle bitiyorsa satılan boyun ekiyle değişir, bitmiyorsa eklenir (`LATTE` ya da `LATTE MEDIUM` →
-  `LATTE MEDIUM` / `LATTE LARGE`); M ve L hiçbir zaman tek satırda birleşmez. lafmaliyet I/İ ve büyük/küçük
-  harf farkını yok saydığı için ModPOS'tan öğrenilmiş `pos_mappings` kayıtları çalışmaya devam eder; tutmayan ad
-  bir kez eşlenir.
+  `LATTE MEDIUM` / `LATTE LARGE`); M ve L hiçbir zaman tek satırda birleşmez. Ek, lafmaliyet'in `posMatchKey`
+  kuralıyla tanınır: `Latte Medium` ve Türkçe klavyede yazılmış `LATTE MEDİUM` de boy ekiyle biter (L satışı
+  `Latte LARGE` olur). lafmaliyet I/İ ve büyük/küçük harf farkını yok saydığı için ModPOS'tan öğrenilmiş
+  `pos_mappings` kayıtları çalışmaya devam eder; tutmayan ad bir kez eşlenir. Aynı anahtara düşen adlar (gün
+  içinde yazımı düzeltilmiş `posName`) tek satırda, ilk görülen yazımla gider.
 - İkram ve iptal satırları listeye girmez (ciro değil); online ödenmiş siparişler girmez.
 - Karaoke gibi `isService` ürünler aynı listede çıkar; lafmaliyet bunları HİZMET olarak eşler.
 - Masa servis ücreti `SERVİS ÜCRETİ` adıyla ayrı hizmet satırıdır (adet: servis ücretli adisyon sayısı).

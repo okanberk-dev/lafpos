@@ -386,6 +386,30 @@ describe('lafmaliyet satış listesi', () => {
     const { z } = await todayPayload();
     expect(kurus(z.openingCash! + z.cash! + z.cashIn! - z.cashOut! - z.handedOver!)).toBe(kurus(z.expectedCash!));
   });
+
+  it('lafmaliyet adındaki boy eki büyük-küçük harf ve I/İ farkı gözetmeden tanınır; aynı ad tek satırda', async () => {
+    const { sizedPosName } = await import('../server/services/menu');
+    expect(sizedPosName('LATTE MEDİUM', 'L')).toBe('LATTE LARGE');
+    expect(sizedPosName('Latte Medium', 'L')).toBe('Latte LARGE');
+    expect(sizedPosName('latte medıum', 'M')).toBe('latte MEDIUM');
+    expect(sizedPosName('Latte  large ', 'M')).toBe('Latte MEDIUM');
+    expect(sizedPosName('LATTE LARGE', 'L')).toBe('LATTE LARGE');
+    expect(sizedPosName('Latte Medium', 'TEK')).toBe('Latte Medium');
+
+    // Yönetim › Menü'de yöneticinin yazdığı ad (yer tutucu "ör. LATTE MEDIUM"): baş harfi büyük
+    const latte = await product('mnu-0007');
+    await h.ok('mudur', 'PATCH', `/admin/products/${latte.id}`, { posName: 'Latte Medium' });
+    await paidSale([{ productId: latte.id, size: 'M' }, { productId: latte.id, size: 'L' }]);
+    const { lines, ikram } = await todayPayload();
+    // lafmaliyet'in posMatchKey'i gibi: büyük-küçük harf ve I/İ farkı yok
+    const key = (s: string) => s.toLocaleUpperCase('tr-TR').replace(/İ/g, 'I');
+    // Önceki satışlar "LATTE MEDIUM" adıyla: yazımı farklı aynı ad ayrı satır olmaz
+    expect(lines.filter((l) => l.siteMenuId === 'mnu-0007').map((l) => `${l.slot}:${key(l.posName)}`).sort()).toEqual(['L:LATTE LARGE', 'M:LATTE MEDIUM']);
+    expect(new Set(lines.map((l) => key(l.posName))).size).toBe(lines.length);
+    expect(ikram.every((i) => !/MEDIUM (LARGE|MEDIUM)/.test(key(i.posName)))).toBe(true);
+    const csv = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv');
+    expect(key(csv.json)).not.toMatch(/MEDIUM (LARGE|MEDIUM)/);
+  });
 });
 
 // ─── LafPOS Uzaktan ve ürün görseli (önceki düzeltmelerin denetimi) ───────────
