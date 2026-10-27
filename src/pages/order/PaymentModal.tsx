@@ -1,7 +1,7 @@
 import { Check, CheckCircle2, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
-import { amountForItems } from '@shared/order-calc';
+import { amountForItems, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import type { OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -233,7 +233,7 @@ export function PaymentModal({
                         {i.name} {i.size !== 'TEK' && <span className="text-muted">{boot.settings.sizeLabels[i.size]}</span>}
                       </span>
                       <span className="tabular text-xs text-muted">
-                        {left} adet · {tl(order.totals.lineNet[i.id] ?? 0)}
+                        {left} adet · {tl(unpaidLineAmount(order.totals, i))}
                       </span>
                     </button>
                     <div className="flex items-center gap-1">

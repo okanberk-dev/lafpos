@@ -202,6 +202,11 @@ export function amountForItems(
   return sum;
 }
 
+/** Kalemin ödenmemiş adetlerinin tutarı ("Kalem seç"te satırın kalanı): kalanın tamamını seçmek bu tutarı öder */
+export function unpaidLineAmount(totals: Pick<OrderTotals, 'lineNet'>, line: { id: string; qty: number; paidQty: number }): Kurus {
+  return amountForItems(totals, [line], [{ lineId: line.id, qty: line.qty - line.paidQty }]);
+}
+
 export interface PaymentLike {
   amount: Kurus;
   refunded?: boolean;

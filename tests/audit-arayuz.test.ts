@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { percentOf } from '@shared/money';
-import { happyHourPercentAt, happyHourUnit } from '@shared/order-calc';
+import { happyHourPercentAt, happyHourUnit, unpaidLineAmount } from '@shared/order-calc';
 import { istanbulParts } from '@shared/time';
 import type { BootstrapDTO, DisplayStateDTO, OrderDTO, ZSummary } from '@shared/types';
 import { estimateUnit, menuUnit } from '../src/lib/boot';
@@ -150,5 +150,34 @@ describe('gün sonu kasa föyü: slip karşılaştırması', () => {
     const blind = slipRows(null, h.boot.paymentMethods);
     expect(blind.find((r) => r.methodId === card.id)).toMatchObject({ expected: null });
     expect(slipDiff(blind[0]!, 1000)).toBeNull();
+  });
+});
+
+describe('ödeme penceresi: Kalem seç', () => {
+  it('kısmen ödenmiş kalemin satırı kalan adetlerin tutarını gösterir', async () => {
+    const tk = product(h.boot, 'Türk kahvesi');
+    const cash = h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: tk.id, qty: 3 }] });
+    const unit = o.items[0].unitPrice;
+    // İlk misafir bir kahveyi "Kalem seç"le öder
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash.id, amount: unit, items: [{ itemId: o.items[0].id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`);
+    const line = o.items[0];
+    expect(line.paidQty).toBe(1);
+    // "2 adet · ₺280": satırın tamamı (₺420) değil
+    expect(unpaidLineAmount(o.totals, line)).toBe(2 * unit);
+    expect(unpaidLineAmount(o.totals, line)).toBe(o.total - o.paid);
+
+    // Adisyon indirimiyle kuruş artığı: kalan adetlerin payı sunucunun "kalanı seç" tutarıyla aynı
+    let d = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
+    d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/items`, { items: [{ productId: tk.id, qty: 3 }] });
+    d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/discount`, { type: 'amount', value: 1001, reason: 'Müdavim', approverPin: '2468' });
+    const first = await h.ok<{ order: OrderDTO; amount: number }>('kasa', 'POST', `/orders/${d.id}/payments`, { methodId: cash.id, amount: 1, items: [{ itemId: d.items[0].id, qty: 1 }] });
+    const rest = unpaidLineAmount(first.order.totals, first.order.items[0]);
+    expect(rest).toBe(first.order.total - first.order.paid);
+    const last = await h.ok<{ order: OrderDTO; amount: number; closed: boolean }>('kasa', 'POST', `/orders/${d.id}/payments`, { methodId: cash.id, amount: 1, items: [{ itemId: d.items[0].id, qty: 2 }] });
+    expect(last.amount).toBe(rest);
+    expect(last.closed).toBe(true);
   });
 });
