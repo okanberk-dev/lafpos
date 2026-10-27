@@ -84,9 +84,12 @@ describe('rapor mutabakatı', () => {
       reconciliation: { difference: number; paidClosed: number; paidOpen: number };
       tips: number;
     }>('mudur', 'GET', '/reports/summary');
-    const products = await h.ok<{ total: number; service: number; categories: { revenue: number }[] }>('mudur', 'GET', '/reports/products');
+    const products = await h.ok<{ total: number; service: number; categories: { revenue: number }[]; products: { qty: number; complimentary: number; voided: number }[] }>('mudur', 'GET', '/reports/products');
     const hourly = await h.ok<{ total: number; hours: { revenue: number }[]; week: { days: number; hours: number[] }[] }>('mudur', 'GET', '/reports/hourly');
-    const patron = await h.ok<{ netSales: number; orders: number }>('patron', 'GET', '/reports/patron');
+    const patron = await h.ok<{ netSales: number; orders: number; avgCheck: number; voided: number }>('patron', 'GET', '/reports/patron');
+    const voids = await h.ok<{ total: number; rows: { qty: number }[] }>('mudur', 'GET', '/reports/items?kind=iptal');
+    const staff = await h.ok<{ staff: { voids: number; voidValue: number }[] }>('patron', 'GET', '/reports/staff');
+    const checks = await h.ok<{ count: number; rows: { status: string; total: number }[] }>('mudur', 'GET', '/reports/checks');
 
     const N = summary.netSales;
     expect(N).toBeGreaterThan(0);
@@ -103,6 +106,24 @@ describe('rapor mutabakatı', () => {
     expect(patron.netSales).toBe(N);
     expect(patron.orders).toBe(summary.receipts);
     expect(summary.receipts).toBe(3);
+    // Adisyon sayısı her yerde aynı ölçütle (₺0 adisyon sayılmaz): ortalama, türe göre kırılım
+    expect(patron.avgCheck).toBe(summary.avgCheck);
+    expect(summary.avgCheck).toBe(Math.round(N / summary.receipts));
+    expect(summary.types.reduce((x, t) => x + t.orders, 0)).toBe(summary.receipts);
+    // Adisyon listesi: dönemin bütün kapanan adisyonları, tutarları ciroyu verir
+    expect(checks.count).toBe(checks.rows.length);
+    expect(checks.rows.filter((r) => r.status === 'kapali').reduce((x, r) => x + r.total, 0)).toBe(N);
+    // Satılan ürün = ürün raporunun adedi (ikram satılmış sayılmaz, ayrı)
+    expect(summary.itemsSold).toBe(products.products.reduce((x, p) => x + p.qty, 0));
+    expect(products.products.reduce((x, p) => x + p.complimentary, 0)).toBe(2);
+    // İptal: özet = patron = iptal listesi = personel; adetler ürün raporu ve personelde aynı
+    expect(summary.voided).toBe(product('Espresso').price);
+    expect(patron.voided).toBe(summary.voided);
+    expect(voids.total).toBe(summary.voided);
+    expect(staff.staff.reduce((x, r) => x + r.voidValue, 0)).toBe(summary.voided);
+    const voidQty = voids.rows.reduce((x, r) => x + r.qty, 0);
+    expect(products.products.reduce((x, p) => x + p.voided, 0)).toBe(voidQty);
+    expect(staff.staff.reduce((x, r) => x + r.voids, 0)).toBe(voidQty);
 
     // Döküm ve KDV
     const w = summary.waterfall;
@@ -119,8 +140,14 @@ describe('rapor mutabakatı', () => {
     expect(summary.tips).toBe(2500);
 
     // Z aynı rakamı yazar
-    const closed = await h.ok<{ day: { id: string }; summary: { netSales: number; kdv: { gross: number }[]; tips: number; payments: { amount: number }[] } }>('mudur', 'POST', '/cash/day/close', { countedCash: null });
+    const closed = await h.ok<{
+      day: { id: string };
+      summary: { netSales: number; receipts: number; voided: number; topProducts: { qty: number }[]; kdv: { gross: number }[]; tips: number; payments: { amount: number }[] };
+    }>('mudur', 'POST', '/cash/day/close', { countedCash: null });
     expect(closed.summary.netSales).toBe(N);
+    expect(closed.summary.receipts).toBe(summary.receipts);
+    expect(closed.summary.voided).toBe(summary.voided);
+    expect(closed.summary.topProducts.reduce((x, p) => x + p.qty, 0)).toBe(summary.itemsSold);
     expect(closed.summary.kdv.reduce((x, k) => x + k.gross, 0)).toBe(N);
     expect(closed.summary.payments.reduce((x, p) => x + p.amount, 0)).toBe(N);
     expect(closed.summary.tips).toBe(2500);

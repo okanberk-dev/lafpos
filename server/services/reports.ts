@@ -46,19 +46,23 @@ const idsOf = (orders: OrderRow[]) => new Set(orders.map((o) => o.id));
 /**
  * Dönemin iş günleri ve o günlerin bütün adisyonları, kalemleri, ödemeleri. Kimlik listesi bağlanmaz: SQLite bir
  * sorguda en çok 32.766 değişken alır, uzun dönemde adisyon sayısı bunu aşar; günler ve adisyonlar alt sorguyla
- * seçilir.
+ * seçilir. Kalem ve ödeme gerekmeyen rapor (saatlik, kıyas dönemi) `{ items: false, payments: false }` ile yalnız
+ * adisyonları okur: uzun dönemde okumanın çoğu kalemlerdir ve okuma sürerken kasa bekler.
  */
-function load(range: Range): Dataset {
+function load(range: Range, read: { items?: boolean; payments?: boolean } = {}): Dataset {
   const inRange = and(gte(schema.businessDays.date, range.from), lte(schema.businessDays.date, range.to));
   const days = db.select().from(schema.businessDays).where(inRange).orderBy(asc(schema.businessDays.date)).all();
   if (!days.length) return { days, orders: [], items: [], payments: [] };
   const dayIds = db.select({ id: schema.businessDays.id }).from(schema.businessDays).where(inRange);
   const orderIds = db.select({ id: schema.orders.id }).from(schema.orders).where(inArray(schema.orders.dayId, dayIds));
   const orders = db.select().from(schema.orders).where(inArray(schema.orders.dayId, dayIds)).all();
-  const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, orderIds)).all();
-  const payments = db.select().from(schema.payments).where(inArray(schema.payments.dayId, dayIds)).all();
+  const items = read.items === false ? [] : db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, orderIds)).all();
+  const payments = read.payments === false ? [] : db.select().from(schema.payments).where(inArray(schema.payments.dayId, dayIds)).all();
   return { days, orders, items, payments };
 }
+
+/** Yalnız adisyonlar (ciro, adisyon sayısı, saat): kalem ve ödeme okunmaz */
+const ORDERS_ONLY = { items: false, payments: false } as const;
 
 /** İptal edilen kalemler: X/Z gibi bütün POS adisyonlarından (açık, iptal edilmiş, kalemleri taşınmış) */
 function voidedItems(ds: Dataset): ItemRow[] {
@@ -135,8 +139,10 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     row.count += 1;
     payMap.set(p.methodName, row);
   }
+  // Türe göre: adisyon sayısı "Adisyon" kutusuyla aynı ölçütle (tutarı olan adisyon; tamamı ikram edilen sayılmaz)
   const types = new Map<string, { type: string; orders: number; amount: number }>();
   for (const o of closed) {
+    if (o.total <= 0) continue;
     const row = types.get(o.type) ?? { type: o.type, orders: 0, amount: 0 };
     row.orders += 1;
     row.amount += totalsOf(o).total;
@@ -145,7 +151,7 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
   // Online sipariş sitede ödenmiş gelir, X/Z gibi her aşamada (hazırlanan da) sayılır; ciroya girmez
   const online = ds.orders.filter((o) => o.source === 'laffogato');
   const cmp = comparison(range, nowMs, reportToday(nowMs));
-  const prev = load(cmp.range);
+  const prev = load(cmp.range, ORDERS_ONLY);
   const prevClosed = prev.orders.filter((o) => isSale(o) && (cmp.cutoffMs == null || (o.closedAt ?? o.openedAt) <= cmp.cutoffMs));
   const prevNet = prevClosed.reduce((a, o) => a + totalsOf(o).total, 0);
   const prevReceipts = prevClosed.filter((o) => o.total > 0).length;
@@ -304,7 +310,7 @@ function hourMemo() {
 }
 
 export function hourlyReport(range: Range) {
-  const ds = load(range);
+  const ds = load(range, ORDERS_ONLY);
   const closed = ds.orders.filter(isSale);
   const hourOf = hourMemo();
   const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, revenue: 0, orders: 0 }));

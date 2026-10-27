@@ -106,7 +106,7 @@ afterAll(() => {
 });
 
 describe('raporlar denetimi', () => {
-  it('iptal her adisyondan sayılır: açık ve taşınmış adisyondaki iptal özet, patron, personel, ürün ve listede X ile aynı', async () => {
+  it('iptal her adisyondan sayılır: açık ve taşınmış adisyondaki iptal özet, patron, personel, ürün ve listede X ile aynı (money-15, reports-31)', async () => {
     await at('2026-10-26T10:00:00+03:00');
     await sale([{ name: 'Türk kahvesi' }]);
 
@@ -150,12 +150,12 @@ describe('raporlar denetimi', () => {
     expect(patron.anomalies.map((a) => a.title)).toContain('İptal oranı yüksek');
   });
 
-  it('adisyon sayısı her ekranda aynı: ₺0 adisyon sayılmaz, satılan ürün ikramı saymaz, geçen hafta aynı ölçütle', async () => {
+  it('adisyon sayısı her ekranda aynı: ₺0 adisyon sayılmaz, satılan ürün ikramı saymaz, geçen hafta aynı ölçütle (reports-35, client-63)', async () => {
     await at('2026-10-26T11:00:00+03:00');
     await sale([{ name: 'Latte', size: 'M', qty: 3 }]);
     await freeCheck([{ name: 'Latte', size: 'L', qty: 2 }]);
 
-    const summary = await h.ok<{ receipts: number; avgCheck: number; itemsSold: number }>('mudur', 'GET', '/reports/summary');
+    const summary = await h.ok<{ receipts: number; avgCheck: number; itemsSold: number; types: { type: string; orders: number }[] }>('mudur', 'GET', '/reports/summary');
     const patron = await h.ok<{ orders: number; avgCheck: number; compare: { lastWeek: { orders: number } } }>('patron', 'GET', '/reports/patron');
     const products = await h.ok<{ products: { qty: number; complimentary: number }[] }>('mudur', 'GET', '/reports/products');
     const x = await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day');
@@ -163,6 +163,9 @@ describe('raporlar denetimi', () => {
     expect(summary.receipts).toBe(x.summary.receipts);
     expect(patron.orders).toBe(summary.receipts);
     expect(patron.avgCheck).toBe(summary.avgCheck);
+    // Türe göre kırılımın "N adisyon"u da aynı ölçütle: ₺0 gel-al adisyonu sayılmaz
+    expect(summary.types.reduce((a, t) => a + t.orders, 0)).toBe(summary.receipts);
+    expect(summary.types.map((t) => t.type)).not.toContain('gelal');
     // "Satılan ürün" ürün raporunun adedi ve Z'nin ürün listesiyle aynı; ikram ayrı
     expect(summary.itemsSold).toBe(products.products.reduce((a, p) => a + p.qty, 0));
     expect(summary.itemsSold).toBe(x.summary.topProducts.reduce((a, p) => a + p.qty, 0));
@@ -171,7 +174,7 @@ describe('raporlar denetimi', () => {
     expect(patron.compare.lastWeek.orders).toBe(1);
   });
 
-  it('CSV: hücre formül gibi başlamaz, CR ve LF satır bölmez, sayılar virgüllü ondalık', async () => {
+  it('CSV: hücre formül gibi başlamaz, CR ve LF satır bölmez, sayılar virgüllü ondalık (reports-32, input-69, reports-37)', async () => {
     await at('2026-10-26T12:00:00+03:00');
     // Garson kendi yeni kalemini onaysız iptal eder; neden serbest metin
     let o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'tezgah' });
@@ -198,7 +201,7 @@ describe('raporlar denetimi', () => {
     for (const r of urunler.slice(1)) expect(r[ciro]).toMatch(/^\d{1,3}(\.\d{3})*,\d{2}$/);
   });
 
-  it('saatlik grafik iş günü sırasıyla: gece 01:30 satışı sabahki satışlardan sonra gelir', async () => {
+  it('saatlik grafik iş günü sırasıyla: gece 01:30 satışı sabahki satışlardan sonra gelir (client-64)', async () => {
     await at('2026-10-27T01:30:00+03:00');
     await sale([{ name: 'Türk kahvesi', qty: 2 }]);
     const patron = await h.ok<{ date: string; hourly: number[]; hourlyLastWeek: number[] }>('patron', 'GET', '/reports/patron');
@@ -216,7 +219,7 @@ describe('raporlar denetimi', () => {
     for (const f of ['src/pages/patron/PatronPage.tsx', 'src/pages/admin/OverviewAdmin.tsx']) expect(readFileSync(join(root, f), 'utf8'), f).toContain('hourBars(');
   });
 
-  it('"Bugün" açık iş günüdür: gün 05:00\'i geçince de raporlar patron paneliyle aynı günü gösterir', async () => {
+  it('"Bugün" açık iş günüdür: gün 05:00\'i geçince de raporlar patron paneliyle aynı günü gösterir (client-59)', async () => {
     await at('2026-10-27T11:00:00+03:00');
     await sale([{ name: 'Türk kahvesi' }]);
     const boot = await h.ok<BootstrapDTO>('patron', 'GET', '/bootstrap');
@@ -242,7 +245,7 @@ describe('raporlar denetimi', () => {
     expect(currentBusinessDate(null, Date.parse('2026-10-27T04:59:00+03:00'))).toBe('2026-10-26');
   });
 
-  it('dönem en çok 400 gün; olmayan tarih 500 değil 422', async () => {
+  it('dönem en çok 400 gün; olmayan tarih 500 değil 422 (input-66, input-72)', async () => {
     for (const q of ['from=2026-13-01&to=2026-13-01', 'from=2026-00-00', 'from=2026-02-30&to=2026-03-01', 'to=2026-04-31', 'from=0001-01-01']) {
       const r = await h.call<{ code: string }>('mudur', 'GET', `/reports/summary?${q}`);
       expect(r.status, q).toBe(422);
@@ -260,7 +263,7 @@ describe('raporlar denetimi', () => {
     expect((await h.call('mudur', 'GET', '/reports/summary?from=2025-09-21&to=2026-10-26')).status).toBe(422);
   });
 
-  it('32.766\'dan çok adisyonlu dönem: raporlar çalışır, adisyon listesi gerçek sayıyı verir, CSV hepsini yazar', async () => {
+  it('32.766\'dan çok adisyonlu dönem: raporlar çalışır, adisyon listesi gerçek sayıyı verir, CSV hepsini yazar (input-65, reports-34)', async () => {
     // 2025 Mart: 30 gün × 1.100 kapanmış adisyon (bir Latte M, nakit) = 33.000; SQLite tek sorguda 32.766 değişken alır
     const DAYS = 30;
     const PER_DAY = 1100;

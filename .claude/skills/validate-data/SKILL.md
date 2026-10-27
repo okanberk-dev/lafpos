@@ -21,6 +21,11 @@ adımlarının LafPOS karşılığı):
 | Online sipariş | Sitede ödenen (`source = 'laffogato'`) ciroya girmez, ayrı gösterilir |
 | Bahşiş | Ciroya ve ödeme toplamına girmez, ayrı satır |
 | Gün | İstanbul iş günü, 05:00'te döner (`shared/time.ts`); upstream'in "UTC'ye çevir" önerisi yerine bu geçerli |
+| Bugün | Açık iş günü, gün 05:00'te kapanmadıysa da (`currentBusinessDate`); gün kapalıysa şu anın iş günü. Saatlik grafikler 05:00'ten başlar, gece yarısından sonrası en sonda |
+| Adisyon sayısı | Tutarı olan kapanmış POS adisyonu (`receipts`); tamamı ikram edilen ₺0 adisyon sayılmaz |
+| Satılan ürün | Kapanmış adisyonlardaki iptal ve ikram dışı kalemlerin adedi; ikram ayrı sayılır |
+| İptal | X/Z gibi bütün POS adisyonlarından: açık, iptal edilmiş ve kalemleri başka masaya taşınmış (`birlesti`) olanlar dahil |
+| Dönem | En çok 400 gün (`MAX_RANGE_DAYS`); olmayan tarih 422 |
 | Kıyas dönemi | Hizalı, `comparison()` (`server/services/reports.ts`): bütün haftalar geriye, ayın başı önceki ayın aynı günleri, bugünü içeren dönem aynı saate kadar |
 
 **Değişmezler** `tests/report-reconciliation.test.ts`'te kuruşu kuruşuna denetlenir:
@@ -29,6 +34,9 @@ adımlarının LafPOS karşılığı):
 - döküm: liste − ikram − indirim + servis = ciro
 - Σ KDV brüt = ciro; her oranda matrah + KDV = brüt
 - kapanmış adisyonların ödemeleri = ciro (iptal edilen ödeme sayılmaz)
+- adisyon sayısı: özet = Z = patron = Σ türe göre; ortalama adisyon özet = patron
+- satılan ürün = ürün raporu adedi = Z ürün listesi
+- iptal: özet = patron = iptal listesi = personel = Z; iptal adedi ürün raporu = personel = iptal listesi
 
 Kurallar:
 
