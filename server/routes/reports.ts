@@ -24,7 +24,10 @@ export const reportRoutes = new Hono<AppEnv>();
 /** Gerçek takvim günü: 2026-13-01 ya da 2026-02-30 iç hata değil, 422 */
 const date = z.string().refine(isCalendarDate);
 
-/** Rapor dönemi: varsayılanı bugün (açık iş günü); ters verilirse çevrilir; en çok MAX_RANGE_DAYS gün */
+/**
+ * Rapor dönemi: varsayılanı bugün (açık iş günü); ters verilirse çevrilir; en çok MAX_RANGE_DAYS gün. Raporlar ve
+ * Raporlar › Aktarım'ın lafmaliyet satış listesi (server/routes/sync.ts) aynı denetimi kullanır.
+ */
 function range(c: Parameters<typeof query>[0]) {
   const today = reportToday();
   const q = query(c, z.object({ from: date.default(today), to: date.default(today) }));
@@ -32,6 +35,7 @@ function range(c: Parameters<typeof query>[0]) {
   if (dayCount(r) > MAX_RANGE_DAYS) throw new HttpError(422, `Rapor dönemi en çok ${MAX_RANGE_DAYS} gün olabilir; daha kısa bir aralık seçin`, 'range_too_long');
   return r;
 }
+export { range as reportRange };
 
 reportRoutes.use('*', async (c, next) => {
   if (c.req.path.endsWith('/patron')) requirePermission(c.get('user'), 'patron.panel');
