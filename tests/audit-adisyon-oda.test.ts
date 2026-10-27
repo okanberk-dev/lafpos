@@ -13,6 +13,11 @@ import { type Harness, PINS, startApp } from './harness';
  * bekleyen sepette ve sitede ödenmiş siparişte başlamaz. Masayı açmak sitede ödenmiş QR siparişini döndürmez; adisyon
  * iptali sipariş yetkisi ister; hazırlanmadan iptal edilen kalemin porsiyonu geri döner; boş adisyonlar otomatik gün
  * sonunu tutmaz.
+ *
+ * Bulgular: kalem taşıma state-03, money-11; iptal state-03, money-10; cihaz sepeti state-04, fiscal-26; sitede
+ * ödenmiş sipariş input-67; masa açma sync-44; iptal yetkisi auth-57; porsiyon state-08. Gün sonu (state-02,
+ * money-10'un gün sonu yarısı) ve otomatik gün sonu (state-06) 0e41785'te düzeldi (`isEmptyOrder`); testleri
+ * gerilemeye karşı burada.
  */
 let h: Harness;
 const MUDUR = PINS.mudur;
