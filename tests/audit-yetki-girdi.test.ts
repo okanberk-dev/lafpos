@@ -452,6 +452,23 @@ describe('input-74: takvimde olmayan tarih ve saat', () => {
     const later = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', scheduledFor: '2026-10-27T19:30:00+03:00' });
     expect(Number.isFinite(new Date(later.scheduledFor!).getTime())).toBe(true);
   });
+
+  it('müşteri doğum günü de: takvimde olmayan tarih 422, boş bırakılan doğum günü silinir', async () => {
+    type Customer = { id: string; birthday: string | null };
+    for (const birthday of ['2026-99-99', '1990-02-30', '1990-13-01', '01.02.1990']) {
+      const r = await h.call('mudur', 'POST', '/customers', { name: 'Hayalet Müşteri', birthday });
+      expect(r.status, birthday).toBe(422);
+    }
+    const created = await h.ok<Customer>('mudur', 'POST', '/customers', { name: 'Doğum günlü müşteri', birthday: '1990-02-28' });
+    expect(created.birthday).toBe('1990-02-28');
+    expect((await h.ok<Customer>('mudur', 'POST', '/customers', { name: 'Doğum günsüz müşteri', birthday: '' })).birthday).toBeNull();
+
+    expect((await h.call('mudur', 'PATCH', `/customers/${created.id}`, { birthday: '1990-02-31' })).status).toBe(422);
+    const detail = await h.ok<{ customer: Customer }>('mudur', 'GET', `/customers/${created.id}`);
+    expect(detail.customer.birthday).toBe('1990-02-28');
+    const cleared = await h.ok<{ customer: Customer }>('mudur', 'PATCH', `/customers/${created.id}`, { birthday: '' });
+    expect(cleared.customer.birthday).toBeNull();
+  });
 });
 
 describe('auth-54: personel tutarları rapor.maliyet ister', () => {
