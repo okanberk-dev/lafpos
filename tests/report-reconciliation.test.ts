@@ -154,6 +154,8 @@ describe('rapor mutabakatı', () => {
     expect(closed.summary.netSales).toBe(N);
     expect(closed.summary.receipts).toBe(summary.receipts);
     expect(closed.summary.voided).toBe(summary.voided);
+    // Z ürün listesi en çok satan 15 ürün: bu günde 15'ten az ürün satıldı, liste eksiksiz
+    expect(closed.summary.topProducts.length).toBeLessThan(15);
     expect(closed.summary.topProducts.reduce((x, p) => x + p.qty, 0)).toBe(summary.itemsSold);
     expect(closed.summary.kdv.reduce((x, k) => x + k.gross, 0)).toBe(N);
     expect(closed.summary.payments.reduce((x, p) => x + p.amount, 0)).toBe(N);

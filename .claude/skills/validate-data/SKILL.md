@@ -36,7 +36,8 @@ adımlarının LafPOS karşılığı):
 - kapanmış adisyonların ödemeleri = ciro (iptal edilen ödeme sayılmaz)
 - adisyon sayısı: özet = Z = patron = Σ türe göre = Σ personel = Σ saatlik (ve saatlik CSV); ortalama adisyon
   özet = patron
-- satılan ürün = ürün raporu adedi = Z ürün listesi
+- satılan ürün = ürün raporu adedi. Z ürün listesi yalnız en çok satan 15 ürün (`topProducts`): Σ adedi ≤ satılan
+  ürün, 15'ten az ürün satıldıysa eşit; tam karşılaştırma için ürün raporu kullanılır
 - iptal: özet = patron = iptal listesi = personel = Z; iptal adedi ürün raporu = personel = iptal listesi
 
 Kurallar:

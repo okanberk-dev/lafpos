@@ -171,8 +171,9 @@ describe('raporlar denetimi', () => {
     // Türe göre kırılımın "N adisyon"u da aynı ölçütle: ₺0 gel-al adisyonu sayılmaz
     expect(summary.types.reduce((a, t) => a + t.orders, 0)).toBe(summary.receipts);
     expect(summary.types.map((t) => t.type)).not.toContain('gelal');
-    // "Satılan ürün" ürün raporunun adedi ve Z'nin ürün listesiyle aynı; ikram ayrı
+    // "Satılan ürün" ürün raporunun adedi; Z'nin listesi en çok satan 15 ürün (15'ten az ürün satıldıysa hepsi); ikram ayrı
     expect(summary.itemsSold).toBe(products.products.reduce((a, p) => a + p.qty, 0));
+    expect(x.summary.topProducts.length).toBeLessThan(15);
     expect(summary.itemsSold).toBe(x.summary.topProducts.reduce((a, p) => a + p.qty, 0));
     expect(products.products.reduce((a, p) => a + p.complimentary, 0)).toBe(2);
     // Geçen pazartesi bu saate kadar: bir ödenmiş, bir ₺0 adisyon → kıyas da 1 adisyon
@@ -282,6 +283,27 @@ describe('raporlar denetimi', () => {
     // Varsayılan dönem raporların "bugün"ü: açık iş günü
     const def = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv');
     expect(def.json).toBe(r.json);
+  });
+
+  it('Z ürün listesi en çok satan 15 ürün; satılan ürün ürün raporuyla aynı, Z listesinden az olmaz (validate-data değişmezi)', async () => {
+    await at('2026-10-26T12:45:00+03:00');
+    const categoryId = h.boot.categories[0]!.id;
+    for (let n = 1; n <= 16; n++) {
+      const p = await h.ok<{ id: string }>('patron', 'POST', '/admin/products', { categoryId, name: `Çeşit ${n}`, price: 1000 + n, kdvRate: 10 });
+      let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: p.id, qty: 1 }] });
+      await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total });
+    }
+    const summary = await h.ok<{ itemsSold: number }>('mudur', 'GET', '/reports/summary');
+    const products = await h.ok<{ products: { qty: number }[] }>('mudur', 'GET', '/reports/products');
+    const x = await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day');
+    expect(summary.itemsSold).toBe(products.products.reduce((a, p) => a + p.qty, 0));
+    expect(x.summary.topProducts).toHaveLength(15);
+    expect(x.summary.topProducts.reduce((a, p) => a + p.qty, 0)).toBeLessThan(summary.itemsSold);
+    // Skill'in değişmezi Z listesinin ilk 15 olduğunu söyler, eşitlik iddia etmez
+    const skill = readFileSync(join(root, '.claude/skills/validate-data/SKILL.md'), 'utf8');
+    expect(skill).not.toContain('= Z ürün listesi');
+    expect(skill).toMatch(/Z ürün listesi[^\n]*15/);
   });
 
   it('saatlik grafik iş günü sırasıyla: gece 01:30 satışı sabahki satışlardan sonra gelir (client-64)', async () => {
