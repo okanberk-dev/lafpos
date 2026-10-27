@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, lt, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import type { Permission } from '@shared/permissions';
 import {
@@ -34,7 +34,16 @@ export function platformSettings(): Record<PlatformId, PlatformSettings> {
   return Object.fromEntries(PLATFORMS.map((p) => [p, { ...PLATFORM_DEFAULTS[p], ...(saved[p] ?? {}) }])) as Record<PlatformId, PlatformSettings>;
 }
 
+/**
+ * Deneme siparişi gerçek satış gibi ciroya, Z'ye ve lafmaliyet'e girer: deneme modu yalnız kurulum modunda
+ * (Ayarlar › kurulum modu; canlıya geçince kapanır) açılır ve sipariş üretir
+ */
+function assertSetupMode() {
+  if (!getSettings().demoMode) throw conflict('Deneme siparişleri ciroya girer: deneme modu yalnız kurulum modunda açılır', 'not_setup_mode');
+}
+
 export function savePlatformSettings(t: Tx, actor: Actor, fx: Effects, platform: PlatformId, patch: Partial<PlatformSettings>) {
+  if (patch.mode === 'deneme') assertSetupMode();
   const all = platformSettings();
   const next = { ...all[platform], ...patch };
   updateSettings({ platforms: { ...all, [platform]: next } }, t);
@@ -60,7 +69,8 @@ const norm = (s: string) => s.toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').tr
 
 /** Platform kalemi → LafPOS ürünü: önce aynı ad (Türkçe büyük-küçük harf duyarsız); boy seçeneklerde yazar */
 function matchLines(t: Tx | DB, payload: PlatformOrderPayload) {
-  const products = t.select().from(schema.products).where(eq(schema.products.active, true)).all();
+  // Tükenmiş ürün de eşleşir: kabulde "tükendi" diye durur, gizli satıra dönüp stok denetimini atlamaz
+  const products = t.select().from(schema.products).where(eq(schema.products.hidden, false)).all();
   const byName = new Map(products.map((p) => [norm(p.name), p]));
   const sizeL = norm(getSettings().sizeLabels.L);
   return payload.lines.map((l) => {
@@ -74,10 +84,12 @@ function matchLines(t: Tx | DB, payload: PlatformOrderPayload) {
 function unmatchedProductId(t: Tx): string {
   const existing = t.select({ id: schema.products.id }).from(schema.products).where(eq(schema.products.posName, 'PLATFORM ÜRÜNÜ')).get();
   if (existing) return existing.id;
-  const cat = t.select({ id: schema.categories.id }).from(schema.categories).orderBy(desc(schema.categories.sort)).get();
+  const cat = t.select({ id: schema.categories.id }).from(schema.categories).orderBy(asc(schema.categories.sort)).get();
   if (!cat) throw conflict('Menüde kategori yok');
+  // Bilinmeyen kalem bara düşer: bar hazırlar ya da adisyondan iptal eder
+  const bar = t.select({ id: schema.stations.id }).from(schema.stations).where(eq(schema.stations.kind, 'bar')).orderBy(asc(schema.stations.sort)).get();
   const id = ulid();
-  t.insert(schema.products).values({ id, categoryId: cat.id, name: 'Platform ürünü', description: 'Paket platformundan gelen, kasada karşılığı olmayan kalem', price: 0, kdvRate: 10, hidden: true, posName: 'PLATFORM ÜRÜNÜ', sort: 999 }).run();
+  t.insert(schema.products).values({ id, categoryId: cat.id, stationId: bar?.id ?? null, name: 'Platform ürünü', description: 'Paket platformundan gelen, kasada karşılığı olmayan kalem', price: 0, kdvRate: 10, hidden: true, posName: 'PLATFORM ÜRÜNÜ', sort: 999 }).run();
   return id;
 }
 
@@ -101,6 +113,8 @@ function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
   const order = row.orderId ? t.select({ no: schema.orders.no }).from(schema.orders).where(eq(schema.orders.id, row.orderId)).get() : null;
   const by = row.decidedBy ? t.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, row.decidedBy)).get() : null;
   const expired = row.status === 'bekliyor' && row.expiresAt != null && row.expiresAt <= now;
+  const pending = row.status === 'bekliyor' && !expired;
+  const matched = pending ? matchLines(t, row.payload) : [];
   return {
     id: row.id,
     platform: row.platform,
@@ -111,7 +125,8 @@ function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
     orderNo: order?.no ?? null,
     decidedBy: by?.name ?? null,
     reason: row.reason,
-    unmatched: row.status === 'bekliyor' ? matchLines(t, row.payload).filter((m) => !m.product).map((m) => m.line.name) : [],
+    unmatched: pending ? matched.filter((m) => !m.product).map((m) => m.line.name) : [],
+    soldOut: pending ? matched.filter((m) => m.product && !m.product.active).map((m) => m.line.name) : [],
     payload: row.payload,
   };
 }
@@ -159,6 +174,7 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
 
 export function sendTestOrder(t: Tx, fx: Effects, platform: PlatformId, opts: { courier?: PlatformCourier } = {}, now = Date.now()) {
   if (platformSettings()[platform].mode !== 'deneme') throw conflict(`${PLATFORM_LABEL[platform]} deneme modunda değil`, 'not_test_mode');
+  assertSetupMode();
   return ingestPlatformOrder(t, fx, sampleOrder(t, platform, now, Math.random, opts), now).row;
 }
 
@@ -239,39 +255,79 @@ export function rejectPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   fx.emit({ topic: 'delivery', kind: 'platform.rejected', byUserId: user.id });
 }
 
-/**
- * Teslim aşaması değişti: tahsilatı platform yapıyorsa platform kuryesine verilince (yolda) ya da teslimde (kendi
- * kurye, gel-al) kalan tutar platformun online ödeme türüyle yazılır, adisyon kapanır.
- */
-export function afterDelivery(t: Tx, user: AuthUser, fx: Effects, orderId: string) {
-  const o = t.select().from(schema.orders).where(eq(schema.orders.id, orderId)).get();
-  if (!o?.platform || o.status !== 'acik') return;
-  const row = t.select().from(schema.platformOrders).where(eq(schema.platformOrders.orderId, orderId)).get();
-  if (!row?.payload.platformCollects) return;
-  const handedOver = o.deliveryStatus === 'teslim' || (o.deliveryStatus === 'yolda' && row.payload.courier === 'platform');
-  if (!handedOver) return;
-  const fresh = orders.recalc(t, orderId);
-  const due = fresh.total - fresh.paid;
-  if (due <= 0) return;
-  orders.addPayment(t, platformActor(user), fx, orderId, { methodId: platformMethodId(t, o.platform), amount: due, note: `${PLATFORM_LABEL[o.platform]} ${o.platformCode ?? ''}`.trim() });
+/** Platformun restorana ödeyeceği: kalemler ve restoranın kampanyası (platformun kampanyasını platform karşılar) */
+const platformAmount = (p: PlatformOrderPayload) => p.subtotal - p.restaurantDiscount;
+
+/** Adisyondaki, platformun online ödeme türüyle alınmış (iade edilmemiş) ödemeler */
+function platformPayments(t: Tx, orderId: string, platform: PlatformId) {
+  return t
+    .select({ id: schema.payments.id, amount: schema.payments.amount })
+    .from(schema.payments)
+    .innerJoin(schema.paymentMethods, eq(schema.paymentMethods.id, schema.payments.methodId))
+    .where(and(eq(schema.payments.orderId, orderId), isNull(schema.payments.refundedAt), eq(schema.paymentMethods.kind, 'online'), eq(schema.paymentMethods.channel, platform)))
+    .all();
 }
 
 /**
- * Platform siparişi iptal etti (denemede elle; gerçek bağlantıda platformdan gelir). Kabul edilmemişse kayıt kapanır;
- * kabul edilmiş açık adisyonun platform ödemesi geri alınır ve adisyon iptal olur.
+ * Teslim aşaması değişti. Tahsilatı platform yapıyorsa platform kuryesine verilince (Yolda) ya da teslimde (kendi
+ * kurye, gel-al) platformun ödeyeceği tutar platformun online ödeme türüyle yazılır, adisyon kapanır. Yalnız:
+ * - aşamaya ilk geçişte (iade edilmiş ödeme kurye değişince yeniden yazılmaz),
+ * - paket yetkisi olan kaydeder (garson "teslim" derse adisyon açık kalır, kasa kapatır),
+ * - adisyon tutarı platformun tutarına eşitse. Fark varsa (kalem iptali, indirim, bölünmüş hesap) otomatik ödeme
+ *   yazılmaz, denetime alarm düşer: kalan kasada alınır.
  */
-export function platformCancelled(t: Tx, user: AuthUser, fx: Effects, id: string, reason: string) {
+export function afterDelivery(t: Tx, user: AuthUser, fx: Effects, orderId: string, before: string | null) {
+  const o = t.select().from(schema.orders).where(eq(schema.orders.id, orderId)).get();
+  if (!o?.platform || o.status !== 'acik' || o.deliveryStatus === before) return;
+  const row = t.select().from(schema.platformOrders).where(eq(schema.platformOrders.orderId, orderId)).get();
+  if (!row?.payload.platformCollects) return;
+  const handedOver = o.deliveryStatus === 'teslim' || (o.deliveryStatus === 'yolda' && row.payload.courier === 'platform');
+  if (!handedOver || !user.permissions.has('paket.yonet')) return;
+  const label = `${PLATFORM_LABEL[o.platform]} ${o.platformCode ?? ''}`.trim();
+  const fresh = orders.recalc(t, orderId);
+  const expected = platformAmount(row.payload);
+  const already = platformPayments(t, orderId, o.platform).reduce((a, p) => a + p.amount, 0);
+  const amount = expected - already;
+  const due = fresh.total - fresh.paid;
+  if (fresh.total !== expected || amount <= 0 || amount !== due || orders.splitActive(t, fresh, due)) {
+    fx.audit(t, {
+      userId: user.id,
+      action: 'platform.mismatch',
+      severity: 'alarm',
+      orderId,
+      amount: fresh.total - expected,
+      message: `${label}: adisyon ${tl(fresh.total)}, platformun ödeyeceği ${tl(expected)}. Platform ödemesi kendiliğinden yazılmadı; kalanı kasadan alın`,
+    });
+    return;
+  }
+  orders.addPayment(t, platformActor(user), fx, orderId, { methodId: platformMethodId(t, o.platform), amount, note: label });
+  fx.audit(t, { userId: user.id, action: 'platform.settle', orderId, amount, message: `${label} platform ödemesiyle kapandı (${tl(amount)})` });
+}
+
+/**
+ * Platform siparişi iptal etti (denemede elle; gerçek bağlantıda platformdan gelir). Kabul edilmemişse kayıt kapanır.
+ * Kabul edilmişse yalnız platformun ödemesi geri alınır ve adisyon iptal olur (kapanmışsa önce açılır); kasada
+ * alınmış başka ödeme varsa durur: o ödeme normal yoldan (yetkili onayıyla) geri alınır.
+ */
+export function platformCancelled(t: Tx, user: AuthUser, fx: Effects, id: string, reason: string, opts: { manual?: boolean } = {}) {
   const row = loadRow(t, id);
   const label = PLATFORM_LABEL[row.platform];
+  if (opts.manual && (!row.payload.simulated || platformSettings()[row.platform].mode !== 'deneme')) throw conflict('Platform iptali elle yalnız deneme siparişinde yapılır', 'not_test_order');
   if (row.status === 'iptal' || row.status === 'ret' || row.status === 'suresi_doldu') throw conflict('Sipariş zaten kapandı', 'not_open');
   const why = `${label} iptal etti${reason.trim() ? `: ${reason.trim()}` : ''}`;
   if (row.orderId) {
     const o = t.select().from(schema.orders).where(eq(schema.orders.id, row.orderId)).get();
-    if (o?.status === 'acik') {
+    if (o && o.status !== 'iptal') {
+      const own = platformPayments(t, o.id, row.platform);
+      const others = t
+        .select({ id: schema.payments.id })
+        .from(schema.payments)
+        .where(and(eq(schema.payments.orderId, o.id), isNull(schema.payments.refundedAt)))
+        .all()
+        .filter((p) => !own.some((x) => x.id === p.id));
+      if (others.length) throw conflict('Adisyonda kasada alınmış ödeme var: önce o ödemeyi yetkili onayıyla geri alın', 'has_payments');
       const actor = platformActor(user);
-      for (const pay of t.select().from(schema.payments).where(eq(schema.payments.orderId, o.id)).all()) {
-        if (!pay.refundedAt) orders.refundPayment(t, actor, fx, o.id, { paymentId: pay.id, reason: why });
-      }
+      for (const pay of own) orders.refundPayment(t, actor, fx, o.id, { paymentId: pay.id, reason: why });
       orders.cancelOrder(t, actor, fx, o.id, why);
     }
   }

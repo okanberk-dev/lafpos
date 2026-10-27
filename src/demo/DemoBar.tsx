@@ -1,11 +1,15 @@
-import { RotateCcw } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { RotateCcw, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { PLATFORM_LABEL, type PlatformId } from '@shared/platforms';
+import { SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode, serviceModeOf } from '@shared/service-mode';
+import type { BootstrapDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { errorMessage } from '@/lib/api';
+import { errorMessage, get } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { appUrl, enterAs, useDemo } from '@/lib/demo';
+import { appUrl, asDemoPatron, enterAs, useDemo } from '@/lib/demo';
 import { toast } from '@/lib/toast';
 
 /** Demo şeridi: rol değiştirme ve sıfırlama. Uygulama şeridin altında tam yüksekliğini kullanır */
@@ -18,10 +22,17 @@ export function DemoFrame({ children }: { children: ReactNode }) {
   );
 }
 
+const DEMO_PLATFORMS: PlatformId[] = ['yemeksepeti', 'getir', 'trendyol'];
+
 function DemoBar() {
   const server = useDemo((s) => s.server);
   const me = useAuth((s) => s.me);
   const navigate = useNavigate();
+  const qc = useQueryClient();
+  // Servis modu ve deneme siparişi oturum açıkken (rol seçimi ekranında şerit yalnız rolü gösterir)
+  const boot = useQuery({ queryKey: ['bootstrap'], queryFn: () => get<BootstrapDTO>('/bootstrap'), enabled: !!me, staleTime: 5 * 60_000 });
+  const mode = serviceModeOf(boot.data?.settings);
+  const [sending, setSending] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   if (!server) return null;
@@ -36,6 +47,30 @@ function DemoBar() {
       toast.err(errorMessage(e));
     }
   };
+  const switchMode = async (next: ServiceMode) => {
+    try {
+      await asDemoPatron('PUT', '/admin/settings', { serviceMode: next });
+      await qc.invalidateQueries({ queryKey: ['bootstrap'] });
+      toast.ok(SERVICE_MODE_LABEL[next]);
+      navigate('/');
+    } catch (e) {
+      toast.err(errorMessage(e));
+    }
+  };
+  // Platformdan gelmiş gibi sipariş: üstteki şeritten kabul edilir (Yemeksepeti, Getir, Trendyol Go sırayla)
+  const sendOrder = async () => {
+    setSending(true);
+    const platform = DEMO_PLATFORMS[Math.floor(Date.now() / 1000) % DEMO_PLATFORMS.length];
+    try {
+      await asDemoPatron('POST', `/platforms/${platform}/test-order`, {});
+      await qc.invalidateQueries({ queryKey: ['platforms'] });
+      toast.ok(`${PLATFORM_LABEL[platform]} siparişi geldi`);
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setSending(false);
+    }
+  };
   const reset = async () => {
     setBusy(true);
     await server.reset();
@@ -43,7 +78,7 @@ function DemoBar() {
   };
 
   return (
-    <div role="region" aria-label="Demo" className="flex shrink-0 items-center gap-2 border-b border-line bg-surface px-3 py-0.5 text-sm">
+    <div role="region" aria-label="Demo" className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface px-3 py-0.5 text-sm">
       <span className="rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-semibold text-[var(--admin-primary)]">Demo</span>
       <span className="hidden min-w-0 truncate text-muted md:inline">
         {server.persistent ? 'Gerçek LafPOS bu tarayıcıda çalışıyor; veriler yalnız burada kalır' : 'Gerçek LafPOS bu sekmede çalışıyor; sekme kapanınca veriler silinir'}
@@ -65,6 +100,25 @@ function DemoBar() {
           ))}
         </select>
       </label>
+      {me && boot.data && (
+        <>
+          <select
+            value={mode}
+            aria-label="Servis modu"
+            onChange={(e) => void switchMode(e.target.value as ServiceMode)}
+            className="min-h-11 rounded-lg border border-[var(--admin-border-strong)] bg-surface px-2 text-sm pointer-fine:min-h-9"
+          >
+            {SERVICE_MODES.map((m) => (
+              <option key={m} value={m}>
+                {SERVICE_MODE_LABEL[m]}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" variant="ghost" icon={<Send className="size-4" />} loading={sending} onClick={() => void sendOrder()} aria-label="Platform siparişi gönder">
+            <span className="max-lg:sr-only">Platform siparişi</span>
+          </Button>
+        </>
+      )}
       <Button size="sm" variant="ghost" icon={<RotateCcw className="size-4" />} onClick={() => setConfirm(true)} aria-label="Demoyu sıfırla">
         <span className="max-sm:sr-only">Sıfırla</span>
       </Button>

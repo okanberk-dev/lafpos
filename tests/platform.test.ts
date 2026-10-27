@@ -27,6 +27,7 @@ function payload(over: Partial<PlatformOrderPayload> = {}): PlatformOrderPayload
   const subtotal = lines.reduce((a, l) => a + l.unitPrice * l.qty, 0);
   return {
     platform: 'yemeksepeti',
+    simulated: true,
     externalId: `ys-${Math.random()}`,
     code: 'A7KX',
     placedAt: Date.now(),
@@ -142,9 +143,83 @@ describe('paket platformları', () => {
     const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
     const o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
     expect(o.items[0]).toMatchObject({ name: 'Platform ürünü', unitPrice: 12000, note: 'Menüde olmayan tatlı' });
-    expect(h.boot.products.some((x) => x.name === 'Platform ürünü')).toBe(false);
+    // Kasanın ürün listesinde gizli (karaoke oda ücreti gibi): yalnız platform satırında kullanılır
+    const boot = await h.ok<{ products: { name: string; hidden: boolean }[] }>('kasa', 'GET', '/bootstrap');
+    expect(boot.products.find((x) => x.name === 'Platform ürünü')?.hidden).toBe(true);
     await h.ok('kasa', 'POST', `/platforms/orders/${row.id}/platform-cancel`, { reason: 'Müşteri vazgeçti' });
     expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).status).toBe('iptal');
     expect((await list()).find((o) => o.id === row.id)?.status).toBe('iptal');
+  });
+
+  it('platform siparişinin içeriği değişmez: ürün eklenmez, masa birleştirilmez', async () => {
+    const { row } = await ingest(payload({ code: 'G7HJ' }));
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    const add = await h.call<{ code: string }>('kasa', 'POST', `/orders/${orderId}/items`, { items: [{ productId: product('Latte').id, qty: 4 }] });
+    expect(add.json.code).toBe('platform_order');
+    const t = h.boot.tables.find((x) => x.kind === 'masa')!;
+    const table = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: t.id, guests: 1 });
+    await h.ok('garson', 'POST', `/orders/${table.id}/items`, { items: [{ productId: product('Latte').id, qty: 4 }] });
+    const merge = await h.call<{ code: string }>('garson', 'POST', `/orders/${orderId}/merge`, { sourceOrderId: table.id });
+    expect(merge.json.code).toBe('platform_order');
+    await h.ok('patron', 'POST', `/orders/${table.id}/cancel`, { reason: 'Deneme' });
+  });
+
+  it('otomatik platform ödemesi: yalnız paket yetkilisi, aşamaya ilk geçişte, tutar platformunkine eşitse', async () => {
+    const { row } = await ingest(payload({ code: 'H8JK' }));
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    // Garson teslim derse adisyon açık kalır
+    await h.ok('garson', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'yolda' });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).status).toBe('acik');
+    // Kalem iptal edildi: tutar platformunkinden farklı, ödeme yazılmaz, alarm düşer
+    const o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
+    await h.ok('patron', 'POST', `/orders/${orderId}/items/${o.items[0].id}/void`, { qty: 1, reason: 'Ürün bitti' });
+    await h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'teslim' });
+    const after = await h.ok<OrderDTO>('patron', 'GET', `/orders/${orderId}`);
+    expect([after.status, after.payments.length]).toEqual(['acik', 0]);
+    const audit = await h.ok<{ action: string; orderId: string | null; severity: string }[]>('patron', 'GET', '/admin/audit?limit=30');
+    expect(audit.find((a) => a.action === 'platform.mismatch' && a.orderId === orderId)?.severity).toBe('alarm');
+  });
+
+  it('iade edilen platform ödemesi kurye değişince yeniden yazılmaz', async () => {
+    const { row } = await ingest(payload({ code: 'J9KL' }));
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    await h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'yolda' });
+    const closed = await h.ok<OrderDTO>('patron', 'GET', `/orders/${orderId}`);
+    await h.ok('mudur', 'POST', `/orders/${orderId}/payments/${closed.payments[0].id}/refund`, { reason: 'Yanlış' });
+    await h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { courierId: null });
+    expect((await h.ok<OrderDTO>('patron', 'GET', `/orders/${orderId}`)).payments.filter((p) => !p.refundedAt)).toHaveLength(0);
+  });
+
+  it('platform iptali: kasada alınmış ödeme varsa durur; kapanmış siparişte platform ödemesi geri alınır', async () => {
+    const real = await ingest(payload({ code: 'K1LM', simulated: false }));
+    expect((await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${real.row.id}/platform-cancel`, { reason: 'x' })).json.code).toBe('not_test_order');
+
+    const cash = await ingest(payload({ code: 'L2MN', courier: 'restoran', platformCollects: false }));
+    const a = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${cash.row.id}/accept`, {});
+    const nakit = h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+    await h.ok('kasa', 'POST', `/orders/${a.orderId}/payments`, { methodId: nakit.id, amount: 10000 });
+    expect((await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${cash.row.id}/platform-cancel`, { reason: 'x' })).json.code).toBe('has_payments');
+
+    const done = await ingest(payload({ code: 'M3NP' }));
+    const b = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${done.row.id}/accept`, {});
+    await h.ok('kasa', 'POST', `/orders/${b.orderId}/delivery`, { deliveryStatus: 'yolda' });
+    await h.ok('kasa', 'POST', `/platforms/orders/${done.row.id}/platform-cancel`, { reason: 'Müşteri vazgeçti' });
+    const cancelled = await h.ok<OrderDTO>('patron', 'GET', `/orders/${b.orderId}`);
+    expect(cancelled.status).toBe('iptal');
+    expect(cancelled.payments.every((p) => p.refundedAt)).toBe(true);
+  });
+
+  it('tükenmiş ürün kabul edilmez; deneme modu yalnız kurulum modunda', async () => {
+    const latte = product('Latte');
+    await h.ok('kasa', 'POST', `/sync/products/${latte.id}/availability`, { active: false });
+    const { row } = await ingest(payload({ code: 'N4PR' }));
+    expect((await list()).find((o) => o.id === row.id)?.soldOut).toEqual(['Latte']);
+    expect((await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {})).json.code).toBe('sold_out');
+    await h.ok('kasa', 'POST', `/sync/products/${latte.id}/availability`, { active: true });
+
+    await h.ok('patron', 'PUT', '/admin/settings', { demoMode: false });
+    expect((await h.call<{ code: string }>('patron', 'PUT', '/platforms/trendyol', { mode: 'deneme' })).json.code).toBe('not_setup_mode');
+    expect((await h.call<{ code: string }>('kasa', 'POST', '/platforms/yemeksepeti/test-order')).json.code).toBe('not_setup_mode');
+    await h.ok('patron', 'PUT', '/admin/settings', { demoMode: true });
   });
 });

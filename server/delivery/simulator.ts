@@ -52,6 +52,7 @@ export function sampleOrder(t: Tx | DB, platform: PlatformId, now = Date.now(), 
   const platformDiscount = r() < 0.2 ? Math.min(1500, subtotal - restaurantDiscount) : 0;
   return {
     platform,
+    simulated: true,
     externalId: `${platform}-${now}-${Math.floor(r() * 1e6)}`,
     code: codeFor(platform, r),
     placedAt: now,

@@ -59,10 +59,15 @@ export function normalizeSize(product: Product, size: Size | undefined): Size {
  * İstemcinin seçtiği seçenekleri veritabanındaki tanımlara göre doğrular ve fiyatlandırır; istemcinin
  * gönderdiği fiyata asla güvenilmez. Seçilmeyen zorunlu tek seçimlik gruplarda varsayılan kullanılır.
  */
-export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: number }[]): SelectedOption[] {
+/**
+ * `lenient`: paket platformu satırı. Platformun seçimleri notta yazar; seçilmeyen grupta varsayılan eklenmez, zorunlu
+ * grup sorulmaz (kasada karşılığı olmayan seçim siparişi durdurmasın)
+ */
+export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: number }[], { lenient = false }: { lenient?: boolean } = {}): SelectedOption[] {
   const out: SelectedOption[] = [];
   for (const g of sp.groups) {
     const chosen = picked.filter((p) => g.items.some((i) => i.id === p.itemId));
+    if (lenient && !chosen.length) continue;
     if (g.kind === 'single') {
       if (chosen.length > 1) throw bad(`${g.name}: tek seçim yapılabilir`, 'option_invalid');
       const item = chosen[0] ? g.items.find((i) => i.id === chosen[0].itemId) : g.items.find((i) => i.isDefault);

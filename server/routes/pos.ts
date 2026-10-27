@@ -270,9 +270,10 @@ posRoutes.post('/orders/:id/delivery', async (c) => {
   const input = await body(c, z.object({ deliveryStatus: z.enum(['hazirlaniyor', 'hazir', 'yolda', 'teslim']).optional(), courierId: z.string().nullish() }));
   const actor = actorFrom(c);
   write((t, fx) => {
+    const before = t.select({ s: schema.orders.deliveryStatus }).from(schema.orders).where(eq(schema.orders.id, c.req.param('id'))).get()?.s ?? null;
     orders.setDelivery(t, actor, fx, c.req.param('id'), input);
     // Platform siparişi: tahsilatı platform yapıyorsa kuryeye verilince / teslimde kapanır
-    afterDelivery(t, actor.user, fx, c.req.param('id'));
+    afterDelivery(t, actor.user, fx, c.req.param('id'), before);
   });
   return c.json(dto(c, c.req.param('id')));
 });

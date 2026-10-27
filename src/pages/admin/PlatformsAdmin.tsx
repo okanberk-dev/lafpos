@@ -30,7 +30,7 @@ export default function PlatformsAdmin() {
     <>
       <PageHeader
         title="Paket platformları"
-        description="Yemeksepeti, Getir Yemek, Trendyol Go (Uber Eats) ve Migros Yemek siparişleri kasaya düşer, onaylanınca bara gider. Tahsilatı platform yapıyorsa kuryeye verilince ya da teslimde platformun online ödemesiyle kapanır; kasada tahsil edilmez"
+        description="Yemeksepeti, Getir Yemek, Trendyol Go (Uber Eats) ve Migros Yemek siparişleri kasaya düşer, onaylanınca bara gider. Tahsilatı platform yapıyorsa kuryeye verilince ya da teslimde platformun online ödemesiyle kapanır; kasada tahsil edilmez. Deneme siparişleri gerçek satış gibi ciroya girer: deneme modu yalnız kurulum modunda açılır"
       />
       <div className="grid gap-4 lg:grid-cols-2">
         {PLATFORMS.map((p) => (

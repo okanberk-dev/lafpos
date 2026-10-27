@@ -141,6 +141,12 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
           Kasada karşılığı olmayan: {order.unmatched.join(', ')}. Kabulde "Platform ürünü" satırı olur, adı notta yazar
         </p>
       )}
+      {order.soldOut.length > 0 && (
+        <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--admin-danger-soft)] p-2 text-xs text-[var(--admin-danger-ink)]">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+          Kasada tükenmiş: {order.soldOut.join(', ')}. Ürünü satışa açın ya da "Ürün tükendi" ile reddedin
+        </p>
+      )}
       {rejecting ? (
         <div className="mt-3 space-y-2">
           <p className="text-sm font-medium">Neden reddediyorsunuz?</p>

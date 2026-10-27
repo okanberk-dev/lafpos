@@ -223,6 +223,23 @@ export async function runDemo(browser) {
         },
       ],
       [
+        'Demo: şeritten self servise geçer; platform siparişi gelir, şeritten kabul edilir',
+        async (page) => {
+          await page.getByLabel('Servis modu').selectOption('self');
+          await page.waitForURL(/\/demo\/(satis|adisyon\/)/, { timeout: 8000 });
+          const before = (await api(page, 'GET', '/platforms')).orders.filter((o) => o.status === 'bekliyor').length;
+          await page.getByRole('button', { name: 'Platform siparişi gönder' }).click();
+          await page.waitForFunction((n) => document.body.innerText.includes('onay bekliyor') && n >= 0, before, { timeout: 8000 });
+          await page.getByRole('button', { name: /onay bekliyor/ }).click();
+          const dialog = page.getByRole('dialog', { name: 'Onay bekleyen platform siparişleri' });
+          await dialog.getByRole('button', { name: /^Kabul et · \d+ dk$/ }).first().click();
+          await page.getByText(/kabul edildi/).first().waitFor({ timeout: 8000 });
+          const accepted = (await api(page, 'GET', '/platforms')).orders.filter((o) => o.status === 'kabul');
+          assert(accepted.length >= 2, `kabul edilen platform siparişi: ${accepted.length}`);
+          await page.getByLabel('Servis modu').selectOption('masa');
+        },
+      ],
+      [
         'Demo: sıfırla ilk güne döner',
         async (page) => {
           const boot = await api(page, 'GET', '/bootstrap');

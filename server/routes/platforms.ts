@@ -73,6 +73,6 @@ platformRoutes.post('/orders/:id/reject', async (c) => {
 platformRoutes.post('/orders/:id/platform-cancel', async (c) => {
   requirePermission(c.get('user'), 'paket.yonet');
   const input = await body(c, z.object({ reason: z.string().max(100).default('') }));
-  write((t, fx) => platformCancelled(t, c.get('user'), fx, c.req.param('id'), input.reason));
+  write((t, fx) => platformCancelled(t, c.get('user'), fx, c.req.param('id'), input.reason, { manual: true }));
   return c.json({ ok: true });
 });

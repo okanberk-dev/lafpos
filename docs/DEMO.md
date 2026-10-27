@@ -22,6 +22,9 @@ yoktur; ayrı adres, ayrı veri.
   bekleyen kalemler, çalışan karaoke sayacı.
 - PIN yok: son seçilen rolle (ilk açılışta Patron) girilir; üstteki şeritten rol değişir. Yetkili onayında PIN
   yerine "Müdür onaylasın" düğmesi. "Sıfırla" bu tarayıcıdaki demo verisini siler.
+- Şeritte **servis modu** (masaya servis, yarı self, self) ve **Platform siparişi** (Yemeksepeti, Getir, Trendyol Go
+  deneme siparişi; üstteki onay şeridinden kabul edilir). İkisi de patron adına kısa bir oturumla yapılır.
+- Kafe bağlanana dek `lafpos.vercel.app` doğrudan demoyu açar; uzaktan görünüm (örnek özet) `?uzaktan=1` ile.
 
 ## Denetim
 

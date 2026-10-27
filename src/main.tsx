@@ -8,6 +8,7 @@ import { DemoFailed, DemoFrame } from './demo/DemoBar';
 import { ApprovalHost } from './lib/approval';
 import { DEMO, startDemo } from './lib/demo';
 import { PrintHost } from './lib/print';
+import { REMOTE } from './lib/remote';
 import { initTheme } from './lib/theme';
 import { Toaster } from './lib/toast';
 import './index.css';
@@ -64,6 +65,13 @@ if (DEMO) {
   // Tarayıcı demosu: önce sayfanın içindeki LafPOS sunucusu açılır (ilk açılışta örnek gün kurulur)
   root.render(<PageLoading label="LafPOS demosu hazırlanıyor" />);
   startDemo().then(render, (e: unknown) => root.render(<DemoFailed error={e} />));
+} else if (REMOTE && !new URLSearchParams(window.location.search).has('uzaktan')) {
+  // LafPOS Uzaktan: kafe henüz bağlanmadıysa (yalnız örnek özet var) site tam etkileşimli demoyu açar. Kafe
+  // bağlanınca uzaktan görünüm açılır; ?uzaktan=1 örnek özetle uzaktan görünümde kalır
+  root.render(<PageLoading label="LafPOS açılıyor" />);
+  fetch('/api/uzaktan/kurulum')
+    .then((r) => r.json() as Promise<{ demo?: boolean }>)
+    .then((s) => (s.demo ? window.location.replace('/demo/') : render()), render);
 } else {
   render();
 }

@@ -16,22 +16,23 @@ export const PLATFORM_LABEL: Record<PlatformId, string> = {
   migros: 'Migros Yemek',
 };
 
-/** Rozet rengi (platformların kendi renklerine yakın; metin beyaz) */
+/** Rozet rengi (platformların rengine yakın, beyaz metinle en az 4,5:1 karşıtlık) */
 export const PLATFORM_COLOR: Record<PlatformId, string> = {
-  yemeksepeti: '#d6034a',
+  yemeksepeti: '#c8033f',
   getir: '#5d3ebc',
-  trendyol: '#f27a1a',
-  migros: '#e5741c',
+  trendyol: '#c2410c',
+  migros: '#a16207',
 };
 
 /**
  * Platformun kabul süresi (sn): yanıt verilmezse sipariş platformda iptal olur. Getir 5 dk'da restoranı kapatır,
- * Yemeksepeti `expiryDate` (~15 dk), Migros belgesiz (10 dk varsayılır), Trendyol Go süre belirtmez.
+ * Yemeksepeti `expiryDate` (~15 dk), Migros belgesiz (10 dk varsayılır).
  */
 export const ACCEPT_SECONDS: Record<PlatformId, number | null> = {
   yemeksepeti: 15 * 60,
   getir: 5 * 60,
-  trendyol: null,
+  // Trendyol Go belgede süre vermez: 30 dk sonra şeritten düşer (platform o arada iptal eder)
+  trendyol: 30 * 60,
   migros: 10 * 60,
 };
 
@@ -61,6 +62,8 @@ export const COURIER_LABEL: Record<PlatformCourier, string> = { platform: 'Platf
 /** Platform siparişinin tek biçimi (her bağdaştırıcı buna çevirir). Tutarlar kuruş */
 export interface PlatformOrderPayload {
   platform: PlatformId;
+  /** Deneme siparişi (simülatör): yalnız kurulum modunda üretilir */
+  simulated?: boolean;
   externalId: string;
   /** Kuryenin ve personelin söylediği kısa kod */
   code: string;
@@ -112,5 +115,7 @@ export interface PlatformOrderDTO {
   reason: string | null;
   /** Kalemlerden eşleşmeyenler (LafPOS'ta karşılığı yok): kabulde "Platform ürünü" satırı olur */
   unmatched: string[];
+  /** Kasada tükenmiş kalemler: kabul edilemez (ürünü satışa açın ya da reddedin) */
+  soldOut: string[];
   payload: PlatformOrderPayload;
 }

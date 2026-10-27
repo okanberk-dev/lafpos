@@ -74,3 +74,23 @@ export function demoProductImage(url: string): string | null {
 export function demoApprovers(): DemoUser[] {
   return (useDemo.getState().server?.users ?? []).filter((u) => u.role === 'mudur' || u.role === 'patron');
 }
+
+/**
+ * Demo şeridinin patron işleri (servis modu, deneme platform siparişi): şeritteki rol ne olursa olsun patron adına
+ * yapılır. Kısa bir patron oturumu açılır, iş bitince kapanır; ekrandaki oturum değişmez.
+ */
+export async function asDemoPatron<T>(method: 'POST' | 'PUT', path: string, body: unknown): Promise<T> {
+  const patron = useDemo.getState().server?.users.find((u) => u.role === 'patron');
+  if (!patron) throw new Error('Demoda patron yok');
+  const json = { 'content-type': 'application/json' };
+  const login = (await (await fetch('/api/auth/login', { method: 'POST', headers: json, body: JSON.stringify({ pin: patron.pin, device: 'Demo şeridi' }) })).json()) as { token: string };
+  const auth = { ...json, authorization: `Bearer ${login.token}` };
+  try {
+    const res = await fetch(`/api${path}`, { method, headers: auth, body: JSON.stringify(body) });
+    const data = (await res.json()) as T & { error?: string };
+    if (!res.ok) throw new Error(data.error ?? `Hata (${res.status})`);
+    return data;
+  } finally {
+    await fetch('/api/auth/logout', { method: 'POST', headers: auth, body: '{}' }).catch(() => null);
+  }
+}
