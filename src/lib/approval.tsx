@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { ApiError, errorMessage } from './api';
+import { DEMO, demoApprovers } from './demo';
 
 /**
  * Yetkili onayı: sunucu 403 `approval_required` dönünce PIN penceresi açılır, istek `approverPin` ile
@@ -80,25 +81,42 @@ export function ApprovalHost() {
       <div className="space-y-4 p-5">
         <div className="flex items-start gap-3 rounded-2xl bg-warn-50 p-3 text-sm text-warn-700 dark:bg-warn-700/20 dark:text-warn-100">
           <ShieldCheck className="mt-0.5 size-5 shrink-0" />
-          <span>{pending.error ?? pending.message}. Yetkili kişi PIN'ini girsin</span>
+          <span>
+            {pending.error ?? pending.message}. {DEMO ? 'Demoda PIN sorulmaz: onaylayacak kişiyi seçin' : "Yetkili kişi PIN'ini girsin"}
+          </span>
         </div>
-        <div className="flex justify-center gap-3 py-1" aria-label="PIN">
-          {Array.from({ length: 6 }, (_, i) => (
-            <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? 'bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-line'} ${i >= 4 && i >= pin.length ? 'opacity-40' : ''}`} />
-          ))}
-        </div>
-        <Numpad
-          onKey={(k) => {
-            const next = applyNumpadKey(pin, k, { maxLength: 6 });
-            setPin(next);
-          }}
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <Button onClick={cancel}>Vazgeç</Button>
-          <Button variant="primary" disabled={pin.length < 4} onClick={() => submit()}>
-            Onayla
-          </Button>
-        </div>
+        {DEMO ? (
+          <div className="grid gap-2">
+            {demoApprovers().map((u) => (
+              <Button key={u.role} onClick={() => submit(u.pin)}>
+                {u.name} onaylasın
+              </Button>
+            ))}
+            <Button variant="ghost" onClick={cancel}>
+              Vazgeç
+            </Button>
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-center gap-3 py-1" aria-label="PIN">
+              {Array.from({ length: 6 }, (_, i) => (
+                <span key={i} className={`size-3.5 rounded-full ${i < pin.length ? 'bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-line'} ${i >= 4 && i >= pin.length ? 'opacity-40' : ''}`} />
+              ))}
+            </div>
+            <Numpad
+              onKey={(k) => {
+                const next = applyNumpadKey(pin, k, { maxLength: 6 });
+                setPin(next);
+              }}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={cancel}>Vazgeç</Button>
+              <Button variant="primary" disabled={pin.length < 4} onClick={() => submit()}>
+                Onayla
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   );

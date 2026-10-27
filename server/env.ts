@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { configFrom } from './env-config';
 
 /** Proje kökü (server/ klasörünün bir üstü) */
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,30 +42,12 @@ function loadSecret(): string {
 }
 
 export const env = {
-  isProd: process.env.NODE_ENV === 'production',
-  port: Number(process.env.LAFPOS_PORT ?? 4000),
-  host: process.env.LAFPOS_HOST ?? '0.0.0.0',
+  ...configFrom(process.env),
   dataDir,
   dbFile: resolve(dataDir, process.env.LAFPOS_DB_FILE ?? 'lafpos.db'),
   uploadsDir: resolve(dataDir, 'uploads'),
   webDist: resolve(ROOT, 'dist/web'),
   secret: loadSecret(),
-  /** Oturum süresi (saat) */
-  sessionHours: Number(process.env.LAFPOS_SESSION_HOURS ?? 14),
-
-  /** laffogato (site + mobil uygulama API'si) */
-  laffogatoUrl: (process.env.LAFFOGATO_URL ?? 'https://laffogato.net').replace(/\/$/, ''),
-  /** Sitenin imzalı uçları: sitedeki LAFPOS_SYNC_SECRET değeri (en az 32 karakter) */
-  laffogatoPanelSecret: (process.env.LAFFOGATO_SYNC_SECRET ?? process.env.LAFFOGATO_PANEL_SECRET ?? '').trim(),
-
-  /** lafmaliyet (maliyet / arka ofis paneli) */
-  lafmaliyetUrl: (process.env.LAFMALIYET_URL ?? '').replace(/\/$/, ''),
-  /** lafmaliyet'in imzalı POS uçları: paneldeki LAFPOS_SYNC_SECRET değeri */
-  lafmaliyetToken: (process.env.LAFMALIYET_SYNC_SECRET ?? '').trim(),
-
-  /** LafPOS Uzaktan (Vercel): canlı özetin gittiği adres ve imza anahtarı (Vercel'deki LAFPOS_CLOUD_SECRET) */
-  cloudUrl: (process.env.LAFPOS_CLOUD_URL ?? '').replace(/\/$/, ''),
-  cloudSecret: (process.env.LAFPOS_CLOUD_SECRET ?? '').trim(),
 };
 
 mkdirSync(env.uploadsDir, { recursive: true });

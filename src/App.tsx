@@ -10,6 +10,8 @@ import { useBootQuery } from './lib/boot';
 import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
 import { REMOTE, REMOTE_PATHS } from './lib/remote';
+import { DemoRolePicker } from './demo/DemoRolePicker';
+import { DEMO } from './lib/demo';
 import { LoginPage } from './pages/LoginPage';
 import { RemoteLoginPage } from './pages/RemoteLoginPage';
 
@@ -93,7 +95,10 @@ function Authed() {
     <AppShell>
       {demo && (
         <div role="note" className="mb-3 rounded-xl border border-[var(--admin-warning)]/30 bg-[var(--admin-warning-soft)] px-3 py-2 text-sm text-[var(--admin-warning)]">
-          Demo verileri: kafedeki kasa bağlanınca gerçek veriler gelir ve giriş parolası devreye girer
+          Demo verileri: kafedeki kasa bağlanınca gerçek veriler gelir ve giriş parolası devreye girer.{' '}
+          <a href="/demo/" className="font-medium underline underline-offset-2">
+            Kasa ekranını dene
+          </a>
         </div>
       )}
       <Suspense fallback={<PageLoading />}>
@@ -134,7 +139,7 @@ export function App() {
   if (!ready) return <PageLoading label="LafPOS açılıyor" />;
   if (!me) {
     if (location.pathname !== '/giris') return <Navigate to="/giris" replace state={{ from: location.pathname }} />;
-    return REMOTE ? <RemoteLoginPage /> : <LoginPage />;
+    return REMOTE ? <RemoteLoginPage /> : DEMO ? <DemoRolePicker /> : <LoginPage />;
   }
   if (location.pathname === '/giris') return <Navigate to="/" replace />;
   return <Authed />;
