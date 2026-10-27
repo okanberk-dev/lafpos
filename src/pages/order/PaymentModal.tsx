@@ -233,7 +233,7 @@ export function PaymentModal({
                         {i.name} {i.size !== 'TEK' && <span className="text-muted">{boot.settings.sizeLabels[i.size]}</span>}
                       </span>
                       <span className="tabular text-xs text-muted">
-                        {left} adet · {tl(unpaidLineAmount(order.totals, i))}
+                        {left} adet · {tl(unpaidLineAmount(order.totals, i, remaining))}
                       </span>
                     </button>
                     <div className="flex items-center gap-1">
@@ -250,7 +250,8 @@ export function PaymentModal({
               })}
               <div className="flex justify-between px-1 pt-2 text-sm font-semibold">
                 <span>Seçilen</span>
-                <span className="tabular">{tl(itemsAmount)}</span>
+                {/* Sunucunun alacağı: ödenecek kalanla sınırlı (ödeme düğmesindeki tutarla aynı) */}
+                <span className="tabular">{tl(amount)}</span>
               </div>
             </div>
           )}

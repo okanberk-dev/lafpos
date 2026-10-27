@@ -202,9 +202,14 @@ export function amountForItems(
   return sum;
 }
 
-/** Kalemin ödenmemiş adetlerinin tutarı ("Kalem seç"te satırın kalanı): kalanın tamamını seçmek bu tutarı öder */
-export function unpaidLineAmount(totals: Pick<OrderTotals, 'lineNet'>, line: { id: string; qty: number; paidQty: number }): Kurus {
-  return amountForItems(totals, [line], [{ lineId: line.id, qty: line.qty - line.paidQty }]);
+/**
+ * Kalemin ödenmemiş adetlerinin tutarı ("Kalem seç"te satırın kalanı): satırın kalanının tamamını tek başına seçmek
+ * bu tutarı öder. Sunucu kalem ödemesini adisyonun ödenecek kalanıyla sınırlar (`remaining` = toplam − ödenen):
+ * kısmi ödemeden sonra adisyona indirim yapılınca ödenmiş adetlerin payı küçülür, kalan adetlerin payı ödenecek
+ * kalanı aşabilir. Satır da aynı sınırla gösterilir ki kart terminaline fazla tutar girilmesin.
+ */
+export function unpaidLineAmount(totals: Pick<OrderTotals, 'lineNet'>, line: { id: string; qty: number; paidQty: number }, remaining: Kurus): Kurus {
+  return Math.min(amountForItems(totals, [line], [{ lineId: line.id, qty: line.qty - line.paidQty }]), Math.max(0, remaining));
 }
 
 export interface PaymentLike {

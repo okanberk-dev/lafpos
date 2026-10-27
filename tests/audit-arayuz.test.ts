@@ -190,18 +190,54 @@ describe('ödeme penceresi: Kalem seç', () => {
     const line = o.items[0];
     expect(line.paidQty).toBe(1);
     // "2 adet · ₺280": satırın tamamı (₺420) değil
-    expect(unpaidLineAmount(o.totals, line)).toBe(2 * unit);
-    expect(unpaidLineAmount(o.totals, line)).toBe(o.total - o.paid);
+    expect(unpaidLineAmount(o.totals, line, o.total - o.paid)).toBe(2 * unit);
+    expect(unpaidLineAmount(o.totals, line, o.total - o.paid)).toBe(o.total - o.paid);
 
     // Adisyon indirimiyle kuruş artığı: kalan adetlerin payı sunucunun "kalanı seç" tutarıyla aynı
     let d = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
     d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/items`, { items: [{ productId: tk.id, qty: 3 }] });
     d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/discount`, { type: 'amount', value: 1001, reason: 'Müdavim', approverPin: PINS.mudur });
     const first = await h.ok<{ order: OrderDTO; amount: number }>('kasa', 'POST', `/orders/${d.id}/payments`, { methodId: cash.id, amount: 1, items: [{ itemId: d.items[0].id, qty: 1 }] });
-    const rest = unpaidLineAmount(first.order.totals, first.order.items[0]);
+    const rest = unpaidLineAmount(first.order.totals, first.order.items[0], first.order.total - first.order.paid);
     expect(rest).toBe(first.order.total - first.order.paid);
     const last = await h.ok<{ order: OrderDTO; amount: number; closed: boolean }>('kasa', 'POST', `/orders/${d.id}/payments`, { methodId: cash.id, amount: 1, items: [{ itemId: d.items[0].id, qty: 2 }] });
     expect(last.amount).toBe(rest);
     expect(last.closed).toBe(true);
+  });
+
+  it('kısmi ödemeden sonra adisyon indirimi: satır ve Seçilen sunucunun aldığı kalanı aşmaz', async () => {
+    const tk = product(h.boot, 'Türk kahvesi');
+    const latte = product(h.boot, 'Latte');
+    const cash = h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: tk.id, qty: 3 }] });
+    const unit = o.items[0].unitPrice;
+    // Bir kahve ₺140'tan ödenir, sonra %10 adisyon indirimi: kalan adetlerin payı ₺252, ödenecek kalan ₺238
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash.id, amount: unit, items: [{ itemId: o.items[0].id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 10, reason: 'Müdavim', approverPin: PINS.mudur });
+    const due = o.total - o.paid;
+    const row = unpaidLineAmount(o.totals, o.items[0], due);
+    expect(row).toBe(due);
+    const last = await h.ok<{ order: OrderDTO; amount: number; closed: boolean }>('kasa', 'POST', `/orders/${o.id}/payments`, {
+      methodId: cash.id,
+      amount: 1,
+      items: [{ itemId: o.items[0].id, qty: o.items[0].qty - o.items[0].paidQty }],
+    });
+    expect(last.amount).toBe(row);
+    expect(last.closed).toBe(true);
+
+    // İki kalem: tek başına seçilen satırın tutarı sunucunun o satır için aldığıyla aynı (kalan yetiyorsa payın tamamı)
+    let d = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
+    d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/items`, { items: [{ productId: tk.id, qty: 3 }, { productId: latte.id, size: 'M', qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${d.id}/payments`, { methodId: cash.id, amount: 1, items: [{ itemId: d.items[0].id, qty: 1 }] });
+    d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/discount`, { type: 'percent', value: 10, reason: 'Müdavim', approverPin: PINS.mudur });
+    for (const line of [d.items[0], d.items[1]]) {
+      const cur = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${d.id}`);
+      const l = cur.items.find((i) => i.id === line.id)!;
+      const shown = unpaidLineAmount(cur.totals, l, cur.total - cur.paid);
+      const paid = await h.ok<{ amount: number }>('kasa', 'POST', `/orders/${d.id}/payments`, { methodId: cash.id, amount: 1, items: [{ itemId: l.id, qty: l.qty - l.paidQty }] });
+      expect(paid.amount).toBe(shown);
+    }
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${d.id}`)).status).not.toBe('open');
   });
 });
