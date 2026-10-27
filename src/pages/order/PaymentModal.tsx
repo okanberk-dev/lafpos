@@ -107,7 +107,7 @@ export function PaymentModal({
   const nextShare = split?.shares[0] ?? 0;
 
   const amount = Math.min(remaining, mode === 'kalem' ? itemsAmount : mode === 'paylas' ? nextShare : (parseTL(amountText) ?? 0));
-  const tip = parseTL(tipText) ?? 0;
+  const tip = boot.settings.tipsEnabled ? (parseTL(tipText) ?? 0) : 0;
   const given = parseTL(givenText);
   const change = method?.kind === 'nakit' && given != null ? given - amount - tip : null;
   const cariBlocked = method?.kind === 'cari' && !order.customer;
@@ -371,19 +371,22 @@ export function PaymentModal({
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-3 text-[13px]">
-            <button
-              onClick={() => setFocus(focus === 'bahsis' ? 'tutar' : 'bahsis')}
-              className={cn('min-h-11 px-3 font-medium pointer-fine:min-h-9', choice(focus === 'bahsis'))}
-            >
-              Bahşiş {tip > 0 ? tl(tip) : 'ekle'}
-            </button>
-            {tipBlocked ? (
-              <span className="text-right text-[var(--admin-danger-ink)]">Açık hesaba bahşiş yazılmaz</span>
-            ) : (
-              <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
-            )}
-          </div>
+          {/* İşletme bahşiş almıyorsa (varsayılan) alan yok */}
+          {boot.settings.tipsEnabled && (
+            <div className="flex items-center justify-between gap-3 text-[13px]">
+              <button
+                onClick={() => setFocus(focus === 'bahsis' ? 'tutar' : 'bahsis')}
+                className={cn('min-h-11 px-3 font-medium pointer-fine:min-h-9', choice(focus === 'bahsis'))}
+              >
+                Bahşiş {tip > 0 ? tl(tip) : 'ekle'}
+              </button>
+              {tipBlocked ? (
+                <span className="text-right text-[var(--admin-danger-ink)]">Açık hesaba bahşiş yazılmaz</span>
+              ) : (
+                <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
+              )}
+            </div>
+          )}
 
           <Button variant="primary" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
             {splitBlocks ? 'Hesap bölünmüş: payları Paylaş\'tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}

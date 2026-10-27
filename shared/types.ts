@@ -191,6 +191,8 @@ export interface PublicSettings {
   demoMode: boolean;
   /** Servis modu: masaya servis (varsayılan), yarı self ya da self servis (shared/service-mode.ts) */
   serviceMode: ServiceMode;
+  /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
+  tipsEnabled: boolean;
 }
 
 export interface BootstrapDTO {

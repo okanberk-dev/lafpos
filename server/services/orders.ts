@@ -1207,6 +1207,8 @@ export function addPayment(
   if (amount <= 0) throw bad('Tutar sıfırdan büyük olmalı');
   if (amount > remaining) throw bad(`En fazla ${tl(remaining)} alınabilir`, 'overpay');
   const tip = Math.max(0, Math.trunc(input.tip ?? 0));
+  // İşletme bahşiş almaz (Ayarlar'da kapalı): eski istemci gönderse de yazılmaz
+  if (tip > 0 && !getSettings().tipsEnabled) throw bad('Bahşiş alınmıyor; bahşişi kaldırın', 'tip_disabled');
   // Açık hesapta para alınmaz: bahşiş Z'de alınmış görünür ama ne çekmecededir ne müşterinin borcunda (denetim, 26 Eki 2026)
   if (tip > 0 && method.kind === 'cari') throw bad('Açık hesaba bahşiş yazılmaz; bahşişi kaldırın', 'tip_on_account');
 

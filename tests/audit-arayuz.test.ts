@@ -16,6 +16,7 @@ import { type Harness, PINS, startApp } from './harness';
 let h: Harness;
 beforeAll(async () => {
   h = await startApp();
+  await h.ok('patron', 'PUT', '/admin/settings', { tipsEnabled: true }); // bahşiş testleri: ayar açık kurulum ve eski veri
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
 });
 afterAll(() => h.cleanup());
