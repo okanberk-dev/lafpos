@@ -419,6 +419,41 @@ describe('ödeme', () => {
     const after = await getOrder(o.id);
     expect([after.paid, after.payments.filter((x) => !x.refundedAt).length]).toEqual([14000, 1]);
   });
+
+  it('state-07 (gözden geçirme): yanıtı kaybolan açık hesap tahsilatı yeniden gelince iki kez yazılmaz; bakiyeden fazlası tahsil edilmez', async () => {
+    const cust = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Veresiye Bey' });
+    const o = await counterOrder('kasa', [{ name: 'Türk kahvesi' }], { customerId: cust.id });
+    const cari = h.boot.paymentMethods.find((m) => m.kind === 'cari')!;
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, customerId: cust.id });
+    const expectedCash = async () => (await h.ok<{ summary: { expectedCash: number } }>('patron', 'GET', '/cash/day')).summary.expectedCash;
+    const detail = () => h.ok<{ customer: { balance: number }; ledger: { kind: string; amount: number }[] }>('kasa', 'GET', `/customers/${cust.id}`);
+    const before = await expectedCash();
+
+    // Aynı tahsilat isteği iki kez: bir kez yazılır, ikinci istek ilk sonucu alır
+    const body = { customerId: cust.id, methodId: method('Nakit').id, amount: 10000, requestId: 'tahsilat-istegi-0001' };
+    expect((await h.call('kasa', 'POST', '/cash/collect', body)).status).toBe(200);
+    expect((await h.call('kasa', 'POST', '/cash/collect', body)).status).toBe(200);
+    let c = await detail();
+    expect(c.customer.balance).toBe(4000);
+    expect(c.ledger.filter((l) => l.kind === 'tahsilat').map((l) => l.amount)).toEqual([-10000]);
+    expect(await expectedCash()).toBe(before + 10000);
+
+    // Aynı kimlik başka tutarla gelirse eski sonuç dönmez
+    const reused = await h.call<{ code: string }>('kasa', 'POST', '/cash/collect', { ...body, amount: 4000 });
+    expect(reused.status).toBe(409);
+    expect(reused.json.code).toBe('request_reused');
+
+    // Bakiyeden fazlası tahsil edilmez: kimliksiz (eski istemci) tekrar da borç kapanınca durur
+    const legacy = { customerId: cust.id, methodId: method('Nakit').id, amount: 4000 };
+    expect((await h.call('kasa', 'POST', '/cash/collect', legacy)).status).toBe(200);
+    const twice = await h.call<{ code: string }>('kasa', 'POST', '/cash/collect', legacy);
+    expect(twice.status).toBe(409);
+    expect(twice.json.code).toBe('over_balance');
+    c = await detail();
+    expect(c.customer.balance).toBe(0);
+    expect(c.ledger.filter((l) => l.kind === 'tahsilat')).toHaveLength(2);
+    expect(await expectedCash()).toBe(before + 14000);
+  });
 });
 
 describe('girdi doğrulama', () => {
