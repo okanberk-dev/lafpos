@@ -1,9 +1,8 @@
 import { Check, ChefHat, CircleDot, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { tl } from '@shared/money';
-import { calcOrder } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
-import type { BootstrapDTO, OrderDTO, OrderItemDTO } from '@shared/types';
+import type { OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
@@ -12,6 +11,7 @@ import { useCan } from '@/lib/auth';
 import { estimateUnit, pendingOptionsText, useBoot } from '@/lib/boot';
 import { type PendingLine, useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
+import { previewTotals } from '@/lib/estimate';
 import { parseTL } from '@shared/money';
 
 // Kalemin bardaki durumu: yalnız anlam taşıyan renk (hazırlanıyor amber, hazır yeşil)
@@ -21,23 +21,6 @@ const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
   hazir: { label: 'Hazır', cls: 'text-[var(--admin-success)]' },
   servis: { label: 'Serviste', cls: 'text-muted' },
 };
-
-/** Gönderilmemiş kalemlerle birlikte tahmini toplam (gösterim için; kesin tutar gönderince sunucudan gelir) */
-export function previewTotals(boot: BootstrapDTO, order: OrderDTO, pending: PendingLine[]) {
-  if (pending.length === 0) return null;
-  const pendingTotal = pending.reduce((a, l) => {
-    const p = boot.products.find((x) => x.id === l.productId);
-    return a + (p ? (l.priceOverride ?? estimateUnit(boot, p, l.size, l.options)) * l.qty : 0);
-  }, 0);
-  return calcOrder({
-    lines: [
-      ...order.items.map((i) => ({ id: i.id, qty: i.qty, unitPrice: i.unitPrice, kdvRate: i.kdvRate, discount: i.discount, complimentary: i.complimentary, voided: i.voided })),
-      { id: '__pending', qty: 1, unitPrice: pendingTotal, kdvRate: 10, discount: 0, complimentary: false, voided: false },
-    ],
-    discount: order.discountType && order.discountValue != null ? { type: order.discountType, value: order.discountValue } : null,
-    serviceRate: order.serviceRate,
-  });
-}
 
 export function CartPanel({
   order,

@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
-import { amountForItems, lineGross, splitState } from '@shared/order-calc';
+import { amountForItems, happyHourUnit, lineGross, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, can, need, needDirect } from '../lib/auth';
@@ -291,7 +291,7 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
     } else {
       const pct = happyHourPercent(t, p, now);
       if (pct > 0) {
-        unit -= percentOf(unit, pct);
+        unit = happyHourUnit(unit, pct);
         happy = true;
       }
     }

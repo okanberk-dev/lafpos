@@ -1,5 +1,5 @@
 import { asc, eq, inArray } from 'drizzle-orm';
-import { hmToMinutes, istanbulParts } from '@shared/time';
+import { happyHourPercentAt } from '@shared/order-calc';
 import type { SelectedOption, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { bad, notFound } from '../lib/http';
@@ -127,25 +127,10 @@ export function optionsUnitTotal(opts: SelectedOption[]): number {
   return opts.reduce((a, o) => a + o.price * o.qty, 0);
 }
 
-/** Şu an geçerli happy hour indirimi (yüzde); gece yarısını aşan aralıklar desteklenir */
+/** Şu an geçerli happy hour indirimi (yüzde); kural eşleşmesi istemcinin tahminiyle ortak (`happyHourPercentAt`) */
 export function happyHourPercent(t: Tx | DB, product: Product, nowMs = Date.now()): number {
   const rules = t.select().from(schema.happyHours).where(eq(schema.happyHours.active, true)).all();
-  if (!rules.length) return 0;
-  const p = istanbulParts(nowMs);
-  const minute = p.hour * 60 + p.minute;
-  let best = 0;
-  for (const r of rules) {
-    const start = hmToMinutes(r.start);
-    const end = hmToMinutes(r.end);
-    const inRange = start <= end ? minute >= start && minute < end : minute >= start || minute < end;
-    // Gece yarısını aşan aralıkta gece kısmı önceki günün kuralına aittir
-    const day = start > end && minute < end ? (p.weekday === 1 ? 7 : p.weekday - 1) : p.weekday;
-    if (!inRange || !r.days.includes(day)) continue;
-    const scoped = r.productIds.length || r.categoryIds.length;
-    const matches = !scoped || r.productIds.includes(product.id) || r.categoryIds.includes(product.categoryId);
-    if (matches) best = Math.max(best, r.percent);
-  }
-  return best;
+  return rules.length ? happyHourPercentAt(rules, product, nowMs) : 0;
 }
 
 const upperTR = (s: string) => s.toLocaleUpperCase('tr-TR');

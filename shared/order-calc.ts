@@ -1,4 +1,5 @@
 import { allocate, type Kurus, percentOf, splitEven, splitKdv } from './money';
+import { hmToMinutes, istanbulParts } from './time';
 
 /** Servis ücretinin KDV oranı (yiyecek-içecek servisi; yazarkasa sepetindeki servis satırı da bunu kullanır) */
 export const SERVICE_KDV_RATE = 10;
@@ -60,6 +61,47 @@ export interface OrderTotals {
 
 export function lineGross(line: Pick<CalcLine, 'qty' | 'unitPrice'>): Kurus {
   return line.qty * line.unitPrice;
+}
+
+/** Happy hour kuralı (veritabanı satırı ve açılış verisindeki `HappyHourDTO` aynı alanları taşır) */
+export interface HappyHourRule {
+  /** 1 = Pazartesi … 7 = Pazar */
+  days: number[];
+  /** "HH:MM", İstanbul saati */
+  start: string;
+  end: string;
+  percent: number;
+  categoryIds: string[];
+  productIds: string[];
+  active: boolean;
+}
+
+/**
+ * Ürüne şu an geçerli happy hour indirimi (yüzde, kuralların en yükseği). Gece yarısını aşan aralıkta gece
+ * kısmı önceki günün kuralına aittir. Sunucu kalemi eklerken, istemci gönderilmemiş kalemi tahmin ederken
+ * aynı fonksiyonu çalıştırır; elle girilen fiyata happy hour uygulanmaz.
+ */
+export function happyHourPercentAt(rules: HappyHourRule[], product: { id: string; categoryId: string }, nowMs: number): number {
+  const p = istanbulParts(nowMs);
+  const minute = p.hour * 60 + p.minute;
+  let best = 0;
+  for (const r of rules) {
+    if (!r.active) continue;
+    const start = hmToMinutes(r.start);
+    const end = hmToMinutes(r.end);
+    const inRange = start <= end ? minute >= start && minute < end : minute >= start || minute < end;
+    const day = start > end && minute < end ? (p.weekday === 1 ? 7 : p.weekday - 1) : p.weekday;
+    if (!inRange || !r.days.includes(day)) continue;
+    const scoped = r.productIds.length || r.categoryIds.length;
+    const matches = !scoped || r.productIds.includes(product.id) || r.categoryIds.includes(product.categoryId);
+    if (matches) best = Math.max(best, r.percent);
+  }
+  return best;
+}
+
+/** Happy hour indirimli birim fiyat: happyHourUnit(14000, 20) = 11200 */
+export function happyHourUnit(unit: Kurus, pct: number): Kurus {
+  return pct > 0 ? unit - percentOf(unit, pct) : unit;
 }
 
 export function calcOrder(input: CalcInput): OrderTotals {

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { happyHourPercentAt, happyHourUnit } from '@shared/order-calc';
 import type { BootstrapDTO, OptionGroupDTO, ProductDTO, SelectedOption, Size } from '@shared/types';
 import { get } from './api';
 
@@ -21,8 +22,8 @@ export function sizePrice(p: ProductDTO, size: Size): number {
   return size === 'L' && p.priceL != null ? p.priceL : p.price;
 }
 
-/** Gönderilmemiş kalemin tahmini birim fiyatı (sunucu happy hour'u da uygular; kesin fiyat gönderince gelir) */
-export function estimateUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, picks: { itemId: string; qty?: number }[]): number {
+/** Menü birim fiyatı: boy ve seçenek farkları dahil, happy hour öncesi (elle fiyatın karşılaştırıldığı tutar) */
+export function menuUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, picks: { itemId: string; qty?: number }[]): number {
   let unit = sizePrice(p, size);
   for (const g of productGroups(boot, p)) {
     for (const pick of picks) {
@@ -31,6 +32,14 @@ export function estimateUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, pick
     }
   }
   return unit;
+}
+
+/**
+ * Gönderilmemiş kalemin tahmini birim fiyatı: menü fiyatına şu an geçerli happy hour, sunucunun kalemi eklerken
+ * yaptığı hesapla uygulanır (kesin fiyat gönderince gelir; saat sınırında cihaz saati farkı olabilir)
+ */
+export function estimateUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, picks: { itemId: string; qty?: number }[], nowMs = Date.now()): number {
+  return happyHourUnit(menuUnit(boot, p, size, picks), happyHourPercentAt(boot.happyHours, p, nowMs));
 }
 
 /** Gönderilmemiş kalemin seçenek metni (sunucunun `optionsText` kuralıyla aynı) */
