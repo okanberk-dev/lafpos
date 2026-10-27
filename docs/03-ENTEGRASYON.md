@@ -74,12 +74,20 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 **Sipariş sürüm sinyali:** `GET /api/pos/orders/version` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version": "<metin>" }`.
 Sitenin veri önbelleğinden (`live:orders` etiketi) gelir, veritabanına dokunmaz; sipariş yazımı etiketi
 düşürünce değer değişir. LafPOS bunu 20 saniyede bir sorar, değer değişince `GET /api/panel/orders`'ı çeker.
-Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer.
+Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer. Sürüm ancak çekme
+başarılı olunca kaydedilir: başarısız çekme her 20 saniyede değil, 5 dakika dolunca yeniden denenir; sinyal
+okunamazsa (5xx, bozuk gövde) 5 dakikalık çekmeye düşülür.
+
+`GET /api/panel/orders` yanıtında `orders` dizisi yoksa (bakım sayfası, ağ geçidi, beklenmeyen gövde) çekme
+başarısız sayılır, hiçbir sipariş kapatılmaz. Listede olmayan açık sipariş yalnız liste tamken bitmiş sayılır:
+`complete: false` (sitenin sınırını aşan kesik liste) ya da okunamayan kalem varsa kapatılmaz. Yerelde kapanmış
+ama sitede hâlâ açık görünen sipariş yeniden açılır.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım).
-`fulfillment = 'table'` olan sipariş, `label` içindeki masa adı ya da `tables.siteTableCode` eşlemesiyle
-masa planında ilgili masada rozet olarak görünür.
+`fulfillment = 'table'` olan sipariş, `tables.siteTableCode` ya da `label` içindeki masa adı eşlemesiyle
+("S2", "Masa S2"; büyük/küçük harf farkı yok, birden çok masaya uyan ad eşlenmez) masa planında ilgili masada
+rozet olarak görünür.
 
 ## 3. LafPOS → lafmaliyet: bugün (kod değişmeden)
 
