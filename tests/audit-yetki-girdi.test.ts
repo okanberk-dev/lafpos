@@ -271,7 +271,7 @@ async function openStream(token: string) {
   };
 }
 
-describe.skip('auth-52: canlı akış oturumu sürekli denetler', () => {
+describe('auth-52: canlı akış oturumu sürekli denetler', () => {
   it('çıkış yapınca akış kapanır, olay gitmez', async () => {
     await h.login('m2', PINS.mudur);
     const s = await openStream(h.tokens.m2);

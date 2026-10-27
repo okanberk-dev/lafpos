@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ALL_PERMISSIONS, effectivePermissions, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
-import { type AppEnv, type AuthUser, can, hashPin, isValidPin, requirePermission } from '../lib/auth';
+import { type AppEnv, type AuthUser, can, hashPin, isValidPin, requirePermission, sessionsChanged } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
@@ -401,6 +401,8 @@ adminRoutes.put('/roles/:role', async (c) => {
   if (next.length === defaults.length && next.every((p) => defaults.includes(p))) delete matrix[role];
   else matrix[role] = next;
   updateSettings({ rolePermissions: matrix });
+  // Açık canlı akışlar yeni yetkiyle süzülsün (patron paneli alınanın uyarıları kesilir)
+  sessionsChanged();
   const added = next.filter((p) => !before.includes(p));
   const removed = before.filter((p) => !next.includes(p));
   if (added.length || removed.length) {
@@ -512,6 +514,8 @@ adminRoutes.patch('/users/:id', async (c) => {
     // Yetki ya da PIN değişince açık oturumlar kapanır
     if (input.pin || input.role || input.permGrant || input.permRevoke || input.active === false) t.delete(schema.sessions).where(eq(schema.sessions.userId, target.id)).run();
   });
+  // Oturumu kapanan ya da yetkisi değişen kişinin açık canlı akışı hemen kapanır ya da yeni yetkiyle süzülür
+  sessionsChanged();
   // Patron PIN'ini değiştirince kurulum modu kapanır (örnek PIN'ler giriş ekranından kalkar)
   if (input.pin && target.role === 'patron' && getSettings().demoMode) updateSettings({ demoMode: false });
   changed('users', 'user.updated', user.id, { action: 'user.update', message: `${user.name} ${target.name} hesabını güncelledi${input.pin ? ' (PIN değişti)' : ''}` });

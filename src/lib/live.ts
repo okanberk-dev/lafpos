@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { create } from 'zustand';
 import type { LiveEvent, LiveTopic } from '@shared/events';
-import { getToken } from './api';
+import { getToken, sessionEnded } from './api';
 
 type Status = 'baglaniyor' | 'canli' | 'kopuk';
 
@@ -57,6 +57,12 @@ export function startLive(qc: QueryClient) {
     useLive.getState().set({ status: 'baglaniyor' });
     try {
       const res = await fetch('/api/events', { headers: { authorization: `Bearer ${token}`, accept: 'text/event-stream' }, signal: controller.signal });
+      if (res.status === 401) {
+        // Sunucu oturumu bitince (çıkış, hesap kapatma, PIN ya da rol değişikliği) akışı kapatır; yeniden
+        // bağlanmak 401 alır: giriş ekranına dönülür, boşuna yeniden denenmez
+        sessionEnded();
+        return;
+      }
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       if (retry > 0) qc.invalidateQueries();
       retry = 0;
