@@ -15,6 +15,8 @@ beforeAll(async () => {
   h = await startApp();
   await h.login('bar', '3333');
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+  // Türk Kahvesi sitenin kalemi (130 TL); beklenen tutarlar 140 TL'ye göre yazıldı, site fiyatı değişse de bozulmasın
+  await h.pinPrice('Türk Kahvesi', 14000);
 });
 afterAll(() => h.cleanup());
 
@@ -45,7 +47,7 @@ describe('indirim', () => {
     await h.login('ind', '4242');
 
     // Tek indirimde sınır zaten vardı: %19 onay ister
-    let o = await counterOrder('ind', [{ name: 'Türk kahvesi' }]);
+    let o = await counterOrder('ind', [{ name: 'Türk Kahvesi' }]);
     expect((await h.call<{ code: string }>('ind', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 19, reason: 'Personel' })).json.code).toBe('approval_required');
 
     // Kaleme %10 kendi sınırında; üstüne adisyona %10 toplamda %19 eder: yetkili onayı ister
@@ -62,14 +64,14 @@ describe('indirim', () => {
     expect(rec!.message).toContain('toplam %19');
 
     // Ters sıra da aynı: önce adisyona %10, sonra kaleme %10
-    let p = await counterOrder('ind', [{ name: 'Türk kahvesi' }]);
+    let p = await counterOrder('ind', [{ name: 'Türk Kahvesi' }]);
     p = await h.ok<OrderDTO>('ind', 'POST', `/orders/${p.id}/discount`, { type: 'percent', value: 10, reason: 'Personel' });
     const lineOnTop = await h.call<{ code: string }>('ind', 'POST', `/orders/${p.id}/items/${p.items[0]!.id}/discount`, { type: 'percent', value: 10, reason: 'Personel' });
     expect(lineOnTop.status).toBe(403);
     expect(lineOnTop.json.code).toBe('approval_required');
 
     // Sınırın içinde kalan birleşim onaysız geçer: kaleme %5, adisyona %4 (toplam %8,8)
-    let q = await counterOrder('ind', [{ name: 'Türk kahvesi' }]);
+    let q = await counterOrder('ind', [{ name: 'Türk Kahvesi' }]);
     q = await h.ok<OrderDTO>('ind', 'POST', `/orders/${q.id}/items/${q.items[0]!.id}/discount`, { type: 'percent', value: 5, reason: 'Personel' });
     q = await h.ok<OrderDTO>('ind', 'POST', `/orders/${q.id}/discount`, { type: 'percent', value: 4, reason: 'Personel' });
     expect(q.totals.lineDiscounts + q.totals.orderDiscount).toBe(700 + 532);
@@ -77,9 +79,9 @@ describe('indirim', () => {
 
   it('money-12: indirimli adisyona başka adisyon birleşir ya da kalem taşınırsa indirim büyür; yetkili onayı ister ve denetime yazılır', async () => {
     // Hedef: 1 kahve, müdür onaylı %50; kaynak: 10 kahvelik başka masa
-    let target = await tableOrder('garson', [{ name: 'Türk kahvesi' }]);
+    let target = await tableOrder('garson', [{ name: 'Türk Kahvesi' }]);
     target = await h.ok<OrderDTO>('garson', 'POST', `/orders/${target.id}/discount`, { type: 'percent', value: 50, reason: 'Personel', approverPin: MUDUR });
-    const source = await tableOrder('garson', [{ name: 'Türk kahvesi', qty: 10 }]);
+    const source = await tableOrder('garson', [{ name: 'Türk Kahvesi', qty: 10 }]);
     expect([target.total, source.total]).toEqual([7000, 140000]);
 
     // Garsonun indirim yetkisi yok: birleştirme indirimi 10 kahveye yayacağı için onay ister, hiçbir şey değişmez
@@ -96,7 +98,7 @@ describe('indirim', () => {
     expect(grown).toMatchObject({ approverName: 'Müdür', severity: 'uyari' });
 
     // Kalem taşıma: indirimli adisyona 6 kahve taşımak da onay ister
-    const other = await tableOrder('garson', [{ name: 'Türk kahvesi', qty: 6 }]);
+    const other = await tableOrder('garson', [{ name: 'Türk Kahvesi', qty: 6 }]);
     const body = { items: [{ itemId: other.items[0]!.id, qty: 6 }], targetOrderId: target.id };
     const moveDenied = await h.call<{ code: string }>('garson', 'POST', `/orders/${other.id}/transfer`, body);
     expect(moveDenied.status).toBe(403);
@@ -107,10 +109,10 @@ describe('indirim', () => {
     expect((await audits(target.id, 'order.discount')).some((a) => a.amount === 42000)).toBe(true);
 
     // İndirimsiz adisyonlar arasında birleştirme ve taşıma eskisi gibi onaysız
-    const a = await tableOrder('garson', [{ name: 'Türk kahvesi' }]);
-    const b = await tableOrder('garson', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const a = await tableOrder('garson', [{ name: 'Türk Kahvesi' }]);
+    const b = await tableOrder('garson', [{ name: 'Türk Kahvesi', qty: 2 }]);
     expect((await h.ok<OrderDTO>('garson', 'POST', `/orders/${a.id}/merge`, { sourceOrderId: b.id })).total).toBe(42000);
-    const c = await tableOrder('garson', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const c = await tableOrder('garson', [{ name: 'Türk Kahvesi', qty: 2 }]);
     const split = await h.ok<{ target: OrderDTO }>('garson', 'POST', `/orders/${c.id}/transfer`, { items: [{ itemId: c.items[0]!.id, qty: 1 }] });
     expect(split.target.total).toBe(14000);
 
@@ -119,8 +121,8 @@ describe('indirim', () => {
       await h.ok('garson', 'POST', `/orders/${o.id}/items/${o.items[0]!.id}/discount`, { type: 'amount', value: 6, reason: 'Yuvarlama', approverPin: MUDUR });
       return h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 10, reason: 'Öğrenci', approverPin: MUDUR });
     };
-    const d = await discounted(await tableOrder('garson', [{ name: 'Türk kahvesi' }]));
-    const e = await discounted(await tableOrder('garson', [{ name: 'Türk kahvesi' }]));
+    const d = await discounted(await tableOrder('garson', [{ name: 'Türk Kahvesi' }]));
+    const e = await discounted(await tableOrder('garson', [{ name: 'Türk Kahvesi' }]));
     expect(d.totals.orderDiscount + e.totals.orderDiscount).toBe(2798);
     expect((await h.ok<OrderDTO>('garson', 'POST', `/orders/${d.id}/merge`, { sourceOrderId: e.id })).totals.orderDiscount).toBe(2799);
   });
@@ -223,7 +225,7 @@ type PayResult = { order: OrderDTO; closed: boolean; change: number; amount: num
 describe('bahşiş', () => {
   it('money-16, reports-36: açık hesap ödemesine bahşiş yazılmaz; raporda alınmamış bahşiş görünmez', async () => {
     const cust = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Ahmet Bey' });
-    const o = await counterOrder('kasa', [{ name: 'Türk kahvesi' }], { customerId: cust.id });
+    const o = await counterOrder('kasa', [{ name: 'Türk Kahvesi' }], { customerId: cust.id });
     const cari = h.boot.paymentMethods.find((m) => m.kind === 'cari')!;
     const tipped = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, tip: 2000, customerId: cust.id });
     expect(tipped.status).toBe(400);
@@ -237,7 +239,7 @@ describe('bahşiş', () => {
     expect((await h.ok<{ summary: { tips: number } }>('patron', 'GET', '/cash/day')).summary.tips).toBe(tipsBefore);
 
     // Kart ödemesinde bahşiş eskisi gibi alınır
-    const p = await counterOrder('kasa', [{ name: 'Türk kahvesi' }]);
+    const p = await counterOrder('kasa', [{ name: 'Türk Kahvesi' }]);
     await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: method('Kredi kartı').id, amount: p.total, tip: 2000 });
     expect((await h.ok<{ summary: { tips: number } }>('patron', 'GET', '/cash/day')).summary.tips).toBe(tipsBefore + 2000);
   });
@@ -246,7 +248,7 @@ describe('bahşiş', () => {
 describe('ödeme', () => {
   it('state-07: yanıtı kaybolup yeniden gönderilen ödeme isteği iki kez yazılmaz; ilk sonuç döner', async () => {
     // Tutar: iki kahvelik masanın yarısı nakit; aynı istek ikinci kez gelir
-    const o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const o = await tableOrder('kasa', [{ name: 'Türk Kahvesi', qty: 2 }]);
     const half = { methodId: method('Nakit').id, amount: 14000, given: 20000, requestId: 'odeme-istegi-0001' };
     expect(await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, half)).toMatchObject({ closed: false, amount: 14000, change: 6000 });
     expect(await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, half)).toMatchObject({ closed: false, amount: 14000, change: 6000 });
@@ -255,7 +257,7 @@ describe('ödeme', () => {
     expect(after.payments).toHaveLength(1);
 
     // Kalem: iki adetlik satırın biri iki kez gönderilir; ikinci adet ödenmiş sayılmaz
-    const p = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const p = await tableOrder('kasa', [{ name: 'Türk Kahvesi', qty: 2 }]);
     const one = { methodId: method('Kredi kartı').id, amount: 14000, items: [{ itemId: p.items[0]!.id, qty: 1 }], requestId: 'odeme-istegi-0002' };
     await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, one);
     await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, one);
@@ -277,7 +279,7 @@ describe('ödeme', () => {
   });
 
   it('money-14: kalem bazlı ödemede ekrandaki tutar sunucununkiyle tutmazsa ödeme yazılmaz; kart terminaline girilen tutar kayıtla ayrışmaz', async () => {
-    let o = await counterOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    let o = await counterOrder('kasa', [{ name: 'Türk Kahvesi', qty: 2 }]);
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 50, reason: 'Personel', approverPin: MUDUR });
     const item = o.items[0]!;
     // Kasiyerin ekranında bir kahve 70 ₺ (indirimli) ve terminale bu girildi; bu sırada başka cihazda indirim kalkar
@@ -296,7 +298,7 @@ describe('ödeme', () => {
   });
 
   it('input-68: ikram ya da iptal kalemi kalem bazlı ödemede ödenmiş işaretlenmez; ikramı geri alınan kalem kalemle ödenir', async () => {
-    let o = await counterOrder('kasa', [{ name: 'Türk kahvesi' }, { name: 'Latte', size: 'M' }, { name: 'Türk kahvesi' }, { name: 'Türk kahvesi' }]);
+    let o = await counterOrder('kasa', [{ name: 'Türk Kahvesi' }, { name: 'Latte', size: 'M' }, { name: 'Türk Kahvesi' }, { name: 'Türk Kahvesi' }]);
     const [comped, latte, voided] = o.items;
     o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${comped!.id}/comp`, { reason: 'Müdür ikramı' });
     o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${voided!.id}/void`, { reason: 'Yanlış giriş' });
@@ -324,8 +326,8 @@ describe('ödeme', () => {
 
   it('money-17: önceki adet ödemesi iptal edilip adet yeniden ödenince kuruş kalmaz; bütün kalemler ödenince adisyon kapanır', async () => {
     // 3 kahvelik satır 1 kuruş indirimle 41999 (adet payları 14000, 14000, 13999), tek kahvelik satır 14000
-    let o = await tableOrder('garson', [{ name: 'Türk kahvesi', qty: 3 }]);
-    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: lines([{ name: 'Türk kahvesi' }]) });
+    let o = await tableOrder('garson', [{ name: 'Türk Kahvesi', qty: 3 }]);
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: lines([{ name: 'Türk Kahvesi' }]) });
     o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 1, reason: 'Yuvarlama', approverPin: MUDUR });
     const [a, b] = o.items;
     expect([o.total, o.totals.lineNet[a!.id], o.totals.lineNet[b!.id]]).toEqual([55999, 41999, 14000]);
@@ -369,7 +371,7 @@ describe('ödeme', () => {
   it('state-07 (gözden geçirme): aynı deneme kimliğiyle başka pay ya da tutar gelirse ilk ödeme dönmez; 409 ile ekran yenilenir', async () => {
     const card = method('Kredi kartı').id;
     // Paylaş: pay 1'in yanıtı kayboldu, ekran pay 2'yi gösterir; eski istemci pay 2'yi aynı kimlikle gönderir
-    let o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 3 }]);
+    let o = await tableOrder('kasa', [{ name: 'Türk Kahvesi', qty: 3 }]);
     o = await h.ok<OrderDTO>('kasa', 'PUT', `/orders/${o.id}/split`, { people: 3 });
     const requestId = 'paylas-deneme-0001';
     const first = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount: o.split!.shares[0], share: true, shareNo: 1, requestId });
@@ -387,7 +389,7 @@ describe('ödeme', () => {
     expect((await getOrder(o.id)).payments).toHaveLength(2);
 
     // Kalem: 2 kahvelik satır 1 kuruş indirimle (adet payları 14000 / 13999); ikinci adet aynı seçim ve kimlikle gelir
-    let p = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    let p = await tableOrder('kasa', [{ name: 'Türk Kahvesi', qty: 2 }]);
     p = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${p.id}/items/${p.items[0]!.id}/discount`, { type: 'amount', value: 1, reason: 'Yuvarlama', approverPin: MUDUR });
     const line = p.items[0]!.id;
     await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: card, amount: 14000, items: [{ itemId: line, qty: 1 }], requestId: 'kalem-deneme-0001' });
@@ -404,7 +406,7 @@ describe('ödeme', () => {
   });
 
   it('state-07 (gözden geçirme): iptal edilen ödemenin deneme kimliği yeniden gelirse iptal edilen ödeme başarı diye dönmez', async () => {
-    const o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const o = await tableOrder('kasa', [{ name: 'Türk Kahvesi', qty: 2 }]);
     const body = { methodId: method('Kredi kartı').id, amount: 14000, requestId: 'tutar-deneme-0001' };
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, body);
     // Yanıt kayboldu, kart aslında reddedilmişti: ödeme iptal edilir, müşteri başka kartla aynı tutarı öder
@@ -422,7 +424,7 @@ describe('ödeme', () => {
 
   it('state-07 (gözden geçirme): yanıtı kaybolan açık hesap tahsilatı yeniden gelince iki kez yazılmaz; bakiyeden fazlası tahsil edilmez', async () => {
     const cust = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Veresiye Bey' });
-    const o = await counterOrder('kasa', [{ name: 'Türk kahvesi' }], { customerId: cust.id });
+    const o = await counterOrder('kasa', [{ name: 'Türk Kahvesi' }], { customerId: cust.id });
     const cari = h.boot.paymentMethods.find((m) => m.kind === 'cari')!;
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, customerId: cust.id });
     const expectedCash = async () => (await h.ok<{ summary: { expectedCash: number } }>('patron', 'GET', '/cash/day')).summary.expectedCash;
@@ -458,8 +460,8 @@ describe('ödeme', () => {
   it('money-17 (gözden geçirme): yazarkasaya kalem seçerek giden sepet de satırın kalanını alır; iptal edilen adet ödemesinden sonra kuruş kalmaz', async () => {
     await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator' });
     try {
-      let o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 3 }]);
-      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: lines([{ name: 'Türk kahvesi' }]) });
+      let o = await tableOrder('kasa', [{ name: 'Türk Kahvesi', qty: 3 }]);
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: lines([{ name: 'Türk Kahvesi' }]) });
       o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 1, reason: 'Yuvarlama', approverPin: MUDUR });
       const [a, b] = o.items;
       expect([o.total, o.totals.lineNet[a!.id], o.totals.lineNet[b!.id]]).toEqual([55999, 41999, 14000]);

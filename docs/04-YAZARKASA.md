@@ -6,7 +6,9 @@ Kod: `server/okc/` (markadan bağımsız akış `service.ts`, sepet hesabı `bas
 sözleşme `types.ts`, Token `tokenx.ts` + istemci `../tokenx.ts`, eğitim cihazı `index.ts`), uçlar
 `server/routes/okc.ts`, ekranlar adisyondaki **Yazarkasa** bölümü, `/cihaz` (eğitim cihazı) ve
 Yönetim › Yazarkasa POS. Testler: `tests/okc-basket.test.ts`, `tests/tokenx-client.test.ts`,
-`tests/api-flow.test.ts`.
+`tests/api-flow.test.ts`, `tests/okc-providers.test.ts`, `tests/audit-yazarkasa.test.ts` (27 Eki 2026 denetimi:
+birleşen adisyonda fiş iptali, kapanmış güne ait iptal, yanıtı alınamayan gönderim, ödemesiz kapanan fiş, servis
+ve KDV dökümü, açılışta sorgu, denetim kaydı).
 
 ## 1. Sağlayıcılar
 
@@ -82,7 +84,8 @@ kaydedip kapatınca sunucu yeniden başlar.
    varsayılan `%1 → 3`, `%10 → 1`, `%20 → 2`. Cihazınızın kısım numaraları farklıysa buradan düzeltin.
 5. **Sonuç bildirimi**: `LAFPOS_PUBLIC_URL` ve `TOKENX_WEBHOOK_SECRET` varsa "Webhook'u kaydet"
    (`POST /api/okc/webhook/register`); adres `…/api/public/okc/tokenx/webhook`. Yoksa LafPOS sonucu
-   kendisi sorar (anlık sepette 2,5 sn, listede 10 sn).
+   kendisi sorar (anlık sepette 2,5 sn, listede 10 sn); sunucu yeniden başlarsa bekleyen sepetleri sormaya
+   açılışta devam eder.
 6. Eğitim cihazıyla bir tur: tezgâh satışı → Yazarkasa → `/cihaz`'da öde → adisyon kendiliğinden kapanır.
 
 ## 4. Anlık ve liste sepet
@@ -101,10 +104,22 @@ kaydedip kapatınca sunucu yeniden başlar.
   bütün adetleri satırın kalanını alır (net pay eksi canlı ödemelerin bu satıra ödediği), kısmi adetler adet
   paylarından sırayla. Sepetin satır tutarları cihaz ödemesinin kalem işaretine yazılır; ödeme iptal edilip adet
   yeniden ödenince kuruş kalmaz.
-- Adisyon indirimi satırlara en büyük kalan yöntemiyle dağıtılır (`adjust.totalValue`). Servis ücreti yalnız
-  adisyonda servis varsa ayrı "Servis ücreti" satırıdır. Bütün adisyon gönderilince sepet toplamı adisyonun
-  kalanına eşitlenir: kalem bazlı ödemeden sonra kalem eklenip indirim yeniden dağıldığında kalan birkaç
-  kuruşluk kayma kalemlerin indirim payına işlenir.
+- Adisyon indirimi satırlara en büyük kalan yöntemiyle dağıtılır (`adjust.totalValue`). Servis ücreti ayrı
+  "Servis ücreti" satırıdır ve yalnız bütün adisyon gönderilince gider; daha önce cihaza giden servis düşülür.
+  Kalem kalem ödenen masada kalan servis tek satırlık sepet olur.
+- Bütün adisyon gönderilince sepet her KDV oranında LafPOS'un KDV dökümüne tamamlanır: o orandan daha önce ödenen
+  kısım (cihaz fişleri gönderilen sepetten, LafPOS'ta kalem seçerek alınan ödemeler kalemlerin payıyla) düşülür,
+  sepetin toplamı adisyonun kalanıdır. Kalem bazlı ödemeden sonra kalem eklenip adisyon indirimi yeniden
+  dağıldığında fark aynı oranın kalemlerine işlenir; o oranda ödenmemiş kalem yoksa o oranda "İndirim farkı"
+  satırı olur. Kalem başına 2 kuruşa kadar yuvarlama oranlar arasında dengelenir. Ödenmiş orana düşen fark eksiyse
+  (ödemeden sonra indirim artırıldı ya da ödenmemiş kalem iptal edildi) cihaz eksi satır almadığı için fark diğer
+  oranların indirimine yazılır.
+- Fark hiçbir zaman servis satırına yazılmaz: cihazdaki "Servis ücreti" LafPOS'un servisinin cihaza gitmemiş
+  kısmıdır, müşteri iki ayrı servis tutarı görmez. Tek istisna sepette indirimi taşıyacak kalem kalmamasıdır
+  (yalnız servis kaldı); o zaman sepetin toplamı adisyonun kalanından sapmasın diye fark servis satırından düşer.
+- Cihazdan gelen ödeme (bölünmüş ödemenin ikincisi, servis fişi) kalem taşımasa da "tutar olarak alınmış ödeme"
+  sayılmaz. LafPOS'ta tutar ya da pay olarak alınmış ödeme varsa bütün adisyon gitmez (`okc_partial`), kalem
+  seçilerek gider.
 - Aynı adisyon için açık bir sepet varken ikincisi gönderilmez (409). Sepet cihazda beklerken adisyonun tutarı ve
   ödemeleri kilitlidir (iptal, ikram, indirim, ödeme, taşıma, birleştirme, iptal: 409 `okc_pending`); kalem
   eklenebilir. Karaoke oda sayacı çalışırken hesap cihaza gönderilmez (`room_running`), sepet cihazda beklerken de
@@ -122,11 +137,19 @@ Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` �
 | Cihazdan gelen (Token) | LafPOS'ta |
 |---|---|
 | `sale.status = 0` | Ödeme kalemleri adisyona işlenir (1 nakit, 3 kart, 7 yemek kartı, 17 açık hesap, 18 havale; ödeme türü eşlemesi Yönetim › Yazarkasa'da), Z ve fiş no yazılır, kalan yoksa (oda sayacı çalışmıyorsa) adisyon kapanır |
+| `0`, ödemeler sepeti karşılamıyor | Cihaz ikram (9), ödemesiz (8) ya da LafPOS'ta karşılığı olmayan türle kapattıysa alınan ödemeler tutar olarak işlenir, kalemler ödenmiş sayılmaz; sepet `hata` olur ve yöneticiye alarm düşer (`okc.underpaid`). Bu fişin kalemleri cihaza yeniden gönderilmez, başka adisyona taşınmaz ve sepet LafPOS'ta silinemez (`okc_unresolved`): aynı kalemler ikinci fişe girerdi. Kalan kasadan (tutar ya da kalem olarak) alınır ya da fiş cihazdan iptal edilir; adisyonun fişe girmemiş kalemleri bu arada "Kalem seç" ile cihaza gönderilebilir. Bütün adisyon, fişteki kalemler LafPOS'ta ödenmedikçe gitmez. LafPOS'a işlenemeyen "ödendi" sonucu da böyle |
 | `-1` | Kasiyer cihazda vazgeçti; sepet kapanır, adisyon açık kalır |
-| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir |
+| `0`, sepet LafPOS'ta iptal sayılmış | Adisyon kendiliğinden kapanmaz, yöneticiye alarm düşer (`okc.late_paid`); Z ve fiş no sepete yazılır. Aynı bildirim tekrar gelirse alarm tekrarlanmaz |
+| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir. Ödeme birleştirmeyle başka adisyona geçtiyse o adisyondan düşer (birleştirmede fişler de hedef adisyona taşınır). Kapanmış adisyon yalnız ödenecek tutar doğarsa açılır: ödemesi LafPOS'ta zaten iptal edilip yeniden alınmışsa kapalı kalır. LafPOS'a ödemesi işlenmiş her fiş (eksik ödenmiş `hata` fişi de) böyle geri alınır |
+| `99`, fiş kesilmemiş sepet | Bekleyen sepet `iptal` olur (`okc.cancelled`). LafPOS'ta silinmiş ya da cihazda vazgeçilmiş sepetin durumu değişmez; bir kez not düşülür (`okc.void`, uyarı). Geç "ödendi" bildirimi gelmiş sepette fiş kesilip iptal edilmiştir: fiş `fis_iptal` olur, alarm düşer |
+| `99`, fiş kapanmış güne ait | Kapanmış günün Z'si değişmez: ödeme geri alınmaz, adisyon açılmaz, fiş `fis_iptal` olur ve yöneticiye alarm düşer (`okc.void_closed_day`). Müşteriye para iade edildiyse bugünün kasasından çıkış olarak işlenir. Eğitim cihazında bu iptal hiç yapılamaz (`day_closed`) |
 | `BASKET_LOCKED` / `UNLOCKED` | Sepet cihazda açıkken LafPOS'ta kilit gösterilir |
 
-Her sonuç denetim kaydına yazılır; son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında görünür.
+Her sonuç denetim kaydına yazılır: gönderim (`okc.send`), ödendi (`okc.paid`), cihazda vazgeçme ya da cihazdan
+silinme (`okc.cancelled`), LafPOS'tan sepet iptali (`okc.delete`, ulaşılamadıysa `okc.force_cancel`), cihaza
+ulaşmayan gönderim (`okc.not_delivered`), fiş iptali (`okc.void`, `okc.void_closed_day`) ve alarmlar
+(`okc.underpaid`, `okc.apply_failed`, `okc.late_paid`). Aynı sonuç ikinci kez gelirse işlem ve kayıt tekrarlanmaz.
+Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında görünür.
 
 ## 7. Sık sorunlar
 
@@ -135,7 +158,16 @@ Her sonuç denetim kaydına yazılır; son hata Genel bakış › Sistem sağlı
 - **1106 terminal bulunamadı**: `TOKENX_TERMINAL_ID` yanlış ya da cihaz Token'da tanımlı değil.
 - **Toplam farkı**: kısım eşlemesindeki KDV oranı cihazdakiyle aynı olmalı.
 - **Sonuç gelmiyor**: webhook adresine dışarıdan erişilemiyorsa anahtarı kaldırın; LafPOS yoklamaya döner.
+- **Yazarkasadan yanıt alınamadı** (`okc_unknown`): gönderim zaman aşımına uğradı, bağlantı koptu (yanıtın gövdesi
+  okunurken kopması da) ya da Token durum kodu olmayan bir yanıt verdi (JSON olmayan 2xx, 5xx); sepet cihaza ulaşmış
+  olabilir. Sepet bekleyen kalır (adisyon kilitli, LafPOS'ta ikinci kez tahsil edilmez) ve LafPOS durumunu sorar:
+  cihazda ödendiyse adisyon kendiliğinden kapanır; Token sepeti hiç görmediyse (1006) sepet hataya düşer ve adisyon
+  kasadan alınabilir. Token'ın kodla reddettiği, 4xx dönen ya da bağlantının hiç kurulamadığı gönderim hemen
+  hataya düşer. Sonuç gönderim isteği sürerken geldiyse (webhook) işlenmiş sepet hatayla ezilmez; silme
+  sürerken gelen "ödendi" de öyle.
 - **İnternet ya da Token kesik, sepet silinemiyor** (`okc_delete`): adisyondaki "İptal"e basınca LafPOS sorar;
   onaylanırsa sepet yetkili PIN'iyle LafPOS'ta iptal sayılır, adisyon kasadan alınır ve gün kapanabilir. Denetim
   kaydına alarm düşer (`okc.force_cancel`). Cihazda yine de o sepetten ödeme alındıysa geç gelen sonuç ikinci bir
-  alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir.
+  alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir. Onay penceresi açıkken cihazda fiş kesildiyse
+  (sepet ödendi ya da eksik ödenip `hata` oldu) iptal reddedilir (`okc_paid`, `okc_unresolved`): fişi kesilmiş
+  sepet hiçbir yoldan "silindi" sayılmaz, fiş iptali ödemesini geri alabilsin.

@@ -30,6 +30,8 @@ beforeAll(async () => {
   h = await startApp();
   await h.login('bar', '3333');
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+  // Türk Kahvesi sitenin kalemi (130 TL); beklenen tutarlar 140 TL'ye göre yazıldı, site fiyatı değişse de bozulmasın
+  await h.pinPrice('Türk Kahvesi', 14000);
 });
 afterAll(() => {
   vi.useRealTimers();
@@ -108,7 +110,7 @@ async function auditFor(orderId: string) {
 
 describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
   it('kalemlerin hepsi başka masaya taşınınca sayacı çalışan oda adisyonu kapanmaz; oda ücreti kaynağa yazılır', async () => {
-    const { room, order: o } = await roomOrder([{ name: 'Türk kahvesi', qty: 2 }]);
+    const { room, order: o } = await roomOrder([{ name: 'Türk Kahvesi', qty: 2 }]);
     const other = await newTable('masa');
     await h.ok('garson', 'POST', `/orders/${o.id}/room/start`);
     // Garson masa.islem yetkisiyle, onaysız: bütün kalemler başka masaya
@@ -130,7 +132,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
   it('aynı odada ayrı hesaba taşımada sayaç kalemlerle gider; başka odadaki adisyona taşımada kaynakta kalır', async () => {
     // "Aynı masada ayrı hesap", bütün kalemler: hedef de odada açılır, boşalan kaynak kapanır, sayaç hedefe geçer.
     // Kaynakta kalsaydı odanın kalemli hesabında "Oda sayacı kapalı · Başlat" görünür, ikinci sayaç başlatılırdı
-    const { room, order: a } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
+    const { room, order: a } = await roomOrder([{ name: 'Türk Kahvesi', qty: 1 }]);
     const started = (await h.ok<OrderDTO>('garson', 'POST', `/orders/${a.id}/room/start`)).room!;
     const split = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${a.id}/transfer`, { items: [{ itemId: a.items[0].id, qty: 1 }], tableId: room });
     expect(split.source).toMatchObject({ status: 'birlesti', room: null });
@@ -140,7 +142,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
     expect(floor.tables[room]?.map((f) => [f.id, f.roomStartedAt])).toEqual([[split.target.id, started.startedAt]]);
 
     // Kalemlerin bir kısmı aynı odada ayrı hesaba: sayaç kalemi kalan kaynağın
-    const { room: room2, order: d } = await roomOrder([{ name: 'Türk kahvesi', qty: 2 }]);
+    const { room: room2, order: d } = await roomOrder([{ name: 'Türk Kahvesi', qty: 2 }]);
     await h.ok('garson', 'POST', `/orders/${d.id}/room/start`);
     const part = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${d.id}/transfer`, { items: [{ itemId: d.items[0].id, qty: 1 }], tableId: room2 });
     expect(part.source).toMatchObject({ status: 'acik', total: 14000 });
@@ -148,7 +150,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
     expect(part.target).toMatchObject({ tableId: room2, room: null, total: 14000 });
 
     // Başka odadaki var olan adisyona (targetOrderId) taşıma: sayaç kendi odasının, kaynakta kalır
-    const { order: b } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
+    const { order: b } = await roomOrder([{ name: 'Türk Kahvesi', qty: 1 }]);
     await h.ok('garson', 'POST', `/orders/${b.id}/room/start`);
     const into = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${b.id}/transfer`, { items: [{ itemId: b.items[0].id, qty: 1 }], targetOrderId: split.target.id });
     expect(into.source.status).toBe('acik');
@@ -157,7 +159,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
     expect(into.target.room?.id).toBe(started.id);
 
     // Sayacı çalışmayan adisyon boşalınca eskisi gibi kapanır (birleşti)
-    const { order: c } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
+    const { order: c } = await roomOrder([{ name: 'Türk Kahvesi', qty: 1 }]);
     const plain = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${c.id}/transfer`, { items: [{ itemId: c.items[0].id, qty: 1 }], targetOrderId: split.target.id });
     expect(plain.source.status).toBe('birlesti');
 
@@ -173,7 +175,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
 
   it('bir odada aynı anda tek sayaç çalışır: odanın ikinci hesabında sayaç başlamaz, oda iki kez faturalanmaz', async () => {
     // Odada "Yeni hesap" (newCheck) ile ikinci adisyon: sayaç ilk hesapta çalışıyor
-    const { room, order: a } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
+    const { room, order: a } = await roomOrder([{ name: 'Türk Kahvesi', qty: 1 }]);
     await h.ok('garson', 'POST', `/orders/${a.id}/room/start`);
     const second = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: room, newCheck: true });
     expect(second.id).not.toBe(a.id);
@@ -193,7 +195,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
     expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${a.id}/room/start`)).json.code).toBe('room_running');
 
     // Kalemler ayrı hesaba taşınıp kaynakta kalan bir kalem varken de hedefte ikinci sayaç başlamaz (inceleme bulgusu)
-    await h.ok<OrderDTO>('garson', 'POST', `/orders/${a.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    await h.ok<OrderDTO>('garson', 'POST', `/orders/${a.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const split = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${a.id}/transfer`, { items: [{ itemId: a.items[0].id, qty: 1 }], tableId: room });
     expect(split.source.room).not.toBeNull();
     expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${split.target.id}/room/start`)).json.code).toBe('room_running');
@@ -246,7 +248,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
   });
 
   it('sepeti yazarkasada bekleyen adisyonda oda sayacı başlamaz; cihaz ödemesi adisyonu sayaçsız kapatır', async () => {
-    const { order: o } = await roomOrder([{ name: 'Türk kahvesi', qty: 2 }]);
+    const { order: o } = await roomOrder([{ name: 'Türk Kahvesi', qty: 2 }]);
     const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     const start = await h.call<{ code: string }>('garson', 'POST', `/orders/${o.id}/room/start`);
     expect(start.status).toBe(409);
@@ -257,7 +259,7 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
   });
 
   it('sayaç çalışırken yazarkasada gelen ödeme adisyonu kapatmaz: uyarı düşer, oda ücreti sonra yazılıp alınır', async () => {
-    const { order: o } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
+    const { order: o } = await roomOrder([{ name: 'Türk Kahvesi', qty: 1 }]);
     const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     // Eski veride (ya da gönderimi hata görünen sepette) sayaç sepet beklerken başlamış olabilir
     const { db, schema } = await server();
@@ -319,7 +321,7 @@ describe('masa açma ve adisyon iptali', () => {
     const o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table, guests: 3, note: 'Rezervasyon: Ali' });
     expect(o.id).not.toBe(qr);
     expect(o).toMatchObject({ source: 'pos', extPaid: false, guests: 3, note: 'Rezervasyon: Ali' });
-    await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     // Masada kasa adisyonu varken masayı açmak onu döndürür (QR siparişi daha önce açılmış olsa da)
     expect((await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table })).id).toBe(o.id);
     await settle(o.id);
@@ -341,7 +343,7 @@ describe('indirim kaldırma', () => {
   it('adisyon indirimini kaldırmak sipariş yetkisi ister ve denetime yazılır', async () => {
     const table = await newTable('masa');
     let o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table });
-    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 2 }] });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 2 }] });
     o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 50, reason: 'Sürekli müşteri', approverPin: MUDUR });
     expect(o.total).toBe(14000);
     // Bar ekranı (sipariş yetkisi yok) başkasının adisyonundaki onaylı indirimi kaldıramaz: ne remove ne sıfır değer
@@ -366,7 +368,7 @@ describe('indirim kaldırma', () => {
   it('kalem indirimini kaldırmak sipariş yetkisi ister ve denetime yazılır', async () => {
     const table = await newTable('masa');
     let o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table });
-    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const itemId = o.items[0].id;
     o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items/${itemId}/discount`, { type: 'percent', value: 50, reason: 'Sürekli müşteri', approverPin: MUDUR });
     expect(o.total).toBe(7000);
@@ -529,7 +531,7 @@ describe('otomatik gün sonu', () => {
 
     // Gecenin son tezgâh satışı, ardından kasa ekranının açtığı boş "Yeni satış" ve dokunulup boş bırakılan masa
     let sale = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
-    sale = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${sale.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    sale = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${sale.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     await settle(sale.id);
     const next = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: sale.id });
     const tapped = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: await newTable('masa') });
