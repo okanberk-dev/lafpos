@@ -47,6 +47,19 @@ export function businessDate(ms: number): string {
   return p.hour < DAY_ROLLOVER_HOUR ? addDays(p.date, -1) : p.date;
 }
 
+const dayMonthFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long' });
+
+/**
+ * Açık gün bugünün iş gününden eskiyse (gün sonu alınmadan 05:00 geçti) kasanın uyarısı, değilse null. Sunucu yeni
+ * satışı bu metinle reddeder (409 `stale_day`), Kasa ekranı aynı metni bant olarak gösterir.
+ */
+export function staleDayMessage(day: { date: string; zNo: number }, nowMs = Date.now()): string | null {
+  const today = businessDate(nowMs);
+  if (day.date >= today) return null;
+  const when = dayMonthFmt.format(new Date(`${day.date}T12:00:00Z`));
+  return day.date === addDays(today, -1) ? `Dünün günü açık (${when}, Z ${day.zNo}). Önce gün sonunu alın` : `${when} günü hâlâ açık (Z ${day.zNo}). Önce gün sonunu alın`;
+}
+
 /** İş gününün başladığı an (o tarihin 05:00'i, İstanbul = UTC+3, yaz saati yok) */
 export function businessDayStartMs(date: string): number {
   const [y, m, d] = date.split('-').map(Number);

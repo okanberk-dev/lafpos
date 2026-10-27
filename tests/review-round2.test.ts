@@ -132,23 +132,23 @@ describe('ikinci inceleme', () => {
   });
 
   it('kör kasa: hesap yazdırma ve teslimat yanıtı kapanmış adisyonun ödemesini de göstermez', async () => {
-    const o = await newOrder([{ name: 'Türk kahvesi' }]);
+    const o = await newOrder([{ name: 'Türk Kahvesi' }]);
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total });
     expect((await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/bill`)).payments).toEqual([]);
     expect((await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/bill`)).payments).toHaveLength(1);
 
     let p = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'paket', deliveryName: 'Ece', deliveryPhone: '05321112233', deliveryAddress: 'Tuzla' });
-    p = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${p.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    p = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${p.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: method('Nakit').id, amount: p.total });
     expect((await h.ok<OrderDTO>('kasa', 'POST', `/orders/${p.id}/delivery`, {})).payments).toEqual([]);
   });
 
   it('indirim kayması cihaza "Servis ücreti" diye gitmez; sepet adisyonun kalanını tam kapatır', async () => {
-    let o = await newOrder([{ name: 'Latte', size: 'M' }, { name: 'Türk kahvesi' }]);
+    let o = await newOrder([{ name: 'Latte', size: 'M' }, { name: 'Türk Kahvesi' }]);
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 2000, reason: 'Kampanya', approverPin: MUDUR });
     const latte = o.items.find((i) => i.name === 'Latte')!;
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Kredi kartı').id, amount: 0, items: [{ itemId: latte.id, qty: 1 }] });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     expect(o.totals.service).toBe(0);
     const sent = await h.ok<{ receipt: { id: string; amount: number; basket: { items: { name: string }[] } } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     expect(sent.receipt.basket.items.some((i) => i.name === 'Servis ücreti')).toBe(false);
@@ -161,7 +161,7 @@ describe('ikinci inceleme', () => {
   it('oda sayacı çalışırken hesap cihaza gitmez; kapanmış adisyona oda ücreti yazılmaz', async () => {
     const room = h.boot.tables.find((t) => t.kind === 'oda')!;
     let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: room.id });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     await h.ok('kasa', 'POST', `/orders/${o.id}/room/start`);
     const blocked = await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     expect(blocked.json.code).toBe('room_running');
@@ -177,7 +177,7 @@ describe('ikinci inceleme', () => {
 
   it('Token kesintisinde takılan sepet yetkili onayıyla LafPOS\'ta iptal sayılır, adisyon nakit alınır', async () => {
     await h.ok('patron', 'PUT', '/okc/settings', { provider: 'tokenx', mode: 'anlik' });
-    const o = await newOrder([{ name: 'Türk kahvesi' }]);
+    const o = await newOrder([{ name: 'Türk Kahvesi' }]);
     const sent = await h.ok<{ receipt: { id: string; status: string } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     expect(sent.receipt.status).toBe('gonderildi');
     tokenxMode = 'down';

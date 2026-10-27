@@ -61,7 +61,7 @@ describe('inceleme düzeltmeleri', () => {
   });
 
   it('yazarkasada bekleyen sepet: tutar ve ödeme değişmez, kalem eklenebilir', async () => {
-    const o = await newOrder([{ name: 'Latte', size: 'M' }, { name: 'Türk kahvesi' }]);
+    const o = await newOrder([{ name: 'Latte', size: 'M' }, { name: 'Türk Kahvesi' }]);
     const sent = await sendToDevice(o.id);
     expect(sent.receipt.amount).toBe(o.total);
     const latte = o.items.find((i) => i.name === 'Latte')!;
@@ -78,7 +78,7 @@ describe('inceleme düzeltmeleri', () => {
       expect(r.json.code, path).toBe('okc_pending');
     }
     // Kalem eklemek serbest; cihazdaki sepet aynı kalır, eklenen kalem ödenmeyi bekler
-    const more = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    const more = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     expect(more.total).toBeGreaterThan(o.total);
     await payOnDevice(sent.receipt.id, 3, sent.receipt.amount);
     const after = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`);
@@ -113,7 +113,7 @@ describe('inceleme düzeltmeleri', () => {
       .values({ id: 'qr-deneme', dayId: day.id, no: 9001, type: 'masa', tableId: to.id, openedAt: now, updatedAt: now, source: 'laffogato', extId: 'ord-9001', extPaid: true, extTotal: 19500 })
       .run();
     let src = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: from.id });
-    src = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${src.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    src = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${src.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const moved = await h.ok<{ source: OrderDTO; target: OrderDTO }>('kasa', 'POST', `/orders/${src.id}/transfer`, { items: [{ itemId: src.items[0].id, qty: 1 }], tableId: to.id });
     expect(moved.target.id).not.toBe('qr-deneme');
     expect(moved.target.source).toBe('pos');
@@ -134,8 +134,8 @@ describe('inceleme düzeltmeleri', () => {
         { itemId: 'b', qty: 0 },
       ]),
     ).toEqual([{ itemId: 'a', qty: 3 }]);
-    const o = await newOrder([{ name: 'Türk kahvesi' }, { name: 'Latte', size: 'M' }]);
-    const tk = o.items.find((i) => i.name === 'Türk kahvesi')!;
+    const o = await newOrder([{ name: 'Türk Kahvesi' }, { name: 'Latte', size: 'M' }]);
+    const tk = o.items.find((i) => i.name === 'Türk Kahvesi')!;
     const r = await h.ok<{ order: OrderDTO }>('kasa', 'POST', `/orders/${o.id}/payments`, {
       methodId: method('Kredi kartı').id,
       amount: 0,
@@ -171,7 +171,7 @@ describe('inceleme düzeltmeleri', () => {
   });
 
   it('cihazda açık hesap: müşterisiz adisyon ve sınır aşımı alarm verir; fiş iptali onay ister, cariyi düzeltir', async () => {
-    const lone = await newOrder([{ name: 'Türk kahvesi' }]);
+    const lone = await newOrder([{ name: 'Türk Kahvesi' }]);
     const s1 = await sendToDevice(lone.id);
     await payOnDevice(s1.receipt.id, 17, s1.receipt.amount);
     expect((await audit('alarm')).some((a) => a.action === 'okc.cari_no_customer')).toBe(true);
@@ -202,7 +202,7 @@ describe('inceleme düzeltmeleri', () => {
   });
 
   it('iptal sayılan sepete geç gelen "ödendi" adisyonu kapatmaz, alarm verir', async () => {
-    const o = await newOrder([{ name: 'Türk kahvesi' }]);
+    const o = await newOrder([{ name: 'Türk Kahvesi' }]);
     const sent = await sendToDevice(o.id);
     await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/cancel`, {});
     const { applySale } = await import('../server/okc/service');

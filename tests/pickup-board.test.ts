@@ -18,10 +18,10 @@ describe('çağrı ekranı', () => {
     const counter = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
     const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${counter.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 1 }] });
     const pickup = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Ayşe Yılmaz' });
-    await h.ok('kasa', 'POST', `/orders/${pickup.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${pickup.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const table = h.boot.tables.find((t) => t.kind !== 'oda')!;
     const dine = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table.id });
-    await h.ok('garson', 'POST', `/orders/${dine.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    await h.ok('garson', 'POST', `/orders/${dine.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
 
     let board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
     expect(board.preparing.map((e) => e.no).sort()).toEqual([counter.no, pickup.no].sort());

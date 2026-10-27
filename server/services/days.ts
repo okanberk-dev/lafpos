@@ -176,9 +176,10 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
     row.tips += p.tip;
     payMap.set(p.methodId, row);
   }
-  const cashMethodIds = new Set(methods.filter((m) => m.kind === 'nakit').map((m) => m.id));
-  const cashSales = salesPays.filter((p) => cashMethodIds.has(p.methodId)).reduce((a, p) => a + p.amount + p.tip, 0);
-  const cashCollections = collections.filter((p) => cashMethodIds.has(p.methodId)).reduce((a, p) => a + p.amount, 0);
+  // Beklenen nakit de Z'nin nakit alanı gibi ödemeye dondurulan `zField`'dan sayılır, türün bugünkü hâlinden değil:
+  // ödeme almış bir tür sonradan nakitten karta çevrilse bile beklenen nakit ile Z nakdi ayrışmaz (G12)
+  const cashSales = salesPays.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount + p.tip, 0);
+  const cashCollections = collections.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount, 0);
   const cashIn = moves.filter((m) => m.kind === 'giris').reduce((a, m) => a + m.amount, 0);
   const cashOut = moves.filter((m) => m.kind === 'harcama').reduce((a, m) => a + m.amount, 0);
   const handedOver = moves.filter((m) => m.kind === 'teslim').reduce((a, m) => a + m.amount, 0);

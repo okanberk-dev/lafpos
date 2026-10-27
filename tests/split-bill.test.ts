@@ -47,7 +47,7 @@ describe('paylaşımlı hesap', () => {
   });
 
   it('hesap üç kişiye bölünür; paylar ayrı yöntemlerle ödenir, sonradan eklenen kalem kalanlara dağılır', async () => {
-    let o = await newOrder([{ name: 'Latte', size: 'M', qty: 3 }, { name: 'Türk kahvesi' }]);
+    let o = await newOrder([{ name: 'Latte', size: 'M', qty: 3 }, { name: 'Türk Kahvesi' }]);
     o = await h.ok<OrderDTO>('kasa', 'PUT', `/orders/${o.id}/split`, { people: 3 });
     expect(o.split).toEqual({ people: 3, paid: 0, left: 3, shares: splitEven(o.total, 3) });
 
@@ -59,7 +59,7 @@ describe('paylaşımlı hesap', () => {
     expect(first.order.split).toMatchObject({ paid: 1, left: 2 });
 
     // Bölündükten sonra bir kalem daha: kalan iki paya dağılır
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     expect(o.split!.shares).toEqual(splitEven(o.total - o.paid, 2));
 
     const second = await payShare(o.id, 'Kredi kartı');
@@ -87,7 +87,7 @@ describe('paylaşımlı hesap', () => {
     const seen = nextShare(o);
 
     // Başka cihaz kalem ekler: ekrandaki eski tutarla pay alınmaz (kart terminaline yanlış tutar girilmesin)
-    await h.ok('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    await h.ok('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const stale = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Kredi kartı').id, share: true, ...seen });
     expect(stale.status).toBe(409);
     expect(stale.json.code).toBe('split_changed');
@@ -128,7 +128,7 @@ describe('paylaşımlı hesap', () => {
     await payShare(o.id, 'Kredi kartı');
     // Paylar bitti, adisyon kapandı; yeniden açılıp kalem eklenince kalan "Tutar" ile alınır
     await h.ok('kasa', 'POST', `/orders/${o.id}/reopen`, { reason: 'Ürün eklenecek', approverPin: MUDUR });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     expect(o.split).toMatchObject({ left: 0, shares: [] });
     const rest = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total - o.paid });
     expect(rest.closed).toBe(true);
@@ -137,7 +137,7 @@ describe('paylaşımlı hesap', () => {
   it('birleştirmede paylaşım kalkar: iki hesabın pay numaraları karışmaz', async () => {
     const tables = h.boot.tables.filter((t) => t.kind !== 'oda');
     const a = await newOrder([{ name: 'Latte', size: 'M' }], 'masa', tables[0]!.id);
-    const b = await newOrder([{ name: 'Türk kahvesi' }], 'masa', tables[1]!.id);
+    const b = await newOrder([{ name: 'Türk Kahvesi' }], 'masa', tables[1]!.id);
     await h.ok('kasa', 'PUT', `/orders/${a.id}/split`, { people: 2 });
     await h.ok('kasa', 'PUT', `/orders/${b.id}/split`, { people: 3 });
     await payShare(b.id, 'Nakit');
@@ -167,14 +167,14 @@ describe('paylaşımlı hesap', () => {
     expect(done.closed).toBe(true);
     // Yeniden açılıp kalem eklenirse paylar bitmiştir: kalan "Tutar" ile alınır ya da kişi eklenir
     await h.ok('kasa', 'POST', `/orders/${o.id}/reopen`, { reason: 'Ürün eklenecek', approverPin: MUDUR });
-    await h.ok('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     expect((await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: 100, share: true })).json.code).toBe('split_done');
     const more = await h.ok<OrderDTO>('kasa', 'PUT', `/orders/${o.id}/split`, { people: 3 });
     expect(more.split).toMatchObject({ people: 3, paid: 2, left: 1, shares: [more.total - more.paid] });
     expect((await payShare(o.id, 'Nakit')).closed).toBe(true);
 
     // Paylaşımı kaldırmak: pay hesabı düşer, ödenmiş payların etiketi kalır
-    const p = await newOrder([{ name: 'Türk kahvesi' }]);
+    const p = await newOrder([{ name: 'Türk Kahvesi' }]);
     await h.ok('kasa', 'PUT', `/orders/${p.id}/split`, { people: 2 });
     expect((await h.ok<OrderDTO>('kasa', 'PUT', `/orders/${p.id}/split`, { people: null })).split).toBeNull();
     await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: method('Nakit').id, amount: p.total });

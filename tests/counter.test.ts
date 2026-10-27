@@ -26,7 +26,7 @@ describe('tezgâh satışı', () => {
     // Başka kişi bu adisyonun kimliğini verse de alamaz
     expect((await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'tezgah', reuse: a.id })).id).not.toBe(a.id);
 
-    const sold = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${a.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    const sold = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${a.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const next = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: a.id });
     expect(next.id).not.toBe(a.id);
     await h.ok('kasa', 'POST', `/orders/${a.id}/payments`, { methodId: method('Nakit').id, amount: sold.total });
@@ -52,7 +52,7 @@ describe('tezgâh satışı', () => {
 
   it('elle fiyat: yetkisi olmayan kasiyerde yetkili PIN ister, fiyat kaleme yazılır ve denetime düşer', async () => {
     const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
-    const line = { productId: product('Türk kahvesi').id, qty: 1, priceOverride: 5000 };
+    const line = { productId: product('Türk Kahvesi').id, qty: 1, priceOverride: 5000 };
     const denied = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/items`, { items: [line] });
     expect(denied.json.code).toBe('approval_required');
     const done = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [line], approverPin: '2468' });
@@ -64,7 +64,7 @@ describe('tezgâh satışı', () => {
 
   it('gün sonunda kalemsiz ve ödemesiz adisyonlar kapanır, dolu adisyon yine engeller', async () => {
     const full = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
-    const withItem = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${full.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    const withItem = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${full.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const blocked = await h.call<{ code: string; error: string }>('mudur', 'POST', '/cash/day/close', { countedCash: 0 });
     expect(blocked.json.code).toBe('open_orders');
     expect(blocked.json.error).toContain(`#${full.no}`);

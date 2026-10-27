@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { ROOT } from '../env';
 import { hashPin } from '../lib/auth';
 import { ulid } from '../lib/ids';
@@ -94,15 +94,10 @@ export function seedIfEmpty(): boolean {
       ])
       .run();
 
-    // ModPOS'ta olup sitede olmayan kasa ürünleri ve seçenek grupları (docs/01-ANALIZ.md §1)
-    const hotCat = t.select().from(schema.categories).all().find((c) => c.extKey === 'hot');
+    // ModPOS'ta olup sitede olmayan kasa ürünleri ve seçenek grupları (docs/01-ANALIZ.md §1). Türk kahvesi sitede
+    // (mnu-0019): yerel kopyası yok, kasaya özel şeker grubu site kalemine bağlanır (sitenin sayaçlı şekerinin yerine).
+    // Yenilebilir bardak bardak seçeneği değil ayrı üründür: ModPOS'taki gibi ayrı satır, lafmaliyet'te ayrı reçete
     const extrasCat = t.select().from(schema.categories).all().find((c) => c.extKey === 'extras');
-    const turkishCoffee = ulid();
-    if (hotCat) {
-      t.insert(schema.products)
-        .values({ id: turkishCoffee, categoryId: hotCat.id, name: 'Türk kahvesi', price: 14000, kdvRate: 10, posName: 'TÜRK KAHVESİ', sort: 50 })
-        .run();
-    }
     if (extrasCat) {
       t.insert(schema.products).values({ id: ulid(), categoryId: extrasCat.id, name: 'Yenilebilir bardak', price: 8000, kdvRate: 10, posName: 'YENİLEBİLİR BARDAK', sort: 50 }).run();
     }
@@ -111,14 +106,30 @@ export function seedIfEmpty(): boolean {
     t.insert(schema.optionItems)
       .values(['Sade', 'Az şekerli', 'Orta', 'Şekerli'].map((name, i) => ({ id: ulid(), groupId: sugarGroup, name, price: 0, isDefault: i === 2, sort: i })))
       .run();
-    if (hotCat) t.insert(schema.productOptionGroups).values({ productId: turkishCoffee, groupId: sugarGroup, sort: 0 }).run();
+    const turkishCoffee = t
+      .select({ id: schema.products.id })
+      .from(schema.products)
+      .where(and(eq(schema.products.extSource, 'laffogato'), eq(schema.products.extId, 'mnu-0019')))
+      .get();
+    if (turkishCoffee) {
+      const siteSugar = t
+        .select({ id: schema.optionGroups.id })
+        .from(schema.optionGroups)
+        .where(and(eq(schema.optionGroups.extSource, 'laffogato'), eq(schema.optionGroups.extKey, 'sugar')))
+        .get();
+      if (siteSugar) {
+        t.delete(schema.productOptionGroups)
+          .where(and(eq(schema.productOptionGroups.productId, turkishCoffee.id), eq(schema.productOptionGroups.groupId, siteSugar.id)))
+          .run();
+      }
+      t.insert(schema.productOptionGroups).values({ productId: turkishCoffee.id, groupId: sugarGroup, sort: 4 }).run();
+    }
     const cupGroup = ulid();
     t.insert(schema.optionGroups).values({ id: cupGroup, name: 'Bardak', kind: 'single', required: false, maxSelect: 1, sort: 11 }).run();
     t.insert(schema.optionItems)
       .values([
         { id: ulid(), groupId: cupGroup, name: 'Cam bardak', price: 0, isDefault: true, sort: 0 },
         { id: ulid(), groupId: cupGroup, name: 'Karton bardak', price: 0, sort: 1 },
-        { id: ulid(), groupId: cupGroup, name: 'Yenilebilir bardak', price: 8000, sort: 2 },
       ])
       .run();
     // Bardak seçimi espresso bazlı ve soğuk kahvelere bağlanır
