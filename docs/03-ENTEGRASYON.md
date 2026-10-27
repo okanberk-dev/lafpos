@@ -92,7 +92,9 @@ okunamazsa (5xx, bozuk gövde) 5 dakikalık çekmeye düşülür.
 `GET /api/panel/orders` yanıtında `orders` dizisi yoksa (bakım sayfası, ağ geçidi, beklenmeyen gövde) çekme
 başarısız sayılır, hiçbir sipariş kapatılmaz. Listede olmayan açık sipariş yalnız liste tamken bitmiş sayılır:
 `complete: false` (sitenin sınırını aşan kesik liste) ya da okunamayan kalem varsa kapatılmaz. Yerelde kapanmış
-ama sitede hâlâ açık görünen sipariş yeniden açılır.
+ama sitede hâlâ açık görünen sipariş yeniden açılır. Liste, istendiği andaki hâldir: istek gittikten sonra
+LafPOS'ta değişen sipariş (kasada "Teslim edildi", aşama, araya giren daha yeni bir çekmenin getirdiği yeni
+sipariş) o listeyle ne yeniden açılır ne kapanır ne de aşaması geri alınır; sonraki çekme geçerlidir.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım). Raporlarda

@@ -158,6 +158,64 @@ describe('online siparişler', () => {
     expect(done?.itemStatus).toEqual(['servis']);
   });
 
+  it('liste istendikten sonra LafPOS\'ta değişen sipariş gecikmiş eski listeyle geri alınmaz', async () => {
+    const { upsertOnlineOrders, syncOnlineOrders, setOnlineStage } = await import('../server/sync/laffogato-orders');
+    const A = panelOrder('ord-teslim-55', { stage: 'ready' });
+    const siteOpen = new Map<string, PanelOrder>([[A.id, A]]);
+    // Her çekmenin yanıtı ağda bekletilir; liste istek anındaki hâldir
+    const held: (() => void)[] = [];
+    site = (path, init) => {
+      if (path === '/api/panel/orders') {
+        const snapshot = [...siteOpen.values()];
+        return new Promise<Response>((resolve) => held.push(() => resolve(json({ version: 1, complete: true, orders: snapshot }))));
+      }
+      if (path === '/api/panel/orders/stage') {
+        siteOpen.delete((JSON.parse(String(init.body)) as { id: string }).id);
+        return json({ order: null });
+      }
+      return undefined;
+    };
+    const pulled = async (n: number) => {
+      while (held.length < n) await new Promise((r) => setTimeout(r, 1));
+    };
+    upsertOnlineOrders([A], false);
+    const local = (await onlineRow(A.id))!;
+    expect(local.status).toBe('acik');
+
+    const stale = syncOnlineOrders();
+    await pulled(1);
+    // Kasiyer "Teslim edildi": site siparişi bitirir, LafPOS kapatır
+    await setOnlineStage(local.id, 'delivered', 'Kasa');
+    expect((await onlineRow(A.id))?.status).toBe('kapali');
+    // Bu arada yeni sipariş gelir, daha yeni bir çekme (Yenile) önce döner
+    const B = panelOrder('ord-yeni-56');
+    siteOpen.set(B.id, B);
+    const fresh = syncOnlineOrders();
+    await pulled(2);
+    held[1]!();
+    await fresh;
+    expect((await onlineRow(B.id))?.status).toBe('acik');
+
+    // Eski liste şimdi döner: A'yı hâlâ açık, B'yi hiç görmemiş
+    held[0]!();
+    await stale;
+    const a = await onlineRow(A.id);
+    expect(a?.status).toBe('kapali');
+    expect(a?.itemStatus).toEqual(['servis']);
+    const b = await onlineRow(B.id);
+    expect(b?.status).toBe('acik');
+    expect(b?.itemStatus).toEqual(['yeni']);
+
+    // Sonraki güncel liste geçerlidir: site B'yi bitirince kapanır
+    siteOpen.delete(B.id);
+    const next = syncOnlineOrders();
+    await pulled(3);
+    held[2]!();
+    await next;
+    expect((await onlineRow(B.id))?.status).toBe('kapali');
+    expect((await onlineRow(A.id))?.status).toBe('kapali');
+  });
+
   it('masa siparişi etiketteki masa adıyla da masaya düşer (site masa kodu tanımlı değilken)', async () => {
     const { upsertOnlineOrders } = await import('../server/sync/laffogato-orders');
     const s2 = h.boot.tables.find((t) => t.name === 'S2')!;
