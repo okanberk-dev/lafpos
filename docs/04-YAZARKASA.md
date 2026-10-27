@@ -6,7 +6,9 @@ Kod: `server/okc/` (markadan bağımsız akış `service.ts`, sepet hesabı `bas
 sözleşme `types.ts`, Token `tokenx.ts` + istemci `../tokenx.ts`, eğitim cihazı `index.ts`), uçlar
 `server/routes/okc.ts`, ekranlar adisyondaki **Yazarkasa** bölümü, `/cihaz` (eğitim cihazı) ve
 Yönetim › Yazarkasa POS. Testler: `tests/okc-basket.test.ts`, `tests/tokenx-client.test.ts`,
-`tests/api-flow.test.ts`.
+`tests/api-flow.test.ts`, `tests/okc-providers.test.ts`, `tests/audit-yazarkasa.test.ts` (27 Eki 2026 denetimi:
+birleşen adisyonda fiş iptali, kapanmış güne ait iptal, yanıtı alınamayan gönderim, ödemesiz kapanan fiş, servis
+ve KDV dökümü, açılışta sorgu, denetim kaydı).
 
 ## 1. Sağlayıcılar
 
