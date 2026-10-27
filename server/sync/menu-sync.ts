@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db, schema, tx } from '../db/client';
 import { Effects } from '../lib/effects';
+import { requireSiteLinked } from './laffogato-link';
 import { applyMenu, fetchPanelMenu, fetchPublicMenu, type MenuPreview, previewMenu, recordMenuSync } from './laffogato-menu';
 
 let running: Promise<unknown> | null = null;
@@ -19,6 +20,8 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
   preview?: MenuPreview;
   result?: { created: number; updated: number; deactivated: number };
 }> {
+  // Bağlantı yoksa (LAFFOGATO_URL) hiçbir istek gitmez; durum kaydına hata da yazılmaz, "kurulmadı" hata değildir
+  requireSiteLinked();
   if (running) await running.catch(() => undefined);
   const job = (async () => {
     try {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/client';
 import { env } from '../env';
+import { siteLinked } from '../sync/laffogato-link';
 
 /**
  * Ürün kartlarındaki görselin küçük kopyası. Görseller sitede 1024 px dekupaj (~160 KB); kasa ve tabletler
@@ -26,9 +27,12 @@ export interface Thumb {
 
 const TYPES: Record<string, string> = { webp: 'image/webp', png: 'image/png', jpg: 'image/jpeg', avif: 'image/avif' };
 
-/** Yalnız sitenin kendi görselleri (https, aynı köken): menüden gelen adres başka yere istek attıramaz */
+/**
+ * Yalnız sitenin kendi görselleri (https, aynı köken): menüden gelen adres başka yere istek attıramaz. Site bağlantısı
+ * yokken (LAFFOGATO_URL) hiçbir görsel indirilmez; kart baş harflerle çizilir.
+ */
 export function thumbSource(url: string | null | undefined): URL | null {
-  if (!url) return null;
+  if (!url || !siteLinked()) return null;
   try {
     const u = new URL(url);
     const site = new URL(env.laffogatoUrl);

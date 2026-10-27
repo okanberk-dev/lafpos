@@ -7,6 +7,7 @@ import { ulid } from '../lib/ids';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
+import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
 
 /**
  * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: LafPOS yalnız gösterir (bar ekranı,
@@ -27,12 +28,12 @@ export interface PanelOrder {
   totalMinor: number;
 }
 
-const configured = () => env.laffogatoPanelSecret.length >= 32;
+const configured = siteSigned;
 
 const STAGE_STATUS: Record<PanelOrder['stage'], 'yeni' | 'hazirlaniyor' | 'hazir'> = { new: 'yeni', preparing: 'hazirlaniyor', ready: 'hazir' };
 
 export async function fetchPanelOrders(): Promise<PanelOrder[]> {
-  if (!configured()) throw new HttpError(409, 'Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
+  requireSiteSigned();
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/orders`));
   if (status !== 200) throw new HttpError(502, `Site siparişleri alınamadı (HTTP ${status})`, 'site_orders');
   return ((json as { orders?: PanelOrder[] })?.orders ?? []).filter((o) => o && typeof o.id === 'string');
@@ -157,7 +158,7 @@ export async function syncOnlineOrders() {
 
 /** Siteye aşama yazar: preparing (hazırlanıyor), ready (hazır / masaya götürüldü / kuryeye verildi), delivered (gel-al teslim) */
 export async function setOnlineStage(orderId: string, action: 'preparing' | 'ready' | 'delivered', actorName: string) {
-  if (!configured()) throw conflict('Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
+  requireSiteSigned();
   const o = db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).get();
   if (!o || o.source !== 'laffogato' || !o.extId) throw notFound('Online sipariş');
   const from = o.extStage === 'done' ? 'ready' : (o.extStage ?? 'new');
@@ -195,12 +196,13 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
  * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir (site Satışta bilgisinin
  * sahibi), 2xx gelince yerelde kaydedilir. Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir.
  */
-export async function setAvailability(productId: string, active: boolean, actorName: string): Promise<{ site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' }> {
+export async function setAvailability(productId: string, active: boolean, actorName: string): Promise<{ site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok' }> {
   const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
   if (!p) throw notFound('Ürün');
-  let site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' = 'bagli_degil';
+  let site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok' = 'bagli_degil';
   if (p.extSource === 'laffogato' && p.extId) {
-    if (!configured()) site = 'anahtar_yok';
+    if (!siteLinked()) site = 'baglanti_yok';
+    else if (!configured()) site = 'anahtar_yok';
     else {
       const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) });
       if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
@@ -269,6 +271,7 @@ export async function onlineOrdersTick() {
 
 /** "Yenile" düğmesi: en sık 30 sn'de bir gerçek çekme */
 export async function refreshOnlineOrders() {
+  requireSiteSigned();
   const now = Date.now();
   if (now - lastFullPull < 30_000) return { skipped: true };
   lastFullPull = now;

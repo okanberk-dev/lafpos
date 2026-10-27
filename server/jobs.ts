@@ -11,6 +11,7 @@ import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
 import { enqueueDay, flushOutbox } from './sync/lafmaliyet';
+import { siteLinked } from './sync/laffogato-link';
 import { onlineOrdersTick, pushSoldOut } from './sync/laffogato-orders';
 import { runMenuSync } from './sync/menu-sync';
 import { startCloudSync } from './sync/cloud';
@@ -21,7 +22,8 @@ export const SYNC_INTERVAL_MS = 5 * 60_000;
 const timers: NodeJS.Timeout[] = [];
 
 async function menuTick() {
-  if (!getSettings().menuAutoSync) return;
+  // Site bağlantısı yoksa (LAFFOGATO_URL) siteye hiçbir istek gitmez: ne menü ne görsel
+  if (!siteLinked() || !getSettings().menuAutoSync) return;
   try {
     const r = await runMenuSync({ apply: true });
     if (r.status === 'uygulandi') console.log(`[senkron] site menüsü uygulandı: ${r.preview?.changes.length ?? 0} değişiklik`);

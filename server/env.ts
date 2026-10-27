@@ -52,8 +52,11 @@ export const env = {
   /** Oturum süresi (saat) */
   sessionHours: Number(process.env.LAFPOS_SESSION_HOURS ?? 14),
 
-  /** laffogato (site + mobil uygulama API'si) */
-  laffogatoUrl: (process.env.LAFFOGATO_URL ?? 'https://laffogato.net').replace(/\/$/, ''),
+  /**
+   * laffogato (site + mobil uygulama API'si). Varsayılanı yok: yalnız .env'de açıkça yazılınca dolu, boşken LafPOS
+   * siteye hiçbir istek atmaz (menü, görsel, online sipariş, Tükendi; sahibin 26 Ekim kararı, docs/03-ENTEGRASYON.md §2)
+   */
+  laffogatoUrl: (process.env.LAFFOGATO_URL ?? '').trim().replace(/\/+$/, ''),
   /** Sitenin imzalı uçları: sitedeki LAFPOS_SYNC_SECRET değeri (en az 32 karakter) */
   laffogatoPanelSecret: (process.env.LAFFOGATO_SYNC_SECRET ?? process.env.LAFFOGATO_PANEL_SECRET ?? '').trim(),
 

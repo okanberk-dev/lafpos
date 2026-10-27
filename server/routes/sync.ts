@@ -7,6 +7,7 @@ import { body, HttpError, query } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
 import { buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
+import { requireSiteLinked, siteLinked } from '../sync/laffogato-link';
 import { onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
 import { runMenuSync } from '../sync/menu-sync';
 import { getSettings } from '../lib/settings';
@@ -17,7 +18,7 @@ export const syncRoutes = new Hono<AppEnv>();
 syncRoutes.get('/status', (c) => {
   const s = getSettings();
   return c.json({
-    menu: { auto: s.menuAutoSync, state: getSyncState('laffogato.menu') },
+    menu: { linked: siteLinked(), auto: s.menuAutoSync, state: getSyncState('laffogato.menu') },
     online: onlineStatus(),
     lafmaliyet: lafmaliyetStatus(),
     okc: okcStatus(),
@@ -34,6 +35,7 @@ syncRoutes.put('/settings', async (c) => {
 syncRoutes.post('/menu/preview', async (c) => {
   const user = c.get('user');
   if (!can(user, 'senkron.yonet')) requirePermission(user, 'menu.yonet');
+  requireSiteLinked();
   try {
     return c.json(await runMenuSync({ apply: false, force: true }));
   } catch (e) {
@@ -44,6 +46,7 @@ syncRoutes.post('/menu/preview', async (c) => {
 syncRoutes.post('/menu/apply', async (c) => {
   const user = c.get('user');
   if (!can(user, 'senkron.yonet')) requirePermission(user, 'menu.yonet');
+  requireSiteLinked();
   try {
     return c.json(await runMenuSync({ apply: true, force: true, userId: user.id, userName: user.name }));
   } catch (e) {

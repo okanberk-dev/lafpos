@@ -102,7 +102,7 @@ export default function MenuAdmin() {
   const availability = async (p: ProductDTO, active: boolean) => {
     try {
       const r = await post<{ site: string }>(`/sync/products/${p.id}/availability`, { active });
-      toast.ok(`${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'anahtar_yok' ? '; site anahtarı yok, yalnız LafPOS' : ''}`);
+      toast.ok(`${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'anahtar_yok' ? '; site anahtarı yok, yalnız LafPOS' : r.site === 'baglanti_yok' ? '; site bağlantısı kurulmadı, yalnız LafPOS' : ''}`);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -197,10 +197,13 @@ export default function MenuAdmin() {
               <Plus className="size-4" aria-hidden="true" />
               Yerel ürün
             </button>
-            <a href={`${boot.integrations.laffogatoUrl.replace(/\/+$/, '')}/admin/menu/yeni`} target="_blank" rel="noreferrer" className={BTN.primary}>
-              <ExternalLink className="size-4" aria-hidden="true" />
-              Sitede ürün ekle
-            </a>
+            {/* Site bağlantısı yokken (LAFFOGATO_URL) sitede eklenen ürün kasaya gelmez; düğme de yok */}
+            {boot.integrations.laffogatoUrl && (
+              <a href={`${boot.integrations.laffogatoUrl.replace(/\/+$/, '')}/admin/menu/yeni`} target="_blank" rel="noreferrer" className={BTN.primary}>
+                <ExternalLink className="size-4" aria-hidden="true" />
+                Sitede ürün ekle
+              </a>
+            )}
           </>
         }
       />

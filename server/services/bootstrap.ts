@@ -4,6 +4,7 @@ import { type DB, schema, type Tx } from '../db/client';
 import { type AuthUser, can } from '../lib/auth';
 import { env } from '../env';
 import { getPublicSettings, getSettings } from '../lib/settings';
+import { siteSigned } from '../sync/laffogato-link';
 import { dayToDTO } from './days';
 import { getOpenDay } from './orders';
 
@@ -138,7 +139,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
     day: dayToDTO(t, getOpenDay(t)),
     integrations: {
       okc: { provider: getSettings().okcProvider, mode: getSettings().okcMode },
-      laffogatoPanel: env.laffogatoPanelSecret.length >= 32,
+      laffogatoPanel: siteSigned(),
       lafmaliyetPush: !!env.lafmaliyetUrl && env.lafmaliyetToken.length >= 32,
       laffogatoUrl: env.laffogatoUrl,
     },

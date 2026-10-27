@@ -6,6 +6,7 @@ import { env } from '../env';
 import { ulid } from '../lib/ids';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
+import { requireSiteLinked, siteSigned } from './laffogato-link';
 
 /**
  * laffogato menüsünü LafPOS'a çeker. Kaynak: herkese açık, CDN önbellekli `GET /api/mobile/v1/menu` (ETag).
@@ -65,6 +66,7 @@ const hashItem = (i: SiteMenuItem) =>
     .slice(0, 16);
 
 export async function fetchPublicMenu(force = false): Promise<{ status: 'degismedi' } | { status: 'yeni'; menu: SiteMenu; etag: string | null }> {
+  requireSiteLinked();
   const prev = getSyncState<{ etag?: string }>('laffogato.menu');
   const headers: Record<string, string> = { accept: 'application/json', 'user-agent': 'LafPOS/0.1 (+kafe kasasi)' };
   if (prev?.etag && !force) headers['if-none-match'] = prev.etag;
@@ -78,7 +80,7 @@ export async function fetchPublicMenu(force = false): Promise<{ status: 'degisme
 
 /** İmzalı panel ucundan Tükendi kalemler dahil liste (anahtar varsa). */
 export async function fetchPanelMenu(): Promise<Map<string, { isActive: boolean; priceMinor: number; priceMinorL: number }> | null> {
-  if (env.laffogatoPanelSecret.length < 32) return null;
+  if (!siteSigned()) return null;
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/menu`));
   if (status !== 200) throw new Error(`Panel menüsü alınamadı (HTTP ${status})`);
   const items = (json as { items?: { id: string; isActive: boolean; priceMinor: number; priceMinorL: number }[] }).items ?? [];

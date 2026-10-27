@@ -88,7 +88,9 @@ export default function OrdersPage() {
       />
       {tab === 'online' && !boot.integrations.laffogatoPanel && (
         <div className="mb-4 rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted">
-          Site bağlantı anahtarı (LAFFOGATO_SYNC_SECRET) tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md
+          {boot.integrations.laffogatoUrl
+            ? 'Site bağlantı anahtarı (LAFFOGATO_SYNC_SECRET) tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'
+            : 'Site bağlantısı kurulmadığı için (LAFFOGATO_URL) uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'}
         </div>
       )}
       {rows.length === 0 ? (
