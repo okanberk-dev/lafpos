@@ -454,7 +454,7 @@ describe.skip('input-74: takvimde olmayan tarih ve saat', () => {
   });
 });
 
-describe.skip('auth-54: personel tutarları rapor.maliyet ister', () => {
+describe('auth-54: personel tutarları rapor.maliyet ister', () => {
   it('kasa rakamlarını gören ama maliyet yetkisi olmayan kişi X ve Z özetinde personel tutarlarını görmez', async () => {
     const sell = async (who: string, name: string, qty: number) => {
       const o = await h.ok<OrderDTO>(who, 'POST', '/orders', { type: 'tezgah' });
@@ -489,7 +489,7 @@ describe.skip('auth-54: personel tutarları rapor.maliyet ister', () => {
     // Gün sonu ve kasa föyü yanıtı da
     const closed = await h.ok<Day>('acik', 'POST', '/cash/day/close', { countedCash: null });
     expect(closed.summary!.byUser).toEqual([]);
-    const counted = await h.ok<Day>('acik', 'POST', `/cash/days/${x.day.id}/count`, { countedCash: closed.summary!.expectedCash });
+    const counted = await h.ok<Day>('acik', 'POST', `/cash/days/${x.day.id}/count`, { countedCash: Math.max(0, closed.summary!.expectedCash) });
     expect(counted.summary!.byUser).toEqual([]);
     expect((await h.ok<Day>('mudur', 'GET', `/cash/days/${x.day.id}`)).summary!.byUser.length).toBeGreaterThanOrEqual(2);
   });

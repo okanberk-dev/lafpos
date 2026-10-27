@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
+import type { ZSummary } from '@shared/types';
 import { db, schema } from '../db/client';
-import { type AppEnv, actorFrom, requirePermission, seesCashNumbers } from '../lib/auth';
+import { type AppEnv, type AuthUser, actorFrom, can, requirePermission, seesCashNumbers } from '../lib/auth';
 import { body, kurus, query } from '../lib/http';
 import { addCashMovement, closeDay, closedToday, collectCustomerPayment, computeSummary, dayToDTO, getDay, lafmaliyetZ, listDays, openDay, recordCount, reopenDay } from '../services/days';
 import { enqueueDay, flushOutbox } from '../sync/lafmaliyet';
@@ -28,6 +29,15 @@ function movementsOf(dayId: string) {
  */
 const seesNumbers = seesCashNumbers;
 
+/**
+ * Personel tutarları (kişi başına adisyon sayısı ve ciro) maliyet yetkisi ister, personel raporu gibi: kör kasası
+ * kaldırılan kasiyer (`kasa.rakam`) ya da rapor gören (`rapor.gor`) kişi X ve Z özetinde onları görmez (denetim,
+ * 26 Eki 2026).
+ */
+function summaryFor(user: AuthUser, s: ZSummary | null): ZSummary | null {
+  return s && !can(user, 'rapor.maliyet') ? { ...s, byUser: [] } : s;
+}
+
 /** Açık gün, ara rapor (X) ve kasa hareketleri */
 cashRoutes.get('/day', (c) => {
   const user = c.get('user');
@@ -37,7 +47,7 @@ cashRoutes.get('/day', (c) => {
     const closed = closedToday(db);
     return c.json({ day: null, summary: null, movements: [], blind, closedToday: closed ? dayToDTO(db, closed) : null });
   }
-  return c.json({ day: dayToDTO(db, day), summary: blind ? null : computeSummary(db, day), movements: movementsOf(day.id), blind });
+  return c.json({ day: dayToDTO(db, day), summary: blind ? null : summaryFor(user, computeSummary(db, day)), movements: movementsOf(day.id), blind });
 });
 
 cashRoutes.post('/day/open', async (c) => {
@@ -56,7 +66,7 @@ cashRoutes.post('/day/close', async (c) => {
   const day = write((t, fx) => closeDay(t, actor, fx, input));
   if (enqueueDay(day.id)) void flushOutbox();
   if (!seesNumbers(c.get('user'))) return c.json({ day: dayToDTO(db, day), summary: null, lafmaliyet: null, blind: true });
-  return c.json({ day: dayToDTO(db, day), summary: day.summary, lafmaliyet: day.summary ? lafmaliyetZ(day, day.summary) : null, blind: false });
+  return c.json({ day: dayToDTO(db, day), summary: summaryFor(c.get('user'), day.summary), lafmaliyet: day.summary ? lafmaliyetZ(day, day.summary) : null, blind: false });
 });
 
 cashRoutes.post('/days/:id/reopen', async (c) => {
@@ -81,7 +91,7 @@ cashRoutes.post('/days/:id/count', async (c) => {
   const day = write((t, fx) => recordCount(t, actor, fx, c.req.param('id'), input));
   if (enqueueDay(day.id)) void flushOutbox();
   const blind = !seesNumbers(c.get('user'));
-  return c.json({ day: dayToDTO(db, day), summary: blind ? null : day.summary, blind });
+  return c.json({ day: dayToDTO(db, day), summary: blind ? null : summaryFor(c.get('user'), day.summary), blind });
 });
 
 cashRoutes.post('/movements', async (c) => {
@@ -115,7 +125,7 @@ cashRoutes.get('/days/:id', (c) => {
   requirePermission(c.get('user'), 'rapor.gor');
   const day = getDay(db, c.req.param('id'));
   const summary = day.summary ?? computeSummary(db, day);
-  return c.json({ day: dayToDTO(db, day), summary, movements: movementsOf(day.id), lafmaliyet: lafmaliyetZ(day, summary), note: day.note, cashCounts: day.cashCounts });
+  return c.json({ day: dayToDTO(db, day), summary: summaryFor(c.get('user'), summary), movements: movementsOf(day.id), lafmaliyet: lafmaliyetZ(day, summary), note: day.note, cashCounts: day.cashCounts });
 });
 
 cashRoutes.get('/days/:id/lafmaliyet.json', (c) => {
