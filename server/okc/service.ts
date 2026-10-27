@@ -133,6 +133,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       items,
       totals: order.totals ?? { lineNet: {} },
       selection: selection?.length ? mergeSelection(selection) : null,
+      payments: orderPayments(db, orderId),
       remainingDue: order.total - order.paid,
       sectionMap: s.okcSectionMap,
       sizeLabels: s.sizeLabels,

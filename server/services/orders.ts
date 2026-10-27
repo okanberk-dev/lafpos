@@ -1298,7 +1298,7 @@ export function addExternalPayments(
   userId: string,
   fx: Effects,
   orderId: string,
-  input: { payments: { methodId: string; amount: number; note?: string | null }[]; items: { itemId: string; qty: number }[] },
+  input: { payments: { methodId: string; amount: number; note?: string | null }[]; items: PaidItem[] },
 ): { order: OrderRow; closed: boolean; paymentIds: string[] } {
   const o = loadOrder(t, orderId);
   if (o.status !== 'acik') throw conflict('Adisyon artık açık değil', 'order_closed');
@@ -1310,14 +1310,25 @@ export function addExternalPayments(
   const sum = input.payments.reduce((a, p) => a + p.amount, 0);
   if (sum > remaining) throw conflict(`Cihazdaki ödeme (${tl(sum)}) kalan tutarı (${tl(remaining)}) aşıyor`, 'overpay');
 
-  const marked: { itemId: string; qty: number }[] = [];
+  const marked: PaidItem[] = [];
   for (const sel of input.items) {
     const it = items.find((i) => i.id === sel.itemId);
     if (!it) continue;
     const qty = Math.min(sel.qty, it.qty - it.paidQty);
     if (qty <= 0) continue;
     t.update(schema.orderItems).set({ paidQty: it.paidQty + qty }).where(eq(schema.orderItems.id, it.id)).run();
-    marked.push({ itemId: it.id, qty });
+    marked.push({ itemId: it.id, qty, amount: qty === sel.qty ? sel.amount : undefined });
+  }
+  // Sepetin satır tutarları kalem işaretine yazılır (addPayment gibi): ödeme iptal edilip adet yeniden ödenince
+  // satırın kalanı kuruşu kuruşuna alınır. Cihaz sepetten az aldıysa tutarlar alınana oranla iner; biri
+  // bilinmiyorsa (eski sepet) hiçbiri yazılmaz, adet payları sırayla sayılır
+  const lineAmounts = marked.map((m) => m.amount);
+  if (lineAmounts.every((a): a is number => a != null)) {
+    const expected = lineAmounts.reduce((a, b) => a + b, 0);
+    const scaled = sum < expected ? allocate(sum, lineAmounts) : lineAmounts;
+    marked.forEach((m, i) => (m.amount = scaled[i] ?? 0));
+  } else {
+    for (const m of marked) delete m.amount;
   }
 
   const ids: string[] = [];

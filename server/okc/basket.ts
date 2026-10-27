@@ -1,5 +1,4 @@
-import { allocate } from '@shared/money';
-import { type OrderTotals, SERVICE_KDV_RATE } from '@shared/order-calc';
+import { itemPayLines, itemsBreakdown, type OrderTotals, type PaidItem, SERVICE_KDV_RATE } from '@shared/order-calc';
 import { TOKENX_PAYMENT, type TokenxBasket, type TokenxItem, type TokenxSale } from './tokenx';
 
 /**
@@ -7,7 +6,9 @@ import { TOKENX_PAYMENT, type TokenxBasket, type TokenxItem, type TokenxSale } f
  * - İptal ve ikram kalemleri sepete girmez (ücretsiz).
  * - Her kalem liste fiyatıyla gider; indirim payı kaleme `adjust.totalValue` olarak eklenir, böylece fişin
  *   toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynıdır.
- * - Kalem bazlı seçimde yalnız seçilen adetler gider (indirim payı adetle orantılı, en büyük kalan yöntemi).
+ * - Kalem bazlı seçimde yalnız seçilen adetler gider. Tutar ödeme ekranıyla aynı hesaptır (`itemsBreakdown`): kalan
+ *   bütün adetler satırın kalanını alır (net pay eksi canlı ödemelerin bu satıra ödediği), kısmi adetler adet
+ *   paylarından sırayla. Yoksa iptal edilen adet ödemesinden sonra cihaz 1 kuruş eksik isterdi (money-17).
  * - KDV oranı cihazdaki kısım (sectionNo) ile eşlenir; eşleşmeyen oran hata verir.
  */
 
@@ -33,6 +34,8 @@ export interface BuildBasketInput {
   totals: Pick<OrderTotals, 'lineNet'> & Partial<Pick<OrderTotals, 'service'>>;
   /** Seçilmezse ödenmemiş bütün adetler */
   selection?: { itemId: string; qty: number }[] | null;
+  /** Adisyonun ödemeleri: satıra ödenen tutar bunlardan bilinir (verilmezse adet payları sırayla sayılır) */
+  payments?: { items: PaidItem[] | null; refundedAt?: number | null }[];
   sectionMap: Record<string, number>;
   sizeLabels: { M: string; L: string };
   callbackUrl?: string;
@@ -50,14 +53,15 @@ export interface BuildBasketInput {
 export interface BuiltBasket {
   basket: TokenxBasket;
   amount: number;
-  lines: { itemId: string; qty: number }[];
+  /** Sepetteki satırlar ve tutarları (kayma dahil): cihazda ödenince ödemenin kalem işaretleri olur */
+  lines: { itemId: string; qty: number; amount: number }[];
 }
 
 const MAX_NAME = 32;
 
 export function buildBasket(input: BuildBasketInput): BuiltBasket {
-  const parts: { item: TokenxItem; gross: number; net: number }[] = [];
-  const lines: { itemId: string; qty: number }[] = [];
+  const parts: { itemId: string; qty: number; item: TokenxItem; gross: number; net: number }[] = [];
+  const payLines = itemPayLines(input.items, input.payments ?? []);
   let amount = 0;
   for (const it of input.items) {
     if (it.voided || it.complimentary) continue;
@@ -67,10 +71,7 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
     if (qty <= 0) continue;
     const net = input.totals.lineNet[it.id] ?? 0;
     if (net <= 0) continue;
-    // Kalemin net payını adetlere böl; daha önce ödenen adetler baştaki payları tüketmiş sayılır
-    const perUnit = allocate(net, Array.from({ length: it.qty }, () => 1));
-    let partNet = 0;
-    for (let i = it.paidQty; i < it.paidQty + qty; i++) partNet += perUnit[i] ?? 0;
+    const partNet = itemsBreakdown(input.totals, payLines, [{ lineId: it.id, qty }])[0]?.amount ?? 0;
     const gross = it.unitPrice * qty;
     const section = input.sectionMap[String(it.kdvRate)];
     if (section == null) throw new Error(`Cihazda %${it.kdvRate} KDV kısmı eşlenmemiş (Yönetim › Yazarkasa POS)`);
@@ -83,8 +84,7 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
       quantity: qty * 1000,
       unit: 'Adet',
     };
-    parts.push({ item, gross, net: partNet });
-    lines.push({ itemId: it.id, qty });
+    parts.push({ itemId: it.id, qty, item, gross, net: partNet });
     amount += partNet;
   }
   let serviceItem: TokenxItem | null = null;
@@ -125,7 +125,7 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
     items,
     ...(input.callbackUrl ? { callbackUrl: input.callbackUrl } : {}),
   };
-  return { basket, amount, lines };
+  return { basket, amount, lines: parts.map((p) => ({ itemId: p.itemId, qty: p.qty, amount: p.net })) };
 }
 
 export type MethodKind = 'nakit' | 'kart' | 'yemek' | 'havale' | 'cari' | 'online' | 'diger';

@@ -454,6 +454,42 @@ describe('ödeme', () => {
     expect(c.ledger.filter((l) => l.kind === 'tahsilat')).toHaveLength(2);
     expect(await expectedCash()).toBe(before + 14000);
   });
+
+  it('money-17 (gözden geçirme): yazarkasaya kalem seçerek giden sepet de satırın kalanını alır; iptal edilen adet ödemesinden sonra kuruş kalmaz', async () => {
+    await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator' });
+    try {
+      let o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 3 }]);
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: lines([{ name: 'Türk kahvesi' }]) });
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 1, reason: 'Yuvarlama', approverPin: MUDUR });
+      const [a, b] = o.items;
+      expect([o.total, o.totals.lineNet[a!.id], o.totals.lineNet[b!.id]]).toEqual([55999, 41999, 14000]);
+      const card = method('Kredi kartı').id;
+      const pay = async (itemId: string, qty: number) => {
+        const amount = amountForItems(o.totals, itemPayLines(o.items, o.payments), [{ lineId: itemId, qty }]);
+        const r = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount, items: [{ itemId, qty }] });
+        o = r.order;
+        return r.amount;
+      };
+      expect([await pay(a!.id, 1), await pay(a!.id, 2)]).toEqual([14000, 27999]);
+      const first = o.payments.find((p) => p.amount === 14000)!;
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/payments/${first.id}/refund`, { reason: 'Yanlış kart', approverPin: MUDUR });
+
+      // Ödeme ekranı bu adet için 14000 der; cihaz sepeti de aynı tutarı ister (13999 değil)
+      const lafpos = amountForItems(o.totals, itemPayLines(o.items, o.payments), [{ lineId: a!.id, qty: 1 }]);
+      const sent = await h.ok<{ receipt: { id: string; amount: number; items: { itemId: string; qty: number; amount?: number }[] } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: [{ itemId: a!.id, qty: 1 }] });
+      expect([lafpos, sent.receipt.amount]).toEqual([14000, 14000]);
+      expect(sent.receipt.items).toEqual([{ itemId: a!.id, qty: 1, amount: 14000 }]);
+      await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 3, amount: sent.receipt.amount }] });
+      o = await getOrder(o.id);
+      // Cihaz ödemesi de satır tutarını taşır: sonraki kalem ödemesi satırın kalanını bilir
+      expect(o.payments.find((p) => p.note?.startsWith('Yazarkasa'))!.items).toEqual([{ itemId: a!.id, qty: 1, amount: 14000 }]);
+      expect(await pay(b!.id, 1)).toBe(14000);
+      o = await getOrder(o.id);
+      expect([o.status, o.total - o.paid]).toEqual(['kapali', 0]);
+    } finally {
+      await h.ok('patron', 'PUT', '/okc/settings', { provider: 'kapali' });
+    }
+  });
 });
 
 describe('girdi doğrulama', () => {
