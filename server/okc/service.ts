@@ -617,6 +617,19 @@ export function ensurePolling() {
   }, 2500);
 }
 
+/**
+ * Sunucu açılışında: önceki süreçten kalan sorgulanabilir bekleyen sepet varsa sorgu döngüsü yeniden başlar
+ * (webhook yokken sonuç yalnız sorguyla gelir; yoksa adisyon kilitli kalırdı, inceleme 27 Eki 2026)
+ */
+export function resumePolling() {
+  const pending = db
+    .select({ id: schema.fiscalReceipts.id })
+    .from(schema.fiscalReceipts)
+    .where(and(inArray(schema.fiscalReceipts.provider, [...POLLED]), inArray(schema.fiscalReceipts.status, [...PENDING])))
+    .get();
+  if (pending) ensurePolling();
+}
+
 export function receiptsForOrder(orderId: string): ReceiptDTO[] {
   return db.select().from(schema.fiscalReceipts).where(eq(schema.fiscalReceipts.orderId, orderId)).orderBy(desc(schema.fiscalReceipts.createdAt)).all().map(receiptDTO);
 }

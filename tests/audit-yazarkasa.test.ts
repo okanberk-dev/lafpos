@@ -99,6 +99,24 @@ describe('yazarkasa denetimi', () => {
     await provider('simulator');
   });
 
+  it('sunucu yeniden başlayınca bekleyen Token sepeti sorgulanır (webhook yokken)', async () => {
+    const o = await order([{ name: 'Türk kahvesi' }]);
+    // Önceki süreçten kalan, sonucu beklenen sepet
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const kasa = db.select().from(schema.users).where(eq(schema.users.name, 'Kasa')).get()!;
+    const id = 'onceki-surecten-sepet';
+    const now = Date.now();
+    db.insert(schema.fiscalReceipts)
+      .values({ id, orderId: o.id, provider: 'tokenx', mode: 'anlik', terminalId: 'T1', status: 'gonderildi', amount: o.total, items: [{ itemId: o.items[0].id, qty: 1 }], basket: { basketID: id, items: [] }, sentBy: kasa.id, createdAt: now, updatedAt: now })
+      .run();
+    details.set(id, { basketID: id, sale: { basketID: id, status: 0, zNo: 1, receiptNo: 9, paymentItems: [{ type: 3, amount: o.total }] } });
+    const { resumePolling } = await import('../server/okc/service');
+    resumePolling();
+    await vi.waitFor(async () => expect((await getOrder(o.id)).status).toBe('kapali'), { timeout: 6000, interval: 200 });
+    expect(calls).toContain(`GET /v1/basket/${id}`);
+  });
+
   it('birleşen adisyonda fiş iptali: ödeme hedef adisyondan düşer, hedef yeniden açılır; fiş hedefe taşınır', async () => {
     const [ta, tb] = tables().slice(0, 2);
     const a = await order([{ name: 'Türk kahvesi' }, { name: 'Latte', size: 'M' }], { type: 'masa', tableId: ta.id });

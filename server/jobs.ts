@@ -7,6 +7,7 @@ import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings } from './lib/settings';
+import { resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -97,6 +98,8 @@ export function startJobs() {
   timers.push(setInterval(() => void flushOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setTimeout(backupTick, 30_000));
+  // Yeniden başlatmadan önce yazarkasaya gönderilmiş, sonucu beklenen sepetler sorgulanmaya devam eder
+  resumePolling();
   // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
   timers.push(...startCloudSync());
   // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır

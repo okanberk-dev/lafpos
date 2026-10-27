@@ -82,7 +82,8 @@ kaydedip kapatınca sunucu yeniden başlar.
    varsayılan `%1 → 3`, `%10 → 1`, `%20 → 2`. Cihazınızın kısım numaraları farklıysa buradan düzeltin.
 5. **Sonuç bildirimi**: `LAFPOS_PUBLIC_URL` ve `TOKENX_WEBHOOK_SECRET` varsa "Webhook'u kaydet"
    (`POST /api/okc/webhook/register`); adres `…/api/public/okc/tokenx/webhook`. Yoksa LafPOS sonucu
-   kendisi sorar (anlık sepette 2,5 sn, listede 10 sn).
+   kendisi sorar (anlık sepette 2,5 sn, listede 10 sn); sunucu yeniden başlarsa bekleyen sepetleri sormaya
+   açılışta devam eder.
 6. Eğitim cihazıyla bir tur: tezgâh satışı → Yazarkasa → `/cihaz`'da öde → adisyon kendiliğinden kapanır.
 
 ## 4. Anlık ve liste sepet
