@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { blockTerms, bookingsAtHand, linkableBooking, type SiteKaraokeBooking } from '@shared/karaoke';
+import { blockTerms, bookingsAtHand, linkableBooking, linkChoices, type SiteKaraokeBooking } from '@shared/karaoke';
 import type { BootstrapDTO, FloorStateDTO, OrderDTO, SiteKaraokeDTO } from '@shared/types';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
@@ -123,6 +123,15 @@ describe('oda ücreti: rezervasyon bloğu (saf kural)', () => {
     const now = Date.UTC(2026, 9, 27, 16, 30); // 19:30
     expect(bookingsAtHand([at(14), at(18), at(20), at(22), at(20, 'refunded')], now).map((b) => b.id)).toEqual(['krk-20', 'krk-18']);
   });
+
+  it('seçim penceresi bugünün geri kalanını da gösterir (erken gelen grup); başka sayaçtaki ve bitmiş olan yok', () => {
+    const at = (startHour: number, active = false) =>
+      ({ id: `krk-${startHour}`, date: '2026-10-27', startHour, hours: 2, startsAt: new Date(Date.UTC(2026, 9, 27, startHour - 3)).toISOString(), endsAt: new Date(Date.UTC(2026, 9, 27, startHour - 1)).toISOString(), status: 'confirmed', paymentStatus: 'paid', session: active ? { active: true } : null }) as SiteKaraokeBooking & { session: { active: boolean } | null };
+    const now = Date.UTC(2026, 9, 27, 13, 0); // 16:00
+    const { atHand, later } = linkChoices([at(12), at(15), at(16, true), at(22), at(19)], now);
+    expect(atHand.map((b) => b.id)).toEqual(['krk-15']);
+    expect(later.map((b) => b.id)).toEqual(['krk-19', 'krk-22']);
+  });
 });
 
 describe('sitedeki rezervasyonların okunması', () => {
@@ -203,9 +212,8 @@ describe('sitedeki rezervasyonların okunması', () => {
 });
 
 /** Mutfak rolünde bir personel (siparis.al ve rezervasyon.yonet yok) */
-async function mutfakPin(): Promise<string> {
-  const pin = '7391';
-  const r = await h.call('patron', 'POST', '/admin/users', { name: 'Mutfak Test', role: 'mutfak', pin });
+async function mutfakPin(pin = '7391'): Promise<string> {
+  const r = await h.call('patron', 'POST', '/admin/users', { name: `Mutfak Test ${pin}`, role: 'mutfak', pin });
   if (r.status !== 200) throw new Error(`personel eklenemedi: ${JSON.stringify(r.json)}`);
   return pin;
 }
@@ -376,5 +384,169 @@ describe('yerel rezervasyon ve saat ücreti', () => {
     await h.ok('patron', 'GET', '/admin/floor/site-karaoke-price');
     expect(site.count('GET /api/mobile/v1/karaoke/availability')).toBe(before + 1);
     expect((await h.call('garson', 'GET', '/admin/floor/site-karaoke-price')).status).toBe(403);
+  });
+});
+
+/** Fikstürdeki bir rezervasyonu yeni kimlikle listeye koyar (önceki testlerin oturumları bloğu tüketmesin) */
+async function asNew(fromId: string, toId: string) {
+  site.karaoke = [...siteKaraokeRows(), { ...siteKaraokeRows().find((b) => b.id === fromId)!, id: toId }];
+  await freshList();
+}
+const siteKaraokeRows = () => site.karaoke.filter((b) => !/^krk-0006\d|^krk-0007\d/.test(b.id));
+async function restoreList() {
+  site.karaoke = (await import('./fake-site')).siteKaraokeFixture().reservations;
+  await freshList();
+}
+
+describe('gözden geçirme düzeltmeleri (27 Eki 2026)', () => {
+  it('rezervasyonsuz başlamış sayaç sonradan bağlanır: sitede ödenmiş 2 saat yeniden ücretlenmez', async () => {
+    await asNew('krk-00044', 'krk-00061');
+    const o = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`);
+    await ranFor(o.id, 10);
+    const linked = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/link`, { bookingId: 'krk-00061' });
+    expect(linked.room).toMatchObject({ bookingId: 'krk-00061', prepaidMinutes: 120 });
+    // Bağlı sayaç ikinci kez bağlanmaz; aynı rezervasyon başka sayaca da bağlanmaz
+    expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${o.id}/room/link`, { bookingId: 'krk-00061' })).json.code).toBe('room_linked');
+    const other = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${other.id}/room/start`);
+    expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${other.id}/room/link`, { bookingId: 'krk-00061' })).json.code).toBe('booking_running');
+    await h.ok('garson', 'POST', `/orders/${other.id}/room/stop`);
+    // Blok sayacın başladığı andan: 140 dk → aşan 20 dk, 30 dk'ya yuvarlanır
+    await ranFor(o.id, 140);
+    const stopped = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+    expect(roomLines(stopped)[0]).toMatchObject({ unitPrice: 50000, note: 'Site rezervasyonu KRK-00061' });
+    const { db, schema } = await import('../server/db/client');
+    const { and, eq } = await import('drizzle-orm');
+    const log = db.select().from(schema.auditLog).where(and(eq(schema.auditLog.orderId, o.id), eq(schema.auditLog.action, 'room.link'))).get();
+    expect(log?.message).toMatch(/KRK-00061 ile bağlandı/);
+    // Çalışan sayacı olmayan adisyon bağlanmaz
+    expect((await h.call('garson', 'POST', `/orders/${o.id}/room/link`, { bookingId: 'krk-00061' })).status).toBe(404);
+    await restoreList();
+  });
+
+  it('köşkte ödenecek bloğun satırı iptal edilip sayaç yeniden başlarsa blok tutarı yeniden yazılır', async () => {
+    await asNew('krk-00042', 'krk-00062');
+    const o = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00062' });
+    await ranFor(o.id, 5);
+    const first = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+    expect(roomLines(first)[0].unitPrice).toBe(76500);
+    await h.ok('patron', 'POST', `/orders/${o.id}/items/${roomLines(first)[0].id}/void`, { reason: 'Yanlışlıkla durduruldu' });
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00062' });
+    await ranFor(o.id, 55);
+    const second = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+    // İlk oturumun 5 dakikası blokta kaldı, 55 dk blokta; tutar iptal edilen satırda kaldığı için yeniden
+    expect(second.total).toBe(76500);
+    await restoreList();
+  });
+
+  it('başka güne taşınıp geri gelen köşkte ödenecek rezervasyon: blok tutarı alınır (ilk oturum saat ücretiyle ödendi)', async () => {
+    await asNew('krk-00042', 'krk-00063');
+    const o = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00063' });
+    // Panel rezervasyonu başka güne taşıdı: ilk oturum saat ücretiyle, blok sayılmadan durur
+    site.karaoke = siteKaraokeRows();
+    await freshList();
+    await ranFor(o.id, 20);
+    const first = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+    expect(roomLines(first)[0].unitPrice).toBe(HOUR);
+    const [ended] = await sessionsOf('krk-00063');
+    expect(ended).toMatchObject({ booking: null, prepaidMinutes: 0, blockCharge: null });
+    // Rezervasyon bugüne geri geldi: bağlanınca bloğu tam, tutarıyla
+    await asNew('krk-00042', 'krk-00063');
+    const again = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00063' });
+    expect(again.room?.prepaidMinutes).toBe(60);
+    await ranFor(o.id, 60);
+    const second = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+    expect(roomLines(second).map((i) => i.unitPrice)).toEqual([HOUR, 76500]);
+    await restoreList();
+  });
+
+  it('blokta kalan, başka kalemi olmayan adisyon kapanır: oda planda boş, adisyon iptal sayılmaz', async () => {
+    await asNew('krk-00044', 'krk-00064');
+    const o = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00064' });
+    await ranFor(o.id, 30);
+    const stopped = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+    expect(stopped).toMatchObject({ status: 'kapali', total: 0, room: null });
+    expect(stopped.items).toHaveLength(0);
+    const floor = await h.ok<FloorStateDTO>('garson', 'GET', '/floor');
+    expect(floor.tables[o.tableId!] ?? []).toHaveLength(0);
+    const { db, schema } = await import('../server/db/client');
+    const { and, eq } = await import('drizzle-orm');
+    const log = db.select().from(schema.auditLog).where(and(eq(schema.auditLog.orderId, o.id), eq(schema.auditLog.action, 'room.stop'))).get();
+    expect(log?.message).toMatch(/boş adisyon kapandı/);
+    // Kalemi olan adisyon açık kalır (yalnız oda satırı yazılmadı)
+    const withDrink = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${withDrink.id}/items`, { items: [{ productId: boot.products.find((p) => p.name === 'Türk Kahvesi')!.id, qty: 1 }] });
+    await h.ok('garson', 'POST', `/orders/${withDrink.id}/room/start`, { bookingId: 'krk-00064' });
+    await ranFor(withDrink.id, 10);
+    expect((await h.ok<OrderDTO>('garson', 'POST', `/orders/${withDrink.id}/room/stop`)).status).toBe('acik');
+    await restoreList();
+  });
+
+  it('Durdur: siteden okuma beklerken geçen süre ücrete eklenmez', async () => {
+    await asNew('krk-00044', 'krk-00065');
+    const o = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00065' });
+    // Liste eskidi: durdururken bir çekim yapılır, site 2,5 sn'de yanıt verir
+    const { getSyncState, setSyncState } = await import('../server/lib/settings');
+    const state = getSyncState<Record<string, unknown>>('laffogato.karaoke')!;
+    setSyncState('laffogato.karaoke', { ...state, pulledAt: Date.now() - 10 * 60_000 });
+    (await karaokeModule()).resetKaraokeTimer();
+    await ranFor(o.id, 120);
+    const before = karaokePulls();
+    site.karaokeDelayMs = 2500;
+    try {
+      const stopped = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+      expect(karaokePulls()).toBe(before + 1);
+      // 2 saatlik blok tam kullanıldı, aşım yok
+      expect(roomLines(stopped)).toHaveLength(0);
+    } finally {
+      site.karaokeDelayMs = 0;
+    }
+    await restoreList();
+  });
+
+  it('"Online siparişleri çek" kapalıyken karaoke işareti okunmaya devam eder, sipariş çekilmez', async () => {
+    const k = await karaokeModule();
+    const orders = await import('../server/sync/laffogato-orders');
+    await h.ok('patron', 'PUT', '/sync/settings', { onlineOrdersSync: false });
+    try {
+      k.resetKaraokeTimer();
+      orders.resetOnlineTimer();
+      const pulls = karaokePulls();
+      const orderPulls = site.count('GET /api/panel/orders');
+      site.karaokeMarker = 'k8';
+      await orders.onlineOrdersTick();
+      expect(karaokePulls()).toBe(pulls + 1);
+      expect(site.count('GET /api/panel/orders')).toBe(orderPulls);
+      expect((await h.ok<{ karaoke: { on: boolean; count: number; lastError: string | null } }>('patron', 'GET', '/sync/status')).karaoke).toMatchObject({ on: true, count: 5, lastError: null });
+    } finally {
+      site.karaokeMarker = 'k1';
+      await h.ok('patron', 'PUT', '/sync/settings', { onlineOrdersSync: true });
+    }
+  });
+
+  it('masa planı: sipariş ve rezervasyon yetkisi olmayan rol notu görmez; Uzaktan özetinde ad, not ve kod yok', async () => {
+    await freshList();
+    expect((await h.ok<FloorStateDTO>('garson', 'GET', '/floor')).siteKaraoke?.find((b) => b.id === 'krk-00044')?.note).toBe('Doğum günü, pasta getirecekler');
+    await h.login('mutfakci2', await mutfakPin('7392'));
+    const bar = await h.ok<FloorStateDTO>('mutfakci2', 'GET', '/floor');
+    expect(bar.siteKaraoke?.find((b) => b.id === 'krk-00044')).toMatchObject({ firstName: 'Ayşe', note: '' });
+
+    await asNew('krk-00044', 'krk-00066');
+    const o = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00066' });
+    const { buildSnapshot } = await import('../server/sync/cloud');
+    const snap = buildSnapshot();
+    const remote = JSON.stringify({ floor: snap.floor, orders: snap.orders });
+    // Ad: masa planındaki site rezervasyonunda boş (online siparişin teslim adı ayrı kuralla yalnız ad olarak gider)
+    expect(remote).not.toMatch(/Doğum günü|krk-000/i);
+    expect(snap.floor.siteKaraoke?.every((b) => b.firstName === '' && b.note === '' && b.id.startsWith('site-'))).toBe(true);
+    expect(snap.orders[o.id].room).toMatchObject({ bookingId: 'uzak', prepaidMinutes: 120 });
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/stop`);
+    await restoreList();
   });
 });

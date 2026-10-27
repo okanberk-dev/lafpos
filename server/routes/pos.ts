@@ -2,7 +2,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { db, schema, tx } from '../db/client';
-import { type AppEnv, actorFrom, blindOrder, needDirect } from '../lib/auth';
+import { type AppEnv, actorFrom, blindOrder, can, needDirect } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, isoDateTime, kurus, query } from '../lib/http';
 import { afterDelivery } from '../delivery/service';
@@ -10,7 +10,7 @@ import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets } from '../services/floor';
 import * as orders from '../services/orders';
-import { startRoom, stopRoom } from '../services/rooms';
+import { linkRoom, startRoom, stopRoom } from '../services/rooms';
 import { refreshSiteKaraoke, siteKaraokeOn } from '../sync/laffogato-karaoke';
 
 export const posRoutes = new Hono<AppEnv>();
@@ -27,7 +27,14 @@ function write<T>(fn: (t: Parameters<Parameters<typeof tx>[0]>[0], fx: Effects) 
 }
 
 posRoutes.get('/bootstrap', (c) => c.json(bootstrap(db, c.get('user'))));
-posRoutes.get('/floor', (c) => c.json(floorState(db)));
+posRoutes.get('/floor', (c) => {
+  const f = floorState(db);
+  // Sitedeki karaoke rezervasyonunun serbest metin notu yalnız oda kutusunu gören rollere (siparis.al ya da
+  // rezervasyon.yonet; /sync/karaoke'nin kapısı): bar ekranı ve kurye gibi roller planı notsuz görür
+  const u = c.get('user');
+  if (f.siteKaraoke && !can(u, 'siparis.al') && !can(u, 'rezervasyon.yonet')) f.siteKaraoke = f.siteKaraoke.map((b) => ({ ...b, note: '' }));
+  return c.json(f);
+});
 
 /** Adisyon yanıtı: kör kasada kapanmış adisyonun ödeme dökümü süzülür (blindOrder) */
 const dto = (c: Context<AppEnv>, id: string) => blindOrder(c.get('user'), orders.getOrderDTO(db, id));
@@ -290,11 +297,21 @@ posRoutes.post('/orders/:id/room/start', async (c) => {
 
 posRoutes.post('/orders/:id/room/stop', async (c) => {
   const actor = actorFrom(c);
+  // Ücret düğmeye basıldığı ana göre: aşağıdaki site okuması (en çok 8 sn) süreye eklenmesin
+  const at = Date.now();
   // Rezervasyona bağlı sayaç: ücret rezervasyonun güncel durumuyla yazılsın (ödemesi bu arada tamamlanmış olabilir).
   // Liste geride kaldıysa bir çekim; site ulaşılamazsa eldeki listeyle (ya da bağlanırken saklananla) devam
   const running = orders.activeRoom(db, c.req.param('id'));
   if (running?.bookingId && siteKaraokeOn()) await refreshSiteKaraoke().catch(() => undefined);
-  write((t, fx) => stopRoom(t, actor, fx, c.req.param('id')));
+  write((t, fx) => stopRoom(t, actor, fx, c.req.param('id'), { at }));
+  return c.json(dto(c, c.req.param('id')));
+});
+
+/** Çalışan, rezervasyonsuz sayacı sitedeki bir karaoke rezervasyonuna bağlar (oda kutusu "Rezervasyona bağla"; §2.4) */
+posRoutes.post('/orders/:id/room/link', async (c) => {
+  const actor = actorFrom(c);
+  const input = await body(c, z.object({ bookingId: z.string().min(1).max(64) }));
+  write((t, fx) => linkRoom(t, actor, fx, c.req.param('id'), input.bookingId));
   return c.json(dto(c, c.req.param('id')));
 });
 

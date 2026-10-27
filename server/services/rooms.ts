@@ -1,7 +1,7 @@
-import { and, eq, isNotNull, isNull, ne } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, ne } from 'drizzle-orm';
 import { type BlockTerms, blockTerms, bookingCode, bookingHours, linkableBooking, type RoomBookingSnapshot, snapshotOf } from '@shared/karaoke';
 import { tl } from '@shared/money';
-import { businessDate } from '@shared/time';
+import { businessDate, fmtTime } from '@shared/time';
 import { schema, type Tx } from '../db/client';
 import { type Actor, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
@@ -10,7 +10,7 @@ import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
 import { posNameFor } from './menu';
 import { findSiteBooking, siteBookingsToday, siteKaraokeOn } from '../sync/laffogato-karaoke';
-import { activeRoom, assertNoPendingDevice, assertPosOrder, loadOrder, recalc, requireCurrentDay } from './orders';
+import { activeRoom, assertNoPendingDevice, assertPosOrder, closeOrderRow, isEmptyOrder, loadOrder, recalc, requireCurrentDay } from './orders';
 
 /**
  * Karaoke odası gibi süreli alanlar: sayaç başlar, durunca süre faturalama adımına yukarı yuvarlanır
@@ -77,13 +77,32 @@ const fmtMinutes = (minutes: number) => {
 
 type SessionRow = typeof schema.roomSessions.$inferSelect;
 
-/** Aynı rezervasyona bağlı, durmuş önceki oturumlar (sayaç durdurulup yeniden başlatıldıysa) */
-function earlierSessions(t: Tx, bookingId: string, exceptId?: string): SessionRow[] {
-  return t
-    .select()
+/**
+ * Aynı rezervasyona bağlı, durmuş önceki oturumlardan gerçekten olanlar (sayaç durdurulup yeniden başlatıldıysa):
+ * `used` bloğun karşıladığı dakika (iptal edilen adisyonun oturumu sayılmaz), `tillCharged` köşkte ödenecek blok
+ * tutarı bir satıra yazıldı ve o satır duruyor (iptal edilmemiş, adisyonu iptal değil). Satır iptal edildiyse ya da
+ * adisyon iptal olduysa tutar sonraki oturumda yeniden yazılır
+ */
+function blockHistory(t: Tx, bookingId: string, exceptId?: string): { used: number; tillCharged: boolean } {
+  const earlier = t
+    .select({ session: schema.roomSessions, orderStatus: schema.orders.status })
     .from(schema.roomSessions)
+    .innerJoin(schema.orders, eq(schema.orders.id, schema.roomSessions.orderId))
     .where(and(eq(schema.roomSessions.bookingId, bookingId), isNotNull(schema.roomSessions.endedAt), exceptId ? ne(schema.roomSessions.id, exceptId) : undefined))
-    .all();
+    .all()
+    .filter((x) => x.orderStatus !== 'iptal')
+    .map((x) => x.session);
+  const used = earlier.reduce((a, x) => a + (x.prepaidMinutes ?? 0), 0);
+  const charged = earlier.filter((x) => (x.blockCharge ?? 0) > 0 && x.itemId).map((x) => x.itemId!);
+  const live = charged.length
+    ? t
+        .select({ id: schema.orderItems.id })
+        .from(schema.orderItems)
+        .innerJoin(schema.orders, eq(schema.orders.id, schema.orderItems.orderId))
+        .where(and(inArray(schema.orderItems.id, charged), eq(schema.orderItems.voided, false), ne(schema.orders.status, 'iptal')))
+        .get()
+    : undefined;
+  return { used, tillCharged: !!live };
 }
 
 /**
@@ -91,7 +110,7 @@ function earlierSessions(t: Tx, bookingId: string, exceptId?: string): SessionRo
  * bağlanırken süren rezervasyon bu arada ödenmiş olabilir; iptal edilen blok düşer). Listede yoksa: liste onun gününe
  * aitse rezervasyon o günden çıkmıştır (panel başka güne taşıdı; blok o güne aittir, burada sayılmaz), değilse (iş
  * günü döndü, site ulaşılamadı) bağlanırken saklanan koşul geçer. Önceki oturumların karşıladığı dakika bloktan
- * düşülür; köşkte ödenen blok tutarı bir kez yazılır (blok koşuluyla duran ilk oturumda).
+ * düşülür; köşkte ödenen blok tutarı, duran bir satırda alınmadıysa yazılır (`blockHistory`).
  */
 function blockOf(t: Tx, session: SessionRow): { block: RoomBlock | null; booking: RoomBookingSnapshot | null; gone: boolean } {
   if (!session.bookingId) return { block: null, booking: null, gone: false };
@@ -101,9 +120,7 @@ function blockOf(t: Tx, session: SessionRow): { block: RoomBlock | null; booking
   const booking = found.booking ? snapshotOf(found.booking) : saved;
   const terms = blockTerms(booking);
   if (!booking || !terms) return { block: null, booking, gone: false };
-  const earlier = earlierSessions(t, session.bookingId, session.id);
-  const used = earlier.reduce((a, x) => a + (x.prepaidMinutes ?? 0), 0);
-  const tillCharged = earlier.some((x) => blockTerms(x.booking) === 'till');
+  const { used, tillCharged } = blockHistory(t, session.bookingId, session.id);
   return { block: { terms, minutes: Math.max(0, booking.hours * 60 - used), charge: terms === 'till' && !tillCharged ? booking.totalMinor : 0 }, booking, gone: false };
 }
 
@@ -155,6 +172,37 @@ export function startRoom(t: Tx, actor: Actor, fx: Effects, orderId: string, opt
   fx.emit({ topic: 'tables', kind: 'room.started', tableId: table.id, byUserId: actor.user.id });
 }
 
+/**
+ * Çalışan, rezervasyonsuz sayacı sonradan sitedeki bir karaoke rezervasyonuna bağlar: sayaç liste gelmeden
+ * "Rezervasyonsuz" başlatıldıysa ya da grup önerilen pencereden erken geldiyse sitede ödenmiş saat yeniden
+ * ücretlenmesin. Kurallar başlatmadakiyle aynı (`bookingToLink`); blok sayacın başladığı andan sayılır. Denetim kaydına
+ * düşer: bağlama kasadaki ücreti düşürür.
+ */
+export function linkRoom(t: Tx, actor: Actor, fx: Effects, orderId: string, bookingId: string) {
+  needDirect(actor, 'siparis.al');
+  const o = loadOrder(t, orderId);
+  if (o.status !== 'acik') throw conflict('Adisyon kapalı');
+  assertPosOrder(o);
+  const session = activeRoom(t, orderId);
+  if (!session) throw notFound('Çalışan oda sayacı');
+  if (session.bookingId) throw conflict(`Sayaç zaten ${bookingCode(session.bookingId)} rezervasyonuna bağlı`, 'room_linked');
+  const link = bookingToLink(t, bookingId);
+  t.update(schema.roomSessions)
+    .set({ bookingId: link.booking.id, booking: link.booking, prepaidMinutes: link.remaining })
+    .where(and(eq(schema.roomSessions.id, session.id), isNull(schema.roomSessions.endedAt), isNull(schema.roomSessions.bookingId)))
+    .run();
+  const table = t.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, session.tableId)).get();
+  fx.audit(t, {
+    userId: actor.user.id,
+    action: 'room.link',
+    orderId,
+    message: `${table?.name ?? 'Oda'} sayacı site rezervasyonu ${bookingCode(link.booking.id)} ile bağlandı (${bookingHours(link.booking)}, ${link.label}; sayaç ${fmtTime(session.startedAt)}'den beri) (#${o.no})`,
+  });
+  fx.emit({ topic: 'orders', kind: 'room.linked', orderId, tableId: session.tableId, byUserId: actor.user.id });
+  fx.emit({ topic: 'tables', kind: 'room.linked', tableId: session.tableId, byUserId: actor.user.id });
+  fx.emit({ topic: 'reservations', kind: 'room.linked' });
+}
+
 /** Sayaca bağlanacak rezervasyon: okunan bugünkü listede, odayı tutuyor, başka çalışan sayaca bağlı değil */
 function bookingToLink(t: Tx, bookingId: string): { booking: RoomBookingSnapshot; remaining: number; label: string } {
   if (!siteKaraokeOn()) throw conflict('Sitedeki karaoke rezervasyonları okunmuyor (site bağlantısı kurulmadı)', 'not_configured');
@@ -168,13 +216,17 @@ function bookingToLink(t: Tx, bookingId: string): { booking: RoomBookingSnapshot
     .where(and(eq(schema.roomSessions.bookingId, b.id), isNull(schema.roomSessions.endedAt)))
     .get();
   if (running) throw conflict(`${bookingCode(b.id)} #${running.no} adisyonda sayaca bağlı`, 'booking_running');
-  const used = earlierSessions(t, b.id).reduce((a, x) => a + (x.prepaidMinutes ?? 0), 0);
+  const { used } = blockHistory(t, b.id);
   const terms = blockTerms(b);
   const label = terms === 'paid' ? 'sitede ödendi' : terms === 'till' ? (b.totalMinor ? `köşkte ödenecek ${tl(b.totalMinor)}` : 'ücretsiz telafi') : 'ödemesi sürüyor';
   return { booking: snapshotOf(b), remaining: Math.max(0, b.hours * 60 - used), label };
 }
 
-export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
+/**
+ * Oda sayacını durdurur ve ücreti adisyona yazar. `at`: durdurma düğmesine basıldığı an (uç, bağlı rezervasyonun
+ * güncel durumunu siteden okurken geçen süre ücrete eklenmesin); verilmezse şimdi.
+ */
+export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string, opts: { at?: number } = {}) {
   needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   if (o.status !== 'acik') throw conflict('Adisyon kapalı; oda ücretini yazmak için önce adisyonu yeniden açın', 'order_closed');
@@ -186,7 +238,7 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
   const product = services.find((p) => p.posName === 'KARAOKE ODASI') ?? services.find((p) => p.hidden) ?? services[0];
   if (!product) throw conflict('Saatlik oda ürünü tanımlı değil (Yönetim › Menü, gizli "hizmet" ürünü)');
   const s = getSettings();
-  const now = Date.now();
+  const now = Math.max(session.startedAt, Math.min(Date.now(), opts.at ?? Date.now()));
   const { block, booking, gone } = blockOf(t, session);
   const bill = roomBill(now - session.startedAt, session.hourlyRate, s.roomBillingStepMinutes, s.roomMinimumMinutes, block);
   const charge = bill.charge;
@@ -197,11 +249,12 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
     : block.terms === 'paid'
       ? `${bill.overMinutes ? `aşan ${fmtMinutes(bill.overMinutes)}` : 'aşım yok'} (${booking!.hours} sa sitede ödendi)`
       : `${booking!.hours} sa rezervasyon${bill.overMinutes ? ` + ${fmtMinutes(bill.overMinutes)}` : ''}`;
-  // Oturum, ücretin dayandığı rezervasyon durumunu saklar: sayaç yeniden başlarsa kalan blok ve köşkte ödenen blok
-  // tutarının alınıp alınmadığı buradan okunur
+  // Oturum yalnız gerçekten uygulanan bloğu saklar (koşul, karşıladığı dakika, satıra yazılan blok tutarı): sayaç
+  // yeniden başlarsa kalan blok ve köşkte ödenen blok tutarının alınıp alınmadığı buradan okunur. Blok sayılmadıysa
+  // (başka güne taşındı, iptal, ödenmemiş) koşul saklanmaz: rezervasyon geri gelirse bloğu tam ve tutarıyla geçer
   const finish = (itemId: string | null) =>
     t.update(schema.roomSessions)
-      .set({ endedAt: now, itemId, booking: booking ?? session.booking, prepaidMinutes: block ? bill.coveredMinutes : session.bookingId ? 0 : null })
+      .set({ endedAt: now, itemId, booking: block ? booking : null, prepaidMinutes: block ? bill.coveredMinutes : session.bookingId ? 0 : null, blockCharge: block && itemId ? bill.blockCharge : null })
       .where(eq(schema.roomSessions.id, session.id))
       .run();
   const ended = Math.max(0, Math.ceil((now - session.startedAt) / 60_000));
@@ -211,11 +264,21 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
       ? `rezervasyon ${code} ${block.terms === 'paid' ? 'sitede ödendi' : 'köşkte'}`
       : `rezervasyon ${code} blok sayılmadı (${gone ? 'sitenin bugünkü listesinde yok' : 'iptal ya da ödenmemiş'})`;
   if (charge <= 0) {
-    // Süre sitede ödenen (ya da ücretsiz telafi) blokta kaldı: adisyona 0 TL satır yazılmaz
+    // Süre sitede ödenen (ya da ücretsiz telafi) blokta kaldı: adisyona 0 TL satır yazılmaz. Adisyonda başka bir şey
+    // yoksa (grup yalnız odayı kullandı) adisyon da burada kapanır: oda planda dolu kalmasın, hizmet verilmiş adisyon
+    // "iptal" diye kapatılmasın
     finish(null);
-    fx.audit(t, { userId: actor.user.id, action: 'room.stop', orderId, amount: 0, message: `Oda sayacı durdu: ${fmtMinutes(ended)}, ${why ?? 'ücret yok'}; kasada ücret yok (#${o.no})` });
-    fx.emit({ topic: 'orders', kind: 'room.stopped', orderId, tableId: session.tableId, byUserId: actor.user.id });
-    fx.emit({ topic: 'tables', kind: 'room.stopped', tableId: session.tableId, byUserId: actor.user.id });
+    const closes = isEmptyOrder(t, orderId);
+    if (closes) closeOrderRow(t, o, actor.user.id);
+    fx.audit(t, {
+      userId: actor.user.id,
+      action: 'room.stop',
+      orderId,
+      amount: 0,
+      message: `Oda sayacı durdu: ${fmtMinutes(ended)}, ${why ?? 'ücret yok'}; kasada ücret yok${closes ? ', boş adisyon kapandı' : ''} (#${o.no})`,
+    });
+    fx.emit({ topic: 'orders', kind: closes ? 'order.closed' : 'room.stopped', orderId, tableId: session.tableId, byUserId: actor.user.id });
+    fx.emit({ topic: 'tables', kind: closes ? 'order.closed' : 'room.stopped', tableId: session.tableId, byUserId: actor.user.id });
     if (code) fx.emit({ topic: 'reservations', kind: 'room.stopped' });
     return;
   }

@@ -85,6 +85,8 @@ export interface FakeSite {
   /** Sitenin karaoke rezervasyonları; tarih, sorulan güne (`from`) taşınır */
   karaoke: PanelKaraokeFixture[];
   karaokeStatus: number[];
+  /** Karaoke listesinin yanıt gecikmesi (yavaş site; ms) */
+  karaokeDelayMs: number;
   /** Herkese açık müsaitlik yanıtındaki saat ücreti */
   karaokeHourly: number;
   /** Sırayla kullanılacak durum kodları; boşsa 200 */
@@ -119,6 +121,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     karaokeMarker: 'k1',
     karaoke: siteKaraokeFixture().reservations,
     karaokeStatus: [],
+    karaokeDelayMs: 0,
     karaokeHourly: 90000,
     ordersStatus: [],
     panelMenuStatus: [],
@@ -159,6 +162,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
 
     if (call === 'GET /api/pos/orders/version') return send(200, site.karaokeMarker === null ? { version: site.version } : { version: site.version, karaoke: site.karaokeMarker });
     if (call === 'GET /api/panel/karaoke') {
+      if (site.karaokeDelayMs) await new Promise((r) => setTimeout(r, site.karaokeDelayMs));
       const code = site.karaokeStatus.shift() ?? 200;
       if (code === 503) return send(503, { error: 'not_configured' });
       if (code !== 200) return send(code, { error: code === 403 ? 'forbidden' : code === 401 ? 'unauthorized' : 'unavailable' });

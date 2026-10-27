@@ -36,6 +36,10 @@ export const cloudEnabled = () => !!env.cloudUrl && env.cloudSecret.length >= MI
 /** Kişisel veri buluta gitmez: müşteri ve teslimat kişisinin yalnız adı; telefon, adres, cari bakiye ve limit yok */
 const firstName = (s: string | null | undefined) => (s ? (s.trim().split(/\s+/)[0] ?? null) : null);
 
+/** Uzaktan özetinde site rezervasyonu kodunun yerine geçen ad (oda kutusu "Site rezervasyonu" yazar) */
+export const REMOTE_BOOKING = 'uzak';
+const BOOKING_NOTE = /^site rezervasyonu krk-/i;
+
 function remoteOrder(o: OrderDTO): OrderDTO {
   return {
     ...o,
@@ -44,6 +48,10 @@ function remoteOrder(o: OrderDTO): OrderDTO {
     deliveryPhone: null,
     deliveryAddress: null,
     extId: null,
+    // Oda sayacına bağlı site rezervasyonunun kodu buluta gitmez (yalnız bağlı olduğu ve bloğun koşulu); oda satırının
+    // notu ("Site rezervasyonu KRK-00042") kodsuz
+    items: o.items.map((i) => (i.note && BOOKING_NOTE.test(i.note) ? { ...i, note: 'Site rezervasyonu' } : i)),
+    room: o.room ? { ...o.room, bookingId: o.room.bookingId ? REMOTE_BOOKING : null, booking: o.room.booking ? { ...o.room.booking, id: REMOTE_BOOKING } : null } : null,
   };
 }
 
@@ -61,8 +69,9 @@ export function buildSnapshot(now = Date.now()) {
       ...floor,
       others: floor.others.map((x) => ({ ...x, label: shorten(x.label) })),
       reservations: floor.reservations.map((r) => ({ ...r, name: firstName(r.name) ?? '' })),
-      // Sitenin karaoke rezervasyonu zaten yalnız ad taşır; serbest metin not buluta gitmez
-      siteKaraoke: floor.siteKaraoke?.map((b) => ({ ...b, note: '' })),
+      // Sitenin karaoke rezervasyonundan buluta yalnız saat, kişi, ödeme durumu: ad, not ve kapıda sorulan kod
+      // (KRK-…) gitmez; sitenin kişisel veri metni rezervasyonu yalnız kafedeki makineye açar (§2.4)
+      siteKaraoke: floor.siteKaraoke?.map((b, i) => ({ ...b, id: `site-${i + 1}`, firstName: '', note: '' })),
     },
     kitchen: kitchenTickets(db).map((k) => ({ ...k, label: shorten(k.label) })),
     board: pickupBoard(db, now),

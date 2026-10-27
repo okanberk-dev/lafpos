@@ -105,6 +105,20 @@ export function bookingsAtHand<T extends SiteKaraokeBooking>(bookings: T[], nowM
     .sort((a, b) => Math.abs(Date.parse(a.startsAt) - nowMs) - Math.abs(Date.parse(b.startsAt) - nowMs));
 }
 
+/**
+ * "Sayacı başlat" ve "Rezervasyona bağla"nın listesi: bağlanabilir, bitmemiş, başka bir sayaca bağlı olmayan
+ * rezervasyonlar. `atHand` o saate düşenler (`bookingsAtHand`), `later` bugünün geri kalanı (grup önerilen pencereden
+ * erken geldiyse ya da sayaç yanlış rezervasyonsuz başladıysa seçilebilsin), başlangıcı yakın olan önce
+ */
+export function linkChoices<T extends SiteKaraokeBooking & { session?: { active: boolean } | null }>(bookings: T[], nowMs: number): { atHand: T[]; later: T[] } {
+  const free = bookings.filter((b) => !b.session?.active);
+  const atHand = bookingsAtHand(free, nowMs);
+  const later = free
+    .filter((b) => linkableBooking(b) && nowMs < Date.parse(b.endsAt) && !atHand.includes(b))
+    .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  return { atHand, later };
+}
+
 /** Sayaca bağlanan rezervasyonun kasada saklanan kısmı (`room_sessions.booking`): ad ve not saklanmaz */
 export type RoomBookingSnapshot = Pick<SiteKaraokeBooking, 'id' | 'date' | 'startHour' | 'hours' | 'status' | 'paymentStatus' | 'totalMinor'>;
 

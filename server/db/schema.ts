@@ -567,7 +567,8 @@ export const roomSessions = sqliteTable('room_sessions', {
   bookingId: text('booking_id'),
   /**
    * Bağlanırken rezervasyonun kasaya ait kısmı (ad ve not yok): sayaç durduğunda rezervasyon artık okunan listede
-   * değilse (gün döndü, panel başka güne taşıdı, site ulaşılamıyor) ücret bununla hesaplanır
+   * değilse (gün döndü, panel başka güne taşıdı, site ulaşılamıyor) ücret bununla hesaplanır. Durunca: ücretin
+   * dayandığı koşul; blok sayılmadıysa (iptal, ödenmemiş, başka güne taşındı) null
    */
   booking: text('booking', { mode: 'json' }).$type<RoomBookingSnapshot>(),
   /**
@@ -575,6 +576,11 @@ export const roomSessions = sqliteTable('room_sessions', {
    * oturumları düşülmüş), durunca bloğun gerçekten karşıladığı dakika (blok yok sayıldıysa 0)
    */
   prepaidMinutes: integer('prepaid_minutes'),
+  /**
+   * Durunca: köşkte ödenecek bloğun (`paymentStatus: 'none'`) bu oturumun satırına yazılan tutarı (kuruş). Blok tutarı
+   * yalnız bu satır duruyorsa (iptal edilmemiş, adisyonu iptal değil) alınmış sayılır; yoksa sonraki oturum yeniden yazar
+   */
+  blockCharge: integer('block_charge'),
 });
 
 export const reservations = sqliteTable(

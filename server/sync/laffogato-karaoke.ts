@@ -305,9 +305,11 @@ export function siteKaraokeView(now = Date.now()): SiteKaraokeDTO {
   };
 }
 
+/** Yönetim › Entegrasyon kartı: açık mı, son çekim, rezervasyon sayısı, son hata (yeni bir çekim olduysa düşer) */
 export function siteKaraokeStatus() {
   const s = readState();
-  return { on: siteKaraokeOn(), date: s.date, pulledAt: s.pulledAt, count: s.bookings.length, lastError: s.lastError, lastErrorAt: s.lastErrorAt };
+  const failedLast = s.lastErrorAt != null && s.lastErrorAt >= (s.pulledAt ?? 0);
+  return { on: siteKaraokeOn(), date: s.date, pulledAt: s.pulledAt, count: s.bookings.length, lastError: failedLast ? s.lastError : null, lastErrorAt: failedLast ? s.lastErrorAt : null, closed: failedLast && s.closed };
 }
 
 // ─── Saat ücreti kıyası (Yönetim › Masa planı) ─────────────────────────────
