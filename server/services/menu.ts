@@ -76,10 +76,17 @@ export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: 
       if (g.required && unique.length === 0) throw bad(`${g.name} seçilmeli`, 'option_required');
       for (const id of unique) out.push(toSelected(g, g.items.find((i) => i.id === id)!, 1));
     } else {
+      // Aynı seçenek birden çok kez gönderilirse adetleri toplanır: sınır seçenek başınadır, yirmi kez "+1 shot"
+      // yirmi shot olmaz (denetim, 26 Eki 2026)
+      const qtyOf = new Map<string, number>();
       for (const c of chosen) {
-        const item = g.items.find((i) => i.id === c.itemId)!;
         const qty = Math.trunc(c.qty ?? 1);
-        if (qty < 0 || qty > item.maxQty) throw bad(`${item.name}: en çok ${item.maxQty}`, 'option_invalid');
+        if (qty < 0) throw bad(`${g.name}: adet geçersiz`, 'option_invalid');
+        qtyOf.set(c.itemId, (qtyOf.get(c.itemId) ?? 0) + qty);
+      }
+      for (const [id, qty] of qtyOf) {
+        const item = g.items.find((i) => i.id === id)!;
+        if (qty > item.maxQty) throw bad(`${item.name}: en çok ${item.maxQty}`, 'option_invalid');
         if (qty > 0) out.push(toSelected(g, item, qty));
       }
     }

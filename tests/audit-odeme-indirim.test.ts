@@ -300,3 +300,47 @@ describe('ödeme', () => {
     expect(itemPayLines([{ ...item, paidQty: 1 }], [{ items: [{ itemId: 'a', qty: 1, amount: 14000 }], refundedAt: 1 }, { items: [{ itemId: 'a', qty: 1, amount: 13999 }] }])[0]!.paidAmount).toBe(13999);
   });
 });
+
+describe('girdi doğrulama', () => {
+  it('input-73: adetli seçenekte aynı seçim tekrarlanınca seçenek sınırı aşılmaz', async () => {
+    const shot = h.boot.optionGroups.find((g) => g.extKey === 'extraShot')!.items[0]!;
+    expect(shot.maxQty).toBe(1);
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const latte = { productId: product('Latte').id, size: 'M', qty: 1 };
+    for (const options of [Array.from({ length: 20 }, () => ({ itemId: shot.id, qty: 1 })), [{ itemId: shot.id }, { itemId: shot.id }]]) {
+      const r = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ ...latte, options }] });
+      expect(r.status).toBe(400);
+      expect(r.json.code).toBe('option_invalid');
+    }
+    expect((await getOrder(o.id)).items).toHaveLength(0);
+    // Tek shot eskisi gibi; seçenek fişte bir kez yazılır
+    const one = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ ...latte, options: [{ itemId: shot.id, qty: 1 }] }] });
+    expect(one.items[0]!.unitPrice).toBe(product('Latte').price + shot.price);
+    expect(one.items[0]!.options.filter((x) => x.itemId === shot.id)).toEqual([expect.objectContaining({ qty: 1 })]);
+  });
+
+  it('input-70: olmayan ya da yinelenen kimlik 500 değil 404/422/409 döner', async () => {
+    const menu = await h.ok<{ categories: { id: string }[]; optionGroups: { id: string }[] }>('patron', 'GET', '/admin/menu');
+    const local = await h.ok<{ id: string }>('patron', 'POST', '/admin/products', { categoryId: menu.categories[0]!.id, name: 'Yerel', price: 1000, kdvRate: 10 });
+    const res = await h.ok<{ id: string }>('mudur', 'POST', '/reservations', { date: '2026-10-27', time: '19:00', name: 'X' });
+    const g = menu.optionGroups[0]!.id;
+    const cases: [string, string, string, unknown, number][] = [
+      ['garson', 'POST', '/orders', { type: 'tezgah', customerId: 'YOK' }, 404],
+      ['kasa', 'POST', '/orders', { type: 'gelal', customerId: 'YOK' }, 404],
+      ['mudur', 'POST', '/customers/YOK/addresses', { address: 'Bağdat cd. 1' }, 422],
+      ['garson', 'POST', '/reservations', { date: '2026-10-27', time: '19:00', name: 'X', tableId: 'YOK' }, 422],
+      ['garson', 'PATCH', `/reservations/${res.id}`, { tableId: 'YOK' }, 422],
+      ['patron', 'POST', '/admin/tables', { sectionId: 'YOK', name: 'T' }, 422],
+      ['patron', 'POST', '/admin/categories', { name: 'C', stationId: 'YOK' }, 422],
+      ['patron', 'POST', '/admin/products', { categoryId: menu.categories[0]!.id, name: 'X', price: 1, kdvRate: 10, stationId: 'YOK' }, 422],
+      ['patron', 'PATCH', `/admin/products/${local.id}`, { categoryId: 'YOK' }, 422],
+      ['patron', 'PATCH', `/admin/products/${local.id}`, { stationId: 'YOK' }, 422],
+      ['patron', 'PUT', '/admin/products/YOK/groups', { groupIds: [g] }, 422],
+      ['patron', 'PUT', `/admin/products/${local.id}/groups`, { groupIds: [g, g] }, 409],
+    ];
+    for (const [who, m, path, body, status] of cases) {
+      const r = await h.call<{ code: string }>(who, m, path, body);
+      expect(r.status, `${m} ${path}`).toBe(status);
+    }
+  });
+});

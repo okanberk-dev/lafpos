@@ -208,6 +208,10 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
     }
   }
   if (input.type === 'paket') needDirect(actor, 'paket.yonet');
+  if (input.customerId) {
+    const c = t.select({ id: schema.customers.id }).from(schema.customers).where(eq(schema.customers.id, input.customerId)).get();
+    if (!c) throw notFound('Müşteri');
+  }
   const now = Date.now();
   const settings = getSettings();
   const row: typeof schema.orders.$inferInsert = {
