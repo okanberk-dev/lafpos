@@ -156,6 +156,11 @@ export const products = sqliteTable(
     image: text('image'),
     /** Satışta (false = Tükendi) */
     active: bool('active').notNull().default(true),
+    /**
+     * Tükendi'yi kim kapattı: 'lafpos' (kasadan, bardan ya da porsiyon bitince) ya da 'site' (sitede satıştan
+     * kalktı, senkron kapattı). Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar; menü yöneticisi hepsini
+     */
+    soldOutBy: text('sold_out_by').$type<'lafpos' | 'site'>(),
     /** POS ekranında gösterme (sitede durabilir) */
     hidden: bool('hidden').notNull().default(false),
     favorite: bool('favorite').notNull().default(false),
@@ -407,7 +412,8 @@ export const orders = sqliteTable(
     /** Online sipariş: sitedeki kimlik (ord-0042), aşama, teslim türü, etiket; ödemesi sitede alınmış */
     extId: text('ext_id'),
     extNo: integer('ext_no'),
-    extStage: text('ext_stage').$type<'new' | 'preparing' | 'ready' | 'done'>(),
+    /** done: LafPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı (sitede tamamlandı, iptal ya da süresi geçti) */
+    extStage: text('ext_stage').$type<'new' | 'preparing' | 'ready' | 'done' | 'gone'>(),
     extFulfillment: text('ext_fulfillment').$type<'table' | 'pickup' | 'delivery'>(),
     extLabel: text('ext_label'),
     extPaid: bool('ext_paid').notNull().default(false),

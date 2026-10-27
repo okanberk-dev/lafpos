@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { and, eq } from 'drizzle-orm';
+import type { LiveEvent } from '@shared/events';
 import { businessDate, istanbulParts } from '@shared/time';
 import { db, schema, sqlite, tx } from './db/client';
 import { expirePlatformOrders } from './delivery/service';
@@ -13,17 +14,32 @@ import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
 import { enqueueDay, flushOutbox } from './sync/lafmaliyet';
-import { onlineOrdersTick, pushSoldOut } from './sync/laffogato-orders';
+import { siteLinked } from './sync/laffogato-link';
+import { onlineOrdersTick } from './sync/laffogato-orders';
+import { flushSiteOutbox } from './sync/site-outbox';
 import { runMenuSync } from './sync/menu-sync';
 import { startCloudSync } from './sync/cloud';
 
-/** Senkron bütçesi: laffogato'nun veritabanına giden otomatik istekler 5 dakikadan sık değil (senkron.md). */
-export const SYNC_INTERVAL_MS = 5 * 60_000;
+/**
+ * Menü yoklaması 15 dakikada bir (ETag). Herkese açık menü CDN'den gelir ama CDN'deki kopya eskiyince istek sitenin
+ * veritabanını okur ve Neon 5 dakika boşta kalınca uyuduğu için her yoklama bir uyanmadır; 15 dk ve gece hiç
+ * (docs/03-ENTEGRASYON.md §2.1). Senkron bütçesi: imzalı uçlara 5 dakikadan sık otomatik istek yok (AGENTS.md kural 6).
+ */
+export const MENU_SYNC_INTERVAL_MS = 15 * 60_000;
+/** LafPOS'un siteye kendi Satışta yazımından sonra eşitleme gecikmesi: art arda yazımlar tek eşitlemede toplanır */
+const AFTER_WRITE_SYNC_MS = 5_000;
 
 const timers: NodeJS.Timeout[] = [];
+let soonTimer: NodeJS.Timeout | null = null;
 
-async function menuTick() {
-  if (!getSettings().menuAutoSync) return;
+/**
+ * Otomatik menü eşitlemesi. Site bağlantısı yoksa (LAFFOGATO_URL) siteye hiçbir istek gitmez: ne menü ne görsel.
+ * Açık iş günü yokken (gece) atlanır, gün açılınca bir kez çeker. `anyTime`: LafPOS'un siteye kendi Tükendi / Satışa
+ * aç yazımından hemen sonra; site o an zaten uyanık, gece de çalışır.
+ */
+export async function menuTick(opts: { anyTime?: boolean } = {}) {
+  if (!siteLinked() || !getSettings().menuAutoSync) return;
+  if (!opts.anyTime && !getOpenDay(db)) return;
   try {
     const r = await runMenuSync({ apply: true });
     if (r.status === 'uygulandi') console.log(`[senkron] site menüsü uygulandı: ${r.preview?.changes.length ?? 0} değişiklik`);
@@ -89,6 +105,15 @@ function autoDayEndTick() {
   if (enqueueDay(closed.id)) void flushOutbox();
 }
 
+/** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi */
+export function menuSyncSoon(delayMs = AFTER_WRITE_SYNC_MS) {
+  if (soonTimer) return;
+  soonTimer = setTimeout(() => {
+    soonTimer = null;
+    void menuTick({ anyTime: true });
+  }, delayMs);
+}
+
 /** Paket platformları: kabul süresi geçen bekleyen sipariş platformda iptal olmuştur */
 function platformTick() {
   try {
@@ -102,12 +127,14 @@ function platformTick() {
 
 export function startJobs() {
   if (process.env.LAFPOS_NO_JOBS === '1') return;
-  timers.push(setTimeout(menuTick, 8_000));
-  timers.push(setInterval(menuTick, SYNC_INTERVAL_MS));
+  timers.push(setTimeout(() => void menuTick(), 8_000));
+  timers.push(setInterval(() => void menuTick(), MENU_SYNC_INTERVAL_MS));
   // Online siparişler: 20 sn'de bir sürüm sinyali (site veritabanına dokunmaz); sinyal yoksa en sık 5 dk'da bir çekme
   timers.push(setTimeout(onlineOrdersTick, 12_000));
   timers.push(setInterval(onlineOrdersTick, 20_000));
   timers.push(setInterval(() => void flushOutbox(), 60_000));
+  // Siteye bildirilemeyen Satışta yazımları (porsiyon sayacı): dakikada bir, bekleme süresi dolanlar
+  timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setInterval(platformTick, 30_000));
   timers.push(setTimeout(backupTick, 30_000));
@@ -126,13 +153,26 @@ export function startJobs() {
     }, 5 * 60_000),
   );
   timers.push(setInterval(backupTick, 60 * 60_000));
-  // Porsiyon sayacıyla değişen Satışta bilgisi siteye de gitsin: biten ürün tükenir, iptalle dönen yeniden satışa açılır
-  bus.on('event', (e) => {
-    if (e.topic === 'sync' && e.kind === 'availability.push' && e.message) void pushSoldOut([e.message]);
-  });
+  bus.on('event', onJobEvent);
+}
+
+/**
+ * Zamanlayıcının olay dinleyicisi (testler de bunu bağlar). Porsiyon sayacıyla değişen Satışta bilgisi siteye de
+ * gider: biten ürün tükenir, hazırlanmadan iptal edilen kalemle porsiyonu geri dönen ürün yeniden satışa açılır.
+ * Adisyon işlemi yazımı giden kutusuna koydu (server/sync/site-outbox.ts); burada hemen gönderilir.
+ */
+export function onJobEvent(e: LiveEvent) {
+  if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
+  // LafPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
+  if (e.topic === 'sync' && e.kind === 'site.menu.written') menuSyncSoon();
+  // Gün açıldı: gece atlanan menü yoklaması bir kez
+  if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void menuTick();
 }
 
 export function stopJobs() {
   for (const t of timers) clearTimeout(t);
   timers.length = 0;
+  bus.off('event', onJobEvent);
+  if (soonTimer) clearTimeout(soonTimer);
+  soonTimer = null;
 }

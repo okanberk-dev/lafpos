@@ -398,31 +398,17 @@ describe('porsiyon sayacı', () => {
     expect(cake.extSource).toBe('laffogato');
     await h.ok('patron', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 1 });
     const { bus } = await import('../server/lib/events');
+    const { onJobEvent } = await import('../server/jobs');
     const seen: LiveEvent[] = [];
     const listen = (e: LiveEvent) => seen.push(e);
 
-    // Son porsiyon yanlışlıkla girildi: aynı kasiyer hemen iptal eder (hiçbir şey hazırlanmadı)
-    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: cake.id, qty: 1 }] });
-    expect(o.items[0].status).toBe('yeni');
-    expect(await productRow(cake.id)).toEqual({ active: false, portionsLeft: 0 });
-    bus.on('event', listen);
-    try {
-      await h.ok('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/void`, { reason: 'Yanlış ürün' });
-    } finally {
-      bus.off('event', listen);
-    }
-    expect(await productRow(cake.id)).toEqual({ active: true, portionsLeft: 1 });
-    expect(seen.some((e) => e.topic === 'menu' && e.kind === 'product.available')).toBe(true);
-    expect(seen.some((e) => e.topic === 'sync' && e.kind === 'availability.push' && e.message === cake.id)).toBe(true);
-
-    // Porsiyonla tükenen ürün sitede de yeniden satışa açılır: site ürünün güncel durumunu alır
-    const bodies: unknown[] = [];
+    // Sahte site: Satışta yazımları (POST /api/panel/menu) toplanır
+    const bodies: { id: string; isActive: boolean; actor: string }[] = [];
     const site = createServer((req, res) => {
       let raw = '';
       req.on('data', (c) => (raw += c));
       req.on('end', () => {
-        if (req.url === '/api/panel/menu') bodies.push(JSON.parse(raw));
+        if (req.url === '/api/panel/menu' && req.method === 'POST') bodies.push(JSON.parse(raw));
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end('{"ok":true}');
       });
@@ -431,13 +417,31 @@ describe('porsiyon sayacı', () => {
     const { env } = await import('../server/env');
     const saved = { laffogatoUrl: env.laffogatoUrl, laffogatoPanelSecret: env.laffogatoPanelSecret };
     Object.assign(env, { laffogatoUrl: `http://127.0.0.1:${(site.address() as AddressInfo).port}`, laffogatoPanelSecret: 's'.repeat(40) });
+    let o: OrderDTO;
     try {
-      const { pushSoldOut } = await import('../server/sync/laffogato-orders');
-      await pushSoldOut([cake.id]);
+      // Son porsiyon yanlışlıkla girildi: Tükendi yazımı giden kutusuna girer (zamanlayıcı yok, gönderilmedi)
+      o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: cake.id, qty: 1 }] });
+      expect(o.items[0].status).toBe('yeni');
+      expect(await productRow(cake.id)).toEqual({ active: false, portionsLeft: 0 });
+      // Aynı kasiyer hemen iptal eder (hiçbir şey hazırlanmadı): zamanlayıcının olay dinleyicisi siteye gönderir
+      bus.on('event', listen);
+      bus.on('event', onJobEvent);
+      try {
+        await h.ok('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/void`, { reason: 'Yanlış ürün' });
+        for (let i = 0; i < 200 && !bodies.length; i++) await new Promise((r) => setTimeout(r, 5));
+      } finally {
+        bus.off('event', listen);
+        bus.off('event', onJobEvent);
+      }
     } finally {
       Object.assign(env, saved);
       site.close();
     }
+    expect(await productRow(cake.id)).toEqual({ active: true, portionsLeft: 1 });
+    expect(seen.some((e) => e.topic === 'menu' && e.kind === 'product.available')).toBe(true);
+    expect(seen.some((e) => e.topic === 'sync' && e.kind === 'availability.push' && e.message === cake.id)).toBe(true);
+    // Porsiyonla tükenen ürün sitede de yeniden satışa açılır: bekleyen Tükendi'nin yerine Satışta gider
     expect(bodies).toEqual([{ id: cake.extId, isActive: true, actor: 'LafPOS porsiyon' }]);
 
     // Geri dönen porsiyon satılır; bar hazırlamaya başladıktan sonraki iptal fire sayılır, porsiyon dönmez

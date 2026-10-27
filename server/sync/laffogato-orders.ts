@@ -8,6 +8,8 @@ import { ulid } from '../lib/ids';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
+import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
+import { dropSiteSoldOut, siteOutboxStatus, withSiteMenuLock } from './site-outbox';
 
 /**
  * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: LafPOS yalnız gösterir (bar ekranı,
@@ -28,7 +30,7 @@ export interface PanelOrder {
   totalMinor: number;
 }
 
-const configured = () => env.laffogatoPanelSecret.length >= 32;
+const configured = siteSigned;
 
 const STAGE_STATUS: Record<PanelOrder['stage'], 'yeni' | 'hazirlaniyor' | 'hazir'> = { new: 'yeni', preparing: 'hazirlaniyor', ready: 'hazir' };
 
@@ -36,17 +38,42 @@ const isPanelOrder = (o: unknown): o is PanelOrder => !!o && typeof (o as PanelO
 
 /**
  * Sitenin açık siparişleri. `orders` dizisi olmayan 200 (bakım sayfası, ağ geçidi, beklenmeyen gövde) başarısız
- * çekme sayılır: boş liste sanılıp sitede ödenmiş açık siparişler kapatılmasın. `complete: false` (sitenin
- * sınırını aşan kesik liste) ya da okunamayan kalem varsa liste eksik sayılır, listede olmayan kapatılmaz.
+ * çekme sayılır: boş liste sanılıp sitede ödenmiş açık siparişler kapatılmasın. `complete: false` (site listeyi kesti,
+ * en çok 200 sipariş; laffogato `src/app/api/panel/orders/route.ts`) ya da okunamayan kalem varsa liste eksik
+ * sayılır, listede olmayan kapatılmaz; alanı göndermeyen eski site bütün liste sayılır.
  */
 export async function fetchPanelOrders(): Promise<{ orders: PanelOrder[]; complete: boolean }> {
-  if (!configured()) throw new HttpError(409, 'Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
+  requireSiteSigned();
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/orders`));
   if (status !== 200) throw new HttpError(502, `Site siparişleri alınamadı (HTTP ${status})`, 'site_orders');
   const body = json as { orders?: unknown; complete?: unknown } | null;
   if (!body || !Array.isArray(body.orders)) throw new HttpError(502, 'Site siparişleri beklenen biçimde gelmedi', 'site_orders');
   const orders = body.orders.filter(isPanelOrder);
   return { orders, complete: body.complete !== false && orders.length === body.orders.length };
+}
+
+const tableKey = (s: string) => s.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
+
+/** Sitenin masa etiketi (laffogato `orderAlertLabel`): ad "masa" diye başlamıyorsa önüne "Masa " gelir ("S4" → "Masa S4") */
+export function siteTableLabel(name: string): string {
+  return /^masa(?:\s|\d|$)/.test(tableKey(name)) ? name.trim() : `Masa ${name.trim()}`;
+}
+
+type TableRow = typeof schema.tables.$inferSelect;
+
+/**
+ * Masa siparişinin masası. Önce Yönetim › Masa planı'ndaki "Sitedeki masa adı" (`siteTableCode`); o alanı boş
+ * masalarda yedek olarak yerel masa adı, sitenin etiket kuralıyla ("Masa S4" ↔ "S4"). Büyük-küçük harf ve boşluk
+ * farkı gözetilmez; ad birden çok masaya uyuyorsa eşlenmez. Bulunamazsa sipariş masasız kalır (bar ekranında
+ * etiketiyle görünür). docs/03-ENTEGRASYON.md §2.3
+ */
+export function tableForLabel(tables: TableRow[], label: string): TableRow | undefined {
+  const want = tableKey(label);
+  if (!want) return undefined;
+  const byCode = tables.find((x) => x.siteTableCode?.trim() && tableKey(x.siteTableCode) === want);
+  if (byCode) return byCode;
+  const byName = tables.filter((x) => !x.siteTableCode?.trim() && x.active && x.kind === 'masa' && (tableKey(x.name) === want || tableKey(siteTableLabel(x.name)) === want));
+  return byName.length === 1 ? byName[0] : undefined;
 }
 
 /** Detay metnindeki boy önekini atar: "M · yulaf · +1 shot" -> "yulaf · +1 shot" */
@@ -56,24 +83,11 @@ function detailText(detail: string, size: string): string {
   return parts.join(' · ');
 }
 
-const fold = (s: string) => s.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
-
 /**
- * Masa siparişinin masası: önce sitenin masa kodu (`siteTableCode`), yoksa etiketteki masa adı ("S2", "Masa 4"
- * ya da "Masa S2"); ad birden çok masaya uyuyorsa eşlenmez. docs/03-ENTEGRASYON.md §2.3
- */
-function tableFor<T extends { name: string; kind: string; active: boolean; siteTableCode: string | null }>(tables: T[], label: string): T | undefined {
-  const l = fold(label);
-  const byCode = tables.find((x) => x.siteTableCode && fold(x.siteTableCode) === l);
-  if (byCode) return byCode;
-  const bare = l.replace(/^masa\s*/, '');
-  const byName = tables.filter((x) => x.active && x.kind === 'masa' && (fold(x.name) === l || fold(x.name) === bare));
-  return byName.length === 1 ? byName[0] : undefined;
-}
-
-/**
- * Siteden gelen listeyi yerel adisyonlara işler; tam listede (`complete`) olmayan açık online siparişler
- * tamamlanmış sayılır. Yerelde kapanmış ama sitede hâlâ açık sipariş yeniden açılır.
+ * Siteden gelen listeyi yerel adisyonlara işler. Tam listede (`complete`) olmayan açık online sipariş "Siteden
+ * kalktı" diye kapanır (`extStage: 'gone'`): sitede tamamlandı, iptal edildi ya da süresi geçti; LafPOS hangisi
+ * olduğunu bilmez, servis edildi saymaz. Site listeyi kestiyse (`complete: false`) hiçbiri kapatılmaz. Yerelde
+ * kapanmış ama sitede hâlâ açık sipariş yeniden açılır.
  *
  * `requestedAt`: listenin istendiği an. Liste sitenin o anki hâlidir; yanıt ağdayken LafPOS'ta değişen sipariş
  * (kasada "Teslim edildi", aşama yazımı, araya giren daha yeni bir çekme) bu listeyle geri alınmaz: yeniden
@@ -104,12 +118,13 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
     for (const o of list) {
       seen.add(o.id);
       const existing = t.select().from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.extId, o.id))).get();
-      const table = o.fulfillment === 'table' ? tableFor(tables, o.label ?? '') : undefined;
+      const table = o.fulfillment === 'table' ? tableForLabel(tables, o.label ?? '') : undefined;
       const status = STAGE_STATUS[o.stage] ?? 'yeni';
       if (existing) {
         if (changedSince(existing)) continue;
         const tableId = table?.id ?? existing.tableId;
-        // Sitede hâlâ açık: yerelde kapanmışsa (eski sürümün bozuk ya da kesik listesi) yeniden açılır
+        // Sitede hâlâ açık: yerelde kapanmışsa (listeden kalkıp geri geldi, sitede geri alınan iptal gibi; ya da eski
+        // sürümün bozuk ya da kesik listesi) yeniden açılır
         const reopen = existing.status === 'kapali';
         if (reopen || existing.extStage !== o.stage || existing.tableId !== tableId) {
           t.update(schema.orders)
@@ -182,23 +197,30 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
       fx.emit({ topic: 'orders', kind: 'online.new', orderId: id, tableId: table?.id, message: `Online sipariş: ${o.label} · ${o.firstName}` });
       fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId: id, message: 'online' });
     }
-    // Kesik listede olmayan sipariş bitmiş sayılamaz
-    const open = complete ? t.select().from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.status, 'acik'))).all() : [];
     let closed = 0;
-    for (const o of open) {
-      // Liste istendikten sonra gelen ya da değişen sipariş eski listede olmayabilir
-      if (seen.has(o.extId!) || changedSince(o)) continue;
-      t.update(schema.orders).set({ status: 'kapali', extStage: 'done', closedAt: now, updatedAt: now }).where(eq(schema.orders.id, o.id)).run();
-      t.update(schema.orderItems).set({ status: 'servis', servedAt: now }).where(eq(schema.orderItems.orderId, o.id)).run();
-      closed++;
-      fx.emit({ topic: 'orders', kind: 'online.done', orderId: o.id, tableId: o.tableId ?? undefined });
-      fx.emit({ topic: 'kitchen', kind: 'online.done', orderId: o.id });
+    // Kesik listede (complete: false) olmayan sipariş yine açık olabilir: hiçbiri kapatılmaz
+    if (complete) {
+      const open = t.select().from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.status, 'acik'))).all();
+      for (const o of open) {
+        // Liste istendikten sonra gelen ya da değişen sipariş eski listede olmayabilir
+        if (seen.has(o.extId!) || changedSince(o)) continue;
+        t.update(schema.orders).set({ status: 'kapali', extStage: 'gone', closedAt: now, updatedAt: now }).where(eq(schema.orders.id, o.id)).run();
+        // Bar ve çağrı ekranından düşer; servis zamanı yazılmaz (servis edildiği bilinmiyor)
+        t.update(schema.orderItems)
+          .set({ status: 'servis' })
+          .where(and(eq(schema.orderItems.orderId, o.id), inArray(schema.orderItems.status, ['yeni', 'hazirlaniyor', 'hazir'])))
+          .run();
+        fx.audit(t, { action: 'online.gone', orderId: o.id, message: `Online sipariş #${o.extNo ?? o.no} siteden kalktı (sitede tamamlandı, iptal edildi ya da süresi geçti)` });
+        closed++;
+        fx.emit({ topic: 'orders', kind: 'online.done', orderId: o.id, tableId: o.tableId ?? undefined });
+        fx.emit({ topic: 'kitchen', kind: 'online.done', orderId: o.id });
+      }
     }
     return { created, updated, closed };
   });
   fx.emit({ topic: 'tables', kind: 'online.sync' });
   fx.flush();
-  setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastSuccessAt: Date.now(), lastError: null, count: list.length });
+  setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastSuccessAt: Date.now(), lastError: null, count: list.length, complete });
   return result;
 }
 
@@ -216,7 +238,7 @@ export async function syncOnlineOrders() {
 
 /** Siteye aşama yazar: preparing (hazırlanıyor), ready (hazır / masaya götürüldü / kuryeye verildi), delivered (gel-al teslim) */
 export async function setOnlineStage(orderId: string, action: 'preparing' | 'ready' | 'delivered', actorName: string) {
-  if (!configured()) throw conflict('Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
+  requireSiteSigned();
   const o = db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).get();
   if (!o || o.source !== 'laffogato' || !o.extId) throw notFound('Online sipariş');
   const from = o.extStage === 'done' ? 'ready' : (o.extStage ?? 'new');
@@ -229,6 +251,11 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
   if (status === 409) {
     await syncOnlineOrders().catch(() => undefined);
     throw conflict('Sipariş bu arada sitede değişti; ekran yenilendi', 'stale');
+  }
+  // Sitede yok ya da artık bar ekranı siparişi değil (iptal, iade): liste yeniden çekilir, sipariş "Siteden kalktı" kapanır
+  if (status === 404) {
+    await syncOnlineOrders().catch(() => undefined);
+    throw new HttpError(404, 'Sipariş sitede bulunamadı; liste yenilendi', 'site_not_found');
   }
   if (status !== 200) throw new HttpError(502, `Site aşamayı kabul etmedi (HTTP ${status})`, 'site_stage');
   const next = (json as { order?: PanelOrder | null })?.order ?? null;
@@ -250,14 +277,17 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
   fx.flush();
 }
 
-export type SiteAvailability = 'guncellendi' | 'bagli_degil' | 'anahtar_yok';
+export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok';
+type ProductRow = typeof schema.products.$inferSelect;
 
 /**
- * Siteye bağlı ürünün Satışta bilgisini siteye yazar (site o bilginin sahibi). Site kabul etmezse hata atar:
- * çağıran yerelde de değiştirmez. Anahtar yoksa ya da ürün bağlı değilse istek gitmez, sonucu bildirilir.
+ * Siteye bağlı üründe Satışta bilgisini siteye yazar (site Satışta bilgisinin sahibi). 2xx gelmezse ya da siteye
+ * ulaşılamazsa 502 atar: çağıran yerelde de değiştirmez. Bağlı değilse, adres ya da anahtar yoksa istek gitmez,
+ * sonuç bunu söyler.
  */
-export async function writeSiteAvailability(p: { extSource: string | null; extId: string | null }, active: boolean, actorName: string): Promise<SiteAvailability> {
+export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'extId'>, active: boolean, actorName: string): Promise<SiteWrite> {
   if (p.extSource !== 'laffogato' || !p.extId) return 'bagli_degil';
+  if (!siteLinked()) return 'baglanti_yok';
   if (!configured()) return 'anahtar_yok';
   const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) }).catch(() => {
     throw new HttpError(502, "Siteye ulaşılamadı; LafPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
@@ -267,102 +297,138 @@ export async function writeSiteAvailability(p: { extSource: string | null; extId
 }
 
 /**
- * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir (site Satışta bilgisinin
- * sahibi), 2xx gelince yerelde kaydedilir. Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir.
+ * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir, 2xx gelince yerelde kaydedilir.
+ * Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir. Açılan ürünün bekleyen Tükendi yazımı giden kutusundan düşer.
+ * Tükendi kilidi: sitenin kapattığı ürünü ("Sitede satışta değil", `soldOutBy = 'site'`) kasiyer açamaz; menü
+ * yetkisi olan (`manager`) açar, denetim kaydına "sitede kapatılmıştı" diye düşer.
  */
-export async function setAvailability(productId: string, active: boolean, actorName: string): Promise<{ site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' }> {
-  const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
-  if (!p) throw notFound('Ürün');
-  const site = await writeSiteAvailability(p, active, actorName);
-  const fx = new Effects();
-  tx((t) => {
-    t.update(schema.products)
-      .set({ active, portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
-      .where(eq(schema.products.id, productId))
-      .run();
-    fx.audit(t, { action: active ? 'product.available' : 'product.sold_out', entity: 'product', entityId: productId, message: `${actorName}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}` });
+export function setAvailability(productId: string, active: boolean, actor: { name: string; manager: boolean }): Promise<{ site: SiteWrite }> {
+  return withSiteMenuLock(async () => {
+    const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
+    if (!p) throw notFound('Ürün');
+    const siteClosed = active && !p.active && p.soldOutBy === 'site';
+    if (siteClosed && !actor.manager) throw new HttpError(403, `${p.name} sitede satışta değil; yalnız menü yetkisi olan biri satışa açabilir`, 'site_closed');
+    const site = await writeSiteAvailability(p, active, actor.name);
+    const fx = new Effects();
+    tx((t) => {
+      t.update(schema.products)
+        .set({ active, soldOutBy: active ? null : 'lafpos', portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
+        .where(eq(schema.products.id, productId))
+        .run();
+      if (active) dropSiteSoldOut(t, p.extId);
+      fx.audit(t, {
+        action: active ? 'product.available' : 'product.sold_out',
+        entity: 'product',
+        entityId: productId,
+        message: `${actor.name}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+      });
+    });
+    fx.emit({ topic: 'menu', kind: active ? 'product.available' : 'product.sold_out' });
+    if (site === 'guncellendi') fx.emit({ topic: 'sync', kind: 'site.menu.written' });
+    fx.flush();
+    return { site };
   });
-  fx.emit({ topic: 'menu', kind: active ? 'product.available' : 'product.sold_out' });
-  fx.flush();
-  return { site };
 }
 
 /**
- * Porsiyon sayacıyla değişen Satışta bilgisini siteye bildirir (adisyon akışından gelen olaylar için): porsiyonu biten
- * ürün sitede de tükenir, hazırlanmadan iptal edilen kalemle porsiyonu geri dönen ürün yeniden satışa açılır. Ürünün
- * gönderim anındaki durumu gider.
+ * Porsiyonu doldurulan kapalı ürünü açar: siteye bağlıysa önce site (2xx gelmezse 502, yerelde de değişmez), sonra
+ * çağıranın yerel yazımı (`apply`, tek işlem). Yalnız yerelde açılan ürünü sitenin sonraki senkronu yeniden kapatırdı.
  */
-export async function pushSoldOut(productIds: string[]) {
-  for (const id of productIds) {
-    const p = db.select().from(schema.products).where(eq(schema.products.id, id)).get();
-    if (!p || p.extSource !== 'laffogato' || !p.extId || !configured()) continue;
-    await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: p.active, actor: 'LafPOS porsiyon' }).catch(() => undefined);
-  }
+export function reopenWithSite<T>(p: ProductRow, actorName: string, apply: (site: SiteWrite) => T): Promise<T> {
+  return withSiteMenuLock(async () => {
+    const site = await writeSiteAvailability(p, true, actorName);
+    const result = apply(site);
+    if (site === 'guncellendi') {
+      const fx = new Effects();
+      fx.emit({ topic: 'sync', kind: 'site.menu.written' });
+      fx.flush();
+    }
+    return result;
+  });
 }
 
 // ─── Zamanlayıcı ────────────────────────────────────────────────────────────
 
-/** Son başarılı çekmedeki sürüm sinyali */
+/**
+ * Sürüm sinyali çalışırken de, gün açıkken en geç bu aralıkla tam çekim: sinyali kaçan bir değişiklik ya da süresi
+ * dolup listeden sessizce düşen sipariş (sitede yazım olmaz, sinyal değişmez) kalmasın. Gece (açık gün yokken)
+ * yalnız sinyal sorulur: sinyal sitenin veritabanına gitmez, güvenlik çekimi giderdi.
+ */
+export const ORDERS_SAFETY_PULL_MS = 15 * 60_000;
+/** Sinyal yokken (eski site) tam çekim aralığı: imzalı uçlara 5 dakikadan sık otomatik istek yok (AGENTS.md kural 6) */
+const ORDERS_FALLBACK_PULL_MS = 5 * 60_000;
+/** Başarısız çekimden sonra yeniden deneme: ilki bir sonraki turda (20 sn), sonra katlanarak, en çok 5 dk arayla */
+const RETRY_FIRST_MS = 20_000;
+
 let lastVersion: string | null = null;
 let versionSupported = true;
-/** Son çekme denemesi (başarılı ya da değil) ve başarısız olup olmadığı */
-let lastPullAt = 0;
-let lastPullFailed = false;
-let inflight: Promise<unknown> | null = null;
-/** Senkron bütçesi (kural 6): sürüm sinyali dışında siparişler en sık 5 dk'da bir kendiliğinden çekilir */
-const PULL_BUDGET_MS = 5 * 60_000;
+let lastFullPull = 0;
+let pullFailures = 0;
+let retryAt = 0;
+let inflight: Promise<void> | null = null;
 
-async function pull(now: number) {
-  lastPullAt = now;
+/** Testler için: zamanlayıcının belleğini sıfırlar */
+export function resetOnlineTimer() {
+  lastVersion = null;
+  versionSupported = true;
+  lastFullPull = 0;
+  pullFailures = 0;
+  retryAt = 0;
+}
+
+/** Tam çekim. Sürüm yalnız çekim başarılıysa kaydedilir: başarısız çekim sonraki turda yeniden denenir, sipariş kaybolmaz */
+async function pull(now: number, version: string | null) {
+  lastFullPull = now;
   try {
-    const r = await syncOnlineOrders();
-    lastPullFailed = false;
-    return r;
+    await syncOnlineOrders();
   } catch (e) {
-    lastPullFailed = true;
+    pullFailures++;
+    retryAt = now + Math.min(ORDERS_FALLBACK_PULL_MS, RETRY_FIRST_MS * 2 ** (pullFailures - 1));
     throw e;
   }
+  pullFailures = 0;
+  retryAt = 0;
+  if (version) lastVersion = version;
 }
 
 /**
- * 20 sn'de bir çağrılır. Sürüm sinyali varsa yalnız değişince çeker; yoksa (ya da okunamazsa) en çok 5 dk'da bir
- * çeker. Sürüm ancak çekme başarılı olunca kaydedilir: başarısız çekme 5 dk dolunca yeniden denenir, her turda değil.
+ * 20 sn'de bir çağrılır. Sürüm sinyali varsa değişince çeker (gece de: sinyal veritabanına gitmez), gün açıkken
+ * ayrıca 15 dk'da bir güvenlik çekimi yapar; sinyal yoksa en çok 5 dk'da bir çeker.
  */
-export async function onlineOrdersTick() {
-  if (!configured() || !getSettings().onlineOrdersSync || inflight) return;
-  const now = Date.now();
-  const budgetOk = now - lastPullAt >= PULL_BUDGET_MS;
-  const job = (async () => {
+export function onlineOrdersTick(): Promise<void> {
+  if (!configured() || !getSettings().onlineOrdersSync) return Promise.resolve();
+  if (inflight) return inflight;
+  inflight = (async () => {
+    const now = Date.now();
     try {
       if (versionSupported) {
         const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/pos/orders/version`));
         const v = (json as { version?: unknown } | null)?.version;
         if (status === 404) versionSupported = false;
         else if (status === 200 && typeof v === 'string' && v) {
-          if (v !== lastVersion && (!lastPullFailed || budgetOk)) {
-            await pull(now);
-            lastVersion = v;
-          }
+          const safety = now - lastFullPull >= ORDERS_SAFETY_PULL_MS && !!getOpenDay(db);
+          if ((v !== lastVersion || safety) && now >= retryAt) await pull(now, v);
           return;
         }
         // Sinyal okunamadı (5xx, bozuk gövde): 5 dk'lık yedek çekmeye düşer
       }
-      if (budgetOk) await pull(now);
+      if (now - lastFullPull >= ORDERS_FALLBACK_PULL_MS && now >= retryAt) await pull(now, null);
     } catch (e) {
       console.warn('[online] siparişler alınamadı:', e instanceof Error ? e.message : e);
     }
   })().finally(() => {
     inflight = null;
   });
-  inflight = job;
-  await job;
+  return inflight;
 }
 
 /** "Yenile" düğmesi: en sık 30 sn'de bir gerçek çekme */
 export async function refreshOnlineOrders() {
+  requireSiteSigned();
   const now = Date.now();
-  if (now - lastPullAt < 30_000) return { skipped: true };
-  return pull(now);
+  if (now - lastFullPull < 30_000) return { skipped: true };
+  lastFullPull = now;
+  return syncOnlineOrders();
 }
 
 export function onlineStatus() {
@@ -374,5 +440,7 @@ export function onlineStatus() {
     open: configured()
       ? db.select({ n: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), inArray(schema.orders.status, ['acik']))).all().length
       : 0,
+    /** Siteye bildirilemeyen ya da sitenin reddettiği Satışta yazımları (porsiyon sayacı; giden kutusu) */
+    soldOutPush: siteOutboxStatus(),
   };
 }

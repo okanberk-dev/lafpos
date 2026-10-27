@@ -54,8 +54,15 @@
     {
       "idx": 7,
       "version": "6",
-      "when": 1793099865432,
-      "tag": "0007_paket_platformlari",
+      "when": 1793099811363,
+      "tag": "0007_tukendi_kilidi",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793101383703,
+      "tag": "0008_paket_platformlari",
       "breakpoints": true
     }
   ]

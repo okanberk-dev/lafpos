@@ -16,6 +16,7 @@ import { ROW_ICON } from './ui';
 interface SyncStatus {
   lafmaliyet: { configured: boolean; pending: number; lastError: string | null };
   menu: { state: { lastError?: string | null } | null };
+  online: { soldOutPush: { pending: number; rejected: number } };
 }
 
 /** İş bekleyen yerlerin sayacı (Innex §3 fikir 1): tükenen ürün, gönderilemeyen gün */
@@ -24,7 +25,7 @@ function useCounts(): Partial<Record<AdminSection['key'], number>> {
   const can = useCan();
   const sync = useQuery({ queryKey: ['sync', 'status'], queryFn: () => get<SyncStatus>('/sync/status'), staleTime: 60_000, enabled: can('senkron.yonet') || can('ayar.yonet') });
   const soldOut = boot.products.filter((p) => !p.active && !p.hidden).length;
-  const failing = sync.data ? sync.data.lafmaliyet.pending + (sync.data.menu.state?.lastError ? 1 : 0) : 0;
+  const failing = sync.data ? sync.data.lafmaliyet.pending + sync.data.online.soldOutPush.pending + sync.data.online.soldOutPush.rejected + (sync.data.menu.state?.lastError ? 1 : 0) : 0;
   return { menu: soldOut || undefined, entegrasyon: failing || undefined };
 }
 

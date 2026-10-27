@@ -351,7 +351,7 @@ describe('menü senkronu', () => {
   });
 
   it('porsiyon sayacı doldurulunca bağlı ürün sitede de satışa açılır; sonraki eşitleme kapatmaz', async () => {
-    const { pushSoldOut } = await import('../server/sync/laffogato-orders');
+    const { flushSiteOutbox } = await import('../server/sync/site-outbox');
     site = menuSite(liveMenu);
     const cake = await product('mnu-0058');
     await h.ok('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 1 });
@@ -360,8 +360,8 @@ describe('menü senkronu', () => {
     const sold = await h.ok<{ total: number }>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: cake.id, qty: 1 }] });
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: nakit.id, amount: sold.total });
     expect((await product('mnu-0058')).active).toBe(false);
-    // Son porsiyon satılınca (jobs.ts olay dinleyicisi) site de Tükendi olur
-    await pushSoldOut([cake.id]);
+    // Son porsiyon satılınca Tükendi giden kutusuna girer; jobs.ts'in olay dinleyicisi gönderir (burada elle)
+    await flushSiteOutbox();
     expect(siteActive.get('mnu-0058')).toBe(false);
 
     // Site kabul etmezse ya da ulaşılamazsa sayaç da değişmez (önce site, sonra LafPOS)

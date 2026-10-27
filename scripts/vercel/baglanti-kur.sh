@@ -110,6 +110,7 @@ umask 077
 {
   echo "# LafPOS kasa ayarları ($(date '+%d.%m.%Y %H:%M')). Kafe bilgisayarında Başlat › LafPOS › LafPOS ayarları'nı açıp"
   echo "# aşağıdaki satırları ekleyin, kaydedin; LafPOS kendini yeniden başlatır. Bu dosyayı kimseyle paylaşmayın, işi bitince silin."
+  # LafPOS'ta site adresinin varsayılanı yok: bu satır yazılmadıkça kafe siteye hiç bağlanmaz (docs/03-ENTEGRASYON.md §2)
   echo "LAFFOGATO_URL=https://laffogato.net"
   [[ $site_ok -eq 1 ]] && echo "LAFFOGATO_SYNC_SECRET=$S_SITE" || echo "# LAFFOGATO_SYNC_SECRET: laffogato'da zaten tanımlıydı; değeri bilinmiyor (--yenile ile yeniden üretin)"
   echo "LAFMALIYET_URL=https://ladmin.laffogato.net"

@@ -1,0 +1,107 @@
+{
+  "version": 1,
+  "now": "2026-10-27T10:00:00.000Z",
+  "complete": true,
+  "orders": [
+    {
+      "id": "ord-0101",
+      "orderNo": 10101,
+      "stage": "new",
+      "fulfillment": "table",
+      "label": "Masa S4",
+      "firstName": "Ayşe",
+      "scheduledFor": "",
+      "note": "Fındık alerjim var",
+      "paidAt": "2026-10-27T09:55:00.000Z",
+      "lines": [
+        {
+          "menuItemId": "mnu-0007",
+          "name": "Latte",
+          "size": "M",
+          "detail": "M · Yulaf",
+          "note": "Az köpük",
+          "qty": 2
+        },
+        {
+          "menuItemId": "mnu-0057",
+          "name": "Donostia (L'Af Özel)",
+          "size": "single",
+          "detail": "",
+          "note": "",
+          "qty": 1
+        }
+      ],
+      "totalMinor": 55000,
+      "path": "/admin/siparisler/ord-0101"
+    },
+    {
+      "id": "ord-0103",
+      "orderNo": 10103,
+      "stage": "new",
+      "fulfillment": "delivery",
+      "label": "Kurye",
+      "firstName": "Zeynep",
+      "scheduledFor": "",
+      "note": "",
+      "paidAt": "2026-10-27T09:58:00.000Z",
+      "lines": [
+        {
+          "menuItemId": "mnu-0005",
+          "name": "Espresso",
+          "size": "M",
+          "detail": "M",
+          "note": "",
+          "qty": 1
+        }
+      ],
+      "totalMinor": 11000,
+      "path": "/admin/siparisler/ord-0103"
+    },
+    {
+      "id": "ord-0104",
+      "orderNo": 10104,
+      "stage": "new",
+      "fulfillment": "table",
+      "label": "Masa 9",
+      "firstName": "Can",
+      "scheduledFor": "",
+      "note": "",
+      "paidAt": "2026-10-27T09:59:00.000Z",
+      "lines": [
+        {
+          "menuItemId": "mnu-0001",
+          "name": "Matcha Latte",
+          "size": "single",
+          "detail": "",
+          "note": "",
+          "qty": 1
+        }
+      ],
+      "totalMinor": 21500,
+      "path": "/admin/siparisler/ord-0104"
+    },
+    {
+      "id": "ord-0102",
+      "orderNo": 10102,
+      "stage": "preparing",
+      "fulfillment": "pickup",
+      "label": "Gel-al",
+      "firstName": "Mehmet",
+      "scheduledFor": "2026-10-27T10:30:00.000Z",
+      "note": "Kapıda alırım",
+      "paidAt": "2026-10-27T09:40:00.000Z",
+      "lines": [
+        {
+          "menuItemId": "mnu-0006",
+          "name": "Americano",
+          "size": "L",
+          "detail": "L",
+          "note": "",
+          "qty": 1
+        }
+      ],
+      "totalMinor": 18500,
+      "path": "/admin/siparisler/ord-0102"
+    }
+  ]
+}
