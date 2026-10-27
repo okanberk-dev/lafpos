@@ -3,12 +3,13 @@ import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Mic2, Plus, Rece
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tlShort } from '@shared/money';
+import { bookingHours, bookingPayment } from '@shared/karaoke';
 import { fmtElapsed } from '@shared/time';
-import type { FloorOrderSummary, FloorStateDTO, OrderDTO, TableDTO } from '@shared/types';
+import type { FloorOrderSummary, FloorStateDTO, OrderDTO, SiteKaraokeBookingDTO, TableDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { PageLoading } from '@/components/ui/misc';
+import { Badge, PageLoading } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -61,6 +62,12 @@ export default function FloorPage() {
   if (floor.isLoading) return <PageLoading />;
   const others = floor.data?.others ?? [];
   const reservations = floor.data?.reservations ?? [];
+  // Sitedeki bugünkü karaoke rezervasyonları (odayı tutanlar): sitede tek oda var, her oda masasına aittir
+  const siteKaraoke = floor.data?.siteKaraoke ?? [];
+  const nextKaraoke = siteKaraoke.find((b) => Date.parse(b.endsAt) > now && !b.session?.active);
+  /** Masanın kartındaki rezervasyon: yerel (masa) ya da oda için sitedeki sıradaki karaoke */
+  const reservationOf = (t: TableDTO) =>
+    reservations.find((r) => r.tableId === t.id) ?? (t.kind === 'oda' && nextKaraoke ? { time: String(nextKaraoke.startHour).padStart(2, '0') + ':00', name: nextKaraoke.firstName || 'Karaoke', guests: nextKaraoke.guests, status: 'site' } : undefined);
   const busyTables = tables.filter((t) => (floor.data?.tables[t.id]?.length ?? 0) > 0);
   const billed = busyTables.filter((t) => floor.data?.tables[t.id]?.some((o) => o.billPrintedAt)).length;
   const summary = [`${tables.length} masa`, `${busyTables.length} dolu`, billed ? `${billed} hesap bekliyor` : null].filter(Boolean).join(' · ');
@@ -153,7 +160,7 @@ export default function FloorPage() {
                   key={t.id}
                   table={t}
                   orders={floor.data?.tables[t.id] ?? []}
-                  reservation={reservations.find((r) => r.tableId === t.id)}
+                  reservation={reservationOf(t)}
                   now={now}
                   onClick={() => tapTable(t)}
                   style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
@@ -164,7 +171,7 @@ export default function FloorPage() {
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
               {tables.map((t) => (
-                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservations.find((r) => r.tableId === t.id)} now={now} onClick={() => tapTable(t)} className="h-28" />
+                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="h-28" />
               ))}
             </div>
           )}
@@ -202,7 +209,7 @@ export default function FloorPage() {
               </span>
             </button>
           ))}
-          {reservations.length > 0 && (
+          {(reservations.length > 0 || siteKaraoke.length > 0) && (
             <div className="mt-2 border-t border-[var(--admin-divider)] px-2 pt-3">
               <h3 className="flex items-center gap-1.5 pb-1.5 text-xs font-medium text-muted">
                 <CalendarClock className="size-3.5" strokeWidth={1.75} /> Bugünkü rezervasyonlar
@@ -213,6 +220,9 @@ export default function FloorPage() {
                   <span className="flex-1 truncate">{r.name}</span>
                   <span className="text-xs text-muted">{r.guests} kişi</span>
                 </div>
+              ))}
+              {siteKaraoke.map((b) => (
+                <SiteKaraokeRow key={b.id} booking={b} past={Date.parse(b.endsAt) <= now} />
               ))}
             </div>
           )}
@@ -243,6 +253,30 @@ export default function FloorPage() {
       </Modal>
 
       <TakeawayModal kind={takeaway} onClose={() => setTakeaway(null)} onCreate={(body) => open.mutate(body)} busy={open.isPending} />
+    </div>
+  );
+}
+
+/** Sitedeki karaoke rezervasyonu (yan listede): saat aralığı, ad, kişi, ödeme durumu, not */
+function SiteKaraokeRow({ booking: b, past }: { booking: SiteKaraokeBookingDTO; past: boolean }) {
+  const pay = bookingPayment(b);
+  return (
+    <div className={cn('rounded-lg px-1 py-1.5 text-sm', past && 'opacity-60')}>
+      <div className="flex items-center gap-2">
+        <Mic2 className="size-3.5 shrink-0 text-[var(--admin-hue-violet)]" strokeWidth={1.75} aria-label="Karaoke odası" />
+        <span className="tabular font-semibold">{bookingHours(b)}</span>
+        <span className="min-w-0 flex-1 truncate">{b.firstName || 'Adsız'}</span>
+        <span className="text-xs text-muted">{b.guests} kişi</span>
+      </div>
+      <div className="mt-0.5 flex flex-wrap items-center gap-1.5 pl-5">
+        <Badge tone={pay.tone}>{pay.text}</Badge>
+        {b.session?.active && <span className="text-xs text-muted">#{b.session.orderNo} sayaçta</span>}
+      </div>
+      {b.note && (
+        <div className="truncate pl-5 text-xs italic text-ink-2" title={b.note}>
+          {b.note}
+        </div>
+      )}
     </div>
   );
 }

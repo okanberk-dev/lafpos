@@ -8,6 +8,7 @@ import { okcStatus } from '../okc/service';
 import { backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
 import { requireSiteLinked, siteLinked } from '../sync/laffogato-link';
 import { reportRange } from './reports';
+import { refreshSiteKaraoke, siteKaraokeOn, siteKaraokeStatus, siteKaraokeView } from '../sync/laffogato-karaoke';
 import { onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
 import { runMenuSync } from '../sync/menu-sync';
 import { getSettings } from '../lib/settings';
@@ -24,6 +25,7 @@ syncRoutes.get('/status', (c) => {
   return c.json({
     menu: { linked: siteLinked(), auto: s.menuAutoSync, state: getSyncState('laffogato.menu') },
     online: onlineStatus(),
+    karaoke: siteKaraokeStatus(),
     lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet')),
     okc: okcStatus(),
   });
@@ -56,6 +58,24 @@ syncRoutes.post('/menu/apply', async (c) => {
   } catch (e) {
     throw new HttpError(502, `Site menüsü uygulanamadı: ${e instanceof Error ? e.message : e}`, 'site_menu');
   }
+});
+
+/**
+ * Sitedeki bugünkü karaoke rezervasyonları (oda kutusu, "Sayacı başlat"): `fresh=1` liste geride kaldıysa önce bir
+ * çekim yapar (oda kutusu açılınca), hata eldeki listeyle döner. Bağlantı yoksa `kapali`, istek gitmez
+ */
+syncRoutes.get('/karaoke', async (c) => {
+  const user = c.get('user');
+  if (!can(user, 'siparis.al')) requirePermission(user, 'rezervasyon.yonet');
+  const fresh = c.req.query('fresh') === '1';
+  return c.json(fresh && siteKaraokeOn() ? await refreshSiteKaraoke() : siteKaraokeView());
+});
+
+/** Oda kutusundaki "Yenile": en sık 30 sn'de bir gerçek çekim; site ulaşılamazsa 502 */
+syncRoutes.post('/karaoke/refresh', async (c) => {
+  const user = c.get('user');
+  if (!can(user, 'siparis.al')) requirePermission(user, 'rezervasyon.yonet');
+  return c.json(await refreshSiteKaraoke({ force: true }));
 });
 
 syncRoutes.post('/online/refresh', async (c) => {

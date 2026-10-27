@@ -2,6 +2,7 @@ import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
 import type { PlatformId, PlatformSettings } from './platforms';
 import type { ServiceMode } from './service-mode';
+import type { RoomBookingSnapshot, SiteKaraokeBooking } from './karaoke';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
 
@@ -230,6 +231,8 @@ export interface BootstrapDTO {
     laffogatoUrl: string;
     /** Yerel damga kartı açık mı (varsayılan kapalı; site bağlantısı kuruluyken hiç açılmaz) */
     localStamps: boolean;
+    /** Sitedeki karaoke rezervasyonları okunuyor mu (site bağlantısı, anahtar ve planda oda; §2.4) */
+    siteKaraoke: boolean;
   };
   serverTime: number;
 }
@@ -304,6 +307,12 @@ export interface RoomSessionDTO {
   startedAt: number;
   endedAt: number | null;
   hourlyRate: number;
+  /** Bağlı site karaoke rezervasyonu (docs/03-ENTEGRASYON.md §2.4); yoksa null */
+  bookingId: string | null;
+  /** Bağlıysa rezervasyon bloğunun bu oturuma düşen kalanı (dakika) */
+  prepaidMinutes: number | null;
+  /** Bağlanırken saklanan rezervasyon koşulu (ad ve not yok); ekran güncel durumu sitenin listesinden okur */
+  booking: RoomBookingSnapshot | null;
 }
 
 export interface OrderDTO {
@@ -380,9 +389,34 @@ export interface FloorOrderSummary {
   roomStartedAt: number | null;
 }
 
+/** Sitedeki karaoke rezervasyonu ve sayaca bağlandıysa adisyonu (docs/03-ENTEGRASYON.md §2.4) */
+export interface SiteKaraokeBookingDTO extends SiteKaraokeBooking {
+  /** Bu rezervasyona bağlı oda sayacı: çalışan, yoksa son duran */
+  session: { orderId: string; orderNo: number; tableName: string; active: boolean } | null;
+}
+
+/**
+ * Oda kutusunun gördüğü site karaokesi. `kapali`: site bağlantısı kurulmadı ya da site karaokeyi LafPOS'a açmadı;
+ * `bekliyor`: bu iş günü için henüz alınmadı; `hata`: son çekim başarısız, eldeki liste gösterilir
+ */
+export interface SiteKaraokeDTO {
+  state: 'kapali' | 'bekliyor' | 'hazir' | 'hata';
+  message: string | null;
+  /** İş günü (pencere) */
+  date: string;
+  pulledAt: number | null;
+  complete: boolean;
+  bookings: SiteKaraokeBookingDTO[];
+}
+
 export interface FloorStateDTO {
   tables: Record<string, FloorOrderSummary[]>;
   reservations: { id: string; tableId: string | null; time: string; name: string; guests: number; status: string }[];
+  /**
+   * Sitedeki bugünkü karaoke rezervasyonları (odayı tutanlar; site bağlantısı yoksa boş). Oda türündeki masaların
+   * hepsine aittir: sitede tek karaoke odası var. Eski Uzaktan özetinde yok
+   */
+  siteKaraoke?: SiteKaraokeBookingDTO[];
   /** Masaya bağlı olmayan açık siparişler (tezgah, gel-al, paket, online) */
   others: (FloorOrderSummary & { type: string; label: string })[];
 }

@@ -9,6 +9,7 @@ import { ulid } from '../lib/ids';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
+import { siteKaraokeOn, siteKaraokeTick } from './laffogato-karaoke';
 import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
 import { dropSiteSoldOut, siteOutboxStatus, siteTablesPushStatus, withSiteMenuLock } from './site-outbox';
 
@@ -407,28 +408,38 @@ async function pull(now: number, version: string | null) {
 
 /**
  * 20 sn'de bir çağrılır. Sürüm sinyali varsa değişince çeker (gece de: sinyal veritabanına gitmez), gün açıkken
- * ayrıca 15 dk'da bir güvenlik çekimi yapar; sinyal yoksa en çok 5 dk'da bir çeker.
+ * ayrıca 15 dk'da bir güvenlik çekimi yapar; sinyal yoksa en çok 5 dk'da bir çeker. Aynı sinyal karaoke işaretini de
+ * taşır: "Online siparişleri çek" kapalıyken sipariş çekilmez ama sinyal, sitedeki karaoke rezervasyonları için
+ * gün açıkken okunmaya devam eder (§2.4; sinyal sitenin veritabanına gitmez, kural 6'nın istisnası).
  */
 export function onlineOrdersTick(): Promise<void> {
-  if (!configured() || !getSettings().onlineOrdersSync) return Promise.resolve();
+  if (!configured()) return Promise.resolve();
+  const ordersOn = getSettings().onlineOrdersSync;
+  if (!ordersOn && !(siteKaraokeOn() && getOpenDay(db))) return Promise.resolve();
   if (inflight) return inflight;
   inflight = (async () => {
     const now = Date.now();
+    // Aynı yanıttaki karaoke işareti (laffogato F1; eski sitede yok): sipariş çekimi başarısız olsa da karaokeye gider
+    let karaoke: unknown;
     try {
       if (versionSupported) {
         const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/pos/orders/version`));
         const v = (json as { version?: unknown } | null)?.version;
+        if (status === 200) karaoke = (json as { karaoke?: unknown } | null)?.karaoke;
         if (status === 404) versionSupported = false;
         else if (status === 200 && typeof v === 'string' && v) {
           const safety = now - lastFullPull >= ORDERS_SAFETY_PULL_MS && !!getOpenDay(db);
-          if ((v !== lastVersion || safety) && now >= retryAt) await pull(now, v);
+          if (ordersOn && (v !== lastVersion || safety) && now >= retryAt) await pull(now, v);
           return;
         }
         // Sinyal okunamadı (5xx, bozuk gövde): 5 dk'lık yedek çekmeye düşer
       }
-      if (now - lastFullPull >= ORDERS_FALLBACK_PULL_MS && now >= retryAt) await pull(now, null);
+      if (ordersOn && now - lastFullPull >= ORDERS_FALLBACK_PULL_MS && now >= retryAt) await pull(now, null);
     } catch (e) {
       console.warn('[online] siparişler alınamadı:', e instanceof Error ? e.message : e);
+    } finally {
+      // Karaoke: işaret değişince ya da iş günü dönünce, en sık 5 dakikada bir (asla atmaz)
+      await siteKaraokeTick(karaoke, now);
     }
   })().finally(() => {
     inflight = null;
