@@ -100,7 +100,12 @@ describe('Yemeksepeti aktarıcısı', () => {
     // Kasanın kullanmadığı durumlar (kurye geldi gibi) kutuya girmez
     const other = await PUT(req('yemeksepeti/remoteId/POS_1/remoteOrder/tok-1/posOrderStatus', { method: 'PUT', body: JSON.stringify({ status: 'COURIER_ARRIVED_AT_VENDOR' }), headers: auth }));
     expect(other.status).toBe(200);
-    expect(lists.get('lafpos:ys:inbox')).toHaveLength(2);
+    // Sipariş ve iptal ayrı listelerde (iptal, bekletilen siparişlerin arkasında kalmasın)
+    expect(lists.get('lafpos:ys:inbox')).toHaveLength(1);
+    expect(lists.get('lafpos:ys:status')).toHaveLength(1);
+    // 512 karakterden uzun belirteç reddedilir (kırpılıp eşleşmez hale gelmesin)
+    const long = await PUT(req(`yemeksepeti/remoteId/POS_1/remoteOrder/${'x'.repeat(513)}/posOrderStatus`, { method: 'PUT', body: JSON.stringify({ status: 'ORDER_CANCELLED' }), headers: auth }));
+    expect(long.status).toBe(400);
     // Boş gövdeli (null) JWT başlığı ya da yükü: 401, çökme yok
     const nullJwt = `${Buffer.from('null').toString('base64url')}.${Buffer.from('null').toString('base64url')}.x`;
     expect((await POST(req('yemeksepeti/order/POS_1', { method: 'POST', body: JSON.stringify(order), headers: { authorization: `Bearer ${nullJwt}` } }))).status).toBe(401);
@@ -129,8 +134,9 @@ describe('Yemeksepeti aktarıcısı', () => {
     expect(got.status).toBe(200);
     const body = (await got.json()) as { items: { id: string; kind: string; remoteId: string; order?: { token: string }; remoteOrderId?: string; status?: string }[]; total: number };
     expect(body.total).toBe(2);
-    expect(body.items[0]).toMatchObject({ kind: 'order', remoteId: 'POS_1', order: { token: 'tok-1' } });
-    expect(body.items[1]).toMatchObject({ kind: 'status', remoteOrderId: 'tok-1', status: 'ORDER_CANCELLED' });
+    // Önce iptaller, sonra siparişler
+    expect(body.items[0]).toMatchObject({ kind: 'status', remoteOrderId: 'tok-1', status: 'ORDER_CANCELLED' });
+    expect(body.items[1]).toMatchObject({ kind: 'order', remoteId: 'POS_1', order: { token: 'tok-1' } });
     const ackUrl = new URL('https://lafpos.vercel.app/api/yemeksepeti/inbox/ack');
     const ackBody = JSON.stringify({ ids: body.items.map((i) => i.id) });
     const ack = await POST(req('yemeksepeti/inbox/ack', { method: 'POST', body: ackBody, headers: { ...signedHeaders(SECRET, 'POST', ackUrl, ackBody), 'content-type': 'application/json' } }));

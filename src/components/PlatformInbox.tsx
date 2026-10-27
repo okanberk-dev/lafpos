@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Bike, PackageCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { tl } from '@shared/money';
+import { fmtTime } from '@shared/time';
 import { COURIER_LABEL, PLATFORM_LABEL, type PlatformLiveStatus, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
@@ -55,7 +56,7 @@ export function PlatformInbox() {
   // Onay bekleyenler ve platformun iptal ettiği ama kasada ödemesi olan (ödeme geri alınınca kendiliğinden kapanır)
   const all = data.data?.orders ?? [];
   // Önce onay bekleyenler, süresi en yakın olan başta; sonra platformun iptal ettiği ama kasada ödemesi olanlar
-  const due = (o: PlatformOrderDTO) => (o.announced || o.expiresAt == null ? Number.MAX_SAFE_INTEGER : o.expiresAt);
+  const due = (o: PlatformOrderDTO) => (o.announced || o.payload.preAccepted || o.expiresAt == null ? Number.MAX_SAFE_INTEGER : o.expiresAt);
   const waitingOrders = all.filter((o) => o.status === 'bekliyor').sort((a, b) => due(a) - due(b));
   const cancelOrders = all.filter((o) => o.status !== 'bekliyor' && o.cancelPending);
   const pending = [...waitingOrders, ...cancelOrders];
@@ -78,7 +79,7 @@ export function PlatformInbox() {
             · {PLATFORM_LABEL[first.platform]} {first.payload.code} · {tl(first.payload.customerTotal)}
           </span>
         </span>
-        {first.expiresAt && first.status === 'bekliyor' && !first.announced && <span className="tabular shrink-0 font-semibold">{left(first.expiresAt, now)}</span>}
+        {first.expiresAt && first.status === 'bekliyor' && !first.announced && !first.payload.preAccepted && <span className="tabular shrink-0 font-semibold">{left(first.expiresAt, now)}</span>}
         <span className="shrink-0 font-semibold underline underline-offset-2">Gör</span>
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={waiting && cancelOrders.length ? 'Platform siparişleri' : waiting ? 'Onay bekleyen platform siparişleri' : 'Platformun iptal ettiği siparişler'} size="md">
@@ -115,14 +116,14 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
     }
   };
   // Platform kabul etti, adisyon açılamadı: süre işlemez, Kabul yalnız adisyonu açmayı yeniden dener
-  const remaining = order.announced || order.cancelPending ? null : left(order.expiresAt, now);
+  const remaining = order.announced || order.cancelPending || p.preAccepted ? null : left(order.expiresAt, now);
   return (
     <section className="rounded-xl border border-line p-3">
       <div className="flex flex-wrap items-center gap-2">
         <PlatformBadge platform={order.platform} code={p.code} />
         <span className="text-sm text-muted">
           {p.courier === 'platform' ? <Bike className="mr-1 inline size-4" /> : <PackageCheck className="mr-1 inline size-4" />}
-          {COURIER_LABEL[p.courier]} · {p.paymentLabel}
+          {COURIER_LABEL[p.courier]} · {p.paymentLabel} · {fmtTime(p.placedAt)}
         </span>
         {p.scheduledFor && (
           <span className="rounded-full bg-[var(--admin-warning-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--admin-warning)]">

@@ -261,7 +261,8 @@ describe('Yemeksepeti gözden geçirme bulguları', () => {
     const o = dhOrder({ callbackUrls: {}, delivery: { address: { street: 'Lale Sk.', number: '9' }, expectedDeliveryTime: null, riderPickupTime: null }, payment: { status: 'pending', type: 'cash' }, price: { deliveryFees: [], grandTotal: '190.00' } });
     const row = await arrive(o);
     expect(row.payload.preAccepted).toBe(true);
-    expect(row.expiresAt).toBeNull();
+    // Kabul süresi yok; yalnız yaş sınırı (sipariş saatinden 3 saat)
+    expect(row.expiresAt).toBe(row.payload.placedAt + 3 * 3600_000);
     const rejected = await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${row.id}/reject`, { reason: 'Çok yoğunuz' });
     expect([rejected.status, rejected.json.code]).toEqual([409, 'pre_accepted']);
     const before = fake.calls.length;
@@ -332,6 +333,54 @@ describe('Yemeksepeti gözden geçirme bulguları', () => {
     expect([r.status, r.json.code]).toEqual([409, 'test_order']);
     const late = await arrive(dhOrder({ expiryDate: new Date(Date.now() - 60_000).toISOString() }));
     expect(late.status).toBe('suresi_doldu');
+  });
+
+  it('ücret satırı bar ve mutfak ekranına düşmez', async () => {
+    const o = dhOrder({ delivery: { address: { street: 'Lale Sk.', number: '9' }, expectedDeliveryTime: null, riderPickupTime: null }, price: { deliveryFees: [{ name: 'delivery fee', value: '25.00' }, { name: 'packaging fee', value: '5.00' }], grandTotal: '220.00' } });
+    const row = await arrive(o);
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    const ord = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
+    const fees = ord.items.filter((i) => i.name === 'Platform ücreti');
+    expect(fees).toHaveLength(2);
+    expect(fees.every((i) => i.status === 'servis')).toBe(true);
+    const tickets = await h.ok<{ orderId: string; items: { name: string }[] }[]>('kasa', 'GET', '/kitchen');
+    expect(tickets.filter((t) => t.orderId === orderId).flatMap((t) => t.items).some((i) => i.name === 'Platform ücreti')).toBe(false);
+  });
+
+  it('tablette kabul edilmiş ama 3 saatten eski sipariş kasaya alınmaz (yeniden hazırlanmasın)', async () => {
+    const o = dhOrder({ callbackUrls: {}, createdAt: new Date(Date.now() - 26 * 3600_000).toISOString(), expeditionType: 'pickup', delivery: null, price: { grandTotal: '190.00' } });
+    const row = await arrive(o);
+    expect(row.status).toBe('suresi_doldu');
+    const r = await h.call<{ code: string; error: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    expect([r.status, r.json.code]).toEqual([409, 'expired']);
+    expect(r.json.error).toMatch(/3 saatten eski/);
+  });
+
+  it('kapıda tahsilatta collectFromCustomer 0,00 gelirse tutarın tamamı platform payı sayılmaz', async () => {
+    const o = dhOrder({ delivery: { address: { street: 'Lale Sk.', number: '9' }, expectedDeliveryTime: null, riderPickupTime: null }, payment: { status: 'pending', type: 'cash' }, price: { deliveryFees: [], grandTotal: '0.00', collectFromCustomer: '0.00' } });
+    const row = await arrive(o);
+    expect(row.payload).toMatchObject({ platformCollects: false, customerTotal: 19000, platformDiscount: 0 });
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).paid).toBe(0);
+  });
+
+  it('ileri tarihli siparişte Yemeksepeti kuryesinin alma saati hem mutfağa hem platforma gider', async () => {
+    const rider = Date.now() + 4 * 3600_000;
+    const o = dhOrder({ preOrder: true, delivery: { address: null, expectedDeliveryTime: new Date(rider + 30 * 60_000).toISOString(), riderPickupTime: new Date(rider).toISOString() } });
+    const row = await arrive(o);
+    expect(row.payload.scheduledFor).toBe(rider);
+    await h.ok('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    expect((fake.bodies.accepted?.at(-1) as { acceptanceTime: string }).acceptanceTime).toBe(new Date(rider).toISOString());
+  });
+
+  it('geri çağrı alan adı: aynı kök kabul, ".com.tr" gibi uzantının tamamı, IP komşusu ve kullanıcı bilgili adres değil', async () => {
+    const { trustedCallback } = await import('../server/delivery/yemeksepeti');
+    expect(trustedCallback('https://cb.eu.restaurant-partners.com/x', 'https://mw.eu.restaurant-partners.com')).not.toBeNull();
+    expect(trustedCallback('https://kotu.com.tr/x', 'https://mw.yemeksepeti.com.tr')).toBeNull();
+    expect(trustedCallback('https://api.yemeksepeti.com.tr/x', 'https://mw.yemeksepeti.com.tr')).not.toBeNull();
+    expect(trustedCallback('http://10.0.0.1/x', 'http://127.0.0.1:9')).toBeNull();
+    expect(trustedCallback('https://a:b@mw.eu.restaurant-partners.com/x', 'https://mw.eu.restaurant-partners.com')).toBeNull();
+    expect(trustedCallback('http://mw.eu.restaurant-partners.com/x', 'https://mw.eu.restaurant-partners.com')).toBeNull();
   });
 
   it('Kapalı modda gelen kutusundaki yeni sipariş silinmez (Canlı\'ya dönünce gelir); iptal uygulanır', async () => {

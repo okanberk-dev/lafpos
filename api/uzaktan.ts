@@ -120,6 +120,10 @@ async function snapshot(): Promise<Snapshot | null> {
  * (`POST /api/yemeksepeti/inbox/ack`). Kabul ve ret kasadan middleware'e gider (server/delivery/yemeksepeti.ts).
  */
 const YS_INBOX_KEY = 'lafpos:ys:inbox';
+/** İptal bildirimleri ayrı listede: kasanın beklettiği siparişler (Kapalı) önlerini tıkamasın, önce onlar verilir */
+const YS_STATUS_KEY = 'lafpos:ys:status';
+/** Delivery Hero sipariş belirteci en çok 512 karakter (order.yaml) */
+const YS_TOKEN_MAX = 512;
 /** Gelen kutusu dolunca kırpılmaz (sipariş sessizce düşmesin): Delivery Hero'ya 503 döner, o yeniden dener */
 const YS_INBOX_MAX = 500;
 const YS_INBOX_TTL_S = 2 * 86400;
@@ -152,11 +156,11 @@ export function verifyMiddlewareJwt(secret: string, authorization: string | null
 }
 
 /** Kaydı gelen kutusuna koyar; kutu doluysa koymaz (false): çağıran 503 döner, Delivery Hero yeniden dener */
-async function inboxPush(item: Record<string, unknown>): Promise<boolean> {
-  const size = Number(await redis('LLEN', YS_INBOX_KEY)) || 0;
+async function inboxPush(item: Record<string, unknown>, key = YS_INBOX_KEY): Promise<boolean> {
+  const size = Number(await redis('LLEN', key)) || 0;
   if (size >= YS_INBOX_MAX) return false;
-  await redis('RPUSH', YS_INBOX_KEY, JSON.stringify(item));
-  await redis('EXPIRE', YS_INBOX_KEY, YS_INBOX_TTL_S);
+  await redis('RPUSH', key, JSON.stringify(item));
+  await redis('EXPIRE', key, YS_INBOX_TTL_S);
   return true;
 }
 
@@ -170,26 +174,30 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     const body = await req.text();
     if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
     if (path === 'yemeksepeti/inbox' && req.method === 'GET') {
-      // En eski 50 kayıt, toplam 2 MB'ı aşmadan; bozuk ya da tek başına sınırı aşan kayıt silinir
-      const raw = ((await redis('LRANGE', YS_INBOX_KEY, 0, YS_PULL_MAX - 1)) as string[] | null) ?? [];
+      // Önce iptaller, sonra siparişler; en çok 50 kayıt ve 2 MB. Bozuk ya da tek başına sınırı aşan kayıt silinir
       const items: unknown[] = [];
       let bytes = 0;
-      for (const r of raw) {
-        if (r.length > YS_PULL_MAX_BYTES) {
-          await redis('LREM', YS_INBOX_KEY, 1, r);
-          continue;
-        }
-        if (bytes + r.length > YS_PULL_MAX_BYTES) break;
-        try {
-          items.push(JSON.parse(r));
-          bytes += r.length;
-        } catch {
-          await redis('LREM', YS_INBOX_KEY, 1, r);
+      for (const key of [YS_STATUS_KEY, YS_INBOX_KEY]) {
+        const room = YS_PULL_MAX - items.length;
+        if (room <= 0) break;
+        const raw = ((await redis('LRANGE', key, 0, room - 1)) as string[] | null) ?? [];
+        for (const r of raw) {
+          if (r.length > YS_PULL_MAX_BYTES) {
+            await redis('LREM', key, 1, r);
+            continue;
+          }
+          if (bytes + r.length > YS_PULL_MAX_BYTES) break;
+          try {
+            items.push(JSON.parse(r));
+            bytes += r.length;
+          } catch {
+            await redis('LREM', key, 1, r);
+          }
         }
       }
-      return json({ items, total: Number(await redis('LLEN', YS_INBOX_KEY)) || 0 });
+      const total = (Number(await redis('LLEN', YS_STATUS_KEY)) || 0) + (Number(await redis('LLEN', YS_INBOX_KEY)) || 0);
+      return json({ items, total });
     }
-    const raw = ((await redis('LRANGE', YS_INBOX_KEY, 0, -1)) as string[] | null) ?? [];
     if (path === 'yemeksepeti/inbox/ack' && req.method === 'POST') {
       let ids: string[] = [];
       try {
@@ -199,14 +207,17 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
         return fail(400, 'Gövde okunamadı', 'bad_body');
       }
       let removed = 0;
-      for (const r of raw) {
-        let id: unknown;
-        try {
-          id = (JSON.parse(r) as { id?: unknown }).id;
-        } catch {
-          continue;
+      for (const key of [YS_STATUS_KEY, YS_INBOX_KEY]) {
+        const raw = ((await redis('LRANGE', key, 0, -1)) as string[] | null) ?? [];
+        for (const r of raw) {
+          let id: unknown;
+          try {
+            id = (JSON.parse(r) as { id?: unknown }).id;
+          } catch {
+            continue;
+          }
+          if (typeof id === 'string' && ids.includes(id)) removed += Number(await redis('LREM', key, 1, r)) || 0;
         }
-        if (typeof id === 'string' && ids.includes(id)) removed += Number(await redis('LREM', YS_INBOX_KEY, 1, r)) || 0;
       }
       return json({ ok: true, removed });
     }
@@ -227,7 +238,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     } catch {
       return json({ reason: 'TECHNICAL_PROBLEM', message: 'json-not-readable' }, 400);
     }
-    if (typeof dh.token !== 'string' || !dh.token) return json({ reason: 'TECHNICAL_PROBLEM', message: 'order-validation-error: token' }, 400);
+    if (typeof dh.token !== 'string' || !dh.token || dh.token.length > YS_TOKEN_MAX) return json({ reason: 'TECHNICAL_PROBLEM', message: 'order-validation-error: token' }, 400);
     if (!(await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'order', remoteId, receivedAt: now, order: dh }))) {
       return json({ reason: 'TECHNICAL_PROBLEM', message: 'inbox-full' }, 503);
     }
@@ -238,6 +249,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
   if (status && (req.method === 'PUT' || req.method === 'POST')) {
     const remoteId = decodeURIComponent(status[1]!);
     const remoteOrderId = decodeURIComponent(status[2]!);
+    if (remoteOrderId.length > YS_TOKEN_MAX) return fail(400, 'remoteOrderId', 'bad_body');
     if (wantRemote && remoteId !== wantRemote) return fail(404, 'Unknown remoteId', 'not_found');
     const text = await req.text();
     if (text.length > YS_STATUS_MAX_BYTES) return fail(400, 'payload-limit-exceeded', 'bad_body');
@@ -250,8 +262,8 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     if (!dh || typeof dh.status !== 'string') return fail(400, 'status', 'bad_body');
     // Kasa yalnız iptali kullanır; ötekiler (kurye geldi, alındı, uyarılar) kutuyu doldurmasın
     if (dh.status !== 'ORDER_CANCELLED') return json({ ok: true });
-    const item = { id: randomBytes(9).toString('base64url'), kind: 'status', remoteId, receivedAt: now, remoteOrderId: remoteOrderId.slice(0, 200), status: dh.status, message: typeof dh.message === 'string' ? dh.message.slice(0, 500) : '' };
-    if (!(await inboxPush(item))) return fail(503, 'inbox-full', 'inbox_full');
+    const item = { id: randomBytes(9).toString('base64url'), kind: 'status', remoteId, receivedAt: now, remoteOrderId, status: dh.status, message: typeof dh.message === 'string' ? dh.message.slice(0, 500) : '' };
+    if (!(await inboxPush(item, YS_STATUS_KEY))) return fail(503, 'inbox-full', 'inbox_full');
     return json({ ok: true });
   }
   return fail(404, 'Yok', 'not_found');

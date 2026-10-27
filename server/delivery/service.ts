@@ -166,12 +166,23 @@ function unmatchedProductId(t: Tx): string {
  * ürüne bağlayabilir
  */
 function feeProductId(t: Tx): string {
-  const existing = t.select({ id: schema.products.id }).from(schema.products).where(eq(schema.products.posName, 'PLATFORM ÜCRETİ')).get();
-  if (existing) return existing.id;
-  const cat = t.select({ id: schema.categories.id }).from(schema.categories).orderBy(asc(schema.categories.sort)).get();
-  if (!cat) throw conflict('Menüde kategori yok');
+  // Kalemin istasyonu ürünün ya da kategorisinin istasyonudur: ücret istasyonsuz bir kategoride durur ki bar ve mutfak
+  // ekranına düşmesin. Yoksa pasif bir kategori açılır (menüde görünmez)
+  const stationless =
+    t.select({ id: schema.categories.id }).from(schema.categories).where(isNull(schema.categories.stationId)).orderBy(asc(schema.categories.sort)).get()?.id ??
+    (() => {
+      const id = ulid();
+      t.insert(schema.categories).values({ id, name: 'Platform ücretleri', color: '#616367', sort: 999, customizable: false, active: false, stationId: null }).run();
+      return id;
+    })();
+  const existing = t.select({ id: schema.products.id, categoryId: schema.products.categoryId, stationId: schema.products.stationId }).from(schema.products).where(eq(schema.products.posName, 'PLATFORM ÜCRETİ')).get();
+  if (existing) {
+    const cat = t.select({ stationId: schema.categories.stationId }).from(schema.categories).where(eq(schema.categories.id, existing.categoryId)).get();
+    if (existing.stationId || cat?.stationId) t.update(schema.products).set({ stationId: null, categoryId: stationless }).where(eq(schema.products.id, existing.id)).run();
+    return existing.id;
+  }
   const id = ulid();
-  t.insert(schema.products).values({ id, categoryId: cat.id, stationId: null, name: 'Platform ücreti', description: 'Paket platformunun teslimat ya da ambalaj ücreti', price: 0, kdvRate: 20, hidden: true, posName: 'PLATFORM ÜCRETİ', sort: 999 }).run();
+  t.insert(schema.products).values({ id, categoryId: stationless, stationId: null, name: 'Platform ücreti', description: 'Paket platformunun teslimat ya da ambalaj ücreti', price: 0, kdvRate: 20, hidden: true, posName: 'PLATFORM ÜCRETİ', sort: 999 }).run();
   return id;
 }
 
@@ -231,6 +242,14 @@ export function listPlatformOrders(t: Tx | DB, now = Date.now()): PlatformOrderD
   return rows.map((r) => toDTO(t, r, now));
 }
 
+/** Platformda (tablette) kabul edilmiş siparişin kasaya alınabileceği en uzun süre: sipariş ya da teslim saatinden */
+export const PRE_ACCEPTED_TTL_MS = 3 * 3600_000;
+
+/** Süresi dolmuş kaydın kasadaki açıklaması */
+export function expiredMessage(row: Pick<PlatformRow, 'payload'>): string {
+  return row.payload.preAccepted ? 'Sipariş 3 saatten eski (platformda kabul edilmişti); kasaya alınmaz' : 'Kabul süresi doldu; sipariş platformda iptal oldu';
+}
+
 /** Platformdan gelen siparişi alır; aynı kimlik ikinci kez gelirse (platform yeniden denedi) var olanı döner */
 export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPayload, now = Date.now()): { row: PlatformRow; created: boolean } {
   const existing = t
@@ -242,8 +261,16 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
   if (platformSettings()[payload.platform].mode === 'kapali') throw conflict(`${PLATFORM_LABEL[payload.platform]} kapalı`, 'platform_off');
   const secs = ACCEPT_SECONDS[payload.platform];
   // Platform kabul süresini verdiyse (Yemeksepeti expiryDate) o (geçmişse sipariş gelir gelmez süresi dolmuştur; geç
-  // çekilen sipariş taze süre almaz), yoksa platformun bilinen süresi. Platformda zaten kabul edilmişse süre yok
-  const expiresAt = payload.preAccepted ? null : typeof payload.expiresAt === 'number' ? payload.expiresAt : secs ? now + secs * 1000 : null;
+  // çekilen sipariş taze süre almaz), yoksa platformun bilinen süresi. Platformda zaten kabul edilmişse kabul süresi
+  // yok ama yaşı var: sipariş saatinden (ileri tarihlide teslim saatinden) 3 saat sonra kasaya alınmaz (eski sipariş,
+  // ör. kasa kapalıyken tablette kabul edilip teslim edilmiş, yeniden hazırlanmasın)
+  const expiresAt = payload.preAccepted
+    ? (payload.scheduledFor ?? payload.placedAt) + PRE_ACCEPTED_TTL_MS
+    : typeof payload.expiresAt === 'number'
+      ? payload.expiresAt
+      : secs
+        ? now + secs * 1000
+        : null;
   const row: PlatformRow = {
     id: ulid(now),
     platform: payload.platform,
@@ -294,7 +321,7 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   const row = loadRow(t, id);
   const now = Date.now();
   if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
-  if (row.notifiedStatus !== 'picked' && row.expiresAt != null && row.expiresAt <= now) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
+  if (row.notifiedStatus !== 'picked' && row.expiresAt != null && row.expiresAt <= now) throw conflict(expiredMessage(row), 'expired');
   const p = row.payload;
   const label = PLATFORM_LABEL[p.platform];
   if (p.test) throw conflict(`${label} test siparişi: mutfağa düşmesin diye kabul edilmez, yalnız reddedilir`, 'test_order');

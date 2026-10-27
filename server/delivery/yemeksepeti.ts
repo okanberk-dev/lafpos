@@ -203,10 +203,14 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
   // Ürün düzeyindeki indirimler üst düzey listede de yer alır (belge): büyük olan alınır, iki kez sayılmaz
   const restaurantDiscount = Math.min(subtotal, Math.max(vendorShare(o.discounts), productDiscounts));
   const ourPart = subtotal - restaurantDiscount;
-  // Müşterinin bize düşen ödemesi
+  // Müşterinin bize düşen ödemesi: kendi kuryemizin kapıda alacağı (collectFromCustomer, yalnız teslimatta ve sıfırdan
+  // büyükse), yoksa grandTotal (Yemeksepeti kuryesinin teslimat ücreti düşülür)
   let ours = ourPart;
-  if (!paid && courier !== 'platform' && present(o.price?.collectFromCustomer)) ours = toKurus(o.price!.collectFromCustomer);
+  const collect = toKurus(o.price?.collectFromCustomer);
+  if (!paid && courier === 'restoran' && collect > 0) ours = collect;
   else if (present(o.price?.grandTotal)) ours = Math.max(0, toKurus(o.price!.grandTotal) - platformFees);
+  // Ödenmemiş siparişte kasada alınacak tutar sıfır görünüyorsa (eksik ya da 0,00 alan) tamamı platform payı sayılmaz
+  if (!paid && ours <= 0) ours = ourPart;
   let platformCollects = paid || courier === 'platform';
   let paymentLabel = paid ? `Online${text(o.payment?.type) ? ` ${o.payment!.type}` : ''}` : `Kapıda ${text(o.payment?.type) ?? 'ödeme'}`;
   // Yemeksepeti kuryesi kapıda alıyor ve kasaya nakit bırakıyor: o tutar kasada alınır, kalanı platformun payı
@@ -223,8 +227,11 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
   const name = [text(o.customer?.firstName), text(o.customer?.lastName)].filter(Boolean).join(' ') || null;
   const codeBase = text(o.shortCode) ?? text(o.code) ?? o.token.slice(-4);
   const noteParts = [o.test ? 'TEST SİPARİŞİ' : null, preAccepted ? 'Yemeksepeti tabletinde kabul edildi' : null, text(o.comments?.customerComment), o.pickup?.pickupCode ? `Teslim kodu ${o.pickup.pickupCode}` : null].filter(Boolean);
-  // İleri tarihli siparişin saati: teslim, gel-al ya da kuryenin alma saati
-  const scheduled = o.preOrder ? (toMs(o.delivery?.expectedDeliveryTime) ?? toMs(o.pickup?.pickupTime) ?? toMs(o.delivery?.riderPickupTime)) : null;
+  // İleri tarihli siparişin saati, kabulde platforma bildirilen saatle aynı kuraldan: gel-alda müşterinin alma saati,
+  // Yemeksepeti kuryesinde kuryenin alma saati, kendi kuryemizde teslim saati (yoksa ötekiler)
+  const times = { pickupTime: toMs(o.pickup?.pickupTime), expectedDeliveryTime: toMs(o.delivery?.expectedDeliveryTime), riderPickupTime: toMs(o.delivery?.riderPickupTime) };
+  const ownTime = courier === 'gelal' ? times.pickupTime : courier === 'platform' ? times.riderPickupTime : times.expectedDeliveryTime;
+  const scheduled = o.preOrder ? (ownTime ?? times.expectedDeliveryTime ?? times.pickupTime ?? times.riderPickupTime) : null;
   return {
     platform: 'yemeksepeti',
     simulated: false,
@@ -251,7 +258,7 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
       callbackUrls,
       expeditionType: o.expeditionType ?? '',
       test: !!o.test,
-      times: { pickupTime: toMs(o.pickup?.pickupTime), expectedDeliveryTime: toMs(o.delivery?.expectedDeliveryTime), riderPickupTime: toMs(o.delivery?.riderPickupTime) },
+      times,
     },
   };
 }
@@ -386,11 +393,18 @@ export function trustedCallback(url: string | undefined, mwUrl: string): string 
   } catch {
     return null;
   }
+  if (u.username || u.password) return null;
   if (u.protocol !== mw.protocol || (u.protocol !== 'https:' && u.hostname !== mw.hostname)) return null;
   if (u.hostname === mw.hostname) return u.toString();
-  const base = mw.hostname.split('.').slice(-2).join('.');
-  return base.includes('.') && u.hostname.endsWith(`.${base}`) ? u.toString() : null;
+  // IP adresinde yalnız tam eşleşme; alan adında kayıtlı kök (".com.tr" gibi iki etiketli uzantıda son üç etiket)
+  if (/^[\d.]+$/.test(mw.hostname) || mw.hostname.includes(':')) return null;
+  const labels = mw.hostname.split('.');
+  const twoLevel = labels.length >= 3 && SECOND_LEVEL.has(labels.at(-2)!);
+  const base = labels.slice(twoLevel ? -3 : -2).join('.');
+  return labels.length >= (twoLevel ? 3 : 2) && u.hostname.endsWith(`.${base}`) ? u.toString() : null;
 }
+/** "com.tr", "co.uk" gibi iki etiketli uzantıların ikinci etiketi: kök bir etiket daha içeri alınır */
+const SECOND_LEVEL = new Set(['com', 'co', 'net', 'org', 'gov', 'edu', 'gen', 'biz', 'info', 'web', 'av', 'bel', 'pol', 'k12', 'tv', 'name', 'tel', 'ac', 'or', 'ne', 'go']);
 
 const untrusted = (what: string) => new YemeksepetiHttpError(400, `${what} adresi middleware alan adında değil; güvenilmedi`);
 

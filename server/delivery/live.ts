@@ -469,8 +469,9 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
   // Tek paketin kaydı düşerse ötekiler durmaz. Kapalı'da yeni sipariş kayda girmez (siparişi iten platformda
   // aktarıcının gelen kutusunda kalır), bozuk paket de bildirilmez
   const bad = intake ? [...(res.invalid ?? [])] : [];
-  // Gelen kutusunda kalacaklar: kayda alınmayan (Kapalı), kaydı düşen (sonraki çekimde yeniden denenir), iptali ertelenen
-  const keep = new Set<string>();
+  // Gelen kutusunda kalacaklar: kayda alınmayan (Kapalı), kaydı düşen (sonraki çekimde yeniden denenir), iptali ertelenen.
+  // Kapalı'da bozuk kayıt da kalır: Canlı'ya dönünce bildirilir (alarmsız silinmesin)
+  const keep = new Set<string>(intake ? [] : (res.invalid ?? []).map((i) => i.externalId));
   let created = 0;
   for (const payload of res.orders) {
     if (!intake) {
