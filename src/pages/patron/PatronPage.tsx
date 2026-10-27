@@ -12,6 +12,7 @@ import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
+import { staleCostsText } from '@/lib/lafmaliyet';
 import { hourBars } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
@@ -38,6 +39,8 @@ export interface PatronData {
   voided: number;
   online: { orders: number; amount: number };
   top: { key: string; name: string; size: string; qty: number; revenue: number; margin: number | null }[];
+  /** Maliyetlerin son çekimi; yalnız maliyet yetkisine gelir (eskiyse uyarı) */
+  costsAt?: number | null;
   openChecks: { id: string; no: number; place: string; total: number; paid: number; openedAt: number; waiter: string | null; billPrinted: boolean }[];
   alerts: { id: number; at: number; severity: 'uyari' | 'alarm'; action: string; message: string; amount: number | null; orderId: string | null }[];
   anomalies: { level: 'uyari' | 'alarm'; title: string; detail: string }[];
@@ -231,6 +234,7 @@ export default function PatronPage() {
               ))}
             </ol>
           )}
+          {can('rapor.maliyet') && staleCostsText(d.costsAt, d.now) && <p className="px-4 pb-3 text-xs font-medium text-warn-700 dark:text-warn-300">{staleCostsText(d.costsAt, d.now)}</p>}
         </Card>
         <Card title={`Açık hesaplar (${d.openChecks.length})`}>
           {d.openChecks.length === 0 ? (

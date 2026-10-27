@@ -14,6 +14,7 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
+import { staleCostsText } from '@/lib/lafmaliyet';
 import { byBusinessHour, fmtShortDate, hourTitle, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 import { toast } from '@/lib/toast';
 
@@ -135,7 +136,7 @@ export default function ReportsPage() {
       )}
       {current.key === 'happy' && <ItemsReport range={range} kind="happy" />}
       {current.key === 'personel' && <StaffReport range={range} />}
-      {current.key === 'aktarim' && <ExportReport range={range} onDownload={() => exportCsv('', `/api/sync/lafmaliyet/satislar.csv?from=${range.from}&to=${range.to}`)} />}
+      {current.key === 'aktarim' && <ExportReport range={range} linked={boot.integrations.lafmaliyetPush} onDownload={() => exportCsv('', `/api/sync/lafmaliyet/satislar.csv?from=${range.from}&to=${range.to}`)} />}
     </AdminShell>
   );
 }
@@ -294,6 +295,8 @@ interface ProductsData {
   service: number;
   products: { key: string; name: string; size: string; category: string; qty: number; revenue: number; share: number; avgPrice: number; complimentary: number; voided: number; cost: number | null; margin: number | null }[];
   categories: { name: string; qty: number; revenue: number; share: number }[];
+  /** Maliyetlerin son çekimi; yalnız maliyet yetkisine gelir */
+  costsAt?: number | null;
 }
 
 function ProductsReport({ range, onExport }: { range: Range; onExport: () => void }) {
@@ -369,7 +372,12 @@ function ProductsReport({ range, onExport }: { range: Range; onExport: () => voi
           </table>
         </div>
       )}
-      {withCost && <p className="px-4 pb-3 text-xs text-muted">Brüt kâr: KDV hariç ciro − lafmaliyet reçete maliyeti. Maliyetler Yönetim › Entegrasyon'dan çekilir</p>}
+      {withCost && (
+        <p className="px-4 pb-3 text-xs text-muted">
+          Brüt kâr: KDV hariç ciro − lafmaliyet reçete maliyeti. Maliyetler gün sonunda günde bir kendiliğinden, Yönetim › Entegrasyon'dan elle çekilir
+          {staleCostsText(data.data?.costsAt) && <span className="block font-medium text-warn-700 dark:text-warn-300">{staleCostsText(data.data?.costsAt)}</span>}
+        </p>
+      )}
     </Card>
   );
 }
@@ -824,17 +832,26 @@ function StaffReport({ range }: { range: Range }) {
   );
 }
 
-function ExportReport({ range, onDownload }: { range: Range; onDownload: () => void }) {
+/**
+ * Elle yedek: lafmaliyet Satışlar ekranına yüklenen liste. Bağlantı kuruluyken günler gün sonunda gider; liste
+ * yalnız bağlantı yokken ya da lafmaliyet'teki geçiş gününden önceki aylar için (yoksa aynı satış iki kez sayılır)
+ */
+function ExportReport({ range, linked, onDownload }: { range: Range; linked: boolean; onDownload: () => void }) {
   return (
     <Card flush title="lafmaliyet aktarımı">
       <div className="space-y-3 p-5 text-sm">
         <p>
           Seçili dönemin ürün satış listesi lafmaliyet'in <b>Satışlar</b> ekranının okuduğu biçimde iner (Ürün; Adet; Tutar, KDV dahil). İkram, iptal ve sitede ödenmiş online siparişler listeye girmez; ekstra shot, şurup ve alternatif süt ayrı satır olarak çıkar.
         </p>
+        {linked && (
+          <p className="rounded-lg border border-warn-200 bg-warn-100 px-3 py-2 text-warn-700 dark:border-transparent dark:bg-warn-800 dark:text-warn-300">
+            lafmaliyet bağlantısı kurulu: günler gün sonunda kendiliğinden gidiyor. Bu liste yalnız bağlantı yokken ya da lafmaliyet'teki geçiş gününden önceki aylar için; geçiş gününden sonraki günleri Satışlar'a yüklemeyin, aynı satış iki kez sayılır
+          </p>
+        )}
         <Button variant="primary" icon={<FileSpreadsheet className="size-4" />} onClick={onDownload}>
           Satış listesini indir ({rangeLabel(range)})
         </Button>
-        <p className="text-xs text-muted">Günlük Z ve satış verisi lafmaliyet bağlantısı kurulunca gün sonunda kendiliğinden gider (Kasa › Geçmiş günler › Gönder)</p>
+        {!linked && <p className="text-xs text-muted">lafmaliyet bağlantısı kurulunca günlük Z ve satış verisi gün sonunda kendiliğinden gider (açılış adımları docs/03-ENTEGRASYON.md'de)</p>}
       </div>
     </Card>
   );

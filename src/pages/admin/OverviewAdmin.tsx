@@ -16,7 +16,7 @@ import type { PatronData } from '@/pages/patron/PatronPage';
 interface SyncStatus {
   menu: { linked: boolean; auto: boolean; state: { lastSuccessAt?: number; lastCheckAt?: number; lastError?: string | null; lastErrorAt?: number } | null };
   online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null; soldOutPush: { pending: number; rejected: number; lastError: string | null } };
-  lafmaliyet: { configured: boolean; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null };
+  lafmaliyet: { configured: boolean; training: boolean; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null };
   okc: { provider: 'kapali' | 'simulator' | 'tokenx'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
 }
 
@@ -129,9 +129,11 @@ export default function OverviewAdmin() {
           key: 'lafmaliyet',
           icon: <PlugZap className="size-4" />,
           label: 'lafmaliyet',
-          tone: !s.lafmaliyet.configured ? 'neutral' : s.lafmaliyet.pending ? 'danger' : 'success',
-          state: !s.lafmaliyet.configured ? 'Anahtar yok' : s.lafmaliyet.pending ? `${s.lafmaliyet.pending} bekliyor` : 'Güncel',
-          detail: s.lafmaliyet.lastError ?? `Son gönderim ${ago(s.lafmaliyet.push?.lastRunAt)}`,
+          tone: !s.lafmaliyet.configured ? 'neutral' : s.lafmaliyet.pending ? 'danger' : s.lafmaliyet.training ? 'info' : 'success',
+          state: !s.lafmaliyet.configured ? 'Kurulmadı' : s.lafmaliyet.pending ? `${s.lafmaliyet.pending} bekliyor` : s.lafmaliyet.training ? 'Kurulum modu' : 'Güncel',
+          detail: !s.lafmaliyet.configured
+            ? 'Gün sonu gitmiyor; elle aktarım'
+            : (s.lafmaliyet.lastError ?? (s.lafmaliyet.training ? "Kurulum modunda gün lafmaliyet'e gitmez" : `Son gönderim ${ago(s.lafmaliyet.push?.lastRunAt)}`)),
         },
         {
           key: 'okc',

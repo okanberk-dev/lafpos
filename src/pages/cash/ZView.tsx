@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/misc';
 import { errorMessage, getToken, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { type DayAnswer, pushToast } from '@/lib/lafmaliyet';
 import { printNow, ZReceipt } from '@/lib/print';
 import { toast } from '@/lib/toast';
 
@@ -61,8 +62,8 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
   const send = async () => {
     setSending(true);
     try {
-      await post(`/sync/lafmaliyet/gun/${day.id}/push`);
-      toast.ok("Gün lafmaliyet'e gönderildi");
+      const r = await post<{ answer?: DayAnswer | null }>(`/sync/lafmaliyet/gun/${day.id}/push`);
+      toast.ok(pushToast(r?.answer));
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {
