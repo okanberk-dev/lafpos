@@ -99,6 +99,8 @@ function matchLines(t: Tx | DB, payload: PlatformOrderPayload) {
   const sizeL = norm(getSettings().sizeLabels.L);
   return payload.lines.map((l) => {
     const viaMap = l.externalId ? byId.get(mapped.get(l.externalId) ?? '') : undefined;
+    // Platformun ücreti ada göre ürüne düşmez: eşlenmişse o ürün, değilse kabulde "Platform ücreti" hizmet satırı
+    if (l.kind === 'fee') return { line: l, product: viaMap ?? null, size: 'TEK' as const };
     const p = viaMap ?? byName.get(norm(l.name)) ?? null;
     const large = l.modifiers.some((m) => norm(m) === sizeL || norm(m) === 'büyük');
     return { line: l, product: p, size: p?.priceL != null ? (large ? ('L' as const) : ('M' as const)) : ('TEK' as const) };
@@ -158,6 +160,21 @@ function unmatchedProductId(t: Tx): string {
   return id;
 }
 
+/**
+ * Platformun ücreti (teslimat, ambalaj) için gizli ürün: KDV %20 (taşıma hizmeti), istasyonsuz (mutfağa gitmez); adı
+ * notta. "Hizmet" işaretlenmez: oda sayacı gizli hizmet ürününü oda ücreti sanmasın. Patron Ürün eşleme'den başka bir
+ * ürüne bağlayabilir
+ */
+function feeProductId(t: Tx): string {
+  const existing = t.select({ id: schema.products.id }).from(schema.products).where(eq(schema.products.posName, 'PLATFORM ÜCRETİ')).get();
+  if (existing) return existing.id;
+  const cat = t.select({ id: schema.categories.id }).from(schema.categories).orderBy(asc(schema.categories.sort)).get();
+  if (!cat) throw conflict('Menüde kategori yok');
+  const id = ulid();
+  t.insert(schema.products).values({ id, categoryId: cat.id, stationId: null, name: 'Platform ücreti', description: 'Paket platformunun teslimat ya da ambalaj ücreti', price: 0, kdvRate: 20, hidden: true, posName: 'PLATFORM ÜCRETİ', sort: 999 }).run();
+  return id;
+}
+
 /** Platformun online ödeme türü (kanal = platform, Z'de online): yoksa açılır */
 function platformMethodId(t: Tx, platform: PlatformId): string {
   const existing = t.select({ id: schema.paymentMethods.id }).from(schema.paymentMethods).where(and(eq(schema.paymentMethods.kind, 'online'), eq(schema.paymentMethods.channel, platform))).get();
@@ -193,7 +210,7 @@ function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
     orderNo: order?.no ?? null,
     decidedBy: by?.name ?? null,
     reason: row.reason,
-    unmatched: pending ? matched.filter((m) => !m.product).map((m) => m.line.name) : [],
+    unmatched: pending ? matched.filter((m) => !m.product && m.line.kind !== 'fee').map((m) => m.line.name) : [],
     soldOut: pending ? matched.filter((m) => m.product && !m.product.active).map((m) => m.line.name) : [],
     payload: row.payload,
     lastError: row.lastError,
@@ -225,8 +242,8 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
   if (platformSettings()[payload.platform].mode === 'kapali') throw conflict(`${PLATFORM_LABEL[payload.platform]} kapalı`, 'platform_off');
   const secs = ACCEPT_SECONDS[payload.platform];
   // Platform kabul süresini verdiyse (Yemeksepeti expiryDate) o (geçmişse sipariş gelir gelmez süresi dolmuştur; geç
-  // çekilen sipariş taze süre almaz), yoksa platformun bilinen süresi
-  const expiresAt = typeof payload.expiresAt === 'number' ? payload.expiresAt : secs ? now + secs * 1000 : null;
+  // çekilen sipariş taze süre almaz), yoksa platformun bilinen süresi. Platformda zaten kabul edilmişse süre yok
+  const expiresAt = payload.preAccepted ? null : typeof payload.expiresAt === 'number' ? payload.expiresAt : secs ? now + secs * 1000 : null;
   const row: PlatformRow = {
     id: ulid(now),
     platform: payload.platform,
@@ -280,6 +297,7 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   if (row.notifiedStatus !== 'picked' && row.expiresAt != null && row.expiresAt <= now) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
   const p = row.payload;
   const label = PLATFORM_LABEL[p.platform];
+  if (p.test) throw conflict(`${label} test siparişi: mutfağa düşmesin diye kabul edilmez, yalnız reddedilir`, 'test_order');
   const prep = prepMinutes ?? platformSettings()[p.platform].prepMinutes;
   const actor = platformActor(user);
   const order = orders.createOrder(t, actor, fx, {
@@ -293,14 +311,15 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   });
   t.update(schema.orders).set({ platform: p.platform, platformCode: p.code }).where(eq(schema.orders.id, order.id)).run();
   const matched = matchLines(t, p);
-  const unknown = matched.some((m) => !m.product) ? unmatchedProductId(t) : null;
+  const unknown = matched.some((m) => !m.product && m.line.kind !== 'fee') ? unmatchedProductId(t) : null;
+  const fee = matched.some((m) => !m.product && m.line.kind === 'fee') ? feeProductId(t) : null;
   orders.addItems(
     t,
     actor,
     fx,
     order.id,
     matched.map((m) => ({
-      productId: m.product?.id ?? unknown!,
+      productId: m.product?.id ?? (m.line.kind === 'fee' ? fee! : unknown!),
       size: m.product ? m.size : 'TEK',
       qty: m.line.qty,
       priceOverride: m.line.unitPrice,

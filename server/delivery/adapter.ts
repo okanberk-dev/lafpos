@@ -15,10 +15,11 @@ export interface PollResult {
   invalid?: { externalId: string; error: string }[];
   /**
    * Kayıtlar yerelde işlendikten sonra çağrılır (siparişi iten platformlarda aktarıcının gelen kutusu burada silinir):
-   * kasa düşerse kayıt silinmemiş olur, sonraki çekimde yeniden gelir ve tekilleştirilir. `skipped`: kayda alınmayan
-   * siparişler (platform Kapalı'yken): gelen kutusunda kalır
+   * kasa düşerse kayıt silinmemiş olur, sonraki çekimde yeniden gelir ve tekilleştirilir. `keep`: gelen kutusunda
+   * kalacak sipariş kimlikleri (externalId): kayda alınmayanlar (platform Kapalı'yken), kaydı düşenler, iptali o an
+   * uygulanamayanlar (karar sürüyordu)
    */
-  commit?: (skipped: ReadonlySet<string>) => Promise<void>;
+  commit?: (keep: ReadonlySet<string>) => Promise<void>;
 }
 
 export interface PlatformAdapter {
@@ -33,8 +34,11 @@ export interface PlatformAdapter {
   poll(sinceMs: number, now: number): Promise<PollResult>;
   /** Kabul, hazırlık süresiyle; platform reddederse fırlatır (yerelde kabul edilmez) */
   accept(order: PlatformOrderPayload, prepMinutes: number): Promise<void>;
-  /** Ret (kasadaki neden metniyle; bağdaştırıcı platformun koduna çevirir) */
-  reject(order: PlatformOrderPayload, reason: string): Promise<void>;
+  /**
+   * Ret (kasadaki neden metniyle; bağdaştırıcı platformun koduna çevirir). `afterAccept`: kabul edilmiş sipariş kasada
+   * iptal edildi; platform bunu kabul etmiyorsa bağdaştırıcı kalıcı hata (PlatformHttpError 4xx) fırlatır
+   */
+  reject(order: PlatformOrderPayload, reason: string, opts?: { afterAccept?: boolean }): Promise<void>;
   /** Teslim aşaması; platformda karşılığı yoksa (platform kuryesi kendi yazar) false döner, istek gitmez */
   notify(order: PlatformOrderPayload, status: PlatformNotify, courier: PlatformCourier): Promise<boolean>;
 }

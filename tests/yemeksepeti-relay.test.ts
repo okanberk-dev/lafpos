@@ -38,6 +38,7 @@ beforeAll(async () => {
       lists.set(k, l);
       result = l.length;
     }
+    if (cmd === 'LLEN') result = (lists.get(k) ?? []).length;
     if (cmd === 'LTRIM') {
       const l = lists.get(k) ?? [];
       const start = Number(rest[0]);
@@ -96,7 +97,27 @@ describe('Yemeksepeti aktarıcısı', () => {
     expect(await ok.json()).toEqual({ remoteResponse: { remoteOrderId: 'tok-1' } });
     const st = await PUT(req('yemeksepeti/remoteId/POS_1/remoteOrder/tok-1/posOrderStatus', { method: 'PUT', body: JSON.stringify({ status: 'ORDER_CANCELLED', message: 'Customer cancelled' }), headers: auth }));
     expect(st.status).toBe(200);
+    // Kasanın kullanmadığı durumlar (kurye geldi gibi) kutuya girmez
+    const other = await PUT(req('yemeksepeti/remoteId/POS_1/remoteOrder/tok-1/posOrderStatus', { method: 'PUT', body: JSON.stringify({ status: 'COURIER_ARRIVED_AT_VENDOR' }), headers: auth }));
+    expect(other.status).toBe(200);
     expect(lists.get('lafpos:ys:inbox')).toHaveLength(2);
+    // Boş gövdeli (null) JWT başlığı ya da yükü: 401, çökme yok
+    const nullJwt = `${Buffer.from('null').toString('base64url')}.${Buffer.from('null').toString('base64url')}.x`;
+    expect((await POST(req('yemeksepeti/order/POS_1', { method: 'POST', body: JSON.stringify(order), headers: { authorization: `Bearer ${nullJwt}` } }))).status).toBe(401);
+  });
+
+  it('gelen kutusu doluysa kırpılmaz: Delivery Hero 503 alır ve yeniden dener; aşırı büyük sipariş 400', async () => {
+    const { POST } = await api();
+    const auth = { authorization: `Bearer ${jwt(PLUGIN_SECRET)}`, 'content-type': 'application/json' };
+    const saved = lists.get('lafpos:ys:inbox') ?? [];
+    lists.set('lafpos:ys:inbox', [...saved, ...Array.from({ length: 500 - saved.length }, (_, i) => JSON.stringify({ id: `dolu-${i}`, kind: 'status' }))]);
+    const full = await POST(req('yemeksepeti/order/POS_1', { method: 'POST', body: JSON.stringify({ ...order, token: 'tok-dolu' }), headers: auth }));
+    expect(full.status).toBe(503);
+    expect(lists.get('lafpos:ys:inbox')).toHaveLength(500);
+    expect(lists.get('lafpos:ys:inbox')![0]).toBe(saved[0]);
+    lists.set('lafpos:ys:inbox', saved);
+    const huge = await POST(req('yemeksepeti/order/POS_1', { method: 'POST', body: JSON.stringify({ ...order, token: 'tok-buyuk', comments: { customerComment: 'x'.repeat(300_000) } }), headers: auth }));
+    expect(huge.status).toBe(400);
   });
 
   it('kasa gelen kutusunu imzalı çeker ve işlediklerini siler; imzasız istek 401', async () => {

@@ -211,18 +211,20 @@ describe('canlı bağlantı', () => {
     await h.ok('kasa', 'POST', `/platforms/orders/${(await byExt(good.token)).id}/reject`, { reason: 'Çok yoğunuz' });
   });
 
-  it('kasada iptal edilen kabul edilmiş sipariş Yemeksepeti\'ne order_rejected gider; platform reddederse yeniden denenmez, alarm', async () => {
+  it('kasada iptal edilen kabul edilmiş sipariş Yemeksepeti\'ne gönderilmez (kabulden sonraki neden kodları kasanın iptalini karşılamaz): alarm, uygulamadan iptal', async () => {
     const o = dhOrder();
     fake.inbox.push(inboxOrder(o));
     await live.pollPlatform('yemeksepeti');
     const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${(await byExt(o.token)).id}/accept`, {});
     await h.ok('patron', 'POST', `/orders/${orderId}/cancel`, { reason: 'Müşteri vazgeçti' });
-    fake.statusFor.rejected = [409];
     await live.reconcileNotifications();
     await live.reconcileNotifications();
-    expect(fake.calls.filter((c) => c === `POST /cb/rejected/${o.token}`)).toHaveLength(1);
-    const audit = await h.ok<{ action: string; severity: string; orderId: string | null }[]>('patron', 'GET', '/admin/audit?limit=50');
-    expect(audit.find((a) => a.action === 'platform.cancel_unsynced' && a.orderId === orderId)?.severity).toBe('alarm');
+    expect(fake.calls.filter((c) => c === `POST /cb/rejected/${o.token}`)).toHaveLength(0);
+    const audit = await h.ok<{ action: string; severity: string; orderId: string | null; message: string }[]>('patron', 'GET', '/admin/audit?limit=50');
+    const alarm = audit.find((a) => a.action === 'platform.cancel_unsynced' && a.orderId === orderId);
+    expect(alarm?.severity).toBe('alarm');
+    expect(alarm?.message).toMatch(/Yemeksepeti uygulamasından iptal edin/);
+    expect((await byExt(o.token)).status).toBe('iptal');
   });
 
   it('test siparişi TEST_ORDER koduyla reddedilir', async () => {
@@ -241,5 +243,110 @@ describe('canlı bağlantı', () => {
     const { yemeksepetiConfigured } = await import('../server/delivery/yemeksepeti');
     expect(yemeksepetiConfigured({ mwUrl: 'x', username: 'u', password: 'p', remoteId: 'r', cloudUrl: '', cloudSecret: '' })).toBe(false);
     await h.ok('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'kapali' });
+  });
+});
+
+describe('Yemeksepeti gözden geçirme bulguları', () => {
+  beforeAll(async () => {
+    await h.ok('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'canli' });
+  });
+  const audit = () => h.ok<{ action: string; severity: string; orderId: string | null; message: string }[]>('patron', 'GET', '/admin/audit?limit=100');
+  async function arrive(o: DhOrder) {
+    fake.inbox.push(inboxOrder(o));
+    await live.pollPlatform('yemeksepeti');
+    return byExt(o.token);
+  }
+
+  it('dolaylı akış (geri çağrı adresi yok): sipariş tablette kabul edilmiş gelir; Kabul platforma gitmez, süre işlemez, ret kasadan yapılmaz', async () => {
+    const o = dhOrder({ callbackUrls: {}, delivery: { address: { street: 'Lale Sk.', number: '9' }, expectedDeliveryTime: null, riderPickupTime: null }, payment: { status: 'pending', type: 'cash' }, price: { deliveryFees: [], grandTotal: '190.00' } });
+    const row = await arrive(o);
+    expect(row.payload.preAccepted).toBe(true);
+    expect(row.expiresAt).toBeNull();
+    const rejected = await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${row.id}/reject`, { reason: 'Çok yoğunuz' });
+    expect([rejected.status, rejected.json.code]).toEqual([409, 'pre_accepted']);
+    const before = fake.calls.length;
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    expect(fake.calls.slice(before).filter((c) => !c.includes('/v2/login'))).toEqual([]);
+    await h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'yolda' });
+    await live.reconcileNotifications();
+    // Alındı adresi de yok: gönderilmez (genel durum ucuna düşülmez)
+    expect(fake.calls.some((c) => c.includes(o.token))).toBe(false);
+  });
+
+  it('ileri tarihli gel-al: saat adisyona geçer, kabul saati müşterinin alma saatidir', async () => {
+    const pickupTime = new Date(Date.now() + 5 * 3600_000).toISOString();
+    const o = dhOrder({ expeditionType: 'pickup', preOrder: true, pickup: { pickupTime, pickupCode: 'K7' }, delivery: null, price: { grandTotal: '190.00' } });
+    const row = await arrive(o);
+    expect(row.payload.scheduledFor).toBe(Date.parse(pickupTime));
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, { prepMinutes: 15 });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).scheduledFor).toBe(new Date(Date.parse(pickupTime)).toISOString());
+    expect((fake.bodies.accepted?.at(-1) as { acceptanceTime: string }).acceptanceTime).toBe(new Date(Date.parse(pickupTime)).toISOString());
+  });
+
+  it('ücretler adlarıyla ayrı satır (KDV %20, mutfağa gitmez) ve eşlenebilir; gel-alda kapıda alınacak tutar collectFromCustomer', async () => {
+    const o = dhOrder({
+      expeditionType: 'pickup',
+      delivery: null,
+      payment: { status: 'pending', type: 'cash' },
+      price: { deliveryFees: [{ name: 'packaging', value: '5.00' }], grandTotal: '195.00', collectFromCustomer: '195.00' },
+    });
+    const row = await arrive(o);
+    expect(row.payload.lines.at(-1)).toMatchObject({ name: 'Ambalaj ücreti', unitPrice: 500, kind: 'fee' });
+    expect(row.payload).toMatchObject({ platformCollects: false, subtotal: 19500, customerTotal: 19500, platformDiscount: 0 });
+    expect(row.unmatched).toEqual([]);
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    const ord = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
+    expect(ord.total).toBe(19500);
+    const fee = ord.items.find((i) => i.unitPrice === 500)!;
+    expect(fee).toMatchObject({ name: 'Platform ücreti', kdvRate: 20 });
+    const products = (await h.ok<{ products: { externalId: string; name: string }[] }>('patron', 'GET', '/platforms/products')).products;
+    expect(products.some((x) => x.externalId === 'ys-ucret:ambalaj ücreti')).toBe(true);
+  });
+
+  it('Yemeksepeti kuryesi kapıda nakit alıp kasaya payRestaurant bırakıyorsa tahsilat kasada; platform kendiliğinden kapatmaz', async () => {
+    const o = dhOrder({ payment: { status: 'pending', type: 'cash' }, price: { deliveryFees: [{ name: 'delivery', value: 25 }], grandTotal: '215.00', payRestaurant: '190.00' } });
+    const row = await arrive(o);
+    expect(row.payload).toMatchObject({ courier: 'platform', platformCollects: false, customerTotal: 19000, platformDiscount: 0 });
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    await h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'yolda' });
+    const ord = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
+    expect([ord.status, ord.paid]).toEqual(['acik', 0]);
+  });
+
+  it('middleware alan adında olmayan geri çağrı adresine jeton gitmez', async () => {
+    const o = dhOrder();
+    o.callbackUrls = { ...o.callbackUrls, orderAcceptedUrl: `https://kotu.example/cb/${o.token}` };
+    const row = await arrive(o);
+    const r = await h.call<{ code: string; error: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    expect(r.status).toBe(502);
+    expect(r.json.error).toMatch(/güvenilmedi/);
+  });
+
+  it('başka restoranın kaydı sessizce silinmez: bir kez alarm; test siparişi kabul edilmez; süresi geçmiş sipariş taze süre almaz', async () => {
+    const other = dhOrder();
+    fake.inbox.push({ ...inboxOrder(other), remoteId: 'BASKA_RESTORAN' });
+    await live.pollPlatform('yemeksepeti');
+    expect((await audit()).filter((a) => a.action === 'platform.package_invalid' && a.message.includes('BASKA_RESTORAN'))).toHaveLength(1);
+    const t = await arrive(dhOrder({ test: true }));
+    const r = await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${t.id}/accept`, {});
+    expect([r.status, r.json.code]).toEqual([409, 'test_order']);
+    const late = await arrive(dhOrder({ expiryDate: new Date(Date.now() - 60_000).toISOString() }));
+    expect(late.status).toBe('suresi_doldu');
+  });
+
+  it('Kapalı modda gelen kutusundaki yeni sipariş silinmez (Canlı\'ya dönünce gelir); iptal uygulanır', async () => {
+    const accepted = await arrive(dhOrder());
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${accepted.id}/accept`, {});
+    await h.ok('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'kapali' });
+    const waiting = dhOrder();
+    fake.inbox.push(inboxOrder(waiting));
+    fake.inbox.push({ id: 'st-kapali', kind: 'status', remoteId: 'POS_1', receivedAt: Date.now(), remoteOrderId: accepted.payload.externalId, status: 'ORDER_CANCELLED' });
+    await live.pollPlatform('yemeksepeti');
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).status).toBe('iptal');
+    expect(fake.inbox.map((i) => i.id)).toEqual([`in-${waiting.token}`]);
+    await h.ok('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'canli' });
+    await live.pollPlatform('yemeksepeti');
+    expect((await byExt(waiting.token)).status).toBe('bekliyor');
+    expect(fake.inbox).toHaveLength(0);
   });
 });

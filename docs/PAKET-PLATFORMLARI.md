@@ -79,18 +79,33 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     sipariş `POST https://lafpos.vercel.app/api/yemeksepeti/order/{remoteId}`, durum bildirimi
     `PUT https://lafpos.vercel.app/api/yemeksepeti/remoteId/{remoteId}/remoteOrder/{remoteOrderId}/posOrderStatus`
     (iptal `ORDER_CANCELLED` gelen kutusundan kasaya gelir, adisyonu iptal eder). Kasa gelen kutusunu kafe anahtarıyla
-    (`LAFPOS_CLOUD_SECRET`) imzalı olarak 20 saniyede bir çeker; kayıtlar kasada yazıldıktan sonra silinir (kasa düşerse
-    yeniden gelir, tekilleştirilir). Gelen kutusu en çok 200 kayıt ve 2 gün tutar.
-    Kabul ve ret kasadan middleware'e gider (`POST /v2/login` jetonuyla, 401'de bir kez yeniden giriş; siparişin
-    `callbackUrls` adresleri varsa onlara): kabulde `order_accepted` + `acceptanceTime` (hazırlık süresi, kendi
-    kuryemizde +20 dk yol) + `remoteOrderId`, retde `order_rejected` + neden kodu (`ITEM_UNAVAILABLE`, `TOO_BUSY`,
-    `CLOSED`, `OUTSIDE_DELIVERY_AREA`; test siparişinde `TEST_ORDER`). Kabul süresi platformun `expiryDate`'i.
+    (`LAFPOS_CLOUD_SECRET`) imzalı olarak 20 saniyede bir çeker (en çok 50 kayıt ya da 2 MB); kayıtlar kasada
+    yazıldıktan sonra silinir (kasa düşerse yeniden gelir, tekilleştirilir). Kayda alınmayan (Kapalı), kaydı düşen ve
+    iptali ertelenen kayıt kutuda kalır. Kutu en çok 500 kayıt ve 2 gün tutar; doluysa kırpılmaz, Delivery Hero 503
+    alır ve yeniden dener. Yalnız `ORDER_CANCELLED` durumu saklanır (ötekiler 200 ile geçilir). Sipariş gövdesi en
+    çok 256 KB. Başka restoranın kimliğiyle gelen kayıt atlanır ama bir kez alarm düşer.
+    Kabul ve ret kasadan middleware'e gider (`POST /v2/login` jetonuyla, 401'de bir kez yeniden giriş), yalnız
+    siparişin `callbackUrls` adreslerine ve yalnız adres middleware'in alan adındaysa (jeton başka sunucuya gitmez).
+    Kabulde `order_accepted` + `remoteOrderId` + `acceptanceTime`: platformun saatine uyulur (gel-alda alma saati,
+    kendi kuryemizde teslim saati, Yemeksepeti kuryesinde kuryenin alma saati), o saat yoksa ya da hazırlıktan
+    erkense şimdi + hazırlık (kendi kuryemizde +20 dk). Retde `order_rejected` + neden kodu (`ITEM_UNAVAILABLE`,
+    `TOO_BUSY`, `CLOSED`, kendi kuryemizde `OUTSIDE_DELIVERY_AREA`; test siparişinde `TEST_ORDER`). Kabul süresi
+    platformun `expiryDate`'i (geçmişse sipariş süresi dolmuş gelir).
+    **Dolaylı akış** (siparişte `orderAcceptedUrl` yok; Türkiye'de tabletli restoranlarda yaygın): sipariş tablette
+    kabul edilmiş gelir. Süre işlemez, kasadaki Kabul platforma gitmeden adisyonu açar, ret ve iptal tabletten yapılır
+    (kasadan 409 `pre_accepted`); adresi olmayan aşama gönderilmez.
     Aşamalar: Yemeksepeti kuryesinde yalnız hazır → `preparation-completed` (adres verildiyse); kendi kuryemizde ve
-    gel-alda yolda → `order_picked_up` bir kez. Kasada iptal edilen kabul edilmiş sipariş `order_rejected` olarak
-    gider; Delivery Hero kabulden sonra reddi almazsa alarm düşer, sipariş platform uygulamasından iptal edilir.
+    gel-alda yolda → `order_picked_up` bir kez (adres verildiyse). Kasada iptal edilen kabul edilmiş sipariş
+    Yemeksepeti'ne gönderilmez (kabulden sonraki neden kodları kurye ve teslim olaylarına özgü): alarm düşer, sipariş
+    Yemeksepeti uygulamasından iptal edilir. Platformun test siparişi kabul edilmez (mutfağa düşmesin), yalnız
+    reddedilir.
     Kurye: `expeditionType: pickup` gel-al; `riderPickupTime` doluysa Yemeksepeti kuryesi, boşsa kendi kuryemiz
-    (adres ve telefon yalnız o zaman kasaya gelir; teslimat ücreti adisyonda ayrı satır). İndirimlerin restoran payı
-    `VENDOR` sponsorluğu.
+    (adres ve telefon yalnız o zaman kasaya gelir). Ücretler (`deliveryFees`: teslimat, ambalaj…) adlarıyla ayrı satır
+    olur (gizli "Platform ücreti" ürünü, KDV %20, mutfağa gitmez; Ürün eşleme'den başka ürüne bağlanabilir); yalnız
+    Yemeksepeti kuryesinin teslimat ücreti platformundur. Kapıda tahsilatta kasada istenen `collectFromCustomer`;
+    Yemeksepeti kuryesi kapıda nakit alıp kasaya `payRestaurant` bırakıyorsa o tutar kasada alınır, platform
+    kendiliğinden kapatmaz. İndirimlerin restoran payı `VENDOR` sponsorluğu. İleri tarihli siparişin saati adisyona
+    geçer. Canlıya geçmeden Delivery Hero'nun test ortamında bir tur atılmalı (alanlar belgeden yazıldı).
     Kafede `.env`: `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`, `YEMEKSEPETI_PASSWORD`, `YEMEKSEPETI_REMOTE_ID` ve
     LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
     Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_REMOTE_ID` (başka restoranın siparişi 400). Kurulum

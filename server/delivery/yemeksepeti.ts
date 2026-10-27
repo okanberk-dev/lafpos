@@ -1,3 +1,4 @@
+import { tl } from '@shared/money';
 import { PLATFORM_LABEL, type PlatformCourier, type PlatformOrderPayload } from '@shared/platforms';
 import { signedFetch } from '../lib/signature';
 import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
@@ -150,11 +151,27 @@ function toppingNames(list: DhTopping[] | undefined, out: string[], depth = 0): 
   return extra;
 }
 
+/** Ücret adı: bilinen Delivery Hero adları Türkçe, ötekiler olduğu gibi */
+function feeLabel(name: string | null): string {
+  const n = (name ?? '').toLowerCase();
+  if (!n || n.includes('deliver')) return 'Teslimat ücreti';
+  if (n.includes('packag') || n.includes('container')) return 'Ambalaj ücreti';
+  if (n.includes('service')) return 'Hizmet ücreti';
+  if (n.includes('small')) return 'Küçük sipariş ücreti';
+  return name!;
+}
+const isDeliveryFee = (name: string | null) => !name || name.toLowerCase().includes('deliver');
+/** Alan var mı (0,00 da geçerli bir değerdir) */
+const present = (v: unknown) => v != null && !(typeof v === 'string' && !v.trim());
+
 /**
  * Delivery Hero siparişi → LafPOS'un tek biçimi. Birim fiyat ürün + seçenekler; ürünün `paidPrice`'ı (adet toplamı)
- * varsa birim ona göre düzeltilir. İndirimlerin restoran payı VENDOR sponsorluğu; müşterinin ödediği `grandTotal`
- * (kendi kuryemizde teslimat ücreti bizim satırımızdır, platform kuryesinde ve gel-alda ücret platformundur ve
- * toplamdan düşülür). Kabul süresi platformun `expiryDate`'i.
+ * varsa birim ona göre düzeltilir. Ücretler (`deliveryFees`: teslimat, ambalaj…) adlarıyla ayrı satır olur
+ * (`kind: 'fee'`); yalnız Yemeksepeti kuryesinin teslimat ücreti platformundur ve satır olmaz. İndirimlerin restoran
+ * payı VENDOR sponsorluğu. Müşterinin bize ödediği: kapıda tahsilatta `collectFromCustomer`, yoksa `grandTotal`
+ * (platform kuryesinde teslimat ücreti düşülür); kalanı platformun kampanyasıdır. Yemeksepeti kuryesi kapıda nakit
+ * alıyorsa kasaya `payRestaurant` bırakır: o tutar kasada alınır. Kabul süresi platformun `expiryDate`'i; geri çağrı
+ * adresi olmayan sipariş (dolaylı akış) tablette zaten kabul edilmiştir.
  */
 export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): PlatformOrderPayload {
   const courier = courierOf(o);
@@ -169,24 +186,45 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
     if (total > 0 && Math.abs(total - unit * qty) > qty) unit = Math.round(total / qty);
     lines.push({ externalId: text(p.remoteCode) ?? text(p.id), name: text(p.name) ?? 'Ürün', qty, unitPrice: unit, modifiers, note: text(p.comment) });
   }
-  const fees = (o.price?.deliveryFees ?? []).reduce((a, f) => a + toKurus(f.value), 0);
-  if (courier === 'restoran' && fees > 0) lines.push({ externalId: null, name: 'Teslimat ücreti', qty: 1, unitPrice: fees, modifiers: [], note: null });
+  let platformFees = 0;
+  for (const f of o.price?.deliveryFees ?? []) {
+    const value = toKurus(f.value);
+    if (value <= 0) continue;
+    const name = text(f.name);
+    if (courier === 'platform' && isDeliveryFee(name)) {
+      platformFees += value;
+      continue;
+    }
+    const label = feeLabel(name);
+    lines.push({ externalId: `ys-ucret:${label.toLocaleLowerCase('tr-TR')}`, name: label, qty: 1, unitPrice: value, modifiers: [], note: null, kind: 'fee' });
+  }
   const subtotal = lines.reduce((a, l) => a + l.unitPrice * l.qty, 0);
   const productDiscounts = (o.products ?? []).reduce((a, p) => a + vendorShare(p.discounts) + (p.selectedToppings ?? []).reduce((b, t) => b + vendorShare(t.discounts), 0), 0);
   // Ürün düzeyindeki indirimler üst düzey listede de yer alır (belge): büyük olan alınır, iki kez sayılmaz
   const restaurantDiscount = Math.min(subtotal, Math.max(vendorShare(o.discounts), productDiscounts));
-  const grand = toKurus(o.price?.grandTotal);
-  const ours = Math.max(0, grand - (courier === 'restoran' ? 0 : fees));
-  let platformDiscount = 0;
-  let customerTotal = subtotal - restaurantDiscount;
-  if (grand > 0 && ours <= subtotal - restaurantDiscount) {
-    platformDiscount = subtotal - restaurantDiscount - ours;
-    customerTotal = ours;
+  const ourPart = subtotal - restaurantDiscount;
+  // Müşterinin bize düşen ödemesi
+  let ours = ourPart;
+  if (!paid && courier !== 'platform' && present(o.price?.collectFromCustomer)) ours = toKurus(o.price!.collectFromCustomer);
+  else if (present(o.price?.grandTotal)) ours = Math.max(0, toKurus(o.price!.grandTotal) - platformFees);
+  let platformCollects = paid || courier === 'platform';
+  let paymentLabel = paid ? `Online${text(o.payment?.type) ? ` ${o.payment!.type}` : ''}` : `Kapıda ${text(o.payment?.type) ?? 'ödeme'}`;
+  // Yemeksepeti kuryesi kapıda alıyor ve kasaya nakit bırakıyor: o tutar kasada alınır, kalanı platformun payı
+  const payRestaurant = toKurus(o.price?.payRestaurant);
+  if (courier === 'platform' && !paid && payRestaurant > 0) {
+    ours = payRestaurant;
+    platformCollects = false;
+    paymentLabel = `${paymentLabel} · kurye kasaya ${tl(payRestaurant)} bırakır`;
   }
+  const customerTotal = Math.min(ours, ourPart);
+  const platformDiscount = ourPart - customerTotal;
+  const callbackUrls = o.callbackUrls ?? {};
+  const preAccepted = !callbackUrls.orderAcceptedUrl;
   const name = [text(o.customer?.firstName), text(o.customer?.lastName)].filter(Boolean).join(' ') || null;
   const codeBase = text(o.shortCode) ?? text(o.code) ?? o.token.slice(-4);
-  const noteParts = [o.test ? 'TEST SİPARİŞİ' : null, text(o.comments?.customerComment), o.pickup?.pickupCode ? `Teslim kodu ${o.pickup.pickupCode}` : null].filter(Boolean);
-  const scheduled = o.preOrder ? (toMs(o.delivery?.expectedDeliveryTime) ?? toMs(o.pickup?.pickupTime)) : null;
+  const noteParts = [o.test ? 'TEST SİPARİŞİ' : null, preAccepted ? 'Yemeksepeti tabletinde kabul edildi' : null, text(o.comments?.customerComment), o.pickup?.pickupCode ? `Teslim kodu ${o.pickup.pickupCode}` : null].filter(Boolean);
+  // İleri tarihli siparişin saati: teslim, gel-al ya da kuryenin alma saati
+  const scheduled = o.preOrder ? (toMs(o.delivery?.expectedDeliveryTime) ?? toMs(o.pickup?.pickupTime) ?? toMs(o.delivery?.riderPickupTime)) : null;
   return {
     platform: 'yemeksepeti',
     simulated: false,
@@ -195,9 +233,8 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
     placedAt: toMs(o.createdAt) ?? now,
     scheduledFor: scheduled,
     courier,
-    // Online ödendiyse ya da Yemeksepeti kuryesi kapıda alıyorsa (payRestaurant) tahsilat platformun; kendi kuryemiz kapıda alırsa kasada
-    platformCollects: paid || courier === 'platform',
-    paymentLabel: paid ? `Online${text(o.payment?.type) ? ` ${o.payment!.type}` : ''}` : `Kapıda ${text(o.payment?.type) ?? 'ödeme'}`,
+    platformCollects,
+    paymentLabel,
     customer: { name, phone: courier === 'restoran' ? text(o.customer?.mobilePhone) : null, address: courier === 'restoran' ? addressOf(o) : null },
     note: noteParts.length ? noteParts.join(' · ') : null,
     lines,
@@ -205,8 +242,17 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
     restaurantDiscount,
     platformDiscount,
     customerTotal,
-    expiresAt: toMs(o.expiryDate),
-    platformData: { remoteId, token: o.token, callbackUrls: o.callbackUrls ?? {}, expeditionType: o.expeditionType ?? '', test: !!o.test },
+    expiresAt: preAccepted ? null : toMs(o.expiryDate),
+    preAccepted,
+    test: !!o.test,
+    platformData: {
+      remoteId,
+      token: o.token,
+      callbackUrls,
+      expeditionType: o.expeditionType ?? '',
+      test: !!o.test,
+      times: { pickupTime: toMs(o.pickup?.pickupTime), expectedDeliveryTime: toMs(o.delivery?.expectedDeliveryTime), riderPickupTime: toMs(o.delivery?.riderPickupTime) },
+    },
   };
 }
 
@@ -283,12 +329,6 @@ export class YemeksepetiClient {
     throw new YemeksepetiHttpError(401, 'kimlik reddedildi');
   }
 
-  statusUrl(token: string): string {
-    return `${this.c.mwUrl}/v2/order/status/${encodeURIComponent(token)}`;
-  }
-  preparedUrl(token: string): string {
-    return `${this.c.mwUrl}/v2/orders/${encodeURIComponent(token)}/preparation-completed`;
-  }
 }
 
 // ─── Aktarıcı (LafPOS Uzaktan) ───────────────────────────────────────────────
@@ -311,16 +351,57 @@ export async function ackInbox(c: YemeksepetiConfig, ids: string[]): Promise<voi
   if (status !== 200) throw new YemeksepetiHttpError(status, 'aktarıcı gelen kutusu temizlenemedi');
 }
 
-type Data = { token?: string; callbackUrls?: { orderAcceptedUrl?: string; orderRejectedUrl?: string; orderPickedUpUrl?: string; orderPreparedUrl?: string }; expeditionType?: string; test?: boolean };
+type Times = { pickupTime?: number | null; expectedDeliveryTime?: number | null; riderPickupTime?: number | null };
+type Data = {
+  token?: string;
+  callbackUrls?: { orderAcceptedUrl?: string; orderRejectedUrl?: string; orderPickedUpUrl?: string; orderPreparedUrl?: string };
+  expeditionType?: string;
+  test?: boolean;
+  times?: Times;
+};
 const dataOf = (o: PlatformOrderPayload): Data => (o.platformData ?? {}) as Data;
 
-/** Kabulde bildirilen süre: hazırlık + (kendi kuryemizde yol); en az 2 dakika sonra olmalı */
-export function acceptanceTime(courier: PlatformCourier, prepMinutes: number, now = Date.now()): string {
-  const minutes = Math.max(3, prepMinutes + (courier === 'restoran' ? 20 : 0));
-  return new Date(now + minutes * 60_000).toISOString();
+/**
+ * Kabulde bildirilen saat: platformun saatine uyulur (gel-alda müşterinin alma saati, kendi kuryemizde teslim saati,
+ * Yemeksepeti kuryesinde kuryenin alma saati; belge: farklı saat müşteriye bildirilir); o saat hazırlıktan erkense ya
+ * da yoksa şimdi + hazırlık (kendi kuryemizde +20 dk yol). En az 3 dakika sonrası.
+ */
+export function acceptanceTime(courier: PlatformCourier, prepMinutes: number, times: Times = {}, now = Date.now()): string {
+  const ready = now + Math.max(3, prepMinutes + (courier === 'restoran' ? 20 : 0)) * 60_000;
+  const wanted = courier === 'gelal' ? times.pickupTime : courier === 'restoran' ? times.expectedDeliveryTime : times.riderPickupTime;
+  return new Date(wanted && wanted > ready ? wanted : ready).toISOString();
 }
 
+/**
+ * Geri çağrı adresi yalnız middleware ile aynı alan adındaysa (ve aynı şemayla) kullanılır: gelen kutusundaki adres
+ * restoranın jetonunu başka bir sunucuya taşımasın
+ */
+export function trustedCallback(url: string | undefined, mwUrl: string): string | null {
+  if (!url) return null;
+  let u: URL;
+  let mw: URL;
+  try {
+    u = new URL(url);
+    mw = new URL(mwUrl);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== mw.protocol || (u.protocol !== 'https:' && u.hostname !== mw.hostname)) return null;
+  if (u.hostname === mw.hostname) return u.toString();
+  const base = mw.hostname.split('.').slice(-2).join('.');
+  return base.includes('.') && u.hostname.endsWith(`.${base}`) ? u.toString() : null;
+}
+
+const untrusted = (what: string) => new YemeksepetiHttpError(400, `${what} adresi middleware alan adında değil; güvenilmedi`);
+
 export function yemeksepetiAdapter(c: YemeksepetiConfig, client = new YemeksepetiClient(c)): PlatformAdapter {
+  const cb = (d: Data, key: keyof NonNullable<Data['callbackUrls']>, what: string): string | null => {
+    const raw = d.callbackUrls?.[key];
+    if (!raw) return null;
+    const ok = trustedCallback(raw, c.mwUrl);
+    if (!ok) throw untrusted(what);
+    return ok;
+  };
   return {
     platform: 'yemeksepeti',
     label: PLATFORM_LABEL.yemeksepeti,
@@ -330,49 +411,64 @@ export function yemeksepetiAdapter(c: YemeksepetiConfig, client = new Yemeksepet
       const orders: PlatformOrderPayload[] = [];
       const cancelled: string[] = [];
       const invalid: { externalId: string; error: string }[] = [];
-      const done: string[] = [];
+      // Kayıt kimliği → siparişin belirteci (kasada kalacaklar için)
+      const tokenOf = new Map<string, string>();
       for (const item of items) {
-        done.push(item.id);
-        if (item.remoteId && c.remoteId && item.remoteId !== c.remoteId) continue;
+        const token = item.kind === 'order' ? (item.order && typeof item.order.token === 'string' ? item.order.token : item.id) : item.remoteOrderId;
+        tokenOf.set(item.id, token);
+        // Başka restoranın kimliği: atlanır ama bildirilir (yanlış ayarda siparişler sessizce kaybolmasın)
+        if (item.remoteId && c.remoteId && item.remoteId !== c.remoteId) {
+          invalid.push({ externalId: token, error: `başka restoranın kimliği (${item.remoteId}); YEMEKSEPETI_REMOTE_ID ${c.remoteId}` });
+          continue;
+        }
         if (item.kind === 'order') {
           // Bozuk sipariş ötekileri durdurmaz: atlanır, kimliğiyle bildirilir
           try {
             if (!item.order || typeof item.order.token !== 'string') throw new Error('sipariş belirteci yok');
             orders.push(fromDhOrder(item.order, item.remoteId, now));
           } catch (e) {
-            invalid.push({ externalId: item.order && typeof item.order.token === 'string' ? item.order.token : item.id, error: e instanceof Error ? e.message : String(e) });
+            invalid.push({ externalId: token, error: e instanceof Error ? e.message : String(e) });
           }
         } else if (item.status === 'ORDER_CANCELLED') cancelled.push(item.remoteOrderId);
       }
-      // Kayıtlar kasada işlendikten sonra silinir (commit); silme başarısızsa yeniden gelir, sipariş tekilleştirilir
-      return { orders, cancelled, invalid, commit: () => ackInbox(c, done) };
+      // Kasada işlenenler silinir; kayda alınmayan (Kapalı), kaydı düşen ve iptali ertelenen kutuda kalır
+      const commit = (keep: ReadonlySet<string>) => ackInbox(c, items.filter((i) => !keep.has(tokenOf.get(i.id) ?? '')).map((i) => i.id));
+      return { orders, cancelled, invalid, commit };
     },
     async accept(order, prepMinutes) {
       const d = dataOf(order);
-      const token = d.token ?? order.externalId;
-      await client.post(d.callbackUrls?.orderAcceptedUrl || client.statusUrl(token), { status: 'order_accepted', acceptanceTime: acceptanceTime(order.courier, prepMinutes), remoteOrderId: token });
+      const url = cb(d, 'orderAcceptedUrl', 'Kabul');
+      // Geri çağrı adresi yok: dolaylı akış, sipariş tablette kabul edildi; platforma gönderilecek bir şey yok
+      if (!url) return;
+      await client.post(url, { status: 'order_accepted', acceptanceTime: acceptanceTime(order.courier, prepMinutes, d.times), remoteOrderId: d.token ?? order.externalId });
     },
-    async reject(order, reason) {
+    async reject(order, reason, opts) {
       const d = dataOf(order);
-      const token = d.token ?? order.externalId;
-      // Test siparişi belgenin istediği kodla reddedilir; kabulden sonraki ret (kasada iptal) platform kabul etmezse kalıcı
-      // hata olur ve patrona "platform uygulamasından iptal edin" alarmı düşer (server/delivery/live.ts)
-      const code = d.test ? 'TEST_ORDER' : (DH_REJECT_REASONS[reason] ?? DH_REJECT_OTHER);
-      await client.post(d.callbackUrls?.orderRejectedUrl || client.statusUrl(token), { status: 'order_rejected', reason: code, message: reason });
+      const url = cb(d, 'orderRejectedUrl', 'Ret');
+      if (!url) throw new YemeksepetiHttpError(409, 'sipariş Yemeksepeti tabletinde kabul edildi; ret ve iptal tabletten yapılır');
+      // Kabulden sonra kasadan iptal: neden kodları kurye ve teslim olaylarına özgü (belge), kasanın iptali karşılamaz
+      if (opts?.afterAccept) throw new YemeksepetiHttpError(409, 'kabul edilmiş siparişin iptali kasadan gönderilmez; Yemeksepeti uygulamasından iptal edin');
+      let code = d.test ? 'TEST_ORDER' : (DH_REJECT_REASONS[reason] ?? DH_REJECT_OTHER);
+      // Adres dışı yalnız kendi kuryemizde geçerli (belge: Vendor Delivery)
+      if (code === 'OUTSIDE_DELIVERY_AREA' && order.courier !== 'restoran') code = DH_REJECT_OTHER;
+      await client.post(url, { status: 'order_rejected', reason: code, message: reason });
     },
     async notify(order, status: PlatformNotify, courier) {
       const d = dataOf(order);
-      const token = d.token ?? order.externalId;
       if (courier === 'platform') {
         // Yemeksepeti kuryesi: yalnız "hazır" (preparation-completed), o da adres verildiyse; alma ve teslimi platform yazar
-        if (status !== 'hazir' || !d.callbackUrls?.orderPreparedUrl) return false;
-        await client.post(d.callbackUrls.orderPreparedUrl, {});
+        if (status !== 'hazir') return false;
+        const url = cb(d, 'orderPreparedUrl', 'Hazır');
+        if (!url) return false;
+        await client.post(url, {});
         return true;
       }
       // Kendi kuryemiz ve gel-al: "alındı" bir kez, yolda adımında (teslime doğrudan geçilse de aşama turu yoldan
-      // geçer); hazır ve teslim platforma gitmez
+      // geçer); adres yoksa gönderilmez (belge: "If the URL is not present, you should skip it")
       if (status !== 'yolda') return false;
-      await client.post(d.callbackUrls?.orderPickedUpUrl || client.statusUrl(token), { status: 'order_picked_up' });
+      const url = cb(d, 'orderPickedUpUrl', 'Alındı');
+      if (!url) return false;
+      await client.post(url, { status: 'order_picked_up' });
       return true;
     },
   };

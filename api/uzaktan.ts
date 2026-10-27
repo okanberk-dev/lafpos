@@ -120,8 +120,14 @@ async function snapshot(): Promise<Snapshot | null> {
  * (`POST /api/yemeksepeti/inbox/ack`). Kabul ve ret kasadan middleware'e gider (server/delivery/yemeksepeti.ts).
  */
 const YS_INBOX_KEY = 'lafpos:ys:inbox';
-const YS_INBOX_MAX = 200;
+/** Gelen kutusu dolunca kırpılmaz (sipariş sessizce düşmesin): Delivery Hero'ya 503 döner, o yeniden dener */
+const YS_INBOX_MAX = 500;
 const YS_INBOX_TTL_S = 2 * 86400;
+const YS_ORDER_MAX_BYTES = 256 * 1024;
+const YS_STATUS_MAX_BYTES = 8 * 1024;
+/** Kasanın bir çekimde aldığı en çok kayıt ve bayt (Vercel yanıt sınırının altında) */
+const YS_PULL_MAX = 50;
+const YS_PULL_MAX_BYTES = 2 * 1024 * 1024;
 
 /** Delivery Hero'nun JWT'si: HS512 (ya da HS256), `service: middleware` iddiası, süresi varsa geçmemiş */
 export function verifyMiddlewareJwt(secret: string, authorization: string | null, nowMs = Date.now()): boolean {
@@ -137,16 +143,21 @@ export function verifyMiddlewareJwt(secret: string, authorization: string | null
   } catch {
     return false;
   }
+  // JSON.parse null, sayı ya da dizi de döndürebilir: nesne değilse geçersiz
+  if (!header || typeof header !== 'object' || !payload || typeof payload !== 'object') return false;
   const alg = header.alg === 'HS512' ? 'sha512' : header.alg === 'HS256' ? 'sha256' : null;
   if (!alg || payload.service !== 'middleware') return false;
   if (typeof payload.exp === 'number' && payload.exp * 1000 < nowMs) return false;
   return sameText(createHmac(alg, secret).update(`${h}.${p}`).digest('base64url'), s);
 }
 
-async function inboxPush(item: Record<string, unknown>) {
+/** Kaydı gelen kutusuna koyar; kutu doluysa koymaz (false): çağıran 503 döner, Delivery Hero yeniden dener */
+async function inboxPush(item: Record<string, unknown>): Promise<boolean> {
+  const size = Number(await redis('LLEN', YS_INBOX_KEY)) || 0;
+  if (size >= YS_INBOX_MAX) return false;
   await redis('RPUSH', YS_INBOX_KEY, JSON.stringify(item));
-  await redis('LTRIM', YS_INBOX_KEY, -YS_INBOX_MAX, -1);
   await redis('EXPIRE', YS_INBOX_KEY, YS_INBOX_TTL_S);
+  return true;
 }
 
 async function yemeksepeti(req: Request, url: URL, path: string): Promise<Response> {
@@ -158,18 +169,27 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
     const body = await req.text();
     if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
-    const raw = ((await redis('LRANGE', YS_INBOX_KEY, 0, -1)) as string[] | null) ?? [];
     if (path === 'yemeksepeti/inbox' && req.method === 'GET') {
+      // En eski 50 kayıt, toplam 2 MB'ı aşmadan; bozuk ya da tek başına sınırı aşan kayıt silinir
+      const raw = ((await redis('LRANGE', YS_INBOX_KEY, 0, YS_PULL_MAX - 1)) as string[] | null) ?? [];
       const items: unknown[] = [];
-      for (const r of raw.slice(0, 50)) {
+      let bytes = 0;
+      for (const r of raw) {
+        if (r.length > YS_PULL_MAX_BYTES) {
+          await redis('LREM', YS_INBOX_KEY, 1, r);
+          continue;
+        }
+        if (bytes + r.length > YS_PULL_MAX_BYTES) break;
         try {
           items.push(JSON.parse(r));
+          bytes += r.length;
         } catch {
           await redis('LREM', YS_INBOX_KEY, 1, r);
         }
       }
-      return json({ items, total: raw.length });
+      return json({ items, total: Number(await redis('LLEN', YS_INBOX_KEY)) || 0 });
     }
+    const raw = ((await redis('LRANGE', YS_INBOX_KEY, 0, -1)) as string[] | null) ?? [];
     if (path === 'yemeksepeti/inbox/ack' && req.method === 'POST') {
       let ids: string[] = [];
       try {
@@ -200,7 +220,7 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     const remoteId = decodeURIComponent(order[1]!);
     if (wantRemote && remoteId !== wantRemote) return json({ reason: 'MENU_ACCOUNT_SETTINGS', message: 'Unknown remoteId' }, 400);
     const body = await req.text();
-    if (body.length > 1_000_000) return json({ reason: 'TECHNICAL_PROBLEM', message: 'payload-limit-exceeded' }, 400);
+    if (body.length > YS_ORDER_MAX_BYTES) return json({ reason: 'TECHNICAL_PROBLEM', message: 'payload-limit-exceeded' }, 400);
     let dh: { token?: unknown };
     try {
       dh = JSON.parse(body) as { token?: unknown };
@@ -208,7 +228,9 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
       return json({ reason: 'TECHNICAL_PROBLEM', message: 'json-not-readable' }, 400);
     }
     if (typeof dh.token !== 'string' || !dh.token) return json({ reason: 'TECHNICAL_PROBLEM', message: 'order-validation-error: token' }, 400);
-    await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'order', remoteId, receivedAt: now, order: dh });
+    if (!(await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'order', remoteId, receivedAt: now, order: dh }))) {
+      return json({ reason: 'TECHNICAL_PROBLEM', message: 'inbox-full' }, 503);
+    }
     // remoteOrderId: siparişin kasadaki kimliği olarak belirtecin kendisi (tekil); durum bildirimleri bununla gelir
     return json({ remoteResponse: { remoteOrderId: dh.token } });
   }
@@ -217,14 +239,19 @@ async function yemeksepeti(req: Request, url: URL, path: string): Promise<Respon
     const remoteId = decodeURIComponent(status[1]!);
     const remoteOrderId = decodeURIComponent(status[2]!);
     if (wantRemote && remoteId !== wantRemote) return fail(404, 'Unknown remoteId', 'not_found');
+    const text = await req.text();
+    if (text.length > YS_STATUS_MAX_BYTES) return fail(400, 'payload-limit-exceeded', 'bad_body');
     let dh: { status?: unknown; message?: unknown };
     try {
-      dh = JSON.parse(await req.text()) as { status?: unknown; message?: unknown };
+      dh = JSON.parse(text) as { status?: unknown; message?: unknown };
     } catch {
       return fail(400, 'json-not-readable', 'bad_body');
     }
-    if (typeof dh.status !== 'string') return fail(400, 'status', 'bad_body');
-    await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'status', remoteId, receivedAt: now, remoteOrderId, status: dh.status, message: typeof dh.message === 'string' ? dh.message.slice(0, 500) : '' });
+    if (!dh || typeof dh.status !== 'string') return fail(400, 'status', 'bad_body');
+    // Kasa yalnız iptali kullanır; ötekiler (kurye geldi, alındı, uyarılar) kutuyu doldurmasın
+    if (dh.status !== 'ORDER_CANCELLED') return json({ ok: true });
+    const item = { id: randomBytes(9).toString('base64url'), kind: 'status', remoteId, receivedAt: now, remoteOrderId: remoteOrderId.slice(0, 200), status: dh.status, message: typeof dh.message === 'string' ? dh.message.slice(0, 500) : '' };
+    if (!(await inboxPush(item))) return fail(503, 'inbox-full', 'inbox_full');
     return json({ ok: true });
   }
   return fail(404, 'Yok', 'not_found');

@@ -213,13 +213,19 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
               ))}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <Button disabled={busy} onClick={() => setRejecting(true)}>
-              Reddet
-            </Button>
-            <Button variant="primary" loading={busy} onClick={() => run(() => post(`/platforms/orders/${order.id}/accept`, { prepMinutes: prep }), `${PLATFORM_LABEL[order.platform]} ${p.code} kabul edildi`)}>
-              {order.announced ? 'Adisyonu aç' : `Kabul et · ${prep} dk`}
-            </Button>
+          {p.test && <p className="text-xs text-muted">Platformun test siparişi: mutfağa düşmesin diye kabul edilmez, yalnız reddedilir</p>}
+          {p.preAccepted && <p className="text-xs text-muted">Platformun tabletinde kabul edildi: Kabul adisyonu açar; ret ve iptal tabletten yapılır</p>}
+          <div className={cn('grid gap-2', !p.test && !p.preAccepted ? 'grid-cols-2' : 'grid-cols-1')}>
+            {!p.preAccepted && (
+              <Button disabled={busy} onClick={() => setRejecting(true)}>
+                Reddet
+              </Button>
+            )}
+            {!p.test && (
+              <Button variant="primary" loading={busy} onClick={() => run(() => post(`/platforms/orders/${order.id}/accept`, { prepMinutes: prep }), `${PLATFORM_LABEL[order.platform]} ${p.code} kabul edildi`)}>
+                {order.announced || p.preAccepted ? 'Adisyonu aç' : `Kabul et · ${prep} dk`}
+              </Button>
+            )}
           </div>
         </div>
       )}
