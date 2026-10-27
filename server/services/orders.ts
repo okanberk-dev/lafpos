@@ -613,6 +613,8 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
   t.update(schema.orderItems).set({ orderId: targetId }).where(eq(schema.orderItems.orderId, sourceId)).run();
   t.update(schema.payments).set({ orderId: targetId }).where(eq(schema.payments.orderId, sourceId)).run();
   t.update(schema.roomSessions).set({ orderId: targetId }).where(eq(schema.roomSessions.orderId, sourceId)).run();
+  // Yazarkasa fişleri de ödemeleriyle birlikte gider: fiş iptali hedef adisyondan düşer, sonraki sepet o fişleri bilir
+  t.update(schema.fiscalReceipts).set({ orderId: targetId }).where(eq(schema.fiscalReceipts.orderId, sourceId)).run();
   t.update(schema.orders)
     .set({ status: 'birlesti', mergedInto: targetId, closedAt: Date.now(), closedBy: actor.user.id, updatedAt: Date.now() })
     .where(eq(schema.orders.id, sourceId))
@@ -1234,14 +1236,28 @@ export function addExternalPayments(
   return { order: updated, closed, paymentIds: ids };
 }
 
-/** Yazarkasada fiş iptal edilince LafPOS ödemeleri de iptal edilir ve adisyon yeniden açılır. */
-export function refundExternalPayments(t: Tx, userId: string | null, fx: Effects, orderId: string, paymentIds: string[], reason: string) {
-  const o = loadOrder(t, orderId);
+/**
+ * Yazarkasada fiş iptal edilince o fişin LafPOS ödemeleri de iptal edilir. Ödeme bulunduğu adisyondan düşer
+ * (birleştirmeyle başka adisyona geçmiş olabilir). Kapanmış adisyon yalnız bu iptalle gerçekten ödenecek tutar
+ * doğduysa yeniden açılır: ödemesi LafPOS'ta zaten iptal edilip yeniden alınmış adisyon kapalı kalır (inceleme,
+ * 27 Eki 2026).
+ */
+export function refundExternalPayments(
+  t: Tx,
+  userId: string | null,
+  fx: Effects,
+  paymentIds: string[],
+  reason: string,
+): { refunded: number; orders: { order: OrderRow; reopened: boolean }[] } {
   const now = Date.now();
   const openDay = getOpenDay(t);
+  const touched = new Map<string, OrderRow>();
+  let refunded = 0;
   for (const pid of paymentIds) {
     const p = t.select().from(schema.payments).where(eq(schema.payments.id, pid)).get();
-    if (!p || p.refundedAt) continue;
+    if (!p || p.refundedAt || !p.orderId) continue;
+    if (!touched.has(p.orderId)) touched.set(p.orderId, loadOrder(t, p.orderId));
+    refunded += p.amount;
     t.update(schema.payments).set({ refundedAt: now, refundedBy: userId, refundReason: reason }).where(eq(schema.payments.id, pid)).run();
     for (const s of p.items ?? []) {
       const it = t.select().from(schema.orderItems).where(eq(schema.orderItems.id, s.itemId)).get();
@@ -1251,18 +1267,24 @@ export function refundExternalPayments(t: Tx, userId: string | null, fx: Effects
       t.update(schema.customers).set({ balance: sql`${schema.customers.balance} - ${p.amount}` }).where(eq(schema.customers.id, p.customerId)).run();
       // Normal ödeme iptaliyle aynı: bakiye ile cari ekstresi ayrışmasın
       t.insert(schema.customerLedger)
-        .values({ id: ulid(now), customerId: p.customerId, kind: 'duzeltme', amount: -p.amount, orderId, paymentId: p.id, dayId: openDay?.id ?? p.dayId, note: `Yazarkasa fiş iptali: ${reason}`, userId, createdAt: now })
+        .values({ id: ulid(now), customerId: p.customerId, kind: 'duzeltme', amount: -p.amount, orderId: p.orderId, paymentId: p.id, dayId: openDay?.id ?? p.dayId, note: `Yazarkasa fiş iptali: ${reason}`, userId, createdAt: now })
         .run();
     }
   }
-  if (o.status === 'kapali') {
-    uncreditCustomer(t, o);
-    t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, orderId)).run();
+  const orders: { order: OrderRow; reopened: boolean }[] = [];
+  for (const o of touched.values()) {
+    let updated = recalc(t, o.id);
+    const reopened = o.status === 'kapali' && updated.paid < updated.total;
+    if (reopened) {
+      uncreditCustomer(t, o);
+      t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, o.id)).run();
+      updated = loadOrder(t, o.id);
+    }
+    orderEvents(fx, updated, userId ?? 'sistem', 'payment.refunded');
+    fx.emit({ topic: 'cash', kind: 'payment.refunded', orderId: o.id });
+    orders.push({ order: updated, reopened });
   }
-  const updated = recalc(t, orderId);
-  orderEvents(fx, updated, userId ?? 'sistem', 'payment.refunded');
-  fx.emit({ topic: 'cash', kind: 'payment.refunded', orderId });
-  return updated;
+  return { refunded, orders };
 }
 
 /** Paket / gel-al durum akışı ve kurye ataması */

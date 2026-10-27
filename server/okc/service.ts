@@ -319,18 +319,23 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
   }
 
   if (result.status === 'voided') {
+    if (r.status === 'fis_iptal') return;
     if (r.status === 'tamamlandi' && r.paymentIds.length) {
       tx((t) => {
-        refundExternalPayments(t, by?.userId ?? null, fx, r.orderId, r.paymentIds, 'Yazarkasada fiş iptal edildi');
+        const out = refundExternalPayments(t, by?.userId ?? null, fx, r.paymentIds, 'Yazarkasada fiş iptal edildi');
         t.update(schema.fiscalReceipts).set({ status: 'fis_iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+        const target = out.orders[0]?.order ?? loadOrder(t, r.orderId);
+        const reopened = out.orders.some((o) => o.reopened);
         fx.audit(t, {
           userId: by?.userId ?? null,
           approverId: by?.approverId ?? null,
           action: 'okc.void',
           severity: 'alarm',
-          orderId: r.orderId,
+          orderId: target.id,
           amount: r.amount,
-          message: `Yazarkasada mali fiş iptal edildi; ${tl(r.amount)} ödeme geri alındı ve adisyon yeniden açıldı`,
+          message: out.refunded
+            ? `#${target.no} adisyonun yazarkasa fişi iptal edildi; ${tl(out.refunded)} ödeme geri alındı${reopened ? ' ve adisyon yeniden açıldı' : ''}`
+            : `#${target.no} adisyonun yazarkasa fişi (${tl(r.amount)}) iptal edildi; ödemesi LafPOS'ta zaten iptal edilmişti, adisyon değişmedi`,
         });
       });
     } else {

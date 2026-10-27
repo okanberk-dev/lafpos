@@ -118,7 +118,7 @@ Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` �
 |---|---|
 | `sale.status = 0` | Ödeme kalemleri adisyona işlenir (1 nakit, 3 kart, 7 yemek kartı, 17 açık hesap, 18 havale; ödeme türü eşlemesi Yönetim › Yazarkasa'da), Z ve fiş no yazılır, kalan yoksa adisyon kapanır |
 | `-1` | Kasiyer cihazda vazgeçti; sepet kapanır, adisyon açık kalır |
-| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir |
+| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir. Ödeme birleştirmeyle başka adisyona geçtiyse o adisyondan düşer (birleştirmede fişler de hedef adisyona taşınır). Kapanmış adisyon yalnız ödenecek tutar doğarsa açılır: ödemesi LafPOS'ta zaten iptal edilip yeniden alınmışsa kapalı kalır |
 | `BASKET_LOCKED` / `UNLOCKED` | Sepet cihazda açıkken LafPOS'ta kilit gösterilir |
 
 Her sonuç denetim kaydına yazılır; son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında görünür.
