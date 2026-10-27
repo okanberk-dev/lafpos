@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { allocate, percentOf, tl } from '@shared/money';
-import { discountGrowth, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
+import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
@@ -342,7 +342,7 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
     } else {
       const pct = happyHourPercent(t, p, now);
       if (pct > 0) {
-        unit -= percentOf(unit, pct);
+        unit = happyHourUnit(unit, pct);
         happy = true;
       }
     }

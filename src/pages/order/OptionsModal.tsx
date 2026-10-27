@@ -4,7 +4,7 @@ import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { estimateUnit, productGroups, useBoot } from '@/lib/boot';
+import { estimateUnit, menuUnit, productGroups, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 
@@ -193,7 +193,7 @@ export function OptionsModal({
             value={priceText}
             onChange={(e) => setPriceText(e.target.value.replace(/[^\d.,]/g, '').slice(0, 9))}
             inputMode="decimal"
-            placeholder={`${tl(estimateUnit(boot, product, size, options))} (menü fiyatı)`}
+            placeholder={`${tl(menuUnit(boot, product, size, options))} (menü fiyatı)`}
             aria-label="Elle birim fiyat"
             className="tabular h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-primary"
           />

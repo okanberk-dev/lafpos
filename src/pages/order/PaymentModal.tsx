@@ -1,7 +1,7 @@
 import { Check, CheckCircle2, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
-import { amountForItems, itemPayLines } from '@shared/order-calc';
+import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import type { OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -83,14 +83,15 @@ export function PaymentModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [order, selection],
   );
+  const payLines = useMemo(() => itemPayLines(order.items, order.payments), [order]);
   const itemsAmount = useMemo(
     () =>
       amountForItems(
         order.totals,
-        itemPayLines(order.items, order.payments),
+        payLines,
         picked.map((s) => ({ lineId: s.itemId, qty: s.qty })),
       ),
-    [order, picked],
+    [order, payLines, picked],
   );
 
   // Paylar: ödenenler ödemelerdeki pay numarasından, ödenmeyenler sunucunun hesabından (split.shares)
@@ -266,7 +267,7 @@ export function PaymentModal({
                         {i.name} {i.size !== 'TEK' && <span className="text-muted">{boot.settings.sizeLabels[i.size]}</span>}
                       </span>
                       <span className="tabular text-xs text-muted">
-                        {left} adet · {tl(order.totals.lineNet[i.id] ?? 0)}
+                        {left} adet · {tl(unpaidLineAmount(order.totals, payLines.find((l) => l.id === i.id) ?? i, remaining))}
                       </span>
                     </button>
                     <div className="flex items-center gap-1">
@@ -283,7 +284,8 @@ export function PaymentModal({
               })}
               <div className="flex justify-between px-1 pt-2 text-sm font-semibold">
                 <span>Seçilen</span>
-                <span className="tabular">{tl(itemsAmount)}</span>
+                {/* Sunucunun alacağı: ödenecek kalanla sınırlı (ödeme düğmesindeki tutarla aynı) */}
+                <span className="tabular">{tl(amount)}</span>
               </div>
             </div>
           )}

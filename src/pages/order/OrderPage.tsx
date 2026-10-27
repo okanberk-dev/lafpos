@@ -36,12 +36,13 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { type PendingLine, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
+import { previewTotals } from '@/lib/estimate';
 import { useMediaQuery, useTick } from '@/lib/hooks';
 import { BillReceipt, printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { sendDisplay, useCustomerDisplay, useDisplayCode } from '@/lib/display';
-import { CartPanel, previewTotals } from './CartPanel';
+import { CartPanel } from './CartPanel';
 import { CustomerModal } from './CustomerModal';
 import { OnlineOrderBar } from './OnlineOrderBar';
 import { OptionsModal } from './OptionsModal';
@@ -77,7 +78,7 @@ export default function OrderPage() {
   // Müşteri ekranı (bu cihaz yansıtıyorsa): kalemler ve gönderilmemişler dahil tahmini tutar
   const [displayCode, setDisplayCode] = useDisplayCode();
   const displayLabel = order ? (table?.name ?? ORDER_TYPE_LABEL[order.type]) : '';
-  useCustomerDisplay(boot, order, pending, displayLabel, order ? (previewTotals(boot, order, pending)?.total ?? order.total) : 0);
+  useCustomerDisplay(boot, order, pending, displayLabel);
 
   if (isLoading) return <PageLoading />;
   if (isError || !order) {
