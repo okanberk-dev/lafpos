@@ -1,0 +1,54 @@
+[
+ {
+  "title": "During an active happy hour, client price estimates skip the discount the server applies: wrong 'Öde' amount and customer-display total",
+  "severity": "medium",
+  "file": "src/lib/boot.ts",
+  "line": 25,
+  "description": "The server's addItems takes happyHourPercent off the unit price. The client's estimateUnit (and so previewTotals in CartPanel.tsx:26) never applies boot.happyHours, even though /bootstrap sends the rules to the client. These screens all show the undiscounted price as the order total: the counter button 'Öde · ₺X' (OrderPage), the CartPanel 'Toplam', the 'Ekle · ₺X' button in OptionsModal, the mobile tab label, and the customer display (useCustomerDisplay gets previewTotals.total and unit*qty per pending line). Only the CartPanel has a small 'tahmini' note. The customer-facing display and the Öde button have none. In the probe, with a 20% happy hour, the cashier sees 'Öde · ₺280' and the customer screen shows ₺280. The server then records ₺224, and the payment window opens with ₺224 remaining.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/client-r1/happyhour.probe.test.ts",
+  "evidence": "client estimate unit 14000 preview total 28000 -> Öde button 28000\nserver unitPrice 11200 happyHour true server total 22400\nAssertionError: expected 28000 to be 22400",
+  "fix": "Move the pure part of happyHourPercent (the rule match on Istanbul time, weekday and product/category scope) into shared/ and use it in estimateUnit when no priceOverride is set. Pass boot.happyHours and Date.now() (or boot.serverTime offset). Then previewTotals, OptionsModal, the Öde button and the customer display will match the server.",
+  "dimension": "client",
+  "votes": [],
+  "id": "client-58"
+ },
+ {
+  "title": "Customer display subtracts the order discount twice: lines are already net, and 'İndirim' is shown again",
+  "severity": "medium",
+  "file": "src/lib/display.ts",
+  "line": 35,
+  "description": "useCustomerDisplay sends each sent line's total as order.totals.lineNet[i.id], which already includes that line's share of the order discount. It then also sends discount: order.totals.orderDiscount (line 46). CustomerDisplayPage shows the lines, then '−İndirim', then 'Toplam'. With a 10% discount on 2× Türk kahvesi, the customer sees the line at ₺252, İndirim −₺28 and Toplam ₺252. Line minus discount reads ₺224, which contradicts the total. Pending lines go the other way: they are sent at the undiscounted unit*qty while the total includes their discount.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/client-r1/display-discount.probe.test.ts",
+  "evidence": "screen line 2× Türk kahvesi ₺252,00\nscreen İndirim −₺28,00 screen Toplam ₺252,00\nlines sum ₺252,00 lines sum − İndirim ₺224,00 server total ₺252,00\nAssertionError: expected 22400 to be 25200",
+  "fix": "Send gross line amounts (qty*unitPrice − line discount, or qty*unitPrice with line discounts folded into 'discount'), with discount = lineDiscounts + orderDiscount, so that lines − discount (+ service) = total. Or keep the net lines and send discount 0. Treat pending lines the same way.",
+  "dimension": "client",
+  "votes": [],
+  "id": "client-60"
+ },
+ {
+  "title": "End-of-day count (CashCount) flags every card tip as a slip difference",
+  "severity": "medium",
+  "file": "src/pages/cash/CashCount.tsx",
+  "line": 110,
+  "description": "Tips are recorded on the payment's method: ZSummary.payments rows carry `tips`, and the server's expectedCash adds cash tips to the drawer. That means a card tip is charged on the card, and the bank POS end-of-day slip shows amount + tip. CashCount compares the slip with m.amount only and shows 'Sistem ₺140'. A correctly charged ₺160 slip (₺140 + ₺20 tip) is therefore shown as a red ₺20,00 difference. The row's own `tips` field is ignored. Every day with card tips shows false slip differences to the manager or owner.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/client-r1/cashcount-cardtip.probe.test.ts",
+  "evidence": "summary card row {...\"name\":\"Kredi kartı\",\"zField\":\"card\",\"count\":1,\"amount\":14000,\"tips\":2000}\nrendered card row diff cell: text-danger-500 ₺20,00\nAssertionError: expected '₺20,00' to be '₺0,00'",
+  "fix": "In CashCount, map summary.payments to an expected value of amount + tips. Use it in both the 'Sistem' label and the slip comparison (d = counted − (m.amount + m.tips)). Optionally show the tip part separately.",
+  "dimension": "client",
+  "votes": [],
+  "id": "client-61"
+ },
+ {
+  "title": "PaymentModal 'Kalem seç' row shows the full line amount next to the remaining quantity after a partial item payment",
+  "severity": "low",
+  "file": "src/pages/order/PaymentModal.tsx",
+  "line": 236,
+  "description": "Each selectable row reads `${left} adet · ${tl(order.totals.lineNet[i.id])}`. Here `left` is qty − paidQty, but lineNet is the amount for the whole line, including the units already paid. After one of 3× Türk kahvesi (₺140 each) is paid by item, the row reads '2 adet · ₺420,00' while only ₺280 is due. A cashier reading the row can quote or charge (in Tutar mode, or on the card terminal) ₺140 too much. The 'Seçilen' sum is correct, because it uses amountForItems.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/client-r1/payment-kalem.probe.test.ts",
+  "evidence": "server: qty 3 paidQty 1 remaining due 28000\nKalem seç row text: 2 adet · ₺420,00\nAssertionError: expected '₺420,00' to be '₺280,00'",
+  "fix": "Show the amount for the remaining units: amountForItems(order.totals, order.items.map(i => ({ id: i.id, qty: i.qty, paidQty: i.paidQty })), [{ lineId: i.id, qty: left }]).",
+  "dimension": "client",
+  "votes": [],
+  "id": "client-62"
+ }
+]

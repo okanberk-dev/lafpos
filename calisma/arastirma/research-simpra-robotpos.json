@@ -1,0 +1,1018 @@
+{
+ "systems": [
+  "Simpra (Protel group): Simpra POS app (iPad/iPhone/Mac, Windows, Linux, Android) and its Backoffice at pos.simprasuite.com ('Sofra'), Simpra Inventory, Simpra Insight (owner app), Simpra KDS / Sipariş Takip, Simpra CDS, QR Menu and QR Menu Order, Check & Place (reservations), Simpra Link, Simpra Pay / Quick / GMU (VUK 507), Kiosk. Help center: Simpra Atlas (atlas.simprasuite.com.tr: about 360 POS/Inventory/GMU KB articles, Jira-level release notes, training playlists). I found no current products called 'Simpra Smart Office' or 'Simpra Online'.",
+  "robotPOS: the Infinia POS (Windows, local SQL Express, hybrid), CPM central product management, IQ ERP / IQ Portal / Sipariş-Sevkiyat, Web Raporlama, the WebOrder integrator for marketplaces, mobile terminal, KDS, Self Checkout kiosk, QR Menü, CRM/Sadakat, Payment Gateway. The robotPOS air Series (air POS, Inventory, Loyalty, Reservation, Gems, air-HR, air-ERP) is the cloud line, and aiR intelligence is its AI layer. Docs come from docs.robotpos.com (Mintlify: Infinia guide, FAQ, weekly release notes) and robotpos.com product pages."
+ ],
+ "areas": [
+  {
+   "area": "1 Sipariş alma ve menü",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Satış türleri ve yetki",
+     "detail": "Giriş ekranının üstünde 4 satış türü düğmesi var: Masa Satışı (alakart), Al Götür ve Tezgah Satışı (ikisi aynı özellikte) ve Paket Satış. Programdaki tüm işlemler, programdan çıkış dahil, yetkiye bağlanabilir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Menü ekranı sınırları ve geri bildirim",
+     "detail": "Sol üstte SAYFA 1 / SAYFA 2 menü grup sayfaları var, toplam 36 grup. Menü Tasarımcısı'nda her sayfa 36 ürün alır, en fazla 180 ürün. Seçilen ürün yeşile döner ve sağ üstteki adisyona işlenir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Benzer üründen kopyalayarak hızlı ürün açma",
+     "detail": "'Ürünler Aynı Özelliklere Sahip' alanında mevcut bir ürün (ör. Lahmacun) seçilince KDV, grup, renk, yazıcı ve fiyat dahil tüm alanlar dolar. Yalnızca ad ve fiyat değiştirilir. Satış ekranındaki ÜRÜN EKLE ile kasadan anında yeni ürün tanımlanıp bir ekran grubuna konabilir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kombo menü: zorunlu, opsiyonel ve varsayılan seçimler",
+     "detail": "Her kombo grubunda sıra no, 'Seçilebilecek En Fazla Ürün Sayısı', 'Seçilebilecek Zorunlu Ürün Sayısı' ve Zorunlu kutusu tanımlanır. Ürünlerde VARSAYILAN işareti var (ör. çorba hep seçili gelir). Limit aşılınca uyarı çıkar. Kombo, satış ekranında fiyatlı bir düğmeye bağlanmazsa satılamaz. Multi Kombo birden fazla komboyu tek düğmede sunar.",
+     "source": "https://docs.robotpos.com/klavuz-cpm"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Mesajlar (condiment), ürün notu ve sipariş notu",
+     "detail": "Mesaj Grupları altında hazır mesajlar tanımlanır (ör. Sıcak İçecek > Şekerli). Akış: satır seçilir, MESAJLAR'a basılır, mesaja dokunulur, BİTİR ile çıkılır. ÜRÜNE NOT EKLE serbest metin içindir, SİPARİŞ NOTU tüm adisyona uygulanır ve ikisi aynı anda kullanılabilir (ör. bir kola buzsuz, sipariş 20:00'de masada). QR menüde mesajlara ek fiyat verilebilir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Porsiyon, sınırsız alt kırılım, satış tipine göre menü",
+     "detail": "Çeyrek, yarım, bir buçuk ve 2 porsiyon seçenekleri var. 'Üst Seviye Ürün' mantığıyla sınırsız kırılım yapılır (Viskiler > Jack Daniels > Duble > cola). Masa, al götür ve paket için ayrı menü dizilimi kurulabilir ve ürün grupları servis türüne göre gizlenir. 'Hızlı Menü / Favori Ürünler' grubu da tanımlanabilir.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Barkod modu, ürün arama ve FİYAT GÖR",
+     "detail": "BARKOD MODU açılınca imleç boş satırda yanıp söner ve okutmaya hazırdır. Barkod numpad ile elle de girilebilir. ÜRÜN ARA ad parçasıyla bulur (AYR yazınca AYRAN gelir). FİYAT GÖR basılı tutulurken okutulan ürünün fiyatını gösterir ve oradan kalıcı yeni fiyat girilebilir. Ayarlar: gizli ürünler barkod modunda aranabilsin/aranmasın, arama butonu pasif olsun.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Fiyat değiştir, 2. fiyat ve diplomatik satış",
+     "detail": "FİYAT DEĞİŞTİR yalnızca seçili satır ve o adisyon için geçerlidir. '2. Fiyatı Kullan' tüm çeki ikinci fiyat şablonuna çeker ve aynı tuşa tekrar basınca 1. fiyata döner. Diplomatik Satış, onaydan sonra çek toplamından KDV'yi düşer.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Geri sayım ürünleri (tükenecek ürün sayacı)",
+     "detail": "İşlemler > Geri Sayım Ürünleri'nde tarih ve saat seçilir, ürün başına eldeki adet girilir. Satış ekranında ürün düğmesinin sol alt köşesinde kalan adet görünür ve satıldıkça azalır. Amaç kasiyerin eldekinden fazla sipariş almasını önlemektir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Koşullu ürün ekleme kuralı",
+     "detail": "'X SEPETTE EKLİYSE Y EKLENEBİLSİN' ayarı X,Y;Z,Y; formatında girilir. Y ürünü ancak sepette X veya Z varsa eklenebilir (ör. ekstra shot yalnızca bir kahveyle).",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kafe modifikatörleri ve hızlı tezgah",
+     "detail": "Kafe POS'ta süt tipi (tam yağlı, az yağlı, soya, yulaf), shot, şurup ve sıcaklık tek-iki tıkla seçilir. Tipik bir kafe siparişinde 5-7 modifikatör olduğu belirtiliyor. Masa açmadan hızlı tezgah satışında sipariş ve ödeme 30 sn'de bitiyor. Barista/bar ekranına yönlendirme ve damga kart (10'da 1 bedava) da paketin parçası.",
+     "source": "https://www.robotpos.com/cafe-pos-sistemi"
+    },
+    {
+     "system": "Simpra",
+     "name": "İlave grupları (modifier)",
+     "detail": "Backoffice > Menü Ayarları > İlave Grupları > 'İlave Grubu Ekle' ile grup açılır. Her ilave için ad, fiyat, vergi sınıfı ve rapor etiketi girilir. Grup, ilgili menü kaleminde ayrıca aktif edilmelidir. Pişme derecesi, Türk kahvesi şekeri, sos ilavesi ve farklı boyutlar tek menü kalemi altında toplanır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/ilave-ekleme-islemi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Açık ürün (açık yiyecek/içecek)",
+     "detail": "Kategoriye 'Açık Ürün Grubu' atanır. POS'ta sağ üstteki 'artı olan telli defter' simgesine basılır; ürün adı, fiyat ve adet girilir, ardından ürün grubu, yazıcı ve KDV seçilir. Ön izlemeden sonra 'Ürünü Ekle' ile eklenir. Açık girilen kalemler stoktan düşmez.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/acik-yiyecek-acik-icecek-girisi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Satır işlemleri tek jestle",
+     "detail": "Çekteki satırda (...) simgesine basılır ya da satır sola kaydırılır. Çöp kutusu iptal mi iade mi diye sorar ve tanımlıysa sebep ister. Hediye paketi ikram içindir ve sebep ister. Not defteri ön tanımlı ya da serbest not ekler; not, 'Sipariş Gönder' ile yazıcıya notla çıkar.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/acik-cek-icerisindeki-urunler-nasil-iptal-iade-edilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Hızlı giriş araçları",
+     "detail": "Eğitim listesinde Çoklu Ürün Klavyesi, Ürün Arama Butonu, Ürüne Renk Atama, Boyut Grubu Ürünü ve Combo Menü Ekleme videoları var. Ayarlar > 'Ürün Görseli Kullan' açılınca backoffice görselleri butonlarda görünür. 4.33.0 sürümüyle 'önceki siparişi tekrarla' fonksiyonu geldi.",
+     "source": "https://atlas.simprasuite.com.tr/egitim/hizli-servis/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kg ürün yuvarlama ve isimlendirme kuralı",
+     "detail": "Kg ürünlerde TL bazlı ekleme yapılınca miktar yuvarlanır (POS-12287). Menü kalemi adlarında ? ; ' : ! ^ # gibi özel karakterler kullanılmamalıdır. Bu karakterler Ingenico yazarkasada tanımlı olmadığı için ödeme hatası verir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/backoffice-uzerinden-menu-kalemi-isimlendirirken-nelere-dikkat-edilmelidir/"
+    },
+    {
+     "system": "Simpra Quick / GMU",
+     "name": "Cihazdan ürün tanımı ve açık fiyatlı ürün",
+     "detail": "Yeni Ürün Ekle formunda ad, KDV dahil fiyat, 'Açık Fiyatlı Ürün' (fiyat satış anında girilir), stok kodu, vergi, grup, birim (adet, gram, kilogram) ve barkod alanları var. Satıştan kaldırmak için ürün sola kaydırılıp 'Pasif Yap' seçilir; geri almak için 'Aktif Yap'.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/gmu/gmu-pos-yeni-urun-nasil-eklenir/"
+    }
+   ]
+  },
+  {
+   "area": "2 Masa ve salon",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Masa planı tasarımı",
+     "detail": "Sınırsız bölüm açılabilir (Ön Salon, Bahçe, Üst Kat). Her bölüm için 9'lu, 18'li ve 27'li hazır şablonlar var; dizilim fareyle sürükle-bırak yapılır. Satış ekranında sağda masa grupları, solda seçili grubun düzeni durur.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Masa durum renkleri ve karo bilgisi",
+     "detail": "Boş masa gri, dolu yeşil, hesap adisyonu yazdırılmış kırmızı. KDS kullanılıyorsa siparişi mutfaktan çıkmış masa sarı, şubenin belirlediği süre boyunca hareketsiz kalan masa siyah olur. Masaya girmeden karo üzerinde garson adı, masa no, açık kalma süresi ve tutar görünür.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Masa açma ve konuk sayısı",
+     "detail": "Masaya dokununca konuk sayısı sorulur ve masa no ile kişi sayısı adisyona işlenir. DİĞER > KİŞİ SAYISI DEĞİŞTİR, mevcut sayıyı numpad'e getirip düzeltmeye izin verir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Masa değiştir, ayır ve birleştir",
+     "detail": "DİĞER > MASA DEĞİŞTİR plana döner ve eski masa no adisyonda saklanır. Masa ayırmak için önce ödeme ayrılır, sonra ayrılan çek açılıp taşınır. BİRLEŞTİR yalnızca aynı türdeki açık çekleri listeler; kişi kendi çekini seçerse uyarı alır. Bu işlemlerin hepsi yetkiye bağlı ve merkezde raporlanır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Taşıma sebebi zorunluluğu",
+     "detail": "'MASA DEĞİŞİKLİĞİNİN SEBEBİNİ SOR' ve 'ÜRÜN DEĞİŞİKLİĞİ SEBEBİNİ SOR' açıkken masa taşıma ve ürün ayırmada pop-up çıkar. Sebep MoveReason alanına yazılır ve merkeze gider. Ürün taşıma ile masa değiştirme işlemleri de accesslog'a düşer.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Garson değiştirme ve posta",
+     "detail": "DİĞER > Garson Değiştir yeni kullanıcının şifresini ister. 'GARSONLAR LİSTEDE ŞİFRE SORULSUN' ayarıyla yetki seviyesi 7'nin altındakiler çeki başkasına devredemez. Yetki ayarıyla bir garsonun başkasının açtığı masaya işlem yapması engellenir; zorunlu hallerde müdür değiştirir.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Rezervasyon modülü",
+     "detail": "Android uygulaması ve web arayüzü var. Akış: masa grubu, ardından masa seçilir, 'REZERVASYON EKLE' ile konuk adı, iletişim no, mail, ön ödeme, not, zaman ve kişi sayısı girilir. 'Tamamla' denen kaydın üstü çizilir, iptal edilen listeden silinir. Filtreler: bugün, yarın, bu hafta, iki tarih arası, tamamlanan, iptal. Web'de rezerve masa kırmızı, boş masa yeşil görünür ve liste yazdırılabilir.",
+     "source": "https://docs.robotpos.com/urunler/rezervasyonyonetimi"
+    },
+    {
+     "system": "robotPOS",
+     "name": "QR masa siparişinde onay akışı",
+     "detail": "Sipariş onaylanana kadar masa farklı renkte ve bir sembolle görünür; onaysız sipariş mutfağa fiş göndermez. Kasada veya bir tablette verilen onay diğer terminallere yansır. Masada birden fazla sipariş varsa liste açılır; tek tek ya da tümü onaylanır. 'ONAYLANMAYAN SİPARİŞLER XX DK SONRA İPTAL OLSUN' ayarı var. QR siparişleri 'QR 20' gibi numarayla listelenir ve KDS'de müşteri adıyla görünür.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "QR Menü yönetim paneli",
+     "detail": "Panelde masa başına QR üretimi, kategoriler, ürünler, ek fiyatlı mesajlar (şekerli, şekersiz), kombo, şube bazlı fiyat listeleri, giriş banner'ı ve dil ekleme yönetilir. Müşteri satış tipinin QR'ını okutur, ürünü + ile seçer, sepete ekler ve 'sipariş ver'e basar.",
+     "source": "https://docs.robotpos.com/urunler/qrmenu"
+    },
+    {
+     "system": "Simpra",
+     "name": "Gelir merkezi türleri ve masa seçenekleri",
+     "detail": "4 tür var: Hızlı Satış, Masaya Servis, Paket Servis, Perakende. Ayarlar: barkodlu satış, kuver girişi, işlemden sonra PIN ekranına dönüş ve aynı masaya birden fazla çek açma. Terminal bazında varsayılan gelir merkezi ve varsayılan masa planı (Bahçe, Salon, Teras) seçilir; PIN girilince doğrudan o ekran açılır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/gelir-merkezi-nasil-acilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kuver ve zorunlu kuver",
+     "detail": "Çek numarasının yanındaki kuver simgesine basılır, Erkek ve Kadın sayısı girilir, 'Kuver Güncelle' ile kaydedilir. Gelir merkezinde 'Çek açılırken kuver girilmek zorunda' seçeneği var. Kuver tipinde varsayılan bir servis ücreti tanımlanırsa kuver girildiği anda kişi başı ücret çeke eklenir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/zorunlu-kuver-secenegi-nasil-aktif-edilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "İsme çek, toplu çek transferi, tüm dolu masaları görme",
+     "detail": "'İsme Göre Çekler' > 'İsme Çek Aç' ile masasız, isimli çek açılır. Vardiya değişiminde biten personelin tüm çekleri tek seferde yeni personele aktarılır; tekil transfer de var. 2026'da yalnız kendi çekini görebilen çalışanın da tüm dolu masaları görmesi ve masa no değişikliğinin tüm cihazlara yansıması eklendi (POS-9198, 13685, 13687).",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/isme-cek-acma-islemi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra Check & Place",
+     "name": "Bekleme listesi, zaman dilimleri, geç kalan misafir",
+     "detail": "Boş masa yoksa misafir bekleme listesine alınır ve masa boşalınca otomatik SMS gider. Servis saatleri sabah, öğle ve akşam dilimlerine bölünür; rezervasyon masa ve dilim bazında yönetilir. Geç kalan misafire SMS ile yeni saat önerilir. Web talepleri tabletten onaylanır ya da iptal edilir. Müşteri profilinde no-show geçmişi tutulur.",
+     "source": "https://apps.apple.com/us/app/check-and-place-restaurant-res/id6443840352"
+    },
+    {
+     "system": "Simpra Reservation",
+     "name": "Onay modu ve no-show önlemleri",
+     "detail": "Rezervasyonlar otomatik onay yerine talep olarak gelebilir ve doluluğa göre onaylanır ya da reddedilir. Yaklaşan rezervasyonda SMS içindeki linkle saniyeler içinde onay alınır; onay sayfasında konum ve iletişim bilgisi var. Provizyon veya ön ödeme alınabilir. Google Arama ve Haritalar'da 'Masa Rezerve Et' butonu çıkar. Aynı masaya günün farklı saatlerinde rezervasyon yapılabilir. VIP ve anonim profiller var. 2026'da talepten rezervasyona dönüştürürken kapasite kontrolü eklendi.",
+     "source": "https://simprasuite.com.tr/restoran-rezervasyon-sistemi/"
+    },
+    {
+     "system": "Simpra Check & Place AI",
+     "name": "Telefon ve mesaj rezervasyon asistanı",
+     "detail": "Restoranda kimse yokken gelen aramaları yanıtlar ve rezervasyonu takvime işler. Teyit ve hatırlatma aramaları yapar. WhatsApp, Telegram ve site sohbetine cevap verir, 35 dilde çalışır. Dönen misafiri telefon numarasından tanıyıp önceki tercihlerini ve notlarını hatırlatır.",
+     "source": "https://simprasuite.com.tr/restoran-rezervasyon-sistemi/"
+    },
+    {
+     "system": "Simpra",
+     "name": "QR Menü akışı",
+     "detail": "Uygulama, üyelik veya şifre gerekmez. Tükenen ürünler listede görünmez. Sipariş önce garsonun ekranına düşer, onay verilince mutfak ve bar ekranlarına ayrı ayrı iletilir. Garson çağırma, gel-al, alerjen ve kalori bilgisi (Inventory'den gelir) var. QR Menu Order ile ödeme telefondan alınır ve Masterpass ile kart kaydedilir. 2026'da QR Menü, Simpra Loyalty ile entegre oldu.",
+     "source": "https://simprasuite.com.tr/restoran-otomasyonu/qr-menu/"
+    }
+   ]
+  },
+  {
+   "area": "3 Mutfak ve bar",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "İki kademeli KDS (mutfak onayı ve garson kapanışı)",
+     "detail": "KDS1 garson ekranı, KDS2 mutfak ekranıdır; settings dosyasında wkds ekran numarasını, wkdssinglemode tek ya da çoklu ekranı (1/0) belirler. Mutfak siparişe dokunup onaylar; garson ekranında sipariş üstü çizili görünür. Garson siparişe dokunup onaylayınca sipariş kapanır.",
+     "source": "https://docs.robotpos.com/urunler/kds"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Atış ve çıkış ekranı kuralı",
+     "detail": "Mutfak Üretim Ekranı 1 atış (hazırlık), 2 çıkış ekranıdır. 1'de işlemi bitmemiş ürün 2'den silinemez. Ekran 3 bağımsız çalışabilir ya da ikinci çıkış ekranı olur. Şablonda her ürün için 1-10 numaralı ekran kutucukları işaretlenerek yönlendirme yapılır. SSS'de 'marş verme' sorusunun yanıtı yalnızca not ve mesaj havuzu; ayrı bir beklet/ateşle akışı yok.",
+     "source": "https://docs.robotpos.com/klavuz-cpm"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Hibrit ekran/yazıcı, hazırlık süresi, hazır bildirimi",
+     "detail": "Karma kurgu mümkün: içecek bölümünde ekran, sıcak mutfakta yazıcı. Siparişler ilgili bölüme otomatik dağılır. Mutfaktaki hazırlanma süresi ölçülüp analiz edilir; sipariş hazır olunca garsona otomatik bildirim gider.",
+     "source": "https://www.robotpos.com/urunler/yazilim-urunleri/is-verimliligi"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Yazıcı yedekleme, iptal fişi, etiket yazıcısı",
+     "detail": "Arka ofiste 30 yazıcıya kadar tanımlanır; bir yazıcı bozulunca içecek ve yan ürün fişleri başka yazıcıya yönlendirilebilir. İptaller için ayrı 'iptal ürün yazıcısı' alanı var. 'İptal Olan Ürünler Yazıcıdan Yazdırılmasın' ayarı mevcut. %100 indirimli çekte de mutfak fişi basılır. Kahve siparişleri bardak etiketi için etiket yazıcısına gider.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Mutfak bitirmeden kurye alamaz",
+     "detail": "'MUTFAK EKRANINDA SİPARİŞ TAMAMLANMADAN ATAMA YAPILAMASIN' ayarıyla mutfak onayı olmadan paketçi siparişi üstüne alamaz. Uygulamadan gelen al-götür sipariş mutfakta onaylanınca uygulamaya 'HAZIRLANDI' statüsü gider. Müşteri sipariş takip ekranında sipariş hazır olunca bildirim sesi çalabilir.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "Simpra",
+     "name": "KDS akışı",
+     "detail": "Siparişler kronolojik sıralanır ve yeni sipariş zil sesiyle gelir. Durumlar 'hazırlanıyor' ve 'hazır'; hazır bildirimi garsonun el terminaline düşer. KDS mesajları masa numarasıyla gelir. Hatalı gönderim tek tuşla geri çekilir, tamamlanan sipariş listeden silinir. Pişirme süresi takip edilir.",
+     "source": "https://simprasuite.com.tr/restoran-otomasyonu/mutfak-siparis-goruntuleme-sistemi/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Beklet ve Marş (hold and fire)",
+     "detail": "Şube > Gelir Merkezleri'nde 'beklet ve marş' seçeneği işaretlenir. Ayrıca davranışı 'sistem ile beklet ve marş' olan bir Beklet butonu oluşturulmalıdır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/beklet-ve-mars-backoffice-konfigurasyonu-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Yazdırma şablonları, yazıcı tanımı, baskı kuyruğu, numaratör",
+     "detail": "Yazdırma şablonunda ad, konsolidasyon modu, yazıcı/ekran ataması ve çıktı dilleri seçilir; 'Rulo Çıktı Ayarları' sağda ön izlemeyle düzenlenir. Yazıcı tanımı: ad, adres 192.168.x.x:9100, model, tür, karakter seti; dahili yazıcılı cihazda tcp://1.1.1.1:9100. 'Bekleyen Yazdırmalar' kuyruğu temizlenebilir. iOS'ta 'yerel ağ' izni verilmezse çıktı alınamaz. Numaratör (sipariş takip ekranı) kendi görseliyle kullanılabilir. 2026'da 'Ödeme Olmadan Ürünleri Yazdırabilir' parametresi tüm gelir merkezlerine geldi.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/yazdirma-sablonu-nasil-eklenir/"
+    }
+   ]
+  },
+  {
+   "area": "4 Ödeme",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Nakit ödeme ekranında 3 yol",
+     "detail": "Tam para alındıysa sol üstteki yeşil kutudaki toplam tutara dokunulur. Bütün para alındıysa çek tutarına göre otomatik önerilen banknotlardan biri seçilir. Ya da tutar numpad'den elle girilip TAMAM'a basılır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Çek ayır (ürün bazlı bölme)",
+     "detail": "ÇEK AYIR ekranında Çek 1'deki ürünlere dokunulur, ardından Çek 2'de boş bir yere dokunulur. ÖDEME AL Çek 2'yi kapatır, İPTAL Çek 1'e geri döndürür. 2025 düzeltmesiyle ayrılan çekler 2 ve 3 diye numaralanıyor. 'ÇEK AYIR EKRANINDA TSM'E GÖNDER' ayarıyla ayrılan çek doğrudan yazarkasaya gönderilebilir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Parçalı ve tutarsal ödeme",
+     "detail": "Adisyon dilediği kadar ödeme tipiyle parça parça tahsil edilir (nakit + kart + yemek çeki). Hem tutarsal hem ürünsel bölme var. 'Ürün Ayır' ile aynı masada sınırsız ayrı adisyon açılabilir. Bu işlemler yetkiye bağlı ve loglanır.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kapalı çekte ödeme tipi değiştirme",
+     "detail": "ÖDEME TÜRÜNÜ DEĞİŞTİR'e basılır ve yetki kodu girilir. Sistem önce eski ödemeyi kaldırmanı ister, sonra yeni tip seçilir. Tüm ödeme değişiklikleri Ödeme Listesi'nde kayıtlı kalır ve değişiklikte sipariş numarası saklanır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kapalı çek düzenleme kilidi",
+     "detail": "Kapalı çekte DÜZENLE tuşu tepki vermez. Önce HESAP YAZIMINI GERİ AL yapılmalıdır (yetki kodu ve EVET onayı); çek iptali de aynı sırayla yapılır, yoksa uyarı çıkar. Hesap yazımını geri alma işlemi AccessLogs'a OrderKey ve TransactionKey ile yazılır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "TAMAM, HESAP ve ÇEK KAPAT farkı",
+     "detail": "TAMAM çeki hiçbir işlem yapmadan açık adisyonlara gönderir ve ekranı en hızlı yoldan yeni müşteriye hazırlar. HESAP müşteriye hesap çeki basar, çek açık kalır. ÇEK KAPAT tüm ödeme tiplerinin ve kapanış işlemlerinin bulunduğu pencereyi açar.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Garsoniye (servis ücreti)",
+     "detail": "Garsoniye otomatik eklenir. 'GARSONİYEDEN ETKİLENMEYECEK ÜRÜNLER' listesiyle bazı ürünler hariç tutulur; iptal edilen ürünler hesaptan düşülür. FiscalBox'ta garsoniyenin KDV oranı arka ofisten ayarlanır.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS Payment Gateway",
+     "name": "Yemek kartı ve cüzdan orkestrasyonu",
+     "detail": "Multinet, Pluxee, Token Flex, iWallet, Paye, GastroPay, Paycell, Chippin, Hopi, Frink ve Zubizu ödemeleri yazarkasadan bağımsız tek bir bulut katmanında toplanır. Kasa, kiosk, mobil, QR ve web'de aynı akış kullanılır; banka kartları mevcut POS'ta kalır. robotPOS'un gerekçeleri: cironun yaklaşık %30'u yemek kartı, Android ÖKC'lerde çoğunlukla 2 yemek kartı entegrasyonu var, yeni şubede kurulum 7-14 gün sürüyor, ÖKC ekranı 5,5 inç.",
+     "source": "https://www.robotpos.com/odeme-orkestrasyon"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Döviz ile satış",
+     "detail": "Ürüne yalnız € fiyatı girilirse $ ve £ fiyatları kurdan otomatik hesaplanır. 'EKRAN YENİLENDİĞİNDE DÖVİZ KURU SABİT KALSIN' ayarı var. Müşteri ekranında ürün altında USD, EUR ve GBP karşılıkları ile güncel kur görünür. Kasa kontrolünde döviz ödemeleri kendi biriminde karşılaştırılır.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Banka POS ve yazarkasa davranışları",
+     "detail": "Ingenico ve Profilo ile hem GMP3 hem TSM entegrasyonu var. Kart ödemesinde önce öncelikli banka denenir, olmazsa diğer bankalara geçilir. TSM 'Ödeme Al' çift tıklaması engellenir. TSM'den çek tutarından fazla ödeme gelirse çek kapanmaz. TSM'e gönderilmiş ama ödemesi gelmemiş çek, 'Tamam'a basılsa bile kapanmaz.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "İade modu ve iade QR'ı",
+     "detail": "Satış fişine sipariş tarihi ve ürünleri içeren bir QR ile Kolay Kod basılır; müşteri iade için herhangi bir şubeye gelince bu kod iade modunda okutulur. 'ÜRÜN HAZIRLANDI / HAZIRLANMADI' seçimi ve sipariş tarihi ayarla zorunlu yapılabilir. İade modunda adet eksiltilebilir.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "El terminalinden yazarkasaya gönderme",
+     "detail": "El terminalinde İşlemler > 'EFT POSA GÖNDER' seçilince ekranda Çek No ve Fiş No görünür; bu numaralar ÇAĞIR ekranında da listelenir. Mobil yazarkasada Satış Modu > 'KAPI' seçilip numara girilince ödeme alınır ve çek otomatik kapanır.",
+     "source": "https://docs.robotpos.com/urunler/mobilterminal"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Ön yüklemeli personel kartı",
+     "detail": "Kartlara bakiye yüklenir; Excel ile toplu yüklemede sistem kaç satır aktarıldığını söyler. Satışta PERSONEL KART seçilir, kart okutulur ya da numara girilir, 'Kredi tüket' ile tutar bakiyeden düşer. Yükleme hareketleri raporu işlem tipine göre filtrelenir.",
+     "source": "https://docs.robotpos.com/urunler/onyuklemelisatis"
+    },
+    {
+     "system": "Simpra",
+     "name": "Çek böl ve ödeme şekilleri",
+     "detail": "Çek numarasına dokunulur, 'Çek Böl' seçilir, bölünecek ürünler işaretlenir, 'İşlemi Tamamla' ve 'Ana Çeke Geri Dön' ile bitirilir. Eğitim videolarındaki ödeme şekilleri: tekil, ürün seçerek ve parçalı.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/cek-bol-islemi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Servis ücreti",
+     "detail": "Sistem Ayarları > Servis Ücretleri'nde ad, Oran/Fiyat/Kuver tipi, Dinamik (açık tutar veya yüzde) ve vergi dilimi seçilir; 'Varsayılan' işaretlenen ücret otomatik eklenir. POS'ta çek no > 'Servis Ücreti' > seçim > 'Uygula'.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/otomatik-servis-ucreti-nasil-eklenir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Bahşiş",
+     "detail": "Nisan 2026 sürümünde bahşiş popup'ı geldi. Adisyon çıktısında bahşiş yüzdesine göre tutar hesaplanıyor ve yazıcı çıktısında bahşiş görünümleri var (POS-14289, 14011, 14336). 4.37.0 sürümünde tip popup'ı iyileştirildi.",
+     "source": "https://atlas.simprasuite.com.tr/ii/spos-26-4-1-backend-sofra/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kapalı çek işlemleri ve mali kilit",
+     "detail": "Sağ üstteki baş harflere basılır, 'Kapalı Çekler' açılır, satırdaki (...) menüsünden seçilir: 'Çeki Geri Aç' (ödemeler silinir, çek yeniden açılır), 'Çeki Sil' veya 'Ödemeleri Değiştir' (Uygulanan sekmesinde eski ödeme çöp kutusuyla silinip yenisi girilir). Yazarkasa entegrasyonu varsa mali fiş çıktığı için bu üç işlem yapılamaz.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/kapali-cek-nasil-geri-cagirilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Yazarkasaya gönderme ve hata kurtarma",
+     "detail": "'Ödeme Al' denir, ödeme tipi seçilir ve tutar yazarkasaya gider. ÖKC'de hata çıkarsa işlem ÖKC'de F tuşu ve şifreyle iptal edilir, sonra Simpra'dan yeniden gönderilir. Cihaza 'EftPos Çeki Kapatabilir' yetkisi verilmelidir: online çalışan platformda çek otomatik kapanır, offline'da çeke bir kez dokunmak gerekir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/ingenico-yazarkasa-odeme-islemi-nasil-iptal-edilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Ödeme ekranı düzeni ve ödeme notları",
+     "detail": "Buton Ayarları > Ekranlar'da gelir merkezi ve ödeme ekranı seçilir, butonların yeri sürükle-bırakla değiştirilir. Notlar&Sebepler > Ödeme Notları'nda ödeme notları tanımlanır (Kredi Kartı, Nakit, Cari). Cari ödeme butonunun davranışı 'sistem ile cari hesaptan öde' adımıdır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/odeme-buton-yer-degisikliligi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra Link",
+     "name": "Linkle tahsilat",
+     "detail": "Ödeme linki SMS veya e-postayla gönderilir; tek çekim ya da taksit, farklı para birimi ve çok dil desteklenir. Kartın bankasına göre o bankanın sanal POS'u atanır. Masterpass ile kart saklanır; bu QR menü ödemelerinde de kullanılır. Rezervasyon koduyla eşleşen link, banket/etkinlik ödemeleri ve cari ödemeleri de bu yolla alınır; 3D Secure kullanılır.",
+     "source": "https://simprasuite.com.tr/link/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Döviz kuru",
+     "detail": "Sistem Ayarları > Döviz Tanımlaması > 'Kur Ekle' ile şube, döviz birimi ve kur servisi seçilir; 'TCMB Kur Güncelle' seçilirse kur otomatik güncellenir. Servis yoksa kur elle girilir, servis varsa 'Döviz Güncelle' ile yenilenir. 2026'da kur tanımı güncellenince kur otomatik güncelleniyor. Müşteri ekranında döviz gösterimi var.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/doviz-tanimlamasi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Desteklenen ödeme cihazları",
+     "detail": "Ingenico GMP3, Hugin T300 ve Hugin Direct, Verifone (Quick ve GMU), PAX A910SF desteklenir. A910SF'de QR ile ödeme Akbank, Garanti ve TechPos'lu bankalarla (Ziraat, Vakıf, İş, Halk, QNB, Deniz, Enpara vb.) yapılır. Zaba, Adyen ve Nexi de var; 2026'da 'Generic Banka Pos' eklentisi eklendi.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/a910sf-qr-ile-odeme-destekleyen-bankalar-hangileridir/"
+    }
+   ]
+  },
+  {
+   "area": "5 Kasa yönetimi",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Kasiyer girişi ve açılış tutarı",
+     "detail": "Kasiyer Giriş'e basılır ve şifre ya da kart okutulur. 'Kasa Açılış Miktarı' istenir: kasadaki tüm para, avans ve bozuk para dahil. Son onaydan sonra 'Para sayımını bitirdiniz mi?' sorusuna EVET denir. Sol altta kasiyer adı görünür ve buton silikleşir. Girilen tutar kasiyer çıkış raporunda 'Açılış Tutarı' olarak kullanılır.",
+     "source": "https://docs.robotpos.com/klavuz-kasaislemleri"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kasiyersiz satış",
+     "detail": "Kasiyer girişi yoksa ürün girilebilir ve para alınabilir ama çek kapatılamaz. TAMAM ile çek açık adisyonlara gider ve para çekle birlikte saklanır. Kasiyer gelince ÇAĞIR'dan çeki açıp ödeme tipini seçerek kapatır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kasiyer çıkışı (vardiya kapanışı)",
+     "detail": "Yetki girilir ve kasiyer seçilir. DEĞİŞTİR ile elde bulunan nakit, kredi kartı, Sodexo, Multinet vb. 'Teslim Edilen' tutarları girilir; onaydan sonra bilgi ekranı çıkar. Vardiya değişimi yeni kasiyerin girişiyle olur. Kasiyer Farkları ve Kasiyer Çıkış raporları merkezde görülür.",
+     "source": "https://docs.robotpos.com/klavuz-kasaislemleri"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kasadan masraf ve personel avansı",
+     "detail": "Ana ekrandaki ÖDEME butonu genel masrafları ve personel avanslarını kaydeder; kasiyer girişi şarttır. Gün içi ödemeler bir listede görünür ve iptal edilebilir. Silmeye izin vermek için 'GİRİLEN MASRAFLAR SİLİNEBİLSİN' ayarı var.",
+     "source": "https://docs.robotpos.com/klavuz-kasaislemleri"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kasa Kontrol formu",
+     "detail": "İşlemler > Kasa Kontrol formunda sistemin getirdiği tutarlar ile şube çalışanının girdiği tutarlar yan yana durur. Hangi ödeme tiplerinin karşılaştırılacağı 'KASA KONTROLÜNDE GÖZÜKECEK ÖDEME TİPLERİ' ayarıyla seçilir. Döviz ödemeleri kendi biriminde karşılaştırılır.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Föy: ÖKC Z raporu mutabakatı",
+     "detail": "Z okuma yetkisi olan ÖKC'lerden Z raporları föy ekranına otomatik gelir; kullanıcı ödeme tiplerinde kasada biriken tutarları girer. 'Z Sil' yalnızca yönetici girişiyle yapılır, 'Z TARİH DEĞİŞTİRME' yetki seviyesine bağlıdır. O gün Z okutulmamış ama EKÜ kaydı varsa föyü açmak yönetici ister. IQ Portal'da sayım girilmeden kasiyer çıkışını engelleyen bir ayar da var.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Gün sonu ve sayım",
+     "detail": "Açık çek varken gün sonu başlamaz ve tarih o günün tarihi olmalıdır. Başlatıldıktan sonra durdurulamaz. Varsayılan 'Günlük Sayım'dır, istenirse 'Aylık Sayım' seçilir. Ardından tüm stokların sayım sütunu sıfırla gelen bir form açılır (stok grubu filtresi ve sütun sıralaması var). 'SON SAYIMI AÇ' ile son kayıtlı sayım düzeltilir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Çekmece kuralları, fiş sayacı, ekran kilidi",
+     "detail": "'PARA ÇEKMECESİNİN AÇILACAĞI MİNUMUM TUTAR' ayarı var. 'Para çekmecesini aç' kapalı olan yemek çeki ve personel kartı ödemelerinde çekmece açılmaz. Fiş sayacı 00:00'da değil gün başlangıç saatinde sıfırlanır. DİĞER > EKRANI KİLİTLE ürün girerken bile ekranı kilitler; Al Götür ekranında 4 dk işlem olmazsa ekran kendiliğinden kilitlenir.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kasa modülü",
+     "detail": "Cihaz bazında 'Kasa Aç/Kapa' özelliği açılır ve 'Veri Güncelle' yapılır; ilk satışta sistem kasa açmanı ister. Satış dışı manuel nakit giriş ve çıkışları kaydedilir. Kasa Raporları yalnızca kapatılmış kasaları gösterir. 4.31.0 sürümü nakit işlem limiti, 4.36.1 sürümü çekmece durum kontrolü getirdi. Gün sonu saati şube ayarındadır; kapanış gece yarısını geçiyorsa 'Günsonu Bir Sonraki Gün' işaretlenir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/kasa-modulu-nasil-aktif-edilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "40 kolon POS raporları",
+     "detail": "Fonksiyonlar > Satış Raporu'nda yazıcı, gelir merkezi, çek durumu (Açık, Kapalı, İptal), çalışan (seçilmezse hepsi) ve tarih seçilir; 'Rapor Önizlemesi' sonrası 'Rapor Al' ile fiş yazıcıdan basılır. Menü Kalemi Satış ve Kurye Raporu da aynı akışla alınır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/simpra-uzerinden-satis-raporu-nasil-alinir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Z raporu ödeme tipleri",
+     "detail": "Z raporunda Nakit, Kredi, Fatura ve Yemek Çeki ödemeleri yer alır. QR ödemeler 'TR KAREKOD-KART' olarak görünür. Z'nin altındaki Faturalar kısmı ödeme toplamına dahil değildir; Z toplamına ayrıca eklenmelidir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/z-raporu-odeme-tipleri/"
+    }
+   ]
+  },
+  {
+   "area": "6 Raporlar ve analitik",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Kasada 90 hazır rapor ve SQL erişimi",
+     "detail": "İşlemler > RAPORLAR'da konu başlıklarına göre 90 hazır rapor var; aranan rapor yoksa sol üstteki YENİ ile talep edilir. Raporlar istenen formatta saklanır ya da basılır. İsteyen markaya SQL veritabanına salt okunur erişim ve tablo yapısı eğitimi verilir. 'TANIMLANAN RAPORLAR MAİL OLARAK GÖNDERİLSİN' ayarı var.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Web raporlama ve hiyerarşik erişim",
+     "detail": "Bayi, bölge sorumlusu, bölge müdürü ve işletme sahibi hiyerarşisiyle her kullanıcı yalnızca belirli şubeleri ve raporları görür. E-posta görevleriyle raporlar belirli saatte gönderilir; olay bildirimleri ve şubelere mesaj var. Her girişte SMS doğrulaması ve şifre değiştirme periyodu uygulanır. Fişler ekranında akış: tarih, şube, grup, Uygula. Denetim bölümü iptal ve indirimlerin kime, ne kadar ve neden yapıldığını gösterir. Veri şubelerden 90 sn'de bir gelir.",
+     "source": "https://docs.robotpos.com/urunler/webraporlama"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Satır bazlı adisyon döngüsü",
+     "detail": "Adisyonu kimin, ne zaman açtığı, masaya kimin ne eklediği, kimin neyi ne zaman ve hangi sebeple düzelttiği, masa/ürün taşıma ve indirimler raporlanır. Veritabanından hiçbir kayıt silinmez; yalnızca kaydın tipi değişir.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS aiR intelligence",
+     "name": "Anomaliden göreve, SLA ve eskalasyona",
+     "detail": "Her şubenin kendi normaline göre Z-score ile 4 tip anomali tespit edilir: iptal artışı, satış düşüşü, nakit, aşırı indirim. Otomatik görev şube müdürüne atanır, bölge müdürü gözlemci olur. SLA süresinin son çeyreğinde uyarı gelir; görev kapanmazsa 5 kademede yukarı taşınır. Şubenin açıklaması ve kanıtı AI tarafından 0-100 puanlanır. Örnek bulgu: '12 iptalin 9'u aynı kasiyer'.",
+     "source": "https://www.robotpos.com/air-intelligence"
+    },
+    {
+     "system": "robotPOS aiR intelligence",
+     "name": "Talep tahmini, menü zekası, sabah brifingi",
+     "detail": "Hava durumu, Ramazan, tatiller ve konum tipine göre şube bazlı saatlik tahmin yapılır. Menü tarafında BCG matrisi, velocity, combo ve cross-sell önerileri var. Her sabah 06:00'da kişiselleştirilmiş AI brifingi gelir ve Türkçe soru sorulabilir ('Dünkü en kötü 3 şubem?'). Veri 2-3 dk'da bir güncellenir. Başka POS kullananlar satışlarını REST ile (X-API-Key) gönderip aynı katmanı kullanabilir (RIaaS).",
+     "source": "https://www.robotpos.com/restaurant-intelligence-as-a-service"
+    },
+    {
+     "system": "Simpra",
+     "name": "Backoffice rapor seti",
+     "detail": "Raporlar: Özet; Şube Raporu (gelir, vergi, ortalamalar, ödeme ve indirim dağılımı, sebebe göre iptal-iade, tek sayfada); Günlük; Yoğunluk (saatlik ısı haritası). Satış Raporları 'Rapor Tipi × Grup Tipi' matrisiyle çalışır (ör. Menü Kalemi × Çalışan, Ödeme Tipi × İş Günü). Ayrıca Rapor Etiketleri, Kasa, Müşteri (en çok harcayan/gelen) ve Çekler raporları var. Çekler indirimli, servis ücretli, bölünmüş ya da birleştirilmiş diye filtrelenir; 'Turları Göster' hangi ürünü kimin saat kaçta girdiğini gösterir. Excel, PDF ve CSV dışa aktarım var.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/backofficete-raporlar-nasil-goruntulenir-nasil-rapor-alinir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Zamanlanmış e-posta raporu",
+     "detail": "Herhangi bir raporda 'E-Posta Gönder'e basılır; Rapor Adı, Rapor Periyodu (hesaplama aralığı), Gönderim Periyodu, Saat ve E-Posta girilir. Kayıtlar Raporlar > E-Posta Ayarları'ndan silinir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/otomatik-rapor-gonderme-nasil-ayarlanir/"
+    },
+    {
+     "system": "Simpra Insight",
+     "name": "Owner app",
+     "detail": "Reports for today, yesterday, past week and month are one tap away. Shows payment types, the top 20 products (with comps and discounts) and revenue center data (guests, refunds, cancellations). Managers approve POS transactions that require authorization from the app. Alerts fire when a user logs in from multiple devices; OTP login is supported, and there are waste reports. The 3.0 rebuild added reports on shift cash closing, table turnover, delivery performance, staff productivity, kitchen prep time, menu engineering and loyalty. It also added a weekday-by-hour heatmap, KPI cards against the previous week, widgets and Apple Watch support.",
+     "source": "https://apps.apple.com/us/app/simpra-insight-sales-report/id1449586798"
+    },
+    {
+     "system": "Simpra",
+     "name": "Şüpheli İşlem Takibi",
+     "detail": "Ücretli bir eklenti. İşlem Listesi'nde açık çek iptali, kapalı çek iptali, indirim, iptal, ikram ve iade için tutar ya da yüzde eşiği tanımlanır. SMS ve bildirim yalnızca 'Bildirilecek Kişi' listesindekilere gider; şube veya organizasyon sahibine otomatik gitmez. Tetiklenen kayıtlar Şüpheli İşlemler ekranında listelenir. 2026'da AI şüpheli işlem modülü eklendi.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/supheli-islem-takibi-nedir-supheli-islem-takibi-nasil-aktif-edilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Maliyetli satış ve indirim raporları",
+     "detail": "Inventory bağlıysa Satış Raporları'nda rapor tipi Menü Kalemi seçilince en sağ sütunda Inventory'den gelen net maliyet görünür. İndirimli Ürün Raporu çalışan, iş günü veya ana rapor olarak gruplanabilir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-inventory/simpra-inventory-insight-maliyeti-simpra-posda-nasil-gorebilirim/"
+    }
+   ]
+  },
+  {
+   "area": "7 Stok ve maliyet",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Şube depo talebi ve mal kabul",
+     "detail": "Depo Talep Formu'nda ürünü teslim eden portföy seçilir; miktar ürün arama, barkod ya da menü tuşlarıyla girilir ve 'SİPARİŞİ ONAYLA' ile gönderilir. Merkez onaylayana kadar talep düzenlenebilir. Mal Kabul aynı gün yapılmalıdır çünkü günlük sayımın tutarlılığı buna bağlı; tarih ve cari seçilir, durum 'MAL KABUL EDİLDİ' olur. Alış faturaları AF, mal kabuller D1 serisiyle numaralanır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Depo, transfer ve fire",
+     "detail": "Şube Depo Yönetimi'nde Envanter Durumu (anlık), Hareketler, Transfer Talepleri ve Depo Sayımları sekmeleri var. Her şubede ayrıca bir Fire Zayiat Deposu bulunur; fire girişi, ürünün fire deposuna transfer formuyla gönderilmesidir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Maliyet yöntemi, reçete ve fiyat kilidi",
+     "detail": "Son alış ve ağırlıklı ortalama yöntemlerinin ikisi de raporlanır. Şube ve merkez için ayrı min/max stok tanımlanır ve par stok sistemi var. Reçete içinde reçete kullanılabilir ve aynı ürün kodu şubeye göre farklı reçete alabilir. Reçete satırında ürün bazlı fire tanımlanır. Menü ürünü zayi edilince tüm reçetesi zayiye çekilir. Anlaşmalı fiyat listesi dışında giriş yapılırsa uyarı çıkar ve fiyat farkı raporuna düşer. Son 5 alış görülebilir.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "IQ Portal (şube web paneli)",
+     "detail": "Şube web panelinde cari, fatura (Satır Ekle), stok ve depo modülleri var. Transferde kaynak ve hedef depo seçilir. Sayım fişi: tarih ve depo seçilip oluşturulur, sonuçlar girilir, Kaydet ya da Güncelle denir, 'Onayla' ile kapatılır. Depo Sayım Periyodu günlük ve haftalık sayımı yönetir. Raporlar: dönem kapanışı, satış malı maliyet analizi, reçete tüketimi.",
+     "source": "https://docs.robotpos.com/klavuz-iqportal"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Teraziye fiyat aktarımı",
+     "detail": "Arka Ofis > Raporlar > Genel > Terazi aktarımı PLU raporu Excel'e alınır. Perkon Terazi Sistemi'nde 'Dosyadan import' ve 'Aktarıma başla' ile yüklenip kaydedilir; fiyatlar teraziye yansır.",
+     "source": "https://docs.robotpos.com/entegrasyonlar/terazi"
+    },
+    {
+     "system": "Simpra Inventory",
+     "name": "Maliyet ve reçete araçları",
+     "detail": "Hareketli ağırlıklı ortalama her alım ve satımdan sonra güncellenir. Reçete içinde reçete kullanılabilir. 'Deneme Reçetesi' yeni reçete olarak ya da mevcut reçetenin üstüne kaydedilir. Bir rapor, reçete içeriğini farklı porsiyonlara ölçekler. Kasap modülü karkas etin verimini ölçer ve üretim planı yapılabilir. Stok malının temel birimi sonradan değiştirilemez.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-inventory/simpra-inventoryde-deneme-recetesi-olusturabilir-miyim/"
+    },
+    {
+     "system": "Simpra Inventory",
+     "name": "Satın alma ve tedarikçi",
+     "detail": "Talep/Sipariş ekranında sipariş ya da transfer talebi açılır ve sipariş e-posta veya B2B ile tedarikçiye gönderilir. Tedarikçiye yalnızca fiyat girebileceği bir liste gönderilir, dönen liste otomatik içe alınır. Talepler min/opt stoğa göre oluşturulur. Sipariş ile alım arasındaki fark raporlanır. Tedarikçi borç durumu ve vade günlerine göre haftalık ödeme takvimi var. Telefonla mobil siteye girilip Bluetooth barkod okuyucuyla sayım, alım ve transfer yapılır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-inventory/simpra-inventoryde-tedarikcilerden-aldigimiz-fiyat-tekliflerini-stoklara-tanimlayabilir-miyiz/"
+    },
+    {
+     "system": "Simpra Inventory",
+     "name": "Kayıt düzeltme kuralları",
+     "detail": "Kaydedilmiş transfer düzenlenemez ve silinemez; ters kayıt gerekir. İrsaliyede miktar, fiyat, vergi ve indirim değiştirilebilir; ürün yanlışsa miktar 0 yapılıp yeni kalem eklenir, başlık değiştirilemez. Fatura 'Faturayı ayır' ile irsaliyeye çevrilip düzeltilir; muhasebeye aktarılmışsa düzeltilemez.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-inventory/simpra-inventory-alim-duzeltme/"
+    },
+    {
+     "system": "Simpra Inventory",
+     "name": "POS düşüm farkı kontrolü",
+     "detail": "POS gelirleri ile 'Gelir ve Maliyet Toplamları' arasındaki fark 'Aktarılmayan İşlemler'den 5 sebep tipine göre incelenir: düşüm durdurulmuş, tanımsız gelir merkezi, aktarılmamış satış malı, eşleştirilmemiş satış malı, envanter kapalı. Sorun giderildikten sonra filtreli düşüm yeniden başlatılır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-inventory/simpra-inv-simpra-pos-gelir-farki-cagrilari-geldiginde-kontrol-edilecek-adimlar/"
+    },
+    {
+     "system": "Simpra",
+     "name": "POS'ta manuel stok ve zayi",
+     "detail": "Menü kaleminde 'Pos ile Manuel Stok Yönetimi' açılıp stok girilir; 'Eksi Stok Satılamaz' işaretliyse stok bitince ürün satışa kapanır. Zayi: Fonksiyonlar > Zayi, ürün aranır, sebep seçilir (ör. SKT Geçti, Ambalaj Hasarı; sebep türü 'Zayi'), miktar girilir, Tamam. Zayi Inventory stoğundan düşer ve Zayi Raporlarında görünür.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/zayi-islemi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra Inventory",
+     "name": "Reçete maliyetinden fiyat önerisi",
+     "detail": "Satın alınan ürünlerin fiyat analizine göre reçete maliyetinden satış fiyatı güncellemesi önerilir. Potansiyel ve gerçek tüketim kaçakları yakalanır. Diğer Giderler, Gelirler Raporu'nda ürün satışlarına dağıtılarak net maliyet gösterilir.",
+     "source": "https://simprasuite.com.tr/restoran-otomasyonu/stok-takip-programi/"
+    }
+   ]
+  },
+  {
+   "area": "8 Personel",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Güvenlik seviyeleri, kart ve parmak izi",
+     "detail": "Seviyeler 1-10 arasıdır, 10 en üst seviyedir; varsayılan olarak garson 3, kasiyer 7. Masa taşıma, çek ayırma, raporlar, indirim ve iptal gibi işlemler seviyeye bağlanır (ör. indirim yalnızca 8-9). Personel kartında numpad yetki kodu ile MIFARE ve PROXIMITY kart kodları bulunur. Manyetik kart okuyucu standarttır, USB parmak izi okuyucu opsiyoneldir.",
+     "source": "https://docs.robotpos.com/klavuz-cpm"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Zaman kartı ve iç mesaj",
+     "detail": "Zaman Kartı ile iş başı ve iş sonu kaydedilir (şifre, manyetik veya Mifare kart ya da parmak izi). Aynı ekrandan kasalar arası iç mesaj gönderilir; 'TABLETE MESAJ GÖNDERİLEBİLSİN' ayarıyla mesaj tabletlere de gider. SSS'ye göre Infinia'da vardiya planı ve puantaj yok.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS air-HR",
+     "name": "Karekodlu mesai, vardiya ve puantaj",
+     "detail": "Mesai, şubeye asılı sabit ya da ekranda dönen bir karekodla ve konum doğrulamasıyla vurulur. Sinyal zayıfsa kayıt cihazda kuyruğa girer ve çift kayıt oluşmaz. Vardiya şablonları, 'geçen haftayı kopyala', gece yarısını aşan vardiya ve asgari dinlenme uyarısı var; plan yayınlanmadan personel göremez. Puantaj geç kalma, fazla mesai ve devamsızlığı otomatik hesaplar; ay onaylanınca kilitlenir ve Excel'e aktarılır.",
+     "source": "https://www.robotpos.com/air-series/air-hr"
+    },
+    {
+     "system": "robotPOS air-HR",
+     "name": "İzin, avans, hakediş ve personel portalı",
+     "detail": "Yıllık izin kıdeme göre otomatik hak edilir; talep telefondan gelir ve tek tıkla onaylanır. Avans taksitlendirilir ve hakedişte otomatik mahsup edilir. Hakediş normal saat, fazla mesai, tatil, gece zammı, yemek, yol, prim ve bahşiş payını kapsar; CSV ile muhasebeye gider. Personel yönetim paneline hiç girmez; uygulama indirmeden mobil web portalını kullanır.",
+     "source": "https://www.robotpos.com/air-series/air-hr"
+    },
+    {
+     "system": "robotPOS air-HR",
+     "name": "Görev motoru (açılış/kapanış, HACCP)",
+     "detail": "Görev tanımı dört soruya cevap verir: ne sıklıkla tekrar eder (günlük, haftalık, 3 ayda bir, işe girişten +N gün), kime düşer (kişi, pozisyon, departman, o vardiyadakiler), havuz mu (ilk tamamlayan alır) yoksa herkes ayrı mı, nasıl kanıtlanır (işaret, fotoğraf, beklenen aralıklı sayısal değer, not). Aralık dışı ölçüm engellenmez; işaretlenir ve yöneticiye bildirim gider. Kural önizlemesi '7 günde 12 kayıt oluşur' gibi özet verir. Görev 20 şubeye tek tıkla kopyalanır ve denetim izi değişmez.",
+     "source": "https://www.robotpos.com/air-series/air-hr"
+    },
+    {
+     "system": "robotPOS air Gems",
+     "name": "Satış hedefi oyunlaştırma",
+     "detail": "Personele günlük, haftalık ve aylık satış hedefleri konur ve ödüller tanımlanır. Liderlik tablosuyla şubeler arası kıyas yapılır. Personel kendi mobil uygulamasında görev, puan ve ödülleri izler.",
+     "source": "https://www.robotpos.com/air-series/air-gems"
+    },
+    {
+     "system": "Simpra",
+     "name": "Yetki grupları ve cihaz yetkileri",
+     "detail": "Şube > Çalışanlar > Yetki Grupları'nda POS operasyon yetkileri ayarlanır (ör. 'Çoklu indirim'); backoffice kullanıcıları için ayrı Rol Ayarları var. Cihaz bazında da yetki verilir: 'Eft Pos Çeki Kapatabilir', 'Kasa Aç/Kapa', 'Harici Uygulama Ayarlarını Güncelleyebilir', çevrimdışı çalışabilir. Terminal değişiklikleri 'Veri Güncelle' ile alır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/yetki-grubu-nedir-nasil-eklenir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Çalışan ve PIN yönetimi",
+     "detail": "Çalışan Ekle formunda şube '+' ile aktif edilir; yetki grubu, PIN, ad, soyad ve telefon girilir; kuryeyse 'kurye' işaretlenir. Unutulan PIN, backoffice'te çalışan düzenleme ekranında görünür. Backoffice kullanıcısı şifresini e-postayla gelen linkten belirler. OTP girişi ve çoklu cihaz giriş uyarısı da var.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/calisan-ekleme-islemi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Saatli Giriş/Çıkış (basit PDKS)",
+     "detail": "Departmanlar tanımlanır; bir kişi birden fazla departmanda olabilir (garson ve şube müdürü). Özellik şube ayarından açılır. PIN ekranının sol altındaki saat simgesine basılır, PIN girilir, departman seçilip giriş onaylanır. Çıkışta Mola ya da Mesai Bitimi seçilir; moladaki kişi giriş yapmak isterse 'Önce Saatli Giriş Yapınız' uyarısıyla operasyon açılmaz. Aktif Giriş raporunda mesaide olanlar yeşil görünür; Özet raporu departman ya da çalışan bazındadır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/simprapos-saatli-giris-cikis/"
+    }
+   ]
+  },
+  {
+   "area": "9 Müşteri ve sadakat",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Sürekli müşteri ve Para Puan",
+     "detail": "Müşteri eklemek için en az ad ve telefon gerekir. Müşteri kartında Para Puan yüzdesi ve başlangıç puanı tanımlanır. Satışta PARA PUAN'a basılır, müşteri ad parçasıyla aranıp SEÇ ile seçilir; puan ekstresi görülür ve yazdırılabilir. PUANI KULLAN numpad ile harcanacak tutarı alır. Örnek: %10 puan, 5 TL kullanım; kalan ve kazanılan tutarlar otomatik hesaplanır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Cari hesap (veresiye)",
+     "detail": "Cari hesaba satış yapılır ve hesap başına limit konur. 'CARİ HESAPTAN TAHSİLAT AL': müşteri seçilir, ödeme tipi seçilir, numpad'e borç toplamı gelir; tamamı ya da bir kısmı tahsil edilir. Cari Hesap Tahsilatları listesinde her satırın sonunda İPTAL ET var; listeyi görmek için 'CARİ HESAP TAHSİLATLARINI GÖRME' yetkisi gerekir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Online Cari (web portal)",
+     "detail": "Müşteriler web portalında açılır; Direkt Borç ve Direkt Alacak (kapora) girişi, PDF hareket raporu ve Excel dışa aktarım var. Hareketi olan müşteri silinemez. Şubede 'Online Cari' ödeme tipiyle çek kapanır; 'Tahsilat Al' ve 'İADE' tuşları var. Aynı çek için ikinci kez tahsilat denenirse 'Cari Ödeme Daha Önce Alınmış' uyarısı çıkar.",
+     "source": "https://docs.robotpos.com/klavuz-onlinecari"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Üç indirim türü ve ikram",
+     "detail": "Çek indirimi tüm toplama oran uygular, ürün indirimi seçili satıra uygulanır, nakit indirimi (DİĞER > İNDİRİM altında) tutar olarak düşülür. Her biri yetki ve müşteri adı ister. Çek indirimi yapılmış çeke ürün indirimi yapılamaz, tersi de mümkün değil. İKRAM ödeme tipinde 'MÜŞTERİ ADINI SOR' açılarak kime ikram yapıldığı zorunlu hale getirilir.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Kupon ve promosyon motoru",
+     "detail": "Kupon kodu üretiminde başlangıç karakterleri (ör. RBT + 5 rakam), uzunluk, tarih, adet, ürün ve şube seçilir. İndirim açıklamasına küçük harfle 'kupon' yazılırsa kod sorulması zorunlu olur; kod merkezde doğrulanır ve aynı tuşa tekrar basınca iptal edilir. Promosyonun koşulu tek ürün, grup, liste ya da tüm ürünler olabilir; minimum adisyon, öncelik sırası, tarih ve saat aralığı tanımlanır ('2 al 1 öde', 'ikincisi %50'). Satış ekranında kasiyere öneri çıkar.",
+     "source": "https://docs.robotpos.com/klavuz-cpm"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Happy Hour",
+     "detail": "DİĞER > Happy Hour Aç/Kapat tek basışla açılır ve açık kaldığı sürece ekranda uyarı yazısı yanıp söner. Otomatik happy hour gün ve saat bazında çalışır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "CRM uygulaması ve air Loyalty",
+     "detail": "Üyelik SMS doğrulamasıyla açılır; uygulamada tek kullanımlık üye QR'ı, TL bakiye ve hediyeler var. Panelde akıllı kampanyalar (hoş geldin, doğum günü, para puan) kurulur ve SMS, e-posta ya da bildirimle iletilir; faydalar % veya TL olarak tanımlanır; akıllı anketler var. air Loyalty'de Üye, Bronz, Gümüş, Altın ve Platin seviyeleri, dijital damga ve şifresiz SMS ile giriş yapılan PWA bulunur.",
+     "source": "https://docs.robotpos.com/urunler/sadakat"
+    },
+    {
+     "system": "Simpra",
+     "name": "İndirim tanımı ve uygulama",
+     "detail": "Sistem Ayarları > İndirimler'de iki tür var. Basit indirim sabit tutar/oran ya da Dinamik (açık tutar/yüzde) olabilir; 'Menü Kalemi İndirimi' ile belirli kalemlere uygulanır. Gelişmiş indirim kategoriye uygulanır. POS'ta çek no > 'İndirim Uygula' > seçim > 'Uygula'. Müşteri indirimi OTP (SMS) onayıyla kurulabilir. Kampanyalar saat dilimine, hizmet tipine ve şubeye göre ayarlanır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/indirim-nasil-tanimlanir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Hediye kartı ve cari tahsilat",
+     "detail": "Hediye kartları gruplar halinde açılır; süreli ve bakiyeli kart seçenekleri var. Kart numaraları Excel'den içe aktarılır ve bakiye yüklemek ayrı yetkiye bağlıdır. Cari tahsilat iki yerden yapılır: backoffice Cari İşlemler > 'Tutar Tahsil Et' (tutar, indirim, tahsilat tipi, not) ve POS'ta Fonksiyonlar > Cari Tahsilat.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/hediye-karti-icin-kart-numaralari-toplu-olarak-nasil-girilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Sadakat programı ve entegrasyonlar",
+     "detail": "Simpra Loyalty eski üye puanlarını taşır; otomatik promosyonlar, doğum günü ve hoş geldin bonusları, SMS/e-posta/push bildirimleri, müşteri segmentasyonu ve dijital sadakat kartı sunar. Como, Kaizen, Zubizu ve Boostfeel ile de entegre çalışır.",
+     "source": "https://simprasuite.com.tr/restoran-otomasyonu/musteri-sadakat-programi/"
+    }
+   ]
+  },
+  {
+   "area": "10 Online ve teslimat",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Caller ID ile paket siparişi",
+     "detail": "Arama gelince hattın bağlı olduğu buton yanıp söner; Caller ID cihazı yoksa PAKET SATIŞ'a basılıp telefon elle girilir. Adres girilip 'YENİ SİPARİŞ VER' denir; aynı müşteri tekrar aradığında bilgileri doğrudan gelir. Bir telefona birden fazla adres, bir adrese birden fazla telefon kaydedilir; müşteri notu, şikayet ve gün içi arama sayısı tutulur. Santral entegrasyonu da var.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Paketçi ekranı",
+     "detail": "Solda kuryeler listelenir; o gün izinli olan aşağı okla izinli kısmına alınır. Sipariş işaretlenip 'Harita Göster' ile Google Maps'te görülür. Kurye TESLİM AL'a basıp şifresini girer ve sipariş 'Teslimatta'ya geçer. Dönünce Varış'a basıp şifre girer; sipariş 'Tamamlanmış'a geçer ve teslim süresi kaydedilir. Kurye Değiştir iki kuryenin şifresini ister. Hesap Durumu bir kuryenin o günkü adisyonlarını ve teslim etmesi gereken nakit, kart ve Multinet tutarlarını gösterir. Analiz ekranı 20 dk'yı geçen siparişleri ve günlük/haftalık ortalamaları verir.",
+     "source": "https://docs.robotpos.com/klavuz-kasaislemleri"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Pazaryeri entegratörü",
+     "detail": "Yemeksepeti, Getir Yemek ve Çarşı, Trendyol Yemek, Migros Yemek ve Fuudy desteklenir. Sipariş gelince sağ altta ileti kutusu açılır, ses çalar ve fiş otomatik yazdırılır. Hazırlanıyor, Teslimatta, Teslim Edildi ve İptal statüleri platforma geri bildirilir; 'XX dk sonra teslim edildi olsun' ayarı var. Pazaryeri siparişi yalnızca kendi ödeme tipiyle kapanır. İptal edilemeyecek statüler tanımlanabilir. CPM'de eşleşmeden satılan ürünler ayrı bir ekranda izlenir.",
+     "source": "https://docs.robotpos.com/entegrasyonlar/yemeksepeti"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Komisyonsuz web ve mobil sipariş",
+     "detail": "Müşterinin uygulama indirmesi gerekmez. Şube listeden, ilçe filtresinden ya da konumla seçilir; kartta açık/kapalı saatleri, 3D tur ve WhatsApp bağlantısı var. Gel-al ya da adrese teslim seçilir. Sipariş seçilen şubenin robotPOS'una düşer. Menü CPM'den 'Web Sipariş Menü Güncelle' ile yayınlanır. Sipariş 2 dk içinde iptal edilebilir.",
+     "source": "https://www.robotpos.com/urunler/yazilim-urunleri/web-mobil-siparis"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Çağrı merkezi ve kurye firmaları",
+     "detail": "Siparişler tek merkezden alınır ve en yakın şubeye yönlendirilir. Mahalle/cadde/sokak verisi Excel'den yüklenir ve her şubeye servis alanı atanır. Vigo, Paket Taxi, Paketle, Packupp ve Hemen Yolda kurye firmalarıyla entegrasyon var.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "Simpra",
+     "name": "Paket servis ekranı",
+     "detail": "Paket gelir merkezinde sipariş sola kaydırılıp 'Kuryede' seçilir, kurye seçilince sipariş 'Kuryedekiler'e geçer. Sola kaydırıp 'İptal Et' denen sipariş 'İptal Edilenler'e gider. Ödeme alınan sipariş 'Teslim Edilenler'e geçer ve Yemeksepeti, Getir ya da Trendyol panelinde teslim edildi olarak işaretlenir. Haritadan bölge çizilip bölgeye göre teslimat ücreti belirlenir; adres haritada pinle seçilir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/paket-servis-siparisi-kuryeye-nasil-atanir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Platform ayarları kasadan",
+     "detail": "Fonksiyonlar > Restoran Ayarları'ndan platform durumu kasadan değiştirilir. Yemeksepeti: Açık, Kapalı veya Yoğun ve servis süresi. Getir: durum, 'Restoran Getirsin (Kurye)' ve servis süresi. Trendyol: durum. Cihazda 'Harici Uygulama Ayarlarını Güncelleyebilir' yetkisi olmalıdır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/simpra-uzerinden-yemeksepeti-ayarlari-nasil-degistirilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Pazaryeri ürün eşleştirme",
+     "detail": "Pazaryeri > Yemeksepeti, Getir veya Trendyol > 'Menüyü Güncelle' ile platform menüsü çekilir. Menü kalemleri 'Menüler', seçenekler 'İlaveler' altında eşleştirilir. Eşleşmeyenler kırmızı ya da 'EŞLEŞTİRİLMEDİ' görünür ve mutfak fişine '(EŞLEŞMEMİŞ)' olarak basılır. Yemeksepeti portalına yeni eklenen ürün görünmezse destekten APK menü güncellemesi istenir (25-30 dk).",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/yemek-sepeti-urun-eslestirme-nasil-yapilir-yemek-sepetinden-gelen-siparislerin-altinda-eslesmemis-yaziyorsa-ne-yapilmalidir/"
+    }
+   ]
+  },
+  {
+   "area": "11 Türkiye mali uyumu",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "ÖKC entegrasyonları ve KDV kısımları",
+     "detail": "Ingenico ve Profilo ile GMP3 ve TSM, Hugin Android ('Hugin Yazarkasa Kullanılıyor (N910)' ayarı, VUK 507) ve PAVO Android desteklenir. Ingenico'da KISIM adlarını ve sırasını değiştiren 'KDV DÜZENLEME' modülü var. Token Flex'te terminal veya entegrasyon bilgisi eksikse fiş basılmaz ve uyarı çıkar.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Bilgi fişi QR ve yemek çeki e-Arşiv",
+     "detail": "e-Arşiv'e geçen markalarda ÖKC bilgi fişine fatura bilgisini gösteren bir QR basılır. Yemek çeki ödemelerinde fişe gerekli ibareler eklenir ve ilgili ödeme tipleri otomatik e-Arşiv faturasına dönüşür. Faturalı satışta e-posta alanına girilemeyecek karakterler kontrol edilir.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "e-Adisyon",
+     "detail": "e-Adisyon, 509 Sıra No.lu VUK Tebliği kapsamında masaya servis yapan işletmeler içindir. Satış belgesi değildir; ödeme alınınca ÖKC fişine ya da e-faturaya dönüşür. Pratikte ÖKC entegrasyonu şarttır, yoksa aynı satış iki cihaza elle girilir ve Z raporu ile POS raporu ayrışır. Geçiş 4 adım: yükümlülük tespiti, GİB başvurusu ve entegratör seçimi, POS ve ÖKC kurulumu, test. Kurulum servis saatleri dışında yapılır.",
+     "source": "https://www.robotpos.com/e-adisyon"
+    },
+    {
+     "system": "Simpra",
+     "name": "GMU (VUK 507), Quick ve iade belgesi",
+     "detail": "Verifone'da 'Bilgi Fişine Slip Bilgilerini Ekle' Evet yapılırsa müşteri nüshası ayrıca basılmaz, bilgi fişinin üzerinde yer alır. GMU'da kapalı çek iptali: İşlemler, çek, üç nokta, 'İade Yap'; ardından Gider Pusulası ya da Fatura İptal. Sepette İstisna ve Tevkifat indirimleri var. 2026'da GMU Fast Service ödemesinden sonra bilgi fişi yazdırma ve faturası oluşmamış çekler için bir arka plan işi eklendi.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/gmu/gmu-pos-kapali-cek-nasil-iptal-edilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "e-Adisyon ve Portal Plus e-belge",
+     "detail": "2026'da Quick'e gönderilen EFT POS çekleri için e-adisyon isteği ve Portal Plus ödemelerinde e-adisyon bilgisinin yazdırılması eklendi. Portal Plus ile e-Arşiv ve e-Fatura kesilir; KB'de vergi no, GİB etiket ve kamu faturası zorunlu alan hataları için rehberler var. Varsayılan fatura unvanının 'Nihai Tüketici' gelmemesi de 2026'da sağlandı.",
+     "source": "https://atlas.simprasuite.com.tr/ii/spos-26-2-1-12-backend-sofra/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Yazarkasa fişi alanları ve ÖKC raporları",
+     "detail": "Ingenico klasöründeki config.json'da UserMessageCheckNo ve UserAlias true yapılıp IIS yeniden başlatılınca yazarkasa fişinde çek no ve kullanıcı görünür. Ingenico'da F tuşuyla EKÜ Özet Raporu, iki tarih arası Z ve Departman Girişi ile KDV kısımları ayarlanır. Parametre yüklemede ÖKC otomatik Z alır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/yazarkasa-fisinde-cek-numarasi-ve-kullanici-bilgisi-nasil-aktif-edilir/"
+    },
+    {
+     "system": "Simpra Quick / Pay",
+     "name": "Telefonu ÖKC yapan SoftPOS",
+     "detail": "NFC'li Android telefon ya da Vanstone A90 Pro üzerinde satış, ödeme (manyetik, çipli, NFC, nakit, parçalı) ve e-Belge tek cihazda yapılır. VUK 507 ve GİB standartlarına uygundur; mali hafıza dolması sorunu yoktur. Adet, kg ve litre birimleri desteklenir.",
+     "source": "https://simprasuite.com.tr/simpra-quick/"
+    }
+   ]
+  },
+  {
+   "area": "12 Donanım ve çalışma",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Hibrit yerel veritabanı",
+     "detail": "Şubede SQL Express çalışır; tüm adisyon hareketleri yerele yazılır ve merkeze 90 sn aralıkla web servisle gider ('internet sadece yedekleme'). Satır bazlı önbellek sayesinde elektrik gidip geldiğinde kaldığı yerden devam edilir. Bağlantı ya da merkez kesilse bile satış sürer, bağlantı dönünce veri senkronlanır.",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Tablet ve el terminali LAN kurulumu",
+     "detail": "Kasa PC'sine IIS kurulup dataservice.asmx servisi yayınlanır; tablet kasanın IP'siyle bağlanır. El terminaline terminal no ve şifreyle girilir. El terminalinden hesap pusulası basılır, EFT POS'a gönderilir, indirim yapılır, masa değiştirilir ve işlemler loglanır.",
+     "source": "https://docs.robotpos.com/urunler/mobilterminal"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Sahada arıza giderme rehberi",
+     "detail": "SQL 'Suspect' durumundaki veritabanı için kurtarma komutları, SQL hizmeti 3417 hatası ve yazıcı paylaşımı için grup ilkesi ayarı anlatılıyor. Windows'un USB güç tasarrufunun barkod okuyucu, CallerID ve yazıcıda kopmalara yol açtığı ve nasıl kapatılacağı da var.",
+     "source": "https://docs.robotpos.com/sorunlar-cozumler"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Self-checkout kiosk",
+     "detail": "Müşteri para birimi ve dili seçer, burada mı al götür mü olduğunu işaretler, +/- ile adet ayarlar, sipariş notu yazar; isim zorunludur. Panelde zaman aşımı süreleri, ürün ve sipariş notunun açık/kapalı oluşu ve başlangıç kategorisi ayarlanır. Ürün görseli 356x285, banner 540x960. Yemek kartı ve cüzdan ödemesi doğrudan kiosk ekranında alınır.",
+     "source": "https://docs.robotpos.com/urunler/selfcheckout"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Müşteri ekranı",
+     "detail": "Ürün notları müşteri ekranında gizlenebilir. Ekranda döviz karşılıkları ve para birimi sembolü, kupon/kampanya uyarısı ve Payriff ödeme QR'ı gösterilir.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "Simpra",
+     "name": "Online ve kutulu offline farkı",
+     "detail": "Offline senaryoda çekler mini PC'deki SQL Server'da tutulur ve ödeme alınıp kapanınca buluta gider. Anlık geçiş yoktur; sistem ya online ya offline çalışır. Offline'da internet yokken EFT POS gönderimi, pazaryeri siparişleri, kasa aç/kapa, Portal Plus e-belge, GMU ve KDS/sipariş takibine gönderim çalışmaz. Insight açık çekleri yalnızca sayı ve tutar olarak gösterir. Simpra logosunun kırmızı olması offline demektir. Geçişte yazarkasalar manuel moda alınmalıdır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/simpra-online-ve-kutulu-offline-arasindaki-farklar-nelerdir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Platformlar ve 'Veri Güncelle'",
+     "detail": "Uygulama iPad, iPhone, Mac, Windows, Linux (AppImage) ve Android'de çalışır; Android cihazlar arasında Verifone T650P, PAX A910SF, iMin, Breeze ve HP Engage var. Backoffice değişiklikleri terminale ancak 'Veri Güncelle' ile iner. Kiosk verileri 2026'da yerel veritabanına alındı.",
+     "source": "https://simprasuite.com.tr/"
+    },
+    {
+     "system": "Simpra CDS",
+     "name": "Customer display",
+     "detail": "Branded screen that shows the current check and menu items. Release history: open-price items (1.2), offers (1.3), multi-currency (1.4), currency display (1.7.1). Android can play video. If the screen size is set to small, only the total shows.",
+     "source": "https://apps.apple.com/us/app/-/id1436299951"
+    }
+   ]
+  },
+  {
+   "area": "13 Yönetim",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "CPM şablonları ve aktarım",
+     "detail": "Menü, fiyat, yazıcı, KDS, ödeme tipi, indirim ve personel yetkisi şablonları şubeye özel ya da ortak tanımlanır. Toplu Fiyat ve Toplu Yazıcı ekranları var. Değişiklikler 'Aktarım' ekranından şubelere gönderilir. Şube-Pasif Ürünler ile şablondaki bir ürün tek şubede gizlenir. Ürün KDV modülü şube ve satış tipine göre KDV tanımlar.",
+     "source": "https://docs.robotpos.com/klavuz-cpm"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Ödeme tiplerini sadeleştirme",
+     "detail": "Arka Ofis > İndirim Promosyon Ödeme > ÖDEME TİPLERİ'nde kullanılmayan tiplere 'Ödeme Tipini Gizle' işaretlenir. Bir tip yeniden adlandırılabilir (Multinet yerine İKRAM) ve 'MÜŞTERİ ADINI SOR' ile müşteri adı zorunlu yapılır. Satış ekranında yalnızca kullanılan tipler kalır.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Destek prosedürü ve SLA",
+     "detail": "Destek 7x16 çalışır. Arayan önce AI bota firma adını ve sorunu söyler, talep açılır ve aynı iş günü yanıt gelir; ciroyu etkileyen sorunlara (ör. kasa açılmıyor) dakikalar içinde dönülür. Fiyat değişikliği ve yeni ürün talepleri en az 3 iş günü önceden e-postayla gönderilmelidir. İstanbul'da robotPOS donanımı için yerinde servis standart olarak 3, acil durumda 1 iş günü içinde gelir.",
+     "source": "https://en.robotpos.com/blog_new/restoran-pos-destek-hizmetleri-proseduru"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Fiyatlandırma şeffaflığı",
+     "detail": "Her ürünün fiyatı dört bileşenden oluşur: lisans, aylık kullanım, kurulum ve destek. air-POS ana kullanıcı lisansı $1,950, ek terminal $750, mobil terminal ve KDS terminali $450. aiR Intelligence ilk 2 ay ücretsiz, destek $25/şube/ay. air inventory $250 tek seferlik + $45/şube/ay. Kiosk $2,950 + $15/şube/ay.",
+     "source": "https://www.robotpos.com/fiyatlandirma"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Entegrasyon ağı ve API",
+     "detail": "60'tan fazla uygulamayla entegrasyon var: ÖKC, ERP (Logo, Mikro, Netsis, SAP, Oracle), e-belge, kurye, cüzdan, AVM, terazi, BI, dijital tabela, servis robotu. Realtime Service API ile satış verisi çekilir ve SQL sorgusu çalıştırılır (rate limit var).",
+     "source": "https://docs.robotpos.com/sorucevap"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Uygulama ve işlem logları",
+     "detail": "Infinia'nın açılıp kapanması, hesap yazımının geri alınması, ürün taşıma ve masa değiştirme accesslog tablosuna yazılır. Başarısız biten çeklerde işlemin son durumu doğru kaydedilir.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "Simpra",
+     "name": "Fiyat Sihirbazı (ileri tarihli toplu fiyat)",
+     "detail": "Akış: seviye seçilir (Organizasyon, Şube ya da Gelir Merkezi), Menü Kalemi ya da İlave seçilir, kategoriler '+' ile işaretlenir, 'Tablo oluştur' denir, fiyata çift tıklanıp değiştirilir; İşlem Adı, Tarih ve Saat girilir. Uyarı: şube ya da gelir merkezinde bir kez fiyat değiştirilen kaleme organizasyon değişikliği artık işlemez ('merkezden al' seçilmelidir). Değişikliğin kapanıştan 1 saat sonrasına konması öneriliyor.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/fiyat-sihirbazi-nedir-nasil-kullanilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "İşlem kayıtları (audit log)",
+     "detail": "Sistem Ayarları > İşlem Kayıtları backoffice'te yapılan her değişikliği, yapan kişiyle ve tarih/saatle listeler. 2026'da çek aktivitelerine indirim kaldırma (CheckRemoveDiscount) logu da eklendi.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/gecmise-donuk-yapilan-islemler-nasil-goruntulenir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Şube yönetim araçları",
+     "detail": "Şube kopyalanabilir; işletme grupları grup bazlı rapor almayı sağlar. Satış kanalları ad, bağlantı türü ve ikonla tanımlanır. Çeviri 11 dilde yapılır; saat dilimi ve şube para birimi ayarlanır. Gelir merkezine fiyat listesi kategori bazlı atanır.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/sube-kopyalama-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Eklenti Mağazası, API ve lisans esnekliği",
+     "detail": "30'dan fazla entegrasyon Pazaryeri > Eklenti Mağazası'ndan kurulur (Inventory, Şüpheli İşlem, GMU, Hemen Yolda, CDS). Simpra Connect anahtarıyla developers.simpra.app API'si kullanılır; anahtarı işletmenin kendisi almalı, e-postayla paylaşılmamalıdır. Kapalı sezonda lisans duraklatılır; cihaz bazında 'Otomatik Yenileme' kapatılabilir; 'Müşteri Öner' ile iki işletmeye 3 ay %10 indirim verilir.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/3-parti-uygulamalara-simpra-uzerinden-nasil-veri-cekilir/"
+    }
+   ]
+  },
+  {
+   "area": "14 UX ayrıntıları",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Çağır ekranında çek bulma",
+     "detail": "ÇAĞIR açılışta AÇIK ÇEKLER seçili gelir; TÜM ÇEKLER'e geçilebilir. Liste çek no, düzenleme tarihi, personel ve tutar sütunlarına göre sıralanır; satış türü düğmeleriyle filtrelenir ve satış türleri farklı ikonlarla gösterilir. Çek ya da fiş no numpad'den yazılıp ARA ile bulunur. Kılavuz, çek tarihi filtresine dikkat edilmesini hatırlatıyor.",
+     "source": "https://docs.robotpos.com/klavuz-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Çift basma ve hata korumaları",
+     "detail": "'Teslim Al'a basıldıktan sonra 3 sn tekrar basılamaz; amaç mükerrer ÖKC fişini önlemek. İptal sebebi alanı 100 karakterle sınırlı. Kahve Dünyası için serbest metin yerine iki aşamalı zorunlu iptal sebebi ekranı yapıldı. CRM ile müşteri bulunduğunda sepet boşsa yeni çek açılmaz ve uyarı verilir.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "Simpra",
+     "name": "Tutarlı dokunuş kalıbı",
+     "detail": "Her satırda (...) ya da sola kaydırma çalışır. Çek numarasına dokunmak çek menüsünü açar (Çek Böl, İndirim Uygula, Servis Ücreti, Çek İptal Et; iptal için sebep seçilir). Sağ üstteki baş harfler (A2) konsolu açar: Fonksiyonlar, Ayarlar, Kapalı Çekler, Verileri Güncelle.",
+     "source": "https://atlas.simprasuite.com.tr/bilgi-bankasi/simpra-pos/acik-cek-iptal-etme-islemi-nasil-yapilir/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Eğitim, onboarding ve destek",
+     "detail": "Atlas'ta Restoran, Hızlı Servis, Paket ve Backoffice oynatma listeleri var; her işlem Windows, Android ve iOS için ayrı kısa video olarak çekilmiş. Backoffice'te Driver.js turları ve NPS/anket bulunuyor. Destek 7x24 telefon, WhatsApp ve canlı sohbetle verilir, talepler takip numarası alır; ayrıca Simpra Status sayfası var.",
+     "source": "https://atlas.simprasuite.com.tr/egitim/hizli-servis/"
+    }
+   ]
+  },
+  {
+   "area": "Diğer (alanlara uymayanlar)",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "Tuvalet şifresini fişe basma ve fişte anket QR'ı",
+     "detail": "Coffy mağazalarında tuvalet şifreleri merkezden Infinia'da tanımlanıp yazarkasadan (ECR) yazdırılıyor. Ayrıca kullanıcıya özel anket QR kodları yazarkasa fişlerine otomatik basılıyor.",
+     "source": "https://docs.robotpos.com/surumnotlari-infinia"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Şube denetim formları",
+     "detail": "Bölge yöneticisi şubeyi mobilde denetler ve sonuç merkeze otomatik gider. Başlıklar: temizlik, pişirme, imaj ve hizmet, resmi evrak, teknik, stok, tedarikçi; her biri için hedef ve gerçek puan. Klasman: 85-100 A, 75-84 B, 65-74 C, 64 ve altı D.",
+     "source": "https://docs.robotpos.com/urunler/denetim"
+    },
+    {
+     "system": "Simpra",
+     "name": "AI trend ürün önerileri, servis robotu, menuboard",
+     "detail": "Simpra AI Önerileri binlerce satış verisinden trend menü ürünlerini listeler. Servis robotu siparişleri POS'tan otomatik alır. Menuboard uzaktan güncellenir ve menü değişikliklerini kendiliğinden yansıtır.",
+     "source": "https://simprasuite.com.tr/restoran-otomasyonu/pos-sistemi/"
+    }
+   ]
+  }
+ ],
+ "standouts": [
+  "Satış hiç durmamalı. robotPOS her şubede yerel SQL üzerinde satış yapar: veri 90 sn'de bir merkeze gider, elektrik kesilince satır bazlı önbellekten kaldığı yerden devam eder, merkez çökse de kasa satmaya devam eder. Simpra bulut öncelikli çalışır; kutulu offline modu ya hep ya hiç mantığındadır ve offline'dayken EFT POS gönderimi, pazaryeri siparişleri, kasa aç/kapa, e-belge ve KDS kapanır. Bir kullanıcı, 15 Kasım 2025 Cumartesi akşamı bir bulut kesintisinde sepetlerin kapandığını ve destek hattının yanıt vermediğini bildirdi (https://www.sikayetvar.com/simpra-suite/simpra-pos-sistem-arizalari-ve-yetersiz-musteri-destegi-nedeniyle-maddi-kayip-yasiyoruz). LafPOS'un kasa PC'sinde yerel sunucu + LAN tablet modeli zaten güvenilir taraf; offline durum sessiz olmalı, KDS ve TokenX LAN'da çalışmaya devam etmeli.",
+  "Mali fişten sonra kilit. Simpra'da ÖKC fişi basılmış kapalı çek yeniden açılamaz, silinemez, ödemesi değiştirilemez. robotPOS önce yetkili 'hesap yazımını geri al' adımını ister ve her ödeme değişikliğini Ödeme Listesi ile AccessLogs'a yazar. GMU'da düzeltme 'İade Yap' ile gider pusulası ya da fatura iptaline gider. LafPOS + TokenX aynısını yapmalı: kapalı çekte serbest düzenleme olmasın, düzeltme sebepli iade ile yapılsın.",
+  "Her yerde sebep ve anlık uyarı. Simpra'da iptal, iade, zayi, geri ödeme ve ikram için tipli sebepler ve ödeme notları var; robotPOS masa ve ürün taşımada sebep pop-up'ı açar. Simpra'nın Şüpheli İşlem modülü eşiği aşan işlemi listedeki kişilere SMS atar; robotPOS aiR şube bazlı Z-score anomaliyi göreve, SLA'ya ve 5 kademeli eskalasyona çevirir, şubenin açıklamasını AI puanlar ('12 iptalin 9'u aynı kasiyer'). Patronun güveni sebep kaydı ile telefona gelen bildirimden doğuyor.",
+  "Kasa mutabakatında katman katman kontrol. robotPOS'ta açılış tutarı bir kez daha onaylanır ('Para sayımını bitirdiniz mi?'), kasiyer çıkışı ödeme tipi bazında yapılır, Kasa Kontrol sistem ile sayılan tutarı yan yana koyar, Föy Z raporunu ÖKC'den otomatik çeker; Z silme yönetici ister, IQ Portal sayımı girilmeden çıkış engellenebilir. İkisinde de açıkça tanımlı bir kör kasa yok; LafPOS'un kör kasası burada net bir üstünlük.",
+  "Uzaktan onay ve hesap güvenliği. Simpra Insight, yetki isteyen POS işlemlerini yöneticinin telefonundan onaylatır, aynı kullanıcı birden fazla cihazdan girince uyarır ve OTP girişi sunar. 3.0 sürümü vardiya kasa kapanışı, masa devir hızı, mutfak hazırlık süresi, menü mühendisliği, gün×saat ısı haritası ve geçen haftayla KPI kıyasını getirdi. LafPOS patron uygulaması bu seviyeye çıkmalı.",
+  "Az dokunuşla hız sağlayan küçük ayrıntılar. robotPOS nakit ekranında tam tutar için yeşil kutu, önerilen banknotlar ve numpad var; ürün butonunda kalan adet sayacı, 'X sepetteyse Y' kuralı, çeki TAMAM ile anında park etme ve barkod modunda otomatik odak var. Simpra'da satırı sola kaydırarak iptal, ikram ve not; çek numarasına dokunarak böl, indirim ve servis ücreti; PIN sonrası varsayılan gelir merkezi ve masa planı; 'önceki siparişi tekrarla'; POS'tan 40 kolonluk rapor basma var.",
+  "Masa planında yoğun bilgi. Durum renkleri gri, yeşil, kırmızı (hesap basıldı), sarı (mutfaktan çıktı) ve siyah (belirlenen süre hareketsiz); karo üzerinde garson, açık kalma süresi ve tutar görünür. QR siparişler onaylanana kadar ayrı renkte bekler, mutfağa gitmez ve X dk sonra kendiliğinden iptal olur. Simpra'da yalnız kendi çekini gören garson bile tüm dolu masaları görür.",
+  "Görünmeyen güvenlik ayarları. robotPOS'ta 'Teslim Al'a 3 sn tekrar basılamaz, TSM'de çift tıklama engellenir, çek tutarından fazla gelen ödeme çeki kapatmaz, çekmece minimum tutarın altında açılmaz, Al Götür ekranı 4 dk sonra kilitlenir, sayaç gün başlangıcında sıfırlanır. Simpra'da Ingenico'yu bozan karakterler menü adlarında yasak, ayar değişikliği terminale açıkça 'Veri Güncelle' ile iner.",
+  "Planlanmış değişiklik ve kafe ayrıntıları. Simpra Fiyat Sihirbazı fiyatları tarih ve saatle değiştirir, kapanıştan 1 saat sonrasını önerir ve organizasyon/şube devralma tuzağını açıkça yazar. robotPOS kafe tarafında latte başına 5-7 modifikatöre, bardak etiketi yazıcısına, 10'da 1 bedava damgaya ve tuvalet şifresinin fişe basılmasına kadar iniyor. Bunlar L'Affogato'nun gündelik akışına doğrudan uyan ayrıntılar."
+ ]
+}

@@ -1,0 +1,1011 @@
+{
+ "systems": [
+  "Adisyo (adisyo.com): bulut tabanlı, 7.000+ işletme iddiası. Herkese açık bir yardım merkezi yok; kaynaklar özellik sayfaları, SSS, fiyat sayfası, developers.adisyo.com ve App Store sürüm notları.",
+  "SambaPOS (kb.sambapos.com, sambapos.com): Windows üzerinde yerel SQL ile çalışan, kural ve aksiyon motoruyla şekillenen bir POS. En ayrıntılı İngilizce bilgi bankası bunda.",
+  "NarPOS (narpos.com.tr): gerçekten var. Bankalarla ortaklıkla ücretsiz adisyon ve yazarkasa POS veriyor. Kamuya açık dokümanı neredeyse yok; yalnızca pazarlama sayfası ve basın haberi bulunuyor.",
+  "Menulux (menulux.com, wiki.menulux.com): Android POS, garson, kiosk, paket ve portal ürünleri var. Herkese açık bir Wiki.js dokümantasyonu bulunuyor (POS, Portal, Garson, Kiosk, Pavo/Hugin yazarkasa, reçeteli stok).",
+  "Simpra (simprasuite.com.tr, bilgibankasi.simprasuite.com.tr). Ek sistem #1, seçilme nedeni: Türkiye'de hem tek şubeli kafelerde hem zincirlerde yaygın. Küçük işletmeler için GMU tabanlı Simpra Quick'i var. 230+ makalelik, en zengin herkese açık Türkçe bilgi bankası onda.",
+  "robotPOS (en.robotpos.com). Ek sistem #2, seçilme nedeni: 2003'ten beri piyasada ve 4.000+ işletme iddia ediyor. Yerelde SQL Express ile satış yapıp buluta senkronlayan hibrit mimarisi LafPOS'a en yakın model. aiR anomali ve görev motoru da en ileri sahip-uyarı katmanı."
+ ],
+ "areas": [
+  {
+   "area": "1 Sipariş alma ve menü",
+   "features": [
+    {
+     "system": "SambaPOS",
+     "name": "Order Tag grupları (modifier) ve min/max seçim",
+     "detail": "Tanım yeri Manage > Tickets > Order Tags > Add Order Tag Group. Her grubun Min Selected Items ve Max Selected Items alanı var; ayrıca buton rengi, sütun sayısı, buton yüksekliği ve font ayarlanabiliyor. Grubun hangi ekranda çıkacağını Mappings belirliyor: departman, ticket type, ürün grubu, ürün ya da porsiyon. Varsayılan durumda çoklu seçim açık; Max 1 yapılınca tekli seçime dönüyor. Ürün adisyona eklendikten sonra satıra dokunulunca eşlenen gruplar açılıyor.",
+     "source": "https://kb.sambapos.com/en/2-3-5-a-what-is-order-tag-how-to-create/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Android garson istemcisinde porsiyon ve tag penceresi",
+     "detail": "Satıra bir kez dokununca Portion & Order Tags penceresi açılıyor. Gruplar yatay kaydırılan başlıklar halinde duruyor. Tag ve grup bazında adet limiti tanımlanabiliyor ve limit aşımı engelleniyor. Serbest metin notu (Free tag), yüzde indirim uygulayan tag ve fiyatlı tag desteği var.",
+     "source": "https://kb.sambapos.com/en/5-1-12-a-how-to-use-sambapos-android-client/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Ürüne otomatik order tag ekleme",
+     "detail": "Tag grubu ürün grubuna eşleniyor, ürün kartındaki order tags alanına virgülle ayrılmış tag adları yazılıyor. Bilgi bankası, büyük/küçük harf ve noktalamanın birebir tutması gerektiği konusunda uyarıyor.",
+     "source": "https://kb.sambapos.com/en/2-3-8-e-how-to-add-product-order-tags-automatically/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Arama kutusu olmadan isim, kod ve barkodla ekleme",
+     "detail": "Adisyon açıkken klavyeden harf yazmak yetiyor; adında bu harfler geçen ürünler listeleniyor. Ürün kodu ya da barkod yazılıp Enter'a basılınca ürün doğrudan adisyona ekleniyor.",
+     "source": "https://kb.sambapos.com/en/5-1-1-c-how-to-add-item-to-ticket-faster-by-using-item-name-or-code/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Önce adet, sonra ürün",
+     "detail": "Önce numpad'den miktar girilip sonra ürüne basılabiliyor ya da her adet için ürüne bir kez basılıyor. İş ekranın ortasındaki Close ile bitiyor ve siparişler tanımlı mutfak yazıcısına veya ekranına otomatik gidiyor.",
+     "source": "https://kb.sambapos.com/en/5-1-1-a-how-to-take-order-to-table/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Anlık fiyat değiştirme",
+     "detail": "Numpad'e yeni fiyat yazılıyor, adisyondaki satır seçiliyor ve soldaki Change Price butonuna basılıyor. Bunu yalnızca yetkili kullanıcılar yapabiliyor.",
+     "source": "https://kb.sambapos.com/en/5-1-1-d-how-to-change-item-price-instantly/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Süreyle fiyatlanan ürün (Product Timer)",
+     "detail": "Ayarlar: Price Duration Type (Minute/Hour/Day), Price Duration, Minimum Time, Time Rounding ve Start Time. Örnek: yuvarlama 5 iken 43. dakikada durdurulan sayaç 45 dakika olarak ücretleniyor. Sayaç durdurulmadan adisyon kapatılamıyor.",
+     "source": "https://kb.sambapos.com/en/2-3-18-how-to-run-product-timers/"
+    },
+    {
+     "system": "Menulux",
+     "name": "Seçenek grupları: tekli/çoklu, minimum seçim, combo",
+     "detail": "Her seçenekte Seçim sayısı, Minimum seçim ve Tekli/Çoklu türü var. Kategori olarak Normal, İndirim ya da Rezervasyon seçilebiliyor. Ürün bazlı seçenekle menüdeki ürünlerden combo kuruluyor ve seçilen ürün için stok hareketi oluşuyor. Seçeneğin kullanılması için ürün düzenleme ekranında ayrıca etkinleştirilmesi gerekiyor.",
+     "source": "https://wiki.menulux.com/tr/portal/urunler"
+    },
+    {
+     "system": "Menulux",
+     "name": "Gramajlı ürün ve terazi",
+     "detail": "Gramajlı ürünlerde açılan ekrana ağırlık giriliyor. Terazi entegrasyonu varsa ağırlık doğrudan teraziden okunuyor. Ürün kartında Adet ya da Gram seçeneği bulunuyor.",
+     "source": "https://wiki.menulux.com/tr/pos/siparisler"
+    },
+    {
+     "system": "Menulux",
+     "name": "Özel Tuşlar (Keys)",
+     "detail": "Sipariş ekranının sol altındaki Keys işlevi üç iş görüyor: barkoddan ürün bulma, eklenecek ürün için adet belirleme ve ürün fiyatını görüntüleme. Ekranın sağ üstündeki arama çubuğu menüler içinde arama yapıyor.",
+     "source": "https://wiki.menulux.com/tr/pos/siparisler"
+    },
+    {
+     "system": "Menulux",
+     "name": "Garson uygulamasında sipariş seçenekleri",
+     "detail": "Tek Seferlik Fiyat, sipariş anında fiyatı geçici olarak değiştirmeye izin veriyor. Ürün Seçeneklerini Göster açıkken varyasyonlu ürünlerde seçim penceresi çıkıyor, kapalıyken ürün doğrudan sepete düşüyor. Ürünleri Grupla sepeti kategoriye göre grupluyor. Kuver Takibi açıkken masa açılırken kişi sayısı soruluyor.",
+     "source": "https://wiki.menulux.com/tr/garson/ayarlar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Ürün kartı kuralları",
+     "detail": "Ürün tanımlanmadan önce menü olmalı; her kategori, ürün ve seçenek bir menüye bağlı. Kodun yanındaki oklar sıradaki kodu otomatik veriyor. Ad ve açıklama dil başına giriliyor. Ürünün hangi yazıcılardan çıkacağı ürün kartında seçiliyor. Ürün silinince geçmiş satışları silinmiyor.",
+     "source": "https://wiki.menulux.com/tr/portal/urunler"
+    },
+    {
+     "system": "Simpra",
+     "name": "Açık Yiyecek / Açık İçecek (açık fiyatlı kalem)",
+     "detail": "Backoffice'te kategori menüsünden 'Açık Ürün Grubu' işaretleniyor. POS'ta sağ üstteki artılı defter ikonu sırayla şunları soruyor: ürün adı, fiyat, adet, ürün grubu, yazıcı, KDV. Ardından önizleme ve 'Ürünü Ekle' geliyor. Açık girilen kalemler stoktan düşmüyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVXKIA4"
+    },
+    {
+     "system": "Simpra",
+     "name": "İlave grupları",
+     "detail": "Pişme derecesi, Türk kahvesi şeker seçimi, sos ve boy gibi seçenekler tek menü kalemi altında toplanıyor. Her ilavenin fiyatı, vergi sınıfı ve rapor etiketi var. Grubun ilgili menü kaleminde ayrıca aktif edilmesi gerekiyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyGqIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kaleme not (ön tanımlı + serbest)",
+     "detail": "Satır sola kaydırılıyor ya da (...) ile not defteri ikonuna basılıyor. Ön tanımlı notlardan biri seçiliyor veya yeni not yazılıyor. Not, 'Sipariş Gönder' ile ürünün tanımlı yazıcısından birlikte basılıyor. Ön tanımlı notlar Sistem Ayarları > Notlar&Sebepler'de tutuluyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyGeIAK"
+    },
+    {
+     "system": "Menulux",
+     "name": "Hızlı satışta çoklu sepet",
+     "detail": "Hızlı satış ekranının üstünde 1-2-3 numaralı sepetler var; kasiyer aynı anda birden fazla müşterinin sepetini açık tutabiliyor. SATIŞ butonu ödeme ekranını açıyor ve kalemler solda görünmeye devam ediyor.",
+     "source": "https://wiki.menulux.com/tr/pos/hızlı-satis"
+    }
+   ]
+  },
+  {
+   "area": "2 Masa ve salon",
+   "features": [
+    {
+     "system": "Menulux",
+     "name": "Masalar ekranı ve renk kodları",
+     "detail": "Ekranın solunda açık adisyonlar, sağında masa planı duruyor. Dolu masalar kırmızı, adisyonu yazdırılmış masalar mavi görünüyor. Üst menüden 'Kuş Bakışı Görünüm' ile 'Yalnızca Açık Masalar' arasında geçiliyor, sağdaki menüden katlar arasında dolaşılıyor.",
+     "source": "https://wiki.menulux.com/tr/pos/masa-siparisleri"
+    },
+    {
+     "system": "Menulux",
+     "name": "Kuş bakışı plan editörü",
+     "detail": "Portalda Yerleşim > Kuş Bakışı Görünümü ekranında kat seçiliyor, masalar sürükle-bırakla yerleştiriliyor ve kaydediliyor. Masanın zorunlu alanları Kat, Masa Numarası ve Masa Adı; katın zorunlu alanları Kat No, Ad ve Tür.",
+     "source": "https://wiki.menulux.com/tr/portal/isletme-yonetimi"
+    },
+    {
+     "system": "Menulux",
+     "name": "Masa taşıma ve aynı masada çoklu adisyon",
+     "detail": "Garson uygulamasında Yeni Adisyon ile aynı masaya ikinci adisyon açılıyor; adisyonlar arasında numaralarına dokunarak geçiliyor. 'Masa Taşı'da Evet onayından sonra hedef masa seçiliyor ve masanın rengi değişiyor. Garson ayarlarında masa renklendirme süreleri de tanımlanabiliyor.",
+     "source": "https://wiki.menulux.com/tr/garson/siparis-yonetimi"
+    },
+    {
+     "system": "Menulux",
+     "name": "Müşteri adıyla masa ve ön ödemeli rezervasyon",
+     "detail": "Masa anında 'Mustafa Bey' gibi bir isimle adlandırılabiliyor ya da müdavimin cari hesabına bağlanabiliyor. Telefonla veya online alınan rezervasyonda ön ödeme tahsil edilebiliyor; adisyon önceden açılıp sipariş girilebiliyor.",
+     "source": "https://www.menulux.com/restoran-otomasyonu/pos-sistemi/restoran-adisyon-programi"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Ticket tag ile masa durumu takibi",
+     "detail": "Her biri ayrı renkli Entity State'ler tanımlanıyor: Order Taken, Order Delivered, Customer Sat, Waiter was Called, Bill Requested, Table Must Be Cleaned, Table Available. 'Table State' tag'i seçildiğinde kural masa durumunu güncelliyor. Bill Requested kuralı ayrıca hesabı yazdırıyor, adisyonu Locked durumuna alıp kilitliyor.",
+     "source": "https://kb.sambapos.com/en/2-4-6-how-to-track-table-states/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Kalem taşıma ile adisyon bölme",
+     "detail": "Taşınacak kalemler seçiliyor, aynı üründen birden fazla varsa (+)/(-) ile adet belirleniyor ve Move'a basılıyor. Kalemler aynı masada yeni bir adisyona geçiyor, bu adisyon Change Table ile başka masaya taşınabiliyor.",
+     "source": "https://kb.sambapos.com/en/5-1-3-b-how-to-split-ticket-and-move-item/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Masa ve adisyon birleştirme",
+     "detail": "Masa birleştirmek için Change Table ile hedef masaya basmak yetiyor. Bir masada birden fazla adisyon varsa adisyonlar seçilip alttaki Merge Tickets'a basılıyor; bunun için Can Merge Tickets yetkisi gerekiyor.",
+     "source": "https://kb.sambapos.com/en/5-1-3-c-how-to-merge-ticket-and-table/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Çek Böl",
+     "detail": "Açık çekte sol üstteki çek numarasına dokunulup 'Çek Böl' seçiliyor. Ayrılacak ürünler işaretlenip 'İşlemi Tamamla'ya basılıyor, 'Ana Çeke Geri Dön' ile ana çeke dönülüyor. Çek iptali, indirim ve servis ücreti de aynı çek numarası menüsünde.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyGdIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "İsme Çek Aç",
+     "detail": "Masaya servis ya da gel-al gelir merkezinde 'İsme Göre Çekler' sekmesinden 'İsme Çek Aç' seçiliyor. İsim yazılıp Uygula'ya basılınca masaya bağlı olmayan isimli bir çek açılıyor; tezgah veya bar tab'ı için kullanışlı.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyGXIA0"
+    },
+    {
+     "system": "Simpra",
+     "name": "Rezervasyon, bekleme listesi ve depozito (Check and Place)",
+     "detail": "Rezervasyonlar otomatik onaylanmıyor, talep olarak düşüyor; personel doluluğa bakıp kabul ya da red ediyor. Aynı masa günün farklı saatlerine rezerve edilebiliyor. Dijital bekleme listesi sırası gelen misafire haber veriyor. SMS'teki linkle misafir rezervasyonu onaylıyor. Online rezervasyonda komisyonsuz provizyon ya da ön ödeme alınabiliyor. Rezervasyon ve ödeme bilgisi POS'tan görülüyor.",
+     "source": "https://simprasuite.com.tr/restoran-rezervasyon-sistemi/"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Masa alanları ve masada açılış saati",
+     "detail": "Sürüm notlarına göre masa alanlarında gelişmiş filtre, liste ve kat planı görünümü eklendi. Sipariş yazdırıldıktan sonra masada zaman bilgisi, masalarda açılış saati formatı ve masa birleştirme sonrası tutar düzeltmesi geldi.",
+     "source": "https://apps.apple.com/tr/app/id6471924118"
+    },
+    {
+     "system": "Adisyo",
+     "name": "QR menüden masaya sipariş ve garson çağrısı",
+     "detail": "Her masanın QR kodu PDF olarak dışa alınıp masaya konuyor. Müşteri siparişi önce işletmeye düşüyor; onaylanan sipariş mutfağa gidiyor. Garson çağrısı panelde anında görünüyor ve müşteri kendi cihazından online kartla ödeyebiliyor. QR modülü aylık +546 TL.",
+     "source": "https://www.adisyo.com/qr-kod-karekod-dijital-menu-tablet-menu-programi"
+    },
+    {
+     "system": "Menulux",
+     "name": "Garson çağrıları ve geri bildirim kaydı",
+     "detail": "Tablet menü, QR menü ve akıllı butonlardan gelen garson çağrıları ile müşteri geri bildirimleri portalda Bildirimler altında ayrı listelerde tutuluyor ve dışa aktarılabiliyor. Garson uygulamasında bildirim türü Tümü, Garson ya da Köz olarak filtrelenebiliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/bildirimler"
+    }
+   ]
+  },
+  {
+   "area": "3 Mutfak ve bar",
+   "features": [
+    {
+     "system": "SambaPOS",
+     "name": "KDS V2: süreye göre renk ve istasyon yönlendirme",
+     "detail": "Manage > KDS > KDS Settings'te State 1/2/3 eşikleri var; fiş varsayılan olarak 5, 10 ve 15. dakikada renk değiştiriyor ve süreler ayarlanabiliyor. Diğer ayarlar: Show Ticket Tag, Remove Finished Products, yeni siparişin solda mı sağda mı görüneceği. KDS Devices > Select Groups ile her tablete hangi ürün gruplarının düşeceği seçiliyor. Çalışması için MSSQL ve Message Server (port 9000+) gerekiyor.",
+     "source": "https://kb.sambapos.com/en/8-19-how-to-configure-sambapos-kds-v2/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Gönderim sonrası iptalde mutfağa bilgi fişi",
+     "detail": "Mutfağa gönderilmemiş kalem Cancel ile sessizce siliniyor. Gönderilmiş kalem Void ile iptal ediliyor; adet (+)/(-) ile seçilebiliyor ve mutfak görevi olan kalemde mutfağa bilgi fişi basılıyor. Void sebepleri raporda gruplanıyor.",
+     "source": "https://kb.sambapos.com/en/5-1-2-how-to-cancel-gift-or-void-items/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Mains away / Starters away mutfak mesajı",
+     "detail": "Ticket tag'e bağlı bir kural mutfağa ayrı mesaj fişi basıyor. Fişte masa, tarih ve saat, adisyon no, garson, bir bip sesi ve büyük puntoyla 'Kitchen Starter' gibi bir satır var. Kurs ateşlemesi bu şekilde yapılıyor.",
+     "source": "https://kb.sambapos.com/en/2-4-16-printing-kitchen-messages-by-ticket-tag-mains-starters-away/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Beklet ve Marş (hold & fire)",
+     "detail": "Gelir merkezi ayarlarında 'beklet ve marş' işaretleniyor. Ardından davranışı 'sistem ile beklet ve marş' olan bir Beklet butonu oluşturuluyor. Böylece kalemler mutfağa gitmeden bekletilip sonra marşlanabiliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVYaIAO"
+    },
+    {
+     "system": "Simpra",
+     "name": "KDS durumları ve geri çekme",
+     "detail": "Yeni siparişte zil çalıyor. Mutfak siparişi 'hazırlanıyor' ya da 'hazır' yapınca bildirim masa numarasıyla garsonun el terminaline gidiyor. Yanlış gönderilen sipariş tek tuşla geri çekiliyor ve pişirme süresi takip ediliyor. Numaratör (sipariş takip) ekranına görsel eklenebiliyor, biriken çekler oradan temizlenebiliyor.",
+     "source": "https://simprasuite.com.tr/restoran-otomasyonu/mutfak-siparis-goruntuleme-sistemi/"
+    },
+    {
+     "system": "Menulux",
+     "name": "Mutfak ekranı sekmeleri ve performans",
+     "detail": "Üstte Tümü, Hazırlanıyor ve Tamamlandı sekmeleri var. Aşçı siparişe dokunup detayı açıyor ve hazır yapıyor, sipariş tamamlanıyor. Bu dokunuşlar mutfak performansını ölçmeye yarıyor.",
+     "source": "https://wiki.menulux.com/tr/pos/mutfak-ekrani"
+    },
+    {
+     "system": "Menulux",
+     "name": "Mutfak fişi şablon ayarları",
+     "detail": "Şablon 1'de ürün adı solda, miktar sağda; Şablon 2'de miktar başta. Dar kağıt seçilince içerik 58 mm'ye otomatik küçültülüyor. Seçenekler ürünün altına miktarlarıyla basılıyor, not 'Sipariş Notu' başlığıyla çıkıyor. Font Küçük, Büyük ya da Double; yazı BÜYÜK HARF ya da Baş Harf Büyük olabiliyor. Sipariş sesi (buzzer), otomatik kesme ve uzun ürün adları için çoklu satır seçenekleri var.",
+     "source": "https://wiki.menulux.com/tr/portal/yazici-ayarlari"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Hazır bildirimi ve istasyon bazlı ekran/yazıcı",
+     "detail": "Mutfak 'Hazır'a basınca bildirim siparişi giren garsona gidiyor. Her bölümün kendi ekranı ya da yazıcısı olabiliyor (yemek mutfağa, içecek bara). Ürün bazlı yazdırmayla istenen ürün istenen yazıcıdan çıkıyor. Siparişler sıralanabiliyor (önce çorba, en son tatlı). KDS modülü Standart paketle başlıyor.",
+     "source": "https://www.adisyo.com/mutfak-yonetimi"
+    },
+    {
+     "system": "Simpra",
+     "name": "Cihaz bazlı yazıcı ataması",
+     "detail": "Backoffice'te Sistem Ayarları > Cihazlar > (...) > Düzenle > Yazıcı Ataması ile her terminalin yazıcısı belirleniyor. Değişikliğin terminale gelmesi için 'Verileri Güncelle' yapılması gerekiyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyQFIA0"
+    }
+   ]
+  },
+  {
+   "area": "4 Ödeme",
+   "features": [
+    {
+     "system": "SambaPOS",
+     "name": "Parçalı ve çoklu ödeme tipi",
+     "detail": "Settle ekranında numpad'e kısmi tutar yazılıp sağdan ödeme tipi seçiliyor ve bu tekrarlanıyor. Alt kısımda her ödemenin tipi, tutarı ve saati listeleniyor. Müşteri fazla para verirse alınan tutar yazılıp Cash'e basılıyor ve para üstü hesaplanıyor.",
+     "source": "https://kb.sambapos.com/en/5-4-4-how-to-get-split-and-item-based-payment/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Kalem bazlı ödeme",
+     "detail": "Ödeme sayfasının solundaki listeden ödenecek kalemler seçiliyor, tutar girilip ödeme tipi seçiliyor. Adisyon alanı ödenen kalemlere göre güncelleniyor ve kalanlar için işlem tekrarlanıyor.",
+     "source": "https://kb.sambapos.com/en/5-4-4-how-to-get-split-and-item-based-payment/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Yuvarlama butonu ve indirim/yuvarlama tavanı",
+     "detail": "Ödeme ekranında küsurat numpad'e yazılıp Round'a basılıyor; tekrar basınca geri alınıyor. Round ve Discount hesaplama şablonlarındaki Max. Amount alanı (örnek 20) bir adisyonda yapılabilecek en büyük yuvarlamayı ya da indirimi sınırlıyor.",
+     "source": "https://kb.sambapos.com/en/2-3-10-c-how-to-limit-discount-and-rounding/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Döviz ile ödeme",
+     "detail": "Manage > Settings > Currencies'te elle girilen bir Rate ve Rounding değeri (örnek 0,25) tanımlanıyor. Her döviz için ayrı kasa hesabı (Dollar Cash, Euro Cash) ve ödeme tipi açılıyor ('Cash [$]' gibi). Para üstü için de döviz başına ayrı Change Payment tipi var: TL, $ ve €.",
+     "source": "https://kb.sambapos.com/en/2-4-3-adding-different-currencies-and-foreign-exchange-working-system/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Masada ödeme (Ingenico/PaymentSense)",
+     "detail": "Kart cihazında F4'e basılıyor, ardından Garson ID ve Masa ID giriliyor; 0 yazılırsa tüm açık masalar listeleniyor. Değeri olmayan bilgi fişi isteğe bağlı basılıyor. Bölme seçenekleri kişi başı (F1), çift başı (F2) ve özel (F3). Gateway kilitleme için Print Bill, açma için Unlock Ticket komutlarını kullanıyor.",
+     "source": "https://kb.sambapos.com/en/6-2-how-to-configure-payment-sense-pay-at-table-settings/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Kişi sayısına göre otomatik kuver",
+     "detail": "'Ask Before Creating Ticket' ve 'Selection Required' işaretli bir Person Count ticket tag'i tanımlanıyor; adisyon açılırken kişi sayısı soruluyor. Bir kural her kişi için Couvert ürününü adisyona ekliyor.",
+     "source": "https://kb.sambapos.com/en/5-1-9-b-how-to-add-couvert-to-ticket/"
+    },
+    {
+     "system": "Menulux",
+     "name": "Ödeme ekranı: Kalanı Öde ve Fatura No",
+     "detail": "Nakit, kart, fiş gibi tiplerle parçalı ya da tam ödeme alınıyor. Soldaki aksiyonlar: indirim, para iadesi, hizmet ücreti, ücretsiz ürün. Sağ üstteki 'Kalanı Öde' kalan tutarı seçili tiple kapatıyor. En üstteki 'Fatura No' o çek için fatura, e-arşiv ya da e-fatura kesiyor.",
+     "source": "https://wiki.menulux.com/tr/pos/siparisler"
+    },
+    {
+     "system": "Menulux",
+     "name": "Adisyonda kişi başı tutar satırı",
+     "detail": "Bölünmüş Ücret ayarı açıkken adisyon fişine masadaki kişi sayısına göre '4 kişi x 125,00 ₺ = 500,00 ₺' biçiminde bir satır ekleniyor. Bakiye ayarıyla müşterinin cari bakiyesi de fişe basılabiliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/yazici-ayarlari"
+    },
+    {
+     "system": "Menulux",
+     "name": "Pavo üzerinden yemek kartları",
+     "detail": "Pavo yazarkasa entegre modda Multinet, Metropol, Paye, Belbim, Tokenflex, Edenred ve Setcard kabul ediyor. Varsayılan açık ödeme tipleri Nakit ve Kredi Kartı; diğerleri sonradan ekleniyor.",
+     "source": "https://wiki.menulux.com/tr/pavo-yazarkasa/menulux-tarafindan-yapilacaklar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Mobil POS: İkram, İade, İptal, Böl",
+     "detail": "Ürüne dokunup İkram seçilirse ödeme alınmıyor ve raporda 'ikram' olarak görünüyor; İade ve İptal de ayrı etiketlerle raporlanıyor. 'Böl' ödeme sırasında ürün bazlı hesap bölüyor. 'Ödeme' seçilen tutarı POS cihazına yönlendiriyor; nakit, kart ve parçalı ödeme destekleniyor.",
+     "source": "https://wiki.menulux.com/tr/mobilpos/siparisler"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kapalı çeki geri açma, silme, ödeme tipini değiştirme",
+     "detail": "Kullanıcı menüsünden 'Kapalı Çekler' açılıp (...) ile 'Çeki Geri Aç' (ödemeler silinerek), 'Çeki Sil' ya da 'Ödemeleri Değiştir' seçiliyor; sonuncusunda eski ödeme çöp kutusuyla silinip yenisi giriliyor. Yazarkasa entegrasyonu olan işletmede mali fiş basıldığı için üç işlem de kapalı.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVxzIAG"
+    },
+    {
+     "system": "Simpra",
+     "name": "Servis ücreti ve kuver tipleri",
+     "detail": "Servis ücreti Oran, Fiyat ya da Kuver tipinde tanımlanıyor. 'Dinamik' seçilirse açık tutar veya yüzde giriliyor; ayrıca vergi dilimi seçiliyor. Kuver tipi 'varsayılan' işaretlenirse çeke kuver girildiğinde tutar otomatik ekleniyor. Kuver girişi Erkek ve Kadın sayısı olarak yapılıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyWpIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "İndirim tipleri ve çoklu indirim yetkisi",
+     "detail": "Basit İndirim sabit ya da dinamik (açık tutar/yüzde) olabiliyor ve tek menü kalemine uygulanabiliyor. Gelişmiş İndirim kategoriye uygulanıyor. Çekte çek numarası > 'İndirim Uygula' ile seçiliyor. Aynı çeke birden fazla indirim uygulanmasını Yetki Grupları > Pos Operasyon Yetkileri > Çoklu indirim ayarı kapatabiliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyKLIA0"
+    },
+    {
+     "system": "Simpra",
+     "name": "Döviz kuru TCMB'den otomatik",
+     "detail": "Sistem Ayarları > Döviz Tanımlaması > Kur Ekle'de şube, döviz birimi ve 'TCMB Kur Güncelle' seçiliyor; kur otomatik güncelleniyor. Kur gerekirse elle de güncellenebiliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVgNIAW"
+    },
+    {
+     "system": "Simpra",
+     "name": "EFT-POS çeki kapatabilir yetkisi",
+     "detail": "Cihaz özelliklerinde 'EftPos Çeki Kapatabilir' işaretleniyor. Online çalışan platformlarda kart onayıyla çek otomatik kapanıyor; offline platformlarda çeke bir kez dokunmak gerekiyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVcsIAG"
+    },
+    {
+     "system": "Simpra",
+     "name": "Yazarkasada takılan ödemeyi iptal edip yeniden gönderme",
+     "detail": "ÖKC'ye gönderilen ödeme hata verirse yazarkasada F tuşuna basılıp şifreyle işlem iptal ediliyor. Hata giderilince çek Simpra'dan istenen ödeme tipiyle tekrar yazarkasaya gönderiliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVx8IAG"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Bahşiş, gel-al hızlı ödeme, Tahsil Et ve Kapat",
+     "detail": "Sürüm notlarına göre sipariş listesine 'Tahsil Et ve Kapat' butonu, gel-al siparişlerine hızlı ödeme eklendi; bahşiş ve bölünmüş ödeme ekranı geliştirildi. SSS'ye göre kuver ve garsoniye yüzde ya da sabit tutar olarak tanımlanabiliyor.",
+     "source": "https://apps.apple.com/tr/app/id6471924118"
+    },
+    {
+     "system": "NarPOS",
+     "name": "Komisyonsuz tahsilat, ertesi gün hesapta",
+     "detail": "Şekerbank ve Halkbank ortaklığıyla yazarkasa POS entegrasyonu adisyonla birlikte ücretsiz veriliyor. Tahsilat sıfır komisyonla yapılıyor ve para ertesi gün hesaba geçiyor. 2025'te 5 milyar TL işlem hacmi açıklandı.",
+     "source": "https://www.paradergi.com.tr/girisimcilik/2026/02/03/restoran-ekonomisinde-140-milyon-tllik-tasarruf-sagladi"
+    }
+   ]
+  },
+  {
+   "area": "5 Kasa yönetimi",
+   "features": [
+    {
+     "system": "SambaPOS",
+     "name": "Değiştirilemeyen gider ve gelir kaydı",
+     "detail": "Accounts > Cash Register'da gider kategorileri var: General, Shopping, Bill Payment, Supplier Payment ve diğerleri. Kaydedilen gider silinemiyor ve düzenlenemiyor; hata, aynı tutarda bir gelir kaydıyla ve açıklamayla düzeltiliyor. Kasada yeterli nakit yoksa hesap eksiye düşüyor. Satış dışı gelirler kasa raporunda görünüyor.",
+     "source": "https://kb.sambapos.com/en/5-4-8-b-how-to-use-cash-register/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Work Period kapanışı: açık adisyon engeli ve otomatik yedek",
+     "detail": "Açık adisyon varken gün kapatılamıyor; adisyonlar kapatılmalı ya da açık hesaba aktarılmalı. End Work Period isteğe bağlı açıklamayla iki kez onaylanıyor. Sistem otomatik yedek alıyor ve raporları oluşturmak için Reports bölümüne yönlendiriyor. Gün açıp kapatma Can Start End of Day yetkisine bağlı.",
+     "source": "https://kb.sambapos.com/en/5-5-1-b-how-to-end-work-period/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kasa Aç/Kapa modülü",
+     "detail": "Cihaz özelliklerinde 'Kasa Aç/Kapa' açılıyor. İlk satışta sistem kasa açılışını zorunlu tutuyor. Kapatılan kasalar ve satış dışı giriş-çıkışlar Backoffice > Raporlar > Kasa Raporları'nda görünüyor. Offline senaryoda kasa açılıp kapatılamıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVyAIAW"
+    },
+    {
+     "system": "Simpra",
+     "name": "Gün sonu saati ve gece yarısını geçen kapanış",
+     "detail": "Şube düzenleme ekranında gün sonu saati giriliyor. İşletme gece yarısından sonra kapanıyorsa (örnek 01:59) 'Günsonu Bir Sonraki Gün' işaretleniyor; aynı gün kapanıyorsa (örnek 23:59) işaretlenmiyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVXiIAO"
+    },
+    {
+     "system": "Menulux",
+     "name": "Nakit/kart kasaları, finansal kasalar ve hızlı gider",
+     "detail": "Portalda Kasalar ekranı seçilen aralıktaki Nakit ve Kredi Kartı toplamlarını gösteriyor; Hareketler'den yeni kasa hareketi eklenebiliyor. Finansal kasalar arasında transfer yapılabiliyor. Hızlı gider girişinde işlem türü, kasa, tarih, ödeme türü, tutar ve açıklama giriliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/cari-hesaplari"
+    },
+    {
+     "system": "Menulux",
+     "name": "Patron uygulamasında Kasa ve Gün Sonu raporu",
+     "detail": "Kasa Hareketleri ekranı POS satışlarını, kasaya giriş ve çıkışları, gelen ve yapılan ödemeleri gösteriyor; toplamlar ödeme tipine göre (nakit, kart, Multinet) ayrılıyor. Gün Sonu raporunda çek sayısı, kuver, masa/paket/hızlı satış, ikram, iptal, iade, servis ve transfer satırları var.",
+     "source": "https://wiki.menulux.com/tr/boss/raporlar"
+    },
+    {
+     "system": "robotPOS",
+     "name": "ÖKC'den otomatik Z çekme ve kasa farkı kontrolü",
+     "detail": "Z-raporu okuma izni açıksa Z raporları yeni nesil ÖKC'den otomatik çekiliyor. Personel ödeme tiplerinin toplamını girdikten sonra kasa kontrolü merkezden yapılıyor. Kasa raporları: Earnings, Cashier Close-Out ve Cashier Variance/Till Control; şube ya da merkez düzeyinde.",
+     "source": "https://en.robotpos.com/faq"
+    },
+    {
+     "system": "Menulux",
+     "name": "X/Z raporları ve portalda Z kaydı",
+     "detail": "POS'taki Raporlar modülünde kasa hareketleri, gün sonu ve X & Z raporları var. Portalda Mali Raporlar > Z Raporları'nda yeni Z kaydı oluşturuluyor, detayı görüntülenip silinebiliyor. Gün Sonu (X) raporunda satış bölümü (masa, hızlı, paket, indirim, iptal, ikram, iade) ve ödeme tipleri bölümü var.",
+     "source": "https://wiki.menulux.com/tr/portal/raporlar"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Vardiya Satış raporu",
+     "detail": "Raporda her vardiya ve çalışan için satış tutarı, sipariş sayısı ve ortalama sipariş tutarı karşılaştırmalı gösteriliyor.",
+     "source": "https://www.adisyo.com/detayli-ve-kolay-raporlama"
+    }
+   ]
+  },
+  {
+   "area": "6 Raporlar ve analitik",
+   "features": [
+    {
+     "system": "Simpra",
+     "name": "Backoffice rapor seti ve Rapor Tipi x Grup Tipi matrisi",
+     "detail": "Raporlar: Özet, Şube (gelir, vergi, ödeme dağılımı, sebebe göre iptal/iade), Günlük, Yoğunluk (saatlik ısı haritası), Satış, Rapor Etiketleri, Kasa, Müşteri (en çok harcayan, en sık gelen) ve Çekler. Satış raporunda Rapor Tipi ile Grup Tipi birleştiriliyor; örneğin Menü Kalemi x Çalışan ya da Ödeme Tipi x İş Günü. Çek detayında 'Turları Göster' hangi kalemi kimin, saat kaçta girdiğini gösteriyor. Tüm raporlar Excel ve PDF'e alınabiliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVXoIAO"
+    },
+    {
+     "system": "Simpra",
+     "name": "Zamanlanmış e-posta raporu",
+     "detail": "Herhangi bir raporda 'E-Posta Gönder' seçiliyor. Girilen alanlar: Rapor Adı, Rapor Periyodu (hesaplama aralığı), Gönderim Periyodu (sıklık), Saat ve E-Posta. Zamanlama sonradan iptal edilebiliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyVWIA0"
+    },
+    {
+     "system": "Simpra",
+     "name": "Terminalden yazdırılan satış raporu",
+     "detail": "Kullanıcı menüsünden Fonksiyonlar > Satış Raporu açılıyor. Filtreler: yazıcı, gelir merkezi, çek durumu (Açık/Kapalı/İptal), çalışan (boş bırakılırsa herkes) ve tarih. Önce 'Rapor Önizlemesi' gösteriliyor, sonra 'Rapor Al' ile seçili yazıcıdan basılıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyOtIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "Şüpheli İşlem Takibi (SMS alarmı)",
+     "detail": "Ücretli eklenti olarak Eklenti Mağazası'ndan kuruluyor. Açık çek iptali, kapalı çek iptali, indirim, iptal, ikram ve iade için tutar ya da yüzde eşiği tanımlanıyor. Eşik aşılınca listedeki kişilere SMS ya da bildirim gidiyor; şube veya organizasyon sahibi listeye eklenmemişse otomatik bildirim almıyor. Kayıtlar Backoffice'te Şüpheli İşlemler altında duruyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyKYIA0"
+    },
+    {
+     "system": "Menulux",
+     "name": "Portal rapor kataloğu",
+     "detail": "Raporlar: Gün sonu (X), Genel durum, Gelir-gider, saatlik/günlük/aylık, Ürün satış, Ürün karlılık, Kategori, Şube, Departman, Kredi kartları, Online siparişler, Açık masalar, İndirim/Ödenmez/Kupon, Masa transferleri, Personel, Kurye, Kat, Masa, PDKS ve haftalık PDKS, Stok, Üretim, Hareketsiz stok, Fire-zayi ve Z. Her tablo XLS, CSV ve PDF'e aktarılabiliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/raporlar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Önceki döneme göre karşılaştırmalı dashboard",
+     "detail": "Portal ana sayfası günlük, haftalık ve aylık satışı bir önceki güne, haftaya ve aya göre yüzde artış/azalışla gösteriyor. Ayrıca bölgedeki hava durumu, döviz kurları, günlük tahsilat özeti ve en çok satan ürünler grafiği var.",
+     "source": "https://wiki.menulux.com/tr/portal/ana-sayfa"
+    },
+    {
+     "system": "Menulux",
+     "name": "Patron uygulaması: dokununca açılan raporlar",
+     "detail": "Haftalık ve aylık grafikte bir haftaya ya da aya dokununca çek sayısı, kuver, servis, indirim, ödenmez, kupon, KDV ve toplam açılıyor. Saatlik raporda başlangıç-bitiş saati filtresi var. Transfer raporu masa birleştirme, taşıma ve bölmeyi işlem ID'si ve personelle listeliyor. Şube seçimi sağ üstten yapılıyor.",
+     "source": "https://wiki.menulux.com/tr/boss/raporlar"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Gün kapanışında raporu e-postayla gönderme",
+     "detail": "'Work Period Ended' olayına bağlı bir kural üç aksiyon çalıştırıyor: raporu dosyaya kaydet (örnek: Cash Report.xps), mesaj göster, e-posta gönder. E-posta ayarları: SMTP sunucu ve port (587), To ve CC (noktalı virgülle çoklu alıcı), gönderimden sonra dosyayı sil, retry sayısı ve aralığı.",
+     "source": "https://kb.sambapos.com/en/2-4-12-e-how-to-send-reports-as-email-at-end-of-work-period/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Work Period raporu ve tarih filtresi yetkisi",
+     "detail": "Work Period raporunun bölümleri: Sales, Incomes, General Information, Payment Details, User Based Sales, User Based Payment Details. 'Can Change Report Date Filter' yetkisi olmayan kullanıcı raporları yalnızca son iş gününden itibaren görebiliyor.",
+     "source": "https://kb.sambapos.com/en/5-5-5-b-what-is-work-period-report-how-to-analyze/"
+    },
+    {
+     "system": "robotPOS",
+     "name": "aiR: Z-skor anomali, tahmin ve sabah özeti",
+     "detail": "POS verisi 2-3 dakikada bir delta senkronla buluta gidiyor. Void artışı, satış düşüşü, aşırı indirim ve kasa anomalileri şubenin kendi normaline göre Z-skorla yakalanıyor. Hava durumu, Ramazan, tatil ve lokasyon tipiyle saatlik şube tahmini yapılıyor. Her sabah 06:00'da kişisel AI özeti geliyor. Ciro, sipariş, ortalama sepet, void oranı ve indirim oranı hedeflerinin toleranslı durumları var: above, on track, warning, missed.",
+     "source": "https://en.robotpos.com/air-intelligence"
+    },
+    {
+     "system": "robotPOS",
+     "name": "SLA'lı görev ve kademeli eskalasyon",
+     "detail": "Anomali ya da eşik ihlali görev açıyor; görev şube müdürüne atanıyor, bölge müdürü gözlemci oluyor. SLA süresinin son çeyreğinde uyarı veriliyor. AI açıklamayı 0-100 arası puanlıyor ve puan düşükse kanıt istiyor. Kaçırılan her SLA görevi bir üst seviyeye taşıyor. Tüm adımlar değiştirilemez bir zaman çizelgesine yazılıyor.",
+     "source": "https://en.robotpos.com/air-intelligence"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Rol bazlı web raporu, 30+ mobil rapor, salt-okunur SQL",
+     "detail": "Merkezi web raporlarına Dealer, Area Supervisor, Regional Manager ve Owner rolleriyle erişiliyor. İptal ve iade raporları kimin neyi ne zaman değiştirdiğini gösteriyor. Zamanlanmış e-posta raporu ve olay alarmı var. SQL bilen personele salt-okunur SQL erişimi veriliyor.",
+     "source": "https://en.robotpos.com/faq"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Beş rapor ekranı ve paketlere göre analiz",
+     "detail": "Ekranlar: Gün Sonu, Ürün Satış, Stok Durum, Restoran İstatistik (ortalama hesap, müşteri sayısı) ve Vardiya Satış. Ödeme raporu nakit, kart ve yemek kartı kullanımını ayrı gösteriyor. Rapor Sihirbazı ile Maliyet & Kârlılık modülleri yalnızca Pro pakette (aylık 2.580 TL).",
+     "source": "https://www.adisyo.com/adisyon-programi-pos-sistemi-fiyatlari"
+    }
+   ]
+  },
+  {
+   "area": "7 Stok ve maliyet",
+   "features": [
+    {
+     "system": "Menulux",
+     "name": "Stok kartı türleri ve alarm seviyesi",
+     "detail": "Türler: Mamul (doğrudan satılan), Yarı Mamul (reçetesi var, başka reçetede kullanılıyor) ve Hammadde. Birimin alım birimine göre seçilmesi öneriliyor. Reçete türü Reçeteli ya da Üretim Reçetesi olabiliyor. Stok alarm seviyesinin altına düşünce uyarı veriliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/stoklar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Reçeteli stok kurulum akışı",
+     "detail": "Hammaddeler, satış menüsünden farklı kod aralığına sahip ayrı bir menüde tutuluyor (satış 10000'ler, hammadde 20000'ler). Sihirbazdaki 'Stokları Oluştur' ve 'Stokları Grupla' kartları otomatik açıyor. Alış fişleri birim maliyeti besliyor ve reçete maliyeti buradan otomatik hesaplanıyor. Yarı mamuller iç içe kullanılabiliyor; örnekte pizza hamuru ve sos pizza reçetesine giriyor.",
+     "source": "https://wiki.menulux.com/tr/receteli-stok/recete"
+    },
+    {
+     "system": "Menulux",
+     "name": "POS'tan sayım, portaldan onay",
+     "detail": "Portaldaki Stok Sayımı ekranında her kartın yanına güncel miktar yazılıp kaydediliyor. POS uygulamasından girilen sayımlar ise 'Sayım Onayı'na düşüyor ve yönetici bilgi butonundan 'Tamamla' ile onaylıyor ya da reddediyor.",
+     "source": "https://wiki.menulux.com/tr/portal/stoklar"
+    },
+    {
+     "system": "Simpra",
+     "name": "Deneme reçetesi ve iç içe reçete",
+     "detail": "Maliyet Kontrolleri > Reçeteler'de mevcut bir reçeteden 'Deneme Reçetesi Oluştur' yapılıyor; sonuç yeni reçete olarak ya da mevcut reçetenin üstüne kaydediliyor. İçerik Ekle'de stok malı yerine başka bir reçete seçilerek reçete içinde reçete kuruluyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyQiIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "Minimum/optimum stok ve satın alma talebi",
+     "detail": "Eldeki Stok'ta her mala minimum ve optimum miktar tanımlanıyor; sipariş ve transfer talepleri bu değerlere göre oluşturuluyor. Siparişler tedarikçiye sistemden e-postayla ya da B2B ile gidiyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyQUIA0"
+    },
+    {
+     "system": "Simpra",
+     "name": "Dönemsel envanter ve zayi",
+     "detail": "Stok hareketleri > Envanterler'de belirli dönemlere sayım giriliyor ve dönemin tüketim ve gelir farkları görülüyor. Zayi ayrı bir hareket türü olarak kaydediliyor. Eldeki Stok, bekleyen kayıt (fatura, transfer, zayi) olduğu sürece güncel değil diye uyarıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyP6IAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "POS'ta basit stok ve stok bitince satışı kapatma",
+     "detail": "Menü kaleminde 'Pos ile Manuel Stok Yönetimi' açılıp stok miktarı giriliyor. 'Eksi Stok Satılamaz' işaretliyse stok sıfırlanınca ürün satışa kapanıyor; işaretli değilse satış eksiye düşerek sürüyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyRzIAK"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Gün sonuna bağlı sayım",
+     "detail": "Sayım için önce iş günü kapatılıyor. Manage > Inventory > End of Day Records'ta son belge açılıp Current Inventory sütununa sayılan miktarlar yazılıyor ve kaydediliyor. Bir sonraki iş günü bu miktarları In Stock olarak başlatıyor ve satış düşümleri buradan devam ediyor.",
+     "source": "https://kb.sambapos.com/en/5-5-7-d-how-to-count-warehouse-inventory/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Reçete ve alışlardan maliyet raporu",
+     "detail": "Cost report seçilen aralık için item, cost, sales price ve rate sütunlarını veriyor. Maliyet, reçetelerden ve kaydedilen alışlardan otomatik hesaplanıyor. Bilgi bankası pahalı kalemleri günlük, diğerlerini birkaç günlük kısa dönemlerle izlemeyi öneriyor.",
+     "source": "https://kb.sambapos.com/en/5-5-5-g-what-is-cost-report-how-to-analyze/"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Sayım geçmişi, toplu stok güncelleme, stok webhook'ları",
+     "detail": "Seçilen aralıktaki sayımlar tarih, işlem sonucu ve ürün bazlı miktar değişimiyle listeleniyor. 'Toplu Ürün İşlemleri' çok sayıda ürünün stok miktarını tek seferde güncelliyor. API tarafında stock.depleted ve stock.restocked webhook'ları (beta) var.",
+     "source": "https://www.adisyo.com/tukenen-veya-kritik-stoklar-icin-uyari-sistemi"
+    }
+   ]
+  },
+  {
+   "area": "8 Personel",
+   "features": [
+    {
+     "system": "SambaPOS",
+     "name": "Ayrıntılı rol yetkileri",
+     "detail": "Ticket yetkilerinden bazıları: Can Remove Ticket Lock, Can Merge Tickets, Can Display Old Tickets, Can Display Other Waiters Tickets, Can Change Order Quantity, Can Change Ticket Entity. Ayrıca Can Approve Admin Pin (Void/Gift için), Can Start End of Day ve Can Change Report Date Filter var. Yönetim ekranına erişim 'Products.Product List' biçiminde başlık başlık veriliyor. Ödeme komutu gibi işlemler de rollere eşlenebiliyor.",
+     "source": "https://kb.sambapos.com/en/2-2-10-a-how-to-create-change-user-roles/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Time Clock modülü",
+     "detail": "'Force User for Clock in Before Login' açıkken PIN girildiğinde 'You Must Clockin Before Login' uyarısı çıkıyor. Molalar ücretli ya da ücretsiz tanımlanabiliyor. Her kullanıcı-departman-rol ataması için saatlik ücret alanı var (varsayılan 0).",
+     "source": "https://kb.sambapos.com/en/8-13-how-to-configure-time-clock-module/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Saatli Giriş/Çıkış (PDKS-lite)",
+     "detail": "PIN ekranının sol altında saat simgesi çıkıyor; mesai girişi, departman seçimi ve Mola ya da Mesai Bitimi buradan yapılıyor. Moladaki kullanıcı operasyon ekranına girmeye çalışırsa 'Önce Saatli Giriş Yapınız' uyarısıyla engelleniyor. Bir kişi aynı vardiyada birden fazla departmanda (Garson + Şube Müdürü) çalışabiliyor. Aktif Giriş raporu mesaidekileri yeşil ikonla, Özet raporu toplam mola ve mesaiyle gösteriyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyP1IAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "Yetki grupları ve PIN'li çalışan",
+     "detail": "Çalışan kaydında şube, yetki grubu, PIN, ad, soyad ve telefon var; kurye çalışanlarda kurye alanı işaretleniyor. Hazır gelen yetki grupları düzenlenebiliyor. Backoffice kullanıcı rolleri Rol Ayarları'nda ayrıca tanımlanıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyK7IAK"
+    },
+    {
+     "system": "Menulux",
+     "name": "Personel şifresi, kart tanımı, çek aktarımı",
+     "detail": "Kullanıcı ayarlarında personele şifre ve kart tanımlanıyor; personeller arasında çek aktarımı da buradan yapılıyor. Oturum açıldıktan sonraki tüm sipariş ve ödemeler personel ID'siyle işaretleniyor. Portalda personel giriş-çıkışları (PDKS) tarih filtresiyle izleniyor.",
+     "source": "https://wiki.menulux.com/tr/pos/ayarlar"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Parmak izi ve kartla yetkilendirme",
+     "detail": "Personel parmak izi okuyucu, manyetik kart, temassız kart ya da şifreyle yetkilendiriliyor. Touch POS PC'lerde manyetik kart okuyucu standart geliyor.",
+     "source": "https://en.robotpos.com/faq"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Rol kontrolü ve yetki düzeltmeleri",
+     "detail": "Sürüm notlarında mobil satış ekranına rol kontrolü ve sipariş transferi yetkisi düzeltmesi geçiyor. Paketler personel sayısına göre ayrılıyor: Lite 1-3, Standart 4-7, Pro daha fazla.",
+     "source": "https://apps.apple.com/tr/app/id6471924118"
+    }
+   ]
+  },
+  {
+   "area": "9 Müşteri ve sadakat",
+   "features": [
+    {
+     "system": "Menulux",
+     "name": "Cari kartı: indirim oranı, negatif bakiye limiti, Ödenmez",
+     "detail": "Müşteriye özel indirim oranı tanımlanabiliyor. 'Negatif bakiye' alanı bakiyenin inebileceği alt sınırı koyuyor. Para birimi seçilince tahsilatta kur dönüşümü yapılıyor. 'Ödenmez' açıksa ödemeler ödenmez olarak işleniyor ve Ödenmez raporuna düşüyor. Tarih filtreli ekstre indirilebiliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/cari-hesaplari"
+    },
+    {
+     "system": "Menulux",
+     "name": "Kampanya türleri ve push bildirimi",
+     "detail": "Üç kampanya türü var. İndirim: belirli aralıkta koşul tutarındaki alışverişe kazanç tutarında indirim. Puan Kazan: aynı koşulla puan. Mutlu Müşteri: koşuldaki adisyon sayısına ulaşan müşteriye indirim. Gönder butonu kampanyayı işletmeye özel mobil uygulamanın tüm kullanıcılarına push olarak yolluyor. Puan hareketleri carinin altında tutuluyor.",
+     "source": "https://wiki.menulux.com/tr/portal/urunler"
+    },
+    {
+     "system": "Simpra",
+     "name": "Hediye kartı numaralarını Excel'den toplu içe aktarma",
+     "detail": "Excel'in ilk sütununa kart numaraları alt alta yazılıyor. Hediye kartı grubunda 'yeni kart ekle' > 'İçeri Aktar' ile dosya seçilince numaralar karta dönüşüyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVnOIAW"
+    },
+    {
+     "system": "Simpra",
+     "name": "Terminalden cari tahsilat (indirimli)",
+     "detail": "Kullanıcı menüsünden Fonksiyonlar > Cari Tahsilat açılıyor ve müşteri aranıyor. Girilenler: tahsilat tutarı, isteğe bağlı indirim, tahsilat tipi ve açıklama. Aynı işlem Backoffice'te 'Tutar Tahsil Et' ile de yapılabiliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyPDIA0"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "SambaCard ön ödemeli kart",
+     "detail": "Kart bir entity, bakiyesi ise bir hesap olarak tutuluyor; hesap adı 'SC-[Ad] – [Telefon]' şablonunda. Account Details'teki Card Refill ile para yükleniyor ve kartla ayrı bir ödeme tipinden ödeme alınıyor. Hesabı olmayan kart promosyon için dağıtılabiliyor ama ödemede kullanılamıyor.",
+     "source": "https://kb.sambapos.com/en/2-4-9-how-to-set-loyalty-card-sambacard/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Zamanlanmış promosyon ve kanal bazlı fiyat listesi",
+     "detail": "Triggers ile kural ve aksiyonlar zamanlanıyor; örneğin her gün 15:00'te ya da yalnız hafta sonu 16:00'da başlayan promosyon. Bitiş için ikinci bir trigger gerekiyor. Price Definitions'ta her ticket type (Delivery gibi) için ayrı fiyat listesi ve kısa tag (DLR) tanımlanıyor. 'Order Added to Ticket' kuralı fiyatı ilgili listeden çekiyor.",
+     "source": "https://kb.sambapos.com/en/2-3-17-a-trigger-features-and-usage/"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Cari müşteri: Ödeme Al ve Excel ile içe aktarma",
+     "detail": "Müşteriler tek tek eklenebiliyor ya da Excel'den toplu yükleniyor. Detay sayfasında adisyonlar tarih, saat, masa, ürün ve tutarla, ödemeler ve kalan borç da ayrıca görünüyor. Tahsilat profildeki 'Ödeme Al' butonuyla yapılıyor. Sadakat modülü yalnızca Pro pakette.",
+     "source": "https://www.adisyo.com/cari-hesap-musteri-yonetimi"
+    }
+   ]
+  },
+  {
+   "area": "10 Online ve teslimat",
+   "features": [
+    {
+     "system": "Menulux",
+     "name": "Online sipariş kabul modları",
+     "detail": "Üç kabul modu var: manuel onay, yalnızca ödemesi yapılmış siparişleri otomatik onay, tüm siparişleri otomatik kabul. Manuel modda bildirime dokunulmadan sipariş işleme alınmıyor; kabul ya da red Paketler ekranından yapılıyor. Platformlar: Yemeksepeti, Trendyol, Getir, Migros ve Fuudy.",
+     "source": "https://wiki.menulux.com/tr/paketlee/paketler"
+    },
+    {
+     "system": "Menulux",
+     "name": "Kurye atama, harici kurye çağırma, otomatik kapanış",
+     "detail": "'Kuryeye Ver' kendi kuryeleri listesinden atama yapıyor. 'Kurye Çağır' entegre harici firmalara gidiyor: Vigo, MaxiJet, Hızır, Paket Taksi, Fiyu. Giden Siparişler ekranında hazırlık süresi, kuryeye veriliş, yola çıkış ve toplam süre görünüyor. Kanal kuryesi siparişleri ayardaki süre (15 dk, 30 dk gibi) sonunda kendiliğinden kapanabiliyor. Kurye atanmamış manuel siparişler düzenlenebiliyor; iptal gerekçesi rapora geçiyor.",
+     "source": "https://wiki.menulux.com/tr/paketlee/paketler"
+    },
+    {
+     "system": "Menulux",
+     "name": "Caller ID ile paket sipariş",
+     "detail": "Arayan numara otomatik okunuyor ve kayıtlı müşteri tanınıyor. 'Hazırlanıyor-Yolda' göstergesinde Yolda'ya basılınca sipariş kuryeye geçiyor. Teslimden sonra Giden Siparişler'deki 'ödeme al' ile tahsilat yapılıyor.",
+     "source": "https://wiki.menulux.com/tr/pos/paketler"
+    },
+    {
+     "system": "Simpra",
+     "name": "Kaydırarak kurye atama ve iptal",
+     "detail": "Paket servis listesinde sipariş sola kaydırılıp 'Kuryede' seçiliyor, kurye belirleniyor ve sipariş 'Kuryedekiler'e geçiyor. İptal de aynı kaydırmayla yapılıyor; iptal edilen sipariş 'İptal Edilenler' sekmesine düşüyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyVUIA0"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Haritadan kurye takibi ve API sipariş durumları",
+     "detail": "Kuryeler canlı haritada görünüyor ve sipariş haritadan en uygun kuryeye atanıyor; zamanında teslim istatistikleri tutuluyor. API'deki durumlar: Hazırlandı, Yola çıktı, Teslim edildi, Yola çıkarma iptal, Sipariş İptal. order.created ve order.updated webhook'ları var.",
+     "source": "https://developers.adisyo.com/"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Android Caller ID uygulaması",
+     "detail": "Uygulama cep telefonuna gelen aramaları SambaPOS'a aktarıyor. POS tarafında CellularCallerId cihazı ve CIDPOPUP açılır penceresi tanımlanıyor. Trim Chars alanına ülke kodu yazılarak numaralar eşleştiriliyor. Açılır pencereye tıklanınca numara Delivery ekranındaki widget'a düşüyor.",
+     "source": "https://kb.sambapos.com/en/8-23-sambapos-android-caller-id-mobile-application-v2-acid-v2/"
+    },
+    {
+     "system": "Menulux",
+     "name": "Online siparişte menü filtresi ve restoranı açıp kapama",
+     "detail": "Online sipariş ayarlarında online restoran durumu açılıp kapatılabiliyor, online kanallar için menü filtrelenebiliyor, sipariş aktarımı ve manuel/otomatik onay seçiliyor. Portaldaki Sipariş Takip ekranında yeni sipariş sesli bildirimle düşüyor; onaylama, reddetme, tamamlama ve yazdırma oradan yapılıyor.",
+     "source": "https://wiki.menulux.com/tr/pos/ayarlar"
+    }
+   ]
+  },
+  {
+   "area": "11 Türkiye mali uyumu",
+   "features": [
+    {
+     "system": "Menulux",
+     "name": "GMP3/GMU/TSM ve ödeme sonrası değişmezlik",
+     "detail": "Türkiye'de GMP3 ve GMU mali entegrasyonu var. Ödemeden sonra sistemdeki satış verisi değiştirilemiyor. Yazarkasa ayarları: kablolu/kablosuz bağlantı, satış modu, fatura tutarı, ödeme tipi eşlemesi, cari bilgisi gönderme ve yazarkasa çıktısının yazdırılması.",
+     "source": "https://wiki.menulux.com/tr/pos/giris"
+    },
+    {
+     "system": "Menulux",
+     "name": "Pavo GMU kurulum kuralları",
+     "detail": "Müşteri dijital.gib.gov.tr'de GMÖEYBS başvurusu yapıyor ve İşletici Kuruluş olarak PAVO'yu seçiyor. Mükellef tipi '507 – Mükellefi' oluyor, KDV oranları ürün grubu bazında tanımlanıyor (Yiyecek %10, Alkol %20). Seri numarası N8 ile başlıyorsa banka tanımında 'PAV' ile değiştiriliyor. Yazarkasa satış modu Ürün, fiş limiti 9900, fiş nüshası Her ikisi. Bağlantı sabit kullanımda REST, mobilde P2P; IP sabitlenmesi zorunlu.",
+     "source": "https://wiki.menulux.com/tr/pavo-yazarkasa/menulux-tarafindan-yapilacaklar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Hugin PC modu",
+     "detail": "Eşleşme yalnızca Ethernet üzerinden yapılıyor. Servis moduna girmek için Hugin partnerinden 8 haneli şifre gerekiyor. Satış ekranında 4321 yazılınca entegrasyon (PC modu) açılıyor, 1234 yazılınca cihaz moduna dönülüyor.",
+     "source": "https://wiki.menulux.com/tr/yazarkasa/hugin-entegrasyonu"
+    },
+    {
+     "system": "Simpra",
+     "name": "GMU'da e-Arşiv limiti ve QR'lı fatura",
+     "detail": "Sepet tutarı fatura limitinin altındaysa nihai tüketici adına fatura kesiliyor ve fatura işlem sonrası ekrandaki QR koddan açılıyor. Limit aşılırsa fatura bilgileri girilmesi gerekiyor. Simpra Quick, müşteri başına günlük 9.900 TL'ye kadar (KDV dahil) müşteri bilgisi olmadan fatura kesilebileceğini belirtiyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVmRIAW"
+    },
+    {
+     "system": "Simpra",
+     "name": "İstisna ve tevkifat indirimleri",
+     "detail": "GMU POS'ta sepetin (...) menüsünde 'İstisna' ve 'Tevkifat' seçenekleri var. Uygulanan indirimler 'Uygulananlar'dan seçilip 'Kaldır' ile geri alınıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVmUIAW"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Adisyon kapanışı ile ÖKC fişi aynı işlemde",
+     "detail": "Adisyo'nun ÖKC rehberi, adisyon kapanışı ile ÖKC fişinin aynı işlemde senkron olması gerektiğini söylüyor. POS'ta alınan ödeme ÖKC'ye ulaşmazsa çift kayıt oluşuyor ve raporlar bozuluyor. Mutfak fişindeki ürünlerin ÖKC ürünleriyle birebir eşleşmesi öneriliyor. Yazarkasa entegrasyonu aylık +565 TL.",
+     "source": "https://www.adisyo.com/blog/okc-kurulumu-cafe-restoran-rehberi"
+    },
+    {
+     "system": "Menulux",
+     "name": "Belge türüne göre fiş başlığı ve KDV dökümü",
+     "detail": "Fatura ayarı kapalıyken başlık belge türüne göre basılıyor: 'PAKET FİŞİ', 'YEMEKSEPETİ SİPARİŞİ', platform adı ya da 'ADİSYON'. KDV ayarı açıksa her KDV oranının tutarı fişin altında ayrı satırda gösteriliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/yazici-ayarlari"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Ingenico TSM üzerinden bulut ÖKC",
+     "detail": "Masada ya da paket siparişte ödeme bulut bağlantılı Ingenico ÖKC'den alınıyor; ödeme tamamlanınca adisyon otomatik kapanıyor. Yıllık 199 USD + KDV ve SambaPOS V5 Pro lisansı gerekiyor.",
+     "source": "https://sambapos.com/okc-for-ingenico-tsm/"
+    },
+    {
+     "system": "Adisyo",
+     "name": "e-Dönüşüm kapsamı",
+     "detail": "e-Fatura, e-Arşiv, e-İrsaliye ve e-Adisyon destekleniyor; e-Adisyon zorunlu değil, isteğe bağlı. Zincirlerde her şube kendi e-Fatura entegrasyonunu kullanabiliyor ya da tek merkezi sistem tüm şubelere hizmet veriyor. Fiyat teklif usulü.",
+     "source": "https://www.adisyo.com/e-donusum-cafe-restoran-cozumleri"
+    }
+   ]
+  },
+  {
+   "area": "12 Donanım ve çalışma",
+   "features": [
+    {
+     "system": "Simpra",
+     "name": "Kutulu offline (yerel SQL Server) ve sınırları",
+     "detail": "Çekler önce mini PC'deki SQL Server'da açılıyor, ödeme alınıp kapanınca buluta gidiyor. Online ve offline arasında anlık geçiş yok; sistem ikisinden birinde çalışıyor. Offline'da çalışmayanlar: EFT-POS'a gönderim, paket platformu siparişleri, kasa açıp kapama, e-arşiv/e-fatura, GMU ödemesi, KDS'e gönderim. Insight'ta açık çeklerin yalnızca sayısı ve toplamı görünüyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyOhIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "Online/offline geçiş kontrol listesi",
+     "detail": "Cihazlara 'çevrimdışı çalışabilir' yetkisi veriliyor. Offline'da Simpra logosu kırmızı, online'da beyaz oluyor. Offline için firewall kapatılıyor. Online'a dönerken şubedeki offline kutu IP'si kaldırılıyor. Sunucu çökerse yazarkasalar manuel satışa açılıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyVYIA0"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Her POS'ta yerel SQL Express ve 90 saniyelik senkron",
+     "detail": "Her satış noktasında yerel SQL Express var ve hareketler 90 saniyede bir merkeze gönderiliyor. İnternet kesilince satış sürüyor; yalnızca pazaryeri ve üçüncü parti entegrasyonlar duruyor. Açık işlemler önbellekte tutuluyor ve elektrik kesintisinden sonra kalınan yerden devam ediliyor.",
+     "source": "https://en.robotpos.com/faq"
+    },
+    {
+     "system": "Menulux",
+     "name": "Sunucu/istemci modu ve yerel ağda garson",
+     "detail": "POS sunucu ya da istemci modunda çalışabiliyor. Garson uygulamasında Bulut Modu kapatılıp sunucu IP'si girilince uygulama yerel ağdaki terminal gibi davranıyor. İnternet kesildiğinde mobil terminaller Wi-Fi üzerinden çalışmayı sürdürüp sonradan senkronlanıyor.",
+     "source": "https://wiki.menulux.com/tr/garson/ayarlar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Cihaz ve yazıcı sağlık ekranı",
+     "detail": "Cihaz ve Yazıcı Ayarları ekranları her cihazın bağlantı durumunu, IP'sini ve iletişim süresini milisaniye olarak listeliyor; bağlı olanlar yeşil görünüyor. Bakım ekranında kilitli adisyonların kilidini açma, adisyonları buluta senkronlama, yedekleme ve konfigürasyonu temizleme var.",
+     "source": "https://wiki.menulux.com/tr/pos/ayarlar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Fişte OFFLINE ibaresi",
+     "detail": "Offline ayarı açıksa cihaz sunucuya bağlı değilken basılan fişin altına 'OFFLINE' yazılıyor; böylece senkron olmamış belgeler ayırt edilebiliyor.",
+     "source": "https://wiki.menulux.com/tr/portal/yazici-ayarlari"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Chrome eklentisiyle internetsiz sipariş",
+     "detail": "Bulut tabanlı Adisyo, internet yokken bir Chrome eklentisi üzerinden masa, paket ve gel-al siparişi almaya izin veriyor. Siparişler bağlantı gelince senkronlanıyor.",
+     "source": "https://www.adisyo.com"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Message Server ile çok terminal",
+     "detail": "Terminaller, KDS ve Android istemciler SambaPOS Message Server (9000+ port) üzerinden haberleşiyor. Tablet, 'IP:port' bilgisini Manual Server Entry'ye yazarak bağlanıyor. KDS V2 MSSQL olmadan çalışmıyor.",
+     "source": "https://kb.sambapos.com/en/8-19-how-to-configure-sambapos-kds-v2/"
+    },
+    {
+     "system": "Menulux",
+     "name": "Self order kiosk ayarları",
+     "detail": "Kiosk sunucu ya da terminal modunda çalışabiliyor. Sepet Modu'nda barkod okutularak ürün ekleniyor. 'Satışta Müşteri Adını Sor' seçeneği var. Belirli bir süre işlem olmazsa ana ekrana dönülüyor (Bekleme Süresi). Akış: Restoranda ya da Paket Yap seçimi, sepet, Ödeme Yap ve bağlı ödeme cihazında tamamlama. Kiosk bir ödeme noktasına ve yazıcıya bağlanıyor.",
+     "source": "https://wiki.menulux.com/tr/kiosk/ayarlar"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "GO Kiosk yönetimi",
+     "detail": "Menü 'Send Menu to GO Office' ile kioska gönderiliyor, ayarlar 'Get Settings From Web' ile alınıyor. Kioskta kategori ve ürünler Category/Product Status ile gizlenebiliyor. Kartla ödenmiş kiosk siparişinin iptali için önce manuel iade, sonra SambaPOS'ta iptal yapılıyor.",
+     "source": "https://kb.sambapos.com/en/8-6-1-sambapos-go-frequantly-asked-questions/"
+    },
+    {
+     "system": "Simpra",
+     "name": "Platform gereksinimleri",
+     "detail": "Desteklenen platformlar: macOS 11+ (M1 ve üstü), Windows 10+ (benchmark skoru en az 1600), Linux AppImage, iOS 15+ ve Android 8.1+. Android müşteri ekranında video oynatılabiliyor.",
+     "source": "https://simprasuite.com/go-to-simpra/"
+    }
+   ]
+  },
+  {
+   "area": "13 Yönetim",
+   "features": [
+    {
+     "system": "Simpra",
+     "name": "Fiyat Sihirbazı (ileri tarihli toplu fiyat)",
+     "detail": "Seviye seçiliyor: Organizasyon, Şube ya da Gelir Merkezi. Kalem tipi Menü Kalemi ya da İlaveler; kategoriler '+' ile seçilip tablo oluşturuluyor ve fiyatlara çift tıklanarak düzenleniyor. Değişikliğe işlem adı (örnek 'Yılbaşı fiyat değişikliği'), tarih ve saat veriliyor. Bir kez şube seviyesinde değiştirilen kalem organizasyon fiyatını artık görmüyor. Saatin kapanıştan 1 saat sonrasına konması öneriliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVl3IAG"
+    },
+    {
+     "system": "Simpra",
+     "name": "İşlem Kayıtları (audit log)",
+     "detail": "Sistem Ayarları > İşlem Kayıtları'nda geçmiş işlemler, işlemi yapan kişi, tarih ve saatle listeleniyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVluIAG"
+    },
+    {
+     "system": "Simpra",
+     "name": "Gelir merkezi türleri ve seçenekleri",
+     "detail": "Dört tür var: Hızlı Satış, Masaya Servis, Paket Servis ve Perakende. Her biri için barkodlu satış, kuver girişi, işlemden sonra PIN ekranına dönüş ve aynı masaya birden fazla çek açma ayarlanıyor. Her terminale bir gelir merkezi atanıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVleIAG"
+    },
+    {
+     "system": "Simpra",
+     "name": "Sebep kodları (iptal/iade/zayi/geri ödeme/ikram)",
+     "detail": "Sistem Ayarları > Notlar&Sebepler > Sebepler'de sebep adı ve türü tanımlanıyor; ödeme notları da aynı yerde. Terminalde ikram, iptal ya da iade yapılırken sebep seçtiriliyor ve sebepler raporlarda dağılım olarak çıkıyor. Ayarların terminale geçmesi için 'Veri Güncelle' gerekiyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyGhIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "Şube kopyalama",
+     "detail": "Organizasyon seviyesinde Şubeler listesinden (...) > 'Şubeyi kopyala' seçiliyor. Kısa süre sonra yeni şube oluşuyor; adı ve ayarları sonradan düzenleniyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyKJIA0"
+    },
+    {
+     "system": "Menulux",
+     "name": "Merkezi Yönetim (toplu fiyat, maliyet, KDV)",
+     "detail": "Bir menünün tüm ürünlerinin satış fiyatı, maliyeti, vergi oranı ve departmanı tek tabloda toplu düzenleniyor; kategori ve menü filtresi var. Yıldız simgesi ürünün diğer menülerdeki değerlerini gösteriyor. Departman KDV grubu demek; 'Ürünleri Güncelle' açıksa departmanın vergi değişikliği bağlı ürünlere otomatik yansıyor.",
+     "source": "https://wiki.menulux.com/tr/portal/urunler"
+    },
+    {
+     "system": "Menulux",
+     "name": "Menüler, uygulama istisnaları, uzun işlemlerin bildirimi",
+     "detail": "Menünün para birimi, varsayılan vergisi ve kendine özel QR'ı var. Kategori 'Uygulamalar (İstisnalar)' ile belirli uygulamalarda (kiosk, QR) gizlenebiliyor. Şubelere menü ve fiyat yayınlama ya da kopyalama gibi uzun işlemler üst barda 'Web Görevleri' bildirimi olarak izleniyor.",
+     "source": "https://wiki.menulux.com/tr/portal/ana-sayfa"
+    },
+    {
+     "system": "Adisyo",
+     "name": "HQ: merkezi ürün, şube fiyatı, B2B talep",
+     "detail": "Merkezde tanımlanan ürünün fiyat ve diğer güncellemeleri tüm şubelere otomatik gidiyor; aynı ürün şubelerde farklı fiyatla satılabiliyor. B2B modülünde şube merkezden ürün talep ediyor, merkez talebi revize edip geri yolluyor. Borç-alacak bakiyesi aynı ekranda tutuluyor.",
+     "source": "https://www.adisyo.com/coklu-sube-yonetimi"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Kural/aksiyon/trigger motoru ile özelleştirme",
+     "detail": "Masa durumu, kuver, fiyat listesi, mutfak mesajı ve e-posta raporu gibi işlerin çoğu Manage > Automation altındaki Rules (olay + kısıt) ve Actions ile kuruluyor. Triggers bunları zamana bağlıyor. Esneklik çok yüksek ama kurulumu entegratör işi.",
+     "source": "https://kb.sambapos.com/en/2-3-17-a-trigger-features-and-usage/"
+    },
+    {
+     "system": "robotPOS",
+     "name": "Şablonla merkezi kurulum ve silmeyen düzeltme",
+     "detail": "Bir şablon birden fazla şubeye uygulanıyor; merkezi sistemde şube ve kullanıcı limiti yok. Düzeltmeler kaydı silmiyor, durumunu değiştiriyor.",
+     "source": "https://en.robotpos.com/faq"
+    },
+    {
+     "system": "Adisyo",
+     "name": "API ve webhook pazarı",
+     "detail": "REST API'de ürün, özellik, sipariş oluşturma ve listeleme, ödeme tipleri, kurye, masa, B2B sipariş ve indirim CRUD uçları var. Beta webhook'lar: order.created/updated, stock.depleted/restocked, product.created/updated/statusChanged/priceChanged. API modülü aylık +565 TL.",
+     "source": "https://developers.adisyo.com/"
+    }
+   ]
+  },
+  {
+   "area": "14 UX ayrıntıları",
+   "features": [
+    {
+     "system": "Simpra",
+     "name": "Kaydırma ve çek numarası menüsü",
+     "detail": "Satır işlemleri satırı sola kaydırarak ya da (...) ile açılıyor: not defteri ikonu not, hediye paketi ikram, çöp kutusu iptal/iade. Çek seviyesindeki işlemler (böl, iptal, indirim, servis ücreti) sol üstteki çek numarasına tek dokunuşla açılıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CVXPIA4"
+    },
+    {
+     "system": "Simpra",
+     "name": "PIN sonrası varsayılan gelir merkezi ve masa planı",
+     "detail": "Terminal ayarlarında varsayılan gelir merkezi ve varsayılan masa planı (Bahçe, Salon, Teras) seçiliyor. Her PIN girişinde personel doğrudan bu ekrana düşüyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyLgIAK"
+    },
+    {
+     "system": "Simpra",
+     "name": "Ödeme butonlarını sürükle-bırak",
+     "detail": "Buton ayarları > Ekranlar'da gelir merkezi ve ödeme ekranı seçilip butonların yeri sürükleyerek değiştiriliyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyJyIAK"
+    },
+    {
+     "system": "Menulux",
+     "name": "Garson uygulaması mikro-UX ayarları",
+     "detail": "Bilgi Mesajı son eklenen ürünü kısa bir alt çubukta gösteriyor. Çıkış Mesajı masadan dönerken onay soruyor. Hızlı Açılış son konfigürasyon zamanına bakıp yüklemeyi atlıyor. Kompakt Mod sepeti üste alıyor. Masa grid'i 3, 4 ya da 5 sütun; ürün listesi liste ya da 2-5 sütun. 'İşlem Sonrasında Çıkış' masa ekranına, 'Otomatik Çıkış' oturum kapanışına götürüyor.",
+     "source": "https://wiki.menulux.com/tr/garson/ayarlar"
+    },
+    {
+     "system": "Menulux",
+     "name": "Adisyon barkodu masayı açıyor",
+     "detail": "Barkod ayarı açıkken adisyon fişine siparişin barkodu basılıyor. Bu barkod POS'ta okutulunca kullanıcı doğrudan ilgili açık masaya gidiyor.",
+     "source": "https://wiki.menulux.com/tr/portal/yazici-ayarlari"
+    },
+    {
+     "system": "SambaPOS",
+     "name": "Android'de uzun basma ve gönderilmiş kalem kilidi",
+     "detail": "Gönderilmemiş satıra uzun basınca iptal ve Change Amount çıkıyor. Gönderilmiş kalemler 'Sent' başlığı altında gruplanıyor ve adet ya da tutarları değiştirilemiyor. Zorunlu ticket tag tanımlıysa masa açılmadan önce soruluyor.",
+     "source": "https://kb.sambapos.com/en/5-1-12-a-how-to-use-sambapos-android-client/"
+    },
+    {
+     "system": "Adisyo",
+     "name": "Tema, erişilebilirlik, bildirim seçimi",
+     "detail": "Son sürümlerde bildirim seçim ekranı, PIN ekranı iyileştirmeleri, erişilebilirlik düzeltmeleri, koyu tema ve tema değiştirme geldi. Hazır butonu daha kolay erişilir hale getirildi.",
+     "source": "https://apps.apple.com/tr/app/id6471924118"
+    },
+    {
+     "system": "Menulux",
+     "name": "Kaldığı yerden devam ve sipariş kalemi birleştirme",
+     "detail": "Sipariş ayarlarında 'son ekrandan devam etme' (kaldığı yerden devam et popup'ı), sipariş kalemlerini birleştirme, iptal edilen ürünleri gösterme, ürün arama modu ve kısmi ödeme ekranı tek tek açılıp kapatılabiliyor.",
+     "source": "https://wiki.menulux.com/tr/paketlee/ayarlar"
+    }
+   ]
+  },
+  {
+   "area": "Diğer (hiçbir başlığa tam uymayan)",
+   "features": [
+    {
+     "system": "robotPOS",
+     "name": "IQ Assistant ile doğal dilde sorgu",
+     "detail": "Yönetici 'Dün en kötü üç şubem?' gibi düz cümlelerle soru soruyor. Şubeler beş boyutta puanlanıyor (ciro, trend, verimlilik, veri kalitesi, güvenlik) ve saatlik ısı haritasıyla karşılaştırılıyor.",
+     "source": "https://en.robotpos.com/air-intelligence"
+    },
+    {
+     "system": "NarPOS",
+     "name": "NarCOST ve kantin bilet sistemi",
+     "detail": "Ürün yelpazesinde stok, sayım ve maliyeti tek yerde yöneten NarCOST, kafeterya ve kantinler için bakiye tabanlı Bilet Sistemi, sanal POS ve Zubizu sadakat entegrasyonu bulunuyor. Hem bulut hem lokal kurulum seçeneği listeleniyor.",
+     "source": "https://www.narpos.com.tr"
+    },
+    {
+     "system": "Simpra",
+     "name": "Müşteri Öner (referans indirimi)",
+     "detail": "Backoffice'teki 'Müşteri Öner' ile başka bir işletme davet ediliyor. Davet edilen Simpra'ya geçerse iki işletme de ilk fatura döneminden itibaren 3 ay boyunca %10 indirim alıyor.",
+     "source": "https://bilgibankasi.simprasuite.com.tr/article.php?lang=tr&articleNumber=ka0Vh000000CyX9IAK"
+    },
+    {
+     "system": "Menulux",
+     "name": "Servis robotu ve menuboard",
+     "detail": "Ürün ailesinde garson robotu ve dijital menuboard (kampanya, görsel ve video gösterimi) da var. Menulux portalının galerisindeki görseller 1280x800 px kırpılarak tüm uygulamalarda ortak kullanılıyor.",
+     "source": "https://www.menulux.com"
+    }
+   ]
+  }
+ ],
+ "standouts": [
+  "Mali kilit güven veriyor: ÖKC'den fiş çıktıktan sonra Simpra kapalı çeki geri açmaya, silmeye ve ödeme tipini değiştirmeye izin vermiyor; Menulux da ödemeden sonra satış verisini değiştirilemez tutuyor. LafPOS TokenX tarafında aynı kuralı uygulamalı, nedenini ekranda açıkça yazmalı.",
+  "Patron tarafına giden alarmlar: Simpra'nın Şüpheli İşlem Takibi açık/kapalı çek iptali, indirim, ikram ve iade için tutar ya da yüzde eşiği aşılınca SMS yolluyor. robotPOS aiR şubenin kendi normaline göre Z-skorla void, indirim ve kasa anomalisi yakalıyor, SLA'lı görev açıp kademeli eskalasyon yapıyor. LafPOS'un tek kafe ölçeğindeki karşılığı, eşikli ve sahibe giden anlık bir 'şüpheli işlem' bildirimi olabilir.",
+  "Offline konusunda açık sözlülük: Simpra internetsiz çalışmayan her işi tek tek listeliyor (EFT-POS, paket platformları, kasa açma/kapama, e-arşiv, KDS). robotPOS 90 saniyede bir senkronluyor ve elektrik kesintisinden sonra açık işleme kaldığı yerden devam ediyor. Menulux senkron olmamış fişe 'OFFLINE' basıyor. LafPOS'un yerel sunucu mimarisi bunların hepsini yapabilir; personele bir durum ışığıyla anlatılmalı.",
+  "Mutfakta zaman görünürlüğü ve kurs kontrolü: SambaPOS KDS fişi 5, 10 ve 15. dakikada (ayarlanabilir) renk değiştiriyor ve ürün grubunu cihaza yönlendiriyor. Simpra Beklet ve Marş ile kalemleri bekletip sonra ateşliyor; hazır bildirimi masa numarasıyla garsonun eline düşüyor.",
+  "Hız veren etkileşimler: SambaPOS'ta arama kutusu olmadan yazınca ürün bulunuyor ve önce numpad'den adet girilebiliyor. Simpra'da satırı sola kaydırmak not, ikram ya da iptali açıyor; çek numarasına tek dokunuş böl/iptal/indirim/servis menüsünü getiriyor. PIN'den sonra doğrudan varsayılan salon planı açılıyor. Menulux'ta adisyon barkodu okutulunca masa açılıyor.",
+  "Zorunlu sebep kodu ve değiştirilemez kayıt: Simpra iptal, iade, zayi, geri ödeme ve ikramda sebep seçtiriyor ve dağılımı rapora koyuyor. SambaPOS'ta kaydedilen gider silinemiyor, yalnızca karşı kayıtla düzeltiliyor. robotPOS düzeltmede kaydı silmek yerine durumunu değiştiriyor. Bunlar sahibin kasaya güvenini doğrudan artırıyor.",
+  "Kendiliğinden gelen rapor: Simpra her raporu istenen saatte ve periyotta e-postayla gönderiyor. SambaPOS gün kapanınca raporu dosyaya kaydedip retry'lı SMTP ile yolluyor. robotPOS her sabah 06:00'da AI özeti gönderiyor. Menulux panosu her rakamı önceki gün, hafta ve aya göre yüzde farkla gösteriyor.",
+  "İleri tarihli toplu fiyat: Simpra Fiyat Sihirbazı fiyat değişikliğini isimli bir işlem olarak belirli tarih ve saate planlıyor ve kapanıştan 1 saat sonrasını öneriyor. Organizasyon > şube > gelir merkezi kalıtım kuralı ve tuzağı da açıkça yazılı.",
+  "Fişte ince ayar: Menulux'ta 58 mm otomatik ölçekleme, kişi başı tutar satırı ('4 kişi x 125,00 ₺'), cari bakiye satırı, KDV oranı dökümü ve belge türüne göre başlık (ADİSYON, PAKET FİŞİ, YEMEKSEPETİ SİPARİŞİ) var. Bunlar garsonun masada açıklama yapma ihtiyacını azaltıyor.",
+  "Personel devamı satışa bağlı: Simpra moladaki personeli satış ekranından 'Önce Saatli Giriş Yapınız' uyarısıyla kesiyor. SambaPOS'ta mesai girişi yapılmadan login olunamıyor. Menulux her sipariş ve ödemeyi personel ID'siyle işaretliyor, personeller arasında çek aktarımına izin veriyor."
+ ]
+}

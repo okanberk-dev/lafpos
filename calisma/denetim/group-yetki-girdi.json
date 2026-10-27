@@ -1,0 +1,80 @@
+[
+ {
+  "title": "Approval-PIN endpoint is an unthrottled oracle: any logged-in staffer discovers the patron PIN and takes over",
+  "severity": "critical",
+  "file": "server/lib/auth.ts",
+  "line": 209,
+  "description": "POST /api/auth/approve calls findApprover(pin, addr), which looks up any user by PIN hash and returns their name on a hit (200 = {id,name}; 403 'approval_forbidden' = '<name> bu işlemi onaylayamaz'; 403 'approval_invalid' = no such PIN). So it distinguishes valid PINs AND names the owner. Throttling does not apply: assertNotLocked's network-wide lock is gated on kind==='giris' only (auth.ts:67), so approval PINs have no network protection, and the per-device 'onay' counter is reset to 0 by clearFailures every time the caller submits their OWN valid PIN (which a logged-in garson knows and which /approve accepts for any permission they hold). A garson thus enumerates all 4-6 digit PINs with zero lockout, learns the patron PIN, and logs in as patron (/auth/login from a 'trusted' device is likewise unthrottled: clearFailures marks the device trusted at auth.ts:102, exempting it from the global lock, and resets its per-device counter on every correct login). This defeats PIN lockout 'per device and network-wide' and bypasses every locked-role / last-patron / escalation guard, since the attacker simply authenticates as the patron.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/auth-r1/pin-bruteforce.probe.test.ts",
+  "evidence": "[approve] wrong guesses: 998 rate-limited responses: 0 discovered: {\"1111\":\"Kasa\",\"1897\":\"Patron\"}\n[login] wrong guesses: 199 rate-limited responses: 0 discovered: {\"1897\":\"Patron (patron)\"} global_lock alarms: 2\nBoth tests FAIL on `expect(rateLimited).toBeGreaterThan(0)` (0 429s over ~1000 guesses); the login probe then authenticates with the discovered PIN 1897 and gets back me.role='patron'.",
+  "fix": "Throttle /auth/approve per device AND network-wide exactly like login (apply the global lock to kind==='onay' too), and do not reset the failure counter on an interleaved correct PIN within the same window (count only consecutive wrong attempts toward unlock timing, keep a rolling cap). Make the endpoint non-enumerating: return a single generic error for invalid/forbidden without echoing the owner's name, and add a hard rate cap that a correct interleave cannot clear.",
+  "dimension": "auth",
+  "votes": [],
+  "id": "auth-51"
+ },
+ {
+  "title": "SSE event stream never re-checks the session: logout, deactivation and role revocation keep delivering live events including cash-amount alerts",
+  "severity": "high",
+  "file": "server/routes/events.ts",
+  "line": 13,
+  "description": "GET /api/events authenticates once in authMiddleware and then streams forever; the handler only stops on client abort. It never re-validates the session or re-reads permissions. After POST /auth/logout (session row deleted), after the user is deactivated (active=false) or has their PIN/role changed (sessions deleted), and after patron.panel is revoked from their role, the already-open stream keeps emitting. 'alerts' events are gated only by the permission snapshot captured at connect time, and their message text contains cash figures (e.g. 'Kasa: kasadan teslim ₺2.500,00'), expected-cash/day-close amounts, and other patron-only data — so a logged-out or deactivated or de-privileged user keeps receiving blind-cash / patron-panel information on the live feed. This breaks session expiry/logout and the blind-cash / patron.panel gating for the live channel.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/auth-r1/sse-session.probe.test.ts",
+  "evidence": "[logout] /auth/me after logout -> 401 ; events delivered after logout: ['data: {\"topic\":\"alerts\",\"kind\":\"cash.harcama\",\"message\":\"Kasa: kasadan harcama ₺1.500,00 (probe-after-logout)\"...}', ...]\n[deactivated] /auth/me -> 401 ; events delivered after deactivation: ['data: {\"topic\":\"alerts\",\"kind\":\"cash.teslim\",\"message\":\"Kasa: kasadan teslim ₺2.500,00 (probe-after-deactivate)\"...}']\n[role-revoke] /reports/patron after revoke -> 403 ; alerts delivered after patron.panel revoked: ['data: {\"topic\":\"alerts\",...\"probe-after-role-revoke\"...}']\nAll three cases: /auth/me (and /reports/patron) correctly return 401/403 while the open stream still carries the event.",
+  "fix": "On each event (or on a short heartbeat) re-resolve the session token and current permissions inside the stream handler; drop the connection when resolveToken returns null and re-evaluate seeAlerts/patron.panel from the fresh permission set before forwarding 'alerts'. Also proactively close open streams for a session on logout, deactivation, and PIN/role/permission change.",
+  "dimension": "auth",
+  "votes": [],
+  "id": "auth-52"
+ },
+ {
+  "title": "Per-staff sales amounts leak to a cashier with kasa.rakam but without rapor.maliyet (personel performans tutarları)",
+  "severity": "high",
+  "file": "server/routes/cash.ts",
+  "line": 36,
+  "description": "AGENTS.md / permissions.ts require that personel performans tutarları be visible only with rapor.maliyet, and /reports/staff correctly enforces that (403 without rapor.maliyet). But computeSummary() builds summary.byUser = per-staff {orders, amount} (days.ts:154), and GET /api/cash/day (and /cash/day/close, /days/:id/count) return the full summary to anyone for whom seesCashNumbers() is true — i.e. kasa.rakam OR rapor.gor. A cashier granted only kasa.rakam (to lift blind cash) therefore sees every staff member's order count and revenue through the X/Z summary, bypassing the rapor.maliyet gate that the dedicated staff report enforces.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70874f282d6/scratchpad/audit/auth-r1/perm-matrix.probe.test.ts",
+  "evidence": "[staff] /reports/staff -> 403 ; /cash/day summary.byUser -> [{\"name\":\"Garson\",\"orders\":1,\"amount\":28000},{\"name\":\"Kasa\",\"orders\":1,\"amount\":14000}]\nme.permissions contains kasa.rakam and does NOT contain rapor.maliyet; FAIL: byUser expected [] but had two staff rows with amounts.",
+  "fix": "Strip (or omit) summary.byUser (and any other personel-tutarı fields) from the X/Z summary returned by the /cash endpoints unless the requesting user has rapor.maliyet; keep the cash totals/expected-cash for kasa.rakam but gate per-staff amounts on rapor.maliyet like /reports/staff does.",
+  "dimension": "auth",
+  "votes": [],
+  "id": "auth-54"
+ },
+ {
+  "title": "pinFree uniqueness check leaks other users' PINs with no throttling (PATCH/POST /admin/users)",
+  "severity": "high",
+  "file": "server/routes/admin.ts",
+  "line": 460,
+  "description": "pinFree(pin, exceptUserId) (used by POST /admin/users and PATCH /admin/users/:id) returns a distinct 409 'pin_taken' when the submitted PIN hash already belongs to another user. A holder of personel.yonet (which can be a mere garson granted that permission) can repeatedly PATCH a dummy user's PIN across the whole 4-6 digit space with no rate limiting and learn exactly which PINs are in use — including the patron's — then log in with the discovered PIN as patron. The escalation/last-patron/locked-role guards stop a staff manager from editing the patron, but this oracle lets them impersonate the patron outright, a full privilege escalation.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70874f282d6/scratchpad/audit/auth-r1/pin-oracle.probe.test.ts",
+  "evidence": "[oracle] 1000 PIN probes, rate-limited: 0 ; pin_taken hits: [\"1111\",\"1897\"] ; login as each: [\"1111=Kasa/kasiyer\",\"1897=Patron/patron\"]\nFAIL: pin_taken set expected not to include patron PIN '1897'.",
+  "fix": "Do not expose a value-specific uniqueness oracle on PIN set: rate-limit PIN changes, and on collision return a generic 'choose a different PIN' without a code that confirms the exact value is in use (or verify uniqueness without leaking which account owns it). Consider blocking a staff manager from assigning a PIN that collides with a higher-privileged account at all, under the same throttle as login/approval.",
+  "dimension": "auth",
+  "votes": [],
+  "id": "auth-56"
+ },
+ {
+  "title": "Empty PATCH body crashes six update endpoints with 'No values to set'",
+  "severity": "low",
+  "file": "server/routes/admin.ts",
+  "line": 257,
+  "description": "PATCH /admin/sections/:id and /admin/stations/:id pass the parsed body straight to db.update().set(). PATCH /admin/tables, /admin/payment-methods, /admin/categories and /reservations/:id pass a filtered object. When no field is sent, Drizzle throws 'No values to set' and the API returns 500. Some of these also return 200 for an unknown id instead of 404 (sections, stations, payment-methods).",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/input-r1/a-batch1.probe.test.ts",
+  "evidence": "[hata] PATCH /api/admin/sections/... Error: No values to set\n[PROBE] crashed 6 [\"PATCH /admin/sections/..\",\"PATCH /admin/tables/..\",\"PATCH /admin/stations/..\",\"PATCH /admin/payment-methods/..\",\"PATCH /admin/categories/..\",\"PATCH /reservations/..\"]",
+  "fix": "When the patch is empty, return the current row (or 422) without calling update. Load the row first and throw notFound() for unknown ids.",
+  "dimension": "input",
+  "votes": [],
+  "id": "input-71"
+ },
+ {
+  "title": "Impossible dates and times are stored (reservations, happy hours, scheduledFor)",
+  "severity": "low",
+  "file": "server/routes/reservations.ts",
+  "line": 14,
+  "description": "These values are validated by shape only, so impossible values are saved. Reservation date/time are regex-only, which saves 2026-99-99 at 99:99. Happy-hour start/end are regex-only (admin.ts:198), which saves 99:99-00:61; the days array also allows duplicates. POST /orders scheduledFor is any string up to 40 characters (pos.ts:77), which saves 'yarın bir ara'. The kitchen and online bars then render it as 'Saat Invalid Date' (KitchenPage.tsx:206).",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/input-r1/c-misc.probe.test.ts",
+  "evidence": "[PROBE] reservation 2026-99-99 99:99 200\n[PROBE] happy hour 99:99-00:61 200\n[PROBE] order scheduledFor 200 yarın bir ara",
+  "fix": "Use a real-date refinement and an HH:MM refinement (00-23:00-59) shared by reservations and happy hours. Make scheduledFor an ISO datetime (z.iso.datetime()) or remove it from the POS create body. Dedupe days.",
+  "dimension": "input",
+  "votes": [],
+  "id": "input-74"
+ }
+]

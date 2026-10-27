@@ -1,0 +1,1193 @@
+{
+ "systems": [
+  "Lightspeed Restaurant K-Series (k-series-support.lightspeedhq.com; Back Office + Restaurant POS iPad/iPhone app + KDS 2.0 + Order Anywhere + Pulse)",
+  "TouchBistro (help.touchbistro.com; iPad POS with local Main Device/Pro Server + Cloud portal + Fresh KDS + TouchBistro One handheld + Online Ordering/Loyalty)"
+ ],
+ "areas": [
+  {
+   "area": "1 Sipariş alma ve menü",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Modifier groups with selection rules",
+     "detail": "Back Office Menu > Item list > Create > Modifier group. Modifiers are free by default; the price is set per modifier inside the group. A 'Selection is required' toggle sets min/max between 1 and 99, and a per-modifier 'Default' toggle preselects an add-on. On the POS, tapping the item opens the modifier sheet with 'Duplicate', 'Add another item' and 'Add to ticket'. Only single items (not combos or item groups) take modifier groups. Groups can be archived (removed from every menu at every location) but never deleted. Requires app 26.16+ on all devices, and modifiers cannot be mixed with production instructions on the same item.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/51623634913051-Understanding-modifiers-and-modifier-groups"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Production instructions (free kitchen instructions)",
+     "detail": "Menu > Production instructions: each instruction is single-choice or multiple-choice with a list of choices (e.g., Doneness: Medium/Medium-Well). Instructions carry no price and generate no statistics. An option prints '#' instead of a number when only one instruction applies, so the cook does not confuse it with quantity. Instructions can be grouped on one line when the same item is ordered several times, and they import/export via CSV/XLSX.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804656369-Managing-production-instructions"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Combos and item groups",
+     "detail": "An item group (e.g., Side Dish) has selection rules (min/max or 'No maximum'). Its choice price either keeps each item's own price or forces a group price, and a Default selection (e.g., fries) is preselected on the POS. A combo has a base price plus upcharges, a forced course, and an optional combo stock counter. 'Show only combo name and price on receipt' merges the lines. 'Auto-detect combos on the POS' alerts the server when the combo's items were rung up separately and suggests the combo.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804656569-Creating-combos"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Price types incl. open price and % price",
+     "detail": "Each item has a price type. 'Single price' is the default. 'Manually-entered price' means staff type the price at the POS (market price). 'Manually-entered negative price' records a loss. 'No price' is for freebies. 'Multiple prices' switch by order profile (e.g., a happy hour or takeaway profile). 'Price as a percentage' of the order is used for service charges. A blank price defaults to 0.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804604870-Creating-and-editing-items"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Per-item POS behaviour flags",
+     "detail": "Per-item POS flags:\n- 'Sub-item that cannot be sold alone' (sauces).\n- 'Item is part of a specific course' (the POS creates Course 3 if it is missing).\n- 'Extends over multiple courses' (reprinted with a continuation note).\n- 'Allow item to be renamed' (prompts for a name at the POS).\n- 'Can be discounted' and 'Can be complimentary'.\n- 'Included in service charge'.\n- 'Create order sub-total before this item'.\n- 'Link item to cover counts' (quantity = covers).\n- Fractional quantities such as 0.33.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804604870-Creating-and-editing-items"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Register keypad workflow",
+     "detail": "Typing a number on the keypad and then tapping an item adds that quantity. 'C' clears the order. Typing a table number and tapping 'Tables' assigns the order. Up to two Quickpay buttons are configurable: Cash closes the order as paid in full; Card pushes the amount to the integrated terminal. Direct Sale quickpay closes with no tip or change entry. 'On hold' parks a counter sale so it can be resumed from Orders.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050328394-Understanding-the-Register-screen"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Search, barcode and per-item QR",
+     "detail": "The magnifier on the Register searches by item name, SKU or barcode ('Add to order' / 'Details'). Each item can store a UPC/EAN barcode and gets an auto-generated QR code (download as PDF/PNG). The Scan icon uses the iPad camera to add the item. Discounts and VIP/punch cards are also applied by scanning their QR codes.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050328554-Editing-and-reviewing-orders"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Price override on an order line",
+     "detail": "Tap the item, then 'Adjust price', type the new price and 'Confirm price'. The override applies only to that order and never syncs back to the Back Office. It is gated by the 'Item price' user permission and needs POS 26.18+.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/51821808439579-What-s-New-June-2026-Service-insights-promotions-task-summary-emails-and-more"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Notes at order, item, course and seat level",
+     "detail": "The 'Manage notes' pop-up offers preset notes (created and reordered in the Back Office, with a per-note 'show on order tickets' toggle) plus 'Create note' for free text. Notes attach to the whole order (VIP, Rush), a line item (via the three-dots menu, app 26.40+), a course or a seat. They print on dockets and the KDS but never on customer receipts, and can be edited until the order is sent. A badge shows the note count.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/48669341062043-Adding-notes-to-orders"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Courses and seats",
+     "detail": "Items default to Course 1, and 'Add a course' starts the next one. The 'By seat' display mode collapses the keypad. Items stay Shared until a seat is chosen, and the + next to 'Select a seat/course' combines both. After sending, items can no longer move between course and seat. 'Send - x items' prints only the newly added items.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360051089273-Adding-orders-in-Table-Service-mode"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Edit, remove and void rules",
+     "detail": "Double-tap a line to reorder it. Unsent items are removed with 'Remove'. Sent items need 'Void line' plus a reason, and the void is logged with user, table, item, date and reason. 'Edit order' supports multi-select and 'Assign to' course or seat. Order actions include 'Clear unsent items', 'Refund all items' (negative quantities) and Rename order. Renaming unassigns the table.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050328554-Editing-and-reviewing-orders"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Group Ordering for counter groups",
+     "detail": "Each guest in a group pays separately at the counter, and all their orders are assigned to one table. Two timers control the kitchen ticket. 'Max time between orders' restarts after each payment. 'Max time since first order' never restarts. When either expires, all the group's orders print together on one kitchen ticket. After each payment the POS asks 'Yes, add another' or 'No, finish up'.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/11395178539931-Setting-up-and-using-Group-Ordering"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Stock counter on menu buttons (sales restriction)",
+     "detail": "With 'Create a stock quantity counter on the item's POS button' enabled, long-press the item, choose 'Sales restriction' and enter the maximum quantity. A countdown then shows on the button. At 0 the item becomes unavailable in Order Anywhere automatically (shown in red), separate from manual snoozes (shown in orange), and it returns when restocked.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/10724827631259-Setting-up-and-using-Item-availability"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Modifier min/max popup behaviour matrix",
+     "detail": "Min 0 makes a group optional; min 1+ auto-prompts; a blank max means unlimited. The popup behaves as follows:\n- 0/0: never pops up.\n- 1+/0: pops up and auto-closes at the minimum.\n- min = max: pops up and auto-closes.\n- 0/1+: no popup, and options grey out at the maximum.\n- 1+/1+: pops up, the minimum must be chosen, and it greys out at the maximum.\nA 'Mandatory' modifier (e.g., a bottle deposit) is always added and does not count against the maximum. Options are reordered by drag-drop.",
+     "source": "https://help.touchbistro.com/s/article/modifier-groups?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Forced modifier entry and flags",
+     "detail": "Mandatory categories show a number for the minimum picks (shown in red on the handheld). Out-of-stock modifier items are greyed out but can still be added with manager approval. Incomplete items are flagged. The 'Custom' tab adds a free-text modifier with an optional cost, and a configurable 'Custom Modifier Suffix' marks free-text mods for the kitchen.",
+     "source": "https://help.touchbistro.com/s/article/modifications-2?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Text vs menu-item modifiers, nesting",
+     "detail": "Text modifiers (cooking instructions) carry no cost and are not inventoried. Menu-item modifiers (a side salad) count toward food cost and inventory and are taxed at the modifier item's own tax rate. If a side has its own modifiers (salad: chicken or no chicken), the POS prompts for them immediately and shows them indented. Nested modifiers are not supported by online ordering or DoorDash.",
+     "source": "https://help.touchbistro.com/s/article/working-menu-modifiers?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Reorder and quantity",
+     "detail": "'Reorder' copies a line with its modifiers as a separate line. A manual discount is not copied, but an automatic (happy hour) discount still applies. Tapping a line with two fingers is a quick reorder. 'Quantity' accepts whole numbers only, except for sell-by-weight items, where entering .5 means half a pound.",
+     "source": "https://help.touchbistro.com/s/article/modifications-2?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Half portions and split plating",
+     "detail": "Set quantity to .5 and add a 'Half Portion Up Charge' item (set to Do not print). A split-plating modifier priced at the total for both seats ($4 for $2 each) is split across seats automatically via 'Split Item Among Seats'. The kitchen ticket carries the half-portion modifier.",
+     "source": "https://help.touchbistro.com/s/article/serving-half-portions-and-plating-split-orders?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Prix fixe and tasting menus",
+     "detail": "One priced parent item (e.g., 'Prix Fixe Lunch $20') carries $0 option items that are colour-coded per course, each with an explicit course and printer. With 'Print Zero Priced Menu Items' off, the guest check shows only the priced item. $0 dummy items such as '-- Apps --' act as headers in list view.",
+     "source": "https://help.touchbistro.com/s/article/creating-a-tasting-menu-or-prix-fixe-menu?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Order screen layout and menu views",
+     "detail": "The order screen has four areas: Menu, Orders (colour-coded seat bars plus a Shared Order bar), a Table & Chairs diagram (tap a seat to focus it, + adds a seat) and Order Summary. The view toggle switches between List, Image grid and Text grid. Tap-and-hold an item to show its picture and description to the guest. Tapping the next seat's colour bar moves to the next guest.",
+     "source": "https://help.touchbistro.com/s/article/taking-orders?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Bluetooth barcode scanning",
+     "detail": "Uses a Socket Mobile S740 scanner, one per iPad; it cannot pair with an iPad that also uses a Bluetooth printer or payment device. UPCs are captured into Menu Management with the iPad's rear camera via 'Scan Code'. Scanning on the Table, Order or Register screens adds the item instantly without tapping any icon.",
+     "source": "https://help.touchbistro.com/s/article/barcode-scanner?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Multi-select editing",
+     "detail": "The Edit icon on the order screen lets staff select several lines, then Actions: Discounts, Delete, Move to Seat, or Move to another table.",
+     "source": "https://help.touchbistro.com/s/article/multi-select-editing?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "2 Masa ve salon",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Floor plan ownership tags and table info toggles",
+     "detail": "Table tags show ownership. Green means the table is yours. Orange means another user's table that you may open. Red means another user's table you have no permission for, and shows that user's initial. Bottom-left toggles switch every table between Covers, Total, Time open (a red band appears after a while) and Status (which course the table is waiting for).",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050328494-Understanding-the-Tables-screen"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Floor plan refresh (Nov 2026)",
+     "detail": "Tables show prominent status colours and server badges. Tiles are customisable to show status, covers, seated time, check total and active course. Staff swipe between floor plans, pinch to zoom, and get an expanded layout on iPad/iPhone with iOS 26+.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/57470575339931-What-s-New-November-2026-Lightspeed-AI-POS-KDS-and-more"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Transfer and merge tables",
+     "detail": "Items and orders can be transferred only after they have been sent. Pick the target from the Orders list or the Floor plan view. Edit mode moves several items at once. A whole order moves via Actions > 'Transfer to another table' by typing the table number or 'Browse tables'; landing on an occupied table merges the orders.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/10032856591643-Transferring-items-and-orders-to-other-tables"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Order management screen",
+     "detail": "Dine-in columns: Order, Floor, User (tap to reassign to any clocked-in user), Covers/seats, Created, Last edit, Course, Total remaining, Payment status (Open / Receipt Printed / Paid) and Customer. Tap a header to sort; search by order, user or customer. The Pickup/Delivery tab adds Type, Channel and a 'Time to pickup' countdown.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050328594-Understanding-the-Order-management-screen"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Tempo pacing alerts on the floor plan",
+     "detail": "Real-time badges appear on tables:\n- 'Visit table' (no activity for too long).\n- 'Take payment' (check printed or split but unpaid).\n- 'Take order' (seated but nothing ordered; needs reservations).\n- 'Pick up order' (KDS marked ready, not collected).\nThresholds are learned from the last 3 months and update monthly ('Order placed' defaults to 5 min); each can be edited or disabled. The dashboard shows empty-table time, the 5 emptiest tables and the 3 biggest slowdowns, each with an order timeline.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/43687798096027-Understanding-Lightspeed-Tempo"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Reservations on the POS",
+     "detail": "A 'Manage reservations' button lists today's bookings. Statuses run Scheduled > Seated > Paid > Departed (or Cancelled), with one-tap shortcut buttons. A new reservation records guests, expected duration, date/time, floor and table, plus name, phone, language, email, tags, dietary restrictions, allergens and notes. 'Assign table' works in advance; 'Seat' > 'Go to order' starts the check. Staff can pause online bookings from the POS.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/45815052598683-Using-Lightspeed-Reservations-on-the-POS"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Automatic table assignment and capacity rules",
+     "detail": "Online bookings are auto-assigned a suitable table by party size, and staff accept, change or skip the suggestion. Capacity can be capped as a percentage or as a set of bookable tables to keep walk-in space. Limits can apply to online bookings only or to all bookings. Table combinations allow large parties to be booked automatically.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/57470575339931-What-s-New-November-2026-Lightspeed-AI-POS-KDS-and-more"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "QR table ordering and pay-the-bill",
+     "detail": "Each table has its own QR code opening Order Anywhere. Guests add items with modifiers, an optional email and a tip, then pay by card or choose 'Pay before leaving'. Orders sync to the POS immediately. Later the guest scans again and taps 'Pay the bill', splitting by amount or by item, with repeat payments until the bill is settled.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260803553189-Placing-orders-using-Order-Anywhere"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Floor plan table tile",
+     "detail": "An unopened table takes its section's colour; an opened table takes the server's colour. The tile shows the day's order number (e.g., the 78th order), the guest count or 'Seats <max>', time seated in hours/minutes, and the running total. A 'Main Device' label warns staff not to close the app on that iPad.",
+     "source": "https://help.touchbistro.com/s/article/understanding-your-floor-plan-screen?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Seating, seat names and adding guests",
+     "detail": "Opening a table asks for party size, defaulting to the table's maximum seats. 'Seat Properties' stores a diner name, shown on the seat banner and the kitchen ticket. The + icon adds a seat for a late guest. Seats combine by hold-and-swipe or 'Combine with Seat' and separate with 'Split from Group'.",
+     "source": "https://help.touchbistro.com/s/article/seating-a-table-2?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Table options menu",
+     "detail": "Tapping a table in preview offers: Print Preview; Transfer Table From (to another server); Transfer Entire Party (to another table); Rename Party; Print All On One Bill without opening the table; Transfer Order to Tab (guests move to the bar); Delete/Void All Items and Close Table (deletes unsent items, voids sent ones); and Close Table (goes to checkout if the bill is unpaid).",
+     "source": "https://help.touchbistro.com/s/article/table-options?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Move items, seats and parties",
+     "detail": "'Move to Seat' may ask for a manager code. 'Transfer Group to Another Table' moves a seat group, and the target table defaults to that group's seat count. 'Transfer Seat to Tab' sends one seat's items to a bar tab. A delivery item moved to a table lands in Shared and is split across existing seat checks.",
+     "source": "https://help.touchbistro.com/s/article/moving-items?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Reservations floorplan and booking states",
+     "detail": "The capacity bar shows booked versus maximum guests per 15-minute slot (e.g., 10/12); full slots disappear from booking. A table's progress bar counts down its turn time and turns red when overdue. 'Seat Walk-In' turns red when it would conflict with a booking. Locks block tables or swiped 15-minute segments (online and/or in-house) for the current shift only.\nBooking-card icons show each stage: unconfirmed, confirmation sent, confirmed, partially arrived, all arrived, partially seated, seated, meal phase, bill given, needs bussing, completed. Further icons mark a late party (counter after 15 min), a no-show, and an unread guest message (red dot).",
+     "source": "https://help.touchbistro.com/s/article/seating-guests-and-managing-your-reservation-and-waitlist-with-the-floorplan?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Server sections assignment",
+     "detail": "Pick a server, tap tables or a whole section tab, then 'Confirm Assignment'. A table cannot belong to two servers. Each server line shows assigned tables, current covers, seated tables and time since their last seating. Expanding it shows covers seated, expected and completed.",
+     "source": "https://help.touchbistro.com/s/article/navigating-and-managing-the-floorplan?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Waitlist with SMS 'table ready'",
+     "detail": "Waitlist can show in floorplan and list views with a + button. A custom 'table ready' SMS (English/French) can be sent automatically when a party is added. Online booking can let guests add themselves to the waitlist with a custom note. Each party has a History of every change, message and status, and can be printed.",
+     "source": "https://help.touchbistro.com/s/article/How-Do-I-Set-Up-the-Waiting-List?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "3 Mutfak ve bar",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "KDS 2.0 local hub architecture",
+     "detail": "One dedicated POS device acts as the hub and serves KDS pages over the LAN. Any browser screen opens the hub's IP and enters a 4-digit connection code. Each station has a name (max 25 chars) and routes by items or menu categories. The hub panel lists every display with an 'Events sync' counter (e.g., 45/100 stalls when a screen drops offline). Stations restore their saved configuration by name. 'kds.local' discovery keeps stations connected when the hub's IP changes. A 6-digit support code allows remote help.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/22168531609499-Setting-up-the-Kitchen-Display-System-2-0"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "KDS ticket statuses, bump and undo",
+     "detail": "Tickets move New (grey) > Preparing (blue) > Ready to collect (green) > Completed; double-tap or bump per item advances them. On hold (brown) and Canceled (red) are reached by long-press. Per-item buttons step play > bell > check. A bell sounds on new tickets, and a ticket changed from the POS blinks until tapped, on each screen separately. Undo is available for 5 seconds. Notes appear blue and allergens red. Tickets are first-in first-out, left to right. New and Ready can be switched off per station.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/22708154090267-Using-the-Kitchen-Display-System-2-0"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "All-day items list and wait-time glow",
+     "detail": "'Items list' merges identical items across tickets by status, with bulk bump icons (bell, triangle, check). Wait-time thresholds 'Delayed after' and 'Late after' (minutes) make tickets pulse orange or red. Courses show as separate chits or one stacked ticket. Display options include Direct line vs Equal layout, light/dark theme, ticket zoom, condensed icon summary and 24h time.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/22708154090267-Using-the-Kitchen-Display-System-2-0"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "View-only prep stations",
+     "detail": "The 'Disable cooking station interactions' toggle in KDS Quick Settings locks bump, complete and status actions on line-cook screens. Only expo/pass stations control ticket completion, which prevents accidental clears.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/57470575339931-What-s-New-November-2026-Lightspeed-AI-POS-KDS-and-more"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "KDS status mirrored on the POS",
+     "detail": "Next to each course the POS shows 'Fired just now / X mins ago', 'Sent' for later courses, then Preparing, Ready to collect and Completed, with timestamps. Course icons are a white arrow (unfired), an orange flame (fired) and a green check (done).",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/49474396676507-What-s-New-January-2026-Faster-KDS-updates-smarter-ordering-built-in-promos-and-more"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Production centers and ticket formatting",
+     "detail": "Printing goes to production centers.\n- Routing: by accounting group, optionally filtered by order profile.\n- Ticket types: Order, Course and/or Transfer.\n- Layout: 0-10 blank header lines (for ticket rails), font Small/Medium/Large, sort by course, SKU before name, one item per ticket, wider lines.\n- Extras: pop the drawer port on each print (plug in a buzzer), print the delivery address.\nReprints carry '** RE-PRINT **' and can target chosen centers, including on closed accounts.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804658689-Managing-production-centers"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Fresh KDS order behaviour options",
+     "detail": "'Combine Like Items' shows e.g. '3 Apple Fritters for seat 3'. 'Manual Item Fire' makes items arrive on Hold so they are fired from the KDS. 'Tap to Start' is visual only; prep timing starts when the ticket arrives. Further options: strike-through for individual modifiers, completed items moving to the bottom, and hiding the employee name (which also overrides printed tickets).",
+     "source": "https://help.touchbistro.com/s/article/Using-TouchBistro-KDS-Powered-by-Fresh?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Fresh KDS coursing, holds, recall and priority",
+     "detail": "Coursing:\n- Course banners appear on tickets, and a pencil icon marks an updated ticket.\n- A fired course jumps to the top stamped with fire time; Pickup has its own icon.\n- 'Resent at' stamps a resend without moving it.\n- Fire, send or hold reopens a closed ticket.\nHolds go to a Holds list with 'Release'. Recall offers search and recalling selected items. Ticket menu actions: change order type (Drive Thru, Curb Side), Prioritize (yellow banner with count-up), Split/Merge tickets, Add Note, and set a fulfillment time.",
+     "source": "https://help.touchbistro.com/s/article/Using-TouchBistro-KDS-Powered-by-Fresh?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "All-day ingredient counts and kitchen automations",
+     "detail": "'All Day Count' tallies ingredients (patties, tenders) using counting rules per item, per modifier or per combo, including fractions (half a tomato), with 'Hide Zero Counts'. 'Modifier Styles' highlight keywords such as 'peanut' with colour and bold, matching starts, contains or ends. Automations: a Large Order alert at N+ items (auto-dismisses after 30 s), Long Cook Time items, and 'Move Ready Orders to Front'.",
+     "source": "https://help.touchbistro.com/s/article/Using-TouchBistro-KDS-Powered-by-Fresh?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Legacy iPad KDS colours and recall",
+     "detail": "Ticket headers turn green, then yellow, then red after configurable minutes. Tap an item to start it (yellow plus timer), tap again to expedite it (grey); tap-and-hold resets it. Swipe down closes a ticket. To recall, open 'Show Closed Order Tickets' and tap a ticket 3 times. Tickets can be dragged to reorder the queue. 'Show Summary' gives all-day counts. Sample tickets are available for practice.",
+     "source": "https://help.touchbistro.com/s/article/using-the-kds?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Modifier routing",
+     "detail": "By default a side prints at its parent's station. With 'Modifier Routing' on, it prints at its own station but always together with the parent item for context (combo vs a la carte). Nested modifiers follow their parent's station, and voids use the same routing.",
+     "source": "https://help.touchbistro.com/s/article/Understanding-Modifier-Routing?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Coursing controls: drinks first, hold and fire",
+     "detail": "The Course icon offers 'Send Drinks' only, send a single course, send one item as its own ticket, 'Resend to Kitchen', Fire a course or an item, and Hold an item. The coursing screen shows which printer received each item. On the register, 'Send' sends only new items, while 'Resend' reprints the previously sent items marked REPRINT.",
+     "source": "https://help.touchbistro.com/s/article/sending-drinks-and-courses-at-separate-times?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Bartender printing exceptions",
+     "detail": "A staff type with 'Uses Bartender Printer' sends its receipts and reports to the bar printer. A drinks group defaults to the Drinks course. Setting 'Local Drink Printer: Do not print' on the bar iPad suppresses drink tickets the bartender rings in, while their food still goes to the kitchen.",
+     "source": "https://help.touchbistro.com/s/article/customizing-printers-for-bartenders?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Kitchen ticket layouts",
+     "detail": "Sample layouts include: by course then seat, or by seat then course; fire, pickup, hold, reprint and void tickets; custom takeout banners (e.g., Drive Thru); seat names and party name at the top; and a large-font option. Impact printers print table info in red.",
+     "source": "https://help.touchbistro.com/s/article/kitchen-ticket-samples?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "4 Ödeme",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Payments screen behaviour",
+     "detail": "'Show condensed view' shows every payment method at once. 'Payment amount' takes partial payments (part cash, part card). If the received amount exceeds the amount due, the difference is automatically recorded as gratuity. Other controls: Add tip and a Print receipt toggle. Table Service checks split by Items, Covers or Seats; Direct Sale checks cannot be split.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360051089473-Processing-payments"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Advanced check splitting",
+     "detail": "Enabled in POS configuration > Payments. 'Distribute by seat' creates one check per seat, and shared items split evenly (4 beers across 4 seats = 0.25 x 4 on each check), so staff can re-gather shares onto one check. Splitting by covers uses +/- and 'Split receipt - X parts'. Each check can be printed or paid individually. Splits can be merged or reverted later.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360051089493-Check-splitting"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Foreign currency cash",
+     "detail": "Payment > Currencies sets an exchange rate and an optional 'Give change in base currency'. A separate payment method type, 'Cash in foreign currency', is added (e.g., GBP). The receipt prints both currencies. Payment methods can be edited but never deleted.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804656969-Adding-and-managing-foreign-currencies"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Meal vouchers on the terminal",
+     "detail": "Supports Edenred, Pluxee, Monizze, Givve and Up through the Lightspeed Payments terminal; registration with each provider takes weeks. Edenred reports as Mastercard and Pluxee/Givve/Up as Visa. Pluxee and Monizze in Belgium pay out separately and are filtered as 'Third party payout'. Meal voucher payments cannot be refunded.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/52979610645787-Meal-vouchers"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Pre-authorised bar tabs",
+     "detail": "'Open a tab', then Continue (pre-authorise) or 'Skip pre-auth'. The default pre-auth amount is editable. A chip or swipe captures the cardholder's name as the tab name; tapping does not. The card status shows green (total below the authorised amount) or yellow (total above it). The 'Bar tabs' filter has search. Closing uses 'Complete payment', or 'Remove pre-authorized amount' to pay another way. Tabs can be transferred to a table.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4408089985179-Creating-and-managing-bar-tabs"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Tip handling rules",
+     "detail": "Tipping is enabled per POS configuration or per payment method. Guests tip on the terminal, or on the iPad for screenless readers. Tips written on receipts need the pre-auth capture method and must be entered before the next morning's auto-capture. A tip goes to whoever takes payment, except when 'Limit order taking to the user assigned to a table' is on, in which case the order taker gets it. Cash tips are declared at clock-out.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4415116773403-Handling-tips-and-gratuities"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Service charge as a percentage item",
+     "detail": "A service charge is an item with 'Price as a percentage'; its tax comes from its accounting group (0% for untaxed). With 'Item can be discounted' unchecked, it is calculated on the pre-discount subtotal. It is applied with a menu button or automatically via an order profile (e.g., Large Party) and recalculates as the total changes. It is reported on the POS user report, the Labor report and the Business report.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/29760563418907-Processing-service-charges"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Pay at Table 2.0 on Smart Terminal",
+     "detail": "Staff log in on the terminal with name and POS PIN; it auto-logs out after 25 seconds idle. Pick the table from the open list, search, or scan the QR on the printed check. Hand the terminal to the guest to tip and pay. Splits are Equal (n checks) or Custom amount, followed by 'Pay remaining'. Tips go to the table's assigned server. Terminals work over cellular, but the active POS needs internet.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/53445038141083-Using-Pay-at-Table-2-0-with-Lightspeed-Payments"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Scan to Pay QR on the check",
+     "detail": "A dynamic QR printed on the guest check lets the guest review the bill, tip and pay by card or wallet on their phone. The order closes automatically on the POS. Enabled with 'Enable QR code on receipt'.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/54972171065755-What-s-New-August-2026-Faster-payments-orders-and-insights"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Receipt actions: reopen, refund, change payment",
+     "detail": "Works on same-day receipts only. Search by receipt number or ID, order name, total, or the card's last 4 digits. Actions: 'Refund and reopen' (refunds and recreates an identical order), Refund order, Refund item (each requires a reason), Change payment type without refunding, partial refund via a custom 'Amount' discount, and 'Create invoice' (shows the total paid without listing items, for expense privacy).",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/17102250160923-Managing-and-refunding-receipts"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Void/refund reasons with stock and print behaviour",
+     "detail": "Reasons are managed under Payment > Refunds and voids, and a name cannot be edited once created. Each reason sets: 'Reverse stock' (No = the item stays deducted), 'Print receipt' (internal void slip), and 'Print order ticket' (default Yes, prints the void with its reason at the station). Deleted reasons still appear in historical reports.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804657449-Understanding-void-reasons"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Predictive quick-pay buttons",
+     "detail": "The Order screen shows 'Exact' plus Smart 1-3 buttons that predict the banknote handed over (a $47 total suggests $50). One tap closes to cash. 'Credit' starts the default terminal, and Tab/Takeout/Delivery buttons convert the order.",
+     "source": "https://help.touchbistro.com/s/article/checkout?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Checkout screen and split restrictions",
+     "detail": "'Split By Seating' (not available on register, takeout or tab orders) or 'Split Evenly By #'. Restrictions: a partially paid bill cannot be split; once split and partly paid, the split cannot be removed and the Order screen cannot be reopened. Splitting an item among seats forces a seat split, and split items earn no loyalty. Adjustments: Discount/Comp All, Promo Code, Service Charges, Tax Exclusions, and a diner-facing note.",
+     "source": "https://help.touchbistro.com/s/article/checkout?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Fast cash entry and close options",
+     "detail": "In cash entry, the last two digits typed are always the decimals (1-2-5-0 = 12.50). Change/Tip shows the change due. Close options: 'Print Receipt & Close', 'Email Receipt & Close', 'Close (No Receipt)' (the bill stays retrievable) or 'Continue Without Closing Table'. Errors are fixed via 'Edit/Undo Payments' > Undo.",
+     "source": "https://help.touchbistro.com/s/article/checkout?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Cash discount (dual pricing) and penny rounding",
+     "detail": "A 'Cash Total' line shows the discounted price on qualifying items. The discount applies only if the bill is paid fully in cash: a partial cash payment cancels it for the remainder, and it is not restored. Service charges are always discounted. The tip guide uses the non-cash total. Penny rounding (Canada) appears on the close screen, the receipt and the EOD report.",
+     "source": "https://help.touchbistro.com/s/article/checkout?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Service charges (Fixed %, Fixed $, Open)",
+     "detail": "Defined in Cloud under Venue Info > Service Charges. The amount is pre- or post-discount and can go to the Venue (revenue) or the Employee (added to the bill opener's tips). Servers can apply or remove it with or without manager approval. It can be manual or automatic per order type, with a dine-in minimum party size and optional tax. A charge created mid-day applies only to orders opened afterwards.",
+     "source": "https://help.touchbistro.com/s/article/Service-Charges?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Refund types",
+     "detail": "From Closed Bills, or from Bill/Guest Check History for earlier batches: Full refund (asks whether to refund the tip), By Items (quantities, service charge, and upcharged modifiers; the tip is refunded 100%, not prorated), By Tax, or Custom Amount with mandatory supporting text that prints on the negative invoice and appears in the audit report. Each further refund is limited by what was already refunded.",
+     "source": "https://help.touchbistro.com/s/article/How-Do-I-Process-an-Integrated-Refund?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Store-and-forward offline card payments",
+     "detail": "With 'Enable Store and Forward' on, the tip line is removed and payments are signed on the slip. Up to 100 offline payments per device, with no amount limit. 'Store and Forward Summary' lists pending, successful and failed payments with 'Upload Transactions' (to be done within 5 days). Failed payments are reprinted for follow-up.",
+     "source": "https://help.touchbistro.com/s/article/touchbistro-payments-store-and-forward?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Non-integrated card payments",
+     "detail": "Card types are defined per brand (Visa credit, MasterCard debit). At checkout staff pick the type, enter the tip from the slip and tap 'Pay in Full'. 'Require Auth #' records the external terminal's authorisation number. The help center warns this is not an offline fallback.",
+     "source": "https://help.touchbistro.com/s/article/Setting-Up-and-Using-Non-Integrated-Payments?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Fast Bar mode",
+     "detail": "Quick-pay buttons turn green. Mandatory modifier prompts are skipped for Drinks-course items, and tap-and-hold modifies a drink. Tapping a cash amount ($20) closes the sale at once and resets the screen, showing tendered and change at the bottom. No receipt prints unless 'Print Prev.' is tapped. Unsent-item warnings are off.",
+     "source": "https://help.touchbistro.com/s/article/fast-bar?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Tips written on slips",
+     "detail": "Closed Bills highlights bills marked 'Tip Required', with an 'Only show if tip required' filter. Search by authorisation number or last 4 digits. 'Adjust Amount' works until the batch closes (e.g., an auto batch at 11:30 PM). The End of Day cannot close while pre-auths are open; 'Override Pre Auth' exists for payments settled in the processor's portal.",
+     "source": "https://help.touchbistro.com/s/article/How-Do-I-Reconcile-Tips-Written-On-Receipts?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Split shared items among seats",
+     "detail": "After the order is sent, 'Split Item Among Seats' moves a shared item (a bottle of wine for seats 1-3) out of Shared and divides it, at .5 or smaller fractions. Checkout then splits by seat automatically. It can be undone via 'Move to Seat' unless a seat has already paid. Rounding can cause small differences between item totals and sales totals.",
+     "source": "https://help.touchbistro.com/s/article/TouchBistro-One-How-Do-I-Manage-My-Table?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Bill history actions",
+     "detail": "Bill/Guest Check History searches by date range or business day, and by server, order number, table or account, with totals and head count. Actions: Reprint, Email, Reorder, 'Reopen as a Tab' (admin only), Refund Sale (creates a negative bill and returns inventory), Change Staff, and View/Edit Payments (refund a card or change the payment type).",
+     "source": "https://help.touchbistro.com/s/article/bill-guest-check-history?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "5 Kasa yönetimi",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Cash drawer counting modes and float",
+     "detail": "Each drawer has Counting set to Disabled (always opens at the default float), Enabled (count, or accept the default) or Mandatory (must count). Other settings:\n- 'Initial cash amount' (the float).\n- Whether non-cash payments count toward the drawer.\n- Printer port Primary/Secondary when two drawers share a splitter.\n- Auto-open on cash and/or non-cash payments; 'Require user permission to open drawer'.\n- Which devices use the drawer, which user groups' sales feed it, and which groups manage it.\nUser groups without a physical drawer get a 'user wallet'.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804606710-Configuring-cash-drawers"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Denomination count, cash in/out",
+     "detail": "The count screen asks how many coins or notes of each denomination there are (not the value); the arrow moves to the next denomination and tapping a row edits it. Each payment method is counted separately. 'Add cash' and 'Remove cash' take an amount plus a reason. 'Open drawer' pops the drawer. Closing offers to print a drawer summary.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050436394-Managing-cash-drawer-operations"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Sales period open/close (Z) rules",
+     "detail": "Only users with 'User can open and close shifts' open or close the sales period; opening records weather and shift impressions. The first user to reach the Register is prompted to count the drawer. Closing requires all orders paid, all users clocked out and every device's drawer closed. The POS warns to answer Yes only if the other drawers are already closed. Tips can be declared at close, and a summary prints.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360051071413-Opening-and-closing-a-sales-period"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Cash drawer report with difference",
+     "detail": "For each payment method the report shows Reported (click to see counted denominations), Lifts/drops, Takings, Total, and Difference (Reported minus Total). The Export menu includes a 'Cash management journal' CSV listing every drop and lift with its reason. If the day is not closed manually, the next day's start marks the close.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4403156150171-Cash-drawer-report"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "End of Day checklist",
+     "detail": "Admin > Perform End of Day opens a checklist with a green check or red X per item, a View button to fix each (open tables, pre-auths, clocked-in staff with force clock-out, cash deposit) and Refresh. Pre-auths cannot be ignored. 'Generate' builds the EOD report. 'Select Reports' picks and reorders the sub-reports, and the choice persists for all users. Admins and managers are warned at clock-in if more than 24 hours have passed without an EOD.",
+     "source": "https://help.touchbistro.com/s/article/perform-end-daypreview-end-day?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Blind vs full cash deposit",
+     "detail": "The EOD 'Cash deposits' step asks for the Actual Deposit. Expected = cash on bills (including tax and auto grats) + pay-ins - payouts, and Over/Short shows the difference (shorts are negative). The role permission 'Can Create/Edit Blind Cash Deposits' hides Expected and Over/Short, and the user cannot edit after filing. If both blind and full are enabled, full wins. Deposits are editable for 7 days with a 'View History' of who changed what. The deposit can be skipped and done later on Cloud after the iPads are locked away.",
+     "source": "https://help.touchbistro.com/s/article/How-to-Complete-Your-End-of-Day-Cash-Deposit?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Pay-ins and payouts with limits",
+     "detail": "Payout reasons are configurable (e.g., float addition). Staff-type rights 'Can Perform Pay Ins/Payouts' can carry a maximum amount (admin is unlimited). A Pay In/Out register button records amount, reason, comment and receipt. The audit report flags '(No receipt)' entries. Payouts appear in the Waiter Read and the EOD.",
+     "source": "https://help.touchbistro.com/s/article/setting-using-payouts-pay-ins?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Drawer access control",
+     "detail": "With the Manager Passcode 'Open Cash Drawer' setting, a Waiter staff type needs manager or cashier approval to open the drawer, while a Cashier opens it directly; when the setting is off, anyone can use No Sale. A two-printer setup opens the drawer only when cash is taken at the register iPad.",
+     "source": "https://help.touchbistro.com/s/article/limiting-who-can-open-the-cash-drawer?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Server cash-out: cash owed to house vs server",
+     "detail": "'Current Shift Report' previews the shift at any time; the official report prints at clock-out. Cash taken is netted against card tips: $56.85 cash minus $20.44 card tips means $36.41 is owed to the house, or 'Cash Owed to <server>' appears when tips exceed cash. Cash tips are not tracked unless the staff type requires them to be declared.",
+     "source": "https://help.touchbistro.com/s/article/How-Do-I-Read-My-Shift-Report-on-the-POS?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "End of Day report contents",
+     "detail": "Contents: net sales, taxes, tips, item costs, refunds, voids, bills, guests, gift card sales, gratuity and gross margin, plus a 'Bills With Outstanding Balances' warning. Labor shows % of net sales, average table turn, and active vs completed shifts. 'Total Payments - Total Net Sales' is the money to remit (tax, card tips, auto grats). Also: sales by section/category, tips by employee, tip outs, accounts, payouts and cash deposits. It can be filtered by day part and exported as CSV/XLSX.",
+     "source": "https://help.touchbistro.com/s/article/How-to-View-Your-End-of-Day-Reports?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "6 Raporlar ve analitik",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Daily Digest email",
+     "detail": "Each user opts in per location and receives the email around 5:30 AM local time. It covers the previous day: net sales, discount %, voids by breakfast/lunch/dinner; covers against the range of the same weekday over the last 4 weeks; front-of-house per employee (orders, average order, time to close a table, spend per cover); top items in the 3 biggest accounting groups; and discounts by employee.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/25596095061787-Daily-Digest"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Pulse owner app",
+     "detail": "Live gross revenue with % change, the time of last update, and a contribution bar per location. Info boxes show orders, covers, voids, discounts, comps, averages, table turn, refunds and sales per labour hour, plus the top 10 items. 'Today' compares with the same weekday last week, not yesterday, to avoid busy-vs-slow-day bias. In-app AI chat answers sales questions.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/29496064755099-About-the-Lightspeed-Pulse-App"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Scheduled report emails",
+     "detail": "Up to 5 Back Office reports are emailed at the end of each day, week, month or year as PDF, XLS, CSV or TSV to comma-separated recipients (e.g., the Business report daily except Monday).",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804606090-Understanding-reporting-automation"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Magic Menu Quadrant (menu engineering)",
+     "detail": "Plots popularity (times ordered over 12 months) against retention (% of customers who came back). Items fall into Greatest Hits, Hidden Gems (low popularity, high retention), One Hit Wonders (popular but guests don't return) and Underperformers. Shown as a scatter chart plus a table with time between visits; filterable by category.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/7339064083739-Magic-Menu-Quadrant"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Benchmarks against similar nearby businesses",
+     "detail": "Daily gross sales are compared with a baseline (the average of the same weekday over the last 4 weeks) and with the market average and range of similar nearby Lightspeed venues. Best and worst days are flagged relative to the market. Also shows a 7-day food/beverage split and hourly activity against the market.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/28846463754523-Understanding-Benchmarks-and-Trends"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Product Mix report",
+     "detail": "Tabs by product, statistic category, accounting group and order profile, with filters for device, staff, shift and tags. Columns: quantity, sales incl./excl. tax, zero-priced count, discounted amount and quantity, offered (comps), loss (wastage), returned (sent back), margin, costs and service charge. Columns can be toggled; hovering a combo shows its contents.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4403156004763-Product-Mix-Report"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Hourly Sales report and reports glossary",
+     "detail": "Covers at most 31 days for one location. A gross/net graph per hour shows orders and covers on hover. The hourly table gives split % by sales, covers and orders, covers and cover average, order average, tips, refunds, discounts, voids, comps and surcharges. An 'Understand terms like Gross sales' panel explains each metric's formula.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/35308969074459-Understanding-the-Hourly-Sales-Report"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Staff Performance and Labor reports",
+     "detail": "Staff Performance shows net sales, hours worked, tips and sales per hour, filterable by hourly/daily/weekly/monthly interval, days of the week, user or group and shift; it charts discounts and voids by user, and per-employee range filters are available. The Labor report shows sales, voids, service charges, discounts, net, gross, tips, total collected, average per hour and average per receipt, with drag-reorder columns.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/40994945471515-Understanding-the-Staff-Performance-report"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "KDS Statistics",
+     "detail": "Per item: count prepared and average preparation time, with fastest and slowest. 'View graphs' opens a Heatmap of prep minutes across a 24h timeline split by weekday, and a Modes distribution of prep seconds against frequency.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4403156122651-KDS-Statistics"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Lightspeed AI agent in Back Office",
+     "detail": "Natural-language questions ('top 10 items last week') return charts and tables, with follow-up suggestions and chat history. Custom instructions can, for example, always show gross and net. Tables export to CSV, chats to PDF, and charts can be saved to the dashboard with adjustable dates. Requires the 'AI access' and 'Sales report access' permissions.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/42676619412251-Understanding-the-Back-Office-Lightspeed-AI-agent"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Mid-service Snapshot report",
+     "detail": "Admin > Snapshot Report shows in real time:\n- Labor cost for active and completed shifts.\n- Item cost for closed and still-open tables.\n- Running sales (closed bills + open tabs + open tables, pre-tax and post-discount) and taxes.\n- Labor/sales ratio and cost/sales ratio.\n- Card tips, voids, discounts and service charges.\nIt can be printed, emailed or exported as CSV.",
+     "source": "https://help.touchbistro.com/s/article/Snapshot-Report-for-Early-Access-Users?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Sales drill-down and heat maps",
+     "detail": "The Drill Down report breaks sales down hour by hour by section, sales category, group and item, as net sales or quantity, by bill start or close time. Gross Margins by Day = net sales minus item cost minus labor (accurate only after everyone has clocked out). The daily/hourly heat map can use Bill Close, Start or Sent time (sent = when the ticket reached the printer or KDS), with min/max/average. Discounts are booked on the base item, not its modifiers.",
+     "source": "https://help.touchbistro.com/s/article/sales-reports?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Menu analysis and item cost",
+     "detail": "Menu Analysis shows quantity and gross sales as % of menu group and % of sales category. 'Modifier Preference by Menu Item' shows each modifier's % of its parent item, to spot unused options. Menu Item Cost gives average cost, average price (handling price changes during the period), average gross profit, food cost % and total profit.",
+     "source": "https://help.touchbistro.com/s/article/menu-reports?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Labor and server performance",
+     "detail": "Hourly Labor Cost shows labor as % of gross sales per hour. Labor Cost Analysis splits front and back of house by staff type. Staff Performance shows net sales, bills, orders, average check, guests, guest average, average table turn in minutes, card and cash tips, tip %, tip claw-back, and void and discount amounts (to spot error-prone staff). No Sale and Deleted Items reports record the manager and timestamp.",
+     "source": "https://help.touchbistro.com/s/article/labor-reports?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Audit reports",
+     "detail": "Includes:\n- Bills with Outstanding Balances (card voided after the bill closed).\n- Reopened Bills ('Reopen as a Tab' deletes the original bill and its payment data).\n- Tax Exclusion (which bills had which tax removed).\n- Payouts/Payins (register, comment, '(No receipt)' flag).\n- Gift card activity, Tax Summary with reduced-tax counts, and Server Gratuity.",
+     "source": "https://help.touchbistro.com/s/article/audit-reports?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Scheduled reports, dashboards and weekly targets",
+     "detail": "Scheduled reports: rolling date range, CSV/XLSX, multiple emails, Daily/Weekly/Every 2 Weeks/Monthly, sent 2 hours after the service day closes (10 AM for an 8am-7:59am day), with a 'Next Report Date' column. The dashboard counts parties, bills and seats separately (a table of 4 counts 4 seats). Weekly Targets takes a sales and covers target and derives the spend per cover needed.",
+     "source": "https://help.touchbistro.com/s/article/custom-reports?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Service time and day parts",
+     "detail": "'Service Time' sets when the business day starts, so after-midnight sales belong to the right day; the week start day is configurable. Day Parts (e.g., Breakfast 9-11 Mon-Fri, 8-11 Sat) are validated against overlap and can be reordered. Editing a day part changes past EOD reports retroactively. The EOD report can be filtered by day part.",
+     "source": "https://help.touchbistro.com/s/article/Hours-Scheduling?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Shift Summary report",
+     "detail": "For one service day, per staff member: hours (including breaks, or a running total if still clocked in), net and gross sales, discounts (including cash discounts), voids, guests (register orders count as 1), average guest check, declared cash tips, non-cash tips, gratuity, and cash owed to the house or to the server. The detailed view lists each clock-in/out separately.",
+     "source": "https://help.touchbistro.com/s/article/Shift-Summary-Report?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "7 Stok ve maliyet",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Recipes: made-to-order vs batches",
+     "detail": "Made-to-order recipes (a mojito) deplete their ingredients when sold. Batch recipes (croissants, dough) have an expected yield and are produced in advance. Ingredients take units of measure. Gross profit % and suggested sell price update each other. Recipes can be searched by ingredient. Sharing a recipe across locations is irreversible.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4407511552155-Creating-and-managing-recipes"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Collaborative stock counts",
+     "detail": "The draft autosaves every few seconds. Several employees can count the same stock count on different devices in real time, each shown as a letter. Counts are per stock location with +/- buttons and 'Save, next item'. Uncounted items show '--' and are left out, so zero must be entered explicitly. Review > Recount > Submit locks the count.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4407510354715-Performing-stock-counts"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Wastage events",
+     "detail": "Each waste event lists items and amounts with a reason; reasons cannot be edited or removed once created. Notes are optional, and the value is calculated automatically from item prices. The dashboard filters by date (up to 12 months) and reason and searches by item. The 'Discount indicates wastage' flag on a discount books comped items as a loss.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/7116014889499-Wastage"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Par levels and purchase orders",
+     "detail": "The par level shows next to current stock while building a purchase order. A PO is per supplier: filter by accounting group, tap an item for +1, set the delivery date and a delivery note, then email it to the supplier with cc/bcc or skip the email. A supplier can be set to 'update stock levels only'. Draft lines can edit unit or total price.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4407569259547-Creating-purchase-orders"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Discrepancy (theoretical vs counted) report",
+     "detail": "Per item: opening stock, theoretical level after all movements, last counted, variance in quantity and value, purchased, consumed (recipes and POS voids), batch yield, wasted, and transfers in and out.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/20537741099419-Discrepancy-reports"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Stock Availability countdown",
+     "detail": "Stock counts are set per item, including modifiers such as sauce packets, with a Low Stock threshold. 'Manage Stock' adds or removes stock; changes push immediately without publishing. At 0 the item becomes Out of Stock (manual override allowed). The POS shows the remaining count on low items. Adding an out-of-stock item needs manager or 'Can Manage Orders' approval. Stock decreases on send (or on close if the item is never sent), not on add. Voids return stock if the void reason says so. A separate 'Can Manage Stock Availability' permission does not grant menu editing.",
+     "source": "https://help.touchbistro.com/s/article/Menu-Management-Stock-Availability?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Ingredient inventory (legacy)",
+     "detail": "Each ingredient has a purchase measure, cost per unit, low-stock warning and recipe measures with conversion ratios. Stock is entered via Purchase or Adjust, with an activity log per ingredient. The Consumption report shows used, cost, ending stock, daily rate and waste from voids. The Low Stock report estimates how many more of each dish can be made. Requires the 'Can Manage Ingredient Purchases' permission.",
+     "source": "https://help.touchbistro.com/s/article/setting-using-touchbistro-ingredient-based-inventory-system?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Hidden menu groups for inventoried modifiers",
+     "detail": "Items such as patties or dressings live in a hidden menu group (not sellable a la carte) with recipe cost. They are attached as menu-item modifiers with upcharges, so their consumption is costed.",
+     "source": "https://help.touchbistro.com/s/article/setting-up-hidden-menu-modifiers?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "8 Personel",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "User group types and granular permissions",
+     "detail": "Group types: Floor staff, Manager, Trainee and Shift tracker (clock-in only). Floor staff permissions:\n- Receipts: duplicate, email or partial receipts; change payment method; manage printing; reprint tickets.\n- Refunds and voids: refunds, partial refunds, reopen via refund, line voids.\n- Orders and tables: order profiles, item transfer, access to others' tables, table transfer, bypass table protection, item price.\n- Cash and payments: open the drawer with no sale, split, tipping.\n- Other: time clock, shift management, configuration change or reload, sales restrictions, customer management, terminal management.\nGroup settings: mandatory tip declaration, tips paid in cash, tip discount %, counting mode, float, drawer or wallet, report access (own / manager / none) and allowed discounts.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804594730-Managing-POS-user-groups"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Login methods",
+     "detail": "A 4-6 digit PIN, a printable QR code badge, an iButton/Dallas key ID, a 4-digit 'identifier for local orders' (Pay at Table), and a visibility toggle. Users can be limited to specific POS configurations. Options to duplicate a user and set per-location access. A disabled user disappears from lists.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804594690-Managing-POS-users"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Clock out forces order handover",
+     "detail": "When the sales period is closed, only shift managers can clock in. At clock-out, any open orders must be transferred to another clocked-in user, who authorises with PIN or QR. Clock-out then asks to count the drawer and declare tips ('Skip' records zero) and offers to print a user summary.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360050309174-Clocking-in-and-out"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Daily rotating manager pincode",
+     "detail": "More > Control center shows managers a 4-digit pincode that changes every day and authorises sensitive actions on any device. The same panel offers add/remove cash, open drawer, reload device, connected-device count, an online-orders toggle and device configuration switching.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360051089953-Understanding-the-More-menu"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Hours and employee activity audit",
+     "detail": "Back Office Hours overview and Monthly hours views, by staff or by day, with row-level export and print. The 'Audit' button shows each employee's activity timeline, e.g., when the cash drawer was opened manually or a shift started. Sessions can be added or edited manually.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804594770-About-Hours"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Per-action manager passcode toggles",
+     "detail": "Security > Manager Passcode settings require approval per action:\n- Void sent items, delete items, discount items, open the cash drawer.\n- Transfer tables between staff; transfer tabs, deliveries or takeout; transfer seats or parties.\n- Change gratuity; open the restaurant (also guards Admin).\n'Lock Staff to Assigned Tables' (with 'Can Access Other Waiter Tables If Same Role') and a lock for tabs/takeout limit who sees which orders. Presets: Low / Medium (recommended) / High.",
+     "source": "https://help.touchbistro.com/s/article/security-settings?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Cloud roles and permission groups",
+     "detail": "Default roles can be reset to factory defaults; custom roles carry a default hourly pay. Each group has a select-all checkbox (with a - for partial). Notable permissions:\n- 'Can Authorize and Perform Voids/Discounts without Approval'.\n- 'Can Manage Orders' (resend, delete takeout, exclude tax, add out-of-stock items, complete pre-auths).\n- 'Can Perform EOD'.\n- 'Show Current and Past Shifts', which can hide sales from bartenders; alone, it means a clock-in-only user.\n- Cash Deposit Blind vs Full, and 'Required Recording of Cash Tips'.\nOnly the default Admin can delete other admins.",
+     "source": "https://help.touchbistro.com/s/article/Staff-Permissions?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Schedule-enforced clock-in",
+     "detail": "Clock in with a passcode or QR code and choose the staff type for the shift. If the person is not scheduled, a manager must enter a passcode (or tap X to refuse). Labor Management offers Enforce Schedule, Enforce Role, Allow Shift Override, and a grace period in minutes for early or late arrival.",
+     "source": "https://help.touchbistro.com/s/article/how-to-enable-clock-in-enforcement?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Breaks and overtime rules",
+     "detail": "Options > Take a Break offers paid or unpaid break types; staff are warned if tables are open and can 'Transfer All Tables to Waiter'. Overtime rules: weekly base hours with a multiplier, daily overtime (Shift Part 1), double time (Shift Part 2), and a spread-of-hours payment when the workday spans more than 10 hours. Split clock-ins are not aggregated.",
+     "source": "https://help.touchbistro.com/s/article/Staff-Overtime-Rules?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Card tip-out percentage (fee withholding)",
+     "detail": "'Calculate Credit Card Tip Out' withholds a % of card tips, for example to pass on the merchant fee. It shows on the EOD and Staff Performance as tip out to house. Cash tips are excluded.",
+     "source": "https://help.touchbistro.com/s/article/gratuity-settings?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "7shifts scheduling integration",
+     "detail": "The POS passcode must equal the 7shifts punch ID. Role names must match, or a '7shifts Integration Name' maps them (Head Waiter to Waiter). Enforce Schedule/Role, with a manager passcode override.",
+     "source": "https://help.touchbistro.com/s/article/scheduling-integrations-7shifts?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "9 Müşteri ve sadakat",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Open accounts (IKDEBT) and settlements",
+     "detail": "Orders are charged to an 'Invoice/On Account' payment method (code IKDEBT). The customer profile Balance is negative when the customer owes. Balance > open invoices > 'Settle' records the payment method. Belgian e-invoices can be created from pending transactions.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4404057969691-Managing-customer-invoices-in-Restaurant-POS"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Customer deposits outside revenue",
+     "detail": "A 'Deposit' transfer operation (amount entered at the POS) moves money onto the customer's balance as a positive amount. It is excluded from revenue until redeemed on the event day. The Back Office warns that 'Make Invoice' wipes the balance to zero.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/32639058097307-Creating-and-applying-customer-deposits"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "VIP, punch, ID and gift cards",
+     "detail": "Card batches are assigned to customers by email, and the QR code is emailed. Scanning a VIP card applies its discount automatically. Scanning a punch card shows the earned benefit, which is then applied as a 'Punch Card' discount on the item. ID cards bill to a customer account.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4404649891099-About-Loyalty-cards"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Gift cards 2.0 on POS",
+     "detail": "'Generate online gift card' (value, linked customer with email, payment, Transfer) sends two emails: the code, and a QR with an Apple Wallet link. It must be a separate transaction. Physical cards are activated by scanning the QR. Redeem with 'Scan card' or 'Type ID'. Checking a balance with unpaid items on screen bills the order to the card. Refills are capped at a maximum balance.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/6339389680923-Using-gift-cards-2-0-at-the-POS"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Discount controls",
+     "detail": "Name up to 25 characters; custom amount; % or fixed amount; discount group; scope by accounting group; discount code; tax-free; show on order ticket; 'indicates wastage'; and a QR code. A menu button or QR scan bypasses user permissions. Discounts cannot be deleted, only unselected per POS configuration. Devices must be reloaded to see changes.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804657089-Understanding-discounts"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Guest book, scorecard and campaign analysis",
+     "detail": "Each customer scorecard shows total visits, average spend, favourite items and notes, plus a 12-month activity grid shaded from grey to dark green with the serving employee per visit. A campaign (title, store, past or future date range) reports sales, visits and average sale against the same weekday the prior year, best customers and new vs repeat %; data arrives 48h after settlement.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/7341353071131-Campaigns"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "House accounts",
+     "detail": "Options > Customer Account List. Starred accounts appear first for fast checkout. An account can be deleted only if it was never used; otherwise it is archived and can be reactivated. 'Pay on Account' at checkout offers tip options and a signature slip. 'Apply Payment' takes full or partial payments, which cannot be refunded or deleted. Accounts Report and Detailed Account Report can be added to the EOD.",
+     "source": "https://help.touchbistro.com/s/article/customer-account-list?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Deposits for future orders",
+     "detail": "Print a quote from a takeout order, then delete the order. 'Add Deposit' on the account records the deposit as non-sale on the EOD; it is blocked while the account owes money. On pickup day: Pay on Account, then 'Apply Payment' for the total minus the deposit.",
+     "source": "https://help.touchbistro.com/s/article/creating-closing-account?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Spend-based loyalty and rewards",
+     "detail": "Points per $1, a guest-facing description, venue selection, and day/time schedules (e.g., Double Points Tuesday). Reward types: check or item discount ($ or %, applied to the highest-priced qualifying item), and Buy X Get Y (entree gets 50% off dessert). A max discount cap, prohibited groups (alcohol), 'In-Venue Only' items and multiple time windows are supported. Programs and rewards are deactivated, never deleted. Points can be adjusted manually by email or phone.",
+     "source": "https://help.touchbistro.com/s/article/touchbistro-loyalty-managing-rewards?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Diner sign-up and birthday lock",
+     "detail": "Sign-up happens at Checkout > Loyalty > New Account (name, phone, email), from Options > Loyalty, or by the diner in the customer web app (a PWA). The birthday can be edited only once, to stop repeated birthday rewards.",
+     "source": "https://help.touchbistro.com/s/article/touchbistro-loyalty-understanding-diner-sign-up?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Marketing automations on CRM segments",
+     "detail": "An automation is attached to a saved CRM filter, with an optional promotion, an in-app message and/or an email template. It runs Weekly, Monthly, Yearly or Once, shows a plain-language schedule summary, and can be set Inactive. Rewards are redeemed at checkout by searching phone or email, then 'Redeem Rewards'.",
+     "source": "https://help.touchbistro.com/s/article/automated-marketing?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Item, bill and cash discounts with promo codes",
+     "detail": "Types are Item, Bill or Cash Discount, and the type cannot change after saving. Options: minimum spend with excluded groups (gift cards); bill-level exclusions (drinks); one Cash Discount with exclusions; apply Automatically, Manually or by Promo Code (capitals and numbers, required start and expiry date/time, and a Promo quick-pay button). Discounts can be copied and set Active/Inactive; deleting one keeps its history.",
+     "source": "https://help.touchbistro.com/s/article/Menu-Management-Discounts?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Scheduled promotions (happy hour)",
+     "detail": "A promotion is either an existing discount or a fixed price on selected items. It runs all day ('Opening Hours') or in several windows (e.g., Mon-Thu 4-6 pm with 15 min grace, Fri-Sat 3-5 pm). A fixed price above the menu price is ignored. Deleting a linked discount asks for a replacement. A legacy 'Hide Item' promotion hides items on a schedule (no alcohol before Sunday noon), and empty groups vanish.",
+     "source": "https://help.touchbistro.com/s/article/Menu-Management-Promotions?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Digital gift cards",
+     "detail": "Sold via a 'Gift Card Add Value' item: amount, purchaser, then the recipient (self or someone else) with a scheduled send date and time. A gift card cannot pay for a gift card, and cards cannot be reloaded (a new one is sold). Online amounts are $5-$500. Redeem by scanning the QR or searching by number: 'Use Remaining Credit' or a set amount, with several cards per bill.",
+     "source": "https://help.touchbistro.com/s/article/How-To-Use-Digital-Gift-Cards?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Guest feedback by SMS",
+     "detail": "An SMS goes out after check-in and order, after a buffer delay; a buffer of 0 disables feedback. Guests give an overall star rating and a thumbs up or down per item, and cannot edit afterwards. Comments are searchable. The item view shows % thumbs up with the number of ratings, so 0% with 1+ ratings means a poorly rated dish. Loyalty rewards appear as 'Loyalty Discount: <name>' with the server who processed them, to spot abuse.",
+     "source": "https://help.touchbistro.com/s/article/working-with-feedback?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "10 Online ve teslimat",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Order Anywhere sync timing and pause",
+     "detail": "Table orders and ASAP pickups sync to the POS immediately. Scheduled pickups sync at pickup time minus prep time minus a few minutes (a 5:30 pickup with 30 min prep arrives around 4:54). The Pickup/Delivery tab supports covers adjustment. Control center has an 'Online orders enabled' toggle to pause ordering. A Future orders tab groups Later today, Tomorrow and Upcoming, searchable by collection code.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/23267765915547-Fulfilling-orders-from-Order-Anywhere"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Item snooze for online menus",
+     "detail": "Items can be snoozed for 1h, 12h, 24h or Indefinitely (indefinite needs a manual unsnooze), in bulk with checkboxes or from the POS Order Anywhere tab, and searched by name or SKU. 'Unsnooze all' restores everything. Snoozed items show 'Currently unavailable' online.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/10724827631259-Setting-up-and-using-Item-availability"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Self-delivery zones",
+     "detail": "Venues deliver with their own couriers. They draw geographic zones, each with its own delivery time estimate, fee and minimum order total.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/34339315446171-What-s-new-Self-delivery-for-Order-Anywhere"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Aggregator integrations (Uber Eats, Deliverect, UEAT)",
+     "detail": "Uber Eats connects from the Integration Hub with a dedicated menu, order profile, ordering hours and prep time. The Back Office pushes names, descriptions and images and overrides the Uber side, so menu changes are made in the Back Office followed by 'Update Menu'. Deliverect orders print silently as tickets; a buzzer on the printer adds sound. UEAT covers web, kiosk and Uber Eats/DoorDash/Skip using fixed order-profile codes (UEATTA, UEATDEL, UEATKI). There are no Turkish aggregators (Yemeksepeti, Getir, Trendyol) and no caller-ID feature.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/25724049883675-Setting-up-the-Uber-Eats-integration"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Phone and takeaway orders via order profiles",
+     "detail": "Order profiles use Takeaway Mode Pick-up or Delivery (one profile each). A profile can be applied by QR scan, add an automatic service charge, and switch on a schedule. Orders appear in Pickup/Delivery with 'Mark as' Ready for delivery or Delivered, a pickup-time update and close.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/8804139100827-Adding-orders-for-takeaway"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Own online ordering setup",
+     "detail": "Hours per weekday range and order type (pickup only on weekdays, pickup and delivery on weekends). Closure or blocked times keep the menu visible but stop ordering. The pickup wait time limits scheduled slots (no slot sooner than the wait, none after closing). Pickup and delivery notices (e.g., buzzer code). Online and in-person payment toggles.\nDelivery boundaries are drawn as polygons (at least 4 points), each with a name, prep plus delivery wait (max 360 min) and minimum spend; below the minimum, the diner is pushed to pickup.",
+     "source": "https://help.touchbistro.com/s/article/touchbistro-online-ordering-merchant-settings?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Online order handling on the POS",
+     "detail": "Orders > Online Orders, with pull-to-refresh. Pending ASAP orders must be accepted within 60 minutes or they auto-cancel; scheduled orders auto-cancel 15 minutes after their time. Accepting prints the kitchen ticket and guest check. Scheduled orders ask when to print the ticket and carry a scheduled banner. Decline or Cancel with a reason emails or texts the diner and refunds automatically. Tips go to the account that closes the order, so use a generic online staff account. Online notes are not sent to the KDS.",
+     "source": "https://help.touchbistro.com/s/article/using-touchbistro-online-ordering?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Auto Accept",
+     "detail": "Skips Pending, accepts immediately and prints the ticket and guest check on one designated device (the main device is recommended), with a banner and chime. Limitations: scheduled orders are still manual, zero-stock items are still accepted, there are no amount-based rules, and it applies to all platforms. A print error is shown, and reprint is under the order's More menu.",
+     "source": "https://help.touchbistro.com/s/article/How-to-Enable-Auto-Accept-for-Online-Ordering?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "DoorDash marketplace orders",
+     "detail": "Orders show the DoorDash logo, order ID and a DELIVERY or PICKUP icon. They must be accepted within 5-8 minutes or DoorDash cancels. Rejecting notifies the diner. Scheduled orders are injected as ASAP at pickup time minus DoorDash's own prep-plus-delivery estimate (a Friday 1 pm order with 45 min arrives at 12:15). An alcohol flag is set per item.",
+     "source": "https://help.touchbistro.com/s/article/DoorDash-Marketplace-Understanding-the-Server-Experience?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "In-house delivery order entry",
+     "detail": "Customer details and address with the delivery route drawn on a map. 'Add to Contacts' feeds name autocomplete next time. Driver notes, driver name, and a reminder banner that repeats until marked read. Options: Change Staff, Transfer to Table, Merge Delivery, and Delete (manager approval).",
+     "source": "https://help.touchbistro.com/s/article/How-To-Take-Delivery-Orders?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "11 Türkiye mali uyumu",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "No Turkish fiscal support; certified-signing analog (Germany TSE)",
+     "detail": "Neither help center mentions Turkey, ÖKC/GMP-3, e-Arşiv/e-Fatura, bilgi fişi or VUK 507. The closest analog is Germany. Every order, payment and void is sent to the Fiskaly cloud TSE, and its signature fields print on the receipt. If the TSE is unreachable, the receipt prints 'Sicherungseinrichtung ausgefallen' instead. The More menu lists unsigned transactions from the past 24h.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/14949401075355-Understanding-German-fiscal-compliance-TSE"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Fiscal QR receipts and e-invoice states (Spain, Belgium, France)",
+     "detail": "Spain: Veri*Factu/TicketBAI generate a signed record and QR code on every receipt and refuse untraceable edits. Belgium: Peppol B2B e-invoices can merge several receipts into one invoice and show status Not sent / Sending / Sent / Failed. France: a 'Fiscal Closing' is a permanent archive that cannot be cancelled.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/53394509875099-Understanding-Spanish-fiscal-compliance"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Tax profiles with conditions",
+     "detail": "Tax rates are grouped into tax profiles whose rules have conditions: order profile, unit price, line price, receipt total, dates, and accounting-group quantity. Each accounting group has one profile. Prices are tax-inclusive outside the US and Canada.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/5533658022043-Understanding-taxes"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Customer self-invoicing link on receipt (Mexico CFDI)",
+     "detail": "SAT product and unit keys are stored per item in the UPC field in the format 'Pospac:#50182000/H87#TZ55'; the suffix must be unique per item and price. The receipt's thank-you message prints an invoicing URL and a unique receipt code. The guest enters the receipt number and total online, then their tax details, and gets an e-invoice. This is the closest analog to e-Arşiv on request.",
+     "source": "https://help.touchbistro.com/s/article/factura-electronica-guia-5-codigos-para-cada-elemento-de-menu?language=es"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Tax holiday and tax exclusion audit",
+     "detail": "A tax can be suspended with 'Exclude this tax from' or by bulk-removing it from filtered groups, checked with a Taxes filter, and timed with Schedule Publishing. The checkout 'Tax Exclusions' toggle removes tax from a bill and lands in the Tax Exclusion audit report.",
+     "source": "https://help.touchbistro.com/s/article/How-to-Temporarily-Suspend-a-Tax-Rate-During-a-Tax-Holiday-Cloud-based-platform-users?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "12 Donanım ve çalışma",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Offline levels: active vs passive POS",
+     "detail": "If the internet drops but the LAN works: orders, multi-register sync, printers, KDS, manual payments (cash, house account), the cached menu and clock-in all keep working. Integrated card terminals only work in standalone 4G mode. Back Office sync, gift cards, loyalty and integrations stop, and item images and allergens are hidden.\nIf the LAN also fails, only the active POS takes orders, with no printers or KDS. It queues everything and uploads later.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/53028167251867-Offline-POS-functionality"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Printing profiles with fallback printer",
+     "detail": "Each profile has a main printer and a fallback printer. A receipt goes to the profile of the floor plan, else the device's profile, else the POS configuration's profile. Order tickets print only for items whose accounting group has a production center.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4403006478107-How-printing-works"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Customer-facing display",
+     "detail": "Runs on a spare iPad paired with a connection code (device type Customer display, optional expiry, single-use). It mirrors items and discounts live. After payment it shows a QR for a digital receipt, for a configurable time. A photo screensaver is available. Takeaway orders show the order number, not the customer name.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/14022943949211-Customer-Facing-Display-setup"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Order Display Screen (pickup board)",
+     "detail": "An Apple TV board with two columns, Preparing and Ready for pickup. The order number is the receipt's collection code. Orders are marked Ready or Picked up from the POS Pickup/Delivery tab or the KDS. A device filter key lets multiple boards show different devices. Text and colours are customisable.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4413390373403-Using-the-Order-Display-Screen"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Kiosk lock and auto-reopen",
+     "detail": "Guided Access locks the iPad to the POS app. An Apple Shortcuts automation reopens the app N seconds after it is closed, so online orders keep syncing. Device guidance: Auto-Lock set to Never (prevents sync drops), automatic updates, location services for the timezone, and forgetting old Wi-Fi networks.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/36410909641499-Using-Apple-automations-with-the-Lightspeed-Restaurant-app"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Main Device local server",
+     "detail": "One iPad (up to about 5-15 iPads) or a Mac Pro Server (for more than 5) holds all restaurant data, and satellites connect to it over Wi-Fi. The POS stops if the Main Device fails, so it must stay charged with the app in the foreground. Devices can be logged off with the admin code or removed. Manual backup and restore are built in. Screen Time 'Deleting Apps: Don't Allow' prevents the app being deleted by accident.",
+     "source": "https://help.touchbistro.com/s/article/using-multiple-ipads-with-touchbistro-pos?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Internet-down capability matrix",
+     "detail": "Still works: taking and closing orders, cash, offline card payments, kitchen printing, KDS and receipts. Stops: cloud reports (they sync later), remote menu edits, online orders, floor plan edits, loyalty and gift cards.",
+     "source": "https://help.touchbistro.com/s/article/What-can-you-do-with-TouchBistro-POS-if-your-Internet-goes-down?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Printer redirect and status messages",
+     "detail": "Printers are auto-discovered, and 'Print Test Page' identifies them; the suggested static IP starts at 10.0.1.201 and goes up by 1. If a printer dies, 'Redirect All Menu Items to Printer' sends its tickets elsewhere until 'Disable Printer Redirection'. Global receipt, report and bartender printers can be overridden by a local receipt or drink printer per iPad. Status messages: Cover Open, Paper Low/Empty, Cutter Error, Drawer Open, Buffer Overflow, Disconnected.",
+     "source": "https://help.touchbistro.com/s/article/printers?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Customer-facing display",
+     "detail": "A second iPad pairs to the POS iPad's reserved IP. Screens: Welcome, live order (with message of the day and logo), and Payment (total, paid, change). Discounts are summed before Amount Due. Font colour, brand colour and font size are set by hex code and slider, with suggested image sizes (logo 500x65, welcome 1024x768). It cannot show signature capture, QR codes or penny rounding.",
+     "source": "https://help.touchbistro.com/s/article/configuring-customer-facing-display?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "TouchBistro One handheld",
+     "detail": "A PAX terminal running a POS:\n- 'My Tables' sit at the top in the server's colour; managers also see other servers' tables grouped by name.\n- Tiles show name, seats, guests, time open and total.\n- Tables open with all seats, or prompt for party size; managers can open a table in someone else's name.\n- Seat tabs plus Shared, search, a low-stock count on items, and mandatory modifier counts in red.\n- Only card payments are taken on the handheld, and it does not open a cash drawer.\n- Split by seating or evenly with arrows; 'All on One Bill' undoes the split.",
+     "source": "https://help.touchbistro.com/s/article/TouchBistro-One-How-Do-I-Take-and-Manage-an-Order?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "PAX pay-at-table discovery",
+     "detail": "The terminal is linked in Cloud with a code and then auto-discovers the main device iPad on the LAN, or takes a manual IP. Staff must already be clocked in on the POS; the terminal refuses if they have not logged out for more than 24h. Tip on Terminal with suggestions. Receipts print locally, on the terminal, or not at all.",
+     "source": "https://help.touchbistro.com/s/article/Setting-Up-PAX-Pay-at-Table-for-TouchBistro-Payments?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "13 Yönetim",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Timed events (scheduled menus)",
+     "detail": "Set per POS configuration: an event title and a menu that replaces the default. Schedule options: start date, optional end date, all day or specific times, and every day / weekdays / weekends / custom days. A banner on the Register warns 15, 30, 45 or 60 minutes ahead. The POS reloads automatically but waits until the current order is finished. More > Timed events lists today's events as Not started, Active or Ended.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/37768983878171-Using-timed-events"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Price lists vs order-profile prices",
+     "detail": "Legacy price lists hold preset prices per group of locations, and one can be linked to an order profile (e.g., Happy hour). Once enabled, all other ways of updating prices are disabled. Lightspeed now recommends Multiple prices per order profile or Locations Manager instead.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/4402274951323-About-price-lists"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Menu import with dry-run and AI import",
+     "detail": "CSV import uses SKU and Screens columns, with 'Drinks##Coffee' for sub-screens and up to 10,000 rows. It can replace or append, and a 'Dry-run' tests without importing. 'Advanced menu import' builds a menu from a PDF, photo, HTML or text file. Its modifier strategy is Shared or Separate, with a preview as a table or as the POS screen before saving.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804605430-Importing-and-exporting-menus"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Item quick create, bulk add and duplicate",
+     "detail": "'Quick create item' needs only name, accounting group and price, plus a menu screen and sub-screen. 'Multiple items' adds rows without a spreadsheet (admins only). Duplicate requires a new name.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/1260804604870-Creating-and-editing-items"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Locations Manager",
+     "detail": "Menus and items are created once and synced to all locations, while each location can still tailor its offering.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/56184584191387-What-s-New-October-2026-Multi-Location-Management-KDS-Connections-and-more"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Menu Management with revision history",
+     "detail": "Recommended order: taxes, prep stations, groups, sales categories, menus, items (including modifier-only items), modifier groups, then discounts, promotions and voids. Bulk edit selected items (50 per page, with an option to apply to all pages). Per-item 'History' shows who changed what, when, with old and new values. 'Delete History' shows who deleted an item, but it cannot be restored. Changes must be published.",
+     "source": "https://help.touchbistro.com/s/article/How-to-Use-Menu-Management?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Scheduled menus",
+     "detail": "Menus are built from menu groups and made available on the POS and/or online. Custom hours allow several windows (Breakfast Mon-Fri 9-11, weekends 10-1). Duplicate creates a '-copy'. Drag sets the order. A menu is hidden by unchecking POS and Online rather than deleting it.",
+     "source": "https://help.touchbistro.com/s/article/Menu-Management-Menus?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Group-to-item inheritance rules",
+     "detail": "Changing a group's name, default course, printer, KDS or colour flows to its items unless an item overrides the setting. Sales category and default tax changes do not flow down.",
+     "source": "https://help.touchbistro.com/s/article/menu-category-inheritance?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Modifier rule change gotcha",
+     "detail": "Changing a group's minimum from 0 to 1 does not take effect on items already linked to it. The fix is to close orders that contain those items, unassign the group from the items, then reassign it.",
+     "source": "https://help.touchbistro.com/s/article/changing-an-optional-modifier-to-a-required-modifier?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Single-editor menu lock",
+     "detail": "A staff type with 'Can Edit Menu' gets 'Manage Menu' in Options. Only one staff member can edit the menu at a time, and the help center warns against editing during service.",
+     "source": "https://help.touchbistro.com/s/article/allowing-non-admins-to-manage-the-menu?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Multi-location hierarchy",
+     "detail": "Venues are organised as Corporate > Restaurant Group > Venue. Staff, menus and taxes, branding and guest engagement can be set at higher levels. Overtime, devices, floor plan, hours and online ordering are always per venue. A 'Select a location' control on each page shows which level is being edited.",
+     "source": "https://help.touchbistro.com/s/article/How-to-Navigate-the-Cloud-Site-for-Multi-Location-Restaurants?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Guest check customisation",
+     "detail": "Options: logo, venue and tax numbers, toggles for zero-priced items, modifiers and 100%-discounted items, thank-you message, tip guide percentages, the starting order number, and server display name and title. The 'Printed from iPad using TouchBistro' footer can be removed.",
+     "source": "https://help.touchbistro.com/s/article/customizable-elements-guest-check?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "14 UX ayrıntıları",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Training mode and setup mode",
+     "detail": "Trainee users are hidden from the Home screen and log in only by QR plus PIN. They confirm 'FOR STAFF TRAINING ONLY', and their receipts print '### INVALID RECEIPT ###' / '### TEST RECEIPT ###'. Their sales appear in separate Training rows and never touch the cash drawer. New accounts start in setup mode, and practice sales are wiped at go-live.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/10630440970779-Training-POS-users"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "New POS navigation",
+     "detail": "On iPad, a slim top bar holds the More sidebar, Floor plan, Orders, Customers and Receipts. On iPhone, a bottom bar is reachable one-handed. The Register screen hides the bar for about 15% more space, with Close to return. '+ New order' is available from the floor plan and Orders. Handhelds have a slide-out menu layer over the active order.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/43162671781659-About-the-new-POS-navigation"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Preferences and notification center",
+     "detail": "Light or Dark mode and a 'Left-handed interface' for the Register buttons. The notification center gathers configuration reload prompts, printer status and print jobs, network problems and timed events in one list.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/360051089953-Understanding-the-More-menu"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Settings search",
+     "detail": "A search field in Admin finds any option by name and jumps to the exact settings screen and section (e.g., 'Print Void Chits When Items are Voided' under Advanced > Printing).",
+     "source": "https://help.touchbistro.com/s/article/option-search?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Unsent and unselected-modifier guards",
+     "detail": "'Unsent Item Handling' has four options: Ignore; Warn (prompts to send when leaving to the floor plan or checkout); Manager Required; or Manager Required (Mark Items as Sent). 'Unselected Modifier Warning' is Ignore, Warn or Manager Required before sending. 'Send After Checkout' sends automatically when Checkout or fast pay is tapped (register only).",
+     "source": "https://help.touchbistro.com/s/article/security-settings?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Speed knobs and Safe Printing",
+     "detail": "Speed settings:\n- Go straight to the order screen after party size; 'Auto Close Forced Modifiers'; default focus on Seat 1 or Shared; lock the menu view.\n- Prompt for guest name; order numbers reset after N; Return After Printing to the floor plan, login or nowhere; logout after paying.\n- Auto-logout after inactivity; print a ticket on every clock in/out (paper trail); party names on bar stools; animations off for speed.\n'Safe Printing' checks the printer is online and has paper, retries, and keeps the dialog open until the job is really sent, so a ticket is never marked sent when it didn't print.",
+     "source": "https://help.touchbistro.com/s/article/advanced-settings?language=en_US"
+    },
+    {
+     "system": "TouchBistro",
+     "name": "Customisable register button bar",
+     "detail": "Buttons: Exact, Smart 1-3 (predicted banknotes), Cash, Debit, Credit, Tab, No Sale/Clear, Print Bill/Print Prev, Takeout, Delivery, Send All, Pay In/Out, Loyalty QR scan and Promo. Credit and Debit can be hidden in Fast Bar.",
+     "source": "https://help.touchbistro.com/s/article/advanced-settings?language=en_US"
+    }
+   ]
+  },
+  {
+   "area": "Diğer (14 alana uymayanlar)",
+   "features": [
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Lightspeed Tasks digital checklists",
+     "detail": "Staff log in on a Pulse device in Staff mode with their POS PIN and see checklists assigned to their role, with due time and % complete. Task types: short answer, multiple choice, photo required, counting (warns below par), temperature (manual or a Bluetooth probe inserted 3 mm), and signature. Schedules can be bi-weekly through yearly with optional end dates. Managers get daily or weekly completion emails per location.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/42198690197275-Using-Lightspeed-Tasks-in-Pulse"
+    },
+    {
+     "system": "Lightspeed K-Series",
+     "name": "Logbook (shift journal)",
+     "detail": "A daily log with a weather, covers and guest-check calendar. Questions are customisable as Text, Checklist or 5-star rating, and shift notes can be required. Staff can comment and @mention each other. The log is reachable from the Back Office, POS and app.",
+     "source": "https://k-series-support.lightspeedhq.com/hc/en-us/articles/7340734685723-Logbook"
+    }
+   ]
+  }
+ ],
+ "standouts": [
+  "Blind cash count as a role permission: TouchBistro's 'Can Create/Edit Blind Cash Deposits' hides the Expected and Over/Short columns from the closer, while a full-deposit role sees Expected, Actual and Over/Short. Deposits are editable for 7 days with a who-changed-what history and can be done later on Cloud after the iPads are locked away. This maps directly to LafPOS 'kör kasa' (https://help.touchbistro.com/s/article/How-to-Complete-Your-End-of-Day-Cash-Deposit?language=en_US).",
+  "Lightspeed's KDS 2.0 has the same architecture as LafPOS: one POS acts as a LAN hub, any browser becomes a station with a 4-digit code, 'kds.local' discovery survives IP changes, an 'Events sync 45/100' counter shows exactly which screen is behind, and stations restore their saved configuration by name. A 5-second Undo and a ticket that blinks until tapped (when changed from the POS) prevent silent kitchen errors.",
+  "Printing you can trust: TouchBistro's Safe Printing will not mark a ticket as sent until the printer confirmed it was online and had paper (with retries). 'Redirect All Menu Items to Printer' re-routes a dead printer in one tap. Lightspeed gives every printing profile a fallback printer and stamps reprints with '** RE-PRINT **'.",
+  "Floor-level nudges instead of reports: Lightspeed Tempo puts 'Visit table / Take order / Take payment / Pick up order' badges on tables. Thresholds are learned from the venue's last 3 months and recalculated monthly; 'Order placed' starts at 5 minutes.",
+  "Owner visibility without logging in: Lightspeed's Daily Digest arrives around 5:30 AM with yesterday by daypart and per employee. The Pulse app compares 'Today' with the same weekday last week, not yesterday. TouchBistro's Snapshot report shows labor/sales and food-cost/sales mid-service, including tables that are still open.",
+  "Cheap but strong authorisation: Lightspeed shows managers a 4-digit pincode that rotates daily. TouchBistro lets the owner choose exactly which actions need a manager passcode (void sent item, delete, discount, open drawer, transfer table or tab, change gratuity), with Low/Medium/High presets.",
+  "Countdown stock on the button: both systems show the remaining count on menu buttons. At zero the item becomes unavailable online automatically (Lightspeed shows red 'Item not available' vs orange manual snooze). TouchBistro decrements on send, not on add, and lets a manager override when adding an out-of-stock item.",
+  "Modifier ergonomics: TouchBistro documents exactly when the modifier popup opens, auto-closes and greys out for every min/max combination. Fast Bar skips forced drink modifiers for bartenders, and Lightspeed's 'Group Ordering' batches separately paid counter orders into one kitchen ticket by timer. These suit a café counter.",
+  "Training with zero risk: Lightspeed trainees log in only by QR plus PIN and get '### TEST RECEIPT ###' printed. Their sales sit in separate report rows and never touch the drawer, and setup-mode practice sales are wiped at go-live.",
+  "Gaps neither covers, where LafPOS can beat them: no Turkish ÖKC/GMP-3, e-Arşiv or bilgi fişi support, no Yemeksepeti/Getir/Trendyol integration and no caller ID. The closest analogs are Lightspeed's signed-receipt fallback text when the German TSE is offline and TouchBistro's Mexico CFDI customer self-invoicing link printed on the receipt."
+ ]
+}

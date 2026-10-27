@@ -1,0 +1,875 @@
+{
+ "systems": [
+  "Toast (POS, KDS, Toast Web back office, Toast Tables, Toast Now app, Toast Go handheld, Kiosk, Mobile Order & Pay, xtraCHEF, Sling by Toast)",
+  "Square for Restaurants (Restaurants POS, Square KDS, Square Team/Shifts, Square Dashboard + Dashboard app, Kiosk, Handheld, Square Online, Loyalty/Marketing, Square AI/Managerbot)"
+ ],
+ "areas": [
+  {
+   "area": "1 Sipariş alma ve menü",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Modifier group behavior: Required / Optional-force show / Optional",
+     "detail": "Each modifier group has a 'Required?' dropdown. Required = the item cannot be sent to the kitchen until a choice is made; 'Optional - force show' pops the group open automatically when the item is added but can be skipped; 'Optional' stays hidden until staff tap the group button. A minimum # of selections can only be set on Required groups; Min/Max dropdowns only appear after multi-select is enabled (otherwise max is forced to 1). If a required group is hidden on a channel (e.g. online), orders on that channel succeed without it.",
+     "source": "https://support.toasttab.com/en/article/Required-Optional-Modifiers?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Pre-modifiers (NO / EXTRA / ON SIDE / ADD)",
+     "detail": "Built in Toast Web > Menus > Settings > Pre modifiers as groups; each pre-modifier has customer Name, short POS Name, Kitchen Name, button Color, Display Mode (Prefix 'ADD Bacon' or Suffix 'Bacon ON SIDE') and either a price multiplier (0 = free 'NO', 2 = double for 'EXTRA', 1.5 = +50%) or a fixed price. The multiplier only works if the modifier group uses per-modifier pricing; pre-modifiers never change the item's base price. Not supported in Toast Online Ordering, kiosk/Order & Pay or xtraCHEF costing.",
+     "source": "https://support.toasttab.com/en/article/Pre-Modifiers-1493068611745?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Open items vs open-priced menu items",
+     "detail": "'+Open item' button sits above the menus (next to search): staff type a name and price for one-off charges (corkage, room hire) that carry a preset tax rule, sales category, course/prep station and 'Defer revenue' flag. An open-priced menu item looks normal but prompts for price when tapped (daily specials). Open items need manager approval by default unless the job has 3.25 Open Items; $0.00 open items always need a manager; max price $10,000. With tax-included pricing the tax is backed out of the typed amount ($120 rings as $110.47). Also used to zero out a check with a stray balance.",
+     "source": "https://support.toasttab.com/en/article/Creating-an-Open-Item-or-Open-Priced-Menu-Item-1492811097670?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Send / Stay / Hold / Repeat buttons",
+     "detail": "Send fires the highlighted items and returns to the Table Service screen; Stay fires what is on the check but keeps the order open to keep adding (drinks/apps now, entrees later); Hold saves items without firing and the table turns red on the floor plan. Repeat: open the check, select an already-ordered item and repeat it (qty defaults to 1, editable). If 'Orders send only after check is paid' is on, only a 'Pay $' button exists and the kitchen gets nothing until payment (except takeout/delivery).",
+     "source": "https://support.toasttab.com/en/article/Differences-Between-the-Send-Stay-and-Hold-Buttons?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Extra order-screen modifier groups (seat, dining option, course, plating split, special request)",
+     "detail": "Admins tick 'Additional Modifier Groups' to add buttons to every item: Seat number (Share, 1, 2...; requires party size 'Always ask'; can be marked Required and used to sort kitchen tickets by seat), per-item Dining option (Dine In/Take Out - affects ticket appearance only, not routing), Course, Split plating ('For 2', 'For 3') and Special request (free-text name plus optional price; enabled by default). Groups can be drag-reordered.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminUiOptionsReference.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Special requests (free-text notes)",
+     "detail": "No permission gates special requests: anyone who can enter an order can type one. The request is stored as a modifier on the item and prints on the kitchen ticket/KDS. The optional price field can be switched off (Front of house > Order screen setup, needs 6.6 Restaurant Operations Setup).",
+     "source": "https://support.toasttab.com/en/article/Adding-Special-Requests-to-Items-1493007020949"
+    },
+    {
+     "system": "Toast",
+     "name": "Menu item search on POS",
+     "detail": "Search bar sits above the menu grid with the Open Item button beside it; typing a name with the on-screen keyboard lists matches to tap. Recently selected items show under the search bar for fast re-orders. On Toast Go handhelds it is a magnifier icon. Long-pressing a search result opens Quick Edit. Admins can hide the bar ('Search bar for POS menu', needs 6.6).",
+     "source": "https://support.toasttab.com/en/article/Menu-Item-Search"
+    },
+    {
+     "system": "Toast",
+     "name": "Quick Edit mode (edit menu from the POS)",
+     "detail": "A manager presses and holds any menu, item or modifier button to enter Quick Edit: rearrange items/modifier options, change button colors and POS names, and set Inventory (In stock / Out of stock / Quantity). Cannot add or delete menus, groups or modifier groups there. Button colors come from a fixed palette with paired light/dark-mode shades.",
+     "source": "https://support.toasttab.com/article/Quick-Edit-Mode-1492794309057"
+    },
+    {
+     "system": "Toast",
+     "name": "Check display rules (consolidation, default modifiers, modifier display)",
+     "detail": "'Consolidate menu items' merges identical items with identical modifiers into one line with a count (disabled when seat numbers are on). 'Show default modifiers' off = only removed defaults are shown, prefixed 'NO'. Modifier display modes: Vertical (one per line, allows per-modifier KDS fulfillment), Horizontal (comma line), Legacy (required first, optional sorted low-to-high price), Legacy-Flatten. 'Add modifier charges to item price' shows a single combined price on the order screen only.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminUiOptionsReference.html"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Modifier sets: required/min/max, quantities, defaults, negative prices, per-item overrides",
+     "detail": "A set can be Required with a minimum above 1; 'Allow more than one modifier to be selected' unlocks a maximum, and 'Allow multiple quantities of a single modifier' (e.g. 3x shot) needs that first. Modifiers can be pre-selected, hidden online, and priced negative ('No cheese' -1.00). Per item, More > Customize overrides visibility, pre-selected choices and selection/quantity rules; later set-level edits stop applying until 'Reset customizations'. Option to sort sold-out modifiers last (they stay visible).",
+     "source": "https://squareup.com/help/us/en/article/5119"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Conversational modifiers",
+     "detail": "Toggle 'Use Conversational Modifiers on POS' on a modifier set and the POS shows Add / No / Extra (and side/sub) buttons next to each option; swapping a default side automatically prints 'No X' plus the substitute on the kitchen ticket. Cannot be combined with multiple-quantity modifiers or sold-out sorting; 'Lite/Easy' operators are not built in.",
+     "source": "https://squareup.com/help/us/en/article/5119"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Nested modifier sets (released Nov 2, 2026)",
+     "detail": "Each modifier choice reveals only the follow-up options that match it, up to three levels deep per item (e.g. Milk > Oat > Barista/Unsweetened). The same structure works on POS, Square Kiosk, KDS, ordering profiles, DoorDash, Grubhub, Uber Eats and the Catalog API.",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Combos with category slots and per-item upcharges",
+     "detail": "Create an item of type Combo, add 'options' made of items or whole categories, set 'Number of required selections' and an optional default per option; any component can carry +1.00 or -1.00. Each component routes to its own printer station showing the combo name (soda to drinks, burger to grill) while expo sees the full combo; Item Sales reports the individual components. Since Oct 20, 2026 staff build the whole combo in one screen (Real-Time Check View) and each choice posts to the check immediately.",
+     "source": "https://squareup.com/help/us/en/article/8558-create-and-sell-combos"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Seats and covers on the check",
+     "detail": "Track Seating offers three modes: cover count only, cover count with optional seat positions, or with required seat positions. Add Seat in the check; swipe left to remove; select items > ••• > Move to Seat, or Move All Items to Seat; a seat can get its own check ('Create new check') or be transferred to another table's check. Cart can be sorted by seat with 'Make default?'. Allergen/dietary notes can be stored per seat for the kitchen; kitchen tickets/KDS can sort by seat.",
+     "source": "https://squareup.com/help/us/en/article/8583"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Barcode scanning with the iPhone/iPad camera (Oct 20, 2026)",
+     "detail": "Enable 'Camera Barcode Scanner' in hardware settings, then tap 'Tap to Scan' in checkout: the camera reads the barcode and either adds the item to the cart or fills item details when creating a product; no separate scanner needed.",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    }
+   ]
+  },
+  {
+   "area": "2 Masa ve salon",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Table status colors and table timer",
+     "detail": "On Table Service: Red = items on hold not sent, Yellow = items sent, Green = every item fulfilled on KDS, Blue = selected, Gray = owned by another server, dotted border = empty. Colors only show for the signed-in server's tables; others are gray and only show order data with 1.8 View Other Employees' Orders. Each tile shows elapsed time since the check opened, but only if the tile is large enough to fit it.",
+     "source": "https://support.toasttab.com/en/article/Creating-Service-Areas-and-Table-Setup-1493049150430?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Move / merge tables and assign servers on the floor plan",
+     "detail": "Press and hold a table tile > select the check > 'Move X Check' > pick destination > Confirm; if the destination already has a check the POS asks whether to merge or keep separate (needs 1.16 Change Table). A server-assignment button lets a host pick a server then tap their tables; overflow menu resets one or all assignments. Pinch to zoom, slide to pan; without 1.8 a server sees only own tables.",
+     "source": "https://support.toasttab.com/en/article/New-POS-Managing-Tables?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Transfer a check to another server",
+     "detail": "On the check, overflow (⋮) > Change/Transfer server; requires 1.17 Change Server (1.9 Edit Others' Orders, 3.4 Bulk Transfer Checks for many at once) or a manager override, and the receiving server must be clocked in. Single-check transfers re-send the order to the kitchen and reopen closed orders; bulk transfers do not. Closed checks can only move after reopening the original server's shift review. Combining checks works only on open checks.",
+     "source": "https://support.toasttab.com/en/article/Transferring-a-Check-to-Another-Employee-1493069784457"
+    },
+    {
+     "system": "Toast",
+     "name": "Toast Tables waitlist with quote timers and 2-way SMS",
+     "detail": "Host taps Add to Waitlist, picks area (or First Available), enters party size, optional name (else 'Walk-in') and phone. Quote comes from booking settings (Manual Multiplier buffer or a Smart Algorithm that learns). Party timer turns yellow within 5 minutes of the quote and red once exceeded. 'Send Notification' sends the Notify SMS and sets status Notified (greyed out without a phone); guests reply 1 to confirm or 9 to cancel; a notified party that does not respond in 15 minutes is auto-marked Done.",
+     "source": "https://support.toasttab.com/en/article/Using-Toast-Tables-Waitlist?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Host stand seating, table statuses and server rotation",
+     "detail": "Drag a party card onto an open table (or Seat from the status menu), confirm or swap the server; with 'Start Order on POS' seating opens a POS check automatically. Table statuses Seated/Ordered/Paid update from POS data, Dirty when the party leaves, plus manual Available/Dirty/Blocked; any status change can be undone by tapping within 30 seconds. Turn-time progress border is colored by server; rotation strip sorts servers by last sat time, current/total covers or tables.",
+     "source": "https://support.toasttab.com/en/article/Using-Toast-Tables-Waitlist?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Reservations with conflict and pacing control",
+     "detail": "Bookings come from the host app, an online link, Reserve with Google or managers in Toast Web, and create/update a Guestbook profile. Overlapping bookings on a table turn red and are fixed in Timeline view; 'View All Unavailable' lets hosts override blocks. Flow Control caps guests per 15-minute window per service period; alerts fire for large parties (7+), changes and cancellations within a 4-hour window. Base plan limits ~25 reservations/month.",
+     "source": "https://support.toasttab.com/en/article/Using-Toast-Tables-Waitlist?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Self-service waitlist stand (Oct 15, 2026)",
+     "detail": "New Toast Tables mode lets guests add themselves to the waitlist on a tablet at the entrance instead of queuing for the host.",
+     "source": "https://updates.toasttab.com/"
+    },
+    {
+     "system": "Toast",
+     "name": "Mobile Order & Pay (QR per table)",
+     "detail": "Each table gets its own QR. Mode is either Tabs (multiple rounds, pay at end; optional card pre-auth placing a $0.01 pending charge) or Pay-as-you-go (typical for cafes). Group Ordering lets several phones at one table join one tab and submit one ticket; servers can add to the same tab from POS/Go. Gotchas: needs a Dine In dining option, duplicate table names cannot get QRs, a table named 'Welcome' is menu-only, and changing the online ordering URL breaks every printed QR.",
+     "source": "https://support.toasttab.com/en/article/Setting-Up-Toast-Mobile-Order-and-Pay?lang=en_US"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Floor plan timers with yellow/red thresholds",
+     "detail": "Floor plan indicators show how long each check has been open; with 'Color Indicators' on, managers set 'Turn Yellow After' and 'Turn Red After' minutes (Device Management > Modes > Checkout > Floor Plans). Available even on the Free plan; no coloring by course status (community suggests a KDS showing held courses instead).",
+     "source": "https://squareup.com/help/us/en/article/8146-customize-table-management-settings"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Floor plan builder and multiple layouts",
+     "detail": "Dashboard floor plans contain sections (Dining Room, Bar, Patio) with auto or custom table names and a table count; tables are dragged, resized and reshaped. A location can hold several floor plans (lunch vs dinner). Removing a table keeps its data. A table shows occupied as soon as a cover count is entered, before any items. Section sales reporting needs Plus.",
+     "source": "https://squareup.com/help/us/en/article/6427-building-your-floor-plan"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Merge tables and drag-to-move bills",
+     "detail": "Select tables > Merge Tables (Register/Android, app 7.3+; Terminal and Handheld can only view) - merged tables show linked and occupied, each keeps its own checks and seats, Unmerge restores them. On a tablet, long-press a table tile and drag it onto another table: empty target = bill moves, occupied target = confirm merge. Actions > Assign hands a bill to another team member; item ••• > Move sends it to a Different Course, New Bill or Existing Bill.",
+     "source": "https://squareup.com/help/au/en/article/8166-comp-void-and-reassign-checks-with-square-for-restaurants"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "QR self-serve ordering via Square Online",
+     "detail": "Each QR code is mapped to a table, walk-up window or parking spot; guests order, add notes and either pay immediately or keep a tab open and pay from their phone before leaving; orders print to kitchen printers and appear in POS.",
+     "source": "https://squareup.com/us/en/online-store/restaurants/self-serve-ordering"
+    }
+   ]
+  },
+  {
+   "area": "3 Mutfak ve bar",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Ticket time vs fire time, HELD state and automated course firing",
+     "detail": "Every KDS ticket shows a stopwatch in the top right starting at 0:00 when Send/Stay is pressed (or an online order arrives) and running until fully fulfilled, including expo. With course pacing, a separate fire time starts when a course is fired; unfired courses show 'HELD' with items in italics. Firing can be manual by server, manual by expo from the KDS, or automatic: when the previous course is fulfilled by all prep stations, by the expediter, or after N seconds. Course pacing applies only to Dine In orders (since v2.117).",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminInterpretingTicketTimes.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Fulfill, unfulfill and average fulfillment timer",
+     "detail": "Double-tap a ticket (or tap > Fulfill) to bump it; optional per-item fulfillment marks items with a green check. Recall: 'Show recently fulfilled' > select tickets (highlighted blue) > Unfulfill, and the ticket returns in its original time order. Double-tap behavior is a per-device choice (fulfill, unfulfill, both, neither). An optional Average Fulfillment Time timer averages tickets bumped within the 'Recently Fulfilled Timeframe' (e.g. 30 min).",
+     "source": "https://support.toasttab.com/en/article/Item-and-Order-Fulfillment-on-KDS?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "All Day View",
+     "detail": "KDS button toggles a consolidated count of open items ('18 burgers'). Options: grouped by item only (default) or by item with modifier sub-groups (plain items first, then each modifier combination with its count). Items are separated by course; held tickets are excluded unless meal pacing is set to send all courses immediately and 'include held items' is ticked; items put on POS Hold never count.",
+     "source": "https://support.toasttab.com/en/article/KDS-All-Day-1493055871075?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Production item count (ingredient-level totals)",
+     "detail": "Define production items (e.g. 'patty') and attach a quantity to each menu item (double cheeseburger = 2 patties); selected counts are always shown in a strip at the bottom of the KDS, no button press. Only fired items count and the number drops as items are fulfilled; modifiers are not counted.",
+     "source": "https://support.toasttab.com/article/Production-Item-Count"
+    },
+    {
+     "system": "Toast",
+     "name": "Prep stations, expediter and routing rules",
+     "detail": "Each prep station chooses 'Send to Expediter': expediter only, prep station only, or prep station and expediter (printer or KDS expo). Item routing rules sit on top of station assignments and redirect or duplicate a ticket for a specific dining option or service area (e.g. takeout items also to the pack station); rules are system-wide, not per terminal. Community tip: route no-prep items (bottled drinks) to expo only.",
+     "source": "https://support.toasttab.com/en/article/Setting-Up-an-Expediter"
+    },
+    {
+     "system": "Toast",
+     "name": "Item fire by prep time",
+     "detail": "Send the whole order at once but have each item fired so everything finishes together: prep time per item in seconds; blank = fire immediately; 0 seconds = fire after everything else has fired. Expo shows not-yet-fired items in grey italics. Independent modifiers can have their own prep time; pre-modifiers cannot. Third-party scheduled orders auto-fire at expected time minus prep time.",
+     "source": "https://support.toasttab.com/en/article/Item-Fire-by-Prep-Time"
+    },
+    {
+     "system": "Toast",
+     "name": "Rush a ticket",
+     "detail": "From an expediter KDS only: open ticket details > Rush. The ticket jumps to the left-most unfulfilled slot on every KDS and shows 'RUSH' at the top; rushing an unfired ticket fires it; with item-level fulfillment, selected items split off into a new rushed ticket. Works from bump bars too. Since Oct 2026 the new KDS view plays a sound for rushed tickets.",
+     "source": "https://support.toasttab.com/en/article/How-to-Rush-an-Order-on-Your-KDS"
+    },
+    {
+     "system": "Toast",
+     "name": "New KDS view safety changes (Oct 2026)",
+     "detail": "Swipe-down no longer fulfills a ticket (prevents accidental bumps), portrait orientation gets the same row/column choices as landscape, and rushed tickets trigger a notification sound (POS v2.119).",
+     "source": "https://updates.toasttab.com/"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "KDS timers, alerts, layout and modifier colors",
+     "detail": "Per device: yellow and red timer thresholds in minutes, 'Play sound when new tickets arrive', custom alert sound and volume; ticket grid of 4-10 columns and adjustable text size; item sort Default/Alphabetical/Category/Custom category/Seat; modifier sets can be reordered for the kitchen separately from checkout. Each modifier option can get a KDS text color (e.g. allergy in red) that also prints on kitchen tickets.",
+     "source": "https://squareup.com/help/us/en/article/7944-get-started-with-square-kds-android"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Complete/recall with 3-second undo and prep-vs-expo sync",
+     "detail": "Tap an item to complete it, tap the ticket banner to complete the ticket; tapping again within 3 seconds undoes, after that it moves to the Completed tab where 'Recall' brings it back. Per device: 'Complete for all devices' or 'only on this device'. Prep completion clears other prep screens but Expo just shows a green check; Expo completion clears everywhere; recalling on Expo asks whether to recall on all prep+expo or prep only. Completing on Expo auto-marks third-party orders Ready.",
+     "source": "https://squareup.com/help/us/en/article/8171"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "All Day counts and staggered prep times",
+     "detail": "All Day shows a combined count of each item across open orders; optional 'Separate fired and held counts' (off by default) splits what is cooking from what is on hold. Staggered item prep times start each item based on its catalog prep time so items finish together (device-local setting, does not sync).",
+     "source": "https://squareup.com/help/us/en/article/7944-get-started-with-square-kds-android"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Draft tickets on KDS (Premium, Oct 5, 2026)",
+     "detail": "Items appear on the KDS as a draft ticket while the server is still ringing them into the cart and update with each addition, so the kitchen can start early; must be enabled on both POS and KDS.",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Coursing with hold/fire and full ticket summary",
+     "detail": "In the cart tap a course, add items, 'Add Course' for more, then tap the fire or hold icon per course and Send; held courses neither print nor display until fired later (reopen check > fire icon > Send produces a fire ticket). KDS option: show fired and held courses as tickets, or only fired. 'View all courses' at the bottom of a ticket opens the table's full ticket summary. Items added to an already fired course show as 'Course Name - Addition'.",
+     "source": "https://squareup.com/help/us/en/article/6428-coursing-with-square-for-restaurants"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Kitchen routing categories and dining-option filters",
+     "detail": "Routing categories are separate from menu/reporting categories: enable 'Use kitchen routing categories on KDS', assign items, then switch on per KDS which categories it receives. Each KDS can also filter by dining option (Dine-In, To-Go, Pickup, Delivery) but those filters apply only to POS-created orders, not online orders.",
+     "source": "https://api.squareup.com/help/us/en/article/8170"
+    }
+   ]
+  },
+  {
+   "area": "4 Ödeme",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Split checks: tap-and-drop, split item N ways, split by seat",
+     "detail": "Tap Split: tap items and drop them onto a new check, select an item and 'Split evenly' by any number, or 'Split by seat' in one tap if seats were used; swipe left/right to view the split checks; undo by moving items back. Service charges do not carry over and item-level discounts are removed when items move (re-apply per check). Gated by 1.20 Split Checks (else manager passcode). US v2.104 (Apr 2026) adds Actions > 'Split item between selected seats' (e.g. one wine bottle across seats 1-3).",
+     "source": "https://support.toasttab.com/en/article/Splitting-Checks-by-Item-1492811097734?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Partial and even payments at the payment screen",
+     "detail": "Type a partial amount into 'Amount tendered' before choosing the tender to leave a 'Balance due'; 'Split evenly' at the bottom of the payment screen divides up to nine ways, each share pre-filled and adjustable, and the check closes when the last share is paid. For separate loyalty accounts, split the check, not the payment.",
+     "source": "https://support.toasttab.com/en/article/Splitting-Checks-by-Item-1492811097734?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Tip prompt configuration",
+     "detail": "Tip calculated before or after tax; up to 3 suggested amounts and 3 percentages, or a mix where a threshold flips from fixed amounts to percentages on bigger checks; default can preselect one, 'No tip', or 'None' which forces the guest to tap a choice before signing. Suggestions use the pre-discount total. When a mandatory gratuity is on the check, suggestions switch to fixed +3/5/7%. 'Require approval' can force manager approval for tip adjustments above an amount or % of balance.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminUiOptionsReference.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Service charges and auto-gratuity by party size",
+     "detail": "A service charge becomes a mandatory gratuity when 'Assign to check owner (Gratuity?)' = Yes (paid to the server as non-tip income); No = house keeps it. Auto-gratuity is attached to service areas with a Minimum Party Size (e.g. 6+) and applies itself when the party size qualifies.",
+     "source": "https://support.toasttab.com/en/article/Mandatory-Gratuity-and-Service-Charges-in-Toast-POS-and-Payroll"
+    },
+    {
+     "system": "Toast",
+     "name": "Card pre-authorization tabs",
+     "detail": "Enabled in Toast Web (Finance > Payment options > Credit) and per device. Dipping a chip card names the tab with the cardholder name; tapping does not (rename manually). Hold amount = configured minimum (>= $0.01) or the items on the check. Incremental auth is only two-step (at open and at close), so a tab that grows past the hold can decline at close. Not available in CA/IE/UK.",
+     "source": "https://support.toasttab.com/en/article/Card-Pre-Authorization-Configuration-Device-Setup?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Voids with reasons vs refunds",
+     "detail": "Voids only on the same business day before the card batch closes; afterwards (up to 90 days) refunds. Void reasons must be configured before staff can pick them. Item void: Update > item > Void > quantity > reason; whole check: overflow > Void Order. Remove 3.32 from a job so a manager with 3.32/3.8 must complete voids. A voided open check is skipped in the check-number sequence, and voids/removals have their own reports.",
+     "source": "https://support.toasttab.com/en/article/Voiding-Items-Payments-and-Checks?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Pay at table by QR on the receipt (Toast Pay)",
+     "detail": "Turning it on prints a QR 'View check and pay now' on receipts (and can show it on the guest-facing display); the guest scans with the phone camera, sees the itemized check without an app, optionally splits evenly and pays; billed at the keyed card rate with no extra fee.",
+     "source": "https://support.toasttab.com/en/article/Get-Started-with-Toast-Pay?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Cash rounding (CA/UK/IE/AU, US limited)",
+     "detail": "Rounding is set up with a non-printing prep station and a dedicated rounding sales category; choose round down, round up, or nearest $0.05 for cash only ($6.03 -> $6.00 or $6.05); exact-change payments are not rounded.",
+     "source": "https://doc.toasttab.com/doc/platformguide/platformCashRoundingOverview.html"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Split by seat / item / evenly with recombine",
+     "detail": "Actions > Split check: 'Split by seat' creates one check per seat with items (shared table items can be moved before Save); 'Split by item' > Create New Check > Save All; Plus/Premium can split a single item evenly or by custom amounts and 'Combine' to recombine. Rules: sell-by-unit items cannot split; modifiers split with their parent; voiding any fraction of a split item recombines it automatically; item discounts/service charges move with their items, cart-level ones stay on the original check.",
+     "source": "https://squareup.com/help/us/en/article/8165-split-a-payment-and-check-with-square-for-restaurants"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Smart tipping, tip-before-payment and round-up tips",
+     "detail": "Smart amounts: under $10 shows No Tip/$1/$2/$3, $10+ shows 15/20/25%; or three custom percentages (all 0% = custom only). 'Ask for tips before payment' is on by default: cart > tip screen > card tap, and the reader stays inactive until a tip is chosen. Alternative separate tip screen after payment, or sign-and-tip on printed receipt (quick-tip boxes or itemized slip; not for contactless). Round-up tip: under $20 to next $1, $20+ to next $5.",
+     "source": "https://squareup.com/help/us/en/article/8631-set-up-and-customize-tipping"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Tip settlement deadline",
+     "detail": "Tips can be added or edited until the payment is settled; signed receipts and signed open bills auto-settle at 36 hours with a zero tip, so unentered tips are lost. Settle one by one ('Add and Settle') or in bulk from Transactions or Close of Day. By default staff settle only their own payments; 'Hide Tip from Cashier' hides tip amounts on the cashier screen.",
+     "source": "https://squareup.com/help/ie/en/article/8375-settle-payments-and-manage-tips"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Automatic gratuity and automatic service charges",
+     "detail": "Auto gratuity triggers by party size (the table's seat/cover count, Plus/Premium) or is applied per check via Actions > Auto-Gratuity; staff can still toggle it manually under Actions > Service Charge; option to tax it. Since Oct 5, 2026 (US/CA) any service charge (e.g. kitchen fee) can apply itself to every cart without staff action.",
+     "source": "https://squareup.com/help/us/en/article/8175-customize-and-apply-automatic-gratuity-with-square-for-restaurants"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Pre-authorized bar tabs",
+     "detail": "Minimum hold $1.01-$250; Square authorizes the greater of the minimum or the current cart; holds last ~36 hours. Start from Checkout (tap/insert/swipe or 'Add pre-authorization') or Orders (+). An unnamed bill takes the cardholder name (or card brand + last 4); tap does not capture names. Close by choosing the top 'Pre-authorize [Card ####]' tender; only one split can use it. Not usable offline or with Interac.",
+     "source": "https://squareup.com/help/ca/en/article/8455-enable-and-configure-preauthorization-for-bar-tabs"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Comp and void with mandatory reasons",
+     "detail": "Comp/void reasons are defined in Dashboard and must be chosen each time. Item: tap item > ••• > Comp or Void > reason; whole bill: Actions > Comp bill / Void bill. Void = entered wrong and not yet made (not shown on receipts); Comp = made but given free (shows on bill, reason prints on ticket). These actions are POS-only.",
+     "source": "https://squareup.com/help/au/en/article/8166-comp-void-and-reassign-checks-with-square-for-restaurants"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Refunds: full, itemized, partial",
+     "detail": "Refunds within one year to the original card or as store credit on a gift card. Itemized refunds keep item-level sales correct; a custom-amount partial refund is not itemized so it does not appear in Item Sales and does not adjust tax.",
+     "source": "https://squareup.com/help/us/en/article/6116"
+    }
+   ]
+  },
+  {
+   "area": "5 Kasa yönetimi",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Cash drawer states and entry types",
+     "detail": "Drawers are Open (accepts cash), Paused (no entries, not yet counted) or Closed (counted); all close automatically at the 4 AM closeout. Cash in: Add cash, Cash collected from server. Cash out: Cash out, Payout (goods/services), Tip out, Cash drop (to safe). Every entry pops the drawer; 'No sale' opens it without a balance change; undo creates a reversing entry. Pausing spawns a new drawer 'Bar (2)' with the same start; closed drawers can be reopened via 'Adjust closing entries' and turned into a deposit.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminCashDrawers.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Blind cash count permission",
+     "detail": "3.17 Cash Drawers (Blind) hides each drawer's expected balance, expected deposit and over/short from the employee, including on the Closed Drawer report; 3.18 Cash Drawers (Full) shows expected totals (managers). An overage/shortage warning with a manager-override threshold can be added at close.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminGlossary.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Cash drawer lockdown (one drawer per person)",
+     "detail": "Cashier opens Cash Drawers, taps the open-lock icon > Lock > Go; the drawer shows a closed lock and their name, and nobody else can transact on it in the software. It can only be unlocked by closing it; managers get 'Cash Drawer Lockdown (Override)'. With required shift review, the locked employee must count and close the drawer before clocking out. Toast recommends this as the way to get a true blind count.",
+     "source": "https://support.toasttab.com/en/article/Cash-Drawer-Lockdown"
+    },
+    {
+     "system": "Toast",
+     "name": "Shift review gate before clock-out",
+     "detail": "Required shift review walks the employee through: close/adjust open checks (or transfer them), declare cash tips (optional minimum % of cash sales; negative tips need manager), Pay/Collect cash owed vs tips owed, count a locked drawer into 'Cash actual' with over/short shown (above-threshold differences need manager approval, 45-char comment), then print and clock out. Checks still open at the 4:00 AM closeout auto-close with zero tip.",
+     "source": "https://support.toasttab.com/en/article/Shift-Review-Overview?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Configurable Z report, shift report and drawer report",
+     "detail": "Admins tick and drag-reorder Z report sections (Sales & Tax Summary, Sales Categories, Revenue Centers, Payment Details, Server Tip Outs, Voids, Removals, Discounts, Labor, Employee Over/Short, Signature, Pay Outs, Deposit Summary, Delivery) and shift review sections (incl. Credit Tip Audit, Tip Sharing). Closed drawer report can auto-print on close or only on demand, with Cash Summary, No Sale Audit, Cash Transaction Detail and Signatures.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminUiOptionsReference.html"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Cash drawer sessions (Cash Management add-on)",
+     "detail": "Enabled per mode or per device with a default starting amount and a cash report email. POS: More > Reports > Current Drawer > Starting Cash > Start Drawer; Paid In/Out entries carry a description; End Drawer vs Close (record counted amount). A drawer can be ended remotely from Dashboard (then no more Pay In/Out). Drawers open 30+ days with 7 days of inactivity are auto-ended. Not available on phones.",
+     "source": "https://squareup.com/help/us/en/article/8344-start-and-end-a-cash-drawer-session"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Close of Day with required closing procedures",
+     "detail": "Account > Run Close of Day shows a preview where staff close open checks and drawers, adjust tips and clock people out; the location can require each step (Service settings > Closing Procedures), overridable only with the owner passcode. Report fields are selectable for print/email. Cannot run offline. Running it settles all card tips and captures delayed-capture payments still inside the 36-hour window. Since Oct 20, 2026 it covers the location's reporting-day start until close-out begins.",
+     "source": "https://squareup.com/help/us/en/article/6594-end-of-day-reporting-with-square-for-restaurants"
+    }
+   ]
+  },
+  {
+   "area": "6 Raporlar ve analitik",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Report catalog, filters, comparisons and exports",
+     "detail": "40+ reports in nine groups, incl. Cash & Loss Management (Cash Activity Audit, Drawer History, Voided Orders, Removed Items, No Sale, Unpaid Orders, Refunds, Offline Payments, Check Sequence Log) and Kitchen (Tickets by Fulfillment/Hour). Filters: time frame, hours, employees, dining option, revenue center, service area. 'Compare Dates' only vs same period last year or the prior period; 'Compare Locations' shows first in blue, second in orange. Email Export sends an .xls/.csv link; PDF via browser print (scale 49 if cut off).",
+     "source": "https://support.toasttab.com/en/article/Getting-Started-with-Analytics-and-Reports?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Removed Items report (pre-send deletions)",
+     "detail": "Tracks items deleted from an order before they reached the kitchen (guest changed mind, wrong tap) separately from voids, with a 'Removal by Server' chart and full list - a loss-prevention view of staff who ring and delete.",
+     "source": "https://support.toasttab.com/en/article/Exceptions-Report-Overview"
+    },
+    {
+     "system": "Toast",
+     "name": "Daily Performance Summary email",
+     "detail": "One email per day for the previous business day across all locations: sales by order type, discounts and labor as % of gross/net sales, hourly labor cost and labor % compared with the same day last week and the 4-week average; sent within ~5 hours of the business-day cutoff (a mirror says fixed 9 a.m. ET, not reschedulable).",
+     "source": "https://support.toasttab.com/en/article/Contact-Settings-Email-List-Configuration-Nightly-Emails-1492812482238?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Toast Now owner app",
+     "detail": "Home shows net sales and labor bars for the day with cards for SPLH, guests, avg/guest, orders, avg/order, voids, discounts, refunds, labor cost; comparison toggle is on by default vs same day last week (or last year / two years ago) with gray prior bars and green/red % arrows; hourly labor-vs-sales overlay; iOS home-screen net sales widget. Cards appear only if the user's numbered permissions allow; multi-location totals are not combined; push notifications still 'coming soon'.",
+     "source": "https://support.toasttab.com/article/Get-Started-with-the-Toast-Now-App"
+    },
+    {
+     "system": "Toast",
+     "name": "Toast IQ AI assistant",
+     "detail": "Chat assistant over Toast data: Spring 2026 added cross-location questions (item sales, labor trends), answers in the user's language, and actions from chat such as changing prices or marking items out of stock; its sales-based upsell suggestions can be switched on for handhelds, terminals, kiosks and guest displays.",
+     "source": "https://support.toasttab.com/en/article/Everything-Toast-announced-in-our-Spring-26-Release"
+    },
+    {
+     "system": "Toast",
+     "name": "Nightly SFTP data exports",
+     "detail": "Order Details, Payment Details, Product Mix, labor, accounting and menu files generated within one hour after each location's closeout hour (default 4:00 a.m.), one file set per day per location, kept 7 days; vendors connect with their own SSH key; enabled only via Customer Care.",
+     "source": "https://support.toasttab.com/en/article/Automated-Nightly-Data-Export-1492723819691"
+    },
+    {
+     "system": "Toast",
+     "name": "Manual 'Employee SOS' text alerts (no automatic anomaly alerts)",
+     "detail": "Staff send preset SMS alerts from the POS overflow menu (e.g. 'Comp / void / discount requested', 'Urgent guest issue') to chosen managers/owners; message includes sender and device. Alerts are never automatic and have no thresholds; separate POS pop-up notifications cover new online orders and offline payment failures.",
+     "source": "https://support.toasttab.com/en/article/Text-Alerts-and-Manager-Notifications?lang=en_US"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Dashboard reports and reporting hours",
+     "detail": "Sales summary, Sales trends (daily/weekly/yearly gross, average and net side by side), item/category/modifier sales, discounts/comps/voids, taxes/service charges, cash drawers, custom report builder; section sales (Plus), team sales and labor-vs-sales (Staff add-on), kitchen performance (KDS). Custom 'reporting hours' define which calendar day late-night sales belong to; device filter needs named devices; transactions export as CSV.",
+     "source": "https://squareup.com/help/ca/en/article/5072"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Square AI (Managerbot)",
+     "detail": "Ask in plain language from Dashboard home or POS ('best sellers 4-5pm yesterday'); refine with follow-ups ('net sales', 'by location'); it flags issues, drafts schedules from labor data, turns invoice emails into purchase orders, bulk-edits catalog items and runs email campaigns; most actions can be reversed by asking it to undo. Owners/full-access only.",
+     "source": "https://squareup.com/help/article/8516"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Revenue centers and open checks in POS sales report (Oct-Nov 2026)",
+     "detail": "Premium sellers define revenue centers (bar, patio, delivery) by mapping devices, floor-plan sections and channels, then group the Sales summary by them. The POS Sales report now uses the same gross/net definitions as Dashboard and includes open checks by default with a banner; turning off the Open Checks filter shows completed sales only.",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Dashboard mobile app widgets",
+     "detail": "Home widget shows gross/net sales, transactions and average ticket for a chosen range; a 'Who's Working' widget filters staff by clocked in/out, on break, scheduled or alert; location pin filters one or many locations; up to four tools can be pinned to the bottom bar.",
+     "source": "https://squareup.com/help/ca/en/article/5618"
+    }
+   ]
+  },
+  {
+   "area": "7 Stok ve maliyet",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "86 and countdown quantities",
+     "detail": "Each item/modifier is In stock, Out of stock (button greyed with '0', unselectable) or Quantity (remaining count on the button). Quantity decrements when the order is sent to the kitchen and flips to Out of stock at zero. Set via POS Quick Edit (manager press-and-hold), Toast Web bulk management (type 0, no 'restock all') or the Toast Now Stock card; the change reaches online ordering within minutes, but duplicated items must be 86'd one by one.",
+     "source": "https://support.toasttab.com/en/article/86-an-Item?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Food waste tracker",
+     "detail": "Admins define waste reasons (Expired, Drop, Misfire, Burnt, Donation, Compost); staff log waste on the POS, which deducts inventory; Food Waste Breakdown report charts by day, reason or top items. Waste entries cannot be printed from the terminal.",
+     "source": "https://support.toasttab.com/en/article/Get-Started-with-Food-Waste-Reduction"
+    },
+    {
+     "system": "Toast",
+     "name": "xtraCHEF recipe costing and inventory variance",
+     "detail": "Scanned supplier invoices update product costs automatically; recipes built on those products show plate cost, margin and a line graph of ingredient price changes; Product Mix mapping must be done early because it is not retroactive. Inventory Variance compares two count dates, drilling into areas and count lists. US only, Pro tier.",
+     "source": "https://support.toasttab.com/en/article/xtraCHEF-Recipe-Reporting"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Recipes with ingredient depletion and auto sold-out (beta)",
+     "detail": "Ingredients are items in a hidden 'internal use' category with units and conversions; recipes attach only to 'Prepared Food & Bev' single-variation items (not modifiers, not nested recipes) with quantity per one unit sold. Each sale decrements ingredient stock; if any tracked ingredient runs short, the menu item is automatically marked sold out (overridable at the register). Reports > Cost of goods sold shows COGS, profit and margin per item.",
+     "source": "https://squareup.com/help/us/en/article/8629-beta-track-ingredient-costs-with-square-recipes"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Sold out with reset times and preorders",
+     "detail": "Long-press an item on the Menu tab > Mark as sold out / Edit Availability; availability is per variation, can be a remaining quantity with a reset time, and resets automatically at end of business day by default. Since Oct 5, 2026 a sold-out variation with a reset date stays on online menus for preorder.",
+     "source": "https://squareup.com/help/article/6425-managing-items-with-square-for-restaurants"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Low-stock alerts and case/pallet receiving",
+     "detail": "Per-item, per-location thresholds; items below threshold show a yellow circle in the Stock column and a digest email goes out 90 minutes after each location's closing time. Since Oct 20, 2026 (Plus) stock can be received in cases or pallets and Square converts to counting units.",
+     "source": "https://squareup.com/help/article/8333"
+    }
+   ]
+  },
+  {
+   "area": "8 Personel",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Numbered granular permissions with inline manager override",
+     "detail": "Every sensitive action maps to a numbered permission (1.1 Table Service, 1.8 View Others' Orders, 1.13 No Sale, 1.15 Offline card over limit, 1.16 Change Table, 1.17 Change Server, 1.20 Split Checks, 3.17/3.18 Cash Drawers, 3.25 Open Items, 3.31/3.32/3.8 Void/Refund...). An employee lacking one gets a manager passcode prompt right in the flow instead of being blocked.",
+     "source": "https://support.toasttab.com/en/article/Shift-Review-Overview?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Access/swipe cards for login and clock-in",
+     "detail": "Toast Access Cards can be used with or instead of the POS passcode (and to clock in/out) to stop passcode sharing; registering one needs 3.24 plus every permission of the target employee. Cards registered on a magstripe reader do not work on Toast Tap/Go and vice versa. Passcodes are masked by default.",
+     "source": "https://support.toasttab.com/en/article/Assign-a-Swipe-Card-to-an-Employee-Manager?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Schedule enforcement at the time clock",
+     "detail": "With Enforce scheduling on, employees cannot clock in earlier than a grace period (max 90 minutes) before their scheduled shift; unscheduled clock-ins need a manager PIN on the POS. Schedules sync from Sling to Toast every hour; breaks are started/ended at the time clock.",
+     "source": "https://support.toasttab.com/en/article/Schedule-Enforcement?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Tips Manager pooling rules",
+     "detail": "Policies run top-to-bottom, so a job that both gives and receives must have its contribution rule above its pool rule; separate pools never affect each other; 'Tip Policy Preview' test-runs a policy before payroll. Tip sharing = tipped role gives % to support roles; pooling = a job's tips split equally or by hours. Needs 6.6; US only.",
+     "source": "https://support.toasttab.com/en/article/Common-Tip-Policies?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Sling scheduling with sales projections",
+     "detail": "Scheduling Pro pulls Toast sales to project demand (sync up to 4 weeks ahead, overrides manual values; 30-40% error considered normal, no weather/holiday awareness) for labor budgeting and overtime control; Lite covers time off, availability and shift trades. Shifts can be built and published inside Toast Web; unpublished shifts are visible only to managers.",
+     "source": "https://support.toasttab.com/en/article/Sling-by-Toast-Compare-Sling-Lite-and-Sling-Pro?lang=en_US"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Permission sets and passcodes",
+     "detail": "Permission sets use Standard/Enhanced/Full levels or Customize, plus chosen access points; Full access allows everything except bank accounts. Owner, personal (4-digit) and an optional shared team passcode (which does not track individuals). 'Require passcode' tasks and an inactivity timeout are set per mode in Dashboard (Security > Timeout). Staff can also clock in by tapping a badge.",
+     "source": "https://squareup.com/help/us/en/article/8357"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Timecards, shift notes and edit requests",
+     "detail": "Checkout > Clock In/Out with passcode or badge; notes can be added at clock-in/out; at End Shift a printable summary lists clock times, breaks and paid hours. Staff request timecard fixes in the Square Team app: one pending request per shift, multiple edits per request, requests expire after 30 days.",
+     "source": "https://squareup.com/help/us/en/article/5643-timecard-management-with-square"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Break rules and enforcement",
+     "detail": "Meal/rest breaks are preset by location law, each paid or unpaid with a duration. Mandatory breaks earned after N hours (multiple per shift) or once per long shift; a missed one raises a 'Missed break alert' on the timecard at clock-out. Plus: 'Block Ending Breaks Early' (with an 'Allow Within' tolerance) and auto-convert paid-break overage to unpaid after one minute (off by default); overruns are flagged in labor reports.",
+     "source": "https://squareup.com/help/us/en/article/8391"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Tip pooling methods",
+     "detail": "Per recipient (no pooling), per transaction (equal split among tip-eligible staff clocked in at sale time), by hours worked over a 24-hour day or 7-day week, or by job percentages totalling 100% (same-job staff split by hours). 'Distribute unattributed tips equally' spreads tips from shared-passcode sales across everyone clocked in that day (default for new sellers). Effective dates can be back-dated up to two weeks; managers are excluded by turning off 'Tip eligible'.",
+     "source": "https://squareup.com/help/us/en/article/7654"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Shifts scheduling and swaps",
+     "detail": "Free for up to five team members; publishing sends email and Team-app push. Staff request swaps (other person accepts, then manager approves) and time off only on unpublished schedules; Shifts Plus adds swapping, time-off management and commissions.",
+     "source": "https://squareup.com/help/article/7197"
+    }
+   ]
+  },
+  {
+   "area": "9 Müşteri ve sadakat",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Toast Loyalty earn/lookup/redeem rules",
+     "detail": "Programs are amount-based (points per dollar) or visit-based. At payment, Rewards lookup by 16-digit e-rewards number, QR scan, linked gift card, or (if Lookup is enabled) name/phone/email. Redemption takes all points up to the balance due - the guest cannot choose how many; no redemption in split-evenly or group-order flows; a reward that applies $0 usually means the item is not marked discountable.",
+     "source": "https://support.toasttab.com/en/article/Redeeming-Points-with-Toast-Loyalty?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Guestbook CRM on the POS",
+     "detail": "Profiles match when phone+email match (or phone matches a profile without email). POS shows tags (VIP, auto segments Lapsed / Big Spender / Regulars / Super Fans, custom), saved address, private notes staff can edit, past orders, last order date, order count, total and average spend. A view-only 'Guest Directory' mode searches guests without opening a check.",
+     "source": "https://support.toasttab.com/en/article/Look-Up-Guest-Profiles-and-Guestbook-Data-on-the-POS"
+    },
+    {
+     "system": "Toast",
+     "name": "Discount engine (fixed, open, combo, BOGO)",
+     "detail": "Four discount types; auto-apply exists only for item-level discounts without manager approval or promo code; approval-required discounts need 3.1; button colors group employee vs guest vs approval discounts. BOGO only triggers when every required item is on the check at full price and marked discountable.",
+     "source": "https://support.toasttab.com/en/article/Basic-Discount-Configuration?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Happy hour via time-specific pricing",
+     "detail": "An item can carry time/day prices with a base price fallback ($10 noon-2pm, $12 otherwise). PMIX then reports the average realized price (100 at $10 + 50 at $5 shows $8.33). Alternative: a duplicated 'HAPPY HOUR' menu with menu-specific prices and its own availability window; Toast advises manual discount buttons rather than auto-applied ones.",
+     "source": "https://support.toasttab.com/en/article/Size-Pricing-Group-Pricing-and-Item-Pricing"
+    },
+    {
+     "system": "Toast",
+     "name": "House accounts",
+     "detail": "Guests buy on credit; the order counts as paid for sales, while the balance is settled later by Toast Web invoice (by date range) or on the POS. Managers can only add credit, never increase the amount due. POS v2.113 (limited release) adds a balance limit where any excess is charged as a separate payment, plus hide-balance and require-signature options.",
+     "source": "https://doc.toasttab.com/doc/platformguide/platformHouseAccountsOverview.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Automated marketing with frequency cap",
+     "detail": "Prebuilt ongoing email campaigns (welcome, 'Miss You' for guests absent 30+ days, VIP); a guest who received any automated campaign in the last 28 days is skipped.",
+     "source": "https://support.toasttab.com/en/article/Building-an-Automated-Email-Campaign"
+    },
+    {
+     "system": "Toast",
+     "name": "Gift card adjustments and bonus promotions",
+     "detail": "3.3 Gift Card Adjustment lets staff add value on POS/Toast Web (no bulk edits). 'Buy X, Get Y' promotions email a separate bonus gift card when guests buy eGift cards online (POS-sold cards do not qualify; limited release US/CA, Oct 2026).",
+     "source": "https://support.toasttab.com/en/article/Set-Up-a-Buy-X-Get-Y-Bonus-Gift-Card-Promotion"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Square Loyalty",
+     "detail": "Earn by visit (with per-visit minimum and excluded items), by amount spent (pre-tip, tax-exclusive by default) or by item/category; up to 15 reward types in tiers (customer can redeem or keep saving for the next tier); custom point name ('Stars', 'Punches'). Priced per location per month.",
+     "source": "https://squareup.com/help/ca/en/article/6462"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Customer directory with instant profiles and smart groups",
+     "detail": "Instant Profiles are auto-created from the name on a payment card (on by default). Default smart groups 'Regulars' and 'Lapsed'; filters (items bought, channel, frequency, locations) can be saved as dynamic Smart Groups; files can be attached to profiles.",
+     "source": "https://squareup.com/help/article/6217"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Automatic discounts with schedules",
+     "detail": "Rules by item/category, quantity (BOGO) or customer group, with day/time schedule and date range (happy hour) and optional minimum spend; times follow each location's time zone; applied automatically at checkout when conditions are met.",
+     "source": "https://squareup.com/help/us/en/article/6603"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Automated campaigns (birthday, win-back, welcome)",
+     "detail": "Birthday offer sent 7 days before the birthday (voucher optional); birthday collector asks up to 500 customers/day; win-back targets customers with 3 purchases in 6 months who have not returned for 6 weeks; welcome within 24 hours of first purchase. Runs until turned off.",
+     "source": "https://squareup.com/help/us/en/article/5660"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Gift card balance and reload",
+     "detail": "Check balance by swipe, barcode/QR scan or 16-digit entry; reload or 'Clear Balance' (which deactivates the card) from the same screen; customers can self-check balance online with card number + 4-digit PIN.",
+     "source": "https://squareup.com/help/us/en/article/8405"
+    }
+   ]
+  },
+  {
+   "area": "10 Online ve teslimat",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Quote time strategies and kitchen capacity throttling",
+     "detail": "SmartQuote (needs KDS; learns from history within min/max), Manual (delivery quote must be >= takeout), Kitchen capacity (limit orders or items per 15-minute slot; full slots disappear from scheduling, big orders spill over: 15 items at 5/slot from 5:00 quotes 5:45) and Order-price rules (+20 min over $20). One limit for all slots; cannot be changed while offline.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminQuoteTimeStrategies.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Snooze/pause online ordering from the phone",
+     "detail": "Toast Now status dropdown: On, Snooze 20 min, Snooze 40 min, Off until tomorrow, Off; individual order sources can be paused and a slider adds delay to quote times.",
+     "source": "https://support.toasttab.com/article/Get-Started-with-the-Toast-Now-App"
+    },
+    {
+     "system": "Toast",
+     "name": "Delivery Mode for own couriers",
+     "detail": "Delivery screen tabs Unassigned > En Route > Delivered: 'Dispatch Driver' assigns a driver (name shown on the order), 'Complete Delivery' when back; needs Delivery Access. Driver shift review adds delivery fees and reimbursements. Cannot mix Toast Delivery Services and own drivers on the same day.",
+     "source": "https://support.toasttab.com/en/article/Delivery-Mode-1493048871021?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Third-party and delivery updates (Oct 2026)",
+     "detail": "Scheduled third-party delivery orders appear in the All To-Go view (v2.119 Test Kitchen); proof-of-delivery photos for Toast Delivery Services orders viewable from the check preview (v2.118).",
+     "source": "https://updates.toasttab.com/"
+    },
+    {
+     "system": "Toast",
+     "name": "No native caller ID; AI phone ordering partners",
+     "detail": "Toast documents no caller-ID screen; phone orders come via partners such as InceptAI, which answers calls and pushes pickup orders straight to POS/KDS.",
+     "source": "https://support.toasttab.com/article/Get-Started-With-InceptAI-Integration"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Order Manager timing: pause, busy mode, delay",
+     "detail": "Orders > clock icon > Pause pickup or delivery orders with a resume time (remaining pause shown, resume instantly); temporarily add 15 minutes to prep time when busy; delaying a pickup time pushes the update to the integration partner which notifies the customer.",
+     "source": "https://squareup.com/help/us/en/article/8325"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Delivery apps on one menu",
+     "detail": "DoorDash and Uber Eats menus sync in real time from the Square catalog and their orders land in POS and KDS; nested modifiers and combos flow to DoorDash, Grubhub and Uber Eats; completing a ticket on an Expo KDS auto-updates the third-party order to Ready.",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    }
+   ]
+  },
+  {
+   "area": "11 Türkiye mali uyumu",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "No Turkish fiscal support (market coverage only US/CA/UK/IE/AU)",
+     "detail": "Toast sells in the US, Canada, UK, Ireland and Australia and documents country-specific behavior only for those markets (e.g. immediate card capture so refunds instead of voids in UK/IE/CA). No ÖKC/GMP-3, e-Arşiv/e-Fatura, bilgi fişi or VUK 507 integration exists - a structural advantage for LafPOS with TokenX.",
+     "source": "https://support.toasttab.com/en/article/Everything-Toast-announced-in-our-Spring-26-Release"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "No Turkish fiscal support (regions US/CA/AU/UK/IE/JP/FR/ES)",
+     "detail": "Square's support regions are Australia, Canada, France, Ireland, Japan, Spain, UK and US; there is no Turkish yazarkasa/GMP-3 pairing, e-Arşiv or bilgi fişi flow.",
+     "source": "https://squareup.com/help/us/en/article/5134"
+    }
+   ]
+  },
+  {
+   "area": "12 Donanım ve çalışma",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Offline mode banner and offline card rules",
+     "detail": "Offline Mode starts automatically; after ~40 seconds a yellow banner tells staff what still works. Cards are stored and authorized later (receipt shows Pending); optional per-transaction cap above which 1.15 is needed; optional 'Skip authorization at all times'. Settings only editable online. Declined offline payments cannot be re-run; auths can expire in 24h; an 'Offline' dining option collects name/phone so staff can chase declines.",
+     "source": "https://support.toasttab.com/en/article/Prepare-to-Operate-in-Offline-Mode-During-Service-Disruptions-or-Outages"
+    },
+    {
+     "system": "Toast",
+     "name": "Local sync hub (LAN) and its limits",
+     "detail": "Toast auto-elects one hardwired, non-handheld device seen in the last 3 minutes as hub; it relays orders to KDS on the same subnet so the kitchen keeps working. But orders on one POS are not visible on other POS devices, and offline you lose kiosk orders, clock-in on other devices, EMV (swipe only), gift cards/rewards/house accounts, guest lookup and Resync; Toast advises one employee per device. Since v2.118 checks cannot be combined offline.",
+     "source": "https://doc.toasttab.com/doc/platformguide/platformOfflineModeLocalSync.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Network hardening settings",
+     "detail": "Toast recommends Ethernet or Wi-Fi (not both), 15/5 Mbps, a cellular backup, and forgetting other Wi-Fi on handhelds; 'Valid SSIDs' restricts devices to exactly named networks.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminUiOptionsReference.html"
+    },
+    {
+     "system": "Toast",
+     "name": "Self-order kiosk",
+     "detail": "Guests can 'Pay with cash' and take a printed receipt to the cashier; the kitchen gets the order either at receipt print or after the cashier collects. Up to six upsell items before checkout; a void reason is auto-attached to orders abandoned by time-out; a 'Kiosk Server' profile re-logs in after a crash.",
+     "source": "https://support.toasttab.com/en/article/Setting-Up-Your-Kiosk"
+    },
+    {
+     "system": "Toast",
+     "name": "Guest-facing display",
+     "detail": "Standby image (1280x800), live order list with tax and total (optional modifier prices), tip+signature, receipt choice, thank-you screen, loyalty sign-up/redeem prompts; light/dark mode. Signature threshold $0.01 forces a signature on every card.",
+     "source": "https://support.toasttab.com/en/article/Guest-Facing-Display?lang=en_US"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Offline payments with explicit limits and countdown",
+     "detail": "Per mode choose 'cash and offline card' or 'cash only', separately for internet outages and Square outages; per-transaction cap $1-$50,000; 24-hour offline session; pending payments must upload within 72 hours or expire. Banner with countdown clock; payments show 'pending'; never sign out/switch mode while pending. Gift cards, manual entry, Close of Day and new online orders unavailable offline. Auto-enabled for all sellers from April 2026 unless opted out.",
+     "source": "https://squareup.com/help/us/en/article/7777-process-card-payments-with-offline-mode"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "KDS has no documented offline/LAN mode",
+     "detail": "Square staff said an offline KDS mode (POS orders reaching KDS during internet or Square outages) is in development after sellers lost kitchen screens during an outage; not documented as shipped.",
+     "source": "https://community.squareup.com/t5/Food-and-Beverage/KDS-Offline-Mode/m-p/718085"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Kiosk order-ready notifications and upsells",
+     "detail": "Kiosk settings: dining options, gift card payment, signature on/off, tipping (% or $, before/after tax), Smart Upsells. Order-ready call by diner name, table number or generated order number (order number requires SMS); SMS optional, and entering a phone links the loyalty account automatically. No cash at kiosk per community.",
+     "source": "https://squareup.com/help/us/en/article/8313-customize-self-serve-ordering-with-square-kiosk"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Square Handheld and KDS hardware",
+     "detail": "Handheld: under 1 lb, 6.2-inch IP54 screen, barcode scanner, all-day battery, offline payments, modes for full/quick service, bar, retail. KDS: Android 9+, 3 GB RAM minimum, iPad KDS discontinued, per-device monthly fee; KDS tickets print only manually and Bluetooth printers are unsupported on Android KDS.",
+     "source": "https://community.squareup.com/t5/Product-Updates/New-Square-Debuts-Pocketable-Lightweight-POS-for-Servers/ba-p/794264"
+    }
+   ]
+  },
+  {
+   "area": "13 Yönetim",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Menu availability vs channel visibility",
+     "detail": "Availability (days/times) is set only at menu level - to time a single item, put it in its own menu. Visibility per menu/group/item decides channels (POS, kiosk, online, Order & Pay). A menu silently disappears outside its window, a common support issue.",
+     "source": "https://support.toasttab.com/en/article/Settings-Menu-Availability?lang=en_US"
+    },
+    {
+     "system": "Toast",
+     "name": "Location-specific prices and publishing",
+     "detail": "Pricing strategy 'Location Specific Price' with a row per location/version and a mandatory top-level group (corporate) fallback price; prices are shared by all versions of an item; nothing is live until published from the Publish Config page, which can push to many locations at once.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminLocationSpecificPricesAndVersions.html"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Menus with schedules and AI menu import",
+     "detail": "A menu is a set of groups/items for a part of the day; one menu feeds POS, online, kiosk and delivery apps with time-based availability, location-specific offerings and channel visibility. New menus can be generated from existing categories, an uploaded PDF/JPG/PNG (ready within ~24 hours) or an import.",
+     "source": "https://squareup.com/help/ie/en/article/6424-create-menus-with-square-for-restaurants"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Multi-account suite, location-scoped edits, SSO (Oct-Nov 2026)",
+     "detail": "Franchise operators share catalogs, menus, POS layouts, permissions and one gift card program across linked accounts with organization reports; staff assigned to some locations see shared item details read-only but can change availability, price and channels for their own locations; Premium supports Okta/Microsoft Entra SSO.",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    }
+   ]
+  },
+  {
+   "area": "14 UX ayrıntıları",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Speed settings for counter service",
+     "detail": "Quick Order 'Fast Cash' button closes the check instantly on exact cash; 'Auto switch user' logs the employee out after every send/hold/payment (plus a per-device screen timeout); 'Close order screen after printing receipt'; optional prompts for tab name and dining option on Pay; 'Show item sent time' prints 'Sent HH:MM' under items.",
+     "source": "https://doc.toasttab.com/doc/platformguide/adminUiOptionsReference.html"
+    },
+    {
+     "system": "Toast",
+     "name": "No real training mode",
+     "detail": "Staff practice in Toast Classroom sandbox tutorials (also linked from POS overflow > Help & Resources); 'Test Mode' exists for setup but users report it is impractical while the restaurant is open - operators keep asking for a practice login that keeps orders off kitchen printers.",
+     "source": "https://community.toasttab.com/t5/restaurant-operations/practice-pos-functions-at-anytime/m-p/10942"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Real-Time Check View and cart side",
+     "detail": "Tapping an item opens its details beside the live check (long press = bulk edit) with autosave, always on for food & beverage; each mode (Quick service, Full service, Bar) can put the cart on the left or right for handedness (Nov 2, 2026).",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "No training mode either",
+     "detail": "Square staff confirm there is no training mode; workaround is 100% discounts, comps, voids or cash/other tenders, but those test sales stay in reports permanently and refunds do not restock inventory.",
+     "source": "https://community.squareup.com/t5/Reporting/Training-Mode/idi-p/689830"
+    }
+   ]
+  },
+  {
+   "area": "15 Diğer (hiçbir başlığa uymayan)",
+   "features": [
+    {
+     "system": "Toast",
+     "name": "Drive-thru and Toast Local marketplace (Spring 2026)",
+     "detail": "Toast Drive-Thru bundles AI voice ordering and hardware (15+ location brands first); Toast Local lets diners discover restaurants, book/waitlist, order and see loyalty balances, and lets every Toast POS user publish time-limited offers like happy hour.",
+     "source": "https://support.toasttab.com/en/article/Everything-Toast-announced-in-our-Spring-26-Release"
+    },
+    {
+     "system": "Square for Restaurants",
+     "name": "Apple Maps place card sync (Oct 5, 2026)",
+     "detail": "Hours, logo and contact details sync to Apple Maps, Siri and Wallet, with order/menu/booking links managed under Channels.",
+     "source": "https://squareup.com/us/en/releases/food-and-beverage/spring-2025"
+    }
+   ]
+  }
+ ],
+ "standouts": [
+  "Visible state everywhere: Toast colors tables by kitchen state (red held, yellow sent, green fully fulfilled, gray another server) with an open-check timer on each tile, and Square lets owners set their own yellow/red minute thresholds. Staff can read the room without opening a check.",
+  "Mistakes are cheap and theft is visible: Square KDS gives a 3-second tap-again undo, Toast removed swipe-to-fulfill to stop accidental bumps, and Toast Tables lets hosts undo any status change within 30 seconds. On the loss side, Toast reports items deleted before sending (Removed Items) separately from voids, skips voided checks in a Check Sequence Log, and requires a reason for every void or comp.",
+  "Money handling is gated, not trusted: numbered permissions (1.20 Split, 3.25 Open Items, 3.32 Void) trigger an inline manager passcode instead of a dead end. Blind drawer permission 3.17 hides expected cash and over/short, a drawer can be locked to one person, and a required shift review blocks clock-out until checks are closed, cash tips declared and the drawer counted. Over/short above a threshold needs a manager.",
+  "The business day is explicit and self-closing: Toast auto-closes drawers and open checks at the 4:00 AM closeout (with zero tip), exports and daily emails key off that hour, and Square's Close of Day can require closing checks, adjusting tips, totalling drawers and clocking everyone out, overridable only with the owner passcode.",
+  "The kitchen sees aggregates and urgency: All Day counts (optionally split into fired and held), ingredient-level production counts pinned at the bottom of the KDS, fire-by-prep-time so a whole order finishes together, and Rush that jumps a ticket to the first slot on every screen with a sound.",
+  "Splitting covers every real table case: tap-and-drop to a new check, split one item N ways, split by seat in one tap, share one bottle across chosen seats, and recombine. Discounts and service charges have documented carry-over rules, and voiding part of a split item recombines it automatically.",
+  "Offline is designed, not hoped for: a banner appears after about 40 seconds, card payments are stored with a configurable per-transaction cap and a visible countdown, and Toast elects a LAN hub so KDS keeps getting tickets. Their limits are where LafPOS can win: Toast POS devices cannot see each other's checks offline, Square KDS has no offline mode, and neither offers gift cards, house accounts or kiosk while offline.",
+  "The owner gets a one-glance phone view: Toast Now compares against the same day last week by default with green/red arrows, SPLH and an hourly labor-vs-sales overlay, and lets the owner snooze online ordering or 86 items. Square AI (Managerbot) answers questions and takes actions such as purchase orders and catalog edits, and can undo them.",
+  "Guest messaging closes loops on its own: waitlist SMS with reply 1 to confirm or 9 to cancel, unresponsive parties auto-cleared after 15 minutes, Square Kiosk order-ready texts that also link the loyalty account, and win-back or birthday campaigns with frequency caps.",
+  "Gaps neither system closes, and LafPOS can fill: no real training mode in either (test sales pollute reports), no Turkish fiscal integration (ÖKC/GMP-3, e-Arşiv, bilgi fişi), Toast's PMIX averages time-based prices, and Toast has only manual SOS texts with no automatic anomaly alerts."
+ ]
+}

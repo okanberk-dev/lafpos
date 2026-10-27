@@ -1,0 +1,869 @@
+{
+ "systems": [
+  "LafPOS"
+ ],
+ "areas": [
+  {
+   "area": "1 Sipariş alma ve menü",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Product grid and categories",
+     "detail": "Adisyon screen: on wide screens (xl) the categories sit in a vertical list on the left with item counts. On phones and tablets they are horizontal chips. A 'Sık' (favourites) pseudo-category comes first whenever any product is flagged favourite. Product cards show the site photo (a 256 px WebP thumbnail fetched once and cached on the kasa PC; setting productImages) or the name's initials. Cards carry a 'Tükendi' badge, or 'Son N' when a portion counter is set. Products marked 'POS'ta gizli' are not shown. Tablets show products and the check side by side; phones switch between 'Menü' and 'Adisyon' tabs.",
+     "source": "src/pages/order/ProductPanel.tsx; src/pages/order/OrderPage.tsx; server/services/media.ts (GET /media/products/:id)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "One-tap add and sizes",
+     "detail": "Tapping a card adds 1 to the pending cart (8 ms haptic). Two-size products show 'Orta'/'Büyük' buttons with prices right on the card, so a size is one tap and option defaults are applied without a dialog. A single-size product that has option groups, or a price of 0, opens the options dialog. A corner slider button always opens it. The server normalizes size: no L price means TEK, and choosing L on a single-size product is refused (size_invalid).",
+     "source": "src/pages/order/ProductPanel.tsx; server/services/menu.ts normalizeSize/sizePrice"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Modifier groups (forced/optional choices)",
+     "detail": "Group kinds are single, multi (maxSelect) and counter (per-item maxQty), each with required flags, defaults, price deltas and allergens (a nut warning shows on the button). The site groups (Süt, Kavrum, Şurup, Ekstra shot, Şeker 0–N) are synced from laffogato and read-only. Local groups come from the seed: 'Şeker' (required single: Sade/Az şekerli/Orta/Şekerli, default Orta) for Türk kahvesi, and 'Bardak' (Cam/Karton/Yenilebilir +₺80) for espresso and iced coffee. The server re-prices options and rejects foreign option ids. A 'required' single group silently falls back to its default, so choices are pre-filled rather than truly forced. Free defaults are left out of the ticket text.",
+     "source": "server/services/menu.ts resolveOptions/optionsText; src/pages/order/OptionsModal.tsx; src/pages/admin/OptionsAdmin.tsx; server/db/seed.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Combos / set menus",
+     "detail": "Not present: there is no bundle table, combo pricing or 'menü' product type.",
+     "source": "server/db/schema.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Notes",
+     "detail": "Each item can carry a note (200 chars) with quick chips: 'Az buzlu, Buzsuz, Çok sıcak, Ilık, Ayrı tabakta, Paket, Kremasız'. The order note (300 chars) is set via İşlemler › 'Adisyon notu'. Both print on KDS tickets (the item note in rose, the order note in the ticket header).",
+     "source": "src/pages/order/OptionsModal.tsx QUICK_NOTES; src/pages/order/OrderPage.tsx; PATCH /api/orders/:id"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Pending cart and send",
+     "detail": "Unsent lines are kept per check on the device (zustand persist in localStorage), so they survive a reload. Identical lines merge their quantities, and each line has +/−, trash and edit. 'Gönder (n)' sends everything in one request (≤60 lines, qty 1–99). Each send gets its own batch number, which becomes one KDS ticket. Leaving a check with unsent lines asks 'Gönder ve çık / Bu cihazda beklesin / Sil ve çık'. Totals preview locally but do not include happy hour.",
+     "source": "src/lib/cart.ts; src/pages/order/CartPanel.tsx; POST /api/orders/:id/items (server/services/orders.ts addItems)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Counter (tezgâh) single-screen sale",
+     "detail": "'Tezgâh satışı' opens a counter check, or reuses this device's last empty one (sessionStorage id; the server reuses it only if it has the same opener and no items, payments, customer, note, discount or split). 'Öde · ₺X' sends the items to the bar and opens payment. When the sale closes, 'Yeni satış' opens the next check automatically. Empty counter checks are auto-cancelled at Z.",
+     "source": "src/lib/counter.ts; src/pages/order/OrderPage.tsx sendAndPay/nextSale; server/services/orders.ts createOrder (reuse)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Courses and seats",
+     "detail": "Not present: there are no course or fire-group fields and no seat numbers on items. The check keeps only a guest count.",
+     "source": "server/db/schema.ts order_items"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Quick keys / favourites",
+     "detail": "The product.favorite flag is set in Yönetim › Ürünler (row menu or drawer: 'Sık kullanılana ekle'). Favourites make up the 'Sık' category in the order screen.",
+     "source": "src/pages/admin/MenuAdmin.tsx; src/pages/order/ProductPanel.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Product search",
+     "detail": "Search ignores Turkish accents and casing ('cay'→Çay) and matches name, short name and barcode. It shows at most 60 results. '/' focuses the search and Esc clears it. Separately, the ⌘K palette jumps to screens, admin sections, products and staff, but it cannot add items to a check.",
+     "source": "src/pages/order/ProductPanel.tsx; src/components/CommandPalette.tsx; src/lib/shell.ts fold"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Open price and price override",
+     "detail": "A product priced 0 opens the dialog so a price can be typed. The dialog's 'Fiyat' field sets a manual unit price. This needs siparis.fiyat or an approver PIN and is written to the audit log as item.price_override (severity uyari when lower than the menu price). An override skips happy hour.",
+     "source": "src/pages/order/OptionsModal.tsx; server/services/orders.ts addItems"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Barcode",
+     "detail": "A barcode field is stored on the product (editable in the admin drawer) and is matched only through the search box. There is no scanner auto-add or keyboard-wedge handler.",
+     "source": "src/pages/admin/MenuAdmin.tsx; src/pages/order/ProductPanel.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Happy hour auto-pricing",
+     "detail": "Rules set weekdays, start/end time, percent and an optional category or product scope. Windows can run past midnight (that part counts to the previous day). The best matching percent is applied when the item is added, and the item is flagged 'Happy hour'. Rules are managed in Yönetim › Seçenekler ve happy hour. The seed rule 'Öğle kahvesi' (10%, weekdays 12–14) is inactive.",
+     "source": "server/services/menu.ts happyHourPercent; src/pages/admin/OptionsAdmin.tsx; /api/admin/happy-hours"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Portion counter",
+     "detail": "The 'Günlük porsiyon' field is decremented on each add. A sale over the remaining count is refused ('son N porsiyon kaldı'). At 0 the product turns Tükendi and is pushed to the site. Despite the name it never resets daily, and voids do not give portions back.",
+     "source": "server/services/orders.ts addItems; server/jobs.ts pushSoldOut; src/pages/admin/MenuAdmin.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Sold-out from the till",
+     "detail": "İşlemler › 'Tükenen ürünler' (also on the bar screen) toggles Tükendi/Satışa aç and needs urun.tukendi (on by default for kasiyer and mutfak). For site products it writes to the site first and only changes locally after a 2xx response. Without the key it changes LafPOS only.",
+     "source": "src/components/SoldOutDialog.tsx; POST /api/sync/products/:id/availability; server/sync/laffogato-orders.ts setAvailability"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Void / comp / item discount after send",
+     "detail": "Tapping a sent line opens 'İptal et', 'İkram et' and 'Kaleme indirim'. A reason is always required, chosen from the configurable lists or typed, and a partial quantity is allowed. The creator can void within 2 minutes without approval if the bar has not started the item. Otherwise it needs siparis.iptal or an approver PIN. Paid quantities are locked. Voids after the bill was printed are logged as alarms. 'İkramı geri al' undoes a comp.",
+     "source": "src/pages/order/CartPanel.tsx ItemSheet; server/services/orders.ts voidItem/compItem/setItemDiscount (VOID_GRACE_MS)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Repeat / copy a sent item",
+     "detail": "Not present. A sent line can't be repeated; the product has to be tapped again.",
+     "source": "src/pages/order/CartPanel.tsx"
+    }
+   ]
+  },
+  {
+   "area": "2 Masa ve salon",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Floor plan screen",
+     "detail": "Section tabs show a count of busy tables. There are two views: plan (tables placed by % on a 16:10 canvas) and list. Phones always use the list view, and the choice is saved per device. The header summary reads 'N masa · M dolu · K hesap bekliyor'. A right panel 'Masasız siparişler' lists counter, pick-up, delivery and online orders, plus today's reservations. Tapping an empty table creates a check; tapping a busy one opens it.",
+     "source": "src/pages/FloorPage.tsx; GET /api/floor (server/services/floor.ts floorState)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Table states and timers",
+     "detail": "Colours: free is white, busy is blue, bill printed ('Hesap istendi') is amber, partly paid is pink; there is a legend in the footer. Each tile shows the total, time since the check opened (refreshed every 30 s; for the karaoke room, the room timer), the waiter's name, a chef-hat count of items still at the bar, and a pulsing green 'N hazır'. Icons mark bill printed, online order and room. A reserved free table shows a time chip and the guest's name.",
+     "source": "src/pages/FloorPage.tsx TableTile"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Several checks on one table",
+     "detail": "A table with more than one open check opens a chooser listing 'Hesap 1/2…'. 'Yeni ayrı hesap aç' adds another check (newCheck).",
+     "source": "src/pages/FloorPage.tsx; server/services/orders.ts createOrder"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Move and merge",
+     "detail": "İşlemler › 'Masa taşı / birleştir': tapping an empty table moves the check there; tapping a busy table asks via window.confirm and then merges. A merge moves items, payments and the room session, adds up guests and removes any split. Needs masa.islem or an approver PIN. Blocked while a fiscal-device basket is pending or when the check is an online order.",
+     "source": "src/pages/order/TableOps.tsx MoveModal; POST /api/orders/:id/move, /merge"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Split by item / transfer",
+     "detail": "'Hesabı böl / kalem taşı': choose items and quantities, then send them to a separate check on the same table or to another table. On another table they join its open POS check, or a new check is created. Paid quantities can't move, and nothing can move into a site-paid QR order. A source check left empty is closed as 'birleşti'.",
+     "source": "src/pages/order/TableOps.tsx TransferModal; POST /api/orders/:id/transfer"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Guests and waiter",
+     "detail": "'Kişi sayısı' modal (1–99). The API can change the waiter (PATCH waiterId, needs masa.islem, logged in the audit), but there is no screen for it.",
+     "source": "src/pages/order/TableOps.tsx GuestsModal; server/services/orders.ts updateOrder"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Timed karaoke room",
+     "detail": "Tables of kind 'oda' carry an hourly rate (seed: Karaoke odası, ₺1.000/h). A Başlat/Durdur bar sits on the check. On stop, the time is rounded up to roomBillingStepMinutes (15) with a minimum of roomMinimumMinutes (60) and added as the hidden service line 'Karaoke odası' (KDV 20, posName KARAOKE ODASI). While the timer runs, payment and the fiscal device are blocked.",
+     "source": "server/services/rooms.ts; src/pages/order/OrderPage.tsx; POST /api/orders/:id/room/start|stop"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Reservations",
+     "detail": "Day view with previous/next arrows and a date picker. 'Yeni' takes time, name, phone (normalized and linked to an existing customer), guests, table or room, duration and note. Status buttons: 'Geldi, masa aç' (opens a table check with the guest count and note when the day is open), 'Gelmedi', 'İptal'. The floor plan shows today's waiting and arrived bookings. Existing bookings can't be edited (only their status), and there is no double-booking check, reminder or deposit. Needs rezervasyon.yonet.",
+     "source": "src/pages/ReservationsPage.tsx; server/routes/reservations.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Waitlist",
+     "detail": "Not present.",
+     "source": "server/db/schema.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "QR table ordering",
+     "detail": "Guests order and pay on the laffogato site (table QR). LafPOS pulls paid orders and matches table orders to a table when tables.siteTableCode equals the order label (case-insensitive). These show as a separate online check with a globe icon: there is no payment step in LafPOS and items can't be transferred into it. Needs LAFFOGATO_SYNC_SECRET.",
+     "source": "server/sync/laffogato-orders.ts upsertOnlineOrders; src/pages/admin/FloorAdmin.tsx (site QR code field)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Floor plan editor",
+     "detail": "Yönetim › Masa planı: tables are dragged and resized on a % canvas and saved as one layout. Add sections; edit table name, seats, shape (square/rect/round/bar), kind (masa/oda), hourly rate and site QR code. A table with an open check can't be deactivated. Needs ayar.yonet.",
+     "source": "src/pages/admin/FloorAdmin.tsx; /api/admin/floor, /tables, PUT /api/admin/tables/layout"
+    }
+   ]
+  },
+  {
+   "area": "3 Mutfak ve bar",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Bar and kitchen screen (KDS)",
+     "detail": "Route /mutfak, always dark. Station chips: 'Tümü', 'Bar', 'Mutfak'. There is one ticket per check and send batch, showing the table or type with #no, waiter, order note and scheduled time for online orders. Items show quantity, size, options (amber) and note. Data refreshes over SSE with a 15 s fallback poll. Needs mutfak.ekran or siparis.al.",
+     "source": "src/pages/KitchenPage.tsx; GET /api/kitchen?station=&history= (server/services/floor.ts kitchenTickets)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Station routing",
+     "detail": "The product's station wins, otherwise the category's station. The seed creates Bar and Mutfak; dessert and snack go to the kitchen, drinks to the bar. Items without a station go straight to 'servis' and skip the KDS. There is no screen to add or rename stations (API only).",
+     "source": "server/services/menu.ts stationFor; server/routes/admin.ts /stations; server/db/seed.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Ticket timers and colours",
+     "detail": "An mm:ss age is shown from send time. The badge turns amber after kitchenWarnMinutes (7) and the ticket gets a red ring after kitchenAlarmMinutes (12); both are set in Ayarlar.",
+     "source": "src/pages/KitchenPage.tsx; server/lib/settings.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Bump and recall",
+     "detail": "Tapping an item moves it from yeni to hazırlanıyor to hazır. Each ticket has 'Başla' (start all new) and 'Hepsi hazır'. The 'Geçmiş' view lists the last 90 minutes of ready items with 'Geri al' (back to hazırlanıyor). There is no 'served/picked up' step in the interface.",
+     "source": "src/pages/KitchenPage.tsx; POST /api/kitchen/status (server/services/orders.ts setItemsStatus)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "All-day counts",
+     "detail": "The 'Toplam' toggle adds up every waiting and in-progress item by product and size, with an option breakdown (e.g. ×6 Latte M · Yulaf 2 · +1 shot 1).",
+     "source": "shared/kitchen.ts kitchenTotals; src/pages/KitchenPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Sounds and void and ready alerts",
+     "detail": "WebAudio beeps on a new ticket (two rising tones) and on a void (three falling tones), filtered by the chosen station and switchable with a toggle. Items voided after the bar started stay struck through as 'İPTAL EDİLDİ, YAPMAYIN' for 10 minutes. 'Hazır' sends the waiter who took the order a toast with a beep and vibration, e.g. 'Bahçe 4 · 2 ürün hazır'.",
+     "source": "src/lib/sound.ts; src/lib/readyAlert.ts; server/services/floor.ts; server/services/orders.ts (items.ready)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Online tickets on the KDS",
+     "detail": "Online orders carry an 'Online' badge with 'Hazırlanıyor' and 'Hazır (siteye bildir)' buttons that write the stage back to laffogato.",
+     "source": "src/pages/KitchenPage.tsx; POST /api/sync/online/:orderId/stage"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Pick-up call screen",
+     "detail": "/cagri is public (no login). Two columns, 'Hazırlanıyor' and 'Hazır', with big numbers; online orders show only the first name. It polls every 3 s and beeps on a new ready order. Ready numbers drop off after 10 minutes. It can be opened from the bar screen ('Çağrı ekranı').",
+     "source": "src/pages/PickupBoardPage.tsx; GET /api/public/board (server/services/floor.ts pickupBoard)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Prep time measurement",
+     "detail": "Report 'Hazırlama süresi': time from send to 'Hazır' as overall average, median, p90 and max, broken down by product and by hour, plus the 10 slowest items. Only global warn/alarm thresholds exist; there are no per-product prep targets.",
+     "source": "server/services/reports.ts prepReport; src/pages/reports/ReportsPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Printer routing and kitchen chits",
+     "detail": "Not implemented: nothing prints a kitchen ticket. The printers table and station.printerId exist but are never used; the seed only adds 'Bu cihaz (tarayıcı)'.",
+     "source": "server/db/schema.ts printers; server/db/seed.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Expo, hold and fire",
+     "detail": "There is no expo view, no course firing and no timed hold. The unsent cart works as a manual hold ('Bu cihazda beklesin').",
+     "source": "src/pages/KitchenPage.tsx; src/pages/order/OrderPage.tsx"
+    }
+   ]
+  },
+  {
+   "area": "4 Ödeme",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Payment dialog: amount, items, share",
+     "detail": "Three modes. 'Tutar': numpad with 'Tamamı' and 'Yarısı'. 'Kalem seç': per-item quantities, priced from each line's net share so check discounts are spread over the items. 'Paylaş': even split among 2–30 people, with shares computed on the server and leftover kuruş given to the first shares. Shares re-spread after items are added or a share is refunded, refunded share numbers are reused, and each share can print its own bill. While a split is open, non-share payments are refused (split_active), and a stale share amount returns 409 split_changed.",
+     "source": "src/pages/order/PaymentModal.tsx; shared/order-calc.ts amountForItems/splitState; POST /api/orders/:id/payments; PUT /api/orders/:id/split"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Payment methods",
+     "detail": "Seeded: Nakit, Kredi kartı, Pluxee, Multinet, Edenred, Setcard, Metropol, Havale/EFT, Açık hesap. Each maps to a lafmaliyet Z field (cash/card/meal_card/online/other) and an optional commission channel. They are edited in Yönetim › Ödeme türleri.",
+     "source": "server/db/seed.ts; src/pages/admin/PaymentsAdmin.tsx; /api/admin/payment-methods"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Cash handling",
+     "detail": "'Verilen' field with 'Tam' and suggested notes (the due amount rounded up to the next ₺10/20/50/100/200, plus the quick-cash setting). Change appears in a large panel on the result screen. A partial payment keeps the dialog open ('Kalanı al').",
+     "source": "shared/money.ts suggestCash; src/pages/order/PaymentModal.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Tips",
+     "detail": "'Bahşiş ekle' takes an amount on any payment. Tips are kept out of revenue and shown separately on the Z. Cash tips count toward expected cash. There is no pooling or per-staff tip report.",
+     "source": "src/pages/order/PaymentModal.tsx; server/services/days.ts computeSummary"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Service charge",
+     "detail": "A global serviceRate % (default 0) is fixed on table checks when they open, with KDV 10. It can't be switched off on a single check.",
+     "source": "server/lib/settings.ts; server/services/orders.ts createOrder; shared/order-calc.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Check discount",
+     "detail": "Percent or ₺, with reason chips. Each user has a maximum discount % (default 10% for staff, 100% for patron and müdür); above it, an approver whose own limit covers the amount must enter a PIN. Discounts at or above alertDiscountPct (25%) are logged as uyari. An empty check can't be discounted.",
+     "source": "src/pages/order/TableOps.tsx OrderDiscountModal; server/services/orders.ts setOrderDiscount/discountApproval"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Open account (cari) payment",
+     "detail": "'Açık hesap' needs a customer on the check and cari.yonet. The credit limit is checked and a debt line is written to the customer ledger.",
+     "source": "server/services/orders.ts addPayment"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Refunds and reopen",
+     "detail": "Each payment has an 'Ödemeyi iptal et' button. The reason is typed into a native window.prompt, and odeme.iade or an approver PIN is needed. It only works within the current open day. A closed check reopens, the customer's visit, spend and stamps are reversed, and an alarm is logged. A closed check can also be reopened via İşlemler › 'Yeniden aç' (same rules). There is no refund for earlier days and no partial product return.",
+     "source": "src/pages/order/PaymentModal.tsx refund; server/services/orders.ts refundPayment/reopenOrder"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Fiscal device (ÖKC) payment",
+     "detail": "The payment dialog has a 'Hesabı / Seçilen kalemleri yazarkasaya gönder' panel. The basket goes to TokenX Connect, or to the training device at /cihaz. Payment types from the device are mapped back (1 nakit, 3 kart, 7 yemek kartı with an operator map, 17 açık hesap, 18 havale) and the check closes by itself. The check is locked while the basket waits (409 okc_pending). A stuck basket can be force-cancelled with approval. A 'paid' result that arrives after cancellation raises an alarm.",
+     "source": "src/pages/order/OkcPanel.tsx; server/okc/service.ts; /api/okc/orders/:id/send, /api/okc/receipts/:id/cancel"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Pay at table",
+     "detail": "Only through the fiscal device's 'liste' mode: a handheld terminal lists the open baskets. A garson has no odeme.al by default, so their button reads 'Ödemeyi kasa alır'. There is no QR pay-at-table for POS checks.",
+     "source": "server/lib/settings.ts okcMode; src/pages/order/OrderPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Rounding, foreign currency, pre-auth tabs, split by seat",
+     "detail": "Not present.",
+     "source": "shared/money.ts; server/db/schema.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Zero-total close and cancel check",
+     "detail": "'Sıfır tutarlı adisyonu kapat' closes a check that is fully comped or voided. 'Adisyonu iptal et' works only when no payment remains. It voids everything with a reason, needs approval unless every item was added by the user within the 2-minute grace, and sends void alerts to the KDS.",
+     "source": "src/pages/order/OrderPage.tsx; server/services/orders.ts closeOrder/cancelOrder"
+    }
+   ]
+  },
+  {
+   "area": "5 Kasa yönetimi",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Day open with opening float",
+     "detail": "The Kasa page has a numpad for the opening cash. Needs kasa.gun. The business day rolls over at 05:00 (same rule as lafmaliyet), Z numbers run in sequence, and each business date gets one Z: after a Z, a new day only opens after 05:00.",
+     "source": "src/pages/cash/CashPage.tsx; POST /api/cash/day/open (server/services/days.ts openDay)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Paid in/out and cash drops",
+     "detail": "Three buttons: 'Harcama' (expense, description required), 'Teslim' (handover or drop to the owner or bank) and 'Kasaya giriş'. Needs kasa.hareket or an approver PIN. An expense or handover of ₺1.000 or more is logged as uyari.",
+     "source": "src/pages/cash/CashPage.tsx; POST /api/cash/movements (days.ts addCashMovement)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "X report",
+     "detail": "'Ara rapor (X)' is shown live on the Kasa page: net revenue, receipts, expected cash, payment methods, KDV, comps, voids, cash movements and best sellers. Only users with kasa.rakam or rapor.gor see it. 'Yazdır' prints it, but under the 'GÜN SONU · Z' heading.",
+     "source": "src/pages/cash/ZView.tsx; src/lib/print.tsx ZReceipt; GET /api/cash/day"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Z (end of day)",
+     "detail": "The 'Gün sonu (Z)' dialog offers a banknote counter (₺200 down to 5 kr) or a single total, card and meal-card slip amounts per method, a note, and 'Sayımı sonra gireceğim'. Open POS checks block the close (empty ones are cancelled automatically). A cash difference of ₺100 or more (alertCashDiffKurus) raises an alarm. Results: a printable Z, the lafmaliyet Kasa raporu fields in form order ('Kopyala', 'JSON', 'Gönder') and an automatic outbox push.",
+     "source": "src/pages/cash/CashPage.tsx, CashCount.tsx, ZView.tsx; POST /api/cash/day/close (days.ts closeDay)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Blind close (kör kasa)",
+     "detail": "The kasiyer role lacks kasa.rakam and rapor.gor by default. So the server sends no X report, no expected cash and no difference, and strips the payment breakdown from every closed check it returns. The cashier counts and types the cash; the difference appears only for managers.",
+     "source": "server/lib/auth.ts seesCashNumbers/blindOrder; server/routes/cash.ts; src/pages/cash/CashCount.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Late count (kasa föyü) and recount",
+     "detail": "Geçmiş günler › 'Kasa föyü gir/düzelt' records the count after an automatic or uncounted close. Changing a saved count needs rapor.gor or an approver and is logged as an alarm. The per-method slip amounts are stored in cashCounts but never shown or reconciled again.",
+     "source": "POST /api/cash/days/:id/count (days.ts recordCount); src/pages/cash/CashPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Reopen a closed day",
+     "detail": "'Günü yeniden aç' works only for today's last Z, needs a reason and an approver (odeme.iade), and is logged as an alarm. The Z number stays the same. The unsent lafmaliyet copy is dropped and re-sent when the day closes again.",
+     "source": "POST /api/cash/days/:id/reopen (days.ts reopenDay)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Automatic end of day",
+     "detail": "Optional, off by default (hour 06). At the set hour it closes the day without a count, if no non-empty POS check is open and the day has been open for at least 3 hours. Otherwise it writes a 'day.auto_skip' warning at most every 30 minutes.",
+     "source": "server/jobs.ts autoDayEndTick; src/pages/admin/SettingsAdmin.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Past days",
+     "detail": "Lists 60 days with Z no, date, receipts, net revenue and badges for 'Föy girilmedi' and 'Fark ₺x'. Opening a day shows its full Z and lafmaliyet fields. Needs rapor.gor.",
+     "source": "src/pages/cash/CashPage.tsx; GET /api/cash/days, /api/cash/days/:id"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Per-staff drawer and shift close",
+     "detail": "Not present: there is one drawer and one count per business day.",
+     "source": "server/db/schema.ts business_days, cash_movements"
+    }
+   ]
+  },
+  {
+   "area": "6 Raporlar ve analitik",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Reports screen",
+     "detail": "Report tabs: Ciro, Ürünler (product or category view), Saatlik, Hazırlama süresi, Adisyonlar, İptal ve indirim (İptaller/İkramlar/İndirimler/Ödeme iptalleri), Happy hour, Personel and lafmaliyet aktarımı. Periods: Bugün, Dün, Bu hafta, Geçen hafta, Bu ay, Geçen ay, Tarih seç (no year preset). Needs rapor.gor; the Personel tab needs rapor.maliyet.",
+     "source": "src/pages/reports/ReportsPage.tsx; /api/reports/*"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Revenue summary and comparisons",
+     "detail": "A KPI strip compares with the matching earlier period: same weekdays, the previous month's same days for month-to-date, and the same clock time when today is included. A waterfall runs list price → comps → discounts → service → revenue → KDV → net. Also: KDV by rate, a reconciliation of payments against revenue, spend per guest at tables, order types and payment shares. Online orders are shown separately.",
+     "source": "server/services/reports.ts summaryReport/comparison"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Product mix",
+     "detail": "Per product and size: quantity, net revenue, share, average price, comp and void counts, with a search box. Category shares are a separate view. Gross profit (excluding KDV) appears only with rapor.maliyet and lafmaliyet costs, which are fetched by hand with 'Maliyetleri çek'.",
+     "source": "server/services/reports.ts productReport; src/pages/admin/IntegrationAdmin.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Dayparts and heatmap",
+     "detail": "Hourly revenue by the hour a check opened. Dayparts: Sabah 06–12, Öğle 12–17, Akşam 17–22, Gece 22–06. Busiest and quietest hour, top 5 hours, and a weekday × hour heatmap of average daily revenue.",
+     "source": "server/services/reports.ts hourlyReport"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Loss reports",
+     "detail": "Lists of voids, comps and discounts (item and check level) and refunds with time, check, place, product, reason, who did it and who approved it. Voids are flagged 'hazırlandıktan sonra' or 'hesap sonrası'. Happy hour lists the effect of each discount.",
+     "source": "server/services/reports.ts itemListReport/refundReport"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Staff report",
+     "detail": "Per waiter: checks, revenue, average, discounts, voids and comps. Needs rapor.maliyet. The Z also has a per-user split.",
+     "source": "server/services/reports.ts staffReport"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Exports",
+     "detail": "CSV in Turkish Excel format (semicolons, decimal commas, BOM) for products, checks, voids, comps, discounts and hourly. A lafmaliyet 'Satışlar' CSV ('Ürün;Adet;Tutar', add-ons such as EXTRA SHOT/SYRUP/ALTERNATIF SÜT on their own rows). Z as JSON. No PDF or XLSX.",
+     "source": "GET /api/reports/export.csv; GET /api/sync/lafmaliyet/satislar.csv; GET /api/cash/days/:id/lafmaliyet.json"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Owner app (Patron paneli)",
+     "detail": "/patron is a web page that can be added to the home screen. It shows: today's revenue, checks and average; open checks total; comparison with last week and with 4 weeks ago at the same clock time; yesterday; hourly chart or table against last week; payment methods; top 6 sellers with margin when allowed; open checks with elapsed time and waiter; today's alerts (tap to open the check) and 'Dikkat' anomalies. It updates live over SSE and pops alert toasts. Outside the café it is reached through Tailscale, or read-only on Vercel (refresh every 10 s).",
+     "source": "src/pages/patron/PatronPage.tsx; GET /api/reports/patron (reports.ts patronLive); api/uzaktan.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Anomaly alerts",
+     "detail": "Rules: void rate above 3% and above twice the average of the same weekday over the last 4 weeks (alarm above 8%); a cash difference on the last Z (alarm at ₺100); a Z closed without a count; reopened checks; voids after the bill was printed. Every uyari or alarm audit entry is streamed live, but only to users with patron.panel. There is no push to a phone when the app is closed.",
+     "source": "server/services/reports.ts anomalies; server/lib/effects.ts; server/routes/events.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Admin overview",
+     "detail": "Yönetim › Genel bakış: KPI strip compared with last week, hourly chart, best sellers, 'Dikkat isteyenler' and 'Sistem sağlığı' (site menu, online orders, lafmaliyet outbox, fiscal device, age of the last backup).",
+     "source": "src/pages/admin/OverviewAdmin.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Labour %, forecasts, menu engineering, scheduled email reports",
+     "detail": "Not present.",
+     "source": "server/services/reports.ts"
+    }
+   ]
+  },
+  {
+   "area": "7 Stok ve maliyet",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Recipes, stock, purchasing, counts, waste",
+     "detail": "Not in LafPOS by design: these belong to lafmaliyet. The stok.yonet permission exists but has no screens or endpoints.",
+     "source": "docs/06-TEK-SISTEM.md; shared/permissions.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Sales feed for depletion",
+     "detail": "At Z the day's package goes through the outbox to lafmaliyet POST /api/pos/gun (signed HMAC, idempotent per date, retried with backoff; 400/409/413 are treated as permanent). It contains Z fields, product lines (posName, site menu id and size, qty, revenue including KDV, service flag, add-ons on separate rows), comps with reasons, and payments with commission channel. Without keys, the CSV and JSON are exported by hand.",
+     "source": "server/sync/lafmaliyet.ts buildDayPayload/enqueueDay/flushOutbox"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Unit costs",
+     "detail": "'Maliyetleri çek' fetches lafmaliyet GET /api/panel/pos/urunler (cost per site item and size). Costs are shown only to rapor.maliyet as gross profit in the product report and the owner panel.",
+     "source": "server/sync/lafmaliyet.ts pullCosts; POST /api/sync/lafmaliyet/costs/pull"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Portion counter as mini stock",
+     "detail": "A per-product count set by hand, decremented on each sale, that turns the product Tükendi at 0.",
+     "source": "server/services/orders.ts addItems"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Waste",
+     "detail": "No waste (zayi) entry. Comps go to lafmaliyet as 'ikram', and voids after the bar started are flagged in the reports.",
+     "source": "server/services/reports.ts; server/sync/lafmaliyet.ts"
+    }
+   ]
+  },
+  {
+   "area": "8 Personel",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Roles and permissions",
+     "detail": "6 roles (Patron, Müdür, Kasiyer / Barista, Garson, Mutfak / Bar, Kurye) and 24 permissions in 5 groups. Each role's set is edited in Yönetim › Roller ve yetkiler; the patron role is locked. Each person can get extra or removed permissions and a maximum discount %. Escalation is blocked: no one can grant what they don't have, edit someone above them, edit their own role or limit, or disable the last patron. Changing a PIN or role ends that person's sessions.",
+     "source": "shared/permissions.ts; src/pages/admin/RolesAdmin.tsx; src/pages/admin/UsersAdmin.tsx; server/routes/admin.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Default role sets",
+     "detail": "kasiyer: siparis.al, siparis.ikram (can comp without approval), masa.islem, odeme.al, kasa.gun, kasa.hareket, cari.yonet, paket.yonet, rezervasyon.yonet, mutfak.ekran, urun.tukendi (blind cash). garson: siparis.al, masa.islem, rezervasyon.yonet. mutfak: mutfak.ekran, urun.tukendi. kurye: paket.yonet. müdür: everything except personel.yonet.",
+     "source": "shared/permissions.ts ROLE_DEFAULTS"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Manager PIN approval",
+     "detail": "When the server answers 403 approval_required, the 'Yetkili onayı' numpad opens and the request is retried with approverPin. A wrong PIN keeps the dialog open. The approver is recorded in the audit log. Approval PINs have their own per-device rate limit.",
+     "source": "src/lib/approval.tsx; server/lib/auth.ts need/findApprover"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Login and locking",
+     "detail": "Login is by PIN only (4–6 digits, unique, stored as a keyed hash) on an on-screen keypad or keyboard; a 6th digit submits on its own. Wide screens list active staff names. Setup mode shows demo PINs. Sessions last 14 h. Auto-lock is in minutes and is off (0) by default. 'Kilitle / kullanıcı değiştir' switches user. Wrong PINs: after 5 on one device a 15 s lock that doubles up to 5 min; 30 across the network in 10 min blocks devices that haven't logged in during the last 7 days and raises an alarm.",
+     "source": "src/pages/LoginPage.tsx; server/lib/auth.ts; server/routes/auth.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Card / RFID / fingerprint login",
+     "detail": "Not present: login accepts PINs of 6 digits at most.",
+     "source": "server/lib/auth.ts isValidPin"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Role home screens and guards",
+     "detail": "The opening screen follows permissions: siparis.al opens /masalar, mutfak.ekran /mutfak, patron.panel /patron, paket.yonet /siparisler, anyone else /kasa. Navigation is filtered and route guards redirect, but the server enforces every rule.",
+     "source": "src/lib/nav.ts; src/App.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Time clock, scheduling, tip pooling, performance",
+     "detail": "Not present. The only staff figures are the 'Personel' report and the per-user split on the Z.",
+     "source": "server/services/reports.ts; server/services/days.ts"
+    }
+   ]
+  },
+  {
+   "area": "9 Müşteri ve sadakat",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Customer records (CRM)",
+     "detail": "Müşteriler page: search by name or normalized phone. Each customer shows open-account balance and limit, stamps, total spend, visits and last visit, plus the ledger (last 100), addresses and last 30 orders. New customer: name, unique phone, email, birthday, note and a credit limit (limit needs cari.yonet). Name, phone and email can't be edited in the UI, and tags are not exposed. Data stays on the kasa PC (KVKK).",
+     "source": "src/pages/CustomersPage.tsx; server/services/customers.ts; /api/customers (needs cari.yonet)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Customer on a check",
+     "detail": "İşlemler › 'Müşteri ekle' searches by phone or name or creates a customer. Anyone with siparis.al can create a customer, as long as no credit limit is set.",
+     "source": "src/pages/order/CustomerModal.tsx; PATCH /api/orders/:id {customerId}"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Stamp card",
+     "detail": "Each closed check adds stamps for drinks in stampCategoryKeys (goal 6). Reopening or refunding takes them back. 'Hediye' (needs siparis.ikram) subtracts the stamps, but the free drink has to be comped separately by hand.",
+     "source": "server/services/orders.ts closeOrderRow/stampQtyOf/uncreditCustomer; server/services/customers.ts redeemStamps"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Open accounts (veresiye)",
+     "detail": "Pay with 'Açık hesap' up to the credit limit. 'Tahsilat al' (nakit, kart or havale) writes a ledger line; it is not revenue, but cash goes into the drawer. The credit limit is changed through a native window.prompt.",
+     "source": "src/pages/CustomersPage.tsx; POST /api/cash/collect (days.ts collectCustomerPayment)"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Discounts and happy hour",
+     "detail": "Item and check discounts with reasons and per-user caps; automatic happy hour by time, weekday and category or product (see Sipariş and Ödeme).",
+     "source": "server/services/orders.ts; server/services/menu.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Points, gift cards, campaigns and coupons, birthday automation",
+     "detail": "Not present. Site loyalty is separate, and stamping at the till through laffogato is still an open item.",
+     "source": "docs/02-PLAN.md §4 Açık; server/db/schema.ts"
+    }
+   ]
+  },
+  {
+   "area": "10 Online ve teslimat",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Own online ordering (laffogato)",
+     "detail": "Site and app orders (table QR, pick-up, delivery) are paid online. LafPOS polls a version signal every 20 s, with a 5-minute fallback and a manual refresh (at most every 30 s). It shows the orders under Siparişler › Online, on the KDS, the floor plan and the call screen. Stages are written back: 'Hazırlanıyor', 'Hazır', 'Masaya götürüldü' / 'Kuryeye verildi', 'Teslim edildi'. These orders are never charged in LafPOS and are excluded from the Z and from lafmaliyet. Needs LAFFOGATO_SYNC_SECRET.",
+     "source": "server/sync/laffogato-orders.ts; src/pages/order/OnlineOrderBar.tsx; src/pages/OrdersPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Pick-up and delivery in the POS",
+     "detail": "The 'Gel-al' and 'Paket' buttons (Paket needs paket.yonet) take name, phone, address (required for Paket) and a note. Status runs Hazırlanıyor → Hazır → Yola çıktı → Teslim edildi. A courier is picked from kurye or garson users, and the phone shows as a tel: link.",
+     "source": "src/pages/FloorPage.tsx TakeawayModal; src/pages/OrdersPage.tsx; POST /api/orders/:id/delivery"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Yemeksepeti / Getir / Trendyol Yemek",
+     "detail": "Not integrated and no adapter exists. Only commission-channel names on payment methods mention them.",
+     "source": "src/pages/admin/PaymentsAdmin.tsx CHANNELS"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Courier management",
+     "detail": "Assigning a courier and the status flow only. No courier app, cash settlement or route.",
+     "source": "src/pages/OrdersPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Caller ID",
+     "detail": "Not present. The phone typed in the pick-up/delivery dialog isn't matched against customers or their saved addresses.",
+     "source": "src/pages/FloorPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Delivery slip",
+     "detail": "The bill print has no address or phone, even though the dialog says 'Müşteri ve adres bilgisi kurye fişine yazılır'.",
+     "source": "src/lib/print.tsx BillReceipt"
+    }
+   ]
+  },
+  {
+   "area": "11 Türkiye mali uyumu",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Fiscal device (ÖKC) integration",
+     "detail": "TokenX Connect Cloud for Token/Beko (300TR, X30TR; 400TR e-documents). Two modes: 'anlık' (basket goes straight to one terminal) or 'liste' (branch-wide list for handhelds). OAuth token from .env. KDV rates map to device departments (default %1→3, %10→1, %20→2, auto-matched from the device). Results come by webhook (LAFPOS_PUBLIC_URL and TOKENX_WEBHOOK_SECRET) or by polling every 2.5 s (10 s in list mode). The result records payments, Z no and receipt no; status 99 voids the receipt, refunds and reopens the check; -1 means cancelled on the device. Yemek kartı operators are mapped to payment methods. Set up in Yönetim › Yazarkasa POS with 'Bağlantıyı dene' and 'Webhook'u kaydet'.",
+     "source": "server/okc/service.ts, basket.ts, tokenx.ts, providers/*; src/pages/admin/OkcAdmin.tsx; docs/04-YAZARKASA.md"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Other device brands",
+     "detail": "Each brand is a separate provider behind one interface (FiscalProvider). Only Token and the simulator are implemented. Hugin, Pavo, Ingenico, Verifone and others appear in the 'Diğer markalar' table as waiting for vendor documentation.",
+     "source": "server/okc/providers/index.ts, types.ts; src/pages/admin/OkcAdmin.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Information slip (bilgi fişi)",
+     "detail": "The LafPOS bill prints 'BİLGİ FİŞİDİR · MALİ DEĞERİ YOKTUR'. A meal-card result is stored as bilgi_fisi. The Z printout says 'LafPOS yönetim raporudur, mali Z değildir'.",
+     "source": "src/lib/print.tsx; server/okc/providers/tokenx.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "e-Arşiv / e-Fatura",
+     "detail": "Not issued by LafPOS; lafmaliyet and Paraşüt handle them. Only the docKind and docId fields exist, filled when a VUK 507 device returns an e-document.",
+     "source": "server/okc/providers/types.ts; docs/00-GELISTIRILMIS-PROMPT.md"
+    },
+    {
+     "system": "LafPOS",
+     "name": "GMP-3 table payment and VUK 507",
+     "detail": "Documented only: paying at the table needs the vendor's written confirmation that its cloud channel issues the summary information slip and keeps the TSM record. No implementation beyond the provider fields.",
+     "source": "docs/04-YAZARKASA.md §1.3"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Training fiscal device",
+     "detail": "/cihaz simulates a Token device: pay by Nakit, Kredi kartı, Yemek kartı or a split, cancel, lock, or void a receipt (approval, same day only). It is the default provider on first install and prints no real receipt.",
+     "source": "src/pages/DevicePage.tsx; /api/okc/simulator/*; server/db/seed.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "KDV handling",
+     "detail": "Prices include KDV, and the rate is frozen on each item at sale time. Bill, Z and reports break KDV down by rate. The service charge uses KDV 10.",
+     "source": "shared/order-calc.ts; server/services/days.ts"
+    }
+   ]
+  },
+  {
+   "area": "12 Donanım ve çalışma",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Local-first server",
+     "detail": "Node 22+ with Hono and SQLite (WAL) runs on the kasa PC, so sales continue without internet. The lafmaliyet outbox retries with backoff, the site menu is cached, and product thumbnails are stored locally.",
+     "source": "server/index.ts; server/jobs.ts; docs/02-PLAN.md"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Device offline behaviour",
+     "detail": "Tablets and phones have no service worker or offline queue. If Wi-Fi or the kasa PC is down they show 'Sunucuya ulaşılamadı' and stop. Only unsent cart lines survive in localStorage.",
+     "source": "src/lib/api.ts; src/lib/cart.ts; index.html"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Multi-device sync",
+     "detail": "Server-sent events on /api/events (fetch stream with a bearer token, 20 s ping). On disconnect it reconnects with backoff up to 10 s and refetches everything afterwards. Event topics invalidate the matching screen data. A status dot shows green, amber, or red with a WifiOff icon.",
+     "source": "server/routes/events.ts; src/lib/live.ts; src/components/AppShell.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Printing",
+     "detail": "Browser window.print() of 80 mm layouts: bill, per-share bill, and Z/X. Kiosk Chrome prints silently (--kiosk-printing), and the cash drawer opens through the printer driver's setting. No ESC/POS or network printing, and no kitchen chits.",
+     "source": "src/lib/print.tsx; scripts/kasa/windows/LafPOS-Kasa.bat"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Customer display",
+     "detail": "/musteri-ekrani?ekran=kasa needs no login and polls every 1.5 s. Mirroring is switched on per device in İşlemler › Müşteri ekranı. It shows lines including unsent ones, discount, paid and remaining, then 'Teşekkürler' for 10 s, then 'Hoş geldiniz'. Up to 20 display codes; the state lives only in memory.",
+     "source": "src/pages/CustomerDisplayPage.tsx; src/lib/display.ts; PUT /api/display/:code (needs odeme.al), GET /api/public/display/:code"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Kiosk / self-order",
+     "detail": "Not in LafPOS; the laffogato web and app are the self-order channel.",
+     "source": "docs/01-ANALIZ.md"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Handhelds",
+     "detail": "Phones use the browser with a phone layout: bottom tabs (4 + 'Daha'), 'Menü'/'Adisyon' tabs, safe areas and haptics. A PWA manifest allows 'Ana ekrana ekle'. Payment terminals connect through the fiscal device's liste mode.",
+     "source": "src/components/AppShell.tsx; src/pages/order/OrderPage.tsx; public/manifest.webmanifest"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Kasa PC installation",
+     "detail": "Windows NSIS installer bundling Node 24: runs as a SYSTEM scheduled task with a watchdog that restarts it, opens firewall port 4000 to the LAN and Tailscale only, adds a kiosk shortcut, turns off sleep on mains power, and keeps settings in ayarlar.env. A macOS launchd script also exists. The installer is unsigned (SmartScreen warns) and has not yet been run on real Windows.",
+     "source": "scripts/kasa/windows/*; scripts/kasa/mac/kur.sh; docs/05-KASA-BILGISAYARI.md"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Wake lock and kiosk protections",
+     "detail": "Screen Wake Lock (setting keepAwake). Chrome flags disable pinch zoom and swipe-back and allow autoplay of sounds. A fullscreen toggle is in the user menu.",
+     "source": "src/lib/wakelock.ts; scripts/kasa/windows/LafPOS-Kasa.bat"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Backups",
+     "detail": "Daily SQLite backup kept for 14 days, a manual 'Yedek al' button and a backup list, plus a WAL checkpoint every 5 minutes. Backups stay on the same disk: no off-site copy and no restore screen.",
+     "source": "server/jobs.ts backupNow; src/pages/admin/SettingsAdmin.tsx; /api/admin/backups"
+    }
+   ]
+  },
+  {
+   "area": "13 Yönetim",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Menu management",
+     "detail": "Products come from laffogato as the single source. In LafPOS only till fields are editable: short name, station, hidden, favourite, lafmaliyet name, portions, barcode, sort and option groups. Site-owned fields return 409 synced_field. Local products (services) have full create/edit and are deleted only if never sold, otherwise hidden. Categories: colour, station and visibility can be changed, but there is no create screen. 'Siteyle eşitle' previews changes (yeni/fiyat/ad/kdv/boy/kalktı/geri/diğer) before applying, and 'Sitede ürün ekle' opens the site admin. The 5-minute auto-sync, however, applies changes silently (logged in the audit).",
+     "source": "src/pages/admin/MenuAdmin.tsx; server/routes/admin.ts; server/sync/menu-sync.ts; server/jobs.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Option groups and happy hour admin",
+     "detail": "Create and edit local groups (kind, required, max select, item prices, default, max qty). Site groups are read-only. Happy hour rules can be created, edited and deleted.",
+     "source": "src/pages/admin/OptionsAdmin.tsx; /api/admin/option-groups, /happy-hours"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Multi-branch, price levels, scheduled menus",
+     "detail": "Not present: one site with one price per size. Happy hour is the only time-based rule.",
+     "source": "server/lib/settings.ts; server/db/schema.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Audit log",
+     "detail": "Every sensitive action is logged with user, approver, amount and a severity (info/uyari/alarm). Yönetim › Denetim kaydı shows only the last 300 entries with severity tabs and search and no date filter; the API itself supports from/to.",
+     "source": "server/lib/effects.ts; src/pages/admin/AuditAdmin.tsx; GET /api/admin/audit"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Settings",
+     "detail": "Business and receipt texts, size labels, service %, auto-lock, keep-awake, product images, quick-cash buttons, void/comp/discount reasons, KDS thresholds, room billing, stamp goal, alert thresholds, lafmaliyet size suffixes, backups, automatic Z and setup mode. The 'Satış için gün açılmış olmalı' toggle has no effect: the server always requires an open day.",
+     "source": "src/pages/admin/SettingsAdmin.tsx; server/lib/settings.ts; server/services/orders.ts requireOpenDay"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Remote access",
+     "detail": "Yönetim › Ağ ve uzaktan erişim shows the LAN and Tailscale (100.x) addresses with QR codes, for full live use from outside. 'LafPOS Uzaktan' on Vercel is a read-only snapshot: owner panel, floor, open checks and bar, stored in Upstash Redis behind a password (8 attempts per IP per 15 min) and without personal data.",
+     "source": "src/pages/admin/NetworkAdmin.tsx; api/uzaktan.ts; server/sync/cloud.ts; vercel.json; docs/07-UZAKTAN-ERISIM.md"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Integrations",
+     "detail": "A fixed set: laffogato (menu, orders, Tükendi), lafmaliyet (daily push, costs), TokenX and the Vercel remote, each with a status card. There is no marketplace.",
+     "source": "src/pages/admin/IntegrationAdmin.tsx; GET /api/sync/status"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Stations and printers admin",
+     "detail": "No screen; stations exist only in the API and printers can't be managed at all.",
+     "source": "server/routes/admin.ts /stations"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Docs vs code drift",
+     "detail": "docs/03 gives /api/integrations/lafmaliyet/satislar.csv, but the code serves /api/sync/lafmaliyet/satislar.csv. 'Kalem kopyalama' (in the scope) and server/print ESC/POS (in the plan) do not exist. The 'adaptör arayüzü' for delivery platforms is not in the code.",
+     "source": "docs/03-ENTEGRASYON.md; docs/00-GELISTIRILMIS-PROMPT.md; docs/02-PLAN.md"
+    }
+   ]
+  },
+  {
+   "area": "14 UX ayrıntıları",
+   "features": [
+    {
+     "system": "LafPOS",
+     "name": "Taps per common flow",
+     "detail": "Counter card sale: 'Tezgâh satışı' → items → 'Öde · ₺X' → 'Kredi kartı' → '₺X Kredi kartı al' → 'Yeni satış' (the next sale opens by itself); about 4–5 taps plus items. Cash adds 'Tam' or a banknote. Waiter on a phone: table → items → 'Gönder (n)'; 2 taps plus items, then the screen switches to the check. Paying at a table: table → 'Ödeme · ₺X' → method → 'al' → 'Tamam'. Voiding a sent item: line → 'İptal et' → reason → '1 adet iptal', plus a PIN if needed.",
+     "source": "src/pages/order/OrderPage.tsx; src/pages/order/PaymentModal.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Shortcuts",
+     "detail": "Ctrl/⌘K command palette (screens, admin sections, products, staff, theme, lock), '/' for product search, Esc, digits/Enter/Backspace on the login screen, arrow keys in the palette.",
+     "source": "src/components/CommandPalette.tsx; src/pages/order/ProductPanel.tsx; src/pages/LoginPage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Training mode",
+     "detail": "Only the fiscal training device and setup-mode PINs exist. Practice sales go into the real business day and Z; there is no sandbox.",
+     "source": "server/db/seed.ts; src/pages/DevicePage.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Error recovery",
+     "detail": "The approval dialog retries until the PIN is right. A 409 conflict refreshes the check. Network errors show a Turkish toast. SSE reconnects and refetches. Unsent cart lines survive a reload, and leaving with unsent lines asks first. A stuck fiscal basket can be force-cancelled. The outbox retries. A check or the whole day can be reopened. Empty checks close at Z.",
+     "source": "src/pages/order/useOrder.ts; src/lib/approval.tsx; src/lib/live.ts; server/okc/service.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Native dialogs on the kiosk",
+     "detail": "window.prompt is used for the refund reason and the credit limit, and window.confirm for merging tables and force-cancelling a fiscal basket.",
+     "source": "src/pages/order/PaymentModal.tsx; src/pages/CustomersPage.tsx; src/pages/order/TableOps.tsx; src/pages/order/OkcPanel.tsx"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Onboarding",
+     "detail": "First run seeds the köşk floor plan (Salon S1–S8 plus Bar, Bahçe B1–B12, Üst kat Ü1–Ü4, Karaoke odası), the site menu snapshot, Türk kahvesi, cup options and demo staff (PINs 1897/2468/1111/2222/3333 shown on the login screen in setup mode). Changing the patron PIN ends setup mode.",
+     "source": "server/db/seed.ts; src/pages/LoginPage.tsx; server/routes/admin.ts"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Accessibility and visuals",
+     "detail": "lang=tr with Turkish casing; 44 px touch targets checked by e2e; AA contrast checked by tests; dark theme (the KDS is always dark); status never shown by colour alone; reduced motion; the Inter font is bundled so it works offline.",
+     "source": "DESIGN.md; tests/design-tokens.test.ts; e2e/run.mjs"
+    },
+    {
+     "system": "LafPOS",
+     "name": "Layouts and speed",
+     "detail": "Phone: top bar and bottom tabs. Tablet: products and check side by side. Desktop: 84 px icon rail. Admin uses the Innex layout with a collapsible sidebar, compact mode and deep links (?urun=, ?kisi=). Speed comes from the local server with SSE, lazily loaded screens, cached thumbnails, counter-check reuse and PIN auto-submit at 6 digits.",
+     "source": "src/components/AppShell.tsx; src/components/admin/AdminShell.tsx; DESIGN.md"
+    }
+   ]
+  }
+ ],
+ "standouts": [
+  "Weak: Nothing prints for the kitchen or bar. There is no ESC/POS or network printer and no kitchen chit; the printers table and station.printerId are never used, and there is no screen to manage stations or printers. The bar tablet is a single point of failure (server/db/schema.ts, src/lib/print.tsx, server/routes/admin.ts).",
+  "Weak: No screen can mark an item 'servis' (served). Ready items keep pulsing 'N hazır' on the table tile until the bill closes, and the call screen drops orders only after a 10-minute timeout (src/pages/KitchenPage.tsx, server/services/floor.ts).",
+  "Weak: Menu sync can undo Tükendi. While LAFFOGATO_SYNC_SECRET is unset, a cashier's Tükendi changes only LafPOS and is silently reset the next time the site menu changes (applyMenu sets active=true). The 5-minute auto-sync also applies site price and name changes without the preview step. 'Günlük porsiyon' never resets daily, and voids don't give portions back (server/sync/laffogato-menu.ts, server/jobs.ts).",
+  "Weak: Cash-up is half-done. Card and meal-card slip amounts are saved at Z but never shown or reconciled again. There is no per-staff drawer or shift close. The X report prints under a 'GÜN SONU · Z' heading. The 'Satış için gün açılmış olmalı' setting does nothing (src/pages/cash/CashCount.tsx, src/lib/print.tsx, src/pages/admin/SettingsAdmin.tsx).",
+  "Weak: Delivery is thin. There is no Yemeksepeti/Getir/Trendyol adapter (despite the plan), no caller ID, and no customer or address lookup in the Gel-al/Paket dialog. The bill print leaves out the address and phone, although the dialog says they go on the courier slip (src/pages/FloorPage.tsx, src/lib/print.tsx).",
+  "Weak: Tablets and phones have no offline mode (no service worker or queue), so ordering stops if Wi-Fi or the kasa PC goes down. Backups stay on the same disk, with no automatic off-site copy and no restore screen (src/lib/api.ts, server/jobs.ts).",
+  "Weak: Several interactions are clumsy on a touch kiosk. Native window.prompt is used for the refund reason and the credit limit, and window.confirm for merging tables and force-cancelling a fiscal basket. Reservations can't be edited (only their status) and have no double-booking check. Customer name and phone can't be edited. Changing the waiter exists in the API but has no screen. Redeeming stamps ('Hediye') doesn't add the free drink (src/pages/order/PaymentModal.tsx, src/pages/CustomersPage.tsx, src/pages/ReservationsPage.tsx).",
+  "Weak: Staff and loyalty basics are missing: time clock, shifts, tip pooling or per-waiter tips, card login, gift cards, points, campaigns and coupons, combos, courses and seats, and hold-and-fire (server/db/schema.ts, shared/permissions.ts).",
+  "Weak: Practice sales count as real sales. The training fiscal device is the default and its sales land in the real day and Z, with no separate training mode. Auto-lock defaults to off on a shared till, and cashiers can comp items without approval by default (server/db/seed.ts, server/lib/settings.ts, shared/permissions.ts).",
+  "Weak: Reports and alerts are CSV only (no PDF or XLSX) and are never e-mailed on a schedule; alerts don't reach the owner's phone when the app is closed. There is no forecast, labour % or menu-engineering view. Costs must be pulled by hand. The audit screen shows only the last 300 entries with no date filter, and rows in the Adisyonlar report don't open the check (src/pages/reports/ReportsPage.tsx, src/pages/admin/AuditAdmin.tsx)."
+ ]
+}

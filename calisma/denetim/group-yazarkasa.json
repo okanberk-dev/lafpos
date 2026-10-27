@@ -1,0 +1,209 @@
+[
+ {
+  "title": "Voiding a fiscal receipt after a merge refunds the payment but leaves the target order closed with a stale paid amount",
+  "severity": "high",
+  "file": "server/services/orders.ts",
+  "line": 1233,
+  "description": "mergeOrders moves the source's payments and items to the target (line 589), but fiscal_receipts.orderId stays on the source. If the source had a device-paid partial (receipt 'tamamlandi') and the fiscal receipt is later voided on the device (applySale status 99, simulator or webhook), refundExternalPayments(t, …, r.orderId = SOURCE, paymentIds) marks the payment (now on the target) as refunded. It then reopens and recalcs only the source, which is 'birlesti', so its status is not 'kapali'. The target keeps status 'kapali' and its stored paid still includes the refunded card payment. Result: a closed order with money still owed, the floor and list show it fully paid, and the X/Z report counts its full net sales but only the payments that remain.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/state-r1/merge-okc-void.probe.test.ts",
+  "evidence": "A after device partial { status: 'acik', total: 33500, paid: 14000 }\nB after merge { status: 'acik', total: 47500, paid: 14000, payments: [ [ 'Kredi kartı', 14000 ] ] }\nB after device void { status: 'kapali', total: 47500, storedPaid: 47500, sumOfNonRefundedPayments: 33500, payments: [ [ 'Kredi kartı', 14000, true ], [ 'Nakit', 33500, false ] ] }\nA (source, birlesti) after device void { status: 'birlesti', total: 0, paid: 0 }\nX report { netSales: 47500, paymentsTotal: 33500 }\nAssertionError: expected 47500 to be 33500",
+  "fix": "In refundExternalPayments, work from each payment's current orderId (p.orderId) rather than r.orderId: refund the payment, then reopen (if 'kapali') and recalc every order that owned a refunded payment. Alternatively, have mergeOrders move fiscal_receipts.orderId (and transferItems handle it too), or refuse to merge a source that has completed device receipts.",
+  "dimension": "state",
+  "votes": [
+   {
+    "lens": "reproduce",
+    "real": true,
+    "severity": "high",
+    "reason": "The bug reproduces on the current code (repo HEAD 78704a1). I ran the original probe (copied to /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-reproduce/original-merge-okc-void.probe.test.ts) and my own independent probe (/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-reproduce/merge-void-own.probe.test.ts). Both fail on assertions of correct behaviour.\n\nRoot cause, confirmed in the code:\n- mergeOrders (server/services/orders.ts:577-604) moves orderItems, payments and roomSessions from the source to the target. It does not move fiscal_receipts.orderId.\n- Its assertNoPendingDevice guard only blocks receipts that are 'gonderildi' or 'kilitli'. A 'tamamlandi' receipt does not stop the merge.\n- On a status-99 void, applySale (server/okc/service.ts:316) calls refundExternalPayments(t, ..., r.orderId, r.paymentIds). Here r.orderId is still the source order.\n- refundExternalPayments (orders.ts:1213-1240) sets refundedAt on the payment, which now belongs to the target. It also lowers paidQty on the moved items. But the status check `if (o.status === 'kapali')` at line 1233 and the recalc only run on the source, which is 'birlesti'. The target is never reopened or recalculated.\n\nOutput from my own probe, scenario 1 (target closed with cash before the void):\n`S1 target after void { status: 'kapali', total: 47500, storedPaid: 47500, livePaid: 33500, refunded: [ 14000 ] }`\n`S1 target in closed list 200 { status: 'kapali', total: 47500, paid: 47500 }`\n`X report { netSales: 47500, payments: 33500 }`\nThe order stays closed and the list shows it fully paid, but 140 TL was refunded on the card and is still owed. The X report counts 47500 in net sales against 33500 in payments.\n\nOutput from scenario 2, a new case where the target is still open at the void:\n`S2 target after void { status: 'acik', total: 47500, storedPaid: 14000, livePaid: 0, dueShown: 33500, dueReal: 47500 }`\nThe amount due shown is too low by the refunded card payment, so the order's stored paid amount is wrong in this case too.\n\nThe original probe's output matches the claim exactly: B ends 'kapali' with storedPaid 47500, the non-refunded payments sum to 33500, the X report shows netSales 47500 against paymentsTotal 33500, and the run fails with `AssertionError: expected 47500 to be 33500`.\n\nThis breaks two project rules: totals must be recomputed on the server (orders.paid goes stale), and every write must publish a live event for the affected order (the target gets no event).\n\nSeverity high: this is a real money discrepancy on a closed order and in the X/Z report. It comes from a reachable flow: pay part of a bill on the fiscal device, merge tables, then void the fiscal receipt the same day."
+   },
+   {
+    "lens": "correctness",
+    "real": true,
+    "severity": "high",
+    "reason": "The bug is real. The expected behaviour in the claim is also what the project intends. docs/04-YAZARKASA.md line 81 says status 99 means \"o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir\". Two existing tests expect the order to be 'acik' with paid 0 after a device void: tests/api-flow.test.ts:130-142 and tests/review-fixes.test.ts:189-201. The void alarm text in server/okc/service.ts:325 also says the order \"yeniden açıldı\".\n\nRoot cause:\n- mergeOrders (server/services/orders.ts:587-588) moves the source's items and payments to the target, but leaves fiscal_receipts.orderId on the source.\n- Merging is allowed because assertNoPendingDevice only blocks receipts in 'gonderildi' or 'kilitli', not 'tamamlandi'.\n- On a device void, applySale (server/okc/service.ts:316) calls refundExternalPayments(t, ..., r.orderId = SOURCE, r.paymentIds).\n- refundExternalPayments (orders.ts:1213-1242) marks the payment refunded and resets paidQty on the moved items. It then only reopens the source if it is 'kapali' (it is 'birlesti') and only recalcs the source. The target is never touched.\n\nProbe: /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-correctness/merge-okc-void.probe.test.ts (config vitest.probe.config.mts in the same folder).\n\n1. Control, no merge: the same partial device payment, then cash for the rest, then a device void. The order reopens correctly (test passes):\n   CONTROL after void { status: 'acik', total: 33500, paid: 19500, live: 19500 }\n2. With the merge:\n   B after merge { status: 'acik', total: 47500, paid: 14000 }\n   B after void { status: 'kapali', total: 47500, storedPaid: 47500, livePaid: 33500, payments: [['Kredi kartı',14000,true],['Nakit',33500,false]], itemsPaidQty all 0 }\n   A after void { status: 'birlesti', total: 0, paid: 0 }\n   X report { netSales: 81000, paymentsTotal: 67000, openOrders: 0 }. The 14000 kuruş gap is order B.\n   Day close 200 ok. The Z is taken because B counts as closed, so the open_orders guard does not stop it.\n   Failing assertions: expected 47500 to be 33500 (stored paid vs. payments not refunded); expected 'kapali' to be 'acik'; expected 81000 to be 67000 (netSales vs. payments).\n\nImpact:\n- A closed order keeps a stale paid amount and still owes 140 TL, and its items show as unpaid.\n- The floor and the order list show it as settled.\n- The Z can be closed with net sales above payments.\n- The 'okc.void' alarm points at the merged source order (birlesti), which cannot be reopened. Nothing points staff to order B, so the shortfall is silent.\n\nThis breaks the core rules that money is always correct and that the server recomputes totals. The trigger needs a partial payment on the fiscal device, then a merge, then a manager-approved void, so it is rare, but the result is wrong money data that stays in the day's Z.\n\nThe proposed fix is sound: in refundExternalPayments, group the payments by their current orderId (p.orderId), then reopen any that are 'kapali' and recalc each owning order. The other options would also work: move fiscal_receipts.orderId during the merge, or block merging a source that has completed receipts."
+   },
+   {
+    "lens": "impact",
+    "real": true,
+    "severity": "high",
+    "reason": "Confirmed with a runnable probe. The bug is real and it loses money and corrupts the Z without anyone being told.\n\n**Root cause.** `mergeOrders` (server/services/orders.ts:588-589) moves the source order's items and payments to the target. It does not move `fiscal_receipts.orderId`, and it only blocks pending device receipts. So a completed (`tamamlandi`) receipt still points at the source. When the receipt is voided on the device (TokenX webhook or simulator, status 99), `applySale` (server/okc/service.ts:316) calls `refundExternalPayments(t, ..., r.orderId = SOURCE, r.paymentIds)`, which:\n- marks the payment refunded, even though it now belongs to the target\n- reopens and recalculates only the source, which is `birlesti`, so nothing reopens\n\nThe target keeps status `kapali` and its stored `paid` still includes the refunded payment.\n\n**Probe:** /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-impact/merge-void-impact.probe.test.ts. I also re-ran the original probe as /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-impact/merge-okc-void.probe.test.ts, and it reproduced the same numbers: storedPaid 47500 vs live 33500, X netSales 47500 vs payments 33500.\n\n**Control, same device void without a merge.** The order reopens correctly:\n- `CONTROL (no merge) after void { status: 'acik', total: 14000, paid: 0 }`\n- `CONTROL day close attempt 409`, so the open order blocks the Z until the money is collected again\n\n**Scenario: partial device payment on A, merge A into B, B closes, receipt voided on the device:**\n- `SCENARIO B after void { status: 'kapali', total: 47500, storedPaid: 47500, livePaid: 33500 }`\n- `SCENARIO floor has open order on table B? false`\n- The `okc.void` audit row points at the source order A (`birlesti`, total 0), not B, and its message says \"ödeme geri alındı ve adisyon yeniden açıldı\", but no order was reopened. This misleads staff.\n- `SCENARIO day close status 200`: the open-order guard is bypassed.\n- `Z summary { netSales: 61500, paymentsTotal: 47500, openOrdersAtClose: 0, expectedCash: 47500, cashDiff: 0 }`. Of the 140 TL gap, all comes from the voided card payment. The control order was settled, so it adds nothing.\n- AssertionError: expected 61500 to be 47500.\n\n**Real-world impact:**\n1. The customer's 140 TL card charge is reversed on the device, but LafPOS shows the order closed and fully paid. No prompt asks staff to collect it again, so the money is lost silently.\n2. The Z is stored and closed with net sales above recorded payments, and `summary.netSales` is what goes to lafmaliyet (days.ts:317). `cashDiff` stays 0, so nothing flags the gap.\n3. The safety net that works without a merge (the order reopens and day close returns 409) is skipped.\n4. The audit trail names the wrong order and says it was reopened.\n\n**Trigger.** Every step is routine: one guest pays their part on the fiscal device, the tables are joined, the rest is paid, and the fiscal receipt is voided the same day, for example after a wrong card charge. The full sequence is uncommon, which is the only thing keeping this from critical. A manager who notices can reopen B by hand, since `reopenOrder` recalculates, but nothing in the system points them to B."
+   }
+  ],
+  "id": "state-01"
+ },
+ {
+  "title": "Voiding a device receipt after its order was merged refunds the target order's payments but leaves the target closed and 'paid'",
+  "severity": "critical",
+  "file": "server/services/orders.ts",
+  "line": 1213,
+  "description": "`applySale` (status 99) calls `refundExternalPayments(t, ..., r.orderId, r.paymentIds)` with the receipt's original order. `mergeOrders` moves payments and items to the target order, but the receipt keeps the source orderId. The void therefore refunds payments that now belong to the target and decrements the target's item paidQty. It then recalculates and reopens only the source order, which is already merged. The target stays 'kapali' with a stale stored `paid`. The X/Z report counts the full closed-order total as net sales while the live payments are lower by the voided amount.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/merge-void.probe.test.ts",
+  "evidence": "merged target total 42000 paid 14000\nvoid -> 200 {... \"status\":\"fis_iptal\",\"amount\":14000 ...}\ntarget after void: status kapali total 42000 stored paid 42000 sum of non-refunded payments 28000 payments [{\"m\":\"Kredi kartı\",\"a\":14000,\"refunded\":true},{\"m\":\"Nakit\",\"a\":28000,\"refunded\":false}]\nX report: netSales 42000 payments by z field {\"cash\":28000,\"card\":0,...}",
+  "fix": "In refundExternalPayments, work from each payment's current `orderId` rather than the receipt's. Recalculate and, if needed, reopen every order touched, and uncredit the customer on the order that is actually closed. Alternatively, have mergeOrders re-point fiscal_receipts.orderId to the target, or refuse to merge orders that have completed device receipts.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-20"
+ },
+ {
+  "title": "Fiscal receipt void reopens a closed order even when it refunds nothing (payment already refunded in LafPOS)",
+  "severity": "low",
+  "file": "server/services/orders.ts",
+  "line": 1233,
+  "description": "refundExternalPayments skips payments that are already refunded, but still reopens the order whenever it is 'kapali'. If a device card payment was refunded in LafPOS (refundPayment allows this for device payments) and the customer then paid cash, a later void of the original fiscal receipt reopens a fully paid order: status 'acik', due 0. The customer is also uncredited. The order then blocks gün sonu with open_orders until someone closes it by hand.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/state-r1/okc-void-after-refund.probe.test.ts",
+  "evidence": "after device payment { status: 'kapali', paid: 14000 }\ncash payment closed the order: true\nafter device void { status: 'acik', total: 14000, paid: 14000, due: 0 }\ngün sonu -> 409 open_orders Açık adisyon var: #1. Gün sonundan önce kapatın ya da iptal edin\nAssertionError: expected 'acik' to be 'kapali'",
+  "fix": "Reopen (and uncredit) only if at least one payment was actually refunded in this call and the recalculated paid is below the total. Also consider refusing LafPOS-side refundPayment for payments linked to a completed fiscal receipt (require the device void instead), so the ÖKC and LafPOS Z stay in step.",
+  "dimension": "state",
+  "votes": [
+   {
+    "lens": "reproduce",
+    "real": true,
+    "severity": "low",
+    "reason": "The bug reproduces on the current code, and I did not change any repo files.\n\n1. **The original probe.** I copied it to /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-reproduce/okc-void-after-refund.probe.test.ts and ran it alone. It fails exactly as claimed:\n   - after device payment: { status: 'kapali', paid: 14000 }\n   - cash payment closed the order: true\n   - after device void: { status: 'acik', total: 14000, paid: 14000, due: 0 }\n   - gün sonu: 409 open_orders\n   - AssertionError: expected 'acik' to be 'kapali'\n\n2. **My own probe.** It is /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-reproduce/okc-void-noop-reopen-own.probe.test.ts: a tezgah order with a customer, a Latte paid by card on the device. It confirms the claim and adds more evidence:\n   - P2: the LafPOS refund of the device card payment returns 200, so refundPayment does not block payments linked to a completed fiscal receipt.\n   - P3: the cash payment closes the order; the customer shows visits 1, totalSpent 19500, stamps 1.\n   - P4/P5: the device void returns 200. The order is then status 'acik', total 19500, paid 19500, due 0, and the only live payment is Nakit 19500. The customer is uncredited to visits 0, totalSpent 0, stamps 0.\n   - P6: the okc.void alarm audit says \"₺195,00 ödeme geri alındı ve adisyon yeniden açıldı\", but nothing was refunded. The audit record is misleading.\n   - P7: re-sending the order to the ÖKC is refused with 409 okc_partial, so reopening does not lead to a new fiscal receipt.\n   - P8: gün sonu is blocked with 409 open_orders.\n   - P9: a manual POST /orders/:id/close gives 200 kapali and gives the customer visits 1 again.\n\n**Root cause.** In refundExternalPayments (server/services/orders.ts lines 1213-1240), already-refunded payments are skipped with `continue`. The order is still reopened and the customer uncredited whenever the status is 'kapali', whether or not anything was refunded or the paid amount fell below the total.\n\n**Why low.** No money is miscounted, and staff can recover with one manual close. The real effects are a false alarm audit, a fully paid order shown as open, a temporary loss of customer credit, and a blocked gün sonu until someone closes the order by hand."
+   },
+   {
+    "lens": "correctness",
+    "real": true,
+    "severity": "low",
+    "reason": "Confirmed with my own probe. The void reopens an order it refunded nothing on, and the order is then stuck.\n\nProbe: /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-correctness/okc-void-after-refund-verify.probe.test.ts. Run with the given vitest config and the filter okc-void-after-refund-verify. The test fails with `expected 'acik' to be 'kapali'`.\n\nSteps and output:\n- Pay the order on the device (simulator) by card; the order has a customer attached. Result: `{ status: 'kapali', paid: 14000, visits: 1 }`.\n- Refund that device card payment in LafPOS with Müdür PIN approval. Result: 200.\n- Pay the same total in cash. Result: `cash closed: true { status: 'kapali', paid: 14000, live: ['Nakit'], visits: 1 }`.\n- Void the receipt on the device (status 99). Result: `{ status: 'acik', total: 14000, paid: 14000, due: 0, live: ['Nakit'], visits: 0 }`. No payment was changed, but the order reopened and the customer's visit was taken back.\n- The okc.void audit reads \"₺140,00 ödeme geri alındı ve adisyon yeniden açıldı\" with amount 14000. Nothing was refunded, so this message is false.\n- Sending the order to the device again: `409 okc_partial`. Taking another payment: `409 nothing_due`. Gün sonu: `409 open_orders Açık adisyon var: #1`.\n- Only the API `POST /orders/:id/close` fixes it (200, kapali, visits 1). The UI does not offer it: in src/pages/order/OrderPage.tsx:163, \"Sıfır tutarlı adisyonu kapat\" only shows when `order.total === 0`, and the Ödeme button is off when due <= 0. From the UI, staff can only refund the cash and take it again, or refund and cancel the order.\n\nWhy the current behaviour is not intended:\n- docs/04-YAZARKASA.md §6 says status 99 refunds that receipt's payments and makes the order payable again.\n- Here nothing was refunded and nothing is payable. So the reopen does not follow the documented intent.\n- It also cannot get a new fiscal receipt issued, because sending to the device again is blocked with okc_partial.\n- The `continue` in refundExternalPayments (server/services/orders.ts:1221) skips payments already refunded, but the `if (o.status === 'kapali')` reopen and uncreditCustomer at line 1233 run anyway.\n\nThe proposed fix is sound: reopen and uncredit only if this call actually refunded a payment and the recalculated paid is below the total. The audit message should also only say a payment was refunded when one was.\n\nWhy low severity:\n- It needs an unusual order of steps: an approved LafPOS refund of a device payment, then paying again, then the device void.\n- No money is wrong: paid, cash and the payment list stay correct, and the alarm is audited.\n- The customer credit comes back on the manual close.\n- The cost is an order that blocks gün sonu, cannot be closed from the UI, and leaves a misleading audit line."
+   },
+   {
+    "lens": "impact",
+    "real": true,
+    "severity": "low",
+    "reason": "The bug is real and its impact is small. No money is lost and the final Z is correct once the order is closed again. But the void puts a fully paid order back into an open state that staff cannot close from the UI, and it blocks gün sonu.\n\nProbe: /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-impact/void-after-refund-impact.probe.test.ts\n\nThe probe uses a path the UI can reach. The order has Türk kahvesi and Latte M. Only the Türk kahvesi goes to the device, which takes card, so the order stays open with 195 TL due and the payment modal is available. The manager refunds the device payment in LafPOS, the cashier takes 335 TL cash, and the order closes. The fiscal receipt is then voided on the device. Output:\n- after device void { status: 'acik', total: 33500, paid: 33500, due: 0, livePayments: [['Nakit', 33500]] }\n- Z summary diff after the void: receipts 1→0, gross 33500→0, netSales 33500→0, kdv and topProducts emptied, openOrdersAtClose 0→1. While the order is reopened, the interim/X report shows no sales but the 335 TL cash is still counted.\n- add payment → 409 nothing_due | cancel → 409 has_payments | gün sonu → 409 open_orders \"Açık adisyon var: #1…\"\n- okc.void alarm audit says \"₺140,00 ödeme geri alındı ve adisyon yeniden açıldı\", but this call refunded nothing.\n- POST /orders/:id/close through the API → 200 kapali, and the Z then matches the pre-void state exactly. So the damage reverses, but only through the API.\n\nThere is no direct UI way out. In OrderPage.tsx:\n- The payment button is disabled when due <= 0.\n- \"Sıfır tutarlı adisyonu kapat\" only shows when total === 0.\n- \"Adisyonu iptal et\" only shows when paid === 0.\n- \"Yeniden aç\" only shows when the order is kapali.\n\nSo on the floor, staff are stuck at gün sonu. They need someone to call the API, or a messy workaround with an approval and alarm audits (for example: add an item, refund the cash, void the item, pay again).\n\nIf a customer is attached to the order, they also lose credit until it is closed again.\n\nLimits on reach:\n- A fully paid device order cannot have its payment refunded from the UI (the payment modal needs due > 0). So the realistic path needs a partial, item-selected device basket, or a direct API call.\n- The simulator refuses a void on a closed day, so the void-after-Z variant could not be reproduced (second probe /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-state-r1-impact/void-after-refund-postz.probe.test.ts returned 409 day_closed).\n\nThat leaves a real but uncommon operational blocker plus a misleading audit and interim report, which fits low severity."
+   }
+  ],
+  "id": "state-09"
+ },
+ {
+  "title": "Service charge can never reach the device once every item has gone through per-item baskets",
+  "severity": "critical",
+  "file": "server/okc/basket.ts",
+  "line": 91,
+  "description": "The service line is only added on a whole-order basket that still has unpaid items (`!input.selection && ... && parts.length`), and per-item baskets never carry service. The docs recommend paying item by item when each person needs their own receipt. In that flow every item ends up fiscalized and the service stays in the remaining balance. The next whole-order send then fails with 'Cihaza gönderilecek ücretli kalem yok', so the service has to be taken in LafPOS without a fiscal receipt. Result: the device total for the order is lower than the LafPOS total.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/service.probe.test.ts",
+  "evidence": "order total 30800 service 2800\nper-item basket 14000 [\"Türk kahvesi\"]\nper-item basket 14000 [\"Türk kahvesi\"]\nafter per-item baskets: status acik total 30800 paid 28000 remaining 2800\nsend remaining (service) to device -> 400 {\"error\":\"Cihaza gönderilecek ücretli kalem yok\",\"code\":\"okc_basket\"}",
+  "fix": "When nothing chargeable is left but service (or service minus what was already fiscalized) is still due, build a basket that holds only the 'Servis ücreti' line. Alternatively, give per-item baskets their proportional service share. Either way, track how much service has already been sent to the device.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-18"
+ },
+ {
+  "title": "Second whole-order basket sends the full service again and hides the overlap as a fake discount, so the KDV split no longer matches LafPOS",
+  "severity": "critical",
+  "file": "server/okc/basket.ts",
+  "line": 92,
+  "description": "After a whole-order basket that included a service line is paid, items can still be added (the docs allow this while the basket is pending). The next whole-order basket again sends `totals.service` in full, even though the first receipt already fiscalized part of it. The drift loop then pushes the overpaid service into an 'İndirim' adjust on whatever item is largest, regardless of its KDV rate. The order total still matches, but the device receipts show 71 TL of service where LafPOS has 43 TL. They also show a 28 TL discount that does not exist in LafPOS, and the gross per KDV rate differs between the two. If the new items are cheaper than the earlier service line, the send fails outright and the remainder cannot be fiscalized at all.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/service.probe.test.ts",
+  "evidence": "basket1 30800 [... Türk kahvesi x2 ..., {\"name\":\"Servis ücreti\",\"price\":2800,...}]\nbasket2 16500 [{\"name\":\"Karaoke kişi başı\",\"price\":15000,\"taxPercent\":2000,...,\"adjust\":{\"description\":\"İndirim\",...,\"totalValue\":2800}},{\"name\":\"Servis ücreti\",\"price\":4300,...}]\nservice on device receipts 7100 LafPOS service 4300\ndevice gross by KDV rate {\"10\":35100,\"20\":12200} LafPOS gross by KDV rate {\"10\":32300,\"20\":15000}\n(variant) remaining 15400 service total 21400 basket1 service line 20000\nsend remainder -> 400 {\"error\":\"Cihaz sepeti adisyonun kalanını tutmuyor; kalanı kalem seçerek ya da LafPOS'ta alın\",\"code\":\"okc_basket\"}",
+  "fix": "Record how much service each receipt fiscalized (for example on fiscal_receipts) and send only `totals.service - alreadyFiscalizedService` as the service line. Book any drift only within the same KDV rate, and never as a discount on another rate's item.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-19"
+ },
+ {
+  "title": "Device sale whose payments don't cover the basket (ikram, ödemesiz or an unmapped type) still marks every item paid; the marks are orphaned and survive a receipt void",
+  "severity": "high",
+  "file": "server/okc/service.ts",
+  "line": 281,
+  "description": "`salePayments` skips IKRAM (9) and ODEMESIZ (8) and clips to the basket, and `methodFor` can drop a payment. Despite that, `addExternalPayments` marks every line in `r.items` as paid. Only the first recorded payment carries those marks; when no payment survives, nothing carries them. The order stays open with an amount due, but its items are 'paid'. As a result the remainder cannot be resent to the device ('ücretli kalem yok'), and the items cannot be voided or comped (item_paid). The device receipt total (280 TL) differs from what LafPOS recorded (140 TL). With a full ikram, `r.paymentIds` is empty, so a later receipt void (99) takes the else branch and never clears paidQty.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/underpaid-sale.probe.test.ts",
+  "evidence": "device receipt total 28000 | LafPOS: status acik total 28000 paid 14000 paidQty [[2,2]] payments [[\"Kredi kartı\",14000,[{\"itemId\":...,\"qty\":2}]]]\nresend remaining to device -> 400 {\"error\":\"Cihaza gönderilecek ücretli kalem yok\",\"code\":\"okc_basket\"}\nvoid item -> 409 {\"error\":\"Ödenmiş kalem iptal edilemez; önce ödemeyi iptal edin\",\"code\":\"item_paid\"}\nreceipt tamamlandi | order acik total 14000 paid 0 paidQty 1 payments 0\nafter receipt void: receipt status iptal | item paidQty 1 paid 0\nresend after void -> 400 ...",
+  "fix": "If the mapped payments sum to less than r.amount, do not mark items paid; mark the receipt 'hata' and raise an okc alarm. Ikram/ödemesiz on the device should become an audited comp or an alarm, never a silent skip. Keep the item marks with the receipt so a 99 void always reverts them, even when no payment row exists.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-21"
+ },
+ {
+  "title": "Receipt void (99) arriving by webhook after the day was closed refunds that day's payments and leaves an open order in the closed day",
+  "severity": "high",
+  "file": "server/okc/service.ts",
+  "line": 313,
+  "description": "The simulator void path refuses payments that belong to a closed day ('Kapanmış bir güne ait fiş iptal edilemez'). The real TokenX webhook path (`handleTokenxWebhook` → `applySale` status 99) has no such check. It refunds payments whose dayId belongs to a closed business day and sets the order back to 'acik' inside that day. The stored Z (netSales/cash 28000) no longer matches the day's data (now 14000), and no later day close checks the orphaned open order. If the day is reopened or exported, it reports different numbers from the Z already taken.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/tokenx-results.probe.test.ts",
+  "evidence": "webhook 99 after day close -> 200\norder after: status acik paid 0 payments [[\"Nakit\",14000,true]]\nclosed day 2026-10-26 closedAt set true | stored Z: netSales 28000 cash 28000 | recomputed now: netSales 14000 cash 14000 openOrders 1",
+  "fix": "Apply the same rule as simulatorCancel inside applySale for status 99: if any of r.paymentIds belongs to a day that is no longer open, do not refund. Instead write an 'okc.void_closed_day' alarm (or post the refund as a correction in the current day) and keep the receipt/order state consistent.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-22"
+ },
+ {
+  "title": "A fiscal-receipt void that arrives after day close rewrites the closed day, and the re-payment lands in the next Z with no sale behind it",
+  "severity": "high",
+  "file": "server/okc/service.ts",
+  "line": 316,
+  "description": "applySale(status 99), reached from the TokenX webhook (handleTokenxWebhook, line 420), calls refundExternalPayments without checking the business day. The simulator path refuses this case ('Kapanmış bir güne ait fiş iptal edilemez', line 474), but the real device path does not. When a receipt from an already-closed day is voided on the device, three things happen. The closed day's payments get refundedAt. The order goes back to 'acik' inside the closed day. /reports/summary for that date drops, while the stored Z and the lafmaliyet payload still show the old figure. addPayment (server/services/orders.ts:825) then accepts payment on this orphan order on the next day: it uses requireOpenDay() for the payment's dayId and never checks o.dayId. The result is that the next Z gets payments (z_total) with zero net sales, and the old date shows net sales with no matching payments.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/reports-r1/okcvoid.probe.test.ts",
+  "evidence": "Z1 at close: net 61500 z_total 615 cash 615\nwebhook 200 {\"ok\":true}\norder A status acik dayId==day1 true\n11-02 /reports/summary net 19500 payments [Nakit 19500] | stored Z net 61500 Z lafmaliyet z_total 615\nrepay status 200 true\nZ2 net 0 Z2 z_total 420 Z2 card 420 receipts 0\n11-02 report net now 61500 payments [[\"Nakit\",19500]]\n11-03 report net 0 payments [[\"Kredi kartı\",42000]]\nAssertionError: report for a closed date must still equal its Z: expected 19500 to be 61500\nAssertionError: Z2 payments total equals Z2 net sales: expected 42000 to be +0",
+  "fix": "In applySale's status-99 branch, apply the same rule as simulatorCancel. If any of r.paymentIds belongs to a day other than the open day (or no day is open), do not refund or reopen. Record an alarm audit entry ('fiş kapanmış güne ait; iade olarak işleyin') and mark the receipt as fis_iptal. In addPayment and addExternalPayments, also refuse orders whose dayId is not the open day (conflict 'day_closed').",
+  "dimension": "reports",
+  "votes": [],
+  "id": "reports-29"
+ },
+ {
+  "title": "A send error overwrites a receipt that was completed meanwhile with 'hata', so a later fiscal void no longer refunds",
+  "severity": "high",
+  "file": "server/okc/service.ts",
+  "line": 174,
+  "description": "`sendOrderToDevice` inserts the receipt as 'gonderildi' and then awaits the TokenX POST. If the BASKET_COMPLETED webhook (or a poll) applies the sale while the POST is still in flight and the POST then fails (for example a gateway timeout), the catch block runs `update ... set status 'hata'` without checking the current status. The order is closed and paid, but the receipt reads 'hata' and the cashier gets a 502 'Yazarkasaya gönderilemedi'. When the receipt is later voided on the device (status 99), `r.status !== 'tamamlandi'` sends it down the else branch: the receipt becomes 'iptal' and the LafPOS payment is never refunded, even though the fiscal sale was cancelled.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/tokenx-race.probe.test.ts",
+  "evidence": "webhook during POST -> 200\nsend -> 502 {\"error\":\"Yazarkasaya gönderilemedi: The operation was aborted due to timeout\",\"code\":\"okc_send\"}\nreceipt status hata error The operation was aborted due to timeout | order kapali paid 14000\nafter device void: receipt iptal | order kapali paid 14000",
+  "fix": "Make the failure update conditional, e.g. `where id = ? and status in ('gonderildi','kilitli')`, and skip the 502 when the receipt is already 'tamamlandi'. Make the 99 handler key on `paymentIds.length` (non-refunded payments exist) rather than on status alone. Apply the same compare-and-set to cancelDeviceBasket's final update.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-23"
+ },
+ {
+  "title": "KDV split on the device diverges from LafPOS when an order discount is redistributed after a per-item device payment",
+  "severity": "high",
+  "file": "server/okc/basket.ts",
+  "line": 101,
+  "description": "`calcOrder` re-allocates the order-level discount over all lines on every recalc, including units already fiscalized on the device. When an item is added after a per-item device receipt, the already-printed item's LafPOS lineNet changes. The whole-order basket's drift loop then books the difference on the largest unpaid item, here a 20% KDV item, even though the shift came from a 10% item. Order totals match, but the device receipts and the LafPOS Z KDV table disagree per rate by 8.23 TL.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/kdv-drift.probe.test.ts",
+  "evidence": "order kapali total 39000 | device receipts gross by KDV {\"10\":11586,\"20\":27414} | LafPOS (Z) gross by KDV {\"10\":12409,\"20\":26591}",
+  "fix": "Freeze lineNet for units already paid or fiscalized (store each paid unit's net with its payment or receipt) and allocate the order discount only over unpaid units. Alternatively, restrict drift absorption to items of the KDV rate the drift came from, and refuse the send when that is not possible.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-24"
+ },
+ {
+  "title": "Basket that fails to send (timeout) is marked 'hata' and never reconciled: refresh and polling skip it, and LafPOS lets the order be charged again",
+  "severity": "medium",
+  "file": "server/okc/service.ts",
+  "line": 357,
+  "description": "Any TokenX send error, including an ambiguous network or gateway timeout after which the basket may still exist on the device, sets the receipt to 'hata'. `refreshReceipt` returns early for anything that is not 'gonderildi'/'kilitli', and the poll loop only selects those statuses. Without a webhook, LafPOS never asks Token whether that basket was paid. The order is unlocked, so the cashier can take the same amount again in LafPOS (or resend, which Token may reject with 1101). The device sale then exists with no LafPOS record, or is booked twice.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/tokenx-results.probe.test.ts",
+  "evidence": "send with timeout -> 502 {\"error\":\"Yazarkasaya gönderilemedi: The operation was aborted due to timeout\",\"code\":\"okc_send\"}\nrefresh on hata receipt -> status hata | GET basket calls during refresh 0\nLafPOS cash payment for same order -> 200 {\"order\":{...",
+  "fix": "Treat a timeout or network error (no Token status code) as 'belirsiz' (unknown): keep the order locked, poll GET /v1/basket for that receipt, and allow refresh for it. Only a definite Token error code should become 'hata'.",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-25"
+ },
+ {
+  "title": "TokenX polling is not resumed after a server restart; baskets pending at boot are never queried",
+  "severity": "low",
+  "file": "server/okc/service.ts",
+  "line": 378,
+  "description": "`ensurePolling()` is only called from `sendOrderToDevice`; nothing at startup restarts it. The kasa PC restarts the server, for example after saving ayarlar.env. Any TokenX basket still 'gonderildi' or 'kilitli' at that moment is never polled when no webhook is configured. The order stays locked with okc_pending until someone presses the manual refresh button or a new basket is sent.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/poll-restart.probe.test.ts",
+  "evidence": "after 6 s: GET basket polls 0 | order status acik paid 0\nLafPOS payment meanwhile -> 409 {\"error\":\"Bu adisyonun sepeti yazarkasada bekliyor; önce cihazda ödeyin ya da sepeti iptal edin\",\"code\":\"okc_pending\"}",
+  "fix": "At server start, call ensurePolling() when the provider is tokenx and any tokenx receipt is pending (for example from index.ts or jobs.ts).",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-27"
+ },
+ {
+  "title": "Device cancel (-1) and basket cancel from LafPOS are not audited, although the docs say every result is",
+  "severity": "low",
+  "file": "server/okc/service.ts",
+  "line": 336,
+  "description": "docs/04-YAZARKASA.md §6 says 'Her sonuç denetim kaydına yazılır'. The -1 branch of applySale writes no audit row, nor does the non-paid 99 branch. A normal `cancelDeviceBasket` (non-force) does not either. Only send, paid, void, force_cancel and late_paid are logged, so a basket sent and then withdrawn leaves no trace beyond okc.send.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/fiscal-r1/audit-results.probe.test.ts",
+  "evidence": "audit actions for order [\"okc.send\",\"okc.send\"]",
+  "fix": "Add fx.audit entries for okc.cancelled (device -1, with source), okc.void on a non-completed receipt, and okc.delete in cancelDeviceBasket (with userId).",
+  "dimension": "fiscal",
+  "votes": [],
+  "id": "fiscal-28"
+ }
+]

