@@ -147,7 +147,7 @@ describe('ikinci inceleme', () => {
     let o = await newOrder([{ name: 'Latte', size: 'M' }, { name: 'Türk Kahvesi' }]);
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 2000, reason: 'Kampanya', approverPin: MUDUR });
     const latte = o.items.find((i) => i.name === 'Latte')!;
-    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Kredi kartı').id, amount: 0, items: [{ itemId: latte.id, qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Kredi kartı').id, amount: o.totals.lineNet[latte.id], items: [{ itemId: latte.id, qty: 1 }] });
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     expect(o.totals.service).toBe(0);
     const sent = await h.ok<{ receipt: { id: string; amount: number; basket: { items: { name: string }[] } } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});

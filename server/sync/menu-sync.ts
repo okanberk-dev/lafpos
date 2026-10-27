@@ -37,7 +37,7 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
       if (!opts.apply) return { status: 'onizleme' as const, preview };
       const fx = new Effects();
       const result = tx((t) => {
-        const r = applyMenu(t, fetched.menu, stations());
+        const r = applyMenu(t, fetched.menu, { ...stations(), panel });
         if (preview.changes.length || preview.newCategories.length) {
           fx.audit(t, {
             userId: opts.userId ?? null,

@@ -35,6 +35,11 @@ export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
 }
 
+/** Oturumun kapandığı API dışından anlaşıldı (canlı akış 401 aldı): giriş ekranına dönülür */
+export function sessionEnded() {
+  onUnauthorized?.();
+}
+
 export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { accept: 'application/json' };
   const token = getToken();

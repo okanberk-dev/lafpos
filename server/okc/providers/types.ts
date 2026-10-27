@@ -58,8 +58,15 @@ export interface ProviderCapabilities {
   docKinds: DocKind[];
 }
 
-/** Sorgu sonucu: belge kesildi, sepet cihazdan silindi ya da hâlâ bekliyor (kilitli/kilitsiz) */
-export type PollOutcome = { kind: 'result'; result: FiscalResult } | { kind: 'deleted' } | { kind: 'pending'; locked: boolean; lockedBy: string | null };
+/**
+ * Sorgu sonucu: belge kesildi, sepet cihazdan silindi, sağlayıcıda böyle bir sepet hiç yok (yanıtı alınamayan
+ * gönderim ulaşmamış) ya da hâlâ bekliyor (kilitli/kilitsiz)
+ */
+export type PollOutcome =
+  | { kind: 'result'; result: FiscalResult }
+  | { kind: 'deleted' }
+  | { kind: 'missing' }
+  | { kind: 'pending'; locked: boolean; lockedBy: string | null };
 
 export interface PendingReceipt {
   id: string;
@@ -79,7 +86,11 @@ export interface FiscalProvider {
   terminalId(): string | null;
   /** Yönetim ekranında gösterilecek durum (gizli değer içermez) */
   status(): Record<string, unknown>;
-  /** Sepeti cihaza yollar. Çekme (pull) sağlayıcısında sepet LafPOS'ta bekler, cihaz kendisi alır. */
+  /**
+   * Sepeti cihaza yollar. Çekme (pull) sağlayıcısında sepet LafPOS'ta bekler, cihaz kendisi alır. Hata
+   * `uncertain: true` taşıyorsa (zaman aşımı, bağlantı koptu) sepet cihaza ulaşmış olabilir: bekleyen kalır ve
+   * `poll` ile sorgulanır; diğer hatalarda sepet cihazda yok sayılır.
+   */
   send(receipt: PendingReceipt): Promise<void>;
   /** Sepeti cihazdan siler (ödeme alınmadıysa); ulaşılamazsa hata fırlatır */
   cancel(receipt: PendingReceipt): Promise<void>;

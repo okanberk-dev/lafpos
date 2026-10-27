@@ -31,6 +31,8 @@ const stateShape = z.discriminatedUnion('kind', [
     label: text(60),
     lines: z.array(z.object({ name: text(80), size: text(16).nullable(), qty: z.number().int().min(1).max(999), options: text(160), total: kurus })).max(80),
     discount: kurus,
+    // Eski kasa sürümü servis göndermez
+    service: kurus.default(0),
     total: kurus,
     paid: kurus,
     due: z.number().int(),

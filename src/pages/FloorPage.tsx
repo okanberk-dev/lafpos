@@ -42,8 +42,9 @@ export default function FloorPage() {
 
   const tapTable = (t: TableDTO) => {
     const orders = floor.data?.tables[t.id] ?? [];
-    if (orders.length === 1) return navigate(`/adisyon/${orders[0].id}`);
-    if (orders.length > 1) return setChoose({ table: t, orders });
+    // Sitede ödenmiş QR siparişi masanın adisyonu değil: masada yalnız o varsa da seçim açılır, garson yeni hesap açabilir
+    if (orders.length === 1 && orders[0].source === 'pos') return navigate(`/adisyon/${orders[0].id}`);
+    if (orders.length) return setChoose({ table: t, orders });
     if (!boot.day) {
       toast.warn('Gün açılmamış. Önce Kasa ekranından günü açın');
       return navigate('/kasa');
@@ -218,18 +219,25 @@ export default function FloorPage() {
         </div>
       </aside>
 
-      <Modal open={!!choose} onClose={() => setChoose(null)} title={choose ? `${choose.table.name}: ayrı hesaplar` : ''} size="sm">
+      <Modal open={!!choose} onClose={() => setChoose(null)} title={choose ? `${choose.table.name}: hesaplar` : ''} size="sm">
         <div className="space-y-2 p-4">
-          {choose?.orders.map((o, i) => (
-            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between rounded-xl border border-line px-4 transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2">
-              <span className="text-sm font-medium">
-                Hesap {i + 1} <span className="text-muted">#{o.no}</span>
-              </span>
-              <span className="tabular font-semibold">{tlShort(o.total)}</span>
-            </button>
-          ))}
+          {choose?.orders.map((o) => {
+            const online = o.source === 'laffogato';
+            const checkNo = choose.orders.filter((x) => x.source === 'pos').indexOf(o) + 1;
+            return (
+              <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-line px-4 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2">
+                <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
+                  {online && <Globe className="size-4 shrink-0 text-[var(--admin-hue-violet)]" strokeWidth={1.75} />}
+                  <span className="truncate">
+                    {online ? 'Online sipariş' : `Hesap ${checkNo}`} <span className="text-muted">#{o.no}</span>
+                  </span>
+                </span>
+                {online ? <span className="shrink-0 text-xs text-muted">Sitede ödendi</span> : <span className="tabular shrink-0 font-semibold">{tlShort(o.total)}</span>}
+              </button>
+            );
+          })}
           <Button block icon={<Plus className="size-4" />} onClick={() => choose && open.mutate({ type: 'masa', tableId: choose.table.id, newCheck: true })}>
-            Yeni ayrı hesap aç
+            {choose?.orders.some((o) => o.source === 'pos') ? 'Yeni ayrı hesap aç' : 'Yeni hesap aç'}
           </Button>
         </div>
       </Modal>

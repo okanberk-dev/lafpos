@@ -5,6 +5,7 @@ import { db, schema } from '../db/client';
 import { DEMO_USERS } from '../db/seed';
 import {
   type AppEnv,
+  approverFor,
   assertNotLocked,
   clearFailures,
   clientKey,
@@ -60,13 +61,16 @@ authRoutes.post('/logout', (c) => {
 
 authRoutes.get('/me', (c) => c.json(meDTO(c.get('user'))));
 
-/** Yetkili PIN'ini işlemden önce denetler (arayüzde anında "Onaylandı: Müdür" göstermek için). */
+/**
+ * Yetkili PIN'ini işlemden önce denetler (arayüzde anında "Onaylandı: Müdür" göstermek için). Hatalı PIN ile yetkisi
+ * olmayanın PIN'i aynı yanıtı alır ve sayaca aynı yazılır; deneme sınırı cihaz ve soran kişi başına.
+ */
 authRoutes.post('/approve', async (c) => {
   const { pin, permission } = await body(c, z.object({ pin: z.string(), permission: z.string() }));
   if (!(permission in PERMISSIONS)) throw new HttpError(422, 'Bilinmeyen yetki');
-  const approver = findApprover(pin, clientKey(c));
-  if (!approver.permissions.has(permission as Permission)) {
-    throw new HttpError(403, `${approver.name} bu işlemi onaylayamaz`, 'approval_forbidden');
-  }
+  const user = c.get('user');
+  const addr = clientKey(c);
+  const approver = findApprover(pin, addr, user);
+  approverFor({ user, approver, approverAddr: addr }, permission as Permission);
   return c.json({ id: approver.id, name: approver.name });
 });

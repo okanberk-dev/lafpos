@@ -32,9 +32,10 @@ describe('TokenX sepeti', () => {
     expect(fromBasket).toBe(totals.total);
     expect(basket.items[0]).toMatchObject({ name: 'Latte Orta', price: 3333, quantity: 3000, sectionNo: 1, taxPercent: 1000 });
     expect(basket.items[1]).toMatchObject({ sectionNo: 2, taxPercent: 2000 });
+    // Satır tutarları da gelir: cihazda ödenince ödemenin kalem işaretleri olur
     expect(lines).toEqual([
-      { itemId: 'a', qty: 3 },
-      { itemId: 'b', qty: 1 },
+      { itemId: 'a', qty: 3, amount: totals.lineNet.a },
+      { itemId: 'b', qty: 1, amount: totals.lineNet.b },
     ]);
   });
 
@@ -42,7 +43,7 @@ describe('TokenX sepeti', () => {
     const items = [item({ id: 'a', qty: 3, paidQty: 1, unitPrice: 1000 })];
     const totals = calcOrder({ lines: [{ id: 'a', qty: 3, unitPrice: 1000, kdvRate: 10, discount: 0, complimentary: false, voided: false }] });
     const r = buildBasket({ ...base, items, totals, selection: [{ itemId: 'a', qty: 5 }] });
-    expect(r.lines).toEqual([{ itemId: 'a', qty: 2 }]);
+    expect(r.lines).toEqual([{ itemId: 'a', qty: 2, amount: 2000 }]);
     expect(r.amount).toBe(2000);
   });
 

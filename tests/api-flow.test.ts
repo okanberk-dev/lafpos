@@ -104,7 +104,7 @@ describe('LafPOS uçtan uca', () => {
 
   it('kalem bazlı kart + nakit ödeme, para üstü, adisyon kapanır', async () => {
     const tk = masa.items.find((i) => i.name === 'Türk Kahvesi')!;
-    const first = await ok<{ order: OrderDTO; closed: boolean }>('kasa', 'POST', `/orders/${masa.id}/payments`, { methodId: method('Kredi kartı').id, amount: 0, items: [{ itemId: tk.id, qty: 2 }] });
+    const first = await ok<{ order: OrderDTO; closed: boolean }>('kasa', 'POST', `/orders/${masa.id}/payments`, { methodId: method('Kredi kartı').id, amount: masa.totals.lineNet[tk.id], items: [{ itemId: tk.id, qty: 2 }] });
     expect(first.closed).toBe(false);
     const due = first.order.total - first.order.paid;
     const second = await ok<{ order: OrderDTO; closed: boolean; change: number }>('kasa', 'POST', `/orders/${masa.id}/payments`, { methodId: method('Nakit').id, amount: due, given: due + 10000 });

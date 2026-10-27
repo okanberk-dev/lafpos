@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
-import { businessDate } from '@shared/time';
+import { addDays, businessDate, businessDayStartMs } from '@shared/time';
 import type { BusinessDayDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import type { ZField, ZSummary } from '../db/schema';
@@ -43,10 +43,29 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
     lastOrderNo: 0,
   };
   t.insert(schema.businessDays).values(day).run();
+  claimEarlyOnlineOrders(t, day.id, day.date);
   fx.audit(t, { userId: actor.user.id, action: 'day.open', amount: day.openingCash, message: `${actor.user.name} günü açtı (Z ${day.zNo}, açılış ${tl(day.openingCash)})` });
   fx.emit({ topic: 'cash', kind: 'day.opened', byUserId: actor.user.id });
   fx.emit({ topic: 'settings', kind: 'day.opened', byUserId: actor.user.id });
   return t.select().from(schema.businessDays).where(eq(schema.businessDays.id, day.id)).get()!;
+}
+
+/**
+ * Gün açılmadan gelen online siparişler (sitede ödendi) geçici olarak son, kapanmış güne yazılır
+ * (`upsertOnlineOrders`). İş günü (ödeme anından, 05:00 kuralı) açılan günün tarihiyse buraya taşınır: raporlar
+ * online siparişi kendi tarihinde gösterir. Açık güne yazılmış sipariş (gün kapanmadan ödenmiş) taşınmaz.
+ */
+function claimEarlyOnlineOrders(t: Tx, dayId: string, date: string) {
+  const from = businessDayStartMs(date);
+  const to = businessDayStartMs(addDays(date, 1));
+  const early = t
+    .select({ id: schema.orders.id, openedAt: schema.orders.openedAt, closedAt: schema.businessDays.closedAt })
+    .from(schema.orders)
+    .innerJoin(schema.businessDays, eq(schema.businessDays.id, schema.orders.dayId))
+    .where(and(eq(schema.orders.source, 'laffogato'), gte(schema.orders.openedAt, from), lt(schema.orders.openedAt, to)))
+    .all()
+    .filter((o) => o.closedAt != null && o.closedAt <= o.openedAt);
+  if (early.length) t.update(schema.orders).set({ dayId }).where(inArray(schema.orders.id, early.map((o) => o.id))).run();
 }
 
 export function addCashMovement(t: Tx, actor: Actor, fx: Effects, input: { kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string }) {
@@ -74,19 +93,59 @@ export function addCashMovement(t: Tx, actor: Actor, fx: Effects, input: { kind:
 }
 
 /** Cari (açık hesap) tahsilatı: satış değildir, Z cirosuna girmez ama nakitse kasaya girer. */
-export function collectCustomerPayment(t: Tx, actor: Actor, fx: Effects, input: { customerId: string; methodId: string; amount: number; note?: string | null }) {
+/**
+ * Açık hesap tahsilatı: ödeme satırı (adisyonsuz), cari ekstresine tahsilat ve bakiye. Yanıtı kaybolan istek aynı
+ * deneme kimliğiyle yeniden gelirse ikinci kez yazılmaz (ödemedeki gibi); yoksa borç iki kez düşüyor, beklenen nakit
+ * iki kez artıyordu. Bakiyeden fazlası tahsil edilmez: fazlası müşteriye alacak olarak yazılır, sonraki açık hesap
+ * satışında harcanırdı (gözden geçirme, 27 Eki 2026). Kimlik yalnız aynı müşteri, tür ve tutarda ilk sonucu döner.
+ */
+export function collectCustomerPayment(
+  t: Tx,
+  actor: Actor,
+  fx: Effects,
+  input: { customerId: string; methodId: string; amount: number; note?: string | null; requestId?: string | null },
+) {
   need(actor, 'cari.yonet');
   const day = requireOpenDay(t);
+  const amount = Math.trunc(input.amount);
+  if (input.requestId) {
+    const prev = t
+      .select()
+      .from(schema.payments)
+      .where(and(isNull(schema.payments.orderId), eq(schema.payments.requestId, input.requestId)))
+      .get();
+    if (prev) {
+      if (prev.customerId !== input.customerId || prev.methodId !== input.methodId || prev.amount !== amount) {
+        throw conflict('Tahsilat ekranı değişti; bakiyeye bakıp yeniden alın', 'request_reused');
+      }
+      return;
+    }
+  }
   const cust = t.select().from(schema.customers).where(eq(schema.customers.id, input.customerId)).get();
   if (!cust) throw notFound('Müşteri');
   const method = t.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, input.methodId)).get();
   if (!method || !method.active || method.kind === 'cari') throw bad('Tahsilat için nakit, kart ya da havale seçin');
-  const amount = Math.trunc(input.amount);
   if (amount <= 0) throw bad('Tutar sıfırdan büyük olmalı');
+  if (amount > cust.balance) {
+    throw conflict(cust.balance > 0 ? `${cust.name} açık hesabında ${tl(cust.balance)} borç var; en çok bu kadar tahsil edilir` : `${cust.name} açık hesabında borç yok`, 'over_balance');
+  }
   const now = Date.now();
   const paymentId = ulid(now);
   t.insert(schema.payments)
-    .values({ id: paymentId, orderId: null, dayId: day.id, methodId: method.id, methodName: method.name, zField: method.zField, amount, customerId: cust.id, note: input.note?.trim() || 'Açık hesap tahsilatı', userId: actor.user.id, createdAt: now })
+    .values({
+      id: paymentId,
+      orderId: null,
+      dayId: day.id,
+      methodId: method.id,
+      methodName: method.name,
+      zField: method.zField,
+      amount,
+      customerId: cust.id,
+      note: input.note?.trim() || 'Açık hesap tahsilatı',
+      userId: actor.user.id,
+      createdAt: now,
+      requestId: input.requestId ?? null,
+    })
     .run();
   t.insert(schema.customerLedger)
     .values({ id: ulid(now), customerId: cust.id, kind: 'tahsilat', amount: -amount, paymentId, methodId: method.id, dayId: day.id, note: input.note?.trim() || null, userId: actor.user.id, createdAt: now })
@@ -176,8 +235,10 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
     row.tips += p.tip;
     payMap.set(p.methodId, row);
   }
-  // Beklenen nakit de Z'nin nakit alanı gibi ödemeye dondurulan `zField`'dan sayılır, türün bugünkü hâlinden değil:
-  // ödeme almış bir tür sonradan nakitten karta çevrilse bile beklenen nakit ile Z nakdi ayrışmaz (G12)
+  // Çekmeceye giren nakit, Z'nin nakit alanıyla aynı bilgiden: ödemeye alındığı an dondurulan Z alanı. Ödeme türü
+  // sonradan değişse (Nakit → Kart) de Z nakdi ve beklenen nakit aynı ödemeleri sayar; lafmaliyet'in beklenen nakit
+  // formülü (açılış + nakit + cash_in − harcama − teslim) LafPOS'unkini verir. Z'de "Diğer"e yazılan ödeme (döviz
+  // gibi çekmeceye ayrı giren) TL beklenen nakde girmez; Yönetim Z'de nakdi yalnız Nakit türüne verir
   const cashSales = salesPays.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount + p.tip, 0);
   const cashCollections = collections.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount, 0);
   const cashIn = moves.filter((m) => m.kind === 'giris').reduce((a, m) => a + m.amount, 0);

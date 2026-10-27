@@ -252,7 +252,8 @@ export interface PaymentDTO {
   tip: number;
   given: number | null;
   change: number | null;
-  items: { itemId: string; qty: number }[] | null;
+  /** Kalem bazlı ödemede kalemler; `amount` bu adetlere düşen tutar (yazarkasa ve eski ödemelerde yok) */
+  items: { itemId: string; qty: number; amount?: number }[] | null;
   customerId: string | null;
   note: string | null;
   userId: string | null;
@@ -468,5 +469,18 @@ export interface DisplayLineDTO {
 
 export type DisplayStateDTO =
   | { kind: 'idle'; at: number }
-  | { kind: 'order'; at: number; label: string; lines: DisplayLineDTO[]; discount: number; total: number; paid: number; due: number }
+  | {
+      kind: 'order';
+      at: number;
+      label: string;
+      /** Kalemler menü fiyatıyla (adet × birim); ikram 0 */
+      lines: DisplayLineDTO[];
+      /** Kalem ve adisyon indirimlerinin toplamı */
+      discount: number;
+      /** Servis ücreti; kalemler − indirim + servis = toplam */
+      service: number;
+      total: number;
+      paid: number;
+      due: number;
+    }
   | { kind: 'thanks'; at: number; total: number };

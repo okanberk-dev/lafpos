@@ -44,7 +44,13 @@ export async function startApp(extraEnv: Record<string, string> = {}) {
 
   for (const [who, pin] of Object.entries(PINS)) await login(who, pin);
   const boot = await ok<BootstrapDTO>('kasa', 'GET', '/bootstrap');
-  return { call, ok, login, tokens, boot, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  /** Siteden gelen ürünün fiyatı API'den değişmez (`synced_field`); beklenen tutarları sabit tutmak isteyen test doğrudan yazar */
+  async function pinPrice(name: string, price: number) {
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    db.update(schema.products).set({ price }).where(eq(schema.products.name, name)).run();
+  }
+  return { call, ok, login, tokens, boot, pinPrice, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 export type Harness = Awaited<ReturnType<typeof startApp>>;
