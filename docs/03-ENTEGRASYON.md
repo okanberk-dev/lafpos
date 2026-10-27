@@ -141,7 +141,7 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 | `z_no` | `business_days.zNo` |
 | `receipts` | kapanan adisyon sayısı (online hariç) |
 | `z_total` | ödemelerin toplamı (cari tahsilat ve bahşiş hariç) |
-| `cash` | `zField = cash` ödeme türleri (türü Nakit olmalı: beklenen nakit de Nakit türünden hesaplanır, Yönetim başka türe izin vermez) |
+| `cash` | `zField = cash` ödemeler (ödeme anında dondurulan Z alanı; beklenen nakit de aynı alandan hesaplanır, ödeme türü sonradan değişse de ikisi aynı ödemeleri sayar. Yönetim Z'de nakdi yalnız Nakit türüne verir) |
 | `card` | `zField = card` |
 | `meal_card` | `zField = meal_card` (Pluxee, Multinet, Edenred, Setcard, Metropol) |
 | `online` | `zField = online` (yemek platformları) |

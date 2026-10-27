@@ -195,9 +195,12 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
     row.tips += p.tip;
     payMap.set(p.methodId, row);
   }
-  const cashMethodIds = new Set(methods.filter((m) => m.kind === 'nakit').map((m) => m.id));
-  const cashSales = salesPays.filter((p) => cashMethodIds.has(p.methodId)).reduce((a, p) => a + p.amount + p.tip, 0);
-  const cashCollections = collections.filter((p) => cashMethodIds.has(p.methodId)).reduce((a, p) => a + p.amount, 0);
+  // Çekmeceye giren nakit, Z'nin nakit alanıyla aynı bilgiden: ödemeye alındığı an dondurulan Z alanı. Ödeme türü
+  // sonradan değişse (Nakit → Kart) de Z nakdi ve beklenen nakit aynı ödemeleri sayar; lafmaliyet'in beklenen nakit
+  // formülü (açılış + nakit + cash_in − harcama − teslim) LafPOS'unkini verir. Z'de "Diğer"e yazılan ödeme (döviz
+  // gibi çekmeceye ayrı giren) TL beklenen nakde girmez; Yönetim Z'de nakdi yalnız Nakit türüne verir
+  const cashSales = salesPays.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount + p.tip, 0);
+  const cashCollections = collections.filter((p) => p.zField === 'cash').reduce((a, p) => a + p.amount, 0);
   const cashIn = moves.filter((m) => m.kind === 'giris').reduce((a, m) => a + m.amount, 0);
   const cashOut = moves.filter((m) => m.kind === 'harcama').reduce((a, m) => a + m.amount, 0);
   const handedOver = moves.filter((m) => m.kind === 'teslim').reduce((a, m) => a + m.amount, 0);

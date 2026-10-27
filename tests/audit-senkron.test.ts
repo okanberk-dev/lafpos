@@ -417,6 +417,22 @@ describe('lafmaliyet satış listesi', () => {
     expect(kurus(z.openingCash! + z.cash! + z.cashIn! - z.cashOut! - z.handedOver!)).toBe(kurus(z.expectedCash!));
   });
 
+  it('kullanılmış ödeme türünün türü sonradan değişse de Z nakdi ve beklenen nakit aynı ödemeleri sayar', async () => {
+    const before = (await todayPayload()).z;
+    const kasa2 = await h.ok<{ id: string }>('patron', 'POST', '/admin/payment-methods', { name: 'Kasa 2', kind: 'nakit', zField: 'cash' });
+    const water = h.boot.products.find((p) => !p.extSource && p.active) ?? h.boot.products.find((p) => p.active)!;
+    const o = await h.ok<{ id: string }>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const r = await h.ok<{ total: number }>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: water.id, qty: 5 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: kasa2.id, amount: r.total });
+    // Yönetici türü düzeltir (Kart, Z alanı kart): denetim kabul eder; ödeme Z'de alındığı alanda kalır
+    await h.ok('patron', 'PATCH', `/admin/payment-methods/${kasa2.id}`, { kind: 'kart', zField: 'card' });
+    const { z } = await todayPayload();
+    expect(kurus(z.cash! - before.cash!)).toBe(r.total);
+    expect(kurus(z.expectedCash! - before.expectedCash!)).toBe(r.total);
+    expect(kurus(z.cashIn!)).toBe(kurus(before.cashIn!));
+    expect(kurus(z.openingCash! + z.cash! + z.cashIn! - z.cashOut! - z.handedOver!)).toBe(kurus(z.expectedCash!));
+  });
+
   it('lafmaliyet adındaki boy eki büyük-küçük harf ve I/İ farkı gözetmeden tanınır; aynı ad tek satırda', async () => {
     const { sizedPosName } = await import('../server/services/menu');
     expect(sizedPosName('LATTE MEDİUM', 'L')).toBe('LATTE LARGE');
