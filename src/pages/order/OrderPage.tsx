@@ -319,7 +319,7 @@ export default function OrderPage() {
   const right = (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       {isOnline && <OnlineOrderBar order={order} act={act} />}
-      {table?.kind === 'oda' && (order.room || editable) && <RoomBox order={order} table={table} editable={editable} act={act} now={now} />}
+      {table?.kind === 'oda' && (order.room || editable) && <RoomBox order={order} table={table} editable={editable} act={act} now={now} onClosed={() => navigate(backPath)} />}
       <CartPanel order={order} pending={pending} onEditPending={(l) => { const p = boot.products.find((x) => x.id === l.productId); if (p) setOptions({ product: p, size: l.size, editing: l }); }} act={act} />
       {actionBar}
     </div>
