@@ -124,6 +124,72 @@ describe('indirim', () => {
     expect(d.totals.orderDiscount + e.totals.orderDiscount).toBe(2798);
     expect((await h.ok<OrderDTO>('garson', 'POST', `/orders/${d.id}/merge`, { sourceOrderId: e.id })).totals.orderDiscount).toBe(2799);
   });
+
+  it('auth-53 (gözden geçirme): indirimden sonra dolgu kalem iptal, ikram ya da taşımayla çıkarılınca etkin indirim sınırı aşamaz', async () => {
+    // %10 sınırlı kasiyer: 1 gerçek + 9 dolgu latte (19.500 kuruş), indirim sınırın içinde verilir
+    await h.ok('patron', 'POST', '/admin/users', { name: 'Sınırlı', role: 'kasiyer', permGrant: ['siparis.indirim'], maxDiscountPct: 10, pin: '5151' });
+    await h.login('sinirli', '5151');
+    const pct = (o: OrderDTO) => Math.round(((o.totals.lineDiscounts + o.totals.orderDiscount) * 10000) / o.totals.gross) / 100;
+    const padded = (who = 'sinirli') => counterOrder(who, [{ name: 'Latte', size: 'M' }, { name: 'Latte', size: 'M', qty: 9 }]);
+    const unchanged = async (id: string, total: number) => {
+      const now = await getOrder(id);
+      expect(now.items.filter((i) => !i.voided && !i.complimentary)).toHaveLength(2);
+      expect(now.total).toBe(total);
+    };
+
+    // Tutar indirimi %10 (19.500); 9 latte "yanlış giriş" diye iptal edilince 1 latte bedava kapanırdı
+    let o = await padded();
+    const pad = o.items[1]!;
+    o = await h.ok<OrderDTO>('sinirli', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 19500, reason: 'Personel' });
+    expect(pct(o)).toBe(10);
+    const voidPath = `/orders/${o.id}/items/${pad.id}/void`;
+    const denied = await h.call<{ code: string; permission: string }>('sinirli', 'POST', voidPath, { reason: 'Yanlış giriş' });
+    expect(denied.status).toBe(403);
+    expect(denied.json).toMatchObject({ code: 'approval_required', permission: 'siparis.indirim' });
+    await unchanged(o.id, 175500);
+    expect((await h.call<{ code: string }>('sinirli', 'POST', `/orders/${o.id}/close`)).json.code).toBe('due');
+    // Müdür onaylarsa iptal olur; büyüyen indirim (17.550 kuruş, %100) onaylayanla denetime yazılır
+    o = await h.ok<OrderDTO>('sinirli', 'POST', voidPath, { reason: 'Yanlış giriş', approverPin: MUDUR });
+    expect(o.total).toBe(0);
+    const grown = (await audits(o.id, 'order.discount')).find((a) => a.amount === 17550);
+    expect(grown).toMatchObject({ approverName: 'Müdür', severity: 'uyari' });
+    expect(grown!.message).toContain('%100');
+
+    // Yüzde yığma: kaleme %10 + adisyona %9 (toplam %9,91); dolgu iptal edilince gerçek kalemde %18,1 olurdu
+    let p = await padded();
+    p = await h.ok<OrderDTO>('sinirli', 'POST', `/orders/${p.id}/items/${p.items[0]!.id}/discount`, { type: 'percent', value: 10, reason: 'Personel' });
+    p = await h.ok<OrderDTO>('sinirli', 'POST', `/orders/${p.id}/discount`, { type: 'percent', value: 9, reason: 'Personel' });
+    expect(pct(p)).toBe(9.91);
+    const stacked = await h.call<{ code: string }>('sinirli', 'POST', `/orders/${p.id}/items/${p.items[1]!.id}/void`, { reason: 'Yanlış giriş' });
+    expect(stacked.status).toBe(403);
+    expect(stacked.json.code).toBe('approval_required');
+    await unchanged(p.id, p.total);
+
+    // Dolguyu ikram etmek ya da başka adisyona taşımak da aynı: onay ister, hiçbir şey değişmez
+    let q = await padded();
+    q = await h.ok<OrderDTO>('sinirli', 'POST', `/orders/${q.id}/discount`, { type: 'amount', value: 19500, reason: 'Personel' });
+    const comp = await h.call<{ code: string; permission: string }>('sinirli', 'POST', `/orders/${q.id}/items/${q.items[1]!.id}/comp`, { reason: 'Misafir' });
+    expect(comp.status).toBe(403);
+    expect(comp.json).toMatchObject({ code: 'approval_required', permission: 'siparis.indirim' });
+    const move = await h.call<{ code: string }>('sinirli', 'POST', `/orders/${q.id}/transfer`, { items: [{ itemId: q.items[1]!.id, qty: 9 }] });
+    expect(move.status).toBe(403);
+    expect(move.json.code).toBe('approval_required');
+    await unchanged(q.id, 175500);
+
+    // Sınırın içinde kalan büyüme onaysız geçer ama denetime yazılır: %5 tutar indirimi, 1 latte iptal → %5,56
+    let r = await padded();
+    r = await h.ok<OrderDTO>('sinirli', 'POST', `/orders/${r.id}/discount`, { type: 'amount', value: 9750, reason: 'Personel' });
+    r = await h.ok<OrderDTO>('sinirli', 'POST', `/orders/${r.id}/items/${r.items[1]!.id}/void`, { qty: 1, reason: 'Yanlış giriş' });
+    expect(pct(r)).toBe(5.56);
+    expect((await audits(r.id, 'order.discount')).find((a) => a.amount === 975)).toMatchObject({ approverName: null, severity: 'info' });
+
+    // Yüzde adisyon indirimi küçülmede oranını korur: indirim yetkisi olmayan kasiyer dolguyu onaysız iptal eder
+    let s = await padded('kasa');
+    s = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${s.id}/discount`, { type: 'percent', value: 10, reason: 'Öğrenci', approverPin: MUDUR });
+    s = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${s.id}/items/${s.items[1]!.id}/void`, { reason: 'Yanlış giriş' });
+    expect([s.total, pct(s)]).toEqual([17550, 10]);
+    expect(await audits(s.id, 'order.discount')).toHaveLength(1);
+  });
 });
 
 describe('iptal onayı', () => {

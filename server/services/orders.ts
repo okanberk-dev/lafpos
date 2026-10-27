@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { allocate, percentOf, tl } from '@shared/money';
-import { itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
+import { discountGrowth, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, can, need, needDirect } from '../lib/auth';
@@ -371,6 +371,7 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   const approverId = fresh ? null : need(actor, 'siparis.iptal', 'Gönderilmiş kalemi iptal etmek yetkili onayı gerektirir');
   const afterSend = !fresh && it.status !== 'yeni';
   const value = qty * it.unitPrice;
+  const before = calcFor(o, orderItems(t, orderId));
 
   splitItem(t, it, qty, {
     voided: true,
@@ -393,6 +394,7 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} iptal etti (${tl(value)}, ${reason})${o.billPrintedAt ? ', hesap yazdırıldıktan sonra' : ''}`,
     data: { afterSend, fresh },
   });
+  approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} iptal etti`);
   orderEvents(fx, updated, actor.user.id, 'item.voided');
   if (it.stationId) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: it.stationId, byUserId: actor.user.id });
   return updated;
@@ -423,6 +425,7 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   const qty = Math.max(1, Math.min(input.qty ?? unpaid, it.qty));
   if (qty > unpaid) throw conflict('Ödenmiş kalem ikram edilemez', 'item_paid');
   const value = qty * it.unitPrice;
+  const before = calcFor(o, orderItems(t, orderId));
   splitItem(t, it, qty, { complimentary: true, compReason: reason, compBy: actor.user.id, discount: 0 });
   const updated = recalc(t, orderId);
   fx.audit(t, {
@@ -436,6 +439,7 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     amount: value,
     message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ikram etti (${tl(value)}, ${reason})`,
   });
+  approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} ikram etti`);
   orderEvents(fx, updated, actor.user.id, 'item.comped');
   return updated;
 }
@@ -471,6 +475,36 @@ function approveDiscountGrowth(t: Tx, actor: Actor, fx: Effects, target: OrderRo
     orderId: target.id,
     amount: growth,
     message: `${actor.user.name} ${what}; #${target.no} adisyonun indirimi gelen kalemlere de uygulandı (${tl(growth)}, adisyonda toplam %${Math.round(pct)})`,
+  });
+}
+
+/**
+ * Adisyonu küçülten işlem (kalem iptali, ikram, başka adisyona taşıma) saklı indirimi kalan kalemlerde büyütür: tutar
+ * indirimi aynı kalır, kalem indirimi kalanın daha büyük payı olur. Sınır yalnız indirim anında denetlendiği için %10
+ * sınırlı kasiyer 10 lattelik adisyona %10 tutar indirimi verip 9 latteyi "yanlış giriş" diye iptal edince 1 latte
+ * bedava kapanıyordu (gözden geçirme, 27 Eki 2026). Önceki orandan fazlası yeni indirimdir: kalan kalemlerdeki toplam
+ * oran işlemi yapanın sınırında olmalı ya da yetkili onaylamalı, denetime yazılır. Yüzde adisyon indirimi oranını
+ * korur, onay istemez. Adisyon iptali bütün kalemleri iptal eder; geride indirim kalmaz.
+ */
+function approveDiscountShrink(t: Tx, actor: Actor, fx: Effects, orderId: string, before: OrderTotals, what: string) {
+  const o = loadOrder(t, orderId);
+  const after = calcFor(o, orderItems(t, orderId));
+  const growth = discountGrowth(before, after);
+  // Yüzde indirimlerin yuvarlaması 1-2 kuruş oynatabilir: indirim büyümesi değil
+  if (growth <= 2) return;
+  const was = Math.round(totalDiscountPct(before) * 10) / 10;
+  const pct = totalDiscountPct(after);
+  const shown = Math.round(pct * 10) / 10;
+  const approverId = discountApproval(actor, pct, `Kalan kalemlerde indirim %${shown} olur; yetkili onayı gerektirir`);
+  fx.audit(t, {
+    userId: actor.user.id,
+    approverId,
+    action: 'order.discount',
+    severity: pct >= getSettings().alertDiscountPct ? 'uyari' : 'info',
+    orderId,
+    amount: growth,
+    message: `${actor.user.name} ${what}; #${o.no} adisyonda kalan kalemlerin indirimi %${was} iken %${shown} oldu (${tl(growth)} fazla indirim)`,
+    data: { beforePct: was, pct: shown },
   });
 }
 
@@ -718,6 +752,7 @@ export function transferItems(
   }
   if (target.id === source.id) throw bad('Kaynak ve hedef aynı');
   const discountBefore = orderDiscountOf(t, orderId, target.id);
+  const sourceBefore = calcFor(source, orderItems(t, orderId));
 
   for (const sel of input.items) {
     const it = loadItem(t, orderId, sel.itemId);
@@ -732,6 +767,8 @@ export function transferItems(
   const src = recalc(t, orderId);
   const dst = recalc(t, target.id);
   approveDiscountGrowth(t, actor, fx, dst, orderDiscountOf(t, orderId, target.id) - discountBefore, `#${source.no} adisyondan #${dst.no} adisyona kalem taşıdı`);
+  // Kaynakta kalan kalemler: tutar indirimi kaynakta kalır, taşınan kalemlerin payı da kalanlara biner
+  approveDiscountShrink(t, actor, fx, orderId, sourceBefore, `#${source.no} adisyondan #${dst.no} adisyona kalem taşıdı`);
   const remaining = orderItems(t, orderId).filter((i) => !i.voided);
   const hasPayments = orderPayments(t, orderId).some((p) => !p.refundedAt);
   if (!remaining.length && !hasPayments) {

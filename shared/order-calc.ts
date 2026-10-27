@@ -136,6 +136,20 @@ export function calcOrder(input: CalcInput): OrderTotals {
   };
 }
 
+type DiscountTotals = Pick<OrderTotals, 'gross' | 'lineDiscounts' | 'orderDiscount'>;
+
+/**
+ * Adisyon küçülünce (kalem iptali, ikram, başka adisyona taşıma) saklı indirimin büyüyen kısmı: kalan indirim eksi
+ * küçülmeden önceki indirim oranının kalan brüte düşen payı. Tutar indirimi aynı kalırken brüt küçülür, kalem
+ * indirimi kalanın daha büyük payı olur; yüzde adisyon indiriminde yalnız 1-2 kuruşluk yuvarlama farkı çıkar.
+ */
+export function discountGrowth(before: DiscountTotals, after: DiscountTotals): Kurus {
+  const now = after.lineDiscounts + after.orderDiscount;
+  if (now <= 0) return 0;
+  if (before.gross <= 0) return now;
+  return now - Math.round(((before.lineDiscounts + before.orderDiscount) * after.gross) / before.gross);
+}
+
 /** Kalem bazlı ödemenin bir satırı: kaç adet ve (tutarı yazılan ödemelerde) bu adetlere düşen tutar */
 export interface PaidItem {
   itemId: string;
