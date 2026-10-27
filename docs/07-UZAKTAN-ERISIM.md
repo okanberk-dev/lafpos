@@ -57,8 +57,12 @@ Maliyet ve kâr, PIN'ler, müşteri telefonları gitmez.
 | Nerede | Ne |
 |---|---|
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
-| Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter), `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
+| Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter); parolayı açmak için `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
 | Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
+
+**İlk etapta parolasız** (27 Ekim 2026 kararı): `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` yokken kafe bağlıyken de giriş parola
+sormaz; bağlantıyı bilen herkes gerçek ciroyu ve personel adlarını salt okunur görür. Gerçek kullanıma geçmeden
+parolayı açın.
 
 Vercel yalnız `main`'i dağıtır: `vercel.json` `git.deploymentEnabled` `claude/**` dallarına önizleme açmaz (26 Ekim
 2026: ekip Hobby planın 24 saatte 100 dağıtım sınırına takıldı ve canlı dağıtımlar da reddedildi). Dalda değişiklik
