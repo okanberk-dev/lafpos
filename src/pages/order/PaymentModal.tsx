@@ -8,10 +8,11 @@ import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
-import { post, put } from '@/lib/api';
+import { ApiError, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { newRequestId } from '@/lib/requestId';
 import { BillReceipt, printNow } from '@/lib/print';
 import { OkcPanel } from './OkcPanel';
 
@@ -19,12 +20,6 @@ type Mode = 'tutar' | 'kalem' | 'paylas';
 
 const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFixed(2).replace('.', ','));
 
-/**
- * Ödeme denemesinin kimliği: yanıt kaybolup "Öde"ye yeniden basılırsa sunucu ödemeyi ikinci kez yazmaz, ilk sonucu
- * döner. Kasiyer tutarı, türü, kalemleri ya da bahşişi değiştirirse yeni deneme sayılır; ödeme alınınca yenilenir.
- * Kafe ağında sayfa http ile açılır; randomUUID yalnız güvenli bağlamda var
- */
-const newRequestId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 
 /** Innex seçim kartı/çipi: seçili mavi kenar ve açık mavi zemin */
 const choice = (on: boolean) =>
@@ -57,7 +52,7 @@ export function PaymentModal({
   const [people, setPeople] = useState(2);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; method: string; share: string | null } | null>(null);
-  /** Süren ödeme denemesi: kasiyerin girdileri (sunucudan gelen yenilemeyle değişen tutar değil) ve kimliği */
+  /** Süren ödeme denemesi: ekranda görülenler (tür, tutar, pay, kalemler, bahşiş, ödeme listesi) ve kimliği */
   const attempt = useRef<{ key: string; id: string } | null>(null);
 
   useEffect(() => {
@@ -136,23 +131,32 @@ export function PaymentModal({
     setBusy(true);
     const sharing = mode === 'paylas' && !!split;
     const items = mode === 'kalem' ? picked : null;
-    // Aynı girdilerle yeniden basılan "Öde" aynı denemedir (yanıtı kaybolan istek ikinci kez yazılmaz)
-    const key = JSON.stringify([mode, method.id, mode === 'tutar' ? amountText : null, items, tipText]);
+    // Aynı ekranda aynı girdilerle yeniden basılan "Öde" aynı denemedir (yanıtı kaybolan istek ikinci kez yazılmaz).
+    // Ekranın gösterdiği tutar, pay ya da ödeme listesi değiştiyse yeni denemedir: yanıtı kaybolan pay 1'den sonra
+    // ekran pay 2'yi ya da adedin yeni tutarını gösterir, iptal edilen ödemenin kimliği yeniden gitmez
+    const shown = order.payments.map((p) => `${p.id}:${p.refundedAt ?? ''}`).join(',');
+    const key = JSON.stringify([mode, method.id, amount, sharing ? freeNos[0] : null, items, tip, shown]);
     if (attempt.current?.key !== key) attempt.current = { key, id: newRequestId() };
     const requestId = attempt.current.id;
-    const res = await act((pin) =>
-      post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null }>(`/orders/${order.id}/payments`, {
-        methodId: method.id,
-        amount,
-        tip,
-        given: method.kind === 'nakit' && given != null ? given : null,
-        items,
-        // Pay: ekrandaki tutar ve numara gider; sunucunun hesabı tutmazsa 409 split_changed, ekran yenilenir
-        ...(sharing ? { share: true, shareNo: freeNos[0] } : {}),
-        requestId,
-        approverPin: pin,
-      }),
-    );
+    const res = await act(async (pin) => {
+      try {
+        return await post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null }>(`/orders/${order.id}/payments`, {
+          methodId: method.id,
+          amount,
+          tip,
+          given: method.kind === 'nakit' && given != null ? given : null,
+          items,
+          // Pay: ekrandaki tutar ve numara gider; sunucunun hesabı tutmazsa 409 split_changed, ekran yenilenir
+          ...(sharing ? { share: true, shareNo: freeNos[0] } : {}),
+          requestId,
+          approverPin: pin,
+        });
+      } catch (e) {
+        // Kimlik başka bir ödemeye (ya da iptal edilen ödemeye) ait: sonraki basış yeni deneme olur
+        if (e instanceof ApiError && (e.code === 'request_reused' || e.code === 'request_refunded')) attempt.current = null;
+        throw e;
+      }
+    });
     setBusy(false);
     if (!res) return;
     attempt.current = null;

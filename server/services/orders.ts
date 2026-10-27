@@ -827,6 +827,23 @@ export interface PaymentInput {
   requestId?: string | null;
 }
 
+/**
+ * Aynı deneme kimliğiyle gelen istek kaydedilen ödemeyle aynı mı: tür, tutar, bahşiş, pay numarası ve kalemler.
+ * Kaydedilen tutar istemcinin gönderdiğiyle aynıdır (pay ve kalem ödemesinde tutmayan tutar 409 alır).
+ */
+function sameRequest(prev: typeof schema.payments.$inferSelect, input: PaymentInput): boolean {
+  if (prev.methodId !== input.methodId || prev.amount !== Math.trunc(input.amount)) return false;
+  if (prev.tip !== Math.max(0, Math.trunc(input.tip ?? 0))) return false;
+  if (!!input.share !== (prev.shareNo != null)) return false;
+  if (input.share && input.shareNo != null && input.shareNo !== prev.shareNo) return false;
+  const key = (list: { itemId: string; qty: number }[]) =>
+    list
+      .map((s) => `${s.itemId}:${s.qty}`)
+      .sort()
+      .join(',');
+  return key(mergeSelection(input.items ?? [])) === key(prev.items ?? []);
+}
+
 /** Ödenmiş paylar (iptal edilmemiş, payı olan ödemeler) */
 function sharePayments(t: Tx | DB, orderId: string) {
   return orderPayments(t, orderId).filter((p) => !p.refundedAt && p.shareNo != null);
@@ -938,6 +955,11 @@ export function addPayment(
       .where(and(eq(schema.payments.orderId, orderId), eq(schema.payments.requestId, input.requestId)))
       .get();
     if (prev) {
+      // İlk sonuç yalnız aynı istek için döner. Ekran yenilenip başka pay, tutar ya da kalem aynı kimlikle geldiyse ya
+      // da o ödeme iptal edildiyse "alındı" denmez: kart terminalinde çekilen para LafPOS'a hiç yazılmıyordu
+      // (gözden geçirme, 27 Eki 2026). 409'da istemci yeni kimlik üretir, ekran yenilenir
+      if (prev.refundedAt) throw conflict('Bu deneme iptal edilen ödemeye ait; ekran yenilendi, ödemeyi yeniden alın', 'request_refunded');
+      if (!sameRequest(prev, input)) throw conflict('Ödeme ekranı değişti; ekran yenilendi, ödemeyi yeniden alın', 'request_reused');
       const order = loadOrder(t, orderId);
       const share = prev.shareNo != null ? { no: prev.shareNo, of: prev.shareOf ?? prev.shareNo } : null;
       return { order, closed: order.status === 'kapali', change: prev.change ?? 0, amount: prev.amount, share };

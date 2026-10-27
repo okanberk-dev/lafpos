@@ -365,6 +365,60 @@ describe('ödeme', () => {
     // İptal edilen ödeme sayılmaz
     expect(itemPayLines([{ ...item, paidQty: 1 }], [{ items: [{ itemId: 'a', qty: 1, amount: 14000 }], refundedAt: 1 }, { items: [{ itemId: 'a', qty: 1, amount: 13999 }] }])[0]!.paidAmount).toBe(13999);
   });
+
+  it('state-07 (gözden geçirme): aynı deneme kimliğiyle başka pay ya da tutar gelirse ilk ödeme dönmez; 409 ile ekran yenilenir', async () => {
+    const card = method('Kredi kartı').id;
+    // Paylaş: pay 1'in yanıtı kayboldu, ekran pay 2'yi gösterir; eski istemci pay 2'yi aynı kimlikle gönderir
+    let o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 3 }]);
+    o = await h.ok<OrderDTO>('kasa', 'PUT', `/orders/${o.id}/split`, { people: 3 });
+    const requestId = 'paylas-deneme-0001';
+    const first = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount: o.split!.shares[0], share: true, shareNo: 1, requestId });
+    expect(first.share).toEqual({ no: 1, of: 3 });
+    o = await getOrder(o.id);
+    const share2 = { methodId: card, amount: o.split!.shares[0], share: true, shareNo: 2 };
+    const second = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { ...share2, requestId });
+    expect(second.status).toBe(409);
+    expect(second.json.code).toBe('request_reused');
+    expect((await getOrder(o.id)).payments).toHaveLength(1);
+    // Yenilenen ekranın yeni denemesi pay 2'yi yazar; ilk istek aynen yeniden gelirse eskisi gibi ilk sonuç döner
+    expect((await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { ...share2, requestId: 'paylas-deneme-0002' })).share).toEqual({ no: 2, of: 3 });
+    const replay = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount: first.amount, share: true, shareNo: 1, requestId });
+    expect(replay.share).toEqual({ no: 1, of: 3 });
+    expect((await getOrder(o.id)).payments).toHaveLength(2);
+
+    // Kalem: 2 kahvelik satır 1 kuruş indirimle (adet payları 14000 / 13999); ikinci adet aynı seçim ve kimlikle gelir
+    let p = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    p = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${p.id}/items/${p.items[0]!.id}/discount`, { type: 'amount', value: 1, reason: 'Yuvarlama', approverPin: MUDUR });
+    const line = p.items[0]!.id;
+    await h.ok('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: card, amount: 14000, items: [{ itemId: line, qty: 1 }], requestId: 'kalem-deneme-0001' });
+    const unit2 = await h.call<{ code: string }>('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: card, amount: 13999, items: [{ itemId: line, qty: 1 }], requestId: 'kalem-deneme-0001' });
+    expect(unit2.status).toBe(409);
+    expect(unit2.json.code).toBe('request_reused');
+    const after = await getOrder(p.id);
+    expect([after.payments.length, after.items[0]!.paidQty, after.total - after.paid]).toEqual([1, 1, 13999]);
+    // Başka ödeme türü ya da bahşiş de başka istektir
+    for (const changed of [{ methodId: method('Nakit').id }, { tip: 500 }]) {
+      const r = await h.call<{ code: string }>('kasa', 'POST', `/orders/${p.id}/payments`, { methodId: card, amount: 14000, items: [{ itemId: line, qty: 1 }], requestId: 'kalem-deneme-0001', ...changed });
+      expect(r.json.code).toBe('request_reused');
+    }
+  });
+
+  it('state-07 (gözden geçirme): iptal edilen ödemenin deneme kimliği yeniden gelirse iptal edilen ödeme başarı diye dönmez', async () => {
+    const o = await tableOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    const body = { methodId: method('Kredi kartı').id, amount: 14000, requestId: 'tutar-deneme-0001' };
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, body);
+    // Yanıt kayboldu, kart aslında reddedilmişti: ödeme iptal edilir, müşteri başka kartla aynı tutarı öder
+    const pay = (await getOrder(o.id)).payments[0]!;
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments/${pay.id}/refund`, { reason: 'Kart reddedildi', approverPin: MUDUR });
+    const again = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, body);
+    expect(again.status).toBe(409);
+    expect(again.json.code).toBe('request_refunded');
+    expect((await getOrder(o.id)).paid).toBe(0);
+    // Yeni deneme kimliğiyle alınır
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { ...body, requestId: 'tutar-deneme-0002' });
+    const after = await getOrder(o.id);
+    expect([after.paid, after.payments.filter((x) => !x.refundedAt).length]).toEqual([14000, 1]);
+  });
 });
 
 describe('girdi doğrulama', () => {
