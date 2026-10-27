@@ -85,7 +85,13 @@ masa planında ilgili masada rozet olarak görünür.
 
 ### 3.1 Ürün satış listesi (Satışlar ekranına yükleme)
 
-`GET /api/integrations/lafmaliyet/satislar.csv?from=YYYY-MM-DD&to=YYYY-MM-DD` (yetki: `rapor.gor`)
+`GET /api/sync/lafmaliyet/satislar.csv?from=YYYY-MM-DD&to=YYYY-MM-DD` (yetki: `rapor.gor`; Raporlar › Aktarım)
+
+Dönem raporlarla aynı denetlenir: varsayılanı bugün (açık iş günü), olmayan tarih 422 `validation`, en çok
+400 gün (daha uzunu 422 `range_too_long`), ters verilen tarihler çevrilir. Hücreler `server/lib/csv.ts` ile yazılır:
+lafmaliyet'in yapıştırma ayrıştırıcısı tırnak bilmediği ve sekmeyi ayraç saydığı için POS adındaki satır sonu ve
+sekme boşluğa, noktalı virgül virgüle döner (her satır bir ürün, üç hücre); `=`, `+`, `-`, `@` ile başlayan adın
+başına `'` konur (Excel'de formül çalışmaz, lafmaliyet adın başındaki `'`'u atar).
 
 ```
 Ürün;Adet;Tutar

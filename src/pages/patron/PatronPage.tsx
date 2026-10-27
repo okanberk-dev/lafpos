@@ -12,6 +12,7 @@ import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
+import { hourBars } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 
@@ -27,6 +28,9 @@ export interface PatronData {
   yesterday: { netSales: number; receipts: number };
   hourly: number[];
   hourlyLastWeek: number[];
+  /** Gün 24 saati aştıysa ertesi günün saatleri (eski sunucu göndermez) */
+  hourlyNextDay?: number[];
+  hourlyLastWeekNextDay?: number[];
   payments: { name: string; amount: number; count: number; share: number }[];
   discounts: number;
   complimentary: number;
@@ -83,9 +87,9 @@ export default function PatronPage() {
   }
   const d = data.data;
   if (!d) return null;
-  const hours = d.hourly.map((v, h) => ({ label: String(h).padStart(2, '0'), value: v, compare: d.hourlyLastWeek[h] }));
-  const firstActive = Math.max(0, Math.min(7, ...hours.map((h, i) => (h.value || h.compare ? i : 24))));
-  const visibleHours = hours.slice(firstActive);
+  // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış sabahın değil, günün sonunda; gün uzadıysa ertesi
+  // sabahın satışı gecenin ardından
+  const visibleHours = hourBars(d);
 
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
@@ -182,8 +186,8 @@ export default function PatronPage() {
                   {visibleHours
                     .filter((h) => h.value || h.compare)
                     .map((h) => (
-                      <tr key={h.label} className="border-t border-line/60">
-                        <td className="py-1">{h.label}:00</td>
+                      <tr key={h.key} className="border-t border-line/60">
+                        <td className="py-1">{h.title}</td>
                         <td className="py-1 text-right font-semibold">{tl(h.value)}</td>
                         <td className="py-1 text-right text-muted">{tl(h.compare ?? 0)}</td>
                       </tr>

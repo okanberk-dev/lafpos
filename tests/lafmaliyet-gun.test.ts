@@ -280,6 +280,8 @@ describe('gün paketi: satırlar ve ikram', () => {
     const cash = await sell([{ name: 'Espresso', size: 'M' }]);
     await pay(cash, 'Nakit', { tip: 1000 });
     const c = await h.ok<{ id: string }>('mudur', 'POST', '/customers', { name: 'Tahsilat Müşterisi' });
+    // Tahsilat bakiyeyi aşamaz (over_balance): önce açık hesaba borç yazılır
+    await pay(await sell([{ name: 'Espresso', size: 'M', qty: 10 }]), 'Açık hesap', { customerId: c.id });
     await h.ok('mudur', 'POST', '/cash/collect', { customerId: c.id, methodId: method('Kredi kartı').id, amount: 25050 });
     await h.ok('mudur', 'POST', '/cash/collect', { customerId: c.id, methodId: method('Nakit').id, amount: 10000 });
     const z = (await payloadOf(day.id)).z;

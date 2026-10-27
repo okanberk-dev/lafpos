@@ -1,10 +1,11 @@
 import { and, asc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
-import { allocate, tlPlain } from '@shared/money';
+import { allocate } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { normalizePosName, posNameKey, posSlotOf } from '@shared/pos-name';
 import type { SelectedOption } from '@shared/types';
 import { db, schema } from '../db/client';
 import { env } from '../env';
+import { money, toCsv } from '../lib/csv';
 import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
@@ -136,20 +137,21 @@ function mergeParts(parts: Part[]): { lines: SaleLine[]; names: Map<string, stri
   return { lines: [...groups.values()].sort((a, b) => b.revenue - a.revenue || a.posName.localeCompare(b.posName, 'tr')), names };
 }
 
-/** Kapanmış POS adisyonları (online siparişler hariç: tahsil edilmez, sitenin cirosudur) */
+/** Kapanmış POS adisyonlarının koşulu (online siparişler hariç: tahsil edilmez, sitenin cirosudur) */
+const closedPosWhere = (dayIds: string[]) =>
+  and(inArray(schema.orders.dayId, dayIds), eq(schema.orders.status, 'kapali'), eq(schema.orders.source, 'pos'));
+
 function closedPosOrders(dayIds: string[]) {
   if (!dayIds.length) return [];
-  return db
-    .select()
-    .from(schema.orders)
-    .where(and(inArray(schema.orders.dayId, dayIds), eq(schema.orders.status, 'kapali'), eq(schema.orders.source, 'pos')))
-    .all();
+  return db.select().from(schema.orders).where(closedPosWhere(dayIds)).all();
 }
 
 function salesOf(dayIds: string[], addonIds = addonSiteIds()) {
   const orders = closedPosOrders(dayIds);
   if (!orders.length) return { lines: [], names: new Map<string, string>() };
-  const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, orders.map((o) => o.id))).all();
+  // Kalemler alt sorguyla: adisyon kimlikleri bağlanmaz (SQLite bir sorguda en çok 32.766 değişken alır)
+  const saleIds = db.select({ id: schema.orders.id }).from(schema.orders).where(closedPosWhere(dayIds));
+  const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, saleIds)).all();
   const totals = new Map(orders.map((o) => [o.id, o.totals ?? calcOrder({ lines: [] })]));
   const parts: Part[] = [];
   for (const i of items) {
@@ -173,13 +175,16 @@ export function daysInRange(from: string, to: string) {
     .all();
 }
 
-const trNumber = (k: number) => tlPlain(k);
-
-/** lafmaliyet Satışlar ekranının okuduğu biçim (noktalı virgül, Türkçe ondalık, KDV dahil tutar) */
+/**
+ * lafmaliyet Satışlar ekranının okuduğu biçim (noktalı virgül, Türkçe ondalık, KDV dahil tutar). lafmaliyet'in
+ * yapıştırma ayrıştırıcısı tırnak bilmez, sekmeyi ayraç sayar: POS adındaki satır sonu ve sekme boşluğa, noktalı
+ * virgül virgüle döner (her satır bir ürün, üç hücre). Hücreler server/lib/csv.ts ile yazılır: Excel'de açılınca
+ * =, +, -, @ ile başlayan ad formül olarak çalışmaz (başına ' konur, lafmaliyet adın başındaki '’u atar).
+ */
 export function salesCsv(from: string, to: string): string {
   const lines = salesLines(daysInRange(from, to).map((d) => d.id));
-  const rows = ['Ürün;Adet;Tutar', ...lines.map((l) => `${l.posName.replace(/;/g, ',')};${l.qty};${trNumber(l.revenue)}`)];
-  return '﻿' + rows.join('\r\n') + '\r\n';
+  const name = (s: string) => s.replace(/[\r\n\t]+/g, ' ').replace(/;/g, ',').trim();
+  return toCsv([['Ürün', 'Adet', 'Tutar'], ...lines.map((l) => [name(l.posName), l.qty, money(l.revenue)])]);
 }
 
 const toTL = (k: number) => Math.round(k) / 100;
