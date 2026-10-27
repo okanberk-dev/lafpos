@@ -1,4 +1,7 @@
 import { readFileSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PanelOrder } from '../server/sync/laffogato-orders';
 import { type Harness, startApp } from './harness';
@@ -16,13 +19,21 @@ let h: Harness;
 type Route = (path: string, init: RequestInit) => Response | Promise<Response> | undefined;
 let site: Route = () => undefined;
 const calls: string[] = [];
+/** Sahte Upstash (LafPOS Uzaktan) */
+const redis = new Map<string, string>();
+let realFetch: typeof fetch;
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 beforeAll(async () => {
   h = await startApp({ LAFFOGATO_URL: SITE, LAFFOGATO_SYNC_SECRET: KEY, LAFPOS_SESSION_HOURS: '1000000' });
-  const realFetch = globalThis.fetch;
+  realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init: RequestInit = {}) => {
     const url = String(input instanceof Request ? input.url : input);
+    if (url === 'https://redis.test') {
+      const [cmd, key, value] = JSON.parse(String(init.body)) as string[];
+      if (cmd === 'SET') redis.set(key!, value!);
+      return json({ result: cmd === 'GET' ? (redis.get(key!) ?? null) : 'OK' });
+    }
     if (!url.startsWith(SITE)) return realFetch(input, init);
     const path = url.slice(SITE.length);
     calls.push(`${init.method ?? 'GET'} ${path}`);
@@ -370,6 +381,56 @@ describe('lafmaliyet satış listesi', () => {
     await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 5000, description: 'Buz' });
     const { z } = await todayPayload();
     expect(kurus(z.openingCash! + z.cash! + z.cashIn! - z.cashOut! - z.handedOver!)).toBe(kurus(z.expectedCash!));
+  });
+});
+
+// ─── LafPOS Uzaktan ve ürün görseli (önceki düzeltmelerin denetimi) ───────────
+
+describe('LafPOS Uzaktan ve ürün görseli', () => {
+  it('eski ya da yeniden gönderilen özet yenisini ezmez', async () => {
+    const CLOUD = 'c'.repeat(40);
+    Object.assign(process.env, { LAFPOS_CLOUD_SECRET: CLOUD, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
+    const { signedHeaders } = await import('../server/lib/signature');
+    const { POST } = await import('../api/uzaktan');
+    const push = (at: number) => {
+      const body = JSON.stringify({ gz: gzipSync(JSON.stringify({ v: 1, at, orders: {} })).toString('base64') });
+      const url = new URL('https://lafpos.vercel.app/api/uzaktan/push');
+      return POST(new Request('https://lafpos.vercel.app/api/uzaktan?yol=uzaktan/push', { method: 'POST', body, headers: signedHeaders(CLOUD, 'POST', url, body) }));
+    };
+    expect((await push(2000)).status).toBe(200);
+    // Yakalanıp 300 sn içinde yeniden gönderilen eski itme
+    const replay = await push(1000);
+    expect(replay.status).toBe(200);
+    expect(((await replay.json()) as { stale?: boolean }).stale).toBe(true);
+    expect((JSON.parse(redis.get('lafpos:snapshot')!) as { at: number }).at).toBe(2000);
+  });
+
+  it('görsel indirme yönlendirmeyi izlemez: site başka adrese yönlendirse de istek gitmez', async () => {
+    const hits: string[] = [];
+    const listen = async (srv: Server) => {
+      await new Promise<void>((r) => srv.listen(0, '127.0.0.1', r));
+      return (srv.address() as AddressInfo).port;
+    };
+    const internal = createServer((req, res) => {
+      hits.push(req.url ?? '');
+      res.writeHead(200, { 'content-type': 'image/png' });
+      res.end('ic-ag');
+    });
+    const internalPort = await listen(internal);
+    const fake = createServer((req, res) => {
+      res.writeHead(302, { location: `http://127.0.0.1:${internalPort}/gizli${req.url}` });
+      res.end();
+    });
+    const sitePort = await listen(fake);
+    site = (path, init) => realFetch(`http://127.0.0.1:${sitePort}${path}`, init);
+    try {
+      const { thumbFor } = await import('../server/services/media');
+      expect(await thumbFor(`${SITE}/menu/yonlendirme.webp`)).toBeNull();
+      expect(hits).toEqual([]);
+    } finally {
+      internal.close();
+      fake.close();
+    }
   });
 });
 
