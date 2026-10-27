@@ -100,6 +100,8 @@ export function apiClient(base) {
 export async function seedFloor(api) {
   const boot = await api.call('kasa', 'GET', '/bootstrap');
   await api.call('kasa', 'POST', '/cash/day/open', { openingCash: 100000 });
+  // Kurulum self serviste açılır; kasa taraması ve akışlar masalı sürümü (masaya servis) dener, demo self servisi
+  await api.call('patron', 'PUT', '/admin/settings', { serviceMode: 'masa' });
   const product = (name) => boot.products.find((p) => p.name === name);
   const tables = boot.tables.filter((t) => t.kind === 'masa');
   const s1 = await api.call('garson', 'POST', '/orders', { type: 'masa', tableId: tables[0].id, guests: 2 });
