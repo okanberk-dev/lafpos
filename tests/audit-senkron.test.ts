@@ -6,7 +6,8 @@ import { type Harness, startApp } from './harness';
 /**
  * Senkron denetiminin bulguları (27 Eki 2026), her biri bir testle: online siparişlerin sürüm sinyali, bozuk
  * yanıt ve masa eşlemesi; menü eşitlemesinde Tükendi, porsiyon sayacı ve POS sırası; lafmaliyet satış listesinde
- * boylar, servis ücreti ve beklenen nakit. Site sahte: `fetch` sitenin adresinde bu dosyanın yönlendiricisine düşer.
+ * boylar, servis ücreti ve beklenen nakit; gün açılmadan gelen online siparişin iş günü. Site sahte: `fetch` sitenin
+ * adresinde bu dosyanın yönlendiricisine düşer.
  */
 const SITE = 'https://laffogato.test';
 const KEY = 's'.repeat(40);
@@ -369,5 +370,46 @@ describe('lafmaliyet satış listesi', () => {
     await h.ok('mudur', 'POST', '/cash/movements', { kind: 'harcama', amount: 5000, description: 'Buz' });
     const { z } = await todayPayload();
     expect(kurus(z.openingCash! + z.cash! + z.cashIn! - z.cashOut! - z.handedOver!)).toBe(kurus(z.expectedCash!));
+  });
+});
+
+// ─── İş günü (en sonda: saat taklit edilir, açık gün kapatılır) ──────────────
+
+describe('online siparişin iş günü', () => {
+  it('gün açılmadan gelen online sipariş kapanmış önceki güne değil kendi iş gününe yazılır', async () => {
+    const { upsertOnlineOrders } = await import('../server/sync/laffogato-orders');
+    await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
+    const ist = (s: string) => Date.parse(`${s}:00+03:00`);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const at = (s: string) => vi.setSystemTime(ist(s));
+      at('2026-11-02T09:00');
+      await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+      at('2026-11-03T03:00');
+      await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
+      // Gece 04:25'te ödenen sipariş 2 Kasım'ın; sabah 07:55'te ödenen 3 Kasım'ın (gün 09:00'da açılır)
+      at('2026-11-03T04:30');
+      upsertOnlineOrders([panelOrder('ord-gece', { paidAt: new Date(ist('2026-11-03T04:25')).toISOString(), totalMinor: 20000 })]);
+      at('2026-11-03T08:00');
+      upsertOnlineOrders([panelOrder('ord-sabah', { paidAt: new Date(ist('2026-11-03T07:55')).toISOString(), totalMinor: 30000 })]);
+      at('2026-11-03T09:00');
+      await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+      at('2026-11-03T09:30');
+      upsertOnlineOrders([panelOrder('ord-acik', { paidAt: new Date(ist('2026-11-03T09:28')).toISOString(), totalMinor: 40000 })]);
+      // Site hepsini tamamladı (raporlar kapanmış siparişleri sayar)
+      at('2026-11-03T09:40');
+      upsertOnlineOrders([]);
+      at('2026-11-03T12:00');
+
+      type Online = { online: { orders: number; amount: number } };
+      const nov2 = await h.ok<Online>('mudur', 'GET', '/reports/summary?from=2026-11-02&to=2026-11-02');
+      const nov3 = await h.ok<Online>('mudur', 'GET', '/reports/summary?from=2026-11-03&to=2026-11-03');
+      const live = await h.ok<Online>('patron', 'GET', '/reports/patron');
+      expect(nov2.online).toEqual({ orders: 1, amount: 20000 });
+      expect(nov3.online).toEqual({ orders: 2, amount: 70000 });
+      expect(live.online.orders).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

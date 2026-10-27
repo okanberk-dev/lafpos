@@ -95,7 +95,9 @@ başarısız sayılır, hiçbir sipariş kapatılmaz. Listede olmayan açık sip
 ama sitede hâlâ açık görünen sipariş yeniden açılır.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
-tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım).
+tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım). Raporlarda
+"Online (sitede ödendi)" olarak görünür: gün açıksa açık güne, değilse ödeme anının iş gününe (05:00 kuralı)
+yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşınır.
 `fulfillment = 'table'` olan sipariş, `tables.siteTableCode` ya da `label` içindeki masa adı eşlemesiyle
 ("S2", "Masa S2"; büyük/küçük harf farkı yok, birden çok masaya uyan ad eşlenmez) masa planında ilgili masada
 rozet olarak görünür.

@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
+import { businessDate } from '@shared/time';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { Effects } from '../lib/effects';
@@ -77,8 +78,15 @@ function tableFor<T extends { name: string; kind: string; active: boolean; siteT
 export function upsertOnlineOrders(list: PanelOrder[], complete = true): { created: number; updated: number; closed: number } {
   const fx = new Effects();
   const result = tx((t) => {
-    const day = getOpenDay(t) ?? t.select().from(schema.businessDays).orderBy(desc(schema.businessDays.openedAt)).get();
-    if (!day) return { created: 0, updated: 0, closed: 0 };
+    // Açık gün varsa sipariş onun (kasanın satışları gibi). Gün açık değilken iş günü (05:00 kuralı) ödeme anından:
+    // o tarihin günü varsa ona, yoksa geçici olarak son güne yazılır; o tarihin günü açılınca oraya taşınır (openDay)
+    const openDay = getOpenDay(t);
+    const latest = openDay ?? t.select().from(schema.businessDays).orderBy(desc(schema.businessDays.openedAt)).get();
+    if (!latest) return { created: 0, updated: 0, closed: 0 };
+    const dayIdFor = (paidAt: number) =>
+      openDay?.id ??
+      t.select({ id: schema.businessDays.id }).from(schema.businessDays).where(eq(schema.businessDays.date, businessDate(paidAt))).orderBy(desc(schema.businessDays.zNo)).get()?.id ??
+      latest.id;
     const products = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
     const categories = new Map(t.select().from(schema.categories).all().map((c) => [c.id, c]));
     const tables = t.select().from(schema.tables).all();
@@ -111,17 +119,18 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true): { creat
         continue;
       }
       const id = ulid(now);
+      const paidAt = Date.parse(o.paidAt) || now;
       t.insert(schema.orders)
         .values({
           id,
-          dayId: day.id,
+          dayId: dayIdFor(paidAt),
           no: o.orderNo,
           type: 'online',
           status: 'acik',
           tableId: table?.id ?? null,
           guests: 1,
           note: o.note || null,
-          openedAt: Date.parse(o.paidAt) || now,
+          openedAt: paidAt,
           source: 'laffogato',
           extId: o.id,
           extNo: o.orderNo,
@@ -155,7 +164,7 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true): { creat
             stationId: p?.stationId ?? cat?.stationId ?? null,
             status,
             batch: 1,
-            sentAt: Date.parse(o.paidAt) || now,
+            sentAt: paidAt,
             extProductId: l.menuItemId,
             createdAt: now,
           })

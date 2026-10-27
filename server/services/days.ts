@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
-import { businessDate } from '@shared/time';
+import { addDays, businessDate, businessDayStartMs } from '@shared/time';
 import type { BusinessDayDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import type { ZField, ZSummary } from '../db/schema';
@@ -43,10 +43,29 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
     lastOrderNo: 0,
   };
   t.insert(schema.businessDays).values(day).run();
+  claimEarlyOnlineOrders(t, day.id, day.date);
   fx.audit(t, { userId: actor.user.id, action: 'day.open', amount: day.openingCash, message: `${actor.user.name} günü açtı (Z ${day.zNo}, açılış ${tl(day.openingCash)})` });
   fx.emit({ topic: 'cash', kind: 'day.opened', byUserId: actor.user.id });
   fx.emit({ topic: 'settings', kind: 'day.opened', byUserId: actor.user.id });
   return t.select().from(schema.businessDays).where(eq(schema.businessDays.id, day.id)).get()!;
+}
+
+/**
+ * Gün açılmadan gelen online siparişler (sitede ödendi) geçici olarak son, kapanmış güne yazılır
+ * (`upsertOnlineOrders`). İş günü (ödeme anından, 05:00 kuralı) açılan günün tarihiyse buraya taşınır: raporlar
+ * online siparişi kendi tarihinde gösterir. Açık güne yazılmış sipariş (gün kapanmadan ödenmiş) taşınmaz.
+ */
+function claimEarlyOnlineOrders(t: Tx, dayId: string, date: string) {
+  const from = businessDayStartMs(date);
+  const to = businessDayStartMs(addDays(date, 1));
+  const early = t
+    .select({ id: schema.orders.id, openedAt: schema.orders.openedAt, closedAt: schema.businessDays.closedAt })
+    .from(schema.orders)
+    .innerJoin(schema.businessDays, eq(schema.businessDays.id, schema.orders.dayId))
+    .where(and(eq(schema.orders.source, 'laffogato'), gte(schema.orders.openedAt, from), lt(schema.orders.openedAt, to)))
+    .all()
+    .filter((o) => o.closedAt != null && o.closedAt <= o.openedAt);
+  if (early.length) t.update(schema.orders).set({ dayId }).where(inArray(schema.orders.id, early.map((o) => o.id))).run();
 }
 
 export function addCashMovement(t: Tx, actor: Actor, fx: Effects, input: { kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string }) {
