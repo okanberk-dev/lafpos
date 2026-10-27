@@ -335,6 +335,13 @@ describe('Yemeksepeti gözden geçirme bulguları', () => {
     expect(late.status).toBe('suresi_doldu');
   });
 
+  it('Türkçe adlı teslimat ücreti de Yemeksepeti kuryesinde platformundur', async () => {
+    const { fromDhOrder } = await import('../server/delivery/yemeksepeti');
+    const p = fromDhOrder(dhOrder({ price: { deliveryFees: [{ name: 'Teslimat Ücreti', value: '25.00' }, { name: 'Paket ücreti', value: '5.00' }], grandTotal: '220.00' } }), 'POS_1');
+    expect(p.lines.filter((l) => l.kind === 'fee').map((l) => l.name)).toEqual(['Ambalaj ücreti']);
+    expect(p.customerTotal).toBe(19500);
+  });
+
   it('ücret satırı bar ve mutfak ekranına düşmez', async () => {
     const o = dhOrder({ delivery: { address: { street: 'Lale Sk.', number: '9' }, expectedDeliveryTime: null, riderPickupTime: null }, price: { deliveryFees: [{ name: 'delivery fee', value: '25.00' }, { name: 'packaging fee', value: '5.00' }], grandTotal: '220.00' } });
     const row = await arrive(o);

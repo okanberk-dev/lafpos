@@ -151,16 +151,18 @@ function toppingNames(list: DhTopping[] | undefined, out: string[], depth = 0): 
   return extra;
 }
 
+/** Teslimat ücreti mi: Delivery Hero adı İngilizce ("delivery fee"); Türkçe ad gelirse de tanınır */
+const isDeliveryFee = (name: string | null) => !name || /deliver|teslimat|getirme|kurye/.test(name.toLocaleLowerCase('tr-TR'));
+
 /** Ücret adı: bilinen Delivery Hero adları Türkçe, ötekiler olduğu gibi */
 function feeLabel(name: string | null): string {
-  const n = (name ?? '').toLowerCase();
-  if (!n || n.includes('deliver')) return 'Teslimat ücreti';
-  if (n.includes('packag') || n.includes('container')) return 'Ambalaj ücreti';
-  if (n.includes('service')) return 'Hizmet ücreti';
-  if (n.includes('small')) return 'Küçük sipariş ücreti';
+  const n = (name ?? '').toLocaleLowerCase('tr-TR');
+  if (isDeliveryFee(name)) return 'Teslimat ücreti';
+  if (/packag|container|ambalaj|paket/.test(n)) return 'Ambalaj ücreti';
+  if (/service|hizmet/.test(n)) return 'Hizmet ücreti';
+  if (/small|küçük/.test(n)) return 'Küçük sipariş ücreti';
   return name!;
 }
-const isDeliveryFee = (name: string | null) => !name || name.toLowerCase().includes('deliver');
 /** Alan var mı (0,00 da geçerli bir değerdir) */
 const present = (v: unknown) => v != null && !(typeof v === 'string' && !v.trim());
 
