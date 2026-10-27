@@ -113,7 +113,7 @@ export default function OverviewAdmin() {
           label: 'Site menüsü',
           tone: !s.menu.linked ? 'neutral' : s.menu.state?.lastError ? 'danger' : s.menu.state?.lastSuccessAt ? 'success' : 'neutral',
           state: !s.menu.linked ? 'Kurulmadı' : s.menu.state?.lastError ? 'Hata' : s.menu.auto ? 'Otomatik' : 'Elle',
-          detail: !s.menu.linked ? 'LAFFOGATO_URL yok: siteye istek gitmez' : (s.menu.state?.lastError ?? `Son eşitleme ${ago(s.menu.state?.lastSuccessAt)}`),
+          detail: !s.menu.linked ? 'Siteye istek gitmiyor' : (s.menu.state?.lastError ?? `Son eşitleme ${ago(s.menu.state?.lastSuccessAt)}`),
         },
         {
           key: 'online',
