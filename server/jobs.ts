@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import type { LiveEvent } from '@shared/events';
 import { businessDate, istanbulParts } from '@shared/time';
 import { db, schema, sqlite, tx } from './db/client';
+import { liveTick, POLL_INTERVAL_MS, reconcileNotifications } from './delivery/live';
 import { expirePlatformOrders } from './delivery/service';
 import { env } from './env';
 import { Effects } from './lib/effects';
@@ -137,6 +138,9 @@ export function startJobs() {
   timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setInterval(platformTick, 30_000));
+  // Canlı platform bağlantısı: yoklama (Trendyol Go) ve bekleyen aşama bildirimleri; anahtar yokken hiç istek yok
+  timers.push(setTimeout(() => void liveTick(), 15_000));
+  timers.push(setInterval(() => void liveTick(), POLL_INTERVAL_MS));
   timers.push(setTimeout(backupTick, 30_000));
   // Yeniden başlatmadan önce yazarkasaya gönderilmiş, sonucu beklenen sepetler sorgulanmaya devam eder
   resumePolling();
@@ -167,6 +171,8 @@ export function onJobEvent(e: LiveEvent) {
   if (e.topic === 'sync' && e.kind === 'site.menu.written') menuSyncSoon();
   // Gün açıldı: gece atlanan menü yoklaması bir kez
   if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void menuTick();
+  // Paket siparişinin aşaması değişti: canlı platforma hemen yazılır (gidemezse 20 sn'lik turda yeniden)
+  if (e.topic === 'delivery' && e.kind === 'delivery.status' && process.env.LAFPOS_NO_JOBS !== '1') void reconcileNotifications().catch(() => undefined);
 }
 
 export function stopJobs() {

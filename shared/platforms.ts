@@ -36,8 +36,37 @@ export const ACCEPT_SECONDS: Record<PlatformId, number | null> = {
   migros: 10 * 60,
 };
 
-/** Bu sürümde platform başına mod: kapalı ya da deneme (simülatör). Gerçek bağlantı anahtar ve sözleşmeyle gelir */
-export type PlatformMode = 'kapali' | 'deneme';
+/**
+ * Platform başına mod: kapalı, deneme (simülatör; yalnız kurulum modunda) ya da canlı (gerçek bağdaştırıcı; anahtarlar
+ * .env'de, server/delivery/registry.ts). Canlı yalnız bağdaştırıcısı olan ve anahtarı tanımlı platformda seçilebilir.
+ */
+export type PlatformMode = 'kapali' | 'deneme' | 'canli';
+export const PLATFORM_MODES: readonly PlatformMode[] = ['kapali', 'deneme', 'canli'];
+export const PLATFORM_MODE_LABEL: Record<PlatformMode, string> = { kapali: 'Kapalı', deneme: 'Deneme', canli: 'Canlı' };
+
+/** Yönetim › Paket platformları: canlı bağlantının durumu */
+export interface PlatformLiveStatus {
+  /** LafPOS'ta bu platform için bağdaştırıcı var mı (Trendyol Go var; Yemeksepeti ve Getir sonraki iş) */
+  supported: boolean;
+  /** Anahtarlar .env'de tanımlı mı */
+  configured: boolean;
+  /** Son başarılı yoklama */
+  lastPollAt: number | null;
+  lastError: string | null;
+  /** Kabul edilmiş, platforma aşaması bildirilen açık siparişler */
+  openOrders: number;
+}
+
+/** Platform ürünü → LafPOS ürünü eşlemesi (Yönetim › Paket platformları › Ürün eşleme); boşsa ada göre eşlenir */
+export interface PlatformProductDTO {
+  id: string;
+  platform: PlatformId;
+  externalId: string;
+  name: string;
+  productId: string | null;
+  productName: string | null;
+  lastSeenAt: number;
+}
 
 export interface PlatformSettings {
   mode: PlatformMode;

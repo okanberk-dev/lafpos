@@ -64,6 +64,13 @@
       "when": 1793101383703,
       "tag": "0008_paket_platformlari",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793105901695,
+      "tag": "0009_platform_canli",
+      "breakpoints": true
     }
   ]
 }

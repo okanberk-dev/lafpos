@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, Bike, PackageCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { tl } from '@shared/money';
-import { COURIER_LABEL, PLATFORM_LABEL, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
+import { COURIER_LABEL, PLATFORM_LABEL, type PlatformLiveStatus, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { errorMessage, get, post } from '@/lib/api';
@@ -17,6 +17,8 @@ import { PlatformBadge } from './PlatformBadge';
 export interface PlatformsData {
   settings: Record<PlatformId, PlatformSettings>;
   orders: PlatformOrderDTO[];
+  /** Canlı bağlantı durumu (eski sunucu göndermez) */
+  live?: Record<PlatformId, PlatformLiveStatus>;
 }
 
 export function usePlatforms(enabled = true) {

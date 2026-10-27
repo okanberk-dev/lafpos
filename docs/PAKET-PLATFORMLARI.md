@@ -24,10 +24,33 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
 - **Kapalı:** sipariş alınmaz.
 - **Deneme:** Yönetim › Paket platformları › "Deneme siparişi gönder" platformdan gelmiş gibi sipariş üretir
   (`server/delivery/simulator.ts`). Tarayıcı demosunda Yemeksepeti, Getir ve Trendyol Go deneme modunda açılır.
-- **Canlı (sonraki iş):** gerçek bağdaştırıcılar `server/delivery/` altında, `PlatformOrderPayload`'a çevirir.
-  Önce Trendyol Go (yoklama; kasadan doğrudan), sonra Getir; Yemeksepeti ve Getir siparişi push ile gönderir, kasa
-  kafe ağında olduğu için LafPOS Uzaktan (Vercel) aktarıcı olur. Anahtarlar `.env`'de; arayüzde ve depoda yazılmaz.
+- **Canlı:** gerçek bağdaştırıcı (`server/delivery/adapter.ts` arayüzü, `registry.ts`) siparişi
+  `PlatformOrderPayload`'a çevirir ve kabul / ret / aşama çağrılarını yapar; akış, ödeme ve kilit yukarıdaki gibi.
+  Canlı yalnız bağdaştırıcısı olan ve anahtarı `.env`'de tanımlı platformda seçilebilir (yoksa 409 `not_supported` /
+  `not_configured`); anahtarlar arayüzde ve depoda yazılmaz. Deneme siparişi (`simulated`) platforma hiç gitmez.
+  - **Trendyol Go Yemek** (`server/delivery/trendyol.ts`; Uber Eats Türkiye siparişleri de buradan): yalnız yoklama,
+    kasadan doğrudan, 20 saniyede bir (`server/delivery/live.ts` `liveTick`; art arda hatada bekleme 5 dakikaya
+    kadar, ilk ve her 15. hata denetim kaydına). `.env`: `TRENDYOL_SUPPLIER_ID`, `TRENDYOL_API_KEY`,
+    `TRENDYOL_API_SECRET`; test ortamı için `TRENDYOL_API_URL`, entegratör adı `TRENDYOL_AGENT_NAME` (boşsa LafPOS).
+    Yeni paketler (`Created`) onay şeridine düşer; platformun iptali (`Cancelled`) bekleyen kaydı kapatır, kabul edilmiş
+    adisyonu platform ödemesini geri alıp iptal eder (kasada alınmış ödeme varsa durur, alarm düşer).
+    **Kabul ve ret önce platforma** (`picked` hazırlık süresiyle, `unsupplied` neden koduyla): platform reddederse
+    502 `platform_unreachable`, yerelde yapılmaz; kasiyer yeniden dener ya da platform uygulamasından karar verir.
+    Teslim aşamaları (`POST /orders/:id/delivery`) sırayla platforma yazılır: hazır → `invoiced`; kendi kuryemizde
+    yolda → `manual-shipped`, teslim → `manual-delivered` (platform kuryesinde yolda ve teslimi platform yazar).
+    Yazılamayan `platform_orders.notified_status` ve `last_error` ile kalır, sonraki turda yeniden denenir; ilk
+    hata denetim kaydına uyarı.
+    Uç yolları, durum adları ve neden kodları `trendyol.ts`'in başındaki sabitlerde: canlıya geçmeden Trendyol'un test
+    ortamında bir tur atılır (IP izni; `developers.tgoapps.com` bu depodan erişilemediği için alan adları araştırma
+    notundan yazıldı), uyuşmayan ad yalnız orada değişir.
+  - **Ürün eşleme** (Yönetim › Paket platformları › Ürün eşleme, `platform_products`): platformdan gelen her kalem
+    (platform ürün kimliğiyle) listelenir; kasadaki ürüne bağlanan kalem adı değişse de doğru ürüne düşer,
+    bağlanmayan ada göre eşlenir, kasada yoksa kabulde "Platform ürünü" satırı olur. Uçlar `GET /api/platforms/products`,
+    `PUT /api/platforms/products/:id { productId }` (menü ya da bağlantı yetkisi).
+  - **Sonraki:** Yemeksepeti ve Getir siparişi push ile gönderir; kasa kafe ağında olduğu için LafPOS Uzaktan (Vercel)
+    aktarıcı olur, kasa oradan çeker.
 
 ## Uçlar
-`GET /api/platforms` · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·
-`POST /api/platforms/orders/:id/accept|reject|platform-cancel` · teslim: `POST /api/orders/:id/delivery`.
+`GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·
+`POST /api/platforms/orders/:id/accept|reject|platform-cancel` · teslim: `POST /api/orders/:id/delivery` ·
+ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id`.

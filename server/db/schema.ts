@@ -679,6 +679,26 @@ export const platformOrders = sqliteTable(
     reason: text('reason'),
     /** Platforma son bildirimin hatası (gerçek bağlantıda; denemede boş) */
     lastError: text('last_error'),
+    /** Platforma yazılan son aşama: picked (kabul), hazir, yolda, teslim, unsupplied (ret); canlı bağlantıda (server/delivery/live.ts) */
+    notifiedStatus: text('notified_status'),
   },
   (t) => [uniqueIndex('platform_orders_ext_idx').on(t.platform, t.externalId), index('platform_orders_status_idx').on(t.status)],
+);
+
+/**
+ * Platform ürünü → LafPOS ürünü: platformdan gelen her kalem (platform ürün kimliğiyle) burada görülür; eşlenmemişse
+ * (`productId` boş) ada göre eşlenir, Yönetim › Paket platformları › Ürün eşleme'den bağlanır
+ */
+export const platformProducts = sqliteTable(
+  'platform_products',
+  {
+    id: text('id').primaryKey(),
+    platform: text('platform').$type<PlatformId>().notNull(),
+    externalId: text('external_id').notNull(),
+    name: text('name').notNull(),
+    productId: text('product_id').references(() => products.id),
+    lastSeenAt: integer('last_seen_at').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('platform_products_ext_idx').on(t.platform, t.externalId)],
 );
