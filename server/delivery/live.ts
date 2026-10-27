@@ -213,6 +213,8 @@ export function acceptFailedLocally(row: PlatformRow, e: unknown) {
 
 /** Retten önce platforma (`unsupplied`); reddederse 502, yerelde reddedilmez */
 export async function announceReject(row: PlatformRow, reason: string): Promise<string | null> {
+  // Platformun tabletinde zaten kabul edilmiş sipariş kasadan reddedilmez
+  if (row.payload.preAccepted) throw new HttpError(409, `${PLATFORM_LABEL[row.platform]} siparişi platformun tabletinde kabul edildi: ret ve iptal oradan yapılır`, 'pre_accepted');
   const a = realAdapter(row);
   if (!a) return null;
   if (row.notifiedStatus === 'unsupplied') return 'unsupplied';
@@ -352,7 +354,7 @@ async function announceLocalCancel(a: PlatformAdapter, row: PlatformRow, cancelR
   const reason = cancelReason?.trim() || 'Diğer';
   const ref = `${row.payload.code}, ${tl(row.payload.customerTotal)}`;
   try {
-    await a.reject(row.payload, reason);
+    await a.reject(row.payload, reason, { afterAccept: true });
   } catch (e) {
     const permanent = permanentOf(e);
     const why = `${a.label}: kasada iptal edilen sipariş platforma bildirilemedi (${message(e)})`;
@@ -386,8 +388,11 @@ function retryCancellation(row: PlatformRow) {
   fx.flush();
 }
 
-/** Platformun iptal ettiği paketler: bekleyen kayıt kapanır, kabul edilmiş adisyon iptal olur (platform ödemesi geri) */
-function applyCancellations(platform: PlatformId, externalIds: string[]) {
+/**
+ * Platformun iptal ettiği paketler: bekleyen kayıt kapanır, kabul edilmiş adisyon iptal olur (platform ödemesi geri).
+ * `deferred`: kararı o an süren, sonraki yoklamaya kalan iptaller (gelen kutusunda kalmalı)
+ */
+function applyCancellations(platform: PlatformId, externalIds: string[], deferred: Set<string>) {
   if (!externalIds.length) return 0;
   const rows = db
     .select()
@@ -397,8 +402,11 @@ function applyCancellations(platform: PlatformId, externalIds: string[]) {
   let n = 0;
   for (const row of rows) {
     if (row.payload.simulated) continue;
-    // Kabul ya da ret o an sürüyor: sonraki yoklama (aynı pencere) yeniden getirir
-    if (deciding.has(row.id)) continue;
+    // Kabul ya da ret o an sürüyor: sonraki yoklama (aynı pencere ya da gelen kutusu) yeniden getirir
+    if (deciding.has(row.id)) {
+      deferred.add(row.externalId);
+      continue;
+    }
     // Zaten bekliyor: aşama turu yeniden dener, alarm yinelenmez
     if (row.cancelPendingAt != null) continue;
     const fx = new Effects();
@@ -461,11 +469,13 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
   // Tek paketin kaydı düşerse ötekiler durmaz. Kapalı'da yeni sipariş kayda girmez (siparişi iten platformda
   // aktarıcının gelen kutusunda kalır), bozuk paket de bildirilmez
   const bad = intake ? [...(res.invalid ?? [])] : [];
-  const skipped = new Set<string>();
+  // Gelen kutusunda kalacaklar: kayda alınmayan (Kapalı), kaydı düşen (sonraki çekimde yeniden denenir), iptali ertelenen.
+  // Kapalı'da bozuk kayıt da kalır: Canlı'ya dönünce bildirilir (alarmsız silinmesin)
+  const keep = new Set<string>(intake ? [] : (res.invalid ?? []).map((i) => i.externalId));
   let created = 0;
   for (const payload of res.orders) {
     if (!intake) {
-      skipped.add(payload.externalId);
+      keep.add(payload.externalId);
       continue;
     }
     const fx = new Effects();
@@ -474,13 +484,14 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
       fx.flush();
       if (r.created) created++;
     } catch (e) {
+      keep.add(payload.externalId);
       bad.push({ externalId: payload.externalId, error: message(e) });
     }
   }
   reportInvalid(platform, bad);
-  const n = applyCancellations(platform, res.cancelled);
+  const n = applyCancellations(platform, res.cancelled, keep);
   // Yerelde işlendi: aktarıcıdaki kayıtlar artık silinebilir (silinemezse yeniden gelir, tekilleştirilir)
-  await res.commit?.(skipped).catch((e) => console.warn(`[platform] ${a.label} gelen kutusu temizlenemedi`, message(e)));
+  await res.commit?.(keep).catch((e) => console.warn(`[platform] ${a.label} gelen kutusu temizlenemedi`, message(e)));
   writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: null, failures: 0 });
   return { created, cancelled: n };
 }

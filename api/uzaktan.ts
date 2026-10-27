@@ -4,6 +4,8 @@
  *
  * Ortam: LAFPOS_CLOUD_SECRET (kafedekiyle aynı, en az 32), LAFPOS_UZAKTAN_PAROLA (en az 10), Upstash Redis
  * (KV_REST_API_URL + KV_REST_API_TOKEN ya da UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN).
+ * Yemeksepeti aktarıcısı (`/api/yemeksepeti/*`, aşağıda): YEMEKSEPETI_PLUGIN_SECRET (Delivery Hero'nun JWT anahtarı),
+ * isteğe bağlı YEMEKSEPETI_REMOTE_ID (yalnız bu restoranın siparişleri).
  * Kendi içinde: Vercel her dosyayı ayrı derler, göreli içe aktarma çalışma anında kırılabilir. İmza kuralı
  * server/lib/signature.ts ile aynı (tests/cloud-api.test.ts denetler). Ayrıntı: docs/07-UZAKTAN-ERISIM.md
  */
@@ -108,6 +110,165 @@ async function snapshot(): Promise<Snapshot | null> {
   return raw ? (JSON.parse(raw) as Snapshot) : null;
 }
 
+// ─── Yemeksepeti aktarıcısı: Delivery Hero POS plugin uçları ────────────────
+
+/**
+ * Kasa kafe ağında olduğu için Delivery Hero siparişi buraya iter (plugin.yaml `POST /order/{remoteId}` ve
+ * `PUT /remoteId/{remoteId}/remoteOrder/{remoteOrderId}/posOrderStatus`); istek `service: middleware` iddialı, bize
+ * verilen anahtarla imzalı bir JWT taşır. Kayıt Redis listesine girer ve sipariş `remoteOrderId` (= sipariş belirteci)
+ * ile saniyeler içinde onaylanır; kasa listeyi imzalı olarak çeker (`GET /api/yemeksepeti/inbox`) ve işlediğini siler
+ * (`POST /api/yemeksepeti/inbox/ack`). Kabul ve ret kasadan middleware'e gider (server/delivery/yemeksepeti.ts).
+ */
+const YS_INBOX_KEY = 'lafpos:ys:inbox';
+/** İptal bildirimleri ayrı listede: kasanın beklettiği siparişler (Kapalı) önlerini tıkamasın, önce onlar verilir */
+const YS_STATUS_KEY = 'lafpos:ys:status';
+/** Delivery Hero sipariş belirteci en çok 512 karakter (order.yaml) */
+const YS_TOKEN_MAX = 512;
+/** Gelen kutusu dolunca kırpılmaz (sipariş sessizce düşmesin): Delivery Hero'ya 503 döner, o yeniden dener */
+const YS_INBOX_MAX = 500;
+const YS_INBOX_TTL_S = 2 * 86400;
+const YS_ORDER_MAX_BYTES = 256 * 1024;
+const YS_STATUS_MAX_BYTES = 8 * 1024;
+/** Kasanın bir çekimde aldığı en çok kayıt ve bayt (Vercel yanıt sınırının altında) */
+const YS_PULL_MAX = 50;
+const YS_PULL_MAX_BYTES = 2 * 1024 * 1024;
+
+/** Delivery Hero'nun JWT'si: HS512 (ya da HS256), `service: middleware` iddiası, süresi varsa geçmemiş */
+export function verifyMiddlewareJwt(secret: string, authorization: string | null, nowMs = Date.now()): boolean {
+  if (!secret) return false;
+  const token = (authorization ?? '').replace(/^Bearer\s+/i, '').trim();
+  const [h, p, s] = token.split('.');
+  if (!h || !p || !s) return false;
+  let header: { alg?: string };
+  let payload: { service?: string; exp?: number };
+  try {
+    header = JSON.parse(Buffer.from(h, 'base64url').toString('utf8')) as { alg?: string };
+    payload = JSON.parse(Buffer.from(p, 'base64url').toString('utf8')) as { service?: string; exp?: number };
+  } catch {
+    return false;
+  }
+  // JSON.parse null, sayı ya da dizi de döndürebilir: nesne değilse geçersiz
+  if (!header || typeof header !== 'object' || !payload || typeof payload !== 'object') return false;
+  const alg = header.alg === 'HS512' ? 'sha512' : header.alg === 'HS256' ? 'sha256' : null;
+  if (!alg || payload.service !== 'middleware') return false;
+  if (typeof payload.exp === 'number' && payload.exp * 1000 < nowMs) return false;
+  return sameText(createHmac(alg, secret).update(`${h}.${p}`).digest('base64url'), s);
+}
+
+/** Kaydı gelen kutusuna koyar; kutu doluysa koymaz (false): çağıran 503 döner, Delivery Hero yeniden dener */
+async function inboxPush(item: Record<string, unknown>, key = YS_INBOX_KEY): Promise<boolean> {
+  const size = Number(await redis('LLEN', key)) || 0;
+  if (size >= YS_INBOX_MAX) return false;
+  await redis('RPUSH', key, JSON.stringify(item));
+  await redis('EXPIRE', key, YS_INBOX_TTL_S);
+  return true;
+}
+
+async function yemeksepeti(req: Request, url: URL, path: string): Promise<Response> {
+  const pluginSecret = env('YEMEKSEPETI_PLUGIN_SECRET');
+  const wantRemote = env('YEMEKSEPETI_REMOTE_ID');
+  const now = Date.now();
+  // Kasanın çekimi ve silmesi: kafe anahtarıyla imzalı (LAFPOS_CLOUD_SECRET)
+  if (path === 'yemeksepeti/inbox' || path === 'yemeksepeti/inbox/ack') {
+    if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
+    const body = await req.text();
+    if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
+    if (path === 'yemeksepeti/inbox' && req.method === 'GET') {
+      // Önce iptaller, sonra siparişler; en çok 50 kayıt ve 2 MB. Bozuk ya da tek başına sınırı aşan kayıt silinir
+      const items: unknown[] = [];
+      let bytes = 0;
+      for (const key of [YS_STATUS_KEY, YS_INBOX_KEY]) {
+        const room = YS_PULL_MAX - items.length;
+        if (room <= 0) break;
+        const raw = ((await redis('LRANGE', key, 0, room - 1)) as string[] | null) ?? [];
+        for (const r of raw) {
+          if (r.length > YS_PULL_MAX_BYTES) {
+            await redis('LREM', key, 1, r);
+            continue;
+          }
+          if (bytes + r.length > YS_PULL_MAX_BYTES) break;
+          try {
+            items.push(JSON.parse(r));
+            bytes += r.length;
+          } catch {
+            await redis('LREM', key, 1, r);
+          }
+        }
+      }
+      const total = (Number(await redis('LLEN', YS_STATUS_KEY)) || 0) + (Number(await redis('LLEN', YS_INBOX_KEY)) || 0);
+      return json({ items, total });
+    }
+    if (path === 'yemeksepeti/inbox/ack' && req.method === 'POST') {
+      let ids: string[] = [];
+      try {
+        const parsed = JSON.parse(body) as { ids?: unknown };
+        ids = Array.isArray(parsed.ids) ? parsed.ids.filter((x): x is string => typeof x === 'string') : [];
+      } catch {
+        return fail(400, 'Gövde okunamadı', 'bad_body');
+      }
+      let removed = 0;
+      for (const key of [YS_STATUS_KEY, YS_INBOX_KEY]) {
+        const raw = ((await redis('LRANGE', key, 0, -1)) as string[] | null) ?? [];
+        for (const r of raw) {
+          let id: unknown;
+          try {
+            id = (JSON.parse(r) as { id?: unknown }).id;
+          } catch {
+            continue;
+          }
+          if (typeof id === 'string' && ids.includes(id)) removed += Number(await redis('LREM', key, 1, r)) || 0;
+        }
+      }
+      return json({ ok: true, removed });
+    }
+    return fail(404, 'Yok', 'not_found');
+  }
+  // Delivery Hero'nun itmesi: JWT
+  if (!pluginSecret) return fail(503, 'Yemeksepeti aktarıcısı kurulmamış (YEMEKSEPETI_PLUGIN_SECRET)', 'not_configured');
+  if (!verifyMiddlewareJwt(pluginSecret, req.headers.get('authorization'), now)) return json({ reason: 'TECHNICAL_PROBLEM', message: 'Unauthorized' }, 401);
+  const order = /^yemeksepeti\/order\/([^/]+)$/.exec(path);
+  if (order && req.method === 'POST') {
+    const remoteId = decodeURIComponent(order[1]!);
+    if (wantRemote && remoteId !== wantRemote) return json({ reason: 'MENU_ACCOUNT_SETTINGS', message: 'Unknown remoteId' }, 400);
+    const body = await req.text();
+    if (body.length > YS_ORDER_MAX_BYTES) return json({ reason: 'TECHNICAL_PROBLEM', message: 'payload-limit-exceeded' }, 400);
+    let dh: { token?: unknown };
+    try {
+      dh = JSON.parse(body) as { token?: unknown };
+    } catch {
+      return json({ reason: 'TECHNICAL_PROBLEM', message: 'json-not-readable' }, 400);
+    }
+    if (typeof dh.token !== 'string' || !dh.token || dh.token.length > YS_TOKEN_MAX) return json({ reason: 'TECHNICAL_PROBLEM', message: 'order-validation-error: token' }, 400);
+    if (!(await inboxPush({ id: randomBytes(9).toString('base64url'), kind: 'order', remoteId, receivedAt: now, order: dh }))) {
+      return json({ reason: 'TECHNICAL_PROBLEM', message: 'inbox-full' }, 503);
+    }
+    // remoteOrderId: siparişin kasadaki kimliği olarak belirtecin kendisi (tekil); durum bildirimleri bununla gelir
+    return json({ remoteResponse: { remoteOrderId: dh.token } });
+  }
+  const status = /^yemeksepeti\/remoteId\/([^/]+)\/remoteOrder\/([^/]+)\/posOrderStatus$/.exec(path);
+  if (status && (req.method === 'PUT' || req.method === 'POST')) {
+    const remoteId = decodeURIComponent(status[1]!);
+    const remoteOrderId = decodeURIComponent(status[2]!);
+    if (remoteOrderId.length > YS_TOKEN_MAX) return fail(400, 'remoteOrderId', 'bad_body');
+    if (wantRemote && remoteId !== wantRemote) return fail(404, 'Unknown remoteId', 'not_found');
+    const text = await req.text();
+    if (text.length > YS_STATUS_MAX_BYTES) return fail(400, 'payload-limit-exceeded', 'bad_body');
+    let dh: { status?: unknown; message?: unknown };
+    try {
+      dh = JSON.parse(text) as { status?: unknown; message?: unknown };
+    } catch {
+      return fail(400, 'json-not-readable', 'bad_body');
+    }
+    if (!dh || typeof dh.status !== 'string') return fail(400, 'status', 'bad_body');
+    // Kasa yalnız iptali kullanır; ötekiler (kurye geldi, alındı, uyarılar) kutuyu doldurmasın
+    if (dh.status !== 'ORDER_CANCELLED') return json({ ok: true });
+    const item = { id: randomBytes(9).toString('base64url'), kind: 'status', remoteId, receivedAt: now, remoteOrderId, status: dh.status, message: typeof dh.message === 'string' ? dh.message.slice(0, 500) : '' };
+    if (!(await inboxPush(item, YS_STATUS_KEY))) return fail(503, 'inbox-full', 'inbox_full');
+    return json({ ok: true });
+  }
+  return fail(404, 'Yok', 'not_found');
+}
+
 // ─── Demo ────────────────────────────────────────────────────────────────────
 
 /**
@@ -188,8 +349,10 @@ async function handle(req: Request): Promise<Response> {
         redisOk = false;
       }
     }
-    return json({ secret: secret().length >= 32, password: !passwordRequired() || env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null, open: !passwordRequired() });
+    return json({ secret: secret().length >= 32, password: !passwordRequired() || env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null, open: !passwordRequired(), yemeksepeti: !!env('YEMEKSEPETI_PLUGIN_SECRET') });
   }
+  // Yemeksepeti aktarıcısı: makineden makineye, demo ve parola kapısından önce
+  if (path.startsWith('yemeksepeti/')) return yemeksepeti(req, url, path);
   // Kafe bağlanmadıysa demo: anahtar ve parola gerekmez, yalnız örnek gün açılır (kafe itmesi aşağıda, anahtarla)
   if (path !== 'uzaktan/push' && demoAllowed() && !(await realSnapshot())) {
     if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now() });

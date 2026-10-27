@@ -9,6 +9,7 @@ import { acceptFailedLocally, announceAccept, announceReject, liveStatus, rehear
 import {
   acceptPlatformOrder,
   closeCancelPending,
+  expiredMessage,
   getPlatformOrder,
   listPlatformOrders,
   listPlatformProducts,
@@ -91,7 +92,7 @@ platformRoutes.post('/orders/:id/accept', async (c) => {
     const row = getPlatformOrder(db, c.req.param('id'));
     if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
     const announced = row.notifiedStatus === 'picked';
-    if (!announced && row.expiresAt != null && row.expiresAt <= Date.now()) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
+    if (!announced && row.expiresAt != null && row.expiresAt <= Date.now()) throw conflict(expiredMessage(row), 'expired');
     const prep = input.prepMinutes ?? platformSettings()[row.platform].prepMinutes;
     if (!row.payload.simulated && !announced) rehearse((t) => acceptPlatformOrder(t, user, new Effects(), row.id, prep, { notifiedStatus: 'picked' }));
     const notifiedStatus = await announceAccept(row, prep);

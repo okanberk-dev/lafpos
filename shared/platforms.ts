@@ -108,7 +108,8 @@ export interface PlatformOrderPayload {
   paymentLabel: string;
   customer: { name: string | null; phone: string | null; address: string | null };
   note: string | null;
-  lines: { externalId: string | null; name: string; qty: number; unitPrice: number; modifiers: string[]; note: string | null }[];
+  /** `kind: 'fee'`: platformun ücreti (teslimat, ambalaj): hizmet satırı olur (KDV %20, mutfağa gitmez), eşlenebilir */
+  lines: { externalId: string | null; name: string; qty: number; unitPrice: number; modifiers: string[]; note: string | null; kind?: 'fee' }[];
   /** Satırların toplamı (birim fiyat × adet) */
   subtotal: number;
   /** Restoranın karşıladığı indirim (adisyon indirimi olur) */
@@ -117,8 +118,15 @@ export interface PlatformOrderPayload {
   platformDiscount: number;
   /** Müşterinin ödediği */
   customerTotal: number;
-  /** Platformun verdiği kabul süresi sonu (ms); yoksa ACCEPT_SECONDS */
+  /** Platformun verdiği kabul süresi sonu (ms; geçmişse sipariş süresi dolmuş gelir); yoksa ACCEPT_SECONDS */
   expiresAt?: number | null;
+  /**
+   * Sipariş platformda (tablette) zaten kabul edildi (Yemeksepeti dolaylı akış): süre işlemez, kasadaki Kabul yalnız
+   * adisyonu açar, ret ve iptal platformun uygulamasından yapılır
+   */
+  preAccepted?: boolean;
+  /** Platformun test siparişi: mutfağa düşmesin diye kabul edilmez, yalnız reddedilir */
+  test?: boolean;
   /** Bağdaştırıcının kendi verisi (sipariş belirteci, geri çağrı adresleri gibi); kasa yorumlamaz */
   platformData?: Record<string, unknown>;
 }

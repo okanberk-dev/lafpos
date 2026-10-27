@@ -99,6 +99,8 @@ function matchLines(t: Tx | DB, payload: PlatformOrderPayload) {
   const sizeL = norm(getSettings().sizeLabels.L);
   return payload.lines.map((l) => {
     const viaMap = l.externalId ? byId.get(mapped.get(l.externalId) ?? '') : undefined;
+    // Platformun ücreti ada göre ürüne düşmez: eşlenmişse o ürün, değilse kabulde "Platform ücreti" hizmet satırı
+    if (l.kind === 'fee') return { line: l, product: viaMap ?? null, size: 'TEK' as const };
     const p = viaMap ?? byName.get(norm(l.name)) ?? null;
     const large = l.modifiers.some((m) => norm(m) === sizeL || norm(m) === 'büyük');
     return { line: l, product: p, size: p?.priceL != null ? (large ? ('L' as const) : ('M' as const)) : ('TEK' as const) };
@@ -158,6 +160,32 @@ function unmatchedProductId(t: Tx): string {
   return id;
 }
 
+/**
+ * Platformun ücreti (teslimat, ambalaj) için gizli ürün: KDV %20 (taşıma hizmeti), istasyonsuz (mutfağa gitmez); adı
+ * notta. "Hizmet" işaretlenmez: oda sayacı gizli hizmet ürününü oda ücreti sanmasın. Patron Ürün eşleme'den başka bir
+ * ürüne bağlayabilir
+ */
+function feeProductId(t: Tx): string {
+  // Kalemin istasyonu ürünün ya da kategorisinin istasyonudur: ücret istasyonsuz bir kategoride durur ki bar ve mutfak
+  // ekranına düşmesin. Yoksa pasif bir kategori açılır (menüde görünmez)
+  const stationless =
+    t.select({ id: schema.categories.id }).from(schema.categories).where(isNull(schema.categories.stationId)).orderBy(asc(schema.categories.sort)).get()?.id ??
+    (() => {
+      const id = ulid();
+      t.insert(schema.categories).values({ id, name: 'Platform ücretleri', color: '#616367', sort: 999, customizable: false, active: false, stationId: null }).run();
+      return id;
+    })();
+  const existing = t.select({ id: schema.products.id, categoryId: schema.products.categoryId, stationId: schema.products.stationId }).from(schema.products).where(eq(schema.products.posName, 'PLATFORM ÜCRETİ')).get();
+  if (existing) {
+    const cat = t.select({ stationId: schema.categories.stationId }).from(schema.categories).where(eq(schema.categories.id, existing.categoryId)).get();
+    if (existing.stationId || cat?.stationId) t.update(schema.products).set({ stationId: null, categoryId: stationless }).where(eq(schema.products.id, existing.id)).run();
+    return existing.id;
+  }
+  const id = ulid();
+  t.insert(schema.products).values({ id, categoryId: stationless, stationId: null, name: 'Platform ücreti', description: 'Paket platformunun teslimat ya da ambalaj ücreti', price: 0, kdvRate: 20, hidden: true, posName: 'PLATFORM ÜCRETİ', sort: 999 }).run();
+  return id;
+}
+
 /** Platformun online ödeme türü (kanal = platform, Z'de online): yoksa açılır */
 function platformMethodId(t: Tx, platform: PlatformId): string {
   const existing = t.select({ id: schema.paymentMethods.id }).from(schema.paymentMethods).where(and(eq(schema.paymentMethods.kind, 'online'), eq(schema.paymentMethods.channel, platform))).get();
@@ -193,7 +221,7 @@ function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
     orderNo: order?.no ?? null,
     decidedBy: by?.name ?? null,
     reason: row.reason,
-    unmatched: pending ? matched.filter((m) => !m.product).map((m) => m.line.name) : [],
+    unmatched: pending ? matched.filter((m) => !m.product && m.line.kind !== 'fee').map((m) => m.line.name) : [],
     soldOut: pending ? matched.filter((m) => m.product && !m.product.active).map((m) => m.line.name) : [],
     payload: row.payload,
     lastError: row.lastError,
@@ -214,6 +242,14 @@ export function listPlatformOrders(t: Tx | DB, now = Date.now()): PlatformOrderD
   return rows.map((r) => toDTO(t, r, now));
 }
 
+/** Platformda (tablette) kabul edilmiş siparişin kasaya alınabileceği en uzun süre: sipariş ya da teslim saatinden */
+export const PRE_ACCEPTED_TTL_MS = 3 * 3600_000;
+
+/** Süresi dolmuş kaydın kasadaki açıklaması */
+export function expiredMessage(row: Pick<PlatformRow, 'payload'>): string {
+  return row.payload.preAccepted ? 'Sipariş 3 saatten eski (platformda kabul edilmişti); kasaya alınmaz' : 'Kabul süresi doldu; sipariş platformda iptal oldu';
+}
+
 /** Platformdan gelen siparişi alır; aynı kimlik ikinci kez gelirse (platform yeniden denedi) var olanı döner */
 export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPayload, now = Date.now()): { row: PlatformRow; created: boolean } {
   const existing = t
@@ -225,8 +261,16 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
   if (platformSettings()[payload.platform].mode === 'kapali') throw conflict(`${PLATFORM_LABEL[payload.platform]} kapalı`, 'platform_off');
   const secs = ACCEPT_SECONDS[payload.platform];
   // Platform kabul süresini verdiyse (Yemeksepeti expiryDate) o (geçmişse sipariş gelir gelmez süresi dolmuştur; geç
-  // çekilen sipariş taze süre almaz), yoksa platformun bilinen süresi
-  const expiresAt = typeof payload.expiresAt === 'number' ? payload.expiresAt : secs ? now + secs * 1000 : null;
+  // çekilen sipariş taze süre almaz), yoksa platformun bilinen süresi. Platformda zaten kabul edilmişse kabul süresi
+  // yok ama yaşı var: sipariş saatinden (ileri tarihlide teslim saatinden) 3 saat sonra kasaya alınmaz (eski sipariş,
+  // ör. kasa kapalıyken tablette kabul edilip teslim edilmiş, yeniden hazırlanmasın)
+  const expiresAt = payload.preAccepted
+    ? (payload.scheduledFor ?? payload.placedAt) + PRE_ACCEPTED_TTL_MS
+    : typeof payload.expiresAt === 'number'
+      ? payload.expiresAt
+      : secs
+        ? now + secs * 1000
+        : null;
   const row: PlatformRow = {
     id: ulid(now),
     platform: payload.platform,
@@ -277,9 +321,10 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   const row = loadRow(t, id);
   const now = Date.now();
   if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
-  if (row.notifiedStatus !== 'picked' && row.expiresAt != null && row.expiresAt <= now) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
+  if (row.notifiedStatus !== 'picked' && row.expiresAt != null && row.expiresAt <= now) throw conflict(expiredMessage(row), 'expired');
   const p = row.payload;
   const label = PLATFORM_LABEL[p.platform];
+  if (p.test) throw conflict(`${label} test siparişi: mutfağa düşmesin diye kabul edilmez, yalnız reddedilir`, 'test_order');
   const prep = prepMinutes ?? platformSettings()[p.platform].prepMinutes;
   const actor = platformActor(user);
   const order = orders.createOrder(t, actor, fx, {
@@ -293,14 +338,15 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   });
   t.update(schema.orders).set({ platform: p.platform, platformCode: p.code }).where(eq(schema.orders.id, order.id)).run();
   const matched = matchLines(t, p);
-  const unknown = matched.some((m) => !m.product) ? unmatchedProductId(t) : null;
+  const unknown = matched.some((m) => !m.product && m.line.kind !== 'fee') ? unmatchedProductId(t) : null;
+  const fee = matched.some((m) => !m.product && m.line.kind === 'fee') ? feeProductId(t) : null;
   orders.addItems(
     t,
     actor,
     fx,
     order.id,
     matched.map((m) => ({
-      productId: m.product?.id ?? unknown!,
+      productId: m.product?.id ?? (m.line.kind === 'fee' ? fee! : unknown!),
       size: m.product ? m.size : 'TEK',
       qty: m.line.qty,
       priceOverride: m.line.unitPrice,

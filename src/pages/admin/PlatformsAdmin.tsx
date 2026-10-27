@@ -16,7 +16,8 @@ import { toast } from '@/lib/toast';
 
 /** Gerçek bağlantı için gerekenler (calisma/arastirma/paket-platformlari, 27 Ekim 2026; docs/PAKET-PLATFORMLARI.md) */
 const LIVE_NEEDS: Record<PlatformId, string> = {
-  yemeksepeti: 'Delivery Hero ile gizlilik sözleşmesi ve yerel sorumlu; siparişler herkese açık bir adrese gelir (LafPOS Uzaktan aktarır)',
+  yemeksepeti:
+    "Delivery Hero'dan POS entegrasyonu (middleware adresi, kullanıcı adı, parola, restoranın POS kimliği ve JWT anahtarı). Siparişler LafPOS Uzaktan'a gelir, kasa 20 saniyede bir çeker: kasa bilgisayarının .env dosyasına YEMEKSEPETI_MW_URL, YEMEKSEPETI_USERNAME, YEMEKSEPETI_PASSWORD, YEMEKSEPETI_REMOTE_ID; Vercel'e YEMEKSEPETI_PLUGIN_SECRET yazılır, LafPOS yeniden başlatılır; sonra Canlı seçilir",
   getir: 'Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber\'e geçti, yol Trendyol Go\'ya dönebilir',
   trendyol: 'Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar kasa bilgisayarının .env dosyasına (TRENDYOL_SUPPLIER_ID, TRENDYOL_API_KEY, TRENDYOL_API_SECRET) yazılır, LafPOS yeniden başlatılır; sonra Canlı seçilir. Uber Eats Türkiye siparişleri de buradan gelir; kasa 20 saniyede bir yoklar',
   migros: 'Belgeler herkese açık değil; Migros Yemek ile görüşme gerekir',
