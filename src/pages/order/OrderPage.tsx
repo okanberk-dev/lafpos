@@ -79,6 +79,8 @@ export default function OrderPage() {
   const mode = useServiceMode();
   // Yarı self servis: masa no / numaratör bir kez sorulur; "Numarasız devam" denen adisyonda yeniden sorulmaz
   const numaratorAsked = useRef(new Set<string>());
+  // Gönderim akışı tek seferlik: masa no kaydedilirken ya da kalemler giderken ikinci basış kalemi yinelemez
+  const flowBusy = useRef(false);
   const [afterNumarator, setAfterNumarator] = useState<null | 'send' | 'pay'>(null);
 
   const table = useMemo(() => boot.tables.find((t) => t.id === order?.tableId), [boot.tables, order?.tableId]);
@@ -152,15 +154,29 @@ export default function OrderPage() {
     setDialog('numarator');
     return true;
   };
-  const sendAndPay = async () => {
-    if (promptNumarator('pay')) return;
-    if (await send()) setDialog('odeme');
+  const once = async (fn: () => Promise<void>) => {
+    if (flowBusy.current) return;
+    flowBusy.current = true;
+    setSending(true);
+    try {
+      await fn();
+    } finally {
+      flowBusy.current = false;
+      setSending(false);
+    }
   };
-  const sendOnly = () => {
-    if (promptNumarator('send')) return;
-    void send();
-  };
-  const saveNumarator = async (value: string | null) => {
+  const sendAndPay = () =>
+    once(async () => {
+      if (promptNumarator('pay')) return;
+      if (await send()) setDialog('odeme');
+    });
+  const sendOnly = () =>
+    void once(async () => {
+      if (promptNumarator('send')) return;
+      await send();
+    });
+  const saveNumarator = (value: string | null) => once(() => saveNumaratorNow(value));
+  const saveNumaratorNow = async (value: string | null) => {
     numaratorAsked.current.add(order.id);
     const next = afterNumarator;
     setAfterNumarator(null);

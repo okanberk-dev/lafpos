@@ -55,6 +55,14 @@ export function normalizeNumarator(raw: unknown): string | null | undefined {
   return v;
 }
 
+/** Yazılırken masa no alanı: izinsiz karakter düşer, Türkçe büyük harf, en çok 6 ("b-4" → "B4") */
+export function numaratorInput(raw: string): string {
+  return raw
+    .toLocaleUpperCase('tr-TR')
+    .replace(/[^0-9A-ZÇĞİÖŞÜ]/g, '')
+    .slice(0, NUMARATOR_MAX);
+}
+
 export function numaratorLabel(n: string): string {
   return `Masa ${n}`;
 }

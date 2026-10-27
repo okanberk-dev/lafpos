@@ -773,7 +773,17 @@ export function setNumarator(t: Tx, actor: Actor, fx: Effects, orderId: string, 
   const value = normalizeNumarator(raw);
   if (value === undefined) throw bad('Masa no en çok 6 harf ya da rakam olabilir', 'numarator_invalid');
   if (value === o.numarator) return o;
+  if (o.status === 'kapali') {
+    // Gün sonu alınmış günün adisyonu Z'ye yazılmıştır: masa no da o günün kaydıdır, değişmez
+    const day = t.select({ closedAt: schema.businessDays.closedAt }).from(schema.businessDays).where(eq(schema.businessDays.id, o.dayId)).get();
+    if (day?.closedAt) throw conflict('Gün sonu alınmış günün adisyonunda masa no değişmez', 'day_closed');
+  }
   t.update(schema.orders).set({ numarator: value, updatedAt: Date.now() }).where(eq(schema.orders.id, orderId)).run();
+  // Ödenmiş adisyonda değişiklik sonradan yapılan düzeltmedir: denetime yazılır (açık satışta sipariş almanın parçası)
+  if (o.status === 'kapali') {
+    const label = (n: string | null) => (n ? numaratorLabel(n) : 'masa no yok');
+    fx.audit(t, { userId: actor.user.id, action: 'order.numarator', orderId, message: `#${o.no} ödenmiş adisyon: ${label(o.numarator)} → ${label(value)}` });
+  }
   const updated = loadOrder(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.numarator');
   fx.emit({ topic: 'kitchen', kind: 'ticket.updated', orderId, byUserId: actor.user.id });
@@ -793,8 +803,9 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
   const busy = t.select({ id: schema.orders.id }).from(schema.orders).where(openCheckOn(tableId)).get();
   if (busy) throw conflict(`${table.name} dolu. Birleştirmek için "Birleştir"i kullanın`, 'table_busy');
   const fromTable = o.tableId;
+  // Masaya oturan siparişin yeri artık masadır: masa no / numaratör kalırsa bar fişi ve çağrı ekranı eski masayı gösterirdi
   t.update(schema.orders)
-    .set({ tableId, type: 'masa', updatedAt: Date.now() })
+    .set({ tableId, type: 'masa', numarator: null, updatedAt: Date.now() })
     .where(eq(schema.orders.id, orderId))
     .run();
   t.update(schema.roomSessions).set({ tableId }).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).run();
@@ -802,6 +813,7 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
   const updated = loadOrder(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.moved');
   if (fromTable) fx.emit({ topic: 'tables', kind: 'order.moved', tableId: fromTable, byUserId: actor.user.id });
+  if (o.numarator) fx.emit({ topic: 'kitchen', kind: 'ticket.updated', orderId, byUserId: actor.user.id });
   return updated;
 }
 
@@ -881,6 +893,11 @@ export function transferItems(
         },
         { staleOk: true },
       );
+    // Masasız ayrı hesap (yarı self) aynı masaya gider: masa no yeni hesaba da yazılır
+    if (!existing && !tableId && source.numarator) {
+      t.update(schema.orders).set({ numarator: source.numarator }).where(eq(schema.orders.id, target.id)).run();
+      target = loadOrder(t, target.id);
+    }
   }
   if (target.id === source.id) throw bad('Kaynak ve hedef aynı');
   const discountBefore = orderDiscountOf(t, orderId, target.id);

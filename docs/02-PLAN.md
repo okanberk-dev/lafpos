@@ -174,8 +174,9 @@ Push), vardiya kasa sayımı, personel giriş-çıkış, kampanya kuralları (fi
 
 **Servis modu** (27 Ekim 2026, `claude/servis-modu`): Yönetim › Ayarlar'da masaya servis (varsayılan, bugünkü
 akış), yarı self ve self servis. Self modlarda açılış ve menünün ilk sekmesi yeni tezgâh satışı (`/satis`), "Öde"
-birincil; yarı selfte "Öde" ve "Gönder" bir kez masa no / numaratör sorar (`PUT /orders/:id/numarator`, ödenmiş
-satışta da düzeltilir), bar ekranı, çağrı ekranı, hazır uyarısı ve fiş numara yerine "Masa 12" yazar; self serviste
+birincil; yarı selfte "Öde" ve "Gönder" bir kez masa no / numaratör sorar (`PUT /orders/:id/numarator`; harfli masa
+adı klavyeden; ödenmiş satışta da düzeltilir ve denetime yazılır, gün sonu alınmış günde değişmez `day_closed`;
+masaya taşınınca kalkar, "Ayrı hesap"la bölünen kalemlere geçer; kayıt sürerken ikinci basış kalemi yinelemez), bar ekranı, çağrı ekranı, hazır uyarısı ve fiş numara yerine "Masa 12" yazar; self serviste
 numara ödeme sonucunda, bar fişinde ve adisyonda büyük. Ödeme kuralları ve bara gidiş değişmez. Mod değişikliği
 ayrı denetim kaydı (`settings.servis_modu`, eski ve yeni mod). Testler `tests/servis-modu.test.ts`, e2e'de mod başına
 bir akış. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u

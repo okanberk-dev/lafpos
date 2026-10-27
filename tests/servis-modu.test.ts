@@ -289,4 +289,57 @@ describe('masa no / numaratör (yarı self servis)', () => {
     expect(res.closed).toBe(true);
     await h.ok('patron', 'PUT', '/admin/settings', { serviceMode: 'masa' });
   });
+
+  // Gözden geçirme bulguları (servis modu, 27 Eki 2026)
+  it('masa no\'lu tezgâh satışı masaya taşınınca masa no kalkar: adisyon masanın adıyla görünür', async () => {
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    await h.ok('kasa', 'PUT', `/orders/${o.id}/numarator`, { numarator: '12' });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 1 }] });
+    const table = h.boot.tables.filter((t) => t.kind !== 'oda')[5]!;
+    const moved = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/move`, { tableId: table.id });
+    expect(moved.type).toBe('masa');
+    expect(moved.numarator).toBeNull();
+    const tickets = await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen');
+    expect(tickets.find((t) => t.orderId === o.id)?.label).toBe(table.name);
+    const board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
+    expect(board.preparing.find((e) => e.id === o.id)?.table ?? null).not.toBe('12');
+  });
+
+  it('"Ayrı hesap" ile bölünen kalemler masa no\'yu taşır: ikisi de aynı masaya gider', async () => {
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    await h.ok('kasa', 'PUT', `/orders/${o.id}/numarator`, { numarator: 'B4' });
+    const full = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 2 }] });
+    const split = await h.ok<{ source: OrderDTO; target: OrderDTO }>('mudur', 'POST', `/orders/${o.id}/transfer`, { items: [{ itemId: full.items[0].id, qty: 1 }] });
+    expect(split.target.id).not.toBe(o.id);
+    expect(split.target.type).toBe('tezgah');
+    expect(split.target.numarator).toBe('B4');
+    expect(split.source.numarator).toBe('B4');
+    const tickets = await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen');
+    expect(tickets.find((t) => t.orderId === split.target.id)?.label).toBe('Masa B4');
+  });
+
+  it('ödenmiş adisyonun masa no\'su değişince denetime yazılır; kapanmış günün adisyonunda değişmez', async () => {
+    const cash = h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    await h.ok('kasa', 'PUT', `/orders/${o.id}/numarator`, { numarator: '3' });
+    const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash.id, amount: sent.total });
+    await h.ok('kasa', 'PUT', `/orders/${o.id}/numarator`, { numarator: '9' });
+    type Audit = { action: string; orderId: string | null; message: string };
+    const audits = (await h.ok<Audit[]>('patron', 'GET', '/admin/audit?limit=1000')).filter((a) => a.orderId === o.id && a.action === 'order.numarator');
+    expect(audits.map((a) => a.message)).toEqual([expect.stringContaining('Masa 3 → Masa 9')]);
+
+    // Gün kapanmış (eski gün): Z'si yazılmış adisyonun masa no'su değişmez
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.id, sent.dayId)).get()!;
+    db.update(schema.businessDays).set({ closedAt: Date.now() }).where(eq(schema.businessDays.id, day.id)).run();
+    try {
+      const r = await h.call<{ code: string }>('kasa', 'PUT', `/orders/${o.id}/numarator`, { numarator: '5' });
+      expect([r.status, r.json.code]).toEqual([409, 'day_closed']);
+      expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).numarator).toBe('9');
+    } finally {
+      db.update(schema.businessDays).set({ closedAt: null }).where(eq(schema.businessDays.id, day.id)).run();
+    }
+  });
 });

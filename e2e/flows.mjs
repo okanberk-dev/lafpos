@@ -203,7 +203,7 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Self servis: patron modu seçer; kasiyer açılışta yeni satışta, Öde ile alır, numara sonuçta büyük',
+      'Self servis: patron modu seçer, yönetimden kasaya dönüş yeni satışa; kasiyer açılışta yeni satışta, Öde ile alır, numara sonuçta büyük',
       async () => {
         assert(simple, 'seçeneksiz tek boy ürün bulunamadı');
         try {
@@ -211,6 +211,9 @@ export async function runFlows(ctx) {
             await go(ctx, page, '/yonetim/ayarlar');
             await page.getByRole('radio', { name: /^Self servis/ }).click();
             await page.getByRole('radio', { name: /^Self servis/, checked: true }).waitFor({ timeout: 8000 });
+            // Yönetimden kasaya dönüş servis modunun açılış sayfasına: masa planına değil yeni satışa
+            await page.getByRole('link', { name: 'Kasa ekranlarına dön' }).click();
+            await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
           });
           const boot = await api.call('kasa', 'GET', '/bootstrap');
           assert(boot.settings.serviceMode === 'self', `servis modu kaydedilmedi: ${boot.settings.serviceMode}`);
@@ -244,7 +247,7 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Yarı self servis: Öde masa no sorar, bar fişi ve çağrı ekranı masayı gösterir',
+      'Yarı self servis: Öde harfli masa no sorar, kayıt sürerken ikinci Öde kalemi yinelemez, bar fişi ve çağrı ekranı masayı gösterir',
       async () => {
         assert(simple, 'seçeneksiz tek boy ürün bulunamadı');
         await api.call('patron', 'PUT', '/admin/settings', { serviceMode: 'yari_self' });
@@ -259,28 +262,40 @@ export async function runFlows(ctx) {
             await page.getByRole('button', { name: /^Öde · / }).click();
             const dialog = page.getByRole('dialog', { name: 'Masa no / numaratör' });
             await dialog.waitFor();
+            // Masa adlarında harf var: klavyeyle "b", tuş takımıyla 12
+            await dialog.getByLabel('Masa no').fill('b');
             await dialog.getByRole('button', { name: '1', exact: true }).click();
             await dialog.getByRole('button', { name: '2', exact: true }).click();
+            const typed = await dialog.getByLabel('Masa no').inputValue();
+            assert(typed === 'B12', `masa no alanı: ${typed}`);
+            // Masa no kaydedilirken "Öde"ye yeniden basmak kalemleri bara ikinci kez göndermez
+            await page.route('**/api/orders/*/numarator', async (route) => {
+              await new Promise((r) => setTimeout(r, 1500));
+              await route.continue();
+            });
             await dialog.getByRole('button', { name: 'Devam', exact: true }).click();
+            await page.getByRole('button', { name: /^Öde · / }).click({ force: true, noWaitAfter: true, timeout: 2000 }).catch(() => {});
             await page.getByRole('button', { name: 'Nakit', exact: true }).click();
             await page.getByRole('button', { name: 'Tam', exact: true }).click();
             await page.getByRole('button', { name: /Nakit al$/ }).click();
             await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor({ timeout: 8000 });
             await page.getByText('Masaya götürülecek', { exact: true }).waitFor();
-            await page.getByText('Masa 12', { exact: true }).first().waitFor();
+            await page.getByText('Masa B12', { exact: true }).first().waitFor();
             await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-yari-self.png` });
           });
           const order = await api.call('kasa', 'GET', `/orders/${orderId}`);
-          assert(order.numarator === '12' && order.status === 'kapali', `masa no kaydedilmedi: ${order.numarator} ${order.status}`);
+          assert(order.numarator === 'B12' && order.status === 'kapali', `masa no kaydedilmedi: ${order.numarator} ${order.status}`);
+          const sentQty = order.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);
+          assert(sentQty === 1, `kalem bara ${sentQty} kez gitti`);
           const tickets = await api.call('bar', 'GET', '/kitchen');
           const ticket = tickets.find((t) => t.orderId === orderId);
-          assert(ticket?.label === 'Masa 12' && ticket.numarator === '12', `bar fişinde masa yok: ${ticket?.label}`);
+          assert(ticket?.label === 'Masa B12' && ticket.numarator === 'B12', `bar fişinde masa yok: ${ticket?.label}`);
           const board = await api.call('', 'GET', '/public/board');
           const entry = [...board.preparing, ...board.ready].find((e) => e.id === orderId);
-          assert(entry?.table === '12', `çağrı ekranında masa yok: ${JSON.stringify(entry)}`);
+          assert(entry?.table === 'B12', `çağrı ekranında masa yok: ${JSON.stringify(entry)}`);
           await withPage(ctx, 'tablet', 'bar', async (page) => {
             await go(ctx, page, '/mutfak');
-            await page.getByText('Masa 12', { exact: true }).first().waitFor({ timeout: 8000 });
+            await page.getByText('Masa B12', { exact: true }).first().waitFor({ timeout: 8000 });
           });
         } finally {
           await api.call('patron', 'PUT', '/admin/settings', { serviceMode: 'masa' });
