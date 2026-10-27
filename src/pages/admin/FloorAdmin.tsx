@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Save } from 'lucide-react';
+import { AlertTriangle, Plus, Save } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { parseTL } from '@shared/money';
+import { parseTL, tl } from '@shared/money';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { PageLoading } from '@/components/ui/misc';
@@ -38,6 +38,14 @@ const snap = (v: number) => Math.round(v);
 export default function FloorAdmin() {
   const qc = useQueryClient();
   const data = useQuery({ queryKey: ['admin', 'floor'], queryFn: () => get<{ sections: Section[]; tables: Table[] }>('/admin/floor') });
+  // Sitenin karaoke saat ücreti: ekran başına bir okuma (otomatik yoklama yok; docs/03-ENTEGRASYON.md §2.4)
+  const sitePrice = useQuery({
+    queryKey: ['admin', 'floor', 'site-karaoke-price'],
+    queryFn: () => get<{ linked: boolean; hourlyMinor: number | null; error: string | null }>('/admin/floor/site-karaoke-price'),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
   const [sectionId, setSectionId] = useState('');
   const [tables, setTables] = useState<Table[]>([]);
   const [dirty, setDirty] = useState<Set<string>>(new Set());
@@ -126,6 +134,9 @@ export default function FloorAdmin() {
   const sections = data.data?.sections ?? [];
   const visible = tables.filter((t) => t.sectionId === sectionId && t.active);
   const sel = tables.find((t) => t.id === selected) ?? null;
+  // Sitede ödenen blok kasada yeniden alınmaz ama aşan süre odanın saat ücretiyle alınır: iki fiyat aynı olmalı
+  const siteHourly = sitePrice.data?.hourlyMinor ?? null;
+  const priceMismatch = siteHourly ? tables.filter((t) => t.active && t.kind === 'oda' && t.hourlyRate !== siteHourly) : [];
 
   return (
     <div>
@@ -143,6 +154,16 @@ export default function FloorAdmin() {
           </>
         }
       />
+      {siteHourly != null && priceMismatch.length > 0 && (
+        <div role="status" className="mb-4 flex items-start gap-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-warning-soft)] px-4 py-3 text-[13px] text-[var(--admin-text)]">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--admin-warning)]" strokeWidth={1.75} />
+          <span>
+            Sitedeki karaoke saat ücreti {tl(siteHourly)},{' '}
+            {priceMismatch.map((t) => `${t.name} ${t.hourlyRate ? tl(t.hourlyRate) : 'ücretsiz'}`).join(', ')}. Sitede ödenen rezervasyonu aşan süre kasada
+            odanın ücretiyle alınır; ikisini aynı tutun.
+          </span>
+        </div>
+      )}
       <div role="tablist" aria-label="Bölüm" className="no-scrollbar -mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
         {sections.map((s) => {
           const on = s.id === sectionId;
@@ -221,7 +242,7 @@ export default function FloorAdmin() {
                 </Select>
               </Field>
               {sel.kind === 'oda' && (
-                <Field label="Saatlik ücret (₺)">
+                <Field label="Saatlik ücret (₺)" hint={siteHourly != null ? `Sitede ${tl(siteHourly)}` : undefined}>
                   <Input defaultValue={sel.hourlyRate ? String(sel.hourlyRate / 100) : ''} key={`r${sel.id}`} inputMode="decimal" onBlur={(e) => updateTable(sel.id, { hourlyRate: parseTL(e.target.value || '0') || null })} />
                 </Field>
               )}

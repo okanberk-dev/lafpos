@@ -8,17 +8,14 @@ import {
   Globe,
   HandCoins,
   Merge,
-  Mic2,
   MonitorUp,
   MoreVertical,
   PackageX,
   Percent,
-  Play,
   Printer,
   RotateCcw,
   Send,
   Split,
-  Square,
   StickyNote,
   TableProperties,
   Trash2,
@@ -62,6 +59,7 @@ import { useServiceMode } from '@/lib/serviceMode';
 import { NumaratorModal } from './NumaratorModal';
 import { appUrl } from '@/lib/demo';
 import { PlatformBadge } from '@/components/PlatformBadge';
+import { RoomBox } from './RoomBox';
 
 type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | CompKind | 'yenidenac' | 'not' | 'musteri' | 'cikis' | 'numarator';
 
@@ -219,10 +217,6 @@ export default function OrderPage() {
     if (res) printNow(<BillReceipt order={res} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} />);
   };
 
-  const roomAction = async (action: 'start' | 'stop') => {
-    await act((pin) => post<OrderDTO>(`/orders/${order.id}/room/${action}`, { approverPin: pin }), action === 'start' ? 'Oda sayacı başladı' : 'Oda ücreti adisyona eklendi');
-  };
-
   // Ciro dışı kapanış sunucudaki kalemlere uygulanır: gönderilmemiş satırlar önce gönderilir ya da silinir (sessizce düşmesin)
   const compable = editable && order.paid === 0 && !order.room && (pending.length > 0 || order.items.some((i) => !i.voided && !i.complimentary));
   const compAll = (kind: CompKind) => (pending.length ? toast.warn('Önce gönderilmemiş kalemleri gönderin ya da silin') : setDialog(kind));
@@ -325,31 +319,7 @@ export default function OrderPage() {
   const right = (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       {isOnline && <OnlineOrderBar order={order} act={act} />}
-      {table?.kind === 'oda' && (order.room || editable) && (
-        // Karaoke odası: sayaç durumu ve tek düğme (başlat / durdur) adisyonun üstünde
-        <div className={cn('flex items-center gap-3 border-b border-[var(--admin-divider)] px-4 py-2', order.room && 'bg-[var(--admin-hue-violet-soft)]')}>
-          <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg', order.room ? 'bg-surface text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
-            <Mic2 className="size-4" strokeWidth={1.75} />
-          </span>
-          <span className="min-w-0 flex-1 text-[13px]">
-            {order.room ? (
-              <>
-                <span className="tabular block font-semibold">Oda açık · {fmtElapsed(order.room.startedAt, now)}</span>
-                <span className="block text-muted">
-                  {fmtTime(order.room.startedAt)}'den beri · saatlik {tl(order.room.hourlyRate)}
-                </span>
-              </>
-            ) : (
-              <span className="font-medium text-ink-2">Oda sayacı kapalı</span>
-            )}
-          </span>
-          {editable && (
-            <Button size="sm" variant={order.room ? 'danger' : 'secondary'} icon={order.room ? <Square className="size-3.5" /> : <Play className="size-3.5" />} onClick={() => roomAction(order.room ? 'stop' : 'start')}>
-              {order.room ? 'Durdur' : 'Başlat'}
-            </Button>
-          )}
-        </div>
-      )}
+      {table?.kind === 'oda' && (order.room || editable) && <RoomBox order={order} table={table} editable={editable} act={act} now={now} />}
       <CartPanel order={order} pending={pending} onEditPending={(l) => { const p = boot.products.find((x) => x.id === l.productId); if (p) setOptions({ product: p, size: l.size, editing: l }); }} act={act} />
       {actionBar}
     </div>

@@ -21,7 +21,7 @@ const INVALIDATE: Record<LiveTopic, string[][]> = {
   settings: [['bootstrap'], ['cash']],
   sync: [['sync']],
   delivery: [['orders'], ['floor'], ['platforms']],
-  reservations: [['reservations'], ['floor']],
+  reservations: [['reservations'], ['floor'], ['site-karaoke']],
   stock: [['bootstrap']],
   customers: [['customers']],
   users: [['bootstrap'], ['users']],
