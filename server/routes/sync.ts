@@ -2,10 +2,10 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
 import { type AppEnv, can, requirePermission } from '../lib/auth';
-import { body, HttpError } from '../lib/http';
+import { body, HttpError, isoDate } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
-import { buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
+import { backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
 import { requireSiteLinked, siteLinked } from '../sync/laffogato-link';
 import { reportRange } from './reports';
 import { onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
@@ -15,12 +15,16 @@ import { eq } from 'drizzle-orm';
 
 export const syncRoutes = new Hono<AppEnv>();
 
+/**
+ * Bağlantı durumu: Entegrasyon, Genel bakış ve menü sayacı okur (giriş yapan herkes). Maliyetin tarihi ve hatası yalnız
+ * `rapor.maliyet`'e: personel maliyetin varlığını da görmez
+ */
 syncRoutes.get('/status', (c) => {
   const s = getSettings();
   return c.json({
     menu: { linked: siteLinked(), auto: s.menuAutoSync, state: getSyncState('laffogato.menu') },
     online: onlineStatus(),
-    lafmaliyet: lafmaliyetStatus(),
+    lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet')),
     okc: okcStatus(),
   });
 });
@@ -101,7 +105,20 @@ syncRoutes.post('/lafmaliyet/gun/:dayId/push', async (c) => {
   return c.json(await pushDayNow(day.id));
 });
 
+/**
+ * Yönetim › Entegrasyon › "Geçmiş günleri gönder": aralıktaki gönderilmemiş kapanmış günler kuyruğa (bağlantı
+ * sonradan kurulduysa ya da günler gidemediyse). Kurulum modunda 409 `training_mode`
+ */
+syncRoutes.post('/lafmaliyet/backfill', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'senkron.yonet');
+  const input = await body(c, z.object({ from: isoDate, to: isoDate }));
+  return c.json(backfillDays(input, { id: user.id, name: user.name }));
+});
+
+/** "Maliyetleri çek": bağlantı yönetimi ve maliyet yetkisi (yanıt kaç ürünün maliyeti geldiğini söyler) */
 syncRoutes.post('/lafmaliyet/costs/pull', async (c) => {
   requirePermission(c.get('user'), 'senkron.yonet');
+  requirePermission(c.get('user'), 'rapor.maliyet');
   return c.json(await pullCosts());
 });

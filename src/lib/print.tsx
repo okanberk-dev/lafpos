@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect } from 'react';
 import { create } from 'zustand';
+import { COMP_LABEL } from '@shared/comp';
 import { tlPlain } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
@@ -69,7 +70,7 @@ export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO
       <Hr />
       {live.map((i) => (
         <div key={i.id} style={{ marginBottom: 2 }}>
-          <Row l={`${i.qty} x ${i.name}${i.size !== 'TEK' ? ` ${sizeLabel(i.size)}` : ''}`} r={i.complimentary ? 'İKRAM' : tlPlain(i.qty * i.unitPrice)} />
+          <Row l={`${i.qty} x ${i.name}${i.size !== 'TEK' ? ` ${sizeLabel(i.size)}` : ''}`} r={i.complimentary ? COMP_LABEL[i.compKind ?? 'ikram'].toLocaleUpperCase('tr-TR') : tlPlain(i.qty * i.unitPrice)} />
           {i.optionsText && <div style={{ paddingLeft: 12, fontSize: 10 }}>{i.optionsText}</div>}
           {i.discount > 0 && <Row l={<span style={{ paddingLeft: 12 }}>İndirim</span>} r={`-${tlPlain(i.discount)}`} />}
         </div>
@@ -134,8 +135,9 @@ export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO;
         <Row key={k.rate} l={`KDV %${k.rate} matrah ${tlPlain(k.base)}`} r={tlPlain(k.kdv)} />
       ))}
       <Hr />
-      <Row l="İkram" r={tlPlain(s.complimentary - (s.odenmez ?? 0))} />
+      <Row l="İkram" r={tlPlain(s.complimentary - (s.odenmez ?? 0) - (s.zayi ?? 0))} />
       {(s.odenmez ?? 0) > 0 && <Row l="Ödenmez" r={tlPlain(s.odenmez ?? 0)} />}
+      {(s.zayi ?? 0) > 0 && <Row l="Zayi" r={tlPlain(s.zayi ?? 0)} />}
       <Row l={`İptal (${s.voidAfterSendCount} hazırlandıktan sonra)`} r={tlPlain(s.voided)} />
       <Hr />
       <Row l="Açılış nakiti" r={tlPlain(s.openingCash)} />

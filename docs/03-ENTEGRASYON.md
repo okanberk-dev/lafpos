@@ -3,6 +3,11 @@
 Bu belge LafPOS'un diğer iki sistemle hangi uçtan, hangi alanlarla, ne sıklıkla konuştuğunu tanımlar.
 Bir alan burada yoksa sistemler arasında gitmez (KVKK beyaz liste kuralı).
 
+**Bütün bağlantılar varsayılan kapalı** (sahibin 26 Ekim 2026 kararı: "lafposu tüm hepsinde aktif edince kullanmaya
+başlayayım, hemen aktif olmasın ki şu anki sistem bozulmasın"). `.env`'de adres ve anahtar yokken LafPOS dışarıya
+hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalışır. Açma adımları tek listede: §8
+**Açılış sırası** (lafmaliyet `docs/LAFPOS.md` › "Açılış sırası" ile aynı adımlar).
+
 ## 1. Sahiplik
 
 | Veri | Sahibi | LafPOS'ta |
@@ -184,11 +189,17 @@ yoldan açılır ya da kapanırsa kayıt düşer. Porsiyon doldurulunca (Yöneti
 eşitlemesinin panel okuması sırayla gider (tek kilit): geç kalan bir "kapalı" yeni bir açılışın üstüne yazılmaz.
 Giden kutusunu lafmaliyet de kullanır; her biri yalnız kendi kayıtlarını gönderir.
 
-## 3. LafPOS → lafmaliyet: bugün (kod değişmeden)
+## 3. LafPOS → lafmaliyet: elle yedek (CSV / kopyala)
+
+Bağlantı kurulmamışken (ya da lafmaliyet'teki geçiş gününden önceki aylar için) gün sonu ve ürün satışları elle
+aktarılır. Bağlantı kuruluyken günler §4 ile kendiliğinden gider; Raporlar › lafmaliyet aktarımı bunu söyler:
+geçiş gününden sonraki günlerin listesi Satışlar'a yüklenmez (aynı satış iki kez sayılır; lafmaliyet geçiş gününden
+sonraki ayın listesini reddeder).
 
 ### 3.1 Ürün satış listesi (Satışlar ekranına yükleme)
 
-`GET /api/sync/lafmaliyet/satislar.csv?from=YYYY-MM-DD&to=YYYY-MM-DD` (yetki: `rapor.gor`; Raporlar › Aktarım)
+`GET /api/sync/lafmaliyet/satislar.csv?from=YYYY-MM-DD&to=YYYY-MM-DD` (yetki: `rapor.gor`; Raporlar › lafmaliyet
+aktarımı)
 
 Dönem raporlarla aynı denetlenir: varsayılanı bugün (açık iş günü), olmayan tarih 422 `validation`, en çok
 400 gün (daha uzunu 422 `range_too_long`), ters verilen tarihler çevrilir. Hücreler `server/lib/csv.ts` ile yazılır:
@@ -239,7 +250,7 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 | `meal_card` | `zField = meal_card` (Pluxee, Multinet, Edenred, Setcard, Metropol) |
 | `online` | `zField = online` (yemek platformları) |
 | `other` | `zField = other` (havale, açık hesap/cari dahil) |
-| `off_revenue` | kapanmış adisyonlarda ikram edilen ve ödenmez kapanan kalemlerin menü değeri |
+| `off_revenue` | kapanmış adisyonlarda ikram edilen, ödenmez ve zayi kapanan kalemlerin menü değeri |
 | `discounts` | kalem + adisyon indirimleri |
 | `opening_cash` | gün açılış nakiti |
 | `cash_out` | harcama türü kasa hareketleri |
@@ -259,11 +270,14 @@ kapatır).
 gerekirse kasa ekranındaki "Günü yeniden aç" (yetkili onayı, neden zorunlu, denetim kaydına alarm) aynı Z
 numarasıyla günü açar. Gün yeniden kapanınca lafmaliyet'e aynı tarih ve Z ile gider, öncekinin yerine geçer.
 
-## 4. LafPOS → lafmaliyet: önerilen imzalı uç (lafmaliyet PR'ı gerekir)
+## 4. LafPOS → lafmaliyet: imzalı gün sonu (canlıda)
 
-Kafedeki sunucu internetten erişilebilir olmadığı için "ping + çekme" yerine **imzalı itme** önerilir.
-LafPOS gün sonunda ve sonradan düzeltmede aynı iş gününü yeniden gönderir (aynı `date` üzerine yazar,
-idempotent). İstek giden kutusunda (`outbox`) bekler; internet yoksa sonra gider.
+lafmaliyet'te canlı (lafmaliyet#34, #36; durum ve geçiş günü B07 #44, günlük satışlar B08 #46). Kafedeki sunucu
+internetten erişilebilir olmadığı için "ping + çekme" yerine **imzalı itme**: LafPOS gün sonunda ve sonradan
+düzeltmede (yeniden sayım, yeniden açılıp kapanan gün) aynı iş gününü yeniden gönderir (aynı `date` üzerine yazar,
+idempotent). İstek giden kutusunda (`outbox`) bekler; internet yoksa artan beklemeyle sonra gider. `.env`'de
+`LAFMALIYET_URL` ve `LAFMALIYET_SYNC_SECRET` yokken hiçbir şey kuyruğa girmez, istek gitmez. Kurulum modunda kapanan
+gün (eğitim günü) hiç gitmez, kurulum modu sonra kapansa da (§4.3).
 
 ```
 POST {LAFMALIYET_URL}/api/pos/gun
@@ -312,8 +326,10 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
 - `ikram` yalnız **kapanmış** POS adisyonlarından gelir (Z'nin `offRevenue`'uyla aynı kapsam; iptal edilen
   adisyonun ikramı tüketim değildir); ikram edilen içeceğin ekleri ayrı kayıttır, menü değeri satıştaki oranla
   bölünür. `ikram` menü değerlerinin toplamı `offRevenue`'a eşittir. Ödenmez kapanan adisyonun kalemleri
-  (personel yemeği, zayi, patron hesabı) de buradadır; ayrı alan yoktur, `reason` "Ödenmez: " ile başlar
-  (ör. `"Ödenmez: Personel yemeği"`).
+  (personel yemeği, patron hesabı) de buradadır; ayrı alan yoktur, `reason` "Ödenmez: " ile başlar
+  (ör. `"Ödenmez: Personel yemeği"`). Zayi yazılan kalem (döküldü, yanlış hazırlandı, bozuk; ödeme ekranındaki
+  "Zayi" ya da kalem sayfasındaki "Zayi yaz") de aynı listededir, `reason` "Zayi: " ile başlar (ör. `"Zayi: Döküldü"`);
+  lafmaliyet bunları `waste_entries`'e `kind = 'zayi'` ile alabilir. Ön ekler `shared/comp.ts` `compReasonText`.
 - `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,
   `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`, `trendyol`, `getir`, `migros`; kanalsız türde
   `null`, alan her zaman var). LafPOS'ta kanal serbest metin değil bu listeden seçilir (`shared/labels.ts`
@@ -326,12 +342,12 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   `DailyProductSale` biçimiyle birebir (`date` gövdede, `productId` lafmaliyet'in `site_menu_id + slot`
   eşlemesinden bulunur, bulunamazsa `posMatchKey(posName)` ile `pos_mappings`).
 - Kişisel veri yok: müşteri, personel adı, telefon gitmez.
-- lafmaliyet tarafı: `pos_daily_sales` tablosu, `loadDailyProductSales` yükleyicisi (bugün `null`),
-  Kasa raporunda `CashPrefill { source: "lafpos" }` ile ön doldurma, `ikram` → `waste_entries`
-  (`kind = 'ikram'`) önerisi. Yanıt: 200 `{ ok: true, date, lines }`, 400 `{ error: "invalid", field }`, 401,
-  409 `{ error: "z_conflict" }`, 413, 503. 400, 409 ve 413 kalıcıdır: LafPOS tekrar denemez, kaydı giden
-  kutusunda hata olarak gösterir (Yönetim › Genel bakış ve Entegrasyon); düzeltilince Kasa › Geçmiş günler'de
-  günün Z raporundaki "Gönder" ile yeniden gider.
+- lafmaliyet tarafı: gün `pos_day_reports` ve `pos_daily_sales`'e yazılır; neyin sayıldığına geçiş günü karar verir
+  (§4.2). Ürün satışları aylık modele (B08), Kasa raporu ön doldurması, ikram ve ödeme kanalları geçiş gününden
+  sonraki günlerde lafmaliyet partileriyle (B09-B11) okunur; ikram lafmaliyet'te `ikram[]` olarak saklanır, Zayi
+  & ikram'a elle girilmez. Yanıtlar §4.2'de. 400, 409, 413 ve 422 kalıcıdır: LafPOS tekrar denemez, kaydı giden
+  kutusunda hata olarak gösterir (Yönetim › Genel bakış ve Entegrasyon; metin "Kendiliğinden yeniden denenmez" der);
+  düzeltilince Kasa › Geçmiş günler'de günün Z raporundaki "Gönder" ile yeniden gider.
 - Aynı gün içinde `posName` tekildir (§3.1 satır anahtarı ve çakışma kuralı). lafmaliyet karşılığı:
   [RiosenBeq/lafmaliyet#34](https://github.com/RiosenBeq/lafmaliyet/pull/34).
 - **Ortak örnek gövde:** `tests/fixtures/lafmaliyet-gun.golden.json` (iki boy, ek, ikram ve eki, karaoke, cari,
@@ -340,8 +356,6 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   `LAFPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts` ile yeniden üretilir ve lafmaliyet'teki kopya
   aynı PR serisinde güncellenir. İmza vektörleri (`/api/pos/gun`, `/api/panel/pos/urunler`)
   `tests/signature.test.ts`'te iki tarafta aynı.
-
-LafPOS istemcisi hazırdır; `LAFMALIYET_URL` ve `LAFMALIYET_SYNC_SECRET` verilince giden kutusu çalışır.
 
 ### 4.1 Ürün maliyetleri (lafmaliyet → LafPOS)
 
@@ -353,7 +367,95 @@ GET {LAFMALIYET_URL}/api/panel/pos/urunler     (imzalı, aynı anahtar)
 ```
 
 `costMinor`: reçeteden birim maliyet, kuruş, KDV hariç. LafPOS bunu yalnız `rapor.maliyet` yetkisi olanlara
-gösterir (patron panelinde ürün kârlılığı). Başka alan gitmez.
+gösterir (patron panelinde ve Raporlar › Ürünler'de brüt kâr, Yönetim › Ürünler'de marj). Başka alan gitmez.
+Maliyetin son çekim tarihi ve çekim hatası da yalnız bu yetkiye gider: `GET /api/sync/status` (Entegrasyon, Genel
+bakış, menü sayacı; giriş yapan herkes okur) `costsAt` ve `costsError`'u başkasına göndermez, Entegrasyon'daki
+maliyet bölümü ve "Maliyetleri çek" (`senkron.yonet` **ve** `rapor.maliyet`) yalnız ona görünür.
+
+- **Doğrulama:** gövde Zod ile okunur (`version: 1`, `items[]`: `siteMenuId`, `slot` `M`/`L`, `costMinor` ≥ 0).
+  Bozuk gövdede ya da HTTP hatasında önceki maliyetler olduğu gibi kalır, istek 502 `lafmaliyet_costs` döner ve
+  hata Yönetim › Entegrasyon'da görünür.
+- **0 = bilinmiyor:** reçetesi olmayan ürün 0 gelir; saklanmaz, kâr "maliyet yok" görünür.
+- **`products.cost` önbellektir:** tek boy ve M maliyeti ürünün alanına gösterim için yazılır; haritada olmayan site
+  ürünününki boşalır (eski rakam kalmasın). Hesabın sahibi lafmaliyet'tir.
+- **Sıklık:** her gün sonunda (kasadan ya da otomatik gün sonu) maliyetler o iş gününde (05:00 kuralı) çekilmediyse
+  bir kez çekilir; kapanış saati bir öncekinden erken olsa da her gün yenilenir. Ayrıca Yönetim › Entegrasyon ›
+  "Maliyetleri çek". Hata gün sonunu bozmaz, sonraki gün sonu yeniden dener. Son çekim 7 günden eskiyse Raporlar ›
+  Ürünler ve patron paneli "Maliyetler N gün önce alındı" der; bu satır ve tarihi yalnız `rapor.maliyet` yetkisine
+  gider, personel maliyetin varlığını da görmez.
+- **Geçiş günü bu uçta yoktur:** LafPOS onu yalnız gün sonu yanıtından öğrenir (§4.2; tek kaynak). Bu uç kurulum
+  modunda da çalışır: yazmayan imzalı GET olduğu için anahtarı ve saati sınamanın yoludur.
+
+### 4.2 Yanıt ve geçiş günü
+
+LafPOS'a geçiş gününün **sahibi lafmaliyet'tir** (Ayarlar › LafPOS (kasa) › LafPOS'a geçiş günü). LafPOS kendi
+tarihini tutmaz, bütün gerçek günleri gönderir; neyin hesaplara girdiğine lafmaliyet karar verir ve yanıtta söyler:
+geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **deneme** olarak saklanır, hiçbir hesaba girmez.
+
+| Yanıt | Gövde | LafPOS |
+| --- | --- | --- |
+| 200 | `{ ok, date, lines, matched, unmatched[], counted, switchDay }` | Gönderildi. `counted`, `switchDay`, `matched`, `unmatched` (en çok 50 ad), `lines` giden kutusu satırında (`outbox.response`) ve `lafmaliyet.push` durumunda (`lastAnswer`) saklanır; gün `business_days.exportedAt` ile işaretlenir (paket günün son kapanışından sonra hazırlandıysa) |
+| 400 | `{ error: "invalid", field }` | Kalıcı: tekrar denenmez, alan `lastError`'da ("Kendiliğinden yeniden denenmez; düzeltilince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin") |
+| 401 | `{ error: "unauthorized" }` | Yeniden denenir; ipucu: "LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET'la aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)?" |
+| 409 | `{ error: "z_conflict", date, zNo }` | Kalıcı; `lastError` "lafmaliyet'te bu güne Z 127 kayıtlı, gönderilen Z 128. Kendiliğinden yeniden denenmez: lafmaliyet Ayarlar › LafPOS (kasa)'da günün kaydı silinince Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin" der |
+| 413, 422 | `{ error: "too_large" }` | Kalıcı |
+| 503 | `{ error: "not_configured" }` | Yeniden denenir; "lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil" |
+| 500 | `{ error: "server_error" }` | Yeniden denenir |
+
+- `counted`: gün geçiş gününden önce değilse `true`. `switchDay`: lafmaliyet'teki geçiş günü (`null`: seçilmedi, kasa
+  ModPOS). Eski lafmaliyet bu alanları göndermez: yoksa ya da bozuksa yazılmaz, LafPOS "geçiş günü bilinmiyor" der.
+- Yönetim › Entegrasyon son gönderilen günü yazar: "lafmaliyet 3 Kasım gününü saymıyor (geçiş günü 10 Kasım): deneme
+  olarak saklandı" ya da "12 Kasım lafmaliyet'te sayılıyor"; eşleşmeyen satır varsa "lafmaliyet'te eşleşmeyen N ürün"
+  ve adları (lafmaliyet Ayarlar › LafPOS (kasa) › Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden
+  gönderilmeden bağlanır). N = `lines - matched` (lafmaliyet en çok 50 ad gönderir; ikisi yoksa gelen adların sayısı).
+- Giden kutusu sayıları: `pending` gönderilmemiş bütün günler, `failing` bunlardan denenip gidemeyenler (hata ya da
+  kalıcı ret). Genel bakış'ın alarmı ve menü sayacı yalnız `failing`'i sayar; "Geçmiş günleri gönder"le kuyruğa yeni
+  giren gün hata değildir, "N gün sırada" görünür (dakikada 20 gün gider).
+- **"Gönder"** (Kasa › Geçmiş günler › Z, `POST /api/sync/lafmaliyet/gun/:dayId/push`, `kasa.gun` ya da
+  `senkron.yonet`): sonuç günün kendi giden kutusu kaydından (`dedupeKey = gun:<tarih>`) okunur; o gün gitmediyse
+  502 `lafmaliyet_push` (aynı turda başka bir günün gitmesi başarı sayılmaz). Kuyrukta önünde bekleyen günler varsa
+  sırası gelene kadar gönderim sürer. Yanıtta `answer` (yukarıdaki alanlar) döner. Hata yeniden denenecekse metin
+  "Giden kutusunda bekliyor, sonra tekrar denenecek" der; kalıcı retteyse demez (ne yapılacağını `lastError` söyler).
+
+### 4.3 Kurulum modu: eğitim günleri gitmez
+
+Kurulum verisi kurulum modunda başlar (`demoMode: true`, örnek PIN'ler; `okcProvider: 'simulator'`, eğitim
+yazarkasası). `demoMode` açıkken **ya da** yazarkasa simülatördeyken:
+
+- Gün sonu **eğitim günü** olarak işaretlenir (`business_days.trainingDay = true`, gün sonunda yazılır). Eğitim günü
+  lafmaliyet'e **hiç** gitmez, kurulum modu sonradan kapansa da: gün sonu ve yeniden sayım kuyruğa koymaz, "Geçmiş
+  günleri gönder" onu atlar (yanıtta `training`: atlanan eğitim günü sayısı), "Gönder" 409 `training_day` döner
+  ("Bu gün kurulum modunda kapandı (eğitim günü); lafmaliyet'e gönderilmez"). Kasa › Geçmiş günler › Z'de "Gönder"
+  görünmez, kart nedenini yazar.
+- Kurulum modu açıkken "Gönder" ve "Geçmiş günleri gönder" 409 `training_mode` döner ("Kurulum modunda lafmaliyet'e
+  gün gönderilmez").
+- Bu işaretten önce kapanan gün (`trainingDay` boş) de gitmez: LafPOS o zaman canlıda değildi, o günler eğitimdi.
+  lafmaliyet'e yalnız kurulum modu dışında kapanan gün (`trainingDay = false`) gider. Gün yeniden açılınca işaret
+  silinir, yeniden kapanışta yeniden yazılır.
+
+Böylece eğitim günleri lafmaliyet'e düşmez ve LafPOS veritabanını eğitimden temizlemek gerekmez: eğitim günleri
+LafPOS'un kendi raporlarında kalır. Veri klasörünü silmek çözüm değildir: kurulumu (personel, masalar, ödeme türleri)
+de siler ve boş veritabanı örnek PIN'ler ve simülatörle, yani kurulum modunda yeniden başlar.
+
+Patron PIN'i değişince kurulum modu kapanır (Yönetim › Ayarlar'dan da kapatılır); yazarkasa Yönetim › Yazarkasa POS'ta
+`kapali` ya da `tokenx` olur. Kurulum modu kapandıktan sonra açılıp kapanan ilk gerçek gün §8'deki **deneme
+gönderimidir** (gün kurulum modu açıkken açıldıysa sabahki eğitim satışları da onda olur; kurulum modunu gün
+açılmadan kapatın). İmzayı sınamak için kurulum modunda da "Maliyetleri çek" (§4.1) yeterli.
+
+### 4.4 Geçmiş günler
+
+Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koymaz) ya da günler gidemediyse:
+`POST /api/sync/lafmaliyet/backfill { from, to }` (`senkron.yonet`; Yönetim › Entegrasyon › "Geçmiş günleri gönder").
+
+- Aralıktaki **gün sonu alınmış ve hiç 200 almamış** (`business_days.exportedAt` boş) gerçek günler tarih sırasıyla
+  kuyruğa girer (gün başına tek kayıt, bekleyen kaydın yerine geçer) ve gönderim başlar. Açık gün, eğitim günü (§4.3)
+  ve daha önce gitmiş gün gitmez; tek günü yeniden göndermek Kasa › Geçmiş günler › Z › Gönder'dir (ör. lafmaliyet'te silinen gün).
+- Varsayılan aralık: son yanıttaki `switchDay`'den (yoksa elle seçilir) düne. Ekran o aralıkta gönderilmemiş
+  kapanmış gerçek gün sayısını yazar. Yanıt `{ queued, days, training }`: `training` aralıkta atlanan eğitim günü
+  sayısıdır, ekran "N eğitim günü (kurulum modunda kapandı) gönderilmez" der. En çok 400 gün; bitiş bugünden sonra olamaz, başlangıç bitişten sonra olamaz (422).
+- Kuyruğa giren gün varsa denetim kaydına `sync.lafmaliyet_backfill` (aralık ve günler) düşer. Kurulum modunda 409
+  `training_mode`.
+- `exportedAt` yalnız `reopenDay` ile sıfırlanır (gün yeniden açılınca yeniden kapanışta tekrar gider).
 
 ## 5. Sıklık ve bütçe
 
@@ -366,18 +468,88 @@ gösterir (patron panelinde ürün kârlılığı). Başka alan gitmez.
 | Sipariş sürüm sinyali | 20 sn, gece de | yok (veri önbelleği, veritabanına gitmez) |
 | Online sipariş okuma | sinyal değişince + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
 | Tükendi / aşama yazma | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
-| lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme) | tek yazım |
+| lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
+| lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
 
-## 6. Diğer repolardaki işler
+## 6. Durum (27 Ekim 2026)
 
-| Repo | Dal | İş |
+| Durum | Repo | İş |
 | --- | --- | --- |
-| laffogato | `claude/lafpos-baglantisi` | `LAFPOS_SYNC_SECRET` panel uçlarında ek anahtar; `GET /api/pos/orders/version` |
-| lafmaliyet | `claude/lafpos-baglantisi` | `POST /api/pos/gun`, `GET /api/panel/pos/urunler`, `pos_daily_sales` ve `loadDailyProductSales`, Kasa raporunda "LafPOS'tan doldur" |
-| laffogato (sonra) | | Kasada damga (M2M) ucu |
+| Birleşti | laffogato#263 (d1de10f) | `LAFPOS_SYNC_SECRET` panel uçlarında ek anahtar; `GET /api/pos/orders/version` |
+| Birleşti | lafmaliyet#34, #36 | `POST /api/pos/gun`, `GET /api/panel/pos/urunler`, `pos_daily_sales`, Kasa raporunda "LafPOS'tan doldur" |
+| Birleşti | lafmaliyet#44 (B07) | LafPOS durumu ve onarımı (Ayarlar › LafPOS (kasa)), geçiş günü ayarı, 200 yanıtına `counted` ve `switchDay`, Kasa bandı geçiş gününe bağlı, eşit anahtar engeli |
+| Birleşti | lafmaliyet#46 (B08) | LafPOS günlük satışları aylık modele; 200 yanıtına `matched` ve `unmatched` |
+| Birleşti | lafpos#11 (L1), #12 (L3) | Gün sonu satırları, ekler, eski gün engeli; site bağlantısı (sipariş sinyali, Tükendi, menü yoklaması, `.env`'siz istek yok) |
+| Bu PR | lafpos L2 | Eğitim günü kapısı, geçmiş günler, yanıt alanları, maliyet doğrulaması ve günlük çekim, açılış sırası (§8) |
+| Açık | lafmaliyet B09-B11 | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
+| Açık | laffogato F1, lafpos L4 | Karaoke: LafPOS bugünün site rezervasyonlarını okur, ödenmiş saat yeniden ücretlenmez |
+| Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı) |
+| Faz 2 | laffogato | Kasada damga (M2M) ucu |
 
 ## 7. Yazarkasa POS (ÖKC) bağlantısı
 
 Mali fiş ÖKC'den kesilir; LafPOS adisyonu cihaza "sepet" olarak gönderir, ödeme ve fiş cihazda olur, sonuç
 (Z no, fiş no, ödeme kalemleri) LafPOS'a döner ve adisyonun ödemesi olarak kaydedilir. Ayrıntı:
 `docs/04-YAZARKASA.md`.
+
+## 8. Açılış sırası
+
+Sahibin istediği tek liste (26 Ekim 2026). lafmaliyet deposunda `docs/LAFPOS.md` › "Açılış sırası" aynı adımlardır:
+**1. anahtarlar → 2. deneme gönderimi → 3. geçiş günü**; aşağıdakiler her adımın LafPOS tarafındaki ayrıntısıdır.
+PR'ların birleşip yayına çıkması hiçbir şeyi açmaz: anahtar, `.env` ve geçiş günü yokken laffogato, lafmaliyet ve
+LafPOS bugünkü gibi çalışır, kasa ModPOS'tur.
+
+**Ön koşul.** LafPOS (L1-L4), lafmaliyet (B07-B11) ve laffogato (F1) birleşmiş ve yayında (durum §6); LafPOS kafe
+bilgisayarına kurulmuş. Anahtarlar **en erken lafmaliyet B07 yayındayken** girilir: o sürümden önce lafmaliyet Kasa
+formu LafPOS gününü geçiş günü olmadan gösterirdi.
+
+1. **Anahtarlar**
+   - lafmaliyet Production (Vercel): `LAFPOS_SYNC_SECRET`, en az 32 karakter (`openssl rand -base64 48`); paneli
+     yeniden yayınlayın.
+   - laffogato Production: `LAFPOS_SYNC_SECRET`, **ayrı bir değer**. İki projede adları aynı, değerleri ayrıdır;
+     ikisi de sitenin `KARAOKE_SYNC_SECRET`'ından ayrıdır (aynıysa site ve panel LafPOS'u kabul etmez).
+   - LafPOS `.env` (Windows kurulumunda Başlat › LafPOS › LafPOS ayarları, `ayarlar.env`), şimdilik yalnız
+     lafmaliyet satırları: `LAFMALIYET_URL=https://ladmin.laffogato.net`, `LAFMALIYET_SYNC_SECRET` = panelin
+     `LAFPOS_SYNC_SECRET`'ı (`server/env-config.ts`). Kurulum modundayken bunlar güvenlidir: gün gitmez (§4.3),
+     yalnız maliyet okuma çalışır (gün sonunda ve "Maliyetleri çek"; yazmayan imzalı GET). İsteğe bağlı LafPOS Uzaktan: `LAFPOS_CLOUD_URL`,
+     `LAFPOS_CLOUD_SECRET`.
+   - Site satırları (`LAFFOGATO_URL`, `LAFFOGATO_SYNC_SECRET`) bu adımda **girilmez**, 2. adımın başında girilir:
+     girildiği andan itibaren LafPOS'taki Tükendi / Satışa aç ve online sipariş aşamaları canlı siteyi ve uygulamayı
+     değiştirir, kurulum modunda da. `scripts/vercel/baglanti-kur.sh` anahtarları üretip üç projeye yazar ve kafeye
+     girecek satırları bir dosyaya döker; site satırlarını o dosyadan 2. adımda alın.
+   - Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz (laffogato `docs/LAFPOS.md`).
+2. **Deneme gönderimi**
+   - Eğitim bitti: LafPOS'ta kurulum modu kapalı (patron PIN'i değişince kendiliğinden kapanır), Yönetim › Yazarkasa
+     POS **`kapali`** (eğitim simülatörü değil). ModPOS'la paralel deneme gününde `kapali` kalır, mali fişi ModPOS
+     keser; `tokenx` ancak geçiş gününden itibaren ve Token'ın test ortamından sonra açılır (`docs/04-YAZARKASA.md`).
+     Simülatörde kalan gün eğitim günüdür ve hiç gitmez (§4.3).
+   - Şimdi site satırları LafPOS `.env`'ine girilir: `LAFFOGATO_URL=https://laffogato.net` (varsayılanı yok),
+     `LAFFOGATO_SYNC_SECRET` = sitenin `LAFPOS_SYNC_SECRET`'ı; LafPOS yeniden başlatılır.
+   - Yönetim › Entegrasyon › "Maliyetleri çek" 200 döner: imza ve saat çalışıyor. Kart "Kurulum modu" demiyor.
+   - Gerçek bir gün LafPOS'ta (kurulum modu kapandıktan sonra) açılıp kapatılır (ModPOS'la paralel olabilir).
+     lafmaliyet Ayarlar › LafPOS (kasa)'da gün **Deneme** görünür, yanıt `counted: false`; LafPOS Entegrasyon'da
+     "lafmaliyet … gününü saymıyor: geçiş günü seçilmedi". Başka hiçbir ekranda görünmez. Retler iki kartta da
+     görünür.
+   - Eşleşmeyen ürünler (iki kartta da listelenir): lafmaliyet'te **Bağla** ya da Ürünler › Site menüsü'nde sitenin
+     kalemine bağlanır; "Yalnız sitede" boşlukları satılan her kalem için kapanır. Liste öneridir, ön koşul değil.
+   - Yalnız ModPOS'ta satılan ürünler (Su (PET), Kuzu Kulağı, Ice Caramel Latte …) için karar: siteye eklenir
+     (tercih) ya da LafPOS yerel ürünü olur, `posName` = eski ModPOS adı.
+   - LafPOS Yönetim › Ödeme türleri'nde yemek kartı ve platform kanalları (`pluxee` … `yemeksepeti` …) seçili.
+   - Eğitim günleri lafmaliyet'e gitmez (§4.3) ve LafPOS'ta kalabilir; veri klasörü silinmez (kurulumu da siler,
+     LafPOS kurulum moduna döner). lafmaliyet kartında yine de bir eğitim günü görünürse orada silinir.
+3. **Geçiş günü**
+   - lafmaliyet Ayarlar › LafPOS (kasa) › LafPOS'a geçiş günü girilir (tercihen ayın 1'i). Ay ortasıysa o ayın
+     ModPOS ürün listesi geçiş gününden önceki günler için Satışlar'a yüklenir (1-9 Kasım; yükleme o güne kırpar).
+   - LafPOS geçiş gününü bir sonraki gün sonunun yanıtından öğrenir (Entegrasyon'da yazar, "Geçmiş günler"in
+     varsayılan başlangıcı olur). Geçiş gününden bu yana kapanmış ama gitmemiş gün varsa "Geçmiş günleri gönder" (§4.4);
+     eğitim günlerini atlar.
+   - Yazarkasa gerçek fişe geçecekse Yönetim › Yazarkasa POS `tokenx` (Token'ın test ortamında denendikten sonra).
+   - İlk gün: LafPOS'ta gün sonu → lafmaliyet kartında gün, `counted: true`; Kasa raporu kendiliğinden dolu, banka
+     POS ve yazarkasa Z eklenip gönderilir; Kasadaki fiyatlar kaybolur.
+
+**Personel yordamı** (kod değil): uygulama / web siparişi kasada nakit ya da kartla ödenirse sitede "Ödendi"
+işaretlenir ve LafPOS'ta normal adisyon olarak çalınır, bugün ModPOS'ta olduğu gibi (site onu `counter` sayıp online
+cirodan ve tüketim satırlarından çıkarır, çift sayım olmaz; otomatik aktarım Faz 2).
+
+**Geri almak:** lafmaliyet'te geçiş gününü boşaltmak her şeyi ModPOS'a döndürür, hiçbir kayıt silinmez. LafPOS
+`.env`'deki satırları silmek (ya da başına `#`) bağlantıyı kapatır; LafPOS yeniden başlayınca dışarıya istek gitmez.

@@ -27,11 +27,17 @@ const widths = {
 export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', persistent, className }: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  // Odak ve Escape efekti yalnız açılışa bağlı: onClose (satır içi ok işlevi) ya da persistent her değişince yeniden
+  // koşsaydı odak üstteki pencereden (ödeme › gerekçe) alta geri çekilirdi; güncel değerler ref'ten okunur
+  const latest = useRef({ onClose, persistent });
+  useEffect(() => {
+    latest.current = { onClose, persistent };
+  });
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !persistent) onClose();
+      if (e.key === 'Escape' && !latest.current.persistent) latest.current.onClose();
     };
     window.addEventListener('keydown', onKey);
     const prev = document.activeElement as HTMLElement | null;
@@ -40,7 +46,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
       window.removeEventListener('keydown', onKey);
       prev?.focus?.();
     };
-  }, [open, onClose, persistent]);
+  }, [open]);
 
   if (!open) return null;
   return createPortal(

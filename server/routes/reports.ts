@@ -1,5 +1,6 @@
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
+import { COMP_LABEL } from '@shared/comp';
 import { fmtDateTime, isCalendarDate } from '@shared/time';
 import { type AppEnv, can, requirePermission, seesStaffOf } from '../lib/auth';
 import { type CsvValue, money, toCsv } from '../lib/csv';
@@ -79,11 +80,11 @@ reportRoutes.get('/export.csv', (c) => {
     rows = [['Saat', 'Adisyon', 'Ciro'], ...rep.hours.map((h) => [`${String(h.hour).padStart(2, '0')}:00${h.nextDay ? ' (ertesi gün)' : ''}`, h.orders, money(h.revenue)])];
   } else {
     const rep = itemListReport(r, type);
-    // İkram listesinde tür (ikram ya da ödenmez) Excel'de süzülebilsin
+    // İkram listesinde tür (ikram, ödenmez, zayi) Excel'de süzülebilsin
     const kind = type === 'ikram';
     rows = [
       ['Zaman', 'Adisyon', 'Yer', 'Ürün', 'Adet', 'Tutar', ...(kind ? ['Tür'] : []), 'Neden', 'Yapan', 'Onaylayan'],
-      ...rep.rows.map((x) => [fmtDateTime(x.at), x.orderNo, x.place, x.name, x.qty, money(x.value), ...(kind ? [x.compKind === 'odenmez' ? 'Ödenmez' : 'İkram'] : []), x.reason ?? '', x.by ?? '', x.approvedBy ?? '']),
+      ...rep.rows.map((x) => [fmtDateTime(x.at), x.orderNo, x.place, x.name, x.qty, money(x.value), ...(kind ? [COMP_LABEL[x.compKind ?? 'ikram']] : []), x.reason ?? '', x.by ?? '', x.approvedBy ?? '']),
     ];
   }
   c.header('content-type', 'text/csv; charset=utf-8');

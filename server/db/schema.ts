@@ -294,6 +294,11 @@ export const businessDays = sqliteTable(
     exportedAt: integer('exported_at'),
     /** Gün sonundan sonra "Günü yeniden aç" ile açıldığı son an (otomatik gün sonu buna da bakar) */
     reopenedAt: integer('reopened_at'),
+    /**
+     * Gün sonu kurulum (eğitim) modunda mı alındı: true eğitim günü, false gerçek gün. null: gün açık ya da bu işaret
+     * yokken kapandı (LafPOS o zaman canlıda değildi). lafmaliyet'e yalnız false giden gün gider (docs/03 §4.3)
+     */
+    trainingDay: integer('training_day', { mode: 'boolean' }),
   },
   (t) => [index('business_days_date_idx').on(t.date)],
 );
@@ -613,6 +618,8 @@ export const outbox = sqliteTable(
     nextAttemptAt: integer('next_attempt_at').notNull(),
     lastError: text('last_error'),
     sentAt: integer('sent_at'),
+    /** Karşı tarafın 200 yanıtından okunan alanlar (lafmaliyet gün sonu: counted, switchDay, matched, unmatched) */
+    response: text('response', { mode: 'json' }).$type<Record<string, unknown> | null>(),
   },
   (t) => [index('outbox_pending_idx').on(t.sentAt, t.nextAttemptAt)],
 );

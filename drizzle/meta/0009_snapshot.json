@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "fbdba33c-c532-42fd-aa9b-8f258a16f095",
+  "id": "96908a73-390c-4219-98c7-1b7375e85201",
   "prevId": "76785507-459a-4691-87a6-8dd5e1fc5919",
   "tables": {
     "audit_log": {
@@ -234,6 +234,13 @@
         },
         "reopened_at": {
           "name": "reopened_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "training_day": {
+          "name": "training_day",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
@@ -2092,6 +2099,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "response": {
+          "name": "response",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -3516,13 +3530,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "qr_code": {
-          "name": "qr_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "sort": {
           "name": "sort",
           "type": "integer",
@@ -3547,13 +3554,6 @@
             "section_id"
           ],
           "isUnique": false
-        },
-        "tables_qr_code_idx": {
-          "name": "tables_qr_code_idx",
-          "columns": [
-            "qr_code"
-          ],
-          "isUnique": true
         }
       },
       "foreignKeys": {

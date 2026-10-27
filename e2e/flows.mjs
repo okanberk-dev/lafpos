@@ -326,6 +326,26 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Tablette müdür: ödeme ekranından dökülen siparişi zayi kapatır',
+      async () => {
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: simple.id, qty: 1 }] });
+        await withPage(ctx, 'tablet', 'mudur', async (page) => {
+          await go(ctx, page, `/adisyon/${o.id}`);
+          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: 'Zayi', exact: true }).click();
+          const reason = page.getByRole('dialog', { name: 'Zayi kapat' });
+          await reason.getByRole('button', { name: 'Döküldü', exact: true }).click();
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-mudur-zayi.png` });
+          await reason.getByRole('button', { name: 'Zayi kapat', exact: true }).click();
+          await reason.waitFor({ state: 'detached', timeout: 8000 });
+        });
+        const closed = await api.call('kasa', 'GET', `/orders/${o.id}`);
+        assert(closed.status === 'kapali' && closed.total === 0, `adisyon kapanmadı: ${closed.status} ${closed.total}`);
+        assert(closed.items.every((i) => i.compKind === 'zayi' && i.compReason === 'Döküldü'), 'kalemler zayi değil');
+      },
+    ],
+    [
       'Bilgisayarda patron: Masa planı\'nda masaya QR üretir, kart önizlemesi ve adres görünür; kod yenilenince değişir',
       async () => {
         // Plan ilk bölümle açılır: o bölümün ilk etkin masası

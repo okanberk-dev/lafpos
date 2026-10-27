@@ -18,7 +18,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   productImages: true,
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
-  odenmezReasons: ['Personel yemeği', 'Patron / ortak', 'Zayi', 'Müşteri şikâyeti', 'Deneme'],
+  odenmezReasons: ['Personel yemeği', 'Patron / ortak', 'Müşteri şikâyeti', 'Deneme'],
+  zayiReasons: ['Döküldü', 'Yanlış hazırlandı', 'Bozuk / bayat', 'Müşteri iade etti'],
   discountReasons: ['Öğrenci', 'Personel', 'Müdavim', 'Kampanya', 'Şikâyet telafisi'],
   quickCash: [10000, 20000, 50000, 100000, 200000],
   sizeLabels: { M: 'Orta', L: 'Büyük' },
@@ -96,6 +97,15 @@ export function getSettings(): AllSettings {
   return cache;
 }
 
+/**
+ * Kurulum (eğitim) modu: giriş ekranında örnek PIN'ler açık (`demoMode`, kurulum verisi böyle başlar) ya da yazarkasa
+ * eğitim simülatöründe. Bu modda kapanan gün eğitim günüdür (`business_days.trainingDay`); lafmaliyet'e hiç gitmez,
+ * kurulum modu sonradan kapansa da. docs/03-ENTEGRASYON.md §4.3
+ */
+export function trainingMode(s: Pick<AllSettings, 'demoMode' | 'okcProvider'> = getSettings()): boolean {
+  return s.demoMode || s.okcProvider === 'simulator';
+}
+
 export function getPublicSettings(): PublicSettings {
   const all = getSettings();
   const out = {} as Record<string, unknown>;
@@ -136,6 +146,24 @@ export function setSyncState(key: string, value: unknown) {
  * Benzer yetkileri (`like`) taşıyan rollere eklenir; patron sonra kaldırırsa bir daha eklenmez.
  */
 const ADDED_PERMISSIONS: { permission: Permission; like: Permission[] }[] = [{ permission: 'siparis.odenmez', like: ['siparis.ikram', 'odeme.iade'] }];
+
+const SETTINGS_UPGRADES_KEY = 'ayar-guncellemeleri';
+
+/**
+ * Tek seferlik ayar düzeltmeleri (açılışta): kayıtlı Ödenmez gerekçelerinden "Zayi" düşer, çünkü zayi artık ayrı
+ * türdür (zayiReasons); kalsaydı personel dökülen ürünü ödenmez diye kapatır, zayi raporu eksik kalırdı. Patron
+ * sonradan yeniden yazarsa dokunulmaz.
+ */
+export function upgradeStoredSettings() {
+  const done = new Set(getSyncState<string[]>(SETTINGS_UPGRADES_KEY) ?? []);
+  if (done.has('zayi-nedeni')) return;
+  const current = getSettings().odenmezReasons;
+  const kept = current.filter((r) => r.trim().toLocaleLowerCase('tr-TR') !== 'zayi');
+  tx((t) => {
+    if (kept.length !== current.length) updateSettings({ odenmezReasons: kept }, t);
+    setSyncState(SETTINGS_UPGRADES_KEY, [...done, 'zayi-nedeni']);
+  });
+}
 const ADDED_KEY = 'rol-yetki-eklemeleri';
 
 export function upgradeRoleSets() {
