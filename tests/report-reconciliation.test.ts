@@ -29,9 +29,9 @@ describe('rapor mutabakatı', () => {
 
     // 1) Masa: servis ücreti, kalem indirimi, ikram, gönderildikten sonra iptal; kart + bahşiş
     let a = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: tables[0]!.id, guests: 3 });
-    a = await add(a, [{ name: 'Latte', size: 'M', qty: 2 }, { name: 'Türk kahvesi', qty: 2 }, { name: 'Espresso', size: 'M' }]);
+    a = await add(a, [{ name: 'Latte', size: 'M', qty: 2 }, { name: 'Türk Kahvesi', qty: 2 }, { name: 'Espresso', size: 'M' }]);
     const latte = a.items.find((i) => i.name === 'Latte')!;
-    const turk = a.items.find((i) => i.name === 'Türk kahvesi')!;
+    const turk = a.items.find((i) => i.name === 'Türk Kahvesi')!;
     const esp = a.items.find((i) => i.name === 'Espresso')!;
     await h.ok('kasa', 'POST', `/orders/${a.id}/items/${latte.id}/discount`, { type: 'percent', value: 15, reason: 'Müdavim', approverPin: MUDUR });
     await h.ok('kasa', 'POST', `/orders/${a.id}/items/${turk.id}/comp`, { qty: 1, reason: 'Müdavim', approverPin: MUDUR });
@@ -64,7 +64,7 @@ describe('rapor mutabakatı', () => {
 
     // 4) Tamamı ikram edilen adisyon: ciroya ve adisyon sayısına girmez
     let d = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: null });
-    d = await add(d, [{ name: 'Türk kahvesi' }]);
+    d = await add(d, [{ name: 'Türk Kahvesi' }]);
     d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/items/${d.items[0]!.id}/comp`, { reason: 'Gecikme özrü', approverPin: MUDUR });
     await h.ok('kasa', 'POST', `/orders/${d.id}/close`, {});
 
@@ -72,6 +72,11 @@ describe('rapor mutabakatı', () => {
     const summary = await h.ok<{
       netSales: number;
       receipts: number;
+      avgCheck: number;
+      itemsSold: number;
+      voided: number;
+      complimentary: number;
+      types: { orders: number }[];
       byDay: { netSales: number }[];
       payments: { amount: number }[];
       waterfall: { list: number; complimentary: number; discounts: number; service: number; revenue: number; kdv: number; netExKdv: number };
@@ -79,9 +84,13 @@ describe('rapor mutabakatı', () => {
       reconciliation: { difference: number; paidClosed: number; paidOpen: number };
       tips: number;
     }>('mudur', 'GET', '/reports/summary');
-    const products = await h.ok<{ total: number; service: number; categories: { revenue: number }[] }>('mudur', 'GET', '/reports/products');
-    const hourly = await h.ok<{ total: number; hours: { revenue: number }[]; week: { days: number; hours: number[] }[] }>('mudur', 'GET', '/reports/hourly');
-    const patron = await h.ok<{ netSales: number; orders: number }>('patron', 'GET', '/reports/patron');
+    const products = await h.ok<{ total: number; service: number; categories: { revenue: number }[]; products: { qty: number; complimentary: number; voided: number }[] }>('mudur', 'GET', '/reports/products');
+    const hourly = await h.ok<{ total: number; hours: { revenue: number; orders: number }[]; parts: { orders: number }[]; week: { days: number; hours: number[] }[] }>('mudur', 'GET', '/reports/hourly');
+    const saatlik = (await h.call<string>('mudur', 'GET', '/reports/export.csv?type=saatlik')).json.replace(/^\uFEFF/, '').trim().split('\r\n').slice(1);
+    const patron = await h.ok<{ netSales: number; orders: number; avgCheck: number; voided: number }>('patron', 'GET', '/reports/patron');
+    const voids = await h.ok<{ total: number; rows: { qty: number }[] }>('mudur', 'GET', '/reports/items?kind=iptal');
+    const staff = await h.ok<{ staff: { orders: number; revenue: number; voids: number; voidValue: number }[] }>('patron', 'GET', '/reports/staff');
+    const checks = await h.ok<{ count: number; rows: { status: string; total: number }[] }>('mudur', 'GET', '/reports/checks');
 
     const N = summary.netSales;
     expect(N).toBeGreaterThan(0);
@@ -98,6 +107,30 @@ describe('rapor mutabakatı', () => {
     expect(patron.netSales).toBe(N);
     expect(patron.orders).toBe(summary.receipts);
     expect(summary.receipts).toBe(3);
+    // Adisyon sayısı her yerde aynı ölçütle (₺0 adisyon sayılmaz): ortalama, türe göre kırılım
+    expect(patron.avgCheck).toBe(summary.avgCheck);
+    expect(summary.avgCheck).toBe(Math.round(N / summary.receipts));
+    expect(summary.types.reduce((x, t) => x + t.orders, 0)).toBe(summary.receipts);
+    // Personel ve saatlik raporun "adisyon"u da (ortalama, en yoğun saat, gün dilimleri, saatlik CSV)
+    expect(staff.staff.reduce((x, r) => x + r.orders, 0)).toBe(summary.receipts);
+    expect(staff.staff.reduce((x, r) => x + r.revenue, 0)).toBe(N);
+    expect(hourly.hours.reduce((x, r) => x + r.orders, 0)).toBe(summary.receipts);
+    expect(hourly.parts.reduce((x, r) => x + r.orders, 0)).toBe(summary.receipts);
+    expect(saatlik.reduce((x, line) => x + Number(line.split(';')[1]), 0)).toBe(summary.receipts);
+    // Adisyon listesi: dönemin bütün kapanan adisyonları, tutarları ciroyu verir
+    expect(checks.count).toBe(checks.rows.length);
+    expect(checks.rows.filter((r) => r.status === 'kapali').reduce((x, r) => x + r.total, 0)).toBe(N);
+    // Satılan ürün = ürün raporunun adedi (ikram satılmış sayılmaz, ayrı)
+    expect(summary.itemsSold).toBe(products.products.reduce((x, p) => x + p.qty, 0));
+    expect(products.products.reduce((x, p) => x + p.complimentary, 0)).toBe(2);
+    // İptal: özet = patron = iptal listesi = personel; adetler ürün raporu ve personelde aynı
+    expect(summary.voided).toBe(product('Espresso').price);
+    expect(patron.voided).toBe(summary.voided);
+    expect(voids.total).toBe(summary.voided);
+    expect(staff.staff.reduce((x, r) => x + r.voidValue, 0)).toBe(summary.voided);
+    const voidQty = voids.rows.reduce((x, r) => x + r.qty, 0);
+    expect(products.products.reduce((x, p) => x + p.voided, 0)).toBe(voidQty);
+    expect(staff.staff.reduce((x, r) => x + r.voids, 0)).toBe(voidQty);
 
     // Döküm ve KDV
     const w = summary.waterfall;
@@ -114,8 +147,16 @@ describe('rapor mutabakatı', () => {
     expect(summary.tips).toBe(2500);
 
     // Z aynı rakamı yazar
-    const closed = await h.ok<{ day: { id: string }; summary: { netSales: number; kdv: { gross: number }[]; tips: number; payments: { amount: number }[] } }>('mudur', 'POST', '/cash/day/close', { countedCash: null });
+    const closed = await h.ok<{
+      day: { id: string };
+      summary: { netSales: number; receipts: number; voided: number; topProducts: { qty: number }[]; kdv: { gross: number }[]; tips: number; payments: { amount: number }[] };
+    }>('mudur', 'POST', '/cash/day/close', { countedCash: null });
     expect(closed.summary.netSales).toBe(N);
+    expect(closed.summary.receipts).toBe(summary.receipts);
+    expect(closed.summary.voided).toBe(summary.voided);
+    // Z ürün listesi en çok satan 15 ürün: bu günde 15'ten az ürün satıldı, liste eksiksiz
+    expect(closed.summary.topProducts.length).toBeLessThan(15);
+    expect(closed.summary.topProducts.reduce((x, p) => x + p.qty, 0)).toBe(summary.itemsSold);
     expect(closed.summary.kdv.reduce((x, k) => x + k.gross, 0)).toBe(N);
     expect(closed.summary.payments.reduce((x, p) => x + p.amount, 0)).toBe(N);
     expect(closed.summary.tips).toBe(2500);

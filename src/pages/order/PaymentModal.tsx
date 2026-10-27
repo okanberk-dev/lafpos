@@ -1,17 +1,18 @@
 import { Check, CheckCircle2, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
-import { amountForItems } from '@shared/order-calc';
+import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import type { OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
-import { post, put } from '@/lib/api';
+import { ApiError, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { newRequestId } from '@/lib/requestId';
 import { BillReceipt, printNow } from '@/lib/print';
 import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
@@ -20,6 +21,7 @@ import { OkcPanel } from './OkcPanel';
 type Mode = 'tutar' | 'kalem' | 'paylas';
 
 const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFixed(2).replace('.', ','));
+
 
 /** Innex seçim kartı/çipi: seçili mavi kenar ve açık mavi zemin */
 const choice = (on: boolean) =>
@@ -53,9 +55,12 @@ export function PaymentModal({
   const [people, setPeople] = useState(2);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; method: string; share: string | null } | null>(null);
+  /** Süren ödeme denemesi: ekranda görülenler (tür, tutar, pay, kalemler, bahşiş, ödeme listesi) ve kimliği */
+  const attempt = useRef<{ key: string; id: string } | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    attempt.current = null;
     // Hesap daha önce bölündüyse pencere doğrudan paylarla açılır
     setMode(order.split ? 'paylas' : 'tutar');
     setAmountText(toInput(Math.max(0, remaining)));
@@ -71,14 +76,25 @@ export function PaymentModal({
   }, [open]);
 
   const unpaidItems = order.items.filter((i) => !i.voided && !i.complimentary && i.qty - i.paidQty > 0 && (order.totals.lineNet[i.id] ?? 0) > 0);
+  // Seçim yalnız ödenebilir kalemlerden gider: başka cihazda ikram ya da iptal edilen kalem seçimde kalmasın
+  const picked = useMemo(
+    () =>
+      Object.entries(selection)
+        .filter(([id, q]) => q > 0 && unpaidItems.some((i) => i.id === id))
+        .map(([itemId, qty]) => ({ itemId, qty })),
+    // unpaidItems order'dan türer
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [order, selection],
+  );
+  const payLines = useMemo(() => itemPayLines(order.items, order.payments), [order]);
   const itemsAmount = useMemo(
     () =>
       amountForItems(
         order.totals,
-        order.items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty })),
-        Object.entries(selection).map(([lineId, qty]) => ({ lineId, qty })),
+        payLines,
+        picked.map((s) => ({ lineId: s.itemId, qty: s.qty })),
       ),
-    [order, selection],
+    [order, payLines, picked],
   );
 
   // Paylar: ödenenler ödemelerdeki pay numarasından, ödenmeyenler sunucunun hesabından (split.shares)
@@ -95,9 +111,11 @@ export function PaymentModal({
   const given = parseTL(givenText);
   const change = method?.kind === 'nakit' && given != null ? given - amount - tip : null;
   const cariBlocked = method?.kind === 'cari' && !order.customer;
+  // Açık hesapta para alınmaz; bahşiş yazılırsa raporda alınmış görünür (sunucu da reddeder)
+  const tipBlocked = method?.kind === 'cari' && tip > 0;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
-  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !splitBlocks;
+  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
 
   const keyTarget = focus === 'verilen' ? [givenText, setGivenText] : focus === 'bahsis' ? [tipText, setTipText] : [amountText, setAmountText];
   const pressKey = (k: string) => {
@@ -116,20 +134,36 @@ export function PaymentModal({
     if (!method || !valid) return;
     setBusy(true);
     const sharing = mode === 'paylas' && !!split;
-    const res = await act((pin) =>
-      post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null }>(`/orders/${order.id}/payments`, {
-        methodId: method.id,
-        amount,
-        tip,
-        given: method.kind === 'nakit' && given != null ? given : null,
-        items: mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null,
-        // Pay: ekrandaki tutar ve numara gider; sunucunun hesabı tutmazsa 409 split_changed, ekran yenilenir
-        ...(sharing ? { share: true, shareNo: freeNos[0] } : {}),
-        approverPin: pin,
-      }),
-    );
+    const items = mode === 'kalem' ? picked : null;
+    // Aynı ekranda aynı girdilerle yeniden basılan "Öde" aynı denemedir (yanıtı kaybolan istek ikinci kez yazılmaz).
+    // Ekranın gösterdiği tutar, pay ya da ödeme listesi değiştiyse yeni denemedir: yanıtı kaybolan pay 1'den sonra
+    // ekran pay 2'yi ya da adedin yeni tutarını gösterir, iptal edilen ödemenin kimliği yeniden gitmez
+    const shown = order.payments.map((p) => `${p.id}:${p.refundedAt ?? ''}`).join(',');
+    const key = JSON.stringify([mode, method.id, amount, sharing ? freeNos[0] : null, items, tip, shown]);
+    if (attempt.current?.key !== key) attempt.current = { key, id: newRequestId() };
+    const requestId = attempt.current.id;
+    const res = await act(async (pin) => {
+      try {
+        return await post<{ order: OrderDTO; closed: boolean; change: number; amount: number; share: { no: number; of: number } | null }>(`/orders/${order.id}/payments`, {
+          methodId: method.id,
+          amount,
+          tip,
+          given: method.kind === 'nakit' && given != null ? given : null,
+          items,
+          // Pay: ekrandaki tutar ve numara gider; sunucunun hesabı tutmazsa 409 split_changed, ekran yenilenir
+          ...(sharing ? { share: true, shareNo: freeNos[0] } : {}),
+          requestId,
+          approverPin: pin,
+        });
+      } catch (e) {
+        // Kimlik başka bir ödemeye (ya da iptal edilen ödemeye) ait: sonraki basış yeni deneme olur
+        if (e instanceof ApiError && (e.code === 'request_reused' || e.code === 'request_refunded')) attempt.current = null;
+        throw e;
+      }
+    });
     setBusy(false);
     if (!res) return;
+    attempt.current = null;
     // Parçalı ödeme sürüyorsa pencere açık kalır: kalan tutara (ya da sıradaki paya) dönülür
     setAmountText(toInput(res.order.total - res.order.paid));
     setSelection({});
@@ -245,7 +279,7 @@ export function PaymentModal({
                         {i.name} {i.size !== 'TEK' && <span className="text-muted">{boot.settings.sizeLabels[i.size]}</span>}
                       </span>
                       <span className="tabular text-xs text-muted">
-                        {left} adet · {tl(order.totals.lineNet[i.id] ?? 0)}
+                        {left} adet · {tl(unpaidLineAmount(order.totals, payLines.find((l) => l.id === i.id) ?? i, remaining))}
                       </span>
                     </button>
                     <div className="flex items-center gap-1">
@@ -262,7 +296,8 @@ export function PaymentModal({
               })}
               <div className="flex justify-between px-1 pt-2 text-sm font-semibold">
                 <span>Seçilen</span>
-                <span className="tabular">{tl(itemsAmount)}</span>
+                {/* Sunucunun alacağı: ödenecek kalanla sınırlı (ödeme düğmesindeki tutarla aynı) */}
+                <span className="tabular">{tl(amount)}</span>
               </div>
             </div>
           )}
@@ -343,14 +378,18 @@ export function PaymentModal({
             >
               Bahşiş {tip > 0 ? tl(tip) : 'ekle'}
             </button>
-            <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
+            {tipBlocked ? (
+              <span className="text-right text-[var(--admin-danger-ink)]">Açık hesaba bahşiş yazılmaz</span>
+            ) : (
+              <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
+            )}
           </div>
 
           <Button variant="primary" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
             {splitBlocks ? 'Hesap bölünmüş: payları Paylaş\'tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
           </Button>
 
-          <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null} onCompleted={(closed) => onDone(closed)} />
+          <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />
 
           {order.payments.length > 0 && (
             <div>
@@ -362,7 +401,8 @@ export function PaymentModal({
                       {p.methodName}
                       {p.shareNo != null && <span className="tabular ml-1.5 rounded-md bg-surface-3 px-1.5 py-0.5 text-xs font-medium text-ink-2">Pay {p.shareNo}/{p.shareOf}</span>}{' '}
                       <span className="text-xs text-muted">
-                        {fmtTime(p.createdAt)} · {p.userName}
+                        {fmtTime(p.createdAt)}
+                        {p.userName && ` · ${p.userName}`}
                       </span>
                     </span>
                     <span className="tabular font-semibold">{tl(p.amount)}</span>

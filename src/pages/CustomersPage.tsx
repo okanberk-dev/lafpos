@@ -1,16 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift, MapPin, Plus, Search, Wallet } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/misc';
-import { errorMessage, get, patch, post } from '@/lib/api';
+import { ApiError, errorMessage, get, patch, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { newRequestId } from '@/lib/requestId';
 import { toast } from '@/lib/toast';
 
 interface Customer {
@@ -45,6 +46,8 @@ export default function CustomersPage() {
   const detail = useQuery({ queryKey: ['customers', 'detail', selected], queryFn: () => get<Detail>(`/customers/${selected}`), enabled: !!selected });
   const [form, setForm] = useState({ name: '', phone: '', email: '', birthday: '', note: '', creditLimit: '' });
   const [collect, setCollect] = useState<{ methodId: string; amount: string } | null>(null);
+  /** Süren tahsilat denemesi: aynı ekranda aynı girdilerle yeniden basılan "Tahsil et" ikinci kez yazılmaz */
+  const attempt = useRef<{ key: string; id: string } | null>(null);
   const [address, setAddress] = useState<{ title: string; address: string } | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ['customers'] });
 
@@ -65,14 +68,25 @@ export default function CustomersPage() {
 
   const doCollect = async () => {
     if (!collect || !selected) return;
+    const amount = parseTL(collect.amount) ?? 0;
+    // Ekranda görülen bakiye değiştiyse (tahsilat yazıldı, ekran yenilendi) yeni denemedir
+    const key = JSON.stringify([selected, collect.methodId, amount, detail.data?.customer.balance ?? null]);
+    if (attempt.current?.key !== key) attempt.current = { key, id: newRequestId() };
+    const requestId = attempt.current.id;
     try {
-      const res = await withApproval((pin) => post('/cash/collect', { customerId: selected, methodId: collect.methodId, amount: parseTL(collect.amount) ?? 0, approverPin: pin }));
+      const res = await withApproval((pin) => post('/cash/collect', { customerId: selected, methodId: collect.methodId, amount, requestId, approverPin: pin }));
       if (res === null) return;
+      attempt.current = null;
       toast.ok('Tahsilat alındı');
       setCollect(null);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
+      // Kimlik başka tahsilata ait ya da bakiye değişmiş: bakiye yenilenir, sonraki basış yeni deneme olur
+      if (e instanceof ApiError && e.status === 409) {
+        if (e.code === 'request_reused') attempt.current = null;
+        refresh();
+      }
     }
   };
 

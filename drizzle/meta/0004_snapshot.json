@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "df7e24e4-7922-4231-80b2-a84b9d3e3fe5",
+  "id": "6e2eef8f-7c3e-4166-8874-dc52f8c455d4",
   "prevId": "81c83209-6cff-4f4b-b97d-0e03d34db952",
   "tables": {
     "audit_log": {
@@ -1846,13 +1846,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "numarator": {
-          "name": "numarator",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "updated_at": {
           "name": "updated_at",
           "type": "integer",
@@ -2300,6 +2293,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "request_id": {
+          "name": "request_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2316,6 +2316,14 @@
             "day_id"
           ],
           "isUnique": false
+        },
+        "payments_request_idx": {
+          "name": "payments_request_idx",
+          "columns": [
+            "order_id",
+            "request_id"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {

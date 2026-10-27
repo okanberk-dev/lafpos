@@ -1,5 +1,5 @@
 import { salePayments } from '../basket';
-import { TOKENX_PAYMENT, TokenxClient, type TokenxSale } from '../tokenx';
+import { TOKENX_PAYMENT, TokenxClient, TokenxError, type TokenxSale } from '../tokenx';
 import type { FiscalProvider, FiscalResult, PollOutcome } from './types';
 
 /**
@@ -68,7 +68,12 @@ export const tokenxProvider: FiscalProvider = {
   async poll(r): Promise<PollOutcome> {
     const c = tokenx();
     if (!c) return { kind: 'pending', locked: r.status === 'kilitli', lockedBy: null };
-    const d = await c.getBasket(r.id);
+    const d = await c.getBasket(r.id).catch((e: unknown) => {
+      // 1006: Token bu sepeti hiç görmedi (yanıtı alınamayan gönderim ulaşmamış)
+      if (e instanceof TokenxError && e.code === '1006') return 'missing' as const;
+      throw e;
+    });
+    if (d === 'missing') return { kind: 'missing' };
     if (d?.sale) return { kind: 'result', result: fromTokenxSale(d.sale, r.amount) };
     if (d?.deletedAt) return { kind: 'deleted' };
     return { kind: 'pending', locked: !!(d?.isLocked ?? d?.islocked), lockedBy: d?.lockedBy ?? null };

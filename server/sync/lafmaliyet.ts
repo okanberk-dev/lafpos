@@ -1,8 +1,11 @@
 import { and, asc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
-import { allocate, tlPlain } from '@shared/money';
+import { allocate } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
+import { posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
+import type { SelectedOption } from '@shared/types';
 import { db, schema } from '../db/client';
 import { env } from '../env';
+import { money, toCsv } from '../lib/csv';
 import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
@@ -24,63 +27,150 @@ export interface SaleLine {
   isService: boolean;
 }
 
-/** Seçenek eklerinin lafmaliyet'teki ürün adları (ModPOS'taki adlarla aynı) */
-const ADDON_NAMES: Record<string, string> = { extraShot: 'EXTRA SHOT', syrup: 'SYRUP', milk: 'ALTERNATIF SÜT' };
+type ItemRow = typeof schema.orderItems.$inferSelect;
+type AddonKey = 'extraShot' | 'syrup' | 'milk';
 
-function addonSiteIds(): Record<string, string | null> {
-  const extras = db
-    .select({ name: schema.products.name, extId: schema.products.extId })
-    .from(schema.products)
-    .innerJoin(schema.categories, eq(schema.categories.id, schema.products.categoryId))
-    .where(and(eq(schema.products.extSource, 'laffogato'), eq(schema.categories.extKey, 'extras')))
-    .all();
-  const find = (re: RegExp) => extras.find((e) => re.test(e.name.toLocaleLowerCase('tr-TR')))?.extId ?? null;
-  return { extraShot: find(/shot/), syrup: find(/şurup|syrup/), milk: find(/süt/) };
+/** Seçenek eklerinin lafmaliyet'teki ürün adları (ModPOS'taki adlarla aynı) */
+const ADDON_NAMES: Record<AddonKey, string> = { extraShot: 'EXTRA SHOT', syrup: 'SYRUP', milk: 'ALTERNATIF SÜT' };
+/** Masa servis ücreti: ürün değil, lafmaliyet'te HİZMET satırı (satırların toplamı Z toplamını tutsun) */
+export const SERVICE_POS_NAME = 'SERVİS ÜCRETİ';
+/** Eklerin sitedeki sabit kalemleri (laffogato menüsü, `extras` kategorisi; server/db/menu-snapshot.json) */
+const ADDON_SITE_IDS: Record<AddonKey, string> = { syrup: 'mnu-0080', extraShot: 'mnu-0081', milk: 'mnu-0082' };
+/** Ek sayılmayan varsayılan seçenek kodları (sitenin `customization` kimlikleri) */
+const ADDON_NONE: Partial<Record<AddonKey, string>> = { milk: 'normal', syrup: 'none' };
+const isAddonKey = (k: string | null): k is AddonKey => k === 'extraShot' || k === 'syrup' || k === 'milk';
+
+/**
+ * Kalemin lafmaliyet'e ayrı satır giden ekleri. Seçim fiyata göre değil koda göre: laktozsuz süt 0 TL'dir ama
+ * alternatif süttür (reçete tüketimi); "Normal" süt ve "Şurup yok" ek değildir; ekstra shot adediyle.
+ */
+export function addonsOf(options: SelectedOption[]): { key: AddonKey; qty: number; price: number }[] {
+  const out: { key: AddonKey; qty: number; price: number }[] = [];
+  for (const op of options) {
+    if (!isAddonKey(op.groupKey) || op.qty <= 0) continue;
+    const none = ADDON_NONE[op.groupKey];
+    // Kodsuz (eski) seçenekte yalnız ücretli olan ek sayılır
+    if (none && (op.code ? op.code === none : op.price <= 0)) continue;
+    out.push({ key: op.groupKey, qty: op.qty, price: op.price });
+  }
+  return out;
 }
 
-/** Kapanmış POS adisyonlarından ürün satış satırları (iptal, ikram ve online siparişler hariç) */
-export function salesLines(dayIds: string[]): SaleLine[] {
-  if (!dayIds.length) return [];
-  const orders = db
-    .select()
-    .from(schema.orders)
-    .where(and(inArray(schema.orders.dayId, dayIds), eq(schema.orders.status, 'kapali'), eq(schema.orders.source, 'pos')))
+/** Eklerin site kimlikleri: önce sabit kimlik (yerelde varsa), yoksa `extras` kategorisinde ada göre */
+function addonSiteIds(): Record<AddonKey, string | null> {
+  const linked = db
+    .select({ name: schema.products.name, extId: schema.products.extId, categoryKey: schema.categories.extKey })
+    .from(schema.products)
+    .innerJoin(schema.categories, eq(schema.categories.id, schema.products.categoryId))
+    .where(eq(schema.products.extSource, 'laffogato'))
     .all();
-  if (!orders.length) return [];
-  const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, orders.map((o) => o.id))).all();
-  const addonIds = addonSiteIds();
-  const lines = new Map<string, SaleLine>();
-  const add = (l: SaleLine) => {
-    const cur = lines.get(l.posName);
+  const ids = new Set(linked.map((p) => p.extId));
+  const extras = linked.filter((p) => p.categoryKey === 'extras');
+  const find = (key: AddonKey, re: RegExp) => (ids.has(ADDON_SITE_IDS[key]) ? ADDON_SITE_IDS[key] : (extras.find((e) => re.test(e.name.toLocaleLowerCase('tr-TR')))?.extId ?? null));
+  return { extraShot: find('extraShot', /shot/), syrup: find('syrup', /şurup|syrup/), milk: find('milk', /süt/) };
+}
+
+interface Part {
+  posName: string;
+  siteMenuId: string | null;
+  slot: 'M' | 'L' | null;
+  qty: number;
+  /** kuruş: satışta net ciro, ikramda menü değeri */
+  value: number;
+  isService: boolean;
+}
+
+/** Kalemin değerini ana ürün ve ekleri arasında liste fiyatları oranında böler (satışta ve ikramda aynı oran) */
+function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string | null>): Part[] {
+  const addons = addonsOf(i.options);
+  const weights = [i.unitPrice - addons.reduce((a, op) => a + op.price * op.qty, 0), ...addons.map((op) => op.price * op.qty)];
+  const shares = allocate(value, weights);
+  const size = i.size === 'L' ? 'L' : i.size === 'M' ? 'M' : 'TEK';
+  return [
+    { posName: soldPosName(i.posName, i.name, size, getSettings().posSizeSuffix), siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService: i.isService },
+    ...addons.map((op, k) => ({
+      posName: ADDON_NAMES[op.key],
+      siteMenuId: addonIds[op.key],
+      slot: addonIds[op.key] ? ('M' as const) : null,
+      qty: i.qty * op.qty,
+      value: shares[k + 1] ?? 0,
+      isService: false,
+    })),
+  ];
+}
+
+const partKey = (p: Pick<Part, 'posName' | 'siteMenuId' | 'slot'>) => `${posNameKey(p.posName)}|${p.siteMenuId ?? ''}|${p.slot ?? ''}`;
+
+/**
+ * Satırları `posName|siteMenuId|slot` anahtarıyla toplar ve günde bir ada bir satır kuralını (lafmaliyet
+ * `parsePosDay`) sağlar: aynı ad iki farklı kaleme / boya düşerse ikinciye boy eki, yine çakışırsa site kimliği
+ * eklenir. Siteye bağlı satır kalemiyle eşleştiği için ad yalnız bağsız üründe önemlidir; bağsız satır adını korur.
+ */
+function mergeParts(parts: Part[]): { lines: SaleLine[]; names: Map<string, string> } {
+  const groups = new Map<string, SaleLine>();
+  for (const p of parts) {
+    const k = partKey(p);
+    const cur = groups.get(k);
     if (cur) {
-      cur.qty += l.qty;
-      cur.revenue += l.revenue;
-    } else lines.set(l.posName, { ...l });
-  };
-  for (const o of orders) {
-    const its = items.filter((i) => i.orderId === o.id);
-    const totals = o.totals ?? calcOrder({ lines: [] });
-    for (const i of its) {
-      if (i.voided || i.complimentary) continue;
-      const net = totals.lineNet[i.id] ?? 0;
-      const addons = i.options.filter((op) => op.price > 0 && op.groupKey && ADDON_NAMES[op.groupKey]);
-      // Satırın net cirosunu ana ürün ve ekler arasında liste fiyatları oranında böl
-      const weights = [i.unitPrice - addons.reduce((a, op) => a + op.price * op.qty, 0), ...addons.map((op) => op.price * op.qty)];
-      const shares = allocate(net, weights);
-      add({
-        posName: i.posName ?? i.name.toLocaleUpperCase('tr-TR'),
-        siteMenuId: i.extProductId,
-        slot: i.extProductId ? (i.size === 'L' ? 'L' : 'M') : null,
-        qty: i.qty,
-        revenue: shares[0] ?? net,
-        isService: i.isService,
-      });
-      addons.forEach((op, k) => {
-        add({ posName: ADDON_NAMES[op.groupKey!], siteMenuId: addonIds[op.groupKey!] ?? null, slot: addonIds[op.groupKey!] ? 'M' : null, qty: i.qty * op.qty, revenue: shares[k + 1] ?? 0, isService: false });
-      });
-    }
+      cur.qty += p.qty;
+      cur.revenue += p.value;
+    } else groups.set(k, { posName: p.posName, siteMenuId: p.siteMenuId, slot: p.slot, qty: p.qty, revenue: p.value, isService: p.isService });
   }
-  return [...lines.values()].sort((a, b) => b.revenue - a.revenue);
+  const suffix = getSettings().posSizeSuffix;
+  const rank = (l: SaleLine) => (l.siteMenuId ? 1 : 0);
+  const ordered = [...groups.entries()].sort(
+    ([, a], [, b]) => rank(a) - rank(b) || (a.siteMenuId ?? '').localeCompare(b.siteMenuId ?? '') || (a.slot === b.slot ? 0 : a.slot === 'M' ? -1 : 1),
+  );
+  const reserved = new Set(ordered.map(([, l]) => posNameKey(l.posName)));
+  const used = new Set<string>();
+  const free = (name: string) => !used.has(posNameKey(name)) && !reserved.has(posNameKey(name));
+  const names = new Map<string, string>();
+  for (const [k, l] of ordered) {
+    if (used.has(posNameKey(l.posName))) {
+      const sizeTail = l.slot ? suffix[l.slot].trim() : '';
+      const sized = sizeTail && !posNameKey(l.posName).endsWith(` ${posNameKey(sizeTail)}`) ? `${l.posName} ${sizeTail}` : null;
+      let name = [sized, `${sized ?? l.posName} (${l.siteMenuId ?? 'yerel'})`].find((c): c is string => !!c && free(c));
+      for (let n = 2; !name; n++) if (free(`${l.posName} (${n})`)) name = `${l.posName} (${n})`;
+      l.posName = name;
+    }
+    used.add(posNameKey(l.posName));
+    names.set(k, l.posName);
+  }
+  return { lines: [...groups.values()].sort((a, b) => b.revenue - a.revenue || a.posName.localeCompare(b.posName, 'tr')), names };
+}
+
+/** Kapanmış POS adisyonlarının koşulu (online siparişler hariç: tahsil edilmez, sitenin cirosudur) */
+const closedPosWhere = (dayIds: string[]) =>
+  and(inArray(schema.orders.dayId, dayIds), eq(schema.orders.status, 'kapali'), eq(schema.orders.source, 'pos'));
+
+function closedPosOrders(dayIds: string[]) {
+  if (!dayIds.length) return [];
+  return db.select().from(schema.orders).where(closedPosWhere(dayIds)).all();
+}
+
+function salesOf(dayIds: string[], addonIds = addonSiteIds()) {
+  const orders = closedPosOrders(dayIds);
+  if (!orders.length) return { lines: [], names: new Map<string, string>() };
+  // Kalemler alt sorguyla: adisyon kimlikleri bağlanmaz (SQLite bir sorguda en çok 32.766 değişken alır)
+  const saleIds = db.select({ id: schema.orders.id }).from(schema.orders).where(closedPosWhere(dayIds));
+  const items = db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, saleIds)).all();
+  const totals = new Map(orders.map((o) => [o.id, o.totals ?? calcOrder({ lines: [] })]));
+  const parts: Part[] = [];
+  for (const i of items) {
+    if (i.voided || i.complimentary) continue;
+    parts.push(...itemParts(i, totals.get(i.orderId)?.lineNet[i.id] ?? 0, addonIds));
+  }
+  // Servis ücreti ayrı hizmet satırı, adedi servis ücretli adisyon sayısı
+  for (const t of totals.values()) {
+    if (t.service > 0) parts.push({ posName: SERVICE_POS_NAME, siteMenuId: null, slot: null, qty: 1, value: t.service, isService: true });
+  }
+  return mergeParts(parts);
+}
+
+/** Kapanmış POS adisyonlarından ürün satış satırları (iptal, ikram ve online siparişler hariç); servis ücreti
+ * varsa ayrı hizmet satırı. Satırların toplamı adisyonların toplamına (Z toplamına) eşittir. */
+export function salesLines(dayIds: string[]): SaleLine[] {
+  return salesOf(dayIds).lines;
 }
 
 export function daysInRange(from: string, to: string) {
@@ -92,13 +182,16 @@ export function daysInRange(from: string, to: string) {
     .all();
 }
 
-const trNumber = (k: number) => tlPlain(k);
-
-/** lafmaliyet Satışlar ekranının okuduğu biçim (noktalı virgül, Türkçe ondalık, KDV dahil tutar) */
+/**
+ * lafmaliyet Satışlar ekranının okuduğu biçim (noktalı virgül, Türkçe ondalık, KDV dahil tutar). lafmaliyet'in
+ * yapıştırma ayrıştırıcısı tırnak bilmez, sekmeyi ayraç sayar: POS adındaki satır sonu ve sekme boşluğa, noktalı
+ * virgül virgüle döner (her satır bir ürün, üç hücre). Hücreler server/lib/csv.ts ile yazılır: Excel'de açılınca
+ * =, +, -, @ ile başlayan ad formül olarak çalışmaz (başına ' konur, lafmaliyet adın başındaki '’u atar).
+ */
 export function salesCsv(from: string, to: string): string {
   const lines = salesLines(daysInRange(from, to).map((d) => d.id));
-  const rows = ['Ürün;Adet;Tutar', ...lines.map((l) => `${l.posName.replace(/;/g, ',')};${l.qty};${trNumber(l.revenue)}`)];
-  return '﻿' + rows.join('\r\n') + '\r\n';
+  const name = (s: string) => s.replace(/[\r\n\t]+/g, ' ').replace(/;/g, ',').trim();
+  return toCsv([['Ürün', 'Adet', 'Tutar'], ...lines.map((l) => [name(l.posName), l.qty, money(l.revenue)])]);
 }
 
 const toTL = (k: number) => Math.round(k) / 100;
@@ -109,11 +202,20 @@ export function buildDayPayload(dayId: string) {
   if (!day) throw notFound('Gün');
   const summary = day.summary ?? computeSummary(db, day);
   const z = lafmaliyetZ(day, summary);
-  const lines = salesLines([day.id]);
-  const orderIds = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.dayId, day.id), eq(schema.orders.source, 'pos'))).all().map((o) => o.id);
-  const comps = orderIds.length
-    ? db.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, orderIds), eq(schema.orderItems.complimentary, true), eq(schema.orderItems.voided, false))).all()
+  const addonIds = addonSiteIds();
+  const { lines, names } = salesOf([day.id], addonIds);
+  // İkram: Z'nin `offRevenue`'u gibi yalnız kapanmış adisyonlardan (iptal edilen adisyonun ikramı tüketim değil);
+  // içeceğin ekleri ayrı kayıt, menü değeri satıştaki oranla bölünür
+  const closedIds = closedPosOrders([day.id]).map((o) => o.id);
+  const comps = closedIds.length
+    ? db.select().from(schema.orderItems).where(and(inArray(schema.orderItems.orderId, closedIds), eq(schema.orderItems.complimentary, true), eq(schema.orderItems.voided, false))).orderBy(asc(schema.orderItems.createdAt), asc(schema.orderItems.id)).all()
     : [];
+  // Banka POS'unun gördüğü ama Z'nin kart alanına girmeyen tutarlar (lafmaliyet kart farkını bunlarla açıklar)
+  const cardPays = db
+    .select({ orderId: schema.payments.orderId, amount: schema.payments.amount, tip: schema.payments.tip })
+    .from(schema.payments)
+    .where(and(eq(schema.payments.dayId, day.id), eq(schema.payments.zField, 'card'), isNull(schema.payments.refundedAt)))
+    .all();
   return {
     version: 1,
     source: 'lafpos',
@@ -137,17 +239,23 @@ export function buildDayPayload(dayId: string) {
       // lafmaliyet beklenen nakdi bunlarla LafPOS'unkine eşitler (docs/03-ENTEGRASYON.md §4)
       cashIn: z.cash_in,
       expectedCash: z.expected_cash,
+      // Kartla bahşiş ve kartla cari tahsilatı: banka POS'unda var, Z'nin `card` alanında yok (isteğe bağlı alanlar)
+      cardTips: toTL(cardPays.reduce((a, p) => a + (p.orderId ? p.tip : 0), 0)),
+      cardCollections: toTL(cardPays.reduce((a, p) => a + (p.orderId ? 0 : p.amount), 0)),
     },
     lines: lines.map((l) => ({ posName: l.posName, siteMenuId: l.siteMenuId, slot: l.slot, qty: l.qty, revenue: toTL(l.revenue), isService: l.isService })),
-    ikram: comps.map((i) => ({
-      posName: i.posName ?? i.name.toLocaleUpperCase('tr-TR'),
-      siteMenuId: i.extProductId,
-      slot: i.extProductId ? (i.size === 'L' ? 'L' : 'M') : null,
-      qty: i.qty,
-      menuValue: toTL(i.qty * i.unitPrice),
-      reason: i.compReason ?? '',
-    })),
-    payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel, count: p.count, amount: toTL(p.amount) })),
+    ikram: comps.flatMap((i) =>
+      itemParts(i, i.qty * i.unitPrice, addonIds).map((p) => ({
+        // Satış satırı yeniden adlandırıldıysa (aynı ad iki kaleme düştü) ikram da aynı adı taşır
+        posName: names.get(partKey(p)) ?? p.posName,
+        siteMenuId: p.siteMenuId,
+        slot: p.slot,
+        qty: p.qty,
+        menuValue: toTL(p.value),
+        reason: i.compReason ?? '',
+      })),
+    ),
+    payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel ?? null, count: p.count, amount: toTL(p.amount) })),
   };
 }
 

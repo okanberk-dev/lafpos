@@ -53,7 +53,7 @@ describe('akış', () => {
   it('e-Arşiv sonucu adisyonu kapatır; ödeme notu ve fişte belge no kalır', async () => {
     await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator' });
     let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 2 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 2 }] });
     const sent = await h.ok<{ receipt: { id: string; amount: number } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     const { applyResult } = await import('../server/okc/service');
     const result = { status: 'paid' as const, docKind: 'e_arsiv' as const, zNo: null, receiptNo: null, docId: 'LAF2026000000042', payments: [{ kind: 'kart' as const, amount: sent.receipt.amount, operatorId: null, description: null }] };
@@ -71,7 +71,7 @@ describe('akış', () => {
   it('Token seçili ama bilgileri yoksa sepet gitmez, eksik ayarlar adıyla söylenir', async () => {
     await h.ok('patron', 'PUT', '/okc/settings', { provider: 'tokenx' });
     let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const r = await h.call<{ code: string; error: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
     expect(r.status).toBe(409);
     expect(r.json).toMatchObject({ code: 'okc_not_configured' });

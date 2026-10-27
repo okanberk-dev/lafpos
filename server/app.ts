@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { env } from './env';
 import { type AppEnv, authMiddleware } from './lib/auth';
-import { HttpError } from './lib/http';
+import { constraintError, HttpError } from './lib/http';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { cashRoutes } from './routes/cash';
@@ -24,6 +24,11 @@ export function createApp() {
   app.onError((err, c) => {
     if (err instanceof HttpError) {
       return c.json({ error: err.message, code: err.code ?? null, ...(err.extra ?? {}) }, err.status);
+    }
+    const constraint = constraintError(err);
+    if (constraint) {
+      console.warn('[kısıt]', c.req.method, c.req.path, err.message);
+      return c.json({ error: constraint.message, code: constraint.code ?? null }, constraint.status);
     }
     console.error('[hata]', c.req.method, c.req.path, err);
     return c.json({ error: 'Beklenmeyen bir hata oluştu', code: 'internal' }, 500);

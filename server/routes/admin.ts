@@ -1,15 +1,18 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { z } from 'zod';
+import { posNameKey, posNamesOf, posSlotOf } from '@shared/pos-name';
+import { PAYMENT_CHANNELS } from '@shared/labels';
 import { ALL_PERMISSIONS, effectivePermissions, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
-import { type AppEnv, type AuthUser, can, hashPin, isValidPin, requirePermission } from '../lib/auth';
+import { type AppEnv, assertNotLocked, type AuthUser, can, clientKey, hashPin, isValidPin, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from '../lib/http';
+import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
+import { writeSiteAvailability } from '../sync/laffogato-orders';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
@@ -68,7 +71,7 @@ adminRoutes.patch('/categories/:id', async (c) => {
   if (!cat) throw notFound('Kategori');
   // Siteden gelen kategoride ad ve sıra sitenin; LafPOS'ta yalnız renk, istasyon ve görünürlük değişir
   const patch = cat.extSource ? { color: input.color, stationId: input.stationId, active: input.active } : input;
-  db.update(schema.categories).set(Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined))).where(eq(schema.categories.id, cat.id)).run();
+  db.update(schema.categories).set(patchFields(patch)).where(eq(schema.categories.id, cat.id)).run();
   changed('menu', 'category.updated', user.id);
   return c.json({ ok: true });
 });
@@ -79,7 +82,8 @@ const productLocal = z.object({
   description: z.string().max(300).nullish(),
   price: kurus,
   priceL: kurus.nullish(),
-  kdvRate: z.number().int().refine((v) => [0, 1, 10, 20].includes(v), 'KDV 0, 1, 10 ya da 20 olmalı'),
+  // %1 kullanılmaz: köşkün sattığı bütün gıda %10 (laffogato CLAUDE.md "KDV": %1 hiçbir üründe kullanılmaz)
+  kdvRate: z.number().int().refine((v) => [0, 10, 20].includes(v), 'KDV 0, 10 ya da 20 olmalı'),
   isService: z.boolean().optional(),
 });
 const productPos = z.object({
@@ -94,11 +98,34 @@ const productPos = z.object({
   sort: z.number().int().optional(),
 });
 
+type ProductRow = typeof schema.products.$inferSelect;
+
+/**
+ * lafmaliyet adı başka bir ürünün ya da boyun adıyla çakışmasın: lafmaliyet bir günde bir ada bir satır ister ve adı
+ * büyük / küçük harf farkı gözetmeden eşleştirir. Aynı adı taşıyan iki yerel ürün tek satırda toplanır (ModPOS'taki
+ * gibi), çakışma sayılmaz; siteye bağlı bir kalemin ya da boyun adını almak sayılır.
+ */
+function assertPosNameFree(self: Pick<ProductRow, 'name' | 'posName' | 'priceL' | 'extSource' | 'extId'> & { id: string | null }) {
+  if (!self.posName?.trim()) return;
+  const suffix = getSettings().posSizeSuffix;
+  const extOf = (p: Pick<ProductRow, 'extSource' | 'extId'>) => (p.extSource === 'laffogato' ? p.extId : null);
+  const rowKey = (p: Pick<ProductRow, 'extSource' | 'extId'>, size: 'M' | 'L' | 'TEK') => `${extOf(p) ?? ''}|${posSlotOf(extOf(p), size) ?? ''}`;
+  const mine = posNamesOf(self, suffix).map((n) => ({ ...n, key: posNameKey(n.name), row: rowKey(self, n.size) }));
+  const others = db.select().from(schema.products).all().filter((p) => p.id !== self.id);
+  for (const o of others) {
+    for (const n of posNamesOf(o, suffix)) {
+      const hit = mine.find((m) => m.key === posNameKey(n.name) && m.row !== rowKey(o, n.size));
+      if (hit) throw conflict(`"${hit.name}" lafmaliyet adı ${o.name}${n.size === 'TEK' ? '' : ` (${n.size})`} ürününde kullanılıyor; başka bir ad yazın`, 'pos_name_taken');
+    }
+  }
+}
+
 adminRoutes.post('/products', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'menu.yonet');
   const input = await body(c, productLocal.merge(productPos));
   if (!db.select().from(schema.categories).where(eq(schema.categories.id, input.categoryId)).get()) throw notFound('Kategori');
+  assertPosNameFree({ id: null, name: input.name, posName: input.posName ?? null, priceL: input.priceL ?? null, extSource: null, extId: null });
   const id = ulid();
   db.insert(schema.products)
     .values({ id, ...input, priceL: input.priceL ?? null, isService: input.isService ?? false, active: true })
@@ -117,13 +144,27 @@ adminRoutes.patch('/products/:id', async (c) => {
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
   }
+  // Yalnız lafmaliyet adı değişiyorsa denetlenir: eski bir çakışma istasyon ya da renk kaydını engellemesin
+  const next = { ...p, name: input.name ?? p.name, priceL: input.priceL !== undefined ? input.priceL : p.priceL, posName: input.posName !== undefined ? input.posName : p.posName };
+  const suffix = getSettings().posSizeSuffix;
+  const namesOf = (x: typeof next) => posNamesOf(x, suffix).map((n) => `${n.size}:${posNameKey(n.name)}`).join('|');
+  if (namesOf(next) !== namesOf(p)) assertPosNameFree(next);
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
-  if (patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0) (patch as Record<string, unknown>).active = true;
+  const refilled = input.portionsLeft != null && input.portionsLeft > 0;
+  if (refilled) (patch as Record<string, unknown>).active = true;
+  // Porsiyonu biten ürün sitede de Tükendi yapılmıştı: sayaç dolunca önce site açılır (Satışta bilgisinin sahibi),
+  // kabul etmezse LafPOS'ta da değişmez; yoksa sonraki menü eşitlemesi ürünü yeniden kapatırdı
+  const site = refilled && !p.active ? await writeSiteAvailability(p, true, user.name) : null;
   db.update(schema.products).set({ ...patch, updatedAt: Date.now() }).where(eq(schema.products.id, p.id)).run();
   if (input.price !== undefined && input.price !== p.price) {
     changed('menu', 'product.updated', user.id, { action: 'menu.price', message: `${user.name} ${p.name} fiyatını değiştirdi` });
+  } else if (site) {
+    changed('menu', 'product.available', user.id, {
+      action: 'product.available',
+      message: `${user.name}: ${p.name} porsiyon sayacı ${input.portionsLeft} yapıldı, satışa açıldı${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+    });
   } else changed('menu', 'product.updated', user.id);
-  return c.json({ ok: true });
+  return c.json({ ok: true, ...(site ? { site } : {}) });
 });
 
 /** Yerel ürünü kaldırır: hiç satılmadıysa siler, satıldıysa gizler (geçmiş raporlar bozulmasın) */
@@ -195,9 +236,13 @@ adminRoutes.put('/option-groups/:id', async (c) => {
 
 const happyShape = z.object({
   name: z.string().min(1).max(60),
-  days: z.array(z.number().int().min(1).max(7)).min(1),
-  start: z.string().regex(/^\d{2}:\d{2}$/),
-  end: z.string().regex(/^\d{2}:\d{2}$/),
+  // Haftanın günleri (1 pazartesi … 7 pazar), tekrarsız ve sıralı
+  days: z
+    .array(z.number().int().min(1).max(7))
+    .min(1)
+    .transform((d) => [...new Set(d)].sort((a, b) => a - b)),
+  start: clockTime,
+  end: clockTime,
   percent: z.number().int().min(1).max(100),
   categoryIds: z.array(z.string()).default([]),
   productIds: z.array(z.string()).default([]),
@@ -255,7 +300,9 @@ adminRoutes.patch('/sections/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, z.object({ name: z.string().min(1).max(40).optional(), active: z.boolean().optional(), sort: z.number().int().optional() }));
-  db.update(schema.sections).set(input).where(eq(schema.sections.id, c.req.param('id'))).run();
+  const section = db.select({ id: schema.sections.id }).from(schema.sections).where(eq(schema.sections.id, c.req.param('id'))).get();
+  if (!section) throw notFound('Bölüm');
+  db.update(schema.sections).set(patchFields(input)).where(eq(schema.sections.id, section.id)).run();
   changed('tables', 'section.updated', user.id);
   return c.json({ ok: true });
 });
@@ -290,12 +337,15 @@ adminRoutes.patch('/tables/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, patchOf(tableShape));
-  const id = c.req.param('id');
+  const table = db.select({ id: schema.tables.id }).from(schema.tables).where(eq(schema.tables.id, c.req.param('id'))).get();
+  if (!table) throw notFound('Masa');
+  const id = table.id;
+  const fields = patchFields(input);
   if (input.active === false) {
     const open = db.select({ id: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.tableId, id), eq(schema.orders.status, 'acik'))).get();
     if (open) throw conflict('Açık adisyonu olan masa kaldırılamaz');
   }
-  db.update(schema.tables).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.tables.id, id)).run();
+  db.update(schema.tables).set(fields).where(eq(schema.tables.id, id)).run();
   changed('tables', 'table.updated', user.id);
   return c.json({ ok: true });
 });
@@ -331,7 +381,9 @@ adminRoutes.patch('/stations/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, z.object({ name: z.string().min(1).max(30).optional(), active: z.boolean().optional(), color: z.string().optional(), printerId: z.string().nullish() }));
-  db.update(schema.stations).set(input).where(eq(schema.stations.id, c.req.param('id'))).run();
+  const station = db.select({ id: schema.stations.id }).from(schema.stations).where(eq(schema.stations.id, c.req.param('id'))).get();
+  if (!station) throw notFound('İstasyon');
+  db.update(schema.stations).set(patchFields(input)).where(eq(schema.stations.id, station.id)).run();
   changed('menu', 'station.updated', user.id);
   return c.json({ ok: true });
 });
@@ -402,6 +454,8 @@ adminRoutes.put('/roles/:role', async (c) => {
   if (next.length === defaults.length && next.every((p) => defaults.includes(p))) delete matrix[role];
   else matrix[role] = next;
   updateSettings({ rolePermissions: matrix });
+  // Açık canlı akışlar yeni yetkiyle süzülsün (patron paneli alınanın uyarıları kesilir)
+  sessionsChanged();
   const added = next.filter((p) => !before.includes(p));
   const removed = before.filter((p) => !next.includes(p));
   if (added.length || removed.length) {
@@ -458,10 +512,36 @@ function assertPatronRemains(t: Tx | DB, changedId: string, next: { role: Role; 
   if (!stays && !others.length) throw conflict('Personel yönetimi olan son etkin patron hesabı kapatılamaz, rolü değiştirilemez', 'last_patron');
 }
 
-function pinFree(pin: string, exceptUserId?: string) {
+/**
+ * PIN tekil olmalı (giriş yalnız PIN'le), bu yüzden "kullanılamaz" yanıtı PIN'in başka birinde olduğunu söyler.
+ * Personel yöneticisi kukla hesaba PIN verip tarayarak patronun PIN'ini bulamasın (denetim, 26 Eki 2026): patron
+ * olmayanın her PIN verme denemesi kişi ve cihaz başına sayılır (uzun vadede saatte 12, kilit denetim kaydına
+ * alarm yazar), yanıt PIN'in kimde olduğunu söylemez, çakışma denetim kaydına düşer. Patron her hesabı zaten
+ * yönetir (PIN'ini değiştirip girebilir); kurulumda bütün ekibe art arda PIN verir, sınır ona uygulanmaz.
+ */
+function pinFree(c: Context<AppEnv>, pin: string, target: { id?: string; name: string }) {
+  const actor = c.get('user');
   if (!isValidPin(pin)) throw bad('PIN 4-6 haneli rakam olmalı', 'pin_invalid');
+  if (actor.role !== 'patron') {
+    const addr = clientKey(c);
+    assertNotLocked('pin', addr, actor.id);
+    recordPinChoice(addr, actor);
+  }
   const other = db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get();
-  if (other && other.id !== exceptUserId) throw conflict('Bu PIN başka bir personelde; farklı bir PIN seçin', 'pin_taken');
+  if (other && other.id !== target.id) {
+    // Kaydı okuyan yönetici de PIN'in kimde olduğunu metinden öğrenmesin; kayıt PIN sahibine bağlı (entityId)
+    const fx = new Effects();
+    fx.audit(db, {
+      userId: actor.id,
+      action: 'user.pin_conflict',
+      severity: actor.role === 'patron' ? 'info' : 'uyari',
+      entity: 'user',
+      entityId: other.id,
+      message: `${actor.name}, ${target.name} için başka bir personelin kullandığı PIN'i seçti; PIN verilmedi. O personelin PIN'i değiştirilmeli`,
+    });
+    fx.flush();
+    throw conflict('Bu PIN kullanılamaz; farklı bir PIN seçin', 'pin_taken');
+  }
 }
 
 adminRoutes.post('/users', async (c) => {
@@ -471,7 +551,7 @@ adminRoutes.post('/users', async (c) => {
   if (input.role === 'patron' && user.role !== 'patron') throw conflict('Patron hesabını yalnız patron açabilir');
   assertCanGrant(user, [...userPermissions({ role: input.role, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[] })]);
   assertDiscountCap(user, input.maxDiscountPct);
-  pinFree(input.pin);
+  pinFree(c, input.pin, { name: input.name });
   const id = ulid();
   db.insert(schema.users).values({ id, name: input.name, role: input.role, color: input.color, maxDiscountPct: input.maxDiscountPct, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[], pinHash: hashPin(input.pin) }).run();
   changed('users', 'user.created', user.id, { action: 'user.create', message: `${user.name} personel ekledi: ${input.name} (${input.role})` });
@@ -505,14 +585,17 @@ adminRoutes.patch('/users/:id', async (c) => {
   if (input.permGrant) patch.permGrant = input.permGrant as Permission[];
   if (input.permRevoke) patch.permRevoke = input.permRevoke as Permission[];
   if (input.pin) {
-    pinFree(input.pin, target.id);
+    pinFree(c, input.pin, target);
     patch.pinHash = hashPin(input.pin);
   }
+  const fields = patchFields(patch);
   tx((t) => {
-    t.update(schema.users).set(patch).where(eq(schema.users.id, target.id)).run();
+    t.update(schema.users).set(fields).where(eq(schema.users.id, target.id)).run();
     // Yetki ya da PIN değişince açık oturumlar kapanır
     if (input.pin || input.role || input.permGrant || input.permRevoke || input.active === false) t.delete(schema.sessions).where(eq(schema.sessions.userId, target.id)).run();
   });
+  // Oturumu kapanan ya da yetkisi değişen kişinin açık canlı akışı hemen kapanır ya da yeni yetkiyle süzülür
+  sessionsChanged();
   // Patron PIN'ini değiştirince kurulum modu kapanır (örnek PIN'ler giriş ekranından kalkar)
   if (input.pin && target.role === 'patron' && getSettings().demoMode) updateSettings({ demoMode: false });
   changed('users', 'user.updated', user.id, { action: 'user.update', message: `${user.name} ${target.name} hesabını güncelledi${input.pin ? ' (PIN değişti)' : ''}` });
@@ -525,11 +608,21 @@ const methodShape = z.object({
   name: z.string().min(1).max(30),
   kind: z.enum(['nakit', 'kart', 'yemek', 'havale', 'cari', 'online', 'diger']),
   zField: z.enum(['cash', 'card', 'meal_card', 'online', 'other']),
-  channel: z.string().max(30).nullish(),
+  // lafmaliyet'in komisyon anahtarı: serbest metin değil, seçim (lafmaliyet src/lib/commission/channels.ts)
+  channel: z.enum(PAYMENT_CHANNELS).nullish(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#245c43'),
   sort: z.number().int().default(20),
   active: z.boolean().default(true),
 });
+/**
+ * Nakit türü (`kind = 'nakit'`; para üstü, çekmece) yalnız Z'nin Nakit alanına gider, Nakit alanına da yalnız nakit
+ * türü. Beklenen nakit ve Z nakdi ikisi de ödemeye dondurulan `zField`'dan sayılır (services/days.ts); eşleşme,
+ * kasada nakit alınan paranın beklenen nakde de girmesini sağlar.
+ */
+function assertCashPair(kind: string, zField: string) {
+  if ((kind === 'nakit') !== (zField === 'cash')) throw bad('Nakit türü yalnız lafmaliyet\'in Nakit alanına bağlanır; Nakit alanına da yalnız nakit türü', 'cash_pair');
+}
+
 adminRoutes.get('/payment-methods', (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   return c.json(db.select().from(schema.paymentMethods).orderBy(asc(schema.paymentMethods.sort)).all());
@@ -538,6 +631,7 @@ adminRoutes.post('/payment-methods', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, methodShape);
+  assertCashPair(input.kind, input.zField);
   const id = ulid();
   db.insert(schema.paymentMethods).values({ id, ...input, channel: input.channel ?? null }).run();
   changed('settings', 'method.created', user.id);
@@ -547,7 +641,11 @@ adminRoutes.patch('/payment-methods/:id', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, patchOf(methodShape));
-  db.update(schema.paymentMethods).set(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined))).where(eq(schema.paymentMethods.id, c.req.param('id'))).run();
+  const m = db.select().from(schema.paymentMethods).where(eq(schema.paymentMethods.id, c.req.param('id'))).get();
+  if (!m) throw notFound('Ödeme türü');
+  // Yalnız tür ya da alan değişiyorsa: eski bir uyumsuz kayıt kapatılabilsin ("Kapat" yalnız `active` gönderir)
+  if (input.kind !== undefined || input.zField !== undefined) assertCashPair(input.kind ?? m.kind, input.zField ?? m.zField);
+  db.update(schema.paymentMethods).set(patchFields(input)).where(eq(schema.paymentMethods.id, m.id)).run();
   changed('settings', 'method.updated', user.id);
   return c.json({ ok: true });
 });

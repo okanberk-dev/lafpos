@@ -57,7 +57,15 @@ describe('LafPOS uçtan uca', () => {
   it('kurulum: site menüsü, yerel ürünler, seçenekler, masa planı', () => {
     expect(boot.products.length).toBeGreaterThan(80);
     expect(product('Latte').priceL).toBeGreaterThan(product('Latte').price);
-    expect(product('Türk kahvesi').optionGroupIds.length).toBe(1);
+    // Türk kahvesi sitenin kalemi (mnu-0019); kasaya özel şeker grubu ona bağlı, sitenin sayaçlı şekeri değil
+    const tk = product('Türk Kahvesi');
+    expect(tk.extId).toBe('mnu-0019');
+    const groupsOf = (ids: string[]) => ids.map((id) => boot.optionGroups.find((g) => g.id === id)).filter((g) => !!g);
+    expect(groupsOf(tk.optionGroupIds).filter((g) => g.name === 'Şeker').map((g) => [g.extKey, g.required])).toEqual([[null, true]]);
+    expect(boot.products.filter((p) => /türk kahvesi/i.test(p.name))).toHaveLength(1);
+    // Yenilebilir bardak bardak seçeneği değil, ayrı ürün (lafmaliyet'te ayrı satır)
+    expect(boot.optionGroups.find((g) => g.name === 'Bardak')!.items.map((i) => i.name)).toEqual(['Cam bardak', 'Karton bardak']);
+    expect(product('Yenilebilir bardak').posName).toBe('YENİLEBİLİR BARDAK');
     expect(boot.tables.some((t) => t.kind === 'oda')).toBe(true);
     expect(boot.integrations.okc.provider).toBe('simulator');
     expect('cost' in boot.products[0]).toBe(false);
@@ -76,13 +84,13 @@ describe('LafPOS uçtan uca', () => {
     masa = await ok<OrderDTO>('garson', 'POST', `/orders/${masa.id}/items`, {
       items: [
         { productId: product('Latte').id, size: 'L', qty: 1, options: [{ itemId: optionItem('milk', 'oat').id }, { itemId: optionItem('syrup', 'vanilla').id }, { itemId: optionItem('extraShot', 'extraShot').id, qty: 1 }] },
-        { productId: product('Türk kahvesi').id, qty: 2 },
+        { productId: product('Türk Kahvesi').id, qty: 2 },
       ],
     });
     const latte = masa.items.find((i) => i.name === 'Latte')!;
     expect(latte.unitPrice).toBe(product('Latte').priceL! + 2500 + 5000 + 5000);
     expect(latte.optionsText).toContain('Yulaf');
-    const tk = masa.items.find((i) => i.name === 'Türk kahvesi')!;
+    const tk = masa.items.find((i) => i.name === 'Türk Kahvesi')!;
     expect(tk.optionsText).toBe('Orta');
   });
 
@@ -95,8 +103,8 @@ describe('LafPOS uçtan uca', () => {
   });
 
   it('kalem bazlı kart + nakit ödeme, para üstü, adisyon kapanır', async () => {
-    const tk = masa.items.find((i) => i.name === 'Türk kahvesi')!;
-    const first = await ok<{ order: OrderDTO; closed: boolean }>('kasa', 'POST', `/orders/${masa.id}/payments`, { methodId: method('Kredi kartı').id, amount: 0, items: [{ itemId: tk.id, qty: 2 }] });
+    const tk = masa.items.find((i) => i.name === 'Türk Kahvesi')!;
+    const first = await ok<{ order: OrderDTO; closed: boolean }>('kasa', 'POST', `/orders/${masa.id}/payments`, { methodId: method('Kredi kartı').id, amount: masa.totals.lineNet[tk.id], items: [{ itemId: tk.id, qty: 2 }] });
     expect(first.closed).toBe(false);
     const due = first.order.total - first.order.paid;
     const second = await ok<{ order: OrderDTO; closed: boolean; change: number }>('kasa', 'POST', `/orders/${masa.id}/payments`, { methodId: method('Nakit').id, amount: due, given: due + 10000 });
@@ -162,7 +170,7 @@ describe('LafPOS uçtan uca', () => {
 
     // Masasız açık adisyon patron panelinde türünün adıyla görünür, ham anahtarla ("tezgah") değil
     const t = await ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
-    const withItem = await ok<OrderDTO>('kasa', 'POST', `/orders/${t.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    const withItem = await ok<OrderDTO>('kasa', 'POST', `/orders/${t.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     const after = await ok<{ openChecks: { id: string; place: string }[] }>('patron', 'GET', '/reports/patron');
     expect(after.openChecks.find((c) => c.id === t.id)?.place).toBe('Tezgâh');
     await ok('kasa', 'POST', `/orders/${t.id}/payments`, { methodId: method('Nakit').id, amount: withItem.total });
@@ -208,7 +216,7 @@ describe('LafPOS uçtan uca', () => {
     expect(z.lafmaliyet.z_total).toBeCloseTo(z.summary.netSales / 100, 2);
     const payload = await ok<{ lines: { posName: string; siteMenuId: string | null; slot: string | null; qty: number; revenue: number }[]; z: { zTotal: number } }>('patron', 'GET', `/sync/lafmaliyet/gun/${z.day.id}`);
     const names = payload.lines.map((l) => l.posName);
-    expect(names).toEqual(expect.arrayContaining(['LATTE LARGE', 'LATTE MEDIUM', 'EXTRA SHOT', 'SYRUP', 'ALTERNATIF SÜT', 'TÜRK KAHVESİ', 'KARAOKE ODASI']));
+    expect(names).toEqual(expect.arrayContaining(['LATTE LARGE', 'LATTE MEDIUM', 'EXTRA SHOT', 'SYRUP', 'ALTERNATIF SÜT', 'TÜRK KAHVESİ MEDIUM', 'KARAOKE ODASI']));
     expect(new Set(names).size).toBe(names.length);
     const latteL = payload.lines.find((l) => l.posName === 'LATTE LARGE')!;
     expect(latteL.siteMenuId).toMatch(/^mnu-/);

@@ -42,6 +42,8 @@ function useWidth<T extends HTMLElement>() {
 
 export interface ColumnDatum {
   label: string;
+  /** İpucunda etiket yerine (ör. "06:00 · ertesi gün") */
+  title?: string;
   value: number;
   compare?: number | null;
 }
@@ -171,7 +173,7 @@ export function ColumnChart({
             className="pointer-events-none absolute z-10 min-w-36 rounded-xl border border-line bg-surface px-3 py-2 text-xs shadow-[var(--shadow-pop)]"
             style={{ left: Math.min(width - 160, Math.max(0, padL + band * hover + band / 2 - 72)), top: 0 }}
           >
-            <div className="font-semibold text-ink">{data[hover].label}</div>
+            <div className="font-semibold text-ink">{data[hover].title ?? data[hover].label}</div>
             <div className="mt-1 flex items-center justify-between gap-3 text-ink-2">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm" style={{ background: 'var(--chart-accent)' }} />

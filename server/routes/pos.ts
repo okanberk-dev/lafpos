@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db, schema, tx } from '../db/client';
 import { type AppEnv, actorFrom, blindOrder, needDirect } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { body, kurus, query } from '../lib/http';
+import { body, isoDateTime, kurus, query } from '../lib/http';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets } from '../services/floor';
@@ -75,7 +75,7 @@ posRoutes.post('/orders', async (c) => {
       deliveryName: z.string().max(80).nullish(),
       deliveryPhone: z.string().max(30).nullish(),
       deliveryAddress: z.string().max(400).nullish(),
-      scheduledFor: z.string().max(40).nullish(),
+      scheduledFor: isoDateTime.nullish(),
     }),
   );
   const actor = actorFrom(c);
@@ -212,6 +212,8 @@ posRoutes.post('/orders/:id/payments', async (c) => {
       note: z.string().max(200).nullish(),
       share: z.boolean().optional(),
       shareNo: z.number().int().min(1).max(30).optional(),
+      // Ödeme denemesinin kimliği (istemci üretir): yeniden gelen istek ikinci kez yazılmaz
+      requestId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).nullish(),
       ...approver,
     }),
   );
@@ -288,7 +290,8 @@ posRoutes.get('/kitchen', (c) => {
 posRoutes.post('/kitchen/status', async (c) => {
   const input = await body(
     c,
-    z.object({ itemIds: z.array(z.string()).min(1).max(100), status: z.enum(['yeni', 'hazirlaniyor', 'hazir', 'servis']).optional() }),
+    // "yeni"ye dönüş yok: başlamış kalemin başlama zamanı silinip onaysız iptal açılırdı (orders.setItemsStatus)
+    z.object({ itemIds: z.array(z.string()).min(1).max(100), status: z.enum(['hazirlaniyor', 'hazir', 'servis']).optional() }),
   );
   const actor = actorFrom(c);
   write((t, fx) => orders.setItemsStatus(t, actor, fx, input));

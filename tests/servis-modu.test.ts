@@ -258,7 +258,7 @@ describe('masa no / numaratör (yarı self servis)', () => {
     expect((await h.call('garson', 'PUT', `/orders/${dine.id}/numarator`, { numarator: '3' })).status).toBe(400);
 
     const cancelled = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Can' });
-    await h.ok('kasa', 'POST', `/orders/${cancelled.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${cancelled.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     await h.ok('mudur', 'POST', `/orders/${cancelled.id}/cancel`, { reason: 'Müşteri vazgeçti' });
     expect((await h.call('kasa', 'PUT', `/orders/${cancelled.id}/numarator`, { numarator: '3' })).status).toBe(409);
 
@@ -282,7 +282,7 @@ describe('masa no / numaratör (yarı self servis)', () => {
     await h.ok('patron', 'PUT', '/admin/settings', { serviceMode: 'self' });
     const table = h.boot.tables.filter((t) => t.kind !== 'oda')[3]!;
     const dine = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table.id });
-    const sent = await h.ok<OrderDTO>('garson', 'POST', `/orders/${dine.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 2 }] });
+    const sent = await h.ok<OrderDTO>('garson', 'POST', `/orders/${dine.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 2 }] });
     expect(sent.items[0].stationId).toBeTruthy();
     const card = h.boot.paymentMethods.find((m) => m.kind === 'kart')!;
     const res = await h.ok<{ closed: boolean }>('kasa', 'POST', `/orders/${dine.id}/payments`, { methodId: card.id, amount: sent.total });

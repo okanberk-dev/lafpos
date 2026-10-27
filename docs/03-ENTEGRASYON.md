@@ -43,7 +43,18 @@ Bir alan burada yoksa sistemler arasında gitmez (KVKK beyaz liste kuralı).
 | `customization.milks/roasts/syrups/extraShotMinor/sugarMax` | `option_groups` + `option_items` (`extKey`: `milk`, `roast`, `syrup`, `extraShot`, `sugar`; kalem `code`: site kimliği) | `dessert`, `snack`, `extras` kategorilerindeki ürünlere bağlanmaz (sitenin `NON_CUSTOMIZABLE_CATEGORIES` kuralı) |
 
 Senkron önce **önizleme** üretir: yeni ürün, fiyatı değişen, adı değişen, KDV'si değişen, siteden kalkan.
-Uygulama tek veritabanı işleminde yapılır, `audit_log`'a "menü senkronu" olarak yazılır.
+Uygulama tek veritabanı işleminde yapılır, `audit_log`'a "menü senkronu" olarak yazılır. POS sırası yalnız ürün
+ilk gelirken sitenin sırasından verilir; sonra LafPOS'undur.
+
+**Satışta / Tükendi:**
+
+- Anahtar varsa imzalı panelin `isActive` bilgisi geçerlidir (CDN'deki herkese açık menü birkaç dakika eski
+  olabilir): sitede Tükendi olan ürün, eski menü listelese de açılmaz; sitede yeniden açılan, eski menü
+  listelemese de kapanmaz.
+- Anahtar yokken herkese açık menüde listelenen satışta sayılır; yalnız son eşitlemede de listelenmiş ve o
+  zamandan beri LafPOS'ta Tükendi yapılmış ürün (site değişmedikçe) kapalı kalır.
+- Porsiyon sayacı biten ürünü site açamaz. Sayaç Yönetim › Menü'de doldurulunca Tükendi ürün önce sitede
+  satışa açılır (`POST /api/panel/menu`); site kabul etmezse sayaç da değişmez.
 
 ### 2.3 İmzalı panel uçları (anahtar verilirse)
 
@@ -65,7 +76,7 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 | Uç | LafPOS kullanımı | Sıklık |
 | --- | --- | --- |
 | `GET /api/panel/menu` | Tükendi kalemleri de görmek (`isActive`) | menü senkronunda, en çok 5 dk'da bir |
-| `POST /api/panel/menu {id, isActive, actor}` | POS'ta Tükendi / Satışa aç → önce site, 2xx gelince yerel | kullanıcı işlemi |
+| `POST /api/panel/menu {id, isActive, actor}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`) | kullanıcı işlemi |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı | 5 dk'da bir + ekran açılınca + elle |
 | `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi | kullanıcı işlemi |
 
@@ -74,18 +85,37 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 **Sipariş sürüm sinyali:** `GET /api/pos/orders/version` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version": "<metin>" }`.
 Sitenin veri önbelleğinden (`live:orders` etiketi) gelir, veritabanına dokunmaz; sipariş yazımı etiketi
 düşürünce değer değişir. LafPOS bunu 20 saniyede bir sorar, değer değişince `GET /api/panel/orders`'ı çeker.
-Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer.
+Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer. Sürüm ancak çekme
+başarılı olunca kaydedilir: başarısız çekme her 20 saniyede değil, 5 dakika dolunca yeniden denenir; sinyal
+okunamazsa (5xx, bozuk gövde) 5 dakikalık çekmeye düşülür.
+
+`GET /api/panel/orders` yanıtında `orders` dizisi yoksa (bakım sayfası, ağ geçidi, beklenmeyen gövde) çekme
+başarısız sayılır, hiçbir sipariş kapatılmaz. Listede olmayan açık sipariş yalnız liste tamken bitmiş sayılır:
+`complete: false` (sitenin sınırını aşan kesik liste) ya da okunamayan kalem varsa kapatılmaz. Yerelde kapanmış
+ama sitede hâlâ açık görünen sipariş yeniden açılır. Liste, istendiği andaki hâldir: istek gittikten sonra
+LafPOS'ta değişen sipariş (kasada "Teslim edildi", aşama, araya giren daha yeni bir çekmenin getirdiği yeni
+sipariş) o listeyle ne yeniden açılır ne kapanır ne de aşaması geri alınır; sonraki çekme geçerlidir.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
-tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım).
-`fulfillment = 'table'` olan sipariş, `label` içindeki masa adı ya da `tables.siteTableCode` eşlemesiyle
-masa planında ilgili masada rozet olarak görünür.
+tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım). Raporlarda
+"Online (sitede ödendi)" olarak görünür: gün açıksa açık güne, değilse ödeme anının iş gününe (05:00 kuralı)
+yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşınır.
+`fulfillment = 'table'` olan sipariş, `tables.siteTableCode` ya da `label` içindeki masa adı eşlemesiyle
+("S2", "Masa S2"; büyük/küçük harf farkı yok, birden çok masaya uyan ad eşlenmez) masa planında ilgili masada
+rozet olarak görünür. Masayı tutmaz: garson masaya dokununca kendi adisyonunu açar (masada yalnız online
+sipariş varsa seçimde "Yeni hesap aç"), masa taşımada dolu sayılmaz ve online siparişle birleştirilmez.
 
 ## 3. LafPOS → lafmaliyet: bugün (kod değişmeden)
 
 ### 3.1 Ürün satış listesi (Satışlar ekranına yükleme)
 
-`GET /api/integrations/lafmaliyet/satislar.csv?from=YYYY-MM-DD&to=YYYY-MM-DD` (yetki: `rapor.gor`)
+`GET /api/sync/lafmaliyet/satislar.csv?from=YYYY-MM-DD&to=YYYY-MM-DD` (yetki: `rapor.gor`; Raporlar › Aktarım)
+
+Dönem raporlarla aynı denetlenir: varsayılanı bugün (açık iş günü), olmayan tarih 422 `validation`, en çok
+400 gün (daha uzunu 422 `range_too_long`), ters verilen tarihler çevrilir. Hücreler `server/lib/csv.ts` ile yazılır:
+lafmaliyet'in yapıştırma ayrıştırıcısı tırnak bilmediği ve sekmeyi ayraç saydığı için POS adındaki satır sonu ve
+sekme boşluğa, noktalı virgül virgüle döner (her satır bir ürün, üç hücre); `=`, `+`, `-`, `@` ile başlayan adın
+başına `'` konur (Excel'de formül çalışmaz, lafmaliyet adın başındaki `'`'u atar).
 
 ```
 Ürün;Adet;Tutar
@@ -96,12 +126,24 @@ KARAOKE ODASI;3;3.000,00
 
 - lafmaliyet'in ayrıştırıcısı (`src/lib/calc/pos-paste.ts`) başlıktaki "Ürün / Adet / Tutar"ı tanır,
   noktalı virgülü ve Türkçe ondalığı okur. Tutar KDV dahil.
-- **POS adı:** ürünün `posName` alanı doluysa o; yoksa `BÜYÜK HARF ad + boy eki` (M → `MEDIUM`,
-  L → `LARGE`, tek boy ek yok). Ekler ayarlardan değişir. lafmaliyet I/İ ve büyük/küçük harf farkını yok
-  saydığı için ModPOS'tan öğrenilmiş `pos_mappings` kayıtları çalışmaya devam eder; tutmayan ad bir kez
-  eşlenir.
+- **POS adı** (`shared/pos-name.ts`, kalem satışta dondurulur): ürünün `posName`'i yoksa `BÜYÜK HARF ad + boy
+  eki` (M → `MEDIUM`, L → `LARGE`, tek boy ek yok; ekler ayarlardan değişir). `posName` doluysa tek boylu üründe
+  olduğu gibi; **iki boylu üründe taban addır** ve boy eki eklenir (`LATTE` → `LATTE MEDIUM` / `LATTE LARGE`;
+  sonuna boy eki yazılmışsa ikinci kez eklenmez). Boşluklar lafmaliyet'teki gibi sadeleşir (`trim`, art arda
+  boşluk tek); boş ya da yalnız boşluk `posName` yok sayılır, ad ürünün adından gelir (oda satırı dahil).
+  Satılmış iki boylu kalem gün paketine satılan boyun ekiyle gider (`soldPosName`): boy eki olmadan saklanmış
+  eski kalem (`LATTE`) de `LATTE LARGE` olur, M ve L tek satırda birleşmez.
+  lafmaliyet I/İ ve büyük/küçük harf farkını yok saydığı için ModPOS'tan öğrenilmiş `pos_mappings` kayıtları
+  çalışmaya devam eder; tutmayan ad bir kez eşlenir.
+- **Satır anahtarı `posName | siteMenuId | slot`** (ad harf farkı gözetmeden). lafmaliyet bir günde bir ada bir
+  satır ister; aynı ad iki ayrı kaleme ya da boya düşerse ikincisine boy eki, yine çakışırsa site kimliği eklenir
+  (`KAHVE MEDIUM (mnu-0006)`). Siteye bağlı satır `siteMenuId + slot` ile eşleştiği için ad yalnız bağsız (yerel)
+  üründe önemlidir; bağsız satır adını korur. Aynı adı taşıyan iki yerel ürün tek satırda toplanır (ModPOS'taki
+  gibi). Yönetim, başka bir ürünün ya da boyun adını taşıyacak `posName`'i 409 `pos_name_taken` ile reddeder.
 - İkram ve iptal satırları listeye girmez (ciro değil); online ödenmiş siparişler girmez.
 - Karaoke gibi `isService` ürünler aynı listede çıkar; lafmaliyet bunları HİZMET olarak eşler.
+- Masa servis ücreti `SERVİS ÜCRETİ` adıyla ayrı hizmet satırıdır (adet: servis ücretli adisyon sayısı).
+  Satırların toplamı günün Z toplamına (`z_total`) eşittir.
 
 ### 3.2 Z özeti (Kasa raporu formuna)
 
@@ -111,14 +153,14 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 | lafmaliyet alanı | LafPOS kaynağı |
 | --- | --- |
 | `z_no` | `business_days.zNo` |
-| `receipts` | kapanan adisyon sayısı (online hariç) |
+| `receipts` | tutarı 0'dan büyük kapanan POS adisyonu sayısı (online, iptal ve tamamı ikram adisyonlar hariç) |
 | `z_total` | ödemelerin toplamı (cari tahsilat ve bahşiş hariç) |
-| `cash` | `zField = cash` ödeme türleri |
+| `cash` | `zField = cash` ödemeler (ödeme anında dondurulan Z alanı; beklenen nakit de aynı alandan hesaplanır, ödeme türü sonradan değişse de ikisi aynı ödemeleri sayar. Yönetim Z'de nakdi yalnız Nakit türüne verir) |
 | `card` | `zField = card` |
 | `meal_card` | `zField = meal_card` (Pluxee, Multinet, Edenred, Setcard, Metropol) |
 | `online` | `zField = online` (yemek platformları) |
 | `other` | `zField = other` (havale, açık hesap/cari dahil) |
-| `off_revenue` | ikram edilen kalemlerin menü değeri |
+| `off_revenue` | kapanmış adisyonlarda ikram edilen kalemlerin menü değeri |
 | `discounts` | kalem + adisyon indirimleri |
 | `opening_cash` | gün açılış nakiti |
 | `cash_out` | harcama türü kasa hareketleri |
@@ -129,6 +171,11 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 | `cash_diff` | sayılan − beklenen nakit |
 
 İş günü tarihi lafmaliyet ile aynı kuralla belirlenir: gün 05:00'ten önce açıldıysa önceki takvim günü.
+**Dünden açık kalan güne satış yazılmaz:** gün sonu alınmadan 05:00 geçerse yeni adisyon, kalem ve oda sayacı
+409 `stale_day` ile reddedilir ("Dünün günü açık (25 Ekim, Z 14). Önce gün sonunu alın"; Kasa ekranında aynı
+bant). Ödeme, iptal, hesap bölme (kalemi yeni adisyona taşımak yeni satış değildir) ve gün sonu serbesttir;
+böylece bugünün satışı lafmaliyet'e dünün tarihiyle gitmez. Otomatik gün sonu varsayılan kapalı kalır (sayımsız
+kapatır).
 **Bir iş gününe tek Z:** gün sonu alındıktan sonra aynı tarihte yeni gün açılmaz; kapanıştan sonra satış
 gerekirse kasa ekranındaki "Günü yeniden aç" (yetkili onayı, neden zorunlu, denetim kaydına alarm) aynı Z
 numarasıyla günü açar. Gün yeniden kapanınca lafmaliyet'e aynı tarih ve Z ile gider, öncekinin yerine geçer.
@@ -151,13 +198,15 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
     "cash": 12000, "card": 29110.5, "mealCard": 3100, "online": 0, "other": 1000,
     "offRevenue": 640, "discounts": 380,
     "openingCash": 1500, "cashOut": 450, "countedCash": 12980, "handedOver": 0, "cashDiff": -70,
-    "cashIn": 0, "expectedCash": 13050
+    "cashIn": 0, "expectedCash": 13050, "cardTips": 120, "cardCollections": 400
   },
   "lines": [
-    { "posName": "LATTE MEDIUM", "siteMenuId": "mnu-0003", "slot": "M", "qty": 42, "revenue": 8190, "isService": false }
+    { "posName": "LATTE MEDIUM", "siteMenuId": "mnu-0007", "slot": "M", "qty": 42, "revenue": 8190, "isService": false },
+    { "posName": "ALTERNATIF SÜT", "siteMenuId": "mnu-0082", "slot": "M", "qty": 9, "revenue": 175, "isService": false }
   ],
   "ikram": [
-    { "posName": "TIRAMISU", "siteMenuId": "mnu-0090", "slot": "M", "qty": 1, "menuValue": 260, "reason": "Doğum günü" }
+    { "posName": "LATTE LARGE", "siteMenuId": "mnu-0007", "slot": "L", "qty": 1, "menuValue": 210, "reason": "Doğum günü" },
+    { "posName": "EXTRA SHOT", "siteMenuId": "mnu-0081", "slot": "M", "qty": 1, "menuValue": 50, "reason": "Doğum günü" }
   ],
   "payments": [
     { "name": "Pluxee", "zField": "meal_card", "channel": "pluxee", "count": 7, "amount": 1850 }
@@ -171,9 +220,24 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   yalnız elle karışıklıkta olur.
 - `cashIn` ve `expectedCash` isteğe bağlıdır (eski gövdede yok): lafmaliyet beklenen nakdi bunlarla
   LafPOS'unkine eşitler; `cashIn` yoksa 0 sayar.
+- `cardTips` (kartla bahşiş) ve `cardCollections` (kartla cari tahsilatı) isteğe bağlıdır, TL: banka POS'unun
+  gördüğü ama Z'nin `card` alanına girmeyen tutarlar. lafmaliyet kart farkını bunlarla açıklar; okumayan sürüm
+  alanı atar (`z.object`), yani gönderim sırası serbesttir.
+- **Ekler** (süt, şurup, ekstra shot) içeceğin satırından ayrı satırdır: `ALTERNATIF SÜT`, `SYRUP`, `EXTRA SHOT`;
+  kimlik önce sitenin sabit kalemleri (`mnu-0082`, `mnu-0080`, `mnu-0081`), yoksa `extras` kategorisinde ada göre.
+  Seçim fiyata göre değil **koda göre**: `milk` kodu `normal` değilse (laktozsuz süt 0 TL'dir ama alternatif
+  süttür, ciro 0 satır), `syrup` kodu `none` değilse, ekstra shot adediyle. Satırın net cirosu ana ürün ve ekler
+  arasında liste fiyatları oranında bölünür.
+- `ikram` yalnız **kapanmış** POS adisyonlarından gelir (Z'nin `offRevenue`'uyla aynı kapsam; iptal edilen
+  adisyonun ikramı tüketim değildir); ikram edilen içeceğin ekleri ayrı kayıttır, menü değeri satıştaki oranla
+  bölünür. `ikram` menü değerlerinin toplamı `offRevenue`'a eşittir.
 - `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,
-  `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`…); Komisyon ekranı aylık kanal satışını buradan
-  doldurabilir.
+  `multinet`, `edenred`, `setcard`, `metropol`, `yemeksepeti`, `trendyol`, `getir`, `migros`; kanalsız türde
+  `null`, alan her zaman var). LafPOS'ta kanal serbest metin değil bu listeden seçilir (`shared/labels.ts`
+  `PAYMENT_CHANNELS`); Komisyon ekranı aylık kanal satışını buradan doldurabilir. Nakit türü (`kind = nakit`)
+  yalnız `zField = cash`'e bağlanır, `cash`'e de yalnız nakit türü. Beklenen nakit de Z'nin nakit alanı da
+  ödemeye dondurulan `zField`'dan sayılır: ödeme almış bir tür sonradan nakitten karta çevrilse de iki rakam
+  ayrışmaz.
 
 - Tutarlar TL (lafmaliyet'in para biçimi), iki ondalık. `lines` lafmaliyet'in planladığı
   `DailyProductSale` biçimiyle birebir (`date` gövdede, `productId` lafmaliyet'in `site_menu_id + slot`
@@ -185,8 +249,14 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   409 `{ error: "z_conflict" }`, 413, 503. 400, 409 ve 413 kalıcıdır: LafPOS tekrar denemez, kaydı giden
   kutusunda hata olarak gösterir (Yönetim › Genel bakış ve Entegrasyon); düzeltilince Kasa › Geçmiş günler'de
   günün Z raporundaki "Gönder" ile yeniden gider.
-- Aynı gün içinde `posName` tekildir (LafPOS satırları zaten ada göre toplar). lafmaliyet karşılığı:
+- Aynı gün içinde `posName` tekildir (§3.1 satır anahtarı ve çakışma kuralı). lafmaliyet karşılığı:
   [RiosenBeq/lafmaliyet#34](https://github.com/RiosenBeq/lafmaliyet/pull/34).
+- **Ortak örnek gövde:** `tests/fixtures/lafmaliyet-gun.golden.json` (iki boy, ek, ikram ve eki, karaoke, cari,
+  kartla bahşiş ve tahsilat). `tests/lafmaliyet-gun.test.ts` LafPOS'un ürettiği gövdenin bu dosyayla bayt bayt
+  aynı olduğunu sabitler; lafmaliyet aynı dosyayı kendi ayrıştırıcısıyla okur (B07). Gövde bilerek değişirse
+  `LAFPOS_GOLDEN=1 npx vitest run tests/lafmaliyet-gun.test.ts` ile yeniden üretilir ve lafmaliyet'teki kopya
+  aynı PR serisinde güncellenir. İmza vektörleri (`/api/pos/gun`, `/api/panel/pos/urunler`)
+  `tests/signature.test.ts`'te iki tarafta aynı.
 
 LafPOS istemcisi hazırdır; `LAFMALIYET_URL` ve `LAFMALIYET_SYNC_SECRET` verilince giden kutusu çalışır.
 
