@@ -22,15 +22,17 @@ describe('ürün görseli', () => {
 
   it('küçük kopya sürümlü adresle istenir: site fotoğrafı değişince yenisi gelir, aynısı yeniden indirilmez', async () => {
     const { thumbFor } = await import('../server/services/media');
+    // Sürümler her koşuda yeni: sql.js projesinde görsel önbelleği koşular arasında diskte kalır (demo/env.ts veri klasörü)
+    const run = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
     const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/webp' } }));
     try {
-      expect(await thumbFor('https://laffogato.net/gorsel/menu/mnu-0007?v=aaa')).not.toBeNull();
-      expect(String(spy.mock.calls[0]![0])).toBe('https://laffogato.net/_next/image?url=%2Fgorsel%2Fmenu%2Fmnu-0007%3Fv%3Daaa&w=256&q=75');
-      await thumbFor('https://laffogato.net/gorsel/menu/mnu-0007?v=aaa');
+      expect(await thumbFor(`https://laffogato.net/gorsel/menu/mnu-0007?v=a${run}`)).not.toBeNull();
+      expect(String(spy.mock.calls[0]![0])).toBe(`https://laffogato.net/_next/image?url=%2Fgorsel%2Fmenu%2Fmnu-0007%3Fv%3Da${run}&w=256&q=75`);
+      await thumbFor(`https://laffogato.net/gorsel/menu/mnu-0007?v=a${run}`);
       expect(spy).toHaveBeenCalledTimes(1);
-      await thumbFor('https://laffogato.net/gorsel/menu/mnu-0007?v=bbb');
+      await thumbFor(`https://laffogato.net/gorsel/menu/mnu-0007?v=b${run}`);
       expect(spy).toHaveBeenCalledTimes(2);
-      expect(String(spy.mock.calls[1]![0])).toContain('url=%2Fgorsel%2Fmenu%2Fmnu-0007%3Fv%3Dbbb');
+      expect(String(spy.mock.calls[1]![0])).toContain(`url=%2Fgorsel%2Fmenu%2Fmnu-0007%3Fv%3Db${run}`);
     } finally {
       spy.mockRestore();
     }

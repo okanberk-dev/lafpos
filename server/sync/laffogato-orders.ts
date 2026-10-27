@@ -403,15 +403,14 @@ export function onlineOrdersTick(): Promise<void> {
     try {
       if (versionSupported) {
         const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/pos/orders/version`));
+        const v = (json as { version?: unknown } | null)?.version;
         if (status === 404) versionSupported = false;
-        else if (status === 200) {
-          const v = (json as { version?: unknown } | null)?.version;
-          const version = typeof v === 'string' && v ? v : null;
-          const changed = version !== null && version !== lastVersion;
+        else if (status === 200 && typeof v === 'string' && v) {
           const safety = now - lastFullPull >= ORDERS_SAFETY_PULL_MS && !!getOpenDay(db);
-          if ((changed || safety) && now >= retryAt) await pull(now, version);
+          if ((v !== lastVersion || safety) && now >= retryAt) await pull(now, v);
           return;
         }
+        // Sinyal okunamadı (5xx, bozuk gövde): 5 dk'lık yedek çekmeye düşer
       }
       if (now - lastFullPull >= ORDERS_FALLBACK_PULL_MS && now >= retryAt) await pull(now, null);
     } catch (e) {
@@ -441,7 +440,7 @@ export function onlineStatus() {
     open: configured()
       ? db.select({ n: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), inArray(schema.orders.status, ['acik']))).all().length
       : 0,
-    /** Siteye bildirilemeyen Tükendi yazımları (porsiyon bitti; giden kutusu) */
+    /** Siteye bildirilemeyen ya da sitenin reddettiği Satışta yazımları (porsiyon sayacı; giden kutusu) */
     soldOutPush: siteOutboxStatus(),
   };
 }

@@ -102,6 +102,26 @@ describe('online sipariş zamanlayıcısı', () => {
       c.restore();
     }
   });
+
+  it('okunamayan sinyal (boş sürüm) 5 dk\'lık yedek çekmeye düşer, her turda çekmez', async () => {
+    const orders = await import('../server/sync/laffogato-orders');
+    const c = clock();
+    try {
+      site.version = '';
+      c.advance(20_000);
+      await orders.onlineOrdersTick();
+      expect(pulls()).toBe(4);
+      c.advance(5 * 60_000);
+      await orders.onlineOrdersTick();
+      expect(pulls()).toBe(5);
+      c.advance(20_000);
+      await orders.onlineOrdersTick();
+      expect(pulls()).toBe(5);
+    } finally {
+      site.version = 'v3';
+      c.restore();
+    }
+  });
 });
 
 describe('liste ve kapanış', () => {

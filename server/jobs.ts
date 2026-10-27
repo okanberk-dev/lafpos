@@ -121,7 +121,7 @@ export function startJobs() {
   timers.push(setTimeout(onlineOrdersTick, 12_000));
   timers.push(setInterval(onlineOrdersTick, 20_000));
   timers.push(setInterval(() => void flushOutbox(), 60_000));
-  // Siteye bildirilemeyen Tükendi yazımları (porsiyon bitti): dakikada bir, bekleme süresi dolanlar
+  // Siteye bildirilemeyen Satışta yazımları (porsiyon sayacı): dakikada bir, bekleme süresi dolanlar
   timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setTimeout(backupTick, 30_000));
