@@ -77,7 +77,9 @@ export default function IntegrationAdmin() {
                 {s.menu.state?.lastSuccessAt ? `Son başarılı kontrol ${fmtDateTime(s.menu.state.lastSuccessAt)}` : 'Henüz eşitlenmedi'}
                 {s.menu.state?.lastError && <span className="block text-danger-500">Hata: {s.menu.state.lastError}</span>}
               </Status>
-              <p className="text-xs text-muted">Herkese açık menü ucu CDN'den gelir, sitenin veritabanını uyandırmaz; 5 dakikada bir ETag ile kontrol edilir</p>
+              <p className="text-xs text-muted">
+                Gün açıkken 15 dakikada bir ETag ile kontrol edilir, gece sorulmaz; LafPOS siteye Tükendi yazınca hemen bir kez. CDN'deki kopya eskiyince istek sitenin veritabanını uyandırır
+              </p>
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <Toggle checked={s.menu.auto} disabled={!canSync} onChange={(v) => setting({ menuAutoSync: v })} label="Otomatik eşitle" />
                 <Button size="sm" icon={<RefreshCw className="size-4" />} onClick={() => run('/sync/menu/apply', 'Menü eşitlendi')}>
@@ -103,7 +105,7 @@ export default function IntegrationAdmin() {
           </Status>
           {s.online.configured && (
             <>
-              <Status ok={s.online.versionSignal}>{s.online.versionSignal ? 'Sipariş sürüm sinyali çalışıyor: 20 sn içinde düşer' : 'Sürüm sinyali yok (site PR\'ı yayında değil): 5 dk\'da bir kontrol'}</Status>
+              <Status ok={s.online.versionSignal}>{s.online.versionSignal ? 'Sipariş sürüm sinyali çalışıyor: 20 sn içinde düşer; gün açıkken 15 dk\'da bir ayrıca tam çekim' : 'Sürüm sinyali yok (site PR\'ı yayında değil): 5 dk\'da bir kontrol'}</Status>
               <Status ok={!s.online.state?.lastError}>
                 {s.online.state?.lastSuccessAt ? `Son çekim ${fmtDateTime(s.online.state.lastSuccessAt)} · ${s.online.open} açık online sipariş` : 'Henüz çekilmedi'}
                 {s.online.state?.lastError && <span className="block text-danger-500">Hata: {s.online.state.lastError}</span>}

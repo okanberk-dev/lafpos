@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { type Harness, startApp } from './harness';
 
 /** Ürün kartı görseli: yalnız sitenin kendi görselleri, bilinmeyen ya da görselsiz ürün 404 */
@@ -18,6 +18,22 @@ describe('ürün görseli', () => {
     expect(thumbSource('file:///etc/passwd')).toBeNull();
     expect(thumbSource(null)).toBeNull();
     expect(thumbSource('bozuk adres')).toBeNull();
+  });
+
+  it('küçük kopya sürümlü adresle istenir: site fotoğrafı değişince yenisi gelir, aynısı yeniden indirilmez', async () => {
+    const { thumbFor } = await import('../server/services/media');
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'image/webp' } }));
+    try {
+      expect(await thumbFor('https://laffogato.net/gorsel/menu/mnu-0007?v=aaa')).not.toBeNull();
+      expect(String(spy.mock.calls[0]![0])).toBe('https://laffogato.net/_next/image?url=%2Fgorsel%2Fmenu%2Fmnu-0007%3Fv%3Daaa&w=256&q=75');
+      await thumbFor('https://laffogato.net/gorsel/menu/mnu-0007?v=aaa');
+      expect(spy).toHaveBeenCalledTimes(1);
+      await thumbFor('https://laffogato.net/gorsel/menu/mnu-0007?v=bbb');
+      expect(spy).toHaveBeenCalledTimes(2);
+      expect(String(spy.mock.calls[1]![0])).toContain('url=%2Fgorsel%2Fmenu%2Fmnu-0007%3Fv%3Dbbb');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('bilinmeyen ya da görselsiz ürün 404; uç oturum istemez ve önbelleğe kapalı değildir', async () => {

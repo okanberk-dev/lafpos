@@ -53,8 +53,11 @@ function fromDisk(key: string): Thumb | null {
 }
 
 async function download(src: URL): Promise<Thumb | null> {
-  const optimized = `${src.origin}/_next/image?url=${encodeURIComponent(src.pathname)}&w=${WIDTH}&q=75`;
-  // Küçültme ucu yanıt vermezse görselin aslı (boyut sınırıyla)
+  // Sürüm (?v=) adresle birlikte gider: site fotoğrafı değiştirince küçültme ucunun önbelleği eskisini vermesin
+  // (yalnız yol giderse aynı küçük kopya ay boyu döner). Site `images.localPatterns` tanımlamadığı için sorgulu yerel
+  // adres kabul edilir (next/dist/shared/lib/match-local-pattern.js); edilmezse aşağıdaki asıl görsele düşülür
+  const optimized = `${src.origin}/_next/image?url=${encodeURIComponent(`${src.pathname}${src.search}`)}&w=${WIDTH}&q=75`;
+  // Küçültme ucu yanıt vermezse görselin sürümlü aslı (boyut sınırıyla)
   for (const target of [optimized, src.href]) {
     try {
       const res = await fetch(target, { headers: { accept: 'image/webp,image/png,image/*;q=0.8' }, signal: AbortSignal.timeout(15_000), redirect: 'error' });
