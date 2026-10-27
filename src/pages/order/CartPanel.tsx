@@ -94,7 +94,7 @@ export function CartPanel({
                         {i.complimentary && (
                           <span className="inline-flex items-center gap-0.5 text-[var(--admin-hue-rose)]">
                             <Gift className="size-3" />
-                            İkram
+                            {i.compKind === 'odenmez' ? 'Ödenmez' : 'İkram'}
                           </span>
                         )}
                         {i.discount > 0 && <span className="tabular text-primary">−{tl(i.discount)}</span>}

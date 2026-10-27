@@ -128,6 +128,9 @@ describe('demo: yayın ayarları', () => {
     expect(demo).toBeGreaterThanOrEqual(0);
     expect(demo).toBeLessThan(all);
   });
+  it('olmayan derleme dosyası sayfaya düşmez (404): yeni sürümde eski sekme yenilenir', () => {
+    expect(vercel.rewrites.find((r) => r.destination === '/index.html')?.source).toBe('/((?!api/|assets/).*)');
+  });
   it('demo yalnız Vercel derlemesinde; kasa derlemesine ve Windows paketine girmez', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
     expect(vercel.buildCommand).toMatch(/npm run build && npm run build:demo$/);

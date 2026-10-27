@@ -47,8 +47,15 @@
     {
       "idx": 6,
       "version": "6",
-      "when": 1793097801111,
-      "tag": "0006_tukendi_kilidi",
+      "when": 1793098066413,
+      "tag": "0006_odenmez",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793099811363,
+      "tag": "0007_tukendi_kilidi",
       "breakpoints": true
     }
   ]

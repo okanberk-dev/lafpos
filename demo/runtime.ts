@@ -98,6 +98,7 @@ async function startServer() {
     import('../server/lib/events'),
     import('./scenario'),
   ]);
+  const { upgradeRoleSets } = await import('../server/lib/settings');
   runMigrations();
   // Kayıt önceki bir iş gününden kaldıysa demo yeni günle açılır: dünden açık gün yeni satışı durdururdu
   // (stale_day), kapanmış günün ertesinde de kasa boş açılırdı
@@ -107,6 +108,7 @@ async function startServer() {
     runMigrations();
   }
   const fresh = seedIfEmpty();
+  upgradeRoleSets();
   const app = createApp();
   if (fresh) await seedDemoDay((req) => app.fetch(req));
   // Zamanlayıcıyla yazan işler de (yazarkasa simülatörü gibi) olay yayar: onlar da kaydedilir. Dışa aktarma hiçbir

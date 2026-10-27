@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "974835fc-c7c6-4efc-9b36-09763041acf2",
+  "id": "51ba4bea-4951-4cd5-8152-67e5b4d0a09c",
   "prevId": "0bdbfb9c-7844-441f-9fb9-9f5b41772a4e",
   "tables": {
     "audit_log": {
@@ -1352,6 +1352,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "comp_kind": {
+          "name": "comp_kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "voided": {
           "name": "voided",
           "type": "integer",
@@ -2612,13 +2619,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
-        },
-        "sold_out_by": {
-          "name": "sold_out_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         },
         "hidden": {
           "name": "hidden",

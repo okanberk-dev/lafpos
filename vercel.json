@@ -20,7 +20,7 @@
       "destination": "/demo/index.html"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|assets/).*)",
       "destination": "/index.html"
     }
   ],

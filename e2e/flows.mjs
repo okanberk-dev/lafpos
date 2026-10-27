@@ -303,6 +303,29 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Tablette kasiyer: personel yemeğini ödenmez kapatır, müdür onaylar',
+      async () => {
+        const table = seed.tables[5];
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 1 });
+        await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: simple.id, qty: 2 }] });
+        await withPage(ctx, 'tablet', 'kasa', async (page) => {
+          await go(ctx, page, `/adisyon/${o.id}`);
+          await page.getByRole('button', { name: 'İşlemler', exact: true }).click();
+          await page.getByRole('button', { name: /^Ödenmez kapat/ }).click();
+          const reason = page.getByRole('dialog', { name: 'Ödenmez kapat' });
+          await reason.getByRole('button', { name: 'Personel yemeği', exact: true }).click();
+          await reason.getByRole('button', { name: 'Ödenmez kapat', exact: true }).click();
+          const approval = page.getByRole('dialog', { name: 'Yetkili onayı' });
+          for (const d of PINS.mudur) await approval.getByRole('button', { name: d, exact: true }).click();
+          await approval.getByRole('button', { name: 'Onayla', exact: true }).click();
+          await page.waitForURL((u) => !u.pathname.startsWith('/adisyon/'), { timeout: 8000 });
+        }, [/istek 403: POST \/api\/orders\/[^/]+\/comp/, /konsol: Failed to load resource: .*403/]);
+        const closed = await api.call('kasa', 'GET', `/orders/${o.id}`);
+        assert(closed.status === 'kapali' && closed.total === 0, `adisyon kapanmadı: ${closed.status} ${closed.total}`);
+        assert(closed.items.every((i) => i.compKind === 'odenmez' && i.compReason === 'Personel yemeği'), 'kalemler ödenmez değil');
+      },
+    ],
+    [
       // Günü kapattığı için en sonda
       'Tablette kasiyer: gece gün sonundan sonra günü müdürün PIN onayıyla yeniden açar',
       async () => {

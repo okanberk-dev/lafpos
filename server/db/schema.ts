@@ -3,9 +3,9 @@ import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from
 import type { Role } from '@shared/permissions';
 import type { Permission } from '@shared/permissions';
 import type { OrderTotals } from '@shared/order-calc';
-import type { SelectedOption, ZField, ZSummary } from '@shared/types';
+import type { CompKind, SelectedOption, ZField, ZSummary } from '@shared/types';
 
-export type { ZField, ZSummary };
+export type { CompKind, ZField, ZSummary };
 
 /**
  * LafPOS veritabanı şeması (SQLite). Para alanları kuruş tam sayı; zaman alanları epoch milisaniye;
@@ -463,6 +463,11 @@ export const orderItems = sqliteTable(
     complimentary: bool('complimentary').notNull().default(false),
     compReason: text('comp_reason'),
     compBy: text('comp_by'),
+    /**
+     * İkram türü: müşteriye ikram ya da ödenmez (personel yemeği, zayi, patron hesabı). İkisi de ciro dışı; raporda
+     * ve Z'de ayrı görünür. Eski kayıtlarda boş = ikram
+     */
+    compKind: text('comp_kind').$type<CompKind>(),
     voided: bool('voided').notNull().default(false),
     voidReason: text('void_reason'),
     voidBy: text('void_by'),

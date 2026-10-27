@@ -25,6 +25,7 @@ type Settings = Record<string, unknown> & {
   productImages: boolean;
   voidReasons: string[];
   compReasons: string[];
+  odenmezReasons: string[];
   discountReasons: string[];
   quickCash: number[];
   sizeLabels: { M: string; L: string };
@@ -177,12 +178,15 @@ export default function SettingsAdmin() {
           </div>
         </Card>
         <Card flush title="Nedenler">
-          <div className="grid gap-3 p-4 sm:grid-cols-3">
+          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="İptal">
               <Textarea value={lines(s.voidReasons)} onChange={(e) => set({ voidReasons: fromLines(e.target.value) })} className="min-h-36" />
             </Field>
             <Field label="İkram">
               <Textarea value={lines(s.compReasons)} onChange={(e) => set({ compReasons: fromLines(e.target.value) })} className="min-h-36" />
+            </Field>
+            <Field label="Ödenmez" hint="Personel yemeği, zayi, patron hesabı">
+              <Textarea value={lines(s.odenmezReasons)} onChange={(e) => set({ odenmezReasons: fromLines(e.target.value) })} className="min-h-36" />
             </Field>
             <Field label="İndirim">
               <Textarea value={lines(s.discountReasons)} onChange={(e) => set({ discountReasons: fromLines(e.target.value) })} className="min-h-36" />

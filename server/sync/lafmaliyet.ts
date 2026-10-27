@@ -252,7 +252,8 @@ export function buildDayPayload(dayId: string) {
         slot: p.slot,
         qty: p.qty,
         menuValue: toTL(p.value),
-        reason: i.compReason ?? '',
+        // Sözleşmede tür alanı yok (docs/03-ENTEGRASYON.md): ödenmez nedenin başında yazılır
+        reason: i.compKind === 'odenmez' ? `Ödenmez: ${i.compReason ?? ''}` : (i.compReason ?? ''),
       })),
     ),
     payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel ?? null, count: p.count, amount: toTL(p.amount) })),
