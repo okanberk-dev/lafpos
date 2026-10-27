@@ -1,5 +1,7 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, ne } from 'drizzle-orm';
+import { type BlockTerms, blockTerms, bookingCode, bookingHours, linkableBooking, type RoomBookingSnapshot, snapshotOf } from '@shared/karaoke';
 import { tl } from '@shared/money';
+import { businessDate } from '@shared/time';
 import { schema, type Tx } from '../db/client';
 import { type Actor, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
@@ -7,6 +9,7 @@ import { bad, conflict, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
 import { posNameFor } from './menu';
+import { findSiteBooking, siteBookingsToday, siteKaraokeOn } from '../sync/laffogato-karaoke';
 import { activeRoom, assertNoPendingDevice, assertPosOrder, loadOrder, recalc, requireCurrentDay } from './orders';
 
 /**
@@ -23,7 +26,85 @@ export function roomCharge(hourlyRate: number, minutes: number): number {
   return Math.round((hourlyRate * minutes) / 60);
 }
 
-export function startRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
+/**
+ * Sayaca bağlı site rezervasyonunun bu oturumdaki bloğu (docs/03-ENTEGRASYON.md §2.4): `paid` sitede ödendi, kasada
+ * ücretsiz; `till` köşkte ödenecek, blok rezervasyonun tutarıyla (`charge`; ücretsiz telafi saatinde 0). `minutes`:
+ * bloğun bu oturuma düşen kalanı.
+ */
+export interface RoomBlock {
+  terms: Exclude<BlockTerms, null>;
+  minutes: number;
+  charge: number;
+}
+
+export interface RoomBill {
+  /** Ücretlenen ve blokta kalan dakikalar toplamı (satır metni) */
+  minutes: number;
+  /** Bloğun karşıladığı dakika */
+  coveredMinutes: number;
+  /** Saat ücretiyle ücretlenen dakika */
+  overMinutes: number;
+  blockCharge: number;
+  charge: number;
+}
+
+/**
+ * Oda ücreti. Bağlı blok yoksa bugünkü kural: süre faturalama adımına yukarı yuvarlanır, en az "minimum dakika".
+ * Blok varsa blok kendi koşuluyla ödenir ve yalnız bloğu aşan süre adıma yuvarlanıp saat ücretiyle eklenir (minimum
+ * yok: oda zaten blok kadar kullanıldı). Blok süreyle ölçülür, saatle değil: geç gelen grup bloğunu yine tam kullanır.
+ */
+export function roomBill(elapsedMs: number, hourlyRate: number, stepMin: number, minimumMin: number, block: RoomBlock | null): RoomBill {
+  if (!block) {
+    const minutes = billableMinutes(elapsedMs, stepMin, minimumMin);
+    return { minutes, coveredMinutes: 0, overMinutes: minutes, blockCharge: 0, charge: roomCharge(hourlyRate, minutes) };
+  }
+  const elapsed = Math.max(0, Math.ceil(elapsedMs / 60_000));
+  const covered = Math.min(elapsed, Math.max(0, block.minutes));
+  const step = Math.max(1, stepMin);
+  const over = elapsed > covered ? Math.ceil((elapsed - covered) / step) * step : 0;
+  const blockCharge = block.terms === 'till' ? block.charge : 0;
+  return { minutes: covered + over, coveredMinutes: covered, overMinutes: over, blockCharge, charge: blockCharge + roomCharge(hourlyRate, over) };
+}
+
+const fmtMinutes = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h ? `${h} sa ` : ''}${m ? `${m} dk` : ''}`.trim() || '0 dk';
+};
+
+type SessionRow = typeof schema.roomSessions.$inferSelect;
+
+/** Aynı rezervasyona bağlı, durmuş önceki oturumlar (sayaç durdurulup yeniden başlatıldıysa) */
+function earlierSessions(t: Tx, bookingId: string, exceptId?: string): SessionRow[] {
+  return t
+    .select()
+    .from(schema.roomSessions)
+    .where(and(eq(schema.roomSessions.bookingId, bookingId), isNotNull(schema.roomSessions.endedAt), exceptId ? ne(schema.roomSessions.id, exceptId) : undefined))
+    .all();
+}
+
+/**
+ * Bağlı oturumun bloğu, sayaç durduğu andaki rezervasyona göre: okunan son listede varsa onun durumu (ödemesi
+ * bağlanırken süren rezervasyon bu arada ödenmiş olabilir; iptal edilen blok düşer), yoksa bağlanırken saklanan.
+ * Önceki oturumların karşıladığı dakika bloktan düşülür; köşkte ödenen blok tutarı yalnız ilk oturuma yazılır.
+ */
+function blockOf(t: Tx, session: SessionRow): { block: RoomBlock | null; booking: RoomBookingSnapshot | null } {
+  if (!session.bookingId) return { block: null, booking: null };
+  const live = findSiteBooking(session.bookingId);
+  const booking = live ? snapshotOf(live) : (session.booking ?? null);
+  const terms = blockTerms(booking);
+  if (!booking || !terms) return { block: null, booking };
+  const earlier = earlierSessions(t, session.bookingId, session.id);
+  const used = earlier.reduce((a, x) => a + (x.prepaidMinutes ?? 0), 0);
+  return { block: { terms, minutes: Math.max(0, booking.hours * 60 - used), charge: terms === 'till' && !earlier.length ? booking.totalMinor : 0 }, booking };
+}
+
+/**
+ * Oda sayacını başlatır. `bookingId` verilirse sayaç sitedeki o karaoke rezervasyonuna bağlanır (oda kutusunun
+ * önerdiği): rezervasyon okunan bugünkü listede, odayı tutuyor ve ödemesi sitede alınmış, köşkte alınacak ya da sürüyor
+ * olmalı; aynı rezervasyon aynı anda iki sayaca bağlanmaz.
+ */
+export function startRoom(t: Tx, actor: Actor, fx: Effects, orderId: string, opts: { bookingId?: string | null } = {}) {
   needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   if (o.status !== 'acik') throw conflict('Adisyon kapalı');
@@ -46,10 +127,43 @@ export function startRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
     .get();
   if (holder) throw conflict(`${table.name} sayacı #${holder.no} adisyonda çalışıyor; oda ücreti o hesaba yazılır`, 'room_running');
   requireCurrentDay(t);
-  t.insert(schema.roomSessions).values({ id: ulid(), orderId, tableId: table.id, hourlyRate: table.hourlyRate, startedAt: Date.now(), startedBy: actor.user.id }).run();
-  fx.audit(t, { userId: actor.user.id, action: 'room.start', orderId, message: `${table.name} sayacı başladı (saatlik ${tl(table.hourlyRate)})` });
+  const link = opts.bookingId ? bookingToLink(t, opts.bookingId) : null;
+  t.insert(schema.roomSessions)
+    .values({
+      id: ulid(),
+      orderId,
+      tableId: table.id,
+      hourlyRate: table.hourlyRate,
+      startedAt: Date.now(),
+      startedBy: actor.user.id,
+      bookingId: link?.booking.id ?? null,
+      booking: link?.booking ?? null,
+      prepaidMinutes: link ? link.remaining : null,
+    })
+    .run();
+  const linked = link ? ` · site rezervasyonu ${bookingCode(link.booking.id)} (${bookingHours(link.booking)}, ${link.label})` : '';
+  fx.audit(t, { userId: actor.user.id, action: 'room.start', orderId, message: `${table.name} sayacı başladı (saatlik ${tl(table.hourlyRate)})${linked}` });
   fx.emit({ topic: 'orders', kind: 'room.started', orderId, tableId: table.id, byUserId: actor.user.id });
   fx.emit({ topic: 'tables', kind: 'room.started', tableId: table.id, byUserId: actor.user.id });
+}
+
+/** Sayaca bağlanacak rezervasyon: okunan bugünkü listede, odayı tutuyor, başka çalışan sayaca bağlı değil */
+function bookingToLink(t: Tx, bookingId: string): { booking: RoomBookingSnapshot; remaining: number; label: string } {
+  if (!siteKaraokeOn()) throw conflict('Sitedeki karaoke rezervasyonları okunmuyor (site bağlantısı kurulmadı)', 'not_configured');
+  const b = siteBookingsToday().find((x) => x.id === bookingId);
+  if (!b || b.date !== businessDate(Date.now())) throw conflict('Rezervasyon sitenin bugünkü listesinde yok; listeyi yenileyip yeniden seçin', 'booking_not_found');
+  if (!linkableBooking(b)) throw conflict(`${bookingCode(b.id)} odayı tutmuyor (iptal, iade ya da süresi dolmuş); sayaç rezervasyonsuz başlatılabilir`, 'booking_not_linkable');
+  const running = t
+    .select({ no: schema.orders.no })
+    .from(schema.roomSessions)
+    .innerJoin(schema.orders, eq(schema.orders.id, schema.roomSessions.orderId))
+    .where(and(eq(schema.roomSessions.bookingId, b.id), isNull(schema.roomSessions.endedAt)))
+    .get();
+  if (running) throw conflict(`${bookingCode(b.id)} #${running.no} adisyonda sayaca bağlı`, 'booking_running');
+  const used = earlierSessions(t, b.id).reduce((a, x) => a + (x.prepaidMinutes ?? 0), 0);
+  const terms = blockTerms(b);
+  const label = terms === 'paid' ? 'sitede ödendi' : terms === 'till' ? (b.totalMinor ? `köşkte ödenecek ${tl(b.totalMinor)}` : 'ücretsiz telafi') : 'ödemesi sürüyor';
+  return { booking: snapshotOf(b), remaining: Math.max(0, b.hours * 60 - used), label };
 }
 
 export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
@@ -65,10 +179,29 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
   if (!product) throw conflict('Saatlik oda ürünü tanımlı değil (Yönetim › Menü, gizli "hizmet" ürünü)');
   const s = getSettings();
   const now = Date.now();
-  const minutes = billableMinutes(now - session.startedAt, s.roomBillingStepMinutes, s.roomMinimumMinutes);
-  const charge = roomCharge(session.hourlyRate, minutes);
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
+  const { block, booking } = blockOf(t, session);
+  const bill = roomBill(now - session.startedAt, session.hourlyRate, s.roomBillingStepMinutes, s.roomMinimumMinutes, block);
+  const charge = bill.charge;
+  const code = booking ? bookingCode(booking.id) : null;
+  // Satır metni: süre ve bağlı bloğun koşulu; satır notunda rezervasyon kodu
+  const text = !block
+    ? fmtMinutes(bill.minutes)
+    : block.terms === 'paid'
+      ? `${bill.overMinutes ? `aşan ${fmtMinutes(bill.overMinutes)}` : 'aşım yok'} (${booking!.hours} sa sitede ödendi)`
+      : `${booking!.hours} sa rezervasyon${bill.overMinutes ? ` + ${fmtMinutes(bill.overMinutes)}` : ''}`;
+  const finish = (itemId: string | null) =>
+    t.update(schema.roomSessions).set({ endedAt: now, itemId, prepaidMinutes: block ? bill.coveredMinutes : session.bookingId ? 0 : null }).where(eq(schema.roomSessions.id, session.id)).run();
+  const ended = Math.max(0, Math.ceil((now - session.startedAt) / 60_000));
+  const why = code ? (block ? `rezervasyon ${code} ${block.terms === 'paid' ? 'sitede ödendi' : 'köşkte'}` : `rezervasyon ${code} blok sayılmadı (${booking ? 'iptal ya da ödenmemiş' : 'okunamadı'})`) : null;
+  if (charge <= 0) {
+    // Süre sitede ödenen (ya da ücretsiz telafi) blokta kaldı: adisyona 0 TL satır yazılmaz
+    finish(null);
+    fx.audit(t, { userId: actor.user.id, action: 'room.stop', orderId, amount: 0, message: `Oda sayacı durdu: ${fmtMinutes(ended)}, ${why ?? 'ücret yok'}; kasada ücret yok (#${o.no})` });
+    fx.emit({ topic: 'orders', kind: 'room.stopped', orderId, tableId: session.tableId, byUserId: actor.user.id });
+    fx.emit({ topic: 'tables', kind: 'room.stopped', tableId: session.tableId, byUserId: actor.user.id });
+    if (code) fx.emit({ topic: 'reservations', kind: 'room.stopped' });
+    return;
+  }
   const itemId = ulid(now);
   t.insert(schema.orderItems)
     .values({
@@ -78,7 +211,8 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
       name: product.shortName?.trim() || product.name,
       size: 'TEK',
       options: [],
-      optionsText: `${h ? `${h} sa ` : ''}${m ? `${m} dk` : ''}`.trim(),
+      optionsText: text,
+      note: code ? `Site rezervasyonu ${code}` : null,
       qty: 1,
       unitPrice: charge,
       basePrice: charge,
@@ -94,9 +228,10 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
       createdAt: now,
     })
     .run();
-  t.update(schema.roomSessions).set({ endedAt: now, itemId }).where(eq(schema.roomSessions.id, session.id)).run();
+  finish(itemId);
   recalc(t, orderId);
-  fx.audit(t, { userId: actor.user.id, action: 'room.stop', orderId, amount: charge, message: `Oda sayacı durdu: ${minutes} dk, ${tl(charge)} adisyona eklendi (#${o.no})` });
+  fx.audit(t, { userId: actor.user.id, action: 'room.stop', orderId, amount: charge, message: `Oda sayacı durdu: ${bill.minutes} dk, ${tl(charge)} adisyona eklendi${why ? ` (${why})` : ''} (#${o.no})` });
   fx.emit({ topic: 'orders', kind: 'room.stopped', orderId, tableId: session.tableId, byUserId: actor.user.id });
   fx.emit({ topic: 'tables', kind: 'room.stopped', tableId: session.tableId, byUserId: actor.user.id });
+  if (code) fx.emit({ topic: 'reservations', kind: 'room.stopped' });
 }

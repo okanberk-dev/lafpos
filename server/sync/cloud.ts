@@ -61,6 +61,8 @@ export function buildSnapshot(now = Date.now()) {
       ...floor,
       others: floor.others.map((x) => ({ ...x, label: shorten(x.label) })),
       reservations: floor.reservations.map((r) => ({ ...r, name: firstName(r.name) ?? '' })),
+      // Sitenin karaoke rezervasyonu zaten yalnız ad taşır; serbest metin not buluta gitmez
+      siteKaraoke: floor.siteKaraoke?.map((b) => ({ ...b, note: '' })),
     },
     kitchen: kitchenTickets(db).map((k) => ({ ...k, label: shorten(k.label) })),
     board: pickupBoard(db, now),

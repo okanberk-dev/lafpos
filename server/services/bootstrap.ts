@@ -4,6 +4,7 @@ import { type DB, schema, type Tx } from '../db/client';
 import { type AuthUser, can } from '../lib/auth';
 import { env } from '../env';
 import { getPublicSettings, getSettings } from '../lib/settings';
+import { siteKaraokeOn } from '../sync/laffogato-karaoke';
 import { localStampsOn, siteSigned } from '../sync/laffogato-link';
 import { dayToDTO } from './days';
 import { getOpenDay } from './orders';
@@ -144,6 +145,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
       lafmaliyetPush: !!env.lafmaliyetUrl && env.lafmaliyetToken.length >= 32,
       laffogatoUrl: env.laffogatoUrl,
       localStamps: localStampsOn(),
+      siteKaraoke: siteKaraokeOn(),
     },
     serverTime: Date.now(),
   };

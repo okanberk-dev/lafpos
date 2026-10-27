@@ -4,6 +4,8 @@ import { numaratorLabel } from '@shared/service-mode';
 import { businessDate } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, KitchenTicket, PickupBoardDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
+import { holdsRoom } from '@shared/karaoke';
+import { siteKaraokeView } from '../sync/laffogato-karaoke';
 import { userNameMap } from './dto';
 import { getOpenDay } from './orders';
 
@@ -68,6 +70,8 @@ export function floorState(t: Tx | DB): FloorStateDTO {
     .orderBy(asc(schema.reservations.time))
     .all()
     .map((r) => ({ id: r.id, tableId: r.tableId, time: r.time, name: r.name, guests: r.guests, status: r.status }));
+  // Sitedeki karaoke rezervasyonları: odayı tutanlar (iptal ve süresi dolan değil); bağlantı yoksa boş
+  result.siteKaraoke = siteKaraokeView().bookings.filter(holdsRoom);
   return result;
 }
 

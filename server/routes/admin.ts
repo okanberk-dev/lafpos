@@ -12,6 +12,7 @@ import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
+import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut } from '../sync/site-outbox';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
@@ -294,6 +295,12 @@ adminRoutes.delete('/happy-hours/:id', (c) => {
 });
 
 // ─── Masa planı ─────────────────────────────────────────────────────────────
+
+/** Karaoke odasının saat ücreti sitedekiyle aynı mı: sitenin fiyatı (ekran başına bir okuma; docs/03-ENTEGRASYON.md §2.4) */
+adminRoutes.get('/floor/site-karaoke-price', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json(await siteKaraokePrice());
+});
 
 adminRoutes.get('/floor', (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');

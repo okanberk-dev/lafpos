@@ -11,6 +11,7 @@ import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets } from '../services/floor';
 import * as orders from '../services/orders';
 import { startRoom, stopRoom } from '../services/rooms';
+import { refreshSiteKaraoke, siteKaraokeOn } from '../sync/laffogato-karaoke';
 
 export const posRoutes = new Hono<AppEnv>();
 
@@ -279,14 +280,20 @@ posRoutes.post('/orders/:id/delivery', async (c) => {
   return c.json(dto(c, c.req.param('id')));
 });
 
-posRoutes.post('/orders/:id/room/start', (c) => {
+/** `bookingId`: sayacı sitedeki karaoke rezervasyonuna bağlar (oda kutusunun önerisi; docs/03-ENTEGRASYON.md §2.4) */
+posRoutes.post('/orders/:id/room/start', async (c) => {
   const actor = actorFrom(c);
-  write((t, fx) => startRoom(t, actor, fx, c.req.param('id')));
+  const input = await body(c, z.object({ bookingId: z.string().min(1).max(64).nullish() }));
+  write((t, fx) => startRoom(t, actor, fx, c.req.param('id'), { bookingId: input.bookingId ?? null }));
   return c.json(dto(c, c.req.param('id')));
 });
 
-posRoutes.post('/orders/:id/room/stop', (c) => {
+posRoutes.post('/orders/:id/room/stop', async (c) => {
   const actor = actorFrom(c);
+  // Rezervasyona bağlı sayaç: ücret rezervasyonun güncel durumuyla yazılsın (ödemesi bu arada tamamlanmış olabilir).
+  // Liste geride kaldıysa bir çekim; site ulaşılamazsa eldeki listeyle (ya da bağlanırken saklananla) devam
+  const running = orders.activeRoom(db, c.req.param('id'));
+  if (running?.bookingId && siteKaraokeOn()) await refreshSiteKaraoke().catch(() => undefined);
   write((t, fx) => stopRoom(t, actor, fx, c.req.param('id')));
   return c.json(dto(c, c.req.param('id')));
 });

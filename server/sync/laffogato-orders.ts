@@ -8,6 +8,7 @@ import { ulid } from '../lib/ids';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
+import { siteKaraokeTick } from './laffogato-karaoke';
 import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
 import { dropSiteSoldOut, siteOutboxStatus, withSiteMenuLock } from './site-outbox';
 
@@ -400,10 +401,13 @@ export function onlineOrdersTick(): Promise<void> {
   if (inflight) return inflight;
   inflight = (async () => {
     const now = Date.now();
+    // Aynı yanıttaki karaoke işareti (laffogato F1; eski sitede yok): sipariş çekimi başarısız olsa da karaokeye gider
+    let karaoke: unknown;
     try {
       if (versionSupported) {
         const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/pos/orders/version`));
         const v = (json as { version?: unknown } | null)?.version;
+        if (status === 200) karaoke = (json as { karaoke?: unknown } | null)?.karaoke;
         if (status === 404) versionSupported = false;
         else if (status === 200 && typeof v === 'string' && v) {
           const safety = now - lastFullPull >= ORDERS_SAFETY_PULL_MS && !!getOpenDay(db);
@@ -415,6 +419,9 @@ export function onlineOrdersTick(): Promise<void> {
       if (now - lastFullPull >= ORDERS_FALLBACK_PULL_MS && now >= retryAt) await pull(now, null);
     } catch (e) {
       console.warn('[online] siparişler alınamadı:', e instanceof Error ? e.message : e);
+    } finally {
+      // Karaoke: işaret değişince ya da iş günü dönünce, en sık 5 dakikada bir (asla atmaz)
+      await siteKaraokeTick(karaoke, now);
     }
   })().finally(() => {
     inflight = null;
