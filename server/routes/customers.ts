@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { db } from '../db/client';
 import { type AppEnv, actorFrom, can, requirePermission } from '../lib/auth';
-import { body, kurus, query } from '../lib/http';
+import { body, isoDate, kurus, query } from '../lib/http';
 import { getSettings } from '../lib/settings';
 import { addAddress, createCustomer, customerDetail, redeemStamps, searchCustomers, updateCustomer } from '../services/customers';
 import { write } from './pos';
@@ -22,7 +22,8 @@ const customerShape = {
   phone: z.string().max(30).nullish(),
   email: z.string().max(120).nullish(),
   note: z.string().max(300).nullish(),
-  birthday: z.string().max(10).nullish(),
+  /** Takvimde olan bir tarih (YYYY-AA-GG); boş metin doğum gününü siler */
+  birthday: isoDate.or(z.literal('')).nullish(),
   creditLimit: kurus.nullish(),
   tags: z.array(z.string().max(30)).max(10).optional(),
 };

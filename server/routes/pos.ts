@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { db, schema, tx } from '../db/client';
 import { type AppEnv, actorFrom, blindOrder, needDirect } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { body, kurus, query } from '../lib/http';
+import { body, isoDateTime, kurus, query } from '../lib/http';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets } from '../services/floor';
@@ -75,7 +75,7 @@ posRoutes.post('/orders', async (c) => {
       deliveryName: z.string().max(80).nullish(),
       deliveryPhone: z.string().max(30).nullish(),
       deliveryAddress: z.string().max(400).nullish(),
-      scheduledFor: z.string().max(40).nullish(),
+      scheduledFor: isoDateTime.nullish(),
     }),
   );
   const actor = actorFrom(c);

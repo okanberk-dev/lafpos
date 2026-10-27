@@ -1,7 +1,7 @@
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { fmtDateTime, isCalendarDate } from '@shared/time';
-import { type AppEnv, can, requirePermission } from '../lib/auth';
+import { type AppEnv, can, requirePermission, seesStaffOf } from '../lib/auth';
 import { type CsvValue, money, toCsv } from '../lib/csv';
 import { HttpError, query } from '../lib/http';
 import {
@@ -56,7 +56,9 @@ reportRoutes.get('/items', (c) => {
   return c.json(itemListReport(range(c), kind));
 });
 reportRoutes.get('/refunds', (c) => c.json(refundReport(range(c))));
-reportRoutes.get('/checks', (c) => c.json(checksReport(range(c))));
+/** Garsona göre toplanan adisyon listesi personel tutarıdır: maliyet yetkisi olmayana yalnız kendi adisyonlarının garsonu */
+const waiterFor = (c: Context<AppEnv>) => (waiterId: string | null) => seesStaffOf(c.get('user'), waiterId);
+reportRoutes.get('/checks', (c) => c.json(checksReport(range(c), 300, waiterFor(c))));
 reportRoutes.get('/patron', (c) => c.json(patronLive(can(c.get('user'), 'rapor.maliyet'))));
 
 /** Excel'in Türkçe ayarıyla açılan CSV (server/lib/csv.ts: noktalı virgül, virgüllü ondalık, formül korumalı) */
@@ -69,7 +71,7 @@ reportRoutes.get('/export.csv', (c) => {
     rows = [['Ürün', 'Boy', 'Kategori', 'Adet', 'Ciro', 'Pay %', 'İkram adet', 'İptal adet'], ...rep.products.map((p) => [p.name, p.size, p.category, p.qty, money(p.revenue), p.share, p.complimentary, p.voided])];
   } else if (type === 'adisyonlar') {
     // Dönemin bütün adisyonları (ekrandaki liste en yenilerle sınırlı)
-    const rep = checksReport(r, null);
+    const rep = checksReport(r, null, waiterFor(c));
     rows = [['No', 'Durum', 'Tür', 'Yer', 'Açılış', 'Kapanış', 'Garson', 'Adet', 'Tutar', 'Ödeme'], ...rep.rows.map((o) => [o.no, o.status, o.type, o.place ?? '', fmtDateTime(o.openedAt), o.closedAt ? fmtDateTime(o.closedAt) : '', o.waiter ?? '', o.qty, money(o.total), o.methods.join(', ')])];
   } else if (type === 'saatlik') {
     // İş günü sırasıyla: 05:00'ten başlar, gece yarısından sonraki saatler, gün uzadıysa ertesi günün saatleri en sonda

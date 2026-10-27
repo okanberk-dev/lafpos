@@ -387,7 +387,8 @@ export function PaymentModal({
                       {p.methodName}
                       {p.shareNo != null && <span className="tabular ml-1.5 rounded-md bg-surface-3 px-1.5 py-0.5 text-xs font-medium text-ink-2">Pay {p.shareNo}/{p.shareOf}</span>}{' '}
                       <span className="text-xs text-muted">
-                        {fmtTime(p.createdAt)} · {p.userName}
+                        {fmtTime(p.createdAt)}
+                        {p.userName && ` · ${p.userName}`}
                       </span>
                     </span>
                     <span className="tabular font-semibold">{tl(p.amount)}</span>
