@@ -134,7 +134,9 @@ Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` �
 | `sale.status = 0` | Ödeme kalemleri adisyona işlenir (1 nakit, 3 kart, 7 yemek kartı, 17 açık hesap, 18 havale; ödeme türü eşlemesi Yönetim › Yazarkasa'da), Z ve fiş no yazılır, kalan yoksa adisyon kapanır |
 | `0`, ödemeler sepeti karşılamıyor | Cihaz ikram (9), ödemesiz (8) ya da LafPOS'ta karşılığı olmayan türle kapattıysa alınan ödemeler tutar olarak işlenir, kalemler ödenmiş sayılmaz; sepet `hata` olur ve yöneticiye alarm düşer (`okc.underpaid`). Kalan kasadan alınana ya da fiş cihazdan iptal edilene kadar adisyon cihaza yeniden gönderilmez (`okc_unresolved`): aynı kalemler ikinci fişe girerdi. LafPOS'a işlenemeyen "ödendi" sonucu da böyle |
 | `-1` | Kasiyer cihazda vazgeçti; sepet kapanır, adisyon açık kalır |
-| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir. Ödeme birleştirmeyle başka adisyona geçtiyse o adisyondan düşer (birleştirmede fişler de hedef adisyona taşınır). Kapanmış adisyon yalnız ödenecek tutar doğarsa açılır: ödemesi LafPOS'ta zaten iptal edilip yeniden alınmışsa kapalı kalır |
+| `0`, sepet LafPOS'ta iptal sayılmış | Adisyon kendiliğinden kapanmaz, yöneticiye alarm düşer (`okc.late_paid`); Z ve fiş no sepete yazılır. Aynı bildirim tekrar gelirse alarm tekrarlanmaz |
+| `99` | Fiş iptal edildi; o fişin ödemeleri iade olarak düşülür, adisyon yeniden ödenebilir. Ödeme birleştirmeyle başka adisyona geçtiyse o adisyondan düşer (birleştirmede fişler de hedef adisyona taşınır). Kapanmış adisyon yalnız ödenecek tutar doğarsa açılır: ödemesi LafPOS'ta zaten iptal edilip yeniden alınmışsa kapalı kalır. LafPOS'a ödemesi işlenmiş her fiş (eksik ödenmiş `hata` fişi de) böyle geri alınır |
+| `99`, fiş kesilmemiş sepet | Bekleyen sepet `iptal` olur (`okc.cancelled`). LafPOS'ta silinmiş ya da cihazda vazgeçilmiş sepetin durumu değişmez; bir kez not düşülür (`okc.void`, uyarı). Geç "ödendi" bildirimi gelmiş sepette fiş kesilip iptal edilmiştir: fiş `fis_iptal` olur, alarm düşer |
 | `99`, fiş kapanmış güne ait | Kapanmış günün Z'si değişmez: ödeme geri alınmaz, adisyon açılmaz, fiş `fis_iptal` olur ve yöneticiye alarm düşer (`okc.void_closed_day`). Müşteriye para iade edildiyse bugünün kasasından çıkış olarak işlenir. Eğitim cihazında bu iptal hiç yapılamaz (`day_closed`) |
 | `BASKET_LOCKED` / `UNLOCKED` | Sepet cihazda açıkken LafPOS'ta kilit gösterilir |
 
@@ -161,4 +163,6 @@ Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında gör�
 - **İnternet ya da Token kesik, sepet silinemiyor** (`okc_delete`): adisyondaki "İptal"e basınca LafPOS sorar;
   onaylanırsa sepet yetkili PIN'iyle LafPOS'ta iptal sayılır, adisyon kasadan alınır ve gün kapanabilir. Denetim
   kaydına alarm düşer (`okc.force_cancel`). Cihazda yine de o sepetten ödeme alındıysa geç gelen sonuç ikinci bir
-  alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir.
+  alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir. Onay penceresi açıkken cihazda fiş kesildiyse
+  (sepet ödendi ya da eksik ödenip `hata` oldu) iptal reddedilir (`okc_paid`, `okc_unresolved`): fişi kesilmiş
+  sepet hiçbir yoldan "silindi" sayılmaz, fiş iptali ödemesini geri alabilsin.

@@ -13,6 +13,8 @@ const MUDUR = PINS.mudur;
 let h: Harness;
 /** Sahte Token: anlık sepet isteğinin davranışı ve sepet sorgusunun cevabı */
 let instant = 'ok' as 'ok' | 'timeout' | 'reject' | 'truncated' | 'garbled' | ((basket: TokenBasket) => Promise<void>);
+/** Sepet silme isteği: Token'a ulaşılamıyor mu */
+let del = 'ok' as 'ok' | 'unreachable';
 const details = new Map<string, unknown>();
 const calls: string[] = [];
 
@@ -55,6 +57,7 @@ beforeAll(async () => {
     const m = u.pathname.match(/^\/v1\/basket\/([^/]+)$/);
     if (m && verb === 'GET') return details.has(m[1]) ? json(200, { status: 0, result: details.get(m[1]) }) : json(200, { status: 1006, description: 'not found' });
     if (m && verb === 'DELETE') {
+      if (del === 'unreachable') throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
       details.set(m[1], { basketID: m[1], deletedAt: new Date().toISOString(), sale: null });
       return json(200, { status: 0, result: {} });
     }
@@ -409,6 +412,58 @@ describe('yazarkasa denetimi', () => {
 
   // ─── İkinci tur (bağımsız inceleme, 27 Eki 2026) ───────────────────────────
 
+  it('belgesi kesilmiş eksik ödemeli (hata) sepet LafPOS’ta iptal sayılmaz; cihazda fiş iptali alınan ödemeyi geri alır', async () => {
+    await provider('tokenx');
+    const o = await order([{ name: 'Türk kahvesi', qty: 2 }]);
+    const unit = o.total / 2;
+    const r = await send(o.id);
+    // Kasiyer "İptal"e basar; Token'a ulaşılamıyor, arayüz yetkili onayıyla zorla iptal sorar
+    del = 'unreachable';
+    const first = await h.call<{ code: string }>('kasa', 'POST', `/okc/receipts/${r.id}/cancel`, {});
+    expect(first.json.code).toBe('okc_delete');
+    // Onay penceresi açıkken cihazda fiş kesildi: bir kahve ikram, biri kartla
+    expect((await webhook({ basketID: r.id, status: 0, zNo: 5, receiptNo: 77, paymentItems: [{ type: 9, amount: unit }, { type: 3, amount: unit }] })).status).toBe(200);
+    expect((await receipts(o.id))[0].status).toBe('hata');
+    const forced = await h.call<{ code: string }>('kasa', 'POST', `/okc/receipts/${r.id}/cancel`, { force: true, approverPin: MUDUR });
+    del = 'ok';
+    expect(forced.status).toBe(409);
+    expect(forced.json.code).toBe('okc_unresolved');
+    // Onaysız iptal ucu da (kasiyer, API'den) belgeli sepeti silemez
+    const plain = await h.call<{ code: string }>('kasa', 'POST', `/okc/receipts/${r.id}/cancel`, {});
+    expect(plain.status).toBe(409);
+    expect(plain.json.code).toBe('okc_unresolved');
+    expect((await receipts(o.id))[0].status).toBe('hata');
+    expect((await audits()).filter((a) => a.orderId === o.id && (a.action === 'okc.delete' || a.action === 'okc.force_cancel'))).toEqual([]);
+    // Aynı kahve ikinci fişe gitmez
+    const again = await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: [{ itemId: o.items[0].id, qty: 1 }] });
+    expect(again.json.code).toBe('okc_unresolved');
+    // Cihazda fiş iptal edilir: kartla alınan ödeme LafPOS'ta geri alınır
+    await webhook({ basketID: r.id, status: 99 });
+    const fin = await getOrder(o.id);
+    expect(fin.payments.map((p) => [p.methodName, !!p.refundedAt])).toEqual([['Kredi kartı', true]]);
+    expect(fin.paid).toBe(0);
+    expect((await receipts(o.id))[0].status).toBe('fis_iptal');
+    expect((await audits()).find((a) => a.orderId === o.id && a.action === 'okc.void')).toMatchObject({ severity: 'alarm' });
+    await h.ok('mudur', 'POST', `/orders/${o.id}/cancel`, { reason: 'Fiş iptal edildi' });
+    await provider('simulator');
+  });
+
+  it('eski kayıt: belgeli sepet "silindi" olmuşsa da fiş iptali alınan ödemeyi geri alır', async () => {
+    const o = await order([{ name: 'Türk kahvesi', qty: 2 }]);
+    const r = await send(o.id);
+    await simPay(r.id, [{ type: 9, amount: 14000 }, { type: 3, amount: r.amount - 14000 }]);
+    // Bu düzeltmeden önce iptal ucu belgeli sepeti "silindi" yapabiliyordu
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    db.update(schema.fiscalReceipts).set({ status: 'silindi' }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+    expect((await simVoid(r.id)).status).toBe(200);
+    const fin = await getOrder(o.id);
+    expect(fin.payments.filter((p) => !p.refundedAt)).toEqual([]);
+    expect(fin.paid).toBe(0);
+    expect((await receipts(o.id))[0].status).toBe('fis_iptal');
+    await h.ok('mudur', 'POST', `/orders/${o.id}/cancel`, { reason: 'Fiş iptal edildi' });
+  });
+
   it('200 yanıtının gövdesi okunamazsa (bağlantı koptu, zaman aşımı) sepet bekleyen kalır; adisyon ikinci kez tahsil edilmez', async () => {
     await provider('tokenx');
     const o = await order([{ name: 'Türk kahvesi' }]);
@@ -439,6 +494,43 @@ describe('yazarkasa denetimi', () => {
     expect(await c.sendInstantBasket({ basketID: 'reject-1', items: [] }).catch((e: unknown) => e)).toMatchObject({ code: '1100', uncertain: false });
     instant = 'ok';
     await provider('simulator');
+  });
+
+  it('aynı 99 ikinci kez gelince kayıt tekrarlanmaz; LafPOS’ta silinen sepet "silindi" kalır', async () => {
+    const { applySale } = await import('../server/okc/service');
+    const o = await order([{ name: 'Türk kahvesi' }]);
+    const r1 = await send(o.id);
+    applySale(r1.id, { basketID: r1.id, status: 99 }, 'webhook');
+    applySale(r1.id, { basketID: r1.id, status: 99 }, 'webhook');
+    const r2 = await send(o.id);
+    await h.ok('kasa', 'POST', `/okc/receipts/${r2.id}/cancel`, {});
+    applySale(r2.id, { basketID: r2.id, status: 99 }, 'webhook');
+    applySale(r2.id, { basketID: r2.id, status: 99 }, 'webhook');
+    const mine = (await audits()).filter((a) => a.orderId === o.id);
+    expect(mine.filter((a) => a.action === 'okc.cancelled')).toHaveLength(1);
+    // Silinen sepete gelen 99 yalnız bir kez not düşer; "fiş kesilmemişti" demez
+    const notes = mine.filter((a) => a.action === 'okc.void');
+    expect(notes).toHaveLength(1);
+    expect(notes[0].message).not.toContain('fiş kesilmemişti');
+    const st = Object.fromEntries((await receipts(o.id)).map((x) => [x.id === r1.id ? 'r1' : 'r2', x.status]));
+    expect(st).toEqual({ r1: 'iptal', r2: 'silindi' });
+
+    // Zorla iptal sonrası geç gelen "ödendi" tek alarm verir; ardından gelen 99 fişin kesilip iptal edildiğini yazar
+    const r3 = await send(o.id);
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${r3.id}/cancel`, {});
+    const paid = { basketID: r3.id, status: 0, zNo: 9, receiptNo: 5, paymentItems: [{ type: 3, amount: r3.amount }] };
+    applySale(r3.id, paid, 'webhook');
+    applySale(r3.id, paid, 'webhook');
+    expect((await audits()).filter((a) => a.orderId === o.id && a.action === 'okc.late_paid')).toHaveLength(1);
+    expect(await getOrder(o.id)).toMatchObject({ status: 'acik', paid: 0 });
+    applySale(r3.id, { basketID: r3.id, status: 99 }, 'webhook');
+    applySale(r3.id, { basketID: r3.id, status: 99 }, 'webhook');
+    const voids = (await audits()).filter((a) => a.orderId === o.id && a.action === 'okc.void' && a.severity === 'alarm');
+    expect(voids).toHaveLength(1);
+    expect(voids[0].message).toContain('fişi');
+    expect((await receipts(o.id)).find((x) => x.id === r3.id)?.status).toBe('fis_iptal');
+    expect(await getOrder(o.id)).toMatchObject({ status: 'acik', paid: 0 });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/cancel`, { reason: 'deneme', approverPin: MUDUR });
   });
 
   it('kalem ödemesinden sonra kalem iptali indirimi yeniden dağıtsa da cihazdaki servis LafPOS servisine eşit', async () => {
