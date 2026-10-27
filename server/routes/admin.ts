@@ -11,6 +11,7 @@ import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
+import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
 import { readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -590,6 +591,7 @@ const settingsShape = patchOf(
     backupKeep: z.number().int().min(1).max(365),
     autoDayEnd: z.boolean(),
     autoDayEndHour: z.number().int().min(0).max(23),
+    serviceMode: z.enum(SERVICE_MODES),
   }),
 );
 
@@ -598,8 +600,25 @@ adminRoutes.put('/settings', async (c) => {
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, settingsShape);
   if (input.menuAutoSync !== undefined || input.onlineOrdersSync !== undefined) requirePermission(user, 'senkron.yonet');
-  updateSettings(input);
-  changed('settings', 'settings.updated', user.id, { action: 'settings.update', message: `${user.name} ayarları değiştirdi: ${Object.keys(input).join(', ')}` });
+  const before = serviceModeOf(getSettings());
+  const fx = new Effects();
+  tx((t) => {
+    updateSettings(input, t);
+    fx.audit(t, { userId: user.id, action: 'settings.update', message: `${user.name} ayarları değiştirdi: ${Object.keys(input).join(', ')}` });
+    // Servis modu bütün sistemin akışını değiştirir (açılış ekranı, menü, tezgâh satışı): ayrı ve okunur kayıt
+    if (input.serviceMode && input.serviceMode !== before) {
+      fx.audit(t, {
+        userId: user.id,
+        action: 'settings.servis_modu',
+        entity: 'settings',
+        entityId: 'serviceMode',
+        message: `${user.name} servis modunu değiştirdi: ${SERVICE_MODE_LABEL[before]} → ${SERVICE_MODE_LABEL[input.serviceMode]}`,
+        data: { from: before, to: input.serviceMode },
+      });
+    }
+  });
+  fx.emit({ topic: 'settings', kind: 'settings.updated', byUserId: user.id });
+  fx.flush();
   return c.json(getSettings());
 });
 

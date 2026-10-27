@@ -99,6 +99,14 @@ posRoutes.patch('/orders/:id', async (c) => {
   return c.json(dto(c, c.req.param('id')));
 });
 
+/** Yarı self servis: masa no / numaratör ("12"); null siler. Kapanmış (ödenmiş) tezgâh satışında da düzeltilir */
+posRoutes.put('/orders/:id/numarator', async (c) => {
+  const input = await body(c, z.object({ numarator: z.string().max(20).nullable() }));
+  const actor = actorFrom(c);
+  write((t, fx) => orders.setNumarator(t, actor, fx, c.req.param('id'), input.numarator));
+  return c.json(dto(c, c.req.param('id')));
+});
+
 const optionPick = z.object({ itemId: z.string(), qty: z.number().int().min(0).max(9).optional() });
 
 posRoutes.post('/orders/:id/items', async (c) => {

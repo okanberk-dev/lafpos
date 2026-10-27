@@ -38,7 +38,7 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { key: 'yazarkasa', to: '/yonetim/yazarkasa', label: 'Yazarkasa POS', desc: 'TokenX Connect, eğitim cihazı, kısım eşlemesi', icon: MonitorSmartphone, hue: 'amber', group: 'baglanti', perm: ['ayar.yonet'], keywords: 'ökc tokenx fiş' },
   { key: 'entegrasyon', to: '/yonetim/entegrasyon', label: 'Site ve lafmaliyet', desc: 'Menü eşitleme, online siparişler, gün sonu gönderimi', icon: PlugZap, hue: 'green', group: 'baglanti', perm: ['senkron.yonet', 'ayar.yonet'], keywords: 'laffogato senkron' },
   { key: 'ag', to: '/yonetim/ag', label: 'Ağ ve uzaktan erişim', desc: 'Tablet ve telefon adresi, karekod, Tailscale ile dışarıdan canlı erişim', icon: Wifi, hue: 'violet', group: 'baglanti', perm: ['ayar.yonet', 'patron.panel'], keywords: 'tablet telefon ip adres karekod qr tailscale uzaktan internet vpn' },
-  { key: 'ayarlar', to: '/yonetim/ayarlar', label: 'Ayarlar ve yedek', desc: 'İşletme, servis, kilit, gün sonu, yedekler', icon: Settings2, hue: 'blue', group: 'sistem', perm: ['ayar.yonet'], keywords: 'yedek tema' },
+  { key: 'ayarlar', to: '/yonetim/ayarlar', label: 'Ayarlar ve yedek', desc: 'Servis modu, işletme, kilit, gün sonu, yedekler', icon: Settings2, hue: 'blue', group: 'sistem', perm: ['ayar.yonet'], keywords: 'yedek tema servis modu self servis yarı self numaratör' },
   { key: 'denetim', to: '/yonetim/denetim', label: 'Denetim kaydı', desc: 'İptal, ikram, indirim, kasa ve gün sonu izi', icon: ClipboardList, hue: 'rose', group: 'sistem', perm: ['ayar.yonet', 'patron.panel'], keywords: 'log alarm uyarı' },
 ];
 

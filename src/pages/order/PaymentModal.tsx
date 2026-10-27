@@ -13,6 +13,8 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { BillReceipt, printNow } from '@/lib/print';
+import { callFor, numaratorLabel } from '@shared/service-mode';
+import { useServiceMode } from '@/lib/serviceMode';
 import { OkcPanel } from './OkcPanel';
 
 type Mode = 'tutar' | 'kalem' | 'paylas';
@@ -38,6 +40,7 @@ export function PaymentModal({
 }) {
   const boot = useBoot();
   const can = useCan();
+  const serviceMode = useServiceMode();
   const remaining = order.total - order.paid;
   const split = order.split;
   const [mode, setMode] = useState<Mode>('tutar');
@@ -160,6 +163,8 @@ export function PaymentModal({
   if (!open) return null;
 
   if (result) {
+    // Self ve yarı self servis: müşteriye söylenecek numara ya da personelin götüreceği masa sonuç ekranında büyük
+    const call = result.closed ? callFor(order, serviceMode) : null;
     return (
       <Modal open onClose={() => (result.closed ? onDone(true) : setResult(null))} size="sm" persistent>
         <div className="p-6 text-center">
@@ -170,6 +175,13 @@ export function PaymentModal({
           <p className="tabular mt-0.5 text-sm text-muted">
             {tl(result.amount)} · {result.method}
           </p>
+          {call && (
+            <div className="mt-5 rounded-xl border border-line bg-surface-2 p-4">
+              <div className="text-[13px] font-medium text-muted">{call.kind === 'masa' ? 'Masaya götürülecek' : 'Sipariş numarası'}</div>
+              <div className="tabular text-5xl font-bold tracking-tight">{call.kind === 'masa' ? numaratorLabel(call.value) : call.value}</div>
+              {call.kind === 'numara' && <div className="mt-1 text-xs text-muted">Hazır olunca çağrı ekranında görünür</div>}
+            </div>
+          )}
           {result.change > 0 && (
             <div className="mt-5 rounded-xl bg-[var(--admin-warning-soft)] p-4">
               <div className="text-[13px] font-medium text-[var(--admin-warning)]">Para üstü</div>
@@ -190,7 +202,7 @@ export function PaymentModal({
   }
 
   return (
-    <Modal open onClose={onClose} size="xl" title={`Ödeme · ${order.tableName ?? `#${order.no}`}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
+    <Modal open onClose={onClose} size="xl" title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
       <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
         <div className="border-b border-[var(--admin-divider)] p-5 lg:border-b-0 lg:border-r">
           <div className="mb-4 flex items-center justify-between gap-3">

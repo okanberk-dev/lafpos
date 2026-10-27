@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
 import type { RoleMatrix } from '@shared/permissions';
+import { DEFAULT_SERVICE_MODE } from '@shared/service-mode';
 import type { PublicSettings } from '@shared/types';
-import { db, schema } from '../db/client';
+import { type DB, db, schema, type Tx } from '../db/client';
 
 /** Arayüze giden ayarlar (herkes görür) */
 export const PUBLIC_DEFAULTS: PublicSettings = {
@@ -27,6 +28,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   stampGoal: 6,
   stampCategoryKeys: ['matcha', 'espresso', 'ice-coffee', 'cold', 'hot', 'frappe', 'smoothie', 'frozen', 'ice-tea'],
   demoMode: false,
+  // Var olan kurulumlarda hiçbir şey değişmesin: patron Yönetim › Ayarlar'dan seçer
+  serviceMode: DEFAULT_SERVICE_MODE,
 };
 
 /** Yalnız sunucuda kullanılan ayarlar */
@@ -94,13 +97,16 @@ export function getPublicSettings(): PublicSettings {
   return out as unknown as PublicSettings;
 }
 
-export function updateSettings(patch: Partial<AllSettings>) {
+/** Ayarları yazar; `t` verilirse çağıranın işleminin içinde (denetim kaydıyla birlikte) */
+export function updateSettings(patch: Partial<AllSettings>, t: Tx | DB = db) {
   const now = Date.now();
+  // Önbellek her durumda düşer: işlem geri alınsa da sonraki okuma veritabanından gelir
+  cache = null;
   for (const [key, value] of Object.entries(patch)) {
     if (!(key in DEFAULTS) || value === undefined) continue;
-    const existing = db.select().from(schema.settings).where(eq(schema.settings.key, key)).get();
-    if (existing) db.update(schema.settings).set({ value, updatedAt: now }).where(eq(schema.settings.key, key)).run();
-    else db.insert(schema.settings).values({ key, value, updatedAt: now }).run();
+    const existing = t.select().from(schema.settings).where(eq(schema.settings.key, key)).get();
+    if (existing) t.update(schema.settings).set({ value, updatedAt: now }).where(eq(schema.settings.key, key)).run();
+    else t.insert(schema.settings).values({ key, value, updatedAt: now }).run();
   }
   cache = null;
 }

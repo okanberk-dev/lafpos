@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { percentOf, tl } from '@shared/money';
 import { amountForItems, lineGross, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
@@ -200,6 +201,7 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
       prev.openedBy === actor.user.id &&
       !prev.customerId &&
       !prev.note &&
+      !prev.numarator &&
       prev.discountType == null &&
       prev.splitPeople == null &&
       isEmptyOrder(t, prev.id)
@@ -574,6 +576,27 @@ export function updateOrder(
   t.update(schema.orders).set(patch).where(eq(schema.orders.id, orderId)).run();
   const updated = loadOrder(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.updated');
+  return updated;
+}
+
+/**
+ * Yarı self servis: tezgâh ya da gel-al siparişine masa no / numaratör ("12") yazar ya da siler. Parasal değildir:
+ * ödeme alındıktan sonra da düzeltilebilir (tezgâh satışı ödemeyle kapanır, sipariş barda hazırlanırken). Bar
+ * ekranı, çağrı ekranı ve masa listesi yenilensin diye kitchen ve orders konularına olay düşer.
+ */
+export function setNumarator(t: Tx, actor: Actor, fx: Effects, orderId: string, raw: string | null): OrderRow {
+  if (!can(actor.user, 'siparis.al')) needDirect(actor, 'odeme.al');
+  const o = loadOrder(t, orderId);
+  if (o.status !== 'acik' && o.status !== 'kapali') throw conflict('İptal edilmiş ya da birleşmiş adisyona masa no yazılmaz', 'order_closed');
+  if (o.source !== 'pos') throw conflict('Online siparişin masası sitede seçilir', 'online_order');
+  if (o.type !== 'tezgah' && o.type !== 'gelal') throw bad('Masa no / numaratör yalnız tezgâh ve gel-al siparişinde girilir; masadaki adisyonu Masa taşı ile değiştirin');
+  const value = normalizeNumarator(raw);
+  if (value === undefined) throw bad('Masa no en çok 6 harf ya da rakam olabilir', 'numarator_invalid');
+  if (value === o.numarator) return o;
+  t.update(schema.orders).set({ numarator: value, updatedAt: Date.now() }).where(eq(schema.orders.id, orderId)).run();
+  const updated = loadOrder(t, orderId);
+  orderEvents(fx, updated, actor.user.id, 'order.numarator');
+  fx.emit({ topic: 'kitchen', kind: 'ticket.updated', orderId, byUserId: actor.user.id });
   return updated;
 }
 
@@ -1130,7 +1153,8 @@ export function setItemsStatus(
     const ready = readyCount.get(id);
     if (ready && o.waiterId) {
       const table = o.tableId ? t.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, o.tableId)).get() : null;
-      const place = table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
+      const place =
+        table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : o.numarator ? numaratorLabel(o.numarator) : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
       fx.emit({ topic: 'orders', kind: 'items.ready', orderId: id, tableId: o.tableId ?? undefined, message: `${place} · ${ready} ürün hazır`, forUserId: o.waiterId, byUserId: actor.user.id });
     }
   }

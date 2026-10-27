@@ -2,6 +2,7 @@ import { Check, ChefHat, CircleDot, Gift, Minus, Pencil, Percent, Plus, ReceiptT
 import { useState } from 'react';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
+import { isCounterFirst, serviceModeOf } from '@shared/service-mode';
 import { fmtTime } from '@shared/time';
 import type { BootstrapDTO, OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -52,6 +53,8 @@ export function CartPanel({
 }) {
   const boot = useBoot();
   const cart = useCart();
+  // Self ve yarı self servis: tezgâh satışında önce ödeme
+  const payFirst = isCounterFirst(serviceModeOf(boot.settings)) && order.type === 'tezgah' && order.source === 'pos';
   const [itemSheet, setItemSheet] = useState<OrderItemDTO | null>(null);
   const t = order.totals;
   const due = order.total - order.paid;
@@ -69,7 +72,9 @@ export function CartPanel({
               <ReceiptText className="size-6" strokeWidth={1.5} />
             </span>
             <p className="mt-3 text-sm font-semibold text-ink">Adisyon boş</p>
-            <p className="mt-1 max-w-[30ch] text-[13px] text-muted">Ürüne dokunun; "Gönder"e basınca bara ve mutfağa gider</p>
+            <p className="mt-1 max-w-[30ch] text-[13px] text-muted">
+              {payFirst ? 'Ürüne dokunun; "Öde" ödemeyi alır ve siparişi bara gönderir' : 'Ürüne dokunun; "Gönder"e basınca bara ve mutfağa gider'}
+            </p>
           </div>
         )}
         <ul className="divide-y divide-[var(--admin-divider)]">

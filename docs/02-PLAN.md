@@ -37,7 +37,7 @@ lafpos/
 
 | Tablo | Amaç | Not |
 | --- | --- | --- |
-| `settings` | anahtar → JSON ayar | işletme adı, fiş metinleri, servis oranı, otomatik kilit, senkron ayarları |
+| `settings` | anahtar → JSON ayar | işletme adı, fiş metinleri, servis oranı, otomatik kilit, senkron ayarları, servis modu (`serviceMode`) |
 | `users`, `sessions` | personel, PIN, rol, kişi bazlı yetki; oturumlar | PIN `HMAC(secret, pin)` olarak tekil |
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
@@ -46,7 +46,7 @@ lafpos/
 | `happy_hours` | saat/gün/kategori indirim kuralı | |
 | `payment_methods` | nakit, kart, yemek kartları, havale, cari | `zField` → lafmaliyet Z alanı (`cash`, `card`, `meal_card`, `online`, `other`), `channel` → komisyon kanalı (`pluxee`…) |
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |
-| `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`) |
+| `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`); yarı self serviste masa no / numaratör (`numarator`, göç 0004) |
 | `cash_movements` | harcama, teslim, giriş | lafmaliyet `cash_outs` türleriyle uyumlu |
 | `room_sessions` | karaoke odası sayacı | |
 | `customers`, `customer_addresses`, `customer_ledger` | müşteri, adres, açık hesap | damga kartı sayacı |
@@ -157,6 +157,15 @@ ekranında Toplam görünümü, Hazır çağrı ekranı (`/cagri`), hazırlama s
 elle fiyat, müşteri ekranı (`/musteri-ekrani`), adisyonda görselli ürün kartları ve kategori listesi, LafPOS Uzaktan
 (Vercel, salt okunur; `docs/07-UZAKTAN-ERISIM.md` §4). Sırada: patronun telefonuna alarm bildirimi (lafmaliyet Web
 Push), vardiya kasa sayımı, personel giriş-çıkış, kampanya kuralları (fiyatın sahibi site; karar gerekir).
+
+**Servis modu** (27 Ekim 2026, `claude/servis-modu`): Yönetim › Ayarlar'da masaya servis (varsayılan, bugünkü
+akış), yarı self ve self servis. Self modlarda açılış ve menünün ilk sekmesi yeni tezgâh satışı (`/satis`), "Öde"
+birincil; yarı selfte "Öde" ve "Gönder" bir kez masa no / numaratör sorar (`PUT /orders/:id/numarator`, ödenmiş
+satışta da düzeltilir), bar ekranı, çağrı ekranı, hazır uyarısı ve fiş numara yerine "Masa 12" yazar; self serviste
+numara ödeme sonucunda, bar fişinde ve adisyonda büyük. Ödeme kuralları ve bara gidiş değişmez. Mod değişikliği
+ayrı denetim kaydı (`settings.servis_modu`, eski ve yeni mod). Testler `tests/servis-modu.test.ts`, e2e'de mod başına
+bir akış. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
+(gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,

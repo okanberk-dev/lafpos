@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, inArray, isNull, or } from 'drizzle-orm';
+import { numaratorLabel } from '@shared/service-mode';
 import { businessDate } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, KitchenTicket, PickupBoardDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
@@ -7,9 +8,14 @@ import { getOpenDay } from './orders';
 
 const TYPE_LABEL: Record<string, string> = { tezgah: 'Tezgâh', gelal: 'Gel-al', paket: 'Paket', online: 'Online', masa: 'Masa' };
 
-export function orderLabel(o: { type: string; no: number; deliveryName: string | null; extLabel: string | null; source: string }, tableName?: string | null): string {
+export function orderLabel(
+  o: { type: string; no: number; deliveryName: string | null; extLabel: string | null; source: string; numarator?: string | null },
+  tableName?: string | null,
+): string {
   if (tableName) return tableName;
   if (o.source === 'laffogato') return o.extLabel ?? 'Online';
+  // Yarı self servis: kasada girilen masa no / numaratör ("Masa 12"); personel siparişi oraya götürür
+  if (o.numarator) return numaratorLabel(o.numarator);
   if (o.deliveryName) return `${TYPE_LABEL[o.type] ?? o.type} · ${o.deliveryName}`;
   return `${TYPE_LABEL[o.type] ?? o.type} #${o.no}`;
 }
@@ -68,7 +74,8 @@ export const PICKUP_READY_MS = 10 * 60_000;
 
 /**
  * Çağrı ekranı: tezgâh ve gel-al siparişleri ile sitenin gel-al siparişleri. Bar "Hazır"a basınca sipariş
- * "Hazırlanıyor"dan "Hazır"a geçer; masaya ya da kuryeye giden siparişler burada görünmez.
+ * "Hazırlanıyor"dan "Hazır"a geçer; masaya ya da kuryeye giden siparişler burada görünmez. Masa no / numaratör
+ * girilmiş tezgâh siparişi (yarı self servis) numara yerine masasıyla görünür: müşteri kalkmaz, personel getirir.
  */
 export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   const day = getOpenDay(t);
@@ -86,7 +93,13 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   for (const o of orders) {
     const mine = items.filter((i) => i.orderId === o.id && i.stationId);
     if (!mine.length) continue;
-    const entry = { id: o.id, no: o.source === 'laffogato' ? (o.extNo ?? o.no) : o.no, name: o.deliveryName?.trim().split(/\s+/)[0] || null, online: o.source === 'laffogato' };
+    const entry = {
+      id: o.id,
+      no: o.source === 'laffogato' ? (o.extNo ?? o.no) : o.no,
+      name: o.deliveryName?.trim().split(/\s+/)[0] || null,
+      online: o.source === 'laffogato',
+      table: o.numarator ?? null,
+    };
     if (mine.some((i) => i.status === 'yeni' || i.status === 'hazirlaniyor')) {
       board.preparing.push(entry);
       continue;
@@ -144,6 +157,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
         note: order.note,
         sentAt: item.sentAt,
         scheduledFor: order.scheduledFor,
+        numarator: order.numarator ?? null,
         items: [],
       };
       tickets.set(key, ticket);

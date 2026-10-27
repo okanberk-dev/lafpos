@@ -1,13 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { DatabaseBackup, Save } from 'lucide-react';
+import { Check, DatabaseBackup, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
+import { SERVICE_MODE_HINT, SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode, serviceModeOf } from '@shared/service-mode';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Textarea, Toggle } from '@/components/ui/Field';
 import { PageLoading } from '@/components/ui/misc';
 import { Card, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 
 type Settings = Record<string, unknown> & {
@@ -38,6 +40,7 @@ type Settings = Record<string, unknown> & {
   autoDayEnd: boolean;
   autoDayEndHour: number;
   posSizeSuffix: { M: string; L: string; TEK: string };
+  serviceMode: ServiceMode;
 };
 
 const lines = (a: string[]) => a.join('\n');
@@ -48,16 +51,34 @@ export default function SettingsAdmin() {
   const data = useQuery({ queryKey: ['admin', 'settings'], queryFn: () => get<Settings>('/admin/settings') });
   const backups = useQuery({ queryKey: ['admin', 'backups'], queryFn: () => get<{ dir: string; files: { name: string; size: number; at: number }[] }>('/admin/backups') });
   const [s, setS] = useState<Settings | null>(null);
+  const [modeBusy, setModeBusy] = useState<ServiceMode | null>(null);
   useEffect(() => {
     if (data.data) setS(data.data);
   }, [data.data]);
   if (!s) return <PageLoading />;
   const set = (patch: Partial<Settings>) => setS({ ...s, ...patch });
+  const mode = serviceModeOf(s);
+
+  // Servis modu seçilince hemen uygulanır (yalnız bu alan gider): kasalar açılış verisiyle birlikte yenilenir
+  const chooseMode = async (next: ServiceMode) => {
+    if (next === mode || modeBusy) return;
+    setModeBusy(next);
+    try {
+      await put('/admin/settings', { serviceMode: next });
+      setS((cur) => (cur ? { ...cur, serviceMode: next } : cur));
+      toast.ok(`Servis modu: ${SERVICE_MODE_LABEL[next]}`);
+      qc.invalidateQueries({ queryKey: ['bootstrap'] });
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setModeBusy(null);
+    }
+  };
 
   const save = async () => {
     try {
-      // Senkron anahtarları ayrı yetkiyle (Site ve lafmaliyet ekranı) değişir; burada gönderilmez
-      const rest = Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'menuAutoSync' && k !== 'onlineOrdersSync'));
+      // Senkron anahtarları ayrı yetkiyle (Site ve lafmaliyet ekranı) değişir; servis modu seçilince kendisi kaydedilir
+      const rest = Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'menuAutoSync' && k !== 'onlineOrdersSync' && k !== 'serviceMode'));
       await put('/admin/settings', rest);
       toast.ok('Ayarlar kaydedildi');
       qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
@@ -76,6 +97,35 @@ export default function SettingsAdmin() {
           <Toggle checked={s.demoMode} onChange={(v) => set({ demoMode: v })} label="Kurulum modu" />
         </div>
       )}
+      <Card flush title="Servis modu" subtitle="Seçince hemen uygulanır; açılış ekranı, menü ve tezgâh satışı buna göre değişir">
+        <div role="radiogroup" aria-label="Servis modu" className="grid gap-2 p-4 sm:grid-cols-3">
+          {SERVICE_MODES.map((m) => {
+            const on = m === mode;
+            return (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                disabled={!!modeBusy}
+                onClick={() => void chooseMode(m)}
+                className={cn(
+                  'flex min-h-16 items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors disabled:opacity-70',
+                  on ? 'border-primary bg-[var(--admin-primary-soft)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)] hover:bg-surface-2',
+                )}
+              >
+                <span className={cn('mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border', on ? 'border-primary bg-primary text-primary-ink' : 'border-[var(--admin-border-strong)]')}>
+                  {on && <Check className="size-3.5" strokeWidth={2.5} />}
+                </span>
+                <span className="min-w-0">
+                  <span className={cn('block text-sm font-semibold', on && 'text-primary')}>{SERVICE_MODE_LABEL[m]}</span>
+                  <span className="block text-xs text-muted">{SERVICE_MODE_HINT[m]}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
       <div className="grid gap-4 xl:grid-cols-2">
         <Card flush title="İşletme ve fiş">
           <div className="grid gap-3 p-4">

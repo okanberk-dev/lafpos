@@ -17,7 +17,7 @@ const item = (name: string, qty: number, status: KitchenTicketItem['status'], op
   readyAt: null,
   ...extra,
 });
-const ticket = (items: KitchenTicketItem[]): KitchenTicket => ({ key: String(Math.random()), orderId: 'o', orderNo: 1, batch: 1, label: 'S1', type: 'masa', source: 'pos', waiterName: null, note: null, sentAt: 0, scheduledFor: null, items });
+const ticket = (items: KitchenTicketItem[]): KitchenTicket => ({ key: String(Math.random()), orderId: 'o', orderNo: 1, batch: 1, label: 'S1', type: 'masa', source: 'pos', waiterName: null, note: null, sentAt: 0, scheduledFor: null, numarator: null, items });
 
 describe('bar ekranı Toplam', () => {
   it('ürün ve boy başına toplar; seçenekler alt sayım; hazır, serviste ve iptal sayılmaz', () => {

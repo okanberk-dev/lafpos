@@ -1,5 +1,6 @@
 import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
+import type { ServiceMode } from './service-mode';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
 
@@ -188,6 +189,8 @@ export interface PublicSettings {
   stampCategoryKeys: string[];
   /** Kurulum modu: giriş ekranında örnek PIN'ler yazar. Canlıya geçince kapatılır */
   demoMode: boolean;
+  /** Servis modu: masaya servis (varsayılan), yarı self ya da self servis (shared/service-mode.ts) */
+  serviceMode: ServiceMode;
 }
 
 export interface BootstrapDTO {
@@ -320,6 +323,8 @@ export interface OrderDTO {
   deliveryStatus: 'hazirlaniyor' | 'hazir' | 'yolda' | 'teslim' | null;
   courierId: string | null;
   cancelReason: string | null;
+  /** Yarı self serviste masa no / numaratör ("12"); personel siparişi bu masaya götürür */
+  numarator: string | null;
   items: OrderItemDTO[];
   payments: PaymentDTO[];
   /** Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar); bölünmediyse null */
@@ -383,6 +388,8 @@ export interface KitchenTicket {
   note: string | null;
   sentAt: number;
   scheduledFor: string | null;
+  /** Masa no / numaratör: fişte numara yerine "Masa 12" */
+  numarator: string | null;
   items: KitchenTicketItem[];
 }
 
@@ -449,6 +456,8 @@ export interface PickupEntryDTO {
   /** Online siparişte müşterinin adı (soyadı gelmez); tezgâhta yok, numara söylenir */
   name: string | null;
   online: boolean;
+  /** Masa no / numaratör girildiyse: ekranda numara yerine masa, sipariş masaya getirilir */
+  table: string | null;
 }
 
 export interface PickupBoardDTO {
