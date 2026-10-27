@@ -280,7 +280,8 @@ posRoutes.get('/kitchen', (c) => {
 posRoutes.post('/kitchen/status', async (c) => {
   const input = await body(
     c,
-    z.object({ itemIds: z.array(z.string()).min(1).max(100), status: z.enum(['yeni', 'hazirlaniyor', 'hazir', 'servis']).optional() }),
+    // "yeni"ye dönüş yok: başlamış kalemin başlama zamanı silinip onaysız iptal açılırdı (orders.setItemsStatus)
+    z.object({ itemIds: z.array(z.string()).min(1).max(100), status: z.enum(['hazirlaniyor', 'hazir', 'servis']).optional() }),
   );
   const actor = actorFrom(c);
   write((t, fx) => orders.setItemsStatus(t, actor, fx, input));

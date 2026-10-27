@@ -110,7 +110,7 @@ export function startJobs() {
     }, 5 * 60_000),
   );
   timers.push(setInterval(backupTick, 60 * 60_000));
-  // Porsiyonu biten ürün sitede de tükensin
+  // Porsiyon sayacıyla değişen Satışta bilgisi siteye de gitsin: biten ürün tükenir, iptalle dönen yeniden satışa açılır
   bus.on('event', (e) => {
     if (e.topic === 'sync' && e.kind === 'availability.push' && e.message) void pushSoldOut([e.message]);
   });

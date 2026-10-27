@@ -70,7 +70,7 @@ function assertOpen(o: OrderRow) {
   if (o.status !== 'acik') throw conflict('Bu adisyon kapalı', 'order_closed');
 }
 
-function assertPosOrder(o: OrderRow) {
+export function assertPosOrder(o: OrderRow) {
   if (o.extPaid) throw conflict('Bu sipariş sitede ödendi; tutarı LafPOS\'ta değiştirilemez', 'online_order');
 }
 
@@ -78,7 +78,7 @@ function assertPosOrder(o: OrderRow) {
  * Sepeti yazarkasada bekleyen adisyonun tutarı ve ödemeleri değişmez: cihazın sonucu geldiğinde ödenen kalemler
  * kayar, aynı kalem iki kez ödenir (inceleme, 26 Eki 2026). Kalem eklemek serbest; cihazdaki sepet aynı kalır.
  */
-function assertNoPendingDevice(t: Tx | DB, orderId: string) {
+export function assertNoPendingDevice(t: Tx | DB, orderId: string) {
   const pending = t
     .select({ id: schema.fiscalReceipts.id })
     .from(schema.fiscalReceipts)
@@ -99,13 +99,17 @@ export function isEmptyOrder(t: Tx | DB, orderId: string): boolean {
   return !basket;
 }
 
-export function assertNoActiveRoom(t: Tx | DB, orderId: string) {
-  const active = t
+/** Adisyonun çalışan oda sayacı (karaoke): faturalanacak ücrettir, durunca adisyona yazılır */
+export function activeRoom(t: Tx | DB, orderId: string) {
+  return t
     .select()
     .from(schema.roomSessions)
     .where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt)))
     .get();
-  if (active) throw conflict('Önce oda sayacını durdurun', 'room_running');
+}
+
+export function assertNoActiveRoom(t: Tx | DB, orderId: string) {
+  if (activeRoom(t, orderId)) throw conflict('Önce oda sayacını durdurun', 'room_running');
 }
 
 function orderEvents(fx: Effects, o: Pick<OrderRow, 'id' | 'tableId'>, userId: string, kind: string) {
@@ -194,10 +198,11 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
     const table = t.select().from(schema.tables).where(eq(schema.tables.id, input.tableId)).get();
     if (!table || !table.active) throw notFound('Masa');
     if (!input.newCheck) {
+      // Masadaki kasa adisyonu döner; sitede ödenmiş QR siparişi değil (ona kalem eklenmez, tahsil edilmez)
       const existing = t
         .select()
         .from(schema.orders)
-        .where(and(eq(schema.orders.tableId, input.tableId), eq(schema.orders.status, 'acik')))
+        .where(and(eq(schema.orders.tableId, input.tableId), eq(schema.orders.status, 'acik'), eq(schema.orders.source, 'pos'), eq(schema.orders.extPaid, false)))
         .orderBy(schema.orders.openedAt)
         .get();
       if (existing) return existing;
@@ -366,6 +371,32 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
 
 // ─── Kalem işlemleri: iptal, ikram, indirim ──────────────────────────────────
 
+/** Bar ya da mutfak kaleme dokunmadı: hiçbir şey hazırlanmadı */
+const notStarted = (it: ItemRow) => it.status === 'yeni' && !it.startedAt;
+
+/**
+ * Hazırlanmaya başlanmamış kalemin iptalinde porsiyon geri döner: ürün hâlâ satılabilir (hazırlanmış kalem fire
+ * sayılır, dönmez). Porsiyonu sıfırdan dönen ürün yeniden satışa açılır ve site de güncellenir.
+ */
+function releasePortions(t: Tx, fx: Effects, userId: string, lines: { productId: string | null; qty: number }[]) {
+  const now = Date.now();
+  const reopened = new Set<string>();
+  for (const l of lines) {
+    if (!l.productId) continue;
+    const p = t.select({ portionsLeft: schema.products.portionsLeft }).from(schema.products).where(eq(schema.products.id, l.productId)).get();
+    if (p?.portionsLeft == null) continue;
+    t.update(schema.products)
+      .set({ portionsLeft: p.portionsLeft + l.qty, ...(p.portionsLeft === 0 ? { active: true } : {}), updatedAt: now })
+      .where(eq(schema.products.id, l.productId))
+      .run();
+    if (p.portionsLeft === 0) reopened.add(l.productId);
+  }
+  if (reopened.size) {
+    fx.emit({ topic: 'menu', kind: 'product.available', byUserId: userId });
+    for (const id of reopened) fx.emit({ topic: 'sync', kind: 'availability.push', message: id });
+  }
+}
+
 export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { itemId: string; qty?: number; reason: string }): OrderRow {
   const o = loadOrder(t, orderId);
   assertOpen(o);
@@ -393,6 +424,7 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     voidedAt: now,
     voidAfterSend: afterSend,
   });
+  if (notStarted(it)) releasePortions(t, fx, actor.user.id, [{ productId: it.productId, qty }]);
   const updated = recalc(t, orderId);
   fx.audit(t, {
     userId: actor.user.id,
@@ -478,6 +510,8 @@ export function setItemDiscount(
   orderId: string,
   input: { itemId: string; type: 'percent' | 'amount'; value: number; reason: string },
 ): OrderRow {
+  // İndirimi kaldırmak da adisyonu değiştirir: sipariş yetkisi ister (bar ekranı onaylı indirimi geri alamasın)
+  needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
@@ -496,6 +530,17 @@ export function setItemDiscount(
     .where(eq(schema.orderItems.id, it.id))
     .run();
   const updated = recalc(t, orderId);
+  // Kaldırılan indirim de denetime yazılır: onaylı indirimi kimin geri aldığı görünür
+  if (amount === 0 && it.discount > 0) {
+    fx.audit(t, {
+      userId: actor.user.id,
+      action: 'item.discount_removed',
+      orderId,
+      entityId: it.id,
+      amount: it.discount,
+      message: `${actor.user.name} #${o.no} adisyonda ${it.name} kalemindeki ${tl(it.discount)} indirimi kaldırdı`,
+    });
+  }
   if (amount > 0) {
     fx.audit(t, {
       userId: actor.user.id,
@@ -519,14 +564,27 @@ export function setOrderDiscount(
   orderId: string,
   input: { type: 'percent' | 'amount'; value: number; reason: string } | null,
 ): OrderRow {
+  // İndirimi kaldırmak da adisyonu değiştirir: sipariş yetkisi ister (bar ekranı onaylı indirimi geri alamasın)
+  needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
   assertNoPendingDevice(t, orderId);
   if (!input || input.value <= 0) {
+    const removed = o.discountType ? calcFor(o, orderItems(t, orderId)).orderDiscount : 0;
     t.update(schema.orders).set({ discountType: null, discountValue: null, discountReason: null, discountBy: null }).where(eq(schema.orders.id, orderId)).run();
     const updated = recalc(t, orderId);
     if (updated.paid > updated.total) throw conflict('Alınan ödeme yeni tutarı aşıyor');
+    // Kaldırılan indirim de denetime yazılır: onaylı indirimi kimin geri aldığı görünür
+    if (o.discountType) {
+      fx.audit(t, {
+        userId: actor.user.id,
+        action: 'order.discount_removed',
+        orderId,
+        amount: removed,
+        message: `${actor.user.name} #${o.no} adisyondaki ${tl(removed)} indirimi kaldırdı`,
+      });
+    }
     orderEvents(fx, updated, actor.user.id, 'order.discount');
     return updated;
   }
@@ -598,6 +656,8 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
   const approverId = need(actor, 'masa.islem');
   const o = loadOrder(t, orderId);
   assertOpen(o);
+  // Sitede ödenmiş siparişin masası sitenin (senkron geri yazar); "masa" adisyonuna dönüp odaya da taşınmaz
+  assertPosOrder(o);
   const table = t.select().from(schema.tables).where(eq(schema.tables.id, tableId)).get();
   if (!table || !table.active) throw notFound('Masa');
   if (o.tableId === tableId) return o;
@@ -709,7 +769,17 @@ export function transferItems(
   const dst = recalc(t, target.id);
   const remaining = orderItems(t, orderId).filter((i) => !i.voided);
   const hasPayments = orderPayments(t, orderId).some((p) => !p.refundedAt);
-  if (!remaining.length && !hasPayments) {
+  const emptied = !remaining.length && !hasPayments;
+  // Oda sayacı çalışan kaynak kapanmaz: sayaç odanın hesabında kalır, durunca ücreti yazılır (kapanmış adisyona
+  // yazılamazdı, oda ücreti kaybolurdu). Bütün kalemler aynı odadaki başka hesaba geçtiyse sayaç da onlarla gider:
+  // kalemleri tutan hesapta görünür, orada ikinci sayaç başlatılmaz, boşalan kaynak kapanır (inceleme, 27 Eki 2026)
+  const room = activeRoom(t, orderId);
+  let roomMoved = false;
+  if (emptied && room && dst.tableId === room.tableId && !activeRoom(t, target.id)) {
+    t.update(schema.roomSessions).set({ orderId: target.id }).where(eq(schema.roomSessions.id, room.id)).run();
+    roomMoved = true;
+  }
+  if (emptied && (!room || roomMoved)) {
     t.update(schema.orders)
       .set({ status: 'birlesti', mergedInto: target.id, closedAt: Date.now(), closedBy: actor.user.id })
       .where(eq(schema.orders.id, orderId))
@@ -720,7 +790,7 @@ export function transferItems(
     approverId,
     action: 'order.transfer',
     orderId,
-    message: `#${source.no} adisyondan ${input.items.length} kalem #${dst.no} adisyona taşındı`,
+    message: `#${source.no} adisyondan ${input.items.length} kalem #${dst.no} adisyona taşındı${roomMoved ? ', oda sayacı da' : ''}`,
   });
   orderEvents(fx, src, actor.user.id, 'order.items_moved');
   orderEvents(fx, dst, actor.user.id, 'order.items_moved');
@@ -993,6 +1063,8 @@ export function closeOrder(t: Tx, actor: Actor, fx: Effects, orderId: string): O
   needDirect(actor, 'siparis.al');
   const o = recalc(t, orderId);
   assertOpen(o);
+  // Sitede ödenmiş siparişin aşaması sitenin, kapanışı senkronun
+  assertPosOrder(o);
   assertNoActiveRoom(t, orderId);
   if (o.total - o.paid > 0) throw conflict(`Ödenecek ${tl(o.total - o.paid)} var`, 'due');
   closeOrderRow(t, o, actor.user.id);
@@ -1079,10 +1151,14 @@ export function reopenOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
 }
 
 export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, reason: string): OrderRow {
+  // Boş adisyon da olsa iptal sipariş yetkisi ister (bar ekranı, kurye başkasının masasını kapatmasın)
+  needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
   assertNoPendingDevice(t, orderId);
+  // Çalışan oda sayacı kalem görünmeyen ücrettir: "boş adisyon" diye onaysız silinmesin, önce durdurulup yazılır
+  assertNoActiveRoom(t, orderId);
   if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Önce alınan ödemeleri iptal edin', 'has_payments');
   const live = orderItems(t, orderId).filter((i) => !i.voided);
   const now = Date.now();
@@ -1095,6 +1171,7 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
       .where(eq(schema.orderItems.id, it.id))
       .run();
   }
+  releasePortions(t, fx, actor.user.id, live.filter(notStarted));
   t.update(schema.orders)
     .set({ status: 'iptal', cancelReason: reason.trim() || null, closedAt: now, closedBy: actor.user.id })
     .where(eq(schema.orders.id, orderId))
@@ -1119,11 +1196,16 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
 
 const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazirlaniyor', hazirlaniyor: 'hazir', hazir: 'servis' };
 
+/**
+ * Bar ve mutfak durumları. Başlamış kalem bekleyene ("yeni") dönmez ve başlama zamanı silinmez: onaysız iptal
+ * "hiç başlanmamış" kaleme (yanlış giriş penceresi) özgüdür. Garson kalemi "yeni"ye çekip bardan çıkmış içeceği
+ * onaysız, zayi sayılmadan iptal ediyordu (denetim, 26 Eki 2026). Bardaki "Geri al" en çok "hazırlanıyor"a döner.
+ */
 export function setItemsStatus(
   t: Tx,
   actor: Actor,
   fx: Effects,
-  input: { itemIds: string[]; status?: 'hazirlaniyor' | 'hazir' | 'servis' | 'yeni' },
+  input: { itemIds: string[]; status?: 'hazirlaniyor' | 'hazir' | 'servis' },
 ): void {
   if (!can(actor.user, 'mutfak.ekran') && !can(actor.user, 'siparis.al')) needDirect(actor, 'mutfak.ekran');
   if (!input.itemIds.length) return;
@@ -1139,7 +1221,6 @@ export function setItemsStatus(
     if (!status || status === it.status) continue;
     if (status === 'hazir') readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
     const patch: Partial<ItemRow> = { status };
-    if (status === 'yeni') Object.assign(patch, { startedAt: null, readyAt: null, servedAt: null });
     if (status === 'hazirlaniyor') patch.startedAt = it.startedAt ?? now;
     if (status === 'hazir') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: now });
     if (status === 'servis') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: it.readyAt ?? now, servedAt: now });
@@ -1166,8 +1247,8 @@ export function getOrderDTO(t: Tx | DB, orderId: string): OrderDTO {
 
 /**
  * Dışarıdan gelen (yazarkasa POS'ta alınmış) ödemeleri adisyona işler: kalemlerin ödenen adetleri işaretlenir,
- * ödemeler eklenir, tutar tamamlandıysa adisyon kapanır. Ödeme cihazda zaten alındığı için yetki sorulmaz;
- * işlemi başlatan kişinin adına kaydedilir.
+ * ödemeler eklenir, tutar tamamlandıysa (oda sayacı çalışmıyorsa) adisyon kapanır. Ödeme cihazda zaten alındığı için
+ * yetki sorulmaz; işlemi başlatan kişinin adına kaydedilir.
  */
 export function addExternalPayments(
   t: Tx,
@@ -1248,9 +1329,21 @@ export function addExternalPayments(
   let updated = recalc(t, orderId);
   let closed = false;
   if (updated.total - updated.paid <= 0) {
-    closeOrderRow(t, updated, userId);
-    updated = loadOrder(t, orderId);
-    closed = true;
+    if (activeRoom(t, orderId)) {
+      // Oda sayacı çalışırken adisyon kapanmaz: kapanmış adisyona oda ücreti yazılamaz, ücret kaybolurdu (eski veri
+      // ya da gönderimi hata görünen sepet; sepet beklerken sayaç başlamaz)
+      fx.audit(t, {
+        userId,
+        action: 'okc.room_running',
+        severity: 'uyari',
+        orderId,
+        message: `#${o.no} adisyon yazarkasada ödendi ama oda sayacı çalışıyor; adisyon açık kaldı. Sayacı durdurup oda ücretini alın`,
+      });
+    } else {
+      closeOrderRow(t, updated, userId);
+      updated = loadOrder(t, orderId);
+      closed = true;
+    }
   }
   orderEvents(fx, updated, userId, closed ? 'order.closed' : 'payment.added');
   fx.emit({ topic: 'cash', kind: 'payment.added', orderId, byUserId: userId });
