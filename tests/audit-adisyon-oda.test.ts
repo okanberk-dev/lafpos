@@ -123,32 +123,86 @@ describe('karaoke odası: çalışan sayaç faturalanacak ücrettir', () => {
     expect(await runningSessions(o.id)).toHaveLength(0);
   });
 
-  it('aynı odada ayrı hesaba ya da var olan adisyona taşımada da sayaç kaynakta kalır', async () => {
-    // "Aynı masada ayrı hesap": hedef de odada açılır, sayaç yine kaynağın
+  it('aynı odada ayrı hesaba taşımada sayaç kalemlerle gider; başka odadaki adisyona taşımada kaynakta kalır', async () => {
+    // "Aynı masada ayrı hesap", bütün kalemler: hedef de odada açılır, boşalan kaynak kapanır, sayaç hedefe geçer.
+    // Kaynakta kalsaydı odanın kalemli hesabında "Oda sayacı kapalı · Başlat" görünür, ikinci sayaç başlatılırdı
     const { room, order: a } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
-    await h.ok('garson', 'POST', `/orders/${a.id}/room/start`);
+    const started = (await h.ok<OrderDTO>('garson', 'POST', `/orders/${a.id}/room/start`)).room!;
     const split = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${a.id}/transfer`, { items: [{ itemId: a.items[0].id, qty: 1 }], tableId: room });
-    expect(split.source).toMatchObject({ status: 'acik', total: 0 });
-    expect(split.source.room).not.toBeNull();
-    expect(split.target).toMatchObject({ tableId: room, room: null, total: 14000 });
+    expect(split.source).toMatchObject({ status: 'birlesti', room: null });
+    expect(split.target).toMatchObject({ status: 'acik', tableId: room, total: 14000 });
+    expect(split.target.room).toMatchObject({ id: started.id, startedAt: started.startedAt, endedAt: null });
+    const floor = await h.ok<FloorStateDTO>('garson', 'GET', '/floor');
+    expect(floor.tables[room]?.map((f) => [f.id, f.roomStartedAt])).toEqual([[split.target.id, started.startedAt]]);
 
-    // Var olan adisyona (targetOrderId) taşıma
+    // Kalemlerin bir kısmı aynı odada ayrı hesaba: sayaç kalemi kalan kaynağın
+    const { room: room2, order: d } = await roomOrder([{ name: 'Türk kahvesi', qty: 2 }]);
+    await h.ok('garson', 'POST', `/orders/${d.id}/room/start`);
+    const part = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${d.id}/transfer`, { items: [{ itemId: d.items[0].id, qty: 1 }], tableId: room2 });
+    expect(part.source).toMatchObject({ status: 'acik', total: 14000 });
+    expect(part.source.room).not.toBeNull();
+    expect(part.target).toMatchObject({ tableId: room2, room: null, total: 14000 });
+
+    // Başka odadaki var olan adisyona (targetOrderId) taşıma: sayaç kendi odasının, kaynakta kalır
     const { order: b } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
     await h.ok('garson', 'POST', `/orders/${b.id}/room/start`);
     const into = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${b.id}/transfer`, { items: [{ itemId: b.items[0].id, qty: 1 }], targetOrderId: split.target.id });
     expect(into.source.status).toBe('acik');
     expect(into.source.room).not.toBeNull();
     expect(into.target.total).toBe(28000);
+    expect(into.target.room?.id).toBe(started.id);
 
     // Sayacı çalışmayan adisyon boşalınca eskisi gibi kapanır (birleşti)
     const { order: c } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
     const plain = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${c.id}/transfer`, { items: [{ itemId: c.items[0].id, qty: 1 }], targetOrderId: split.target.id });
     expect(plain.source.status).toBe('birlesti');
 
-    for (const id of [a.id, b.id]) {
-      await h.ok('garson', 'POST', `/orders/${id}/room/stop`);
+    // Her oda bir kez faturalanır: sayaç durunca en az bir saat
+    for (const id of [split.target.id, b.id, d.id]) {
+      const before = await h.ok<OrderDTO>('garson', 'GET', `/orders/${id}`);
+      const stopped = await h.ok<OrderDTO>('garson', 'POST', `/orders/${id}/room/stop`);
+      expect(stopped.total - before.total).toBe(100000);
       await settle(id);
     }
+    await settle(part.target.id);
+  });
+
+  it('bir odada aynı anda tek sayaç çalışır: odanın ikinci hesabında sayaç başlamaz, oda iki kez faturalanmaz', async () => {
+    // Odada "Yeni hesap" (newCheck) ile ikinci adisyon: sayaç ilk hesapta çalışıyor
+    const { room, order: a } = await roomOrder([{ name: 'Türk kahvesi', qty: 1 }]);
+    await h.ok('garson', 'POST', `/orders/${a.id}/room/start`);
+    const second = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: room, newCheck: true });
+    expect(second.id).not.toBe(a.id);
+    const start = await h.call<{ code: string; error: string }>('garson', 'POST', `/orders/${second.id}/room/start`);
+    expect(start.status).toBe(409);
+    expect(start.json.code).toBe('room_running');
+    expect(start.json.error).toContain(`#${a.no}`);
+    const { db, schema } = await server();
+    const onRoom = () =>
+      db
+        .select()
+        .from(schema.roomSessions)
+        .where(and(eq(schema.roomSessions.tableId, room), isNull(schema.roomSessions.endedAt)))
+        .all();
+    expect(onRoom()).toHaveLength(1);
+    // Aynı adisyonda ikinci başlatma da aynı kodla döner
+    expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${a.id}/room/start`)).json.code).toBe('room_running');
+
+    // Kalemler ayrı hesaba taşınıp kaynakta kalan bir kalem varken de hedefte ikinci sayaç başlamaz (inceleme bulgusu)
+    await h.ok<OrderDTO>('garson', 'POST', `/orders/${a.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    const split = await h.ok<{ source: OrderDTO; target: OrderDTO }>('garson', 'POST', `/orders/${a.id}/transfer`, { items: [{ itemId: a.items[0].id, qty: 1 }], tableId: room });
+    expect(split.source.room).not.toBeNull();
+    expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${split.target.id}/room/start`)).json.code).toBe('room_running');
+    expect(onRoom()).toHaveLength(1);
+
+    // Sayaç durunca oda bir kez yazılır; oda yeniden kullanılınca öteki hesapta başlar
+    const stopped = await h.ok<OrderDTO>('garson', 'POST', `/orders/${a.id}/room/stop`);
+    expect(stopped.items.filter((i) => i.isService).map((i) => i.unitPrice)).toEqual([100000]);
+    await settle(a.id);
+    expect((await h.ok<OrderDTO>('garson', 'POST', `/orders/${second.id}/room/start`)).room).not.toBeNull();
+    expect(onRoom()).toHaveLength(1);
+    await h.ok('garson', 'POST', `/orders/${second.id}/room/stop`);
+    await settle(second.id);
     await settle(split.target.id);
   });
 
@@ -279,6 +333,53 @@ describe('masa açma ve adisyon iptali', () => {
   });
 });
 
+describe('indirim kaldırma', () => {
+  it('adisyon indirimini kaldırmak sipariş yetkisi ister ve denetime yazılır', async () => {
+    const table = await newTable('masa');
+    let o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 2 }] });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 50, reason: 'Sürekli müşteri', approverPin: MUDUR });
+    expect(o.total).toBe(14000);
+    // Bar ekranı (sipariş yetkisi yok) başkasının adisyonundaki onaylı indirimi kaldıramaz: ne remove ne sıfır değer
+    for (const body of [{ type: 'percent', value: 0, reason: '', remove: true }, { type: 'amount', value: 0, reason: '' }]) {
+      const r = await h.call<{ code: string; permission: string }>('bar', 'POST', `/orders/${o.id}/discount`, body);
+      expect(r.status).toBe(403);
+      expect(r.json).toMatchObject({ code: 'forbidden', permission: 'siparis.al' });
+    }
+    expect((await h.ok<OrderDTO>('garson', 'GET', `/orders/${o.id}`)).total).toBe(14000);
+    expect((await auditFor(o.id)).map((a) => a.action)).toEqual(['order.discount']);
+
+    // Siparişi alan kişi kaldırır: hesap eski tutarına döner, kaldırılan indirim denetimde görünür
+    const removed = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 0, reason: '', remove: true });
+    expect(removed).toMatchObject({ total: 28000, discountType: null });
+    expect((await auditFor(o.id)).find((a) => a.action === 'order.discount_removed')).toMatchObject({ amount: 14000, approverName: null });
+    // İndirimsiz adisyonda "kaldır" denetime bir şey yazmaz
+    await h.ok('garson', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 0, reason: '', remove: true });
+    expect((await auditFor(o.id)).filter((a) => a.action === 'order.discount_removed')).toHaveLength(1);
+    await settle(o.id);
+  });
+
+  it('kalem indirimini kaldırmak sipariş yetkisi ister ve denetime yazılır', async () => {
+    const table = await newTable('masa');
+    let o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+    const itemId = o.items[0].id;
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items/${itemId}/discount`, { type: 'percent', value: 50, reason: 'Sürekli müşteri', approverPin: MUDUR });
+    expect(o.total).toBe(7000);
+    const r = await h.call<{ code: string; permission: string }>('bar', 'POST', `/orders/${o.id}/items/${itemId}/discount`, { type: 'amount', value: 0, reason: '' });
+    expect(r.status).toBe(403);
+    expect(r.json).toMatchObject({ code: 'forbidden', permission: 'siparis.al' });
+    expect((await h.ok<OrderDTO>('garson', 'GET', `/orders/${o.id}`)).total).toBe(7000);
+
+    const removed = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items/${itemId}/discount`, { type: 'amount', value: 0, reason: '' });
+    expect(removed.total).toBe(14000);
+    const rows = await auditFor(o.id);
+    expect(rows.map((a) => a.action).sort()).toEqual(['item.discount', 'item.discount_removed']);
+    expect(rows.find((a) => a.action === 'item.discount_removed')).toMatchObject({ amount: 7000 });
+    await settle(o.id);
+  });
+});
+
 describe('porsiyon sayacı', () => {
   async function productRow(id: string) {
     const { db, schema } = await server();
@@ -369,6 +470,48 @@ describe('porsiyon sayacı', () => {
     expect((await h.ok<OrderDTO>('kasa', 'POST', `/orders/${f.id}/cancel`, { reason: 'Yanlış adisyon' })).status).toBe('iptal');
     expect(await productRow(cake.id)).toEqual({ active: true, portionsLeft: 2 });
 
+    await h.ok('patron', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: null });
+  });
+
+  it('hazırlanmış ya da servis edilmiş kalem "yeni"ye çekilemez: iptalinde porsiyon dönmez, ürün Tükendi kalır', async () => {
+    const cake = product('San Sebastian');
+    await h.ok('patron', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 2 });
+    const { bus } = await import('../server/lib/events');
+    const seen: LiveEvent[] = [];
+    const listen = (e: LiveEvent) => seen.push(e);
+    const table = await newTable('masa');
+    let o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, {
+      items: [
+        { productId: cake.id, qty: 1 },
+        { productId: cake.id, qty: 1, note: 'Ayrı tabak' },
+      ],
+    });
+    expect(await productRow(cake.id)).toEqual({ active: false, portionsLeft: 0 });
+    const [ready, served] = o.items;
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: [ready.id, served.id], status: 'hazir' });
+    await h.ok('garson', 'POST', '/kitchen/status', { itemIds: [served.id], status: 'servis' });
+
+    // Garson (yalnız siparis.al) ya da bar kalemi bekleyene çekip "hiç başlanmamış" gösteremez: başlama zamanı kalır
+    for (const who of ['garson', 'bar']) {
+      const r = await h.call(who, 'POST', '/kitchen/status', { itemIds: [ready.id, served.id], status: 'yeni' });
+      expect(r.status, who).toBe(400);
+    }
+    const after = await h.ok<OrderDTO>('garson', 'GET', `/orders/${o.id}`);
+    expect(after.items.map((i) => i.status)).toEqual(['hazir', 'servis']);
+
+    // İptal yetkili onayı ister (hazırlanmış kalem); onaylı iptalde porsiyon dönmez, ürün POS'ta ve sitede Tükendi kalır
+    expect((await h.call<{ code: string }>('garson', 'POST', `/orders/${o.id}/items/${served.id}/void`, { reason: 'Vazgeçti' })).json.code).toBe('approval_required');
+    bus.on('event', listen);
+    try {
+      for (const it of [ready, served]) await h.ok('garson', 'POST', `/orders/${o.id}/items/${it.id}/void`, { reason: 'Vazgeçti', approverPin: MUDUR });
+    } finally {
+      bus.off('event', listen);
+    }
+    expect(await productRow(cake.id)).toEqual({ active: false, portionsLeft: 0 });
+    expect(seen.filter((e) => (e.topic === 'menu' && e.kind === 'product.available') || (e.topic === 'sync' && e.kind === 'availability.push'))).toEqual([]);
+
+    await h.ok('garson', 'POST', `/orders/${o.id}/cancel`, { reason: '' });
     await h.ok('patron', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: null });
   });
 });
