@@ -14,7 +14,7 @@ import type { PatronData } from '@/pages/patron/PatronPage';
 
 interface SyncStatus {
   menu: { linked: boolean; auto: boolean; state: { lastSuccessAt?: number; lastCheckAt?: number; lastError?: string | null; lastErrorAt?: number } | null };
-  online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null };
+  online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null; soldOutPush: { pending: number; lastError: string | null } };
   lafmaliyet: { configured: boolean; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null };
   okc: { provider: 'kapali' | 'simulator' | 'tokenx'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
 }
@@ -97,6 +97,7 @@ export default function OverviewAdmin() {
   for (const a of d?.anomalies ?? []) attention.push({ key: `an-${a.title}`, tone: a.level === 'alarm' ? 'danger' : 'warning', title: a.title, detail: a.detail });
   for (const a of (d?.alerts ?? []).slice(0, 6)) attention.push({ key: `al-${a.id}`, tone: a.severity === 'alarm' ? 'danger' : 'warning', title: a.message, detail: fmtTime(a.at) });
   if (s?.lafmaliyet.pending) attention.push({ key: 'lm', tone: 'danger', title: `lafmaliyet'e gönderilemeyen ${s.lafmaliyet.pending} gün`, detail: s.lafmaliyet.lastError ?? s.lafmaliyet.pendingDays.join(', ') });
+  if (s?.online.soldOutPush.pending) attention.push({ key: 'site-tukendi', tone: 'warning', title: `Siteye bildirilemeyen Tükendi: ${s.online.soldOutPush.pending} ürün`, detail: s.online.soldOutPush.lastError ?? 'Yeniden denenecek' });
   if (s?.okc.lastError) attention.push({ key: 'okc', tone: 'warning', title: 'Yazarkasa hatası', detail: `${s.okc.lastError.message} · ${fmtTime(s.okc.lastError.at)}` });
   if (d && !d.dayOpen) attention.push({ key: 'gun', tone: 'neutral', title: 'Gün kapalı', detail: 'Satış için kasadan gün açılmalı' });
 

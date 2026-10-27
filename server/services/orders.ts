@@ -10,6 +10,7 @@ import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
+import { enqueueSiteSoldOut } from '../sync/site-outbox';
 import { calcFor, orderItems, orderPayments, orderToDTO } from './dto';
 import {
   defaultsOf,
@@ -320,7 +321,11 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
         .set({ portionsLeft: left, active: left > 0, ...(left > 0 ? {} : { soldOutBy: 'lafpos' as const }), updatedAt: now })
         .where(eq(schema.products.id, p.id))
         .run();
-      if (left === 0) soldOut.push(p.id);
+      if (left === 0) {
+        soldOut.push(p.id);
+        // Siteye bağlı ürün sitede ve uygulamada da tükensin: yazım kalemle aynı işlemde giden kutusuna girer
+        enqueueSiteSoldOut(t, p);
+      }
     }
 
     const stationId = stationFor(p, sp.category);

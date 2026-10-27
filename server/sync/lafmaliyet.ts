@@ -286,7 +286,8 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
   const due = db
     .select()
     .from(schema.outbox)
-    .where(and(isNull(schema.outbox.sentAt), lte(schema.outbox.nextAttemptAt, Date.now())))
+    // Giden kutusunu site de kullanır (Tükendi yazımları, target 'laffogato'): lafmaliyet'e yalnız kendi kayıtları
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), isNull(schema.outbox.sentAt), lte(schema.outbox.nextAttemptAt, Date.now())))
     .orderBy(asc(schema.outbox.id))
     .limit(20)
     .all();
@@ -355,7 +356,11 @@ export function costMap(): Record<string, number> {
 }
 
 export function lafmaliyetStatus() {
-  const pending = db.select({ id: schema.outbox.id, lastError: schema.outbox.lastError, attempts: schema.outbox.attempts, dedupeKey: schema.outbox.dedupeKey }).from(schema.outbox).where(isNull(schema.outbox.sentAt)).all();
+  const pending = db
+    .select({ id: schema.outbox.id, lastError: schema.outbox.lastError, attempts: schema.outbox.attempts, dedupeKey: schema.outbox.dedupeKey })
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), isNull(schema.outbox.sentAt)))
+    .all();
   return {
     configured: configured(),
     url: env.lafmaliyetUrl || null,

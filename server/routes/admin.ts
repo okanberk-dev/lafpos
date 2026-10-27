@@ -12,6 +12,8 @@ import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from 
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
+import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
+import { dropSiteSoldOut } from '../sync/site-outbox';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
 import { readdirSync, statSync } from 'node:fs';
@@ -148,12 +150,33 @@ adminRoutes.patch('/products/:id', async (c) => {
   const namesOf = (x: typeof next) => posNamesOf(x, suffix).map((n) => `${n.size}:${posNameKey(n.name)}`).join('|');
   if (namesOf(next) !== namesOf(p)) assertPosNameFree(next);
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
-  if (patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0) Object.assign(patch, { active: true, soldOutBy: null });
-  db.update(schema.products).set({ ...patch, updatedAt: Date.now() }).where(eq(schema.products.id, p.id)).run();
+  // Porsiyon doldurulunca ürün satışa açılır. Kapalı ve siteye bağlıysa önce sitede (yalnız yerelde açılan ürünü
+  // sitenin sonraki senkronu yeniden kapatırdı); site kabul etmezse 502 ve hiçbir alan kaydedilmez
+  const refill = patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0;
+  if (refill) Object.assign(patch, { active: true, soldOutBy: null });
+  const save = (site: SiteWrite | null) => {
+    const fx = new Effects();
+    tx((t) => {
+      t.update(schema.products).set({ ...patch, updatedAt: Date.now() }).where(eq(schema.products.id, p.id)).run();
+      if (site) {
+        dropSiteSoldOut(t, p.extId);
+        fx.audit(t, {
+          userId: user.id,
+          action: 'product.available',
+          entity: 'product',
+          entityId: p.id,
+          message: `${user.name}: ${p.name} porsiyonu dolduruldu (${patch.portionsLeft}), satışa açıldı${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+        });
+      }
+    });
+    fx.flush();
+    return site;
+  };
+  const site = refill && !p.active ? await reopenWithSite(p, user.name, save) : save(null);
   if (input.price !== undefined && input.price !== p.price) {
     changed('menu', 'product.updated', user.id, { action: 'menu.price', message: `${user.name} ${p.name} fiyatını değiştirdi` });
   } else changed('menu', 'product.updated', user.id);
-  return c.json({ ok: true });
+  return c.json({ ok: true, ...(site ? { site } : {}) });
 });
 
 /** Yerel ürünü kaldırır: hiç satılmadıysa siler, satıldıysa gizler (geçmiş raporlar bozulmasın) */

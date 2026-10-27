@@ -12,7 +12,8 @@ import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
 import { enqueueDay, flushOutbox } from './sync/lafmaliyet';
 import { siteLinked } from './sync/laffogato-link';
-import { onlineOrdersTick, pushSoldOut } from './sync/laffogato-orders';
+import { onlineOrdersTick } from './sync/laffogato-orders';
+import { flushSiteOutbox } from './sync/site-outbox';
 import { runMenuSync } from './sync/menu-sync';
 import { startCloudSync } from './sync/cloud';
 
@@ -97,6 +98,8 @@ export function startJobs() {
   timers.push(setTimeout(onlineOrdersTick, 12_000));
   timers.push(setInterval(onlineOrdersTick, 20_000));
   timers.push(setInterval(() => void flushOutbox(), 60_000));
+  // Siteye bildirilemeyen Tükendi yazımları (porsiyon bitti): dakikada bir, bekleme süresi dolanlar
+  timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setTimeout(backupTick, 30_000));
   // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
@@ -112,9 +115,9 @@ export function startJobs() {
     }, 5 * 60_000),
   );
   timers.push(setInterval(backupTick, 60 * 60_000));
-  // Porsiyonu biten ürün sitede de tükensin
+  // Porsiyonu biten ürün sitede de tükensin: adisyon işlemi giden kutusuna koydu, hemen gönderilir
   bus.on('event', (e) => {
-    if (e.topic === 'sync' && e.kind === 'availability.push' && e.message) void pushSoldOut([e.message]);
+    if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
   });
 }
 

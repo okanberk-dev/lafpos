@@ -8,6 +8,7 @@ import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
 import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
+import { dropSiteSoldOut, siteOutboxStatus, withSiteMenuLock } from './site-outbox';
 
 /**
  * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: LafPOS yalnız gösterir (bar ekranı,
@@ -244,54 +245,70 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
 }
 
 export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok';
+type ProductRow = typeof schema.products.$inferSelect;
 
 /**
- * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir (site Satışta bilgisinin
- * sahibi), 2xx gelince yerelde kaydedilir. Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir.
+ * Siteye bağlı üründe Satışta bilgisini siteye yazar (site Satışta bilgisinin sahibi). 2xx gelmezse 502 atar:
+ * çağıran yerelde de değiştirmez. Bağlı değilse, adres ya da anahtar yoksa istek gitmez, sonuç bunu söyler.
+ */
+async function writeSiteAvailability(p: ProductRow, active: boolean, actorName: string): Promise<SiteWrite> {
+  if (p.extSource !== 'laffogato' || !p.extId) return 'bagli_degil';
+  if (!siteLinked()) return 'baglanti_yok';
+  if (!configured()) return 'anahtar_yok';
+  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) });
+  if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
+  return 'guncellendi';
+}
+
+/**
+ * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir, 2xx gelince yerelde kaydedilir.
+ * Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir. Açılan ürünün bekleyen Tükendi yazımı giden kutusundan düşer.
  * Tükendi kilidi: sitenin kapattığı ürünü ("Sitede satışta değil", `soldOutBy = 'site'`) kasiyer açamaz; menü
  * yetkisi olan (`manager`) açar, denetim kaydına "sitede kapatılmıştı" diye düşer.
  */
-export async function setAvailability(productId: string, active: boolean, actor: { name: string; manager: boolean }): Promise<{ site: SiteWrite }> {
-  const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
-  if (!p) throw notFound('Ürün');
-  const actorName = actor.name;
-  const siteClosed = active && !p.active && p.soldOutBy === 'site';
-  if (siteClosed && !actor.manager) throw new HttpError(403, `${p.name} sitede satışta değil; yalnız menü yetkisi olan biri satışa açabilir`, 'site_closed');
-  let site: SiteWrite = 'bagli_degil';
-  if (p.extSource === 'laffogato' && p.extId) {
-    if (!siteLinked()) site = 'baglanti_yok';
-    else if (!configured()) site = 'anahtar_yok';
-    else {
-      const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) });
-      if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
-      site = 'guncellendi';
-    }
-  }
-  const fx = new Effects();
-  tx((t) => {
-    t.update(schema.products)
-      .set({ active, soldOutBy: active ? null : 'lafpos', portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
-      .where(eq(schema.products.id, productId))
-      .run();
-    fx.audit(t, {
-      action: active ? 'product.available' : 'product.sold_out',
-      entity: 'product',
-      entityId: productId,
-      message: `${actorName}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+export function setAvailability(productId: string, active: boolean, actor: { name: string; manager: boolean }): Promise<{ site: SiteWrite }> {
+  return withSiteMenuLock(async () => {
+    const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
+    if (!p) throw notFound('Ürün');
+    const siteClosed = active && !p.active && p.soldOutBy === 'site';
+    if (siteClosed && !actor.manager) throw new HttpError(403, `${p.name} sitede satışta değil; yalnız menü yetkisi olan biri satışa açabilir`, 'site_closed');
+    const site = await writeSiteAvailability(p, active, actor.name);
+    const fx = new Effects();
+    tx((t) => {
+      t.update(schema.products)
+        .set({ active, soldOutBy: active ? null : 'lafpos', portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
+        .where(eq(schema.products.id, productId))
+        .run();
+      if (active) dropSiteSoldOut(t, p.extId);
+      fx.audit(t, {
+        action: active ? 'product.available' : 'product.sold_out',
+        entity: 'product',
+        entityId: productId,
+        message: `${actor.name}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+      });
     });
+    fx.emit({ topic: 'menu', kind: active ? 'product.available' : 'product.sold_out' });
+    if (site === 'guncellendi') fx.emit({ topic: 'sync', kind: 'site.menu.written' });
+    fx.flush();
+    return { site };
   });
-  fx.emit({ topic: 'menu', kind: active ? 'product.available' : 'product.sold_out' });
-  fx.flush();
-  return { site };
 }
 
-/** Porsiyonu biten ürünleri siteye bildirir (adisyon akışından gelen olaylar için) */
-export async function pushSoldOut(productIds: string[]) {
-  for (const id of productIds) {
-    const p = db.select().from(schema.products).where(eq(schema.products.id, id)).get();
-    if (!p || p.extSource !== 'laffogato' || !p.extId || !configured()) continue;
-    await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: false, actor: 'LafPOS porsiyon' }).catch(() => undefined);
-  }
+/**
+ * Porsiyonu doldurulan kapalı ürünü açar: siteye bağlıysa önce site (2xx gelmezse 502, yerelde de değişmez), sonra
+ * çağıranın yerel yazımı (`apply`, tek işlem). Yalnız yerelde açılan ürünü sitenin sonraki senkronu yeniden kapatırdı.
+ */
+export function reopenWithSite<T>(p: ProductRow, actorName: string, apply: (site: SiteWrite) => T): Promise<T> {
+  return withSiteMenuLock(async () => {
+    const site = await writeSiteAvailability(p, true, actorName);
+    const result = apply(site);
+    if (site === 'guncellendi') {
+      const fx = new Effects();
+      fx.emit({ topic: 'sync', kind: 'site.menu.written' });
+      fx.flush();
+    }
+    return result;
+  });
 }
 
 // ─── Zamanlayıcı ────────────────────────────────────────────────────────────
@@ -388,5 +405,7 @@ export function onlineStatus() {
     open: configured()
       ? db.select({ n: schema.orders.id }).from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), inArray(schema.orders.status, ['acik']))).all().length
       : 0,
+    /** Siteye bildirilemeyen Tükendi yazımları (porsiyon bitti; giden kutusu) */
+    soldOutPush: siteOutboxStatus(),
   };
 }

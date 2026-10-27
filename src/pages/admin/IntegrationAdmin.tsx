@@ -12,7 +12,14 @@ import { toast } from '@/lib/toast';
 
 interface SyncStatus {
   menu: { linked: boolean; auto: boolean; state: { lastCheckAt?: number; lastSuccessAt?: number; lastError?: string | null; lastErrorAt?: number; lastChanges?: number; etag?: string } | null };
-  online: { configured: boolean; enabled: boolean; versionSignal: boolean; state: { lastSuccessAt?: number; lastError?: string | null; count?: number } | null; open: number };
+  online: {
+    configured: boolean;
+    enabled: boolean;
+    versionSignal: boolean;
+    state: { lastSuccessAt?: number; lastError?: string | null; count?: number } | null;
+    open: number;
+    soldOutPush: { pending: number; lastError: string | null };
+  };
   lafmaliyet: { configured: boolean; url: string | null; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null; costsAt: number | null };
 }
 
@@ -101,6 +108,12 @@ export default function IntegrationAdmin() {
                 {s.online.state?.lastSuccessAt ? `Son çekim ${fmtDateTime(s.online.state.lastSuccessAt)} · ${s.online.open} açık online sipariş` : 'Henüz çekilmedi'}
                 {s.online.state?.lastError && <span className="block text-danger-500">Hata: {s.online.state.lastError}</span>}
               </Status>
+              {s.online.soldOutPush.pending > 0 && (
+                <Status ok={false}>
+                  Siteye bildirilemeyen Tükendi: {s.online.soldOutPush.pending} ürün (porsiyonu bitti; yeniden denenecek)
+                  {s.online.soldOutPush.lastError && <span className="block text-danger-500">Son hata: {s.online.soldOutPush.lastError}</span>}
+                </Status>
+              )}
               <Toggle checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />
             </>
           )}
