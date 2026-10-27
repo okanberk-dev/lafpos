@@ -162,9 +162,14 @@ describe('gün sonu kasa föyü: slip karşılaştırması', () => {
     const tipped = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, tip: 2000, customerId: cust.id });
     expect([tipped.status, tipped.json.code]).toEqual([400, 'tip_on_account']);
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, customerId: cust.id });
+    // Eski kayıt: kural öncesi açık hesaba ₺20 bahşişle alınmış ödeme (müşterinin borcu yine yalnız tutar)
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    db.update(schema.payments).set({ tip: 2000 }).where(eq(schema.payments.orderId, o.id)).run();
     const debt = (await h.ok<{ customer: { balance: number } }>('kasa', 'GET', `/customers/${cust.id}`)).customer.balance;
     expect(debt).toBe(o.total);
     const summary = (await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day')).summary;
+    expect(summary.payments.find((p) => p.methodId === cari.id)!.tips).toBeGreaterThanOrEqual(2000);
     const row = slipRows(summary, h.boot.paymentMethods).find((r) => r.methodId === cari.id)!;
     const booked = (before?.amount ?? 0) + debt;
     expect(row.expected).toBe(booked);

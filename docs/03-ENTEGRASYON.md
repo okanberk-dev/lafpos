@@ -131,8 +131,8 @@ KARAOKE ODASI;3;3.000,00
   olduğu gibi; **iki boylu üründe taban addır** ve boy eki eklenir (`LATTE` → `LATTE MEDIUM` / `LATTE LARGE`;
   sonuna boy eki yazılmışsa ikinci kez eklenmez). Boşluklar lafmaliyet'teki gibi sadeleşir (`trim`, art arda
   boşluk tek); boş ya da yalnız boşluk `posName` yok sayılır, ad ürünün adından gelir (oda satırı dahil).
-  Satılmış iki boylu kalem gün paketine satılan boyun ekiyle gider (`soldPosName`): boy eki olmadan saklanmış
-  eski kalem (`LATTE`) de `LATTE LARGE` olur, M ve L tek satırda birleşmez.
+  Satılmış kalemin adı dondurulmuştur, boy eki ayarı sonradan değişse de aynen gider (`soldPosName`). Yalnız boy
+  eki olmadan saklanmış eski iki boylu kalem (`LATTE`) satılan boyun ekini alır (`LATTE LARGE`), M ve L birleşmez.
   lafmaliyet I/İ ve büyük/küçük harf farkını yok saydığı için ModPOS'tan öğrenilmiş `pos_mappings` kayıtları
   çalışmaya devam eder; tutmayan ad bir kez eşlenir.
 - **Satır anahtarı `posName | siteMenuId | slot`** (ad harf farkı gözetmeden). lafmaliyet bir günde bir ada bir
