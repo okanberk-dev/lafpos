@@ -30,6 +30,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   demoMode: false,
   // Var olan kurulumlarda hiçbir şey değişmesin: patron Yönetim › Ayarlar'dan seçer
   serviceMode: DEFAULT_SERVICE_MODE,
+  tipsEnabled: false,
 };
 
 /** Yalnız sunucuda kullanılan ayarlar */

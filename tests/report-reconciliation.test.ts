@@ -12,6 +12,7 @@ const MUDUR = PINS.mudur;
 
 beforeAll(async () => {
   h = await startApp();
+  await h.ok('patron', 'PUT', '/admin/settings', { tipsEnabled: true }); // bahşiş testleri: ayar açık kurulum ve eski veri
   await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 10 });
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 50000 });
 });

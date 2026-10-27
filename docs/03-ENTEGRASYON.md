@@ -223,6 +223,8 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
 - `cardTips` (kartla bahşiş) ve `cardCollections` (kartla cari tahsilatı) isteğe bağlıdır, TL: banka POS'unun
   gördüğü ama Z'nin `card` alanına girmeyen tutarlar. lafmaliyet kart farkını bunlarla açıklar; okumayan sürüm
   alanı atar (`z.object`), yani gönderim sırası serbesttir.
+  İşletme bahşiş almaz (Ayarlar `tipsEnabled` varsayılan kapalı, ödeme `tip > 0` 400 `tip_disabled`): `cardTips`
+  yalnız eski kayıtlarda 0'dan büyük olur.
 - **Ekler** (süt, şurup, ekstra shot) içeceğin satırından ayrı satırdır: `ALTERNATIF SÜT`, `SYRUP`, `EXTRA SHOT`;
   kimlik önce sitenin sabit kalemleri (`mnu-0082`, `mnu-0080`, `mnu-0081`), yoksa `extras` kategorisinde ada göre.
   Seçim fiyata göre değil **koda göre**: `milk` kodu `normal` değilse (laktozsuz süt 0 TL'dir ama alternatif

@@ -13,6 +13,7 @@ let tableNo = 0;
 
 beforeAll(async () => {
   h = await startApp();
+  await h.ok('patron', 'PUT', '/admin/settings', { tipsEnabled: true }); // bahşiş testleri: ayar açık kurulum ve eski veri
   await h.login('bar', '3333');
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
   // Türk Kahvesi sitenin kalemi (130 TL); beklenen tutarlar 140 TL'ye göre yazıldı, site fiyatı değişse de bozulmasın

@@ -24,6 +24,7 @@ let modules: {
 
 beforeAll(async () => {
   h = await startApp();
+  await h.ok('patron', 'PUT', '/admin/settings', { tipsEnabled: true }); // bahşiş testleri: ayar açık kurulum ve eski veri
   const client = await import('../server/db/client');
   modules = { db: client.db, schema: client.schema };
 });

@@ -690,6 +690,7 @@ const settingsShape = patchOf(
     autoDayEnd: z.boolean(),
     autoDayEndHour: z.number().int().min(0).max(23),
     serviceMode: z.enum(SERVICE_MODES),
+    tipsEnabled: z.boolean(),
   }),
 );
 
