@@ -607,6 +607,8 @@ export const outbox = sqliteTable(
     nextAttemptAt: integer('next_attempt_at').notNull(),
     lastError: text('last_error'),
     sentAt: integer('sent_at'),
+    /** Karşı tarafın 200 yanıtından okunan alanlar (lafmaliyet gün sonu: counted, switchDay, matched, unmatched) */
+    response: text('response', { mode: 'json' }).$type<Record<string, unknown> | null>(),
   },
   (t) => [index('outbox_pending_idx').on(t.sentAt, t.nextAttemptAt)],
 );

@@ -2,10 +2,10 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
 import { type AppEnv, can, requirePermission } from '../lib/auth';
-import { body, HttpError } from '../lib/http';
+import { body, HttpError, isoDate } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
-import { buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
+import { backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
 import { requireSiteLinked, siteLinked } from '../sync/laffogato-link';
 import { reportRange } from './reports';
 import { onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
@@ -99,6 +99,17 @@ syncRoutes.post('/lafmaliyet/gun/:dayId/push', async (c) => {
   const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.id, c.req.param('dayId'))).get();
   if (!day?.closedAt) throw new HttpError(409, 'Yalnız gün sonu alınmış gün gönderilir', 'day_open');
   return c.json(await pushDayNow(day.id));
+});
+
+/**
+ * Yönetim › Entegrasyon › "Geçmiş günleri gönder": aralıktaki gönderilmemiş kapanmış günler kuyruğa (bağlantı
+ * sonradan kurulduysa ya da günler gidemediyse). Kurulum modunda 409 `training_mode`
+ */
+syncRoutes.post('/lafmaliyet/backfill', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'senkron.yonet');
+  const input = await body(c, z.object({ from: isoDate, to: isoDate }));
+  return c.json(backfillDays(input, { id: user.id, name: user.name }));
 });
 
 syncRoutes.post('/lafmaliyet/costs/pull', async (c) => {

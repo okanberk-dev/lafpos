@@ -1,20 +1,25 @@
-import { and, asc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
+import { z } from 'zod';
 import { allocate } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
+import { addDays, businessDate, isCalendarDate } from '@shared/time';
 import type { SelectedOption } from '@shared/types';
-import { db, schema } from '../db/client';
+import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { money, toCsv } from '../lib/csv';
+import { Effects } from '../lib/effects';
+import { bus } from '../lib/events';
 import { conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { computeSummary, lafmaliyetZ } from '../services/days';
 
 /**
- * LafPOS → lafmaliyet. Bugün: Satışlar ekranına yüklenen "Ürün;Adet;Tutar" listesi ve Kasa raporu alanları.
- * lafmaliyet'te imzalı uç yazılınca: aynı veri giden kutusundan `POST /api/pos/gun` ile gider.
- * docs/03-ENTEGRASYON.md §3-4
+ * LafPOS → lafmaliyet. Gün sonu giden kutusundan imzalı `POST /api/pos/gun` ile gider (lafmaliyet'te canlı); maliyet
+ * `GET /api/panel/pos/urunler`'den günde bir gelir. Elle yedek: Satışlar ekranına yüklenen "Ürün;Adet;Tutar" listesi
+ * ve Kasa raporu alanları. Bağlantı `.env`'de LAFMALIYET_URL ve LAFMALIYET_SYNC_SECRET yokken kapalı; kurulum
+ * modunda gün gönderilmez. docs/03-ENTEGRASYON.md §3-4
  */
 
 export interface SaleLine {
@@ -260,17 +265,37 @@ export function buildDayPayload(dayId: string) {
   };
 }
 
+
 const configured = () => !!env.lafmaliyetUrl && env.lafmaliyetToken.length >= MIN_SECRET_LENGTH;
 
-/** Günün paketini giden kutusuna koyar (aynı günün bekleyen paketi varsa yerine geçer) */
-export function enqueueDay(dayId: string) {
-  if (!configured()) return false;
+/**
+ * Kurulum (eğitim) modu: giriş ekranında örnek PIN'ler açık (`demoMode`, kurulum verisi böyle başlar) ya da yazarkasa
+ * eğitim simülatöründe. Bu günler gerçek satış değildir; lafmaliyet'e hiç gitmez (kuyruğa girmez, elle de
+ * gönderilmez). İmzayı sınamak için "Maliyetleri çek" (yazmayan imzalı GET) yeterli. docs/03-ENTEGRASYON.md §4
+ */
+export function trainingMode(s = getSettings()): boolean {
+  return s.demoMode || s.okcProvider === 'simulator';
+}
+
+export const TRAINING_MESSAGE =
+  "Kurulum modunda lafmaliyet'e gün gönderilmez: örnek PIN'ler açık (Yönetim › Ayarlar › Kurulum modu) ya da yazarkasa eğitim simülatöründe (Yönetim › Yazarkasa POS)";
+
+const notConfigured = () => conflict('lafmaliyet bağlantısı tanımlı değil (LAFMALIYET_URL, LAFMALIYET_SYNC_SECRET)', 'not_configured');
+
+/**
+ * Günün paketini giden kutusuna koyar (aynı günün bekleyen paketi varsa yerine geçer). Bağlantı yoksa ya da kurulum
+ * modundaysa hiçbir şey yapmaz ve `null` döner; koyunca günün anahtarını (`gun:<tarih>`).
+ */
+export function enqueueDay(dayId: string): string | null {
+  if (!configured() || trainingMode()) return null;
   const payload = buildDayPayload(dayId);
   const key = `gun:${payload.date}`;
   const now = Date.now();
-  db.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
-  db.insert(schema.outbox).values({ target: 'lafmaliyet', kind: 'pos.gun', dedupeKey: key, payload, createdAt: now, nextAttemptAt: now }).run();
-  return true;
+  tx((t) => {
+    t.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
+    t.insert(schema.outbox).values({ target: 'lafmaliyet', kind: 'pos.gun', dedupeKey: key, payload, createdAt: now, nextAttemptAt: now }).run();
+  });
+  return key;
 }
 
 /** Süren gönderim. Bu sırada gelen istek onun bitmesini bekleyip yeniden gönderir: kuyruğa yeni giren gün dakikalık
@@ -293,9 +318,86 @@ export function flushOutbox(): Promise<{ sent: number; failed: number }> {
   return running;
 }
 
+/**
+ * lafmaliyet'in gün sonu 200 yanıtından okunan alanlar (docs/03-ENTEGRASYON.md §4.2). Eski lafmaliyet bunları
+ * göndermez: gelmeyen ya da bozuk alan yazılmaz (`switchDay` yoksa geçiş günü bilinmiyor, `null`sa seçilmedi).
+ */
+export interface DayAnswer {
+  /** Gönderilen iş günü */
+  date: string;
+  /** Yanıtın geldiği an */
+  at: number;
+  lines?: number;
+  /** Ürüne ya da hizmete bağlanan satır sayısı */
+  matched?: number;
+  /** lafmaliyet'te ürüne bağlanamayan POS adları (en çok 50) */
+  unmatched?: string[];
+  /** lafmaliyet bu günü hesaplara sayıyor mu (gün geçiş gününden önce değilse true) */
+  counted?: boolean;
+  /** lafmaliyet'teki "LafPOS'a geçiş günü"; null: seçilmedi, kasa ModPOS */
+  switchDay?: string | null;
+}
+
+const count = z.number().int().min(0).optional().catch(undefined);
+const answerShape = z.object({
+  lines: count,
+  matched: count,
+  unmatched: z
+    .array(z.string())
+    .transform((a) => a.slice(0, 50).map((n) => n.slice(0, 120)))
+    .optional()
+    .catch(undefined),
+  counted: z.boolean().optional().catch(undefined),
+  switchDay: z.string().refine(isCalendarDate).nullable().optional().catch(undefined),
+});
+
+export function readDayAnswer(json: unknown, date: string, at = Date.now()): DayAnswer {
+  const parsed = answerShape.safeParse(json && typeof json === 'object' ? json : {});
+  const out: DayAnswer = { date, at };
+  if (parsed.success) for (const [k, v] of Object.entries(parsed.data)) if (v !== undefined) Object.assign(out, { [k]: v });
+  return out;
+}
+
+/** Hata gövdesinin kısa hâli: "(z_conflict)", "(invalid: lines.3.qty)" */
+function errorDetail(json: unknown): string {
+  if (!json || typeof json !== 'object') return '';
+  const j = json as { error?: unknown; field?: unknown };
+  const parts = [j.error, j.field].filter((x): x is string => typeof x === 'string' && x.length > 0);
+  return parts.length ? ` (${parts.join(': ')})` : '';
+}
+
+/** Yanıta göre kullanıcıya gösterilen hata (giden kutusunun `lastError`'u): neden ve ne yapılacağı */
+export function pushErrorText(status: number, json: unknown, payload: unknown): string {
+  const detail = errorDetail(json);
+  if (status === 409) {
+    const body = (json && typeof json === 'object' ? json : {}) as { zNo?: unknown };
+    const sent = (payload as { z?: { zNo?: unknown } } | null)?.z?.zNo;
+    const known = typeof body.zNo === 'number' ? `lafmaliyet'te bu güne Z ${body.zNo} kayıtlı, gönderilen Z ${typeof sent === 'number' ? sent : '?'}. ` : '';
+    return `lafmaliyet reddetti: HTTP 409${detail}. ${known}lafmaliyet Ayarlar › LafPOS (kasa)'da günün kaydı silinince buradan yeniden gönderin`;
+  }
+  if (status === 400 || status === 413 || status === 422) return `lafmaliyet reddetti: HTTP ${status}${detail}`;
+  if (status === 401) return `HTTP 401${detail}: imza kabul edilmedi. LafPOS'taki LAFMALIYET_SYNC_SECRET paneldeki LAFPOS_SYNC_SECRET'la aynı mı, kasa bilgisayarının saati doğru mu (±5 dk)?`;
+  if (status === 503) return `HTTP 503${detail}: lafmaliyet'te LAFPOS_SYNC_SECRET tanımlı değil, bağlantı panelde kapalı`;
+  return `HTTP ${status}${detail}`;
+}
+
+interface PushState {
+  lastRunAt?: number;
+  sent?: number;
+  failed?: number;
+  /** En son gönderilen günün yanıtı */
+  lastAnswer?: DayAnswer;
+}
+
+const dateOf = (payload: unknown) => {
+  const d = (payload as { date?: unknown } | null)?.date;
+  return typeof d === 'string' ? d : '';
+};
+
 async function sendDue(): Promise<{ sent: number; failed: number }> {
   let sent = 0;
   let failed = 0;
+  let lastAnswer: DayAnswer | null = null;
   const due = db
     .select()
     .from(schema.outbox)
@@ -307,19 +409,30 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
   for (const row of due) {
     try {
       const { status, json } = await signedFetch(env.lafmaliyetToken, 'POST', new URL(`${env.lafmaliyetUrl}/api/pos/gun`), row.payload, 15_000);
-      const detail = json && typeof json === 'object' ? ` (${[(json as { error?: unknown }).error, (json as { field?: unknown }).field].filter(Boolean).join(': ')})` : '';
       // 400/413 kalıcıdır (veri hatalı ya da büyük), 409 aynı tarihte başka Z (z_conflict): tekrar denenmez,
-      // elle düzeltilip yeniden gönderilir
+      // elle düzeltilip yeniden gönderilir (Kasa › Geçmiş günler › Z › Gönder)
       if (status === 400 || status === 409 || status === 413 || status === 422) {
         db.update(schema.outbox)
-          .set({ attempts: row.attempts + 1, lastError: `lafmaliyet reddetti: HTTP ${status}${detail}`, nextAttemptAt: Date.now() + 365 * 86400_000 })
+          .set({ attempts: row.attempts + 1, lastError: pushErrorText(status, json, row.payload), nextAttemptAt: Date.now() + 365 * 86400_000 })
           .where(eq(schema.outbox.id, row.id))
           .run();
         failed++;
         continue;
       }
-      if (status !== 200) throw new Error(`HTTP ${status}${detail}`);
-      db.update(schema.outbox).set({ sentAt: Date.now(), lastError: null, attempts: row.attempts + 1 }).where(eq(schema.outbox.id, row.id)).run();
+      if (status !== 200) throw new Error(pushErrorText(status, json, row.payload));
+      const date = dateOf(row.payload);
+      const answer = readDayAnswer(json, date);
+      const now = Date.now();
+      tx((t) => {
+        t.update(schema.outbox).set({ sentAt: now, lastError: null, attempts: row.attempts + 1, response: { ...answer } }).where(eq(schema.outbox.id, row.id)).run();
+        // Gün gönderildi: paket günün son kapanışından sonra hazırlandıysa (arada yeniden açılmadıysa) işaretlenir.
+        // "Geçmiş günleri gönder" bu işareti olmayan kapanmış günleri sayar
+        t.update(schema.businessDays)
+          .set({ exportedAt: now })
+          .where(and(eq(schema.businessDays.date, date), isNotNull(schema.businessDays.closedAt), lte(schema.businessDays.closedAt, row.createdAt)))
+          .run();
+      });
+      lastAnswer = answer;
       sent++;
     } catch (e) {
       const attempts = row.attempts + 1;
@@ -331,41 +444,199 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       failed++;
     }
   }
-  if (sent || failed) setSyncState('lafmaliyet.push', { lastRunAt: Date.now(), sent, failed });
+  if (sent || failed) {
+    const prev = getSyncState<PushState>('lafmaliyet.push') ?? {};
+    setSyncState('lafmaliyet.push', { ...prev, lastRunAt: Date.now(), sent, failed, ...(lastAnswer ? { lastAnswer } : {}) } satisfies PushState);
+    bus.publish({ topic: 'sync', kind: 'lafmaliyet.push' });
+  }
   return { sent, failed };
 }
 
-export async function pushDayNow(dayId: string) {
-  if (!configured()) throw conflict('lafmaliyet bağlantısı tanımlı değil (LAFMALIYET_URL, LAFMALIYET_SYNC_SECRET)', 'not_configured');
-  enqueueDay(dayId);
-  const r = await flushOutbox();
-  if (r.failed && !r.sent) {
-    const row = db.select().from(schema.outbox).where(eq(schema.outbox.kind, 'pos.gun')).orderBy(asc(schema.outbox.id)).all().pop();
-    throw new HttpError(502, `lafmaliyet'e gönderilemedi: ${row?.lastError ?? 'bilinmeyen hata'}. Giden kutusunda bekliyor, sonra tekrar denenecek`, 'lafmaliyet_push');
-  }
-  return r;
+/** Günün giden kutusundaki en yeni kaydı */
+function dayRow(key: string) {
+  return db
+    .select()
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'lafmaliyet'), eq(schema.outbox.dedupeKey, key)))
+    .orderBy(desc(schema.outbox.id))
+    .get();
 }
 
-/** lafmaliyet'ten boy bazında birim maliyet (kuruş, KDV hariç). Yalnız maliyet yetkisi olanlara gösterilir. */
+/**
+ * Kasa › Geçmiş günler › Z › "Gönder": günü kuyruğa koyup gönderir. Sonuç bu günün kendi kaydından okunur: o
+ * gönderilmediyse 502 (aynı turda başka bir günün gitmesi başarı sayılmaz). Kuyrukta önünde bekleyen günler varsa
+ * (geçmiş günler, turda en çok 20) sırası gelene kadar gönderim sürer.
+ */
+export async function pushDayNow(dayId: string) {
+  if (!configured()) throw notConfigured();
+  if (trainingMode()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  const key = enqueueDay(dayId);
+  if (!key) throw notConfigured();
+  const total = { sent: 0, failed: 0 };
+  let row = dayRow(key);
+  for (let round = 0; round < 20 && row && !row.sentAt && row.attempts === 0; round++) {
+    const r = await flushOutbox();
+    total.sent += r.sent;
+    total.failed += r.failed;
+    row = dayRow(key);
+    if (!r.sent && !r.failed) break;
+  }
+  if (!row?.sentAt) {
+    throw new HttpError(502, `lafmaliyet'e gönderilemedi: ${row?.lastError ?? 'sırası gelmedi'}. Giden kutusunda bekliyor, sonra tekrar denenecek`, 'lafmaliyet_push');
+  }
+  return { ...total, answer: (row.response as DayAnswer | null) ?? null };
+}
+
+/** Son gönderilen günün yanıtı (geçiş günü ve sayılıp sayılmadığı) */
+export function lastDayAnswer(): DayAnswer | null {
+  return getSyncState<PushState>('lafmaliyet.push')?.lastAnswer ?? null;
+}
+
+/** lafmaliyet'in geçiş günü: son yanıtta yoksa (eski lafmaliyet ya da hiç gönderilmedi) `undefined` */
+export function knownSwitchDay(): string | null | undefined {
+  const a = lastDayAnswer();
+  return a && 'switchDay' in a ? (a.switchDay ?? null) : undefined;
+}
+
+/** "Geçmiş günleri gönder"in varsayılan aralığı: lafmaliyet'in geçiş gününden düne */
+export function backfillDefaults(now = Date.now()) {
+  return { from: knownSwitchDay() ?? null, to: addDays(businessDate(now), -1) };
+}
+
+/** Aralıktaki, gün sonu alınmış ve lafmaliyet'e henüz gitmemiş (200 almamış) günler, tarih sırasıyla */
+export function unsentClosedDays(from: string, to: string) {
+  return db
+    .select({ id: schema.businessDays.id, date: schema.businessDays.date })
+    .from(schema.businessDays)
+    .where(and(gte(schema.businessDays.date, from), lte(schema.businessDays.date, to), isNotNull(schema.businessDays.closedAt), isNull(schema.businessDays.exportedAt)))
+    .orderBy(asc(schema.businessDays.date))
+    .all();
+}
+
+/** En uzun geçmiş gün aralığı (raporların dönem sınırıyla aynı) */
+export const BACKFILL_MAX_DAYS = 400;
+
+/**
+ * Yönetim › Entegrasyon › "Geçmiş günleri gönder": bağlantı sonradan kurulduysa ya da günler gidemediyse aralıktaki
+ * gönderilmemiş kapanmış günleri kuyruğa koyar (gün başına tek kayıt; bekleyen kaydın yerine geçer) ve gönderimi
+ * başlatır. Daha önce 200 almış gün yeniden gitmez: tek günü yeniden göndermek Kasa › Geçmiş günler › Z › Gönder.
+ */
+export function backfillDays(input: { from: string; to: string }, actor: { id: string | null; name: string }) {
+  if (!configured()) throw notConfigured();
+  if (trainingMode()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  const today = businessDate(Date.now());
+  if (input.from > input.to) throw new HttpError(422, 'Başlangıç günü bitiş gününden sonra olamaz', 'range');
+  if (input.to > today) throw new HttpError(422, 'Bitiş günü bugünden sonra olamaz', 'range');
+  if (input.from < addDays(input.to, -(BACKFILL_MAX_DAYS - 1))) throw new HttpError(422, `En çok ${BACKFILL_MAX_DAYS} gün seçilebilir; daha kısa bir aralık seçin`, 'range_too_long');
+  const fx = new Effects();
+  const queued = tx((t) => {
+    const days = unsentClosedDays(input.from, input.to);
+    if (!days.length) return [];
+    for (const d of days) enqueueDay(d.id);
+    fx.audit(t, {
+      userId: actor.id,
+      action: 'sync.lafmaliyet_backfill',
+      message: `lafmaliyet'e geçmiş günler kuyruğa alındı: ${days.length} gün (${input.from} ile ${input.to} arası)`,
+      data: { from: input.from, to: input.to, days: days.map((d) => d.date) },
+    });
+    fx.emit({ topic: 'sync', kind: 'lafmaliyet.backfill' });
+    return days.map((d) => d.date);
+  });
+  fx.flush();
+  if (queued.length) void flushOutbox();
+  return { queued: queued.length, days: queued };
+}
+
+// ─── Maliyet (lafmaliyet → LafPOS) ──────────────────────────────────────────
+
+/** `GET /api/panel/pos/urunler` gövdesi (docs/03-ENTEGRASYON.md §4.1); bozuksa önceki maliyetler kalır */
+const costsBody = z.object({
+  version: z.literal(1),
+  items: z
+    .array(z.object({ siteMenuId: z.string().min(1).max(64), slot: z.enum(['M', 'L']), costMinor: z.number().finite().min(0) }))
+    .max(10_000),
+});
+
+interface CostsState {
+  /** Son başarılı çekim */
+  at: number;
+  /** `<siteMenuId>:<M|L>` → birim maliyet (kuruş, KDV hariç); 0 gelen (reçetesiz) yazılmaz: bilinmiyor */
+  map: Record<string, number>;
+  lastError?: string | null;
+  lastErrorAt?: number | null;
+}
+
+const costsState = () => getSyncState<CostsState>('lafmaliyet.costs');
+
+function costsFailed(message: string): never {
+  const prev = costsState();
+  setSyncState('lafmaliyet.costs', { at: prev?.at ?? 0, map: prev?.map ?? {}, lastError: message, lastErrorAt: Date.now() } satisfies CostsState);
+  throw new HttpError(502, message, 'lafmaliyet_costs');
+}
+
+/**
+ * lafmaliyet'ten boy bazında birim maliyet (kuruş, KDV hariç). Yalnız maliyet yetkisi olanlara gösterilir. 0 =
+ * bilinmiyor (reçetesiz ürün): saklanmaz, kâr "maliyet yok" görünür. Haritada olmayan site ürününün maliyeti
+ * boşalır (eski rakam kalmasın). Gövde okunamazsa önceki maliyetler olduğu gibi kalır, hata Entegrasyon'da görünür.
+ */
 export async function pullCosts() {
   if (!configured()) throw conflict('lafmaliyet bağlantısı tanımlı değil', 'not_configured');
-  const { status, json } = await signedFetch(env.lafmaliyetToken, 'GET', new URL(`${env.lafmaliyetUrl}/api/panel/pos/urunler`));
-  if (status !== 200) throw new HttpError(502, `Maliyetler alınamadı (HTTP ${status})`, 'lafmaliyet_costs');
-  const items = (json as { items?: { siteMenuId: string; slot: 'M' | 'L'; costMinor: number }[] })?.items ?? [];
-  const map: Record<string, number> = {};
-  for (const i of items) if (i.siteMenuId && Number.isFinite(i.costMinor)) map[`${i.siteMenuId}:${i.slot}`] = Math.round(i.costMinor);
-  setSyncState('lafmaliyet.costs', { at: Date.now(), map });
-  // Tek boy ve M maliyeti ürünün kendi alanına da yazılır (menü ekranında gösterim için)
-  const products = db.select({ id: schema.products.id, extId: schema.products.extId }).from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
-  for (const p of products) {
-    const cost = map[`${p.extId}:M`];
-    if (cost != null) db.update(schema.products).set({ cost }).where(eq(schema.products.id, p.id)).run();
+  let res: { status: number; json: unknown };
+  try {
+    res = await signedFetch(env.lafmaliyetToken, 'GET', new URL(`${env.lafmaliyetUrl}/api/panel/pos/urunler`));
+  } catch (e) {
+    costsFailed(`Maliyetler alınamadı: lafmaliyet'e ulaşılamadı (${e instanceof Error ? e.message : e})`);
   }
-  return { count: items.length };
+  if (res.status !== 200) costsFailed(`Maliyetler alınamadı (${pushErrorText(res.status, res.json, null)})`);
+  const parsed = costsBody.safeParse(res.json);
+  if (!parsed.success) {
+    const where = parsed.error.issues[0]?.path.join('.') || 'gövde';
+    costsFailed(`Maliyetler okunamadı: lafmaliyet'in yanıtı beklenen biçimde değil (${where}); önceki maliyetler kaldı`);
+  }
+  const map: Record<string, number> = {};
+  for (const i of parsed.data.items) if (i.costMinor > 0) map[`${i.siteMenuId}:${i.slot}`] = Math.round(i.costMinor);
+  tx((t) => {
+    setSyncState('lafmaliyet.costs', { at: Date.now(), map, lastError: null, lastErrorAt: null } satisfies CostsState);
+    // Tek boy ve M maliyeti ürünün kendi alanına da yazılır (menü ekranında gösterim için); `products.cost` önbellektir
+    const products = t.select({ id: schema.products.id, extId: schema.products.extId, cost: schema.products.cost }).from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
+    for (const p of products) {
+      const cost = map[`${p.extId}:M`] ?? null;
+      if (cost !== p.cost) t.update(schema.products).set({ cost }).where(eq(schema.products.id, p.id)).run();
+    }
+  });
+  bus.publish({ topic: 'menu', kind: 'costs.pulled' });
+  return { count: parsed.data.items.length, known: Object.keys(map).length };
+}
+
+/** Maliyetlerin kendiliğinden yenilenme aralığı: günde bir, gün sonunda */
+export const COSTS_REFRESH_MS = 24 * 3600_000;
+
+/** Gün sonunda: maliyetler 24 saatten eskiyse bir kez çekilir. Hata gün sonunu bozmaz, Entegrasyon'da görünür */
+export async function pullCostsIfStale(now = Date.now()): Promise<boolean> {
+  if (!configured()) return false;
+  if (now - (costsState()?.at ?? 0) < COSTS_REFRESH_MS) return false;
+  try {
+    await pullCosts();
+    return true;
+  } catch (e) {
+    console.warn('[lafmaliyet] maliyetler alınamadı:', e instanceof Error ? e.message : e);
+    return false;
+  }
+}
+
+/** Gün sonu alınınca (kasadan ya da otomatik): gün lafmaliyet'e gider, maliyetler günde bir yenilenir */
+export function afterDayClosed(dayId: string) {
+  if (enqueueDay(dayId)) void flushOutbox();
+  void pullCostsIfStale();
 }
 
 export function costMap(): Record<string, number> {
-  return getSyncState<{ map: Record<string, number> }>('lafmaliyet.costs')?.map ?? {};
+  return costsState()?.map ?? {};
+}
+
+/** Maliyetlerin son başarılı çekimi (yoksa null); yalnız maliyet yetkisi olanlara gider */
+export function costsAt(): number | null {
+  return costsState()?.at || null;
 }
 
 export function lafmaliyetStatus() {
@@ -374,14 +645,20 @@ export function lafmaliyetStatus() {
     .from(schema.outbox)
     .where(and(eq(schema.outbox.target, 'lafmaliyet'), isNull(schema.outbox.sentAt)))
     .all();
+  const push = getSyncState<PushState>('lafmaliyet.push');
+  const costs = costsState();
+  const range = backfillDefaults();
   return {
     configured: configured(),
     url: env.lafmaliyetUrl || null,
+    training: trainingMode(),
     pending: pending.length,
     pendingDays: pending.map((p) => p.dedupeKey),
     lastError: pending.find((p) => p.lastError)?.lastError ?? null,
-    push: getSyncState('lafmaliyet.push'),
-    costsAt: getSyncState<{ at: number }>('lafmaliyet.costs')?.at ?? null,
-    autoPush: getSettings().menuAutoSync,
+    push: push ? { lastRunAt: push.lastRunAt, sent: push.sent, failed: push.failed } : null,
+    answer: push?.lastAnswer ?? null,
+    backfill: { ...range, unsent: range.from && range.from <= range.to ? unsentClosedDays(range.from, range.to).length : null },
+    costsAt: costs?.at || null,
+    costsError: costs?.lastError ? { message: costs.lastError, at: costs.lastErrorAt ?? null } : null,
   };
 }
