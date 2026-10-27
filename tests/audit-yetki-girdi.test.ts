@@ -422,7 +422,7 @@ describe('input-71: boş düzenleme gövdesi', () => {
   });
 });
 
-describe.skip('input-74: takvimde olmayan tarih ve saat', () => {
+describe('input-74: takvimde olmayan tarih ve saat', () => {
   it('rezervasyon, happy hour ve ileri tarihli sipariş geçersiz tarih ve saati 422 ile reddeder', async () => {
     const bad = [
       { date: '2026-99-99', time: '19:00' },

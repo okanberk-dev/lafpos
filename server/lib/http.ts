@@ -69,7 +69,12 @@ export function query<T extends z.ZodType>(c: Context, schema: T): z.infer<T> {
 /** Kuruş alanları için ortak şema: negatif olmayan tam sayı */
 export const kurus = z.number().int().min(0).max(1_000_000_000);
 
-/** Takvimde olan tarih (YYYY-AA-GG): 2026-02-30 ya da 2026-99-99 geçmez, yalnız biçim denetimi yetmiyordu */
-export const isoDate = z.iso.date({ error: 'Geçerli bir tarih olmalı (YYYY-AA-GG)' });
+/**
+ * Takvimde olan tarih (YYYY-AA-GG): 2026-02-30 ya da 2026-99-99 geçmez. Yalnız biçim denetimi (regex) yetmiyordu,
+ * olmayan tarih ve saat kaydediliyordu (denetim, 26 Eki 2026).
+ */
+export const isoDate = z.iso.date({ error: 'YYYY-AA-GG biçiminde, takvimde olan bir tarih olmalı' });
 /** Saat ve dakika (SS:DD, 00:00-23:59) */
-export const clockTime = z.iso.time({ precision: -1, error: 'Geçerli bir saat olmalı (SS:DD)' });
+export const clockTime = z.iso.time({ precision: -1, error: 'SS:DD biçiminde, 00:00 ile 23:59 arası bir saat olmalı' });
+/** Saat dilimli tarih ve saat (ISO 8601, ör. 2026-10-27T19:30:00+03:00); ekranlar `new Date` ile okur */
+export const isoDateTime = z.iso.datetime({ offset: true, error: 'Saat dilimli tarih ve saat olmalı (ör. 2026-10-27T19:30:00+03:00)' });

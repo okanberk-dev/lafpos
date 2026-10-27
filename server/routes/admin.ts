@@ -6,7 +6,7 @@ import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
 import { type AppEnv, assertNotLocked, type AuthUser, can, clientKey, hashPin, isValidPin, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { bad, body, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
+import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
@@ -194,9 +194,13 @@ adminRoutes.put('/option-groups/:id', async (c) => {
 
 const happyShape = z.object({
   name: z.string().min(1).max(60),
-  days: z.array(z.number().int().min(1).max(7)).min(1),
-  start: z.string().regex(/^\d{2}:\d{2}$/),
-  end: z.string().regex(/^\d{2}:\d{2}$/),
+  // Haftanın günleri (1 pazartesi … 7 pazar), tekrarsız ve sıralı
+  days: z
+    .array(z.number().int().min(1).max(7))
+    .min(1)
+    .transform((d) => [...new Set(d)].sort((a, b) => a - b)),
+  start: clockTime,
+  end: clockTime,
   percent: z.number().int().min(1).max(100),
   categoryIds: z.array(z.string()).default([]),
   productIds: z.array(z.string()).default([]),

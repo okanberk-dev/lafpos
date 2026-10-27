@@ -5,14 +5,14 @@ import { businessDate } from '@shared/time';
 import { db, schema } from '../db/client';
 import { type AppEnv, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { body, notFound, patchFields, patchOf, query } from '../lib/http';
+import { body, clockTime, isoDate, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { normalizePhone } from '../services/customers';
 
 export const reservationRoutes = new Hono<AppEnv>();
 
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const time = z.string().regex(/^\d{2}:\d{2}$/);
+const date = isoDate;
+const time = clockTime;
 
 function emit(userId: string, message?: string) {
   const fx = new Effects();
