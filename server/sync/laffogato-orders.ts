@@ -230,6 +230,20 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
   fx.flush();
 }
 
+export type SiteAvailability = 'guncellendi' | 'bagli_degil' | 'anahtar_yok';
+
+/**
+ * Siteye bağlı ürünün Satışta bilgisini siteye yazar (site o bilginin sahibi). Site kabul etmezse hata atar:
+ * çağıran yerelde de değiştirmez. Anahtar yoksa ya da ürün bağlı değilse istek gitmez, sonucu bildirilir.
+ */
+export async function writeSiteAvailability(p: { extSource: string | null; extId: string | null }, active: boolean, actorName: string): Promise<SiteAvailability> {
+  if (p.extSource !== 'laffogato' || !p.extId) return 'bagli_degil';
+  if (!configured()) return 'anahtar_yok';
+  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) });
+  if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
+  return 'guncellendi';
+}
+
 /**
  * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir (site Satışta bilgisinin
  * sahibi), 2xx gelince yerelde kaydedilir. Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir.
@@ -237,15 +251,7 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
 export async function setAvailability(productId: string, active: boolean, actorName: string): Promise<{ site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' }> {
   const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
   if (!p) throw notFound('Ürün');
-  let site: 'guncellendi' | 'bagli_degil' | 'anahtar_yok' = 'bagli_degil';
-  if (p.extSource === 'laffogato' && p.extId) {
-    if (!configured()) site = 'anahtar_yok';
-    else {
-      const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) });
-      if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
-      site = 'guncellendi';
-    }
-  }
+  const site = await writeSiteAvailability(p, active, actorName);
   const fx = new Effects();
   tx((t) => {
     t.update(schema.products)

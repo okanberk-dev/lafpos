@@ -10,6 +10,7 @@ import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from 
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
 import { cloudState } from '../sync/cloud';
+import { writeSiteAvailability } from '../sync/laffogato-orders';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
 import { readdirSync, statSync } from 'node:fs';
@@ -117,12 +118,21 @@ adminRoutes.patch('/products/:id', async (c) => {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
   }
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
-  if (patch.portionsLeft !== undefined && patch.portionsLeft !== null && (patch.portionsLeft as number) > 0) (patch as Record<string, unknown>).active = true;
+  const refilled = input.portionsLeft != null && input.portionsLeft > 0;
+  if (refilled) (patch as Record<string, unknown>).active = true;
+  // Porsiyonu biten ürün sitede de Tükendi yapılmıştı: sayaç dolunca önce site açılır (Satışta bilgisinin sahibi),
+  // kabul etmezse LafPOS'ta da değişmez; yoksa sonraki menü eşitlemesi ürünü yeniden kapatırdı
+  const site = refilled && !p.active ? await writeSiteAvailability(p, true, user.name) : null;
   db.update(schema.products).set({ ...patch, updatedAt: Date.now() }).where(eq(schema.products.id, p.id)).run();
   if (input.price !== undefined && input.price !== p.price) {
     changed('menu', 'product.updated', user.id, { action: 'menu.price', message: `${user.name} ${p.name} fiyatını değiştirdi` });
+  } else if (site) {
+    changed('menu', 'product.available', user.id, {
+      action: 'product.available',
+      message: `${user.name}: ${p.name} porsiyon sayacı ${input.portionsLeft} yapıldı, satışa açıldı${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+    });
   } else changed('menu', 'product.updated', user.id);
-  return c.json({ ok: true });
+  return c.json({ ok: true, ...(site ? { site } : {}) });
 });
 
 /** Yerel ürünü kaldırır: hiç satılmadıysa siler, satıldıysa gizler (geçmiş raporlar bozulmasın) */

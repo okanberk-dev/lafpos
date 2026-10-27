@@ -43,7 +43,18 @@ Bir alan burada yoksa sistemler arasında gitmez (KVKK beyaz liste kuralı).
 | `customization.milks/roasts/syrups/extraShotMinor/sugarMax` | `option_groups` + `option_items` (`extKey`: `milk`, `roast`, `syrup`, `extraShot`, `sugar`; kalem `code`: site kimliği) | `dessert`, `snack`, `extras` kategorilerindeki ürünlere bağlanmaz (sitenin `NON_CUSTOMIZABLE_CATEGORIES` kuralı) |
 
 Senkron önce **önizleme** üretir: yeni ürün, fiyatı değişen, adı değişen, KDV'si değişen, siteden kalkan.
-Uygulama tek veritabanı işleminde yapılır, `audit_log`'a "menü senkronu" olarak yazılır.
+Uygulama tek veritabanı işleminde yapılır, `audit_log`'a "menü senkronu" olarak yazılır. POS sırası yalnız ürün
+ilk gelirken sitenin sırasından verilir; sonra LafPOS'undur.
+
+**Satışta / Tükendi:**
+
+- Anahtar varsa imzalı panelin `isActive` bilgisi geçerlidir (CDN'deki herkese açık menü birkaç dakika eski
+  olabilir): sitede Tükendi olan ürün, eski menü listelese de açılmaz; sitede yeniden açılan, eski menü
+  listelemese de kapanmaz.
+- Anahtar yokken herkese açık menüde listelenen satışta sayılır; yalnız son eşitlemede de listelenmiş ve o
+  zamandan beri LafPOS'ta Tükendi yapılmış ürün (site değişmedikçe) kapalı kalır.
+- Porsiyon sayacı biten ürünü site açamaz. Sayaç Yönetim › Menü'de doldurulunca Tükendi ürün önce sitede
+  satışa açılır (`POST /api/panel/menu`); site kabul etmezse sayaç da değişmez.
 
 ### 2.3 İmzalı panel uçları (anahtar verilirse)
 
@@ -65,7 +76,7 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 | Uç | LafPOS kullanımı | Sıklık |
 | --- | --- | --- |
 | `GET /api/panel/menu` | Tükendi kalemleri de görmek (`isActive`) | menü senkronunda, en çok 5 dk'da bir |
-| `POST /api/panel/menu {id, isActive, actor}` | POS'ta Tükendi / Satışa aç → önce site, 2xx gelince yerel | kullanıcı işlemi |
+| `POST /api/panel/menu {id, isActive, actor}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; sayaç bitince site ardından Tükendi yapılır | kullanıcı işlemi |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı | 5 dk'da bir + ekran açılınca + elle |
 | `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi | kullanıcı işlemi |
 

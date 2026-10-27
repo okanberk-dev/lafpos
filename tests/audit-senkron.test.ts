@@ -1,10 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PanelOrder } from '../server/sync/laffogato-orders';
 import { type Harness, startApp } from './harness';
 
 /**
  * Senkron denetiminin bulguları (27 Eki 2026), her biri bir testle: online siparişlerin sürüm sinyali, bozuk
- * yanıt ve masa eşlemesi. Site sahte: `fetch` sitenin adresinde bu dosyanın yönlendiricisine düşer.
+ * yanıt ve masa eşlemesi; menü eşitlemesinde Tükendi, porsiyon sayacı ve POS sırası. Site sahte: `fetch`
+ * sitenin adresinde bu dosyanın yönlendiricisine düşer.
  */
 const SITE = 'https://laffogato.test';
 const KEY = 's'.repeat(40);
@@ -159,5 +161,133 @@ describe('online siparişler', () => {
     expect((await onlineRow('ord-masa1'))?.tableId).toBe(s2.id);
     expect((await onlineRow('ord-masa2'))?.tableId).toBe(b3.id);
     expect((await onlineRow('ord-masa3'))?.tableId).toBeNull();
+  });
+});
+
+// ─── Menü ───────────────────────────────────────────────────────────────────
+
+type SiteItem = { id: string; name: string; priceMinor: number; priceLargeMinor: number | null };
+type SiteMenu = { categories: { key: string; items: SiteItem[] }[] };
+const snapshot = JSON.parse(readFileSync(new URL('../server/db/menu-snapshot.json', import.meta.url), 'utf8')) as SiteMenu;
+const allItems = snapshot.categories.flatMap((c) => c.items);
+/** Sitenin Satışta bilgisi (false = Tükendi) ve LafPOS'un siteye yazdıkları */
+const siteActive = new Map<string, boolean>();
+const posts: { id: string; isActive: boolean; actor: string }[] = [];
+const without = (menu: SiteMenu, ids: string[]): SiteMenu => ({ ...menu, categories: menu.categories.map((c) => ({ ...c, items: c.items.filter((i) => !ids.includes(i.id)) })) });
+/** Herkese açık menü yalnız satıştakileri listeler */
+const liveMenu = () => without(snapshot, allItems.filter((i) => siteActive.get(i.id) === false).map((i) => i.id));
+let rejectPost = false;
+
+/** `publicMenu`: CDN'den gelen (eski olabilir) herkese açık menü; imzalı panel her zaman güncel */
+const menuSite =
+  (publicMenu: () => SiteMenu): Route =>
+  (path, init) => {
+    if (path === '/api/mobile/v1/menu') return json(publicMenu());
+    if (path === '/api/panel/menu' && init.method === 'POST') {
+      if (rejectPost) return json({ error: 'unavailable' }, 503);
+      const b = JSON.parse(String(init.body)) as { id: string; isActive: boolean; actor: string };
+      posts.push(b);
+      siteActive.set(b.id, b.isActive);
+      return json({ item: { id: b.id, isActive: b.isActive } });
+    }
+    if (path === '/api/panel/menu') {
+      return json({ version: 1, items: allItems.map((i) => ({ id: i.id, isActive: siteActive.get(i.id) !== false, priceMinor: i.priceMinor, priceMinorL: i.priceLargeMinor ?? 0 })) });
+    }
+    return undefined;
+  };
+
+async function product(extId: string) {
+  const { db: d, schema, eq } = await db();
+  return d.select().from(schema.products).where(eq(schema.products.extId, extId)).get()!;
+}
+type Applied = { status: string; preview: { changes: { kind: string; extId: string; detail: string }[] } };
+const applyMenu = () => h.ok<Applied>('mudur', 'POST', '/sync/menu/apply');
+const changesOf = (r: Applied, extId: string) => r.preview.changes.filter((c) => c.extId === extId).map((c) => c.kind);
+
+describe('menü senkronu', () => {
+  it('anahtar varken imzalı panelin Satışta bilgisi geçerli: önbellekteki eski menü Tükendi ürünü açmaz', async () => {
+    // CDN'deki menü (s-maxage=300) Tükendi yapılan ürünü bir süre daha listeler
+    site = menuSite(() => snapshot);
+    const americano = await product('mnu-0006');
+    expect((await h.ok<{ site: string }>('kasa', 'POST', `/sync/products/${americano.id}/availability`, { active: false })).site).toBe('guncellendi');
+    const r = await applyMenu();
+    expect(r.status).toBe('uygulandi');
+    expect((await product('mnu-0006')).active).toBe(false);
+    expect(changesOf(r, 'mnu-0006')).toEqual([]);
+
+    // Tersi: site ürünü yeniden açtı ama CDN'deki menü henüz listelemiyor; LafPOS'ta açık kalır
+    const espresso = await product('mnu-0005');
+    await h.ok('kasa', 'POST', `/sync/products/${espresso.id}/availability`, { active: false });
+    await h.ok('kasa', 'POST', `/sync/products/${espresso.id}/availability`, { active: true });
+    site = menuSite(() => without(snapshot, ['mnu-0005']));
+    const r2 = await applyMenu();
+    expect((await product('mnu-0005')).active).toBe(true);
+    expect(changesOf(r2, 'mnu-0005')).toEqual([]);
+  });
+
+  it('anahtar yokken yerelde Tükendi yapılan ürün site değişmedikçe açılmaz; sitede geri gelen açılır', async () => {
+    const { env } = await import('../server/env');
+    const saved = env.laffogatoPanelSecret;
+    env.laffogatoPanelSecret = '';
+    try {
+      const iced = await product('mnu-0022');
+      expect((await h.ok<{ site: string }>('kasa', 'POST', `/sync/products/${iced.id}/availability`, { active: false })).site).toBe('anahtar_yok');
+      // Başka bir değişiklik (site Buzlu Caffè Latte'yi satıştan kaldırdı) eşitlemeyi tetikler
+      site = menuSite(() => without(snapshot, ['mnu-0023']));
+      const r = await applyMenu();
+      expect((await product('mnu-0022')).active).toBe(false);
+      expect(changesOf(r, 'mnu-0022')).toEqual([]);
+      expect((await product('mnu-0023')).active).toBe(false);
+      expect(changesOf(r, 'mnu-0023')).toEqual(['kalkti']);
+
+      // Site kalemi yeniden satışa koydu: LafPOS'ta da açılır; kasiyerin Tükendi'si sürer
+      site = menuSite(() => snapshot);
+      const r2 = await applyMenu();
+      expect((await product('mnu-0023')).active).toBe(true);
+      expect(changesOf(r2, 'mnu-0023')).toEqual(['geri']);
+      expect((await product('mnu-0022')).active).toBe(false);
+      expect(changesOf(r2, 'mnu-0022')).toEqual([]);
+    } finally {
+      env.laffogatoPanelSecret = saved;
+    }
+  });
+
+  it('porsiyon sayacı doldurulunca bağlı ürün sitede de satışa açılır; sonraki eşitleme kapatmaz', async () => {
+    const { pushSoldOut } = await import('../server/sync/laffogato-orders');
+    site = menuSite(liveMenu);
+    const cake = await product('mnu-0058');
+    await h.ok('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 1 });
+    const nakit = h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+    const o = await h.ok<{ id: string }>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const sold = await h.ok<{ total: number }>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: cake.id, qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: nakit.id, amount: sold.total });
+    expect((await product('mnu-0058')).active).toBe(false);
+    // Son porsiyon satılınca (jobs.ts olay dinleyicisi) site de Tükendi olur
+    await pushSoldOut([cake.id]);
+    expect(siteActive.get('mnu-0058')).toBe(false);
+
+    // Site yanıt vermezse sayaç da değişmez (önce site, sonra LafPOS)
+    rejectPost = true;
+    const failed = await h.call('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 8 });
+    rejectPost = false;
+    expect(failed.status).toBe(502);
+    expect((await product('mnu-0058')).portionsLeft).toBe(0);
+
+    await h.ok('mudur', 'PATCH', `/admin/products/${cake.id}`, { portionsLeft: 8 });
+    expect(siteActive.get('mnu-0058')).toBe(true);
+    expect(posts.at(-1)).toMatchObject({ id: 'mnu-0058', isActive: true });
+    const r = await applyMenu();
+    const after = await product('mnu-0058');
+    expect(after.active).toBe(true);
+    expect(after.portionsLeft).toBe(8);
+    expect(changesOf(r, 'mnu-0058')).toEqual([]);
+  });
+
+  it('menü eşitlemesi bağlı ürünün POS sırasına dokunmaz', async () => {
+    site = menuSite(liveMenu);
+    const latte = await product('mnu-0007');
+    await h.ok('mudur', 'PATCH', `/admin/products/${latte.id}`, { sort: -5 });
+    await applyMenu();
+    expect((await product('mnu-0007')).sort).toBe(-5);
   });
 });
