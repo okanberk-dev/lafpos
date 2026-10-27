@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, Layers, MonitorUp, PackageX, RotateCcw, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { kitchenTotals } from '@shared/kitchen';
+import { ticketHead } from '@shared/service-mode';
 import type { KitchenTicket, KitchenTicketItem } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { errorMessage, get, post } from '@/lib/api';
@@ -14,6 +15,8 @@ import { beep, unlockAudio } from '@/lib/sound';
 import { useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
+import { useServiceMode } from '@/lib/serviceMode';
+import { appUrl } from '@/lib/demo';
 
 function mmss(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -29,6 +32,7 @@ export default function KitchenPage() {
   const [history, setHistory] = useState(false);
   const [soldOut, setSoldOut] = useState(false);
   const can = useCan();
+  const mode = useServiceMode();
   const [sound, setSound] = useLocalPref<boolean>('kds.sound', true);
   // "Toplam": açık fişlerdeki ürünler toplu (6 latte, 2'si yulaflı); yoğunlukta topluca hazırlamak için
   const [totalsView, setTotalsView] = useLocalPref<boolean>('kds.toplam', false);
@@ -122,7 +126,7 @@ export default function KitchenPage() {
         )}
         <button
           hidden={REMOTE}
-          onClick={() => window.open('/cagri', 'lafpos-cagri')}
+          onClick={() => window.open(appUrl('/cagri'), 'lafpos-cagri')}
           title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)"
           className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] px-3 text-sm font-medium transition-colors hover:bg-surface-2 pointer-fine:min-h-9"
         >
@@ -178,6 +182,8 @@ export default function KitchenPage() {
             const level = age > boot.settings.kitchenAlarmMinutes * 60_000 ? 'alarm' : age > boot.settings.kitchenWarnMinutes * 60_000 ? 'warn' : 'ok';
             const online = t.source === 'laffogato';
             const allStarted = live.every((i) => i.status !== 'yeni');
+            // Self modlarda numara, yarı selfte masa no büyük rozet: barista çağıracağı ya da götürüleceği yeri görür
+            const head = ticketHead(t, mode);
             return (
               // Fiş: başlık nötr; süre rozeti yalnız gecikince renklenir (amber uyarı, kırmızı alarm)
               <article key={t.key} className={cn('overflow-hidden rounded-2xl border bg-surface', level === 'alarm' && !history ? 'border-danger-300 ring-2 ring-[var(--admin-danger-soft)] dark:border-danger-400' : 'border-line')}>
@@ -187,8 +193,11 @@ export default function KitchenPage() {
                       <Globe className="size-3.5" /> Online
                     </span>
                   )}
-                  <span className="truncate text-base font-semibold">{t.label}</span>
-                  <span className="tabular text-[13px] text-muted">#{t.orderNo}</span>
+                  {head.call && (
+                    <span className="tabular shrink-0 rounded-lg bg-[var(--admin-primary-soft)] px-2 py-0.5 text-xl font-bold leading-tight text-[var(--admin-primary)]">{head.call}</span>
+                  )}
+                  {head.label && <span className={cn('truncate', head.call ? 'text-sm text-ink-2' : 'text-base font-semibold')}>{head.label}</span>}
+                  {head.showNo && <span className="tabular text-[13px] text-muted">#{t.orderNo}</span>}
                   <span className="flex-1" />
                   <span
                     className={cn(

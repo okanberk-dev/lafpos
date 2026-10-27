@@ -1,4 +1,4 @@
-import { Expand, Lock, LogOut, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
+import { Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { fmtTime } from '@shared/time';
@@ -6,7 +6,8 @@ import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLive } from '@/lib/live';
-import { isAdminArea, POS_NAV } from '@/lib/nav';
+import { isAdminArea, visibleNav } from '@/lib/nav';
+import { useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
 import { useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
@@ -74,7 +75,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     else void document.documentElement.requestFullscreen().catch(() => toast.warn('Tarayıcı tam ekrana izin vermedi'));
   };
 
-  const items = POS_NAV.filter((n) => n.perms.some((p) => can(p)) && (!REMOTE || REMOTE_PATHS.includes(n.to)));
+  // Servis moduna göre menü: self modlarda "Satış" başta, Masalar ikinci planda (shared/service-mode.ts)
+  const mode = useServiceMode();
+  const tablesInUse = useTablesInUse(mode);
+  const items = visibleNav(can, mode, { tablesInUse }).filter((n) => !REMOTE || REMOTE_PATHS.includes(n.to));
   const primary = items.filter((n) => n.primary).slice(0, 4);
   const rest = items.filter((n) => !primary.includes(n));
   const admin = isAdminArea(location.pathname);
@@ -206,6 +210,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Modal open={menuOpen} onClose={() => setMenuOpen(false)} title={me.name} subtitle={boot.settings.businessName} size="sm">
         <div className="space-y-2 p-4">
+          {REMOTE && (
+            // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
+            <a href="/demo/" className={sheetRow}>
+              <span className={sheetIcon}>
+                <MonitorPlay strokeWidth={1.75} />
+              </span>
+              <span>
+                <span className="block text-sm font-medium">Kasa ekranını dene</span>
+                <span className="block text-xs text-muted">Gerçek LafPOS tarayıcıda çalışır; PIN yok, veriler yalnız bu tarayıcıda</span>
+              </span>
+            </a>
+          )}
           <button onClick={lock} className={sheetRow}>
             <span className={sheetIcon}>
               <Lock strokeWidth={1.75} />

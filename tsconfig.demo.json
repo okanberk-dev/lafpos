@@ -1,0 +1,8 @@
+{
+  "//": "Tarayıcı demosunun çalışma zamanı (demo/): sunucu kodu tarayıcıda, DOM ve Node türleri birlikte.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
+  },
+  "include": ["demo", "server", "shared"]
+}

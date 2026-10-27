@@ -7,49 +7,92 @@ import { signedFetch } from '../lib/signature';
 import { siteSigned } from './laffogato-link';
 
 /**
- * Siteye giden Satışta yazımları (`POST /api/panel/menu`). Porsiyonu biten siteye bağlı ürünün Tükendi'si giden
- * kutusunda bekler (`outbox`: target 'laffogato', kind 'menu.isActive', tekil anahtar `menu:<extId>`): internet
- * yokken satış durmaz, gönderilemeyen yazım kaybolmaz, artan beklemeyle yeniden denenir. Ürün bu arada yeniden
- * açılırsa kayıt düşer. Elle "Tükendi / Satışa aç" beklemez, doğrudan yazar; hepsi aynı kilitle sıralanır.
+ * Siteye giden Satışta yazımları (`POST /api/panel/menu`). Porsiyon sayacının değiştirdiği Satışta bilgisi giden
+ * kutusunda bekler (`outbox`: target 'laffogato', kind 'menu.isActive', tekil anahtar `menu:<extId>`, son istenen
+ * durum): son porsiyonu satılan ürün sitede de Tükendi olur, hazırlanmadan iptal edilen kalemle porsiyonu geri dönen
+ * ürün sitede yeniden satışa açılır. İnternet yokken satış durmaz, gönderilemeyen yazım kaybolmaz, artan beklemeyle
+ * yeniden denenir. Ürün bu arada başka yoldan açılır ya da kapanırsa kayıt düşer. Elle "Tükendi / Satışa aç" ve
+ * porsiyon doldurma beklemez, doğrudan yazar; hepsi ve menü eşitlemesi aynı kilitle sıralanır.
  */
 
 const keyOf = (extId: string) => `menu:${extId}`;
+const extIdOf = (key: string | null) => (key?.startsWith('menu:') ? key.slice(5) : null);
+/** Sitenin kalıcı olarak reddettiği yazım: yeniden denenmez (`nextAttemptAt` hiç gelmez), Entegrasyon'da görünür */
+const PARKED = Number.MAX_SAFE_INTEGER;
 
 let chain: Promise<unknown> = Promise.resolve();
 
-/** Siteye Satışta yazımlarını sıraya koyar: giden kutusu, "Tükendi / Satışa aç" ve porsiyon doldurma birbirini ezmesin */
+/**
+ * Siteye Satışta yazımlarını ve menü eşitlemesinin panel okumasını sıraya koyar: giden kutusu, "Tükendi / Satışa aç",
+ * porsiyon doldurma ve eşitleme birbirini ezmesin (eşitleme, istek yoldayken yapılan yazımı eski görüntüyle geri almasın)
+ */
 export function withSiteMenuLock<T>(fn: () => Promise<T>): Promise<T> {
   const run = chain.then(fn, fn);
   chain = run.catch(() => undefined);
   return run;
 }
 
-/** Porsiyonu biten siteye bağlı ürünün Tükendi'sini giden kutusuna koyar; çağıranın işleminde (adisyon kalemiyle tek işlem) */
-export function enqueueSiteSoldOut(t: Tx | DB, p: { extSource: string | null; extId: string | null }): boolean {
+/**
+ * Porsiyon sayacının değiştirdiği Satışta bilgisini giden kutusuna koyar; çağıranın işleminde (adisyon kalemiyle tek
+ * işlem). Aynı ürünün bekleyen yazımının yerini alır: siteye son durum gider.
+ */
+export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean): boolean {
   if (!siteSigned() || p.extSource !== 'laffogato' || !p.extId) return false;
   const key = keyOf(p.extId);
   const now = Date.now();
-  t.delete(schema.outbox).where(and(eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
+  t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
   t.insert(schema.outbox)
-    .values({ target: 'laffogato', kind: 'menu.isActive', dedupeKey: key, payload: { id: p.extId, isActive: false, actor: 'LafPOS porsiyon' }, createdAt: now, nextAttemptAt: now })
+    .values({ target: 'laffogato', kind: 'menu.isActive', dedupeKey: key, payload: { id: p.extId, isActive: active, actor: 'LafPOS porsiyon' }, createdAt: now, nextAttemptAt: now })
     .run();
   return true;
 }
 
-/** Ürün yeniden açılınca bekleyen Tükendi yazımı düşer (gönderilmemiş ya da sitenin reddettiği) */
+/** Porsiyonu biten siteye bağlı ürünün Tükendi'si */
+export const enqueueSiteSoldOut = (t: Tx | DB, p: { extSource: string | null; extId: string | null }) => enqueueSiteAvailability(t, p, false);
+
+/** Ürünün Satışta bilgisi siteye doğrudan yazıldı (yönetici açtı, porsiyon dolduruldu): bekleyen yazımı düşer */
 export function dropSiteSoldOut(t: Tx | DB, extId: string | null) {
   if (!extId) return;
   t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, keyOf(extId)), isNull(schema.outbox.sentAt))).run();
 }
 
-/** Site bunları düzeltilmeden kabul etmez: tekrar denenmez, Yönetim › Entegrasyon'da hata olarak görünür */
-const PERMANENT = new Set([400, 403, 404, 409, 413, 422]);
+/**
+ * Menü eşitlemesi (kilit içinde, panelin taze listesiyle): sitenin zaten istenen durumda olduğu ve sitede artık
+ * olmayan kalemlerin yazımı düşer. Kalanların ürünü `held` olarak döner: site görüntüsü LafPOS'un henüz gönderemediği
+ * yazımdan eskidir, eşitleme o ürünün Satışta bilgisine dokunmaz. Reddedilmiş yazım ürünü tutmaz (sitenin durumu
+ * geçerli), yalnız uyarı olarak kalır.
+ */
+export function settleSiteWrites(t: Tx | DB, panel: Map<string, { isActive: boolean }> | null): Set<string> {
+  const held = new Set<string>();
+  const rows = t
+    .select()
+    .from(schema.outbox)
+    .where(and(eq(schema.outbox.target, 'laffogato'), isNull(schema.outbox.sentAt)))
+    .all();
+  for (const row of rows) {
+    const extId = extIdOf(row.dedupeKey);
+    if (!extId) continue;
+    const want = (row.payload as { isActive?: unknown }).isActive;
+    if (panel) {
+      const site = panel.get(extId);
+      if (!site || site.isActive === want) {
+        t.delete(schema.outbox).where(eq(schema.outbox.id, row.id)).run();
+        continue;
+      }
+    }
+    if (row.nextAttemptAt !== PARKED) held.add(extId);
+  }
+  return held;
+}
 
-/** Bekleyen Tükendi yazımlarını gönderir (dakikada bir ve porsiyon biter bitmez) */
+/** Site bunları düzeltilmeden kabul etmez: tekrar denenmez, Yönetim › Entegrasyon'da hata olarak görünür */
+const PERMANENT = new Set([400, 403, 409, 413, 422]);
+
+/** Bekleyen Satışta yazımlarını gönderir (dakikada bir ve porsiyon değişir değişmez) */
 export function flushSiteOutbox(): Promise<{ sent: number; failed: number }> {
   if (!siteSigned()) return Promise.resolve({ sent: 0, failed: 0 });
   return withSiteMenuLock(sendDue).catch((e) => {
-    console.warn('[site] Tükendi bildirimleri gönderilemedi:', e instanceof Error ? e.message : e);
+    console.warn('[site] Satışta bildirimleri gönderilemedi:', e instanceof Error ? e.message : e);
     return { sent: 0, failed: 0 };
   });
 }
@@ -66,9 +109,9 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
     .all();
   for (const row of due) {
     const payload = row.payload as { id: string; isActive: boolean; actor: string };
-    // Bu arada yeniden açılan (porsiyon doldu, yönetici açtı) ürün sitede kapatılmaz
+    // Ürün bu arada başka yoldan açıldı ya da kapandı (porsiyon doldu, yönetici açtı, site kapattı): yazım eskidi
     const p = db.select({ active: schema.products.active }).from(schema.products).where(and(eq(schema.products.extSource, 'laffogato'), eq(schema.products.extId, payload.id))).get();
-    if (!p || p.active) {
+    if (!p || p.active !== payload.isActive) {
       db.delete(schema.outbox).where(eq(schema.outbox.id, row.id)).run();
       continue;
     }
@@ -79,9 +122,14 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
         sent++;
         continue;
       }
+      // Kalem sitede yok (silinmiş): sitede açılacak ya da kapatılacak bir şey yok, yazım tamamdır
+      if (status === 404) {
+        db.delete(schema.outbox).where(eq(schema.outbox.id, row.id)).run();
+        continue;
+      }
       if (PERMANENT.has(status)) {
         db.update(schema.outbox)
-          .set({ attempts: row.attempts + 1, lastError: `Site Tükendi bilgisini reddetti (HTTP ${status})`, nextAttemptAt: Date.now() + 365 * 86400_000 })
+          .set({ attempts: row.attempts + 1, lastError: `Site Satışta bilgisini reddetti (HTTP ${status})`, nextAttemptAt: PARKED })
           .where(eq(schema.outbox.id, row.id))
           .run();
         failed++;
@@ -92,7 +140,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       const attempts = row.attempts + 1;
       const wait = Math.min(6 * 3600_000, 60_000 * 2 ** Math.min(attempts, 8));
       db.update(schema.outbox)
-        .set({ attempts, lastError: `Site Tükendi bilgisini alamadı: ${e instanceof Error ? e.message : String(e)}`, nextAttemptAt: Date.now() + wait })
+        .set({ attempts, lastError: `Site Satışta bilgisini alamadı: ${e instanceof Error ? e.message : String(e)}`, nextAttemptAt: Date.now() + wait })
         .where(eq(schema.outbox.id, row.id))
         .run();
       failed++;
@@ -107,12 +155,17 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
   return { sent, failed };
 }
 
-/** Yönetim › Entegrasyon ve Genel bakış: siteye bildirilemeyen Tükendi yazımları */
-export function siteOutboxStatus() {
+/**
+ * Yönetim › Entegrasyon ve Genel bakış: siteye bildirilemeyen Satışta yazımları. `pending` yeniden denenir,
+ * `rejected` site kalıcı olarak reddetti (yeniden denenmez). Bağlantı anahtarı yokken gönderim de yoktur: sayılmaz.
+ */
+export function siteOutboxStatus(): { pending: number; rejected: number; lastError: string | null } {
+  if (!siteSigned()) return { pending: 0, rejected: 0, lastError: null };
   const rows = db
-    .select({ lastError: schema.outbox.lastError })
+    .select({ lastError: schema.outbox.lastError, nextAttemptAt: schema.outbox.nextAttemptAt })
     .from(schema.outbox)
     .where(and(eq(schema.outbox.target, 'laffogato'), isNull(schema.outbox.sentAt)))
     .all();
-  return { pending: rows.length, lastError: rows.find((r) => r.lastError)?.lastError ?? null };
+  const rejected = rows.filter((r) => r.nextAttemptAt === PARKED).length;
+  return { pending: rows.length - rejected, rejected, lastError: rows.find((r) => r.lastError)?.lastError ?? null };
 }

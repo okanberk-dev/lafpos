@@ -78,33 +78,43 @@ export async function fetchPublicMenu(force = false): Promise<{ status: 'degisme
   return { status: 'yeni', menu, etag: res.headers.get('etag') };
 }
 
-/** İmzalı panel listesi: sitedeki her kalem, satışta olsun olmasın (laffogato `toPanelMenuItem`) */
-export type PanelMenuMap = Map<string, { isActive: boolean; priceMinor: number; priceMinorL: number }>;
+/** İmzalı panelin kalemleri: sitedeki her kalem, Tükendi olanlar dahil, CDN önbelleği yok (laffogato `toPanelMenuItem`) */
+export type PanelMenu = Map<string, { isActive: boolean; priceMinor: number; priceMinorL: number }>;
 
-/** İmzalı panel ucundan Tükendi kalemler dahil liste (anahtar varsa). Bozuk gövde liste sayılmaz. */
-export async function fetchPanelMenu(): Promise<PanelMenuMap | null> {
+/** İmzalı panel ucundan Tükendi kalemler dahil liste (adres ve anahtar varsa). Bozuk gövde liste sayılmaz. */
+export async function fetchPanelMenu(): Promise<PanelMenu | null> {
   if (!siteSigned()) return null;
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/menu`));
   if (status !== 200) throw new Error(`Panel menüsü alınamadı (HTTP ${status})`);
   const items = (json as { items?: unknown } | null)?.items;
   if (!Array.isArray(items)) throw new Error('Panel menüsü beklenen biçimde değil');
   return new Map(
-    items
-      .filter((i): i is { id: string; isActive: boolean; priceMinor: number; priceMinorL: number } => !!i && typeof i.id === 'string' && typeof i.isActive === 'boolean')
-      .map((i) => [i.id, i]),
+    (items as { id?: unknown; isActive?: unknown; priceMinor: number; priceMinorL: number }[])
+      .filter((i) => typeof i?.id === 'string' && typeof i.isActive === 'boolean')
+      .map((i) => [i.id as string, i as { isActive: boolean; priceMinor: number; priceMinorL: number }]),
   );
 }
 
+type LocalProduct = typeof schema.products.$inferSelect;
+
+/** Son eşitlemenin anı: listelenen her bağlı ürünün `syncedAt`'i o eşitlemede yazılır */
+function lastSyncAt(local: LocalProduct[]): number {
+  return local.reduce((a, p) => Math.max(a, p.syncedAt ?? 0), 0);
+}
+
 /**
- * Sitenin bir kalem için "Satışta" bilgisi. İmzalı panel listesi veritabanından tazedir ve her kalemi verir; herkese
- * açık menü CDN'den gelir, dakikalarca bayat kalabilir (s-maxage=300, stale-while-revalidate). Panel listesi varsa
- * karar onundur: herkese açık listede görünen ama panelde kapalı kalem kapanır, listede görünmeyen ama panelde açık
- * kalem kapanmaz; panelde hiç olmayan kalem sitede silinmiştir. Panel yoksa (anahtar yok) bugünkü kural: listede
- * olan satışta, olmayan değil.
+ * Bağlı ürün LafPOS'ta satışta mı olmalı. Porsiyon sayacı biten ürünü site açamaz (sayaç LafPOS'un). Anahtar
+ * varsa imzalı panelin Satışta bilgisi geçerlidir: panel veritabanından tazedir ve her kalemi verir, herkese açık
+ * menü ise CDN'den dakikalarca eski gelebilir (s-maxage=300, stale-while-revalidate). Herkese açık listede görünen
+ * ama panelde kapalı kalem kapanır, listede görünmeyen ama panelde açık kalem kapanmaz, panelde hiç olmayan kalem
+ * sitede silinmiştir. Panel yoksa herkese açık menüde listelenen satışta sayılır; yalnız son eşitlemede de
+ * listelenmiş ve o zamandan beri LafPOS'ta (anahtarsız) Tükendi yapılmış ürün, site değişmedikçe kapalı kalır.
  */
-export function siteSaysActive(extId: string, listed: boolean, panel: PanelMenuMap | null): boolean {
-  if (!panel) return listed;
-  return panel.get(extId)?.isActive ?? false;
+export function shouldBeActive(p: LocalProduct, listed: boolean, panel: PanelMenu | null, lastSync: number): boolean {
+  if (p.portionsLeft === 0) return false;
+  if (panel) return panel.get(p.extId!)?.isActive ?? false;
+  if (!listed) return false;
+  return p.active || (p.syncedAt ?? 0) < lastSync;
 }
 
 type SoldOutBy = 'lafpos' | 'site';
@@ -120,12 +130,28 @@ export function soldOutByAfterSync(p: { active: boolean; soldOutBy: SoldOutBy | 
   return p.portionsLeft === 0 ? 'lafpos' : 'site';
 }
 
+/**
+ * Eşitlemenin Satışta kuralı. `keep`: imzalı panel alınamadı (anahtar varken): bağlı ürünlerin Satışta bilgisine
+ * dokunulmaz, fiyat, ad, KDV ve yeni ürünler yine uygulanır. `held`: LafPOS'un siteye henüz gönderemediği Satışta
+ * yazımı bekleyen ürünler (giden kutusu); sitenin anlık görüntüsü o yazımdan eskidir, ürünün durumu korunur.
+ */
+export interface AvailabilityRule {
+  panel: PanelMenu | null;
+  keep?: boolean;
+  held?: Set<string>;
+}
+
+const decides = (rule: AvailabilityRule, extId: string) => !rule.keep && !rule.held?.has(extId);
+
 function siteItems(menu: SiteMenu): SiteMenuItem[] {
   return menu.categories.flatMap((c) => c.items.map((i) => ({ ...i, categoryKey: i.categoryKey ?? c.key })));
 }
 
-export function previewMenu(t: Tx | DB, menu: SiteMenu, panel: PanelMenuMap | null = null): MenuPreview {
+export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu | AvailabilityRule | null = null): MenuPreview {
+  const rule: AvailabilityRule = panelOrRule instanceof Map || panelOrRule === null ? { panel: panelOrRule } : panelOrRule;
+  const panel = rule.panel;
   const local = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
+  const lastSync = lastSyncAt(local);
   const byExt = new Map(local.map((p) => [p.extId!, p]));
   const cats = new Set(t.select({ k: schema.categories.extKey }).from(schema.categories).where(eq(schema.categories.extSource, 'laffogato')).all().map((c) => c.k));
   const changes: MenuChange[] = [];
@@ -138,10 +164,11 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panel: PanelMenuMap | nu
       changes.push({ kind: 'yeni', productId: null, extId: i.id, name: i.name, detail: `${tl(i.priceMinor)}${i.priceLargeMinor ? ` / ${tl(i.priceLargeMinor)}` : ''}` });
       continue;
     }
-    // Satışta bilgisi applyMenu'nün kuralıyla: panel varsa ondan, porsiyonu biten LafPOS'ta kapalı kalır
-    const want = siteSaysActive(i.id, true, panel) && p.portionsLeft !== 0;
-    if (!p.active && want) changes.push({ kind: 'geri', productId: p.id, extId: i.id, name: i.name, detail: 'Sitede yeniden satışta' });
-    if (p.active && !want) changes.push({ kind: 'kalkti', productId: p.id, extId: i.id, name: i.name, detail: p.portionsLeft === 0 ? 'Porsiyon bitti' : 'Sitede Tükendi' });
+    if (decides(rule, i.id)) {
+      const active = shouldBeActive(p, true, panel, lastSync);
+      if (!p.active && active) changes.push({ kind: 'geri', productId: p.id, extId: i.id, name: i.name, detail: 'Sitede yeniden satışta' });
+      if (p.active && !active) changes.push({ kind: 'kalkti', productId: p.id, extId: i.id, name: i.name, detail: p.portionsLeft === 0 ? 'Porsiyon bitti' : 'Sitede Tükendi' });
+    }
     if (p.price !== i.priceMinor) changes.push({ kind: 'fiyat', productId: p.id, extId: i.id, name: i.name, detail: `${tl(p.price)} → ${tl(i.priceMinor)}` });
     if ((p.priceL ?? null) !== (i.priceLargeMinor ?? null)) {
       changes.push({ kind: 'boy', productId: p.id, extId: i.id, name: i.name, detail: `L: ${p.priceL ? tl(p.priceL) : 'yok'} → ${i.priceLargeMinor ? tl(i.priceLargeMinor) : 'yok'}` });
@@ -153,11 +180,10 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panel: PanelMenuMap | nu
     }
   }
   for (const p of local) {
-    if (seen.has(p.extId!)) continue;
-    const want = siteSaysActive(p.extId!, false, panel) && p.portionsLeft !== 0;
-    if (p.active && !want) changes.push({ kind: 'kalkti', productId: p.id, extId: p.extId!, name: p.name, detail: panel?.has(p.extId!) ? 'Sitede Tükendi' : 'Sitede satışta değil' });
-    // Panel açık diyor, CDN'deki liste henüz göstermiyor
-    if (!p.active && want) changes.push({ kind: 'geri', productId: p.id, extId: p.extId!, name: p.name, detail: 'Sitede yeniden satışta' });
+    if (seen.has(p.extId!) || !decides(rule, p.extId!)) continue;
+    const active = shouldBeActive(p, false, panel, lastSync);
+    if (!p.active && active) changes.push({ kind: 'geri', productId: p.id, extId: p.extId!, name: p.name, detail: 'Sitede yeniden satışta' });
+    if (p.active && !active) changes.push({ kind: 'kalkti', productId: p.id, extId: p.extId!, name: p.name, detail: panel?.has(p.extId!) ? 'Sitede Tükendi' : 'Sitede satışta değil' });
   }
   return {
     changes,
@@ -202,17 +228,21 @@ function upsertOptionGroups(t: Tx | DB, menu: SiteMenu): string[] {
 }
 
 /**
- * Menüyü uygular (tek işlem). Fiyat, ad, KDV, açıklama, görsel siteden gelir; POS alanları korunur. Satışta bilgisi
- * `siteSaysActive` kuralıyla (imzalı panel listesi varsa ondan); sitede satışta olmayan bağlı ürün Tükendi yapılır
- * (silinmez, geçmiş satışlar bozulmasın), porsiyonu biten ürünü site açamaz. Tükendi'nin sahibi `soldOutBy`'a yazılır.
+ * Menüyü uygular (tek işlem). Fiyat, ad, KDV, açıklama, görsel siteden gelir; POS alanları (sıra dahil) korunur.
+ * Satışta bilgisi `shouldBeActive` kuralıyla (imzalı panel verildiyse onun Satışta bilgisi geçerlidir): sitede
+ * satışta olmayan bağlı ürün Tükendi yapılır (silinmez, geçmiş satışlar bozulmasın), porsiyonu biten ürünü site
+ * açamaz. Tükendi'nin sahibi `soldOutBy`'a yazılır. `keep` ve `held` ürünlerin Satışta bilgisine dokunulmaz
+ * (`AvailabilityRule`).
  */
 export function applyMenu(
   t: Tx,
   menu: SiteMenu,
-  opts: { barStationId?: string | null; kitchenStationId?: string | null; panel?: PanelMenuMap | null } = {},
+  opts: { barStationId?: string | null; kitchenStationId?: string | null; panel?: PanelMenu | null; keep?: boolean; held?: Set<string> } = {},
 ): { created: number; updated: number; deactivated: number; reactivated: number } {
   const now = Date.now();
-  const panel = opts.panel ?? null;
+  const rule: AvailabilityRule = { panel: opts.panel ?? null, keep: opts.keep, held: opts.held };
+  const panel = rule.panel;
+  const lastSync = lastSyncAt(t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all());
   const groupIds = upsertOptionGroups(t, menu);
   const catIdByKey = new Map<string, string>();
   menu.categories.forEach((c, ci) => {
@@ -262,7 +292,6 @@ export function applyMenu(
       image: i.image ?? null,
       tags: i.tags ?? [],
       allergens: i.allergens ?? null,
-      sort: idx,
       extHash: hashItem(i),
       syncedAt: now,
       updatedAt: now,
@@ -270,17 +299,20 @@ export function applyMenu(
     const existing = t.select().from(schema.products).where(and(eq(schema.products.extSource, 'laffogato'), eq(schema.products.extId, i.id))).get();
     let productId: string;
     if (existing) {
-      // Porsiyonu bittiği için LafPOS'ta tükenen ürünü site yeniden açamaz; o sayaç LafPOS'un
-      const active = siteSaysActive(i.id, true, panel) && existing.portionsLeft !== 0;
-      if (existing.active && !active) deactivated++;
-      if (!existing.active && active) reactivated++;
-      t.update(schema.products).set({ ...values, active, soldOutBy: soldOutByAfterSync(existing, active) }).where(eq(schema.products.id, existing.id)).run();
+      if (decides(rule, i.id)) {
+        const active = shouldBeActive(existing, true, panel, lastSync);
+        if (existing.active && !active) deactivated++;
+        if (!existing.active && active) reactivated++;
+        t.update(schema.products).set({ ...values, active, soldOutBy: soldOutByAfterSync(existing, active) }).where(eq(schema.products.id, existing.id)).run();
+      } else t.update(schema.products).set(values).where(eq(schema.products.id, existing.id)).run();
       productId = existing.id;
       updated++;
     } else {
       productId = ulid();
-      const active = siteSaysActive(i.id, true, panel);
-      t.insert(schema.products).values({ id: productId, ...values, active, soldOutBy: active ? null : 'site', extSource: 'laffogato', extId: i.id, createdAt: now }).run();
+      // POS sırası LafPOS'un (docs/03 §1): yalnız ürün ilk gelirken sitenin sırası verilir. Panel alınamadıysa
+      // herkese açık listede görünen yeni kalem satıştadır
+      const active = (rule.keep ? undefined : panel?.get(i.id)?.isActive) ?? true;
+      t.insert(schema.products).values({ id: productId, ...values, sort: idx, active, soldOutBy: active ? null : 'site', extSource: 'laffogato', extId: i.id, createdAt: now }).run();
       created++;
     }
     // Site seçenekleri (süt, şurup…) yalnız ürün ilk kez gelirken bağlanır; sonra yöneticinin seçimi korunur
@@ -292,8 +324,8 @@ export function applyMenu(
   // Herkese açık listede olmayan bağlı ürünler: panel "açık" diyorsa (CDN bayat) kapanmaz
   const local = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
   for (const p of local) {
-    if (seen.has(p.extId!)) continue;
-    const active = siteSaysActive(p.extId!, false, panel) && p.portionsLeft !== 0;
+    if (seen.has(p.extId!) || !decides(rule, p.extId!)) continue;
+    const active = shouldBeActive(p, false, panel, lastSync);
     const soldOutBy = soldOutByAfterSync(p, active);
     if (active === p.active && soldOutBy === p.soldOutBy) continue;
     t.update(schema.products).set({ active, soldOutBy, updatedAt: now }).where(eq(schema.products.id, p.id)).run();

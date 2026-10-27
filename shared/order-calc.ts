@@ -1,4 +1,5 @@
 import { allocate, type Kurus, percentOf, splitEven, splitKdv } from './money';
+import { hmToMinutes, istanbulParts } from './time';
 
 /** Servis ücretinin KDV oranı (yiyecek-içecek servisi; yazarkasa sepetindeki servis satırı da bunu kullanır) */
 export const SERVICE_KDV_RATE = 10;
@@ -60,6 +61,47 @@ export interface OrderTotals {
 
 export function lineGross(line: Pick<CalcLine, 'qty' | 'unitPrice'>): Kurus {
   return line.qty * line.unitPrice;
+}
+
+/** Happy hour kuralı (veritabanı satırı ve açılış verisindeki `HappyHourDTO` aynı alanları taşır) */
+export interface HappyHourRule {
+  /** 1 = Pazartesi … 7 = Pazar */
+  days: number[];
+  /** "HH:MM", İstanbul saati */
+  start: string;
+  end: string;
+  percent: number;
+  categoryIds: string[];
+  productIds: string[];
+  active: boolean;
+}
+
+/**
+ * Ürüne şu an geçerli happy hour indirimi (yüzde, kuralların en yükseği). Gece yarısını aşan aralıkta gece
+ * kısmı önceki günün kuralına aittir. Sunucu kalemi eklerken, istemci gönderilmemiş kalemi tahmin ederken
+ * aynı fonksiyonu çalıştırır; elle girilen fiyata happy hour uygulanmaz.
+ */
+export function happyHourPercentAt(rules: HappyHourRule[], product: { id: string; categoryId: string }, nowMs: number): number {
+  const p = istanbulParts(nowMs);
+  const minute = p.hour * 60 + p.minute;
+  let best = 0;
+  for (const r of rules) {
+    if (!r.active) continue;
+    const start = hmToMinutes(r.start);
+    const end = hmToMinutes(r.end);
+    const inRange = start <= end ? minute >= start && minute < end : minute >= start || minute < end;
+    const day = start > end && minute < end ? (p.weekday === 1 ? 7 : p.weekday - 1) : p.weekday;
+    if (!inRange || !r.days.includes(day)) continue;
+    const scoped = r.productIds.length || r.categoryIds.length;
+    const matches = !scoped || r.productIds.includes(product.id) || r.categoryIds.includes(product.categoryId);
+    if (matches) best = Math.max(best, r.percent);
+  }
+  return best;
+}
+
+/** Happy hour indirimli birim fiyat: happyHourUnit(14000, 20) = 11200 */
+export function happyHourUnit(unit: Kurus, pct: number): Kurus {
+  return pct > 0 ? unit - percentOf(unit, pct) : unit;
 }
 
 export function calcOrder(input: CalcInput): OrderTotals {
@@ -136,16 +178,73 @@ export function calcOrder(input: CalcInput): OrderTotals {
   };
 }
 
+type DiscountTotals = Pick<OrderTotals, 'gross' | 'lineDiscounts' | 'orderDiscount'>;
+
 /**
- * Kalem bazlı ödemede seçilen adetlerin tutarı. Bir kalemin tamamı seçildiyse kalan payının tamamı
- * alınır (yuvarlama artığı kalmasın diye); kısmi adetler orantılı yuvarlanır.
+ * Adisyon küçülünce (kalem iptali, ikram, başka adisyona taşıma) saklı indirimin büyüyen kısmı: kalan indirim eksi
+ * küçülmeden önceki indirim oranının kalan brüte düşen payı. Tutar indirimi aynı kalırken brüt küçülür, kalem
+ * indirimi kalanın daha büyük payı olur; yüzde adisyon indiriminde yalnız 1-2 kuruşluk yuvarlama farkı çıkar.
  */
-export function amountForItems(
+export function discountGrowth(before: DiscountTotals, after: DiscountTotals): Kurus {
+  const now = after.lineDiscounts + after.orderDiscount;
+  if (now <= 0) return 0;
+  if (before.gross <= 0) return now;
+  return now - Math.round(((before.lineDiscounts + before.orderDiscount) * after.gross) / before.gross);
+}
+
+/** Kalem bazlı ödemenin bir satırı: kaç adet ve (tutarı yazılan ödemelerde) bu adetlere düşen tutar */
+export interface PaidItem {
+  itemId: string;
+  qty: number;
+  amount?: Kurus;
+}
+
+/** Kalem bazlı ödeme için satır: ödenen adet ve, biliniyorsa, canlı ödemelerin bu satıra ödediği tutar */
+export interface ItemPayLine {
+  id: string;
+  qty: number;
+  paidQty: number;
+  /** Bilinmiyorsa (tutarı yazılmamış eski ya da yazarkasa ödemesi) null: adet payları sırayla sayılır */
+  paidAmount?: Kurus | null;
+}
+
+/**
+ * Kalemlerin ödeme satırları. Satırın ödenmiş tutarı ancak bütün ödenmiş adetleri tutarı yazılmış canlı
+ * ödemelerden geliyorsa bilinir; iptal edilen ödeme sayılmaz. Sunucu ve ödeme ekranı aynı hesabı kullanır.
+ */
+export function itemPayLines(
+  items: { id: string; qty: number; paidQty: number }[],
+  payments: { items: PaidItem[] | null; refundedAt?: number | null }[],
+): ItemPayLine[] {
+  const paid = new Map<string, { qty: number; amount: Kurus | null }>();
+  for (const p of payments) {
+    if (p.refundedAt) continue;
+    for (const s of p.items ?? []) {
+      const cur = paid.get(s.itemId) ?? { qty: 0, amount: 0 };
+      paid.set(s.itemId, { qty: cur.qty + s.qty, amount: cur.amount != null && s.amount != null ? cur.amount + s.amount : null });
+    }
+  }
+  return items.map((i) => {
+    const p = paid.get(i.id);
+    const paidAmount = i.paidQty === 0 ? 0 : p && p.qty === i.paidQty ? p.amount : null;
+    return { id: i.id, qty: i.qty, paidQty: i.paidQty, paidAmount };
+  });
+}
+
+/**
+ * Kalem bazlı ödemede seçilen adetlerin satır satır tutarı. Kısmi adetler kalemin net payının adetlere bölünmüş
+ * paylarından sırayla alınır. Kalemin kalan bütün adetleri seçildiyse kalan payının tamamı alınır: net pay eksi
+ * bu satıra şimdiye kadar ödenen (yuvarlama artığı kalmasın). Ödenen tutar bilinmiyorsa paylar sırayla sayılır;
+ * daha önce ödenen adetler baştaki payları tüketmiş sayılır. Bilinmesi önemli: baştaki (büyük) payı ödeyen ödeme
+ * iptal edilip adet yeniden ödenirse sıradaki pay 1 kuruş küçük kalır, bütün kalemler ödendiği hâlde adisyonda
+ * 0,01 ₺ borç kalıyordu (denetim, 26 Eki 2026).
+ */
+export function itemsBreakdown(
   totals: Pick<OrderTotals, 'lineNet'>,
-  lines: { id: string; qty: number; paidQty: number }[],
+  lines: ItemPayLine[],
   selection: { lineId: string; qty: number }[],
-): Kurus {
-  let sum = 0;
+): { lineId: string; qty: number; amount: Kurus }[] {
+  const out: { lineId: string; qty: number; amount: Kurus }[] = [];
   for (const sel of selection) {
     const line = lines.find((l) => l.id === sel.lineId);
     if (!line || sel.qty <= 0) continue;
@@ -153,11 +252,31 @@ export function amountForItems(
     const unpaid = line.qty - line.paidQty;
     const qty = Math.min(sel.qty, unpaid);
     if (qty <= 0) continue;
-    const perUnitShares = allocate(net, Array.from({ length: line.qty }, () => 1));
-    // Daha önce ödenen adetler baştaki payları tüketmiş say; sıradaki `qty` payı topla.
-    for (let i = line.paidQty; i < line.paidQty + qty; i++) sum += perUnitShares[i] ?? 0;
+    let amount = 0;
+    if (qty === unpaid && line.paidAmount != null) amount = Math.max(0, net - line.paidAmount);
+    else {
+      const perUnitShares = allocate(net, Array.from({ length: line.qty }, () => 1));
+      for (let i = line.paidQty; i < line.paidQty + qty; i++) amount += perUnitShares[i] ?? 0;
+    }
+    out.push({ lineId: line.id, qty, amount });
   }
-  return sum;
+  return out;
+}
+
+/** Kalem bazlı ödemede seçilen adetlerin tutarı (`itemsBreakdown` toplamı) */
+export function amountForItems(totals: Pick<OrderTotals, 'lineNet'>, lines: ItemPayLine[], selection: { lineId: string; qty: number }[]): Kurus {
+  return itemsBreakdown(totals, lines, selection).reduce((a, l) => a + l.amount, 0);
+}
+
+/**
+ * Kalemin ödenmemiş adetlerinin tutarı ("Kalem seç"te satırın kalanı): satırın kalanının tamamını tek başına seçmek
+ * bu tutarı öder. Sunucu kalem ödemesini adisyonun ödenecek kalanıyla sınırlar (`remaining` = toplam − ödenen):
+ * kısmi ödemeden sonra adisyona indirim yapılınca ödenmiş adetlerin payı küçülür, kalan adetlerin payı ödenecek
+ * kalanı aşabilir. Satır da aynı sınırla gösterilir ki kart terminaline fazla tutar girilmesin. Satır `itemPayLines`'tan
+ * verilirse satıra ödenmiş tutar düşülür (seçince alınacak tutarla aynı).
+ */
+export function unpaidLineAmount(totals: Pick<OrderTotals, 'lineNet'>, line: ItemPayLine, remaining: Kurus): Kurus {
+  return Math.min(amountForItems(totals, [line], [{ lineId: line.id, qty: line.qty - line.paidQty }]), Math.max(0, remaining));
 }
 
 export interface PaymentLike {

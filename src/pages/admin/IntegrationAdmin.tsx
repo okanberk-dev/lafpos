@@ -18,7 +18,7 @@ interface SyncStatus {
     versionSignal: boolean;
     state: { lastSuccessAt?: number; lastError?: string | null; count?: number } | null;
     open: number;
-    soldOutPush: { pending: number; lastError: string | null };
+    soldOutPush: { pending: number; rejected: number; lastError: string | null };
   };
   lafmaliyet: { configured: boolean; url: string | null; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null; costsAt: number | null };
 }
@@ -54,8 +54,9 @@ export default function IntegrationAdmin() {
   };
   const run = async (path: string, ok: string) => {
     try {
-      await post(path);
-      toast.ok(ok);
+      const r = await post<{ warning?: string }>(path);
+      if (r?.warning) toast.warn(r.warning);
+      else toast.ok(ok);
       qc.invalidateQueries({ queryKey: ['sync'] });
       qc.invalidateQueries({ queryKey: ['bootstrap'] });
     } catch (e) {
@@ -112,8 +113,14 @@ export default function IntegrationAdmin() {
               </Status>
               {s.online.soldOutPush.pending > 0 && (
                 <Status ok={false}>
-                  Siteye bildirilemeyen Tükendi: {s.online.soldOutPush.pending} ürün (porsiyonu bitti; yeniden denenecek)
+                  Siteye bildirilemeyen Satışta bilgisi: {s.online.soldOutPush.pending} ürün (porsiyon sayacı; yeniden denenecek)
                   {s.online.soldOutPush.lastError && <span className="block text-danger-500">Son hata: {s.online.soldOutPush.lastError}</span>}
+                </Status>
+              )}
+              {s.online.soldOutPush.rejected > 0 && (
+                <Status ok={false}>
+                  Sitenin reddettiği Satışta bilgisi: {s.online.soldOutPush.rejected} ürün (yeniden denenmeyecek; ürün LafPOS'ta açılınca ya da site aynı duruma gelince kalkar)
+                  {!s.online.soldOutPush.pending && s.online.soldOutPush.lastError && <span className="block text-danger-500">Son hata: {s.online.soldOutPush.lastError}</span>}
                 </Status>
               )}
               <Toggle checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />

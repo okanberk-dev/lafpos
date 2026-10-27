@@ -1,14 +1,15 @@
 import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
-import { addDays, businessDate, businessDayStartMs, istanbulParts } from '@shared/time';
+import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
 import { db, schema } from '../db/client';
 import { costMap } from '../sync/lafmaliyet';
 import { getOpenDay } from './orders';
 
 /**
- * Raporlar: iş günü tarihleriyle ([from, to], 05:00 kuralı) çalışır. Kaynak yalnız LafPOS'ta tahsil edilen
- * (source = 'pos') kapanmış adisyonlardır; online (sitede ödenen) siparişler ayrı gösterilir.
+ * Raporlar: iş günü tarihleriyle ([from, to], 05:00 kuralı) çalışır. Ciro yalnız LafPOS'ta tahsil edilen
+ * (source = 'pos') kapanmış adisyonlardandır; online (sitede ödenen) siparişler ayrı gösterilir. İptal, X/Z gibi
+ * bütün POS adisyonlarından sayılır: açık, iptal edilmiş ya da kalemleri başka masaya taşınmış (birlesti) olsa da.
  */
 
 type OrderRow = typeof schema.orders.$inferSelect;
@@ -21,33 +22,63 @@ export interface Range {
 
 interface Dataset {
   days: (typeof schema.businessDays.$inferSelect)[];
+  /** Dönemin bütün adisyonları, her durumda: her rapor kendi kümesini açıkça seçer */
   orders: OrderRow[];
   items: ItemRow[];
   payments: (typeof schema.payments.$inferSelect)[];
 }
 
+/** Bir raporun alabileceği en uzun dönem (gün, iki uç dahil): dönem belleğe okunur, kasa işlemleri beklemesin */
+export const MAX_RANGE_DAYS = 400;
+
+/** Dönemin gün sayısı, iki uç dahil */
+export const dayCount = (r: Range) => Math.round((Date.parse(`${r.to}T00:00:00Z`) - Date.parse(`${r.from}T00:00:00Z`)) / 86400_000) + 1;
+
+/** Raporların "bugün"ü: açık iş günü (05:00'i geçse de), yoksa şu anın iş günü; patron paneliyle aynı */
+export const reportToday = (now = Date.now()) => currentBusinessDate(getOpenDay(db)?.date, now);
+
 const EMPTY_TOTALS: OrderTotals = calcOrder({ lines: [] });
 const totalsOf = (o: OrderRow) => o.totals ?? EMPTY_TOTALS;
+/** Ciro kümesi: LafPOS'ta tahsil edilip kapanmış adisyon */
+const isSale = (o: OrderRow) => o.status === 'kapali' && o.source === 'pos';
+const idsOf = (orders: OrderRow[]) => new Set(orders.map((o) => o.id));
 
-function load(range: Range, opts: { includeOpen?: boolean } = {}): Dataset {
-  const days = db
-    .select()
-    .from(schema.businessDays)
-    .where(and(gte(schema.businessDays.date, range.from), lte(schema.businessDays.date, range.to)))
-    .orderBy(asc(schema.businessDays.date))
-    .all();
+/**
+ * Dönemin iş günleri ve o günlerin bütün adisyonları, kalemleri, ödemeleri. Kimlik listesi bağlanmaz: SQLite bir
+ * sorguda en çok 32.766 değişken alır, uzun dönemde adisyon sayısı bunu aşar; günler ve adisyonlar alt sorguyla
+ * seçilir. Kalem ve ödeme gerekmeyen rapor (saatlik, kıyas dönemi) `{ items: false, payments: false }` ile yalnız
+ * adisyonları okur: uzun dönemde okumanın çoğu kalemlerdir ve okuma sürerken kasa bekler.
+ */
+function load(range: Range, read: { items?: boolean; payments?: boolean } = {}): Dataset {
+  const inRange = and(gte(schema.businessDays.date, range.from), lte(schema.businessDays.date, range.to));
+  const days = db.select().from(schema.businessDays).where(inRange).orderBy(asc(schema.businessDays.date)).all();
   if (!days.length) return { days, orders: [], items: [], payments: [] };
-  const dayIds = days.map((d) => d.id);
-  const statuses: ('kapali' | 'iptal' | 'acik')[] = opts.includeOpen ? ['kapali', 'iptal', 'acik'] : ['kapali', 'iptal'];
-  const orders = db
-    .select()
-    .from(schema.orders)
-    .where(and(inArray(schema.orders.dayId, dayIds), inArray(schema.orders.status, statuses)))
-    .all();
-  const ids = orders.map((o) => o.id);
-  const items = ids.length ? db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, ids)).all() : [];
-  const payments = db.select().from(schema.payments).where(inArray(schema.payments.dayId, dayIds)).all();
+  const dayIds = db.select({ id: schema.businessDays.id }).from(schema.businessDays).where(inRange);
+  const orderIds = db.select({ id: schema.orders.id }).from(schema.orders).where(inArray(schema.orders.dayId, dayIds));
+  const orders = db.select().from(schema.orders).where(inArray(schema.orders.dayId, dayIds)).all();
+  const items = read.items === false ? [] : db.select().from(schema.orderItems).where(inArray(schema.orderItems.orderId, orderIds)).all();
+  const payments = read.payments === false ? [] : db.select().from(schema.payments).where(inArray(schema.payments.dayId, dayIds)).all();
   return { days, orders, items, payments };
+}
+
+/** Yalnız adisyonlar (ciro, adisyon sayısı, saat): kalem ve ödeme okunmaz */
+const ORDERS_ONLY = { items: false, payments: false } as const;
+
+/** İptal edilen kalemler: X/Z gibi bütün POS adisyonlarından (açık, iptal edilmiş, kalemleri taşınmış) */
+function voidedItems(ds: Dataset): ItemRow[] {
+  const pos = idsOf(ds.orders.filter((o) => o.source === 'pos'));
+  return ds.items.filter((i) => i.voided && pos.has(i.orderId));
+}
+
+function groupBy<T>(list: T[], key: (x: T) => string): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const x of list) {
+    const k = key(x);
+    const arr = out.get(k);
+    if (arr) arr.push(x);
+    else out.set(k, [x]);
+  }
+  return out;
 }
 
 const dayOf = (ds: Dataset) => new Map(ds.days.map((d) => [d.id, d.date]));
@@ -57,11 +88,11 @@ const change = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - pre
 /**
  * Kıyas dönemi: aynı uzunlukta ve aynı haftanın günlerine hizalı. Ayın 1'inden başlayan dönem önceki ayın aynı
  * günleriyle (1-26 Ekim → 1-26 Eylül), diğerleri bütün haftalar kadar geriyle (Çarşamba Çarşambayla) kıyaslanır.
- * Bugünü içeren dönemde önceki dönem de aynı saate kadar sayılır (yarım gün bütün günle kıyaslanmaz).
+ * Bugünü (açık iş günü, `reportToday`) içeren dönemde önceki dönem de aynı saate kadar sayılır (yarım gün bütün
+ * günle kıyaslanmaz).
  */
-export function comparison(r: Range, nowMs = Date.now()): { range: Range; label: string; cutoffMs: number | null } {
-  const len = Math.round((Date.parse(`${r.to}T00:00:00Z`) - Date.parse(`${r.from}T00:00:00Z`)) / 86400_000) + 1;
-  const today = businessDate(nowMs);
+export function comparison(r: Range, nowMs = Date.now(), today = businessDate(nowMs)): { range: Range; label: string; cutoffMs: number | null } {
+  const len = dayCount(r);
   const [fy, fm, fd] = r.from.split('-').map(Number);
   let range: Range;
   let label: string;
@@ -85,10 +116,11 @@ export function comparison(r: Range, nowMs = Date.now()): { range: Range; label:
 
 // ─── Ciro ───────────────────────────────────────────────────────────────────
 
-export function summaryReport(range: Range) {
+export function summaryReport(range: Range, nowMs = Date.now()) {
   const ds = load(range);
   const dates = dayOf(ds);
-  const closed = ds.orders.filter((o) => o.status === 'kapali' && o.source === 'pos');
+  const closed = ds.orders.filter(isSale);
+  const closedIds = idsOf(closed);
   const sum = (f: (o: OrderRow) => number) => closed.reduce((a, o) => a + f(o), 0);
   const netSales = sum((o) => totalsOf(o).total);
   const receipts = closed.filter((o) => o.total > 0).length;
@@ -107,20 +139,24 @@ export function summaryReport(range: Range) {
     row.count += 1;
     payMap.set(p.methodName, row);
   }
+  // Türe göre: adisyon sayısı "Adisyon" kutusuyla aynı ölçütle (tutarı olan adisyon; tamamı ikram edilen sayılmaz)
   const types = new Map<string, { type: string; orders: number; amount: number }>();
   for (const o of closed) {
+    if (o.total <= 0) continue;
     const row = types.get(o.type) ?? { type: o.type, orders: 0, amount: 0 };
     row.orders += 1;
     row.amount += totalsOf(o).total;
     types.set(o.type, row);
   }
+  // Online sipariş sitede ödenmiş gelir, X/Z gibi her aşamada (hazırlanan da) sayılır; ciroya girmez
   const online = ds.orders.filter((o) => o.source === 'laffogato');
-  const cmp = comparison(range);
-  const prev = load(cmp.range);
-  const prevClosed = prev.orders.filter((o) => o.status === 'kapali' && o.source === 'pos' && (cmp.cutoffMs == null || (o.closedAt ?? o.openedAt) <= cmp.cutoffMs));
+  const cmp = comparison(range, nowMs, reportToday(nowMs));
+  const prev = load(cmp.range, ORDERS_ONLY);
+  const prevClosed = prev.orders.filter((o) => isSale(o) && (cmp.cutoffMs == null || (o.closedAt ?? o.openedAt) <= cmp.cutoffMs));
   const prevNet = prevClosed.reduce((a, o) => a + totalsOf(o).total, 0);
   const prevReceipts = prevClosed.filter((o) => o.total > 0).length;
-  const itemsSold = ds.items.filter((i) => !i.voided && closed.some((o) => o.id === i.orderId)).reduce((a, i) => a + i.qty, 0);
+  // Satılan ürün: ürün raporunun adedi (ikram satılmadı, ayrı sayılır)
+  const itemsSold = ds.items.filter((i) => !i.voided && !i.complimentary && closedIds.has(i.orderId)).reduce((a, i) => a + i.qty, 0);
   const totalPaid = [...payMap.values()].reduce((a, p) => a + p.amount, 0);
   // Ciro dökümü: liste değeri − ikram − indirim (+ servis) = ciro (KDV dahil); − KDV = net satış (KDV hariç)
   const kdvByRate = new Map<number, { rate: number; gross: number; base: number; kdv: number }>();
@@ -135,7 +171,6 @@ export function summaryReport(range: Range) {
   }
   const kdvTotal = [...kdvByRate.values()].reduce((a, k) => a + k.kdv, 0);
   // Kapanmış adisyonların ödemeleri ciroya eşit olmalı (bahşiş hariç); açık adisyonlardan alınan ödeme ayrı
-  const closedIds = new Set(closed.map((o) => o.id));
   const paidClosed = salesPays.filter((p) => closedIds.has(p.orderId!)).reduce((a, p) => a + p.amount, 0);
   const paidOpen = salesPays.filter((p) => !closedIds.has(p.orderId!)).reduce((a, p) => a + p.amount, 0);
   const tableOrders = closed.filter((o) => o.type === 'masa');
@@ -143,7 +178,7 @@ export function summaryReport(range: Range) {
   const tableSales = tableOrders.reduce((a, o) => a + totalsOf(o).total, 0);
   return {
     range,
-    asOf: Date.now(),
+    asOf: nowMs,
     waterfall: {
       list: sum((o) => totalsOf(o).gross + totalsOf(o).complimentary),
       complimentary: sum((o) => totalsOf(o).complimentary),
@@ -161,7 +196,7 @@ export function summaryReport(range: Range) {
     gross: sum((o) => totalsOf(o).gross),
     discounts: sum((o) => totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount),
     complimentary: sum((o) => totalsOf(o).complimentary),
-    voided: ds.items.filter((i) => i.voided && ds.orders.find((o) => o.id === i.orderId)?.source === 'pos').reduce((a, i) => a + i.qty * i.unitPrice, 0),
+    voided: voidedItems(ds).reduce((a, i) => a + i.qty * i.unitPrice, 0),
     receipts,
     avgCheck: receipts ? Math.round(netSales / receipts) : 0,
     guests: closed.filter((o) => o.type === 'masa').reduce((a, o) => a + o.guests, 0),
@@ -179,14 +214,16 @@ export function summaryReport(range: Range) {
 
 export function productReport(range: Range, withCost: boolean) {
   const ds = load(range);
-  const closedIds = new Set(ds.orders.filter((o) => o.status === 'kapali' && o.source === 'pos').map((o) => o.id));
+  const closedIds = idsOf(ds.orders.filter(isSale));
+  const voided = new Set(voidedItems(ds));
   const totals = new Map(ds.orders.map((o) => [o.id, totalsOf(o)]));
   const products = new Map(db.select().from(schema.products).all().map((p) => [p.id, p]));
   const categories = new Map(db.select().from(schema.categories).all().map((c) => [c.id, c]));
   const costs = withCost ? costMap() : {};
   const rows = new Map<string, { key: string; name: string; size: string; categoryId: string | null; category: string; qty: number; revenue: number; revenueNet: number; cost: number | null; complimentary: number; voided: number }>();
   for (const i of ds.items) {
-    if (!closedIds.has(i.orderId) && !i.voided) continue;
+    // Satış ve ikram kapanmış adisyondan, iptal adedi bütün POS adisyonlarından (X/Z gibi)
+    if (i.voided ? !voided.has(i) : !closedIds.has(i.orderId)) continue;
     const key = `${i.productId ?? i.name}|${i.size}`;
     const p = i.productId ? products.get(i.productId) : undefined;
     const row =
@@ -258,20 +295,50 @@ const PARTS = [
   { key: 'gece', label: 'Gece', from: 22, to: 30 },
 ];
 
+/**
+ * Anın İstanbul saati (0-23), çağrı başına önbellekli: saat dilimi farkı tam saat olduğundan aynı UTC saatindeki anlar
+ * aynı saati verir; uzun dönemde on binlerce adisyon için Intl saat başına bir kez çağrılır.
+ */
+function hourMemo() {
+  const seen = new Map<number, number>();
+  return (ms: number) => {
+    const key = Math.floor(ms / 3_600_000);
+    let hour = seen.get(key);
+    if (hour === undefined) seen.set(key, (hour = istanbulParts(ms).hour));
+    return hour;
+  };
+}
+
+/**
+ * Saatlik ciro, adisyonun açıldığı saate göre; `hours` iş günü sırasıyla (05:00 ilk, gece yarısından sonrası son).
+ * Satır, iş gününün başından (05:00) geçen saattir (`offset`). Tek günde gün 24 saati aşarsa (05:00'te kapanmadı,
+ * masa açık kaldı) ertesi günün saatleri kendi satırlarıyla sonda gelir (`nextDay`): 27 Ekim 06:30 satışı 26 Ekim
+ * sabahının 06'sına karışmaz, gecenin ardından çizilir. Çok günlük dönemde satır günün saatidir (dağılım), 24 satır.
+ * Adisyon sayısı Adisyon kutusuyla aynı ölçütle: tutarı olan adisyon (tamamı ikram edilen ₺0 adisyon sayılmaz).
+ */
 export function hourlyReport(range: Range) {
-  const ds = load(range);
-  const closed = ds.orders.filter((o) => o.status === 'kapali' && o.source === 'pos');
-  const hours = Array.from({ length: 24 }, (_, h) => ({ hour: h, revenue: 0, orders: 0 }));
-  for (const o of closed) {
-    const h = istanbulParts(o.openedAt).hour;
-    hours[h].revenue += totalsOf(o).total;
-    hours[h].orders += 1;
+  const ds = load(range, ORDERS_ONLY);
+  const closed = ds.orders.filter(isSale);
+  const hourOf = hourMemo();
+  const dates = dayOf(ds);
+  const dayStart = new Map(ds.days.map((d) => [d.id, businessDayStartMs(d.date)]));
+  const single = range.from === range.to;
+  const offsetOf = (o: OrderRow) => {
+    const raw = Math.max(0, Math.floor((o.openedAt - (dayStart.get(o.dayId) ?? o.openedAt)) / 3_600_000));
+    return single ? raw : raw % 24;
+  };
+  const offsets = closed.map(offsetOf);
+  const length = offsets.reduce((a, x) => Math.max(a, x + 1), 24);
+  const hours = Array.from({ length }, (_, offset) => ({ hour: (offset + DAY_ROLLOVER_HOUR) % 24, offset, nextDay: offset >= 24, revenue: 0, orders: 0 }));
+  for (const [k, o] of closed.entries()) {
+    const row = hours[offsets[k]!]!;
+    row.revenue += totalsOf(o).total;
+    if (o.total > 0) row.orders += 1;
   }
   const total = hours.reduce((a, h) => a + h.revenue, 0);
   const active = hours.filter((h) => h.orders > 0);
   // Haftanın günü × saat: iş gününün (gece yarısından sonraki satış o güne yazılır) haftanın günü, adisyonun açıldığı
   // saat; hücre o günün ortalama cirosu (dönemde 2 salı varsa salı hücreleri 2'ye bölünür)
-  const dates = dayOf(ds);
   const weekdayOf = (date: string) => {
     const [y, m, d] = date.split('-').map(Number);
     return ((new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7) + 1;
@@ -280,7 +347,7 @@ export function hourlyReport(range: Range) {
   for (const d of ds.days) week[weekdayOf(d.date) - 1].days += 1;
   for (const o of closed) {
     const date = dates.get(o.dayId);
-    if (date) week[weekdayOf(date) - 1].hours[istanbulParts(o.openedAt).hour] += totalsOf(o).total;
+    if (date) week[weekdayOf(date) - 1].hours[hourOf(o.openedAt)] += totalsOf(o).total;
   }
   for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
   const parts = PARTS.map((p) => {
@@ -314,7 +381,7 @@ function percentile(sorted: number[], p: number): number {
  * en yavaş fişler; yoğun saatte kaç barista gerektiğini gösterir. Açık adisyonlar da sayılır (hazırlanmışsa).
  */
 export function prepReport(range: Range) {
-  const ds = load(range, { includeOpen: true });
+  const ds = load(range);
   const orderNo = new Map(ds.orders.map((o) => [o.id, o.no]));
   const done = ds.items
     .filter((i) => !i.voided && i.stationId && i.readyAt && i.readyAt >= i.sentAt)
@@ -330,8 +397,9 @@ export function prepReport(range: Range) {
     row.secs.push(d.sec);
     byProduct.set(key, row);
   }
+  const hourOf = hourMemo();
   const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, secs: [] as number[] }));
-  for (const d of done) hours[istanbulParts(d.sentAt).hour].secs.push(d.sec);
+  for (const d of done) hours[hourOf(d.sentAt)].secs.push(d.sec);
   return {
     range,
     overall: stats(done.map((d) => d.sec)),
@@ -352,21 +420,25 @@ export function staffReport(range: Range) {
     if (!rows.has(key)) rows.set(key, { userId: key, name: id ? (users.get(id) ?? 'Bilinmiyor') : 'Atanmamış', orders: 0, revenue: 0, voids: 0, voidValue: 0, comps: 0, compValue: 0, discounts: 0 });
     return rows.get(key)!;
   };
-  for (const o of ds.orders) {
-    if (o.source !== 'pos') continue;
-    if (o.status === 'kapali') {
-      const r = row(o.waiterId);
-      r.orders += 1;
-      r.revenue += totalsOf(o).total;
-      r.discounts += totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount;
-    }
+  const closed = ds.orders.filter(isSale);
+  for (const o of closed) {
+    const r = row(o.waiterId);
+    // Adisyon kutusuyla aynı ölçüt: tamamı ikram edilen ₺0 adisyon sayılmaz (ortalamayı düşürmez); indirimi ve
+    // ikramı yine garsona yazılır
+    if (o.total > 0) r.orders += 1;
+    r.revenue += totalsOf(o).total;
+    r.discounts += totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount;
   }
+  // İptal bütün POS adisyonlarından (X/Z ve iptal listesiyle aynı); ikram, ciro gibi kapanmış adisyondan (açıkken
+  // geri alınabilir)
+  for (const i of voidedItems(ds)) {
+    const r = row(i.voidBy);
+    r.voids += i.qty;
+    r.voidValue += i.qty * i.unitPrice;
+  }
+  const closedIds = idsOf(closed);
   for (const i of ds.items) {
-    if (i.voided) {
-      const r = row(i.voidBy);
-      r.voids += i.qty;
-      r.voidValue += i.qty * i.unitPrice;
-    } else if (i.complimentary) {
+    if (!i.voided && i.complimentary && closedIds.has(i.orderId)) {
       const r = row(i.compBy);
       r.comps += i.qty;
       r.compValue += i.qty * i.unitPrice;
@@ -377,8 +449,9 @@ export function staffReport(range: Range) {
 
 // ─── Kalem listeleri: iptal, ikram, indirim, iade, happy hour ───────────────
 
+/** Bütün POS adisyonlarından (açık ve kalemleri taşınmış olanlar dahil): iptal listesi X/Z'nin iptal tutarını verir */
 export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy') {
-  const ds = load(range, { includeOpen: true });
+  const ds = load(range);
   const orders = new Map(ds.orders.map((o) => [o.id, o]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   const tables = new Map(db.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((t) => [t.id, t.name]));
@@ -436,7 +509,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
 }
 
 export function refundReport(range: Range) {
-  const ds = load(range, { includeOpen: true });
+  const ds = load(range);
   const orders = new Map(ds.orders.map((o) => [o.id, o]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
   const rows = ds.payments
@@ -454,39 +527,54 @@ export function refundReport(range: Range) {
   return { range, total: rows.reduce((a, r) => a + r.amount, 0), count: rows.length, rows };
 }
 
-/** Adisyon listesi (ModPOS "Adisyon" raporu): kapanan ve iptal edilen adisyonlar, ödeme türleriyle */
-export function checksReport(range: Range, limit = 300) {
+/**
+ * Adisyon listesi (ModPOS "Adisyon" raporu): kapanan ve iptal edilen adisyonlar, ödeme türleriyle. `count` dönemin
+ * gerçek adisyon sayısı; `rows` en yeni `limit` adisyon (ekran), `limit` null ise hepsi (CSV). `showWaiter` garsonun
+ * kime gösterileceğini söyler: garsona göre toplanan liste personel tutarıdır (`seesStaffOf`).
+ */
+export function checksReport(range: Range, limit: number | null = 300, showWaiter: (waiterId: string | null) => boolean = () => true) {
   const ds = load(range);
   const tables = new Map(db.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((t) => [t.id, t.name]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
-  const rows = ds.orders
-    .filter((o) => o.source === 'pos')
-    .sort((a, b) => (b.closedAt ?? b.openedAt) - (a.closedAt ?? a.openedAt))
-    .slice(0, limit)
-    .map((o) => {
-      const its = ds.items.filter((i) => i.orderId === o.id && !i.voided);
-      const pays = ds.payments.filter((p) => p.orderId === o.id && !p.refundedAt);
-      return {
-        id: o.id,
-        no: o.no,
-        status: o.status,
-        type: o.type,
-        place: o.tableId ? (tables.get(o.tableId) ?? '') : null,
-        openedAt: o.openedAt,
-        closedAt: o.closedAt,
-        waiter: o.waiterId ? (users.get(o.waiterId) ?? null) : null,
-        itemCount: its.length,
-        qty: its.reduce((a, i) => a + i.qty, 0),
-        total: o.total,
-        methods: [...new Set(pays.map((p) => p.methodName))],
-      };
-    });
-  return { range, count: rows.length, rows };
+  const checks = ds.orders
+    .filter((o) => o.source === 'pos' && (o.status === 'kapali' || o.status === 'iptal'))
+    .sort((a, b) => (b.closedAt ?? b.openedAt) - (a.closedAt ?? a.openedAt));
+  // Kalem ve ödeme adisyona göre bir kez gruplanır (satır başına bütün listeyi taramak uzun dönemde karesel)
+  const itemsBy = groupBy(
+    ds.items.filter((i) => !i.voided),
+    (i) => i.orderId,
+  );
+  const paysBy = groupBy(
+    ds.payments.filter((p) => p.orderId && !p.refundedAt),
+    (p) => p.orderId!,
+  );
+  const rows = (limit == null ? checks : checks.slice(0, limit)).map((o) => {
+    const its = itemsBy.get(o.id) ?? [];
+    const pays = paysBy.get(o.id) ?? [];
+    return {
+      id: o.id,
+      no: o.no,
+      status: o.status,
+      type: o.type,
+      place: o.tableId ? (tables.get(o.tableId) ?? '') : null,
+      openedAt: o.openedAt,
+      closedAt: o.closedAt,
+      waiter: o.waiterId && showWaiter(o.waiterId) ? (users.get(o.waiterId) ?? null) : null,
+      itemCount: its.length,
+      qty: its.reduce((a, i) => a + i.qty, 0),
+      total: o.total,
+      methods: [...new Set(pays.map((p) => p.methodName))],
+    };
+  });
+  return { range, count: checks.length, rows };
 }
 
 // ─── Patron paneli: canlı ───────────────────────────────────────────────────
 
-/** Bir iş gününde, gün başından itibaren `elapsedMs` içinde kapanan POS adisyonlarının cirosu */
+/**
+ * Bir iş gününde, gün başından itibaren `elapsedMs` içinde kapanan POS adisyonlarının cirosu ve adisyon sayısı
+ * (raporlarla aynı ölçüt: tutarı olan adisyon; tamamı ikram edilen sayılmaz)
+ */
 function salesUntil(date: string, elapsedMs: number) {
   const start = businessDayStartMs(date);
   const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.date, date)).all();
@@ -497,15 +585,15 @@ function salesUntil(date: string, elapsedMs: number) {
     .where(and(inArray(schema.orders.dayId, day.map((d) => d.id)), eq(schema.orders.status, 'kapali'), eq(schema.orders.source, 'pos')))
     .all()
     .filter((o) => (o.closedAt ?? 0) <= start + elapsedMs);
-  return { netSales: orders.reduce((a, o) => a + totalsOf(o).total, 0), orders: orders.length };
+  return { netSales: orders.reduce((a, o) => a + totalsOf(o).total, 0), orders: orders.filter((o) => o.total > 0).length };
 }
 
 export function patronLive(withCost: boolean) {
   const now = Date.now();
   const openDay = getOpenDay(db);
-  const today = openDay?.date ?? businessDate(now);
+  const today = currentBusinessDate(openDay?.date, now);
   const elapsed = now - businessDayStartMs(today);
-  const ds = load({ from: today, to: today }, { includeOpen: true });
+  const ds = load({ from: today, to: today });
   const pos = ds.orders.filter((o) => o.source === 'pos');
   const closed = pos.filter((o) => o.status === 'kapali');
   const open = pos.filter((o) => o.status === 'acik');
@@ -513,12 +601,21 @@ export function patronLive(withCost: boolean) {
   const openTotal = open.reduce((a, o) => a + o.total - o.paid, 0);
   const lastWeek = salesUntil(addDays(today, -7), elapsed);
   const fourWeeks = salesUntil(addDays(today, -28), elapsed);
-  const yesterday = summaryReport({ from: addDays(today, -1), to: addDays(today, -1) });
+  const yesterday = summaryReport({ from: addDays(today, -1), to: addDays(today, -1) }, now);
 
-  const hourly = hourlyReport({ from: today, to: today }).hours.map((h) => h.revenue);
-  const hourlyLastWeek = hourlyReport({ from: addDays(today, -7), to: addDays(today, -7) }).hours.map((h) => h.revenue);
+  // Saat dizisi saat numarasıyla (0-23); gün 05:00'i geçip 24 saati aştıysa ertesi günün saatleri `…NextDay`de
+  // ([0] ertesi gün 05:00). Grafik iş günü sırasıyla çizer (src/lib/period.ts hourBars): gecenin ardından ertesi gün.
+  // Eski istemci yalnız 24 saati okur, ertesi günü göstermez ama saatleri kaymaz (LafPOS Uzaktan sürüm farkı)
+  const byHour = (date: string) => {
+    const rows = hourlyReport({ from: date, to: date }).hours;
+    const day = Array.from({ length: 24 }, () => 0);
+    for (const r of rows) if (!r.nextDay) day[r.hour] = r.revenue;
+    return { day, next: rows.filter((r) => r.nextDay).map((r) => r.revenue) };
+  };
+  const todayHours = byHour(today);
+  const lastWeekHours = byHour(addDays(today, -7));
   const products = productReport({ from: today, to: today }, withCost).products.slice(0, 6);
-  const summary = summaryReport({ from: today, to: today });
+  const summary = summaryReport({ from: today, to: today }, now);
 
   const tables = new Map(db.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((t) => [t.id, t.name]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
@@ -550,8 +647,10 @@ export function patronLive(withCost: boolean) {
       fourWeeks: { ...fourWeeks, change: change(netSales, fourWeeks.netSales) },
     },
     yesterday: { netSales: yesterday.netSales, receipts: yesterday.receipts },
-    hourly,
-    hourlyLastWeek,
+    hourly: todayHours.day,
+    hourlyLastWeek: lastWeekHours.day,
+    hourlyNextDay: todayHours.next,
+    hourlyLastWeekNextDay: lastWeekHours.next,
     payments: summary.payments,
     discounts: summary.discounts,
     complimentary: summary.complimentary,
@@ -560,18 +659,20 @@ export function patronLive(withCost: boolean) {
     top: products,
     openChecks,
     alerts,
-    anomalies: anomalies(today, summary),
+    anomalies: anomalies(today, summary, open.reduce((a, o) => a + totalsOf(o).gross, 0)),
   };
 }
 
 /**
  * Basit anomali kuralları (robotPOS'un "aiR anomali" karşılığı): bugünün iptal oranı son 4 haftanın aynı gününe
  * göre belirgin yüksekse, son gün sonunda kasa farkı varsa, hesap yazdırıldıktan sonra iptal ya da kapanmış
- * adisyon yeniden açıldıysa uyarır.
+ * adisyon yeniden açıldıysa uyarır. İptal açık adisyonlardan da sayıldığından oranın paydasına açık adisyonların
+ * kalemleri (`openGross`) de girer: açık masası çok olan öğleden sonra yalancı alarm vermez.
  */
-function anomalies(today: string, s: ReturnType<typeof summaryReport>) {
+function anomalies(today: string, s: ReturnType<typeof summaryReport>, openGross: number) {
   const out: { level: 'uyari' | 'alarm'; title: string; detail: string }[] = [];
-  const rateNow = s.gross > 0 ? s.voided / (s.gross + s.voided) : 0;
+  const rung = s.gross + openGross + s.voided;
+  const rateNow = rung > 0 ? s.voided / rung : 0;
   const past = [7, 14, 21, 28].map((d) => summaryReport({ from: addDays(today, -d), to: addDays(today, -d) }));
   const pastRates = past.filter((p) => p.gross > 0).map((p) => p.voided / (p.gross + p.voided));
   const avg = pastRates.length ? pastRates.reduce((a, b) => a + b, 0) / pastRates.length : 0;

@@ -1,5 +1,6 @@
 import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
+import type { ServiceMode } from './service-mode';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
 
@@ -190,6 +191,10 @@ export interface PublicSettings {
   stampCategoryKeys: string[];
   /** Kurulum modu: giriş ekranında örnek PIN'ler yazar. Canlıya geçince kapatılır */
   demoMode: boolean;
+  /** Servis modu: masaya servis (varsayılan), yarı self ya da self servis (shared/service-mode.ts) */
+  serviceMode: ServiceMode;
+  /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
+  tipsEnabled: boolean;
 }
 
 export interface BootstrapDTO {
@@ -257,7 +262,8 @@ export interface PaymentDTO {
   tip: number;
   given: number | null;
   change: number | null;
-  items: { itemId: string; qty: number }[] | null;
+  /** Kalem bazlı ödemede kalemler; `amount` bu adetlere düşen tutar (yazarkasa ve eski ödemelerde yok) */
+  items: { itemId: string; qty: number; amount?: number }[] | null;
   customerId: string | null;
   note: string | null;
   userId: string | null;
@@ -326,6 +332,8 @@ export interface OrderDTO {
   deliveryStatus: 'hazirlaniyor' | 'hazir' | 'yolda' | 'teslim' | null;
   courierId: string | null;
   cancelReason: string | null;
+  /** Yarı self serviste masa no / numaratör ("12"); personel siparişi bu masaya götürür */
+  numarator: string | null;
   items: OrderItemDTO[];
   payments: PaymentDTO[];
   /** Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar); bölünmediyse null */
@@ -389,6 +397,8 @@ export interface KitchenTicket {
   note: string | null;
   sentAt: number;
   scheduledFor: string | null;
+  /** Masa no / numaratör: fişte numara yerine "Masa 12" */
+  numarator: string | null;
   items: KitchenTicketItem[];
 }
 
@@ -455,6 +465,8 @@ export interface PickupEntryDTO {
   /** Online siparişte müşterinin adı (soyadı gelmez); tezgâhta yok, numara söylenir */
   name: string | null;
   online: boolean;
+  /** Masa no / numaratör girildiyse: ekranda numara yerine masa, sipariş masaya getirilir */
+  table: string | null;
 }
 
 export interface PickupBoardDTO {
@@ -474,5 +486,18 @@ export interface DisplayLineDTO {
 
 export type DisplayStateDTO =
   | { kind: 'idle'; at: number }
-  | { kind: 'order'; at: number; label: string; lines: DisplayLineDTO[]; discount: number; total: number; paid: number; due: number }
+  | {
+      kind: 'order';
+      at: number;
+      label: string;
+      /** Kalemler menü fiyatıyla (adet × birim); ikram 0 */
+      lines: DisplayLineDTO[];
+      /** Kalem ve adisyon indirimlerinin toplamı */
+      discount: number;
+      /** Servis ücreti; kalemler − indirim + servis = toplam */
+      service: number;
+      total: number;
+      paid: number;
+      due: number;
+    }
   | { kind: 'thanks'; at: number; total: number };

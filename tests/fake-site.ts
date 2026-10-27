@@ -54,6 +54,8 @@ export interface FakeSite {
   /** Sırayla kullanılacak durum kodları; boşsa 200 */
   ordersStatus: number[];
   panelMenuStatus: number[];
+  /** Verilirse imzalı panel menüsünün yanıtı bu söz çözülene dek bekletilir (yanıt ağdayken olanları denemek için) */
+  panelMenuGate: Promise<void> | null;
   menuPostStatus: number[];
   stageStatus: number[];
   /** Gelen istekler: "GET /api/panel/orders" gibi */
@@ -80,6 +82,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     version: 'v1',
     ordersStatus: [],
     panelMenuStatus: [],
+    panelMenuGate: null,
     menuPostStatus: [],
     stageStatus: [],
     calls: [],
@@ -128,9 +131,12 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       return send(200, { order: order && change.action === 'preparing' ? { ...order, stage: 'preparing' } : null });
     }
     if (call === 'GET /api/panel/menu') {
+      // Site listeyi istek anında okur; yanıt ağda bekleyebilir
+      const snapshot = new Map(site.panelActive);
+      if (site.panelMenuGate) await site.panelMenuGate;
       const code = site.panelMenuStatus.shift() ?? 200;
       if (code !== 200) return send(code, { error: 'unavailable' });
-      return send(200, { ...panelMenu, items: panelMenu.items.map((i) => ({ ...i, isActive: site.panelActive.get(i.id) ?? i.isActive })) });
+      return send(200, { ...panelMenu, items: panelMenu.items.map((i) => ({ ...i, isActive: snapshot.get(i.id) ?? i.isActive })) });
     }
     if (call === 'POST /api/panel/menu') {
       const change = JSON.parse(raw) as FakeSite['menuPosts'][number];

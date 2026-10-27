@@ -59,31 +59,75 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
     site.menu = siteMenuFixture();
   });
 
-  it('anahtar varken panel listesi alınamazsa tur uygulanmaz, sonraki tur uygular', async () => {
+  it('anahtar varken panel listesi alınamazsa fiyat ve ürünler yine uygulanır, Satışta bilgisi değişmez; sonraki tur uygular', async () => {
     site.panelActive.set('mnu-0005', false);
     await sync();
     expect((await product('mnu-0005')).active).toBe(false);
+    const latteBefore = await product('mnu-0007');
+    expect(latteBefore.active).toBe(true);
+
+    // Site espresso'yu yeniden açar ve Latte'nin fiyatını 10 TL artırır; panel 401 döner (kafe saati kaydı)
     site.panelActive.set('mnu-0005', true);
-    site.panelMenuStatus.push(503);
-    await expect(sync()).rejects.toThrow(/Panel menüsü alınamadı \(HTTP 503\)/);
+    site.panelActive.set('mnu-0007', false);
+    const raised = siteMenuFixture();
+    for (const c of raised.categories) for (const i of c.items) if (i.id === 'mnu-0007') i.priceMinor += 1000;
+    site.menu = raised;
+    site.panelMenuStatus.push(401);
+    const { runMenuSync } = await import('../server/sync/menu-sync');
+    const r = await runMenuSync({ apply: true });
+    expect(r.status).toBe('uygulandi');
+    expect(r.warning).toMatch(/Satışta bilgisi alınamadı.*HTTP 401/);
+    expect(r.preview?.changes.filter((c) => c.kind === 'geri' || c.kind === 'kalkti')).toEqual([]);
+    const latte = await product('mnu-0007');
+    expect(latte.price).toBe(latteBefore.price + 1000);
+    expect(latte.active).toBe(true);
     expect((await product('mnu-0005')).active).toBe(false);
     const status = await h.ok<{ menu: { state: { lastError?: string } } }>('patron', 'GET', '/sync/status');
-    expect(status.menu.state.lastError).toMatch(/Panel menüsü alınamadı/);
-    await sync();
+    expect(status.menu.state.lastError).toMatch(/HTTP 401/);
+
+    // ETag yazılmadı: sonraki otomatik tur menüyü yeniden alır (304 değil) ve Satışta bilgisini uygular
+    const r2 = await runMenuSync({ apply: true });
+    expect(r2.status).toBe('uygulandi');
+    expect(r2.warning).toBeUndefined();
     expect((await product('mnu-0005')).active).toBe(true);
+    expect((await product('mnu-0007')).active).toBe(false);
+    site.panelActive.set('mnu-0007', true);
+    site.menu = siteMenuFixture();
+    await sync();
   });
 
   it('panel listesi yoksa (anahtar yok) bugünkü kural: listede olan satışta, olmayan sitenin Tükendi\'si', async () => {
     const { tx } = await import('../server/db/client');
-    const { applyMenu, siteSaysActive } = await import('../server/sync/laffogato-menu');
-    expect(siteSaysActive('mnu-0001', true, null)).toBe(true);
-    expect(siteSaysActive('mnu-0001', false, null)).toBe(false);
+    const { applyMenu } = await import('../server/sync/laffogato-menu');
     tx((t) => applyMenu(t, without('mnu-0001')));
     const matcha = await product('mnu-0001');
     expect(matcha.active).toBe(false);
     expect(matcha.soldOutBy).toBe('site');
     tx((t) => applyMenu(t, siteMenuFixture() as unknown as SiteMenu));
     expect((await product('mnu-0001')).active).toBe(true);
+  });
+
+  it('eşitleme yanıtı ağdayken basılan Tükendi eski panel görüntüsüyle geri alınmaz', async () => {
+    const p = await product('mnu-0011');
+    expect(p.active).toBe(true);
+    let release!: () => void;
+    site.panelMenuGate = new Promise<void>((r) => (release = r));
+    const posts = site.menuPosts.length;
+    const reads = site.count('GET /api/panel/menu');
+    // Panel ürünü "açık" okur, yanıt bekler; kasiyer bu arada Tükendi'ye basar
+    const syncing = sync();
+    while (site.count('GET /api/panel/menu') === reads) await new Promise((r) => setTimeout(r, 2));
+    const tap = h.ok<{ site: string }>('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: false });
+    await new Promise((r) => setTimeout(r, 30));
+    release();
+    site.panelMenuGate = null;
+    await syncing;
+    expect((await tap).site).toBe('guncellendi');
+    expect(site.menuPosts.slice(posts)).toEqual([expect.objectContaining({ id: 'mnu-0011', isActive: false })]);
+    const after = await product('mnu-0011');
+    expect(after.active).toBe(false);
+    expect(after.soldOutBy).toBe('lafpos');
+    await h.ok('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: true });
   });
 });
 

@@ -8,7 +8,7 @@ import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLive } from '@/lib/live';
-import { homePath } from '@/lib/nav';
+import { useHomePath } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
 import { ADMIN_GROUPS, type AdminSection, visibleSections } from './sections';
 import { ROW_ICON } from './ui';
@@ -16,7 +16,7 @@ import { ROW_ICON } from './ui';
 interface SyncStatus {
   lafmaliyet: { configured: boolean; pending: number; lastError: string | null };
   menu: { state: { lastError?: string | null } | null };
-  online: { soldOutPush: { pending: number } };
+  online: { soldOutPush: { pending: number; rejected: number } };
 }
 
 /** İş bekleyen yerlerin sayacı (Innex §3 fikir 1): tükenen ürün, gönderilemeyen gün */
@@ -25,7 +25,7 @@ function useCounts(): Partial<Record<AdminSection['key'], number>> {
   const can = useCan();
   const sync = useQuery({ queryKey: ['sync', 'status'], queryFn: () => get<SyncStatus>('/sync/status'), staleTime: 60_000, enabled: can('senkron.yonet') || can('ayar.yonet') });
   const soldOut = boot.products.filter((p) => !p.active && !p.hidden).length;
-  const failing = sync.data ? sync.data.lafmaliyet.pending + sync.data.online.soldOutPush.pending + (sync.data.menu.state?.lastError ? 1 : 0) : 0;
+  const failing = sync.data ? sync.data.lafmaliyet.pending + sync.data.online.soldOutPush.pending + sync.data.online.soldOutPush.rejected + (sync.data.menu.state?.lastError ? 1 : 0) : 0;
   return { menu: soldOut || undefined, entegrasyon: failing || undefined };
 }
 
@@ -42,6 +42,7 @@ export function AdminShell({ title, children }: { title: string; children: React
   const { rail, compact, toggleRail, toggleCompact, setPalette, setUserMenu } = useShell();
   const location = useLocation();
   const counts = useCounts();
+  const home = useHomePath();
   const sections = visibleSections(can);
   const atIndex = location.pathname === '/yonetim' || location.pathname === '/yonetim/';
 
@@ -104,7 +105,7 @@ export function AdminShell({ title, children }: { title: string; children: React
         })}
       </div>
       <div className={cn('space-y-0.5 border-t border-[var(--admin-border)] py-2.5', narrow ? 'px-2' : 'px-2.5')}>
-        <Link to={homePath(can)} title={narrow ? 'Kasa ekranlarına dön' : undefined} aria-label={narrow ? 'Kasa ekranlarına dön' : undefined} className={cn('flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-[var(--admin-text-soft)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)] pointer-fine:min-h-8', narrow && 'mx-auto size-11 justify-center px-0 pointer-fine:size-10')}>
+        <Link to={home} title={narrow ? 'Kasa ekranlarına dön' : undefined} aria-label={narrow ? 'Kasa ekranlarına dön' : undefined} className={cn('flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-[var(--admin-text-soft)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)] pointer-fine:min-h-8', narrow && 'mx-auto size-11 justify-center px-0 pointer-fine:size-10')}>
           <ArrowLeftRight className="size-4 shrink-0" aria-hidden="true" />
           {!narrow && 'Kasa ekranlarına dön'}
         </Link>

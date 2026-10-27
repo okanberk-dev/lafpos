@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { businessDate } from '@shared/time';
 import { db, schema } from '../db/client';
 import { type AppEnv, can, requirePermission } from '../lib/auth';
-import { body, HttpError, query } from '../lib/http';
+import { body, HttpError } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
 import { buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
 import { requireSiteLinked, siteLinked } from '../sync/laffogato-link';
+import { reportRange } from './reports';
 import { onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
 import { runMenuSync } from '../sync/menu-sync';
 import { getSettings } from '../lib/settings';
@@ -79,10 +79,10 @@ syncRoutes.post('/products/:id/availability', async (c) => {
   return c.json(await setAvailability(c.req.param('id'), input.active, { name: user.name, manager }));
 });
 
+/** Raporlar › Aktarım: dönem raporlarla aynı denetlenir (gerçek tarih, en çok 400 gün, varsayılan açık iş günü) */
 syncRoutes.get('/lafmaliyet/satislar.csv', (c) => {
   requirePermission(c.get('user'), 'rapor.gor');
-  const today = businessDate(Date.now());
-  const q = query(c, z.object({ from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(today), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).default(today) }));
+  const q = reportRange(c);
   c.header('content-type', 'text/csv; charset=utf-8');
   c.header('content-disposition', `attachment; filename="lafpos-satislar-${q.from}_${q.to}.csv"`);
   return c.body(salesCsv(q.from, q.to));

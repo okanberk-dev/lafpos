@@ -3,7 +3,7 @@ import { tl } from '@shared/money';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, need } from '../lib/auth';
 import type { Effects } from '../lib/effects';
-import { bad, conflict, notFound } from '../lib/http';
+import { bad, conflict, notFound, patchFields } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { localStampsOn } from '../sync/laffogato-link';
 
@@ -86,7 +86,7 @@ export function updateCustomer(t: Tx, actor: Actor, fx: Effects, id: string, inp
   if (input.birthday !== undefined) patch.birthday = input.birthday || null;
   if (input.creditLimit !== undefined) patch.creditLimit = input.creditLimit;
   if (input.tags !== undefined) patch.tags = input.tags;
-  t.update(schema.customers).set(patch).where(eq(schema.customers.id, id)).run();
+  t.update(schema.customers).set(patchFields(patch)).where(eq(schema.customers.id, id)).run();
   fx.emit({ topic: 'customers', kind: 'updated', byUserId: actor.user.id });
 }
 

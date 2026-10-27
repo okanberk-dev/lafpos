@@ -37,7 +37,7 @@ lafpos/
 
 | Tablo | Amaç | Not |
 | --- | --- | --- |
-| `settings` | anahtar → JSON ayar | işletme adı, fiş metinleri, servis oranı, otomatik kilit, senkron ayarları |
+| `settings` | anahtar → JSON ayar | işletme adı, fiş metinleri, servis oranı, otomatik kilit, senkron ayarları, servis modu (`serviceMode`) |
 | `users`, `sessions` | personel, PIN, rol, kişi bazlı yetki; oturumlar | PIN `HMAC(secret, pin)` olarak tekil |
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
@@ -46,7 +46,7 @@ lafpos/
 | `happy_hours` | saat/gün/kategori indirim kuralı | |
 | `payment_methods` | nakit, kart, yemek kartları, havale, cari | `zField` → lafmaliyet Z alanı (`cash`, `card`, `meal_card`, `online`, `other`), `channel` → komisyon kanalı (`pluxee`…) |
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |
-| `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`) |
+| `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`); ödemede istemcinin deneme kimliği (`request_id`, adisyon başına tekil: yanıtı kaybolup yeniden gelen aynı istek ikinci kez yazılmaz, ilk sonuç döner; aynı kimlikle başka tür, tutar, pay ya da kalem gelirse ya da o ödeme iptal edildiyse 409 `request_reused` / `request_refunded`, göç 0004; açık hesap tahsilatı da kimlik gönderir ve bakiyeden fazlası tahsil edilmez: 409 `over_balance`); yarı self serviste masa no / numaratör (`numarator`, göç 0005) |
 | `cash_movements` | harcama, teslim, giriş | lafmaliyet `cash_outs` türleriyle uyumlu |
 | `room_sessions` | karaoke odası sayacı | |
 | `customers`, `customer_addresses`, `customer_ledger` | müşteri, adres, açık hesap | damga kartı sayacı |
@@ -100,7 +100,8 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 2. Gel-al ve paket panosu: kurye, durumlar
 3. Rezervasyon: gün görünümü, masa ataması, planda gösterim
 4. Karaoke odası sayacı: başlat/durdur, saatlik ücret, HİZMET satırı
-5. Porsiyon sayacı: günlük adet, sıfırda otomatik Tükendi (ve siteye bildirim)
+5. Porsiyon sayacı: günlük adet, sıfırda otomatik Tükendi (ve siteye bildirim); hazırlanmadan iptal edilen kalemin
+   porsiyonu geri döner
 
 ### Dalga 5: raporlar, patron paneli, yönetim
 
@@ -144,6 +145,19 @@ döndüren bütün uçlarda; indirim kayması cihaza "Servis ücreti" diye gitme
 yayılır ve otomatik gün sonu onu hemen kapatmaz (`business_days.reopened_at`); oda sayacı çalışırken hesap cihaza
 gitmez, kapanmış adisyona oda ücreti yazılmaz; lafmaliyet'e gönderim sürerken basılan "Gönder" gerçekten gönderir.
 
+Denetim düzeltmeleri, adisyon ve oda (`tests/audit-adisyon-oda.test.ts`): çalışan oda sayacı faturalanacak ücrettir.
+Sayacı çalışan adisyon iptal edilmez (`room_running`; önce durdurulur, oda ücretinin iptali yetkili onayı ister),
+kalemlerinin hepsi başka masaya taşınınca kapanmaz (sayaç kaynakta kalır), yazarkasada ödenince kapanmaz (uyarı
+düşer). Bir odada aynı anda tek sayaç çalışır: odanın öbür hesabında başlatılmaz (`room_running`, sayacı tutan
+adisyonun numarasıyla); kalemlerin hepsi aynı odadaki başka hesaba taşınınca sayaç da oraya geçer, boşalan kaynak
+kapanır. Sepet cihazda beklerken ve sitede ödenmiş siparişte sayaç başlamaz; sitede ödenmiş sipariş masaya taşınmaz,
+kasadan kapatılmaz. Masayı açmak QR siparişini değil masadaki kasa adisyonunu döndürür (yoksa yenisini açar).
+Adisyon iptali boş adisyonda da, adisyon ve kalem indirimini kaldırmak da `siparis.al` ister; kaldırılan indirim
+denetime yazılır (`order.discount_removed`, `item.discount_removed`). Hazırlanmaya başlanmamış kalem iptal edilince
+porsiyonu geri döner; sıfırdan dönen ürün yeniden satışa açılır, sitede de. Başlamış kalem bekleyene ("yeni")
+çekilemez, başlama zamanı silinmez: hazırlanmış ya da servis edilmiş kalem "hiç başlanmamış" gösterilip porsiyonu
+geri alınamaz.
+
 Aynı gün akşam (RiosenBeq/lafpos `claude/kasa-sade-tasarim`): kasa ekranları da Innex'e geçti (`DESIGN.md` §1);
 **paylaşımlı hesap**: hesap N kişiye kuruşu kuruşuna bölünür, her pay ayrı ödenir, sonradan eklenen kalem ya da
 iptal edilen pay kalanlara dağılır (`orders.split_people`, `payments.share_no/share_of`, göç 0003;
@@ -157,6 +171,16 @@ ekranında Toplam görünümü, Hazır çağrı ekranı (`/cagri`), hazırlama s
 elle fiyat, müşteri ekranı (`/musteri-ekrani`), adisyonda görselli ürün kartları ve kategori listesi, LafPOS Uzaktan
 (Vercel, salt okunur; `docs/07-UZAKTAN-ERISIM.md` §4). Sırada: patronun telefonuna alarm bildirimi (lafmaliyet Web
 Push), vardiya kasa sayımı, personel giriş-çıkış, kampanya kuralları (fiyatın sahibi site; karar gerekir).
+
+**Servis modu** (27 Ekim 2026, `claude/servis-modu`): Yönetim › Ayarlar'da masaya servis (varsayılan, bugünkü
+akış), yarı self ve self servis. Self modlarda açılış ve menünün ilk sekmesi yeni tezgâh satışı (`/satis`), "Öde"
+birincil; yarı selfte "Öde" ve "Gönder" bir kez masa no / numaratör sorar (`PUT /orders/:id/numarator`; harfli masa
+adı klavyeden; ödenmiş satışta da düzeltilir ve denetime yazılır, gün sonu alınmış günde değişmez `day_closed`;
+masaya taşınınca kalkar, "Ayrı hesap"la bölünen kalemlere geçer; kayıt sürerken ikinci basış kalemi yinelemez), bar ekranı, çağrı ekranı, hazır uyarısı ve fiş numara yerine "Masa 12" yazar; self serviste
+numara ödeme sonucunda, bar fişinde ve adisyonda büyük. Ödeme kuralları ve bara gidiş değişmez. Mod değişikliği
+ayrı denetim kaydı (`settings.servis_modu`, eski ve yeni mod). Testler `tests/servis-modu.test.ts`, e2e'de mod başına
+bir akış. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
+(gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,

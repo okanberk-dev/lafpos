@@ -33,8 +33,22 @@
     {
       "idx": 4,
       "version": "6",
-      "when": 1793080114770,
-      "tag": "0004_tukendi_kilidi",
+      "when": 1793047133046,
+      "tag": "0004_odeme_istegi",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1793084891102,
+      "tag": "0005_servis_modu",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793097801111,
+      "tag": "0006_tukendi_kilidi",
       "breakpoints": true
     }
   ]

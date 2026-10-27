@@ -92,7 +92,10 @@ function Entry({ entry, ready, fresh }: { entry: PickupEntryDTO; ready?: boolean
         fresh && 'animate-ring motion-reduce:animate-none',
       )}
     >
-      <span className={cn('tabular font-bold leading-none tracking-tight', ready ? 'text-6xl text-[var(--admin-success)]' : 'text-5xl text-ink-2')}>{entry.no}</span>
+      {/* Yarı self servis: numara yerine masa; müşteri kalkmaz, personel getirir */}
+      {entry.table && <span className="mb-1 text-sm font-semibold uppercase tracking-[0.06em] text-muted">Masa</span>}
+      <span className={cn('tabular max-w-full truncate font-bold leading-none tracking-tight', ready ? 'text-6xl text-[var(--admin-success)]' : 'text-5xl text-ink-2')}>{entry.table ?? entry.no}</span>
+      {entry.table && <span className="mt-2 text-sm font-medium text-ink-2">{ready ? 'Masanıza geliyor' : 'Masanıza getirilecek'}</span>}
       {entry.name && <span className="mt-2 max-w-full truncate text-lg font-semibold">{entry.name}</span>}
       {entry.online && <span className="mt-1 text-xs font-medium uppercase tracking-[0.06em] text-muted">Uygulama</span>}
     </div>

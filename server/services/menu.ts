@@ -1,6 +1,6 @@
 import { asc, eq, inArray } from 'drizzle-orm';
+import { happyHourPercentAt } from '@shared/order-calc';
 import { posNameOf } from '@shared/pos-name';
-import { hmToMinutes, istanbulParts } from '@shared/time';
 import type { SelectedOption, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { bad, notFound } from '../lib/http';
@@ -77,10 +77,17 @@ export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: 
       if (g.required && unique.length === 0) throw bad(`${g.name} seçilmeli`, 'option_required');
       for (const id of unique) out.push(toSelected(g, g.items.find((i) => i.id === id)!, 1));
     } else {
+      // Aynı seçenek birden çok kez gönderilirse adetleri toplanır: sınır seçenek başınadır, yirmi kez "+1 shot"
+      // yirmi shot olmaz (denetim, 26 Eki 2026)
+      const qtyOf = new Map<string, number>();
       for (const c of chosen) {
-        const item = g.items.find((i) => i.id === c.itemId)!;
         const qty = Math.trunc(c.qty ?? 1);
-        if (qty < 0 || qty > item.maxQty) throw bad(`${item.name}: en çok ${item.maxQty}`, 'option_invalid');
+        if (qty < 0) throw bad(`${g.name}: adet geçersiz`, 'option_invalid');
+        qtyOf.set(c.itemId, (qtyOf.get(c.itemId) ?? 0) + qty);
+      }
+      for (const [id, qty] of qtyOf) {
+        const item = g.items.find((i) => i.id === id)!;
+        if (qty > item.maxQty) throw bad(`${item.name}: en çok ${item.maxQty}`, 'option_invalid');
         if (qty > 0) out.push(toSelected(g, item, qty));
       }
     }
@@ -128,25 +135,10 @@ export function optionsUnitTotal(opts: SelectedOption[]): number {
   return opts.reduce((a, o) => a + o.price * o.qty, 0);
 }
 
-/** Şu an geçerli happy hour indirimi (yüzde); gece yarısını aşan aralıklar desteklenir */
+/** Şu an geçerli happy hour indirimi (yüzde); kural eşleşmesi istemcinin tahminiyle ortak (`happyHourPercentAt`) */
 export function happyHourPercent(t: Tx | DB, product: Product, nowMs = Date.now()): number {
   const rules = t.select().from(schema.happyHours).where(eq(schema.happyHours.active, true)).all();
-  if (!rules.length) return 0;
-  const p = istanbulParts(nowMs);
-  const minute = p.hour * 60 + p.minute;
-  let best = 0;
-  for (const r of rules) {
-    const start = hmToMinutes(r.start);
-    const end = hmToMinutes(r.end);
-    const inRange = start <= end ? minute >= start && minute < end : minute >= start || minute < end;
-    // Gece yarısını aşan aralıkta gece kısmı önceki günün kuralına aittir
-    const day = start > end && minute < end ? (p.weekday === 1 ? 7 : p.weekday - 1) : p.weekday;
-    if (!inRange || !r.days.includes(day)) continue;
-    const scoped = r.productIds.length || r.categoryIds.length;
-    const matches = !scoped || r.productIds.includes(product.id) || r.categoryIds.includes(product.categoryId);
-    if (matches) best = Math.max(best, r.percent);
-  }
-  return best;
+  return rules.length ? happyHourPercentAt(rules, product, nowMs) : 0;
 }
 
 /**

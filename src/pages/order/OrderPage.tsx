@@ -17,11 +17,12 @@ import {
   Split,
   Square,
   StickyNote,
+  TableProperties,
   Trash2,
   UserRound,
   Users,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { tl } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
@@ -31,17 +32,18 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Toggle } from '@/components/ui/Field';
 import { Badge, PageLoading } from '@/components/ui/misc';
-import { errorMessage, patch, post } from '@/lib/api';
+import { errorMessage, patch, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { type PendingLine, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
+import { previewTotals } from '@/lib/estimate';
 import { useMediaQuery, useTick } from '@/lib/hooks';
 import { BillReceipt, printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { sendDisplay, useCustomerDisplay, useDisplayCode } from '@/lib/display';
-import { CartPanel, previewTotals } from './CartPanel';
+import { CartPanel } from './CartPanel';
 import { CustomerModal } from './CustomerModal';
 import { OnlineOrderBar } from './OnlineOrderBar';
 import { OptionsModal } from './OptionsModal';
@@ -51,8 +53,12 @@ import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal 
 import { useOrder } from './useOrder';
 import { REMOTE } from '@/lib/remote';
 import { openCounterSale } from '@/lib/counter';
+import { asksNumarator, callFor, callText, numaratorLabel } from '@shared/service-mode';
+import { useServiceMode } from '@/lib/serviceMode';
+import { NumaratorModal } from './NumaratorModal';
+import { appUrl } from '@/lib/demo';
 
-type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis';
+type Dialog = null | 'tukendi' | 'menu' | 'ekran' | 'odeme' | 'tasi' | 'bol' | 'indirim' | 'kisi' | 'iptal' | 'yenidenac' | 'not' | 'musteri' | 'cikis' | 'numarator';
 
 export default function OrderPage() {
   const { id = '' } = useParams();
@@ -71,13 +77,20 @@ export default function OrderPage() {
   const [options, setOptions] = useState<{ product: ProductDTO; size: Size; editing: PendingLine | null } | null>(null);
   const [sending, setSending] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const mode = useServiceMode();
+  // Yarı self servis: masa no / numaratör bir kez sorulur; "Numarasız devam" denen adisyonda yeniden sorulmaz
+  const numaratorAsked = useRef(new Set<string>());
+  // Gönderim akışı tek seferlik: masa no kaydedilirken ya da kalemler giderken ikinci basış kalemi yinelemez
+  const flowBusy = useRef(false);
+  const [afterNumarator, setAfterNumarator] = useState<null | 'send' | 'pay'>(null);
 
   const table = useMemo(() => boot.tables.find((t) => t.id === order?.tableId), [boot.tables, order?.tableId]);
   const pendingCount = pending.reduce((a, l) => a + l.qty, 0);
   // Müşteri ekranı (bu cihaz yansıtıyorsa): kalemler ve gönderilmemişler dahil tahmini tutar
   const [displayCode, setDisplayCode] = useDisplayCode();
-  const displayLabel = order ? (table?.name ?? ORDER_TYPE_LABEL[order.type]) : '';
-  useCustomerDisplay(boot, order, pending, displayLabel, order ? (previewTotals(boot, order, pending)?.total ?? order.total) : 0);
+  const call = order ? callFor(order, mode) : null;
+  const displayLabel = order ? (table?.name ?? (call ? callText(call) : ORDER_TYPE_LABEL[order.type])) : '';
+  useCustomerDisplay(boot, order, pending, displayLabel);
 
   if (isLoading) return <PageLoading />;
   if (isError || !order) {
@@ -85,8 +98,8 @@ export default function OrderPage() {
       <div className="grid h-full place-items-center p-6 text-center">
         <div>
           <p className="font-semibold">Adisyon bulunamadı</p>
-          <Button className="mt-4" onClick={() => navigate('/masalar')}>
-            Masalara dön
+          <Button className="mt-4" onClick={() => navigate('/')}>
+            Ana ekrana dön
           </Button>
         </div>
       </div>
@@ -98,7 +111,15 @@ export default function OrderPage() {
   const editable = !REMOTE && isOpen && !isOnline && can('siparis.al');
   const due = order.total - order.paid;
   const backPath = order.tableId ? '/masalar' : '/siparisler';
-  const title = order.tableName ?? (isOnline ? (order.extLabel ?? 'Online') : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? `Gel-al${order.deliveryName ? ` · ${order.deliveryName}` : ''}` : `Paket${order.deliveryName ? ` · ${order.deliveryName}` : ''}`);
+  const title =
+    order.tableName ??
+    (isOnline
+      ? (order.extLabel ?? 'Online')
+      : order.type === 'tezgah'
+        ? `Tezgâh${order.numarator ? ` · ${numaratorLabel(order.numarator)}` : ''}`
+        : order.type === 'gelal'
+          ? `Gel-al${order.deliveryName ? ` · ${order.deliveryName}` : ''}${order.numarator ? ` · ${numaratorLabel(order.numarator)}` : ''}`
+          : `Paket${order.deliveryName ? ` · ${order.deliveryName}` : ''}`);
 
   const quickAdd = (p: ProductDTO, size: Size) => {
     cart.add(order.id, { productId: p.id, size, qty: 1, options: [], note: '' });
@@ -126,8 +147,49 @@ export default function OrderPage() {
 
   // Tezgâhta tek ekran: "Öde" kalemleri bara gönderir ve ödemeyi açar; satış kapanınca ekran yeni satışa hazırdır
   const counter = order.type === 'tezgah' && !isOnline;
-  const sendAndPay = async () => {
-    if (await send()) setDialog('odeme');
+  // Yarı self servis: tezgâh satışında gönderimden önce masa no / numaratör (bar fişine numara yerine o yazılır)
+  const numaratorOn = asksNumarator(mode) && counter;
+  const promptNumarator = (next: 'send' | 'pay') => {
+    if (!numaratorOn || order.numarator || numaratorAsked.current.has(order.id)) return false;
+    setAfterNumarator(next);
+    setDialog('numarator');
+    return true;
+  };
+  const once = async (fn: () => Promise<void>) => {
+    if (flowBusy.current) return;
+    flowBusy.current = true;
+    setSending(true);
+    try {
+      await fn();
+    } finally {
+      flowBusy.current = false;
+      setSending(false);
+    }
+  };
+  const sendAndPay = () =>
+    once(async () => {
+      if (promptNumarator('pay')) return;
+      if (await send()) setDialog('odeme');
+    });
+  const sendOnly = () =>
+    void once(async () => {
+      if (promptNumarator('send')) return;
+      await send();
+    });
+  const saveNumarator = (value: string | null) => once(() => saveNumaratorNow(value));
+  const saveNumaratorNow = async (value: string | null) => {
+    numaratorAsked.current.add(order.id);
+    const next = afterNumarator;
+    setAfterNumarator(null);
+    setDialog(null);
+    if (value !== order.numarator) {
+      // Satış akışında ayrı bildirim yok (ödeme ekranı masayı gösterir); düzenlemede onay
+      const res = await act(() => put<OrderDTO>(`/orders/${order.id}/numarator`, { numarator: value }), next ? undefined : value ? `${numaratorLabel(value)} yazıldı` : 'Masa no kaldırıldı');
+      if (!res && next) return;
+    }
+    if (next === 'pay') {
+      if (await send()) setDialog('odeme');
+    } else if (next === 'send') await send();
   };
   const nextSale = async () => {
     try {
@@ -159,6 +221,13 @@ export default function OrderPage() {
     { icon: <Users className="size-5" />, label: `Kişi sayısı (${order.guests})`, onClick: () => setDialog('kisi'), show: editable },
     { icon: <UserRound className="size-5" />, label: order.customer ? `Müşteri: ${order.customer.name}` : 'Müşteri ekle', hint: boot.integrations.localStamps ? 'Açık hesap ve damga kartı için' : 'Açık hesap ve sipariş geçmişi için', onClick: () => setDialog('musteri'), show: isOpen && !isOnline },
     { icon: <MonitorUp className="size-5" />, label: displayCode ? 'Müşteri ekranı: açık' : 'Müşteri ekranı', hint: 'İkinci ekran ya da müşteriye dönük tablet', onClick: () => setDialog('ekran'), show: !isOnline },
+    {
+      icon: <TableProperties className="size-5" />,
+      label: order.numarator ? `Masa no: ${order.numarator}` : 'Masa no / numaratör',
+      hint: 'Hazır olunca personel bu masaya götürür',
+      onClick: () => setDialog('numarator'),
+      show: !REMOTE && !isOnline && (order.type === 'tezgah' || order.type === 'gelal') && (order.status === 'acik' || order.status === 'kapali') && (asksNumarator(mode) || !!order.numarator),
+    },
     { icon: <StickyNote className="size-5" />, label: 'Adisyon notu', onClick: () => { setNoteText(order.note ?? ''); setDialog('not'); }, show: editable },
     { icon: <Printer className="size-5" />, label: 'Hesap yazdır', onClick: printBill, show: !isOnline && order.items.some((i) => !i.voided) },
     { icon: <CircleDollarSign className="size-5" />, label: 'Sıfır tutarlı adisyonu kapat', onClick: () => act(() => post(`/orders/${order.id}/close`), 'Adisyon kapandı').then((r) => r && navigate(backPath)), show: isOpen && !isOnline && order.total === 0 && order.items.length > 0 },
@@ -203,7 +272,7 @@ export default function OrderPage() {
       {pending.length > 0 && counter && can('odeme.al') ? (
         <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2">
           <Button size="lg" aria-label="Gönderilmemişleri sil" title="Vazgeç" icon={<Trash2 className="size-4" />} onClick={() => cart.clear(order.id)} />
-          <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={() => void send()}>
+          <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly}>
             Gönder
           </Button>
           <Button size="lg" variant="primary" loading={sending} onClick={() => void sendAndPay()}>
@@ -215,7 +284,7 @@ export default function OrderPage() {
           <Button size="lg" onClick={() => cart.clear(order.id)}>
             Vazgeç
           </Button>
-          <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={() => void send()}>
+          <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly}>
             Gönder ({pendingCount})
           </Button>
         </>
@@ -365,7 +434,7 @@ export default function OrderPage() {
             }}
             label="Bu cihazdaki adisyonlar müşteri ekranına yansısın"
           />
-          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open('/musteri-ekrani?ekran=kasa', 'lafpos-musteri')}>
+          <Button block icon={<MonitorUp className="size-4" />} onClick={() => window.open(appUrl('/musteri-ekrani?ekran=kasa'), 'lafpos-musteri')}>
             Ekranı yeni pencerede aç
           </Button>
           <p className="text-xs text-muted">
@@ -374,6 +443,16 @@ export default function OrderPage() {
         </div>
       </Modal>
 
+      <NumaratorModal
+        open={dialog === 'numarator'}
+        initial={order.numarator}
+        flow={afterNumarator != null}
+        onClose={() => {
+          setAfterNumarator(null);
+          setDialog(null);
+        }}
+        onConfirm={(v) => void saveNumarator(v)}
+      />
       <PaymentModal
         order={order}
         open={dialog === 'odeme'}

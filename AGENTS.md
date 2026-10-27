@@ -36,6 +36,9 @@ Bu repoda çalışan her ajan ve geliştirici için.
 11. Yeni ekran ya da yönetim bölümü `e2e/run.mjs` `ROUTES`'a eklenir (`tests/ui-rules.test.ts` denetler).
 12. Sunucu çalışırken diskten dosya okuyan yeni kod (göç, anlık görüntü gibi; yolu `ROOT`'tan) Windows paketine
     de girer: `scripts/kasa/windows/kurulum/derle.mjs`. `npm run kurulum:windows` paketi açıp dener.
+13. Sunucu tarayıcı demosunda da çalışır (`docs/DEMO.md`): yeni Node modülü ya da disk okuması `demo/`'da karşılık
+    ister (`demo/vite-plugin.ts`, `demo/shims/`). Sunucu testleri sql.js ile de koşar; demo bozulursa `npm test`
+    düşer.
 
 ## Git
 

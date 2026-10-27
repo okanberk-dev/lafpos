@@ -24,6 +24,8 @@ interface Preview {
   status: 'degismedi' | 'onizleme' | 'uygulandi';
   preview?: { changes: { kind: string; productId: string | null; extId: string; name: string; detail: string }[]; newCategories: string[]; itemCount: number; siteUpdatedAt: string | null };
   result?: { created: number; updated: number; deactivated: number };
+  /** İmzalı panel alınamadı: fiyat ve ürünler uygulanır, Satışta bilgisi değişmez */
+  warning?: string;
 }
 type Category = AdminMenu['categories'][number];
 type Tab = 'tumu' | 'satista' | 'tukendi' | 'gizli' | 'site' | 'yerel';
@@ -136,7 +138,8 @@ export default function MenuAdmin() {
     setSyncing(true);
     try {
       const r = await post<Preview>('/sync/menu/apply');
-      toast.ok(r.status === 'degismedi' ? 'Site menüsü değişmemiş' : `Menü eşitlendi: ${r.result?.created ?? 0} yeni, ${r.result?.updated ?? 0} güncel`);
+      if (r.warning) toast.warn(`Menü eşitlendi; ${r.warning}`);
+      else toast.ok(r.status === 'degismedi' ? 'Site menüsü değişmemiş' : `Menü eşitlendi: ${r.result?.created ?? 0} yeni, ${r.result?.updated ?? 0} güncel`);
       setPreview(null);
       refresh();
     } catch (e) {
@@ -320,6 +323,7 @@ export default function MenuAdmin() {
         }
       >
         <div className="p-4">
+          {preview?.warning ? <p className="mb-2 text-sm text-danger-500">{preview.warning}</p> : null}
           {preview?.preview?.newCategories.length ? <p className="mb-2 text-sm">Yeni kategoriler: {preview.preview.newCategories.join(', ')}</p> : null}
           {preview?.preview?.changes.length ? (
             <ul className="divide-y divide-[var(--admin-divider)] rounded-xl border border-[var(--admin-border)]">

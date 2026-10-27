@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { and, eq } from 'drizzle-orm';
+import type { LiveEvent } from '@shared/events';
 import { businessDate, istanbulParts } from '@shared/time';
 import { db, schema, sqlite, tx } from './db/client';
 import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings } from './lib/settings';
+import { resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -123,6 +125,8 @@ export function startJobs() {
   timers.push(setInterval(() => void flushSiteOutbox(), 60_000));
   timers.push(setInterval(autoDayEndTick, 60_000));
   timers.push(setTimeout(backupTick, 30_000));
+  // Yeniden başlatmadan önce yazarkasaya gönderilmiş, sonucu beklenen sepetler sorgulanmaya devam eder
+  resumePolling();
   // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
   timers.push(...startCloudSync());
   // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır
@@ -136,19 +140,26 @@ export function startJobs() {
     }, 5 * 60_000),
   );
   timers.push(setInterval(backupTick, 60 * 60_000));
-  bus.on('event', (e) => {
-    // Porsiyonu biten ürün sitede de tükensin: adisyon işlemi giden kutusuna koydu, hemen gönderilir
-    if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
-    // LafPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
-    if (e.topic === 'sync' && e.kind === 'site.menu.written') menuSyncSoon();
-    // Gün açıldı: gece atlanan menü yoklaması bir kez
-    if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void menuTick();
-  });
+  bus.on('event', onJobEvent);
+}
+
+/**
+ * Zamanlayıcının olay dinleyicisi (testler de bunu bağlar). Porsiyon sayacıyla değişen Satışta bilgisi siteye de
+ * gider: biten ürün tükenir, hazırlanmadan iptal edilen kalemle porsiyonu geri dönen ürün yeniden satışa açılır.
+ * Adisyon işlemi yazımı giden kutusuna koydu (server/sync/site-outbox.ts); burada hemen gönderilir.
+ */
+export function onJobEvent(e: LiveEvent) {
+  if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
+  // LafPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
+  if (e.topic === 'sync' && e.kind === 'site.menu.written') menuSyncSoon();
+  // Gün açıldı: gece atlanan menü yoklaması bir kez
+  if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void menuTick();
 }
 
 export function stopJobs() {
   for (const t of timers) clearTimeout(t);
   timers.length = 0;
+  bus.off('event', onJobEvent);
   if (soonTimer) clearTimeout(soonTimer);
   soonTimer = null;
 }

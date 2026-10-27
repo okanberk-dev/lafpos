@@ -3,6 +3,7 @@ import { Bike, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, Utensi
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { numaratorLabel } from '@shared/service-mode';
 import { tl } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
@@ -111,7 +112,7 @@ export default function OrdersPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
-                      {o.tableName ?? o.extLabel ?? o.deliveryName ?? ORDER_TYPE_LABEL[o.type]}{' '}
+                      {o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type])}{' '}
                       <span className="font-normal text-muted">#{o.extNo ?? o.no}</span>
                     </span>
                     <span className="block text-xs text-muted">

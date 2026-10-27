@@ -15,7 +15,7 @@ let h: Harness;
 beforeAll(async () => {
   h = await startApp();
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
-  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
+  Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     if (String(input) !== 'https://redis.test') return realFetch(input, init);
@@ -112,7 +112,7 @@ describe('LafPOS Uzaktan', () => {
       delete process.env.LAFPOS_CLOUD_SECRET;
       delete process.env.KV_REST_API_URL;
       const body = await read();
-      expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null, demo: true });
+      expect(body).toEqual({ secret: false, password: true, redis: false, snapshotAt: null, demo: true, open: false });
       expect(JSON.stringify(body)).not.toContain(PASSWORD);
       // Kafe bağlanmamışken anahtarsız yalnız demo açılır
       expect(await (await GET(req('health'))).json()).toMatchObject({ ok: true, demo: true });
@@ -151,6 +151,24 @@ describe('LafPOS Uzaktan', () => {
       delete process.env.LAFPOS_UZAKTAN_DEMO;
       store.clear();
       for (const [k, v] of saved) store.set(k, v);
+    }
+  });
+});
+
+describe('LafPOS Uzaktan: parolasız görünüm (varsayılan, 27 Eki 2026)', () => {
+  it('LAFPOS_UZAKTAN_PAROLA_GEREKLI yoksa kafe bağlıyken de giriş parola sormaz; görünüm yine salt okunur', async () => {
+    const { GET, POST } = await api();
+    delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
+    try {
+      expect(await (await GET(req('uzaktan/kurulum'))).json()).toMatchObject({ open: true, password: true });
+      const login = await POST(req('uzaktan/giris', { method: 'POST', body: '{}' }));
+      expect(login.status).toBe(200);
+      const { token, demo } = (await login.json()) as { token: string; demo?: boolean };
+      expect(demo).toBeUndefined();
+      expect((await GET(req('bootstrap', { headers: { authorization: `Bearer ${token}` } }))).status).toBe(200);
+      expect((await POST(req('orders', { method: 'POST', body: '{}', headers: { authorization: `Bearer ${token}` } }))).status).toBe(403);
+    } finally {
+      process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI = '1';
     }
   });
 });

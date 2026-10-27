@@ -11,7 +11,8 @@ export class ApiError extends Error {
   }
 }
 
-const TOKEN_KEY = 'lafpos.token';
+// Tarayıcı demosu (/demo) aynı alan adında Uzaktan'la ya da kasayla yan yana açılır: oturumları birbirini ezmesin
+const TOKEN_KEY = import.meta.env.MODE === 'demo' ? 'lafpos.demo.token' : 'lafpos.token';
 
 export function getToken(): string | null {
   try {
@@ -33,6 +34,11 @@ export function setToken(token: string | null) {
 let onUnauthorized: (() => void) | null = null;
 export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
+}
+
+/** Oturumun kapandığı API dışından anlaşıldı (canlı akış 401 aldı): giriş ekranına dönülür */
+export function sessionEnded() {
+  onUnauthorized?.();
 }
 
 export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {

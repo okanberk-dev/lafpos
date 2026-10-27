@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
+import { businessDate } from '@shared/time';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { Effects } from '../lib/effects';
@@ -33,16 +34,22 @@ const configured = siteSigned;
 
 const STAGE_STATUS: Record<PanelOrder['stage'], 'yeni' | 'hazirlaniyor' | 'hazir'> = { new: 'yeni', preparing: 'hazirlaniyor', ready: 'hazir' };
 
+const isPanelOrder = (o: unknown): o is PanelOrder => !!o && typeof (o as PanelOrder).id === 'string' && Array.isArray((o as PanelOrder).lines);
+
 /**
- * Açık online siparişler. `complete: false`: site listeyi kesti (en çok 200 sipariş), listede olmayanlar yine açık
- * olabilir (laffogato `src/app/api/panel/orders/route.ts`); alanı göndermeyen eski site bütün liste sayılır.
+ * Sitenin açık siparişleri. `orders` dizisi olmayan 200 (bakım sayfası, ağ geçidi, beklenmeyen gövde) başarısız
+ * çekme sayılır: boş liste sanılıp sitede ödenmiş açık siparişler kapatılmasın. `complete: false` (site listeyi kesti,
+ * en çok 200 sipariş; laffogato `src/app/api/panel/orders/route.ts`) ya da okunamayan kalem varsa liste eksik
+ * sayılır, listede olmayan kapatılmaz; alanı göndermeyen eski site bütün liste sayılır.
  */
 export async function fetchPanelOrders(): Promise<{ orders: PanelOrder[]; complete: boolean }> {
   requireSiteSigned();
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/orders`));
   if (status !== 200) throw new HttpError(502, `Site siparişleri alınamadı (HTTP ${status})`, 'site_orders');
-  const body = json as { orders?: PanelOrder[]; complete?: unknown } | null;
-  return { orders: (body?.orders ?? []).filter((o) => o && typeof o.id === 'string'), complete: body?.complete !== false };
+  const body = json as { orders?: unknown; complete?: unknown } | null;
+  if (!body || !Array.isArray(body.orders)) throw new HttpError(502, 'Site siparişleri beklenen biçimde gelmedi', 'site_orders');
+  const orders = body.orders.filter(isPanelOrder);
+  return { orders, complete: body.complete !== false && orders.length === body.orders.length };
 }
 
 const tableKey = (s: string) => s.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
@@ -57,15 +64,16 @@ type TableRow = typeof schema.tables.$inferSelect;
 /**
  * Masa siparişinin masası. Önce Yönetim › Masa planı'ndaki "Sitedeki masa adı" (`siteTableCode`); o alanı boş
  * masalarda yedek olarak yerel masa adı, sitenin etiket kuralıyla ("Masa S4" ↔ "S4"). Büyük-küçük harf ve boşluk
- * farkı gözetilmez. Bulunamazsa sipariş masasız kalır (bar ekranında etiketiyle görünür).
+ * farkı gözetilmez; ad birden çok masaya uyuyorsa eşlenmez. Bulunamazsa sipariş masasız kalır (bar ekranında
+ * etiketiyle görünür). docs/03-ENTEGRASYON.md §2.3
  */
 export function tableForLabel(tables: TableRow[], label: string): TableRow | undefined {
   const want = tableKey(label);
   if (!want) return undefined;
-  return (
-    tables.find((x) => x.siteTableCode?.trim() && tableKey(x.siteTableCode) === want) ??
-    tables.find((x) => !x.siteTableCode?.trim() && x.active && x.kind === 'masa' && (tableKey(x.name) === want || tableKey(siteTableLabel(x.name)) === want))
-  );
+  const byCode = tables.find((x) => x.siteTableCode?.trim() && tableKey(x.siteTableCode) === want);
+  if (byCode) return byCode;
+  const byName = tables.filter((x) => !x.siteTableCode?.trim() && x.active && x.kind === 'masa' && (tableKey(x.name) === want || tableKey(siteTableLabel(x.name)) === want));
+  return byName.length === 1 ? byName[0] : undefined;
 }
 
 /** Detay metnindeki boy önekini atar: "M · yulaf · +1 shot" -> "yulaf · +1 shot" */
@@ -76,15 +84,27 @@ function detailText(detail: string, size: string): string {
 }
 
 /**
- * Siteden gelen listeyi yerel adisyonlara işler. Listede olmayan açık online sipariş "Siteden kalktı" diye kapanır
- * (`extStage: 'gone'`): sitede tamamlandı, iptal edildi ya da süresi geçti; LafPOS hangisi olduğunu bilmez, servis
- * edildi saymaz. Site listeyi kestiyse (`complete: false`) hiçbiri kapatılmaz.
+ * Siteden gelen listeyi yerel adisyonlara işler. Tam listede (`complete`) olmayan açık online sipariş "Siteden
+ * kalktı" diye kapanır (`extStage: 'gone'`): sitede tamamlandı, iptal edildi ya da süresi geçti; LafPOS hangisi
+ * olduğunu bilmez, servis edildi saymaz. Site listeyi kestiyse (`complete: false`) hiçbiri kapatılmaz. Yerelde
+ * kapanmış ama sitede hâlâ açık sipariş yeniden açılır.
+ *
+ * `requestedAt`: listenin istendiği an. Liste sitenin o anki hâlidir; yanıt ağdayken LafPOS'ta değişen sipariş
+ * (kasada "Teslim edildi", aşama yazımı, araya giren daha yeni bir çekme) bu listeyle geri alınmaz: yeniden
+ * açılmaz, kapanmaz, aşaması eskiye dönmez. Sonraki çekme geçerlidir. Verilmezse liste en yeni sayılır.
  */
-export function upsertOnlineOrders(list: PanelOrder[], opts: { complete?: boolean } = {}): { created: number; updated: number; closed: number } {
+export function upsertOnlineOrders(list: PanelOrder[], complete = true, requestedAt = Number.POSITIVE_INFINITY): { created: number; updated: number; closed: number } {
   const fx = new Effects();
   const result = tx((t) => {
-    const day = getOpenDay(t) ?? t.select().from(schema.businessDays).orderBy(desc(schema.businessDays.openedAt)).get();
-    if (!day) return { created: 0, updated: 0, closed: 0 };
+    // Açık gün varsa sipariş onun (kasanın satışları gibi). Gün açık değilken iş günü (05:00 kuralı) ödeme anından:
+    // o tarihin günü varsa ona, yoksa geçici olarak son güne yazılır; o tarihin günü açılınca oraya taşınır (openDay)
+    const openDay = getOpenDay(t);
+    const latest = openDay ?? t.select().from(schema.businessDays).orderBy(desc(schema.businessDays.openedAt)).get();
+    if (!latest) return { created: 0, updated: 0, closed: 0 };
+    const dayIdFor = (paidAt: number) =>
+      openDay?.id ??
+      t.select({ id: schema.businessDays.id }).from(schema.businessDays).where(eq(schema.businessDays.date, businessDate(paidAt))).orderBy(desc(schema.businessDays.zNo)).get()?.id ??
+      latest.id;
     const products = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
     const categories = new Map(t.select().from(schema.categories).all().map((c) => [c.id, c]));
     const tables = t.select().from(schema.tables).all();
@@ -92,38 +112,48 @@ export function upsertOnlineOrders(list: PanelOrder[], opts: { complete?: boolea
     let updated = 0;
     const seen = new Set<string>();
     const now = Date.now();
+    // Liste istendikten sonra yerelde yazıldı (updatedAt her yazımda güncellenir): bu liste ondan eski. Saat geri
+    // alınmışsa gelecekte görünen kayıt korunmaz, yoksa saat yetişene dek hiç güncellenmezdi
+    const changedSince = (o: { updatedAt: number }) => o.updatedAt >= requestedAt && o.updatedAt <= now;
     for (const o of list) {
       seen.add(o.id);
       const existing = t.select().from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.extId, o.id))).get();
-      const table = o.fulfillment === 'table' ? tableForLabel(tables, o.label) : undefined;
+      const table = o.fulfillment === 'table' ? tableForLabel(tables, o.label ?? '') : undefined;
       const status = STAGE_STATUS[o.stage] ?? 'yeni';
       if (existing) {
-        // Listeden kalkıp geri gelen sipariş (sitede geri alınan iptal gibi) yeniden açılır
-        const back = existing.status === 'kapali' && existing.extStage === 'gone';
-        if (back || existing.extStage !== o.stage || (table && existing.tableId !== table.id)) {
+        if (changedSince(existing)) continue;
+        const tableId = table?.id ?? existing.tableId;
+        // Sitede hâlâ açık: yerelde kapanmışsa (listeden kalkıp geri geldi, sitede geri alınan iptal gibi; ya da eski
+        // sürümün bozuk ya da kesik listesi) yeniden açılır
+        const reopen = existing.status === 'kapali';
+        if (reopen || existing.extStage !== o.stage || existing.tableId !== tableId) {
           t.update(schema.orders)
-            .set({ extStage: o.stage, tableId: table?.id ?? existing.tableId, updatedAt: now, ...(back ? { status: 'acik' as const, closedAt: null } : {}) })
+            .set({ extStage: o.stage, tableId, ...(reopen ? { status: 'acik' as const, closedAt: null } : {}), updatedAt: now })
             .where(eq(schema.orders.id, existing.id))
             .run();
-          t.update(schema.orderItems).set({ status }).where(eq(schema.orderItems.orderId, existing.id)).run();
+          t.update(schema.orderItems)
+            .set({ status, ...(reopen ? { servedAt: null } : {}) })
+            .where(eq(schema.orderItems.orderId, existing.id))
+            .run();
           updated++;
-          fx.emit({ topic: 'orders', kind: 'online.updated', orderId: existing.id, tableId: table?.id });
+          fx.emit({ topic: 'orders', kind: 'online.updated', orderId: existing.id, tableId: tableId ?? undefined });
           fx.emit({ topic: 'kitchen', kind: 'online.updated', orderId: existing.id });
         }
         continue;
       }
       const id = ulid(now);
+      const paidAt = Date.parse(o.paidAt) || now;
       t.insert(schema.orders)
         .values({
           id,
-          dayId: day.id,
+          dayId: dayIdFor(paidAt),
           no: o.orderNo,
           type: 'online',
           status: 'acik',
           tableId: table?.id ?? null,
           guests: 1,
           note: o.note || null,
-          openedAt: Date.parse(o.paidAt) || now,
+          openedAt: paidAt,
           source: 'laffogato',
           extId: o.id,
           extNo: o.orderNo,
@@ -157,7 +187,7 @@ export function upsertOnlineOrders(list: PanelOrder[], opts: { complete?: boolea
             stationId: p?.stationId ?? cat?.stationId ?? null,
             status,
             batch: 1,
-            sentAt: Date.parse(o.paidAt) || now,
+            sentAt: paidAt,
             extProductId: l.menuItemId,
             createdAt: now,
           })
@@ -169,10 +199,11 @@ export function upsertOnlineOrders(list: PanelOrder[], opts: { complete?: boolea
     }
     let closed = 0;
     // Kesik listede (complete: false) olmayan sipariş yine açık olabilir: hiçbiri kapatılmaz
-    if (opts.complete !== false) {
+    if (complete) {
       const open = t.select().from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.status, 'acik'))).all();
       for (const o of open) {
-        if (seen.has(o.extId!)) continue;
+        // Liste istendikten sonra gelen ya da değişen sipariş eski listede olmayabilir
+        if (seen.has(o.extId!) || changedSince(o)) continue;
         t.update(schema.orders).set({ status: 'kapali', extStage: 'gone', closedAt: now, updatedAt: now }).where(eq(schema.orders.id, o.id)).run();
         // Bar ve çağrı ekranından düşer; servis zamanı yazılmaz (servis edildiği bilinmiyor)
         t.update(schema.orderItems)
@@ -189,14 +220,16 @@ export function upsertOnlineOrders(list: PanelOrder[], opts: { complete?: boolea
   });
   fx.emit({ topic: 'tables', kind: 'online.sync' });
   fx.flush();
-  setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastSuccessAt: Date.now(), lastError: null, count: list.length, complete: opts.complete !== false });
+  setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastSuccessAt: Date.now(), lastError: null, count: list.length, complete });
   return result;
 }
 
 export async function syncOnlineOrders() {
   try {
+    // İstek gitmeden önceki an: yanıt beklenirken yerelde olan değişiklik listeden yenidir
+    const requestedAt = Date.now();
     const { orders, complete } = await fetchPanelOrders();
-    return upsertOnlineOrders(orders, { complete });
+    return upsertOnlineOrders(orders, complete, requestedAt);
   } catch (e) {
     setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastError: e instanceof Error ? e.message : String(e), lastErrorAt: Date.now() });
     throw e;
@@ -248,14 +281,17 @@ export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglant
 type ProductRow = typeof schema.products.$inferSelect;
 
 /**
- * Siteye bağlı üründe Satışta bilgisini siteye yazar (site Satışta bilgisinin sahibi). 2xx gelmezse 502 atar:
- * çağıran yerelde de değiştirmez. Bağlı değilse, adres ya da anahtar yoksa istek gitmez, sonuç bunu söyler.
+ * Siteye bağlı üründe Satışta bilgisini siteye yazar (site Satışta bilgisinin sahibi). 2xx gelmezse ya da siteye
+ * ulaşılamazsa 502 atar: çağıran yerelde de değiştirmez. Bağlı değilse, adres ya da anahtar yoksa istek gitmez,
+ * sonuç bunu söyler.
  */
-async function writeSiteAvailability(p: ProductRow, active: boolean, actorName: string): Promise<SiteWrite> {
+export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'extId'>, active: boolean, actorName: string): Promise<SiteWrite> {
   if (p.extSource !== 'laffogato' || !p.extId) return 'bagli_degil';
   if (!siteLinked()) return 'baglanti_yok';
   if (!configured()) return 'anahtar_yok';
-  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) });
+  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80) }).catch(() => {
+    throw new HttpError(502, "Siteye ulaşılamadı; LafPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
+  });
   if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
   return 'guncellendi';
 }

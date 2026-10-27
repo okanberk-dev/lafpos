@@ -8,7 +8,8 @@ import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { POS_NAV } from '@/lib/nav';
+import { navFor } from '@/lib/nav';
+import { useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
 import { useTheme } from '@/lib/theme';
 import { visibleSections } from './admin/sections';
@@ -52,6 +53,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const logout = useAuth((s) => s.logout);
   const { theme, setTheme } = useTheme();
+  const mode = useServiceMode();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -67,7 +69,8 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const entries = useMemo<Entry[]>(() => {
     const out: Entry[] = [];
-    for (const n of POS_NAV) {
+    // Paletten her ekran bulunur (self serviste kullanılmayan Masalar da)
+    for (const n of navFor(mode, { tablesInUse: true })) {
       if (n.to === '/yonetim' || !n.perms.some((p) => can(p))) continue;
       out.push({ id: `ekran:${n.to}`, group: 'Ekranlar', label: n.title, icon: <n.icon />, run: go(n.to) });
     }
@@ -111,7 +114,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boot.products, users.data, theme]);
+  }, [boot.products, users.data, theme, mode]);
 
   const results = useMemo(() => {
     const k = fold(q.trim());

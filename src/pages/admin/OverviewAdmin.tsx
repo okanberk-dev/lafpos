@@ -10,11 +10,12 @@ import { PageLoading } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { onLive } from '@/lib/live';
+import { hourBars } from '@/lib/period';
 import type { PatronData } from '@/pages/patron/PatronPage';
 
 interface SyncStatus {
   menu: { linked: boolean; auto: boolean; state: { lastSuccessAt?: number; lastCheckAt?: number; lastError?: string | null; lastErrorAt?: number } | null };
-  online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null; soldOutPush: { pending: number; lastError: string | null } };
+  online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null; soldOutPush: { pending: number; rejected: number; lastError: string | null } };
   lafmaliyet: { configured: boolean; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null };
   okc: { provider: 'kapali' | 'simulator' | 'tokenx'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
 }
@@ -97,12 +98,13 @@ export default function OverviewAdmin() {
   for (const a of d?.anomalies ?? []) attention.push({ key: `an-${a.title}`, tone: a.level === 'alarm' ? 'danger' : 'warning', title: a.title, detail: a.detail });
   for (const a of (d?.alerts ?? []).slice(0, 6)) attention.push({ key: `al-${a.id}`, tone: a.severity === 'alarm' ? 'danger' : 'warning', title: a.message, detail: fmtTime(a.at) });
   if (s?.lafmaliyet.pending) attention.push({ key: 'lm', tone: 'danger', title: `lafmaliyet'e gönderilemeyen ${s.lafmaliyet.pending} gün`, detail: s.lafmaliyet.lastError ?? s.lafmaliyet.pendingDays.join(', ') });
-  if (s?.online.soldOutPush.pending) attention.push({ key: 'site-tukendi', tone: 'warning', title: `Siteye bildirilemeyen Tükendi: ${s.online.soldOutPush.pending} ürün`, detail: s.online.soldOutPush.lastError ?? 'Yeniden denenecek' });
+  if (s?.online.soldOutPush.pending) attention.push({ key: 'site-tukendi', tone: 'warning', title: `Siteye bildirilemeyen Satışta bilgisi: ${s.online.soldOutPush.pending} ürün`, detail: s.online.soldOutPush.lastError ?? 'Yeniden denenecek' });
+  if (s?.online.soldOutPush.rejected) attention.push({ key: 'site-red', tone: 'warning', title: `Sitenin reddettiği Satışta bilgisi: ${s.online.soldOutPush.rejected} ürün`, detail: 'Yeniden denenmeyecek; ürün LafPOS\'ta açılınca ya da site aynı duruma gelince kalkar' });
   if (s?.okc.lastError) attention.push({ key: 'okc', tone: 'warning', title: 'Yazarkasa hatası', detail: `${s.okc.lastError.message} · ${fmtTime(s.okc.lastError.at)}` });
   if (d && !d.dayOpen) attention.push({ key: 'gun', tone: 'neutral', title: 'Gün kapalı', detail: 'Satış için kasadan gün açılmalı' });
 
-  const hours = d ? d.hourly.map((v, h) => ({ label: String(h).padStart(2, '0'), value: v, compare: d.hourlyLastWeek[h] })) : [];
-  const first = Math.max(0, Math.min(8, ...hours.map((h, i) => (h.value || h.compare ? i : 24))));
+  // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış günün sonunda
+  const hours = d ? hourBars(d, 8) : [];
   const lastBackup = backups.data?.files[0];
 
   const health: { key: string; icon: React.ReactNode; label: string; tone: Tone; state: string; detail: string }[] = s
@@ -179,7 +181,7 @@ export default function OverviewAdmin() {
           <div className="space-y-4 xl:col-span-2">
             {d && (
               <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü">
-                <ColumnChart data={hours.slice(first)} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} />
+                <ColumnChart data={hours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} />
               </Card>
             )}
             {d && (
