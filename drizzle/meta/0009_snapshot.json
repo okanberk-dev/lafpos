@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "85d858e0-7a1f-4b4b-8dcd-5161e05bed29",
+  "id": "96908a73-390c-4219-98c7-1b7375e85201",
   "prevId": "76785507-459a-4691-87a6-8dd5e1fc5919",
   "tables": {
     "audit_log": {
@@ -234,6 +234,13 @@
         },
         "reopened_at": {
           "name": "reopened_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "training_day": {
+          "name": "training_day",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,

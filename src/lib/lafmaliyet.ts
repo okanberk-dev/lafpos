@@ -44,13 +44,23 @@ export function pushToast(a: DayAnswer | null | undefined): string {
   return "Gün lafmaliyet'e gönderildi";
 }
 
-/** lafmaliyet'te ürüne bağlanamayan adlar: ilk birkaçı ve kalan sayı */
-export function unmatchedText(names: string[], shown = 5): string {
-  const head = names.slice(0, shown).join(', ');
-  return names.length > shown ? `${head} ve ${names.length - shown} ad daha` : head;
+/**
+ * lafmaliyet'te ürüne bağlanamayan satır sayısı. lafmaliyet en çok 50 ad gönderir; gerçek sayı `lines - matched`
+ * (`matched` ürüne ya da hizmete bağlanan satırlar). İkisi yoksa (eski lafmaliyet) gelen adların sayısı
+ */
+export function unmatchedCount(a: DayAnswer): number {
+  if (typeof a.lines === 'number' && typeof a.matched === 'number') return Math.max(0, a.lines - a.matched);
+  return a.unmatched?.length ?? 0;
 }
 
-/** Maliyetler bu kadar günden eskiyse raporlarda uyarı (kendiliğinden yenileme günde bir, gün sonunda) */
+/** lafmaliyet'te ürüne bağlanamayan adlar: ilk birkaçı ve kalan sayı (`total`: gerçek sayı, gelen adlardan çok olabilir) */
+export function unmatchedText(names: string[], total = names.length, shown = 5): string {
+  const head = names.slice(0, shown).join(', ');
+  const rest = Math.max(total, names.length) - Math.min(shown, names.length);
+  return rest > 0 ? (head ? `${head} ve ${rest} ad daha` : `${rest} ad`) : head;
+}
+
+/** Maliyetler bu kadar günden eskiyse raporlarda uyarı (kendiliğinden yenileme her gün sonunda) */
 export const COSTS_STALE_DAYS = 7;
 
 /** "Maliyetler 9 gün önce alındı": yalnız maliyet yetkisi olanın ekranında; sunucu `costsAt`'i başkasına göndermez */

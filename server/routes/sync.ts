@@ -15,12 +15,16 @@ import { eq } from 'drizzle-orm';
 
 export const syncRoutes = new Hono<AppEnv>();
 
+/**
+ * Bağlantı durumu: Entegrasyon, Genel bakış ve menü sayacı okur (giriş yapan herkes). Maliyetin tarihi ve hatası yalnız
+ * `rapor.maliyet`'e: personel maliyetin varlığını da görmez
+ */
 syncRoutes.get('/status', (c) => {
   const s = getSettings();
   return c.json({
     menu: { linked: siteLinked(), auto: s.menuAutoSync, state: getSyncState('laffogato.menu') },
     online: onlineStatus(),
-    lafmaliyet: lafmaliyetStatus(),
+    lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet')),
     okc: okcStatus(),
   });
 });
@@ -112,7 +116,9 @@ syncRoutes.post('/lafmaliyet/backfill', async (c) => {
   return c.json(backfillDays(input, { id: user.id, name: user.name }));
 });
 
+/** "Maliyetleri çek": bağlantı yönetimi ve maliyet yetkisi (yanıt kaç ürünün maliyeti geldiğini söyler) */
 syncRoutes.post('/lafmaliyet/costs/pull', async (c) => {
   requirePermission(c.get('user'), 'senkron.yonet');
+  requirePermission(c.get('user'), 'rapor.maliyet');
   return c.json(await pullCosts());
 });

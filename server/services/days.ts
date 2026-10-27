@@ -9,7 +9,7 @@ import { type Actor, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
-import { getSettings } from '../lib/settings';
+import { getSettings, trainingMode } from '../lib/settings';
 import { getOpenDay, isEmptyOrder, requireOpenDay } from './orders';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
@@ -17,7 +17,7 @@ type DayRow = typeof schema.businessDays.$inferSelect;
 export function dayToDTO(t: Tx | DB, d: DayRow | undefined | null): BusinessDayDTO | null {
   if (!d) return null;
   const opener = d.openedBy ? t.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, d.openedBy)).get() : null;
-  return { id: d.id, date: d.date, zNo: d.zNo, openedAt: d.openedAt, openedByName: opener?.name ?? null, openingCash: d.openingCash, closedAt: d.closedAt, reopenedAt: d.reopenedAt };
+  return { id: d.id, date: d.date, zNo: d.zNo, openedAt: d.openedAt, openedByName: opener?.name ?? null, openingCash: d.openingCash, closedAt: d.closedAt, reopenedAt: d.reopenedAt, trainingDay: d.trainingDay };
 }
 
 export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: number }): DayRow {
@@ -299,7 +299,7 @@ export function reopenDay(t: Tx, actor: Actor, fx: Effects, dayId: string, reaso
     throw conflict('Yalnız bugünün son gün sonu yeniden açılabilir', 'day_not_reopenable');
   }
   t.update(schema.businessDays)
-    .set({ closedAt: null, closedBy: null, countedCash: null, cashCounts: null, expectedCash: null, cashDiff: null, summary: null, exportedAt: null, reopenedAt: Date.now() })
+    .set({ closedAt: null, closedBy: null, countedCash: null, cashCounts: null, expectedCash: null, cashDiff: null, summary: null, exportedAt: null, trainingDay: null, reopenedAt: Date.now() })
     .where(eq(schema.businessDays.id, dayId))
     .run();
   // Henüz gitmemiş eski Z lafmaliyet'e gün açıkken gitmesin; gün yeniden kapanınca güncel Z kuyruğa girer
@@ -370,6 +370,8 @@ export function closeDay(
       cashDiff: diff,
       note: input.note?.trim() || null,
       summary,
+      // Kurulum modunda kapanan gün eğitim günüdür: lafmaliyet'e hiç gitmez (kurulum modu sonra kapansa da)
+      trainingDay: trainingMode(),
     })
     .where(eq(schema.businessDays.id, day.id))
     .run();

@@ -96,6 +96,15 @@ export function getSettings(): AllSettings {
   return cache;
 }
 
+/**
+ * Kurulum (eğitim) modu: giriş ekranında örnek PIN'ler açık (`demoMode`, kurulum verisi böyle başlar) ya da yazarkasa
+ * eğitim simülatöründe. Bu modda kapanan gün eğitim günüdür (`business_days.trainingDay`); lafmaliyet'e hiç gitmez,
+ * kurulum modu sonradan kapansa da. docs/03-ENTEGRASYON.md §4.3
+ */
+export function trainingMode(s: Pick<AllSettings, 'demoMode' | 'okcProvider'> = getSettings()): boolean {
+  return s.demoMode || s.okcProvider === 'simulator';
+}
+
 export function getPublicSettings(): PublicSettings {
   const all = getSettings();
   const out = {} as Record<string, unknown>;

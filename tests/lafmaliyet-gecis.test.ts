@@ -2,12 +2,12 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { addDays, businessDate } from '@shared/time';
-import { answerText, pushToast, staleCostsText, unmatchedText } from '../src/lib/lafmaliyet';
+import { answerText, pushToast, staleCostsText, unmatchedCount, unmatchedText } from '../src/lib/lafmaliyet';
 import { type Harness, startApp } from './harness';
 
 /**
- * lafmaliyet'e geçiş istemcisi (plan L2, docs/03-ENTEGRASYON.md §4): kurulum modunda gün gitmez, geçmiş günler bir
- * kez kuyruğa girer, 200 yanıtının alanları (`counted`, `switchDay`, `matched`, `unmatched`) saklanır, "Gönder" kendi
+ * lafmaliyet'e geçiş istemcisi (plan L2, docs/03-ENTEGRASYON.md §4): kurulum modunda kapanan gün (eğitim günü) kurulum
+ * modu kapansa da hiç gitmez, geçmiş günler bir kez kuyruğa girer, 200 yanıtının alanları (`counted`, `switchDay`, `matched`, `unmatched`) saklanır, "Gönder" kendi
  * gününün sonucunu okur, maliyet gövdesi doğrulanır (0 = bilinmiyor, bozuk gövde haritayı korur) ve günde bir
  * kendiliğinden çekilir; maliyetin tarihi yalnız maliyet yetkisine gider.
  */
@@ -58,14 +58,15 @@ async function mod() {
   const { db, schema } = await import('../server/db/client');
   const { eq } = await import('drizzle-orm');
   const lm = await import('../server/sync/lafmaliyet');
-  const { updateSettings } = await import('../server/lib/settings');
+  const { updateSettings, setSyncState } = await import('../server/lib/settings');
   const { ulid } = await import('../server/lib/ids');
-  /** Gün sonu alınmış (ya da açık) bir geçmiş gün; satışsız */
-  const insertDay = (date: string, zNo: number, o: { closed?: boolean; exportedAt?: number } = {}) => {
+  /** Gün sonu alınmış (ya da açık) bir geçmiş gün; satışsız. Varsayılan: kurulum modu dışında kapanmış gerçek gün */
+  const insertDay = (date: string, zNo: number, o: { closed?: boolean; exportedAt?: number; training?: boolean | null } = {}) => {
     const id = ulid();
     const at = Date.now() - 3600_000;
+    const closed = o.closed !== false;
     db.insert(schema.businessDays)
-      .values({ id, date, zNo, openedAt: at, openingCash: 0, closedAt: o.closed === false ? null : at + 60_000, exportedAt: o.exportedAt ?? null })
+      .values({ id, date, zNo, openedAt: at, openingCash: 0, closedAt: closed ? at + 60_000 : null, exportedAt: o.exportedAt ?? null, trainingDay: closed ? (o.training === undefined ? false : o.training) : null })
       .run();
     return id;
   };
@@ -74,24 +75,25 @@ async function mod() {
   const drain = async () => {
     for (let i = 0; i < 10 && outbox().some((r) => !r.sentAt && r.nextAttemptAt <= Date.now()); i++) await lm.flushOutbox();
   };
-  return { db, schema, eq, lm, updateSettings, insertDay, dayRow, outbox, drain };
+  return { db, schema, eq, lm, updateSettings, setSyncState, insertDay, dayRow, outbox, drain };
 }
 
 interface Status {
   configured: boolean;
   training: boolean;
   pending: number;
+  failing: number;
   answer: { date: string; counted?: boolean; switchDay?: string | null; matched?: number; unmatched?: string[] } | null;
   backfill: { from: string | null; to: string; unsent: number | null };
-  costsAt: number | null;
-  costsError: { message: string } | null;
+  costsAt?: number | null;
+  costsError?: { message: string } | null;
   autoPush?: unknown;
 }
 const status = async () => (await h.ok<{ lafmaliyet: Status }>('patron', 'GET', '/sync/status')).lafmaliyet;
 
 describe('lafmaliyet geçişi', () => {
   it('kurulum modunda gün kuyruğa girmez, elle ve geçmiş günlerle de gönderilmez; maliyet çekilir', async () => {
-    const { outbox, insertDay, lm } = await mod();
+    const { outbox, insertDay, lm, dayRow } = await mod();
     // Kurulum verisi kurulum modunda başlar (örnek PIN'ler, yazarkasa simülatörü)
     expect(await status()).toMatchObject({ configured: true, training: true });
     await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
@@ -101,12 +103,15 @@ describe('lafmaliyet geçişi', () => {
     await vi.waitFor(() => expect(costGets()).toBe(1), { timeout: 5000, interval: 25 });
     expect(outbox()).toEqual([]);
     expect(posts()).toEqual([]);
+    // Gün eğitim günü olarak işaretlenir
+    expect(dayRow(closed.day.id).trainingDay).toBe(true);
+    expect((await h.ok<{ day: { trainingDay: boolean } }>('patron', 'GET', `/cash/days/${closed.day.id}`)).day.trainingDay).toBe(true);
 
     const push = await h.call<{ code: string; error: string }>('kasa', 'POST', `/sync/lafmaliyet/gun/${closed.day.id}/push`);
     expect(push.status).toBe(409);
     expect(push.json.code).toBe('training_mode');
     expect(push.json.error).toMatch(/Kurulum modunda/);
-    insertDay(day(70), 1);
+    insertDay(day(70), 1, { training: true });
     const back = await h.call<{ code: string }>('patron', 'POST', '/sync/lafmaliyet/backfill', { from: day(70), to: day(1) });
     expect(back.status).toBe(409);
     expect(back.json.code).toBe('training_mode');
@@ -119,6 +124,32 @@ describe('lafmaliyet geçişi', () => {
     expect((await status()).training).toBe(true);
     updateSettings({ okcProvider: 'kapali' });
     expect((await status()).training).toBe(false);
+  });
+
+  it('kurulum modunda kapanan gün, kurulum modu kapandıktan sonra da gitmez: geçmiş günler, Gönder, yeniden sayım', async () => {
+    const { outbox, insertDay, lm, db, schema } = await mod();
+    expect((await status()).training).toBe(false);
+    const training = db.select().from(schema.businessDays).all().find((d) => d.date === today && d.closedAt)!;
+    expect(training.trainingDay).toBe(true);
+    // İşaretten önce kapanan gün (LafPOS o zaman canlıda değildi) de eğitim günü sayılır
+    const legacy = insertDay(day(65), 90, { training: null });
+
+    const back = await h.ok<{ queued: number; days: string[]; training: number }>('patron', 'POST', '/sync/lafmaliyet/backfill', { from: day(70), to: today });
+    expect(back).toEqual({ queued: 0, days: [], training: 3 });
+    const push = await h.call<{ code: string; error: string }>('kasa', 'POST', `/sync/lafmaliyet/gun/${training.id}/push`);
+    expect(push.status).toBe(409);
+    expect(push.json.code).toBe('training_day');
+    expect(push.json.error).toMatch(/kurulum modunda kapandı/);
+    const old = await h.call<{ code: string; error: string }>('kasa', 'POST', `/sync/lafmaliyet/gun/${legacy}/push`);
+    expect(old.json.code).toBe('training_day');
+    expect(old.json.error).toMatch(/işareti tutulmadan önce kapandı/);
+    // Yeniden sayım günü kuyruğa koymaz
+    await h.ok('mudur', 'POST', `/cash/days/${training.id}/count`, { countedCash: training.expectedCash ?? 0 });
+    expect(lm.enqueueDay(training.id)).toBeNull();
+    expect(lm.unsentClosedDays(day(70), today)).toEqual([]);
+    await lm.flushOutbox();
+    expect(outbox()).toEqual([]);
+    expect(posts()).toEqual([]);
   });
 
   it('geçmiş günler: aralıktaki gönderilmemiş kapanmış günler bir kez kuyruğa girer, gidince işaretlenir', async () => {
@@ -136,7 +167,9 @@ describe('lafmaliyet geçişi', () => {
     // Yetki: senkron yönetimi
     expect((await h.call('kasa', 'POST', '/sync/lafmaliyet/backfill', { from: day(60), to: day(56) })).status).toBe(403);
     const r = await h.ok<{ queued: number; days: string[] }>('patron', 'POST', '/sync/lafmaliyet/backfill', { from: day(60), to: day(56) });
-    expect(r).toEqual({ queued: 3, days: [day(60), day(59), day(56)] });
+    expect(r).toEqual({ queued: 3, days: [day(60), day(59), day(56)], training: 0 });
+    // Kuyruğa yeni giren gün hata değildir: sırasını bekler
+    expect((await status()).failing).toBe(0);
     await drain();
     for (const d of [day(60), day(59), day(56)]) expect(posts(d)).toHaveLength(1);
     expect(posts(day(58))).toEqual([]);
@@ -147,8 +180,8 @@ describe('lafmaliyet geçişi', () => {
     expect(outbox().filter((o) => !o.sentAt)).toEqual([]);
 
     // İkinci kez: gidenler yeniden gitmez
-    expect(await h.ok('patron', 'POST', '/sync/lafmaliyet/backfill', { from: day(60), to: day(56) })).toEqual({ queued: 0, days: [] });
-    // Varsayılan aralık lafmaliyet'in bildirdiği geçiş gününden düne; açık gün sayılmaz, 70 gün önceki eğitim günü aralık dışı
+    expect(await h.ok('patron', 'POST', '/sync/lafmaliyet/backfill', { from: day(60), to: day(56) })).toEqual({ queued: 0, days: [], training: 0 });
+    // Varsayılan aralık lafmaliyet'in bildirdiği geçiş gününden düne; açık gün ve eğitim günü sayılmaz
     expect((await status()).backfill).toEqual({ from: day(60), to: day(1), unsent: 0 });
 
     // Denetim kaydı
@@ -188,6 +221,10 @@ describe('lafmaliyet geçişi', () => {
     expect(rejected.json.code).toBe('lafmaliyet_push');
     expect(rejected.json.error).toMatch(/HTTP 409 \(z_conflict\)/);
     expect(rejected.json.error).toMatch(/Z 7 kayıtlı, gönderilen Z 12/);
+    // Kalıcı ret yeniden denenmez: metin bunu ve yolu söyler, "tekrar denenecek" demez
+    expect(rejected.json.error).toMatch(/Kendiliğinden yeniden denenmez: .*Kasa › Geçmiş günler › Z › Gönder ile yeniden gönderin$/);
+    expect(rejected.json.error).not.toMatch(/tekrar denenecek|buradan/);
+    expect(await status()).toMatchObject({ pending: 1, failing: 1 });
     expect(dayRow(d2).exportedAt).toBeGreaterThan(0);
     expect(dayRow(d3).exportedAt).toBeNull();
 
@@ -197,6 +234,7 @@ describe('lafmaliyet geçişi', () => {
     const unauthorized = await h.call<{ error: string }>('kasa', 'POST', `/sync/lafmaliyet/gun/${d4}/push`);
     expect(unauthorized.status).toBe(502);
     expect(unauthorized.json.error).toMatch(/LAFMALIYET_SYNC_SECRET.*LAFPOS_SYNC_SECRET.*±5 dk/);
+    expect(unauthorized.json.error).toMatch(/Giden kutusunda bekliyor, sonra tekrar denenecek$/);
     expect(outbox().find((o) => o.dedupeKey === `gun:${day(17)}`)!.nextAttemptAt).toBeLessThan(Date.now() + 86400_000);
 
     // Eski lafmaliyet (yalnız ok, date, lines): geçiş günü bilinmiyor; bozuk alan yazılmaz
@@ -260,19 +298,32 @@ describe('lafmaliyet geçişi', () => {
     }
     expect((await status()).costsError?.message).toMatch(/LAFPOS_SYNC_SECRET tanımlı değil/);
 
-    // Günde bir: 24 saatten yeni maliyet yeniden çekilmez, eskisi çekilir
+    // Her gün sonu: aynı iş gününde (05:00 kuralı) yeniden çekilmez; ertesi gün kapanış öncekinden erken olsa da çekilir
+    const { setSyncState } = await mod();
+    const IST = (s: string) => Date.parse(`${s}+03:00`);
+    setSyncState('lafmaliyet.costs', { at: IST('2026-11-02T23:05:00'), map: lm.costMap() });
     costsReply = { status: 200, body: { version: 1, now: '', items: [] } };
     const before = costGets();
-    expect(await lm.pullCostsIfStale(firstAt + 3600_000)).toBe(false);
+    expect(await lm.pullCostsIfStale(IST('2026-11-03T02:00:00'))).toBe(false);
     expect(costGets()).toBe(before);
-    expect(await lm.pullCostsIfStale(firstAt + 25 * 3600_000)).toBe(true);
+    expect(await lm.pullCostsIfStale(IST('2026-11-03T22:55:00'))).toBe(true);
     expect(costGets()).toBe(before + 1);
     expect(cost(a.id)).toBeNull();
   });
 
-  it('maliyetin tarihi yalnız maliyet yetkisine gider (Raporlar, patron paneli)', async () => {
-    await h.ok('patron', 'POST', '/admin/users', { name: 'Rapor bakan', role: 'garson', permGrant: ['rapor.gor', 'patron.panel'], pin: '7373' });
+  it('maliyetin tarihi yalnız maliyet yetkisine gider (Raporlar, patron paneli, bağlantı durumu)', async () => {
+    await h.ok('patron', 'POST', '/admin/users', { name: 'Rapor bakan', role: 'garson', permGrant: ['rapor.gor', 'patron.panel', 'senkron.yonet'], pin: '7373' });
     await h.login('rapor', '7373');
+    // Bağlantı durumu herkese açık (Genel bakış, menü sayacı) ama maliyetin tarihi ve hatası yalnız maliyet yetkisine
+    expect((await status()).costsAt).toBeGreaterThan(0);
+    for (const who of ['garson', 'kasa', 'rapor']) {
+      const lm = (await h.ok<{ lafmaliyet: Record<string, unknown> }>(who, 'GET', '/sync/status')).lafmaliyet;
+      expect(lm).not.toHaveProperty('costsAt');
+      expect(lm).not.toHaveProperty('costsError');
+      expect(lm).toHaveProperty('configured', true);
+    }
+    // "Maliyetleri çek" bağlantı yönetimi yetmez, maliyet yetkisi de ister
+    expect((await h.call('rapor', 'POST', '/sync/lafmaliyet/costs/pull')).status).toBe(403);
     const range = `from=${today}&to=${today}`;
     const own = await h.ok<Record<string, unknown>>('patron', 'GET', `/reports/products?${range}`);
     expect(own.costsAt).toBeGreaterThan(0);
@@ -293,6 +344,13 @@ describe('lafmaliyet geçişi', () => {
     expect(pushToast(null)).toBe("Gün lafmaliyet'e gönderildi");
     expect(unmatchedText(['A', 'B'])).toBe('A, B');
     expect(unmatchedText(['A', 'B', 'C', 'D', 'E', 'F', 'G'])).toBe('A, B, C, D, E ve 2 ad daha');
+    // lafmaliyet en çok 50 ad gönderir: gerçek sayı lines - matched
+    const fifty = Array.from({ length: 50 }, (_, i) => `URUN ${i + 1}`);
+    const many = { date: '2026-11-03', at: 0, lines: 80, matched: 7, unmatched: fifty };
+    expect(unmatchedCount(many)).toBe(73);
+    expect(unmatchedText(fifty, unmatchedCount(many))).toBe('URUN 1, URUN 2, URUN 3, URUN 4, URUN 5 ve 68 ad daha');
+    expect(unmatchedCount({ date: '2026-11-03', at: 0, unmatched: ['A', 'B'] })).toBe(2);
+    expect(unmatchedCount({ date: '2026-11-03', at: 0, lines: 4, matched: 4, unmatched: [] })).toBe(0);
     const now = Date.UTC(2026, 10, 20);
     expect(staleCostsText(null, now)).toBeNull();
     expect(staleCostsText(now - 7 * 86_400_000, now)).toBeNull();
