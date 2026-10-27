@@ -58,10 +58,13 @@ export function roomBill(elapsedMs: number, hourlyRate: number, stepMin: number,
     const minutes = billableMinutes(elapsedMs, stepMin, minimumMin);
     return { minutes, coveredMinutes: 0, overMinutes: minutes, blockCharge: 0, charge: roomCharge(hourlyRate, minutes) };
   }
+  // Aşan süre bugünkü kuralla dakikaya yukarı, sonra adıma; bloğun karşıladığı süre en yakın dakika (sayaç yeniden
+  // başlarsa kalan blok buradan hesaplanır)
+  const blockMinutes = Math.max(0, block.minutes);
   const elapsed = Math.max(0, Math.ceil(elapsedMs / 60_000));
-  const covered = Math.min(elapsed, Math.max(0, block.minutes));
+  const covered = Math.min(blockMinutes, Math.max(0, Math.round(elapsedMs / 60_000)));
   const step = Math.max(1, stepMin);
-  const over = elapsed > covered ? Math.ceil((elapsed - covered) / step) * step : 0;
+  const over = elapsed > blockMinutes ? Math.ceil((elapsed - blockMinutes) / step) * step : 0;
   const blockCharge = block.terms === 'till' ? block.charge : 0;
   return { minutes: covered + over, coveredMinutes: covered, overMinutes: over, blockCharge, charge: blockCharge + roomCharge(hourlyRate, over) };
 }
