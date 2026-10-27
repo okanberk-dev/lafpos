@@ -115,6 +115,11 @@ async function snapshot(): Promise<Snapshot | null> {
  * demo biter; gerçek veri her zaman parolalıdır. LAFPOS_UZAKTAN_DEMO=0 demoyu kapatır.
  */
 const demoAllowed = () => env('LAFPOS_UZAKTAN_DEMO') !== '0' && demoBase() != null;
+/**
+ * İlk etapta kafe bağlanınca da gerçek görünüm parolasızdır (kullanıcı kararı, 27 Eki 2026): bağlantıyı bilen salt
+ * okunur ekranları görür. LAFPOS_UZAKTAN_PAROLA_GEREKLI=1 patron parolasını geri açar.
+ */
+const passwordRequired = () => env('LAFPOS_UZAKTAN_PAROLA_GEREKLI') === '1';
 /** Demo jetonunun anahtarı gizli değildir: yalnız örnek güne açılır, gerçek özet hiçbir zaman demo jetonuyla verilmez */
 const demoKey = () => 'lafpos-uzaktan-demo';
 
@@ -183,7 +188,7 @@ async function handle(req: Request): Promise<Response> {
         redisOk = false;
       }
     }
-    return json({ secret: secret().length >= 32, password: env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null });
+    return json({ secret: secret().length >= 32, password: !passwordRequired() || env('LAFPOS_UZAKTAN_PAROLA').length >= 10, redis: redisOk, snapshotAt, demo: demoAllowed() && snapshotAt == null, open: !passwordRequired() });
   }
   // Kafe bağlanmadıysa demo: anahtar ve parola gerekmez, yalnız örnek gün açılır (kafe itmesi aşağıda, anahtarla)
   if (path !== 'uzaktan/push' && demoAllowed() && !(await realSnapshot())) {
@@ -215,6 +220,9 @@ async function handle(req: Request): Promise<Response> {
     await redis('SET', SNAPSHOT_KEY, JSON.stringify(snap), 'EX', 7 * 86400);
     return json({ ok: true });
   }
+
+  // Parolasız görünüm (varsayılan): giriş parola sormadan salt okunur oturum açar
+  if (path === 'uzaktan/giris' && req.method === 'POST' && !passwordRequired()) return json({ token: issueToken(secret()), me: ME });
 
   // Patron girişi: parola, IP başına 15 dakikada en çok 8 deneme
   if (path === 'uzaktan/giris' && req.method === 'POST') {

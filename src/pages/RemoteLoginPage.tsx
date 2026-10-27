@@ -14,6 +14,8 @@ interface Setup {
   snapshotAt: number | null;
   /** Kafe bağlanmadı: örnek gün parolasız açılır */
   demo?: boolean;
+  /** Parolasız görünüm (LAFPOS_UZAKTAN_PAROLA_GEREKLI yoksa): gerçek veri de parola sormadan açılır */
+  open?: boolean;
 }
 
 /** Kurulum adımları: eksik olan varsa giriş yerine ne yapılacağı görünür (parolayı denemeye gerek kalmaz) */
@@ -51,21 +53,23 @@ export function RemoteLoginPage() {
   const ready = !!setup.data && setup.data.secret && setup.data.password && setup.data.redis;
   const demoTried = useRef(false);
 
-  // Demo: parola sorulmaz, örnek güne doğrudan girilir
+  // Demo ya da parolasız görünüm: parola sorulmaz, doğrudan girilir
   useEffect(() => {
-    if (!setup.data?.demo || demoTried.current) return;
+    const demo = !!setup.data?.demo;
+    if (!(demo || (setup.data?.open && ready)) || demoTried.current) return;
     demoTried.current = true;
     void (async () => {
       try {
         const res = await post<{ token: string }>('/uzaktan/giris', {});
-        sessionStorage.setItem('lafpos.demo', '1');
+        if (demo) sessionStorage.setItem('lafpos.demo', '1');
+        else sessionStorage.removeItem('lafpos.demo');
         setToken(res.token);
         await init();
       } catch (err) {
         setError(errorMessage(err));
       }
     })();
-  }, [setup.data, init]);
+  }, [setup.data, ready, init]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
