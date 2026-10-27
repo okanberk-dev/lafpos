@@ -55,6 +55,7 @@ export default function PlatformsAdmin() {
                 <Badge tone={o.status === 'kabul' ? 'success' : o.status === 'ret' ? 'warning' : 'neutral'}>{PLATFORM_STATUS_LABEL[o.status]}</Badge>
                 {o.reason && <span className="text-xs text-[var(--admin-text-mute)]">{o.reason}</span>}
                 {o.decidedBy && <span className="text-xs text-[var(--admin-text-mute)]">{o.decidedBy}</span>}
+                {o.lastError && <span className="w-full text-xs text-[var(--admin-danger-ink)]">{o.lastError}</span>}
               </li>
             ))}
           </ul>
@@ -70,7 +71,8 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['platforms', 'products'], queryFn: () => get<{ products: PlatformProductDTO[] }>('/platforms/products') });
   const rows = q.data?.products ?? [];
-  const products = [...boot.products].filter((p) => !p.hidden).sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  // Menüde gizli ürün de seçilebilir (eşleme onu açar); kasada karşılığı olmayan kalemin gizli satırı hariç
+  const products = [...boot.products].filter((p) => p.posName !== 'PLATFORM ÜRÜNÜ').sort((a, b) => Number(a.hidden) - Number(b.hidden) || a.name.localeCompare(b.name, 'tr'));
   const save = async (row: PlatformProductDTO, productId: string | null) => {
     try {
       await put(`/platforms/products/${row.id}`, { productId });
@@ -100,7 +102,7 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
                   <option value="">Ada göre eşlenir</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name}
+                      {p.hidden ? `${p.name} (menüde gizli)` : p.name}
                     </option>
                   ))}
                 </Select>

@@ -53,10 +53,15 @@ export function PlatformInbox() {
   }, [allowed]);
 
   // Onay bekleyenler ve platformun iptal ettiği ama kasada ödemesi olan (ödeme geri alınınca kendiliğinden kapanır)
-  const pending = (data.data?.orders ?? []).filter((o) => o.status === 'bekliyor' || o.cancelPending);
+  const all = data.data?.orders ?? [];
+  // Önce onay bekleyenler, süresi en yakın olan başta; sonra platformun iptal ettiği ama kasada ödemesi olanlar
+  const due = (o: PlatformOrderDTO) => (o.announced || o.expiresAt == null ? Number.MAX_SAFE_INTEGER : o.expiresAt);
+  const waitingOrders = all.filter((o) => o.status === 'bekliyor').sort((a, b) => due(a) - due(b));
+  const cancelOrders = all.filter((o) => o.status !== 'bekliyor' && o.cancelPending);
+  const pending = [...waitingOrders, ...cancelOrders];
   if (!allowed || !pending.length) return null;
-  const first = pending[0];
-  const waiting = pending.filter((o) => o.status === 'bekliyor').length;
+  const first = pending[0]!;
+  const waiting = waitingOrders.length;
   return (
     <>
       <button
@@ -67,6 +72,7 @@ export function PlatformInbox() {
         <Bell className="size-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate font-medium">
           {waiting === 0 ? 'Platform iptal etti: kasadaki ödemeyi geri alın' : waiting === 1 ? 'Platform siparişi onay bekliyor' : `${waiting} platform siparişi onay bekliyor`}
+          {waiting > 0 && cancelOrders.length > 0 && <span className="font-normal"> · {cancelOrders.length} iptal: ödemeyi geri alın</span>}
           <span className="font-normal max-sm:hidden">
             {' '}
             · {PLATFORM_LABEL[first.platform]} {first.payload.code} · {tl(first.payload.customerTotal)}
@@ -75,7 +81,7 @@ export function PlatformInbox() {
         {first.expiresAt && first.status === 'bekliyor' && !first.announced && <span className="tabular shrink-0 font-semibold">{left(first.expiresAt, now)}</span>}
         <span className="shrink-0 font-semibold underline underline-offset-2">Gör</span>
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title={waiting ? 'Onay bekleyen platform siparişleri' : 'Platformun iptal ettiği siparişler'} size="md">
+      <Modal open={open} onClose={() => setOpen(false)} title={waiting && cancelOrders.length ? 'Platform siparişleri' : waiting ? 'Onay bekleyen platform siparişleri' : 'Platformun iptal ettiği siparişler'} size="md">
         <div className="space-y-3 p-4">
           {pending.map((o) => (
             <PendingCard key={o.id} order={o} now={now} defaultPrep={data.data?.settings[o.platform].prepMinutes ?? 20} onDone={() => pending.length === 1 && setOpen(false)} />
@@ -88,6 +94,7 @@ export function PlatformInbox() {
 
 function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrderDTO; now: number; defaultPrep: number; onDone: () => void }) {
   const qc = useQueryClient();
+  const canClose = useCan()('siparis.iptal');
   const [prep, setPrep] = useState(defaultPrep);
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -117,6 +124,11 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
           {p.courier === 'platform' ? <Bike className="mr-1 inline size-4" /> : <PackageCheck className="mr-1 inline size-4" />}
           {COURIER_LABEL[p.courier]} · {p.paymentLabel}
         </span>
+        {p.scheduledFor && (
+          <span className="rounded-full bg-[var(--admin-warning-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--admin-warning)]">
+            İleri tarihli · {new Date(p.scheduledFor).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
         <span className="flex-1" />
         {remaining && <span className={cn('tabular text-sm font-semibold', (order.expiresAt ?? 0) - now < 60_000 ? 'text-[var(--admin-danger-ink)]' : 'text-ink-2')}>{remaining}</span>}
       </div>
@@ -159,9 +171,16 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
         </p>
       )}
       {order.cancelPending ? (
-        <p className="mt-3 text-sm text-ink-2">
-          {PLATFORM_LABEL[order.platform]} bu siparişi iptal etti{order.orderNo ? `; adisyon #${order.orderNo}` : ''}. Kasada alınan ödemeyi yetkili onayıyla geri alın: adisyon kendiliğinden iptal olur
-        </p>
+        <div className="mt-3 space-y-2">
+          <p className="text-sm text-ink-2">
+            {PLATFORM_LABEL[order.platform]} bu siparişi iptal etti{order.orderNo ? `; adisyon #${order.orderNo}` : ''}. Kasada alınan ödemeyi yetkili onayıyla geri alın: adisyon kendiliğinden iptal olur
+          </p>
+          {canClose && (
+            <Button size="sm" disabled={busy} onClick={() => run(() => post(`/platforms/orders/${order.id}/cancel-close`), 'İptal kayda alındı; hesabı elle düzeltin')}>
+              Ödeme geri alınamıyor: iptali kayda al
+            </Button>
+          )}
+        </div>
       ) : rejecting ? (
         <div className="mt-3 space-y-2">
           <p className="text-sm font-medium">Neden reddediyorsunuz?</p>

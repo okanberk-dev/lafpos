@@ -23,8 +23,9 @@ lafmaliyet'e platform siparişi POS satışı olarak gider (satış satırları,
 lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
 
 ## Modlar
-- **Kapalı:** yeni sipariş alınmaz. Platformdan gelmiş, henüz kapanmamış sipariş platformla konuşmaya devam eder
-  (kabul, ret ve teslim aşamaları platforma gider).
+- **Kapalı:** yeni sipariş alınmaz. Platformdan gelmiş, henüz kapanmamış sipariş platformla konuşmaya devam eder:
+  kabul, ret ve teslim aşamaları platforma gider; onay bekleyen ya da adisyonu açık gerçek sipariş varken yoklama da
+  sürer ki platformun iptali kasaya ulaşsın (o yoklamada yeni paket kayda girmez).
 - **Deneme:** Yönetim › Paket platformları › "Deneme siparişi gönder" platformdan gelmiş gibi sipariş üretir
   (`server/delivery/simulator.ts`). Tarayıcı demosunda Yemeksepeti, Getir ve Trendyol Go deneme modunda açılır.
 - **Canlı:** gerçek bağdaştırıcı (`server/delivery/adapter.ts` arayüzü, `registry.ts`) siparişi
@@ -48,13 +49,18 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     Teslim aşamaları (`POST /orders/:id/delivery`) sırayla platforma yazılır: hazır → `invoiced`; kendi kuryemizde
     yolda → `manual-shipped`, teslim → `manual-delivered` (platform kuryesinde yolda ve teslimi platform yazar).
     Yazılamayan `platform_orders.notified_status` ve `last_error` ile kalır, sonraki turda yeniden denenir; ilk
-    hata denetim kaydına uyarı. Platform kalıcı olarak reddederse (400, 404, 409, 410, 422) yeniden denenmez
-    (`notify_parked_at`), patrona alarm: aşama platform uygulamasından işaretlenir. Aşama turu tek koşudur (20 sn'lik
-    tur ile teslim olayı aynı anda isterse ikincisi bekler) ve yalnız son 48 saatte kabul edilenlere bakar.
+    hata denetim kaydına uyarı. Platform kalıcı olarak reddederse (400, 404, 409, 410, 422) o siparişin aşamaları
+    yeniden denenmez (`notify_parked_at`), patrona alarm: aşama platform uygulamasından işaretlenir; kasada iptal yine
+    platforma gider. Aşama turu tek koşudur (20 sn'lik tur ile teslim olayı aynı anda isterse ikincisi bekler), son 48
+    saatte kabul edilenlere bakar ve her kaydı işlemden hemen önce yeniden okur (tur ağ beklerken gelen platform iptali
+    "kasada iptal" sanılmaz). Kabul ya da ret platforma giderken süre dolumu o kayda dokunmaz.
     **Kasada iptal edilen** kabul edilmiş sipariş platforma "tedarik edilemedi" (`unsupplied`) olarak gider ve kayıt
     kapanır; platform kabul etmezse alarm (`platform.cancel_unsynced`): sipariş platform uygulamasından iptal edilir.
     **Platformun iptali** kasada alınmış ödeme yüzünden uygulanamazsa (`cancel_pending_at`) alarm bir kez düşer,
-    şeritte görünür; kasiyer ödemeyi geri alınca sonraki turda adisyon kendiliğinden iptal olur.
+    şeritte görünür; kasiyer ödemeyi geri alınca sonraki turda adisyon kendiliğinden iptal olur. Ödeme geri
+    alınamıyorsa (kapanmış güne ait) iptal yetkisi olan kişi şeritten "iptali kayda al" der
+    (`POST /api/platforms/orders/:id/cancel-close`): kayıt kapanır, para yerinde kalır, patrona alarm.
+    İleri tarihli siparişin saati adisyona geçer (mutfak fişi ve sipariş şeridi) ve onay kartında görünür.
     Ağ hataları kasada Türkçe görünür ("bağlantı kurulamadı", "yanıt gelmedi"); çevrilemeyen paket ötekileri
     durdurmaz, atlanıp bir kez denetim kaydına düşer (`platform.package_invalid`). Yönetim'deki "açık sipariş"
     adisyonu açık kabul edilmiş siparişlerdir.
@@ -71,5 +77,5 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
 
 ## Uçlar
 `GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·
-`POST /api/platforms/orders/:id/accept|reject|platform-cancel` · teslim: `POST /api/orders/:id/delivery` ·
+`POST /api/platforms/orders/:id/accept|reject|platform-cancel|cancel-close` · teslim: `POST /api/orders/:id/delivery` ·
 ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id`.

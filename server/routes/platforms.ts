@@ -8,6 +8,7 @@ import { body, conflict, HttpError } from '../lib/http';
 import { acceptFailedLocally, announceAccept, announceReject, liveStatus, rehearse, withDecisionLock } from '../delivery/live';
 import {
   acceptPlatformOrder,
+  closeCancelPending,
   getPlatformOrder,
   listPlatformOrders,
   listPlatformProducts,
@@ -116,6 +117,17 @@ platformRoutes.post('/orders/:id/reject', async (c) => {
     write((t, fx) => rejectPlatformOrder(t, user, fx, row.id, input.reason, { notifiedStatus }));
     return c.json({ ok: true });
   });
+});
+
+/**
+ * Platformun iptali kasada uygulanamıyor (alınan ödeme geri alınamıyor, ör. kapanmış güne ait): yetkili kaydı elle
+ * kapatır, alarm düşer. Para hareketi yok
+ */
+platformRoutes.post('/orders/:id/cancel-close', (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'siparis.iptal');
+  write((t, fx) => closeCancelPending(t, user, fx, c.req.param('id')));
+  return c.json({ ok: true });
 });
 
 /** Platform siparişi iptal etti: denemede elle (gerçek bağlantıda platformdan gelir) */
