@@ -1,5 +1,5 @@
 import { PLATFORM_LABEL, type PlatformCourier, type PlatformOrderPayload } from '@shared/platforms';
-import type { PlatformAdapter, PlatformNotify } from './adapter';
+import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
 
 /**
  * Trendyol Go Yemek (Uber Eats Türkiye siparişleri de buradan gelir) bağdaştırıcısı: yalnız yoklama (platform
@@ -267,14 +267,7 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
 
 // ─── HTTP ───────────────────────────────────────────────────────────────────
 
-export class TrendyolHttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export class TrendyolHttpError extends PlatformHttpError {}
 
 function headersFor(c: TrendyolConfig): Record<string, string> {
   return {
@@ -291,8 +284,12 @@ export async function trendyolRequest(c: TrendyolConfig, method: 'GET' | 'PUT' |
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(`${c.apiUrl.replace(/\/+$/, '')}${path}`, { method, headers: headersFor(c), body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal });
-    const raw = await res.text();
+    const res = await fetch(`${c.apiUrl.replace(/\/+$/, '')}${path}`, { method, headers: headersFor(c), body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal }).catch((e) => {
+      throw networkError(e, timeoutMs);
+    });
+    const raw = await res.text().catch((e) => {
+      throw networkError(e, timeoutMs);
+    });
     let json: unknown = null;
     try {
       json = raw ? JSON.parse(raw) : null;
@@ -350,7 +347,17 @@ export function trendyolAdapter(c: TrendyolConfig): PlatformAdapter {
       const start = Math.max(0, sinceMs - POLL_OVERLAP_MS);
       const created = await fetchPackages(c, TRENDYOL_STATUS.created, start, now);
       const cancelled = await fetchPackages(c, TRENDYOL_STATUS.cancelled, start, now);
-      return { orders: created.map((p) => fromTrendyolPackage(p, now)), cancelled: cancelled.map((p) => String(p.id)) };
+      // Bozuk paket ötekileri durdurmaz: atlanır, kimliğiyle bildirilir
+      const orders: PlatformOrderPayload[] = [];
+      const invalid: { externalId: string; error: string }[] = [];
+      for (const p of created) {
+        try {
+          orders.push(fromTrendyolPackage(p, now));
+        } catch (e) {
+          invalid.push({ externalId: String(p.id), error: e instanceof Error ? e.message : String(e) });
+        }
+      }
+      return { orders, cancelled: cancelled.map((p) => String(p.id)), invalid };
     },
     accept: (order, prepMinutes) => put(c, TRENDYOL_PATHS.picked(c.supplierId, order.externalId), { preparationTime: prepMinutes }),
     reject: (order, reason) => put(c, TRENDYOL_PATHS.unsupplied(c.supplierId, order.externalId), { reasonCode: TRENDYOL_REASON_CODES[reason] ?? TRENDYOL_REASON_OTHER }),

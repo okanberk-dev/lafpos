@@ -194,7 +194,7 @@ describe('canlı bağlantı', () => {
     const { eq } = await import('drizzle-orm');
     const stuck = db.select().from(schema.platformOrders).where(eq(schema.platformOrders.id, row.id)).get()!;
     expect(stuck.notifiedStatus).toBe('picked');
-    expect(stuck.lastError).toMatch(/aşama bildirilemedi/);
+    expect(stuck.lastError).toMatch(/"Hazır" bildirilemedi/);
     const second = await live.reconcileNotifications();
     expect(second.sent).toBe(1);
     const calls = fake.calls.filter((c) => c.startsWith(`PUT ${p.id} `));

@@ -1,6 +1,6 @@
 import { BarChart3, CalendarClock, ChefHat, ClipboardList, Gauge, LayoutGrid, Settings, Store, Users, Wallet } from 'lucide-react';
 import type { Permission } from '@shared/permissions';
-import { DEFAULT_SERVICE_MODE, isCounterFirst, type ServiceMode } from '@shared/service-mode';
+import { DEFAULT_SERVICE_MODE, isCounterFirst, type ServiceMode, showsTables } from '@shared/service-mode';
 
 /**
  * Rolüne ve servis moduna göre açılış sayfası. Masaya serviste sipariş alan masa planında açar; self ve yarı self
@@ -41,15 +41,16 @@ export const POS_NAV: NavItem[] = [
 export const SALE_NAV: NavItem = { to: '/satis', label: 'Satış', title: 'Yeni satış (tezgâh)', icon: Store, perms: ['siparis.al'], primary: true };
 
 /**
- * Servis moduna göre kasa menüsü. Masaya servis bugünkü menü. Yarı self: "Satış" başta, Masalar doluluk için kalır
- * ama telefonda alt sekmeden "Daha"ya iner. Self: Masalar yalnız masada açık adisyon varsa (masa kullanılıyorsa) görünür.
+ * Servis moduna göre kasa menüsü. Masaya servis bugünkü menü. Yarı self ve QR + self: "Satış" başta, Masalar kalır
+ * (doluluk; QR siparişi masaya düşer) ama telefonda alt sekmeden "Daha"ya iner. Self: Masalar yalnız masada açık
+ * adisyon varsa (masa kullanılıyorsa) görünür.
  */
 export function navFor(mode: ServiceMode, opts: { tablesInUse?: boolean } = {}): NavItem[] {
   if (!isCounterFirst(mode)) return POS_NAV;
   const out: NavItem[] = [SALE_NAV];
   for (const n of POS_NAV) {
     if (n.to !== '/masalar') out.push(n);
-    else if (mode === 'yari_self' || opts.tablesInUse) out.push({ ...n, primary: false });
+    else if (showsTables(mode) || opts.tablesInUse) out.push({ ...n, primary: false });
   }
   return out;
 }

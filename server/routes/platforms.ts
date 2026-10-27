@@ -5,7 +5,7 @@ import { db, tx } from '../db/client';
 import { type AppEnv, actorFrom, can, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, conflict, HttpError } from '../lib/http';
-import { announceAccept, announceReject, liveStatus } from '../delivery/live';
+import { acceptFailedLocally, announceAccept, announceReject, liveStatus, rehearse, withDecisionLock } from '../delivery/live';
 import {
   acceptPlatformOrder,
   getPlatformOrder,
@@ -77,30 +77,45 @@ platformRoutes.post('/:platform/test-order', async (c) => {
 });
 
 /**
- * Kabul: canlı bağlantıda önce platforma bildirilir (platform reddederse 502, yerelde kabul edilmez: platform sipariş
- * durumunun sahibidir), sonra yerelde adisyon açılır. Deneme siparişi platforma gitmez.
+ * Kabul: canlı bağlantıda önce adisyonun açılabildiği yerelde denenir (gün açık, ürün tükenmemiş, porsiyon yetiyor;
+ * geri alınır), sonra platforma bildirilir (platform reddederse 502, yerelde kabul edilmez: platform sipariş durumunun
+ * sahibidir), sonra adisyon açılır. Platform kabul edip adisyon yine de açılamazsa kayıt bunu tutar: süre dolmaz, yeniden
+ * Kabul platforma ikinci kez gitmez. Deneme siparişi platforma gitmez. İki ekrandan aynı anda karar verilmez.
  */
 platformRoutes.post('/orders/:id/accept', async (c) => {
-  requirePermission(c.get('user'), 'paket.yonet');
+  const user = c.get('user');
+  requirePermission(user, 'paket.yonet');
   const input = await body(c, z.object({ prepMinutes: z.number().int().min(5).max(120).optional() }));
-  const row = getPlatformOrder(db, c.req.param('id'));
-  if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
-  if (row.expiresAt != null && row.expiresAt <= Date.now()) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
-  const prep = input.prepMinutes ?? platformSettings()[row.platform].prepMinutes;
-  const notifiedStatus = await announceAccept(row, prep);
-  const res = write((t, fx) => acceptPlatformOrder(t, c.get('user'), fx, row.id, prep, { notifiedStatus }));
-  return c.json({ orderId: res.order.id, prepMinutes: res.prepMinutes });
+  return withDecisionLock(c.req.param('id'), async () => {
+    const row = getPlatformOrder(db, c.req.param('id'));
+    if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
+    const announced = row.notifiedStatus === 'picked';
+    if (!announced && row.expiresAt != null && row.expiresAt <= Date.now()) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
+    const prep = input.prepMinutes ?? platformSettings()[row.platform].prepMinutes;
+    if (!row.payload.simulated && !announced) rehearse((t) => acceptPlatformOrder(t, user, new Effects(), row.id, prep, { notifiedStatus: 'picked' }));
+    const notifiedStatus = await announceAccept(row, prep);
+    try {
+      const res = write((t, fx) => acceptPlatformOrder(t, user, fx, row.id, prep, { notifiedStatus }));
+      return c.json({ orderId: res.order.id, prepMinutes: res.prepMinutes });
+    } catch (e) {
+      if (notifiedStatus) acceptFailedLocally(getPlatformOrder(db, row.id), e);
+      throw e;
+    }
+  });
 });
 
 platformRoutes.post('/orders/:id/reject', async (c) => {
-  requirePermission(c.get('user'), 'paket.yonet');
+  const user = c.get('user');
+  requirePermission(user, 'paket.yonet');
   const input = await body(c, z.object({ reason: z.string().max(100) }));
-  const row = getPlatformOrder(db, c.req.param('id'));
-  if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
   if (!input.reason.trim()) throw new HttpError(400, 'Ret nedeni seçilmeli', 'reason_required');
-  const notifiedStatus = await announceReject(row, input.reason.trim());
-  write((t, fx) => rejectPlatformOrder(t, c.get('user'), fx, row.id, input.reason, { notifiedStatus }));
-  return c.json({ ok: true });
+  return withDecisionLock(c.req.param('id'), async () => {
+    const row = getPlatformOrder(db, c.req.param('id'));
+    if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
+    const notifiedStatus = await announceReject(row, input.reason.trim());
+    write((t, fx) => rejectPlatformOrder(t, user, fx, row.id, input.reason, { notifiedStatus }));
+    return c.json({ ok: true });
+  });
 });
 
 /** Platform siparişi iptal etti: denemede elle (gerçek bağlantıda platformdan gelir) */

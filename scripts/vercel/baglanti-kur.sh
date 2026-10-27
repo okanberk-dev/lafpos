@@ -110,13 +110,19 @@ umask 077
 {
   echo "# LafPOS kasa ayarları ($(date '+%d.%m.%Y %H:%M')). Kafe bilgisayarında Başlat › LafPOS › LafPOS ayarları'nı açıp"
   echo "# aşağıdaki satırları ekleyin, kaydedin; LafPOS kendini yeniden başlatır. Bu dosyayı kimseyle paylaşmayın, işi bitince silin."
-  # LafPOS'ta site adresinin varsayılanı yok: bu satır yazılmadıkça kafe siteye hiç bağlanmaz (docs/03-ENTEGRASYON.md §2)
-  echo "LAFFOGATO_URL=https://laffogato.net"
-  [[ $site_ok -eq 1 ]] && echo "LAFFOGATO_SYNC_SECRET=$S_SITE" || echo "# LAFFOGATO_SYNC_SECRET: laffogato'da zaten tanımlıydı; değeri bilinmiyor (--yenile ile yeniden üretin)"
+  echo "# Sıra docs/03-ENTEGRASYON.md §8 'Açılış sırası'nda."
+  echo
+  echo "# 1. adım (anahtarlar): kurulum modundayken de güvenli, gün gitmez; yalnız maliyet okunur"
   echo "LAFMALIYET_URL=https://ladmin.laffogato.net"
   [[ $maliyet_ok -eq 1 ]] && echo "LAFMALIYET_SYNC_SECRET=$S_MALIYET" || echo "# LAFMALIYET_SYNC_SECRET: lafmaliyet'te zaten tanımlıydı; değeri bilinmiyor (--yenile ile yeniden üretin)"
   echo "LAFPOS_CLOUD_URL=https://lafpos.vercel.app"
   [[ $cloud_ok -eq 1 ]] && echo "LAFPOS_CLOUD_SECRET=$S_CLOUD" || echo "# LAFPOS_CLOUD_SECRET: lafpos'ta zaten tanımlıydı; değeri bilinmiyor (--yenile ile yeniden üretin)"
+  echo
+  # LafPOS'ta site adresinin varsayılanı yok: bu satır yazılmadıkça kafe siteye hiç bağlanmaz (docs/03-ENTEGRASYON.md §2)
+  echo "# 2. adım (deneme gönderimi), eğitim bitip kurulum modu kapandıktan SONRA ekleyin: bu iki satır girilince"
+  echo "# LafPOS'taki Tükendi / Satışa aç ve online sipariş aşamaları canlı siteyi ve uygulamayı değiştirir"
+  echo "LAFFOGATO_URL=https://laffogato.net"
+  [[ $site_ok -eq 1 ]] && echo "LAFFOGATO_SYNC_SECRET=$S_SITE" || echo "# LAFFOGATO_SYNC_SECRET: laffogato'da zaten tanımlıydı; değeri bilinmiyor (--yenile ile yeniden üretin)"
   if [[ -n "$PAROLA" ]]; then
     echo
     echo "# Yalnız senin için, kafeye girmez: https://lafpos.vercel.app giriş parolası"

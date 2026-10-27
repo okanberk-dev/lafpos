@@ -48,6 +48,12 @@ beforeAll(async () => {
     req.on('data', (c) => (raw += c));
     req.on('end', () =>
       setTimeout(() => {
+        // Gün sonunda maliyetler de günde bir çekilir (GET /api/panel/pos/urunler)
+        if (req.method === 'GET') {
+          res.writeHead(200, { 'content-type': 'application/json' });
+          res.end(JSON.stringify({ version: 1, now: new Date().toISOString(), items: [] }));
+          return;
+        }
         lmBodies.push(JSON.parse(raw));
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ ok: true, date: 'x', lines: 0 }));
@@ -196,6 +202,9 @@ describe('ikinci inceleme', () => {
   });
 
   it('lafmaliyet\'e gönderim sürerken basılan "Gönder" bitmesini bekler, günü gerçekten gönderir', async () => {
+    // Kurulum modunda (örnek PIN'ler, eğitim simülatörü) gün lafmaliyet'e gitmez
+    const { updateSettings } = await import('../server/lib/settings');
+    updateSettings({ demoMode: false, okcProvider: 'kapali' });
     const x = await h.ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
     const closed = await h.ok<{ day: { id: string; date: string } }>('kasa', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash });
     // Kapanıştaki gönderim yavaş sunucuda sürüyor; "Gönder" onu bekleyip yeniden gönderir

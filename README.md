@@ -42,13 +42,19 @@ Windows kasa bilgisayarı için tek dosyalık kurulum: `npm run kurulum:windows`
 ## Ortam değişkenleri
 
 `.env.example` dosyasını `.env` olarak kopyalayın. Hepsi isteğe bağlıdır; boş bırakılan entegrasyon kapalı kalır.
+Açma sırası (anahtarlar → deneme gönderimi → geçiş günü): `docs/03-ENTEGRASYON.md` §8.
+
+**İki ayrı `LAFPOS_SYNC_SECRET`:** sitede (laffogato) ve panelde (lafmaliyet) aynı adlı iki değişken vardır, değerleri
+**ayrıdır** (`scripts/vercel/baglanti-kur.sh` ikisini ayrı üretir). LafPOS'ta sitenin değeri `LAFFOGATO_SYNC_SECRET`'a,
+panelinki `LAFMALIYET_SYNC_SECRET`'a yazılır; ikisi de sitenin `KARAOKE_SYNC_SECRET`'ından ayrıdır.
 
 | Değişken | Ne işe yarar |
 | --- | --- |
 | `LAFPOS_PORT` | Sunucu portu (varsayılan 4000) |
 | `LAFFOGATO_URL` | Site adresi (`https://laffogato.net`). Varsayılanı yok: boşken LafPOS siteye hiç bağlanmaz (menü, görsel, online sipariş, Tükendi) |
 | `LAFFOGATO_SYNC_SECRET` | Sitenin imzalı uçları (Tükendi yazma, online siparişler); sitedeki `LAFPOS_SYNC_SECRET` |
-| `LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET` | lafmaliyet'e günlük satış/Z itme, maliyet çekme; paneldeki `LAFPOS_SYNC_SECRET` |
+| `LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET` | lafmaliyet'e günlük satış/Z itme, maliyet çekme (`https://ladmin.laffogato.net`); paneldeki `LAFPOS_SYNC_SECRET`. Boşken gün sonu gitmez (elle aktarım); kurulum modunda kapanan gün (eğitim günü) hiç gitmez |
+| `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET` | LafPOS Uzaktan (Vercel, salt okunur canlı özet; `docs/07-UZAKTAN-ERISIM.md` §4); Vercel'deki `LAFPOS_CLOUD_SECRET` |
 | `TOKENX_*` | Yazarkasa POS (Token ÖKC) bağlantısı, bkz. `docs/04-YAZARKASA.md` |
 | `LAFPOS_PUBLIC_URL`, `TOKENX_WEBHOOK_SECRET` | Yazarkasa sonucunun webhook ile gelmesi (yoksa LafPOS sorar) |
 

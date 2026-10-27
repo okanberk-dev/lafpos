@@ -179,7 +179,13 @@ adı klavyeden; ödenmiş satışta da düzeltilir ve denetime yazılır, gün s
 masaya taşınınca kalkar, "Ayrı hesap"la bölünen kalemlere geçer; kayıt sürerken ikinci basış kalemi yinelemez), bar ekranı, çağrı ekranı, hazır uyarısı ve fiş numara yerine "Masa 12" yazar; self serviste
 numara ödeme sonucunda, bar fişinde ve adisyonda büyük. Ödeme kuralları ve bara gidiş değişmez. Mod değişikliği
 ayrı denetim kaydı (`settings.servis_modu`, eski ve yeni mod). Testler `tests/servis-modu.test.ts`, e2e'de mod başına
-bir akış. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
+bir akış. **QR + self servis** (`qr_self`, `claude/qr-self-servis`): self gibi kasada sipariş ve ödeme, ama Masalar
+menüde kalır çünkü masadaki QR'ı okutan müşteri uygulamadan masaya sipariş verir ve sipariş masaya düşer. QR'ı LafPOS
+üretir ve saklar (`tables.qrCode`, göç `0010_masa_qr`; sitenin 10 simgelik Crockford kuralı, içerik
+`https://laffogato.net/masa/<kod>`, `shared/table-qr.ts`); Yönetim › Masa planı'nda masa başına QR, kod yenileme ve
+A4 masa kartları (`printNow(…, { sheet: true })`). Sipariş eşlemesi önce `tableCode`, sonra etiket; sitenin kodu
+tanıması için sözleşmeye eklenen `PUT /api/panel/tables` (giden kutusu `tables.sync`; site henüz almıyorsa
+yeniden denenmez) `docs/03-ENTEGRASYON.md` §2.3. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
 (gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
@@ -189,13 +195,17 @@ dosyasının kod imzası (imzasız dosyada Windows SmartScreen uyarır).
 
 ## 5. Diğer repolarda gereken işler (ayrı PR, kullanıcı onayıyla)
 
-| Repo | İş | Neden |
-| --- | --- | --- |
-| lafmaliyet | (RiosenBeq/lafmaliyet#34) İmzalı `POST /api/pos/gun` ucu: günlük satış satırları + Z alanları + ikram; `pos_daily_sales` tablosu ve `loadDailyProductSales` yükleyicisi; Kasa raporunda `CashPrefill { source: "lafpos" }` | Elle Z ve aylık liste girişini bitirir; sözleşme `docs/03-ENTEGRASYON.md` §4 |
-| lafmaliyet | İmzalı `GET /api/panel/pos/urunler`: ürün, boy, reçete maliyeti | Patron panelinde ürün kârlılığı (yalnız `rapor.maliyet` yetkisi) |
-| laffogato | Ayrı anahtarlı `/api/pos/*` (ortak `KARAOKE_SYNC_SECRET` yerine): RiosenBeq/laffogato#263 | Kafedeki makineye panel anahtarı koymamak, ayrı döndürülebilir anahtar |
-| laffogato | Online sipariş için ucuz "değişti mi" sinyali: `GET /api/pos/orders/version` (#263) | 5 dk sorgu sınırı varken siparişi saniyesinde görmek |
-| laffogato | Kasada damga (M2M) | Uygulama üyesine kasada damga vermek |
+Durum 27 Ekim 2026; sözleşme ve açılış sırası `docs/03-ENTEGRASYON.md` §6 ve §8. Bağlantıların hepsi varsayılan
+kapalıdır: anahtar, `.env` ve lafmaliyet'teki geçiş günü yokken hiçbiri çalışmaz.
+
+| Repo | İş | Neden | Durum |
+| --- | --- | --- | --- |
+| lafmaliyet | İmzalı `POST /api/pos/gun` ucu: günlük satış satırları + Z alanları + ikram; `pos_daily_sales`, Kasa raporunda "LafPOS'tan doldur" | Elle Z ve aylık liste girişini bitirir; sözleşme `docs/03-ENTEGRASYON.md` §4 | Birleşti (lafmaliyet#34, #36); durum, onarım ve geçiş günü B07 (#44), günlük satışlar aylık modele B08 (#46); kasa uzlaşması, komisyon ve ikram, ModPOS metinleri B09-B11 açık |
+| lafmaliyet | İmzalı `GET /api/panel/pos/urunler`: ürün, boy, reçete maliyeti | Patron panelinde ürün kârlılığı (yalnız `rapor.maliyet` yetkisi) | Birleşti (#34); LafPOS günde bir, gün sonunda çeker (L2) |
+| laffogato | Ayrı anahtarlı `/api/pos/*` (ortak `KARAOKE_SYNC_SECRET` yerine): RiosenBeq/laffogato#263 | Kafedeki makineye panel anahtarı koymamak, ayrı döndürülebilir anahtar | Birleşti (d1de10f) |
+| laffogato | Online sipariş için ucuz "değişti mi" sinyali: `GET /api/pos/orders/version` (#263) | 5 dk sorgu sınırı varken siparişi saniyesinde görmek | Birleşti (#263) |
+| laffogato | Bugünün karaoke rezervasyonları LafPOS'a (F1; LafPOS L4) | Sitede rezerve oda kasada boş görünmesin, ödenmiş saat yeniden ücretlenmesin | Açık |
+| laffogato | Kasada damga (M2M) | Uygulama üyesine kasada damga vermek | Faz 2 |
 
 ## 6. Riskler
 

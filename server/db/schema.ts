@@ -83,12 +83,14 @@ export const tables = sqliteTable(
     kind: text('kind').$type<'masa' | 'oda'>().notNull().default('masa'),
     /** Karaoke odası gibi süreli alanlarda saatlik ücret (kuruş) */
     hourlyRate: integer('hourly_rate'),
-    /** Sitenin masa QR kodu (laffogato cafe_tables), online masa siparişini eşlemek için */
+    /** Sitedeki masa adı ("Masa 4"): online masa siparişini etiketle eşlemek için (Yönetim › Masa planı "Sitedeki masa adı") */
     siteTableCode: text('site_table_code'),
+    /** Masanın QR kodu: LafPOS üretir, sitenin biçimiyle (10 simge Crockford; shared/table-qr.ts); QR içeriği sitenin masa adresi */
+    qrCode: text('qr_code'),
     sort: integer('sort').notNull().default(0),
     active: bool('active').notNull().default(true),
   },
-  (t) => [index('tables_section_idx').on(t.sectionId)],
+  (t) => [index('tables_section_idx').on(t.sectionId), uniqueIndex('tables_qr_code_idx').on(t.qrCode)],
 );
 
 export const printers = sqliteTable('printers', {
@@ -292,6 +294,11 @@ export const businessDays = sqliteTable(
     exportedAt: integer('exported_at'),
     /** Gün sonundan sonra "Günü yeniden aç" ile açıldığı son an (otomatik gün sonu buna da bakar) */
     reopenedAt: integer('reopened_at'),
+    /**
+     * Gün sonu kurulum (eğitim) modunda mı alındı: true eğitim günü, false gerçek gün. null: gün açık ya da bu işaret
+     * yokken kapandı (LafPOS o zaman canlıda değildi). lafmaliyet'e yalnız false giden gün gider (docs/03 §4.3)
+     */
+    trainingDay: integer('training_day', { mode: 'boolean' }),
   },
   (t) => [index('business_days_date_idx').on(t.date)],
 );
@@ -611,6 +618,8 @@ export const outbox = sqliteTable(
     nextAttemptAt: integer('next_attempt_at').notNull(),
     lastError: text('last_error'),
     sentAt: integer('sent_at'),
+    /** Karşı tarafın 200 yanıtından okunan alanlar (lafmaliyet gün sonu: counted, switchDay, matched, unmatched) */
+    response: text('response', { mode: 'json' }).$type<Record<string, unknown> | null>(),
   },
   (t) => [index('outbox_pending_idx').on(t.sentAt, t.nextAttemptAt)],
 );
@@ -681,6 +690,10 @@ export const platformOrders = sqliteTable(
     lastError: text('last_error'),
     /** Platforma yazılan son aşama: picked (kabul), hazir, yolda, teslim, unsupplied (ret); canlı bağlantıda (server/delivery/live.ts) */
     notifiedStatus: text('notified_status'),
+    /** Platform iptal etti ama adisyon kapatılamadı (kasada alınmış ödeme): her turda yeniden denenir, alarm bir kez */
+    cancelPendingAt: integer('cancel_pending_at'),
+    /** Platform bildirimi kalıcı olarak reddetti (4xx): yeniden denenmez, Yönetim ve denetim kaydı gösterir */
+    notifyParkedAt: integer('notify_parked_at'),
   },
   (t) => [uniqueIndex('platform_orders_ext_idx').on(t.platform, t.externalId), index('platform_orders_status_idx').on(t.status)],
 );

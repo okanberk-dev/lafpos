@@ -1,5 +1,6 @@
-import { Check, ChefHat, CircleDot, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
+import { Check, ChefHat, CircleDot, Droplets, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
 import { useState } from 'react';
+import { COMP_LABEL, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { isCounterFirst, serviceModeOf } from '@shared/service-mode';
@@ -92,9 +93,9 @@ export function CartPanel({
                         )}
                         <span className="tabular font-normal text-muted">{fmtTime(i.sentAt)}</span>
                         {i.complimentary && (
-                          <span className="inline-flex items-center gap-0.5 text-[var(--admin-hue-rose)]">
-                            <Gift className="size-3" />
-                            {i.compKind === 'odenmez' ? 'Ödenmez' : 'İkram'}
+                          <span className={cn('inline-flex items-center gap-0.5', i.compKind === 'zayi' ? 'text-[var(--admin-warning)]' : 'text-[var(--admin-hue-rose)]')}>
+                            {i.compKind === 'zayi' ? <Droplets className="size-3" /> : <Gift className="size-3" />}
+                            {COMP_LABEL[i.compKind ?? 'ikram']}
                           </span>
                         )}
                         {i.discount > 0 && <span className="tabular text-primary">−{tl(i.discount)}</span>}
@@ -157,7 +158,8 @@ export function CartPanel({
           <div className="mb-1.5 space-y-0.5 text-[13px] text-muted">
             <Row l="Ara toplam" r={tl(t.gross)} />
             {t.lineDiscounts + t.orderDiscount > 0 && <Row l={`İndirim${order.discountReason ? ` (${order.discountReason})` : ''}`} r={`−${tl(t.lineDiscounts + t.orderDiscount)}`} />}
-            {t.complimentary > 0 && <Row l="İkram" r={tl(t.complimentary)} />}
+            {/* Yalnız ikram varsa "İkram"; ödenmez ya da zayi de varsa hepsi birlikte "Ciro dışı" */}
+            {t.complimentary > 0 && <Row l={order.items.some((i) => i.complimentary && !i.voided && i.compKind && i.compKind !== 'ikram') ? 'Ciro dışı' : 'İkram'} r={tl(t.complimentary)} />}
             {t.service > 0 && <Row l={`Servis %${order.serviceRate}`} r={tl(t.service)} />}
           </div>
         )}
@@ -186,7 +188,7 @@ const Row = ({ l, r }: { l: React.ReactNode; r: React.ReactNode }) => (
   </div>
 );
 
-/** Gönderilmiş kaleme dokununca: iptal, ikram, indirim. */
+/** Gönderilmiş kaleme dokununca: iptal, ikram, zayi, indirim. */
 function ItemSheet({
   item,
   order,
@@ -200,7 +202,7 @@ function ItemSheet({
 }) {
   const boot = useBoot();
   const can = useCan();
-  const [mode, setMode] = useState<null | 'iptal' | 'ikram' | 'indirim'>(null);
+  const [mode, setMode] = useState<null | 'iptal' | 'ikram' | 'zayi' | 'indirim'>(null);
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState('');
   const [discType, setDiscType] = useState<'percent' | 'amount'>('percent');
@@ -215,13 +217,13 @@ function ItemSheet({
     setQty(1);
     onClose();
   };
-  const reasons = mode === 'iptal' ? boot.settings.voidReasons : mode === 'ikram' ? boot.settings.compReasons : boot.settings.discountReasons;
+  const reasons = mode === 'iptal' ? boot.settings.voidReasons : mode === 'indirim' ? boot.settings.discountReasons : mode ? compReasonsOf(boot.settings, mode) : [];
 
   const submit = async () => {
     const base = `/orders/${order.id}/items/${item.id}`;
     let res: unknown = null;
     if (mode === 'iptal') res = await act((pin) => post(`${base}/void`, { qty, reason, approverPin: pin }), 'Kalem iptal edildi');
-    if (mode === 'ikram') res = await act((pin) => post(`${base}/comp`, { qty, reason, approverPin: pin }), 'İkram edildi');
+    if (mode === 'ikram' || mode === 'zayi') res = await act((pin) => post(`${base}/comp`, { qty, reason, kind: mode, approverPin: pin }), mode === 'zayi' ? 'Zayi yazıldı' : 'İkram edildi');
     if (mode === 'indirim') {
       const value = discType === 'percent' ? Number(discValue.replace(',', '.')) : (parseTL(discValue) ?? 0);
       res = await act((pin) => post(`${base}/discount`, { type: discType, value, reason, approverPin: pin }), value > 0 ? 'İndirim uygulandı' : 'İndirim kaldırıldı');
@@ -241,9 +243,16 @@ function ItemSheet({
         <div className="grid gap-2 p-4">
           <SheetButton icon={<XCircle className="size-[18px] text-[var(--admin-danger-ink)]" strokeWidth={1.75} />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
           {item.complimentary ? (
-            <SheetButton icon={<Undo2 className="size-[18px] text-[var(--admin-hue-rose)]" strokeWidth={1.75} />} title="İkramı geri al" onClick={async () => (await act((pin) => post(`/orders/${order.id}/items/${item.id}/comp`, { undo: true, reason: '', approverPin: pin }), 'İkram geri alındı')) && close()} />
+            <SheetButton
+              icon={<Undo2 className="size-[18px] text-[var(--admin-hue-rose)]" strokeWidth={1.75} />}
+              title={item.compKind === 'ikram' || !item.compKind ? 'İkramı geri al' : `${COMP_LABEL[item.compKind]} kaydını geri al`}
+              onClick={async () => (await act((pin) => post(`/orders/${order.id}/items/${item.id}/comp`, { undo: true, reason: '', approverPin: pin }), `${COMP_LABEL[item.compKind ?? 'ikram']} geri alındı`)) && close()}
+            />
           ) : (
-            <SheetButton icon={<Gift className="size-[18px] text-[var(--admin-hue-rose)]" strokeWidth={1.75} />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
+            <>
+              <SheetButton icon={<Gift className="size-[18px] text-[var(--admin-hue-rose)]" strokeWidth={1.75} />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
+              <SheetButton icon={<Droplets className="size-[18px] text-[var(--admin-warning)]" strokeWidth={1.75} />} title="Zayi yaz" hint="Döküldü, yanlış hazırlandı; ciro dışı, zayi raporuna girer" onClick={() => setMode('zayi')} disabled={unpaid < 1} />
+            </>
           )}
           <SheetButton icon={<Percent className="size-[18px] text-primary" strokeWidth={1.75} />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
           {item.paidQty > 0 && <p className="px-1 text-xs text-muted">{item.paidQty} adedin ödemesi alındı; bu adetler değiştirilemez</p>}
@@ -293,7 +302,7 @@ function ItemSheet({
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={() => setMode(null)}>Geri</Button>
             <Button variant={mode === 'iptal' ? 'danger' : 'primary'} disabled={!reason.trim() && !(mode === 'indirim' && (discValue === '' || discValue === '0'))} onClick={submit}>
-              {mode === 'iptal' ? `${qty} adet iptal` : mode === 'ikram' ? `${qty} adet ikram` : 'Uygula'}
+              {mode === 'iptal' ? `${qty} adet iptal` : mode === 'ikram' ? `${qty} adet ikram` : mode === 'zayi' ? `${qty} adet zayi` : 'Uygula'}
             </Button>
           </div>
         </div>

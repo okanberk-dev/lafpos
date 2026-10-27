@@ -82,10 +82,11 @@ const norm = (s: string) => s.toLocaleLowerCase('tr-TR').replace(/\s+/g, ' ').tr
  * sonra aynı ad (Türkçe büyük-küçük harf duyarsız); boy seçeneklerde yazar
  */
 function matchLines(t: Tx | DB, payload: PlatformOrderPayload) {
-  // Tükenmiş ürün de eşleşir: kabulde "tükendi" diye durur, gizli satıra dönüp stok denetimini atlamaz
-  const products = t.select().from(schema.products).where(eq(schema.products.hidden, false)).all();
-  const byName = new Map(products.map((p) => [norm(p.name), p]));
-  const byId = new Map(products.map((p) => [p.id, p]));
+  // Tükenmiş ürün de eşleşir: kabulde "tükendi" diye durur, gizli satıra dönüp stok denetimini atlamaz. Ada göre
+  // yalnız menüdeki ürün; Ürün eşleme ile bağlanan ürün menüden gizlenmiş olsa da o ürün (patronun açık kararı)
+  const all = t.select().from(schema.products).all();
+  const byName = new Map(all.filter((p) => !p.hidden).map((p) => [norm(p.name), p]));
+  const byId = new Map(all.map((p) => [p.id, p]));
   const mapped = new Map(
     t
       .select({ externalId: schema.platformProducts.externalId, productId: schema.platformProducts.productId })
@@ -176,7 +177,9 @@ export { loadRow as getPlatformOrder };
 function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
   const order = row.orderId ? t.select({ no: schema.orders.no }).from(schema.orders).where(eq(schema.orders.id, row.orderId)).get() : null;
   const by = row.decidedBy ? t.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, row.decidedBy)).get() : null;
-  const expired = row.status === 'bekliyor' && row.expiresAt != null && row.expiresAt <= now;
+  // Platform kabul etmiş ama adisyon açılamamışsa süre dolmaz: sipariş platformda yaşıyor
+  const announced = row.status === 'bekliyor' && row.notifiedStatus === 'picked';
+  const expired = row.status === 'bekliyor' && !announced && row.expiresAt != null && row.expiresAt <= now;
   const pending = row.status === 'bekliyor' && !expired;
   const matched = pending ? matchLines(t, row.payload) : [];
   return {
@@ -192,6 +195,9 @@ function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
     unmatched: pending ? matched.filter((m) => !m.product).map((m) => m.line.name) : [],
     soldOut: pending ? matched.filter((m) => m.product && !m.product.active).map((m) => m.line.name) : [],
     payload: row.payload,
+    lastError: row.lastError,
+    announced,
+    cancelPending: row.status === 'kabul' && row.cancelPendingAt != null,
   };
 }
 
@@ -200,7 +206,7 @@ export function listPlatformOrders(t: Tx | DB, now = Date.now()): PlatformOrderD
   const rows = t
     .select()
     .from(schema.platformOrders)
-    .where(or(eq(schema.platformOrders.status, 'bekliyor'), gte(schema.platformOrders.receivedAt, now - 12 * 3600_000)))
+    .where(or(eq(schema.platformOrders.status, 'bekliyor'), isNotNull(schema.platformOrders.cancelPendingAt), gte(schema.platformOrders.receivedAt, now - 12 * 3600_000)))
     .orderBy(desc(schema.platformOrders.receivedAt))
     .limit(100)
     .all();
@@ -233,6 +239,8 @@ export function ingestPlatformOrder(t: Tx, fx: Effects, payload: PlatformOrderPa
     reason: null,
     lastError: null,
     notifiedStatus: null,
+    cancelPendingAt: null,
+    notifyParkedAt: null,
   };
   t.insert(schema.platformOrders).values(row).run();
   rememberPlatformProducts(t, payload, now);
@@ -251,7 +259,8 @@ export function expirePlatformOrders(t: Tx, fx: Effects, now = Date.now()): numb
   const stale = t
     .select({ id: schema.platformOrders.id })
     .from(schema.platformOrders)
-    .where(and(eq(schema.platformOrders.status, 'bekliyor'), isNotNull(schema.platformOrders.expiresAt), lt(schema.platformOrders.expiresAt, now)))
+    // Platforma kabulü gitmiş kayıt (adisyonu açılamamış) süre dolunca iptal sayılmaz: platformda yaşıyor
+    .where(and(eq(schema.platformOrders.status, 'bekliyor'), isNull(schema.platformOrders.notifiedStatus), isNotNull(schema.platformOrders.expiresAt), lt(schema.platformOrders.expiresAt, now)))
     .all();
   if (!stale.length) return 0;
   t.update(schema.platformOrders).set({ status: 'suresi_doldu', decidedAt: now }).where(inArray(schema.platformOrders.id, stale.map((s) => s.id))).run();
@@ -264,7 +273,7 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   const row = loadRow(t, id);
   const now = Date.now();
   if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
-  if (row.expiresAt != null && row.expiresAt <= now) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
+  if (row.notifiedStatus !== 'picked' && row.expiresAt != null && row.expiresAt <= now) throw conflict('Kabul süresi doldu; sipariş platformda iptal oldu', 'expired');
   const p = row.payload;
   const label = PLATFORM_LABEL[p.platform];
   const prep = prepMinutes ?? platformSettings()[p.platform].prepMinutes;
@@ -295,7 +304,24 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   );
   if (p.restaurantDiscount > 0) orders.setOrderDiscount(t, actor, fx, order.id, { type: 'amount', value: p.restaurantDiscount, reason: `${label} kampanyası` });
   t.update(schema.platformOrders).set({ status: 'kabul', orderId: order.id, decidedAt: now, decidedBy: user.id, reason: `${prep} dk`, notifiedStatus: opts.notifiedStatus ?? null, lastError: null }).where(eq(schema.platformOrders.id, id)).run();
-  const accepted = orders.recalc(t, order.id);
+  let accepted = orders.recalc(t, order.id);
+  // Kapıda tahsilat kasada ama kampanyanın bir kısmını platform karşılıyor: o pay platformun ödemesidir, şimdi
+  // platformun online ödeme türüyle yazılır; kasada müşterinin ödediği kalır (fazlası istenmesin)
+  if (!p.platformCollects && p.platformDiscount > 0) {
+    if (accepted.total - p.platformDiscount === p.customerTotal) {
+      orders.addPayment(t, actor, fx, order.id, { methodId: platformMethodId(t, p.platform), amount: p.platformDiscount, note: `${label} ${p.code} kampanya payı` });
+      accepted = orders.recalc(t, order.id);
+    } else {
+      fx.audit(t, {
+        userId: user.id,
+        action: 'platform.mismatch',
+        severity: 'alarm',
+        orderId: order.id,
+        amount: accepted.total - p.platformDiscount - p.customerTotal,
+        message: `${label} ${p.code}: adisyon ${tl(accepted.total)}, platform kampanyası ${tl(p.platformDiscount)}, müşteri ${tl(p.customerTotal)} ödeyecek. Platformun payı kendiliğinden yazılmadı; tahsilatı elle düzeltin`,
+      });
+    }
+  }
   fx.audit(t, {
     userId: user.id,
     action: 'platform.accept',
@@ -399,7 +425,7 @@ export function platformCancelled(t: Tx, user: AuthUser, fx: Effects, id: string
       orders.cancelOrder(t, actor, fx, o.id, why);
     }
   }
-  t.update(schema.platformOrders).set({ status: 'iptal', decidedAt: Date.now(), reason: why }).where(eq(schema.platformOrders.id, id)).run();
+  t.update(schema.platformOrders).set({ status: 'iptal', decidedAt: Date.now(), reason: why, cancelPendingAt: null, lastError: null }).where(eq(schema.platformOrders.id, id)).run();
   fx.audit(t, { userId: user.id, action: 'platform.cancel', severity: 'uyari', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why} (${row.payload.code}, ${tl(row.payload.customerTotal)})` });
   fx.emit({ topic: 'delivery', kind: 'platform.cancelled', orderId: row.orderId ?? undefined, byUserId: user.id });
 }

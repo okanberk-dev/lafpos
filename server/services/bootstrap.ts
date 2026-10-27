@@ -96,6 +96,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
         kind: x.kind,
         hourlyRate: x.hourlyRate,
         siteTableCode: x.siteTableCode,
+        qrCode: x.qrCode,
         sort: x.sort,
       })),
     stations: t

@@ -108,7 +108,7 @@ async function startServer() {
   runMigrations();
   // Kayıt önceki bir iş gününden kaldıysa demo yeni günle açılır: dünden açık gün yeni satışı durdururdu
   // (stale_day), kapanmış günün ertesinde de kasa boş açılırdı
-  const { getSyncState, setSyncState, upgradeRoleSets } = await import('../server/lib/settings');
+  const { getSyncState, setSyncState, upgradeRoleSets, upgradeStoredSettings } = await import('../server/lib/settings');
   const last = saved && db.select({ date: schema.businessDays.date }).from(schema.businessDays).orderBy(desc(schema.businessDays.date)).limit(1).get();
   if ((last && last.date < businessDate(Date.now())) || (saved && getSyncState<number>(VERSION_KEY) !== DEMO_DAY_VERSION)) {
     openDatabase();
@@ -116,6 +116,7 @@ async function startServer() {
   }
   const fresh = seedIfEmpty();
   upgradeRoleSets();
+  upgradeStoredSettings();
   const app = createApp();
   if (fresh) {
     await seedDemoDay((req) => app.fetch(req));

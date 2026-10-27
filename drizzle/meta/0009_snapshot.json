@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "73420169-1edc-43b9-be83-3a862f6be021",
+  "id": "96908a73-390c-4219-98c7-1b7375e85201",
   "prevId": "76785507-459a-4691-87a6-8dd5e1fc5919",
   "tables": {
     "audit_log": {
@@ -234,6 +234,13 @@
         },
         "reopened_at": {
           "name": "reopened_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "training_day": {
+          "name": "training_day",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
@@ -2092,6 +2099,13 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "response": {
+          "name": "response",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -2486,13 +2500,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "notified_status": {
-          "name": "notified_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -2532,88 +2539,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "decided_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "platform_products": {
-      "name": "platform_products",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "platform": {
-          "name": "platform",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "external_id": {
-          "name": "external_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "last_seen_at": {
-          "name": "last_seen_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "platform_products_ext_idx": {
-          "name": "platform_products_ext_idx",
-          "columns": [
-            "platform",
-            "external_id"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "platform_products_product_id_products_id_fk": {
-          "name": "platform_products_product_id_products_id_fk",
-          "tableFrom": "platform_products",
-          "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
           ],
           "columnsTo": [
             "id"

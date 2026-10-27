@@ -26,6 +26,7 @@ type Settings = Record<string, unknown> & {
   voidReasons: string[];
   compReasons: string[];
   odenmezReasons: string[];
+  zayiReasons: string[];
   discountReasons: string[];
   quickCash: number[];
   sizeLabels: { M: string; L: string };
@@ -101,7 +102,7 @@ export default function SettingsAdmin() {
         </div>
       )}
       <Card flush title="Servis modu" subtitle="Seçince hemen uygulanır; açılış ekranı, menü ve tezgâh satışı buna göre değişir">
-        <div role="radiogroup" aria-label="Servis modu" className="grid gap-2 p-4 sm:grid-cols-3">
+        <div role="radiogroup" aria-label="Servis modu" className="grid gap-2 p-4 sm:grid-cols-2 xl:grid-cols-4">
           {SERVICE_MODES.map((m) => {
             const on = m === mode;
             return (
@@ -178,15 +179,18 @@ export default function SettingsAdmin() {
           </div>
         </Card>
         <Card flush title="Nedenler">
-          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Field label="İptal">
               <Textarea value={lines(s.voidReasons)} onChange={(e) => set({ voidReasons: fromLines(e.target.value) })} className="min-h-36" />
             </Field>
             <Field label="İkram">
               <Textarea value={lines(s.compReasons)} onChange={(e) => set({ compReasons: fromLines(e.target.value) })} className="min-h-36" />
             </Field>
-            <Field label="Ödenmez" hint="Personel yemeği, zayi, patron hesabı">
+            <Field label="Ödenmez" hint="Personel yemeği, patron hesabı">
               <Textarea value={lines(s.odenmezReasons)} onChange={(e) => set({ odenmezReasons: fromLines(e.target.value) })} className="min-h-36" />
+            </Field>
+            <Field label="Zayi" hint="Döküldü, yanlış hazırlandı">
+              <Textarea value={lines(s.zayiReasons)} onChange={(e) => set({ zayiReasons: fromLines(e.target.value) })} className="min-h-36" />
             </Field>
             <Field label="İndirim">
               <Textarea value={lines(s.discountReasons)} onChange={(e) => set({ discountReasons: fromLines(e.target.value) })} className="min-h-36" />

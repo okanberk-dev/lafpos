@@ -18,6 +18,10 @@ export interface FakeTrendyol {
   statusFor: Record<string, number[]>;
   /** Beklenen Basic başlığı; tutmayan istek 401 */
   expectAuth: string;
+  /** Uç adına göre yanıttan önce bekleme (ms): yarış senaryoları */
+  delayFor: Record<string, number>;
+  /** Uç adına göre yanıttan hemen önce çalışan kanca (platform kabul etti, kasada bir şey değişti) */
+  before: Record<string, () => void>;
   count: (call: string) => number;
 }
 
@@ -35,6 +39,8 @@ export async function startFakeTrendyol(opts: { apiKey: string; apiSecret: strin
     calls: [],
     bodies: {},
     statusFor: {},
+    delayFor: {},
+    before: {},
     expectAuth: `Basic ${Buffer.from(`${opts.apiKey}:${opts.apiSecret}`).toString('base64')}`,
     count: (call) => site.calls.filter((c) => c === call).length,
   };
@@ -64,6 +70,9 @@ export async function startFakeTrendyol(opts: { apiKey: string; apiSecret: strin
       const [, id, action] = m;
       site.calls.push(`PUT ${id} ${action}`);
       (site.bodies[action] ??= []).push(raw ? JSON.parse(raw) : null);
+      const wait = site.delayFor[action!];
+      if (wait) await new Promise((r) => setTimeout(r, wait));
+      site.before[action!]?.();
       const forced = site.statusFor[action!]?.shift();
       if (forced && forced !== 200) return send(forced, { message: `forced ${forced}` });
       if (!site.packages.some((p) => String(p.id) === id)) return send(404, { message: 'package not found' });

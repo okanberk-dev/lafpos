@@ -10,4 +10,6 @@ CREATE TABLE `platform_products` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `platform_products_ext_idx` ON `platform_products` (`platform`,`external_id`);--> statement-breakpoint
-ALTER TABLE `platform_orders` ADD `notified_status` text;
+ALTER TABLE `platform_orders` ADD `notified_status` text;--> statement-breakpoint
+ALTER TABLE `platform_orders` ADD `cancel_pending_at` integer;--> statement-breakpoint
+ALTER TABLE `platform_orders` ADD `notify_parked_at` integer;
