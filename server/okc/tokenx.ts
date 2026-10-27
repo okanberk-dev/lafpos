@@ -238,7 +238,24 @@ export class TokenxClient {
     const res = await fetch(url, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: AbortSignal.timeout(15_000) }).catch((e: unknown) => {
       throw networkError(e, method !== 'GET');
     });
-    const json = (await res.json().catch(() => null)) as { status?: number | string; description?: string; result?: T } | null;
+    // Durum kodu olmayan 2xx ya da 5xx: yazma isteği Token'a ulaşmış ve işlenmiş olabilir (sepet cihazda olabilir)
+    const mayHaveArrived = method !== 'GET' && (res.ok || res.status >= 500);
+    // Gövde ayrı okunur: başlıklar geldikten sonra bağlantı koparsa ya da 15 sn dolarsa okuma düşer; bu kesin ret
+    // sayılmaz (inceleme, 27 Eki 2026)
+    let text: string;
+    try {
+      text = await res.text();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      throw new TokenxError(`Token'ın yanıtı okunamadı (HTTP ${res.status}): ${message}`, null, res.status, mayHaveArrived);
+    }
+    type Body = { status?: number | string; description?: string; result?: T } | null;
+    let json: Body = null;
+    try {
+      json = text ? (JSON.parse(text) as Body) : null;
+    } catch {
+      json = null;
+    }
     const code = statusCode(json?.status);
     if ((res.status === 401 || code === '0002') && opts.retryAuth !== false) {
       this.token = null;
@@ -247,8 +264,8 @@ export class TokenxClient {
     const ok = res.ok && (json?.status === 0 || json?.status === 201 || json?.status === '0');
     if (!ok) {
       const known = code ? STATUS_TEXT[code] : undefined;
-      // Durum kodu olmayan 5xx (ağ geçidi zaman aşımı gibi): istek Token'a ulaşmış ve işlenmiş olabilir
-      throw new TokenxError(known ?? json?.description ?? `Token isteği başarısız (HTTP ${res.status})`, code, res.status, !code && res.status >= 500 && method !== 'GET');
+      // Token'ın durum koduyla verdiği ret ve 4xx kesindir; kodsuz 2xx (JSON olmayan gövde) ya da 5xx belirsiz
+      throw new TokenxError(known ?? json?.description ?? `Token isteği başarısız (HTTP ${res.status})`, code, res.status, !code && mayHaveArrived);
     }
     return json?.result as T;
   }

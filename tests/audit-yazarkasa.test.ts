@@ -12,7 +12,7 @@ const MUDUR = PINS.mudur;
 
 let h: Harness;
 /** Sahte Token: anlık sepet isteğinin davranışı ve sepet sorgusunun cevabı */
-let instant = 'ok' as 'ok' | 'timeout' | 'reject' | ((basket: TokenBasket) => Promise<void>);
+let instant = 'ok' as 'ok' | 'timeout' | 'reject' | 'truncated' | 'garbled' | ((basket: TokenBasket) => Promise<void>);
 const details = new Map<string, unknown>();
 const calls: string[] = [];
 
@@ -35,6 +35,17 @@ beforeAll(async () => {
         return json(200, { status: 1100, description: 'open basket' });
       }
       if (instant === 'timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      if (instant === 'truncated') {
+        // Token sepeti aldı, 200 başlıkları geldi; gövde okunurken bağlantı koptu (ya da 15 sn zaman aşımı doldu)
+        const stream = new ReadableStream({
+          start(c) {
+            c.enqueue(new TextEncoder().encode('{"status":0,'));
+            c.error(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+          },
+        });
+        return new Response(stream, { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (instant === 'garbled') return new Response('<html>Gateway</html>', { status: 200, headers: { 'content-type': 'text/html' } });
       if (typeof instant === 'function') {
         await instant(b);
         throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
@@ -375,6 +386,40 @@ describe('yazarkasa denetimi', () => {
     expect((await audits()).filter((a) => a.orderId === o.id && a.action === 'okc.cancelled')).toHaveLength(1);
     expect((await receipts(o.id)).map((x) => x.status)).toEqual(['silindi', 'iptal']);
     await h.ok('kasa', 'POST', `/orders/${o.id}/cancel`, { reason: 'Vazgeçti', approverPin: MUDUR });
+  });
+
+  // ─── İkinci tur (bağımsız inceleme, 27 Eki 2026) ───────────────────────────
+
+  it('200 yanıtının gövdesi okunamazsa (bağlantı koptu, zaman aşımı) sepet bekleyen kalır; adisyon ikinci kez tahsil edilmez', async () => {
+    await provider('tokenx');
+    const o = await order([{ name: 'Türk kahvesi' }]);
+    instant = 'truncated';
+    const res = await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
+    instant = 'ok';
+    expect(res.status).toBe(502);
+    expect(res.json.code).toBe('okc_unknown');
+    const [rec] = await receipts(o.id);
+    expect(rec.status).toBe('gonderildi');
+    const pay = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total });
+    expect(pay.json.code).toBe('okc_pending');
+    // Müşteri cihazda kartla ödedi: sonuç işlenir, adisyon kapanır
+    await webhook({ basketID: rec.id, status: 0, zNo: 6, receiptNo: 80, paymentItems: [{ type: 3, amount: rec.amount }] });
+    expect(await getOrder(o.id)).toMatchObject({ status: 'kapali', paid: o.total });
+    expect((await receipts(o.id))[0].status).toBe('tamamlandi');
+
+    // 2xx ama JSON olmayan gövde (ağ geçidi sayfası): istek kabul edilmiş olabilir, kesin ret sayılmaz
+    const { TokenxClient, TokenxError } = await import('../server/okc/tokenx');
+    const c = new TokenxClient({ authUrl: BASE, basketUrl: BASE, settingsUrl: BASE, clientId: 'id', clientSecret: 'secret', terminalId: 'T1', branchId: '', appResource: '' });
+    instant = 'garbled';
+    const err = await c.sendInstantBasket({ basketID: 'garbled-1', items: [] }).catch((e: unknown) => e);
+    instant = 'ok';
+    expect(err).toBeInstanceOf(TokenxError);
+    expect(err).toMatchObject({ uncertain: true });
+    // Token'ın kodla verdiği ret kesin kalır
+    instant = 'reject';
+    expect(await c.sendInstantBasket({ basketID: 'reject-1', items: [] }).catch((e: unknown) => e)).toMatchObject({ code: '1100', uncertain: false });
+    instant = 'ok';
+    await provider('simulator');
   });
 
   // Gün kapanır: bundan sonra test yok
