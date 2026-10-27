@@ -93,8 +93,9 @@ export function ProductPanel({
     if (current === FAVORITES) return favorites;
     return visible.filter((p) => p.categoryId === current);
   }, [q, current, visible, favorites]);
-  // Listede görselli ürün varsa bütün kartlar görsel alanıyla çizilir: satırlar aynı boyda kalır
-  const withImages = boot.settings.productImages && list.some((p) => p.image);
+  // Listede görselli ürün varsa bütün kartlar görsel alanıyla çizilir: satırlar aynı boyda kalır. Görseller siteden
+  // gelir: site bağlantısı kurulmamışken (LAFFOGATO_URL) sunucu onları indirmez, kartlar görselsiz çizilir
+  const withImages = boot.settings.productImages && !!boot.integrations.laffogatoUrl && list.some((p) => p.image);
 
   const categoryItems = [
     ...(showFavorites ? [{ id: FAVORITES, name: 'Sık', color: null as string | null, count: favorites.length }] : []),

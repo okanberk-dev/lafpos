@@ -27,8 +27,9 @@ Verisi ayrı iki sistem (ürünü bir yerde yükleyip kasaya elle aktarmak) hiç
    Hangi yüzü kimin gördüğünü **rol ve yetki** belirler (Yönetim › Roller ve yetkiler); kasiyer yönetimi
    görmez, adresle girse de sunucu reddeder.
 2. **Ürünün tek ana kaydı laffogato'nun yönetim panelidir.** Site, uygulama ve kasa aynı menüyü okur; ad,
-   fiyat, boy, KDV, fotoğraf orada değişir. LafPOS menüyü kendisi çeker (5 dakikada bir, ETag ile),
-   değişikliği uygulamadan önce gösterir. Kasaya özgü alanları (istasyon, kısa ad, porsiyon, seçenek grubu,
+   fiyat, boy, KDV, fotoğraf orada değişir. LafPOS menüyü kendisi çeker (gün açıkken 15 dakikada bir, ETag ile;
+   `.env`'de `LAFFOGATO_URL` yoksa hiç). Otomatik senkron değişikliği doğrudan uygular ve denetim kaydına yazar;
+   yalnız elle "Siteyle eşitle" uygulamadan önce önizler. Kasaya özgü alanları (istasyon, kısa ad, porsiyon, seçenek grubu,
    sık kullanılan) LafPOS tutar. Yönetim › Ürünler'deki **"Sitede ürün ekle"** laffogato panelinin yeni
    ürün sayfasını açar.
 3. **Yalnız kafede satılan hizmetler** (karaoke odası saatlik ücreti, etkinlik ücreti) LafPOS'ta

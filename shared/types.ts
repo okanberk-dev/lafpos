@@ -93,6 +93,8 @@ export interface ProductDTO {
   color: string | null;
   image: string | null;
   active: boolean;
+  /** Tükendi'yi kim kapattı: 'site' ise kasiyer açamaz (Sitede satışta değil), yalnız menü yetkisi olan */
+  soldOutBy: 'lafpos' | 'site' | null;
   hidden: boolean;
   favorite: boolean;
   sort: number;
@@ -214,7 +216,10 @@ export interface BootstrapDTO {
     okc: { provider: 'kapali' | 'tokenx' | 'simulator'; mode: 'anlik' | 'liste' };
     laffogatoPanel: boolean;
     lafmaliyetPush: boolean;
+    /** Site adresi; boşsa site bağlantısı kurulmadı (LAFFOGATO_URL yok) */
     laffogatoUrl: string;
+    /** Yerel damga kartı açık mı (varsayılan kapalı; site bağlantısı kuruluyken hiç açılmaz) */
+    localStamps: boolean;
   };
   serverTime: number;
 }
@@ -318,7 +323,8 @@ export interface OrderDTO {
   source: 'pos' | 'laffogato';
   extId: string | null;
   extNo: number | null;
-  extStage: 'new' | 'preparing' | 'ready' | 'done' | null;
+  /** done: LafPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı */
+  extStage: 'new' | 'preparing' | 'ready' | 'done' | 'gone' | null;
   extFulfillment: 'table' | 'pickup' | 'delivery' | null;
   extLabel: string | null;
   extPaid: boolean;

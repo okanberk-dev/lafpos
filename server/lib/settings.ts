@@ -27,7 +27,9 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   roomBillingStepMinutes: 15,
   roomMinimumMinutes: 60,
   stampGoal: 6,
-  stampCategoryKeys: ['matcha', 'espresso', 'ice-coffee', 'cold', 'hot', 'frappe', 'smoothie', 'frozen', 'ice-tea'],
+  // Yerel damga kartı varsayılan kapalı: tek sadakat programı uygulamadaki damga (laffogato hukuk metni tek program
+  // tanımlar). Kategori anahtarı yazılırsa açılır; site bağlantısı kuruluyken hiç açılmaz (sync/laffogato-link.ts)
+  stampCategoryKeys: [],
   demoMode: false,
   // Var olan kurulumlarda hiçbir şey değişmesin: patron Yönetim › Ayarlar'dan seçer
   serviceMode: DEFAULT_SERVICE_MODE,

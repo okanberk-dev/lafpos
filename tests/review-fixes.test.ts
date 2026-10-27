@@ -150,6 +150,8 @@ describe('inceleme düzeltmeleri', () => {
   });
 
   it('yeniden açma ve ödeme iptali müşterinin ziyaret, harcama ve damgasını geri alır', async () => {
+    // Yerel damga kartı varsayılan kapalı (L3): bu kurulumda site bağlantısı yok, kategoriyle açılır
+    await h.ok('patron', 'PUT', '/admin/settings', { stampCategoryKeys: ['espresso'] });
     const cust = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Damga Deneme' });
     const o = await newOrder([{ name: 'Latte', size: 'M', qty: 2 }], { customerId: cust.id });
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total });

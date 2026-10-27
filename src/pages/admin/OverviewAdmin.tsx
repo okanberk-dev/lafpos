@@ -14,8 +14,8 @@ import { hourBars } from '@/lib/period';
 import type { PatronData } from '@/pages/patron/PatronPage';
 
 interface SyncStatus {
-  menu: { auto: boolean; state: { lastSuccessAt?: number; lastCheckAt?: number; lastError?: string | null; lastErrorAt?: number } | null };
-  online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null };
+  menu: { linked: boolean; auto: boolean; state: { lastSuccessAt?: number; lastCheckAt?: number; lastError?: string | null; lastErrorAt?: number } | null };
+  online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null; soldOutPush: { pending: number; rejected: number; lastError: string | null } };
   lafmaliyet: { configured: boolean; pending: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null };
   okc: { provider: 'kapali' | 'simulator' | 'tokenx'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
 }
@@ -98,6 +98,8 @@ export default function OverviewAdmin() {
   for (const a of d?.anomalies ?? []) attention.push({ key: `an-${a.title}`, tone: a.level === 'alarm' ? 'danger' : 'warning', title: a.title, detail: a.detail });
   for (const a of (d?.alerts ?? []).slice(0, 6)) attention.push({ key: `al-${a.id}`, tone: a.severity === 'alarm' ? 'danger' : 'warning', title: a.message, detail: fmtTime(a.at) });
   if (s?.lafmaliyet.pending) attention.push({ key: 'lm', tone: 'danger', title: `lafmaliyet'e gönderilemeyen ${s.lafmaliyet.pending} gün`, detail: s.lafmaliyet.lastError ?? s.lafmaliyet.pendingDays.join(', ') });
+  if (s?.online.soldOutPush.pending) attention.push({ key: 'site-tukendi', tone: 'warning', title: `Siteye bildirilemeyen Satışta bilgisi: ${s.online.soldOutPush.pending} ürün`, detail: s.online.soldOutPush.lastError ?? 'Yeniden denenecek' });
+  if (s?.online.soldOutPush.rejected) attention.push({ key: 'site-red', tone: 'warning', title: `Sitenin reddettiği Satışta bilgisi: ${s.online.soldOutPush.rejected} ürün`, detail: 'Yeniden denenmeyecek; ürün LafPOS\'ta açılınca ya da site aynı duruma gelince kalkar' });
   if (s?.okc.lastError) attention.push({ key: 'okc', tone: 'warning', title: 'Yazarkasa hatası', detail: `${s.okc.lastError.message} · ${fmtTime(s.okc.lastError.at)}` });
   if (d && !d.dayOpen) attention.push({ key: 'gun', tone: 'neutral', title: 'Gün kapalı', detail: 'Satış için kasadan gün açılmalı' });
 
@@ -111,17 +113,17 @@ export default function OverviewAdmin() {
           key: 'menu',
           icon: <Globe className="size-4" />,
           label: 'Site menüsü',
-          tone: s.menu.state?.lastError ? 'danger' : s.menu.state?.lastSuccessAt ? 'success' : 'neutral',
-          state: s.menu.state?.lastError ? 'Hata' : s.menu.auto ? 'Otomatik' : 'Elle',
-          detail: s.menu.state?.lastError ?? `Son eşitleme ${ago(s.menu.state?.lastSuccessAt)}`,
+          tone: !s.menu.linked ? 'neutral' : s.menu.state?.lastError ? 'danger' : s.menu.state?.lastSuccessAt ? 'success' : 'neutral',
+          state: !s.menu.linked ? 'Kurulmadı' : s.menu.state?.lastError ? 'Hata' : s.menu.auto ? 'Otomatik' : 'Elle',
+          detail: !s.menu.linked ? 'Siteye istek gitmiyor' : (s.menu.state?.lastError ?? `Son eşitleme ${ago(s.menu.state?.lastSuccessAt)}`),
         },
         {
           key: 'online',
           icon: <ShoppingBag className="size-4" />,
           label: 'Online siparişler',
           tone: !s.online.configured ? 'neutral' : s.online.state?.lastError ? 'danger' : 'success',
-          state: !s.online.configured ? 'Anahtar yok' : s.online.enabled ? 'Açık' : 'Kapalı',
-          detail: s.online.state?.lastError ?? `Son kontrol ${ago(s.online.state?.lastSuccessAt)} · açık ${s.online.open}`,
+          state: !s.menu.linked ? 'Kurulmadı' : !s.online.configured ? 'Anahtar yok' : s.online.enabled ? 'Açık' : 'Kapalı',
+          detail: !s.menu.linked ? 'Site bağlantısı kurulmadı' : (s.online.state?.lastError ?? `Son kontrol ${ago(s.online.state?.lastSuccessAt)} · açık ${s.online.open}`),
         },
         {
           key: 'lafmaliyet',

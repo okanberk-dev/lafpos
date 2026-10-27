@@ -11,6 +11,8 @@ import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
+import { localStampsOn } from '../sync/laffogato-link';
+import { enqueueSiteAvailability, enqueueSiteSoldOut } from '../sync/site-outbox';
 import { calcFor, orderItems, orderPayments, orderToDTO } from './dto';
 import {
   defaultsOf,
@@ -353,10 +355,14 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
       if (p.portionsLeft < qty) throw conflict(`${p.name}: son ${p.portionsLeft} porsiyon kaldı`, 'portions');
       const left = p.portionsLeft - qty;
       t.update(schema.products)
-        .set({ portionsLeft: left, active: left > 0, updatedAt: now })
+        .set({ portionsLeft: left, active: left > 0, ...(left > 0 ? {} : { soldOutBy: 'lafpos' as const }), updatedAt: now })
         .where(eq(schema.products.id, p.id))
         .run();
-      if (left === 0) soldOut.push(p.id);
+      if (left === 0) {
+        soldOut.push(p.id);
+        // Siteye bağlı ürün sitede ve uygulamada da tükensin: yazım kalemle aynı işlemde giden kutusuna girer
+        enqueueSiteSoldOut(t, p);
+      }
     }
 
     const stationId = stationFor(p, sp.category);
@@ -407,20 +413,28 @@ const notStarted = (it: ItemRow) => it.status === 'yeni' && !it.startedAt;
 
 /**
  * Hazırlanmaya başlanmamış kalemin iptalinde porsiyon geri döner: ürün hâlâ satılabilir (hazırlanmış kalem fire
- * sayılır, dönmez). Porsiyonu sıfırdan dönen ürün yeniden satışa açılır ve site de güncellenir.
+ * sayılır, dönmez). Porsiyonu sıfırdan dönen ürün yeniden satışa açılır ve site de güncellenir: yazım iptalle aynı
+ * işlemde giden kutusuna girer (bekleyen Tükendi'nin yerini alır), olay dinleyicisi hemen gönderir.
  */
 function releasePortions(t: Tx, fx: Effects, userId: string, lines: { productId: string | null; qty: number }[]) {
   const now = Date.now();
   const reopened = new Set<string>();
   for (const l of lines) {
     if (!l.productId) continue;
-    const p = t.select({ portionsLeft: schema.products.portionsLeft }).from(schema.products).where(eq(schema.products.id, l.productId)).get();
+    const p = t
+      .select({ portionsLeft: schema.products.portionsLeft, extSource: schema.products.extSource, extId: schema.products.extId })
+      .from(schema.products)
+      .where(eq(schema.products.id, l.productId))
+      .get();
     if (p?.portionsLeft == null) continue;
     t.update(schema.products)
-      .set({ portionsLeft: p.portionsLeft + l.qty, ...(p.portionsLeft === 0 ? { active: true } : {}), updatedAt: now })
+      .set({ portionsLeft: p.portionsLeft + l.qty, ...(p.portionsLeft === 0 ? { active: true, soldOutBy: null } : {}), updatedAt: now })
       .where(eq(schema.products.id, l.productId))
       .run();
-    if (p.portionsLeft === 0) reopened.add(l.productId);
+    if (p.portionsLeft === 0) {
+      reopened.add(l.productId);
+      enqueueSiteAvailability(t, p, true);
+    }
   }
   if (reopened.size) {
     fx.emit({ topic: 'menu', kind: 'product.available', byUserId: userId });
@@ -1102,10 +1116,10 @@ export function mergeSelection(list: { itemId: string; qty: number }[]): { itemI
   return [...merged].filter(([, qty]) => qty > 0).map(([itemId, qty]) => ({ itemId, qty }));
 }
 
-/** Adisyonun damga sayılan adedi (ayarlardaki damga kategorileri, iptal ve ikram hariç) */
+/** Adisyonun damga sayılan adedi (ayarlardaki damga kategorileri, iptal ve ikram hariç); damga kartı kapalıyken 0 */
 function stampQtyOf(t: Tx, orderId: string): number {
   const settings = getSettings();
-  if (!settings.stampCategoryKeys.length) return 0;
+  if (!localStampsOn()) return 0;
   const items = orderItems(t, orderId).filter((i) => !i.voided && !i.complimentary);
   const productIds = [...new Set(items.map((i) => i.productId).filter((x): x is string => !!x))];
   if (!productIds.length) return 0;

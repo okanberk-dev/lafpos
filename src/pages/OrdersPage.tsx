@@ -89,7 +89,9 @@ export default function OrdersPage() {
       />
       {tab === 'online' && !boot.integrations.laffogatoPanel && (
         <div className="mb-4 rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted">
-          Site bağlantı anahtarı (LAFFOGATO_SYNC_SECRET) tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md
+          {boot.integrations.laffogatoUrl
+            ? 'Site bağlantı anahtarı (LAFFOGATO_SYNC_SECRET) tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'
+            : 'Site bağlantısı kurulmadığı için (LAFFOGATO_URL) uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'}
         </div>
       )}
       {rows.length === 0 ? (
@@ -124,6 +126,7 @@ export default function OrdersPage() {
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {o.extPaid && <Badge tone="pink">Sitede ödendi</Badge>}
+                  {o.extStage === 'gone' && <Badge>Siteden kalktı</Badge>}
                   {pendingKitchen > 0 && <Badge tone="warn">{pendingKitchen} hazırlanıyor</Badge>}
                   {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
                   {o.payments.length > 0 && <Badge>{[...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))].join(', ')}</Badge>}
