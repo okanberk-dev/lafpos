@@ -148,6 +148,13 @@ posRoutes.post('/orders/:id/items/:itemId/comp', async (c) => {
   return c.json(dto(c, c.req.param('id')));
 });
 
+posRoutes.post('/orders/:id/comp', async (c) => {
+  const input = await body(c, z.object({ kind: z.enum(['ikram', 'odenmez']), reason, ...approver }));
+  const actor = actorFrom(c, input.approverPin);
+  write((t, fx) => orders.compOrder(t, actor, fx, c.req.param('id'), { kind: input.kind, reason: input.reason }));
+  return c.json(dto(c, c.req.param('id')));
+});
+
 const discountShape = { type: z.enum(['percent', 'amount']), value: z.number().min(0).max(1_000_000_000), reason, ...approver };
 
 posRoutes.post('/orders/:id/items/:itemId/discount', async (c) => {

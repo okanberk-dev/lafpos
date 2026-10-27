@@ -17,6 +17,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   productImages: true,
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
+  odenmezReasons: ['Personel yemeği', 'Patron / ortak', 'Zayi', 'Müşteri şikâyeti', 'Deneme'],
   discountReasons: ['Öğrenci', 'Personel', 'Müdavim', 'Kampanya', 'Şikâyet telafisi'],
   quickCash: [10000, 20000, 50000, 100000, 200000],
   sizeLabels: { M: 'Orta', L: 'Büyük' },

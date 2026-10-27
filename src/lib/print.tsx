@@ -132,7 +132,8 @@ export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO;
         <Row key={k.rate} l={`KDV %${k.rate} matrah ${tlPlain(k.base)}`} r={tlPlain(k.kdv)} />
       ))}
       <Hr />
-      <Row l="İkram" r={tlPlain(s.complimentary)} />
+      <Row l="İkram" r={tlPlain(s.complimentary - (s.odenmez ?? 0))} />
+      {(s.odenmez ?? 0) > 0 && <Row l="Ödenmez" r={tlPlain(s.odenmez ?? 0)} />}
       <Row l={`İptal (${s.voidAfterSendCount} hazırlandıktan sonra)`} r={tlPlain(s.voided)} />
       <Hr />
       <Row l="Açılış nakiti" r={tlPlain(s.openingCash)} />

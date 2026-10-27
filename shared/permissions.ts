@@ -23,6 +23,7 @@ export const PERMISSIONS = {
   'siparis.al': 'Masa açma, ürün ekleme, mutfağa gönderme',
   'siparis.iptal': 'Gönderilmiş kalemi iptal etme',
   'siparis.ikram': 'İkram etme',
+  'siparis.odenmez': 'Adisyonu ödenmez kapatma (personel yemeği, zayi, patron hesabı)',
   'siparis.indirim': 'İndirim uygulama',
   'siparis.fiyat': 'Fiyatı elle değiştirme',
   'masa.islem': 'Masa taşıma, birleştirme, bölme',
@@ -75,7 +76,7 @@ export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
  * Her yetki tam bir grupta (tests/permissions.test.ts).
  */
 export const PERMISSION_GROUPS: { key: string; label: string; permissions: Permission[] }[] = [
-  { key: 'satis', label: 'Satış işlemleri', permissions: ['siparis.al', 'siparis.iptal', 'siparis.ikram', 'siparis.indirim', 'siparis.fiyat', 'masa.islem', 'paket.yonet', 'rezervasyon.yonet'] },
+  { key: 'satis', label: 'Satış işlemleri', permissions: ['siparis.al', 'siparis.iptal', 'siparis.ikram', 'siparis.odenmez', 'siparis.indirim', 'siparis.fiyat', 'masa.islem', 'paket.yonet', 'rezervasyon.yonet'] },
   { key: 'odeme', label: 'Ödeme ve kasa', permissions: ['odeme.al', 'odeme.iade', 'kasa.gun', 'kasa.rakam', 'kasa.hareket', 'cari.yonet'] },
   { key: 'bar', label: 'Bar ve mutfak', permissions: ['mutfak.ekran', 'urun.tukendi'] },
   { key: 'rapor', label: 'Raporlar', permissions: ['rapor.gor', 'rapor.maliyet', 'patron.panel'] },

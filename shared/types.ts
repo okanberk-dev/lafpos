@@ -177,6 +177,8 @@ export interface PublicSettings {
   productImages: boolean;
   voidReasons: string[];
   compReasons: string[];
+  /** Ödenmez kapanış gerekçeleri (adisyonun tamamı ciro dışı) */
+  odenmezReasons: string[];
   discountReasons: string[];
   quickCash: number[];
   sizeLabels: { M: string; L: string };
@@ -233,6 +235,8 @@ export interface OrderItemDTO {
   happyHour: boolean;
   complimentary: boolean;
   compReason: string | null;
+  /** İkramın türü; ikram değilse null (eski ikramlar 'ikram') */
+  compKind: CompKind | null;
   voided: boolean;
   voidReason: string | null;
   voidAfterSend: boolean;
@@ -397,6 +401,12 @@ export interface KitchenTicket {
 }
 
 /** lafmaliyet Kasa raporundaki ödeme alanı */
+/**
+ * Ciro dışı kapanan kalemin türü: müşteriye ikram ya da ödenmez (personel yemeği, zayi, patron hesabı). İkisi de
+ * ödenmez, cirodan düşer; raporda ve Z'de ayrı görünür.
+ */
+export type CompKind = 'ikram' | 'odenmez';
+
 export type ZField = 'cash' | 'card' | 'meal_card' | 'online' | 'other';
 
 /** Gün sonu (Z) ya da ara rapor (X) özeti. Tutarlar kuruş. */
@@ -406,7 +416,10 @@ export interface ZSummary {
   guests: number;
   gross: number;
   discounts: number;
+  /** Ciro dışı kalemler (ikram ve ödenmez birlikte; lafmaliyet'e off_revenue) */
   complimentary: number;
+  /** Ciro dışının ödenmez kısmı (personel yemeği, zayi, patron hesabı); eski Z'lerde yok */
+  odenmez?: number;
   voided: number;
   voidAfterSendCount: number;
   service: number;
