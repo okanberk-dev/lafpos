@@ -182,5 +182,53 @@ describe('ödeme', () => {
 
     // İstek kimliği olmayan eski istemci eskisi gibi çalışır; kimlik biçimi denetlenir
     expect((await h.call('kasa', 'POST', `/orders/${p.id}/payments`, { ...one, requestId: 'kısa' })).status).toBe(422);
+    const { requestId: _, ...legacy } = one;
+    expect((await h.ok<PayResult>('kasa', 'POST', `/orders/${p.id}/payments`, legacy)).closed).toBe(true);
+  });
+
+  it('money-14: kalem bazlı ödemede ekrandaki tutar sunucununkiyle tutmazsa ödeme yazılmaz; kart terminaline girilen tutar kayıtla ayrışmaz', async () => {
+    let o = await counterOrder('kasa', [{ name: 'Türk kahvesi', qty: 2 }]);
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 50, reason: 'Personel', approverPin: MUDUR });
+    const item = o.items[0]!;
+    // Kasiyerin ekranında bir kahve 70 ₺ (indirimli) ve terminale bu girildi; bu sırada başka cihazda indirim kalkar
+    expect(o.totals.lineNet[item.id]).toBe(14000);
+    await h.ok('mudur', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 0, remove: true });
+    const stale = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Kredi kartı').id, amount: 7000, items: [{ itemId: item.id, qty: 1 }] });
+    expect(stale.status).toBe(409);
+    expect(stale.json.code).toBe('items_changed');
+    const after = await getOrder(o.id);
+    expect(after.payments).toHaveLength(0);
+    expect(after.items[0]).toMatchObject({ paidQty: 0 });
+
+    // Yenilenen ekranın tutarıyla alınır
+    const paid = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Kredi kartı').id, amount: 14000, items: [{ itemId: item.id, qty: 1 }] });
+    expect(paid).toMatchObject({ amount: 14000, closed: false });
+  });
+
+  it('input-68: ikram ya da iptal kalemi kalem bazlı ödemede ödenmiş işaretlenmez; ikramı geri alınan kalem kalemle ödenir', async () => {
+    let o = await counterOrder('kasa', [{ name: 'Türk kahvesi' }, { name: 'Latte', size: 'M' }, { name: 'Türk kahvesi' }, { name: 'Türk kahvesi' }]);
+    const [comped, latte, voided] = o.items;
+    o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${comped!.id}/comp`, { reason: 'Müdür ikramı' });
+    o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${voided!.id}/void`, { reason: 'Yanlış giriş' });
+    const latteNet = o.totals.lineNet[latte!.id]!;
+    const card = method('Kredi kartı').id;
+
+    // İkram kalemi ücretli kalemle birlikte seçilir: ücretsiz kalem ödenmiş işaretlenmez, ödeme yazılmaz
+    for (const free of [comped!, voided!]) {
+      const r = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount: latteNet, items: [{ itemId: free.id, qty: 1 }, { itemId: latte!.id, qty: 1 }] });
+      expect(r.status).toBe(409);
+      expect(r.json.code).toBe('item_free');
+    }
+    let after = await getOrder(o.id);
+    expect(after.payments).toHaveLength(0);
+    expect(after.items.every((i) => i.paidQty === 0)).toBe(true);
+
+    // Latte'yi öder, kahvenin ikramı geri alınır: kahve borçludur ve kalemle ödenir
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount: latteNet, items: [{ itemId: latte!.id, qty: 1 }] });
+    after = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${comped!.id}/comp`, { undo: true, reason: '' });
+    expect(after.total - after.paid).toBe(28000);
+    expect(after.items.find((i) => i.id === comped!.id)).toMatchObject({ complimentary: false, paidQty: 0 });
+    const paid = await h.ok<PayResult>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: card, amount: 14000, items: [{ itemId: comped!.id, qty: 1 }] });
+    expect(paid.order.items.find((i) => i.id === comped!.id)).toMatchObject({ paidQty: 1 });
   });
 });

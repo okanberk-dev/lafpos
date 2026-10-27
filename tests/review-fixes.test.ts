@@ -138,7 +138,7 @@ describe('inceleme düzeltmeleri', () => {
     const tk = o.items.find((i) => i.name === 'Türk kahvesi')!;
     const r = await h.ok<{ order: OrderDTO }>('kasa', 'POST', `/orders/${o.id}/payments`, {
       methodId: method('Kredi kartı').id,
-      amount: 0,
+      amount: o.totals.lineNet[tk.id],
       items: [
         { itemId: tk.id, qty: 1 },
         { itemId: tk.id, qty: 1 },

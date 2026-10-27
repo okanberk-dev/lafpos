@@ -78,14 +78,24 @@ export function PaymentModal({
   }, [open]);
 
   const unpaidItems = order.items.filter((i) => !i.voided && !i.complimentary && i.qty - i.paidQty > 0 && (order.totals.lineNet[i.id] ?? 0) > 0);
+  // Seçim yalnız ödenebilir kalemlerden gider: başka cihazda ikram ya da iptal edilen kalem seçimde kalmasın
+  const picked = useMemo(
+    () =>
+      Object.entries(selection)
+        .filter(([id, q]) => q > 0 && unpaidItems.some((i) => i.id === id))
+        .map(([itemId, qty]) => ({ itemId, qty })),
+    // unpaidItems order'dan türer
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [order, selection],
+  );
   const itemsAmount = useMemo(
     () =>
       amountForItems(
         order.totals,
         order.items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty })),
-        Object.entries(selection).map(([lineId, qty]) => ({ lineId, qty })),
+        picked.map((s) => ({ lineId: s.itemId, qty: s.qty })),
       ),
-    [order, selection],
+    [order, picked],
   );
 
   // Paylar: ödenenler ödemelerdeki pay numarasından, ödenmeyenler sunucunun hesabından (split.shares)
@@ -123,7 +133,7 @@ export function PaymentModal({
     if (!method || !valid) return;
     setBusy(true);
     const sharing = mode === 'paylas' && !!split;
-    const items = mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null;
+    const items = mode === 'kalem' ? picked : null;
     // Aynı girdilerle yeniden basılan "Öde" aynı denemedir (yanıtı kaybolan istek ikinci kez yazılmaz)
     const key = JSON.stringify([mode, method.id, mode === 'tutar' ? amountText : null, items, tipText]);
     if (attempt.current?.key !== key) attempt.current = { key, id: newRequestId() };
@@ -355,7 +365,7 @@ export function PaymentModal({
             {splitBlocks ? 'Hesap bölünmüş: payları Paylaş\'tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
           </Button>
 
-          <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? Object.entries(selection).filter(([, q]) => q > 0).map(([itemId, qty]) => ({ itemId, qty })) : null} onCompleted={(closed) => onDone(closed)} />
+          <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />
 
           {order.payments.length > 0 && (
             <div>

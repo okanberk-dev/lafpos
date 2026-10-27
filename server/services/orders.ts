@@ -945,15 +945,28 @@ export function addPayment(
     share = { no, of: o.splitPeople };
   }
   if (wanted.length) {
+    for (const s of wanted) {
+      const it = items.find((i) => i.id === s.itemId);
+      if (!it) throw notFound('Kalem');
+      // İptal, ikram ya da tamamen indirimli kalem ödemeye seçilmez: ücretsizken ödenmiş işaretlenirse ikramı geri
+      // alınınca borçlu olur ama ne kalemle ödenir ne iptal edilir (denetim, 26 Eki 2026)
+      if (it.voided || it.complimentary || (totals.lineNet[it.id] ?? 0) <= 0) {
+        throw conflict(`${it.name} ücretsiz; ödemeye seçilmez. Ekran yenilendi, yeniden seçin`, 'item_free');
+      }
+    }
     const lines = items.map((i) => ({ id: i.id, qty: i.qty, paidQty: i.paidQty }));
     const sel = wanted.map((s) => ({ lineId: s.itemId, qty: s.qty }));
     const expected = amountForItems(totals, lines, sel);
     if (expected <= 0) throw bad('Seçilen kalemler ödenmiş ya da ücretsiz');
     amount = Math.min(expected, remaining);
+    // Kasiyerin ekranda gördüğü ve kart terminaline girdiği tutar sunucununkiyle aynı olmalı (pay ödemesindeki gibi):
+    // başka cihazda indirim kalktıysa ya da kalem eklenip indirim yeniden dağıldıysa başka tutar sessizce yazılmasın
+    if (Math.trunc(input.amount) !== amount) {
+      throw conflict(`Seçilen kalemlerin tutarı değişti: ${tl(amount)}. Ekran yenilendi, yeniden alın`, 'items_changed');
+    }
     selection = [];
     for (const s of wanted) {
-      const it = items.find((i) => i.id === s.itemId);
-      if (!it) throw notFound('Kalem');
+      const it = items.find((i) => i.id === s.itemId)!;
       const qty = Math.min(s.qty, it.qty - it.paidQty);
       if (qty <= 0) continue;
       t.update(schema.orderItems).set({ paidQty: it.paidQty + qty }).where(eq(schema.orderItems.id, it.id)).run();
