@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { tl } from '@shared/money';
+import { allocate, tl } from '@shared/money';
+import type { OrderTotals } from '@shared/order-calc';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { type Actor, need, needDirect, toAuthUser } from '../lib/auth';
@@ -9,11 +10,11 @@ import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
 import { addExternalPayments, assertNoActiveRoom, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
-import { buildBasket, clampPayments, type MethodKind } from './basket';
+import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
 import { type FiscalProvider, type FiscalResult, providerFor } from './providers';
 import type { PendingReceipt } from './providers/types';
 import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
-import { TokenxError, type TokenxSale } from './tokenx';
+import { type TokenxBasket, TokenxError, type TokenxSale } from './tokenx';
 
 /**
  * Yazarkasa POS (ÖKC) bağlantısı. Sağlayıcılar `providers/` altında (Token, eğitim cihazı...); burası markadan
@@ -122,7 +123,9 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
   if (selection?.length && splitActive(db, order, order.total - paidNow)) {
     throw conflict('Hesap kişilere bölünmüş: payları "Paylaş"tan alın ya da paylaşımı kaldırın', 'split_active');
   }
-  const amountPayments = orderPayments(db, orderId).filter((p) => !p.refundedAt && !p.items?.length);
+  // Cihazdan gelen ödemeler fişleriyle bilinir (bölünmüş ödemenin ikincisi ya da servis fişi kalem taşımaz)
+  const deviceIds = new Set(completedReceipts(orderId).flatMap((r) => r.paymentIds));
+  const amountPayments = orderPayments(db, orderId).filter((p) => !p.refundedAt && !p.items?.length && !deviceIds.has(p.id));
   if (amountPayments.length && !selection?.length) {
     throw conflict('Adisyonda tutar olarak alınmış ödeme var. Kalanı LafPOS\'ta alın ya da "Kalem seç" ile cihaza gönderin', 'okc_partial');
   }
@@ -143,6 +146,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       totals: order.totals ?? { lineNet: {} },
       selection: selection?.length ? mergeSelection(selection) : null,
       remainingDue: order.total - order.paid,
+      prior: selection?.length || !order.totals ? undefined : priorOf(orderId, items, order.totals),
       sectionMap: s.okcSectionMap,
       sizeLabels: s.sizeLabels,
       callbackUrl: s.okcProvider === 'tokenx' ? (webhookUrl() ?? undefined) : undefined,
@@ -273,6 +277,50 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
   }
   publish(r.orderId, 'okc.cancelled', unreachable ? "Cihaza ulaşılamadı; sepet LafPOS'ta iptal sayıldı" : 'Cihaz sepeti iptal edildi', actor.user.id);
   return receiptDTO(loadReceipt(r.id));
+}
+
+function completedReceipts(orderId: string): ReceiptRow[] {
+  return db
+    .select()
+    .from(schema.fiscalReceipts)
+    .where(and(eq(schema.fiscalReceipts.orderId, orderId), eq(schema.fiscalReceipts.status, 'tamamlandi')))
+    .all();
+}
+
+/**
+ * Adisyonun ödenmiş kısmının KDV oranına göre brütü ve cihaza giden servis: cihaz fişleri gönderilen sepetten
+ * (fişin iade edilmemiş ödemesi kadar), LafPOS'ta kalem seçerek alınan ödemeler kalemlerin bugünkü payıyla
+ * oranlara bölünür. Bütün adisyon sepeti bunu LafPOS'un KDV dökümüne tamamlar (inceleme, 27 Eki 2026).
+ */
+function priorOf(orderId: string, items: { id: string; qty: number; kdvRate: number }[], totals: OrderTotals): { byRate: Record<string, number>; service: number } {
+  const live = orderPayments(db, orderId).filter((p) => !p.refundedAt);
+  const byRate: Record<string, number> = {};
+  let service = 0;
+  const add = (amount: number, weights: Record<string, number>) => {
+    const keys = Object.keys(weights);
+    allocate(amount, keys.map((k) => weights[k])).forEach((v, i) => (byRate[keys[i]] = (byRate[keys[i]] ?? 0) + v));
+  };
+  const deviceIds = new Set<string>();
+  for (const r of completedReceipts(orderId)) {
+    for (const id of r.paymentIds) deviceIds.add(id);
+    const paid = live.filter((p) => r.paymentIds.includes(p.id)).reduce((a, p) => a + p.amount, 0);
+    if (paid <= 0) continue;
+    // Fişin ödemesinin bir kısmı LafPOS'ta iade edildiyse kalan ödeme fişin oranlarına bölünür
+    const sent = basketByRate(r.basket as TokenxBasket);
+    add(paid, sent.byRate);
+    service += paid === r.amount ? sent.service : allocate(paid, [sent.service, r.amount - sent.service])[0];
+  }
+  for (const p of live) {
+    if (deviceIds.has(p.id) || !p.items?.length) continue;
+    const weights: Record<string, number> = {};
+    for (const sel of p.items) {
+      const it = items.find((i) => i.id === sel.itemId);
+      if (!it || it.qty <= 0) continue;
+      weights[String(it.kdvRate)] = (weights[String(it.kdvRate)] ?? 0) + ((totals.lineNet[it.id] ?? 0) * sel.qty) / it.qty;
+    }
+    if (Object.keys(weights).length) add(p.amount, weights);
+  }
+  return { byRate, service };
 }
 
 function methodFor(kind: MethodKind, operatorId: number | null): string | null {
