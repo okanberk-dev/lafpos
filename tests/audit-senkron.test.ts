@@ -517,6 +517,25 @@ describe('lafmaliyet satış listesi', () => {
     const csv = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv');
     expect(key(csv.json)).not.toMatch(/MEDIUM (LARGE|MEDIUM)/);
   });
+
+  it('satılmış kalemin adı dondurulmuştur: boy eki ayarı sonradan değişince geçmiş satışın adı değişmez', async () => {
+    const latte = await product('mnu-0007');
+    await h.ok('mudur', 'PATCH', `/admin/products/${latte.id}`, { posName: null });
+    await paidSale([{ productId: latte.id, size: 'M' }, { productId: latte.id, size: 'L' }]);
+    const names = async () => (await todayPayload()).lines.filter((l) => l.siteMenuId === 'mnu-0007').map((l) => l.posName).sort();
+    expect(await names()).toEqual(expect.arrayContaining(['LATTE LARGE', 'LATTE MEDIUM']));
+    await h.ok('patron', 'PUT', '/admin/settings', { posSizeSuffix: { M: 'ORTA', L: 'BÜYÜK', TEK: '' } });
+    try {
+      // Önceki testin boy eki olmadan saklanmış eski kalemi bugünkü eki alır; dondurulmuş adlar aynen kalır
+      const after = await names();
+      expect(after).toEqual(expect.arrayContaining(['LATTE LARGE', 'LATTE MEDIUM']));
+      expect(after.filter((n) => /MEDIUM ORTA|LARGE BÜYÜK|MEDIUM BÜYÜK|LARGE ORTA/.test(n))).toEqual([]);
+      const csv = await h.call<string>('mudur', 'GET', '/sync/lafmaliyet/satislar.csv');
+      expect(csv.json).not.toMatch(/MEDIUM ORTA|LARGE BÜYÜK/);
+    } finally {
+      await h.ok('patron', 'PUT', '/admin/settings', { posSizeSuffix: { M: 'MEDIUM', L: 'LARGE', TEK: '' } });
+    }
+  });
 });
 
 // ─── LafPOS Uzaktan ve ürün görseli (önceki düzeltmelerin denetimi) ───────────
