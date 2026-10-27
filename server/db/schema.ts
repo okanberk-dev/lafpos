@@ -406,7 +406,8 @@ export const orders = sqliteTable(
     /** Online sipariş: sitedeki kimlik (ord-0042), aşama, teslim türü, etiket; ödemesi sitede alınmış */
     extId: text('ext_id'),
     extNo: integer('ext_no'),
-    extStage: text('ext_stage').$type<'new' | 'preparing' | 'ready' | 'done'>(),
+    /** done: LafPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı (sitede tamamlandı, iptal ya da süresi geçti) */
+    extStage: text('ext_stage').$type<'new' | 'preparing' | 'ready' | 'done' | 'gone'>(),
     extFulfillment: text('ext_fulfillment').$type<'table' | 'pickup' | 'delivery'>(),
     extLabel: text('ext_label'),
     extPaid: bool('ext_paid').notNull().default(false),

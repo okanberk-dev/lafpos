@@ -97,7 +97,8 @@ export function CartPanel({
                         {i.stationId && (
                           <span className={cn('inline-flex items-center gap-0.5', STATUS[i.status].cls)}>
                             {i.status === 'hazir' ? <Check className="size-3" /> : i.status === 'servis' ? <CircleDot className="size-3" /> : <ChefHat className="size-3" />}
-                            {STATUS[i.status].label}
+                            {/* Sitenin listesinden kalkan online sipariş servis edildi sayılmaz */}
+                            {order.extStage === 'gone' && i.status === 'servis' ? 'Siteden kalktı' : STATUS[i.status].label}
                           </span>
                         )}
                         <span className="tabular font-normal text-muted">{fmtTime(i.sentAt)}</span>

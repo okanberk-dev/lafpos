@@ -125,6 +125,7 @@ export default function OrdersPage() {
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {o.extPaid && <Badge tone="pink">Sitede ödendi</Badge>}
+                  {o.extStage === 'gone' && <Badge>Siteden kalktı</Badge>}
                   {pendingKitchen > 0 && <Badge tone="warn">{pendingKitchen} hazırlanıyor</Badge>}
                   {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
                   {o.payments.length > 0 && <Badge>{[...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))].join(', ')}</Badge>}

@@ -308,7 +308,8 @@ export interface OrderDTO {
   source: 'pos' | 'laffogato';
   extId: string | null;
   extNo: number | null;
-  extStage: 'new' | 'preparing' | 'ready' | 'done' | null;
+  /** done: LafPOS'ta son aşamaya getirildi · gone: sitenin listesinden kalktı */
+  extStage: 'new' | 'preparing' | 'ready' | 'done' | 'gone' | null;
   extFulfillment: 'table' | 'pickup' | 'delivery' | null;
   extLabel: string | null;
   extPaid: boolean;

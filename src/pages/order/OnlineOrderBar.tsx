@@ -50,6 +50,9 @@ export function OnlineOrderBar({ order, act }: { order: OrderDTO; act: Act }) {
           )}
         </div>
       )}
+      {order.status === 'kapali' && stage === 'gone' && (
+        <p className="mt-2 text-sm font-medium text-ink-2">Siteden kalktı: sitede tamamlandı, iptal edildi ya da süresi geçti</p>
+      )}
       <p className="mt-1.5 text-xs text-muted">Bu sipariş LafPOS'ta tahsil edilmez ve Z'ye girmez; ödeme sitede alındı</p>
     </div>
   );
