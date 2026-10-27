@@ -326,6 +326,28 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Bilgisayarda kasiyer: Yemeksepeti deneme siparişini şeritten kabul eder; kuryeye verince platform ödemesiyle kapanır',
+      async () => {
+        await api.call('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'deneme' });
+        const { id } = await api.call('kasa', 'POST', '/platforms/yemeksepeti/test-order', { courier: 'platform' });
+        await withPage(ctx, 'bilgisayar', 'kasa', async (page) => {
+          await go(ctx, page, '/masalar');
+          await page.getByRole('button', { name: /Platform siparişi onay bekliyor/ }).click();
+          const dialog = page.getByRole('dialog', { name: 'Onay bekleyen platform siparişleri' });
+          await dialog.getByRole('button', { name: /^Kabul et · \d+ dk$/ }).click();
+          await dialog.waitFor({ state: 'detached', timeout: 8000 });
+          await go(ctx, page, '/siparisler');
+          await page.getByText('Yemeksepeti', { exact: false }).first().waitFor({ timeout: 8000 });
+        });
+        const row = (await api.call('kasa', 'GET', '/platforms')).orders.find((o) => o.id === id);
+        assert(row?.status === 'kabul' && row.orderId, `kabul edilmedi: ${row?.status}`);
+        await api.call('kasa', 'POST', `/orders/${row.orderId}/delivery`, { deliveryStatus: 'yolda' });
+        const o = await api.call('patron', 'GET', `/orders/${row.orderId}`);
+        assert(o.status === 'kapali' && o.payments[0]?.methodName === 'Yemeksepeti', `platform ödemesiyle kapanmadı: ${o.status}`);
+        await api.call('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'kapali' });
+      },
+    ],
+    [
       // Günü kapattığı için en sonda
       'Tablette kasiyer: gece gün sonundan sonra günü müdürün PIN onayıyla yeniden açar',
       async () => {

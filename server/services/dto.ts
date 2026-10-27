@@ -142,6 +142,8 @@ export function orderToDTO(t: Tx | DB, order: OrderRow): OrderDTO {
     courierId: order.courierId,
     cancelReason: order.cancelReason,
     numarator: order.numarator ?? null,
+    platform: order.platform ?? null,
+    platformCode: order.platformCode ?? null,
     items: items.map(itemToDTO),
     payments: pays.map((p) => paymentToDTO(p, names)),
     split: order.splitPeople ? splitState(order.splitPeople, pays.filter((p) => !p.refundedAt && p.shareNo != null).length, order.total - order.paid) : null,

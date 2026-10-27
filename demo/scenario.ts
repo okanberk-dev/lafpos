@@ -100,6 +100,12 @@ export async function seedDemoDay(fetch: Fetch) {
 
   await call('kasiyer', 'POST', '/cash/movements', { kind: 'harcama', amount: 18000, description: 'Süt ve buz' });
 
+  // Paket platformları deneme modunda: bir Trendyol Go siparişi barda, bir Yemeksepeti siparişi onay bekliyor (şerit)
+  for (const platform of ['yemeksepeti', 'getir', 'trendyol']) await call('patron', 'PUT', `/platforms/${platform}`, { mode: 'deneme' });
+  const trendyol = await call<{ id: string }>('kasiyer', 'POST', '/platforms/trendyol/test-order', { courier: 'platform' });
+  await call('kasiyer', 'POST', `/platforms/orders/${trendyol.id}/accept`, { prepMinutes: 20 });
+  await call('kasiyer', 'POST', '/platforms/yemeksepeti/test-order', { courier: 'platform' });
+
   // Kurulumun oturumları kapanır: demoyu açan kişi kendi rolüyle girer
   for (const role of tokens.keys()) await call(role, 'POST', '/auth/logout');
 }

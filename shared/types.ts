@@ -1,5 +1,6 @@
 import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
+import type { PlatformId, PlatformSettings } from './platforms';
 import type { ServiceMode } from './service-mode';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
@@ -197,6 +198,8 @@ export interface PublicSettings {
   serviceMode: ServiceMode;
   /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
   tipsEnabled: boolean;
+  /** Paket platformları: mod, hazırlık süresi, tahmini komisyon (shared/platforms.ts) */
+  platforms: Record<PlatformId, PlatformSettings>;
 }
 
 export interface BootstrapDTO {
@@ -338,6 +341,9 @@ export interface OrderDTO {
   cancelReason: string | null;
   /** Yarı self serviste masa no / numaratör ("12"); personel siparişi bu masaya götürür */
   numarator: string | null;
+  /** Paket platformundan geldiyse platform ve kısa kod (shared/platforms.ts) */
+  platform: PlatformId | null;
+  platformCode: string | null;
   items: OrderItemDTO[];
   payments: PaymentDTO[];
   /** Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar); bölünmediyse null */
