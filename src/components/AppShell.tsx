@@ -6,7 +6,8 @@ import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLive } from '@/lib/live';
-import { isAdminArea, POS_NAV } from '@/lib/nav';
+import { isAdminArea, visibleNav } from '@/lib/nav';
+import { useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
 import { useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
@@ -74,7 +75,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     else void document.documentElement.requestFullscreen().catch(() => toast.warn('Tarayıcı tam ekrana izin vermedi'));
   };
 
-  const items = POS_NAV.filter((n) => n.perms.some((p) => can(p)) && (!REMOTE || REMOTE_PATHS.includes(n.to)));
+  // Servis moduna göre menü: self modlarda "Satış" başta, Masalar ikinci planda (shared/service-mode.ts)
+  const mode = useServiceMode();
+  const tablesInUse = useTablesInUse(mode);
+  const items = visibleNav(can, mode, { tablesInUse }).filter((n) => !REMOTE || REMOTE_PATHS.includes(n.to));
   const primary = items.filter((n) => n.primary).slice(0, 4);
   const rest = items.filter((n) => !primary.includes(n));
   const admin = isAdminArea(location.pathname);

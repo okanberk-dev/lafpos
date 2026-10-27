@@ -7,13 +7,14 @@ import { PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
-import { homePath } from './lib/nav';
+import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
 import { REMOTE, REMOTE_PATHS } from './lib/remote';
 import { LoginPage } from './pages/LoginPage';
 import { RemoteLoginPage } from './pages/RemoteLoginPage';
 
 const FloorPage = lazy(() => import('./pages/FloorPage'));
+const CounterSalePage = lazy(() => import('./pages/CounterSalePage'));
 const OrderPage = lazy(() => import('./pages/order/OrderPage'));
 const OrdersPage = lazy(() => import('./pages/OrdersPage'));
 const KitchenPage = lazy(() => import('./pages/KitchenPage'));
@@ -29,15 +30,16 @@ const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
   const can = useCan();
+  const home = useHomePath();
   const list = Array.isArray(perm) ? perm : [perm];
-  if (!list.some((p) => can(p))) return <Navigate to={homePath(can)} replace />;
+  if (!list.some((p) => can(p))) return <Navigate to={home} replace />;
   return <>{children}</>;
 }
 
 function Authed() {
   const qc = useQueryClient();
   const boot = useBootQuery();
-  const can = useCan();
+  const home = useHomePath();
   const location = useLocation();
 
   useEffect(() => {
@@ -96,8 +98,9 @@ function Authed() {
       )}
       <Suspense fallback={<PageLoading />}>
         <Routes>
-          <Route path="/" element={<Navigate to={homePath(can)} replace />} />
+          <Route path="/" element={<Navigate to={home} replace />} />
           <Route path="/masalar" element={<Guard perm="siparis.al"><FloorPage /></Guard>} />
+          <Route path="/satis" element={<Guard perm="siparis.al"><CounterSalePage /></Guard>} />
           <Route path="/adisyon/:id" element={<Guard perm={['siparis.al', 'odeme.al']}><OrderPage /></Guard>} />
           <Route path="/siparisler" element={<Guard perm={['siparis.al', 'paket.yonet']}><OrdersPage /></Guard>} />
           <Route path="/mutfak" element={<Guard perm={['mutfak.ekran', 'siparis.al']}><KitchenPage /></Guard>} />

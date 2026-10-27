@@ -52,9 +52,12 @@ const ROUTES = {
     '/yonetim/denetim',
   ],
   garson: ['/masalar', '/siparisler', '/mutfak', '@s1'],
-  kasa: ['/kasa', '/masalar', '@s2', '@tz', '/cihaz'],
+  kasa: ['/kasa', '/masalar', '/satis', '@s2', '@tz', '/cihaz'],
   bar: ['/mutfak'],
 };
+
+/** Kendiliğinden başka adrese geçen ekranlar: "/satis" boş tezgâh satışını açıp adisyona geçer */
+const LANDS = { '/satis': '/adisyon/' };
 
 const slug = (route) => route.replace(/^\/|^@/, '').replace(/[/?=&]+/g, '-') || 'kok';
 
@@ -83,7 +86,7 @@ async function sweep(server, api, seed, browser) {
         await settle(page);
         const where = `${viewport} · ${role} · ${route}`;
         const landed = new URL(page.url()).pathname;
-        if (!landed.startsWith(target.split('?')[0])) problems.push(`yönlendirildi: ${landed}`);
+        if (!landed.startsWith(LANDS[route] ?? target.split('?')[0])) problems.push(`yönlendirildi: ${landed}`);
         const overflow = await overflowReport(page);
         if (overflow.page > 1) problems.push(`sayfa ${overflow.page} px yatay taşıyor`);
         for (const o of overflow.items) problems.push(`taşan öğe: ${o.text} (sol ${o.left}, sağ ${o.right})`);

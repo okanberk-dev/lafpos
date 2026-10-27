@@ -20,6 +20,17 @@ sipariş, lafmaliyet'le gün sonu ve maliyet alışverişi yapar.
 | Müdür | Bilgisayar ya da tablet, vardiya arasında | İndirim/iptal onayı, kasa, rapor | Yetkili PIN onayı, net tutarlar |
 | Patron | Telefon (dışarıdayken) ve bilgisayar (yönetimde) | Canlı ciro, dikkat isteyenler; menü, personel, ayar | Patron paneli telefonda tek sütun; yönetim Innex düzeninde |
 
+## Servis modu
+
+Patron Yönetim › Ayarlar ve yedek › Servis modu'ndan seçer; seçince hemen uygulanır (`shared/service-mode.ts`).
+Ödeme kuralları ve bara gidiş her modda aynıdır; değişen açılış ekranı, menü ve tezgâh satışının akışıdır.
+
+| Mod | Akış | Sistemde |
+|---|---|---|
+| Masaya servis (varsayılan) | Garson masayı açar, sipariş masada, hesap sonda | Bugünkü akış: açılış Masalar |
+| Yarı self servis | Sipariş ve ödeme kasada, personel masaya götürür | Açılış yeni satış (`/satis`), menüde "Satış" başta; "Öde" önce masa no / numaratör sorar (isteğe bağlı); bar ekranı, çağrı ekranı ve fiş numara yerine "Masa 12" yazar; Masalar doluluk için ikinci planda |
+| Self servis | Sipariş ve ödeme kasada, müşteri numarası çağrılınca alır | Açılış yeni satış; ödeme sonucu, bar fişi ve adisyon numarayı büyük yazar; Masalar yalnız masada açık adisyon varsa menüde |
+
 ## Kısıtlar
 
 - Para kuruş tam sayı; fiyatlar KDV dahil; personel maliyet ve kâr görmez (KVKK, `rapor.maliyet`).

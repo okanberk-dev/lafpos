@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
 import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
@@ -246,6 +247,7 @@ export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrder
       prev.openedBy === actor.user.id &&
       !prev.customerId &&
       !prev.note &&
+      !prev.numarator &&
       prev.discountType == null &&
       prev.splitPeople == null &&
       isEmptyOrder(t, prev.id)
@@ -757,6 +759,37 @@ export function updateOrder(
   return updated;
 }
 
+/**
+ * Yarı self servis: tezgâh ya da gel-al siparişine masa no / numaratör ("12") yazar ya da siler. Parasal değildir:
+ * ödeme alındıktan sonra da düzeltilebilir (tezgâh satışı ödemeyle kapanır, sipariş barda hazırlanırken). Bar
+ * ekranı, çağrı ekranı ve masa listesi yenilensin diye kitchen ve orders konularına olay düşer.
+ */
+export function setNumarator(t: Tx, actor: Actor, fx: Effects, orderId: string, raw: string | null): OrderRow {
+  if (!can(actor.user, 'siparis.al')) needDirect(actor, 'odeme.al');
+  const o = loadOrder(t, orderId);
+  if (o.status !== 'acik' && o.status !== 'kapali') throw conflict('İptal edilmiş ya da birleşmiş adisyona masa no yazılmaz', 'order_closed');
+  if (o.source !== 'pos') throw conflict('Online siparişin masası sitede seçilir', 'online_order');
+  if (o.type !== 'tezgah' && o.type !== 'gelal') throw bad('Masa no / numaratör yalnız tezgâh ve gel-al siparişinde girilir; masadaki adisyonu Masa taşı ile değiştirin');
+  const value = normalizeNumarator(raw);
+  if (value === undefined) throw bad('Masa no en çok 6 harf ya da rakam olabilir', 'numarator_invalid');
+  if (value === o.numarator) return o;
+  if (o.status === 'kapali') {
+    // Gün sonu alınmış günün adisyonu Z'ye yazılmıştır: masa no da o günün kaydıdır, değişmez
+    const day = t.select({ closedAt: schema.businessDays.closedAt }).from(schema.businessDays).where(eq(schema.businessDays.id, o.dayId)).get();
+    if (day?.closedAt) throw conflict('Gün sonu alınmış günün adisyonunda masa no değişmez', 'day_closed');
+  }
+  t.update(schema.orders).set({ numarator: value, updatedAt: Date.now() }).where(eq(schema.orders.id, orderId)).run();
+  // Ödenmiş adisyonda değişiklik sonradan yapılan düzeltmedir: denetime yazılır (açık satışta sipariş almanın parçası)
+  if (o.status === 'kapali') {
+    const label = (n: string | null) => (n ? numaratorLabel(n) : 'masa no yok');
+    fx.audit(t, { userId: actor.user.id, action: 'order.numarator', orderId, message: `#${o.no} ödenmiş adisyon: ${label(o.numarator)} → ${label(value)}` });
+  }
+  const updated = loadOrder(t, orderId);
+  orderEvents(fx, updated, actor.user.id, 'order.numarator');
+  fx.emit({ topic: 'kitchen', kind: 'ticket.updated', orderId, byUserId: actor.user.id });
+  return updated;
+}
+
 export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tableId: string): OrderRow {
   const approverId = need(actor, 'masa.islem');
   const o = loadOrder(t, orderId);
@@ -770,8 +803,9 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
   const busy = t.select({ id: schema.orders.id }).from(schema.orders).where(openCheckOn(tableId)).get();
   if (busy) throw conflict(`${table.name} dolu. Birleştirmek için "Birleştir"i kullanın`, 'table_busy');
   const fromTable = o.tableId;
+  // Masaya oturan siparişin yeri artık masadır: masa no / numaratör kalırsa bar fişi ve çağrı ekranı eski masayı gösterirdi
   t.update(schema.orders)
-    .set({ tableId, type: 'masa', updatedAt: Date.now() })
+    .set({ tableId, type: 'masa', numarator: null, updatedAt: Date.now() })
     .where(eq(schema.orders.id, orderId))
     .run();
   t.update(schema.roomSessions).set({ tableId }).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).run();
@@ -779,6 +813,7 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
   const updated = loadOrder(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.moved');
   if (fromTable) fx.emit({ topic: 'tables', kind: 'order.moved', tableId: fromTable, byUserId: actor.user.id });
+  if (o.numarator) fx.emit({ topic: 'kitchen', kind: 'ticket.updated', orderId, byUserId: actor.user.id });
   return updated;
 }
 
@@ -858,6 +893,11 @@ export function transferItems(
         },
         { staleOk: true },
       );
+    // Masasız ayrı hesap (yarı self) aynı masaya gider: masa no yeni hesaba da yazılır
+    if (!existing && !tableId && source.numarator) {
+      t.update(schema.orders).set({ numarator: source.numarator }).where(eq(schema.orders.id, target.id)).run();
+      target = loadOrder(t, target.id);
+    }
   }
   if (target.id === source.id) throw bad('Kaynak ve hedef aynı');
   const discountBefore = orderDiscountOf(t, orderId, target.id);
@@ -1408,7 +1448,8 @@ export function setItemsStatus(
     const ready = readyCount.get(id);
     if (ready && o.waiterId) {
       const table = o.tableId ? t.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, o.tableId)).get() : null;
-      const place = table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
+      const place =
+        table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : o.numarator ? numaratorLabel(o.numarator) : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
       fx.emit({ topic: 'orders', kind: 'items.ready', orderId: id, tableId: o.tableId ?? undefined, message: `${place} · ${ready} ürün hazır`, forUserId: o.waiterId, byUserId: actor.user.id });
     }
   }

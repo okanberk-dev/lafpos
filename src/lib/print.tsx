@@ -4,6 +4,7 @@ import { tlPlain } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import type { ZSummary } from '@shared/types';
+import { callFor, callText, numaratorLabel, serviceModeOf } from '@shared/service-mode';
 
 /**
  * Tarayıcıdan 80 mm termal yazıcıya çıktı. İçerik `.print-area`ya çizilir, `window.print()` çağrılır;
@@ -52,11 +53,15 @@ function Header({ boot, title }: { boot: BootstrapDTO; title: string }) {
 export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO; boot: BootstrapDTO; sizeLabel: (s: string) => string; share?: { no: number; of: number; amount: number } }) {
   const t = order.totals;
   const live = order.items.filter((i) => !i.voided);
+  // Self ve yarı self servis: müşterinin numarası ya da masası fişte büyük (numara çağrılınca alır)
+  const call = order.tableName ? null : callFor(order, serviceModeOf(boot.settings));
+  const place = order.tableName ?? (order.numarator ? numaratorLabel(order.numarator) : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? 'Gel-al' : 'Paket');
   return (
     <div>
       <Header boot={boot} title="ADİSYON" />
+      {call && <div style={{ textAlign: 'center', fontSize: 26, fontWeight: 700, margin: '4px 0' }}>{callText(call)}</div>}
       <Hr />
-      <Row l={`${order.tableName ?? (order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? 'Gel-al' : 'Paket')} · #${order.no}`} r={fmtDateTime(Date.now())} />
+      <Row l={`${place} · #${order.no}`} r={fmtDateTime(Date.now())} />
       {order.waiterName && <Row l={`Garson: ${order.waiterName}`} r={`${order.guests} kişi`} />}
       {order.customer && <Row l={`Müşteri: ${order.customer.name}`} />}
       <Hr />

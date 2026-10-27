@@ -419,6 +419,8 @@ export const orders = sqliteTable(
     courierId: text('courier_id').references(() => users.id),
     mergedInto: text('merged_into'),
     cancelReason: text('cancel_reason'),
+    /** Yarı self servis: kasada girilen masa no / numaratör ("12"); bar fişinde, çağrı ekranında numara yerine */
+    numarator: text('numarator'),
     updatedAt: integer('updated_at').notNull(),
     version: integer('version').notNull().default(1),
   },
