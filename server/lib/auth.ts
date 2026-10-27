@@ -4,9 +4,9 @@ import { and, eq, gt } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 import { effectivePermissions, type Permission, type Role } from '@shared/permissions';
 import type { OrderDTO } from '@shared/types';
-import { Effects } from './effects';
+import { type AuditEntry, Effects } from './effects';
 import { getSettings } from './settings';
-import { db, schema } from '../db/client';
+import { db, schema, sqlite } from '../db/client';
 import { env } from '../env';
 import { HttpError } from './http';
 
@@ -132,6 +132,27 @@ function penalize(kind: PinKind, addr: string, userId: string | null | undefined
   return out;
 }
 
+/**
+ * Kilit alarmı denetim kaydına. Yetkili onayı bir yazma işleminin içinde reddedilince (`need`) işlem geri alınır;
+ * alarm onunla birlikte silinmesin diye işlem bittikten sonra yazılır (better-sqlite3 eşzamanlı: işlem açıkken
+ * sıraya giren iş, geri alma bittikten sonra çalışır).
+ */
+function writeAlarm(entry: AuditEntry) {
+  const write = () => {
+    const fx = new Effects();
+    fx.audit(db, entry);
+    fx.flush();
+  };
+  if (!sqlite.inTransaction) return write();
+  queueMicrotask(() => {
+    try {
+      write();
+    } catch (e) {
+      console.error('[hata] PIN alarmı yazılamadı', e);
+    }
+  });
+}
+
 function pinAlarm(kind: PinKind, addr: string, user: { id: string; name: string } | null | undefined, ms: number) {
   const wait = waitText(ms);
   const message =
@@ -140,9 +161,7 @@ function pinAlarm(kind: PinKind, addr: string, user: { id: string; name: string 
       : kind === 'pin'
         ? `${user?.name ?? 'Bir personel'} kısa sürede çok sayıda PIN denedi; personele PIN verme ${wait} kilitlendi. Başka birinin PIN'i aranıyor olabilir`
         : `Bir cihazdan (${addr}) araya doğru PIN de girilerek çok sayıda hatalı giriş PIN'i denendi; bu cihaz ${wait} giriş yapamaz. PIN taranıyor olabilir`;
-  const fx = new Effects();
-  fx.audit(db, { userId: user?.id ?? null, action: 'auth.pin_lock', severity: 'alarm', message, data: { kind, addr } });
-  fx.flush();
+  writeAlarm({ userId: user?.id ?? null, action: 'auth.pin_lock', severity: 'alarm', message, data: { kind, addr } });
 }
 
 /** Hatalı PIN: cihazın (ve onayda kişinin) sayacına yazılır, ağ geneli sayaca da */
@@ -160,13 +179,11 @@ export function recordFailure(kind: PinKind, addr: string, user?: { id: string; 
     const ms = Math.min(600_000, 60_000 * 2 ** (globalTrips - 1));
     globalUntil = now + ms;
     globalFails.length = 0;
-    const fx = new Effects();
-    fx.audit(db, {
+    writeAlarm({
       action: 'auth.global_lock',
       severity: 'alarm',
       message: `10 dakikada ${GLOBAL_LIMIT} hatalı PIN denemesi: bu sunucuya son 7 günde girmemiş cihazlar ${Math.round(ms / 60_000)} dakika giriş yapamaz. Kafedeki cihazlar etkilenmez; ağa bilinmeyen bir cihaz bağlı olabilir`,
     });
-    fx.flush();
   }
 }
 
@@ -316,6 +333,8 @@ export function requirePermission(user: AuthUser, perm: Permission) {
 export interface Actor {
   user: AuthUser;
   approver: AuthUser | null;
+  /** Yetkili PIN'inin girildiği cihaz (deneme sayacı için) */
+  approverAddr?: string;
 }
 
 /**
@@ -327,8 +346,8 @@ export function approvalRejected(): HttpError {
 }
 
 /**
- * Yetkili PIN'ini doğrular: kişi etkin olmalı. Yetkinin kendisi `need` ile işlem anında denetlenir. Deneme sınırı
- * hem cihazın hem PIN'i soranın (oturumdaki kişi) üzerinedir.
+ * Yetkili PIN'ini doğrular: kişi etkin olmalı. Yetkinin kendisi `need` (`approverFor`) ile işlem anında denetlenir;
+ * sayaç da orada sıfırlanır, burada değil. Deneme sınırı hem cihazın hem PIN'i soranın (oturumdaki kişi) üzerinedir.
  */
 export function findApprover(pin: string, addr: string, requester: AuthUser): AuthUser {
   assertNotLocked('onay', addr, requester.id);
@@ -337,8 +356,25 @@ export function findApprover(pin: string, addr: string, requester: AuthUser): Au
     recordFailure('onay', addr, requester);
     throw approvalRejected();
   }
-  clearFailures('onay', addr, requester.id);
   return toAuthUser(row);
+}
+
+/**
+ * Yetkili bu işlemi onaylıyor mu: onaylıyorsa kimliği döner ve art arda hata sayacı sıfırlanır. Onaylayamayan
+ * (yetkisi olmayan) kişinin PIN'i hatalı PIN gibi sayılır, yanıtı da aynıdır. Yoksa kişinin kendi doğru PIN'i
+ * sayacı sıfırladığı için kilidin ne zaman devreye girdiğine bakarak denenen PIN'in birine ait olduğu anlaşılırdı
+ * (denetim, 26 Eki 2026).
+ */
+export function approverFor(actor: Actor, perm: Permission): string {
+  const approver = actor.approver;
+  if (!approver) throw new HttpError(403, 'Bu işlem yetkili onayı gerektirir', 'approval_required', { permission: perm });
+  const addr = actor.approverAddr ?? 'yerel';
+  if (!can(approver, perm)) {
+    recordFailure('onay', addr, actor.user);
+    throw approvalRejected();
+  }
+  clearFailures('onay', addr, actor.user.id);
+  return approver.id;
 }
 
 /**
@@ -359,8 +395,9 @@ export function blindOrder(user: AuthUser, dto: OrderDTO): OrderDTO {
 
 export function actorFrom(c: Context<AppEnv>, approverPin?: string | null): Actor {
   const user = c.get('user');
-  const approver = approverPin ? findApprover(approverPin, clientKey(c), user) : null;
-  return { user, approver };
+  const addr = clientKey(c);
+  const approver = approverPin ? findApprover(approverPin, addr, user) : null;
+  return { user, approver, approverAddr: addr };
 }
 
 /**
@@ -369,10 +406,7 @@ export function actorFrom(c: Context<AppEnv>, approverPin?: string | null): Acto
  */
 export function need(actor: Actor, perm: Permission, reason?: string): string | null {
   if (can(actor.user, perm)) return null;
-  if (actor.approver) {
-    if (can(actor.approver, perm)) return actor.approver.id;
-    throw approvalRejected();
-  }
+  if (actor.approver) return approverFor(actor, perm);
   throw new HttpError(403, reason ?? 'Bu işlem yetkili onayı gerektirir', 'approval_required', { permission: perm });
 }
 

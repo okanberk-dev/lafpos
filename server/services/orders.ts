@@ -4,7 +4,7 @@ import { percentOf, tl } from '@shared/money';
 import { amountForItems, lineGross, splitState } from '@shared/order-calc';
 import type { OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
-import { type Actor, can, need, needDirect } from '../lib/auth';
+import { type Actor, approverFor, can, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
@@ -443,10 +443,12 @@ function discountApproval(actor: Actor, pct: number): string | null {
     if (!actor.approver) {
       throw new HttpError(403, `İndirim sınırınız %${actor.user.maxDiscountPct}; daha fazlası yetkili onayı ister`, 'approval_required', { permission: 'siparis.indirim' });
     }
-    if (!can(actor.approver, 'siparis.indirim') || pct > actor.approver.maxDiscountPct) {
-      throw new HttpError(403, `${actor.approver.name} bu indirimi onaylayamaz`, 'approval_forbidden');
+    // Yetkisi olmayanın PIN'i hatalı PIN'le aynı yanıtı alır (adı söylenmez); yetkisi olanın sınırı söylenir
+    const id = approverFor(actor, 'siparis.indirim');
+    if (pct > actor.approver.maxDiscountPct) {
+      throw new HttpError(403, `${actor.approver.name} en çok %${actor.approver.maxDiscountPct} indirim onaylayabilir`, 'approval_forbidden');
     }
-    return actor.approver.id;
+    return id;
   }
   if (approverId && actor.approver && pct > actor.approver.maxDiscountPct) {
     throw new HttpError(403, `${actor.approver.name} en çok %${actor.approver.maxDiscountPct} indirim onaylayabilir`, 'approval_forbidden');

@@ -5,7 +5,7 @@ import { db, schema } from '../db/client';
 import { DEMO_USERS } from '../db/seed';
 import {
   type AppEnv,
-  approvalRejected,
+  approverFor,
   assertNotLocked,
   clearFailures,
   clientKey,
@@ -63,12 +63,14 @@ authRoutes.get('/me', (c) => c.json(meDTO(c.get('user'))));
 
 /**
  * Yetkili PIN'ini işlemden önce denetler (arayüzde anında "Onaylandı: Müdür" göstermek için). Hatalı PIN ile yetkisi
- * olmayanın PIN'i aynı yanıtı alır; deneme sınırı cihaz ve soran kişi başına.
+ * olmayanın PIN'i aynı yanıtı alır ve sayaca aynı yazılır; deneme sınırı cihaz ve soran kişi başına.
  */
 authRoutes.post('/approve', async (c) => {
   const { pin, permission } = await body(c, z.object({ pin: z.string(), permission: z.string() }));
   if (!(permission in PERMISSIONS)) throw new HttpError(422, 'Bilinmeyen yetki');
-  const approver = findApprover(pin, clientKey(c), c.get('user'));
-  if (!approver.permissions.has(permission as Permission)) throw approvalRejected();
+  const user = c.get('user');
+  const addr = clientKey(c);
+  const approver = findApprover(pin, addr, user);
+  approverFor({ user, approver, approverAddr: addr }, permission as Permission);
   return c.json({ id: approver.id, name: approver.name });
 });
