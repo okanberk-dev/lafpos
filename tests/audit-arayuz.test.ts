@@ -150,6 +150,31 @@ describe('gün sonu kasa föyü: slip karşılaştırması', () => {
     expect(blind.find((r) => r.methodId === card.id)).toMatchObject({ expected: null });
     expect(slipDiff(blind[0]!, 1000)).toBeNull();
   });
+
+  it('açık hesaba alınan bahşiş cariye yazılmaz: Açık hesap satırı müşterilere yazılan borçla karşılaştırılır', async () => {
+    const tk = product(h.boot, 'Türk kahvesi');
+    const cari = h.boot.paymentMethods.find((m) => m.kind === 'cari')!;
+    const before = (await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day')).summary.payments.find((p) => p.methodId === cari.id);
+    const cust = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Föy Cari' });
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: tk.id, qty: 1 }] });
+    // ₺140 açık hesaba, ₺20 bahşişle: müşterinin borcu ₺140 (bahşiş kimsenin cari hesabına yazılmaz)
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cari.id, amount: o.total, tip: 2000, customerId: cust.id });
+    const debt = (await h.ok<{ customer: { balance: number } }>('kasa', 'GET', `/customers/${cust.id}`)).customer.balance;
+    expect(debt).toBe(o.total);
+    const summary = (await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day')).summary;
+    expect(summary.payments.find((p) => p.methodId === cari.id)!.tips).toBeGreaterThanOrEqual(2000);
+    const row = slipRows(summary, h.boot.paymentMethods).find((r) => r.methodId === cari.id)!;
+    const booked = (before?.amount ?? 0) + debt;
+    expect(row.expected).toBe(booked);
+    expect(row.tips).toBe(0);
+    expect(slipDiff(row, booked)).toBe(0);
+    // Kartta bahşiş yine slipe dahil
+    const card = h.boot.paymentMethods.find((m) => m.name === 'Kredi kartı')!;
+    const cardRow = slipRows(summary, h.boot.paymentMethods).find((r) => r.methodId === card.id)!;
+    const cardSum = summary.payments.find((p) => p.methodId === card.id)!;
+    expect(cardRow.expected).toBe(cardSum.amount + cardSum.tips);
+  });
 });
 
 describe('ödeme penceresi: Kalem seç', () => {
