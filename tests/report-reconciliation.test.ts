@@ -29,9 +29,9 @@ describe('rapor mutabakatı', () => {
 
     // 1) Masa: servis ücreti, kalem indirimi, ikram, gönderildikten sonra iptal; kart + bahşiş
     let a = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: tables[0]!.id, guests: 3 });
-    a = await add(a, [{ name: 'Latte', size: 'M', qty: 2 }, { name: 'Türk kahvesi', qty: 2 }, { name: 'Espresso', size: 'M' }]);
+    a = await add(a, [{ name: 'Latte', size: 'M', qty: 2 }, { name: 'Türk Kahvesi', qty: 2 }, { name: 'Espresso', size: 'M' }]);
     const latte = a.items.find((i) => i.name === 'Latte')!;
-    const turk = a.items.find((i) => i.name === 'Türk kahvesi')!;
+    const turk = a.items.find((i) => i.name === 'Türk Kahvesi')!;
     const esp = a.items.find((i) => i.name === 'Espresso')!;
     await h.ok('kasa', 'POST', `/orders/${a.id}/items/${latte.id}/discount`, { type: 'percent', value: 15, reason: 'Müdavim', approverPin: MUDUR });
     await h.ok('kasa', 'POST', `/orders/${a.id}/items/${turk.id}/comp`, { qty: 1, reason: 'Müdavim', approverPin: MUDUR });
@@ -64,7 +64,7 @@ describe('rapor mutabakatı', () => {
 
     // 4) Tamamı ikram edilen adisyon: ciroya ve adisyon sayısına girmez
     let d = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: null });
-    d = await add(d, [{ name: 'Türk kahvesi' }]);
+    d = await add(d, [{ name: 'Türk Kahvesi' }]);
     d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/items/${d.items[0]!.id}/comp`, { reason: 'Gecikme özrü', approverPin: MUDUR });
     await h.ok('kasa', 'POST', `/orders/${d.id}/close`, {});
 

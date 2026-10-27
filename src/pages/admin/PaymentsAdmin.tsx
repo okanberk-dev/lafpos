@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Plus, Power } from 'lucide-react';
 import { useState } from 'react';
+import { PAYMENT_CHANNELS } from '@shared/labels';
 import type { PaymentMethodDTO } from '@shared/types';
 import { ActionMenu, Badge, BTN, type Column, DataTable, PageHeader, QuickLook } from '@/components/admin/ui';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
@@ -13,8 +14,8 @@ type Draft = Omit<Method, 'id'> & { id?: string };
 
 const KIND = { nakit: 'Nakit', kart: 'Kredi kartı', yemek: 'Yemek kartı', havale: 'Havale / EFT', cari: 'Açık hesap', online: 'Yemek platformu', diger: 'Diğer' };
 const ZFIELD = { cash: 'Nakit', card: 'Kredi kartı', meal_card: 'Yemek kartı', online: 'Online', other: 'Diğer' };
-/** lafmaliyet komisyon kanalları (src/lib/commission/channels.ts) */
-const CHANNELS = ['pluxee', 'multinet', 'edenred', 'setcard', 'metropol', 'yemeksepeti', 'trendyol', 'getir', 'migros'];
+/** Türün olağan lafmaliyet alanı: tür değişince alan da ona geçer (nakit türü yalnız Nakit alanına gider) */
+const ZFIELD_OF: Record<Method['kind'], Method['zField']> = { nakit: 'cash', kart: 'card', yemek: 'meal_card', havale: 'other', cari: 'other', online: 'online', diger: 'other' };
 
 export default function PaymentsAdmin() {
   const qc = useQueryClient();
@@ -123,7 +124,13 @@ export default function PaymentsAdmin() {
               <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} autoFocus={!edit.id} />
             </Field>
             <Field label="Tür">
-              <Select value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value as Method['kind'] })}>
+              <Select
+                value={edit.kind}
+                onChange={(e) => {
+                  const kind = e.target.value as Method['kind'];
+                  setEdit({ ...edit, kind, zField: kind === 'nakit' || edit.zField === 'cash' ? ZFIELD_OF[kind] : edit.zField });
+                }}
+              >
                 {Object.entries(KIND).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
@@ -134,7 +141,7 @@ export default function PaymentsAdmin() {
             <Field label="lafmaliyet alanı">
               <Select value={edit.zField} onChange={(e) => setEdit({ ...edit, zField: e.target.value as Method['zField'] })}>
                 {Object.entries(ZFIELD).map(([k, v]) => (
-                  <option key={k} value={k}>
+                  <option key={k} value={k} disabled={(edit.kind === 'nakit') !== (k === 'cash')}>
                     {v}
                   </option>
                 ))}
@@ -143,7 +150,7 @@ export default function PaymentsAdmin() {
             <Field label="Komisyon kanalı">
               <Select value={edit.channel ?? ''} onChange={(e) => setEdit({ ...edit, channel: e.target.value || null })}>
                 <option value="">Yok</option>
-                {CHANNELS.map((c) => (
+                {PAYMENT_CHANNELS.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>

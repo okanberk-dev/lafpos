@@ -42,8 +42,9 @@ Windows bilgisayarda çalışıyor, iş günü 06:00'da otomatik kapanıyor.
 - ModPOS'taki ürün adları sitedekinden farklı ve büyük harf ("TEA" ↔ Çay, "ICED AMERICANO" ↔ Buzlu Americano);
   içeceklerin çoğu **tek boy** ve fiyatlar siteyle uyuşmuyor (Latte 200 ₺ ↔ sitede 195/210 ₺, alternatif süt
   50 ₺ ↔ sitede 25 ₺). Üçüncü kopya sorunu bu.
-- Kasaya özel kalemler: Karaoke kişi başı (150 ₺), Karaoke toplu (1.000 ₺), Etkinlik ücreti, Yenilebilir bardak,
-  Türk kahvesi (sitede yok).
+- Kasaya özel kalemler: Karaoke kişi başı (150 ₺), Karaoke toplu (1.000 ₺), Etkinlik ücreti, Yenilebilir bardak.
+  Türk kahvesi artık sitede (`mnu-0019`): LafPOS'ta yerel kopyası yok, kasaya özel şeker grubu site kalemine bağlı.
+  Yenilebilir bardak bardak seçeneği değil ayrı üründür (ModPOS'taki gibi ayrı satır, lafmaliyet'te ayrı reçete).
 
 **LafPOS'a yansıyanlar (tasarım farklı, yaklaşım karşılanıyor)**
 

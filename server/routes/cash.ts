@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { staleDayMessage } from '@shared/time';
 import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
 import { db, schema } from '../db/client';
@@ -37,7 +38,8 @@ cashRoutes.get('/day', (c) => {
     const closed = closedToday(db);
     return c.json({ day: null, summary: null, movements: [], blind, closedToday: closed ? dayToDTO(db, closed) : null });
   }
-  return c.json({ day: dayToDTO(db, day), summary: blind ? null : computeSummary(db, day), movements: movementsOf(day.id), blind });
+  // Dünden açık kalan gün: yeni satış reddedilir (409 stale_day), kasa aynı metni bant olarak gösterir
+  return c.json({ day: dayToDTO(db, day), summary: blind ? null : computeSummary(db, day), movements: movementsOf(day.id), blind, stale: staleDayMessage(day) });
 });
 
 cashRoutes.post('/day/open', async (c) => {

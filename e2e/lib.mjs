@@ -107,7 +107,7 @@ export async function seedFloor(api) {
   const filled = await api.call('garson', 'POST', `/orders/${s1.id}/items`, {
     items: [
       { productId: product('Latte').id, size: 'M', qty: 2 },
-      { productId: product('Türk kahvesi').id, qty: 1 },
+      { productId: product('Türk Kahvesi').id, qty: 1 },
     ],
   });
   await api.call('bar', 'POST', '/kitchen/status', { itemIds: [filled.items[0].id], status: 'hazir' });

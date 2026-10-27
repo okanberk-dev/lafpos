@@ -17,6 +17,13 @@ describe('panel imzası (laffogato ↔ lafmaliyet ile bayt bayt aynı)', () => {
     expect(sign(SECRET, { timestamp: TS, method: 'POST', url: PING_URL, body: PING_BODY })).toBe('1d993513ad228ef2b3c43bc4c32c76d792a20aa4563d31001320cc95cfbd9c69');
   });
 
+  it('lafmaliyet\'in LafPOS uçları için sabitlediği vektörler (lafmaliyet tests/lafpos.test.ts)', () => {
+    // Gün sonu itmesi ve maliyet okuması: LafPOS'un imzası bu iki değeri vermezse lafmaliyet 401 döner
+    const dayBody = '{"version":1,"source":"lafpos","date":"2026-10-26"}';
+    expect(sign(SECRET, { timestamp: TS, method: 'POST', url: new URL('https://ladmin.laffogato.net/api/pos/gun'), body: dayBody })).toBe('5ab02280859d09c6afb003f9cc62bbfdd46b1738f6a25c9a6cf8a475113639cb');
+    expect(sign(SECRET, { timestamp: TS, method: 'GET', url: new URL('https://ladmin.laffogato.net/api/panel/pos/urunler'), body: '' })).toBe('4693defb7ef97b132908d552133471db2827261b6468b2ef565effa6fcbf8a3c');
+  });
+
   it('kanonik metin: zaman, yöntem, yol, sıralı sorgu, gövde özeti; alan adı yok', () => {
     expect(canonicalString({ timestamp: TS, method: 'get', url: PULL_URL, body: '' })).toBe(
       ['1760000000', 'GET', '/api/panel/karaoke', 'from=2026-10-20&to=2026-12-31', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'].join('\n'),

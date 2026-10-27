@@ -32,16 +32,16 @@ describe('demo özeti', () => {
     };
     // Gün içinde kapanmış adisyonlar: saatlere yayılır
     const closed: [string, number, ('M' | 'L')?][][] = [
-      [['Latte', 2, 'M'], ['Türk kahvesi', 1]],
+      [['Latte', 2, 'M'], ['Türk Kahvesi', 1]],
       [['Americano', 1, 'L'], ['Espresso', 2, 'M']],
       [['Mocha', 2, 'L']],
       [['Flat White', 1, 'M'], ['Cortado', 1]],
-      [['Türk kahvesi', 3]],
+      [['Türk Kahvesi', 3]],
       [['Latte', 1, 'L'], ['Americano', 2, 'M']],
       [['Espresso', 1, 'M'], ['Mocha', 1, 'M']],
       [['Flat White', 2, 'M']],
       [['Latte', 3, 'M'], ['Cortado', 2]],
-      [['Türk kahvesi', 2], ['Americano', 1, 'M']],
+      [['Türk Kahvesi', 2], ['Americano', 1, 'M']],
     ];
     const now = Date.now();
     for (const [i, items] of closed.entries()) {
@@ -51,7 +51,7 @@ describe('demo özeti', () => {
       db.update(schema.orders).set({ openedAt: closedAt - 25 * 60_000, closedAt }).where(eq(schema.orders.id, o.id)).run();
     }
     // Açık masalar ve bar kuyruğu
-    await sale([['Latte', 2, 'M'], ['Türk kahvesi', 1]], 3, 3);
+    await sale([['Latte', 2, 'M'], ['Türk Kahvesi', 1]], 3, 3);
     await sale([['Mocha', 1, 'L'], ['Espresso', 1, 'M']], 4, 2);
     const b = await sale([['Flat White', 2, 'M'], ['Cortado', 1]], 5, 2);
     await h.ok('kasa', 'POST', `/orders/${b.id}/bill`, {});

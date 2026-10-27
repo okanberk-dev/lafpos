@@ -516,7 +516,7 @@ function ProductDrawer({
           </Field>
           <Field label="KDV">
             <Select value={f.kdvRate} onChange={(e) => setF({ ...f, kdvRate: Number(e.target.value) })} disabled={synced}>
-              {[0, 1, 10, 20].map((r) => (
+              {[0, 10, 20].map((r) => (
                 <option key={r} value={r}>
                   %{r}
                 </option>
@@ -532,8 +532,8 @@ function ProductDrawer({
           <Field label="Kısa ad" hint="düğme ve fişte">
             <Input value={f.shortName} onChange={(e) => setF({ ...f, shortName: e.target.value })} />
           </Field>
-          <Field label="lafmaliyet adı" hint="boşsa AD BOY">
-            <Input value={f.posName} onChange={(e) => setF({ ...f, posName: e.target.value })} placeholder="ör. LATTE MEDIUM" />
+          <Field label="lafmaliyet adı" hint={product?.priceL != null || (!synced && f.priceL) ? 'boy eki eklenir' : 'boşsa AD BOY'}>
+            <Input value={f.posName} onChange={(e) => setF({ ...f, posName: e.target.value })} placeholder="ör. LATTE" />
           </Field>
           <Field label="İstasyon" hint="boşsa kategoriden">
             <Select value={f.stationId} onChange={(e) => setF({ ...f, stationId: e.target.value })}>
