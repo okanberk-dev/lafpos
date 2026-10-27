@@ -32,8 +32,11 @@ Verisi ayrı iki sistem (ürünü bir yerde yükleyip kasaya elle aktarmak) hiç
    yalnız elle "Siteyle eşitle" uygulamadan önce önizler. Kasaya özgü alanları (istasyon, kısa ad, porsiyon, seçenek grubu,
    sık kullanılan) LafPOS tutar. Yönetim › Ürünler'deki **"Sitede ürün ekle"** laffogato panelinin yeni
    ürün sayfasını açar.
-3. **Yalnız kafede satılan hizmetler** (karaoke odası saatlik ücreti, etkinlik ücreti) LafPOS'ta
-   "yerel ürün"dür; sitede satılmadıkları için laffogato'ya girmez.
+3. **Karaoke odasını site satar:** rezervasyon sitede (`/karaoke` ve uygulama) alınır ve çoğunlukla orada ödenir.
+   LafPOS bugünün rezervasyonlarını okur, oda sayacını rezervasyona bağlar, sitede ödenen saati yeniden almaz; kasada
+   yalnız bloğu aşan süre ve köşkte ödenecek rezervasyonun tutarı alınır (`docs/03-ENTEGRASYON.md` §2.4). Odaya
+   LafPOS'ta yerel rezervasyon yazılmaz. **Yalnız kasada çalınan hizmetler** (odanın saatlik ücreti, etkinlik ücreti)
+   LafPOS'ta "yerel ürün"dür; laffogato'nun menüsüne girmez.
 4. **Maliyet, reçete, stok ve muhasebenin kaynağı lafmaliyet'tir.** LafPOS gün sonunu oraya gönderir,
    maliyeti oradan günde bir okur (`docs/03-ENTEGRASYON.md` §4); kopyalamaz. LafPOS'taki `products.cost`
    yalnız gösterim için önbellektir (lafmaliyet'te olmayan ürününki boşalır); hangi günün hesaplara girdiğine de

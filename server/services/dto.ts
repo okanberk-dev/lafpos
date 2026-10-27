@@ -147,7 +147,9 @@ export function orderToDTO(t: Tx | DB, order: OrderRow): OrderDTO {
     items: items.map(itemToDTO),
     payments: pays.map((p) => paymentToDTO(p, names)),
     split: order.splitPeople ? splitState(order.splitPeople, pays.filter((p) => !p.refundedAt && p.shareNo != null).length, order.total - order.paid) : null,
-    room: activeRoom ? { id: activeRoom.id, startedAt: activeRoom.startedAt, endedAt: activeRoom.endedAt, hourlyRate: activeRoom.hourlyRate } : null,
+    room: activeRoom
+      ? { id: activeRoom.id, startedAt: activeRoom.startedAt, endedAt: activeRoom.endedAt, hourlyRate: activeRoom.hourlyRate, bookingId: activeRoom.bookingId, prepaidMinutes: activeRoom.prepaidMinutes, booking: activeRoom.booking ?? null }
+      : null,
     version: order.version,
     updatedAt: order.updatedAt,
   };

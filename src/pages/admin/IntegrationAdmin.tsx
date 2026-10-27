@@ -24,6 +24,8 @@ interface SyncStatus {
     /** Masa QR kodlarının siteye gidişi; eski sunucu göndermez, anahtar yokken null */
     tablesPush?: { lastSentAt?: number; lastTriedAt?: number; unsupported?: boolean; lastError?: string | null } | null;
   };
+  /** Sitedeki karaoke rezervasyonları (§2.4); `on`: anahtar var ve planda oda var */
+  karaoke: { on: boolean; date: string | null; pulledAt: number | null; count: number; lastError: string | null; lastErrorAt: number | null; closed: boolean };
   lafmaliyet: {
     configured: boolean;
     url: string | null;
@@ -173,11 +175,39 @@ export default function IntegrationAdmin() {
                 <Status ok>Masa QR kodları sitede: {fmtDateTime(s.online.tablesPush.lastSentAt)}</Status>
               )}
               <Toggle checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />
+              <KaraokeStatus k={s.karaoke} />
             </>
           )}
         </div>
       </Card>
       <LafmaliyetCard s={s.lafmaliyet} canSync={canSync} canCost={can('rapor.maliyet')} run={run} />
+    </div>
+  );
+}
+
+/**
+ * Sitedeki karaoke rezervasyonlarının okunması (§2.4): siparişlerle aynı sürüm sinyalinden, "Online siparişleri çek"
+ * kapalıyken de. Planda oda yoksa hiç okunmaz
+ */
+function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
+  if (!k.on) {
+    return (
+      <Status ok={false} idle>
+        Karaoke rezervasyonları okunmuyor: masa planında karaoke odası (oda türünde masa) yok
+      </Status>
+    );
+  }
+  return (
+    <div className="space-y-1 border-t border-[var(--admin-divider)] pt-2">
+      <Status ok={!k.lastError} idle={k.closed}>
+        {k.closed
+          ? 'Site karaoke rezervasyonlarını LafPOS\'a açmadı: sitede LAFPOS_SYNC_SECRET tanımlı değil ya da anahtar farklı'
+          : k.pulledAt
+            ? `Karaoke rezervasyonları: son çekim ${fmtDateTime(k.pulledAt)} · ${k.count} rezervasyon (${k.date})`
+            : 'Karaoke rezervasyonları henüz çekilmedi: gün açılınca ya da oda adisyonu açılınca'}
+        {k.lastError && !k.closed && <span className="block text-danger-500">Hata: {k.lastError}</span>}
+      </Status>
+      <p className="text-xs text-muted">Gün açıkken site rezervasyon değişince, en sık 5 dakikada bir; oda adisyonu açılınca ve elle. "Online siparişleri çek" kapalıyken de okunur</p>
     </div>
   );
 }

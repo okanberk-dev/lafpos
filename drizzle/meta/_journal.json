@@ -82,8 +82,15 @@
     {
       "idx": 11,
       "version": "6",
-      "when": 1793121323856,
-      "tag": "0011_platform_canli",
+      "when": 1793121426538,
+      "tag": "0011_karaoke_rezervasyonu",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1793123824988,
+      "tag": "0012_platform_canli",
       "breakpoints": true
     }
   ]
