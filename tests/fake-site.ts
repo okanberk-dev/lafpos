@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { sign } from '../server/lib/signature';
 
 /**
@@ -13,7 +14,7 @@ import { sign } from '../server/lib/signature';
  * `GET /api/mobile/v1/menu` yanıtının kopyası). İmzalı uçlar imzayı sitenin kuralıyla doğrular, yanlışsa 401.
  */
 
-const root = join(__dirname, '..');
+const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = <T>(p: string): T => JSON.parse(readFileSync(join(root, p), 'utf8')) as T;
 
 export interface PanelOrderFixture {
