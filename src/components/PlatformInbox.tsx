@@ -52,9 +52,11 @@ export function PlatformInbox() {
     });
   }, [allowed]);
 
-  const pending = (data.data?.orders ?? []).filter((o) => o.status === 'bekliyor');
+  // Onay bekleyenler ve platformun iptal ettiği ama kasada ödemesi olan (ödeme geri alınınca kendiliğinden kapanır)
+  const pending = (data.data?.orders ?? []).filter((o) => o.status === 'bekliyor' || o.cancelPending);
   if (!allowed || !pending.length) return null;
   const first = pending[0];
+  const waiting = pending.filter((o) => o.status === 'bekliyor').length;
   return (
     <>
       <button
@@ -64,16 +66,16 @@ export function PlatformInbox() {
       >
         <Bell className="size-4 shrink-0" />
         <span className="min-w-0 flex-1 truncate font-medium">
-          {pending.length === 1 ? 'Platform siparişi onay bekliyor' : `${pending.length} platform siparişi onay bekliyor`}
+          {waiting === 0 ? 'Platform iptal etti: kasadaki ödemeyi geri alın' : waiting === 1 ? 'Platform siparişi onay bekliyor' : `${waiting} platform siparişi onay bekliyor`}
           <span className="font-normal max-sm:hidden">
             {' '}
             · {PLATFORM_LABEL[first.platform]} {first.payload.code} · {tl(first.payload.customerTotal)}
           </span>
         </span>
-        {first.expiresAt && <span className="tabular shrink-0 font-semibold">{left(first.expiresAt, now)}</span>}
+        {first.expiresAt && first.status === 'bekliyor' && !first.announced && <span className="tabular shrink-0 font-semibold">{left(first.expiresAt, now)}</span>}
         <span className="shrink-0 font-semibold underline underline-offset-2">Gör</span>
       </button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Onay bekleyen platform siparişleri" size="md">
+      <Modal open={open} onClose={() => setOpen(false)} title={waiting ? 'Onay bekleyen platform siparişleri' : 'Platformun iptal ettiği siparişler'} size="md">
         <div className="space-y-3 p-4">
           {pending.map((o) => (
             <PendingCard key={o.id} order={o} now={now} defaultPrep={data.data?.settings[o.platform].prepMinutes ?? 20} onDone={() => pending.length === 1 && setOpen(false)} />
@@ -105,7 +107,8 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
       qc.invalidateQueries({ queryKey: ['orders'] });
     }
   };
-  const remaining = left(order.expiresAt, now);
+  // Platform kabul etti, adisyon açılamadı: süre işlemez, Kabul yalnız adisyonu açmayı yeniden dener
+  const remaining = order.announced || order.cancelPending ? null : left(order.expiresAt, now);
   return (
     <section className="rounded-xl border border-line p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -149,7 +152,17 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
           Kasada tükenmiş: {order.soldOut.join(', ')}. Ürünü satışa açın ya da "Ürün tükendi" ile reddedin
         </p>
       )}
-      {rejecting ? (
+      {order.lastError && (
+        <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--admin-danger-soft)] p-2 text-xs text-[var(--admin-danger-ink)]">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+          {order.lastError}
+        </p>
+      )}
+      {order.cancelPending ? (
+        <p className="mt-3 text-sm text-ink-2">
+          {PLATFORM_LABEL[order.platform]} bu siparişi iptal etti{order.orderNo ? `; adisyon #${order.orderNo}` : ''}. Kasada alınan ödemeyi yetkili onayıyla geri alın: adisyon kendiliğinden iptal olur
+        </p>
+      ) : rejecting ? (
         <div className="mt-3 space-y-2">
           <p className="text-sm font-medium">Neden reddediyorsunuz?</p>
           <div className="flex flex-wrap gap-1.5">
@@ -165,26 +178,28 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
         </div>
       ) : (
         <div className="mt-3 space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Hazırlık süresi">
-            <span className="mr-1 text-sm text-muted">Hazırlık</span>
-            {preps.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setPrep(m)}
-                aria-pressed={prep === m}
-                className={cn('min-h-11 rounded-lg border px-3 text-sm pointer-fine:min-h-9', prep === m ? 'border-ink font-semibold' : 'border-line text-ink-2')}
-              >
-                {m} dk
-              </button>
-            ))}
-          </div>
+          {!order.announced && (
+            <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Hazırlık süresi">
+              <span className="mr-1 text-sm text-muted">Hazırlık</span>
+              {preps.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPrep(m)}
+                  aria-pressed={prep === m}
+                  className={cn('min-h-11 rounded-lg border px-3 text-sm pointer-fine:min-h-9', prep === m ? 'border-ink font-semibold' : 'border-line text-ink-2')}
+                >
+                  {m} dk
+                </button>
+              ))}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <Button disabled={busy} onClick={() => setRejecting(true)}>
               Reddet
             </Button>
             <Button variant="primary" loading={busy} onClick={() => run(() => post(`/platforms/orders/${order.id}/accept`, { prepMinutes: prep }), `${PLATFORM_LABEL[order.platform]} ${p.code} kabul edildi`)}>
-              Kabul et · {prep} dk
+              {order.announced ? 'Adisyonu aç' : `Kabul et · ${prep} dk`}
             </Button>
           </div>
         </div>

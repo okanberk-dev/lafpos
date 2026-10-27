@@ -117,6 +117,10 @@ export interface PlatformOrderPayload {
   platformDiscount: number;
   /** Müşterinin ödediği */
   customerTotal: number;
+  /** Platformun verdiği kabul süresi sonu (ms); yoksa ACCEPT_SECONDS */
+  expiresAt?: number | null;
+  /** Bağdaştırıcının kendi verisi (sipariş belirteci, geri çağrı adresleri gibi); kasa yorumlamaz */
+  platformData?: Record<string, unknown>;
 }
 
 export type PlatformOrderStatus = 'bekliyor' | 'kabul' | 'ret' | 'iptal' | 'suresi_doldu';
@@ -147,4 +151,10 @@ export interface PlatformOrderDTO {
   /** Kasada tükenmiş kalemler: kabul edilemez (ürünü satışa açın ya da reddedin) */
   soldOut: string[];
   payload: PlatformOrderPayload;
+  /** Platforma son bildirimin ya da yerel kabulün hatası (eski sunucu göndermez) */
+  lastError?: string | null;
+  /** Kabul platforma gitti ama adisyon açılamadı: Kabul yalnız yerelde yeniden dener (süre dolmaz) */
+  announced?: boolean;
+  /** Platform iptal etti, adisyonda kasada alınmış ödeme var: ödeme geri alınınca kendiliğinden kapanır */
+  cancelPending?: boolean;
 }

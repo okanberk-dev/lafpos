@@ -681,6 +681,10 @@ export const platformOrders = sqliteTable(
     lastError: text('last_error'),
     /** Platforma yazılan son aşama: picked (kabul), hazir, yolda, teslim, unsupplied (ret); canlı bağlantıda (server/delivery/live.ts) */
     notifiedStatus: text('notified_status'),
+    /** Platform iptal etti ama adisyon kapatılamadı (kasada alınmış ödeme): her turda yeniden denenir, alarm bir kez */
+    cancelPendingAt: integer('cancel_pending_at'),
+    /** Platform bildirimi kalıcı olarak reddetti (4xx): yeniden denenmez, Yönetim ve denetim kaydı gösterir */
+    notifyParkedAt: integer('notify_parked_at'),
   },
   (t) => [uniqueIndex('platform_orders_ext_idx').on(t.platform, t.externalId), index('platform_orders_status_idx').on(t.status)],
 );
