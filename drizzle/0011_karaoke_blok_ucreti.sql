@@ -1,1 +1,0 @@
-ALTER TABLE `room_sessions` ADD `block_charge` integer;

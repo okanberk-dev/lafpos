@@ -1,13 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Plus, Save } from 'lucide-react';
+import { AlertTriangle, Plus, Printer, QrCode as QrCodeIcon, RefreshCw, Save } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
+import { tableQrUrl } from '@shared/table-qr';
+import { Badge, PageHeader } from '@/components/admin/ui';
+import { QrCode } from '@/components/QrCode';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select } from '@/components/ui/Field';
 import { PageLoading } from '@/components/ui/misc';
-import { PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, patch, post, put } from '@/lib/api';
+import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
 
 interface Section {
@@ -29,13 +33,34 @@ interface Table {
   kind: 'masa' | 'oda';
   hourlyRate: number | null;
   siteTableCode: string | null;
+  qrCode: string | null;
   active: boolean;
+}
+
+/**
+ * A4 masa kartları (yazdırma): her kartta masanın QR'ı (sitenin masa adresi), adı ve işletme adı. Sayfa kuralı
+ * index.css `.print-sheet`; kart bölünmez (`breakInside`). Sitenin kendi kart sayfasıyla aynı düzen.
+ */
+function TableCardsSheet({ tables, businessName }: { tables: Table[]; businessName: string }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10mm' }}>
+      {tables.map((t) => (
+        <section key={t.id} style={{ breakInside: 'avoid', border: '1px solid #999', borderRadius: 12, padding: 18, textAlign: 'center', color: '#0c0e1b', background: '#fff' }}>
+          <QrCode value={tableQrUrl(t.qrCode ?? '')} label={`${t.name} QR kodu`} className="mx-auto w-full max-w-56 border-0" />
+          <div style={{ marginTop: 10, fontSize: 22, fontWeight: 700 }}>{t.name}</div>
+          <div style={{ marginTop: 4, fontSize: 13, color: '#5f594e' }}>Menü · Uygulamadan masaya sipariş</div>
+          <div style={{ marginTop: 2, fontSize: 12, color: '#5f594e' }}>{businessName}</div>
+        </section>
+      ))}
+    </div>
+  );
 }
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const snap = (v: number) => Math.round(v);
 
 export default function FloorAdmin() {
+  const boot = useBoot();
   const qc = useQueryClient();
   const data = useQuery({ queryKey: ['admin', 'floor'], queryFn: () => get<{ sections: Section[]; tables: Table[] }>('/admin/floor') });
   // Sitenin karaoke saat ücreti: ekran başına bir okuma (otomatik yoklama yok; docs/03-ENTEGRASYON.md §2.4)
@@ -130,6 +155,33 @@ export default function FloorAdmin() {
     }
   };
 
+  /** Masa QR'ı: üret ya da yenile (yenilemede basılı eski kart o anda geçersiz olur) */
+  const makeQr = async (t: Table, rotate = false) => {
+    if (rotate && !window.confirm(`${t.name} masasının kodu yenilensin mi? Eski kod siteye pasif olarak bildirilir (site alana dek eski kart menüyü açmaya devam eder); kartı yeniden yazdırın`)) return;
+    try {
+      const r = await post<{ qrCode: string; changed: boolean }>(`/admin/tables/${t.id}/qr`, { rotate });
+      setTables((all) => all.map((x) => (x.id === t.id ? { ...x, qrCode: r.qrCode } : x)));
+      toast.ok(rotate ? `${t.name} kodu yenilendi; kartı yeniden yazdırın` : `${t.name} için QR üretildi`);
+      refresh();
+    } catch (e) {
+      toast.err(errorMessage(e));
+    }
+  };
+  const makeAllQr = async () => {
+    try {
+      const r = await post<{ created: number }>('/admin/tables/qr', {});
+      toast.ok(r.created ? `${r.created} masaya QR üretildi` : 'Bütün masaların QR kodu zaten var');
+      refresh();
+    } catch (e) {
+      toast.err(errorMessage(e));
+    }
+  };
+  const printCards = (list: Table[]) => {
+    const withCode = list.filter((t) => t.qrCode);
+    if (!withCode.length) return toast.warn('Önce masalara QR üretin');
+    printNow(<TableCardsSheet tables={withCode} businessName={boot.settings.businessName} />, { sheet: true });
+  };
+
   if (data.isLoading) return <PageLoading />;
   const sections = data.data?.sections ?? [];
   const visible = tables.filter((t) => t.sectionId === sectionId && t.active);
@@ -137,14 +189,25 @@ export default function FloorAdmin() {
   // Sitede ödenen blok kasada yeniden alınmaz ama aşan süre odanın saat ücretiyle alınır: iki fiyat aynı olmalı
   const siteHourly = sitePrice.data?.hourlyMinor ?? null;
   const priceMismatch = siteHourly ? tables.filter((t) => t.active && t.kind === 'oda' && t.hourlyRate !== siteHourly) : [];
+  const qrTables = tables.filter((t) => t.active && t.kind === 'masa');
+  const missingQr = qrTables.filter((t) => !t.qrCode).length;
 
   return (
     <div>
       <PageHeader
         title="Masa planı"
-        description="Masaları sürükleyin, köşesinden boyutlandırın. Karaoke odası gibi saatlik alanlar için türü 'oda' seçin"
+        description="Masaları sürükleyin, köşesinden boyutlandırın. Karaoke odası gibi saatlik alanlar için türü 'oda' seçin. Masaya özel QR'ı burada üretin ve kartları yazdırın"
         actions={
           <>
+            {missingQr > 0 ? (
+              <Button icon={<QrCodeIcon className="size-4" />} onClick={makeAllQr}>
+                Eksik QR'ları üret ({missingQr})
+              </Button>
+            ) : (
+              <Button icon={<Printer className="size-4" />} onClick={() => printCards(qrTables)} disabled={!qrTables.length}>
+                Masa kartlarını yazdır
+              </Button>
+            )}
             <Button icon={<Plus className="size-4" />} onClick={addTable}>
               Masa ekle
             </Button>
@@ -199,6 +262,7 @@ export default function FloorAdmin() {
             <div
               key={t.id}
               onPointerDown={(e) => onPointerDown(e, t, 'move')}
+              data-table-id={t.id}
               style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
               className={cn(
                 'absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
@@ -209,6 +273,7 @@ export default function FloorAdmin() {
             >
               {t.name}
               <span className="text-[11px] font-normal text-[var(--admin-text-mute)]">{t.kind === 'oda' ? 'oda' : `${t.seats} kişi`}</span>
+              {t.qrCode && <QrCodeIcon aria-label="QR kodu var" className="absolute left-1 top-1 size-3.5 text-[var(--admin-text-mute)]" />}
               <span onPointerDown={(e) => onPointerDown(e, t, 'size')} aria-hidden="true" className="absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize rounded-sm border-b-2 border-r-2 border-[var(--admin-primary)]" />
             </div>
           ))}
@@ -246,9 +311,44 @@ export default function FloorAdmin() {
                   <Input defaultValue={sel.hourlyRate ? String(sel.hourlyRate / 100) : ''} key={`r${sel.id}`} inputMode="decimal" onBlur={(e) => updateTable(sel.id, { hourlyRate: parseTL(e.target.value || '0') || null })} />
                 </Field>
               )}
-              <Field label="Sitedeki masa adı" hint="QR ile gelen online siparişi bu masaya düşürür">
+              <Field label="Sitedeki masa adı" hint="Sitede ayrı adla tanımlı masanın online siparişini bu masaya düşürür; QR kodu olan masada gerekmez">
                 <Input defaultValue={sel.siteTableCode ?? ''} key={`c${sel.id}`} placeholder='ör. "Masa 4"' onBlur={(e) => updateTable(sel.id, { siteTableCode: e.target.value.trim() || null })} />
               </Field>
+              {sel.kind === 'masa' && (
+              <div className="space-y-2 rounded-xl border border-[var(--admin-border)] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium text-[var(--admin-text-soft)]">Masa QR</span>
+                  {sel.qrCode ? <Badge tone="success">Kod var</Badge> : <Badge>Kod yok</Badge>}
+                </div>
+                {sel.qrCode ? (
+                  <>
+                    <div className="flex items-start gap-3">
+                      <QrCode value={tableQrUrl(sel.qrCode)} label={`${sel.name} QR kodu`} className="size-28" />
+                      <div className="min-w-0 space-y-1 text-xs text-muted">
+                        <p className="break-all font-mono text-[13px] font-semibold text-[var(--admin-text)]">{sel.qrCode}</p>
+                        <p className="break-all">{tableQrUrl(sel.qrCode)}</p>
+                        <p>Müşteri okutunca sitenin menüsü açılır, uygulamadan bu masaya sipariş verir; sipariş kasada bu masaya düşer</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" icon={<Printer className="size-4" />} onClick={() => printCards([sel])}>
+                        Kartı yazdır
+                      </Button>
+                      <Button size="sm" variant="ghost" icon={<RefreshCw className="size-4" />} onClick={() => void makeQr(sel, true)}>
+                        Kodu yenile
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted">Masaya özel QR: müşteri okutunca uygulamadan bu masaya sipariş verir, sipariş kasada masaya düşer. Kodu LafPOS üretir, sitenin biçimiyle</p>
+                    <Button size="sm" icon={<QrCodeIcon className="size-4" />} onClick={() => void makeQr(sel)}>
+                      QR üret
+                    </Button>
+                  </>
+                )}
+              </div>
+              )}
               <Button
                 variant="ghost"
                 className="text-danger-500"

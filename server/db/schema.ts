@@ -84,12 +84,14 @@ export const tables = sqliteTable(
     kind: text('kind').$type<'masa' | 'oda'>().notNull().default('masa'),
     /** Karaoke odası gibi süreli alanlarda saatlik ücret (kuruş) */
     hourlyRate: integer('hourly_rate'),
-    /** Sitenin masa QR kodu (laffogato cafe_tables), online masa siparişini eşlemek için */
+    /** Sitedeki masa adı ("Masa 4"): online masa siparişini etiketle eşlemek için (Yönetim › Masa planı "Sitedeki masa adı") */
     siteTableCode: text('site_table_code'),
+    /** Masanın QR kodu: LafPOS üretir, sitenin biçimiyle (10 simge Crockford; shared/table-qr.ts); QR içeriği sitenin masa adresi */
+    qrCode: text('qr_code'),
     sort: integer('sort').notNull().default(0),
     active: bool('active').notNull().default(true),
   },
-  (t) => [index('tables_section_idx').on(t.sectionId)],
+  (t) => [index('tables_section_idx').on(t.sectionId), uniqueIndex('tables_qr_code_idx').on(t.qrCode)],
 );
 
 export const printers = sqliteTable('printers', {

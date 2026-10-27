@@ -49,7 +49,7 @@ export function signedHeaders(secret: string, method: string, url: URL, body: st
 /** İmzalı istek; zaman aşımı 8 sn (lafmaliyet'in site bağlantısıyla aynı). */
 export async function signedFetch(
   secret: string,
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PUT',
   url: URL,
   body?: unknown,
   timeoutMs = 8000,

@@ -21,6 +21,8 @@ interface SyncStatus {
     state: { lastSuccessAt?: number; lastError?: string | null; count?: number } | null;
     open: number;
     soldOutPush: { pending: number; rejected: number; lastError: string | null };
+    /** Masa QR kodlarının siteye gidişi; eski sunucu göndermez, anahtar yokken null */
+    tablesPush?: { lastSentAt?: number; lastTriedAt?: number; unsupported?: boolean; lastError?: string | null } | null;
   };
   /** Sitedeki karaoke rezervasyonları (§2.4); `on`: anahtar var ve planda oda var */
   karaoke: { on: boolean; date: string | null; pulledAt: number | null; count: number; lastError: string | null; lastErrorAt: number | null; closed: boolean };
@@ -69,6 +71,17 @@ export default function IntegrationAdmin() {
   const setting = async (body: Record<string, boolean>) => {
     try {
       await put('/sync/settings', body);
+      qc.invalidateQueries({ queryKey: ['sync'] });
+    } catch (e) {
+      toast.err(errorMessage(e));
+    }
+  };
+  /** Masa QR kodlarını siteye yeniden gönder (site ucu sonradan açıldıysa 6 saatlik turu beklemeden) */
+  const resendTables = async () => {
+    try {
+      const r = await post<{ sent: number; failed: number }>('/admin/tables/qr/sync');
+      if (r.sent) toast.ok('Masa kodları siteye gönderildi');
+      else toast.warn('Site masa kodlarını henüz almıyor; 6 saatte bir yeniden denenecek');
       qc.invalidateQueries({ queryKey: ['sync'] });
     } catch (e) {
       toast.err(errorMessage(e));
@@ -144,6 +157,22 @@ export default function IntegrationAdmin() {
                   Sitenin reddettiği Satışta bilgisi: {s.online.soldOutPush.rejected} ürün (yeniden denenmeyecek; ürün LafPOS'ta açılınca ya da site aynı duruma gelince kalkar)
                   {!s.online.soldOutPush.pending && s.online.soldOutPush.lastError && <span className="block text-danger-500">Son hata: {s.online.soldOutPush.lastError}</span>}
                 </Status>
+              )}
+              {s.online.tablesPush?.unsupported && (
+                <Status ok={false} idle>
+                  Masa QR kodları siteye gönderildi ama site henüz almıyor (PUT /api/panel/tables yok): QR'lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer; 6 saatte bir yeniden denenir.{' '}
+                  <button type="button" className="min-h-11 font-medium text-primary underline underline-offset-2 pointer-fine:min-h-6" onClick={() => void resendTables()}>
+                    Şimdi yeniden gönder
+                  </button>
+                </Status>
+              )}
+              {s.online.tablesPush?.lastError && !s.online.tablesPush.unsupported && (
+                <Status ok={false}>
+                  Masa QR kodları siteye gidemedi: {s.online.tablesPush.lastError}
+                </Status>
+              )}
+              {s.online.tablesPush?.lastSentAt && !s.online.tablesPush.lastError && !s.online.tablesPush.unsupported && (
+                <Status ok>Masa QR kodları sitede: {fmtDateTime(s.online.tablesPush.lastSentAt)}</Status>
               )}
               <Toggle checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />
               <KaraokeStatus k={s.karaoke} />

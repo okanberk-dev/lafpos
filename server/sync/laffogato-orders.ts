@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
+import { normalizeTableCode } from '@shared/table-qr';
 import { businessDate } from '@shared/time';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
@@ -10,7 +11,7 @@ import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
 import { siteKaraokeOn, siteKaraokeTick } from './laffogato-karaoke';
 import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
-import { dropSiteSoldOut, siteOutboxStatus, withSiteMenuLock } from './site-outbox';
+import { dropSiteSoldOut, siteOutboxStatus, siteTablesPushStatus, withSiteMenuLock } from './site-outbox';
 
 /**
  * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: LafPOS yalnız gösterir (bar ekranı,
@@ -23,6 +24,8 @@ export interface PanelOrder {
   stage: 'new' | 'preparing' | 'ready';
   fulfillment: 'table' | 'pickup' | 'delivery';
   label: string;
+  /** Masa siparişinde masanın QR kodu (sözleşmeye sonradan eklenen alan; eski site göndermez, etiketle eşlenir) */
+  tableCode?: string;
   firstName: string;
   scheduledFor: string;
   note: string;
@@ -77,6 +80,17 @@ export function tableForLabel(tables: TableRow[], label: string): TableRow | und
   return byName.length === 1 ? byName[0] : undefined;
 }
 
+/**
+ * Masa siparişinin masası: önce masanın QR kodu (`tableCode`, LafPOS'un ürettiği `tables.qrCode`; yazım farkları
+ * katlanır), site kodu göndermiyorsa ya da kod tanınmıyorsa etiketle (`tableForLabel`).
+ */
+export function tableForOrder(tables: TableRow[], o: Pick<PanelOrder, 'label' | 'tableCode'>): TableRow | undefined {
+  const code = normalizeTableCode(o.tableCode);
+  // Yalnız etkin masa (oda değil): plandan kaldırılmış masanın kodu gelirse sipariş masasız kalır, etiketiyle görünür
+  const byQr = code ? tables.find((x) => x.qrCode === code && x.active && x.kind === 'masa') : undefined;
+  return byQr ?? tableForLabel(tables, o.label ?? '');
+}
+
 /** Detay metnindeki boy önekini atar: "M · yulaf · +1 shot" -> "yulaf · +1 shot" */
 function detailText(detail: string, size: string): string {
   const parts = detail.split('·').map((s) => s.trim()).filter(Boolean);
@@ -119,7 +133,7 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
     for (const o of list) {
       seen.add(o.id);
       const existing = t.select().from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.extId, o.id))).get();
-      const table = o.fulfillment === 'table' ? tableForLabel(tables, o.label ?? '') : undefined;
+      const table = o.fulfillment === 'table' ? tableForOrder(tables, o) : undefined;
       const status = STAGE_STATUS[o.stage] ?? 'yeni';
       if (existing) {
         if (changedSince(existing)) continue;
@@ -453,5 +467,7 @@ export function onlineStatus() {
       : 0,
     /** Siteye bildirilemeyen ya da sitenin reddettiği Satışta yazımları (porsiyon sayacı; giden kutusu) */
     soldOutPush: siteOutboxStatus(),
+    /** Masa QR kodlarının siteye gidişi (docs/03-ENTEGRASYON.md §2.3 "Masa QR"); anahtar yokken null */
+    tablesPush: siteTablesPushStatus(),
   };
 }

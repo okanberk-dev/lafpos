@@ -5,8 +5,10 @@
  * - `masa` (varsayılan): garson masayı açar, sipariş masada alınır, hesap sonda ödenir (bugünkü akış).
  * - `yari_self`: sipariş ve ödeme kasada; kasiyer masa no ya da numaratör girer, personel masaya götürür.
  * - `self`: sipariş ve ödeme kasada; müşteri numarasını çağrı ekranında görünce tezgâhtan alır.
+ * - `qr_self`: self gibi kasada sipariş ve ödeme; ama masalar görünür, çünkü masadaki QR'ı okutan müşteri uygulamadan
+ *   masaya sipariş verir ve sipariş masaya düşer (QR'ı LafPOS üretir: shared/table-qr.ts, Yönetim › Masa planı).
  */
-export const SERVICE_MODES = ['masa', 'yari_self', 'self'] as const;
+export const SERVICE_MODES = ['masa', 'yari_self', 'self', 'qr_self'] as const;
 export type ServiceMode = (typeof SERVICE_MODES)[number];
 
 export const DEFAULT_SERVICE_MODE: ServiceMode = 'masa';
@@ -15,6 +17,7 @@ export const SERVICE_MODE_LABEL: Record<ServiceMode, string> = {
   masa: 'Masaya servis',
   yari_self: 'Yarı self servis',
   self: 'Self servis',
+  qr_self: 'QR + self servis',
 };
 
 /** Ayarlar sayfasında her modun altındaki tek satır */
@@ -22,6 +25,7 @@ export const SERVICE_MODE_HINT: Record<ServiceMode, string> = {
   masa: 'Garson masayı açar, sipariş masada alınır, hesap sonda ödenir',
   yari_self: 'Sipariş ve ödeme kasada, masa no ya da numaratörle personel masaya götürür',
   self: 'Sipariş ve ödeme kasada, müşteri numarası çağrılınca tezgâhtan alır',
+  qr_self: 'Kasada self servis; masadaki QR ile uygulamadan verilen sipariş masaya düşer, masalar görünür',
 };
 
 /** Ayarlarda yoksa ya da tanınmıyorsa (eski kurulum, uzaktan özet) bugünkü akış */
@@ -33,6 +37,11 @@ export function serviceModeOf(settings?: { serviceMode?: unknown } | null): Serv
 /** Yeni satış tezgâhta başlar, önce ödeme alınır (self ve yarı self) */
 export function isCounterFirst(mode: ServiceMode): boolean {
   return mode !== 'masa';
+}
+
+/** Masalar menüde hep görünür: masaya serviste ve yarı selfte (doluluk), QR + selfte (QR siparişi masaya düşer); selfte yalnız masa kullanılıyorsa */
+export function showsTables(mode: ServiceMode): boolean {
+  return mode !== 'self';
 }
 
 /** Tezgâh satışında ödemeden (ya da gönderimden) önce masa no / numaratör sorulur */

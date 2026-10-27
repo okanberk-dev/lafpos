@@ -328,4 +328,24 @@
     color: #000;
     background: #fff;
   }
+  /*
+   * A4 sayfa (masa kartları, Yönetim › Masa planı): fiş kuralının üstüne sayfa boyu ve yazı. Adlandırılmış sayfa
+   * yalnız akıştaki kutuya uygulanır (mutlak konumda Chrome yok sayar): alan akışa alınır, uygulamanın geri kalanı
+   * görünmezlik yerine display ile kaldırılır ki önüne boş sayfa düşmesin
+   */
+  .print-area.print-sheet {
+    position: static;
+    width: 100%;
+    padding: 0;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    page: sheet;
+  }
+  html:has(.print-sheet) #root > :not(.print-sheet) {
+    display: none;
+  }
+  @page sheet {
+    size: A4;
+    margin: 12mm;
+  }
 }

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "1fd5d595-6f2e-4cd1-8470-b78f536fb8c4",
+  "id": "7277289c-0699-4664-8378-9c5de8e1a577",
   "prevId": "96908a73-390c-4219-98c7-1b7375e85201",
   "tables": {
     "audit_log": {
@@ -3146,27 +3146,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "booking_id": {
-          "name": "booking_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "booking": {
-          "name": "booking",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "prepaid_minutes": {
-          "name": "prepaid_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {},
@@ -3551,6 +3530,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "qr_code": {
+          "name": "qr_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "sort": {
           "name": "sort",
           "type": "integer",
@@ -3575,6 +3561,13 @@
             "section_id"
           ],
           "isUnique": false
+        },
+        "tables_qr_code_idx": {
+          "name": "tables_qr_code_idx",
+          "columns": [
+            "qr_code"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {

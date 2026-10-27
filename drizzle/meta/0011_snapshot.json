@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a96409da-fe98-4d9f-97e5-0e0a0131d0f1",
-  "prevId": "1fd5d595-6f2e-4cd1-8470-b78f536fb8c4",
+  "id": "af65a469-069b-4194-a34b-84804281cf13",
+  "prevId": "7277289c-0699-4664-8378-9c5de8e1a577",
   "tables": {
     "audit_log": {
       "name": "audit_log",
@@ -3558,6 +3558,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "qr_code": {
+          "name": "qr_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "sort": {
           "name": "sort",
           "type": "integer",
@@ -3582,6 +3589,13 @@
             "section_id"
           ],
           "isUnique": false
+        },
+        "tables_qr_code_idx": {
+          "name": "tables_qr_code_idx",
+          "columns": [
+            "qr_code"
+          ],
+          "isUnique": true
         }
       },
       "foreignKeys": {
