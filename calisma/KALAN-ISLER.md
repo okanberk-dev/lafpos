@@ -23,7 +23,7 @@ Bu dosya kaldığın yerden devam etmek içindir. Her şey GitHub'da (`RiosenBeq
 ## Bitenler (bugün main'e girdi)
 | PR | İçerik |
 |---|---|
-| (Yemeksepeti PR'ı, açılıyor) | **Yemeksepeti canlı bağlantısı**: Delivery Hero siparişi LafPOS Uzaktan'a (Vercel, `api/uzaktan.ts`) JWT ile gelir, Redis gelen kutusuna girer; kasa imzalı çeker, kayıt yazılınca siler. Dolaylı akış (tablette kabul edilmiş, geri çağrı adresi yok) desteklenir; kabul saati platformun saatine uyar; ücretler ayrı satır (KDV %20, mutfağa gitmez); kuryenin bıraktığı nakit kasada; test siparişi kabul edilmez. İki çekişmeli tur: 11 doğrulanmış + 13 doğrulanmamış bulgu kapandı |
+| #28 | **Yemeksepeti canlı bağlantısı**: Delivery Hero siparişi LafPOS Uzaktan'a (Vercel, `api/uzaktan.ts`) JWT ile gelir, Redis gelen kutusuna girer; kasa imzalı çeker, kayıt yazılınca siler. Dolaylı akış (tablette kabul edilmiş, geri çağrı adresi yok) desteklenir; kabul saati platformun saatine uyar; ücretler ayrı satır (KDV %20, mutfağa gitmez); kuryenin bıraktığı nakit kasada; test siparişi kabul edilmez. İki çekişmeli tur: 11 doğrulanmış + 13 doğrulanmamış bulgu kapandı |
 | #27 | **Trendyol Go canlı bağlantısı** (Uber Eats Türkiye dahil): yoklama, kabul / ret önce platforma (önce yerelde prova), aşamalar sırayla, kasada iptal platforma, ürün eşleme, göç `0012_platform_canli`. İki çekişmeli tur: 20 bulgu kapandı (Kapalı modda iptal yoklaması, karar kilidi, tek koşu tur, bekleyen iptali kayda alma…) |
 | #26 | **QR + self servis** modu (`qr_self`) ve masaya özel QR'ı LafPOS üretir (`tables.qrCode`, göç `0010_masa_qr`, sitenin 10 simgelik Crockford biçimi, `https://laffogato.net/masa/<kod>`); A4 masa kartları; kodlar siteye `PUT /api/panel/tables` ile giden kutusundan (site ucu yoksa 6 saatte bir) |
 | #24 | **Ödeme ekranında İkram / Ödenmez / Zayi** (`CompKind` `zayi`, `zayiReasons`, Z/X ve raporlarda ayrı satır, lafmaliyet `"Zayi: …"`); kalem düzeyinde "Zayi yaz" |
@@ -87,7 +87,7 @@ Entegrasyon "site henüz almıyor" der.
 
 ### 1. Paket platformları B2: gerçek API (kullanıcı: "yemek sepeti uber API de ekle")
 
-**Durum (27 Ekim gece):** Trendyol Go (#27) ve Yemeksepeti (PR açılıyor; kapılar koşuyor); ikisi de canlı ortamda hiç denenmedi
+**Durum (27 Ekim gece):** Trendyol Go (#27) ve Yemeksepeti (#28) main'de; ikisi de canlı ortamda hiç denenmedi
 (uç ve alan adları belgeden; bu ortamdan `developers.tgoapps.com` ve Delivery Hero'ya erişim yok). Sırada:
 - **Kullanıcının adımları** (anahtarları Claude yazmaz): Trendyol için kasa `.env`'ine `TRENDYOL_SUPPLIER_ID`,
   `TRENDYOL_API_KEY`, `TRENDYOL_API_SECRET`; Yemeksepeti için Delivery Hero'dan POS entegrasyonu, kasa `.env`'ine
