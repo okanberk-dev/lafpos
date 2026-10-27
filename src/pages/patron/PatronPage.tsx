@@ -35,7 +35,9 @@ export interface PatronData {
   payments: { name: string; amount: number; count: number; share: number }[];
   discounts: number;
   complimentary: number;
-  odenmez: number;
+  /** Eski sunucu ve uzaktan demo özeti (api/demo-ozet.json) göndermez */
+  odenmez?: number;
+  zayi?: number;
   voided: number;
   online: { orders: number; amount: number };
   top: { key: string; name: string; size: string; qty: number; revenue: number; margin: number | null }[];
@@ -120,7 +122,11 @@ export default function PatronPage() {
         <div className="grid grid-cols-2 gap-3">
           <Stat label="Dünkü ciro" value={tl(d.yesterday.netSales)} hint={`${d.yesterday.receipts} adisyon`} />
           <Stat label="Açık hesap" value={String(d.open.count)} hint={tl(d.open.total)} />
-          <Stat label="İndirim · ikram" value={tl(d.discounts + d.complimentary)} hint={d.odenmez > 0 ? `ikram ${tl(d.complimentary - d.odenmez)} · ödenmez ${tl(d.odenmez)}` : `ikram ${tl(d.complimentary)}`} />
+          <Stat
+            label="İndirim · ikram"
+            value={tl(d.discounts + d.complimentary)}
+            hint={[`ikram ${tl(d.complimentary - (d.odenmez ?? 0) - (d.zayi ?? 0))}`, (d.odenmez ?? 0) > 0 && `ödenmez ${tl(d.odenmez ?? 0)}`, (d.zayi ?? 0) > 0 && `zayi ${tl(d.zayi ?? 0)}`].filter(Boolean).join(' · ')}
+          />
           <Stat label="İptal" value={tl(d.voided)} />
           {d.online.orders > 0 && <Stat label="Online (sitede ödendi)" value={tl(d.online.amount)} hint={`${d.online.orders} sipariş`} />}
         </div>

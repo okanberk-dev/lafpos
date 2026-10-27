@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDownRight, ArrowUpRight, BadgePercent, CircleDollarSign, Download, FileSpreadsheet, Package, Receipt, Search, ShoppingBag } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { COMP_LABEL } from '@shared/comp';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl } from '@shared/money';
+import type { CompKind } from '@shared/types';
 import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
@@ -28,7 +30,7 @@ const REPORTS: { key: ReportKey; label: string; hint: string; perm?: 'rapor.mali
   { key: 'saatlik', label: 'Saatlik', hint: 'Yoğun saatler, gün dilimleri' },
   { key: 'hazirlama', label: 'Hazırlama süresi', hint: 'Bar ve mutfak hızı' },
   { key: 'adisyon', label: 'Adisyonlar', hint: 'Kapanan ve iptal' },
-  { key: 'kayip', label: 'İptal ve indirim', hint: 'İptal, ikram, indirim, ödeme iptali' },
+  { key: 'kayip', label: 'İptal ve indirim', hint: 'İptal, ikram, zayi, indirim, ödeme iptali' },
   { key: 'happy', label: 'Happy hour', hint: 'Kampanya etkisi' },
   { key: 'personel', label: 'Personel', hint: 'Satış, iptal, ikram', perm: 'rapor.maliyet' },
   { key: 'aktarim', label: 'lafmaliyet aktarımı', hint: 'Satışlar listesi' },
@@ -46,7 +48,7 @@ const LEGACY: Record<string, { key: ReportKey; product?: ProductView; loss?: Los
 
 const LOSS_TABS: { value: LossKind; label: string }[] = [
   { value: 'iptal', label: 'İptaller' },
-  { value: 'ikram', label: 'İkramlar' },
+  { value: 'ikram', label: 'İkram ve zayi' },
   { value: 'indirim', label: 'İndirimler' },
   { value: 'iade', label: 'Ödeme iptalleri' },
 ];
@@ -160,6 +162,7 @@ interface Summary {
   discounts: number;
   complimentary: number;
   odenmez: number;
+  zayi: number;
   voided: number;
   receipts: number;
   avgCheck: number;
@@ -215,7 +218,7 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
           },
           { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)}${s.perGuest != null ? ` · kişi başı ${tl(s.perGuest)}` : ''} · önceki ${s.previous.receipts}`, onClick: () => onOpen('adisyon') },
           { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü', onClick: () => onOpen('urunler', { product: 'urun' }) },
-          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary - s.odenmez)}${s.odenmez ? ` · ödenmez ${tl(s.odenmez)}` : ''} · iptal ${tl(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
+          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary - s.odenmez - s.zayi)}${s.odenmez ? ` · ödenmez ${tl(s.odenmez)}` : ''}${s.zayi ? ` · zayi ${tl(s.zayi)}` : ''} · iptal ${tl(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
           { key: 'online', label: 'Online (sitede ödendi)', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `${s.online.orders} sipariş, ciroya dahil değil` },
         ]}
       />
@@ -241,7 +244,7 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
           <dl className="divide-y divide-[var(--admin-divider)] text-sm">
             {[
               ['Liste değeri', s.waterfall.list, false],
-              [s.odenmez ? 'İkram ve ödenmez' : 'İkram', -s.waterfall.complimentary, false],
+              [s.odenmez || s.zayi ? 'Ciro dışı (ikram, ödenmez, zayi)' : 'İkram', -s.waterfall.complimentary, false],
               ['İndirim', -s.waterfall.discounts, false],
               ...(s.waterfall.service ? [['Servis ücreti', s.waterfall.service, false] as const] : []),
               ['Ciro (KDV dahil)', s.waterfall.revenue, true],
@@ -701,10 +704,10 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
 interface ItemsData {
   total: number;
   count: number;
-  rows: { id: string; at: number; orderNo: number; place: string; name: string; size: string; qty: number; value: number; reason: string | null; compKind: 'ikram' | 'odenmez' | null; by: string | null; approvedBy: string | null; afterSend: boolean; billPrinted: boolean }[];
+  rows: { id: string; at: number; orderNo: number; place: string; name: string; size: string; qty: number; value: number; reason: string | null; compKind: CompKind | null; by: string | null; approvedBy: string | null; afterSend: boolean; billPrinted: boolean }[];
 }
 
-const ITEM_TITLES = { iptal: 'İptal edilen kalemler', ikram: 'İkram edilen kalemler', indirim: 'İndirimler', happy: 'Happy hour satışları' };
+const ITEM_TITLES = { iptal: 'İptal edilen kalemler', ikram: 'İkram, ödenmez ve zayi kalemleri', indirim: 'İndirimler', happy: 'Happy hour satışları' };
 
 function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 'ikram' | 'indirim' | 'happy'; onExport?: () => void }) {
   const data = useQuery({ queryKey: ['reports', 'items', kind, range], queryFn: () => get<ItemsData>(`/reports/items?kind=${kind}&${qs(range)}`) });
@@ -738,7 +741,7 @@ function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 
                   </td>
                   <td className="px-2 py-2 font-medium">
                     {r.qty}× {r.name}
-                    {r.compKind === 'odenmez' && <span className="ml-1.5 rounded bg-[var(--admin-warning-soft)] px-1.5 text-xs text-[var(--admin-warning)]">ödenmez</span>}
+                    {r.compKind && r.compKind !== 'ikram' && <span className="ml-1.5 rounded bg-[var(--admin-warning-soft)] px-1.5 text-xs text-[var(--admin-warning)]">{COMP_LABEL[r.compKind].toLocaleLowerCase('tr-TR')}</span>}
                     {kind === 'iptal' && (r.afterSend || r.billPrinted) && (
                       <span className="ml-1.5 rounded bg-danger-100 px-1.5 text-xs text-danger-600">{r.billPrinted ? 'hesap sonrası' : 'hazırlandıktan sonra'}</span>
                     )}

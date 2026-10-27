@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
+import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
 import { costMap, costsAt } from '../sync/lafmaliyet';
 import { getOpenDay } from './orders';
@@ -196,7 +197,8 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     gross: sum((o) => totalsOf(o).gross),
     discounts: sum((o) => totalsOf(o).lineDiscounts + totalsOf(o).orderDiscount),
     complimentary: sum((o) => totalsOf(o).complimentary),
-    odenmez: odenmezOf(ds, closedIds),
+    odenmez: compKindOf(ds, closedIds, 'odenmez'),
+    zayi: compKindOf(ds, closedIds, 'zayi'),
     voided: voidedItems(ds).reduce((a, i) => a + i.qty * i.unitPrice, 0),
     receipts,
     avgCheck: receipts ? Math.round(netSales / receipts) : 0,
@@ -450,9 +452,9 @@ export function staffReport(range: Range) {
   return { range, staff: [...rows.values()].sort((a, b) => b.revenue - a.revenue) };
 }
 
-/** Kapanmış adisyonlardaki ciro dışı kalemlerin ödenmez kısmı (Z'deki `odenmez` ile aynı kural) */
-function odenmezOf(ds: { items: ItemRow[] }, closedIds: Set<string>): number {
-  return ds.items.filter((i) => !i.voided && i.complimentary && i.compKind === 'odenmez' && closedIds.has(i.orderId)).reduce((a, i) => a + i.qty * i.unitPrice, 0);
+/** Kapanmış adisyonlardaki ciro dışı kalemlerin bir türünün (ödenmez, zayi) değeri; Z'deki `odenmez` ve `zayi` ile aynı kural */
+function compKindOf(ds: { items: ItemRow[] }, closedIds: Set<string>, kind: CompKind): number {
+  return ds.items.filter((i) => !i.voided && i.complimentary && i.compKind === kind && closedIds.has(i.orderId)).reduce((a, i) => a + i.qty * i.unitPrice, 0);
 }
 
 // ─── Kalem listeleri: iptal, ikram, indirim, iade, happy hour ───────────────
@@ -665,6 +667,7 @@ export function patronLive(withCost: boolean) {
     discounts: summary.discounts,
     complimentary: summary.complimentary,
     odenmez: summary.odenmez,
+    zayi: summary.zayi,
     voided: summary.voided,
     online: summary.online,
     top: products,

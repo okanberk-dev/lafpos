@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { z } from 'zod';
+import { compReasonText } from '@shared/comp';
 import { allocate } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
@@ -257,8 +258,8 @@ export function buildDayPayload(dayId: string) {
         slot: p.slot,
         qty: p.qty,
         menuValue: toTL(p.value),
-        // Sözleşmede tür alanı yok (docs/03-ENTEGRASYON.md): ödenmez nedenin başında yazılır
-        reason: i.compKind === 'odenmez' ? `Ödenmez: ${i.compReason ?? ''}` : (i.compReason ?? ''),
+        // Sözleşmede tür alanı yok (docs/03-ENTEGRASYON.md): ödenmez ve zayi nedenin başında yazılır
+        reason: compReasonText(i.compKind, i.compReason),
       })),
     ),
     payments: summary.payments.map((p) => ({ name: p.name, zField: p.zField, channel: p.channel ?? null, count: p.count, amount: toTL(p.amount) })),
