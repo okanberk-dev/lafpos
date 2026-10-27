@@ -19,6 +19,7 @@ hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalı�
 | Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | LafPOS kopyalamaz |
 | Masa, adisyon, ödeme, gün sonu, personel PIN'leri | LafPOS | |
 | Online sipariş (uygulama, web, masa QR) | laffogato | bar ekranında gösterilir, aşaması geri yazılır, tahsil edilmez |
+| Karaoke rezervasyonu (gün, saat, ödeme) | laffogato (`/karaoke` ve uygulama) | bugünkü liste salt okunur (§2.4); oda yerel rezervasyona verilmez, sayaç rezervasyona bağlanır |
 | Sadakat damgası | laffogato (uygulama) | LafPOS'un yerel damga kartı varsayılan kapalı (`stampCategoryKeys: []`), site bağlantısı kuruluyken hiç açılmaz |
 
 ## 2. laffogato → LafPOS: menü
@@ -118,10 +119,12 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 | `GET /api/pos/orders/version` | sipariş sürüm sinyali (aşağıda) | 20 sn'de bir, gece de; veritabanına gitmez |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı | sinyal değişince; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
 | `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi; 409 ve 404'te liste yeniden çekilir | kullanıcı işlemi |
+| `GET /api/panel/karaoke?from=<gün>&to=<gün>` | bugünün karaoke rezervasyonları: oda kutusu, masa planı, oda ücreti (§2.4) | `karaoke` işareti değişince, gün açıkken en sık 5 dk'da bir; oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn) |
 
 `actor` LafPOS kullanıcısının adıdır. LafPOS anahtarıyla gelen yazımlar site olay kaydına `lafpos:<ad>` diye düşer.
 
-**Sipariş sürüm sinyali:** `GET /api/pos/orders/version` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version": "<metin>" }`.
+**Sipariş sürüm sinyali:** `GET /api/pos/orders/version` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version": "<metin>",
+"karaoke": "<metin>" }` (`karaoke` laffogato#264'ten beri; karaoke okumasının işareti, §2.4).
 Sitenin veri önbelleğinden (`live:orders` etiketi) gelir, veritabanına dokunmaz; sipariş yazımı etiketi
 düşürünce değer değişir. LafPOS bunu 20 saniyede bir sorar (gece de: gün kapalıyken gelen sipariş ödeme anının iş
 gününe işlenir), değer değişince `GET /api/panel/orders`'ı çeker. Böylece online sipariş Neon kotasını harcamadan yarım
@@ -170,6 +173,91 @@ yoldan açılır ya da kapanırsa kayıt düşer. Porsiyon doldurulunca (Yöneti
 2xx'ten sonra yerelde; site kabul etmezse hiçbir alan kaydedilmez. Siteye giden bütün Satışta yazımları ve menü
 eşitlemesinin panel okuması sırayla gider (tek kilit): geç kalan bir "kapalı" yeni bir açılışın üstüne yazılmaz.
 Giden kutusunu lafmaliyet de kullanır; her biri yalnız kendi kayıtlarını gönderir.
+
+### 2.4 Karaoke rezervasyonları (yalnız okuma)
+
+Karaoke odası sitede (`/karaoke` ve uygulama) rezerve edilir ve çoğunlukla orada ödenir; sitede ödenen saat online
+karaoke cirosudur (laffogato `docs/PANEL-SALES.md`, lafmaliyet onu sitenin satışlarından ekler). LafPOS bugünün
+rezervasyonlarını okur: oda sitede rezerveyken kasada boş görünmesin, sitede ödenmiş saat kasada yeniden ücretlenmesin.
+Rezervasyonu yalnız site yazar, taşır, iptal eder; LafPOS hiçbir şey yazmaz. Kod: `server/sync/laffogato-karaoke.ts`
+(okuma), `shared/karaoke.ts` (kurallar), `server/services/rooms.ts` (ücret).
+
+**Uç:** `GET /api/panel/karaoke?from=<iş günü>&to=<iş günü>`, imzalı, LafPOS anahtarıyla (laffogato#264; yanıt panelin
+aldığıyla aynı, laffogato `docs/LAFPOS.md` › "Karaoke satırını kasa nasıl okur"). Pencere kasanın iş günüdür (05:00
+kuralı, `from = to`); rezervasyon en geç 24:00'te biter, gece yarısını aşmaz. Site LafPOS'un anahtarına yalnız dünden
+yarına (İstanbul) açar; daha geniş pencere 403. Hiç istek gitmez: `.env`'de `LAFFOGATO_URL` ya da
+`LAFFOGATO_SYNC_SECRET` yoksa ya da planda oda türünde (`kind: 'oda'`) etkin masa yoksa.
+
+```json
+{ "now": "…", "from": "2026-10-27", "to": "2026-10-27", "complete": true,
+  "reservations": [ { "id": "krk-00044", "date": "2026-10-27", "startHour": 20, "hours": 2,
+    "startsAt": "…", "endsAt": "…", "guests": 4, "status": "confirmed", "paymentStatus": "paid",
+    "firstName": "Ayşe", "note": "Doğum günü", "totalMinor": 180000, "channel": "web" } ] }
+```
+
+LafPOS `id`, `date`, `startHour`, `hours`, `guests`, `status`, `paymentStatus`, `firstName`, `note`, `totalMinor` ve
+`channel`'ı okur (`startsAt`/`endsAt` gün ve saatten yeniden hesaplanır, İstanbul sabit UTC+3); `createdAt`/`updatedAt`
+okunmaz. `reservations` dizisi olmayan 200 başarısız çekimdir, eldeki liste silinmez; okunamayan bir satır listeyi
+düşürmez. Bilinmeyen durum sitenin kuralıyla güvenli tarafa okunur: bilinmeyen `status` `requested`, bilinmeyen
+`paymentStatus` `none`.
+
+**Satır nasıl okunur** (sitenin kuralı, `shared/karaoke.ts`):
+
+| `status` | `paymentStatus` | Oda | Blok kasada | "Sayacı başlat"ta |
+| --- | --- | --- | --- | --- |
+| `requested` / `confirmed` | `paid` | tutulu | sitede ödendi: yalnız bloğu aşan süre, odanın saat ücretiyle | önerilir |
+| `requested` / `confirmed` | `none` | tutulu | köşkte ödenecek: blok satırın `totalMinor`'ı (üye indirimi içinde), aşan süre saat ücretiyle; `totalMinor` 0 (köşkün telafi saati) ücretsiz | önerilir |
+| `requested` | `pending` | tutulu | sayaç durunca ödenmişse `paid`, değilse bütün süre saat ücretiyle | önerilir |
+| `requested` / `confirmed` | `refunding`, `refunded`, `expired` | tutulu | yok: bütün süre saat ücretiyle | önerilmez |
+| `cancelled` | herhangi | boş | yok | önerilmez, masa planında görünmez |
+
+**Ne zaman çekilir** (`AGENTS.md` kural 6: bu okuma sitenin veritabanına gider):
+- Sürüm sinyalinin (20 sn) `karaoke` değeri değişince ya da iş günü dönünce, **açık iş günü varken**, otomatik çekimler
+  arası en az 5 dakika. Gece (açık gün yokken) hiç; gün açılınca ilk turda bir kez. `karaoke` alanı olmayan (eski) site:
+  günde bir, gün açılınca.
+- Oda kutusu açılınca liste geride kaldıysa: sinyal canlıysa yalnız işaret değiştiyse, değilse liste 5 dakikadan
+  eskiyse. Sayaç dururken bağlı rezervasyon varsa aynı kural (ödemesi bu arada tamamlanmış olabilir).
+- Elle "Yenile" (oda kutusu): en sık 30 saniyede bir.
+- 401, 403 ya da 503 `not_configured`: "site karaokeyi LafPOS'a açmadı"; otomatik çekim 30 dakika bekler, oda kutusu
+  bunu sakin bir notla söyler. Diğer hatalarda eldeki liste "güncel olmayabilir" notuyla gösterilir.
+
+**Oda sayacı.** "Başlat" o saate düşen rezervasyonları önerir: bağlanabilir (tabloda "önerilir"), başlangıcına en çok
+bir saat kalmış ve bitmemiş; başlangıcı şimdiye en yakın olan önce. Seçilen rezervasyon sayaca bağlanır
+(`room_sessions.bookingId`; `booking`: ad ve not olmadan koşulun anlık görüntüsü; `prepaidMinutes`: bloğun bu oturuma
+düşen kalanı). Aynı rezervasyon aynı anda tek sayaca bağlanır; listede olmayan ya da bağlanamayan (iptal, iadesi süren, ödeme süresi
+dolmuş) rezervasyon 409.
+"Rezervasyonsuz başlat" bugünkü gibi çalışır.
+
+**Ücret** (sayaç durunca, rezervasyonun o anki durumuyla):
+- Blok süreyle ölçülür, saatle değil: geç gelen grup bloğunu yine tam kullanır, erken gelen bloğu erken bitirir.
+- Bloğu aşan süre bugünkü kuralla faturalama adımına yukarı yuvarlanır ve odanın saat ücretiyle alınır; en az süre
+  kuralı bloğa uygulanmaz. Sitede ödenen blok içinde kalan oturum adisyona satır yazmaz, denetim kaydına "kasada ücret
+  yok" düşer.
+- Satır oda hizmet ürünüdür (KDV ürünün oranı), metni "aşan 30 dk (2 sa sitede ödendi)" ya da "1 sa rezervasyon +
+  30 dk", notu "Site rezervasyonu KRK-00044".
+- Sayaç durdurulup yeniden başlarsa bloğun kalanı geçer; köşkte ödenecek blok tutarı bir kez alınır.
+- Rezervasyon kendi gününün okunan listesinden düştüyse (panel başka güne taşıdı) blok o güne aittir, burada sayılmaz.
+  Liste başka güne aitse (iş günü döndü) ya da site ulaşılamıyorsa bağlanırken saklanan koşul geçer.
+
+**Ekranlar.** Adisyondaki oda kutusu: sayaç, bağlı rezervasyonun bloğu ("blokta 40 dk kaldı"), bugünün odayı tutan ve
+bitmemiş rezervasyonları (saat, ad, kişi, ödeme durumu, not), "Yenile". Masa planı: boş oda kartında sıradaki
+rezervasyon, yan listede bugünkü rezervasyonlar. Rezervasyon ekranında oda seçilmez. Oda kutusunun listesi
+(`GET /api/sync/karaoke`) `siparis.al` ya da `rezervasyon.yonet` ister; masa planındaki satırlar yerel rezervasyonlar
+gibi planı gören herkese görünür.
+
+**Yerel rezervasyon.** Oda türündeki masaya yerel rezervasyon (`POST`/`PATCH /api/reservations`) 409
+`room_reservation`: "Karaoke rezervasyonu sitedeki /karaoke'den alınır". Masa rezervasyonu (kafenin kendi defteri)
+olduğu gibi kalır.
+
+**Saat ücreti.** Yönetim › Masa planı açılınca sitenin karaoke saat ücreti herkese açık
+`GET /api/mobile/v1/karaoke/availability`'den (`hourlyMinor`) okunur: ekran başına bir istek (sunucuda bir dakikalık
+önbellek), otomatik yoklama yok, yalnız `LAFFOGATO_URL` varken ve planda oda varken. Odanın saat ücreti farklıysa ekran
+uyarır: aşan süre kasada odanın ücretiyle alınır.
+
+**Kişisel veri.** Siteden yalnız ad, gün ve saat, kişi sayısı, durumlar, not, tutar ve kanal gelir; soyad, e-posta,
+telefon, ödeme referansı gelmez (sitenin `toPanelReservation` beyaz listesi). LafPOS listeyi yalnız son okunan iş
+günü için tutar (`sync_state`, yeni gün gelince üzerine yazılır); sayaç oturumunda, adisyon satırında ve denetim
+kaydında ad ve not yoktur, yalnız rezervasyon kodu. LafPOS Uzaktan'a giden masa planı özetinde not yoktur.
 
 ## 3. LafPOS → lafmaliyet: elle yedek (CSV / kopyala)
 
@@ -450,6 +538,8 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | Sipariş sürüm sinyali | 20 sn, gece de | yok (veri önbelleği, veritabanına gitmez) |
 | Online sipariş okuma | sinyal değişince + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
 | Tükendi / aşama yazma | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
+| Karaoke rezervasyonları (§2.4) | `karaoke` işareti değişince ya da gün dönünce, gün açıkken en sık 5 dk; oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn); gece yok; planda oda yoksa hiç | küçük okuma |
+| Karaoke saat ücreti (§2.4) | Yönetim › Masa planı açılınca (en sık dakikada bir) | küçük okuma (herkese açık uç) |
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
 
@@ -461,10 +551,10 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | Birleşti | lafmaliyet#34, #36 | `POST /api/pos/gun`, `GET /api/panel/pos/urunler`, `pos_daily_sales`, Kasa raporunda "LafPOS'tan doldur" |
 | Birleşti | lafmaliyet#44 (B07) | LafPOS durumu ve onarımı (Ayarlar › LafPOS (kasa)), geçiş günü ayarı, 200 yanıtına `counted` ve `switchDay`, Kasa bandı geçiş gününe bağlı, eşit anahtar engeli |
 | Birleşti | lafmaliyet#46 (B08) | LafPOS günlük satışları aylık modele; 200 yanıtına `matched` ve `unmatched` |
-| Birleşti | lafpos#11 (L1), #12 (L3) | Gün sonu satırları, ekler, eski gün engeli; site bağlantısı (sipariş sinyali, Tükendi, menü yoklaması, `.env`'siz istek yok) |
-| Bu PR | lafpos L2 | Eğitim günü kapısı, geçmiş günler, yanıt alanları, maliyet doğrulaması ve günlük çekim, açılış sırası (§8) |
+| Birleşti | lafpos#11 (L1), #12 (L3), #22 (L2) | Gün sonu satırları, ekler, eski gün engeli; site bağlantısı (sipariş sinyali, Tükendi, menü yoklaması, `.env`'siz istek yok); eğitim günü kapısı, geçmiş günler, yanıt alanları, maliyet doğrulaması ve günlük çekim, açılış sırası (§8) |
+| Birleşti | laffogato#264 (cc0e40a), #265 (F1) | `GET /api/panel/karaoke` LafPOS anahtarına açık (dünden yarına), sürüm yanıtında `karaoke` işareti |
+| Bu PR | lafpos L4 | Karaoke: LafPOS bugünün site rezervasyonlarını okur (§2.4), sayaç rezervasyona bağlanır, ödenmiş saat yeniden ücretlenmez, oda yerel rezervasyona verilmez |
 | Açık | lafmaliyet B09-B11 | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
-| Açık | laffogato F1, lafpos L4 | Karaoke: LafPOS bugünün site rezervasyonlarını okur, ödenmiş saat yeniden ücretlenmez |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
 
@@ -508,6 +598,9 @@ formu LafPOS gününü geçiş günü olmadan gösterirdi.
    - Şimdi site satırları LafPOS `.env`'ine girilir: `LAFFOGATO_URL=https://laffogato.net` (varsayılanı yok),
      `LAFFOGATO_SYNC_SECRET` = sitenin `LAFPOS_SYNC_SECRET`'ı; LafPOS yeniden başlatılır.
    - Yönetim › Entegrasyon › "Maliyetleri çek" 200 döner: imza ve saat çalışıyor. Kart "Kurulum modu" demiyor.
+   - Karaoke (§2.4): karaoke odasının adisyonunda oda kutusu bugünün site rezervasyonlarını gösterir ("site karaokeyi
+     LafPOS'a açmadı" diyorsa sitenin `LAFPOS_SYNC_SECRET`'ı ile `LAFFOGATO_SYNC_SECRET` aynı değil). Yönetim › Masa
+     planı'nda saat ücreti uyarısı yoksa odanın ücreti sitedekiyle aynıdır.
    - Gerçek bir gün LafPOS'ta (kurulum modu kapandıktan sonra) açılıp kapatılır (ModPOS'la paralel olabilir).
      lafmaliyet Ayarlar › LafPOS (kasa)'da gün **Deneme** görünür, yanıt `counted: false`; LafPOS Entegrasyon'da
      "lafmaliyet … gününü saymıyor: geçiş günü seçilmedi". Başka hiçbir ekranda görünmez. Retler iki kartta da

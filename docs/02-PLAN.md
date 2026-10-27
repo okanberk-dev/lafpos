@@ -48,7 +48,7 @@ lafpos/
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |
 | `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`); ödemede istemcinin deneme kimliği (`request_id`, adisyon başına tekil: yanıtı kaybolup yeniden gelen aynı istek ikinci kez yazılmaz, ilk sonuç döner; aynı kimlikle başka tür, tutar, pay ya da kalem gelirse ya da o ödeme iptal edildiyse 409 `request_reused` / `request_refunded`, göç 0004; açık hesap tahsilatı da kimlik gönderir ve bakiyeden fazlası tahsil edilmez: 409 `over_balance`); yarı self serviste masa no / numaratör (`numarator`, göç 0005) |
 | `cash_movements` | harcama, teslim, giriş | lafmaliyet `cash_outs` türleriyle uyumlu |
-| `room_sessions` | karaoke odası sayacı | |
+| `room_sessions` | karaoke odası sayacı | `bookingId`, `booking`, `prepaidMinutes`: sitedeki rezervasyona bağlı sayaç (`docs/03-ENTEGRASYON.md` §2.4) |
 | `customers`, `customer_addresses`, `customer_ledger` | müşteri, adres, açık hesap | damga kartı sayacı |
 | `reservations` | rezervasyon | |
 | `audit_log` | denetim ve patron uyarıları | `severity: info | uyari | alarm` |
@@ -99,7 +99,8 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 1. Müşteri/cari: telefonla bul, adresler, açık hesap, tahsilat, geçmiş, damga kartı
 2. Gel-al ve paket panosu: kurye, durumlar
 3. Rezervasyon: gün görünümü, masa ataması, planda gösterim
-4. Karaoke odası sayacı: başlat/durdur, saatlik ücret, HİZMET satırı
+4. Karaoke odası sayacı: başlat/durdur, saatlik ücret, HİZMET satırı; sitedeki rezervasyona bağlanır, sitede ödenen
+   blok yeniden alınmaz (`docs/03-ENTEGRASYON.md` §2.4)
 5. Porsiyon sayacı: günlük adet, sıfırda otomatik Tükendi (ve siteye bildirim); hazırlanmadan iptal edilen kalemin
    porsiyonu geri döner
 
@@ -198,7 +199,7 @@ kapalıdır: anahtar, `.env` ve lafmaliyet'teki geçiş günü yokken hiçbiri �
 | lafmaliyet | İmzalı `GET /api/panel/pos/urunler`: ürün, boy, reçete maliyeti | Patron panelinde ürün kârlılığı (yalnız `rapor.maliyet` yetkisi) | Birleşti (#34); LafPOS günde bir, gün sonunda çeker (L2) |
 | laffogato | Ayrı anahtarlı `/api/pos/*` (ortak `KARAOKE_SYNC_SECRET` yerine): RiosenBeq/laffogato#263 | Kafedeki makineye panel anahtarı koymamak, ayrı döndürülebilir anahtar | Birleşti (d1de10f) |
 | laffogato | Online sipariş için ucuz "değişti mi" sinyali: `GET /api/pos/orders/version` (#263) | 5 dk sorgu sınırı varken siparişi saniyesinde görmek | Birleşti (#263) |
-| laffogato | Bugünün karaoke rezervasyonları LafPOS'a (F1; LafPOS L4) | Sitede rezerve oda kasada boş görünmesin, ödenmiş saat yeniden ücretlenmesin | Açık |
+| laffogato | Bugünün karaoke rezervasyonları LafPOS'a (F1; LafPOS L4) | Sitede rezerve oda kasada boş görünmesin, ödenmiş saat yeniden ücretlenmesin | Birleşti (laffogato#264 cc0e40a, #265); LafPOS tarafı L4 (`docs/03-ENTEGRASYON.md` §2.4) |
 | laffogato | Kasada damga (M2M) | Uygulama üyesine kasada damga vermek | Faz 2 |
 
 ## 6. Riskler

@@ -160,7 +160,7 @@ function bookingToLink(t: Tx, bookingId: string): { booking: RoomBookingSnapshot
   if (!siteKaraokeOn()) throw conflict('Sitedeki karaoke rezervasyonları okunmuyor (site bağlantısı kurulmadı)', 'not_configured');
   const b = siteBookingsToday().find((x) => x.id === bookingId);
   if (!b || b.date !== businessDate(Date.now())) throw conflict('Rezervasyon sitenin bugünkü listesinde yok; listeyi yenileyip yeniden seçin', 'booking_not_found');
-  if (!linkableBooking(b)) throw conflict(`${bookingCode(b.id)} odayı tutmuyor (iptal, iade ya da süresi dolmuş); sayaç rezervasyonsuz başlatılabilir`, 'booking_not_linkable');
+  if (!linkableBooking(b)) throw conflict(`${bookingCode(b.id)} sayaca bağlanamaz (iptal edilmiş, iadesi süren ya da ödeme süresi dolmuş); sayaç rezervasyonsuz başlatılabilir`, 'booking_not_linkable');
   const running = t
     .select({ no: schema.orders.no })
     .from(schema.roomSessions)
