@@ -144,9 +144,12 @@ export function buildBasket(input: BuildBasketInput): BuiltBasket {
       throw new Error("Cihaz sepeti adisyonun kalanını tutmuyor; kalanı kalem seçerek ya da LafPOS'ta alın");
     }
   }
-  const items: TokenxItem[] = slots.map(({ item, gross, net, kind }) =>
-    kind === 'kalem' ? (gross - net > 0 ? { ...item, adjust: { description: 'İndirim', discountOrSurcharge: 0, type: 0, totalValue: gross - net } } : item) : { ...item, price: net },
-  );
+  // Kayma servis ya da fark satırını sıfırladıysa satır gitmez
+  const items: TokenxItem[] = slots
+    .filter((p) => p.kind === 'kalem' || p.net > 0)
+    .map(({ item, gross, net, kind }) =>
+      kind === 'kalem' ? (gross - net > 0 ? { ...item, adjust: { description: 'İndirim', discountOrSurcharge: 0, type: 0, totalValue: gross - net } } : item) : { ...item, price: net },
+    );
   if (!items.length) throw new Error('Cihaza gönderilecek ücretli kalem yok');
   const basket: TokenxBasket = {
     basketID: input.basketId,

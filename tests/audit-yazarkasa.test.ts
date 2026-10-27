@@ -345,6 +345,20 @@ describe('yazarkasa denetimi', () => {
     });
     expect(built.amount).toBe(1000);
     expect(built.basket.items.map((i) => i.name)).toEqual(['b']);
+    // Eksi fark servis satırını sıfırlarsa sıfır tutarlı satır gitmez
+    const zero = buildBasket({
+      basketId: 'c',
+      orderNo: 1,
+      title: 'T',
+      sectionMap: { '10': 1, '20': 2 },
+      sizeLabels: { M: 'Orta', L: 'Büyük' },
+      items: [line('a', 10, 1100, 1), line('b', 20, 2000, 0)],
+      totals: { lineNet: { a: 900, b: 1900 }, service: 100, kdv: [{ rate: 10, gross: 1000, base: 909, kdv: 91 }, { rate: 20, gross: 1900, base: 1583, kdv: 317 }] },
+      remainingDue: 1800,
+      prior: { byRate: { '10': 1100 }, service: 0 },
+    });
+    expect(zero.amount).toBe(1800);
+    expect(zero.basket.items.map((i) => [i.name, i.price])).toEqual([['b', 2000]]);
   });
 
   it('her cihaz sonucu denetim kaydına yazılır: cihazda vazgeçme ve LafPOS’tan sepet iptali', async () => {
