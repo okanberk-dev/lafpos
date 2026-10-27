@@ -144,7 +144,9 @@ export function seedIfEmpty(): boolean {
       .values({ id: ulid(), name: 'Öğle kahvesi', days: [1, 2, 3, 4, 5], start: '12:00', end: '14:00', percent: 10, categoryIds: [], productIds: [], active: false })
       .run();
   });
-  updateSettings({ demoMode: true, okcProvider: 'simulator' });
+  // İşletme self servis (kullanıcı kararı, 27 Ekim 2026): yeni kurulum satış ekranında açılır; masaya servis ve yarı
+  // self Yönetim › Ayarlar › Servis modu'ndan. Var olan kurulumun ayarına dokunulmaz
+  updateSettings({ demoMode: true, okcProvider: 'simulator', serviceMode: 'self' });
   return true;
 }
 

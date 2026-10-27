@@ -60,9 +60,10 @@ async function ready(page) {
   await settle(page);
 }
 
+/** Demo self serviste açılır: satış ekranı (menü), bar, çağrı ve müşteri ekranı; masa planı şeritten açılan sürümde */
 const SWEEP = {
-  patron: ['/masalar', '/patron', '/kasa', '/raporlar', '/siparisler', '/mutfak', '/yonetim', '/musteri-ekrani', '/giris'],
-  garson: ['/masalar'],
+  patron: ['/satis', '/masalar', '/patron', '/kasa', '/raporlar', '/siparisler', '/mutfak', '/cagri', '/yonetim', '/musteri-ekrani', '/giris'],
+  garson: ['/satis'],
 };
 
 function assert(cond, message) {
@@ -133,11 +134,6 @@ const api = (page, method, path, body) =>
     [method, path, body],
   );
 
-async function tableTotal(page, name) {
-  const card = page.getByRole('button', { name: new RegExp(`^${name}\\b`) }).first();
-  return (await card.innerText()).replace(/\s+/g, ' ');
-}
-
 export async function runDemo(browser) {
   const server = await startStatic();
   const results = [];
@@ -149,37 +145,36 @@ export async function runDemo(browser) {
 
     const flows = [
       [
-        'Demo PIN sormadan açılır; örnek günde açık masalar ve Z 1 var',
+        'Demo PIN sormadan self servis satış ekranında açılır: menü var, masa planı yok',
         async (page) => {
-          assert(new URL(page.url()).pathname === '/demo/masalar', `açılış adresi: ${page.url()}`);
+          assert(/^\/demo\/adisyon\//.test(new URL(page.url()).pathname), `açılış adresi: ${page.url()}`);
           assert((await page.getByText('PIN kodunuzu girin').count()) === 0, 'PIN ekranı göründü');
-          assert(/₺470/.test(await tableTotal(page, 'S1')), `S1: ${await tableTotal(page, 'S1')}`);
-          const days = await api(page, 'GET', '/bootstrap');
-          assert(days.day?.zNo === 1, 'gün açık değil');
+          await page.getByPlaceholder('Ürün ara').waitFor();
+          assert((await page.getByRole('link', { name: 'Masalar', exact: true }).count()) === 0, 'self serviste Masalar menüde');
+          const boot = await api(page, 'GET', '/bootstrap');
+          assert(boot.day?.zNo === 1 && boot.settings.serviceMode === 'self', `gün ya da mod: ${boot.day?.zNo} ${boot.settings.serviceMode}`);
         },
       ],
       [
-        'Demo: masaya ürün ekler, nakit öder; yenileyince veri kalır',
+        'Demo: tezgâhta ürün ekler, önce öder; numara çağrı ekranında; yenileyince veri kalır',
         async (page) => {
           const boot = await api(page, 'GET', '/bootstrap');
           const simple = boot.products.find((p) => p.active && !p.hidden && p.priceL == null && p.optionGroupIds.length === 0 && !p.isService);
-          await page.getByRole('button', { name: /^S2\b/ }).first().click();
-          await page.waitForURL(/\/demo\/adisyon\//, { timeout: 8000 });
           const orderId = new URL(page.url()).pathname.split('/').pop();
           await page.getByPlaceholder('Ürün ara').fill(simple.name);
           await page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first().click();
-          const send = page.getByRole('button', { name: /^Gönder \(/ });
-          if (await send.count()) await send.click();
-          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
           await page.getByRole('button', { name: 'Nakit', exact: true }).click();
           await page.getByRole('button', { name: 'Tam', exact: true }).click();
           await page.getByRole('button', { name: /Nakit al$/ }).click();
-          await page.getByText('Adisyon kapandı').waitFor({ timeout: 8000 });
+          await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor({ timeout: 8000 });
           // Bekleme yok: yazan istek yanıtını kayıt bittikten sonra alır
           await page.reload({ waitUntil: 'domcontentloaded' });
           await ready(page);
           const order = await api(page, 'GET', `/orders/${orderId}`);
           assert(order.status === 'kapali' && order.items[0]?.productId === simple.id, `yenileyince adisyon: ${order.status}`);
+          const board = await api(page, 'GET', '/public/board');
+          assert([...board.preparing, ...board.ready].some((e) => e.id === orderId), 'numara çağrı ekranında yok');
         },
       ],
       [
@@ -187,9 +182,15 @@ export async function runDemo(browser) {
         async (page) => {
           await page.getByLabel('Demo rolü').selectOption('garson');
           await page.waitForFunction(() => document.body.innerText.includes('GA'));
-          await page.getByRole('button', { name: /^S4\b/ }).first().click();
-          await page.waitForURL(/\/demo\/adisyon\//, { timeout: 8000 });
-          const orderId = new URL(page.url()).pathname.split('/').pop();
+          const boot = await api(page, 'GET', '/bootstrap');
+          const latte = boot.products.find((p) => p.name === 'Latte');
+          const o = await api(page, 'POST', '/orders', { type: 'tezgah' });
+          await api(page, 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 2 }] });
+          await page.evaluate((to) => {
+            history.pushState(null, '', to);
+            dispatchEvent(new PopStateEvent('popstate'));
+          }, `/demo/adisyon/${o.id}`);
+          await settle(page);
           await page.getByRole('button', { name: 'İşlemler' }).click();
           await page.getByRole('button', { name: /^Adisyon indirimi/ }).click();
           await page.getByRole('button', { name: '1', exact: true }).click();
@@ -201,58 +202,61 @@ export async function runDemo(browser) {
           assert((await page.getByLabel('PIN').count()) === 0, 'onay penceresinde PIN alanı var');
           await approve.click();
           await page.getByText('İndirim uygulandı').waitFor({ timeout: 8000 });
-          const order = await api(page, 'GET', `/orders/${orderId}`);
-          assert(order.totals.orderDiscount > 0, 'indirim uygulanmadı');
+          const after = await api(page, 'GET', `/orders/${o.id}`);
+          assert(after.totals.orderDiscount > 0, 'indirim uygulanmadı');
         },
       ],
       [
         'Demo: ikinci sekme sunucuyu paylaşır; yazılan diğerinde canlı görünür',
         async (page, context, watch) => {
+          await page.evaluate(() => {
+            history.pushState(null, '', '/demo/siparisler');
+            dispatchEvent(new PopStateEvent('popstate'));
+          });
+          await settle(page);
           const other = await context.newPage();
           watch(other);
-          await other.goto(`${server.base}/demo/masalar`, { waitUntil: 'domcontentloaded' });
+          await other.goto(`${server.base}/demo/siparisler`, { waitUntil: 'domcontentloaded' });
           await ready(other);
           const boot = await api(other, 'GET', '/bootstrap');
-          const s3 = boot.tables.find((t) => t.name === 'S3');
           const latte = boot.products.find((p) => p.name === 'Latte');
-          const o = await api(other, 'POST', '/orders', { type: 'masa', tableId: s3.id, guests: 2 });
+          const o = await api(other, 'POST', '/orders', { type: 'tezgah' });
           await api(other, 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 1 }] });
-          await page.waitForFunction(() => /S3\s+₺/.test(document.body.innerText), null, { timeout: 8000 });
+          await page.waitForFunction((no) => document.body.innerText.includes(`#${no}`), o.no, { timeout: 8000 });
           const locks = await page.evaluate(() => navigator.locks.query());
           assert(locks.held.length === 1 && locks.pending.length === 1, `kilit: ${JSON.stringify(locks)}`);
         },
       ],
       [
-        'Demo: şeritten self servise geçer; platform siparişi gelir, şeritten kabul edilir',
+        'Demo: şeritten masaya servise geçer ve geri döner; platform siparişi gelir, şeritten kabul edilir',
         async (page) => {
-          await page.getByLabel('Servis modu').selectOption('self');
-          await page.waitForURL(/\/demo\/(satis|adisyon\/)/, { timeout: 8000 });
-          const before = (await api(page, 'GET', '/platforms')).orders.filter((o) => o.status === 'bekliyor').length;
+          await page.getByLabel('Servis modu').selectOption('masa');
+          await page.waitForURL(/\/demo\/masalar$/, { timeout: 8000 });
+          await page.getByRole('link', { name: 'Masalar', exact: true }).first().waitFor();
           await page.getByRole('button', { name: 'Platform siparişi gönder' }).click();
-          await page.waitForFunction((n) => document.body.innerText.includes('onay bekliyor') && n >= 0, before, { timeout: 8000 });
           await page.getByRole('button', { name: /onay bekliyor/ }).click();
           const dialog = page.getByRole('dialog', { name: 'Onay bekleyen platform siparişleri' });
           await dialog.getByRole('button', { name: /^Kabul et · \d+ dk$/ }).first().click();
           await page.getByText(/kabul edildi/).first().waitFor({ timeout: 8000 });
           const accepted = (await api(page, 'GET', '/platforms')).orders.filter((o) => o.status === 'kabul');
           assert(accepted.length >= 2, `kabul edilen platform siparişi: ${accepted.length}`);
-          await page.getByLabel('Servis modu').selectOption('masa');
+          await page.getByLabel('Servis modu').selectOption('self');
+          await page.waitForURL(/\/demo\/adisyon\//, { timeout: 8000 });
         },
       ],
       [
         'Demo: sıfırla ilk güne döner',
         async (page) => {
-          const boot = await api(page, 'GET', '/bootstrap');
-          const s1 = boot.tables.find((t) => t.name === 'S1');
-          const [open] = (await api(page, 'GET', '/floor')).tables[s1.id];
-          await api(page, 'POST', `/orders/${open.id}/cancel`, { reason: 'Deneme' });
-          await page.waitForFunction(() => !/S1\s+₺470/.test(document.body.innerText), null, { timeout: 8000 });
+          const extra = await api(page, 'POST', '/orders', { type: 'tezgah' });
+          assert(extra.id, 'adisyon açılmadı');
           await page.getByRole('button', { name: 'Demoyu sıfırla' }).click();
           await page.getByRole('dialog', { name: 'Demoyu sıfırla' }).getByRole('button', { name: 'Sıfırla', exact: true }).click();
           await page.waitForEvent('load');
           await ready(page);
-          assert(/₺470/.test(await tableTotal(page, 'S1')), `sıfırlamadan sonra S1: ${await tableTotal(page, 'S1')}`);
-          assert(boot.day?.zNo === 1, 'gün açık değil');
+          const gone = await api(page, 'GET', `/orders/${extra.id}`);
+          assert(gone.code === 'not_found', `sıfırlamadan sonra adisyon duruyor: ${JSON.stringify(gone).slice(0, 80)}`);
+          const boot = await api(page, 'GET', '/bootstrap');
+          assert(boot.day?.zNo === 1 && boot.settings.serviceMode === 'self', 'ilk gün değil');
         },
       ],
     ];
