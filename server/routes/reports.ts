@@ -1,8 +1,8 @@
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { tlPlain } from '@shared/money';
 import { businessDate, fmtDateTime } from '@shared/time';
-import { type AppEnv, can, requirePermission } from '../lib/auth';
+import { type AppEnv, can, requirePermission, seesStaffOf } from '../lib/auth';
 import { query } from '../lib/http';
 import { checksReport, hourlyReport, itemListReport, patronLive, prepReport, productReport, refundReport, staffReport, summaryReport } from '../services/reports';
 
@@ -34,7 +34,9 @@ reportRoutes.get('/items', (c) => {
   return c.json(itemListReport(range(c), kind));
 });
 reportRoutes.get('/refunds', (c) => c.json(refundReport(range(c))));
-reportRoutes.get('/checks', (c) => c.json(checksReport(range(c))));
+/** Garsona göre toplanan adisyon listesi personel tutarıdır: maliyet yetkisi olmayana yalnız kendi adisyonlarının garsonu */
+const waiterFor = (c: Context<AppEnv>) => (waiterId: string | null) => seesStaffOf(c.get('user'), waiterId);
+reportRoutes.get('/checks', (c) => c.json(checksReport(range(c), 300, waiterFor(c))));
 reportRoutes.get('/patron', (c) => c.json(patronLive(can(c.get('user'), 'rapor.maliyet'))));
 
 const csvCell = (v: unknown) => {
@@ -51,7 +53,7 @@ reportRoutes.get('/export.csv', (c) => {
     const rep = productReport(r, can(c.get('user'), 'rapor.maliyet'));
     rows = [['Ürün', 'Boy', 'Kategori', 'Adet', 'Ciro', 'Pay %', 'İkram adet', 'İptal adet'], ...rep.products.map((p) => [p.name, p.size, p.category, p.qty, tlPlain(p.revenue), p.share, p.complimentary, p.voided])];
   } else if (type === 'adisyonlar') {
-    const rep = checksReport(r, 5000);
+    const rep = checksReport(r, 5000, waiterFor(c));
     rows = [['No', 'Durum', 'Tür', 'Yer', 'Açılış', 'Kapanış', 'Garson', 'Adet', 'Tutar', 'Ödeme'], ...rep.rows.map((o) => [o.no, o.status, o.type, o.place ?? '', fmtDateTime(o.openedAt), o.closedAt ? fmtDateTime(o.closedAt) : '', o.waiter ?? '', o.qty, tlPlain(o.total), o.methods.join(', ')])];
   } else if (type === 'saatlik') {
     const rep = hourlyReport(r);

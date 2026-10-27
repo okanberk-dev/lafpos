@@ -454,8 +454,11 @@ export function refundReport(range: Range) {
   return { range, total: rows.reduce((a, r) => a + r.amount, 0), count: rows.length, rows };
 }
 
-/** Adisyon listesi (ModPOS "Adisyon" raporu): kapanan ve iptal edilen adisyonlar, ödeme türleriyle */
-export function checksReport(range: Range, limit = 300) {
+/**
+ * Adisyon listesi (ModPOS "Adisyon" raporu): kapanan ve iptal edilen adisyonlar, ödeme türleriyle. `showWaiter`
+ * garsonun kime gösterileceğini söyler: garsona göre toplanan liste personel tutarıdır (`seesStaffOf`).
+ */
+export function checksReport(range: Range, limit = 300, showWaiter: (waiterId: string | null) => boolean = () => true) {
   const ds = load(range);
   const tables = new Map(db.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((t) => [t.id, t.name]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
@@ -474,7 +477,7 @@ export function checksReport(range: Range, limit = 300) {
         place: o.tableId ? (tables.get(o.tableId) ?? '') : null,
         openedAt: o.openedAt,
         closedAt: o.closedAt,
-        waiter: o.waiterId ? (users.get(o.waiterId) ?? null) : null,
+        waiter: o.waiterId && showWaiter(o.waiterId) ? (users.get(o.waiterId) ?? null) : null,
         itemCount: its.length,
         qty: its.reduce((a, i) => a + i.qty, 0),
         total: o.total,

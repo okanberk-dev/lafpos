@@ -386,11 +386,32 @@ export function seesCashNumbers(user: AuthUser): boolean {
 }
 
 /**
- * Kör kasa: kapanmış adisyonun ödeme dökümü kasa rakamlarını görmeyene gitmez. Adisyon döndüren her uç bundan
- * geçer (okuma, hesap yazdırma, teslimat, ödeme...); yalnız okuma uçlarını süzmek yetmedi (inceleme, 26 Eki 2026).
+ * Personel tutarları maliyet yetkisi ister (`rapor.maliyet`), yalnız X ve Z özetindeki kişi başına ciro değil:
+ * kapanmış adisyonun kime ait olduğu da (garson, kalemi ekleyen, ödemeyi alan). Kapanmış adisyonlar garsona göre
+ * toplanınca o özet ve personel raporu yeniden çıkıyordu (inceleme, 27 Eki 2026). Kişi kendi adisyonunu tam görür.
+ */
+export function seesStaffOf(user: AuthUser, waiterId: string | null): boolean {
+  return (waiterId !== null && waiterId === user.id) || can(user, 'rapor.maliyet');
+}
+
+/**
+ * Kapanmış adisyonun kişiye göre süzülmesi. Kör kasa: ödeme dökümü kasa rakamlarını görmeyene gitmez (toplayıp
+ * beklenen nakdi bulamasın). Personel tutarları: başkasının kapanmış adisyonunda garson, kalemi ekleyen ve ödemeyi
+ * alan kişi maliyet yetkisi olmayana gitmez (`seesStaffOf`); tutarlar ve kalemler kalır. Açık adisyon olduğu gibi
+ * gider: salon planı, mutfak ve hesap fişi garsonu gösterir. Adisyon döndüren her uç bundan geçer (okuma, hesap
+ * yazdırma, teslimat, ödeme...); yalnız okuma uçlarını süzmek yetmedi (inceleme, 26 Eki 2026).
  */
 export function blindOrder(user: AuthUser, dto: OrderDTO): OrderDTO {
-  return dto.status !== 'acik' && !seesCashNumbers(user) ? { ...dto, payments: [] } : dto;
+  if (dto.status === 'acik') return dto;
+  const out = seesCashNumbers(user) ? dto : { ...dto, payments: [] };
+  if (seesStaffOf(user, dto.waiterId)) return out;
+  return {
+    ...out,
+    waiterId: null,
+    waiterName: null,
+    items: out.items.map((i) => ({ ...i, createdBy: null })),
+    payments: out.payments.map((p) => ({ ...p, userId: null, userName: null })),
+  };
 }
 
 export function actorFrom(c: Context<AppEnv>, approverPin?: string | null): Actor {

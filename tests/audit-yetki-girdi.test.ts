@@ -471,6 +471,74 @@ describe('input-74: takvimde olmayan tarih ve saat', () => {
   });
 });
 
+describe('auth-54 devamı: kapanmış adisyonun garsonu da personel tutarıdır', () => {
+  it('maliyet yetkisi olmayan kişi kapanmış adisyonlardan personel tutarı çıkaramaz; kendi adisyonunun garsonunu ve açık adisyonları görür', async () => {
+    const sell = async (who: string, qty: number) => {
+      const o = await h.ok<OrderDTO>(who, 'POST', '/orders', { type: 'tezgah' });
+      const full = await h.ok<OrderDTO>(who, 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty }] });
+      await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: full.total });
+      return full;
+    };
+    await h.ok('patron', 'POST', '/admin/users', { name: 'Rakamlı kasa', role: 'kasiyer', permGrant: ['kasa.rakam'], pin: '4547' });
+    await h.ok('patron', 'POST', '/admin/users', { name: 'Rapor bakan', role: 'kasiyer', permGrant: ['rapor.gor'], pin: '4548' });
+    await h.login('rakamli', '4547');
+    await h.login('rapor', '4548');
+    const theirs = await sell('garson', 2);
+    const own = await sell('rakamli', 1);
+    const open = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'tezgah' });
+    const openFull = await h.ok<OrderDTO>('garson', 'POST', `/orders/${open.id}/items`, { items: [{ productId: product('Türk kahvesi').id, qty: 1 }] });
+
+    // Bulgudaki sınama: kapanmış adisyon listesini garsona göre toplayıp X'teki kişi başına ciroyu bulmak
+    type Day = { summary: { byUser: { name: string; amount: number }[] } | null };
+    expect((await h.ok<Day>('rakamli', 'GET', '/cash/day')).summary!.byUser).toEqual([]);
+    const truth = Object.fromEntries((await h.ok<Day>('mudur', 'GET', '/cash/day')).summary!.byUser.map((u) => [u.name, u.amount]));
+    const closed = await h.ok<OrderDTO[]>('rakamli', 'GET', '/orders?status=kapali&limit=500');
+    const derived: Record<string, number> = {};
+    for (const o of closed) if (o.waiterName) derived[o.waiterName] = (derived[o.waiterName] ?? 0) + o.total;
+    expect(derived).not.toEqual(truth);
+    // Yalnız kendi adisyonlarının garsonu görünür
+    expect(Object.keys(derived)).toEqual(['Rakamlı kasa']);
+    expect(closed.find((o) => o.id === theirs.id)).toMatchObject({ waiterId: null, waiterName: null, total: theirs.total });
+    expect(closed.find((o) => o.id === own.id)?.waiterName).toBe('Rakamlı kasa');
+    // Tek adisyon okuması da (listeden alınan numarayla tek tek okumak aşmasın); ödeme dökümü kasa rakamıyla görünür
+    const one = await h.ok<OrderDTO>('rakamli', 'GET', `/orders/${theirs.id}`);
+    expect(one.waiterName).toBeNull();
+    expect(one.payments.length).toBe(1);
+    // Kalemi ekleyen ve ödemeyi alan kişi de garsonu verir (tezgâhta çoğu zaman aynı kişi)
+    expect(one.items.map((i) => i.createdBy)).toEqual(one.items.map(() => null));
+    expect(one.payments[0]).toMatchObject({ userId: null, userName: null, amount: theirs.total });
+    const mine = await h.ok<OrderDTO>('rakamli', 'GET', `/orders/${own.id}`);
+    expect(mine.items.every((i) => i.createdBy !== null)).toBe(true);
+    expect(mine.payments[0].userName).toBe('Kasa');
+    // Kör kasiyer ve garson da başkasınınkini görmez; kendi adisyonunu görür
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${theirs.id}`)).waiterName).toBeNull();
+    expect((await h.ok<OrderDTO>('garson', 'GET', `/orders/${theirs.id}`)).waiterName).toBe('Garson');
+    // Açık adisyonda garson görünür (salon planı ve mutfak için gerekli); maliyet yetkisi olan her şeyi görür
+    expect((await h.ok<OrderDTO[]>('rakamli', 'GET', '/orders?status=acik')).find((o) => o.id === open.id)?.waiterName).toBe('Garson');
+    expect((await h.ok<OrderDTO>('mudur', 'GET', `/orders/${theirs.id}`)).waiterName).toBe('Garson');
+
+    // Adisyon raporu ve CSV dökümü: rapor gören ama maliyet görmeyen kişiye garson gitmez
+    type Checks = { rows: { id: string; no: number; waiter: string | null }[] };
+    expect((await h.ok<Checks>('rapor', 'GET', '/reports/checks')).rows.find((r) => r.id === theirs.id)?.waiter).toBeNull();
+    expect((await h.ok<Checks>('mudur', 'GET', '/reports/checks')).rows.find((r) => r.id === theirs.id)?.waiter).toBe('Garson');
+    const csvWaiter = async (who: string) => {
+      const res = await h.call<string>(who, 'GET', '/reports/export.csv?type=adisyonlar');
+      expect(res.status).toBe(200);
+      const lines = res.json.replace(/^﻿/, '').trim().split('\r\n').map((l) => l.split(';'));
+      const col = lines[0].indexOf('Garson');
+      expect(col).toBeGreaterThan(0);
+      return lines.find((l) => l[0] === String(theirs.no) && l[1] === 'kapali')?.[col];
+    };
+    expect(await csvWaiter('rapor')).toBe('');
+    expect(await csvWaiter('mudur')).toBe('Garson');
+
+    // Ödemeyi alan kasiyerin yanıtı da: kapanan adisyonun garsonu başkasıysa gitmez
+    const paid = await h.ok<{ order: OrderDTO; closed: boolean }>('rakamli', 'POST', `/orders/${open.id}/payments`, { methodId: method('Nakit').id, amount: openFull.total });
+    expect(paid.closed).toBe(true);
+    expect(paid.order.waiterName).toBeNull();
+  });
+});
+
 describe('auth-54: personel tutarları rapor.maliyet ister', () => {
   it('kasa rakamlarını gören ama maliyet yetkisi olmayan kişi X ve Z özetinde personel tutarlarını görmez', async () => {
     const sell = async (who: string, name: string, qty: number) => {

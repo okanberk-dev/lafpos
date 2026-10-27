@@ -32,7 +32,8 @@ const seesNumbers = seesCashNumbers;
 /**
  * Personel tutarları (kişi başına adisyon sayısı ve ciro) maliyet yetkisi ister, personel raporu gibi: kör kasası
  * kaldırılan kasiyer (`kasa.rakam`) ya da rapor gören (`rapor.gor`) kişi X ve Z özetinde onları görmez (denetim,
- * 26 Eki 2026).
+ * 26 Eki 2026). Kural yalnız bu özet için değil, verinin kendisi için: kapanmış adisyonun garsonu da aynı kişiye
+ * gitmez (`seesStaffOf`: adisyon uçları `blindOrder`, adisyon raporu ve CSV dökümü).
  */
 function summaryFor(user: AuthUser, s: ZSummary | null): ZSummary | null {
   return s && !can(user, 'rapor.maliyet') ? { ...s, byUser: [] } : s;

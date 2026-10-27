@@ -597,10 +597,13 @@ interface ChecksData {
 }
 
 function ChecksReport({ range, onExport }: { range: Range; onExport: () => void }) {
+  const can = useCan();
   const data = useQuery({ queryKey: ['reports', 'checks', range], queryFn: () => get<ChecksData>(`/reports/checks?${qs(range)}`) });
   if (data.isLoading) return <PageLoading />;
   if (data.isError) return <ReportError error={data.error} onRetry={() => void data.refetch()} />;
   const rows = data.data?.rows ?? [];
+  // Garsona göre adisyon listesi personel tutarıdır: maliyet yetkisi olmayana sunucu garsonu göndermez
+  const withWaiter = can('rapor.maliyet');
   return (
     <Card flush title={`Adisyonlar (${rows.length})`} actions={<Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>CSV</Button>}>
       {rows.length === 0 ? (
@@ -613,7 +616,7 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
                 <th className="px-4 py-2">No</th>
                 <th className="px-2 py-2">Yer</th>
                 <th className="px-2 py-2">Saat</th>
-                <th className="px-2 py-2">Garson</th>
+                {withWaiter && <th className="px-2 py-2">Garson</th>}
                 <th className="px-2 py-2 text-right">Adet</th>
                 <th className="px-2 py-2">Ödeme</th>
                 <th className="px-4 py-2 text-right">Tutar</th>
@@ -630,7 +633,7 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
                     {fmtTime(o.openedAt)}
                     {o.closedAt && ` – ${fmtTime(o.closedAt)}`}
                   </td>
-                  <td className="px-2 py-2">{o.waiter ?? '—'}</td>
+                  {withWaiter && <td className="px-2 py-2">{o.waiter ?? '—'}</td>}
                   <td className="px-2 py-2 text-right">{o.qty}</td>
                   <td className="px-2 py-2 text-muted">{o.methods.join(', ') || '—'}</td>
                   <td className="px-4 py-2 text-right font-semibold">{tl(o.total)}</td>
