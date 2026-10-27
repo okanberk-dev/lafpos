@@ -179,7 +179,13 @@ adı klavyeden; ödenmiş satışta da düzeltilir ve denetime yazılır, gün s
 masaya taşınınca kalkar, "Ayrı hesap"la bölünen kalemlere geçer; kayıt sürerken ikinci basış kalemi yinelemez), bar ekranı, çağrı ekranı, hazır uyarısı ve fiş numara yerine "Masa 12" yazar; self serviste
 numara ödeme sonucunda, bar fişinde ve adisyonda büyük. Ödeme kuralları ve bara gidiş değişmez. Mod değişikliği
 ayrı denetim kaydı (`settings.servis_modu`, eski ve yeni mod). Testler `tests/servis-modu.test.ts`, e2e'de mod başına
-bir akış. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
+bir akış. **QR + self servis** (`qr_self`, `claude/qr-self-servis`): self gibi kasada sipariş ve ödeme, ama Masalar
+menüde kalır çünkü masadaki QR'ı okutan müşteri uygulamadan masaya sipariş verir ve sipariş masaya düşer. QR'ı LafPOS
+üretir ve saklar (`tables.qrCode`, göç `0010_masa_qr`; sitenin 10 simgelik Crockford kuralı, içerik
+`https://laffogato.net/masa/<kod>`, `shared/table-qr.ts`); Yönetim › Masa planı'nda masa başına QR, kod yenileme ve
+A4 masa kartları (`printNow(…, { sheet: true })`). Sipariş eşlemesi önce `tableCode`, sonra etiket; sitenin kodu
+tanıması için sözleşmeye eklenen `PUT /api/panel/tables` (giden kutusu `tables.sync`; site henüz almıyorsa
+yeniden denenmez) `docs/03-ENTEGRASYON.md` §2.3. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
 (gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı

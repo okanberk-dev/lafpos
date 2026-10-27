@@ -102,7 +102,7 @@ export default function SettingsAdmin() {
         </div>
       )}
       <Card flush title="Servis modu" subtitle="Seçince hemen uygulanır; açılış ekranı, menü ve tezgâh satışı buna göre değişir">
-        <div role="radiogroup" aria-label="Servis modu" className="grid gap-2 p-4 sm:grid-cols-3">
+        <div role="radiogroup" aria-label="Servis modu" className="grid gap-2 p-4 sm:grid-cols-2 xl:grid-cols-4">
           {SERVICE_MODES.map((m) => {
             const on = m === mode;
             return (
