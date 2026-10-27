@@ -156,9 +156,24 @@ export class TokenxError extends Error {
     message: string,
     public code: string | null,
     public httpStatus: number,
+    /**
+     * İstek Token'a ulaşmış olabilir ama yanıt gelmedi (zaman aşımı, bağlantı koptu, ağ geçidi hatası): sepet
+     * cihazda olabilir. Token'ın durum koduyla verdiği ret ve bağlantı hiç kurulamadıysa false.
+     */
+    public uncertain = false,
   ) {
     super(message);
   }
+}
+
+/** Bağlantı kurulamadan düşen istek Token'a hiç gitmemiştir (DNS, bağlantı reddi, ağ yok) */
+const NOT_SENT = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED', 'ENETUNREACH', 'EHOSTUNREACH', 'ENETDOWN']);
+
+function networkError(e: unknown, mayHaveArrived: boolean): TokenxError {
+  const message = e instanceof Error ? e.message : String(e);
+  const cause = (e as { cause?: { code?: string } } | null)?.cause?.code;
+  const arrived = mayHaveArrived && !(cause && NOT_SENT.has(cause));
+  return new TokenxError(arrived ? `Token'dan yanıt alınamadı: ${message}` : `Token'a ulaşılamadı: ${message}`, null, 0, arrived);
 }
 
 export class TokenxClient {
@@ -196,6 +211,9 @@ export class TokenxClient {
       method: 'POST',
       headers: { authorization: `Basic ${basic}`, accept: 'application/json' },
       signal: AbortSignal.timeout(10_000),
+    }).catch((e: unknown) => {
+      // Kimlik adımı: asıl istek (sepet) henüz gitmedi
+      throw networkError(e, false);
     });
     const json = (await res.json().catch(() => null)) as { status?: number; description?: string; result?: { accessToken?: string; expiresIn?: number } } | null;
     const value = json?.result?.accessToken;
@@ -217,7 +235,9 @@ export class TokenxClient {
     if (opts.terminal) headers['terminal-id'] = this.cfg.terminalId;
     if (opts.branch) headers['branch-id'] = this.cfg.branchId;
     if (this.cfg.appResource) headers['x-application-resource'] = this.cfg.appResource;
-    const res = await fetch(url, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: AbortSignal.timeout(15_000) });
+    const res = await fetch(url, { method, headers, body: opts.body === undefined ? undefined : JSON.stringify(opts.body), signal: AbortSignal.timeout(15_000) }).catch((e: unknown) => {
+      throw networkError(e, method !== 'GET');
+    });
     const json = (await res.json().catch(() => null)) as { status?: number | string; description?: string; result?: T } | null;
     const code = statusCode(json?.status);
     if ((res.status === 401 || code === '0002') && opts.retryAuth !== false) {
@@ -227,7 +247,8 @@ export class TokenxClient {
     const ok = res.ok && (json?.status === 0 || json?.status === 201 || json?.status === '0');
     if (!ok) {
       const known = code ? STATUS_TEXT[code] : undefined;
-      throw new TokenxError(known ?? json?.description ?? `Token isteği başarısız (HTTP ${res.status})`, code, res.status);
+      // Durum kodu olmayan 5xx (ağ geçidi zaman aşımı gibi): istek Token'a ulaşmış ve işlenmiş olabilir
+      throw new TokenxError(known ?? json?.description ?? `Token isteği başarısız (HTTP ${res.status})`, code, res.status, !code && res.status >= 500 && method !== 'GET');
     }
     return json?.result as T;
   }

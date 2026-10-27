@@ -142,6 +142,65 @@ describe('yazarkasa denetimi', () => {
     expect((await receipts(o.id))[0].status).toBe('fis_iptal');
   });
 
+  it('gönderim isteği sürerken gelen "ödendi" hata ile ezilmez; sonraki fiş iptali ödemeyi geri alır', async () => {
+    await provider('tokenx');
+    const o = await order([{ name: 'Türk kahvesi' }]);
+    instant = async (b) => {
+      const amount = b.items.reduce((a, i) => a + (i.price * i.quantity) / 1000, 0);
+      expect((await webhook({ basketID: b.basketID, status: 0, zNo: 3, receiptNo: 11, paymentItems: [{ type: 1, amount }] })).status).toBe(200);
+    };
+    const sent = await h.call<{ receipt: Receipt }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
+    instant = 'ok';
+    expect(sent.status).toBe(200);
+    expect(sent.json.receipt.status).toBe('tamamlandi');
+    expect(await getOrder(o.id)).toMatchObject({ status: 'kapali', paid: o.total });
+
+    await webhook({ basketID: sent.json.receipt.id, status: 99 });
+    expect(await getOrder(o.id)).toMatchObject({ status: 'acik', paid: 0 });
+    expect((await receipts(o.id))[0].status).toBe('fis_iptal');
+    await h.ok('mudur', 'POST', `/orders/${o.id}/cancel`, { reason: 'Fiş iptal edildi' });
+  });
+
+  it('yanıtı alınamayan gönderim bekleyen kalır ve sorgulanır; ödendiyse işlenir, cihaza ulaşmadıysa kilit açılır', async () => {
+    const o = await order([{ name: 'Türk kahvesi' }]);
+    instant = 'timeout';
+    const r = await h.call<{ code: string; error: string }>('kasa', 'POST', `/okc/orders/${o.id}/send`, {});
+    instant = 'ok';
+    expect(r.status).toBe(502);
+    expect(r.json.code).toBe('okc_unknown');
+    const [rec] = await receipts(o.id);
+    expect(rec.status).toBe('gonderildi');
+    // Sepet cihazda olabilir: LafPOS'ta ikinci kez tahsil edilmez
+    const pay = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: o.total });
+    expect(pay.json.code).toBe('okc_pending');
+    // Kasiyer cihazda ödemeyi aldı; sorgu sonucu işler
+    details.set(rec.id, { basketID: rec.id, sale: { basketID: rec.id, status: 0, zNo: 7, receiptNo: 42, paymentItems: [{ type: 3, amount: rec.amount }] } });
+    const refreshed = await h.ok<Receipt>('kasa', 'POST', `/okc/receipts/${rec.id}/refresh`);
+    expect(refreshed.status).toBe('tamamlandi');
+    expect(await getOrder(o.id)).toMatchObject({ status: 'kapali', paid: o.total });
+
+    // Token sepeti hiç görmediyse (1006) sepet hata olur, adisyon kasadan alınır
+    const o2 = await order([{ name: 'Türk kahvesi' }]);
+    instant = 'timeout';
+    await h.call('kasa', 'POST', `/okc/orders/${o2.id}/send`, {});
+    instant = 'ok';
+    const [rec2] = await receipts(o2.id);
+    details.delete(rec2.id);
+    expect((await h.ok<Receipt>('kasa', 'POST', `/okc/receipts/${rec2.id}/refresh`)).status).toBe('hata');
+    expect((await h.ok<{ closed: boolean }>('kasa', 'POST', `/orders/${o2.id}/payments`, { methodId: method('Nakit').id, amount: o2.total })).closed).toBe(true);
+
+    // Token kodla reddettiyse sepet hemen hata olur
+    const o3 = await order([{ name: 'Türk kahvesi' }]);
+    instant = 'reject';
+    const rej = await h.call<{ code: string }>('kasa', 'POST', `/okc/orders/${o3.id}/send`, {});
+    instant = 'ok';
+    expect(rej.status).toBe(502);
+    expect(rej.json.code).toBe('tokenx_1100');
+    expect((await receipts(o3.id))[0].status).toBe('hata');
+    expect((await h.ok<{ closed: boolean }>('kasa', 'POST', `/orders/${o3.id}/payments`, { methodId: method('Nakit').id, amount: o3.total })).closed).toBe(true);
+    await provider('simulator');
+  });
+
   // Gün kapanır: bundan sonra test yok
   it('kapanmış güne ait fiş iptali (webhook) Z’yi değiştirmez; ödeme geri alınmaz, yöneticiye alarm düşer', async () => {
     const o = await order([{ name: 'Latte', size: 'L', qty: 2 }]);

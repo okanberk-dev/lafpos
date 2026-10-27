@@ -162,15 +162,30 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     })
     .run();
 
+  let unknown: string | null = null;
   if (provider.capabilities.transport === 'push') {
     try {
       await provider.send({ id: basketId, status: 'gonderildi', mode: s.okcMode, basket: built.basket, amount: built.amount });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      db.update(schema.fiscalReceipts).set({ status: 'hata', error: message, updatedAt: Date.now() }).where(eq(schema.fiscalReceipts.id, basketId)).run();
-      recordError(message);
-      publish(orderId, 'okc.error', message, actor.user.id);
-      throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : 'okc_send');
+      // Yanıt gelmediyse (zaman aşımı, bağlantı koptu) sepet cihaza ulaşmış olabilir: bekleyen kalır, adisyon kilitli
+      // kalır ve durumu sorgulanır. Kesin retse sepet cihazda yoktur. Her iki durumda da yalnız hâlâ bekleyen sepet
+      // güncellenir: sonuç (webhook) istek sürerken geldiyse işlenmiş sepet ezilmez (inceleme, 27 Eki 2026)
+      const uncertain = (e as { uncertain?: unknown } | null)?.uncertain === true;
+      const stillPending = and(eq(schema.fiscalReceipts.id, basketId), inArray(schema.fiscalReceipts.status, [...PENDING]));
+      const changed = db
+        .update(schema.fiscalReceipts)
+        .set(uncertain ? { error: `Gönderimin yanıtı alınamadı: ${message}`, updatedAt: Date.now() } : { status: 'hata', error: message, updatedAt: Date.now() })
+        .where(stillPending)
+        .run().changes;
+      if (changed) {
+        recordError(message);
+        if (!uncertain) {
+          publish(orderId, 'okc.error', message, actor.user.id);
+          throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : 'okc_send');
+        }
+        unknown = message;
+      }
     }
   }
   if (provider.poll) ensurePolling();
@@ -180,9 +195,17 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
     action: 'okc.send',
     orderId,
     amount: built.amount,
-    message: `#${order.no} adisyon yazarkasaya gönderildi (${tl(built.amount)}, ${s.okcProvider === 'simulator' ? 'simülatör' : `${provider.label}, ${s.okcMode === 'anlik' ? 'kasada ödeme' : 'masada ödeme'}`})`,
+    message: `#${order.no} adisyon yazarkasaya gönderildi (${tl(built.amount)}, ${s.okcProvider === 'simulator' ? 'simülatör' : `${provider.label}, ${s.okcMode === 'anlik' ? 'kasada ödeme' : 'masada ödeme'}`})${unknown ? `; cihazdan yanıt alınamadı (${unknown})` : ''}`,
   });
   fx.flush();
+  if (unknown) {
+    publish(orderId, 'okc.error', 'Yazarkasadan yanıt alınamadı; sepetin durumu sorgulanıyor', actor.user.id);
+    throw new HttpError(
+      502,
+      `Yazarkasadan yanıt alınamadı; sepet cihaza ulaşmış olabilir. Durumu sorgulanıyor: cihazda ödendiyse adisyon kendiliğinden kapanır, cihazda yoksa sepeti iptal edin (${unknown})`,
+      'okc_unknown',
+    );
+  }
   publish(orderId, 'okc.sent', undefined, actor.user.id);
   return receiptDTO(loadReceipt(basketId));
 }
@@ -204,19 +227,27 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
       if (!provider) throw new Error(`${r.provider} bağlantısı bu sürümde yok`);
       await provider.cancel(pendingOf(r));
     } catch (e) {
-      // Sepet bu arada ödendiyse sonucu işlemek için durumu sorgula
+      // Sepet bu arada ödendiyse ya da cihazda yoksa sonucu işlemek için durumu sorgula
       await refreshReceipt(r.id).catch(() => undefined);
       const message = e instanceof Error ? e.message : String(e);
-      if (!force) throw new HttpError(502, `Cihazdaki sepet silinemedi: ${message}`, 'okc_delete');
       const now = loadReceipt(r.id);
       if (now.status === 'tamamlandi') throw conflict('Sepet bu arada cihazda ödendi; adisyona işlendi', 'okc_paid');
+      if (!PENDING.includes(now.status as (typeof PENDING)[number])) return receiptDTO(now);
+      if (!force) throw new HttpError(502, `Cihazdaki sepet silinemedi: ${message}`, 'okc_delete');
       unreachable = message;
     }
   }
-  db.update(schema.fiscalReceipts)
+  // Yalnız hâlâ bekleyen (ya da hatalı) sepet silinmiş sayılır: silme sürerken gelen "ödendi" ezilmez
+  const changed = db
+    .update(schema.fiscalReceipts)
     .set({ status: 'silindi', error: unreachable ? `Cihaza ulaşılamadı, LafPOS'ta iptal sayıldı: ${unreachable}` : null, updatedAt: Date.now() })
-    .where(eq(schema.fiscalReceipts.id, r.id))
-    .run();
+    .where(and(eq(schema.fiscalReceipts.id, r.id), inArray(schema.fiscalReceipts.status, [...PENDING, 'hata'])))
+    .run().changes;
+  if (!changed) {
+    const now = loadReceipt(r.id);
+    if (now.status === 'tamamlandi') throw conflict('Sepet bu arada cihazda ödendi; adisyona işlendi', 'okc_paid');
+    return receiptDTO(now);
+  }
   if (unreachable) {
     const order = loadOrder(db, r.orderId);
     const fx = new Effects();
@@ -406,10 +437,18 @@ export async function refreshReceipt(receiptId: string) {
   const provider = providerFor(r.provider);
   if (!provider?.poll || !provider.configured() || !PENDING.includes(r.status as (typeof PENDING)[number])) return receiptDTO(r);
   const out = await provider.poll(pendingOf(r));
+  const stillPending = and(eq(schema.fiscalReceipts.id, r.id), inArray(schema.fiscalReceipts.status, [...PENDING]));
   if (out.kind === 'result') applyResult(r.id, out.result, 'sorgu');
   else if (out.kind === 'deleted') {
-    db.update(schema.fiscalReceipts).set({ status: 'silindi', updatedAt: Date.now() }).where(eq(schema.fiscalReceipts.id, r.id)).run();
+    db.update(schema.fiscalReceipts).set({ status: 'silindi', updatedAt: Date.now() }).where(stillPending).run();
     publish(r.orderId, 'okc.cancelled', 'Sepet cihazdan silindi');
+  } else if (out.kind === 'missing') {
+    // Yanıtı alınamayan gönderim cihaza hiç ulaşmamış: adisyonun kilidi açılır
+    db.update(schema.fiscalReceipts)
+      .set({ status: 'hata', error: `Sepet cihaza ulaşmadı${r.error ? ` (${r.error})` : ''}`, updatedAt: Date.now() })
+      .where(stillPending)
+      .run();
+    publish(r.orderId, 'okc.error', 'Sepet cihaza ulaşmadı; hesabı yeniden gönderin ya da kasadan alın');
   } else if (out.locked !== (r.status === 'kilitli')) setLock(r.id, out.locked, out.lockedBy);
   return receiptDTO(loadReceipt(r.id));
 }
