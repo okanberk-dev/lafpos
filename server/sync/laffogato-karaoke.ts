@@ -264,9 +264,14 @@ export function siteBookingsToday(now = Date.now()): SiteKaraokeBooking[] {
   return s.date === businessDate(now) ? s.bookings : [];
 }
 
-/** Okunan son listedeki rezervasyon (gün bakılmaz: sayaç gece yarısını aşabilir) */
-export function findSiteBooking(id: string): SiteKaraokeBooking | null {
-  return readState().bookings.find((b) => b.id === id) ?? null;
+/**
+ * Okunan son listedeki rezervasyon (gün bakılmaz: sayaç gece yarısını aşabilir). `gone`: liste rezervasyonun gününe ait
+ * ve eksiksiz ama rezervasyon içinde yok; bağlanırken listedeydi, sonraki bir çekimde düştü (panel başka güne taşıdı)
+ */
+export function findSiteBooking(id: string, date: string): { booking: SiteKaraokeBooking | null; gone: boolean } {
+  const s = readState();
+  const booking = s.bookings.find((b) => b.id === id) ?? null;
+  return { booking, gone: !booking && s.date === date && s.complete };
 }
 
 /** Oda kutusunun ve "Sayacı başlat"ın gördüğü: durum, iş gününün rezervasyonları ve hangisinin hangi adisyonda sayaçta olduğu */

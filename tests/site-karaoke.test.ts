@@ -315,16 +315,40 @@ describe('oda sayacı rezervasyona bağlanır', () => {
     await h.ok('garson', 'POST', `/orders/${a.id}/room/stop`);
   });
 
-  it('sayaç dururken rezervasyon listede yoksa bağlanırken saklanan koşul geçerlidir', async () => {
+  it('sayaç dururken rezervasyon o günün listesinden düştüyse (başka güne taşındı) blok sayılmaz', async () => {
     const o = await roomOrder();
     await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00044' });
-    // Panel rezervasyonu başka güne taşıdı: bugünün listesinden düştü
+    // Panel rezervasyonu başka güne taşıdı: bugünün listesinden düştü, blok o güne ait
     site.karaoke = site.karaoke.filter((b) => b.id !== 'krk-00044');
     await freshList();
     await ranFor(o.id, 130);
     const stopped = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
-    // İlk testin oturumu 120 dk'yı kullandı; bu oturum yalnız aşan süreyi öder (130 dk → 135 dk adımla)
-    expect(roomLines(stopped)[0].unitPrice).toBe(225000);
+    // 130 dk → 135 dk adımla, saat ücretiyle
+    expect(roomLines(stopped)[0]).toMatchObject({ unitPrice: 225000, optionsText: '2 sa 15 dk', note: 'Site rezervasyonu KRK-00044' });
+    const { db, schema } = await import('../server/db/client');
+    const { and, eq } = await import('drizzle-orm');
+    const log = db.select().from(schema.auditLog).where(and(eq(schema.auditLog.orderId, o.id), eq(schema.auditLog.action, 'room.stop'))).get();
+    expect(log?.message).toMatch(/KRK-00044 blok sayılmadı \(sitenin bugünkü listesinde yok\)/);
+    site.karaoke = (await import('./fake-site')).siteKaraokeFixture().reservations;
+    await freshList();
+  });
+
+  it('liste başka güne aitse (iş günü döndü, site ulaşılamadı) bağlanırken saklanan koşul geçer', async () => {
+    site.karaoke = site.karaoke.map((b) => (b.id === 'krk-00044' ? { ...b, id: 'krk-00054' } : b));
+    await freshList();
+    const o = await roomOrder();
+    await h.ok('garson', 'POST', `/orders/${o.id}/room/start`, { bookingId: 'krk-00054' });
+    // Gece yarısından sonra 05:00'i geçen sayaç: okunan liste artık ertesi iş gününün, rezervasyon içinde değil
+    const { getSyncState, setSyncState } = await import('../server/lib/settings');
+    const state = getSyncState<Record<string, unknown>>('laffogato.karaoke')!;
+    setSyncState('laffogato.karaoke', { ...state, date: '2099-01-01', bookings: [] });
+    // Durdururken yapılacak çekim de başarısız: site ulaşılamıyor
+    site.karaokeStatus.push(500, 500);
+    await ranFor(o.id, 130);
+    const stopped = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/room/stop`);
+    site.karaokeStatus.length = 0;
+    // Sitede ödenmiş 2 saat saklanan koşulla düşülür: aşan 10 dk → 15 dk
+    expect(roomLines(stopped)[0]).toMatchObject({ unitPrice: 25000, note: 'Site rezervasyonu KRK-00054' });
     site.karaoke = (await import('./fake-site')).siteKaraokeFixture().reservations;
     await freshList();
   });

@@ -2,7 +2,7 @@ import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
 import type { PlatformId, PlatformSettings } from './platforms';
 import type { ServiceMode } from './service-mode';
-import type { SiteKaraokeBooking } from './karaoke';
+import type { RoomBookingSnapshot, SiteKaraokeBooking } from './karaoke';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
 
@@ -309,6 +309,8 @@ export interface RoomSessionDTO {
   bookingId: string | null;
   /** Bağlıysa rezervasyon bloğunun bu oturuma düşen kalanı (dakika) */
   prepaidMinutes: number | null;
+  /** Bağlanırken saklanan rezervasyon koşulu (ad ve not yok); ekran güncel durumu sitenin listesinden okur */
+  booking: RoomBookingSnapshot | null;
 }
 
 export interface OrderDTO {

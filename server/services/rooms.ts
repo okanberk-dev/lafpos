@@ -88,18 +88,23 @@ function earlierSessions(t: Tx, bookingId: string, exceptId?: string): SessionRo
 
 /**
  * Bağlı oturumun bloğu, sayaç durduğu andaki rezervasyona göre: okunan son listede varsa onun durumu (ödemesi
- * bağlanırken süren rezervasyon bu arada ödenmiş olabilir; iptal edilen blok düşer), yoksa bağlanırken saklanan.
- * Önceki oturumların karşıladığı dakika bloktan düşülür; köşkte ödenen blok tutarı yalnız ilk oturuma yazılır.
+ * bağlanırken süren rezervasyon bu arada ödenmiş olabilir; iptal edilen blok düşer). Listede yoksa: liste onun gününe
+ * aitse rezervasyon o günden çıkmıştır (panel başka güne taşıdı; blok o güne aittir, burada sayılmaz), değilse (iş
+ * günü döndü, site ulaşılamadı) bağlanırken saklanan koşul geçer. Önceki oturumların karşıladığı dakika bloktan
+ * düşülür; köşkte ödenen blok tutarı bir kez yazılır (blok koşuluyla duran ilk oturumda).
  */
-function blockOf(t: Tx, session: SessionRow): { block: RoomBlock | null; booking: RoomBookingSnapshot | null } {
-  if (!session.bookingId) return { block: null, booking: null };
-  const live = findSiteBooking(session.bookingId);
-  const booking = live ? snapshotOf(live) : (session.booking ?? null);
+function blockOf(t: Tx, session: SessionRow): { block: RoomBlock | null; booking: RoomBookingSnapshot | null; gone: boolean } {
+  if (!session.bookingId) return { block: null, booking: null, gone: false };
+  const saved = session.booking ?? null;
+  const found = findSiteBooking(session.bookingId, saved?.date ?? '');
+  if (found.gone) return { block: null, booking: saved, gone: true };
+  const booking = found.booking ? snapshotOf(found.booking) : saved;
   const terms = blockTerms(booking);
-  if (!booking || !terms) return { block: null, booking };
+  if (!booking || !terms) return { block: null, booking, gone: false };
   const earlier = earlierSessions(t, session.bookingId, session.id);
   const used = earlier.reduce((a, x) => a + (x.prepaidMinutes ?? 0), 0);
-  return { block: { terms, minutes: Math.max(0, booking.hours * 60 - used), charge: terms === 'till' && !earlier.length ? booking.totalMinor : 0 }, booking };
+  const tillCharged = earlier.some((x) => blockTerms(x.booking) === 'till');
+  return { block: { terms, minutes: Math.max(0, booking.hours * 60 - used), charge: terms === 'till' && !tillCharged ? booking.totalMinor : 0 }, booking, gone: false };
 }
 
 /**
@@ -182,7 +187,7 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
   if (!product) throw conflict('Saatlik oda ürünü tanımlı değil (Yönetim › Menü, gizli "hizmet" ürünü)');
   const s = getSettings();
   const now = Date.now();
-  const { block, booking } = blockOf(t, session);
+  const { block, booking, gone } = blockOf(t, session);
   const bill = roomBill(now - session.startedAt, session.hourlyRate, s.roomBillingStepMinutes, s.roomMinimumMinutes, block);
   const charge = bill.charge;
   const code = booking ? bookingCode(booking.id) : null;
@@ -192,10 +197,19 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string) {
     : block.terms === 'paid'
       ? `${bill.overMinutes ? `aşan ${fmtMinutes(bill.overMinutes)}` : 'aşım yok'} (${booking!.hours} sa sitede ödendi)`
       : `${booking!.hours} sa rezervasyon${bill.overMinutes ? ` + ${fmtMinutes(bill.overMinutes)}` : ''}`;
+  // Oturum, ücretin dayandığı rezervasyon durumunu saklar: sayaç yeniden başlarsa kalan blok ve köşkte ödenen blok
+  // tutarının alınıp alınmadığı buradan okunur
   const finish = (itemId: string | null) =>
-    t.update(schema.roomSessions).set({ endedAt: now, itemId, prepaidMinutes: block ? bill.coveredMinutes : session.bookingId ? 0 : null }).where(eq(schema.roomSessions.id, session.id)).run();
+    t.update(schema.roomSessions)
+      .set({ endedAt: now, itemId, booking: booking ?? session.booking, prepaidMinutes: block ? bill.coveredMinutes : session.bookingId ? 0 : null })
+      .where(eq(schema.roomSessions.id, session.id))
+      .run();
   const ended = Math.max(0, Math.ceil((now - session.startedAt) / 60_000));
-  const why = code ? (block ? `rezervasyon ${code} ${block.terms === 'paid' ? 'sitede ödendi' : 'köşkte'}` : `rezervasyon ${code} blok sayılmadı (${booking ? 'iptal ya da ödenmemiş' : 'okunamadı'})`) : null;
+  const why = !code
+    ? null
+    : block
+      ? `rezervasyon ${code} ${block.terms === 'paid' ? 'sitede ödendi' : 'köşkte'}`
+      : `rezervasyon ${code} blok sayılmadı (${gone ? 'sitenin bugünkü listesinde yok' : 'iptal ya da ödenmemiş'})`;
   if (charge <= 0) {
     // Süre sitede ödenen (ya da ücretsiz telafi) blokta kaldı: adisyona 0 TL satır yazılmaz
     finish(null);
