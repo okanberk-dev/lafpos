@@ -4,7 +4,7 @@ import { calcOrder, type OrderTotals } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
 import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
-import { costMap } from '../sync/lafmaliyet';
+import { costMap, costsAt } from '../sync/lafmaliyet';
 import { getOpenDay } from './orders';
 
 /**
@@ -284,6 +284,8 @@ export function productReport(range: Range, withCost: boolean) {
     range,
     total,
     service,
+    // Maliyetlerin son çekimi: yalnız maliyet yetkisine (eskiyse "Maliyetler N gün önce alındı"); personel varlığını da görmez
+    ...(withCost ? { costsAt: costsAt() } : {}),
     products: products_,
     categories: [...cats.values()].sort((a, b) => b.revenue - a.revenue).map((c) => ({ ...c, share: pct(c.revenue, total) })),
   };
@@ -669,6 +671,7 @@ export function patronLive(withCost: boolean) {
     voided: summary.voided,
     online: summary.online,
     top: products,
+    ...(withCost ? { costsAt: costsAt() } : {}),
     openChecks,
     alerts,
     anomalies: anomalies(today, summary, open.reduce((a, o) => a + totalsOf(o).gross, 0)),

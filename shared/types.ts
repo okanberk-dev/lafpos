@@ -164,6 +164,9 @@ export interface BusinessDayDTO {
   closedAt: number | null;
   /** Gün sonundan sonra yeniden açıldıysa son açılış anı */
   reopenedAt?: number | null;
+  /** Gün sonu kurulum modunda alındı (true, eğitim günü) ya da gerçek (false); null açık ya da işaretten önce kapandı.
+   * lafmaliyet'e yalnız false giden gün gider */
+  trainingDay?: boolean | null;
 }
 
 export interface PublicSettings {

@@ -78,7 +78,8 @@ Durum: Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan. Giriş ekranı ku
 anahtarı üretir ve Vercel'e yazar (laffogato ve lafmaliyet'e `LAFPOS_SYNC_SECRET`, lafpos'a `LAFPOS_CLOUD_SECRET`),
 parolayı sorar (tanımlıysa dokunmaz), Upstash Redis'i ekler (koşulları operatör onaylar), üç projenin main'den gelen
 son üretim dağıtımını yeniden derler ve kafe bilgisayarına girecek satırları `~/Downloads/lafpos-kasa-ayarlari.env`
-dosyasına yazar (izin 600). Anahtarlar ekrana basılmaz; tanımlı bir değişkene `--yenile` olmadan dokunmaz.
+dosyasına yazar (izin 600; lafmaliyet ve Uzaktan satırları 1. adım, site satırları kurulum modu kapandıktan sonra 2.
+adım başlığıyla, `docs/03-ENTEGRASYON.md` §8). Anahtarlar ekrana basılmaz; tanımlı bir değişkene `--yenile` olmadan dokunmaz.
 
 ## 5. Sorun giderme
 

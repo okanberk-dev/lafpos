@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/misc';
 import { errorMessage, getToken, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { type DayAnswer, pushToast } from '@/lib/lafmaliyet';
 import { printNow, ZReceipt } from '@/lib/print';
 import { toast } from '@/lib/toast';
 
@@ -61,8 +62,8 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
   const send = async () => {
     setSending(true);
     try {
-      await post(`/sync/lafmaliyet/gun/${day.id}/push`);
-      toast.ok("Gün lafmaliyet'e gönderildi");
+      const r = await post<{ answer?: DayAnswer | null }>(`/sync/lafmaliyet/gun/${day.id}/push`);
+      toast.ok(pushToast(r?.answer));
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {
@@ -70,6 +71,8 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
     }
   };
   const d = summary.cashDiff;
+  // Kurulum modunda (ya da eğitim işaretinden önce) kapanan gün lafmaliyet'e gitmez (docs/03-ENTEGRASYON.md §4.3)
+  const trainingDay = !!day.closedAt && day.trainingDay !== false;
 
   return (
     <div className="space-y-4">
@@ -142,7 +145,7 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
               <Button size="sm" icon={<Download className="size-4" />} onClick={download}>
                 JSON
               </Button>
-              {boot.integrations.lafmaliyetPush && day.closedAt && (can('kasa.gun') || can('senkron.yonet')) && (
+              {boot.integrations.lafmaliyetPush && day.closedAt && !trainingDay && (can('kasa.gun') || can('senkron.yonet')) && (
                 <Button size="sm" variant="primary" icon={<Send className="size-4" />} loading={sending} onClick={send}>
                   Gönder
                 </Button>
@@ -158,7 +161,14 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
               </div>
             ))}
           </div>
-          <p className="px-4 pb-3 text-xs text-muted">Alanlar lafmaliyet'teki formla aynı sırada. "Kopyala" ile alıp forma yapıştırabilirsiniz; bağlantı kurulunca kendiliğinden gider</p>
+          <p className="px-4 pb-3 text-xs text-muted">
+            Alanlar lafmaliyet'teki formla aynı sırada. "Kopyala" ile alıp forma yapıştırabilirsiniz;{' '}
+            {trainingDay
+              ? day.trainingDay
+                ? "bu gün kurulum modunda kapandı (eğitim günü), lafmaliyet'e kendiliğinden gitmez"
+                : "bu gün eğitim işareti tutulmadan önce kapandı, lafmaliyet'e kendiliğinden gitmez"
+              : 'bağlantı kurulunca kendiliğinden gider'}
+          </p>
         </Card>
       )}
 
