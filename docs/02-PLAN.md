@@ -177,7 +177,7 @@ dosyasının kod imzası (imzasız dosyada Windows SmartScreen uyarır).
 
 | Risk | Önlem |
 | --- | --- |
-| Neon kotası (site) | Yalnız CDN'deki menü ucu sık çekilir; imzalı uçlar en sık 5 dakikada bir ya da elle |
+| Neon kotası (site) | Menü ucu (CDN) gün açıkken 15 dakikada bir, gece hiç; imzalı uçlar en sık 5 dakikada bir ya da elle; sipariş sürüm sinyali veritabanına gitmez; `LAFFOGATO_URL` yoksa hiç istek yok (`docs/03-ENTEGRASYON.md` §2, §5) |
 | Ortak anahtarın kafe makinesinde durması | Opsiyonel; `.env`'de, dosya izinleri 600; ayrı anahtar için laffogato PR'ı önerildi |
 | Mali mevzuat | Adisyon "mali değeri yoktur" bilgi fişi; mali fiş ÖKC'den (TokenX Connect bağlantısı, `docs/04-YAZARKASA.md`) |
 | Tek makine arızası | Günlük otomatik SQLite yedeği; kurulum kılavuzunda yedeğin başka diske/buluta kopyası |

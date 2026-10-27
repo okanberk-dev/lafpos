@@ -35,6 +35,8 @@ Kurulum yönetici izni ister ve şunları yapar:
 
 - **Ayarlar** (site, lafmaliyet, yazarkasa anahtarları): Başlat › LafPOS › LafPOS ayarları. `ayarlar.env`
   Not Defteri'nde açılır; kaydedince (Ctrl+S) bekçi değişikliği görür ve sunucuyu yeni ayarlarla yeniden başlatır.
+  İlk kurulumda site bağlantısı kapalıdır (`LAFFOGATO_URL` satırı yorumlu): LafPOS siteye hiç bağlanmaz, menü
+  kurulumdaki gibi kalır. Açmak için `docs/03-ENTEGRASYON.md` §2.
 - **Güncelleme:** yeni kurulum dosyasını çalıştırın. Sunucuyu durdurur, veritabanını
   `backups\lafpos-guncelleme-<tarih>.db` olarak kopyalar, uygulamayı değiştirir, sunucuyu başlatır; veri ve
   ayarlar kalır.

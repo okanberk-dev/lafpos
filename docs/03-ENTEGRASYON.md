@@ -7,25 +7,45 @@ Bir alan burada yoksa sistemler arasında gitmez (KVKK beyaz liste kuralı).
 
 | Veri | Sahibi | LafPOS'ta |
 | --- | --- | --- |
-| Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır |
+| Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır; sitenin kapattığını kasiyer açamaz (§2.3 Tükendi kilidi) |
 | Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti) | menüyle birlikte gelir |
 | POS'a özel alanlar: istasyon, kısa ad, düğme rengi, POS sırası, gizli, porsiyon sayacı, `posName` | LafPOS | senkron dokunmaz |
 | POS'a özel ürünler (karaoke saati, kampanya) | LafPOS | `extSource` boş |
 | Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | LafPOS kopyalamaz |
 | Masa, adisyon, ödeme, gün sonu, personel PIN'leri | LafPOS | |
 | Online sipariş (uygulama, web, masa QR) | laffogato | bar ekranında gösterilir, aşaması geri yazılır, tahsil edilmez |
+| Sadakat damgası | laffogato (uygulama) | LafPOS'un yerel damga kartı varsayılan kapalı (`stampCategoryKeys: []`), site bağlantısı kuruluyken hiç açılmaz |
 
 ## 2. laffogato → LafPOS: menü
 
-### 2.1 Herkese açık menü (her zaman açık)
+**Bağlantı varsayılan kapalı** (sahibin 26 Ekim kararı): LafPOS siteye yalnız kasa bilgisayarının `.env`'inde
+(Windows kurulumunda `ayarlar.env`) `LAFFOGATO_URL` açıkça yazılıysa bağlanır; varsayılan adres yoktur. Yazılmamışsa
+hiçbir istek gitmez: menü yoklaması, ürün görseli, sipariş sürüm sinyali, Tükendi yazımı. Yönetim › Entegrasyon
+"Site bağlantısı kurulmadı" der, elle "Siteyle eşitle" ve online sipariş "Yenile" aynı mesajla 409 `not_configured`
+döner, Tükendi yalnız LafPOS'ta değişir. İmzalı uçlar (§2.3) ayrıca `LAFFOGATO_SYNC_SECRET` ister. Kurulum betiği
+(`scripts/vercel/baglanti-kur.sh`) kafeye girecek ayar dosyasına `LAFFOGATO_URL=https://laffogato.net` satırını yazar;
+`.env.example`'da (ve ondan üretilen `ayarlar.env.ornek`'te) satır yorumludur.
 
-`GET https://laffogato.net/api/mobile/v1/menu` · `If-None-Match: <son ETag>` · anahtar gerekmez.
+### 2.1 Herkese açık menü
 
-- CDN'den gelir (`s-maxage=300`), sitenin veritabanını uyandırmaz.
+`GET {LAFFOGATO_URL}/api/mobile/v1/menu` · `If-None-Match: <son ETag>` · anahtar gerekmez.
+
+- CDN'den gelir (`s-maxage=300, stale-while-revalidate=3600`). CDN'deki kopya eskiyince istek sitenin veritabanını
+  okur (laffogato `listMenuItems`); Neon 5 dakika boşta kalınca uyuduğu için her ıska bir uyanmadır, gece
+  uyanmaları en büyük israftır.
 - 304 gelirse değişiklik yok. 200 gelirse fark hesaplanır.
-- **Sıklık:** en çok 5 dakikada bir otomatik (ayarla kapatılabilir) + "Siteyle eşitle" düğmesi.
-- Yalnız satıştaki kalemleri içerir; listede olmayan bağlı ürün "sitede satışta değil" sayılır ve
-  POS'ta Tükendi olur (silinmez, geçmiş satışlar bozulmasın).
+- **Sıklık:** açık iş günü varken 15 dakikada bir otomatik (ayarla kapatılabilir). Açık gün yokken (gece) hiç; gün
+  açılınca (ya da yeniden açılınca) bir kez. LafPOS siteye kendi Satışta yazımını yaptıktan (Tükendi, Satışa aç,
+  porsiyon) 5 saniye sonra bir kez: site o an zaten uyanık. Ayrıca "Siteyle eşitle" düğmesi.
+- Yalnız satıştaki kalemleri içerir ve dakikalarca bayat kalabilir. **Satışta bilgisinde karar imzalı panel
+  listesinindir** (anahtar varsa, §2.3 `GET /api/panel/menu`; her kalemi satışta olsun olmasın veritabanından taze
+  verir): herkese açık listede görünen ama panelde kapalı kalem kapanır, listede görünmeyen ama panelde açık kalem
+  kapanmaz (kapalıysa açılır), panelde hiç olmayan kalem sitede silinmiştir. Anahtar varken panel listesi alınamazsa
+  o tur uygulanmaz (ETag yazılmaz), sonraki tur yeniden dener: bayat liste Tükendi ürünü yeniden açmasın. Anahtar
+  yoksa listede olmayan bağlı ürün "sitede satışta değil" sayılır. Kapanan ürün POS'ta Tükendi olur (silinmez,
+  geçmiş satışlar bozulmasın); porsiyonu biten ürünü site açamaz.
+- Ürün kartının görseli bir kez indirilip veri klasöründe kalır: sitenin küçültme ucuna (`/_next/image`, 256 px)
+  sürümlü adresle (`?v=`) gidilir, site fotoğrafı değişince yenisi gelir; uç yanıt vermezse sürümlü asıl görsel.
 
 ### 2.2 Eşleme
 
@@ -42,15 +62,17 @@ Bir alan burada yoksa sistemler arasında gitmez (KVKK beyaz liste kuralı).
 | `allergens`, `tags` | `allergens`, `tags` | |
 | `customization.milks/roasts/syrups/extraShotMinor/sugarMax` | `option_groups` + `option_items` (`extKey`: `milk`, `roast`, `syrup`, `extraShot`, `sugar`; kalem `code`: site kimliği) | `dessert`, `snack`, `extras` kategorilerindeki ürünlere bağlanmaz (sitenin `NON_CUSTOMIZABLE_CATEGORIES` kuralı) |
 
-Senkron önce **önizleme** üretir: yeni ürün, fiyatı değişen, adı değişen, KDV'si değişen, siteden kalkan.
-Uygulama tek veritabanı işleminde yapılır, `audit_log`'a "menü senkronu" olarak yazılır.
+Elle "Siteyle eşitle" önce **önizleme** gösterir: yeni ürün, fiyatı değişen, adı değişen, KDV'si değişen, siteden
+kalkan, yeniden satışa çıkan; onaylanınca uygular. Otomatik senkron önizlemesiz uygular. İkisi de tek veritabanı
+işleminde yapılır ve değişiklik varsa `audit_log`'a "menü senkronu" olarak yazılır.
 
 ### 2.3 İmzalı panel uçları (anahtar verilirse)
 
-`.env`: `LAFFOGATO_SYNC_SECRET`. Değeri sitenin **`LAFPOS_SYNC_SECRET`** ortam değişkeniyle aynıdır (en az 32
-karakter). Site bu anahtarı panel uçlarında `KARAOKE_SYNC_SECRET`'a ek olarak kabul eder (laffogato
-`claude/lafpos-baglantisi` PR'ı); böylece panelin anahtarı kafedeki makinede durmaz ve iki anahtar ayrı
-döndürülebilir. Site değişikliği yayına girene kadar geçici olarak `KARAOKE_SYNC_SECRET` değeri de çalışır.
+`.env`: `LAFFOGATO_URL` ve `LAFFOGATO_SYNC_SECRET`. Anahtarın değeri sitenin **`LAFPOS_SYNC_SECRET`** ortam
+değişkeniyle aynıdır (en az 32 karakter). Site bu anahtarı panel uçlarında `KARAOKE_SYNC_SECRET`'a ek olarak kabul eder
+(laffogato#263); iki anahtar ayrı döndürülür. **Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz:** site, LafPOS
+anahtarı panelinkiyle aynıysa onu LafPOS anahtarı saymaz (laffogato `src/lib/panel/signed-callers.ts`); sürüm sinyali
+503 döner, yazımlar panelinmiş gibi kaydedilirdi.
 
 İmza sitenin `src/lib/panel/karaoke-sync-core.ts` kuralının aynısı:
 
@@ -64,22 +86,49 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 
 | Uç | LafPOS kullanımı | Sıklık |
 | --- | --- | --- |
-| `GET /api/panel/menu` | Tükendi kalemleri de görmek (`isActive`) | menü senkronunda, en çok 5 dk'da bir |
-| `POST /api/panel/menu {id, isActive, actor}` | POS'ta Tükendi / Satışa aç → önce site, 2xx gelince yerel | kullanıcı işlemi |
-| `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı | 5 dk'da bir + ekran açılınca + elle |
-| `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi | kullanıcı işlemi |
+| `GET /api/panel/menu` | Satışta bilgisinin taze kaynağı (`isActive`, §2.1) | menü senkronunda: herkese açık menü değişince ve elle |
+| `POST /api/panel/menu {id, isActive, actor}` | Tükendi / Satışa aç → önce site, 2xx gelince yerel; porsiyon Tükendi'si giden kutusundan; porsiyon doldurunca önce site | kullanıcı işlemi ya da porsiyon |
+| `GET /api/pos/orders/version` | sipariş sürüm sinyali (aşağıda) | 20 sn'de bir, gece de; veritabanına gitmez |
+| `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı | sinyal değişince; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
+| `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi; 409 ve 404'te liste yeniden çekilir | kullanıcı işlemi |
 
 `actor` LafPOS kullanıcısının adıdır. LafPOS anahtarıyla gelen yazımlar site olay kaydına `lafpos:<ad>` diye düşer.
 
 **Sipariş sürüm sinyali:** `GET /api/pos/orders/version` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version": "<metin>" }`.
 Sitenin veri önbelleğinden (`live:orders` etiketi) gelir, veritabanına dokunmaz; sipariş yazımı etiketi
-düşürünce değer değişir. LafPOS bunu 20 saniyede bir sorar, değer değişince `GET /api/panel/orders`'ı çeker.
-Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer.
+düşürünce değer değişir. LafPOS bunu 20 saniyede bir sorar (gece de: gün kapalıyken gelen sipariş son güne işlenir),
+değer değişince `GET /api/panel/orders`'ı çeker. Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde
+bar ekranına düşer. Veritabanına dokunmadığı için 5 dakika kuralının (`AGENTS.md` kural 6) dışındadır.
+- Sürüm yalnız çekim başarılıysa kaydedilir: başarısız çekim sonraki turda (20 sn) yeniden denenir, art arda
+  başarısızlıkta bekleme katlanır (en çok 5 dk). Sipariş kaybolmaz.
+- Sinyal çalışırken de açık iş günü varken 15 dakikada bir tam çekim yapılır: sinyali kaçan bir değişiklik ya da
+  süresi dolup listeden sessizce düşen sipariş (sitede yazım olmaz, sinyal değişmez) kalmasın. Gece yapılmaz.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım).
-`fulfillment = 'table'` olan sipariş, `label` içindeki masa adı ya da `tables.siteTableCode` eşlemesiyle
-masa planında ilgili masada rozet olarak görünür.
+- **Masa:** `fulfillment = 'table'` olan sipariş masa planında ilgili masada rozet olarak görünür. Masa önce Yönetim ›
+  Masa planı'ndaki "Sitedeki masa adı" (`tables.siteTableCode`) `label` ile kıyaslanarak bulunur; o alanı boş
+  masalarda yedek, yerel masa adıdır, sitenin etiket kuralıyla (ad "masa" diye başlamıyorsa önüne "Masa " gelir:
+  yerel `S4` ↔ sitedeki `Masa S4`). Büyük-küçük harf ve boşluk farkı gözetilmez; sitenin masa QR kodu gerekmez.
+- **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) LafPOS hiçbir siparişi kapatmaz. Bütün
+  listede olmayan açık online sipariş "Siteden kalktı" diye kapanır (`extStage = 'gone'`: sitede tamamlandı, iptal
+  edildi ya da süresi geçti): servis edilmiş sayılmaz, bar ve çağrı ekranından düşer, denetim kaydına yazılır; listeye
+  geri gelirse yeniden açılır. LafPOS'ta son aşamaya getirilen sipariş `extStage = 'done'` kapanır.
+- **Aşama:** site 409 (`stale`, sipariş bu arada değişti) ya da 404 (`not_found`, "Sipariş sitede bulunamadı")
+  dönerse liste yeniden çekilir.
+
+**Tükendi kilidi** (`products.soldOutBy`): LafPOS'un kapattığı ürün (kasadan, bardan, porsiyon bitince) `lafpos`,
+sitenin kapattığı (senkron) `site` diye işaretlenir. Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar;
+sitenin kapattığı kasada "Sitede satışta değil" diye görünür, düğmesi yoktur, sunucu 403 `site_closed` döner. Menü
+yetkisi olan (`menu.yonet`) hepsini açar: açış önce siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer.
+
+**Porsiyon:** siteye bağlı ürünün porsiyonu bitince Tükendi yazımı adisyon kalemiyle aynı işlemde giden kutusuna
+girer (`outbox`: target `laffogato`, kind `menu.isActive`, ürün başına tek kayıt `menu:<extId>`) ve hemen gönderilir;
+gönderilemezse artan beklemeyle yeniden denenir, site 400/403/404/409/413 dönerse kalıcı hata olarak Yönetim ›
+Entegrasyon ve Genel bakış'ta görünür. Ürün bu arada yeniden açılırsa kayıt düşer. Porsiyon doldurulunca (Yönetim ›
+Ürünler) kapalı ürün önce sitede açılır, 2xx'ten sonra yerelde; site kabul etmezse hiçbir alan kaydedilmez. Siteye
+giden bütün Satışta yazımları sırayla gider (tek kilit): geç kalan bir "kapalı" yeni bir açılışın üstüne yazılmaz.
+Giden kutusunu lafmaliyet de kullanır; her biri yalnız kendi kayıtlarını gönderir.
 
 ## 3. LafPOS → lafmaliyet: bugün (kod değişmeden)
 
@@ -240,12 +289,15 @@ gösterir (patron panelinde ürün kârlılığı). Başka alan gitmez.
 
 ## 5. Sıklık ve bütçe
 
+`.env`'de `LAFFOGATO_URL` yoksa aşağıdaki site işlerinin hiçbiri çalışmaz (§2).
+
 | İş | Sıklık | Neon'a etkisi |
 | --- | --- | --- |
-| Herkese açık menü | 5 dk (ETag) | yok (CDN) |
-| İmzalı menü okuma | senkronda, ≥5 dk | küçük okuma |
-| Online sipariş okuma | 5 dk + ekran açılınca + elle | küçük okuma |
-| Tükendi / aşama yazma | kullanıcı işlemi | tek yazım |
+| Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; elle | CDN ıskasında okuma (uyanma) |
+| İmzalı menü okuma | senkronda (herkese açık menü değişince) ve elle | küçük okuma |
+| Sipariş sürüm sinyali | 20 sn, gece de | yok (veri önbelleği, veritabanına gitmez) |
+| Online sipariş okuma | sinyal değişince + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
+| Tükendi / aşama yazma | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme) | tek yazım |
 
 ## 6. Diğer repolardaki işler
