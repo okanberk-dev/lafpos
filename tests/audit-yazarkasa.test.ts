@@ -141,4 +141,28 @@ describe('yazarkasa denetimi', () => {
     expect(voided.message).not.toContain('yeniden açıldı');
     expect((await receipts(o.id))[0].status).toBe('fis_iptal');
   });
+
+  // Gün kapanır: bundan sonra test yok
+  it('kapanmış güne ait fiş iptali (webhook) Z’yi değiştirmez; ödeme geri alınmaz, yöneticiye alarm düşer', async () => {
+    const o = await order([{ name: 'Latte', size: 'L', qty: 2 }]);
+    const r = await send(o.id);
+    await simPay(r.id, [{ type: 1, amount: r.amount }]);
+    expect((await getOrder(o.id)).status).toBe('kapali');
+    const x = await h.ok<{ day: { id: string; date: string }; summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
+    const closed = await h.ok<{ summary: { netSales: number } }>('mudur', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash });
+
+    const res = await webhook({ basketID: r.id, status: 99 });
+    expect(res.status).toBe(200);
+    const after = await getOrder(o.id);
+    expect(after).toMatchObject({ status: 'kapali', paid: o.total });
+    expect(after.payments.every((p) => !p.refundedAt)).toBe(true);
+    const report = await h.ok<{ netSales: number }>('mudur', 'GET', `/reports/summary?from=${x.day.date}&to=${x.day.date}`);
+    expect(report.netSales).toBe(closed.summary.netSales);
+    expect((await receipts(o.id))[0].status).toBe('fis_iptal');
+    const alarm = (await audits()).find((a) => a.action === 'okc.void_closed_day');
+    expect(alarm).toMatchObject({ severity: 'alarm', orderId: o.id, amount: r.amount });
+    // Aynı sonuç ikinci kez gelirse bir şey değişmez
+    await webhook({ basketID: r.id, status: 99 });
+    expect((await receipts(o.id))[0].status).toBe('fis_iptal');
+  });
 });

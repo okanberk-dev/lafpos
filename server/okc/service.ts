@@ -320,7 +320,27 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
 
   if (result.status === 'voided') {
     if (r.status === 'fis_iptal') return;
-    if (r.status === 'tamamlandi' && r.paymentIds.length) {
+    const closedDay = r.status === 'tamamlandi' ? closedDayOf(r) : null;
+    if (closedDay) {
+      // Kapanmış günün Z'si değişmez: ödeme o günden geri alınmaz, adisyon o günde açılmaz. İade bugünün işidir,
+      // yönetici alarmı görür ve parayı geri verdiyse bugünün kasasından çıkış olarak işler (inceleme, 27 Eki 2026)
+      tx((t) => {
+        t.update(schema.fiscalReceipts)
+          .set({ status: 'fis_iptal', result, error: `Fiş ${closedDay.date} gününe ait; gün kapandığı için ödeme LafPOS'ta geri alınmadı`, updatedAt: now })
+          .where(eq(schema.fiscalReceipts.id, r.id))
+          .run();
+        const order = loadOrder(t, closedDay.orderId);
+        fx.audit(t, {
+          userId: by?.userId ?? null,
+          approverId: by?.approverId ?? null,
+          action: 'okc.void_closed_day',
+          severity: 'alarm',
+          orderId: order.id,
+          amount: r.amount,
+          message: `#${order.no} adisyonun ${closedDay.date} tarihli yazarkasa fişi (${tl(r.amount)}) cihazda iptal edildi; gün kapandığı için ödeme LafPOS'ta geri alınmadı. Müşteriye iade yapıldıysa bugünün kasasından çıkış olarak işleyin`,
+        });
+      });
+    } else if (r.status === 'tamamlandi' && r.paymentIds.length) {
       tx((t) => {
         const out = refundExternalPayments(t, by?.userId ?? null, fx, r.paymentIds, 'Yazarkasada fiş iptal edildi');
         t.update(schema.fiscalReceipts).set({ status: 'fis_iptal', result, updatedAt: now }).where(eq(schema.fiscalReceipts.id, r.id)).run();
@@ -352,6 +372,22 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
   fx.emit({ topic: 'okc', kind: 'okc.cancelled', orderId: r.orderId, message: 'Cihazda ödemeden vazgeçildi' });
   fx.emit({ topic: 'orders', kind: 'okc.cancelled', orderId: r.orderId });
   fx.flush();
+}
+
+/** Fişin (iade edilmemiş) ödemelerinden biri açık gün dışındaysa o günün tarihi ve ödemenin adisyonu */
+function closedDayOf(r: ReceiptRow): { date: string; orderId: string } | null {
+  if (!r.paymentIds.length) return null;
+  const day = getOpenDay(db);
+  const live = db
+    .select({ dayId: schema.payments.dayId, orderId: schema.payments.orderId, refundedAt: schema.payments.refundedAt })
+    .from(schema.payments)
+    .where(inArray(schema.payments.id, r.paymentIds))
+    .all()
+    .filter((p) => !p.refundedAt);
+  const old = live.find((p) => p.dayId !== day?.id);
+  if (!old) return null;
+  const date = db.select({ date: schema.businessDays.date }).from(schema.businessDays).where(eq(schema.businessDays.id, old.dayId)).get()?.date ?? '?';
+  return { date, orderId: old.orderId ?? r.orderId };
 }
 
 export function setLock(receiptId: string, locked: boolean, by?: string | null) {
@@ -481,9 +517,7 @@ export function simulatorCancel(actor: Actor, receiptId: string, voidReceipt = f
   if (voidReceipt) {
     // Fiş iptali ödeme iptalidir: LafPOS'taki ödeme iptaliyle aynı yetki ve aynı gün kuralı
     approverId = need(actor, 'odeme.iade', 'Fiş iptali yetkili onayı gerektirir');
-    const day = getOpenDay(db);
-    const paidDays = r.paymentIds.length ? db.select({ dayId: schema.payments.dayId }).from(schema.payments).where(inArray(schema.payments.id, r.paymentIds)).all() : [];
-    if (!day || paidDays.some((p) => p.dayId !== day.id)) throw conflict('Kapanmış bir güne ait fiş iptal edilemez', 'day_closed');
+    if (!getOpenDay(db) || closedDayOf(r)) throw conflict('Kapanmış bir güne ait fiş iptal edilemez', 'day_closed');
   }
   applySale(r.id, { basketID: r.id, status: voidReceipt ? 99 : -1, message: 'CANCELLED' }, 'simulator', { userId: actor.user.id, approverId });
   return receiptDTO(loadReceipt(r.id));
