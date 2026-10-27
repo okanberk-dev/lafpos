@@ -157,7 +157,7 @@ export default function OrderPage() {
     { icon: <Split className="size-5" />, label: 'Hesabı böl / kalem taşı', onClick: () => setDialog('bol'), show: editable && order.items.some((i) => !i.voided) },
     { icon: <Percent className="size-5" />, label: order.discountType ? 'Adisyon indirimini değiştir' : 'Adisyon indirimi', onClick: () => setDialog('indirim'), show: editable },
     { icon: <Users className="size-5" />, label: `Kişi sayısı (${order.guests})`, onClick: () => setDialog('kisi'), show: editable },
-    { icon: <UserRound className="size-5" />, label: order.customer ? `Müşteri: ${order.customer.name}` : 'Müşteri ekle', hint: 'Açık hesap ve damga kartı için', onClick: () => setDialog('musteri'), show: isOpen && !isOnline },
+    { icon: <UserRound className="size-5" />, label: order.customer ? `Müşteri: ${order.customer.name}` : 'Müşteri ekle', hint: boot.integrations.localStamps ? 'Açık hesap ve damga kartı için' : 'Açık hesap ve sipariş geçmişi için', onClick: () => setDialog('musteri'), show: isOpen && !isOnline },
     { icon: <MonitorUp className="size-5" />, label: displayCode ? 'Müşteri ekranı: açık' : 'Müşteri ekranı', hint: 'İkinci ekran ya da müşteriye dönük tablet', onClick: () => setDialog('ekran'), show: !isOnline },
     { icon: <StickyNote className="size-5" />, label: 'Adisyon notu', onClick: () => { setNoteText(order.note ?? ''); setDialog('not'); }, show: editable },
     { icon: <Printer className="size-5" />, label: 'Hesap yazdır', onClick: printBill, show: !isOnline && order.items.some((i) => !i.voided) },

@@ -124,3 +124,12 @@ describe('Tükendi kilidi', () => {
     site.menu = siteMenuFixture();
   });
 });
+
+describe('yerel damga kartı, site bağlantısı kuruluyken', () => {
+  it('kategori yazılsa da kapalı: ekranda yok, hediye kullanılmaz', async () => {
+    await h.ok('patron', 'PUT', '/admin/settings', { stampCategoryKeys: ['espresso'] });
+    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).integrations.localStamps).toBe(false);
+    const c = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Uygulama üyesi' });
+    expect((await h.call<{ code: string }>('kasa', 'POST', `/customers/${c.id}/redeem`, {})).json.code).toBe('stamps_off');
+  });
+});

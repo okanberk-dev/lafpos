@@ -1,5 +1,6 @@
 import { env } from '../env';
 import { conflict } from '../lib/http';
+import { getSettings } from '../lib/settings';
 import { MIN_SECRET_LENGTH } from '../lib/signature';
 
 /**
@@ -23,3 +24,10 @@ export function requireSiteSigned() {
   requireSiteLinked();
   if (!siteSigned()) throw conflict('Site bağlantı anahtarı tanımlı değil (LAFFOGATO_SYNC_SECRET)', 'not_configured');
 }
+
+/**
+ * LafPOS'un yerel, telefonla damga kartı. Varsayılan kapalı (`stampCategoryKeys: []`): tek sadakat programı
+ * uygulamadaki damgadır (laffogato `src/lib/legal/content.ts` tek program tanımlar). Site bağlantısı kuruluyken hiç
+ * açılmaz: damga birikmez, hediye kullanılmaz, ekranda görünmez.
+ */
+export const localStampsOn = () => getSettings().stampCategoryKeys.length > 0 && !siteLinked();

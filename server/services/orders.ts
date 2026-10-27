@@ -10,6 +10,7 @@ import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
+import { localStampsOn } from '../sync/laffogato-link';
 import { enqueueSiteSoldOut } from '../sync/site-outbox';
 import { calcFor, orderItems, orderPayments, orderToDTO } from './dto';
 import {
@@ -813,10 +814,10 @@ export function mergeSelection(list: { itemId: string; qty: number }[]): { itemI
   return [...merged].filter(([, qty]) => qty > 0).map(([itemId, qty]) => ({ itemId, qty }));
 }
 
-/** Adisyonun damga sayılan adedi (ayarlardaki damga kategorileri, iptal ve ikram hariç) */
+/** Adisyonun damga sayılan adedi (ayarlardaki damga kategorileri, iptal ve ikram hariç); damga kartı kapalıyken 0 */
 function stampQtyOf(t: Tx, orderId: string): number {
   const settings = getSettings();
-  if (!settings.stampCategoryKeys.length) return 0;
+  if (!localStampsOn()) return 0;
   const items = orderItems(t, orderId).filter((i) => !i.voided && !i.complimentary);
   const productIds = [...new Set(items.map((i) => i.productId).filter((x): x is string => !!x))];
   if (!productIds.length) return 0;

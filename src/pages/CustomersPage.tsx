@@ -78,13 +78,15 @@ export default function CustomersPage() {
 
   const c = detail.data?.customer;
   const goal = boot.settings.stampGoal;
+  // Yerel damga kartı varsayılan kapalı, site bağlantısı kuruluyken hiç yok (tek sadakat programı uygulamada)
+  const stamps = boot.integrations.localStamps;
   const collectMethods = boot.paymentMethods.filter((m) => m.kind !== 'cari' && m.kind !== 'online');
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
       <div className="flex min-h-0 flex-col border-line lg:w-[420px] lg:border-r">
         <div className="space-y-3 p-4">
-          <PageHeader title="Müşteriler" subtitle="Damga kartı, açık hesap ve adresler" actions={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>Yeni</Button>} />
+          <PageHeader title="Müşteriler" subtitle={stamps ? 'Damga kartı, açık hesap ve adresler' : 'Açık hesap ve adresler'} actions={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>Yeni</Button>} />
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ad ya da telefon" className="pl-9" />
@@ -101,9 +103,11 @@ export default function CustomersPage() {
                   </span>
                 </span>
                 <span className="text-right text-xs">
-                  <span className="block font-semibold text-warn-600">
-                    {x.stamps}/{goal}
-                  </span>
+                  {stamps && (
+                    <span className="block font-semibold text-warn-600">
+                      {x.stamps}/{goal}
+                    </span>
+                  )}
                   {x.balance !== 0 && <span className={x.balance > 0 ? 'text-danger-500' : 'text-brand-500'}>{tl(x.balance)}</span>}
                 </span>
               </button>
@@ -116,7 +120,7 @@ export default function CustomersPage() {
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
         {!c ? (
           <EmptyState icon={<Wallet />} title="Bir müşteri seçin">
-            Açık hesap bakiyesi, tahsilat, damga kartı ve sipariş geçmişi burada görünür
+            {stamps ? 'Açık hesap bakiyesi, tahsilat, damga kartı ve sipariş geçmişi burada görünür' : 'Açık hesap bakiyesi, tahsilat ve sipariş geçmişi burada görünür'}
           </EmptyState>
         ) : (
           <div className="space-y-4">
@@ -130,7 +134,7 @@ export default function CustomersPage() {
                 </p>
                 {c.note && <p className="mt-1 text-sm italic text-ink-2">{c.note}</p>}
               </div>
-              {c.stamps >= goal && (
+              {stamps && c.stamps >= goal && (
                 <Button
                   variant="warn"
                   icon={<Gift className="size-4" />}
@@ -155,9 +159,9 @@ export default function CustomersPage() {
                 </Button>
               )}
             </div>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className={`grid grid-cols-2 gap-3 ${stamps ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
               <Tile label="Açık hesap" value={tl(c.balance)} hint={c.creditLimit != null ? `sınır ${tl(c.creditLimit)}` : 'sınırsız'} />
-              <Tile label="Damga" value={`${c.stamps} / ${goal}`} />
+              {stamps && <Tile label="Damga" value={`${c.stamps} / ${goal}`} />}
               <Tile label="Toplam harcama" value={tl(c.totalSpent)} />
               <Tile label="Ziyaret" value={String(c.visits)} hint={c.lastVisitAt ? `son ${fmtDateTime(c.lastVisitAt)}` : undefined} />
             </div>

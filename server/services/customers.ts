@@ -5,6 +5,7 @@ import { type Actor, need } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
+import { localStampsOn } from '../sync/laffogato-link';
 
 /** Telefonu karşılaştırma biçimine indirger: yalnız rakamlar, başta 90/0 yok ("0532 111 22 33" -> "5321112233") */
 export function normalizePhone(phone: string | null | undefined): string | null {
@@ -91,6 +92,7 @@ export function updateCustomer(t: Tx, actor: Actor, fx: Effects, id: string, inp
 
 /** Damga kartı: hedefe ulaşan müşteriye bir içecek ikram edilir, damga hedef kadar düşer. */
 export function redeemStamps(t: Tx, actor: Actor, fx: Effects, customerId: string, goal: number) {
+  if (!localStampsOn()) throw conflict('LafPOS damga kartı kapalı; sadakat damgası uygulamadan verilir', 'stamps_off');
   need(actor, 'siparis.ikram');
   const c = t.select().from(schema.customers).where(eq(schema.customers.id, customerId)).get();
   if (!c) throw notFound('Müşteri');

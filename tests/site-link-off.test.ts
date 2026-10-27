@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { BootstrapDTO } from '@shared/types';
+import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
 /**
@@ -69,5 +69,36 @@ describe('LAFFOGATO_URL yokken site bağlantısı kapalı', () => {
       vi.useRealTimers();
     }
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('yerel damga kartı (L3 madde 7)', () => {
+  const stampsOf = async (id: string) => (await h.ok<{ customer: { stamps: number } }>('kasa', 'GET', `/customers/${id}`)).customer.stamps;
+  async function sale(customerId: string) {
+    const latte = boot.products.find((p) => p.name === 'Latte' && p.extSource === 'laffogato')!;
+    const cash = boot.paymentMethods.find((m) => m.kind === 'nakit')!;
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', customerId });
+    const filled = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, qty: 2, size: 'M' }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash.id, amount: filled.total });
+  }
+
+  it('varsayılan kapalı: damga birikmez, hediye kullanılmaz, ekranda yok', async () => {
+    expect(boot.integrations.localStamps).toBe(false);
+    const c = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Damgasız' });
+    await sale(c.id);
+    expect(await stampsOf(c.id)).toBe(0);
+    const r = await h.call<{ code: string }>('kasa', 'POST', `/customers/${c.id}/redeem`, {});
+    expect(r.status).toBe(409);
+    expect(r.json.code).toBe('stamps_off');
+  });
+
+  it('site bağlantısı yokken kategori yazılırsa açılır', async () => {
+    await h.ok('patron', 'PUT', '/admin/settings', { stampCategoryKeys: ['espresso'], stampGoal: 2 });
+    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).integrations.localStamps).toBe(true);
+    const c = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Damgalı' });
+    await sale(c.id);
+    expect(await stampsOf(c.id)).toBe(2);
+    await h.ok('kasa', 'POST', `/customers/${c.id}/redeem`, {});
+    expect(await stampsOf(c.id)).toBe(0);
   });
 });

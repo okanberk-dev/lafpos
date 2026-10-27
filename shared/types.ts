@@ -209,7 +209,10 @@ export interface BootstrapDTO {
     okc: { provider: 'kapali' | 'tokenx' | 'simulator'; mode: 'anlik' | 'liste' };
     laffogatoPanel: boolean;
     lafmaliyetPush: boolean;
+    /** Site adresi; boşsa site bağlantısı kurulmadı (LAFFOGATO_URL yok) */
     laffogatoUrl: string;
+    /** Yerel damga kartı açık mı (varsayılan kapalı; site bağlantısı kuruluyken hiç açılmaz) */
+    localStamps: boolean;
   };
   serverTime: number;
 }

@@ -8,6 +8,7 @@ import { Field, Input, Textarea, Toggle } from '@/components/ui/Field';
 import { PageLoading } from '@/components/ui/misc';
 import { Card, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
+import { useBoot } from '@/lib/boot';
 import { toast } from '@/lib/toast';
 
 type Settings = Record<string, unknown> & {
@@ -44,6 +45,7 @@ const lines = (a: string[]) => a.join('\n');
 const fromLines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 
 export default function SettingsAdmin() {
+  const boot = useBoot();
   const qc = useQueryClient();
   const data = useQuery({ queryKey: ['admin', 'settings'], queryFn: () => get<Settings>('/admin/settings') });
   const backups = useQuery({ queryKey: ['admin', 'backups'], queryFn: () => get<{ dir: string; files: { name: string; size: number; at: number }[] }>('/admin/backups') });
@@ -137,7 +139,7 @@ export default function SettingsAdmin() {
             </Field>
           </div>
         </Card>
-        <Card flush title="Bar ekranı, karaoke, damga, uyarılar">
+        <Card flush title={boot.integrations.localStamps ? 'Bar ekranı, karaoke, damga, uyarılar' : 'Bar ekranı, karaoke, uyarılar'}>
           <div className="grid grid-cols-2 gap-3 p-4">
             <Field label="Bar uyarı (dk)">
               <Input type="number" value={s.kitchenWarnMinutes} onChange={(e) => set({ kitchenWarnMinutes: Number(e.target.value) || 1 })} />
@@ -151,9 +153,12 @@ export default function SettingsAdmin() {
             <Field label="Oda en az (dk)">
               <Input type="number" value={s.roomMinimumMinutes} onChange={(e) => set({ roomMinimumMinutes: Number(e.target.value) || 0 })} />
             </Field>
-            <Field label="Hediye için damga">
-              <Input type="number" value={s.stampGoal} onChange={(e) => set({ stampGoal: Number(e.target.value) || 1 })} />
-            </Field>
+            {/* Yerel damga kartı varsayılan kapalı, site bağlantısı kuruluyken hiç yok (tek sadakat programı uygulamada) */}
+            {boot.integrations.localStamps && (
+              <Field label="Hediye için damga">
+                <Input type="number" value={s.stampGoal} onChange={(e) => set({ stampGoal: Number(e.target.value) || 1 })} />
+              </Field>
+            )}
             <Field label="Uyarı: indirim (%)">
               <Input type="number" value={s.alertDiscountPct} onChange={(e) => set({ alertDiscountPct: Number(e.target.value) || 1 })} />
             </Field>
