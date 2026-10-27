@@ -7,7 +7,7 @@ import { estimateUnit, menuUnit } from '../src/lib/boot';
 import type { PendingLine } from '../src/lib/cart';
 import { slipDiff, slipRows } from '../src/lib/cashCount';
 import { type DisplayOrder, displayOrder, previewTotals } from '../src/lib/estimate';
-import { type Harness, startApp } from './harness';
+import { type Harness, PINS, startApp } from './harness';
 
 /**
  * Kasa arayüzünün tahminleri sunucuyla aynı hesabı yapar: gönderilmemiş kalemin fiyatı (happy hour dahil),
@@ -76,7 +76,6 @@ describe('happy hour: istemci tahmini sunucunun fiyatı', () => {
 });
 
 describe('müşteri ekranı dökümü', () => {
-  const MUDUR = '2468';
   const sum = (d: DisplayOrder) => d.lines.reduce((a, l) => a + l.total, 0);
   /** Ekrandaki satırlar: kalemler − İndirim + Servis = Toplam */
   const addsUp = (d: DisplayOrder) => sum(d) - d.discount + d.service;
@@ -88,8 +87,8 @@ describe('müşteri ekranı dökümü', () => {
     let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: tk.id, qty: 2 }, { productId: latte.id, size: 'M', qty: 1 }] });
     const latteLine = o.items.find((i) => i.productId === latte.id)!;
-    await h.ok('kasa', 'POST', `/orders/${o.id}/items/${latteLine.id}/discount`, { type: 'percent', value: 15, reason: 'Müdavim', approverPin: MUDUR });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 10, reason: 'Müdavim', approverPin: MUDUR });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items/${latteLine.id}/discount`, { type: 'percent', value: 15, reason: 'Müdavim', approverPin: PINS.mudur });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'percent', value: 10, reason: 'Müdavim', approverPin: PINS.mudur });
     expect(o.totals.orderDiscount).toBeGreaterThan(0);
 
     const shown = displayOrder(boot, o, [], 'Gel al')!;
@@ -113,8 +112,8 @@ describe('müşteri ekranı dökümü', () => {
     let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 2 });
     await h.ok('patron', 'PUT', '/admin/settings', { serviceRate: 0 });
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product(h.boot, 'Türk kahvesi').id, qty: 3 }] });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/comp`, { qty: 1, reason: 'Müdavim', approverPin: MUDUR });
-    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 2000, reason: 'Müdavim', approverPin: MUDUR });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/comp`, { qty: 1, reason: 'Müdavim', approverPin: PINS.mudur });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 2000, reason: 'Müdavim', approverPin: PINS.mudur });
     expect(o.totals.service).toBeGreaterThan(0);
     const shown = displayOrder(h.boot, o, [], table.name)!;
     expect(shown.total).toBe(o.total);
@@ -172,7 +171,7 @@ describe('ödeme penceresi: Kalem seç', () => {
     // Adisyon indirimiyle kuruş artığı: kalan adetlerin payı sunucunun "kalanı seç" tutarıyla aynı
     let d = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal' });
     d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/items`, { items: [{ productId: tk.id, qty: 3 }] });
-    d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/discount`, { type: 'amount', value: 1001, reason: 'Müdavim', approverPin: '2468' });
+    d = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${d.id}/discount`, { type: 'amount', value: 1001, reason: 'Müdavim', approverPin: PINS.mudur });
     const first = await h.ok<{ order: OrderDTO; amount: number }>('kasa', 'POST', `/orders/${d.id}/payments`, { methodId: cash.id, amount: 1, items: [{ itemId: d.items[0].id, qty: 1 }] });
     const rest = unpaidLineAmount(first.order.totals, first.order.items[0]);
     expect(rest).toBe(first.order.total - first.order.paid);
