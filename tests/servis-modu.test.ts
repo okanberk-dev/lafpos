@@ -11,6 +11,7 @@ import {
   SERVICE_MODE_LABEL,
   SERVICE_MODES,
   serviceModeOf,
+  showsTables,
   ticketHead,
 } from '@shared/service-mode';
 import type { BootstrapDTO, KitchenTicket, OrderDTO, PickupBoardDTO } from '@shared/types';
@@ -35,6 +36,13 @@ describe('servis modu: saf yardımcılar', () => {
     expect(isCounterFirst('masa')).toBe(false);
     expect(isCounterFirst('self')).toBe(true);
     expect(isCounterFirst('yari_self')).toBe(true);
+    expect(serviceModeOf({ serviceMode: 'qr_self' })).toBe('qr_self');
+    expect(isCounterFirst('qr_self')).toBe(true);
+    expect(asksNumarator('qr_self')).toBe(false);
+    expect(showsTables('masa')).toBe(true);
+    expect(showsTables('yari_self')).toBe(true);
+    expect(showsTables('qr_self')).toBe(true);
+    expect(showsTables('self')).toBe(false);
     expect(asksNumarator('yari_self')).toBe(true);
     expect(asksNumarator('self')).toBe(false);
     expect(asksNumarator('masa')).toBe(false);
@@ -47,7 +55,7 @@ describe('servis modu: saf yardımcılar', () => {
       expect(SERVICE_MODE_HINT[m]).not.toMatch(/\.$/);
       expect(SERVICE_MODE_HINT[m]).not.toMatch(/\n/);
     }
-    expect(SERVICE_MODE_LABEL).toEqual({ masa: 'Masaya servis', yari_self: 'Yarı self servis', self: 'Self servis' });
+    expect(SERVICE_MODE_LABEL).toEqual({ masa: 'Masaya servis', yari_self: 'Yarı self servis', self: 'Self servis', qr_self: 'QR + self servis' });
   });
 
   it('açılış sayfası: masaya serviste masa planı, self modlarda yeni satış; sipariş almayanlar değişmez', () => {
@@ -56,6 +64,7 @@ describe('servis modu: saf yardımcılar', () => {
     expect(homePath(canAs('kasiyer'), 'self')).toBe('/satis');
     expect(homePath(canAs('kasiyer'), 'yari_self')).toBe('/satis');
     expect(homePath(canAs('patron'), 'self')).toBe('/satis');
+    expect(homePath(canAs('kasiyer'), 'qr_self')).toBe('/satis');
     for (const m of SERVICE_MODES) {
       expect(homePath(canAs('mutfak'), m)).toBe('/mutfak');
       expect(homePath(canAs('kurye'), m)).toBe('/siparisler');
@@ -73,6 +82,11 @@ describe('servis modu: saf yardımcılar', () => {
     expect(masalar?.primary).toBe(false);
     // Telefonda ilk dört birincil sekme: Satış, Siparişler, Bar, Kasa (Masalar "Daha"da)
     expect(tos(yari.filter((n) => n.primary).slice(0, 4))).toEqual(['/satis', '/siparisler', '/mutfak', '/kasa']);
+    // QR + self: yarı self gibi Satış başta, Masalar hep menüde (QR siparişi masaya düşer) ama ikinci planda
+    const qr = visibleNav(canAs('kasiyer'), 'qr_self');
+    expect(qr[0].to).toBe('/satis');
+    expect(qr.find((n) => n.to === '/masalar')?.primary).toBe(false);
+    expect(tos(visibleNav(canAs('kasiyer'), 'qr_self', { tablesInUse: false }))).toContain('/masalar');
   });
 
   it('self serviste Masalar yalnız masa kullanılıyorsa görünür', () => {

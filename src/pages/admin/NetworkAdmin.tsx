@@ -1,32 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { CircleAlert } from 'lucide-react';
-import { useMemo } from 'react';
-import { encode } from 'uqr';
 import { fmtDateTime } from '@shared/time';
 import type { NetAddressDTO, NetworkInfoDTO } from '@shared/types';
 import { Badge, Card, DefRow, LABEL, PageHeader, TONE_SOFT } from '@/components/admin/ui';
+import { QrCode } from '@/components/QrCode';
 import { PageLoading } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { cn } from '@/lib/cn';
-
-/** Karekod: beyaz zeminde koyu modüller (okuyucular ters renkte zorlanır), kenarda iki modül sessiz alan */
-function QrCode({ value, label }: { value: string; label: string }) {
-  const { d, n } = useMemo(() => {
-    const qr = encode(value, { ecc: 'M', border: 2 });
-    let path = '';
-    qr.data.forEach((row, y) =>
-      row.forEach((on, x) => {
-        if (on) path += `M${x} ${y}h1v1h-1z`;
-      }),
-    );
-    return { d: path, n: qr.data.length };
-  }, [value]);
-  return (
-    <svg role="img" aria-label={label} viewBox={`0 0 ${n} ${n}`} shapeRendering="crispEdges" className="size-40 shrink-0 rounded-lg border border-[var(--admin-border)] bg-white">
-      <path d={d} fill="#0c0e1b" />
-    </svg>
-  );
-}
 
 /** Karekod ve adres yan yana; telefonda alt alta */
 function Address({ item, children }: { item: NetAddressDTO; children: React.ReactNode }) {

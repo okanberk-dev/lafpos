@@ -59,6 +59,8 @@ export interface TableDTO {
   kind: 'masa' | 'oda';
   hourlyRate: number | null;
   siteTableCode: string | null;
+  /** Masanın QR kodu (shared/table-qr.ts); yoksa null */
+  qrCode: string | null;
   sort: number;
 }
 
@@ -164,6 +166,9 @@ export interface BusinessDayDTO {
   closedAt: number | null;
   /** Gün sonundan sonra yeniden açıldıysa son açılış anı */
   reopenedAt?: number | null;
+  /** Gün sonu kurulum modunda alındı (true, eğitim günü) ya da gerçek (false); null açık ya da işaretten önce kapandı.
+   * lafmaliyet'e yalnız false giden gün gider */
+  trainingDay?: boolean | null;
 }
 
 export interface PublicSettings {
@@ -180,8 +185,10 @@ export interface PublicSettings {
   productImages: boolean;
   voidReasons: string[];
   compReasons: string[];
-  /** Ödenmez kapanış gerekçeleri (adisyonun tamamı ciro dışı) */
+  /** Ödenmez kapanış gerekçeleri (personel yemeği, patron hesabı; ciro dışı) */
   odenmezReasons: string[];
+  /** Zayi gerekçeleri (döküldü, yanlış hazırlandı, bozuk; ciro dışı, ayrı raporlanır) */
+  zayiReasons: string[];
   discountReasons: string[];
   quickCash: number[];
   sizeLabels: { M: string; L: string };
@@ -413,10 +420,10 @@ export interface KitchenTicket {
 }
 
 /**
- * Ciro dışı kapanan kalemin türü: müşteriye ikram ya da ödenmez (personel yemeği, zayi, patron hesabı). İkisi de
- * ödenmez, cirodan düşer; raporda ve Z'de ayrı görünür.
+ * Ciro dışı kapanan kalemin türü: müşteriye ikram, ödenmez (personel yemeği, patron hesabı) ya da zayi (döküldü,
+ * yanlış hazırlandı, bozuk). Üçü de ödenmez, cirodan düşer; raporda ve Z'de ayrı görünür (shared/comp.ts).
  */
-export type CompKind = 'ikram' | 'odenmez';
+export type CompKind = 'ikram' | 'odenmez' | 'zayi';
 
 /** lafmaliyet Kasa raporundaki ödeme alanı */
 export type ZField = 'cash' | 'card' | 'meal_card' | 'online' | 'other';
@@ -430,8 +437,10 @@ export interface ZSummary {
   discounts: number;
   /** Ciro dışı kalemler (ikram ve ödenmez birlikte; lafmaliyet'e off_revenue) */
   complimentary: number;
-  /** Ciro dışının ödenmez kısmı (personel yemeği, zayi, patron hesabı); eski Z'lerde yok */
+  /** Ciro dışının ödenmez kısmı (personel yemeği, patron hesabı); eski Z'lerde yok */
   odenmez?: number;
+  /** Ciro dışının zayi kısmı (döküldü, yanlış hazırlandı, bozuk); eski Z'lerde yok */
+  zayi?: number;
   voided: number;
   voidAfterSendCount: number;
   service: number;

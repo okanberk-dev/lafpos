@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { calcOrder } from '@shared/order-calc';
 import type { OrderDTO } from '@shared/types';
 import { buildBasket } from '../server/okc/basket';
@@ -24,6 +24,12 @@ beforeAll(async () => {
     let raw = '';
     req.on('data', (c) => (raw += c));
     req.on('end', () => {
+      // Gün sonunda maliyetler de günde bir çekilir (GET /api/panel/pos/urunler)
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ version: 1, now: new Date().toISOString(), items: [] }));
+        return;
+      }
       lmBodies.push(JSON.parse(raw));
       res.writeHead(lmStatus, { 'content-type': 'application/json' });
       res.end(JSON.stringify(lmStatus === 409 ? { error: 'z_conflict', date: 'x', zNo: 1 } : { ok: true, date: 'x', lines: 0 }));
@@ -306,6 +312,10 @@ describe('inceleme düzeltmeleri', () => {
   });
 
   it('gün sonu: lafmaliyet 409 kalıcı hata, yeniden sayım onay ister, aynı tarihe ikinci Z açılmaz', async () => {
+    // Kurulum modunda (örnek PIN'ler, eğitim simülatörü) gün lafmaliyet'e gitmez: bu test gerçek kurulumu dener
+    const { updateSettings } = await import('../server/lib/settings');
+    updateSettings({ demoMode: false, okcProvider: 'kapali' });
+    onTestFinished(() => updateSettings({ demoMode: true, okcProvider: 'simulator' }));
     const { db, schema } = await import('../server/db/client');
     const x = await h.ok<{ summary: { expectedCash: number } }>('mudur', 'GET', '/cash/day');
     const closed = await h.ok<{ day: { id: string; zNo: number; date: string } }>('kasa', 'POST', '/cash/day/close', { countedCash: x.summary.expectedCash });

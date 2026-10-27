@@ -14,7 +14,7 @@ import { resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
-import { enqueueDay, flushOutbox } from './sync/lafmaliyet';
+import { afterDayClosed, flushOutbox } from './sync/lafmaliyet';
 import { siteLinked } from './sync/laffogato-link';
 import { onlineOrdersTick } from './sync/laffogato-orders';
 import { flushSiteOutbox } from './sync/site-outbox';
@@ -103,7 +103,7 @@ function autoDayEndTick() {
   }
   const closed = tx((t) => closeDay(t, null, fx, { countedCash: null, note: 'Otomatik gün sonu' }));
   fx.flush();
-  if (enqueueDay(closed.id)) void flushOutbox();
+  afterDayClosed(closed.id);
 }
 
 /** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi */

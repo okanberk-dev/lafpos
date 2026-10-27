@@ -7,7 +7,7 @@ import { db, schema } from '../db/client';
 import { type AppEnv, type AuthUser, actorFrom, can, requirePermission, seesCashNumbers } from '../lib/auth';
 import { body, kurus, query } from '../lib/http';
 import { addCashMovement, closeDay, closedToday, collectCustomerPayment, computeSummary, dayToDTO, getDay, lafmaliyetZ, listDays, openDay, recordCount, reopenDay } from '../services/days';
-import { enqueueDay, flushOutbox } from '../sync/lafmaliyet';
+import { afterDayClosed, enqueueDay, flushOutbox } from '../sync/lafmaliyet';
 import { getOpenDay } from '../services/orders';
 import { write } from './pos';
 
@@ -67,7 +67,8 @@ cashRoutes.post('/day/close', async (c) => {
   );
   const actor = actorFrom(c);
   const day = write((t, fx) => closeDay(t, actor, fx, input));
-  if (enqueueDay(day.id)) void flushOutbox();
+  // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir
+  afterDayClosed(day.id);
   if (!seesNumbers(c.get('user'))) return c.json({ day: dayToDTO(db, day), summary: null, lafmaliyet: null, blind: true });
   return c.json({ day: dayToDTO(db, day), summary: summaryFor(c.get('user'), day.summary), lafmaliyet: day.summary ? lafmaliyetZ(day, day.summary) : null, blind: false });
 });
