@@ -42,7 +42,8 @@ export function PaymentModal({
   order: OrderDTO;
   open: boolean;
   onClose: () => void;
-  onDone: (closed: boolean) => void;
+  /** `comp`: adisyon ödeme alınmadan ciro dışı kapandı (müşteri ekranına teşekkür ve tutar gitmez) */
+  onDone: (closed: boolean, opts?: { comp?: CompKind }) => void;
   act: <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 }) {
   const boot = useBoot();
@@ -132,7 +133,7 @@ export function PaymentModal({
     const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), COMP_DONE_TOAST[kind]);
     if (!res) return;
     setComp(null);
-    onDone(true);
+    onDone(true, { comp: kind });
   };
 
   const keyTarget = focus === 'verilen' ? [givenText, setGivenText] : focus === 'bahsis' ? [tipText, setTipText] : [amountText, setAmountText];

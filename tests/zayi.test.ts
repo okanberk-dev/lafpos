@@ -132,6 +132,67 @@ describe('zayi', () => {
     expect(compReasonText(null, null)).toBe('');
   });
 
+  it('tahsilatı platformun yaptığı paket siparişi ciro dışı kapanmaz; kendi kuryemiz kapıda alıyorsa kapanır', async () => {
+    await h.ok('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'deneme' });
+    const service = await import('../server/delivery/service');
+    const { tx } = await import('../server/db/client');
+    const { Effects } = await import('../server/lib/effects');
+    const ingest = (over: { code: string; courier: 'platform' | 'restoran'; platformCollects: boolean }) => {
+      const fx = new Effects();
+      const lines = [{ externalId: 'ys-latte', name: 'Latte', qty: 1, unitPrice: 19000, modifiers: [], note: null }];
+      const res = tx((t) =>
+        service.ingestPlatformOrder(t, fx, {
+          platform: 'yemeksepeti',
+          simulated: true,
+          externalId: `ys-${over.code}`,
+          code: over.code,
+          placedAt: Date.now(),
+          scheduledFor: null,
+          courier: over.courier,
+          platformCollects: over.platformCollects,
+          paymentLabel: over.platformCollects ? 'Online kart' : 'Kapıda nakit',
+          customer: { name: 'Ayşe K.', phone: null, address: null },
+          note: null,
+          lines,
+          subtotal: 19000,
+          restaurantDiscount: 0,
+          platformDiscount: 0,
+          customerTotal: 19000,
+        }),
+      );
+      fx.flush();
+      return res.row;
+    };
+    const paid = ingest({ code: 'ZY01', courier: 'platform', platformCollects: true });
+    const a = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${paid.id}/accept`, {});
+    const r1 = await h.call<{ code: string }>('mudur', 'POST', `/orders/${a.orderId}/comp`, { kind: 'zayi', reason: 'Döküldü' });
+    expect([r1.status, r1.json.code]).toEqual([409, 'platform_order']);
+    const o = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${a.orderId}`);
+    const r2 = await h.call<{ code: string }>('mudur', 'POST', `/orders/${a.orderId}/items/${o.items[0]!.id}/comp`, { kind: 'zayi', qty: 1, reason: 'Döküldü' });
+    expect([r2.status, r2.json.code]).toEqual([409, 'platform_order']);
+    const r3 = await h.call<{ code: string }>('mudur', 'POST', `/orders/${a.orderId}/items/${o.items[0]!.id}/comp`, { qty: 1, reason: 'Müdavim' });
+    expect([r3.status, r3.json.code]).toEqual([409, 'platform_order']);
+    // Kendi kuryemiz kapıda alıyor: tahsilat kasada, dökülen sipariş zayi kapanabilir
+    const cash = ingest({ code: 'ZY02', courier: 'restoran', platformCollects: false });
+    const b = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${cash.id}/accept`, {});
+    const closed = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${b.orderId}/comp`, { kind: 'zayi', reason: 'Döküldü' });
+    expect([closed.status, closed.total]).toEqual(['kapali', 0]);
+    zayiValue += 19000;
+    await h.ok('patron', 'PUT', '/platforms/yemeksepeti', { mode: 'kapali' });
+  });
+
+  it('açılış düzeltmesi: kayıtlı Ödenmez gerekçelerinden "Zayi" bir kez düşer, patron yeniden yazarsa kalır', async () => {
+    const { upgradeStoredSettings, getSettings, setSyncState } = await import('../server/lib/settings');
+    await h.ok('patron', 'PUT', '/admin/settings', { odenmezReasons: ['Personel yemeği', 'ZAYİ', 'Deneme'] });
+    setSyncState('ayar-guncellemeleri', []);
+    upgradeStoredSettings();
+    expect(getSettings().odenmezReasons).toEqual(['Personel yemeği', 'Deneme']);
+    await h.ok('patron', 'PUT', '/admin/settings', { odenmezReasons: ['Zayi'] });
+    upgradeStoredSettings();
+    expect(getSettings().odenmezReasons).toEqual(['Zayi']);
+    await h.ok('patron', 'PUT', '/admin/settings', { odenmezReasons: ['Personel yemeği', 'Deneme'] });
+  });
+
   it('ödeme alınmış adisyon zayi kapanmaz (kalem kalem yazılır); iptal edilmiş kalem zayi yazılamaz', async () => {
     const o = await table([{ name: 'Americano', qty: 2 }]);
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: 15000 });

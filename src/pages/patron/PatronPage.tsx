@@ -34,8 +34,8 @@ export interface PatronData {
   payments: { name: string; amount: number; count: number; share: number }[];
   discounts: number;
   complimentary: number;
-  odenmez: number;
-  /** Eski sunucu göndermez */
+  /** Eski sunucu ve uzaktan demo özeti (api/demo-ozet.json) göndermez */
+  odenmez?: number;
   zayi?: number;
   voided: number;
   online: { orders: number; amount: number };
@@ -122,7 +122,7 @@ export default function PatronPage() {
           <Stat
             label="İndirim · ikram"
             value={tl(d.discounts + d.complimentary)}
-            hint={[`ikram ${tl(d.complimentary - d.odenmez - (d.zayi ?? 0))}`, d.odenmez > 0 && `ödenmez ${tl(d.odenmez)}`, (d.zayi ?? 0) > 0 && `zayi ${tl(d.zayi ?? 0)}`].filter(Boolean).join(' · ')}
+            hint={[`ikram ${tl(d.complimentary - (d.odenmez ?? 0) - (d.zayi ?? 0))}`, (d.odenmez ?? 0) > 0 && `ödenmez ${tl(d.odenmez ?? 0)}`, (d.zayi ?? 0) > 0 && `zayi ${tl(d.zayi ?? 0)}`].filter(Boolean).join(' · ')}
           />
           <Stat label="İptal" value={tl(d.voided)} />
           {d.online.orders > 0 && <Stat label="Online (sitede ödendi)" value={tl(d.online.amount)} hint={`${d.online.orders} sipariş`} />}

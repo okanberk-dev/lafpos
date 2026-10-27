@@ -3,13 +3,14 @@ import { serve } from '@hono/node-server';
 import { createApp } from './app';
 import { runMigrations, sqlite } from './db/client';
 import { seedIfEmpty } from './db/seed';
-import { upgradeRoleSets } from './lib/settings';
+import { upgradeRoleSets, upgradeStoredSettings } from './lib/settings';
 import { env } from './env';
 import { startJobs, stopJobs } from './jobs';
 
 runMigrations();
 if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi');
 upgradeRoleSets();
+upgradeStoredSettings();
 
 const app = createApp();
 

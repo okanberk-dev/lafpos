@@ -513,11 +513,23 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
  * Kalemi ciro dışı yazar: müşteriye ikram (`siparis.ikram`) ya da zayi (döküldü, yanlış hazırlandı; `siparis.odenmez`).
  * Geri alma yazanın yetkisini ister: ödenmez ya da zayi kaydını yalnız ikram yetkisi olan geri alamaz.
  */
+/**
+ * Tahsilatı platformun yaptığı paket siparişi (platform ödemesi kuryeye verilince yazılır, server/delivery/service.ts
+ * afterDelivery) ciro dışı kapanmaz: sıfırla kapanan adisyona platform ödemesi hiç yazılmaz, uyuşmazlık alarmı da
+ * düşmezdi. İptal platformdan gelir; kendi kuryemizin kapıda aldığı siparişte ikram ve zayi serbesttir.
+ */
+function assertNotPlatformCollected(t: Tx, o: OrderRow) {
+  if (!o.platform) return;
+  const row = t.select({ payload: schema.platformOrders.payload }).from(schema.platformOrders).where(eq(schema.platformOrders.orderId, o.id)).get();
+  if (row?.payload.platformCollects) throw conflict('Tahsilatı platformun yaptığı sipariş ciro dışı kapanmaz; iptal platformdan gelir', 'platform_order');
+}
+
 export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { itemId: string; qty?: number; reason: string; undo?: boolean; kind?: 'ikram' | 'zayi' }): OrderRow {
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
   assertNoPendingDevice(t, orderId);
+  if (!input.undo) assertNotPlatformCollected(t, o);
   const it = loadItem(t, orderId, input.itemId);
   if (it.voided) throw conflict('İptal edilmiş kalem ikram ya da zayi yazılamaz');
 
@@ -576,6 +588,7 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
   assertOpen(o);
   assertPosOrder(o);
   assertNoPendingDevice(t, orderId);
+  assertNotPlatformCollected(t, o);
   // Çalışan oda sayacı kalem görünmeyen ücrettir: önce durdurulup satıra yazılır, sonra ikram edilir
   assertNoActiveRoom(t, orderId);
   // Cihazda kesilmiş ama LafPOS'a işlenmemiş fiş: kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz

@@ -475,11 +475,12 @@ export default function OrderPage() {
         open={dialog === 'odeme'}
         onClose={() => setDialog(null)}
         act={act}
-        onDone={(closed) => {
+        onDone={(closed, opts) => {
           setDialog(null);
           if (closed) {
             cart.clear(order.id);
-            sendDisplay(displayCode, { kind: 'thanks', total: order.total });
+            // Ciro dışı kapanışta (ikram, ödenmez, zayi) tahsilat yok: müşteri ekranı tutarla teşekkür etmez, hoş geldinize döner
+            sendDisplay(displayCode, opts?.comp ? { kind: 'idle' } : { kind: 'thanks', total: order.total });
             if (counter) void nextSale();
             else navigate(backPath);
           }

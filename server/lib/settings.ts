@@ -137,6 +137,24 @@ export function setSyncState(key: string, value: unknown) {
  * Benzer yetkileri (`like`) taşıyan rollere eklenir; patron sonra kaldırırsa bir daha eklenmez.
  */
 const ADDED_PERMISSIONS: { permission: Permission; like: Permission[] }[] = [{ permission: 'siparis.odenmez', like: ['siparis.ikram', 'odeme.iade'] }];
+
+const SETTINGS_UPGRADES_KEY = 'ayar-guncellemeleri';
+
+/**
+ * Tek seferlik ayar düzeltmeleri (açılışta): kayıtlı Ödenmez gerekçelerinden "Zayi" düşer, çünkü zayi artık ayrı
+ * türdür (zayiReasons); kalsaydı personel dökülen ürünü ödenmez diye kapatır, zayi raporu eksik kalırdı. Patron
+ * sonradan yeniden yazarsa dokunulmaz.
+ */
+export function upgradeStoredSettings() {
+  const done = new Set(getSyncState<string[]>(SETTINGS_UPGRADES_KEY) ?? []);
+  if (done.has('zayi-nedeni')) return;
+  const current = getSettings().odenmezReasons;
+  const kept = current.filter((r) => r.trim().toLocaleLowerCase('tr-TR') !== 'zayi');
+  tx((t) => {
+    if (kept.length !== current.length) updateSettings({ odenmezReasons: kept }, t);
+    setSyncState(SETTINGS_UPGRADES_KEY, [...done, 'zayi-nedeni']);
+  });
+}
 const ADDED_KEY = 'rol-yetki-eklemeleri';
 
 export function upgradeRoleSets() {
