@@ -228,14 +228,14 @@ function LafmaliyetCard({ s, canSync, run }: { s: SyncStatus['lafmaliyet']; canS
                 <Field label="Bitiş" className="w-40">
                   <Input type="date" value={to} min={from || undefined} onChange={(e) => setRange({ from, to: e.target.value })} />
                 </Field>
-                <Button size="sm" icon={<History className="size-4" />} loading={sending} disabled={!canSync || s.training || !from || !to} onClick={backfill}>
+                <Button size="sm" icon={<History className="size-4" />} loading={sending} disabled={!canSync || s.training || !from || !to || from > to} onClick={backfill}>
                   Geçmiş günleri gönder
                 </Button>
               </div>
             </div>
 
             <div className="space-y-2 border-t border-line pt-3">
-              <Status ok={!!s.costsAt && !costsError}>
+              <Status ok={!!s.costsAt && !costsError} idle={!s.costsAt && !costsError}>
                 {s.costsAt ? `Maliyetler ${fmtDateTime(s.costsAt)} tarihinde çekildi; gün sonunda günde bir kendiliğinden yenilenir` : 'Maliyetler henüz çekilmedi; ilk gün sonunda kendiliğinden çekilir'}
                 {costsError && <span className="block text-danger-500">Son deneme: {costsError}</span>}
               </Status>
