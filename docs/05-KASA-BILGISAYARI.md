@@ -130,9 +130,11 @@ kullanıcı hesabı önerilir.
 - **Hatalı PIN sınırı**: aynı cihazda art arda 5 hatadan sonra 15 sn (her hatada ikiye katlanır, en çok 5 dk).
   Araya doğru PIN girmek sayacı sıfırlar ama hatalar ayrıca birikir: cihaz (yetkili onayında PIN'i soran kişi de)
   saatte 12'den fazla hatalı PIN deneyemez, kilit denetim kaydına alarm yazar. Yetkili onayında yanlış PIN ile
-  işlemi onaylayamayan kişinin PIN'i aynı yanıtı alır, adı söylenmez. Ağda 10 dakikada 30 hatalı PIN olursa son
-  7 günde LafPOS'a doğru PIN'le girmemiş cihazlar bir süre giremez; kafedeki kasa, tablet ve telefonlar
-  etkilenmez, denetim kaydına alarm düşer (ağa bilinmeyen bir cihaz bağlı olabilir).
+  işlemi onaylayamayan kişinin PIN'i aynı yanıtı alır, adı söylenmez. Patron olmayan personel yöneticisi de
+  saatte 12'den fazla PIN veremez ("Bu PIN kullanılamaz" yanıtıyla PIN taranmasın; çakışma denetim kaydına
+  düşer, o personelin PIN'i değiştirilmeli). Ağda 10 dakikada 30 hatalı PIN olursa son 7 günde LafPOS'a doğru
+  PIN'le girmemiş cihazlar bir süre giremez; kafedeki kasa, tablet ve telefonlar etkilenmez, denetim kaydına
+  alarm düşer (ağa bilinmeyen bir cihaz bağlı olabilir).
 - **Tam ekran**: kiosk kullanılmayan tablet ya da bilgisayarda kullanıcı menüsünden.
 - Kasiyer rolü varsayılan olarak **kör kasa** sayar: ara raporu, beklenen nakdi ve kapanmış adisyonların
   ödeme dökümünü görmez, gün sonunda çekmeceyi sayıp yazar; fark yöneticinin ekranında (Yönetim › Roller ve

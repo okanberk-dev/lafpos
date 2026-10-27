@@ -1,10 +1,10 @@
 import { and, asc, desc, eq, gte, lte, sql } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { ALL_PERMISSIONS, effectivePermissions, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
-import { type AppEnv, type AuthUser, can, hashPin, isValidPin, requirePermission, sessionsChanged } from '../lib/auth';
+import { type AppEnv, assertNotLocked, type AuthUser, can, clientKey, hashPin, isValidPin, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { bad, body, conflict, HttpError, kurus, notFound, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
@@ -459,10 +459,36 @@ function assertPatronRemains(t: Tx | DB, changedId: string, next: { role: Role; 
   if (!stays && !others.length) throw conflict('Personel yönetimi olan son etkin patron hesabı kapatılamaz, rolü değiştirilemez', 'last_patron');
 }
 
-function pinFree(pin: string, exceptUserId?: string) {
+/**
+ * PIN tekil olmalı (giriş yalnız PIN'le), bu yüzden "kullanılamaz" yanıtı PIN'in başka birinde olduğunu söyler.
+ * Personel yöneticisi kukla hesaba PIN verip tarayarak patronun PIN'ini bulamasın (denetim, 26 Eki 2026): patron
+ * olmayanın her PIN verme denemesi kişi ve cihaz başına sayılır (uzun vadede saatte 12, kilit denetim kaydına
+ * alarm yazar), yanıt PIN'in kimde olduğunu söylemez, çakışma denetim kaydına düşer. Patron her hesabı zaten
+ * yönetir (PIN'ini değiştirip girebilir); kurulumda bütün ekibe art arda PIN verir, sınır ona uygulanmaz.
+ */
+function pinFree(c: Context<AppEnv>, pin: string, target: { id?: string; name: string }) {
+  const actor = c.get('user');
   if (!isValidPin(pin)) throw bad('PIN 4-6 haneli rakam olmalı', 'pin_invalid');
+  if (actor.role !== 'patron') {
+    const addr = clientKey(c);
+    assertNotLocked('pin', addr, actor.id);
+    recordPinChoice(addr, actor);
+  }
   const other = db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get();
-  if (other && other.id !== exceptUserId) throw conflict('Bu PIN başka bir personelde; farklı bir PIN seçin', 'pin_taken');
+  if (other && other.id !== target.id) {
+    // Kaydı okuyan yönetici de PIN'in kimde olduğunu metinden öğrenmesin; kayıt PIN sahibine bağlı (entityId)
+    const fx = new Effects();
+    fx.audit(db, {
+      userId: actor.id,
+      action: 'user.pin_conflict',
+      severity: actor.role === 'patron' ? 'info' : 'uyari',
+      entity: 'user',
+      entityId: other.id,
+      message: `${actor.name}, ${target.name} için başka bir personelin kullandığı PIN'i seçti; PIN verilmedi. O personelin PIN'i değiştirilmeli`,
+    });
+    fx.flush();
+    throw conflict('Bu PIN kullanılamaz; farklı bir PIN seçin', 'pin_taken');
+  }
 }
 
 adminRoutes.post('/users', async (c) => {
@@ -472,7 +498,7 @@ adminRoutes.post('/users', async (c) => {
   if (input.role === 'patron' && user.role !== 'patron') throw conflict('Patron hesabını yalnız patron açabilir');
   assertCanGrant(user, [...userPermissions({ role: input.role, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[] })]);
   assertDiscountCap(user, input.maxDiscountPct);
-  pinFree(input.pin);
+  pinFree(c, input.pin, { name: input.name });
   const id = ulid();
   db.insert(schema.users).values({ id, name: input.name, role: input.role, color: input.color, maxDiscountPct: input.maxDiscountPct, permGrant: input.permGrant as Permission[], permRevoke: input.permRevoke as Permission[], pinHash: hashPin(input.pin) }).run();
   changed('users', 'user.created', user.id, { action: 'user.create', message: `${user.name} personel ekledi: ${input.name} (${input.role})` });
@@ -506,7 +532,7 @@ adminRoutes.patch('/users/:id', async (c) => {
   if (input.permGrant) patch.permGrant = input.permGrant as Permission[];
   if (input.permRevoke) patch.permRevoke = input.permRevoke as Permission[];
   if (input.pin) {
-    pinFree(input.pin, target.id);
+    pinFree(c, input.pin, target);
     patch.pinHash = hashPin(input.pin);
   }
   tx((t) => {

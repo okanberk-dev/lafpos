@@ -338,7 +338,7 @@ describe('auth-52: canlı akış oturumu sürekli denetler', () => {
   });
 });
 
-describe.skip('auth-56: PIN tekilliği PIN taraması için kullanılamaz', () => {
+describe('auth-56: PIN tekilliği PIN taraması için kullanılamaz', () => {
   it('patron olmayan personel yöneticisi kukla hesapla PIN tarayamaz; çakışma denetim kaydına düşer', async () => {
     auth.resetFailures();
     try {
