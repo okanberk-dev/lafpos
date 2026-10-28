@@ -19,6 +19,8 @@ import { generateTableCode, tableQrUrl } from '@shared/table-qr';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
+import { lastZNo } from '../services/days';
+import { nextZNo, Z_NO_MAX } from '@shared/z-no';
 import { readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { env } from '../env';
@@ -755,6 +757,13 @@ adminRoutes.get('/settings', (c) => {
   return c.json(getSettings());
 });
 
+/** Z zinciri (Ayarlar › İlk Z numarası'nın altındaki bilgi): kayıtlı en büyük Z ve açılacak günün Z'si */
+adminRoutes.get('/settings/z', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  const lastZ = lastZNo(db);
+  return c.json({ lastZ: lastZ || null, nextZ: nextZNo(lastZ, getSettings().zNoStart) });
+});
+
 const settingsShape = patchOf(
   z.object({
     businessName: z.string().max(60),
@@ -791,6 +800,7 @@ const settingsShape = patchOf(
     autoDayEndHour: z.number().int().min(0).max(23),
     serviceMode: z.enum(SERVICE_MODES),
     tipsEnabled: z.boolean(),
+    zNoStart: z.number().int().min(1).max(Z_NO_MAX).nullable(),
   }),
 );
 
@@ -800,8 +810,16 @@ adminRoutes.put('/settings', async (c) => {
   const input = await body(c, settingsShape);
   if (input.menuAutoSync !== undefined || input.onlineOrdersSync !== undefined) requirePermission(user, 'senkron.yonet');
   const before = serviceModeOf(getSettings());
+  const zFrom = getSettings().zNoStart;
+  // Kaydet bütün formu gönderir: ilk Z numarası yalnız değiştiyse denetlenir ve kayda düşer
+  const zChanged = input.zNoStart !== undefined && input.zNoStart !== zFrom;
   const fx = new Effects();
   tx((t) => {
+    // Z zinciri geri alınmaz: ilk Z numarası kayıtlı en büyük Z'den büyük olmalı (boşaltmak serbest, zinciri değiştirmez)
+    if (zChanged && input.zNoStart != null) {
+      const last = lastZNo(t);
+      if (input.zNoStart <= last) throw new HttpError(422, `Z numarası geri alınamaz; son Z ${last}`, 'z_start_low');
+    }
     updateSettings(input, t);
     fx.audit(t, { userId: user.id, action: 'settings.update', message: `${user.name} ayarları değiştirdi: ${Object.keys(input).join(', ')}` });
     // Servis modu bütün sistemin akışını değiştirir (açılış ekranı, menü, tezgâh satışı): ayrı ve okunur kayıt
@@ -813,6 +831,18 @@ adminRoutes.put('/settings', async (c) => {
         entityId: 'serviceMode',
         message: `${user.name} servis modunu değiştirdi: ${SERVICE_MODE_LABEL[before]} → ${SERVICE_MODE_LABEL[input.serviceMode]}`,
         data: { from: before, to: input.serviceMode },
+      });
+    }
+    if (zChanged) {
+      const show = (n: number | null | undefined) => (n == null ? 'boş' : String(n));
+      fx.audit(t, {
+        userId: user.id,
+        action: 'settings.z_start',
+        severity: 'uyari',
+        entity: 'settings',
+        entityId: 'zNoStart',
+        message: `${user.name} ilk Z numarasını değiştirdi: ${show(zFrom)} → ${show(input.zNoStart)}`,
+        data: { from: zFrom, to: input.zNoStart },
       });
     }
   });
