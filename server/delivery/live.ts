@@ -232,10 +232,14 @@ export async function announceReject(row: PlatformRow, reason: string): Promise<
 /** Platforma yazılan aşamaların sırası: platform sıralı ister (hazır olmadan yolda yazılmaz) */
 const STEPS: readonly (PlatformNotify | 'picked')[] = ['picked', 'hazir', 'yolda', 'teslim'];
 
-/** Adisyonun teslim aşamasından platforma yazılması gereken son adım; platform kuryesinde yolda ve teslimi platform yazar */
-export function desiredStep(deliveryStatus: string | null, courier: PlatformOrderPayload['courier']): PlatformNotify | null {
+/**
+ * Adisyonun teslim aşamasından platforma yazılması gereken son adım. Platform kuryesinde teslimi platform yazar;
+ * kuryeye verilişi de (`handover`: Getir) ancak bağdaştırıcı isterse
+ */
+export function desiredStep(deliveryStatus: string | null, courier: PlatformOrderPayload['courier'], handover = false): PlatformNotify | null {
   if (!deliveryStatus || deliveryStatus === 'hazirlaniyor') return null;
-  if (courier === 'platform' || deliveryStatus === 'hazir') return 'hazir';
+  if (deliveryStatus === 'hazir') return 'hazir';
+  if (courier === 'platform') return handover ? 'yolda' : 'hazir';
   return deliveryStatus === 'yolda' ? 'yolda' : 'teslim';
 }
 
@@ -311,7 +315,7 @@ async function reconcileOnce(now: number): Promise<{ sent: number; failed: numbe
     }
     // Platform bu siparişin bir aşamasını kalıcı olarak reddetti: aşama bildirimi durur (iptal dalları sürer)
     if (row.notifyParkedAt != null) continue;
-    const want = desiredStep(o.deliveryStatus, row.payload.courier);
+    const want = desiredStep(o.deliveryStatus, row.payload.courier, !!a.handover);
     if (!want) continue;
     const have = STEPS.indexOf((row.notifiedStatus as PlatformNotify | 'picked' | null) ?? 'picked');
     const target = STEPS.indexOf(want);
@@ -327,6 +331,8 @@ async function reconcileOnce(now: number): Promise<{ sent: number; failed: numbe
       }
       sent++;
     } catch (e) {
+      // Platform "henüz erken" dedi (aşamalar arasında bekleme ister): hata değil, sonraki turda sürer; gidenler yazıldı
+      if (e instanceof PlatformHttpError && e.status === 425) continue;
       failed++;
       const permanent = permanentOf(e);
       const why = `${a.label}: "${STEP_LABEL[step]}" bildirilemedi (${message(e)})`;
@@ -492,7 +498,8 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
   const n = applyCancellations(platform, res.cancelled, keep);
   // Yerelde işlendi: aktarıcıdaki kayıtlar artık silinebilir (silinemezse yeniden gelir, tekilleştirilir)
   await res.commit?.(keep).catch((e) => console.warn(`[platform] ${a.label} gelen kutusu temizlenemedi`, message(e)));
-  writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: null, failures: 0 });
+  // Yoklama başarılı; eksik yol varsa (aktarıcı düştü, yedek yol çalıştı) Yönetim'de görünür, bekleme uygulanmaz
+  writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: res.warning ? `${a.label}: ${res.warning}` : null, failures: 0 });
   return { created, cancelled: n };
 }
 

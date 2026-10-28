@@ -46,7 +46,7 @@ export const PLATFORM_MODE_LABEL: Record<PlatformMode, string> = { kapali: 'Kapa
 
 /** Yönetim › Paket platformları: canlı bağlantının durumu */
 export interface PlatformLiveStatus {
-  /** LafPOS'ta bu platform için bağdaştırıcı var mı (Trendyol Go var; Yemeksepeti ve Getir sonraki iş) */
+  /** LafPOS'ta bu platform için bağdaştırıcı var mı (Trendyol Go, Yemeksepeti, Getir var; Migros Yemek'in belgesi yok) */
   supported: boolean;
   /** Anahtarlar .env'de tanımlı mı */
   configured: boolean;

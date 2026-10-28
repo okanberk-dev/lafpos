@@ -116,7 +116,53 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
     Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_REMOTE_ID` (başka restoranın siparişi 400). Kurulum
     durumu `GET /api/uzaktan/kurulum`'da `yemeksepeti: true|false` (değer asla).
-  - **Sonraki:** Getir siparişi push ile gönderir; Yemeksepeti'deki gibi LafPOS Uzaktan aktarıcı olur.
+  - **Getir Yemek** (GetirFood API; `server/delivery/getir.ts`, aktarıcı `api/uzaktan.ts` `getir/*`): Getir siparişi
+    bizim verdiğimiz iki adrese iter; LafPOS Uzaktan (Vercel) aktarıcıdır. Getir'e verilecek adresler: yeni sipariş
+    `POST https://lafpos.vercel.app/api/getir/order`, iptal `POST https://lafpos.vercel.app/api/getir/cancel`; ikisinde
+    de başlıkta bizim ürettiğimiz anahtar (`x-api-key` = Vercel'deki `GETIR_WEBHOOK_SECRET`, en az 16 karakter, sabit
+    zamanlı karşılaştırılır; yoksa aktarıcı 503). Kayıt Redis'teki gelen kutusuna girer (siparişler `lafpos:getir:inbox`,
+    iptaller ayrı listede `lafpos:getir:status`, yalnız sipariş kimliği ve nedeniyle; önce iptaller verilir). Kutu,
+    doluluk ve boyut kuralları Yemeksepeti'ninkiyle aynı (500 kayıt, 2 gün, dolu → 503, gövde 256 KB, kimlik 512
+    karakter); kasa aynı imzalı uçlardan (`GET /api/getir/inbox`, `POST /api/getir/inbox/ack`) 20 saniyede bir çeker
+    ve işlediğini siler. **Yedek yol:** kasa Getir'in onaysız (`POST /food-orders/periodic/unapproved`) ve iptal
+    (`/periodic/cancelled`) listelerini de doğrudan okur, en sık dakikada bir (belge "sürekli sorgulanmamalı"),
+    aktarıcı düşmüşse her turda; iki yoldan gelen aynı sipariş tekilleşir. Aktarıcı düşüp Getir çalışıyorsa yoklama
+    başarılı sayılır, Yönetim'de "aktarıcı gelen kutusu alınamadı … doğrudan Getir'den alınıyor" uyarısı görünür;
+    ikisi de düşerse yoklama hatası. Girişte Getir'in verdiği restoran kimliğiyle uyuşmayan sipariş atlanır, bir kez
+    alarm düşer (Vercel'de isteğe bağlı `GETIR_RESTAURANT_ID` aynı siparişi 400 ile reddeder).
+    Kimlik: `POST /auth/login` {appSecretKey, restaurantSecretKey} → jeton (1 saat; 55 dakikada yenilenir, 401'de bir
+    kez yeniden giriş), her istekte `token` başlığı. **Kabul önce Getir'e:** `POST /food-orders/{id}/verify` (ileri
+    tarihli onaysız sipariş, durum 325: `/verify-scheduled`); hazırlık süresi Getir'e sipariş başına gitmez (uç
+    gövdesiz). Getir "zaten onaylı" (hata kodu 2) derse kasada yalnız adisyon açılır. **Ret ve kasada iptal** aynı
+    yoldan: `GET /food-orders/{id}/cancel-options`'tan seçenek (kasadaki neden anahtar kelimeyle eşlenir, bulunamazsa
+    "diğer", o da yoksa ilk), `POST /food-orders/{id}/cancel` {cancelReasonId, cancelNote}; Getir seçenek vermiyorsa
+    (kurye yolda) kalıcı ret: kayıt kapanır, alarm düşer, sipariş Getir uygulamasından iptal edilir. Kabul süresi
+    sipariş saatinden (`checkoutDate`, GMT) 5 dk; Getir 30 sn'de yanıt yoksa restoranı IVR ile arar, 5 dk'da
+    restoranı kapatır.
+    **Aşamalar** kurye türüne göre (belge "Order Flow"): hazır → `/prepare`; Getir kuryesinde (`deliveryType` 1) yolda
+    → `/handover` (bağdaştırıcı `handover` bayrağı; teslimi Getir yazar), kendi kuryemizde (2) yolda Getir'e gitmez,
+    teslim → `/deliver`. Getir akış çağrıları arasında **en az 1 dakika** ister: kabulden ya da bir önceki aşamadan 1
+    dk geçmeden aşama gönderilmez, hata sayılmaz (425, sessiz), sonraki turda gider; kasa yeniden başlatılırsa önceki
+    çağrının saati bilinmez ve beklenmez.
+    Kurye ve ödeme: `deliveryType` 1 Getir kuryesi (adres ve telefon kasaya gelmez), 2 kendi kuryemiz (maskeli telefon
+    ve adres gelir; gel-al Getir belgesinde yok). `paymentMethod` 1 MasterPass, 2 BKM Express, 15 MobilExpress, 16
+    GetirMoney ve 19 Sodexo Online **online** sayılır (kasada tahsil edilmez); 3 Kredi / Banka Kartı dahil ötekiler
+    kapıda (kendi kuryemizde kasada alınır; Getir kuryesinde platform tahsil eder). Ücret satırı yok: Getir kuryesinin
+    ücretini Getir müşteriden kendisi alır. İndirim (`totalPrice` − `totalDiscountedPrice`) **kimin karşıladığını belge
+    yazmaz:** restoran kampanyası sayılır (adisyon müşterinin ödediğini gösterir); Getir'in karşıladığı kampanya varsa
+    fark hesap kesiminde görünür. Test siparişi bayrağı yok: Getir'in test ortamı (`GETIR_API_URL` test adresi) gerçek
+    akışla denenir. Saatler GMT; saat dilimi yazılmamış değer UTC sayılır.
+    **Belgeden emin olunmayanlar** (`getir.ts` başındaki sabitler ve yorumlar; canlıya geçmeden Getir'in test ortamında
+    doğrulanır): girişin gövdesi (swagger JSON şema verir, açıklama "HTTP Basic Auth" der), hata gövdesindeki `code`
+    alanı, `result: false` yanıtı, hangi ödeme türlerinin online olduğu, iptal seçeneği metinleri, `/periodic`
+    uçlarının yanıt biçimi (dizi; `{data: [...]}` sarmalı da kabul edilir), ürün kimliği alanı (`product`, zincirde
+    `chainProduct`), ileri tarihli siparişin Getir'ce kendiliğinden "hazırlanıyor"a (500) alınmasından sonra
+    `/prepare`'in kabul edilip edilmediği.
+    Kafede `.env`: `GETIR_APP_SECRET_KEY`, `GETIR_RESTAURANT_SECRET_KEY`, test ortamı için `GETIR_API_URL`
+    (boşsa canlı `https://food-external-api-gateway.getirapi.com`) ve LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`,
+    `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz; Getir'e adreslerle birlikte verilir),
+    isteğe bağlı `GETIR_RESTAURANT_ID`. Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
+  - **Sonraki:** Migros Yemek (belge herkese açık değil; görüşme gerekir).
 
 ## Uçlar
 `GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·

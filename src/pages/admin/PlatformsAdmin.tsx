@@ -18,7 +18,8 @@ import { toast } from '@/lib/toast';
 const LIVE_NEEDS: Record<PlatformId, string> = {
   yemeksepeti:
     "Delivery Hero'dan POS entegrasyonu (middleware adresi, kullanıcı adı, parola, restoranın POS kimliği ve JWT anahtarı). Siparişler LafPOS Uzaktan'a gelir, kasa 20 saniyede bir çeker: kasa bilgisayarının .env dosyasına YEMEKSEPETI_MW_URL, YEMEKSEPETI_USERNAME, YEMEKSEPETI_PASSWORD, YEMEKSEPETI_REMOTE_ID; Vercel'e YEMEKSEPETI_PLUGIN_SECRET yazılır, LafPOS yeniden başlatılır; sonra Canlı seçilir",
-  getir: 'Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber\'e geçti, yol Trendyol Go\'ya dönebilir',
+  getir:
+    "Getir'den POS entegrasyonu (POS firması başvurur; test ve canlı için uygulama anahtarı ve restoran anahtarı). Siparişler LafPOS Uzaktan'a gelir, kasa 20 saniyede bir çeker, yedek olarak Getir'den de okur: kasa bilgisayarının .env dosyasına GETIR_APP_SECRET_KEY, GETIR_RESTAURANT_SECRET_KEY (test ortamı için GETIR_API_URL); Vercel'e bizim ürettiğimiz GETIR_WEBHOOK_SECRET yazılır ve Getir'e sipariş ile iptal adresleri bu anahtarla verilir, LafPOS yeniden başlatılır; sonra Canlı seçilir. Getir'in yemek işi Uber'e geçti: siparişler ileride Trendyol Go'dan da gelebilir",
   trendyol: 'Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar kasa bilgisayarının .env dosyasına (TRENDYOL_SUPPLIER_ID, TRENDYOL_API_KEY, TRENDYOL_API_SECRET) yazılır, LafPOS yeniden başlatılır; sonra Canlı seçilir. Uber Eats Türkiye siparişleri de buradan gelir; kasa 20 saniyede bir yoklar',
   migros: 'Belgeler herkese açık değil; Migros Yemek ile görüşme gerekir',
 };
