@@ -13,7 +13,7 @@ hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalı�
 | Veri | Sahibi | LafPOS'ta |
 | --- | --- | --- |
 | Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır; sitenin kapattığını kasiyer açamaz (§2.3 Tükendi kilidi) |
-| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti) | menüyle birlikte gelir |
+| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti; panelde düzenlenmez, site koduyla değişir) | menüyle birlikte gelir, salt okunur; kasaya özel seçenek LafPOS'ta yerel gruptur |
 | POS'a özel alanlar: istasyon, kısa ad, düğme rengi, POS sırası, gizli, porsiyon sayacı, `posName` | LafPOS | senkron dokunmaz |
 | POS'a özel ürünler (karaoke saati, kampanya) | LafPOS | `extSource` boş |
 | Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | LafPOS kopyalamaz |

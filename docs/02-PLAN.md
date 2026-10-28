@@ -189,6 +189,18 @@ tanıması için sözleşmeye eklenen `PUT /api/panel/tables` (giden kutusu `tab
 yeniden denenmez) `docs/03-ENTEGRASYON.md` §2.3. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
 (gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
 
+**Seçenek grupları** (28 Ekim 2026, `claude/k-secenek`): kasaya özel (yerel) grup, ürün çekmecesindeki "Yeni grup"
+ile orada açılır ve ürüne seçili gelir; ürün ve grup bağları tek istekte, tek işlemde yazılır (`POST /admin/products`
+ve `PATCH /admin/products/:id` gövdesinde isteğe bağlı `groupIds`; gönderilmezse bağlar değişmez, eski
+`PUT /admin/products/:id/groups` geriye uyum için yerinde). Grup penceresi (`src/components/admin/OptionGroupEditor.tsx`)
+Seçenekler'de bağlı ürünleri de seçer (`productIds`, aynı işlem; yalnız bağlar için `PUT /admin/option-groups/:id/products`:
+yeni bağ ürünün öteki gruplarının sonuna eklenir, bir ürüne en çok 12 grup) ve grubu kapatır ("Grup açık"; kapalı grup
+kasada sorulmaz, bağlar durur). Denetim kaydı: seçenek ek fiyatı `menu.option_price` (eski → yeni, eklenen ve
+kaldırılan seçenek; yalnız ad değişince yazılmaz), ürün ↔ grup bağı `menu.product_groups` (eklenen, çıkarılan);
+ikisi de yazmayla aynı işlemde. Süt, şurup ve shot sitenin kod sabitinden gelir (laffogato
+`src/lib/mobile/customization.ts`, mobil v1 sözleşmesi); LafPOS'ta salt okunur, panelden düzenlenmez. Testler
+`tests/secenek-grubu.test.ts`, e2e'de `/yonetim/menu` › `yeni-urun` ve `yeni-grup` durumları ve telefonda akış.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

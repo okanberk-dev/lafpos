@@ -4,13 +4,14 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import type { ProductDTO } from '@shared/types';
+import { newGroupDraft, OptionGroupEditor } from '@/components/admin/OptionGroupEditor';
 import { ActionMenu, ActionRow, ActionRows, Badge, Card, CARD, CODE, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, SetupNotes, StatusTabs, TableSkeleton } from '@/components/admin/ui';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Field, Input, Label, Select, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, Notice } from '@/components/ui/misc';
-import { del, errorMessage, get, patch, post, put } from '@/lib/api';
+import { del, errorMessage, get, patch, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -335,7 +336,7 @@ export default function MenuAdmin() {
 
       <div className="mt-4">
         <SetupNotes summary="Menü nasıl çalışır">
-          <p>Ürünler tek yerde, laffogato panelinde eklenir; site, uygulama ve kasa aynı menüyü okur. Seçenek grupları da burada düzenlenir.</p>
+          <p>Ürünler tek yerde, laffogato panelinde eklenir; site, uygulama ve kasa aynı menüyü okur. Süt, şurup ve shot site kodundaki sabit listeden gelir; kasaya özel seçenek grubu Seçenekler’de ya da ürünün çekmecesinde (Yeni grup) açılır.</p>
           <p>Yerel ürün yalnız kafede satılan hizmetler içindir (karaoke, etkinlik ücreti gibi).</p>
           <p>
             Site bağlantısı (<code className={CODE}>LAFFOGATO_URL</code>) yoksa sitede eklenen ürün kasaya gelmez. Ayrıntı: <code className={CODE}>docs/06-TEK-SISTEM.md</code>
@@ -356,6 +357,7 @@ export default function MenuAdmin() {
           }}
           onAvailability={availability}
           onQuick={quick}
+          onGroupCreated={refresh}
         />
       )}
 
@@ -440,6 +442,7 @@ function ProductDrawer({
   onSaved,
   onAvailability,
   onQuick,
+  onGroupCreated,
 }: {
   product: ProductDTO | null;
   cats: Category[];
@@ -448,6 +451,8 @@ function ProductDrawer({
   onSaved: () => void;
   onAvailability: (p: ProductDTO, active: boolean) => Promise<void>;
   onQuick: (p: ProductDTO, body: Record<string, unknown>, done?: string) => Promise<void>;
+  /** Çekmeceden yeni seçenek grubu açıldı: liste yenilenir, çip görünür */
+  onGroupCreated: () => void;
 }) {
   const boot = useBoot();
   const can = useCan();
@@ -456,6 +461,7 @@ function ProductDrawer({
   const [saving, setSaving] = useState(false);
   // Eksik alan sessizce soluk düğme yerine Kaydet'e basınca alanın altında söylenir
   const [tried, setTried] = useState(false);
+  const [newGroup, setNewGroup] = useState(false);
   const [f, setF] = useState({
     categoryId: product?.categoryId ?? cats.find((c) => !c.extSource)?.id ?? cats[0]?.id ?? '',
     name: product?.name ?? '',
@@ -490,10 +496,10 @@ function ProductDrawer({
         color: f.color || null,
       };
       const own = { categoryId: f.categoryId, name: f.name, price: parseTL(f.price) ?? 0, priceL: f.priceL ? parseTL(f.priceL) : null, kdvRate: f.kdvRate, isService: f.isService };
-      let id = product?.id;
-      if (!product) id = (await post<{ id: string }>('/admin/products', { ...own, ...pos })).id;
-      else await patch(`/admin/products/${product.id}`, synced ? pos : { ...own, ...pos });
-      await put(`/admin/products/${id}/groups`, { groupIds: f.groupIds });
+      // Seçenek grupları ürünle tek istekte (sunucuda tek işlem); değişmediyse gönderilmez, bağlar olduğu gibi kalır
+      const links = f.groupIds.join('|') !== (product?.optionGroupIds ?? []).join('|') ? { groupIds: f.groupIds } : {};
+      if (!product) await post('/admin/products', { ...own, ...pos, ...links });
+      else await patch(`/admin/products/${product.id}`, { ...(synced ? pos : { ...own, ...pos }), ...links });
       toast.ok(product ? `${f.name} kaydedildi` : `${f.name} eklendi`);
       onSaved();
     } catch (e) {
@@ -653,9 +659,30 @@ function ProductDrawer({
                   </button>
                 );
               })}
+            <button
+              type="button"
+              onClick={() => setNewGroup(true)}
+              className="inline-flex min-h-11 items-center gap-1 rounded-full border border-dashed border-[var(--admin-border-strong)] px-3 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] pointer-fine:min-h-8"
+            >
+              <Plus aria-hidden="true" className="size-3.5" />
+              Yeni grup
+            </button>
           </div>
         </div>
       </div>
+      {newGroup && (
+        <OptionGroupEditor
+          initial={newGroupDraft()}
+          note="Kaydedince grup bu ürün için seçilir; ürünü kaydedince bağlanır"
+          onClose={() => setNewGroup(false)}
+          onSaved={({ id, name }) => {
+            setF((cur) => ({ ...cur, groupIds: [...cur.groupIds, id] }));
+            setNewGroup(false);
+            onGroupCreated();
+            toast.ok(`${name} grubu eklendi; ürünü kaydedince bağlanır`);
+          }}
+        />
+      )}
     </QuickLook>
   );
 }
