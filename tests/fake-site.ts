@@ -41,7 +41,20 @@ export interface SiteMenuFixture {
   updatedAt?: string;
 }
 
-export const siteOrdersFixture = () => readJson<{ version: number; now: string; complete: boolean; orders: PanelOrderFixture[] }>('tests/fixtures/site-panel-orders.json');
+type SiteOrdersFixture = { version: number; now: string; complete: boolean; orders: PanelOrderFixture[] };
+/**
+ * Fikstürün saatleri gerçek saate kaydırılır: sitenin yanıtındaki `now` bu dosya ilk okunduğu ana denk gelir, ödeme ve
+ * planlı saatler aynı aralıkla kayar. Sabit tarihli fikstür bar ekranının 12-24 saatlik penceresinden bir gün sonra
+ * düşüyordu (28 Ekim 2026). Kayma bir kez hesaplanır: aynı test dosyasındaki her çağrı aynı saatleri görür.
+ */
+let ordersShift: number | null = null;
+const shiftIso = (iso: string, ms: number) => (iso ? new Date(Date.parse(iso) + ms).toISOString() : iso);
+export const siteOrdersFixture = (): SiteOrdersFixture => {
+  const raw = readJson<SiteOrdersFixture>('tests/fixtures/site-panel-orders.json');
+  ordersShift ??= Date.now() - Date.parse(raw.now);
+  const ms = ordersShift;
+  return { ...raw, now: shiftIso(raw.now, ms), orders: raw.orders.map((o) => ({ ...o, paidAt: shiftIso(o.paidAt, ms), scheduledFor: shiftIso(o.scheduledFor, ms) })) };
+};
 export const sitePanelMenuFixture = () => readJson<{ version: number; now: string; items: { id: string; isActive: boolean; priceMinor: number; priceMinorL: number }[] }>('tests/fixtures/site-panel-menu.json');
 export const siteMenuFixture = () => readJson<SiteMenuFixture>('server/db/menu-snapshot.json');
 
