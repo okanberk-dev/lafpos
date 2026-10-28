@@ -41,7 +41,15 @@ const LIVE_NEEDS: Record<PlatformId, ReactNode> = {
       <Env names={['YEMEKSEPETI_PLUGIN_SECRET']} /> yazılır; LafPOS yeniden başlatılınca Canlı seçilir. Siparişler LafPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker.
     </>
   ),
-  getir: 'Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber’e geçti, yol Trendyol Go’ya dönebilir.',
+  getir: (
+    <>
+      Getir’den POS entegrasyonu: test ve canlı için uygulama anahtarı ve restoran anahtarı. Kasa bilgisayarının <code className={CODE}>.env</code> dosyasına{' '}
+      <Env names={['GETIR_APP_SECRET_KEY', 'GETIR_RESTAURANT_SECRET_KEY']} /> (test ortamı için <Env names={['GETIR_API_URL']} />), Vercel’e bizim ürettiğimiz{' '}
+      <Env names={['GETIR_WEBHOOK_SECRET']} /> yazılır; Getir’e sipariş ve iptal adresleri bu anahtarla verilir. LafPOS yeniden başlatılınca Canlı seçilir. Siparişler
+      LafPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker, yedek olarak Getir’den de okur. Getir’in yemek işi Uber’e geçti: siparişler ileride Trendyol Go’dan da
+      gelebilir.
+    </>
+  ),
   trendyol: (
     <>
       Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar kasa bilgisayarının <code className={CODE}>.env</code> dosyasına (

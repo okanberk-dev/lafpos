@@ -43,6 +43,18 @@ export function configFrom(vars: Record<string, string | undefined>) {
       /** Restoranın Delivery Hero'daki POS kimliği (remoteId); aktarıcı yalnız bunu kabul eder */
       remoteId: (vars.YEMEKSEPETI_REMOTE_ID ?? '').trim(),
     },
+    /**
+     * Getir Yemek (GetirFood API): Getir'in verdiği uygulama anahtarı ve restoran anahtarı; siparişler LafPOS Uzaktan
+     * aktarıcısına (Vercel) iter, kasa oradan çeker (LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET de gerekir), yedek olarak
+     * doğrudan Getir'den okur. Getir'e verilen webhook anahtarı (GETIR_WEBHOOK_SECRET) yalnız Vercel'de durur, kasada
+     * gerekmez (server/delivery/getir.ts)
+     */
+    getir: {
+      appSecretKey: (vars.GETIR_APP_SECRET_KEY ?? '').trim(),
+      restaurantSecretKey: (vars.GETIR_RESTAURANT_SECRET_KEY ?? '').trim(),
+      /** Canlı https://food-external-api-gateway.getirapi.com; test ortamı https://food-external-api-gateway.development.getirapi.com */
+      apiUrl: ((vars.GETIR_API_URL ?? '').trim() || 'https://food-external-api-gateway.getirapi.com').replace(/\/+$/, ''),
+    },
     trendyol: {
       supplierId: (vars.TRENDYOL_SUPPLIER_ID ?? '').trim(),
       apiKey: (vars.TRENDYOL_API_KEY ?? '').trim(),
