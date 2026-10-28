@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
-import { defaultPicks, editingPicks, estimateUnit, knownPicks, menuUnit, missingChoice, pickHint, pickNote, pickSingle, productGroups, reconcilePicks, useBoot } from '@/lib/boot';
+import { defaultPicks, editingPicks, estimateUnit, menuUnit, missingChoice, pickHint, pickNote, pickSingle, productGroups, reconcilePicks, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { useFinePointer } from '@/lib/hooks';
@@ -57,17 +57,15 @@ export function OptionsModal({
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
-  // Seçimin kurulduğu ya da son uzlaştırıldığı andaki gruplar: sonradan açılan grup bunlarda yoktur
-  const seenGroups = useRef<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     if (!product) return;
-    seenGroups.current = new Set(groupsRef.current.map((g) => g.id));
     if (editing) {
       setSize(editing.size);
       // Bu arada tükenen seçenek seçili kalır: grubu uyarır, Güncelle kasiyer bırakana ya da başkasını seçene dek kapalı.
-      // Grubu kapanan ya da kaldırılan seçenek düşer (sunucu 400 döner, bütün bekleyen satırlar takılırdı)
-      setPicks(knownPicks(groupsRef.current, editingPicks(editing.options)));
+      // Grubu kapanan ya da kaldırılan seçenek düşer (sunucu 400 döner, bütün bekleyen satırlar takılırdı); isteğe bağlı
+      // grubun tükenen varsayılanı (önseçili gelmiş Normal süt) bırakılır, grup boş gider
+      setPicks(reconcilePicks(groupsRef.current, editingPicks(editing.options)));
       setNote(editing.note);
       setQty(editing.qty);
       setPriceText(editing.priceOverride != null ? String(editing.priceOverride / 100).replace('.', ',') : '');
@@ -82,14 +80,14 @@ export function OptionsModal({
     }
   }, [product, editing, initialSize]);
 
-  // Pencere açıkken ürünün bir grubu kapanır ya da açılırsa (Yönetim › Seçenekler, menü olayı) seçim, not ve adet
-  // korunarak uzlaştırılır: kapanan grubun seçimi atılır (yoksa gönderim 400 alırdı), yeni görünen grubun varsayılanı
-  // seçili gelir (ücretli varsayılan ekranda seçili görünmeden fiyata girmesin). Yukarıdaki efektten sonra çalışır
+  // Pencere açıkken ürünün bir grubu kapanır ya da açılırsa, seçenek tükenir ya da satışa açılırsa (Yönetim ›
+  // Seçenekler, Tükenen ürünler; menü olayı) seçim, not ve adet korunarak uzlaştırılır: kapanan grubun seçimi atılır
+  // (yoksa gönderim 400 alırdı), önseçili Normal süt tükenince bırakılır (Ekle açık kalır, süt yazılmaz), seçimi boşalan
+  // isteğe bağlı grubun varsayılanı seçili gelir (ücretli varsayılan ekranda seçili görünmeden fiyata girmesin).
+  // Yukarıdaki efektten sonra çalışır
   useEffect(() => {
     if (!product) return;
-    const seen = seenGroups.current;
-    seenGroups.current = new Set(groups.map((g) => g.id));
-    setPicks((cur) => reconcilePicks(groups, cur, seen));
+    setPicks((cur) => reconcilePicks(groups, cur));
   }, [product, groups]);
 
   if (!product) return null;

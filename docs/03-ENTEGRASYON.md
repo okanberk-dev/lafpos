@@ -200,15 +200,20 @@ başka biri seçilene kadar Ekle kapalıdır, hızlı ekleme de pencereyi açar.
 durmaz: grup başlığında yalnız bilgi notu ("Normal tükendi") çıkar, Ekle açıktır, hızlı ekleme pencere açmaz ve sunucu
 o grup için seçenek yazmaz. Site Süt ve Kavrum gruplarını sudan çaya bütün içeceklere bağlar; normal süt bitti diye su
 ve espresso satılamaz olmasın, yerine Laktozsuz ya da Yulaf da yazılmasın (lafmaliyet'e yanlış `ALTERNATIF SÜT`
-satırı, fazladan ek fiyat). Pencere açıkken tükenen ya da sepetteki gönderilmemiş satırda seçili olan seçenek seçili
-kalır (seçim, not ve adet korunur): grubu "Yulaf tükendi, başka birini seçin" der, alt çubuk aynı nedeni "Süt: ..."
-diye yazar, Ekle / Güncelle kasiyer onu bırakana ya da başkasını seçene dek kapalıdır. Sepetteki gönderilemeyecek satırın
-altında kırmızı neden yazar ("Yulaf tükendi", "Orta tükendi, şeker seçin", grubu kapandıysa "Seçeneği kalktı,
-düzenleyin"); dokununca düzenleme penceresi açılır. Pencere açıkken ürünün bir grubu kapanır ya da açılırsa seçim
-uzlaştırılır: kapanan grubun seçimi atılır, yeni görünen grubun varsayılanı seçili gelir. Sunucu yalnız kasa satışını
-(`POST /api/orders/:id/items`) reddeder: tükenen seçenek açıkça seçildiyse (her grupta) ya da zorunlu tek seçimlik grup
-boş gönderildi ve varsayılanı tükendiyse 409 `option_sold_out` ("Yulaf tükendi", "Orta tükendi; Şeker seçin"). Siteden
-gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez.
+satırı, fazladan ek fiyat). Pencere açıkken tükenen ya da sepetteki gönderilmemiş satırda açıkça seçilmiş seçenek seçili
+kalır (seçim, not ve adet korunur): grubu "Yulaf tükendi, başka birini seçin" (isteğe bağlı grupta "... ya da bırakın")
+der, alt çubuk aynı nedeni "Süt: ..." diye yazar, Ekle / Güncelle kasiyer onu bırakana ya da başkasını seçene dek
+kapalıdır. İsteğe bağlı grubun varsayılanı (pencerenin önseçtiği Normal süt) seçili olsa da seçim sayılmaz: tükenince
+pencere onu bırakır (yalnız bilgi notu, Ekle açık), sepetteki satır işaretlenmez, Gönder onu satırdan çıkarır ve sunucu
+o grup için seçenek yazmaz (Su süt yazılmadan satılır; `sendableOptions`). Sepetteki gönderilemeyecek satırın altında
+kırmızı neden yazar ("Yulaf tükendi", "Orta tükendi, şeker seçin", grubu kapandıysa "Seçeneği kalktı, düzenleyin");
+dokununca düzenleme penceresi açılır. Pencere açıkken ürünün bir grubu kapanır ya da açılırsa, seçenek tükenir ya da
+satışa açılırsa seçim uzlaştırılır (`reconcilePicks`): kapanan grubun seçimi atılır; seçimi boşalan her isteğe bağlı tek
+seçimlik grubun (yeni açılan, varsayılanı yeniden satışa açılan, seçili seçeneği kaldırılan) varsayılanı seçili gelir,
+ücretli varsayılan ekranda görünmeden ücrete girmez. Sunucu yalnız kasa satışını (`POST /api/orders/:id/items`)
+reddeder: tükenen seçenek açıkça seçildiyse (her grupta) ya da zorunlu tek seçimlik grup boş gönderildi ve varsayılanı
+tükendiyse 409 `option_sold_out` ("Yulaf tükendi", "Orta tükendi; Şeker seçin"). Siteden gelen ödenmiş sipariş ve paket
+platformu siparişi reddedilmez.
 
 **Porsiyon:** siteye bağlı ürünün porsiyonu bitince Tükendi yazımı adisyon kalemiyle aynı işlemde giden kutusuna
 girer (`outbox`: target `laffogato`, kind `menu.isActive`, ürün başına tek kayıt `menu:<extId>`, son istenen durum) ve

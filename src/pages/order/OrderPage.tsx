@@ -35,7 +35,7 @@ import { Textarea, Toggle } from '@/components/ui/Field';
 import { Badge, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
 import { errorMessage, patch, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
-import { soldOutDefault, useBoot } from '@/lib/boot';
+import { sendableOptions, soldOutDefault, useBoot } from '@/lib/boot';
 import { type PendingLine, restoreLines, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { joinMeta } from '@/lib/text';
@@ -152,11 +152,13 @@ export default function OrderPage() {
     if (!pending.length) return false;
     // Yalnız gönderilen adetler sepetten düşer: istek sürerken eklenen ya da "Geri al"la geri konan satır beklemede kalır
     const sent = new Map(pending.map((l) => [l.key, l.qty]));
+    // Pencerenin önseçtiği, sonra tükenen Normal süt gitmez: o grup boş gider, sunucu süt yazmaz (gitse 409 alır, bütün
+    // satırlar takılırdı)
     setSending(true);
     const res = await act(
       (pin) =>
         post<OrderDTO>(`/orders/${order.id}/items`, {
-          items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: l.options, note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
+          items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: sendableOptions(boot, l.productId, l.options), note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
           approverPin: pin,
         }),
       `${pendingCount} ürün gönderildi`,

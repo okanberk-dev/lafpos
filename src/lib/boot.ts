@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { happyHourPercentAt, happyHourUnit } from '@shared/order-calc';
-import type { BootstrapDTO, OptionGroupDTO, ProductDTO, SelectedOption, Size } from '@shared/types';
+import type { BootstrapDTO, OptionGroupDTO, OptionItemDTO, ProductDTO, SelectedOption, Size } from '@shared/types';
 import { get } from './api';
 
 /** Açılış verisi: menü, masa planı, ödeme türleri, ayarlar. Menü/ayar olaylarında yenilenir. */
@@ -16,6 +16,27 @@ export function useBoot(): BootstrapDTO {
 
 export function productGroups(boot: BootstrapDTO, p: ProductDTO): OptionGroupDTO[] {
   return p.optionGroupIds.map((id) => boot.optionGroups.find((g) => g.id === id)).filter((g): g is OptionGroupDTO => !!g);
+}
+
+/**
+ * İsteğe bağlı tek seçimlik grubun tükenen varsayılanı seçili sayılmaz (pencerenin önseçtiği Normal süt, pencere açıkken
+ * ya da satır sepetteyken tükendi): seçim yokmuş gibi ele alınır. Sunucu seçimsiz grubun tükenen varsayılanını yazmaz,
+ * satış sürer; açıkça gönderilse 409 alırdı. Pencere onu bırakır (`reconcilePicks`), sepet işaretlemez
+ * (`pendingProblem`), gönderim çıkarır (`sendableOptions`), tahmini fiyata ve seçenek metnine girmez
+ */
+function lapsedDefault(g: OptionGroupDTO, i: OptionItemDTO): boolean {
+  return g.kind === 'single' && !g.required && i.isDefault && i.soldOut;
+}
+
+/**
+ * Gönderimden hemen önce bekleyen satırın seçenekleri: `lapsedDefault` seçimler çıkar, o grup boş gider (sunucu seçenek
+ * yazmaz; kalsa 409 alır, bütün bekleyen satırlar takılırdı). Çıkacak bir şey yoksa aynı dizi döner
+ */
+export function sendableOptions<T extends { itemId: string }>(boot: BootstrapDTO, productId: string, options: T[]): T[] {
+  const p = boot.products.find((x) => x.id === productId);
+  if (!p || !options.length) return options;
+  const lapsed = new Set(productGroups(boot, p).flatMap((g) => g.items.filter((i) => lapsedDefault(g, i)).map((i) => i.id)));
+  return options.some((o) => lapsed.has(o.itemId)) ? options.filter((o) => !lapsed.has(o.itemId)) : options;
 }
 
 /**
@@ -37,7 +58,7 @@ export function menuUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, picks: {
   for (const g of productGroups(boot, p)) {
     for (const pick of picks) {
       const item = g.items.find((i) => i.id === pick.itemId);
-      if (item) unit += item.price * (g.kind === 'counter' ? (pick.qty ?? 1) : 1);
+      if (item && !lapsedDefault(g, item)) unit += item.price * (g.kind === 'counter' ? (pick.qty ?? 1) : 1);
     }
   }
   return unit;
@@ -57,7 +78,7 @@ export function pendingOptionsText(boot: BootstrapDTO, p: ProductDTO, picks: { i
   for (const g of productGroups(boot, p)) {
     for (const pick of picks) {
       const item = g.items.find((i) => i.id === pick.itemId);
-      if (!item) continue;
+      if (!item || lapsedDefault(g, item)) continue;
       const qty = pick.qty ?? 1;
       if (item.isDefault && item.price === 0 && !g.required) continue;
       if (g.extKey === 'extraShot') parts.push(qty > 1 ? `+${qty} shot` : '+1 shot');
@@ -111,8 +132,8 @@ export function defaultPicks(groups: OptionGroupDTO[]): Record<string, number> {
 /**
  * Sepetteki satırı düzenlerken ilk seçim: satırın seçimleri olduğu gibi. Bu arada tükenen seçenek de seçili kalır
  * (`pickHint` uyarır, Güncelle kapalı, kasiyer bırakır ya da başkasını seçer); süzülse isteğe bağlı grup boş kalır,
- * sunucu varsayılanı yazardı (müşteri yulaf istemişti, normal süt giderdi). Pencere bunu `knownPicks`'ten geçirir:
- * grubu kapanan ya da kaldırılan seçenek düşer
+ * sunucu varsayılanı yazardı (müşteri yulaf istemişti, normal süt giderdi). Pencere bunu `reconcilePicks`'ten geçirir:
+ * grubu kapanan ya da kaldırılan seçenek ve isteğe bağlı grubun tükenen varsayılanı düşer
  */
 export function editingPicks(options: { itemId: string; qty?: number }[]): Record<string, number> {
   return Object.fromEntries(options.map((o) => [o.itemId, o.qty ?? 1]));
@@ -130,13 +151,19 @@ export function knownPicks(groups: OptionGroupDTO[], picks: Record<string, numbe
 }
 
 /**
- * Pencere açıkken ürünün grupları değişti (Yönetim › Seçenekler'de grup kapandı ya da açıldı, menü olayı): bilinmeyen
- * seçenekler atılır (`knownPicks`), `seen`'de olmayan, yeni görünen grubun varsayılanı seçili gelir (`defaultPicks`;
- * ücretli varsayılan ekranda seçili görünmeden ücrete eklenmesin). Değişen bir şey yoksa aynı nesne döner
+ * Seçimi ürünün o anki gruplarıyla uzlaştırır (pencere açılırken ve açıkken grup kapanınca, açılınca, seçenek tükenince
+ * ya da satışa açılınca; menü olayı): bilinmeyen seçenekler atılır (`knownPicks`), isteğe bağlı grubun tükenen
+ * varsayılanı bırakılır (`lapsedDefault`: Normal süt bitti, Ekle açık, grup boş gider). Sonra seçimi kalmayan her
+ * isteğe bağlı tek seçimlik grubun tükenmemiş varsayılanı seçili gelir (`defaultPicks`): yeni açılan grup, yeniden
+ * satışa açılan varsayılan, seçili seçeneği gruptan kaldırılan grup. Sunucu boş gruba varsayılanı yazar; ücretli
+ * varsayılan ekranda seçili görünmeden ücrete girmesin. Açıkça seçilen tükenen seçenek (Yulaf) kalır, `pickHint`
+ * uyarır. Değişen bir şey yoksa aynı nesne döner
  */
-export function reconcilePicks(groups: OptionGroupDTO[], picks: Record<string, number>, seen: ReadonlySet<string>): Record<string, number> {
-  const kept = knownPicks(groups, picks);
-  const added = defaultPicks(groups.filter((g) => !seen.has(g.id)));
+export function reconcilePicks(groups: OptionGroupDTO[], picks: Record<string, number>): Record<string, number> {
+  const known = knownPicks(groups, picks);
+  const lapsed = new Set(groups.flatMap((g) => g.items.filter((i) => known[i.id] && lapsedDefault(g, i)).map((i) => i.id)));
+  const kept = lapsed.size ? Object.fromEntries(Object.entries(known).filter(([id]) => !lapsed.has(id))) : known;
+  const added = defaultPicks(groups.filter((g) => !g.items.some((i) => kept[i.id])));
   return Object.keys(added).length ? { ...kept, ...added } : kept;
 }
 
@@ -153,13 +180,14 @@ export function pickSingle(g: OptionGroupDTO, picks: Record<string, number>, ite
 
 /**
  * Tükenen seçenek yüzünden seçim bekleyen grubun uyarısı; varken Ekle kapalı (sunucu 409 `option_sold_out` döner).
- * Seçiliyken tükenen (başka kasa işaretledi, ya da sepetteki satır düzenleniyor) her grupta bırakılır. Zorunlu tek
- * seçimlik grupta bir şey seçilmediyse sunucu varsayılanı yazar: o tükendiyse başkası seçilir. İsteğe bağlı grubun
- * tükenen varsayılanı satışı durdurmaz (sunucu o grup için seçenek yazmaz); onu yalnız `pickNote` söyler
+ * Açıkça seçilip seçiliyken tükenen (başka kasa işaretledi, ya da sepetteki satır düzenleniyor) her grupta bırakılır;
+ * isteğe bağlı grupta bırakmak varsayılana döner. Zorunlu tek seçimlik grupta bir şey seçilmediyse sunucu varsayılanı
+ * yazar: o tükendiyse başkası seçilir. İsteğe bağlı grubun tükenen varsayılanı, seçili olsa da, satışı durdurmaz
+ * (`lapsedDefault`; sunucu o grup için seçenek yazmaz); onu yalnız `pickNote` söyler
  */
 export function pickHint(g: OptionGroupDTO, picks: Record<string, number>): string | null {
-  const gone = g.items.find((i) => i.soldOut && picks[i.id]);
-  if (gone) return `${gone.name} tükendi, ${g.kind === 'single' ? 'başka birini seçin' : 'kaldırın'}`;
+  const gone = g.items.find((i) => i.soldOut && picks[i.id] && !lapsedDefault(g, i));
+  if (gone) return `${gone.name} tükendi, ${g.kind !== 'single' ? 'kaldırın' : g.required ? 'başka birini seçin' : 'başka birini seçin ya da bırakın'}`;
   if (g.kind !== 'single' || !g.required || g.items.some((i) => picks[i.id])) return null;
   const d = g.items.find((i) => i.isDefault);
   if (d) return d.soldOut ? `${d.name} tükendi, başka birini seçin` : null;
@@ -171,22 +199,23 @@ export function pickHint(g: OptionGroupDTO, picks: Record<string, number>): stri
  * Ekle açık kalır; sunucu o grup için seçenek yazmaz (su, espresso süt sormadan satılır)
  */
 export function pickNote(g: OptionGroupDTO, picks: Record<string, number>): string | null {
-  if (g.kind !== 'single' || g.required || g.items.some((i) => picks[i.id])) return null;
+  if (g.kind !== 'single' || g.required || g.items.some((i) => picks[i.id] && !lapsedDefault(g, i))) return null;
   const d = g.items.find((i) => i.isDefault);
   return d?.soldOut ? `${d.name} tükendi` : null;
 }
 
 /**
  * Gönderilmemiş satırı sunucu neden reddeder (sepette satırın altında kırmızı; dokununca düzenleme penceresi açılır):
- * seçili seçenek tükendi ("Yulaf tükendi"), zorunlu grupta seçim yok ve varsayılanı tükendi ("Orta tükendi, şeker
- * seçin") ya da varsayılanı yok ("Şeker seçin"), ya da seçeneğinin grubu kapandı / seçenek kaldırıldı. Yoksa null.
- * Kurallar sunucunun `resolveOptions`'ıyla aynı
+ * açıkça seçilen seçenek tükendi ("Yulaf tükendi"), zorunlu grupta seçim yok ve varsayılanı tükendi ("Orta tükendi,
+ * şeker seçin") ya da varsayılanı yok ("Şeker seçin"), ya da seçeneğinin grubu kapandı / seçenek kaldırıldı. Yoksa null.
+ * Kurallar sunucunun `resolveOptions`'ıyla aynı; isteğe bağlı grubun tükenen varsayılanı sorun değil, gönderim onu
+ * çıkarır (`sendableOptions`)
  */
 export function pendingProblem(boot: BootstrapDTO, p: ProductDTO, options: { itemId: string; qty?: number }[]): string | null {
   const groups = productGroups(boot, p);
   const picks = editingPicks(options);
   for (const g of groups) {
-    const gone = g.items.find((i) => i.soldOut && (picks[i.id] ?? 0) > 0);
+    const gone = g.items.find((i) => i.soldOut && (picks[i.id] ?? 0) > 0 && !lapsedDefault(g, i));
     if (gone) return `${gone.name} tükendi`;
     if (!g.required || g.kind === 'counter' || g.items.some((i) => (picks[i.id] ?? 0) > 0)) continue;
     const d = g.kind === 'single' ? g.items.find((i) => i.isDefault) : undefined;
