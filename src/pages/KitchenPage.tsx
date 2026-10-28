@@ -89,6 +89,11 @@ export default function KitchenPage() {
   const counts = useMemo(() => ({ waiting: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'yeni').length, 0), making: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'hazirlaniyor').length, 0) }), [list]);
 
   const canSoldOut = can('urun.tukendi') || can('menu.yonet');
+  const callScreen = REMOTE ? null : (
+    <ToolButton onClick={() => window.open(appUrl('/cagri'), 'lafpos-cagri')} title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)">
+      <MonitorUp className="size-4" /> Çağrı ekranı
+    </ToolButton>
+  );
   const tools = (
     <>
       {!history && (
@@ -123,15 +128,12 @@ export default function KitchenPage() {
               {counts.making > 0 && <span className="tabular inline-flex min-h-6 items-center rounded-md bg-[var(--admin-primary-soft)] px-2 text-[var(--admin-primary)]">{counts.making} hazırlanıyor</span>}
             </div>
           )}
-          <div className="hidden items-center gap-1 md:flex">
+          {/* Araçlar 1024 px üstünde satırda; tablet ve telefonda "Diğer" penceresinde (768 px'te satır taşıyordu) */}
+          <div className="hidden items-center gap-1 lg:flex">
             {tools}
-            {!REMOTE && (
-              <ToolButton onClick={() => window.open(appUrl('/cagri'), 'lafpos-cagri')} title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)">
-                <MonitorUp className="size-4" /> Çağrı ekranı
-              </ToolButton>
-            )}
+            {callScreen}
           </div>
-          <IconButton label="Diğer" className="md:hidden" onClick={() => setMore(true)}>
+          <IconButton label="Diğer" className="lg:hidden" onClick={() => setMore(true)}>
             <MoreHorizontal className="size-5" />
           </IconButton>
           <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} aria-pressed={sound} className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-surface-2 active:bg-surface-3">
@@ -142,8 +144,10 @@ export default function KitchenPage() {
       </div>
 
       <Modal open={more} onClose={() => setMore(false)} title="Bar ekranı" size="sm">
-        <div className="grid gap-1.5 p-3 [&>button]:w-full [&>button]:justify-start [&>button]:px-3" onClick={() => setMore(false)}>
+        <div className="grid gap-1.5 p-3 [&_button]:w-full [&_button]:justify-start [&_button]:px-3" onClick={() => setMore(false)}>
           {tools}
+          {/* Telefonda çağrı ekranı açılmaz (televizyon ya da müşteriye dönük tablet içindir) */}
+          <span className="contents max-md:hidden">{callScreen}</span>
         </div>
       </Modal>
 
