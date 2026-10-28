@@ -6,7 +6,7 @@ import { env } from '../env';
 import { ulid } from '../lib/ids';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
-import { requireSiteLinked, siteSigned } from './laffogato-link';
+import { requireSiteLinked, siteSigned, unknownSiteListVersion } from './laffogato-link';
 
 /**
  * laffogato menüsünü LafPOS'a çeker. Kaynak: herkese açık, CDN önbellekli `GET /api/mobile/v1/menu` (ETag).
@@ -81,13 +81,19 @@ export async function fetchPublicMenu(force = false): Promise<{ status: 'degisme
 /** İmzalı panelin kalemleri: sitedeki her kalem, Tükendi olanlar dahil, CDN önbelleği yok (laffogato `toPanelMenuItem`) */
 export type PanelMenu = Map<string, { isActive: boolean; priceMinor: number; priceMinorL: number }>;
 
-/** İmzalı panel ucundan Tükendi kalemler dahil liste (adres ve anahtar varsa). Bozuk gövde liste sayılmaz. */
+/**
+ * İmzalı panel ucundan Tükendi kalemler dahil liste (adres ve anahtar varsa). Bozuk gövde ve tanınmayan biçim
+ * (`version` 1 değil; alanı göndermeyen eski site tanınır) liste sayılmaz: çağıran Satışta bilgisine dokunmaz.
+ */
 export async function fetchPanelMenu(): Promise<PanelMenu | null> {
   if (!siteSigned()) return null;
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/menu`));
   if (status !== 200) throw new Error(`Panel menüsü alınamadı (HTTP ${status})`);
-  const items = (json as { items?: unknown } | null)?.items;
-  if (!Array.isArray(items)) throw new Error('Panel menüsü beklenen biçimde değil');
+  const body = json as { version?: unknown; items?: unknown } | null;
+  const items = body?.items;
+  if (!body || !Array.isArray(items)) throw new Error('Panel menüsü beklenen biçimde değil');
+  const version = unknownSiteListVersion(body);
+  if (version !== null) throw new Error(`Panel menüsü tanınmayan biçimde (sürüm ${version})`);
   return new Map(
     (items as { id?: unknown; isActive?: unknown; priceMinor: number; priceMinorL: number }[])
       .filter((i) => typeof i?.id === 'string' && typeof i.isActive === 'boolean')

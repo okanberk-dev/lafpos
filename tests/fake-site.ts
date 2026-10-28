@@ -92,6 +92,10 @@ export interface FakeSite {
   /** İmzalı panel menüsünde Satışta bilgisi: kimlik → isActive (fikstürde hepsi true) */
   panelActive: Map<string, boolean>;
   orders: { complete: boolean; orders: PanelOrderFixture[] };
+  /** Sipariş listesinin biçim sürümü (site 1 gönderir); undefined: alan hiç gönderilmez (eski site) */
+  ordersVersion: unknown;
+  /** Panel menüsünün biçim sürümü (site 1 gönderir); undefined: alan hiç gönderilmez (eski site) */
+  panelMenuVersion: unknown;
   version: string;
   /** Sürüm yanıtındaki karaoke işareti (F1); null: eski site, alan gönderilmez */
   karaokeMarker: string | null;
@@ -130,6 +134,8 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     menu: siteMenuFixture(),
     panelActive: new Map(panelMenu.items.map((i) => [i.id, i.isActive])),
     orders: (({ complete, orders }) => ({ complete, orders }))(siteOrdersFixture()),
+    ordersVersion: 1,
+    panelMenuVersion: panelMenu.version,
     version: 'v1',
     karaokeMarker: 'k1',
     karaoke: siteKaraokeFixture().reservations,
@@ -188,7 +194,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     if (call === 'GET /api/panel/orders') {
       const code = site.ordersStatus.shift() ?? 200;
       if (code !== 200) return send(code, { error: 'unavailable' });
-      return send(200, { version: 1, now: new Date().toISOString(), complete: site.orders.complete, orders: site.orders.orders });
+      return send(200, { version: site.ordersVersion, now: new Date().toISOString(), complete: site.orders.complete, orders: site.orders.orders });
     }
     if (call === 'POST /api/panel/orders/stage') {
       const change = JSON.parse(raw) as FakeSite['stagePosts'][number];
@@ -206,7 +212,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
       if (site.panelMenuGate) await site.panelMenuGate;
       const code = site.panelMenuStatus.shift() ?? 200;
       if (code !== 200) return send(code, { error: 'unavailable' });
-      return send(200, { ...panelMenu, items: panelMenu.items.map((i) => ({ ...i, isActive: snapshot.get(i.id) ?? i.isActive })) });
+      return send(200, { ...panelMenu, version: site.panelMenuVersion, items: panelMenu.items.map((i) => ({ ...i, isActive: snapshot.get(i.id) ?? i.isActive })) });
     }
     if (call === 'POST /api/panel/menu') {
       const change = JSON.parse(raw) as FakeSite['menuPosts'][number];
