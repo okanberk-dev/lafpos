@@ -329,7 +329,7 @@ export default function OptionsAdmin() {
               <Field label="Ad" required error={tried ? happyErrors?.name : null}>
                 <Input value={happy.name} onChange={(e) => setHappy({ ...happy, name: e.target.value })} placeholder="Ör. öğleden sonra kahvesi" />
               </Field>
-              <Field label="İndirim (%)" hint="1-100">
+              <Field label="İndirim (%)" hint="1–100">
                 <NumberInput value={happy.percent} min={1} max={100} onCommit={(percent) => setHappy({ ...happy, percent })} />
               </Field>
               <Field label="Başlangıç">

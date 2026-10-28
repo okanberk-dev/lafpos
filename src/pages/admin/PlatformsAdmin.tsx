@@ -219,10 +219,10 @@ function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Hazırlık süresi (dk)" hint="5-120">
+          <Field label="Hazırlık süresi (dk)" hint="5–120">
             <NumberInput value={settings.prepMinutes} min={5} max={120} fallback={20} disabled={!canEdit} onCommit={(prepMinutes) => void save({ prepMinutes })} />
           </Field>
-          <Field label="Tahmini komisyon (%)" hint="0-60">
+          <Field label="Tahmini komisyon (%)" hint="0–60">
             <NumberInput decimals={2} value={settings.commissionPct} min={0} max={60} fallback={0} disabled={!canEdit} onCommit={(commissionPct) => void save({ commissionPct })} />
           </Field>
         </div>

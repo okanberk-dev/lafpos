@@ -9,9 +9,8 @@ import { useLive } from '@/lib/live';
 import { isAdminArea, visibleNav } from '@/lib/nav';
 import { useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
-import { KDS_THEME_PREF, type KdsTheme, useTheme } from '@/lib/theme';
+import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
-import { useLocalPref } from '@/lib/hooks';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
@@ -55,8 +54,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const me = useAuth((s) => s.me)!;
   const logout = useAuth((s) => s.logout);
   const live = useLive((s) => s.status);
-  const { theme, setTheme, forceDark, setForceDark } = useTheme();
-  const [, setKdsTheme] = useLocalPref<KdsTheme>(KDS_THEME_PREF, 'koyu');
+  const { theme, setTheme } = useTheme();
+  const barDark = useTheme((s) => s.force === 'dark');
   const navigate = useNavigate();
   const location = useLocation();
   const now = useClock();
@@ -98,10 +97,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
   // Bar ekranı kendi tercihinde (cihazda, varsayılan koyu) açılır; orada tema satırı o tercihi değiştirir
   const onBar = location.pathname === '/mutfak';
-  const setBarTheme = (v: KdsTheme) => {
-    setKdsTheme(v);
-    setForceDark(v === 'koyu');
-  };
 
   // Bağlantı ve gün durumu. 84 px'lik rayda alt alta (yan yana "Gün kapalı" taşar)
   const liveLabel = live === 'canli' ? 'Canlı bağlantı' : live === 'baglaniyor' ? 'Bağlanıyor…' : 'Bağlantı koptu; yeniden deneniyor';
@@ -276,7 +271,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             {onBar ? (
               <Segmented<KdsTheme>
                 label="Bar ekranı teması"
-                value={forceDark ? 'koyu' : 'acik'}
+                value={barDark ? 'koyu' : 'acik'}
                 onChange={setBarTheme}
                 options={[
                   { value: 'acik', label: 'Açık' },

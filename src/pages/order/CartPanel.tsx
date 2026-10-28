@@ -238,6 +238,9 @@ function ItemSheet({
   const [reason, setReason] = useState('');
   const [discType, setDiscType] = useState<'percent' | 'amount'>('percent');
   const [discValue, setDiscValue] = useState('');
+  /** Süren iptal, ikram, zayi ya da indirim isteği: çift dokunuş ya da ikinci Enter ikinci adedi yazmasın */
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   if (!item) return null;
   const unpaid = item.qty - item.paidQty;
@@ -250,7 +253,19 @@ function ItemSheet({
   };
   const reasons = mode === 'iptal' ? boot.settings.voidReasons : mode === 'indirim' ? boot.settings.discountReasons : mode ? compReasonsOf(boot.settings, mode) : [];
 
+  const ready = !!reason.trim() || (mode === 'indirim' && (discValue === '' || discValue === '0'));
   const submit = async () => {
+    if (busyRef.current || !ready) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await send();
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+  const send = async () => {
     const base = `/orders/${order.id}/items/${item.id}`;
     let res: unknown = null;
     if (mode === 'iptal') res = await act((pin) => post(`${base}/void`, { qty, reason, approverPin: pin }), 'Kalem iptal edildi');
@@ -324,7 +339,14 @@ function ItemSheet({
                   <TypedAmount text={discValue} />
                 )}
               </output>
-              <Numpad size="md" keyboard decimal={discType === 'amount'} onKey={(k) => setDiscValue(applyNumpadKey(discValue, k, { decimal: discType === 'amount', maxLength: discType === 'percent' ? 3 : 8 }))} />
+              {/* Enter, Uygula etkinse uygular; değilse hiçbir şey yapmaz (odaktaki rakamı yinelemez) */}
+              <Numpad
+                size="md"
+                keyboard
+                decimal={discType === 'amount'}
+                onEnter={() => void submit()}
+                onKey={(k) => setDiscValue(applyNumpadKey(discValue, k, { decimal: discType === 'amount', maxLength: discType === 'percent' ? 3 : 8 }))}
+              />
             </div>
           )}
           <div>
@@ -339,8 +361,10 @@ function ItemSheet({
             <Input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="Ya da nedeni yazın" aria-label="Neden" className="mt-2" />
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => setMode(null)}>Geri</Button>
-            <Button variant={mode === 'iptal' ? 'danger' : 'primary'} disabled={!reason.trim() && !(mode === 'indirim' && (discValue === '' || discValue === '0'))} onClick={submit}>
+            <Button onClick={() => setMode(null)} disabled={busy}>
+              Geri
+            </Button>
+            <Button variant={mode === 'iptal' ? 'danger' : 'primary'} disabled={!ready} loading={busy} onClick={() => void submit()}>
               {mode === 'iptal' ? `${qty} adet iptal` : mode === 'ikram' ? `${qty} adet ikram` : mode === 'zayi' ? `${qty} adet zayi` : 'Uygula'}
             </Button>
           </div>

@@ -28,9 +28,10 @@ export const fieldClass = base;
 /** Form etiketi: tek ölçek (13 px, orta kalınlık); ipucu sağda 12 px gri ("zorunlu", "boşsa sınırsız") */
 export function Label({ children, hint, className }: { children: ReactNode; hint?: ReactNode; className?: string }) {
   return (
-    <span className={cn('mb-1.5 flex items-baseline justify-between gap-2 text-[13px] font-medium text-ink-2', className)}>
-      <span>{children}</span>
-      {hint && <span className="text-xs font-normal text-muted">{hint}</span>}
+    // Dar alanda ipucu etiketi ezmez, alta iner; kısa ipucu ("5–120", "zorunlu") tek parça kalır
+    <span className={cn('mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 text-[13px] font-medium text-ink-2', className)}>
+      <span className="min-w-0">{children}</span>
+      {hint && <span className={cn('text-xs font-normal text-muted', typeof hint === 'string' && hint.length <= 16 && 'whitespace-nowrap')}>{hint}</span>}
     </span>
   );
 }
@@ -112,12 +113,19 @@ export const SearchInput = forwardRef<
     dense?: boolean;
   }
 >(function SearchInput({ value, onChange, label, className, wrapperClassName, dense, onKeyDown, ...rest }, ref) {
+  // Temizle düğmesi basılınca DOM'dan kalkar: odak alana döner (body'ye düşüp yazılan kaybolmasın, Tab pencereden kaçmasın)
+  const inner = useRef<HTMLInputElement | null>(null);
+  const setRef = (el: HTMLInputElement | null) => {
+    inner.current = el;
+    if (typeof ref === 'function') ref(el);
+    else if (ref) ref.current = el;
+  };
   return (
     <label className={cn('relative block min-w-0', wrapperClassName)}>
       <span className="sr-only">{label}</span>
       <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
       <input
-        ref={ref}
+        ref={setRef}
         type="search"
         inputMode="search"
         enterKeyHint="search"
@@ -142,7 +150,10 @@ export const SearchInput = forwardRef<
           type="button"
           aria-label="Aramayı temizle"
           title="Aramayı temizle"
-          onClick={() => onChange('')}
+          onClick={() => {
+            onChange('');
+            inner.current?.focus();
+          }}
           className={cn('absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-xl text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
         >
           <X aria-hidden="true" className="size-4" />
@@ -292,6 +303,9 @@ export function Toggle({
 /**
  * Yan yana seçenek düğmeleri (ödeme yolu, kasa sekmesi): gri ray, seçili beyaz hap; köşeler eş merkezli (ray 8,
  * boşluk 2, hap 6). Hap odağı rayın içinde çizilir (kaydırmalı ray dış halkayı kırpar). `label` grubu adlandırır.
+ * Kısa etiketler tek satırda kalır, sığmazsa ray kayar. `wrap`: uzun etiketli seçenekler (yazarkasa bağlantısı ve
+ * ödeme yeri) rayı tam genişlikte eşit böler, etiket kendi içinde kırılır, telefonda alt alta dizilir; hiçbiri gizli
+ * kaydırıcıda kalmaz.
  */
 export function Segmented<T extends string>({
   value,
@@ -300,6 +314,7 @@ export function Segmented<T extends string>({
   className,
   size = 'md',
   label,
+  wrap,
 }: {
   value: T;
   onChange: (v: T) => void;
@@ -307,9 +322,14 @@ export function Segmented<T extends string>({
   className?: string;
   size?: 'sm' | 'md';
   label?: string;
+  wrap?: boolean;
 }) {
   return (
-    <div role={label ? 'group' : undefined} aria-label={label} className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-lg bg-surface-3 p-0.5', className)}>
+    <div
+      role={label ? 'group' : undefined}
+      aria-label={label}
+      className={cn(wrap ? 'flex w-full gap-0.5 max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full overflow-x-auto', 'rounded-lg bg-surface-3 p-0.5', className)}
+    >
       {options.map((o) => (
         <button
           key={o.value}
@@ -317,7 +337,9 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           aria-pressed={value === o.value}
           className={cn(
-            'inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-md font-medium transition-[color,background-color,box-shadow] duration-150 focus-visible:-outline-offset-2 pointer-coarse:min-h-11',
+            'inline-flex items-center justify-center rounded-md font-medium',
+            wrap ? 'min-w-0 flex-1 whitespace-normal py-1.5 text-center leading-snug max-sm:flex-auto' : 'shrink-0 whitespace-nowrap',
+            'transition-[color,background-color,box-shadow] duration-150 focus-visible:-outline-offset-2 pointer-coarse:min-h-11',
             size === 'sm' ? 'min-h-7 px-2.5 text-xs' : 'min-h-9 px-3.5 text-sm [[data-area=admin]_&]:text-[13px]',
             value === o.value ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08),0_0_0_1px_rgb(12_14_27/0.04)]' : 'text-muted hover:text-ink',
           )}

@@ -12,7 +12,9 @@ import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
+import { fromLines, rebaseDraft } from '@/lib/settingsDraft';
 import { toast } from '@/lib/toast';
+import { useUnsavedGuard } from '@/lib/unsavedGuard';
 
 type Settings = Record<string, unknown> & {
   businessName: string;
@@ -48,7 +50,6 @@ type Settings = Record<string, unknown> & {
 };
 
 const lines = (a: string[]) => a.join('\n');
-const fromLines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean);
 /** Kaydedilmemiş değişiklik karşılaştırması: servis modu seçilince kendisi kaydedilir, sayılmaz */
 const comparable = (x: Settings) => JSON.stringify({ ...x, serviceMode: null });
 
@@ -95,6 +96,43 @@ function TlInput({ value, onCommit, ...rest }: { value: number; onCommit: (kurus
   );
 }
 
+/**
+ * Satır satır liste alanı (nedenler, hızlı nakit): metin kendi taslağında durur, her tuşta ayrıştırılan liste forma
+ * geçer (Kaydet ilk tuşta etkin). Ayrıştırılan liste metne geri yazılmaz: yoksa satır sonundaki boşluk ve yeni satır
+ * silinir, "Yanlış masa" "Yanlışmasa" olurdu. Alandan çıkınca ya da değer dışarıdan değişince metin yeniden kurulur.
+ */
+function LinesTextarea<T>({ value, format, parse, onChange, className }: { value: T[]; format: (v: T[]) => string; parse: (text: string) => T[]; onChange: (v: T[]) => void; className?: string }) {
+  const [draft, setDraft] = useState(() => format(value));
+  const focused = useRef(false);
+  const key = JSON.stringify(value);
+  useEffect(() => {
+    if (!focused.current) setDraft(format(value));
+    // Yalnız değer değişince (format her çizimde yeni işlev)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return (
+    <Textarea
+      value={draft}
+      className={className}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onBlur={() => {
+        focused.current = false;
+        setDraft(format(value));
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const next = parse(e.target.value);
+        if (JSON.stringify(next) !== key) onChange(next);
+      }}
+    />
+  );
+}
+
+const parseQuickCash = (text: string) => fromLines(text).map((x) => parseTL(x) ?? 0).filter((x) => x > 0);
+const formatQuickCash = (a: number[]) => a.map((k) => String(k / 100)).join('\n');
+
 export default function SettingsAdmin() {
   const boot = useBoot();
   const qc = useQueryClient();
@@ -105,19 +143,19 @@ export default function SettingsAdmin() {
   const [saving, setSaving] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const wide = useMediaQuery('(min-width: 768px)');
+  // Sunucudan yeni veri gelince (odak dönüşü, canlı akış, başka cihaz) kaydedilmemiş alanlar korunur: yalnız
+  // kullanıcının dokunmadığı alanlar yeni değeri alır, karşılaştırma tabanı (data.data) güncellenir
+  const base = useRef<Settings | null>(null);
   useEffect(() => {
-    if (data.data) setS(data.data);
+    const next = data.data;
+    if (!next) return;
+    const prev = base.current;
+    base.current = next;
+    setS((cur) => (cur && prev ? rebaseDraft(prev, cur, next) : next));
   }, [data.data]);
   const dirty = !!s && !!data.data && comparable(s) !== comparable(data.data);
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  // Sekme kapanırken ve uygulama içi geçişte (kenar çubuğu, palet) kaydedilmemiş değişiklik sorulur
+  useUnsavedGuard(dirty);
   if (!s) {
     // Başlık hemen; ayarlar gelene dek kart iskeleti, alınamazsa sonsuz yükleme yerine neden ve yeniden dene
     return (
@@ -147,6 +185,8 @@ export default function SettingsAdmin() {
     try {
       await put('/admin/settings', { serviceMode: next });
       setS((cur) => (cur ? { ...cur, serviceMode: next } : cur));
+      // Önbellek sunucuyla aynı kalsın: sonraki yenileme yeni nesne getirip taslağı yeniden kurmasın
+      qc.setQueryData<Settings>(['admin', 'settings'], (d) => (d ? { ...d, serviceMode: next } : d));
       toast.ok(`Servis modu: ${SERVICE_MODE_LABEL[next]}`);
       qc.invalidateQueries({ queryKey: ['bootstrap'] });
     } catch (e) {
@@ -162,10 +202,18 @@ export default function SettingsAdmin() {
     try {
       // Senkron anahtarları ayrı yetkiyle (Site ve lafmaliyet ekranı) değişir; servis modu seçilince kendisi kaydedilir
       const rest = Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'menuAutoSync' && k !== 'onlineOrdersSync' && k !== 'serviceMode'));
+      const sent = s;
       await put('/admin/settings', rest);
       toast.ok('Ayarlar kaydedildi');
-      qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
       qc.invalidateQueries({ queryKey: ['bootstrap'] });
+      await qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      // Kaydedilen taslak sunucunun biçimini alır (kırpılan metin "kaydedilmemiş" kalmasın); kayıt sürerken yapılan
+      // değişiklikler korunur
+      const fresh = qc.getQueryData<Settings>(['admin', 'settings']);
+      if (fresh) {
+        base.current = fresh;
+        setS((cur) => (cur ? rebaseDraft(sent, cur, fresh) : fresh));
+      }
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {
@@ -273,7 +321,7 @@ export default function SettingsAdmin() {
               </label>
             </div>
             <Field label="Hızlı nakit düğmeleri (₺, satır satır)">
-              <Textarea value={s.quickCash.map((k) => String(k / 100)).join('\n')} onChange={(e) => set({ quickCash: fromLines(e.target.value).map((x) => parseTL(x) ?? 0).filter((x) => x > 0) })} />
+              <LinesTextarea value={s.quickCash} format={formatQuickCash} parse={parseQuickCash} onChange={(quickCash) => set({ quickCash })} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Servis ücreti (%)" hint="masa adisyonlarına">
@@ -288,19 +336,19 @@ export default function SettingsAdmin() {
         <Card flush title="Nedenler">
           <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <Field label="İptal">
-              <Textarea value={lines(s.voidReasons)} onChange={(e) => set({ voidReasons: fromLines(e.target.value) })} className="min-h-36" />
+              <LinesTextarea value={s.voidReasons} format={lines} parse={fromLines} onChange={(voidReasons) => set({ voidReasons })} className="min-h-36" />
             </Field>
             <Field label="İkram">
-              <Textarea value={lines(s.compReasons)} onChange={(e) => set({ compReasons: fromLines(e.target.value) })} className="min-h-36" />
+              <LinesTextarea value={s.compReasons} format={lines} parse={fromLines} onChange={(compReasons) => set({ compReasons })} className="min-h-36" />
             </Field>
             <Field label="Ödenmez" hint="ör. personel yemeği, patron hesabı">
-              <Textarea value={lines(s.odenmezReasons)} onChange={(e) => set({ odenmezReasons: fromLines(e.target.value) })} className="min-h-36" />
+              <LinesTextarea value={s.odenmezReasons} format={lines} parse={fromLines} onChange={(odenmezReasons) => set({ odenmezReasons })} className="min-h-36" />
             </Field>
             <Field label="Zayi" hint="ör. döküldü, yanlış hazırlandı">
-              <Textarea value={lines(s.zayiReasons)} onChange={(e) => set({ zayiReasons: fromLines(e.target.value) })} className="min-h-36" />
+              <LinesTextarea value={s.zayiReasons} format={lines} parse={fromLines} onChange={(zayiReasons) => set({ zayiReasons })} className="min-h-36" />
             </Field>
             <Field label="İndirim">
-              <Textarea value={lines(s.discountReasons)} onChange={(e) => set({ discountReasons: fromLines(e.target.value) })} className="min-h-36" />
+              <LinesTextarea value={s.discountReasons} format={lines} parse={fromLines} onChange={(discountReasons) => set({ discountReasons })} className="min-h-36" />
             </Field>
           </div>
         </Card>

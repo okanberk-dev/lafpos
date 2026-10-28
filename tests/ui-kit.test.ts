@@ -1,9 +1,20 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { fmtAgo } from '../shared/time';
 import { cn, cx, mergeClasses } from '../src/lib/cn';
 import { joinMeta } from '../src/lib/text';
+import { ApiError } from '../src/lib/api';
+import { useApproval, withApproval } from '../src/lib/approvalStore';
+import { bootThemeFor, resolveDark } from '../src/lib/bootDark';
+import { restoreLines, type PendingLine } from '../src/lib/cart';
+import { layoutChanges, mergeServerTables } from '../src/lib/floorLayout';
+import { kpiCellSpan, kpiGridCols } from '../src/lib/kpiGrid';
+import { applyNumpadKey, numpadKeyOf, typeOverPrefill } from '../src/lib/numpad';
+import { lossParts, previousShort } from '../src/lib/reportLabels';
+import { endSession } from '../src/lib/sessionEnd';
+import { fromLines, rebaseDraft } from '../src/lib/settingsDraft';
+import { useToasts } from '../src/lib/toastStore';
 
 /** Ortak bileşen kitinin saf parçaları: sınıf birleştirme, meta satırı, yeni renk belirteçlerinin kontrastı */
 
@@ -125,5 +136,206 @@ describe('yeni renk belirteçleri (index.css)', () => {
     expect(alpha(dark.scrim)).toBeGreaterThanOrEqual(0.5);
     expect(alpha(dark.scrim)).toBeGreaterThan(alpha(light.scrim));
     expect(dark['surface-raised']).not.toBe(dark['admin-surface']);
+  });
+});
+
+/** Klavyeyle yazılan tutar: tuşları sırayla tuş takımı kuralından geçirir (useNumpadKeys ile aynı eşleme) */
+function typeKeys(keys: { key: string; code?: string }[], start = '', decimal = true): string {
+  let v = start;
+  for (const e of keys) {
+    const a = numpadKeyOf(e, decimal);
+    if (a?.type === 'key') v = applyNumpadKey(v, a.key, { decimal, maxLength: 9 });
+  }
+  return v;
+}
+const chars = (s: string) => [...s].map((key) => ({ key }));
+
+describe('tuş takımı: fiziksel klavye', () => {
+  it('ana sıradaki "." binlik ayırıcıdır, ondalık sayılmaz: "2.000" iki bin', () => {
+    expect(typeKeys(chars('2.000'))).toBe('2000');
+    expect(numpadKeyOf({ key: '.', code: 'Period' }, true)).toEqual({ type: 'ignore' });
+  });
+  it('"," ve sayısal tuş takımının ondalığı virgül', () => {
+    expect(typeKeys(chars('12,5'))).toBe('12,5');
+    expect(numpadKeyOf({ key: '.', code: 'NumpadDecimal' }, true)).toEqual({ type: 'key', key: ',' });
+    expect(numpadKeyOf({ key: ',', code: 'NumpadDecimal' }, true)).toEqual({ type: 'key', key: ',' });
+  });
+  it('ondalıksız tuş takımında virgül ve nokta tarayıcıya kalır', () => {
+    expect(numpadKeyOf({ key: ',' }, false)).toBeNull();
+    expect(numpadKeyOf({ key: '.' }, false)).toBeNull();
+  });
+  it('Enter, Backspace, Delete', () => {
+    expect(numpadKeyOf({ key: 'Enter' })).toEqual({ type: 'enter' });
+    expect(numpadKeyOf({ key: 'Backspace' })).toEqual({ type: 'key', key: 'back' });
+    expect(numpadKeyOf({ key: 'Delete' })).toEqual({ type: 'key', key: 'clear' });
+  });
+});
+
+describe('ödeme penceresi: önceden doldurulan kalan', () => {
+  it('ilk rakam kalanın yerine geçer: "250" üstüne 100 yazılınca 100', () => {
+    let v = '250';
+    let replace = true;
+    for (const k of ['1', '0', '0']) {
+      v = typeOverPrefill(v, k, replace, { decimal: true });
+      replace = false;
+    }
+    expect(v).toBe('100');
+  });
+  it('virgülle başlayan yazım da yerine geçer; geri sil değeri düzenler', () => {
+    expect(typeOverPrefill('250', ',', true, { decimal: true })).toBe('0,');
+    expect(typeOverPrefill('250', 'back', true, { decimal: true })).toBe('25');
+    expect(typeOverPrefill('250', '5', false, { decimal: true })).toBe('2505');
+  });
+  it('kalandan fazla tutar kırpılmaz, ödeme düğmesi kapanır (kaynak)', () => {
+    const src = readFileSync(join(__dirname, '../src/pages/order/PaymentModal.tsx'), 'utf8');
+    expect(src).toMatch(/overRemaining = mode === 'tutar' && typed > remaining/);
+    expect(src).toMatch(/const valid = [^;]*!overRemaining/);
+    expect(src).not.toMatch(/Math\.min\(remaining, mode === 'kalem' \? itemsAmount : mode === 'paylas' \? nextShare : \(parseTL/);
+  });
+});
+
+describe('klavyeli tuş takımında Enter', () => {
+  it('klavye girişi açık her tuş takımı Enter’ı ya onaylar ya da hiç yapmaz (odaktaki rakam yinelenmez)', () => {
+    const root = join(__dirname, '..');
+    const walk = (dir: string): string[] =>
+      readdirSync(join(root, dir), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : e.name.endsWith('.tsx') ? [join(dir, e.name)] : []));
+    const bad: string[] = [];
+    for (const f of walk('src')) {
+      const text = readFileSync(join(root, f), 'utf8');
+      for (const m of text.matchAll(/<Numpad\b[^>]*?\/>/gs)) if (/\bkeyboard\b/.test(m[0]) && !/\b(onEnter|confirm)=/.test(m[0])) bad.push(f);
+    }
+    expect(bad).toEqual([]);
+    // Onaysız tuş takımında Enter, tuş takımının içindeyse yutulur
+    expect(readFileSync(join(root, 'src/components/ui/Numpad.tsx'), 'utf8')).toMatch(/if \(!enter\) \{\s*if \(inPad\) e\.preventDefault\(\);/);
+  });
+});
+
+describe('yetkili onayı', () => {
+  it('yanlış PIN kırmızı uyarı olarak kalır, her soruda PIN alanı boşalır; oturum kapanınca soru vazgeçilir', async () => {
+    let calls = 0;
+    const fn = async (pin?: string) => {
+      calls++;
+      if (!pin) throw new ApiError(403, 'Yetkili onayı gerekli', 'approval_required', { permission: 'siparis.indirim' });
+      if (pin !== '9999') throw new ApiError(403, 'Yetkili PIN hatalı', 'approval_invalid', {});
+      return 'tamam';
+    };
+    const flush = () => new Promise((r) => setTimeout(r, 0));
+    const run = withApproval(fn);
+    await flush();
+    const first = useApproval.getState().pending!;
+    expect(first.error).toBeNull();
+    first.resolve('1111');
+    await flush();
+    const second = useApproval.getState().pending!;
+    expect(second.error).toBe('Yetkili PIN hatalı');
+    expect(second.attempt).toBeGreaterThan(first.attempt);
+    second.resolve('1111');
+    await flush();
+    const third = useApproval.getState().pending!;
+    // Aynı hata ikinci kez: ileti aynı ama soru yeni (PIN alanı yine boşalır)
+    expect(third.error).toBe('Yetkili PIN hatalı');
+    expect(third.attempt).toBeGreaterThan(second.attempt);
+    third.resolve('9999');
+    expect(await run).toBe('tamam');
+    expect(useApproval.getState().pending).toBeNull();
+    expect(calls).toBe(4);
+
+    const pendingRun = withApproval(fn);
+    await flush();
+    expect(useApproval.getState().pending).not.toBeNull();
+    endSession();
+    expect(await pendingRun).toBeNull();
+    expect(useApproval.getState().pending).toBeNull();
+  });
+});
+
+describe('bildirim eylemi ("Geri al")', () => {
+  it('en çok bir kez çalışır: kapanırken ikinci basış etkisiz', () => {
+    let runs = 0;
+    const id = useToasts.getState().push({ tone: 'ok', text: '3 ürün silindi', action: { label: 'Geri al', run: () => runs++ } });
+    useToasts.getState().act(id);
+    useToasts.getState().act(id);
+    expect(runs).toBe(1);
+    expect(useToasts.getState().list.find((x) => x.id === id)?.leaving).toBe(true);
+  });
+  it('geri alınan satırlar sepette zaten varsa yeniden eklenmez', () => {
+    const line = (key: string): PendingLine => ({ key, productId: 'p', size: 'TEK', qty: 1, options: [], note: '' });
+    const saved = [line('a'), line('b')];
+    const once = restoreLines([], saved);
+    expect(once.map((l) => l.key)).toEqual(['a', 'b']);
+    expect(restoreLines(once, saved)).toBe(once);
+    expect(restoreLines([line('c'), line('a')], saved).map((l) => l.key)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+describe('zorla tema (bar, çağrı, müşteri ekranı)', () => {
+  it('bar ekranı açık seçilmişse cihaz ve uygulama koyu olsa da açık', () => {
+    expect(resolveDark('koyu', 'light', true)).toBe(false);
+    expect(resolveDark('sistem', 'light', true)).toBe(false);
+    expect(resolveDark('acik', 'dark', false)).toBe(true);
+    expect(resolveDark('sistem', null, true)).toBe(true);
+    expect(resolveDark('acik', null, true)).toBe(false);
+  });
+  it('açılışın ilk karesi de aynı karar', () => {
+    expect(bootThemeFor('/mutfak', '', 'acik')).toBe('light');
+    expect(bootThemeFor('/mutfak', '', 'koyu')).toBe('dark');
+    expect(bootThemeFor('/musteri-ekrani', '?tema=acik', 'koyu')).toBe('light');
+    expect(bootThemeFor('/cagri', '', 'acik')).toBe('dark');
+    expect(bootThemeFor('/masalar', '', 'koyu')).toBeNull();
+  });
+});
+
+describe('ayarlar taslağı', () => {
+  it('satır listesi kaydedilirken kırpılır; alanın metni ayrı taslakta (SettingsAdmin LinesTextarea)', () => {
+    expect(fromLines('Müşteri vazgeçti\nYanlış \n\n')).toEqual(['Müşteri vazgeçti', 'Yanlış']);
+    const src = readFileSync(join(__dirname, '../src/pages/admin/SettingsAdmin.tsx'), 'utf8');
+    expect(src).not.toMatch(/<Textarea value=\{lines\(/);
+    expect(src).not.toMatch(/<Textarea value=\{s\.quickCash/);
+  });
+  it('sunucudan yeni veri gelince kaydedilmemiş alan korunur, dokunulmayan alan güncellenir', () => {
+    const prev = { businessName: 'L’Affogato', serviceMode: 'masa', autoLockMinutes: 5 };
+    const draft = { ...prev, businessName: 'L’Affogato Tuzla' };
+    const next = { ...prev, serviceMode: 'self', autoLockMinutes: 10 };
+    expect(rebaseDraft(prev, draft, next)).toEqual({ businessName: 'L’Affogato Tuzla', serviceMode: 'self', autoLockMinutes: 10 });
+    expect(rebaseDraft(prev, prev, next)).toEqual(next);
+  });
+});
+
+describe('masa planı taslağı', () => {
+  const t = (id: string, x: number, name = id) => ({ id, name, x, y: 0, w: 10, h: 10 });
+  it('sunucu listesi yenilenince sürüklenip kaydedilmemiş masanın yeri korunur', () => {
+    const server = [t('m1', 0, 'M1 yeni ad'), t('m2', 0)];
+    const local = [t('m1', 40), t('m2', 0)];
+    expect(mergeServerTables(server, local, new Set(['m1']))).toEqual([t('m1', 40, 'M1 yeni ad'), t('m2', 0)]);
+    expect(mergeServerTables(server, local, new Set())).toBe(server);
+  });
+  it('sayaç yalnız yeri gerçekten değişen masaları sayar', () => {
+    const server = [t('m1', 0), t('m2', 0)];
+    expect(layoutChanges([t('m1', 40), t('m2', 0)], server, new Set(['m1', 'm2'])).map((x) => x.id)).toEqual(['m1']);
+  });
+});
+
+describe('KPI şeridi iskeleti', () => {
+  it('iskelet yüklenecek şeritle aynı ızgarayı kullanır (tablette beş hücre iki satır)', () => {
+    expect(kpiGridCols(5)).toBe('md:grid-cols-6 xl:grid-cols-5');
+    expect([0, 1, 2, 3, 4].map((i) => kpiCellSpan(5, i))).toEqual(['md:col-span-2 xl:col-span-1', 'md:col-span-2 xl:col-span-1', 'md:col-span-2 xl:col-span-1', 'md:col-span-3 xl:col-span-1', 'md:col-span-3 xl:col-span-1']);
+    const src = readFileSync(join(__dirname, '../src/components/admin/ui.tsx'), 'utf8');
+    expect(src.match(/kpiGridCols\(/g)?.length).toBe(2);
+    expect(src.match(/kpiCellSpan\(/g)?.length).toBe(2);
+  });
+});
+
+describe('raporlar KPI etiketleri', () => {
+  it('kıyas "Geçen hafta" demez, neyle kıyaslandığını ve saat kesimini söyler', () => {
+    expect(previousShort('geçen haftanın aynı günleri')).toBe('1 hafta önce');
+    expect(previousShort('geçen haftanın aynı günleri, aynı saate kadar')).toBe('1 hafta önce, bu saate dek');
+    expect(previousShort('3 hafta önceki aynı günler')).toBe('3 hafta önce');
+    expect(previousShort('önceki ayın aynı günleri, aynı saate kadar', { from: '2026-09-01', to: '2026-09-12' })).toBe('Önceki ayın ilk 12 günü, bu saate dek');
+    expect(previousShort('önceki ayın aynı günleri')).toBe('Önceki ayın aynı günleri');
+  });
+  it('"İndirim ve ikram" dökümü değeri oluşturan kalemleri yazar', () => {
+    const fmt = (k: number) => `₺${k / 100}`;
+    expect(lossParts({ discounts: 0, complimentary: 50000, odenmez: 0, zayi: 50000, voided: 0 }, fmt)).toBe('İndirim ₺0 · zayi ₺500');
+    expect(lossParts({ discounts: 1000, complimentary: 20000, odenmez: 5000, zayi: 0, voided: 3000 }, fmt)).toBe('İndirim ₺10 · ikram ₺150 · ödenmez ₺50 · iptal ₺30');
   });
 });

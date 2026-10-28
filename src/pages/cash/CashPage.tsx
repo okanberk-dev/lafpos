@@ -21,6 +21,9 @@ import { TypedAmount } from '../order/TypedAmount';
 import { CashCount, type CountResult } from './CashCount';
 import { ZView } from './ZView';
 
+/** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
+const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-sm:whitespace-normal max-sm:leading-tight max-[400px]:[&>svg]:hidden';
+
 interface DayResponse {
   day: BusinessDayDTO | null;
   summary: ZSummary | null;
@@ -232,8 +235,10 @@ export default function CashPage() {
                 Gün sonu (Z)
               </Button>
             )}
+            {/* Telefonda kendi satırında, tam genişlik: eylemlerle aynı satıra sıkışıp "Geçmiş günler" kırpılmasın */}
             {can('rapor.gor') && (
               <Segmented
+                className="max-sm:min-w-full max-sm:[&>button]:flex-1"
                 label="Kasa görünümü"
                 value={tab}
                 onChange={(v) => {
@@ -328,14 +333,15 @@ export default function CashPage() {
             </Notice>
           )}
           {can('kasa.hareket') && (
+            // Telefonda üç eşit sütun: dolgu daralır, dar telefonda ikon düşer ve etiket gerekirse iki satıra iner (kenara dayanmasın)
             <div className="grid grid-cols-3 gap-2 sm:flex">
-              <Button icon={<ArrowUpFromLine className="size-4" />} onClick={() => openMove('harcama')}>
+              <Button icon={<ArrowUpFromLine className="size-4" />} className={MOVE_BTN} onClick={() => openMove('harcama')}>
                 Harcama
               </Button>
-              <Button icon={<Wallet className="size-4" />} onClick={() => openMove('teslim')}>
+              <Button icon={<Wallet className="size-4" />} className={MOVE_BTN} onClick={() => openMove('teslim')}>
                 Teslim
               </Button>
-              <Button icon={<ArrowDownToLine className="size-4" />} onClick={() => openMove('giris')}>
+              <Button icon={<ArrowDownToLine className="size-4" />} className={MOVE_BTN} onClick={() => openMove('giris')}>
                 Kasaya giriş
               </Button>
             </div>

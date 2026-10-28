@@ -14,6 +14,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
+import { layoutChanges, mergeServerTables } from '@/lib/floorLayout';
 
 interface Section {
   id: string;
@@ -81,22 +82,40 @@ export default function FloorAdmin() {
   const canvas = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; mode: 'move' | 'size'; startX: number; startY: number; orig: Table } | null>(null);
 
+  // Sunucu verisi yalnız kendisi değişince yeniden kurulur (bölüm sekmesi değişince değil); sürüklenip kaydedilmemiş
+  // masaların yeri korunur (öteki masada Kişi, Şekil, QR, kaldırma da listeyi yeniler)
+  const dirtyRef = useRef(dirty);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  });
   useEffect(() => {
     if (!data.data) return;
-    setTables(data.data.tables);
-    if (!sectionId) setSectionId(data.data.sections[0]?.id ?? '');
+    const server = data.data.tables;
+    setTables((local) => mergeServerTables(server, local, dirtyRef.current));
+  }, [data.data]);
+  useEffect(() => {
+    if (!sectionId && data.data?.sections[0]) setSectionId(data.data.sections[0].id);
   }, [data.data, sectionId]);
+  // Sayaç ve kayıt yalnız yeri gerçekten değişen masalar (sürüklenip eski yerine bırakılan sayılmaz)
+  const changes = layoutChanges(tables, data.data?.tables ?? [], dirty);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['admin', 'floor'] });
     qc.invalidateQueries({ queryKey: ['bootstrap'] });
   };
 
+  // Paneldeki alanlar (Kişi, Ad, ücret) çıkınca kaydeder ve seçili masaya bağlı: seçim değişmeden önce odaktaki alan
+  // bırakılır, yazılan değer kaydedilir (yoksa alan blur gelmeden DOM'dan kalkar, değer sessizce kaybolur)
+  const select = (id: string | null) => {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && el !== document.body && !canvas.current?.contains(el)) el.blur();
+    setSelected(id);
+  };
   const onPointerDown = (e: React.PointerEvent, t: Table, mode: 'move' | 'size') => {
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     drag.current = { id: t.id, mode, startX: e.clientX, startY: e.clientY, orig: t };
-    setSelected(t.id);
+    select(t.id);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -120,7 +139,7 @@ export default function FloorAdmin() {
   const saveLayout = async () => {
     setBusy('plan');
     try {
-      await put('/admin/tables/layout', { tables: tables.filter((t) => dirty.has(t.id)).map(({ id, x, y, w, h }) => ({ id, x, y, w, h })) });
+      await put('/admin/tables/layout', { tables: changes.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })) });
       setDirty(new Set());
       toast.ok('Masa planı kaydedildi');
       refresh();
@@ -235,8 +254,8 @@ export default function FloorAdmin() {
             <Button icon={<Plus className="size-4" />} loading={busy === 'masa'} disabled={!sectionId} onClick={addTable}>
               Masa ekle
             </Button>
-            <Button variant="primary" icon={<Save className="size-4" />} loading={busy === 'plan'} disabled={!dirty.size} onClick={saveLayout}>
-              Planı kaydet{dirty.size ? ` (${dirty.size})` : ''}
+            <Button variant="primary" icon={<Save className="size-4" />} loading={busy === 'plan'} disabled={!changes.length} onClick={saveLayout}>
+              Planı kaydet{changes.length ? ` (${changes.length})` : ''}
             </Button>
           </>
         ) : undefined
@@ -286,7 +305,7 @@ export default function FloorAdmin() {
           ref={canvas}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerDown={() => setSelected(null)}
+          onPointerDown={() => select(null)}
           className="relative aspect-[16/10] w-full touch-none select-none rounded-xl border border-[var(--admin-border)] bg-[radial-gradient(circle_at_1px_1px,var(--admin-border-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-[var(--admin-surface-2)]"
         >
           {visible.length === 0 && (

@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import { bootDarkFor, KDS_THEME_PREF, type KdsTheme } from './bootDark';
-import { readLocalPref } from './hooks';
+import { type AppTheme, bootThemeFor, type ForcedTheme, forcedForKds, KDS_THEME_PREF, type KdsTheme, resolveDark } from './bootDark';
+import { readLocalPref, writeLocalPref } from './hooks';
 
-export { isBootDarkPath, KDS_THEME_PREF, type KdsTheme } from './bootDark';
+export { isBootDarkPath, KDS_THEME_PREF, type ForcedTheme, type KdsTheme } from './bootDark';
 
-type Theme = 'acik' | 'koyu' | 'sistem';
+type Theme = AppTheme;
 const KEY = 'lafpos.theme';
 
 /** Bar ekranının bu cihazdaki tercihi (kaydedilmemişse koyu) */
@@ -19,25 +19,28 @@ function read(): Theme {
   }
 }
 
-function apply(theme: Theme, forceDark: boolean) {
-  const dark = forceDark || theme === 'koyu' || (theme === 'sistem' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+function apply(theme: Theme, force: ForcedTheme) {
+  const dark = resolveDark(theme, force, systemDark());
   document.documentElement.classList.toggle('dark', dark);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0d0f13' : '#edeff1');
 }
 
 export const useTheme = create<{
   theme: Theme;
-  forceDark: boolean;
-  /** Açılış adresi zorla koyu ekransa (bar, çağrı, müşteri ekranı): sayfa kendi koyusunu kurana dek ilk kareler koyu */
-  bootDark: boolean;
+  /** Ekranın zorladığı tema (bar, çağrı, müşteri ekranı); null ise genel tema */
+  force: ForcedTheme;
+  /** Açılış adresi kendi temasında açılan ekransa: sayfa kendi temasını kurana dek ilk kareler o temada */
+  bootForce: ForcedTheme;
   setTheme: (t: Theme) => void;
-  setForceDark: (v: boolean) => void;
-  /** Adres zorla koyu ekrandan çıkınca (ya da yetki yönlendirince) başlangıç koyusu bırakılır */
+  setForce: (f: ForcedTheme) => void;
+  /** Adres o ekrandan çıkınca (ya da yetki yönlendirince) başlangıç teması bırakılır */
   releaseBootDark: () => void;
 }>((set, get) => ({
   theme: read(),
-  forceDark: false,
-  bootDark: false,
+  force: null,
+  bootForce: null,
   setTheme: (theme) => {
     try {
       localStorage.setItem(KEY, theme);
@@ -45,29 +48,42 @@ export const useTheme = create<{
       /* tercih yalnız bu oturumda kalır */
     }
     set({ theme });
-    apply(theme, get().forceDark || get().bootDark);
+    apply(theme, get().force ?? get().bootForce);
   },
-  setForceDark: (forceDark) => {
-    set({ forceDark });
-    apply(get().theme, forceDark || get().bootDark);
+  setForce: (force) => {
+    set({ force });
+    apply(get().theme, force ?? get().bootForce);
   },
   releaseBootDark: () => {
-    if (!get().bootDark) return;
-    set({ bootDark: false });
-    apply(get().theme, get().forceDark);
+    if (!get().bootForce) return;
+    set({ bootForce: null });
+    apply(get().theme, get().force);
   },
 }));
 
+/** Bar ekranının teması: cihaza kaydedilir ve hemen uygulanır (uygulama ya da cihaz teması ne olursa olsun) */
+export function setBarTheme(t: KdsTheme) {
+  writeLocalPref(KDS_THEME_PREF, t);
+  useTheme.getState().setForce(forcedForKds(t));
+}
+
+/** Ekran şu an koyu mu (zorlanan tema dahil); bileşen yeniden çizilsin diye mağazadan okunur */
+export function useIsDark(): boolean {
+  const theme = useTheme((s) => s.theme);
+  const force = useTheme((s) => s.force ?? s.bootForce);
+  return resolveDark(theme, force, systemDark());
+}
+
 /**
- * `path` yönlendiricinin gördüğü adres (demoda /demo öneki atılmış). Bar ekranı (tercih koyuysa), çağrı ekranı ve
- * müşteri ekranı (`?tema=acik` değilse) ilk karede koyu
+ * `path` yönlendiricinin gördüğü adres (demoda /demo öneki atılmış). Bar ekranı (cihaz tercihinde), çağrı ekranı ve
+ * müşteri ekranı (`?tema=acik` ise açık, değilse koyu) ilk karede kendi temasında
  */
 export function initTheme(path?: string) {
-  const bootDark = !!path && bootDarkFor(path, window.location.search, readKdsTheme());
-  useTheme.setState({ bootDark });
-  apply(read(), bootDark);
+  const bootForce = path ? bootThemeFor(path, window.location.search, readKdsTheme()) : null;
+  useTheme.setState({ bootForce });
+  apply(read(), bootForce);
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     const s = useTheme.getState();
-    apply(s.theme, s.forceDark || s.bootDark);
+    apply(s.theme, s.force ?? s.bootForce);
   });
 }

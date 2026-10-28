@@ -2,6 +2,9 @@ import { Delete } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/cn';
 import { isTopLayer, isTypingTarget } from '@/lib/focus';
+import { numpadKeyOf } from '@/lib/numpad';
+
+export { applyNumpadKey } from '@/lib/numpad';
 
 interface NumpadProps {
   onKey: (key: string) => void;
@@ -16,8 +19,9 @@ interface NumpadProps {
    */
   confirm?: { label: string; disabled?: boolean; onPress: () => void };
   /**
-   * Fiziksel klavye de girsin (kasa bilgisayarı): rakamlar, "," ve ".", Backspace, Delete, Enter (`confirm` ya da
-   * `onEnter`). Yazı alanı odaktayken ve üstte başka pencere açıkken dinlemez
+   * Fiziksel klavye de girsin (kasa bilgisayarı): rakamlar, "," ve sayısal tuş takımının ondalığı, Backspace, Delete,
+   * Enter (`confirm` ya da `onEnter`; ikisi de yoksa Enter tuş takımında hiçbir şey yapmaz). Yazı alanı odaktayken ve
+   * üstte başka pencere açıkken dinlemez
    */
   keyboard?: boolean;
   onEnter?: () => void;
@@ -75,10 +79,11 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
 }
 
 /**
- * Tuş takımına fiziksel klavyeden giriş: 0-9 → rakam, "," ve "." → "," (`decimal`), Backspace → "back",
- * Delete → "clear", Enter → `onEnter`. Odak bir yazı alanındaysa, Ctrl/⌘/Alt basılıysa ya da `root` en üst
- * katmanda değilse (üstte onay penceresi açık) dinlemez. Numpad'in `keyboard` prop'u bunu kendisi kurar; tuş
- * takımı ekranda yokken de girilecekse (kasa açılış nakdi) sayfa doğrudan çağırır.
+ * Tuş takımına fiziksel klavyeden giriş: 0-9 → rakam, "," ve sayısal tuş takımının ondalık tuşu → "," (`decimal`;
+ * ana sıradaki "." binlik ayırıcıdır, yok sayılır), Backspace → "back", Delete → "clear", Enter → `onEnter`. Odak bir
+ * yazı alanındaysa, Ctrl/⌘/Alt basılıysa ya da `root` en üst katmanda değilse (üstte onay penceresi açık) dinlemez.
+ * Numpad'in `keyboard` prop'u bunu kendisi kurar; tuş takımı ekranda yokken de girilecekse (kasa açılış nakdi) sayfa
+ * doğrudan çağırır.
  */
 export function useNumpadKeys({
   enabled = true,
@@ -103,23 +108,25 @@ export function useNumpadKeys({
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return;
       if (root && !isTopLayer(root.current)) return;
       const { onKey: key, onEnter: enter, decimal: dec } = latest.current;
-      let k: string | null = null;
-      if (/^\d$/.test(e.key)) k = e.key;
-      else if ((e.key === ',' || e.key === '.') && dec) k = ',';
-      else if (e.key === 'Backspace') k = 'back';
-      else if (e.key === 'Delete') k = 'clear';
-      else if (e.key === 'Enter' && enter) {
-        // Odaktaki düğmenin kendi Enter'ı (Vazgeç, Kapat) tuş takımını onaylamasın; tuş takımının kendi tuşu ya da
-        // tutar alanı (`data-numpad-enter`) farede tıklanıp odakta kaldıysa Enter yine onaylar (son rakamı yinelemez)
-        if ((e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement) && !e.target.closest('[data-numpad-enter]')) return;
+      const action = numpadKeyOf(e, dec);
+      if (!action) return;
+      if (action.type === 'enter') {
+        // Tuş takımının kendi tuşu ya da tutar alanı (`data-numpad-enter`) farede tıklanıp odakta kaldıysa Enter onu
+        // yeniden basmaz (son rakam yinelenmez: %10 → %100): onay varsa onaylar, yoksa hiçbir şey yapmaz
+        const inPad = e.target instanceof Element && !!e.target.closest('[data-numpad-enter]');
+        if (!enter) {
+          if (inPad) e.preventDefault();
+          return;
+        }
+        // Odaktaki başka düğmenin kendi Enter'ı (Vazgeç, Kapat) tuş takımını onaylamasın
+        if ((e.target instanceof HTMLButtonElement || e.target instanceof HTMLAnchorElement) && !inPad) return;
         e.preventDefault();
         // Basılı tutulan Enter tekrar etmez (ödeme, kasa hareketi iki kez gitmesin)
         if (!e.repeat) enter();
         return;
       }
-      if (k == null) return;
       e.preventDefault();
-      key(k);
+      if (action.type === 'key') key(action.key);
     };
     window.addEventListener('keydown', onDown);
     return () => window.removeEventListener('keydown', onDown);
@@ -142,21 +149,4 @@ export function PinDots({ length = 6, filled, min = 4, className }: { length?: n
       ))}
     </div>
   );
-}
-
-/** Numpad tuşunu metin değerine uygular (tutar alanları için virgül ve iki hane sınırı). */
-export function applyNumpadKey(value: string, key: string, opts: { decimal?: boolean; maxLength?: number } = {}): string {
-  const max = opts.maxLength ?? 9;
-  if (key === 'back') return value.slice(0, -1);
-  if (key === 'clear') return '';
-  if (key === ',') {
-    if (!opts.decimal || value.includes(',')) return value;
-    return (value || '0') + ',';
-  }
-  const next = value === '0' && key !== '00' ? key : value + key;
-  if (opts.decimal && next.includes(',')) {
-    const [, frac] = next.split(',');
-    if (frac.length > 2) return value;
-  }
-  return next.length > max ? value : next;
 }

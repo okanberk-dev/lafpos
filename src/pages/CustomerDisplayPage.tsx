@@ -25,14 +25,15 @@ export default function CustomerDisplayPage() {
   const [params] = useSearchParams();
   const code = (params.get('ekran') ?? 'kasa').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || 'kasa';
   useWakeLock(true);
-  const forced = params.get('tema') !== 'acik';
-  const setForceDark = useTheme((s) => s.setForceDark);
+  // Varsayılan koyu; ?tema=acik ise cihaz ya da uygulama teması ne olursa olsun açık
+  const forced = params.get('tema') === 'acik' ? 'light' : 'dark';
+  const setForce = useTheme((s) => s.setForce);
   useLayoutEffect(() => {
-    setForceDark(forced);
-    // Açılışın koyusu (theme.ts BOOT_DARK_PATHS) bırakılır: ?tema=acik ise ekran cihazın temasına döner
+    setForce(forced);
+    // Açılışın teması (bootDark.ts) artık sayfanın kendisinde
     useTheme.getState().releaseBootDark();
-    return () => setForceDark(false);
-  }, [forced, setForceDark]);
+    return () => setForce(null);
+  }, [forced, setForce]);
   // Oturumsuz ekran: canlı bağlantı yok, sık yoklanır (yalnız bellekten okunan küçük bir yanıt)
   const q = useQuery({ queryKey: ['display', code], queryFn: () => get<DisplayStateDTO>(`/public/display/${code}`), refetchInterval: 1_500 });
 

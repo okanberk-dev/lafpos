@@ -58,6 +58,7 @@ export const TONE_SOFT: Record<Tone, string> = {
 };
 
 import type { Hue } from './hues';
+import { KPI_LAST_ODD, kpiCellSpan, kpiGridCols } from '@/lib/kpiGrid';
 
 export type { Hue };
 const HUE: Record<Hue, string> = {
@@ -169,9 +170,8 @@ export interface KpiCell {
  */
 export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: string }) {
   const n = cells.length;
-  const cols = n === 5 ? 'md:grid-cols-6 xl:grid-cols-5' : n >= 6 ? 'md:grid-cols-3 xl:grid-cols-6' : n === 4 ? 'md:grid-cols-4' : n === 2 ? 'md:grid-cols-2' : n === 1 ? 'md:grid-cols-1' : 'md:grid-cols-3';
   return (
-    <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', cols, '[&>*:last-child:nth-child(odd)]:max-md:col-span-2', className)}>
+    <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', kpiGridCols(n), KPI_LAST_ODD, className)}>
       {cells.map((c, i) => {
         const body = (
           <>
@@ -186,7 +186,7 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
             {c.reference && <span className="mt-1 block w-full text-xs text-[var(--admin-text-mute)]">{c.reference}</span>}
           </>
         );
-        const span = n === 5 ? (i < 3 ? 'md:col-span-2 xl:col-span-1' : 'md:col-span-3 xl:col-span-1') : null;
+        const span = kpiCellSpan(n, i);
         const cls = cn('flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left', span, c.active && 'bg-[var(--admin-primary-soft)]/60 shadow-[inset_0_-2px_0_var(--admin-primary)]');
         return c.onClick ? (
           <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors', !c.active && 'hover:bg-[var(--hover-solid)]', FOCUS, 'focus-visible:-outline-offset-2')}>
@@ -361,6 +361,9 @@ export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label
                 disabled={it.disabled}
                 onClick={() => {
                   setOpen(false);
+                  // Odak önce ⋯ düğmesine döner: açılan çekmece ya da onay penceresi açanı doğru yakalar, kapanınca
+                  // odak satıra geri gelir (menü öğesi DOM'dan kalkınca body'ye düşmesin)
+                  btn.current?.focus();
                   it.onSelect();
                 }}
                 className={it.danger ? BTN.menuDanger : BTN.menu}
@@ -543,6 +546,7 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
     latest.current = onClose;
   });
   const opener = useRef<HTMLElement | null>(null);
+  const downOnScrim = useRef(false);
   const wasOpen = useRef(false);
   if (open && !wasOpen.current && typeof document !== 'undefined') opener.current = document.activeElement as HTMLElement | null;
   wasOpen.current = open;
@@ -551,6 +555,14 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
     const restore = opener.current;
     if (!panel.current?.contains(document.activeElement)) panel.current?.focus();
     const onKey = (e: KeyboardEvent) => {
+      // Odak çekmece dışına düştüyse Tab arka sayfaya geçmez, çekmeceye döner
+      if (e.key === 'Tab') {
+        if (panel.current && topDialog() === panel.current && !panel.current.contains(e.target as Node)) {
+          e.preventDefault();
+          panel.current.focus();
+        }
+        return;
+      }
       if (e.key !== 'Escape' || (panel.current && topDialog() !== panel.current)) return;
       latest.current();
     };
@@ -562,8 +574,20 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
   }, [open]);
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="animate-fade absolute inset-0 bg-[var(--scrim-soft)]" aria-hidden="true" onPointerDown={onClose} />
+    <div className="fixed inset-0 z-50">
+      {/* Karartmaya dokunuş click'te kapatır (basış da karartmada başladıysa): pointerdown'da kapansa aynı dokunuşun
+          click'i alttaki satıra düşer, başka bir kaydın çekmecesini açardı */}
+      <div
+        className="animate-fade absolute inset-0 bg-[var(--scrim-soft)]"
+        aria-hidden="true"
+        onPointerDown={(e) => {
+          downOnScrim.current = e.target === e.currentTarget;
+        }}
+        onClick={(e) => {
+          if (downOnScrim.current && e.target === e.currentTarget) onClose();
+          downOnScrim.current = false;
+        }}
+      />
       <div
         ref={panel}
         tabIndex={-1}
@@ -684,9 +708,9 @@ export function SearchField({ value, onChange, placeholder, label }: { value: st
 /** KPI şeridi iskeleti (Raporlar, Genel bakış ilk yüklemede): aynı kabuk, her hücrede etiket, rakam, referans */
 export function KpiStripSkeleton({ count = 5, className }: { count?: number; className?: string }) {
   return (
-    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', count === 5 ? 'md:grid-cols-5' : count === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3', className)}>
+    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className={cn('space-y-2.5 bg-[var(--admin-surface)] p-4', count % 2 === 1 && i === count - 1 && 'max-md:col-span-2')}>
+        <div key={i} className={cn('space-y-2.5 bg-[var(--admin-surface)] p-4', kpiCellSpan(count, i))}>
           <Skeleton className="h-3.5 w-20" />
           <Skeleton className="h-7 w-28" />
           <Skeleton className="h-3 w-32 max-w-full" />

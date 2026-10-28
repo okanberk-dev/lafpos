@@ -68,6 +68,16 @@ export const useCart = create<CartState>()(
   ),
 );
 
+/**
+ * Silinen gönderilmemiş satırları geri koyar ("Geri al"): sepette anahtarı zaten bulunan satır yeniden eklenmez (geri
+ * alma iki kez çalışsa da kalemler çoğalmaz, aynı anahtarlı iki satır olmaz)
+ */
+export function restoreLines(current: PendingLine[], saved: PendingLine[]): PendingLine[] {
+  const keys = new Set(current.map((l) => l.key));
+  const missing = saved.filter((l) => !keys.has(l.key));
+  return missing.length ? [...current, ...missing] : current;
+}
+
 export function usePending(orderId: string): PendingLine[] {
   return useCart((s) => s.byOrder[orderId]) ?? EMPTY;
 }

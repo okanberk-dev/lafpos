@@ -57,13 +57,18 @@ export function useLocalPref<T>(key: string, initial: T): [T, (v: T) => void] {
   const [value, setValue] = useState<T>(() => readLocalPref(key, initial));
   const set = (v: T) => {
     setValue(v);
-    try {
-      localStorage.setItem(`lafpos.pref.${key}`, JSON.stringify(v));
-    } catch {
-      /* özel pencere */
-    }
+    writeLocalPref(key, v);
   };
   return [value, set];
+}
+
+/** `useLocalPref`'in tercihini bileşen dışından yazar (bar ekranı teması gibi) */
+export function writeLocalPref<T>(key: string, v: T) {
+  try {
+    localStorage.setItem(`lafpos.pref.${key}`, JSON.stringify(v));
+  } catch {
+    /* özel pencere */
+  }
 }
 
 /** `useLocalPref`'in kaydettiği değeri bileşen dışından okur (açılışta tema gibi) */

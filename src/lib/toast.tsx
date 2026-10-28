@@ -1,52 +1,9 @@
 import { AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { create } from 'zustand';
 import { cn } from './cn';
+import { type Toast, type ToastOptions, type Tone, useToasts } from './toastStore';
 
-type Tone = 'ok' | 'err' | 'info' | 'warn';
-
-/** Bildirimdeki eylem: "Geri al" gibi; basınca çalışır ve bildirim kapanır */
-export interface ToastAction {
-  label: string;
-  run: () => void;
-}
-
-export interface ToastOptions {
-  action?: ToastAction;
-  /** Ekranda kalma süresi (ms); üzerine gelince ya da odaktayken sayaç durur */
-  duration?: number;
-}
-
-interface Toast {
-  id: number;
-  tone: Tone;
-  text: string;
-  action?: ToastAction;
-  duration: number;
-  leaving?: boolean;
-}
-
-/** Okuma süresi: başarı ve bilgi kısa, uyarı orta, hata uzun (müşteriyle konuşurken kaçmasın) */
-const DURATION: Record<Tone, number> = { ok: 4000, info: 4000, warn: 6000, err: 10_000 };
-/** Eylemli bildirim (Geri al) en az bu kadar kalır */
-const ACTION_MIN = 6000;
-const LEAVE_MS = 150;
-
-const useToasts = create<{ list: Toast[]; push: (t: Omit<Toast, 'id' | 'duration'> & { duration?: number }) => number; leave: (id: number) => void; drop: (id: number) => void }>((set, get) => ({
-  list: [],
-  push: (t) => {
-    const id = Date.now() + Math.random();
-    const duration = t.duration ?? Math.max(DURATION[t.tone], t.action ? ACTION_MIN : 0);
-    set((s) => ({ list: [...s.list.filter((x) => !x.leaving).slice(-3), { ...t, id, duration }] }));
-    return id;
-  },
-  leave: (id) => {
-    if (!get().list.some((x) => x.id === id && !x.leaving)) return;
-    set((s) => ({ list: s.list.map((x) => (x.id === id ? { ...x, leaving: true } : x)) }));
-    setTimeout(() => get().drop(id), LEAVE_MS);
-  },
-  drop: (id) => set((s) => ({ list: s.list.filter((x) => x.id !== id) })),
-}));
+export type { ToastAction, ToastOptions } from './toastStore';
 
 /**
  * Kısa geri bildirim. `toast.ok('Ayarlar kaydedildi')`; geri alınabilen eylemde onay penceresi yerine:
@@ -72,6 +29,7 @@ const tones: Record<Tone, string> = {
 
 function ToastItem({ t }: { t: Toast }) {
   const leave = useToasts((s) => s.leave);
+  const act = useToasts((s) => s.act);
   const Icon = icons[t.tone];
   // Sayaç üzerine gelince ve odaktayken durur, ayrılınca kalan süreyle sürer
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,7 +55,9 @@ function ToastItem({ t }: { t: Toast }) {
   useEffect(() => {
     run();
     return () => {
+      // Söküm sonrası yeniden kurulumda (StrictMode) run() yeni sayaç kurabilsin
       if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -110,17 +70,16 @@ function ToastItem({ t }: { t: Toast }) {
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) hold('focus', false);
       }}
-      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
+      // Kapanırken (150 ms) düğmeler etkisiz: "Geri al"a çift dokunuş eylemi iki kez çalıştırmasın
+      inert={t.leaving || undefined}
+      className={cn(t.leaving ? 'pointer-events-none' : 'pointer-events-auto', 'flex max-w-md items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
     >
       <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span className="flex-1 leading-snug">{t.text}</span>
       {t.action && (
         <button
           type="button"
-          onClick={() => {
-            t.action!.run();
-            leave(t.id);
-          }}
+          onClick={() => act(t.id)}
           className="-my-1.5 min-h-8 shrink-0 rounded-md px-2 text-sm font-semibold underline-offset-2 hover:underline pointer-coarse:-my-3 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
         >
           {t.action.label}

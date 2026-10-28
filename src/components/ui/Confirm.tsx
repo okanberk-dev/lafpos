@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useId, useState } from 'react';
 import { create } from 'zustand';
 import { useFinePointer } from '@/lib/hooks';
+import { onSessionEnd } from '@/lib/sessionEnd';
 import { Button } from './Button';
 import { Field, Input, Textarea } from './Field';
 import { Modal } from './Modal';
@@ -59,6 +60,17 @@ function open(next: Pending) {
   }
   useConfirmStore.setState({ pending: next });
 }
+
+/** Açık soru vazgeçilmiş sayılır (oturum kapandı: kilit, çıkış): onay false, metin null döner, pencere kapanır */
+export function cancelDialogs() {
+  const prev = useConfirmStore.getState().pending;
+  if (!prev) return;
+  useConfirmStore.setState({ pending: null });
+  if (prev.kind === 'confirm') prev.resolve(false);
+  else prev.resolve(null);
+}
+
+onSessionEnd(cancelDialogs);
 
 /** Onay sorar; "evet" için true, vazgeçince false */
 export function confirmDialog(options: ConfirmOptions): Promise<boolean> {

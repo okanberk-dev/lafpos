@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Minus, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import type { FloorStateDTO, OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -148,6 +148,7 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
   const [type, setType] = useState<'percent' | 'amount'>('percent');
   const [value, setValue] = useState('');
   const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!open) return;
     setType(order.discountType ?? 'percent');
@@ -156,11 +157,15 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
   }, [open, order]);
   if (!open) return null;
   const numeric = type === 'percent' ? Number(value || 0) : (parseTL(value || '0') ?? 0);
+  const ready = !!reason.trim() && numeric > 0;
   const submit = async (remove = false) => {
+    if (busy) return;
+    setBusy(true);
     const res = await act(
       (pin) => post(`/orders/${order.id}/discount`, remove ? { type: 'percent', value: 0, reason: '', remove: true, approverPin: pin } : { type, value: numeric, reason, approverPin: pin }),
       remove ? 'İndirim kaldırıldı' : 'İndirim uygulandı',
     );
+    setBusy(false);
     if (res) onClose();
   };
   return (
@@ -184,7 +189,14 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
             <TypedAmount text={value} />
           )}
         </output>
-        <Numpad size="md" keyboard decimal={type === 'amount'} onKey={(k) => setValue(applyNumpadKey(value, k, { decimal: type === 'amount', maxLength: type === 'percent' ? 3 : 8 }))} />
+        {/* Enter, Uygula etkinse indirimi uygular; değilse hiçbir şey yapmaz (odaktaki rakamı yinelemez) */}
+        <Numpad
+          size="md"
+          keyboard
+          decimal={type === 'amount'}
+          onEnter={() => ready && void submit()}
+          onKey={(k) => setValue(applyNumpadKey(value, k, { decimal: type === 'amount', maxLength: type === 'percent' ? 3 : 8 }))}
+        />
         <div className="flex flex-wrap gap-1.5">
           {boot.settings.discountReasons.map((r) => (
             <ReasonChip key={r} on={reason === r} onClick={() => setReason(r)}>
@@ -194,13 +206,13 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
         </div>
         <div className="grid grid-cols-2 gap-2">
           {order.discountType ? (
-            <Button variant="danger" onClick={() => submit(true)}>
+            <Button variant="danger" disabled={busy} onClick={() => submit(true)}>
               Kaldır
             </Button>
           ) : (
             <Button onClick={onClose}>Vazgeç</Button>
           )}
-          <Button variant="primary" disabled={!reason.trim() || numeric <= 0} onClick={() => submit()}>
+          <Button variant="primary" disabled={!ready} loading={busy} onClick={() => submit()}>
             Uygula
           </Button>
         </div>
@@ -250,22 +262,33 @@ export function ReasonModal({
   confirmLabel: string;
   danger?: boolean;
   onClose: () => void;
-  onConfirm: (reason: string) => void;
+  /** Söz dönerse yanıt gelene dek ikinci Enter ya da dokunuş yok sayılır (iptal, ciro dışı kapanış iki kez gitmesin) */
+  onConfirm: (reason: string) => unknown;
 }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   useEffect(() => {
     setReason('');
     setError(null);
   }, [open]);
   if (!open) return null;
   // Neden zorunlu (denetim kaydına yazılır): düğme sessizce soluk kalmaz, ileti alanın altında
-  const confirm = () => {
+  const confirm = async () => {
+    if (busyRef.current) return;
     if (!reason.trim()) {
       setError('Bir neden seçin ya da yazın');
       return;
     }
-    onConfirm(reason.trim());
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      await onConfirm(reason.trim());
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
   return (
     <Modal open onClose={onClose} size="sm" title={title} subtitle={subtitle}>
@@ -292,7 +315,7 @@ export function ReasonModal({
               setError(null);
             }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.repeat) confirm();
+              if (e.key === 'Enter' && !e.repeat) void confirm();
             }}
             enterKeyHint="done"
             placeholder="Ör. yanlış masa"
@@ -300,8 +323,10 @@ export function ReasonModal({
           />
         </Field>
         <div className="grid grid-cols-2 gap-2">
-          <Button onClick={onClose}>Vazgeç</Button>
-          <Button variant={danger ? 'danger' : 'primary'} onClick={confirm}>
+          <Button onClick={onClose} disabled={busy}>
+            Vazgeç
+          </Button>
+          <Button variant={danger ? 'danger' : 'primary'} loading={busy} onClick={() => void confirm()}>
             {confirmLabel}
           </Button>
         </div>

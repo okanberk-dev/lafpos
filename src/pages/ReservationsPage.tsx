@@ -35,6 +35,7 @@ export default function ReservationsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [date, setDate] = useState(businessDate(Date.now()));
+  const dateRef = useRef<HTMLInputElement>(null);
   // Gün değişince önceki günün listesi soluk kalır (sahte "rezervasyon yok" yanıp sönmesin)
   const list = useQuery({ queryKey: ['reservations', date], queryFn: () => get<Reservation[]>(`/reservations?date=${date}`), placeholderData: keepPreviousData });
   const [form, setForm] = useState<null | { time: string; name: string; phone: string; guests: number; tableId: string; durationMin: number; note: string }>(null);
@@ -91,14 +92,40 @@ export default function ReservationsPage() {
         subtitle={`${fmtDateLong(date)} · ${rows.filter((r) => r.status !== 'iptal').length} rezervasyon, ${guests} kişi`}
         actions={
           <>
-            {/* Tarih adımlayıcı: görünen metin bizim biçimimizde ("Bugün", "27 Eki Sal"); üstündeki görünmez tarih alanı yerli seçiciyi açar */}
-            <div className="flex items-center rounded-xl border border-line bg-surface">
+            {/* Tarih adımlayıcı: görünen metin bizim biçimimizde ("Bugün", "27 Eki Sal"); ortadaki düğme yerli seçiciyi açar
+                (görünmez tarih alanının showPicker'ı). Odak düğmede, halkası görünür; telefonda tam genişlikte dengeli */}
+            <div className="flex items-center justify-between rounded-xl border border-line bg-surface">
               <button aria-label="Önceki gün" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setDate(addDays(date, -1))}>
                 <ChevronLeft className="size-4" />
               </button>
-              <span className="relative inline-flex h-11 min-w-24 items-center justify-center px-3 text-sm font-medium">
-                {date === businessDate(Date.now()) ? 'Bugün' : fmtDateShort(date)}
-                <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Tarih" className="absolute inset-0 size-full cursor-pointer opacity-0" />
+              <span className="relative inline-flex min-w-24 flex-1">
+                <button
+                  type="button"
+                  aria-label={`Tarih seç: ${fmtDateLong(date)}`}
+                  className="inline-flex h-11 w-full items-center justify-center px-3 text-sm font-medium transition-colors duration-150 hover:bg-hover active:bg-press"
+                  onClick={() => {
+                    const el = dateRef.current;
+                    if (!el) return;
+                    try {
+                      el.showPicker();
+                    } catch {
+                      // showPicker yoksa (eski tarayıcı) alan odaklanıp tıklanır
+                      el.focus();
+                      el.click();
+                    }
+                  }}
+                >
+                  {date === businessDate(Date.now()) ? 'Bugün' : fmtDateShort(date)}
+                </button>
+                <input
+                  ref={dateRef}
+                  type="date"
+                  value={date}
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onChange={(e) => e.target.value && setDate(e.target.value)}
+                  className="pointer-events-none absolute inset-0 size-full opacity-0"
+                />
               </span>
               <button aria-label="Sonraki gün" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setDate(addDays(date, 1))}>
                 <ChevronRight className="size-4" />

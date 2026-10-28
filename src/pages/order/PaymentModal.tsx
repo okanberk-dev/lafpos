@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad, useNumpadKeys } from '@/components/ui/Numpad';
+import { typeOverPrefill } from '@/lib/numpad';
 import { promptDialog } from '@/components/ui/Confirm';
 import { ApiError, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -71,6 +72,14 @@ export function PaymentModal({
   const [comp, setComp] = useState<CompKind | null>(null);
   /** Fiziksel klavye dinleyicisinin kökü: üstte onay ya da gerekçe penceresi açıkken tuşlar ona gider */
   const panelRef = useRef<HTMLDivElement>(null);
+  /** Tutar alanı ve Verilen alanı: tür ya da hızlı tutar seçilince odak buraya döner, Enter ödemeyi alır */
+  const amountRef = useRef<HTMLButtonElement>(null);
+  const givenRef = useRef<HTMLButtonElement>(null);
+  /**
+   * Tutar alanındaki değer pencerenin önceden doldurduğu (kalan, Tamamı, Yarısı): seçili metin gibi, ilk rakam onun
+   * yerine geçer ("250" üstüne 100 yazılınca 100 olur, 250100 değil)
+   */
+  const [prefilled, setPrefilled] = useState(true);
   /** Süren ödeme denemesi: ekranda görülenler (tür, tutar, pay, kalemler, bahşiş, ödeme listesi) ve kimliği */
   const attempt = useRef<{ key: string; id: string } | null>(null);
 
@@ -80,6 +89,7 @@ export function PaymentModal({
     // Hesap daha önce bölündüyse pencere doğrudan paylarla açılır
     setMode(order.split ? 'paylas' : 'tutar');
     setAmountText(toInput(Math.max(0, remaining)));
+    setPrefilled(true);
     setMethod(null);
     setGivenText('');
     setTipText('');
@@ -123,7 +133,11 @@ export function PaymentModal({
   }, [split, paidShares]);
   const nextShare = split?.shares[0] ?? 0;
 
-  const amount = Math.min(remaining, mode === 'kalem' ? itemsAmount : mode === 'paylas' ? nextShare : (parseTL(amountText) ?? 0));
+  // Tutar kipinde yazılan kalana kırpılmaz: fazlası reddedilir (bankanın POS'undan çekilenle LafPOS'a yazılan ayrışmasın).
+  // Kalem ve pay kiplerinde tutar sunucunun hesabıdır, kalanla sınırlı
+  const typed = parseTL(amountText) ?? 0;
+  const overRemaining = mode === 'tutar' && typed > remaining;
+  const amount = mode === 'tutar' ? typed : Math.min(remaining, mode === 'kalem' ? itemsAmount : nextShare);
   const tip = boot.settings.tipsEnabled ? (parseTL(tipText) ?? 0) : 0;
   const given = parseTL(givenText);
   const change = method?.kind === 'nakit' && given != null ? given - amount - tip : null;
@@ -132,7 +146,7 @@ export function PaymentModal({
   const tipBlocked = method?.kind === 'cari' && tip > 0;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
-  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
+  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
   const closeComp = async (reason: string) => {
@@ -148,7 +162,24 @@ export function PaymentModal({
   const pressKey = (k: string) => {
     if (mode !== 'tutar' && focus === 'tutar') return;
     const [val, set] = keyTarget as [string, (v: string) => void];
+    if (focus === 'tutar') {
+      set(typeOverPrefill(val, k, prefilled, { decimal: true, maxLength: 9 }));
+      setPrefilled(false);
+      return;
+    }
     set(applyNumpadKey(val, k, { decimal: true, maxLength: 9 }));
+  };
+  /** Tutarı pencere doldurur (kalan, Tamamı, Yarısı): sonraki ilk tuş onun yerine geçer */
+  const prefillAmount = (k: number) => {
+    setAmountText(toInput(k));
+    setPrefilled(true);
+  };
+  /** Fareyle tür ya da hızlı tutar seçildikten sonra odak yazılan alana döner: Enter o düğmeyi yeniden basmaz, ödemeyi alır */
+  const focusTyped = (target: 'tutar' | 'verilen') => {
+    requestAnimationFrame(() => {
+      const el = target === 'verilen' ? givenRef.current : amountRef.current;
+      (el ?? panelRef.current)?.focus({ preventScroll: true });
+    });
   };
 
   // Kasa bilgisayarında tutar ve verilen nakit klavyeyle de yazılır: rakam, virgül, Backspace, Delete; Enter ödemeyi
@@ -204,7 +235,7 @@ export function PaymentModal({
     if (!res) return;
     attempt.current = null;
     // Parçalı ödeme sürüyorsa pencere açık kalır: kalan tutara (ya da sıradaki paya) dönülür
-    setAmountText(toInput(res.order.total - res.order.paid));
+    prefillAmount(res.order.total - res.order.paid);
     setSelection({});
     setGivenText('');
     setTipText('');
@@ -284,7 +315,7 @@ export function PaymentModal({
 
   return (
     <Modal open onClose={onClose} size="xl" persistent={!!comp} title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
-      <div ref={panelRef} className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
+      <div ref={panelRef} tabIndex={-1} className="grid gap-0 outline-none lg:grid-cols-[1.1fr_1fr]">
         <div className="border-b border-[var(--admin-divider)] p-5 lg:border-b-0 lg:border-r">
           <div className="mb-4 flex items-center justify-between gap-3">
             <Segmented<Mode>
@@ -307,16 +338,26 @@ export function PaymentModal({
           </div>
 
           {mode === 'tutar' && (
-            <button
-              onClick={() => setFocus('tutar')}
-              onFocus={() => setFocus('tutar')}
-              data-numpad-enter=""
-              aria-label={`Alınacak tutar: ${amountText || '0'}`}
-              aria-pressed={focus === 'tutar'}
-              className={cn(typedField(focus === 'tutar'), 'mb-3 py-3 text-4xl')}
-            >
-              <TypedAmount text={amountText} />
-            </button>
+            <>
+              <button
+                ref={amountRef}
+                onClick={() => setFocus('tutar')}
+                onFocus={() => setFocus('tutar')}
+                data-numpad-enter=""
+                aria-label={`Alınacak tutar: ${amountText || '0'}`}
+                aria-pressed={focus === 'tutar'}
+                aria-invalid={overRemaining || undefined}
+                aria-describedby={overRemaining ? 'odeme-tutar-fazla' : undefined}
+                className={cn(typedField(focus === 'tutar'), 'py-3 text-4xl', overRemaining ? 'mb-1 border-[var(--admin-danger)]' : 'mb-3', prefilled && focus === 'tutar' && 'text-ink-2')}
+              >
+                <TypedAmount text={amountText} />
+              </button>
+              {overRemaining && (
+                <p id="odeme-tutar-fazla" role="alert" className="mb-3 text-sm text-[var(--admin-danger-ink)]">
+                  Kalandan fazla: en çok {tl(remaining)} alınır
+                </p>
+              )}
+            </>
           )}
 
           {mode === 'kalem' && (
@@ -370,8 +411,24 @@ export function PaymentModal({
           {(mode === 'tutar' || method?.kind === 'nakit' || focus === 'bahsis') && <Numpad decimal size="md" onKey={pressKey} />}
           {mode === 'tutar' && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <QuickButton onClick={() => setAmountText(toInput(remaining))}>Tamamı</QuickButton>
-              <QuickButton onClick={() => setAmountText(toInput(Math.ceil(remaining / 2)))}>Yarısı</QuickButton>
+              <QuickButton
+                onClick={() => {
+                  prefillAmount(remaining);
+                  setFocus('tutar');
+                  focusTyped('tutar');
+                }}
+              >
+                Tamamı
+              </QuickButton>
+              <QuickButton
+                onClick={() => {
+                  prefillAmount(Math.ceil(remaining / 2));
+                  setFocus('tutar');
+                  focusTyped('tutar');
+                }}
+              >
+                Yarısı
+              </QuickButton>
             </div>
           )}
         </div>
@@ -387,6 +444,7 @@ export function PaymentModal({
                     setMethod(m);
                     if (m.kind === 'nakit') setFocus('verilen');
                     else if (focus === 'verilen') setFocus('tutar');
+                    focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
                   }}
                   aria-pressed={method?.id === m.id}
                   className={cn('flex h-14 items-center gap-2 px-3 text-left text-sm font-semibold', choice(method?.id === m.id))}
@@ -429,6 +487,7 @@ export function PaymentModal({
                 {change != null && change < 0 && <span className="tabular text-sm font-semibold text-[var(--admin-danger-ink)]">Eksik {tl(-change)}</span>}
               </div>
               <button
+                ref={givenRef}
                 onClick={() => setFocus('verilen')}
                 onFocus={() => setFocus('verilen')}
                 data-numpad-enter=""
@@ -439,9 +498,24 @@ export function PaymentModal({
                 <TypedAmount text={givenText} />
               </button>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <QuickButton onClick={() => setGivenText(toInput(amount + tip))}>Tam</QuickButton>
+                <QuickButton
+                  onClick={() => {
+                    setGivenText(toInput(amount + tip));
+                    setFocus('verilen');
+                    focusTyped('verilen');
+                  }}
+                >
+                  Tam
+                </QuickButton>
                 {suggestCash(amount + tip, boot.settings.quickCash).map((c) => (
-                    <QuickButton key={c} onClick={() => setGivenText(toInput(c))}>
+                    <QuickButton
+                      key={c}
+                      onClick={() => {
+                        setGivenText(toInput(c));
+                        setFocus('verilen');
+                        focusTyped('verilen');
+                      }}
+                    >
                       {tlShort(c)}
                     </QuickButton>
                   ))}
@@ -480,7 +554,7 @@ export function PaymentModal({
               reasons={compReasonsOf(boot.settings, comp)}
               confirmLabel={COMP_CONFIRM_LABEL[comp]}
               onClose={() => setComp(null)}
-              onConfirm={(reason) => void closeComp(reason)}
+              onConfirm={closeComp}
             />
           )}
 

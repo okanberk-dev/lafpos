@@ -47,17 +47,33 @@ export default function RolesAdmin() {
     setDraft({ ...draft, [r.role]: list.includes(p) ? list.filter((x) => x !== p) : [...list, p] });
   };
   const reset = (r: RoleRow) => setDraft({ ...draft, [r.role]: r.defaults });
+  // Roller sırayla kaydedilir: biri reddedilirse önce kaydedilenler taslaktan düşer (sayaç kalanları gösterir), ekran
+  // sunucudaki durumu yeniden okur, ileti hangi rolün kaydedilemediğini söyler
   const save = async () => {
     setSaving(true);
+    const saved: RoleRow[] = [];
     try {
-      for (const r of dirty) await put(`/admin/roles/${r.role}`, { permissions: draft[r.role] });
-      toast.ok(dirty.length === 1 ? `${dirty[0].label} rolünün yetkileri kaydedildi` : `${dirty.length} rolün yetkileri kaydedildi`);
-      setDraft({});
-      qc.invalidateQueries({ queryKey: ['admin', 'roles'] });
-      qc.invalidateQueries({ queryKey: ['users'] });
-    } catch (e) {
-      toast.err(errorMessage(e));
+      for (const r of dirty) {
+        try {
+          await put(`/admin/roles/${r.role}`, { permissions: draft[r.role] });
+        } catch (e) {
+          toast.err(`${r.label}: ${errorMessage(e)}${saved.length ? ` (${saved.map((x) => x.label).join(', ')} kaydedildi)` : ''}`);
+          return;
+        }
+        saved.push(r);
+      }
+      toast.ok(saved.length === 1 ? `${saved[0].label} rolünün yetkileri kaydedildi` : `${saved.length} rolün yetkileri kaydedildi`);
     } finally {
+      // Önce sunucunun yeni hâli okunur, sonra taslak düşer (kaydedilen rol bir an eski yetkileriyle görünmesin)
+      await qc.invalidateQueries({ queryKey: ['admin', 'roles'] }).catch(() => undefined);
+      if (saved.length) {
+        setDraft((d) => {
+          const next = { ...d };
+          for (const r of saved) delete next[r.role];
+          return next;
+        });
+        qc.invalidateQueries({ queryKey: ['users'] });
+      }
       setSaving(false);
     }
   };

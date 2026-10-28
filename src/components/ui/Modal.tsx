@@ -42,6 +42,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
   });
   // Açan öğe çizim sırasında yakalanır: içerideki autoFocus alanı odağı efektlerden önce alır
   const opener = useRef<HTMLElement | null>(null);
+  const downOnBackdrop = useRef(false);
   const wasOpen = useRef(false);
   if (open && !wasOpen.current && typeof document !== 'undefined') opener.current = document.activeElement as HTMLElement | null;
   wasOpen.current = open;
@@ -49,6 +50,14 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      // Odak pencere dışına düştüyse (kalkan düğme, arka plana tıklama) Tab arka sayfaya geçmez, pencereye döner
+      if (e.key === 'Tab') {
+        if (panel.current && topDialog() === panel.current && !panel.current.contains(e.target as Node)) {
+          e.preventDefault();
+          panel.current.focus();
+        }
+        return;
+      }
       if (e.key !== 'Escape' || latest.current.persistent) return;
       // İç içe pencerede (ödeme › gerekçe) yalnız üstteki kapanır
       if (panel.current && topDialog() !== panel.current) return;
@@ -67,8 +76,14 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
   return createPortal(
     <div
       className="animate-fade fixed inset-0 z-50 flex items-end justify-center bg-[var(--scrim)] sm:items-center sm:p-4"
+      // Arka plana dokunuş click'te kapatır (basış da arka planda başladıysa): pointerdown'da kapansa aynı dokunuşun
+      // click'i alttaki öğeye (hızlı bakıştaki "Tükendi işaretle", satır) düşerdi
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget && !persistent) onClose();
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget && !persistent) onClose();
+        downOnBackdrop.current = false;
       }}
     >
       <div

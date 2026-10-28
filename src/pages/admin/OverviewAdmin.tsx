@@ -8,7 +8,7 @@ import { Badge, Card, CARD, EmptyState, IconBox, type KpiCell, KpiStrip, KpiStri
 import { ColumnChart } from '@/components/charts';
 import { buttonClass } from '@/components/ui/Button';
 import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
-import { get } from '@/lib/api';
+import { errorMessage, get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { onLive } from '@/lib/live';
 import { hourBars } from '@/lib/period';
@@ -161,9 +161,10 @@ export default function OverviewAdmin() {
                 key: 'yedek',
                 icon: <HardDrive className="size-4" />,
                 label: 'Yedek',
-                tone: (lastBackup && Date.now() - lastBackup.at < 36 * 3_600_000 ? 'success' : 'warning') as Tone,
-                state: lastBackup ? 'Var' : 'Yok',
-                detail: lastBackup ? `Son yedek ${fmtDateTime(lastBackup.at)}` : 'Henüz yedek alınmadı',
+                // Liste yüklenirken ya da alınamazken "Yok" denmez: yedek varken patron yokmuş sanmasın
+                tone: (backups.isPending ? 'neutral' : backups.isError ? 'warning' : lastBackup && Date.now() - lastBackup.at < 36 * 3_600_000 ? 'success' : 'warning') as Tone,
+                state: backups.isPending ? 'Denetleniyor' : backups.isError ? 'Denetlenemedi' : lastBackup ? 'Var' : 'Yok',
+                detail: backups.isPending ? 'Yedek listesi okunuyor' : backups.isError ? errorMessage(backups.error) : lastBackup ? `Son yedek ${fmtDateTime(lastBackup.at)}` : 'Henüz yedek alınmadı',
               },
             ]
           : []),

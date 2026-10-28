@@ -26,13 +26,13 @@ export default function PickupBoardPage() {
   const now = useTick(5_000);
   useWakeLock(true);
   // Müşteriye dönük tabela hep koyu: gece loş salonda en parlak yüzey olmasın (çizimden önce, beyaz kare yok)
-  const setForceDark = useTheme((s) => s.setForceDark);
+  const setForce = useTheme((s) => s.setForce);
   useLayoutEffect(() => {
-    setForceDark(true);
+    setForce('dark');
     // Adres açılışta koyu çizildiyse (theme.ts BOOT_DARK_PATHS) o koyu artık sayfanın kendisinde
     useTheme.getState().releaseBootDark();
-    return () => setForceDark(false);
-  }, [setForceDark]);
+    return () => setForce(null);
+  }, [setForce]);
   // Oturumsuz ekran: canlı bağlantı yok, birkaç saniyede bir yoklanır
   const board = useQuery({ queryKey: ['pickup-board'], queryFn: () => get<PickupBoardDTO>('/public/board'), refetchInterval: 3_000 });
 

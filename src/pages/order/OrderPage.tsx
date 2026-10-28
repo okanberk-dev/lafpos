@@ -36,7 +36,7 @@ import { Badge, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc
 import { errorMessage, patch, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
-import { type PendingLine, useCart, usePending } from '@/lib/cart';
+import { type PendingLine, restoreLines, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { joinMeta } from '@/lib/text';
 import { previewTotals } from '@/lib/estimate';
@@ -221,12 +221,14 @@ export default function OrderPage() {
   };
 
   // Gönderilmemişleri silmek geri alınabilir: onay penceresi yerine bildirimde "Geri al" (6 sn)
+  // Gönderim sürerken silinmez: bara giden kalemler "Geri al" ile yeniden bekleyen satır olmasın
   const discardPending = () => {
+    if (sending) return;
     const saved = pending;
     const orderId = order.id;
     cart.clear(orderId);
     toast.ok(`${pendingCount} ürün silindi`, {
-      action: { label: 'Geri al', run: () => useCart.setState((st) => ({ byOrder: { ...st.byOrder, [orderId]: [...(st.byOrder[orderId] ?? []), ...saved] } })) },
+      action: { label: 'Geri al', run: () => useCart.setState((st) => ({ byOrder: { ...st.byOrder, [orderId]: restoreLines(st.byOrder[orderId] ?? [], saved) } })) },
     });
   };
 
@@ -309,7 +311,7 @@ export default function OrderPage() {
     <div className="grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       {pending.length > 0 && counter && can('odeme.al') ? (
         <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2 md:max-lg:grid-cols-[auto_auto_1fr]">
-          <Button size="lg" aria-label="Gönderilmemişleri sil" title="Gönderilmemişleri sil" icon={<Trash2 className="size-4" />} onClick={discardPending} />
+          <Button size="lg" aria-label="Gönderilmemişleri sil" title="Gönderilmemişleri sil" icon={<Trash2 className="size-4" />} disabled={sending} onClick={discardPending} />
           <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label="Gönder" title="Gönder" className="md:max-lg:w-14 md:max-lg:px-0">
             <span className="md:max-lg:sr-only">Gönder</span>
           </Button>
@@ -319,7 +321,7 @@ export default function OrderPage() {
         </div>
       ) : pending.length > 0 ? (
         <>
-          <Button size="lg" onClick={discardPending}>
+          <Button size="lg" disabled={sending} onClick={discardPending}>
             Vazgeç
           </Button>
           <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly}>

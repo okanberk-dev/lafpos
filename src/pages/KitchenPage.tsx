@@ -16,7 +16,7 @@ import { cn } from '@/lib/cn';
 import { useLocalPref, useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
 import { beep, unlockAudio } from '@/lib/sound';
-import { KDS_THEME_PREF, type KdsTheme, readKdsTheme, useTheme } from '@/lib/theme';
+import { readKdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 import { useServiceMode } from '@/lib/serviceMode';
@@ -31,11 +31,10 @@ function mmss(ms: number) {
 export default function KitchenPage() {
   const boot = useBoot();
   const qc = useQueryClient();
-  const setForceDark = useTheme((s) => s.setForceDark);
-  // Bar ekranı cihazın tercihinde açılır (varsayılan koyu; cam önündeki tablette açık). Kullanıcı menüsü de aynı
-  // tercihi değiştirdiği için görünen durum mağazadaki forceDark'tan okunur
-  const dark = useTheme((s) => s.forceDark);
-  const [, setKdsTheme] = useLocalPref<KdsTheme>(KDS_THEME_PREF, 'koyu');
+  const setForce = useTheme((s) => s.setForce);
+  // Bar ekranı cihazın tercihinde açılır (varsayılan koyu; cam önündeki tablette açık), uygulama ya da cihaz teması
+  // ne olursa olsun. Kullanıcı menüsü ve komut paleti de aynı tercihi değiştirdiği için görünen durum mağazadan okunur
+  const dark = useTheme((s) => s.force === 'dark');
   const [station, setStation] = useLocalPref<string>('kds.station', '');
   const [history, setHistory] = useState(false);
   const [soldOut, setSoldOut] = useState(false);
@@ -51,15 +50,11 @@ export default function KitchenPage() {
   // Çizimden önce (useLayoutEffect): açık temalı cihazda yeniden yüklemede beyaz kare parlamasın. Açılışın koyusu
   // (initTheme) sayfa kendi tercihini kurunca bırakılır
   useLayoutEffect(() => {
-    setForceDark(readKdsTheme() === 'koyu');
+    setBarTheme(readKdsTheme());
     useTheme.getState().releaseBootDark();
-    return () => setForceDark(false);
-  }, [setForceDark]);
-  const toggleScreenTheme = () => {
-    const next: KdsTheme = dark ? 'acik' : 'koyu';
-    setKdsTheme(next);
-    setForceDark(next === 'koyu');
-  };
+    return () => setForce(null);
+  }, [setForce]);
+  const toggleScreenTheme = () => setBarTheme(dark ? 'acik' : 'koyu');
   // Fiş düğmesi istek sürerken kilitlenir (çift dokunuş iki kez göndermesin)
   const [busy, setBusy] = useState<string | null>(null);
 

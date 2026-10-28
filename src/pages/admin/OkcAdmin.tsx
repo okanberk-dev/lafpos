@@ -115,6 +115,7 @@ export default function OkcAdmin() {
       <Card flush title="Bağlantı">
         <div className="space-y-4 p-4">
           <Segmented
+            wrap
             label="Yazarkasa bağlantısı"
             value={s.provider}
             onChange={(v) => save({ provider: v })}
@@ -149,6 +150,7 @@ export default function OkcAdmin() {
             <div>
               <div className="mb-1.5 text-[13px] font-medium text-ink-2">Ödeme yeri</div>
               <Segmented
+                wrap
                 label="Ödeme yeri"
                 value={s.mode}
                 onChange={(v) => save({ mode: v })}

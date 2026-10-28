@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Coffee, CornerDownLeft, Lock, Moon, Plus, Search, Sun, UserPlus, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { tl } from '@shared/money';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
@@ -12,7 +12,9 @@ import { trapTab } from '@/lib/focus';
 import { navFor } from '@/lib/nav';
 import { useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
-import { useTheme } from '@/lib/theme';
+import { resolveDark } from '@/lib/bootDark';
+import { setBarTheme, useTheme } from '@/lib/theme';
+import { confirmLeave } from '@/lib/unsavedGuard';
 import { visibleSections } from './admin/sections';
 
 interface Entry {
@@ -54,6 +56,8 @@ function Palette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const logout = useAuth((s) => s.logout);
   const { theme, setTheme } = useTheme();
+  const barDark = useTheme((s) => s.force === 'dark');
+  const onBar = useLocation().pathname === '/mutfak';
   const mode = useServiceMode();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
@@ -71,9 +75,10 @@ function Palette({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
-  const go = (to: string) => () => {
+  const go = (to: string) => async () => {
     onClose();
-    navigate(to);
+    // Ayarlarda kaydedilmemiş değişiklik varsa önce sorulur
+    if (await confirmLeave()) navigate(to);
   };
 
   const entries = useMemo<Entry[]>(() => {
@@ -97,16 +102,19 @@ function Palette({ onClose }: { onClose: () => void }) {
       out.push({ id: 'eylem:personel', group: 'Eylemler', label: 'Personel ekle', icon: <UserPlus />, keywords: 'yeni kullanıcı pin', run: go('/yonetim/personel?kisi=yeni') });
       for (const u of users.data ?? []) out.push({ id: `kisi:${u.id}`, group: 'Personel', label: u.name, hint: u.active ? undefined : 'kapalı', icon: <Users />, run: go(`/yonetim/personel?kisi=${u.id}`) });
     }
-    const dark = document.documentElement.classList.contains('dark');
+    // Bar ekranında eylem bu cihazın bar tercihini değiştirir (kullanıcı menüsündeki satır gibi); başka ekranda genel
+    // temayı. Yön `.dark` sınıfından değil (bar zorlaması onu ezer) temanın kendisinden okunur: etiket ve sonuç aynı yönde
+    const dark = onBar ? barDark : resolveDark(theme, null, window.matchMedia('(prefers-color-scheme: dark)').matches);
     out.push({
       id: 'eylem:tema',
       group: 'Eylemler',
-      label: dark ? 'Açık temaya geç' : 'Koyu temaya geç',
+      label: onBar ? (dark ? 'Bar ekranını açık yap' : 'Bar ekranını koyu yap') : dark ? 'Açık temaya geç' : 'Koyu temaya geç',
       icon: dark ? <Sun /> : <Moon />,
-      keywords: 'tema gece gündüz',
+      keywords: 'tema gece gündüz bar ekranı',
       run: () => {
         onClose();
-        setTheme(theme === 'koyu' || (theme === 'sistem' && dark) ? 'acik' : 'koyu');
+        if (onBar) setBarTheme(dark ? 'acik' : 'koyu');
+        else setTheme(dark ? 'acik' : 'koyu');
       },
     });
     out.push({
@@ -123,7 +131,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boot.products, users.data, theme, mode]);
+  }, [boot.products, users.data, theme, mode, onBar, barDark]);
 
   const results = useMemo(() => {
     const k = fold(q.trim());

@@ -21,6 +21,7 @@ import { joinMeta } from '@/lib/text';
 import { staleCostsText } from '@/lib/lafmaliyet';
 import { byBusinessHour, fmtShortDate, hourTitle, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 import { toast } from '@/lib/toast';
+import { lossParts, previousShort } from '@/lib/reportLabels';
 
 type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'kayip' | 'happy' | 'personel' | 'aktarim';
 type ProductView = 'urun' | 'kategori';
@@ -186,7 +187,7 @@ interface Summary {
   payments: { name: string; amount: number; count: number; share: number }[];
   types: { type: string; orders: number; amount: number }[];
   online: { orders: number; amount: number };
-  previous: { netSales: number; receipts: number; change: number | null; label: string };
+  previous: { netSales: number; receipts: number; change: number | null; label: string; range?: { from: string; to: string } };
   asOf: number;
   waterfall: { list: number; complimentary: number; discounts: number; service: number; revenue: number; kdv: number; netExKdv: number };
   kdv: { rate: number; gross: number; base: number; kdv: number }[];
@@ -196,13 +197,6 @@ interface Summary {
 
 const TYPE_LABEL: Record<string, string> = ORDER_TYPE_LABEL;
 
-/** Kıyas döneminin KPI referansına sığan adı (sunucunun uzun adı `title`'da kalır) */
-function previousShort(label: string): string {
-  if (label.startsWith('önceki ay')) return 'Önceki ay';
-  if (label.startsWith('geçen hafta')) return 'Geçen hafta';
-  const weeks = label.match(/^(\d+) hafta/)?.[1];
-  return weeks ? `${weeks} hafta önce` : 'Önceki dönem';
-}
 
 /**
  * Rapor sorgusu: dönem değişince önceki dönemin rakamları yeni gelene dek yerinde (soluk) kalır; sayfa spinner'a
@@ -261,7 +255,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
   return (
     <ReportBody q={q} skeleton={skeleton}>
       {(s) => {
-        const prev = previousShort(s.previous.label);
+        const prev = previousShort(s.previous.label, s.previous.range);
         return (
           <div className="space-y-4">
             {/* Etiket en çok 18, referans en çok 30 karakter; ayrıntı döküm kartlarında ve tıklanınca açılan raporda */}
@@ -294,7 +288,8 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                   onClick: () => onOpen('adisyon'),
                 },
                 { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü', onClick: () => onOpen('urunler', { product: 'urun' }) },
-                { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tlShort(s.discounts)} · iptal ${tlShort(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
+                // Değer indirim ve bütün ciro dışı kalemler (ikram, ödenmez, zayi): referans hepsini söyler, sıfır olan düşer
+                { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: lossParts(s, tlShort), onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
                 { key: 'online', label: 'Online', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `Sitede ödendi · ${s.online.orders} sipariş, ciroya dahil değil` },
               ]}
             />
