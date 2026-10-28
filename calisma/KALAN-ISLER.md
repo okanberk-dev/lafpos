@@ -210,7 +210,7 @@ etkiler), `matched`/`unmatched` yanıtı, B09-B11'in durumu, `day.platforms`.
 ### 5. Sürüm v0.2.0 (kafeye giden Windows kurulumu)
 
 **28 Ekim gece:** derlendi (yukarıda SHA-256); Linux'ta `apt-get install nsis` ile (3.09), göçler 0000-0013 pakette,
-paket denemesi geçti; 0.1.0 veritabanından yükseltme denemesi sürüyor (sonucu sonraki commit'te). Kalan: kullanıcı GitHub › Releases ›
+paket denemesi geçti; 0.1.0 veritabanından yükseltme denemesi geçti (paketin kendisiyle: göçler 4'ten 14'e, satır sayıları ve eski Z'nin 28 alanı aynı, açık adisyon ödendi, Z sırası sürdü; not: Özet'te satılan adet ikramı saymaz, 0.1.0'da kapanan günler lafmaliyet'e 0.2.0'dan gitmez). Kalan: kullanıcı GitHub › Releases ›
 Draft a new release (etiket `v0.2.0`, hedef main af0410d), notu yapıştırır, `.exe`'yi yükler; kafede kurulum ve
 `docs/05-KASA-BILGISAYARI.md` §2 sonundaki tur. Eski not:
 - `npm run kurulum:windows`: macOS'ta makensis, betik LC_ALL'u UTF-8 yapar. Göç 0004 ve 0005 pakete giriyor mu bak
