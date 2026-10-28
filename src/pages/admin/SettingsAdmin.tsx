@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { parseTL, tlCompact } from '@shared/money';
 import { SERVICE_MODE_HINT, SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode, serviceModeOf } from '@shared/service-mode';
 import { fmtDateTime } from '@shared/time';
+import { nextZNo } from '@shared/z-no';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Textarea, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
@@ -47,6 +48,7 @@ type Settings = Record<string, unknown> & {
   autoDayEndHour: number;
   posSizeSuffix: { M: string; L: string; TEK: string };
   serviceMode: ServiceMode;
+  zNoStart: number | null;
 };
 
 const lines = (a: string[]) => a.join('\n');
@@ -142,6 +144,8 @@ export default function SettingsAdmin() {
   const qc = useQueryClient();
   const data = useQuery({ queryKey: ['admin', 'settings'], queryFn: () => get<Settings>('/admin/settings') });
   const backups = useQuery({ queryKey: ['admin', 'backups'], queryFn: () => get<{ dir: string; files: { name: string; size: number; at: number }[] }>('/admin/backups') });
+  // Z zinciri `cash` altında: gün açılıp kapanınca ve ayar kaydedilince canlı akış kendiliğinden yeniler
+  const zChain = useQuery({ queryKey: ['cash', 'z-chain'], queryFn: () => get<{ lastZ: number | null; nextZ: number }>('/admin/settings/z') });
   const [s, setS] = useState<Settings | null>(null);
   const [modeBusy, setModeBusy] = useState<ServiceMode | null>(null);
   const [saving, setSaving] = useState(false);
@@ -193,6 +197,10 @@ export default function SettingsAdmin() {
   }
   const set = (patch: Partial<Settings>) => setS({ ...s, ...patch });
   const mode = serviceModeOf(s);
+  // İlk Z numarası yalnız değiştiyse denetlenir (sunucu da öyle): zincir geri alınmaz
+  const lastZ = zChain.data ? (zChain.data.lastZ ?? 0) : null;
+  const zError =
+    s.zNoStart != null && s.zNoStart !== data.data?.zNoStart ? (s.zNoStart < 1 ? 'Z numarası 1 ya da daha büyük olmalı' : lastZ != null && s.zNoStart <= lastZ ? `Z numarası geri alınamaz; son Z ${lastZ}` : null) : null;
 
   // Servis modu seçilince hemen uygulanır (yalnız bu alan gider): kasalar açılış verisiyle birlikte yenilenir
   const chooseMode = async (next: ServiceMode) => {
@@ -334,6 +342,30 @@ export default function SettingsAdmin() {
                 Saat
                 <NumberInput commitOnChange value={s.autoDayEndHour} min={0} max={23} fallback={0} onCommit={(autoDayEndHour) => set({ autoDayEndHour })} className="w-20" />
               </label>
+            </div>
+            <div>
+              <Field label="İlk Z numarası" hint="ModPOS’un son Z numarasının bir fazlası. Geçiş gününden önce bir kez girilir; sonraki gün sonları buradan devam eder" error={zError}>
+                <Input
+                  value={s.zNoStart == null ? '' : String(s.zNoStart)}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                    set({ zNoStart: digits === '' ? null : Number(digits) });
+                  }}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="Boşsa 1’den"
+                  aria-describedby="z-chain-info"
+                  className="tabular text-right sm:max-w-48"
+                />
+              </Field>
+              {/* Yüklenirken ya da alınamazsa "yok" yazılmaz */}
+              {lastZ == null && !zChain.isError ? (
+                <Skeleton className="mt-2 h-3.5 w-52 rounded" />
+              ) : (
+                <p id="z-chain-info" className="tabular mt-1.5 text-xs text-muted">
+                  {lastZ == null ? 'Son Z alınamadı' : `${lastZ ? `Son Z: ${lastZ}` : 'Henüz gün açılmadı'} · sıradaki gün: Z ${nextZNo(lastZ, zError ? data.data?.zNoStart : s.zNoStart)}`}
+                </p>
+              )}
             </div>
             <Field label="Hızlı nakit düğmeleri (₺, satır satır)">
               <LinesTextarea value={s.quickCash} format={formatQuickCash} parse={parseQuickCash} onChange={(quickCash) => set({ quickCash })} />

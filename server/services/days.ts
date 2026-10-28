@@ -3,6 +3,7 @@ import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs } from '@shared/time';
 import type { BusinessDayDTO } from '@shared/types';
+import { nextZNo } from '@shared/z-no';
 import { type DB, schema, type Tx } from '../db/client';
 import type { ZField, ZSummary } from '../db/schema';
 import { type Actor, need, needDirect } from '../lib/auth';
@@ -20,6 +21,11 @@ export function dayToDTO(t: Tx | DB, d: DayRow | undefined | null): BusinessDayD
   return { id: d.id, date: d.date, zNo: d.zNo, openedAt: d.openedAt, openedByName: opener?.name ?? null, openingCash: d.openingCash, closedAt: d.closedAt, reopenedAt: d.reopenedAt, trainingDay: d.trainingDay };
 }
 
+/** Kayıtlı en büyük Z (açık gün ve eğitim günleri dahil); gün yoksa 0 */
+export function lastZNo(t: Tx | DB): number {
+  return t.select({ z: sql<number>`coalesce(max(${schema.businessDays.zNo}), 0)` }).from(schema.businessDays).get()?.z ?? 0;
+}
+
 export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: number }): DayRow {
   needDirect(actor, 'kasa.gun');
   if (getOpenDay(t)) throw conflict('Açık bir gün zaten var', 'day_open');
@@ -32,11 +38,11 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
     .where(and(eq(schema.businessDays.date, businessDate(now)), isNotNull(schema.businessDays.closedAt)))
     .get();
   if (closedToday) throw conflict(`Bugünün gün sonu alındı (Z ${closedToday.zNo}). Satış gerekiyorsa günü yeniden açın; yeni gün 05:00'ten sonra açılır`, 'day_closed_today');
-  const last = t.select({ z: sql<number>`coalesce(max(${schema.businessDays.zNo}), 0)` }).from(schema.businessDays).get();
   const day = {
     id: ulid(now),
     date: businessDate(now),
-    zNo: (last?.z ?? 0) + 1,
+    // Geçişte zincir ModPOS'un son Z'sinden devam eder (Yönetim › Ayarlar › İlk Z numarası); eğitim günleri de zincirde
+    zNo: nextZNo(lastZNo(t), getSettings().zNoStart),
     openedAt: now,
     openedBy: actor.user.id,
     openingCash: Math.max(0, Math.trunc(input.openingCash)),

@@ -344,7 +344,7 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 
 | lafmaliyet alanı | LafPOS kaynağı |
 | --- | --- |
-| `z_no` | `business_days.zNo` |
+| `z_no` | `business_days.zNo` (geçişte ModPOS'un son Z'sinden devam eder: Yönetim › Ayarlar › İlk Z numarası, §8) |
 | `receipts` | tutarı 0'dan büyük kapanan POS adisyonu sayısı (online, iptal ve tamamı ikram adisyonlar hariç) |
 | `z_total` | ödemelerin toplamı (cari tahsilat ve bahşiş hariç) |
 | `cash` | `zField = cash` ödemeler (ödeme anında dondurulan Z alanı; beklenen nakit de aynı alandan hesaplanır, ödeme türü sonradan değişse de ikisi aynı ödemeleri sayar. Yönetim Z'de nakdi yalnız Nakit türüne verir) |
@@ -651,6 +651,14 @@ formu LafPOS gününü geçiş günü olmadan gösterirdi.
      varsayılan başlangıcı olur). Geçiş gününden bu yana kapanmış ama gitmemiş gün varsa "Geçmiş günleri gönder" (§4.4);
      eğitim günlerini atlar.
    - Yazarkasa gerçek fişe geçecekse Yönetim › Yazarkasa POS `tokenx` (Token'ın test ortamında denendikten sonra).
+   - **İlk Z numarası:** ModPOS'ta son gün sonu alındıktan sonra, geçiş günü LafPOS'ta gün açılmadan önce Yönetim ›
+     Ayarlar › Kasa ve gün › İlk Z numarası = ModPOS'un son Z numarası + 1 (son Z 1200 ise 1201); Z zinciri, dolayısıyla
+     Kasa raporunun Z no'su ModPOS'unkinden devam eder. Açılan günün Z'si kayıtlı en büyük Z + 1'dir, ilk Z numarası daha
+     büyükse odur (`shared/z-no.ts`): ayar yalnız yukarı doğru etkiler, kayıtlı günlerin numarası değişmez (eğitim ve
+     deneme günleri de zincirdedir), geçmiş gün yeniden gönderilince `z_conflict` çıkmaz. Son Z ve altı reddedilir
+     (422 `z_start_low`, "Z numarası geri alınamaz; son Z N"); boşaltmak zinciri geri almaz. Yalnız ayar yetkisiyle
+     (`ayar.yonet`) değişir, denetim kaydına uyarı olarak düşer (`settings.z_start`, eski → yeni). Alanın altında son Z
+     ve sıradaki günün Z'si yazar.
    - İlk gün: LafPOS'ta gün sonu → lafmaliyet kartında gün, `counted: true`; Kasa raporu kendiliğinden dolu, banka
      POS ve yazarkasa Z eklenip gönderilir; Kasadaki fiyatlar kaybolur.
 
