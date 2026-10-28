@@ -560,7 +560,8 @@ function serve(snap: Snapshot | null, path: string, url: URL, demo: boolean): Re
   if (path === 'bootstrap') return json({ ...snap.bootstrap, me: ME });
   if (path === 'reports/patron') return json(snap.patron);
   if (path === 'floor') return json(snap.floor);
-  if (path === 'kitchen') return json(url.searchParams.get('history') === '1' ? [] : snap.kitchen);
+  // Özet yalnız aktif fişleri taşır: Geçmiş ve Hazır sekmesi uzaktan boş
+  if (path === 'kitchen') return json(url.searchParams.get('history') === '1' || url.searchParams.get('ready') === '1' ? [] : snap.kitchen);
   if (path === 'kitchen/board') return json(snap.board);
   const order = /^orders\/([A-Za-z0-9]+)$/.exec(path);
   if (order) return snap.orders[order[1]!] ? json(snap.orders[order[1]!]) : fail(404, 'Adisyon kapanmış ya da yok', 'not_found');

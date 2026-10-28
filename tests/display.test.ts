@@ -26,4 +26,12 @@ describe('müşteri ekranı', () => {
     await h.ok('kasa', 'PUT', '/display/kasa', { kind: 'thanks', total: 39000 });
     expect((await h.ok<DisplayStateDTO>('', 'GET', '/public/display/kasa')).kind).toBe('thanks');
   });
+
+  it('teşekkürde self servisin çağrı numarası; eski kasa göndermezse yok, uzunu reddedilir', async () => {
+    await h.ok('kasa', 'PUT', '/display/kasa', { kind: 'thanks', total: 39000, call: 'No 34' });
+    expect(await h.ok<DisplayStateDTO>('', 'GET', '/public/display/kasa')).toMatchObject({ kind: 'thanks', total: 39000, call: 'No 34' });
+    await h.ok('kasa', 'PUT', '/display/kasa', { kind: 'thanks', total: 39000 });
+    expect(await h.ok<DisplayStateDTO>('', 'GET', '/public/display/kasa')).not.toHaveProperty('call');
+    expect((await h.call('kasa', 'PUT', '/display/kasa', { kind: 'thanks', total: 39000, call: 'x'.repeat(17) })).status).toBe(422);
+  });
 });

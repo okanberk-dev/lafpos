@@ -390,6 +390,93 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Tablette bar: Hazır sekmesinde siparişi teslim eder, çağrı ekranından düşer; Geri al geri getirir',
+      async () => {
+        const latte = seed.boot.products.find((p) => p.name === 'Latte');
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        const sent = await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 1 }] });
+        await api.call('bar', 'POST', '/kitchen/status', { itemIds: sent.items.map((i) => i.id), status: 'hazir' });
+        const onBoard = async () => {
+          const board = await api.call('', 'GET', '/public/board');
+          return board.ready.some((e) => e.id === o.id);
+        };
+        assert(await onBoard(), 'hazır sipariş çağrı ekranında yok');
+        await withPage(ctx, 'tablet', 'bar', async (page) => {
+          await go(ctx, page, '/mutfak');
+          await page.getByRole('tab', { name: /^Hazır/ }).click();
+          const card = page.locator('article', { hasText: `Tezgâh #${o.no}` });
+          await card.waitFor({ timeout: 8000 });
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-bar-hazir-sekmesi.png` });
+          const overflow = await overflowReport(page);
+          assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+          const small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await card.getByRole('button', { name: 'Teslim edildi', exact: true }).click();
+          await card.waitFor({ state: 'detached', timeout: 8000 });
+          const toast = page.getByRole('status').filter({ hasText: `Tezgâh #${o.no} teslim edildi` });
+          await toast.waitFor({ timeout: 5000 });
+          assert(!(await onBoard()), 'teslim edilen sipariş çağrı ekranından düşmedi');
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-bar-teslim-geri-al.png` });
+          await toast.getByRole('button', { name: 'Geri al', exact: true }).click();
+          await card.waitFor({ timeout: 8000 });
+        });
+        assert(await onBoard(), 'geri alınan sipariş çağrı ekranına dönmedi');
+        const back = await api.call('kasa', 'GET', `/orders/${o.id}`);
+        assert(back.items.every((i) => i.status === 'hazir'), `kalem hazıra dönmedi: ${back.items.map((i) => i.status).join(', ')}`);
+      },
+    ],
+    [
+      'Telefonda kasiyer: hazır gel-al siparişini Siparişler\'den, tezgâh satışını adisyondan teslim eder; müşteri ekranı numarayı söyler',
+      async () => {
+        const latte = seed.boot.products.find((p) => p.name === 'Latte');
+        const pickup = await api.call('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Selin Bulut' });
+        const p1 = await api.call('kasa', 'POST', `/orders/${pickup.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 1 }] });
+        const counter = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        const c1 = await api.call('kasa', 'POST', `/orders/${counter.id}/items`, { items: [{ productId: latte.id, size: 'L', qty: 2 }] });
+        await api.call('bar', 'POST', '/kitchen/status', { itemIds: [...p1.items, ...c1.items].map((i) => i.id), status: 'hazir' });
+        await withPage(ctx, 'telefon', 'kasa', async (page) => {
+          await go(ctx, page, '/siparisler');
+          const card = page.locator('div.rounded-2xl', { hasText: `Selin Bulut #${pickup.no}` }).filter({ has: page.getByRole('button', { name: 'Teslim edildi' }) });
+          await card.waitFor({ timeout: 8000 });
+          // Kasanın gel-al siparişinde aşama düğmesi ("Hazır") o arada gizli: tek düğme
+          assert((await card.getByRole('button', { name: 'Hazır', exact: true }).count()) === 0, 'gel-al kartında ikinci aşama düğmesi var');
+          await card.scrollIntoViewIfNeeded();
+          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-siparisler-hazir.png` });
+          let overflow = await overflowReport(page);
+          assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+          let small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await card.getByRole('button', { name: 'Teslim edildi', exact: true }).click();
+          await page.getByRole('status').filter({ hasText: `Selin Bulut #${pickup.no} teslim edildi` }).waitFor({ timeout: 5000 });
+
+          await go(ctx, page, `/adisyon/${counter.id}`);
+          await page.getByRole('tab', { name: /^Adisyon/ }).click();
+          await page.getByText('2 ürün hazır', { exact: true }).waitFor({ timeout: 8000 });
+          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-adisyon-hazir.png` });
+          overflow = await overflowReport(page);
+          assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+          small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await page.getByRole('button', { name: 'Teslim edildi', exact: true }).click();
+          await page.getByText('2 ürün hazır', { exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+
+          // Ödeme penceresinin gönderdiği teşekkür (çağrı numarasıyla); ekran 15 sn gösterir
+          await api.call('kasa', 'PUT', '/display/kasa', { kind: 'thanks', total: 39000, call: `No ${counter.no}` });
+          await go(ctx, page, '/musteri-ekrani');
+          await page.getByText('Numaranız', { exact: true }).waitFor({ timeout: 8000 });
+          await page.getByText(String(counter.no), { exact: true }).waitFor();
+          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-musteri-ekrani-numara.png` });
+          overflow = await overflowReport(page);
+          assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+        });
+        const p = await api.call('kasa', 'GET', `/orders/${pickup.id}`);
+        assert(p.deliveryStatus === 'teslim' && p.items.every((i) => i.status === 'servis'), `gel-al teslim edilmedi: ${p.deliveryStatus}`);
+        const c = await api.call('kasa', 'GET', `/orders/${counter.id}`);
+        assert(c.items.every((i) => i.status === 'servis'), `tezgâh satışı teslim edilmedi: ${c.items.map((i) => i.status).join(', ')}`);
+        await api.call('kasa', 'PUT', '/display/kasa', { kind: 'idle' });
+      },
+    ],
+    [
       // Günü kapattığı için en sonda
       'Tablette kasiyer: gece gün sonundan sonra günü müdürün PIN onayıyla yeniden açar',
       async () => {

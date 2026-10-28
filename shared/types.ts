@@ -529,6 +529,9 @@ export interface PickupEntryDTO {
   online: boolean;
   /** Masa no / numaratör girildiyse: ekranda numara yerine masa, sipariş masaya getirilir */
   table: string | null;
+  /** Paket platformunun gel-al siparişi: müşteri uygulamada platformun kısa kodunu görür, ekranda numara yerine o */
+  platform?: PlatformId | null;
+  code?: string | null;
 }
 
 export interface PickupBoardDTO {
@@ -562,4 +565,10 @@ export type DisplayStateDTO =
       paid: number;
       due: number;
     }
-  | { kind: 'thanks'; at: number; total: number };
+  | {
+      kind: 'thanks';
+      at: number;
+      total: number;
+      /** Self servisin çağrı kimliği ("No 34" ya da "Masa 12"); bara giden kalemi olmayan satışta ve eski kasada yok */
+      call?: string;
+    };

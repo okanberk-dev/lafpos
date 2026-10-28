@@ -37,7 +37,8 @@ const stateShape = z.discriminatedUnion('kind', [
     paid: kurus,
     due: z.number().int(),
   }),
-  z.object({ kind: z.literal('thanks'), total: kurus }),
+  // Self servisin çağrı kimliği ("No 34", "Masa 12"); eski kasa sürümü göndermez
+  z.object({ kind: z.literal('thanks'), total: kurus, call: text(16).optional() }),
 ]);
 
 displayPublicRoutes.get('/display/:code', (c) => {

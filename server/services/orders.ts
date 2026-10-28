@@ -1527,6 +1527,11 @@ const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazir
  * Bar ve mutfak durumları. Başlamış kalem bekleyene ("yeni") dönmez ve başlama zamanı silinmez: onaysız iptal
  * "hiç başlanmamış" kaleme (yanlış giriş penceresi) özgüdür. Garson kalemi "yeni"ye çekip bardan çıkmış içeceği
  * onaysız, zayi sayılmadan iptal ediyordu (denetim, 26 Eki 2026). Bardaki "Geri al" en çok "hazırlanıyor"a döner.
+ *
+ * "Teslim edildi" kalemi "servis"e taşır (teslim zamanı yazılır, çağrı ekranından ve bar ekranının Hazır sekmesinden
+ * düşer); onun "Geri al"ı "servis"ten "hazir"a döndürür: hazır olduğu an korunur, hazır uyarısı yinelenmez. Kasanın
+ * kendi gel-al siparişinin aşaması bardan izler (`syncPickupDelivery`; Siparişler'de aynı sipariş için ikinci bir
+ * düğme kalmasın).
  */
 export function setItemsStatus(
   t: Tx,
@@ -1542,21 +1547,27 @@ export function setItemsStatus(
   const stations = new Set<string>();
   /** Adisyon başına bu dokunuşta "Hazır" olan adet: siparişi alana uyarı */
   const readyCount = new Map<string, number>();
+  /** Teslimi geri alınan kalemin adisyonu */
+  const unserved = new Set<string>();
   for (const it of items) {
     if (it.voided) continue;
     const status = input.status ?? NEXT[it.status];
     if (!status || status === it.status) continue;
-    if (status === 'hazir') readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
+    // Teslimin geri alınışı: kalem yeniden hazırlanmadı, yalnız teslim zamanı silinir
+    const undo = it.status === 'servis' && status === 'hazir' && it.readyAt != null;
+    if (status === 'hazir' && !undo) readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
+    if (it.status === 'servis') unserved.add(it.orderId);
     const patch: Partial<ItemRow> = { status };
-    if (status === 'hazirlaniyor') patch.startedAt = it.startedAt ?? now;
-    if (status === 'hazir') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: now });
+    // Teslimden geri dönen kalemin teslim zamanı kalmaz (hazırdan teslime süresi yalnız gerçek teslimi sayar)
+    if (status === 'hazirlaniyor') Object.assign(patch, { startedAt: it.startedAt ?? now, servedAt: null });
+    if (status === 'hazir') Object.assign(patch, undo ? { servedAt: null } : { startedAt: it.startedAt ?? now, readyAt: now, servedAt: null });
     if (status === 'servis') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: it.readyAt ?? now, servedAt: now });
     t.update(schema.orderItems).set(patch).where(eq(schema.orderItems.id, it.id)).run();
     orders.add(it.orderId);
     if (it.stationId) stations.add(it.stationId);
   }
   for (const id of orders) {
-    const o = loadOrder(t, id);
+    const o = syncPickupDelivery(t, actor, fx, loadOrder(t, id), unserved.has(id));
     orderEvents(fx, o, actor.user.id, 'item.status');
     const ready = readyCount.get(id);
     if (ready && o.waiterId) {
@@ -1567,6 +1578,37 @@ export function setItemsStatus(
     }
   }
   for (const s of stations) fx.emit({ topic: 'kitchen', kind: 'ticket.status', stationId: s, byUserId: actor.user.id });
+}
+
+/**
+ * Kasanın gel-al siparişi (site ve paket platformu değil): aşaması bardan izler. Bara giden kalemlerin hepsi hazır
+ * olunca "Hazır", hepsi teslim edilince "Teslim edildi"; teslim geri alınınca (kalem servisten döndü) kalemlerin
+ * durumuna döner. Platform siparişinin aşaması platforma ve ödemesine bağlı, burada değişmez.
+ */
+function syncPickupDelivery(t: Tx, actor: Actor, fx: Effects, o: OrderRow, unserved: boolean): OrderRow {
+  if (o.source !== 'pos' || o.platform || o.type !== 'gelal' || o.status === 'iptal') return o;
+  const kitchen = orderItems(t, o.id).filter((i) => !i.voided && i.stationId);
+  if (!kitchen.length) return o;
+  const served = kitchen.every((i) => i.status === 'servis');
+  const ready = kitchen.every((i) => i.status === 'hazir' || i.status === 'servis');
+  const reverted = unserved && o.deliveryStatus === 'teslim';
+  let next: OrderRow['deliveryStatus'] = null;
+  if (served) next = o.deliveryStatus === 'teslim' ? null : 'teslim';
+  else if (ready) next = o.deliveryStatus === 'hazirlaniyor' || reverted ? 'hazir' : null;
+  else if (reverted) next = 'hazirlaniyor';
+  if (!next || next === o.deliveryStatus) return o;
+  t.update(schema.orders).set({ deliveryStatus: next, updatedAt: Date.now() }).where(eq(schema.orders.id, o.id)).run();
+  // Hazır aşaması denetime yazılmaz (Siparişler'deki aşama düğmesi gibi); teslim ve geri alınışı yazılır
+  if (next === 'teslim' || reverted) {
+    fx.audit(t, {
+      userId: actor.user.id,
+      action: next === 'teslim' ? 'delivery.done' : 'delivery.undo',
+      orderId: o.id,
+      message: next === 'teslim' ? `#${o.no} gel-al teslim edildi` : `#${o.no} gel-al teslimi geri alındı`,
+    });
+  }
+  fx.emit({ topic: 'delivery', kind: 'delivery.status', orderId: o.id, byUserId: actor.user.id });
+  return loadOrder(t, o.id);
 }
 
 export function getOrderDTO(t: Tx | DB, orderId: string): OrderDTO {

@@ -11,8 +11,9 @@ import { cn } from '@/lib/cn';
 import { useTheme } from '@/lib/theme';
 import { useWakeLock } from '@/lib/wakelock';
 
-/** "Teşekkürler" bu kadar kalır, sonra hoş geldiniz */
+/** "Teşekkürler" bu kadar kalır, sonra hoş geldiniz; çağrı numarası varsa müşteri onu okuyabilsin diye biraz daha */
 const THANKS_MS = 10_000;
+const THANKS_CALL_MS = 15_000;
 
 /**
  * Müşteri ekranı (ikinci monitör ya da müşteriye dönük tablet): kasadaki adisyonun kalemleri ve tutarı, ödeme
@@ -38,7 +39,7 @@ export default function CustomerDisplayPage() {
   const q = useQuery({ queryKey: ['display', code], queryFn: () => get<DisplayStateDTO>(`/public/display/${code}`), refetchInterval: 1_500 });
 
   const s = q.data;
-  const state: DisplayStateDTO = !s || (s.kind === 'thanks' && now - s.at > THANKS_MS) ? { kind: 'idle', at: 0 } : s;
+  const state: DisplayStateDTO = !s || (s.kind === 'thanks' && now - s.at > (s.call ? THANKS_CALL_MS : THANKS_MS)) ? { kind: 'idle', at: 0 } : s;
 
   return (
     <div className="flex h-full flex-col bg-bg p-3 md:p-6">
@@ -109,6 +110,7 @@ export default function CustomerDisplayPage() {
               <>
                 <h1 className="mt-8 text-4xl font-semibold tracking-tight md:text-5xl">Teşekkürler, afiyet olsun</h1>
                 <p className="tabular mt-3 text-xl text-muted">{tl(state.total)}</p>
+                {state.call && <CallNumber call={state.call} />}
               </>
             ) : (
               <>
@@ -119,6 +121,21 @@ export default function CustomerDisplayPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Self servisin çağrı kimliği teşekkürde: "No 34" numara (müşteri çağrı ekranında bekler), "Masa 12" masa (personel
+ * getirir). Kasa `callText` biçiminde gönderir.
+ */
+function CallNumber({ call }: { call: string }) {
+  const no = /^No (.+)$/.exec(call)?.[1];
+  return (
+    <div className="mx-auto mt-8 w-fit min-w-56 rounded-2xl border border-line bg-surface-2 px-8 py-5">
+      <p className="text-lg font-medium text-muted">{no ? 'Numaranız' : 'Siparişiniz'}</p>
+      <p className="tabular text-7xl font-bold leading-tight tracking-tight md:text-8xl">{no ?? call}</p>
+      <p className="mt-1 text-lg text-ink-2">{no ? 'Hazır olunca çağrı ekranında görünür' : 'Masanıza getirilecek'}</p>
     </div>
   );
 }

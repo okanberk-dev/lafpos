@@ -11,7 +11,9 @@ Araştırma ve platform belgeleri: `calisma/arastirma/paket-platformlari/` (cali
    fiyatıyla, restoranın kampanyası adisyon indirimi olur. Platformun karşıladığı kampanya ciroyu düşürmez.
    Kalemler adla eşlenir; kasada karşılığı olmayan kalem gizli "Platform ürünü" satırı olur, adı notta.
    **Ret** nedeniyle; denetim kaydına yazılır.
-3. Bar ve mutfak normal fişi alır; adisyonun adı "Yemeksepeti A7KX" gibi (kurye bu kodu söyler).
+3. Bar ve mutfak normal fişi alır; adisyonun adı "Yemeksepeti A7KX" gibi (kurye bu kodu söyler). Gel-al siparişi
+   çağrı ekranında LafPOS numarasıyla değil bu kodla ve platformun adıyla görünür (müşteri uygulamada kodu görür);
+   Siparişler'de teslim aşamasına geçince düşer. Bar ekranının Hazır sekmesine gelmez: teslimi platformun akışında.
 4. Tahsilat: platform tahsil ediyorsa (online ödenmiş ya da platform kuryesi kapıda alır) adisyon platform
    kuryesine verilince (Yolda) ya da teslimde (kendi kurye, gel-al) platformun **online** ödeme türüyle (kanal =
    platform, Z'de online) kapanır; kasada tahsil edilmez. Kendi kuryemiz kapıda alıyorsa ödeme kasada alınır; o

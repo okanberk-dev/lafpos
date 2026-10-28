@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bike, ChefHat, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
+import { Bike, Check, ChefHat, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
@@ -14,6 +14,7 @@ import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { deliverItems, readyToHand } from '@/lib/handoff';
 import { useTick } from '@/lib/hooks';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
@@ -42,6 +43,17 @@ export default function OrdersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
     onError: (e) => toast.err(errorMessage(e)),
   });
+  // Hazır tezgâh ve gel-al siparişi kasadan da teslim edilir (Geri al bildirimde)
+  const canHand = can('mutfak.ekran') || can('siparis.al');
+  const [handing, setHanding] = useState<string | null>(null);
+  const hand = async (o: OrderDTO, ids: string[], name: string) => {
+    setHanding(o.id);
+    try {
+      await deliverItems(ids, name, () => qc.invalidateQueries({ queryKey: ['orders'] }));
+    } finally {
+      setHanding(null);
+    }
+  };
   const delivery = async (o: OrderDTO, body: Record<string, unknown>) => {
     try {
       await post(`/orders/${o.id}/delivery`, body);
@@ -121,9 +133,16 @@ export default function OrdersPage() {
             const Icon = o.source === 'laffogato' ? Globe : o.type === 'paket' ? Bike : o.type === 'gelal' ? ShoppingBag : o.type === 'masa' ? UtensilsCrossed : Store;
             const flow = o.deliveryStatus ? DELIVERY_FLOW[o.deliveryStatus] : null;
             const pendingKitchen = o.items.filter((i) => !i.voided && i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length;
+            const readyIds = canHand ? readyToHand(o) : [];
+            // Adet olarak ("2 ürün" yazan kartta "2 hazır")
+            const readyQty = o.items.filter((i) => readyIds.includes(i.id)).reduce((a, i) => a + i.qty, 0);
+            const name = o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type]);
             const itemCount = o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);
             const methods = [...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))];
-            const hasBadges = !!o.platform || o.extPaid || o.extStage === 'gone' || pendingKitchen > 0 || !!o.deliveryStatus || methods.length > 0;
+            const hasBadges = !!o.platform || o.extPaid || o.extStage === 'gone' || pendingKitchen > 0 || readyIds.length > 0 || !!o.deliveryStatus || methods.length > 0;
+            // Kasanın gel-al siparişinin aşaması bardan izler (kalemlerin hepsi teslim edilince "Teslim edildi"): hazır kalem
+            // varken aşama düğmesi gizli, kartta tek düğme
+            const stageButton = flow && !readyIds.length;
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
               <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
@@ -133,7 +152,7 @@ export default function OrdersPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
-                      {o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type])}{' '}
+                      {name}{' '}
                       <span className="tabular font-normal text-muted">#{o.extNo ?? o.no}</span>
                     </span>
                     {/* Açıkta geçen süre (açılış saati ipucunda), kapananda kapanış saati; boş parça düşer */}
@@ -161,6 +180,13 @@ export default function OrdersPage() {
                         {pendingKitchen} barda
                       </Badge>
                     )}
+                    {/* Gel-al'ın aşama rozeti zaten "Hazır" diyorsa sayı yinelenmez */}
+                    {readyIds.length > 0 && o.deliveryStatus !== 'hazir' && (
+                      <Badge tone="green">
+                        <Check aria-hidden="true" className="size-3" />
+                        {readyQty} hazır
+                      </Badge>
+                    )}
                     {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
                     {methods.length > 0 && <Badge>{methods.join(', ')}</Badge>}
                   </div>
@@ -175,7 +201,12 @@ export default function OrdersPage() {
                     {o.deliveryAddress && <div className="mt-1 text-ink-2">{o.deliveryAddress}</div>}
                   </div>
                 )}
-                {o.status === 'acik' && (o.type === 'paket' || o.type === 'gelal') && (can('paket.yonet') || can('siparis.al')) && (
+                {readyIds.length > 0 && (
+                  <Button variant="primary" className="mt-3" icon={<PackageCheck className="size-4" />} loading={handing === o.id} onClick={() => void hand(o, readyIds, `${name} #${o.no}`)}>
+                    Teslim edildi
+                  </Button>
+                )}
+                {o.status === 'acik' && (o.type === 'paket' || o.type === 'gelal') && (can('paket.yonet') || can('siparis.al')) && ((o.type === 'paket' && couriers.length > 0) || stageButton) && (
                   <div className="mt-3 flex gap-2">
                     {o.type === 'paket' && couriers.length > 0 && (
                       <Select value={o.courierId ?? ''} onChange={(e) => delivery(o, { courierId: e.target.value || null })} aria-label="Kurye" className="min-w-0 flex-1">
@@ -187,7 +218,7 @@ export default function OrdersPage() {
                         ))}
                       </Select>
                     )}
-                    {flow && (
+                    {stageButton && (
                       <Button variant="primary" onClick={() => delivery(o, { deliveryStatus: flow.next })}>
                         {flow.label}
                       </Button>

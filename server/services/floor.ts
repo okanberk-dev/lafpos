@@ -2,7 +2,7 @@ import { and, asc, eq, gt, inArray, isNull, or } from 'drizzle-orm';
 import { PLATFORM_LABEL, type PlatformId } from '@shared/platforms';
 import { numaratorLabel } from '@shared/service-mode';
 import { businessDate } from '@shared/time';
-import type { FloorOrderSummary, FloorStateDTO, KitchenTicket, PickupBoardDTO } from '@shared/types';
+import type { FloorOrderSummary, FloorStateDTO, KitchenTicket, PickupBoardDTO, PickupEntryDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { holdsRoom } from '@shared/karaoke';
 import { siteKaraokeView } from '../sync/laffogato-karaoke';
@@ -75,14 +75,17 @@ export function floorState(t: Tx | DB): FloorStateDTO {
   return result;
 }
 
-/** Bar/mutfak ekranı: istasyona düşen ve henüz hazır olmayan kalemler, fiş (adisyon + gönderim) başına gruplu. */
 /** Hazır olan sipariş çağrı ekranında bu kadar kalır (teslim edilince hemen düşer) */
 export const PICKUP_READY_MS = 10 * 60_000;
+/** Bar ekranının Hazır sekmesi: teslim edilmemiş hazır siparişler bu kadar görünür */
+export const KITCHEN_READY_MS = 30 * 60_000;
 
 /**
  * Çağrı ekranı: tezgâh ve gel-al siparişleri ile sitenin gel-al siparişleri. Bar "Hazır"a basınca sipariş
  * "Hazırlanıyor"dan "Hazır"a geçer; masaya ya da kuryeye giden siparişler burada görünmez. Masa no / numaratör
  * girilmiş tezgâh siparişi (yarı self servis) numara yerine masasıyla görünür: müşteri kalkmaz, personel getirir.
+ * Paket platformunun gel-al siparişi LafPOS numarasıyla değil platformun kısa koduyla görünür (müşteri uygulamada
+ * onu görür). "Teslim edildi" (kalemler serviste ya da gel-al teslim aşamasında) siparişi hemen düşürür.
  */
 export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   const day = getOpenDay(t);
@@ -100,12 +103,14 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   for (const o of orders) {
     const mine = items.filter((i) => i.orderId === o.id && i.stationId);
     if (!mine.length) continue;
-    const entry = {
+    if (o.deliveryStatus === 'teslim') continue;
+    const entry: PickupEntryDTO = {
       id: o.id,
       no: o.source === 'laffogato' ? (o.extNo ?? o.no) : o.no,
       name: o.deliveryName?.trim().split(/\s+/)[0] || null,
       online: o.source === 'laffogato',
       table: o.numarator ?? null,
+      ...(o.platform && o.platformCode ? { platform: o.platform, code: o.platformCode } : {}),
     };
     if (mine.some((i) => i.status === 'yeni' || i.status === 'hazirlaniyor')) {
       board.preparing.push(entry);
@@ -119,7 +124,13 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   return board;
 }
 
-export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; history?: boolean } = {}): KitchenTicket[] {
+/**
+ * Bar/mutfak ekranı. Varsayılan: istasyona düşen ve henüz hazır olmayan kalemler, fiş (adisyon + gönderim) başına
+ * gruplu. `ready` (Hazır sekmesi): son 30 dakikada hazır olup teslim edilmemiş kalemler, sipariş başına tek fiş
+ * (müşteri siparişi bütün alır); site ve paket platformu siparişleri gelmez, onların teslimi kendi akışlarında.
+ * `history` (Geçmiş): son 90 dakikada hazır olanlar ve teslim edilenler.
+ */
+export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; history?: boolean; ready?: boolean } = {}): KitchenTicket[] {
   const now = Date.now();
   const day = getOpenDay(t);
   const since = day ? Math.min(day.openedAt, now - 12 * 3600_000) : now - 24 * 3600_000;
@@ -127,14 +138,16 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
   const base = and(gt(schema.orderItems.sentAt, since), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
   const where = opts.history
     ? and(base, eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['hazir', 'servis']), gt(schema.orderItems.readyAt, now - 90 * 60_000))
-    : and(
-        base,
-        or(
-          and(eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['yeni', 'hazirlaniyor'])),
-          // Hazırlanırken iptal edilen kalem 10 dakika boyunca üstü çizili görünür
-          and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
-        ),
-      );
+    : opts.ready
+      ? and(base, eq(schema.orderItems.voided, false), eq(schema.orderItems.status, 'hazir'), gt(schema.orderItems.readyAt, now - KITCHEN_READY_MS))
+      : and(
+          base,
+          or(
+            and(eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['yeni', 'hazirlaniyor'])),
+            // Hazırlanırken iptal edilen kalem 10 dakika boyunca üstü çizili görünür
+            and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
+          ),
+        );
 
   const rows = t
     .select({ item: schema.orderItems, order: schema.orders })
@@ -143,13 +156,13 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
     .where(and(where, inArray(schema.orders.status, ['acik', 'kapali'])))
     .orderBy(asc(schema.orderItems.sentAt))
     .all()
-    .filter((r) => r.item.stationId);
+    .filter((r) => r.item.stationId && (!opts.ready || (r.order.source === 'pos' && !r.order.platform && r.order.deliveryStatus !== 'teslim')));
 
   const names = userNameMap(t);
   const tableNames = new Map(t.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((x) => [x.id, x.name]));
   const tickets = new Map<string, KitchenTicket>();
   for (const { item, order } of rows) {
-    const key = `${order.id}:${item.batch}`;
+    const key = opts.ready ? `${order.id}:hazir` : `${order.id}:${item.batch}`;
     let ticket = tickets.get(key);
     if (!ticket) {
       ticket = {
@@ -186,5 +199,8 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
   }
   // Yalnız iptal satırı kalan fişte bile iptal bildirimi gösterilsin; ama hiç kalemi kalmayan fiş yok
   const list = [...tickets.values()].filter((tk) => tk.items.length);
+  // Hazır: en uzun bekleyen önce (alınmayan sipariş üstte kalır)
+  const readyOf = (tk: KitchenTicket) => Math.max(...tk.items.map((i) => i.readyAt ?? 0));
+  if (opts.ready) return list.sort((a, b) => readyOf(a) - readyOf(b));
   return opts.history ? list.sort((a, b) => b.sentAt - a.sentAt) : list;
 }
