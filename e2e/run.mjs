@@ -48,6 +48,27 @@ const ROUTES = {
     '/rezervasyon',
     '/raporlar',
     state('/raporlar', 'urunler', (page) => page.getByRole('tab', { name: 'Ürünler', exact: true }).click({ timeout: 5000 })),
+    state('/raporlar', 'platformlar', async (page) => {
+      // Rapor boş görünmesin: sunucu başına bir kez deneme modunda bir Getir siparişi teslim edilir, biri reddedilir
+      await page.evaluate(async () => {
+        const call = async (method, path, body) => {
+          const res = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+          if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+          return res.json();
+        };
+        if ((await call('GET', '/reports/platforms')).platforms.length) return;
+        await call('PUT', '/platforms/getir', { mode: 'deneme', commissionPct: 25 });
+        const sold = await call('POST', '/platforms/getir/test-order', { courier: 'platform' });
+        const { orderId } = await call('POST', `/platforms/orders/${sold.id}/accept`, {});
+        await call('POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'teslim' });
+        const missed = await call('POST', '/platforms/getir/test-order', { courier: 'platform' });
+        await call('POST', `/platforms/orders/${missed.id}/reject`, { reason: 'Çok yoğunuz' });
+        await call('PUT', '/platforms/getir', { mode: 'kapali' });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await settle(page);
+      await page.getByRole('tab', { name: 'Paket platformları', exact: true }).click({ timeout: 5000 });
+    }),
     '/yonetim',
     '/yonetim/genel',
     '/yonetim/menu',
