@@ -13,7 +13,7 @@ hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalı�
 | Veri | Sahibi | LafPOS'ta |
 | --- | --- | --- |
 | Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır; sitenin kapattığını kasiyer açamaz (§2.3 Tükendi kilidi) |
-| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti) | menüyle birlikte gelir |
+| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti; panelde düzenlenmez, site koduyla değişir) | menüyle birlikte gelir, salt okunur; kasaya özel seçenek LafPOS'ta yerel gruptur. Seçeneğin kasadaki Tükendi'si (`option_items.soldOut`) yalnız LafPOS'ta, siteye gitmez (§2.3 Seçenek tükendi) |
 | POS'a özel alanlar: istasyon, kısa ad, düğme rengi, POS sırası, gizli, porsiyon sayacı, `posName` | LafPOS | senkron dokunmaz |
 | POS'a özel ürünler (karaoke saati, kampanya) | LafPOS | `extSource` boş |
 | Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | LafPOS kopyalamaz |
@@ -136,9 +136,15 @@ dakika içinde bar ekranına düşer. Veritabanına dokunmadığı için 5 dakik
   süresi dolup listeden sessizce düşen sipariş (sitede yazım olmaz, sinyal değişmez) kalmasın. Gece yapılmaz.
 
 `GET /api/panel/orders` yanıtında `orders` dizisi yoksa (bakım sayfası, ağ geçidi, beklenmeyen gövde) çekme
-başarısız sayılır, hiçbir sipariş kapatılmaz. Liste, istendiği andaki hâldir: istek gittikten sonra LafPOS'ta
-değişen sipariş (kasada "Teslim edildi", aşama, araya giren daha yeni bir çekmenin getirdiği yeni sipariş) o listeyle
-ne yeniden açılır ne kapanır ne de aşaması geri alınır; sonraki çekme geçerlidir.
+başarısız sayılır, hiçbir sipariş kapatılmaz. **Biçim sürümü:** iki imzalı liste de `version` taşır (laffogato
+`PANEL_ORDERS_VERSION`, `PANEL_MENU_VERSION`; bugün `1`). Değer `1` değilse (başka sayı, metin, `null`) LafPOS listeyi
+okumaz: sipariş çekimi başarısız sayılır (502 `site_orders`, "Site siparişleri tanınmayan biçimde (sürüm N)"; hiçbir
+sipariş kapanmaz, hata Yönetim › Entegrasyon'da görünür), menü senkronu panel listesi alınamamış gibi davranır
+(fiyat, ad, KDV ve yeni ürünler uygulanır, Satışta bilgisine dokunulmaz). Alanı hiç göndermeyen eski site okunur.
+
+Liste, istendiği andaki hâldir: istek gittikten sonra LafPOS'ta değişen sipariş (kasada "Teslim edildi", aşama, araya
+giren daha yeni bir çekmenin getirdiği yeni sipariş) o listeyle ne yeniden açılır ne kapanır ne de aşaması geri
+alınır; sonraki çekme geçerlidir.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım). Raporlarda
@@ -157,17 +163,20 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   üretir, eski kod siteye `active: false` ile gider (sitede de kapanır; site ucu gelene dek eski kart menüyü açmaya
   devam eder, sipariş kodla değil etiketle eşlenir). Sipariş eşlemesi önce `tableCode` (yalnız etkin masa; aşağıda),
   sonra yukarıdaki etiket kuralı.
-  Sitenin LafPOS'un kodunu tanıması için sözleşmeye iki alan eklendi; ikisi de **laffogato işi, bu sürümde sitede yok**:
+  Sitenin LafPOS'un kodunu tanıması için sözleşmeye iki alan eklendi; ikisi de **laffogato#268 (28 Ekim 2026) ile
+  sitede**:
   1. `GET /api/panel/orders` masa siparişinde `tableCode` (siparişin `orders.tableCode` anlık görüntüsü; eski site
      göndermez, LafPOS etiketle eşlemeye düşer).
   2. İmzalı `PUT /api/panel/tables` (LafPOS'un anahtarı) `{ tables: [{ code, name, active }], actor }`: kodu
      `cafe_tables`'a ekler (yeni satır, `rotatedAt` boş) ya da aynı kodlu satırın adını ve etkinliğini günceller;
-     listede olmayan, sitede tanımlı masaya dokunmaz; `active: false` sitede devre dışı bırakır. 200 `{ ok: true,
-     count }`, 400 `{ error: "invalid", field }`, 401, 413. LafPOS kod üretince, yenileyince ve QR'lı masanın adı ya
-     da etkinliği değişince tam listeyi giden kutusundan gönderir (kind `tables.sync`, tek kayıt, son liste geçerli).
+     listede olmayan, sitede tanımlı masaya dokunmaz; `active: false` sitede devre dışı bırakır. Liste en çok 200
+     masa, gövde en çok 64 KB. 200 `{ ok: true, count, created, updated, unchanged }`, 400 `{ error: "invalid", field }`,
+     401, 413 `too_large` (64 KB'ı aşan gövde), 503 `not_configured` (sitede `LAFPOS_SYNC_SECRET` yok) ya da
+     `unavailable` (veritabanına yazılamadı). LafPOS kod üretince, yenileyince ve QR'lı masanın adı ya da etkinliği
+     değişince tam listeyi giden kutusundan gönderir (kind `tables.sync`, tek kayıt, son liste geçerli).
      Site 404 / 405 / 501 dönerse "site henüz almıyor" sayılır, kayıt kalır ve 6 saatte bir yeniden denenir (kod
      üretimi ve Yönetim › Entegrasyon'daki "Şimdi yeniden gönder" (`POST /api/admin/tables/qr/sync`) hemen dener);
-     400 / 403 / 409 / 413 / 422 park edilir.
+     400 / 403 / 409 / 413 / 422 park edilir; 503 ve ağ hatası artan beklemeyle (en çok 6 saat) yeniden denenir.
 - **Kapanış:** site listeyi keserse (`complete: false`, en çok 200 sipariş) ya da okunamayan kalem varsa LafPOS hiçbir
   siparişi kapatmaz. Bütün listede olmayan açık online sipariş "Siteden kalktı" diye kapanır (`extStage = 'gone'`:
   sitede tamamlandı, iptal edildi ya da süresi geçti): servis edilmiş sayılmaz, bar ve çağrı ekranından düşer, denetim
@@ -180,6 +189,35 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
 sitenin kapattığı (senkron) `site` diye işaretlenir. Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar;
 sitenin kapattığı kasada "Sitede satışta değil" diye görünür, düğmesi yoktur, sunucu 403 `site_closed` döner. Menü
 yetkisi olan (`menu.yonet`) hepsini açar: açış önce siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer.
+
+**Seçenek tükendi** (`option_items.soldOut`, göç 0013): yulaf sütü bitince kasiyer ya da bar (`urun.tukendi`, menü
+yetkisi olan da) Tükenen ürünler › Seçenekler'den seçeneği Tükendi yapar ve açar (`POST /api/option-items/:id/sold-out
+{soldOut}`; denetim kaydı `menu.option_sold_out`, `menu` olayıyla bütün kasalar anında görür). Site grubunun seçeneği de
+işaretlenir. Sözleşmede böyle bir alan olmadığı için siteye ve uygulamaya gitmez; menü senkronu ve Yönetim › Seçenekler
+düzenlemesi işarete dokunmaz, gün açılışında sıfırlanmaz (ürünün Tükendi'si gibi). Seçenek penceresinde tükenen seçenek
+gri ve "Tükendi" yazar, seçilemez. Varsayılanı tükenen grup önseçili gelmez. Zorunlu grupta (Türk kahvesinde Orta şeker)
+başka biri seçilene kadar Ekle kapalıdır, hızlı ekleme de pencereyi açar. İsteğe bağlı grupta (Normal süt) satış
+durmaz: grup başlığında yalnız bilgi notu ("Normal tükendi") çıkar, Ekle açıktır, hızlı ekleme pencere açmaz ve sunucu
+o grup için seçenek yazmaz. Site Süt ve Kavrum gruplarını sudan çaya bütün içeceklere bağlar; normal süt bitti diye su
+ve espresso satılamaz olmasın, yerine Laktozsuz ya da Yulaf da yazılmasın (lafmaliyet'e yanlış `ALTERNATIF SÜT`
+satırı, fazladan ek fiyat). Pencere açıkken tükenen ya da sepetteki gönderilmemiş satırda açıkça seçilmiş seçenek seçili
+kalır (seçim, not ve adet korunur): grubu "Yulaf tükendi, başka birini seçin" (isteğe bağlı grupta "... ya da bırakın")
+der, alt çubuk aynı nedeni "Süt: ..." diye yazar, Ekle / Güncelle kasiyer onu bırakana ya da başkasını seçene dek
+kapalıdır. İsteğe bağlı grubun varsayılanı (pencerenin önseçtiği Normal süt) seçili olsa da seçim sayılmaz: tükenince
+pencere onu bırakır (yalnız bilgi notu, Ekle açık), sepetteki satır işaretlenmez, Gönder onu satırdan çıkarır ve sunucu
+o grup için seçenek yazmaz (Su süt yazılmadan satılır; `sendableOptions`). Sepetteki gönderilemeyecek satırın altında
+kırmızı neden yazar ("Yulaf tükendi", "Orta tükendi, şeker seçin", grubu kapandıysa "Seçeneği kalktı, düzenleyin");
+dokununca düzenleme penceresi açılır. İşaretsiz satırın sepette, "Öde" düğmesinde ve müşteri ekranında görünen tutarı
+ve seçenek metni sunucunun yazacağıyla aynıdır (`menuUnit`, `pendingOptionsText`): seçimi olmayan tek seçimlik grupta
+varsayılan, tükenmemişse, ücretiyle ve adıyla girer. Ücretli varsayılan (Karton +₺5) satır eklenirken tükenikti ve satır
+sepetteyken satışa açıldıysa sepet ₺85 ve "Karton" gösterir, sunucu da onu yazar; iki boylu ürünün pencere açılmadan
+eklenmesi de böyle (`tests/secenek-tahmin.test.ts`, node ve sql.js). Pencere açıkken ürünün bir grubu kapanır ya da
+açılırsa, seçenek tükenir ya da satışa açılırsa seçim uzlaştırılır (`reconcilePicks`): kapanan grubun seçimi atılır;
+seçimi boşalan her isteğe bağlı tek seçimlik grubun (yeni açılan, varsayılanı yeniden satışa açılan, seçili seçeneği
+kaldırılan) varsayılanı seçili gelir, ücretli varsayılan ekranda görünmeden ücrete girmez. Sunucu yalnız kasa satışını
+(`POST /api/orders/:id/items`) reddeder: tükenen seçenek açıkça seçildiyse (her grupta) ya da zorunlu tek seçimlik grup
+boş gönderildi ve varsayılanı tükendiyse 409 `option_sold_out` ("Yulaf tükendi", "Orta tükendi; Şeker seçin"). Siteden
+gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez.
 
 **Porsiyon:** siteye bağlı ürünün porsiyonu bitince Tükendi yazımı adisyon kalemiyle aynı işlemde giden kutusuna
 girer (`outbox`: target `laffogato`, kind `menu.isActive`, ürün başına tek kayıt `menu:<extId>`, son istenen durum) ve
@@ -344,7 +382,7 @@ alınır, `GET /api/cash/days/:id/lafmaliyet.json` ile JSON indirilir.
 
 | lafmaliyet alanı | LafPOS kaynağı |
 | --- | --- |
-| `z_no` | `business_days.zNo` |
+| `z_no` | `business_days.zNo` (geçişte ModPOS'un son Z'sinden devam eder: Yönetim › Ayarlar › İlk Z numarası, §8) |
 | `receipts` | tutarı 0'dan büyük kapanan POS adisyonu sayısı (online, iptal ve tamamı ikram adisyonlar hariç) |
 | `z_total` | ödemelerin toplamı (cari tahsilat ve bahşiş hariç) |
 | `cash` | `zField = cash` ödemeler (ödeme anında dondurulan Z alanı; beklenen nakit de aynı alandan hesaplanır, ödeme türü sonradan değişse de ikisi aynı ödemeleri sayar. Yönetim Z'de nakdi yalnız Nakit türüne verir) |
@@ -575,7 +613,7 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
 
-## 6. Durum (27 Ekim 2026)
+## 6. Durum (28 Ekim 2026)
 
 | Durum | Repo | İş |
 | --- | --- | --- |
@@ -585,7 +623,10 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | Birleşti | lafmaliyet#46 (B08) | LafPOS günlük satışları aylık modele; 200 yanıtına `matched` ve `unmatched` |
 | Birleşti | lafpos#11 (L1), #12 (L3), #22 (L2) | Gün sonu satırları, ekler, eski gün engeli; site bağlantısı (sipariş sinyali, Tükendi, menü yoklaması, `.env`'siz istek yok); eğitim günü kapısı, geçmiş günler, yanıt alanları, maliyet doğrulaması ve günlük çekim, açılış sırası (§8) |
 | Birleşti | laffogato#264 (cc0e40a), #265 (F1) | `GET /api/panel/karaoke` LafPOS anahtarına açık (dünden yarına), sürüm yanıtında `karaoke` işareti |
-| Bu PR | lafpos L4 | Karaoke: LafPOS bugünün site rezervasyonlarını okur (§2.4), sayaç rezervasyona bağlanır, ödenmiş saat yeniden ücretlenmez, oda yerel rezervasyona verilmez |
+| Birleşti | lafpos#24 | Ödeme ekranında Zayi: gün sonu `ikram[]` satırında `reason` "Zayi: " ile başlar (§4) |
+| Birleşti | lafpos#26 | Masa QR'ı LafPOS üretir; siparişte `tableCode` ile eşleme, kodlar giden kutusundan `PUT /api/panel/tables`'a (§2.3) |
+| Birleşti | lafpos#25 (L4) | Karaoke: LafPOS bugünün site rezervasyonlarını okur (§2.4), sayaç rezervasyona bağlanır, ödenmiş saat yeniden ücretlenmez, oda yerel rezervasyona verilmez |
+| Birleşti | laffogato#268 | Panel siparişinde `tableCode`; imzalı `PUT /api/panel/tables` (LafPOS anahtarı; §2.3) |
 | Açık | lafmaliyet B09-B11 | Kasa raporu uzlaşması; komisyon kanalları ve ikram; geçişten sonra ModPOS metinleri ve "Kasadaki fiyatlar" |
 | Faz 2 | laffogato F2 + lafpos L5 | Kasada ödenen site siparişinin adisyona aktarılması (bugün §8'deki personel yordamı) |
 | Faz 2 | laffogato | Kasada damga (M2M) ucu |
@@ -603,9 +644,9 @@ Sahibin istediği tek liste (26 Ekim 2026). lafmaliyet deposunda `docs/LAFPOS.md
 PR'ların birleşip yayına çıkması hiçbir şeyi açmaz: anahtar, `.env` ve geçiş günü yokken laffogato, lafmaliyet ve
 LafPOS bugünkü gibi çalışır, kasa ModPOS'tur.
 
-**Ön koşul.** LafPOS (L1-L4), lafmaliyet (B07-B11) ve laffogato (F1) birleşmiş ve yayında (durum §6); LafPOS kafe
-bilgisayarına kurulmuş. Anahtarlar **en erken lafmaliyet B07 yayındayken** girilir: o sürümden önce lafmaliyet Kasa
-formu LafPOS gününü geçiş günü olmadan gösterirdi.
+**Ön koşul.** LafPOS (L1-L4), lafmaliyet (B07-B08; B09-B11 durumu §6) ve laffogato (F1) birleşmiş ve yayında (durum
+§6); LafPOS kafe bilgisayarına kurulmuş. Anahtarlar **en erken lafmaliyet B07 yayındayken** girilir: o sürümden önce
+lafmaliyet Kasa formu LafPOS gününü geçiş günü olmadan gösterirdi.
 
 1. **Anahtarlar**
    - lafmaliyet Production (Vercel): `LAFPOS_SYNC_SECRET`, en az 32 karakter (`openssl rand -base64 48`); paneli
@@ -651,6 +692,14 @@ formu LafPOS gününü geçiş günü olmadan gösterirdi.
      varsayılan başlangıcı olur). Geçiş gününden bu yana kapanmış ama gitmemiş gün varsa "Geçmiş günleri gönder" (§4.4);
      eğitim günlerini atlar.
    - Yazarkasa gerçek fişe geçecekse Yönetim › Yazarkasa POS `tokenx` (Token'ın test ortamında denendikten sonra).
+   - **İlk Z numarası:** ModPOS'ta son gün sonu alındıktan sonra, geçiş günü LafPOS'ta gün açılmadan önce Yönetim ›
+     Ayarlar › Kasa ve gün › İlk Z numarası = ModPOS'un son Z numarası + 1 (son Z 1200 ise 1201); Z zinciri, dolayısıyla
+     Kasa raporunun Z no'su ModPOS'unkinden devam eder. Açılan günün Z'si kayıtlı en büyük Z + 1'dir, ilk Z numarası daha
+     büyükse odur (`shared/z-no.ts`): ayar yalnız yukarı doğru etkiler, kayıtlı günlerin numarası değişmez (eğitim ve
+     deneme günleri de zincirdedir), geçmiş gün yeniden gönderilince `z_conflict` çıkmaz. Son Z ve altı reddedilir
+     (422 `z_start_low`, "Z numarası geri alınamaz; son Z N"); boşaltmak zinciri geri almaz. Yalnız ayar yetkisiyle
+     (`ayar.yonet`) değişir, denetim kaydına uyarı olarak düşer (`settings.z_start`, eski → yeni). Alanın altında son Z
+     ve sıradaki günün Z'si yazar.
    - İlk gün: LafPOS'ta gün sonu → lafmaliyet kartında gün, `counted: true`; Kasa raporu kendiliğinden dolu, banka
      POS ve yazarkasa Z eklenip gönderilir; Kasadaki fiyatlar kaybolur.
 

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "L'Affogato POS: masa, adisyon, mutfak ekranı, kasa, stok, cari ve patron paneli; laffogato ve lafmaliyet ile bağlantılı",
   "engines": {
-    "node": ">=22.11"
+    "node": ">=22.11 <25"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",

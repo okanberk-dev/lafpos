@@ -2,13 +2,14 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { db, schema, tx } from '../db/client';
-import { type AppEnv, actorFrom, blindOrder, can, needDirect } from '../lib/auth';
+import { type AppEnv, actorFrom, blindOrder, can, needDirect, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, isoDateTime, kurus, query } from '../lib/http';
 import { afterDelivery } from '../delivery/service';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets, ordersAwaitingHand } from '../services/floor';
+import { setOptionSoldOut } from '../services/menu';
 import * as orders from '../services/orders';
 import { linkRoom, startRoom, stopRoom } from '../services/rooms';
 import { refreshSiteKaraoke, siteKaraokeOn } from '../sync/laffogato-karaoke';
@@ -344,6 +345,19 @@ posRoutes.post('/kitchen/status', async (c) => {
   const actor = actorFrom(c);
   write((t, fx) => orders.setItemsStatus(t, actor, fx, input));
   return c.json({ ok: true });
+});
+
+// ─── Seçenek tükendi ─────────────────────────────────────────────────────────
+
+/**
+ * Seçeneği kasada Tükendi yap / satışa aç (yulaf sütü bitti): ürünün Tükendi'siyle aynı yetki (`urun.tukendi` ya da
+ * menü yetkisi). Yalnız LafPOS'ta; siteye gitmez
+ */
+posRoutes.post('/option-items/:id/sold-out', async (c) => {
+  const user = c.get('user');
+  if (!can(user, 'menu.yonet')) requirePermission(user, 'urun.tukendi');
+  const input = await body(c, z.object({ soldOut: z.boolean() }));
+  return c.json(write((t, fx) => setOptionSoldOut(t, fx, c.req.param('id'), input.soldOut, { id: user.id, name: user.name })));
 });
 
 export { write };

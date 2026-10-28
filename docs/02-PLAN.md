@@ -42,7 +42,7 @@ lafpos/
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
 | `categories`, `products` | menü | `price` (M/tek), `priceL` (L), `kdvRate`, `extSource/extId` (`laffogato`/`mnu-0011`), POS'a özel alanlar, porsiyon sayacı, `isService` |
-| `option_groups`, `option_items`, `product_option_groups` | süt, kavrum, şurup, ekstra shot, şeker | site kodlarıyla (`oat`, `vanilla`…) |
+| `option_groups`, `option_items`, `product_option_groups` | süt, kavrum, şurup, ekstra shot, şeker | site kodlarıyla (`oat`, `vanilla`…); seçeneğin kasadaki Tükendi'si (`soldOut`, göç 0013; yalnız LafPOS'ta, `docs/03-ENTEGRASYON.md` §2.3) |
 | `happy_hours` | saat/gün/kategori indirim kuralı | |
 | `payment_methods` | nakit, kart, yemek kartları, havale, cari | `zField` → lafmaliyet Z alanı (`cash`, `card`, `meal_card`, `online`, `other`), `channel` → komisyon kanalı (`pluxee`…) |
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |
@@ -70,7 +70,21 @@ Her dalga: kod + birim testleri + tip denetimi + tarayıcıda deneme + GitHub'a 
 2. PIN girişi, oturum, yetki, yetkili onayı, denetim kaydı
 3. Uygulama kabuğu: gezinme, gün durumu, bağlantı göstergesi, kilit, tema
 4. Masa planı: bölümler, durum renkleri, süre/tutar/garson, tezgâh ve gel-al hızlı satış
-5. Adisyon: ürün ızgarası, arama, boy ve seçenek penceresi, not, adet, gönder (istasyona yönlendirme), happy hour
+5. Adisyon: ürün ızgarası, arama, boy ve seçenek penceresi, not, adet, gönder (istasyona yönlendirme), happy hour.
+   Varyant (boy) eklerken seçenek (27 Eki 2026, kullanıcı: "varyant ekleme de seçenekli olsun"): iki boylu ürünün
+   boy düğmesi hemen ekler; zorunlu seçimi olan üründe (Türk kahvesinde şeker) seçenek penceresini o boy seçili açar.
+   Pencerede zorunlu grup boyun hemen altında, önseçimsiz, başlığında "Zorunlu" yazar; seçilene kadar Ekle kapalı,
+   altında "Şeker seçin". İsteğe bağlı grupta varsayılan seçili gelir (Normal süt). Yönetim › Ayarlar › Seçenekleri sor
+   (`askOptions`): "Zorunlu seçim varsa" (`zorunlu`, varsayılan) ya da "Seçenekli her üründe" (`hep`: Latte da
+   pencereyle). Tek boylu seçenekli ürün her iki ayarda pencereyle eklenir. Sunucu değişmedi: kasa satışında (eski
+   istemci) seçeneksiz gelen zorunlu tek seçimlik gruba sunucu varsayılanı yazar; varsayılan kasada tükendiyse 409
+   `option_sold_out` ("Orta tükendi; Şeker seçin", `docs/03-ENTEGRASYON.md` §2.3). İsteğe bağlı grubun tükenen
+   varsayılanı (Normal süt) satışı durdurmaz: sunucu o grup için seçenek yazmaz, pencerede yalnız "Normal tükendi"
+   bilgisi çıkar (su ve espresso süt sormadan satılır). Paket platformu ve site satırına varsayılan yazılmaz, seçim notta
+   ya da sitenin döküm metninde gelir. Sepetteki tahmini tutar ve satır metni sunucunun yazacağı seçeneklerle
+   hesaplanır: hızlı eklenen satırda (seçimsiz tek seçimlik grup) tükenmemiş varsayılan ücretiyle ve adıyla girer
+   (`menuUnit`, `pendingOptionsText`; `tests/secenek-tahmin.test.ts`). Kurallar `src/lib/boot.ts` (`needsChoice`,
+   `asksOptions`, `defaultPicks`, `missingChoice`), testi `tests/varyant-secenek.test.ts`
 6. Masa işlemleri: taşı, birleştir, kalem taşı (böl), kişi sayısı, garson değiştir
 7. İptal, ikram, kalem ve adisyon indirimi: gerekçe, yetki, yetkili PIN onayı, uyarı
 8. Ödeme: nakit (para üstü, hızlı banknot), kart, yemek kartı, havale, cari; parçalı, kalem bazlı, kişi başı;
@@ -188,6 +202,23 @@ A4 masa kartları (`printNow(…, { sheet: true })`). Sipariş eşlemesi önce `
 tanıması için sözleşmeye eklenen `PUT /api/panel/tables` (giden kutusu `tables.sync`; site henüz almıyorsa
 yeniden denenmez) `docs/03-ENTEGRASYON.md` §2.3. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
 (gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
+
+**Seçenek grupları** (28 Ekim 2026, `claude/k-secenek`): kasaya özel (yerel) grup, ürün çekmecesindeki "Yeni grup"
+ile orada açılır ve ürüne seçili gelir (orada "Grup açık" anahtarı yok: yeni grup hep açık); ürün ve grup bağları tek
+istekte, tek işlemde yazılır (`POST /admin/products`
+ve `PATCH /admin/products/:id` gövdesinde isteğe bağlı `groupIds`; gönderilmezse bağlar değişmez, eski
+`PUT /admin/products/:id/groups` geriye uyum için yerinde). Grup penceresi (`src/components/admin/OptionGroupEditor.tsx`)
+Seçenekler'de bağlı ürünleri de seçer (`productIds`, aynı işlem; yalnız bağlar için `PUT /admin/option-groups/:id/products`:
+yeni bağ ürünün öteki gruplarının sonuna eklenir, bir ürüne en çok 12 grup) ve grubu kapatır ("Grup açık"; kapalı grup
+kasada sorulmaz, bağlar durur). Denetim kaydı: seçenek ek fiyatı `menu.option_price` (eski → yeni, eklenen ve
+kaldırılan seçenek, tek seçimlik grubun varsayılanı ücretli bir seçenekten ya da ücretli bir seçeneğe geçince
+`defaultChange`: seçeneksiz kasa satışının tutarı değişir; etkin varsayılan grubun açıklığına bağlı, ücretli
+varsayılanlı grubu kapatmak "grup kapatıldı; varsayılan Karton +₺5,00 → yok", açmak tersini yazar; yalnız ad,
+ücretsizden ücretsize varsayılan ya da ücretsiz varsayılanlı grubun açılıp kapanması yazılmaz), ürün ↔ grup bağı
+`menu.product_groups` (eklenen, çıkarılan);
+ikisi de yazmayla aynı işlemde. Süt, şurup ve shot sitenin kod sabitinden gelir (laffogato
+`src/lib/mobile/customization.ts`, mobil v1 sözleşmesi); LafPOS'ta salt okunur, panelden düzenlenmez. Testler
+`tests/secenek-grubu.test.ts`, e2e'de `/yonetim/menu` › `yeni-urun` ve `yeni-grup` durumları ve telefonda akış.
 
 **Hazır ve teslim** (28 Ekim 2026, `claude/k-hazir`): bar ekranında üç görünüm, Fişler, **Hazır** ve Geçmiş. Hazır
 sekmesi son 30 dakikada hazır olup alınmamış siparişleri sipariş başına tek fişle, en uzun bekleyen üstte gösterir

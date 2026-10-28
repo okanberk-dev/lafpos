@@ -18,7 +18,8 @@ sonu, müşteri/cari, paket, rezervasyon, karaoke odası, raporlar ve patron pan
 
 ## Çalıştırma
 
-Gereken: Node.js 22.11 ya da üstü (üretimde Node 24 LTS önerilir).
+Gereken: Node.js 22.11 ile 24 arası (üretimde Node 24 LTS önerilir). `package.json` `engines.node` üst sınırı
+(`<25`) Vercel'in sessizce yeni ana sürüme geçmesini önler; Node 25 ya da üstüne geçiş ayrı bir iştir.
 
 ```bash
 npm install

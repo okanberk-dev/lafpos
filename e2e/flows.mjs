@@ -118,6 +118,37 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Telefonda patron: yerel ürün çekmecesinde yeni seçenek grubu açar, ürünle tek kayıtta bağlar',
+      () =>
+        withPage(ctx, 'telefon', 'patron', async (page) => {
+          await go(ctx, page, '/yonetim/menu');
+          await page.getByRole('button', { name: 'Yerel ürün', exact: true }).click();
+          const drawer = page.getByRole('dialog', { name: 'Yeni yerel ürün' });
+          await drawer.waitFor();
+          await drawer.getByRole('textbox', { name: /^Ad/ }).fill('E2E etkinlik');
+          await drawer.getByRole('textbox', { name: /^Fiyat/ }).fill('150');
+          await drawer.getByRole('button', { name: 'Yeni grup', exact: true }).click();
+          const editor = page.getByRole('dialog', { name: 'Yeni seçenek grubu' });
+          await editor.waitFor();
+          // Çekmeceden açılan yeni grup hep açık: kapalı kaydedilse ürüne görünmeden bağlanır, çipi çıkmazdı
+          assert((await editor.getByText('Grup açık', { exact: true }).count()) === 0, 'çekmecedeki yeni grup penceresinde "Grup açık" anahtarı var');
+          await editor.getByRole('textbox', { name: /^Ad/ }).fill('E2E bilet');
+          await editor.getByLabel('1. seçenek adı').fill('Ön sıra');
+          await editor.getByLabel('1. seçenek ek fiyatı (₺)').fill('20');
+          await editor.getByRole('button', { name: 'Kaydet', exact: true }).click();
+          await editor.waitFor({ state: 'detached', timeout: 8000 });
+          await drawer.getByRole('button', { name: /^E2E bilet/, pressed: true }).waitFor({ timeout: 8000 });
+          await drawer.getByRole('button', { name: 'Kaydet', exact: true }).click();
+          await drawer.waitFor({ state: 'detached', timeout: 8000 });
+          const menu = await api.call('patron', 'GET', '/admin/menu');
+          const group = menu.optionGroups.find((g) => g.name === 'E2E bilet');
+          const product = menu.products.find((p) => p.name === 'E2E etkinlik');
+          assert(group && product, 'grup ya da ürün oluşmadı');
+          assert(JSON.stringify(product.optionGroupIds) === JSON.stringify([group.id]), `grup ürüne bağlanmadı: ${JSON.stringify(product.optionGroupIds)}`);
+          assert(menu.optionItems.some((i) => i.groupId === group.id && i.price === 2000), 'seçeneğin ek fiyatı kaydedilmedi');
+        }),
+    ],
+    [
       'Bilgisayarda patron: Personel çekmecesinde indirim sınırını değiştirir',
       () =>
         withPage(ctx, 'bilgisayar', 'patron', async (page) => {
@@ -156,6 +187,248 @@ export async function runFlows(ctx) {
           await dialog.getByRole('button', { name: 'Satışa aç', exact: true }).first().click();
           await dialog.getByRole('button', { name: 'Tükendi', exact: true }).first().waitFor({ timeout: 8000 });
         }),
+    ],
+    [
+      'Telefonda kasiyer: yulaf sütü tükendi; açık pencerede (alt çubukta da) ve sepetteki satırda seçili Yulaf uyarır, seçenek penceresinde gri; normal süt bitince Latte süt sormadan eklenir, sepette seçili Normal işaretlenmez',
+      () =>
+        withPage(ctx, 'telefon', 'kasa', async (page) => {
+          // Kısa adı önceki akışta değişti: güncel menüden
+          const boot = await api.call('kasa', 'GET', '/bootstrap');
+          const latte = boot.products.find((p) => p.name === 'Latte');
+          const milk = boot.optionGroups.find((g) => g.name === 'Süt' && latte.optionGroupIds.includes(g.id));
+          const item = (name) => milk.items.find((i) => i.name === name);
+          const soldOut = async (name) => (await api.call('kasa', 'GET', '/bootstrap')).optionGroups.find((g) => g.id === milk.id).items.find((i) => i.name === name).soldOut;
+          const label = latte.shortName?.trim() || latte.name;
+          const modal = page.getByRole('dialog', { name: latte.name });
+          // Grup başlığındaki ipucu (alt çubuktaki "Süt: ..." satırı ayrı); süt isteğe bağlı, bırakmak da olur
+          const gone = modal.getByText('Yulaf tükendi, başka birini seçin ya da bırakın', { exact: true });
+          const why = modal.locator('#secenek-eksik');
+          const inView = (loc) => loc.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return r.width > 0 && r.top >= 0 && r.bottom <= window.innerHeight;
+          });
+          const pressed = async (name) => (await modal.getByRole('button', { name: new RegExp(`^${name}`) }).getAttribute('aria-pressed')) === 'true';
+          try {
+            await go(ctx, page, `/adisyon/${seed.tz.id}`);
+            // Sepette gönderilmemiş "Latte (Yulaf)": aşağıda yulaf bitince düzenlenecek
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
+            await modal.getByRole('button', { name: /^Yulaf/ }).click();
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            // Pencere açıkken Yulaf seçili; bardan Yulaf tükendi (menü olayı açılış verisini yeniler): seçim, not ve adet
+            // korunur, ipucu çıkar, Ekle kapanır
+            await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
+            await modal.getByRole('button', { name: /^Yulaf/ }).click();
+            await modal.getByLabel('Bara ve mutfağa not').fill('E2E notu');
+            await modal.getByRole('button', { name: 'Artır', exact: true }).last().click();
+            await api.call('kasa', 'POST', `/option-items/${item('Yulaf').id}/sold-out`, { soldOut: true });
+            await gone.waitFor({ timeout: 8000 });
+            // Pencere not alanına kaydırılmışken de Ekle'nin neden kapalı olduğu alt çubukta görünür (başlıktaki ipucu
+            // telefonda ekranın dışında kalır)
+            await modal.getByLabel('Bara ve mutfağa not').scrollIntoViewIfNeeded();
+            await why.filter({ hasText: 'Süt: Yulaf tükendi, başka birini seçin ya da bırakın' }).waitFor({ timeout: 8000 });
+            assert(await inView(why), 'alt çubuktaki neden ekranda değil');
+            assert((await modal.getByRole('button', { name: /^Ekle/ }).getAttribute('aria-describedby')) === 'secenek-eksik', 'Ekle nedenine bağlı değil');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-alt-cubuk.png` });
+            assert(await pressed('Yulaf'), 'seçili Yulaf menü olayında bırakıldı');
+            assert(!(await modal.getByRole('button', { name: /^Yulaf/ }).isDisabled()), 'seçiliyken tükenen Yulaf bırakılamıyor');
+            assert(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled(), 'tükenen Yulaf seçiliyken Ekle açık');
+            assert((await modal.getByLabel('Bara ve mutfağa not').inputValue()) === 'E2E notu', 'not menü olayında silindi');
+            const qty = (await modal.getByRole('button', { name: 'Azalt', exact: true }).last().locator('xpath=following-sibling::span[1]').textContent()).trim();
+            assert(qty === '2', `adet menü olayında sıfırlandı: ${qty}`);
+            await gone.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-secili-tukendi.png` });
+            await modal.getByRole('button', { name: /^Laktozsuz/ }).click();
+            assert((await gone.count()) === 0, 'başka süt seçildi ama ipucu duruyor');
+            assert(((await why.textContent()) ?? '').trim() === '', 'başka süt seçildi ama alt çubukta neden duruyor');
+            assert(!(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled()), 'başka süt seçildi ama Ekle kapalı');
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            // Sepetteki "Latte (Yulaf)" düzenlenir: Yulaf seçili kalır, ipucu var, Güncelle kapalı; seçili Yulaf'a dokununca
+            // bırakılır, grup varsayılana (Normal) döner
+            await page.getByRole('tab', { name: /^Adisyon/ }).click();
+            await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).click();
+            await gone.waitFor({ timeout: 8000 });
+            assert(await pressed('Yulaf'), 'düzenlenen satırın tükenen Yulaf\'ı süzüldü');
+            assert(await modal.getByRole('button', { name: /^Güncelle/ }).isDisabled(), 'tükenen Yulaf seçiliyken Güncelle açık');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-duzenle-tukendi.png` });
+            await modal.getByRole('button', { name: /^Yulaf/ }).click();
+            assert((await gone.count()) === 0 && (await pressed('Normal')), 'seçili tükenen Yulaf bırakılınca varsayılan seçilmedi');
+            assert(await modal.getByRole('button', { name: /^Yulaf/ }).isDisabled(), 'bırakılan tükenmiş Yulaf yeniden seçilebiliyor');
+            await modal.getByRole('button', { name: /^Güncelle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            assert((await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).count()) === 0, 'sepette Yulaf kaldı');
+            await page.getByRole('tab', { name: 'Menü', exact: true }).click();
+            // Aşağıdaki adım Yulaf'ı Tükenen ürünler penceresinden işaretler
+            await api.call('kasa', 'POST', `/option-items/${item('Yulaf').id}/sold-out`, { soldOut: false });
+
+            await page.getByRole('button', { name: 'İşlemler' }).click();
+            await page.getByRole('button', { name: /Tükenen ürünler/ }).click();
+            const dialog = page.getByRole('dialog', { name: /Tükenen ürünler/ });
+            await dialog.getByRole('tab', { name: /Seçenekler/ }).click();
+            await dialog.getByPlaceholder(/Seçenek ara/).fill('Yulaf');
+            await dialog.getByRole('button', { name: 'Tükendi', exact: true }).first().click();
+            await dialog.getByRole('button', { name: 'Satışa aç', exact: true }).first().waitFor({ timeout: 8000 });
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-tukendi.png` });
+            assert((await soldOut('Yulaf')) === true, 'Yulaf tükenmedi');
+            await page.keyboard.press('Escape');
+            await dialog.waitFor({ state: 'detached' });
+            // Normal süt de bitti (başka kasa). Süt isteğe bağlı: satış durmaz, boy düğmesi Latte'yi pencere açmadan ekler
+            // (sunucu o grup için süt yazmaz; su ve espresso da böyle satılır)
+            await api.call('kasa', 'POST', `/option-items/${item('Normal').id}/sold-out`, { soldOut: true });
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            const tile = page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).locator('xpath=..');
+            const linesOf = () => page.evaluate((id) => JSON.parse(localStorage.getItem('lafpos.cart') ?? '{}')?.state?.byOrder?.[id] ?? [], seed.tz.id);
+            const before = (await linesOf()).length;
+            await tile.getByRole('button', { name: new RegExp(`^${boot.settings.sizeLabels.M}`) }).click();
+            await page.waitForFunction(([id, n]) => (JSON.parse(localStorage.getItem('lafpos.cart') ?? '{}')?.state?.byOrder?.[id] ?? []).length > n, [seed.tz.id, before], { timeout: 8000 });
+            assert((await modal.count()) === 0, 'isteğe bağlı grubun varsayılanı tükendi diye hızlı ekleme pencere açtı');
+            const added = (await linesOf()).at(-1);
+            assert(added.productId === latte.id && added.options.length === 0, `hızlı eklenen satır beklenen gibi değil: ${JSON.stringify(added)}`);
+            // Pencerede Süt grubunda yalnız bilgi notu, önseçim yok, Ekle açık
+            await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
+            await modal.getByText('Normal tükendi', { exact: true }).waitFor({ timeout: 8000 });
+            assert(!(await pressed('Normal')) && !(await pressed('Laktozsuz')), 'tükenen varsayılanın yerine süt önseçili');
+            assert(await modal.getByRole('button', { name: /^Yulaf/ }).isDisabled(), 'tükenen Yulaf seçilebiliyor');
+            assert(!(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled()), 'isteğe bağlı grubun varsayılanı tükendi diye Ekle kapalı');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-penceresi.png` });
+            const overflow = await overflowReport(page);
+            assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+            // Yalnız pencerenin hedefleri: telefonda arkasında kalan ürün kartları da sayılırdı
+            const small = await modal.locator('button').evaluateAll((els) => els.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && Math.min(r.width, r.height) + 0.5 < 44; }).map((e) => e.textContent.trim()));
+            assert(!small.length, `44 px altı: ${small.join(', ')}`);
+            await modal.getByRole('button', { name: /^Laktozsuz/ }).click();
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            // Sepette Yulaf bırakılınca varsayılana dönen, sonra tükenen Normal (düzenlenen satır) işaretlenmez: önseçili
+            // varsayılan gibi gönderimde çıkar, Gönder 409 almaz (pencere yukarıda "Normal tükendi" dedi, menü güncel)
+            await page.getByRole('tab', { name: /^Adisyon/ }).click();
+            await page.getByRole('button', { name: `${label} düzenle`, exact: true }).first().waitFor({ timeout: 8000 });
+            assert((await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'tükendi' }).count()) === 0, 'tükenen önseçili Normal yüzünden satır işaretli');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-sepet-tukendi.png` });
+          } finally {
+            // Sonraki akışlar Latte'yi seçeneksiz ekler: düşse de sütler açılır
+            for (const name of ['Yulaf', 'Normal']) await api.call('kasa', 'POST', `/option-items/${item(name).id}/sold-out`, { soldOut: false });
+          }
+        }),
+    ],
+    [
+      'Tablette kasiyer: Su penceresi açıkken ve Su sepetteyken önseçili Normal süt tükenir; Ekle açık, satır işaretsiz, Gönder süt yazmadan geçer; açıkça seçilen Yulaf tükenince uyarır',
+      async () => {
+        const boot = await api.call('kasa', 'GET', '/bootstrap');
+        const water = boot.products.find((p) => p.name === 'Su');
+        const milk = boot.optionGroups.find((g) => g.name === 'Süt' && water.optionGroupIds.includes(g.id));
+        assert(water && milk && !milk.required, 'Su ya da isteğe bağlı Süt grubu bulunamadı');
+        const item = (name) => milk.items.find((i) => i.name === name);
+        const mark = (name, soldOut) => api.call('kasa', 'POST', `/option-items/${item(name).id}/sold-out`, { soldOut });
+        const label = water.shortName?.trim() || water.name;
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        try {
+          await withPage(ctx, 'tablet', 'kasa', async (page) => {
+            await go(ctx, page, `/adisyon/${o.id}`);
+            const modal = page.getByRole('dialog', { name: water.name });
+            const add = modal.getByRole('button', { name: /^Ekle/ });
+            const why = modal.locator('#secenek-eksik');
+            const chip = (name, pressed) => modal.getByRole('button', { name: new RegExp(`^${name}`), ...(pressed === undefined ? {} : { pressed }) });
+            const open = async () => {
+              await page.getByPlaceholder('Ürün ara').fill(water.name);
+              await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
+              await modal.waitFor();
+            };
+            // Pencereyle eklenen Su: Normal süt önseçili, satıra yazılır
+            await open();
+            await chip('Normal', true).waitFor({ timeout: 8000 });
+            await add.click();
+            await modal.waitFor({ state: 'detached' });
+            // Pencere yeniden açık, Normal önseçili; bardan Normal tükendi (menü olayı): seçim bırakılır, yalnız bilgi
+            // notu, Ekle açık. Kasiyerden başka süt istenmez (yanlış ALTERNATIF SÜT satırı ya da +25 TL olurdu)
+            await open();
+            await chip('Normal', true).waitFor({ timeout: 8000 });
+            await mark('Normal', true);
+            await modal.getByText('Normal tükendi', { exact: true }).waitFor({ timeout: 8000 });
+            await chip('Normal', false).waitFor({ timeout: 8000 });
+            assert((await modal.getByText(/başka birini seçin/).count()) === 0, 'tükenen önseçili Normal için başka süt isteniyor');
+            assert(((await why.textContent()) ?? '').trim() === '', `alt çubukta neden var: ${await why.textContent()}`);
+            assert(!(await add.isDisabled()), 'önseçili Normal tükendi diye Ekle kapalı');
+            assert((await chip('Laktozsuz').getAttribute('aria-pressed')) === 'false', 'tükenen Normal\'in yerine süt seçildi');
+            await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-secenek-onsecili-tukendi.png` });
+            await add.click();
+            await modal.waitFor({ state: 'detached' });
+            // Sepette ilk satırın seçeneğinde tükenen Normal var: işaretlenmez (Gönder onu çıkarır)
+            const lines = page.getByRole('button', { name: `${label} düzenle`, exact: true });
+            await lines.nth(1).waitFor({ timeout: 8000 });
+            assert((await lines.count()) === 2, `sepette ${await lines.count()} Su satırı var`);
+            assert((await lines.filter({ hasText: 'tükendi' }).count()) === 0, 'önseçili Normal tükenen Su satırı işaretli');
+            await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-sepet-onsecili-tukendi.png` });
+            // Açıkça seçilen Yulaf tükenince eskisi gibi: seçili kalır, uyarı, Ekle kapalı
+            await open();
+            await chip('Yulaf').click();
+            await chip('Yulaf', true).waitFor();
+            await mark('Yulaf', true);
+            await modal.getByText('Yulaf tükendi, başka birini seçin ya da bırakın', { exact: true }).waitFor({ timeout: 8000 });
+            await why.filter({ hasText: 'Süt: Yulaf tükendi, başka birini seçin ya da bırakın' }).waitFor({ timeout: 8000 });
+            assert((await chip('Yulaf').getAttribute('aria-pressed')) === 'true', 'açıkça seçilen Yulaf tükenince bırakıldı');
+            assert(await add.isDisabled(), 'tükenen Yulaf seçiliyken Ekle açık');
+            await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-secenek-yulaf-tukendi.png` });
+            await page.keyboard.press('Escape');
+            await modal.waitFor({ state: 'detached' });
+            // Gönder 409 almaz: iki Su bara gider (tezgâhta Öde'nin yanındaki Gönder)
+            await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+            await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+          });
+          const done = await api.call('kasa', 'GET', `/orders/${o.id}`);
+          const sold = done.items.filter((i) => i.productId === water.id && !i.voided);
+          assert(sold.reduce((a, i) => a + i.qty, 0) === 2, `adisyonda ${sold.length} Su kalemi var`);
+          assert(sold.every((i) => !i.options.some((x) => x.groupId === milk.id)), `Su'ya süt yazıldı: ${JSON.stringify(sold.map((i) => i.options.map((x) => x.name)))}`);
+          assert(sold.every((i) => i.unitPrice === water.price), `Su fiyatı değişti: ${sold.map((i) => i.unitPrice)}`);
+        } finally {
+          for (const name of ['Normal', 'Yulaf']) await mark(name, false);
+        }
+      },
+    ],
+    [
+      'Tablette kasiyer: seçenek penceresi açıkken bağlı grup kapanır, ücretli varsayılanlı grup açılır; seçim uzlaşır, Ekle ve Gönder geçer',
+      async () => {
+        const menu = await api.call('patron', 'GET', '/admin/menu');
+        const category = menu.categories.find((c) => !c.extSource) ?? menu.categories[0];
+        const lid = await api.call('patron', 'POST', '/admin/option-groups', { name: 'E2E kapak', kind: 'single', items: [{ name: 'Kapaklı', isDefault: true }, { name: 'Kapaksız' }] });
+        // Ücretli varsayılanlı grup kapalı başlar: seçeneksiz satışa yazılmaz
+        const cup = await api.call('patron', 'POST', '/admin/option-groups', { name: 'E2E bardak', kind: 'single', active: false, items: [{ name: 'Karton', price: 500, isDefault: true }, { name: 'Kupa' }] });
+        const product = await api.call('patron', 'POST', '/admin/products', { categoryId: category.id, name: 'E2E soğuk kahve', price: 19000, kdvRate: 10, groupIds: [lid.id, cup.id] });
+        const items = (await api.call('patron', 'GET', '/admin/menu')).optionItems;
+        const setOpen = (id, name, active) =>
+          api.call('patron', 'PUT', `/admin/option-groups/${id}`, { name, kind: 'single', active, items: items.filter((i) => i.groupId === id && i.active).map((i) => ({ id: i.id, name: i.name, price: i.price, isDefault: i.isDefault })) });
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        await withPage(ctx, 'tablet', 'kasa', async (page) => {
+          await go(ctx, page, `/adisyon/${o.id}`);
+          await page.getByPlaceholder('Ürün ara').fill('E2E soğuk');
+          await page.getByRole('button', { name: 'E2E soğuk kahve seçenekleri', exact: true }).click();
+          const modal = page.getByRole('dialog', { name: 'E2E soğuk kahve' });
+          await modal.getByRole('button', { name: /^Kapaklı/, pressed: true }).waitFor({ timeout: 8000 });
+          // Pencere açıkken bağlı grup kapandı (başka cihazda Yönetim › Seçenekler): seçimi atılır, yoksa Gönder 400 alırdı
+          await setOpen(lid.id, 'E2E kapak', false);
+          await modal.getByText('E2E kapak', { exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+          // Ücretli varsayılanlı grup açıldı: çipi seçili gelir, Ekle tutarı onu içerir (₺195 gösterilip ₺200 alınmaz)
+          await setOpen(cup.id, 'E2E bardak', true);
+          await modal.getByRole('button', { name: /^Karton/, pressed: true }).waitFor({ timeout: 8000 });
+          const add = modal.getByRole('button', { name: /^Ekle/ });
+          const text = (await add.textContent()) ?? '';
+          assert(/195,00/.test(text), `Ekle tutarı Karton'u içermiyor: ${text}`);
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-secenek-grup-acildi.png` });
+          await add.click();
+          await modal.waitFor({ state: 'detached' });
+          await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+          await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+        });
+        const done = await api.call('kasa', 'GET', `/orders/${o.id}`);
+        const line = done.items.find((i) => i.productId === product.id);
+        assert(line, 'kalem adisyona yazılmadı');
+        assert(line.unitPrice === 19500 && JSON.stringify(line.options.map((x) => x.name)) === '["Karton"]', `kalem beklenen gibi değil: ${line.unitPrice} ${JSON.stringify(line.options.map((x) => x.name))}`);
+        // Sonraki akışlar menüyü değişmemiş bilir: ürün kaldırılır (satıldığı için gizlenir), gruplar kapanır
+        await api.call('patron', 'DELETE', `/admin/products/${product.id}`);
+        await setOpen(cup.id, 'E2E bardak', false);
+      },
     ],
     [
       'Bilgisayarda komut paleti: Ctrl K ile personel sayfasına gider',
@@ -425,6 +698,71 @@ export async function runFlows(ctx) {
         const closed = await api.call('kasa', 'GET', `/orders/${o.id}`);
         assert(closed.status === 'kapali' && closed.total === 0, `adisyon kapanmadı: ${closed.status} ${closed.total}`);
         assert(closed.items.every((i) => i.compKind === 'zayi' && i.compReason === 'Döküldü'), 'kalemler zayi değil');
+      },
+    ],
+    [
+      'Telefonda kasiyer: Türk kahvesinin Büyük düğmesi şekeri sorar (önseçim yok, seçilene kadar Ekle kapalı); Latte boy düğmesiyle hemen eklenir, "Seçenekli her üründe" ayarında o da sorar',
+      async () => {
+        const boot = await api.call('kasa', 'GET', '/bootstrap');
+        const { M, L } = boot.settings.sizeLabels;
+        const latte = boot.products.find((p) => p.name === 'Latte');
+        // Kısa adı önceki akışta değişti: kart güncel adla, boy düğmeleri kartın içinden
+        const latteTile = (page) => page.getByRole('button', { name: `${latte.shortName?.trim() || latte.name} seçenekleri`, exact: true }).locator('xpath=..');
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        try {
+          await withPage(ctx, 'telefon', 'kasa', async (page) => {
+            await go(ctx, page, `/adisyon/${o.id}`);
+            await page.getByPlaceholder('Ürün ara').fill('Türk Kahvesi');
+            await page.getByRole('button', { name: new RegExp(`^${L} `) }).first().click();
+            const modal = page.getByRole('dialog', { name: 'Türk Kahvesi' });
+            await modal.waitFor({ timeout: 8000 });
+            assert((await modal.getByRole('button', { name: new RegExp(`^${L}`) }).getAttribute('aria-pressed')) === 'true', 'dokunulan boy seçili gelmedi');
+            for (const name of ['Sade', 'Az şekerli', 'Orta', 'Şekerli']) assert((await modal.getByRole('button', { name, exact: true }).getAttribute('aria-pressed')) === 'false', `şekerde önseçim: ${name}`);
+            await modal.getByText('Zorunlu', { exact: true }).waitFor();
+            await modal.getByText('Şeker seçin', { exact: true }).waitFor();
+            assert(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled(), 'şeker seçilmeden Ekle açık');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-zorunlu-secenek.png` });
+            const overflow = await overflowReport(page);
+            assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+            // Yalnız pencerenin hedefleri: telefonda arkasında kalan ürün kartları da sayılırdı
+            const small = await modal.locator('button').evaluateAll((els) => els.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && Math.min(r.width, r.height) + 0.5 < 44; }).map((e) => e.textContent.trim()));
+            assert(!small.length, `44 px altı: ${small.join(', ')}`);
+            await modal.getByRole('button', { name: 'Sade', exact: true }).click();
+            assert((await modal.getByText('Şeker seçin', { exact: true }).count()) === 0, 'şeker seçildi ama uyarı duruyor');
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            // Zorunlu seçimi olmayan iki boylu ürün: boy düğmesi pencere açmadan ekler
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            await latteTile(page).getByRole('button', { name: new RegExp(`^${M} `) }).click();
+            assert((await page.getByRole('dialog').count()) === 0, 'Latte için pencere açıldı');
+            await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+            await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+          });
+          const sent = await api.call('kasa', 'GET', `/orders/${o.id}`);
+          const rows = sent.items.map((i) => `${i.name} ${i.size} ${i.optionsText}`.trim());
+          assert(rows.includes('Türk Kahvesi L Sade') && sent.items.some((i) => i.productId === latte.id && i.size === 'M'), `adisyonda beklenen kalemler yok: ${rows.join(', ')}`);
+          // Patron "Seçenekli her üründe"yi seçer: Latte'nin boy düğmesi de pencereyi açar
+          await withPage(ctx, 'bilgisayar', 'patron', async (page) => {
+            await go(ctx, page, '/yonetim/ayarlar');
+            await page.getByRole('button', { name: 'Seçenekli her üründe', exact: true }).click();
+            await page.getByRole('button', { name: 'Kaydet', exact: true }).first().click();
+            await page.getByText('Ayarlar kaydedildi').waitFor({ timeout: 8000 });
+          });
+          const after = await api.call('kasa', 'GET', '/bootstrap');
+          assert(after.settings.askOptions === 'hep', `ayar kaydedilmedi: ${after.settings.askOptions}`);
+          await withPage(ctx, 'telefon', 'kasa', async (page) => {
+            await go(ctx, page, `/adisyon/${o.id}`);
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            await latteTile(page).getByRole('button', { name: new RegExp(`^${L} `) }).click();
+            const modal = page.getByRole('dialog', { name: latte.name });
+            await modal.waitFor({ timeout: 8000 });
+            assert(!(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled()), 'isteğe bağlı seçenekte Ekle kapalı');
+            await page.keyboard.press('Escape');
+            await modal.waitFor({ state: 'detached' });
+          });
+        } finally {
+          await api.call('patron', 'PUT', '/admin/settings', { askOptions: 'zorunlu' });
+        }
       },
     ],
     [

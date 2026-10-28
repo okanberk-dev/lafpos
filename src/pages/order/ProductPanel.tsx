@@ -5,7 +5,7 @@ import type { ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
 import { EmptyState } from '@/components/ui/misc';
-import { useBoot } from '@/lib/boot';
+import { asksOptions, productGroups, useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { DEMO, demoProductImage } from '@/lib/demo';
@@ -227,7 +227,7 @@ function CategoryChip({ active, color, onClick, children }: { active: boolean; c
 }
 
 /**
- * Ürün kartı: dokununca eklenir (iki boyluda boy düğmeleri). Görselli düzende üstte sitedeki ürün fotoğrafı
+ * Ürün kartı: dokununca eklenir (iki boyluda boy düğmeleri; zorunlu seçimi olan iki boylu ürün seçenek penceresiyle). Görselli düzende üstte sitedeki ürün fotoğrafı
  * (dekupaj, gri sahnede), görseli olmayan üründe adın baş harfleri. Seçenekli üründe köşede seçenek düğmesi;
  * durum (tükendi, son porsiyon) küçük rozet.
  */
@@ -249,10 +249,15 @@ function ProductTile({
   // Dekupaj (saydam köşe) gri sahnede ortada durur; fotoğraf sahneyi doldurur
   const [photo, setPhoto] = useState(false);
   const soldOut = !p.active;
-  const hasOptions = p.optionGroupIds.length > 0;
+  // Açık gruplardan (asksOptions ve needsChoice ile aynı kaynak): tek grubu kapatılmış ürün hızlı eklenir, simgesi çıkmaz
+  const hasOptions = productGroups(boot, p).length > 0;
   const twoSizes = p.priceL != null;
   const label = p.shortName?.trim() || p.name;
   const off = soldOut || disabled;
+  // İki boylu üründe zorunlu seçim (Türk kahvesinde şeker) varsa ya da ayar "Seçenekli her üründe" ise kart ve boy
+  // düğmesi hemen eklemez, seçenek penceresini o boy seçili açar
+  const ask = twoSizes && asksOptions(boot, p);
+  const addSize = (size: Size) => (ask ? onCustomize(p, size) : onQuickAdd(p, size));
   const src = !p.image || broken ? null : DEMO ? demoProductImage(p.image) : `/media/products/${p.id}?v=${imageVersion(p.image)}`;
 
   return (
@@ -266,8 +271,10 @@ function ProductTile({
       <button
         disabled={off}
         // Fiyatı 0 olan açık ürün (etkinlik ücreti, özel pasta) fiyat girilsin diye pencereyle açılır
-        onClick={() => ((twoSizes || !hasOptions) && (twoSizes || p.price > 0) ? onQuickAdd(p, twoSizes ? 'M' : 'TEK') : onCustomize(p, 'TEK'))}
-        className={cn('flex flex-1 flex-col items-stretch rounded-xl text-left transition-colors duration-150 active:bg-press', !withImage && hasOptions && 'pr-12')}
+        onClick={() => (twoSizes ? addSize('M') : !hasOptions && p.price > 0 ? onQuickAdd(p, 'TEK') : onCustomize(p, 'TEK'))}
+        aria-haspopup={ask ? 'dialog' : undefined}
+        // İki boylu kartta ad tek satırsa düğme 41 px kalıyordu: dokunmatikte 44 (kart da pencereyi açabilir)
+        className={cn('flex min-h-11 flex-1 flex-col items-stretch rounded-xl text-left transition-colors duration-150 active:bg-press pointer-fine:min-h-0', !withImage && hasOptions && 'pr-12')}
       >
         {withImage && (
           <span aria-hidden="true" className="relative mx-1.5 mt-1.5 grid h-[88px] place-items-center overflow-hidden rounded-lg bg-surface-2">
@@ -321,20 +328,21 @@ function ProductTile({
       )}
       {twoSizes && (
         <div className="grid grid-cols-2 gap-2 px-2 pb-2">
-          <SizeButton disabled={off} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => onQuickAdd(p, 'M')} />
-          <SizeButton disabled={off} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => onQuickAdd(p, 'L')} />
+          <SizeButton disabled={off} dialog={ask} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => addSize('M')} />
+          <SizeButton disabled={off} dialog={ask} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => addSize('L')} />
         </div>
       )}
     </div>
   );
 }
 
-function SizeButton({ label, price, onClick, disabled }: { label: string; price: number; onClick: () => void; disabled?: boolean }) {
+function SizeButton({ label, price, onClick, disabled, dialog }: { label: string; price: number; onClick: () => void; disabled?: boolean; dialog?: boolean }) {
   return (
     <button
       disabled={disabled}
       onClick={onClick}
       aria-label={`${label} ${tlShort(price)}`}
+      aria-haspopup={dialog ? 'dialog' : undefined}
       className="flex min-h-11 flex-col items-center justify-center rounded-lg bg-surface-3 leading-tight transition-[background-color,color,box-shadow] duration-150 hover:bg-[var(--admin-primary-soft)] hover:text-primary active:bg-[var(--admin-primary-soft)] active:text-primary active:ring-1 active:ring-inset active:ring-primary pointer-fine:min-h-10"
     >
       <span className="text-xs font-medium text-muted">{label}</span>

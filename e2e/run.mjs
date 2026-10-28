@@ -38,8 +38,21 @@ const ROUTES = {
   patron: [
     '/patron',
     '/masalar',
+    // İki boylu üründe zorunlu seçim: Türk kahvesinin Büyük düğmesi seçenek penceresini açar (şeker seçilmedi, Ekle kapalı)
+    state('@tz', 'zorunlu-secenek', async (page) => {
+      await page.getByPlaceholder('Ürün ara').fill('Türk Kahvesi', { timeout: 5000 });
+      await page.getByRole('button', { name: /^Büyük / }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Türk Kahvesi' }).waitFor({ timeout: 5000 });
+    }),
     '/siparisler',
     '/mutfak',
+    // Tükenen ürünler › Seçenekler (yulaf sütü bitti); telefon ve tablette araçlar "Diğer" penceresinde
+    state('/mutfak', 'tukenen-secenekler', async (page) => {
+      const more = page.getByRole('button', { name: 'Diğer', exact: true });
+      if (await more.isVisible()) await more.click({ timeout: 5000 });
+      await page.getByRole('button', { name: 'Tükendi', exact: true }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Tükenen ürünler' }).getByRole('tab', { name: /Seçenekler/ }).click({ timeout: 5000 });
+    }),
     state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })),
     '/cagri',
     '/musteri-ekrani',
@@ -86,6 +99,15 @@ const ROUTES = {
     '/yonetim',
     '/yonetim/genel',
     '/yonetim/menu',
+    state('/yonetim/menu', 'yeni-urun', async (page) => {
+      await page.getByRole('button', { name: 'Yerel ürün', exact: true }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Yeni yerel ürün' }).waitFor({ timeout: 5000 });
+    }),
+    state('/yonetim/menu', 'yeni-grup', async (page) => {
+      await page.getByRole('button', { name: 'Yerel ürün', exact: true }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Yeni yerel ürün' }).getByRole('button', { name: 'Yeni grup', exact: true }).click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Yeni seçenek grubu' }).waitFor({ timeout: 5000 });
+    }),
     '/yonetim/secenekler',
     state('/yonetim/secenekler', 'yeni-grup', async (page) => {
       await page.getByRole('button', { name: 'Grup ekle', exact: true }).first().click({ timeout: 5000 });

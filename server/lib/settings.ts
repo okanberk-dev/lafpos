@@ -16,6 +16,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   autoLockMinutes: 0,
   keepAwake: true,
   productImages: true,
+  // Şeker gibi zorunlu seçim kasada sorulsun; Latte gibi isteğe bağlı seçenekli ürün boy düğmesiyle hemen eklenir
+  askOptions: 'zorunlu',
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
   odenmezReasons: ['Personel yemeği', 'Patron / ortak', 'Müşteri şikâyeti', 'Deneme'],
@@ -64,6 +66,8 @@ export interface PrivateSettings {
   okcOperatorMethods: Record<string, string>;
   /** Yönetim › Roller ve yetkiler'de düzenlenen rol yetki setleri; olmayan rol varsayılanını kullanır */
   rolePermissions: RoleMatrix;
+  /** İlk Z numarası: geçişte ModPOS'un son Z'si + 1; zincir yalnız yukarı doğru etkilenir (`nextZNo`). null: 1'den */
+  zNoStart: number | null;
   /**
    * Paket platformları: mod, hazırlık süresi, otomatik kabul, tahmini komisyon (shared/platforms.ts). Arayüze
    * bootstrap'la gitmez: komisyon oranı maliyettir; ekranlar `GET /api/platforms`'tan okur (oran yalnız maliyet,
@@ -86,6 +90,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
   rolePermissions: {},
+  zNoStart: null,
   platforms: PLATFORM_DEFAULTS,
 };
 
@@ -126,6 +131,12 @@ export function updateSettings(patch: Partial<AllSettings>, t: Tx | DB = db) {
   cache = null;
   for (const [key, value] of Object.entries(patch)) {
     if (!(key in DEFAULTS) || value === undefined) continue;
+    // null: kayıt silinir, ayar varsayılanına döner (değer sütunu boş olamaz; null'u yalnız varsayılanı null olan
+    // ayar kabul eder, ör. ilk Z numarası)
+    if (value === null) {
+      t.delete(schema.settings).where(eq(schema.settings.key, key)).run();
+      continue;
+    }
     const existing = t.select().from(schema.settings).where(eq(schema.settings.key, key)).get();
     if (existing) t.update(schema.settings).set({ value, updatedAt: now }).where(eq(schema.settings.key, key)).run();
     else t.insert(schema.settings).values({ key, value, updatedAt: now }).run();
