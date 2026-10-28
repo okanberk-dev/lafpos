@@ -73,6 +73,8 @@ const ACTION_LABEL: Record<string, string> = {
   'order.zayi': 'Zayi',
   'payment.refund': 'Ödeme iptali',
   'platform.accept': 'Platform kabulü',
+  'platform.auto_accept': 'Otomatik kabul',
+  'platform.auto_skip': 'Otomatik kabul edilmedi',
   'platform.product_map': 'Ürün eşleme',
   'platform.reject': 'Platform reddi',
   'platform.settings': 'Platform ayarı',

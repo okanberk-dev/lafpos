@@ -1,15 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { PLATFORMS, type PlatformId } from '@shared/platforms';
+import { AUTO_ACCEPT_MAX_LIMIT, PLATFORM_MODES, PLATFORMS, type PlatformId } from '@shared/platforms';
 import { db, tx } from '../db/client';
 import { type AppEnv, actorFrom, can, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
-import { body, conflict, HttpError } from '../lib/http';
-import { acceptFailedLocally, announceAccept, announceReject, liveStatus, rehearse, withDecisionLock } from '../delivery/live';
+import { body, conflict, HttpError, patchOf } from '../lib/http';
+import { acceptFlow, announceReject, autoAccept, liveStatus, withDecisionLock } from '../delivery/live';
 import {
-  acceptPlatformOrder,
+  autoAcceptors,
   closeCancelPending,
-  expiredMessage,
   getPlatformOrder,
   listPlatformOrders,
   listPlatformProducts,
@@ -39,7 +38,7 @@ const platformParam = (raw: string): PlatformId => {
 platformRoutes.get('/', (c) => {
   const user = c.get('user');
   if (!can(user, 'paket.yonet') && !can(user, 'siparis.al') && !can(user, 'senkron.yonet')) requirePermission(user, 'paket.yonet');
-  return c.json({ settings: platformSettings(), orders: listPlatformOrders(db), live: liveStatus() });
+  return c.json({ settings: platformSettings(), orders: listPlatformOrders(db), live: liveStatus(), acceptors: autoAcceptors(db) });
 });
 
 /** Ürün eşleme: platform ürünü → LafPOS ürünü (menü ya da bağlantı yetkisi; görmek için paket yetkisi yeter) */
@@ -57,53 +56,43 @@ platformRoutes.put('/products/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+const settingsShape = patchOf(
+  z.object({
+    mode: z.enum(PLATFORM_MODES),
+    prepMinutes: z.number().int().min(5).max(120),
+    commissionPct: z.number().min(0).max(60),
+    autoAccept: z.boolean(),
+    autoAcceptUserId: z.string().max(40).nullable(),
+    autoAcceptMaxKurus: z.number().int().min(100).max(AUTO_ACCEPT_MAX_LIMIT),
+  }),
+);
+
 platformRoutes.put('/:platform', async (c) => {
   const user = c.get('user');
   if (!can(user, 'senkron.yonet')) requirePermission(user, 'ayar.yonet');
   const platform = platformParam(c.req.param('platform'));
-  const input = await body(
-    c,
-    z.object({ mode: z.enum(['kapali', 'deneme', 'canli']).optional(), prepMinutes: z.number().int().min(5).max(120).optional(), commissionPct: z.number().min(0).max(60).optional() }),
-  );
+  const input = await body(c, settingsShape);
   const saved = write((t, fx) => savePlatformSettings(t, actorFrom(c), fx, platform, input));
   return c.json(saved);
 });
 
-/** Deneme modunda platformdan gelmiş gibi sipariş (simülatör) */
+/** Deneme modunda platformdan gelmiş gibi sipariş (simülatör); otomatik kabul açıksa aynı yoldan kabul edilir (platforma gitmez) */
 platformRoutes.post('/:platform/test-order', async (c) => {
   requirePermission(c.get('user'), 'paket.yonet');
   const platform = platformParam(c.req.param('platform'));
   const input = await body(c, z.object({ courier: z.enum(['platform', 'restoran', 'gelal']).optional() }));
   const row = write((t, fx) => sendTestOrder(t, fx, platform, input));
-  return c.json({ id: row.id });
+  const auto = await autoAccept(row.id);
+  return c.json({ id: row.id, autoAccepted: auto === 'accepted' });
 });
 
-/**
- * Kabul: canlı bağlantıda önce adisyonun açılabildiği yerelde denenir (gün açık, ürün tükenmemiş, porsiyon yetiyor;
- * geri alınır), sonra platforma bildirilir (platform reddederse 502, yerelde kabul edilmez: platform sipariş durumunun
- * sahibidir), sonra adisyon açılır. Platform kabul edip adisyon yine de açılamazsa kayıt bunu tutar: süre dolmaz, yeniden
- * Kabul platforma ikinci kez gitmez. Deneme siparişi platforma gitmez. İki ekrandan aynı anda karar verilmez.
- */
+/** Kabul (server/delivery/live.ts `acceptFlow`; otomatik kabulle aynı yol) */
 platformRoutes.post('/orders/:id/accept', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'paket.yonet');
   const input = await body(c, z.object({ prepMinutes: z.number().int().min(5).max(120).optional() }));
-  return withDecisionLock(c.req.param('id'), async () => {
-    const row = getPlatformOrder(db, c.req.param('id'));
-    if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
-    const announced = row.notifiedStatus === 'picked';
-    if (!announced && row.expiresAt != null && row.expiresAt <= Date.now()) throw conflict(expiredMessage(row), 'expired');
-    const prep = input.prepMinutes ?? platformSettings()[row.platform].prepMinutes;
-    if (!row.payload.simulated && !announced) rehearse((t) => acceptPlatformOrder(t, user, new Effects(), row.id, prep, { notifiedStatus: 'picked' }));
-    const notifiedStatus = await announceAccept(row, prep);
-    try {
-      const res = write((t, fx) => acceptPlatformOrder(t, user, fx, row.id, prep, { notifiedStatus }));
-      return c.json({ orderId: res.order.id, prepMinutes: res.prepMinutes });
-    } catch (e) {
-      if (notifiedStatus) acceptFailedLocally(getPlatformOrder(db, row.id), e);
-      throw e;
-    }
-  });
+  const res = await acceptFlow(user, c.req.param('id'), input.prepMinutes);
+  return c.json({ orderId: res.order.id, prepMinutes: res.prepMinutes });
 });
 
 platformRoutes.post('/orders/:id/reject', async (c) => {

@@ -222,7 +222,51 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     isteğe bağlı `GETIR_RESTAURANT_ID`. Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
   - **Sonraki:** Migros Yemek (belge herkese açık değil; görüşme gerekir).
 
+## Otomatik kabul
+İsteğe bağlı ve **varsayılan kapalı**, platform başına (Yönetim › Paket platformları, platform kartında "Otomatik
+kabul"; ayar `PlatformSettings.autoAccept`, `autoAcceptUserId`, `autoAcceptMaxKurus`, ayar JSON'unda durur). Açarken
+"Kabul eden" seçilir: etkin ve paket yetkili (`paket.yonet`) bir kişi; seçilmemişse ya da kişi uygun değilse ayar
+kaydedilmez (422 `auto_accept_user`). Açıp kapamak, kişiyi ya da sınırı değiştirmek denetim kaydına uyarı düşer.
+
+Yoklama yeni siparişi kayda aldıktan sonra (aynı turdaki platform iptali ve panelden kabul işlendikten sonra) her
+yeni kaydı **bir kez** dener; kasadaki Kabul ile aynı yoldan gider (`server/delivery/live.ts` `acceptFlow`: aynı
+kilit, yerelde prova, önce platforma, sonra adisyon). O an başka ekranda karar veriliyorsa (409 `busy`) sonraki
+yoklamada bir kez daha denenir. Deneme modunda "Deneme siparişi gönder" de aynı yoldan dener (platforma gitmez).
+Kabul edilmiş kayıt yeniden denense de (kasa yeniden başladı) kilit ve durum denetimi ikinci kabulü ve ikinci
+platform çağrısını önler.
+
+Bütün koşullar sağlanmazsa sipariş **elle kabul bekler**: nedeni şeritte bilgi notu olarak görünür ("Otomatik kabul
+edilmedi: eşleşmeyen kalem (…)"; tutar ya da ödeme doğrulanacaksa bağdaştırıcının metni; kayıtta platformun hatası gibi
+başka bir not varsa o ezilmez) ve denetim kaydına bir kez düşer (`platform.auto_skip`). Koşullar (`autoAcceptBlocker`, sırayla):
+1. Ayar açık ve platform Kapalı değil.
+2. Platformun test siparişi değil.
+3. Mod: Canlı'da yalnız gerçek sipariş ve kasa kurulum modunda değil; Deneme'de (yalnız kurulum modunda) yalnız
+   deneme siparişi.
+4. Platformun tabletinde kabul edilmiş değil (`preAccepted`: barda çift hazırlık riski), platformun panelinden kabul
+   edilmiş değil (`notifiedStatus` boş), ileri tarihli değil (saati okunamamış ileri tarihli de: `scheduledUnknown`).
+5. Kabul süresinin bitmesine en az 30 saniye var.
+6. Kabul eden kişi her denemede yeniden okunur: etkin ve paket yetkili değilse çalışmaz (ilk seferde uyarı).
+7. Gün açık ve güncel (05:00 kuralı; önceki günün gün sonu alınmamışsa olmaz).
+8. Tahsilat platformda (`platformCollects`): kendi kuryemizin kapıda alacağı ya da Yemeksepeti kuryesinin kasaya
+   nakit bırakacağı sipariş elle.
+9. Tutar tutarlı: bağdaştırıcı tutarı ya da tahsilatı doğrulanmalı diye işaretlemedi (`amountReview`: Getir'in
+   açıklanamayan farkı, Yemeksepeti'nde ödenmemiş siparişte alınacak tutarın sıfır görünmesi, Trendyol Go'da ödenen
+   tutarın olmaması ya da kalemleri aşması; kendi kuryemizin siparişinde ödeme türünün belirsiz olması: Getir'de
+   "Getir'den doğrulayın" etiketi, Trendyol Go'da ödeme türünün gelmemesi); tutarlar kuruş tam sayı ve sıfırdan küçük değil, adetler tam sayı; Σ(birim × adet) = kalemler;
+   restoran kampanyası + platform kampanyası + müşterinin ödediği = kalemler; müşterinin ödediği sıfırdan büyük.
+10. Müşterinin ödediği ayardaki en yüksek tutarı (varsayılan 1.500 TL) aşmıyor.
+11. Bütün kalemler kasadaki ürüne eşleşmiş (ücret satırı serbest) ve hiçbiri tükenmemiş.
+12. Prova geçiyor (porsiyon yetiyor) ve provadaki adisyonun tutarı platformun ödeyeceğine (kalemler − restoran
+    kampanyası) eşit.
+
+Hazırlık süresi ayardaki `prepMinutes`. Kabul eden ayarda seçilen kişidir (`decidedBy`); denetim kaydında
+`platform.auto_accept` ve "<ad> (otomatik)", kayıtta "20 dk, otomatik". Kasada bildirim çıkar, bar fişi her zamanki
+gibi düşer. Platform kabulü almazsa kayıt bekler (uyarı; elle kabul edilir), platform kabul edip adisyon açılamazsa
+`platform.accept_failed` alarmı (Kabul yalnız adisyonu açar, platforma ikinci kez gidilmez).
+
 ## Uçlar
-`GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·
+`GET /api/platforms` (ayarlar, siparişler, `live` canlı durum, `acceptors` otomatik kabulde seçilebilecek kişiler) ·
+`PUT /api/platforms/:platform` (`mode`, `prepMinutes`, `commissionPct`, `autoAccept`, `autoAcceptUserId`,
+`autoAcceptMaxKurus`) · `POST /api/platforms/:platform/test-order` (`autoAccepted`) ·
 `POST /api/platforms/orders/:id/accept|reject|platform-cancel|cancel-close` · teslim: `POST /api/orders/:id/delivery` ·
 ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id`.

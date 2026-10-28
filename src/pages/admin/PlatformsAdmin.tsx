@@ -2,13 +2,25 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bike, ChevronRight, PackageSearch, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { tl } from '@shared/money';
-import { PLATFORM_LABEL, PLATFORM_MODE_LABEL, PLATFORM_STATUS_LABEL, PLATFORMS, type PlatformId, type PlatformLiveStatus, type PlatformMode, type PlatformProductDTO, type PlatformSettings } from '@shared/platforms';
+import {
+  AUTO_ACCEPT_MAX_DEFAULT,
+  AUTO_ACCEPT_MAX_LIMIT,
+  PLATFORM_LABEL,
+  PLATFORM_MODE_LABEL,
+  PLATFORM_STATUS_LABEL,
+  PLATFORMS,
+  type PlatformId,
+  type PlatformLiveStatus,
+  type PlatformMode,
+  type PlatformProductDTO,
+  type PlatformSettings,
+} from '@shared/platforms';
 import { fmtDateTime, fmtTime } from '@shared/time';
 import { Badge, Card, CARD, CODE, EmptyState, PageHeader, Segmented } from '@/components/admin/ui';
 import { PlatformBadge } from '@/components/PlatformBadge';
 import { usePlatforms } from '@/components/PlatformInbox';
 import { Button } from '@/components/ui/Button';
-import { Field, NumberInput, Select } from '@/components/ui/Field';
+import { Field, NumberInput, Select, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -87,7 +99,15 @@ export default function PlatformsAdmin() {
       {header}
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {PLATFORMS.map((p) => (
-          <PlatformCard key={p} platform={p} settings={data.data!.settings[p]} live={data.data!.live?.[p]} canEdit={can('senkron.yonet') || can('ayar.yonet')} canTest={can('paket.yonet')} />
+          <PlatformCard
+            key={p}
+            platform={p}
+            settings={data.data!.settings[p]}
+            live={data.data!.live?.[p]}
+            acceptors={data.data!.acceptors ?? []}
+            canEdit={can('senkron.yonet') || can('ayar.yonet')}
+            canTest={can('paket.yonet')}
+          />
         ))}
       </div>
       <ProductMapping canEdit={can('menu.yonet') || can('senkron.yonet')} />
@@ -173,9 +193,27 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform: PlatformId; settings: PlatformSettings; live?: PlatformLiveStatus; canEdit: boolean; canTest: boolean }) {
+function PlatformCard({
+  platform,
+  settings,
+  live,
+  acceptors,
+  canEdit,
+  canTest,
+}: {
+  platform: PlatformId;
+  settings: PlatformSettings;
+  live?: PlatformLiveStatus;
+  acceptors: { id: string; name: string }[];
+  canEdit: boolean;
+  canTest: boolean;
+}) {
   const qc = useQueryClient();
+  const boot = useBoot();
   const [testing, setTesting] = useState(false);
+  // Seçilen kişi sonradan kapatıldıysa ya da yetkisi alındıysa listede adıyla durur: otomatik kabul onun adına çalışmaz
+  const acceptorId = settings.autoAcceptUserId ?? '';
+  const staleAcceptor = acceptorId && !acceptors.some((a) => a.id === acceptorId) ? (boot.users.find((u) => u.id === acceptorId)?.name ?? 'Silinmiş kişi') : null;
   const save = async (patch: Partial<PlatformSettings>) => {
     try {
       await put(`/platforms/${platform}`, patch);
@@ -189,9 +227,9 @@ function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform
   const test = async () => {
     setTesting(true);
     try {
-      await post(`/platforms/${platform}/test-order`);
+      const res = await post<{ id: string; autoAccepted?: boolean }>(`/platforms/${platform}/test-order`);
       qc.invalidateQueries({ queryKey: ['platforms'] });
-      toast.ok('Deneme siparişi geldi: üstteki şeritten onaylayın');
+      toast.ok(res.autoAccepted ? 'Deneme siparişi geldi ve otomatik kabul edildi' : 'Deneme siparişi geldi: üstteki şeritten onaylayın');
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {
@@ -225,6 +263,41 @@ function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform
           <Field label="Tahmini komisyon (%)" hint="0–60">
             <NumberInput decimals={2} value={settings.commissionPct} min={0} max={60} fallback={0} disabled={!canEdit} onCommit={(commissionPct) => void save({ commissionPct })} />
           </Field>
+        </div>
+        <div className="space-y-3 border-t border-[var(--admin-divider)] pt-3">
+          <Toggle
+            block
+            checked={settings.autoAccept}
+            disabled={!canEdit}
+            onChange={(autoAccept) => void save({ autoAccept })}
+            label="Otomatik kabul"
+            hint="Yalnız Canlı modda; tutarı tutan, bütün ürünleri eşleşmiş, ödemesi platformda alınmış siparişler. Diğerleri elle kabul bekler"
+          />
+          <div className="grid grid-cols-2 items-end gap-3">
+            <Field label="Kabul eden">
+              <Select value={acceptorId} disabled={!canEdit} onChange={(e) => void save({ autoAcceptUserId: e.target.value || null })}>
+                <option value="">Seçilmedi</option>
+                {acceptors.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+                {staleAcceptor && <option value={acceptorId}>{staleAcceptor} (etkin değil ya da yetkisiz)</option>}
+              </Select>
+            </Field>
+            <Field label="En yüksek tutar (₺)">
+              <NumberInput
+                value={Math.round(settings.autoAcceptMaxKurus / 100)}
+                min={1}
+                max={AUTO_ACCEPT_MAX_LIMIT / 100}
+                fallback={AUTO_ACCEPT_MAX_DEFAULT / 100}
+                disabled={!canEdit}
+                onCommit={(lira) => void save({ autoAcceptMaxKurus: lira * 100 })}
+              />
+            </Field>
+          </div>
+          {settings.autoAccept && staleAcceptor && <p className="text-xs text-[var(--admin-warning)]">Kabul eden kişi etkin değil ya da paket yetkisi yok: siparişler elle kabul bekler</p>}
+          {settings.autoAccept && settings.mode === 'deneme' && <p className="text-xs text-[var(--admin-text-mute)]">Deneme modunda deneme siparişleri de otomatik kabul edilir; platforma bir şey gitmez</p>}
         </div>
         {settings.mode === 'deneme' && canTest && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

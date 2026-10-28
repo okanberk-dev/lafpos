@@ -17,7 +17,7 @@ import {
 import { deciding } from './locks';
 import { adapterFor } from './registry';
 import { type DB, schema, type Tx } from '../db/client';
-import type { Actor, AuthUser } from '../lib/auth';
+import { type Actor, type AuthUser, toAuthUser } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
@@ -46,6 +46,28 @@ function assertSetupMode() {
   if (!getSettings().demoMode) throw conflict('Deneme siparişleri ciroya girer: deneme modu yalnız kurulum modunda açılır', 'not_setup_mode');
 }
 
+/** Otomatik kabulde kabul eden kişi: etkin ve paket yetkili olmalı (yetki rol setinden, her seferinde yeniden); değilse nedeni */
+export function autoAcceptor(t: Tx | DB, userId: string | null): AuthUser | string {
+  if (!userId) return 'kabul eden kişi seçilmedi';
+  const u = t.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+  if (!u) return 'kabul eden kişi bulunamadı';
+  if (!u.active) return `kabul eden kişi (${u.name}) etkin değil`;
+  const user = toAuthUser(u);
+  return user.permissions.has('paket.yonet') ? user : `kabul eden kişinin (${u.name}) paket yetkisi yok`;
+}
+
+/** Yönetim › Paket platformları: otomatik kabulde seçilebilecek kişiler (etkin ve paket yetkili) */
+export function autoAcceptors(t: Tx | DB): { id: string; name: string }[] {
+  return t
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.active, true))
+    .orderBy(asc(schema.users.name))
+    .all()
+    .filter((u) => toAuthUser(u).permissions.has('paket.yonet'))
+    .map((u) => ({ id: u.id, name: u.name }));
+}
+
 export function savePlatformSettings(t: Tx, actor: Actor, fx: Effects, platform: PlatformId, patch: Partial<PlatformSettings>) {
   if (patch.mode === 'deneme') assertSetupMode();
   if (patch.mode === 'canli') {
@@ -55,13 +77,22 @@ export function savePlatformSettings(t: Tx, actor: Actor, fx: Effects, platform:
     if (!a.configured()) throw conflict(`${PLATFORM_LABEL[platform]} anahtarları .env'de tanımlı değil (docs/PAKET-PLATFORMLARI.md)`, 'not_configured');
   }
   const all = platformSettings();
-  const next = { ...all[platform], ...patch };
+  const before = all[platform];
+  const next = { ...before, ...patch };
+  // Otomatik kabul açılırken ya da kabul eden değişirken kişi geçerli olmalı (etkin, paket yetkili)
+  const acceptor = next.autoAccept ? autoAcceptor(t, next.autoAcceptUserId) : null;
+  if (typeof acceptor === 'string' && (patch.autoAccept !== undefined || patch.autoAcceptUserId !== undefined)) {
+    throw new HttpError(422, `Otomatik kabul açılamadı: ${acceptor}. Paket yetkisi olan etkin bir kişi seçin`, 'auto_accept_user');
+  }
   updateSettings({ platforms: { ...all, [platform]: next } }, t);
+  const auto = next.autoAccept ? `otomatik kabul açık (${typeof acceptor === 'string' ? acceptor : acceptor?.name}, en çok ${tl(next.autoAcceptMaxKurus)})` : 'otomatik kabul kapalı';
+  // Canlıya geçiş ve otomatik kabulün açılıp kapanması ya da kişisinin, sınırının değişmesi uyarıdır
+  const autoChanged = next.autoAccept !== before.autoAccept || (next.autoAccept && (next.autoAcceptUserId !== before.autoAcceptUserId || next.autoAcceptMaxKurus !== before.autoAcceptMaxKurus));
   fx.audit(t, {
     userId: actor.user.id,
     action: 'platform.settings',
-    severity: next.mode === 'canli' && all[platform].mode !== 'canli' ? 'uyari' : 'info',
-    message: `${actor.user.name} ${PLATFORM_LABEL[platform]} ayarını değiştirdi (${PLATFORM_MODE_LABEL[next.mode].toLocaleLowerCase('tr-TR')}, ${next.prepMinutes} dk, %${next.commissionPct} komisyon)`,
+    severity: (next.mode === 'canli' && before.mode !== 'canli') || autoChanged ? 'uyari' : 'info',
+    message: `${actor.user.name} ${PLATFORM_LABEL[platform]} ayarını değiştirdi (${PLATFORM_MODE_LABEL[next.mode].toLocaleLowerCase('tr-TR')}, ${next.prepMinutes} dk, %${next.commissionPct} komisyon, ${auto})`,
   });
   fx.emit({ topic: 'settings', kind: 'platform.settings', byUserId: actor.user.id });
   return next;
@@ -203,6 +234,15 @@ function loadRow(t: Tx | DB, id: string): PlatformRow {
 }
 export { loadRow as getPlatformOrder };
 
+/** Onay bekleyen siparişin kasadaki sorunları: karşılığı olmayan kalemler (ücret satırı hariç) ve tükenmiş kalemler */
+export function lineIssues(t: Tx | DB, payload: PlatformOrderPayload): { unmatched: string[]; soldOut: string[] } {
+  const matched = matchLines(t, payload);
+  return {
+    unmatched: matched.filter((m) => !m.product && m.line.kind !== 'fee').map((m) => m.line.name),
+    soldOut: matched.filter((m) => m.product && !m.product.active).map((m) => m.line.name),
+  };
+}
+
 function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
   const order = row.orderId ? t.select({ no: schema.orders.no }).from(schema.orders).where(eq(schema.orders.id, row.orderId)).get() : null;
   const by = row.decidedBy ? t.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, row.decidedBy)).get() : null;
@@ -210,7 +250,7 @@ function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
   const announced = row.status === 'bekliyor' && row.notifiedStatus === 'picked';
   const expired = row.status === 'bekliyor' && !announced && row.expiresAt != null && row.expiresAt <= now;
   const pending = row.status === 'bekliyor' && !expired;
-  const matched = pending ? matchLines(t, row.payload) : [];
+  const issues = pending ? lineIssues(t, row.payload) : { unmatched: [], soldOut: [] };
   return {
     id: row.id,
     platform: row.platform,
@@ -221,8 +261,8 @@ function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {
     orderNo: order?.no ?? null,
     decidedBy: by?.name ?? null,
     reason: row.reason,
-    unmatched: pending ? matched.filter((m) => !m.product && m.line.kind !== 'fee').map((m) => m.line.name) : [],
-    soldOut: pending ? matched.filter((m) => m.product && !m.product.active).map((m) => m.line.name) : [],
+    unmatched: issues.unmatched,
+    soldOut: issues.soldOut,
     payload: row.payload,
     lastError: row.lastError,
     announced,
@@ -316,7 +356,11 @@ export function expirePlatformOrders(t: Tx, fx: Effects, now = Date.now()): numb
   return ids.length;
 }
 
-export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: string, prepMinutes?: number, opts: { notifiedStatus?: string | null } = {}) {
+/**
+ * Kabul: adisyon açılır. `auto`: otomatik kabul (server/delivery/live.ts `autoAccept`); kabul eden ayarda seçilen kişi,
+ * denetim kaydında "(otomatik)"
+ */
+export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: string, prepMinutes?: number, opts: { notifiedStatus?: string | null; auto?: boolean } = {}) {
   if (!user.permissions.has('paket.yonet')) throw new HttpError(403, 'Platform siparişini paket yetkisi olan kabul eder', 'forbidden');
   const row = loadRow(t, id);
   const now = Date.now();
@@ -355,7 +399,10 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
     { platformPrice: true },
   );
   if (p.restaurantDiscount > 0) orders.setOrderDiscount(t, actor, fx, order.id, { type: 'amount', value: p.restaurantDiscount, reason: `${label} kampanyası` });
-  t.update(schema.platformOrders).set({ status: 'kabul', orderId: order.id, decidedAt: now, decidedBy: user.id, reason: `${prep} dk`, notifiedStatus: opts.notifiedStatus ?? null, lastError: null }).where(eq(schema.platformOrders.id, id)).run();
+  t.update(schema.platformOrders)
+    .set({ status: 'kabul', orderId: order.id, decidedAt: now, decidedBy: user.id, reason: opts.auto ? `${prep} dk, otomatik` : `${prep} dk`, notifiedStatus: opts.notifiedStatus ?? null, lastError: null })
+    .where(eq(schema.platformOrders.id, id))
+    .run();
   let accepted = orders.recalc(t, order.id);
   // Kapıda tahsilat kasada ama kampanyanın bir kısmını platform karşılıyor: o pay platformun ödemesidir, şimdi
   // platformun online ödeme türüyle yazılır; kasada müşterinin ödediği kalır (fazlası istenmesin)
@@ -376,12 +423,13 @@ export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
   }
   fx.audit(t, {
     userId: user.id,
-    action: 'platform.accept',
+    action: opts.auto ? 'platform.auto_accept' : 'platform.accept',
     orderId: order.id,
     amount: accepted.total,
-    message: `${user.name} ${label} siparişini kabul etti (${p.code}, ${tl(accepted.total)}, ${prep} dk)${unknown ? '; eşleşmeyen kalem var' : ''}`,
+    message: `${user.name}${opts.auto ? ' (otomatik)' : ''} ${label} siparişini kabul etti (${p.code}, ${tl(accepted.total)}, ${prep} dk)${unknown ? '; eşleşmeyen kalem var' : ''}`,
   });
-  fx.emit({ topic: 'delivery', kind: 'platform.accepted', orderId: order.id, byUserId: user.id });
+  // Otomatik kabul kasada bildirim olarak görünür (elle kabulde kabul eden zaten ekranda)
+  fx.emit({ topic: 'delivery', kind: 'platform.accepted', orderId: order.id, byUserId: user.id, ...(opts.auto ? { message: `${label} ${p.code} otomatik kabul edildi (${prep} dk)` } : {}) });
   return { order: accepted, prepMinutes: prep };
 }
 
@@ -402,7 +450,7 @@ export function rejectPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: stri
 }
 
 /** Platformun restorana ödeyeceği: kalemler ve restoranın kampanyası (platformun kampanyasını platform karşılar) */
-const platformAmount = (p: PlatformOrderPayload) => p.subtotal - p.restaurantDiscount;
+export const platformAmount = (p: PlatformOrderPayload) => p.subtotal - p.restaurantDiscount;
 
 /** Adisyondaki, platformun online ödeme türüyle alınmış (iade edilmemiş) ödemeler */
 function platformPayments(t: Tx, orderId: string, platform: PlatformId) {

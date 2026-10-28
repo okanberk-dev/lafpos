@@ -211,8 +211,13 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
   const collect = toKurus(o.price?.collectFromCustomer);
   if (!paid && courier === 'restoran' && collect > 0) ours = collect;
   else if (present(o.price?.grandTotal)) ours = Math.max(0, toKurus(o.price!.grandTotal) - platformFees);
-  // Ödenmemiş siparişte kasada alınacak tutar sıfır görünüyorsa (eksik ya da 0,00 alan) tamamı platform payı sayılmaz
-  if (!paid && ours <= 0) ours = ourPart;
+  // Ödenmemiş siparişte kasada alınacak tutar sıfır görünüyorsa (eksik ya da 0,00 alan) tamamı platform payı sayılmaz;
+  // tutar platformdan doğrulanmalı (otomatik kabul edilmez)
+  let amountReview: string | null = null;
+  if (!paid && ours <= 0) {
+    ours = ourPart;
+    amountReview = `Yemeksepeti'nde alınacak tutar sıfır göründü; ${tl(ourPart)} sayıldı, Yemeksepeti'nden doğrulayın`;
+  }
   let platformCollects = paid || courier === 'platform';
   let paymentLabel = paid ? `Online${text(o.payment?.type) ? ` ${o.payment!.type}` : ''}` : `Kapıda ${text(o.payment?.type) ?? 'ödeme'}`;
   // Yemeksepeti kuryesi kapıda alıyor ve kasaya nakit bırakıyor: o tutar kasada alınır, kalanı platformun payı
@@ -254,6 +259,9 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
     expiresAt: preAccepted ? null : toMs(o.expiryDate),
     preAccepted,
     test: !!o.test,
+    ...(amountReview ? { amountReview } : {}),
+    // Ön sipariş ama saati yok: otomatik kabul edilmez
+    ...(o.preOrder && scheduled == null ? { scheduledUnknown: true } : {}),
     platformData: {
       remoteId,
       token: o.token,

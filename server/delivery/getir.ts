@@ -460,6 +460,10 @@ export function fromGetirOrder(o: GetirOrder, now = Date.now(), opts: { preAccep
     ...(opts.preAccepted ? { preAccepted: true } : {}),
     // Getir siparişinde test bayrağı yok (test ortamının siparişleri gerçek akışla denenir)
     test: false,
+    // Açıklanamayan fark (notta da yazar) ya da kendi kuryemizin siparişinde belirsiz ödeme türü (tahsilatı kim yapar
+    // tahmin): otomatik kabul edilmez. Saati okunamayan ileri tarihli sipariş de
+    ...(gapNote || (pay.verify && courier !== 'platform') ? { amountReview: gapNote ?? pay.label } : {}),
+    ...(o.isScheduled && scheduledFor == null ? { scheduledUnknown: true } : {}),
     platformData: { status: o.status ?? null, isScheduled: !!o.isScheduled, deliveryType: o.deliveryType ?? null, restaurantId: text(o.restaurant?.id), paymentMethod: o.paymentMethod ?? null },
   };
 }
