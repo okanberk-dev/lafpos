@@ -101,7 +101,8 @@ export function ticketHead(
   mode: ServiceMode,
 ): { call: string | null; label: string; showNo: boolean } {
   const call = callFor({ type: t.type, source: t.source, no: t.orderNo, numarator: t.numarator }, mode);
-  if (!call) return { call: null, label: t.label, showNo: true };
+  // Etiket numarayı zaten taşıyorsa ("Tezgâh #3") ayrıca "#3" yazılmaz
+  if (!call) return { call: null, label: t.label, showNo: !t.label.endsWith(` #${t.orderNo}`) };
   if (call.kind === 'masa') return { call: callText(call), label: '', showNo: true };
   return { call: callText(call), label: t.label.replace(new RegExp(` #${t.orderNo}$`), ''), showNo: false };
 }
