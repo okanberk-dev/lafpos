@@ -49,6 +49,7 @@ const ACTION_LABEL: Record<string, string> = {
   'item.zayi': 'Zayi',
   'menu.category': 'Kategori',
   'menu.happy': 'Happy hour',
+  'menu.option_sold_out': 'Seçenek tükendi / açıldı',
   'menu.price': 'Fiyat değişikliği',
   'menu.product': 'Ürün',
   'menu.product_delete': 'Ürün silme',

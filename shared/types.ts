@@ -124,6 +124,8 @@ export interface OptionItemDTO {
   isDefault: boolean;
   maxQty: number;
   allergens: string[];
+  /** Kasada Tükendi: seçenek penceresinde gri, kasa satışı almaz (409 `option_sold_out`) */
+  soldOut: boolean;
 }
 
 export interface OptionGroupDTO {

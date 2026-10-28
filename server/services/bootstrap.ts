@@ -69,7 +69,7 @@ export function menuOptionGroups(t: Tx | DB): OptionGroupDTO[] {
       extKey: g.extKey,
       items: items
         .filter((i) => i.groupId === g.id)
-        .map((i) => ({ id: i.id, name: i.name, code: i.code, price: i.price, isDefault: i.isDefault, maxQty: i.maxQty, allergens: i.allergens })),
+        .map((i) => ({ id: i.id, name: i.name, code: i.code, price: i.price, isDefault: i.isDefault, maxQty: i.maxQty, allergens: i.allergens, soldOut: i.soldOut })),
     }));
 }
 

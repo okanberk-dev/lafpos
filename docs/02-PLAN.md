@@ -42,7 +42,7 @@ lafpos/
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
 | `categories`, `products` | menü | `price` (M/tek), `priceL` (L), `kdvRate`, `extSource/extId` (`laffogato`/`mnu-0011`), POS'a özel alanlar, porsiyon sayacı, `isService` |
-| `option_groups`, `option_items`, `product_option_groups` | süt, kavrum, şurup, ekstra shot, şeker | site kodlarıyla (`oat`, `vanilla`…) |
+| `option_groups`, `option_items`, `product_option_groups` | süt, kavrum, şurup, ekstra shot, şeker | site kodlarıyla (`oat`, `vanilla`…); seçeneğin kasadaki Tükendi'si (`soldOut`, göç 0013; yalnız LafPOS'ta, `docs/03-ENTEGRASYON.md` §2.3) |
 | `happy_hours` | saat/gün/kategori indirim kuralı | |
 | `payment_methods` | nakit, kart, yemek kartları, havale, cari | `zField` → lafmaliyet Z alanı (`cash`, `card`, `meal_card`, `online`, `other`), `channel` → komisyon kanalı (`pluxee`…) |
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |

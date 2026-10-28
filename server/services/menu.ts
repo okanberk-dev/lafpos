@@ -3,7 +3,8 @@ import { happyHourPercentAt } from '@shared/order-calc';
 import { posNameOf } from '@shared/pos-name';
 import type { SelectedOption, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
-import { bad, notFound } from '../lib/http';
+import type { Effects } from '../lib/effects';
+import { bad, conflict, notFound } from '../lib/http';
 import { getSettings } from '../lib/settings';
 
 type Product = typeof schema.products.$inferSelect;
@@ -61,10 +62,19 @@ export function normalizeSize(product: Product, size: Size | undefined): Size {
  */
 /**
  * `lenient`: paket platformu satırı. Platformun seçimleri notta yazar; seçilmeyen grupta varsayılan eklenmez, zorunlu
- * grup sorulmaz (kasada karşılığı olmayan seçim siparişi durdurmasın)
+ * grup sorulmaz (kasada karşılığı olmayan seçim siparişi durdurmasın).
+ * `refuseSoldOut`: kasa satışı. Kasada Tükendi işaretli seçenek seçildiyse ya da seçilmeyen tek seçimlik grubun
+ * varsayılanı tükendiyse 409 `option_sold_out`. Paket platformu satırı reddedilmez (sipariş platformda verildi)
  */
-export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: number }[], { lenient = false }: { lenient?: boolean } = {}): SelectedOption[] {
+export function resolveOptions(
+  sp: SaleProduct,
+  picked: { itemId: string; qty?: number }[],
+  { lenient = false, refuseSoldOut = false }: { lenient?: boolean; refuseSoldOut?: boolean } = {},
+): SelectedOption[] {
   const out: SelectedOption[] = [];
+  const refuse = (item: Item, hint?: string) => {
+    if (refuseSoldOut && item.soldOut) throw conflict(`${item.name} tükendi${hint ? `; ${hint}` : ''}`, 'option_sold_out');
+  };
   for (const g of sp.groups) {
     const chosen = picked.filter((p) => g.items.some((i) => i.id === p.itemId));
     if (lenient && !chosen.length) continue;
@@ -75,12 +85,18 @@ export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: 
         if (g.required) throw bad(`${g.name} seçilmeli`, 'option_required');
         continue;
       }
+      // Seçilmeyen grupta varsayılan yazılırdı: o tükendiyse kasiyer başkasını seçer
+      refuse(item, chosen[0] ? undefined : `${g.name} seçin`);
       out.push(toSelected(g, item, 1));
     } else if (g.kind === 'multi') {
       const unique = [...new Set(chosen.map((c) => c.itemId))];
       if (unique.length > g.maxSelect) throw bad(`${g.name}: en çok ${g.maxSelect} seçim`, 'option_invalid');
       if (g.required && unique.length === 0) throw bad(`${g.name} seçilmeli`, 'option_required');
-      for (const id of unique) out.push(toSelected(g, g.items.find((i) => i.id === id)!, 1));
+      for (const id of unique) {
+        const item = g.items.find((i) => i.id === id)!;
+        refuse(item);
+        out.push(toSelected(g, item, 1));
+      }
     } else {
       // Aynı seçenek birden çok kez gönderilirse adetleri toplanır: sınır seçenek başınadır, yirmi kez "+1 shot"
       // yirmi shot olmaz (denetim, 26 Eki 2026)
@@ -93,7 +109,10 @@ export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: 
       for (const [id, qty] of qtyOf) {
         const item = g.items.find((i) => i.id === id)!;
         if (qty > item.maxQty) throw bad(`${item.name}: en çok ${item.maxQty}`, 'option_invalid');
-        if (qty > 0) out.push(toSelected(g, item, qty));
+        if (qty > 0) {
+          refuse(item);
+          out.push(toSelected(g, item, qty));
+        }
       }
     }
   }
@@ -101,6 +120,29 @@ export function resolveOptions(sp: SaleProduct, picked: { itemId: string; qty?: 
   const unknown = picked.find((p) => !known.has(p.itemId));
   if (unknown) throw bad('Bu ürüne ait olmayan bir seçenek gönderildi', 'option_invalid');
   return out;
+}
+
+/**
+ * Seçeneği kasada Tükendi yapar ya da satışa açar (yulaf sütü bitti). Yalnız LafPOS'ta: siteye ve uygulamaya gitmez
+ * (sözleşmede böyle bir alan yok), menü senkronu ve yönetimdeki grup düzenlemesi dokunmaz; site grubunun seçeneği de
+ * işaretlenir. Durumu zaten istenen gibi olan seçenekte bir şey yazılmaz (iki kasa aynı anda bastıysa)
+ */
+export function setOptionSoldOut(t: Tx, fx: Effects, itemId: string, soldOut: boolean, actor: { id: string; name: string }): { changed: boolean } {
+  const item = t.select().from(schema.optionItems).where(eq(schema.optionItems.id, itemId)).get();
+  if (!item?.active) throw notFound('Seçenek');
+  if (item.soldOut === soldOut) return { changed: false };
+  const group = t.select({ name: schema.optionGroups.name }).from(schema.optionGroups).where(eq(schema.optionGroups.id, item.groupId)).get();
+  t.update(schema.optionItems).set({ soldOut }).where(eq(schema.optionItems.id, itemId)).run();
+  fx.audit(t, {
+    userId: actor.id,
+    action: 'menu.option_sold_out',
+    entity: 'option_item',
+    entityId: itemId,
+    message: `${actor.name}: ${item.name}${group ? ` (${group.name})` : ''} ${soldOut ? 'tükendi' : 'satışa açıldı'}`,
+    data: { soldOut },
+  });
+  fx.emit({ topic: 'menu', kind: soldOut ? 'option.sold_out' : 'option.available', byUserId: actor.id });
+  return { changed: true };
 }
 
 function toSelected(g: Group, item: Item, qty: number): SelectedOption {
