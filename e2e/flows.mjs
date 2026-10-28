@@ -346,6 +346,71 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Telefonda kasiyer: Türk kahvesinin Büyük düğmesi şekeri sorar (önseçim yok, seçilene kadar Ekle kapalı); Latte boy düğmesiyle hemen eklenir, "Seçenekli her üründe" ayarında o da sorar',
+      async () => {
+        const boot = await api.call('kasa', 'GET', '/bootstrap');
+        const { M, L } = boot.settings.sizeLabels;
+        const latte = boot.products.find((p) => p.name === 'Latte');
+        // Kısa adı önceki akışta değişti: kart güncel adla, boy düğmeleri kartın içinden
+        const latteTile = (page) => page.getByRole('button', { name: `${latte.shortName?.trim() || latte.name} seçenekleri`, exact: true }).locator('xpath=..');
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        try {
+          await withPage(ctx, 'telefon', 'kasa', async (page) => {
+            await go(ctx, page, `/adisyon/${o.id}`);
+            await page.getByPlaceholder('Ürün ara').fill('Türk Kahvesi');
+            await page.getByRole('button', { name: new RegExp(`^${L} `) }).first().click();
+            const modal = page.getByRole('dialog', { name: 'Türk Kahvesi' });
+            await modal.waitFor({ timeout: 8000 });
+            assert((await modal.getByRole('button', { name: new RegExp(`^${L}`) }).getAttribute('aria-pressed')) === 'true', 'dokunulan boy seçili gelmedi');
+            for (const name of ['Sade', 'Az şekerli', 'Orta', 'Şekerli']) assert((await modal.getByRole('button', { name, exact: true }).getAttribute('aria-pressed')) === 'false', `şekerde önseçim: ${name}`);
+            await modal.getByText('Zorunlu', { exact: true }).waitFor();
+            await modal.getByText('Şeker seçin', { exact: true }).waitFor();
+            assert(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled(), 'şeker seçilmeden Ekle açık');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-zorunlu-secenek.png` });
+            const overflow = await overflowReport(page);
+            assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+            // Yalnız pencerenin hedefleri: telefonda arkasında kalan ürün kartları da sayılırdı
+            const small = await modal.locator('button').evaluateAll((els) => els.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && Math.min(r.width, r.height) + 0.5 < 44; }).map((e) => e.textContent.trim()));
+            assert(!small.length, `44 px altı: ${small.join(', ')}`);
+            await modal.getByRole('button', { name: 'Sade', exact: true }).click();
+            assert((await modal.getByText('Şeker seçin', { exact: true }).count()) === 0, 'şeker seçildi ama uyarı duruyor');
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            // Zorunlu seçimi olmayan iki boylu ürün: boy düğmesi pencere açmadan ekler
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            await latteTile(page).getByRole('button', { name: new RegExp(`^${M} `) }).click();
+            assert((await page.getByRole('dialog').count()) === 0, 'Latte için pencere açıldı');
+            await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+            await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+          });
+          const sent = await api.call('kasa', 'GET', `/orders/${o.id}`);
+          const rows = sent.items.map((i) => `${i.name} ${i.size} ${i.optionsText}`.trim());
+          assert(rows.includes('Türk Kahvesi L Sade') && sent.items.some((i) => i.productId === latte.id && i.size === 'M'), `adisyonda beklenen kalemler yok: ${rows.join(', ')}`);
+          // Patron "Seçenekli her üründe"yi seçer: Latte'nin boy düğmesi de pencereyi açar
+          await withPage(ctx, 'bilgisayar', 'patron', async (page) => {
+            await go(ctx, page, '/yonetim/ayarlar');
+            await page.getByRole('button', { name: 'Seçenekli her üründe', exact: true }).click();
+            await page.getByRole('button', { name: 'Kaydet', exact: true }).first().click();
+            await page.getByText('Ayarlar kaydedildi').waitFor({ timeout: 8000 });
+          });
+          const after = await api.call('kasa', 'GET', '/bootstrap');
+          assert(after.settings.askOptions === 'hep', `ayar kaydedilmedi: ${after.settings.askOptions}`);
+          await withPage(ctx, 'telefon', 'kasa', async (page) => {
+            await go(ctx, page, `/adisyon/${o.id}`);
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            await latteTile(page).getByRole('button', { name: new RegExp(`^${L} `) }).click();
+            const modal = page.getByRole('dialog', { name: latte.name });
+            await modal.waitFor({ timeout: 8000 });
+            assert(!(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled()), 'isteğe bağlı seçenekte Ekle kapalı');
+            await page.keyboard.press('Escape');
+            await modal.waitFor({ state: 'detached' });
+          });
+        } finally {
+          await api.call('patron', 'PUT', '/admin/settings', { askOptions: 'zorunlu' });
+        }
+      },
+    ],
+    [
       'Bilgisayarda patron: Masa planı\'nda masaya QR üretir, kart önizlemesi ve adres görünür; kod yenilenince değişir',
       async () => {
         // Plan ilk bölümle açılır: o bölümün ilk etkin masası

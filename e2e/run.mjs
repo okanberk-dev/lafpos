@@ -38,6 +38,12 @@ const ROUTES = {
   patron: [
     '/patron',
     '/masalar',
+    // İki boylu üründe zorunlu seçim: Türk kahvesinin Büyük düğmesi seçenek penceresini açar (şeker seçilmedi, Ekle kapalı)
+    state('@tz', 'zorunlu-secenek', async (page) => {
+      await page.getByPlaceholder('Ürün ara').fill('Türk Kahvesi', { timeout: 5000 });
+      await page.getByRole('button', { name: /^Büyük / }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Türk Kahvesi' }).waitFor({ timeout: 5000 });
+    }),
     '/siparisler',
     '/mutfak',
     '/cagri',

@@ -766,6 +766,7 @@ const settingsShape = patchOf(
     autoLockMinutes: z.number().int().min(0).max(120),
     keepAwake: z.boolean(),
     productImages: z.boolean(),
+    askOptions: z.enum(['zorunlu', 'hep']),
     voidReasons: z.array(z.string().max(40)).max(12),
     compReasons: z.array(z.string().max(40)).max(12),
     odenmezReasons: z.array(z.string().max(40)).max(12),

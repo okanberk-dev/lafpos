@@ -16,6 +16,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   autoLockMinutes: 0,
   keepAwake: true,
   productImages: true,
+  // Şeker gibi zorunlu seçim kasada sorulsun; Latte gibi isteğe bağlı seçenekli ürün boy düğmesiyle hemen eklenir
+  askOptions: 'zorunlu',
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
   odenmezReasons: ['Personel yemeği', 'Patron / ortak', 'Müşteri şikâyeti', 'Deneme'],

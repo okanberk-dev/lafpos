@@ -70,7 +70,15 @@ Her dalga: kod + birim testleri + tip denetimi + tarayıcıda deneme + GitHub'a 
 2. PIN girişi, oturum, yetki, yetkili onayı, denetim kaydı
 3. Uygulama kabuğu: gezinme, gün durumu, bağlantı göstergesi, kilit, tema
 4. Masa planı: bölümler, durum renkleri, süre/tutar/garson, tezgâh ve gel-al hızlı satış
-5. Adisyon: ürün ızgarası, arama, boy ve seçenek penceresi, not, adet, gönder (istasyona yönlendirme), happy hour
+5. Adisyon: ürün ızgarası, arama, boy ve seçenek penceresi, not, adet, gönder (istasyona yönlendirme), happy hour.
+   Varyant (boy) eklerken seçenek (27 Eki 2026, kullanıcı: "varyant ekleme de seçenekli olsun"): iki boylu ürünün
+   boy düğmesi hemen ekler; zorunlu seçimi olan üründe (Türk kahvesinde şeker) seçenek penceresini o boy seçili açar.
+   Pencerede zorunlu grup boyun hemen altında, önseçimsiz, başlığında "Zorunlu" yazar; seçilene kadar Ekle kapalı,
+   altında "Şeker seçin". İsteğe bağlı grupta varsayılan seçili gelir (Normal süt). Yönetim › Ayarlar › Seçenekleri sor
+   (`askOptions`): "Zorunlu seçim varsa" (`zorunlu`, varsayılan) ya da "Seçenekli her üründe" (`hep`: Latte da
+   pencereyle). Tek boylu seçenekli ürün her iki ayarda pencereyle eklenir. Sunucu değişmedi: seçeneksiz gelen zorunlu
+   tek seçimlik gruba varsayılanı yazar (site, paket platformu, eski istemci). Kurallar `src/lib/boot.ts`
+   (`needsChoice`, `asksOptions`, `defaultPicks`, `missingChoice`), testi `tests/varyant-secenek.test.ts`
 6. Masa işlemleri: taşı, birleştir, kalem taşı (böl), kişi sayısı, garson değiştir
 7. İptal, ikram, kalem ve adisyon indirimi: gerekçe, yetki, yetkili PIN onayı, uyarı
 8. Ödeme: nakit (para üstü, hızlı banknot), kart, yemek kartı, havale, cari; parçalı, kalem bazlı, kişi başı;

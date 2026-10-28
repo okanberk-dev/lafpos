@@ -4,8 +4,9 @@ import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
+import { Badge } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
-import { estimateUnit, menuUnit, productGroups, useBoot } from '@/lib/boot';
+import { defaultPicks, estimateUnit, menuUnit, missingChoice, productGroups, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { useFinePointer } from '@/lib/hooks';
@@ -18,17 +19,6 @@ type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
 const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
 const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
 const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
-
-function defaultPicks(groups: OptionGroupDTO[]): Picks {
-  const p: Picks = {};
-  for (const g of groups) {
-    if (g.kind === 'single') {
-      const d = g.items.find((i) => i.isDefault) ?? (g.required ? g.items[0] : undefined);
-      if (d) p[d.id] = 1;
-    }
-  }
-  return p;
-}
 
 /** Ürün seçenekleri: boy, süt, kavrum, şurup, ekstra shot, şeker, not ve adet. */
 export function OptionsModal({
@@ -46,7 +36,8 @@ export function OptionsModal({
 }) {
   const boot = useBoot();
   const fine = useFinePointer();
-  const groups = useMemo(() => (product ? productGroups(boot, product) : []), [boot, product]);
+  // Zorunlu grup (şeker) boyun hemen altında: telefonda pencerenin dibinde kalıp gözden kaçmasın
+  const groups = useMemo(() => (product ? productGroups(boot, product).sort((a, b) => Number(b.required) - Number(a.required)) : []), [boot, product]);
   const [size, setSize] = useState<Size>(initialSize);
   const [picks, setPicks] = useState<Picks>({});
   const [note, setNote] = useState('');
@@ -81,6 +72,8 @@ export function OptionsModal({
     .map(([itemId, n]) => ({ itemId, qty: n }));
   const override = priceText.trim() ? parseTL(priceText) : null;
   const unit = override ?? estimateUnit(boot, product, size, options);
+  // Zorunlu grup (şeker) seçilmeden Ekle kapalı: sunucu boş grupta varsayılanı yazardı, kasiyer sormadan geçmesin
+  const missing = missingChoice(groups, picks);
 
   // Tek seçimlik grup radyo düğmesi gibi davranır: dokunulan seçilir, gruptaki diğerleri kalkar
   const pickSingle = (g: OptionGroupDTO, itemId: string) => {
@@ -99,7 +92,8 @@ export function OptionsModal({
       title={product.name}
       subtitle={product.description ?? undefined}
       footer={
-        <div className="flex items-center gap-3">
+        // Eksik zorunlu seçimin yazısı Ekle'nin altında kendi satırında (bilgi cümlesi devre dışı düğmede durmaz)
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <div className="flex items-center rounded-xl border border-line bg-surface">
             <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.max(1, qty - 1))}>
               <Minus className="size-4" />
@@ -110,9 +104,14 @@ export function OptionsModal({
             </button>
           </div>
           <div className="flex-1" />
-          <Button variant="primary" size="lg" onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
+          <Button variant="primary" size="lg" disabled={!!missing} aria-describedby={missing ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
             {editing ? 'Güncelle' : 'Ekle'} · {tl(unit * qty)}
           </Button>
+          {missing && (
+            <p id="secenek-eksik" className="basis-full text-right text-sm font-medium text-ink-2">
+              {missing.name} seçin
+            </p>
+          )}
         </div>
       }
     >
@@ -138,7 +137,10 @@ export function OptionsModal({
 
         {groups.map((g) => (
           <section key={g.id}>
-            <h3 className="mb-2 text-sm font-semibold text-ink-2">{g.name}</h3>
+            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-2">
+              {g.name}
+              {g.required && g.kind !== 'counter' && <Badge>Zorunlu</Badge>}
+            </h3>
             {g.kind === 'counter' ? (
               <div className="flex flex-wrap gap-2">
                 {g.items.map((i) => (
