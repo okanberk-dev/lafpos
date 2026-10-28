@@ -88,11 +88,15 @@ export function savePlatformSettings(t: Tx, actor: Actor, fx: Effects, platform:
   const auto = next.autoAccept ? `otomatik kabul açık (${typeof acceptor === 'string' ? acceptor : acceptor?.name}, en çok ${tl(next.autoAcceptMaxKurus)})` : 'otomatik kabul kapalı';
   // Canlıya geçiş ve otomatik kabulün açılıp kapanması ya da kişisinin, sınırının değişmesi uyarıdır
   const autoChanged = next.autoAccept !== before.autoAccept || (next.autoAccept && (next.autoAcceptUserId !== before.autoAcceptUserId || next.autoAcceptMaxKurus !== before.autoAcceptMaxKurus));
+  // Komisyon oranı maliyettir: iletide yazmaz (ileti uyarı olarak her ekrana ve patron paneline gider), yalnız değiştiği
+  // söylenir; oran denetim kaydının `data`'sında, `/admin/audit` onu maliyeti görmeyene maskeler (`commission.ts`)
+  const commissionChanged = next.commissionPct !== before.commissionPct;
   fx.audit(t, {
     userId: actor.user.id,
     action: 'platform.settings',
     severity: (next.mode === 'canli' && before.mode !== 'canli') || autoChanged ? 'uyari' : 'info',
-    message: `${actor.user.name} ${PLATFORM_LABEL[platform]} ayarını değiştirdi (${PLATFORM_MODE_LABEL[next.mode].toLocaleLowerCase('tr-TR')}, ${next.prepMinutes} dk, %${next.commissionPct} komisyon, ${auto})`,
+    message: `${actor.user.name} ${PLATFORM_LABEL[platform]} ayarını değiştirdi (${PLATFORM_MODE_LABEL[next.mode].toLocaleLowerCase('tr-TR')}, ${next.prepMinutes} dk, ${commissionChanged ? 'tahmini komisyon oranı değişti, ' : ''}${auto})`,
+    ...(commissionChanged ? { data: { commissionPct: { from: before.commissionPct, to: next.commissionPct } } } : {}),
   });
   fx.emit({ topic: 'settings', kind: 'platform.settings', byUserId: actor.user.id });
   return next;

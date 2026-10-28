@@ -1,4 +1,7 @@
-import type { KitchenTicketItem, OrderDTO } from '@shared/types';
+import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { callFor, callText, numaratorLabel, type ServiceMode } from '@shared/service-mode';
+import type { KitchenTicket, KitchenTicketItem, OrderDTO } from '@shared/types';
+import { joinMeta } from './text';
 
 /**
  * Kasadan (adisyon, Siparişler) teslim edilebilen hazır kalemler: kasanın tezgâh ve gel-al siparişi. Site ve paket
@@ -32,4 +35,30 @@ export function undoStep(items: Pick<KitchenTicketItem, 'id' | 'status' | 'voide
   if (served.length) return { ids: served, status: 'hazir' };
   const ready = live.filter((i) => i.status === 'hazir').map((i) => i.id);
   return ready.length ? { ids: ready, status: 'hazirlaniyor' } : null;
+}
+
+/**
+ * Bar ekranı Geçmiş'inde teslim edilebilen kalemler: kasanın siparişinde (site ve paket platformu değil) hazır kalemler.
+ * Geçmiş'te teslimi geri alınan 30 dakikadan eski sipariş Hazır sekmesine dönmez (hazır anı korunur); barista onu
+ * Geçmiş'ten yeniden teslim eder (Geri al'ın yanında Teslim edildi, aynı uç)
+ */
+export function historyHandIds(t: Pick<KitchenTicket, 'source' | 'platform' | 'items'>): string[] {
+  if (t.source !== 'pos' || t.platform) return [];
+  return t.items.filter((i) => !i.voided && i.status === 'hazir').map((i) => i.id);
+}
+
+/**
+ * Siparişler kartının adı (teslim bildiriminin öznesi de). Self modlarda kasanın tezgâh ve gel-al siparişi çağrı
+ * numarasıyla ("No 34 · Ayşe Yılmaz"); paket platformunun gel-al'ı platformun kısa koduyla ("K9TX · Deniz Öztürk"):
+ * müşteri LafPOS numarasını bilmez, uygulamada platformun kodunu görür (çağrı ekranı gibi). `head` varsa sipariş
+ * numarası ("#12") ayrıca yazılmaz.
+ */
+export function orderCardName(
+  o: Pick<OrderDTO, 'type' | 'source' | 'no' | 'numarator' | 'platform' | 'platformCode' | 'tableName' | 'extLabel' | 'deliveryName'>,
+  mode: ServiceMode,
+): { name: string; head: string | null } {
+  const call = o.platform ? null : callFor(o, mode);
+  const head = call?.kind === 'numara' ? callText(call) : o.platform && o.type === 'gelal' ? o.platformCode : null;
+  if (head) return { name: joinMeta([head, o.deliveryName]), head };
+  return { name: o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type]), head: null };
 }

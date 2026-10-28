@@ -2,8 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bike, Check, ChefHat, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ORDER_TYPE_LABEL } from '@shared/labels';
-import { callFor, callText, numaratorLabel } from '@shared/service-mode';
 import { tl } from '@shared/money';
 import { fmtAgo, fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
@@ -15,7 +13,7 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { deliverItems } from '@/lib/handoff';
-import { readyToHand, stageFromBar } from '@/lib/readyToHand';
+import { orderCardName, readyToHand, stageFromBar } from '@/lib/readyToHand';
 import { useServiceMode } from '@/lib/serviceMode';
 import { useTick } from '@/lib/hooks';
 import { joinMeta } from '@/lib/text';
@@ -41,15 +39,21 @@ export default function OrdersPage() {
   const [tab, setTab] = useState<Tab>('acik');
   const open = useQuery({ queryKey: ['orders', 'acik'], queryFn: () => get<OrderDTO[]>('/orders?status=acik&limit=200'), refetchInterval: 60_000 });
   const closed = useQuery({ queryKey: ['orders', 'kapali'], queryFn: () => get<OrderDTO[]>('/orders?status=kapali&limit=300'), enabled: tab === 'kapanan' });
-  // Önce ödenmiş (kapanmış) tezgâh ve gel-al satışı hazır olunca teslim bekler (self servis): Açık'ta da görünür
-  const paidRecent = useQuery({ queryKey: ['orders', 'kapali', 'teslim'], queryFn: () => get<OrderDTO[]>('/orders?status=kapali&type=tezgah,gelal&limit=100'), refetchInterval: 60_000 });
+  // Hazır tezgâh ve gel-al siparişi kasadan da teslim edilir (Geri al bildirimde)
+  const canHand = can('mutfak.ekran') || can('siparis.al');
+  // Önce ödenmiş (kapanmış) tezgâh ve gel-al satışı hazır olunca teslim bekler (self servis): Açık'ta da görünür. Sunucu
+  // bar ekranının Hazır sekmesinin koşuluyla süzer (`ready=1`: son 30 dakikada hazır, açık günün); yalnız teslim edebilene
+  const paidReady = useQuery({
+    queryKey: ['orders', 'kapali', 'teslim'],
+    queryFn: () => get<OrderDTO[]>('/orders?status=kapali&type=tezgah,gelal&ready=1&limit=200'),
+    enabled: canHand,
+    refetchInterval: 60_000,
+  });
   const refreshOnline = useMutation({
     mutationFn: () => post('/sync/online/refresh'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
     onError: (e) => toast.err(errorMessage(e)),
   });
-  // Hazır tezgâh ve gel-al siparişi kasadan da teslim edilir (Geri al bildirimde)
-  const canHand = can('mutfak.ekran') || can('siparis.al');
   const [handing, setHanding] = useState<string | null>(null);
   const hand = async (o: OrderDTO, ids: string[], name: string) => {
     setHanding(o.id);
@@ -69,8 +73,9 @@ export default function OrdersPage() {
   };
 
   const all = open.data ?? [];
-  // Bugün kapanmış, hazır kalemi teslim bekleyen tezgâh ve gel-al satışı (önce ödenen): en üstte, "Ödendi" rozetiyle
-  const awaitingHand = (paidRecent.data ?? []).filter((o) => readyToHand(o).length > 0);
+  // Kapanmış, hazır kalemi teslim bekleyen tezgâh ve gel-al satışı (önce ödenen): en üstte, "Ödendi" rozetiyle. Teslim
+  // yetkisi olmayan (kurye) düğmesiz kart görmez
+  const awaitingHand = canHand ? (paidReady.data ?? []) : [];
   const openPos = all.filter((o) => o.type !== 'masa' && o.source === 'pos');
   // Liste sorgusu: boş durum yalnız veri gelip boşsa; yüklenirken iskelet, alınamazsa hata (sahte "yok" değil)
   const list = tab === 'kapanan' ? closed : open;
@@ -144,10 +149,9 @@ export default function OrdersPage() {
             const readyIds = canHand ? readyToHand(o) : [];
             // Adet olarak ("2 ürün" yazan kartta "2 hazır")
             const readyQty = o.items.filter((i) => readyIds.includes(i.id)).reduce((a, i) => a + i.qty, 0);
-            // Self modlarda tezgâh ve gel-al siparişinin çağrı numarası ("No 34"; müşteri onunla bekler), adıyla
-            const call = callFor(o, mode);
-            const callNo = call?.kind === 'numara' ? callText(call) : null;
-            const name = callNo ? joinMeta([callNo, o.deliveryName]) : (o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type]));
+            // Self modlarda kasanın tezgâh ve gel-al siparişinin çağrı numarası ("No 34"; müşteri onunla bekler), adıyla;
+            // paket platformunun gel-al'ında platformun kısa kodu (müşteri LafPOS numarasını bilmez, çağrı ekranı gibi)
+            const { name, head } = orderCardName(o, mode);
             const paidAhead = o.status === 'kapali' && tab !== 'kapanan';
             const itemCount = o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);
             const methods = [...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))];
@@ -165,7 +169,7 @@ export default function OrdersPage() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
                       {name}
-                      {!callNo && <span className="tabular font-normal text-muted"> #{o.extNo ?? o.no}</span>}
+                      {!head && <span className="tabular font-normal text-muted"> #{o.extNo ?? o.no}</span>}
                     </span>
                     {/* Açıkta geçen süre (açılış saati ipucunda), kapananda kapanış saati; boş parça düşer */}
                     <span className="block text-[13px] text-muted" title={`Açılış ${fmtTime(o.openedAt)}`}>
@@ -215,7 +219,7 @@ export default function OrdersPage() {
                   </div>
                 )}
                 {readyIds.length > 0 && (
-                  <Button variant="primary" className="mt-3" icon={<PackageCheck className="size-4" />} loading={handing === o.id} onClick={() => void hand(o, readyIds, callNo ? name : `${name} #${o.no}`)}>
+                  <Button variant="primary" className="mt-3" icon={<PackageCheck className="size-4" />} loading={handing === o.id} onClick={() => void hand(o, readyIds, head ? name : `${name} #${o.no}`)}>
                     Teslim edildi
                   </Button>
                 )}

@@ -6,6 +6,7 @@ import { PLATFORM_LABEL, PLATFORMS, type PlatformId } from '@shared/platforms';
 import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
 import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
+import { auditForViewer } from '../delivery/commission';
 import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
 import { costMap, costsAt } from '../sync/lafmaliyet';
 import { getOpenDay } from './orders';
@@ -803,7 +804,8 @@ export function patronLive(withCost: boolean) {
     .orderBy(desc(schema.auditLog.at))
     .limit(40)
     .all()
-    .map((a) => ({ id: a.id, at: a.at, severity: a.severity, action: a.action, message: a.message, amount: a.amount, orderId: a.orderId }));
+    // Eski platform ayarı uyarısının iletisinde komisyon oranı yazıyordu: maliyeti görmeyene (ve bulut özetine) silinir
+    .map((a) => auditForViewer({ id: a.id, at: a.at, severity: a.severity, action: a.action, message: a.message, amount: a.amount, orderId: a.orderId }, withCost));
 
   return {
     now,

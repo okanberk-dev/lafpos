@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNotNull, isNull, or, type SQL } from 'drizzle-orm';
 import { PLATFORM_LABEL, type PlatformId } from '@shared/platforms';
 import { numaratorLabel } from '@shared/service-mode';
 import { businessDate } from '@shared/time';
@@ -125,23 +125,62 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   return board;
 }
 
+/** Bar ekranının penceresi: açık günün başından (en az son 12 saat); açık gün yoksa son 24 saat */
+const kitchenSince = (day: { openedAt: number } | undefined, now: number) => (day ? Math.min(day.openedAt, now - 12 * 3600_000) : now - 24 * 3600_000);
+
+/**
+ * Teslim bekleyen hazır bar kalemi: bar ekranının Hazır sekmesi (`kitchenTickets` `ready`) ve Siparişler › Açık'ın
+ * önce ödenmiş satışları (`GET /orders?ready=1`, `ordersAwaitingHand`) aynı koşulla süzülür. Son 30 dakikada hazır
+ * olmuş, teslim edilmemiş, iptal edilmemiş bar kalemi; açık günün penceresinde; kasanın açık ya da kapanmış siparişi
+ * (site ve paket platformu siparişi değil, onların teslimi kendi akışlarında). Açık gün yoksa null (liste boş): gün
+ * sonundan sonra önceki günlerin teslim edilmemiş hazırı listede birikmez. `orderItems` ⨝ `orders` birleşimine uygulanır.
+ */
+export function awaitingHandWhere(t: Tx | DB, now = Date.now(), stationId?: string | null): SQL | null {
+  const day = getOpenDay(t);
+  if (!day) return null;
+  return (
+    and(
+      gt(schema.orderItems.sentAt, kitchenSince(day, now)),
+      stationId ? eq(schema.orderItems.stationId, stationId) : isNotNull(schema.orderItems.stationId),
+      eq(schema.orderItems.voided, false),
+      eq(schema.orderItems.status, 'hazir'),
+      gt(schema.orderItems.readyAt, now - KITCHEN_READY_MS),
+      inArray(schema.orders.status, ['acik', 'kapali']),
+      eq(schema.orders.source, 'pos'),
+      isNull(schema.orders.platform),
+    ) ?? null
+  );
+}
+
+/** Teslim bekleyen hazır kalemi olan siparişler (`awaitingHandWhere`); açık gün yoksa boş */
+export function ordersAwaitingHand(t: Tx | DB, now = Date.now()): string[] {
+  const where = awaitingHandWhere(t, now);
+  if (!where) return [];
+  return t
+    .selectDistinct({ id: schema.orderItems.orderId })
+    .from(schema.orderItems)
+    .innerJoin(schema.orders, eq(schema.orders.id, schema.orderItems.orderId))
+    .where(where)
+    .all()
+    .map((r) => r.id);
+}
+
 /**
  * Bar/mutfak ekranı. Varsayılan: istasyona düşen ve henüz hazır olmayan kalemler, fiş (adisyon + gönderim) başına
- * gruplu. `ready` (Hazır sekmesi): son 30 dakikada hazır olup teslim edilmemiş kalemler, sipariş başına tek fiş
- * (müşteri siparişi bütün alır); site ve paket platformu siparişleri gelmez, onların teslimi kendi akışlarında. Kasanın
- * siparişinde kalemin durumu esastır: teslim edilmiş gel-al'a sonradan eklenen kalem hazır olunca burada görünür.
- * `history` (Geçmiş): son 90 dakikada hazır olanlar ve teslim edilenler.
+ * gruplu. `ready` (Hazır sekmesi): teslim bekleyen hazır kalemler (`awaitingHandWhere`: son 30 dakikada hazır, açık
+ * günün; açık gün yoksa boş), sipariş başına tek fiş (müşteri siparişi bütün alır); site ve paket platformu siparişleri
+ * gelmez, onların teslimi kendi akışlarında. Kasanın siparişinde kalemin durumu esastır: teslim edilmiş gel-al'a
+ * sonradan eklenen kalem hazır olunca burada görünür. `history` (Geçmiş): son 90 dakikada hazır olanlar ve teslim edilenler.
  */
 export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; history?: boolean; ready?: boolean } = {}): KitchenTicket[] {
   const now = Date.now();
-  const day = getOpenDay(t);
-  const since = day ? Math.min(day.openedAt, now - 12 * 3600_000) : now - 24 * 3600_000;
+  const since = kitchenSince(getOpenDay(t), now);
 
   const base = and(gt(schema.orderItems.sentAt, since), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
   const where = opts.history
     ? and(base, eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['hazir', 'servis']), gt(schema.orderItems.readyAt, now - 90 * 60_000))
     : opts.ready
-      ? and(base, eq(schema.orderItems.voided, false), eq(schema.orderItems.status, 'hazir'), gt(schema.orderItems.readyAt, now - KITCHEN_READY_MS))
+      ? awaitingHandWhere(t, now, opts.stationId)
       : and(
           base,
           or(
@@ -150,6 +189,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
             and(eq(schema.orderItems.voided, true), eq(schema.orderItems.voidAfterSend, true), gt(schema.orderItems.voidedAt, now - 10 * 60_000)),
           ),
         );
+  if (!where) return [];
 
   const rows = t
     .select({ item: schema.orderItems, order: schema.orders })
@@ -158,7 +198,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
     .where(and(where, inArray(schema.orders.status, ['acik', 'kapali'])))
     .orderBy(asc(schema.orderItems.sentAt))
     .all()
-    .filter((r) => r.item.stationId && (!opts.ready || (r.order.source === 'pos' && !r.order.platform)));
+    .filter((r) => r.item.stationId);
 
   const names = userNameMap(t);
   const tableNames = new Map(t.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((x) => [x.id, x.name]));
@@ -180,6 +220,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
         sentAt: item.sentAt,
         scheduledFor: order.scheduledFor,
         numarator: order.numarator ?? null,
+        platform: order.platform ?? null,
         items: [],
       };
       tickets.set(key, ticket);

@@ -5,7 +5,8 @@ import { db, tx } from '../db/client';
 import { type AppEnv, actorFrom, can, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, conflict, HttpError, patchOf } from '../lib/http';
-import { acceptFlow, announceReject, autoAccept, liveStatus, withDecisionLock } from '../delivery/live';
+import { seesCommission } from '../delivery/commission';
+import { acceptFlow, announceReject, autoAccept, liveStatus, rejectWhileAutoAccepting, withDecisionLock } from '../delivery/live';
 import {
   autoAcceptors,
   closeCancelPending,
@@ -43,7 +44,7 @@ platformRoutes.get('/', (c) => {
   const user = c.get('user');
   if (!can(user, 'paket.yonet') && !can(user, 'siparis.al') && !can(user, 'senkron.yonet')) requirePermission(user, 'paket.yonet');
   const all = platformSettings();
-  const withCost = can(user, 'rapor.maliyet') || can(user, 'ayar.yonet') || can(user, 'senkron.yonet');
+  const withCost = seesCommission(user);
   const settings = withCost ? all : (Object.fromEntries(PLATFORMS.map((p) => [p, withoutCommission(all[p])])) as Record<PlatformId, Omit<PlatformSettings, 'commissionPct'>>);
   return c.json({ settings, orders: listPlatformOrders(db), live: liveStatus(), acceptors: autoAcceptors(db) });
 });
@@ -111,13 +112,19 @@ platformRoutes.post('/orders/:id/reject', async (c) => {
   requirePermission(user, 'paket.yonet');
   const input = await body(c, z.object({ reason: z.string().max(100) }));
   if (!input.reason.trim()) throw new HttpError(400, 'Ret nedeni seçilmeli', 'reason_required');
-  return withDecisionLock(c.req.param('id'), async () => {
-    const row = getPlatformOrder(db, c.req.param('id'));
-    if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
-    const notifiedStatus = await announceReject(row, input.reason.trim());
-    write((t, fx) => rejectPlatformOrder(t, user, fx, row.id, input.reason, { notifiedStatus }));
-    return c.json({ ok: true });
-  });
+  // Otomatik kabul o an platforma kabul yazıyorsa ret gitmez: 409 `auto_accepting` (kabul edilirse adisyondan iptal),
+  // deneme denetim kaydına
+  return withDecisionLock(
+    c.req.param('id'),
+    async () => {
+      const row = getPlatformOrder(db, c.req.param('id'));
+      if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
+      const notifiedStatus = await announceReject(row, input.reason.trim());
+      write((t, fx) => rejectPlatformOrder(t, user, fx, row.id, input.reason, { notifiedStatus }));
+      return c.json({ ok: true });
+    },
+    { whileAuto: () => rejectWhileAutoAccepting(user, c.req.param('id'), input.reason.trim()) },
+  );
 });
 
 /**

@@ -78,6 +78,7 @@ const ACTION_LABEL: Record<string, string> = {
   'platform.auto_skip': 'Otomatik kabul edilmedi',
   'platform.product_map': 'Ürün eşleme',
   'platform.reject': 'Platform reddi',
+  'platform.reject_try': 'Platform reddi denemesi',
   'platform.settings': 'Platform ayarı',
   'platform.settle': 'Platform ödemesi',
   'product.available': 'Satışta',

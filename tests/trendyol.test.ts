@@ -91,7 +91,10 @@ describe('paket → tek biçim', () => {
     // Kapıda ödemeyi Trendyol Go kuryesi alır: tahsilat platformun
     expect(goCash).toMatchObject({ courier: 'platform', platformCollects: true, paymentLabel: 'Kapıda Pluxee' });
     expect(courierOf({ id: 1, deliveryType: 'go' })).toBe('platform');
-    expect(paymentOf({ id: 1 })).toEqual({ online: true, label: 'Online' });
+    // Tür gelmedi (yalnız boşluk da): online sayılır, `missing` ile işaretli (kendi kuryemizde tahsilat doğrulanır)
+    expect(paymentOf({ id: 1 })).toEqual({ online: true, label: 'Online', missing: true });
+    expect(paymentOf({ id: 1, payment: ' ' })).toEqual({ online: true, label: 'Online', missing: true });
+    expect(paymentOf({ id: 1, payment: { paymentType: '  ' } })).toEqual({ online: true, label: 'Online', missing: true });
   });
 
   it('eksik ya da bozuk alanlar: kuruşa çevrim, adet 1, kod paketten; ödenen tutar kalemleri aşarsa dokunulmaz', async () => {

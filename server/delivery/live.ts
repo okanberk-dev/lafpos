@@ -186,17 +186,44 @@ function patchRow(id: string, set: Partial<PlatformRow>, audit?: AuditEntry) {
 /**
  * Aynı platform siparişine iki ekrandan aynı anda kabul ya da ret gitmesin: platform çağrısı yerel karardan önce
  * yapıldığı için işlem kilidi yetmez (iki istek de "onay bekliyor" görür ve ikisi de platforma yazar). Kasadaki karar
- * (`auto` değil) kaydı `manualDecision`'a da koyar: sonucu ne olursa olsun otomatik kabul o kayda dokunmaz.
+ * (`auto` değil) kaydı `manualDecision`'a da koyar: sonucu ne olursa olsun otomatik kabul o kayda dokunmaz. Kilidi
+ * otomatik kabul tutuyorsa ve `whileAuto` verildiyse (kasadaki Reddet) onun hatası atılır, "başka bir ekranda" değil.
  */
-export async function withDecisionLock<T>(id: string, fn: () => Promise<T>, opts: { auto?: boolean } = {}): Promise<T> {
-  if (deciding.has(id)) throw new HttpError(409, 'Bu sipariş şu an başka bir ekranda işleniyor; birkaç saniye sonra yeniden bakın', 'busy');
-  deciding.add(id);
+export async function withDecisionLock<T>(id: string, fn: () => Promise<T>, opts: { auto?: boolean; whileAuto?: () => HttpError } = {}): Promise<T> {
+  const holder = deciding.get(id);
+  if (holder === 'auto' && opts.whileAuto) throw opts.whileAuto();
+  if (holder) throw new HttpError(409, 'Bu sipariş şu an başka bir ekranda işleniyor; birkaç saniye sonra yeniden bakın', 'busy');
+  deciding.set(id, opts.auto ? 'auto' : 'manual');
   if (!opts.auto) manualDecision.add(id);
   try {
     return await fn();
   } finally {
     deciding.delete(id);
   }
+}
+
+/** Otomatik kabul platform çağrısındayken kasadaki Reddet: ret gitmez, kabul edilirse sipariş adisyondan iptal edilir */
+export const AUTO_ACCEPTING_MESSAGE = 'Otomatik kabul ediliyor; kabul edilirse adisyondan iptal edin';
+
+/**
+ * Kasadaki Reddet otomatik kabulün kilidine denk geldi: ret platforma gitmez (kabul platformda sürüyor), kişinin ret
+ * denemesi denetim kaydına yazılır (bilgi) ve kayıt kasadaki karar sayılır (`manualDecision`: kabul düşerse otomatik kabul
+ * yeniden denemez, sipariş elle kalır). 409 `auto_accepting`; şerit iletiyi gösterir.
+ */
+export function rejectWhileAutoAccepting(user: AuthUser, id: string, reason: string): HttpError {
+  manualDecision.add(id);
+  const row = db.select().from(schema.platformOrders).where(eq(schema.platformOrders.id, id)).get();
+  const fx = new Effects();
+  tx((t) =>
+    fx.audit(t, {
+      userId: user.id,
+      action: 'platform.reject_try',
+      amount: row?.payload.customerTotal ?? null,
+      message: `${user.name} ${row ? `${PLATFORM_LABEL[row.platform]} ${row.payload.code}` : 'platform'} siparişini reddetmek istedi (${reason}); otomatik kabul o an sürüyordu, ret gitmedi`,
+    }),
+  );
+  fx.flush();
+  return new HttpError(409, AUTO_ACCEPTING_MESSAGE, 'auto_accepting');
 }
 
 class Rehearsal extends Error {}

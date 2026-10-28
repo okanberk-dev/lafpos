@@ -421,6 +421,31 @@ describe('Canlı', () => {
     expect(await byExt(ext2)).toMatchObject({ status: 'kabul', reason: '20 dk, otomatik' });
   });
 
+  it('otomatik kabul platform çağrısındayken Reddet: 409 auto_accepting ve ileti (başka ekran değil); ret denemesi denetimde, kayıt kasadaki karar', async () => {
+    await setPlatform('trendyol', { autoAccept: false });
+    const ext = await tyArrive();
+    const row = await byExt(ext);
+    await setPlatform('trendyol', { autoAccept: true });
+    ty.delayFor.picked = 300;
+    const auto = live.autoAccept(row.id);
+    const rej = await h.call<{ code: string; error: string }>('kasa', 'POST', `/platforms/orders/${row.id}/reject`, { reason: 'Çok yoğunuz' });
+    expect([rej.status, rej.json.code, rej.json.error]).toEqual([409, 'auto_accepting', 'Otomatik kabul ediliyor; kabul edilirse adisyondan iptal edin']);
+    // Ret denemesi kayıt: kasadaki karar sayılır (kabul düşseydi otomatik kabul yeniden denemezdi)
+    const { manualDecision } = await import('../server/delivery/locks');
+    expect(manualDecision.has(row.id)).toBe(true);
+    expect(await auto).toBe('accepted');
+    delete ty.delayFor.picked;
+    expect(ty.count(`PUT ${ext} unsupplied`)).toBe(0);
+    expect((await byExt(ext)).status).toBe('kabul');
+    const tried = (await audit()).filter((a) => a.action === 'platform.reject_try' && a.message.includes(`${row.payload.code} `));
+    expect(tried).toHaveLength(1);
+    expect(tried[0]).toMatchObject({ severity: 'info' });
+    expect(tried[0]!.message).toBe(`Kasa Trendyol Go ${row.payload.code} siparişini reddetmek istedi (Çok yoğunuz); otomatik kabul o an sürüyordu, ret gitmedi`);
+    // Kilit bitince Reddet bugünkü gibi: sipariş artık onay beklemiyor
+    const late = await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${row.id}/reject`, { reason: 'Çok yoğunuz' });
+    expect([late.status, late.json.code]).toEqual([409, 'not_pending']);
+  });
+
   it('elle ret platforma gidemedi (aynı yoklamada): otomatik kabul personelin reddetmeye çalıştığı siparişi kabul etmez', async () => {
     const a = tyPkg();
     const b = tyPkg();
@@ -677,6 +702,13 @@ describe('Deneme', () => {
     // Ödeme türü yoksa online sayılır: platform kuryesinde önemsiz, kendi kuryemizde tahsilat doğrulanmalı
     expect(fromTrendyolPackage(tyPkg({ payment: undefined })).amountReview).toBeUndefined();
     expect(fromTrendyolPackage(tyPkg({ payment: undefined, deliveryType: 'STORE' })).amountReview).toMatch(/Ödeme türü gelmedi/);
+    // Yalnız boşluk da gelmemiş sayılır (`paymentOf`'un kırptığı değer): eskiden işaretlenmeyip otomatik kabul ediliyordu
+    for (const payment of [' ', { paymentType: '  ' }] as TrendyolPackage['payment'][]) {
+      const own = fromTrendyolPackage(tyPkg({ payment, deliveryType: 'STORE' }));
+      expect([own.courier, own.platformCollects, own.paymentLabel]).toEqual(['restoran', true, 'Online']);
+      expect(own.amountReview).toBe("Ödeme türü gelmedi: tahsilatı Trendyol'dan doğrulayın");
+      expect(fromTrendyolPackage(tyPkg({ payment })).amountReview).toBeUndefined();
+    }
 
     const { fromDhOrder } = await import('../server/delivery/yemeksepeti');
     const dh = (price: DhOrder['price'], payment: DhOrder['payment']): DhOrder => ({

@@ -105,6 +105,15 @@ describe('çağrı ekranı', () => {
     // Platform siparişinin teslimi kendi akışında (Siparişler): bar ekranının Hazır sekmesinde düğmesi yok
     const ready = await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?ready=1');
     expect(ready.some((tk) => tk.orderId === orderId)).toBe(false);
+    // Geçmiş'te de Teslim edildi düğmesi yok (fiş platformu taşır)
+    const { historyHandIds, orderCardName } = await import('../src/lib/readyToHand');
+    const past = (await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?history=1')).find((tk) => tk.orderId === orderId)!;
+    expect(past.platform).toBe('yemeksepeti');
+    expect(historyHandIds(past)).toEqual([]);
+    // Siparişler kartının başlığı self modda da platformun kodu: müşteri LafPOS numarasını bilmez (çağrı ekranı gibi)
+    const card = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`);
+    expect(orderCardName(card, 'self')).toEqual({ name: 'K9TX · Deniz Öztürk', head: 'K9TX' });
+    expect(orderCardName(card, 'masa').head).toBe('K9TX');
 
     await h.ok('kasa', 'POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'teslim' });
     board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
@@ -400,13 +409,105 @@ describe('teslimin geri alınışı, taşıma, birleştirme ve elle aşama (göz
     const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${counter.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
     await h.ok('kasa', 'POST', `/orders/${counter.id}/payments`, { methodId: nakit.id, amount: sent.total });
     await h.ok('bar', 'POST', '/kitchen/status', { itemIds: sent.items.map((i) => i.id), status: 'hazir' });
-    // Siparişler'in sorgusu (Açık sekmesi): bugünkü kapanmış tezgâh ve gel-al
-    const list = () => h.ok<OrderDTO[]>('kasa', 'GET', '/orders?status=kapali&type=tezgah,gelal&limit=100');
+    // Siparişler'in sorgusu (Açık sekmesi): kapanmış tezgâh ve gel-al, bar Hazır sekmesinin koşuluyla (`ready=1`)
+    const list = () => h.ok<OrderDTO[]>('kasa', 'GET', '/orders?status=kapali&type=tezgah,gelal&ready=1&limit=200');
     const paid = (await list()).find((x) => x.id === counter.id)!;
     expect(paid.status).toBe('kapali');
     expect(readyToHand(paid)).toEqual(sent.items.map((i) => i.id));
     await h.ok('kasa', 'POST', '/kitchen/status', { itemIds: readyToHand(paid), status: 'servis' });
-    expect(readyToHand((await list()).find((x) => x.id === counter.id)!)).toEqual([]);
+    expect((await list()).some((x) => x.id === counter.id)).toBe(false);
+  });
+});
+
+describe('Siparişler › Açık ve bar Geçmiş\'i (gözden geçirme son)', () => {
+  const nakit = () => h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+  const ids = (o: OrderDTO) => o.items.map((i) => i.id);
+  /** Siparişler › Açık'ın önce ödenmiş satış sorgusu */
+  const paidReady = () => h.ok<OrderDTO[]>('kasa', 'GET', '/orders?status=kapali&type=tezgah,gelal&ready=1&limit=200');
+  const paidCounter = async () => {
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: nakit().id, amount: sent.total });
+    return sent;
+  };
+
+  it('önce ödenen satış Açık\'ta bar Hazır sekmesinin koşuluyla: son 30 dakikada hazır, teslim edilmemiş; açık gün yoksa hiç', async () => {
+    const { db, schema } = await import('../server/db/client');
+    const { eq, isNull } = await import('drizzle-orm');
+    const fresh = await paidCounter();
+    const stale = await paidCounter();
+    const waiting = await paidCounter();
+    const handed = await paidCounter();
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: [...ids(fresh), ...ids(stale), ...ids(handed)], status: 'hazir' });
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids(handed), status: 'servis' });
+    // Hazır olalı 31 dakika: eskiden gün boyu "Ödendi" kartı olarak kalır, gerçek açık adisyonları aşağı iterdi
+    db.update(schema.orderItems).set({ readyAt: Date.now() - 31 * 60_000 }).where(eq(schema.orderItems.orderId, stale.id)).run();
+
+    const listed = (await paidReady()).map((o) => o.id);
+    expect(listed).toContain(fresh.id);
+    for (const o of [stale, waiting, handed]) expect(listed).not.toContain(o.id);
+    expect((await paidReady()).every((o) => o.status === 'kapali' && (o.type === 'tezgah' || o.type === 'gelal'))).toBe(true);
+    // Tek koşul: süzgeç (durum ve türden bağımsız) bar ekranının Hazır sekmesiyle aynı siparişleri verir
+    const all = (await h.ok<OrderDTO[]>('kasa', 'GET', '/orders?status=tum&ready=1&limit=500')).map((o) => o.id).sort();
+    const bar = [...new Set((await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?ready=1')).map((tk) => tk.orderId))].sort();
+    expect(all).toEqual(bar);
+    expect(all).toContain(fresh.id);
+
+    // Gün sonundan sonra (açık gün yok) ikisi de boş: önceki günlerin teslim edilmemiş hazırı listede birikmez
+    const day = db.select().from(schema.businessDays).where(isNull(schema.businessDays.closedAt)).get()!;
+    db.update(schema.businessDays).set({ closedAt: Date.now() }).where(eq(schema.businessDays.id, day.id)).run();
+    try {
+      expect(await paidReady()).toEqual([]);
+      expect(await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?ready=1')).toEqual([]);
+      // Süzgeçsiz liste gün sonundan sonra bütün günlerin kapananını verir (eski sorgu)
+      expect((await h.ok<OrderDTO[]>('kasa', 'GET', '/orders?status=kapali&type=tezgah,gelal&limit=500')).some((o) => o.id === fresh.id)).toBe(true);
+    } finally {
+      db.update(schema.businessDays).set({ closedAt: null }).where(eq(schema.businessDays.id, day.id)).run();
+    }
+    expect((await paidReady()).map((o) => o.id)).toContain(fresh.id);
+  });
+
+  it('Siparişler kartının adı: self modda kasanın satışı çağrı numarasıyla, platform gel-al\'ı platformun koduyla', async () => {
+    const { orderCardName } = await import('../src/lib/readyToHand');
+    const base = { type: 'gelal', source: 'pos', no: 4, numarator: null, platform: null, platformCode: null, tableName: null, extLabel: null, deliveryName: 'Deniz Öztürk' } as const;
+    expect(orderCardName(base, 'self')).toEqual({ name: 'No 4 · Deniz Öztürk', head: 'No 4' });
+    expect(orderCardName({ ...base, type: 'tezgah', deliveryName: null }, 'qr_self')).toEqual({ name: 'No 4', head: 'No 4' });
+    // Platform gel-al'ı: "No 4" değil (müşteri onu bilmez), her modda platformun kodu
+    expect(orderCardName({ ...base, platform: 'trendyol', platformCode: 'K9TX' }, 'self')).toEqual({ name: 'K9TX · Deniz Öztürk', head: 'K9TX' });
+    expect(orderCardName({ ...base, platform: 'trendyol', platformCode: 'K9TX' }, 'masa')).toEqual({ name: 'K9TX · Deniz Öztürk', head: 'K9TX' });
+    // Platformun paketi (kurye götürür) ve masaya servis modunda kasanın gel-al'ı: ad ve sipariş numarası
+    expect(orderCardName({ ...base, type: 'paket', platform: 'getir', platformCode: '4821' }, 'self')).toEqual({ name: 'Deniz Öztürk', head: null });
+    expect(orderCardName(base, 'masa')).toEqual({ name: 'Deniz Öztürk', head: null });
+    expect(orderCardName({ ...base, numarator: 'B4' }, 'yari_self')).toEqual({ name: 'Deniz Öztürk', head: null });
+  });
+
+  it('Geçmiş\'te teslimi geri alınan eski sipariş Hazır sekmesine dönmez: Geçmiş fişinin Teslim edildi\'si (aynı uç) yeniden teslim eder', async () => {
+    const { historyHandIds } = await import('../src/lib/readyToHand');
+    const { db, schema } = await import('../server/db/client');
+    const { inArray } = await import('drizzle-orm');
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Arda Er' });
+    const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids(sent), status: 'hazir' });
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids(sent), status: 'servis' });
+    // 40 dakika önce hazır olmuştu; teslim Geçmiş'ten geri alınır (hazır anı korunur)
+    db.update(schema.orderItems).set({ readyAt: Date.now() - 40 * 60_000 }).where(inArray(schema.orderItems.id, ids(sent))).run();
+    let past = (await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?history=1')).find((tk) => tk.orderId === o.id)!;
+    expect(historyHandIds(past)).toEqual([]);
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids(sent), status: 'hazir' });
+
+    // Hazır sekmesinde, çağrı ekranında ve Fişler'de yok: eskiden barista onu yeniden teslim edemiyordu
+    expect((await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?ready=1')).some((tk) => tk.orderId === o.id)).toBe(false);
+    expect((await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen')).some((tk) => tk.orderId === o.id)).toBe(false);
+    const board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
+    expect([...board.preparing, ...board.ready].some((e) => e.id === o.id)).toBe(false);
+    past = (await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?history=1')).find((tk) => tk.orderId === o.id)!;
+    expect(historyHandIds(past)).toEqual(ids(sent));
+    expect(historyHandIds({ ...past, source: 'laffogato' })).toEqual([]);
+
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: historyHandIds(past), status: 'servis' });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).deliveryStatus).toBe('teslim');
+    past = (await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?history=1')).find((tk) => tk.orderId === o.id)!;
+    expect(historyHandIds(past)).toEqual([]);
   });
 });
 

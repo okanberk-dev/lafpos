@@ -257,6 +257,11 @@ gidemeyince (502) kayıt onay bekler görünür; eskiden turun sonundaki otomati
 deneme personelin reddettiği siparişi kabul edip bara gönderiyordu (gözden geçirme, 28 Eki 2026). Üç kat:
 - O an kasada karar veriliyorsa (409 `busy`: kasadaki Kabul ya da Ret platform çağrısını bekliyor) otomatik kabul
   kaydı bırakır, yeniden denemez; nedeni "kasada karar veriliyor".
+- Tersi: otomatik kabul platform çağrısındayken kasada Reddet'e basılırsa ret gitmez (kabul platformda sürüyor) ve
+  "başka bir ekranda işleniyor" denmez: 409 `auto_accepting`, "Otomatik kabul ediliyor; kabul edilirse adisyondan
+  iptal edin" (şerit kartta ve bildirimde gösterir). Kişinin ret denemesi denetim kaydına bilgi olarak yazılır
+  (`platform.reject_try`, nedeniyle) ve kayıt kasadaki karar sayılır (`manualDecision`): kabul düşerse sipariş elle
+  kalır. Elle Kabul aynı anda 409 `busy` alır (bugünkü gibi).
 - Kilidin içinde okunan kayıtta otomatik kabulün kendi notundan ("Otomatik kabul edilmedi: …") başka bir not varsa
   (ör. "ret bildirilemedi") atlanır: "kasada karar denendi". Kasa yeniden başlasa da kayıtta durur.
 - Kasadaki karar uçları (`accept`, `reject`, `platform-cancel`, `cancel-close`) kilidin içinde kaydı süreç belleğindeki
@@ -289,7 +294,8 @@ başka bir not varsa o ezilmez) ve denetim kaydına bir kez düşer (`platform.a
    Yemeksepeti'nde `grandTotal` − Yemeksepeti kuryesinin teslimat ücreti − kuryenin bahşişi `riderTip` kalemleri
    aşıyorsa, bahşiş tek başına aşmaz; Trendyol Go'da ödenen tutar) tutar doğrulanır, fark adisyona girmez. Ayrıca
    Yemeksepeti'nde ödenmemiş siparişte alınacak tutarın sıfır görünmesi ve kendi kuryemizin siparişinde ödeme türünün
-   belirsiz olması: Getir'de "Getir'den doğrulayın" etiketi, Trendyol Go'da ödeme türünün gelmemesi ya da
+   belirsiz olması: Getir'de "Getir'den doğrulayın" etiketi, Trendyol Go'da ödeme türünün gelmemesi (boş ya da yalnız
+   boşluk: `paymentOf`'un kırptığı değer, "Ödeme türü gelmedi") ya da
    tanınmaması ("Ödeme türü tanınmadı (X)": tanınan online türler `TRENDYOL_ONLINE_PAYMENTS`'ta açıkça listeli,
    kapıda türler ayrı; tanınmayan tür elle kabulde bugünkü gibi online sayılır, yalnız işaretlenir); tutarlar kuruş tam sayı ve sıfırdan küçük değil, adetler tam sayı; Σ(birim × adet) = kalemler;
    restoran kampanyası + platform kampanyası + müşterinin ödediği = kalemler; müşterinin ödediği sıfırdan büyük.
@@ -346,7 +352,10 @@ komisyon oranı `commissionPct` maliyettir, yalnız `rapor.maliyet`, `ayar.yonet
 garson ve raporcu almaz; platform ayarları sunucuya özel ayarlardadır, `/api/bootstrap` ve bulut anlık görüntüsü
 onları hiç taşımaz) ·
 `PUT /api/platforms/:platform` (`mode`, `prepMinutes`, `commissionPct`, `autoAccept`, `autoAcceptUserId`,
-`autoAcceptMaxKurus`) · `POST /api/platforms/:platform/test-order` (`autoAccepted`) ·
+`autoAcceptMaxKurus`; denetim kaydı `platform.settings` iletisinde oran yazmaz, değiştiyse "tahmini komisyon oranı
+değişti" der: ileti uyarı olarak `alerts` olayıyla her ekrana ve patron paneline gider. Oranın eskisi ve yenisi kaydın
+`data`'sında; `/api/admin/audit` onu, ve eski kayıtların iletisindeki "%N komisyon" parçasını, `rapor.maliyet`,
+`ayar.yonet` ya da `senkron.yonet` yetkisi olmayana (yalnız patron paneli yetkilisi) maskeler, `server/delivery/commission.ts`) · `POST /api/platforms/:platform/test-order` (`autoAccepted`) ·
 `POST /api/platforms/orders/:id/accept|reject|platform-cancel|cancel-close` · teslim: `POST /api/orders/:id/delivery` ·
 ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id` · rapor: `GET /api/reports/platforms`,
 `GET /api/reports/export.csv?type=platformlar`.

@@ -160,12 +160,15 @@ function promotionParts(p: TrendyolPromotion): { value: number; sellerRatio: num
  */
 export const TRENDYOL_ONLINE_PAYMENTS: ReadonlySet<string> = new Set(['PAY_WITH_CREDIT_CARD', 'PAY_WITH_DEBIT_CARD', 'PAY_WITH_CARD', 'PAY_WITH_WALLET', 'PAY_ONLINE', 'ONLINE', 'CREDIT_CARD', 'DEBIT_CARD']);
 
-/** Ödeme türü metninden: online mı, kapıda ne; tanınmayan tür `verify` (ham adıyla `raw`) */
-export function paymentOf(pkg: TrendyolPackage): { online: boolean; label: string; verify?: boolean; raw?: string } {
+/**
+ * Ödeme türü metninden: online mı, kapıda ne; tanınmayan tür `verify` (ham adıyla `raw`). Tür gelmediyse (boş ya da
+ * yalnız boşluk) `missing`: online sayılır, kendi kuryemizin siparişinde tahsilat doğrulanır
+ */
+export function paymentOf(pkg: TrendyolPackage): { online: boolean; label: string; verify?: boolean; raw?: string; missing?: boolean } {
   const given = (typeof pkg.payment === 'string' ? pkg.payment : (pkg.payment?.paymentType ?? '')).trim();
   const raw = given.toUpperCase();
   const cardType = typeof pkg.payment === 'object' && pkg.payment ? text(pkg.payment.cardType) : null;
-  if (!raw) return { online: true, label: 'Online' };
+  if (!raw) return { online: true, label: 'Online', missing: true };
   if (raw.includes('CASH') || raw.includes('NAKIT')) return { online: false, label: 'Kapıda nakit' };
   const cards: [string, string][] = [
     ['MULTINET', 'Multinet'],
@@ -255,10 +258,9 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
   } else if (paidTotal != null) {
     amountReview = `Trendyol'da ödenen ${tl(paidTotal)}, kalemler ${tl(subtotal - restaurantDiscount)}: farkı Trendyol'dan doğrulayın`;
   }
-  // Kendi kuryemizin siparişinde ödeme türü yoksa ya da tanınmıyorsa online sayılır (tahmin; elle kabulde de öyle):
-  // tahsilat Trendyol'dan doğrulanmalı, otomatik kabul edilmez
-  const noPayment = !(typeof pkg.payment === 'string' ? pkg.payment : pkg.payment?.paymentType);
-  if (noPayment && courier !== 'platform') amountReview ??= 'Ödeme türü gelmedi: tahsilatı Trendyol\'dan doğrulayın';
+  // Kendi kuryemizin siparişinde ödeme türü yoksa (yalnız boşluk da: `paymentOf`'un kırptığı değer) ya da tanınmıyorsa
+  // online sayılır (tahmin; elle kabulde de öyle): tahsilat Trendyol'dan doğrulanmalı, otomatik kabul edilmez
+  if (pay.missing && courier !== 'platform') amountReview ??= 'Ödeme türü gelmedi: tahsilatı Trendyol\'dan doğrulayın';
   if (pay.verify && courier !== 'platform') amountReview ??= `Ödeme türü tanınmadı (${pay.raw}): tahsilatı Trendyol'dan doğrulayın`;
   const name = [text(pkg.customer?.firstName), text(pkg.customer?.lastName)].filter(Boolean).join(' ') || text(pkg.address?.fullName);
   const phone = text(pkg.address?.phone) ?? text(pkg.callCenterPhone);

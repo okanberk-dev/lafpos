@@ -295,6 +295,20 @@ export async function runFlows(ctx) {
 
           // Önce ödenen satış hazır olunca Siparişler › Açık'ta teslim bekler: çağrı numarası, "Ödendi" ve Teslim edildi
           await api.call('bar', 'POST', '/kitchen/status', { itemIds: order.items.filter((i) => i.stationId).map((i) => i.id), status: 'hazir' });
+          // Teslim yetkisi olmayan (kurye: yalnız paket) düğmesiz "Ödendi" kartı görmez
+          const kurye = await api.call('patron', 'POST', '/admin/users', { name: 'Kurye E2E', role: 'kurye', pin: '5959' });
+          api.tokens.kurye = (await api.call('', 'POST', '/auth/login', { pin: '5959' })).token;
+          try {
+            await withPage(ctx, 'telefon', 'kurye', async (page) => {
+              await go(ctx, page, '/siparisler');
+              await page.getByRole('tab', { name: /^Açık/ }).waitFor({ timeout: 8000 });
+              assert((await page.getByText('Ödendi', { exact: true }).count()) === 0, 'kurye düğmesiz "Ödendi" kartı görüyor');
+              assert((await page.getByText(`No ${order.no}`, { exact: true }).count()) === 0, 'kurye önce ödenen satışın kartını görüyor');
+              await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kurye-siparisler.png` });
+            });
+          } finally {
+            await api.call('patron', 'PATCH', `/admin/users/${kurye.id}`, { active: false });
+          }
           await withPage(ctx, 'tablet', 'kasa', async (page) => {
             await go(ctx, page, '/siparisler');
             const label = page.getByText(`No ${order.no}`, { exact: true });
@@ -458,7 +472,7 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Tablette bar: Hazır sekmesinde siparişi teslim eder, çağrı ekranından düşer; Geri al geri getirir',
+      'Tablette bar: Hazır sekmesinde siparişi teslim eder, çağrı ekranından düşer; Geri al geri getirir; Geçmiş\'ten yeniden teslim eder',
       async () => {
         const latte = seed.boot.products.find((p) => p.name === 'Latte');
         const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
@@ -487,10 +501,26 @@ export async function runFlows(ctx) {
           await page.screenshot({ path: `${ROOT}/e2e/out/tablet-bar-teslim-geri-al.png` });
           await toast.getByRole('button', { name: 'Geri al', exact: true }).click();
           await card.waitFor({ timeout: 8000 });
+          assert(await onBoard(), 'geri alınan sipariş çağrı ekranına dönmedi');
+          const back = await api.call('kasa', 'GET', `/orders/${o.id}`);
+          assert(back.items.every((i) => i.status === 'hazir'), `kalem hazıra dönmedi: ${back.items.map((i) => i.status).join(', ')}`);
+
+          // Geçmiş'te hazır kalemli fiş Geri al'ın yanında Teslim edildi taşır: teslimi geri alınan eski sipariş (Hazır
+          // sekmesinde 30 dakika) buradan yeniden teslim edilir
+          await page.getByRole('tab', { name: /^Geçmiş/ }).click();
+          const past = page.locator('article', { hasText: `Tezgâh #${o.no}` });
+          await past.getByRole('button', { name: 'Teslim edildi', exact: true }).waitFor({ timeout: 8000 });
+          assert((await past.getByRole('button', { name: 'Geri al', exact: true }).count()) === 1, 'Geçmiş fişinde Geri al yok');
+          await past.scrollIntoViewIfNeeded();
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-bar-gecmis-teslim.png` });
+          const smallPast = await smallTargets(page);
+          assert(!smallPast.length, `44 px altı: ${smallPast.join(', ')}`);
+          await past.getByRole('button', { name: 'Teslim edildi', exact: true }).click();
+          await past.getByRole('button', { name: 'Teslim edildi', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
         });
-        assert(await onBoard(), 'geri alınan sipariş çağrı ekranına dönmedi');
-        const back = await api.call('kasa', 'GET', `/orders/${o.id}`);
-        assert(back.items.every((i) => i.status === 'hazir'), `kalem hazıra dönmedi: ${back.items.map((i) => i.status).join(', ')}`);
+        assert(!(await onBoard()), 'Geçmiş\'ten teslim edilen sipariş çağrı ekranında');
+        const handed = await api.call('kasa', 'GET', `/orders/${o.id}`);
+        assert(handed.items.every((i) => i.status === 'servis'), `Geçmiş'ten teslim edilmedi: ${handed.items.map((i) => i.status).join(', ')}`);
       },
     ],
     [

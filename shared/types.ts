@@ -448,6 +448,8 @@ export interface KitchenTicket {
   scheduledFor: string | null;
   /** Masa no / numaratör: fişte numara yerine "Masa 12" */
   numarator: string | null;
+  /** Paket platformunun siparişi: teslimi platformun akışında, bar ekranında Teslim edildi düğmesi yok (eski sunucu göndermez) */
+  platform?: PlatformId | null;
   items: KitchenTicketItem[];
 }
 

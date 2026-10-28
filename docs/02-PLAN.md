@@ -197,9 +197,18 @@ Bar Geçmiş'inin Geri al'ı (ve Geçmiş'te kaleme dokunuş) bir adım geri gid
 geri alınışı: hazır anı korunur, uyarı yok, sipariş kuyruğa dönmez), yalnız hazır kalem "Hazırlanıyor"a; sunucu da
 teslim edilmiş kalemi "Hazırlanıyor"a götürmez, "Hazır"a indirir (gözden geçirme 2: iki adım geri giden sipariş
 kuyruğa dönüyor, çağrı ekranında Hazırlanıyor oluyor, hazır uyarısı yeniden gidiyor ve hazırlama süresi şişiyordu).
+Geçmiş fişinde hazır kalem varsa (kasanın siparişi; site ve platform değil) Geri al'ın yanında **Teslim edildi** de
+durur (aynı uç): hazır anı korunduğu için teslimi geri alınan 30 dakikadan eski sipariş Hazır sekmesine, Fişler'e ve
+çağrı ekranına dönmez, barista onu buradan yeniden teslim eder (`historyHandIds`; gözden geçirme son).
 Kasada aynı düğme adisyonda (hazır tezgâh ve gel-al, kapanmış self servis satışı da) ve Siparişler kartında; önce
-ödenip kapanmış tezgâh ve gel-al satışı hazır olunca Siparişler › Açık'ta da (sayıda da) görünür, "Ödendi" rozetiyle;
-self modlarda kartın adı çağrı numarasıdır ("No 34"). Site ve
+ödenip kapanmış tezgâh ve gel-al satışı hazır olunca Siparişler › Açık'ta da (sayıda da) görünür, "Ödendi" rozetiyle.
+Bu kartlar bar Hazır sekmesiyle **aynı koşulla** süzülür (sunucuda tek koşul, `awaitingHandWhere`: son 30 dakikada
+hazır olmuş, teslim edilmemiş bar kalemi, açık günün; açık gün yoksa hiç; `GET /orders?ready=1`, `kitchenTickets`
+`ready`) ve yalnız teslim edebilene (`mutfak.ekran` ya da `siparis.al`) gelir: eskiden hazır kalemi teslim edilmemiş her
+ödenmiş satış gün boyu ve gün sonundan sonra önceki günlerinki de görünüyor, yoğun günde gerçek açık adisyonları aşağı
+itiyor, "son 100" sınırında taze sipariş düşebiliyor, kurye düğmesiz kart görüyordu. Self modlarda kartın adı çağrı
+numarasıdır ("No 34"); paket platformunun gel-al'ında her modda platformun kısa kodu ("K9TX · Deniz Öztürk", çağrı
+ekranı gibi; müşteri LafPOS numarasını bilmez; `orderCardName`). Site ve
 paket platformu siparişleri Hazır sekmesine gelmez, teslimleri kendi akışlarında. Kasanın gel-al siparişinin aşaması
 bara giden kalemlerden türetilir (`pickupStageOf`): hepsi teslim edildiyse "Teslim edildi", hepsi hazırsa "Hazır",
 değilse "Hazırlanıyor". Kalem durumu değişince, bara kalem gidince (teslim edilmiş, kapanıp yeniden açılmış siparişe

@@ -8,7 +8,7 @@ import { body, isoDateTime, kurus, query } from '../lib/http';
 import { afterDelivery } from '../delivery/service';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
-import { floorState, kitchenTickets } from '../services/floor';
+import { floorState, kitchenTickets, ordersAwaitingHand } from '../services/floor';
 import * as orders from '../services/orders';
 import { linkRoom, startRoom, stopRoom } from '../services/rooms';
 import { refreshSiteKaraoke, siteKaraokeOn } from '../sync/laffogato-karaoke';
@@ -46,10 +46,19 @@ posRoutes.get('/orders', (c) => {
       status: z.enum(['acik', 'kapali', 'iptal', 'tum']).default('acik'),
       dayId: z.string().optional(),
       type: z.string().optional(),
+      /** Teslim bekleyen hazır kalemi olanlar: bar ekranının Hazır sekmesiyle aynı koşul (`awaitingHandWhere`) */
+      ready: z.literal('1').optional(),
       limit: z.coerce.number().int().min(1).max(500).default(100),
     }),
   );
   const conds = [];
+  if (q.ready) {
+    // Siparişler › Açık'ın önce ödenmiş satışları: son 30 dakikada hazır olup teslim edilmemiş, açık günün; açık gün
+    // yoksa boş (eskiden gün boyu ve gün sonundan sonra önceki günlerin "Ödendi" kartları birikiyordu)
+    const ids = ordersAwaitingHand(db);
+    if (!ids.length) return c.json([]);
+    conds.push(inArray(schema.orders.id, ids));
+  }
   if (q.status !== 'tum') conds.push(eq(schema.orders.status, q.status));
   if (q.dayId) conds.push(eq(schema.orders.dayId, q.dayId));
   if (q.type) conds.push(inArray(schema.orders.type, q.type.split(',') as ('masa' | 'tezgah' | 'gelal' | 'paket' | 'online')[]));

@@ -11,7 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { EmptyState, Notice, Skeleton, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { deliverItems } from '@/lib/handoff';
-import { undoStep } from '@/lib/readyToHand';
+import { historyHandIds, undoStep } from '@/lib/readyToHand';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -109,14 +109,10 @@ export default function KitchenPage() {
     }
   };
 
-  const deliver = async (t: KitchenTicket, name: string, busyKey: string) => {
+  const deliver = async (ids: string[], name: string, busyKey: string) => {
     setBusy(busyKey);
     try {
-      await deliverItems(
-        t.items.filter((i) => !i.voided && i.status === 'hazir').map((i) => i.id),
-        name,
-        () => qc.invalidateQueries({ queryKey: ['kitchen'] }),
-      );
+      await deliverItems(ids, name, () => qc.invalidateQueries({ queryKey: ['kitchen'] }));
     } finally {
       setBusy(null);
     }
@@ -375,13 +371,21 @@ export default function KitchenPage() {
                       </Button>
                     </>
                   ) : readyView ? (
-                    <Button variant="primary" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(t, name, `${t.key}:deliver`)}>
+                    <Button variant="primary" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(live.filter((i) => i.status === 'hazir').map((i) => i.id), name, `${t.key}:deliver`)}>
                       Teslim edildi
                     </Button>
                   ) : history ? (
-                    <Button size="lg" className={FOOT} icon={<Undo2 className="size-4" />} disabled={ticketBusy} loading={busy === `${t.key}:undo`} onClick={() => void undo(live, `${t.key}:undo`)}>
-                      Geri al
-                    </Button>
+                    <>
+                      <Button size="lg" className={FOOT} icon={<Undo2 className="size-4" />} disabled={ticketBusy} loading={busy === `${t.key}:undo`} onClick={() => void undo(live, `${t.key}:undo`)}>
+                        Geri al
+                      </Button>
+                      {/* Teslimi geri alınan eski sipariş Hazır sekmesine dönmez (30 dk): Geçmiş'ten yeniden teslim edilir */}
+                      {historyHandIds(t).length > 0 && (
+                        <Button variant="primary" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(historyHandIds(t), name, `${t.key}:deliver`)}>
+                          Teslim edildi
+                        </Button>
+                      )}
+                    </>
                   ) : (
                     <>
                       {!allStarted && (

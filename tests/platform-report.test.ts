@@ -345,6 +345,52 @@ describe('Raporlar › Paket platformları', () => {
     expect(platformSettings().yemeksepeti.commissionPct).toBe(18.5);
   });
 
+  it('denetim kaydı ve uyarı olayı oranı taşımaz: patron paneli yetkili ama maliyet yetkisiz kişi oranı ne listede ne olayda görür', async () => {
+    // Patron panelini ve denetim kaydını gören, maliyet, ayar ve bağlantı yetkisi olmayan kişi
+    await h.ok('patron', 'POST', '/admin/users', { name: 'Panelci', role: 'garson', permGrant: ['patron.panel'], pin: '5858' });
+    await h.login('panelci', '5858');
+    const { bus } = await import('../server/lib/events');
+    const { PLATFORM_LABEL } = await import('@shared/platforms');
+    const seen: { topic: string; kind: string; message?: string }[] = [];
+    const listen = (e: { topic: string; kind: string; message?: string }) => seen.push(e);
+    const kasa = h.boot.users.find((u) => u.name === 'Kasa')!.id;
+    bus.on('event', listen);
+    // Oran otomatik kabulle birlikte değişir: kayıt uyarı düzeyinde, `alerts` olayı her ekrana gider
+    await h.ok('patron', 'PUT', '/platforms/getir', { commissionPct: 23.75, autoAccept: true, autoAcceptUserId: kasa });
+    bus.off('event', listen);
+    const alert = seen.find((e) => e.topic === 'alerts' && e.kind === 'platform.settings')!;
+    expect(alert.message).toContain('tahmini komisyon oranı değişti');
+    expect(JSON.stringify(seen)).not.toContain('23.75');
+    expect(JSON.stringify(seen)).not.toContain('23,75');
+
+    type Row = { action: string; severity: string; message: string; data: unknown };
+    const latest = (rows: Row[]) => rows.find((a) => a.action === 'platform.settings' && a.message.includes(PLATFORM_LABEL.getir))!;
+    const panel = await h.ok<Row[]>('panelci', 'GET', '/admin/audit?limit=100');
+    expect(latest(panel)).toMatchObject({ severity: 'uyari', data: null });
+    expect(latest(panel).message).toContain('tahmini komisyon oranı değişti');
+    expect(JSON.stringify(panel)).not.toContain('23.75');
+    // Maliyeti gören (patron) oranı kaydın verisinde görür
+    expect(latest(await h.ok<Row[]>('patron', 'GET', '/admin/audit?limit=100')).data).toEqual({ commissionPct: { from: 25, to: 23.75 } });
+
+    // Oran değişmediyse iletide anılmaz
+    await h.ok('patron', 'PUT', '/platforms/getir', { prepMinutes: 25 });
+    expect(latest(await h.ok<Row[]>('patron', 'GET', '/admin/audit?limit=100')).message).not.toContain('komisyon');
+
+    // Eski kayıt (oran iletide yazıyordu): maliyeti görmeyene silinir, patron panelinin uyarılarında da
+    const { tx } = await import('../server/db/client');
+    const { Effects } = await import('../server/lib/effects');
+    const old = `Patron ${PLATFORM_LABEL.getir} ayarını değiştirdi (canlı, 20 dk, %23.75 komisyon)`;
+    tx((t) => new Effects().audit(t, { action: 'platform.settings', severity: 'uyari', message: old }));
+    const legacy = (await h.ok<Row[]>('panelci', 'GET', '/admin/audit?limit=100')).find((a) => a.message.startsWith(`Patron ${PLATFORM_LABEL.getir} ayarını değiştirdi (canlı`))!;
+    expect(legacy.message).toBe(`Patron ${PLATFORM_LABEL.getir} ayarını değiştirdi (canlı, 20 dk)`);
+    expect((await h.ok<Row[]>('patron', 'GET', '/admin/audit?limit=100')).some((a) => a.message === old)).toBe(true);
+    const live = await h.ok<{ alerts: Row[] }>('panelci', 'GET', '/reports/patron');
+    expect(live.alerts.some((a) => a.action === 'platform.settings')).toBe(true);
+    expect(JSON.stringify(live)).not.toContain('23.75');
+
+    await h.ok('patron', 'PUT', '/platforms/getir', { commissionPct: 25, autoAccept: false, prepMinutes: 20 });
+  });
+
   it('platform siparişi olmayan dönem boş döner', async () => {
     const empty = await report('patron', addDays(today, -30), addDays(today, -20));
     expect(empty).toMatchObject({ netSales: 0, revenue: 0, orders: 0, pending: 0, platforms: [] });

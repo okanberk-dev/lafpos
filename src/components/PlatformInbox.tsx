@@ -6,7 +6,7 @@ import { fmtTime } from '@shared/time';
 import { AUTO_SKIP_PREFIX, COURIER_LABEL, PLATFORM_LABEL, type PlatformLiveStatus, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { errorMessage, get, post } from '@/lib/api';
+import { ApiError, errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
@@ -104,6 +104,9 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
   const [prep, setPrep] = useState(defaultPrep);
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Reddet otomatik kabulün platform çağrısına denk geldi (409 `auto_accepting`): ret gitmedi. Hata değil, kartta bilgi;
+  // kaydın notu değişince (otomatik kabul edilmedi) eskir
+  const [autoNote, setAutoNote] = useState<{ text: string; lastError: string | null } | null>(null);
   const p = order.payload;
   const preps = [...new Set([10, 15, 20, 30, 45, defaultPrep])].sort((a, b) => a - b);
   const run = async (fn: () => Promise<unknown>, ok: string) => {
@@ -113,7 +116,12 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
       toast.ok(ok);
       onDone();
     } catch (e) {
-      toast.err(errorMessage(e));
+      if (e instanceof ApiError && e.code === 'auto_accepting') {
+        setRejecting(false);
+        setAutoNote({ text: e.message, lastError: order.lastError ?? null });
+        // Kabul edilince kart kapanır: ileti bildirimde de kalır
+        toast.info(e.message);
+      } else toast.err(errorMessage(e));
     } finally {
       setBusy(false);
       qc.invalidateQueries({ queryKey: ['platforms'] });
@@ -168,6 +176,12 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
         <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--admin-danger-soft)] p-2 text-xs text-[var(--admin-danger-ink)]">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
           Kasada tükenmiş: {order.soldOut.join(', ')}. Ürünü satışa açın ya da "Ürün tükendi" ile reddedin
+        </p>
+      )}
+      {autoNote && autoNote.lastError === (order.lastError ?? null) && (
+        <p role="status" className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--admin-info-soft)] p-2 text-xs text-[var(--admin-info)]">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          {autoNote.text}
         </p>
       )}
       {/* Otomatik kabul edilmedi: hata değil, nedeni ve elle kabul bekliyor */}
