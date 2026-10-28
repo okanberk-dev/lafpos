@@ -12,6 +12,7 @@ import {
   itemListReport,
   MAX_RANGE_DAYS,
   patronLive,
+  platformReport,
   prepReport,
   productReport,
   refundReport,
@@ -57,6 +58,8 @@ reportRoutes.get('/items', (c) => {
   return c.json(itemListReport(range(c), kind));
 });
 reportRoutes.get('/refunds', (c) => c.json(refundReport(range(c))));
+/** Paket platformları: tahmini komisyon bir maliyettir, yalnız maliyet yetkisine gider */
+reportRoutes.get('/platforms', (c) => c.json(platformReport(range(c), can(c.get('user'), 'rapor.maliyet'))));
 /** Garsona göre toplanan adisyon listesi personel tutarıdır: maliyet yetkisi olmayana yalnız kendi adisyonlarının garsonu */
 const waiterFor = (c: Context<AppEnv>) => (waiterId: string | null) => seesStaffOf(c.get('user'), waiterId);
 reportRoutes.get('/checks', (c) => c.json(checksReport(range(c), 300, waiterFor(c))));
@@ -65,7 +68,7 @@ reportRoutes.get('/patron', (c) => c.json(patronLive(can(c.get('user'), 'rapor.m
 /** Excel'in Türkçe ayarıyla açılan CSV (server/lib/csv.ts: noktalı virgül, virgüllü ondalık, formül korumalı) */
 reportRoutes.get('/export.csv', (c) => {
   const r = range(c);
-  const type = query(c, z.object({ type: z.enum(['urunler', 'adisyonlar', 'iptal', 'ikram', 'indirim', 'saatlik']) })).type;
+  const type = query(c, z.object({ type: z.enum(['urunler', 'adisyonlar', 'iptal', 'ikram', 'indirim', 'saatlik', 'platformlar']) })).type;
   let rows: CsvValue[][] = [];
   if (type === 'urunler') {
     const rep = productReport(r, can(c.get('user'), 'rapor.maliyet'));
@@ -78,6 +81,32 @@ reportRoutes.get('/export.csv', (c) => {
     // İş günü sırasıyla: 05:00'ten başlar, gece yarısından sonraki saatler, gün uzadıysa ertesi günün saatleri en sonda
     const rep = hourlyReport(r);
     rows = [['Saat', 'Adisyon', 'Ciro'], ...rep.hours.map((h) => [`${String(h.hour).padStart(2, '0')}:00${h.nextDay ? ' (ertesi gün)' : ''}`, h.orders, money(h.revenue)])];
+  } else if (type === 'platformlar') {
+    // Komisyon sütunları yalnız maliyet yetkisine (ekrandaki gibi); kaçan tutar müşterinin ödeyeceği, ciroya girmez
+    const withCost = can(c.get('user'), 'rapor.maliyet');
+    const rep = platformReport(r, withCost);
+    rows = [
+      ['Platform', 'Sipariş', 'Ciro', 'Ort. sepet', 'Ciro payı %', 'Restoran indirimi', 'Platform kampanyası', 'Platformda tahsil', 'Kasada tahsil', 'Açık sipariş', 'Açık tutar', 'Reddedilen', 'Süresi dolan', 'İptal', 'Kasaya alınmadı', 'Kaçan tutar', ...(withCost ? ['Komisyon oranı % (bugünkü)', 'Tahmini komisyon'] : [])],
+      ...rep.platforms.map((p) => [
+        p.label,
+        p.orders,
+        money(p.revenue),
+        money(p.avgBasket),
+        p.share,
+        money(p.discounts),
+        money(p.platformDiscount),
+        money(p.collectedByPlatform),
+        money(p.collectedAtCounter),
+        p.open.orders,
+        money(p.open.amount),
+        p.missed.rejected,
+        p.missed.expired,
+        p.missed.cancelled,
+        p.missed.unrecorded,
+        money(p.missed.amount),
+        ...(withCost ? [p.commissionPct ?? 0, money(p.commission ?? 0)] : []),
+      ]),
+    ];
   } else {
     const rep = itemListReport(r, type);
     // İkram listesinde tür (ikram, ödenmez, zayi) Excel'de süzülebilsin

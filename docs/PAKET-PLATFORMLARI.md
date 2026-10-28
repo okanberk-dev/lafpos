@@ -22,6 +22,14 @@ Araştırma ve platform belgeleri: `calisma/arastirma/paket-platformlari/` (cali
 lafmaliyet'e platform siparişi POS satışı olarak gider (satış satırları, `payments[].channel` = platform; komisyon
 lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
 
+**Açık iş (lafmaliyet komisyonu):** kanal yalnız platformun online ödeme türünde var. Tahsilatı kasada olan platform
+siparişi (kendi kuryemizin kapıda aldığı ya da Yemeksepeti kuryesinin kapıda alıp kasaya `payRestaurant` bıraktığı)
+nakit ya da kart türüyle kapanır, kanalı `null` kalır: o siparişin cirosu lafmaliyet'in platform komisyonuna girmez.
+LafPOS'ta doğru rakam Raporlar › Paket platformları'ndadır (siparişin kaynağına göre, aşağıda). Öneri: gün paketine
+(`day`) yalnız ekleme olarak `platforms: [{ channel, orders, revenue }]` (kapanmış POS adisyonlarından
+`orders.platform`'a göre, TL, iki ondalık; rapordaki ciroyla aynı kural). Önce `docs/03-ENTEGRASYON.md`'ye yazılır,
+lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek alan gönderilmez.
+
 ## Modlar
 - **Kapalı:** yeni sipariş alınmaz. Platformdan gelmiş, henüz kapanmamış sipariş platformla konuşmaya devam eder:
   kabul, ret ve teslim aşamaları platforma gider; onay bekleyen ya da adisyonu açık gerçek sipariş varken yoklama da
@@ -222,7 +230,29 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     isteğe bağlı `GETIR_RESTAURANT_ID`. Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
   - **Sonraki:** Migros Yemek (belge herkese açık değil; görüşme gerekir).
 
+## Rapor
+Raporlar › Paket platformları (`rapor.gor`; `GET /api/reports/platforms?from&to`, CSV `type=platformlar`),
+`server/services/reports.ts` `platformReport`:
+- **Ciro** Raporlar › Ciro'nun kuralıyla: kapanmış POS adisyonu, adisyonun açıldığı iş günü, KDV dahil; platforma
+  siparişin kaynağından (`orders.platform`) bağlanır, tahsilatı kim yaparsa yapsın. Platformların toplamı Ciro'nun
+  `netSales`'inin içindedir (`tests/platform-report.test.ts`, `tests/report-reconciliation.test.ts`). Sipariş sayısı
+  Ciro'daki adisyon ölçütüyle (tutarı olan adisyon), ortalama sepet ciro / sipariş.
+- **İndirim:** restoranın karşıladığı (adisyonun kalem ve adisyon indirimi; platformun kampanyasındaki restoran payı
+  dahil) ve platformun karşıladığı kampanya (kabul edilen siparişin `platformDiscount`'u; ciroyu düşürmez, bilgi).
+- **Tahsilat:** platformun ödeme türü (kanal = platform) "platformda", öteki türler "kasada"; ikisinin toplamı ciro.
+- **Açık:** kabul edilmiş, henüz kapanmamış adisyonlar; ciroya girmez.
+- **Kaçan:** reddedilen, süresi dolan (zamanlayıcı işaretlemeden süresi geçen de) ve iptal edilen (platformun ya da
+  kasanın; kabulden önce ya da sonra). Kabul edilmemiş kayıt geldiği anın iş gününe (05:00 kuralı), kabul edilip
+  iptal edilen adisyonun gününe yazılır; tutar müşterinin ödeyeceği (`customerTotal`), ciroya girmez. Platformda
+  (tablette) kabul edilmiş, 3 saat içinde kasaya alınmamış sipariş "süresi doldu" değil "kasaya alınmadı" sayılır:
+  platformda teslim edilmiş olabilir, kasada kaydı yoktur. Platformun test siparişi sayılmaz. Onay bekleyen sipariş hiçbir rakama girmez, yalnız sayısı yazılır.
+- **Tahmini komisyon** yalnız `rapor.maliyet` yetkisine gider (uçta ve CSV'de; yoksa alan hiç yok): platformun
+  cirosu × Yönetim › Paket platformları'ndaki **bugünkü** oran, kuruşa yuvarlanmış (`percentOf`). Oran sipariş anında
+  dondurulmaz, değişirse geçmiş dönemin tahmini de değişir; gerçek komisyon platformun hesap kesiminde ve lafmaliyet'te
+  (Trendyol Go'nun hesap kesimi ucu bağdaştırıcıda henüz yok).
+
 ## Uçlar
 `GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·
 `POST /api/platforms/orders/:id/accept|reject|platform-cancel|cancel-close` · teslim: `POST /api/orders/:id/delivery` ·
-ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id`.
+ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id` · rapor: `GET /api/reports/platforms`,
+`GET /api/reports/export.csv?type=platformlar`.

@@ -1,14 +1,16 @@
 import { keepPreviousData, type UseQueryResult, useIsFetching, useQuery } from '@tanstack/react-query';
-import { ArrowDownRight, ArrowUpRight, BadgePercent, CircleDollarSign, CreditCard, Download, FileSpreadsheet, Loader2, Package, Receipt, SearchX, ShoppingBag, Timer, Users } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, BadgePercent, Bike, CircleDollarSign, Clock, CreditCard, Download, FileSpreadsheet, Loader2, Package, Receipt, SearchX, ShoppingBag, Timer, Users, XCircle } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { COMP_LABEL } from '@shared/comp';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl, tlShort } from '@shared/money';
+import type { PlatformId } from '@shared/platforms';
 import type { CompKind } from '@shared/types';
 import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { AdminShell } from '@/components/admin/AdminShell';
+import { PlatformBadge } from '@/components/PlatformBadge';
 import { Card, CARD, CODE, KpiStrip, KpiStripSkeleton, PageHeader, Segmented, SetupNotes, StatusTabs, TableSkeleton } from '@/components/admin/ui';
 import { Input, SearchInput } from '@/components/ui/Field';
 import { EmptyState, ErrorState, ListSkeleton, Notice, Skeleton, Stat } from '@/components/ui/misc';
@@ -23,7 +25,7 @@ import { byBusinessHour, fmtShortDate, hourTitle, PERIOD_LABELS, type PeriodKey,
 import { toast } from '@/lib/toast';
 import { lossParts, previousShort } from '@/lib/reportLabels';
 
-type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'kayip' | 'happy' | 'personel' | 'aktarim';
+type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'platformlar' | 'kayip' | 'happy' | 'personel' | 'aktarim';
 type ProductView = 'urun' | 'kategori';
 type LossKind = 'iptal' | 'ikram' | 'indirim' | 'iade';
 
@@ -33,6 +35,7 @@ const REPORTS: { key: ReportKey; label: string; hint: string; perm?: 'rapor.mali
   { key: 'saatlik', label: 'Saatlik', hint: 'Yoğun saatler, gün dilimleri' },
   { key: 'hazirlama', label: 'Hazırlama süresi', hint: 'Bar ve mutfak hızı' },
   { key: 'adisyon', label: 'Adisyonlar', hint: 'Kapanan ve iptal' },
+  { key: 'platformlar', label: 'Paket platformları', hint: 'Platform satışı, tahsilat ve kaçan sipariş' },
   { key: 'kayip', label: 'İptal ve indirim', hint: 'İptal, ikram, zayi, indirim, ödeme iptali' },
   { key: 'happy', label: 'Happy hour', hint: 'Kampanya etkisi' },
   { key: 'personel', label: 'Personel', hint: 'Satış, iptal, ikram', perm: 'rapor.maliyet' },
@@ -143,6 +146,7 @@ export default function ReportsPage() {
       {current.key === 'saatlik' && <HourlyReport range={range} onExport={() => exportCsv('saatlik')} />}
       {current.key === 'hazirlama' && <PrepReport range={range} />}
       {current.key === 'adisyon' && <ChecksReport range={range} onExport={() => exportCsv('adisyonlar')} />}
+      {current.key === 'platformlar' && <PlatformsReport range={range} onExport={() => exportCsv('platformlar')} />}
       {current.key === 'kayip' && (
         <div className="space-y-3">
           <Segmented label="Tür" value={loss} onChange={setLoss} options={LOSS_TABS} className="max-sm:w-full" />
@@ -838,6 +842,142 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
       )}
     </Card>
       )}
+    </ReportBody>
+  );
+}
+
+interface PlatformRow {
+  platform: PlatformId;
+  label: string;
+  /** Tutarı olan kapanmış adisyon */
+  orders: number;
+  /** Ciro, KDV dahil */
+  revenue: number;
+  avgBasket: number;
+  /** Toplam cirodaki payı */
+  share: number;
+  discounts: number;
+  platformDiscount: number;
+  collectedByPlatform: number;
+  collectedAtCounter: number;
+  open: { orders: number; amount: number };
+  /** `unrecorded`: platformda (tablette) kabul edilmiş, 3 saat içinde kasaya alınmamış */
+  missed: { orders: number; amount: number; rejected: number; expired: number; cancelled: number; unrecorded: number };
+  /** Yalnız maliyet yetkisine gelir: bugünkü oran ve onunla tahmin */
+  commissionPct?: number;
+  commission?: number;
+}
+interface PlatformsData {
+  netSales: number;
+  revenue: number;
+  orders: number;
+  avgBasket: number;
+  share: number;
+  open: { orders: number; amount: number };
+  missed: { orders: number; amount: number };
+  pending: number;
+  commission?: number;
+  platforms: PlatformRow[];
+}
+
+/** Kaçan siparişin nedenleri: "2 ret · 1 süre doldu · 1 iptal", sıfır olan düşer */
+const missedParts = (m: PlatformRow['missed']) =>
+  joinMeta([m.rejected > 0 && `${m.rejected} ret`, m.expired > 0 && `${m.expired} süre doldu`, m.cancelled > 0 && `${m.cancelled} iptal`, m.unrecorded > 0 && `${m.unrecorded} kasaya alınmadı`]);
+
+/** Platform satırının bir rakamı: küçük etiket, rakam, altında ipucu */
+function Metric({ label, value, hint }: { label: string; value: ReactNode; hint?: string | null }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted">{label}</dt>
+      <dd className="tabular font-medium">
+        {value}
+        {hint && <span className="block text-xs font-normal text-muted">{hint}</span>}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * Paket platformları: platform başına ciro (Ciro raporunun kuralıyla), kampanyalar, tahsilatın yeri, açık ve kaçan
+ * siparişler. Tahmini komisyon yalnız maliyet yetkisine gelir (sunucu göndermez), bugünkü oranla
+ */
+function PlatformsReport({ range, onExport }: { range: Range; onExport: () => void }) {
+  const can = useCan();
+  const withCost = can('rapor.maliyet');
+  const data = useReport<PlatformsData>(['platforms', range], `/reports/platforms?${qs(range)}`);
+  const skeleton = (
+    <div className="space-y-4">
+      <KpiStripSkeleton count={withCost ? 5 : 4} />
+      <CardSkeleton rows={3} />
+    </div>
+  );
+  return (
+    <ReportBody q={data} skeleton={skeleton}>
+      {(d) => {
+        if (!d.platforms.length)
+          return (
+            <EmptyState className={CARD} icon={<Bike />} title="Bu dönemde platform siparişi yok">
+              {d.pending > 0 ? `${d.pending} sipariş onay bekliyor; kabul edilip kapanınca burada sayılır` : 'Yemeksepeti, Getir Yemek ve Trendyol Go siparişleri kapandıkça burada toplanır'}
+            </EmptyState>
+          );
+        const max = Math.max(1, ...d.platforms.map((p) => p.revenue));
+        const showCost = withCost && d.commission != null;
+        return (
+          <div className="space-y-4">
+            <KpiStrip
+              cells={[
+                { key: 'ciro', label: 'Platform cirosu', icon: <Bike />, hue: 'blue', value: tl(d.revenue), reference: `Toplam ciroda pay %${d.share.toLocaleString('tr-TR')}` },
+                { key: 'siparis', label: 'Sipariş', icon: <Receipt />, hue: 'violet', value: d.orders.toLocaleString('tr-TR'), reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
+                ...(showCost ? [{ key: 'komisyon', label: 'Komisyon', icon: <BadgePercent />, hue: 'amber' as const, value: tl(d.commission!), reference: 'Bugünkü oranla tahmin' }] : []),
+                { key: 'acik', label: 'Açık sipariş', icon: <Clock />, hue: 'green', value: d.open.orders.toLocaleString('tr-TR'), reference: d.open.orders ? `${tlShort(d.open.amount)} · ciroya girmedi` : 'Hepsi kapandı' },
+                { key: 'kacan', label: 'Kaçan sipariş', icon: <XCircle />, hue: 'rose', value: d.missed.orders.toLocaleString('tr-TR'), reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre ya da iptal yok' },
+              ]}
+            />
+            <Card
+              flush
+              title="Platformlara göre"
+              subtitle="Kapanmış siparişler, KDV dahil"
+              actions={
+                <Button size="sm" icon={<Download className="size-4" />} onClick={onExport}>
+                  CSV
+                </Button>
+              }
+            >
+              <ul className="divide-y divide-[var(--admin-divider)]">
+                {d.platforms.map((p) => (
+                  <li key={p.platform} className="px-4 py-3.5 sm:px-5">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <PlatformBadge platform={p.platform} />
+                      <span className="tabular text-sm text-muted">
+                        <span className="text-base font-semibold text-ink">{tl(p.revenue)}</span> · ciroda %{p.share.toLocaleString('tr-TR')}
+                      </span>
+                    </div>
+                    <div aria-hidden="true" className="mt-2 h-2 rounded-full" style={{ background: 'var(--chart-track)' }}>
+                      <div className="h-2 rounded-full" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm sm:grid-cols-3 xl:grid-cols-4">
+                      <Metric label="Sipariş" value={p.orders.toLocaleString('tr-TR')} hint={p.orders ? `ortalama ${tlShort(p.avgBasket)}` : null} />
+                      <Metric label="Restoranın indirimi" value={tl(p.discounts)} />
+                      <Metric label="Platformun kampanyası" value={tl(p.platformDiscount)} hint="Ciroyu düşürmez" />
+                      <Metric label="Platformda tahsil" value={tl(p.collectedByPlatform)} />
+                      <Metric label="Kasada tahsil" value={tl(p.collectedAtCounter)} hint="Kapıda alınan" />
+                      {showCost && <Metric label="Tahmini komisyon" value={p.commissionPct ? tl(p.commission ?? 0) : '—'} hint={p.commissionPct ? `%${p.commissionPct.toLocaleString('tr-TR')}, bugünkü oranla` : 'Oran girilmedi'} />}
+                      {p.open.orders > 0 && <Metric label="Açık" value={`${p.open.orders} · ${tl(p.open.amount)}`} hint="Ciroya girmedi" />}
+                      <Metric label="Kaçan" value={p.missed.orders ? `${p.missed.orders} · ${tl(p.missed.amount)}` : '0'} hint={p.missed.orders ? missedParts(p.missed) : null} />
+                    </dl>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+            <p className="text-xs text-muted">
+              Rakamlar Ciro sekmesiyle aynı kuralla: kapanmış adisyonlar, adisyonun açıldığı iş gününe göre. Tahsilatı platform da yapsa kasa da yapsa sipariş platformun satışıdır. Kaçan sipariş reddedilen, süresi dolan ya da iptal
+              edilen siparişlerdir: geldiği iş gününe yazılır, tutarı müşterinin ödeyeceğidir, ciroya girmez.
+              {d.pending > 0 && ` Şu an ${d.pending} sipariş onay bekliyor; hiçbir rakama girmedi.`}
+              {showCost && ' Komisyon tahminidir: Yönetim › Paket platformları’ndaki bugünkü oranla KDV dahil cirodan hesaplanır, oran değişirse geçmiş dönemin tahmini de değişir. Gerçek tutar platformun hesap kesimindedir.'}
+            </p>
+          </div>
+        );
+      }}
     </ReportBody>
   );
 }
