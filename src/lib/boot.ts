@@ -61,4 +61,44 @@ export function pendingOptionsText(boot: BootstrapDTO, p: ProductDTO, picks: { i
   return parts.join(' · ');
 }
 
+/** Kasiyerin seçmesi gereken grup: zorunlu ve seçeneği var (sayaçlı grup, ekstra shot gibi, sıfırla da geçerli) */
+const isChoice = (g: OptionGroupDTO) => g.required && g.kind !== 'counter' && g.items.length > 0;
+
+/**
+ * Üründe zorunlu seçim var mı (Türk kahvesinde şeker). Sunucu seçeneksiz gelen zorunlu tek seçimlik gruba varsayılanı
+ * yazar (site, paket platformu, eski istemci); kasada sorulmadan "Orta" bara gitmesin diye ürün pencereyle eklenir
+ */
+export function needsChoice(boot: BootstrapDTO, p: ProductDTO): boolean {
+  return productGroups(boot, p).some(isChoice);
+}
+
+/**
+ * İki boylu ürünün kartı ve boy düğmesi seçenek penceresini o boy seçili mi açar (hemen eklemek yerine): zorunlu seçim
+ * varsa, Yönetim › Ayarlar › Seçenekleri sor "Seçenekli her üründe" ise seçeneği olan her üründe. Tek boylu seçenekli
+ * ürün zaten hep pencereyle eklenir
+ */
+export function asksOptions(boot: BootstrapDTO, p: ProductDTO): boolean {
+  if (!productGroups(boot, p).length) return false;
+  return boot.settings.askOptions === 'hep' || needsChoice(boot, p);
+}
+
+/**
+ * Seçenek penceresinin ilk seçimi: isteğe bağlı tek seçimlik grupta varsayılan (Normal süt, Cam bardak). Zorunlu
+ * grupta önseçim yok, kasiyer seçer (seçilene kadar Ekle kapalı)
+ */
+export function defaultPicks(groups: OptionGroupDTO[]): Record<string, number> {
+  const picks: Record<string, number> = {};
+  for (const g of groups) {
+    if (g.kind !== 'single' || g.required) continue;
+    const d = g.items.find((i) => i.isDefault);
+    if (d) picks[d.id] = 1;
+  }
+  return picks;
+}
+
+/** Seçim bekleyen ilk zorunlu grup: varken pencerede Ekle kapalı, altında "Şeker seçin" */
+export function missingChoice(groups: OptionGroupDTO[], picks: Record<string, number>): OptionGroupDTO | undefined {
+  return groups.find((g) => isChoice(g) && !g.items.some((i) => (picks[i.id] ?? 0) > 0));
+}
+
 export type { SelectedOption };

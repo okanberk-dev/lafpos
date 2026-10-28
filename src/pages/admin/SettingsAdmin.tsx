@@ -6,7 +6,7 @@ import { SERVICE_MODE_HINT, SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode,
 import { fmtDateTime } from '@shared/time';
 import { nextZNo } from '@shared/z-no';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, NumberInput, Textarea, Toggle } from '@/components/ui/Field';
+import { Field, Input, NumberInput, Segmented, Textarea, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
 import { Card, CARD, CODE, EmptyState, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
@@ -27,6 +27,7 @@ type Settings = Record<string, unknown> & {
   autoLockMinutes: number;
   keepAwake: boolean;
   productImages: boolean;
+  askOptions: 'zorunlu' | 'hep';
   voidReasons: string[];
   compReasons: string[];
   odenmezReasons: string[];
@@ -335,6 +336,23 @@ export default function SettingsAdmin() {
             <Toggle checked={s.requireDayOpen} onChange={(v) => set({ requireDayOpen: v })} label="Satış için gün açılmış olmalı" />
             <Toggle checked={s.keepAwake} onChange={(v) => set({ keepAwake: v })} label="Ekran kararmasın" hint="kasa bilgisayarı, bar ve tablet ekranları" />
             <Toggle checked={s.productImages} onChange={(v) => set({ productImages: v })} label="Ürün kartlarında görsel" hint="sitedeki fotoğraf, kasa bilgisayarında saklanır" />
+            {/* İki boylu ürünün boy düğmesi: hemen ekler ya da seçenek penceresini açar (tek boylu seçenekli ürün hep pencereyle) */}
+            <div>
+              <div className="mb-1.5 text-[13px] font-medium text-ink-2">Seçenekleri sor</div>
+              <Segmented
+                wrap
+                label="Seçenekleri sor"
+                value={s.askOptions === 'hep' ? 'hep' : 'zorunlu'}
+                onChange={(askOptions) => set({ askOptions })}
+                options={[
+                  { value: 'zorunlu', label: 'Zorunlu seçim varsa' },
+                  { value: 'hep', label: 'Seçenekli her üründe' },
+                ]}
+              />
+              <p className="mt-1.5 text-xs text-muted">
+                {s.askOptions === 'hep' ? 'Seçeneği olan iki boylu ürün de pencereyle eklenir, dokunulan boy seçili gelir' : 'İki boylu ürün boy düğmesiyle hemen eklenir; şeker gibi zorunlu seçimi olan pencereyle açılır'}
+              </p>
+            </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <Toggle checked={s.autoDayEnd} onChange={(v) => set({ autoDayEnd: v })} label="Otomatik gün sonu" hint="açık adisyon varsa alınmaz; sayım sonra Kasa föyünden girilir" />
               {/* Telefonda saat, anahtarın yazısının altına hizalı (anahtar 44 + aralık 12 px) */}
