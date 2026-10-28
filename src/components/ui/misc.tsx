@@ -140,12 +140,13 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
 /** Sayfa başlığı: Innex 18/600 ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile) */
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end gap-3 pb-4">
-      <div className="min-w-0 flex-1">
+    <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="min-w-0 sm:flex-1">
         <h1 className="text-lg font-semibold tracking-[-0.01em]">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-[13px] text-muted">{subtitle}</p>}
+        {subtitle && <p className="mt-0.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+      {/* Telefonda eylemler kendi satırında, eşit genişlikte; geniş ekranda sağda */}
+      {actions && <div className="flex flex-wrap items-center gap-2 max-sm:[&>*]:flex-1">{actions}</div>}
     </div>
   );
 }

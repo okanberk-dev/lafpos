@@ -8,7 +8,7 @@ type Size = 'sm' | 'md' | 'lg' | 'xl';
 // Innex (docs/ADMIN-INNEX.md §1.5): birincil dolu mavi, ikincil beyaz ve ince kenarlı, ghost yalnız metin
 // Her düğmenin dört durumu: dinlenme, üzerinde, basılı (bir ton daha koyu), devre dışı (yarı saydam); odak halkası index.css'te ortak
 const variants: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)] active:bg-[var(--admin-primary-hover)] active:brightness-95',
+  primary: 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)] active:bg-[var(--admin-primary-hover)] active:brightness-95 disabled:bg-surface-3 disabled:text-muted disabled:opacity-100',
   secondary: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:border-[var(--admin-border-field)] active:bg-surface-3',
   ghost: 'bg-transparent text-ink-2 hover:bg-surface-3 hover:text-ink active:bg-[var(--admin-border)]',
   outline: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:border-[var(--admin-border-field)] active:bg-surface-3',

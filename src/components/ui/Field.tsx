@@ -43,7 +43,8 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
   );
 }
 
-export function Toggle({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; disabled?: boolean }) {
+/** Anahtar: etiket sola yaslı (çok satırda da), isteğe bağlı 12 px ipucu ikinci satır; anahtarın kendisi üstte hizalı */
+export function Toggle({ checked, onChange, label, hint, disabled, className }: { checked: boolean; onChange: (v: boolean) => void; label?: ReactNode; hint?: ReactNode; disabled?: boolean; className?: string }) {
   return (
     <button
       type="button"
@@ -51,12 +52,17 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="group inline-flex min-h-11 items-center gap-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-0 [[data-area=admin]_&]:text-sm"
+      className={cn('group inline-flex min-h-11 max-w-full items-start gap-3 text-left text-[15px] disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-0 [[data-area=admin]_&]:text-sm', !!label && 'py-0.5', className)}
     >
       <span className={cn('relative h-[26px] w-11 shrink-0 rounded-full transition-colors duration-150', checked ? 'bg-primary group-hover:bg-[var(--admin-primary-hover)]' : 'bg-line-strong group-hover:bg-[var(--admin-text-mute)]')}>
         <span className={cn('absolute left-0.5 top-0.5 size-[22px] rounded-full bg-white shadow-[0_1px_2px_rgb(12_14_27/0.25)] transition-transform duration-150 ease-out motion-reduce:transition-none', checked && 'translate-x-[18px]')} />
       </span>
-      {label && <span className="text-ink">{label}</span>}
+      {label && (
+        <span className="min-w-0 flex-1 leading-5 text-ink [[data-area=admin]_&]:pt-0.5 pt-[3px]">
+          <span className="block">{label}</span>
+          {hint && <span className="mt-0.5 block text-xs leading-4 text-muted">{hint}</span>}
+        </span>
+      )}
     </button>
   );
 }

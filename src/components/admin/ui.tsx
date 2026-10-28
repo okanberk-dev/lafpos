@@ -16,7 +16,7 @@ const COMPACT_H = 'pointer-fine:[[data-density=compact]_&]:min-h-8';
 const BUTTON_BASE = `inline-flex min-h-11 items-center justify-center gap-2 rounded-lg py-1.5 text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,filter,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 disabled:active:brightness-100 pointer-fine:min-h-9 [&>svg]:shrink-0 ${COMPACT_H} ${FOCUS}`;
 
 export const BTN = {
-  primary: `${BUTTON_BASE} bg-[var(--admin-primary)] px-3.5 text-[var(--admin-on-primary)] hover:bg-[var(--admin-primary-hover)] active:brightness-95`,
+  primary: `${BUTTON_BASE} bg-[var(--admin-primary)] px-3.5 text-[var(--admin-on-primary)] hover:bg-[var(--admin-primary-hover)] active:brightness-95 disabled:bg-[var(--admin-panel)] disabled:text-[var(--admin-text-mute)] disabled:opacity-100`,
   ghost: `${BUTTON_BASE} border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] px-3 text-[var(--admin-text)] hover:border-[var(--admin-border-field)] hover:bg-[var(--admin-surface-2)] active:bg-[var(--admin-panel)]`,
   soft: `${BUTTON_BASE} bg-[var(--admin-primary-soft)] px-3 text-[var(--admin-primary)] hover:brightness-95 active:brightness-90`,
   danger: `${BUTTON_BASE} border border-[var(--admin-danger)]/35 bg-[var(--admin-surface)] px-3 text-[var(--admin-danger-ink)] hover:border-[var(--admin-danger)] hover:bg-[var(--admin-danger)] hover:text-white active:brightness-95`,
