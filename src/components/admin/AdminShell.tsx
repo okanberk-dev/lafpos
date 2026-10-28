@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeftRight, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Rows3, Rows4, Search } from 'lucide-react';
+import { ArrowLeftRight, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Rows3, Rows4, Search, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
 import { LafMark } from '@/components/LafMark';
@@ -11,7 +11,7 @@ import { useLive } from '@/lib/live';
 import { useHomePath } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
 import { ADMIN_GROUPS, type AdminSection, visibleSections } from './sections';
-import { ROW_ICON } from './ui';
+import { Badge, ROW_ICON } from './ui';
 
 interface SyncStatus {
   /** `failing`: denenip gidemeyen günler (kuyruğa yeni giren gün sayaca girmez) */
@@ -46,6 +46,8 @@ export function AdminShell({ title, children }: { title: string; children: React
   const home = useHomePath();
   const sections = visibleSections(can);
   const atIndex = location.pathname === '/yonetim' || location.pathname === '/yonetim/';
+  const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+  const searchKey = mac ? '⌘K' : 'Ctrl K';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -70,7 +72,7 @@ export function AdminShell({ title, children }: { title: string; children: React
         cn(
           'flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors pointer-fine:min-h-8',
           narrow && 'mx-auto size-11 justify-center px-0 pointer-fine:size-10',
-          isActive ? 'bg-[var(--admin-panel)] text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)]',
+          isActive ? 'bg-[var(--admin-panel)] text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)] hover:bg-hover hover:text-[var(--admin-text)] active:bg-press',
         )
       }
     >
@@ -80,42 +82,44 @@ export function AdminShell({ title, children }: { title: string; children: React
     </NavLink>
   );
 
-  const sidebar = (narrow: boolean) => (
+  /** `canRail`: daraltma düğmesi yalnız bilgisayarda (tablette menü hep dar) */
+  const sidebar = (narrow: boolean, canRail: boolean) => (
     <nav aria-label="Yönetim" className="flex h-full flex-col">
-      <div className={cn('flex items-center gap-2.5 px-3 pb-3 pt-3.5', narrow && 'justify-center px-0')}>
+      <div className={cn('flex items-center gap-2.5 px-3 pb-2.5 pt-3.5', narrow && 'flex-col justify-center gap-1.5 px-0')}>
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-night text-white dark:bg-surface-3">
-          <LafMark className="h-3" bean="#e8c877" />
+          <LafMark className="h-3" onNight />
         </span>
         {!narrow && (
-          <span className="min-w-0">
+          <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold text-[var(--admin-text)]">{boot.settings.businessName}</span>
             <span className="block truncate text-xs text-[var(--admin-text-mute)]">{boot.day ? `Z ${boot.day.zNo} açık` : 'Gün kapalı'} · LafPOS</span>
           </span>
         )}
+        {canRail && (
+          <button type="button" onClick={toggleRail} title={rail ? 'Menüyü genişlet' : 'Menüyü daralt'} aria-label={rail ? 'Menüyü genişlet' : 'Menüyü daralt'} className={cn(ROW_ICON, 'shrink-0')}>
+            {rail ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+          </button>
+        )}
       </div>
-      <div className={cn('scroll-thin min-h-0 flex-1 space-y-4 overflow-y-auto pb-3', narrow ? 'px-2' : 'px-2.5')}>
+      <div className={cn('scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto pb-5 [mask-image:linear-gradient(to_bottom,black_calc(100%-20px),transparent)]', narrow ? 'px-2' : 'px-2.5')}>
         {ADMIN_GROUPS.map((g) => {
           const list = sections.filter((s) => s.group === g.key);
           if (!list.length) return null;
           return (
             <div key={g.key}>
-              {narrow ? <div className="mx-2 mb-1.5 border-t border-[var(--admin-border)]" /> : <div className="px-2.5 pb-1 text-[11px] font-medium uppercase tracking-[0.06em] text-[#606264] dark:text-[var(--admin-text-mute)]">{g.label}</div>}
+              {narrow ? <div className="mx-2 mb-1.5 border-t border-[var(--admin-border)]" /> : <div className="px-2.5 pb-0.5 text-[11px] font-medium uppercase leading-4 tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</div>}
               <div className="space-y-0.5">{list.map((s) => item(s, narrow))}</div>
             </div>
           );
         })}
       </div>
-      <div className={cn('space-y-0.5 border-t border-[var(--admin-border)] py-2.5', narrow ? 'px-2' : 'px-2.5')}>
-        <Link to={home} title={narrow ? 'Kasa ekranlarına dön' : undefined} aria-label={narrow ? 'Kasa ekranlarına dön' : undefined} className={cn('flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-[var(--admin-text-soft)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)] pointer-fine:min-h-8', narrow && 'mx-auto size-11 justify-center px-0 pointer-fine:size-10')}>
+      <div className={cn('space-y-0.5 border-t border-[var(--admin-border)] py-2', narrow ? 'px-2' : 'px-2.5')}>
+        <Link to={home} title={narrow ? 'Kasa ekranlarına dön' : undefined} aria-label={narrow ? 'Kasa ekranlarına dön' : undefined} className={cn('flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium text-[var(--admin-text-soft)] transition-colors hover:bg-hover hover:text-[var(--admin-text)] active:bg-press pointer-fine:min-h-8', narrow && 'mx-auto size-11 justify-center px-0 pointer-fine:size-10')}>
           <ArrowLeftRight className="size-4 shrink-0" aria-hidden="true" />
           {!narrow && 'Kasa ekranlarına dön'}
         </Link>
-        <button type="button" onClick={toggleRail} title={rail ? 'Menüyü genişlet' : 'Menüyü daralt'} aria-label={rail ? 'Menüyü genişlet' : 'Menüyü daralt'} className={cn('hidden min-h-11 items-center gap-2.5 rounded-lg text-sm font-medium text-[var(--admin-text-soft)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 lg:flex', narrow ? 'mx-auto size-11 justify-center pointer-fine:size-10' : 'w-full px-2.5')}>
-          {rail ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
-          {!narrow && 'Menüyü daralt'}
-        </button>
-        <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className={cn('mt-1 flex min-h-11 items-center gap-2.5 rounded-lg text-left hover:bg-[var(--admin-surface-2)]', narrow ? 'mx-auto size-11 justify-center' : 'w-full px-2')}>
-          <span className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white" style={{ background: me.color }}>
+        <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className={cn('flex min-h-11 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-hover active:bg-press', narrow ? 'mx-auto size-11 justify-center' : 'w-full px-2 pointer-fine:min-h-9')}>
+          <span className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: me.color }}>
             {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
           </span>
           {!narrow && (
@@ -135,11 +139,12 @@ export function AdminShell({ title, children }: { title: string; children: React
   return (
     <div className="flex h-full min-h-0 bg-[var(--admin-surface)] text-[var(--admin-text)] md:gap-3 md:bg-[var(--admin-bg)] md:p-2">
       <aside className={cn('hidden shrink-0 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] md:block', rail ? 'md:w-16' : 'md:w-16 lg:w-[15.5rem]')}>
-        <div className="h-full lg:hidden">{sidebar(true)}</div>
-        <div className="hidden h-full lg:block">{sidebar(rail)}</div>
+        <div className="h-full lg:hidden">{sidebar(true, false)}</div>
+        <div className="hidden h-full lg:block">{sidebar(rail, true)}</div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col md:overflow-hidden md:rounded-xl md:border md:border-[var(--admin-border)] md:bg-[var(--admin-surface)]">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[var(--admin-border)] px-2 sm:px-4">
+        {/* Telefonda (ana ekrandan açılınca) çentik ve saat başlığın üstünde kalır */}
+        <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-[var(--admin-border)] px-2 max-md:pt-[env(safe-area-inset-top)] sm:px-4">
           {!atIndex && (location.pathname.startsWith('/yonetim') || sections.length > 1) ? (
             <Link to="/yonetim" aria-label="Yönetim listesi" className={cn(ROW_ICON, 'md:hidden')}>
               <ChevronLeft className="size-5" />
@@ -155,18 +160,19 @@ export function AdminShell({ title, children }: { title: string; children: React
               <li aria-hidden="true" className="hidden text-[var(--admin-text-mute)] md:block">
                 /
               </li>
-              <li className="truncate font-semibold md:font-medium">{current?.label ?? title}</li>
+              <li className="truncate text-base font-semibold md:text-sm md:font-medium">{current?.label ?? title}</li>
             </ol>
           </nav>
           <button
             type="button"
             onClick={() => setPalette(true)}
-            className="inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 text-sm text-[var(--admin-text-mute)] hover:bg-[var(--admin-surface-2)] md:w-64 md:border md:border-[var(--admin-border-strong)] md:bg-[var(--admin-surface)] md:pointer-fine:h-9"
-            aria-label="Ara ya da git (Ctrl K)"
+            className="inline-flex h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 text-sm text-[var(--admin-text-mute)] transition-colors hover:bg-hover hover:text-[var(--admin-text)] md:w-64 md:border md:border-[var(--admin-border-strong)] md:bg-[var(--admin-surface)] md:hover:border-[var(--admin-border-field)] md:pointer-fine:h-9"
+            aria-label={`Ara ya da git (${searchKey})`}
           >
             <Search className="size-4 shrink-0" aria-hidden="true" />
             <span className="hidden flex-1 text-left md:block">Ara ya da git…</span>
-            <kbd className="hidden rounded border border-[var(--admin-border-strong)] px-1.5 font-sans text-[11px] md:block">⌘K</kbd>
+            {/* Kısayol yalnız klavyeli cihazda: dokunmatik tablette basılamayacak bir ipucu gürültü olur */}
+            <kbd className="hidden rounded border border-[var(--admin-border)] bg-[var(--admin-surface-2)] px-1.5 py-px font-sans text-xs text-[var(--admin-text-mute)] md:pointer-fine:block">{searchKey}</kbd>
           </button>
           <button
             type="button"
@@ -178,9 +184,21 @@ export function AdminShell({ title, children }: { title: string; children: React
           >
             {compact ? <Rows3 className="size-4" /> : <Rows4 className="size-4" />}
           </button>
-          <span title={live === 'canli' ? 'Canlı bağlantı' : 'Bağlantı kopuk'} className={cn('hidden size-2 rounded-full sm:block', live === 'canli' ? 'bg-[var(--admin-success)]' : live === 'kopuk' ? 'bg-[var(--admin-danger)]' : 'bg-[var(--admin-warning)]')} />
+          {/* Canlı bağlantı: sağlıklıyken sakin nokta; kopunca yazıyla söylenir (renk tek başına durum taşımaz) */}
+          <span role="status" aria-live="polite" className="hidden shrink-0 sm:inline-flex">
+            {live === 'kopuk' ? (
+              <Badge tone="danger" title="Canlı güncellemeler gelmiyor; bağlantı gelince kendiliğinden yenilenir">
+                <WifiOff aria-hidden="true" className="size-3" />
+                Kopuk
+              </Badge>
+            ) : (
+              <span title={live === 'canli' ? 'Canlı bağlantı' : 'Bağlanıyor…'} className={cn('size-2 rounded-full', live === 'canli' ? 'bg-[var(--admin-success)]' : 'bg-[var(--admin-warning)]')}>
+                <span className="sr-only">{live === 'canli' ? 'Canlı bağlantı' : 'Bağlanıyor…'}</span>
+              </span>
+            )}
+          </span>
           <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className="grid size-11 shrink-0 place-items-center md:hidden">
-            <span className="grid size-8 place-items-center rounded-full text-xs font-semibold text-white" style={{ background: me.color }}>
+            <span className="grid size-8 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: me.color }}>
               {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
             </span>
           </button>

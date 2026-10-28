@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { DemoServer, DemoUser } from '@shared/demo';
 import type { MeDTO } from '@shared/types';
-import { get, getToken, post, setToken } from './api';
+import { get, getToken, post, setToken, statusMessage } from './api';
 import { useAuth } from './auth';
 
 /**
@@ -88,7 +88,7 @@ export async function asDemoPatron<T>(method: 'POST' | 'PUT', path: string, body
   try {
     const res = await fetch(`/api${path}`, { method, headers: auth, body: JSON.stringify(body) });
     const data = (await res.json()) as T & { error?: string };
-    if (!res.ok) throw new Error(data.error ?? `Hata (${res.status})`);
+    if (!res.ok) throw new Error(data.error || statusMessage(res.status));
     return data;
   } finally {
     await fetch('/api/auth/logout', { method: 'POST', headers: auth, body: '{}' }).catch(() => null);

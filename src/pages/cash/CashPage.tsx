@@ -1,22 +1,28 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, ArrowDownToLine, ArrowUpFromLine, CalendarCheck, Coins, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowDownToLine, ArrowUpFromLine, CalendarCheck, Coins, EyeOff, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import { fmtDateLong, fmtTime } from '@shared/time';
 import type { BusinessDayDTO, ZSummary } from '@shared/types';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, Input, Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
-import { Badge, Card, EmptyState, PageHeader, PageLoading } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, ErrorState, ListSkeleton, Notice, PageHeader, PageLoading } from '@/components/ui/misc';
+import { cn } from '@/lib/cn';
 import { errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
+import { TypedAmount } from '../order/TypedAmount';
 import { CashCount, type CountResult } from './CashCount';
 import { ZView } from './ZView';
+
+/** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
+const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-sm:whitespace-normal max-sm:leading-tight max-[400px]:[&>svg]:hidden';
 
 interface DayResponse {
   day: BusinessDayDTO | null;
@@ -65,6 +71,13 @@ export default function CashPage() {
   const [zResult, setZResult] = useState<DayDetail | null>(null);
   const [fillFor, setFillFor] = useState<DayDetail | null>(null);
   const [reopenReason, setReopenReason] = useState('');
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const reasonRef = useRef<HTMLInputElement>(null);
+  const [moveError, setMoveError] = useState<{ amount?: string; desc?: string }>({});
+  const descRef = useRef<HTMLInputElement>(null);
+  // Kasa hareketi Enter'la da kaydedilir: istek sürerken ikinci basış ikinci hareketi yazmasın
+  const moveBusy = useRef(false);
+  const [moveSaving, setMoveSaving] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const refresh = () => {
@@ -73,6 +86,7 @@ export default function CashPage() {
   };
 
   const openDay = async () => {
+    if (busy) return;
     setBusy(true);
     try {
       await post('/cash/day/open', { openingCash: parseTL(opening || '0') ?? 0 });
@@ -88,6 +102,12 @@ export default function CashPage() {
 
   // Gece Z alındıktan sonra gelen müşteri: aynı gün yetkili onayıyla yeniden açılır, Z numarası değişmez
   const reopen = async (id: string) => {
+    // Neden zorunlu (Z raporuna yazılır): düğme sessizce soluk kalmaz, ileti alanın altında
+    if (!reopenReason.trim()) {
+      setReasonError('Neden gerekli');
+      reasonRef.current?.focus();
+      return;
+    }
     setBusy(true);
     try {
       const res = await withApproval((pin) => post(`/cash/days/${id}/reopen`, { reason: reopenReason, approverPin: pin }));
@@ -102,8 +122,21 @@ export default function CashPage() {
     }
   };
 
+  const openMove = (kind: 'harcama' | 'teslim' | 'giris') => {
+    setMoveError({});
+    setMoveKind(kind);
+  };
   const addMove = async () => {
     if (!moveKind) return;
+    const err = { amount: parseTL(moveAmount || '0') ? undefined : 'Tutarı girin', desc: moveKind === 'harcama' && !moveDesc.trim() ? 'Harcamanın açıklaması gerekli' : undefined };
+    if (err.amount || err.desc) {
+      setMoveError(err);
+      if (!err.amount && err.desc) descRef.current?.focus();
+      return;
+    }
+    if (moveBusy.current) return;
+    moveBusy.current = true;
+    setMoveSaving(true);
     try {
       const res = await withApproval((pin) => post('/cash/movements', { kind: moveKind, amount: parseTL(moveAmount) ?? 0, description: moveDesc, approverPin: pin }));
       if (res === null) return;
@@ -114,6 +147,9 @@ export default function CashPage() {
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      moveBusy.current = false;
+      setMoveSaving(false);
     }
   };
 
@@ -161,7 +197,14 @@ export default function CashPage() {
     }
   };
 
-  if (current.isLoading) return <PageLoading />;
+  if (current.isPending) return <PageLoading />;
+  if (current.isError && !current.data) {
+    return (
+      <div className="grid h-full place-items-center p-4">
+        <ErrorState title="Kasa bilgisi alınamadı" error={current.error} retrying={current.isFetching} onRetry={() => void current.refetch()} />
+      </div>
+    );
+  }
   const day = current.data?.day ?? null;
   const summary = current.data?.summary ?? null;
   // Kör kasa: kasiyerin `kasa.rakam` yetkisi yoksa sunucu ara raporu ve beklenen nakdi göndermez
@@ -175,18 +218,28 @@ export default function CashPage() {
         title="Kasa"
         subtitle={
           day
-            ? `Z ${day.zNo} · ${fmtDateLong(day.date)} · ${day.openedByName ?? ''} ${fmtTime(day.openedAt)}'de açtı${day.reopenedAt ? ` · ${fmtTime(day.reopenedAt)}'de yeniden açıldı` : ''}`
+            ? joinMeta([`Z ${day.zNo}`, fmtDateLong(day.date), day.reopenedAt ? `yeniden açılış ${fmtTime(day.reopenedAt)}` : [`açılış ${fmtTime(day.openedAt)}`, day.openedByName].filter(Boolean).join(', ')])
             : 'Gün kapalı'
         }
         actions={
           <>
             {boot.integrations.okc.provider === 'simulator' && (
-              <Link to="/cihaz">
-                <Button icon={<MonitorSmartphone className="size-4" />}>Eğitim cihazı</Button>
+              <Link to="/cihaz" className={buttonClass('secondary')}>
+                <MonitorSmartphone className="size-4" />
+                Eğitim cihazı
               </Link>
             )}
+            {/* Gün sonu rutin bir kapanıştır: birincil mavi; kırmızı iptal ve alarma ayrılır */}
+            {tab === 'bugun' && day && can('kasa.gun') && (
+              <Button variant="primary" icon={<Lock className="size-4" />} onClick={() => setClosing(true)}>
+                Gün sonu (Z)
+              </Button>
+            )}
+            {/* Telefonda kendi satırında, tam genişlik: eylemlerle aynı satıra sıkışıp "Geçmiş günler" kırpılmasın */}
             {can('rapor.gor') && (
               <Segmented
+                className="max-sm:min-w-full max-sm:[&>button]:flex-1"
+                label="Kasa görünümü"
                 value={tab}
                 onChange={(v) => {
                   setTab(v);
@@ -206,25 +259,35 @@ export default function CashPage() {
         <div className="mx-auto max-w-md">
           <Card>
             <div className="space-y-4 p-6 text-center">
-              <Lock className="mx-auto size-12 text-muted" />
+              <span aria-hidden="true" className="mx-auto grid size-12 place-items-center rounded-2xl bg-surface-3 text-ink-2">
+                <Lock className="size-6" />
+              </span>
               <div>
-                <h2 className="text-xl font-semibold">Bugünün gün sonu alındı</h2>
-                <p className="text-sm text-muted">
-                  Z {closedDay.zNo} · {closedDay.closedAt ? `${fmtTime(closedDay.closedAt)}'de kapandı` : ''}. Yeni gün 05:00'ten sonra açılır; kapanıştan sonra satış gerekirse günü yeniden açın
-                </p>
+                <h2 className="text-lg font-semibold tracking-[-0.01em]">Bugünün gün sonu alındı</h2>
+                <p className="tabular mt-1 text-sm font-medium text-ink-2">{joinMeta([`Z ${closedDay.zNo}`, closedDay.closedAt && `kapanış ${fmtTime(closedDay.closedAt)}`])}</p>
+                <p className="mt-1 text-pretty text-sm text-muted">Yeni gün 05:00’ten sonra açılır; kapanıştan sonra satış gerekirse günü yeniden açın</p>
               </div>
               {can('kasa.gun') ? (
                 <>
-                  <Field label="Neden">
-                    <Input value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} maxLength={200} placeholder="Ör. kapanıştan sonra gelen müşteri" />
+                  <Field label="Neden" hint="zorunlu, Z raporuna yazılır" className="text-left" error={reasonError}>
+                    <Input
+                      ref={reasonRef}
+                      value={reopenReason}
+                      onChange={(e) => {
+                        setReopenReason(e.target.value);
+                        setReasonError(null);
+                      }}
+                      maxLength={200}
+                      placeholder="Ör. kapanıştan sonra gelen müşteri"
+                    />
                   </Field>
-                  <Button variant="primary" size="xl" block loading={busy} disabled={!reopenReason.trim()} onClick={() => reopen(closedDay.id)}>
+                  <Button variant="primary" size="lg" block loading={busy} onClick={() => reopen(closedDay.id)}>
                     Günü yeniden aç
                   </Button>
-                  <p className="text-xs text-muted">Yetkili onayı gerekir. Gün yeniden kapanınca Z raporu ve lafmaliyet'teki kayıt güncellenir</p>
+                  <p className="text-xs text-muted">Yetkili onayı gerekir. Gün yeniden kapanınca Z raporu ve lafmaliyet’teki kayıt güncellenir</p>
                 </>
               ) : (
-                <p className="text-sm text-muted">Günü kasiyer, müdür ya da patron yeniden açabilir</p>
+                <p className="text-sm text-muted">Günü yeniden açma yetkiniz yok. Kasiyer, müdür ya da patron açabilir</p>
               )}
             </div>
           </Card>
@@ -235,21 +298,27 @@ export default function CashPage() {
         <div className="mx-auto max-w-md">
           <Card>
             <div className="space-y-4 p-6 text-center">
-              <CalendarCheck className="mx-auto size-12 text-brand-500" />
+              {/* Gün sonu kartıyla aynı ikon kutusu ve başlık ölçüsü */}
+              <span aria-hidden="true" className="mx-auto grid size-12 place-items-center rounded-2xl bg-surface-3 text-ink-2">
+                <CalendarCheck className="size-6" />
+              </span>
               <div>
-                <h2 className="text-xl font-semibold">Günü aç</h2>
-                <p className="text-sm text-muted">Çekmecedeki açılış nakitini girin. Gün 05:00 kuralıyla lafmaliyet'teki tarihe yazılır</p>
+                <h2 className="text-lg font-semibold tracking-[-0.01em]">Günü aç</h2>
+                <p className="mt-1 text-pretty text-sm text-muted">Çekmecedeki açılış nakdini girin. Gece 05:00’e kadarki satışlar bu güne yazılır</p>
               </div>
               {can('kasa.gun') ? (
                 <>
-                  <div className="tabular rounded-2xl border border-line bg-surface-2 px-4 py-3 text-right text-4xl font-semibold">{opening || '0'} ₺</div>
-                  <Numpad decimal onKey={(k) => setOpening(applyNumpadKey(opening, k, { decimal: true, maxLength: 9 }))} />
+                  {/* Kasa bilgisayarında tutar klavyeyle de yazılır (rakam, virgül, Backspace, Enter: günü aç) */}
+                  <output aria-label="Açılış nakdi" aria-live="polite" className="tabular block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-4xl font-semibold">
+                    <TypedAmount text={opening} />
+                  </output>
+                  <Numpad decimal keyboard onEnter={() => void openDay()} onKey={(k) => setOpening(applyNumpadKey(opening, k, { decimal: true, maxLength: 9 }))} />
                   <Button variant="primary" size="xl" block loading={busy} onClick={openDay}>
                     Günü aç
                   </Button>
                 </>
               ) : (
-                <p className="text-sm text-danger-500">Günü kasiyer, müdür ya da patron açabilir</p>
+                <p className="text-sm text-muted">Günü açma yetkiniz yok. Kasiyer, müdür ya da patron açabilir</p>
               )}
             </div>
           </Card>
@@ -257,61 +326,59 @@ export default function CashPage() {
       )}
 
       {tab === 'bugun' && day && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {current.data?.stale && (
-            <div role="alert" className="flex items-start gap-3 rounded-2xl border border-warn-200 bg-warn-100 px-4 py-3 text-warn-700 dark:border-transparent dark:bg-warn-800 dark:text-warn-300">
-              <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
-              <div className="min-w-0 text-sm">
-                <p className="font-semibold">{current.data.stale}</p>
-                <p>Bu güne yeni adisyon ve ürün eklenmez; açık adisyonların ödemesi alınır. Gün sonunu aldıktan sonra yeni günü açın</p>
-              </div>
+            <Notice tone="warn" role="alert" title={current.data.stale}>
+              Bu güne yeni adisyon ve ürün eklenmez; açık adisyonların ödemesi alınır. Gün sonunu aldıktan sonra yeni günü açın
+            </Notice>
+          )}
+          {can('kasa.hareket') && (
+            // Telefonda üç eşit sütun: dolgu daralır, dar telefonda ikon düşer ve etiket gerekirse iki satıra iner (kenara dayanmasın)
+            <div className="grid grid-cols-3 gap-2 sm:flex">
+              <Button icon={<ArrowUpFromLine className="size-4" />} className={MOVE_BTN} onClick={() => openMove('harcama')}>
+                Harcama
+              </Button>
+              <Button icon={<Wallet className="size-4" />} className={MOVE_BTN} onClick={() => openMove('teslim')}>
+                Teslim
+              </Button>
+              <Button icon={<ArrowDownToLine className="size-4" />} className={MOVE_BTN} onClick={() => openMove('giris')}>
+                Kasaya giriş
+              </Button>
             </div>
           )}
-          <div className="flex flex-wrap gap-2">
-            {can('kasa.hareket') && (
-              <>
-                <Button icon={<ArrowUpFromLine className="size-4" />} onClick={() => setMoveKind('harcama')}>
-                  Harcama
-                </Button>
-                <Button icon={<Wallet className="size-4" />} onClick={() => setMoveKind('teslim')}>
-                  Teslim
-                </Button>
-                <Button icon={<ArrowDownToLine className="size-4" />} onClick={() => setMoveKind('giris')}>
-                  Kasaya giriş
-                </Button>
-              </>
-            )}
-            <div className="flex-1" />
-            {can('kasa.gun') && (
-              <Button variant="danger" icon={<Lock className="size-4" />} onClick={() => setClosing(true)}>
-                Gün sonu (Z)
-              </Button>
-            )}
-          </div>
 
           {summary ? (
             <ZView day={day} summary={summary} lafmaliyet={null} title={`Ara rapor (X) · Z ${day.zNo}`} />
           ) : (
-            <Card title="Kör kasa">
-              <p className="px-4 py-4 text-sm text-muted">
-                Ara rapor ve beklenen nakit bu rolde görünmez. Gün sonunda çekmeceyi sayıp yazın; fark yöneticinin ekranında ve Z raporunda. Rakamları görmek için yöneticiden "Ara rapor (X) ve kasa rakamlarını görme" yetkisi isteyin
+            // Kör kasa: başlıksız tek not; yetkinin adı ipucunda
+            <div
+              className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3 text-[13px] text-muted"
+              title="Rakamları görmek için yöneticiden “Ara rapor (X) ve kasa rakamlarını görme” yetkisi isteyin"
+            >
+              <EyeOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <p className="text-pretty">
+                <span className="font-medium text-ink-2">Kör kasa</span>: ara rapor ve beklenen nakit bu rolde gizli. Gün sonunda çekmeceyi sayıp girin; farkı yönetici görür
               </p>
-            </Card>
+            </div>
           )}
 
           <Card title="Kasa hareketleri">
             {movements.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-muted">Bugün kasa hareketi yok</p>
+              <EmptyState compact icon={<Coins />} title="Bugün kasa hareketi yok">
+                Harcama, teslim ve kasaya giriş burada listelenir
+              </EmptyState>
             ) : (
               <ul className="divide-y divide-line">
                 {movements.map((m) => (
+                  // Yön işaretle: giriş artı ve yeşil, çıkan para eksi
                   <li key={m.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                     <Badge tone={m.kind === 'giris' ? 'green' : m.kind === 'teslim' ? 'blue' : 'red'}>{MOVE_LABEL[m.kind]}</Badge>
-                    <span className="min-w-0 flex-1 truncate">{m.description || '—'}</span>
-                    <span className="text-xs text-muted">
-                      {m.userName} · {fmtTime(m.createdAt)}
+                    <span className="min-w-0 flex-1 truncate">{m.description}</span>
+                    <span className="shrink-0 text-right text-xs text-muted sm:w-28">{joinMeta([m.userName, fmtTime(m.createdAt)])}</span>
+                    <span className={cn('tabular w-24 shrink-0 text-right font-semibold', m.kind === 'giris' ? 'text-[var(--admin-success)]' : 'text-ink')}>
+                      {m.kind === 'giris' ? '+' : '−'}
+                      {tl(m.amount)}
                     </span>
-                    <span className="tabular font-semibold">{tl(m.amount)}</span>
                   </li>
                 ))}
               </ul>
@@ -322,13 +389,19 @@ export default function CashPage() {
 
       {tab === 'gecmis' && !selected && (
         <Card>
-          {(days.data ?? []).length === 0 ? (
-            <EmptyState icon={<Receipt />} title="Henüz kapanmış gün yok" />
+          {days.isPending ? (
+            <ListSkeleton rows={6} />
+          ) : days.isError && !days.data ? (
+            <ErrorState compact title="Geçmiş günler alınamadı" error={days.error} retrying={days.isFetching} onRetry={() => void days.refetch()} />
+          ) : !days.data?.length ? (
+            <EmptyState icon={<Receipt />} title="Henüz kapanmış gün yok">
+              Gün sonu alınan günler Z raporlarıyla burada listelenir
+            </EmptyState>
           ) : (
             <ul className="divide-y divide-line">
-              {days.data?.map((d) => (
+              {days.data.map((d) => (
                 <li key={d.id}>
-                  <button onClick={() => setSelected(d.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2">
+                  <button onClick={() => setSelected(d.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
                     <span className="tabular w-14 font-semibold">Z {d.zNo}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block">{fmtDateLong(d.date)}</span>
@@ -343,6 +416,20 @@ export default function CashPage() {
             </ul>
           )}
         </Card>
+      )}
+
+      {tab === 'gecmis' && selected && !detail.data && (
+        // Detay gelene dek sayfa boş kalmaz: dönüş düğmesi ve iskelet ya da hata
+        <div className="space-y-3">
+          <Button onClick={() => setSelected(null)}>Listeye dön</Button>
+          <Card>
+            {detail.isError ? (
+              <ErrorState compact title="Gün raporu alınamadı" error={detail.error} retrying={detail.isFetching} onRetry={() => void detail.refetch()} />
+            ) : (
+              <ListSkeleton rows={6} />
+            )}
+          </Card>
+        </div>
       )}
 
       {tab === 'gecmis' && selected && detail.data && (
@@ -367,12 +454,47 @@ export default function CashPage() {
         subtitle={moveKind === 'harcama' ? 'Kasadan yapılan masraf (lafmaliyet: kasadan çıkan)' : moveKind === 'teslim' ? 'Patrona ya da bankaya teslim edilen nakit' : 'Kasaya konan bozuk para vb.'}
       >
         <div className="space-y-3 p-4">
-          <div className="tabular rounded-2xl border border-line bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">{moveAmount || '0'} ₺</div>
-          <Numpad size="md" decimal onKey={(k) => setMoveAmount(applyNumpadKey(moveAmount, k, { decimal: true }))} />
-          <Field label="Açıklama">
-            <Input value={moveDesc} onChange={(e) => setMoveDesc(e.target.value)} placeholder={moveKind === 'harcama' ? 'Ör. Süt (market), fiş no' : 'İsteğe bağlı'} />
+          <div>
+            <output
+              aria-label="Tutar"
+              aria-live="polite"
+              aria-invalid={!!moveError.amount || undefined}
+              className={cn('tabular block rounded-2xl border bg-surface-2 px-4 py-3 text-right text-3xl font-semibold', moveError.amount ? 'border-[var(--admin-danger)]' : 'border-line-strong')}
+            >
+              <TypedAmount text={moveAmount} />
+            </output>
+            {moveError.amount && (
+              <p role="alert" className="mt-1.5 text-[13px] text-danger-ink">
+                {moveError.amount}
+              </p>
+            )}
+          </div>
+          <Numpad
+            size="md"
+            decimal
+            keyboard
+            onEnter={() => void addMove()}
+            onKey={(k) => {
+              setMoveAmount(applyNumpadKey(moveAmount, k, { decimal: true }));
+              setMoveError((e) => ({ ...e, amount: undefined }));
+            }}
+          />
+          <Field label="Açıklama" hint={moveKind === 'harcama' ? 'zorunlu' : 'isteğe bağlı'} error={moveError.desc}>
+            <Input
+              ref={descRef}
+              value={moveDesc}
+              onChange={(e) => {
+                setMoveDesc(e.target.value);
+                setMoveError((x) => ({ ...x, desc: undefined }));
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.repeat) void addMove();
+              }}
+              enterKeyHint="done"
+              placeholder={moveKind === 'harcama' ? 'Ör. süt (market), fiş no' : moveKind === 'teslim' ? 'Ör. bankaya yatırıldı' : 'Ör. bozuk para'}
+            />
           </Field>
-          <Button variant="primary" block disabled={!parseTL(moveAmount || '0') || (moveKind === 'harcama' && !moveDesc.trim())} onClick={addMove}>
+          <Button variant="primary" block loading={moveSaving} onClick={addMove}>
             Kaydet
           </Button>
         </div>
@@ -386,8 +508,8 @@ export default function CashPage() {
         subtitle="Çekmeceyi sayın; banka POS slipi ve yemek kartı tutarlarını girin"
         footer={
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={!counted} onChange={(e) => setCounted(!e.target.checked)} className="size-4" />
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={!counted} onChange={(e) => setCounted(!e.target.checked)} className="size-5 accent-[var(--admin-primary)]" />
               Sayımı sonra gireceğim
             </label>
             <div className="flex-1" />

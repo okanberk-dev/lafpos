@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { tl } from '@shared/money';
 import type { DisplayStateDTO } from '@shared/types';
@@ -6,6 +7,8 @@ import { LafMark } from '@/components/LafMark';
 import { get } from '@/lib/api';
 import { useTick } from '@/lib/hooks';
 import { useBusinessName } from '@/lib/publicInfo';
+import { cn } from '@/lib/cn';
+import { useTheme } from '@/lib/theme';
 import { useWakeLock } from '@/lib/wakelock';
 
 /** "Teşekkürler" bu kadar kalır, sonra hoş geldiniz */
@@ -14,6 +17,7 @@ const THANKS_MS = 10_000;
 /**
  * Müşteri ekranı (ikinci monitör ya da müşteriye dönük tablet): kasadaki adisyonun kalemleri ve tutarı, ödeme
  * bitince teşekkür, boşta hoş geldiniz. Kasa Adisyon › İşlemler › Müşteri ekranı'ndan yansıtır; ekran adı ?ekran=. Personel girişi istemez.
+ * Varsayılan koyu (gece loş salonda müşterinin gözünü almasın); `?tema=acik` zorla koyu açmaz, cihazın temasında kalır.
  */
 export default function CustomerDisplayPage() {
   const businessName = useBusinessName();
@@ -21,6 +25,15 @@ export default function CustomerDisplayPage() {
   const [params] = useSearchParams();
   const code = (params.get('ekran') ?? 'kasa').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || 'kasa';
   useWakeLock(true);
+  // Varsayılan koyu; ?tema=acik ise cihaz ya da uygulama teması ne olursa olsun açık
+  const forced = params.get('tema') === 'acik' ? 'light' : 'dark';
+  const setForce = useTheme((s) => s.setForce);
+  useLayoutEffect(() => {
+    setForce(forced);
+    // Açılışın teması (bootDark.ts) artık sayfanın kendisinde
+    useTheme.getState().releaseBootDark();
+    return () => setForce(null);
+  }, [forced, setForce]);
   // Oturumsuz ekran: canlı bağlantı yok, sık yoklanır (yalnız bellekten okunan küçük bir yanıt)
   const q = useQuery({ queryKey: ['display', code], queryFn: () => get<DisplayStateDTO>(`/public/display/${code}`), refetchInterval: 1_500 });
 
@@ -34,7 +47,7 @@ export default function CustomerDisplayPage() {
           <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
             <header className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-5 py-4">
               <span className="grid size-11 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-                <LafMark className="h-4" bean="#e8c877" />
+                <LafMark className="h-4" onNight />
               </span>
               <h1 className="text-xl font-semibold tracking-[-0.01em]">Siparişiniz</h1>
               <span className="flex-1" />
@@ -86,10 +99,11 @@ export default function CustomerDisplayPage() {
           </section>
         </div>
       ) : (
-        <div className="grid flex-1 place-items-center rounded-2xl border border-line bg-surface p-8 text-center">
+        // Koyuda boş ekranda kart yok: içerik doğrudan zeminde, gecenin tek açık yüzeyi logonun karosu
+        <div className={cn('grid flex-1 place-items-center p-8 text-center', !forced && 'rounded-2xl border border-line bg-surface')}>
           <div>
-            <span className="mx-auto grid size-24 place-items-center rounded-3xl bg-night text-white dark:bg-surface-3">
-              <LafMark className="h-9" bean="#e8c877" />
+            <span className="mx-auto grid size-24 place-items-center rounded-[20px] bg-night text-white dark:bg-surface-3">
+              <LafMark className="h-9" onNight />
             </span>
             {state.kind === 'thanks' ? (
               <>

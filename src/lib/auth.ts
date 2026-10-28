@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Permission } from '@shared/permissions';
 import type { MeDTO } from '@shared/types';
 import { get, getToken, post, setToken, setUnauthorizedHandler } from './api';
+import { endSession } from './sessionEnd';
 
 interface AuthState {
   me: MeDTO | null;
@@ -43,10 +44,12 @@ export const useAuth = create<AuthState>((set) => ({
     }
     setToken(null);
     set({ me: null });
+    endSession();
   },
   clear: () => {
     setToken(null);
     set({ me: null });
+    endSession();
   },
 }));
 

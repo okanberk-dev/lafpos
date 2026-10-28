@@ -2,16 +2,19 @@ import { useQuery } from '@tanstack/react-query';
 import { Coffee, CornerDownLeft, Lock, Moon, Plus, Search, Sun, UserPlus, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { tl } from '@shared/money';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { trapTab } from '@/lib/focus';
 import { navFor } from '@/lib/nav';
 import { useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
-import { useTheme } from '@/lib/theme';
+import { resolveDark } from '@/lib/bootDark';
+import { setBarTheme, useTheme } from '@/lib/theme';
+import { confirmLeave } from '@/lib/unsavedGuard';
 import { visibleSections } from './admin/sections';
 
 interface Entry {
@@ -53,18 +56,31 @@ function Palette({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
   const logout = useAuth((s) => s.logout);
   const { theme, setTheme } = useTheme();
+  const barDark = useTheme((s) => s.force === 'dark');
+  const onBar = useLocation().pathname === '/mutfak';
   const mode = useServiceMode();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  /** Basış karartmada mı başladı: kapanış click'te (Modal gibi), aynı dokunuş alttaki öğeye düşmesin */
+  const downOnBackdrop = useRef(false);
   const users = useQuery({ queryKey: ['users', 'admin'], queryFn: () => get<{ id: string; name: string; role: string; active: boolean }[]>('/admin/users'), enabled: can('personel.yonet'), staleTime: 60_000 });
 
-  useEffect(() => input.current?.focus(), []);
+  // Kapanınca odak açan öğeye döner (⌘K'ya basılan alan, sol menüdeki büyüteç)
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    input.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus?.();
+    };
+  }, []);
 
-  const go = (to: string) => () => {
+  const go = (to: string) => async () => {
     onClose();
-    navigate(to);
+    // Ayarlarda kaydedilmemiş değişiklik varsa önce sorulur
+    if (await confirmLeave()) navigate(to);
   };
 
   const entries = useMemo<Entry[]>(() => {
@@ -88,16 +104,19 @@ function Palette({ onClose }: { onClose: () => void }) {
       out.push({ id: 'eylem:personel', group: 'Eylemler', label: 'Personel ekle', icon: <UserPlus />, keywords: 'yeni kullanıcı pin', run: go('/yonetim/personel?kisi=yeni') });
       for (const u of users.data ?? []) out.push({ id: `kisi:${u.id}`, group: 'Personel', label: u.name, hint: u.active ? undefined : 'kapalı', icon: <Users />, run: go(`/yonetim/personel?kisi=${u.id}`) });
     }
-    const dark = document.documentElement.classList.contains('dark');
+    // Bar ekranında eylem bu cihazın bar tercihini değiştirir (kullanıcı menüsündeki satır gibi); başka ekranda genel
+    // temayı. Yön `.dark` sınıfından değil (bar zorlaması onu ezer) temanın kendisinden okunur: etiket ve sonuç aynı yönde
+    const dark = onBar ? barDark : resolveDark(theme, null, window.matchMedia('(prefers-color-scheme: dark)').matches);
     out.push({
       id: 'eylem:tema',
       group: 'Eylemler',
-      label: dark ? 'Açık temaya geç' : 'Koyu temaya geç',
+      label: onBar ? (dark ? 'Bar ekranını açık yap' : 'Bar ekranını koyu yap') : dark ? 'Açık temaya geç' : 'Koyu temaya geç',
       icon: dark ? <Sun /> : <Moon />,
-      keywords: 'tema gece gündüz',
+      keywords: 'tema gece gündüz bar ekranı',
       run: () => {
         onClose();
-        setTheme(theme === 'koyu' || (theme === 'sistem' && dark) ? 'acik' : 'koyu');
+        if (onBar) setBarTheme(dark ? 'acik' : 'koyu');
+        else setTheme(dark ? 'acik' : 'koyu');
       },
     });
     out.push({
@@ -108,13 +127,15 @@ function Palette({ onClose }: { onClose: () => void }) {
       keywords: 'çıkış oturum',
       run: async () => {
         onClose();
+        // Kilitlemek sayfadan çıkmaktır: Ayarlarda kaydedilmemiş değişiklik varsa önce sorulur
+        if (!(await confirmLeave())) return;
         await logout();
         navigate('/giris');
       },
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boot.products, users.data, theme, mode]);
+  }, [boot.products, users.data, theme, mode, onBar, barDark]);
 
   const results = useMemo(() => {
     const k = fold(q.trim());
@@ -155,8 +176,22 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   let lastGroup = '';
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-[#0c0e1b]/25 p-3 pt-[min(18vh,140px)]" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Komut paleti" className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-pop)]">
+    <div className="animate-fade fixed inset-0 z-[70] flex items-start justify-center bg-[var(--scrim-soft)] p-3 pt-[min(18vh,140px)]" onPointerDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        downOnBackdrop.current = false;
+      }}
+    >
+      <div
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Komut paleti"
+        onKeyDown={(e) => trapTab(e, dialog.current)}
+        className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
+      >
         <div className="flex items-center gap-2.5 border-b border-line px-4">
           <Search className="size-4 shrink-0 text-muted" aria-hidden="true" />
           <input
@@ -171,10 +206,15 @@ function Palette({ onClose }: { onClose: () => void }) {
             aria-activedescendant={results[active] ? `palette-${results[active].id}` : undefined}
             className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
           />
-          <kbd className="rounded border border-line px-1.5 text-[11px] text-muted">Esc</kbd>
+          <kbd className="rounded border border-line px-1.5 text-[11px] text-muted pointer-coarse:hidden">Esc</kbd>
         </div>
-        <ul ref={list} id="palette-list" role="listbox" className="scroll-thin min-h-0 flex-1 overflow-y-auto p-1.5">
-          {results.length === 0 && <li className="px-3 py-8 text-center text-sm text-muted">“{q}” için sonuç yok</li>}
+        <ul ref={list} id="palette-list" role="listbox" className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+          {results.length === 0 && (
+            <li role="presentation" className="px-3 py-8 text-center">
+              <p className="text-sm font-medium text-ink">“{q}” için sonuç yok</p>
+              <p className="mt-0.5 text-[13px] text-muted">Ekran, ürün ya da personel adının bir bölümünü yazın</p>
+            </li>
+          )}
           {results.map((r, i) => {
             const head = r.group !== lastGroup;
             lastGroup = r.group;

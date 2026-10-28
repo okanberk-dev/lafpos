@@ -5,7 +5,7 @@ import { fmtDateLong, fmtDateTime } from '@shared/time';
 import type { BusinessDayDTO } from '@shared/types';
 import type { ZSummary } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/misc';
+import { Card, EmptyState, Stat } from '@/components/ui/misc';
 import { errorMessage, getToken, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -78,8 +78,8 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-0 flex-1">
-          <h2 className="text-xl font-semibold">{title ?? `Z ${day.zNo}`}</h2>
-          <p className="text-sm text-muted">
+          <h2 className="text-base font-semibold">{title ?? `Z ${day.zNo}`}</h2>
+          <p className="text-[13px] text-muted">
             {fmtDateLong(day.date)} · açılış {fmtDateTime(day.openedAt)}
             {day.closedAt && ` · kapanış ${fmtDateTime(day.closedAt)}`}
           </p>
@@ -90,13 +90,13 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Net ciro" value={tl(summary.netSales)} strong />
-        <Tile label="Adisyon" value={`${summary.receipts}`} hint={summary.receipts ? `ort. ${tl(Math.round(summary.netSales / summary.receipts))}` : undefined} />
-        <Tile label="Beklenen nakit" value={tl(summary.expectedCash)} />
-        <Tile label="Kasa farkı" value={d == null ? 'Sayılmadı' : tl(d)} tone={d == null ? undefined : d === 0 ? 'ok' : 'bad'} />
+        <Stat label="Net ciro" value={tl(summary.netSales)} strong />
+        <Stat label="Adisyon" value={`${summary.receipts}`} hint={summary.receipts ? `ort. ${tl(Math.round(summary.netSales / summary.receipts))}` : undefined} />
+        <Stat label="Beklenen nakit" value={tl(summary.expectedCash)} />
+        <Stat label="Kasa farkı" value={d == null ? '—' : tl(d)} hint={d == null ? 'Sayılmadı' : undefined} tone={d == null ? undefined : d === 0 ? 'ok' : 'bad'} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 lg:grid-cols-2">
         <Card title="Ödeme türleri">
           <ul className="divide-y divide-line">
             {summary.payments.map((p) => (
@@ -113,7 +113,11 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
                 <span className="tabular">{tl(summary.tips)}</span>
               </li>
             )}
-            {summary.payments.length === 0 && <li className="px-4 py-4 text-sm text-muted">Ödeme yok</li>}
+            {summary.payments.length === 0 && (
+              <li>
+                <EmptyState compact title="Bu gün ödeme alınmadı" />
+              </li>
+            )}
           </ul>
         </Card>
         <Card title="Kontrol">
@@ -124,7 +128,9 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
             {(summary.odenmez ?? 0) > 0 && <Line l="Ödenmez (ciro dışı)" r={tl(summary.odenmez ?? 0)} />}
             {(summary.zayi ?? 0) > 0 && <Line l="Zayi (ciro dışı)" r={tl(summary.zayi ?? 0)} />}
             <Line l={`İptal (${summary.voidAfterSendCount} hazırlandıktan sonra)`} r={tl(summary.voided)} />
-            <Line l="Kasa girişi / harcama / teslim" r={`${tl(summary.cashIn)} / ${tl(summary.cashOut)} / ${tl(summary.handedOver)}`} />
+            <Line l="Kasa girişi" r={tl(summary.cashIn)} />
+            <Line l="Harcama" r={tl(summary.cashOut)} />
+            <Line l="Teslim" r={tl(summary.handedOver)} />
             {summary.cariCollections > 0 && <Line l="Açık hesap tahsilatı" r={tl(summary.cariCollections)} />}
             {summary.onlineOrders > 0 && <Line l={`Online (sitede ödendi, ${summary.onlineOrders})`} r={tl(summary.onlineTotal)} />}
             {summary.kdv.map((k) => (
@@ -162,11 +168,11 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
             ))}
           </div>
           <p className="px-4 pb-3 text-xs text-muted">
-            Alanlar lafmaliyet'teki formla aynı sırada. "Kopyala" ile alıp forma yapıştırabilirsiniz;{' '}
+            Alanlar lafmaliyet’teki formla aynı sırada. “Kopyala” ile alıp forma yapıştırabilirsiniz;{' '}
             {trainingDay
               ? day.trainingDay
-                ? "bu gün kurulum modunda kapandı (eğitim günü), lafmaliyet'e kendiliğinden gitmez"
-                : "bu gün eğitim işareti tutulmadan önce kapandı, lafmaliyet'e kendiliğinden gitmez"
+                ? 'bu gün kurulum modunda kapandı (eğitim günü), lafmaliyet’e kendiliğinden gitmez'
+                : 'bu gün eğitim işareti tutulmadan önce kapandı, lafmaliyet’e kendiliğinden gitmez'
               : 'bağlantı kurulunca kendiliğinden gider'}
           </p>
         </Card>
@@ -186,16 +192,6 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
           </ul>
         </Card>
       )}
-    </div>
-  );
-}
-
-function Tile({ label, value, hint, strong, tone }: { label: string; value: string; hint?: string; strong?: boolean; tone?: 'ok' | 'bad' }) {
-  return (
-    <div className={`rounded-2xl border p-4 ${tone === 'bad' ? 'border-danger-200 bg-[var(--admin-danger-soft)] dark:border-transparent' : tone === 'ok' ? 'border-success-200 bg-[var(--admin-success-soft)] dark:border-transparent' : 'border-line bg-surface'}`}>
-      <div className="text-sm text-muted">{label}</div>
-      <div className={`tabular mt-1 font-semibold ${strong ? 'text-3xl' : 'text-2xl'}`}>{value}</div>
-      {hint && <div className="text-xs text-muted">{hint}</div>}
     </div>
   );
 }

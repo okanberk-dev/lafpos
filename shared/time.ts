@@ -98,11 +98,14 @@ const dateTimeFmt = new Intl.DateTimeFormat('tr-TR', {
   minute: '2-digit',
 });
 const dateLongFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
+const dateShortFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'short', weekday: 'short' });
 
 export const fmtTime = (ms: number) => timeFmt.format(new Date(ms));
 export const fmtDateTime = (ms: number) => dateTimeFmt.format(new Date(ms));
 /** "2026-10-26" -> "26 Ekim 2026 Pazartesi" */
 export const fmtDateLong = (date: string) => dateLongFmt.format(new Date(`${date}T12:00:00Z`));
+/** "2026-10-26" -> "26 Eki Pzt" (tarih adımlayıcı gibi dar yerler) */
+export const fmtDateShort = (date: string) => dateShortFmt.format(new Date(`${date}T12:00:00Z`));
 
 /** Geçen süre: "4 dk", "1 sa 12 dk" */
 export function fmtElapsed(fromMs: number, toMs = Date.now()): string {
@@ -111,6 +114,14 @@ export function fmtElapsed(fromMs: number, toMs = Date.now()): string {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return m ? `${h} sa ${m} dk` : `${h} sa`;
+}
+
+/**
+ * Meta satırı için geçen süre ("az önce", "12 dk", "1 sa 5 dk"): bir dakikadan kısa süre "0 dk" yazılmaz.
+ * Bar sayaçları ve gecikme rozeti fmtElapsed'de kalır (orada 0 dk da bilgidir)
+ */
+export function fmtAgo(fromMs: number, toMs = Date.now()): string {
+  return toMs - fromMs < 60_000 ? 'az önce' : fmtElapsed(fromMs, toMs);
 }
 
 /** "HH:MM" metnini dakikaya çevirir */

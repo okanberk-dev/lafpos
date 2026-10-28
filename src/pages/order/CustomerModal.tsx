@@ -1,14 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { Gift, Search, UserPlus, X } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { tl } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
-import { Button } from '@/components/ui/Button';
-import { Field, Input } from '@/components/ui/Field';
+import { Button, IconButton } from '@/components/ui/Button';
+import { Field, Input, SearchInput } from '@/components/ui/Field';
+import { EmptyState, ErrorState, ListSkeleton } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
 import { get, patch, post } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { useFinePointer } from '@/lib/hooks';
+import { joinMeta } from '@/lib/text';
 
 type Act = <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 
@@ -28,6 +31,9 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const fine = useFinePointer();
   const list = useQuery({ queryKey: ['customers', 'search', q], queryFn: () => get<CustomerRow[]>(`/customers?q=${encodeURIComponent(q)}&limit=12`), enabled: open && !creating });
   if (!open) return null;
 
@@ -36,6 +42,12 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
     if (res) onClose();
   };
   const create = async () => {
+    // Zorunlu alan eksikse ileti alanın altında (düğme sessizce soluk kalmaz)
+    if (!name.trim()) {
+      setNameError('Ad soyad gerekli');
+      nameRef.current?.focus();
+      return;
+    }
     const c = await act((pin) => post<CustomerRow>('/customers', { name, phone: phone || null, approverPin: pin }), 'Müşteri kaydedildi');
     if (c) await attach(c.id);
   };
@@ -48,69 +60,90 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
     <Modal open onClose={onClose} title="Müşteri" subtitle={stamps ? 'Telefon ya da adla bulun; damga kartı ve açık hesap için' : 'Telefon ya da adla bulun; açık hesap ve sipariş geçmişi için'} size="md">
       <div className="space-y-3 p-4">
         {current && (
-          <div className="flex items-center gap-3 rounded-2xl border border-brand-200 bg-[var(--admin-primary-soft)] p-3 dark:border-transparent">
+          <div className="flex items-center gap-3 rounded-2xl border border-primary-line bg-primary-soft p-3">
             <div className="min-w-0 flex-1">
               <div className="font-semibold">{current.name}</div>
-              <div className="text-xs text-muted">
-                {current.phone ?? 'telefon yok'}
-                {stamps && ` · damga ${current.stamps}/${goal}`}
-                {current.balance !== 0 && ` · açık hesap ${tl(current.balance)}`}
-              </div>
+              <div className="text-xs text-muted">{joinMeta([current.phone, stamps && `damga ${current.stamps}/${goal}`, current.balance !== 0 && `açık hesap ${tl(current.balance)}`])}</div>
             </div>
             {stamps && current.stamps >= goal && (
               <Button size="sm" variant="warn" icon={<Gift className="size-4" />} onClick={() => act((pin) => post(`/customers/${current.id}/redeem`, { approverPin: pin }), `${goal} damga kullanıldı; bir içeceği ikram edin`)}>
-                Hediye
+                Hediye içecek
               </Button>
             )}
-            <Button size="sm" variant="ghost" aria-label="Müşteriyi kaldır" onClick={() => attach(null)}>
+            <IconButton size="sm" label="Müşteriyi kaldır" onClick={() => attach(null)}>
               <X className="size-4" />
-            </Button>
+            </IconButton>
           </div>
         )}
         {!creating ? (
           <>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-              <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Telefon ya da ad" className="pl-9" autoFocus inputMode="search" />
-            </div>
-            <ul className="divide-y divide-line rounded-2xl border border-line">
+            <SearchInput value={q} onChange={setQ} label="Müşteri ara" placeholder="Telefon ya da ad" autoFocus={fine} />
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line">
+              {list.isPending && (
+                <li>
+                  <ListSkeleton rows={3} />
+                </li>
+              )}
+              {list.isError && !list.data && (
+                <li>
+                  <ErrorState compact title="Müşteriler alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+                </li>
+              )}
               {(list.data ?? []).map((c) => (
                 <li key={c.id}>
-                  <button onClick={() => attach(c.id)} className={cn('flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-surface-2', current?.id === c.id && 'bg-brand-50')}>
+                  <button
+                    onClick={() => attach(c.id)}
+                    aria-current={current?.id === c.id || undefined}
+                    className={cn('flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press', current?.id === c.id && 'bg-primary-soft')}
+                  >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{c.name}</span>
-                      <span className="text-xs text-muted">
-                        {c.phone ?? '—'} · {c.visits} ziyaret
-                      </span>
+                      <span className="text-xs text-muted">{joinMeta([c.phone, `${c.visits} ziyaret`])}</span>
                     </span>
                     <span className="text-right text-xs">
                       {stamps && (
-                        <span className="block font-semibold text-warn-600">
+                        <span className="block font-semibold text-warning-ink">
                           {c.stamps}/{goal} damga
                         </span>
                       )}
-                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-danger-500' : 'text-brand-500'}>{tl(c.balance)}</span>}
+                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-danger-ink' : 'text-primary'}>{tl(c.balance)}</span>}
                     </span>
                   </button>
                 </li>
               ))}
-              {list.data?.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted">Bulunamadı</li>}
+              {list.isSuccess && list.data.length === 0 && (
+                <li>
+                  <EmptyState compact icon={<Search />} title={q.trim() ? 'Müşteri bulunamadı' : 'Henüz müşteri yok'}>
+                    {q.trim() ? 'Telefonun ya da adın bir bölümünü yazın ya da yeni müşteri ekleyin' : 'Yeni müşteri ile ilk kaydı açın'}
+                  </EmptyState>
+                </li>
+              )}
             </ul>
-            <Button block icon={<UserPlus className="size-4" />} onClick={() => { setCreating(true); setPhone(/^\d/.test(q) ? q : ''); setName(/^\d/.test(q) ? '' : q); }}>
+            <Button block icon={<UserPlus className="size-4" />} onClick={() => { setCreating(true); setNameError(null); setPhone(/^\d/.test(q) ? q : ''); setName(/^\d/.test(q) ? '' : q); }}>
               Yeni müşteri
             </Button>
           </>
         ) : (
           <div className="space-y-3">
-            <Field label="Ad soyad">
-              <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            <Field label="Ad soyad" required error={nameError}>
+              <Input
+                ref={nameRef}
+                value={name}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setNameError(null);
+                }}
+                autoFocus={fine}
+                autoCapitalize="words"
+                enterKeyHint="next"
+              />
             </Field>
-            <Field label="Telefon" hint="Sonraki ziyarette bununla bulunur">
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="05xx xxx xx xx" />
+            <Field label="Telefon" hint="sonraki ziyarette bununla bulunur">
+              <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" spellCheck={false} placeholder="Ör. 0532 123 45 67" />
             </Field>
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => setCreating(false)}>Geri</Button>
-              <Button variant="primary" disabled={!name.trim()} onClick={create}>
+              <Button variant="primary" onClick={create}>
                 Kaydet ve ekle
               </Button>
             </div>

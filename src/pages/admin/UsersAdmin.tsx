@@ -1,15 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Pencil, Plus, Power } from 'lucide-react';
+import { KeyRound, Pencil, Plus, Power, Save, SearchX } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { ALL_PERMISSIONS, effectivePermissions, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, type RoleMatrix, ROLES } from '@shared/permissions';
 import { fmtDateTime } from '@shared/time';
-import { ActionMenu, Badge, BTN, type Column, DataTable, DefRow, PageHeader, QuickLook, SearchField, StatusTabs, type Tone } from '@/components/admin/ui';
-import { Field, Input, Select, Toggle } from '@/components/ui/Field';
-import { PageLoading } from '@/components/ui/misc';
+import { ActionMenu, Badge, CARD, type Column, DataTable, DefRow, EmptyState, PageHeader, QuickLook, SearchField, StatusTabs, TableSkeleton, type Tone } from '@/components/admin/ui';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, Label, NumberInput, Select, Toggle } from '@/components/ui/Field';
+import { ErrorState } from '@/components/ui/misc';
 import { errorMessage, get, patch, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
+import { useFinePointer } from '@/lib/hooks';
 import { fold } from '@/lib/shell';
 import { toast } from '@/lib/toast';
 
@@ -27,7 +29,8 @@ interface UserRow {
 type Draft = Omit<UserRow, 'id' | 'lastLoginAt'> & { id?: string; pin: string };
 
 const COLORS = ['#1e4031', '#6b1a2b', '#a87c2e', '#3f6b8a', '#5e8f45', '#a23e6b', '#9a3b2f', '#7a6a5f'];
-const ROLE_TONE: Record<Role, Tone> = { patron: 'accent', mudur: 'primary', kasiyer: 'info', garson: 'success', mutfak: 'warning', kurye: 'neutral' };
+/** Rol rozeti sakin: yalnız her şeyi gören patron vurgulu, gerisi gri */
+const roleTone = (role: Role): Tone => (role === 'patron' ? 'accent' : 'neutral');
 
 /** Son giriş: "az önce", "12 dk önce", "3 sa önce", sonra tarih (Innex: "Şu an aktif / 3 saat önce") */
 function since(at: number | null): string {
@@ -39,17 +42,20 @@ function since(at: number | null): string {
   return fmtDateTime(at);
 }
 
+/** Ad altındaki satır: "Son giriş 12 dk önce" ya da "Hiç girmedi" */
+const lastSeen = (at: number | null) => (at ? `Son giriş ${since(at).toLocaleLowerCase('tr-TR')}` : since(at));
+
 function Avatar({ name, color, size = 'md' }: { name: string; color: string; size?: 'md' | 'lg' }) {
   return (
-    <span aria-hidden="true" className={cn('grid shrink-0 place-items-center rounded-full font-semibold text-white', size === 'lg' ? 'size-11 text-sm' : 'size-8 text-xs')} style={{ background: color }}>
+    <span aria-hidden="true" className={cn('grid shrink-0 place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', size === 'lg' ? 'size-11 text-sm' : 'size-8 text-xs')} style={{ background: color }}>
       {name.slice(0, 2).toLocaleUpperCase('tr-TR')}
     </span>
   );
 }
 
 /**
- * Personel ve yetki (Innex personel listesi ve §3 fikir 9): rol rozeti, ek ve kaldırılan yetki satırda, son
- * giriş "3 sa önce" biçiminde; düzenleme sağdan açılan çekmecede, yetkiler tablo olarak. ?kisi=<id>|yeni.
+ * Personel (Innex personel listesi ve §3 fikir 9): rol rozeti, ek ve kaldırılan yetki satırda, son giriş adın
+ * altında "3 sa önce" biçiminde; düzenleme sağdan açılan çekmecede, yetkiler tablo olarak. ?kisi=<id>|yeni.
  */
 export default function UsersAdmin() {
   const qc = useQueryClient();
@@ -89,7 +95,6 @@ export default function UsersAdmin() {
     }
   };
 
-  if (data.isLoading) return <PageLoading />;
   const selected = openId && openId !== 'yeni' ? all.find((u) => u.id === openId) ?? null : null;
 
   const columns: Column<UserRow>[] = [
@@ -101,15 +106,15 @@ export default function UsersAdmin() {
           <Avatar name={u.name} color={u.color} />
           <span className="min-w-0">
             <span className="block truncate font-medium text-[var(--admin-text)]">{u.name}</span>
-            <span className="block text-xs text-[var(--admin-text-mute)]">{u.id === me?.id ? 'Siz' : ROLE_LABELS[u.role]}</span>
+            <span className="block text-xs text-[var(--admin-text-mute)]">{u.id === me?.id ? 'Siz' : lastSeen(u.lastLoginAt)}</span>
           </span>
         </span>
       ),
     },
-    { key: 'rol', header: 'Rol', cell: (u) => <Badge tone={ROLE_TONE[u.role]}>{ROLE_LABELS[u.role]}</Badge> },
+    { key: 'rol', header: 'Rol', cell: (u) => <Badge tone={roleTone(u.role)}>{ROLE_LABELS[u.role]}</Badge> },
     {
       key: 'yetki',
-      header: 'Kişiye özel yetki',
+      header: 'Ek yetki',
       cell: (u) =>
         u.permGrant.length || u.permRevoke.length ? (
           <span className="flex flex-wrap gap-1">
@@ -117,28 +122,35 @@ export default function UsersAdmin() {
             {u.permRevoke.length > 0 && <Badge tone="danger">−{u.permRevoke.length} kaldırılan</Badge>}
           </span>
         ) : (
-          <span className="text-[var(--admin-text-mute)]">Rolün yetkileri</span>
+          <span className="text-[var(--admin-text-mute)]">
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">Rolün yetkileri</span>
+          </span>
         ),
       hideOnPhone: true,
       hideBelow: 'xl',
     },
     { key: 'indirim', header: 'İndirim sınırı', align: 'right', cell: (u) => <span className="tabular-nums">%{u.maxDiscountPct}</span> },
-    { key: 'giris', header: 'Son giriş', cell: (u) => <span className="whitespace-nowrap text-[var(--admin-text-soft)]">{since(u.lastLoginAt)}</span> },
     { key: 'durum', header: 'Durum', cell: (u) => <Badge tone={u.active ? 'success' : 'neutral'} dot>{u.active ? 'Etkin' : 'Kapalı'}</Badge> },
   ];
 
   return (
     <>
       <PageHeader
-        title="Personel ve yetki"
-        description="Her kişi kendi PIN'iyle girer; yetkisi olmayan işlemi yetkili PIN'iyle onaylatır. Maliyet ve kâr yalnız 'Maliyet, kâr ve personel tutarları' yetkisiyle görünür"
+        title="Personel"
+        description="Her kişi kendi PIN’iyle girer; yetkisi olmayan işlemi yetkili PIN’iyle onaylatır"
         actions={
-          <button type="button" className={BTN.primary} onClick={() => open('yeni')}>
-            <Plus className="size-4" aria-hidden="true" />
+          <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => open('yeni')}>
             Personel ekle
-          </button>
+          </Button>
         }
       />
+      {data.isPending ? (
+        <TableSkeleton rows={6} />
+      ) : data.isError && !data.data ? (
+        <ErrorState className={CARD} title="Personel listesi alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+      ) : (
+        <>
       <StatusTabs
         label="Personel durumu"
         value={tab}
@@ -162,8 +174,7 @@ export default function UsersAdmin() {
         rowClassName={(u) => !u.active && 'opacity-70'}
         phoneMeta={(u) => (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Badge tone={ROLE_TONE[u.role]}>{ROLE_LABELS[u.role]}</Badge>
-            <span>{since(u.lastLoginAt)}</span>
+            <Badge tone={roleTone(u.role)}>{ROLE_LABELS[u.role]}</Badge>
             {!u.active && <Badge>Kapalı</Badge>}
           </span>
         )}
@@ -177,7 +188,29 @@ export default function UsersAdmin() {
             ]}
           />
         )}
+        empty={
+          <EmptyState
+            icon={<SearchX />}
+            title={q.trim() ? `“${q.trim()}” ile eşleşen kişi yok` : tab === 'kapali' ? 'Kapatılmış personel yok' : 'Bu süzgeçte kişi yok'}
+            action={
+              q.trim() || tab !== 'etkin' ? (
+                <Button
+                  onClick={() => {
+                    setQ('');
+                    setTab('etkin');
+                  }}
+                >
+                  {q.trim() ? 'Aramayı temizle' : 'Etkin personeli göster'}
+                </Button>
+              ) : undefined
+            }
+          >
+            {q.trim() ? 'Adın ya da rolün bir bölümünü yazın' : 'Kapatılan kişi burada listelenir; geçmiş adisyonlarında adı kalır'}
+          </EmptyState>
+        }
       />
+        </>
+      )}
 
       {(selected || openId === 'yeni') && (
         <UserDrawer
@@ -198,7 +231,10 @@ export default function UsersAdmin() {
 
 function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | null; isMe: boolean; matrix: RoleMatrix; onClose: () => void; onSaved: () => void }) {
   const [d, setD] = useState<Draft>(user ? { ...user, pin: '' } : { name: '', role: 'garson', color: COLORS[3], active: true, permGrant: [], permRevoke: [], maxDiscountPct: 10, pin: '' });
+  const fine = useFinePointer();
   const [saving, setSaving] = useState(false);
+  // Eksik ya da hatalı alan Kaydet'e basınca alanın altında söylenir (düğme sessizce soluk kalmaz)
+  const [tried, setTried] = useState(false);
   const effective = effectivePermissions(d.role, { grant: d.permGrant, revoke: d.permRevoke }, matrix);
   const roleBase = (role: Role) => (role === 'patron' ? ALL_PERMISSIONS : (matrix[role] ?? ROLE_DEFAULTS[role]));
   const pinOk = user ? !d.pin || /^\d{4,6}$/.test(d.pin) : /^\d{4,6}$/.test(d.pin);
@@ -208,7 +244,13 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
     if (byRole) setD({ ...d, permRevoke: on ? [...d.permRevoke, p] : d.permRevoke.filter((x) => x !== p) });
     else setD({ ...d, permGrant: on ? d.permGrant.filter((x) => x !== p) : [...d.permGrant, p] });
   };
+  const nameError = !d.name.trim() ? 'Ad gerekli' : null;
+  const pinError = pinOk ? null : !d.pin ? 'PIN gerekli (4-6 hane)' : '4-6 hane rakam';
   const save = async () => {
+    if (nameError || pinError) {
+      setTried(true);
+      return;
+    }
     setSaving(true);
     try {
       const body = { name: d.name, role: d.role, color: d.color, maxDiscountPct: d.maxDiscountPct, permGrant: d.permGrant, permRevoke: d.permRevoke, active: d.active, ...(d.pin ? { pin: d.pin } : {}) };
@@ -234,17 +276,15 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
           {user ? user.name : 'Yeni personel'}
         </span>
       }
-      subtitle={user ? `${ROLE_LABELS[user.role]} · son giriş ${since(user.lastLoginAt).toLocaleLowerCase('tr-TR')}` : 'PIN 4-6 hane; kişi bu PIN ile girer'}
+      subtitle={user ? `${ROLE_LABELS[user.role]} · ${lastSeen(user.lastLoginAt).toLocaleLowerCase('tr-TR')}` : 'PIN 4-6 hane; kişi bu PIN ile girer'}
       footer={
         <>
           {user && !isMe && <Toggle checked={d.active} onChange={(v) => setD({ ...d, active: v })} label={d.active ? 'Etkin' : 'Kapalı'} />}
           <div className="flex-1" />
-          <button type="button" className={BTN.ghost} onClick={onClose}>
-            Vazgeç
-          </button>
-          <button type="button" className={BTN.primary} disabled={!d.name.trim() || !pinOk || saving} onClick={save}>
+          <Button onClick={onClose}>Vazgeç</Button>
+          <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
             Kaydet
-          </button>
+          </Button>
         </>
       }
     >
@@ -256,8 +296,8 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Ad">
-          <Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus={!user} />
+        <Field label="Ad" required error={tried ? nameError : null}>
+          <Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus={!user && fine} autoCapitalize="words" />
         </Field>
         <Field label="Rol" hint={isMe ? 'başka bir yetkili değiştirir' : undefined}>
           <Select value={d.role} disabled={isMe} onChange={(e) => setD({ ...d, role: e.target.value as Role, permGrant: [], permRevoke: [] })}>
@@ -268,21 +308,24 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
             ))}
           </Select>
         </Field>
-        <Field label={user ? 'Yeni PIN' : 'PIN'} hint={user ? 'değişmeyecekse boş' : '4-6 hane'} error={d.pin && !pinOk ? '4-6 hane rakam' : null}>
+        <Field label={user ? 'Yeni PIN' : 'PIN'} hint={user ? 'değişmeyecekse boş bırakın' : '4-6 hane'} error={(d.pin || tried) && pinError ? pinError : null}>
           <div className="relative">
             <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--admin-text-mute)]" aria-hidden="true" />
             <Input value={d.pin} onChange={(e) => setD({ ...d, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} inputMode="numeric" autoComplete="off" className="pl-9 tracking-[0.3em]" />
           </div>
         </Field>
         <Field label="İndirim sınırı (%)" hint="üstü onay ister">
-          <Input type="number" min={0} max={100} value={d.maxDiscountPct} disabled={isMe} onChange={(e) => setD({ ...d, maxDiscountPct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} />
+          <NumberInput value={d.maxDiscountPct} min={0} max={100} fallback={0} disabled={isMe} onCommit={(maxDiscountPct) => setD({ ...d, maxDiscountPct })} />
         </Field>
-        <div className="sm:col-span-2">
-          <div className="mb-1.5 text-sm font-medium text-[var(--admin-text-soft)]">Renk</div>
+        <div className="sm:col-span-2" role="group" aria-label="Renk">
+          <Label>Renk</Label>
           <div className="flex flex-wrap gap-1">
-            {COLORS.map((c) => (
-              <button key={c} type="button" aria-label={`Renk ${c}`} aria-pressed={d.color === c} onClick={() => setD({ ...d, color: c })} className="grid size-11 place-items-center rounded-full">
-                <span className={cn('size-8 rounded-full ring-offset-2 ring-offset-[var(--admin-surface)]', d.color === c && 'ring-2 ring-[var(--admin-primary)]')} style={{ background: c }} />
+            {COLORS.map((c, i) => (
+              <button key={c} type="button" aria-label={`Renk ${i + 1}`} aria-pressed={d.color === c} onClick={() => setD({ ...d, color: c })} className="grid size-11 place-items-center rounded-full">
+                <span
+                  className={cn('size-8 rounded-full', d.color === c ? 'ring-2 ring-[var(--admin-primary)] ring-offset-2 ring-offset-[var(--admin-surface)]' : 'ring-1 ring-inset ring-black/5 dark:ring-white/15')}
+                  style={{ background: c }}
+                />
               </button>
             ))}
           </div>
@@ -292,7 +335,7 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
       <h3 className="mb-1 mt-5 text-sm font-semibold">Yetkiler</h3>
       <p className="mb-2 text-xs text-[var(--admin-text-mute)]">
         {isMe
-          ? 'Kendi rolünüzü, yetkilerinizi ve indirim sınırınızı başka bir yetkili değiştirir; burada adınızı, renginizi ve PIN\'inizi değiştirebilirsiniz'
+          ? 'Kendi rolünüzü, yetkilerinizi ve indirim sınırınızı başka bir yetkili değiştirir; burada adınızı, renginizi ve PIN’inizi değiştirebilirsiniz'
           : 'İşaretliler rolden gelir; burada değiştirilen yalnız bu kişiye uygulanır (rol setleri: Roller ve yetkiler)'}
       </p>
       <div className="space-y-3">
@@ -304,7 +347,7 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
               const byRole = roleBase(d.role).includes(p);
               const source = byRole ? (on ? null : { tone: 'danger' as const, text: 'kişiden kaldırıldı' }) : on ? { tone: 'primary' as const, text: 'kişiye ek' } : null;
               return (
-                <label key={p} className={cn('flex min-h-11 items-center gap-3 border-t border-[var(--admin-divider)] px-3 py-2 text-sm', isMe ? 'opacity-70' : 'cursor-pointer hover:bg-[var(--admin-surface-2)]')}>
+                <label key={p} className={cn('flex min-h-11 items-center gap-3 border-t border-[var(--admin-divider)] px-3 py-2 text-sm', isMe ? 'opacity-70' : 'cursor-pointer transition-colors hover:bg-hover')}>
                   <input type="checkbox" checked={on} disabled={isMe} onChange={() => toggle(p)} className="size-4 accent-[var(--admin-primary)]" />
                   <span className="min-w-0 flex-1">{PERMISSIONS[p]}</span>
                   {source && <Badge tone={source.tone}>{source.text}</Badge>}

@@ -8,7 +8,9 @@ import type { CompKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
+import { applyNumpadKey, Numpad, useNumpadKeys } from '@/components/ui/Numpad';
+import { typeOverPrefill } from '@/lib/numpad';
+import { promptDialog } from '@/components/ui/Confirm';
 import { ApiError, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -19,6 +21,7 @@ import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
 import { OkcPanel } from './OkcPanel';
 import { ReasonModal } from './TableOps';
+import { TypedAmount } from './TypedAmount';
 
 type Mode = 'tutar' | 'kalem' | 'paylas';
 
@@ -30,7 +33,11 @@ const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFi
 
 /** Innex seçim kartı/çipi: seçili mavi kenar ve açık mavi zemin */
 const choice = (on: boolean) =>
-  cn('rounded-xl border transition-colors', on ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2');
+  cn('rounded-xl border transition-colors duration-150', on ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press');
+
+/** Tuş takımıyla yazılan alan (Tutar, Verilen): düğme görünümünde; seçili olan mavi kenar ve halka */
+const typedField = (on: boolean) =>
+  cn('tabular w-full rounded-xl border px-4 text-right font-semibold transition-[border-color,box-shadow] duration-150', on ? 'border-primary ring-4 ring-[var(--admin-primary-soft)]' : 'border-line-strong hover:border-[var(--admin-border-field)]');
 
 export function PaymentModal({
   order,
@@ -63,6 +70,16 @@ export function PaymentModal({
   const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; method: string; share: string | null } | null>(null);
   /** Ciro dışı kapanış: gerekçe penceresi açık olan tür */
   const [comp, setComp] = useState<CompKind | null>(null);
+  /** Fiziksel klavye dinleyicisinin kökü: üstte onay ya da gerekçe penceresi açıkken tuşlar ona gider */
+  const panelRef = useRef<HTMLDivElement>(null);
+  /** Tutar alanı ve Verilen alanı: tür ya da hızlı tutar seçilince odak buraya döner, Enter ödemeyi alır */
+  const amountRef = useRef<HTMLButtonElement>(null);
+  const givenRef = useRef<HTMLButtonElement>(null);
+  /**
+   * Tutar alanındaki değer pencerenin önceden doldurduğu (kalan, Tamamı, Yarısı): seçili metin gibi, ilk rakam onun
+   * yerine geçer ("250" üstüne 100 yazılınca 100 olur, 250100 değil)
+   */
+  const [prefilled, setPrefilled] = useState(true);
   /** Süren ödeme denemesi: ekranda görülenler (tür, tutar, pay, kalemler, bahşiş, ödeme listesi) ve kimliği */
   const attempt = useRef<{ key: string; id: string } | null>(null);
 
@@ -72,6 +89,7 @@ export function PaymentModal({
     // Hesap daha önce bölündüyse pencere doğrudan paylarla açılır
     setMode(order.split ? 'paylas' : 'tutar');
     setAmountText(toInput(Math.max(0, remaining)));
+    setPrefilled(true);
     setMethod(null);
     setGivenText('');
     setTipText('');
@@ -115,7 +133,11 @@ export function PaymentModal({
   }, [split, paidShares]);
   const nextShare = split?.shares[0] ?? 0;
 
-  const amount = Math.min(remaining, mode === 'kalem' ? itemsAmount : mode === 'paylas' ? nextShare : (parseTL(amountText) ?? 0));
+  // Tutar kipinde yazılan kalana kırpılmaz: fazlası reddedilir (bankanın POS'undan çekilenle LafPOS'a yazılan ayrışmasın).
+  // Kalem ve pay kiplerinde tutar sunucunun hesabıdır, kalanla sınırlı
+  const typed = parseTL(amountText) ?? 0;
+  const overRemaining = mode === 'tutar' && typed > remaining;
+  const amount = mode === 'tutar' ? typed : Math.min(remaining, mode === 'kalem' ? itemsAmount : nextShare);
   const tip = boot.settings.tipsEnabled ? (parseTL(tipText) ?? 0) : 0;
   const given = parseTL(givenText);
   const change = method?.kind === 'nakit' && given != null ? given - amount - tip : null;
@@ -124,7 +146,7 @@ export function PaymentModal({
   const tipBlocked = method?.kind === 'cari' && tip > 0;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
-  const valid = !!method && amount > 0 && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
+  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
   const closeComp = async (reason: string) => {
@@ -140,8 +162,37 @@ export function PaymentModal({
   const pressKey = (k: string) => {
     if (mode !== 'tutar' && focus === 'tutar') return;
     const [val, set] = keyTarget as [string, (v: string) => void];
+    if (focus === 'tutar') {
+      set(typeOverPrefill(val, k, prefilled, { decimal: true, maxLength: 9 }));
+      setPrefilled(false);
+      return;
+    }
     set(applyNumpadKey(val, k, { decimal: true, maxLength: 9 }));
   };
+  /** Tutarı pencere doldurur (kalan, Tamamı, Yarısı): sonraki ilk tuş onun yerine geçer */
+  const prefillAmount = (k: number) => {
+    setAmountText(toInput(k));
+    setPrefilled(true);
+  };
+  /** Fareyle tür ya da hızlı tutar seçildikten sonra odak yazılan alana döner: Enter o düğmeyi yeniden basmaz, ödemeyi alır */
+  const focusTyped = (target: 'tutar' | 'verilen') => {
+    requestAnimationFrame(() => {
+      const el = target === 'verilen' ? givenRef.current : amountRef.current;
+      (el ?? panelRef.current)?.focus({ preventScroll: true });
+    });
+  };
+
+  // Kasa bilgisayarında tutar ve verilen nakit klavyeyle de yazılır: rakam, virgül, Backspace, Delete; Enter ödemeyi
+  // alır. Hedef ekrandaki seçili alan (Tab ile Tutar ve Verilen arasında geçilir)
+  useNumpadKeys({
+    enabled: open && !result,
+    root: panelRef,
+    decimal: true,
+    onKey: pressKey,
+    onEnter: () => {
+      if (valid && !busy) void pay();
+    },
+  });
 
   const setSplit = async (n: number | null) => {
     setBusy(true);
@@ -184,7 +235,7 @@ export function PaymentModal({
     if (!res) return;
     attempt.current = null;
     // Parçalı ödeme sürüyorsa pencere açık kalır: kalan tutara (ya da sıradaki paya) dönülür
-    setAmountText(toInput(res.order.total - res.order.paid));
+    prefillAmount(res.order.total - res.order.paid);
     setSelection({});
     setGivenText('');
     setTipText('');
@@ -195,10 +246,18 @@ export function PaymentModal({
     if (res.closed || method.kind === 'nakit') setResult({ change: res.change, closed: res.closed, amount: res.amount, method: method.name, share: shareLabel });
   };
 
-  const refund = async (paymentId: string) => {
-    const reason = window.prompt('Ödeme iptalinin nedeni');
-    if (!reason?.trim()) return;
-    await act((pin) => post(`/orders/${order.id}/payments/${paymentId}/refund`, { reason, approverPin: pin }), 'Ödeme iptal edildi');
+  const refund = async (p: OrderDTO['payments'][number]) => {
+    const reason = await promptDialog({
+      title: 'Ödeme iptali',
+      body: `${p.methodName} · ${tl(p.amount)}. İptal denetim kaydına yazılır`,
+      label: 'Neden',
+      placeholder: 'Ör. yanlış tutar girildi',
+      maxLength: 200,
+      required: true,
+      confirmLabel: 'Ödemeyi iptal et',
+    });
+    if (!reason) return;
+    await act((pin) => post(`/orders/${order.id}/payments/${p.id}/refund`, { reason, approverPin: pin }), 'Ödeme iptal edildi');
   };
 
   // Pay fişi de hesap yazdırmadır: sunucuya işlenir (denetim kaydı, masada "hesap istendi", sonraki iptal alarmı)
@@ -256,10 +315,11 @@ export function PaymentModal({
 
   return (
     <Modal open onClose={onClose} size="xl" persistent={!!comp} title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
-      <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
+      <div ref={panelRef} tabIndex={-1} className="grid gap-0 outline-none lg:grid-cols-[1.1fr_1fr]">
         <div className="border-b border-[var(--admin-divider)] p-5 lg:border-b-0 lg:border-r">
           <div className="mb-4 flex items-center justify-between gap-3">
             <Segmented<Mode>
+              label="Ödeme yolu"
               value={mode}
               onChange={(m) => {
                 setMode(m);
@@ -278,12 +338,26 @@ export function PaymentModal({
           </div>
 
           {mode === 'tutar' && (
-            <button
-              onClick={() => setFocus('tutar')}
-              className={cn('tabular mb-3 w-full rounded-xl border px-4 py-3 text-right text-4xl font-semibold transition', focus === 'tutar' ? 'border-primary ring-4 ring-[var(--admin-primary-soft)]' : 'border-line')}
-            >
-              {amountText || '0'} ₺
-            </button>
+            <>
+              <button
+                ref={amountRef}
+                onClick={() => setFocus('tutar')}
+                onFocus={() => setFocus('tutar')}
+                data-numpad-enter=""
+                aria-label={`Alınacak tutar: ${amountText || '0'}`}
+                aria-pressed={focus === 'tutar'}
+                aria-invalid={overRemaining || undefined}
+                aria-describedby={overRemaining ? 'odeme-tutar-fazla' : undefined}
+                className={cn(typedField(focus === 'tutar'), 'py-3 text-4xl', overRemaining ? 'mb-1 border-[var(--admin-danger)]' : 'mb-3', prefilled && focus === 'tutar' && 'text-ink-2')}
+              >
+                <TypedAmount text={amountText} />
+              </button>
+              {overRemaining && (
+                <p id="odeme-tutar-fazla" role="alert" className="mb-3 text-sm text-[var(--admin-danger-ink)]">
+                  Kalandan fazla: en çok {tl(remaining)} alınır
+                </p>
+              )}
+            </>
           )}
 
           {mode === 'kalem' && (
@@ -302,11 +376,11 @@ export function PaymentModal({
                       </span>
                     </button>
                     <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 text-ink" onClick={() => setSelection({ ...selection, [i.id]: Math.max(0, sel - 1) })}>
+                      <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 text-ink transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setSelection({ ...selection, [i.id]: Math.max(0, sel - 1) })}>
                         <Minus className="size-4" />
                       </button>
                       <span className="tabular w-6 text-center font-semibold text-ink">{sel}</span>
-                      <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 text-ink" onClick={() => setSelection({ ...selection, [i.id]: Math.min(left, sel + 1) })}>
+                      <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 text-ink transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setSelection({ ...selection, [i.id]: Math.min(left, sel + 1) })}>
                         <Plus className="size-4" />
                       </button>
                     </div>
@@ -337,8 +411,24 @@ export function PaymentModal({
           {(mode === 'tutar' || method?.kind === 'nakit' || focus === 'bahsis') && <Numpad decimal size="md" onKey={pressKey} />}
           {mode === 'tutar' && (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <QuickButton onClick={() => setAmountText(toInput(remaining))}>Tamamı</QuickButton>
-              <QuickButton onClick={() => setAmountText(toInput(Math.ceil(remaining / 2)))}>Yarısı</QuickButton>
+              <QuickButton
+                onClick={() => {
+                  prefillAmount(remaining);
+                  setFocus('tutar');
+                  focusTyped('tutar');
+                }}
+              >
+                Tamamı
+              </QuickButton>
+              <QuickButton
+                onClick={() => {
+                  prefillAmount(Math.ceil(remaining / 2));
+                  setFocus('tutar');
+                  focusTyped('tutar');
+                }}
+              >
+                Yarısı
+              </QuickButton>
             </div>
           )}
         </div>
@@ -354,11 +444,15 @@ export function PaymentModal({
                     setMethod(m);
                     if (m.kind === 'nakit') setFocus('verilen');
                     else if (focus === 'verilen') setFocus('tutar');
+                    // Bahşiş yazılırken kart seçmek bahşiş girişini kesmez: DOM odağı tutar alanına gitse onFocus
+                    // odağı 'tutar'a çeker, bahşiş diye yazılan rakam ödeme tutarının yerine geçerdi
+                    if (m.kind !== 'nakit' && focus === 'bahsis') requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+                    else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
                   }}
                   aria-pressed={method?.id === m.id}
                   className={cn('flex h-14 items-center gap-2 px-3 text-left text-sm font-semibold', choice(method?.id === m.id))}
                 >
-                  <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: m.color }} />
+                  <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: m.color }} />
                   <span className="min-w-0 truncate">{m.name}</span>
                 </button>
               ))}
@@ -383,7 +477,7 @@ export function PaymentModal({
                   ? 'Ödeme alınmış adisyon ciro dışı kapanmaz; kalan kalemi hesap listesinden tek tek ikram ya da zayi yazın'
                   : order.room
                     ? 'Oda sayaçlı adisyon ciro dışı kapanmaz; kalemleri hesap listesinden tek tek yazın'
-                    : 'Adisyon ücret alınmadan kapanır; ikram, ödenmez ve zayi raporda ve Z\'de ayrı görünür'}
+                    : 'Adisyon ücret alınmadan kapanır; ikram, ödenmez ve zayi raporda ve Z’de ayrı görünür'}
               </p>
             </div>
           )}
@@ -396,15 +490,35 @@ export function PaymentModal({
                 {change != null && change < 0 && <span className="tabular text-sm font-semibold text-[var(--admin-danger-ink)]">Eksik {tl(-change)}</span>}
               </div>
               <button
+                ref={givenRef}
                 onClick={() => setFocus('verilen')}
-                className={cn('tabular w-full rounded-xl border px-4 py-2.5 text-right text-2xl font-semibold transition', focus === 'verilen' ? 'border-primary ring-4 ring-[var(--admin-primary-soft)]' : 'border-line')}
+                onFocus={() => setFocus('verilen')}
+                data-numpad-enter=""
+                aria-label={`Verilen nakit: ${givenText || '0'}`}
+                aria-pressed={focus === 'verilen'}
+                className={cn(typedField(focus === 'verilen'), 'py-2.5 text-2xl')}
               >
-                {givenText || '—'} ₺
+                <TypedAmount text={givenText} />
               </button>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <QuickButton onClick={() => setGivenText(toInput(amount + tip))}>Tam</QuickButton>
+                <QuickButton
+                  onClick={() => {
+                    setGivenText(toInput(amount + tip));
+                    setFocus('verilen');
+                    focusTyped('verilen');
+                  }}
+                >
+                  Tam
+                </QuickButton>
                 {suggestCash(amount + tip, boot.settings.quickCash).map((c) => (
-                    <QuickButton key={c} onClick={() => setGivenText(toInput(c))}>
+                    <QuickButton
+                      key={c}
+                      onClick={() => {
+                        setGivenText(toInput(c));
+                        setFocus('verilen');
+                        focusTyped('verilen');
+                      }}
+                    >
                       {tlShort(c)}
                     </QuickButton>
                   ))}
@@ -430,7 +544,7 @@ export function PaymentModal({
           )}
 
           <Button variant="primary" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
-            {splitBlocks ? 'Hesap bölünmüş: payları Paylaş\'tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
+            {splitBlocks ? 'Hesap bölünmüş: payları Paylaş’tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
           </Button>
 
           <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />
@@ -443,7 +557,7 @@ export function PaymentModal({
               reasons={compReasonsOf(boot.settings, comp)}
               confirmLabel={COMP_CONFIRM_LABEL[comp]}
               onClose={() => setComp(null)}
-              onConfirm={(reason) => void closeComp(reason)}
+              onConfirm={closeComp}
             />
           )}
 
@@ -463,7 +577,7 @@ export function PaymentModal({
                     </span>
                     <span className="tabular font-semibold">{tl(p.amount)}</span>
                     {!p.refundedAt && (can('odeme.iade') || can('odeme.al')) && (
-                      <button aria-label="Ödemeyi iptal et" title="Ödemeyi iptal et" onClick={() => refund(p.id)} className="grid size-9 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-[var(--admin-danger-ink)] pointer-coarse:size-11">
+                      <button aria-label="Ödemeyi iptal et" title="Ödemeyi iptal et" onClick={() => void refund(p)} className="grid size-9 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-[var(--admin-danger-soft)] hover:text-[var(--admin-danger-ink)] pointer-coarse:size-11">
                         <RotateCcw className="size-4" />
                       </button>
                     )}
@@ -505,11 +619,11 @@ function SplitPanel({
   const minPeople = Math.max(2, paidShares.length + 1);
   const stepper = (
     <div className="flex items-center gap-1">
-      <button aria-label="Kişi azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 disabled:opacity-40" disabled={people <= minPeople} onClick={() => setPeople(Math.max(minPeople, people - 1))}>
+      <button aria-label="Kişi azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 enabled:hover:bg-[var(--admin-border)] disabled:opacity-40" disabled={people <= minPeople} onClick={() => setPeople(Math.max(minPeople, people - 1))}>
         <Minus className="size-4" />
       </button>
       <span className="tabular w-10 text-center text-xl font-semibold">{people}</span>
-      <button aria-label="Kişi artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 disabled:opacity-40" disabled={people >= 30} onClick={() => setPeople(Math.min(30, people + 1))}>
+      <button aria-label="Kişi artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 enabled:hover:bg-[var(--admin-border)] disabled:opacity-40" disabled={people >= 30} onClick={() => setPeople(Math.min(30, people + 1))}>
         <Plus className="size-4" />
       </button>
     </div>
@@ -549,14 +663,14 @@ function SplitPanel({
               Uygula
             </Button>
           )}
-          <button aria-label="Paylaşımı kaldır" title="Paylaşımı kaldır" onClick={() => onSplit(null)} className="grid size-11 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-ink">
+          <button aria-label="Paylaşımı kaldır" title="Paylaşımı kaldır" onClick={() => onSplit(null)} className="grid size-11 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press">
             <X className="size-4" />
           </button>
         </div>
       </div>
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         {paidShares.map((p) => (
-          <li key={p.id} className="rounded-xl border border-success-200 bg-[var(--admin-success-soft)] px-3 py-2.5 dark:border-transparent">
+          <li key={p.id} className="rounded-xl border border-success-line bg-success-soft px-3 py-2.5">
             <div className="flex items-center justify-between text-xs font-medium text-[var(--admin-success)]">
               <span className="tabular">Pay {p.shareNo}</span>
               <Check className="size-4" />
@@ -581,7 +695,7 @@ function SplitPanel({
       </ul>
       {split.shares.length === 0 && order.total - order.paid > 0 && (
         <p className="rounded-xl bg-[var(--admin-warning-soft)] px-3 py-2 text-[13px] text-[var(--admin-warning)]">
-          Bütün paylar ödendi ama {tl(order.total - order.paid)} kaldı (sonradan eklenen kalem). Kişi ekleyin ya da "Tutar" ile alın
+          Bütün paylar ödendi ama {tl(order.total - order.paid)} kaldı (sonradan eklenen kalem). Kişi ekleyin ya da “Tutar” ile alın
         </p>
       )}
     </div>
@@ -590,7 +704,7 @@ function SplitPanel({
 
 function QuickButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} className="tabular min-h-11 rounded-lg border border-[var(--admin-border-strong)] bg-surface px-3 text-sm font-semibold transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2 pointer-fine:min-h-9">
+    <button onClick={onClick} className="tabular min-h-11 rounded-lg border border-[var(--admin-border-strong)] bg-surface px-3 text-sm font-semibold transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press pointer-fine:min-h-9">
       {children}
     </button>
   );

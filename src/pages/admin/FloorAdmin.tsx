@@ -1,18 +1,20 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Plus, Printer, QrCode as QrCodeIcon, RefreshCw, Save } from 'lucide-react';
+import { LayoutGrid, Plus, Printer, QrCode as QrCodeIcon, RefreshCw, Save, Trash2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { tableQrUrl } from '@shared/table-qr';
-import { Badge, PageHeader } from '@/components/admin/ui';
+import { Badge, CARD, EmptyState, PageHeader, StatusTabs } from '@/components/admin/ui';
 import { QrCode } from '@/components/QrCode';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, Select } from '@/components/ui/Field';
-import { PageLoading } from '@/components/ui/misc';
+import { confirmDialog, promptDialog } from '@/components/ui/Confirm';
+import { Field, Input, NumberInput, Select } from '@/components/ui/Field';
+import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, patch, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
+import { layoutChanges, mergeServerTables, settleSaved } from '@/lib/floorLayout';
 
 interface Section {
   id: string;
@@ -75,25 +77,47 @@ export default function FloorAdmin() {
   const [tables, setTables] = useState<Table[]>([]);
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  // Çift gönderim olmasın: kayıt ve ekleme sürerken düğme döner gösterge alır
+  const [busy, setBusy] = useState<'plan' | 'masa' | 'qr' | null>(null);
   const canvas = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; mode: 'move' | 'size'; startX: number; startY: number; orig: Table } | null>(null);
 
+  // Sunucu verisi yalnız kendisi değişince yeniden kurulur (bölüm sekmesi değişince değil); sürüklenip kaydedilmemiş
+  // masaların yeri korunur (öteki masada Kişi, Şekil, QR, kaldırma da listeyi yeniler)
+  const dirtyRef = useRef(dirty);
+  const tablesRef = useRef(tables);
+  useEffect(() => {
+    dirtyRef.current = dirty;
+    tablesRef.current = tables;
+  });
   useEffect(() => {
     if (!data.data) return;
-    setTables(data.data.tables);
-    if (!sectionId) setSectionId(data.data.sections[0]?.id ?? '');
+    const server = data.data.tables;
+    setTables((local) => mergeServerTables(server, local, dirtyRef.current));
+  }, [data.data]);
+  useEffect(() => {
+    if (!sectionId && data.data?.sections[0]) setSectionId(data.data.sections[0].id);
   }, [data.data, sectionId]);
+  // Sayaç ve kayıt yalnız yeri gerçekten değişen masalar (sürüklenip eski yerine bırakılan sayılmaz)
+  const changes = layoutChanges(tables, data.data?.tables ?? [], dirty);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['admin', 'floor'] });
     qc.invalidateQueries({ queryKey: ['bootstrap'] });
   };
 
+  // Paneldeki alanlar (Kişi, Ad, ücret) çıkınca kaydeder ve seçili masaya bağlı: seçim değişmeden önce odaktaki alan
+  // bırakılır, yazılan değer kaydedilir (yoksa alan blur gelmeden DOM'dan kalkar, değer sessizce kaybolur)
+  const select = (id: string | null) => {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement && el !== document.body && !canvas.current?.contains(el)) el.blur();
+    setSelected(id);
+  };
   const onPointerDown = (e: React.PointerEvent, t: Table, mode: 'move' | 'size') => {
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     drag.current = { id: t.id, mode, startX: e.clientX, startY: e.clientY, orig: t };
-    setSelected(t.id);
+    select(t.id);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
@@ -115,29 +139,40 @@ export default function FloorAdmin() {
   };
 
   const saveLayout = async () => {
+    setBusy('plan');
     try {
-      await put('/admin/tables/layout', { tables: tables.filter((t) => dirty.has(t.id)).map(({ id, x, y, w, h }) => ({ id, x, y, w, h })) });
-      setDirty(new Set());
+      const sent = changes.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }));
+      const before = data.data?.tables ?? [];
+      await put('/admin/tables/layout', { tables: sent });
+      // Kayıt sürerken sürüklenen masa işaretli kalır (yalnız gönderilen yerde duranlar düşer)
+      const next = settleSaved(dirtyRef.current, tablesRef.current, sent, before);
+      dirtyRef.current = next;
+      setDirty(next);
       toast.ok('Masa planı kaydedildi');
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setBusy(null);
     }
   };
   const addTable = async () => {
+    setBusy('masa');
     try {
       const n = tables.filter((t) => t.sectionId === sectionId).length + 1;
       await post('/admin/tables', { sectionId, name: `M${n}`, seats: 2, shape: 'square', x: 5, y: 5, w: 12, h: 16 });
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setBusy(null);
     }
   };
   const addSection = async () => {
-    const name = window.prompt('Bölüm adı (ör. Teras)');
-    if (!name?.trim()) return;
+    const name = await promptDialog({ title: 'Yeni bölüm', label: 'Bölüm adı', placeholder: 'Ör. Teras', confirmLabel: 'Bölümü ekle', tone: 'primary', required: true, maxLength: 40 });
+    if (!name) return;
     try {
-      const r = await post<{ id: string }>('/admin/sections', { name: name.trim() });
+      const r = await post<{ id: string }>('/admin/sections', { name });
       setSectionId(r.id);
       refresh();
     } catch (e) {
@@ -157,7 +192,15 @@ export default function FloorAdmin() {
 
   /** Masa QR'ı: üret ya da yenile (yenilemede basılı eski kart o anda geçersiz olur) */
   const makeQr = async (t: Table, rotate = false) => {
-    if (rotate && !window.confirm(`${t.name} masasının kodu yenilensin mi? Eski kod siteye pasif olarak bildirilir (site alana dek eski kart menüyü açmaya devam eder); kartı yeniden yazdırın`)) return;
+    if (
+      rotate &&
+      !(await confirmDialog({
+        title: `${t.name} masasının kodu yenilensin mi`,
+        body: 'Eski kod siteye pasif olarak bildirilir; site alana dek eski kart menüyü açmaya devam eder. Yeni kartı yazdırıp eskisini masadan kaldırın',
+        confirmLabel: 'Kodu yenile',
+      }))
+    )
+      return;
     try {
       const r = await post<{ qrCode: string; changed: boolean }>(`/admin/tables/${t.id}/qr`, { rotate });
       setTables((all) => all.map((x) => (x.id === t.id ? { ...x, qrCode: r.qrCode } : x)));
@@ -168,13 +211,21 @@ export default function FloorAdmin() {
     }
   };
   const makeAllQr = async () => {
+    setBusy('qr');
     try {
       const r = await post<{ created: number }>('/admin/tables/qr', {});
       toast.ok(r.created ? `${r.created} masaya QR üretildi` : 'Bütün masaların QR kodu zaten var');
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setBusy(null);
     }
+  };
+  const removeTable = async (t: Table) => {
+    if (!(await confirmDialog({ title: `${t.name} plandan kaldırılsın mı`, body: 'Geçmiş adisyonlar değişmez', confirmLabel: 'Masayı kaldır' }))) return;
+    setSelected(null);
+    await updateTable(t.id, { active: false });
   };
   const printCards = (list: Table[]) => {
     const withCode = list.filter((t) => t.qrCode);
@@ -182,7 +233,6 @@ export default function FloorAdmin() {
     printNow(<TableCardsSheet tables={withCode} businessName={boot.settings.businessName} />, { sheet: true });
   };
 
-  if (data.isLoading) return <PageLoading />;
   const sections = data.data?.sections ?? [];
   const visible = tables.filter((t) => t.sectionId === sectionId && t.active);
   const sel = tables.find((t) => t.id === selected) ?? null;
@@ -192,72 +242,93 @@ export default function FloorAdmin() {
   const qrTables = tables.filter((t) => t.active && t.kind === 'masa');
   const missingQr = qrTables.filter((t) => !t.qrCode).length;
 
-  return (
-    <div>
-      <PageHeader
-        title="Masa planı"
-        description="Masaları sürükleyin, köşesinden boyutlandırın. Karaoke odası gibi saatlik alanlar için türü 'oda' seçin. Masaya özel QR'ı burada üretin ve kartları yazdırın"
-        actions={
+  const header = (
+    <PageHeader
+      title="Masa planı"
+      description="Masaları sürükleyin, köşeden boyutlandırın; QR ve karaoke odası da burada"
+      actions={
+        data.data ? (
           <>
             {missingQr > 0 ? (
-              <Button icon={<QrCodeIcon className="size-4" />} onClick={makeAllQr}>
-                Eksik QR'ları üret ({missingQr})
+              <Button icon={<QrCodeIcon className="size-4" />} loading={busy === 'qr'} onClick={makeAllQr}>
+                Eksik QR’ları üret ({missingQr})
               </Button>
             ) : (
               <Button icon={<Printer className="size-4" />} onClick={() => printCards(qrTables)} disabled={!qrTables.length}>
                 Masa kartlarını yazdır
               </Button>
             )}
-            <Button icon={<Plus className="size-4" />} onClick={addTable}>
+            <Button icon={<Plus className="size-4" />} loading={busy === 'masa'} disabled={!sectionId} onClick={addTable}>
               Masa ekle
             </Button>
-            <Button variant="primary" icon={<Save className="size-4" />} disabled={!dirty.size} onClick={saveLayout}>
-              Planı kaydet{dirty.size ? ` (${dirty.size})` : ''}
+            <Button variant="primary" icon={<Save className="size-4" />} loading={busy === 'plan'} disabled={!changes.length} onClick={saveLayout}>
+              Planı kaydet{changes.length ? ` (${changes.length})` : ''}
             </Button>
           </>
-        }
-      />
-      {siteHourly != null && priceMismatch.length > 0 && (
-        <div role="status" className="mb-4 flex items-start gap-2.5 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-warning-soft)] px-4 py-3 text-[13px] text-[var(--admin-text)]">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--admin-warning)]" strokeWidth={1.75} />
-          <span>
-            Sitedeki karaoke saat ücreti {tl(siteHourly)},{' '}
-            {priceMismatch.map((t) => `${t.name} ${t.hourlyRate ? tl(t.hourlyRate) : 'ücretsiz'}`).join(', ')}. Sitede ödenen rezervasyonu aşan süre kasada
-            odanın ücretiyle alınır; ikisini aynı tutun.
-          </span>
+        ) : undefined
+      }
+    />
+  );
+
+  // Başlık ve açıklama hemen; plan gelene dek iskelet, alınamazsa neden ve yeniden dene
+  if (data.isPending)
+    return (
+      <div>
+        {header}
+        <div role="status" aria-label="Yükleniyor…" className="grid items-start gap-4 xl:grid-cols-[1fr_320px]">
+          <Skeleton className="aspect-[16/10] w-full rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
         </div>
-      )}
-      <div role="tablist" aria-label="Bölüm" className="no-scrollbar -mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-        {sections.map((s) => {
-          const on = s.id === sectionId;
-          return (
-            <button
-              key={s.id}
-              role="tab"
-              aria-selected={on}
-              onClick={() => setSectionId(s.id)}
-              className={cn(
-                'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border bg-[var(--admin-surface)] px-2.5 text-[13px] pointer-coarse:min-h-11',
-                on ? 'border-[var(--admin-text)] font-semibold text-[var(--admin-text)]' : 'border-[var(--admin-border)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)]',
-              )}
-            >
-              {s.name}
-              <span className={cn('min-w-5 rounded-md px-1.5 text-center text-xs tabular-nums', on ? 'bg-[var(--admin-text)] text-[var(--admin-surface)]' : 'bg-[var(--admin-panel)]')}>{tables.filter((t) => t.sectionId === s.id && t.active).length}</span>
-            </button>
-          );
-        })}
-        <button onClick={addSection} className="inline-flex min-h-9 shrink-0 items-center rounded-lg border border-dashed border-[var(--admin-border-field)] px-3 text-[13px] text-[var(--admin-text-mute)] hover:text-[var(--admin-text)] pointer-coarse:min-h-11">
-          + Bölüm
-        </button>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+    );
+  if (data.isError && !data.data)
+    return (
+      <div>
+        {header}
+        <ErrorState className={CARD} title="Masa planı alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+      </div>
+    );
+
+  return (
+    <div>
+      {header}
+      {siteHourly != null && priceMismatch.length > 0 && (
+        <Notice tone="warn" role="status" className="mb-4 text-[13px]">
+          Sitedeki karaoke saat ücreti {tl(siteHourly)},{' '}
+          {priceMismatch.map((t) => `${t.name} ${t.hourlyRate ? tl(t.hourlyRate) : 'ücretsiz'}`).join(', ')}. Sitede ödenen rezervasyonu aşan süre kasada odanın ücretiyle
+          alınır; ikisini aynı tutun
+        </Notice>
+      )}
+      {/* Bölüm sekmeleri ve yanında "Bölüm ekle": sekmeler telefonda kendi içinde kayar, düğme yerinde kalır (telefonda yalnız ikon) */}
+      <div className="flex items-start gap-2 [&>[role=tablist]]:mx-0 [&>[role=tablist]]:min-w-0 [&>[role=tablist]]:flex-1 [&>[role=tablist]]:px-0">
+        <StatusTabs label="Bölüm" value={sectionId} onChange={setSectionId} tabs={sections.map((s) => ({ value: s.id, label: s.name, count: tables.filter((t) => t.sectionId === s.id && t.active).length }))} />
+        <Button icon={<Plus className="size-4" />} onClick={() => void addSection()} className="mb-4 shrink-0 max-sm:w-11 max-sm:px-0">
+          <span className="max-sm:sr-only">Bölüm ekle</span>
+        </Button>
+      </div>
+      {/* items-start: uzun düzenleme paneli satırı uzatınca 16/10 plan, oranı yüzünden genişleyip kartı taşırıyordu */}
+      <div className="grid items-start gap-4 xl:grid-cols-[1fr_320px]">
         <div
           ref={canvas}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerDown={() => setSelected(null)}
+          onPointerDown={() => select(null)}
           className="relative aspect-[16/10] w-full touch-none select-none rounded-xl border border-[var(--admin-border)] bg-[radial-gradient(circle_at_1px_1px,var(--admin-border-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-[var(--admin-surface-2)]"
         >
+          {visible.length === 0 && (
+            <div className="absolute inset-0 grid place-items-center p-4" onPointerDown={(e) => e.stopPropagation()}>
+              {sections.length === 0 ? (
+                <EmptyState bare icon={<LayoutGrid />} title="Henüz bölüm yok" action={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => void addSection()}>Bölüm ekle</Button>}>
+                  {/* Telefonda plan alçak: açıklama sığmaz, başlık ve düğme yeter */}
+                  <span className="max-sm:hidden">Önce salon, bahçe ya da teras gibi bir bölüm ekleyin; masalar bölümün içine yerleşir</span>
+                </EmptyState>
+              ) : (
+                <EmptyState bare icon={<LayoutGrid />} title="Bu bölümde masa yok" action={<Button variant="primary" icon={<Plus className="size-4" />} loading={busy === 'masa'} onClick={addTable}>Masa ekle</Button>}>
+                  <span className="max-sm:hidden">Eklenen masa sol üst köşeye gelir; sürükleyip yerine koyun</span>
+                </EmptyState>
+              )}
+            </div>
+          )}
           {visible.map((t) => (
             <div
               key={t.id}
@@ -265,7 +336,7 @@ export default function FloorAdmin() {
               data-table-id={t.id}
               style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
               className={cn(
-                'absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
+                'group absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
                 t.shape === 'round' ? 'rounded-full' : 'rounded-lg',
                 selected === t.id ? 'border-[var(--admin-primary)] ring-2 ring-[var(--admin-primary)]/30' : 'border-[var(--admin-border-field)]/60',
                 t.kind === 'oda' && 'bg-[var(--admin-accent-soft)]',
@@ -274,22 +345,35 @@ export default function FloorAdmin() {
               {t.name}
               <span className="text-[11px] font-normal text-[var(--admin-text-mute)]">{t.kind === 'oda' ? 'oda' : `${t.seats} kişi`}</span>
               {t.qrCode && <QrCodeIcon aria-label="QR kodu var" className="absolute left-1 top-1 size-3.5 text-[var(--admin-text-mute)]" />}
-              <span onPointerDown={(e) => onPointerDown(e, t, 'size')} aria-hidden="true" className="absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize rounded-sm border-b-2 border-r-2 border-[var(--admin-primary)]" />
+              {/* Boyutlandırma kulpu yalnız seçili masada (farede üzerine gelince de): her masada hep görünen mavi köşe
+                  gürültüydü. Görünen köşe 16 px; parmakla tutturulsun diye dokunma alanı 44 px (farede 24) */}
+              <span
+                onPointerDown={(e) => onPointerDown(e, t, 'size')}
+                aria-hidden="true"
+                className={cn(
+                  'absolute -bottom-3 -right-3 z-[1] grid size-11 cursor-nwse-resize place-items-center transition-opacity pointer-fine:-bottom-1 pointer-fine:-right-1 pointer-fine:size-6',
+                  selected === t.id ? 'opacity-100' : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100',
+                )}
+              >
+                <span className="size-4 rounded-sm border-b-2 border-r-2 border-[var(--admin-primary)]" />
+              </span>
             </div>
           ))}
         </div>
-        <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] p-4">
+        <div className={cn(CARD, 'p-4')}>
           {!sel ? (
-            <p className="text-sm text-muted">Düzenlemek için bir masaya dokunun</p>
+            <EmptyState bare icon={<LayoutGrid />} title="Masa seçilmedi">
+              Düzenlemek için plandan bir masaya dokunun
+            </EmptyState>
           ) : (
             <div className="space-y-3">
-              <h3 className="font-semibold">{sel.name}</h3>
+              <h3 className="font-semibold text-[var(--admin-text)]">{sel.name}</h3>
               <Field label="Ad">
                 <Input defaultValue={sel.name} key={`n${sel.id}`} onBlur={(e) => e.target.value.trim() && e.target.value !== sel.name && updateTable(sel.id, { name: e.target.value.trim() })} />
               </Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Kişi">
-                  <Input type="number" min={1} defaultValue={sel.seats} key={`s${sel.id}`} onBlur={(e) => updateTable(sel.id, { seats: Number(e.target.value) || 1 })} />
+                  <NumberInput key={`s${sel.id}`} value={sel.seats} min={1} max={40} onCommit={(seats) => updateTable(sel.id, { seats })} />
                 </Field>
                 <Field label="Şekil">
                   <Select value={sel.shape} onChange={(e) => updateTable(sel.id, { shape: e.target.value as Table['shape'] })}>
@@ -312,7 +396,7 @@ export default function FloorAdmin() {
                 </Field>
               )}
               <Field label="Sitedeki masa adı" hint="Sitede ayrı adla tanımlı masanın online siparişini bu masaya düşürür; QR kodu olan masada gerekmez">
-                <Input defaultValue={sel.siteTableCode ?? ''} key={`c${sel.id}`} placeholder='ör. "Masa 4"' onBlur={(e) => updateTable(sel.id, { siteTableCode: e.target.value.trim() || null })} />
+                <Input defaultValue={sel.siteTableCode ?? ''} key={`c${sel.id}`} placeholder="Ör. Masa 4" spellCheck={false} onBlur={(e) => updateTable(sel.id, { siteTableCode: e.target.value.trim() || null })} />
               </Field>
               {sel.kind === 'masa' && (
               <div className="space-y-2 rounded-xl border border-[var(--admin-border)] p-3">
@@ -324,7 +408,7 @@ export default function FloorAdmin() {
                   <>
                     <div className="flex items-start gap-3">
                       <QrCode value={tableQrUrl(sel.qrCode)} label={`${sel.name} QR kodu`} className="size-28" />
-                      <div className="min-w-0 space-y-1 text-xs text-muted">
+                      <div className="min-w-0 space-y-1 text-xs text-[var(--admin-text-mute)]">
                         <p className="break-all font-mono text-[13px] font-semibold text-[var(--admin-text)]">{sel.qrCode}</p>
                         <p className="break-all">{tableQrUrl(sel.qrCode)}</p>
                         <p>Müşteri okutunca sitenin menüsü açılır, uygulamadan bu masaya sipariş verir; sipariş kasada bu masaya düşer</p>
@@ -341,7 +425,7 @@ export default function FloorAdmin() {
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-muted">Masaya özel QR: müşteri okutunca uygulamadan bu masaya sipariş verir, sipariş kasada masaya düşer. Kodu LafPOS üretir, sitenin biçimiyle</p>
+                    <p className="text-xs text-[var(--admin-text-mute)]">Masaya özel QR: müşteri okutunca uygulamadan bu masaya sipariş verir, sipariş kasada masaya düşer. Kodu LafPOS üretir, sitenin biçimiyle</p>
                     <Button size="sm" icon={<QrCodeIcon className="size-4" />} onClick={() => void makeQr(sel)}>
                       QR üret
                     </Button>
@@ -349,14 +433,7 @@ export default function FloorAdmin() {
                 )}
               </div>
               )}
-              <Button
-                variant="ghost"
-                className="text-danger-500"
-                onClick={() => {
-                  if (window.confirm(`${sel.name} plandan kaldırılsın mı?`)) updateTable(sel.id, { active: false });
-                  setSelected(null);
-                }}
-              >
+              <Button variant="dangerOutline" icon={<Trash2 className="size-4" />} onClick={() => void removeTable(sel)}>
                 Masayı kaldır
               </Button>
             </div>

@@ -1,20 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bike, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
+import { Bike, ChefHat, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { numaratorLabel } from '@shared/service-mode';
 import { tl } from '@shared/money';
-import { fmtElapsed, fmtTime } from '@shared/time';
+import { fmtAgo, fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Segmented } from '@/components/ui/Field';
-import { Badge, EmptyState, PageHeader, PageLoading } from '@/components/ui/misc';
+import { Select } from '@/components/ui/Field';
+import { Badge, EmptyState, ErrorState, PageHeader, Skeleton, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { PlatformBadge } from '@/components/PlatformBadge';
 
@@ -50,8 +51,9 @@ export default function OrdersPage() {
     }
   };
 
-  if (open.isLoading) return <PageLoading />;
   const all = open.data ?? [];
+  // Liste sorgusu: boş durum yalnız veri gelip boşsa; yüklenirken iskelet, alınamazsa hata (sahte "yok" değil)
+  const list = tab === 'kapanan' ? closed : open;
   const rows =
     tab === 'acik'
       ? all.filter((o) => o.type !== 'masa' && o.source === 'pos')
@@ -77,66 +79,96 @@ export default function OrdersPage() {
           </>
         }
       />
-      <Segmented<Tab>
-        className="mb-4"
+      <Tabs<Tab>
+        label="Sipariş listesi"
+        className="mb-3"
         value={tab}
         onChange={setTab}
         options={[
-          { value: 'acik', label: `Açık (${all.filter((o) => o.type !== 'masa' && o.source === 'pos').length})` },
-          { value: 'online', label: `Online (${all.filter((o) => o.source === 'laffogato').length})` },
-          { value: 'paket', label: 'Paket / gel-al' },
-          { value: 'kapanan', label: 'Bugün kapanan' },
+          { value: 'acik', label: 'Açık', count: all.filter((o) => o.type !== 'masa' && o.source === 'pos').length },
+          { value: 'online', label: 'Online', count: all.filter((o) => o.source === 'laffogato').length },
+          { value: 'paket', label: 'Paket ve gel-al', count: all.filter((o) => o.type === 'paket' || o.type === 'gelal').length },
+          { value: 'kapanan', label: 'Kapanan' },
         ]}
       />
       {tab === 'online' && !boot.integrations.laffogatoPanel && (
-        <div className="mb-4 rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted">
-          {boot.integrations.laffogatoUrl
-            ? 'Site bağlantı anahtarı (LAFFOGATO_SYNC_SECRET) tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'
-            : 'Site bağlantısı kurulmadığı için (LAFFOGATO_URL) uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'}
+        <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted sm:flex-row sm:items-center">
+          <span className="flex-1 text-pretty">
+            {boot.integrations.laffogatoUrl ? 'Site bağlantı anahtarı tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor' : 'Site bağlantısı kurulmadığı için uygulama ve web siparişleri buraya düşmüyor'}
+          </span>
+          {can('ayar.yonet') || can('senkron.yonet') ? (
+            <Link to="/yonetim/entegrasyon" className="inline-flex min-h-11 items-center font-medium text-primary hover:underline pointer-fine:min-h-0">
+              Site ve lafmaliyet
+            </Link>
+          ) : null}
         </div>
       )}
-      {rows.length === 0 ? (
-        <EmptyState icon={<PackageCheck />} title="Liste boş">
-          {tab === 'kapanan' ? 'Bugün kapanmış adisyon yok' : 'Bu sekmede açık sipariş yok'}
+      {list.isPending ? (
+        <div role="status" aria-label="Siparişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-[92px] rounded-2xl" />
+          ))}
+        </div>
+      ) : list.isError && !list.data ? (
+        <ErrorState title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState icon={<PackageCheck />} title={tab === 'kapanan' ? 'Bugün kapanan adisyon yok' : tab === 'online' ? 'Açık online sipariş yok' : tab === 'paket' ? 'Açık paket ya da gel-al siparişi yok' : 'Açık tezgâh siparişi yok'}>
+          {tab === 'online' ? 'Uygulama ve web siparişleri hazırlanırken burada görünür' : tab === 'kapanan' ? 'Bugün kapanan adisyonlar burada listelenir' : 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın'}
         </EmptyState>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 animate-fade">
           {rows.map((o) => {
             const Icon = o.source === 'laffogato' ? Globe : o.type === 'paket' ? Bike : o.type === 'gelal' ? ShoppingBag : o.type === 'masa' ? UtensilsCrossed : Store;
             const flow = o.deliveryStatus ? DELIVERY_FLOW[o.deliveryStatus] : null;
             const pendingKitchen = o.items.filter((i) => !i.voided && i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length;
+            const itemCount = o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);
+            const methods = [...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))];
+            const hasBadges = !!o.platform || o.extPaid || o.extStage === 'gone' || pendingKitchen > 0 || !!o.deliveryStatus || methods.length > 0;
             return (
-              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)]">
-                <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex items-start gap-3 text-left">
-                  <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', o.source === 'laffogato' ? 'bg-rose-100 text-rose-700' : 'bg-brand-100 text-brand-700')}>
-                    <Icon className="size-5" />
+              // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
+              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
+                <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex items-start gap-3 rounded-lg text-left">
+                  <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
+                    <Icon />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
                       {o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type])}{' '}
-                      <span className="font-normal text-muted">#{o.extNo ?? o.no}</span>
+                      <span className="tabular font-normal text-muted">#{o.extNo ?? o.no}</span>
                     </span>
-                    <span className="block text-xs text-muted">
-                      {fmtTime(o.openedAt)} · {o.status === 'acik' ? fmtElapsed(o.openedAt, now) : 'kapandı'} · {o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0)} ürün
+                    {/* Açıkta geçen süre (açılış saati ipucunda), kapananda kapanış saati; boş parça düşer */}
+                    <span className="block text-[13px] text-muted" title={`Açılış ${fmtTime(o.openedAt)}`}>
+                      {joinMeta([itemCount > 0 && `${itemCount} ürün`, o.status === 'acik' ? fmtAgo(o.openedAt, now) : o.closedAt && `kapanış ${fmtTime(o.closedAt)}`])}
                     </span>
                   </span>
-                  <span className="tabular text-right font-semibold">
-                    {tl(o.extPaid ? (o.extTotal ?? 0) : o.total)}
-                    {o.paid > 0 && o.paid < o.total && <span className="block text-xs font-normal text-rose-700">{tl(o.total - o.paid)} kaldı</span>}
-                  </span>
+                  {itemCount === 0 ? (
+                    <span className="text-xs text-muted">Boş</span>
+                  ) : (
+                    <span className="tabular text-right font-semibold">
+                      {tl(o.extPaid ? (o.extTotal ?? 0) : o.total)}
+                      {o.paid > 0 && o.paid < o.total && <span className="block text-xs font-medium text-[var(--admin-hue-rose)]">{tl(o.total - o.paid)} kaldı</span>}
+                    </span>
+                  )}
                 </button>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {o.platform && <PlatformBadge platform={o.platform} code={o.platformCode} />}
-                  {o.extPaid && <Badge tone="pink">Sitede ödendi</Badge>}
-                  {o.extStage === 'gone' && <Badge>Siteden kalktı</Badge>}
-                  {pendingKitchen > 0 && <Badge tone="warn">{pendingKitchen} hazırlanıyor</Badge>}
-                  {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
-                  {o.payments.length > 0 && <Badge>{[...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))].join(', ')}</Badge>}
-                </div>
+                {hasBadges && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {o.platform && <PlatformBadge platform={o.platform} code={o.platformCode} />}
+                    {o.extPaid && <Badge tone="violet">Sitede ödendi</Badge>}
+                    {o.extStage === 'gone' && <Badge>Siteden kalktı</Badge>}
+                    {pendingKitchen > 0 && (
+                      <Badge>
+                        <ChefHat aria-hidden="true" className="size-3" />
+                        {pendingKitchen} barda
+                      </Badge>
+                    )}
+                    {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
+                    {methods.length > 0 && <Badge>{methods.join(', ')}</Badge>}
+                  </div>
+                )}
                 {(o.deliveryAddress || o.deliveryPhone) && (
                   <div className="mt-2 rounded-xl bg-surface-2 p-2.5 text-sm">
                     {o.deliveryPhone && (
-                      <a href={`tel:${o.deliveryPhone}`} className="flex items-center gap-1.5 font-medium text-brand-600">
+                      <a href={`tel:${o.deliveryPhone}`} className="flex min-h-11 items-center gap-1.5 font-medium text-primary pointer-fine:min-h-0">
                         <Phone className="size-3.5" /> {o.deliveryPhone}
                       </a>
                     )}
@@ -146,22 +178,17 @@ export default function OrdersPage() {
                 {o.status === 'acik' && (o.type === 'paket' || o.type === 'gelal') && (can('paket.yonet') || can('siparis.al')) && (
                   <div className="mt-3 flex gap-2">
                     {o.type === 'paket' && couriers.length > 0 && (
-                      <select
-                        value={o.courierId ?? ''}
-                        onChange={(e) => delivery(o, { courierId: e.target.value || null })}
-                        aria-label="Kurye"
-                        className="h-10 min-w-0 flex-1 rounded-xl border border-line-strong bg-surface px-2 text-sm pointer-coarse:h-11"
-                      >
+                      <Select value={o.courierId ?? ''} onChange={(e) => delivery(o, { courierId: e.target.value || null })} aria-label="Kurye" className="min-w-0 flex-1">
                         <option value="">Kurye seç</option>
                         {couriers.map((u) => (
                           <option key={u.id} value={u.id}>
                             {u.name}
                           </option>
                         ))}
-                      </select>
+                      </Select>
                     )}
                     {flow && (
-                      <Button size="sm" variant="primary" className="h-10" onClick={() => delivery(o, { deliveryStatus: flow.next })}>
+                      <Button variant="primary" onClick={() => delivery(o, { deliveryStatus: flow.next })}>
                         {flow.label}
                       </Button>
                     )}

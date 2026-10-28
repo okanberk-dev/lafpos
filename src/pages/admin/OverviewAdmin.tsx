@@ -1,13 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgePercent, CircleDollarSign, Globe, HardDrive, MonitorSmartphone, PlugZap, Receipt, ShieldAlert, ShoppingBag, Utensils } from 'lucide-react';
+import { AlertTriangle, BadgePercent, BarChart3, CheckCircle2, CircleDollarSign, Globe, HardDrive, MonitorSmartphone, PlugZap, Receipt, ShieldAlert, ShoppingBag, Utensils } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
 import { tl, tlCompact } from '@shared/money';
 import { fmtDateTime, fmtTime } from '@shared/time';
-import { Badge, BTN, Card, DefRow, EmptyState, type KpiCell, KpiStrip, PageHeader, type Tone } from '@/components/admin/ui';
+import { Badge, Card, CARD, EmptyState, IconBox, type KpiCell, KpiStrip, KpiStripSkeleton, PageHeader, type Tone } from '@/components/admin/ui';
 import { ColumnChart } from '@/components/charts';
-import { PageLoading } from '@/components/ui/misc';
-import { get } from '@/lib/api';
+import { buttonClass } from '@/components/ui/Button';
+import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
+import { errorMessage, get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { onLive } from '@/lib/live';
 import { hourBars } from '@/lib/period';
@@ -43,7 +44,9 @@ export default function OverviewAdmin() {
     [qc],
   );
 
-  if (live.isLoading || sync.isLoading) return <PageLoading />;
+  // İlk yükleme: başlık hemen, rakamlar yerinde iskelet (sayfa veri gelince zıplamasın)
+  const livePending = can('patron.panel') && live.isPending;
+  const liveFailed = live.isError && !live.data;
   const d = live.data;
   const s = sync.data;
 
@@ -56,7 +59,7 @@ export default function OverviewAdmin() {
           hue: 'blue',
           value: tl(d.netSales),
           delta: pct(d.compare.lastWeek.change),
-          reference: `Geçen hafta bu saate kadar ${tl(d.compare.lastWeek.netSales)}`,
+          reference: `Geçen hafta bu saatte ${tl(d.compare.lastWeek.netSales)}`,
         },
         {
           key: 'adisyon',
@@ -98,9 +101,9 @@ export default function OverviewAdmin() {
   for (const a of d?.anomalies ?? []) attention.push({ key: `an-${a.title}`, tone: a.level === 'alarm' ? 'danger' : 'warning', title: a.title, detail: a.detail });
   for (const a of (d?.alerts ?? []).slice(0, 6)) attention.push({ key: `al-${a.id}`, tone: a.severity === 'alarm' ? 'danger' : 'warning', title: a.message, detail: fmtTime(a.at) });
   // Yalnız denenip gidemeyen gün alarmdır; kuyruğa yeni giren (Geçmiş günleri gönder) sırasını bekler
-  if (s?.lafmaliyet.failing) attention.push({ key: 'lm', tone: 'danger', title: `lafmaliyet'e gönderilemeyen ${s.lafmaliyet.failing} gün`, detail: s.lafmaliyet.lastError ?? s.lafmaliyet.pendingDays.join(', ') });
+  if (s?.lafmaliyet.failing) attention.push({ key: 'lm', tone: 'danger', title: `lafmaliyet’e gönderilemeyen ${s.lafmaliyet.failing} gün`, detail: s.lafmaliyet.lastError ?? s.lafmaliyet.pendingDays.join(', ') });
   if (s?.online.soldOutPush.pending) attention.push({ key: 'site-tukendi', tone: 'warning', title: `Siteye bildirilemeyen Satışta bilgisi: ${s.online.soldOutPush.pending} ürün`, detail: s.online.soldOutPush.lastError ?? 'Yeniden denenecek' });
-  if (s?.online.soldOutPush.rejected) attention.push({ key: 'site-red', tone: 'warning', title: `Sitenin reddettiği Satışta bilgisi: ${s.online.soldOutPush.rejected} ürün`, detail: 'Yeniden denenmeyecek; ürün LafPOS\'ta açılınca ya da site aynı duruma gelince kalkar' });
+  if (s?.online.soldOutPush.rejected) attention.push({ key: 'site-red', tone: 'warning', title: `Sitenin reddettiği Satışta bilgisi: ${s.online.soldOutPush.rejected} ürün`, detail: 'Yeniden denenmeyecek; ürün LafPOS’ta açılınca ya da site aynı duruma gelince kalkar' });
   if (s?.okc.lastError) attention.push({ key: 'okc', tone: 'warning', title: 'Yazarkasa hatası', detail: `${s.okc.lastError.message} · ${fmtTime(s.okc.lastError.at)}` });
   if (d && !d.dayOpen) attention.push({ key: 'gun', tone: 'neutral', title: 'Gün kapalı', detail: 'Satış için kasadan gün açılmalı' });
 
@@ -142,7 +145,7 @@ export default function OverviewAdmin() {
                   : 'Güncel',
           detail: !s.lafmaliyet.configured
             ? 'Gün sonu gitmiyor; elle aktarım'
-            : (s.lafmaliyet.lastError ?? (s.lafmaliyet.training ? "Kurulum modunda gün lafmaliyet'e gitmez" : `Son gönderim ${ago(s.lafmaliyet.push?.lastRunAt)}`)),
+            : (s.lafmaliyet.lastError ?? (s.lafmaliyet.training ? 'Kurulum modunda gün lafmaliyet’e gitmez' : `Son gönderim ${ago(s.lafmaliyet.push?.lastRunAt)}`)),
         },
         {
           key: 'okc',
@@ -158,9 +161,10 @@ export default function OverviewAdmin() {
                 key: 'yedek',
                 icon: <HardDrive className="size-4" />,
                 label: 'Yedek',
-                tone: (lastBackup && Date.now() - lastBackup.at < 36 * 3_600_000 ? 'success' : 'warning') as Tone,
-                state: lastBackup ? 'Var' : 'Yok',
-                detail: lastBackup ? `Son yedek ${fmtDateTime(lastBackup.at)}` : 'Henüz yedek alınmadı',
+                // Liste yüklenirken ya da alınamazken "Yok" denmez: yedek varken patron yokmuş sanmasın
+                tone: (backups.isPending ? 'neutral' : backups.isError ? 'warning' : lastBackup && Date.now() - lastBackup.at < 36 * 3_600_000 ? 'success' : 'warning') as Tone,
+                state: backups.isPending ? 'Denetleniyor' : backups.isError ? 'Denetlenemedi' : lastBackup ? 'Var' : 'Yok',
+                detail: backups.isPending ? 'Yedek listesi okunuyor' : backups.isError ? errorMessage(backups.error) : lastBackup ? `Son yedek ${fmtDateTime(lastBackup.at)}` : 'Henüz yedek alınmadı',
               },
             ]
           : []),
@@ -171,14 +175,22 @@ export default function OverviewAdmin() {
     <>
       <PageHeader
         title="Genel bakış"
-        description={d ? `${d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · ${fmtTime(d.now)} itibarıyla · rakamlar geçen haftanın aynı günü aynı saatiyle karşılaştırılır` : 'Bugünün rakamları için patron paneli yetkisi gerekir'}
+        description={
+          d
+            ? `${d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · ${fmtTime(d.now)} · kıyas geçen haftanın aynı günü`
+            : liveFailed
+              ? 'Canlı rakamlar alınamadı'
+              : livePending
+                ? 'Bugünün rakamları yükleniyor…'
+                : 'Bugünün rakamları için patron paneli yetkisi gerekir'
+        }
         actions={
           <>
-            <Link to="/raporlar" className={BTN.ghost}>
+            <Link to="/raporlar" className={buttonClass('secondary')}>
               Raporlar
             </Link>
             {can('kasa.gun') && (
-              <Link to="/kasa" className={BTN.primary}>
+              <Link to="/kasa" className={buttonClass('primary')}>
                 Kasa ve gün sonu
               </Link>
             )}
@@ -186,13 +198,19 @@ export default function OverviewAdmin() {
         }
       />
       <div className="space-y-4">
-        {cells.length > 0 && <KpiStrip cells={cells} />}
+        {livePending ? <KpiStripSkeleton /> : cells.length > 0 && <KpiStrip cells={cells} />}
+        {liveFailed && <ErrorState className={CARD} title="Bugünün rakamları alınamadı" error={live.error} onRetry={() => void live.refetch()} retrying={live.isFetching} />}
 
         <div className="grid gap-4 xl:grid-cols-3">
           <div className="space-y-4 xl:col-span-2">
+            {livePending && (
+              <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü">
+                <Skeleton className="h-[220px] rounded-xl" />
+              </Card>
+            )}
             {d && (
               <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü">
-                <ColumnChart data={hours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} />
+                <ColumnChart data={hours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} emptyLabel="Bugün henüz satış yok" emptyHint="İlk adisyon kapanınca saat saat ciro burada çizilir" />
               </Card>
             )}
             {d && (
@@ -211,14 +229,20 @@ export default function OverviewAdmin() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="px-5 pb-5 text-sm text-[var(--admin-text-mute)]">Bugün henüz satış yok</p>
+                  <EmptyState bare icon={<BarChart3 />} title="Bugün henüz satış yok">
+                    İlk adisyon kapanınca en çok satanlar burada sıralanır
+                  </EmptyState>
                 )}
               </Card>
             )}
           </div>
 
           <div className="space-y-4">
-            <Card title="Dikkat isteyenler" subtitle={attention.length ? `${attention.length} konu` : 'Her şey yolunda'} flush>
+            <Card
+              title="Dikkat isteyenler"
+              actions={attention.length ? <Badge tone={attention.some((a) => a.tone === 'danger') ? 'danger' : 'warning'}>{attention.length}</Badge> : undefined}
+              flush
+            >
               {attention.length ? (
                 <ul className="divide-y divide-[var(--admin-divider)]">
                   {attention.map((a) => (
@@ -231,34 +255,41 @@ export default function OverviewAdmin() {
                     </li>
                   ))}
                 </ul>
+              ) : livePending || sync.isPending ? (
+                // Uyarılar gelmeden "Her şey yolunda" denmez
+                <ListSkeleton rows={2} />
+              ) : liveFailed || (sync.isError && !sync.data) ? (
+                <EmptyState bare icon={<AlertTriangle />} title="Uyarılar şu an denetlenemiyor">
+                  Rakamlar ya da bağlantı durumu alınamadı; gelince uyarılar burada görünür
+                </EmptyState>
               ) : (
-                <EmptyState bare title="Dikkat isteyen bir şey yok">
+                <EmptyState bare icon={<CheckCircle2 />} title="Her şey yolunda">
                   İptal, ikram ve kasa farkı uyarıları burada görünür
                 </EmptyState>
               )}
             </Card>
 
             <Card title="Sistem sağlığı" subtitle="Bağlantılar ve yedek">
-              <div className="-my-1">
+              {sync.isPending && <ListSkeleton rows={4} className="p-0" />}
+              {sync.isError && !sync.data && <ErrorState compact title="Bağlantı durumu alınamadı" error={sync.error} onRetry={() => void sync.refetch()} retrying={sync.isFetching} />}
+              {health.length > 0 && (
+              <ul className="-my-2.5">
                 {health.map((h) => (
-                  <DefRow
-                    key={h.key}
-                    label={
-                      <span className="inline-flex items-center gap-2 text-[var(--admin-text-soft)]">
-                        {h.icon}
-                        {h.label}
-                      </span>
-                    }
-                  >
-                    <Badge tone={h.tone} dot>
+                  <li key={h.key} className="flex items-center gap-3 border-b border-[var(--admin-divider)] py-2.5 last:border-0">
+                    <IconBox hue="blue" size="sm">
+                      {h.icon}
+                    </IconBox>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-[var(--admin-text)]">{h.label}</span>
+                      <span className="block text-xs text-[var(--admin-text-mute)] [overflow-wrap:anywhere]">{h.detail}</span>
+                    </span>
+                    <Badge tone={h.tone} dot className="shrink-0">
                       {h.state}
                     </Badge>
-                    <span className="mt-0.5 block max-w-[13rem] truncate text-xs font-normal text-[var(--admin-text-mute)]" title={h.detail}>
-                      {h.detail}
-                    </span>
-                  </DefRow>
+                  </li>
                 ))}
-              </div>
+              </ul>
+              )}
             </Card>
           </div>
         </div>

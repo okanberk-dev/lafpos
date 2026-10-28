@@ -127,7 +127,8 @@ describe('servis modu: saf yardımcılar', () => {
 
   it('bar fişi başlığı: numara tekrar yazılmaz, masada bugünkü etiket', () => {
     const t = { label: 'Tezgâh #34', orderNo: 34, type: 'tezgah', source: 'pos', numarator: null };
-    expect(ticketHead(t, 'masa')).toEqual({ call: null, label: 'Tezgâh #34', showNo: true });
+    // Etiket numarayı taşıyor: fişte "#34" ikinci kez yazılmaz
+    expect(ticketHead(t, 'masa')).toEqual({ call: null, label: 'Tezgâh #34', showNo: false });
     expect(ticketHead(t, 'self')).toEqual({ call: 'No 34', label: 'Tezgâh', showNo: false });
     expect(ticketHead({ ...t, label: 'Masa 12', numarator: '12' }, 'yari_self')).toEqual({ call: 'Masa 12', label: '', showNo: true });
     expect(ticketHead({ ...t, type: 'gelal', label: 'Gel-al · Ayşe' }, 'self')).toEqual({ call: 'No 34', label: 'Gel-al · Ayşe', showNo: false });

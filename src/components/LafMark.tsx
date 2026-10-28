@@ -8,11 +8,16 @@ const LETTERS =
 const BEAN =
   'M291.3 8.8C273.4 12.3 258.4 28.7 255.1 48.5C254 54.8 254.1 57 255.5 64C258.9 80.4 265.1 88.9 284.2 103.7C298.1 114.5 303.4 121.1 305.3 130.4C309.6 151.3 297.2 184.5 270.5 223.8C258.9 240.8 246.1 256 217.7 286.7C198.7 307.1 187.9 322.7 180.2 340.6C164.6 376.8 166.3 419 185 456.1C200.9 487.9 223.1 504.7 251.1 506.3C294.8 508.8 331.5 470.8 338.8 415.5C343 384.3 334.9 351.4 316.3 323.7C309.7 313.9 298.6 302 291.6 297.3C281.7 290.7 269.1 287.9 261.7 290.7C259.5 291.5 259.2 292.1 259.7 294.5C260.3 297 259.8 297.7 254.6 301.2C243.3 309.1 236.7 321.8 235.6 338.2C234.5 354 241 371.6 253.3 386.7C271.6 409.1 276.5 415.6 279.7 422.1C285 432.9 286.5 440.2 286.1 452.6C285.8 462 285.4 464 282.5 470C278.2 479.2 274.1 484.2 267.9 487.7C258.6 493.1 254.7 490.8 260.1 483.2C271.4 467.5 273.9 450.1 267.4 431.8C263.6 421 259.6 414.8 247.4 400.4C234 384.7 230.3 379.7 225.9 371.6C218.7 358.6 216.3 340.2 219.9 325.8C222.1 316.3 230 300.5 236.9 291.2C244.2 281.4 245.4 280.4 249.7 280.3C252.7 280.2 254.3 278.8 264.3 267.7C297.7 230.6 317.6 203.3 332.2 174.2C348.4 142.1 356.3 112.1 356.3 82.4C356.2 46.9 345.2 23.1 323.9 12.7C314.2 8 302.6 6.6 291.3 8.8';
 
-export function LafMark({ className, bean = 'var(--laf-bean)', title }: { className?: string; bean?: string; title?: string }) {
+/**
+ * `onNight`: koyu karo ya da hep koyu ekran (giriş karosu, çağrı ve müşteri ekranı): çekirdek gece pirinci
+ * (`--laf-bean-night`), açık temada da. Özel bir renk gerekirse `bean`.
+ */
+export function LafMark({ className, bean, onNight, title }: { className?: string; bean?: string; onNight?: boolean; title?: string }) {
+  const fill = bean ?? (onNight ? 'var(--laf-bean-night)' : 'var(--laf-bean)');
   return (
     <svg viewBox="0 0 1035.2 846" className={className} role={title ? 'img' : undefined} aria-label={title} aria-hidden={title ? undefined : true}>
       <path fillRule="evenodd" fill="currentColor" d={LETTERS} />
-      <path fillRule="evenodd" fill={bean} d={BEAN} />
+      <path fillRule="evenodd" fill={fill} d={BEAN} />
     </svg>
   );
 }

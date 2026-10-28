@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { tl, tlShort } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
-import { Button } from '@/components/ui/Button';
+import { Button, IconButton } from '@/components/ui/Button';
+import { confirmDialog } from '@/components/ui/Confirm';
+import { Badge } from '@/components/ui/misc';
 import { ApiError, errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
@@ -86,12 +88,21 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
       // İnternet ya da Token kesintisi: sepet cihazdan silinemiyor. Yetkili onayıyla LafPOS'ta iptal sayılır ki adisyon
       // nakit alınabilsin ve gün kapanabilsin; cihazda yine de ödeme alınırsa yönetici alarm görür
       if (e instanceof ApiError && e.code === 'okc_delete') {
-        const ok = window.confirm(`${e.message}\n\nCihaza ulaşılamıyor. Sepet LafPOS'ta iptal sayılsın mı? Cihazda bu sepetten ödeme alınmadığından emin olun.`);
+        const ok = await confirmDialog({
+          title: 'Sepet LafPOS’ta iptal sayılsın mı',
+          body: (
+            <>
+              <p>{e.message}</p>
+              <p className="mt-2">Cihaza ulaşılamıyor. Cihazda bu sepetten ödeme alınmadığından emin olun; alınırsa yönetici alarm görür</p>
+            </>
+          ),
+          confirmLabel: 'Sepeti iptal say',
+        });
         if (!ok) return;
         try {
           const done = await withApproval((pin) => post(`/okc/receipts/${id}/cancel`, { force: true, approverPin: pin }));
           if (done === null) return;
-          toast.warn("Sepet LafPOS'ta iptal sayıldı; adisyonu kasadan alabilirsiniz");
+          toast.warn('Sepet LafPOS’ta iptal sayıldı; adisyonu kasadan alabilirsiniz');
           await qc.invalidateQueries({ queryKey: ['okc', order.id] });
           await qc.invalidateQueries({ queryKey: ['order', order.id] });
         } catch (err) {
@@ -119,13 +130,13 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
         <span className="grid size-7 place-items-center rounded-lg bg-surface-3 text-ink-2">
           <MonitorSmartphone className="size-4" />
         </span>
-        Yazarkasa POS {provider === 'simulator' && <span className="rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-warning)]">eğitim cihazı</span>}
+        Yazarkasa POS {provider === 'simulator' && <Badge tone="warning">eğitim cihazı</Badge>}
       </div>
       {pending ? (
         <div className="flex items-center gap-3">
-          <Loader2 className="size-5 animate-spin text-primary" />
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="font-medium">{pending.status === 'kilitli' ? 'Cihazda açıldı, ödeme alınıyor' : 'Cihazda ödeme bekleniyor'}</div>
+          <Loader2 aria-hidden="true" className="size-5 animate-spin text-primary" />
+          <div role="status" className="min-w-0 flex-1 text-sm">
+            <div className="font-medium">{pending.status === 'kilitli' ? 'Cihazda açıldı, ödeme alınıyor…' : 'Cihazda ödeme bekleniyor…'}</div>
             <div className="text-xs text-muted">
               {tl(pending.amount)}
               {provider === 'simulator' && (
@@ -139,11 +150,11 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
             </div>
           </div>
           {provider === 'tokenx' && (
-            <Button size="sm" variant="ghost" aria-label="Durumu sorgula" onClick={() => refresh(pending.id)}>
+            <IconButton size="sm" label="Durumu sorgula" onClick={() => refresh(pending.id)}>
               <RefreshCw className="size-4" />
-            </Button>
+            </IconButton>
           )}
-          <Button size="sm" variant="ghost" className="text-[var(--admin-danger-ink)]" onClick={() => cancel(pending.id)}>
+          <Button size="sm" variant="dangerGhost" onClick={() => cancel(pending.id)}>
             İptal
           </Button>
         </div>

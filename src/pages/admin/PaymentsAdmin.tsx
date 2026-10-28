@@ -1,12 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Power } from 'lucide-react';
+import { CreditCard, Pencil, Plus, Power, Save } from 'lucide-react';
 import { useState } from 'react';
 import { PAYMENT_CHANNELS } from '@shared/labels';
 import type { PaymentMethodDTO } from '@shared/types';
-import { ActionMenu, Badge, BTN, type Column, DataTable, PageHeader, QuickLook } from '@/components/admin/ui';
-import { Field, Input, Select, Toggle } from '@/components/ui/Field';
-import { PageLoading } from '@/components/ui/misc';
+import { ActionMenu, Badge, CARD, type Column, DataTable, EmptyState, PageHeader, QuickLook, TableSkeleton } from '@/components/admin/ui';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, NumberInput, Select, Toggle } from '@/components/ui/Field';
+import { ErrorState } from '@/components/ui/misc';
 import { errorMessage, get, patch, post } from '@/lib/api';
+import { useFinePointer } from '@/lib/hooks';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 
 type Method = PaymentMethodDTO & { sort: number; active: boolean };
@@ -20,13 +23,26 @@ const ZFIELD_OF: Record<Method['kind'], Method['zField']> = { nakit: 'cash', kar
 export default function PaymentsAdmin() {
   const qc = useQueryClient();
   const data = useQuery({ queryKey: ['admin', 'methods'], queryFn: () => get<Method[]>('/admin/payment-methods') });
+  const fine = useFinePointer();
   const [edit, setEdit] = useState<Draft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [tried, setTried] = useState(false);
+  const openEdit = (d: Draft) => {
+    setTried(false);
+    setEdit(d);
+  };
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['admin', 'methods'] });
     qc.invalidateQueries({ queryKey: ['bootstrap'] });
   };
+  const nameError = edit && !edit.name.trim() ? 'Ad gerekli' : null;
   const save = async () => {
     if (!edit) return;
+    if (nameError) {
+      setTried(true);
+      return;
+    }
+    setSaving(true);
     try {
       const { id, ...body } = edit;
       if (id) await patch(`/admin/payment-methods/${id}`, body);
@@ -36,6 +52,8 @@ export default function PaymentsAdmin() {
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setSaving(false);
     }
   };
   const setActive = async (m: Method, active: boolean) => {
@@ -46,15 +64,13 @@ export default function PaymentsAdmin() {
       toast.err(errorMessage(e));
     }
   };
-  if (data.isLoading) return <PageLoading />;
-
   const columns: Column<Method>[] = [
     {
       key: 'ad',
       header: 'Ödeme türü',
       cell: (m) => (
         <span className="flex items-center gap-3">
-          <span aria-hidden="true" className="size-8 shrink-0 rounded-lg" style={{ background: m.color }} />
+          <span aria-hidden="true" className="size-8 shrink-0 rounded-lg ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: m.color }} />
           <span className="min-w-0">
             <span className="block font-medium text-[var(--admin-text)]">{m.name}</span>
             <span className="block text-xs text-[var(--admin-text-mute)]">{KIND[m.kind]}</span>
@@ -68,60 +84,70 @@ export default function PaymentsAdmin() {
     { key: 'durum', header: 'Durum', cell: (m) => <Badge tone={m.active ? 'success' : 'neutral'} dot>{m.active ? 'Etkin' : 'Kapalı'}</Badge> },
   ];
 
+  const newMethod = () => openEdit({ name: '', kind: 'yemek', zField: 'meal_card', channel: null, color: '#3f6b8a', sort: 20, active: true });
+
   return (
     <>
       <PageHeader
         title="Ödeme türleri"
-        description="Her tür lafmaliyet Kasa raporundaki bir alana (Nakit, Kart, Yemek kartı, Online, Diğer) ve varsa komisyon kanalına bağlanır"
+        description="Her tür lafmaliyet Kasa raporunda bir alana ve varsa komisyon kanalına bağlanır"
         actions={
-          <button type="button" className={BTN.primary} onClick={() => setEdit({ name: '', kind: 'yemek', zField: 'meal_card', channel: null, color: '#3f6b8a', sort: 20, active: true })}>
-            <Plus className="size-4" aria-hidden="true" />
+          <Button variant="primary" icon={<Plus className="size-4" />} onClick={newMethod}>
             Tür ekle
-          </button>
+          </Button>
         }
       />
+      {data.isPending ? (
+        <TableSkeleton rows={5} />
+      ) : data.isError && !data.data ? (
+        <ErrorState className={CARD} title="Ödeme türleri alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+      ) : (
       <DataTable
         caption="Ödeme türleri"
         rows={data.data ?? []}
         columns={columns}
         rowKey={(m) => m.id}
-        onOpen={(m) => setEdit({ ...m })}
+        onOpen={(m) => openEdit({ ...m })}
         selectedKey={edit?.id ?? null}
         rowClassName={(m) => !m.active && 'opacity-70'}
-        phoneMeta={(m) => `${KIND[m.kind]} → ${ZFIELD[m.zField]}${m.channel ? ` · ${m.channel}` : ''}${m.active ? '' : ' · kapalı'}`}
+        phoneMeta={(m) => joinMeta([`${KIND[m.kind]} → ${ZFIELD[m.zField]}`, m.channel, !m.active && 'kapalı'])}
         actions={(m) => (
           <ActionMenu
             label={`${m.name} eylemleri`}
             items={[
-              { key: 'duzenle', label: 'Düzenle', icon: <Pencil />, onSelect: () => setEdit({ ...m }) },
+              { key: 'duzenle', label: 'Düzenle', icon: <Pencil />, onSelect: () => openEdit({ ...m }) },
               { key: 'durum', label: m.active ? 'Kapat' : 'Etkinleştir', icon: <Power />, danger: m.active, onSelect: () => setActive(m, !m.active) },
             ]}
           />
         )}
+        empty={
+          <EmptyState icon={<CreditCard />} title="Ödeme türü yok" action={<Button variant="primary" icon={<Plus className="size-4" />} onClick={newMethod}>Tür ekle</Button>}>
+            Kasada her tür bir ödeme düğmesi olur; nakit ve kredi kartıyla başlayın
+          </EmptyState>
+        }
       />
+      )}
       <QuickLook
         open={!!edit}
         onClose={() => setEdit(null)}
         label="Ödeme türü"
         title={edit?.id ? edit.name : 'Yeni ödeme türü'}
-        subtitle="Kasada ödeme düğmesi, Z'de bir satır, lafmaliyet'te bir alan"
+        subtitle="Kasada ödeme düğmesi, Z’de bir satır, lafmaliyet’te bir alan"
         footer={
           <>
             {edit && <Toggle checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Etkin" />}
             <div className="flex-1" />
-            <button type="button" className={BTN.ghost} onClick={() => setEdit(null)}>
-              Vazgeç
-            </button>
-            <button type="button" className={BTN.primary} disabled={!edit?.name.trim()} onClick={save}>
+            <Button onClick={() => setEdit(null)}>Vazgeç</Button>
+            <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
               Kaydet
-            </button>
+            </Button>
           </>
         }
       >
         {edit && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Ad" className="sm:col-span-2">
-              <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} autoFocus={!edit.id} />
+            <Field label="Ad" className="sm:col-span-2" required error={tried ? nameError : null}>
+              <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} autoFocus={!edit.id && fine} placeholder="Ör. Multinet" />
             </Field>
             <Field label="Tür">
               <Select
@@ -157,11 +183,11 @@ export default function PaymentsAdmin() {
                 ))}
               </Select>
             </Field>
-            <Field label="Sıra">
-              <Input type="number" value={edit.sort} onChange={(e) => setEdit({ ...edit, sort: Number(e.target.value) || 0 })} />
+            <Field label="Sıra" hint="küçük olan önce">
+              <NumberInput value={edit.sort} min={0} max={999} fallback={0} onCommit={(sort) => setEdit({ ...edit, sort })} />
             </Field>
             <Field label="Renk">
-              <input type="color" value={edit.color} onChange={(e) => setEdit({ ...edit, color: e.target.value })} className="h-11 w-20 cursor-pointer rounded-lg border border-[var(--admin-border)]" />
+              <input type="color" value={edit.color} onChange={(e) => setEdit({ ...edit, color: e.target.value })} className="h-11 w-20 cursor-pointer rounded-lg border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] p-1" />
             </Field>
           </div>
         )}

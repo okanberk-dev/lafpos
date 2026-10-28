@@ -1,16 +1,23 @@
-import { Minus, Plus } from 'lucide-react';
+import { Minus, Pencil, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { estimateUnit, menuUnit, productGroups, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
+import { useFinePointer } from '@/lib/hooks';
 
 const QUICK_NOTES = ['Az buzlu', 'Buzsuz', 'Çok sıcak', 'Ilık', 'Ayrı tabakta', 'Paket', 'Kremasız'];
 
 type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
+
+// Seçenek ve hızlı not çipleri aynı dilde: 8 px köşe, seçilince mavi; amber bu sistemde durum rengidir, seçim rengi değil
+const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
+const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
+const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
 
 function defaultPicks(groups: OptionGroupDTO[]): Picks {
   const p: Picks = {};
@@ -38,6 +45,7 @@ export function OptionsModal({
   onSubmit: (line: Omit<PendingLine, 'key'>) => void;
 }) {
   const boot = useBoot();
+  const fine = useFinePointer();
   const groups = useMemo(() => (product ? productGroups(boot, product) : []), [boot, product]);
   const [size, setSize] = useState<Size>(initialSize);
   const [picks, setPicks] = useState<Picks>({});
@@ -45,6 +53,8 @@ export function OptionsModal({
   const [qty, setQty] = useState(1);
   // Elle fiyat (açık ürün, pazarlıklı satış): boşsa menü fiyatı. Sunucu yetki ister, denetim kaydına yazar
   const [priceText, setPriceText] = useState('');
+  // Elle fiyat bölümü yalnız açık üründe (fiyatı 0) ya da zaten elle fiyat yazılmışsa açık; diğer üründe küçük düğmenin ardında
+  const [priceOpen, setPriceOpen] = useState(false);
 
   useEffect(() => {
     if (!product) return;
@@ -54,12 +64,14 @@ export function OptionsModal({
       setNote(editing.note);
       setQty(editing.qty);
       setPriceText(editing.priceOverride != null ? String(editing.priceOverride / 100).replace('.', ',') : '');
+      setPriceOpen(editing.priceOverride != null || product.price === 0);
     } else {
       setSize(product.priceL != null ? (initialSize === 'L' ? 'L' : 'M') : 'TEK');
       setPicks(defaultPicks(groups));
       setNote('');
       setQty(1);
       setPriceText('');
+      setPriceOpen(product.price === 0);
     }
   }, [product, editing, initialSize, groups]);
 
@@ -89,11 +101,11 @@ export function OptionsModal({
       footer={
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-xl border border-line bg-surface">
-            <button aria-label="Azalt" className="grid size-11 place-items-center" onClick={() => setQty(Math.max(1, qty - 1))}>
+            <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.max(1, qty - 1))}>
               <Minus className="size-4" />
             </button>
             <span className="tabular w-8 text-center text-lg font-semibold">{qty}</span>
-            <button aria-label="Artır" className="grid size-11 place-items-center" onClick={() => setQty(Math.min(99, qty + 1))}>
+            <button aria-label="Artır" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.min(99, qty + 1))}>
               <Plus className="size-4" />
             </button>
           </div>
@@ -112,8 +124,9 @@ export function OptionsModal({
               {(['M', 'L'] as const).map((s) => (
                 <button
                   key={s}
+                  aria-pressed={size === s}
                   onClick={() => setSize(s)}
-                  className={cn('rounded-xl border p-3 text-left transition-colors', size === s ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}
+                  className={cn('rounded-xl border p-3 text-left transition-colors duration-150', size === s ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface hover:border-[var(--admin-border-field)] active:bg-press')}
                 >
                   <div className="font-semibold">{boot.settings.sizeLabels[s]}</div>
                   <div className="tabular text-sm text-muted">{tlShort(s === 'L' ? product.priceL! : product.price)}</div>
@@ -135,11 +148,11 @@ export function OptionsModal({
                       {i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
                     </span>
                     <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-3 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
+                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
                         <Minus className="size-4" />
                       </button>
                       <span className="tabular w-6 text-center font-semibold">{picks[i.id] ?? 0}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-3 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
+                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
                         <Plus className="size-4" />
                       </button>
                     </div>
@@ -153,8 +166,9 @@ export function OptionsModal({
                   return (
                     <button
                       key={i.id}
+                      aria-pressed={on}
                       onClick={() => (g.kind === 'single' ? pickSingle(g, i.id) : setCount(i.id, on ? 0 : 1))}
-                      className={cn('min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors pointer-fine:min-h-10', on ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)]')}
+                      className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
                     >
                       {i.name}
                       {i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>}
@@ -169,36 +183,39 @@ export function OptionsModal({
 
         <section>
           <h3 className="mb-2 text-sm font-semibold text-ink-2">Not</h3>
-          <div className="mb-2 flex flex-wrap gap-1.5">
+          <div className="mb-2 flex flex-wrap gap-2">
             {QUICK_NOTES.map((n) => (
               <button
                 key={n}
+                aria-pressed={note.includes(n)}
                 onClick={() => setNote(note.includes(n) ? note.replace(n, '').replace(/\s*·\s*$/, '').replace(/^\s*·\s*/, '').trim() : note ? `${note} · ${n}` : n)}
-                className={cn('rounded-full border px-3 py-1 text-sm', note.includes(n) ? 'border-warn-500 bg-warn-50 text-warn-700' : 'border-line text-ink-2')}
+                className={cn(CHIP, note.includes(n) ? CHIP_ON : CHIP_OFF)}
               >
                 {n}
               </button>
             ))}
           </div>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value.slice(0, 200))}
-            placeholder="Bara/mutfağa not"
-            className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-brand-500"
-          />
+          <Input value={note} onChange={(e) => setNote(e.target.value.slice(0, 200))} placeholder="Ör. az şekerli, bardakta" aria-label="Bara ve mutfağa not" />
         </section>
-        <section>
-          <h3 className="mb-2 text-sm font-semibold text-ink-2">Fiyat</h3>
-          <input
-            value={priceText}
-            onChange={(e) => setPriceText(e.target.value.replace(/[^\d.,]/g, '').slice(0, 9))}
-            inputMode="decimal"
-            placeholder={`${tl(menuUnit(boot, product, size, options))} (menü fiyatı)`}
-            aria-label="Elle birim fiyat"
-            className="tabular h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-primary"
-          />
-          <p className="mt-1 text-xs text-muted">Boş bırakın; yalnız açık ürün ya da istisna için. Yetkili onayı ister ve denetim kaydına düşer</p>
-        </section>
+        {priceOpen ? (
+          <section>
+            <h3 className="mb-2 text-sm font-semibold text-ink-2">Birim fiyat</h3>
+            <Input
+              value={priceText}
+              onChange={(e) => setPriceText(e.target.value.replace(/[^\d.,]/g, '').slice(0, 9))}
+              inputMode="decimal"
+              placeholder={`${tl(menuUnit(boot, product, size, options))} (menü fiyatı)`}
+              aria-label="Elle birim fiyat"
+              className="tabular"
+              autoFocus={fine && product.price === 0 && !editing}
+            />
+            <p className="mt-1 text-xs text-muted">Yetkili onayı ister ve denetim kaydına düşer</p>
+          </section>
+        ) : (
+          <Button variant="ghost" size="sm" icon={<Pencil className="size-4" />} onClick={() => setPriceOpen(true)} className="-ml-3">
+            Elle fiyat
+          </Button>
+        )}
         {product.allergens && product.allergens.length > 0 && <p className="text-xs text-muted">Alerjen: {product.allergens.join(', ')}</p>}
       </div>
     </Modal>

@@ -59,25 +59,25 @@ function AdminIndex() {
   return (
     <>
       <PageHeader title="Yönetim" description="Menü, masa planı, personel, cihazlar ve bağlantılar" />
-      <div className="space-y-5">
+      <div className="space-y-6">
         {ADMIN_GROUPS.map((g) => {
           const list = sections.filter((s) => s.group === g.key);
           if (!list.length) return null;
           return (
             <section key={g.key}>
-              <h2 className="px-1 pb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</h2>
+              <h2 className="px-4 pb-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</h2>
               <ul className={`${CARD} divide-y divide-[var(--admin-divider)] overflow-hidden`}>
                 {list.map((s) => (
                   <li key={s.key}>
-                    <Link to={s.to} className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-[var(--admin-surface-2)]">
-                      <IconBox hue={s.hue}>
+                    <Link to={s.to} className="flex min-h-[68px] items-center gap-3 px-4 py-3.5 transition-colors hover:bg-hover active:bg-press">
+                      <IconBox hue={s.hue} size="lg">
                         <s.icon />
                       </IconBox>
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold text-[var(--admin-text)]">{s.label}</span>
-                        <span className="block truncate text-xs text-[var(--admin-text-mute)]">{s.desc}</span>
+                        <span className="mt-0.5 line-clamp-2 text-xs text-[var(--admin-text-mute)]">{s.desc}</span>
                       </span>
-                      <ChevronRight className="size-4 shrink-0 text-[var(--admin-text-mute)]" aria-hidden="true" />
+                      <ChevronRight className="size-5 shrink-0 text-[var(--admin-border-field)]" aria-hidden="true" />
                     </Link>
                   </li>
                 ))}

@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, RotateCcw } from 'lucide-react';
+import { Lock, RotateCcw, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { type Permission, PERMISSIONS, type Role } from '@shared/permissions';
-import { Badge, BTN, CARD, PageHeader, StatusTabs } from '@/components/admin/ui';
-import { PageLoading } from '@/components/ui/misc';
+import { Badge, CARD, PageHeader, StatusTabs, TableSkeleton } from '@/components/admin/ui';
+import { Button } from '@/components/ui/Button';
+import { ErrorState } from '@/components/ui/misc';
 import { errorMessage, get, put } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
@@ -46,45 +47,67 @@ export default function RolesAdmin() {
     setDraft({ ...draft, [r.role]: list.includes(p) ? list.filter((x) => x !== p) : [...list, p] });
   };
   const reset = (r: RoleRow) => setDraft({ ...draft, [r.role]: r.defaults });
+  // Roller sırayla kaydedilir: biri reddedilirse önce kaydedilenler taslaktan düşer (sayaç kalanları gösterir), ekran
+  // sunucudaki durumu yeniden okur, ileti hangi rolün kaydedilemediğini söyler
   const save = async () => {
     setSaving(true);
+    const saved: RoleRow[] = [];
     try {
-      for (const r of dirty) await put(`/admin/roles/${r.role}`, { permissions: draft[r.role] });
-      toast.ok(dirty.length === 1 ? `${dirty[0].label} rolünün yetkileri kaydedildi` : `${dirty.length} rolün yetkileri kaydedildi`);
-      setDraft({});
-      qc.invalidateQueries({ queryKey: ['admin', 'roles'] });
-      qc.invalidateQueries({ queryKey: ['users'] });
-    } catch (e) {
-      toast.err(errorMessage(e));
+      for (const r of dirty) {
+        try {
+          await put(`/admin/roles/${r.role}`, { permissions: draft[r.role] });
+        } catch (e) {
+          toast.err(`${r.label}: ${errorMessage(e)}${saved.length ? ` (${saved.map((x) => x.label).join(', ')} kaydedildi)` : ''}`);
+          return;
+        }
+        saved.push(r);
+      }
+      toast.ok(saved.length === 1 ? `${saved[0].label} rolünün yetkileri kaydedildi` : `${saved.length} rolün yetkileri kaydedildi`);
     } finally {
+      // Önce sunucunun yeni hâli okunur, sonra taslak düşer (kaydedilen rol bir an eski yetkileriyle görünmesin)
+      await qc.invalidateQueries({ queryKey: ['admin', 'roles'] }).catch(() => undefined);
+      if (saved.length) {
+        setDraft((d) => {
+          const next = { ...d };
+          for (const r of saved) delete next[r.role];
+          return next;
+        });
+        qc.invalidateQueries({ queryKey: ['users'] });
+      }
       setSaving(false);
     }
   };
 
-  if (data.isLoading || !data.data) return <PageLoading />;
+  const actions = (
+    <>
+      {dirty.length > 0 && <Button onClick={() => setDraft({})}>Vazgeç</Button>}
+      <Button variant="primary" icon={<Save className="size-4" />} loading={saving} disabled={!dirty.length} onClick={() => void save()}>
+        {dirty.length ? `Kaydet (${dirty.length})` : 'Kaydet'}
+      </Button>
+    </>
+  );
+  const header = <PageHeader title="Roller ve yetkiler" description="Rolün yetkisi o roldeki herkese uygulanır; kişiye özel ek Personel’de" actions={data.data ? actions : undefined} />;
+
+  if (data.isPending)
+    return (
+      <>
+        {header}
+        <TableSkeleton rows={10} />
+      </>
+    );
+  if (!data.data)
+    return (
+      <>
+        {header}
+        <ErrorState className={CARD} title="Roller alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+      </>
+    );
   const groups = data.data.groups;
   const phone = roles.find((r) => r.role === phoneRole) ?? roles[0];
 
-  const actions = (
-    <>
-      {dirty.length > 0 && (
-        <button type="button" className={BTN.ghost} onClick={() => setDraft({})}>
-          Vazgeç
-        </button>
-      )}
-      <button type="button" className={BTN.primary} disabled={!dirty.length || saving} onClick={save}>
-        {dirty.length ? `Değişiklikleri kaydet (${dirty.length})` : 'Kaydedildi'}
-      </button>
-    </>
-  );
-
   return (
     <>
-      <PageHeader
-        title="Roller ve yetkiler"
-        description="Her rolün yetkileri o roldeki herkese uygulanır; kişiye özel ek ya da kaldırılan yetki Personel sayfasında. Patron rolü her yetkiye sahiptir. Kasiyer kasa rakamlarını görmüyorsa gün sonu sayımı kör yapılır"
-        actions={actions}
-      />
+      {header}
 
       {/* Bilgisayar ve tablet: roller sütun */}
       <div className={cn(CARD, 'hidden overflow-hidden md:block')}>
@@ -93,13 +116,13 @@ export default function RolesAdmin() {
             <caption className="sr-only">Rollere göre yetkiler</caption>
             <thead>
               <tr className="bg-[var(--admin-surface-2)]">
-                <th scope="col" className="h-12 min-w-64 px-4 text-left text-[13px] font-medium text-[var(--admin-text-mute)]">
+                <th scope="col" className="sticky left-0 z-[1] h-12 min-w-44 bg-[var(--admin-surface-2)] px-4 text-left text-[13px] font-medium text-[var(--admin-text-mute)] md:w-[38%]">
                   Yetki
                 </th>
                 {roles.map((r) => (
-                  <th key={r.role} scope="col" className="px-2 py-2 text-center align-bottom">
+                  <th key={r.role} scope="col" className="px-1 py-2 text-center align-bottom">
                     <span className="flex flex-col items-center gap-1">
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap text-[13px] font-semibold text-[var(--admin-text)]">
+                      <span className="inline-flex max-w-20 items-center justify-center gap-1 text-center text-[13px] font-semibold leading-tight text-[var(--admin-text)]">
                         {r.locked && <Lock className="size-3.5 text-[var(--admin-text-mute)]" aria-label="kilitli" />}
                         {r.label}
                       </span>
@@ -115,11 +138,9 @@ export default function RolesAdmin() {
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {groups.map((g) => (
-                <GroupRows key={g.key} group={g} roles={roles} current={current} toggle={toggle} />
-              ))}
-            </tbody>
+            {groups.map((g) => (
+              <GroupRows key={g.key} group={g} roles={roles} current={current} toggle={toggle} />
+            ))}
           </table>
         </div>
       </div>
@@ -129,10 +150,9 @@ export default function RolesAdmin() {
         <StatusTabs label="Rol" value={phone.role} onChange={setPhoneRole} tabs={roles.map((r) => ({ value: r.role, label: r.label, count: current(r).length }))} />
         {phone.locked && <p className="mb-3 text-[13px] text-[var(--admin-text-mute)]">Patron rolü her yetkiye sahiptir ve değiştirilemez</p>}
         {!phone.locked && !sameSet(current(phone), phone.defaults) && (
-          <button type="button" onClick={() => reset(phone)} className={cn(BTN.ghost, 'mb-3')}>
-            <RotateCcw className="size-4" aria-hidden="true" />
+          <Button icon={<RotateCcw className="size-4" />} onClick={() => reset(phone)} className="mb-3">
             Varsayılana dön
-          </button>
+          </Button>
         )}
         <div className="space-y-4">
           {groups.map((g) => (
@@ -171,24 +191,26 @@ function GroupRows({
   current: (r: RoleRow) => Permission[];
   toggle: (r: RoleRow, p: Permission) => void;
 }) {
+  // Her grup kendi gövdesi: grup başlığı yalnız kendi satırlarına (rowgroup); ilk sütun yatay kaydırmada yerinde kalır
   return (
-    <>
+    <tbody>
       <tr className="border-t border-[var(--admin-border)] bg-[var(--admin-panel)]">
-        <th scope="rowgroup" colSpan={roles.length + 1} className="px-4 py-1.5 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">
+        <th scope="rowgroup" className="sticky left-0 z-[1] bg-[var(--admin-panel)] px-4 py-1.5 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">
           {group.label}
         </th>
+        <td colSpan={roles.length} aria-hidden="true" />
       </tr>
       {group.permissions.map((p) => (
-        <tr key={p} className="border-t border-[var(--admin-divider)] hover:bg-[var(--admin-surface-2)]">
-          <th scope="row" className="px-4 py-2 text-left font-normal text-[var(--admin-text)]">
+        <tr key={p} className="group border-t border-[var(--admin-divider)] hover:bg-[var(--hover-solid)]">
+          <th scope="row" className="sticky left-0 z-[1] bg-[var(--admin-surface)] px-4 py-2 text-left font-normal text-[var(--admin-text)] group-hover:bg-[var(--hover-solid)]">
             {PERMISSIONS[p]}
           </th>
           {roles.map((r) => {
             const on = current(r).includes(p);
             const changed = !r.locked && on !== r.defaults.includes(p);
             return (
-              <td key={r.role} className="px-2 py-1 text-center">
-                <label className={cn('inline-grid size-11 place-items-center rounded-md pointer-fine:size-9', !r.locked && 'cursor-pointer hover:bg-[var(--admin-panel)]', changed && 'bg-[var(--admin-primary-soft)]')}>
+              <td key={r.role} className="px-1 py-1 text-center">
+                <label className={cn('inline-grid size-11 place-items-center rounded-md pointer-fine:size-8', !r.locked && 'cursor-pointer hover:bg-[var(--admin-panel)]', changed && 'bg-[var(--admin-primary-soft)]')}>
                   <input
                     type="checkbox"
                     checked={on}
@@ -203,6 +225,6 @@ function GroupRows({
           })}
         </tr>
       ))}
-    </>
+    </tbody>
   );
 }
