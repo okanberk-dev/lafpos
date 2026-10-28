@@ -102,6 +102,35 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Telefonda patron: yerel ürün çekmecesinde yeni seçenek grubu açar, ürünle tek kayıtta bağlar',
+      () =>
+        withPage(ctx, 'telefon', 'patron', async (page) => {
+          await go(ctx, page, '/yonetim/menu');
+          await page.getByRole('button', { name: 'Yerel ürün', exact: true }).click();
+          const drawer = page.getByRole('dialog', { name: 'Yeni yerel ürün' });
+          await drawer.waitFor();
+          await drawer.getByRole('textbox', { name: /^Ad/ }).fill('E2E etkinlik');
+          await drawer.getByRole('textbox', { name: /^Fiyat/ }).fill('150');
+          await drawer.getByRole('button', { name: 'Yeni grup', exact: true }).click();
+          const editor = page.getByRole('dialog', { name: 'Yeni seçenek grubu' });
+          await editor.waitFor();
+          await editor.getByRole('textbox', { name: /^Ad/ }).fill('E2E bilet');
+          await editor.getByLabel('1. seçenek adı').fill('Ön sıra');
+          await editor.getByLabel('1. seçenek ek fiyatı (₺)').fill('20');
+          await editor.getByRole('button', { name: 'Kaydet', exact: true }).click();
+          await editor.waitFor({ state: 'detached', timeout: 8000 });
+          await drawer.getByRole('button', { name: /^E2E bilet/, pressed: true }).waitFor({ timeout: 8000 });
+          await drawer.getByRole('button', { name: 'Kaydet', exact: true }).click();
+          await drawer.waitFor({ state: 'detached', timeout: 8000 });
+          const menu = await api.call('patron', 'GET', '/admin/menu');
+          const group = menu.optionGroups.find((g) => g.name === 'E2E bilet');
+          const product = menu.products.find((p) => p.name === 'E2E etkinlik');
+          assert(group && product, 'grup ya da ürün oluşmadı');
+          assert(JSON.stringify(product.optionGroupIds) === JSON.stringify([group.id]), `grup ürüne bağlanmadı: ${JSON.stringify(product.optionGroupIds)}`);
+          assert(menu.optionItems.some((i) => i.groupId === group.id && i.price === 2000), 'seçeneğin ek fiyatı kaydedilmedi');
+        }),
+    ],
+    [
       'Bilgisayarda patron: Personel çekmecesinde indirim sınırını değiştirir',
       () =>
         withPage(ctx, 'bilgisayar', 'patron', async (page) => {

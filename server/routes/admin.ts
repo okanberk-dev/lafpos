@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
+import { tl } from '@shared/money';
 import { posNameKey, posNamesOf, posSlotOf } from '@shared/pos-name';
 import { PAYMENT_CHANNELS } from '@shared/labels';
 import { ALL_PERMISSIONS, effectivePermissions, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
@@ -123,17 +124,81 @@ function assertPosNameFree(self: Pick<ProductRow, 'name' | 'posName' | 'priceL' 
   }
 }
 
+// ─── Seçenek grubu ↔ ürün bağı ──────────────────────────────────────────────
+
+/** Bir ürüne bağlanabilecek en çok grup (çekmecedeki çipler; gruptan bağlarken de aşılmaz) */
+const MAX_PRODUCT_GROUPS = 12;
+const groupIdsShape = z.array(z.string()).max(MAX_PRODUCT_GROUPS);
+
+/** Bağ değişikliğinin denetim metninde en çok bu kadar ad yazılır; tam liste `data`da */
+const nameList = (names: string[], max = 10) => (names.length > max ? `${names.slice(0, max).join(', ')} ve ${names.length - max} tane daha` : names.join(', '));
+
+function linkSummary(added: string[], removed: string[]) {
+  return [added.length ? `eklenen ${nameList(added)}` : '', removed.length ? `çıkarılan ${nameList(removed)}` : ''].filter(Boolean).join('; ');
+}
+
+/**
+ * Gönderilen kimlikler yazmadan önce denetlenir (sitedeki Satışta isteğinden de önce): aynısı iki kez 409, olmayanı
+ * 422. Veritabanı kısıtına bırakılmaz; kayıtların adı denetim metni için döner.
+ */
+function knownIds(table: typeof schema.optionGroups | typeof schema.products, ids: string[], what: string) {
+  if (new Set(ids).size !== ids.length) throw conflict(`Aynı ${what} iki kez gönderildi`, 'duplicate');
+  const names = new Map(db.select({ id: table.id, name: table.name }).from(table).all().map((r) => [r.id, r.name]));
+  if (ids.some((id) => !names.has(id))) throw new HttpError(422, `Gönderilen ${what} bulunamadı (silinmiş olabilir); ekranı yenileyip yeniden deneyin`, 'invalid_reference');
+  return names;
+}
+
+/** Ürünün grupları gönderilen sırayla yazılır; üyelik değiştiyse denetim kaydı (aynı işlemde) */
+function writeProductGroups(t: Tx, fx: Effects, user: AuthUser, product: { id: string; name: string }, groupIds: string[], names: Map<string, string>) {
+  const before = t.select({ groupId: schema.productOptionGroups.groupId }).from(schema.productOptionGroups).where(eq(schema.productOptionGroups.productId, product.id)).orderBy(asc(schema.productOptionGroups.sort)).all().map((l) => l.groupId);
+  if (before.join('|') === groupIds.join('|')) return;
+  t.delete(schema.productOptionGroups).where(eq(schema.productOptionGroups.productId, product.id)).run();
+  groupIds.forEach((groupId, i) => t.insert(schema.productOptionGroups).values({ productId: product.id, groupId, sort: i }).run());
+  const added = groupIds.filter((g) => !before.includes(g)).map((g) => names.get(g) ?? g);
+  const removed = before.filter((g) => !groupIds.includes(g)).map((g) => names.get(g) ?? g);
+  if (!added.length && !removed.length) return; // yalnız sıra değişti
+  fx.audit(t, { userId: user.id, action: 'menu.product_groups', entity: 'product', entityId: product.id, message: `${user.name} ${product.name} ürününün seçenek grupları: ${linkSummary(added, removed)}`, data: { added, removed } });
+}
+
+/**
+ * Grubun bağlı olduğu ürünler: listede olmayanın bağı kalkar, yeni bağ ürünün öteki gruplarının sonuna eklenir,
+ * kalanların sırası değişmez. Üyelik değiştiyse denetim kaydı (aynı işlemde)
+ */
+function writeGroupProducts(t: Tx, fx: Effects, user: AuthUser, group: { id: string; name: string }, productIds: string[], names: Map<string, string>) {
+  const links = t.select().from(schema.productOptionGroups).all();
+  const before = links.filter((l) => l.groupId === group.id).map((l) => l.productId);
+  const added = productIds.filter((p) => !before.includes(p));
+  const removed = before.filter((p) => !productIds.includes(p));
+  if (!added.length && !removed.length) return;
+  for (const productId of removed) t.delete(schema.productOptionGroups).where(and(eq(schema.productOptionGroups.productId, productId), eq(schema.productOptionGroups.groupId, group.id))).run();
+  for (const productId of added) {
+    const own = links.filter((l) => l.productId === productId);
+    if (own.length >= MAX_PRODUCT_GROUPS) throw conflict(`${names.get(productId)} ürününde en çok ${MAX_PRODUCT_GROUPS} seçenek grubu olabilir`, 'too_many_groups');
+    t.insert(schema.productOptionGroups).values({ productId, groupId: group.id, sort: Math.max(-1, ...own.map((l) => l.sort)) + 1 }).run();
+  }
+  const addedNames = added.map((p) => names.get(p) ?? p);
+  const removedNames = removed.map((p) => names.get(p) ?? p);
+  fx.audit(t, { userId: user.id, action: 'menu.product_groups', entity: 'option_group', entityId: group.id, message: `${user.name} ${group.name} grubunun ürünleri: ${linkSummary(addedNames, removedNames)}`, data: { added: addedNames, removed: removedNames } });
+}
+
 adminRoutes.post('/products', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'menu.yonet');
-  const input = await body(c, productLocal.merge(productPos));
+  // Seçenek grupları ürünle aynı istekte ve aynı işlemde: ikinci istek düşüp ürün grupsuz kalmasın
+  const { groupIds, ...input } = await body(c, productLocal.merge(productPos).extend({ groupIds: groupIdsShape.optional() }));
   if (!db.select().from(schema.categories).where(eq(schema.categories.id, input.categoryId)).get()) throw notFound('Kategori');
   assertPosNameFree({ id: null, name: input.name, posName: input.posName ?? null, priceL: input.priceL ?? null, extSource: null, extId: null });
+  const groupNames = groupIds ? knownIds(schema.optionGroups, groupIds, 'seçenek grubu') : null;
   const id = ulid();
-  db.insert(schema.products)
-    .values({ id, ...input, priceL: input.priceL ?? null, isService: input.isService ?? false, active: true })
-    .run();
-  changed('menu', 'product.created', user.id, { action: 'menu.product', message: `${user.name} yerel ürün ekledi: ${input.name}` });
+  const fx = new Effects();
+  tx((t) => {
+    t.insert(schema.products)
+      .values({ id, ...input, priceL: input.priceL ?? null, isService: input.isService ?? false, active: true })
+      .run();
+    fx.audit(t, { userId: user.id, action: 'menu.product', entity: 'product', entityId: id, message: `${user.name} yerel ürün ekledi: ${input.name}` });
+    if (groupIds && groupNames) writeProductGroups(t, fx, user, { id, name: input.name }, groupIds, groupNames);
+  });
+  fx.emit({ topic: 'menu', kind: 'product.created', byUserId: user.id }).flush();
   return c.json({ id });
 });
 
@@ -142,7 +207,9 @@ adminRoutes.patch('/products/:id', async (c) => {
   requirePermission(user, 'menu.yonet');
   const p = db.select().from(schema.products).where(eq(schema.products.id, c.req.param('id'))).get();
   if (!p) throw notFound('Ürün');
-  const input = await body(c, patchOf(productLocal).merge(patchOf(productPos)));
+  // groupIds gönderilmezse bağlar değişmez; gönderilirse ürün alanlarıyla aynı işlemde yazılır
+  const { groupIds, ...input } = await body(c, patchOf(productLocal).merge(patchOf(productPos)).extend({ groupIds: groupIdsShape.optional() }));
+  const groupNames = groupIds ? knownIds(schema.optionGroups, groupIds, 'seçenek grubu') : null;
   const synced = p.extSource === 'laffogato';
   if (synced && (input.name !== undefined || input.price !== undefined || input.priceL !== undefined || input.kdvRate !== undefined || input.categoryId !== undefined)) {
     throw conflict('Bu ürün siteden geliyor: ad, fiyat, boy, KDV ve kategori sitede değişir (laffogato yönetim paneli). LafPOS\'ta yalnız kasa alanları düzenlenir', 'synced_field');
@@ -163,6 +230,7 @@ adminRoutes.patch('/products/:id', async (c) => {
     const fx = new Effects();
     tx((t) => {
       t.update(schema.products).set({ ...patch, updatedAt: Date.now() }).where(eq(schema.products.id, p.id)).run();
+      if (groupIds && groupNames) writeProductGroups(t, fx, user, { id: p.id, name: input.name ?? p.name }, groupIds, groupNames);
       if (site) {
         dropSiteSoldOut(t, p.extId);
         fx.audit(t, {
@@ -201,29 +269,72 @@ adminRoutes.delete('/products/:id', (c) => {
 adminRoutes.put('/products/:id/groups', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'menu.yonet');
-  const { groupIds } = await body(c, z.object({ groupIds: z.array(z.string()).max(12) }));
-  const id = c.req.param('id');
-  tx((t) => {
-    t.delete(schema.productOptionGroups).where(eq(schema.productOptionGroups.productId, id)).run();
-    groupIds.forEach((groupId, i) => t.insert(schema.productOptionGroups).values({ productId: id, groupId, sort: i }).run());
-  });
-  changed('menu', 'product.groups', user.id);
+  // Geriye uyum: yeni istemci groupIds'i ürünün POST / PATCH gövdesinde gönderir (tek işlem)
+  const { groupIds } = await body(c, z.object({ groupIds: groupIdsShape }));
+  const p = db.select({ id: schema.products.id, name: schema.products.name }).from(schema.products).where(eq(schema.products.id, c.req.param('id'))).get();
+  if (!p) throw new HttpError(422, 'Ürün bulunamadı (silinmiş olabilir); ekranı yenileyip yeniden deneyin', 'invalid_reference');
+  const names = knownIds(schema.optionGroups, groupIds, 'seçenek grubu');
+  const fx = new Effects();
+  tx((t) => writeProductGroups(t, fx, user, p, groupIds, names));
+  fx.emit({ topic: 'menu', kind: 'product.groups', byUserId: user.id }).flush();
   return c.json({ ok: true });
 });
 
 const groupShape = z.object({ name: z.string().min(1).max(40), kind: z.enum(['single', 'multi', 'counter']), required: z.boolean().default(false), maxSelect: z.number().int().min(1).max(10).default(1), sort: z.number().int().default(50), active: z.boolean().default(true) });
 const itemShape = z.object({ name: z.string().min(1).max(40), price: kurus.default(0), isDefault: z.boolean().default(false), maxQty: z.number().int().min(1).max(9).default(1), sort: z.number().int().default(0), active: z.boolean().default(true) });
+/** Gruba bağlı ürünler (Seçenekler'deki düzenleyici); gönderilmezse bağlar değişmez */
+const productIdsShape = z.array(z.string()).max(500);
+
+type PricedItem = { id: string; name: string; price: number; active: boolean };
+
+/**
+ * Seçenek ek fiyatı denetim kaydına yazılır (AGENTS kural 4): eski → yeni fiyat, eklenen ve kaldırılan seçenek.
+ * Yalnız ad, varsayılan ya da adet sınırı değiştiyse kayıt yok.
+ */
+function auditOptionPrices(t: Tx, fx: Effects, user: AuthUser, group: { id: string; name: string }, before: PricedItem[], after: PricedItem[], created = false) {
+  const was = before.filter((i) => i.active);
+  const now = after.filter((i) => i.active);
+  const changes = now.flatMap((a) => {
+    const b = was.find((x) => x.id === a.id);
+    return b && b.price !== a.price ? [{ id: a.id, name: a.name, from: b.price, to: a.price }] : [];
+  });
+  const added = now.filter((a) => !was.some((b) => b.id === a.id)).map(({ id, name, price }) => ({ id, name, price }));
+  const removed = was.filter((b) => !now.some((a) => a.id === b.id)).map(({ id, name, price }) => ({ id, name, price }));
+  if (!changes.length && !added.length && !removed.length) return;
+  const priced = (i: { name: string; price: number }) => (i.price ? `${i.name} +${tl(i.price)}` : i.name);
+  const parts = [
+    ...changes.map((ch) => `${ch.name} ${tl(ch.from)} → ${tl(ch.to)}`),
+    added.length ? `eklenen ${added.map(priced).join(', ')}` : '',
+    removed.length ? `kaldırılan ${removed.map((i) => i.name).join(', ')}` : '',
+  ].filter(Boolean);
+  fx.audit(t, {
+    userId: user.id,
+    action: 'menu.option_price',
+    entity: 'option_group',
+    entityId: group.id,
+    message: created ? `${user.name} "${group.name}" seçenek grubunu ekledi: ${parts.join('; ')}` : `${user.name} ${group.name} seçeneklerini değiştirdi: ${parts.join('; ')}`,
+    data: { changes, added, removed },
+  });
+}
 
 adminRoutes.post('/option-groups', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'menu.yonet');
-  const input = await body(c, groupShape.extend({ items: z.array(itemShape).max(30).default([]) }));
+  const input = await body(c, groupShape.extend({ items: z.array(itemShape).max(30).default([]), productIds: productIdsShape.optional() }));
+  const productNames = input.productIds ? knownIds(schema.products, input.productIds, 'ürün') : null;
   const id = ulid();
+  const fx = new Effects();
   tx((t) => {
     t.insert(schema.optionGroups).values({ id, name: input.name, kind: input.kind, required: input.required, maxSelect: input.maxSelect, sort: input.sort, active: input.active }).run();
-    input.items.forEach((it, i) => t.insert(schema.optionItems).values({ id: ulid(), groupId: id, ...it, sort: it.sort || i }).run());
+    const after = input.items.map((it, i) => {
+      const row = { id: ulid(), groupId: id, ...it, sort: it.sort || i };
+      t.insert(schema.optionItems).values(row).run();
+      return row;
+    });
+    auditOptionPrices(t, fx, user, { id, name: input.name }, [], after, true);
+    if (input.productIds && productNames) writeGroupProducts(t, fx, user, { id, name: input.name }, input.productIds, productNames);
   });
-  changed('menu', 'group.created', user.id);
+  fx.emit({ topic: 'menu', kind: 'group.created', byUserId: user.id }).flush();
   return c.json({ id });
 });
 
@@ -232,22 +343,46 @@ adminRoutes.put('/option-groups/:id', async (c) => {
   requirePermission(user, 'menu.yonet');
   const g = db.select().from(schema.optionGroups).where(eq(schema.optionGroups.id, c.req.param('id'))).get();
   if (!g) throw notFound('Seçenek grubu');
-  if (g.extSource) throw conflict('Bu grup siteden geliyor (süt, şurup…); fiyatları sitede değişir');
-  const input = await body(c, groupShape.extend({ items: z.array(itemShape.extend({ id: z.string().optional() })).max(30) }));
+  if (g.extSource) throw conflict('Süt, şurup ve shot sitenin sabit listesinden gelir, site koduyla değişir; kasaya özel seçenek için yerel grup ekleyin', 'site_group');
+  const input = await body(c, groupShape.extend({ items: z.array(itemShape.extend({ id: z.string().optional() })).max(30), productIds: productIdsShape.optional() }));
+  const productNames = input.productIds ? knownIds(schema.products, input.productIds, 'ürün') : null;
+  const fx = new Effects();
   tx((t) => {
     t.update(schema.optionGroups).set({ name: input.name, kind: input.kind, required: input.required, maxSelect: input.maxSelect, sort: input.sort, active: input.active }).where(eq(schema.optionGroups.id, g.id)).run();
     const existing = t.select().from(schema.optionItems).where(eq(schema.optionItems.groupId, g.id)).all();
     const keep = new Set<string>();
+    const after: PricedItem[] = [];
     input.items.forEach((it, i) => {
       const { id, ...rest } = it;
       if (id && existing.some((e) => e.id === id)) {
         keep.add(id);
         t.update(schema.optionItems).set({ ...rest, sort: i }).where(eq(schema.optionItems.id, id)).run();
-      } else t.insert(schema.optionItems).values({ id: ulid(), groupId: g.id, ...rest, sort: i }).run();
+        after.push({ id, ...rest });
+      } else {
+        const row = { id: ulid(), groupId: g.id, ...rest, sort: i };
+        t.insert(schema.optionItems).values(row).run();
+        after.push(row);
+      }
     });
     for (const e of existing) if (!keep.has(e.id)) t.update(schema.optionItems).set({ active: false }).where(eq(schema.optionItems.id, e.id)).run();
+    auditOptionPrices(t, fx, user, { id: g.id, name: input.name }, existing, after);
+    if (input.productIds && productNames) writeGroupProducts(t, fx, user, { id: g.id, name: input.name }, input.productIds, productNames);
   });
-  changed('menu', 'group.updated', user.id);
+  fx.emit({ topic: 'menu', kind: 'group.updated', byUserId: user.id }).flush();
+  return c.json({ ok: true });
+});
+
+/** Gruptan ürünlere bağlama: yalnız bağlar değişir (site grubunda da; grubun kendisi sitenin) */
+adminRoutes.put('/option-groups/:id/products', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'menu.yonet');
+  const g = db.select({ id: schema.optionGroups.id, name: schema.optionGroups.name }).from(schema.optionGroups).where(eq(schema.optionGroups.id, c.req.param('id'))).get();
+  if (!g) throw notFound('Seçenek grubu');
+  const { productIds } = await body(c, z.object({ productIds: productIdsShape }));
+  const names = knownIds(schema.products, productIds, 'ürün');
+  const fx = new Effects();
+  tx((t) => writeGroupProducts(t, fx, user, g, productIds, names));
+  fx.emit({ topic: 'menu', kind: 'group.products', byUserId: user.id }).flush();
   return c.json({ ok: true });
 });
 

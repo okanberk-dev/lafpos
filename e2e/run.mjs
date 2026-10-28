@@ -51,6 +51,15 @@ const ROUTES = {
     '/yonetim',
     '/yonetim/genel',
     '/yonetim/menu',
+    state('/yonetim/menu', 'yeni-urun', async (page) => {
+      await page.getByRole('button', { name: 'Yerel ürün', exact: true }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Yeni yerel ürün' }).waitFor({ timeout: 5000 });
+    }),
+    state('/yonetim/menu', 'yeni-grup', async (page) => {
+      await page.getByRole('button', { name: 'Yerel ürün', exact: true }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Yeni yerel ürün' }).getByRole('button', { name: 'Yeni grup', exact: true }).click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Yeni seçenek grubu' }).waitFor({ timeout: 5000 });
+    }),
     '/yonetim/secenekler',
     state('/yonetim/secenekler', 'yeni-grup', async (page) => {
       await page.getByRole('button', { name: 'Grup ekle', exact: true }).first().click({ timeout: 5000 });

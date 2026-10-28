@@ -1,13 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BadgePercent, Globe, ListChecks, Plus, Save, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { parseTL, tl } from '@shared/money';
-import type { HappyHourDTO } from '@shared/types';
-import { Button, IconButton } from '@/components/ui/Button';
+import { BadgePercent, Globe, ListChecks, Plus, Save } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { tl } from '@shared/money';
+import type { HappyHourDTO, ProductDTO } from '@shared/types';
+import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
-import { Field, Input, Label, NumberInput, Select, Toggle } from '@/components/ui/Field';
+import { Field, Input, Label, NumberInput, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
+import { groupDraft, newGroupDraft, OptionGroupEditor, type OptionGroupDraft } from '@/components/admin/OptionGroupEditor';
 import { Badge, Card, CARD, EmptyState, PageHeader } from '@/components/admin/ui';
 import { del, errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
@@ -34,7 +35,6 @@ interface Item {
   sort: number;
   active: boolean;
 }
-type EditItem = { id?: string; name: string; price: string; isDefault: boolean; maxQty: number };
 
 const KIND_LABEL = { single: 'Tek seçim', multi: 'Çoklu seçim', counter: 'Adetli' };
 const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
@@ -42,9 +42,9 @@ const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 export default function OptionsAdmin() {
   const boot = useBoot();
   const qc = useQueryClient();
-  const data = useQuery({ queryKey: ['admin', 'menu'], queryFn: () => get<{ optionGroups: Group[]; optionItems: Item[] }>('/admin/menu') });
+  const data = useQuery({ queryKey: ['admin', 'menu'], queryFn: () => get<{ categories: { id: string; name: string; sort: number }[]; products: ProductDTO[]; optionGroups: Group[]; optionItems: Item[] }>('/admin/menu') });
   const hh = useQuery({ queryKey: ['admin', 'happy'], queryFn: () => get<HappyHourDTO[]>('/admin/happy-hours') });
-  const [edit, setEdit] = useState<{ id?: string; name: string; kind: Group['kind']; required: boolean; maxSelect: number; active: boolean; items: EditItem[] } | null>(null);
+  const [edit, setEdit] = useState<OptionGroupDraft | null>(null);
   const [happy, setHappy] = useState<(Omit<HappyHourDTO, 'id'> & { id?: string }) | null>(null);
   const [saving, setSaving] = useState(false);
   // Eksik alan Kaydet'e basınca alanın altında söylenir (düğme sessizce soluk kalmaz)
@@ -54,38 +54,12 @@ export default function OptionsAdmin() {
     qc.invalidateQueries({ queryKey: ['bootstrap'] });
   };
 
-  const groupErrors = edit ? { name: edit.name.trim() ? null : 'Grup adı gerekli', items: edit.items.some((i) => i.name.trim()) ? null : 'En az bir seçenek yazın' } : null;
   const happyErrors = happy ? { name: happy.name.trim() ? null : 'Kural adı gerekli', days: happy.days.length ? null : 'En az bir gün seçin' } : null;
-  const openGroup = (g: NonNullable<typeof edit>) => {
-    setTried(false);
-    setEdit(g);
-  };
   const openHappy = (h: NonNullable<typeof happy>) => {
     setTried(false);
     setHappy(h);
   };
 
-  const saveGroup = async () => {
-    if (!edit) return;
-    if (groupErrors?.name || groupErrors?.items) {
-      setTried(true);
-      return;
-    }
-    // Adı boş kalan satır gönderilmez (sunucu boş adı reddeder)
-    const body = { name: edit.name, kind: edit.kind, required: edit.required, maxSelect: edit.maxSelect, sort: 50, active: edit.active, items: edit.items.filter((i) => i.name.trim()).map((i, idx) => ({ id: i.id, name: i.name.trim(), price: parseTL(i.price || '0') ?? 0, isDefault: i.isDefault, maxQty: i.maxQty, sort: idx, active: true })) };
-    setSaving(true);
-    try {
-      if (edit.id) await put(`/admin/option-groups/${edit.id}`, body);
-      else await post('/admin/option-groups', body);
-      toast.ok(`${edit.name.trim()} kaydedildi`);
-      setEdit(null);
-      refresh();
-    } catch (e) {
-      toast.err(errorMessage(e));
-    } finally {
-      setSaving(false);
-    }
-  };
   const saveHappy = async () => {
     if (!happy) return;
     if (happyErrors?.name || happyErrors?.days) {
@@ -119,14 +93,24 @@ export default function OptionsAdmin() {
 
   const groups = data.data?.optionGroups ?? [];
   const items = data.data?.optionItems ?? [];
-  const newGroup = () => openGroup({ name: '', kind: 'single', required: false, maxSelect: 1, active: true, items: [{ name: '', price: '', isDefault: true, maxQty: 1 }] });
+  const products = useMemo(() => data.data?.products ?? [], [data.data]);
+  // Düzenleyicinin ürün listesi kategori sırasıyla, kategori adıyla
+  const productChoices = useMemo(() => {
+    const cats = data.data?.categories ?? [];
+    const order = new Map(cats.map((c, i) => [c.id, i]));
+    return [...products]
+      .sort((a, b) => (order.get(a.categoryId) ?? 999) - (order.get(b.categoryId) ?? 999))
+      .map((p) => ({ id: p.id, name: p.name, category: cats.find((c) => c.id === p.categoryId)?.name }));
+  }, [products, data.data]);
+  const linkedTo = (groupId: string) => products.filter((p) => p.optionGroupIds.includes(groupId)).map((p) => p.id);
+  const newGroup = () => setEdit(newGroupDraft());
   const newHappy = () => openHappy({ name: '', days: [1, 2, 3, 4, 5], start: '15:00', end: '17:00', percent: 15, categoryIds: [], productIds: [], active: true });
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Seçenekler ve happy hour"
-        description="Süt, şurup ve shot siteden gelir; kasaya özel grupları buradan ekleyin"
+        description="Süt, şurup ve shot site kodundaki sabit listeden gelir; kasaya özel seçenek için yerel grup ekleyin"
         actions={
           <Button variant="primary" icon={<Plus className="size-4" />} onClick={newGroup}>
             Grup ekle
@@ -143,12 +127,13 @@ export default function OptionsAdmin() {
         <ErrorState className={CARD} title="Seçenek grupları alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
       ) : groups.length === 0 ? (
         <EmptyState icon={<ListChecks />} title="Seçenek grubu yok" action={<Button variant="primary" icon={<Plus className="size-4" />} onClick={newGroup}>Grup ekle</Button>}>
-          Süt, şurup ve shot grupları site bağlantısıyla gelir; kasaya özel grup için Grup ekle’ye basın
+          Süt, şurup ve shot sitenin sabit listesinden, site bağlantısıyla gelir; kasaya özel seçenek için Grup ekle’ye basın
         </EmptyState>
       ) : (
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((g) => {
           const its = items.filter((i) => i.groupId === g.id && i.active);
+          const linked = linkedTo(g.id);
           return (
             <Card flush
               key={g.id}
@@ -167,7 +152,7 @@ export default function OptionsAdmin() {
               }
               actions={
                 !g.extSource && (
-                  <Button size="sm" onClick={() => openGroup({ id: g.id, name: g.name, kind: g.kind, required: g.required, maxSelect: g.maxSelect, active: g.active, items: its.map((i) => ({ id: i.id, name: i.name, price: i.price ? String(i.price / 100).replace('.', ',') : '', isDefault: i.isDefault, maxQty: i.maxQty })) })}>
+                  <Button size="sm" onClick={() => setEdit(groupDraft(g, its, linked))}>
                     Düzenle
                   </Button>
                 )
@@ -177,6 +162,8 @@ export default function OptionsAdmin() {
                 <div className="mb-2 text-xs text-[var(--admin-text-mute)]">
                   {KIND_LABEL[g.kind]}
                   {g.required && ' · zorunlu'}
+                  {` · ${linked.length ? `${linked.length} ürün` : 'ürüne bağlı değil'}`}
+                  {!g.active && ' · kapalı'}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {its.map((i) => (
@@ -237,78 +224,19 @@ export default function OptionsAdmin() {
         )}
       </Card>
 
-      <Modal
-        open={!!edit}
-        onClose={() => setEdit(null)}
-        size="lg"
-        title={edit?.id ? 'Seçenek grubu' : 'Yeni seçenek grubu'}
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setEdit(null)}>Vazgeç</Button>
-            <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void saveGroup()}>
-              Kaydet
-            </Button>
-          </div>
-        }
-      >
-        {edit && (
-          <div className="space-y-3 p-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Ad" required error={tried ? groupErrors?.name : null}>
-                <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="Ör. bardak" maxLength={40} />
-              </Field>
-              <Field label="Tür">
-                <Select value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value as Group['kind'] })}>
-                  <option value="single">Tek seçim</option>
-                  <option value="multi">Çoklu seçim</option>
-                  <option value="counter">Adetli (ör. ekstra şeker)</option>
-                </Select>
-              </Field>
-              <Field label="Zorunlu">
-                <Toggle checked={edit.required} onChange={(v) => setEdit({ ...edit, required: v })} label={edit.required ? 'Evet' : 'Hayır'} />
-              </Field>
-            </div>
-            <div className="space-y-2">
-              {/* Sütun adları: satırdaki alanlar yalnız yer tutucu taşımasın */}
-              <div className="flex items-center gap-2 text-xs font-medium text-[var(--admin-text-mute)]" aria-hidden="true">
-                <span className="min-w-0 flex-1">Seçenek</span>
-                <span className="w-20 shrink-0 text-right">Ek fiyat (₺)</span>
-                {edit.kind === 'single' && <span className="w-[4.5rem] shrink-0 text-center">Varsayılan</span>}
-                {edit.kind === 'counter' && <span className="w-16 shrink-0 text-right">En çok</span>}
-                <span className="w-11 shrink-0 pointer-fine:w-9" />
-              </div>
-              {edit.items.map((it, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input value={it.name} onChange={(e) => setEdit({ ...edit, items: edit.items.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)) })} placeholder="Ör. yulaf sütü" aria-label={`${i + 1}. seçenek adı`} maxLength={40} className="min-w-0 flex-1" />
-                  <Input value={it.price} onChange={(e) => setEdit({ ...edit, items: edit.items.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)) })} placeholder="0" aria-label={`${i + 1}. seçenek ek fiyatı (₺)`} className="tabular w-20 shrink-0 text-right" inputMode="decimal" />
-                  {edit.kind === 'single' && (
-                    // Bütün hücre dokunma alanı (44 px); sütun adı üstte, ekran okuyucuya satırın kendi adı
-                    <label className="flex min-h-11 w-[4.5rem] shrink-0 cursor-pointer items-center justify-center rounded-lg hover:bg-hover pointer-fine:min-h-9">
-                      <input type="radio" name="varsayilan" checked={it.isDefault} onChange={() => setEdit({ ...edit, items: edit.items.map((x, j) => ({ ...x, isDefault: j === i })) })} className="size-4 accent-[var(--admin-primary)]" />
-                      <span className="sr-only">{`${i + 1}. seçenek varsayılan`}</span>
-                    </label>
-                  )}
-                  {edit.kind === 'counter' && (
-                    <NumberInput value={it.maxQty} min={1} max={9} fallback={1} aria-label={`${i + 1}. seçenekten en çok adet`} onCommit={(maxQty) => setEdit({ ...edit, items: edit.items.map((x, j) => (j === i ? { ...x, maxQty } : x)) })} className="w-16 shrink-0" />
-                  )}
-                  <IconButton label={`${i + 1}. seçeneği sil`} className="text-[var(--admin-text-mute)] hover:text-[var(--admin-danger-ink)]" onClick={() => setEdit({ ...edit, items: edit.items.filter((_, j) => j !== i) })}>
-                    <Trash2 className="size-4" />
-                  </IconButton>
-                </div>
-              ))}
-              {tried && groupErrors?.items && (
-                <p role="alert" className="text-[13px] text-[var(--admin-danger-ink)]">
-                  {groupErrors.items}
-                </p>
-              )}
-              <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setEdit({ ...edit, items: [...edit.items, { name: '', price: '', isDefault: false, maxQty: 1 }] })}>
-                Seçenek ekle
-              </Button>
-            </div>
-            <p className="text-xs text-[var(--admin-text-mute)]">Grubu ürünlere Ürünler’de, ürünün hızlı bakışındaki Seçenek grupları’ndan bağlayın</p>
-          </div>
-        )}
-      </Modal>
+      {edit && (
+        <OptionGroupEditor
+          key={edit.id ?? 'yeni'}
+          initial={edit}
+          products={productChoices}
+          onClose={() => setEdit(null)}
+          onSaved={({ name }) => {
+            toast.ok(`${name} kaydedildi`);
+            setEdit(null);
+            refresh();
+          }}
+        />
+      )}
 
       <Modal
         open={!!happy}
