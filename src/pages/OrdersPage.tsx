@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bike, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { numaratorLabel } from '@shared/service-mode';
 import { tl } from '@shared/money';
@@ -90,10 +90,15 @@ export default function OrdersPage() {
         ]}
       />
       {tab === 'online' && !boot.integrations.laffogatoPanel && (
-        <div className="mb-4 rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted">
-          {boot.integrations.laffogatoUrl
-            ? 'Site bağlantı anahtarı (LAFFOGATO_SYNC_SECRET) tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'
-            : 'Site bağlantısı kurulmadığı için (LAFFOGATO_URL) uygulama ve web siparişleri buraya düşmüyor. Kurulum: docs/03-ENTEGRASYON.md'}
+        <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted sm:flex-row sm:items-center">
+          <span className="flex-1 text-pretty">
+            {boot.integrations.laffogatoUrl ? 'Site bağlantı anahtarı tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor' : 'Site bağlantısı kurulmadığı için uygulama ve web siparişleri buraya düşmüyor'}
+          </span>
+          {can('ayar.yonet') || can('senkron.yonet') ? (
+            <Link to="/yonetim/entegrasyon" className="inline-flex min-h-11 items-center font-medium text-primary hover:underline pointer-fine:min-h-0">
+              Site ve lafmaliyet
+            </Link>
+          ) : null}
         </div>
       )}
       {rows.length === 0 ? (

@@ -150,7 +150,7 @@ export default function CustomersPage() {
         </ul>
       </aside>
 
-      <section className="scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 md:p-6">
+      <section className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 md:p-6', !c && 'max-lg:hidden')}>
         {!c ? (
           <EmptyState icon={<Wallet />} title="Bir müşteri seçin">
             {stamps ? 'Açık hesap bakiyesi, tahsilat, damga kartı ve sipariş geçmişi burada görünür' : 'Açık hesap bakiyesi, tahsilat ve sipariş geçmişi burada görünür'}

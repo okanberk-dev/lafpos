@@ -89,7 +89,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
             </button>
           </div>
         )}
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+        <div className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain', !footer && 'max-sm:pb-[env(safe-area-inset-bottom)]')}>{children}</div>
         {footer && <div className="border-t border-[var(--admin-divider)] bg-surface-2 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
       </div>
     </div>,

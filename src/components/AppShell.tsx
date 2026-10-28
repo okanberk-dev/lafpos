@@ -1,4 +1,4 @@
-import { Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
+import { ChevronRight, Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { fmtTime } from '@shared/time';
@@ -82,6 +82,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const items = visibleNav(can, mode, { tablesInUse }).filter((n) => !REMOTE || REMOTE_PATHS.includes(n.to));
   const primary = items.filter((n) => n.primary).slice(0, 4);
   const rest = items.filter((n) => !primary.includes(n));
+  const isAt = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
+  // Telefon üst şeridinde saat yerine ekranın adı (saat rayda ve kilit ekranında); "Daha"daki ekrandaysa Daha etkin
+  const current = items.find((n) => isAt(n.to));
+  const restActive = rest.some((n) => isAt(n.to));
   const admin = isAdminArea(location.pathname);
   const fullBleed = admin || location.pathname.startsWith('/adisyon/') || location.pathname === '/mutfak';
   const lock = async () => {
@@ -101,7 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     ) : (
     <div className={cn('flex items-center text-xs', rail ? 'flex-col gap-1.5' : 'gap-1')}>
       <span title={liveLabel} aria-label={liveLabel} className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-1', live === 'kopuk' ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'text-muted')}>
-        {live === 'kopuk' ? <WifiOff className="size-3.5" /> : <span className={cn('size-2 rounded-full', live === 'canli' ? 'bg-success-600 dark:bg-success-300' : 'bg-warn-500')} />}
+        {live === 'kopuk' ? <WifiOff className="size-3.5" /> : <span className={cn('size-2.5 rounded-full', live === 'canli' ? 'bg-success-600 dark:bg-success-300' : 'bg-warn-500')} />}
         {rail && live !== 'kopuk' && <Wifi className="size-3.5" />}
       </span>
       <NavLink to="/kasa" title="Kasa ve gün sonu" className="inline-flex min-h-11 min-w-11 items-center justify-center pointer-fine:min-h-0 pointer-fine:min-w-0">
@@ -120,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
     </span>
   );
-  const sheetRow = 'flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition hover:border-[var(--admin-border-field)] hover:bg-surface-2';
+  const sheetRow = 'flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3';
   const sheetIcon = 'grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 [&>svg]:size-[18px]';
 
   return (
@@ -163,10 +167,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Telefon: üst şerit */}
         {!fullBleed && (
-          <header className="flex items-center gap-1 border-b border-line bg-surface py-1 pl-4 pr-1 md:hidden">
-            <LafMark className="h-[18px] text-ink" title="L'Affogato" />
-            <span className="tabular ml-1.5 text-sm text-muted">{fmtTime(now)}</span>
-            <div className="flex-1" />
+          <header className="flex items-center gap-0.5 border-b border-line bg-surface py-1 pl-4 pr-2 md:hidden">
+            <LafMark className="h-4 shrink-0 text-ink" title="L'Affogato" />
+            <span className="ml-2.5 min-w-0 flex-1 truncate text-base font-semibold tracking-[-0.01em]">{current?.title ?? ''}</span>
             <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted">
               <Search className="size-5" strokeWidth={1.75} />
             </button>
@@ -179,20 +182,29 @@ export function AppShell({ children }: { children: ReactNode }) {
         {!REMOTE && <PlatformInbox />}
         <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
         {/* Telefon: alt sekmeler */}
-        <nav className="safe-bottom flex border-t border-line bg-surface md:hidden">
+        {/* Etkin sekme yalnız renkle değil, kalın çizgi ve kalın yazıyla da ayrılır; ev çubuğu payı alt boşluğa eklenir */}
+        <nav aria-label="Ekranlar" className="flex border-t border-line bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
           {primary.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
-              className={({ isActive }) => cn('flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium', isActive ? 'text-primary' : 'text-muted')}
+              className={({ isActive }) => cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-surface-2', isActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
             >
-              <n.icon className="size-5" strokeWidth={1.75} />
-              {n.label}
+              {({ isActive }) => (
+                <>
+                  <n.icon className="size-6" strokeWidth={isActive ? 2.25 : 1.75} />
+                  {n.label}
+                </>
+              )}
             </NavLink>
           ))}
           {rest.length > 0 && (
-            <button onClick={() => setMoreOpen(true)} className="flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium text-muted">
-              <MoreHorizontal className="size-5" strokeWidth={1.75} />
+            <button
+              onClick={() => setMoreOpen(true)}
+              aria-current={restActive ? 'page' : undefined}
+              className={cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-surface-2', restActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
+            >
+              <MoreHorizontal className="size-6" strokeWidth={restActive ? 2.25 : 1.75} />
               Daha
             </button>
           )}
@@ -200,13 +212,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="Diğer ekranlar" size="sm">
-        <div className="grid grid-cols-3 gap-2 p-4">
+        {/* Liste: ekranın tam adı (raydaki kısaltma değil), sağda ok */}
+        <div className="space-y-2 p-4">
           {rest.map((n) => (
-            <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className="flex flex-col items-center gap-2 rounded-xl border border-line p-4 text-sm font-medium hover:bg-surface-2">
+            <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => cn(sheetRow, isActive && 'border-[var(--admin-border-field)] bg-surface-2')}>
               <span className={sheetIcon}>
                 <n.icon strokeWidth={1.75} />
               </span>
-              {n.label}
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{n.title}</span>
+              <ChevronRight className="size-4 shrink-0 text-muted" />
             </NavLink>
           ))}
         </div>

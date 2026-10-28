@@ -101,20 +101,20 @@ export default function PatronPage() {
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className={cn('size-2.5 rounded-full', d.dayOpen ? 'animate-pulse bg-success-600 dark:bg-success-300' : 'bg-muted')} />
-        <span className="text-sm text-muted">
+        <span className="text-[13px] text-muted">
           {d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · {fmtTime(now)} itibarıyla · canlı
         </span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-2xl border border-line bg-surface p-6">
+      <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
+        <div className="rounded-2xl border border-line bg-surface p-5">
           <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
-          <div className="tabular mt-1 text-5xl font-bold tracking-tight sm:text-6xl">{tl(d.netSales)}</div>
-          <div className="mt-1 text-sm text-muted">
+          <div className="tabular mt-2 text-[44px] font-semibold leading-none tracking-[-0.02em] sm:text-[56px]">{tl(d.netSales)}</div>
+          <div className="mt-2 text-sm text-muted">
             {d.orders} adisyon · ortalama {tl(d.avgCheck)}
             {d.open.count > 0 && ` · açıkta ${tl(d.open.total)}`}
           </div>
-          <div className="mt-5 grid gap-2 sm:grid-cols-2">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <CompareRow label="Geçen hafta bu saate kadar" value={d.compare.lastWeek.netSales} change={d.compare.lastWeek.change} />
             <CompareRow label="4 hafta önce bu saate kadar" value={d.compare.fourWeeks.netSales} change={d.compare.fourWeeks.change} />
           </div>
@@ -269,12 +269,13 @@ export default function PatronPage() {
   );
 }
 
+/** Kıyas: etiket üstte, tutar ve değişim altta; telefonda da tek satıra sıkışmaz */
 function CompareRow({ label, value, change }: { label: string; value: number; change: number | null }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-4 py-3">
-      <span className="text-[13px] text-ink-2">{label}</span>
-      <span className="flex items-center gap-2">
-        <span className="tabular font-semibold">{tl(value)}</span>
+    <div className="flex flex-col gap-1 rounded-xl border border-line bg-surface-2 px-4 py-3">
+      <span className="text-xs text-muted">{label}</span>
+      <span className="flex items-center justify-between gap-2">
+        <span className="tabular text-[15px] font-semibold">{tl(value)}</span>
         <Change value={change} />
       </span>
     </div>

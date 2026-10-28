@@ -73,9 +73,10 @@ export function LoginPage() {
   const today = businessDate(now);
   return (
     // Innex: gri zemin, beyaz kartlar. Solda kim ve ne zaman, sağda PIN
-    <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
+    <div className="flex min-h-full items-center justify-center bg-bg p-4 sm:p-6">
       <div className="grid w-full max-w-4xl gap-3 lg:grid-cols-[1fr_minmax(360px,420px)]">
-        <section className="flex flex-col justify-between gap-6 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+        {/* Telefon ve tablette kim ve ne zaman tek satır; PIN kartı ekranın asıl yüzü */}
+        <section className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-4 sm:p-5 lg:flex-col lg:items-stretch lg:justify-between lg:gap-6 lg:p-6">
           <div className="flex items-center gap-3">
             <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
               <LafMark className="h-4" bean="#e8c877" />
@@ -85,9 +86,9 @@ export function LoginPage() {
               <span className="block text-xs text-muted">LafPOS · kasa</span>
             </span>
           </div>
-          <div>
-            <div className="tabular text-6xl font-semibold tracking-[-0.03em] sm:text-7xl">{fmtTime(now)}</div>
-            <div className="mt-1 text-sm text-muted">{fmtDateLong(today)}</div>
+          <div className="shrink-0 text-right lg:text-left">
+            <div className="tabular text-2xl font-semibold tracking-[-0.01em] lg:text-7xl lg:tracking-[-0.03em]">{fmtTime(now)}</div>
+            <div className="mt-0.5 hidden text-sm text-muted sm:block lg:mt-1">{fmtDateLong(today)}</div>
           </div>
           {!!info.data?.users.length && (
             <div className="hidden flex-wrap gap-1.5 lg:flex">
@@ -112,14 +113,14 @@ export function LoginPage() {
             ))}
           </div>
           <div className="mb-3 h-5 text-center text-[13px] font-medium text-[var(--admin-danger-ink)]">{error}</div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-surface-3 p-1.5">
             {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((k) => (
               <PadKey key={k} onClick={() => press(k)}>
                 {k}
               </PadKey>
             ))}
             <PadKey onClick={() => press('back')} aria-label="Sil">
-              <Delete className="mx-auto size-6" />
+              <Delete className="mx-auto size-5" />
             </PadKey>
             <PadKey onClick={() => press('0')}>0</PadKey>
             <PadKey onClick={() => press('ok')} primary disabled={pin.length < 4 || busy}>
@@ -152,8 +153,11 @@ function PadKey({ children, primary, className, ...rest }: React.ButtonHTMLAttri
     <button
       type="button"
       className={cn(
-        'tabular h-16 rounded-xl text-2xl font-semibold transition active:scale-[0.97] disabled:opacity-40 sm:h-[68px]',
-        primary ? 'bg-primary text-base text-primary-ink hover:bg-[var(--admin-primary-hover)]' : 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:bg-surface-2 active:bg-surface-3',
+        // Numpad ile aynı dil: gri tepsi üstünde beyaz tuş; Giriş devre dışıyken de okunur (açık mavi)
+        'tabular h-16 rounded-lg text-2xl font-medium transition-[background-color,transform,box-shadow] duration-100 active:scale-[0.97] motion-reduce:active:scale-100 sm:h-[68px]',
+        primary
+          ? 'bg-primary text-base font-semibold text-primary-ink hover:bg-[var(--admin-primary-hover)] active:bg-[var(--admin-primary-hover)] disabled:bg-[var(--admin-primary-soft)] disabled:text-primary disabled:active:scale-100'
+          : 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08)] hover:bg-surface-2 active:bg-surface-2 active:shadow-none',
         className,
       )}
       {...rest}

@@ -288,7 +288,7 @@ export default function OrderPage() {
   // Tablette (768-1023 px) hesap kartı ~300 px: ikincil düğme ikona iner, birincil düğmenin etiketi tek satırda kalır
   const hasItems = order.items.some((i) => !i.voided);
   const actionBar = (
-    <div className="safe-bottom grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface p-3">
+    <div className="grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       {pending.length > 0 && counter && can('odeme.al') ? (
         <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2 md:max-lg:grid-cols-[auto_auto_1fr]">
           <Button size="lg" aria-label="Gönderilmemişleri sil" title="Vazgeç" icon={<Trash2 className="size-4" />} onClick={() => cart.clear(order.id)} />
@@ -346,7 +346,7 @@ export default function OrderPage() {
     <div className="flex h-full flex-col">
       {wide ? (
         // Innex: iki beyaz kart; solda katalog, sağda adisyon (başlığıyla)
-        <div className="flex min-h-0 flex-1 gap-2">
+        <div className="flex min-h-0 flex-1 gap-3">
           {/* Uzaktan salt okunur: katalog yok, adisyon tam genişlikte */}
           {!REMOTE && (
             <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface">
@@ -368,9 +368,18 @@ export default function OrderPage() {
                 role="tab"
                 aria-selected={tab === k}
                 onClick={() => setTab(k)}
-                className={cn('relative min-h-12 py-2.5 text-sm font-medium transition-colors duration-100 active:bg-surface-2', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'text-muted')}
+                className={cn('relative inline-flex min-h-11 items-center justify-center gap-1.5 py-2 text-[15px] transition-colors duration-100 active:bg-surface-2', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'font-medium text-muted')}
               >
-                {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(previewTotals(boot, order, pending)?.total ?? order.total)}`}
+                {k === 'menu' ? (
+                  'Menü'
+                ) : (
+                  // Tutar ekranın en önemli rakamı: sekme pasifken de koyu; gönderilmemiş adet amber sayaçta
+                  <>
+                    Adisyon
+                    {pendingCount > 0 && <span className="tabular rounded-md bg-[var(--admin-warning-soft)] px-1.5 text-xs font-semibold text-[var(--admin-warning)]">+{pendingCount}</span>}
+                    <span className="tabular ml-0.5 font-semibold text-ink">{tl(previewTotals(boot, order, pending)?.total ?? order.total)}</span>
+                  </>
+                )}
               </button>
             ))}
           </div>

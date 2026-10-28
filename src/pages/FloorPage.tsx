@@ -6,7 +6,7 @@ import { tlShort } from '@shared/money';
 import { bookingHours, bookingPayment } from '@shared/karaoke';
 import { fmtElapsed } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, OrderDTO, SiteKaraokeBookingDTO, TableDTO } from '@shared/types';
-import { Button } from '@/components/ui/Button';
+import { Button, IconButton } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, EmptyState, PageLoading, Tabs } from '@/components/ui/misc';
@@ -74,14 +74,15 @@ export default function FloorPage() {
 
   return (
     // Innex: gri zemin üstünde iki beyaz kart; telefonda kartlar kenara yapışmasın diye zeminde 8 px
-    <div className="flex h-full flex-col gap-3 p-2 md:p-0 lg:flex-row">
-      <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface">
+    // Telefonda tek kaydırma yüzeyi (masa kartı içinde ayrı kaydırma yok); tablet ve bilgisayarda kartlar kendi içinde kayar
+    <div className="flex h-full flex-col gap-3 p-2 max-md:overflow-y-auto md:p-0 lg:flex-row">
+      <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface max-md:flex-none">
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3">
           <div className="min-w-0 flex-1 basis-full sm:basis-auto">
             <h1 className="text-lg font-semibold tracking-[-0.01em]">{section?.name ?? 'Masalar'}</h1>
             <p className="text-[13px] text-muted">{summary}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 max-sm:w-full">
             {wide && (
               <div role="radiogroup" aria-label="Görünüm" className="inline-flex rounded-lg bg-surface-3 p-0.5">
                 {(
@@ -110,15 +111,24 @@ export default function FloorPage() {
             )}
             {!REMOTE && (
             <>
-            <Button icon={<ShoppingBag className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('gelal')} className="hidden sm:inline-flex">
+            {/* Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır (cn sınıf birleştirmez: gizleme max-sm: ile) */}
+            <Button icon={<ShoppingBag className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden">
               Gel-al
             </Button>
+            <IconButton label="Gel-al" variant="secondary" onClick={() => setTakeaway('gelal')} className="sm:hidden">
+              <ShoppingBag className="size-[18px]" strokeWidth={1.75} />
+            </IconButton>
             {can('paket.yonet') && (
-              <Button icon={<Bike className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('paket')} className="hidden sm:inline-flex">
-                Paket
-              </Button>
+              <>
+                <Button icon={<Bike className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('paket')} className="max-sm:hidden">
+                  Paket
+                </Button>
+                <IconButton label="Paket" variant="secondary" onClick={() => setTakeaway('paket')} className="sm:hidden">
+                  <Bike className="size-[18px]" strokeWidth={1.75} />
+                </IconButton>
+              </>
             )}
-            <Button variant="primary" icon={<Store className="size-4" strokeWidth={1.75} />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
+            <Button variant="primary" className="max-sm:flex-1" icon={<Store className="size-4" strokeWidth={1.75} />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
               Tezgâh satışı
             </Button>
             </>
@@ -130,7 +140,7 @@ export default function FloorPage() {
           <Tabs label="Bölümler" className="px-4 pt-3" value={section?.id ?? ''} onChange={setSectionId} options={boot.sections.map((s) => ({ value: s.id, label: s.name, count: counts.get(s.id) ?? 0 }))} />
         )}
 
-        <div className="scroll-thin min-h-0 flex-1 overflow-auto p-4">
+        <div className="scroll-thin min-h-0 flex-1 overflow-auto p-4 max-md:overflow-visible">
           {effectiveView === 'plan' ? (
             <div className="relative mx-auto aspect-[16/10] w-full max-w-6xl">
               {tables.map((t) => (
@@ -149,7 +159,7 @@ export default function FloorPage() {
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
               {tables.map((t) => (
-                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="h-28" />
+                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="h-24 md:h-28" />
               ))}
             </div>
           )}
@@ -163,7 +173,7 @@ export default function FloorPage() {
         </footer>
       </section>
 
-      <aside className="flex max-h-[40%] flex-col rounded-2xl border border-line bg-surface lg:max-h-none lg:w-80">
+      <aside className="flex max-h-[40%] flex-col rounded-2xl border border-line bg-surface max-md:max-h-none max-md:flex-none lg:max-h-none lg:w-80">
         <div className="flex min-h-12 items-center gap-2 border-b border-[var(--admin-divider)] px-4 py-2.5">
           <h2 className="flex-1 text-[15px] font-semibold">Masasız siparişler</h2>
           <span className="tabular min-w-5 rounded-md bg-surface-3 px-1.5 py-px text-center text-xs font-medium text-ink-2">{others.length}</span>

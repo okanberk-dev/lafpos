@@ -115,7 +115,7 @@ export function ProductPanel({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="px-3 pt-3">
+        <div className="px-4 pt-2 md:pt-3">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" strokeWidth={1.75} />
             <input
@@ -147,7 +147,7 @@ export function ProductPanel({
         <div
           role="tablist"
           aria-label="Kategoriler"
-          className="no-scrollbar flex snap-x snap-proximity gap-2 overflow-x-auto px-3 py-3 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] xl:hidden"
+          className="no-scrollbar flex snap-x snap-proximity scroll-px-4 gap-2 overflow-x-auto px-4 py-2 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] md:py-3 xl:hidden"
         >
           {categoryItems.map((c) => (
             <CategoryChip key={c.id} active={!q && current === c.id} color={c.color} onClick={() => setCategoryId(c.id)}>
@@ -159,7 +159,7 @@ export function ProductPanel({
         <div
           className={cn(
             // 140 px: 768 px tablette hesap kartının yanında iki sütun, bilgisayarda üç
-            'scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 overflow-y-auto border-t border-[var(--admin-divider)] bg-surface-2 p-3 xl:mt-3',
+            'scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 overflow-y-auto border-t border-[var(--admin-divider)] bg-surface-2 p-4 xl:mt-3',
           )}
         >
           {list.map((p) => (

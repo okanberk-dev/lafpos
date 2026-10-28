@@ -304,9 +304,6 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
-  .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
   /* Yerel select oku: paletten (açıkta etiket grisi, koyuda açık gri); Field.tsx Select */
   .select-arrow {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23616367' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
