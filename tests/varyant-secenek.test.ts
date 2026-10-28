@@ -25,8 +25,8 @@ const group = (over: Partial<OptionGroupDTO> & Pick<OptionGroupDTO, 'kind'>): Op
   extKey: null,
   // Yalnız kuralın baktığı alanlar (sonradan eklenen seçenek alanları bu testi ilgilendirmez)
   items: [
-    { id: `${over.id ?? over.kind}-a`, name: 'A', code: null, price: 0, isDefault: false, maxQty: 3, allergens: [] },
-    { id: `${over.id ?? over.kind}-b`, name: 'B', code: null, price: 0, isDefault: true, maxQty: 3, allergens: [] },
+    { id: `${over.id ?? over.kind}-a`, name: 'A', code: null, price: 0, isDefault: false, maxQty: 3, allergens: [], soldOut: false },
+    { id: `${over.id ?? over.kind}-b`, name: 'B', code: null, price: 0, isDefault: true, maxQty: 3, allergens: [], soldOut: false },
   ] as OptionItemDTO[],
   ...over,
 });
