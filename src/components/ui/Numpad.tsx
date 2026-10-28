@@ -21,7 +21,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg' }: N
           type="button"
           onClick={() => onKey(k)}
           className={cn(
-            'tabular rounded-xl border border-[var(--admin-border-strong)] bg-surface font-semibold text-ink transition hover:bg-surface-2 active:scale-[0.97] active:bg-surface-3',
+            'tabular rounded-xl border border-[var(--admin-border-strong)] bg-surface font-semibold text-ink transition-[background-color,transform] duration-100 hover:bg-surface-2 active:scale-[0.97] active:bg-surface-3 motion-reduce:active:scale-100',
             size === 'lg' ? 'h-16 text-2xl' : 'h-12 text-xl',
             k === 'clear' && 'text-base text-muted',
           )}

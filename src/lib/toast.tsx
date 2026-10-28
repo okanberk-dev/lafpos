@@ -39,14 +39,14 @@ export function Toaster() {
   const list = useToasts((s) => s.list);
   const drop = useToasts((s) => s.drop);
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-6">
+    <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-6">
       {list.map((t) => {
         const Icon = icons[t.tone];
         return (
           <div key={t.id} className={cn('animate-in pointer-events-auto flex max-w-md items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)]', tones[t.tone])}>
             <Icon className="mt-0.5 size-4 shrink-0" />
             <span className="flex-1 leading-snug">{t.text}</span>
-            <button onClick={() => drop(t.id)} aria-label="Kapat" className="opacity-70 hover:opacity-100">
+            <button onClick={() => drop(t.id)} aria-label="Kapat" className="-m-2 grid size-8 shrink-0 place-items-center rounded-md opacity-70 transition-opacity hover:opacity-100 pointer-coarse:-my-3 pointer-coarse:size-11">
               <X className="size-4" />
             </button>
           </div>

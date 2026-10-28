@@ -2,6 +2,7 @@ import { Search, SlidersHorizontal, Star, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
+import { fieldClass } from '@/components/ui/Field';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
@@ -129,7 +130,7 @@ export function ProductPanel({
               }}
               placeholder="Ürün ara"
               aria-label="Ürün ara"
-              className="h-11 w-full rounded-xl border border-[var(--admin-border-strong)] bg-surface pl-9 pr-11 text-[15px] outline-none transition placeholder:text-muted focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]"
+              className={cn(fieldClass, 'h-11 pl-9 pr-11')}
             />
             {q ? (
               <button onClick={() => setQ('')} aria-label="Aramayı temizle" className="absolute right-0 top-0 grid size-11 place-items-center rounded-xl text-muted hover:text-ink">

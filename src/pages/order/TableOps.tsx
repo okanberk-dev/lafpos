@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import type { FloorStateDTO, OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { get, patch, post } from '@/lib/api';
@@ -252,7 +253,7 @@ export function ReasonModal({
             </button>
           ))}
         </div>
-        <input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="Neden" className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-brand-500" />
+        <Input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="Ör. Yanlış masa" aria-label="Neden" />
         <div className="grid grid-cols-2 gap-2">
           <Button onClick={onClose}>Vazgeç</Button>
           <Button variant={danger ? 'danger' : 'primary'} disabled={!reason.trim()} onClick={() => onConfirm(reason.trim())}>

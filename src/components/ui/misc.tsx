@@ -35,9 +35,9 @@ export function Spinner({ className }: { className?: string }) {
   return <Loader2 className={cn('size-5 animate-spin text-muted', className)} />;
 }
 
-export function PageLoading({ label = 'Yükleniyor' }: { label?: string }) {
+export function PageLoading({ label = 'Yükleniyor…' }: { label?: string }) {
   return (
-    <div className="grid h-full min-h-40 place-items-center text-muted">
+    <div role="status" className="grid h-full min-h-40 place-items-center text-muted">
       <div className="flex items-center gap-2 text-sm">
         <Spinner />
         {label}
@@ -46,13 +46,40 @@ export function PageLoading({ label = 'Yükleniyor' }: { label?: string }) {
   );
 }
 
-export function EmptyState({ icon, title, children, action }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode }) {
+/** Boş durum: ne olmadığını ve nasıl dolacağını söyler; ikon yumuşak kutuda (kasa ve yönetimde aynı dil) */
+export function EmptyState({ icon, title, children, action, compact }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode; compact?: boolean }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
-      {icon && <div className="mb-1 text-muted [&>svg]:size-10">{icon}</div>}
-      <p className="font-semibold">{title}</p>
-      {children && <div className="max-w-sm text-sm text-muted">{children}</div>}
-      {action && <div className="mt-3">{action}</div>}
+    <div className={cn('flex flex-col items-center justify-center text-center', compact ? 'px-4 py-8' : 'px-6 py-12')}>
+      {icon && (
+        <span aria-hidden="true" className="mb-3 grid size-12 place-items-center rounded-2xl bg-surface-3 text-muted [&>svg]:size-6 [&>svg]:stroke-[1.5]">
+          {icon}
+        </span>
+      )}
+      <p className="text-sm font-semibold text-ink">{title}</p>
+      {children && <div className="mt-1 max-w-[32ch] text-[13px] leading-relaxed text-muted">{children}</div>}
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  );
+}
+
+/** Yükleme iskeleti: liste ya da kart yerine duran soluk bloklar (spinner yerine; index.css .skeleton) */
+export function Skeleton({ className }: { className?: string }) {
+  return <span aria-hidden="true" className={cn('skeleton block', className)} />;
+}
+
+export function ListSkeleton({ rows = 4, className }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-label="Yükleniyor" className={cn('space-y-3 p-4', className)}>
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <Skeleton className="size-9 rounded-lg" />
+          <span className="flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-[46%]" />
+            <Skeleton className="h-3 w-[28%]" />
+          </span>
+          <Skeleton className="h-3.5 w-14" />
+        </div>
+      ))}
     </div>
   );
 }

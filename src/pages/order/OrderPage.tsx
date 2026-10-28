@@ -31,7 +31,7 @@ import type { CompKind, OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { Toggle } from '@/components/ui/Field';
+import { Textarea, Toggle } from '@/components/ui/Field';
 import { Badge, PageLoading } from '@/components/ui/misc';
 import { errorMessage, patch, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -509,7 +509,7 @@ export default function OrderPage() {
       />
       <Modal open={dialog === 'not'} onClose={() => setDialog(null)} title="Adisyon notu" size="sm">
         <div className="space-y-3 p-4">
-          <textarea value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 300))} className="min-h-24 w-full rounded-xl border border-line-strong bg-surface p-3 outline-none focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]" placeholder="Ör. Doğum günü, pastayı 21:00'de getir" />
+          <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 300))} className="min-h-24" placeholder="Ör. Doğum günü, pastayı 21:00'de getir" aria-label="Adisyon notu" />
           <Button
             variant="primary"
             block

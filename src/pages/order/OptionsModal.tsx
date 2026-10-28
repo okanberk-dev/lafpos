@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
+import { fieldClass } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { estimateUnit, menuUnit, productGroups, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
@@ -183,8 +184,9 @@ export function OptionsModal({
           <input
             value={note}
             onChange={(e) => setNote(e.target.value.slice(0, 200))}
-            placeholder="Bara/mutfağa not"
-            className="h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-brand-500"
+            placeholder="Ör. Az şekerli, bardakta"
+            aria-label="Bara ve mutfağa not"
+            className={fieldClass + ' h-11'}
           />
         </section>
         <section>
@@ -195,7 +197,7 @@ export function OptionsModal({
             inputMode="decimal"
             placeholder={`${tl(menuUnit(boot, product, size, options))} (menü fiyatı)`}
             aria-label="Elle birim fiyat"
-            className="tabular h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-primary"
+            className={fieldClass + ' tabular h-11'}
           />
           <p className="mt-1 text-xs text-muted">Boş bırakın; yalnız açık ürün ya da istisna için. Yetkili onayı ister ve denetim kaydına düşer</p>
         </section>

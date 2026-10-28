@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { LafMark } from '@/components/LafMark';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Field';
 import { errorMessage, get, post, setToken } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -105,13 +106,13 @@ export function RemoteLoginPage() {
         <label className="mt-5 block text-sm font-medium" htmlFor="parola">
           Parola
         </label>
-        <input
+        <Input
           id="parola"
           type="password"
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="mt-1.5 h-11 w-full rounded-xl border border-[var(--admin-border-strong)] bg-surface px-3.5 text-base outline-none focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]"
+          className="mt-1.5 text-base"
         />
         {error && <p className="mt-2 text-sm text-[var(--admin-danger-ink)]">{error}</p>}
         <Button type="submit" variant="primary" size="lg" block className="mt-4" loading={busy} disabled={!!setup.data && !ready}>

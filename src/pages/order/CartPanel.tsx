@@ -7,6 +7,7 @@ import { isCounterFirst, serviceModeOf } from '@shared/service-mode';
 import { fmtTime } from '@shared/time';
 import type { OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { post } from '@/lib/api';
@@ -297,7 +298,7 @@ function ItemSheet({
                 </button>
               ))}
             </div>
-            <input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="ya da yazın" className="mt-2 h-11 w-full rounded-xl border border-line-strong bg-surface px-3.5 outline-none focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)]" />
+            <Input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="Ya da nedeni yazın" aria-label="Neden" className="mt-2" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Button onClick={() => setMode(null)}>Geri</Button>

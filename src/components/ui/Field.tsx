@@ -1,8 +1,12 @@
 import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
 
+// Alanın üç durumu: dinlenme (ince gri kenar), odak (mavi kenar ve yumuşak halka), devre dışı (soluk, zemin gri)
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)] disabled:opacity-60 [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
+
+/** Alanla aynı görünümde kullanılan tek seferlik input'lar için (dışarıdan `className` ile) */
+export const fieldClass = base;
 
 export function Label({ children, hint, className }: { children: ReactNode; hint?: ReactNode; className?: string }) {
   return (
@@ -33,7 +37,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(base, 'h-11 [[data-area=admin]_&]:pointer-fine:h-10 appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a7b70' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")" }} {...rest}>
+    <select className={cn(base, 'select-arrow h-11 [[data-area=admin]_&]:pointer-fine:h-10 appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} {...rest}>
       {children}
     </select>
   );
@@ -47,10 +51,10 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="inline-flex min-h-11 items-center gap-3 text-[15px] disabled:opacity-50 pointer-fine:min-h-0 [[data-area=admin]_&]:text-sm"
+      className="group inline-flex min-h-11 items-center gap-3 text-[15px] disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-0 [[data-area=admin]_&]:text-sm"
     >
-      <span className={cn('relative h-7 w-12 shrink-0 rounded-full transition', checked ? 'bg-primary' : 'bg-line-strong')}>
-        <span className={cn('absolute top-0.5 size-6 rounded-full bg-white shadow transition-all', checked ? 'left-[22px]' : 'left-0.5')} />
+      <span className={cn('relative h-[26px] w-11 shrink-0 rounded-full transition-colors duration-150', checked ? 'bg-primary group-hover:bg-[var(--admin-primary-hover)]' : 'bg-line-strong group-hover:bg-[var(--admin-text-mute)]')}>
+        <span className={cn('absolute left-0.5 top-0.5 size-[22px] rounded-full bg-white shadow-[0_1px_2px_rgb(12_14_27/0.25)] transition-transform duration-150 ease-out motion-reduce:transition-none', checked && 'translate-x-[18px]')} />
       </span>
       {label && <span className="text-ink">{label}</span>}
     </button>
@@ -78,10 +82,11 @@ export function Segmented<T extends string>({
           key={o.value}
           type="button"
           onClick={() => onChange(o.value)}
+          aria-pressed={value === o.value}
           className={cn(
-            'rounded-md font-medium transition pointer-coarse:min-h-11',
+            'rounded-md font-medium transition-[color,background-color,box-shadow] duration-150 pointer-coarse:min-h-11',
             size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
-            value === o.value ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08)]' : 'text-muted hover:text-ink',
+            value === o.value ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08),0_0_0_1px_rgb(12_14_27/0.04)]' : 'text-muted hover:text-ink',
           )}
         >
           {o.label}

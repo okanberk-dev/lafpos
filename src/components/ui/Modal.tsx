@@ -51,7 +51,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
   if (!open) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-night/40 sm:items-center sm:p-4"
+      className="animate-fade fixed inset-0 z-50 flex items-end justify-center bg-night/40 sm:items-center sm:p-4"
       onPointerDown={(e) => {
         if (e.target === e.currentTarget && !persistent) onClose();
       }}
@@ -68,11 +68,13 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
           className,
         )}
       >
+        {/* Telefonda alt sayfa: tutamak, sürüklenebilir görünsün */}
+        <div aria-hidden="true" className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-[var(--admin-border-strong)] sm:hidden" />
         {(title || subtitle) && (
           <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-5 py-3.5">
             <div className="min-w-0 flex-1">
               {title && (
-                <h2 id={titleId} className="truncate text-base font-semibold">
+                <h2 id={titleId} className="truncate text-base font-semibold tracking-[-0.01em]">
                   {title}
                 </h2>
               )}
@@ -81,13 +83,13 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
             <button
               onClick={onClose}
               aria-label="Kapat"
-              className="-mr-1.5 grid size-11 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-ink"
+              className="-mr-1.5 grid size-11 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-surface-3 hover:text-ink active:bg-[var(--admin-border)]"
             >
               <X className="size-5" />
             </button>
           </div>
         )}
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">{children}</div>
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
         {footer && <div className="border-t border-[var(--admin-divider)] bg-surface-2 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
       </div>
     </div>,
