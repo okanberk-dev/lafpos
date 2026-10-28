@@ -13,7 +13,7 @@ hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalı�
 | Veri | Sahibi | LafPOS'ta |
 | --- | --- | --- |
 | Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır; sitenin kapattığını kasiyer açamaz (§2.3 Tükendi kilidi) |
-| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti; panelde düzenlenmez, site koduyla değişir) | menüyle birlikte gelir, salt okunur; kasaya özel seçenek LafPOS'ta yerel gruptur |
+| Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti; panelde düzenlenmez, site koduyla değişir) | menüyle birlikte gelir, salt okunur; kasaya özel seçenek LafPOS'ta yerel gruptur. Seçeneğin kasadaki Tükendi'si (`option_items.soldOut`) yalnız LafPOS'ta, siteye gitmez (§2.3 Seçenek tükendi) |
 | POS'a özel alanlar: istasyon, kısa ad, düğme rengi, POS sırası, gizli, porsiyon sayacı, `posName` | LafPOS | senkron dokunmaz |
 | POS'a özel ürünler (karaoke saati, kampanya) | LafPOS | `extSource` boş |
 | Reçete, hammadde, maliyet, stok, tedarikçi, cari, kasa raporu | lafmaliyet | LafPOS kopyalamaz |
@@ -189,6 +189,16 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
 sitenin kapattığı (senkron) `site` diye işaretlenir. Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar;
 sitenin kapattığı kasada "Sitede satışta değil" diye görünür, düğmesi yoktur, sunucu 403 `site_closed` döner. Menü
 yetkisi olan (`menu.yonet`) hepsini açar: açış önce siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer.
+
+**Seçenek tükendi** (`option_items.soldOut`, göç 0013): yulaf sütü bitince kasiyer ya da bar (`urun.tukendi`, menü
+yetkisi olan da) Tükenen ürünler › Seçenekler'den seçeneği Tükendi yapar ve açar (`POST /api/option-items/:id/sold-out
+{soldOut}`; denetim kaydı `menu.option_sold_out`, `menu` olayıyla bütün kasalar anında görür). Site grubunun seçeneği de
+işaretlenir. Sözleşmede böyle bir alan olmadığı için siteye ve uygulamaya gitmez; menü senkronu ve Yönetim › Seçenekler
+düzenlemesi işarete dokunmaz, gün açılışında sıfırlanmaz (ürünün Tükendi'si gibi). Seçenek penceresinde tükenen seçenek
+gri ve "Tükendi" yazar, seçilemez; varsayılanı tükenen grup (normal süt) önseçili gelmez, başka biri seçilene kadar Ekle
+kapalıdır, hızlı ekleme de pencereyi açar. Sunucu yalnız kasa satışını (`POST /api/orders/:id/items`) reddeder: tükenen
+seçenek seçildiyse ya da tek seçimlik grup boş gönderildi ve varsayılanı tükendiyse 409 `option_sold_out` ("Yulaf
+tükendi", "Normal tükendi; Süt seçin"). Siteden gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez.
 
 **Porsiyon:** siteye bağlı ürünün porsiyonu bitince Tükendi yazımı adisyon kalemiyle aynı işlemde giden kutusuna
 girer (`outbox`: target `laffogato`, kind `menu.isActive`, ürün başına tek kayıt `menu:<extId>`, son istenen durum) ve

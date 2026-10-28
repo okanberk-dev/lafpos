@@ -46,6 +46,13 @@ const ROUTES = {
     }),
     '/siparisler',
     '/mutfak',
+    // Tükenen ürünler › Seçenekler (yulaf sütü bitti); telefon ve tablette araçlar "Diğer" penceresinde
+    state('/mutfak', 'tukenen-secenekler', async (page) => {
+      const more = page.getByRole('button', { name: 'Diğer', exact: true });
+      if (await more.isVisible()) await more.click({ timeout: 5000 });
+      await page.getByRole('button', { name: 'Tükendi', exact: true }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Tükenen ürünler' }).getByRole('tab', { name: /Seçenekler/ }).click({ timeout: 5000 });
+    }),
     '/cagri',
     '/musteri-ekrani',
     '/kasa',

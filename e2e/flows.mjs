@@ -171,6 +171,54 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Telefonda kasiyer: yulaf sütü tükendi; seçenek penceresinde gri, normal süt bitince Latte süt sorar',
+      () =>
+        withPage(ctx, 'telefon', 'kasa', async (page) => {
+          // Kısa adı önceki akışta değişti: güncel menüden
+          const boot = await api.call('kasa', 'GET', '/bootstrap');
+          const latte = boot.products.find((p) => p.name === 'Latte');
+          const milk = boot.optionGroups.find((g) => g.name === 'Süt' && latte.optionGroupIds.includes(g.id));
+          const item = (name) => milk.items.find((i) => i.name === name);
+          const soldOut = async (name) => (await api.call('kasa', 'GET', '/bootstrap')).optionGroups.find((g) => g.id === milk.id).items.find((i) => i.name === name).soldOut;
+          try {
+            await go(ctx, page, `/adisyon/${seed.tz.id}`);
+            await page.getByRole('button', { name: 'İşlemler' }).click();
+            await page.getByRole('button', { name: /Tükenen ürünler/ }).click();
+            const dialog = page.getByRole('dialog', { name: /Tükenen ürünler/ });
+            await dialog.getByRole('tab', { name: /Seçenekler/ }).click();
+            await dialog.getByPlaceholder(/Seçenek ara/).fill('Yulaf');
+            await dialog.getByRole('button', { name: 'Tükendi', exact: true }).first().click();
+            await dialog.getByRole('button', { name: 'Satışa aç', exact: true }).first().waitFor({ timeout: 8000 });
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-tukendi.png` });
+            assert((await soldOut('Yulaf')) === true, 'Yulaf tükenmedi');
+            await page.keyboard.press('Escape');
+            await dialog.waitFor({ state: 'detached' });
+            // Normal süt de bitti (başka kasa): hızlı ekleme seçenek penceresini açar, süt seçilene kadar Ekle kapalı
+            await api.call('kasa', 'POST', `/option-items/${item('Normal').id}/sold-out`, { soldOut: true });
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            const label = latte.shortName?.trim() || latte.name;
+            const tile = page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).locator('xpath=..');
+            await tile.getByRole('button', { name: new RegExp(`^${boot.settings.sizeLabels.M}`) }).click();
+            const modal = page.getByRole('dialog', { name: latte.name });
+            await modal.getByText('Normal tükendi, başka birini seçin').waitFor({ timeout: 8000 });
+            assert(await modal.getByRole('button', { name: /^Yulaf/ }).isDisabled(), 'tükenen Yulaf seçilebiliyor');
+            assert(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled(), 'süt seçilmeden Ekle açık');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-penceresi.png` });
+            const overflow = await overflowReport(page);
+            assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+            // Yalnız pencerenin hedefleri: telefonda arkasında kalan ürün kartları da sayılırdı
+            const small = await modal.locator('button').evaluateAll((els) => els.filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && Math.min(r.width, r.height) + 0.5 < 44; }).map((e) => e.textContent.trim()));
+            assert(!small.length, `44 px altı: ${small.join(', ')}`);
+            await modal.getByRole('button', { name: /^Laktozsuz/ }).click();
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+          } finally {
+            // Sonraki akışlar Latte'yi seçeneksiz ekler: düşse de sütler açılır
+            for (const name of ['Yulaf', 'Normal']) await api.call('kasa', 'POST', `/option-items/${item(name).id}/sold-out`, { soldOut: false });
+          }
+        }),
+    ],
+    [
       'Bilgisayarda komut paleti: Ctrl K ile personel sayfasına gider',
       () =>
         withPage(ctx, 'bilgisayar', 'patron', async (page) => {

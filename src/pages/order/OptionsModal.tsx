@@ -19,6 +19,23 @@ type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
 const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
 const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
 const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
+// Kasada tükenen seçenek: gri, seçilemez, yanında "Tükendi" (Tükenen ürünler › Seçenekler)
+const CHIP_SOLD = 'border-line bg-surface-2 text-muted disabled:cursor-not-allowed';
+const SOLD_BADGE = 'ml-1.5 rounded-md bg-[var(--admin-danger-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]';
+
+/**
+ * Tükenen seçenek yüzünden seçim bekleyen grubun uyarısı; varken Ekle kapalı (sunucu 409 `option_sold_out` döner).
+ * Tek seçimlik grupta bir şey seçilmediyse sunucu varsayılanı yazar: o tükendiyse başkası seçilir. Seçiliyken
+ * tükenen (başka kasa işaretledi) kaldırılır
+ */
+function pickHint(g: OptionGroupDTO, picks: Picks): string | null {
+  const gone = g.items.find((i) => i.soldOut && picks[i.id]);
+  if (gone) return `${gone.name} tükendi, ${g.kind === 'single' ? 'başka birini seçin' : 'kaldırın'}`;
+  if (g.kind !== 'single' || g.items.some((i) => picks[i.id])) return null;
+  const d = g.items.find((i) => i.isDefault);
+  if (d) return d.soldOut ? `${d.name} tükendi, başka birini seçin` : null;
+  return g.required && g.items.some((i) => i.soldOut) ? 'Birini seçin' : null;
+}
 
 /** Ürün seçenekleri: boy, süt, kavrum, şurup, ekstra shot, şeker, not ve adet. */
 export function OptionsModal({
@@ -51,7 +68,9 @@ export function OptionsModal({
     if (!product) return;
     if (editing) {
       setSize(editing.size);
-      setPicks(Object.fromEntries(editing.options.map((o) => [o.itemId, o.qty ?? 1])));
+      // Sepetteki satır düzenlenirken bu arada tükenen seçenek düşer: grup yeniden seçim ister
+      const sold = new Set(groups.flatMap((g) => g.items.filter((i) => i.soldOut).map((i) => i.id)));
+      setPicks(Object.fromEntries(editing.options.filter((o) => !sold.has(o.itemId)).map((o) => [o.itemId, o.qty ?? 1])));
       setNote(editing.note);
       setQty(editing.qty);
       setPriceText(editing.priceOverride != null ? String(editing.priceOverride / 100).replace('.', ',') : '');
@@ -74,6 +93,7 @@ export function OptionsModal({
   const unit = override ?? estimateUnit(boot, product, size, options);
   // Zorunlu grup (şeker) seçilmeden Ekle kapalı: sunucu boş grupta varsayılanı yazardı, kasiyer sormadan geçmesin
   const missing = missingChoice(groups, picks);
+  const waiting = groups.some((g) => pickHint(g, picks));
 
   // Tek seçimlik grup radyo düğmesi gibi davranır: dokunulan seçilir, gruptaki diğerleri kalkar
   const pickSingle = (g: OptionGroupDTO, itemId: string) => {
@@ -104,7 +124,7 @@ export function OptionsModal({
             </button>
           </div>
           <div className="flex-1" />
-          <Button variant="primary" size="lg" disabled={!!missing} aria-describedby={missing ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
+          <Button variant="primary" size="lg" disabled={waiting || !!missing} aria-describedby={missing ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
             {editing ? 'Güncelle' : 'Ekle'} · {tl(unit * qty)}
           </Button>
           {missing && (
@@ -137,24 +157,25 @@ export function OptionsModal({
 
         {groups.map((g) => (
           <section key={g.id}>
-            <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink-2">
+            <h3 className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-ink-2">
               {g.name}
               {g.required && g.kind !== 'counter' && <Badge>Zorunlu</Badge>}
+              {pickHint(g, picks) && <span className="text-xs font-medium text-[var(--admin-danger-ink)]">{pickHint(g, picks)}</span>}
             </h3>
             {g.kind === 'counter' ? (
               <div className="flex flex-wrap gap-2">
                 {g.items.map((i) => (
-                  <div key={i.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-1.5">
+                  <div key={i.id} className={cn('flex items-center gap-3 rounded-xl border border-line px-3 py-1.5', i.soldOut ? 'bg-surface-2 text-muted' : 'bg-surface')}>
                     <span className="font-medium">
                       {i.name}
-                      {i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
+                      {i.soldOut ? <span className={SOLD_BADGE}>Tükendi</span> : i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
                     </span>
                     <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
+                      <button aria-label="Azalt" disabled={i.soldOut && !picks[i.id]} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
                         <Minus className="size-4" />
                       </button>
                       <span className="tabular w-6 text-center font-semibold">{picks[i.id] ?? 0}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
+                      <button aria-label="Artır" disabled={i.soldOut} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
                         <Plus className="size-4" />
                       </button>
                     </div>
@@ -165,15 +186,22 @@ export function OptionsModal({
               <div className="flex flex-wrap gap-2">
                 {g.items.map((i) => {
                   const on = !!picks[i.id];
+                  // Seçiliyken tükenen (başka kasa işaretledi) kaldırılabilsin diye yalnız seçili değilken kapalı
+                  const sold = i.soldOut && !on;
                   return (
                     <button
                       key={i.id}
                       aria-pressed={on}
+                      disabled={sold}
                       onClick={() => (g.kind === 'single' ? pickSingle(g, i.id) : setCount(i.id, on ? 0 : 1))}
-                      className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
+                      className={cn(CHIP, i.soldOut ? CHIP_SOLD : on ? CHIP_ON : CHIP_OFF)}
                     >
                       {i.name}
-                      {i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>}
+                      {i.soldOut ? (
+                        <span className={SOLD_BADGE}>Tükendi</span>
+                      ) : (
+                        i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>
+                      )}
                       {i.allergens.includes('nuts') && <span className="ml-1 text-[11px] text-[var(--admin-warning)]">(kuruyemiş)</span>}
                     </button>
                   );

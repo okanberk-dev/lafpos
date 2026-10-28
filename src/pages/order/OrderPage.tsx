@@ -35,7 +35,7 @@ import { Textarea, Toggle } from '@/components/ui/Field';
 import { Badge, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
 import { errorMessage, patch, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
-import { useBoot } from '@/lib/boot';
+import { soldOutDefault, useBoot } from '@/lib/boot';
 import { type PendingLine, restoreLines, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { joinMeta } from '@/lib/text';
@@ -142,6 +142,8 @@ export default function OrderPage() {
   const titleBadge = order.platform ? <PlatformBadge platform={order.platform} code={order.platformCode} className="shrink-0" /> : null;
 
   const quickAdd = (p: ProductDTO, size: Size) => {
+    // Varsayılan seçeneği tükendi (normal süt bitti): pencere açılır, kasiyer başkasını seçer
+    if (soldOutDefault(boot, p)) return setOptions({ product: p, size, editing: null });
     cart.add(order.id, { productId: p.id, size, qty: 1, options: [], note: '' });
     if (navigator.vibrate) navigator.vibrate(8);
   };
@@ -265,7 +267,7 @@ export default function OrderPage() {
     { icon: <Printer className="size-5" />, label: 'Hesap yazdır', onClick: printBill, show: !isOnline && order.items.some((i) => !i.voided) },
     { icon: <CircleDollarSign className="size-5" />, label: 'Sıfır tutarlı adisyonu kapat', onClick: () => act(() => post(`/orders/${order.id}/close`), 'Adisyon kapandı').then((r) => r && navigate(backPath)), show: isOpen && !isOnline && order.total === 0 && order.items.length > 0 },
     { icon: <RotateCcw className="size-5" />, label: 'Yeniden aç', hint: 'Yetkili onayı ister', onClick: () => setDialog('yenidenac'), show: order.status === 'kapali' && !isOnline },
-    { icon: <PackageX className="size-5" />, label: 'Tükenen ürünler', hint: 'Ürünü tükendi işaretle ya da satışa aç', onClick: () => setDialog('tukendi'), show: can('urun.tukendi') || can('menu.yonet') },
+    { icon: <PackageX className="size-5" />, label: 'Tükenen ürünler', hint: 'Ürünü ya da seçeneği tükendi işaretle, satışa aç', onClick: () => setDialog('tukendi'), show: can('urun.tukendi') || can('menu.yonet') },
     // Ciro dışı kapanış (ikram, ödenmez, zayi): ödeme alınmamış adisyonun bütün kalemleri (kısmen ödenmişte kalan kalem kalem yazılır)
     ...COMP_KINDS.map((kind) => ({ icon: COMP_ICON[kind], label: COMP_CLOSE_LABEL[kind], hint: COMP_HINT[kind], onClick: () => compAll(kind), show: compable })),
     { icon: <Ban className="size-5" />, label: 'Adisyonu iptal et', hint: 'Bütün kalemler iptal olur', onClick: () => setDialog('iptal'), show: editable && order.paid === 0, danger: true },

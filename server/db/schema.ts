@@ -225,6 +225,11 @@ export const optionItems = sqliteTable(
     allergens: text('allergens', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
     sort: integer('sort').notNull().default(0),
     active: bool('active').notNull().default(true),
+    /**
+     * Kasada Tükendi (yulaf sütü bitti): kasa satışı bu seçeneği almaz. Yalnız LafPOS'ta; siteye gitmez, menü
+     * senkronu dokunmaz, gün açılışında sıfırlanmaz (ürünün Tükendi'si gibi)
+     */
+    soldOut: bool('sold_out').notNull().default(false),
   },
   (t) => [index('option_items_group_idx').on(t.groupId)],
 );

@@ -18,6 +18,14 @@ export function productGroups(boot: BootstrapDTO, p: ProductDTO): OptionGroupDTO
   return p.optionGroupIds.map((id) => boot.optionGroups.find((g) => g.id === id)).filter((g): g is OptionGroupDTO => !!g);
 }
 
+/**
+ * Hızlı eklemede (seçeneksiz) sunucu tek seçimlik grupların varsayılanını yazar; varsayılanı kasada tükenen üründe
+ * seçenek penceresi açılır (sunucu 409 `option_sold_out` döner)
+ */
+export function soldOutDefault(boot: BootstrapDTO, p: ProductDTO): boolean {
+  return productGroups(boot, p).some((g) => g.kind === 'single' && g.items.some((i) => i.isDefault && i.soldOut));
+}
+
 export function sizePrice(p: ProductDTO, size: Size): number {
   return size === 'L' && p.priceL != null ? p.priceL : p.price;
 }
@@ -91,7 +99,8 @@ export function defaultPicks(groups: OptionGroupDTO[]): Record<string, number> {
   for (const g of groups) {
     if (g.kind !== 'single' || g.required) continue;
     const d = g.items.find((i) => i.isDefault);
-    if (d) picks[d.id] = 1;
+    // Tükenen varsayılan seçili gelmez: kasiyer başkasını seçer (sunucu da almaz)
+    if (d && !d.soldOut) picks[d.id] = 1;
   }
   return picks;
 }

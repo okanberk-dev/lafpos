@@ -36,7 +36,7 @@ export const PERMISSIONS = {
   'paket.yonet': 'Paket servis ve gel-al siparişleri',
   'rezervasyon.yonet': 'Rezervasyon',
   'mutfak.ekran': 'Mutfak / bar ekranı',
-  'urun.tukendi': 'Ürünü kasadan ya da bardan tükendi işaretleme, satışa açma',
+  'urun.tukendi': 'Ürünü ve seçeneği (yulaf sütü gibi) kasadan ya da bardan tükendi işaretleme, satışa açma',
   'rapor.gor': 'Satış raporları',
   'rapor.maliyet': 'Maliyet, kâr ve personel tutarları',
   'menu.yonet': 'Menü, fiyat ve seçenek yönetimi',
