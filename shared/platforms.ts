@@ -74,13 +74,32 @@ export interface PlatformSettings {
   prepMinutes: number;
   /** Raporda tahmini komisyon (yüzde); Trendyol Go gerçek komisyonu hesap kesiminde verir */
   commissionPct: number;
+  /**
+   * Otomatik kabul (varsayılan kapalı): yalnız bütün güvenli koşulları sağlayan sipariş, seçilen kişi adına kabul
+   * edilir; ötekiler elle kabul bekler (docs/PAKET-PLATFORMLARI.md "Otomatik kabul")
+   */
+  autoAccept: boolean;
+  /** Otomatik kabulde kabul eden kişi: etkin ve paket yetkili olmalı (her denemede yeniden okunur) */
+  autoAcceptUserId: string | null;
+  /** Otomatik kabul edilecek en yüksek müşteri tutarı (kuruş); üstü elle */
+  autoAcceptMaxKurus: number;
 }
 
+/** Otomatik kabulün tutar sınırı: varsayılan ve ayarda girilebilecek en yüksek değer (kuruş) */
+export const AUTO_ACCEPT_MAX_DEFAULT = 150_000;
+export const AUTO_ACCEPT_MAX_LIMIT = 5_000_000;
+/** Kabul süresinin bitmesine bundan az kalmışsa otomatik kabul denenmez (platform çağrısı yetişmeyebilir) */
+export const AUTO_ACCEPT_MIN_LEFT_MS = 30_000;
+/** Otomatik kabul edilmeyen siparişin şeritteki notu bununla başlar (`lastError`): hata değil, elle kabul bekliyor */
+export const AUTO_SKIP_PREFIX = 'Otomatik kabul edilmedi';
+
+const DEFAULTS: PlatformSettings = { mode: 'kapali', prepMinutes: 20, commissionPct: 0, autoAccept: false, autoAcceptUserId: null, autoAcceptMaxKurus: AUTO_ACCEPT_MAX_DEFAULT };
+
 export const PLATFORM_DEFAULTS: Record<PlatformId, PlatformSettings> = {
-  yemeksepeti: { mode: 'kapali', prepMinutes: 20, commissionPct: 0 },
-  getir: { mode: 'kapali', prepMinutes: 20, commissionPct: 0 },
-  trendyol: { mode: 'kapali', prepMinutes: 20, commissionPct: 0 },
-  migros: { mode: 'kapali', prepMinutes: 20, commissionPct: 0 },
+  yemeksepeti: { ...DEFAULTS },
+  getir: { ...DEFAULTS },
+  trendyol: { ...DEFAULTS },
+  migros: { ...DEFAULTS },
 };
 
 /** Kim götürür: platformun kuryesi, restoranın kuryesi ya da müşteri gelip alır */
@@ -127,6 +146,15 @@ export interface PlatformOrderPayload {
   preAccepted?: boolean;
   /** Platformun test siparişi: mutfağa düşmesin diye kabul edilmez, yalnız reddedilir */
   test?: boolean;
+  /**
+   * Tutar ya da tahsilat platformdan doğrulanmalı: bağdaştırıcı platformun verdiği toplamları kalemlerle tam
+   * açıklayamadı (Getir'in açıklanamayan farkı, Yemeksepeti'nde kasada alınacak tutarın sıfır görünmesi, Trendyol Go'da
+   * ödenen tutarın olmaması ya da kalemleri aşması) ya da kendi kuryemizin siparişinde ödeme türü belirsiz (online mı
+   * kapıda mı tahmin edildi). Doluysa sipariş otomatik kabul edilmez
+   */
+  amountReview?: string;
+  /** İleri tarihli ama saati bilinmiyor (`scheduledFor` boş; saat notta ya da platformun panelinde): otomatik kabul edilmez */
+  scheduledUnknown?: boolean;
   /** Bağdaştırıcının kendi verisi (sipariş belirteci, geri çağrı adresleri gibi); kasa yorumlamaz */
   platformData?: Record<string, unknown>;
 }

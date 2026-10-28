@@ -1,3 +1,4 @@
+import { tl } from '@shared/money';
 import { PLATFORM_LABEL, type PlatformCourier, type PlatformOrderPayload } from '@shared/platforms';
 import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
 
@@ -236,11 +237,19 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
   platformDiscount = Math.min(platformDiscount, subtotal - restaurantDiscount);
   const paidTotal = pkg.totalPrice != null ? toKurus(pkg.totalPrice) : null;
   let customerTotal = subtotal - restaurantDiscount - platformDiscount;
+  // Ödenen tutar yoksa ya da kalemleri (restoran kampanyası düşülmüş) aşıyorsa tutar Trendyol'dan doğrulanmalı:
+  // kampanya alanlarından hesaplanan kalır, otomatik kabul edilmez
+  let amountReview: string | null = paidTotal == null ? 'Trendyol ödenen tutarı vermedi' : null;
   if (paidTotal != null && paidTotal >= 0 && paidTotal <= subtotal - restaurantDiscount) {
     // Müşterinin ödediği esastır: kampanya alanlarının anlaşılmayan kısmı platformun karşıladığı farktır
     platformDiscount = subtotal - restaurantDiscount - paidTotal;
     customerTotal = paidTotal;
+  } else if (paidTotal != null) {
+    amountReview = `Trendyol'da ödenen ${tl(paidTotal)}, kalemler ${tl(subtotal - restaurantDiscount)}: farkı Trendyol'dan doğrulayın`;
   }
+  // Kendi kuryemizin siparişinde ödeme türü yoksa online sayılır (tahmin): tahsilat Trendyol'dan doğrulanmalı
+  const noPayment = !(typeof pkg.payment === 'string' ? pkg.payment : pkg.payment?.paymentType);
+  if (noPayment && courier !== 'platform') amountReview ??= 'Ödeme türü gelmedi: tahsilatı Trendyol\'dan doğrulayın';
   const name = [text(pkg.customer?.firstName), text(pkg.customer?.lastName)].filter(Boolean).join(' ') || text(pkg.address?.fullName);
   const phone = text(pkg.address?.phone) ?? text(pkg.callCenterPhone);
   const noteParts = [text(pkg.customerNote), pkg.pinCode ? `Teslim PIN ${pkg.pinCode}` : null].filter(Boolean);
@@ -262,6 +271,7 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
     restaurantDiscount,
     platformDiscount,
     customerTotal,
+    ...(amountReview ? { amountReview } : {}),
   };
 }
 

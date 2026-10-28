@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, Bike, PackageCheck, TriangleAlert } from 'lucide-react';
+import { Bell, Bike, Info, PackageCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { tl } from '@shared/money';
 import { fmtTime } from '@shared/time';
-import { COURIER_LABEL, PLATFORM_LABEL, type PlatformLiveStatus, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
+import { AUTO_SKIP_PREFIX, COURIER_LABEL, PLATFORM_LABEL, type PlatformLiveStatus, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { errorMessage, get, post } from '@/lib/api';
@@ -20,6 +20,8 @@ export interface PlatformsData {
   orders: PlatformOrderDTO[];
   /** Canlı bağlantı durumu (eski sunucu göndermez) */
   live?: Record<PlatformId, PlatformLiveStatus>;
+  /** Otomatik kabulde kabul eden olarak seçilebilecek kişiler: etkin ve paket yetkili (eski sunucu göndermez) */
+  acceptors?: { id: string; name: string }[];
 }
 
 export function usePlatforms(enabled = true) {
@@ -50,6 +52,8 @@ export function PlatformInbox() {
         beep('yeni');
         if (e.message) toast.info(e.message);
       }
+      // Otomatik kabul: bildirim yalnız onda gelir (elle kabul eden zaten ekranda)
+      if (e.topic === 'delivery' && e.kind === 'platform.accepted' && e.message) toast.ok(e.message);
     });
   }, [allowed]);
 
@@ -165,11 +169,19 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
           Kasada tükenmiş: {order.soldOut.join(', ')}. Ürünü satışa açın ya da "Ürün tükendi" ile reddedin
         </p>
       )}
-      {order.lastError && (
-        <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--admin-danger-soft)] p-2 text-xs text-[var(--admin-danger-ink)]">
-          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+      {/* Otomatik kabul edilmedi: hata değil, nedeni ve elle kabul bekliyor */}
+      {order.lastError?.startsWith(AUTO_SKIP_PREFIX) ? (
+        <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--admin-info-soft)] p-2 text-xs text-[var(--admin-info)]">
+          <Info className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
           {order.lastError}
         </p>
+      ) : (
+        order.lastError && (
+          <p role="alert" className="mt-2 flex items-start gap-1.5 rounded-lg bg-[var(--admin-danger-soft)] p-2 text-xs text-[var(--admin-danger-ink)]">
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+            {order.lastError}
+          </p>
+        )
       )}
       {order.cancelPending ? (
         <div className="mt-3 space-y-2">
