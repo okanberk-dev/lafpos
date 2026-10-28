@@ -102,7 +102,8 @@ export default function CustomerDisplayPage() {
       ) : (
         // Koyuda boş ekranda kart yok: içerik doğrudan zeminde, gecenin tek açık yüzeyi logonun karosu
         <div className={cn('grid flex-1 place-items-center p-8 text-center', !forced && 'rounded-2xl border border-line bg-surface')}>
-          <div>
+          {/* Izgara öğesi içeriğin en geniş kelimesine göre büyümesin: uzun masa no telefonda taşmasın */}
+          <div className="w-full min-w-0">
             <span className="mx-auto grid size-24 place-items-center rounded-[20px] bg-night text-white dark:bg-surface-3">
               <LafMark className="h-9" onNight />
             </span>
@@ -131,10 +132,13 @@ export default function CustomerDisplayPage() {
  */
 function CallNumber({ call }: { call: string }) {
   const no = /^No (.+)$/.exec(call)?.[1];
+  const shown = no ?? call;
+  // Uzun kimlik ("Masa WWWWWW"): çağrı ekranındaki gibi ekranla küçülen yazı ve kırılan kelime (390 px'te taşmasın)
+  const long = shown.length > 5;
   return (
-    <div className="mx-auto mt-8 w-fit min-w-56 rounded-2xl border border-line bg-surface-2 px-8 py-5">
+    <div className="mx-auto mt-8 w-fit min-w-56 max-w-full rounded-2xl border border-line bg-surface-2 px-8 py-5 max-sm:min-w-0 max-sm:px-5">
       <p className="text-lg font-medium text-muted">{no ? 'Numaranız' : 'Siparişiniz'}</p>
-      <p className="tabular text-7xl font-bold leading-tight tracking-tight md:text-8xl">{no ?? call}</p>
+      <p className={cn('tabular font-bold leading-tight tracking-tight [overflow-wrap:anywhere]', long ? 'text-[clamp(2.25rem,9vw,5rem)]' : 'text-7xl md:text-8xl')}>{shown}</p>
       <p className="mt-1 text-lg text-ink-2">{no ? 'Hazır olunca çağrı ekranında görünür' : 'Masanıza getirilecek'}</p>
     </div>
   );

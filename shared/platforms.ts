@@ -90,6 +90,11 @@ export const AUTO_ACCEPT_MAX_DEFAULT = 150_000;
 export const AUTO_ACCEPT_MAX_LIMIT = 5_000_000;
 /** Kabul süresinin bitmesine bundan az kalmışsa otomatik kabul denenmez (platform çağrısı yetişmeyebilir) */
 export const AUTO_ACCEPT_MIN_LEFT_MS = 30_000;
+/**
+ * Sipariş saatinden (ileri tarihlide teslim saatinden) bu kadar geçmişse otomatik kabul edilmez: bağlantı kopukken
+ * birikmiş sipariş platformda çoktan kaybolmuş olabilir (Trendyol Go'da kabul süresi kasaya geliş anından sayılır)
+ */
+export const AUTO_ACCEPT_MAX_AGE_MS = 30 * 60_000;
 /** Otomatik kabul edilmeyen siparişin şeritteki notu bununla başlar (`lastError`): hata değil, elle kabul bekliyor */
 export const AUTO_SKIP_PREFIX = 'Otomatik kabul edilmedi';
 

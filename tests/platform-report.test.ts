@@ -330,6 +330,21 @@ describe('Raporlar › Paket platformları', () => {
     }
   });
 
+  it('komisyon oranı bootstrap ile ve bulut anlık görüntüsüyle hiç gitmez (garson, raporcu, kasa, patron); oranın tek yolu gelen kutusu', async () => {
+    for (const who of ['garson', 'raporcu', 'kasa', 'patron']) {
+      const boot = await h.ok<{ settings: Record<string, unknown> }>(who, 'GET', '/bootstrap');
+      expect(boot.settings).not.toHaveProperty('platforms');
+      expect(JSON.stringify(boot)).not.toContain('commissionPct');
+    }
+    const { buildSnapshot } = await import('../server/sync/cloud');
+    const snap = buildSnapshot();
+    expect(snap.bootstrap.settings).not.toHaveProperty('platforms');
+    expect(JSON.stringify(snap)).not.toContain('commissionPct');
+    // Sunucu ayarı okumaya devam eder (rapor, gelen kutusu, otomatik kabul)
+    const { platformSettings } = await import('../server/delivery/service');
+    expect(platformSettings().yemeksepeti.commissionPct).toBe(18.5);
+  });
+
   it('platform siparişi olmayan dönem boş döner', async () => {
     const empty = await report('patron', addDays(today, -30), addDays(today, -20));
     expect(empty).toMatchObject({ netSales: 0, revenue: 0, orders: 0, pending: 0, platforms: [] });

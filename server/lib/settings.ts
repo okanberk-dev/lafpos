@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { Permission, Role, RoleMatrix } from '@shared/permissions';
-import { PLATFORM_DEFAULTS } from '@shared/platforms';
+import { PLATFORM_DEFAULTS, type PlatformId, type PlatformSettings } from '@shared/platforms';
 import { DEFAULT_SERVICE_MODE } from '@shared/service-mode';
 import type { PublicSettings } from '@shared/types';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
@@ -36,7 +36,6 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   // Var olan kurulumlarda hiçbir şey değişmesin: patron Yönetim › Ayarlar'dan seçer
   serviceMode: DEFAULT_SERVICE_MODE,
   tipsEnabled: false,
-  platforms: PLATFORM_DEFAULTS,
 };
 
 /** Yalnız sunucuda kullanılan ayarlar */
@@ -65,6 +64,12 @@ export interface PrivateSettings {
   okcOperatorMethods: Record<string, string>;
   /** Yönetim › Roller ve yetkiler'de düzenlenen rol yetki setleri; olmayan rol varsayılanını kullanır */
   rolePermissions: RoleMatrix;
+  /**
+   * Paket platformları: mod, hazırlık süresi, otomatik kabul, tahmini komisyon (shared/platforms.ts). Arayüze
+   * bootstrap'la gitmez: komisyon oranı maliyettir; ekranlar `GET /api/platforms`'tan okur (oran yalnız maliyet,
+   * ayar ya da senkron yetkisine)
+   */
+  platforms: Record<PlatformId, PlatformSettings>;
 }
 
 export const PRIVATE_DEFAULTS: PrivateSettings = {
@@ -81,6 +86,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
   rolePermissions: {},
+  platforms: PLATFORM_DEFAULTS,
 };
 
 export type AllSettings = PublicSettings & PrivateSettings;

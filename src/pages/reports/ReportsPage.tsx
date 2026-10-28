@@ -939,7 +939,7 @@ function PlatformsReport({ range, onExport }: { range: Range; onExport: () => vo
                 { key: 'siparis', label: 'Sipariş', icon: <Receipt />, hue: 'violet', value: d.orders.toLocaleString('tr-TR'), reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
                 ...(showCost ? [{ key: 'komisyon', label: 'Komisyon', icon: <BadgePercent />, hue: 'amber' as const, value: tl(d.commission!), reference: 'Bugünkü oranla tahmin' }] : []),
                 { key: 'acik', label: 'Açık sipariş', icon: <Clock />, hue: 'green', value: d.open.orders.toLocaleString('tr-TR'), reference: d.open.orders ? `${tlShort(d.open.amount)} · ciroya girmedi` : 'Hepsi kapandı' },
-                { key: 'kacan', label: 'Kaçan sipariş', icon: <XCircle />, hue: 'rose', value: d.missed.orders.toLocaleString('tr-TR'), reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre ya da iptal yok' },
+                { key: 'kacan', label: 'Kaçan sipariş', icon: <XCircle />, hue: 'rose', value: d.missed.orders.toLocaleString('tr-TR'), reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre, iptal ya da kasaya alınmayan yok' },
               ]}
             />
             <Card
@@ -979,8 +979,8 @@ function PlatformsReport({ range, onExport }: { range: Range; onExport: () => vo
               </ul>
             </Card>
             <p className="text-xs text-muted">
-              Rakamlar Ciro sekmesiyle aynı kuralla: kapanmış adisyonlar, adisyonun açıldığı iş gününe göre. Tahsilatı platform da yapsa kasa da yapsa sipariş platformun satışıdır. Kaçan sipariş reddedilen, süresi dolan ya da iptal
-              edilen siparişlerdir: geldiği iş gününe yazılır, tutarı müşterinin ödeyeceğidir, ciroya girmez.
+              Rakamlar Ciro sekmesiyle aynı kuralla: kapanmış adisyonlar, adisyonun açıldığı iş gününe göre. Tahsilatı platform da yapsa kasa da yapsa sipariş platformun satışıdır. Kaçan sipariş reddedilen, süresi dolan, iptal
+              edilen ya da platformda kabul edilip 3 saatte kasaya alınmayan siparişlerdir: geldiği iş gününe yazılır, tutarı müşterinin ödeyeceğidir, ciroya girmez.
               {d.pending > 0 && ` Şu an ${d.pending} sipariş onay bekliyor; hiçbir rakama girmedi.`}
               {showCost && ' Komisyon tahminidir: Yönetim › Paket platformları’ndaki bugünkü oranla KDV dahil cirodan hesaplanır, oran değişirse geçmiş dönemin tahmini de değişir. Gerçek tutar platformun hesap kesimindedir.'}
             </p>

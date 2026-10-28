@@ -1,6 +1,6 @@
 import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
-import type { PlatformId, PlatformSettings } from './platforms';
+import type { PlatformId } from './platforms';
 import type { ServiceMode } from './service-mode';
 import type { RoomBookingSnapshot, SiteKaraokeBooking } from './karaoke';
 
@@ -206,8 +206,6 @@ export interface PublicSettings {
   serviceMode: ServiceMode;
   /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
   tipsEnabled: boolean;
-  /** Paket platformları: mod, hazırlık süresi, tahmini komisyon (shared/platforms.ts) */
-  platforms: Record<PlatformId, PlatformSettings>;
 }
 
 export interface BootstrapDTO {

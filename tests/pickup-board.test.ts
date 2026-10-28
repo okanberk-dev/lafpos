@@ -213,7 +213,7 @@ describe('teslimden sonra eklenen kalem', () => {
     const b = await board();
     return b.ready.some((e) => e.id === id) ? 'hazir' : b.preparing.some((e) => e.id === id) ? 'hazirlaniyor' : null;
   };
-  const audits = () => h.ok<{ action: string; orderId: string | null }[]>('patron', 'GET', '/admin/audit?limit=100');
+  const audits = () => h.ok<{ action: string; orderId: string | null; message: string; userId: string | null }[]>('patron', 'GET', '/admin/audit?limit=100');
 
   it('teslim edilmiş gel-al\'a bar kalemi: çağrı ekranında Hazırlanıyor, hazır olunca Hazır sekmesinde ve Teslim edildi düğmesinde; aşama kalemlerden', async () => {
     const { readyToHand } = await import('../src/lib/readyToHand');
@@ -228,7 +228,10 @@ describe('teslimden sonra eklenen kalem', () => {
     // Müşteri bir şey daha ister: aynı adisyona bar kalemi. Teslim geri alınır (denetimde), sipariş yeniden hazırlanıyor
     const more = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${pickup.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 1 }] });
     expect(more.deliveryStatus).toBe('hazirlaniyor');
-    expect((await audits()).filter((a) => a.action === 'delivery.undo' && a.orderId === pickup.id)).toHaveLength(1);
+    const undone = (await audits()).filter((a) => a.action === 'delivery.undo' && a.orderId === pickup.id);
+    expect(undone).toHaveLength(1);
+    // Denetimdeki neden gerçek olan: kasiyer bara yeni kalem gönderdi
+    expect(undone[0]!.message).toBe(`#${pickup.no} gel-al teslimden döndü: bara yeni kalem gitti`);
     expect(await where(pickup.id)).toBe('hazirlaniyor');
     expect(readyToHand(more)).toEqual([]);
 
@@ -283,6 +286,127 @@ describe('teslimden sonra eklenen kalem', () => {
     o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`);
     expect(o.deliveryStatus).toBe('hazir');
     expect(await where(pickup.id)).toBe('hazir');
+  });
+});
+
+describe('teslimin geri alınışı, taşıma, birleştirme ve elle aşama (gözden geçirme 2)', () => {
+  const board = () => h.ok<PickupBoardDTO>('', 'GET', '/public/board');
+  const where = async (id: string) => {
+    const b = await board();
+    return b.ready.some((e) => e.id === id) ? 'hazir' : b.preparing.some((e) => e.id === id) ? 'hazirlaniyor' : null;
+  };
+  const audits = () => h.ok<{ action: string; orderId: string | null; message: string }[]>('patron', 'GET', '/admin/audit?limit=200');
+  const get = (id: string) => h.ok<OrderDTO>('kasa', 'GET', `/orders/${id}`);
+  const items = async (o: OrderDTO) => {
+    const { db, schema } = await import('../server/db/client');
+    const { inArray } = await import('drizzle-orm');
+    return db.select().from(schema.orderItems).where(inArray(schema.orderItems.id, o.items.map((i) => i.id))).all();
+  };
+  const pickupWith = async (name: string, lines: { productId: string; size?: string; qty: number }[]) => {
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: name });
+    return h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: lines });
+  };
+
+  it('Geçmiş\'te teslim edilmiş kalemin Geri al\'ı "Hazır"a döner: hazır anı korunur, uyarı yok, kuyruğa ve Hazırlanıyor\'a dönmez', async () => {
+    const { undoStep } = await import('../src/lib/readyToHand');
+    const o = await pickupWith('Selin Ak', [{ productId: product('Türk Kahvesi').id, qty: 1 }]);
+    const ids = o.items.map((i) => i.id);
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids, status: 'hazir' });
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids, status: 'servis' });
+    const readyAt = (await items(o)).map((i) => i.readyAt);
+    expect((await get(o.id)).deliveryStatus).toBe('teslim');
+
+    // Bar ekranının Geçmiş'i: teslim edilmiş fişin Geri al'ı bir adım geri ("Hazır")
+    const history = await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?history=1');
+    const ticket = history.find((tk) => tk.orderId === o.id)!;
+    expect(undoStep(ticket.items)).toEqual({ ids, status: 'hazir' });
+    expect(undoStep([{ id: 'a', status: 'hazir', voided: false }, { id: 'b', status: 'hazir', voided: true }])).toEqual({ ids: ['a'], status: 'hazirlaniyor' });
+
+    // Eski ekranın isteği (teslim edilmiş kalem doğrudan "Hazırlanıyor"a) sunucuda "Hazır"a iner
+    const { bus } = await import('../server/lib/events');
+    const seen: LiveEvent[] = [];
+    const listen = (e: LiveEvent) => seen.push(e);
+    bus.on('event', listen);
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids, status: 'hazirlaniyor' });
+    bus.off('event', listen);
+    const after = await items(o);
+    expect(after.map((i) => [i.status, i.servedAt, i.readyAt])).toEqual(readyAt.map((at) => ['hazir', null, at]));
+    expect(seen.some((e) => e.kind === 'items.ready')).toBe(false);
+    expect((await get(o.id)).deliveryStatus).toBe('hazir');
+    expect(await where(o.id)).toBe('hazir');
+    expect((await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen')).some((tk) => tk.orderId === o.id)).toBe(false);
+    const undo = (await audits()).find((a) => a.action === 'delivery.undo' && a.orderId === o.id)!;
+    expect(undo.message).toBe(`#${o.no} gel-al teslimi geri alındı`);
+    // Hazır kalem ise bir adım geri "Hazırlanıyor"a (bar hazırı geri aldı)
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: ids, status: 'hazirlaniyor' });
+    expect((await items(o)).map((i) => i.status)).toEqual(['hazirlaniyor']);
+    expect((await get(o.id)).deliveryStatus).toBe('hazirlaniyor');
+  });
+
+  it('kalem taşıma ve birleştirme gel-al aşamasını kalemlerden yeniden türetir', async () => {
+    // Taşıma: bekleyen Latte başka hesaba gidince kalan hepsi hazır: kaynak "Hazır" ve çağrı ekranında hazır
+    const a = await pickupWith('Okan T', [
+      { productId: product('Türk Kahvesi').id, qty: 1 },
+      { productId: product('Latte').id, size: 'M', qty: 1 },
+    ]);
+    const [tk, lt] = a.items;
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: [tk!.id], status: 'hazir' });
+    expect((await get(a.id)).deliveryStatus).toBe('hazirlaniyor');
+    const moved = await h.ok<{ source: OrderDTO; target: OrderDTO }>('kasa', 'POST', `/orders/${a.id}/transfer`, { items: [{ itemId: lt!.id, qty: 1 }] });
+    expect(moved.source.deliveryStatus).toBe('hazir');
+    expect(await where(a.id)).toBe('hazir');
+    expect([moved.target.type, moved.target.deliveryStatus]).toEqual(['gelal', 'hazirlaniyor']);
+
+    // Birleştirme: teslim edilmiş gel-al'a bekleyen kalemli adisyon katılınca "Hazırlanıyor", denetimde nedeniyle
+    const done = await pickupWith('Pelin U', [{ productId: product('Türk Kahvesi').id, qty: 1 }]);
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: done.items.map((i) => i.id), status: 'hazir' });
+    await h.ok('kasa', 'POST', '/kitchen/status', { itemIds: done.items.map((i) => i.id), status: 'servis' });
+    expect((await get(done.id)).deliveryStatus).toBe('teslim');
+    const waiting = await pickupWith('Pelin U', [{ productId: product('Latte').id, size: 'M', qty: 1 }]);
+    const merged = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${done.id}/merge`, { sourceOrderId: waiting.id });
+    expect(merged.deliveryStatus).toBe('hazirlaniyor');
+    expect(await where(done.id)).toBe('hazirlaniyor');
+    const undo = (await audits()).find((x) => x.action === 'delivery.undo' && x.orderId === done.id)!;
+    expect(undo.message).toBe(`#${done.no} gel-al teslimden döndü: #${waiting.no} adisyonun kalemi barda`);
+  });
+
+  it('bara kalem giden kasa gel-al\'ında aşama bardan izlenir: Siparişler\'in elle aşaması 409; bara gitmeyen gel-al\'da sürer', async () => {
+    const { stageFromBar } = await import('../src/lib/readyToHand');
+    const o = await pickupWith('Deniz K', [{ productId: product('Türk Kahvesi').id, qty: 1 }]);
+    expect(stageFromBar(o)).toBe(true);
+    for (const deliveryStatus of ['hazir', 'yolda', 'teslim']) {
+      const r = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/delivery`, { deliveryStatus });
+      expect([r.status, r.json.code]).toEqual([409, 'stage_from_bar']);
+    }
+    expect((await get(o.id)).deliveryStatus).toBe('hazirlaniyor');
+    // Bar sonra "Hazır" dediğinde aşama ilerler; teslimin geri alınışı barista adına denetime düşmez
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: o.items.map((i) => i.id), status: 'hazir' });
+    expect((await get(o.id)).deliveryStatus).toBe('hazir');
+    expect((await audits()).some((a) => a.action === 'delivery.undo' && a.orderId === o.id)).toBe(false);
+
+    // Bara kalem gitmeyen gel-al: elle aşama düğmeleri aynen
+    const stationOf = (p: (typeof h.boot.products)[number]) => p.stationId ?? h.boot.categories.find((c) => c.id === p.categoryId)?.stationId ?? null;
+    const noBar = h.boot.products.find((p) => p.active && !p.hidden && p.priceL == null && p.optionGroupIds.length === 0 && !stationOf(p))!;
+    const plain = await pickupWith('Ali V', [{ productId: noBar.id, qty: 1 }]);
+    expect(stageFromBar(plain)).toBe(false);
+    for (const deliveryStatus of ['hazir', 'yolda', 'teslim']) await h.ok('kasa', 'POST', `/orders/${plain.id}/delivery`, { deliveryStatus });
+    expect((await get(plain.id)).deliveryStatus).toBe('teslim');
+  });
+
+  it('önce ödenen tezgâh satışı hazır olunca kapanmış adisyonlarda teslim bekler (Siparişler › Açık), teslimle düşer', async () => {
+    const { readyToHand } = await import('../src/lib/readyToHand');
+    const nakit = h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+    const counter = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${counter.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
+    await h.ok('kasa', 'POST', `/orders/${counter.id}/payments`, { methodId: nakit.id, amount: sent.total });
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: sent.items.map((i) => i.id), status: 'hazir' });
+    // Siparişler'in sorgusu (Açık sekmesi): bugünkü kapanmış tezgâh ve gel-al
+    const list = () => h.ok<OrderDTO[]>('kasa', 'GET', '/orders?status=kapali&type=tezgah,gelal&limit=100');
+    const paid = (await list()).find((x) => x.id === counter.id)!;
+    expect(paid.status).toBe('kapali');
+    expect(readyToHand(paid)).toEqual(sent.items.map((i) => i.id));
+    await h.ok('kasa', 'POST', '/kitchen/status', { itemIds: readyToHand(paid), status: 'servis' });
+    expect(readyToHand((await list()).find((x) => x.id === counter.id)!)).toEqual([]);
   });
 });
 

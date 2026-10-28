@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/Modal';
 import { EmptyState, Notice, Skeleton, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { deliverItems } from '@/lib/handoff';
+import { undoStep } from '@/lib/readyToHand';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -119,6 +120,12 @@ export default function KitchenPage() {
     } finally {
       setBusy(null);
     }
+  };
+
+  // Geçmiş'in Geri al'ı bir adım geri: teslim edilmiş kalemler "Hazır"a, yoksa hazırlar "Hazırlanıyor"a (`undoStep`)
+  const undo = async (items: KitchenTicketItem[], key: string) => {
+    const step = undoStep(items);
+    if (step) await setStatus(step.ids, step.status, key);
   };
 
   const list = useMemo(() => tickets.data ?? [], [tickets.data]);
@@ -327,9 +334,11 @@ export default function KitchenPage() {
                   {t.items.map((i) => (
                     <li key={i.id}>
                       <button
-                        // Hazır sekmesinde kaleme dokunmak bir şey yapmaz: teslim fişin düğmesiyle, geri alma Geçmiş'ten
+                        // Hazır sekmesinde kaleme dokunmak bir şey yapmaz: teslim fişin düğmesiyle, geri alma Geçmiş'ten.
+                        // Geçmiş'te bir adım geri: teslim edilmiş kalem "Hazır"a (hazır anı korunur), hazır kalem
+                        // "Hazırlanıyor"a
                         disabled={i.voided || online || REMOTE || readyView}
-                        onClick={() => setStatus([i.id], history ? 'hazirlaniyor' : undefined)}
+                        onClick={() => setStatus([i.id], history ? (i.status === 'servis' ? 'hazir' : 'hazirlaniyor') : undefined)}
                         className={cn('flex w-full items-start gap-3 px-3 py-3 text-left transition-colors duration-150 md:py-3.5', !i.voided && !online && 'active:bg-press', i.voided && 'bg-[var(--admin-danger-soft)]')}
                       >
                         {/* Uzaktan okunur: adet, ad ve seçenek geniş ekranda büyür (telefonda bugünkü ölçü) */}
@@ -370,7 +379,7 @@ export default function KitchenPage() {
                       Teslim edildi
                     </Button>
                   ) : history ? (
-                    <Button size="lg" className={FOOT} icon={<Undo2 className="size-4" />} disabled={ticketBusy} loading={busy === `${t.key}:undo`} onClick={() => setStatus(live.map((i) => i.id), 'hazirlaniyor', `${t.key}:undo`)}>
+                    <Button size="lg" className={FOOT} icon={<Undo2 className="size-4" />} disabled={ticketBusy} loading={busy === `${t.key}:undo`} onClick={() => void undo(live, `${t.key}:undo`)}>
                       Geri al
                     </Button>
                   ) : (
@@ -434,7 +443,7 @@ function StatusDot({ status }: { status: KitchenTicketItem['status'] }) {
     yeni: { cls: 'border-2 border-[var(--admin-border-field)]', label: 'Bekliyor' },
     hazirlaniyor: { cls: 'bg-[var(--admin-primary)]', label: 'Hazırlanıyor' },
     hazir: { cls: 'bg-[var(--admin-success)]', label: 'Hazır' },
-    servis: { cls: 'bg-muted', label: 'Serviste' },
+    servis: { cls: 'bg-muted', label: 'Teslim edildi' },
   }[status];
   return (
     <span className="mt-1 flex shrink-0 flex-col items-center gap-1 text-xs font-medium text-muted" role="img" aria-label={map.label}>

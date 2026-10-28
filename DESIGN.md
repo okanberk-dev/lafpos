@@ -16,7 +16,7 @@ Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (
   yumuşak zemini `*-soft`, kenarı `*-line` (sınıf adları `bg-primary-soft`, `border-warning-line`,
   `text-danger-ink`...). Masa boş beyaz, dolu mavi, hesap istendi amber, kısmen ödendi pembe (zemin `*-soft`,
   kenar `*-line`); online (siteden gelen) sipariş her ekranda mor. Bar ekranında kalem bekliyor nötr (gri halka),
-  hazırlanıyor mavi, hazır yeşil; amber yalnız zamanı söyler (ayardaki dakikayı geçen fişin süre rozeti, planlı
+  hazırlanıyor mavi, hazır yeşil, teslim edildi gri (yazıyla "Teslim edildi"); amber yalnız zamanı söyler (ayardaki dakikayı geçen fişin süre rozeti, planlı
   saat), kırmızı alarm ve iptal. Ham Tailwind ölçekleri (`danger-600`, `success-600`...) koyuda değişmez; yalnız
   beyaz yazılı dolu yüzeyde (dolu düğme, alarm süre rozeti, hazır rozeti) kalır, `tests/ui-rules.test.ts` izinli
   listeyle tutar. Renk durumu tek başına taşımaz, yanında yazı ya da ikon olur.
@@ -34,7 +34,8 @@ Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (
   sahnede, fotoğraf sahneyi doldurur, görseli olmayanda baş harfler); "/" aramaya götürür.
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok): çağrı ekranı `/cagri` (Hazırlanıyor ve
   büyük numaralı Hazır; platformun gel-al siparişinde platformun kodu ve adı), müşteri ekranı `/musteri-ekrani`
-  (kalemler ve büyük tutar; teşekkür, self serviste çağrı numarasıyla; hoş geldiniz).
+  (kalemler ve büyük tutar; teşekkür, self serviste çağrı numarasıyla; uzun kimlik, "Masa WWWWWW", çağrı ekranındaki
+  gibi ekranla küçülen yazı ve kırılan kelimeyle telefonda da taşmaz; hoş geldiniz).
   İkisi de ilk karesinden koyu açılır (gece loş salonda en parlak yüzey olmasın); müşteri ekranı `?tema=acik` ile
   açık açılır.
 - **Grafik:** tek seri tek renk (birincil mavi), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli

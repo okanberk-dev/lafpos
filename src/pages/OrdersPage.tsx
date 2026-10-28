@@ -3,7 +3,7 @@ import { Bike, Check, ChefHat, Globe, PackageCheck, Phone, RefreshCw, ShoppingBa
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
-import { numaratorLabel } from '@shared/service-mode';
+import { callFor, callText, numaratorLabel } from '@shared/service-mode';
 import { tl } from '@shared/money';
 import { fmtAgo, fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
@@ -15,7 +15,8 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { deliverItems } from '@/lib/handoff';
-import { readyToHand } from '@/lib/readyToHand';
+import { readyToHand, stageFromBar } from '@/lib/readyToHand';
+import { useServiceMode } from '@/lib/serviceMode';
 import { useTick } from '@/lib/hooks';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
@@ -36,9 +37,12 @@ export default function OrdersPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const now = useTick(30_000);
+  const mode = useServiceMode();
   const [tab, setTab] = useState<Tab>('acik');
   const open = useQuery({ queryKey: ['orders', 'acik'], queryFn: () => get<OrderDTO[]>('/orders?status=acik&limit=200'), refetchInterval: 60_000 });
   const closed = useQuery({ queryKey: ['orders', 'kapali'], queryFn: () => get<OrderDTO[]>('/orders?status=kapali&limit=300'), enabled: tab === 'kapanan' });
+  // Önce ödenmiş (kapanmış) tezgâh ve gel-al satışı hazır olunca teslim bekler (self servis): Açık'ta da görünür
+  const paidRecent = useQuery({ queryKey: ['orders', 'kapali', 'teslim'], queryFn: () => get<OrderDTO[]>('/orders?status=kapali&type=tezgah,gelal&limit=100'), refetchInterval: 60_000 });
   const refreshOnline = useMutation({
     mutationFn: () => post('/sync/online/refresh'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
@@ -65,11 +69,14 @@ export default function OrdersPage() {
   };
 
   const all = open.data ?? [];
+  // Bugün kapanmış, hazır kalemi teslim bekleyen tezgâh ve gel-al satışı (önce ödenen): en üstte, "Ödendi" rozetiyle
+  const awaitingHand = (paidRecent.data ?? []).filter((o) => readyToHand(o).length > 0);
+  const openPos = all.filter((o) => o.type !== 'masa' && o.source === 'pos');
   // Liste sorgusu: boş durum yalnız veri gelip boşsa; yüklenirken iskelet, alınamazsa hata (sahte "yok" değil)
   const list = tab === 'kapanan' ? closed : open;
   const rows =
     tab === 'acik'
-      ? all.filter((o) => o.type !== 'masa' && o.source === 'pos')
+      ? [...awaitingHand, ...openPos]
       : tab === 'online'
         ? all.filter((o) => o.source === 'laffogato')
         : tab === 'paket'
@@ -98,7 +105,7 @@ export default function OrdersPage() {
         value={tab}
         onChange={setTab}
         options={[
-          { value: 'acik', label: 'Açık', count: all.filter((o) => o.type !== 'masa' && o.source === 'pos').length },
+          { value: 'acik', label: 'Açık', count: awaitingHand.length + openPos.length },
           { value: 'online', label: 'Online', count: all.filter((o) => o.source === 'laffogato').length },
           { value: 'paket', label: 'Paket ve gel-al', count: all.filter((o) => o.type === 'paket' || o.type === 'gelal').length },
           { value: 'kapanan', label: 'Kapanan' },
@@ -137,13 +144,17 @@ export default function OrdersPage() {
             const readyIds = canHand ? readyToHand(o) : [];
             // Adet olarak ("2 ürün" yazan kartta "2 hazır")
             const readyQty = o.items.filter((i) => readyIds.includes(i.id)).reduce((a, i) => a + i.qty, 0);
-            const name = o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type]);
+            // Self modlarda tezgâh ve gel-al siparişinin çağrı numarası ("No 34"; müşteri onunla bekler), adıyla
+            const call = callFor(o, mode);
+            const callNo = call?.kind === 'numara' ? callText(call) : null;
+            const name = callNo ? joinMeta([callNo, o.deliveryName]) : (o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type]));
+            const paidAhead = o.status === 'kapali' && tab !== 'kapanan';
             const itemCount = o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);
             const methods = [...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))];
-            const hasBadges = !!o.platform || o.extPaid || o.extStage === 'gone' || pendingKitchen > 0 || readyIds.length > 0 || !!o.deliveryStatus || methods.length > 0;
-            // Kasanın gel-al siparişinin aşaması bardan izler (kalemlerin hepsi teslim edilince "Teslim edildi"): hazır kalem
-            // varken aşama düğmesi gizli, kartta tek düğme
-            const stageButton = flow && !readyIds.length;
+            const hasBadges = paidAhead || !!o.platform || o.extPaid || o.extStage === 'gone' || pendingKitchen > 0 || readyIds.length > 0 || !!o.deliveryStatus || methods.length > 0;
+            // Kasanın gel-al siparişinde bara kalem gittiyse aşama bardan izlenir (kalemlerin hepsi teslim edilince
+            // "Teslim edildi"): elle aşama düğmesi yok, teslim kalemin Teslim edildi düğmesiyle (sunucu da reddeder)
+            const stageButton = flow && !stageFromBar(o);
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
               <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
@@ -153,8 +164,8 @@ export default function OrdersPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
-                      {name}{' '}
-                      <span className="tabular font-normal text-muted">#{o.extNo ?? o.no}</span>
+                      {name}
+                      {!callNo && <span className="tabular font-normal text-muted"> #{o.extNo ?? o.no}</span>}
                     </span>
                     {/* Açıkta geçen süre (açılış saati ipucunda), kapananda kapanış saati; boş parça düşer */}
                     <span className="block text-[13px] text-muted" title={`Açılış ${fmtTime(o.openedAt)}`}>
@@ -172,6 +183,7 @@ export default function OrdersPage() {
                 </button>
                 {hasBadges && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
+                    {paidAhead && <Badge tone="green">Ödendi</Badge>}
                     {o.platform && <PlatformBadge platform={o.platform} code={o.platformCode} />}
                     {o.extPaid && <Badge tone="violet">Sitede ödendi</Badge>}
                     {o.extStage === 'gone' && <Badge>Siteden kalktı</Badge>}
@@ -203,7 +215,7 @@ export default function OrdersPage() {
                   </div>
                 )}
                 {readyIds.length > 0 && (
-                  <Button variant="primary" className="mt-3" icon={<PackageCheck className="size-4" />} loading={handing === o.id} onClick={() => void hand(o, readyIds, `${name} #${o.no}`)}>
+                  <Button variant="primary" className="mt-3" icon={<PackageCheck className="size-4" />} loading={handing === o.id} onClick={() => void hand(o, readyIds, callNo ? name : `${name} #${o.no}`)}>
                     Teslim edildi
                   </Button>
                 )}

@@ -208,15 +208,26 @@ export function fromDhOrder(o: DhOrder, remoteId: string, now = Date.now()): Pla
   // Müşterinin bize düşen ödemesi: kendi kuryemizin kapıda alacağı (collectFromCustomer, yalnız teslimatta ve sıfırdan
   // büyükse), yoksa grandTotal (Yemeksepeti kuryesinin teslimat ücreti düşülür)
   let ours = ourPart;
+  /** grandTotal'ın kalemleri aşan kısmı (bilinen fark, kuryenin bahşişi, düşülmüş): adisyona girmez, doğrulanır */
+  let excess = 0;
   const collect = toKurus(o.price?.collectFromCustomer);
   if (!paid && courier === 'restoran' && collect > 0) ours = collect;
-  else if (present(o.price?.grandTotal)) ours = Math.max(0, toKurus(o.price!.grandTotal) - platformFees);
+  else if (present(o.price?.grandTotal)) {
+    ours = Math.max(0, toKurus(o.price!.grandTotal) - platformFees);
+    excess = ours - toKurus(o.price?.riderTip) - ourPart;
+  }
   // Ödenmemiş siparişte kasada alınacak tutar sıfır görünüyorsa (eksik ya da 0,00 alan) tamamı platform payı sayılmaz;
   // tutar platformdan doğrulanmalı (otomatik kabul edilmez)
   let amountReview: string | null = null;
   if (!paid && ours <= 0) {
     ours = ourPart;
     amountReview = `Yemeksepeti'nde alınacak tutar sıfır göründü; ${tl(ourPart)} sayıldı, Yemeksepeti'nden doğrulayın`;
+  } else if (excess > 0) {
+    // Toplam kalemleri aşıyor (bahşiş tek başına aşmaz): fark adisyona ve platform alacağına girmez, doğrulanır
+    amountReview = `Yemeksepeti'nde ${paid ? 'ödenen' : 'alınacak'} ${tl(ourPart + excess)}, kalemler ${tl(ourPart)}: farkı Yemeksepeti'nden doğrulayın`;
+  } else if (paid && !present(o.price?.grandTotal)) {
+    // Ödenmiş siparişin toplamı gelmedi: kalemlerle çapraz denetlenemez (Getir ve Trendyol Go'da da aynı kural)
+    amountReview = "Yemeksepeti toplamı gelmedi: tutarı Yemeksepeti'nden doğrulayın";
   }
   let platformCollects = paid || courier === 'platform';
   let paymentLabel = paid ? `Online${text(o.payment?.type) ? ` ${o.payment!.type}` : ''}` : `Kapıda ${text(o.payment?.type) ?? 'ödeme'}`;

@@ -43,6 +43,19 @@ const ROUTES = {
     state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })),
     '/cagri',
     '/musteri-ekrani',
+    state('/musteri-ekrani', 'uzun-masa', async (page) => {
+      // Teşekkür ekranı uzun masa no ile (yarı self, harfli masa no): çağrı kutusu telefonda taşmasın
+      await page.evaluate(async () => {
+        const res = await fetch('/api/display/e2e-uzun', {
+          method: 'PUT',
+          headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ kind: 'thanks', total: 12345, call: 'Masa WWWWWW' }),
+        });
+        if (!res.ok) throw new Error(`PUT /display → ${res.status}`);
+      });
+      await page.goto(new URL('/musteri-ekrani?ekran=e2e-uzun', page.url()).href, { waitUntil: 'domcontentloaded' });
+      await page.getByText('Masa WWWWWW', { exact: true }).waitFor({ timeout: 5000 });
+    }),
     '/kasa',
     '/cihaz',
     '/musteriler',

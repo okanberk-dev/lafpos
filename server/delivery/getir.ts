@@ -460,9 +460,10 @@ export function fromGetirOrder(o: GetirOrder, now = Date.now(), opts: { preAccep
     ...(opts.preAccepted ? { preAccepted: true } : {}),
     // Getir siparişinde test bayrağı yok (test ortamının siparişleri gerçek akışla denenir)
     test: false,
-    // Açıklanamayan fark (notta da yazar) ya da kendi kuryemizin siparişinde belirsiz ödeme türü (tahsilatı kim yapar
+    // Açıklanamayan fark (notta da yazar), Getir'in toplamı hiç gelmedi (kalemler çapraz denetlenemez; Trendyol Go ve
+    // Yemeksepeti'nde de aynı kural) ya da kendi kuryemizin siparişinde belirsiz ödeme türü (tahsilatı kim yapar
     // tahmin): otomatik kabul edilmez. Saati okunamayan ileri tarihli sipariş de
-    ...(gapNote || (pay.verify && courier !== 'platform') ? { amountReview: gapNote ?? pay.label } : {}),
+    ...(gapNote || paid == null || (pay.verify && courier !== 'platform') ? { amountReview: gapNote ?? (paid == null ? "Getir toplamı gelmedi: tutarı Getir'den doğrulayın" : pay.label) } : {}),
     ...(o.isScheduled && scheduledFor == null ? { scheduledUnknown: true } : {}),
     platformData: { status: o.status ?? null, isScheduled: !!o.isScheduled, deliveryType: o.deliveryType ?? null, restaurantId: text(o.restaurant?.id), paymentMethod: o.paymentMethod ?? null },
   };
@@ -980,8 +981,12 @@ export function getirAdapter(c: GetirConfig, client = new GetirClient(c)): Platf
         }
       }
       result ??= await verify(id, GETIR_PATHS.verify(id));
-      // Getir panelinden zaten onaylanmış (2): onay anı bilinmez, en geç şimdi: ilk aşama bir aralık bekler
-      if (result === 'already') lastCall.set(id, clock());
+      // Getir panelinden ya da IVR'dan zaten onaylanmış (2): onay anı bilinmez, en geç şimdi: ilk aşama bir aralık
+      // bekler. Kasa bunu bilir: otomatik kabul adisyonu açmaz (kasada onay bekleyen sipariş panelden de alınmış olabilir)
+      if (result === 'already') {
+        lastCall.set(id, clock());
+        return 'already';
+      }
     },
     async reconfirm(order) {
       // Kasada kabul edilmiş ileri tarihli sipariş etkinleşince Getir onaysız listede yeniden 400 gösterdi: /verify.

@@ -193,21 +193,34 @@ yeniden denenmez) `docs/03-ENTEGRASYON.md` §2.3. Benzerleri: Square'in hızlı 
 sekmesi son 30 dakikada hazır olup alınmamış siparişleri sipariş başına tek fişle, en uzun bekleyen üstte gösterir
 (sekmede sayısı; `GET /kitchen?ready=1`); fişte tek dokunuşla **Teslim edildi** (`POST /kitchen/status` `servis`,
 teslim zamanı `served_at`), bildirimde **Geri al** (`servis` → `hazir`: hazır anı korunur, hazır uyarısı yinelenmez).
-Kasada aynı düğme adisyonda (hazır tezgâh ve gel-al, kapanmış self servis satışı da) ve Siparişler kartında. Site ve
+Bar Geçmiş'inin Geri al'ı (ve Geçmiş'te kaleme dokunuş) bir adım geri gider: teslim edilmiş kalem "Hazır"a (teslimin
+geri alınışı: hazır anı korunur, uyarı yok, sipariş kuyruğa dönmez), yalnız hazır kalem "Hazırlanıyor"a; sunucu da
+teslim edilmiş kalemi "Hazırlanıyor"a götürmez, "Hazır"a indirir (gözden geçirme 2: iki adım geri giden sipariş
+kuyruğa dönüyor, çağrı ekranında Hazırlanıyor oluyor, hazır uyarısı yeniden gidiyor ve hazırlama süresi şişiyordu).
+Kasada aynı düğme adisyonda (hazır tezgâh ve gel-al, kapanmış self servis satışı da) ve Siparişler kartında; önce
+ödenip kapanmış tezgâh ve gel-al satışı hazır olunca Siparişler › Açık'ta da (sayıda da) görünür, "Ödendi" rozetiyle;
+self modlarda kartın adı çağrı numarasıdır ("No 34"). Site ve
 paket platformu siparişleri Hazır sekmesine gelmez, teslimleri kendi akışlarında. Kasanın gel-al siparişinin aşaması
 bara giden kalemlerden türetilir (`pickupStageOf`): hepsi teslim edildiyse "Teslim edildi", hepsi hazırsa "Hazır",
 değilse "Hazırlanıyor". Kalem durumu değişince, bara kalem gidince (teslim edilmiş, kapanıp yeniden açılmış siparişe
-eklenen kalem de) ve bar kalemi iptal edilince yeniden türetilir; barın Geri al'ı "Hazır"ı da geri alır (denetimde
-`delivery.done` / `delivery.undo`; Siparişler kartında tek düğme kalır). Çağrı ekranı, Hazır sekmesi ve kasadaki
+eklenen kalem de), bar kalemi iptal edilince, kalem başka hesaba taşınınca (kaynak ve hedef) ve adisyonlar
+birleşince yeniden türetilir; barın Geri al'ı "Hazır"ı da geri alır (denetimde `delivery.done` / `delivery.undo`;
+teslimden dönüşün nedeni yazılır: "bara yeni kalem gitti", "bar hazırı geri aldı", "#N adisyonun kalemi barda"). Bara
+kalem giden kasa gel-al'ında Siparişler'in elle aşama düğmeleri (Hazır, Yola çıktı, Teslim edildi) yoktur, sunucu da
+elle aşamayı 409 `stage_from_bar` ile reddeder (`pickupFromBar`): elle "Teslim edildi" bar kalemi beklerken verilir,
+bar sonra Hazır deyince aşama geri döner ve teslimin geri alınışı barista adına denetime düşerdi. Teslim kalemin Teslim
+edildi düğmesiyle; bara kalem gitmeyen gel-al'da elle aşama sürer. Çağrı ekranı, Hazır sekmesi ve kasadaki
 Teslim edildi düğmesi kasanın siparişinde kalemin durumuna bakar (teslimden sonra eklenen kalem yeniden görünür),
 platform siparişini teslim aşamasında düşürür; paket platformunun gel-al siparişini LafPOS numarası yerine platformun
 kısa koduyla ve adıyla gösterir. Platform siparişinin "N ürün hazır" uyarısı paket yetkili her cihazda çalar (kabul
 eden, otomatik kabulde, kafede olmayabilir).
 Müşteri ekranının teşekkürü bara giden kalemi olan self servis satışında çağrı numarasını da söyler ("Numaranız 34",
-yarı selfte "Masa 12"; `thanks.call`, eski kasa göndermezse ekran bugünkü gibi). Hazırlama süresi raporunda
+yarı selfte "Masa 12"; `thanks.call`, eski kasa göndermezse ekran bugünkü gibi); uzun masa no ("Masa WWWWWW") kutuyu
+390 px'te taşırmaz (yazı ekranla küçülür, kelime kırılır; e2e taramasında `/musteri-ekrani` › `uzun-masa`). Hazırlama süresi raporunda
 **Hazırdan teslime** ortancası (her teslim dokunuşu bir kez). Testler `tests/pickup-board.test.ts`,
 `tests/prep-report.test.ts`, `tests/display.test.ts`; e2e'de iki akış ve self servis akışında ödeme penceresinin
-gerçek teşekkür gönderimi (bara giden satışta numara, gitmeyende numarasız). Teşekkür gidince 300 ms toplanan
+gerçek teşekkür gönderimi (bara giden satışta numara, gitmeyende numarasız) ve önce ödenen satışın Siparişler › Açık'ta
+"Ödendi" ve çağrı numarasıyla teslim edilmesi. Teşekkür gidince 300 ms toplanan
 adisyon görüntüsü iptal olur ve gönderimler sırayla gider (`src/lib/display.ts`): ödemeden hemen önce kurulan
 zamanlayıcı teşekkürü ezip ekranı ödenmemiş adisyona döndürüyordu (bu akış buldu).
 

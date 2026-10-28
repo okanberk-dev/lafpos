@@ -184,8 +184,10 @@ describe('ayar', () => {
 
 describe('Canlı', () => {
   beforeAll(async () => {
-    // Kurulum modunda canlı sipariş otomatik kabul edilmez: kasa canlıda
+    // Kurulum modunda ve yazarkasanın eğitim simülatöründe (kurulum verisi onunla başlar) canlı sipariş otomatik kabul
+    // edilmez: kasa canlıda
     await h.ok('patron', 'PUT', '/admin/settings', { demoMode: false });
+    await h.ok('patron', 'PUT', '/okc/settings', { provider: 'kapali' });
     for (const p of ['trendyol', 'yemeksepeti', 'getir']) await setPlatform(p, { mode: 'canli', autoAccept: true, autoAcceptUserId: ids.kasa });
   });
 
@@ -319,10 +321,17 @@ describe('Canlı', () => {
     d.update(schema.products).set({ portionsLeft: null }).where(eq(schema.products.id, latte.id)).run();
   });
 
-  it('kasa kurulum modunda, gün güncel değil ya da kabul eden uygun değilse çalışmaz (kişide bir kez uyarı)', async () => {
+  it('kasa kurulum ya da eğitim modunda, gün güncel değil ya da kabul eden uygun değilse çalışmaz (kişide bir kez uyarı)', async () => {
     await h.ok('patron', 'PUT', '/admin/settings', { demoMode: true });
-    await expectSkip(payload(), 'kasa kurulum modunda');
+    await expectSkip(payload(), 'kasa kurulum ya da eğitim modunda');
     await h.ok('patron', 'PUT', '/admin/settings', { demoMode: false });
+    // Yazarkasanın eğitim simülatörü açıkken günün satışı eğitim günüdür: gerçek sipariş ona yazılmaz (yoklamadan da)
+    await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator' });
+    await expectSkip(payload(), 'kasa kurulum ya da eğitim modunda');
+    const ext = await tyArrive();
+    expect(await byExt(ext)).toMatchObject({ status: 'bekliyor', orderId: null, lastError: 'Otomatik kabul edilmedi: kasa kurulum ya da eğitim modunda' });
+    expect(picked(ext)).toBe(0);
+    await h.ok('patron', 'PUT', '/okc/settings', { provider: 'kapali' });
 
     const { db: d, schema } = await db();
     const { eq, isNull } = await import('drizzle-orm');
@@ -491,6 +500,145 @@ describe('Canlı', () => {
     expect(picked(ext)).toBe(0);
   });
 });
+
+describe('Canlı: platformda zaten kabul edilmiş ve eski sipariş', () => {
+  it('Getir /verify "zaten onaylı" (2) derse otomatik kabul adisyonu açmaz: bekler, alarm; elle Kabul açar, ikinci verify yok', async () => {
+    const id = `ord-ivr-${++seq}`;
+    const order: GetirOrder = {
+      id,
+      status: 400,
+      isScheduled: false,
+      confirmationId: String(seq),
+      client: { id: 'cl-2', name: 'Can D.' },
+      products: [{ id: 'line-1', product: 'prd-latte', count: 1, name: { tr: 'Latte', en: 'Latte' }, price: 190, priceWithOption: 190, totalPriceWithOption: 190 }],
+      totalPrice: 190,
+      totalDiscountedPrice: 190,
+      checkoutDate: new Date().toISOString(),
+      deliveryType: 1,
+      paymentMethod: 1,
+      paymentMethodText: { tr: 'MasterPass', en: 'MasterPass' },
+      restaurant: { id: 'rest-1', name: "L'Affogato" },
+    };
+    // Sipariş kasaya gelmeden Getir panelinden ya da IVR'dan onaylanmış (onaylı listede henüz yok)
+    gf.statusFor.verify = [{ status: 400, code: 2 }];
+    gf.inbox.push({ id: `in-${id}`, kind: 'order', receivedAt: Date.now(), order } satisfies GetirInboxItem);
+    await live.pollPlatform('getir');
+    delete gf.statusFor.verify;
+    const row = await byExt(id);
+    expect([row.status, row.orderId, row.announced]).toEqual(['bekliyor', null, true]);
+    expect(row.lastError).toBe('Platformun panelinden kabul edildi: Kabul yalnız adisyonu açar');
+    expect(gf.count(`POST ${id} verify`)).toBe(1);
+    const alarm = (await audit()).find((x) => x.action === 'platform.accepted_elsewhere' && x.message.includes(row.payload.code))!;
+    expect(alarm.severity).toBe('alarm');
+    expect((await audit()).some((x) => x.action === 'platform.auto_accept' && x.message.includes(row.payload.code))).toBe(false);
+    // Yeniden denense de (kasa yeniden başladı) elle kalır
+    expect(await live.autoAccept(row.id)).toBe('skipped');
+    expect((await byExt(id)).orderId).toBeNull();
+    // Elle Kabul yalnız adisyonu açar: Getir'e ikinci kez gidilmez
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    expect(gf.count(`POST ${id} verify`)).toBe(1);
+    expect(await byExt(id)).toMatchObject({ status: 'kabul', orderId, decidedBy: 'Kasa' });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${orderId}`)).status).toBe('acik');
+  });
+
+  it('elle Kabul\'de Getir "zaten onaylı" derse adisyon her zamanki gibi açılır (davranış değişmedi)', async () => {
+    await setPlatform('getir', { autoAccept: false });
+    const id = `ord-el-${++seq}`;
+    const order: GetirOrder = {
+      id,
+      status: 400,
+      confirmationId: String(seq),
+      products: [{ id: 'line-1', product: 'prd-latte', count: 1, name: { tr: 'Latte' }, price: 190, priceWithOption: 190, totalPriceWithOption: 190 }],
+      totalPrice: 190,
+      checkoutDate: new Date().toISOString(),
+      deliveryType: 1,
+      paymentMethod: 1,
+      restaurant: { id: 'rest-1' },
+    };
+    gf.inbox.push({ id: `in-${id}`, kind: 'order', receivedAt: Date.now(), order } satisfies GetirInboxItem);
+    await live.pollPlatform('getir');
+    const row = await byExt(id);
+    expect(row.status).toBe('bekliyor');
+    gf.statusFor.verify = [{ status: 400, code: 2 }];
+    const { orderId } = await h.ok<{ orderId: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    delete gf.statusFor.verify;
+    expect(await byExt(id)).toMatchObject({ status: 'kabul', orderId, lastError: null });
+    await setPlatform('getir', { autoAccept: true });
+  });
+
+  it('bağlantı kopukken birikmiş sipariş (2 saat önce oluşmuş, hâlâ Created) otomatik kabul edilmez: sipariş eski', async () => {
+    const { fmtTime } = await import('@shared/time');
+    const at = Date.now() - 2 * 3600_000;
+    const ext = await tyArrive({ packageCreationDate: at, packageModificationDate: Date.now() - 60_000 });
+    const row = await byExt(ext);
+    expect([row.status, row.orderId]).toEqual(['bekliyor', null]);
+    expect(row.lastError).toBe(`Otomatik kabul edilmedi: sipariş eski (${fmtTime(at)})`);
+    expect(picked(ext)).toBe(0);
+    // 30 dakikanın içindeki sipariş kabul edilir
+    const fresh = await tyArrive({ packageCreationDate: Date.now() - 20 * 60_000 });
+    expect((await byExt(fresh)).status).toBe('kabul');
+  });
+});
+
+describe('bağdaştırıcıların tutar ve ödeme işaretleri', () => {
+  it('toplam gelmezse üç bağdaştırıcıda da tutar doğrulanır (otomatik kabul edilmez)', async () => {
+    const { fromTrendyolPackage } = await import('../server/delivery/trendyol');
+    const { fromGetirOrder } = await import('../server/delivery/getir');
+    const { fromDhOrder } = await import('../server/delivery/yemeksepeti');
+    expect(fromTrendyolPackage(tyPkg({ totalPrice: undefined })).amountReview).toBe('Trendyol ödenen tutarı vermedi');
+    const g: GetirOrder = { id: 'g-yok', status: 400, products: [{ id: 'l', product: 'prd-latte', count: 1, name: { tr: 'Latte' }, price: 190, priceWithOption: 190, totalPriceWithOption: 190 }], checkoutDate: new Date().toISOString(), deliveryType: 1, paymentMethod: 1 };
+    expect(fromGetirOrder(g).amountReview).toBe("Getir toplamı gelmedi: tutarı Getir'den doğrulayın");
+    expect(fromGetirOrder({ ...g, totalPrice: 190 }).amountReview).toBeUndefined();
+    const paid = fromDhOrder(dh({ deliveryFees: [] }, { status: 'paid', type: 'online' }), 'POS_1');
+    expect(paid.amountReview).toBe("Yemeksepeti toplamı gelmedi: tutarı Yemeksepeti'nden doğrulayın");
+    expect(paid.customerTotal).toBe(19000);
+    const row = await ingest(paid);
+    expect(live.autoAcceptBlocker(row)).toBe("Yemeksepeti toplamı gelmedi: tutarı Yemeksepeti'nden doğrulayın");
+  });
+
+  it("Yemeksepeti: ödenen toplam kalemleri aşarsa doğrulanır; kurye bahşişi ve Yemeksepeti kuryesinin teslimat ücreti tek başına aşmaz", async () => {
+    const { fromDhOrder } = await import('../server/delivery/yemeksepeti');
+    const ok = fromDhOrder(dh({ deliveryFees: [{ name: 'delivery', value: 25 }], grandTotal: '215.00' }, { status: 'paid', type: 'online' }), 'POS_1');
+    expect([ok.amountReview, ok.customerTotal]).toEqual([undefined, 19000]);
+    const tip = fromDhOrder(dh({ deliveryFees: [{ name: 'delivery', value: 25 }], grandTotal: '235.00', riderTip: '20.00' }, { status: 'paid', type: 'online' }), 'POS_1');
+    expect([tip.amountReview, tip.customerTotal]).toEqual([undefined, 19000]);
+    const over = fromDhOrder(dh({ deliveryFees: [{ name: 'delivery', value: 25 }], grandTotal: '265.00', riderTip: '20.00' }, { status: 'paid', type: 'online' }), 'POS_1');
+    expect(over.amountReview).toBe("Yemeksepeti'nde ödenen ₺220,00, kalemler ₺190,00: farkı Yemeksepeti'nden doğrulayın");
+    // Adisyon kalemlerle kalır (fark adisyona ve platform alacağına girmez), sipariş elle kabul edilir
+    expect(over.customerTotal).toBe(19000);
+    await expectSkip(over, "Yemeksepeti'nde ödenen ₺220,00, kalemler ₺190,00: farkı Yemeksepeti'nden doğrulayın");
+  });
+
+  it('Trendyol Go: kendi kuryemizin siparişinde tanınmayan ödeme türü doğrulanır; tahsilat davranışı aynı, platform kuryesinde bayrak yok', async () => {
+    const { fromTrendyolPackage, paymentOf } = await import('../server/delivery/trendyol');
+    const own: Partial<TrendyolPackage> = { deliveryType: 'STORE', storePickupSelected: false, address: { address1: 'Aydınlı Mh.', phone: '0 5** *** ** 90' } };
+    const unknown = fromTrendyolPackage(tyPkg({ ...own, payment: { paymentType: 'PAY_WITH_POS' } }));
+    expect(unknown.amountReview).toBe("Ödeme türü tanınmadı (PAY_WITH_POS): tahsilatı Trendyol'dan doğrulayın");
+    // Elle kabulde tahsilat bugünkü gibi (online sayılır), yalnız işaretli
+    expect([unknown.courier, unknown.platformCollects, unknown.paymentLabel]).toEqual(['restoran', true, 'Online kart']);
+    expect(fromTrendyolPackage(tyPkg({ payment: { paymentType: 'PAY_WITH_POS' } })).amountReview).toBeUndefined();
+    // Tanınan türler: online kart işaretsiz, kapıda nakit kasada
+    expect(fromTrendyolPackage(tyPkg({ ...own, payment: { paymentType: 'PAY_WITH_CREDIT_CARD' } })).amountReview).toBeUndefined();
+    expect(paymentOf(tyPkg({ payment: 'pay_with_credit_card' }))).toEqual({ online: true, label: 'Online kart' });
+    expect(paymentOf(tyPkg({ payment: { paymentType: 'PAY_WITH_CASH' } }))).toEqual({ online: false, label: 'Kapıda nakit' });
+    expect(paymentOf(tyPkg({ payment: { paymentType: 'PAY_WITH_POS' } }))).toMatchObject({ online: true, verify: true, raw: 'PAY_WITH_POS' });
+  });
+});
+
+/** Yemeksepeti siparişi (Yemeksepeti kuryesi, tablette kabul edilmemiş): 1 Latte 190 TL */
+function dh(price: DhOrder['price'], payment: DhOrder['payment']): DhOrder {
+  return {
+    token: `tok-${++seq}`,
+    code: `c${seq}`,
+    createdAt: new Date().toISOString(),
+    delivery: { address: null, expectedDeliveryTime: null, riderPickupTime: new Date(Date.now() + 20 * 60_000).toISOString() },
+    expeditionType: 'delivery',
+    payment,
+    products: [{ id: 'P', remoteCode: 'latte-m', name: 'Latte', quantity: '1', unitPrice: '190.00', selectedToppings: [] }],
+    price,
+    callbackUrls: { orderAcceptedUrl: `${ys.url}/cb/accepted/tok-${seq}`, orderRejectedUrl: `${ys.url}/cb/rejected/tok-${seq}` },
+  };
+}
 
 describe('Deneme', () => {
   beforeAll(async () => {

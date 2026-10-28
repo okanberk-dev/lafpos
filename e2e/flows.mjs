@@ -292,6 +292,22 @@ export async function runFlows(ctx) {
           const board = await api.call('', 'GET', '/public/board');
           const entry = [...board.preparing, ...board.ready].find((e) => e.id === orderId);
           assert(entry && entry.no === order.no && !entry.table, `çağrı ekranında numara yok: ${JSON.stringify(entry)}`);
+
+          // Önce ödenen satış hazır olunca Siparişler › Açık'ta teslim bekler: çağrı numarası, "Ödendi" ve Teslim edildi
+          await api.call('bar', 'POST', '/kitchen/status', { itemIds: order.items.filter((i) => i.stationId).map((i) => i.id), status: 'hazir' });
+          await withPage(ctx, 'tablet', 'kasa', async (page) => {
+            await go(ctx, page, '/siparisler');
+            const label = page.getByText(`No ${order.no}`, { exact: true });
+            const card = page.locator('div').filter({ has: label }).filter({ hasText: 'Ödendi' }).last();
+            await card.waitFor({ timeout: 8000 });
+            await page.screenshot({ path: `${ROOT}/e2e/out/tablet-siparisler-self-odendi.png` });
+            const overflow = await overflowReport(page);
+            assert(overflow.page <= 1 && !overflow.items.length, `Siparişler yatay taşıyor: ${JSON.stringify(overflow)}`);
+            await card.getByRole('button', { name: 'Teslim edildi', exact: true }).click();
+            await label.waitFor({ state: 'detached', timeout: 8000 });
+          });
+          const handed = await api.call('kasa', 'GET', `/orders/${orderId}`);
+          assert(handed.items.filter((i) => i.stationId).every((i) => i.status === 'servis'), `Siparişler'den teslim edilmedi: ${handed.items.map((i) => i.status)}`);
         } finally {
           await api.call('patron', 'PUT', '/admin/settings', { serviceMode: 'masa' });
           await api.call('kasa', 'PUT', `/display/${display}`, { kind: 'idle' });
