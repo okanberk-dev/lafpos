@@ -35,7 +35,7 @@ Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok): çağrı ekranı `/cagri` (Hazırlanıyor ve
   büyük numaralı Hazır), müşteri ekranı `/musteri-ekrani` (kalemler ve büyük tutar; teşekkür; hoş geldiniz).
   İkisi de ilk karesinden koyu açılır (gece loş salonda en parlak yüzey olmasın); müşteri ekranı `?tema=acik` ile
-  cihazın temasında kalır.
+  açık açılır.
 - **Grafik:** tek seri tek renk (birincil mavi), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli
   adım yok, verisi olmayan dönemde eksen yerine ekranın zamanını söyleyen boş durum çizilir (Bugün henüz satış
   yok, Bu günde satış yok, Bu dönemde satış yok; `ColumnChart` `emptyLabel`, `src/components/charts.tsx`).
@@ -93,7 +93,40 @@ değerleri (`--bg`, `--ink`, `--primary`...) Innex'e döner, ortak bileşenler d
 6. **Sistem sağlığı kartı** (Innex §3 fikir 5): site menüsü, online sipariş, lafmaliyet, yazarkasa ve
    yedeğin durumu tek yerde.
 
-## 3. Telefon ve tablet (impeccable `adapt`)
+## 3. Ortak bileşenler ve etkileşim (28 Ekim 2026 yenilemesi)
+
+Kasa ekranları `src/components/ui/*`, yönetim `src/components/admin/ui.tsx` kullanır; ikisi aynı belirteçlerden
+ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denetimini yazmaz.
+
+- **Ölçek:** sayfa başlığı 18/600 ve 13 px açıklama (`PageHeader`), bölüm 16/600, kart başlığı 15/600, mikro
+  etiket 12/500; kart arası 12 px, pencereye 8 px. KPI karosu tek bileşen (`Stat`: 13 px etiket, 24 px rakam,
+  `strong` 30 px); rakam yerine kelime yazılmaz ("—" ve ipucunda "Sayılmadı").
+- **Durumlar:** her denetimin dinlenme, üzerine gelme, basılı (zemin bir ton koyu; dokunmatikte `hover`
+  çalışmadığı için basılı renk ayrıca yazılır), odak (2 px birincil halka) ve devre dışı hali var. Devre dışı
+  birincil düğme gri zemin ve soluk yazıdır, yarı saydam mavi değil; bir bilgi cümlesi devre dışı düğme olarak
+  çizilmez ("Ödemeyi kasa alır" düğmenin altında yazıdır).
+- **Sekme ve seçim:** `Tabs` (bölüm, istasyon, sipariş listesi; seçili gri zemin, sayı hapı sıfırsa gizli, dar
+  ekranda yatay kayar) ve `Segmented` (2-4 eşit seçenek; gri ray, beyaz hap). Seçim rengi mavidir; amber durum
+  rengidir, seçim için kullanılmaz.
+- **Boş, yükleniyor, hata:** `EmptyState` (kart içinde `compact`, sayfada varsayılan, bar ve çağrı ekranında
+  `large`; başlık ekranın sözüyle, "Liste boş" değil), `Skeleton` / `ListSkeleton` (ilk yüklemede), `ErrorState`
+  (yeniden dene ile). Yüklenirken ya da hata varken "yok" yazılmaz.
+- **Onay ve metin isteme:** tarayıcının `confirm()` / `prompt()` pencereleri yok; `confirmDialog` /
+  `promptDialog` (`src/components/ui/Confirm.tsx`) eylemi adlandıran düğmeyle, yıkıcı eylemde kırmızı. Para ya da
+  kayıt değiştiren her düğme istek sürerken kilitlidir (`loading`), ikinci dokunuş gitmez.
+- **Tutar girişi:** ekrandaki tuş takımı (`Numpad`) fiziksel klavyeyle de çalışır: rakam, `,` ve sayısal
+  takımın ondalığı virgül; ana sıradaki `.` ardından üç rakam gelirse binlik ayıracı ("2.000"), değilse ondalık
+  ("45.90" = 45,90 TL); Enter onaylar, odaktaki tuşa yeniden basmaz. Önceden dolu tutarın üstüne ilk tuş yazar.
+  Kalandan fazlası sessizce kırpılmaz, alan uyarır.
+- **Bildirim:** telefonda alt sekmenin üstünde, tablet ve bilgisayarda sağ üstte (aksiyon şeridini örtmez);
+  "Geri al" gibi tek eylem taşıyabilir, eylem bir kez çalışır. Hata bildirimi daha uzun kalır.
+- **Sınıflar:** `cn()` (`src/lib/cn.ts`) çakışan Tailwind sınıflarını birleştirir, sonraki kazanır (`px-0`
+  `px-3`'ü, `max-sm:hidden` gizlemeyi ezer). Geçiş yalnız değişen özelliklere, 150 ms; hareket azaltmada dekoratif
+  hareket ve nabız durur.
+- **Kaydedilmemiş değişiklik:** uzun ayar formu değişiklik varken altta yapışkan şerit (Vazgeç, Kaydet) gösterir;
+  sekme kapanırken, uygulama içi geçişte ve geri tuşunda sorar (`src/lib/unsavedGuard.ts`).
+
+## 4. Telefon ve tablet (impeccable `adapt`)
 
 - Kırılımlar: telefon `< 768`, tablet `768-1023`, bilgisayar `1024+`. Giriş türü genişlikten değil
   `pointer-coarse` / `pointer-fine` sorgusundan: dokunmatikte her hedef en az 44 px.
