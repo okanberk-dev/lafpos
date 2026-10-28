@@ -189,6 +189,20 @@ tanıması için sözleşmeye eklenen `PUT /api/panel/tables` (giden kutusu `tab
 yeniden denenmez) `docs/03-ENTEGRASYON.md` §2.3. Benzerleri: Square'in hızlı servis (quick service) ve tam servis modları, Toast'un "service prompt"u
 (gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
 
+**Hazır ve teslim** (28 Ekim 2026, `claude/k-hazir`): bar ekranında üç görünüm, Fişler, **Hazır** ve Geçmiş. Hazır
+sekmesi son 30 dakikada hazır olup alınmamış siparişleri sipariş başına tek fişle, en uzun bekleyen üstte gösterir
+(sekmede sayısı; `GET /kitchen?ready=1`); fişte tek dokunuşla **Teslim edildi** (`POST /kitchen/status` `servis`,
+teslim zamanı `served_at`), bildirimde **Geri al** (`servis` → `hazir`: hazır anı korunur, hazır uyarısı yinelenmez).
+Kasada aynı düğme adisyonda (hazır tezgâh ve gel-al, kapanmış self servis satışı da) ve Siparişler kartında. Site ve
+paket platformu siparişleri Hazır sekmesine gelmez, teslimleri kendi akışlarında. Kasanın gel-al siparişinin aşaması
+bardan izler: bara giden her kalem hazır olunca "Hazır", teslim edilince "Teslim edildi", geri alınınca "Hazır"
+(denetimde `delivery.done` / `delivery.undo`; Siparişler kartında tek düğme kalır). Çağrı ekranı teslim edileni (kalemler serviste ya da gel-al teslim aşamasında)
+hemen düşürür; paket platformunun gel-al siparişini LafPOS numarası yerine platformun kısa koduyla ve adıyla gösterir.
+Müşteri ekranının teşekkürü bara giden kalemi olan self servis satışında çağrı numarasını da söyler ("Numaranız 34",
+yarı selfte "Masa 12"; `thanks.call`, eski kasa göndermezse ekran bugünkü gibi). Hazırlama süresi raporunda
+**Hazırdan teslime** ortancası (her teslim dokunuşu bir kez). Testler `tests/pickup-board.test.ts`,
+`tests/prep-report.test.ts`, `tests/display.test.ts`; e2e'de iki akış.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

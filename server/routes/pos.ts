@@ -318,17 +318,18 @@ posRoutes.post('/orders/:id/room/link', async (c) => {
 // ─── Bar / mutfak ekranı ─────────────────────────────────────────────────────
 
 posRoutes.get('/kitchen', (c) => {
-  const q = query(c, z.object({ station: z.string().optional(), history: z.enum(['0', '1']).optional() }));
+  const q = query(c, z.object({ station: z.string().optional(), history: z.enum(['0', '1']).optional(), ready: z.enum(['0', '1']).optional() }));
   const actor = actorFrom(c);
   if (!actor.user.permissions.has('mutfak.ekran') && !actor.user.permissions.has('siparis.al')) needDirect(actor, 'mutfak.ekran');
-  return c.json(kitchenTickets(db, { stationId: q.station || null, history: q.history === '1' }));
+  return c.json(kitchenTickets(db, { stationId: q.station || null, history: q.history === '1', ready: q.ready === '1' }));
 });
 
 
 posRoutes.post('/kitchen/status', async (c) => {
   const input = await body(
     c,
-    // "yeni"ye dönüş yok: başlamış kalemin başlama zamanı silinip onaysız iptal açılırdı (orders.setItemsStatus)
+    // "yeni"ye dönüş yok: başlamış kalemin başlama zamanı silinip onaysız iptal açılırdı (orders.setItemsStatus).
+    // "servis" Teslim edildi; teslimden "hazir"a dönüş onun Geri al'ı
     z.object({ itemIds: z.array(z.string()).min(1).max(100), status: z.enum(['hazirlaniyor', 'hazir', 'servis']).optional() }),
   );
   const actor = actorFrom(c);

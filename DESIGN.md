@@ -33,7 +33,8 @@ Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (
 - **Adisyon:** geniş ekranda kategoriler solda dikey liste (sayılarıyla), ürün kartında sitedeki görsel (dekupaj gri
   sahnede, fotoğraf sahneyi doldurur, görseli olmayanda baş harfler); "/" aramaya götürür.
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok): çağrı ekranı `/cagri` (Hazırlanıyor ve
-  büyük numaralı Hazır), müşteri ekranı `/musteri-ekrani` (kalemler ve büyük tutar; teşekkür; hoş geldiniz).
+  büyük numaralı Hazır; platformun gel-al siparişinde platformun kodu ve adı), müşteri ekranı `/musteri-ekrani`
+  (kalemler ve büyük tutar; teşekkür, self serviste çağrı numarasıyla; hoş geldiniz).
   İkisi de ilk karesinden koyu açılır (gece loş salonda en parlak yüzey olmasın); müşteri ekranı `?tema=acik` ile
   açık açılır.
 - **Grafik:** tek seri tek renk (birincil mavi), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli

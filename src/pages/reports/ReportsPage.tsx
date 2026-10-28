@@ -689,6 +689,8 @@ interface PrepStats {
 }
 interface PrepData {
   overall: PrepStats;
+  /** Hazırdan teslime (Teslim edildi); eski sunucu göndermez */
+  handoff?: PrepStats;
   products: (PrepStats & { name: string; size: string })[];
   hours: (PrepStats & { hour: number })[];
   slowest: { orderNo: number; name: string; size: string; sentAt: number; sec: number }[];
@@ -714,11 +716,18 @@ function PrepReport({ range }: { range: Range }) {
           </EmptyState>
         ) : (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Ortalama" value={dur(p.overall.avg)} hint={`${p.overall.count} kalem`} />
         <Stat label="Ortanca" value={dur(p.overall.median)} hint="Kalemlerin yarısı bundan kısa" />
         <Stat label="En yavaş %10" value={dur(p.overall.p90)} hint="Bu süreyi aşan her 10 kalemden biri" />
         <Stat label="En uzun" value={dur(p.overall.max)} />
+        {/* Müşterinin hazır siparişi ne kadar sürede aldığı: bar ekranında ya da kasada "Teslim edildi" */}
+        <Stat
+          className="max-lg:col-span-2"
+          label="Hazırdan teslime"
+          value={p.handoff?.count ? dur(p.handoff.median) : '—'}
+          hint={p.handoff?.count ? `Ortanca · ${p.handoff.count} teslim` : 'Sayılmadı · bu dönemde teslim işaretlenmedi'}
+        />
       </div>
       <Card flush title="Saate göre ortalama süre">
         <div className="p-4">

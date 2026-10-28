@@ -40,6 +40,7 @@ const ROUTES = {
     '/masalar',
     '/siparisler',
     '/mutfak',
+    state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })),
     '/cagri',
     '/musteri-ekrani',
     '/kasa',
@@ -91,7 +92,7 @@ const ROUTES = {
   ],
   garson: ['/masalar', '/siparisler', '/mutfak', '@s1'],
   kasa: ['/kasa', '/masalar', '/satis', '@s2', '@tz', '/cihaz'],
-  bar: ['/mutfak'],
+  bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 }))],
 };
 
 /** Kendiliğinden başka adrese geçen ekranlar: "/satis" boş tezgâh satışını açıp adisyona geçer */

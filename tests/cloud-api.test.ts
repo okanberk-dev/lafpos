@@ -82,6 +82,9 @@ describe('LafPOS Uzaktan', () => {
     expect(boot.products.length).toBeGreaterThan(50);
     expect((await GET(req(`orders/${o.id}`, { headers: auth }))).status).toBe(200);
     expect((await GET(req('reports/patron', { headers: auth }))).status).toBe(200);
+    // Özette yalnız aktif fişler: bar ekranının Hazır sekmesi uzaktan boş (aktif fişlerle dolmaz)
+    expect(await (await GET(req('kitchen', { headers: auth }))).json()).toHaveLength(1);
+    expect(await (await GET(req('kitchen&ready=1', { headers: auth }))).json()).toEqual([]);
     const write = await POST(req(`orders/${o.id}/items`, { method: 'POST', body: '{}', headers: auth }));
     expect(write.status).toBe(403);
     expect(((await write.json()) as { code: string }).code).toBe('remote_readonly');

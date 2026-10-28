@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, Layers, MessageSquareText, MonitorUp, Moon, MoreHorizontal, PackageX, Sun, Undo2, WifiOff } from 'lucide-react';
+import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, Layers, MessageSquareText, MonitorUp, Moon, MoreHorizontal, PackageCheck, PackageX, Sun, Undo2, WifiOff } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { kitchenTotals } from '@shared/kitchen';
 import { ticketHead } from '@shared/service-mode';
@@ -10,6 +10,7 @@ import { Button, IconButton } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState, Notice, Skeleton, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
+import { deliverItems } from '@/lib/handoff';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -21,6 +22,10 @@ import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 import { useServiceMode } from '@/lib/serviceMode';
 import { appUrl } from '@/lib/demo';
+
+/** Bar ekranının görünümü: hazırlanacak fişler, teslim bekleyen hazırlar (son 30 dk), hazırlanmış olanlar (90 dk) */
+type View = 'aktif' | 'hazir' | 'gecmis';
+const VIEW_QUERY: Record<View, Record<string, string>> = { aktif: {}, hazir: { ready: '1' }, gecmis: { history: '1' } };
 
 function mmss(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -36,9 +41,11 @@ export default function KitchenPage() {
   // ne olursa olsun. Kullanıcı menüsü ve komut paleti de aynı tercihi değiştirdiği için görünen durum mağazadan okunur
   const dark = useTheme((s) => s.force === 'dark');
   const [station, setStation] = useLocalPref<string>('kds.station', '');
-  const [history, setHistory] = useState(false);
+  const [view, setView] = useState<View>('aktif');
+  const history = view === 'gecmis';
+  const readyView = view === 'hazir';
   const [soldOut, setSoldOut] = useState(false);
-  // Telefonda araç çubuğu tek düğmeye iner: Toplam, Geçmiş ve Tükendi bu pencerede
+  // Telefonda araç çubuğu tek düğmeye iner: Toplam ve Tükendi bu pencerede (Fişler, Hazır, Geçmiş sekmede)
   const [more, setMore] = useState(false);
   const can = useCan();
   const mode = useServiceMode();
@@ -58,11 +65,14 @@ export default function KitchenPage() {
   // Fiş düğmesi istek sürerken kilitlenir (çift dokunuş iki kez göndermesin)
   const [busy, setBusy] = useState<string | null>(null);
 
-  const tickets = useQuery({
-    queryKey: ['kitchen', station, history],
-    queryFn: () => get<KitchenTicket[]>(`/kitchen?${new URLSearchParams({ ...(station ? { station } : {}), ...(history ? { history: '1' } : {}) })}`),
+  const ticketsOf = (v: View) => ({
+    queryKey: ['kitchen', station, v],
+    queryFn: () => get<KitchenTicket[]>(`/kitchen?${new URLSearchParams({ ...(station ? { station } : {}), ...VIEW_QUERY[v] })}`),
     refetchInterval: 15_000,
   });
+  const tickets = useQuery(ticketsOf(view));
+  // Hazır sekmesinin sayısı her görünümde: teslim bekleyen sipariş barın gözünün önünde kalsın
+  const ready = useQuery(ticketsOf('hazir'));
 
   useEffect(
     () =>
@@ -98,9 +108,22 @@ export default function KitchenPage() {
     }
   };
 
+  const deliver = async (t: KitchenTicket, name: string, busyKey: string) => {
+    setBusy(busyKey);
+    try {
+      await deliverItems(
+        t.items.filter((i) => !i.voided && i.status === 'hazir').map((i) => i.id),
+        name,
+        () => qc.invalidateQueries({ queryKey: ['kitchen'] }),
+      );
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const list = useMemo(() => tickets.data ?? [], [tickets.data]);
   const totals = useMemo(() => kitchenTotals(list), [list]);
-  const showTotals = totalsView && !history;
+  const showTotals = totalsView && view === 'aktif';
   const counts = useMemo(() => ({ waiting: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'yeni').length, 0), making: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'hazirlaniyor').length, 0) }), [list]);
 
   const canSoldOut = can('urun.tukendi') || can('menu.yonet');
@@ -111,14 +134,11 @@ export default function KitchenPage() {
   );
   const tools = (
     <>
-      {!history && (
+      {view === 'aktif' && (
         <ToolButton pressed={totalsView} onClick={() => setTotalsView(!totalsView)} title="Açık fişlerdeki ürünleri topla">
           <Layers className="size-4" /> {totalsView ? 'Fişler' : 'Toplam'}
         </ToolButton>
       )}
-      <ToolButton pressed={history} onClick={() => setHistory(!history)}>
-        <History className="size-4" /> {history ? 'Aktif fişler' : 'Geçmiş'}
-      </ToolButton>
       {canSoldOut && (
         <ToolButton onClick={() => setSoldOut(true)}>
           <PackageX className="size-4" /> Tükendi
@@ -141,7 +161,7 @@ export default function KitchenPage() {
           </span>
           <h1 className="min-w-0 truncate text-lg font-semibold tracking-[-0.01em]">Bar ve mutfak</h1>
           <div className="flex-1" />
-          {!history && (
+          {view === 'aktif' && (
             // Renk dili: bekliyor nötr, hazırlanıyor mavi, hazır yeşil; amber yalnız zaman (gecikme, planlı saat)
             <div className="flex shrink-0 gap-1.5 whitespace-nowrap text-[13px] font-medium md:text-sm">
               <span className={cn('tabular inline-flex min-h-6 items-center rounded-md bg-surface-3 px-2 md:min-h-7 md:px-2.5', counts.waiting > 0 ? 'text-ink' : 'text-muted')}>{counts.waiting} bekliyor</span>
@@ -160,7 +180,22 @@ export default function KitchenPage() {
             {sound ? <Bell className="size-[18px]" /> : <BellOff className="size-[18px] text-muted" />}
           </button>
         </div>
-        <Tabs label="İstasyon" className="border-t border-[var(--admin-divider)] px-2 py-1.5 md:px-3" value={station} onChange={setStation} options={[{ value: '', label: 'Tümü' }, ...boot.stations.map((s) => ({ value: s.id, label: s.name }))]} />
+        {/* Görünüm ve istasyon: geniş ekranda tek satır, telefonda alt alta (istasyonlar yatay kayar) */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--admin-divider)] px-2 py-1.5 md:flex-nowrap md:px-3">
+          <Tabs<View>
+            label="Görünüm"
+            className="shrink-0"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'aktif', label: 'Fişler' },
+              { value: 'hazir', label: 'Hazır', count: ready.data?.length },
+              { value: 'gecmis', label: 'Geçmiş' },
+            ]}
+          />
+          <span aria-hidden="true" className="h-6 w-px shrink-0 bg-[var(--admin-divider)] max-md:hidden" />
+          <Tabs label="İstasyon" className="min-w-0 max-md:basis-full" value={station} onChange={setStation} options={[{ value: '', label: 'Tümü' }, ...boot.stations.map((s) => ({ value: s.id, label: s.name }))]} />
+        </div>
       </div>
 
       <Modal open={more} onClose={() => setMore(false)} title="Bar ekranı" size="sm">
@@ -195,8 +230,12 @@ export default function KitchenPage() {
         )}
         {tickets.isSuccess && list.length === 0 && (
           <div className="grid h-full place-items-center">
-            <EmptyState large icon={<CheckCheck />} title={history ? 'Son 90 dakikada hazırlanan yok' : 'Bekleyen sipariş yok'}>
-              {history ? 'Hazır işaretlenen fişler 90 dakika burada kalır' : 'Yeni sipariş gelince ses çalar ve fiş burada belirir'}
+            <EmptyState large icon={<CheckCheck />} title={history ? 'Son 90 dakikada hazırlanan yok' : readyView ? 'Teslim bekleyen sipariş yok' : 'Bekleyen sipariş yok'}>
+              {history
+                ? 'Hazır işaretlenen fişler 90 dakika burada kalır'
+                : readyView
+                  ? 'Hazır olan sipariş alınana dek 30 dakika burada bekler; teslim edince düşer'
+                  : 'Yeni sipariş gelince ses çalar ve fiş burada belirir'}
             </EmptyState>
           </div>
         )}
@@ -232,13 +271,15 @@ export default function KitchenPage() {
         <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-3', showTotals && 'hidden')}>
           {list.map((t) => {
             const live = t.items.filter((i) => !i.voided);
-            const age = now - t.sentAt;
+            // Hazır sekmesinde süre hazır olduğundan beri (müşteri ne zamandır almadı)
+            const age = readyView ? now - Math.max(...live.map((i) => i.readyAt ?? t.sentAt)) : now - t.sentAt;
             const level = age > boot.settings.kitchenAlarmMinutes * 60_000 ? 'alarm' : age > boot.settings.kitchenWarnMinutes * 60_000 ? 'warn' : 'ok';
             const online = t.source === 'laffogato';
             const allStarted = live.every((i) => i.status !== 'yeni');
             // Self modlarda numara, yarı selfte masa no büyük rozet: barista çağıracağı ya da götürüleceği yeri görür
             const head = ticketHead(t, mode);
-            const late = history ? 'ok' : level;
+            const late = history || readyView ? 'ok' : level;
+            const name = head.call ?? t.label;
             // Bu fişin bir isteği sürerken fişin öteki düğmeleri de kilitli (çift dokunuş iki kez göndermesin)
             const ticketBusy = !!busy && busy.startsWith(`${t.key}:`);
             return (
@@ -268,10 +309,11 @@ export default function KitchenPage() {
                   <span
                     className={cn(
                       'tabular inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[15px] font-semibold md:min-h-8 md:text-[17px]',
-                      history ? 'bg-surface-3 text-muted' : late === 'alarm' ? 'bg-danger-600 text-white' : late === 'warn' ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-ink-2',
+                      history ? 'bg-surface-3 text-muted' : readyView ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : late === 'alarm' ? 'bg-danger-600 text-white' : late === 'warn' ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-ink-2',
                     )}
                   >
-                    <Clock className="size-4 md:size-[18px]" />
+                    {readyView ? <CheckCheck aria-hidden="true" className="size-4 md:size-[18px]" /> : <Clock aria-hidden="true" className="size-4 md:size-[18px]" />}
+                    {readyView && <span className="sr-only">Hazır olalı</span>}
                     {mmss(age)}
                   </span>
                 </header>
@@ -285,7 +327,8 @@ export default function KitchenPage() {
                   {t.items.map((i) => (
                     <li key={i.id}>
                       <button
-                        disabled={i.voided || online || REMOTE}
+                        // Hazır sekmesinde kaleme dokunmak bir şey yapmaz: teslim fişin düğmesiyle, geri alma Geçmiş'ten
+                        disabled={i.voided || online || REMOTE || readyView}
                         onClick={() => setStatus([i.id], history ? 'hazirlaniyor' : undefined)}
                         className={cn('flex w-full items-start gap-3 px-3 py-3 text-left transition-colors duration-150 md:py-3.5', !i.voided && !online && 'active:bg-press', i.voided && 'bg-[var(--admin-danger-soft)]')}
                       >
@@ -322,6 +365,10 @@ export default function KitchenPage() {
                         Hazır (siteye bildir)
                       </Button>
                     </>
+                  ) : readyView ? (
+                    <Button variant="primary" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(t, name, `${t.key}:deliver`)}>
+                      Teslim edildi
+                    </Button>
                   ) : history ? (
                     <Button size="lg" className={FOOT} icon={<Undo2 className="size-4" />} disabled={ticketBusy} loading={busy === `${t.key}:undo`} onClick={() => setStatus(live.map((i) => i.id), 'hazirlaniyor', `${t.key}:undo`)}>
                       Geri al

@@ -387,6 +387,8 @@ function percentile(sorted: number[], p: number): number {
 /**
  * Bar ve mutfakta hazırlama süresi: kalemin gönderildiği andan "Hazır"a basıldığı ana (saniye). Ürün, saat ve
  * en yavaş fişler; yoğun saatte kaç barista gerektiğini gösterir. Açık adisyonlar da sayılır (hazırlanmışsa).
+ * `handoff`: hazırdan teslime (bar ekranında ya da kasada "Teslim edildi"); her teslim dokunuşu bir kez sayılır,
+ * süresi o dokunuşta teslim edilen kalemlerin en son hazır olanından.
  */
 export function prepReport(range: Range) {
   const ds = load(range);
@@ -408,9 +410,18 @@ export function prepReport(range: Range) {
   const hourOf = hourMemo();
   const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, secs: [] as number[] }));
   for (const d of done) hours[hourOf(d.sentAt)].secs.push(d.sec);
+  // Teslim: aynı adisyonda aynı anda teslim edilen kalemler tek teslimdir. Hiç "Hazır" görmeden teslime geçen kalem
+  // (hazır anı teslim anına eşit) sayılmaz
+  const handoffs = new Map<string, number>();
+  for (const i of ds.items) {
+    if (i.voided || !i.stationId || i.status !== 'servis' || !i.readyAt || !i.servedAt || i.servedAt <= i.readyAt) continue;
+    const key = `${i.orderId}|${i.servedAt}`;
+    handoffs.set(key, Math.min(handoffs.get(key) ?? Infinity, Math.round((i.servedAt - i.readyAt) / 1000)));
+  }
   return {
     range,
     overall: stats(done.map((d) => d.sec)),
+    handoff: stats([...handoffs.values()]),
     products: [...byProduct.values()].map((r) => ({ name: r.name, size: r.size, ...stats(r.secs) })).sort((a, b) => b.p90 - a.p90 || b.count - a.count),
     hours: hours.filter((h) => h.secs.length).map((h) => ({ hour: h.hour, ...stats(h.secs) })),
     slowest: [...done].sort((a, b) => b.sec - a.sec).slice(0, 10).map((d) => ({ orderNo: orderNo.get(d.orderId) ?? 0, name: d.name, size: d.size, sentAt: d.sentAt, sec: d.sec })),

@@ -39,6 +39,7 @@ const ACTION_LABEL: Record<string, string> = {
   'day.recount': 'Yeniden sayım',
   'day.reopen': 'Günü yeniden açma',
   'delivery.done': 'Teslim',
+  'delivery.undo': 'Teslimi geri alma',
   'floor.layout': 'Masa planı',
   'item.comp': 'İkram',
   'item.discount': 'Kalem indirimi',
