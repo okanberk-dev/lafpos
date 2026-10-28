@@ -6,7 +6,7 @@ import { PLATFORM_LABEL, PLATFORMS, type PlatformId } from '@shared/platforms';
 import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
 import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
-import { platformSettings } from '../delivery/service';
+import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
 import { costMap, costsAt } from '../sync/lafmaliyet';
 import { getOpenDay } from './orders';
 
@@ -599,8 +599,8 @@ export function checksReport(range: Range, limit: number | null = 300, showWaite
 
 /**
  * Platform siparişinin ciroya girmeme nedeni: platform kaydının durumu (kabul edilip iptal edilen de `iptal`).
- * `unrecorded`: platformda (tablette) kabul edilmiş sipariş 3 saat içinde kasaya alınmadı; kaybedilmiş olmayabilir,
- * kasada kaydı yok
+ * `unrecorded`: platformda kabul edilmiş (tablette, platformun panelinden ya da kasadan kabulü gidip adisyonu
+ * açılamamış) sipariş 3 saat içinde kasaya alınmadı; kaybedilmiş olmayabilir, kasada kaydı yok
  */
 type MissedKind = 'rejected' | 'expired' | 'cancelled' | 'unrecorded';
 
@@ -676,10 +676,14 @@ export function platformReport(range: Range, withCost: boolean, nowMs = Date.now
   for (const r of loose) {
     // Onay bekleyenin süresi geçtiyse platformda iptal olmuştur (zamanlayıcı henüz işaretlemediyse de; Yönetim'deki liste gibi)
     const expired = r.status === 'bekliyor' && r.notifiedStatus !== 'picked' && r.expiresAt != null && r.expiresAt <= nowMs;
+    // Platformda kabul edilmiş (panelden ya da kasadan kabulü gidip adisyonu açılamamış) ama kasaya alınmamış kaydın
+    // süresi dolmaz: tabletteki gibi 3 saat sonra "kasaya alınmadı" sayılır, karar bekleyen değildir
+    const unrecorded = r.status === 'bekliyor' && r.notifiedStatus === 'picked' && (r.payload.scheduledFor ?? r.payload.placedAt) + PRE_ACCEPTED_TTL_MS <= nowMs;
     if (r.status === 'ret') miss(r.platform, 'rejected', r.payload.customerTotal);
     else if (r.status === 'suresi_doldu' || expired) miss(r.platform, r.payload.preAccepted ? 'unrecorded' : 'expired', r.payload.customerTotal);
+    else if (unrecorded) miss(r.platform, 'unrecorded', r.payload.customerTotal);
     else if (r.status === 'iptal') miss(r.platform, 'cancelled', r.payload.customerTotal);
-    else if (r.status === 'bekliyor') pending += 1;
+    else if (r.status === 'bekliyor' && r.notifiedStatus !== 'picked') pending += 1;
   }
 
   const revenue = [...rows.values()].reduce((a, r) => a + r.revenue, 0);
@@ -706,7 +710,10 @@ export function platformReport(range: Range, withCost: boolean, nowMs = Date.now
     share: pct(revenue, netSales),
     open: { orders: platforms.reduce((a, r) => a + r.open.orders, 0), amount: platforms.reduce((a, r) => a + r.open.amount, 0) },
     missed: { orders: platforms.reduce((a, r) => a + r.missed.orders, 0), amount: platforms.reduce((a, r) => a + r.missed.amount, 0) },
-    /** Onay bekleyen (karar verilmemiş) siparişler: hiçbir rakama girmez */
+    /**
+     * Onay bekleyen (karar verilmemiş) siparişler: hiçbir rakama girmez. Platformda kabul edilip adisyonu henüz
+     * açılmamış kayıt karar beklemez, sayılmaz (3 saat sonra "kasaya alınmadı")
+     */
     pending,
     ...(withCost ? { commission: platforms.reduce((a, r) => a + (r.commission ?? 0), 0) } : {}),
     platforms,

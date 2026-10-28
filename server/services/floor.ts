@@ -85,7 +85,8 @@ export const KITCHEN_READY_MS = 30 * 60_000;
  * "Hazırlanıyor"dan "Hazır"a geçer; masaya ya da kuryeye giden siparişler burada görünmez. Masa no / numaratör
  * girilmiş tezgâh siparişi (yarı self servis) numara yerine masasıyla görünür: müşteri kalkmaz, personel getirir.
  * Paket platformunun gel-al siparişi LafPOS numarasıyla değil platformun kısa koduyla görünür (müşteri uygulamada
- * onu görür). "Teslim edildi" (kalemler serviste ya da gel-al teslim aşamasında) siparişi hemen düşürür.
+ * onu görür). "Teslim edildi" siparişi hemen düşürür: kasanın siparişinde kalemlerin durumu (teslimden sonra eklenen
+ * kalem yeniden "Hazırlanıyor"), platform siparişinde teslim aşaması (teslimi platformun akışında, kalemler hazırda kalır).
  */
 export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   const day = getOpenDay(t);
@@ -103,7 +104,7 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   for (const o of orders) {
     const mine = items.filter((i) => i.orderId === o.id && i.stationId);
     if (!mine.length) continue;
-    if (o.deliveryStatus === 'teslim') continue;
+    if (o.platform && o.deliveryStatus === 'teslim') continue;
     const entry: PickupEntryDTO = {
       id: o.id,
       no: o.source === 'laffogato' ? (o.extNo ?? o.no) : o.no,
@@ -127,7 +128,8 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
 /**
  * Bar/mutfak ekranı. Varsayılan: istasyona düşen ve henüz hazır olmayan kalemler, fiş (adisyon + gönderim) başına
  * gruplu. `ready` (Hazır sekmesi): son 30 dakikada hazır olup teslim edilmemiş kalemler, sipariş başına tek fiş
- * (müşteri siparişi bütün alır); site ve paket platformu siparişleri gelmez, onların teslimi kendi akışlarında.
+ * (müşteri siparişi bütün alır); site ve paket platformu siparişleri gelmez, onların teslimi kendi akışlarında. Kasanın
+ * siparişinde kalemin durumu esastır: teslim edilmiş gel-al'a sonradan eklenen kalem hazır olunca burada görünür.
  * `history` (Geçmiş): son 90 dakikada hazır olanlar ve teslim edilenler.
  */
 export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; history?: boolean; ready?: boolean } = {}): KitchenTicket[] {
@@ -156,7 +158,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
     .where(and(where, inArray(schema.orders.status, ['acik', 'kapali'])))
     .orderBy(asc(schema.orderItems.sentAt))
     .all()
-    .filter((r) => r.item.stationId && (!opts.ready || (r.order.source === 'pos' && !r.order.platform && r.order.deliveryStatus !== 'teslim')));
+    .filter((r) => r.item.stationId && (!opts.ready || (r.order.source === 'pos' && !r.order.platform)));
 
   const names = userNameMap(t);
   const tableNames = new Map(t.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((x) => [x.id, x.name]));

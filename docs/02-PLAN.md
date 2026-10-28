@@ -195,13 +195,21 @@ sekmesi son 30 dakikada hazır olup alınmamış siparişleri sipariş başına 
 teslim zamanı `served_at`), bildirimde **Geri al** (`servis` → `hazir`: hazır anı korunur, hazır uyarısı yinelenmez).
 Kasada aynı düğme adisyonda (hazır tezgâh ve gel-al, kapanmış self servis satışı da) ve Siparişler kartında. Site ve
 paket platformu siparişleri Hazır sekmesine gelmez, teslimleri kendi akışlarında. Kasanın gel-al siparişinin aşaması
-bardan izler: bara giden her kalem hazır olunca "Hazır", teslim edilince "Teslim edildi", geri alınınca "Hazır"
-(denetimde `delivery.done` / `delivery.undo`; Siparişler kartında tek düğme kalır). Çağrı ekranı teslim edileni (kalemler serviste ya da gel-al teslim aşamasında)
-hemen düşürür; paket platformunun gel-al siparişini LafPOS numarası yerine platformun kısa koduyla ve adıyla gösterir.
+bara giden kalemlerden türetilir (`pickupStageOf`): hepsi teslim edildiyse "Teslim edildi", hepsi hazırsa "Hazır",
+değilse "Hazırlanıyor". Kalem durumu değişince, bara kalem gidince (teslim edilmiş, kapanıp yeniden açılmış siparişe
+eklenen kalem de) ve bar kalemi iptal edilince yeniden türetilir; barın Geri al'ı "Hazır"ı da geri alır (denetimde
+`delivery.done` / `delivery.undo`; Siparişler kartında tek düğme kalır). Çağrı ekranı, Hazır sekmesi ve kasadaki
+Teslim edildi düğmesi kasanın siparişinde kalemin durumuna bakar (teslimden sonra eklenen kalem yeniden görünür),
+platform siparişini teslim aşamasında düşürür; paket platformunun gel-al siparişini LafPOS numarası yerine platformun
+kısa koduyla ve adıyla gösterir. Platform siparişinin "N ürün hazır" uyarısı paket yetkili her cihazda çalar (kabul
+eden, otomatik kabulde, kafede olmayabilir).
 Müşteri ekranının teşekkürü bara giden kalemi olan self servis satışında çağrı numarasını da söyler ("Numaranız 34",
 yarı selfte "Masa 12"; `thanks.call`, eski kasa göndermezse ekran bugünkü gibi). Hazırlama süresi raporunda
 **Hazırdan teslime** ortancası (her teslim dokunuşu bir kez). Testler `tests/pickup-board.test.ts`,
-`tests/prep-report.test.ts`, `tests/display.test.ts`; e2e'de iki akış.
+`tests/prep-report.test.ts`, `tests/display.test.ts`; e2e'de iki akış ve self servis akışında ödeme penceresinin
+gerçek teşekkür gönderimi (bara giden satışta numara, gitmeyende numarasız). Teşekkür gidince 300 ms toplanan
+adisyon görüntüsü iptal olur ve gönderimler sırayla gider (`src/lib/display.ts`): ödemeden hemen önce kurulan
+zamanlayıcı teşekkürü ezip ekranı ödenmemiş adisyona döndürüyordu (bu akış buldu).
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,

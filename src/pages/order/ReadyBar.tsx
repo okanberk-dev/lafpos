@@ -3,7 +3,8 @@ import { Check, PackageCheck } from 'lucide-react';
 import { useState } from 'react';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { deliverItems, readyToHand } from '@/lib/handoff';
+import { deliverItems } from '@/lib/handoff';
+import { readyToHand } from '@/lib/readyToHand';
 
 /**
  * Hazır tezgâh ya da gel-al siparişi (kapanmış self servis satışı da): kasada "Teslim edildi". Çağrı ekranından ve bar

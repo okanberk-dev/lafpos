@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { AUTO_ACCEPT_MAX_LIMIT, PLATFORM_MODES, PLATFORMS, type PlatformId } from '@shared/platforms';
+import { AUTO_ACCEPT_MAX_LIMIT, PLATFORM_MODES, PLATFORMS, type PlatformId, type PlatformSettings } from '@shared/platforms';
 import { db, tx } from '../db/client';
 import { type AppEnv, actorFrom, can, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
@@ -35,11 +35,22 @@ const platformParam = (raw: string): PlatformId => {
   return raw as PlatformId;
 };
 
+/**
+ * Gelen kutusu ve ayarlar. Komisyon oranı maliyettir (AGENTS kural 3): yalnız maliyeti gören (`rapor.maliyet`) ya da
+ * ayarı yöneten (Yönetim › Paket platformları) alır; garson ve raporcu almaz (oranı ciroyla çarpıp komisyonu bulmasın)
+ */
 platformRoutes.get('/', (c) => {
   const user = c.get('user');
   if (!can(user, 'paket.yonet') && !can(user, 'siparis.al') && !can(user, 'senkron.yonet')) requirePermission(user, 'paket.yonet');
-  return c.json({ settings: platformSettings(), orders: listPlatformOrders(db), live: liveStatus(), acceptors: autoAcceptors(db) });
+  const all = platformSettings();
+  const withCost = can(user, 'rapor.maliyet') || can(user, 'ayar.yonet') || can(user, 'senkron.yonet');
+  const settings = withCost ? all : (Object.fromEntries(PLATFORMS.map((p) => [p, withoutCommission(all[p])])) as Record<PlatformId, Omit<PlatformSettings, 'commissionPct'>>);
+  return c.json({ settings, orders: listPlatformOrders(db), live: liveStatus(), acceptors: autoAcceptors(db) });
 });
+
+function withoutCommission({ commissionPct: _, ...rest }: PlatformSettings): Omit<PlatformSettings, 'commissionPct'> {
+  return rest;
+}
 
 /** Ürün eşleme: platform ürünü → LafPOS ürünü (menü ya da bağlantı yetkisi; görmek için paket yetkisi yeter) */
 platformRoutes.get('/products', (c) => {
@@ -111,19 +122,23 @@ platformRoutes.post('/orders/:id/reject', async (c) => {
 
 /**
  * Platformun iptali kasada uygulanamıyor (alınan ödeme geri alınamıyor, ör. kapanmış güne ait): yetkili kaydı elle
- * kapatır, alarm düşer. Para hareketi yok
+ * kapatır, alarm düşer. Para hareketi yok. Kasadaki karar: kilitli, otomatik kabul bu kayda dokunmaz
  */
 platformRoutes.post('/orders/:id/cancel-close', (c) => {
   const user = c.get('user');
   requirePermission(user, 'siparis.iptal');
-  write((t, fx) => closeCancelPending(t, user, fx, c.req.param('id')));
-  return c.json({ ok: true });
+  return withDecisionLock(c.req.param('id'), async () => {
+    write((t, fx) => closeCancelPending(t, user, fx, c.req.param('id')));
+    return c.json({ ok: true });
+  });
 });
 
-/** Platform siparişi iptal etti: denemede elle (gerçek bağlantıda platformdan gelir) */
+/** Platform siparişi iptal etti: denemede elle (gerçek bağlantıda platformdan gelir). Kasadaki karar gibi kilitli */
 platformRoutes.post('/orders/:id/platform-cancel', async (c) => {
   requirePermission(c.get('user'), 'paket.yonet');
   const input = await body(c, z.object({ reason: z.string().max(100).default('') }));
-  write((t, fx) => platformCancelled(t, c.get('user'), fx, c.req.param('id'), input.reason, { manual: true }));
-  return c.json({ ok: true });
+  return withDecisionLock(c.req.param('id'), async () => {
+    write((t, fx) => platformCancelled(t, c.get('user'), fx, c.req.param('id'), input.reason, { manual: true }));
+    return c.json({ ok: true });
+  });
 });

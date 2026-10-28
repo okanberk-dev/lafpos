@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { type LiveEvent, readyAlertFor } from '@shared/events';
 import type { PlatformOrderPayload } from '@shared/platforms';
 import type { FloorStateDTO, KitchenTicket, OrderDTO, PickupBoardDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
@@ -90,7 +91,15 @@ describe('çağrı ekranı', () => {
     let board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
     // Müşteri LafPOS numarasını bilmez, platformun kodunu bilir
     expect(board.preparing.find((e) => e.id === orderId)).toMatchObject({ code: 'K9TX', platform: 'yemeksepeti', name: 'Deniz' });
+    // Hazır uyarısı platform bilgisini taşır: paket yetkili her cihazda çalar (kabul eden kafede olmayabilir)
+    const { bus } = await import('../server/lib/events');
+    const seen: LiveEvent[] = [];
+    const listen = (e: LiveEvent) => seen.push(e);
+    bus.on('event', listen);
     await h.ok('bar', 'POST', '/kitchen/status', { itemIds: order.items.map((i) => i.id), status: 'hazir' });
+    bus.off('event', listen);
+    const alert = seen.find((e) => e.kind === 'items.ready');
+    expect(alert).toMatchObject({ platform: 'yemeksepeti', message: 'Yemeksepeti K9TX · 1 ürün hazır', forUserId: order.waiterId });
     board = await h.ok<PickupBoardDTO>('', 'GET', '/public/board');
     expect(board.ready.find((e) => e.id === orderId)?.code).toBe('K9TX');
     // Platform siparişinin teslimi kendi akışında (Siparişler): bar ekranının Hazır sekmesinde düğmesi yok
@@ -170,6 +179,110 @@ describe('çağrı ekranı', () => {
     db.update(schema.orderItems).set({ readyAt: old }).where(eq(schema.orderItems.orderId, counter.id)).run();
     ready = await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?ready=1');
     expect(ready.some((tk) => tk.orderId === counter.id)).toBe(false);
+  });
+});
+
+describe('hazır uyarısı kimde çalar (readyAlertFor)', () => {
+  const ready = (over: Partial<LiveEvent> = {}): LiveEvent => ({ seq: 1, at: 0, topic: 'orders', kind: 'items.ready', message: 'Bahçe 4 · 2 ürün hazır', forUserId: 'garson', byUserId: 'bar', ...over });
+  const kasiyer = { id: 'kasa', permissions: ['siparis.al', 'odeme.al', 'paket.yonet'] };
+  const garson = { id: 'garson', permissions: ['siparis.al'] };
+  const patron = { id: 'patron', permissions: ['siparis.al', 'paket.yonet', 'rapor.maliyet'] };
+
+  it('elle alınan sipariş: yalnız siparişi alan; "Hazır"a basan kendi ekranında görmez', () => {
+    expect(readyAlertFor(ready(), garson)).toBe(true);
+    expect(readyAlertFor(ready(), kasiyer)).toBe(false);
+    expect(readyAlertFor(ready({ byUserId: 'garson' }), garson)).toBe(false);
+    expect(readyAlertFor(ready({ kind: 'ticket.status' }), garson)).toBe(false);
+  });
+
+  it('platform siparişi: kabul eden (otomatik kabulde kafede olmayan patron) ve paket yetkili her cihaz; garson değil', () => {
+    const e = ready({ platform: 'getir', forUserId: 'patron', message: 'Getir Yemek 4821 · 1 ürün hazır' });
+    expect(readyAlertFor(e, kasiyer)).toBe(true);
+    expect(readyAlertFor(e, patron)).toBe(true);
+    expect(readyAlertFor(e, garson)).toBe(false);
+    // Kabul edeni olmayan (eski kayıt) platform siparişi de kasaya düşer
+    expect(readyAlertFor({ ...e, forUserId: undefined }, kasiyer)).toBe(true);
+    expect(readyAlertFor({ ...e, byUserId: 'kasa' }, kasiyer)).toBe(false);
+  });
+});
+
+describe('teslimden sonra eklenen kalem', () => {
+  const method = (name: string) => h.boot.paymentMethods.find((m) => m.name === name)!;
+  const board = () => h.ok<PickupBoardDTO>('', 'GET', '/public/board');
+  const where = async (id: string) => {
+    const b = await board();
+    return b.ready.some((e) => e.id === id) ? 'hazir' : b.preparing.some((e) => e.id === id) ? 'hazirlaniyor' : null;
+  };
+  const audits = () => h.ok<{ action: string; orderId: string | null }[]>('patron', 'GET', '/admin/audit?limit=100');
+
+  it('teslim edilmiş gel-al\'a bar kalemi: çağrı ekranında Hazırlanıyor, hazır olunca Hazır sekmesinde ve Teslim edildi düğmesinde; aşama kalemlerden', async () => {
+    const { readyToHand } = await import('../src/lib/readyToHand');
+    const pickup = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Ece Kaya' });
+    const first = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${pickup.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
+    const firstIds = first.items.map((i) => i.id);
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: firstIds, status: 'hazir' });
+    await h.ok('kasa', 'POST', '/kitchen/status', { itemIds: firstIds, status: 'servis' });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`)).deliveryStatus).toBe('teslim');
+    expect(await where(pickup.id)).toBeNull();
+
+    // Müşteri bir şey daha ister: aynı adisyona bar kalemi. Teslim geri alınır (denetimde), sipariş yeniden hazırlanıyor
+    const more = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${pickup.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 1 }] });
+    expect(more.deliveryStatus).toBe('hazirlaniyor');
+    expect((await audits()).filter((a) => a.action === 'delivery.undo' && a.orderId === pickup.id)).toHaveLength(1);
+    expect(await where(pickup.id)).toBe('hazirlaniyor');
+    expect(readyToHand(more)).toEqual([]);
+
+    const newIds = more.items.filter((i) => !firstIds.includes(i.id)).map((i) => i.id);
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: newIds, status: 'hazir' });
+    let o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`);
+    expect(o.deliveryStatus).toBe('hazir');
+    expect(await where(pickup.id)).toBe('hazir');
+    // Kasada Teslim edildi düğmesi yalnız yeni kalem için; bar ekranının Hazır sekmesinde de yalnız o
+    expect(readyToHand(o)).toEqual(newIds);
+    const ready = await h.ok<KitchenTicket[]>('bar', 'GET', '/kitchen?ready=1');
+    expect(ready.find((tk) => tk.orderId === pickup.id)?.items.map((i) => i.id)).toEqual(newIds);
+
+    // Bar Geçmiş'ten Geri al (hazır → hazırlanıyor): aşama da Hazırlanıyor'a döner, Siparişler'de "Hazır" rozeti kalmaz
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: newIds, status: 'hazirlaniyor' });
+    o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`);
+    expect(o.deliveryStatus).toBe('hazirlaniyor');
+    expect(readyToHand(o)).toEqual([]);
+    expect(await where(pickup.id)).toBe('hazirlaniyor');
+
+    // Yeniden hazır ve teslim: sipariş yine teslim edildi, çağrı ekranından düşer
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: newIds, status: 'hazir' });
+    await h.ok('kasa', 'POST', '/kitchen/status', { itemIds: newIds, status: 'servis' });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`)).deliveryStatus).toBe('teslim');
+    expect(await where(pickup.id)).toBeNull();
+  });
+
+  it('kapanmış ve teslim edilmiş gel-al yeniden açılıp kalem eklenince yine çağrı ekranında; bekleyen kalem iptal edilince kalanlardan', async () => {
+    const pickup = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Mert Can' });
+    const first = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${pickup.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
+    const firstIds = first.items.map((i) => i.id);
+    await h.ok('kasa', 'POST', `/orders/${pickup.id}/payments`, { methodId: method('Nakit').id, amount: first.total });
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: firstIds, status: 'hazir' });
+    await h.ok('kasa', 'POST', '/kitchen/status', { itemIds: firstIds, status: 'servis' });
+    let o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`);
+    expect([o.status, o.deliveryStatus]).toEqual(['kapali', 'teslim']);
+
+    await h.ok('patron', 'POST', `/orders/${pickup.id}/reopen`, { reason: 'Müşteri ekledi' });
+    const more = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${pickup.id}/items`, {
+      items: [
+        { productId: product('Latte').id, size: 'M', qty: 1 },
+        { productId: product('Türk Kahvesi').id, qty: 1 },
+      ],
+    });
+    expect(more.deliveryStatus).toBe('hazirlaniyor');
+    expect(await where(pickup.id)).toBe('hazirlaniyor');
+    const [latte, turk] = more.items.filter((i) => !firstIds.includes(i.id));
+    await h.ok('bar', 'POST', '/kitchen/status', { itemIds: [latte!.id], status: 'hazir' });
+    expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`)).deliveryStatus).toBe('hazirlaniyor');
+    // Bekleyen son kalem iptal edilince kalanların hepsi hazır: "Hazır"
+    await h.ok('kasa', 'POST', `/orders/${pickup.id}/items/${turk!.id}/void`, { reason: 'Vazgeçti' });
+    o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${pickup.id}`);
+    expect(o.deliveryStatus).toBe('hazir');
+    expect(await where(pickup.id)).toBe('hazir');
   });
 });
 

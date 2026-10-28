@@ -38,6 +38,22 @@ const go = async (ctx, page, path) => {
 export async function runFlows(ctx) {
   const { api, seed } = ctx;
   const simple = seed.boot.products.find((p) => p.active && !p.hidden && p.priceL == null && p.optionGroupIds.length === 0 && !p.isService);
+  /** Ürünün fişinin düştüğü istasyon (ürünün ya da kategorisinin); yoksa bara gitmez */
+  const stationOf = (p) => p.stationId ?? seed.boot.categories.find((c) => c.id === p.categoryId)?.stationId ?? null;
+  /** Bara gitmeyen, seçeneksiz tek boy ürün (etkinlik ücreti gibi) */
+  const noBar = seed.boot.products.find((p) => p.active && !p.hidden && p.priceL == null && p.optionGroupIds.length === 0 && !stationOf(p));
+  /**
+   * Müşteri ekranının `after`'dan sonra yazılmış teşekkür durumu (ödeme penceresi kapanırken gönderir; istek
+   * beklenmez, birkaç kez okunur)
+   */
+  const thanksOn = async (code, after = 0) => {
+    for (let i = 0; i < 50; i++) {
+      const s = await api.call('', 'GET', `/public/display/${code}`);
+      if (s.kind === 'thanks' && s.at > after) return s;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return null;
+  };
 
   const flows = [
     [
@@ -203,9 +219,12 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Self servis: patron modu seçer, yönetimden kasaya dönüş yeni satışa; kasiyer açılışta yeni satışta, Öde ile alır, numara sonuçta büyük',
+      'Self servis: patron modu seçer, yönetimden kasaya dönüş yeni satışa; kasiyer açılışta yeni satışta, Öde ile alır, numara sonuçta büyük; müşteri ekranının teşekkürü numarayı söyler (bara gitmeyen satışta söylemez)',
       async () => {
-        assert(simple, 'seçeneksiz tek boy ürün bulunamadı');
+        assert(simple && stationOf(simple), 'bara giden seçeneksiz tek boy ürün bulunamadı');
+        assert(noBar, 'bara gitmeyen seçeneksiz ürün bulunamadı');
+        // Bu cihaz müşteri ekranını yansıtır (Adisyon › İşlemler › Müşteri ekranı'nın yazdığı tercih)
+        const display = 'e2e-self';
         try {
           await withPage(ctx, 'bilgisayar', 'patron', async (page) => {
             await go(ctx, page, '/yonetim/ayarlar');
@@ -218,7 +237,11 @@ export async function runFlows(ctx) {
           const boot = await api.call('kasa', 'GET', '/bootstrap');
           assert(boot.settings.serviceMode === 'self', `servis modu kaydedilmedi: ${boot.settings.serviceMode}`);
           let orderId = '';
+          let plainId = '';
+          let thanks = null;
+          let plainThanks = null;
           await withPage(ctx, 'tablet', 'kasa', async (page) => {
+            await page.addInitScript((code) => localStorage.setItem('lafpos.pref.display.code', JSON.stringify(code)), display);
             await go(ctx, page, '/');
             await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
             orderId = new URL(page.url()).pathname.split('/').pop();
@@ -235,14 +258,43 @@ export async function runFlows(ctx) {
             await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-self-servis.png` });
             await page.getByRole('button', { name: 'Yeni satış', exact: true }).click();
             await page.waitForURL((u) => u.pathname.startsWith('/adisyon/') && !u.pathname.endsWith(orderId), { timeout: 8000 });
+            plainId = new URL(page.url()).pathname.split('/').pop();
+            // Ödeme penceresinin gerçek gönderimi (kapanırken): teşekkür çağrı numarasıyla
+            thanks = await thanksOn(display);
+
+            // Müşteri ekranı numarayı büyük söyler (çağrı numaralı teşekkür 15 sn kalır)
+            await go(ctx, page, `/musteri-ekrani?ekran=${display}`);
+            await page.getByText('Numaranız', { exact: true }).waitFor({ timeout: 8000 });
+            if (thanks?.call) await page.getByText(thanks.call.replace(/^No /, ''), { exact: true }).waitFor();
+            await page.screenshot({ path: `${ROOT}/e2e/out/tablet-musteri-ekrani-numara.png` });
+            const overflow = await overflowReport(page);
+            assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
+
+            // Bara gitmeyen satış: teşekkür numara söylemez (çağrı ekranında da görünmez)
+            await go(ctx, page, `/adisyon/${plainId}`);
+            await page.getByPlaceholder('Ürün ara').fill(noBar.name);
+            await page.getByRole('button', { name: new RegExp(`^${noBar.shortName || noBar.name}`) }).first().click();
+            await page.getByRole('button', { name: /^Öde · / }).click();
+            await page.getByRole('button', { name: 'Nakit', exact: true }).click();
+            await page.getByRole('button', { name: 'Tam', exact: true }).click();
+            await page.getByRole('button', { name: /Nakit al$/ }).click();
+            await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor({ timeout: 8000 });
+            await page.getByRole('button', { name: 'Yeni satış', exact: true }).click();
+            await page.waitForURL((u) => u.pathname.startsWith('/adisyon/') && !u.pathname.endsWith(plainId), { timeout: 8000 });
+            plainThanks = await thanksOn(display, thanks?.at ?? 0);
           });
           const order = await api.call('kasa', 'GET', `/orders/${orderId}`);
           assert(order.status === 'kapali' && order.type === 'tezgah', `tezgâh satışı kapanmadı: ${order.type} ${order.status}`);
+          assert(thanks?.call === `No ${order.no}` && thanks.total === order.total, `müşteri ekranının teşekkürü numarasız: ${JSON.stringify(thanks)}`);
+          const plain = await api.call('kasa', 'GET', `/orders/${plainId}`);
+          assert(plain.status === 'kapali' && plain.items.every((i) => !i.stationId), `bara gitmeyen satış kapanmadı: ${plain.status}`);
+          assert(plainThanks?.total === plain.total && plainThanks.call == null, `bara gitmeyen satışın teşekkürü yok ya da numara söyledi: ${JSON.stringify(plainThanks)}`);
           const board = await api.call('', 'GET', '/public/board');
           const entry = [...board.preparing, ...board.ready].find((e) => e.id === orderId);
           assert(entry && entry.no === order.no && !entry.table, `çağrı ekranında numara yok: ${JSON.stringify(entry)}`);
         } finally {
           await api.call('patron', 'PUT', '/admin/settings', { serviceMode: 'masa' });
+          await api.call('kasa', 'PUT', `/display/${display}`, { kind: 'idle' });
         }
       },
     ],
@@ -426,7 +478,7 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Telefonda kasiyer: hazır gel-al siparişini Siparişler\'den, tezgâh satışını adisyondan teslim eder; müşteri ekranı numarayı söyler',
+      'Telefonda kasiyer: hazır gel-al siparişini Siparişler\'den, tezgâh satışını adisyondan teslim eder',
       async () => {
         const latte = seed.boot.products.find((p) => p.name === 'Latte');
         const pickup = await api.call('kasa', 'POST', '/orders', { type: 'gelal', deliveryName: 'Selin Bulut' });
@@ -459,21 +511,11 @@ export async function runFlows(ctx) {
           assert(!small.length, `44 px altı: ${small.join(', ')}`);
           await page.getByRole('button', { name: 'Teslim edildi', exact: true }).click();
           await page.getByText('2 ürün hazır', { exact: true }).waitFor({ state: 'detached', timeout: 8000 });
-
-          // Ödeme penceresinin gönderdiği teşekkür (çağrı numarasıyla); ekran 15 sn gösterir
-          await api.call('kasa', 'PUT', '/display/kasa', { kind: 'thanks', total: 39000, call: `No ${counter.no}` });
-          await go(ctx, page, '/musteri-ekrani');
-          await page.getByText('Numaranız', { exact: true }).waitFor({ timeout: 8000 });
-          await page.getByText(String(counter.no), { exact: true }).waitFor();
-          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-musteri-ekrani-numara.png` });
-          overflow = await overflowReport(page);
-          assert(overflow.page <= 1 && !overflow.items.length, `yatay taşma: ${JSON.stringify(overflow)}`);
         });
         const p = await api.call('kasa', 'GET', `/orders/${pickup.id}`);
         assert(p.deliveryStatus === 'teslim' && p.items.every((i) => i.status === 'servis'), `gel-al teslim edilmedi: ${p.deliveryStatus}`);
         const c = await api.call('kasa', 'GET', `/orders/${counter.id}`);
         assert(c.items.every((i) => i.status === 'servis'), `tezgâh satışı teslim edilmedi: ${c.items.map((i) => i.status).join(', ')}`);
-        await api.call('kasa', 'PUT', '/display/kasa', { kind: 'idle' });
       },
     ],
     [

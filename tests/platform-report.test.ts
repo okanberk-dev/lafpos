@@ -281,6 +281,55 @@ describe('Raporlar › Paket platformları', () => {
     expect(lines).toHaveLength(1 + r.platforms.length);
   });
 
+  it('platformda kabul edilip kasaya alınmamış sipariş karar beklemez; 3 saat sonra "kasaya alınmadı"', async () => {
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const { platformReport } = await import('../server/services/reports');
+    await h.ok('patron', 'PUT', '/platforms/migros', { mode: 'deneme' });
+    const before = await report('patron');
+    const start = businessDayStartMs(today);
+    // Platformun panelinden kabul edilmiş (applyConfirmed) ya da kabulü platforma gidip adisyonu açılamamış
+    // (acceptFailedLocally) kayıtlar: biri 4 saat önce, biri şimdi geldi. Kabul süresi geçse de süre dolmaz
+    const old = await ingest(payload('migros', { placedAt: start - 4 * 3600_000, expiresAt: start - 3 * 3600_000 }), start);
+    const fresh = await ingest(payload('migros', { expiresAt: Date.now() - 1000 }));
+    for (const r of [old, fresh]) {
+      db.update(schema.platformOrders).set({ notifiedStatus: 'picked', lastError: 'Platformun panelinden kabul edildi: Kabul yalnız adisyonu açar' }).where(eq(schema.platformOrders.id, r.id)).run();
+    }
+    const after = await report('patron');
+    const migros = after.platforms.find((p) => p.platform === 'migros')!;
+    expect(migros.missed).toEqual({ orders: 1, amount: old.payload.customerTotal, rejected: 0, expired: 0, cancelled: 0, unrecorded: 1 });
+    // İkisi de karar beklemiyor: onay bekleyen sayısı değişmez
+    expect(after.pending).toBe(before.pending);
+    // Zamanlayıcı bu kayıtlara dokunmaz, rakam değişmez
+    const { tx } = await import('../server/db/client');
+    const { Effects } = await import('../server/lib/effects');
+    tx((t) => service.expirePlatformOrders(t, new Effects()));
+    expect((await report('patron')).platforms.find((p) => p.platform === 'migros')!.missed).toEqual(migros.missed);
+    // 3 saat dolunca yeni gelen de kasaya alınmadı sayılır
+    const later = platformReport({ from: today, to: today }, true, fresh.payload.placedAt + service.PRE_ACCEPTED_TTL_MS);
+    expect(later.platforms.find((p) => p.platform === 'migros')!.missed).toMatchObject({ orders: 2, unrecorded: 2, amount: old.payload.customerTotal + fresh.payload.customerTotal });
+    // Kasada Kabul (yalnız adisyonu açar) gelince kayıt kaçan değil açık sipariş olur
+    await accept(old.id);
+    const opened = (await report('patron')).platforms.find((p) => p.platform === 'migros')!;
+    expect(opened.missed.unrecorded).toBe(0);
+    expect(opened.open.orders).toBe(1);
+  });
+
+  it('gelen kutusu: komisyon oranı yalnız maliyeti gören ya da ayarı yönetene gider (garson ve raporcu almaz)', async () => {
+    type Inbox = { settings: Record<string, Record<string, unknown>> };
+    const patron = await h.ok<Inbox>('patron', 'GET', '/platforms');
+    expect(patron.settings.yemeksepeti!.commissionPct).toBe(18.5);
+    expect(patron.settings.getir!.commissionPct).toBe(25);
+    for (const who of ['garson', 'raporcu', 'kasa']) {
+      const r = await h.ok<Inbox>(who, 'GET', '/platforms');
+      for (const st of Object.values(r.settings)) {
+        expect(st).not.toHaveProperty('commissionPct');
+        // Gelen kutusunun kullandığı alanlar durur
+        expect(st).toMatchObject({ mode: expect.any(String), prepMinutes: expect.any(Number) });
+      }
+    }
+  });
+
   it('platform siparişi olmayan dönem boş döner', async () => {
     const empty = await report('patron', addDays(today, -30), addDays(today, -20));
     expect(empty).toMatchObject({ netSales: 0, revenue: 0, orders: 0, pending: 0, platforms: [] });

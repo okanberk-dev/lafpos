@@ -18,7 +18,7 @@ import {
 import { fmtDateTime, fmtTime } from '@shared/time';
 import { Badge, Card, CARD, CODE, EmptyState, PageHeader, Segmented } from '@/components/admin/ui';
 import { PlatformBadge } from '@/components/PlatformBadge';
-import { usePlatforms } from '@/components/PlatformInbox';
+import { type PlatformsData, usePlatforms } from '@/components/PlatformInbox';
 import { Button } from '@/components/ui/Button';
 import { Field, NumberInput, Select, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
@@ -202,7 +202,7 @@ function PlatformCard({
   canTest,
 }: {
   platform: PlatformId;
-  settings: PlatformSettings;
+  settings: PlatformsData['settings'][PlatformId];
   live?: PlatformLiveStatus;
   acceptors: { id: string; name: string }[];
   canEdit: boolean;
@@ -260,9 +260,12 @@ function PlatformCard({
           <Field label="Hazırlık süresi (dk)" hint="5–120">
             <NumberInput value={settings.prepMinutes} min={5} max={120} fallback={20} disabled={!canEdit} onCommit={(prepMinutes) => void save({ prepMinutes })} />
           </Field>
-          <Field label="Tahmini komisyon (%)" hint="0–60">
-            <NumberInput decimals={2} value={settings.commissionPct} min={0} max={60} fallback={0} disabled={!canEdit} onCommit={(commissionPct) => void save({ commissionPct })} />
-          </Field>
+          {/* Oran maliyettir: yalnız ayarı yöneten ya da maliyeti gören alır (sunucu ötekilere göndermez) */}
+          {settings.commissionPct != null && (
+            <Field label="Tahmini komisyon (%)" hint="0–60">
+              <NumberInput decimals={2} value={settings.commissionPct} min={0} max={60} fallback={0} disabled={!canEdit} onCommit={(commissionPct) => void save({ commissionPct })} />
+            </Field>
+          )}
         </div>
         <div className="space-y-3 border-t border-[var(--admin-divider)] pt-3">
           <Toggle

@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { PLATFORM_LABEL } from '@shared/platforms';
 import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
 import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
@@ -415,7 +416,8 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
       .run();
   }
 
-  const updated = recalc(t, orderId);
+  // Bara giden kalem kasanın gel-al siparişinin aşamasını geri alabilir (teslim edilmişe eklenen kalem "Hazırlanıyor")
+  const updated = stations.size ? syncPickupDelivery(t, actor, fx, recalc(t, orderId)) : recalc(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.items_added');
   for (const s of stations) fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId, stationId: s, byUserId: actor.user.id });
   if (soldOut.length) {
@@ -490,7 +492,8 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     voidAfterSend: afterSend,
   });
   if (notStarted(it)) releasePortions(t, fx, actor.user.id, [{ productId: it.productId, qty }]);
-  const updated = recalc(t, orderId);
+  // Bekleyen son bar kalemi iptal edilince gel-al siparişi kalanların durumuna geçer (hepsi hazırsa "Hazır")
+  const updated = it.stationId ? syncPickupDelivery(t, actor, fx, recalc(t, orderId)) : recalc(t, orderId);
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
@@ -1531,7 +1534,7 @@ const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazir
  * "Teslim edildi" kalemi "servis"e taşır (teslim zamanı yazılır, çağrı ekranından ve bar ekranının Hazır sekmesinden
  * düşer); onun "Geri al"ı "servis"ten "hazir"a döndürür: hazır olduğu an korunur, hazır uyarısı yinelenmez. Kasanın
  * kendi gel-al siparişinin aşaması bardan izler (`syncPickupDelivery`; Siparişler'de aynı sipariş için ikinci bir
- * düğme kalmasın).
+ * düğme kalmasın; bar "Hazır"ı geri alınca aşama da "Hazırlanıyor"a döner).
  */
 export function setItemsStatus(
   t: Tx,
@@ -1547,8 +1550,6 @@ export function setItemsStatus(
   const stations = new Set<string>();
   /** Adisyon başına bu dokunuşta "Hazır" olan adet: siparişi alana uyarı */
   const readyCount = new Map<string, number>();
-  /** Teslimi geri alınan kalemin adisyonu */
-  const unserved = new Set<string>();
   for (const it of items) {
     if (it.voided) continue;
     const status = input.status ?? NEXT[it.status];
@@ -1556,7 +1557,6 @@ export function setItemsStatus(
     // Teslimin geri alınışı: kalem yeniden hazırlanmadı, yalnız teslim zamanı silinir
     const undo = it.status === 'servis' && status === 'hazir' && it.readyAt != null;
     if (status === 'hazir' && !undo) readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
-    if (it.status === 'servis') unserved.add(it.orderId);
     const patch: Partial<ItemRow> = { status };
     // Teslimden geri dönen kalemin teslim zamanı kalmaz (hazırdan teslime süresi yalnız gerçek teslimi sayar)
     if (status === 'hazirlaniyor') Object.assign(patch, { startedAt: it.startedAt ?? now, servedAt: null });
@@ -1567,39 +1567,59 @@ export function setItemsStatus(
     if (it.stationId) stations.add(it.stationId);
   }
   for (const id of orders) {
-    const o = syncPickupDelivery(t, actor, fx, loadOrder(t, id), unserved.has(id));
+    const o = syncPickupDelivery(t, actor, fx, loadOrder(t, id));
     orderEvents(fx, o, actor.user.id, 'item.status');
     const ready = readyCount.get(id);
-    if (ready && o.waiterId) {
+    // Platform siparişinin "siparişi alanı" kabul edendir (otomatik kabulde ayarda seçilen, kafede olmayabilir): uyarı
+    // paket siparişlerini yöneten bütün cihazlara gider (`platform`; istemci `readyAlertFor`)
+    if (ready && (o.waiterId || o.platform)) {
       const table = o.tableId ? t.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, o.tableId)).get() : null;
-      const place =
-        table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : o.numarator ? numaratorLabel(o.numarator) : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
-      fx.emit({ topic: 'orders', kind: 'items.ready', orderId: id, tableId: o.tableId ?? undefined, message: `${place} · ${ready} ürün hazır`, forUserId: o.waiterId, byUserId: actor.user.id });
+      const place = o.platform
+        ? `${PLATFORM_LABEL[o.platform]} ${o.platformCode ?? `#${o.no}`}`
+        : (table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : o.numarator ? numaratorLabel(o.numarator) : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`));
+      fx.emit({
+        topic: 'orders',
+        kind: 'items.ready',
+        orderId: id,
+        tableId: o.tableId ?? undefined,
+        message: `${place} · ${ready} ürün hazır`,
+        forUserId: o.waiterId ?? undefined,
+        ...(o.platform ? { platform: o.platform } : {}),
+        byUserId: actor.user.id,
+      });
     }
   }
   for (const s of stations) fx.emit({ topic: 'kitchen', kind: 'ticket.status', stationId: s, byUserId: actor.user.id });
 }
 
 /**
- * Kasanın gel-al siparişi (site ve paket platformu değil): aşaması bardan izler. Bara giden kalemlerin hepsi hazır
- * olunca "Hazır", hepsi teslim edilince "Teslim edildi"; teslim geri alınınca (kalem servisten döndü) kalemlerin
- * durumuna döner. Platform siparişinin aşaması platforma ve ödemesine bağlı, burada değişmez.
+ * Kasanın gel-al siparişinin bara giden kalemlerinden aşaması: hepsi teslim edildiyse "Teslim edildi", hepsi hazırsa
+ * (ya da teslim edildiyse) "Hazır", değilse "Hazırlanıyor"
  */
-function syncPickupDelivery(t: Tx, actor: Actor, fx: Effects, o: OrderRow, unserved: boolean): OrderRow {
+function pickupStageOf(kitchen: Pick<ItemRow, 'status'>[]): 'hazirlaniyor' | 'hazir' | 'teslim' {
+  if (kitchen.every((i) => i.status === 'servis')) return 'teslim';
+  if (kitchen.every((i) => i.status === 'hazir' || i.status === 'servis')) return 'hazir';
+  return 'hazirlaniyor';
+}
+
+/**
+ * Kasanın gel-al siparişi (site ve paket platformu değil): aşaması bardan izler (`pickupStageOf`). Kalemin durumu
+ * değişince, bara kalem gidince ve bar kalemi iptal edilince yeniden türetilir: teslim edilmiş siparişe eklenen kalem
+ * (kapanmış satış yeniden açılıp eklense de) aşamayı "Hazırlanıyor"a, barın "Geri al"ı "Hazır"ı "Hazırlanıyor"a,
+ * teslimin geri alınışı "Teslim edildi"yi "Hazır"a döndürür. Siparişler'den elle verilen "Yolda" yalnız teslimle
+ * ilerler. Teslim ve teslimden dönüş denetime yazılır (`delivery.done`, `delivery.undo`), "Hazır" yazılmaz
+ * (Siparişler'deki aşama düğmesi gibi). Platform siparişinin aşaması platforma ve ödemesine bağlı, burada değişmez.
+ */
+function syncPickupDelivery(t: Tx, actor: Actor, fx: Effects, o: OrderRow): OrderRow {
   if (o.source !== 'pos' || o.platform || o.type !== 'gelal' || o.status === 'iptal') return o;
   const kitchen = orderItems(t, o.id).filter((i) => !i.voided && i.stationId);
   if (!kitchen.length) return o;
-  const served = kitchen.every((i) => i.status === 'servis');
-  const ready = kitchen.every((i) => i.status === 'hazir' || i.status === 'servis');
-  const reverted = unserved && o.deliveryStatus === 'teslim';
-  let next: OrderRow['deliveryStatus'] = null;
-  if (served) next = o.deliveryStatus === 'teslim' ? null : 'teslim';
-  else if (ready) next = o.deliveryStatus === 'hazirlaniyor' || reverted ? 'hazir' : null;
-  else if (reverted) next = 'hazirlaniyor';
-  if (!next || next === o.deliveryStatus) return o;
+  const stage = pickupStageOf(kitchen);
+  const cur = o.deliveryStatus;
+  const next = stage === 'teslim' || cur === 'hazirlaniyor' || cur === 'hazir' || cur === 'teslim' ? stage : cur;
+  if (next === cur) return o;
   t.update(schema.orders).set({ deliveryStatus: next, updatedAt: Date.now() }).where(eq(schema.orders.id, o.id)).run();
-  // Hazır aşaması denetime yazılmaz (Siparişler'deki aşama düğmesi gibi); teslim ve geri alınışı yazılır
-  if (next === 'teslim' || reverted) {
+  if (next === 'teslim' || cur === 'teslim') {
     fx.audit(t, {
       userId: actor.user.id,
       action: next === 'teslim' ? 'delivery.done' : 'delivery.undo',

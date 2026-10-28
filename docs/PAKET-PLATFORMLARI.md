@@ -240,10 +240,23 @@ kaydedilmez (422 `auto_accept_user`). Açıp kapamak, kişiyi ya da sınırı de
 
 Yoklama yeni siparişi kayda aldıktan sonra (aynı turdaki platform iptali ve panelden kabul işlendikten sonra) her
 yeni kaydı **bir kez** dener; kasadaki Kabul ile aynı yoldan gider (`server/delivery/live.ts` `acceptFlow`: aynı
-kilit, yerelde prova, önce platforma, sonra adisyon). O an başka ekranda karar veriliyorsa (409 `busy`) sonraki
-yoklamada bir kez daha denenir. Deneme modunda "Deneme siparişi gönder" de aynı yoldan dener (platforma gitmez).
-Kabul edilmiş kayıt yeniden denense de (kasa yeniden başladı) kilit ve durum denetimi ikinci kabulü ve ikinci
-platform çağrısını önler.
+kilit, yerelde prova, önce platforma, sonra adisyon). Deneme modunda "Deneme siparişi gönder" de aynı yoldan dener
+(platforma gitmez). Kabul edilmiş kayıt yeniden denense de (kasa yeniden başladı) kilit ve durum denetimi ikinci
+kabulü ve ikinci platform çağrısını önler.
+
+**Kasadaki karar önce gelir.** Kasada bir kişi kayıt üzerinde karar denediyse (Kabul, Ret, platform iptali, iptalin
+elle kapatılması; başarılı ya da başarısız) otomatik kabul o kaydı **hiçbir zaman** kabul etmez. Ret platforma
+gidemeyince (502) kayıt onay bekler görünür; eskiden turun sonundaki otomatik kabul ya da "meşgul" sonrası yeniden
+deneme personelin reddettiği siparişi kabul edip bara gönderiyordu (gözden geçirme, 28 Eki 2026). Üç kat:
+- O an kasada karar veriliyorsa (409 `busy`: kasadaki Kabul ya da Ret platform çağrısını bekliyor) otomatik kabul
+  kaydı bırakır, yeniden denemez; nedeni "kasada karar veriliyor".
+- Kilidin içinde okunan kayıtta otomatik kabulün kendi notundan ("Otomatik kabul edilmedi: …") başka bir not varsa
+  (ör. "ret bildirilemedi") atlanır: "kasada karar denendi". Kasa yeniden başlasa da kayıtta durur.
+- Kasadaki karar uçları (`accept`, `reject`, `platform-cancel`, `cancel-close`) kilidin içinde kaydı süreç belleğindeki
+  `manualDecision` kümesine de koyar (`server/delivery/locks.ts`): kayda hata yazılmayan başarısızlıkta da (ör. elle
+  Kabul'ün provası porsiyon yüzünden düştü) otomatik kabul o kaydı atlar.
+
+Şüphede sipariş elle kabule kalır: otomatik kabul para ve durum değiştirir.
 
 Bütün koşullar sağlanmazsa sipariş **elle kabul bekler**: nedeni şeritte bilgi notu olarak görünür ("Otomatik kabul
 edilmedi: eşleşmeyen kalem (…)"; tutar ya da ödeme doğrulanacaksa bağdaştırıcının metni; kayıtta platformun hatası gibi
@@ -253,7 +266,8 @@ başka bir not varsa o ezilmez) ve denetim kaydına bir kez düşer (`platform.a
 3. Mod: Canlı'da yalnız gerçek sipariş ve kasa kurulum modunda değil; Deneme'de (yalnız kurulum modunda) yalnız
    deneme siparişi.
 4. Platformun tabletinde kabul edilmiş değil (`preAccepted`: barda çift hazırlık riski), platformun panelinden kabul
-   edilmiş değil (`notifiedStatus` boş), ileri tarihli değil (saati okunamamış ileri tarihli de: `scheduledUnknown`).
+   edilmiş değil (`notifiedStatus` boş), kasada karar denenmemiş (yukarıda), ileri tarihli değil (saati okunamamış
+   ileri tarihli de: `scheduledUnknown`).
 5. Kabul süresinin bitmesine en az 30 saniye var.
 6. Kabul eden kişi her denemede yeniden okunur: etkin ve paket yetkili değilse çalışmaz (ilk seferde uyarı).
 7. Gün açık ve güncel (05:00 kuralı; önceki günün gün sonu alınmamışsa olmaz).
@@ -274,6 +288,11 @@ Hazırlık süresi ayardaki `prepMinutes`. Kabul eden ayarda seçilen kişidir (
 gibi düşer. Platform kabulü almazsa kayıt bekler (uyarı; elle kabul edilir), platform kabul edip adisyon açılamazsa
 `platform.accept_failed` alarmı (Kabul yalnız adisyonu açar, platforma ikinci kez gidilmez).
 
+Siparişin "alanı" (adisyonun garsonu) kabul edendir; otomatik kabulde ayarda seçilen kişi kafede olmayabilir. Bu
+yüzden platform siparişinin "N ürün hazır" uyarısı (`items.ready`, `platform` alanıyla; "Yemeksepeti A7KX · 1 ürün
+hazır") paket yetkili (`paket.yonet`, şeritteki siparişleri yöneten) her cihazda ve kabul edende çalar; bir cihazda bir
+kez (`shared/events.ts` `readyAlertFor`). Elle alınan masa, tezgâh ve gel-al siparişinde yalnız siparişi alan görür.
+
 ## Rapor
 Raporlar › Paket platformları (`rapor.gor`; `GET /api/reports/platforms?from&to`, CSV `type=platformlar`),
 `server/services/reports.ts` `platformReport`:
@@ -288,15 +307,21 @@ Raporlar › Paket platformları (`rapor.gor`; `GET /api/reports/platforms?from&
 - **Kaçan:** reddedilen, süresi dolan (zamanlayıcı işaretlemeden süresi geçen de) ve iptal edilen (platformun ya da
   kasanın; kabulden önce ya da sonra). Kabul edilmemiş kayıt geldiği anın iş gününe (05:00 kuralı), kabul edilip
   iptal edilen adisyonun gününe yazılır; tutar müşterinin ödeyeceği (`customerTotal`), ciroya girmez. Platformda
-  (tablette) kabul edilmiş, 3 saat içinde kasaya alınmamış sipariş "süresi doldu" değil "kasaya alınmadı" sayılır:
-  platformda teslim edilmiş olabilir, kasada kaydı yoktur. Platformun test siparişi sayılmaz. Onay bekleyen sipariş hiçbir rakama girmez, yalnız sayısı yazılır.
+  kabul edilmiş, 3 saat içinde kasaya alınmamış sipariş "süresi doldu" değil "kasaya alınmadı" sayılır: platformda
+  teslim edilmiş olabilir, kasada kaydı yoktur. Bu, tablette kabul edilmişe (`preAccepted`) ve kasada "onay bekliyor"
+  görünen ama platformda kabul edilmiş kayda (`notifiedStatus` = `picked`: platformun panelinden kabul edilmiş ya da
+  kasadan kabulü platforma gidip adisyonu açılamamış) aynı süreyle uygulanır: sipariş saatinden (ileri tarihlide teslim
+  saatinden) 3 saat sonra (`PRE_ACCEPTED_TTL_MS`). Platformun test siparişi sayılmaz. Onay bekleyen sipariş hiçbir
+  rakama girmez, yalnız sayısı yazılır; platformda kabul edilmiş kayıt karar beklemediği için o sayıya girmez.
 - **Tahmini komisyon** yalnız `rapor.maliyet` yetkisine gider (uçta ve CSV'de; yoksa alan hiç yok): platformun
   cirosu × Yönetim › Paket platformları'ndaki **bugünkü** oran, kuruşa yuvarlanmış (`percentOf`). Oran sipariş anında
   dondurulmaz, değişirse geçmiş dönemin tahmini de değişir; gerçek komisyon platformun hesap kesiminde ve lafmaliyet'te
   (Trendyol Go'nun hesap kesimi ucu bağdaştırıcıda henüz yok).
 
 ## Uçlar
-`GET /api/platforms` (ayarlar, siparişler, `live` canlı durum, `acceptors` otomatik kabulde seçilebilecek kişiler) ·
+`GET /api/platforms` (ayarlar, siparişler, `live` canlı durum, `acceptors` otomatik kabulde seçilebilecek kişiler;
+komisyon oranı `commissionPct` maliyettir, yalnız `rapor.maliyet`, `ayar.yonet` ya da `senkron.yonet` yetkisine gider,
+garson ve raporcu almaz) ·
 `PUT /api/platforms/:platform` (`mode`, `prepMinutes`, `commissionPct`, `autoAccept`, `autoAcceptUserId`,
 `autoAcceptMaxKurus`) · `POST /api/platforms/:platform/test-order` (`autoAccepted`) ·
 `POST /api/platforms/orders/:id/accept|reject|platform-cancel|cancel-close` · teslim: `POST /api/orders/:id/delivery` ·

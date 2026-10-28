@@ -1,16 +1,5 @@
-import type { OrderDTO } from '@shared/types';
 import { errorMessage, post } from './api';
 import { toast } from './toast';
-
-/**
- * Kasadan (adisyon, Siparişler) teslim edilebilen hazır kalemler: kasanın tezgâh ve gel-al siparişi. Site ve paket
- * platformu siparişinin teslimi kendi akışında (site düğmesi, teslim aşaması); teslim aşamasına geçmiş gel-al da yok.
- */
-export function readyToHand(o: OrderDTO): string[] {
-  if (o.source !== 'pos' || o.platform || (o.type !== 'tezgah' && o.type !== 'gelal')) return [];
-  if ((o.status !== 'acik' && o.status !== 'kapali') || o.deliveryStatus === 'teslim') return [];
-  return o.items.filter((i) => !i.voided && i.stationId && i.status === 'hazir').map((i) => i.id);
-}
 
 /**
  * "Teslim edildi": hazır kalemler servise geçer, sipariş çağrı ekranından ve bar ekranının Hazır sekmesinden hemen

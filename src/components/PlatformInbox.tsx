@@ -16,7 +16,8 @@ import { toast } from '@/lib/toast';
 import { PlatformBadge } from './PlatformBadge';
 
 export interface PlatformsData {
-  settings: Record<PlatformId, PlatformSettings>;
+  /** Komisyon oranı yalnız maliyeti gören ya da ayarı yöneten kişiye gelir (garson ve raporcu almaz) */
+  settings: Record<PlatformId, Omit<PlatformSettings, 'commissionPct'> & { commissionPct?: number }>;
   orders: PlatformOrderDTO[];
   /** Canlı bağlantı durumu (eski sunucu göndermez) */
   live?: Record<PlatformId, PlatformLiveStatus>;

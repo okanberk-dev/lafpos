@@ -13,7 +13,8 @@ import { startApp, type Harness } from './harness';
  * Paket platformu siparişini otomatik kabul (docs/PAKET-PLATFORMLARI.md "Otomatik kabul"): ayar varsayılan kapalı ve
  * kabul eden kişi şart; Canlı'da yoklamanın yeni siparişi kasadaki Kabul'ün yoluyla, platforma bir kez giderek kabul
  * edilir (Trendyol Go, Yemeksepeti, Getir sahte sunucularıyla); koşullardan biri tutmazsa sipariş nedeniyle elle kabul
- * bekler; platform reddi, yerelde açılamayan adisyon, elle kabulle yarış ve yeniden deneme çift kabul yapmaz; Deneme'de
+ * bekler; platform reddi, yerelde açılamayan adisyon, elle kabulle yarış ve yeniden deneme çift kabul yapmaz; kasada
+ * karar denenmiş kayıt (ret platforma gidemedi, elle kabul yerelde düştü) hiçbir zaman otomatik kabul edilmez; Deneme'de
  * deneme siparişi platforma gitmeden kabul edilir. "sqljs" projesinde demonun veritabanıyla da koşar.
  */
 const TY = { supplierId: '777', apiKey: 'anahtar', apiSecret: 'gizli' };
@@ -381,8 +382,8 @@ describe('Canlı', () => {
     expect((await byExt(ext)).status).toBe('kabul');
   });
 
-  it('elle kabulle yarış: biri kabul ederken öteki 409 busy; otomatik kabul sonraki yoklamada bir kez daha bakar, çift kabul yok', async () => {
-    // Elle kabul sürerken otomatik kabul gelir
+  it('elle kabulle yarış: biri kabul ederken öteki 409 busy; otomatik kabul o kayda dönmez, çift kabul yok', async () => {
+    // Elle kabul sürerken otomatik kabul gelir: karar kişinin, otomatik kabul kaydı bırakır (yeniden denemez)
     await setPlatform('trendyol', { autoAccept: false });
     const ext = await tyArrive();
     const row = await byExt(ext);
@@ -394,7 +395,8 @@ describe('Canlı', () => {
     expect((await manual).status).toBe(200);
     await live.pollPlatform('trendyol');
     expect(picked(ext)).toBe(1);
-    expect(await byExt(ext)).toMatchObject({ status: 'kabul', reason: '20 dk' });
+    // Elle kabul otomatik kabulün "kasada karar veriliyor" notunu temizler
+    expect(await byExt(ext)).toMatchObject({ status: 'kabul', reason: '20 dk', lastError: null });
 
     // Otomatik kabul sürerken elle Kabul
     await setPlatform('trendyol', { autoAccept: false });
@@ -408,6 +410,85 @@ describe('Canlı', () => {
     delete ty.delayFor.picked;
     expect(picked(ext2)).toBe(1);
     expect(await byExt(ext2)).toMatchObject({ status: 'kabul', reason: '20 dk, otomatik' });
+  });
+
+  it('elle ret platforma gidemedi (aynı yoklamada): otomatik kabul personelin reddetmeye çalıştığı siparişi kabul etmez', async () => {
+    const a = tyPkg();
+    const b = tyPkg();
+    ty.packages.push(a, b);
+    const extA = String(a.id);
+    const extB = String(b.id);
+    // İlk siparişin otomatik kabulü platformda beklerken personel ikincisini reddeder; ret platforma gidemez
+    ty.delayFor.picked = 400;
+    ty.statusFor.unsupplied = [500];
+    const poll = live.pollPlatform('trendyol');
+    for (let i = 0; i < 200 && picked(extA) === 0; i++) await sleep(10);
+    const rowB = await byExt(extB);
+    expect(rowB.status).toBe('bekliyor');
+    const rej = await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${rowB.id}/reject`, { reason: 'Ürün kalmadı' });
+    expect([rej.status, rej.json.code]).toEqual([502, 'platform_unreachable']);
+    await poll;
+    delete ty.delayFor.picked;
+    expect((await byExt(extA)).status).toBe('kabul');
+    const after = await byExt(extB);
+    expect([after.status, after.orderId]).toEqual(['bekliyor', null]);
+    expect(after.lastError).toMatch(/^Trendyol Go: ret bildirilemedi/);
+    expect(picked(extB)).toBe(0);
+    expect((await audit()).some((x) => x.action === 'platform.auto_skip' && x.message.includes(`${after.payload.code}: otomatik kabul edilmedi (kasada karar denendi)`))).toBe(true);
+    // Kasa yeniden başlasa da (süreç belleği boş) kayıttaki not otomatik kabulü durdurur
+    const { manualDecision } = await import('../server/delivery/locks');
+    manualDecision.delete(after.id);
+    expect(await live.autoAccept(after.id)).toBe('skipped');
+    expect(picked(extB)).toBe(0);
+    // Platform düzelince personel yeniden reddeder
+    await h.ok('kasa', 'POST', `/platforms/orders/${after.id}/reject`, { reason: 'Ürün kalmadı' });
+    expect((await byExt(extB)).status).toBe('ret');
+    expect(picked(extB)).toBe(0);
+  });
+
+  it('elle ret sürerken otomatik kabul gelir (busy): kayıt elle kalır; ret düşünce sonraki yoklama da kabul etmez', async () => {
+    await setPlatform('trendyol', { autoAccept: false });
+    const ext = await tyArrive();
+    const row = await byExt(ext);
+    await setPlatform('trendyol', { autoAccept: true });
+    // Platform yavaş ve sonunda 500
+    ty.delayFor.unsupplied = 300;
+    ty.statusFor.unsupplied = [500];
+    const reject = h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${row.id}/reject`, { reason: 'Ürün kalmadı' });
+    for (let i = 0; i < 100 && ty.count(`PUT ${ext} unsupplied`) === 0; i++) await sleep(10);
+    expect(await live.autoAccept(row.id)).toBe('busy');
+    const r = await reject;
+    expect([r.status, r.json.code]).toEqual([502, 'platform_unreachable']);
+    delete ty.delayFor.unsupplied;
+    // Eskiden "busy" sonraki yoklamada yeniden denenir ve kabul edilirdi
+    await live.pollPlatform('trendyol');
+    expect(await live.autoAccept(row.id)).toBe('skipped');
+    const after = await byExt(ext);
+    expect([after.status, after.orderId]).toEqual(['bekliyor', null]);
+    expect(after.lastError).toMatch(/^Trendyol Go: ret bildirilemedi/);
+    expect(picked(ext)).toBe(0);
+    const skips = (await audit()).filter((x) => x.action === 'platform.auto_skip' && x.message.includes(`${row.payload.code}:`));
+    expect(skips.some((x) => x.message.includes('(kasada karar veriliyor)'))).toBe(true);
+    expect(skips.some((x) => x.message.includes('(kasada karar denendi)'))).toBe(true);
+  });
+
+  it('elle kabul yerelde düştü (kayda hata yazılmadı): otomatik kabul o kayda da dokunmaz', async () => {
+    await setPlatform('trendyol', { autoAccept: false });
+    const ext = await tyArrive();
+    const row = await byExt(ext);
+    await setPlatform('trendyol', { autoAccept: true });
+    const { db: d, schema } = await db();
+    const { eq } = await import('drizzle-orm');
+    const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+    // Porsiyon bitti: prova düşer, platforma gidilmez, kayda not yazılmaz
+    d.update(schema.products).set({ portionsLeft: 0 }).where(eq(schema.products.id, latte.id)).run();
+    const res = await h.call<{ code: string }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, {});
+    expect([res.status, res.json.code]).toEqual([409, 'portions']);
+    d.update(schema.products).set({ portionsLeft: null }).where(eq(schema.products.id, latte.id)).run();
+    expect((await byExt(ext)).lastError ?? null).toBeNull();
+    expect(await live.autoAccept(row.id)).toBe('skipped');
+    expect((await byExt(ext)).lastError).toBe('Otomatik kabul edilmedi: kasada karar denendi');
+    expect(picked(ext)).toBe(0);
   });
 });
 
