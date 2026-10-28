@@ -12,7 +12,7 @@ import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
-import { fromLines, rebaseDraft } from '@/lib/settingsDraft';
+import { draftConflicts, fromLines, rebaseDraft } from '@/lib/settingsDraft';
 import { toast } from '@/lib/toast';
 import { useUnsavedGuard } from '@/lib/unsavedGuard';
 
@@ -105,8 +105,12 @@ function LinesTextarea<T>({ value, format, parse, onChange, className }: { value
   const [draft, setDraft] = useState(() => format(value));
   const focused = useRef(false);
   const key = JSON.stringify(value);
+  const prevKey = useRef(key);
   useEffect(() => {
-    if (!focused.current) setDraft(format(value));
+    // Odaktayken de metin yeniden kurulur, kullanıcı yazmadıysa (metin önceki değerin aynısıysa): yoksa ilk tuş eski
+    // listeyi yazıp dışarıdan gelen değişikliği (başka cihaz) ezerdi
+    if (!focused.current || JSON.stringify(parse(draft)) === prevKey.current) setDraft(format(value));
+    prevKey.current = key;
     // Yalnız değer değişince (format her çizimde yeni işlev)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
@@ -146,12 +150,24 @@ export default function SettingsAdmin() {
   // Sunucudan yeni veri gelince (odak dönüşü, canlı akış, başka cihaz) kaydedilmemiş alanlar korunur: yalnız
   // kullanıcının dokunmadığı alanlar yeni değeri alır, karşılaştırma tabanı (data.data) güncellenir
   const base = useRef<Settings | null>(null);
+  const draftRef = useRef(s);
+  useEffect(() => {
+    draftRef.current = s;
+  });
   useEffect(() => {
     const next = data.data;
     if (!next) return;
     const prev = base.current;
     base.current = next;
-    setS((cur) => (cur && prev ? rebaseDraft(prev, cur, next) : next));
+    // Aynı alanı başka cihaz da değiştirdiyse sessizce ezilmez: söylenir, sunucudaki bir dokunuşla alınır
+    const cur = draftRef.current;
+    const conflicts = cur && prev && prev !== next ? draftConflicts(prev, cur, next) : [];
+    if (conflicts.length) {
+      toast.warn(conflicts.length === 1 ? 'Değiştirdiğiniz bir ayar başka cihazda da kaydedildi; kaydederseniz sizinki geçer' : `Değiştirdiğiniz ${conflicts.length} ayar başka cihazda da kaydedildi; kaydederseniz sizinkiler geçer`, {
+        action: { label: 'Sunucudakini al', run: () => setS((d) => (d ? { ...d, ...Object.fromEntries(conflicts.map((k) => [k, next[k]])) } : d)) },
+      });
+    }
+    setS((c) => (c && prev ? rebaseDraft(prev, c, next) : next));
   }, [data.data]);
   const dirty = !!s && !!data.data && comparable(s) !== comparable(data.data);
   // Sekme kapanırken ve uygulama içi geçişte (kenar çubuğu, palet) kaydedilmemiş değişiklik sorulur
@@ -203,17 +219,16 @@ export default function SettingsAdmin() {
       // Senkron anahtarları ayrı yetkiyle (Site ve lafmaliyet ekranı) değişir; servis modu seçilince kendisi kaydedilir
       const rest = Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'menuAutoSync' && k !== 'onlineOrdersSync' && k !== 'serviceMode'));
       const sent = s;
-      await put('/admin/settings', rest);
+      // Kayıt ucu kaydedilen ayarları döndürür (GET ile aynı biçim): taslak onunla yeniden kurulur. Ayrı bir yenileme
+      // başarısız olsa ya da çevrimdışı diye duraklasa önbellekteki eski ayarlar taslağı geri alırdı
+      const saved = await put<Settings>('/admin/settings', rest);
       toast.ok('Ayarlar kaydedildi');
-      qc.invalidateQueries({ queryKey: ['bootstrap'] });
-      await qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
       // Kaydedilen taslak sunucunun biçimini alır (kırpılan metin "kaydedilmemiş" kalmasın); kayıt sürerken yapılan
-      // değişiklikler korunur
-      const fresh = qc.getQueryData<Settings>(['admin', 'settings']);
-      if (fresh) {
-        base.current = fresh;
-        setS((cur) => (cur ? rebaseDraft(sent, cur, fresh) : fresh));
-      }
+      // değişiklikler korunur. Taban önce yazılır: önbellek değişince çalışan eşitleme taslağa dokunmaz
+      base.current = saved;
+      qc.setQueryData(['admin', 'settings'], saved);
+      setS((cur) => (cur ? rebaseDraft(sent, cur, saved) : saved));
+      void qc.invalidateQueries({ queryKey: ['bootstrap'] });
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {

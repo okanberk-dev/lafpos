@@ -12,7 +12,8 @@ import { Tabs } from '@/components/ui/misc';
 import { get, patch, post } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { groupTyped, TypedAmount } from './TypedAmount';
+import { groupTyped } from '@/lib/numpad';
+import { TypedAmount } from './TypedAmount';
 
 type Act = <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 
@@ -70,6 +71,9 @@ export function TransferModal({ order, open, onClose, act, onDone }: { order: Or
   const boot = useBoot();
   const [sel, setSel] = useState<Record<string, number>>({});
   const [target, setTarget] = useState<'ayri' | string>('ayri');
+  // Tek seferlik taşıma: ikinci basış kaynakta kalan adedi ikinci bir yeni hesaba taşımasın
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   useEffect(() => {
     if (open) setSel({});
   }, [open]);
@@ -77,16 +81,24 @@ export function TransferModal({ order, open, onClose, act, onDone }: { order: Or
   const items = order.items.filter((i) => !i.voided && i.qty - i.paidQty > 0);
   const chosen = Object.entries(sel).filter(([, q]) => q > 0);
   const submit = async () => {
-    const res = await act(
-      (pin) =>
-        post<{ source: OrderDTO; target: OrderDTO }>(`/orders/${order.id}/transfer`, {
-          items: chosen.map(([itemId, qty]) => ({ itemId, qty })),
-          tableId: target === 'ayri' ? (order.tableId ?? null) : target,
-          approverPin: pin,
-        }),
-      'Kalemler taşındı',
-    );
-    if (res) onDone(res.target.id);
+    if (busyRef.current || !chosen.length) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const res = await act(
+        (pin) =>
+          post<{ source: OrderDTO; target: OrderDTO }>(`/orders/${order.id}/transfer`, {
+            items: chosen.map(([itemId, qty]) => ({ itemId, qty })),
+            tableId: target === 'ayri' ? (order.tableId ?? null) : target,
+            approverPin: pin,
+          }),
+        'Kalemler taşındı',
+      );
+      if (res) onDone(res.target.id);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
   return (
     <Modal
@@ -107,7 +119,7 @@ export function TransferModal({ order, open, onClose, act, onDone }: { order: Or
                 </option>
               ))}
           </Select>
-          <Button variant="primary" disabled={!chosen.length} onClick={submit}>
+          <Button variant="primary" disabled={!chosen.length} loading={busy} onClick={() => void submit()}>
             {chosen.reduce((a, [, q]) => a + q, 0)} kalemi taşı
           </Button>
         </div>

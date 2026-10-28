@@ -1,19 +1,20 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parseTL } from '../shared/money';
 import { fmtAgo } from '../shared/time';
 import { cn, cx, mergeClasses } from '../src/lib/cn';
 import { joinMeta } from '../src/lib/text';
 import { ApiError } from '../src/lib/api';
 import { useApproval, withApproval } from '../src/lib/approvalStore';
 import { bootThemeFor, resolveDark } from '../src/lib/bootDark';
-import { restoreLines, type PendingLine } from '../src/lib/cart';
-import { layoutChanges, mergeServerTables } from '../src/lib/floorLayout';
+import { consumeLines, restoreLines, type PendingLine } from '../src/lib/cart';
+import { layoutChanges, mergeServerTables, settleSaved } from '../src/lib/floorLayout';
 import { kpiCellSpan, kpiGridCols } from '../src/lib/kpiGrid';
-import { applyNumpadKey, numpadKeyOf, typeOverPrefill } from '../src/lib/numpad';
+import { applyNumpadKey, groupTyped, numpadKeyOf, typeOverPrefill } from '../src/lib/numpad';
 import { lossParts, previousShort } from '../src/lib/reportLabels';
 import { endSession } from '../src/lib/sessionEnd';
-import { fromLines, rebaseDraft } from '../src/lib/settingsDraft';
+import { draftConflicts, fromLines, rebaseDraft } from '../src/lib/settingsDraft';
 import { useToasts } from '../src/lib/toastStore';
 
 /** Ortak bileşen kitinin saf parçaları: sınıf birleştirme, meta satırı, yeni renk belirteçlerinin kontrastı */
@@ -151,9 +152,26 @@ function typeKeys(keys: { key: string; code?: string }[], start = '', decimal = 
 const chars = (s: string) => [...s].map((key) => ({ key }));
 
 describe('tuş takımı: fiziksel klavye', () => {
-  it('ana sıradaki "." binlik ayırıcıdır, ondalık sayılmaz: "2.000" iki bin', () => {
+  const kurus = (typed: string) => parseTL(typeKeys(chars(typed)));
+  it('ana sıradaki "." parseTL kuralıyla okunur: ardından üç hane binlik, daha azı ondalık', () => {
     expect(typeKeys(chars('2.000'))).toBe('2000');
-    expect(numpadKeyOf({ key: '.', code: 'Period' }, true)).toEqual({ type: 'ignore' });
+    expect(kurus('2.000')).toBe(200000);
+    expect(kurus('45.90')).toBe(4590);
+    expect(kurus('12.5')).toBe(1250);
+    expect(kurus('7.5')).toBe(750);
+    expect(kurus('1.234.567')).toBe(123456700);
+    expect(kurus('0.5')).toBe(50);
+    // Klavyenin kendi yazımı ile para ayrıştırıcısı aynı sonucu verir
+    for (const t of ['45.90', '12.5', '2.000', '1.250,50', '3']) expect(kurus(t), t).toBe(parseTL(t));
+    expect(numpadKeyOf({ key: '.', code: 'Period' }, true)).toEqual({ type: 'key', key: '.' });
+  });
+  it('metinde kalan nokta ondalık gösterilir; dördüncü kesir hanesi ve ikinci ayırıcı reddedilir', () => {
+    expect(groupTyped(typeKeys(chars('45.9')))).toBe('45,9');
+    expect(groupTyped(typeKeys(chars('2.000')))).toBe('2.000');
+    expect(typeKeys(chars('45.9,'))).toBe('45.9');
+    expect(typeKeys(chars('12,5.'))).toBe('12,5');
+    expect(applyNumpadKey('2.00', '00', { decimal: true })).toBe('2.00');
+    expect(applyNumpadKey('2.0', '00', { decimal: true })).toBe('2000');
   });
   it('"," ve sayısal tuş takımının ondalığı virgül', () => {
     expect(typeKeys(chars('12,5'))).toBe('12,5');
@@ -168,6 +186,10 @@ describe('tuş takımı: fiziksel klavye', () => {
     expect(numpadKeyOf({ key: 'Enter' })).toEqual({ type: 'enter' });
     expect(numpadKeyOf({ key: 'Backspace' })).toEqual({ type: 'key', key: 'back' });
     expect(numpadKeyOf({ key: 'Delete' })).toEqual({ type: 'key', key: 'clear' });
+  });
+  it('NumLock kapalıyken sayısal tuş takımının Del’i her alanda temizler (virgül yazmaz)', () => {
+    expect(numpadKeyOf({ key: 'Delete', code: 'NumpadDecimal' }, true)).toEqual({ type: 'key', key: 'clear' });
+    expect(numpadKeyOf({ key: 'Delete', code: 'NumpadDecimal' }, false)).toEqual({ type: 'key', key: 'clear' });
   });
 });
 
@@ -258,6 +280,11 @@ describe('bildirim eylemi ("Geri al")', () => {
     expect(runs).toBe(1);
     expect(useToasts.getState().list.find((x) => x.id === id)?.leaving).toBe(true);
   });
+  it('kapanırken de dokunuşu bildirim alır: alttaki ürüne, pencerenin arka planına geçmez', () => {
+    const src = readFileSync(join(__dirname, '../src/lib/toast.tsx'), 'utf8');
+    expect(src).not.toMatch(/inert=/);
+    expect(src).not.toMatch(/t\.leaving \? 'pointer-events-none'/);
+  });
   it('geri alınan satırlar sepette zaten varsa yeniden eklenmez', () => {
     const line = (key: string): PendingLine => ({ key, productId: 'p', size: 'TEK', qty: 1, options: [], note: '' });
     const saved = [line('a'), line('b')];
@@ -265,6 +292,61 @@ describe('bildirim eylemi ("Geri al")', () => {
     expect(once.map((l) => l.key)).toEqual(['a', 'b']);
     expect(restoreLines(once, saved)).toBe(once);
     expect(restoreLines([line('c'), line('a')], saved).map((l) => l.key)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+describe('adisyon: gönderim', () => {
+  const line = (key: string, qty = 1): PendingLine => ({ key, productId: key, size: 'TEK', qty, options: [], note: '' });
+  it('yalnız gönderilen adetler düşer: istek sürerken "Geri al"la geri konan satır kalır', () => {
+    // [A] silindi, B gönderiliyor; istek sürerken A geri alındı
+    const sent = new Map([['b', 1]]);
+    const onScreen = restoreLines([line('b')], [line('a')]);
+    expect(consumeLines(onScreen, sent).map((l) => l.key)).toEqual(['a']);
+  });
+  it('istek sürerken aynı ürüne dokunulunca artan adet ve yeni satır beklemede kalır', () => {
+    const sent = new Map([['b', 1]]);
+    expect(consumeLines([line('b', 2), line('c')], sent)).toEqual([line('b', 1), line('c')]);
+    expect(consumeLines([line('b', 1)], sent)).toEqual([]);
+  });
+  it('gönderim sepeti toptan silmez; "Gönder ve çık" tek seferlik, gönderim sürerken "Sil ve çık" kapalı (kaynak)', () => {
+    const src = readFileSync(join(__dirname, '../src/pages/order/OrderPage.tsx'), 'utf8');
+    const send = src.slice(src.indexOf('const send = async'), src.indexOf('// Tezgâhta tek ekran'));
+    expect(send).toMatch(/cart\.consume\(order\.id, sent\)/);
+    expect(send).not.toMatch(/cart\.clear/);
+    expect(src).toMatch(/loading=\{sending\}\s*onClick=\{\(\) =>\s*void once\(async \(\) => \{\s*if \(!\(await send\(\)\)\) return;/);
+    expect(src).toMatch(/<Button variant="dangerGhost" disabled=\{sending\} onClick=\{\(\) => \{ discardPending\(\); navigate\(backPath\); \}\}>/);
+  });
+  it('kalem taşıma tek seferlik; kalem penceresi istek sürerken kapanmaz; boş indirimde Enter kaldırmaz (kaynak)', () => {
+    const ops = readFileSync(join(__dirname, '../src/pages/order/TableOps.tsx'), 'utf8');
+    const transfer = ops.slice(ops.indexOf('export function TransferModal'), ops.indexOf('kalemi taşı'));
+    expect(transfer).toMatch(/if \(busyRef\.current \|\| !chosen\.length\) return;/);
+    expect(transfer).toMatch(/loading=\{busy\} onClick=\{\(\) => void submit\(\)\}/);
+    const cart = readFileSync(join(__dirname, '../src/pages/order/CartPanel.tsx'), 'utf8');
+    expect(cart).toMatch(/onClose=\{dismiss\}\s*persistent=\{busy\}/);
+    expect(cart).toMatch(/if \(discValue !== ''\) void submit\(\);/);
+    const pay = readFileSync(join(__dirname, '../src/pages/order/PaymentModal.tsx'), 'utf8');
+    expect(pay).toMatch(/if \(m\.kind !== 'nakit' && focus === 'bahsis'\) requestAnimationFrame\(\(\) => panelRef\.current\?\.focus/);
+  });
+});
+
+describe('arka plan, arama, gezinme (kaynak)', () => {
+  it('komut paleti de Modal gibi click’te kapanır (basış karartmada başladıysa)', () => {
+    const src = readFileSync(join(__dirname, '../src/components/CommandPalette.tsx'), 'utf8');
+    expect(src).not.toMatch(/onPointerDown=\{\(e\) => e\.target === e\.currentTarget && onClose\(\)\}/);
+    expect(src).toMatch(/if \(downOnBackdrop\.current && e\.target === e\.currentTarget\) onClose\(\);/);
+  });
+  it('aramayı temizle dokunmatikte alana odak vermez (ekran klavyesi açılmaz)', () => {
+    const src = readFileSync(join(__dirname, '../src/components/ui/Field.tsx'), 'utf8');
+    expect(src).toMatch(/if \(isFinePointer\(\)\) inner\.current\?\.focus\(\);/);
+  });
+  it('kaydedilmemiş değişiklik: geri hareketi ve Kilitle de sorar, ekran değişince gezinme sayfaları kapanır', () => {
+    const guard = readFileSync(join(__dirname, '../src/lib/unsavedGuard.ts'), 'utf8');
+    expect(guard).toMatch(/addEventListener\('popstate', onPop\)/);
+    const shell = readFileSync(join(__dirname, '../src/components/AppShell.tsx'), 'utf8');
+    expect(shell).toMatch(/const lock = async \(\) => \{[^}]*if \(!\(await confirmLeave\(\)\)\) return;/);
+    expect(shell).toMatch(/setMoreOpen\(false\);\s*setMenuOpen\(false\);\s*\}, \[location\.pathname/);
+    const palette = readFileSync(join(__dirname, '../src/components/CommandPalette.tsx'), 'utf8');
+    expect(palette).toMatch(/if \(!\(await confirmLeave\(\)\)\) return;\s*await logout\(\);/);
   });
 });
 
@@ -299,6 +381,22 @@ describe('ayarlar taslağı', () => {
     expect(rebaseDraft(prev, draft, next)).toEqual({ businessName: 'L’Affogato Tuzla', serviceMode: 'self', autoLockMinutes: 10 });
     expect(rebaseDraft(prev, prev, next)).toEqual(next);
   });
+  it('aynı alanı başka cihaz da değiştirdiyse çakışma olarak söylenir', () => {
+    const prev = { voidReasons: ['A'], businessName: 'Eski', autoLockMinutes: 5 };
+    const draft = { ...prev, voidReasons: ['A', 'Yerel'], businessName: 'Yeni' };
+    const next = { ...prev, voidReasons: ['A', 'Uzak'], businessName: 'Yeni', autoLockMinutes: 10 };
+    expect(draftConflicts(prev, draft, next)).toEqual(['voidReasons']);
+    expect(draftConflicts(prev, prev, next)).toEqual([]);
+  });
+  it('kayıt sonrası taslak kayıt ucunun yanıtıyla kurulur (yenileme başarısızsa eski ayarlar geri gelmez) (kaynak)', () => {
+    const src = readFileSync(join(__dirname, '../src/pages/admin/SettingsAdmin.tsx'), 'utf8');
+    const save = src.slice(src.indexOf('const save = async'), src.indexOf('const backupNow'));
+    expect(save).toMatch(/const saved = await put<Settings>\('\/admin\/settings', rest\);/);
+    expect(save).toMatch(/base\.current = saved;\s*qc\.setQueryData\(\['admin', 'settings'\], saved\);/);
+    expect(save).not.toMatch(/getQueryData/);
+    // Satır alanı odaktayken de dışarıdan gelen listeyi alır, kullanıcı yazmadıysa
+    expect(src).toMatch(/if \(!focused\.current \|\| JSON\.stringify\(parse\(draft\)\) === prevKey\.current\) setDraft\(format\(value\)\);/);
+  });
 });
 
 describe('masa planı taslağı', () => {
@@ -312,6 +410,15 @@ describe('masa planı taslağı', () => {
   it('sayaç yalnız yeri gerçekten değişen masaları sayar', () => {
     const server = [t('m1', 0), t('m2', 0)];
     expect(layoutChanges([t('m1', 40), t('m2', 0)], server, new Set(['m1', 'm2'])).map((x) => x.id)).toEqual(['m1']);
+  });
+  it('kayıt sürerken sürüklenen masa işaretli kalır, yalnız gönderilen yerde duran düşer', () => {
+    const before = [t('a', 0), t('b', 50), t('c', 20)];
+    const sent = [{ id: 'a', x: 30, y: 0, w: 10, h: 10 }];
+    // A gönderildi, istek sürerken B sürüklendi; C sürüklenip eski yerine bırakılmıştı
+    const local = [t('a', 30), t('b', 0), t('c', 20)];
+    expect([...settleSaved(new Set(['a', 'b', 'c']), local, sent, before)]).toEqual(['b']);
+    // İstek sürerken A yeniden sürüklendiyse o da kalır
+    expect([...settleSaved(new Set(['a']), [t('a', 60)], sent, before)]).toEqual(['a']);
   });
 });
 

@@ -444,7 +444,10 @@ export function PaymentModal({
                     setMethod(m);
                     if (m.kind === 'nakit') setFocus('verilen');
                     else if (focus === 'verilen') setFocus('tutar');
-                    focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
+                    // Bahşiş yazılırken kart seçmek bahşiş girişini kesmez: DOM odağı tutar alanına gitse onFocus
+                    // odağı 'tutar'a çeker, bahşiş diye yazılan rakam ödeme tutarının yerine geçerdi
+                    if (m.kind !== 'nakit' && focus === 'bahsis') requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+                    else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
                   }}
                   aria-pressed={method?.id === m.id}
                   className={cn('flex h-14 items-center gap-2 px-3 text-left text-sm font-semibold', choice(method?.id === m.id))}

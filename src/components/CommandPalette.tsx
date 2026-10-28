@@ -64,6 +64,8 @@ function Palette({ onClose }: { onClose: () => void }) {
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
+  /** Basış karartmada mı başladı: kapanış click'te (Modal gibi), aynı dokunuş alttaki öğeye düşmesin */
+  const downOnBackdrop = useRef(false);
   const users = useQuery({ queryKey: ['users', 'admin'], queryFn: () => get<{ id: string; name: string; role: string; active: boolean }[]>('/admin/users'), enabled: can('personel.yonet'), staleTime: 60_000 });
 
   // Kapanınca odak açan öğeye döner (⌘K'ya basılan alan, sol menüdeki büyüteç)
@@ -125,6 +127,8 @@ function Palette({ onClose }: { onClose: () => void }) {
       keywords: 'çıkış oturum',
       run: async () => {
         onClose();
+        // Kilitlemek sayfadan çıkmaktır: Ayarlarda kaydedilmemiş değişiklik varsa önce sorulur
+        if (!(await confirmLeave())) return;
         await logout();
         navigate('/giris');
       },
@@ -172,7 +176,14 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   let lastGroup = '';
   return (
-    <div className="animate-fade fixed inset-0 z-[70] flex items-start justify-center bg-[var(--scrim-soft)] p-3 pt-[min(18vh,140px)]" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="animate-fade fixed inset-0 z-[70] flex items-start justify-center bg-[var(--scrim-soft)] p-3 pt-[min(18vh,140px)]" onPointerDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+        downOnBackdrop.current = false;
+      }}
+    >
       <div
         ref={dialog}
         role="dialog"

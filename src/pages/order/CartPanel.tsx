@@ -18,7 +18,8 @@ import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
 import { parseTL } from '@shared/money';
-import { groupTyped, TypedAmount } from './TypedAmount';
+import { groupTyped } from '@/lib/numpad';
+import { TypedAmount } from './TypedAmount';
 
 // Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
 const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
@@ -251,6 +252,11 @@ function ItemSheet({
     setQty(1);
     onClose();
   };
+  // İstek sürerken pencere kapanmaz (Escape, arka plan, X): kapanıp başka kaleme geçilse, paylaşılan busy o kalemi
+  // kilitler, süren isteğin sonundaki close() da onun penceresini kapatırdı
+  const dismiss = () => {
+    if (!busyRef.current) close();
+  };
   const reasons = mode === 'iptal' ? boot.settings.voidReasons : mode === 'indirim' ? boot.settings.discountReasons : mode ? compReasonsOf(boot.settings, mode) : [];
 
   const ready = !!reason.trim() || (mode === 'indirim' && (discValue === '' || discValue === '0'));
@@ -280,7 +286,8 @@ function ItemSheet({
   return (
     <Modal
       open
-      onClose={close}
+      onClose={dismiss}
+      persistent={busy}
       size="sm"
       title={`${item.qty}× ${item.name}${item.size !== 'TEK' ? ` ${boot.settings.sizeLabels[item.size]}` : ''}`}
       subtitle={[item.optionsText, tl(item.qty * item.unitPrice)].filter(Boolean).join(' · ')}
@@ -339,12 +346,15 @@ function ItemSheet({
                   <TypedAmount text={discValue} />
                 )}
               </output>
-              {/* Enter, Uygula etkinse uygular; değilse hiçbir şey yapmaz (odaktaki rakamı yinelemez) */}
+              {/* Enter, Uygula etkinse uygular; değilse hiçbir şey yapmaz (odaktaki rakamı yinelemez). Boş değerle Enter
+                  indirimi kaldırmaz: kaldırma yazılmış bir 0 ya da Uygula düğmesiyle açıkça yapılır */}
               <Numpad
                 size="md"
                 keyboard
                 decimal={discType === 'amount'}
-                onEnter={() => void submit()}
+                onEnter={() => {
+                  if (discValue !== '') void submit();
+                }}
                 onKey={(k) => setDiscValue(applyNumpadKey(discValue, k, { decimal: discType === 'amount', maxLength: discType === 'percent' ? 3 : 8 }))}
               />
             </div>

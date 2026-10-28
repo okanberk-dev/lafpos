@@ -23,6 +23,8 @@ interface CartState {
   update: (orderId: string, key: string, patch: Partial<PendingLine>) => void;
   remove: (orderId: string, key: string) => void;
   clear: (orderId: string) => void;
+  /** Gönderilen satırları sepetten düşer (anahtar → gönderilen adet); istek sürerken eklenen ya da geri konan kalır */
+  consume: (orderId: string, sent: ReadonlyMap<string, number>) => void;
 }
 
 const sameLine = (a: Omit<PendingLine, 'key'>, b: Omit<PendingLine, 'key'>) =>
@@ -63,6 +65,14 @@ export const useCart = create<CartState>()(
           delete next[orderId];
           return { byOrder: next };
         }),
+      consume: (orderId, sent) =>
+        set((s) => {
+          const lines = consumeLines(s.byOrder[orderId] ?? [], sent);
+          const next = { ...s.byOrder };
+          if (lines.length) next[orderId] = lines;
+          else delete next[orderId];
+          return { byOrder: next };
+        }),
     }),
     { name: 'lafpos.cart', storage: safeStorage },
   ),
@@ -76,6 +86,21 @@ export function restoreLines(current: PendingLine[], saved: PendingLine[]): Pend
   const keys = new Set(current.map((l) => l.key));
   const missing = saved.filter((l) => !keys.has(l.key));
   return missing.length ? [...current, ...missing] : current;
+}
+
+/**
+ * Gönderimden sonra sepette kalan satırlar: gönderilen her anahtardan gönderilen adet düşülür, adedi biten satır
+ * kalkar. Gönderim sürerken eklenen satır (başka anahtar) ya da aynı ürüne dokunulunca artan adet beklemede kalır;
+ * "Geri al" ile geri konan satır da öyle. Sepeti toptan silmek (clear) bunları bara hiç gitmeden kaybettirirdi.
+ */
+export function consumeLines(current: PendingLine[], sent: ReadonlyMap<string, number>): PendingLine[] {
+  const out: PendingLine[] = [];
+  for (const l of current) {
+    const q = sent.get(l.key);
+    if (q === undefined) out.push(l);
+    else if (l.qty > q) out.push({ ...l, qty: l.qty - q });
+  }
+  return out;
 }
 
 export function usePending(orderId: string): PendingLine[] {

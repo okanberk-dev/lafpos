@@ -23,3 +23,11 @@ export function rebaseDraft<T extends Record<string, unknown>>(prevServer: T, dr
   }
   return out as T;
 }
+
+/**
+ * Çakışan alanlar: kullanıcı da sunucu da (başka cihaz) aynı alanı önceki değerden farklı değerlere değiştirdi.
+ * rebaseDraft bunlarda kullanıcının değerini tutar; ekran bunu söyler ve sunucudakini alma seçeneği verir.
+ */
+export function draftConflicts<T extends Record<string, unknown>>(prevServer: T, draft: T, nextServer: T): (keyof T & string)[] {
+  return Object.keys(draft).filter((k) => !same(draft[k], prevServer[k]) && !same(nextServer[k], prevServer[k]) && !same(nextServer[k], draft[k])) as (keyof T & string)[];
+}

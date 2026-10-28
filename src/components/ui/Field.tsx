@@ -14,6 +14,7 @@ import {
   useState,
 } from 'react';
 import { cn } from '@/lib/cn';
+import { isFinePointer } from '@/lib/hooks';
 
 /**
  * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (mavi kenar ve yumuşak halka), hatalı (`aria-invalid`:
@@ -150,9 +151,16 @@ export const SearchInput = forwardRef<
           type="button"
           aria-label="Aramayı temizle"
           title="Aramayı temizle"
-          onClick={() => {
+          onClick={(e) => {
             onChange('');
-            inner.current?.focus();
+            // Fareyle odak alana döner (yeniden yazılır). Dokunmatikte alana odak ekran klavyesini açıp ızgarayı örterdi:
+            // kalkan düğmenin odağı sayfaya düşmesin diye kapsayan pencereye verilir (Tab sırası pencerede kalır)
+            if (isFinePointer()) inner.current?.focus();
+            else {
+              const host = e.currentTarget.closest<HTMLElement>('[role=dialog][tabindex]');
+              if (host) host.focus({ preventScroll: true });
+              else e.currentTarget.blur();
+            }
           }}
           className={cn('absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-xl text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
         >

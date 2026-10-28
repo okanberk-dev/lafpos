@@ -9,6 +9,7 @@ import { useLive } from '@/lib/live';
 import { isAdminArea, visibleNav } from '@/lib/nav';
 import { useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
+import { confirmLeave } from '@/lib/unsavedGuard';
 import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
@@ -63,6 +64,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setMenuOpen = useShell((s) => s.setUserMenu);
   const setPalette = useShell((s) => s.setPalette);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Ekran değişince gezinme sayfaları kapanır: kaydedilmemiş değişiklik koruması bağlantının tıklamasını yakalayıp
+  // onaydan sonra kendisi gezdiğinde bağlantının onClick'i (sayfayı kapat) çalışmamış olur
+  useEffect(() => {
+    setMoreOpen(false);
+    setMenuOpen(false);
+  }, [location.pathname, setMenuOpen]);
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
   useReadyAlerts();
@@ -92,6 +99,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const fullBleed = admin || location.pathname.startsWith('/adisyon/') || location.pathname === '/mutfak';
   const lock = async () => {
     setMenuOpen(false);
+    // Kilitlemek sayfadan çıkmaktır: Ayarlarda kaydedilmemiş değişiklik varsa önce sorulur (otomatik kilit sormaz)
+    if (!(await confirmLeave())) return;
     await logout();
     navigate('/giris');
   };

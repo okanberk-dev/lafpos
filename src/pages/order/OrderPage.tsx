@@ -148,6 +148,8 @@ export default function OrderPage() {
 
   const send = async (): Promise<boolean> => {
     if (!pending.length) return false;
+    // Yalnız gönderilen adetler sepetten düşer: istek sürerken eklenen ya da "Geri al"la geri konan satır beklemede kalır
+    const sent = new Map(pending.map((l) => [l.key, l.qty]));
     setSending(true);
     const res = await act(
       (pin) =>
@@ -159,7 +161,7 @@ export default function OrderPage() {
     );
     setSending(false);
     if (!res) return false;
-    cart.clear(order.id);
+    cart.consume(order.id, sent);
     qc.invalidateQueries({ queryKey: ['kitchen'] });
     if (!wide) setTab('adisyon');
     return true;
@@ -574,13 +576,27 @@ export default function OrderPage() {
       </Modal>
       <Modal open={dialog === 'cikis'} onClose={() => setDialog(null)} title="Gönderilmemiş ürünler var" subtitle={`${pendingCount} ürün henüz bara/mutfağa gitmedi`} size="sm">
         <div className="grid gap-2 p-4">
-          <Button variant="primary" size="lg" icon={<Send className="size-4" />} onClick={async () => { await send(); setDialog(null); navigate(backPath); }}>
+          {/* Tek seferlik (once): çift dokunuş kalemleri bara iki kez göndermez; gönderilemezse pencere açık kalır */}
+          <Button
+            variant="primary"
+            size="lg"
+            icon={<Send className="size-4" />}
+            loading={sending}
+            onClick={() =>
+              void once(async () => {
+                if (!(await send())) return;
+                setDialog(null);
+                navigate(backPath);
+              })
+            }
+          >
             Gönder ve çık
           </Button>
           <Button size="lg" onClick={() => navigate(backPath)}>
             Bu cihazda beklesin
           </Button>
-          <Button variant="dangerGhost" onClick={() => { discardPending(); navigate(backPath); }}>
+          {/* Gönderim sürerken silinmez (discardPending): düğme de kapalı, "sildim" sanılıp kalemler bara gitmesin */}
+          <Button variant="dangerGhost" disabled={sending} onClick={() => { discardPending(); navigate(backPath); }}>
             Sil ve çık
           </Button>
         </div>

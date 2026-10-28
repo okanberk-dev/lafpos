@@ -14,7 +14,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
-import { layoutChanges, mergeServerTables } from '@/lib/floorLayout';
+import { layoutChanges, mergeServerTables, settleSaved } from '@/lib/floorLayout';
 
 interface Section {
   id: string;
@@ -85,8 +85,10 @@ export default function FloorAdmin() {
   // Sunucu verisi yalnız kendisi değişince yeniden kurulur (bölüm sekmesi değişince değil); sürüklenip kaydedilmemiş
   // masaların yeri korunur (öteki masada Kişi, Şekil, QR, kaldırma da listeyi yeniler)
   const dirtyRef = useRef(dirty);
+  const tablesRef = useRef(tables);
   useEffect(() => {
     dirtyRef.current = dirty;
+    tablesRef.current = tables;
   });
   useEffect(() => {
     if (!data.data) return;
@@ -139,8 +141,13 @@ export default function FloorAdmin() {
   const saveLayout = async () => {
     setBusy('plan');
     try {
-      await put('/admin/tables/layout', { tables: changes.map(({ id, x, y, w, h }) => ({ id, x, y, w, h })) });
-      setDirty(new Set());
+      const sent = changes.map(({ id, x, y, w, h }) => ({ id, x, y, w, h }));
+      const before = data.data?.tables ?? [];
+      await put('/admin/tables/layout', { tables: sent });
+      // Kayıt sürerken sürüklenen masa işaretli kalır (yalnız gönderilen yerde duranlar düşer)
+      const next = settleSaved(dirtyRef.current, tablesRef.current, sent, before);
+      dirtyRef.current = next;
+      setDirty(next);
       toast.ok('Masa planı kaydedildi');
       refresh();
     } catch (e) {

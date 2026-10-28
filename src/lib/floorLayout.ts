@@ -33,3 +33,19 @@ export function layoutChanges<T extends Geometry>(local: T[], server: T[], dirty
     return !!s && !sameGeometry(t, s);
   });
 }
+
+/**
+ * Kayıttan sonra hâlâ kaydedilmemiş masalar: gönderilen konumda duran masa düşer, sunucudaki yerine geri bırakılmış
+ * olan da (kaydedilecek bir şeyi yok). Kayıt sürerken yeniden sürüklenen masa işaretli kalır; sonraki yenileme onu
+ * sunucudaki eski yerine zıplatmaz.
+ */
+export function settleSaved<T extends Geometry>(dirty: ReadonlySet<string>, local: T[], sent: Geometry[], server: Geometry[] = []): Set<string> {
+  const sentById = new Map(sent.map((t) => [t.id, t]));
+  const serverById = new Map(server.map((t) => [t.id, t]));
+  const out = new Set(dirty);
+  for (const t of local) {
+    const s = sentById.get(t.id) ?? serverById.get(t.id);
+    if (s && sameGeometry(t, s)) out.delete(t.id);
+  }
+  return out;
+}

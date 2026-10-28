@@ -70,15 +70,18 @@ function ToastItem({ t }: { t: Toast }) {
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) hold('focus', false);
       }}
-      // Kapanırken (150 ms) düğmeler etkisiz: "Geri al"a çift dokunuş eylemi iki kez çalıştırmasın
-      inert={t.leaving || undefined}
-      className={cn(t.leaving ? 'pointer-events-none' : 'pointer-events-auto', 'flex max-w-md items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
+      // Kapanırken (150 ms) dokunuşu yine bildirim alır, hiçbir şey olmaz: act() ve leave() kapanmakta olanı yok sayar
+      // ("Geri al"a çift dokunuş eylemi iki kez çalıştırmaz). inert ya da pointer-events-none dokunuşu alttaki ürüne,
+      // pencerenin arka planına geçirirdi
+      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
     >
       <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span className="flex-1 leading-snug">{t.text}</span>
       {t.action && (
         <button
           type="button"
+          tabIndex={t.leaving ? -1 : undefined}
+          aria-disabled={t.leaving || undefined}
           onClick={() => act(t.id)}
           className="-my-1.5 min-h-8 shrink-0 rounded-md px-2 text-sm font-semibold underline-offset-2 hover:underline pointer-coarse:-my-3 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
         >
@@ -87,6 +90,7 @@ function ToastItem({ t }: { t: Toast }) {
       )}
       <button
         type="button"
+        tabIndex={t.leaving ? -1 : undefined}
         onClick={() => leave(t.id)}
         aria-label="Kapat"
         className="-my-2 -mr-2 grid size-9 shrink-0 place-items-center rounded-md opacity-70 transition-opacity hover:opacity-100 pointer-coarse:-my-3 pointer-coarse:size-11"
