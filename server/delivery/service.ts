@@ -22,6 +22,7 @@ import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings, updateSettings } from '../lib/settings';
+import { loadSaleProduct } from '../services/menu';
 import * as orders from '../services/orders';
 import { sampleOrder } from './simulator';
 
@@ -245,6 +246,21 @@ export function lineIssues(t: Tx | DB, payload: PlatformOrderPayload): { unmatch
     unmatched: matched.filter((m) => !m.product && m.line.kind !== 'fee').map((m) => m.line.name),
     soldOut: matched.filter((m) => m.product && !m.product.active).map((m) => m.line.name),
   };
+}
+
+/**
+ * Eşleşen kalemin ürününde kasada tükendi işaretli seçenek (yulaf sütü bitti): "Latte: Yulaf". Platformun seçimleri
+ * notta metin olarak gelir, seçenek kimliğine bağlanmaz; bu yüzden otomatik kabul böyle bir ürünü içeren siparişi elle
+ * bırakır (seçimi kişi okur). Elle kabul ve adisyon açma bundan etkilenmez: platform siparişi reddedilmez
+ */
+export function soldOutOptionsOf(t: Tx | DB, payload: PlatformOrderPayload): string[] {
+  const out = new Set<string>();
+  for (const m of matchLines(t, payload)) {
+    if (!m.product || m.line.kind === 'fee') continue;
+    const sold = loadSaleProduct(t, m.product.id).groups.flatMap((g) => g.items.filter((i) => i.soldOut).map((i) => i.name));
+    if (sold.length) out.add(`${m.line.name}: ${[...new Set(sold)].join(', ')}`);
+  }
+  return [...out];
 }
 
 function toDTO(t: Tx | DB, row: PlatformRow, now: number): PlatformOrderDTO {

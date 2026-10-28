@@ -300,7 +300,9 @@ başka bir not varsa o ezilmez) ve denetim kaydına bir kez düşer (`platform.a
    kapıda türler ayrı; tanınmayan tür elle kabulde bugünkü gibi online sayılır, yalnız işaretlenir); tutarlar kuruş tam sayı ve sıfırdan küçük değil, adetler tam sayı; Σ(birim × adet) = kalemler;
    restoran kampanyası + platform kampanyası + müşterinin ödediği = kalemler; müşterinin ödediği sıfırdan büyük.
 10. Müşterinin ödediği ayardaki en yüksek tutarı (varsayılan 1.500 TL) aşmıyor.
-11. Bütün kalemler kasadaki ürüne eşleşmiş (ücret satırı serbest) ve hiçbiri tükenmemiş.
+11. Bütün kalemler kasadaki ürüne eşleşmiş (ücret satırı serbest) ve hiçbiri tükenmemiş; eşleşen ürünün seçeneklerinden
+    biri kasada tükendi işaretliyse (yulaf sütü bitti) de elle: platformun seçimi notta metindir, kişi okur
+    (`soldOutOptionsOf`; elle kabul ve adisyon açma etkilenmez, platform siparişi reddedilmez).
 12. Prova geçiyor (porsiyon yetiyor) ve provadaki adisyonun tutarı platformun ödeyeceğine (kalemler − restoran
     kampanyası) eşit.
 

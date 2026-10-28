@@ -319,6 +319,12 @@ describe('Canlı', () => {
     d.update(schema.products).set({ active: true, portionsLeft: 1 }).where(eq(schema.products.id, latte.id)).run();
     await expectSkip(payload({ lines: [{ externalId: '55', name: 'Latte', qty: 2, unitPrice: 20000, modifiers: [], note: null }] }), /^Otomatik kabul edilmedi: adisyon açılamıyor: Latte: son 1 porsiyon kaldı/);
     d.update(schema.products).set({ portionsLeft: null }).where(eq(schema.products.id, latte.id)).run();
+    // Ürünün seçeneklerinden biri kasada tükendi (yulaf sütü bitti): platformun seçimi metin, kişi okur; elle
+    const link = d.select().from(schema.productOptionGroups).where(eq(schema.productOptionGroups.productId, latte.id)).all()[0]!;
+    const opt = d.select().from(schema.optionItems).where(eq(schema.optionItems.groupId, link.groupId)).all()[0]!;
+    d.update(schema.optionItems).set({ soldOut: true }).where(eq(schema.optionItems.id, opt.id)).run();
+    await expectSkip(payload(), `seçeneği tükenmiş ürün (Latte: ${opt.name})`);
+    d.update(schema.optionItems).set({ soldOut: false }).where(eq(schema.optionItems.id, opt.id)).run();
   });
 
   it('kasa kurulum ya da eğitim modunda, gün güncel değil ya da kabul eden uygun değilse çalışmaz (kişide bir kez uyarı)', async () => {

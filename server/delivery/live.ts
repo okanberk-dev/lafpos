@@ -19,6 +19,7 @@ import {
   getPlatformOrder,
   ingestPlatformOrder,
   lineIssues,
+  soldOutOptionsOf,
   PRE_ACCEPTED_TTL_MS,
   platformAmount,
   platformCancelled,
@@ -376,6 +377,8 @@ export function autoAcceptBlocker(row: PlatformRow, now = Date.now()): string | 
   const { unmatched, soldOut } = lineIssues(db, p);
   if (unmatched.length) return `eşleşmeyen kalem (${unmatched.join(', ')})`;
   if (soldOut.length) return `tükenmiş kalem (${soldOut.join(', ')})`;
+  const soldOptions = soldOutOptionsOf(db, p);
+  if (soldOptions.length) return `seçeneği tükenmiş ürün (${soldOptions.join('; ')})`;
   return null;
 }
 
