@@ -81,8 +81,10 @@ Her dalga: kod + birim testleri + tip denetimi + tarayıcıda deneme + GitHub'a 
    `option_sold_out` ("Orta tükendi; Şeker seçin", `docs/03-ENTEGRASYON.md` §2.3). İsteğe bağlı grubun tükenen
    varsayılanı (Normal süt) satışı durdurmaz: sunucu o grup için seçenek yazmaz, pencerede yalnız "Normal tükendi"
    bilgisi çıkar (su ve espresso süt sormadan satılır). Paket platformu ve site satırına varsayılan yazılmaz, seçim notta
-   ya da sitenin döküm metninde gelir. Kurallar `src/lib/boot.ts` (`needsChoice`, `asksOptions`, `defaultPicks`,
-   `missingChoice`), testi `tests/varyant-secenek.test.ts`
+   ya da sitenin döküm metninde gelir. Sepetteki tahmini tutar ve satır metni sunucunun yazacağı seçeneklerle
+   hesaplanır: hızlı eklenen satırda (seçimsiz tek seçimlik grup) tükenmemiş varsayılan ücretiyle ve adıyla girer
+   (`menuUnit`, `pendingOptionsText`; `tests/secenek-tahmin.test.ts`). Kurallar `src/lib/boot.ts` (`needsChoice`,
+   `asksOptions`, `defaultPicks`, `missingChoice`), testi `tests/varyant-secenek.test.ts`
 6. Masa işlemleri: taşı, birleştir, kalem taşı (böl), kişi sayısı, garson değiştir
 7. İptal, ikram, kalem ve adisyon indirimi: gerekçe, yetki, yetkili PIN onayı, uyarı
 8. Ödeme: nakit (para üstü, hızlı banknot), kart, yemek kartı, havale, cari; parçalı, kalem bazlı, kişi başı;

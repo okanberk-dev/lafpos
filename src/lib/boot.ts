@@ -52,16 +52,42 @@ export function sizePrice(p: ProductDTO, size: Size): number {
   return size === 'L' && p.priceL != null ? p.priceL : p.price;
 }
 
-/** Menü birim fiyatı: boy ve seçenek farkları dahil, happy hour öncesi (elle fiyatın karşılaştırıldığı tutar) */
-export function menuUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, picks: { itemId: string; qty?: number }[]): number {
-  let unit = sizePrice(p, size);
+/**
+ * Bekleyen satırın sunucuda yazılacak seçenekleri, kasa satışında `resolveOptions`'ın kuralıyla: satırın kendi
+ * seçimleri (isteğe bağlı grubun tükenen varsayılanı hariç, gönderim onu çıkarır: `sendableOptions`; sayaçlı grupta
+ * aynı seçeneğin adetleri toplanır, sıfır adet yazılmaz) ve seçimi olmayan tek seçimlik grupta varsayılan, tükenmemişse.
+ * Ücretli varsayılan (Karton +₺5) satır eklenirken tükenikti ve sonra satışa açıldı, ya da iki boylu ürün pencere
+ * açılmadan eklendi: sunucu onu yazar ve ücretini alır, tahmin ve satır metni de. Tükenen varsayılanı sunucu isteğe
+ * bağlı grupta yazmaz; zorunlu grupta 409 verir, o satır zaten `pendingProblem` ile işaretli
+ */
+function resolvedPicks(boot: BootstrapDTO, p: ProductDTO, picks: { itemId: string; qty?: number }[]) {
+  const out: { g: OptionGroupDTO; item: OptionItemDTO; qty: number }[] = [];
   for (const g of productGroups(boot, p)) {
+    const own = new Map<string, { g: OptionGroupDTO; item: OptionItemDTO; qty: number }>();
     for (const pick of picks) {
       const item = g.items.find((i) => i.id === pick.itemId);
-      if (item && !lapsedDefault(g, item)) unit += item.price * (g.kind === 'counter' ? (pick.qty ?? 1) : 1);
+      if (!item || lapsedDefault(g, item)) continue;
+      const qty = g.kind === 'counter' ? Math.trunc(pick.qty ?? 1) : 1;
+      const seen = own.get(item.id);
+      if (!seen) own.set(item.id, { g, item, qty });
+      else if (g.kind === 'counter') seen.qty += qty;
     }
+    if (own.size || g.kind !== 'single') {
+      out.push(...[...own.values()].filter((r) => r.qty > 0));
+      continue;
+    }
+    const d = g.items.find((i) => i.isDefault);
+    if (d && !d.soldOut) out.push({ g, item: d, qty: 1 });
   }
-  return unit;
+  return out;
+}
+
+/**
+ * Menü birim fiyatı: boy ve sunucunun yazacağı seçeneklerin farkları dahil (`resolvedPicks`), happy hour öncesi (elle
+ * fiyatın karşılaştırıldığı tutar)
+ */
+export function menuUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, picks: { itemId: string; qty?: number }[]): number {
+  return resolvedPicks(boot, p, picks).reduce((unit, r) => unit + r.item.price * r.qty, sizePrice(p, size));
 }
 
 /**
@@ -72,21 +98,19 @@ export function estimateUnit(boot: BootstrapDTO, p: ProductDTO, size: Size, pick
   return happyHourUnit(menuUnit(boot, p, size, picks), happyHourPercentAt(boot.happyHours, p, nowMs));
 }
 
-/** Gönderilmemiş kalemin seçenek metni (sunucunun `optionsText` kuralıyla aynı) */
+/**
+ * Gönderilmemiş kalemin seçenek metni: sunucunun yazacağı seçenekler (`resolvedPicks`) sunucunun `optionsText`
+ * kuralıyla. İsteğe bağlı grubun ücretsiz varsayılanı (Normal süt) yazılmaz, ücretli varsayılan (Karton) ve zorunlu
+ * grubun seçimi (Orta) yazılır
+ */
 export function pendingOptionsText(boot: BootstrapDTO, p: ProductDTO, picks: { itemId: string; qty?: number }[]): string {
   const parts: string[] = [];
-  for (const g of productGroups(boot, p)) {
-    for (const pick of picks) {
-      const item = g.items.find((i) => i.id === pick.itemId);
-      if (!item || lapsedDefault(g, item)) continue;
-      const qty = pick.qty ?? 1;
-      if (item.isDefault && item.price === 0 && !g.required) continue;
-      if (g.extKey === 'extraShot') parts.push(qty > 1 ? `+${qty} shot` : '+1 shot');
-      else if (g.extKey === 'sugar') {
-        if (qty > 0) parts.push(`${qty} şeker`);
-      } else if (g.extKey === 'roast') parts.push(`${item.name} kavrum`);
-      else parts.push(item.name);
-    }
+  for (const { g, item, qty } of resolvedPicks(boot, p, picks)) {
+    if (g.items.find((i) => i.isDefault)?.id === item.id && item.price === 0 && !g.required) continue;
+    if (g.extKey === 'extraShot') parts.push(qty > 1 ? `+${qty} shot` : '+1 shot');
+    else if (g.extKey === 'sugar') parts.push(`${qty} şeker`);
+    else if (g.extKey === 'roast') parts.push(`${item.name} kavrum`);
+    else parts.push(qty > 1 ? `${qty}× ${item.name}` : item.name);
   }
   return parts.join(' · ');
 }

@@ -207,13 +207,17 @@ kapalıdır. İsteğe bağlı grubun varsayılanı (pencerenin önseçtiği Norm
 pencere onu bırakır (yalnız bilgi notu, Ekle açık), sepetteki satır işaretlenmez, Gönder onu satırdan çıkarır ve sunucu
 o grup için seçenek yazmaz (Su süt yazılmadan satılır; `sendableOptions`). Sepetteki gönderilemeyecek satırın altında
 kırmızı neden yazar ("Yulaf tükendi", "Orta tükendi, şeker seçin", grubu kapandıysa "Seçeneği kalktı, düzenleyin");
-dokununca düzenleme penceresi açılır. Pencere açıkken ürünün bir grubu kapanır ya da açılırsa, seçenek tükenir ya da
-satışa açılırsa seçim uzlaştırılır (`reconcilePicks`): kapanan grubun seçimi atılır; seçimi boşalan her isteğe bağlı tek
-seçimlik grubun (yeni açılan, varsayılanı yeniden satışa açılan, seçili seçeneği kaldırılan) varsayılanı seçili gelir,
-ücretli varsayılan ekranda görünmeden ücrete girmez. Sunucu yalnız kasa satışını (`POST /api/orders/:id/items`)
-reddeder: tükenen seçenek açıkça seçildiyse (her grupta) ya da zorunlu tek seçimlik grup boş gönderildi ve varsayılanı
-tükendiyse 409 `option_sold_out` ("Yulaf tükendi", "Orta tükendi; Şeker seçin"). Siteden gelen ödenmiş sipariş ve paket
-platformu siparişi reddedilmez.
+dokununca düzenleme penceresi açılır. İşaretsiz satırın sepette, "Öde" düğmesinde ve müşteri ekranında görünen tutarı
+ve seçenek metni sunucunun yazacağıyla aynıdır (`menuUnit`, `pendingOptionsText`): seçimi olmayan tek seçimlik grupta
+varsayılan, tükenmemişse, ücretiyle ve adıyla girer. Ücretli varsayılan (Karton +₺5) satır eklenirken tükenikti ve satır
+sepetteyken satışa açıldıysa sepet ₺85 ve "Karton" gösterir, sunucu da onu yazar; iki boylu ürünün pencere açılmadan
+eklenmesi de böyle (`tests/secenek-tahmin.test.ts`, node ve sql.js). Pencere açıkken ürünün bir grubu kapanır ya da
+açılırsa, seçenek tükenir ya da satışa açılırsa seçim uzlaştırılır (`reconcilePicks`): kapanan grubun seçimi atılır;
+seçimi boşalan her isteğe bağlı tek seçimlik grubun (yeni açılan, varsayılanı yeniden satışa açılan, seçili seçeneği
+kaldırılan) varsayılanı seçili gelir, ücretli varsayılan ekranda görünmeden ücrete girmez. Sunucu yalnız kasa satışını
+(`POST /api/orders/:id/items`) reddeder: tükenen seçenek açıkça seçildiyse (her grupta) ya da zorunlu tek seçimlik grup
+boş gönderildi ve varsayılanı tükendiyse 409 `option_sold_out` ("Yulaf tükendi", "Orta tükendi; Şeker seçin"). Siteden
+gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez.
 
 **Porsiyon:** siteye bağlı ürünün porsiyonu bitince Tükendi yazımı adisyon kalemiyle aynı işlemde giden kutusuna
 girer (`outbox`: target `laffogato`, kind `menu.isActive`, ürün başına tek kayıt `menu:<extId>`, son istenen durum) ve
