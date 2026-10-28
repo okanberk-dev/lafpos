@@ -196,9 +196,12 @@ yetkisi olan da) Tükenen ürünler › Seçenekler'den seçeneği Tükendi yapa
 işaretlenir. Sözleşmede böyle bir alan olmadığı için siteye ve uygulamaya gitmez; menü senkronu ve Yönetim › Seçenekler
 düzenlemesi işarete dokunmaz, gün açılışında sıfırlanmaz (ürünün Tükendi'si gibi). Seçenek penceresinde tükenen seçenek
 gri ve "Tükendi" yazar, seçilemez; varsayılanı tükenen grup (normal süt) önseçili gelmez, başka biri seçilene kadar Ekle
-kapalıdır, hızlı ekleme de pencereyi açar. Sunucu yalnız kasa satışını (`POST /api/orders/:id/items`) reddeder: tükenen
-seçenek seçildiyse ya da tek seçimlik grup boş gönderildi ve varsayılanı tükendiyse 409 `option_sold_out` ("Yulaf
-tükendi", "Normal tükendi; Süt seçin"). Siteden gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez.
+kapalıdır, hızlı ekleme de pencereyi açar. Pencere açıkken tükenen ya da sepetteki gönderilmemiş satırda seçili olan
+seçenek seçili kalır (seçim, not ve adet korunur): grubu "Yulaf tükendi, başka birini seçin" der, Ekle / Güncelle
+kasiyer onu bırakana ya da başkasını seçene dek kapalıdır. Sunucu yalnız kasa satışını (`POST /api/orders/:id/items`)
+reddeder: tükenen seçenek seçildiyse ya da tek seçimlik grup boş gönderildi ve varsayılanı tükendiyse 409
+`option_sold_out` ("Yulaf tükendi", "Normal tükendi; Süt seçin"). Siteden gelen ödenmiş sipariş ve paket platformu
+siparişi reddedilmez.
 
 **Porsiyon:** siteye bağlı ürünün porsiyonu bitince Tükendi yazımı adisyon kalemiyle aynı işlemde giden kutusuna
 girer (`outbox`: target `laffogato`, kind `menu.isActive`, ürün başına tek kayıt `menu:<extId>`, son istenen durum) ve

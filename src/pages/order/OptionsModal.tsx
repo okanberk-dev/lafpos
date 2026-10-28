@@ -1,12 +1,12 @@
 import { Minus, Pencil, Plus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
-import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
+import type { ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
-import { defaultPicks, estimateUnit, menuUnit, missingChoice, productGroups, useBoot } from '@/lib/boot';
+import { defaultPicks, editingPicks, estimateUnit, menuUnit, missingChoice, pickHint, pickSingle, productGroups, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { useFinePointer } from '@/lib/hooks';
@@ -22,20 +22,6 @@ const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-bord
 // Kasada tükenen seçenek: gri, seçilemez, yanında "Tükendi" (Tükenen ürünler › Seçenekler)
 const CHIP_SOLD = 'border-line bg-surface-2 text-muted disabled:cursor-not-allowed';
 const SOLD_BADGE = 'ml-1.5 rounded-md bg-[var(--admin-danger-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]';
-
-/**
- * Tükenen seçenek yüzünden seçim bekleyen grubun uyarısı; varken Ekle kapalı (sunucu 409 `option_sold_out` döner).
- * Tek seçimlik grupta bir şey seçilmediyse sunucu varsayılanı yazar: o tükendiyse başkası seçilir. Seçiliyken
- * tükenen (başka kasa işaretledi) kaldırılır
- */
-function pickHint(g: OptionGroupDTO, picks: Picks): string | null {
-  const gone = g.items.find((i) => i.soldOut && picks[i.id]);
-  if (gone) return `${gone.name} tükendi, ${g.kind === 'single' ? 'başka birini seçin' : 'kaldırın'}`;
-  if (g.kind !== 'single' || g.items.some((i) => picks[i.id])) return null;
-  const d = g.items.find((i) => i.isDefault);
-  if (d) return d.soldOut ? `${d.name} tükendi, başka birini seçin` : null;
-  return g.required && g.items.some((i) => i.soldOut) ? 'Birini seçin' : null;
-}
 
 /** Ürün seçenekleri: boy, süt, kavrum, şurup, ekstra shot, şeker, not ve adet. */
 export function OptionsModal({
@@ -64,26 +50,33 @@ export function OptionsModal({
   // Elle fiyat bölümü yalnız açık üründe (fiyatı 0) ya da zaten elle fiyat yazılmışsa açık; diğer üründe küçük düğmenin ardında
   const [priceOpen, setPriceOpen] = useState(false);
 
+  // Menü olayı (bardan seçenek tükendi) açılış verisini yeniler, groups yeni dizi olur. Başlangıç seçimi yalnız pencere
+  // açılırken ya da ürün, düzenlenen satır, başlangıç boyu değişince kurulur; gruplar o anki halinden okunur. Yoksa
+  // seçim, not ve adet sessizce sıfırlanır, seçiliyken tükenen Yulaf uyarısız normal süte dönerdi
+  const groupsRef = useRef(groups);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+
   useEffect(() => {
     if (!product) return;
     if (editing) {
       setSize(editing.size);
-      // Sepetteki satır düzenlenirken bu arada tükenen seçenek düşer: grup yeniden seçim ister
-      const sold = new Set(groups.flatMap((g) => g.items.filter((i) => i.soldOut).map((i) => i.id)));
-      setPicks(Object.fromEntries(editing.options.filter((o) => !sold.has(o.itemId)).map((o) => [o.itemId, o.qty ?? 1])));
+      // Bu arada tükenen seçenek seçili kalır: grubu uyarır, Güncelle kasiyer bırakana ya da başkasını seçene dek kapalı
+      setPicks(editingPicks(editing.options));
       setNote(editing.note);
       setQty(editing.qty);
       setPriceText(editing.priceOverride != null ? String(editing.priceOverride / 100).replace('.', ',') : '');
       setPriceOpen(editing.priceOverride != null || product.price === 0);
     } else {
       setSize(product.priceL != null ? (initialSize === 'L' ? 'L' : 'M') : 'TEK');
-      setPicks(defaultPicks(groups));
+      setPicks(defaultPicks(groupsRef.current));
       setNote('');
       setQty(1);
       setPriceText('');
       setPriceOpen(product.price === 0);
     }
-  }, [product, editing, initialSize, groups]);
+  }, [product, editing, initialSize]);
 
   if (!product) return null;
   const options = Object.entries(picks)
@@ -95,13 +88,6 @@ export function OptionsModal({
   const missing = missingChoice(groups, picks);
   const waiting = groups.some((g) => pickHint(g, picks));
 
-  // Tek seçimlik grup radyo düğmesi gibi davranır: dokunulan seçilir, gruptaki diğerleri kalkar
-  const pickSingle = (g: OptionGroupDTO, itemId: string) => {
-    const next = { ...picks };
-    for (const i of g.items) delete next[i.id];
-    next[itemId] = 1;
-    setPicks(next);
-  };
   const setCount = (itemId: string, n: number) => setPicks({ ...picks, [itemId]: n });
 
   return (
@@ -186,15 +172,16 @@ export function OptionsModal({
               <div className="flex flex-wrap gap-2">
                 {g.items.map((i) => {
                   const on = !!picks[i.id];
-                  // Seçiliyken tükenen (başka kasa işaretledi) kaldırılabilsin diye yalnız seçili değilken kapalı
+                  // Seçiliyken tükenen (başka kasa işaretledi ya da sepetteki satır düzenleniyor) bırakılabilsin diye yalnız
+                  // seçili değilken kapalı; seçiliyse gri zeminde mavi çerçeve
                   const sold = i.soldOut && !on;
                   return (
                     <button
                       key={i.id}
                       aria-pressed={on}
                       disabled={sold}
-                      onClick={() => (g.kind === 'single' ? pickSingle(g, i.id) : setCount(i.id, on ? 0 : 1))}
-                      className={cn(CHIP, i.soldOut ? CHIP_SOLD : on ? CHIP_ON : CHIP_OFF)}
+                      onClick={() => (g.kind === 'single' ? setPicks(pickSingle(g, picks, i.id)) : setCount(i.id, on ? 0 : 1))}
+                      className={cn(CHIP, i.soldOut ? cn(CHIP_SOLD, on && 'border-primary active:bg-press') : on ? CHIP_ON : CHIP_OFF)}
                     >
                       {i.name}
                       {i.soldOut ? (

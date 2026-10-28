@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PlatformOrderPayload } from '@shared/platforms';
-import type { BootstrapDTO, OrderDTO } from '@shared/types';
+import type { BootstrapDTO, OptionGroupDTO, OrderDTO } from '@shared/types';
+import { editingPicks, missingChoice, pickHint, pickSingle } from '../src/lib/boot';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
 
@@ -226,5 +227,49 @@ describe('kasa dışından gelen sipariş reddedilmez, işaret korunur', () => {
       await mark('kasa', oat.id, false);
       await mark('kasa', glass.id, false);
     }
+  });
+});
+
+describe('seçenek penceresi: seçiliyken tükenen seçenek (saf kurallar)', () => {
+  const item = (id: string, name: string, over: Partial<OptionGroupDTO['items'][number]> = {}) => ({ id, name, code: null, price: 0, isDefault: false, maxQty: 1, allergens: [], soldOut: false, ...over });
+  const milk: OptionGroupDTO = {
+    id: 'g-sut',
+    name: 'Süt',
+    kind: 'single',
+    required: false,
+    maxSelect: 1,
+    extKey: 'milk',
+    items: [item('normal', 'Normal', { isDefault: true }), item('oat', 'Yulaf', { price: 1500, soldOut: true }), item('lf', 'Laktozsuz', { price: 1000 })],
+  };
+
+  it('sepetteki "Latte (Yulaf)" düzenlenirken tükenen Yulaf seçili kalır: uyarı var (Güncelle kapalı), sunucu normal süt yazmaz', () => {
+    const picks = editingPicks([{ itemId: 'oat' }, { itemId: 'shot', qty: 2 }]);
+    expect(picks).toEqual({ oat: 1, shot: 2 });
+    expect(pickHint(milk, picks)).toBe('Yulaf tükendi, başka birini seçin');
+  });
+
+  it('seçili tükenen çipe dokunmak onu bırakır (grup varsayılanına döner); başka süt seçmek yerine geçer, öteki gruplar kalır', () => {
+    const picks = { oat: 1, shot: 2 };
+    expect(pickSingle(milk, picks, 'oat')).toEqual({ shot: 2, normal: 1 });
+    expect(pickSingle(milk, picks, 'lf')).toEqual({ shot: 2, lf: 1 });
+    expect(pickHint(milk, pickSingle(milk, picks, 'oat'))).toBeNull();
+    // Satıştaki seçenek radyo düğmesi gibi: zaten seçiliyse seçili kalır
+    expect(pickSingle(milk, { lf: 1 }, 'lf')).toEqual({ lf: 1 });
+  });
+
+  it('zorunlu grupta tükenen seçim bırakılınca grup seçim bekler; varsayılanı da tükendiyse önseçim gelmez', () => {
+    const sugar: OptionGroupDTO = { ...milk, id: 'g-seker', name: 'Şeker', required: true, extKey: null, items: [item('sade', 'Sade'), item('orta', 'Orta', { soldOut: true })] };
+    expect(pickHint(sugar, { orta: 1 })).toBe('Orta tükendi, başka birini seçin');
+    expect(pickSingle(sugar, { orta: 1 }, 'orta')).toEqual({});
+    expect(missingChoice([sugar], {})?.name).toBe('Şeker');
+    const soldDefault: OptionGroupDTO = { ...milk, items: milk.items.map((i) => ({ ...i, soldOut: i.id !== 'lf' })) };
+    expect(pickSingle(soldDefault, { oat: 1 }, 'oat')).toEqual({});
+    expect(pickHint(soldDefault, {})).toBe('Normal tükendi, başka birini seçin');
+  });
+
+  it('çok seçimli grupta tükenen seçim "kaldırın" der', () => {
+    const syrup: OptionGroupDTO = { ...milk, kind: 'multi', maxSelect: 2, items: [item('vanilya', 'Vanilya', { soldOut: true }), item('karamel', 'Karamel')] };
+    expect(pickHint(syrup, { vanilya: 1, karamel: 1 })).toBe('Vanilya tükendi, kaldırın');
+    expect(pickHint(syrup, { karamel: 1 })).toBeNull();
   });
 });

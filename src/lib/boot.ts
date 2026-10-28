@@ -73,8 +73,10 @@ export function pendingOptionsText(boot: BootstrapDTO, p: ProductDTO, picks: { i
 const isChoice = (g: OptionGroupDTO) => g.required && g.kind !== 'counter' && g.items.length > 0;
 
 /**
- * Üründe zorunlu seçim var mı (Türk kahvesinde şeker). Sunucu seçeneksiz gelen zorunlu tek seçimlik gruba varsayılanı
- * yazar (site, paket platformu, eski istemci); kasada sorulmadan "Orta" bara gitmesin diye ürün pencereyle eklenir
+ * Üründe zorunlu seçim var mı (Türk kahvesinde şeker). Kasa satışında (eski istemci) seçeneksiz gelen zorunlu tek
+ * seçimlik gruba sunucu varsayılanı yazar, varsayılan kasada tükendiyse 409 `option_sold_out` (docs/03 §2.3); paket
+ * platformu ve site satırına yazılmaz, seçim notta ya da sitenin döküm metninde gelir. Kasada sorulmadan "Orta" bara
+ * gitmesin diye ürün pencereyle eklenir
  */
 export function needsChoice(boot: BootstrapDTO, p: ProductDTO): boolean {
   return productGroups(boot, p).some(isChoice);
@@ -103,6 +105,40 @@ export function defaultPicks(groups: OptionGroupDTO[]): Record<string, number> {
     if (d && !d.soldOut) picks[d.id] = 1;
   }
   return picks;
+}
+
+/**
+ * Sepetteki satırı düzenlerken ilk seçim: satırın seçimleri olduğu gibi. Bu arada tükenen seçenek de seçili kalır
+ * (`pickHint` uyarır, Güncelle kapalı, kasiyer bırakır ya da başkasını seçer); süzülse isteğe bağlı grup boş kalır,
+ * sunucu varsayılanı yazardı (müşteri yulaf istemişti, normal süt giderdi)
+ */
+export function editingPicks(options: { itemId: string; qty?: number }[]): Record<string, number> {
+  return Object.fromEntries(options.map((o) => [o.itemId, o.qty ?? 1]));
+}
+
+/**
+ * Tek seçimlik grup radyo düğmesi gibi davranır: dokunulan seçilir, gruptaki diğerleri kalkar. Seçiliyken tükenen
+ * seçeneğe dokunmak onu bırakır: grup varsayılanına döner (`defaultPicks`; zorunlu grupta seçim bekler)
+ */
+export function pickSingle(g: OptionGroupDTO, picks: Record<string, number>, itemId: string): Record<string, number> {
+  const next = { ...picks };
+  for (const i of g.items) delete next[i.id];
+  const drop = !!picks[itemId] && !!g.items.find((i) => i.id === itemId)?.soldOut;
+  return { ...next, ...(drop ? defaultPicks([g]) : { [itemId]: 1 }) };
+}
+
+/**
+ * Tükenen seçenek yüzünden seçim bekleyen grubun uyarısı; varken Ekle kapalı (sunucu 409 `option_sold_out` döner).
+ * Tek seçimlik grupta bir şey seçilmediyse sunucu varsayılanı yazar: o tükendiyse başkası seçilir. Seçiliyken
+ * tükenen (başka kasa işaretledi, ya da sepetteki satır düzenleniyor) kaldırılır
+ */
+export function pickHint(g: OptionGroupDTO, picks: Record<string, number>): string | null {
+  const gone = g.items.find((i) => i.soldOut && picks[i.id]);
+  if (gone) return `${gone.name} tükendi, ${g.kind === 'single' ? 'başka birini seçin' : 'kaldırın'}`;
+  if (g.kind !== 'single' || g.items.some((i) => picks[i.id])) return null;
+  const d = g.items.find((i) => i.isDefault);
+  if (d) return d.soldOut ? `${d.name} tükendi, başka birini seçin` : null;
+  return g.required && g.items.some((i) => i.soldOut) ? 'Birini seçin' : null;
 }
 
 /** Seçim bekleyen ilk zorunlu grup: varken pencerede Ekle kapalı, altında "Şeker seçin" */

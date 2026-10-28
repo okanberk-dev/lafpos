@@ -76,9 +76,11 @@ Her dalga: kod + birim testleri + tip denetimi + tarayıcıda deneme + GitHub'a 
    Pencerede zorunlu grup boyun hemen altında, önseçimsiz, başlığında "Zorunlu" yazar; seçilene kadar Ekle kapalı,
    altında "Şeker seçin". İsteğe bağlı grupta varsayılan seçili gelir (Normal süt). Yönetim › Ayarlar › Seçenekleri sor
    (`askOptions`): "Zorunlu seçim varsa" (`zorunlu`, varsayılan) ya da "Seçenekli her üründe" (`hep`: Latte da
-   pencereyle). Tek boylu seçenekli ürün her iki ayarda pencereyle eklenir. Sunucu değişmedi: seçeneksiz gelen zorunlu
-   tek seçimlik gruba varsayılanı yazar (site, paket platformu, eski istemci). Kurallar `src/lib/boot.ts`
-   (`needsChoice`, `asksOptions`, `defaultPicks`, `missingChoice`), testi `tests/varyant-secenek.test.ts`
+   pencereyle). Tek boylu seçenekli ürün her iki ayarda pencereyle eklenir. Sunucu değişmedi: kasa satışında (eski
+   istemci) seçeneksiz gelen zorunlu tek seçimlik gruba sunucu varsayılanı yazar; varsayılan kasada tükendiyse 409
+   `option_sold_out` (`docs/03-ENTEGRASYON.md` §2.3); paket platformu ve site satırına varsayılan yazılmaz, seçim notta
+   ya da sitenin döküm metninde gelir. Kurallar `src/lib/boot.ts` (`needsChoice`, `asksOptions`, `defaultPicks`,
+   `missingChoice`), testi `tests/varyant-secenek.test.ts`
 6. Masa işlemleri: taşı, birleştir, kalem taşı (böl), kişi sayısı, garson değiştir
 7. İptal, ikram, kalem ve adisyon indirimi: gerekçe, yetki, yetkili PIN onayı, uyarı
 8. Ödeme: nakit (para üstü, hızlı banknot), kart, yemek kartı, havale, cari; parçalı, kalem bazlı, kişi başı;
@@ -204,7 +206,9 @@ ve `PATCH /admin/products/:id` gövdesinde isteğe bağlı `groupIds`; gönderil
 Seçenekler'de bağlı ürünleri de seçer (`productIds`, aynı işlem; yalnız bağlar için `PUT /admin/option-groups/:id/products`:
 yeni bağ ürünün öteki gruplarının sonuna eklenir, bir ürüne en çok 12 grup) ve grubu kapatır ("Grup açık"; kapalı grup
 kasada sorulmaz, bağlar durur). Denetim kaydı: seçenek ek fiyatı `menu.option_price` (eski → yeni, eklenen ve
-kaldırılan seçenek; yalnız ad değişince yazılmaz), ürün ↔ grup bağı `menu.product_groups` (eklenen, çıkarılan);
+kaldırılan seçenek, tek seçimlik grubun varsayılanı ücretli bir seçenekten ya da ücretli bir seçeneğe geçince
+`defaultChange`: seçeneksiz kasa satışının tutarı değişir; yalnız ad ya da ücretsizden ücretsize varsayılan değişince
+yazılmaz), ürün ↔ grup bağı `menu.product_groups` (eklenen, çıkarılan);
 ikisi de yazmayla aynı işlemde. Süt, şurup ve shot sitenin kod sabitinden gelir (laffogato
 `src/lib/mobile/customization.ts`, mobil v1 sözleşmesi); LafPOS'ta salt okunur, panelden düzenlenmez. Testler
 `tests/secenek-grubu.test.ts`, e2e'de `/yonetim/menu` › `yeni-urun` ve `yeni-grup` durumları ve telefonda akış.

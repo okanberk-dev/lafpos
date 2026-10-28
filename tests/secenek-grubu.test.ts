@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { ProductDTO } from '@shared/types';
+import type { BootstrapDTO, ProductDTO } from '@shared/types';
+import { asksOptions, needsChoice, productGroups } from '../src/lib/boot';
 import { type Harness, startApp } from './harness';
 
 /**
@@ -183,10 +185,18 @@ describe('gruptan ürünlere bağlama', () => {
     const { id } = await h.ok<{ id: string }>('patron', 'POST', '/admin/option-groups', { name: 'Kapanacak', kind: 'single', items: [{ name: 'Biri' }], productIds: [p] });
     const item = (await menu()).optionItems.find((i) => i.groupId === id)!;
     await h.ok('patron', 'PUT', `/admin/option-groups/${id}`, { name: 'Kapanacak', kind: 'single', active: false, items: [{ id: item.id, name: 'Biri' }] });
-    const boot = await h.ok<{ optionGroups: { id: string }[] }>('kasa', 'GET', '/bootstrap');
+    const boot = await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap');
     expect(boot.optionGroups.some((g) => g.id === id)).toBe(false);
     expect((await menu()).optionGroups.find((g) => g.id === id)!.active).toBe(false);
     expect(await groupsOf(p)).toEqual([id]);
+    // Kasa ekranı da açık gruplardan karar verir: tek grubu kapalı tek boylu ürün hızlı eklenir (boş pencere açılmaz),
+    // kartında seçenek simgesi çıkmaz. Kart, pencere ve sorma kuralı aynı kaynağa (productGroups) bakar
+    const product = boot.products.find((x) => x.id === p)!;
+    expect(product.optionGroupIds).toEqual([id]);
+    expect([productGroups(boot, product), asksOptions(boot, product), needsChoice(boot, product)]).toEqual([[], false, false]);
+    const tile = readFileSync(new URL('../src/pages/order/ProductPanel.tsx', import.meta.url), 'utf8');
+    expect(tile).toContain('const hasOptions = productGroups(boot, p).length > 0;');
+    expect(tile).not.toMatch(/optionGroupIds\.length/);
   });
 
   it('bir ürüne en çok 12 grup bağlanır, gruptan bağlarken de', async () => {
@@ -238,6 +248,56 @@ describe('seçenek ek fiyatı denetim kaydında', () => {
       added: [expect.objectContaining({ name: 'Akçaağaç', price: 2500 })],
       removed: [{ id: yok.id, name: 'Şurupsuz', price: 0 }],
     });
+  });
+
+  it('varsayılan ücretli seçeneğe geçince (ya da ondan çıkınca) kayıt düşer; ücretsizden ücretsize geçişte düşmez', async () => {
+    // Seçeneksiz kasa satışına sunucu tek seçimlik grubun varsayılanını yazar: Cam → Karton satışın tutarını değiştirir
+    const { id } = await h.ok<{ id: string }>('patron', 'POST', '/admin/option-groups', {
+      name: 'Bardak (kasa)',
+      kind: 'single',
+      items: [
+        { name: 'Cam', price: 0, isDefault: true },
+        { name: 'Kağıt', price: 0 },
+        { name: 'Karton', price: 500 },
+      ],
+    });
+    expect(await audits('menu.option_price', id)).toHaveLength(1);
+    const items = (await menu()).optionItems.filter((i) => i.groupId === id);
+    const [cam, kagit, karton] = ['Cam', 'Kağıt', 'Karton'].map((n) => items.find((i) => i.name === n)!);
+    const put = (def: string) =>
+      h.ok('patron', 'PUT', `/admin/option-groups/${id}`, {
+        name: 'Bardak (kasa)',
+        kind: 'single',
+        items: [cam, kagit, karton].map((i) => ({ id: i.id, name: i.name, price: i.price, isDefault: i.id === def })),
+      });
+    const changed = async () => (await audits('menu.option_price', id)).filter((e) => e.message.includes('değiştirdi'));
+
+    // Ücretsizden ücretsize (Cam → Kağıt): tutar değişmez, kayıt yok
+    await put(kagit.id);
+    expect(await changed()).toHaveLength(0);
+
+    // Ücretsizden ücretliye (Kağıt → Karton)
+    await put(karton.id);
+    let entries = await changed();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.message).toMatch(/Bardak \(kasa\) seçeneklerini değiştirdi: varsayılan Kağıt → Karton \+₺5,00$/);
+    expect(entries[0]!.data).toEqual({ changes: [], added: [], removed: [], defaultChange: { from: { name: 'Kağıt', price: 0 }, to: { name: 'Karton', price: 500 } } });
+
+    // Ücretliden ücretsize (Karton → Cam) de tutarı değiştirir
+    await put(cam.id);
+    entries = await changed();
+    expect(entries).toHaveLength(2);
+    expect(entries.some((e) => /varsayılan Karton \+₺5,00 → Cam$/.test(e.message))).toBe(true);
+
+    // Seçeneksiz kasa satışına yazılan varsayılan: Karton'a alınca tutar +5 TL (kaydın konusu)
+    await put(karton.id);
+    expect(await changed()).toHaveLength(3);
+    const p = (await localProduct({ groupIds: [id] })).json.id;
+    await h.call('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+    const order = await h.ok<{ id: string }>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const r = await h.ok<{ items: { productId: string; options: { name: string; price: number }[] }[] }>('kasa', 'POST', `/orders/${order.id}/items`, { items: [{ productId: p, qty: 1 }] });
+    const line = r.items.find((i) => i.productId === p)!;
+    expect(line.options.map((o) => [o.name, o.price])).toEqual([['Karton', 500]]);
   });
 
   it('site grubu LafPOS’ta düzenlenmez; mesaj nereden değiştiğini söyler, ürünlere bağlanabilir', async () => {

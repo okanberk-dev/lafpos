@@ -5,7 +5,7 @@ import type { ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
 import { EmptyState } from '@/components/ui/misc';
-import { asksOptions, useBoot } from '@/lib/boot';
+import { asksOptions, productGroups, useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { DEMO, demoProductImage } from '@/lib/demo';
@@ -249,7 +249,8 @@ function ProductTile({
   // Dekupaj (saydam köşe) gri sahnede ortada durur; fotoğraf sahneyi doldurur
   const [photo, setPhoto] = useState(false);
   const soldOut = !p.active;
-  const hasOptions = p.optionGroupIds.length > 0;
+  // Açık gruplardan (asksOptions ve needsChoice ile aynı kaynak): tek grubu kapatılmış ürün hızlı eklenir, simgesi çıkmaz
+  const hasOptions = productGroups(boot, p).length > 0;
   const twoSizes = p.priceL != null;
   const label = p.shortName?.trim() || p.name;
   const off = soldOut || disabled;

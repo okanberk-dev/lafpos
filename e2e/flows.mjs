@@ -171,7 +171,7 @@ export async function runFlows(ctx) {
         }),
     ],
     [
-      'Telefonda kasiyer: yulaf sütü tükendi; seçenek penceresinde gri, normal süt bitince Latte süt sorar',
+      'Telefonda kasiyer: yulaf sütü tükendi; açık pencerede ve sepetteki satırda seçili Yulaf uyarır, seçenek penceresinde gri, normal süt bitince Latte süt sorar',
       () =>
         withPage(ctx, 'telefon', 'kasa', async (page) => {
           // Kısa adı önceki akışta değişti: güncel menüden
@@ -180,8 +180,57 @@ export async function runFlows(ctx) {
           const milk = boot.optionGroups.find((g) => g.name === 'Süt' && latte.optionGroupIds.includes(g.id));
           const item = (name) => milk.items.find((i) => i.name === name);
           const soldOut = async (name) => (await api.call('kasa', 'GET', '/bootstrap')).optionGroups.find((g) => g.id === milk.id).items.find((i) => i.name === name).soldOut;
+          const label = latte.shortName?.trim() || latte.name;
+          const modal = page.getByRole('dialog', { name: latte.name });
+          const gone = modal.getByText('Yulaf tükendi, başka birini seçin');
+          const pressed = async (name) => (await modal.getByRole('button', { name: new RegExp(`^${name}`) }).getAttribute('aria-pressed')) === 'true';
           try {
             await go(ctx, page, `/adisyon/${seed.tz.id}`);
+            // Sepette gönderilmemiş "Latte (Yulaf)": aşağıda yulaf bitince düzenlenecek
+            await page.getByPlaceholder('Ürün ara').fill('Latte');
+            await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
+            await modal.getByRole('button', { name: /^Yulaf/ }).click();
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            // Pencere açıkken Yulaf seçili; bardan Yulaf tükendi (menü olayı açılış verisini yeniler): seçim, not ve adet
+            // korunur, ipucu çıkar, Ekle kapanır
+            await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
+            await modal.getByRole('button', { name: /^Yulaf/ }).click();
+            await modal.getByLabel('Bara ve mutfağa not').fill('E2E notu');
+            await modal.getByRole('button', { name: 'Artır', exact: true }).last().click();
+            await api.call('kasa', 'POST', `/option-items/${item('Yulaf').id}/sold-out`, { soldOut: true });
+            await gone.waitFor({ timeout: 8000 });
+            assert(await pressed('Yulaf'), 'seçili Yulaf menü olayında bırakıldı');
+            assert(!(await modal.getByRole('button', { name: /^Yulaf/ }).isDisabled()), 'seçiliyken tükenen Yulaf bırakılamıyor');
+            assert(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled(), 'tükenen Yulaf seçiliyken Ekle açık');
+            assert((await modal.getByLabel('Bara ve mutfağa not').inputValue()) === 'E2E notu', 'not menü olayında silindi');
+            const qty = (await modal.getByRole('button', { name: 'Azalt', exact: true }).last().locator('xpath=following-sibling::span[1]').textContent()).trim();
+            assert(qty === '2', `adet menü olayında sıfırlandı: ${qty}`);
+            await gone.scrollIntoViewIfNeeded();
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-secili-tukendi.png` });
+            await modal.getByRole('button', { name: /^Laktozsuz/ }).click();
+            assert((await gone.count()) === 0, 'başka süt seçildi ama ipucu duruyor');
+            assert(!(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled()), 'başka süt seçildi ama Ekle kapalı');
+            await modal.getByRole('button', { name: /^Ekle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            // Sepetteki "Latte (Yulaf)" düzenlenir: Yulaf seçili kalır, ipucu var, Güncelle kapalı; seçili Yulaf'a dokununca
+            // bırakılır, grup varsayılana (Normal) döner
+            await page.getByRole('tab', { name: /^Adisyon/ }).click();
+            await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).click();
+            await gone.waitFor({ timeout: 8000 });
+            assert(await pressed('Yulaf'), 'düzenlenen satırın tükenen Yulaf\'ı süzüldü');
+            assert(await modal.getByRole('button', { name: /^Güncelle/ }).isDisabled(), 'tükenen Yulaf seçiliyken Güncelle açık');
+            await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-secenek-duzenle-tukendi.png` });
+            await modal.getByRole('button', { name: /^Yulaf/ }).click();
+            assert((await gone.count()) === 0 && (await pressed('Normal')), 'seçili tükenen Yulaf bırakılınca varsayılan seçilmedi');
+            assert(await modal.getByRole('button', { name: /^Yulaf/ }).isDisabled(), 'bırakılan tükenmiş Yulaf yeniden seçilebiliyor');
+            await modal.getByRole('button', { name: /^Güncelle/ }).click();
+            await modal.waitFor({ state: 'detached' });
+            assert((await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).count()) === 0, 'sepette Yulaf kaldı');
+            await page.getByRole('tab', { name: 'Menü', exact: true }).click();
+            // Aşağıdaki adım Yulaf'ı Tükenen ürünler penceresinden işaretler
+            await api.call('kasa', 'POST', `/option-items/${item('Yulaf').id}/sold-out`, { soldOut: false });
+
             await page.getByRole('button', { name: 'İşlemler' }).click();
             await page.getByRole('button', { name: /Tükenen ürünler/ }).click();
             const dialog = page.getByRole('dialog', { name: /Tükenen ürünler/ });
@@ -196,10 +245,8 @@ export async function runFlows(ctx) {
             // Normal süt de bitti (başka kasa): hızlı ekleme seçenek penceresini açar, süt seçilene kadar Ekle kapalı
             await api.call('kasa', 'POST', `/option-items/${item('Normal').id}/sold-out`, { soldOut: true });
             await page.getByPlaceholder('Ürün ara').fill('Latte');
-            const label = latte.shortName?.trim() || latte.name;
             const tile = page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).locator('xpath=..');
             await tile.getByRole('button', { name: new RegExp(`^${boot.settings.sizeLabels.M}`) }).click();
-            const modal = page.getByRole('dialog', { name: latte.name });
             await modal.getByText('Normal tükendi, başka birini seçin').waitFor({ timeout: 8000 });
             assert(await modal.getByRole('button', { name: /^Yulaf/ }).isDisabled(), 'tükenen Yulaf seçilebiliyor');
             assert(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled(), 'süt seçilmeden Ekle açık');
