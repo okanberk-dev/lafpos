@@ -12,6 +12,7 @@ import { Effects } from '../lib/effects';
 import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { networkInfo } from '../lib/network';
+import { auditForViewer, seesCommission } from '../delivery/commission';
 import { cloudState } from '../sync/cloud';
 import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
@@ -1044,7 +1045,9 @@ adminRoutes.get('/audit', (c) => {
     .limit(q.limit)
     .all()
     .map((a) => ({ ...a, userName: a.userId ? (names.get(a.userId) ?? null) : null, approverName: a.approverId ? (names.get(a.approverId) ?? null) : null }));
-  return c.json(rows);
+  // Patron paneli yetkilisi maliyeti görmeyebilir: platform ayarının komisyon oranı ona maskelenir
+  const sees = seesCommission(user);
+  return c.json(rows.map((a) => auditForViewer(a, sees)));
 });
 
 /** Tablet ve telefonların bağlanacağı adresler (Yönetim › Ağ ve uzaktan erişim); patron uzaktan da açar */

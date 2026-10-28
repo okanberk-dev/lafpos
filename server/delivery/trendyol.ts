@@ -1,3 +1,4 @@
+import { tl } from '@shared/money';
 import { PLATFORM_LABEL, type PlatformCourier, type PlatformOrderPayload } from '@shared/platforms';
 import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNotify } from './adapter';
 
@@ -153,11 +154,21 @@ function promotionParts(p: TrendyolPromotion): { value: number; sellerRatio: num
   return { value, sellerRatio: Math.min(1, Math.max(0, ratio)) };
 }
 
-/** Ödeme türü metninden: online mı, kapıda ne */
-export function paymentOf(pkg: TrendyolPackage): { online: boolean; label: string } {
-  const raw = (typeof pkg.payment === 'string' ? pkg.payment : (pkg.payment?.paymentType ?? '')).toUpperCase();
+/**
+ * Tanınan online ödeme türleri (Trendyol uygulamasında kartla ya da cüzdanla ödenmiş). Burada olmayan ve kapıda
+ * sayılmayan tür online sayılır ama doğrulanır (`verify`): kendi kuryemizin siparişinde kapıda ödemeyse kasa açık verir
+ */
+export const TRENDYOL_ONLINE_PAYMENTS: ReadonlySet<string> = new Set(['PAY_WITH_CREDIT_CARD', 'PAY_WITH_DEBIT_CARD', 'PAY_WITH_CARD', 'PAY_WITH_WALLET', 'PAY_ONLINE', 'ONLINE', 'CREDIT_CARD', 'DEBIT_CARD']);
+
+/**
+ * Ödeme türü metninden: online mı, kapıda ne; tanınmayan tür `verify` (ham adıyla `raw`). Tür gelmediyse (boş ya da
+ * yalnız boşluk) `missing`: online sayılır, kendi kuryemizin siparişinde tahsilat doğrulanır
+ */
+export function paymentOf(pkg: TrendyolPackage): { online: boolean; label: string; verify?: boolean; raw?: string; missing?: boolean } {
+  const given = (typeof pkg.payment === 'string' ? pkg.payment : (pkg.payment?.paymentType ?? '')).trim();
+  const raw = given.toUpperCase();
   const cardType = typeof pkg.payment === 'object' && pkg.payment ? text(pkg.payment.cardType) : null;
-  if (!raw) return { online: true, label: 'Online' };
+  if (!raw) return { online: true, label: 'Online', missing: true };
   if (raw.includes('CASH') || raw.includes('NAKIT')) return { online: false, label: 'Kapıda nakit' };
   const cards: [string, string][] = [
     ['MULTINET', 'Multinet'],
@@ -171,7 +182,8 @@ export function paymentOf(pkg: TrendyolPackage): { online: boolean; label: strin
   ];
   for (const [key, label] of cards) if (raw.includes(key)) return { online: false, label: `Kapıda ${label}` };
   if (raw.includes('DOOR') || raw.includes('KAPIDA')) return { online: false, label: `Kapıda ${cardType ?? 'kart'}` };
-  return { online: true, label: `Online ${cardType ?? 'kart'}`.trim() };
+  const label = `Online ${cardType ?? 'kart'}`.trim();
+  return TRENDYOL_ONLINE_PAYMENTS.has(raw) ? { online: true, label } : { online: true, label, verify: true, raw: given };
 }
 
 /** Kim götürür: GO → platform kuryesi; STORE → gel-al ya da kendi kuryemiz */
@@ -236,11 +248,20 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
   platformDiscount = Math.min(platformDiscount, subtotal - restaurantDiscount);
   const paidTotal = pkg.totalPrice != null ? toKurus(pkg.totalPrice) : null;
   let customerTotal = subtotal - restaurantDiscount - platformDiscount;
+  // Ödenen tutar yoksa ya da kalemleri (restoran kampanyası düşülmüş) aşıyorsa tutar Trendyol'dan doğrulanmalı:
+  // kampanya alanlarından hesaplanan kalır, otomatik kabul edilmez
+  let amountReview: string | null = paidTotal == null ? 'Trendyol ödenen tutarı vermedi' : null;
   if (paidTotal != null && paidTotal >= 0 && paidTotal <= subtotal - restaurantDiscount) {
     // Müşterinin ödediği esastır: kampanya alanlarının anlaşılmayan kısmı platformun karşıladığı farktır
     platformDiscount = subtotal - restaurantDiscount - paidTotal;
     customerTotal = paidTotal;
+  } else if (paidTotal != null) {
+    amountReview = `Trendyol'da ödenen ${tl(paidTotal)}, kalemler ${tl(subtotal - restaurantDiscount)}: farkı Trendyol'dan doğrulayın`;
   }
+  // Kendi kuryemizin siparişinde ödeme türü yoksa (yalnız boşluk da: `paymentOf`'un kırptığı değer) ya da tanınmıyorsa
+  // online sayılır (tahmin; elle kabulde de öyle): tahsilat Trendyol'dan doğrulanmalı, otomatik kabul edilmez
+  if (pay.missing && courier !== 'platform') amountReview ??= 'Ödeme türü gelmedi: tahsilatı Trendyol\'dan doğrulayın';
+  if (pay.verify && courier !== 'platform') amountReview ??= `Ödeme türü tanınmadı (${pay.raw}): tahsilatı Trendyol'dan doğrulayın`;
   const name = [text(pkg.customer?.firstName), text(pkg.customer?.lastName)].filter(Boolean).join(' ') || text(pkg.address?.fullName);
   const phone = text(pkg.address?.phone) ?? text(pkg.callCenterPhone);
   const noteParts = [text(pkg.customerNote), pkg.pinCode ? `Teslim PIN ${pkg.pinCode}` : null].filter(Boolean);
@@ -262,6 +283,7 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
     restaurantDiscount,
     platformDiscount,
     customerTotal,
+    ...(amountReview ? { amountReview } : {}),
   };
 }
 

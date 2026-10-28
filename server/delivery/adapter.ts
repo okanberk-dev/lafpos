@@ -54,8 +54,12 @@ export interface PlatformAdapter {
    * Çevrilemeyen paket (`invalid`) ötekileri durdurmaz: atlanır, kimliğiyle denetim kaydına düşer.
    */
   poll(sinceMs: number, now: number): Promise<PollResult>;
-  /** Kabul, hazırlık süresiyle; platform reddederse fırlatır (yerelde kabul edilmez) */
-  accept(order: PlatformOrderPayload, prepMinutes: number): Promise<void>;
+  /**
+   * Kabul, hazırlık süresiyle; platform reddederse fırlatır (yerelde kabul edilmez). 'already': platform siparişi zaten
+   * kabul edilmiş buldu (Getir 2: Getir panelinden ya da IVR'dan onaylanmış); elle Kabul adisyonu açar, otomatik kabul
+   * açmaz (sipariş elle kalır, `live.ts` `acceptFlow`)
+   */
+  accept(order: PlatformOrderPayload, prepMinutes: number): Promise<void | 'already'>;
   /**
    * Ret (kasadaki neden metniyle; bağdaştırıcı platformun koduna çevirir). `afterAccept`: kabul edilmiş sipariş kasada
    * iptal edildi; platform bunu kabul etmiyorsa bağdaştırıcı kalıcı hata (PlatformHttpError 4xx) fırlatır

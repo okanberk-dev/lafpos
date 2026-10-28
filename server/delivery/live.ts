@@ -1,16 +1,30 @@
 import { and, eq, gte, inArray, isNotNull, isNull, or } from 'drizzle-orm';
 import { tl } from '@shared/money';
+import { fmtTime } from '@shared/time';
 import { ALL_PERMISSIONS } from '@shared/permissions';
-import { PLATFORM_LABEL, type PlatformId, type PlatformLiveStatus, type PlatformOrderPayload, PLATFORMS } from '@shared/platforms';
+import { AUTO_ACCEPT_MAX_AGE_MS, AUTO_ACCEPT_MIN_LEFT_MS, AUTO_SKIP_PREFIX, PLATFORM_LABEL, type PlatformId, type PlatformLiveStatus, type PlatformOrderPayload, PLATFORMS } from '@shared/platforms';
 import { db, schema, type Tx, tx } from '../db/client';
 import type { AuthUser } from '../lib/auth';
 import { type AuditEntry, Effects } from '../lib/effects';
-import { HttpError } from '../lib/http';
-import { getSyncState, setSyncState } from '../lib/settings';
+import { conflict, HttpError } from '../lib/http';
+import { getSettings, getSyncState, setSyncState, trainingMode } from '../lib/settings';
+import { requireCurrentDay } from '../services/orders';
 import { type PlatformAdapter, PlatformHttpError, type PlatformNotify, type PollResult } from './adapter';
-import { deciding } from './locks';
+import { deciding, manualDecision } from './locks';
 import { adapterFor } from './registry';
-import { ingestPlatformOrder, PRE_ACCEPTED_TTL_MS, platformCancelled, platformSettings } from './service';
+import {
+  acceptPlatformOrder,
+  autoAcceptor,
+  expiredMessage,
+  getPlatformOrder,
+  ingestPlatformOrder,
+  lineIssues,
+  soldOutOptionsOf,
+  PRE_ACCEPTED_TTL_MS,
+  platformAmount,
+  platformCancelled,
+  platformSettings,
+} from './service';
 
 /**
  * Canlı platform bağlantısı (docs/PAKET-PLATFORMLARI.md "Canlı"): yoklama (yeni sipariş, platformun iptali), kabul
@@ -172,16 +186,45 @@ function patchRow(id: string, set: Partial<PlatformRow>, audit?: AuditEntry) {
 
 /**
  * Aynı platform siparişine iki ekrandan aynı anda kabul ya da ret gitmesin: platform çağrısı yerel karardan önce
- * yapıldığı için işlem kilidi yetmez (iki istek de "onay bekliyor" görür ve ikisi de platforma yazar)
+ * yapıldığı için işlem kilidi yetmez (iki istek de "onay bekliyor" görür ve ikisi de platforma yazar). Kasadaki karar
+ * (`auto` değil) kaydı `manualDecision`'a da koyar: sonucu ne olursa olsun otomatik kabul o kayda dokunmaz. Kilidi
+ * otomatik kabul tutuyorsa ve `whileAuto` verildiyse (kasadaki Reddet) onun hatası atılır, "başka bir ekranda" değil.
  */
-export async function withDecisionLock<T>(id: string, fn: () => Promise<T>): Promise<T> {
-  if (deciding.has(id)) throw new HttpError(409, 'Bu sipariş şu an başka bir ekranda işleniyor; birkaç saniye sonra yeniden bakın', 'busy');
-  deciding.add(id);
+export async function withDecisionLock<T>(id: string, fn: () => Promise<T>, opts: { auto?: boolean; whileAuto?: () => HttpError } = {}): Promise<T> {
+  const holder = deciding.get(id);
+  if (holder === 'auto' && opts.whileAuto) throw opts.whileAuto();
+  if (holder) throw new HttpError(409, 'Bu sipariş şu an başka bir ekranda işleniyor; birkaç saniye sonra yeniden bakın', 'busy');
+  deciding.set(id, opts.auto ? 'auto' : 'manual');
+  if (!opts.auto) manualDecision.add(id);
   try {
     return await fn();
   } finally {
     deciding.delete(id);
   }
+}
+
+/** Otomatik kabul platform çağrısındayken kasadaki Reddet: ret gitmez, kabul edilirse sipariş adisyondan iptal edilir */
+export const AUTO_ACCEPTING_MESSAGE = 'Otomatik kabul ediliyor; kabul edilirse adisyondan iptal edin';
+
+/**
+ * Kasadaki Reddet otomatik kabulün kilidine denk geldi: ret platforma gitmez (kabul platformda sürüyor), kişinin ret
+ * denemesi denetim kaydına yazılır (bilgi) ve kayıt kasadaki karar sayılır (`manualDecision`: kabul düşerse otomatik kabul
+ * yeniden denemez, sipariş elle kalır). 409 `auto_accepting`; şerit iletiyi gösterir.
+ */
+export function rejectWhileAutoAccepting(user: AuthUser, id: string, reason: string): HttpError {
+  manualDecision.add(id);
+  const row = db.select().from(schema.platformOrders).where(eq(schema.platformOrders.id, id)).get();
+  const fx = new Effects();
+  tx((t) =>
+    fx.audit(t, {
+      userId: user.id,
+      action: 'platform.reject_try',
+      amount: row?.payload.customerTotal ?? null,
+      message: `${user.name} ${row ? `${PLATFORM_LABEL[row.platform]} ${row.payload.code}` : 'platform'} siparişini reddetmek istedi (${reason}); otomatik kabul o an sürüyordu, ret gitmedi`,
+    }),
+  );
+  fx.flush();
+  return new HttpError(409, AUTO_ACCEPTING_MESSAGE, 'auto_accepting');
 }
 
 class Rehearsal extends Error {}
@@ -201,18 +244,28 @@ export function rehearse(fn: (t: Tx) => unknown) {
   }
 }
 
-/** Kabulden önce platforma: reddederse 502, yerelde kabul edilmez. Dönen değer kayda yazılacak bildirim durumu */
-export async function announceAccept(row: PlatformRow, prepMinutes: number): Promise<string | null> {
+/**
+ * Kabulden önce platforma: reddederse 502, yerelde kabul edilmez. Dönen değer kayda yazılacak bildirim durumu.
+ * Platform siparişi zaten kabul edilmiş bulursa (`'already'`: Getir panelinden ya da IVR'dan onaylanmış) elle Kabul
+ * adisyonu açar (kişi karar verdi); otomatik kabul açmaz: kayıt platformun panelinden kabul edilmiş gibi işaretlenir
+ * (`markAcceptedElsewhere`, alarm) ve sipariş elle kalır, Kabul yalnız adisyonu açar (barda çift hazırlık riski)
+ */
+export async function announceAccept(row: PlatformRow, prepMinutes: number, opts: { auto?: boolean } = {}): Promise<string | null> {
   const a = realAdapter(row);
   if (!a) return null;
   // Önceki denemede platform kabul etmiş, adisyon açılamamıştı: platforma ikinci kez gitmez
   if (row.notifiedStatus === 'picked') return 'picked';
+  let result: void | 'already';
   try {
-    await a.accept(row.payload, prepMinutes);
+    result = await a.accept(row.payload, prepMinutes);
   } catch (e) {
     const why = `${a.label}: kabul bildirilemedi (${message(e)})`;
     patchRow(row.id, { lastError: why });
     throw new HttpError(502, `${why}. Yeniden deneyin; olmazsa platform uygulamasından kabul edin`, 'platform_unreachable');
+  }
+  if (result === 'already' && opts.auto) {
+    markAcceptedElsewhere(row);
+    throw new AcceptedElsewhere();
   }
   // Platform kabul etti: adisyon açılamasa da bu bilgi kalır (süre dolunca iptal sayılmaz, yeniden denemede tekrar gitmez)
   patchRow(row.id, { notifiedStatus: 'picked', lastError: null });
@@ -228,6 +281,176 @@ export function acceptFailedLocally(row: PlatformRow, e: unknown) {
     { lastError: why },
     first ? { action: 'platform.accept_failed', severity: 'alarm', amount: row.payload.customerTotal, message: `${PLATFORM_LABEL[row.platform]} ${row.payload.code}: ${why}` } : undefined,
   );
+}
+
+/** Otomatik kabulün koşulu tutmadı: sipariş elle kabul bekler (nedeni şeritte ve denetim kaydında) */
+class AutoSkip extends Error {}
+/** Otomatik kabulde platform siparişi zaten kabul edilmiş buldu: kayıt işaretlendi (alarm), sipariş elle kalır */
+class AcceptedElsewhere extends Error {}
+
+/**
+ * Kabul (kasadaki Kabul ve otomatik kabul aynı yoldan): canlı bağlantıda önce adisyonun açılabildiği yerelde denenir
+ * (gün açık, ürün tükenmemiş, porsiyon yetiyor; geri alınır), sonra platforma bildirilir (platform reddederse 502,
+ * yerelde kabul edilmez: platform sipariş durumunun sahibidir), sonra adisyon açılır. Platform kabul edip adisyon yine
+ * de açılamazsa kayıt bunu tutar: süre dolmaz, yeniden Kabul platforma ikinci kez gitmez. Deneme siparişi platforma
+ * gitmez. İki ekrandan (ya da ekranla otomatik kabulden) aynı anda karar verilmez. `auto`: koşullar kilidin içinde
+ * yeniden okunur (`autoAcceptBlocker`; kasada karar denenmiş kayıt atlanır), deneme siparişi de provadan geçer ve
+ * adisyonun tutarı platformun tutarına eşit olmalıdır.
+ */
+export async function acceptFlow(user: AuthUser, id: string, prepMinutes?: number, opts: { auto?: boolean } = {}) {
+  return withDecisionLock(id, async () => {
+    const row = getPlatformOrder(db, id);
+    if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
+    const announced = row.notifiedStatus === 'picked';
+    if (!announced && row.expiresAt != null && row.expiresAt <= Date.now()) throw conflict(expiredMessage(row), 'expired');
+    if (opts.auto) {
+      const why = autoAcceptBlocker(row);
+      if (why) throw new AutoSkip(why);
+    }
+    const prep = prepMinutes ?? platformSettings()[row.platform].prepMinutes;
+    if ((opts.auto || !row.payload.simulated) && !announced) {
+      rehearse((t) => {
+        const { order } = acceptPlatformOrder(t, user, new Effects(), row.id, prep, { notifiedStatus: 'picked' });
+        const expected = platformAmount(row.payload);
+        if (opts.auto && order.total !== expected) throw new AutoSkip(`adisyon ${tl(order.total)}, platformun tutarı ${tl(expected)}`);
+      });
+    }
+    const notifiedStatus = await announceAccept(row, prep, { auto: opts.auto });
+    const fx = new Effects();
+    try {
+      const res = tx((t) => acceptPlatformOrder(t, user, fx, row.id, prep, { notifiedStatus, auto: opts.auto }));
+      fx.flush();
+      return res;
+    } catch (e) {
+      if (notifiedStatus) acceptFailedLocally(getPlatformOrder(db, row.id), e);
+      throw e;
+    }
+  }, { auto: opts.auto });
+}
+
+/** Platformun tutarları kendi içinde tutarlı mı: kuruş tam sayı, kalemler toplamı, indirimler ve müşterinin ödediği */
+function amountsConsistent(p: PlatformOrderPayload): boolean {
+  const kurus = (n: number) => Number.isSafeInteger(n) && n >= 0;
+  if (!p.lines.length || !p.lines.every((l) => kurus(l.unitPrice) && Number.isSafeInteger(l.qty) && l.qty >= 1)) return false;
+  if (![p.subtotal, p.restaurantDiscount, p.platformDiscount, p.customerTotal].every(kurus) || p.customerTotal <= 0) return false;
+  if (p.lines.reduce((a, l) => a + l.unitPrice * l.qty, 0) !== p.subtotal) return false;
+  return p.restaurantDiscount + p.platformDiscount + p.customerTotal === p.subtotal;
+}
+
+/**
+ * Otomatik kabulün koşulları (docs/PAKET-PLATFORMLARI.md "Otomatik kabul"): biri tutmazsa nedeni, hepsi tutarsa null.
+ * Ayarın açık olduğu, kabul eden kişi (`autoAcceptor`), porsiyon ve adisyonun tutarı ayrıca denetlenir. Kasada karar
+ * denenmiş kayıt (kabul, ret, platform iptali; başarılı ya da başarısız) hiçbir zaman otomatik kabul edilmez: kayıtta
+ * otomatik kabulün kendi notundan başka bir not (ör. "ret bildirilemedi") ya da süreçte kişinin kararı
+ * (`manualDecision`) bunu söyler.
+ */
+export function autoAcceptBlocker(row: PlatformRow, now = Date.now()): string | null {
+  const p = row.payload;
+  const s = platformSettings()[row.platform];
+  if (p.test) return 'platformun test siparişi';
+  // Canlı'da yalnız gerçek sipariş ve kasa canlıdayken: kurulum modu da yazarkasanın eğitim simülatörü de olmaz (o
+  // günün satışı eğitim günüdür, `trainingMode`). Deneme'de (yalnız kurulum modunda) yalnız deneme siparişi
+  if (s.mode === 'canli') {
+    if (p.simulated) return 'deneme siparişi';
+    if (trainingMode()) return 'kasa kurulum ya da eğitim modunda';
+  } else if (s.mode === 'deneme') {
+    if (!p.simulated || !getSettings().demoMode) return 'platform Deneme modunda';
+  } else return 'platform kapalı';
+  if (p.preAccepted) return 'platformun tabletinde kabul edilmiş';
+  if (row.notifiedStatus != null) return 'platformda zaten kabul edilmiş';
+  if (manualDecision.has(row.id) || (row.lastError && !row.lastError.startsWith(AUTO_SKIP_PREFIX))) return 'kasada karar denendi';
+  if (p.scheduledFor != null || p.scheduledUnknown) return 'ileri tarihli sipariş';
+  // Bağlantı kopukken birikmiş sipariş (Trendyol Go'da kabul süresi kasaya geliş anından sayılır): taze süre almasın
+  const placed = p.scheduledFor ?? p.placedAt;
+  if (now - placed > AUTO_ACCEPT_MAX_AGE_MS) return `sipariş eski (${fmtTime(placed)})`;
+  if (row.expiresAt != null && row.expiresAt - now < AUTO_ACCEPT_MIN_LEFT_MS) return 'kabul süresi dolmak üzere';
+  try {
+    requireCurrentDay(db);
+  } catch (e) {
+    return e instanceof HttpError && e.code === 'stale_day' ? 'önceki günün gün sonu alınmadı' : 'gün açık değil';
+  }
+  if (!p.platformCollects) return 'ödeme kasada alınacak';
+  // Bağdaştırıcının metni neyin doğrulanacağını söyler (tutar farkı, belirsiz ödeme türü)
+  if (p.amountReview) return p.amountReview.trim() || 'tutar ya da ödeme platformdan doğrulanmalı';
+  if (!amountsConsistent(p)) return 'platformun tutarları birbirini tutmuyor';
+  if (p.customerTotal > s.autoAcceptMaxKurus) return `tutar ${tl(s.autoAcceptMaxKurus)} sınırının üstünde`;
+  const { unmatched, soldOut } = lineIssues(db, p);
+  if (unmatched.length) return `eşleşmeyen kalem (${unmatched.join(', ')})`;
+  if (soldOut.length) return `tükenmiş kalem (${soldOut.join(', ')})`;
+  const soldOptions = soldOutOptionsOf(db, p);
+  if (soldOptions.length) return `seçeneği tükenmiş ürün (${soldOptions.join('; ')})`;
+  return null;
+}
+
+/** Kabul eden kişinin uyarısı süreç başına bir kez (platform:kişi); sonraki siparişlerde bilgi */
+const warnedAcceptor = new Set<string>();
+
+/**
+ * Otomatik kabul edilmedi: kayıt elle kabul bekler. Neden şeritte görünür (kayıtta başka bir not, ör. platformun hatası,
+ * varsa o ezilmez) ve denetim kaydına bir kez düşer
+ */
+function autoSkipped(row: PlatformRow, reason: string, severity: 'info' | 'uyari' = 'info') {
+  patchRow(
+    row.id,
+    { lastError: row.lastError ?? `${AUTO_SKIP_PREFIX}: ${reason}` },
+    { action: 'platform.auto_skip', severity, amount: row.payload.customerTotal, message: `${PLATFORM_LABEL[row.platform]} ${row.payload.code}: otomatik kabul edilmedi (${reason}); elle kabul bekliyor` },
+  );
+}
+
+export type AutoAcceptResult = 'off' | 'accepted' | 'skipped' | 'busy' | 'failed' | 'not_pending';
+
+/**
+ * Otomatik kabul (ayar açıksa; docs/PAKET-PLATFORMLARI.md "Otomatik kabul"): koşulları tutan sipariş ayarda seçilen
+ * kişi adına, kasadaki Kabul'ün yoluyla (`acceptFlow`) kabul edilir. Tutmayan elle kabul bekler. Platform kabulü
+ * reddederse kayıt bekler; platform kabul edip adisyon açılamazsa `acceptFailedLocally` (alarm). Yoklama yeni kaydı
+ * bir kez verir. Karar o an kasada veriliyorsa (`busy`: kasadaki kabul ya da ret platform çağrısını bekliyor) kayıt
+ * elle kalır, yeniden denenmez: ret platforma gidemese de kişinin reddettiği sipariş kabul edilmez. Kilit ve durum
+ * denetimi aynı siparişin iki kez kabul edilmesini önler: kabul edilmiş kayıtta `not_pending` döner, platforma gidilmez.
+ */
+export async function autoAccept(id: string): Promise<AutoAcceptResult> {
+  const row = db.select().from(schema.platformOrders).where(eq(schema.platformOrders.id, id)).get();
+  if (!row || row.status !== 'bekliyor') return 'not_pending';
+  const s = platformSettings()[row.platform];
+  if (!s.autoAccept || s.mode === 'kapali') return 'off';
+  const who = autoAcceptor(db, s.autoAcceptUserId);
+  if (typeof who === 'string') {
+    const key = `${row.platform}:${s.autoAcceptUserId ?? ''}`;
+    autoSkipped(row, who, warnedAcceptor.has(key) ? 'info' : 'uyari');
+    warnedAcceptor.add(key);
+    return 'skipped';
+  }
+  try {
+    await acceptFlow(who, id, s.prepMinutes, { auto: true });
+    return 'accepted';
+  } catch (e) {
+    // Platform siparişi zaten kabul edilmiş buldu: kayıt işaretlendi (platform.accepted_elsewhere), elle kalır
+    if (e instanceof AcceptedElsewhere) return 'skipped';
+    if (e instanceof HttpError && e.code === 'busy') {
+      // Kilit yalnız kasadaki kararda tutulur (otomatik kabul kaydı bir kez dener): karar kişinindir, kayıt elle kalır
+      const fresh = db.select().from(schema.platformOrders).where(eq(schema.platformOrders.id, id)).get();
+      if (fresh?.status === 'bekliyor') autoSkipped(fresh, 'kasada karar veriliyor');
+      return 'busy';
+    }
+    const after = db.select().from(schema.platformOrders).where(eq(schema.platformOrders.id, id)).get();
+    if (!after || after.status !== 'bekliyor') return 'not_pending';
+    // Platform kabul etti, adisyon açılamadı: acceptFailedLocally alarmı düştü, Kabul yalnız adisyonu açar
+    if (after.notifiedStatus === 'picked' && row.notifiedStatus == null) return 'failed';
+    const code = e instanceof HttpError ? e.code : null;
+    if (e instanceof AutoSkip) autoSkipped(after, e.message);
+    // Platform kabulü almadı (hata kayıtta): elle kabul edilmeli, süre işliyor
+    else if (code === 'platform_unreachable' || code === 'platform_off') autoSkipped(after, 'platform kabulü almadı', 'uyari');
+    else if (code === 'expired') autoSkipped(after, 'kabul süresi doldu');
+    // Prova düştü (tükendi, porsiyon yetmiyor): platforma gidilmedi
+    else autoSkipped(after, `adisyon açılamıyor: ${message(e)}`);
+    return 'skipped';
+  }
+}
+
+/** Yoklamanın yeni kayıtları otomatik kabule (ayar açıksa); her kayıt bir kez */
+async function autoAcceptNew(platform: PlatformId, created: string[]) {
+  for (const id of created) {
+    await autoAccept(id).catch((e) => console.warn(`[platform] ${PLATFORM_LABEL[platform]} otomatik kabul`, message(e)));
+  }
 }
 
 /** Retten önce platforma (`unsupplied`); reddederse 502, yerelde reddedilmez */
@@ -481,13 +704,20 @@ function applyConfirmed(platform: PlatformId, externalIds: string[] | undefined)
     .all();
   for (const row of rows) {
     if (row.payload.simulated || row.payload.preAccepted || deciding.has(row.id)) continue;
-    const label = PLATFORM_LABEL[platform];
-    patchRow(
-      row.id,
-      { status: 'bekliyor', decidedAt: null, notifiedStatus: 'picked', lastError: `Platformun panelinden kabul edildi: Kabul yalnız adisyonu açar` },
-      { action: 'platform.accepted_elsewhere', severity: 'alarm', amount: row.payload.customerTotal, message: `${label} ${row.payload.code}: sipariş platformun panelinden kabul edildi ama kasada adisyonu yok; Kabul ile adisyonu açın (${tl(row.payload.customerTotal)})` },
-    );
+    markAcceptedElsewhere(row);
   }
+}
+
+/**
+ * Sipariş kasanın dışında (platformun panelinden, IVR'dan) kabul edilmiş: kayıt onay bekler ama platforma ikinci kez
+ * gidilmez (`notifiedStatus` picked; süre işlemez), Kabul yalnız adisyonu açar; patrona alarm
+ */
+function markAcceptedElsewhere(row: PlatformRow) {
+  patchRow(
+    row.id,
+    { status: 'bekliyor', decidedAt: null, notifiedStatus: 'picked', lastError: 'Platformun panelinden kabul edildi: Kabul yalnız adisyonu açar' },
+    { action: 'platform.accepted_elsewhere', severity: 'alarm', amount: row.payload.customerTotal, message: `${PLATFORM_LABEL[row.platform]} ${row.payload.code}: sipariş platformun panelinden kabul edildi ama kasada adisyonu yok; Kabul ile adisyonu açın (${tl(row.payload.customerTotal)})` },
+  );
 }
 
 /**
@@ -608,6 +838,7 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
           .map((r) => r.externalId),
       );
   let created = 0;
+  const fresh: string[] = [];
   for (const payload of res.orders) {
     if (!intake) {
       if (!known.has(payload.externalId)) keep.add(payload.externalId);
@@ -621,7 +852,10 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
         return out;
       });
       fx.flush();
-      if (r.created) created++;
+      if (r.created) {
+        created++;
+        fresh.push(r.row.id);
+      }
     } catch (e) {
       keep.add(payload.externalId);
       bad.push({ externalId: payload.externalId, error: message(e) });
@@ -644,6 +878,8 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
   // Yoklama başarılı; eksik yol varsa (aktarıcı düştü, yedek yol çalıştı) Yönetim'de görünür, bekleme uygulanmaz
   const notes = [res.blocked, res.warning].filter(Boolean).join('; ');
   writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: notes ? `${a.label}: ${notes}` : null, failures: 0, blockedRounds });
+  // Otomatik kabul en son: platformun bu turdaki iptali ve panelden kabulü kayda işlendi
+  if (intake) await autoAcceptNew(platform, fresh);
   return { created, cancelled: n };
 }
 

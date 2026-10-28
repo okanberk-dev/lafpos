@@ -220,6 +220,50 @@ ikisi de yazmayla aynı işlemde. Süt, şurup ve shot sitenin kod sabitinden ge
 `src/lib/mobile/customization.ts`, mobil v1 sözleşmesi); LafPOS'ta salt okunur, panelden düzenlenmez. Testler
 `tests/secenek-grubu.test.ts`, e2e'de `/yonetim/menu` › `yeni-urun` ve `yeni-grup` durumları ve telefonda akış.
 
+**Hazır ve teslim** (28 Ekim 2026, `claude/k-hazir`): bar ekranında üç görünüm, Fişler, **Hazır** ve Geçmiş. Hazır
+sekmesi son 30 dakikada hazır olup alınmamış siparişleri sipariş başına tek fişle, en uzun bekleyen üstte gösterir
+(sekmede sayısı; `GET /kitchen?ready=1`); fişte tek dokunuşla **Teslim edildi** (`POST /kitchen/status` `servis`,
+teslim zamanı `served_at`), bildirimde **Geri al** (`servis` → `hazir`: hazır anı korunur, hazır uyarısı yinelenmez).
+Bar Geçmiş'inin Geri al'ı (ve Geçmiş'te kaleme dokunuş) bir adım geri gider: teslim edilmiş kalem "Hazır"a (teslimin
+geri alınışı: hazır anı korunur, uyarı yok, sipariş kuyruğa dönmez), yalnız hazır kalem "Hazırlanıyor"a; sunucu da
+teslim edilmiş kalemi "Hazırlanıyor"a götürmez, "Hazır"a indirir (gözden geçirme 2: iki adım geri giden sipariş
+kuyruğa dönüyor, çağrı ekranında Hazırlanıyor oluyor, hazır uyarısı yeniden gidiyor ve hazırlama süresi şişiyordu).
+Geçmiş fişinde hazır kalem varsa (kasanın siparişi; site ve platform değil) Geri al'ın yanında **Teslim edildi** de
+durur (aynı uç): hazır anı korunduğu için teslimi geri alınan 30 dakikadan eski sipariş Hazır sekmesine, Fişler'e ve
+çağrı ekranına dönmez, barista onu buradan yeniden teslim eder (`historyHandIds`; gözden geçirme son).
+Kasada aynı düğme adisyonda (hazır tezgâh ve gel-al, kapanmış self servis satışı da) ve Siparişler kartında; önce
+ödenip kapanmış tezgâh ve gel-al satışı hazır olunca Siparişler › Açık'ta da (sayıda da) görünür, "Ödendi" rozetiyle.
+Bu kartlar bar Hazır sekmesiyle **aynı koşulla** süzülür (sunucuda tek koşul, `awaitingHandWhere`: son 30 dakikada
+hazır olmuş, teslim edilmemiş bar kalemi, açık günün; açık gün yoksa hiç; `GET /orders?ready=1`, `kitchenTickets`
+`ready`) ve yalnız teslim edebilene (`mutfak.ekran` ya da `siparis.al`) gelir: eskiden hazır kalemi teslim edilmemiş her
+ödenmiş satış gün boyu ve gün sonundan sonra önceki günlerinki de görünüyor, yoğun günde gerçek açık adisyonları aşağı
+itiyor, "son 100" sınırında taze sipariş düşebiliyor, kurye düğmesiz kart görüyordu. Self modlarda kartın adı çağrı
+numarasıdır ("No 34"); paket platformunun gel-al'ında her modda platformun kısa kodu ("K9TX · Deniz Öztürk", çağrı
+ekranı gibi; müşteri LafPOS numarasını bilmez; `orderCardName`). Site ve
+paket platformu siparişleri Hazır sekmesine gelmez, teslimleri kendi akışlarında. Kasanın gel-al siparişinin aşaması
+bara giden kalemlerden türetilir (`pickupStageOf`): hepsi teslim edildiyse "Teslim edildi", hepsi hazırsa "Hazır",
+değilse "Hazırlanıyor". Kalem durumu değişince, bara kalem gidince (teslim edilmiş, kapanıp yeniden açılmış siparişe
+eklenen kalem de), bar kalemi iptal edilince, kalem başka hesaba taşınınca (kaynak ve hedef) ve adisyonlar
+birleşince yeniden türetilir; barın Geri al'ı "Hazır"ı da geri alır (denetimde `delivery.done` / `delivery.undo`;
+teslimden dönüşün nedeni yazılır: "bara yeni kalem gitti", "bar hazırı geri aldı", "#N adisyonun kalemi barda"). Bara
+kalem giden kasa gel-al'ında Siparişler'in elle aşama düğmeleri (Hazır, Yola çıktı, Teslim edildi) yoktur, sunucu da
+elle aşamayı 409 `stage_from_bar` ile reddeder (`pickupFromBar`): elle "Teslim edildi" bar kalemi beklerken verilir,
+bar sonra Hazır deyince aşama geri döner ve teslimin geri alınışı barista adına denetime düşerdi. Teslim kalemin Teslim
+edildi düğmesiyle; bara kalem gitmeyen gel-al'da elle aşama sürer. Çağrı ekranı, Hazır sekmesi ve kasadaki
+Teslim edildi düğmesi kasanın siparişinde kalemin durumuna bakar (teslimden sonra eklenen kalem yeniden görünür),
+platform siparişini teslim aşamasında düşürür; paket platformunun gel-al siparişini LafPOS numarası yerine platformun
+kısa koduyla ve adıyla gösterir. Platform siparişinin "N ürün hazır" uyarısı paket yetkili her cihazda çalar (kabul
+eden, otomatik kabulde, kafede olmayabilir).
+Müşteri ekranının teşekkürü bara giden kalemi olan self servis satışında çağrı numarasını da söyler ("Numaranız 34",
+yarı selfte "Masa 12"; `thanks.call`, eski kasa göndermezse ekran bugünkü gibi); uzun masa no ("Masa WWWWWW") kutuyu
+390 px'te taşırmaz (yazı ekranla küçülür, kelime kırılır; e2e taramasında `/musteri-ekrani` › `uzun-masa`). Hazırlama süresi raporunda
+**Hazırdan teslime** ortancası (her teslim dokunuşu bir kez). Testler `tests/pickup-board.test.ts`,
+`tests/prep-report.test.ts`, `tests/display.test.ts`; e2e'de iki akış ve self servis akışında ödeme penceresinin
+gerçek teşekkür gönderimi (bara giden satışta numara, gitmeyende numarasız) ve önce ödenen satışın Siparişler › Açık'ta
+"Ödendi" ve çağrı numarasıyla teslim edilmesi. Teşekkür gidince 300 ms toplanan
+adisyon görüntüsü iptal olur ve gönderimler sırayla gider (`src/lib/display.ts`): ödemeden hemen önce kurulan
+zamanlayıcı teşekkürü ezip ekranı ödenmemiş adisyona döndürüyordu (bu akış buldu).
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

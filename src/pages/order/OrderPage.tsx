@@ -51,6 +51,7 @@ import { OnlineOrderBar } from './OnlineOrderBar';
 import { OptionsModal } from './OptionsModal';
 import { PaymentModal } from './PaymentModal';
 import { ProductPanel } from './ProductPanel';
+import { ReadyBar } from './ReadyBar';
 import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal } from './TableOps';
 import { useOrder } from './useOrder';
 import { REMOTE } from '@/lib/remote';
@@ -362,6 +363,7 @@ export default function OrderPage() {
   const right = (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
       {isOnline && <OnlineOrderBar order={order} act={act} />}
+      {!REMOTE && (can('mutfak.ekran') || can('siparis.al')) && <ReadyBar order={order} name={call ? callText(call) : `${title} #${orderNo}`} />}
       {table?.kind === 'oda' && (order.room || editable) && <RoomBox order={order} table={table} editable={editable} act={act} now={now} onClosed={() => navigate(backPath)} />}
       <CartPanel order={order} pending={pending} onEditPending={(l) => { const p = boot.products.find((x) => x.id === l.productId); if (p) setOptions({ product: p, size: l.size, editing: l }); }} act={act} />
       {actionBar}
@@ -501,8 +503,10 @@ export default function OrderPage() {
           setDialog(null);
           if (closed) {
             cart.clear(order.id);
-            // Ciro dışı kapanışta (ikram, ödenmez, zayi) tahsilat yok: müşteri ekranı tutarla teşekkür etmez, hoş geldinize döner
-            sendDisplay(displayCode, opts?.comp ? { kind: 'idle' } : { kind: 'thanks', total: order.total });
+            // Ciro dışı kapanışta (ikram, ödenmez, zayi) tahsilat yok: müşteri ekranı tutarla teşekkür etmez, hoş geldinize döner.
+            // Bara giden kalemi olan self servis satışında teşekkür çağrı numarasını da söyler ("No 34", "Masa 12")
+            const thanksCall = call && !order.platform && order.items.some((i) => !i.voided && i.stationId) ? callText(call) : null;
+            sendDisplay(displayCode, opts?.comp ? { kind: 'idle' } : { kind: 'thanks', total: order.total, ...(thanksCall ? { call: thanksCall } : {}) });
             if (counter) void nextSale();
             else navigate(backPath);
           }

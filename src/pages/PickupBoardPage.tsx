@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { PLATFORM_LABEL } from '@shared/platforms';
 import { fmtTime } from '@shared/time';
 import type { PickupBoardDTO, PickupEntryDTO } from '@shared/types';
 import { LafMark } from '@/components/LafMark';
@@ -18,8 +19,8 @@ const FRESH_MS = 45_000;
 
 /**
  * Çağrı ekranı (televizyon ya da müşteriye dönük tablet): tezgâh ve gel-al siparişlerinin numarası, online
- * siparişte yalnız ad. Bar "Hazır"a basınca numara sağa geçer, ses çalar; 10 dakika sonra ya da teslim edilince
- * düşer. Kasa menüsü olmadan tam ekran açılır, personel girişi istemez (Bar ekranındaki "Çağrı ekranı" düğmesi yeni pencerede açar).
+ * siparişte yalnız ad, paket platformunun gel-al siparişinde platformun kısa kodu. Bar "Hazır"a basınca numara sağa
+ * geçer, ses çalar; 10 dakika sonra ya da teslim edilince düşer. Kasa menüsü olmadan tam ekran açılır, personel girişi istemez (Bar ekranındaki "Çağrı ekranı" düğmesi yeni pencerede açar).
  */
 export default function PickupBoardPage() {
   const businessName = useBusinessName();
@@ -107,6 +108,9 @@ function Column({ title, count, tone, empty, children }: { title: string; count:
 }
 
 function Entry({ entry, ready, fresh }: { entry: PickupEntryDTO; ready?: boolean; fresh?: boolean }) {
+  // Platformun kodu müşterinin uygulamada gördüğü kimlik ("A7KX", Getir'de 4 rakam); uzun kod küçük yazılır, kırpılmaz
+  const big = entry.table ?? entry.code ?? String(entry.no);
+  const long = !entry.table && !!entry.code && entry.code.length > 5;
   return (
     <div
       className={cn(
@@ -118,8 +122,17 @@ function Entry({ entry, ready, fresh }: { entry: PickupEntryDTO; ready?: boolean
     >
       {/* Yarı self servis: numara yerine masa; müşteri kalkmaz, personel getirir */}
       {entry.table && <span className="mb-1 text-sm font-semibold uppercase tracking-[0.06em] text-muted">Masa</span>}
-      <span className={cn('tabular max-w-full truncate leading-none tracking-tight', ready ? 'text-[clamp(4rem,6vw,6.5rem)] font-bold text-ink' : 'text-5xl font-semibold text-muted')}>{entry.table ?? entry.no}</span>
+      <span
+        className={cn(
+          'tabular max-w-full leading-none tracking-tight',
+          long ? 'break-all' : 'truncate',
+          ready ? (long ? 'text-[clamp(2.25rem,3.5vw,3.5rem)] font-bold text-ink' : 'text-[clamp(4rem,6vw,6.5rem)] font-bold text-ink') : long ? 'text-3xl font-semibold text-muted' : 'text-5xl font-semibold text-muted',
+        )}
+      >
+        {big}
+      </span>
       {entry.table && <span className="mt-2 text-sm font-medium text-ink-2">{ready ? 'Masanıza geliyor' : 'Masanıza getirilecek'}</span>}
+      {entry.platform && !entry.table && <span className="mt-2 text-sm font-semibold uppercase tracking-[0.06em] text-ink-2">{PLATFORM_LABEL[entry.platform]}</span>}
       {entry.name && <span className="mt-2 max-w-full truncate text-lg font-semibold">{entry.name}</span>}
       {entry.online && <span className="mt-1 text-xs font-medium uppercase tracking-[0.06em] text-muted">Uygulama</span>}
     </div>

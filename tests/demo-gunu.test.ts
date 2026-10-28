@@ -38,6 +38,10 @@ describe('demonun ilk günü (self servis)', () => {
     expect(board.ready.length).toBeGreaterThanOrEqual(1);
     const platforms = await h.ok<{ orders: { platform: string; status: string }[] }>('patron', 'GET', '/platforms');
     expect(platforms.orders.map((o) => `${o.platform}:${o.status}`).sort()).toEqual(['trendyol:kabul', 'yemeksepeti:bekliyor']);
+    // Raporlar › Paket platformları: barda bekleyen açık, onay bekleyen hiçbir rakama girmez
+    const today = boot.day!.date;
+    const report = await h.ok<{ revenue: number; pending: number; platforms: { platform: string; open: { orders: number } }[] }>('patron', 'GET', `/reports/platforms?from=${today}&to=${today}`);
+    expect(report).toMatchObject({ revenue: 0, pending: 1, platforms: [{ platform: 'trendyol', open: { orders: 1 } }] });
   });
 
   it('kurulumun oturumları kapanır; demoyu açan kendi rolüyle girer', async () => {

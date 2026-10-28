@@ -237,7 +237,8 @@ export async function runDemo(browser) {
           const latte = boot.products.find((p) => p.name === 'Latte');
           const o = await api(other, 'POST', '/orders', { type: 'tezgah' });
           await api(other, 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 1 }] });
-          await page.waitForFunction((no) => document.body.innerText.includes(`#${no}`), o.no, { timeout: 8000 });
+          // Kart numarayla: self modlarda çağrı numarası ("No 34"), öteki modlarda "#34"
+          await page.waitForFunction((no) => document.body.innerText.includes(`#${no}`) || document.body.innerText.includes(`No ${no}`), o.no, { timeout: 8000 });
           const locks = await page.evaluate(() => navigator.locks.query());
           assert(locks.held.length === 1 && locks.pending.length === 1, `kilit: ${JSON.stringify(locks)}`);
         },

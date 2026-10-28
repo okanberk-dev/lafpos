@@ -53,14 +53,49 @@ const ROUTES = {
       await page.getByRole('button', { name: 'Tükendi', exact: true }).first().click({ timeout: 5000 });
       await page.getByRole('dialog', { name: 'Tükenen ürünler' }).getByRole('tab', { name: /Seçenekler/ }).click({ timeout: 5000 });
     }),
+    state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })),
     '/cagri',
     '/musteri-ekrani',
+    state('/musteri-ekrani', 'uzun-masa', async (page) => {
+      // Teşekkür ekranı uzun masa no ile (yarı self, harfli masa no): çağrı kutusu telefonda taşmasın
+      await page.evaluate(async () => {
+        const res = await fetch('/api/display/e2e-uzun', {
+          method: 'PUT',
+          headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ kind: 'thanks', total: 12345, call: 'Masa WWWWWW' }),
+        });
+        if (!res.ok) throw new Error(`PUT /display → ${res.status}`);
+      });
+      await page.goto(new URL('/musteri-ekrani?ekran=e2e-uzun', page.url()).href, { waitUntil: 'domcontentloaded' });
+      await page.getByText('Masa WWWWWW', { exact: true }).waitFor({ timeout: 5000 });
+    }),
     '/kasa',
     '/cihaz',
     '/musteriler',
     '/rezervasyon',
     '/raporlar',
     state('/raporlar', 'urunler', (page) => page.getByRole('tab', { name: 'Ürünler', exact: true }).click({ timeout: 5000 })),
+    state('/raporlar', 'platformlar', async (page) => {
+      // Rapor boş görünmesin: sunucu başına bir kez deneme modunda bir Getir siparişi teslim edilir, biri reddedilir
+      await page.evaluate(async () => {
+        const call = async (method, path, body) => {
+          const res = await fetch(`/api${path}`, { method, headers: { authorization: `Bearer ${localStorage.getItem('lafpos.token')}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
+          if (!res.ok) throw new Error(`${method} ${path} → ${res.status}`);
+          return res.json();
+        };
+        if ((await call('GET', '/reports/platforms')).platforms.length) return;
+        await call('PUT', '/platforms/getir', { mode: 'deneme', commissionPct: 25 });
+        const sold = await call('POST', '/platforms/getir/test-order', { courier: 'platform' });
+        const { orderId } = await call('POST', `/platforms/orders/${sold.id}/accept`, {});
+        await call('POST', `/orders/${orderId}/delivery`, { deliveryStatus: 'teslim' });
+        const missed = await call('POST', '/platforms/getir/test-order', { courier: 'platform' });
+        await call('POST', `/platforms/orders/${missed.id}/reject`, { reason: 'Çok yoğunuz' });
+        await call('PUT', '/platforms/getir', { mode: 'kapali' });
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await settle(page);
+      await page.getByRole('tab', { name: 'Paket platformları', exact: true }).click({ timeout: 5000 });
+    }),
     '/yonetim',
     '/yonetim/genel',
     '/yonetim/menu',
@@ -92,7 +127,7 @@ const ROUTES = {
   ],
   garson: ['/masalar', '/siparisler', '/mutfak', '@s1'],
   kasa: ['/kasa', '/masalar', '/satis', '@s2', '@tz', '/cihaz'],
-  bar: ['/mutfak'],
+  bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 }))],
 };
 
 /** Kendiliğinden başka adrese geçen ekranlar: "/satis" boş tezgâh satışını açıp adisyona geçer */

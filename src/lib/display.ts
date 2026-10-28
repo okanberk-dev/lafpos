@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type { BootstrapDTO, DisplayStateDTO, OrderDTO } from '@shared/types';
 import { put } from './api';
 import type { PendingLine } from './cart';
@@ -14,11 +14,22 @@ export function useDisplayCode() {
 
 /** Son gönderilen durum: adisyondan çıkınca yalnız adisyon gösteriliyorsa "hoş geldiniz"e dönülür */
 let lastKind: Outgoing['kind'] = 'idle';
+/**
+ * Gönderilmeyi bekleyen adisyon görüntüsü (300 ms toplanır). Teşekkür ya da hoş geldiniz gidince iptal olur: ödemeden
+ * hemen önce kurulan zamanlayıcı teşekkürün ardından ateşlenip ekranı ödenmemiş adisyona döndürüyordu (e2e, 28 Eki 2026)
+ */
+let pendingOrder: ReturnType<typeof setTimeout> | null = null;
+/** Gönderimler sırayla: önce çıkan istek sonra çıkanı (teşekkürü) ezmesin */
+let queue: Promise<unknown> = Promise.resolve();
 
 export function sendDisplay(code: string, state: Outgoing) {
+  if (pendingOrder) {
+    clearTimeout(pendingOrder);
+    pendingOrder = null;
+  }
   if (!code) return;
   lastKind = state.kind;
-  void put(`/display/${code}`, state).catch(() => null);
+  queue = queue.then(() => put(`/display/${code}`, state)).catch(() => null);
 }
 
 /**
@@ -28,19 +39,21 @@ export function sendDisplay(code: string, state: Outgoing) {
  */
 export function useCustomerDisplay(boot: BootstrapDTO, order: OrderDTO | undefined, pending: PendingLine[], label: string) {
   const [code] = useDisplayCode();
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!code || !order || order.status !== 'acik') return;
     const state = displayOrder(boot, order, pending, label);
     // Boş adisyon (satış sonrası yeni satış) ekrandaki "teşekkürler"i ezmesin
     if (!state) return;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => sendDisplay(code, state), 300);
+    if (pendingOrder) clearTimeout(pendingOrder);
+    pendingOrder = setTimeout(() => sendDisplay(code, state), 300);
   }, [code, order, pending, boot, label]);
   // Adisyondan çıkınca ekran "hoş geldiniz"e döner (kapandıysa "teşekkürler"i ödeme penceresi göndermiştir)
   useEffect(
     () => () => {
-      if (timer.current) clearTimeout(timer.current);
+      if (pendingOrder) {
+        clearTimeout(pendingOrder);
+        pendingOrder = null;
+      }
       if (code && lastKind === 'order') sendDisplay(code, { kind: 'idle' });
     },
     [code],

@@ -11,7 +11,9 @@ Araştırma ve platform belgeleri: `calisma/arastirma/paket-platformlari/` (cali
    fiyatıyla, restoranın kampanyası adisyon indirimi olur. Platformun karşıladığı kampanya ciroyu düşürmez.
    Kalemler adla eşlenir; kasada karşılığı olmayan kalem gizli "Platform ürünü" satırı olur, adı notta.
    **Ret** nedeniyle; denetim kaydına yazılır.
-3. Bar ve mutfak normal fişi alır; adisyonun adı "Yemeksepeti A7KX" gibi (kurye bu kodu söyler).
+3. Bar ve mutfak normal fişi alır; adisyonun adı "Yemeksepeti A7KX" gibi (kurye bu kodu söyler). Gel-al siparişi
+   çağrı ekranında LafPOS numarasıyla değil bu kodla ve platformun adıyla görünür (müşteri uygulamada kodu görür);
+   Siparişler'de teslim aşamasına geçince düşer. Bar ekranının Hazır sekmesine gelmez: teslimi platformun akışında.
 4. Tahsilat: platform tahsil ediyorsa (online ödenmiş ya da platform kuryesi kapıda alır) adisyon platform
    kuryesine verilince (Yolda) ya da teslimde (kendi kurye, gel-al) platformun **online** ödeme türüyle (kanal =
    platform, Z'de online) kapanır; kasada tahsil edilmez. Kendi kuryemiz kapıda alıyorsa ödeme kasada alınır; o
@@ -21,6 +23,14 @@ Araştırma ve platform belgeleri: `calisma/arastirma/paket-platformlari/` (cali
 
 lafmaliyet'e platform siparişi POS satışı olarak gider (satış satırları, `payments[].channel` = platform; komisyon
 lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
+
+**Açık iş (lafmaliyet komisyonu):** kanal yalnız platformun online ödeme türünde var. Tahsilatı kasada olan platform
+siparişi (kendi kuryemizin kapıda aldığı ya da Yemeksepeti kuryesinin kapıda alıp kasaya `payRestaurant` bıraktığı)
+nakit ya da kart türüyle kapanır, kanalı `null` kalır: o siparişin cirosu lafmaliyet'in platform komisyonuna girmez.
+LafPOS'ta doğru rakam Raporlar › Paket platformları'ndadır (siparişin kaynağına göre, aşağıda). Öneri: gün paketine
+(`day`) yalnız ekleme olarak `platforms: [{ channel, orders, revenue }]` (kapanmış POS adisyonlarından
+`orders.platform`'a göre, TL, iki ondalık; rapordaki ciroyla aynı kural). Önce `docs/03-ENTEGRASYON.md`'ye yazılır,
+lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek alan gönderilmez.
 
 ## Modlar
 - **Kapalı:** yeni sipariş alınmaz. Platformdan gelmiş, henüz kapanmamış sipariş platformla konuşmaya devam eder:
@@ -61,6 +71,10 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     alınamıyorsa (kapanmış güne ait) iptal yetkisi olan kişi şeritten "iptali kayda al" der
     (`POST /api/platforms/orders/:id/cancel-close`): kayıt kapanır, para yerinde kalır, patrona alarm.
     İleri tarihli siparişin saati adisyona geçer (mutfak fişi ve sipariş şeridi) ve onay kartında görünür.
+    Ödeme türü (`payment.paymentType`): nakit, yemek kartı ve "kapıda" türleri kapıda; tanınan online türler
+    (`TRENDYOL_ONLINE_PAYMENTS`: `PAY_WITH_CREDIT_CARD` ve benzerleri) online. Tanınmayan tür online sayılır (tahsilat
+    davranışı değişmez) ama kendi kuryemizin siparişinde işaretlenir: "Ödeme türü tanınmadı (X): tahsilatı Trendyol'dan
+    doğrulayın", otomatik kabul edilmez.
     Ağ hataları kasada Türkçe görünür ("bağlantı kurulamadı", "yanıt gelmedi"); çevrilemeyen paket ötekileri
     durdurmaz, atlanıp bir kez denetim kaydına düşer (`platform.package_invalid`). Yönetim'deki "açık sipariş"
     adisyonu açık kabul edilmiş siparişlerdir.
@@ -107,7 +121,9 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     olur (gizli "Platform ücreti" ürünü, KDV %20, istasyonsuz kategoride: bar ve mutfak ekranına düşmez; Ürün
     eşleme'den başka ürüne bağlanabilir); yalnız Yemeksepeti kuryesinin teslimat ücreti platformundur. Kendi kuryemizin
     kapıda alacağı `collectFromCustomer` (sıfırdan büyükse), yoksa `grandTotal`; ödenmemiş siparişte bu sıfır görünürse
-    tamamı kasada istenir (platform payı sayılmaz). Yemeksepeti kuryesi kapıda nakit alıp kasaya `payRestaurant`
+    tamamı kasada istenir (platform payı sayılmaz). `grandTotal` (Yemeksepeti kuryesinin teslimat ücreti ve kuryenin
+    bahşişi `riderTip` düşülünce) kalemleri aşarsa fark adisyona girmez ve tutar Yemeksepeti'nden doğrulanır; ödenmiş
+    siparişte `grandTotal` hiç gelmezse de (otomatik kabul edilmez). Yemeksepeti kuryesi kapıda nakit alıp kasaya `payRestaurant`
     bırakıyorsa o tutar kasada alınır, platform kendiliğinden kapatmaz. İndirimlerin restoran payı `VENDOR`
     sponsorluğu. İleri tarihli siparişin saati adisyona geçer ve platforma bildirilen saatle aynıdır (gel-alda alma,
     Yemeksepeti kuryesinde kuryenin alma, kendi kuryemizde teslim saati). Canlıya geçmeden Delivery Hero'nun test
@@ -153,7 +169,8 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     zaman kalıcı sayılmaz (aşama park edilmez, kasadaki iptal kapanmaz; anahtar düzelince gider). **Kabul önce
     Getir'e:** `POST /food-orders/{id}/verify` (ileri tarihli onaysız sipariş, durum 325: `/verify-scheduled`; o
     arada etkinleşmişse 3 döner ve `/verify` denenir); hazırlık süresi Getir'e sipariş başına gitmez (uç gövdesiz).
-    Getir "zaten onaylı" (hata kodu 2) derse kasada yalnız adisyon açılır. `result: false` ya da nesne olmayan gövde
+    Getir "zaten onaylı" (hata kodu 2) derse elle Kabul'de kasada yalnız adisyon açılır; otomatik kabulde adisyon
+    açılmaz, sipariş "platformun panelinden kabul edildi" olarak elle kalır ("Otomatik kabul"). `result: false` ya da nesne olmayan gövde
     (vekil sunucunun sayfası) hiçbir uçta başarı sayılmaz. **Ret ve kasada iptal** aynı yoldan:
     `GET /food-orders/{id}/cancel-options`'tan seçenek (kasadaki neden anahtar kelimeyle eşlenir, bulunamazsa
     "diğer", o da yoksa ilk; sipariş başına 5 dk saklanır: uç 10 dk'da 40 istekle sınırlı), `POST
@@ -222,7 +239,125 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     isteğe bağlı `GETIR_RESTAURANT_ID`. Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
   - **Sonraki:** Migros Yemek (belge herkese açık değil; görüşme gerekir).
 
+## Otomatik kabul
+İsteğe bağlı ve **varsayılan kapalı**, platform başına (Yönetim › Paket platformları, platform kartında "Otomatik
+kabul"; ayar `PlatformSettings.autoAccept`, `autoAcceptUserId`, `autoAcceptMaxKurus`, ayar JSON'unda durur). Açarken
+"Kabul eden" seçilir: etkin ve paket yetkili (`paket.yonet`) bir kişi; seçilmemişse ya da kişi uygun değilse ayar
+kaydedilmez (422 `auto_accept_user`). Açıp kapamak, kişiyi ya da sınırı değiştirmek denetim kaydına uyarı düşer.
+
+Yoklama yeni siparişi kayda aldıktan sonra (aynı turdaki platform iptali ve panelden kabul işlendikten sonra) her
+yeni kaydı **bir kez** dener; kasadaki Kabul ile aynı yoldan gider (`server/delivery/live.ts` `acceptFlow`: aynı
+kilit, yerelde prova, önce platforma, sonra adisyon). Deneme modunda "Deneme siparişi gönder" de aynı yoldan dener
+(platforma gitmez). Kabul edilmiş kayıt yeniden denense de (kasa yeniden başladı) kilit ve durum denetimi ikinci
+kabulü ve ikinci platform çağrısını önler.
+
+**Kasadaki karar önce gelir.** Kasada bir kişi kayıt üzerinde karar denediyse (Kabul, Ret, platform iptali, iptalin
+elle kapatılması; başarılı ya da başarısız) otomatik kabul o kaydı **hiçbir zaman** kabul etmez. Ret platforma
+gidemeyince (502) kayıt onay bekler görünür; eskiden turun sonundaki otomatik kabul ya da "meşgul" sonrası yeniden
+deneme personelin reddettiği siparişi kabul edip bara gönderiyordu (gözden geçirme, 28 Eki 2026). Üç kat:
+- O an kasada karar veriliyorsa (409 `busy`: kasadaki Kabul ya da Ret platform çağrısını bekliyor) otomatik kabul
+  kaydı bırakır, yeniden denemez; nedeni "kasada karar veriliyor".
+- Tersi: otomatik kabul platform çağrısındayken kasada Reddet'e basılırsa ret gitmez (kabul platformda sürüyor) ve
+  "başka bir ekranda işleniyor" denmez: 409 `auto_accepting`, "Otomatik kabul ediliyor; kabul edilirse adisyondan
+  iptal edin" (şerit kartta ve bildirimde gösterir). Kişinin ret denemesi denetim kaydına bilgi olarak yazılır
+  (`platform.reject_try`, nedeniyle) ve kayıt kasadaki karar sayılır (`manualDecision`): kabul düşerse sipariş elle
+  kalır. Elle Kabul aynı anda 409 `busy` alır (bugünkü gibi).
+- Kilidin içinde okunan kayıtta otomatik kabulün kendi notundan ("Otomatik kabul edilmedi: …") başka bir not varsa
+  (ör. "ret bildirilemedi") atlanır: "kasada karar denendi". Kasa yeniden başlasa da kayıtta durur.
+- Kasadaki karar uçları (`accept`, `reject`, `platform-cancel`, `cancel-close`) kilidin içinde kaydı süreç belleğindeki
+  `manualDecision` kümesine de koyar (`server/delivery/locks.ts`): kayda hata yazılmayan başarısızlıkta da (ör. elle
+  Kabul'ün provası porsiyon yüzünden düştü) otomatik kabul o kaydı atlar.
+
+Şüphede sipariş elle kabule kalır: otomatik kabul para ve durum değiştirir.
+
+Bütün koşullar sağlanmazsa sipariş **elle kabul bekler**: nedeni şeritte bilgi notu olarak görünür ("Otomatik kabul
+edilmedi: eşleşmeyen kalem (…)"; tutar ya da ödeme doğrulanacaksa bağdaştırıcının metni; kayıtta platformun hatası gibi
+başka bir not varsa o ezilmez) ve denetim kaydına bir kez düşer (`platform.auto_skip`). Koşullar (`autoAcceptBlocker`, sırayla):
+1. Ayar açık ve platform Kapalı değil.
+2. Platformun test siparişi değil.
+3. Mod: Canlı'da yalnız gerçek sipariş ve kasa kurulum ya da eğitim modunda değil (`trainingMode`: kurulum modu ya
+   da yazarkasanın eğitim simülatörü; o günün satışı eğitim günüdür, gerçek sipariş ona yazılmaz); Deneme'de (yalnız
+   kurulum modunda) yalnız deneme siparişi.
+4. Platformun tabletinde kabul edilmiş değil (`preAccepted`: barda çift hazırlık riski), platformun panelinden kabul
+   edilmiş değil (`notifiedStatus` boş), kasada karar denenmemiş (yukarıda), ileri tarihli değil (saati okunamamış
+   ileri tarihli de: `scheduledUnknown`), eski değil: sipariş saatinden 30 dakikadan fazla geçmişse ("sipariş eski
+   (HH:MM)", `AUTO_ACCEPT_MAX_AGE_MS`) elle; bağlantı kopukken birikmiş Trendyol Go paketi kabul süresini kasaya
+   geliş anından aldığı için taze görünürdü.
+5. Kabul süresinin bitmesine en az 30 saniye var.
+6. Kabul eden kişi her denemede yeniden okunur: etkin ve paket yetkili değilse çalışmaz (ilk seferde uyarı).
+7. Gün açık ve güncel (05:00 kuralı; önceki günün gün sonu alınmamışsa olmaz).
+8. Tahsilat platformda (`platformCollects`): kendi kuryemizin kapıda alacağı ya da Yemeksepeti kuryesinin kasaya
+   nakit bırakacağı sipariş elle.
+9. Tutar tutarlı: bağdaştırıcı tutarı ya da tahsilatı doğrulanmalı diye işaretlemedi (`amountReview`). Üç
+   bağdaştırıcıda aynı kural: platformun toplamı hiç gelmezse ("Getir toplamı gelmedi", Yemeksepeti'nde ödenmiş
+   siparişte `grandTotal` yok, "Trendyol ödenen tutarı vermedi") ya da kalemleri aşarsa (Getir'in açıklanamayan farkı;
+   Yemeksepeti'nde `grandTotal` − Yemeksepeti kuryesinin teslimat ücreti − kuryenin bahşişi `riderTip` kalemleri
+   aşıyorsa, bahşiş tek başına aşmaz; Trendyol Go'da ödenen tutar) tutar doğrulanır, fark adisyona girmez. Ayrıca
+   Yemeksepeti'nde ödenmemiş siparişte alınacak tutarın sıfır görünmesi ve kendi kuryemizin siparişinde ödeme türünün
+   belirsiz olması: Getir'de "Getir'den doğrulayın" etiketi, Trendyol Go'da ödeme türünün gelmemesi (boş ya da yalnız
+   boşluk: `paymentOf`'un kırptığı değer, "Ödeme türü gelmedi") ya da
+   tanınmaması ("Ödeme türü tanınmadı (X)": tanınan online türler `TRENDYOL_ONLINE_PAYMENTS`'ta açıkça listeli,
+   kapıda türler ayrı; tanınmayan tür elle kabulde bugünkü gibi online sayılır, yalnız işaretlenir); tutarlar kuruş tam sayı ve sıfırdan küçük değil, adetler tam sayı; Σ(birim × adet) = kalemler;
+   restoran kampanyası + platform kampanyası + müşterinin ödediği = kalemler; müşterinin ödediği sıfırdan büyük.
+10. Müşterinin ödediği ayardaki en yüksek tutarı (varsayılan 1.500 TL) aşmıyor.
+11. Bütün kalemler kasadaki ürüne eşleşmiş (ücret satırı serbest) ve hiçbiri tükenmemiş; eşleşen ürünün seçeneklerinden
+    biri kasada tükendi işaretliyse (yulaf sütü bitti) de elle: platformun seçimi notta metindir, kişi okur
+    (`soldOutOptionsOf`; elle kabul ve adisyon açma etkilenmez, platform siparişi reddedilmez).
+12. Prova geçiyor (porsiyon yetiyor) ve provadaki adisyonun tutarı platformun ödeyeceğine (kalemler − restoran
+    kampanyası) eşit.
+
+Hazırlık süresi ayardaki `prepMinutes`. Kabul eden ayarda seçilen kişidir (`decidedBy`); denetim kaydında
+`platform.auto_accept` ve "<ad> (otomatik)", kayıtta "20 dk, otomatik". Kasada bildirim çıkar, bar fişi her zamanki
+gibi düşer. Platform kabulü almazsa kayıt bekler (uyarı; elle kabul edilir), platform kabul edip adisyon açılamazsa
+`platform.accept_failed` alarmı (Kabul yalnız adisyonu açar, platforma ikinci kez gidilmez). Platform kabulü "zaten
+kabul edilmiş" diye yanıtlarsa (Getir `/verify` 400 kod 2: Getir panelinden ya da IVR'dan onaylanmış; bağdaştırıcının
+`accept`'i `'already'` döner) otomatik kabul adisyonu **açmaz**: kayıt platformun panelinden kabul edilmiş gibi
+işaretlenir (`notifiedStatus` picked, "Platformun panelinden kabul edildi: Kabul yalnız adisyonu açar",
+`platform.accepted_elsewhere` alarmı) ve sipariş elle kalır; kasadaki koşul (panelden kabul edilmişi otomatik kabul
+etme, barda çift hazırlık riski) böyle delinmez. Elle Kabul'de "zaten onaylı" yanıtı eskisi gibi adisyonu açar; elle
+Kabul işaretli kayıtta platforma ikinci kez gitmez.
+
+Siparişin "alanı" (adisyonun garsonu) kabul edendir; otomatik kabulde ayarda seçilen kişi kafede olmayabilir. Bu
+yüzden platform siparişinin "N ürün hazır" uyarısı (`items.ready`, `platform` alanıyla; "Yemeksepeti A7KX · 1 ürün
+hazır") paket yetkili (`paket.yonet`, şeritteki siparişleri yöneten) her cihazda ve kabul edende çalar; bir cihazda bir
+kez (`shared/events.ts` `readyAlertFor`). Elle alınan masa, tezgâh ve gel-al siparişinde yalnız siparişi alan görür.
+
+## Rapor
+Raporlar › Paket platformları (`rapor.gor`; `GET /api/reports/platforms?from&to`, CSV `type=platformlar`),
+`server/services/reports.ts` `platformReport`:
+- **Ciro** Raporlar › Ciro'nun kuralıyla: kapanmış POS adisyonu, adisyonun açıldığı iş günü, KDV dahil; platforma
+  siparişin kaynağından (`orders.platform`) bağlanır, tahsilatı kim yaparsa yapsın. Platformların toplamı Ciro'nun
+  `netSales`'inin içindedir (`tests/platform-report.test.ts`, `tests/report-reconciliation.test.ts`). Sipariş sayısı
+  Ciro'daki adisyon ölçütüyle (tutarı olan adisyon), ortalama sepet ciro / sipariş.
+- **İndirim:** restoranın karşıladığı (adisyonun kalem ve adisyon indirimi; platformun kampanyasındaki restoran payı
+  dahil) ve platformun karşıladığı kampanya (kabul edilen siparişin `platformDiscount`'u; ciroyu düşürmez, bilgi).
+- **Tahsilat:** platformun ödeme türü (kanal = platform) "platformda", öteki türler "kasada"; ikisinin toplamı ciro.
+- **Açık:** kabul edilmiş, henüz kapanmamış adisyonlar; ciroya girmez.
+- **Kaçan:** reddedilen, süresi dolan (zamanlayıcı işaretlemeden süresi geçen de), iptal edilen (platformun ya da
+  kasanın; kabulden önce ya da sonra) ve platformda kabul edilip 3 saatte kasaya alınmayan (ayrı nedeni "kasaya
+  alınmadı"; ekrandaki tanım ve boş KPI açıklaması da onu sayar). Kabul edilmemiş kayıt geldiği anın iş gününe (05:00 kuralı), kabul edilip
+  iptal edilen adisyonun gününe yazılır; tutar müşterinin ödeyeceği (`customerTotal`), ciroya girmez. Platformda
+  kabul edilmiş, 3 saat içinde kasaya alınmamış sipariş "süresi doldu" değil "kasaya alınmadı" sayılır: platformda
+  teslim edilmiş olabilir, kasada kaydı yoktur. Bu, tablette kabul edilmişe (`preAccepted`) ve kasada "onay bekliyor"
+  görünen ama platformda kabul edilmiş kayda (`notifiedStatus` = `picked`: platformun panelinden kabul edilmiş ya da
+  kasadan kabulü platforma gidip adisyonu açılamamış) aynı süreyle uygulanır: sipariş saatinden (ileri tarihlide teslim
+  saatinden) 3 saat sonra (`PRE_ACCEPTED_TTL_MS`). Platformun test siparişi sayılmaz. Onay bekleyen sipariş hiçbir
+  rakama girmez, yalnız sayısı yazılır; platformda kabul edilmiş kayıt karar beklemediği için o sayıya girmez.
+- **Tahmini komisyon** yalnız `rapor.maliyet` yetkisine gider (uçta ve CSV'de; yoksa alan hiç yok): platformun
+  cirosu × Yönetim › Paket platformları'ndaki **bugünkü** oran, kuruşa yuvarlanmış (`percentOf`). Oran sipariş anında
+  dondurulmaz, değişirse geçmiş dönemin tahmini de değişir; gerçek komisyon platformun hesap kesiminde ve lafmaliyet'te
+  (Trendyol Go'nun hesap kesimi ucu bağdaştırıcıda henüz yok).
+
 ## Uçlar
-`GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·
+`GET /api/platforms` (ayarlar, siparişler, `live` canlı durum, `acceptors` otomatik kabulde seçilebilecek kişiler;
+komisyon oranı `commissionPct` maliyettir, yalnız `rapor.maliyet`, `ayar.yonet` ya da `senkron.yonet` yetkisine gider,
+garson ve raporcu almaz; platform ayarları sunucuya özel ayarlardadır, `/api/bootstrap` ve bulut anlık görüntüsü
+onları hiç taşımaz) ·
+`PUT /api/platforms/:platform` (`mode`, `prepMinutes`, `commissionPct`, `autoAccept`, `autoAcceptUserId`,
+`autoAcceptMaxKurus`; denetim kaydı `platform.settings` iletisinde oran yazmaz, değiştiyse "tahmini komisyon oranı
+değişti" der: ileti uyarı olarak `alerts` olayıyla her ekrana ve patron paneline gider. Oranın eskisi ve yenisi kaydın
+`data`'sında; `/api/admin/audit` onu, ve eski kayıtların iletisindeki "%N komisyon" parçasını, `rapor.maliyet`,
+`ayar.yonet` ya da `senkron.yonet` yetkisi olmayana (yalnız patron paneli yetkilisi) maskeler, `server/delivery/commission.ts`) · `POST /api/platforms/:platform/test-order` (`autoAccepted`) ·
 `POST /api/platforms/orders/:id/accept|reject|platform-cancel|cancel-close` · teslim: `POST /api/orders/:id/delivery` ·
-ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id`.
+ürün eşleme: `GET /api/platforms/products`, `PUT /api/platforms/products/:id` · rapor: `GET /api/reports/platforms`,
+`GET /api/reports/export.csv?type=platformlar`.

@@ -1,9 +1,13 @@
-import { and, asc, desc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { percentOf } from '@shared/money';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
+import { PLATFORM_LABEL, PLATFORMS, type PlatformId } from '@shared/platforms';
 import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
 import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
+import { auditForViewer } from '../delivery/commission';
+import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
 import { costMap, costsAt } from '../sync/lafmaliyet';
 import { getOpenDay } from './orders';
 
@@ -384,6 +388,8 @@ function percentile(sorted: number[], p: number): number {
 /**
  * Bar ve mutfakta hazırlama süresi: kalemin gönderildiği andan "Hazır"a basıldığı ana (saniye). Ürün, saat ve
  * en yavaş fişler; yoğun saatte kaç barista gerektiğini gösterir. Açık adisyonlar da sayılır (hazırlanmışsa).
+ * `handoff`: hazırdan teslime (bar ekranında ya da kasada "Teslim edildi"); her teslim dokunuşu bir kez sayılır,
+ * süresi o dokunuşta teslim edilen kalemlerin en son hazır olanından.
  */
 export function prepReport(range: Range) {
   const ds = load(range);
@@ -405,9 +411,18 @@ export function prepReport(range: Range) {
   const hourOf = hourMemo();
   const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, secs: [] as number[] }));
   for (const d of done) hours[hourOf(d.sentAt)].secs.push(d.sec);
+  // Teslim: aynı adisyonda aynı anda teslim edilen kalemler tek teslimdir. Hiç "Hazır" görmeden teslime geçen kalem
+  // (hazır anı teslim anına eşit) sayılmaz
+  const handoffs = new Map<string, number>();
+  for (const i of ds.items) {
+    if (i.voided || !i.stationId || i.status !== 'servis' || !i.readyAt || !i.servedAt || i.servedAt <= i.readyAt) continue;
+    const key = `${i.orderId}|${i.servedAt}`;
+    handoffs.set(key, Math.min(handoffs.get(key) ?? Infinity, Math.round((i.servedAt - i.readyAt) / 1000)));
+  }
   return {
     range,
     overall: stats(done.map((d) => d.sec)),
+    handoff: stats([...handoffs.values()]),
     products: [...byProduct.values()].map((r) => ({ name: r.name, size: r.size, ...stats(r.secs) })).sort((a, b) => b.p90 - a.p90 || b.count - a.count),
     hours: hours.filter((h) => h.secs.length).map((h) => ({ hour: h.hour, ...stats(h.secs) })),
     slowest: [...done].sort((a, b) => b.sec - a.sec).slice(0, 10).map((d) => ({ orderNo: orderNo.get(d.orderId) ?? 0, name: d.name, size: d.size, sentAt: d.sentAt, sec: d.sec })),
@@ -581,6 +596,152 @@ export function checksReport(range: Range, limit: number | null = 300, showWaite
   return { range, count: checks.length, rows };
 }
 
+// ─── Paket platformları ─────────────────────────────────────────────────────
+
+/**
+ * Platform siparişinin ciroya girmeme nedeni: platform kaydının durumu (kabul edilip iptal edilen de `iptal`).
+ * `unrecorded`: platformda kabul edilmiş (tablette, platformun panelinden ya da kasadan kabulü gidip adisyonu
+ * açılamamış) sipariş 3 saat içinde kasaya alınmadı; kaybedilmiş olmayabilir, kasada kaydı yok
+ */
+type MissedKind = 'rejected' | 'expired' | 'cancelled' | 'unrecorded';
+
+/**
+ * Paket platformlarının satışı (Yemeksepeti, Getir Yemek, Trendyol Go, Migros Yemek). Ciro Raporlar › Ciro'nun
+ * kuralıyla (kapanmış POS adisyonu, adisyonun açıldığı iş günü, KDV dahil), siparişin kaynağına göre
+ * (`orders.platform`): tahsilatı kim yaptıysa yapsın (kapıda nakit alınan da) platformun satışıdır. Platformun
+ * karşıladığı kampanya ciroyu düşürmez, bilgi olarak kabul edilen siparişten okunur. Kaçan sipariş (reddedilen,
+ * süresi dolan, iptal edilen) ciroya girmez: tutarı müşterinin ödeyeceğidir; kabul edilmemişse geldiği anın iş gününe
+ * (05:00 kuralı), kabul edilip iptal edildiyse adisyonun gününe yazılır. Platformun test siparişi sayılmaz.
+ * Tahmini komisyon bugünkü oranla (Yönetim › Paket platformları; sipariş anında dondurulmaz, oran değişirse geçmişin
+ * tahmini de değişir) ve yalnız maliyet yetkisine (`withCost`): komisyon bir maliyettir.
+ */
+export function platformReport(range: Range, withCost: boolean, nowMs = Date.now()) {
+  const ds = load(range, { items: false });
+  const netSales = ds.orders.filter(isSale).reduce((a, o) => a + totalsOf(o).total, 0);
+  const own = ds.orders.filter((o) => o.source === 'pos' && o.platform != null);
+  // Kabul edilen siparişlerin platform kaydı: platformun kampanyası ve iptalde müşterinin tutarı
+  const dayIds = ds.days.map((d) => d.id);
+  const ownIds = db.select({ id: schema.orders.id }).from(schema.orders).where(and(inArray(schema.orders.dayId, dayIds), isNotNull(schema.orders.platform)));
+  const acceptedRows = own.length
+    ? db.select({ orderId: schema.platformOrders.orderId, payload: schema.platformOrders.payload }).from(schema.platformOrders).where(inArray(schema.platformOrders.orderId, ownIds)).all()
+    : [];
+  const payloadOf = new Map(acceptedRows.map((r) => [r.orderId!, r.payload]));
+  // Kabul edilmeden kapanan kayıtlar: geldiği an dönemin iş günlerinde (05:00'ten 05:00'e)
+  const loose = db
+    .select()
+    .from(schema.platformOrders)
+    .where(and(isNull(schema.platformOrders.orderId), gte(schema.platformOrders.receivedAt, businessDayStartMs(range.from)), lt(schema.platformOrders.receivedAt, businessDayStartMs(addDays(range.to, 1)))))
+    .all()
+    .filter((r) => !r.payload.test);
+  const channelOf = new Map(db.select({ id: schema.paymentMethods.id, channel: schema.paymentMethods.channel }).from(schema.paymentMethods).all().map((m) => [m.id, m.channel]));
+  const settings = platformSettings();
+
+  const rows = new Map<PlatformId, ReturnType<typeof emptyPlatformRow>>();
+  const row = (p: PlatformId) => {
+    if (!rows.has(p)) rows.set(p, emptyPlatformRow(p));
+    return rows.get(p)!;
+  };
+  const miss = (p: PlatformId, kind: MissedKind, amount: number) => {
+    const r = row(p);
+    r.missed[kind] += 1;
+    r.missed.orders += 1;
+    r.missed.amount += amount;
+  };
+  const platformOf = new Map<string, PlatformId>();
+  for (const o of own) {
+    const p = o.platform!;
+    platformOf.set(o.id, p);
+    if (o.status === 'acik') {
+      row(p).open.orders += 1;
+      row(p).open.amount += totalsOf(o).total;
+    } else if (o.status === 'iptal') miss(p, 'cancelled', payloadOf.get(o.id)?.customerTotal ?? 0);
+    else if (isSale(o)) {
+      const r = row(p);
+      const t = totalsOf(o);
+      // Adisyon sayısı Ciro'nun ölçütüyle: tutarı olan adisyon
+      if (o.total > 0) r.orders += 1;
+      r.revenue += t.total;
+      r.discounts += t.lineDiscounts + t.orderDiscount;
+      r.platformDiscount += payloadOf.get(o.id)?.platformDiscount ?? 0;
+    }
+  }
+  // Tahsilat: platformun ödeme türü (kanal = platform) platformda, öteki türler (nakit, kart, yemek kartı) kasada
+  const saleIds = idsOf(own.filter(isSale));
+  for (const pay of ds.payments) {
+    if (!pay.orderId || pay.refundedAt || !saleIds.has(pay.orderId)) continue;
+    const p = platformOf.get(pay.orderId)!;
+    if (channelOf.get(pay.methodId) === p) row(p).collectedByPlatform += pay.amount;
+    else row(p).collectedAtCounter += pay.amount;
+  }
+  let pending = 0;
+  for (const r of loose) {
+    // Onay bekleyenin süresi geçtiyse platformda iptal olmuştur (zamanlayıcı henüz işaretlemediyse de; Yönetim'deki liste gibi)
+    const expired = r.status === 'bekliyor' && r.notifiedStatus !== 'picked' && r.expiresAt != null && r.expiresAt <= nowMs;
+    // Platformda kabul edilmiş (panelden ya da kasadan kabulü gidip adisyonu açılamamış) ama kasaya alınmamış kaydın
+    // süresi dolmaz: tabletteki gibi 3 saat sonra "kasaya alınmadı" sayılır, karar bekleyen değildir
+    const unrecorded = r.status === 'bekliyor' && r.notifiedStatus === 'picked' && (r.payload.scheduledFor ?? r.payload.placedAt) + PRE_ACCEPTED_TTL_MS <= nowMs;
+    if (r.status === 'ret') miss(r.platform, 'rejected', r.payload.customerTotal);
+    else if (r.status === 'suresi_doldu' || expired) miss(r.platform, r.payload.preAccepted ? 'unrecorded' : 'expired', r.payload.customerTotal);
+    else if (unrecorded) miss(r.platform, 'unrecorded', r.payload.customerTotal);
+    else if (r.status === 'iptal') miss(r.platform, 'cancelled', r.payload.customerTotal);
+    else if (r.status === 'bekliyor' && r.notifiedStatus !== 'picked') pending += 1;
+  }
+
+  const revenue = [...rows.values()].reduce((a, r) => a + r.revenue, 0);
+  const platforms = PLATFORMS.filter((p) => rows.has(p))
+    .map((p) => {
+      const r = rows.get(p)!;
+      const rate = settings[p].commissionPct;
+      return {
+        ...r,
+        avgBasket: r.orders ? Math.round(r.revenue / r.orders) : 0,
+        share: pct(r.revenue, netSales),
+        ...(withCost ? { commissionPct: rate, commission: percentOf(r.revenue, rate) } : {}),
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue || b.orders - a.orders);
+  const orders = platforms.reduce((a, r) => a + r.orders, 0);
+  return {
+    range,
+    /** Dönemin bütün cirosu (Raporlar › Ciro'nun `netSales`'i); platformların payı bunun içindedir */
+    netSales,
+    revenue,
+    orders,
+    avgBasket: orders ? Math.round(revenue / orders) : 0,
+    share: pct(revenue, netSales),
+    open: { orders: platforms.reduce((a, r) => a + r.open.orders, 0), amount: platforms.reduce((a, r) => a + r.open.amount, 0) },
+    missed: { orders: platforms.reduce((a, r) => a + r.missed.orders, 0), amount: platforms.reduce((a, r) => a + r.missed.amount, 0) },
+    /**
+     * Onay bekleyen (karar verilmemiş) siparişler: hiçbir rakama girmez. Platformda kabul edilip adisyonu henüz
+     * açılmamış kayıt karar beklemez, sayılmaz (3 saat sonra "kasaya alınmadı")
+     */
+    pending,
+    ...(withCost ? { commission: platforms.reduce((a, r) => a + (r.commission ?? 0), 0) } : {}),
+    platforms,
+  };
+}
+
+function emptyPlatformRow(platform: PlatformId) {
+  return {
+    platform,
+    label: PLATFORM_LABEL[platform],
+    /** Tutarı olan kapanmış adisyon */
+    orders: 0,
+    /** Ciro, KDV dahil */
+    revenue: 0,
+    /** Restoranın karşıladığı indirim (platformun kampanyasındaki restoran payı ve kasada yapılan indirim) */
+    discounts: 0,
+    /** Platformun karşıladığı kampanya: ciroyu düşürmez, bilgi */
+    platformDiscount: 0,
+    collectedByPlatform: 0,
+    collectedAtCounter: 0,
+    /** Henüz kapanmamış adisyonlar: ciroya girmedi */
+    open: { orders: 0, amount: 0 },
+    /** Reddedilen, süresi dolan, iptal edilen, platformda kabul edilip kasaya alınmayan; tutar müşterinin ödeyeceği */
+    missed: { orders: 0, amount: 0, rejected: 0, expired: 0, cancelled: 0, unrecorded: 0 },
+  };
+}
+
 // ─── Patron paneli: canlı ───────────────────────────────────────────────────
 
 /**
@@ -643,7 +804,8 @@ export function patronLive(withCost: boolean) {
     .orderBy(desc(schema.auditLog.at))
     .limit(40)
     .all()
-    .map((a) => ({ id: a.id, at: a.at, severity: a.severity, action: a.action, message: a.message, amount: a.amount, orderId: a.orderId }));
+    // Eski platform ayarı uyarısının iletisinde komisyon oranı yazıyordu: maliyeti görmeyene (ve bulut özetine) silinir
+    .map((a) => auditForViewer({ id: a.id, at: a.at, severity: a.severity, action: a.action, message: a.message, amount: a.amount, orderId: a.orderId }, withCost));
 
   return {
     now,

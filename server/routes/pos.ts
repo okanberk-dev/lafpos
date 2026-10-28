@@ -8,7 +8,7 @@ import { body, isoDateTime, kurus, query } from '../lib/http';
 import { afterDelivery } from '../delivery/service';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
-import { floorState, kitchenTickets } from '../services/floor';
+import { floorState, kitchenTickets, ordersAwaitingHand } from '../services/floor';
 import { setOptionSoldOut } from '../services/menu';
 import * as orders from '../services/orders';
 import { linkRoom, startRoom, stopRoom } from '../services/rooms';
@@ -47,10 +47,19 @@ posRoutes.get('/orders', (c) => {
       status: z.enum(['acik', 'kapali', 'iptal', 'tum']).default('acik'),
       dayId: z.string().optional(),
       type: z.string().optional(),
+      /** Teslim bekleyen hazır kalemi olanlar: bar ekranının Hazır sekmesiyle aynı koşul (`awaitingHandWhere`) */
+      ready: z.literal('1').optional(),
       limit: z.coerce.number().int().min(1).max(500).default(100),
     }),
   );
   const conds = [];
+  if (q.ready) {
+    // Siparişler › Açık'ın önce ödenmiş satışları: son 30 dakikada hazır olup teslim edilmemiş, açık günün; açık gün
+    // yoksa boş (eskiden gün boyu ve gün sonundan sonra önceki günlerin "Ödendi" kartları birikiyordu)
+    const ids = ordersAwaitingHand(db);
+    if (!ids.length) return c.json([]);
+    conds.push(inArray(schema.orders.id, ids));
+  }
   if (q.status !== 'tum') conds.push(eq(schema.orders.status, q.status));
   if (q.dayId) conds.push(eq(schema.orders.dayId, q.dayId));
   if (q.type) conds.push(inArray(schema.orders.type, q.type.split(',') as ('masa' | 'tezgah' | 'gelal' | 'paket' | 'online')[]));
@@ -319,17 +328,18 @@ posRoutes.post('/orders/:id/room/link', async (c) => {
 // ─── Bar / mutfak ekranı ─────────────────────────────────────────────────────
 
 posRoutes.get('/kitchen', (c) => {
-  const q = query(c, z.object({ station: z.string().optional(), history: z.enum(['0', '1']).optional() }));
+  const q = query(c, z.object({ station: z.string().optional(), history: z.enum(['0', '1']).optional(), ready: z.enum(['0', '1']).optional() }));
   const actor = actorFrom(c);
   if (!actor.user.permissions.has('mutfak.ekran') && !actor.user.permissions.has('siparis.al')) needDirect(actor, 'mutfak.ekran');
-  return c.json(kitchenTickets(db, { stationId: q.station || null, history: q.history === '1' }));
+  return c.json(kitchenTickets(db, { stationId: q.station || null, history: q.history === '1', ready: q.ready === '1' }));
 });
 
 
 posRoutes.post('/kitchen/status', async (c) => {
   const input = await body(
     c,
-    // "yeni"ye dönüş yok: başlamış kalemin başlama zamanı silinip onaysız iptal açılırdı (orders.setItemsStatus)
+    // "yeni"ye dönüş yok: başlamış kalemin başlama zamanı silinip onaysız iptal açılırdı (orders.setItemsStatus).
+    // "servis" Teslim edildi; teslimden "hazir"a dönüş onun Geri al'ı
     z.object({ itemIds: z.array(z.string()).min(1).max(100), status: z.enum(['hazirlaniyor', 'hazir', 'servis']).optional() }),
   );
   const actor = actorFrom(c);

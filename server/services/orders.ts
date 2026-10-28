@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
+import { PLATFORM_LABEL } from '@shared/platforms';
 import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
 import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
@@ -416,7 +417,8 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
       .run();
   }
 
-  const updated = recalc(t, orderId);
+  // Bara giden kalem kasanın gel-al siparişinin aşamasını geri alabilir (teslim edilmişe eklenen kalem "Hazırlanıyor")
+  const updated = stations.size ? syncPickupDelivery(t, actor, fx, recalc(t, orderId), 'bara yeni kalem gitti') : recalc(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.items_added');
   for (const s of stations) fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId, stationId: s, byUserId: actor.user.id });
   if (soldOut.length) {
@@ -491,7 +493,8 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     voidAfterSend: afterSend,
   });
   if (notStarted(it)) releasePortions(t, fx, actor.user.id, [{ productId: it.productId, qty }]);
-  const updated = recalc(t, orderId);
+  // Bekleyen son bar kalemi iptal edilince gel-al siparişi kalanların durumuna geçer (hepsi hazırsa "Hazır")
+  const updated = it.stationId ? syncPickupDelivery(t, actor, fx, recalc(t, orderId)) : recalc(t, orderId);
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
@@ -954,7 +957,8 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
     .where(eq(schema.orders.id, targetId))
     .run();
   recalc(t, sourceId);
-  const updated = recalc(t, targetId);
+  // Gelen kalemler kasanın gel-al siparişinin aşamasını değiştirir (teslim edilmişe bekleyen kalem: "Hazırlanıyor")
+  const updated = syncPickupDelivery(t, actor, fx, recalc(t, targetId), `#${source.no} adisyonun kalemi barda`);
   approveDiscountGrowth(t, actor, fx, updated, orderDiscountOf(t, targetId) - discountBefore, `#${source.no} adisyonu #${target.no} ile birleştirdi`);
   fx.audit(t, { userId: actor.user.id, approverId, action: 'order.merge', orderId: targetId, message: `#${source.no} adisyon #${target.no} ile birleştirildi` });
   orderEvents(fx, updated, actor.user.id, 'order.merged');
@@ -1030,8 +1034,10 @@ export function transferItems(
     else splitItem(t, it, qty, { orderId: target.id });
   }
 
-  const src = recalc(t, orderId);
-  const dst = recalc(t, target.id);
+  // Taşınan kalem iki gel-al siparişinin de aşamasını değiştirebilir: kalan hepsi hazırsa kaynak "Hazır", hedefe
+  // bekleyen kalem gelirse "Hazırlanıyor" (aşama kalemlerden türer)
+  const src = syncPickupDelivery(t, actor, fx, recalc(t, orderId));
+  const dst = syncPickupDelivery(t, actor, fx, recalc(t, target.id), `#${source.no} adisyondan taşınan kalem barda`);
   approveDiscountGrowth(t, actor, fx, dst, orderDiscountOf(t, orderId, target.id) - discountBefore, `#${source.no} adisyondan #${dst.no} adisyona kalem taşıdı`);
   // Kaynakta kalan kalemler: tutar indirimi kaynakta kalır, taşınan kalemlerin payı da kalanlara biner
   approveDiscountShrink(t, actor, fx, orderId, sourceBefore, `#${source.no} adisyondan #${dst.no} adisyona kalem taşıdı`);
@@ -1528,6 +1534,11 @@ const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazir
  * Bar ve mutfak durumları. Başlamış kalem bekleyene ("yeni") dönmez ve başlama zamanı silinmez: onaysız iptal
  * "hiç başlanmamış" kaleme (yanlış giriş penceresi) özgüdür. Garson kalemi "yeni"ye çekip bardan çıkmış içeceği
  * onaysız, zayi sayılmadan iptal ediyordu (denetim, 26 Eki 2026). Bardaki "Geri al" en çok "hazırlanıyor"a döner.
+ *
+ * "Teslim edildi" kalemi "servis"e taşır (teslim zamanı yazılır, çağrı ekranından ve bar ekranının Hazır sekmesinden
+ * düşer); onun "Geri al"ı "servis"ten "hazir"a döndürür: hazır olduğu an korunur, hazır uyarısı yinelenmez. Kasanın
+ * kendi gel-al siparişinin aşaması bardan izler (`syncPickupDelivery`; Siparişler'de aynı sipariş için ikinci bir
+ * düğme kalmasın; bar "Hazır"ı geri alınca aşama da "Hazırlanıyor"a döner).
  */
 export function setItemsStatus(
   t: Tx,
@@ -1543,31 +1554,105 @@ export function setItemsStatus(
   const stations = new Set<string>();
   /** Adisyon başına bu dokunuşta "Hazır" olan adet: siparişi alana uyarı */
   const readyCount = new Map<string, number>();
+  /** Teslimin geri alındığı adisyonlar ve öteki dokunuşlarda türetilen aşamanın teslimden dönüş nedeni (denetim) */
+  const undone = new Set<string>();
+  const cause = new Map<string, string>();
   for (const it of items) {
     if (it.voided) continue;
-    const status = input.status ?? NEXT[it.status];
+    let status = input.status ?? NEXT[it.status];
+    // Teslim edilmiş kalem bir adımda geri döner: "Hazır"a (teslimin geri alınışı). Eski ekranın Geri al'ı onu
+    // "Hazırlanıyor"a götürüyordu: sipariş kuyruğa döner, hazır anı silinir, hazır uyarısı yeniden giderdi
+    if (it.status === 'servis' && status === 'hazirlaniyor') status = 'hazir';
     if (!status || status === it.status) continue;
-    if (status === 'hazir') readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
+    // Teslimin geri alınışı: kalem yeniden hazırlanmadı, yalnız teslim zamanı silinir
+    const undo = it.status === 'servis' && status === 'hazir' && it.readyAt != null;
+    if (undo) undone.add(it.orderId);
+    else cause.set(it.orderId, status === 'hazirlaniyor' ? 'bar hazırı geri aldı' : 'aşama bardan izlenir');
+    if (status === 'hazir' && !undo) readyCount.set(it.orderId, (readyCount.get(it.orderId) ?? 0) + it.qty);
     const patch: Partial<ItemRow> = { status };
-    if (status === 'hazirlaniyor') patch.startedAt = it.startedAt ?? now;
-    if (status === 'hazir') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: now });
+    // Teslimden geri dönen kalemin teslim zamanı kalmaz (hazırdan teslime süresi yalnız gerçek teslimi sayar)
+    if (status === 'hazirlaniyor') Object.assign(patch, { startedAt: it.startedAt ?? now, servedAt: null });
+    if (status === 'hazir') Object.assign(patch, undo ? { servedAt: null } : { startedAt: it.startedAt ?? now, readyAt: now, servedAt: null });
     if (status === 'servis') Object.assign(patch, { startedAt: it.startedAt ?? now, readyAt: it.readyAt ?? now, servedAt: now });
     t.update(schema.orderItems).set(patch).where(eq(schema.orderItems.id, it.id)).run();
     orders.add(it.orderId);
     if (it.stationId) stations.add(it.stationId);
   }
   for (const id of orders) {
-    const o = loadOrder(t, id);
+    const o = syncPickupDelivery(t, actor, fx, loadOrder(t, id), undone.has(id) ? undefined : cause.get(id));
     orderEvents(fx, o, actor.user.id, 'item.status');
     const ready = readyCount.get(id);
-    if (ready && o.waiterId) {
+    // Platform siparişinin "siparişi alanı" kabul edendir (otomatik kabulde ayarda seçilen, kafede olmayabilir): uyarı
+    // paket siparişlerini yöneten bütün cihazlara gider (`platform`; istemci `readyAlertFor`)
+    if (ready && (o.waiterId || o.platform)) {
       const table = o.tableId ? t.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, o.tableId)).get() : null;
-      const place =
-        table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : o.numarator ? numaratorLabel(o.numarator) : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`);
-      fx.emit({ topic: 'orders', kind: 'items.ready', orderId: id, tableId: o.tableId ?? undefined, message: `${place} · ${ready} ürün hazır`, forUserId: o.waiterId, byUserId: actor.user.id });
+      const place = o.platform
+        ? `${PLATFORM_LABEL[o.platform]} ${o.platformCode ?? `#${o.no}`}`
+        : (table?.name ?? (o.source === 'laffogato' ? (o.extLabel ?? 'Online') : o.numarator ? numaratorLabel(o.numarator) : `${ORDER_TYPE_LABEL[o.type]} #${o.no}`));
+      fx.emit({
+        topic: 'orders',
+        kind: 'items.ready',
+        orderId: id,
+        tableId: o.tableId ?? undefined,
+        message: `${place} · ${ready} ürün hazır`,
+        forUserId: o.waiterId ?? undefined,
+        ...(o.platform ? { platform: o.platform } : {}),
+        byUserId: actor.user.id,
+      });
     }
   }
   for (const s of stations) fx.emit({ topic: 'kitchen', kind: 'ticket.status', stationId: s, byUserId: actor.user.id });
+}
+
+/**
+ * Kasanın gel-al siparişinin bara giden kalemlerinden aşaması: hepsi teslim edildiyse "Teslim edildi", hepsi hazırsa
+ * (ya da teslim edildiyse) "Hazır", değilse "Hazırlanıyor"
+ */
+function pickupStageOf(kitchen: Pick<ItemRow, 'status'>[]): 'hazirlaniyor' | 'hazir' | 'teslim' {
+  if (kitchen.every((i) => i.status === 'servis')) return 'teslim';
+  if (kitchen.every((i) => i.status === 'hazir' || i.status === 'servis')) return 'hazir';
+  return 'hazirlaniyor';
+}
+
+/**
+ * Kasanın gel-al siparişi (site ve paket platformu değil) bara giden (iptal edilmemiş) kalem taşıyorsa aşaması bardan
+ * izlenir: elle aşama (Siparişler'in Hazır / Yola çıktı / Teslim edildi düğmesi) verilmez, teslim kalemin "Teslim
+ * edildi"siyle. Bara kalem gitmeyen gel-al'da elle aşama sürer
+ */
+export function pickupFromBar(t: Tx | DB, o: Pick<OrderRow, 'id' | 'source' | 'platform' | 'type' | 'status'>): boolean {
+  return posPickup(o) && orderItems(t, o.id).some((i) => !i.voided && i.stationId);
+}
+
+const posPickup = (o: Pick<OrderRow, 'source' | 'platform' | 'type' | 'status'>) => o.source === 'pos' && !o.platform && o.type === 'gelal' && o.status !== 'iptal';
+
+/**
+ * Kasanın gel-al siparişi (site ve paket platformu değil): aşaması bardan izler (`pickupStageOf`). Kalemin durumu
+ * değişince, bara kalem gidince ve bar kalemi iptal edilince yeniden türetilir: teslim edilmiş siparişe eklenen kalem
+ * (kapanmış satış yeniden açılıp eklense de) aşamayı "Hazırlanıyor"a, barın "Geri al"ı "Hazır"ı "Hazırlanıyor"a,
+ * teslimin geri alınışı "Teslim edildi"yi "Hazır"a döndürür. Siparişler'den elle verilen "Yolda" yalnız teslimle
+ * ilerler. Teslim ve teslimden dönüş denetime yazılır (`delivery.done`, `delivery.undo`), "Hazır" yazılmaz
+ * (Siparişler'deki aşama düğmesi gibi). Platform siparişinin aşaması platforma ve ödemesine bağlı, burada değişmez.
+ */
+function syncPickupDelivery(t: Tx, actor: Actor, fx: Effects, o: OrderRow, cause?: string): OrderRow {
+  if (!posPickup(o)) return o;
+  const kitchen = orderItems(t, o.id).filter((i) => !i.voided && i.stationId);
+  if (!kitchen.length) return o;
+  const stage = pickupStageOf(kitchen);
+  const cur = o.deliveryStatus;
+  const next = stage === 'teslim' || cur === 'hazirlaniyor' || cur === 'hazir' || cur === 'teslim' ? stage : cur;
+  if (next === cur) return o;
+  t.update(schema.orders).set({ deliveryStatus: next, updatedAt: Date.now() }).where(eq(schema.orders.id, o.id)).run();
+  if (next === 'teslim' || cur === 'teslim') {
+    fx.audit(t, {
+      userId: actor.user.id,
+      action: next === 'teslim' ? 'delivery.done' : 'delivery.undo',
+      orderId: o.id,
+      // Teslimden dönüşün gerçek nedeni (bara yeni kalem gitti, bar hazırı geri aldı…); yoksa teslimin geri alınışı
+      message: next === 'teslim' ? `#${o.no} gel-al teslim edildi` : cause ? `#${o.no} gel-al teslimden döndü: ${cause}` : `#${o.no} gel-al teslimi geri alındı`,
+    });
+  }
+  fx.emit({ topic: 'delivery', kind: 'delivery.status', orderId: o.id, byUserId: actor.user.id });
+  return loadOrder(t, o.id);
 }
 
 export function getOrderDTO(t: Tx | DB, orderId: string): OrderDTO {
@@ -1752,6 +1837,11 @@ export function setDelivery(
   if (!can(actor.user, 'paket.yonet') && !can(actor.user, 'siparis.al')) needDirect(actor, 'paket.yonet');
   const o = loadOrder(t, orderId);
   if (o.type !== 'paket' && o.type !== 'gelal') throw bad('Yalnız paket ve gel-al siparişlerinde');
+  // Bara kalem giden kasa gel-al'ının aşaması bardan izlenir: elle "Teslim edildi" bar kalemi beklerken verilirdi, bar
+  // sonra "Hazır" deyince aşama geri döner ve teslimin geri alınışı barista adına denetime düşerdi
+  if (input.deliveryStatus && input.deliveryStatus !== o.deliveryStatus && pickupFromBar(t, o)) {
+    throw conflict('Bu gel-al siparişinin aşaması bar ekranından izlenir: hazır olunca Teslim edildi ile teslim edin', 'stage_from_bar');
+  }
   const patch: Partial<OrderRow> = { updatedAt: Date.now() };
   if (input.deliveryStatus) patch.deliveryStatus = input.deliveryStatus;
   if (input.courierId !== undefined) {

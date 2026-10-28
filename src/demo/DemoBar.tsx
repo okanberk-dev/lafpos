@@ -57,14 +57,15 @@ function DemoBar() {
       toast.err(errorMessage(e));
     }
   };
-  // Platformdan gelmiş gibi sipariş: üstteki şeritten kabul edilir (Yemeksepeti, Getir, Trendyol Go sırayla)
+  // Platformdan gelmiş gibi sipariş: üstteki şeritten kabul edilir (Yemeksepeti, Getir, Trendyol Go sırayla); platformun
+  // otomatik kabulü açıksa (Yönetim › Paket platformları) koşulları tutan sipariş kendiliğinden kabul edilir
   const sendOrder = async () => {
     setSending(true);
     const platform = DEMO_PLATFORMS[Math.floor(Date.now() / 1000) % DEMO_PLATFORMS.length];
     try {
-      await asDemoPatron('POST', `/platforms/${platform}/test-order`, {});
+      const res = await asDemoPatron<{ autoAccepted?: boolean }>('POST', `/platforms/${platform}/test-order`, {});
       await qc.invalidateQueries({ queryKey: ['platforms'] });
-      toast.ok(`${PLATFORM_LABEL[platform]} siparişi geldi`);
+      toast.ok(res.autoAccepted ? `${PLATFORM_LABEL[platform]} siparişi geldi ve otomatik kabul edildi` : `${PLATFORM_LABEL[platform]} siparişi geldi`);
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {

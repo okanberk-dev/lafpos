@@ -1,6 +1,6 @@
 import type { OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
-import type { PlatformId, PlatformSettings } from './platforms';
+import type { PlatformId } from './platforms';
 import type { ServiceMode } from './service-mode';
 import type { RoomBookingSnapshot, SiteKaraokeBooking } from './karaoke';
 
@@ -213,8 +213,6 @@ export interface PublicSettings {
   serviceMode: ServiceMode;
   /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
   tipsEnabled: boolean;
-  /** Paket platformları: mod, hazırlık süresi, tahmini komisyon (shared/platforms.ts) */
-  platforms: Record<PlatformId, PlatformSettings>;
 }
 
 export interface BootstrapDTO {
@@ -457,6 +455,8 @@ export interface KitchenTicket {
   scheduledFor: string | null;
   /** Masa no / numaratör: fişte numara yerine "Masa 12" */
   numarator: string | null;
+  /** Paket platformunun siparişi: teslimi platformun akışında, bar ekranında Teslim edildi düğmesi yok (eski sunucu göndermez) */
+  platform?: PlatformId | null;
   items: KitchenTicketItem[];
 }
 
@@ -536,6 +536,9 @@ export interface PickupEntryDTO {
   online: boolean;
   /** Masa no / numaratör girildiyse: ekranda numara yerine masa, sipariş masaya getirilir */
   table: string | null;
+  /** Paket platformunun gel-al siparişi: müşteri uygulamada platformun kısa kodunu görür, ekranda numara yerine o */
+  platform?: PlatformId | null;
+  code?: string | null;
 }
 
 export interface PickupBoardDTO {
@@ -569,4 +572,10 @@ export type DisplayStateDTO =
       paid: number;
       due: number;
     }
-  | { kind: 'thanks'; at: number; total: number };
+  | {
+      kind: 'thanks';
+      at: number;
+      total: number;
+      /** Self servisin çağrı kimliği ("No 34" ya da "Masa 12"); bara giden kalemi olmayan satışta ve eski kasada yok */
+      call?: string;
+    };

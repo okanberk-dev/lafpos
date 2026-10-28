@@ -92,6 +92,7 @@ describe('rapor mutabakatı', () => {
     const voids = await h.ok<{ total: number; rows: { qty: number }[] }>('mudur', 'GET', '/reports/items?kind=iptal');
     const staff = await h.ok<{ staff: { orders: number; revenue: number; voids: number; voidValue: number }[] }>('patron', 'GET', '/reports/staff');
     const checks = await h.ok<{ count: number; rows: { status: string; total: number }[] }>('mudur', 'GET', '/reports/checks');
+    const platforms = await h.ok<{ netSales: number; revenue: number; platforms: unknown[] }>('mudur', 'GET', '/reports/platforms');
 
     const N = summary.netSales;
     expect(N).toBeGreaterThan(0);
@@ -106,6 +107,8 @@ describe('rapor mutabakatı', () => {
     expect(hourly.week.flatMap((w) => w.hours).reduce((x, v) => x + v, 0)).toBe(N);
     expect(summary.byDay.reduce((x, r) => x + r.netSales, 0)).toBe(N);
     expect(patron.netSales).toBe(N);
+    // Paket platformları raporu aynı ciroya göre pay verir; bu günde platform siparişi yok (tests/platform-report.test.ts)
+    expect(platforms).toMatchObject({ netSales: N, revenue: 0, platforms: [] });
     expect(patron.orders).toBe(summary.receipts);
     expect(summary.receipts).toBe(3);
     // Adisyon sayısı her yerde aynı ölçütle (₺0 adisyon sayılmaz): ortalama, türe göre kırılım
