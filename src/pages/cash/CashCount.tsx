@@ -4,6 +4,7 @@ import { parseTL, tl } from '@shared/money';
 import type { ZSummary } from '@shared/types';
 import { useBoot } from '@/lib/boot';
 import { slipDiff, slipRows } from '@/lib/cashCount';
+import { Segmented } from '@/components/ui/Field';
 import { cn } from '@/lib/cn';
 
 /** Türk lirası banknot ve madeni paralar (kuruş) */
@@ -40,13 +41,15 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
       <section>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="font-semibold">Nakit sayımı</h3>
-          <div className="flex rounded-lg bg-surface-2 p-0.5 text-xs">
-            {(['banknot', 'toplam'] as const).map((m) => (
-              <button key={m} onClick={() => setMode(m)} className={cn('rounded-md px-2.5 py-1 pointer-coarse:min-h-11', mode === m && 'bg-surface shadow-sm')}>
-                {m === 'banknot' ? 'Banknot banknot' : 'Toplam tutar'}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            size="sm"
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'banknot', label: 'Banknot banknot' },
+              { value: 'toplam', label: 'Toplam tutar' },
+            ]}
+          />
         </div>
         {mode === 'banknot' ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

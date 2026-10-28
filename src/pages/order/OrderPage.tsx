@@ -117,15 +117,20 @@ export default function OrderPage() {
   const editable = !REMOTE && isOpen && !isOnline && can('siparis.al');
   const due = order.total - order.paid;
   const backPath = order.tableId ? '/masalar' : '/siparisler';
+  // Başlıkta en önemli bilgi: masa, yoksa numaratör (siparişin gideceği masa), yoksa tip ve ad; tip künye satırına iner
   const title =
     order.tableName ??
     (isOnline
       ? (order.extLabel ?? 'Online')
-      : order.type === 'tezgah'
-        ? `Tezgâh${order.numarator ? ` · ${numaratorLabel(order.numarator)}` : ''}`
-        : order.type === 'gelal'
-          ? `Gel-al${order.deliveryName ? ` · ${order.deliveryName}` : ''}${order.numarator ? ` · ${numaratorLabel(order.numarator)}` : ''}`
-          : `Paket${order.deliveryName ? ` · ${order.deliveryName}` : ''}`);
+      : order.numarator
+        ? numaratorLabel(order.numarator)
+        : order.type === 'tezgah'
+          ? 'Tezgâh'
+          : order.type === 'gelal'
+            ? `Gel-al${order.deliveryName ? ` · ${order.deliveryName}` : ''}`
+            : `Paket${order.deliveryName ? ` · ${order.deliveryName}` : ''}`);
+  const titleType = !order.tableName && !isOnline && order.numarator ? `${ORDER_TYPE_LABEL[order.type]}${order.deliveryName ? ` · ${order.deliveryName}` : ''}` : null;
+  const orderNo = isOnline ? (order.extNo ?? order.no) : order.no;
   const titleBadge = order.platform ? <PlatformBadge platform={order.platform} code={order.platformCode} className="shrink-0" /> : null;
 
   const quickAdd = (p: ProductDTO, size: Size) => {
@@ -247,7 +252,7 @@ export default function OrderPage() {
   // Innex başlık şeridi: geri, başlık ve künye, sağda işlemler
   const header = (
     <div className="flex items-center gap-1.5 border-b border-[var(--admin-divider)] bg-surface px-2 py-2">
-      <button onClick={goBack} aria-label="Geri" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
+      <button onClick={goBack} aria-label="Geri" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-100 hover:bg-surface-3 hover:text-ink active:bg-[var(--admin-border)]">
         <ArrowLeft className="size-5" strokeWidth={1.75} />
       </button>
       <div className="min-w-0 flex-1">
@@ -256,7 +261,7 @@ export default function OrderPage() {
             {titleBadge}
             <span className="truncate">{title}</span>
           </h1>
-          <span className="tabular text-[13px] text-muted">#{isOnline ? (order.extNo ?? order.no) : order.no}</span>
+          <span className="tabular text-[13px] text-muted max-lg:hidden">#{orderNo}</span>
           {order.status !== 'acik' && <Badge tone={order.status === 'kapali' ? 'green' : 'red'}>{order.status === 'kapali' ? 'Kapandı' : order.status === 'iptal' ? 'İptal' : 'Birleşti'}</Badge>}
           {isOnline && (
             <Badge tone="pink">
@@ -265,29 +270,33 @@ export default function OrderPage() {
           )}
         </div>
         <div className="truncate text-xs text-muted">
+          <span className="tabular lg:hidden">#{orderNo} · </span>
+          {titleType && `${titleType} · `}
           {order.guests} kişi · {order.waiterName ?? '—'} · {fmtTime(order.openedAt)} ({fmtElapsed(order.openedAt, now)})
           {order.customer && ` · ${order.customer.name}`}
           {order.note && ` · Not: ${order.note}`}
         </div>
       </div>
       {!REMOTE && (
-        <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-surface-3 hover:text-ink">
+        <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-100 hover:bg-surface-3 hover:text-ink active:bg-[var(--admin-border)]">
           <MoreVertical className="size-5" strokeWidth={1.75} />
         </button>
       )}
     </div>
   );
 
+  // Tablette (768-1023 px) hesap kartı ~300 px: ikincil düğme ikona iner, birincil düğmenin etiketi tek satırda kalır
+  const hasItems = order.items.some((i) => !i.voided);
   const actionBar = (
     <div className="safe-bottom grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface p-3">
       {pending.length > 0 && counter && can('odeme.al') ? (
-        <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2">
+        <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2 md:max-lg:grid-cols-[auto_auto_1fr]">
           <Button size="lg" aria-label="Gönderilmemişleri sil" title="Vazgeç" icon={<Trash2 className="size-4" />} onClick={() => cart.clear(order.id)} />
-          <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly}>
-            Gönder
+          <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label="Gönder" title="Gönder" className="md:max-lg:w-14 md:max-lg:px-0">
+            <span className="md:max-lg:sr-only">Gönder</span>
           </Button>
           <Button size="lg" variant="primary" loading={sending} onClick={() => void sendAndPay()}>
-            Öde · {tl((previewTotals(boot, order, pending)?.total ?? order.total) - order.paid)}
+            Öde · <span className="tabular">{tl((previewTotals(boot, order, pending)?.total ?? order.total) - order.paid)}</span>
           </Button>
         </div>
       ) : pending.length > 0 ? (
@@ -299,15 +308,23 @@ export default function OrderPage() {
             Gönder ({pendingCount})
           </Button>
         </>
-      ) : isOpen && !isOnline && !REMOTE ? (
+      ) : isOpen && !isOnline && !REMOTE && !can('odeme.al') ? (
+        // Garson ödeme alamaz: birincil eylemi hesabı yazdırmak; devre dışı bir "Ödeme" düğmesi yerine kısa açıklama
         <>
-          <Button size="lg" icon={<Printer className="size-4" />} onClick={printBill} disabled={!order.items.some((i) => !i.voided)}>
-            Hesap
+          <Button size="lg" variant="primary" className="col-span-2" icon={<Printer className="size-4" />} onClick={printBill} disabled={!hasItems}>
+            Hesap yazdır
           </Button>
-          <Button size="lg" variant="primary" disabled={due <= 0 || !can('odeme.al')} onClick={() => setDialog('odeme')}>
-            {can('odeme.al') ? `Ödeme · ${tl(due)}` : 'Ödemeyi kasa alır'}
-          </Button>
+          <p className="col-span-2 -mt-0.5 text-center text-xs text-muted">Ödemeyi kasa alır</p>
         </>
+      ) : isOpen && !isOnline && !REMOTE ? (
+        <div className="col-span-2 grid grid-cols-2 gap-2 md:max-lg:grid-cols-[auto_1fr]">
+          <Button size="lg" icon={<Printer className="size-4" />} onClick={printBill} disabled={!hasItems} aria-label="Hesap yazdır" title="Hesap yazdır" className="md:max-lg:w-14 md:max-lg:px-0">
+            <span className="md:max-lg:sr-only">Hesap</span>
+          </Button>
+          <Button size="lg" variant="primary" disabled={due <= 0} onClick={() => setDialog('odeme')}>
+            Ödeme · <span className="tabular">{tl(due)}</span>
+          </Button>
+        </div>
       ) : (
         <Button size="lg" className="col-span-2" onClick={() => navigate(backPath)}>
           Kapat
@@ -336,7 +353,7 @@ export default function OrderPage() {
               <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
             </section>
           )}
-          <section className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface', REMOTE ? 'mx-auto w-full max-w-2xl' : 'w-[clamp(320px,42vw,440px)]')}>
+          <section className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface', REMOTE ? 'mx-auto w-full max-w-2xl' : 'w-[clamp(300px,40vw,440px)]')}>
             {header}
             {right}
           </section>
@@ -351,7 +368,7 @@ export default function OrderPage() {
                 role="tab"
                 aria-selected={tab === k}
                 onClick={() => setTab(k)}
-                className={cn('relative min-h-12 py-2.5 text-sm font-medium', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'text-muted')}
+                className={cn('relative min-h-12 py-2.5 text-sm font-medium transition-colors duration-100 active:bg-surface-2', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'text-muted')}
               >
                 {k === 'menu' ? 'Menü' : `Adisyon${pendingCount ? ` (+${pendingCount})` : ''} · ${tl(previewTotals(boot, order, pending)?.total ?? order.total)}`}
               </button>
@@ -397,7 +414,7 @@ export default function OrderPage() {
                   setDialog(null);
                   m.onClick();
                 }}
-                className={cn('flex min-h-12 items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors hover:bg-surface-2', m.danger && 'text-[var(--admin-danger-ink)]')}
+                className={cn('flex min-h-12 items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3', m.danger && 'text-[var(--admin-danger-ink)]')}
               >
                 <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', m.danger ? 'bg-[var(--admin-danger-soft)]' : 'bg-surface-3 text-ink-2')}>{m.icon}</span>
                 <span>

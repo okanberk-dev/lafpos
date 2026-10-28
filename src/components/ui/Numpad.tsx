@@ -14,19 +14,21 @@ interface NumpadProps {
 export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg' }: NumpadProps) {
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', decimal ? ',' : doubleZero ? '00' : 'clear', '0', 'back'];
   return (
-    <div className={cn('grid grid-cols-3 gap-2', className)}>
+    // Innex segment dili: gri tepsi üstünde beyaz tuşlar; sınırı kenarlık değil zemin farkı çizer, kol mesafesinden seçilir
+    <div className={cn('grid grid-cols-3 gap-1.5 rounded-xl bg-surface-3 p-1.5', className)}>
       {keys.map((k) => (
         <button
           key={k}
           type="button"
           onClick={() => onKey(k)}
+          aria-label={k === 'back' ? 'Geri sil' : undefined}
           className={cn(
-            'tabular rounded-xl border border-[var(--admin-border-strong)] bg-surface font-semibold text-ink transition-[background-color,transform] duration-100 hover:bg-surface-2 active:scale-[0.97] active:bg-surface-3 motion-reduce:active:scale-100',
+            'tabular rounded-lg bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08)] transition-[background-color,transform,box-shadow] duration-100 hover:bg-surface-2 active:scale-[0.97] active:bg-surface-2 active:shadow-none motion-reduce:active:scale-100',
             size === 'lg' ? 'h-16 text-2xl' : 'h-12 text-xl',
-            k === 'clear' && 'text-base text-muted',
+            k === 'clear' && 'text-[15px] text-ink-2',
           )}
         >
-          {k === 'back' ? <Delete className="mx-auto size-6" /> : k === 'clear' ? 'Sil' : k}
+          {k === 'back' ? <Delete className="mx-auto size-5" /> : k === 'clear' ? 'Sil' : k}
         </button>
       ))}
     </div>

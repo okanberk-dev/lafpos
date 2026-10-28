@@ -143,7 +143,12 @@ export function ProductPanel({
             )}
           </div>
         </div>
-        <div role="tablist" aria-label="Kategoriler" className="no-scrollbar flex gap-1.5 overflow-x-auto px-3 py-3 xl:hidden">
+        {/* Rayın sağı solarak biter: devamı olduğu belli olur; seçili çip görünür alana kaydırılır */}
+        <div
+          role="tablist"
+          aria-label="Kategoriler"
+          className="no-scrollbar flex snap-x snap-proximity gap-2 overflow-x-auto px-3 py-3 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] xl:hidden"
+        >
           {categoryItems.map((c) => (
             <CategoryChip key={c.id} active={!q && current === c.id} color={c.color} onClick={() => setCategoryId(c.id)}>
               {c.id === FAVORITES && <Star className="size-3.5" strokeWidth={1.75} />}
@@ -153,8 +158,8 @@ export function ProductPanel({
         </div>
         <div
           className={cn(
-            'scroll-thin grid min-h-0 flex-1 auto-rows-min gap-2 overflow-y-auto border-t border-[var(--admin-divider)] bg-surface-2 p-3 xl:mt-3',
-            withImages ? 'grid-cols-[repeat(auto-fill,minmax(150px,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(148px,1fr))]',
+            // 140 px: 768 px tablette hesap kartının yanında iki sütun, bilgisayarda üç
+            'scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 overflow-y-auto border-t border-[var(--admin-divider)] bg-surface-2 p-3 xl:mt-3',
           )}
         >
           {list.map((p) => (
@@ -176,7 +181,7 @@ function CategoryRow({ active, color, count, favorite, onClick, children }: { ac
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        'flex min-h-11 w-full shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors pointer-fine:min-h-10',
+        'flex min-h-11 w-full shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors active:bg-surface-3 pointer-fine:min-h-10',
         active ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-surface-2 hover:text-ink',
       )}
     >
@@ -193,14 +198,20 @@ function CategoryRow({ active, color, count, favorite, onClick, children }: { ac
 
 /** Kategori çipi (telefon, tablet): Innex durum sekmesi gibi; seçili koyu kenar. Kategori rengi yalnız küçük nokta */
 function CategoryChip({ active, color, onClick, children }: { active: boolean; color?: string | null; onClick: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  // Seçili kategori (sayfa yenilenince de) rayda görünür kalsın
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [active]);
   return (
     <button
+      ref={ref}
       type="button"
       role="tab"
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border bg-surface px-3 text-sm whitespace-nowrap transition-[color,border-color] pointer-fine:min-h-9',
+        'inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-lg border bg-surface px-3.5 text-sm whitespace-nowrap transition-[color,border-color,background-color] active:bg-surface-3 pointer-fine:min-h-9',
         active ? 'border-ink font-semibold text-ink' : 'border-line font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
       )}
     >
@@ -242,8 +253,8 @@ function ProductTile({
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-xl border border-line bg-surface transition-[border-color,box-shadow] hover:border-[var(--admin-border-field)] hover:shadow-[0_1px_2px_rgb(12_14_27/0.06)]',
-        withImage ? 'min-h-[176px]' : 'min-h-[104px]',
+        'group relative flex flex-col rounded-xl border border-line bg-surface transition-[border-color,transform] duration-100 hover:border-[var(--admin-border-field)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-border-field)] motion-reduce:has-[button:active]:scale-100',
+        withImage ? 'min-h-[176px]' : 'min-h-[88px]',
         off && 'opacity-50',
       )}
     >
@@ -251,7 +262,7 @@ function ProductTile({
         disabled={off}
         // Fiyatı 0 olan açık ürün (etkinlik ücreti, özel pasta) fiyat girilsin diye pencereyle açılır
         onClick={() => ((twoSizes || !hasOptions) && (twoSizes || p.price > 0) ? onQuickAdd(p, twoSizes ? 'M' : 'TEK') : onCustomize(p, 'TEK'))}
-        className={cn('flex flex-1 flex-col items-stretch rounded-xl text-left active:bg-surface-2', !withImage && hasOptions && 'pr-11')}
+        className={cn('flex flex-1 flex-col items-stretch rounded-xl text-left transition-colors duration-100 active:bg-surface-3', !withImage && hasOptions && 'pr-12')}
       >
         {withImage && (
           <span aria-hidden="true" className="relative mx-1.5 mt-1.5 grid h-[88px] place-items-center overflow-hidden rounded-lg bg-surface-2">
@@ -274,14 +285,14 @@ function ProductTile({
             )}
           </span>
         )}
-        <span className={cn('flex flex-1 flex-col items-start gap-1 px-3 pb-2.5', withImage ? 'pt-2' : 'pt-2.5')}>
-          <span className="line-clamp-2 text-sm font-semibold leading-snug">{label}</span>
+        <span className={cn('flex flex-1 flex-col items-start gap-1.5 px-3 pb-2.5', withImage ? 'pt-2' : 'justify-between pt-2.5')}>
+          <span className="line-clamp-2 text-[15px] font-semibold leading-snug">{label}</span>
           {soldOut ? (
             <span className="rounded-md bg-[var(--admin-danger-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]">Tükendi</span>
           ) : p.portionsLeft != null ? (
             <span className="tabular rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-warning)]">Son {p.portionsLeft}</span>
           ) : null}
-          {!twoSizes && <span className="tabular mt-auto text-sm font-semibold text-ink-2">{tlShort(p.price)}</span>}
+          {!twoSizes && <span className="tabular mt-auto text-[13px] font-medium text-ink-2">{tlShort(p.price)}</span>}
         </span>
       </button>
       {hasOptions && (
@@ -291,22 +302,22 @@ function ProductTile({
           aria-label={`${label} seçenekleri`}
           title="Seçenekler"
           className={cn(
-            'absolute right-0 top-0 grid size-11 place-items-center text-muted transition-colors hover:text-primary',
+            'absolute right-0 top-0 grid size-11 place-items-center text-ink-2 transition-colors hover:text-primary active:text-primary',
             withImage ? 'rounded-lg' : 'rounded-xl',
           )}
         >
           {withImage ? (
             // Fotoğrafın üstünde okunur kalsın: beyaz hap; dokunma alanı yine 44 px
-            <span className="grid size-8 place-items-center rounded-lg bg-surface/90 text-ink-2 shadow-[0_1px_3px_rgb(12_14_27/0.18)] backdrop-blur-sm">
-              <SlidersHorizontal className="size-4" strokeWidth={1.75} />
+            <span className="grid size-9 place-items-center rounded-lg bg-surface/90 text-ink-2 shadow-[0_1px_3px_rgb(12_14_27/0.18)] backdrop-blur-sm">
+              <SlidersHorizontal className="size-[18px]" strokeWidth={1.75} />
             </span>
           ) : (
-            <SlidersHorizontal className="size-4" strokeWidth={1.75} />
+            <SlidersHorizontal className="size-[18px]" strokeWidth={1.75} />
           )}
         </button>
       )}
       {twoSizes && (
-        <div className="grid grid-cols-2 gap-1 px-1.5 pb-1.5">
+        <div className="grid grid-cols-2 gap-2 px-2 pb-2">
           <SizeButton disabled={off} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => onQuickAdd(p, 'M')} />
           <SizeButton disabled={off} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => onQuickAdd(p, 'L')} />
         </div>
@@ -321,9 +332,9 @@ function SizeButton({ label, price, onClick, disabled }: { label: string; price:
       disabled={disabled}
       onClick={onClick}
       aria-label={`${label} ${tlShort(price)}`}
-      className="flex min-h-11 flex-col items-center justify-center rounded-lg bg-surface-3 leading-tight transition-colors hover:bg-[var(--admin-primary-soft)] hover:text-primary active:bg-[var(--admin-primary-soft)] pointer-fine:min-h-10"
+      className="flex min-h-11 flex-col items-center justify-center rounded-lg bg-surface-3 leading-tight transition-[background-color,color,box-shadow] duration-100 hover:bg-[var(--admin-primary-soft)] hover:text-primary active:bg-[var(--admin-primary-soft)] active:text-primary active:ring-1 active:ring-inset active:ring-primary pointer-fine:min-h-10"
     >
-      <span className="text-[11px] text-muted">{label}</span>
+      <span className="text-xs font-medium text-muted">{label}</span>
       <span className="tabular text-[13px] font-semibold">{tlShort(price)}</span>
     </button>
   );

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { fmtTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
-import { EmptyState, PageHeader } from '@/components/ui/misc';
+import { Card, EmptyState, PageHeader } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useBoot } from '@/lib/boot';
@@ -33,10 +33,11 @@ interface SimReceipt {
   basket: { title?: string; filter?: string; checkNumber?: number; items: BasketItem[] };
 }
 
+// Cihaz ekranı LafPOS'un koyu temasıyla çizilir (sarmalayıcı `dark`); renkler belirteçlerden
 const TYPES = [
-  { type: 1, label: 'Nakit', icon: Banknote, color: 'bg-brand-600' },
-  { type: 3, label: 'Kredi kartı', icon: CreditCard, color: 'bg-sky-700' },
-  { type: 7, label: 'Yemek kartı', icon: Utensils, color: 'bg-warn-600' },
+  { type: 1, label: 'Nakit', icon: Banknote, color: 'bg-primary text-primary-ink' },
+  { type: 3, label: 'Kredi kartı', icon: CreditCard, color: 'bg-[var(--admin-info)] text-white' },
+  { type: 7, label: 'Yemek kartı', icon: Utensils, color: 'bg-warn-600 text-white' },
 ];
 
 /**
@@ -122,28 +123,28 @@ export default function DevicePage() {
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <PageHeader title="Eğitim cihazı" subtitle="Token ÖKC benzeri: kasadan gönderilen sepetler burada ödenir. Gerçek cihaz bağlanınca bu ekran kullanılmaz" />
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
-        <div className="mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[10px] border-night bg-night p-1 shadow-[var(--shadow-pop)]">
-          <div className="min-h-[560px] overflow-hidden rounded-[1.6rem] bg-[#0f1512] text-[#e8f0eb]">
-            <div className="flex items-center justify-between bg-brand-700 px-4 py-2 text-xs">
-              <span className="font-semibold tracking-wide">TOKEN ÖKC · EĞİTİM</span>
-              <span>{fmtTime(Date.now())}</span>
+        <div className="dark mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[10px] border-night bg-night p-1 shadow-[var(--shadow-pop)]">
+          <div className="min-h-[560px] overflow-hidden rounded-[1.6rem] bg-surface text-ink">
+            <div className="flex items-center justify-between bg-surface-3 px-4 py-2 text-xs text-ink-2">
+              <span className="font-semibold">Token ÖKC · eğitim</span>
+              <span className="tabular">{fmtTime(Date.now())}</span>
             </div>
             {!current ? (
               <div className="p-3">
-                <div className="mb-2 px-1 text-xs uppercase tracking-wider text-[#8fa89a]">Açık sepetler</div>
-                {(baskets.data ?? []).length === 0 && <div className="px-2 py-16 text-center text-sm text-[#8fa89a]">Kasadan sepet bekleniyor</div>}
+                <div className="mb-2 px-1 text-xs font-medium text-muted">Açık sepetler</div>
+                {(baskets.data ?? []).length === 0 && <EmptyState compact icon={<Receipt />} title="Kasadan sepet bekleniyor">Kasada "Hesabı yazarkasaya gönder" deyince burada belirir</EmptyState>}
                 <div className="space-y-2">
                   {baskets.data?.map((b) => (
-                    <button key={b.id} onClick={() => open(b)} className="flex w-full items-center gap-3 rounded-xl bg-[#1a2420] p-3 text-left active:bg-[#22302a]">
-                      <Receipt className="size-5 text-brand-300" />
+                    <button key={b.id} onClick={() => open(b)} className="flex w-full items-center gap-3 rounded-xl bg-surface-3 p-3 text-left transition-colors duration-100 active:bg-[var(--admin-border)]">
+                      <Receipt className="size-5 text-primary" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold">{b.basket.title ?? 'Sepet'}</div>
-                        <div className="text-xs text-[#8fa89a]">
+                        <div className="text-xs text-muted">
                           #{b.basket.checkNumber} · {b.basket.filter} · {fmtTime(b.createdAt)}
                         </div>
                       </div>
                       <div className="tabular font-semibold">{tl(b.amount)}</div>
-                      {b.status === 'kilitli' && <Lock className="size-4 text-warn-300" />}
+                      {b.status === 'kilitli' && <Lock className="size-4 text-[var(--admin-warning)]" aria-label="Kilitli" />}
                     </button>
                   ))}
                 </div>
@@ -174,21 +175,21 @@ export default function DevicePage() {
                     </div>
                   ))}
                 </div>
-                <div className="my-3 flex justify-between border-t border-dashed border-[#3a4a42] pt-2 text-lg font-bold">
+                <div className="my-3 flex justify-between border-t border-dashed border-line pt-2 text-lg font-bold">
                   <span>TOPLAM</span>
                   <span className="tabular">{tl(current.amount)}</span>
                 </div>
                 {!split ? (
                   <div className="grid grid-cols-2 gap-2">
                     {TYPES.map((t) => (
-                      <button key={t.type} onClick={() => pay([{ type: t.type, amount: current.amount }])} className={cn('flex h-14 items-center justify-center gap-2 rounded-xl font-semibold text-white', t.color)}>
+                      <button key={t.type} onClick={() => pay([{ type: t.type, amount: current.amount }])} className={cn('flex h-14 items-center justify-center gap-2 rounded-xl font-semibold transition-[filter] duration-100 active:brightness-90', t.color)}>
                         <t.icon className="size-5" /> {t.label}
                       </button>
                     ))}
-                    <button onClick={() => setSplit([{ type: 3, amount: '' }, { type: 1, amount: '' }])} className="flex h-14 items-center justify-center gap-2 rounded-xl bg-[#26332d] font-semibold">
+                    <button onClick={() => setSplit([{ type: 3, amount: '' }, { type: 1, amount: '' }])} className="flex h-14 items-center justify-center gap-2 rounded-xl bg-surface-3 font-semibold transition-colors duration-100 active:bg-[var(--admin-border)]">
                       <Split className="size-5" /> Böl
                     </button>
-                    <button onClick={() => cancel(current.id)} className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-xl text-sm text-danger-300">
+                    <button onClick={() => cancel(current.id)} className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-xl text-sm text-[var(--admin-danger-ink)] transition-colors duration-100 active:bg-surface-3">
                       <XCircle className="size-4" /> Ödemeden vazgeç
                     </button>
                   </div>
@@ -196,31 +197,31 @@ export default function DevicePage() {
                   <div className="space-y-2">
                     {split.map((s, i) => (
                       <div key={i} className="flex gap-2">
-                        <select value={s.type} onChange={(e) => setSplit(split.map((x, j) => (j === i ? { ...x, type: Number(e.target.value) } : x)))} className="h-11 rounded-lg bg-[#1a2420] px-2">
+                        <select value={s.type} onChange={(e) => setSplit(split.map((x, j) => (j === i ? { ...x, type: Number(e.target.value) } : x)))} aria-label="Ödeme türü" className="select-arrow h-11 appearance-none rounded-lg bg-surface-3 bg-[length:16px] bg-[right_8px_center] bg-no-repeat pl-2 pr-8">
                           {TYPES.map((t) => (
                             <option key={t.type} value={t.type}>
                               {t.label}
                             </option>
                           ))}
                         </select>
-                        <input value={s.amount} onChange={(e) => setSplit(split.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} placeholder="Tutar" inputMode="decimal" className="h-11 flex-1 rounded-lg bg-[#1a2420] px-3 text-right" />
+                        <input value={s.amount} onChange={(e) => setSplit(split.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} placeholder="Tutar" inputMode="decimal" aria-label="Tutar" className="tabular h-11 min-w-0 flex-1 rounded-lg bg-surface-3 px-3 text-right" />
                       </div>
                     ))}
                     <div className="flex justify-between text-sm">
-                      <button className="text-brand-300" onClick={() => setSplit([...split, { type: 3, amount: '' }])}>
+                      <button className="min-h-11 text-primary" onClick={() => setSplit([...split, { type: 3, amount: '' }])}>
                         + Ödeme ekle
                       </button>
-                      <span className={splitTotal === current.amount ? 'text-brand-300' : 'text-warn-300'}>
+                      <span className={cn('tabular self-center', splitTotal === current.amount ? 'text-[var(--admin-success)]' : 'text-[var(--admin-warning)]')}>
                         {tl(splitTotal)} / {tl(current.amount)}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <button className="h-12 rounded-xl bg-[#26332d]" onClick={() => setSplit(null)}>
+                      <button className="h-12 rounded-xl bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)]" onClick={() => setSplit(null)}>
                         Geri
                       </button>
                       <button
                         disabled={splitTotal !== current.amount}
-                        className="h-12 rounded-xl bg-brand-600 font-semibold disabled:opacity-40"
+                        className="h-12 rounded-xl bg-primary font-semibold text-primary-ink transition-[filter] duration-100 active:brightness-90 disabled:opacity-40"
                         onClick={() => pay(split.map((s) => ({ type: s.type, amount: parseTL(s.amount) ?? 0 })).filter((s) => s.amount > 0))}
                       >
                         Öde ve fiş bas
@@ -233,18 +234,16 @@ export default function DevicePage() {
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-line bg-surface p-4 text-sm leading-relaxed">
-            <h3 className="mb-1 font-semibold">Gerçek cihazda akış aynı</h3>
-            <ol className="list-decimal space-y-1 pl-5 text-ink-2">
+        <div className="space-y-3">
+          <Card title="Gerçek cihazda akış aynı">
+            <ol className="list-decimal space-y-1 p-4 pl-9 text-sm leading-relaxed text-ink-2">
               <li>Kasada "Hesabı yazarkasaya gönder" denir; sepet (ürünler, KDV kısımları, indirimler) cihaza gider.</li>
               <li>Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar.</li>
               <li>Sonuç (Z no, fiş no, ödeme kalemleri) LafPOS'a gelir; adisyon kendiliğinden kapanır.</li>
               <li>Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır ve patron paneline alarm düşer.</li>
             </ol>
-          </div>
-          <div className="rounded-2xl border border-line bg-surface">
-            <div className="border-b border-line px-4 py-3 font-semibold">Son fişler</div>
+          </Card>
+          <Card title="Son fişler">
             <ul className="divide-y divide-line">
               {(recent.data ?? []).map((r) => (
                 <li key={r.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
@@ -262,9 +261,15 @@ export default function DevicePage() {
                   )}
                 </li>
               ))}
-              {recent.data?.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted">Henüz fiş yok</li>}
+              {recent.data?.length === 0 && (
+                <li>
+                  <EmptyState compact title="Henüz fiş yok">
+                    Cihazda alınan ödemeler burada listelenir
+                  </EmptyState>
+                </li>
+              )}
             </ul>
-          </div>
+          </Card>
         </div>
       </div>
     </div>

@@ -8,12 +8,12 @@ type Size = 'sm' | 'md' | 'lg' | 'xl';
 // Innex (docs/ADMIN-INNEX.md §1.5): birincil dolu mavi, ikincil beyaz ve ince kenarlı, ghost yalnız metin
 // Her düğmenin dört durumu: dinlenme, üzerinde, basılı (bir ton daha koyu), devre dışı (yarı saydam); odak halkası index.css'te ortak
 const variants: Record<Variant, string> = {
-  primary: 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)] active:brightness-95',
-  secondary: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3',
+  primary: 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)] active:bg-[var(--admin-primary-hover)] active:brightness-95',
+  secondary: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:border-[var(--admin-border-field)] active:bg-surface-3',
   ghost: 'bg-transparent text-ink-2 hover:bg-surface-3 hover:text-ink active:bg-[var(--admin-border)]',
-  outline: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3',
-  danger: 'bg-danger-600 text-white hover:bg-danger-700 active:brightness-95',
-  success: 'bg-success-600 text-white hover:bg-success-700 active:brightness-95',
+  outline: 'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:border-[var(--admin-border-field)] active:bg-surface-3',
+  danger: 'bg-danger-600 text-white hover:bg-danger-700 active:bg-danger-700 active:brightness-95',
+  success: 'bg-success-600 text-white hover:bg-success-700 active:bg-success-700 active:brightness-95',
   warn: 'border border-warn-200 bg-warn-100 text-warn-700 hover:bg-warn-200 active:brightness-95 dark:border-transparent dark:bg-warn-800 dark:text-warn-300',
 };
 

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Mic2, Plus, Receipt, ShoppingBag, Store } from 'lucide-react';
+import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tlShort } from '@shared/money';
@@ -9,7 +9,7 @@ import type { FloorOrderSummary, FloorStateDTO, OrderDTO, SiteKaraokeBookingDTO,
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, PageLoading } from '@/components/ui/misc';
+import { Badge, EmptyState, PageLoading, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -74,7 +74,7 @@ export default function FloorPage() {
 
   return (
     // Innex: gri zemin üstünde iki beyaz kart; telefonda kartlar kenara yapışmasın diye zeminde 8 px
-    <div className="flex h-full flex-col gap-2 p-2 md:p-0 lg:flex-row">
+    <div className="flex h-full flex-col gap-3 p-2 md:p-0 lg:flex-row">
       <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface">
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3">
           <div className="min-w-0 flex-1 basis-full sm:basis-auto">
@@ -127,29 +127,7 @@ export default function FloorPage() {
         </header>
 
         {boot.sections.length > 1 && (
-          <div role="tablist" aria-label="Bölümler" className="no-scrollbar flex gap-1.5 overflow-x-auto px-4 pt-3">
-            {boot.sections.map((s) => {
-              const on = s.id === section?.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={on}
-                  onClick={() => setSectionId(s.id)}
-                  className={cn(
-                    'inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border bg-surface px-3 text-sm whitespace-nowrap transition-[color,border-color] pointer-fine:min-h-9',
-                    on ? 'border-ink font-semibold text-ink' : 'border-line font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
-                  )}
-                >
-                  {s.name}
-                  {!!counts.get(s.id) && (
-                    <span className={cn('tabular min-w-5 rounded-md px-1.5 py-px text-center text-xs font-medium', on ? 'bg-ink text-surface' : 'bg-surface-3 text-ink-2')}>{counts.get(s.id)}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <Tabs label="Bölümler" className="px-4 pt-3" value={section?.id ?? ''} onChange={setSectionId} options={boot.sections.map((s) => ({ value: s.id, label: s.name, count: counts.get(s.id) ?? 0 }))} />
         )}
 
         <div className="scroll-thin min-h-0 flex-1 overflow-auto p-4">
@@ -169,19 +147,19 @@ export default function FloorPage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
               {tables.map((t) => (
                 <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="h-28" />
               ))}
             </div>
           )}
         </div>
-        <footer className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-4 py-2.5 text-xs text-muted">
+        <footer className="hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-4 py-2.5 text-xs text-muted sm:flex">
           <Legend className="border border-line bg-surface" label="Boş" />
-          <Legend className="border border-brand-200 bg-brand-50" label="Dolu" />
-          <Legend className="border border-warn-200 bg-warn-100" label="Hesap istendi" />
-          <Legend className="border border-rose-300 bg-rose-100" label="Kısmen ödendi" />
-          <Legend className="border border-line bg-surface" dot="bg-brand-600" label="Rezerve" />
+          <Legend className="border border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-[var(--admin-primary-soft)]" label="Dolu" />
+          <Legend className="border border-warn-200 bg-warn-100 dark:border-warn-800 dark:bg-[var(--admin-warning-soft)]" label="Hesap istendi" />
+          <Legend className="border border-rose-300 bg-rose-100 dark:border-transparent dark:bg-[var(--admin-hue-rose-soft)]" label="Kısmen ödendi" />
+          <Legend className="border border-line bg-surface" dot label="Rezerve" />
         </footer>
       </section>
 
@@ -191,22 +169,30 @@ export default function FloorPage() {
           <span className="tabular min-w-5 rounded-md bg-surface-3 px-1.5 py-px text-center text-xs font-medium text-ink-2">{others.length}</span>
         </div>
         <div className="scroll-thin flex-1 overflow-y-auto p-2">
-          {others.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">Açık tezgâh, gel-al, paket ya da online sipariş yok</p>}
+          {others.length === 0 && (
+            <EmptyState compact icon={<Store />} title="Masasız açık sipariş yok">
+              Tezgâh, gel-al, paket ve online siparişler burada
+            </EmptyState>
+          )}
           {others.map((o) => (
-            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-surface-2">
+            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3">
               <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
                 {o.source === 'laffogato' ? <Globe strokeWidth={1.75} /> : o.type === 'paket' ? <Bike strokeWidth={1.75} /> : o.type === 'gelal' ? <ShoppingBag strokeWidth={1.75} /> : <Store strokeWidth={1.75} />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{o.label}</span>
                 <span className="text-xs text-muted">
-                  #{o.no} · {fmtElapsed(o.openedAt, now)} · {o.itemCount} ürün
+                  {fmtElapsed(o.openedAt, now)} · {o.itemCount} ürün
                 </span>
               </span>
-              <span className="tabular text-right text-sm font-semibold">
-                {tlShort(o.total)}
-                {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-[var(--admin-warning)]">{o.pendingKitchen} hazırlanıyor</span>}
-              </span>
+              {o.itemCount === 0 ? (
+                <span className="text-xs text-muted">Boş</span>
+              ) : (
+                <span className="tabular text-right text-sm font-semibold">
+                  {tlShort(o.total)}
+                  {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-[var(--admin-warning)]">{o.pendingKitchen} hazırlanıyor</span>}
+                </span>
+              )}
             </button>
           ))}
           {(reservations.length > 0 || siteKaraoke.length > 0) && (
@@ -235,7 +221,7 @@ export default function FloorPage() {
             const online = o.source === 'laffogato';
             const checkNo = choose.orders.filter((x) => x.source === 'pos').indexOf(o) + 1;
             return (
-              <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-line px-4 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2">
+              <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-line px-4 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3">
                 <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
                   {online && <Globe className="size-4 shrink-0 text-[var(--admin-hue-violet)]" strokeWidth={1.75} />}
                   <span className="truncate">
@@ -281,10 +267,11 @@ function SiteKaraokeRow({ booking: b, past }: { booking: SiteKaraokeBookingDTO; 
   );
 }
 
-function Legend({ className, dot, label }: { className: string; dot?: string; label: string }) {
+/** Açıklama satırı: kutucuk kartın tonuyla aynı; Rezerve, karttaki saat çipinin mavi hapı */
+function Legend({ className, dot, label }: { className: string; dot?: boolean; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={cn('relative size-3 rounded-[4px]', className)}>{dot && <span className={cn('absolute -right-0.5 -top-0.5 size-1.5 rounded-full', dot)} />}</span>
+      <span className={cn('relative size-3 rounded-[4px]', className)}>{dot && <span className="absolute inset-[2px] rounded-[2px] bg-[var(--admin-primary-soft)] ring-1 ring-inset ring-[var(--admin-primary)]/50" />}</span>
       {label}
     </span>
   );
@@ -329,7 +316,8 @@ function TableTile({
       onClick={onClick}
       style={style}
       className={cn(
-        '@container group flex flex-col justify-between overflow-hidden border p-2.5 text-left transition-[border-color,background-color,transform] active:scale-[0.98]',
+        '@container group flex flex-col overflow-hidden border p-2.5 text-left transition-[border-color,background-color,transform] duration-100 active:scale-[0.98] motion-reduce:active:scale-100',
+        busy || reservation ? 'justify-between' : 'justify-start gap-1',
         round ? 'items-center rounded-[999px] text-center' : 'rounded-xl',
         tone === 'free' && 'border-line bg-surface hover:border-[var(--admin-border-field)]',
         tone === 'busy' && 'border-brand-200 bg-brand-50 hover:border-brand-300 dark:border-brand-800 dark:bg-[var(--admin-primary-soft)]',
@@ -339,17 +327,20 @@ function TableTile({
       )}
     >
       <div className={cn('flex w-full items-start gap-1', round && 'justify-center')}>
-        <span className="truncate text-sm font-semibold leading-tight @min-[6rem]:text-[15px]">{table.name}</span>
+        {/* Boş masanın adı hafif, dolununki koyu: dolu masa kol mesafesinden seçilir */}
+        <span className={cn('truncate text-sm leading-tight @min-[6rem]:text-[15px]', busy ? 'font-semibold text-ink' : 'font-medium text-ink-2')}>{table.name}</span>
         {!round && <span className="flex-1" />}
-        <span className="hidden gap-1 text-ink-2 @min-[6rem]:flex">
-          {billed && <Receipt className="size-4 shrink-0" strokeWidth={1.75} />}
-          {online && <Globe className="size-4 shrink-0" strokeWidth={1.75} />}
-          {table.kind === 'oda' && <Mic2 className="size-4 shrink-0" strokeWidth={1.75} />}
+        <span className="flex gap-1 text-ink-2">
+          {billed && <Receipt className="size-4 shrink-0" strokeWidth={1.75} aria-label="Hesap istendi" />}
+          {online && <Globe className="hidden size-4 shrink-0 @min-[6rem]:block" strokeWidth={1.75} aria-label="Online sipariş" />}
+          {table.kind === 'oda' && <Mic2 className="hidden size-4 shrink-0 @min-[6rem]:block" strokeWidth={1.75} aria-label="Oda" />}
         </span>
       </div>
       {busy ? (
         <div className={cn('w-full', round && 'text-center')}>
           <div className="tabular text-sm font-bold leading-none @min-[6rem]:text-lg">{tlShort(total)}</div>
+          {/* Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır */}
+          {partial && <div className="tabular mt-0.5 text-xs font-medium text-[var(--admin-hue-rose)]">{tlShort(total - paid)} kaldı</div>}
           <div className={cn('mt-1 hidden items-center gap-1.5 text-xs text-ink-2 @min-[6.5rem]:flex', round && 'justify-center')}>
             <span className="tabular whitespace-nowrap">{room ? `Oda ${fmtElapsed(room, now)}` : fmtElapsed(openedAt, now)}</span>
             {orders[0]?.waiterName && !round && <span className="truncate">· {orders[0].waiterName}</span>}
@@ -357,7 +348,7 @@ function TableTile({
           {(pending > 0 || ready > 0) && (
             <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
               {pending > 0 && (
-                <span className="tabular inline-flex items-center gap-0.5 rounded-md bg-surface/80 px-1.5 py-0.5 text-ink-2 dark:bg-surface-3">
+                <span className="tabular inline-flex items-center gap-0.5 rounded-md bg-surface px-1.5 py-0.5 text-ink-2 ring-1 ring-inset ring-brand-200 dark:bg-surface-3 dark:ring-brand-800" title={`${pending} kalem barda`}>
                   <ChefHat className="size-3" strokeWidth={1.75} />
                   {pending}
                 </span>
@@ -372,7 +363,10 @@ function TableTile({
           <div className="mt-0.5 hidden truncate text-xs text-ink-2 @min-[6rem]:block">{reservation.name}</div>
         </div>
       ) : (
-        <div className="hidden text-xs text-muted @min-[5rem]:block">{table.kind === 'oda' ? 'Oda · saatlik' : `${table.seats} kişilik`}</div>
+        <span className={cn('hidden items-center gap-1 text-[13px] text-ink-2 @min-[5rem]:inline-flex', round && 'justify-center')}>
+          {table.kind === 'oda' ? <Mic2 className="size-3.5 shrink-0" strokeWidth={1.75} /> : <Users className="size-3.5 shrink-0" strokeWidth={1.75} />}
+          {table.kind === 'oda' ? 'Saatlik' : `${table.seats} kişilik`}
+        </span>
       )}
     </button>
   );

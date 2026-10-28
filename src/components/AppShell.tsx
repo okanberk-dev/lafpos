@@ -108,7 +108,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         {boot.day ? (
           <span className="tabular rounded-md bg-surface-3 px-1.5 py-0.5 font-medium text-ink-2">Z {boot.day.zNo}</span>
         ) : (
-          <span className={cn('rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 font-medium text-[var(--admin-warning)]', rail && 'max-w-[68px] text-center leading-tight')}>Gün kapalı</span>
+          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 font-medium text-[var(--admin-warning)]">
+            <Lock className="size-3" strokeWidth={2} /> Kapalı
+          </span>
         )}
       </NavLink>
     </div>
@@ -123,7 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     // Innex düzeni: gri zemin üstünde beyaz menü kartı; kasa ekranları zeminde kendi kartlarını çizer
-    <div className={cn('flex h-full bg-bg', !admin && 'md:gap-2 md:p-2')}>
+    <div className={cn('flex h-full bg-bg', !admin && 'md:gap-3 md:p-2')}>
       {/* Tablet ve bilgisayar: ikon rayı (Innex'in daraltılmış kenar çubuğu, docs/ADMIN-INNEX.md §1.2) */}
       <aside className={cn('hidden w-[84px] shrink-0 flex-col items-center rounded-2xl border border-line bg-surface py-3', !admin && 'md:flex')}>
         <NavLink to="/" className="mb-3 grid size-11 place-items-center rounded-xl bg-night text-white dark:bg-surface-3" title="LafPOS">

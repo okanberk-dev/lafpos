@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, ChevronLeft, ChevronRight, Phone, Plus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { addDays, businessDate, fmtDateLong } from '@shared/time';
+import { addDays, businessDate, fmtDateLong, fmtDateShort } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
@@ -72,12 +72,16 @@ export default function ReservationsPage() {
         subtitle={`${fmtDateLong(date)} · ${rows.filter((r) => r.status !== 'iptal').length} rezervasyon, ${guests} kişi`}
         actions={
           <>
+            {/* Tarih adımlayıcı: görünen metin bizim biçimimizde ("Bugün", "27 Eki Sal"); üstündeki görünmez tarih alanı yerli seçiciyi açar */}
             <div className="flex items-center rounded-xl border border-line bg-surface">
-              <button aria-label="Önceki gün" className="grid size-11 place-items-center" onClick={() => setDate(addDays(date, -1))}>
+              <button aria-label="Önceki gün" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3" onClick={() => setDate(addDays(date, -1))}>
                 <ChevronLeft className="size-4" />
               </button>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11 bg-transparent px-1 text-sm" />
-              <button aria-label="Sonraki gün" className="grid size-11 place-items-center" onClick={() => setDate(addDays(date, 1))}>
+              <span className="relative inline-flex h-11 min-w-24 items-center justify-center px-3 text-sm font-medium">
+                {date === businessDate(Date.now()) ? 'Bugün' : fmtDateShort(date)}
+                <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Tarih" className="absolute inset-0 size-full cursor-pointer opacity-0" />
+              </span>
+              <button aria-label="Sonraki gün" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3" onClick={() => setDate(addDays(date, 1))}>
                 <ChevronRight className="size-4" />
               </button>
             </div>
@@ -93,12 +97,12 @@ export default function ReservationsPage() {
         <div className="space-y-2">
           {rows.map((r) => (
             <div key={r.id} className={cn('flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-4', r.status === 'iptal' && 'opacity-60')}>
-              <div className="tabular w-16 text-2xl font-semibold">{r.time}</div>
+              <div className="tabular w-14 text-xl font-semibold">{r.time}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 font-semibold">
                   {r.name} <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted">
+                <div className="flex flex-wrap items-center gap-x-3 text-[13px] text-muted">
                   <span className="inline-flex items-center gap-1">
                     <Users className="size-3.5" /> {r.guests} kişi
                   </span>
@@ -114,13 +118,13 @@ export default function ReservationsPage() {
               </div>
               {r.status === 'bekliyor' && (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="primary" onClick={() => setStatus(r, 'geldi')}>
+                  <Button size="sm" variant="primary" className="min-w-24" onClick={() => setStatus(r, 'geldi')}>
                     Geldi{r.tableId && boot.day ? ', masa aç' : ''}
                   </Button>
-                  <Button size="sm" onClick={() => setStatus(r, 'gelmedi')}>
+                  <Button size="sm" className="min-w-24" onClick={() => setStatus(r, 'gelmedi')}>
                     Gelmedi
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setStatus(r, 'iptal')}>
+                  <Button size="sm" variant="ghost" className="min-w-24" onClick={() => setStatus(r, 'iptal')}>
                     İptal
                   </Button>
                 </div>

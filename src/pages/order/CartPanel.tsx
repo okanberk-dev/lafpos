@@ -1,5 +1,5 @@
 import { Check, ChefHat, CircleDot, Droplets, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { COMP_LABEL, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
@@ -49,17 +49,29 @@ export function CartPanel({
 
   const visibleItems = order.items.filter((i) => !i.voided || i.voidAfterSend || Date.now() - (i.createdAt ?? 0) < 3600_000);
 
+  // Yeni eklenen kalem uzun adisyonda da görünsün: gönderilmemişler bloğu görünür alana kayar
+  const pendingRef = useRef<HTMLDivElement>(null);
+  const pendingQty = pending.reduce((a, l) => a + l.qty, 0);
+  useEffect(() => {
+    if (!pending.length) return;
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    pendingRef.current?.scrollIntoView({ block: 'end', behavior: reduce ? 'auto' : 'smooth' });
+  }, [pending.length, pendingQty]);
+
+  // Ödeme sürerken büyük rakam kalan tutar; kapanmış ya da ödenmemiş adisyonda toplam
+  const partlyPaid = order.paid > 0 && !order.extPaid && due > 0 && !preview;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+      <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
         {visibleItems.length === 0 && pending.length === 0 && (
-          <div className="flex flex-col items-center px-6 py-14 text-center">
+          <div className="my-auto flex flex-col items-center px-6 py-10 text-center">
             <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-surface-3 text-muted">
-              <ReceiptText className="size-6" strokeWidth={1.5} />
+              <ReceiptText className="size-6" strokeWidth={1.75} />
             </span>
             <p className="mt-3 text-sm font-semibold text-ink">Adisyon boş</p>
-            <p className="mt-1 max-w-[30ch] text-[13px] text-muted">
-              {payFirst ? 'Ürüne dokunun; "Öde" ödemeyi alır ve siparişi bara gönderir' : 'Ürüne dokunun; "Gönder"e basınca bara ve mutfağa gider'}
+            <p className="mt-1 max-w-[30ch] text-[13px] text-pretty text-muted">
+              {payFirst ? 'Soldan ürün seçin. Öde ödemeyi alır ve siparişi bara iletir' : 'Soldan ürün seçin. Gönder bara ve mutfağa iletir'}
             </p>
           </div>
         )}
@@ -68,26 +80,26 @@ export function CartPanel({
             <li key={i.id}>
               <button
                 onClick={() => !i.voided && !order.extPaid && order.status === 'acik' && setItemSheet(i)}
-                className={cn('flex min-h-12 w-full items-start gap-3 px-4 py-2.5 text-left', !i.voided && order.status === 'acik' && 'hover:bg-surface-2')}
+                className={cn('flex min-h-12 w-full items-start gap-3 px-4 py-2.5 text-left transition-colors duration-100', !i.voided && order.status === 'acik' && 'hover:bg-surface-2 active:bg-surface-3')}
               >
-                <span className={cn('tabular mt-px min-w-7 rounded-md px-1.5 py-0.5 text-center text-[13px] font-semibold', i.voided ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'bg-surface-3 text-ink')}>
+                <span className={cn('tabular h-6 min-w-7 rounded-md px-1.5 text-center text-[13px] font-semibold leading-6', i.voided ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'bg-surface-3 text-ink')}>
                   {i.qty}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className={cn('block text-sm font-medium leading-snug', i.voided && 'text-muted line-through')}>
                     {i.name}
-                    {i.size !== 'TEK' && <span className="ml-1 text-sm font-normal text-muted">{boot.settings.sizeLabels[i.size]}</span>}
+                    {i.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[i.size]}</SizeTag>}
                   </span>
                   {i.optionsText && <span className="block text-xs text-ink-2">{i.optionsText}</span>}
                   {i.note && <span className="block text-xs italic text-[var(--admin-warning)]">"{i.note}"</span>}
-                  <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-medium">
+                  <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-medium">
                     {i.voided ? (
                       <span className="text-[var(--admin-danger-ink)]">İptal: {i.voidReason}</span>
                     ) : (
                       <>
                         {i.stationId && (
                           <span className={cn('inline-flex items-center gap-0.5', STATUS[i.status].cls)}>
-                            {i.status === 'hazir' ? <Check className="size-3" /> : i.status === 'servis' ? <CircleDot className="size-3" /> : <ChefHat className="size-3" />}
+                            {i.status === 'hazir' ? <Check className="size-3.5" /> : i.status === 'servis' ? <CircleDot className="size-3.5" /> : <ChefHat className="size-3.5" />}
                             {/* Sitenin listesinden kalkan online sipariş servis edildi sayılmaz */}
                             {order.extStage === 'gone' && i.status === 'servis' ? 'Siteden kalktı' : STATUS[i.status].label}
                           </span>
@@ -95,7 +107,7 @@ export function CartPanel({
                         <span className="tabular font-normal text-muted">{fmtTime(i.sentAt)}</span>
                         {i.complimentary && (
                           <span className={cn('inline-flex items-center gap-0.5', i.compKind === 'zayi' ? 'text-[var(--admin-warning)]' : 'text-[var(--admin-hue-rose)]')}>
-                            {i.compKind === 'zayi' ? <Droplets className="size-3" /> : <Gift className="size-3" />}
+                            {i.compKind === 'zayi' ? <Droplets className="size-3.5" /> : <Gift className="size-3.5" />}
                             {COMP_LABEL[i.compKind ?? 'ikram']}
                           </span>
                         )}
@@ -113,39 +125,40 @@ export function CartPanel({
         </ul>
 
         {pending.length > 0 && (
-          <div className="border-y border-warn-200 bg-warn-50 dark:border-warn-800 dark:bg-[var(--admin-warning-soft)]">
-            <div className="flex items-center gap-1.5 px-4 pt-2.5 text-xs font-medium text-[var(--admin-warning)]">
+          <div ref={pendingRef} className="border-y border-warn-200 bg-warn-50 dark:border-warn-800 dark:bg-[var(--admin-warning-soft)]">
+            <div className="sticky top-0 z-[1] flex items-center gap-1.5 bg-warn-50 px-4 pb-1 pt-2.5 text-xs font-medium text-[var(--admin-warning)] dark:bg-[var(--admin-warning-soft)]">
               <span className="size-1.5 rounded-full bg-current" />
               Gönderilmedi
             </div>
-            <ul>
+            <ul className="divide-y divide-warn-200/60 dark:divide-warn-800/60">
               {pending.map((l) => {
                 const p = boot.products.find((x) => x.id === l.productId);
                 if (!p) return null;
                 const unit = l.priceOverride ?? estimateUnit(boot, p, l.size, l.options);
                 const text = [pendingOptionsText(boot, p, l.options), l.priceOverride != null ? 'elle fiyat' : ''].filter(Boolean).join(' · ');
                 return (
-                  <li key={l.key} className="flex items-center gap-2 px-3 py-2">
-                    <div className="flex items-center rounded-lg border border-[var(--admin-border-strong)] bg-surface">
-                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-l-lg hover:bg-surface-2 pointer-coarse:size-11" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
+                  <li key={l.key} className="animate-in flex items-center gap-2 px-4 py-2">
+                    <div className="flex items-center rounded-lg border border-line-strong bg-surface">
+                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-l-lg transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3 pointer-coarse:size-11" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
                         {l.qty > 1 ? <Minus className="size-4" /> : <Trash2 className="size-4 text-[var(--admin-danger-ink)]" />}
                       </button>
                       <span className="tabular w-6 text-center text-sm font-semibold">{l.qty}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-r-lg hover:bg-surface-2 pointer-coarse:size-11" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
+                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-r-lg transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3 pointer-coarse:size-11" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
                         <Plus className="size-4" />
                       </button>
                     </div>
-                    <button className="min-w-0 flex-1 text-left" onClick={() => onEditPending(l)}>
-                      <span className="block truncate text-sm font-medium">
-                        {p.shortName || p.name}
-                        {l.size !== 'TEK' && <span className="ml-1 text-sm font-normal text-muted">{boot.settings.sizeLabels[l.size]}</span>}
+                    {/* Satırın kendisi düzenlemeye açar; kalem ikonu yalnız ipucu */}
+                    <button className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors duration-100 active:bg-warn-100 dark:active:bg-warn-800/40" onClick={() => onEditPending(l)} aria-label={`${p.shortName || p.name} düzenle`}>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {p.shortName || p.name}
+                          {l.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[l.size]}</SizeTag>}
+                        </span>
+                        {(text || l.note) && <span className="block truncate text-xs text-ink-2">{[text, l.note && `"${l.note}"`].filter(Boolean).join(' · ')}</span>}
                       </span>
-                      {(text || l.note) && <span className="block truncate text-xs text-ink-2">{[text, l.note && `"${l.note}"`].filter(Boolean).join(' · ')}</span>}
+                      <Pencil aria-hidden="true" className="size-3.5 shrink-0 text-muted" />
                     </button>
                     <span className="tabular text-right text-sm font-semibold">{tl(unit * l.qty)}</span>
-                    <button aria-label="Düzenle" className="grid size-9 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-ink pointer-coarse:size-11" onClick={() => onEditPending(l)}>
-                      <Pencil className="size-4" />
-                    </button>
                   </li>
                 );
               })}
@@ -164,11 +177,17 @@ export function CartPanel({
             {t.service > 0 && <Row l={`Servis %${order.serviceRate}`} r={tl(t.service)} />}
           </div>
         )}
+        {partlyPaid && (
+          <div className="mb-1 space-y-0.5 text-[13px] text-muted">
+            <Row l="Toplam" r={tl(order.total)} />
+            <Row l="Ödenen" r={tl(order.paid)} />
+          </div>
+        )}
         <div className="flex items-baseline justify-between">
-          <span className="text-[13px] font-medium text-muted">Toplam</span>
-          <span className="tabular text-2xl font-bold tracking-tight">{tl(preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
+          <span className="text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
+          <span className="tabular text-2xl font-bold tracking-tight">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
         </div>
-        {order.paid > 0 && !order.extPaid && (
+        {order.paid > 0 && !order.extPaid && !partlyPaid && (
           <div className="mt-1 space-y-0.5 text-[13px]">
             <Row l="Ödenen" r={tl(order.paid)} />
             <Row l={<b>Kalan</b>} r={<b>{tl(due)}</b>} />
@@ -181,6 +200,11 @@ export function CartPanel({
     </div>
   );
 }
+
+/** Boy etiketi: ürün adına yapışık düz metin yerine küçük çerçeveli çip; seçenek metniyle karışmaz */
+const SizeTag = ({ children }: { children: React.ReactNode }) => (
+  <span className="ml-1.5 inline-block rounded border border-line px-1 align-[2px] text-[11px] font-medium leading-4 text-ink-2">{children}</span>
+);
 
 const Row = ({ l, r }: { l: React.ReactNode; r: React.ReactNode }) => (
   <div className="flex justify-between">
@@ -264,11 +288,11 @@ function ItemSheet({
             <div className="flex items-center justify-between rounded-xl border border-line p-1.5 pl-4">
               <span className="text-sm font-medium">Adet</span>
               <div className="flex items-center gap-1">
-                <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3" onClick={() => setQty(Math.max(1, qty - 1))}>
+                <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)]" onClick={() => setQty(Math.max(1, qty - 1))}>
                   <Minus className="size-4" />
                 </button>
                 <span className="tabular w-10 text-center text-lg font-semibold">{qty}</span>
-                <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3" onClick={() => setQty(Math.min(unpaid, qty + 1))}>
+                <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)]" onClick={() => setQty(Math.min(unpaid, qty + 1))}>
                   <Plus className="size-4" />
                 </button>
               </div>
@@ -278,7 +302,7 @@ function ItemSheet({
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 {(['percent', 'amount'] as const).map((k) => (
-                  <button key={k} onClick={() => setDiscType(k)} className={cn('min-h-11 rounded-lg border text-sm font-medium transition-colors', discType === k ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line hover:border-[var(--admin-border-field)]')}>
+                  <button key={k} onClick={() => setDiscType(k)} className={cn('min-h-11 rounded-lg border text-sm font-medium transition-colors', discType === k ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line hover:border-[var(--admin-border-field)] active:bg-surface-3')}>
                     {k === 'percent' ? 'Yüzde (%)' : 'Tutar (₺)'}
                   </button>
                 ))}
@@ -293,7 +317,7 @@ function ItemSheet({
             <div className="mb-2 text-sm font-medium text-ink-2">Neden</div>
             <div className="flex flex-wrap gap-1.5">
               {reasons.map((r) => (
-                <button key={r} onClick={() => setReason(r)} className={cn('min-h-11 rounded-lg border bg-surface px-3 text-sm transition-colors pointer-fine:min-h-9', reason === r ? 'border-ink font-semibold text-ink' : 'border-line text-ink-2 hover:border-[var(--admin-border-field)]')}>
+                <button key={r} onClick={() => setReason(r)} className={cn('min-h-11 rounded-lg border bg-surface px-3 text-sm transition-colors active:bg-surface-3 pointer-fine:min-h-9', reason === r ? 'border-ink font-semibold text-ink' : 'border-line text-ink-2 hover:border-[var(--admin-border-field)]')}>
                   {r}
                 </button>
               ))}
@@ -314,7 +338,7 @@ function ItemSheet({
 
 function SheetButton({ icon, title, hint, onClick, disabled }: { icon: React.ReactNode; title: string; hint?: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button disabled={disabled} onClick={onClick} className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2 disabled:opacity-40">
+    <button disabled={disabled} onClick={onClick} className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3 disabled:opacity-40">
       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3">{icon}</span>
       <span>
         <span className="block text-sm font-medium">{title}</span>

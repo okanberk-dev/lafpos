@@ -76,7 +76,7 @@ export function Segmented<T extends string>({
   size?: 'sm' | 'md';
 }) {
   return (
-    <div className={cn('inline-flex rounded-xl bg-surface-3 p-1', className)}>
+    <div className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-xl bg-surface-3 p-1', className)}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -84,7 +84,7 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           aria-pressed={value === o.value}
           className={cn(
-            'rounded-md font-medium transition-[color,background-color,box-shadow] duration-150 pointer-coarse:min-h-11',
+            'shrink-0 whitespace-nowrap rounded-md font-medium transition-[color,background-color,box-shadow] duration-150 pointer-coarse:min-h-11',
             size === 'sm' ? 'px-2.5 py-1 text-xs' : 'px-3.5 py-1.5 text-sm',
             value === o.value ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08),0_0_0_1px_rgb(12_14_27/0.04)]' : 'text-muted hover:text-ink',
           )}

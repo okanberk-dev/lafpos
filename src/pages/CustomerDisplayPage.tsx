@@ -88,7 +88,7 @@ export default function CustomerDisplayPage() {
       ) : (
         <div className="grid flex-1 place-items-center rounded-2xl border border-line bg-surface p-8 text-center">
           <div>
-            <span className="mx-auto grid size-24 place-items-center rounded-3xl bg-night text-white dark:bg-surface-3">
+            <span className="mx-auto grid size-24 place-items-center rounded-[20px] bg-night text-white dark:bg-surface-3">
               <LafMark className="h-9" bean="#e8c877" />
             </span>
             {state.kind === 'thanks' ? (

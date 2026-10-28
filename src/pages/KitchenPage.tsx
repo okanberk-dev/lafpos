@@ -1,10 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, Layers, MonitorUp, PackageX, RotateCcw, Undo2 } from 'lucide-react';
+import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, History, Layers, MonitorUp, MoreHorizontal, PackageX, RotateCcw, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { kitchenTotals } from '@shared/kitchen';
 import { ticketHead } from '@shared/service-mode';
+import { fmtTime } from '@shared/time';
 import type { KitchenTicket, KitchenTicketItem } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
+import { IconButton } from '@/components/ui/Button';
+import { Modal } from '@/components/ui/Modal';
+import { EmptyState, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -31,6 +35,8 @@ export default function KitchenPage() {
   const [station, setStation] = useLocalPref<string>('kds.station', '');
   const [history, setHistory] = useState(false);
   const [soldOut, setSoldOut] = useState(false);
+  // Telefonda araç çubuğu tek düğmeye iner: Toplam, Geçmiş ve Tükendi bu pencerede
+  const [more, setMore] = useState(false);
   const can = useCan();
   const mode = useServiceMode();
   const [sound, setSound] = useLocalPref<boolean>('kds.sound', true);
@@ -82,72 +88,75 @@ export default function KitchenPage() {
   const showTotals = totalsView && !history;
   const counts = useMemo(() => ({ waiting: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'yeni').length, 0), making: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'hazirlaniyor').length, 0) }), [list]);
 
+  const canSoldOut = can('urun.tukendi') || can('menu.yonet');
+  const tools = (
+    <>
+      {!history && (
+        <ToolButton pressed={totalsView} onClick={() => setTotalsView(!totalsView)} title="Açık fişlerdeki ürünleri topla">
+          <Layers className="size-4" /> {totalsView ? 'Fişler' : 'Toplam'}
+        </ToolButton>
+      )}
+      <ToolButton pressed={history} onClick={() => setHistory(!history)}>
+        <History className="size-4" /> {history ? 'Aktif fişler' : 'Geçmiş'}
+      </ToolButton>
+      {canSoldOut && (
+        <ToolButton onClick={() => setSoldOut(true)}>
+          <PackageX className="size-4" /> Tükendi
+        </ToolButton>
+      )}
+    </>
+  );
+
   return (
-    <div className="flex h-full flex-col gap-2 bg-bg p-2 md:p-0" onPointerDown={unlockAudio}>
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface px-4 py-2.5">
-        <span className="grid size-9 place-items-center rounded-lg bg-surface-3 text-ink-2">
-          <ChefHat className="size-5" />
-        </span>
-        <h1 className="mr-2 text-lg font-semibold tracking-[-0.01em]">Bar ve mutfak</h1>
-        <div className="flex gap-1.5">
-          <Chip active={!station} onClick={() => setStation('')}>
-            Tümü
-          </Chip>
-          {boot.stations.map((s) => (
-            <Chip key={s.id} active={station === s.id} onClick={() => setStation(s.id)}>
-              {s.name}
-            </Chip>
-          ))}
-        </div>
-        <div className="flex-1" />
-        {!history && (
-          <div className="flex gap-1.5 text-xs font-medium">
-            <span className="tabular rounded-md bg-[var(--admin-warning-soft)] px-2 py-1 text-[var(--admin-warning)]">{counts.waiting} bekliyor</span>
-            <span className="tabular rounded-md bg-[var(--admin-primary-soft)] px-2 py-1 text-[var(--admin-primary)]">{counts.making} hazırlanıyor</span>
+    <div className="flex h-full flex-col gap-3 bg-bg p-2 md:p-0" onPointerDown={unlockAudio}>
+      {/* Başlık kartı iki satır: üstte ad, sayaçlar ve araçlar; altta istasyon sekmeleri (telefonda kayar) */}
+      <div className="rounded-2xl border border-line bg-surface">
+        <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2">
+            <ChefHat className="size-5" />
+          </span>
+          <h1 className="min-w-0 truncate text-lg font-semibold tracking-[-0.01em]">Bar ve mutfak</h1>
+          <div className="flex-1" />
+          {!history && (
+            <div className="flex gap-1.5 text-[13px] font-medium">
+              <span className={cn('tabular inline-flex min-h-6 items-center rounded-md px-2', counts.waiting > 0 ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-muted')}>{counts.waiting} bekliyor</span>
+              {counts.making > 0 && <span className="tabular inline-flex min-h-6 items-center rounded-md bg-[var(--admin-primary-soft)] px-2 text-[var(--admin-primary)]">{counts.making} hazırlanıyor</span>}
+            </div>
+          )}
+          <div className="hidden items-center gap-1 md:flex">
+            {tools}
+            {!REMOTE && (
+              <ToolButton onClick={() => window.open(appUrl('/cagri'), 'lafpos-cagri')} title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)">
+                <MonitorUp className="size-4" /> Çağrı ekranı
+              </ToolButton>
+            )}
           </div>
-        )}
-        {!history && (
-          <button
-            onClick={() => setTotalsView(!totalsView)}
-            aria-pressed={totalsView}
-            title="Açık fişlerdeki ürünleri topla"
-            className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors pointer-fine:min-h-9', totalsView ? 'border-ink text-ink' : 'border-[var(--admin-border-strong)] hover:bg-surface-2')}
-          >
-            <Layers className="size-4" /> {totalsView ? 'Fişler' : 'Toplam'}
+          <IconButton label="Diğer" className="md:hidden" onClick={() => setMore(true)}>
+            <MoreHorizontal className="size-5" />
+          </IconButton>
+          <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} aria-pressed={sound} className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-surface-2 active:bg-surface-3">
+            {sound ? <Bell className="size-[18px]" /> : <BellOff className="size-[18px] text-muted" />}
           </button>
-        )}
-        <button onClick={() => setHistory(!history)} className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors pointer-fine:min-h-9', history ? 'border-ink text-ink' : 'border-[var(--admin-border-strong)] hover:bg-surface-2')}>
-          <History className="size-4" /> {history ? 'Aktif fişler' : 'Geçmiş'}
-        </button>
-        {(can('urun.tukendi') || can('menu.yonet')) && (
-          <button onClick={() => setSoldOut(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] px-3 text-sm font-medium transition-colors hover:bg-surface-2 pointer-fine:min-h-9">
-            <PackageX className="size-4" /> Tükendi
-          </button>
-        )}
-        <button
-          hidden={REMOTE}
-          onClick={() => window.open(appUrl('/cagri'), 'lafpos-cagri')}
-          title="Çağrı ekranını yeni pencerede aç (televizyon, müşteriye dönük tablet)"
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] px-3 text-sm font-medium transition-colors hover:bg-surface-2 pointer-fine:min-h-9"
-        >
-          <MonitorUp className="size-4" /> Çağrı ekranı
-        </button>
-        <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} className="grid size-11 place-items-center rounded-xl border border-[var(--admin-border-strong)] transition-colors hover:bg-surface-2">
-          {sound ? <Bell className="size-4" /> : <BellOff className="size-4 text-muted" />}
-        </button>
+        </div>
+        <Tabs label="İstasyon" className="border-t border-[var(--admin-divider)] px-2 py-1.5 md:px-3" value={station} onChange={setStation} options={[{ value: '', label: 'Tümü' }, ...boot.stations.map((s) => ({ value: s.id, label: s.name }))]} />
       </div>
+
+      <Modal open={more} onClose={() => setMore(false)} title="Bar ekranı" size="sm">
+        <div className="grid gap-1.5 p-3 [&>button]:w-full [&>button]:justify-start [&>button]:px-3" onClick={() => setMore(false)}>
+          {tools}
+        </div>
+      </Modal>
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {list.length === 0 && (
-          <div className="grid h-full place-items-center text-center text-muted">
-            <div>
-              <CheckCheck className="mx-auto mb-2 size-12 opacity-60" />
-              <p className="text-lg">{history ? 'Son 90 dakikada hazırlanan yok' : 'Bekleyen sipariş yok'}</p>
-            </div>
+          <div className="grid h-full place-items-center">
+            <EmptyState large icon={<CheckCheck />} title={history ? 'Son 90 dakikada hazırlanan yok' : 'Bekleyen sipariş yok'}>
+              {history ? 'Hazır işaretlenen fişler 90 dakika burada kalır' : 'Yeni sipariş gelince ses çalar ve fiş burada belirir'}
+            </EmptyState>
           </div>
         )}
         {showTotals && list.length > 0 && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] items-start gap-2">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] items-start gap-3">
             {totals.map((r) => (
               <article key={r.key} className="rounded-2xl border border-line bg-surface p-3">
                 <div className="flex items-start gap-3">
@@ -175,7 +184,7 @@ export default function KitchenPage() {
             ))}
           </div>
         )}
-        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] items-start gap-2', showTotals && 'hidden')}>
+        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] items-start gap-3', showTotals && 'hidden')}>
           {list.map((t) => {
             const live = t.items.filter((i) => !i.voided);
             const age = now - t.sentAt;
@@ -196,24 +205,25 @@ export default function KitchenPage() {
                   {head.call && (
                     <span className="tabular shrink-0 rounded-lg bg-[var(--admin-primary-soft)] px-2 py-0.5 text-xl font-bold leading-tight text-[var(--admin-primary)]">{head.call}</span>
                   )}
-                  {head.label && <span className={cn('truncate', head.call ? 'text-sm text-ink-2' : 'text-base font-semibold')}>{head.label}</span>}
-                  {head.showNo && <span className="tabular text-[13px] text-muted">#{t.orderNo}</span>}
+                  {/* Nereye gideceği en büyük yazı: barın üstündeki tablet 1-2 m'den okunur */}
+                  {head.label && <span className={cn('truncate', head.call ? 'text-sm text-ink-2' : 'text-xl font-bold tracking-[-0.01em]')}>{head.label}</span>}
+                  {head.showNo && <span className="tabular shrink-0 text-sm text-muted">#{t.orderNo}</span>}
+                  {t.waiterName && <span className="min-w-0 truncate text-sm text-muted">· {t.waiterName}</span>}
                   <span className="flex-1" />
                   <span
                     className={cn(
-                      'tabular inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[13px] font-semibold',
+                      'tabular inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[15px] font-semibold',
                       history ? 'bg-surface-3 text-muted' : level === 'alarm' ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : level === 'warn' ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-ink-2',
                     )}
                   >
-                    <Clock className="size-3.5" />
+                    <Clock className="size-4" />
                     {mmss(age)}
                   </span>
                 </header>
-                {(t.waiterName || t.note || t.scheduledFor) && (
-                  <div className="border-b border-[var(--admin-divider)] px-3 py-1.5 text-xs text-muted">
-                    {t.waiterName && <span>{t.waiterName}</span>}
-                    {t.scheduledFor && <span className="ml-2 font-semibold text-[var(--admin-warning)]">Saat {new Date(t.scheduledFor).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>}
-                    {t.note && <div className="mt-0.5 text-sm italic text-[var(--admin-warning)]">"{t.note}"</div>}
+                {(t.note || t.scheduledFor) && (
+                  <div className="border-b border-[var(--admin-divider)] px-3 py-1.5 text-sm">
+                    {t.scheduledFor && <span className="font-semibold text-[var(--admin-warning)]">Saat {fmtTime(Date.parse(t.scheduledFor))}</span>}
+                    {t.note && <div className="italic text-[var(--admin-warning)]">"{t.note}"</div>}
                   </div>
                 )}
                 <ul className="divide-y divide-[var(--admin-divider)]">
@@ -222,7 +232,7 @@ export default function KitchenPage() {
                       <button
                         disabled={i.voided || online || REMOTE}
                         onClick={() => setStatus([i.id], history ? 'hazirlaniyor' : undefined)}
-                        className={cn('flex w-full items-start gap-3 px-3 py-2.5 text-left', !i.voided && !online && 'active:bg-surface-2', i.voided && 'bg-[var(--admin-danger-soft)]')}
+                        className={cn('flex w-full items-start gap-3 px-3 py-3 text-left transition-colors duration-100', !i.voided && !online && 'active:bg-surface-3', i.voided && 'bg-[var(--admin-danger-soft)]')}
                       >
                         <span className={cn('tabular min-w-8 rounded-md px-1.5 py-0.5 text-center text-lg font-bold', i.voided ? 'bg-danger-600 text-white' : 'bg-surface-3')}>{i.qty}</span>
                         <span className="min-w-0 flex-1">
@@ -243,26 +253,26 @@ export default function KitchenPage() {
                   {online ? (
                     <>
                       {!allStarted && (
-                        <button onClick={() => onlineStage(t.orderId, 'preparing')} className="h-11 flex-1 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors hover:bg-surface-2">
+                        <button onClick={() => onlineStage(t.orderId, 'preparing')} className="h-11 flex-1 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3">
                           Hazırlanıyor
                         </button>
                       )}
-                      <button onClick={() => onlineStage(t.orderId, 'ready')} className="h-11 flex-1 rounded-xl bg-success-600 text-sm font-semibold text-white transition-colors hover:bg-success-700">
+                      <button onClick={() => onlineStage(t.orderId, 'ready')} className="h-11 flex-1 rounded-xl bg-success-600 text-sm font-semibold text-white transition-colors duration-100 hover:bg-success-700 active:bg-success-700 active:brightness-95">
                         Hazır (siteye bildir)
                       </button>
                     </>
                   ) : history ? (
-                    <button onClick={() => setStatus(live.map((i) => i.id), 'hazirlaniyor')} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors hover:bg-surface-2">
+                    <button onClick={() => setStatus(live.map((i) => i.id), 'hazirlaniyor')} className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3">
                       <Undo2 className="size-4" /> Geri al
                     </button>
                   ) : (
                     <>
                       {!allStarted && (
-                        <button onClick={() => setStatus(live.filter((i) => i.status === 'yeni').map((i) => i.id), 'hazirlaniyor')} className="h-11 flex-1 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors hover:bg-surface-2">
+                        <button onClick={() => setStatus(live.filter((i) => i.status === 'yeni').map((i) => i.id), 'hazirlaniyor')} className="h-11 flex-1 rounded-xl border border-[var(--admin-border-strong)] text-sm font-semibold transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3">
                           Başla
                         </button>
                       )}
-                      <button onClick={() => setStatus(live.map((i) => i.id), 'hazir')} className="h-11 flex-[2] rounded-xl bg-success-600 text-sm font-semibold text-white transition-colors hover:bg-success-700">
+                      <button onClick={() => setStatus(live.map((i) => i.id), 'hazir')} className="h-11 flex-[2] rounded-xl bg-success-600 text-sm font-semibold text-white transition-colors duration-100 hover:bg-success-700 active:bg-success-700 active:brightness-95">
                         Hepsi hazır
                       </button>
                     </>
@@ -283,20 +293,25 @@ export default function KitchenPage() {
   );
 }
 
-function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/** Araç çubuğu düğmesi: Tabs ile aynı dil (basılı gri, renksiz); aria-pressed ile açık/kapalı */
+function ToolButton({ pressed, className, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { pressed?: boolean }) {
   return (
     <button
-      onClick={onClick}
+      type="button"
+      aria-pressed={pressed}
       className={cn(
-        'inline-flex min-h-9 items-center rounded-lg border px-3 text-sm transition-[color,border-color] pointer-coarse:min-h-11',
-        active ? 'border-ink font-semibold text-ink' : 'border-line font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
+        'inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors duration-150 active:bg-surface-3 pointer-fine:min-h-9',
+        pressed ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-surface-2 hover:text-ink',
+        className,
       )}
+      {...rest}
     >
       {children}
     </button>
   );
 }
 
+/** Kalem durumu: bekleyen içi boş halka (varsayılan, yazısız), hazırlanan dolu amber, hazır yeşil */
 function StatusDot({ status }: { status: KitchenTicketItem['status'] }) {
   const map = {
     yeni: { cls: 'border-2 border-[var(--admin-warning)]', label: 'Bekliyor' },
@@ -305,9 +320,9 @@ function StatusDot({ status }: { status: KitchenTicketItem['status'] }) {
     servis: { cls: 'bg-muted', label: 'Serviste' },
   }[status];
   return (
-    <span className="mt-1 flex flex-col items-center gap-1 text-[11px] text-muted">
-      <span className={cn('size-4 rounded-full', map.cls)} />
-      {map.label}
+    <span className="mt-1 flex shrink-0 flex-col items-center gap-1 text-xs font-medium text-muted" role="img" aria-label={map.label}>
+      <span className={cn('size-3.5 rounded-full', map.cls)} />
+      {status !== 'yeni' && <span aria-hidden="true">{map.label}</span>}
     </span>
   );
 }

@@ -6,7 +6,8 @@ import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, Card, EmptyState, PageHeader } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, PageHeader, Stat } from '@/components/ui/misc';
+import { cn } from '@/lib/cn';
 import { ApiError, errorMessage, get, patch, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
@@ -97,9 +98,10 @@ export default function CustomersPage() {
   const collectMethods = boot.paymentMethods.filter((m) => m.kind !== 'cari' && m.kind !== 'online');
 
   return (
-    <div className="flex h-full flex-col lg:flex-row">
-      <div className="flex min-h-0 flex-col border-line lg:w-[420px] lg:border-r">
-        <div className="space-y-3 p-4">
+    // Innex: gri zemin üstünde iki beyaz kart (liste ve kayıt), Masalar ekranıyla aynı iskelet
+    <div className="flex h-full flex-col gap-3 p-2 md:p-0 lg:flex-row">
+      <aside className={cn('flex min-h-0 flex-col rounded-2xl border border-line bg-surface lg:w-[400px]', c ? 'max-h-[40%] lg:max-h-none' : 'flex-1 lg:flex-none')}>
+        <div className="space-y-3 p-4 pb-3">
           <PageHeader title="Müşteriler" subtitle={stamps ? 'Damga kartı, açık hesap ve adresler' : 'Açık hesap ve adresler'} actions={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>Yeni</Button>} />
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
@@ -109,7 +111,7 @@ export default function CustomersPage() {
         <ul className="scroll-thin min-h-0 flex-1 divide-y divide-line overflow-y-auto">
           {(list.data ?? []).map((x) => (
             <li key={x.id}>
-              <button onClick={() => setSelected(x.id)} className={`flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-2 ${selected === x.id ? 'bg-[var(--admin-primary-soft)]' : ''}`}>
+              <button onClick={() => setSelected(x.id)} aria-current={selected === x.id || undefined} className={cn('flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3', selected === x.id && 'bg-surface-3 shadow-[inset_2px_0_0_var(--admin-primary)]')}>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{x.name}</span>
                   <span className="text-xs text-muted">
@@ -127,11 +129,28 @@ export default function CustomersPage() {
               </button>
             </li>
           ))}
-          {list.data?.length === 0 && <li className="p-6 text-center text-sm text-muted">Müşteri bulunamadı</li>}
+          {list.data?.length === 0 && (
+            <li>
+              <EmptyState
+                compact
+                icon={q ? <Search /> : <Plus />}
+                title={q ? 'Müşteri bulunamadı' : 'Henüz müşteri yok'}
+                action={
+                  q ? undefined : (
+                    <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
+                      İlk müşteriyi ekle
+                    </Button>
+                  )
+                }
+              >
+                {q ? 'Ad ya da telefonun bir bölümünü yazın' : 'Açık hesap ve adres için müşteri kaydı açın'}
+              </EmptyState>
+            </li>
+          )}
         </ul>
-      </div>
+      </aside>
 
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+      <section className="scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 md:p-6">
         {!c ? (
           <EmptyState icon={<Wallet />} title="Bir müşteri seçin">
             {stamps ? 'Açık hesap bakiyesi, tahsilat, damga kartı ve sipariş geçmişi burada görünür' : 'Açık hesap bakiyesi, tahsilat ve sipariş geçmişi burada görünür'}
@@ -140,7 +159,7 @@ export default function CustomersPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap items-start gap-3">
               <div className="min-w-0 flex-1">
-                <h2 className="text-2xl font-semibold">{c.name}</h2>
+                <h2 className="text-xl font-semibold tracking-[-0.01em]">{c.name}</h2>
                 <p className="text-sm text-muted">
                   {c.phone ?? 'telefon yok'}
                   {c.email && ` · ${c.email}`}
@@ -174,15 +193,17 @@ export default function CustomersPage() {
               )}
             </div>
             <div className={`grid grid-cols-2 gap-3 ${stamps ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-              <Tile label="Açık hesap" value={tl(c.balance)} hint={c.creditLimit != null ? `sınır ${tl(c.creditLimit)}` : 'sınırsız'} />
-              {stamps && <Tile label="Damga" value={`${c.stamps} / ${goal}`} />}
-              <Tile label="Toplam harcama" value={tl(c.totalSpent)} />
-              <Tile label="Ziyaret" value={String(c.visits)} hint={c.lastVisitAt ? `son ${fmtDateTime(c.lastVisitAt)}` : undefined} />
+              <Stat label="Açık hesap" value={tl(c.balance)} hint={c.creditLimit != null ? `sınır ${tl(c.creditLimit)}` : 'sınırsız'} tone={c.creditLimit != null && c.balance > c.creditLimit ? 'bad' : undefined} />
+              {stamps && <Stat label="Damga" value={`${c.stamps} / ${goal}`} />}
+              <Stat label="Toplam harcama" value={tl(c.totalSpent)} />
+              <Stat label="Ziyaret" value={String(c.visits)} hint={c.lastVisitAt ? `son ${fmtDateTime(c.lastVisitAt)}` : undefined} />
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-3 lg:grid-cols-2">
               <Card title="Açık hesap hareketleri">
                 {detail.data!.ledger.length === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-muted">Hareket yok</p>
+                  <EmptyState compact title="Hareket yok">
+                    Açık hesaba yazılan satış ve tahsilat burada
+                  </EmptyState>
                 ) : (
                   <ul className="divide-y divide-line">
                     {detail.data!.ledger.map((l) => (
@@ -198,7 +219,9 @@ export default function CustomersPage() {
               </Card>
               <Card title="Adresler" actions={<Button size="sm" icon={<MapPin className="size-4" />} onClick={() => setAddress({ title: 'Ev', address: '' })}>Ekle</Button>}>
                 {detail.data!.addresses.length === 0 ? (
-                  <p className="px-4 py-6 text-center text-sm text-muted">Adres yok</p>
+                  <EmptyState compact title="Adres yok">
+                    Paket siparişte adres buradan seçilir
+                  </EmptyState>
                 ) : (
                   <ul className="divide-y divide-line">
                     {detail.data!.addresses.map((a) => (
@@ -220,7 +243,11 @@ export default function CustomersPage() {
                     <span className="tabular font-semibold">{tl(o.total)}</span>
                   </li>
                 ))}
-                {detail.data!.orders.length === 0 && <li className="px-4 py-6 text-center text-sm text-muted">Sipariş yok</li>}
+                {detail.data!.orders.length === 0 && (
+                  <li>
+                    <EmptyState compact title="Sipariş yok" />
+                  </li>
+                )}
               </ul>
             </Card>
             {can('cari.yonet') && (
@@ -242,7 +269,7 @@ export default function CustomersPage() {
             )}
           </div>
         )}
-      </div>
+      </section>
 
       <Modal
         open={creating}
@@ -337,12 +364,3 @@ export default function CustomersPage() {
   );
 }
 
-function Tile({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-4">
-      <div className="text-sm text-muted">{label}</div>
-      <div className="tabular mt-1 text-xl font-semibold">{value}</div>
-      {hint && <div className="text-xs text-muted">{hint}</div>}
-    </div>
-  );
-}

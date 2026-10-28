@@ -39,7 +39,8 @@ export function Toaster() {
   const list = useToasts((s) => s.list);
   const drop = useToasts((s) => s.drop);
   return (
-    <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 sm:bottom-6">
+    // Telefonda alt sekmenin üstü; tablet ve bilgisayarda sağ üst (Innex araç ipucu konumu): aksiyon şeridini örtmez
+    <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-20 z-[60] flex flex-col items-center gap-2 px-4 md:inset-x-auto md:bottom-auto md:right-4 md:top-4 md:items-end">
       {list.map((t) => {
         const Icon = icons[t.tone];
         return (

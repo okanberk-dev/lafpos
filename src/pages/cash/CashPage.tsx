@@ -10,6 +10,7 @@ import { Field, Input, Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { Badge, Card, EmptyState, PageHeader, PageLoading } from '@/components/ui/misc';
+import { cn } from '@/lib/cn';
 import { errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
@@ -185,6 +186,12 @@ export default function CashPage() {
                 <Button icon={<MonitorSmartphone className="size-4" />}>Eğitim cihazı</Button>
               </Link>
             )}
+            {/* Gün sonu rutin bir kapanıştır: birincil mavi; kırmızı iptal ve alarma ayrılır */}
+            {tab === 'bugun' && day && can('kasa.gun') && (
+              <Button variant="primary" icon={<Lock className="size-4" />} onClick={() => setClosing(true)}>
+                Gün sonu (Z)
+              </Button>
+            )}
             {can('rapor.gor') && (
               <Segmented
                 value={tab}
@@ -206,19 +213,21 @@ export default function CashPage() {
         <div className="mx-auto max-w-md">
           <Card>
             <div className="space-y-4 p-6 text-center">
-              <Lock className="mx-auto size-12 text-muted" />
+              <span aria-hidden="true" className="mx-auto grid size-14 place-items-center rounded-full bg-surface-3 text-ink-2">
+                <Lock className="size-6" strokeWidth={1.75} />
+              </span>
               <div>
-                <h2 className="text-xl font-semibold">Bugünün gün sonu alındı</h2>
-                <p className="text-sm text-muted">
+                <h2 className="text-lg font-semibold tracking-[-0.01em]">Bugünün gün sonu alındı</h2>
+                <p className="mt-1 text-pretty text-sm text-muted">
                   Z {closedDay.zNo} · {closedDay.closedAt ? `${fmtTime(closedDay.closedAt)}'de kapandı` : ''}. Yeni gün 05:00'ten sonra açılır; kapanıştan sonra satış gerekirse günü yeniden açın
                 </p>
               </div>
               {can('kasa.gun') ? (
                 <>
-                  <Field label="Neden">
+                  <Field label="Neden" className="text-left">
                     <Input value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} maxLength={200} placeholder="Ör. kapanıştan sonra gelen müşteri" />
                   </Field>
-                  <Button variant="primary" size="xl" block loading={busy} disabled={!reopenReason.trim()} onClick={() => reopen(closedDay.id)}>
+                  <Button variant="primary" size="lg" block loading={busy} disabled={!reopenReason.trim()} onClick={() => reopen(closedDay.id)}>
                     Günü yeniden aç
                   </Button>
                   <p className="text-xs text-muted">Yetkili onayı gerekir. Gün yeniden kapanınca Z raporu ve lafmaliyet'teki kayıt güncellenir</p>
@@ -257,7 +266,7 @@ export default function CashPage() {
       )}
 
       {tab === 'bugun' && day && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {current.data?.stale && (
             <div role="alert" className="flex items-start gap-3 rounded-2xl border border-warn-200 bg-warn-100 px-4 py-3 text-warn-700 dark:border-transparent dark:bg-warn-800 dark:text-warn-300">
               <AlertTriangle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
@@ -267,27 +276,19 @@ export default function CashPage() {
               </div>
             </div>
           )}
-          <div className="flex flex-wrap gap-2">
-            {can('kasa.hareket') && (
-              <>
-                <Button icon={<ArrowUpFromLine className="size-4" />} onClick={() => setMoveKind('harcama')}>
-                  Harcama
-                </Button>
-                <Button icon={<Wallet className="size-4" />} onClick={() => setMoveKind('teslim')}>
-                  Teslim
-                </Button>
-                <Button icon={<ArrowDownToLine className="size-4" />} onClick={() => setMoveKind('giris')}>
-                  Kasaya giriş
-                </Button>
-              </>
-            )}
-            <div className="flex-1" />
-            {can('kasa.gun') && (
-              <Button variant="danger" icon={<Lock className="size-4" />} onClick={() => setClosing(true)}>
-                Gün sonu (Z)
+          {can('kasa.hareket') && (
+            <div className="grid grid-cols-3 gap-2 sm:flex">
+              <Button icon={<ArrowUpFromLine className="size-4" />} onClick={() => setMoveKind('harcama')}>
+                Harcama
               </Button>
-            )}
-          </div>
+              <Button icon={<Wallet className="size-4" />} onClick={() => setMoveKind('teslim')}>
+                Teslim
+              </Button>
+              <Button icon={<ArrowDownToLine className="size-4" />} onClick={() => setMoveKind('giris')}>
+                Kasaya giriş
+              </Button>
+            </div>
+          )}
 
           {summary ? (
             <ZView day={day} summary={summary} lafmaliyet={null} title={`Ara rapor (X) · Z ${day.zNo}`} />
@@ -301,17 +302,23 @@ export default function CashPage() {
 
           <Card title="Kasa hareketleri">
             {movements.length === 0 ? (
-              <p className="px-4 py-6 text-center text-sm text-muted">Bugün kasa hareketi yok</p>
+              <EmptyState compact icon={<Coins />} title="Bugün kasa hareketi yok">
+                Harcama, teslim ve kasaya giriş burada listelenir
+              </EmptyState>
             ) : (
               <ul className="divide-y divide-line">
                 {movements.map((m) => (
+                  // Yön işaretle: giriş artı ve yeşil, çıkan para eksi
                   <li key={m.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
                     <Badge tone={m.kind === 'giris' ? 'green' : m.kind === 'teslim' ? 'blue' : 'red'}>{MOVE_LABEL[m.kind]}</Badge>
                     <span className="min-w-0 flex-1 truncate">{m.description || '—'}</span>
-                    <span className="text-xs text-muted">
+                    <span className="shrink-0 text-right text-xs text-muted sm:w-28">
                       {m.userName} · {fmtTime(m.createdAt)}
                     </span>
-                    <span className="tabular font-semibold">{tl(m.amount)}</span>
+                    <span className={cn('tabular w-24 shrink-0 text-right font-semibold', m.kind === 'giris' ? 'text-[var(--admin-success)]' : 'text-ink')}>
+                      {m.kind === 'giris' ? '+' : '−'}
+                      {tl(m.amount)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -386,8 +393,8 @@ export default function CashPage() {
         subtitle="Çekmeceyi sayın; banka POS slipi ve yemek kartı tutarlarını girin"
         footer={
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={!counted} onChange={(e) => setCounted(!e.target.checked)} className="size-4" />
+            <label className="flex min-h-11 items-center gap-2 text-sm">
+              <input type="checkbox" checked={!counted} onChange={(e) => setCounted(!e.target.checked)} className="size-5 accent-[var(--admin-primary)]" />
               Sayımı sonra gireceğim
             </label>
             <div className="flex-1" />

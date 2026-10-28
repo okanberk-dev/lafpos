@@ -98,11 +98,14 @@ const dateTimeFmt = new Intl.DateTimeFormat('tr-TR', {
   minute: '2-digit',
 });
 const dateLongFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
+const dateShortFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'short', weekday: 'short' });
 
 export const fmtTime = (ms: number) => timeFmt.format(new Date(ms));
 export const fmtDateTime = (ms: number) => dateTimeFmt.format(new Date(ms));
 /** "2026-10-26" -> "26 Ekim 2026 Pazartesi" */
 export const fmtDateLong = (date: string) => dateLongFmt.format(new Date(`${date}T12:00:00Z`));
+/** "2026-10-26" -> "26 Eki Pzt" (tarih adımlayıcı gibi dar yerler) */
+export const fmtDateShort = (date: string) => dateShortFmt.format(new Date(`${date}T12:00:00Z`));
 
 /** Geçen süre: "4 dk", "1 sa 12 dk" */
 export function fmtElapsed(fromMs: number, toMs = Date.now()): string {
