@@ -1,4 +1,4 @@
-# LafPOS: kalan işler (27 Ekim 2026, gece)
+# LafPOS: kalan işler (28 Ekim 2026, akşam)
 
 Bu dosya kaldığın yerden devam etmek içindir. Her şey GitHub'da (`RiosenBeq/lafpos`). Ayrıntılı geçmiş:
 `calisma/PLAN.md`. Kurallar: depodaki `AGENTS.md` (para kuruş, yetki sunucuda, denetim kaydı, `patchOf`, Türkçe metin,
@@ -20,9 +20,44 @@ Bu dosya kaldığın yerden devam etmek içindir. Her şey GitHub'da (`RiosenBeq
   parolasız (yapıldı, PR #16). Gerçek kullanımdan önce Vercel'de `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve
   `LAFPOS_UZAKTAN_PAROLA` tanımlanmalı. Bunu v0.2.0 öncesi kullanıcıya hatırlat.
 
-## Bitenler (bugün main'e girdi)
+## 28 Ekim 2026: durum ve canlıya geçiş
+
+Kullanıcının isteği (28 Ekim): "kalan işleri yap, main'e al; diğer repolarla bağlantılı mısın bak, henüz demo, ben
+aktif ol deyince olabilecek misin; tüm bileşen tasarımlarını en ufak ayrıntısına kadar geliştir".
+
+**Bugün main'e girenler:** #29 Getir Yemek canlı bağlantısı, #30 tasarım yenilemesi (aşağıdaki tabloda). laffogato'da
+#268 (LafPOS masa kodları: panel siparişinde `tableCode`, imzalı `PUT /api/panel/tables`, yalnız LafPOS anahtarıyla).
+Önce/sonra ekranları: https://claude.ai/artifact/CzWAiSWwAP6uPk4fZxb4oX (özel sayfa; paylaşmak sahibin işi).
+
+**Bağlantılar:**
+- laffogato: bu oturuma bağlı, push var; #268 birleşti. Site tarafında LafPOS'un istediği iki uç artık var; LafPOS'un
+  `sendTables` 200 alınca "site henüz almıyor" durumu kendiliğinden kalkar.
+- lafmaliyet: GitHub'da bağlanabilir görünüyor (`check_repo_access` → attachable) ama bağlama isteği oturumun izin
+  denetiminde reddedildi; kullanıcı izin verirse sözleşme karşılaştırması yapılır (4. madde).
+- Bu bulut ortamının ağ politikası `laffogato.net` ve `lafpos.vercel.app`'i reddediyor (403): canlı uçlar ve Vercel
+  dağıtımı buradan denetlenemiyor. Ortam ayarlarında Network access › Allowed domains'e iki alan adı eklenirse olur.
+- GitHub Actions hâlâ çalışmıyor ("denetim" işi günlük üretmeden 1 sn'de düşüyor, faturalama). Kapılar yerelde.
+
+**"Aktif ol" dendiğinde sırayla (anahtarları Claude yazmaz, değerleri ekrana basmaz):**
+1. Vercel › lafpos: `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (demo parolasız; gerçek kullanımdan
+   önce şart). `LAFPOS_CLOUD_SECRET` dolu ve en az 32 karakter (`/api/uzaktan/kurulum` → `secret:true`).
+2. Kasa bilgisayarının `.env`'i: `LAFFOGATO_URL=https://laffogato.net`, `LAFFOGATO_SYNC_SECRET` (sitedeki
+   `LAFPOS_SYNC_SECRET` ile aynı değer), `LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET`, `LAFPOS_CLOUD_URL`,
+   `LAFPOS_CLOUD_SECRET`. Sitede `LAFPOS_SYNC_SECRET` tanımlı ve `KARAOKE_SYNC_SECRET`'ten farklı olmalı (eşitse
+   kapalı sayılır, docs/LAFPOS.md "Varsayılan kapalı").
+3. Ayarlar: kurulum modunu kapat, örnek PIN'leri değiştir; servis modu seç (self servis varsayılan).
+4. Paket platformları (her biri önce test ortamında bir tur, sonra Yönetim › Paket platformları'nda "Canlı"):
+   Trendyol Go (`TRENDYOL_*`), Yemeksepeti (`YEMEKSEPETI_*`, Vercel'de `YEMEKSEPETI_PLUGIN_SECRET`), Getir
+   (`GETIR_APP_SECRET_KEY`, `GETIR_RESTAURANT_SECRET_KEY`, test için `GETIR_API_URL`; Vercel'de ayrı bir
+   `GETIR_WEBHOOK_SECRET`, Getir'e `https://lafpos.vercel.app/api/getir/order` ve `/api/getir/cancel`).
+5. Masa kartları: Yönetim › Masa planı › QR üret ve yazdır; kodlar siteye `PUT /api/panel/tables` ile gider.
+6. v0.2.0 Windows kurulumu (5. madde) ve kafede gerçek cihazla bir tur (iPhone, Android, Windows dokunmatik).
+
+## Bitenler
 | PR | İçerik |
 |---|---|
+| #30 | **Tasarım yenilemesi** ("aydınlık ve sade"): 8 mercekli denetim (adisyon, salon, telefon, yönetim, bileşenler, mekanik, koyu tema ve bar, durumlar ve kopya) ve bulgularının hepsi; ortak bileşenler (basılı durum, `Tabs`, `Stat`, üç boy `EmptyState`, `ErrorState`, `Skeleton`, `confirmDialog` / `promptDialog`, `NumberInput`, `SearchInput`, `cn()` sınıf birleştirme), fiziksel klavyeyle tutar, çift gönderim kilitleri, kaydedilmemiş değişiklik koruması, telefon ve koyu tema. İki çekişmeli tur: 33 + 19 bulgu (ikincisi "45.90" → 4.590 TL hatasını yakaladı). `DESIGN.md` §3. Kapılar: 1168 test, 148 ekran 0 sorun, 16/16, demo 47/0 ve 6/6 |
+| #29 | **Getir Yemek canlı bağlantısı**: aktarıcı (LafPOS Uzaktan, `x-api-key`), yedek yoklama, verify / verify-scheduled / prepare / handover / deliver / cancel. İki çekişmeli tur: 26 + 15 bulgu (geçici hata kodları, ileri tarihli sipariş, `result:false`, indirim, kişisel verinin aktarıcıda süresi). Test saat bombası düzeltmesi (`tests/fake-site.ts`) |
 | #28 | **Yemeksepeti canlı bağlantısı**: Delivery Hero siparişi LafPOS Uzaktan'a (Vercel, `api/uzaktan.ts`) JWT ile gelir, Redis gelen kutusuna girer; kasa imzalı çeker, kayıt yazılınca siler. Dolaylı akış (tablette kabul edilmiş, geri çağrı adresi yok) desteklenir; kabul saati platformun saatine uyar; ücretler ayrı satır (KDV %20, mutfağa gitmez); kuryenin bıraktığı nakit kasada; test siparişi kabul edilmez. İki çekişmeli tur: 11 doğrulanmış + 13 doğrulanmamış bulgu kapandı |
 | #27 | **Trendyol Go canlı bağlantısı** (Uber Eats Türkiye dahil): yoklama, kabul / ret önce platforma (önce yerelde prova), aşamalar sırayla, kasada iptal platforma, ürün eşleme, göç `0012_platform_canli`. İki çekişmeli tur: 20 bulgu kapandı (Kapalı modda iptal yoklaması, karar kilidi, tek koşu tur, bekleyen iptali kayda alma…) |
 | #26 | **QR + self servis** modu (`qr_self`) ve masaya özel QR'ı LafPOS üretir (`tables.qrCode`, göç `0010_masa_qr`, sitenin 10 simgelik Crockford biçimi, `https://laffogato.net/masa/<kod>`); A4 masa kartları; kodlar siteye `PUT /api/panel/tables` ile giden kutusundan (site ucu yoksa 6 saatte bir) |
@@ -52,7 +87,8 @@ Kullanıcı GitHub › Settings › Billing'den düzeltmeli. O zamana kadar kap�
 
 ### 0. Kullanıcının 27 Ekim akşam istekleri (sırayla; her biri ayrı PR, para değiştirenler çekişmeli gözden geçirmeyle)
 
-**Durum (27 Ekim gece):** 1 (#24), 2 (#26) ve 4 (#23) bitti. **3 (varyant) kullanıcının cevabını bekliyor**: LafPOS'ta
+**Durum (28 Ekim):** 1 (#24), 2 (#26) ve 4 (#23) bitti; sitedeki karşılığı (masa kodları) laffogato #268 ile bitti.
+**3 (varyant) hâlâ kullanıcının cevabını bekliyor**: LafPOS'ta
 "varyant" kavramı yok; Yönetim › Menü'de ürün düzenlerken seçenek grubu bağlama zaten var (`MenuAdmin.tsx` "Seçenek
 grupları"), boy yalnız M/L. Kelime sitenin (laffogato) mağaza ürünü sihirbazında geçiyor (paket kahve 250 g / 1 kg
 gibi adlı varyantlar). Sorulan seçenekler: (a) sitede mağaza ürününe varyant eklerken hazır seçeneklerden seçmek
@@ -87,7 +123,7 @@ Entegrasyon "site henüz almıyor" der.
 
 ### 1. Paket platformları B2: gerçek API (kullanıcı: "yemek sepeti uber API de ekle")
 
-**Durum (27 Ekim gece):** Trendyol Go (#27) ve Yemeksepeti (#28) main'de; ikisi de canlı ortamda hiç denenmedi
+**Durum (28 Ekim):** Trendyol Go (#27), Yemeksepeti (#28) ve Getir (#29) main'de; üçü de canlı ortamda hiç denenmedi
 (uç ve alan adları belgeden; bu ortamdan `developers.tgoapps.com` ve Delivery Hero'ya erişim yok). Sırada:
 - **Kullanıcının adımları** (anahtarları Claude yazmaz): Trendyol için kasa `.env`'ine `TRENDYOL_SUPPLIER_ID`,
   `TRENDYOL_API_KEY`, `TRENDYOL_API_SECRET`; Yemeksepeti için Delivery Hero'dan POS entegrasyonu, kasa `.env`'ine
@@ -96,7 +132,7 @@ Entegrasyon "site henüz almıyor" der.
   `https://lafpos.vercel.app/api/yemeksepeti/order/{remoteId}`, durum adresi
   `.../api/yemeksepeti/remoteId/{remoteId}/remoteOrder/{remoteOrderId}/posOrderStatus`.
 - Her iki platformun test ortamında bir tur; uyuşmayan alan adı yalnız bağdaştırıcıda değişir.
-- **Getir** (push + `/periodic/unapproved` yedek): Yemeksepeti'deki aktarıcı deseniyle.
+- ~~**Getir**~~ (#29). Migros Yemek: belgeler herkese açık değil, görüşme gerekir.
 - Platform başına satış ve komisyon raporu; platformdan otomatik kabul (isteğe bağlı).
 - B1 (#19) hazır: `server/delivery/` (service, simulator), `shared/platforms.ts` (`PlatformOrderPayload` tek biçim),
   `docs/PAKET-PLATFORMLARI.md`. Bağdaştırıcı yalnız siparişi bu biçime çevirir ve kabul/ret/hazır/yolda çağrılarını
@@ -127,7 +163,9 @@ Entegrasyon "site henüz almıyor" der.
   satışıdır: ön ödemeli olanın ödemesi platformun `online` yöntemiyle (kanal = platform) yazılır, kasada tahsil
   edilmez. Gerçek anahtarlar kullanıcıdan; Claude yazmaz.
 
-### 2. Tasarım yenilemesi (kullanıcının seçimi: "Aydınlık ve sade")
+### 2. ~~Tasarım yenilemesi~~ (#30, 28 Ekim). Kalan küçükler: Ayarlar'da kayıttan sonra geçmişte fazladan bir giriş
+kalıyor (geri tuşuna bir kez fazla basılır); otomatik kilit kaydedilmemiş değişikliği sormuyor; ham Tailwind ölçeği
+bekçisi `tests/ui-rules.test.ts`'te izinli listeyle var, yeni ekranlar `--admin-*` kullanmalı. Eski not:
 Apple tarzı: beyaz zemin, az renk, bol boşluk, ince tipografi, her şey tek bakışta okunur. Varsayılan tema açık,
 koyu tema ayarda kalır. Kasa ekranları ve yönetim tek dilde (Innex yapısı sadeleşerek kalır). Önce/sonra ekran
 görüntülerini kullanıcıya göster; 1. maddedeki demoda görünsün. Skill'ler: `impeccable`, `web-interface-guidelines`.
@@ -163,6 +201,8 @@ görüntülerini kullanıcıya göster; 1. maddedeki demoda görünsün. Skill'l
 - Üretim yalnız main'den. Günlük 100 dağıtım sınırı (Hobby): main'e günde birkaç kez birleştir.
 - Yemeksepeti için Vercel'e `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun JWT anahtarı) ve isteğe bağlı
   `YEMEKSEPETI_REMOTE_ID` eklenmeli; `GET /api/uzaktan/kurulum` `yemeksepeti: true` döner. Değer Delivery Hero'dan gelir.
+- Getir için Vercel'e `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16, `LAFPOS_CLOUD_SECRET` ve Yemeksepeti
+  anahtarından farklı; eşitse reddedilir) ve isteğe bağlı `GETIR_RESTAURANT_ID`; kurulum `getir: true` döner.
 
 ### 7. Operatörün yapacakları
 - GitHub faturalama (Actions çalışsın).
@@ -180,7 +220,14 @@ görüntülerini kullanıcıya göster; 1. maddedeki demoda görünsün. Skill'l
   Workflow'ta ajan sayısını 10'un altında tut (50 ajanlık tur oturum sınırına takıldı, doğrulayıcıların çoğu düştü).
 - `npx prettier --write` depoya uygulanmaz (depo prettier biçiminde değil, yüzlerce satır gürültü yapar).
 - `pkill -f <ad>` komutu kendi kabuğunu da öldürür (komut satırında aynı ad geçer).
-- Bu ortamın vekil sunucusu `lafpos.vercel.app`'i engelliyor (403): canlı denetim buradan yapılamıyor, kullanıcı bakmalı.
+- Bu ortamın vekil sunucusu `lafpos.vercel.app`'i ve `laffogato.net`'i engelliyor (403): canlı denetim buradan
+  yapılamıyor; ortamın Allowed domains listesine eklenirse olur, yoksa kullanıcı bakmalı.
+- **Saat bombası:** sabit tarihli fikstür bir gün sonra testi düşürdü (28 Ekim, `tests/site-orders.test.ts`).
+  Zamana bağlı pencereye giren fikstür gerçek saate kaydırılır (`tests/fake-site.ts` `siteOrdersFixture`).
+- **Büyük arayüz işi:** dosya sahipliğine göre böl (önce ortak bileşenler tek başına, sonra sayfa grupları paralel),
+  sonra bağımsız doğrulayıcı ve iki çekişmeli tur. İkinci tur yine para hatası buldu ("45.90" → 4.590 TL).
+- Kullanım limiti 28 Ekim'de iki kez doldu (5 saatlik pencere); yarım ajanlar SendMessage ile, iş akışları
+  `resumeFromRunId` ile kaldığı yerden sürdü.
 
 - Kullanım limiti: aynı anda tek iş akışı (≤ 6 ajan); büyük işten önce kullanıma bak. Bugün birleştirme, iki
   gözden geçirici, servis modu ve iki küçük PR 5 saatlik pencerenin ~%80'ini kullandı.
@@ -195,12 +242,13 @@ görüntülerini kullanıcıya göster; 1. maddedeki demoda görünsün. Skill'l
 ## Devam istemi (yeni oturuma yapıştır)
 
 > LafPOS'ta (`RiosenBeq/lafpos`) kaldığın yerden devam et. `git fetch`, sonra `origin/claude/calisma-notlari`
-> dalındaki `calisma/KALAN-ISLER.md`'yi oku ve `AGENTS.md`'ye uy. İşletme self servis. Sırayla: (1) 0. maddenin 3.
-> işi "varyant eklemede seçenek": kullanıcının cevabına göre (cevap yoksa önce sor) `claude/varyant-secenek`
-> dalında yap; (2) 1. madde: kullanıcı anahtarları verdiyse Trendyol Go ve Yemeksepeti'nin test ortamında bir tur
-> (anahtarları sen yazma, `.env` ve Vercel değişkenleri kullanıcıda), sonra Getir bağdaştırıcısı (Yemeksepeti'deki
-> aktarıcı deseni); (3) 1b ve sonraki maddeler. Her iş ayrı dal ve worktree (`~/Downloads/lafpos-wt/<ad>`); para ya
-> da durum değiştiren iş bağımsız çekişmeli gözden geçirmeden iki tur geçer (ajan sayısı 10'un altında); kapıları
+> dalındaki `calisma/KALAN-ISLER.md`'yi oku ve `AGENTS.md`'ye uy. İşletme self servis; sistem henüz demo. Sırayla:
+> (1) 0. maddenin 3. işi "varyant eklemede seçenek": kullanıcının cevabına göre (cevap yoksa önce sor)
+> `claude/varyant-secenek` dalında yap; (2) kullanıcı "aktif ol" derse "28 Ekim: durum ve canlıya geçiş"
+> listesini sırayla yürüt (anahtarları sen yazma, değer basma; Vercel değişkeni ekleyebilirsin); platformların test
+> ortamında birer tur; (3) lafmaliyet bağlanabilirse 4. madde (sözleşme karşılaştırması); (4) 1b, 3, 5. maddeler.
+> Her iş ayrı dal ve worktree (`/home/user/lafpos-wt/<ad>`, `node_modules` ana klondan bağ); para ya da durum
+> değiştiren iş bağımsız çekişmeli gözden geçirmeden iki tur geçer (ajan sayısı 10'un altında); kapıları
 > (typecheck, test, build, e2e) yerelde geçir ve PR'a yaz; PR'dan önce main'i al ve göç numarasını denetle; PR ile
 > main'e al (merge commit); Vercel sınırı yüzünden main'e günde birkaç kez; birleştirince canlıya bak.
 > Kullanımın %90'ına gelince bu dosyayı güncelle ve yeni devam istemi ver.
