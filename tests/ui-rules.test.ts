@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ADMIN_SECTIONS } from '../src/components/admin/sections';
 import { fold } from '../src/lib/shell';
+import { bootDarkFor } from '../src/lib/bootDark';
 
 /** Arayüzün kuralları: Türkçe büyük harf, mobil görüntü alanı, yönetim bölümü ile rota ve e2e taraması eşleşmesi */
 const root = join(__dirname, '..');
@@ -36,6 +37,38 @@ describe('kaynak taraması', () => {
     const bad = sources.filter(({ text }) => /<(IconButton|ActionMenu)\b(?![^>]*\blabel=)[^>]*>/.test(text)).map(({ f }) => f);
     expect(bad).toEqual([]);
   });
+
+  /**
+   * Ham Tailwind ölçekleri (brand-*, warn-*, danger-*, rose-*, success-*) koyu temada değişmez: koyu kartta AA altı
+   * metin, okunmayan seçili satır ve pastel leke verir. Metin, rozet, uyarı kutusu ve kenar anlam adlarıyla yazılır
+   * (text-danger-ink, bg-warning-soft, border-primary-line, `--admin-*`). Ham ölçek yalnız aşağıdaki bilinçli dolu
+   * yüzeylerde kalır: beyaz yazılı dolu düğme ve rozet, gece mürekkebi zeminde ikon. Yeni kullanım test düşürür;
+   * gerçekten gerekiyorsa gerekçesiyle buraya eklenir.
+   */
+  it('ham renk ölçeği yalnız izinli dolu yüzeylerde', () => {
+    const ALLOWED: Record<string, { tokens: string[]; why: string }> = {
+      'src/components/ui/Button.tsx': {
+        tokens: ['bg-danger-600', 'hover:bg-danger-700', 'active:bg-danger-700', 'bg-success-600', 'hover:bg-success-700', 'active:bg-success-700', 'dark:bg-success-700', 'dark:enabled:hover:bg-success-600'],
+        why: 'danger ve success dolu düğmeleri, beyaz yazı iki temada AA',
+      },
+      'src/pages/KitchenPage.tsx': { tokens: ['bg-danger-600'], why: 'bar ekranında alarm süre rozeti ve iptal edilen kalemin adedi, beyaz yazı' },
+      'src/pages/FloorPage.tsx': { tokens: ['bg-success-600'], why: 'masa kartında hazır rozeti, beyaz yazı' },
+      'src/pages/DevicePage.tsx': { tokens: ['bg-warn-600'], why: 'eğitim cihazında yemek kartı ödeme tipi (TYPES), beyaz yazı' },
+      'src/lib/toast.tsx': {
+        tokens: ['[&>svg:first-child]:text-success-300', '[&>svg:first-child]:text-danger-300'],
+        why: 'bildirimin ikonu gece mürekkebi zeminde (iki temada koyu); koyu temada dark: ile belirtece döner',
+      },
+    };
+    const RAW = /(?:^|[\s'"`])((?:[^\s'"`]*:)?(?:text|bg|border|ring|outline|fill|stroke|divide|from|via|to|decoration|accent|caret|shadow|placeholder)-(?:brand|warn|danger|rose|success)-\d{2,3}(?:\/\d{1,3})?)(?=[\s'"`]|$)/gm;
+    const bad: string[] = [];
+    for (const { f, text } of sources) {
+      if (!/\.tsx?$/.test(f)) continue;
+      const file = f.split('\\').join('/');
+      const allowed = ALLOWED[file]?.tokens ?? [];
+      for (const m of text.matchAll(RAW)) if (!allowed.includes(m[1])) bad.push(`${file}: ${m[1]}`);
+    }
+    expect(bad).toEqual([]);
+  });
 });
 
 describe('yönetim paneli bölümleri', () => {
@@ -56,6 +89,20 @@ describe('yönetim paneli bölümleri', () => {
   it('Innex tarifi ve skill depoda', () => {
     expect(existsSync(join(root, 'docs/ADMIN-INNEX.md'))).toBe(true);
     expect(read('.claude/skills/build-admin-panel/SKILL.md')).toMatch(/docs\/ADMIN-INNEX\.md/);
+  });
+});
+
+describe('ilk karede koyu açılan ekranlar (beyaz flaş olmasın)', () => {
+  it('çağrı ekranı hep, müşteri ekranı ?tema=acik değilse, bar ekranı cihaz tercihi koyuysa', () => {
+    expect(bootDarkFor('/cagri', '', 'koyu')).toBe(true);
+    expect(bootDarkFor('/cagri/', '', 'acik')).toBe(true);
+    expect(bootDarkFor('/musteri-ekrani', '?ekran=kasa', 'koyu')).toBe(true);
+    expect(bootDarkFor('/musteri-ekrani', '?ekran=kasa&tema=acik', 'koyu')).toBe(false);
+    // Bar ekranı cihazın tercihinde (kaydedilmemişse koyu; theme.ts readKdsTheme)
+    expect(bootDarkFor('/mutfak', '', 'koyu')).toBe(true);
+    expect(bootDarkFor('/mutfak', '', 'acik')).toBe(false);
+    expect(bootDarkFor('/masalar', '', 'koyu')).toBe(false);
+    expect(bootDarkFor('/', '', 'koyu')).toBe(false);
   });
 });
 

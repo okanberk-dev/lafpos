@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, RotateCcw } from 'lucide-react';
+import { Lock, RotateCcw, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { type Permission, PERMISSIONS, type Role } from '@shared/permissions';
-import { Badge, BTN, CARD, PageHeader, StatusTabs } from '@/components/admin/ui';
-import { PageLoading } from '@/components/ui/misc';
+import { Badge, CARD, PageHeader, StatusTabs, TableSkeleton } from '@/components/admin/ui';
+import { Button } from '@/components/ui/Button';
+import { ErrorState } from '@/components/ui/misc';
 import { errorMessage, get, put } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
@@ -61,30 +62,36 @@ export default function RolesAdmin() {
     }
   };
 
-  if (data.isLoading || !data.data) return <PageLoading />;
+  const actions = (
+    <>
+      {dirty.length > 0 && <Button onClick={() => setDraft({})}>Vazgeç</Button>}
+      <Button variant="primary" icon={<Save className="size-4" />} loading={saving} disabled={!dirty.length} onClick={() => void save()}>
+        {dirty.length ? `Kaydet (${dirty.length})` : 'Kaydet'}
+      </Button>
+    </>
+  );
+  const header = <PageHeader title="Roller ve yetkiler" description="Rolün yetkisi o roldeki herkese uygulanır; kişiye özel ek Personel’de" actions={data.data ? actions : undefined} />;
+
+  if (data.isPending)
+    return (
+      <>
+        {header}
+        <TableSkeleton rows={10} />
+      </>
+    );
+  if (!data.data)
+    return (
+      <>
+        {header}
+        <ErrorState className={CARD} title="Roller alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+      </>
+    );
   const groups = data.data.groups;
   const phone = roles.find((r) => r.role === phoneRole) ?? roles[0];
 
-  const actions = (
-    <>
-      {dirty.length > 0 && (
-        <button type="button" className={BTN.ghost} onClick={() => setDraft({})}>
-          Vazgeç
-        </button>
-      )}
-      <button type="button" className={BTN.primary} disabled={!dirty.length || saving} onClick={save}>
-        {dirty.length ? `Kaydet (${dirty.length})` : 'Kaydet'}
-      </button>
-    </>
-  );
-
   return (
     <>
-      <PageHeader
-        title="Roller ve yetkiler"
-        description="Rolün yetkisi o roldeki herkese uygulanır; kişiye özel ek Personel'de"
-        actions={actions}
-      />
+      {header}
 
       {/* Bilgisayar ve tablet: roller sütun */}
       <div className={cn(CARD, 'hidden overflow-hidden md:block')}>
@@ -127,10 +134,9 @@ export default function RolesAdmin() {
         <StatusTabs label="Rol" value={phone.role} onChange={setPhoneRole} tabs={roles.map((r) => ({ value: r.role, label: r.label, count: current(r).length }))} />
         {phone.locked && <p className="mb-3 text-[13px] text-[var(--admin-text-mute)]">Patron rolü her yetkiye sahiptir ve değiştirilemez</p>}
         {!phone.locked && !sameSet(current(phone), phone.defaults) && (
-          <button type="button" onClick={() => reset(phone)} className={cn(BTN.ghost, 'mb-3')}>
-            <RotateCcw className="size-4" aria-hidden="true" />
+          <Button icon={<RotateCcw className="size-4" />} onClick={() => reset(phone)} className="mb-3">
             Varsayılana dön
-          </button>
+          </Button>
         )}
         <div className="space-y-4">
           {groups.map((g) => (
@@ -179,8 +185,8 @@ function GroupRows({
         <td colSpan={roles.length} aria-hidden="true" />
       </tr>
       {group.permissions.map((p) => (
-        <tr key={p} className="group border-t border-[var(--admin-divider)] hover:bg-[var(--admin-surface-2)]">
-          <th scope="row" className="sticky left-0 z-[1] bg-[var(--admin-surface)] px-4 py-2 text-left font-normal text-[var(--admin-text)] group-hover:bg-[var(--admin-surface-2)]">
+        <tr key={p} className="group border-t border-[var(--admin-divider)] hover:bg-[var(--hover-solid)]">
+          <th scope="row" className="sticky left-0 z-[1] bg-[var(--admin-surface)] px-4 py-2 text-left font-normal text-[var(--admin-text)] group-hover:bg-[var(--hover-solid)]">
             {PERMISSIONS[p]}
           </th>
           {roles.map((r) => {

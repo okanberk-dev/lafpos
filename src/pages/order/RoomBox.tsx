@@ -122,14 +122,14 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
     <div className={cn('border-b border-[var(--admin-divider)]', room && 'bg-[var(--admin-hue-violet-soft)]')}>
       <div className="flex items-center gap-3 px-4 py-2">
         <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg', room ? 'bg-surface text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
-          <Mic2 className="size-4" strokeWidth={1.75} />
+          <Mic2 className="size-4" />
         </span>
         <span className="min-w-0 flex-1 text-[13px]">
           {room ? (
             <>
               <span className="tabular block font-semibold">Oda açık · {fmtElapsed(room.startedAt, now)}</span>
               <span className="block text-muted">
-                {fmtTime(room.startedAt)}'den beri · saatlik {tl(room.hourlyRate)}
+                başlangıç {fmtTime(room.startedAt)} · saatlik {tl(room.hourlyRate)}
               </span>
             </>
           ) : (
@@ -144,7 +144,7 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
           ) : (
             // Liste gelirken düğme bekler: sitede ödenmiş rezervasyon görünmeden sayaç rezervasyonsuz başlamasın
             <Button size="sm" variant="secondary" icon={<Play className="size-3.5" />} loading={listLoading} onClick={onStart}>
-              {listLoading ? 'Rezervasyonlar yükleniyor' : 'Başlat'}
+              {listLoading ? 'Rezervasyonlar yükleniyor…' : 'Başlat'}
             </Button>
           ))}
       </div>
@@ -177,10 +177,10 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
       {siteOn && !REMOTE && (upcoming.length > 0 || siteNote) && (
         <div className="px-4 pb-2">
           <div className="flex items-center gap-2 text-xs text-muted">
-            <CalendarClock className="size-3.5 shrink-0" strokeWidth={1.75} />
+            <CalendarClock className="size-3.5 shrink-0" />
             <span className="flex-1">{upcoming.length ? 'Sitedeki rezervasyonlar (bugün)' : 'Sitedeki rezervasyonlar'}</span>
             <IconButton label="Sitedeki rezervasyonları yenile" onClick={refresh} disabled={refreshing} className="-my-2 -mr-2">
-              <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} strokeWidth={1.75} />
+              <RefreshCw className={cn('size-4', refreshing && 'animate-spin')} />
             </IconButton>
           </div>
           {siteNote && <p className={cn('text-xs', state === 'hata' ? 'text-[var(--admin-warning)]' : 'text-muted')}>{siteNote}</p>}
@@ -208,7 +208,7 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
         open={!!choose}
         onClose={() => setChoose(null)}
         title={choose === 'link' ? `${table.name}: rezervasyona bağla` : `${table.name}: sayacı başlat`}
-        subtitle={choose === 'link' && room ? `Blok sayacın başladığı ${fmtTime(room.startedAt)}'den sayılır; sitede ödenen saat kasada alınmaz` : 'Sitedeki rezervasyonla bağlayın: sitede ödenen saat kasada yeniden alınmaz'}
+        subtitle={choose === 'link' && room ? `Blok, sayacın başladığı saatten (${fmtTime(room.startedAt)}) sayılır; sitede ödenen saat kasada alınmaz` : 'Sitedeki rezervasyonla bağlayın: sitede ödenen saat kasada yeniden alınmaz'}
         size="sm"
       >
         <div className="space-y-2 p-4">
@@ -247,7 +247,7 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
 function BookingChoice({ booking: b, onPick }: { booking: SiteKaraokeBookingDTO; onPick: () => void }) {
   const pay = bookingPayment(b);
   return (
-    <button type="button" onClick={onPick} className="flex min-h-14 w-full flex-col items-start gap-1 rounded-xl border border-line px-4 py-2.5 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2">
+    <button type="button" onClick={onPick} className="flex min-h-14 w-full flex-col items-start gap-1 rounded-xl border border-line px-4 py-2.5 text-left transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press">
       <span className="flex w-full items-baseline gap-2 text-sm">
         <span className="tabular font-semibold">{bookingHours(b)}</span>
         <span className="min-w-0 flex-1 truncate font-medium">{who(b)}</span>

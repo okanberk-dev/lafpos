@@ -1,6 +1,7 @@
 import { Bike, ChefHat, Globe, PackageCheck, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { tl } from '@shared/money';
+import { fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { post } from '@/lib/api';
@@ -21,14 +22,15 @@ export function OnlineOrderBar({ order, act }: { order: OrderDTO; act: Act }) {
   };
   const readyLabel = order.extFulfillment === 'table' ? 'Masaya götürüldü' : order.extFulfillment === 'delivery' ? 'Kuryeye verildi' : 'Hazır';
   return (
-    <div className="border-b border-line bg-rose-50 px-4 py-3 dark:bg-rose-700/15">
+    // Online her ekranda mor (Siparişler'deki "Sitede ödendi" rozetiyle aynı); pembe masa planında "kısmen ödendi" demek
+    <div className="border-b border-[var(--admin-border)] bg-violet-soft px-4 py-3">
       <div className="flex items-center gap-2 text-sm">
-        <Globe className="size-4 text-rose-700" />
-        <span className="font-semibold text-rose-700">Sitede ödendi · {tl(order.extTotal ?? 0)}</span>
+        <Globe aria-hidden="true" className="size-4 text-violet-ink" />
+        <span className="font-semibold text-violet-ink">Sitede ödendi · {tl(order.extTotal ?? 0)}</span>
         <span className="flex-1" />
         <span className="inline-flex items-center gap-1 text-xs text-ink-2">
           <f.icon className="size-3.5" /> {f.label}
-          {order.scheduledFor && ` · ${new Date(order.scheduledFor).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`}
+          {order.scheduledFor && ` · ${fmtTime(Date.parse(order.scheduledFor))}`}
         </span>
       </div>
       {order.status === 'acik' && (
@@ -53,7 +55,7 @@ export function OnlineOrderBar({ order, act }: { order: OrderDTO; act: Act }) {
       {order.status === 'kapali' && stage === 'gone' && (
         <p className="mt-2 text-sm font-medium text-ink-2">Siteden kalktı: sitede tamamlandı, iptal edildi ya da süresi geçti</p>
       )}
-      <p className="mt-1.5 text-xs text-muted">Bu sipariş LafPOS'ta tahsil edilmez ve Z'ye girmez; ödeme sitede alındı</p>
+      <p className="mt-1.5 text-xs text-muted">Bu sipariş LafPOS’ta tahsil edilmez ve Z’ye girmez; ödeme sitede alındı</p>
     </div>
   );
 }

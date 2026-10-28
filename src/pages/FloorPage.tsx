@@ -1,20 +1,21 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Lock, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { tlShort } from '@shared/money';
 import { bookingHours, bookingPayment } from '@shared/karaoke';
-import { fmtElapsed } from '@shared/time';
+import { fmtAgo, fmtElapsed } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, OrderDTO, SiteKaraokeBookingDTO, TableDTO } from '@shared/types';
-import { Button, IconButton } from '@/components/ui/Button';
+import { Button, buttonClass, IconButton } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, EmptyState, PageLoading, Tabs } from '@/components/ui/misc';
+import { Badge, EmptyState, ErrorState, PageLoading, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { useLocalPref, useMediaQuery, useTick } from '@/lib/hooks';
+import { useFinePointer, useLocalPref, useMediaQuery, useTick } from '@/lib/hooks';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 import { openCounterSale } from '@/lib/counter';
@@ -59,7 +60,14 @@ export default function FloorPage() {
     return m;
   }, [boot.tables, floor.data]);
 
-  if (floor.isLoading) return <PageLoading />;
+  if (floor.isPending) return <PageLoading />;
+  if (floor.isError && !floor.data) {
+    return (
+      <div className="grid h-full place-items-center p-4">
+        <ErrorState title="Masalar alınamadı" error={floor.error} retrying={floor.isFetching} onRetry={() => void floor.refetch()} />
+      </div>
+    );
+  }
   const others = floor.data?.others ?? [];
   const reservations = floor.data?.reservations ?? [];
   // Sitedeki bugünkü karaoke rezervasyonları (odayı tutanlar): sitede tek oda var, her oda masasına aittir
@@ -100,35 +108,35 @@ export default function FloorPage() {
                     title={label}
                     onClick={() => setView(v)}
                     className={cn(
-                      'grid size-9 place-items-center rounded-md transition-colors pointer-coarse:size-11',
+                      'grid size-9 place-items-center rounded-md transition-colors duration-150 focus-visible:-outline-offset-2 pointer-coarse:size-11',
                       view === v ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08),0_0_0_1px_rgb(12_14_27/0.04)]' : 'text-muted hover:text-ink',
                     )}
                   >
-                    <Icon className="size-4" strokeWidth={1.75} />
+                    <Icon className="size-4" />
                   </button>
                 ))}
               </div>
             )}
             {!REMOTE && (
             <>
-            {/* Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır (cn sınıf birleştirmez: gizleme max-sm: ile) */}
-            <Button icon={<ShoppingBag className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden">
+            {/* Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır */}
+            <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden">
               Gel-al
             </Button>
             <IconButton label="Gel-al" variant="secondary" onClick={() => setTakeaway('gelal')} className="sm:hidden">
-              <ShoppingBag className="size-[18px]" strokeWidth={1.75} />
+              <ShoppingBag className="size-[18px]" />
             </IconButton>
             {can('paket.yonet') && (
               <>
-                <Button icon={<Bike className="size-4" strokeWidth={1.75} />} onClick={() => setTakeaway('paket')} className="max-sm:hidden">
+                <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="max-sm:hidden">
                   Paket
                 </Button>
                 <IconButton label="Paket" variant="secondary" onClick={() => setTakeaway('paket')} className="sm:hidden">
-                  <Bike className="size-[18px]" strokeWidth={1.75} />
+                  <Bike className="size-[18px]" />
                 </IconButton>
               </>
             )}
-            <Button variant="primary" className="max-sm:flex-1" icon={<Store className="size-4" strokeWidth={1.75} />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
+            <Button variant="primary" className="max-sm:flex-1" icon={<Store className="size-4" />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
               Tezgâh satışı
             </Button>
             </>
@@ -136,12 +144,39 @@ export default function FloorPage() {
           </div>
         </header>
 
+        {/* Gün kapalıyken kalıcı şerit: masaya dokununca yalnız toast çıkmasın; renk ikonda, metin mürekkepte */}
+        {!boot.day && !REMOTE && (
+          <div role="status" className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] px-4 py-1.5 text-[13px] text-ink">
+            <Lock aria-hidden="true" className="size-3.5 shrink-0 text-[var(--admin-warning)]" />
+            <span className="min-w-0 flex-1">{can('kasa.gun') ? 'Gün açılmadı. Masa açmak için önce günü açın' : 'Gün açılmadı. Yetkili birinin günü açması gerekiyor'}</span>
+            {can('kasa.gun') && (
+              <Link to="/kasa" className={buttonClass('secondary', 'sm')}>
+                Günü aç
+              </Link>
+            )}
+          </div>
+        )}
+
         {boot.sections.length > 1 && (
           <Tabs label="Bölümler" className="px-4 pt-3" value={section?.id ?? ''} onChange={setSectionId} options={boot.sections.map((s) => ({ value: s.id, label: s.name, count: counts.get(s.id) ?? 0 }))} />
         )}
 
         <div className="scroll-thin min-h-0 flex-1 overflow-auto p-4 max-md:overflow-visible">
-          {effectiveView === 'plan' ? (
+          {tables.length === 0 ? (
+            <EmptyState
+              icon={<LayoutGrid />}
+              title="Masa planı boş"
+              action={
+                can('ayar.yonet') && (
+                  <Link to="/yonetim/masa-plani" className={buttonClass('primary', 'sm')}>
+                    Masa planını aç
+                  </Link>
+                )
+              }
+            >
+              Masaları Yönetim › Masa planı’ndan ekleyin; tezgâh, gel-al ve paket satışı masasız da çalışır
+            </EmptyState>
+          ) : effectiveView === 'plan' ? (
             <div className="relative mx-auto aspect-[16/10] w-full max-w-6xl">
               {tables.map((t) => (
                 <TableTile
@@ -166,9 +201,9 @@ export default function FloorPage() {
         </div>
         <footer className="hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-4 py-2.5 text-xs text-muted sm:flex">
           <Legend className="border border-line bg-surface" label="Boş" />
-          <Legend className="border border-brand-200 bg-brand-50 dark:border-brand-800 dark:bg-[var(--admin-primary-soft)]" label="Dolu" />
-          <Legend className="border border-warn-200 bg-warn-100 dark:border-warn-800 dark:bg-[var(--admin-warning-soft)]" label="Hesap istendi" />
-          <Legend className="border border-rose-300 bg-rose-100 dark:border-transparent dark:bg-[var(--admin-hue-rose-soft)]" label="Kısmen ödendi" />
+          <Legend className="border border-primary-line bg-primary-soft" label="Dolu" />
+          <Legend className="border border-warning-line bg-warning-soft" label="Hesap istendi" />
+          <Legend className="border border-rose-line bg-rose-soft" label="Kısmen ödendi" />
           <Legend className="border border-line bg-surface" dot label="Rezerve" />
         </footer>
       </section>
@@ -185,22 +220,21 @@ export default function FloorPage() {
             </EmptyState>
           )}
           {others.map((o) => (
-            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3">
+            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
               <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
-                {o.source === 'laffogato' ? <Globe strokeWidth={1.75} /> : o.type === 'paket' ? <Bike strokeWidth={1.75} /> : o.type === 'gelal' ? <ShoppingBag strokeWidth={1.75} /> : <Store strokeWidth={1.75} />}
+                {o.source === 'laffogato' ? <Globe /> : o.type === 'paket' ? <Bike /> : o.type === 'gelal' ? <ShoppingBag /> : <Store />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">{o.label}</span>
-                <span className="text-xs text-muted">
-                  {fmtElapsed(o.openedAt, now)} · {o.itemCount} ürün
-                </span>
+                <span className="text-xs text-muted">{joinMeta([o.itemCount > 0 && `${o.itemCount} ürün`, fmtAgo(o.openedAt, now)])}</span>
               </span>
               {o.itemCount === 0 ? (
                 <span className="text-xs text-muted">Boş</span>
               ) : (
                 <span className="tabular text-right text-sm font-semibold">
                   {tlShort(o.total)}
-                  {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-[var(--admin-warning)]">{o.pendingKitchen} hazırlanıyor</span>}
+                  {/* Hazırlanan mavi (bar ekranıyla aynı dil); amber yalnız zamana */}
+                  {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-primary">{o.pendingKitchen} barda</span>}
                 </span>
               )}
             </button>
@@ -208,7 +242,7 @@ export default function FloorPage() {
           {(reservations.length > 0 || siteKaraoke.length > 0) && (
             <div className="mt-2 border-t border-[var(--admin-divider)] px-2 pt-3">
               <h3 className="flex items-center gap-1.5 pb-1.5 text-xs font-medium text-muted">
-                <CalendarClock className="size-3.5" strokeWidth={1.75} /> Bugünkü rezervasyonlar
+                <CalendarClock className="size-3.5" /> Bugünkü rezervasyonlar
               </h3>
               {reservations.map((r) => (
                 <div key={r.id} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-sm">
@@ -231,9 +265,9 @@ export default function FloorPage() {
             const online = o.source === 'laffogato';
             const checkNo = choose.orders.filter((x) => x.source === 'pos').indexOf(o) + 1;
             return (
-              <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-line px-4 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3">
+              <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-line px-4 text-left transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press">
                 <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
-                  {online && <Globe className="size-4 shrink-0 text-[var(--admin-hue-violet)]" strokeWidth={1.75} />}
+                  {online && <Globe className="size-4 shrink-0 text-[var(--admin-hue-violet)]" />}
                   <span className="truncate">
                     {online ? 'Online sipariş' : `Hesap ${checkNo}`} <span className="text-muted">#{o.no}</span>
                   </span>
@@ -259,7 +293,7 @@ function SiteKaraokeRow({ booking: b, past }: { booking: SiteKaraokeBookingDTO; 
   return (
     <div className={cn('rounded-lg px-1 py-1.5 text-sm', past && 'opacity-60')}>
       <div className="flex items-center gap-2">
-        <Mic2 className="size-3.5 shrink-0 text-[var(--admin-hue-violet)]" strokeWidth={1.75} aria-label="Karaoke odası" />
+        <Mic2 className="size-3.5 shrink-0 text-[var(--admin-hue-violet)]" aria-label="Karaoke odası" />
         <span className="tabular font-semibold">{bookingHours(b)}</span>
         <span className="min-w-0 flex-1 truncate">{b.firstName || 'Adsız'}</span>
         <span className="text-xs text-muted">{b.guests} kişi</span>
@@ -326,13 +360,14 @@ function TableTile({
       onClick={onClick}
       style={style}
       className={cn(
-        '@container group flex flex-col overflow-hidden border p-2.5 text-left transition-[border-color,background-color,transform] duration-100 active:scale-[0.98] motion-reduce:active:scale-100',
+        '@container group flex flex-col overflow-hidden border p-2.5 text-left transition-[border-color,background-color,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
         busy || reservation ? 'justify-between' : 'justify-start gap-1',
         round ? 'items-center rounded-[999px] text-center' : 'rounded-xl',
         tone === 'free' && 'border-line bg-surface hover:border-[var(--admin-border-field)]',
-        tone === 'busy' && 'border-brand-200 bg-brand-50 hover:border-brand-300 dark:border-brand-800 dark:bg-[var(--admin-primary-soft)]',
-        tone === 'billed' && 'border-warn-200 bg-warn-100 hover:border-warn-300 dark:border-warn-800 dark:bg-[var(--admin-warning-soft)]',
-        tone === 'partial' && 'border-rose-300 bg-rose-100 hover:border-rose-500 dark:border-transparent dark:bg-[var(--admin-hue-rose-soft)]',
+        // Durum çizgisi belirteçleri iki temada da görünür (koyuda dolu, hesap istendi ve kısmen ödendi karışmasın)
+        tone === 'busy' && 'border-primary-line bg-primary-soft hover:border-[var(--admin-primary)]',
+        tone === 'billed' && 'border-warning-line bg-warning-soft hover:border-[var(--admin-warning)]',
+        tone === 'partial' && 'border-rose-line bg-rose-soft hover:border-[var(--admin-hue-rose)]',
         className,
       )}
     >
@@ -341,9 +376,9 @@ function TableTile({
         <span className={cn('truncate text-sm leading-tight @min-[6rem]:text-[15px]', busy ? 'font-semibold text-ink' : 'font-medium text-ink-2')}>{table.name}</span>
         {!round && <span className="flex-1" />}
         <span className="flex gap-1 text-ink-2">
-          {billed && <Receipt className="size-4 shrink-0" strokeWidth={1.75} aria-label="Hesap istendi" />}
-          {online && <Globe className="hidden size-4 shrink-0 @min-[6rem]:block" strokeWidth={1.75} aria-label="Online sipariş" />}
-          {table.kind === 'oda' && <Mic2 className="hidden size-4 shrink-0 @min-[6rem]:block" strokeWidth={1.75} aria-label="Oda" />}
+          {billed && <Receipt className="size-4 shrink-0" aria-label="Hesap istendi" />}
+          {online && <Globe className="hidden size-4 shrink-0 @min-[6rem]:block" aria-label="Online sipariş" />}
+          {table.kind === 'oda' && <Mic2 className="hidden size-4 shrink-0 @min-[6rem]:block" aria-label="Oda" />}
         </span>
       </div>
       {busy ? (
@@ -358,8 +393,8 @@ function TableTile({
           {(pending > 0 || ready > 0) && (
             <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
               {pending > 0 && (
-                <span className="tabular inline-flex items-center gap-0.5 rounded-md bg-surface px-1.5 py-0.5 text-ink-2 ring-1 ring-inset ring-brand-200 dark:bg-surface-3 dark:ring-brand-800" title={`${pending} kalem barda`}>
-                  <ChefHat className="size-3" strokeWidth={1.75} />
+                <span className="tabular inline-flex items-center gap-0.5 rounded-md bg-surface px-1.5 py-0.5 text-ink-2 ring-1 ring-inset ring-primary-line" title={`${pending} kalem barda`}>
+                  <ChefHat className="size-3" />
                   {pending}
                 </span>
               )}
@@ -374,7 +409,7 @@ function TableTile({
         </div>
       ) : (
         <span className={cn('hidden items-center gap-1 text-[13px] text-ink-2 @min-[5rem]:inline-flex', round && 'justify-center')}>
-          {table.kind === 'oda' ? <Mic2 className="size-3.5 shrink-0" strokeWidth={1.75} /> : <Users className="size-3.5 shrink-0" strokeWidth={1.75} />}
+          {table.kind === 'oda' ? <Mic2 className="size-3.5 shrink-0" /> : <Users className="size-3.5 shrink-0" />}
           {table.kind === 'oda' ? 'Saatlik' : `${table.seats} kişilik`}
         </span>
       )}
@@ -397,8 +432,17 @@ function TakeawayModal({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [note, setNote] = useState('');
+  const [addressError, setAddressError] = useState<string | null>(null);
+  const addressRef = useRef<HTMLTextAreaElement>(null);
+  const fine = useFinePointer();
   if (!kind) return null;
   const submit = () => {
+    // Paket adressiz açılmaz: düğme sessizce soluk kalmaz, ileti alanın altında
+    if (kind === 'paket' && !address.trim()) {
+      setAddressError('Adres gerekli');
+      addressRef.current?.focus();
+      return;
+    }
     onCreate({ type: kind, deliveryName: name || null, deliveryPhone: phone || null, deliveryAddress: kind === 'paket' ? address || null : null, note: note || null });
   };
   return (
@@ -410,7 +454,7 @@ function TakeawayModal({
       footer={
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Vazgeç</Button>
-          <Button variant="primary" loading={busy} disabled={kind === 'paket' && !address.trim()} onClick={submit}>
+          <Button variant="primary" loading={busy} onClick={submit}>
             Siparişi aç
           </Button>
         </div>
@@ -418,14 +462,24 @@ function TakeawayModal({
     >
       <div className="grid gap-3 p-5 sm:grid-cols-2">
         <Field label="Ad">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Müşteri adı" autoFocus />
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ör. Ayşe" autoFocus={fine} autoCapitalize="words" enterKeyHint="next" />
         </Field>
         <Field label="Telefon">
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" placeholder="05xx xxx xx xx" />
+          <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" spellCheck={false} placeholder="Ör. 0532 123 45 67" />
         </Field>
         {kind === 'paket' && (
-          <Field label="Adres" className="sm:col-span-2">
-            <Textarea value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Mahalle, sokak, bina, daire, tarif" />
+          <Field label="Adres" className="sm:col-span-2" required error={addressError}>
+            <Textarea
+              ref={addressRef}
+              value={address}
+              onChange={(e) => {
+                setAddress(e.target.value);
+                setAddressError(null);
+              }}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Ör. mahalle, sokak, bina, daire, tarif"
+            />
           </Field>
         )}
         <Field label="Not" className="sm:col-span-2">

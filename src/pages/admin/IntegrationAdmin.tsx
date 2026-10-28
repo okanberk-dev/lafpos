@@ -4,8 +4,8 @@ import { useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Toggle } from '@/components/ui/Field';
-import { PageLoading } from '@/components/ui/misc';
-import { Card, CODE, PageHeader, SetupNotes } from '@/components/admin/ui';
+import { ErrorState, Skeleton } from '@/components/ui/misc';
+import { Card, CARD, CODE, PageHeader, SetupNotes } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -68,6 +68,8 @@ export default function IntegrationAdmin() {
   const can = useCan();
   const qc = useQueryClient();
   const data = useQuery({ queryKey: ['sync', 'status'], queryFn: () => get<SyncStatus>('/sync/status'), refetchInterval: 30_000 });
+  // Elle tetiklenen işlem sürerken düğmesi döner gösterge alır (çift istek gitmesin)
+  const [busy, setBusy] = useState<string | null>(null);
   const setting = async (body: Record<string, boolean>) => {
     try {
       await put('/sync/settings', body);
@@ -78,6 +80,7 @@ export default function IntegrationAdmin() {
   };
   /** Masa QR kodlarını siteye yeniden gönder (site ucu sonradan açıldıysa 6 saatlik turu beklemeden) */
   const resendTables = async () => {
+    setBusy('tables');
     try {
       const r = await post<{ sent: number; failed: number }>('/admin/tables/qr/sync');
       if (r.sent) toast.ok('Masa kodları siteye gönderildi');
@@ -85,9 +88,12 @@ export default function IntegrationAdmin() {
       qc.invalidateQueries({ queryKey: ['sync'] });
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setBusy(null);
     }
   };
   const run = async (path: string, ok: string) => {
+    setBusy(path);
     try {
       const r = await post<{ warning?: string }>(path);
       if (r?.warning) toast.warn(r.warning);
@@ -96,15 +102,32 @@ export default function IntegrationAdmin() {
       qc.invalidateQueries({ queryKey: ['bootstrap'] });
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setBusy(null);
     }
   };
-  if (data.isLoading || !data.data) return <PageLoading />;
+  const header = <PageHeader title="Site ve lafmaliyet" description="Ürünler siteden gelir, satış ve Z lafmaliyet’e gider" />;
+  if (!data.data)
+    return (
+      <div className="space-y-4">
+        {header}
+        {data.isError ? (
+          <ErrorState className={CARD} title="Bağlantı durumu alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+        ) : (
+          <div role="status" aria-label="Yükleniyor…" className="space-y-4">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-36 rounded-2xl" />
+            ))}
+          </div>
+        )}
+      </div>
+    );
   const s = data.data;
   const canSync = can('senkron.yonet');
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Site ve lafmaliyet" description="Ürünler siteden gelir, satış ve Z lafmaliyet'e gider" />
+      {header}
       <Card flush title={s.menu.linked ? `laffogato · menü (${boot.integrations.laffogatoUrl})` : 'laffogato · menü'}>
         <div className="space-y-2 p-4">
           {s.menu.linked ? (
@@ -116,7 +139,7 @@ export default function IntegrationAdmin() {
               <p className="text-xs text-muted">Gün açıkken 15 dakikada bir kontrol edilir, gece sorulmaz; LafPOS siteye Tükendi yazınca hemen bir kez</p>
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 <Toggle checked={s.menu.auto} disabled={!canSync} onChange={(v) => setting({ menuAutoSync: v })} label="Otomatik eşitle" />
-                <Button size="sm" icon={<RefreshCw className="size-4" />} onClick={() => run('/sync/menu/apply', 'Menü eşitlendi')}>
+                <Button size="sm" icon={<RefreshCw className="size-4" />} loading={busy === '/sync/menu/apply'} onClick={() => void run('/sync/menu/apply', 'Menü eşitlendi')}>
                   Şimdi eşitle
                 </Button>
               </div>
@@ -134,12 +157,12 @@ export default function IntegrationAdmin() {
             {s.online.configured
               ? 'İmzalı bağlantı açık'
               : s.menu.linked
-                ? 'Anahtar yok: online siparişler gelmez, Tükendi yalnız LafPOS\'ta değişir'
-                : 'Site bağlantısı kurulmadı: online siparişler gelmez, Tükendi yalnız LafPOS\'ta değişir'}
+                ? 'Anahtar yok: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'
+                : 'Site bağlantısı kurulmadı: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'}
           </Status>
           {s.online.configured && (
             <>
-              <Status ok={s.online.versionSignal}>{s.online.versionSignal ? 'Sipariş sürüm sinyali çalışıyor: 20 sn içinde düşer; gün açıkken 15 dk\'da bir ayrıca tam çekim' : 'Sürüm sinyali yok (site PR\'ı yayında değil): 5 dk\'da bir kontrol'}</Status>
+              <Status ok={s.online.versionSignal}>{s.online.versionSignal ? 'Sipariş sürüm sinyali çalışıyor: 20 sn içinde düşer; gün açıkken 15 dk’da bir ayrıca tam çekim' : 'Sürüm sinyali yok (site PR’ı yayında değil): 5 dk’da bir kontrol'}</Status>
               <Status ok={!s.online.state?.lastError}>
                 {s.online.state?.lastSuccessAt ? `Son çekim ${fmtDateTime(s.online.state.lastSuccessAt)} · ${s.online.open} açık online sipariş` : 'Henüz çekilmedi'}
                 {s.online.state?.lastError && <span className="block text-[var(--admin-danger-ink)]">Hata: {s.online.state.lastError}</span>}
@@ -152,15 +175,15 @@ export default function IntegrationAdmin() {
               )}
               {s.online.soldOutPush.rejected > 0 && (
                 <Status ok={false}>
-                  Sitenin reddettiği Satışta bilgisi: {s.online.soldOutPush.rejected} ürün (yeniden denenmeyecek; ürün LafPOS'ta açılınca ya da site aynı duruma gelince kalkar)
+                  Sitenin reddettiği Satışta bilgisi: {s.online.soldOutPush.rejected} ürün (yeniden denenmeyecek; ürün LafPOS’ta açılınca ya da site aynı duruma gelince kalkar)
                   {!s.online.soldOutPush.pending && s.online.soldOutPush.lastError && <span className="block text-[var(--admin-danger-ink)]">Son hata: {s.online.soldOutPush.lastError}</span>}
                 </Status>
               )}
               {s.online.tablesPush?.unsupported && (
                 <Status ok={false} idle>
-                  Masa QR kodları siteye gönderildi ama site henüz almıyor: QR'lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer; 6 saatte bir yeniden denenir.{' '}
-                  <button type="button" className="min-h-11 font-medium text-primary underline underline-offset-2 pointer-fine:min-h-6" onClick={() => void resendTables()}>
-                    Şimdi yeniden gönder
+                  Masa QR kodları siteye gönderildi ama site henüz almıyor: QR’lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer; 6 saatte bir yeniden denenir.{' '}
+                  <button type="button" disabled={busy === 'tables'} aria-busy={busy === 'tables' || undefined} className="min-h-11 font-medium text-primary underline underline-offset-2 disabled:cursor-progress disabled:opacity-60 pointer-fine:min-h-6" onClick={() => void resendTables()}>
+                    {busy === 'tables' ? 'Gönderiliyor…' : 'Şimdi yeniden gönder'}
                   </button>
                 </Status>
               )}
@@ -178,7 +201,7 @@ export default function IntegrationAdmin() {
           )}
         </div>
       </Card>
-      <LafmaliyetCard s={s.lafmaliyet} canSync={canSync} canCost={can('rapor.maliyet')} run={run} />
+      <LafmaliyetCard s={s.lafmaliyet} canSync={canSync} canCost={can('rapor.maliyet')} run={run} busy={busy} />
       <SetupNotes>
         <p>
           Kasa bilgisayarının ayarları: site için <code className={CODE}>LAFFOGATO_URL</code> ve <code className={CODE}>LAFFOGATO_SYNC_SECRET</code>, lafmaliyet için <code className={CODE}>LAFMALIYET_URL</code> ve <code className={CODE}>LAFMALIYET_SYNC_SECRET</code> (en az 32 karakter). Adres yoksa o sisteme hiç istek gitmez.
@@ -186,7 +209,7 @@ export default function IntegrationAdmin() {
         <p>
           Karaoke rezervasyonları sitede <code className={CODE}>LAFPOS_SYNC_SECRET</code> tanımlıysa ve anahtar aynıysa açılır. Masa QR kodları sitenin <code className={CODE}>PUT /api/panel/tables</code> ucuna gider.
         </p>
-        <p>Menü ETag ile sorulur; CDN'deki kopya eskiyince istek sitenin veritabanını uyandırır.</p>
+        <p>Menü ETag ile sorulur; CDN’deki kopya eskiyince istek sitenin veritabanını uyandırır.</p>
         <p>
           Açılış adımları ve sözleşme: <code className={CODE}>docs/03-ENTEGRASYON.md</code> (lafmaliyet §8).
         </p>
@@ -211,13 +234,13 @@ function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
     <div className="space-y-1 border-t border-[var(--admin-divider)] pt-2">
       <Status ok={!k.lastError} idle={k.closed}>
         {k.closed
-          ? 'Site karaoke rezervasyonlarını LafPOS\'a açmadı: sitedeki anahtar eksik ya da farklı'
+          ? 'Site karaoke rezervasyonlarını LafPOS’a açmadı: sitedeki anahtar eksik ya da farklı'
           : k.pulledAt
             ? `Karaoke rezervasyonları: son çekim ${fmtDateTime(k.pulledAt)} · ${k.count} rezervasyon (${k.date})`
             : 'Karaoke rezervasyonları henüz çekilmedi: gün açılınca ya da oda adisyonu açılınca'}
         {k.lastError && !k.closed && <span className="block text-[var(--admin-danger-ink)]">Hata: {k.lastError}</span>}
       </Status>
-      <p className="text-xs text-muted">Gün açıkken site rezervasyon değişince, en sık 5 dakikada bir; oda adisyonu açılınca ve elle. "Online siparişleri çek" kapalıyken de okunur</p>
+      <p className="text-xs text-muted">Gün açıkken site rezervasyon değişince, en sık 5 dakikada bir; oda adisyonu açılınca ve elle. “Online siparişleri çek” kapalıyken de okunur</p>
     </div>
   );
 }
@@ -226,7 +249,7 @@ function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
  * lafmaliyet kartı: bağlantı, kurulum modu kapısı, giden kutusu, son günün lafmaliyet'teki durumu (geçiş günü,
  * eşleşmeyen ürünler), geçmiş günler ve maliyet. Bağlantı yokken sakin dil (sahibin kararı: varsayılan kapalı)
  */
-function LafmaliyetCard({ s, canSync, canCost, run }: { s: SyncStatus['lafmaliyet']; canSync: boolean; canCost: boolean; run: (path: string, ok: string) => Promise<void> }) {
+function LafmaliyetCard({ s, canSync, canCost, run, busy }: { s: SyncStatus['lafmaliyet']; canSync: boolean; canCost: boolean; run: (path: string, ok: string) => Promise<void>; busy: string | null }) {
   const qc = useQueryClient();
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [sending, setSending] = useState(false);
@@ -265,7 +288,7 @@ function LafmaliyetCard({ s, canSync, canCost, run }: { s: SyncStatus['lafmaliye
             <Status ok>Bağlı: {s.url}</Status>
             {s.training && (
               <Status ok={false} idle>
-                Kurulum modu: günler lafmaliyet'e gönderilmez (örnek PIN'ler açık ya da yazarkasa eğitim simülatöründe). Bu modda kapanan gün eğitim günüdür, kurulum modu kapansa da hiç gitmez.{canCost ? ' İmzayı sınamak için "Maliyetleri çek" yeterli.' : ''} Gerçek ilk gün kurulum modu kapandıktan sonra açılıp kapanınca gider
+                Kurulum modu: günler lafmaliyet’e gönderilmez (örnek PIN’ler açık ya da yazarkasa eğitim simülatöründe). Bu modda kapanan gün eğitim günüdür, kurulum modu kapansa da hiç gitmez.{canCost ? ' İmzayı sınamak için “Maliyetleri çek” yeterli.' : ''} Gerçek ilk gün kurulum modu kapandıktan sonra açılıp kapanınca gider
               </Status>
             )}
             <Status ok={!s.failing} idle={!!s.pending && !s.failing}>
@@ -283,8 +306,8 @@ function LafmaliyetCard({ s, canSync, canCost, run }: { s: SyncStatus['lafmaliye
             )}
             {s.answer && unmatched > 0 && (
               <Status ok={false}>
-                lafmaliyet'te eşleşmeyen {unmatched} ürün ({dayLabel(s.answer.date)}){s.answer.unmatched?.length ? `: ${unmatchedText(s.answer.unmatched, unmatched)}` : ''}
-                <span className="block text-xs text-muted">lafmaliyet Ayarlar › LafPOS (kasa)'da Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden gönderilmeden bağlanır</span>
+                lafmaliyet’te eşleşmeyen {unmatched} ürün ({dayLabel(s.answer.date)}){s.answer.unmatched?.length ? `: ${unmatchedText(s.answer.unmatched, unmatched)}` : ''}
+                <span className="block text-xs text-muted">lafmaliyet Ayarlar › LafPOS (kasa) bölümünde Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden gönderilmeden bağlanır</span>
               </Status>
             )}
 
@@ -292,9 +315,9 @@ function LafmaliyetCard({ s, canSync, canCost, run }: { s: SyncStatus['lafmaliye
               <p className="text-sm font-medium">Geçmiş günler</p>
               <p className="text-xs text-muted">
                 {!s.backfill.from
-                  ? "lafmaliyet'in geçiş günü henüz bilinmiyor (seçilmedi ya da hiç gün gönderilmedi). Bağlantı sonradan kurulduysa gönderilecek aralığı seçin"
+                  ? 'lafmaliyet’in geçiş günü henüz bilinmiyor (seçilmedi ya da hiç gün gönderilmedi). Bağlantı sonradan kurulduysa gönderilecek aralığı seçin'
                   : s.backfill.from > s.backfill.to
-                    ? `lafmaliyet'teki geçiş günü ${dayLabel(s.backfill.from)}: o güne kadar gönderilecek geçmiş gün yok`
+                    ? `lafmaliyet’teki geçiş günü ${dayLabel(s.backfill.from)}: o güne kadar gönderilecek geçmiş gün yok`
                     : s.backfill.unsent
                       ? `Geçiş günü ${dayLabel(s.backfill.from)}: o günden düne kadar gönderilmemiş ${s.backfill.unsent} kapanmış gün var`
                       : `Geçiş günü ${dayLabel(s.backfill.from)}: o günden bu yana gönderilmemiş kapanmış gün yok`}
@@ -320,7 +343,7 @@ function LafmaliyetCard({ s, canSync, canCost, run }: { s: SyncStatus['lafmaliye
                   {s.costsAt ? `Maliyetler ${fmtDateTime(s.costsAt)} tarihinde çekildi; her gün sonunda kendiliğinden yenilenir` : 'Maliyetler henüz çekilmedi; ilk gün sonunda kendiliğinden çekilir'}
                   {costsError && <span className="block text-[var(--admin-danger-ink)]">Son deneme: {costsError}</span>}
                 </Status>
-                <Button size="sm" icon={<CloudDownload className="size-4" />} disabled={!canSync} onClick={() => run('/sync/lafmaliyet/costs/pull', 'Maliyetler çekildi')}>
+                <Button size="sm" icon={<CloudDownload className="size-4" />} loading={busy === '/sync/lafmaliyet/costs/pull'} disabled={!canSync} onClick={() => void run('/sync/lafmaliyet/costs/pull', 'Maliyetler çekildi')}>
                   Maliyetleri çek
                 </Button>
               </div>

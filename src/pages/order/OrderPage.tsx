@@ -23,21 +23,22 @@ import {
   Users,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
 import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, compCloseSubtitle, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
-import { fmtElapsed, fmtTime } from '@shared/time';
+import { fmtTime } from '@shared/time';
 import type { CompKind, OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea, Toggle } from '@/components/ui/Field';
-import { Badge, PageLoading } from '@/components/ui/misc';
+import { Badge, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
 import { errorMessage, patch, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { type PendingLine, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
+import { joinMeta } from '@/lib/text';
 import { previewTotals } from '@/lib/estimate';
 import { useMediaQuery, useTick } from '@/lib/hooks';
 import { BillReceipt, printNow } from '@/lib/print';
@@ -75,7 +76,7 @@ export default function OrderPage() {
   // Tablet dikeyde de ürünler ve adisyon yan yana (impeccable adapt: tablette liste + ayrıntı)
   const wide = useMediaQuery('(min-width: 768px)');
   const now = useTick(30_000);
-  const { order, isLoading, isError, act } = useOrder(id);
+  const { order, isLoading, isError, error, refetch, isFetching, act } = useOrder(id);
   const pending = usePending(id);
   const cart = useCart();
   const [tab, setTab] = useState<'menu' | 'adisyon'>(REMOTE ? 'adisyon' : 'menu');
@@ -99,15 +100,22 @@ export default function OrderPage() {
   useCustomerDisplay(boot, order, pending, displayLabel);
 
   if (isLoading) return <PageLoading />;
-  if (isError || !order) {
+  if (!order) {
+    const home = (
+      <Link to="/" className={buttonClass('secondary', 'sm')}>
+        Ana ekrana dön
+      </Link>
+    );
     return (
-      <div className="grid h-full place-items-center p-6 text-center">
-        <div>
-          <p className="font-semibold">Adisyon bulunamadı</p>
-          <Button className="mt-4" onClick={() => navigate('/')}>
-            Ana ekrana dön
-          </Button>
-        </div>
+      <div className="grid h-full place-items-center p-6">
+        {/* Bağlantı hatası "bulunamadı" diye okunmasın: hata ise yeniden dene, yoksa ana ekrana */}
+        {isError && !(error && 'status' in error && error.status === 404) ? (
+          <ErrorState title="Adisyon alınamadı" error={error} retrying={isFetching} onRetry={() => void refetch()} action={home} />
+        ) : (
+          <EmptyState title="Adisyon bulunamadı" action={home}>
+            Kapanmış ya da başka bir adisyonla birleşmiş olabilir
+          </EmptyState>
+        )}
       </div>
     );
   }
@@ -212,6 +220,16 @@ export default function OrderPage() {
     }
   };
 
+  // Gönderilmemişleri silmek geri alınabilir: onay penceresi yerine bildirimde "Geri al" (6 sn)
+  const discardPending = () => {
+    const saved = pending;
+    const orderId = order.id;
+    cart.clear(orderId);
+    toast.ok(`${pendingCount} ürün silindi`, {
+      action: { label: 'Geri al', run: () => useCart.setState((st) => ({ byOrder: { ...st.byOrder, [orderId]: [...(st.byOrder[orderId] ?? []), ...saved] } })) },
+    });
+  };
+
   const goBack = () => {
     if (pending.length) return setDialog('cikis');
     navigate(backPath);
@@ -251,9 +269,10 @@ export default function OrderPage() {
 
   // Innex başlık şeridi: geri, başlık ve künye, sağda işlemler
   const header = (
-    <div className="flex items-center gap-1.5 border-b border-[var(--admin-divider)] bg-surface px-2 py-2">
-      <button onClick={goBack} aria-label="Geri" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-100 hover:bg-surface-3 hover:text-ink active:bg-[var(--admin-border)]">
-        <ArrowLeft className="size-5" strokeWidth={1.75} />
+    // Telefonda tam ekran: ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
+    <div className="flex items-center gap-1.5 border-b border-[var(--admin-divider)] bg-surface px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <button onClick={goBack} aria-label="Geri" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press">
+        <ArrowLeft className="size-5" />
       </button>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -263,23 +282,22 @@ export default function OrderPage() {
           </h1>
           <span className="tabular text-[13px] text-muted max-lg:hidden">#{orderNo}</span>
           {order.status !== 'acik' && <Badge tone={order.status === 'kapali' ? 'green' : 'red'}>{order.status === 'kapali' ? 'Kapandı' : order.status === 'iptal' ? 'İptal' : 'Birleşti'}</Badge>}
+          {/* Online her ekranda mor; pembe yalnız "kısmen ödendi" */}
           {isOnline && (
-            <Badge tone="pink">
+            <Badge tone="violet">
               <Globe className="size-3" /> Sitede ödendi
             </Badge>
           )}
         </div>
+        {/* Künye: boş parça düşer ("—" ve "0 dk" yok) */}
         <div className="truncate text-xs text-muted">
           <span className="tabular lg:hidden">#{orderNo} · </span>
-          {titleType && `${titleType} · `}
-          {order.guests} kişi · {order.waiterName ?? '—'} · {fmtTime(order.openedAt)} ({fmtElapsed(order.openedAt, now)})
-          {order.customer && ` · ${order.customer.name}`}
-          {order.note && ` · Not: ${order.note}`}
+          {joinMeta([titleType, `${order.guests} kişi`, order.waiterName, `açılış ${fmtTime(order.openedAt)}`, order.customer?.name, order.note && `Not: ${order.note}`])}
         </div>
       </div>
       {!REMOTE && (
-        <button onClick={() => setDialog('menu')} aria-label="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-100 hover:bg-surface-3 hover:text-ink active:bg-[var(--admin-border)]">
-          <MoreVertical className="size-5" strokeWidth={1.75} />
+        <button onClick={() => setDialog('menu')} aria-label="İşlemler" title="İşlemler" className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press">
+          <MoreVertical className="size-5" />
         </button>
       )}
     </div>
@@ -291,7 +309,7 @@ export default function OrderPage() {
     <div className="grid grid-cols-2 gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       {pending.length > 0 && counter && can('odeme.al') ? (
         <div className="col-span-2 grid grid-cols-[auto_1fr_1.3fr] gap-2 md:max-lg:grid-cols-[auto_auto_1fr]">
-          <Button size="lg" aria-label="Gönderilmemişleri sil" title="Vazgeç" icon={<Trash2 className="size-4" />} onClick={() => cart.clear(order.id)} />
+          <Button size="lg" aria-label="Gönderilmemişleri sil" title="Gönderilmemişleri sil" icon={<Trash2 className="size-4" />} onClick={discardPending} />
           <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label="Gönder" title="Gönder" className="md:max-lg:w-14 md:max-lg:px-0">
             <span className="md:max-lg:sr-only">Gönder</span>
           </Button>
@@ -301,7 +319,7 @@ export default function OrderPage() {
         </div>
       ) : pending.length > 0 ? (
         <>
-          <Button size="lg" onClick={() => cart.clear(order.id)}>
+          <Button size="lg" onClick={discardPending}>
             Vazgeç
           </Button>
           <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly}>
@@ -368,7 +386,7 @@ export default function OrderPage() {
                 role="tab"
                 aria-selected={tab === k}
                 onClick={() => setTab(k)}
-                className={cn('relative inline-flex min-h-11 items-center justify-center gap-1.5 py-2 text-[15px] transition-colors duration-100 active:bg-surface-2', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'font-medium text-muted')}
+                className={cn('relative inline-flex min-h-11 items-center justify-center gap-1.5 py-2 text-[15px] transition-colors duration-150 active:bg-press', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'font-medium text-muted')}
               >
                 {k === 'menu' ? (
                   'Menü'
@@ -423,7 +441,7 @@ export default function OrderPage() {
                   setDialog(null);
                   m.onClick();
                 }}
-                className={cn('flex min-h-12 items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3', m.danger && 'text-[var(--admin-danger-ink)]')}
+                className={cn('flex min-h-12 items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors duration-150 hover:bg-hover active:bg-press', m.danger && 'text-[var(--admin-danger-ink)]')}
               >
                 <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', m.danger ? 'bg-[var(--admin-danger-soft)]' : 'bg-surface-3 text-ink-2')}>{m.icon}</span>
                 <span>
@@ -451,7 +469,7 @@ export default function OrderPage() {
             Ekranı yeni pencerede aç
           </Button>
           <p className="text-xs text-muted">
-            İkinci monitörde pencereyi oraya taşıyıp tam ekran yapın. Müşteriye dönük tablette tarayıcıda {window.location.origin}/musteri-ekrani adresini açın; personel girişi gerekmez.
+            İkinci monitörde pencereyi oraya taşıyıp tam ekran yapın. Müşteriye dönük tablette tarayıcıda {window.location.origin}/musteri-ekrani adresini açın; personel girişi gerekmez
           </p>
         </div>
       </Modal>
@@ -535,7 +553,7 @@ export default function OrderPage() {
       />
       <Modal open={dialog === 'not'} onClose={() => setDialog(null)} title="Adisyon notu" size="sm">
         <div className="space-y-3 p-4">
-          <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 300))} className="min-h-24" placeholder="Ör. Doğum günü, pastayı 21:00'de getir" aria-label="Adisyon notu" />
+          <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 300))} className="min-h-24" placeholder="Ör. doğum günü, pastayı 21:00’de getir" aria-label="Adisyon notu" />
           <Button
             variant="primary"
             block
@@ -560,7 +578,7 @@ export default function OrderPage() {
           <Button size="lg" onClick={() => navigate(backPath)}>
             Bu cihazda beklesin
           </Button>
-          <Button variant="ghost" className="text-[var(--admin-danger-ink)]" onClick={() => { cart.clear(order.id); navigate(backPath); }}>
+          <Button variant="dangerGhost" onClick={() => { discardPending(); navigate(backPath); }}>
             Sil ve çık
           </Button>
         </div>

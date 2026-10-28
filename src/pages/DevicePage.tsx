@@ -1,12 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Banknote, CreditCard, Lock, MonitorSmartphone, Receipt, Split, Utensils, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import { fmtTime } from '@shared/time';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Card, EmptyState, PageHeader } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
+import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { onLive } from '@/lib/live';
@@ -46,6 +48,7 @@ const TYPES = [
  */
 export default function DevicePage() {
   const boot = useBoot();
+  const can = useCan();
   const qc = useQueryClient();
   const baskets = useQuery({ queryKey: ['okc', 'sim'], queryFn: () => get<SimReceipt[]>('/okc/simulator/baskets'), refetchInterval: 5000 });
   const recent = useQuery({ queryKey: ['okc', 'sim-recent'], queryFn: () => get<SimReceipt[]>('/okc/simulator/recent') });
@@ -72,8 +75,18 @@ export default function DevicePage() {
   if (boot.integrations.okc.provider !== 'simulator') {
     return (
       <div className="p-6">
-        <EmptyState icon={<MonitorSmartphone />} title="Eğitim cihazı kapalı">
-          Yazarkasa bağlantısı "{boot.integrations.okc.provider === 'tokenx' ? 'TokenX (gerçek cihaz)' : 'kapalı'}" durumda. Yönetim › Yazarkasa POS'tan simülatörü seçebilirsiniz.
+        <EmptyState
+          icon={<MonitorSmartphone />}
+          title="Eğitim cihazı kapalı"
+          action={
+            can('ayar.yonet') && (
+              <Link to="/yonetim/yazarkasa" className={buttonClass('secondary', 'sm')}>
+                Yazarkasa ayarları
+              </Link>
+            )
+          }
+        >
+          Yazarkasa şu an {boot.integrations.okc.provider === 'tokenx' ? 'gerçek cihaza (TokenX) bağlı' : 'kapalı'}. Denemek için Yönetim › Yazarkasa POS’ta eğitim cihazını seçin
         </EmptyState>
       </div>
     );
@@ -97,7 +110,7 @@ export default function DevicePage() {
     try {
       await post(`/okc/simulator/baskets/${current.id}/pay`, { payments });
       beep('tamam');
-      toast.ok('Fiş basıldı, ödeme LafPOS\'a işlendi');
+      toast.ok('Fiş basıldı, ödeme LafPOS’a işlendi');
       setOpenId(null);
       qc.invalidateQueries({ queryKey: ['okc'] });
     } catch (e) {
@@ -106,7 +119,7 @@ export default function DevicePage() {
   };
   const cancel = async (id: string, voidReceipt = false) => {
     try {
-      // Fiş iptali ödeme iptalidir: yetkisi yoksa yetkili PIN'i istenir
+      // Fiş iptali ödeme iptalidir: yetkisi yoksa yetkili PIN’i istenir
       const done = await withApproval((pin) => post(`/okc/simulator/baskets/${id}/cancel`, { voidReceipt, approverPin: pin }));
       if (done === null) return;
       toast.warn(voidReceipt ? 'Fiş iptal edildi; LafPOS ödemesi geri alındı' : 'Cihazda ödemeden vazgeçildi');
@@ -123,7 +136,8 @@ export default function DevicePage() {
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <PageHeader title="Eğitim cihazı" subtitle="Token ÖKC benzeri: kasadan gönderilen sepetler burada ödenir. Gerçek cihaz bağlanınca bu ekran kullanılmaz" />
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
-        <div className="dark mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[10px] border-night bg-night p-1 shadow-[var(--shadow-pop)]">
+        {/* Çerçeve koyu sayfada kaybolmasın: ince açık halka (açık temada etkisiz) */}
+        <div className="dark mx-auto w-full max-w-[420px] rounded-[2.2rem] border-[10px] border-night bg-night p-1 shadow-[var(--shadow-pop)] ring-1 ring-white/10">
           <div className="min-h-[560px] overflow-hidden rounded-[1.6rem] bg-surface text-ink">
             <div className="flex items-center justify-between bg-surface-3 px-4 py-2 text-xs text-ink-2">
               <span className="font-semibold">Token ÖKC · eğitim</span>
@@ -132,10 +146,14 @@ export default function DevicePage() {
             {!current ? (
               <div className="p-3">
                 <div className="mb-2 px-1 text-xs font-medium text-muted">Açık sepetler</div>
-                {(baskets.data ?? []).length === 0 && <EmptyState compact icon={<Receipt />} title="Kasadan sepet bekleniyor">Kasada "Hesabı yazarkasaya gönder" deyince burada belirir</EmptyState>}
+                {baskets.isSuccess && baskets.data.length === 0 && (
+                  <EmptyState compact icon={<Receipt />} title="Kasadan sepet bekleniyor…">
+                    Kasada “Hesabı yazarkasaya gönder” deyince burada belirir
+                  </EmptyState>
+                )}
                 <div className="space-y-2">
                   {baskets.data?.map((b) => (
-                    <button key={b.id} onClick={() => open(b)} className="flex w-full items-center gap-3 rounded-xl bg-surface-3 p-3 text-left transition-colors duration-100 active:bg-[var(--admin-border)]">
+                    <button key={b.id} onClick={() => open(b)} className="flex w-full items-center gap-3 rounded-xl bg-surface-3 p-3 text-left transition-colors duration-150 active:bg-[var(--admin-border)]">
                       <Receipt className="size-5 text-primary" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-semibold">{b.basket.title ?? 'Sepet'}</div>
@@ -151,7 +169,7 @@ export default function DevicePage() {
               </div>
             ) : (
               <div className="flex min-h-[520px] flex-col p-3">
-                <button onClick={close} className="mb-2 inline-flex items-center gap-1 text-sm text-[#8fa89a]">
+                <button onClick={close} className="mb-2 inline-flex min-h-11 items-center gap-1 self-start text-sm text-muted transition-colors duration-150 hover:text-ink">
                   <ArrowLeft className="size-4" /> Listeye dön
                 </button>
                 <div className="font-semibold">
@@ -166,7 +184,7 @@ export default function DevicePage() {
                         </span>
                         <span>{tl(it.price * (it.quantity / 1000))}</span>
                       </div>
-                      <div className="flex justify-between text-[11px] text-[#8fa89a]">
+                      <div className="flex justify-between text-[11px] text-muted">
                         <span>
                           KDV %{it.taxPercent / 100} · kısım {it.sectionNo}
                         </span>
@@ -182,14 +200,14 @@ export default function DevicePage() {
                 {!split ? (
                   <div className="grid grid-cols-2 gap-2">
                     {TYPES.map((t) => (
-                      <button key={t.type} onClick={() => pay([{ type: t.type, amount: current.amount }])} className={cn('flex h-14 items-center justify-center gap-2 rounded-xl font-semibold transition-[filter] duration-100 active:brightness-90', t.color)}>
+                      <button key={t.type} onClick={() => pay([{ type: t.type, amount: current.amount }])} className={cn('flex h-14 items-center justify-center gap-2 rounded-xl font-semibold transition-[filter] duration-150 active:brightness-90', t.color)}>
                         <t.icon className="size-5" /> {t.label}
                       </button>
                     ))}
-                    <button onClick={() => setSplit([{ type: 3, amount: '' }, { type: 1, amount: '' }])} className="flex h-14 items-center justify-center gap-2 rounded-xl bg-surface-3 font-semibold transition-colors duration-100 active:bg-[var(--admin-border)]">
+                    <button onClick={() => setSplit([{ type: 3, amount: '' }, { type: 1, amount: '' }])} className="flex h-14 items-center justify-center gap-2 rounded-xl bg-surface-3 font-semibold transition-colors duration-150 active:bg-[var(--admin-border)]">
                       <Split className="size-5" /> Böl
                     </button>
-                    <button onClick={() => cancel(current.id)} className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-xl text-sm text-[var(--admin-danger-ink)] transition-colors duration-100 active:bg-surface-3">
+                    <button onClick={() => cancel(current.id)} className="col-span-2 flex h-11 items-center justify-center gap-2 rounded-xl text-sm text-[var(--admin-danger-ink)] transition-colors duration-150 hover:bg-[var(--admin-danger-soft)] active:bg-[var(--admin-danger-soft)]">
                       <XCircle className="size-4" /> Ödemeden vazgeç
                     </button>
                   </div>
@@ -216,12 +234,12 @@ export default function DevicePage() {
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <button className="h-12 rounded-xl bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)]" onClick={() => setSplit(null)}>
+                      <button className="h-12 rounded-xl bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)]" onClick={() => setSplit(null)}>
                         Geri
                       </button>
                       <button
                         disabled={splitTotal !== current.amount}
-                        className="h-12 rounded-xl bg-primary font-semibold text-primary-ink transition-[filter] duration-100 active:brightness-90 disabled:opacity-40"
+                        className="h-12 rounded-xl bg-primary font-semibold text-primary-ink transition-[filter,background-color,color] duration-150 active:brightness-90 disabled:bg-surface-3 disabled:text-muted disabled:active:brightness-100"
                         onClick={() => pay(split.map((s) => ({ type: s.type, amount: parseTL(s.amount) ?? 0 })).filter((s) => s.amount > 0))}
                       >
                         Öde ve fiş bas
@@ -237,10 +255,10 @@ export default function DevicePage() {
         <div className="space-y-3">
           <Card title="Gerçek cihazda akış aynı">
             <ol className="list-decimal space-y-1 p-4 pl-9 text-sm leading-relaxed text-ink-2">
-              <li>Kasada "Hesabı yazarkasaya gönder" denir; sepet (ürünler, KDV kısımları, indirimler) cihaza gider.</li>
-              <li>Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar.</li>
-              <li>Sonuç (Z no, fiş no, ödeme kalemleri) LafPOS'a gelir; adisyon kendiliğinden kapanır.</li>
-              <li>Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır ve patron paneline alarm düşer.</li>
+              <li>Kasada “Hesabı yazarkasaya gönder” denir; sepet (ürünler, KDV kısımları, indirimler) cihaza gider</li>
+              <li>Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar</li>
+              <li>Sonuç (Z no, fiş no, ödeme kalemleri) LafPOS’a gelir; adisyon kendiliğinden kapanır</li>
+              <li>Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır ve patron paneline alarm düşer</li>
             </ol>
           </Card>
           <Card title="Son fişler">
@@ -255,7 +273,7 @@ export default function DevicePage() {
                   </span>
                   <span className="tabular font-semibold">{tl(r.amount)}</span>
                   {r.status === 'tamamlandi' && (
-                    <Button size="sm" variant="ghost" className="text-danger-500" onClick={() => cancel(r.id, true)}>
+                    <Button size="sm" variant="dangerGhost" onClick={() => cancel(r.id, true)}>
                       Fiş iptal
                     </Button>
                   )}

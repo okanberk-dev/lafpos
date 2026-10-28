@@ -115,7 +115,7 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
             )}
             {summary.payments.length === 0 && (
               <li>
-                <EmptyState compact title="Ödeme yok" />
+                <EmptyState compact title="Bu gün ödeme alınmadı" />
               </li>
             )}
           </ul>
@@ -168,11 +168,11 @@ export function ZView({ day, summary, lafmaliyet, title }: { day: BusinessDayDTO
             ))}
           </div>
           <p className="px-4 pb-3 text-xs text-muted">
-            Alanlar lafmaliyet'teki formla aynı sırada. "Kopyala" ile alıp forma yapıştırabilirsiniz;{' '}
+            Alanlar lafmaliyet’teki formla aynı sırada. “Kopyala” ile alıp forma yapıştırabilirsiniz;{' '}
             {trainingDay
               ? day.trainingDay
-                ? "bu gün kurulum modunda kapandı (eğitim günü), lafmaliyet'e kendiliğinden gitmez"
-                : "bu gün eğitim işareti tutulmadan önce kapandı, lafmaliyet'e kendiliğinden gitmez"
+                ? 'bu gün kurulum modunda kapandı (eğitim günü), lafmaliyet’e kendiliğinden gitmez'
+                : 'bu gün eğitim işareti tutulmadan önce kapandı, lafmaliyet’e kendiliğinden gitmez'
               : 'bağlantı kurulunca kendiliğinden gider'}
           </p>
         </Card>

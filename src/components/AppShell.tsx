@@ -1,4 +1,4 @@
-import { ChevronRight, Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, Sun, Wifi, WifiOff } from 'lucide-react';
+import { ChevronRight, Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, SunMoon, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { fmtTime } from '@shared/time';
@@ -9,13 +9,15 @@ import { useLive } from '@/lib/live';
 import { isAdminArea, visibleNav } from '@/lib/nav';
 import { useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
-import { useTheme } from '@/lib/theme';
+import { KDS_THEME_PREF, type KdsTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
+import { useLocalPref } from '@/lib/hooks';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
 import { LafMark } from './LafMark';
 import { PlatformInbox } from './PlatformInbox';
+import { Segmented } from './ui/Field';
 import { Modal } from './ui/Modal';
 import { REMOTE, REMOTE_PATHS } from '@/lib/remote';
 
@@ -53,7 +55,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const me = useAuth((s) => s.me)!;
   const logout = useAuth((s) => s.logout);
   const live = useLive((s) => s.status);
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, forceDark, setForceDark } = useTheme();
+  const [, setKdsTheme] = useLocalPref<KdsTheme>(KDS_THEME_PREF, 'koyu');
   const navigate = useNavigate();
   const location = useLocation();
   const now = useClock();
@@ -93,19 +96,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     await logout();
     navigate('/giris');
   };
-  const dark = document.documentElement.classList.contains('dark');
+  // Bar ekranı kendi tercihinde (cihazda, varsayılan koyu) açılır; orada tema satırı o tercihi değiştirir
+  const onBar = location.pathname === '/mutfak';
+  const setBarTheme = (v: KdsTheme) => {
+    setKdsTheme(v);
+    setForceDark(v === 'koyu');
+  };
 
   // Bağlantı ve gün durumu. 84 px'lik rayda alt alta (yan yana "Gün kapalı" taşar)
-  const liveLabel = live === 'canli' ? 'Canlı bağlantı' : live === 'baglaniyor' ? 'Bağlanıyor' : 'Bağlantı koptu; yeniden deneniyor';
+  const liveLabel = live === 'canli' ? 'Canlı bağlantı' : live === 'baglaniyor' ? 'Bağlanıyor…' : 'Bağlantı koptu; yeniden deneniyor';
   const status = (rail = false) =>
     REMOTE ? (
-      <span title="Kafeden gelen canlı özet; 10 sn'de bir yenilenir" className="rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-primary)]">
+      <span title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir" className="rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-primary)]">
         Uzaktan
       </span>
     ) : (
     <div className={cn('flex items-center text-xs', rail ? 'flex-col gap-1.5' : 'gap-1')}>
-      <span title={liveLabel} aria-label={liveLabel} className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-1', live === 'kopuk' ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'text-muted')}>
-        {live === 'kopuk' ? <WifiOff className="size-3.5" /> : <span className={cn('size-2.5 rounded-full', live === 'canli' ? 'bg-success-600 dark:bg-success-300' : 'bg-warn-500')} />}
+      <span role="status" title={liveLabel} aria-label={liveLabel} className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-1', live === 'kopuk' ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'text-muted')}>
+        {live === 'kopuk' ? <WifiOff className="size-3.5" /> : <span className={cn('size-2.5 rounded-full', live === 'canli' ? 'bg-[var(--admin-success)]' : 'bg-[var(--admin-warning)]')} />}
         {rail && live !== 'kopuk' && <Wifi className="size-3.5" />}
       </span>
       <NavLink to="/kasa" title="Kasa ve gün sonu" className="inline-flex min-h-11 min-w-11 items-center justify-center pointer-fine:min-h-0 pointer-fine:min-w-0">
@@ -113,27 +121,34 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="tabular rounded-md bg-surface-3 px-1.5 py-0.5 font-medium text-ink-2">Z {boot.day.zNo}</span>
         ) : (
           <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 font-medium text-[var(--admin-warning)]">
-            <Lock className="size-3" strokeWidth={2} /> Kapalı
+            <Lock className="size-3 stroke-2" /> Kapalı
           </span>
         )}
       </NavLink>
     </div>
     );
   const avatar = (size: 'sm' | 'md') => (
-    <span className={cn('grid place-items-center rounded-full font-semibold text-white', size === 'md' ? 'size-9 text-xs' : 'size-8 text-[11px]')} style={{ background: me.color }}>
+    // Kişinin rengi koyu kartta kaybolmasın: ince iç halka
+    <span className={cn('grid place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', size === 'md' ? 'size-9 text-xs' : 'size-8 text-[11px]')} style={{ background: me.color }}>
       {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
     </span>
   );
-  const sheetRow = 'flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3';
+  const sheetRow = 'flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-[background-color,border-color,color] duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press';
   const sheetIcon = 'grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 [&>svg]:size-[18px]';
 
   return (
     // Innex düzeni: gri zemin üstünde beyaz menü kartı; kasa ekranları zeminde kendi kartlarını çizer
-    <div className={cn('flex h-full bg-bg', !admin && 'md:gap-3 md:p-2')}>
+    // Yatay telefonda çentik yanlarda: kök kapsayıcı yan güvenli alanı bırakır
+    <div
+      className={cn(
+        'flex h-full bg-bg pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
+        !admin && 'md:gap-3 md:p-2 md:pl-[max(0.5rem,env(safe-area-inset-left))] md:pr-[max(0.5rem,env(safe-area-inset-right))]',
+      )}
+    >
       {/* Tablet ve bilgisayar: ikon rayı (Innex'in daraltılmış kenar çubuğu, docs/ADMIN-INNEX.md §1.2) */}
       <aside className={cn('hidden w-[84px] shrink-0 flex-col items-center rounded-2xl border border-line bg-surface py-3', !admin && 'md:flex')}>
         <NavLink to="/" className="mb-3 grid size-11 place-items-center rounded-xl bg-night text-white dark:bg-surface-3" title="LafPOS">
-          <LafMark className="h-4" bean="#e8c877" />
+          <LafMark className="h-4" onNight />
         </NavLink>
         <nav className="scroll-thin flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-2">
           {items.map((n) => (
@@ -142,19 +157,19 @@ export function AppShell({ children }: { children: ReactNode }) {
               to={n.to}
               className={({ isActive }) =>
                 cn(
-                  'flex w-full flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-colors',
-                  isActive ? 'bg-surface-3 text-ink' : 'text-muted hover:bg-surface-2 hover:text-ink',
+                  'flex w-full flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-colors duration-150',
+                  isActive ? 'bg-surface-3 text-ink' : 'text-muted hover:bg-hover hover:text-ink active:bg-press',
                 )
               }
             >
-              <n.icon className="size-5" strokeWidth={1.75} />
+              <n.icon className="size-5" />
               {n.label}
             </NavLink>
           ))}
         </nav>
         <div className="mt-2 flex flex-col items-center gap-1.5 border-t border-[var(--admin-divider)] px-2 pt-2">
-          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted hover:bg-surface-2 hover:text-ink">
-            <Search className="size-5" strokeWidth={1.75} />
+          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press">
+            <Search className="size-5" />
           </button>
           <div className="tabular text-xs font-medium text-ink-2">{fmtTime(now)}</div>
           {status(true)}
@@ -167,11 +182,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Telefon: üst şerit */}
         {!fullBleed && (
-          <header className="flex items-center gap-0.5 border-b border-line bg-surface py-1 pl-4 pr-2 md:hidden">
+          // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
+          <header className="flex items-center gap-0.5 border-b border-line bg-surface pb-1 pl-4 pr-2 pt-[max(0.25rem,env(safe-area-inset-top))] md:hidden">
             <LafMark className="h-4 shrink-0 text-ink" title="L'Affogato" />
             <span className="ml-2.5 min-w-0 flex-1 truncate text-base font-semibold tracking-[-0.01em]">{current?.title ?? ''}</span>
-            <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted">
-              <Search className="size-5" strokeWidth={1.75} />
+            <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted active:bg-press">
+              <Search className="size-5" />
             </button>
             {status()}
             <button onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 place-items-center">
@@ -188,11 +204,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavLink
               key={n.to}
               to={n.to}
-              className={({ isActive }) => cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-surface-2', isActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
+              className={({ isActive }) => cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-press', isActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
             >
               {({ isActive }) => (
                 <>
-                  <n.icon className="size-6" strokeWidth={isActive ? 2.25 : 1.75} />
+                  {/* Kalınlık sınıfla (index.css svg.lucide 1.75'i öznitelikten üstün) */}
+                  <n.icon className={cn('size-6', isActive && 'stroke-[2.25]')} />
                   {n.label}
                 </>
               )}
@@ -202,9 +219,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               onClick={() => setMoreOpen(true)}
               aria-current={restActive ? 'page' : undefined}
-              className={cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-surface-2', restActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
+              className={cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-press', restActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
             >
-              <MoreHorizontal className="size-6" strokeWidth={restActive ? 2.25 : 1.75} />
+              <MoreHorizontal className={cn('size-6', restActive && 'stroke-[2.25]')} />
               Daha
             </button>
           )}
@@ -215,9 +232,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Liste: ekranın tam adı (raydaki kısaltma değil), sağda ok */}
         <div className="space-y-2 p-4">
           {rest.map((n) => (
-            <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => cn(sheetRow, isActive && 'border-[var(--admin-border-field)] bg-surface-2')}>
+            <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => cn(sheetRow, isActive && 'border-[var(--admin-border-field)] bg-surface-3')}>
               <span className={sheetIcon}>
-                <n.icon strokeWidth={1.75} />
+                <n.icon />
               </span>
               <span className="min-w-0 flex-1 truncate text-sm font-medium">{n.title}</span>
               <ChevronRight className="size-4 shrink-0 text-muted" />
@@ -232,7 +249,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
             <a href="/demo/" className={sheetRow}>
               <span className={sheetIcon}>
-                <MonitorPlay strokeWidth={1.75} />
+                <MonitorPlay />
               </span>
               <span>
                 <span className="block text-sm font-medium">Kasa ekranını dene</span>
@@ -242,27 +259,53 @@ export function AppShell({ children }: { children: ReactNode }) {
           )}
           <button onClick={lock} className={sheetRow}>
             <span className={sheetIcon}>
-              <Lock strokeWidth={1.75} />
+              <Lock />
             </span>
             <span>
               <span className="block text-sm font-medium">Kilitle / kullanıcı değiştir</span>
-              <span className="block text-xs text-muted">Başka personel PIN'iyle devam etsin</span>
+              <span className="block text-xs text-muted">Başka personel PIN’iyle devam etsin</span>
             </span>
           </button>
-          <button onClick={() => setTheme(theme === 'koyu' || (theme === 'sistem' && dark) ? 'acik' : 'koyu')} className={sheetRow}>
-            <span className={sheetIcon}>{dark ? <Sun strokeWidth={1.75} /> : <Moon strokeWidth={1.75} />}</span>
-            <span className="text-sm font-medium">{dark ? 'Açık tema' : 'Koyu tema'}</span>
-          </button>
+          {/* Tema: üç seçenek (Cihaz bir dokunuşta kaybolmasın); bar ekranında bu cihazın bar tercihi */}
+          <div className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line px-3 py-2.5">
+            <span className={sheetIcon}>{onBar ? <Moon /> : <SunMoon />}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">{onBar ? 'Bar ekranı' : 'Tema'}</span>
+              {onBar && <span className="block text-xs text-muted">Bu cihazda saklanır</span>}
+            </span>
+            {onBar ? (
+              <Segmented<KdsTheme>
+                label="Bar ekranı teması"
+                value={forceDark ? 'koyu' : 'acik'}
+                onChange={setBarTheme}
+                options={[
+                  { value: 'acik', label: 'Açık' },
+                  { value: 'koyu', label: 'Koyu' },
+                ]}
+              />
+            ) : (
+              <Segmented<typeof theme>
+                label="Tema"
+                value={theme}
+                onChange={setTheme}
+                options={[
+                  { value: 'acik', label: 'Açık' },
+                  { value: 'koyu', label: 'Koyu' },
+                  { value: 'sistem', label: 'Cihaz' },
+                ]}
+              />
+            )}
+          </div>
           {typeof document !== 'undefined' && document.fullscreenEnabled && (
             <button onClick={toggleFull} className={sheetRow}>
-              <span className={sheetIcon}>{full ? <Shrink strokeWidth={1.75} /> : <Expand strokeWidth={1.75} />}</span>
+              <span className={sheetIcon}>{full ? <Shrink /> : <Expand />}</span>
               <span>
                 <span className="block text-sm font-medium">{full ? 'Tam ekrandan çık' : 'Tam ekran'}</span>
                 <span className="block text-xs text-muted">Kasa bilgisayarında kiosk başlatıcısı bunu kendisi yapar</span>
               </span>
             </button>
           )}
-          <button onClick={lock} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm text-muted hover:bg-surface-2 hover:text-ink">
+          <button onClick={lock} className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-sm text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press">
             <LogOut className="size-4" /> Çıkış yap
           </button>
         </div>

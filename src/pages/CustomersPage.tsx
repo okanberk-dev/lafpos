@@ -1,18 +1,21 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Gift, MapPin, Plus, Search, Wallet } from 'lucide-react';
+import { Gift, MapPin, Plus, Receipt, Search, Wallet } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, Select, Textarea } from '@/components/ui/Field';
+import { Field, Input, SearchInput, Select, Textarea } from '@/components/ui/Field';
+import { promptDialog } from '@/components/ui/Confirm';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, Card, EmptyState, PageHeader, Stat } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, ErrorState, ListSkeleton, PageHeader, Skeleton, Stat } from '@/components/ui/misc';
 import { cn } from '@/lib/cn';
 import { ApiError, errorMessage, get, patch, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { useFinePointer } from '@/lib/hooks';
 import { newRequestId } from '@/lib/requestId';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 
 interface Customer {
@@ -50,9 +53,18 @@ export default function CustomersPage() {
   /** Süren tahsilat denemesi: aynı ekranda aynı girdilerle yeniden basılan "Tahsil et" ikinci kez yazılmaz */
   const attempt = useRef<{ key: string; id: string } | null>(null);
   const [address, setAddress] = useState<{ title: string; address: string } | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const fine = useFinePointer();
   const refresh = () => qc.invalidateQueries({ queryKey: ['customers'] });
 
   const save = async () => {
+    // Zorunlu alan eksikse ileti alanın altında (düğme sessizce soluk kalmaz)
+    if (!form.name.trim()) {
+      setNameError('Ad soyad gerekli');
+      nameRef.current?.focus();
+      return;
+    }
     try {
       const body = { name: form.name, phone: form.phone || null, email: form.email || null, birthday: form.birthday || null, note: form.note || null, creditLimit: form.creditLimit ? parseTL(form.creditLimit) : null };
       const res = await withApproval((pin) => post<{ id: string }>('/customers', { ...body, approverPin: pin }));
@@ -102,34 +114,47 @@ export default function CustomersPage() {
     <div className="flex h-full flex-col gap-3 p-2 md:p-0 lg:flex-row">
       <aside className={cn('flex min-h-0 flex-col rounded-2xl border border-line bg-surface lg:w-[400px]', c ? 'max-h-[40%] lg:max-h-none' : 'flex-1 lg:flex-none')}>
         <div className="space-y-3 p-4 pb-3">
-          <PageHeader title="Müşteriler" subtitle={stamps ? 'Damga kartı, açık hesap ve adresler' : 'Açık hesap ve adresler'} actions={<Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>Yeni</Button>} />
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ad ya da telefon" className="pl-9" />
-          </div>
+          <PageHeader
+            title="Müşteriler"
+            subtitle={stamps ? 'Damga kartı, açık hesap ve adresler' : 'Açık hesap ve adresler'}
+            actions={
+              <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
+                Yeni müşteri
+              </Button>
+            }
+          />
+          <SearchInput value={q} onChange={setQ} label="Müşteri ara" placeholder="Ad ya da telefon" />
         </div>
         <ul className="scroll-thin min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+          {list.isPending && (
+            <li>
+              <ListSkeleton rows={8} className="p-4" />
+            </li>
+          )}
+          {list.isError && !list.data && (
+            <li>
+              <ErrorState compact title="Müşteriler alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+            </li>
+          )}
           {(list.data ?? []).map((x) => (
             <li key={x.id}>
-              <button onClick={() => setSelected(x.id)} aria-current={selected === x.id || undefined} className={cn('flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3', selected === x.id && 'bg-surface-3 shadow-[inset_2px_0_0_var(--admin-primary)]')}>
+              <button onClick={() => setSelected(x.id)} aria-current={selected === x.id || undefined} className={cn('flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press', selected === x.id && 'bg-surface-3 shadow-[inset_2px_0_0_var(--admin-primary)]')}>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{x.name}</span>
-                  <span className="text-xs text-muted">
-                    {x.phone ?? '—'} · {x.visits} ziyaret
-                  </span>
+                  <span className="text-xs text-muted">{joinMeta([x.phone, `${x.visits} ziyaret`])}</span>
                 </span>
                 <span className="text-right text-xs">
                   {stamps && (
-                    <span className="block font-semibold text-warn-600">
+                    <span className="block font-semibold text-warning-ink">
                       {x.stamps}/{goal}
                     </span>
                   )}
-                  {x.balance !== 0 && <span className={x.balance > 0 ? 'text-danger-500' : 'text-brand-500'}>{tl(x.balance)}</span>}
+                  {x.balance !== 0 && <span className={x.balance > 0 ? 'text-danger-ink' : 'text-primary'}>{tl(x.balance)}</span>}
                 </span>
               </button>
             </li>
           ))}
-          {list.data?.length === 0 && (
+          {list.isSuccess && list.data.length === 0 && (
             <li>
               <EmptyState
                 compact
@@ -150,21 +175,32 @@ export default function CustomersPage() {
         </ul>
       </aside>
 
-      <section className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 md:p-6', !c && 'max-lg:hidden')}>
-        {!c ? (
+      <section className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 md:p-6', !selected && 'max-lg:hidden')}>
+        {!selected ? (
           <EmptyState icon={<Wallet />} title="Bir müşteri seçin">
             {stamps ? 'Açık hesap bakiyesi, tahsilat, damga kartı ve sipariş geçmişi burada görünür' : 'Açık hesap bakiyesi, tahsilat ve sipariş geçmişi burada görünür'}
           </EmptyState>
+        ) : detail.isPending ? (
+          // Seçilen müşterinin kartı gelene dek iskelet ("Bir müşteri seçin" denmez; zaten seçildi)
+          <div role="status" aria-label="Müşteri yükleniyor…" className="space-y-4">
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-[84px] rounded-2xl" />
+              ))}
+            </div>
+          </div>
+        ) : !c ? (
+          <ErrorState title="Müşteri bilgisi alınamadı" error={detail.error} retrying={detail.isFetching} onRetry={() => void detail.refetch()} />
         ) : (
           <div className="space-y-4">
             <div className="flex flex-wrap items-start gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-xl font-semibold tracking-[-0.01em]">{c.name}</h2>
-                <p className="text-sm text-muted">
-                  {c.phone ?? 'telefon yok'}
-                  {c.email && ` · ${c.email}`}
-                  {c.birthday && ` · doğum günü ${c.birthday}`}
-                </p>
+                <p className="text-sm text-muted">{joinMeta([c.phone, c.email, c.birthday && `doğum günü ${c.birthday}`])}</p>
                 {c.note && <p className="mt-1 text-sm italic text-ink-2">{c.note}</p>}
               </div>
               {stamps && c.stamps >= goal && (
@@ -217,7 +253,14 @@ export default function CustomersPage() {
                   </ul>
                 )}
               </Card>
-              <Card title="Adresler" actions={<Button size="sm" icon={<MapPin className="size-4" />} onClick={() => setAddress({ title: 'Ev', address: '' })}>Ekle</Button>}>
+              <Card
+                title="Adresler"
+                actions={
+                  <Button size="sm" icon={<MapPin className="size-4" />} onClick={() => setAddress({ title: 'Ev', address: '' })}>
+                    Adres ekle
+                  </Button>
+                }
+              >
                 {detail.data!.addresses.length === 0 ? (
                   <EmptyState compact title="Adres yok">
                     Paket siparişte adres buradan seçilir
@@ -245,7 +288,9 @@ export default function CustomersPage() {
                 ))}
                 {detail.data!.orders.length === 0 && (
                   <li>
-                    <EmptyState compact title="Sipariş yok" />
+                    <EmptyState compact icon={<Receipt />} title="Henüz sipariş yok">
+                      Bu müşteri adisyona eklenince siparişleri burada görünür
+                    </EmptyState>
                   </li>
                 )}
               </ul>
@@ -254,10 +299,22 @@ export default function CustomersPage() {
               <Button
                 variant="ghost"
                 onClick={async () => {
-                  const limit = window.prompt('Açık hesap sınırı (₺, boş bırakırsanız sınırsız)', c.creditLimit != null ? String(c.creditLimit / 100) : '');
+                  const limit = await promptDialog({
+                    title: 'Açık hesap sınırı',
+                    body: c.name,
+                    label: 'Açık hesap sınırı (₺)',
+                    hint: 'boşsa sınırsız',
+                    placeholder: 'Ör. 500',
+                    initial: c.creditLimit != null ? String(c.creditLimit / 100).replace('.', ',') : '',
+                    inputMode: 'decimal',
+                    validate: (v) => (v && parseTL(v) == null ? 'Tutarı ör. 500 ya da 1.250,50 biçiminde yazın' : null),
+                    confirmLabel: 'Sınırı kaydet',
+                    tone: 'primary',
+                  });
                   if (limit === null) return;
                   try {
-                    await withApproval((pin) => patch(`/customers/${c.id}`, { creditLimit: limit.trim() ? parseTL(limit) : null, approverPin: pin }));
+                    await withApproval((pin) => patch(`/customers/${c.id}`, { creditLimit: limit ? parseTL(limit) : null, approverPin: pin }));
+                    toast.ok('Açık hesap sınırı kaydedildi');
                     refresh();
                   } catch (e) {
                     toast.err(errorMessage(e));
@@ -278,27 +335,37 @@ export default function CustomersPage() {
         footer={
           <div className="flex justify-end gap-2">
             <Button onClick={() => setCreating(false)}>Vazgeç</Button>
-            <Button variant="primary" disabled={!form.name.trim()} onClick={save}>
+            <Button variant="primary" onClick={save}>
               Kaydet
             </Button>
           </div>
         }
       >
         <div className="grid gap-3 p-5 sm:grid-cols-2">
-          <Field label="Ad soyad" className="sm:col-span-2">
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
+          <Field label="Ad soyad" className="sm:col-span-2" required error={nameError}>
+            <Input
+              ref={nameRef}
+              value={form.name}
+              onChange={(e) => {
+                setForm({ ...form, name: e.target.value });
+                setNameError(null);
+              }}
+              autoFocus={fine}
+              autoCapitalize="words"
+              enterKeyHint="next"
+            />
           </Field>
           <Field label="Telefon">
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" />
+            <Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" spellCheck={false} />
           </Field>
           <Field label="E-posta">
-            <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} type="email" />
+            <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} type="email" spellCheck={false} autoCapitalize="none" />
           </Field>
           <Field label="Doğum günü">
             <Input value={form.birthday} onChange={(e) => setForm({ ...form, birthday: e.target.value })} type="date" />
           </Field>
           {can('cari.yonet') && (
-            <Field label="Açık hesap sınırı (₺)" hint="boş = sınırsız">
+            <Field label="Açık hesap sınırı (₺)" hint="boşsa sınırsız">
               <Input value={form.creditLimit} onChange={(e) => setForm({ ...form, creditLimit: e.target.value })} inputMode="decimal" />
             </Field>
           )}

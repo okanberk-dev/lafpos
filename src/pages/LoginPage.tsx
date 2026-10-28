@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { Coffee, Delete } from 'lucide-react';
+import { Coffee } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LafMark } from '@/components/LafMark';
-import { cn } from '@/lib/cn';
+import { Numpad, PinDots } from '@/components/ui/Numpad';
 import { errorMessage, get } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { businessDate, fmtDateLong, fmtTime } from '@shared/time';
@@ -50,6 +50,10 @@ export function LoginPage() {
       setPin(pin.slice(0, -1));
       return;
     }
+    if (k === 'clear') {
+      setPin('');
+      return;
+    }
     if (k === 'ok') {
       void submit(pin);
       return;
@@ -60,16 +64,6 @@ export function LoginPage() {
     if (next.length === 6) void submit(next);
   };
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (/^\d$/.test(e.key)) press(e.key);
-      else if (e.key === 'Backspace') press('back');
-      else if (e.key === 'Enter') press('ok');
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
-
   const today = businessDate(now);
   return (
     // Innex: gri zemin, beyaz kartlar. Solda kim ve ne zaman, sağda PIN
@@ -79,7 +73,7 @@ export function LoginPage() {
         <section className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-surface p-4 sm:p-5 lg:flex-col lg:items-stretch lg:justify-between lg:gap-6 lg:p-6">
           <div className="flex items-center gap-3">
             <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-              <LafMark className="h-4" bean="#e8c877" />
+              <LafMark className="h-4" onNight />
             </span>
             <span className="min-w-0">
               <span className="block truncate text-[15px] font-semibold">{info.data?.businessName ?? "L'Affogato"}</span>
@@ -94,7 +88,7 @@ export function LoginPage() {
             <div className="hidden flex-wrap gap-1.5 lg:flex">
               {info.data.users.map((u) => (
                 <span key={u.id} className="inline-flex items-center gap-1.5 rounded-md bg-surface-3 px-2 py-1 text-xs font-medium text-ink-2">
-                  <span className="size-2 rounded-full" style={{ background: u.color }} />
+                  <span className="size-2 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: u.color }} />
                   {u.name}
                 </span>
               ))}
@@ -107,30 +101,16 @@ export function LoginPage() {
             <h1 className="text-lg font-semibold tracking-[-0.01em]">Hoş geldiniz</h1>
             <p className="mt-0.5 text-[13px] text-muted">PIN kodunuzu girin</p>
           </div>
-          <div className="mb-2 flex justify-center gap-3" aria-live="polite" aria-label={`${pin.length} hane girildi`}>
-            {Array.from({ length: 6 }, (_, i) => (
-              <span key={i} className={cn('size-3.5 rounded-full transition', i < pin.length ? 'bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-line', i >= 4 && i >= pin.length && 'opacity-50')} />
-            ))}
+          <PinDots filled={pin.length} className="mb-2" />
+          <div role="alert" className="mb-3 h-5 text-center text-[13px] font-medium text-[var(--admin-danger-ink)]">
+            {error}
           </div>
-          <div className="mb-3 h-5 text-center text-[13px] font-medium text-[var(--admin-danger-ink)]">{error}</div>
-          <div className="grid grid-cols-3 gap-1.5 rounded-xl bg-surface-3 p-1.5">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((k) => (
-              <PadKey key={k} onClick={() => press(k)}>
-                {k}
-              </PadKey>
-            ))}
-            <PadKey onClick={() => press('back')} aria-label="Sil">
-              <Delete className="mx-auto size-5" />
-            </PadKey>
-            <PadKey onClick={() => press('0')}>0</PadKey>
-            <PadKey onClick={() => press('ok')} primary disabled={pin.length < 4 || busy}>
-              Giriş
-            </PadKey>
-          </div>
+          {/* Ortak tuş takımı; fiziksel klavye de girer (rakam, Backspace, Delete, Enter) */}
+          <Numpad size="lg" keyboard onKey={press} confirm={{ label: 'Giriş', disabled: pin.length < 4 || busy, onPress: () => press('ok') }} />
           {info.data?.demoPins && (
             <div className="mt-5 rounded-xl bg-[var(--admin-warning-soft)] p-3 text-xs text-[var(--admin-warning)]">
               <div className="mb-1 flex items-center gap-1.5 font-semibold">
-                <Coffee className="size-3.5" /> Kurulum modu: örnek PIN'ler
+                <Coffee className="size-3.5" /> Kurulum modu: örnek PIN’ler
               </div>
               <div className="flex flex-wrap gap-x-3 gap-y-1">
                 {info.data.demoPins.map((d) => (
@@ -139,30 +119,11 @@ export function LoginPage() {
                   </button>
                 ))}
               </div>
-              <div className="mt-1.5 text-ink-2">Canlıya geçmeden önce Yönetim › Personel'den PIN'leri değiştirip kurulum modunu kapatın</div>
+              <div className="mt-1.5 text-ink-2">Canlıya geçmeden önce Yönetim › Personel’den PIN’leri değiştirip kurulum modunu kapatın</div>
             </div>
           )}
         </section>
       </div>
     </div>
-  );
-}
-
-function PadKey({ children, primary, className, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { primary?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        // Numpad ile aynı dil: gri tepsi üstünde beyaz tuş; Giriş devre dışıyken de okunur (açık mavi)
-        'tabular h-16 rounded-lg text-2xl font-medium transition-[background-color,transform,box-shadow] duration-100 active:scale-[0.97] motion-reduce:active:scale-100 sm:h-[68px]',
-        primary
-          ? 'bg-primary text-base font-semibold text-primary-ink hover:bg-[var(--admin-primary-hover)] active:bg-[var(--admin-primary-hover)] disabled:bg-[var(--admin-primary-soft)] disabled:text-primary disabled:active:scale-100'
-          : 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08)] hover:bg-surface-2 active:bg-surface-2 active:shadow-none',
-        className,
-      )}
-      {...rest}
-    >
-      {children}
-    </button>
   );
 }

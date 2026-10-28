@@ -1,6 +1,6 @@
 import { Minus, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { parseTL, tl } from '@shared/money';
+import { parseTL, tl, tlShort } from '@shared/money';
 import type { ZSummary } from '@shared/types';
 import { useBoot } from '@/lib/boot';
 import { slipDiff, slipRows } from '@/lib/cashCount';
@@ -43,6 +43,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
           <h3 className="font-semibold">Nakit sayımı</h3>
           <Segmented
             size="sm"
+            label="Sayım biçimi"
             value={mode}
             onChange={setMode}
             options={[
@@ -55,20 +56,24 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {DENOMINATIONS.map((d) => {
               const n = value.banknotes[String(d)] ?? 0;
+              // ₺ başta, uygulamanın her yerindeki gibi (₺200, ₺0,50)
+              const label = tlShort(d);
               return (
                 <div key={d} className="flex items-center gap-2 rounded-xl border border-line bg-surface px-2 py-1.5">
-                  <span className="tabular w-14 text-sm font-semibold">{d >= 100 ? `${d / 100} ₺` : `${d} kr`}</span>
-                  <button aria-label="Azalt" className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 pointer-coarse:size-11" onClick={() => setNote(d, n - 1)}>
+                  <span className="tabular w-14 text-sm font-semibold">{label}</span>
+                  <button type="button" aria-label={`${label} bir azalt`} className={STEP} onClick={() => setNote(d, n - 1)}>
                     <Minus className="size-3.5" />
                   </button>
                   <input
                     value={n || ''}
                     onChange={(e) => setNote(d, Number(e.target.value.replace(/\D/g, '')) || 0)}
                     inputMode="numeric"
-                    className="tabular h-8 w-full min-w-0 rounded-lg border border-line bg-surface text-center text-sm pointer-coarse:h-11"
+                    autoComplete="off"
+                    aria-label={`${label} adedi`}
+                    className="tabular h-8 w-full min-w-0 rounded-lg border border-line-strong bg-surface text-center text-sm pointer-coarse:h-11"
                     placeholder="0"
                   />
-                  <button aria-label="Artır" className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 pointer-coarse:size-11" onClick={() => setNote(d, n + 1)}>
+                  <button type="button" aria-label={`${label} bir artır`} className={STEP} onClick={() => setNote(d, n + 1)}>
                     <Plus className="size-3.5" />
                   </button>
                 </div>
@@ -84,6 +89,8 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
               onChange({ ...value, countedCash: parseTL(e.target.value) ?? 0, banknotes: {} });
             }}
             inputMode="decimal"
+            autoComplete="off"
+            aria-label="Çekmecedeki nakit"
             placeholder="Çekmecedeki nakit"
             className="tabular h-14 w-full rounded-2xl border border-line-strong bg-surface px-4 text-right text-2xl font-semibold"
           />
@@ -131,10 +138,12 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
                       onChange({ ...value, methodCounts: next });
                     }}
                     inputMode="decimal"
+                    autoComplete="off"
+                    aria-label={`${m.name} slip tutarı`}
                     placeholder="Slip"
                     className="tabular h-11 w-28 rounded-lg border border-line-strong bg-surface px-2 text-right"
                   />
-                  {!blind && <span className={cn('tabular w-24 text-right text-sm font-semibold', d == null ? 'text-muted' : d === 0 ? 'text-brand-500' : 'text-danger-500')}>{d == null ? '—' : tl(d)}</span>}
+                  {!blind && <span className={cn('tabular w-24 text-right text-sm font-semibold', d == null ? 'text-muted' : d === 0 ? 'text-success-ink' : 'text-danger-ink')}>{d == null ? '—' : tl(d)}</span>}
                 </div>
               );
             })}
@@ -145,9 +154,13 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
   );
 }
 
+/** Banknot adedi düğmesi: farede 32, dokunmatikte 44 px */
+const STEP = 'grid size-8 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)] pointer-coarse:size-11';
+
+/** Beklenen, sayılan ve fark: tonlu hücrenin kenarı durum çizgisi (iki temada da görünür) */
 function Cell({ label, value, tone }: { label: string; value: string; tone?: 'ok' | 'warn' | 'bad' }) {
   return (
-    <div className={cn('rounded-xl border px-3 py-2', tone === 'bad' ? 'border-danger-200 bg-[var(--admin-danger-soft)] dark:border-transparent' : tone === 'warn' ? 'border-warn-200 bg-[var(--admin-warning-soft)] dark:border-transparent' : tone === 'ok' ? 'border-success-200 bg-[var(--admin-success-soft)] dark:border-transparent' : 'border-line')}>
+    <div className={cn('rounded-xl border px-3 py-2', tone === 'bad' ? 'border-danger-line bg-danger-soft' : tone === 'warn' ? 'border-warning-line bg-warning-soft' : tone === 'ok' ? 'border-success-line bg-success-soft' : 'border-line')}>
       <div className="text-xs text-muted">{label}</div>
       <div className="tabular font-semibold">{value}</div>
     </div>

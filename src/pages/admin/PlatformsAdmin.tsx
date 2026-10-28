@@ -1,14 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Send } from 'lucide-react';
+import { Bike, ChevronRight, PackageSearch, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { tl } from '@shared/money';
 import { PLATFORM_LABEL, PLATFORM_MODE_LABEL, PLATFORM_STATUS_LABEL, PLATFORMS, type PlatformId, type PlatformLiveStatus, type PlatformMode, type PlatformProductDTO, type PlatformSettings } from '@shared/platforms';
 import { fmtDateTime, fmtTime } from '@shared/time';
-import { Badge, BTN, Card, CODE, PageHeader, Segmented } from '@/components/admin/ui';
+import { Badge, Card, CARD, CODE, EmptyState, PageHeader, Segmented } from '@/components/admin/ui';
 import { PlatformBadge } from '@/components/PlatformBadge';
 import { usePlatforms } from '@/components/PlatformInbox';
-import { Field, Input, Select } from '@/components/ui/Field';
-import { PageLoading } from '@/components/ui/misc';
+import { Button } from '@/components/ui/Button';
+import { Field, NumberInput, Select } from '@/components/ui/Field';
+import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -35,12 +36,12 @@ function Env({ names }: { names: string[] }) {
 const LIVE_NEEDS: Record<PlatformId, ReactNode> = {
   yemeksepeti: (
     <>
-      Delivery Hero'dan POS entegrasyonu: middleware adresi, kullanıcı adı, parola, restoranın POS kimliği ve JWT anahtarı. Kasa bilgisayarının{' '}
-      <code className={CODE}>.env</code> dosyasına <Env names={['YEMEKSEPETI_MW_URL', 'YEMEKSEPETI_USERNAME', 'YEMEKSEPETI_PASSWORD', 'YEMEKSEPETI_REMOTE_ID']} />, Vercel'e{' '}
-      <Env names={['YEMEKSEPETI_PLUGIN_SECRET']} /> yazılır; LafPOS yeniden başlatılınca Canlı seçilir. Siparişler LafPOS Uzaktan'a gelir, kasa 20 saniyede bir çeker.
+      Delivery Hero’dan POS entegrasyonu: middleware adresi, kullanıcı adı, parola, restoranın POS kimliği ve JWT anahtarı. Kasa bilgisayarının{' '}
+      <code className={CODE}>.env</code> dosyasına <Env names={['YEMEKSEPETI_MW_URL', 'YEMEKSEPETI_USERNAME', 'YEMEKSEPETI_PASSWORD', 'YEMEKSEPETI_REMOTE_ID']} />, Vercel’e{' '}
+      <Env names={['YEMEKSEPETI_PLUGIN_SECRET']} /> yazılır; LafPOS yeniden başlatılınca Canlı seçilir. Siparişler LafPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker.
     </>
   ),
-  getir: "Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber'e geçti, yol Trendyol Go'ya dönebilir.",
+  getir: 'Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber’e geçti, yol Trendyol Go’ya dönebilir.',
   trendyol: (
     <>
       Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar kasa bilgisayarının <code className={CODE}>.env</code> dosyasına (
@@ -56,14 +57,26 @@ const MODE_TONE: Record<PlatformMode, 'neutral' | 'info' | 'success'> = { kapali
 export default function PlatformsAdmin() {
   const data = usePlatforms();
   const can = useCan();
-  if (data.isLoading || !data.data) return <PageLoading />;
+  const header = <PageHeader title="Paket platformları" description="Platform siparişleri kasaya düşer, onaylanınca bara gider; tahsilat platformda" />;
+  if (!data.data)
+    return (
+      <>
+        {header}
+        {data.isError ? (
+          <ErrorState className={CARD} title="Platform durumu alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
+        ) : (
+          <div role="status" aria-label="Yükleniyor…" className="grid items-start gap-4 lg:grid-cols-2">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-52 rounded-2xl" />
+            ))}
+          </div>
+        )}
+      </>
+    );
   const recent = data.data.orders.filter((o) => o.status !== 'bekliyor').slice(0, 20);
   return (
     <>
-      <PageHeader
-        title="Paket platformları"
-        description="Platform siparişleri kasaya düşer, onaylanınca bara gider; tahsilat platformda"
-      />
+      {header}
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {PLATFORMS.map((p) => (
           <PlatformCard key={p} platform={p} settings={data.data!.settings[p]} live={data.data!.live?.[p]} canEdit={can('senkron.yonet') || can('ayar.yonet')} canTest={can('paket.yonet')} />
@@ -72,7 +85,9 @@ export default function PlatformsAdmin() {
       <ProductMapping canEdit={can('menu.yonet') || can('senkron.yonet')} />
       <Card title="Son 12 saat" subtitle="Kabul, ret ve platform iptalleri" className="mt-4" flush>
         {recent.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-[var(--admin-text-mute)]">Henüz platform siparişi yok</p>
+          <EmptyState bare icon={<Bike />} title="Son 12 saatte platform siparişi yok">
+            Kabul edilen ya da reddedilen siparişler burada listelenir
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-[var(--admin-divider)]">
             {recent.map((o) => (
@@ -113,9 +128,15 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
   };
   const unmatched = rows.filter((r) => !r.productId).length;
   return (
-    <Card title="Ürün eşleme" subtitle={'Platformdan gelen kalem kasadaki ürüne bağlanır; bağlanmayan ada göre eşlenir, kasada yoksa kabulde "Platform ürünü" satırı olur'} className="mt-4" flush actions={unmatched > 0 ? <Badge tone="warning">{unmatched} eşlenmemiş</Badge> : undefined}>
-      {rows.length === 0 ? (
-        <p className="px-4 py-6 text-sm text-[var(--admin-text-mute)]">Henüz platformdan kalem gelmedi</p>
+    <Card title="Ürün eşleme" subtitle="Platformdan gelen kalem kasadaki ürüne bağlanır; bağlanmayan ada göre eşlenir, kasada yoksa kabulde “Platform ürünü” satırı olur" className="mt-4" flush actions={unmatched > 0 ? <Badge tone="warning">{unmatched} eşlenmemiş</Badge> : undefined}>
+      {q.isPending ? (
+        <ListSkeleton rows={3} />
+      ) : q.isError && !q.data ? (
+        <ErrorState compact title="Platform ürünleri alınamadı" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
+      ) : rows.length === 0 ? (
+        <EmptyState bare icon={<PackageSearch />} title="Henüz platformdan ürün gelmedi">
+          İlk siparişle gelen ürünleri burada kasadaki ürünlerle eşleştirirsiniz
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-[var(--admin-divider)]">
           {rows.map((r) => (
@@ -127,7 +148,7 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
               </span>
               <label className="w-full sm:w-64">
                 <span className="sr-only">{r.name} için kasadaki ürün</span>
-                <Select value={r.productId ?? ''} disabled={!canEdit} onChange={(e) => void save(r, e.target.value || null)} className="text-sm pointer-fine:h-9">
+                <Select value={r.productId ?? ''} disabled={!canEdit} onChange={(e) => void save(r, e.target.value || null)} className="[[data-area=admin]_&]:pointer-fine:h-9">
                   <option value="">Ada göre eşlenir</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -146,8 +167,7 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
 
 function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform: PlatformId; settings: PlatformSettings; live?: PlatformLiveStatus; canEdit: boolean; canTest: boolean }) {
   const qc = useQueryClient();
-  const [prep, setPrep] = useState(String(settings.prepMinutes));
-  const [commission, setCommission] = useState(String(settings.commissionPct));
+  const [testing, setTesting] = useState(false);
   const save = async (patch: Partial<PlatformSettings>) => {
     try {
       await put(`/platforms/${platform}`, patch);
@@ -159,12 +179,15 @@ function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform
     }
   };
   const test = async () => {
+    setTesting(true);
     try {
       await post(`/platforms/${platform}/test-order`);
       qc.invalidateQueries({ queryKey: ['platforms'] });
       toast.ok('Deneme siparişi geldi: üstteki şeritten onaylayın');
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setTesting(false);
     }
   };
   return (
@@ -188,19 +211,18 @@ function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform
           </p>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Hazırlık süresi (dk)">
-            <Input type="number" min={5} max={120} value={prep} disabled={!canEdit} onChange={(e) => setPrep(e.target.value)} onBlur={() => Number(prep) !== settings.prepMinutes && save({ prepMinutes: Math.min(120, Math.max(5, Number(prep) || 20)) })} />
+          <Field label="Hazırlık süresi (dk)" hint="5-120">
+            <NumberInput value={settings.prepMinutes} min={5} max={120} fallback={20} disabled={!canEdit} onCommit={(prepMinutes) => void save({ prepMinutes })} />
           </Field>
-          <Field label="Tahmini komisyon (%)">
-            <Input type="number" min={0} max={60} value={commission} disabled={!canEdit} onChange={(e) => setCommission(e.target.value)} onBlur={() => Number(commission) !== settings.commissionPct && save({ commissionPct: Math.min(60, Math.max(0, Number(commission) || 0)) })} />
+          <Field label="Tahmini komisyon (%)" hint="0-60">
+            <NumberInput decimals={2} value={settings.commissionPct} min={0} max={60} fallback={0} disabled={!canEdit} onCommit={(commissionPct) => void save({ commissionPct })} />
           </Field>
         </div>
         {settings.mode === 'deneme' && canTest && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <button type="button" className={BTN.soft} onClick={() => void test()}>
-              <Send className="size-4" aria-hidden="true" />
+            <Button variant="soft" icon={<Send className="size-4" />} loading={testing} onClick={() => void test()}>
               Deneme siparişi gönder
-            </button>
+            </Button>
             <span className="text-xs text-[var(--admin-text-mute)]">Deneme siparişi gerçek satış gibi ciroya girer</span>
           </div>
         )}

@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, Info } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ClipboardList, Info, SearchX } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { tl } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
-import { Badge, Card, EmptyState, PageHeader, SearchField, StatusTabs, Timeline, type TimelineItem } from '@/components/admin/ui';
-import { PageLoading } from '@/components/ui/misc';
+import { Badge, Card, CARD, EmptyState, PageHeader, SearchField, StatusTabs, Timeline, type TimelineItem } from '@/components/admin/ui';
+import { Button } from '@/components/ui/Button';
+import { ErrorState, ListSkeleton } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { fold } from '@/lib/shell';
 
@@ -160,14 +161,37 @@ export default function AuditAdmin() {
       <div className="mb-3 flex items-center gap-2">
         <SearchField value={q} onChange={setQ} placeholder="Kayıt, işlem ya da kişi" label="Denetim kaydında ara" />
       </div>
-      {data.isLoading ? (
-        <PageLoading />
+      {data.isPending ? (
+        <Card>
+          <ListSkeleton rows={6} className="p-0" />
+        </Card>
+      ) : data.isError && !data.data ? (
+        <ErrorState className={CARD} title="Denetim kaydı alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
       ) : items.length ? (
         <Card bodyClassName="[&_ol>li]:pb-4">
           <Timeline items={items} />
         </Card>
+      ) : all.length === 0 ? (
+        <EmptyState icon={<ClipboardList />} title="Henüz kayıt yok">
+          İptal, ikram, indirim, kasa hareketi ve gün sonu yapıldıkça burada listelenir
+        </EmptyState>
       ) : (
-        <EmptyState title="Kayıt yok">Seçili süzgeçte denetim kaydı bulunmuyor</EmptyState>
+        <EmptyState
+          icon={<SearchX />}
+          title="Bu süzgeçte kayıt yok"
+          action={
+            <Button
+              onClick={() => {
+                setQ('');
+                setSeverity('tum');
+              }}
+            >
+              Süzgeci temizle
+            </Button>
+          }
+        >
+          Aramayı ya da önem süzgecini değiştirin
+        </EmptyState>
       )}
     </>
   );

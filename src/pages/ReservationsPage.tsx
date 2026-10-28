@@ -1,16 +1,17 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, ChevronLeft, ChevronRight, Phone, Plus, Users } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { addDays, businessDate, fmtDateLong, fmtDateShort } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Field, Input, Select, Textarea } from '@/components/ui/Field';
+import { Field, Input, NumberInput, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, EmptyState, PageHeader } from '@/components/ui/misc';
+import { Badge, EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, patch, post } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { useFinePointer } from '@/lib/hooks';
 import { toast } from '@/lib/toast';
 
 interface Reservation {
@@ -34,12 +35,28 @@ export default function ReservationsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [date, setDate] = useState(businessDate(Date.now()));
-  const list = useQuery({ queryKey: ['reservations', date], queryFn: () => get<Reservation[]>(`/reservations?date=${date}`) });
+  // Gün değişince önceki günün listesi soluk kalır (sahte "rezervasyon yok" yanıp sönmesin)
+  const list = useQuery({ queryKey: ['reservations', date], queryFn: () => get<Reservation[]>(`/reservations?date=${date}`), placeholderData: keepPreviousData });
   const [form, setForm] = useState<null | { time: string; name: string; phone: string; guests: number; tableId: string; durationMin: number; note: string }>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const fine = useFinePointer();
   const refresh = () => qc.invalidateQueries({ queryKey: ['reservations'] });
+  const openForm = () => {
+    setNameError(null);
+    setForm({ time: '19:00', name: '', phone: '', guests: 2, tableId: '', durationMin: 120, note: '' });
+  };
 
   const save = async () => {
     if (!form) return;
+    // Zorunlu alan eksikse düğme sessizce soluk kalmaz: ileti alanın altında, odak alanda
+    if (!form.name.trim()) {
+      setNameError('Ad gerekli');
+      nameRef.current?.focus();
+      return;
+    }
+    setSaving(true);
     try {
       await post('/reservations', { date, time: form.time, name: form.name, phone: form.phone || null, guests: form.guests, tableId: form.tableId || null, durationMin: form.durationMin, note: form.note || null });
       toast.ok('Rezervasyon eklendi');
@@ -47,6 +64,8 @@ export default function ReservationsPage() {
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
+    } finally {
+      setSaving(false);
     }
   };
   const setStatus = async (r: Reservation, status: Reservation['status']) => {
@@ -74,27 +93,45 @@ export default function ReservationsPage() {
           <>
             {/* Tarih adımlayıcı: görünen metin bizim biçimimizde ("Bugün", "27 Eki Sal"); üstündeki görünmez tarih alanı yerli seçiciyi açar */}
             <div className="flex items-center rounded-xl border border-line bg-surface">
-              <button aria-label="Önceki gün" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3" onClick={() => setDate(addDays(date, -1))}>
+              <button aria-label="Önceki gün" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setDate(addDays(date, -1))}>
                 <ChevronLeft className="size-4" />
               </button>
               <span className="relative inline-flex h-11 min-w-24 items-center justify-center px-3 text-sm font-medium">
                 {date === businessDate(Date.now()) ? 'Bugün' : fmtDateShort(date)}
                 <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} aria-label="Tarih" className="absolute inset-0 size-full cursor-pointer opacity-0" />
               </span>
-              <button aria-label="Sonraki gün" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3" onClick={() => setDate(addDays(date, 1))}>
+              <button aria-label="Sonraki gün" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setDate(addDays(date, 1))}>
                 <ChevronRight className="size-4" />
               </button>
             </div>
-            <Button variant="primary" icon={<Plus className="size-4" />} onClick={() => setForm({ time: '19:00', name: '', phone: '', guests: 2, tableId: '', durationMin: 120, note: '' })}>
-              Yeni
+            <Button variant="primary" icon={<Plus className="size-4" />} onClick={openForm}>
+              Yeni rezervasyon
             </Button>
           </>
         }
       />
-      {rows.length === 0 ? (
-        <EmptyState icon={<CalendarClock />} title="Bu gün için rezervasyon yok" />
+      {list.isPending ? (
+        <div role="status" aria-label="Rezervasyonlar yükleniyor…" className="space-y-2">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-[72px] rounded-2xl" />
+          ))}
+        </div>
+      ) : list.isError && !list.data ? (
+        <ErrorState title="Rezervasyonlar alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon={<CalendarClock />}
+          title="Bu gün için rezervasyon yok"
+          action={
+            <Button size="sm" icon={<Plus className="size-4" />} onClick={openForm}>
+              Rezervasyon ekle
+            </Button>
+          }
+        >
+          Telefonla gelen rezervasyonu ekleyin; Geldi deyince masa açılır
+        </EmptyState>
       ) : (
-        <div className="space-y-2">
+        <div aria-busy={list.isPlaceholderData || undefined} className={cn('space-y-2 transition-opacity duration-150', list.isPlaceholderData && 'opacity-60')}>
           {rows.map((r) => (
             <div key={r.id} className={cn('flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-4', r.status === 'iptal' && 'opacity-60')}>
               <div className="tabular w-14 text-xl font-semibold">{r.time}</div>
@@ -108,7 +145,7 @@ export default function ReservationsPage() {
                   </span>
                   {r.tableName && <span>{r.tableName}</span>}
                   {r.phone && (
-                    <a href={`tel:${r.phone}`} className="inline-flex items-center gap-1 text-brand-600">
+                    <a href={`tel:${r.phone}`} className="inline-flex min-h-11 items-center gap-1 text-primary pointer-fine:min-h-0">
                       <Phone className="size-3.5" /> {r.phone}
                     </a>
                   )}
@@ -142,7 +179,7 @@ export default function ReservationsPage() {
         footer={
           <div className="flex justify-end gap-2">
             <Button onClick={() => setForm(null)}>Vazgeç</Button>
-            <Button variant="primary" disabled={!form?.name.trim()} onClick={save}>
+            <Button variant="primary" loading={saving} onClick={save}>
               Kaydet
             </Button>
           </div>
@@ -154,15 +191,25 @@ export default function ReservationsPage() {
               <Input type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
             </Field>
             <Field label="Kişi">
-              <Input type="number" min={1} value={form.guests} onChange={(e) => setForm({ ...form, guests: Number(e.target.value) || 1 })} />
+              <NumberInput value={form.guests} min={1} max={99} fallback={1} onCommit={(guests) => setForm({ ...form, guests })} />
             </Field>
-            <Field label="Ad">
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus />
+            <Field label="Ad" required error={nameError}>
+              <Input
+                ref={nameRef}
+                value={form.name}
+                onChange={(e) => {
+                  setForm({ ...form, name: e.target.value });
+                  setNameError(null);
+                }}
+                autoFocus={fine}
+                autoCapitalize="words"
+                enterKeyHint="next"
+              />
             </Field>
             <Field label="Telefon">
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" />
+              <Input type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} inputMode="tel" spellCheck={false} />
             </Field>
-            <Field label="Masa" hint={boot.tables.some((t) => t.kind === 'oda') ? "Karaoke odası sitedeki /karaoke'den rezerve edilir" : undefined}>
+            <Field label="Masa" hint={boot.tables.some((t) => t.kind === 'oda') ? 'Karaoke odası sitedeki /karaoke’den rezerve edilir' : undefined}>
               <Select value={form.tableId} onChange={(e) => setForm({ ...form, tableId: e.target.value })}>
                 <option value="">Sonra belirlenecek</option>
                 {/* Oda yerel rezervasyona verilmez: karaoke sitede alınır ve ödenir (docs/03-ENTEGRASYON.md §2.4) */}
@@ -176,7 +223,7 @@ export default function ReservationsPage() {
               </Select>
             </Field>
             <Field label="Süre (dk)">
-              <Input type="number" min={15} step={15} value={form.durationMin} onChange={(e) => setForm({ ...form, durationMin: Number(e.target.value) || 120 })} />
+              <NumberInput value={form.durationMin} min={15} max={720} fallback={120} onCommit={(durationMin) => setForm({ ...form, durationMin })} />
             </Field>
             <Field label="Not" className="sm:col-span-2">
               <Textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="Ör. doğum günü, pasta getirecekler" />

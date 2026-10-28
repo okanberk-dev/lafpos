@@ -8,6 +8,7 @@ import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { trapTab } from '@/lib/focus';
 import { navFor } from '@/lib/nav';
 import { useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
@@ -58,9 +59,17 @@ function Palette({ onClose }: { onClose: () => void }) {
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   const users = useQuery({ queryKey: ['users', 'admin'], queryFn: () => get<{ id: string; name: string; role: string; active: boolean }[]>('/admin/users'), enabled: can('personel.yonet'), staleTime: 60_000 });
 
-  useEffect(() => input.current?.focus(), []);
+  // Kapanınca odak açan öğeye döner (⌘K'ya basılan alan, sol menüdeki büyüteç)
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    input.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus?.();
+    };
+  }, []);
 
   const go = (to: string) => () => {
     onClose();
@@ -155,8 +164,15 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   let lastGroup = '';
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center bg-[#0c0e1b]/25 p-3 pt-[min(18vh,140px)]" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Komut paleti" className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-line bg-surface shadow-[var(--shadow-pop)]">
+    <div className="animate-fade fixed inset-0 z-[70] flex items-start justify-center bg-[var(--scrim-soft)] p-3 pt-[min(18vh,140px)]" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div
+        ref={dialog}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Komut paleti"
+        onKeyDown={(e) => trapTab(e, dialog.current)}
+        className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
+      >
         <div className="flex items-center gap-2.5 border-b border-line px-4">
           <Search className="size-4 shrink-0 text-muted" aria-hidden="true" />
           <input
@@ -171,10 +187,15 @@ function Palette({ onClose }: { onClose: () => void }) {
             aria-activedescendant={results[active] ? `palette-${results[active].id}` : undefined}
             className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
           />
-          <kbd className="rounded border border-line px-1.5 text-[11px] text-muted">Esc</kbd>
+          <kbd className="rounded border border-line px-1.5 text-[11px] text-muted pointer-coarse:hidden">Esc</kbd>
         </div>
-        <ul ref={list} id="palette-list" role="listbox" className="scroll-thin min-h-0 flex-1 overflow-y-auto p-1.5">
-          {results.length === 0 && <li className="px-3 py-8 text-center text-sm text-muted">“{q}” için sonuç yok</li>}
+        <ul ref={list} id="palette-list" role="listbox" className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
+          {results.length === 0 && (
+            <li role="presentation" className="px-3 py-8 text-center">
+              <p className="text-sm font-medium text-ink">“{q}” için sonuç yok</p>
+              <p className="mt-0.5 text-[13px] text-muted">Ekran, ürün ya da personel adının bir bölümünü yazın</p>
+            </li>
+          )}
           {results.map((r, i) => {
             const head = r.group !== lastGroup;
             lastGroup = r.group;

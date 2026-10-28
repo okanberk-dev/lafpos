@@ -31,7 +31,8 @@ export function NumaratorModal({
   return (
     <Modal open={open} onClose={onClose} size="sm" title="Masa no / numaratör" subtitle="Sipariş hazır olunca personel bu masaya götürür">
       <div className="space-y-3 p-4">
-        <label className="flex items-baseline justify-center gap-2 rounded-xl border border-primary px-4 py-3 ring-4 ring-[var(--admin-primary-soft)]">
+        {/* Odak halkası yalnız alan odaktayken (sabit halka odak yokken de odaklı gösteriyordu) */}
+        <label className="flex items-baseline justify-center gap-2 rounded-xl border border-line-strong px-4 py-3 transition-[border-color,box-shadow] duration-150 focus-within:border-primary focus-within:ring-4 focus-within:ring-[var(--admin-primary-soft)]">
           <span className="text-2xl font-semibold text-muted">Masa</span>
           <input
             aria-label="Masa no"
@@ -49,7 +50,7 @@ export function NumaratorModal({
             className="tabular min-h-11 w-[7ch] bg-transparent text-4xl font-bold tracking-tight text-ink outline-none placeholder:text-muted"
           />
         </label>
-        <Numpad size="md" onKey={(k) => setValue((v) => applyNumpadKey(v, k, { maxLength: NUMARATOR_MAX }))} />
+        <Numpad size="md" keyboard onEnter={() => value && onConfirm(value)} onKey={(k) => setValue((v) => applyNumpadKey(v, k, { maxLength: NUMARATOR_MAX }))} />
         <div className="grid grid-cols-2 gap-2 pt-1">
           {flow ? (
             <Button size="lg" onClick={() => onConfirm(null)}>

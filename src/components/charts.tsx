@@ -1,8 +1,10 @@
+import { BarChart3 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
+import { EmptyState } from './ui/misc';
 
 /**
- * Grafikler (dataviz kuralları): tek seri tek renk (orman yeşili), kıyas serisi gri ve ince (vurgu biçimi),
+ * Grafikler (dataviz kuralları): tek seri tek renk (birincil mavi), kıyas serisi gri ve ince (vurgu biçimi),
  * tek eksen, sütun en çok 24 px, uçları 4 px yuvarlak ve tabanda düz, ızgara 1 px ve geride, değer etiketi
  * seçici, her işarette üzerine gelince ipucu. Renkler CSS değişkenlerinden gelir, koyu temada kendi adımları var.
  */
@@ -56,6 +58,8 @@ export function ColumnChart({
   height = 220,
   ariaLabel,
   unitDivisor = 100,
+  emptyLabel = 'Bu dönemde satış yok',
+  emptyHint,
 }: {
   data: ColumnDatum[];
   format: (v: number) => string;
@@ -65,6 +69,12 @@ export function ColumnChart({
   ariaLabel: string;
   /** Eksen değerlerini kuruştan liraya çevirmek için */
   unitDivisor?: number;
+  /**
+   * Veri yokken ekranın zamanını söyleyen boş durum: "Bugün henüz satış yok", "Bu günde satış yok",
+   * "Bu dönemde hazırlanan kalem yok". "Veri" denmez
+   */
+  emptyLabel?: string;
+  emptyHint?: string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
@@ -95,9 +105,12 @@ export function ColumnChart({
   }, [data, hasCompare, band, max, plotH]);
 
   if (empty) {
+    // Grafik yüksekliğinde (veri gelince kart zıplamasın); kesik çerçeve yok (bırakma alanı çağrışımı)
     return (
-      <div className="grid place-items-center rounded-lg border border-dashed border-line text-sm text-muted" style={{ height: Math.min(height, 160) }}>
-        Bu dönemde veri yok
+      <div role="img" aria-label={`${ariaLabel}: ${emptyLabel}`} className="grid place-items-center rounded-xl bg-surface-2" style={{ height }}>
+        <EmptyState compact icon={<BarChart3 />} title={emptyLabel}>
+          {emptyHint}
+        </EmptyState>
       </div>
     );
   }
@@ -170,7 +183,7 @@ export function ColumnChart({
         )}
         {hover != null && data[hover] && width > 0 && (
           <div
-            className="pointer-events-none absolute z-10 min-w-36 rounded-xl border border-line bg-surface px-3 py-2 text-xs shadow-[var(--shadow-pop)]"
+            className="pointer-events-none absolute z-10 min-w-36 rounded-xl border border-line bg-[var(--surface-raised)] px-3 py-2 text-xs shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
             style={{ left: Math.min(width - 160, Math.max(0, padL + band * hover + band / 2 - 72)), top: 0 }}
           >
             <div className="font-semibold text-ink">{data[hover].title ?? data[hover].label}</div>

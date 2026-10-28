@@ -1,15 +1,17 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect } from 'react';
+import { Button } from './components/ui/Button';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import type { Permission } from '@shared/permissions';
 import { AppShell } from './components/AppShell';
-import { PageLoading } from './components/ui/misc';
+import { ErrorState, PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
 import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
 import { REMOTE, REMOTE_PATHS } from './lib/remote';
+import { isBootDarkPath, useTheme } from './lib/theme';
 import { DemoRolePicker } from './demo/DemoRolePicker';
 import { DEMO } from './lib/demo';
 import { LoginPage } from './pages/LoginPage';
@@ -58,32 +60,31 @@ function Authed() {
     };
   }, [qc]);
 
-  if (boot.isLoading) return <PageLoading label="LafPOS hazırlanıyor" />;
+  if (boot.isLoading) return <PageLoading label="LafPOS açılıyor…" />;
   if (boot.isError || !boot.data) {
     // Uzaktan görünümde giriş çalışır ama kafeden özet gelmemiş olabilir: ağ değil, kasa kurulumu söylenir
     const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
     return (
-      <div className="grid h-full place-items-center p-6 text-center">
-        <div className="max-w-md">
-          <p className="font-semibold">{noSnapshot ? 'Kafeden henüz veri gelmedi' : 'Sunucuya bağlanılamadı'}</p>
-          <p className="mt-1 text-sm text-muted">
-            {noSnapshot
-              ? 'Giriş çalışıyor. Kafedeki kasa bilgisayarında LafPOS 0.2.0 açılıp uzaktan erişim satırları ayarlara girilince canlı görünüm birkaç saniyede başlar'
-              : REMOTE
-                ? errorMessage(boot.error)
-                : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
-          </p>
-          <div className="mt-4 flex justify-center gap-2">
-            <button className="min-h-11 rounded-xl bg-primary px-4 py-2 text-primary-ink" onClick={() => boot.refetch()}>
-              Tekrar dene
-            </button>
-            {REMOTE && (
-              <button className="min-h-11 rounded-xl border border-line px-4 py-2" onClick={() => void useAuth.getState().logout()}>
+      <div className="grid h-full place-items-center p-6">
+        <ErrorState
+          title={noSnapshot ? 'Kafeden henüz veri gelmedi' : 'Sunucuya bağlanılamadı'}
+          error={boot.error}
+          onRetry={() => void boot.refetch()}
+          retrying={boot.isFetching}
+          action={
+            REMOTE && (
+              <Button size="sm" variant="ghost" onClick={() => void useAuth.getState().logout()}>
                 Çıkış
-              </button>
-            )}
-          </div>
-        </div>
+              </Button>
+            )
+          }
+        >
+          {noSnapshot
+            ? 'Giriş çalışıyor. Kafedeki kasa bilgisayarında LafPOS 0.2.0 açılıp uzaktan erişim satırları ayarlara girilince canlı görünüm birkaç saniyede başlar'
+            : REMOTE
+              ? errorMessage(boot.error)
+              : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
+        </ErrorState>
       </div>
     );
   }
@@ -131,12 +132,18 @@ export function App() {
     init();
   }, [init]);
 
+  // Açılıştaki bar ekranı koyusu (main.tsx initTheme) adres oradan çıkınca bırakılır: giriş ya da yetki
+  // yönlendirmesi başka ekrana götürdüyse o ekran temasıyla açılır. Bar ekranı açıkken kendi koyusunu tutar
+  useEffect(() => {
+    if (!isBootDarkPath(location.pathname) && location.pathname !== '/giris') useTheme.getState().releaseBootDark();
+  }, [location.pathname]);
+
   // Müşteriye dönük ekranlar (çağrı, müşteri ekranı) personel girişi istemez: tablette ya da televizyonda kimsenin
   // oturumu açık kalmaz; kasa menüsü ve otomatik kilit yok. Uzaktan görünümde yoklar
   if (!REMOTE && (location.pathname === '/cagri' || location.pathname === '/musteri-ekrani')) {
     return <Suspense fallback={<PageLoading />}>{location.pathname === '/cagri' ? <PickupBoardPage /> : <CustomerDisplayPage />}</Suspense>;
   }
-  if (!ready) return <PageLoading label="LafPOS açılıyor" />;
+  if (!ready) return <PageLoading label="LafPOS açılıyor…" />;
   if (!me) {
     if (location.pathname !== '/giris') return <Navigate to="/giris" replace state={{ from: location.pathname }} />;
     return REMOTE ? <RemoteLoginPage /> : DEMO ? <DemoRolePicker /> : <LoginPage />;

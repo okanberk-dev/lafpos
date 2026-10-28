@@ -1,9 +1,8 @@
-import { Store, Wallet } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button';
-import { EmptyState, PageLoading } from '@/components/ui/misc';
-import { errorMessage } from '@/lib/api';
+import { EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { openCounterSale } from '@/lib/counter';
@@ -16,7 +15,7 @@ export default function CounterSalePage() {
   const boot = useBoot();
   const can = useCan();
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
   const started = useRef(-1);
 
@@ -26,7 +25,7 @@ export default function CounterSalePage() {
     started.current = attempt;
     openCounterSale()
       .then((o) => navigate(`/adisyon/${o.id}`, { replace: true }))
-      .catch((e) => setError(errorMessage(e)));
+      .catch((e: unknown) => setError(e ?? new Error('Yeni satış açılamadı')));
   }, [boot.day, attempt, navigate]);
 
   if (!boot.day) {
@@ -38,41 +37,31 @@ export default function CounterSalePage() {
           action={
             can('kasa.gun') ? (
               <Button variant="primary" size="lg" onClick={() => navigate('/kasa')}>
-                Kasaya git ve günü aç
+                Günü aç
               </Button>
             ) : undefined
           }
         >
-          {can('kasa.gun') ? 'Satışa başlamak için önce günü açın' : 'Satışa başlamak için yetkili birinin günü açması gerekiyor'}
+          {can('kasa.gun') ? 'Satışa başlamak için önce kasada günü açın' : 'Satışa başlamak için yetkili birinin günü açması gerekiyor'}
         </EmptyState>
       </div>
     );
   }
 
-  if (error) {
+  if (error != null) {
     return (
       <div className="grid h-full place-items-center p-4">
-        <EmptyState
-          icon={<Store />}
+        <ErrorState
           title="Yeni satış açılamadı"
-          action={
-            <Button
-              variant="primary"
-              size="lg"
-              onClick={() => {
-                setError(null);
-                setAttempt((n) => n + 1);
-              }}
-            >
-              Tekrar dene
-            </Button>
-          }
-        >
-          {error}
-        </EmptyState>
+          error={error}
+          onRetry={() => {
+            setError(null);
+            setAttempt((n) => n + 1);
+          }}
+        />
       </div>
     );
   }
 
-  return <PageLoading label="Yeni satış açılıyor" />;
+  return <PageLoading label="Yeni satış açılıyor…" />;
 }

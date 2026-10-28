@@ -68,6 +68,12 @@
   --color-rose-500: #e0557f;
   --color-rose-700: #c0264a;
 
+  /*
+   * Ham ölçekler (brand-*, success-*, warn-*, danger-*, rose-*) koyu temada değişmez: yalnız dolu düğmede
+   * (danger-600/700, success-600/700, beyaz yazı) ve bar ekranının süre durumlarında kullanılır. Metin, rozet,
+   * uyarı kutusu ve kenar için anlam adları (aşağıdaki @theme inline: text-danger-ink, bg-warning-soft,
+   * border-warning-line…) ya da --admin-* belirteçleri; onlar iki temada da AA (tests/design-tokens.test.ts)
+   */
   --color-night: #0c0e1b;
 
   /* Innex köşeleri: düğme ve alan 8, kart 12 (sınıf adları aynı kaldı: rounded-xl düğme, rounded-2xl kart) */
@@ -139,9 +145,30 @@
   --primary: var(--admin-primary);
   --primary-ink: var(--admin-on-primary);
   --chart-accent: var(--admin-chart-line);
-  --chart-context: #b4b9c2;
+  /* Kıyas çizgisi (geçen hafta): gri ama kartta 3:1 (WCAG 1.4.11 grafik nesnesi) */
+  --chart-context: #8a909a;
   --chart-grid: #eef0f3;
   --chart-track: var(--admin-panel);
+
+  /* Durum çizgisi: yumuşak zeminli kutunun ya da kartın kenarı (masa durumu, uyarı kutusu, KPI karosu) */
+  --admin-primary-line: #d9e2ff;
+  --admin-success-line: #c1f0d3;
+  --admin-warning-line: #fde2c3;
+  --admin-danger-line: #fbd2d7;
+  --admin-rose-line: #f7b3c4;
+  --admin-info-line: #b9e3f2;
+  /* Yüzen katmanlar: karartma (pencere; çekmece ve palet hafif), yüzen yüzey (menü, bildirim, grafik ipucu) */
+  --scrim: rgb(12 14 27 / 0.32);
+  --scrim-soft: rgb(12 14 27 / 0.18);
+  --surface-raised: var(--admin-surface);
+  /* Üzerine gelme ve basılı: zeminden bağımsız örtü (saydam öğede), sabit kopyası yapışkan hücre gibi opak yerde */
+  --hover: rgb(12 14 27 / 0.04);
+  --press: rgb(12 14 27 / 0.08);
+  --hover-solid: color-mix(in oklab, var(--admin-surface) 96%, var(--admin-text));
+  /* Hazır rozetinin nabız halkası */
+  --ring-ready: rgb(21 128 61 / 0.45);
+  /* L'Af çekirdeği koyu karoda (gece karosu, giriş ekranı logosu): her temada açık pirinç */
+  --laf-bean-night: #e8c877;
   color-scheme: light;
 }
 
@@ -188,8 +215,24 @@
   --admin-hue-green: #6ee7a0;
   --admin-hue-green-soft: #13301f;
   --admin-chart-line: #9aa8ff;
-  --chart-context: #5b6270;
+  /* Kıyas çizgisi kartta en az 3:1 (WCAG 1.4.11 grafik nesnesi) */
+  --chart-context: #6b7381;
   --chart-grid: #232832;
+  /* Durum rengi %45 yumuşak zemine karışık: koyu zeminde 2.5:1'in üstünde, yazıyla yarışmaz */
+  --admin-primary-line: #47569a;
+  --admin-success-line: #337a4f;
+  --admin-warning-line: #896529;
+  --admin-danger-line: #8f4346;
+  --admin-rose-line: #935061;
+  --admin-info-line: #327189;
+  /* Koyuda gece mürekkebi zeminle aynı renk: karartma siyah ve daha yoğun, yüzen yüzey bir ton açık */
+  --scrim: rgb(0 0 0 / 0.62);
+  --scrim-soft: rgb(0 0 0 / 0.5);
+  --surface-raised: #1d2129;
+  --hover: rgb(255 255 255 / 0.06);
+  --press: rgb(255 255 255 / 0.1);
+  --hover-solid: color-mix(in oklab, var(--admin-surface) 93%, var(--admin-text));
+  --ring-ready: rgb(90 212 138 / 0.5);
   color-scheme: dark;
 }
 
@@ -219,6 +262,33 @@
   --color-line-strong: var(--line-strong);
   --color-primary: var(--primary);
   --color-primary-ink: var(--primary-ink);
+  /*
+   * Anlam adları: iki temada da doğru tonu verir, dark: tekrarı gerekmez (text-danger-ink, bg-warning-soft,
+   * border-primary-line, bg-hover, bg-raised…). Ham ölçek (danger-500, warn-700) koyuda değişmez
+   */
+  --color-primary-soft: var(--admin-primary-soft);
+  --color-primary-line: var(--admin-primary-line);
+  --color-success-ink: var(--admin-success);
+  --color-success-soft: var(--admin-success-soft);
+  --color-success-line: var(--admin-success-line);
+  --color-warning-ink: var(--admin-warning);
+  --color-warning-soft: var(--admin-warning-soft);
+  --color-warning-line: var(--admin-warning-line);
+  --color-danger-ink: var(--admin-danger-ink);
+  --color-danger-soft: var(--admin-danger-soft);
+  --color-danger-line: var(--admin-danger-line);
+  --color-info-ink: var(--admin-info);
+  --color-info-soft: var(--admin-info-soft);
+  --color-info-line: var(--admin-info-line);
+  --color-rose-ink: var(--admin-hue-rose);
+  --color-rose-soft: var(--admin-hue-rose-soft);
+  --color-rose-line: var(--admin-rose-line);
+  --color-violet-ink: var(--admin-hue-violet);
+  --color-violet-soft: var(--admin-hue-violet-soft);
+  --color-hover: var(--hover);
+  --color-press: var(--press);
+  --color-raised: var(--surface-raised);
+  --color-scrim: var(--scrim);
 }
 
 @layer base {
@@ -259,6 +329,10 @@
     background: var(--admin-primary-soft);
     color: var(--admin-text);
   }
+  /* Koyuda yumuşak mavi karttan ayrışmaz (1.2:1): birincilin %40'ı, üstünde metin 7:1 */
+  .dark ::selection {
+    background: color-mix(in oklab, var(--admin-primary) 40%, transparent);
+  }
   * {
     scrollbar-color: var(--line-strong) transparent;
   }
@@ -278,7 +352,10 @@
     background-color: var(--surface);
     color: var(--ink);
   }
-  /* Innex ikonları ince çizgi (1.75): lucide'nin stroke-width özniteliğini CSS ezer */
+  /*
+   * Innex ikonları ince çizgi (1.75): lucide'nin stroke-width özniteliğini CSS ezer, bu yüzden `strokeWidth={2}`
+   * prop'u işlemez. Kalınlık yalnız sınıfla değişir (`stroke-2`, `stroke-[2.25]`; utilities katmanı bunu yener)
+   */
   svg.lucide {
     stroke-width: 1.75;
     flex-shrink: 0;
@@ -304,12 +381,12 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
-  /* Yerel select oku: paletten (açıkta etiket grisi, koyuda açık gri); Field.tsx Select */
+  /* Yerel select oku: paletten (açıkta --admin-text-mute, koyuda onun koyu değeri; değişirse burası da); çizgi 1.75 */
   .select-arrow {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23616367' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23616367' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   .dark .select-arrow {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1ac' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1ac' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   /* Yükleme iskeleti: içeriğin yerini tutan soluk blok (spinner yerine, Operate) */
   .skeleton {
@@ -331,10 +408,10 @@
 
 @keyframes lp-pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgb(21 128 61 / 0.45);
+    box-shadow: 0 0 0 0 var(--ring-ready);
   }
   100% {
-    box-shadow: 0 0 0 10px rgb(21 128 61 / 0);
+    box-shadow: 0 0 0 10px transparent;
   }
 }
 .animate-ring {
@@ -365,17 +442,55 @@
 .animate-fade {
   animation: lp-fade 0.15s ease-out;
 }
+/* Yükleniyor göstergesi kısa beklemede görünmesin (yerel sunucu 20-50 ms): DOM'da durur, 300 ms sonra belirir */
+.animate-delayed {
+  animation: lp-fade 0.15s ease-out both;
+  animation-delay: var(--delay, 300ms);
+}
 
-/* Hareket azaltma: giriş ve nabız animasyonları yok, durum geçişleri (renk) kalır */
+/* Bildirim: telefonda alttan çıkar, tablet ve bilgisayarda üst ortadan iner; kapanırken söner */
+@keyframes lp-drop {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes lp-leave {
+  to {
+    transform: translateY(4px);
+    opacity: 0;
+  }
+}
+.toast-in {
+  animation: lp-slide-up 0.2s cubic-bezier(0.2, 0, 0, 1);
+}
+@media (min-width: 48rem) {
+  .toast-in {
+    animation-name: lp-drop;
+  }
+}
+.toast-out {
+  animation: lp-leave 0.15s ease-in forwards;
+}
+
+/* Hareket azaltma: giriş, çıkış ve nabız animasyonları yok, durum geçişleri (renk) kalır */
 @media (prefers-reduced-motion: reduce) {
   .animate-in,
   .animate-fade,
+  .animate-delayed,
+  .toast-in,
+  .toast-out,
+  .animate-pulse,
   .skeleton {
     animation: none;
   }
   .animate-ring {
     animation: none;
-    box-shadow: 0 0 0 3px rgb(21 128 61 / 0.35);
+    box-shadow: 0 0 0 3px var(--ring-ready);
   }
 }
 

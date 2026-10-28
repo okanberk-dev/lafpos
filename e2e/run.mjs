@@ -7,7 +7,7 @@
  * 2. Akışlar: e2e/flows.mjs (telefonda sipariş, ödeme, yönetimde düzenleme).
  * 3. Tarayıcı demosu: e2e/demo.mjs (dist/web/demo; tarama, PIN'siz akışlar, iki sekme).
  *
- * Seçenekler: --only=tarama|akis|demo  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu
+ * Seçenekler: --only=tarama|akis|demo  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu,/raporlar#urunler
  *             --targets=warn (küçük hedefleri yalnız raporla)
  * Sorun varsa çıkış kodu 1'dir.
  */
@@ -25,6 +25,14 @@ const args = Object.fromEntries(
 );
 const list = (v) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : null);
 
+/**
+ * Varsayılan görünümde olmayan durum (seçili masa, açık pencere, ikinci sekme): adres açılır, `act` sayfayı o duruma
+ * getirir, sonra aynı denetimler koşar (taşma, 44 px, konsol). Görüntü `…-<adres>-<ad>.png`; `--routes=` adresle
+ * (adresin bütün durumları) ya da `adres#ad` ile seçer. Rapor sekmesi adreste değil cihazda saklanır
+ * (`reports.key`): sekmeye basılır, aynı bağlamda sonraki ekranlar etkilenmesin diye durum adresinden sonra gelir
+ */
+const state = (path, name, act) => ({ path, name, act });
+
 const ROUTES = {
   giris: ['/giris'],
   patron: [
@@ -39,11 +47,17 @@ const ROUTES = {
     '/musteriler',
     '/rezervasyon',
     '/raporlar',
+    state('/raporlar', 'urunler', (page) => page.getByRole('tab', { name: 'Ürünler', exact: true }).click({ timeout: 5000 })),
     '/yonetim',
     '/yonetim/genel',
     '/yonetim/menu',
     '/yonetim/secenekler',
+    state('/yonetim/secenekler', 'yeni-grup', async (page) => {
+      await page.getByRole('button', { name: 'Grup ekle', exact: true }).first().click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'Yeni seçenek grubu' }).waitFor({ timeout: 5000 });
+    }),
     '/yonetim/masa-plani',
+    state('/yonetim/masa-plani', 'secili-masa', (page) => page.locator('[data-table-id]').first().click({ timeout: 5000 })),
     '/yonetim/personel',
     '/yonetim/roller',
     '/yonetim/odeme',
@@ -81,13 +95,23 @@ async function sweep(server, api, seed, browser) {
       if (viewport === 'koyu' && role !== 'patron') continue;
       const token = role === 'giris' ? null : api.tokens[role];
       const { context, page, problems } = await openContext(browser, viewport, token);
-      for (const route of ROUTES[role]) {
-        if (only && !only.includes(route)) continue;
+      for (const entry of ROUTES[role]) {
+        const route = typeof entry === 'string' ? entry : entry.path;
+        const extra = typeof entry === 'string' ? null : entry;
+        if (only && !only.includes(route) && !(extra && only.includes(`${route}#${extra.name}`))) continue;
         const target = route === '@s1' ? `/adisyon/${seed.s1.id}` : route === '@s2' ? `/adisyon/${seed.s2.id}` : route === '@tz' ? `/adisyon/${seed.tz.id}` : route;
         problems.length = 0;
         await page.goto(server.base + target, { waitUntil: 'domcontentloaded' });
         await settle(page);
-        const where = `${viewport} · ${role} · ${route}`;
+        if (extra) {
+          try {
+            await extra.act(page);
+            await settle(page);
+          } catch (e) {
+            problems.push(`durum kurulamadı (${extra.name}): ${String(e?.message ?? e).split('\n')[0]}`);
+          }
+        }
+        const where = `${viewport} · ${role} · ${route}${extra ? ` › ${extra.name}` : ''}`;
         const landed = new URL(page.url()).pathname;
         if (!landed.startsWith(LANDS[route] ?? target.split('?')[0])) problems.push(`yönlendirildi: ${landed}`);
         const overflow = await overflowReport(page);
@@ -98,7 +122,7 @@ async function sweep(server, api, seed, browser) {
           if (small.length) (strictTargets ? problems : warnings).push(...small.map((s) => `${where}: küçük hedef ${s}`).slice(0, strictTargets ? 0 : 50));
           if (small.length && strictTargets) problems.push(`44 px altı ${small.length} hedef: ${small.slice(0, 6).join(', ')}`);
         }
-        await page.screenshot({ path: join(outDir, `${viewport}-${role}-${slug(route)}.png`) });
+        await page.screenshot({ path: join(outDir, `${viewport}-${role}-${slug(route)}${extra ? `-${extra.name}` : ''}.png`) });
         pages++;
         for (const p of problems) failures.push(`${where}: ${p}`);
       }

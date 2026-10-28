@@ -69,7 +69,7 @@ function AdminIndex() {
               <ul className={`${CARD} divide-y divide-[var(--admin-divider)] overflow-hidden`}>
                 {list.map((s) => (
                   <li key={s.key}>
-                    <Link to={s.to} className="flex min-h-[68px] items-center gap-3 px-4 py-3.5 hover:bg-[var(--admin-surface-2)] active:bg-[var(--admin-panel)]">
+                    <Link to={s.to} className="flex min-h-[68px] items-center gap-3 px-4 py-3.5 transition-colors hover:bg-hover active:bg-press">
                       <IconBox hue={s.hue} size="lg">
                         <s.icon />
                       </IconBox>

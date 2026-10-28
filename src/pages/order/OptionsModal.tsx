@@ -3,20 +3,21 @@ import { useEffect, useMemo, useState } from 'react';
 import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { fieldClass, Input } from '@/components/ui/Field';
+import { Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { estimateUnit, menuUnit, productGroups, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
+import { useFinePointer } from '@/lib/hooks';
 
 const QUICK_NOTES = ['Az buzlu', 'Buzsuz', 'Çok sıcak', 'Ilık', 'Ayrı tabakta', 'Paket', 'Kremasız'];
 
 type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
 
 // Seçenek ve hızlı not çipleri aynı dilde: 8 px köşe, seçilince mavi; amber bu sistemde durum rengidir, seçim rengi değil
-const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-100 pointer-fine:min-h-10';
+const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
 const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
-const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-surface-3';
+const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
 
 function defaultPicks(groups: OptionGroupDTO[]): Picks {
   const p: Picks = {};
@@ -44,6 +45,7 @@ export function OptionsModal({
   onSubmit: (line: Omit<PendingLine, 'key'>) => void;
 }) {
   const boot = useBoot();
+  const fine = useFinePointer();
   const groups = useMemo(() => (product ? productGroups(boot, product) : []), [boot, product]);
   const [size, setSize] = useState<Size>(initialSize);
   const [picks, setPicks] = useState<Picks>({});
@@ -99,11 +101,11 @@ export function OptionsModal({
       footer={
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-xl border border-line bg-surface">
-            <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3" onClick={() => setQty(Math.max(1, qty - 1))}>
+            <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.max(1, qty - 1))}>
               <Minus className="size-4" />
             </button>
             <span className="tabular w-8 text-center text-lg font-semibold">{qty}</span>
-            <button aria-label="Artır" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3" onClick={() => setQty(Math.min(99, qty + 1))}>
+            <button aria-label="Artır" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.min(99, qty + 1))}>
               <Plus className="size-4" />
             </button>
           </div>
@@ -122,8 +124,9 @@ export function OptionsModal({
               {(['M', 'L'] as const).map((s) => (
                 <button
                   key={s}
+                  aria-pressed={size === s}
                   onClick={() => setSize(s)}
-                  className={cn('rounded-xl border p-3 text-left transition-colors duration-100', size === s ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface hover:border-[var(--admin-border-field)] active:bg-surface-3')}
+                  className={cn('rounded-xl border p-3 text-left transition-colors duration-150', size === s ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface hover:border-[var(--admin-border-field)] active:bg-press')}
                 >
                   <div className="font-semibold">{boot.settings.sizeLabels[s]}</div>
                   <div className="tabular text-sm text-muted">{tlShort(s === 'L' ? product.priceL! : product.price)}</div>
@@ -145,11 +148,11 @@ export function OptionsModal({
                       {i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
                     </span>
                     <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
+                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
                         <Minus className="size-4" />
                       </button>
                       <span className="tabular w-6 text-center font-semibold">{picks[i.id] ?? 0}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
+                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
                         <Plus className="size-4" />
                       </button>
                     </div>
@@ -163,6 +166,7 @@ export function OptionsModal({
                   return (
                     <button
                       key={i.id}
+                      aria-pressed={on}
                       onClick={() => (g.kind === 'single' ? pickSingle(g, i.id) : setCount(i.id, on ? 0 : 1))}
                       className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
                     >
@@ -191,13 +195,7 @@ export function OptionsModal({
               </button>
             ))}
           </div>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value.slice(0, 200))}
-            placeholder="Ör. Az şekerli, bardakta"
-            aria-label="Bara ve mutfağa not"
-            className={fieldClass + ' h-11'}
-          />
+          <Input value={note} onChange={(e) => setNote(e.target.value.slice(0, 200))} placeholder="Ör. az şekerli, bardakta" aria-label="Bara ve mutfağa not" />
         </section>
         {priceOpen ? (
           <section>
@@ -209,7 +207,7 @@ export function OptionsModal({
               placeholder={`${tl(menuUnit(boot, product, size, options))} (menü fiyatı)`}
               aria-label="Elle birim fiyat"
               className="tabular"
-              autoFocus={product.price === 0 && !editing}
+              autoFocus={fine && product.price === 0 && !editing}
             />
             <p className="mt-1 text-xs text-muted">Yetkili onayı ister ve denetim kaydına düşer</p>
           </section>

@@ -1,20 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bike, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
+import { Bike, ChefHat, Globe, PackageCheck, Phone, RefreshCw, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { numaratorLabel } from '@shared/service-mode';
 import { tl } from '@shared/money';
-import { fmtElapsed, fmtTime } from '@shared/time';
+import { fmtAgo, fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Field';
-import { Badge, EmptyState, PageHeader, PageLoading, Tabs } from '@/components/ui/misc';
+import { Badge, EmptyState, ErrorState, PageHeader, Skeleton, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { PlatformBadge } from '@/components/PlatformBadge';
 
@@ -50,8 +51,9 @@ export default function OrdersPage() {
     }
   };
 
-  if (open.isLoading) return <PageLoading />;
   const all = open.data ?? [];
+  // Liste sorgusu: boş durum yalnız veri gelip boşsa; yüklenirken iskelet, alınamazsa hata (sahte "yok" değil)
+  const list = tab === 'kapanan' ? closed : open;
   const rows =
     tab === 'acik'
       ? all.filter((o) => o.type !== 'masa' && o.source === 'pos')
@@ -101,7 +103,15 @@ export default function OrdersPage() {
           ) : null}
         </div>
       )}
-      {rows.length === 0 ? (
+      {list.isPending ? (
+        <div role="status" aria-label="Siparişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-[92px] rounded-2xl" />
+          ))}
+        </div>
+      ) : list.isError && !list.data ? (
+        <ErrorState title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+      ) : rows.length === 0 ? (
         <EmptyState icon={<PackageCheck />} title={tab === 'kapanan' ? 'Bugün kapanan adisyon yok' : tab === 'online' ? 'Açık online sipariş yok' : tab === 'paket' ? 'Açık paket ya da gel-al siparişi yok' : 'Açık tezgâh siparişi yok'}>
           {tab === 'online' ? 'Uygulama ve web siparişleri hazırlanırken burada görünür' : tab === 'kapanan' ? 'Bugün kapanan adisyonlar burada listelenir' : 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın'}
         </EmptyState>
@@ -116,18 +126,19 @@ export default function OrdersPage() {
             const hasBadges = !!o.platform || o.extPaid || o.extStage === 'gone' || pendingKitchen > 0 || !!o.deliveryStatus || methods.length > 0;
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
-              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] hover:border-[var(--admin-border-field)]">
+              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
                 <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex items-start gap-3 rounded-lg text-left">
                   <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
-                    <Icon strokeWidth={1.75} />
+                    <Icon />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">
                       {o.tableName ?? o.extLabel ?? o.deliveryName ?? (o.numarator ? numaratorLabel(o.numarator) : ORDER_TYPE_LABEL[o.type])}{' '}
                       <span className="tabular font-normal text-muted">#{o.extNo ?? o.no}</span>
                     </span>
-                    <span className="block text-[13px] text-muted">
-                      {fmtTime(o.openedAt)} · {o.status === 'acik' ? fmtElapsed(o.openedAt, now) : 'kapandı'} · {itemCount} ürün
+                    {/* Açıkta geçen süre (açılış saati ipucunda), kapananda kapanış saati; boş parça düşer */}
+                    <span className="block text-[13px] text-muted" title={`Açılış ${fmtTime(o.openedAt)}`}>
+                      {joinMeta([itemCount > 0 && `${itemCount} ürün`, o.status === 'acik' ? fmtAgo(o.openedAt, now) : o.closedAt && `kapanış ${fmtTime(o.closedAt)}`])}
                     </span>
                   </span>
                   {itemCount === 0 ? (
@@ -144,7 +155,12 @@ export default function OrdersPage() {
                     {o.platform && <PlatformBadge platform={o.platform} code={o.platformCode} />}
                     {o.extPaid && <Badge tone="violet">Sitede ödendi</Badge>}
                     {o.extStage === 'gone' && <Badge>Siteden kalktı</Badge>}
-                    {pendingKitchen > 0 && <Badge tone="warn">{pendingKitchen} hazırlanıyor</Badge>}
+                    {pendingKitchen > 0 && (
+                      <Badge>
+                        <ChefHat aria-hidden="true" className="size-3" />
+                        {pendingKitchen} barda
+                      </Badge>
+                    )}
                     {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
                     {methods.length > 0 && <Badge>{methods.join(', ')}</Badge>}
                   </div>
@@ -152,7 +168,7 @@ export default function OrdersPage() {
                 {(o.deliveryAddress || o.deliveryPhone) && (
                   <div className="mt-2 rounded-xl bg-surface-2 p-2.5 text-sm">
                     {o.deliveryPhone && (
-                      <a href={`tel:${o.deliveryPhone}`} className="flex items-center gap-1.5 font-medium text-brand-600">
+                      <a href={`tel:${o.deliveryPhone}`} className="flex min-h-11 items-center gap-1.5 font-medium text-primary pointer-fine:min-h-0">
                         <Phone className="size-3.5" /> {o.deliveryPhone}
                       </a>
                     )}
@@ -162,7 +178,7 @@ export default function OrdersPage() {
                 {o.status === 'acik' && (o.type === 'paket' || o.type === 'gelal') && (can('paket.yonet') || can('siparis.al')) && (
                   <div className="mt-3 flex gap-2">
                     {o.type === 'paket' && couriers.length > 0 && (
-                      <Select value={o.courierId ?? ''} onChange={(e) => delivery(o, { courierId: e.target.value || null })} aria-label="Kurye" className="h-10 min-w-0 flex-1 text-sm pointer-coarse:h-11">
+                      <Select value={o.courierId ?? ''} onChange={(e) => delivery(o, { courierId: e.target.value || null })} aria-label="Kurye" className="min-w-0 flex-1">
                         <option value="">Kurye seç</option>
                         {couriers.map((u) => (
                           <option key={u.id} value={u.id}>
@@ -172,7 +188,7 @@ export default function OrdersPage() {
                       </Select>
                     )}
                     {flow && (
-                      <Button size="sm" variant="primary" className="h-10" onClick={() => delivery(o, { deliveryStatus: flow.next })}>
+                      <Button variant="primary" onClick={() => delivery(o, { deliveryStatus: flow.next })}>
                         {flow.label}
                       </Button>
                     )}

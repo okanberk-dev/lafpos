@@ -15,13 +15,15 @@ import { useCan } from '@/lib/auth';
 import { estimateUnit, pendingOptionsText, useBoot } from '@/lib/boot';
 import { type PendingLine, useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
 import { parseTL } from '@shared/money';
+import { groupTyped, TypedAmount } from './TypedAmount';
 
-// Kalemin bardaki durumu: yalnız anlam taşıyan renk (hazırlanıyor amber, hazır yeşil)
+// Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
 const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
   yeni: { label: 'Bara gitti', cls: 'text-muted' },
-  hazirlaniyor: { label: 'Hazırlanıyor', cls: 'text-[var(--admin-warning)]' },
+  hazirlaniyor: { label: 'Hazırlanıyor', cls: 'text-primary' },
   hazir: { label: 'Hazır', cls: 'text-[var(--admin-success)]' },
   servis: { label: 'Serviste', cls: 'text-muted' },
 };
@@ -46,6 +48,8 @@ export function CartPanel({
   const due = order.total - order.paid;
 
   const preview = previewTotals(boot, order, pending);
+  // Boş adisyon yönergesi ekranın yerleşimine göre: geniş ekranda ürünler solda, telefonda Menü sekmesinde
+  const wide = useMediaQuery('(min-width: 768px)');
 
   const visibleItems = order.items.filter((i) => !i.voided || i.voidAfterSend || Date.now() - (i.createdAt ?? 0) < 3600_000);
 
@@ -66,12 +70,13 @@ export function CartPanel({
       <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
         {visibleItems.length === 0 && pending.length === 0 && (
           <div className="my-auto flex flex-col items-center px-6 py-10 text-center">
-            <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-surface-3 text-muted">
-              <ReceiptText className="size-6" strokeWidth={1.75} />
+            <span aria-hidden="true" className="grid size-11 place-items-center rounded-xl bg-surface-3 text-muted">
+              <ReceiptText className="size-5" />
             </span>
-            <p className="mt-3 text-sm font-semibold text-ink">Adisyon boş</p>
-            <p className="mt-1 max-w-[30ch] text-[13px] text-pretty text-muted">
-              {payFirst ? 'Soldan ürün seçin. Öde ödemeyi alır ve siparişi bara iletir' : 'Soldan ürün seçin. Gönder bara ve mutfağa iletir'}
+            <p className="mt-3 text-[15px] font-semibold text-ink">Adisyon boş</p>
+            <p className="mt-1 max-w-[32ch] text-[13px] text-pretty text-muted">
+              {wide ? 'Soldan ürün seçin. ' : 'Menü sekmesinden ürün seçin. '}
+              {payFirst ? 'Ödeme alınınca sipariş bara gider' : 'Gönder’e basınca sipariş bara ve mutfağa gider'}
             </p>
           </div>
         )}
@@ -80,7 +85,7 @@ export function CartPanel({
             <li key={i.id}>
               <button
                 onClick={() => !i.voided && !order.extPaid && order.status === 'acik' && setItemSheet(i)}
-                className={cn('flex min-h-12 w-full items-start gap-3 px-4 py-2.5 text-left transition-colors duration-100', !i.voided && order.status === 'acik' && 'hover:bg-surface-2 active:bg-surface-3')}
+                className={cn('flex min-h-12 w-full items-start gap-3 px-4 py-2.5 text-left transition-colors duration-150', !i.voided && order.status === 'acik' && 'hover:bg-hover active:bg-press')}
               >
                 <span className={cn('tabular h-6 min-w-7 rounded-md px-1.5 text-center text-[13px] font-semibold leading-6', i.voided ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'bg-surface-3 text-ink')}>
                   {i.qty}
@@ -91,7 +96,7 @@ export function CartPanel({
                     {i.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[i.size]}</SizeTag>}
                   </span>
                   {i.optionsText && <span className="block text-xs text-ink-2">{i.optionsText}</span>}
-                  {i.note && <span className="block text-xs italic text-[var(--admin-warning)]">"{i.note}"</span>}
+                  {i.note && <span className="block text-xs text-ink-2">Not: {i.note}</span>}
                   <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-medium">
                     {i.voided ? (
                       <span className="text-[var(--admin-danger-ink)]">İptal: {i.voidReason}</span>
@@ -125,12 +130,13 @@ export function CartPanel({
         </ul>
 
         {pending.length > 0 && (
-          <div ref={pendingRef} className="border-y border-warn-200 bg-warn-50 dark:border-warn-800 dark:bg-[var(--admin-warning-soft)]">
-            <div className="sticky top-0 z-[1] flex items-center gap-1.5 bg-warn-50 px-4 pb-1 pt-2.5 text-xs font-medium text-[var(--admin-warning)] dark:bg-[var(--admin-warning-soft)]">
-              <span className="size-1.5 rounded-full bg-current" />
+          // Gönderilmemişler: amber zemin ve durum çizgisi (iki temada tek tarif, dark: yaması yok)
+          <div ref={pendingRef} className="border-y border-warning-line bg-warning-soft">
+            <div className="sticky top-0 z-[1] flex items-center gap-1.5 bg-warning-soft px-4 pb-1 pt-2.5 text-xs font-medium text-warning-ink">
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
               Gönderilmedi
             </div>
-            <ul className="divide-y divide-warn-200/60 dark:divide-warn-800/60">
+            <ul className="divide-y divide-warning-line">
               {pending.map((l) => {
                 const p = boot.products.find((x) => x.id === l.productId);
                 if (!p) return null;
@@ -139,22 +145,22 @@ export function CartPanel({
                 return (
                   <li key={l.key} className="animate-in flex items-center gap-2 px-4 py-2">
                     <div className="flex items-center rounded-lg border border-line-strong bg-surface">
-                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-l-lg transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3 pointer-coarse:size-11" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
+                      <button aria-label={l.qty > 1 ? 'Azalt' : 'Kaldır'} className="grid size-9 place-items-center rounded-l-lg transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
                         {l.qty > 1 ? <Minus className="size-4" /> : <Trash2 className="size-4 text-[var(--admin-danger-ink)]" />}
                       </button>
                       <span className="tabular w-6 text-center text-sm font-semibold">{l.qty}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-r-lg transition-colors duration-100 hover:bg-surface-2 active:bg-surface-3 pointer-coarse:size-11" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
+                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-r-lg transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
                         <Plus className="size-4" />
                       </button>
                     </div>
                     {/* Satırın kendisi düzenlemeye açar; kalem ikonu yalnız ipucu */}
-                    <button className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors duration-100 active:bg-warn-100 dark:active:bg-warn-800/40" onClick={() => onEditPending(l)} aria-label={`${p.shortName || p.name} düzenle`}>
+                    <button className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors duration-150 active:bg-press" onClick={() => onEditPending(l)} aria-label={`${p.shortName || p.name} düzenle`}>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">
                           {p.shortName || p.name}
                           {l.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[l.size]}</SizeTag>}
                         </span>
-                        {(text || l.note) && <span className="block truncate text-xs text-ink-2">{[text, l.note && `"${l.note}"`].filter(Boolean).join(' · ')}</span>}
+                        {(text || l.note) && <span className="block truncate text-xs text-ink-2">{[text, l.note && `Not: ${l.note}`].filter(Boolean).join(' · ')}</span>}
                       </span>
                       <Pencil aria-hidden="true" className="size-3.5 shrink-0 text-muted" />
                     </button>
@@ -266,20 +272,20 @@ function ItemSheet({
     >
       {!mode ? (
         <div className="grid gap-2 p-4">
-          <SheetButton icon={<XCircle className="size-[18px] text-[var(--admin-danger-ink)]" strokeWidth={1.75} />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
+          <SheetButton icon={<XCircle className="size-[18px] text-[var(--admin-danger-ink)]" />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
           {item.complimentary ? (
             <SheetButton
-              icon={<Undo2 className="size-[18px] text-[var(--admin-hue-rose)]" strokeWidth={1.75} />}
+              icon={<Undo2 className="size-[18px] text-[var(--admin-hue-rose)]" />}
               title={item.compKind === 'ikram' || !item.compKind ? 'İkramı geri al' : `${COMP_LABEL[item.compKind]} kaydını geri al`}
               onClick={async () => (await act((pin) => post(`/orders/${order.id}/items/${item.id}/comp`, { undo: true, reason: '', approverPin: pin }), `${COMP_LABEL[item.compKind ?? 'ikram']} geri alındı`)) && close()}
             />
           ) : (
             <>
-              <SheetButton icon={<Gift className="size-[18px] text-[var(--admin-hue-rose)]" strokeWidth={1.75} />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
-              <SheetButton icon={<Droplets className="size-[18px] text-[var(--admin-warning)]" strokeWidth={1.75} />} title="Zayi yaz" hint="Döküldü, yanlış hazırlandı; ciro dışı, zayi raporuna girer" onClick={() => setMode('zayi')} disabled={unpaid < 1} />
+              <SheetButton icon={<Gift className="size-[18px] text-[var(--admin-hue-rose)]" />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
+              <SheetButton icon={<Droplets className="size-[18px] text-[var(--admin-warning)]" />} title="Zayi yaz" hint="Döküldü, yanlış hazırlandı; ciro dışı, zayi raporuna girer" onClick={() => setMode('zayi')} disabled={unpaid < 1} />
             </>
           )}
-          <SheetButton icon={<Percent className="size-[18px] text-primary" strokeWidth={1.75} />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
+          <SheetButton icon={<Percent className="size-[18px] text-primary" />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
           {item.paidQty > 0 && <p className="px-1 text-xs text-muted">{item.paidQty} adedin ödemesi alındı; bu adetler değiştirilemez</p>}
         </div>
       ) : (
@@ -288,11 +294,11 @@ function ItemSheet({
             <div className="flex items-center justify-between rounded-xl border border-line p-1.5 pl-4">
               <span className="text-sm font-medium">Adet</span>
               <div className="flex items-center gap-1">
-                <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)]" onClick={() => setQty(Math.max(1, qty - 1))}>
+                <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setQty(Math.max(1, qty - 1))}>
                   <Minus className="size-4" />
                 </button>
                 <span className="tabular w-10 text-center text-lg font-semibold">{qty}</span>
-                <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-100 active:bg-[var(--admin-border)]" onClick={() => setQty(Math.min(unpaid, qty + 1))}>
+                <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setQty(Math.min(unpaid, qty + 1))}>
                   <Plus className="size-4" />
                 </button>
               </div>
@@ -302,22 +308,30 @@ function ItemSheet({
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
                 {(['percent', 'amount'] as const).map((k) => (
-                  <button key={k} onClick={() => setDiscType(k)} className={cn('min-h-11 rounded-lg border text-sm font-medium transition-colors', discType === k ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line hover:border-[var(--admin-border-field)] active:bg-surface-3')}>
+                  <button key={k} aria-pressed={discType === k} onClick={() => setDiscType(k)} className={cn('min-h-11 rounded-lg border text-sm font-medium transition-colors duration-150', discType === k ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line-strong hover:border-[var(--admin-border-field)] active:bg-press')}>
                     {k === 'percent' ? 'Yüzde (%)' : 'Tutar (₺)'}
                   </button>
                 ))}
               </div>
-              <div className="tabular rounded-xl border border-line bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
-                {discValue || '0'} {discType === 'percent' ? '%' : '₺'}
-              </div>
-              <Numpad size="md" decimal={discType === 'amount'} onKey={(k) => setDiscValue(applyNumpadKey(discValue, k, { decimal: discType === 'amount', maxLength: discType === 'percent' ? 3 : 8 }))} />
+              {/* İşaret başta, sönük (₺120, %10); klavyeyle de yazılır */}
+              <output aria-label={discType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular block rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
+                {discType === 'percent' ? (
+                  <>
+                    <span className="mr-0.5 align-baseline text-[0.6em] font-medium text-muted">%</span>
+                    {groupTyped(discValue)}
+                  </>
+                ) : (
+                  <TypedAmount text={discValue} />
+                )}
+              </output>
+              <Numpad size="md" keyboard decimal={discType === 'amount'} onKey={(k) => setDiscValue(applyNumpadKey(discValue, k, { decimal: discType === 'amount', maxLength: discType === 'percent' ? 3 : 8 }))} />
             </div>
           )}
           <div>
             <div className="mb-2 text-sm font-medium text-ink-2">Neden</div>
             <div className="flex flex-wrap gap-1.5">
               {reasons.map((r) => (
-                <button key={r} onClick={() => setReason(r)} className={cn('min-h-11 rounded-lg border bg-surface px-3 text-sm transition-colors active:bg-surface-3 pointer-fine:min-h-9', reason === r ? 'border-ink font-semibold text-ink' : 'border-line text-ink-2 hover:border-[var(--admin-border-field)]')}>
+                <button key={r} aria-pressed={reason === r} onClick={() => setReason(r)} className={cn('min-h-11 rounded-lg border bg-surface px-3 text-sm transition-colors duration-150 active:bg-press pointer-fine:min-h-9', reason === r ? 'border-ink font-semibold text-ink' : 'border-line-strong text-ink-2 hover:border-[var(--admin-border-field)]')}>
                   {r}
                 </button>
               ))}
@@ -338,7 +352,7 @@ function ItemSheet({
 
 function SheetButton({ icon, title, hint, onClick, disabled }: { icon: React.ReactNode; title: string; hint?: string; onClick: () => void; disabled?: boolean }) {
   return (
-    <button disabled={disabled} onClick={onClick} className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3 disabled:opacity-40">
+    <button disabled={disabled} onClick={onClick} className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 enabled:hover:border-[var(--admin-border-field)] enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-not-allowed disabled:opacity-40">
       <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3">{icon}</span>
       <span>
         <span className="block text-sm font-medium">{title}</span>

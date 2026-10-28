@@ -64,9 +64,20 @@ export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   if (!res.ok) {
     const d = (data ?? {}) as Record<string, unknown>;
     if (res.status === 401 && path !== '/auth/login') onUnauthorized?.();
-    throw new ApiError(res.status, (d.error as string) ?? `Hata (${res.status})`, (d.code as string) ?? null, d);
+    throw new ApiError(res.status, (d.error as string) || statusMessage(res.status), (d.code as string) ?? null, d);
   }
   return data as T;
+}
+
+/** Sunucu metin göndermediyse kodun anlamı ve ne yapılacağı (kullanıcıya "Hata (500)" yazılmaz) */
+export function statusMessage(status: number): string {
+  if (status === 401) return 'Oturum kapandı. Yeniden giriş yapın';
+  if (status === 403) return 'Bu işlem için yetkiniz yok';
+  if (status === 404) return 'Kayıt bulunamadı; ekranı yenileyin';
+  if (status === 409) return 'Kayıt başka bir ekranda değişti; ekranı yenileyip yeniden deneyin';
+  if (status === 429) return 'Çok sık denendi. Biraz bekleyip yeniden deneyin';
+  if (status >= 500) return "Kasa sunucusunda bir sorun oldu. Biraz sonra yeniden deneyin; sürerse LafPOS'u yeniden başlatın";
+  return `İşlem tamamlanamadı (hata ${status}). Yeniden deneyin`;
 }
 
 export const get = <T>(path: string) => api<T>('GET', path);
@@ -78,5 +89,5 @@ export const del = <T>(path: string) => api<T>('DELETE', path);
 export function errorMessage(e: unknown): string {
   if (e instanceof ApiError) return e.message;
   if (e instanceof Error) return e.message;
-  return 'Bir hata oluştu';
+  return 'Beklenmeyen bir sorun oldu. Yeniden deneyin';
 }

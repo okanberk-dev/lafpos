@@ -116,6 +116,14 @@ export function fmtElapsed(fromMs: number, toMs = Date.now()): string {
   return m ? `${h} sa ${m} dk` : `${h} sa`;
 }
 
+/**
+ * Meta satırı için geçen süre ("az önce", "12 dk", "1 sa 5 dk"): bir dakikadan kısa süre "0 dk" yazılmaz.
+ * Bar sayaçları ve gecikme rozeti fmtElapsed'de kalır (orada 0 dk da bilgidir)
+ */
+export function fmtAgo(fromMs: number, toMs = Date.now()): string {
+  return toMs - fromMs < 60_000 ? 'az önce' : fmtElapsed(fromMs, toMs);
+}
+
 /** "HH:MM" metnini dakikaya çevirir */
 export function hmToMinutes(hm: string): number {
   const [h, m] = hm.split(':').map(Number);

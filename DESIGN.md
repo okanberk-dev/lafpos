@@ -12,9 +12,14 @@ Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (
 
 - **Yerleşim:** tablet ve bilgisayarda 84 px beyaz ikon rayı, yanında ekranın kendi kartları (pencereye 8 px);
   telefonda üst şerit ve alt sekme çubuğu. Adisyon iki kart: ürünler | hesap.
-- **Durum renkleri** (Tailwind ölçekleri `brand` mavi, `success`, `warn`, `danger`, `rose`): masa boş beyaz,
-  dolu açık mavi, hesap istendi amber, kısmen ödendi pembe; bar ekranında hazır yeşil halka, bekleyen fiş
-  ayardaki dakikalarda amber sonra kırmızı. Renk durumu tek başına taşımaz, yanında yazı ya da ikon olur.
+- **Durum renkleri** belirteçlerden, iki temada da AA: durum rengi `--admin-{primary,warning,rose,success,danger}`,
+  yumuşak zemini `*-soft`, kenarı `*-line` (sınıf adları `bg-primary-soft`, `border-warning-line`,
+  `text-danger-ink`...). Masa boş beyaz, dolu mavi, hesap istendi amber, kısmen ödendi pembe (zemin `*-soft`,
+  kenar `*-line`); online (siteden gelen) sipariş her ekranda mor. Bar ekranında kalem bekliyor nötr (gri halka),
+  hazırlanıyor mavi, hazır yeşil; amber yalnız zamanı söyler (ayardaki dakikayı geçen fişin süre rozeti, planlı
+  saat), kırmızı alarm ve iptal. Ham Tailwind ölçekleri (`danger-600`, `success-600`...) koyuda değişmez; yalnız
+  beyaz yazılı dolu yüzeyde (dolu düğme, alarm süre rozeti, hazır rozeti) kalır, `tests/ui-rules.test.ts` izinli
+  listeyle tutar. Renk durumu tek başına taşımaz, yanında yazı ya da ikon olur.
 - **Logo:** L'Af, laffogato.net ve uygulama ikonuyla aynı vektör (`src/components/LafMark.tsx`): harfler
   yazının rengi, çekirdek pirinç (açık zeminde `#B08A2E`, koyuda ve gece karosunda `#E8C877`). Yazı tipine
   bağlı değil, Didot'u olmayan Windows ve Android'de de aynı. Favicon, PWA ikonları ve Windows simgesi sitenin
@@ -29,8 +34,11 @@ Inter, birincil mavi. `--admin-*` değerleri `:root`'ta (açık) ve `.dark`'ta (
   sahnede, fotoğraf sahneyi doldurur, görseli olmayanda baş harfler); "/" aramaya götürür.
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok): çağrı ekranı `/cagri` (Hazırlanıyor ve
   büyük numaralı Hazır), müşteri ekranı `/musteri-ekrani` (kalemler ve büyük tutar; teşekkür; hoş geldiniz).
+  İkisi de ilk karesinden koyu açılır (gece loş salonda en parlak yüzey olmasın); müşteri ekranı `?tema=acik` ile
+  cihazın temasında kalır.
 - **Grafik:** tek seri tek renk (birincil mavi), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli
-  adım yok, verisi olmayan dönemde eksen değil "Bu dönemde veri yok" çizilir (`src/components/charts.tsx`).
+  adım yok, verisi olmayan dönemde eksen yerine ekranın zamanını söyleyen boş durum çizilir (Bugün henüz satış
+  yok, Bu günde satış yok, Bu dönemde satış yok; `ColumnChart` `emptyLabel`, `src/components/charts.tsx`).
 
 ## 2. Yönetim paneli (Innex)
 

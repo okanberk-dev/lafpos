@@ -1,8 +1,10 @@
-import { Search, SlidersHorizontal, Star, X } from 'lucide-react';
+import { Search, SlidersHorizontal, Star } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
-import { fieldClass } from '@/components/ui/Field';
+import { Button } from '@/components/ui/Button';
+import { SearchInput } from '@/components/ui/Field';
+import { EmptyState } from '@/components/ui/misc';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
@@ -116,27 +118,10 @@ export function ProductPanel({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="px-4 pt-2 md:pt-3">
+          {/* Ortak arama alanı (temizle düğmesi, Escape); boşken farede "/" kısayolu ipucu */}
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" strokeWidth={1.75} />
-            <input
-              ref={searchRef}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape' && q) {
-                  e.stopPropagation();
-                  setQ('');
-                }
-              }}
-              placeholder="Ürün ara"
-              aria-label="Ürün ara"
-              className={cn(fieldClass, 'h-11 pl-9 pr-11')}
-            />
-            {q ? (
-              <button onClick={() => setQ('')} aria-label="Aramayı temizle" className="absolute right-0 top-0 grid size-11 place-items-center rounded-xl text-muted hover:text-ink">
-                <X className="size-4" />
-              </button>
-            ) : (
+            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" />
+            {!q && (
               <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-2 px-1.5 text-xs font-medium text-muted pointer-fine:inline-block">
                 /
               </kbd>
@@ -151,7 +136,7 @@ export function ProductPanel({
         >
           {categoryItems.map((c) => (
             <CategoryChip key={c.id} active={!q && current === c.id} color={c.color} onClick={() => setCategoryId(c.id)}>
-              {c.id === FAVORITES && <Star className="size-3.5" strokeWidth={1.75} />}
+              {c.id === FAVORITES && <Star aria-hidden="true" className="size-3.5" />}
               {c.name}
             </CategoryChip>
           ))}
@@ -165,7 +150,26 @@ export function ProductPanel({
           {list.map((p) => (
             <ProductTile key={p.id} p={p} withImage={withImages} disabled={disabled} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
           ))}
-          {list.length === 0 && <p className="col-span-full py-10 text-center text-sm text-muted">Bu aramada ürün yok</p>}
+          {list.length === 0 && (
+            <div className="col-span-full">
+              {q.trim() ? (
+                <EmptyState
+                  compact
+                  icon={<Search />}
+                  title={`“${q.trim()}” ile eşleşen ürün yok`}
+                  action={
+                    <Button size="sm" variant="ghost" onClick={() => setQ('')}>
+                      Aramayı temizle
+                    </Button>
+                  }
+                >
+                  Adın, kısa adın ya da barkodun bir bölümünü yazın
+                </EmptyState>
+              ) : (
+                <EmptyState compact title="Bu kategoride satışta ürün yok" />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -181,14 +185,15 @@ function CategoryRow({ active, color, count, favorite, onClick, children }: { ac
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        'flex min-h-11 w-full shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors active:bg-surface-3 pointer-fine:min-h-10',
-        active ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-surface-2 hover:text-ink',
+        'flex min-h-11 w-full shrink-0 items-center gap-2.5 rounded-lg px-2.5 text-left text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press pointer-fine:min-h-10',
+        active ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
       )}
     >
       {favorite ? (
-        <Star aria-hidden="true" className="size-3.5 shrink-0 text-[var(--laf-bean)]" strokeWidth={2} />
+        <Star aria-hidden="true" className="size-3.5 shrink-0 stroke-2 text-[var(--laf-bean)]" />
       ) : (
-        <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: color ?? 'var(--admin-border-field)' }} />
+        // Kategori rengi koyu kartta kaybolmasın: ince halka
+        <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color ?? 'var(--admin-border-field)' }} />
       )}
       <span className="min-w-0 flex-1 truncate">{children}</span>
       <span className="tabular text-xs font-medium text-muted">{count}</span>
@@ -211,11 +216,11 @@ function CategoryChip({ active, color, onClick, children }: { active: boolean; c
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-lg border bg-surface px-3.5 text-sm whitespace-nowrap transition-[color,border-color,background-color] active:bg-surface-3 pointer-fine:min-h-9',
+        'inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-lg border bg-surface px-3.5 text-sm whitespace-nowrap transition-[color,border-color,background-color] duration-150 active:bg-press pointer-fine:min-h-9',
         active ? 'border-ink font-semibold text-ink' : 'border-line font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
       )}
     >
-      {color && <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: color }} />}
+      {color && <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color }} />}
       {children}
     </button>
   );
@@ -253,7 +258,7 @@ function ProductTile({
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-xl border border-line bg-surface transition-[border-color,transform] duration-100 hover:border-[var(--admin-border-field)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-border-field)] motion-reduce:has-[button:active]:scale-100',
+        'group relative flex flex-col rounded-xl border border-line bg-surface transition-[border-color,transform] duration-150 hover:border-[var(--admin-border-field)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-border-field)] motion-reduce:has-[button:active]:scale-100',
         withImage ? 'min-h-[176px]' : 'min-h-[88px]',
         off && 'opacity-50',
       )}
@@ -262,7 +267,7 @@ function ProductTile({
         disabled={off}
         // Fiyatı 0 olan açık ürün (etkinlik ücreti, özel pasta) fiyat girilsin diye pencereyle açılır
         onClick={() => ((twoSizes || !hasOptions) && (twoSizes || p.price > 0) ? onQuickAdd(p, twoSizes ? 'M' : 'TEK') : onCustomize(p, 'TEK'))}
-        className={cn('flex flex-1 flex-col items-stretch rounded-xl text-left transition-colors duration-100 active:bg-surface-3', !withImage && hasOptions && 'pr-12')}
+        className={cn('flex flex-1 flex-col items-stretch rounded-xl text-left transition-colors duration-150 active:bg-press', !withImage && hasOptions && 'pr-12')}
       >
         {withImage && (
           <span aria-hidden="true" className="relative mx-1.5 mt-1.5 grid h-[88px] place-items-center overflow-hidden rounded-lg bg-surface-2">
@@ -275,10 +280,8 @@ function ProductTile({
                 draggable={false}
                 onError={() => setBroken(true)}
                 onLoad={(e) => setPhoto(isOpaque(e.currentTarget))}
-                className={cn(
-                  'transition-transform duration-200 ease-out group-hover:scale-[1.04] motion-reduce:transition-none',
-                  photo ? 'size-full object-cover' : 'h-[80px] w-full object-contain',
-                )}
+                // Görsel sabit: süs yakınlaşma yok; basılı durumu kartın kendi ölçeği verir
+                className={photo ? 'size-full object-cover' : 'h-[80px] w-full object-contain'}
               />
             ) : (
               <span className="text-xl font-semibold tracking-tight text-[var(--admin-border-field)]">{initials(label)}</span>
@@ -302,17 +305,17 @@ function ProductTile({
           aria-label={`${label} seçenekleri`}
           title="Seçenekler"
           className={cn(
-            'absolute right-0 top-0 grid size-11 place-items-center text-ink-2 transition-colors hover:text-primary active:text-primary',
+            'absolute right-0 top-0 grid size-11 place-items-center text-ink-2 transition-colors duration-150 hover:text-primary active:text-primary',
             withImage ? 'rounded-lg' : 'rounded-xl',
           )}
         >
           {withImage ? (
             // Fotoğrafın üstünde okunur kalsın: beyaz hap; dokunma alanı yine 44 px
             <span className="grid size-9 place-items-center rounded-lg bg-surface/90 text-ink-2 shadow-[0_1px_3px_rgb(12_14_27/0.18)] backdrop-blur-sm">
-              <SlidersHorizontal className="size-[18px]" strokeWidth={1.75} />
+              <SlidersHorizontal className="size-[18px]" />
             </span>
           ) : (
-            <SlidersHorizontal className="size-[18px]" strokeWidth={1.75} />
+            <SlidersHorizontal className="size-[18px]" />
           )}
         </button>
       )}
@@ -332,7 +335,7 @@ function SizeButton({ label, price, onClick, disabled }: { label: string; price:
       disabled={disabled}
       onClick={onClick}
       aria-label={`${label} ${tlShort(price)}`}
-      className="flex min-h-11 flex-col items-center justify-center rounded-lg bg-surface-3 leading-tight transition-[background-color,color,box-shadow] duration-100 hover:bg-[var(--admin-primary-soft)] hover:text-primary active:bg-[var(--admin-primary-soft)] active:text-primary active:ring-1 active:ring-inset active:ring-primary pointer-fine:min-h-10"
+      className="flex min-h-11 flex-col items-center justify-center rounded-lg bg-surface-3 leading-tight transition-[background-color,color,box-shadow] duration-150 hover:bg-[var(--admin-primary-soft)] hover:text-primary active:bg-[var(--admin-primary-soft)] active:text-primary active:ring-1 active:ring-inset active:ring-primary pointer-fine:min-h-10"
     >
       <span className="text-xs font-medium text-muted">{label}</span>
       <span className="tabular text-[13px] font-semibold">{tlShort(price)}</span>

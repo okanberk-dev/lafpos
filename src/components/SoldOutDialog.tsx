@@ -1,12 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { PackageSearch } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { errorMessage, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
-import { cn } from '@/lib/cn';
 import { fold } from '@/lib/shell';
 import { toast } from '@/lib/toast';
+import { Button } from './ui/Button';
+import { SearchInput } from './ui/Field';
+import { EmptyState } from './ui/misc';
 import { Modal } from './ui/Modal';
 
 /**
@@ -44,12 +46,11 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
   return (
     <Modal open={open} onClose={onClose} title="Tükenen ürünler" subtitle={`${boot.products.filter((p) => !p.active && !p.hidden).length} ürün tükendi`} size="md">
       <div className="sticky top-0 z-10 border-b border-line bg-surface p-3">
-        <label className="relative block">
-          <span className="sr-only">Ürün ara</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden="true" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ürün ara" className="h-11 w-full rounded-xl border border-line-strong bg-surface pl-9 pr-3 text-[15px]" />
-        </label>
+        <SearchInput value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" />
       </div>
+      {rows.length === 0 && (
+        <EmptyState compact icon={<PackageSearch />} title={q.trim() ? `“${q.trim()}” ile eşleşen ürün yok` : 'Kasada satılan ürün yok'} action={q.trim() ? <Button size="sm" variant="ghost" onClick={() => setQ('')}>Aramayı temizle</Button> : undefined} />
+      )}
       <ul className="divide-y divide-line">
         {rows.map((p) => {
           const siteClosed = !p.active && p.soldOutBy === 'site';
@@ -57,19 +58,14 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
             <li key={p.id} className="flex min-h-14 items-center gap-3 px-4 py-2">
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{p.name}</span>
-                {!p.active && <span className="text-xs font-semibold text-danger-500">{siteClosed ? 'Sitede satışta değil' : 'Tükendi'}</span>}
+                {!p.active && <span className="text-xs font-semibold text-[var(--admin-danger-ink)]">{siteClosed ? 'Sitede satışta değil' : 'Tükendi'}</span>}
               </span>
               {siteClosed && !manager ? (
                 <span className="shrink-0 text-xs text-muted">Yönetici açar</span>
               ) : (
-                <button
-                  type="button"
-                  disabled={busy === p.id}
-                  onClick={() => set(p.id, p.name, !p.active)}
-                  className={cn('h-11 shrink-0 rounded-xl px-4 text-sm font-semibold disabled:opacity-50', p.active ? 'border border-danger-200 text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)]' : 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)]')}
-                >
+                <Button variant={p.active ? 'dangerOutline' : 'primary'} loading={busy === p.id} disabled={!!busy && busy !== p.id} onClick={() => set(p.id, p.name, !p.active)} className="shrink-0 text-sm font-semibold">
                   {p.active ? 'Tükendi' : 'Satışa aç'}
-                </button>
+                </Button>
               )}
             </li>
           );

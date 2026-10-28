@@ -1,19 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Globe, Receipt, Table2, TrendingUp } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Coffee, Receipt, Table2, TrendingUp, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl } from '@shared/money';
-import { fmtElapsed, fmtTime } from '@shared/time';
+import { fmtAgo, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
-import { Card, PageLoading, Stat } from '@/components/ui/misc';
-import { Button } from '@/components/ui/Button';
-import { errorMessage, get } from '@/lib/api';
+import { Badge, Card, EmptyState, ErrorState, Skeleton, Stat } from '@/components/ui/misc';
+import { get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
 import { staleCostsText } from '@/lib/lafmaliyet';
 import { hourBars } from '@/lib/period';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 
@@ -48,8 +48,17 @@ export interface PatronData {
   anomalies: { level: 'uyari' | 'alarm'; title: string; detail: string }[];
 }
 
-function Change({ value }: { value: number | null }) {
-  if (value == null) return <span className="whitespace-nowrap text-xs text-muted">veri yok</span>;
+/**
+ * Değişim yüzdesi. Hesaplanamıyorsa nedeni: kıyas günü satış yoksa "satış yoktu" (rakam yanında, "veri yok" eksik
+ * kayıt ya da arıza gibi okunuyordu)
+ */
+function Change({ value, base }: { value: number | null; base: number }) {
+  if (value == null)
+    return (
+      <span className="whitespace-nowrap text-xs text-muted" title="Yüzde hesaplanamaz">
+        {base === 0 ? 'satış yoktu' : 'kıyas yok'}
+      </span>
+    );
   const up = value >= 0;
   return (
     <span className={cn('tabular inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold', up ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
@@ -76,18 +85,27 @@ export default function PatronPage() {
     [qc],
   );
 
-  if (data.isLoading) return <PageLoading />;
+  // İlk yükleme: sayfanın biçiminde iskelet (büyük ciro kartı ve dört karo), spinner değil
+  if (data.isPending) {
+    return (
+      <div role="status" aria-label="Canlı rakamlar yükleniyor…" className="h-full overflow-hidden p-4 md:p-6">
+        <Skeleton className="mb-4 h-5 w-56" />
+        <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
+          <Skeleton className="h-[188px] rounded-2xl" />
+          <div className="grid grid-cols-2 gap-3">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[104px] rounded-2xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
   // Rakamlar alınamadıysa ₺0 gösterilmez: patron "satış yok" sanmasın
   if (data.isError && !data.data) {
     return (
-      <div className="grid h-full place-items-center p-6 text-center">
-        <div role="alert">
-          <p className="font-semibold">Canlı rakamlar alınamadı</p>
-          <p className="mt-1 text-sm text-muted">{errorMessage(data.error)}</p>
-          <Button className="mt-4" onClick={() => void data.refetch()}>
-            Yeniden dene
-          </Button>
-        </div>
+      <div className="grid h-full place-items-center p-6">
+        <ErrorState title="Canlı rakamlar alınamadı" error={data.error} retrying={data.isFetching} onRetry={() => void data.refetch()} />
       </div>
     );
   }
@@ -100,7 +118,8 @@ export default function PatronPage() {
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className={cn('size-2.5 rounded-full', d.dayOpen ? 'animate-pulse bg-success-600 dark:bg-success-300' : 'bg-muted')} />
+        {/* Durumu nokta ve yazı birlikte anlatır; sürekli nabız yok */}
+        <span aria-hidden="true" className={cn('size-2.5 rounded-full', d.dayOpen ? 'bg-[var(--admin-success)]' : 'bg-muted')} />
         <span className="text-[13px] text-muted">
           {d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · {fmtTime(now)} itibarıyla · canlı
         </span>
@@ -110,10 +129,7 @@ export default function PatronPage() {
         <div className="rounded-2xl border border-line bg-surface p-5">
           <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
           <div className="tabular mt-2 text-[44px] font-semibold leading-none tracking-[-0.02em] sm:text-[56px]">{tl(d.netSales)}</div>
-          <div className="mt-2 text-sm text-muted">
-            {d.orders} adisyon · ortalama {tl(d.avgCheck)}
-            {d.open.count > 0 && ` · açıkta ${tl(d.open.total)}`}
-          </div>
+          <div className="mt-2 text-sm text-muted">{joinMeta([`${d.orders} adisyon`, d.orders > 0 && `ortalama ${tl(d.avgCheck)}`, d.open.count > 0 && `açıkta ${tl(d.open.total)}`])}</div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <CompareRow label="Geçen hafta bu saate kadar" value={d.compare.lastWeek.netSales} change={d.compare.lastWeek.change} />
             <CompareRow label="4 hafta önce bu saate kadar" value={d.compare.fourWeeks.netSales} change={d.compare.fourWeeks.change} />
@@ -139,10 +155,10 @@ export default function PatronPage() {
               <ul className="divide-y divide-line">
                 {d.anomalies.map((a, i) => (
                   <li key={i} className="flex items-start gap-3 px-4 py-3 text-sm">
-                    {a.level === 'alarm' ? <AlertOctagon className="mt-0.5 size-5 shrink-0 text-danger-500" /> : <AlertTriangle className="mt-0.5 size-5 shrink-0 text-warn-500" />}
+                    {a.level === 'alarm' ? <AlertOctagon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-danger-ink" /> : <AlertTriangle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-warning-ink" />}
                     <span>
-                      <span className="block font-semibold">
-                        {a.title} <span className={cn('ml-1 rounded px-1.5 text-[11px]', a.level === 'alarm' ? 'bg-danger-100 text-danger-600' : 'bg-warn-100 text-warn-700')}>{a.level === 'alarm' ? 'Alarm' : 'Uyarı'}</span>
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold">
+                        {a.title} <Badge tone={a.level === 'alarm' ? 'danger' : 'warning'}>{a.level === 'alarm' ? 'Alarm' : 'Uyarı'}</Badge>
                       </span>
                       <span className="text-muted">{a.detail}</span>
                     </span>
@@ -156,8 +172,8 @@ export default function PatronPage() {
               <ul className="scroll-thin max-h-72 divide-y divide-line overflow-y-auto">
                 {d.alerts.map((a) => (
                   <li key={a.id}>
-                    <button onClick={() => a.orderId && navigate(`/adisyon/${a.orderId}`)} className="flex w-full items-start gap-3 px-4 py-2.5 text-left text-sm hover:bg-surface-2">
-                      {a.severity === 'alarm' ? <AlertOctagon className="mt-0.5 size-4 shrink-0 text-danger-500" /> : <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn-500" />}
+                    <button onClick={() => a.orderId && navigate(`/adisyon/${a.orderId}`)} className="flex w-full items-start gap-3 px-4 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-hover active:bg-press">
+                      {a.severity === 'alarm' ? <AlertOctagon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-danger-ink" /> : <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-ink" />}
                       <span className="min-w-0 flex-1">
                         <span className="block">{a.message}</span>
                         <span className="text-xs text-muted">
@@ -177,7 +193,7 @@ export default function PatronPage() {
         <Card
           title="Saat saat bugün"
           actions={
-            <button onClick={() => setTable(!table)} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-ink-2 hover:bg-surface-2 pointer-fine:min-h-0">
+            <button onClick={() => setTable(!table)} aria-pressed={table} className="inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press pointer-fine:min-h-9">
               <Table2 className="size-4" /> {table ? 'Grafik' : 'Tablo'}
             </button>
           }
@@ -205,13 +221,19 @@ export default function PatronPage() {
                 </tbody>
               </table>
             ) : (
-              <ColumnChart data={visibleHours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta aynı gün" ariaLabel="Bugünün saatlik cirosu, geçen haftayla" />
+              <ColumnChart data={visibleHours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta aynı gün" ariaLabel="Bugünün saatlik cirosu, geçen haftayla" emptyLabel="Bugün henüz satış yok" />
             )}
           </div>
         </Card>
         <Card title="Ödeme türleri">
           <div className="p-4">
-            {d.payments.length ? <BarList items={d.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')}` }))} format={tl} /> : <p className="text-sm text-muted">Henüz ödeme yok</p>}
+            {d.payments.length ? (
+              <BarList items={d.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')}` }))} format={tl} />
+            ) : (
+              <EmptyState compact icon={<Wallet />} title="Bugün henüz ödeme alınmadı">
+                Adisyonlar kapandıkça ödeme türleri burada toplanır
+              </EmptyState>
+            )}
           </div>
         </Card>
       </div>
@@ -219,7 +241,9 @@ export default function PatronPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card title="En çok satanlar">
           {d.top.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-muted">Henüz satış yok</p>
+            <EmptyState compact icon={<Coffee />} title="Bugün henüz satış yok">
+              İlk adisyon kapanınca en çok satanlar burada sıralanır
+            </EmptyState>
           ) : (
             <ol className="divide-y divide-line">
               {d.top.map((p, i) => (
@@ -231,7 +255,7 @@ export default function PatronPage() {
                   <span className="text-muted">{p.qty} adet</span>
                   <span className="tabular w-24 text-right font-semibold">{tl(p.revenue)}</span>
                   {can('rapor.maliyet') && p.margin != null && (
-                    <span className="tabular hidden w-24 text-right text-xs text-brand-600 sm:block">
+                    <span className="tabular hidden w-24 text-right text-xs text-primary sm:block">
                       <TrendingUp className="mr-0.5 inline size-3" />
                       {tl(p.margin)}
                     </span>
@@ -240,22 +264,23 @@ export default function PatronPage() {
               ))}
             </ol>
           )}
-          {can('rapor.maliyet') && staleCostsText(d.costsAt, d.now) && <p className="px-4 pb-3 text-xs font-medium text-warn-700 dark:text-warn-300">{staleCostsText(d.costsAt, d.now)}</p>}
+          {can('rapor.maliyet') && staleCostsText(d.costsAt, d.now) && <p className="px-4 pb-3 text-xs font-medium text-warning-ink">{staleCostsText(d.costsAt, d.now)}</p>}
         </Card>
         <Card title={`Açık hesaplar (${d.openChecks.length})`}>
           {d.openChecks.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-muted">Şu an açık hesap yok</p>
+            <EmptyState compact icon={<Receipt />} title="Şu an açık hesap yok">
+              Açılan adisyonlar ödenene kadar burada görünür
+            </EmptyState>
           ) : (
             <ul className="divide-y divide-line">
               {d.openChecks.map((o) => (
                 <li key={o.id}>
-                  <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-surface-2">
-                    {o.billPrinted ? <Receipt className="size-4 text-warn-500" /> : <Globe className="size-4 opacity-0" />}
+                  <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-hover active:bg-press">
+                    {/* Hesap istendi: ikon ve ipucu (renk tek başına değil); yoksa aynı genişlikte boşluk */}
+                    {o.billPrinted ? <Receipt aria-label="Hesap istendi" className="size-4 shrink-0 text-warning-ink" /> : <span aria-hidden="true" className="size-4 shrink-0" />}
                     <span className="min-w-0 flex-1">
                       <span className="font-medium">{o.place}</span> <span className="text-muted">#{o.no}</span>
-                      <span className="block text-xs text-muted">
-                        {fmtElapsed(o.openedAt, now)} · {o.waiter ?? '—'}
-                      </span>
+                      <span className="block text-xs text-muted">{joinMeta([fmtAgo(o.openedAt, now), o.waiter])}</span>
                     </span>
                     <span className="tabular font-semibold">{tl(o.total - o.paid)}</span>
                   </button>
@@ -276,7 +301,7 @@ function CompareRow({ label, value, change }: { label: string; value: number; ch
       <span className="text-xs text-muted">{label}</span>
       <span className="flex items-center justify-between gap-2">
         <span className="tabular text-[15px] font-semibold">{tl(value)}</span>
-        <Change value={change} />
+        <Change value={change} base={value} />
       </span>
     </div>
   );

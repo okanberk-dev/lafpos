@@ -1,7 +1,11 @@
-import { ChevronRight, MoreHorizontal, X } from 'lucide-react';
+import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { buttonClass, CloseButton } from '@/components/ui/Button';
+import { SearchInput } from '@/components/ui/Field';
+import { Badge as KitBadge, EmptyState as KitEmptyState, Skeleton } from '@/components/ui/misc';
 import { cn } from '@/lib/cn';
+import { topDialog, trapTab } from '@/lib/focus';
 
 /**
  * Yönetim paneli kiti: Innex (docs/ADMIN-INNEX.md §1.5), laffogato'nun `src/components/admin/ui`
@@ -13,22 +17,29 @@ import { cn } from '@/lib/cn';
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--admin-primary)]';
 const COMPACT_H = 'pointer-fine:[[data-density=compact]_&]:min-h-8';
 
-const BUTTON_BASE = `inline-flex min-h-11 items-center justify-center gap-2 rounded-lg py-1.5 text-sm font-medium whitespace-nowrap transition-[color,background-color,border-color,filter,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 disabled:active:brightness-100 pointer-fine:min-h-9 [&>svg]:shrink-0 ${COMPACT_H} ${FOCUS}`;
+/**
+ * Düğme sınıfları `ui/Button.tsx`'in `buttonClass`'ından (tek kaynak): yeni kodda `<Button variant=…>` ya da
+ * bağlantıda `buttonClass(…)` yazın. Eşleme: primary = primary, ghost = secondary (beyaz, kenarlı), soft = soft,
+ * danger = dangerOutline, icon = IconButton variant="secondary". Menü öğeleri yalnız burada.
+ */
+const MENU_ITEM = `flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm disabled:opacity-50 pointer-fine:min-h-9 focus-visible:outline-2 focus-visible:-outline-offset-2 ${COMPACT_H}`;
 
 export const BTN = {
-  primary: `${BUTTON_BASE} bg-[var(--admin-primary)] px-3.5 text-[var(--admin-on-primary)] hover:bg-[var(--admin-primary-hover)] active:brightness-95 disabled:bg-[var(--admin-panel)] disabled:text-[var(--admin-text-mute)] disabled:opacity-100`,
-  ghost: `${BUTTON_BASE} border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] px-3 text-[var(--admin-text)] hover:border-[var(--admin-border-field)] hover:bg-[var(--admin-surface-2)] active:bg-[var(--admin-panel)]`,
-  soft: `${BUTTON_BASE} bg-[var(--admin-primary-soft)] px-3 text-[var(--admin-primary)] hover:brightness-95 active:brightness-90`,
-  danger: `${BUTTON_BASE} border border-[var(--admin-danger)]/35 bg-[var(--admin-surface)] px-3 text-[var(--admin-danger-ink)] hover:border-[var(--admin-danger)] hover:bg-[var(--admin-danger)] hover:text-white active:brightness-95`,
-  icon: `${BUTTON_BASE} size-11 shrink-0 border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] text-[var(--admin-text-soft)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)] active:bg-[var(--admin-panel)] pointer-fine:size-9`,
-  menu: `flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--admin-text)] hover:bg-[var(--admin-surface-2)] focus-visible:bg-[var(--admin-surface-2)] focus-visible:outline-none disabled:opacity-50 pointer-fine:min-h-9 ${COMPACT_H}`,
-  menuDanger: `flex min-h-11 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)] focus-visible:bg-[var(--admin-danger-soft)] focus-visible:outline-none pointer-fine:min-h-9 ${COMPACT_H}`,
+  primary: buttonClass('primary', 'md'),
+  ghost: buttonClass('secondary', 'md'),
+  soft: buttonClass('soft', 'md'),
+  danger: buttonClass('dangerOutline', 'md'),
+  icon: buttonClass('secondary', 'md', { square: true, className: 'text-[var(--admin-text-soft)] hover:text-[var(--admin-text)]' }),
+  // Menü öğesi: üzerinde ve klavye odağında gri zemin, odakta ayrıca içe çizilen halka (oklarla gezerken görünür)
+  menu: `${MENU_ITEM} text-[var(--admin-text)] hover:bg-[var(--admin-panel)] focus-visible:bg-[var(--admin-panel)] focus-visible:outline-[var(--admin-primary)]`,
+  menuDanger: `${MENU_ITEM} text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)] focus-visible:bg-[var(--admin-danger-soft)] focus-visible:outline-[var(--admin-danger)]`,
 } as const;
 
 /** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, dokunmatikte 44 px, farede 32 px */
 export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
 
-export const CARD = 'rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)]';
+/** Kart: köşe 12 (düğme ve alan 8, rozet 6; kap > denetim) */
+export const CARD = 'rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)]';
 export const LABEL = 'text-xs font-medium text-[var(--admin-text-mute)]';
 export const NUM = 'tabular-nums';
 /** Karakter karakter okunan ad (env değişkeni, klasör, adres): sistem eş genişlikli, gri kutu */
@@ -46,16 +57,6 @@ export const TONE_SOFT: Record<Tone, string> = {
   danger: 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]',
 };
 
-const TONE_DOT: Record<Tone, string> = {
-  neutral: 'bg-[var(--admin-text-mute)]',
-  primary: 'bg-[var(--admin-primary)]',
-  accent: 'bg-[var(--admin-accent)]',
-  info: 'bg-[var(--admin-info)]',
-  success: 'bg-[var(--admin-success)]',
-  warning: 'bg-[var(--admin-warning)]',
-  danger: 'bg-[var(--admin-danger)]',
-};
-
 import type { Hue } from './hues';
 
 export type { Hue };
@@ -67,13 +68,12 @@ const HUE: Record<Hue, string> = {
   green: 'bg-[var(--admin-hue-green-soft)] text-[var(--admin-hue-green)]',
 };
 
-/** Durum rozeti: açık zemin üstünde renkli metin, köşe 6, 22 px */
+/** Durum rozeti: açık zemin üstünde renkli metin, köşe 6, 22 px (kasa rozetiyle tek bileşen: ui/misc.tsx) */
 export function Badge({ tone = 'neutral', dot, children, className, title }: { tone?: Tone; dot?: boolean; children: ReactNode; className?: string; title?: string }) {
   return (
-    <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium leading-4 whitespace-nowrap', TONE_SOFT[tone], className)}>
-      {dot && <span aria-hidden="true" className={cn('size-1.5 rounded-full', TONE_DOT[tone])} />}
+    <KitBadge tone={tone} dot={dot} className={className} title={title}>
       {children}
-    </span>
+    </KitBadge>
   );
 }
 
@@ -113,11 +113,30 @@ export function PageHeader({ title, description, actions, children }: { title: R
   );
 }
 
-export function Card({ title, subtitle, actions, children, className, bodyClassName, flush }: { title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string; flush?: boolean }) {
+/** Yönetim kartı: çizgisiz Innex başlığı; `divided` başlığın altına çizgi koyar (içerik satır listesiyse) */
+export function Card({
+  title,
+  subtitle,
+  actions,
+  children,
+  className,
+  bodyClassName,
+  flush,
+  divided,
+}: {
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  bodyClassName?: string;
+  flush?: boolean;
+  divided?: boolean;
+}) {
   return (
     <section className={cn(CARD, 'min-w-0', className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-4 sm:px-5">
+        <header className={cn('flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-4 sm:px-5', divided && 'border-b border-[var(--admin-divider)] pb-3')}>
           <div className="min-w-0 flex-1">
             {title && <h2 className="text-[15px] font-semibold leading-6 tracking-[-0.01em] text-[var(--admin-text)]">{title}</h2>}
             {subtitle && <p className="text-xs text-[var(--admin-text-mute)]">{subtitle}</p>}
@@ -152,7 +171,7 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
   const n = cells.length;
   const cols = n === 5 ? 'md:grid-cols-6 xl:grid-cols-5' : n >= 6 ? 'md:grid-cols-3 xl:grid-cols-6' : n === 4 ? 'md:grid-cols-4' : n === 2 ? 'md:grid-cols-2' : n === 1 ? 'md:grid-cols-1' : 'md:grid-cols-3';
   return (
-    <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--admin-border)] bg-[var(--admin-border)]', cols, '[&>*:last-child:nth-child(odd)]:max-md:col-span-2', className)}>
+    <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', cols, '[&>*:last-child:nth-child(odd)]:max-md:col-span-2', className)}>
       {cells.map((c, i) => {
         const body = (
           <>
@@ -170,7 +189,7 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
         const span = n === 5 ? (i < 3 ? 'md:col-span-2 xl:col-span-1' : 'md:col-span-3 xl:col-span-1') : null;
         const cls = cn('flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left', span, c.active && 'bg-[var(--admin-primary-soft)]/60 shadow-[inset_0_-2px_0_var(--admin-primary)]');
         return c.onClick ? (
-          <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors hover:bg-[var(--admin-surface-2)]', FOCUS)}>
+          <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors', !c.active && 'hover:bg-[var(--hover-solid)]', FOCUS, 'focus-visible:-outline-offset-2')}>
             {body}
           </button>
         ) : (
@@ -207,6 +226,7 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
                 'inline-flex min-h-9 items-center gap-1.5 rounded-lg border bg-[var(--admin-surface)] px-2.5 text-[13px] whitespace-nowrap transition-[color,border-color] pointer-coarse:min-h-11',
                 COMPACT_H,
                 FOCUS,
+                'focus-visible:-outline-offset-2',
                 on ? 'border-[var(--admin-text)] font-semibold text-[var(--admin-text)]' : 'border-[var(--admin-border)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)]',
               )}
             >
@@ -239,6 +259,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
               'inline-flex min-h-9 shrink-0 items-center justify-center rounded-md px-3 text-[13px] font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11',
               COMPACT_H,
               FOCUS,
+              'focus-visible:-outline-offset-2',
               on ? 'bg-[var(--admin-surface)] text-[var(--admin-text)] shadow-[0_1px_2px_rgba(12,14,27,0.08),0_0_0_1px_rgba(12,14,27,0.04)]' : 'text-[var(--admin-text-mute)] hover:text-[var(--admin-text)]',
             )}
           >
@@ -331,7 +352,7 @@ export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label
       </button>
       {open &&
         createPortal(
-          <div ref={menu} role="menu" style={style} className="z-[60] rounded-[10px] border border-[var(--admin-border)] bg-[var(--admin-surface)] p-1 shadow-[var(--shadow-pop)]">
+          <div ref={menu} role="menu" style={style} className="z-[60] rounded-[10px] border border-[var(--admin-border)] bg-[var(--surface-raised)] p-1 shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]">
             {items.map((it) => (
               <button
                 key={it.key}
@@ -405,7 +426,7 @@ export function DataTable<T>({
   phoneAside?: (row: T) => ReactNode;
   rowClassName?: (row: T) => string | false | undefined;
 }) {
-  if (!rows.length) return <>{empty ?? <EmptyState title="Kayıt yok" />}</>;
+  if (!rows.length) return <>{empty ?? <EmptyState title="Henüz kayıt yok" />}</>;
   return (
     <div className={cn(CARD, 'overflow-hidden')}>
       <div className="hidden overflow-x-auto md:block" data-overflow-ok>
@@ -430,7 +451,7 @@ export function DataTable<T>({
                   key={k}
                   aria-selected={onOpen ? selected : undefined}
                   onClick={onOpen ? (e) => !fromControl(e) && onOpen(r) : undefined}
-                  className={cn('group border-t border-[var(--admin-divider)]', onOpen && 'cursor-pointer', selected ? 'bg-[var(--admin-primary-soft)]/50' : 'hover:bg-[var(--admin-surface-2)]', rowClassName?.(r))}
+                  className={cn('group border-t border-[var(--admin-divider)]', onOpen && 'cursor-pointer', selected ? 'bg-[var(--admin-primary-soft)]/50' : 'hover:bg-[var(--hover-solid)]', rowClassName?.(r))}
                 >
                   {columns.map((c, i) => (
                     <td key={c.key} className={cn('px-4 py-3 align-middle pointer-fine:[[data-density=compact]_&]:py-2', alignCls(c.align), hideCls(c), c.className)}>
@@ -444,7 +465,7 @@ export function DataTable<T>({
                     </td>
                   ))}
                   {actions && (
-                    <td className={cn('sticky right-0 px-2 text-right shadow-[-10px_0_10px_-10px_rgba(12,14,27,0.18)]', selected ? 'bg-[var(--admin-primary-soft)]' : 'bg-[var(--admin-surface)] group-hover:bg-[var(--admin-surface-2)]')}>{actions(r)}</td>
+                    <td className={cn('sticky right-0 px-2 text-right shadow-[-10px_0_10px_-10px_rgba(12,14,27,0.18)]', selected ? 'bg-[var(--admin-primary-soft)]' : 'bg-[var(--admin-surface)] group-hover:bg-[var(--hover-solid)]')}>{actions(r)}</td>
                   )}
                 </tr>
               );
@@ -497,55 +518,70 @@ export function DataTable<T>({
   );
 }
 
-/** Boş durum: ne olmadığını ve nasıl dolacağını söyler. Kartın içindeyse `bare` (iç içe kart olmaz). */
+/**
+ * Boş durum: kasadakiyle tek bileşen (ui/misc.tsx), gri ikon kutusu. Sayfada kart içinde durur; kartın içindeyse
+ * `bare` (iç içe kart olmaz, kompakt boy).
+ */
 export function EmptyState({ icon, title, children, action, bare }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode; bare?: boolean }) {
   return (
-    <div className={cn(!bare && CARD, 'flex flex-col items-center gap-2 text-center', bare ? 'px-4 py-6' : 'px-6 py-12')}>
-      {icon && <IconBox hue="blue" size="lg">{icon}</IconBox>}
-      <p className={cn('mt-1 text-[var(--admin-text)]', bare ? 'text-sm font-medium' : 'text-[15px] font-semibold')}>{title}</p>
-      {children && <div className={cn('max-w-sm text-[var(--admin-text-mute)]', bare ? 'text-xs' : 'text-[13px]')}>{children}</div>}
-      {action && <div className="mt-2">{action}</div>}
-    </div>
+    <KitEmptyState compact={bare} icon={icon} title={title} action={action} className={cn(!bare && CARD)}>
+      {children}
+    </KitEmptyState>
   );
 }
 
-/** Hızlı bakış çekmecesi: geniş ekranda sağdan, telefonda alttan; karartma %20 */
+/**
+ * Hızlı bakış çekmecesi: geniş ekranda sağdan, telefonda alttan; hafif karartma. Odak kuralları Modal'la aynı:
+ * içerideki autoFocus alanı korunur, yazarken (canlı yenileme, her tuşta üst bileşenin yeniden çizimi) odak
+ * alandan kopmaz, Tab çekmecede döner, Escape yalnız en üstteki katmanı kapatır.
+ */
 export function QuickLook({ open, onClose, title, subtitle, children, footer, label }: { open: boolean; onClose: () => void; title: ReactNode; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode; label: string }) {
   const panel = useRef<HTMLDivElement>(null);
+  // onClose çoğu yerde satır içi ok işlevi: efekt ona bağlansaydı her çizimde odak panele geri çekilirdi
+  const latest = useRef(onClose);
+  useEffect(() => {
+    latest.current = onClose;
+  });
+  const opener = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current && typeof document !== 'undefined') opener.current = document.activeElement as HTMLElement | null;
+  wasOpen.current = open;
   useEffect(() => {
     if (!open) return;
-    const prev = document.activeElement as HTMLElement | null;
-    panel.current?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const restore = opener.current;
+    if (!panel.current?.contains(document.activeElement)) panel.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || (panel.current && topDialog() !== panel.current)) return;
+      latest.current();
+    };
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
-      prev?.focus?.();
+      if (restore?.isConnected) restore.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return createPortal(
     <div className="fixed inset-0 z-50" onPointerDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="absolute inset-0 bg-[#0c0e1b]/20" aria-hidden="true" onPointerDown={onClose} />
+      <div className="animate-fade absolute inset-0 bg-[var(--scrim-soft)]" aria-hidden="true" onPointerDown={onClose} />
       <div
         ref={panel}
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-2 md:left-auto md:right-2 md:max-h-none md:w-[min(460px,calc(100vw-1rem))] md:rounded-xl"
+        onKeyDown={(e) => trapTab(e, panel.current)}
+        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-2 md:left-auto md:right-2 md:max-h-none md:w-[min(460px,calc(100vw-1rem))] md:rounded-2xl dark:border-[var(--admin-border-strong)]"
       >
-        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-[var(--admin-border-strong)] md:hidden" aria-hidden="true" />
-        <div className="flex items-start gap-3 border-b border-[var(--admin-border)] px-4 py-3 sm:px-5">
+        <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-[var(--admin-border-field)]/50 md:hidden" aria-hidden="true" />
+        <div className="flex items-center gap-3 border-b border-[var(--admin-border)] py-2 pl-4 pr-3 sm:pl-5">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[15px] font-semibold text-[var(--admin-text)]">{title}</h2>
+            <h2 className="truncate text-[15px] font-semibold leading-6 tracking-[-0.01em] text-[var(--admin-text)]">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
-          <button type="button" onClick={onClose} aria-label="Kapat" className={ROW_ICON}>
-            <X className="size-4" />
-          </button>
+          <CloseButton onClick={onClose} className="mr-0" />
         </div>
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
         {footer && <div className="flex flex-wrap items-center gap-2 border-t border-[var(--admin-border)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">{footer}</div>}
       </div>
     </div>,
@@ -553,9 +589,9 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
   );
 }
 
-/** Gri kap içinde beyaz işlem satırları (hızlı bakış): renkli ikon kutusu, etiket, sağda değer ya da › */
+/** Gri kap içinde beyaz işlem satırları (hızlı bakış): renkli ikon kutusu, etiket, sağda değer ya da ›; köşeler eş merkezli (12, 4, 8) */
 export function ActionRows({ children }: { children: ReactNode }) {
-  return <div className="space-y-1.5 rounded-xl bg-[var(--admin-panel)] p-1.5">{children}</div>;
+  return <div className="space-y-1 rounded-2xl bg-[var(--admin-panel)] p-1">{children}</div>;
 }
 
 export function ActionRow({ icon, hue = 'blue', label, value, onClick, danger, disabled }: { icon: ReactNode; hue?: Hue; label: ReactNode; value?: ReactNode; onClick?: () => void; danger?: boolean; disabled?: boolean }) {
@@ -569,7 +605,7 @@ export function ActionRow({ icon, hue = 'blue', label, value, onClick, danger, d
   );
   const cls = 'flex min-h-12 w-full items-center gap-3 rounded-lg bg-[var(--admin-surface)] px-3 py-2 text-left';
   return onClick ? (
-    <button type="button" onClick={onClick} disabled={disabled} className={cn(cls, 'transition-colors hover:bg-[var(--admin-surface-2)] disabled:opacity-50', FOCUS)}>
+    <button type="button" onClick={onClick} disabled={disabled} className={cn(cls, 'transition-colors hover:bg-[var(--hover-solid)] disabled:opacity-50', FOCUS)}>
       {inner}
     </button>
   ) : (
@@ -617,8 +653,8 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
  */
 export function SetupNotes({ children, summary = 'Kurulum adımları', open }: { children: ReactNode; summary?: ReactNode; open?: boolean }) {
   return (
-    <details open={open} className="group rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)]">
-      <summary className={cn('flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 text-[13px] font-medium text-[var(--admin-text-mute)] hover:text-[var(--admin-text)] pointer-fine:min-h-9 [&::-webkit-details-marker]:hidden', FOCUS)}>
+    <details open={open} className="group rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)]">
+      <summary className={cn('flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-2xl px-4 text-[13px] font-medium text-[var(--admin-text-mute)] hover:text-[var(--admin-text)] pointer-fine:min-h-9 [&::-webkit-details-marker]:hidden', FOCUS)}>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none" />
         {summary}
       </summary>
@@ -637,22 +673,44 @@ export function DefRow({ label, children }: { label: ReactNode; children: ReactN
   );
 }
 
-/** Liste araç çubuğu: büyüteçli arama ve satırın kendi denetimleri tek satırda */
+/**
+ * Liste araç çubuğu: büyüteçli arama ve satırın kendi denetimleri tek satırda. Alan kitin ortak arama alanı
+ * (ui/Field.tsx SearchInput): kenar ve odak öteki alanlarla aynı, yazınca temizle düğmesi, Escape temizler
+ */
 export function SearchField({ value, onChange, placeholder, label }: { value: string; onChange: (v: string) => void; placeholder: string; label: string }) {
+  return <SearchInput dense value={value} onChange={onChange} placeholder={placeholder} label={label} wrapperClassName="basis-full sm:max-w-xs sm:flex-1 sm:basis-auto" />;
+}
+
+/** KPI şeridi iskeleti (Raporlar, Genel bakış ilk yüklemede): aynı kabuk, her hücrede etiket, rakam, referans */
+export function KpiStripSkeleton({ count = 5, className }: { count?: number; className?: string }) {
   return (
-    <label className="relative block min-w-0 basis-full sm:max-w-xs sm:flex-1 sm:basis-auto">
-      <span className="sr-only">{label}</span>
-      <svg aria-hidden="true" viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--admin-text-mute)]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <circle cx="11" cy="11" r="7" />
-        <path d="m20 20-3.5-3.5" />
-      </svg>
-      <input
-        type="search"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={cn('h-11 w-full rounded-lg border border-[var(--admin-border-field)]/60 bg-[var(--admin-surface)] pl-9 pr-3 text-sm text-[var(--admin-text)] placeholder:text-[var(--admin-text-mute)] pointer-fine:h-9', FOCUS)}
-      />
-    </label>
+    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', count === 5 ? 'md:grid-cols-5' : count === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3', className)}>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className={cn('space-y-2.5 bg-[var(--admin-surface)] p-4', count % 2 === 1 && i === count - 1 && 'max-md:col-span-2')}>
+          <Skeleton className="h-3.5 w-20" />
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-3 w-32 max-w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Tablo iskeleti (Ürünler, Personel, Ödeme türleri ilk yüklemede): kart kabuğu, satır başına ikon ve iki çizgi */
+export function TableSkeleton({ rows = 8, className }: { rows?: number; className?: string }) {
+  return (
+    <div role="status" aria-label="Yükleniyor…" className={cn(CARD, 'overflow-hidden', className)}>
+      <div className="h-10 bg-[var(--admin-surface-2)]" />
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="flex h-14 items-center gap-3 border-t border-[var(--admin-divider)] px-4">
+          <Skeleton className="size-9 rounded-lg" />
+          <span className="flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-40 max-w-[60%]" />
+            <Skeleton className="h-3 w-24 max-w-[40%]" />
+          </span>
+          <Skeleton className="hidden h-3.5 w-16 sm:block" />
+        </div>
+      ))}
+    </div>
   );
 }
