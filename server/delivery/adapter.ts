@@ -16,6 +16,21 @@ export interface PollResult {
   /** Yoklama başarılı ama eksik bir yol var (ör. aktarıcı düştü, siparişler yedek yoldan geldi): Yönetim'de görünür, bekleme uygulanmaz */
   warning?: string;
   /**
+   * Yoklama hata vermedi (iptaller işlenir) ama yeni siparişler kasaya alınamıyor (Getir: giriş olmadı, restoran
+   * kimliği bilinmiyor; kayıtlar gelen kutusunda bekliyor). Kasa ilk turda denetim kaydına uyarı, sürerse alarm yazar
+   */
+  blocked?: string;
+  /**
+   * Platformda kasanın dışında (platformun panelinden) kabul edilmiş siparişlerin kimlikleri: kasada onay bekleyen ya
+   * da süresi dolmuş kayıt "platformda kabul edildi" olur (süre işlemez, Kabul yalnız adisyonu açar)
+   */
+  confirmed?: string[];
+  /**
+   * Kasada kabul edilmiş ama platformun yeniden onay beklediği siparişler (Getir: ileri tarihli sipariş etkinleşince):
+   * kasa bağdaştırıcının `reconfirm`'ünü çağırır
+   */
+  reconfirm?: string[];
+  /**
    * Kayıtlar yerelde işlendikten sonra çağrılır (siparişi iten platformlarda aktarıcının gelen kutusu burada silinir):
    * kasa düşerse kayıt silinmemiş olur, sonraki çekimde yeniden gelir ve tekilleştirilir. `keep`: gelen kutusunda
    * kalacak sipariş kimlikleri (externalId): kayda alınmayanlar (platform Kapalı'yken), kaydı düşenler, iptali o an
@@ -46,6 +61,11 @@ export interface PlatformAdapter {
    * iptal edildi; platform bunu kabul etmiyorsa bağdaştırıcı kalıcı hata (PlatformHttpError 4xx) fırlatır
    */
   reject(order: PlatformOrderPayload, reason: string, opts?: { afterAccept?: boolean }): Promise<void>;
+  /**
+   * Kasada kabul edilmiş siparişin platforma yeniden onayı (`PollResult.reconfirm`); platform reddederse fırlatır.
+   * 'already': platform siparişi zaten onaylı buldu (onay önceden gitmişti; kasa yeniden denetim kaydı yazmaz)
+   */
+  reconfirm?(order: PlatformOrderPayload): Promise<void | 'already'>;
   /** Teslim aşaması; platformda karşılığı yoksa (platform kuryesi kendi yazar) false döner, istek gitmez */
   notify(order: PlatformOrderPayload, status: PlatformNotify, courier: PlatformCourier): Promise<boolean>;
 }

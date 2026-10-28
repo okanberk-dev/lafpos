@@ -10,6 +10,8 @@ const SECRET = 'c'.repeat(40);
 const WEBHOOK_SECRET = 'getir-webhook-anahtari-123';
 const store = new Map<string, string>();
 const lists = new Map<string, string[]>();
+/** Anahtar → son EXPIRE süresi (sn) */
+const expires = new Map<string, number>();
 let h: Harness;
 
 beforeAll(async () => {
@@ -23,7 +25,7 @@ beforeAll(async () => {
     let result: unknown = null;
     if (cmd === 'GET') result = store.get(k) ?? null;
     if (cmd === 'SET') (store.set(k, String(rest[0])), (result = 'OK'));
-    if (cmd === 'EXPIRE') result = 1;
+    if (cmd === 'EXPIRE') (expires.set(k, Number(rest[0])), (result = 1));
     if (cmd === 'RPUSH') {
       const l = lists.get(k) ?? [];
       l.push(String(rest[0]));
@@ -86,7 +88,10 @@ describe('Getir aktarıcısı', () => {
     expect(lists.get('lafpos:getir:inbox')).toHaveLength(1);
     expect(lists.get('lafpos:getir:status')).toHaveLength(1);
     const item = JSON.parse(lists.get('lafpos:getir:status')![0]!) as Record<string, unknown>;
-    expect(item).toMatchObject({ kind: 'cancel', orderId: 'ord-1', reason: 'Müşteri iptal etti', note: 'Müşteri vazgeçti' });
+    expect(item).toMatchObject({ kind: 'cancel', orderId: 'ord-1', reason: 'Müşteri iptal etti' });
+    // İptalin serbest metin notu (müşterinin ya da temsilcinin yazdığı) saklanmaz: kasa okumaz, kişisel veri taşıyabilir
+    expect(item.note).toBeUndefined();
+    expect(JSON.stringify(item)).not.toContain('Müşteri vazgeçti');
     expect(item.order).toBeUndefined();
     // 512 karakterden uzun kimlik reddedilir
     expect((await POST(req('getir/order', { method: 'POST', body: JSON.stringify({ ...order, id: 'x'.repeat(513) }), headers: auth }))).status).toBe(400);
@@ -136,5 +141,62 @@ describe('Getir aktarıcısı', () => {
     } finally {
       process.env.GETIR_WEBHOOK_SECRET = saved;
     }
+  });
+  it('Getir\'e verilen anahtar kafenin ana anahtarına ya da Yemeksepeti anahtarına eşitse aktarıcı kurulmamış sayılır (503, kurulum getir: false)', async () => {
+    const { POST, GET } = await api();
+    const saved = { getir: process.env.GETIR_WEBHOOK_SECRET, ys: process.env.YEMEKSEPETI_PLUGIN_SECRET };
+    try {
+      for (const [k, v] of [['GETIR_WEBHOOK_SECRET', SECRET], ['YEMEKSEPETI_PLUGIN_SECRET', WEBHOOK_SECRET]] as const) {
+        process.env.GETIR_WEBHOOK_SECRET = WEBHOOK_SECRET;
+        delete process.env.YEMEKSEPETI_PLUGIN_SECRET;
+        process.env[k] = v;
+        const key = process.env.GETIR_WEBHOOK_SECRET!;
+        const r = await POST(req('getir/order', { method: 'POST', body: JSON.stringify({ ...order, id: 'ord-esit' }), headers: { ...auth, 'x-api-key': key } }));
+        expect(r.status).toBe(503);
+        expect(await (await GET(req('uzaktan/kurulum'))).json()).toMatchObject({ getir: false });
+      }
+    } finally {
+      process.env.GETIR_WEBHOOK_SECRET = saved.getir;
+      if (saved.ys === undefined) delete process.env.YEMEKSEPETI_PLUGIN_SECRET;
+      else process.env.YEMEKSEPETI_PLUGIN_SECRET = saved.ys;
+    }
+    expect(lists.get('lafpos:getir:inbox') ?? []).toHaveLength(0);
+  });
+
+  it('kişisel veri en aza iner: konum ve kurye saklanmaz, Getir kuryesinde telefon ve adres de, kendi kuryemizde tek telefon (maskesiz yalnız başka yoksa); kayıt başına 1 gün, liste 1 gün etkinliksiz düşer (en çok 2 gün)', async () => {
+    const { POST, GET } = await api();
+    const { signedHeaders } = await import('../server/lib/signature');
+    const client = { id: 'cl-1', name: 'Ayşe K.', contactPhoneNumber: '+90 (850) 000-00000 / 123456', clientPhoneNumber: '+90 (850) 000-00000 / 654321', clientUnmaskedPhoneNumber: '+905321112233', deliveryAddress: { address: 'Gül Sk. 4' }, location: { lat: 40.8, lon: 29.3 } };
+    const courier = { id: 'c1', status: 300, name: 'Kurye', location: { lat: 40.81, lon: 29.31 } };
+    // Süresi geçmiş eski kayıt kutunun başında (bir günden eski)
+    lists.set('lafpos:getir:inbox', [JSON.stringify({ id: 'eski', kind: 'order', receivedAt: Date.now() - 1.5 * 86400_000, order: { id: 'ord-eski' } })]);
+    for (const [id, deliveryType] of [['ord-getir-kurye', 1], ['ord-kendi-kurye', 2]] as const) {
+      const r = await POST(req('getir/order', { method: 'POST', body: JSON.stringify({ ...order, id, deliveryType, client, courier }), headers: auth }));
+      expect(r.status).toBe(200);
+    }
+    const stored = lists.get('lafpos:getir:inbox')!.map((r) => JSON.parse(r) as { id: string; order: Record<string, unknown> });
+    expect(stored.map((x) => x.order.id)).toEqual(['ord-getir-kurye', 'ord-kendi-kurye']);
+    const [g, k] = stored.map((x) => x.order);
+    expect(JSON.stringify(stored)).not.toMatch(/"lat"|"lon"|location/);
+    expect(g!.courier).toBeUndefined();
+    expect(g!.client).toEqual({ name: 'Ayşe K.' });
+    expect(k!.client).toEqual({ name: 'Ayşe K.', contactPhoneNumber: client.contactPhoneNumber, deliveryAddress: client.deliveryAddress });
+    expect(JSON.stringify(stored)).not.toContain(client.clientUnmaskedPhoneNumber);
+    expect(g!).toMatchObject({ confirmationId: '1042', totalPrice: 190, restaurant: { id: 'rest-1' } });
+    // Liste süresi 1 gün: itme ve çekim olmasa da kayıt en çok 2 gün kalır
+    expect(expires.get('lafpos:getir:inbox')).toBe(86_400);
+    expect(expires.get('lafpos:getir:status')).toBe(86_400);
+    // Maskeli numara yoksa kasanın okuyacağı tek numara maskesiz olandır
+    const { slimGetirOrder } = await api();
+    const only = slimGetirOrder({ id: 'x', deliveryType: 2, client: { name: 'A', clientUnmaskedPhoneNumber: '+905321112233' } });
+    expect(only.client).toEqual({ name: 'A', contactPhoneNumber: '+905321112233', deliveryAddress: undefined });
+    // Çekimde de: kutuda kalmış (Kapalı modda kimse çekmedi) eski kayıt verilmez ve silinir
+    const l = lists.get('lafpos:getir:inbox')!;
+    l.push(JSON.stringify({ id: 'eski-2', kind: 'order', receivedAt: Date.now() - 1.5 * 86400_000, order: { id: 'ord-eski-2' } }));
+    const url = new URL('https://lafpos.vercel.app/api/getir/inbox');
+    const body = (await (await GET(req('getir/inbox', { headers: signedHeaders(SECRET, 'GET', url, '') }))).json()) as { items: { id: string }[] };
+    expect(body.items.map((i) => i.id)).toEqual(stored.map((x) => x.id));
+    expect(lists.get('lafpos:getir:inbox')).toHaveLength(2);
+    lists.set('lafpos:getir:inbox', []);
   });
 });

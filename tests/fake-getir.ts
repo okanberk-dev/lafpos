@@ -4,9 +4,14 @@ import type { GetirOrder, InboxItem } from '../server/delivery/getir';
 
 /**
  * Testler için sahte LafPOS Uzaktan gelen kutusu (`/api/getir/inbox`, `/inbox/ack`; imza başlığı aranır) ve sahte
- * GetirFood API'si (`/auth/login`, `/food-orders/periodic/unapproved|cancelled`, `/food-orders/{id}/cancel-options`,
- * `/food-orders/{id}/verify|verify-scheduled|prepare|handover|deliver|cancel`). Çağrılar ve gövdeler kaydedilir;
- * `statusFor` ile bir uca sırayla verilecek durum kodları (ya da Getir hata kodlu 400) kuyruklanır.
+ * GetirFood API'si (`/auth/login`, `/food-orders/periodic/unapproved|cancelled`, `/food-orders/active`,
+ * `GET /food-orders/{id}`, `/food-orders/{id}/cancel-options`, `/food-orders/{id}/verify|verify-scheduled|prepare|
+ * handover|deliver|cancel`). Çağrılar ve gövdeler kaydedilir; `statusFor` ile bir uca sırayla verilecek durum kodları
+ * (ya da Getir hata kodlu 400), `bodyFor` ile 200 gövdeleri kuyruklanır. `strict`: Getir'in akışı (verify → prepare →
+ * handover / deliver; sırasız çağrı 400 kod 3) ve `gapMs` aralık kuralı (verify, prepare, deliver arasında; ihlal 400,
+ * prepare'de kod 74, deliver'da 62: bağdaştırıcının varsayımı); strict'te `GET /food-orders/{id}` `details`'te yoksa
+ * akıştaki duruma göre üretilir (onaylı 350, hazır 550 + prepareDate, kuryede 600 + handoverDate, teslim 900 +
+ * deliverDate). `singleToken`: yeni giriş eski jetonları düşürür.
  */
 export interface FakeGetir {
   url: string;
@@ -18,6 +23,10 @@ export interface FakeGetir {
   /** Yedek yoklamanın verdiği onaysız ve iptal edilmiş siparişler */
   unapproved: GetirOrder[];
   cancelledList: GetirOrder[];
+  /** `/food-orders/active` (Getir'de onaylı siparişler) */
+  active: GetirOrder[];
+  /** `GET /food-orders/{id}` yanıtları */
+  details: Record<string, GetirOrder>;
   /** `/cancel-options` yanıtı */
   cancelOptions: { id: string; message: string }[];
   /** "POST /auth/login", "GET inbox", "POST ack", "POST unapproved", "POST ord-1 verify" gibi */
@@ -25,6 +34,15 @@ export interface FakeGetir {
   bodies: Record<string, unknown[]>;
   /** Uç adına göre sırayla kullanılacak durum kodları; sayı ya da Getir hata kodlu yanıt (boşsa 200) */
   statusFor: Record<string, (number | { status: number; code: number })[]>;
+  /** Uç adına göre sırayla kullanılacak 200 gövdeleri (boşsa uç kendi gövdesini verir) */
+  bodyFor: Record<string, unknown[]>;
+  /** Getir'in akış ve aralık kuralı (yukarıda) */
+  strict: boolean;
+  gapMs: number;
+  /** Sipariş → Getir'deki durum ve son akış çağrısı (strict) */
+  flow: Map<string, { stage: 'new' | 'verified' | 'prepared' | 'handed' | 'delivered'; at: number }>;
+  /** Yeni giriş eski jetonları düşürür */
+  singleToken: boolean;
   /** Uç adına göre yanıttan önce bekleme (ms) */
   delayFor: Record<string, number>;
   /** Uç adına göre yanıttan hemen önce çalışan kanca */
@@ -50,6 +68,8 @@ export async function startFakeGetir(creds: { appSecretKey: string; restaurantSe
     acked: [],
     unapproved: [],
     cancelledList: [],
+    active: [],
+    details: {},
     cancelOptions: [
       { id: 'cr-1', message: 'Ürün stokta yok' },
       { id: 'cr-2', message: 'Restoran çok yoğun' },
@@ -60,6 +80,11 @@ export async function startFakeGetir(creds: { appSecretKey: string; restaurantSe
     calls: [],
     bodies: {},
     statusFor: {},
+    bodyFor: {},
+    strict: false,
+    gapMs: 0,
+    flow: new Map(),
+    singleToken: false,
     delayFor: {},
     before: {},
     tokens: new Set(),
@@ -95,10 +120,16 @@ export async function startFakeGetir(creds: { appSecretKey: string; restaurantSe
     // GetirFood API
     if (path === '/auth/login' && req.method === 'POST') {
       f.calls.push('POST /auth/login');
+      const forcedLogin = f.statusFor.login?.shift();
+      if (forcedLogin && forcedLogin !== 200) {
+        if (typeof forcedLogin === 'number') return send(forcedLogin, { statusCode: forcedLogin, error: 'Forced', message: `forced ${forcedLogin}` });
+        return send(forcedLogin.status, { code: forcedLogin.code, error: 'ServiceError', message: `forced code ${forcedLogin.code}` });
+      }
       const body = JSON.parse(raw || '{}') as { appSecretKey?: string; restaurantSecretKey?: string };
       if (body.appSecretKey !== creds.appSecretKey || body.restaurantSecretKey !== creds.restaurantSecretKey) return send(401, { code: 0, error: 'Unauthorized', message: 'bad keys' });
       f.logins++;
       const token = `jeton-${f.logins}`;
+      if (f.singleToken) f.tokens.clear();
       f.tokens.add(token);
       return send(200, { restaurantId: f.restaurantId, token });
     }
@@ -116,15 +147,60 @@ export async function startFakeGetir(creds: { appSecretKey: string; restaurantSe
         if (typeof forced === 'number') return send(forced, { statusCode: forced, error: 'Forced', message: `forced ${forced}` });
         return send(forced.status, { code: forced.code, error: 'ServiceError', message: `forced code ${forced.code}` });
       }
-      return send(200, ok);
+      const body = f.bodyFor[action]?.length ? f.bodyFor[action]!.shift() : ok;
+      if (typeof body === 'string') {
+        res.writeHead(200, { 'content-type': 'text/html' });
+        return res.end(body);
+      }
+      return send(200, body);
+    };
+    /** Getir'in akış kuralı (strict): sırasız çağrı kod 3, aralık ihlali 74 / 62; geçerse durum ilerler */
+    const flowError = (id: string, action: string): { code: number } | null => {
+      if (!f.strict || !['verify', 'verify-scheduled', 'prepare', 'handover', 'deliver'].includes(action)) return null;
+      const cur = f.flow.get(id) ?? { stage: 'new' as const, at: 0 };
+      const need: Record<string, string[]> = { verify: ['new'], 'verify-scheduled': ['new'], prepare: ['verified'], handover: ['prepared'], deliver: ['prepared'] };
+      if (action.startsWith('verify') && cur.stage !== 'new') return { code: 2 };
+      if (!need[action]!.includes(cur.stage)) return { code: 3 };
+      const gapped = action !== 'handover';
+      if (gapped && f.gapMs && cur.at && Date.now() - cur.at < f.gapMs) return { code: action === 'deliver' ? 62 : 74 };
+      const next = { verify: 'verified', 'verify-scheduled': 'verified', prepare: 'prepared', handover: 'handed', deliver: 'delivered' }[action] as 'verified';
+      f.flow.set(id, { stage: next, at: gapped ? Date.now() : cur.at });
+      return null;
     };
     if (path === '/food-orders/periodic/unapproved' && req.method === 'POST') return respond('unapproved', f.unapproved);
     if (path === '/food-orders/periodic/cancelled' && req.method === 'POST') return respond('cancelled', f.cancelledList);
+    if (path === '/food-orders/active' && req.method === 'POST') return respond('active', f.active);
+    const one = path.match(/^\/food-orders\/([^/]+)$/);
+    if (one && req.method === 'GET') {
+      const st = f.strict ? f.flow.get(one[1]!) : undefined;
+      const at = st ? new Date(st.at || Date.now()).toISOString() : '';
+      const synth: GetirOrder | undefined = st
+        ? {
+            id: one[1]!,
+            status: { new: 400, verified: 350, prepared: 550, handed: 600, delivered: 900 }[st.stage],
+            ...(st.stage === 'prepared' || st.stage === 'handed' || st.stage === 'delivered' ? { prepareDate: at } : {}),
+            ...(st.stage === 'handed' ? { handoverDate: at } : {}),
+            ...(st.stage === 'delivered' ? { deliverDate: at } : {}),
+          }
+        : undefined;
+      const o = f.details[one[1]!] ?? synth;
+      if (!o) {
+        f.calls.push(`GET ${one[1]} order`);
+        return send(404, { code: 1, error: 'FoodOrderNotFound', message: 'food order not found' });
+      }
+      return respond(`${one[1]} order`, o);
+    }
     const m = path.match(/^\/food-orders\/([^/]+)\/(cancel-options|verify-scheduled|verify|prepare|handover|deliver|cancel)$/);
     if (m) {
       const [, id, action] = m;
       if (action === 'cancel-options' && req.method === 'GET') return respond(`${id} cancel-options`, f.cancelOptions);
-      if (req.method === 'POST') return respond(`${id} ${action}`, { result: true });
+      if (req.method === 'POST') {
+        const bad = action === 'cancel' || f.statusFor[action!]?.length ? null : flowError(id!, action!);
+        if (bad) {
+          (f.statusFor[action!] ??= []).unshift({ status: 400, code: bad.code });
+        }
+        return respond(`${id} ${action}`, action === 'cancel' ? {} : { result: true });
+      }
     }
     return send(404, { code: 1, error: 'FoodOrderNotFound', message: 'food order not found' });
   });
