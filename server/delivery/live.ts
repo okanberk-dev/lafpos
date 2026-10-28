@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, or } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, or } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { ALL_PERMISSIONS } from '@shared/permissions';
 import { PLATFORM_LABEL, type PlatformId, type PlatformLiveStatus, type PlatformOrderPayload, PLATFORMS } from '@shared/platforms';
@@ -10,7 +10,7 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { type PlatformAdapter, PlatformHttpError, type PlatformNotify, type PollResult } from './adapter';
 import { deciding } from './locks';
 import { adapterFor } from './registry';
-import { ingestPlatformOrder, platformCancelled, platformSettings } from './service';
+import { ingestPlatformOrder, PRE_ACCEPTED_TTL_MS, platformCancelled, platformSettings } from './service';
 
 /**
  * Canlı platform bağlantısı (docs/PAKET-PLATFORMLARI.md "Canlı"): yoklama (yeni sipariş, platformun iptali), kabul
@@ -25,6 +25,8 @@ export interface LiveState {
   lastOkAt?: number;
   lastError?: string | null;
   failures?: number;
+  /** Art arda "yeni sipariş alınamıyor" turları (`PollResult.blocked`; bekleme süresini uzatmaz) */
+  blockedRounds?: number;
 }
 
 const stateKey = (p: PlatformId) => `platform.${p}.live`;
@@ -54,6 +56,23 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const permanentOf = (e: unknown) => e instanceof PlatformHttpError && e.permanent;
 
 const STEP_LABEL: Record<PlatformNotify, string> = { hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' };
+
+/**
+ * Geçici sayılan hata (ör. Getir 14 "kurye durumu", 15, 4; ağ) bu süreden uzun sürerse patrona bir kez alarm: yeniden
+ * deneme sürer ama durum zamanla düzelmiyor olabilir. Kasadaki iptalde daha kısa (platformda sipariş sürüyor)
+ */
+export const TRANSIENT_ALARM_MS = { notify: 10 * 60_000, cancel: 5 * 60_000 } as const;
+/** Kayıt → ilk geçici hatanın anı ve alarmın düşüp düşmediği (süreç başına; yeniden başlayınca yeniden sayılır) */
+const transientSince = new Map<string, { at: number; alarmed: boolean }>();
+
+/** Geçici hata sürüyor: süre aşıldıysa ve alarm daha düşmediyse true (bir kez) */
+function transientOverdue(key: string, kind: keyof typeof TRANSIENT_ALARM_MS, now: number): number | null {
+  const t = transientSince.get(key) ?? { at: now, alarmed: false };
+  transientSince.set(key, t);
+  if (t.alarmed || now - t.at < TRANSIENT_ALARM_MS[kind]) return null;
+  t.alarmed = true;
+  return Math.max(1, Math.round((now - t.at) / 60_000));
+}
 
 /** Yeni sipariş yoklaması: platformun canlı bağlantısı açık ve anahtarı tanımlı mı */
 export function liveAdapter(platform: PlatformId): PlatformAdapter | null {
@@ -232,10 +251,14 @@ export async function announceReject(row: PlatformRow, reason: string): Promise<
 /** Platforma yazılan aşamaların sırası: platform sıralı ister (hazır olmadan yolda yazılmaz) */
 const STEPS: readonly (PlatformNotify | 'picked')[] = ['picked', 'hazir', 'yolda', 'teslim'];
 
-/** Adisyonun teslim aşamasından platforma yazılması gereken son adım; platform kuryesinde yolda ve teslimi platform yazar */
-export function desiredStep(deliveryStatus: string | null, courier: PlatformOrderPayload['courier']): PlatformNotify | null {
+/**
+ * Adisyonun teslim aşamasından platforma yazılması gereken son adım. Platform kuryesinde teslimi platform yazar;
+ * kuryeye verilişi de (`handover`: Getir) ancak bağdaştırıcı isterse
+ */
+export function desiredStep(deliveryStatus: string | null, courier: PlatformOrderPayload['courier'], handover = false): PlatformNotify | null {
   if (!deliveryStatus || deliveryStatus === 'hazirlaniyor') return null;
-  if (courier === 'platform' || deliveryStatus === 'hazir') return 'hazir';
+  if (deliveryStatus === 'hazir') return 'hazir';
+  if (courier === 'platform') return handover ? 'yolda' : 'hazir';
   return deliveryStatus === 'yolda' ? 'yolda' : 'teslim';
 }
 
@@ -305,13 +328,13 @@ async function reconcileOnce(now: number): Promise<{ sent: number; failed: numbe
       .get();
     if (!o) continue;
     if (o.status === 'iptal') {
-      if (await announceLocalCancel(a, row, o.cancelReason)) sent++;
+      if (await announceLocalCancel(a, row, o.cancelReason, now)) sent++;
       else failed++;
       continue;
     }
     // Platform bu siparişin bir aşamasını kalıcı olarak reddetti: aşama bildirimi durur (iptal dalları sürer)
     if (row.notifyParkedAt != null) continue;
-    const want = desiredStep(o.deliveryStatus, row.payload.courier);
+    const want = desiredStep(o.deliveryStatus, row.payload.courier, !!a.handover);
     if (!want) continue;
     const have = STEPS.indexOf((row.notifiedStatus as PlatformNotify | 'picked' | null) ?? 'picked');
     const target = STEPS.indexOf(want);
@@ -327,20 +350,29 @@ async function reconcileOnce(now: number): Promise<{ sent: number; failed: numbe
       }
       sent++;
     } catch (e) {
+      // Platform "henüz erken" dedi (aşamalar arasında bekleme ister): hata değil, sonraki turda sürer; gidenler yazıldı
+      if (e instanceof PlatformHttpError && e.status === 425) continue;
       failed++;
       const permanent = permanentOf(e);
       const why = `${a.label}: "${STEP_LABEL[step]}" bildirilemedi (${message(e)})`;
       const ref = `${row.payload.code}, ${tl(row.payload.customerTotal)}`;
+      const key = `notify:${row.id}`;
+      const overdue = permanent ? null : transientOverdue(key, 'notify', now);
+      if (permanent) transientSince.delete(key);
       patchRow(
         row.id,
         { notifiedStatus: current, lastError: why, notifyParkedAt: permanent ? Date.now() : null },
         permanent
           ? { action: 'platform.notify_rejected', severity: 'alarm', orderId: row.orderId, message: `${why}; platform kabul etmedi, yeniden denenmeyecek: aşamayı platform uygulamasından işaretleyin (${ref})` }
-          : !row.lastError
-            ? { action: 'platform.notify_failed', severity: 'uyari', orderId: row.orderId, message: `${why}; yeniden denenecek (${ref})` }
-            : undefined,
+          : overdue != null
+            ? { action: 'platform.notify_failed', severity: 'alarm', orderId: row.orderId, message: `${why}; ${overdue} dakikadır gitmiyor, yeniden denenmeye devam ediliyor: aşamayı platform uygulamasından da işaretleyin (${ref})` }
+            : !row.lastError
+              ? { action: 'platform.notify_failed', severity: 'uyari', orderId: row.orderId, message: `${why}; yeniden denenecek (${ref})` }
+              : undefined,
       );
+      continue;
     }
+    transientSince.delete(`notify:${row.id}`);
   }
   return { sent, failed };
 }
@@ -350,25 +382,32 @@ async function reconcileOnce(now: number): Promise<{ sent: number; failed: numbe
  * olarak reddederse (ör. kurye yolda) kayıt yine kapanır, hata kayıtta kalır ve patrona alarm: sipariş platform
  * uygulamasından iptal edilir. Geçici hata sonraki turda yeniden denenir.
  */
-async function announceLocalCancel(a: PlatformAdapter, row: PlatformRow, cancelReason: string | null): Promise<boolean> {
+async function announceLocalCancel(a: PlatformAdapter, row: PlatformRow, cancelReason: string | null, now = Date.now()): Promise<boolean> {
   const reason = cancelReason?.trim() || 'Diğer';
   const ref = `${row.payload.code}, ${tl(row.payload.customerTotal)}`;
+  const key = `cancel:${row.id}`;
   try {
     await a.reject(row.payload, reason, { afterAccept: true });
   } catch (e) {
     const permanent = permanentOf(e);
     const why = `${a.label}: kasada iptal edilen sipariş platforma bildirilemedi (${message(e)})`;
+    // Geçici hata sürerse (platformda sipariş sürüyor, kasa iptal saydı) bir kez alarm; yeniden deneme sürer
+    const overdue = permanent ? null : transientOverdue(key, 'cancel', now);
+    if (permanent) transientSince.delete(key);
     patchRow(
       row.id,
       permanent ? { status: 'iptal', decidedAt: Date.now(), lastError: why, reason: `Kasada iptal edildi: ${reason}; platforma bildirilemedi` } : { lastError: why },
       permanent
         ? { action: 'platform.cancel_unsynced', severity: 'alarm', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why}: siparişi platform uygulamasından iptal edin (${ref})` }
-        : !row.lastError
-          ? { action: 'platform.cancel_unsynced', severity: 'uyari', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why}; yeniden denenecek (${ref})` }
-          : undefined,
+        : overdue != null
+          ? { action: 'platform.cancel_unsynced', severity: 'alarm', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why}; ${overdue} dakikadır gitmiyor, platformda sipariş sürüyor: siparişi platform uygulamasından da iptal edin, yeniden denenmeye devam ediliyor (${ref})` }
+          : !row.lastError
+            ? { action: 'platform.cancel_unsynced', severity: 'uyari', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why}; yeniden denenecek (${ref})` }
+            : undefined,
     );
     return false;
   }
+  transientSince.delete(key);
   patchRow(
     row.id,
     { status: 'iptal', notifiedStatus: 'unsupplied', lastError: null, reason: `Kasada iptal edildi: ${reason}` },
@@ -428,6 +467,90 @@ function applyCancellations(platform: PlatformId, externalIds: string[], deferre
   return n;
 }
 
+/**
+ * Platformun panelinden (kasanın dışında) kabul edilmiş siparişler: kasada onay bekleyen ya da süresi dolmuş kayıt
+ * "platformda kabul edildi" olur (süre işlemez, Kabul yalnız adisyonu açar, platforma ikinci kez gitmez); patrona bir
+ * kez alarm. Tabletten kabul edilmiş gelen (preAccepted) ve kararı süren kayda dokunulmaz
+ */
+function applyConfirmed(platform: PlatformId, externalIds: string[] | undefined) {
+  if (!externalIds?.length) return;
+  const rows = db
+    .select()
+    .from(schema.platformOrders)
+    .where(and(eq(schema.platformOrders.platform, platform), inArray(schema.platformOrders.externalId, externalIds), inArray(schema.platformOrders.status, ['bekliyor', 'suresi_doldu']), isNull(schema.platformOrders.notifiedStatus)))
+    .all();
+  for (const row of rows) {
+    if (row.payload.simulated || row.payload.preAccepted || deciding.has(row.id)) continue;
+    const label = PLATFORM_LABEL[platform];
+    patchRow(
+      row.id,
+      { status: 'bekliyor', decidedAt: null, notifiedStatus: 'picked', lastError: `Platformun panelinden kabul edildi: Kabul yalnız adisyonu açar` },
+      { action: 'platform.accepted_elsewhere', severity: 'alarm', amount: row.payload.customerTotal, message: `${label} ${row.payload.code}: sipariş platformun panelinden kabul edildi ama kasada adisyonu yok; Kabul ile adisyonu açın (${tl(row.payload.customerTotal)})` },
+    );
+  }
+}
+
+/**
+ * Kasada kabul edilmiş ama platformun yeniden onay beklediği siparişler (Getir: ileri tarihli sipariş etkinleşince):
+ * onay bağdaştırıcıdan gider; gidemezse patrona bir kez alarm, sonraki yoklamada (platform hâlâ bekliyorsa) yeniden.
+ * Platformda onaylı ve kasada süren sipariş de sayılır: kasada kabul edilmiş, ya da onay bekleyen ama platformda
+ * kabul edilmiş (platformun panelinden, tabletinden; `notifiedStatus` picked ya da `preAccepted`). Adisyonu kasada
+ * iptal edilmiş sipariş yeniden onaylanmaz (iptali platforma ayrıca gider). Platform "zaten onaylı" derse denetim
+ * kaydı yazılmaz (onay önceden gitmişti)
+ */
+async function applyReconfirm(a: PlatformAdapter, platform: PlatformId, externalIds: string[] | undefined) {
+  if (!a.reconfirm || !externalIds?.length) return;
+  const rows = db
+    .select()
+    .from(schema.platformOrders)
+    .where(and(eq(schema.platformOrders.platform, platform), inArray(schema.platformOrders.externalId, externalIds), inArray(schema.platformOrders.status, ['kabul', 'bekliyor'])))
+    .all()
+    .filter((r) => r.status === 'kabul' || r.notifiedStatus === 'picked' || !!r.payload.preAccepted);
+  const prefix = `${a.label}: yeniden onay gönderilemedi`;
+  for (const row of rows) {
+    if (row.payload.simulated || deciding.has(row.id)) continue;
+    if (row.orderId) {
+      const o = db.select({ status: schema.orders.status }).from(schema.orders).where(eq(schema.orders.id, row.orderId)).get();
+      if (o?.status === 'iptal') continue;
+    }
+    const ref = `${row.payload.code}, ${tl(row.payload.customerTotal)}`;
+    let result: void | 'already';
+    try {
+      result = await a.reconfirm(row.payload);
+    } catch (e) {
+      const why = `${prefix} (${message(e)})`;
+      patchRow(
+        row.id,
+        { lastError: why },
+        row.lastError?.startsWith(prefix) ? undefined : { action: 'platform.reconfirm_failed', severity: 'alarm', orderId: row.orderId, amount: row.payload.customerTotal, message: `${why}: platform siparişi yeniden onay bekliyor, platform uygulamasından onaylayın (${ref})` },
+      );
+      continue;
+    }
+    if (result === 'already') {
+      if (row.lastError?.startsWith(prefix)) patchRow(row.id, { lastError: null });
+      continue;
+    }
+    // Yalnız kendi hatası temizlenir ("platformun panelinden kabul edildi" gibi ipuçları kalır)
+    patchRow(row.id, { lastError: row.lastError?.startsWith(prefix) ? null : row.lastError }, { action: 'platform.reconfirm', severity: 'uyari', orderId: row.orderId, message: `${a.label} siparişi platformda yeniden onay bekliyordu (ileri tarihli sipariş etkinleşti); onay gönderildi (${ref})` });
+  }
+}
+
+/**
+ * Onay bekleyen kaydın saati sonradan geldi (Getir: ilk gelişte ileri tarihli siparişin saati okunamadı, yedek liste ya
+ * da sonraki tur getirdi): yalnız saat ve not tamamlanır (aynı kaynaktan gelen not; tabletten kabul edilmişin süresi
+ * teslim saatinden işler). Başka alana dokunulmaz
+ */
+function completeSchedule(t: Tx, fx: Effects, row: PlatformRow, payload: PlatformOrderPayload) {
+  if (row.status !== 'bekliyor' || row.payload.scheduledFor != null || payload.scheduledFor == null) return;
+  if (!!row.payload.preAccepted !== !!payload.preAccepted) return;
+  const next: PlatformOrderPayload = { ...row.payload, scheduledFor: payload.scheduledFor, note: payload.note };
+  t.update(schema.platformOrders)
+    .set({ payload: next, ...(row.payload.preAccepted ? { expiresAt: payload.scheduledFor + PRE_ACCEPTED_TTL_MS } : {}) })
+    .where(eq(schema.platformOrders.id, row.id))
+    .run();
+  fx.emit({ topic: 'delivery', kind: 'platform.sync' });
+}
+
 /** Çevrilemeyen ya da kayda girmeyen paketler süreç başına bir kez denetim kaydına düşer (her turda yinelenmesin) */
 const reportedInvalid = new Set<string>();
 
@@ -472,15 +595,31 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
   // Gelen kutusunda kalacaklar: kayda alınmayan (Kapalı), kaydı düşen (sonraki çekimde yeniden denenir), iptali ertelenen.
   // Kapalı'da bozuk kayıt da kalır: Canlı'ya dönünce bildirilir (alarmsız silinmesin)
   const keep = new Set<string>(intake ? [] : (res.invalid ?? []).map((i) => i.externalId));
+  // Kapalı'da yalnız kasada kaydı olmayan sipariş kalır: kaydı olan (platformda yaşayan, ör. etkinleşen ileri tarihli
+  // siparişin yeniden itmesi) tekilleşir ve silinir, gelen kutusunda her turda yeniden işlenmez
+  const known = intake || !res.orders.length
+    ? new Set<string>()
+    : new Set(
+        db
+          .select({ externalId: schema.platformOrders.externalId })
+          .from(schema.platformOrders)
+          .where(and(eq(schema.platformOrders.platform, platform), inArray(schema.platformOrders.externalId, res.orders.map((o) => o.externalId))))
+          .all()
+          .map((r) => r.externalId),
+      );
   let created = 0;
   for (const payload of res.orders) {
     if (!intake) {
-      keep.add(payload.externalId);
+      if (!known.has(payload.externalId)) keep.add(payload.externalId);
       continue;
     }
     const fx = new Effects();
     try {
-      const r = tx((t) => ingestPlatformOrder(t, fx, payload, now));
+      const r = tx((t) => {
+        const out = ingestPlatformOrder(t, fx, payload, now);
+        if (!out.created) completeSchedule(t, fx, out.row, payload);
+        return out;
+      });
       fx.flush();
       if (r.created) created++;
     } catch (e) {
@@ -489,10 +628,22 @@ export async function pollPlatform(platform: PlatformId, now = Date.now()): Prom
     }
   }
   reportInvalid(platform, bad);
+  applyConfirmed(platform, res.confirmed);
   const n = applyCancellations(platform, res.cancelled, keep);
+  await applyReconfirm(a, platform, res.reconfirm);
   // Yerelde işlendi: aktarıcıdaki kayıtlar artık silinebilir (silinemezse yeniden gelir, tekilleştirilir)
   await res.commit?.(keep).catch((e) => console.warn(`[platform] ${a.label} gelen kutusu temizlenemedi`, message(e)));
-  writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: null, failures: 0 });
+  // Yeni siparişler kasaya alınamıyor (Getir: giriş yok): ilk turda uyarı, sürerse 15 turda bir (≈5 dk) alarm. Bekleme
+  // uygulanmaz (düzelince hemen görülsün); iptaller yukarıda işlendi
+  const blockedRounds = res.blocked && intake ? (state.blockedRounds ?? 0) + 1 : 0;
+  if (blockedRounds === 1 || (blockedRounds > 0 && blockedRounds % 15 === 0)) {
+    const fx = new Effects();
+    fx.audit(db, { action: 'platform.poll_failed', severity: blockedRounds >= 15 ? 'alarm' : 'uyari', message: `${a.label}: ${res.blocked} (${blockedRounds}. tur); yeni siparişler kasaya gelmiyor, platform uygulamasından kabul edin` });
+    fx.flush();
+  }
+  // Yoklama başarılı; eksik yol varsa (aktarıcı düştü, yedek yol çalıştı) Yönetim'de görünür, bekleme uygulanmaz
+  const notes = [res.blocked, res.warning].filter(Boolean).join('; ');
+  writeState(platform, { lastPollAt: now, lastOkAt: now, lastError: notes ? `${a.label}: ${notes}` : null, failures: 0, blockedRounds });
   return { created, cancelled: n };
 }
 

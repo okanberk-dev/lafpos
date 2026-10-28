@@ -116,7 +116,111 @@ lafmaliyet'te kanala göre hesaplanır). Sözleşme: `docs/03-ENTEGRASYON.md`.
     LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `YEMEKSEPETI_PLUGIN_SECRET` (Delivery
     Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_REMOTE_ID` (başka restoranın siparişi 400). Kurulum
     durumu `GET /api/uzaktan/kurulum`'da `yemeksepeti: true|false` (değer asla).
-  - **Sonraki:** Getir siparişi push ile gönderir; Yemeksepeti'deki gibi LafPOS Uzaktan aktarıcı olur.
+  - **Getir Yemek** (GetirFood API; `server/delivery/getir.ts`, aktarıcı `api/uzaktan.ts` `getir/*`): Getir siparişi
+    bizim verdiğimiz iki adrese iter; LafPOS Uzaktan (Vercel) aktarıcıdır. Getir'e verilecek adresler: yeni sipariş
+    `POST https://lafpos.vercel.app/api/getir/order`, iptal `POST https://lafpos.vercel.app/api/getir/cancel`; ikisinde
+    de başlıkta bizim ürettiğimiz anahtar (`x-api-key` = Vercel'deki `GETIR_WEBHOOK_SECRET`, en az 16 karakter, sabit
+    zamanlı karşılaştırılır; yoksa ya da `LAFPOS_CLOUD_SECRET`'e veya `YEMEKSEPETI_PLUGIN_SECRET`'e eşitse aktarıcı
+    503: üçüncü tarafa verilen değer gelen kutularını okuyan, özeti ezen anahtar olamaz; ayrı üretin, ör.
+    `openssl rand -hex 24`). Kayıt Redis'teki gelen kutusuna girer (siparişler `lafpos:getir:inbox`, iptaller ayrı
+    listede `lafpos:getir:status`, yalnız sipariş kimliği ve nedeniyle, serbest metin not saklanmaz; önce iptaller
+    verilir). Sipariş kaydı yalnız kasanın okuduğu alanlarla saklanır: müşteri ve kurye konumu ile kurye hiç, Getir
+    kuryesinde müşterinin telefonu ve adresi de saklanmaz; kendi kuryemizde tek telefon (kasanın kullandığı: iletişim
+    ya da maskeli numara, maskesiz numara yalnız ikisi yoksa). Kutu, doluluk ve boyut kuralları Yemeksepeti'ninkiyle
+    aynı (500 kayıt, dolu → 503, gövde 256 KB, kimlik 512 karakter); ayrıca kayıt 1 gün sonra verilmez ve silinir
+    (itmede ve çekimde), liste 1 gün etkinliksiz kalınca düşer: itme ve çekim olmasa da hiçbir kayıt 2 günden uzun
+    kalmaz. Kasa aynı imzalı uçlardan (`GET /api/getir/inbox`, `POST /api/getir/inbox/ack`) 20 saniyede bir çeker ve
+    işlediğini siler. Kasa yeniden başlayınca restoran kimliği girişte öğrenilene dek aktarıcının sipariş kaydı (ve
+    aynı siparişin iptal kaydı) alınmaz, gelen kutusunda kalır; giriş olmayan turda Getir'in listeleri de okunmaz.
+    Bu durum yoklama hatası sayılmaz (iptaller işlenir, bekleme uzamaz) ama siparişin kasaya ulaşmadığı ilk turda
+    denetim kaydına uyarı (`platform.poll_failed`), sürerse 15 turda bir (≈5 dk, Getir'in restoranı kapatma süresi)
+    alarm düşer: siparişi Getir uygulamasından yönetin.
+    **Yedek yol:** kasa Getir'in onaysız (`POST /food-orders/periodic/unapproved`), iptal (`/periodic/cancelled`) ve
+    onaylı (`POST /food-orders/active`) listelerini de doğrudan okur, en sık dakikada bir (belge "sürekli
+    sorgulanmamalı"; `/periodic` uçları hız sınırı dışında, `/active` jeton başına dakikada 300 isteğe sayılır),
+    aktarıcı düşmüşse her turda; iki yoldan gelen aynı sipariş tekilleşir. Listeler ayrı ayrı okunur: iptal ya da
+    onaylı listesinin hatası onaysız siparişleri düşürmez, uyarı olur. Aktarıcı düşüp Getir çalışıyorsa yoklama
+    başarılı sayılır, Yönetim'de "aktarıcı gelen kutusu alınamadı … doğrudan Getir'den alınıyor" uyarısı görünür;
+    aktarıcı ve onaysız liste birlikte düşerse yoklama hatası. Girişte Getir'in verdiği restoran kimliğiyle uyuşmayan
+    sipariş atlanır, bir kez alarm düşer (Vercel'de isteğe bağlı `GETIR_RESTAURANT_ID` aynı siparişi 400 ile reddeder).
+    **Getir panelinden onaylanan sipariş** (belge "Time Limit for Order Confirmation": kabul Getir'e ulaşmadı ya da
+    yanıtı kayboldu, personel Getir panelinden onayladı): onaylı listede görünür (350 ve üstü, 400 değil, teslim
+    edilmemiş, iptal belirtisi yok: yanıt şemasında iptal nedeni ve notu); kasada onay bekleyen ya da süresi
+    dolmuş kayıt "platformda kabul edildi" olur (süre işlemez, Kabul yalnız adisyonu açar, patrona bir kez alarm),
+    kasanın hiç görmediği sipariş tabletten kabul edilmiş gibi gelir (Kabul adisyonu açar; ret ve iptal Getir'den).
+    Kimlik: `POST /auth/login` {appSecretKey, restaurantSecretKey} → jeton (1 saat; 55 dakikada yenilenir, 401'de bir
+    kez yeniden giriş; aynı anda tek giriş), her istekte `token` başlığı. Giriş hatası siparişe ait değildir, hiçbir
+    zaman kalıcı sayılmaz (aşama park edilmez, kasadaki iptal kapanmaz; anahtar düzelince gider). **Kabul önce
+    Getir'e:** `POST /food-orders/{id}/verify` (ileri tarihli onaysız sipariş, durum 325: `/verify-scheduled`; o
+    arada etkinleşmişse 3 döner ve `/verify` denenir); hazırlık süresi Getir'e sipariş başına gitmez (uç gövdesiz).
+    Getir "zaten onaylı" (hata kodu 2) derse kasada yalnız adisyon açılır. `result: false` ya da nesne olmayan gövde
+    (vekil sunucunun sayfası) hiçbir uçta başarı sayılmaz. **Ret ve kasada iptal** aynı yoldan:
+    `GET /food-orders/{id}/cancel-options`'tan seçenek (kasadaki neden anahtar kelimeyle eşlenir, bulunamazsa
+    "diğer", o da yoksa ilk; sipariş başına 5 dk saklanır: uç 10 dk'da 40 istekle sınırlı), `POST
+    /food-orders/{id}/cancel` {cancelReasonId, cancelNote}; Getir seçenek vermiyorsa (kurye yolda) kalıcı ret: kayıt
+    kapanır, alarm düşer, sipariş Getir uygulamasından iptal edilir. Kabul süresi sipariş saatinden (`checkoutDate`,
+    GMT) 5 dk; etkinleşmiş (400) ileri tarihli siparişte kasaya geliş anından. Getir 30 sn'de yanıt yoksa restoranı IVR
+    ile arar, 5 dk'da restoranı kapatır.
+    **İleri tarihli:** push gövdesinde saat (`scheduledDate`) yok: `GET /food-orders/{id}`'den alınır, alınamazsa
+    sipariş yine gelir ve notunda "İLERİ TARİHLİ: saat Getir panelinde" yazar. Kasada `/verify-scheduled` ile kabul
+    edilmiş sipariş etkinleşince onaysız listede 400 olarak yeniden görünürse kasa `/verify`'ı kendisi gönderir
+    (gidemezse bir kez alarm, sonraki yoklamada yeniden): sipariş başına bir kez (5 dk içinde yeniden 400 görünse de
+    gitmez; Getir "zaten onaylı" derse aralık yeniden başlamaz, denetim kaydı yazılmaz). Getir tabletinden onaylanıp
+    kasada onay bekleyen sipariş de yeniden onaylanır; adisyonu kasada iptal edilmiş sipariş onaylanmaz. Kapalı'da
+    kasada kaydı olan siparişin yeniden itmesi gelen kutusundan silinir (her turda yeniden işlenmez). Push'ta saati
+    gelmeyen ileri tarihli siparişin saati okunamazsa kayıt bir dakikaya dek bekletilir (yedek liste ya da sonraki tur
+    saati getirsin), sonra notlu alınır; saat sonradan gelirse onay bekleyen kaydın saati ve notu tamamlanır.
+    **Aşamalar** kurye türüne göre (belge "Order Flow"): hazır → `/prepare`; Getir kuryesinde (`deliveryType` 1) yolda
+    → `/handover` (bağdaştırıcı `handover` bayrağı; teslimi Getir yazar), kendi kuryemizde (2) yolda Getir'e gitmez,
+    teslim → `/deliver`. Getir verify, prepare ve deliver arasında **en az 1 dakika** ister (handover bu kurala bağlı
+    değil, kurye beklemez): kabulden ya da bir önceki aşamadan 1 dk geçmeden aşama gönderilmez, hata sayılmaz (425,
+    sessiz), sonraki turda gider. Aralık tekdüze saatle tutulur (Windows saati geri alsa da en çok 1 dk); kasa yeniden
+    başlatılınca önceki çağrının saati bilinmez, açılıştan 1 dk beklenir. **Hata sınıfları:** Getir'in bütün hizmet
+    hataları HTTP 400'dür; 4 (kilit), 14 (kurye durumu), 15 (kurye henüz restorana ulaşmadı) ve 79 (ileri tarihli
+    henüz etkinleşmedi) geçicidir (bir kez uyarı, sonraki turda yeniden); 74 ve 62 (süre sınırları) ilk gelişte bir
+    aralık beklenip bir kez daha denenir, yine gelirse kalıcı. 3 (durum geçersiz) gelirse Getir'deki durum
+    `GET /food-orders/{id}`'den okunur: aşama geçilmişse (`prepareDate` / `handoverDate` / `deliverDate` ya da durum
+    eşiği) başarı sayılır ve sonraki aşama gider (yanıtı kaybolan denememiz uygulanmış, kurye siparişi uygulamasından
+    almış, ileri tarihli sipariş Getir'ce 500'e alınmış); etkinleşmemiş ya da yeniden onay bekleyen ileri tarihli
+    siparişte (325, 350, 400) hazır bir aralık sonra yeniden denenir; iptal edilmiş ya da geride kalan durum kalıcı.
+    Durum okunamazsa önceki denemenin yanıtı kaybolduysa (ağ, 5xx) uygulanmış, değilse geçici sayılır. Öteki kodlar
+    kalıcı ret (aşama park edilir, alarm). Geçici hata sürerse patrona bir kez alarm düşer (aşamada 10 dk, kasadaki
+    iptalde 5 dk; yeniden deneme sürer): durum zamanla düzelmiyor olabilir.
+    Kurye ve ödeme: `deliveryType` 1 Getir kuryesi (adres ve telefon kasaya gelmez), 2 kendi kuryemiz (maskeli telefon
+    ve adres gelir; gel-al Getir belgesinde yok). `paymentMethod` 1 MasterPass, 2 BKM Express, 15 MobilExpress, 16
+    GetirMoney ve 19 Sodexo Online **online** sayılır (kasada tahsil edilmez); 3 Kredi / Banka Kartı dahil ötekiler
+    kapıda (kendi kuryemizde kasada alınır; Getir kuryesinde platform tahsil eder); Getir'in metninde "online" ya da
+    "kapıda" kelimesi geçiyorsa (başta ya da içeride: "Kredi Kartı (Online)") karar ona uyar ve etiket kararla hiç
+    çelişmez; tür kodu bilinmiyorsa, metin iki kelimeyi birden taşıyorsa ya da bilinen kodun yönüyle çelişiyorsa
+    etiket "Getir'den doğrulayın" der ve Yönetim uyarır. Ücret satırı yok: Getir kuryesinin ücretini Getir müşteriden
+    kendisi alır. İndirim Getir'in kendi alanlarından okunur (`totalPrice` − `totalDiscountedPrice`, satır indirimi;
+    büyük olan) ve **kimin karşıladığını belge yazmaz:** restoran kampanyası sayılır; Getir'in karşıladığı kampanya
+    varsa fark hesap kesiminde görünür. İndirimli değer yalnız 0 < değer < taban ise indirimdir (indirim yokken 0
+    gelebilir). Getir'in toplamı ile kalemler arasındaki açıklanamayan fark indirimden ayrı tutulur: toplam kalemleri
+    aşarsa fark adisyona ve platform alacağına girmez (uydurma ücret satırı yok), notta Getir'in toplamı, indirimli
+    toplamı ve kalemler, kendi kuryemizin kapıda nakit siparişinde müşterinin ödeyeceği yazar ("farkı Getir'den
+    doğrulayın"); müşterinin ödediği indirimin açıklayamayacağı kadar düşükse fark restoran indirimi sayılır (adisyon
+    ödenenin üstünde kalmaz, platform payı uydurulmaz), notta görünür. Aynı sipariş push'tan da yedek listeden de aynı
+    tutarla gelir. Ürün kimliği yoksa kalem ada göre eşlenir (satır kimliği her siparişte yenidir,
+    eşleme anahtarı olmaz). Sayısal metin ("150") sayı gibi okunur. Test siparişi bayrağı yok: Getir'in test ortamı (`GETIR_API_URL` test adresi) gerçek
+    akışla denenir. Saatler GMT; saat dilimi yazılmamış değer UTC sayılır.
+    **Belgeden emin olunmayanlar** (`getir.ts` başındaki yorum; güvenli taraf seçildi, canlıya geçmeden Getir'in test
+    ortamında bir turla doğrulanır): girişin gövdesi (swagger JSON şema verir, açıklama "HTTP Basic Auth" der), hata
+    gövdesindeki `code` alanı, 74 ve 62'nin anlamı (1 dk kuralı mı süre aşımı mı), `result: false` yanıtı, hangi ödeme
+    türlerinin online olduğu, iptal seçeneği metinleri, `/periodic` ve `/active` uçlarının yanıt biçimi (dizi;
+    `{data: [...]}` sarmalı da kabul edilir) ve `/active`'teki durum kodları, ürün kimliği alanı (`product`, zincirde
+    `chainProduct`), indirimsiz siparişte indirim alanlarının değeri, kalemleri aşan Getir toplamının ne olduğu
+    (kendi kuryemiz, kapıda nakit siparişte `totalPrice` ile kalemlerin toplamı karşılaştırılır), ileri tarihli
+    siparişin akışı (325 → `/verify-scheduled` → etkinleşince 400 olarak yeniden `/verify` istiyor mu, 400'ün 5
+    dakikası neye göre işliyor), yinelenen ya da geçilmiş aşamaya Getir'in 3 dönmesi ve aşamanın geçildiğini gösteren
+    durum eşikleri (`GETIR_PASSED_STATUS`: hazır 500, belgede "hazırlanıyor"; kuryeye verildi 600, teslim 900 ve iptal
+    1500 belgede yok; önce swagger'daki aşama tarihlerine bakılır). Kalıcı reddedilip park edilen aşamayı kasadan
+    yeniden denetecek bir uç yok (ayrı iş): alarm personele aşamayı Getir uygulamasından işaretlemesini söyler.
+    Kafede `.env`: `GETIR_APP_SECRET_KEY`, `GETIR_RESTAURANT_SECRET_KEY`, test ortamı için `GETIR_API_URL`
+    (boşsa canlı `https://food-external-api-gateway.getirapi.com`) ve LafPOS Uzaktan'ın `LAFPOS_CLOUD_URL`,
+    `LAFPOS_CLOUD_SECRET`'i. Vercel'de: `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz; Getir'e adreslerle birlikte verilir),
+    isteğe bağlı `GETIR_RESTAURANT_ID`. Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
+  - **Sonraki:** Migros Yemek (belge herkese açık değil; görüşme gerekir).
 
 ## Uçlar
 `GET /api/platforms` (ayarlar, siparişler, `live` canlı durum) · `PUT /api/platforms/:platform` · `POST /api/platforms/:platform/test-order` ·
