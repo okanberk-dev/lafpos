@@ -136,9 +136,15 @@ dakika içinde bar ekranına düşer. Veritabanına dokunmadığı için 5 dakik
   süresi dolup listeden sessizce düşen sipariş (sitede yazım olmaz, sinyal değişmez) kalmasın. Gece yapılmaz.
 
 `GET /api/panel/orders` yanıtında `orders` dizisi yoksa (bakım sayfası, ağ geçidi, beklenmeyen gövde) çekme
-başarısız sayılır, hiçbir sipariş kapatılmaz. Liste, istendiği andaki hâldir: istek gittikten sonra LafPOS'ta
-değişen sipariş (kasada "Teslim edildi", aşama, araya giren daha yeni bir çekmenin getirdiği yeni sipariş) o listeyle
-ne yeniden açılır ne kapanır ne de aşaması geri alınır; sonraki çekme geçerlidir.
+başarısız sayılır, hiçbir sipariş kapatılmaz. **Biçim sürümü:** iki imzalı liste de `version` taşır (laffogato
+`PANEL_ORDERS_VERSION`, `PANEL_MENU_VERSION`; bugün `1`). Değer `1` değilse (başka sayı, metin, `null`) LafPOS listeyi
+okumaz: sipariş çekimi başarısız sayılır (502 `site_orders`, "Site siparişleri tanınmayan biçimde (sürüm N)"; hiçbir
+sipariş kapanmaz, hata Yönetim › Entegrasyon'da görünür), menü senkronu panel listesi alınamamış gibi davranır
+(fiyat, ad, KDV ve yeni ürünler uygulanır, Satışta bilgisine dokunulmaz). Alanı hiç göndermeyen eski site okunur.
+
+Liste, istendiği andaki hâldir: istek gittikten sonra LafPOS'ta değişen sipariş (kasada "Teslim edildi", aşama, araya
+giren daha yeni bir çekmenin getirdiği yeni sipariş) o listeyle ne yeniden açılır ne kapanır ne de aşaması geri
+alınır; sonraki çekme geçerlidir.
 
 Online siparişler LafPOS'ta `orders.source = 'laffogato'`, `extPaid = true` olarak tutulur:
 tahsilat düğmesi kapalıdır, gün sonu cirosuna ve lafmaliyet satış listesine girmez (çift sayım). Raporlarda

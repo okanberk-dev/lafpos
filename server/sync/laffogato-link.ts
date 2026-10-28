@@ -15,6 +15,20 @@ export const siteSigned = () => siteLinked() && env.laffogatoPanelSecret.length 
 
 export const SITE_NOT_LINKED = 'Site bağlantısı kurulmadı';
 
+/**
+ * İmzalı listelerin (`GET /api/panel/orders`, `GET /api/panel/menu`) LafPOS'un okuduğu biçim sürümü (laffogato
+ * `PANEL_ORDERS_VERSION`, `PANEL_MENU_VERSION`). Alanı hiç göndermeyen eski site tanınır; başka her değer (2, "1",
+ * null) LafPOS'un bilmediği biçimdir, liste okunmaz. docs/03-ENTEGRASYON.md §2.3
+ */
+export const SITE_LIST_VERSION = 1;
+
+/** Gövdenin sürümü tanınmıyorsa onu, tanınıyorsa (ya da alan yoksa) null döner */
+export function unknownSiteListVersion(body: { version?: unknown }): string | null {
+  if (body.version === undefined || body.version === SITE_LIST_VERSION) return null;
+  // Sayı olduğu gibi, gerisi JSON'uyla: metin "1" ile sayı 1 hata mesajında ayırt edilsin
+  return (typeof body.version === 'number' ? String(body.version) : (JSON.stringify(body.version) ?? String(body.version))).slice(0, 40);
+}
+
 /** Elle tetiklenen site işlemleri ("Siteyle eşitle", "Yenile") bağlantı yokken bu mesajla 409 döner */
 export function requireSiteLinked() {
   if (!siteLinked()) throw conflict(`${SITE_NOT_LINKED}: kasa bilgisayarının ayarlarında LAFFOGATO_URL yok`, 'not_configured');

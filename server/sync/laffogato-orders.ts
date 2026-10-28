@@ -10,7 +10,7 @@ import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
 import { siteKaraokeOn, siteKaraokeTick } from './laffogato-karaoke';
-import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
+import { requireSiteSigned, siteLinked, siteSigned, unknownSiteListVersion } from './laffogato-link';
 import { dropSiteSoldOut, siteOutboxStatus, siteTablesPushStatus, withSiteMenuLock } from './site-outbox';
 
 /**
@@ -44,14 +44,18 @@ const isPanelOrder = (o: unknown): o is PanelOrder => !!o && typeof (o as PanelO
  * Sitenin açık siparişleri. `orders` dizisi olmayan 200 (bakım sayfası, ağ geçidi, beklenmeyen gövde) başarısız
  * çekme sayılır: boş liste sanılıp sitede ödenmiş açık siparişler kapatılmasın. `complete: false` (site listeyi kesti,
  * en çok 200 sipariş; laffogato `src/app/api/panel/orders/route.ts`) ya da okunamayan kalem varsa liste eksik
- * sayılır, listede olmayan kapatılmaz; alanı göndermeyen eski site bütün liste sayılır.
+ * sayılır, listede olmayan kapatılmaz; alanı göndermeyen eski site bütün liste sayılır. `version` 1 değilse (site
+ * biçimi değiştirdi) liste okunmaz, çekim başarısız olur.
  */
 export async function fetchPanelOrders(): Promise<{ orders: PanelOrder[]; complete: boolean }> {
   requireSiteSigned();
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/orders`));
   if (status !== 200) throw new HttpError(502, `Site siparişleri alınamadı (HTTP ${status})`, 'site_orders');
-  const body = json as { orders?: unknown; complete?: unknown } | null;
+  const body = json as { version?: unknown; orders?: unknown; complete?: unknown } | null;
   if (!body || !Array.isArray(body.orders)) throw new HttpError(502, 'Site siparişleri beklenen biçimde gelmedi', 'site_orders');
+  // Tanınmayan biçim: liste okunmaz, çekim başarısız sayılır, hiçbir sipariş kapanmaz (alanı göndermeyen eski site tanınır)
+  const version = unknownSiteListVersion(body);
+  if (version !== null) throw new HttpError(502, `Site siparişleri tanınmayan biçimde (sürüm ${version})`, 'site_orders');
   const orders = body.orders.filter(isPanelOrder);
   return { orders, complete: body.complete !== false && orders.length === body.orders.length };
 }

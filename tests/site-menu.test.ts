@@ -96,6 +96,42 @@ describe('menü senkronu: Satışta bilgisi imzalı panel listesinden', () => {
     await sync();
   });
 
+  it('panel listesi tanınmayan biçimde gelirse (version 1 değil) Satışta bilgisi değişmez; alanı göndermeyen eski site okunur', async () => {
+    const { runMenuSync } = await import('../server/sync/menu-sync');
+    expect((await product('mnu-0007')).active).toBe(true);
+    // Panel Latte'yi Tükendi der ama biçimi LafPOS bilmiyor: liste okunmaz, fiyat ve ürünler yine uygulanır
+    site.panelActive.set('mnu-0007', false);
+    const raised = siteMenuFixture();
+    for (const c of raised.categories) for (const i of c.items) if (i.id === 'mnu-0007') i.priceMinor += 500;
+    site.menu = raised;
+    const before = (await product('mnu-0007')).price;
+    try {
+      for (const v of [2, '1']) {
+        site.panelMenuVersion = v;
+        const r = await runMenuSync({ apply: true, force: true });
+        expect(r.status).toBe('uygulandi');
+        expect(r.warning).toBe(`Satışta bilgisi alınamadı, ürünlerin Satışta durumu değişmedi: Panel menüsü tanınmayan biçimde (sürüm ${JSON.stringify(v)})`);
+        expect(r.preview?.changes.filter((c) => c.kind === 'geri' || c.kind === 'kalkti')).toEqual([]);
+        const latte = await product('mnu-0007');
+        expect(latte.active).toBe(true);
+        expect(latte.price).toBe(before + 500);
+      }
+      const status = await h.ok<{ menu: { state: { lastError?: string } } }>('patron', 'GET', '/sync/status');
+      expect(status.menu.state.lastError).toMatch(/tanınmayan biçimde \(sürüm "1"\)/);
+      // Eski site alanı hiç göndermez: liste okunur, Latte kapanır
+      site.panelMenuVersion = undefined;
+      const r = await runMenuSync({ apply: true, force: true });
+      expect(r.warning).toBeUndefined();
+      expect((await product('mnu-0007')).active).toBe(false);
+    } finally {
+      site.panelMenuVersion = 1;
+      site.panelActive.set('mnu-0007', true);
+      site.menu = siteMenuFixture();
+      await sync();
+    }
+    expect((await product('mnu-0007')).active).toBe(true);
+  });
+
   it('panel listesi yoksa (anahtar yok) bugünkü kural: listede olan satışta, olmayan sitenin Tükendi\'si', async () => {
     const { tx } = await import('../server/db/client');
     const { applyMenu } = await import('../server/sync/laffogato-menu');
