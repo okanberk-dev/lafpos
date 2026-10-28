@@ -124,6 +124,8 @@ export interface OptionItemDTO {
   isDefault: boolean;
   maxQty: number;
   allergens: string[];
+  /** Kasada Tükendi: seçenek penceresinde gri, kasa satışı almaz (409 `option_sold_out`) */
+  soldOut: boolean;
 }
 
 export interface OptionGroupDTO {
@@ -184,6 +186,11 @@ export interface PublicSettings {
   keepAwake: boolean;
   /** Ürün kartlarında sitedeki görsel (küçük kopyası kasa sunucusunda) */
   productImages: boolean;
+  /**
+   * Seçenekleri sor: iki boylu üründe boy düğmesi hemen ekler; `zorunlu` (varsayılan) zorunlu seçimi olan üründe
+   * (Türk kahvesinde şeker), `hep` seçeneği olan her üründe seçenek penceresini o boy seçili açar
+   */
+  askOptions: 'zorunlu' | 'hep';
   voidReasons: string[];
   compReasons: string[];
   /** Ödenmez kapanış gerekçeleri (personel yemeği, patron hesabı; ciro dışı) */

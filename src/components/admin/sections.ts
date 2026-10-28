@@ -29,8 +29,8 @@ export interface AdminSection {
 export const ADMIN_SECTIONS: AdminSection[] = [
   { key: 'genel', to: '/yonetim/genel', label: 'Genel bakış', desc: 'Bugünün rakamları, dikkat isteyenler, sistem sağlığı', icon: Gauge, hue: 'blue', group: 'genel', perm: ['patron.panel', 'rapor.gor'], keywords: 'pano dashboard özet' },
   { key: 'raporlar', to: '/raporlar', label: 'Raporlar', desc: 'Ciro, ürün, saat, personel ve lafmaliyet aktarımı', icon: BarChart3, hue: 'violet', group: 'genel', perm: ['rapor.gor'], keywords: 'ciro satış z' },
-  { key: 'menu', to: '/yonetim/menu', label: 'Ürünler', desc: 'Satışta, tükendi, istasyon, kısa ad, site eşitlemesi', icon: Coffee, hue: 'amber', group: 'menu', perm: ['menu.yonet'], keywords: 'menü ürün fiyat tükendi' },
-  { key: 'secenekler', to: '/yonetim/secenekler', label: 'Seçenekler ve happy hour', desc: 'Süt, şurup, shot grupları ve indirim saatleri', icon: BadgePercent, hue: 'rose', group: 'menu', perm: ['menu.yonet'], keywords: 'opsiyon kampanya' },
+  { key: 'menu', to: '/yonetim/menu', label: 'Ürünler', desc: 'Satışta, tükendi, istasyon, kısa ad, site eşitlemesi', icon: Coffee, hue: 'amber', group: 'menu', perm: ['menu.yonet'], keywords: 'menü ürün fiyat tükendi varyant boy' },
+  { key: 'secenekler', to: '/yonetim/secenekler', label: 'Seçenekler ve happy hour', desc: 'Süt, şurup, shot grupları ve indirim saatleri', icon: BadgePercent, hue: 'rose', group: 'menu', perm: ['menu.yonet'], keywords: 'opsiyon varyant kampanya' },
   { key: 'masa-plani', to: '/yonetim/masa-plani', label: 'Masa planı', desc: 'Bölümler, masalar, karaoke odası', icon: LayoutGrid, hue: 'green', group: 'salon', perm: ['ayar.yonet'], keywords: 'salon bahçe oda' },
   { key: 'odeme', to: '/yonetim/odeme', label: 'Ödeme türleri', desc: 'Nakit, kart, yemek kartları, açık hesap', icon: CreditCard, hue: 'blue', group: 'salon', perm: ['ayar.yonet'], keywords: 'pluxee multinet sodexo' },
   { key: 'personel', to: '/yonetim/personel', label: 'Personel', desc: 'PIN, rol, kişiye özel yetki, indirim sınırı', icon: Users, hue: 'violet', group: 'ekip', perm: ['personel.yonet'], keywords: 'kullanıcı garson kasiyer pin' },

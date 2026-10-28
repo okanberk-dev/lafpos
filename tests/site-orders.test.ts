@@ -156,6 +156,32 @@ describe('liste ve kapanış', () => {
     expect(back.status).toBe('acik');
     expect(back.extStage).toBe('new');
   });
+
+  it('tanınmayan biçim (version 1 değil) okunmaz: çekim başarısız, hiçbir sipariş kapanmaz; alanı göndermeyen eski site okunur', async () => {
+    const { syncOnlineOrders } = await import('../server/sync/laffogato-orders');
+    // Site biçimi değiştirdi ve ord-0103 listede yok: eski kuralla okunsaydı "Siteden kalktı" kapanırdı
+    site.orders = { complete: true, orders: siteOrdersFixture().orders.filter((o) => o.id !== 'ord-0103') };
+    try {
+      for (const v of [2, '1', null]) {
+        site.ordersVersion = v;
+        await expect(syncOnlineOrders()).rejects.toMatchObject({ status: 502, code: 'site_orders' });
+        expect((await byExt('ord-0103')).status).toBe('acik');
+      }
+      const status = await h.ok<{ online: { state: { lastError?: string | null } } }>('patron', 'GET', '/sync/status');
+      expect(status.online.state.lastError).toBe('Site siparişleri tanınmayan biçimde (sürüm null)');
+      // Eski site alanı hiç göndermez: liste okunur, listede olmayan kapanır, hata temizlenir
+      site.ordersVersion = undefined;
+      expect((await syncOnlineOrders()).closed).toBe(1);
+      expect((await byExt('ord-0103')).extStage).toBe('gone');
+      const after = await h.ok<{ online: { state: { lastError?: string | null } } }>('patron', 'GET', '/sync/status');
+      expect(after.online.state.lastError).toBeNull();
+    } finally {
+      site.ordersVersion = 1;
+      site.orders = { complete: true, orders: siteOrdersFixture().orders };
+      await syncOnlineOrders();
+    }
+    expect((await byExt('ord-0103')).status).toBe('acik');
+  });
 });
 
 describe('aşama yazımı', () => {

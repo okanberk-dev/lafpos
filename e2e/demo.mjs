@@ -178,6 +178,21 @@ export async function runDemo(browser) {
         },
       ],
       [
+        'Demo: Türk kahvesinin Büyük düğmesi şekeri sorar, seçilene kadar Ekle kapalı; Sade seçilince hesapta Sade',
+        async (page) => {
+          await page.getByPlaceholder('Ürün ara').fill('Türk Kahvesi');
+          await page.getByRole('button', { name: /^Büyük / }).first().click();
+          const modal = page.getByRole('dialog', { name: 'Türk Kahvesi' });
+          await modal.waitFor({ timeout: 8000 });
+          assert(await modal.getByRole('button', { name: /^Ekle/ }).isDisabled(), 'şeker seçilmeden Ekle açık');
+          await modal.getByRole('button', { name: 'Sade', exact: true }).click();
+          await modal.getByRole('button', { name: /^Ekle/ }).click();
+          await modal.waitFor({ state: 'detached' });
+          // Bilgisayarda hesap kartı yanda: gönderilmemiş satır seçtiği şekerle
+          await page.getByText('Sade', { exact: true }).first().waitFor({ timeout: 8000 });
+        },
+      ],
+      [
         'Demo: garsona geçer; indirim PIN yerine "Müdür onaylasın" ile',
         async (page) => {
           await page.getByLabel('Demo rolü').selectOption('garson');

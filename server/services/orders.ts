@@ -337,8 +337,9 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
     if (!p.active) throw conflict(`${p.name} tükendi`, 'sold_out');
     const size = normalizeSize(p, line.size);
     const base = sizePrice(p, size);
-    // Platform satırının seçenekleri notta yazar (platformun seçimi); zorunlu seçenek kasada sorulmaz
-    const opts = resolveOptions(sp, line.options ?? [], { lenient: platformPrice });
+    // Platform satırının seçenekleri notta yazar (platformun seçimi); zorunlu seçenek kasada sorulmaz. Kasada
+    // Tükendi işaretli seçenek yalnız kasa satışında reddedilir (platform siparişi kabulde durmasın)
+    const opts = resolveOptions(sp, line.options ?? [], { lenient: platformPrice, refuseSoldOut: !platformPrice });
     let unit = base + optionsUnitTotal(opts);
     let happy = false;
 

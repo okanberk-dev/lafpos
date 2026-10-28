@@ -1,11 +1,12 @@
 import { Minus, Pencil, Plus } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
-import type { OptionGroupDTO, ProductDTO, Size } from '@shared/types';
+import type { ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
+import { Badge } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
-import { estimateUnit, menuUnit, productGroups, useBoot } from '@/lib/boot';
+import { defaultPicks, editingPicks, estimateUnit, menuUnit, missingChoice, pickHint, pickNote, pickSingle, productGroups, reconcilePicks, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { useFinePointer } from '@/lib/hooks';
@@ -18,17 +19,9 @@ type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
 const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
 const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
 const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
-
-function defaultPicks(groups: OptionGroupDTO[]): Picks {
-  const p: Picks = {};
-  for (const g of groups) {
-    if (g.kind === 'single') {
-      const d = g.items.find((i) => i.isDefault) ?? (g.required ? g.items[0] : undefined);
-      if (d) p[d.id] = 1;
-    }
-  }
-  return p;
-}
+// Kasada tükenen seçenek: gri, seçilemez, yanında "Tükendi" (Tükenen ürünler › Seçenekler)
+const CHIP_SOLD = 'border-line bg-surface-2 text-muted disabled:cursor-not-allowed';
+const SOLD_BADGE = 'ml-1.5 rounded-md bg-[var(--admin-danger-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]';
 
 /** Ürün seçenekleri: boy, süt, kavrum, şurup, ekstra shot, şeker, not ve adet. */
 export function OptionsModal({
@@ -46,7 +39,8 @@ export function OptionsModal({
 }) {
   const boot = useBoot();
   const fine = useFinePointer();
-  const groups = useMemo(() => (product ? productGroups(boot, product) : []), [boot, product]);
+  // Zorunlu grup (şeker) boyun hemen altında: telefonda pencerenin dibinde kalıp gözden kaçmasın
+  const groups = useMemo(() => (product ? productGroups(boot, product).sort((a, b) => Number(b.required) - Number(a.required)) : []), [boot, product]);
   const [size, setSize] = useState<Size>(initialSize);
   const [picks, setPicks] = useState<Picks>({});
   const [note, setNote] = useState('');
@@ -56,24 +50,45 @@ export function OptionsModal({
   // Elle fiyat bölümü yalnız açık üründe (fiyatı 0) ya da zaten elle fiyat yazılmışsa açık; diğer üründe küçük düğmenin ardında
   const [priceOpen, setPriceOpen] = useState(false);
 
+  // Menü olayı (bardan seçenek tükendi) açılış verisini yeniler, groups yeni dizi olur. Başlangıç seçimi yalnız pencere
+  // açılırken ya da ürün, düzenlenen satır, başlangıç boyu değişince kurulur; gruplar o anki halinden okunur. Yoksa
+  // seçim, not ve adet sessizce sıfırlanır, seçiliyken tükenen Yulaf uyarısız normal süte dönerdi
+  const groupsRef = useRef(groups);
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
+
   useEffect(() => {
     if (!product) return;
     if (editing) {
       setSize(editing.size);
-      setPicks(Object.fromEntries(editing.options.map((o) => [o.itemId, o.qty ?? 1])));
+      // Bu arada tükenen seçenek seçili kalır: grubu uyarır, Güncelle kasiyer bırakana ya da başkasını seçene dek kapalı.
+      // Grubu kapanan ya da kaldırılan seçenek düşer (sunucu 400 döner, bütün bekleyen satırlar takılırdı); isteğe bağlı
+      // grubun tükenen varsayılanı (önseçili gelmiş Normal süt) bırakılır, grup boş gider
+      setPicks(reconcilePicks(groupsRef.current, editingPicks(editing.options)));
       setNote(editing.note);
       setQty(editing.qty);
       setPriceText(editing.priceOverride != null ? String(editing.priceOverride / 100).replace('.', ',') : '');
       setPriceOpen(editing.priceOverride != null || product.price === 0);
     } else {
       setSize(product.priceL != null ? (initialSize === 'L' ? 'L' : 'M') : 'TEK');
-      setPicks(defaultPicks(groups));
+      setPicks(defaultPicks(groupsRef.current));
       setNote('');
       setQty(1);
       setPriceText('');
       setPriceOpen(product.price === 0);
     }
-  }, [product, editing, initialSize, groups]);
+  }, [product, editing, initialSize]);
+
+  // Pencere açıkken ürünün bir grubu kapanır ya da açılırsa, seçenek tükenir ya da satışa açılırsa (Yönetim ›
+  // Seçenekler, Tükenen ürünler; menü olayı) seçim, not ve adet korunarak uzlaştırılır: kapanan grubun seçimi atılır
+  // (yoksa gönderim 400 alırdı), önseçili Normal süt tükenince bırakılır (Ekle açık kalır, süt yazılmaz), seçimi boşalan
+  // isteğe bağlı grubun varsayılanı seçili gelir (ücretli varsayılan ekranda seçili görünmeden fiyata girmesin).
+  // Yukarıdaki efektten sonra çalışır
+  useEffect(() => {
+    if (!product) return;
+    setPicks((cur) => reconcilePicks(groups, cur));
+  }, [product, groups]);
 
   if (!product) return null;
   const options = Object.entries(picks)
@@ -81,14 +96,13 @@ export function OptionsModal({
     .map(([itemId, n]) => ({ itemId, qty: n }));
   const override = priceText.trim() ? parseTL(priceText) : null;
   const unit = override ?? estimateUnit(boot, product, size, options);
+  // Zorunlu grup (şeker) seçilmeden Ekle kapalı: sunucu boş grupta varsayılanı yazardı, kasiyer sormadan geçmesin
+  const missing = missingChoice(groups, picks);
+  const hinted = groups.find((g) => pickHint(g, picks));
+  const waiting = !!hinted;
+  // Ekle neden kapalı: alt çubukta yazar (telefonda grup başlığındaki ipucu ekranın dışında kalabilir)
+  const reason = missing ? `${missing.name} seçin` : hinted ? `${hinted.name}: ${pickHint(hinted, picks)}` : null;
 
-  // Tek seçimlik grup radyo düğmesi gibi davranır: dokunulan seçilir, gruptaki diğerleri kalkar
-  const pickSingle = (g: OptionGroupDTO, itemId: string) => {
-    const next = { ...picks };
-    for (const i of g.items) delete next[i.id];
-    next[itemId] = 1;
-    setPicks(next);
-  };
   const setCount = (itemId: string, n: number) => setPicks({ ...picks, [itemId]: n });
 
   return (
@@ -99,7 +113,9 @@ export function OptionsModal({
       title={product.name}
       subtitle={product.description ?? undefined}
       footer={
-        <div className="flex items-center gap-3">
+        // Eksik zorunlu seçimin ya da tükenen seçimin yazısı Ekle'nin altında kendi satırında (bilgi cümlesi devre dışı
+        // düğmede durmaz)
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <div className="flex items-center rounded-xl border border-line bg-surface">
             <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.max(1, qty - 1))}>
               <Minus className="size-4" />
@@ -110,9 +126,13 @@ export function OptionsModal({
             </button>
           </div>
           <div className="flex-1" />
-          <Button variant="primary" size="lg" onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
+          <Button variant="primary" size="lg" disabled={waiting || !!missing} aria-describedby={reason ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
             {editing ? 'Güncelle' : 'Ekle'} · {tl(unit * qty)}
           </Button>
+          {/* Canlı bölge hep yerinde (boşken görünmez): tükenen seçim sonradan geldiğinde de okunur */}
+          <p id="secenek-eksik" role="status" className={cn('basis-full text-right text-sm font-medium', !reason ? 'sr-only' : missing ? 'text-ink-2' : 'text-[var(--admin-danger-ink)]')}>
+            {reason}
+          </p>
         </div>
       }
     >
@@ -138,21 +158,30 @@ export function OptionsModal({
 
         {groups.map((g) => (
           <section key={g.id}>
-            <h3 className="mb-2 text-sm font-semibold text-ink-2">{g.name}</h3>
+            <h3 className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-ink-2">
+              {g.name}
+              {g.required && g.kind !== 'counter' && <Badge>Zorunlu</Badge>}
+              {pickHint(g, picks) ? (
+                <span className="text-xs font-medium text-[var(--admin-danger-ink)]">{pickHint(g, picks)}</span>
+              ) : (
+                // İsteğe bağlı grubun tükenen varsayılanı: yalnız bilgi, Ekle açık (sunucu o grup için seçenek yazmaz)
+                pickNote(g, picks) && <span className="text-xs font-medium text-muted">{pickNote(g, picks)}</span>
+              )}
+            </h3>
             {g.kind === 'counter' ? (
               <div className="flex flex-wrap gap-2">
                 {g.items.map((i) => (
-                  <div key={i.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface px-3 py-1.5">
+                  <div key={i.id} className={cn('flex items-center gap-3 rounded-xl border border-line px-3 py-1.5', i.soldOut ? 'bg-surface-2 text-muted' : 'bg-surface')}>
                     <span className="font-medium">
                       {i.name}
-                      {i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
+                      {i.soldOut ? <span className={SOLD_BADGE}>Tükendi</span> : i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
                     </span>
                     <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
+                      <button aria-label="Azalt" disabled={i.soldOut && !picks[i.id]} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
                         <Minus className="size-4" />
                       </button>
                       <span className="tabular w-6 text-center font-semibold">{picks[i.id] ?? 0}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
+                      <button aria-label="Artır" disabled={i.soldOut} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
                         <Plus className="size-4" />
                       </button>
                     </div>
@@ -163,15 +192,23 @@ export function OptionsModal({
               <div className="flex flex-wrap gap-2">
                 {g.items.map((i) => {
                   const on = !!picks[i.id];
+                  // Seçiliyken tükenen (başka kasa işaretledi ya da sepetteki satır düzenleniyor) bırakılabilsin diye yalnız
+                  // seçili değilken kapalı; seçiliyse gri zeminde mavi çerçeve
+                  const sold = i.soldOut && !on;
                   return (
                     <button
                       key={i.id}
                       aria-pressed={on}
-                      onClick={() => (g.kind === 'single' ? pickSingle(g, i.id) : setCount(i.id, on ? 0 : 1))}
-                      className={cn(CHIP, on ? CHIP_ON : CHIP_OFF)}
+                      disabled={sold}
+                      onClick={() => (g.kind === 'single' ? setPicks(pickSingle(g, picks, i.id)) : setCount(i.id, on ? 0 : 1))}
+                      className={cn(CHIP, i.soldOut ? cn(CHIP_SOLD, on && 'border-primary active:bg-press') : on ? CHIP_ON : CHIP_OFF)}
                     >
                       {i.name}
-                      {i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>}
+                      {i.soldOut ? (
+                        <span className={SOLD_BADGE}>Tükendi</span>
+                      ) : (
+                        i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>
+                      )}
                       {i.allergens.includes('nuts') && <span className="ml-1 text-[11px] text-[var(--admin-warning)]">(kuruyemiş)</span>}
                     </button>
                   );
