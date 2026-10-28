@@ -31,6 +31,8 @@ export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-cent
 export const CARD = 'rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)]';
 export const LABEL = 'text-xs font-medium text-[var(--admin-text-mute)]';
 export const NUM = 'tabular-nums';
+/** Karakter karakter okunan ad (env değişkeni, klasör, adres): sistem eş genişlikli, gri kutu */
+export const CODE = 'rounded bg-[var(--admin-surface-2)] px-1 py-px font-mono text-[0.92em] text-[var(--admin-text)] [overflow-wrap:anywhere]';
 
 export type Tone = 'neutral' | 'primary' | 'accent' | 'info' | 'success' | 'warning' | 'danger';
 
@@ -91,16 +93,20 @@ export function IconBox({ hue = 'blue', children, size = 'md' }: { hue?: Hue; ch
   );
 }
 
-/** Sayfa başlığı şeridi: solda başlık ve açıklama, sağda önce ikincil sonra birincil düğme; kart boyu çizgi */
+/**
+ * Sayfa başlığı şeridi: solda başlık ve açıklama, sağda önce ikincil sonra birincil düğme; kart boyu çizgi.
+ * Telefonda (md altı) başlığı kabuğun üst şeridi yazar: h1 yalnız ekran okuyucuya kalır, açıklama iki satır.
+ */
 export function PageHeader({ title, description, actions, children }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; children?: ReactNode }) {
+  const titleOnly = !description && !actions && !children;
   return (
-    <div className="-mx-4 mb-5 border-b border-[var(--admin-border)] px-4 pb-4 sm:-mx-5 sm:px-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-[-0.01em] text-[var(--admin-text)]">{title}</h1>
-          {description && <p className="mt-0.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)]">{description}</p>}
+    <div className={cn('-mx-4 mb-5 border-b border-[var(--admin-border)] px-4 pb-4 sm:-mx-5 sm:px-5', titleOnly && 'max-md:mb-0 max-md:border-0 max-md:pb-0')}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className={cn('min-w-0', !description && 'max-md:contents')}>
+          <h1 className="text-lg font-semibold tracking-[-0.01em] text-[var(--admin-text)] max-md:sr-only">{title}</h1>
+          {description && <p className="mt-0.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
       </div>
       {children}
     </div>
@@ -138,26 +144,31 @@ export interface KpiCell {
   active?: boolean;
 }
 
-/** KPI şeridi: tek kart, hücreler arasında 1 px çizgi (kartın grisi 1 px boşluktan görünür) */
+/**
+ * KPI şeridi: tek kart, hücreler arasında 1 px çizgi (kartın grisi 1 px boşluktan görünür). Beş hücre
+ * tablette 3 + 2 dizilir (altı sütunlu ızgarada 2 ve 3 sütun kaplar), boş gri hücre kalmaz.
+ */
 export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: string }) {
-  const cols = cells.length >= 5 ? 'md:grid-cols-3 xl:grid-cols-5' : cells.length === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3';
+  const n = cells.length;
+  const cols = n === 5 ? 'md:grid-cols-6 xl:grid-cols-5' : n >= 6 ? 'md:grid-cols-3 xl:grid-cols-6' : n === 4 ? 'md:grid-cols-4' : n === 2 ? 'md:grid-cols-2' : n === 1 ? 'md:grid-cols-1' : 'md:grid-cols-3';
   return (
     <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-[var(--admin-border)] bg-[var(--admin-border)]', cols, '[&>*:last-child:nth-child(odd)]:max-md:col-span-2', className)}>
-      {cells.map((c) => {
+      {cells.map((c, i) => {
         const body = (
           <>
-            <span className="flex items-center gap-2">
+            <span className="flex w-full items-center gap-2">
               <IconBox hue={c.hue}>{c.icon}</IconBox>
               <span className="min-w-0 truncate text-[13px] font-medium text-[var(--admin-text-soft)]">{c.label}</span>
             </span>
-            <span className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="mt-2 flex w-full flex-wrap items-baseline gap-x-2 gap-y-1">
               <span className={cn('text-2xl font-bold tracking-[-0.02em] text-[var(--admin-text)]', NUM)}>{c.value}</span>
               {c.delta && <Badge tone={c.delta.good ? 'success' : 'danger'}>{c.delta.text}</Badge>}
             </span>
-            {c.reference && <span className="mt-1 block text-xs text-[var(--admin-text-mute)]">{c.reference}</span>}
+            {c.reference && <span className="mt-1 block w-full text-xs text-[var(--admin-text-mute)]">{c.reference}</span>}
           </>
         );
-        const cls = cn('block min-w-0 bg-[var(--admin-surface)] p-4 text-left', c.active && 'bg-[var(--admin-primary-soft)]/60 shadow-[inset_0_-2px_0_var(--admin-primary)]');
+        const span = n === 5 ? (i < 3 ? 'md:col-span-2 xl:col-span-1' : 'md:col-span-3 xl:col-span-1') : null;
+        const cls = cn('flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left', span, c.active && 'bg-[var(--admin-primary-soft)]/60 shadow-[inset_0_-2px_0_var(--admin-primary)]');
         return c.onClick ? (
           <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors hover:bg-[var(--admin-surface-2)]', FOCUS)}>
             {body}
@@ -489,10 +500,10 @@ export function DataTable<T>({
 /** Boş durum: ne olmadığını ve nasıl dolacağını söyler. Kartın içindeyse `bare` (iç içe kart olmaz). */
 export function EmptyState({ icon, title, children, action, bare }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode; bare?: boolean }) {
   return (
-    <div className={cn(!bare && CARD, 'flex flex-col items-center gap-2 text-center', bare ? 'px-4 py-8' : 'px-6 py-12')}>
+    <div className={cn(!bare && CARD, 'flex flex-col items-center gap-2 text-center', bare ? 'px-4 py-6' : 'px-6 py-12')}>
       {icon && <IconBox hue="blue" size="lg">{icon}</IconBox>}
-      <p className="mt-1 text-[15px] font-semibold text-[var(--admin-text)]">{title}</p>
-      {children && <div className="max-w-sm text-[13px] text-[var(--admin-text-mute)]">{children}</div>}
+      <p className={cn('mt-1 text-[var(--admin-text)]', bare ? 'text-sm font-medium' : 'text-[15px] font-semibold')}>{title}</p>
+      {children && <div className={cn('max-w-sm text-[var(--admin-text-mute)]', bare ? 'text-xs' : 'text-[13px]')}>{children}</div>}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );
@@ -597,6 +608,22 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
         </li>
       ))}
     </ol>
+  );
+}
+
+/**
+ * Kurulum bilgisi (env değişkeni, belge yolu, komut): ana akıştan çıkar, sayfa sonunda kapalı durur.
+ * İçerik kaybolmaz; açan kişi okur.
+ */
+export function SetupNotes({ children, summary = 'Kurulum adımları', open }: { children: ReactNode; summary?: ReactNode; open?: boolean }) {
+  return (
+    <details open={open} className="group rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)]">
+      <summary className={cn('flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-xl px-4 text-[13px] font-medium text-[var(--admin-text-mute)] hover:text-[var(--admin-text)] pointer-fine:min-h-9 [&::-webkit-details-marker]:hidden', FOCUS)}>
+        <ChevronRight aria-hidden="true" className="size-4 shrink-0 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none" />
+        {summary}
+      </summary>
+      <div className="space-y-2 pb-4 pl-10 pr-4 text-xs leading-5 text-[var(--admin-text-soft)]">{children}</div>
+    </details>
   );
 }
 

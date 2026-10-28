@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Plus, Printer, QrCode as QrCodeIcon, RefreshCw, Save } from 'lucide-react';
+import { AlertTriangle, LayoutGrid, Plus, Printer, QrCode as QrCodeIcon, RefreshCw, Save } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { tableQrUrl } from '@shared/table-qr';
-import { Badge, PageHeader } from '@/components/admin/ui';
+import { Badge, BTN, EmptyState, PageHeader, StatusTabs } from '@/components/admin/ui';
 import { QrCode } from '@/components/QrCode';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Select } from '@/components/ui/Field';
@@ -196,7 +196,7 @@ export default function FloorAdmin() {
     <div>
       <PageHeader
         title="Masa planı"
-        description="Masaları sürükleyin, köşesinden boyutlandırın. Karaoke odası gibi saatlik alanlar için türü 'oda' seçin. Masaya özel QR'ı burada üretin ve kartları yazdırın"
+        description="Masaları sürükleyin, köşeden boyutlandırın; QR ve karaoke odası da burada"
         actions={
           <>
             {missingQr > 0 ? (
@@ -227,30 +227,16 @@ export default function FloorAdmin() {
           </span>
         </div>
       )}
-      <div role="tablist" aria-label="Bölüm" className="no-scrollbar -mx-4 mb-4 flex gap-1.5 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:px-0">
-        {sections.map((s) => {
-          const on = s.id === sectionId;
-          return (
-            <button
-              key={s.id}
-              role="tab"
-              aria-selected={on}
-              onClick={() => setSectionId(s.id)}
-              className={cn(
-                'inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg border bg-[var(--admin-surface)] px-2.5 text-[13px] pointer-coarse:min-h-11',
-                on ? 'border-[var(--admin-text)] font-semibold text-[var(--admin-text)]' : 'border-[var(--admin-border)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)]',
-              )}
-            >
-              {s.name}
-              <span className={cn('min-w-5 rounded-md px-1.5 text-center text-xs tabular-nums', on ? 'bg-[var(--admin-text)] text-[var(--admin-surface)]' : 'bg-[var(--admin-panel)]')}>{tables.filter((t) => t.sectionId === s.id && t.active).length}</span>
-            </button>
-          );
-        })}
-        <button onClick={addSection} className="inline-flex min-h-9 shrink-0 items-center rounded-lg border border-dashed border-[var(--admin-border-field)] px-3 text-[13px] text-[var(--admin-text-mute)] hover:text-[var(--admin-text)] pointer-coarse:min-h-11">
-          + Bölüm
+      {/* Bölüm sekmeleri ve yanında "Bölüm ekle": sekmeler telefonda kendi içinde kayar, düğme yerinde kalır (telefonda yalnız ikon) */}
+      <div className="flex items-start gap-2 [&>[role=tablist]]:mx-0 [&>[role=tablist]]:min-w-0 [&>[role=tablist]]:flex-1 [&>[role=tablist]]:px-0">
+        <StatusTabs label="Bölüm" value={sectionId} onChange={setSectionId} tabs={sections.map((s) => ({ value: s.id, label: s.name, count: tables.filter((t) => t.sectionId === s.id && t.active).length }))} />
+        <button type="button" onClick={addSection} className={cn(BTN.ghost, 'mb-4 shrink-0 max-sm:w-11 max-sm:px-0')}>
+          <Plus className="size-4" aria-hidden="true" />
+          <span className="max-sm:sr-only">Bölüm ekle</span>
         </button>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+      {/* items-start: uzun düzenleme paneli satırı uzatınca 16/10 plan, oranı yüzünden genişleyip kartı taşırıyordu */}
+      <div className="grid items-start gap-4 xl:grid-cols-[1fr_320px]">
         <div
           ref={canvas}
           onPointerMove={onPointerMove}
@@ -265,7 +251,7 @@ export default function FloorAdmin() {
               data-table-id={t.id}
               style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
               className={cn(
-                'absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
+                'group absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
                 t.shape === 'round' ? 'rounded-full' : 'rounded-lg',
                 selected === t.id ? 'border-[var(--admin-primary)] ring-2 ring-[var(--admin-primary)]/30' : 'border-[var(--admin-border-field)]/60',
                 t.kind === 'oda' && 'bg-[var(--admin-accent-soft)]',
@@ -274,16 +260,26 @@ export default function FloorAdmin() {
               {t.name}
               <span className="text-[11px] font-normal text-[var(--admin-text-mute)]">{t.kind === 'oda' ? 'oda' : `${t.seats} kişi`}</span>
               {t.qrCode && <QrCodeIcon aria-label="QR kodu var" className="absolute left-1 top-1 size-3.5 text-[var(--admin-text-mute)]" />}
-              <span onPointerDown={(e) => onPointerDown(e, t, 'size')} aria-hidden="true" className="absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize rounded-sm border-b-2 border-r-2 border-[var(--admin-primary)]" />
+              {/* Boyutlandırma kulpu yalnız seçili masada (farede üzerine gelince de): her masada hep görünen mavi köşe gürültüydü */}
+              <span
+                onPointerDown={(e) => onPointerDown(e, t, 'size')}
+                aria-hidden="true"
+                className={cn(
+                  'absolute bottom-0.5 right-0.5 size-4 cursor-nwse-resize rounded-sm border-b-2 border-r-2 border-[var(--admin-primary)] transition-opacity',
+                  selected === t.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                )}
+              />
             </div>
           ))}
         </div>
         <div className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] p-4">
           {!sel ? (
-            <p className="text-sm text-muted">Düzenlemek için bir masaya dokunun</p>
+            <EmptyState bare icon={<LayoutGrid />} title="Masa seçilmedi">
+              Düzenlemek için plandan bir masaya dokunun
+            </EmptyState>
           ) : (
             <div className="space-y-3">
-              <h3 className="font-semibold">{sel.name}</h3>
+              <h3 className="font-semibold text-[var(--admin-text)]">{sel.name}</h3>
               <Field label="Ad">
                 <Input defaultValue={sel.name} key={`n${sel.id}`} onBlur={(e) => e.target.value.trim() && e.target.value !== sel.name && updateTable(sel.id, { name: e.target.value.trim() })} />
               </Field>
@@ -324,7 +320,7 @@ export default function FloorAdmin() {
                   <>
                     <div className="flex items-start gap-3">
                       <QrCode value={tableQrUrl(sel.qrCode)} label={`${sel.name} QR kodu`} className="size-28" />
-                      <div className="min-w-0 space-y-1 text-xs text-muted">
+                      <div className="min-w-0 space-y-1 text-xs text-[var(--admin-text-mute)]">
                         <p className="break-all font-mono text-[13px] font-semibold text-[var(--admin-text)]">{sel.qrCode}</p>
                         <p className="break-all">{tableQrUrl(sel.qrCode)}</p>
                         <p>Müşteri okutunca sitenin menüsü açılır, uygulamadan bu masaya sipariş verir; sipariş kasada bu masaya düşer</p>
@@ -341,7 +337,7 @@ export default function FloorAdmin() {
                   </>
                 ) : (
                   <>
-                    <p className="text-xs text-muted">Masaya özel QR: müşteri okutunca uygulamadan bu masaya sipariş verir, sipariş kasada masaya düşer. Kodu LafPOS üretir, sitenin biçimiyle</p>
+                    <p className="text-xs text-[var(--admin-text-mute)]">Masaya özel QR: müşteri okutunca uygulamadan bu masaya sipariş verir, sipariş kasada masaya düşer. Kodu LafPOS üretir, sitenin biçimiyle</p>
                     <Button size="sm" icon={<QrCodeIcon className="size-4" />} onClick={() => void makeQr(sel)}>
                       QR üret
                     </Button>
@@ -349,16 +345,16 @@ export default function FloorAdmin() {
                 )}
               </div>
               )}
-              <Button
-                variant="ghost"
-                className="text-danger-500"
+              <button
+                type="button"
+                className={BTN.danger}
                 onClick={() => {
                   if (window.confirm(`${sel.name} plandan kaldırılsın mı?`)) updateTable(sel.id, { active: false });
                   setSelected(null);
                 }}
               >
                 Masayı kaldır
-              </Button>
+              </button>
             </div>
           )}
         </div>

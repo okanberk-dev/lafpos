@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send } from 'lucide-react';
-import { useState } from 'react';
+import { ChevronRight, Send } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { tl } from '@shared/money';
 import { PLATFORM_LABEL, PLATFORM_MODE_LABEL, PLATFORM_STATUS_LABEL, PLATFORMS, type PlatformId, type PlatformLiveStatus, type PlatformMode, type PlatformProductDTO, type PlatformSettings } from '@shared/platforms';
 import { fmtDateTime, fmtTime } from '@shared/time';
-import { Badge, BTN, Card, PageHeader, Segmented } from '@/components/admin/ui';
+import { Badge, BTN, Card, CODE, PageHeader, Segmented } from '@/components/admin/ui';
 import { PlatformBadge } from '@/components/PlatformBadge';
 import { usePlatforms } from '@/components/PlatformInbox';
 import { Field, Input, Select } from '@/components/ui/Field';
@@ -14,13 +14,41 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { toast } from '@/lib/toast';
 
-/** Gerçek bağlantı için gerekenler (calisma/arastirma/paket-platformlari, 27 Ekim 2026; docs/PAKET-PLATFORMLARI.md) */
-const LIVE_NEEDS: Record<PlatformId, string> = {
-  yemeksepeti:
-    "Delivery Hero'dan POS entegrasyonu (middleware adresi, kullanıcı adı, parola, restoranın POS kimliği ve JWT anahtarı). Siparişler LafPOS Uzaktan'a gelir, kasa 20 saniyede bir çeker: kasa bilgisayarının .env dosyasına YEMEKSEPETI_MW_URL, YEMEKSEPETI_USERNAME, YEMEKSEPETI_PASSWORD, YEMEKSEPETI_REMOTE_ID; Vercel'e YEMEKSEPETI_PLUGIN_SECRET yazılır, LafPOS yeniden başlatılır; sonra Canlı seçilir",
-  getir: 'Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber\'e geçti, yol Trendyol Go\'ya dönebilir',
-  trendyol: 'Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar kasa bilgisayarının .env dosyasına (TRENDYOL_SUPPLIER_ID, TRENDYOL_API_KEY, TRENDYOL_API_SECRET) yazılır, LafPOS yeniden başlatılır; sonra Canlı seçilir. Uber Eats Türkiye siparişleri de buradan gelir; kasa 20 saniyede bir yoklar',
-  migros: 'Belgeler herkese açık değil; Migros Yemek ile görüşme gerekir',
+/** Ayar adları kitin eş genişlikli kodu (`CODE`) ile, virgülle */
+function Env({ names }: { names: string[] }) {
+  return (
+    <>
+      {names.map((n, i) => (
+        <span key={n}>
+          {i > 0 && ', '}
+          <code className={CODE}>{n}</code>
+        </span>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Gerçek bağlantı için gerekenler (calisma/arastirma/paket-platformlari, 27 Ekim 2026; docs/PAKET-PLATFORMLARI.md).
+ * Kartın ana akışında değil, "Gerçek bağlantı için ne gerekir" açılırında; anahtarı tamam canlı platformda gösterilmez.
+ */
+const LIVE_NEEDS: Record<PlatformId, ReactNode> = {
+  yemeksepeti: (
+    <>
+      Delivery Hero'dan POS entegrasyonu: middleware adresi, kullanıcı adı, parola, restoranın POS kimliği ve JWT anahtarı. Kasa bilgisayarının{' '}
+      <code className={CODE}>.env</code> dosyasına <Env names={['YEMEKSEPETI_MW_URL', 'YEMEKSEPETI_USERNAME', 'YEMEKSEPETI_PASSWORD', 'YEMEKSEPETI_REMOTE_ID']} />, Vercel'e{' '}
+      <Env names={['YEMEKSEPETI_PLUGIN_SECRET']} /> yazılır; LafPOS yeniden başlatılınca Canlı seçilir. Siparişler LafPOS Uzaktan'a gelir, kasa 20 saniyede bir çeker.
+    </>
+  ),
+  getir: "Getir geliştirici portalından POS başvurusu; test ve canlı anahtar. Getir yemek işi Uber'e geçti, yol Trendyol Go'ya dönebilir.",
+  trendyol: (
+    <>
+      Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar kasa bilgisayarının <code className={CODE}>.env</code> dosyasına (
+      <Env names={['TRENDYOL_SUPPLIER_ID', 'TRENDYOL_API_KEY', 'TRENDYOL_API_SECRET']} />) yazılır; LafPOS yeniden başlatılınca Canlı seçilir. Uber Eats Türkiye
+      siparişleri de buradan gelir, kasa 20 saniyede bir yoklar.
+    </>
+  ),
+  migros: 'Belgeler herkese açık değil; Migros Yemek ile görüşme gerekir.',
 };
 
 const MODE_TONE: Record<PlatformMode, 'neutral' | 'info' | 'success'> = { kapali: 'neutral', deneme: 'info', canli: 'success' };
@@ -34,9 +62,9 @@ export default function PlatformsAdmin() {
     <>
       <PageHeader
         title="Paket platformları"
-        description="Yemeksepeti, Getir Yemek, Trendyol Go (Uber Eats) ve Migros Yemek siparişleri kasaya düşer, onaylanınca bara gider. Tahsilatı platform yapıyorsa kuryeye verilince ya da teslimde platformun online ödemesiyle kapanır; kasada tahsil edilmez. Deneme siparişleri gerçek satış gibi ciroya girer: deneme modu yalnız kurulum modunda açılır"
+        description="Platform siparişleri kasaya düşer, onaylanınca bara gider; tahsilat platformda"
       />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         {PLATFORMS.map((p) => (
           <PlatformCard key={p} platform={p} settings={data.data!.settings[p]} live={data.data!.live?.[p]} canEdit={can('senkron.yonet') || can('ayar.yonet')} canTest={can('paket.yonet')} />
         ))}
@@ -152,7 +180,7 @@ function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform
             ...(live?.supported ? [{ value: 'canli' as const, label: 'Canlı' }] : []),
           ]}
         />
-        {live?.supported && !live.configured && <p className="text-xs text-[var(--admin-warning)]">Canlı için anahtarlar .env'de tanımlı değil; yazıp LafPOS'u yeniden başlatın</p>}
+        {live?.supported && !live.configured && <p className="text-xs text-[var(--admin-warning)]">Canlı bağlantının anahtarları bu kasada tanımlı değil</p>}
         {settings.mode === 'canli' && live && (
           <p className={live.lastError ? 'text-xs text-[var(--admin-danger-ink)]' : 'text-xs text-[var(--admin-success)]'}>
             {live.lastError ?? (live.lastPollAt ? `Son yoklama ${fmtDateTime(live.lastPollAt)}` : 'Henüz yoklanmadı')}
@@ -167,12 +195,24 @@ function PlatformCard({ platform, settings, live, canEdit, canTest }: { platform
             <Input type="number" min={0} max={60} value={commission} disabled={!canEdit} onChange={(e) => setCommission(e.target.value)} onBlur={() => Number(commission) !== settings.commissionPct && save({ commissionPct: Math.min(60, Math.max(0, Number(commission) || 0)) })} />
           </Field>
         </div>
-        <p className="text-xs text-[var(--admin-text-mute)]">Gerçek bağlantı: {LIVE_NEEDS[platform]}</p>
         {settings.mode === 'deneme' && canTest && (
-          <button type="button" className={BTN.soft} onClick={() => void test()}>
-            <Send className="size-4" aria-hidden="true" />
-            Deneme siparişi gönder
-          </button>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <button type="button" className={BTN.soft} onClick={() => void test()}>
+              <Send className="size-4" aria-hidden="true" />
+              Deneme siparişi gönder
+            </button>
+            <span className="text-xs text-[var(--admin-text-mute)]">Deneme siparişi gerçek satış gibi ciroya girer</span>
+          </div>
+        )}
+        {/* Kurulum metni yalnız henüz canlı olmayan (ya da canlıda anahtarı eksik) platformda */}
+        {(settings.mode !== 'canli' || (live?.supported && !live.configured)) && (
+          <details className="group text-xs">
+            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-[var(--admin-primary)] pointer-fine:min-h-0 [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
+              Gerçek bağlantı için ne gerekir
+            </summary>
+            <p className="mt-1.5 text-[var(--admin-text-mute)]">{LIVE_NEEDS[platform]}</p>
+          </details>
         )}
       </div>
     </Card>

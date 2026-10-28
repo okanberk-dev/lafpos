@@ -7,10 +7,11 @@ import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Textarea, Toggle } from '@/components/ui/Field';
 import { PageLoading } from '@/components/ui/misc';
-import { Card, PageHeader } from '@/components/admin/ui';
+import { BTN, Card, CODE, PageHeader, TONE_SOFT } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/hooks';
 import { toast } from '@/lib/toast';
 
 type Settings = Record<string, unknown> & {
@@ -48,6 +49,8 @@ type Settings = Record<string, unknown> & {
 
 const lines = (a: string[]) => a.join('\n');
 const fromLines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean);
+/** Kaydedilmemiş değişiklik karşılaştırması: servis modu seçilince kendisi kaydedilir, sayılmaz */
+const comparable = (x: Settings) => JSON.stringify({ ...x, serviceMode: null });
 
 export default function SettingsAdmin() {
   const boot = useBoot();
@@ -56,9 +59,20 @@ export default function SettingsAdmin() {
   const backups = useQuery({ queryKey: ['admin', 'backups'], queryFn: () => get<{ dir: string; files: { name: string; size: number; at: number }[] }>('/admin/backups') });
   const [s, setS] = useState<Settings | null>(null);
   const [modeBusy, setModeBusy] = useState<ServiceMode | null>(null);
+  const wide = useMediaQuery('(min-width: 768px)');
   useEffect(() => {
     if (data.data) setS(data.data);
   }, [data.data]);
+  const dirty = !!s && !!data.data && comparable(s) !== comparable(data.data);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
   if (!s) return <PageLoading />;
   const set = (patch: Partial<Settings>) => setS({ ...s, ...patch });
   const mode = serviceModeOf(s);
@@ -94,9 +108,19 @@ export default function SettingsAdmin() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Ayarlar" actions={<Button variant="primary" icon={<Save className="size-4" />} onClick={save}>Kaydet</Button>} />
+      {/* Telefonda Kaydet yalnız alttaki yapışkan şeritte (değişiklik varken) */}
+      <PageHeader
+        title="Ayarlar ve yedek"
+        actions={
+          wide ? (
+            <Button variant="primary" icon={<Save className="size-4" />} onClick={save} disabled={!dirty}>
+              Kaydet
+            </Button>
+          ) : undefined
+        }
+      />
       {s.demoMode && (
-        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warn-400 bg-warn-50 p-4 text-sm text-warn-700 dark:bg-warn-700/20 dark:text-warn-100">
+        <div className={cn('flex flex-col gap-3 rounded-xl p-4 text-sm sm:flex-row sm:items-center', TONE_SOFT.warning)}>
           <span className="flex-1">Kurulum modu açık: giriş ekranında örnek PIN'ler görünüyor. Canlıya geçmeden önce Personel'den PIN'leri değiştirip bunu kapatın</span>
           <Toggle checked={s.demoMode} onChange={(v) => set({ demoMode: v })} label="Kurulum modu" />
         </div>
@@ -158,12 +182,15 @@ export default function SettingsAdmin() {
         <Card flush title="Kasa ve gün">
           <div className="grid gap-3 p-4">
             <Toggle checked={s.requireDayOpen} onChange={(v) => set({ requireDayOpen: v })} label="Satış için gün açılmış olmalı" />
-            <Toggle checked={s.keepAwake} onChange={(v) => set({ keepAwake: v })} label="Ekran kararmasın (kasa bilgisayarı, bar ve tablet ekranları)" />
-            <Toggle checked={s.productImages} onChange={(v) => set({ productImages: v })} label="Ürün kartlarında görsel (sitedeki fotoğraf; kasa bilgisayarında saklanır)" />
-            <div className="flex flex-wrap items-center gap-3">
-              <Toggle checked={s.autoDayEnd} onChange={(v) => set({ autoDayEnd: v })} label="Otomatik gün sonu saat" />
-              <Input type="number" min={0} max={23} value={s.autoDayEndHour} onChange={(e) => set({ autoDayEndHour: Number(e.target.value) || 0 })} className="w-20" />
-              <span className="text-xs text-muted">açık adisyon varsa alınmaz; sayım sonra Kasa föyünden girilir</span>
+            <Toggle checked={s.keepAwake} onChange={(v) => set({ keepAwake: v })} label="Ekran kararmasın" hint="kasa bilgisayarı, bar ve tablet ekranları" />
+            <Toggle checked={s.productImages} onChange={(v) => set({ productImages: v })} label="Ürün kartlarında görsel" hint="sitedeki fotoğraf, kasa bilgisayarında saklanır" />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+              <Toggle checked={s.autoDayEnd} onChange={(v) => set({ autoDayEnd: v })} label="Otomatik gün sonu" hint="açık adisyon varsa alınmaz; sayım sonra Kasa föyünden girilir" />
+              {/* Telefonda saat, anahtarın yazısının altına hizalı (anahtar 44 + aralık 12 px) */}
+              <label className="ml-14 flex shrink-0 items-center gap-2 text-sm text-muted sm:ml-0">
+                Saat
+                <Input type="number" min={0} max={23} value={s.autoDayEndHour} onChange={(e) => set({ autoDayEndHour: Number(e.target.value) || 0 })} className="w-20" />
+              </label>
             </div>
             <Field label="Hızlı nakit düğmeleri (₺, satır satır)">
               <Textarea value={s.quickCash.map((k) => String(k / 100)).join('\n')} onChange={(e) => set({ quickCash: fromLines(e.target.value).map((x) => parseTL(x) ?? 0).filter((x) => x > 0) })} />
@@ -254,7 +281,7 @@ export default function SettingsAdmin() {
       >
         <div className="p-4 text-sm">
           <p className="mb-2 text-muted">
-            Her gün kendiliğinden alınır, son {s.backupKeep} gün tutulur. Klasör: <code className="rounded bg-surface-2 px-1">{backups.data?.dir}</code>. Bu klasörü haftada bir başka diske ya da buluta kopyalayın
+            Her gün kendiliğinden alınır, son {s.backupKeep} gün tutulur. Klasör: <code className={CODE}>{backups.data?.dir}</code>. Bu klasörü haftada bir başka diske ya da buluta kopyalayın
           </p>
           <ul className="divide-y divide-line rounded-xl border border-line">
             {(backups.data?.files ?? []).slice(0, 8).map((f) => (
@@ -270,6 +297,20 @@ export default function SettingsAdmin() {
           <p className="mt-2 text-xs text-muted">Alarm eşiği şu an {tl(s.alertCashDiffKurus)}</p>
         </div>
       </Card>
+      {dirty && (
+        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır; burada yalnız iç boşluk
+        <div className="sticky bottom-0 z-10 -mx-4 flex items-center gap-3 border-t border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
+          <span className="text-[13px] text-[var(--admin-text-mute)]">Kaydedilmemiş değişiklik</span>
+          <span className="flex-1" />
+          <button type="button" className={BTN.ghost} onClick={() => data.data && setS({ ...data.data, serviceMode: s.serviceMode })}>
+            Vazgeç
+          </button>
+          <button type="button" className={BTN.primary} onClick={save}>
+            <Save className="size-4" aria-hidden="true" />
+            Kaydet
+          </button>
+        </div>
+      )}
     </div>
   );
 }

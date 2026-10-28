@@ -73,7 +73,7 @@ export default function RolesAdmin() {
         </button>
       )}
       <button type="button" className={BTN.primary} disabled={!dirty.length || saving} onClick={save}>
-        {dirty.length ? `Değişiklikleri kaydet (${dirty.length})` : 'Kaydedildi'}
+        {dirty.length ? `Kaydet (${dirty.length})` : 'Kaydet'}
       </button>
     </>
   );
@@ -82,7 +82,7 @@ export default function RolesAdmin() {
     <>
       <PageHeader
         title="Roller ve yetkiler"
-        description="Her rolün yetkileri o roldeki herkese uygulanır; kişiye özel ek ya da kaldırılan yetki Personel sayfasında. Patron rolü her yetkiye sahiptir. Kasiyer kasa rakamlarını görmüyorsa gün sonu sayımı kör yapılır"
+        description="Rolün yetkisi o roldeki herkese uygulanır; kişiye özel ek Personel'de"
         actions={actions}
       />
 
@@ -93,13 +93,13 @@ export default function RolesAdmin() {
             <caption className="sr-only">Rollere göre yetkiler</caption>
             <thead>
               <tr className="bg-[var(--admin-surface-2)]">
-                <th scope="col" className="h-12 min-w-64 px-4 text-left text-[13px] font-medium text-[var(--admin-text-mute)]">
+                <th scope="col" className="sticky left-0 z-[1] h-12 min-w-44 bg-[var(--admin-surface-2)] px-4 text-left text-[13px] font-medium text-[var(--admin-text-mute)] md:w-[38%]">
                   Yetki
                 </th>
                 {roles.map((r) => (
-                  <th key={r.role} scope="col" className="px-2 py-2 text-center align-bottom">
+                  <th key={r.role} scope="col" className="px-1 py-2 text-center align-bottom">
                     <span className="flex flex-col items-center gap-1">
-                      <span className="inline-flex items-center gap-1 whitespace-nowrap text-[13px] font-semibold text-[var(--admin-text)]">
+                      <span className="inline-flex max-w-20 items-center justify-center gap-1 text-center text-[13px] font-semibold leading-tight text-[var(--admin-text)]">
                         {r.locked && <Lock className="size-3.5 text-[var(--admin-text-mute)]" aria-label="kilitli" />}
                         {r.label}
                       </span>
@@ -115,11 +115,9 @@ export default function RolesAdmin() {
                 ))}
               </tr>
             </thead>
-            <tbody>
-              {groups.map((g) => (
-                <GroupRows key={g.key} group={g} roles={roles} current={current} toggle={toggle} />
-              ))}
-            </tbody>
+            {groups.map((g) => (
+              <GroupRows key={g.key} group={g} roles={roles} current={current} toggle={toggle} />
+            ))}
           </table>
         </div>
       </div>
@@ -171,24 +169,26 @@ function GroupRows({
   current: (r: RoleRow) => Permission[];
   toggle: (r: RoleRow, p: Permission) => void;
 }) {
+  // Her grup kendi gövdesi: grup başlığı yalnız kendi satırlarına (rowgroup); ilk sütun yatay kaydırmada yerinde kalır
   return (
-    <>
+    <tbody>
       <tr className="border-t border-[var(--admin-border)] bg-[var(--admin-panel)]">
-        <th scope="rowgroup" colSpan={roles.length + 1} className="px-4 py-1.5 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">
+        <th scope="rowgroup" className="sticky left-0 z-[1] bg-[var(--admin-panel)] px-4 py-1.5 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">
           {group.label}
         </th>
+        <td colSpan={roles.length} aria-hidden="true" />
       </tr>
       {group.permissions.map((p) => (
-        <tr key={p} className="border-t border-[var(--admin-divider)] hover:bg-[var(--admin-surface-2)]">
-          <th scope="row" className="px-4 py-2 text-left font-normal text-[var(--admin-text)]">
+        <tr key={p} className="group border-t border-[var(--admin-divider)] hover:bg-[var(--admin-surface-2)]">
+          <th scope="row" className="sticky left-0 z-[1] bg-[var(--admin-surface)] px-4 py-2 text-left font-normal text-[var(--admin-text)] group-hover:bg-[var(--admin-surface-2)]">
             {PERMISSIONS[p]}
           </th>
           {roles.map((r) => {
             const on = current(r).includes(p);
             const changed = !r.locked && on !== r.defaults.includes(p);
             return (
-              <td key={r.role} className="px-2 py-1 text-center">
-                <label className={cn('inline-grid size-11 place-items-center rounded-md pointer-fine:size-9', !r.locked && 'cursor-pointer hover:bg-[var(--admin-panel)]', changed && 'bg-[var(--admin-primary-soft)]')}>
+              <td key={r.role} className="px-1 py-1 text-center">
+                <label className={cn('inline-grid size-11 place-items-center rounded-md pointer-fine:size-8', !r.locked && 'cursor-pointer hover:bg-[var(--admin-panel)]', changed && 'bg-[var(--admin-primary-soft)]')}>
                   <input
                     type="checkbox"
                     checked={on}
@@ -203,6 +203,6 @@ function GroupRows({
           })}
         </tr>
       ))}
-    </>
+    </tbody>
   );
 }

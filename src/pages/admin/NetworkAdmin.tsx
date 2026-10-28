@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CircleAlert } from 'lucide-react';
 import { fmtDateTime } from '@shared/time';
 import type { NetAddressDTO, NetworkInfoDTO } from '@shared/types';
-import { Badge, Card, DefRow, LABEL, PageHeader, TONE_SOFT } from '@/components/admin/ui';
+import { Badge, Card, CODE, DefRow, LABEL, PageHeader, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { QrCode } from '@/components/QrCode';
 import { PageLoading } from '@/components/ui/misc';
 import { get } from '@/lib/api';
@@ -38,12 +38,12 @@ export default function NetworkAdmin() {
     <div className="space-y-4">
       <PageHeader
         title="Ağ ve uzaktan erişim"
-        description="Tablet ve telefonlar bu bilgisayardaki LafPOS sunucusuna bağlanır: kafede Wi-Fi'dan, dışarıdan Tailscale ile. İkisinde de ekranlar kafedekilerle aynı anda güncellenir"
+        description="Tablet ve telefonlar kafede Wi-Fi'dan, dışarıdan Tailscale ile bağlanır"
       />
       {n.loopbackOnly && (
         <p className={cn('flex items-start gap-2 rounded-xl p-3 text-sm', TONE_SOFT.warning)}>
           <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          Sunucu yalnız bu bilgisayarı dinliyor (LAFPOS_HOST): tablet ve telefonlar bağlanamaz
+          Sunucu yalnız bu bilgisayarı dinliyor: tablet ve telefonlar bağlanamaz
         </p>
       )}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -103,7 +103,7 @@ export default function NetworkAdmin() {
             {n.cloud.lastError && <DefRow label="Son hata">{n.cloud.lastError}</DefRow>}
           </>
         ) : (
-          <p className={HINT}>Açmak için ayarlara LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET yazın (docs/07-UZAKTAN-ERISIM.md); Vercel'de aynı anahtar ve bir parola tanımlanır</p>
+          <p className={HINT}>Açmak için kasa bilgisayarına ve Vercel'e aynı anahtar tanımlanır; adımlar sayfanın sonunda</p>
         )}
       </Card>
 
@@ -116,6 +116,18 @@ export default function NetworkAdmin() {
           <span className="break-all">{window.location.origin}</span>
         </DefRow>
       </Card>
+
+      <SetupNotes>
+        <p>
+          Sunucunun dinlediği adres <code className={CODE}>LAFPOS_HOST</code> ayarıyla değişir; ağdaki cihazların bağlanması için <code className={CODE}>0.0.0.0</code> (varsayılan) kalmalı.
+        </p>
+        <p>
+          LafPOS Uzaktan: kasa bilgisayarının ayarlarına <code className={CODE}>LAFPOS_CLOUD_URL</code> ve <code className={CODE}>LAFPOS_CLOUD_SECRET</code> yazın; Vercel'de aynı anahtar ve bir parola tanımlanır.
+        </p>
+        <p>
+          Ayrıntı: <code className={CODE}>docs/07-UZAKTAN-ERISIM.md</code>
+        </p>
+      </SetupNotes>
     </div>
   );
 }

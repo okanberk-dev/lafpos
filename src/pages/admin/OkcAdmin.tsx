@@ -6,7 +6,8 @@ import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Segmented } from '@/components/ui/Field';
 import { PageLoading } from '@/components/ui/misc';
-import { Card, PageHeader } from '@/components/admin/ui';
+import { Card, CODE, PageHeader, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
+import { cn } from '@/lib/cn';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { toast } from '@/lib/toast';
@@ -80,7 +81,7 @@ export default function OkcAdmin() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Yazarkasa POS" description="Adisyon cihaza sepet olarak gider; ödeme ve mali fiş cihazda alınır, sonuç (Z no, fiş no, ödemeler) adisyona işlenir" />
+      <PageHeader title="Yazarkasa POS" description="Adisyon cihaza sepet olarak gider; ödeme ve mali fiş cihazda alınır" />
       <Card flush title="Bağlantı">
         <div className="space-y-4 p-4">
           <Segmented
@@ -110,7 +111,7 @@ export default function OkcAdmin() {
           )}
           {s.provider === 'simulator' && (
             <p className="text-sm text-muted">
-              Gerçek cihaz bağlanana kadar akışı denemek ve personeli eğitmek için. Sepetler <Link to="/cihaz" className="font-semibold text-brand-600 underline">eğitim cihazı</Link> ekranında ödenir
+              Gerçek cihaz bağlanana kadar akışı denemek ve personeli eğitmek için. Sepetler <Link to="/cihaz" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">eğitim cihazı</Link> ekranında ödenir
             </p>
           )}
           {s.provider !== 'kapali' && (
@@ -134,20 +135,9 @@ export default function OkcAdmin() {
         <Card flush title="TokenX Connect (Cloud)">
           <div className="space-y-3 p-4 text-sm">
             <div className="flex items-center gap-2">
-              {s.tokenx.configured ? <CheckCircle2 className="size-5 text-brand-500" /> : <XCircle className="size-5 text-danger-500" />}
-              {s.tokenx.configured ? `Bilgiler tanımlı · terminal ${s.tokenx.terminalId ?? '—'}${s.tokenx.branchId ? ` · şube ${s.tokenx.branchId}` : ''}` : 'Token bilgileri .env dosyasında eksik'}
+              {s.tokenx.configured ? <CheckCircle2 aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-success)]" /> : <XCircle aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-danger-ink)]" />}
+              {s.tokenx.configured ? `Bilgiler tanımlı · terminal ${s.tokenx.terminalId ?? '—'}${s.tokenx.branchId ? ` · şube ${s.tokenx.branchId}` : ''}` : 'Token bilgileri eksik; adımlar sayfanın sonunda'}
             </div>
-            {!s.tokenx.configured && (
-              <pre className="overflow-x-auto rounded-xl bg-surface-2 p-3 text-xs">{`TOKENX_AUTH_URL=     (Token'ın verdiği kimlik adresi)
-TOKENX_BASKET_URL=   (sepet API adresi)
-TOKENX_SETTINGS_URL= (client-settings adresi)
-TOKENX_CLIENT_ID=
-TOKENX_CLIENT_SECRET=
-TOKENX_TERMINAL_ID=  (cihazdaki QR'da, AV/AT ile başlar)
-TOKENX_BRANCH_ID=    (masada ödeme modu için)
-TOKENX_WEBHOOK_SECRET= (en az 16 karakter)
-LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
-            )}
             <div className="flex flex-wrap gap-2">
               <Button icon={<PlugZap className="size-4" />} loading={busy} disabled={!s.tokenx.configured} onClick={runTest}>
                 Bağlantıyı dene
@@ -171,7 +161,7 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
               {s.tokenx.webhookUrl ? `Webhook adresi: ${s.tokenx.webhookUrl}` : 'Webhook adresi yok: kafedeki sunucu internetten erişilemiyorsa LafPOS sepet durumunu 2,5 sn\'de bir sorgular; sonuç yine gelir'}
             </p>
             {s.lastError && (
-              <p className="rounded-xl bg-danger-50 p-2 text-xs text-danger-600 dark:bg-danger-800/30">
+              <p className={cn('rounded-xl p-2 text-xs', TONE_SOFT.danger)}>
                 Son hata ({fmtDateTime(s.lastError.at)}): {s.lastError.message}
               </p>
             )}
@@ -242,7 +232,7 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
 
       <Card flush title="Nasıl çalışır">
         <div className="flex gap-3 p-4 text-sm text-ink-2">
-          <MonitorSmartphone className="size-5 shrink-0 text-brand-600" />
+          <MonitorSmartphone aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-primary)]" />
           <ol className="list-decimal space-y-1 pl-4">
             <li>Ödeme penceresinde "Hesabı yazarkasaya gönder"e basılır (kalem seçerek bölünmüş hesap da gönderilebilir).</li>
             <li>Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar.</li>
@@ -251,6 +241,25 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
           </ol>
         </div>
       </Card>
+
+      {/* Token seçili ve bilgiler eksikken açık gelir: o an gereken tek şey bu */}
+      <SetupNotes open={s.provider === 'tokenx' && !s.tokenx.configured}>
+        <p>
+          TokenX Connect bilgileri kasa bilgisayarının ayarlarına (<code className={CODE}>.env</code>) yazılır, sonra "Bağlantıyı dene":
+        </p>
+        <pre className="overflow-x-auto rounded-lg bg-[var(--admin-surface-2)] p-3 font-mono text-xs leading-5 text-[var(--admin-text)]">{`TOKENX_AUTH_URL=     (Token'ın verdiği kimlik adresi)
+TOKENX_BASKET_URL=   (sepet API adresi)
+TOKENX_SETTINGS_URL= (client-settings adresi)
+TOKENX_CLIENT_ID=
+TOKENX_CLIENT_SECRET=
+TOKENX_TERMINAL_ID=  (cihazdaki QR'da, AV/AT ile başlar)
+TOKENX_BRANCH_ID=    (masada ödeme modu için)
+TOKENX_WEBHOOK_SECRET= (en az 16 karakter)
+LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
+        <p>
+          Ayrıntı ve diğer markalar için üreticiden istenecekler: <code className={CODE}>docs/04-YAZARKASA.md</code>
+        </p>
+      </SetupNotes>
     </div>
   );
 }

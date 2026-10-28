@@ -27,7 +27,8 @@ interface UserRow {
 type Draft = Omit<UserRow, 'id' | 'lastLoginAt'> & { id?: string; pin: string };
 
 const COLORS = ['#1e4031', '#6b1a2b', '#a87c2e', '#3f6b8a', '#5e8f45', '#a23e6b', '#9a3b2f', '#7a6a5f'];
-const ROLE_TONE: Record<Role, Tone> = { patron: 'accent', mudur: 'primary', kasiyer: 'info', garson: 'success', mutfak: 'warning', kurye: 'neutral' };
+/** Rol rozeti sakin: yalnız her şeyi gören patron vurgulu, gerisi gri */
+const roleTone = (role: Role): Tone => (role === 'patron' ? 'accent' : 'neutral');
 
 /** Son giriş: "az önce", "12 dk önce", "3 sa önce", sonra tarih (Innex: "Şu an aktif / 3 saat önce") */
 function since(at: number | null): string {
@@ -39,6 +40,9 @@ function since(at: number | null): string {
   return fmtDateTime(at);
 }
 
+/** Ad altındaki satır: "Son giriş 12 dk önce" ya da "Hiç girmedi" */
+const lastSeen = (at: number | null) => (at ? `Son giriş ${since(at).toLocaleLowerCase('tr-TR')}` : since(at));
+
 function Avatar({ name, color, size = 'md' }: { name: string; color: string; size?: 'md' | 'lg' }) {
   return (
     <span aria-hidden="true" className={cn('grid shrink-0 place-items-center rounded-full font-semibold text-white', size === 'lg' ? 'size-11 text-sm' : 'size-8 text-xs')} style={{ background: color }}>
@@ -48,8 +52,8 @@ function Avatar({ name, color, size = 'md' }: { name: string; color: string; siz
 }
 
 /**
- * Personel ve yetki (Innex personel listesi ve §3 fikir 9): rol rozeti, ek ve kaldırılan yetki satırda, son
- * giriş "3 sa önce" biçiminde; düzenleme sağdan açılan çekmecede, yetkiler tablo olarak. ?kisi=<id>|yeni.
+ * Personel (Innex personel listesi ve §3 fikir 9): rol rozeti, ek ve kaldırılan yetki satırda, son giriş adın
+ * altında "3 sa önce" biçiminde; düzenleme sağdan açılan çekmecede, yetkiler tablo olarak. ?kisi=<id>|yeni.
  */
 export default function UsersAdmin() {
   const qc = useQueryClient();
@@ -101,15 +105,15 @@ export default function UsersAdmin() {
           <Avatar name={u.name} color={u.color} />
           <span className="min-w-0">
             <span className="block truncate font-medium text-[var(--admin-text)]">{u.name}</span>
-            <span className="block text-xs text-[var(--admin-text-mute)]">{u.id === me?.id ? 'Siz' : ROLE_LABELS[u.role]}</span>
+            <span className="block text-xs text-[var(--admin-text-mute)]">{u.id === me?.id ? 'Siz' : lastSeen(u.lastLoginAt)}</span>
           </span>
         </span>
       ),
     },
-    { key: 'rol', header: 'Rol', cell: (u) => <Badge tone={ROLE_TONE[u.role]}>{ROLE_LABELS[u.role]}</Badge> },
+    { key: 'rol', header: 'Rol', cell: (u) => <Badge tone={roleTone(u.role)}>{ROLE_LABELS[u.role]}</Badge> },
     {
       key: 'yetki',
-      header: 'Kişiye özel yetki',
+      header: 'Ek yetki',
       cell: (u) =>
         u.permGrant.length || u.permRevoke.length ? (
           <span className="flex flex-wrap gap-1">
@@ -117,21 +121,23 @@ export default function UsersAdmin() {
             {u.permRevoke.length > 0 && <Badge tone="danger">−{u.permRevoke.length} kaldırılan</Badge>}
           </span>
         ) : (
-          <span className="text-[var(--admin-text-mute)]">Rolün yetkileri</span>
+          <span className="text-[var(--admin-text-mute)]">
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">Rolün yetkileri</span>
+          </span>
         ),
       hideOnPhone: true,
       hideBelow: 'xl',
     },
     { key: 'indirim', header: 'İndirim sınırı', align: 'right', cell: (u) => <span className="tabular-nums">%{u.maxDiscountPct}</span> },
-    { key: 'giris', header: 'Son giriş', cell: (u) => <span className="whitespace-nowrap text-[var(--admin-text-soft)]">{since(u.lastLoginAt)}</span> },
     { key: 'durum', header: 'Durum', cell: (u) => <Badge tone={u.active ? 'success' : 'neutral'} dot>{u.active ? 'Etkin' : 'Kapalı'}</Badge> },
   ];
 
   return (
     <>
       <PageHeader
-        title="Personel ve yetki"
-        description="Her kişi kendi PIN'iyle girer; yetkisi olmayan işlemi yetkili PIN'iyle onaylatır. Maliyet ve kâr yalnız 'Maliyet, kâr ve personel tutarları' yetkisiyle görünür"
+        title="Personel"
+        description="Her kişi kendi PIN'iyle girer; yetkisi olmayan işlemi yetkili PIN'iyle onaylatır"
         actions={
           <button type="button" className={BTN.primary} onClick={() => open('yeni')}>
             <Plus className="size-4" aria-hidden="true" />
@@ -162,8 +168,7 @@ export default function UsersAdmin() {
         rowClassName={(u) => !u.active && 'opacity-70'}
         phoneMeta={(u) => (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Badge tone={ROLE_TONE[u.role]}>{ROLE_LABELS[u.role]}</Badge>
-            <span>{since(u.lastLoginAt)}</span>
+            <Badge tone={roleTone(u.role)}>{ROLE_LABELS[u.role]}</Badge>
             {!u.active && <Badge>Kapalı</Badge>}
           </span>
         )}
@@ -234,7 +239,7 @@ function UserDrawer({ user, isMe, matrix, onClose, onSaved }: { user: UserRow | 
           {user ? user.name : 'Yeni personel'}
         </span>
       }
-      subtitle={user ? `${ROLE_LABELS[user.role]} · son giriş ${since(user.lastLoginAt).toLocaleLowerCase('tr-TR')}` : 'PIN 4-6 hane; kişi bu PIN ile girer'}
+      subtitle={user ? `${ROLE_LABELS[user.role]} · ${lastSeen(user.lastLoginAt).toLocaleLowerCase('tr-TR')}` : 'PIN 4-6 hane; kişi bu PIN ile girer'}
       footer={
         <>
           {user && !isMe && <Toggle checked={d.active} onChange={(v) => setD({ ...d, active: v })} label={d.active ? 'Etkin' : 'Kapalı'} />}

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { Link } from 'react-router';
 import { tl, tlCompact } from '@shared/money';
 import { fmtDateTime, fmtTime } from '@shared/time';
-import { Badge, BTN, Card, DefRow, EmptyState, type KpiCell, KpiStrip, PageHeader, type Tone } from '@/components/admin/ui';
+import { Badge, BTN, Card, EmptyState, IconBox, type KpiCell, KpiStrip, PageHeader, type Tone } from '@/components/admin/ui';
 import { ColumnChart } from '@/components/charts';
 import { PageLoading } from '@/components/ui/misc';
 import { get } from '@/lib/api';
@@ -56,7 +56,7 @@ export default function OverviewAdmin() {
           hue: 'blue',
           value: tl(d.netSales),
           delta: pct(d.compare.lastWeek.change),
-          reference: `Geçen hafta bu saate kadar ${tl(d.compare.lastWeek.netSales)}`,
+          reference: `Geçen hafta bu saatte ${tl(d.compare.lastWeek.netSales)}`,
         },
         {
           key: 'adisyon',
@@ -171,7 +171,7 @@ export default function OverviewAdmin() {
     <>
       <PageHeader
         title="Genel bakış"
-        description={d ? `${d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · ${fmtTime(d.now)} itibarıyla · rakamlar geçen haftanın aynı günü aynı saatiyle karşılaştırılır` : 'Bugünün rakamları için patron paneli yetkisi gerekir'}
+        description={d ? `${d.dayOpen ? 'Gün açık' : 'Gün kapalı'} · ${fmtTime(d.now)} · kıyas geçen haftanın aynı günü` : 'Bugünün rakamları için patron paneli yetkisi gerekir'}
         actions={
           <>
             <Link to="/raporlar" className={BTN.ghost}>
@@ -218,7 +218,11 @@ export default function OverviewAdmin() {
           </div>
 
           <div className="space-y-4">
-            <Card title="Dikkat isteyenler" subtitle={attention.length ? `${attention.length} konu` : 'Her şey yolunda'} flush>
+            <Card
+              title="Dikkat isteyenler"
+              actions={attention.length ? <Badge tone={attention.some((a) => a.tone === 'danger') ? 'danger' : 'warning'}>{attention.length}</Badge> : undefined}
+              flush
+            >
               {attention.length ? (
                 <ul className="divide-y divide-[var(--admin-divider)]">
                   {attention.map((a) => (
@@ -232,33 +236,29 @@ export default function OverviewAdmin() {
                   ))}
                 </ul>
               ) : (
-                <EmptyState bare title="Dikkat isteyen bir şey yok">
+                <EmptyState bare title="Her şey yolunda">
                   İptal, ikram ve kasa farkı uyarıları burada görünür
                 </EmptyState>
               )}
             </Card>
 
             <Card title="Sistem sağlığı" subtitle="Bağlantılar ve yedek">
-              <div className="-my-1">
+              <ul className="-my-2.5">
                 {health.map((h) => (
-                  <DefRow
-                    key={h.key}
-                    label={
-                      <span className="inline-flex items-center gap-2 text-[var(--admin-text-soft)]">
-                        {h.icon}
-                        {h.label}
-                      </span>
-                    }
-                  >
-                    <Badge tone={h.tone} dot>
+                  <li key={h.key} className="flex items-center gap-3 border-b border-[var(--admin-divider)] py-2.5 last:border-0">
+                    <IconBox hue="blue" size="sm">
+                      {h.icon}
+                    </IconBox>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-[var(--admin-text)]">{h.label}</span>
+                      <span className="block text-xs text-[var(--admin-text-mute)] [overflow-wrap:anywhere]">{h.detail}</span>
+                    </span>
+                    <Badge tone={h.tone} dot className="shrink-0">
                       {h.state}
                     </Badge>
-                    <span className="mt-0.5 block max-w-[13rem] truncate text-xs font-normal text-[var(--admin-text-mute)]" title={h.detail}>
-                      {h.detail}
-                    </span>
-                  </DefRow>
+                  </li>
                 ))}
-              </div>
+              </ul>
             </Card>
           </div>
         </div>

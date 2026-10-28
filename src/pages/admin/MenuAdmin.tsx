@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import type { ProductDTO } from '@shared/types';
-import { ActionMenu, ActionRow, ActionRows, Badge, BTN, Card, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, StatusTabs } from '@/components/admin/ui';
+import { ActionMenu, ActionRow, ActionRows, Badge, BTN, Card, CODE, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, SetupNotes, StatusTabs } from '@/components/admin/ui';
 import { Field, Input, Select, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { PageLoading } from '@/components/ui/misc';
@@ -42,7 +42,7 @@ const status = (p: ProductDTO) =>
 /** Ürünün kategori renginde baş harfleri (Innex tablosundaki avatar yerine) */
 function ProductMark({ name, color }: { name: string; color: string }) {
   return (
-    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-lg text-xs font-semibold text-white" style={{ background: color || '#616367' }}>
+    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-lg text-xs font-semibold text-white" style={{ background: color || 'var(--admin-text-mute)' }}>
       {name
         .split(/\s+/)
         .slice(0, 2)
@@ -194,7 +194,7 @@ export default function MenuAdmin() {
     <>
       <PageHeader
         title="Ürünler"
-        description="Ürünler tek yerde, laffogato panelinde yüklenir; site, uygulama ve kasa aynı menüyü okur (docs/06-TEK-SISTEM.md). Burada satış durumu, istasyon, kısa ad, porsiyon ve seçenek grupları düzenlenir; yerel ürün yalnız kafede satılan hizmetler içindir"
+        description="Ad, fiyat ve KDV sitede değişir; burada satış durumu, istasyon, kısa ad ve porsiyon"
         actions={
           <>
             <button type="button" className={BTN.ghost} onClick={syncPreview} disabled={syncing}>
@@ -287,6 +287,16 @@ export default function MenuAdmin() {
         }
       />
 
+      <div className="mt-4">
+        <SetupNotes summary="Menü nasıl çalışır">
+          <p>Ürünler tek yerde, laffogato panelinde eklenir; site, uygulama ve kasa aynı menüyü okur. Seçenek grupları da burada düzenlenir.</p>
+          <p>Yerel ürün yalnız kafede satılan hizmetler içindir (karaoke, etkinlik ücreti gibi).</p>
+          <p>
+            Site bağlantısı (<code className={CODE}>LAFFOGATO_URL</code>) yoksa sitede eklenen ürün kasaya gelmez. Ayrıntı: <code className={CODE}>docs/06-TEK-SISTEM.md</code>
+          </p>
+        </SetupNotes>
+      </div>
+
       {(selected || openId === 'yeni') && (
         <ProductDrawer
           key={openId}
@@ -323,7 +333,7 @@ export default function MenuAdmin() {
         }
       >
         <div className="p-4">
-          {preview?.warning ? <p className="mb-2 text-sm text-danger-500">{preview.warning}</p> : null}
+          {preview?.warning ? <p className="mb-2 text-sm text-[var(--admin-danger-ink)]">{preview.warning}</p> : null}
           {preview?.preview?.newCategories.length ? <p className="mb-2 text-sm">Yeni kategoriler: {preview.preview.newCategories.join(', ')}</p> : null}
           {preview?.preview?.changes.length ? (
             <ul className="divide-y divide-[var(--admin-divider)] rounded-xl border border-[var(--admin-border)]">

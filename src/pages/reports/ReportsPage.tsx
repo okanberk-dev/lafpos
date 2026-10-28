@@ -3,13 +3,13 @@ import { ArrowDownRight, ArrowUpRight, BadgePercent, CircleDollarSign, Download,
 import { useMemo, useState } from 'react';
 import { COMP_LABEL } from '@shared/comp';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
-import { tl } from '@shared/money';
+import { tl, tlShort } from '@shared/money';
 import type { CompKind } from '@shared/types';
 import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { AdminShell } from '@/components/admin/AdminShell';
-import { Card, KpiStrip, PageHeader, Segmented, StatusTabs } from '@/components/admin/ui';
+import { Card, CODE, KpiStrip, PageHeader, Segmented, SetupNotes, StatusTabs, TONE_SOFT } from '@/components/admin/ui';
 import { EmptyState, PageLoading, Stat } from '@/components/ui/misc';
 import { errorMessage, get, getToken } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -102,7 +102,7 @@ export default function ReportsPage() {
             value={period}
             onChange={setPeriod}
             options={(Object.keys(PERIOD_LABELS) as PeriodKey[]).map((k) => ({ value: k, label: PERIOD_LABELS[k] }))}
-            className="max-sm:w-full"
+            className="max-lg:w-full max-lg:[&>*]:grow"
           />
         }
       >
@@ -150,7 +150,7 @@ function Delta({ value }: { value: number | null }) {
   if (value == null) return <span className="text-muted">önceki dönem yok</span>;
   const up = value >= 0;
   return (
-    <span className={cn('inline-flex items-center gap-0.5 font-medium', up ? 'text-brand-500' : 'text-danger-500')}>
+    <span className={cn('inline-flex items-center gap-0.5 font-medium', up ? 'text-[var(--admin-success)]' : 'text-[var(--admin-danger-ink)]')}>
       {up ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}%{Math.abs(value).toLocaleString('tr-TR')} önceki döneme göre
     </span>
   );
@@ -183,6 +183,14 @@ interface Summary {
 
 const TYPE_LABEL: Record<string, string> = ORDER_TYPE_LABEL;
 
+/** Kıyas döneminin KPI referansına sığan adı (sunucunun uzun adı `title`'da kalır) */
+function previousShort(label: string): string {
+  if (label.startsWith('önceki ay')) return 'Önceki ay';
+  if (label.startsWith('geçen hafta')) return 'Geçen hafta';
+  const weeks = label.match(/^(\d+) hafta/)?.[1];
+  return weeks ? `${weeks} hafta önce` : 'Önceki dönem';
+}
+
 /** Rapor alınamadı: sıfır ya da "satış yok" gösterilmez (yanlış rakam gibi okunur), neden ve yeniden dene */
 function ReportError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
   return (
@@ -203,8 +211,10 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
   if (q.isError) return <ReportError error={q.error} onRetry={() => void q.refetch()} />;
   const s = q.data;
   if (!s) return null;
+  const prev = previousShort(s.previous.label);
   return (
     <div className="space-y-4">
+      {/* Etiket en çok 18, referans en çok 30 karakter; ayrıntı döküm kartlarında ve tıklanınca açılan raporda */}
       <KpiStrip
         cells={[
           {
@@ -214,12 +224,27 @@ function SummaryReport({ range, onOpen }: { range: Range; onOpen: (key: ReportKe
             hue: 'blue',
             value: tl(s.netSales),
             delta: s.previous.change == null ? null : { text: `${s.previous.change >= 0 ? '▲' : '▼'} %${Math.abs(s.previous.change).toLocaleString('tr-TR')}`, good: s.previous.change >= 0 },
-            reference: s.previous.change == null ? `Kıyas (${s.previous.label}) satışsız` : `${s.previous.label}: ${tl(s.previous.netSales)}`,
+            reference: <span title={`Kıyas: ${s.previous.label}`}>{s.previous.change == null ? `${prev} satış yok` : `${prev}: ${tlShort(s.previous.netSales)}`}</span>,
           },
-          { key: 'adisyon', label: 'Adisyon', icon: <Receipt />, hue: 'violet', value: s.receipts.toLocaleString('tr-TR'), reference: `Ortalama ${tl(s.avgCheck)}${s.perGuest != null ? ` · kişi başı ${tl(s.perGuest)}` : ''} · önceki ${s.previous.receipts}`, onClick: () => onOpen('adisyon') },
+          {
+            key: 'adisyon',
+            label: 'Adisyon',
+            icon: <Receipt />,
+            hue: 'violet',
+            value: s.receipts.toLocaleString('tr-TR'),
+            reference: (
+              <>
+                <span className="block">
+                  Ortalama {tlShort(s.avgCheck)} · önceki {s.previous.receipts}
+                </span>
+                {s.perGuest != null && <span className="block">Kişi başı {tlShort(s.perGuest)}</span>}
+              </>
+            ),
+            onClick: () => onOpen('adisyon'),
+          },
           { key: 'urun', label: 'Satılan ürün', icon: <Package />, hue: 'amber', value: s.itemsSold.toLocaleString('tr-TR'), reference: s.days > 1 ? `${s.days} iş günü` : 'Tek iş günü', onClick: () => onOpen('urunler', { product: 'urun' }) },
-          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tl(s.discounts)} · ikram ${tl(s.complimentary - s.odenmez - s.zayi)}${s.odenmez ? ` · ödenmez ${tl(s.odenmez)}` : ''}${s.zayi ? ` · zayi ${tl(s.zayi)}` : ''} · iptal ${tl(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
-          { key: 'online', label: 'Online (sitede ödendi)', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `${s.online.orders} sipariş, ciroya dahil değil` },
+          { key: 'indirim', label: 'İndirim ve ikram', icon: <BadgePercent />, hue: 'rose', value: tl(s.discounts + s.complimentary), reference: `İndirim ${tlShort(s.discounts)} · iptal ${tlShort(s.voided)}`, onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }) },
+          { key: 'online', label: 'Online', icon: <ShoppingBag />, hue: 'green', value: tl(s.online.amount), reference: `Sitede ödendi · ${s.online.orders} sipariş, ciroya dahil değil` },
         ]}
       />
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
@@ -378,7 +403,7 @@ function ProductsReport({ range, onExport }: { range: Range; onExport: () => voi
       {withCost && (
         <p className="px-4 pb-3 text-xs text-muted">
           Brüt kâr: KDV hariç ciro − lafmaliyet reçete maliyeti. Maliyetler gün sonunda günde bir kendiliğinden, Yönetim › Entegrasyon'dan elle çekilir
-          {staleCostsText(data.data?.costsAt) && <span className="block font-medium text-warn-700 dark:text-warn-300">{staleCostsText(data.data?.costsAt)}</span>}
+          {staleCostsText(data.data?.costsAt) && <span className="block font-medium text-[var(--admin-warning)]">{staleCostsText(data.data?.costsAt)}</span>}
         </p>
       )}
     </Card>
@@ -680,7 +705,7 @@ function ChecksReport({ range, onExport }: { range: Range; onExport: () => void 
               {rows.map((o) => (
                 <tr key={o.id} className="border-b border-line/60 last:border-0">
                   <td className="px-4 py-2 font-medium">
-                    #{o.no} {o.status === 'iptal' && <span className="ml-1 rounded bg-danger-100 px-1.5 text-xs text-danger-600">iptal</span>}
+                    #{o.no} {o.status === 'iptal' && <span className="ml-1 rounded bg-[var(--admin-danger-soft)] px-1.5 text-xs text-[var(--admin-danger-ink)]">iptal</span>}
                   </td>
                   <td className="px-2 py-2">{o.place ?? TYPE_LABEL[o.type] ?? o.type}</td>
                   <td className="px-2 py-2 text-muted">
@@ -743,7 +768,7 @@ function ItemsReport({ range, kind, onExport }: { range: Range; kind: 'iptal' | 
                     {r.qty}× {r.name}
                     {r.compKind && r.compKind !== 'ikram' && <span className="ml-1.5 rounded bg-[var(--admin-warning-soft)] px-1.5 text-xs text-[var(--admin-warning)]">{COMP_LABEL[r.compKind].toLocaleLowerCase('tr-TR')}</span>}
                     {kind === 'iptal' && (r.afterSend || r.billPrinted) && (
-                      <span className="ml-1.5 rounded bg-danger-100 px-1.5 text-xs text-danger-600">{r.billPrinted ? 'hesap sonrası' : 'hazırlandıktan sonra'}</span>
+                      <span className="ml-1.5 rounded bg-[var(--admin-danger-soft)] px-1.5 text-xs text-[var(--admin-danger-ink)]">{r.billPrinted ? 'hesap sonrası' : 'hazırlandıktan sonra'}</span>
                     )}
                   </td>
                   <td className="px-2 py-2 text-ink-2">{r.reason ?? '—'}</td>
@@ -841,21 +866,30 @@ function StaffReport({ range }: { range: Range }) {
  */
 function ExportReport({ range, linked, onDownload }: { range: Range; linked: boolean; onDownload: () => void }) {
   return (
-    <Card flush title="lafmaliyet aktarımı">
-      <div className="space-y-3 p-5 text-sm">
-        <p>
-          Seçili dönemin ürün satış listesi lafmaliyet'in <b>Satışlar</b> ekranının okuduğu biçimde iner (Ürün; Adet; Tutar, KDV dahil). İkram, iptal ve sitede ödenmiş online siparişler listeye girmez; ekstra shot, şurup ve alternatif süt ayrı satır olarak çıkar.
-        </p>
-        {linked && (
-          <p className="rounded-lg border border-warn-200 bg-warn-100 px-3 py-2 text-warn-700 dark:border-transparent dark:bg-warn-800 dark:text-warn-300">
-            lafmaliyet bağlantısı kurulu: günler gün sonunda kendiliğinden gidiyor. Bu liste yalnız bağlantı yokken ya da lafmaliyet'teki geçiş gününden önceki aylar için; geçiş gününden sonraki günleri Satışlar'a yüklemeyin, aynı satış iki kez sayılır
+    <div className="space-y-4">
+      <Card flush title="lafmaliyet aktarımı">
+        <div className="space-y-3 p-5 text-sm">
+          <p>
+            Seçili dönemin ürün satış listesi lafmaliyet'in <b>Satışlar</b> ekranının okuduğu biçimde iner (Ürün; Adet; Tutar, KDV dahil). İkram, iptal ve sitede ödenmiş online siparişler listeye girmez; ekstra shot, şurup ve alternatif süt ayrı satır olarak çıkar.
           </p>
-        )}
-        <Button variant="primary" icon={<FileSpreadsheet className="size-4" />} onClick={onDownload}>
-          Satış listesini indir ({rangeLabel(range)})
-        </Button>
-        {!linked && <p className="text-xs text-muted">lafmaliyet bağlantısı kurulunca günlük Z ve satış verisi gün sonunda kendiliğinden gider (açılış adımları docs/03-ENTEGRASYON.md'de)</p>}
-      </div>
-    </Card>
+          {linked && (
+            <p className={cn('rounded-lg px-3 py-2', TONE_SOFT.warning)}>
+              lafmaliyet bağlantısı kurulu: günler gün sonunda kendiliğinden gidiyor. Bu liste yalnız bağlantı yokken ya da lafmaliyet'teki geçiş gününden önceki aylar için; geçiş gününden sonraki günleri Satışlar'a yüklemeyin, aynı satış iki kez sayılır
+            </p>
+          )}
+          <Button variant="primary" icon={<FileSpreadsheet className="size-4" />} onClick={onDownload}>
+            Satış listesini indir ({rangeLabel(range)})
+          </Button>
+          {!linked && <p className="text-xs text-muted">lafmaliyet bağlantısı kurulunca günlük Z ve satış verisi gün sonunda kendiliğinden gider</p>}
+        </div>
+      </Card>
+      {!linked && (
+        <SetupNotes>
+          <p>
+            Bağlantının açılış adımları <code className={CODE}>docs/03-ENTEGRASYON.md</code> belgesinde.
+          </p>
+        </SetupNotes>
+      )}
+    </div>
   );
 }

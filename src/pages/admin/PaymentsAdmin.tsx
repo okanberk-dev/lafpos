@@ -72,7 +72,7 @@ export default function PaymentsAdmin() {
     <>
       <PageHeader
         title="Ödeme türleri"
-        description="Her tür lafmaliyet Kasa raporundaki bir alana (Nakit, Kart, Yemek kartı, Online, Diğer) ve varsa komisyon kanalına bağlanır"
+        description="Her tür lafmaliyet Kasa raporunda bir alana ve varsa komisyon kanalına bağlanır"
         actions={
           <button type="button" className={BTN.primary} onClick={() => setEdit({ name: '', kind: 'yemek', zField: 'meal_card', channel: null, color: '#3f6b8a', sort: 20, active: true })}>
             <Plus className="size-4" aria-hidden="true" />
