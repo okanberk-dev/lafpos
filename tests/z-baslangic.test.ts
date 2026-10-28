@@ -2,7 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { LiveEvent } from '@shared/events';
 import { businessDate } from '@shared/time';
-import { nextZNo, Z_NO_MAX } from '@shared/z-no';
+import { nextZNo, Z_NO_MAX, zStartPlaceholder } from '@shared/z-no';
 import { type Harness, startApp } from './harness';
 
 /**
@@ -56,6 +56,16 @@ describe('nextZNo', () => {
     expect(nextZNo(1250, 1201)).toBe(1251);
     expect(nextZNo(7, 1)).toBe(8);
     expect(Z_NO_MAX).toBe(99_999_999);
+  });
+});
+
+describe('zStartPlaceholder', () => {
+  it('kayıtlı Z yoksa "Boşsa 1’den", gün açıldıktan sonra boş alan son Z’den sürer; son Z bilinmiyorsa yer tutucu yok', () => {
+    expect(zStartPlaceholder(0)).toBe('Boşsa 1’den');
+    expect(zStartPlaceholder(7)).toBe('Boşsa son Z’den devam eder');
+    expect(zStartPlaceholder(null)).toBeUndefined();
+    // Yer tutucu boş alanın davranışını söyler: boş alan nextZNo'ya null gider
+    expect(nextZNo(7, null)).toBe(8);
   });
 });
 

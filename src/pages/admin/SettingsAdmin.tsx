@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { parseTL, tlCompact } from '@shared/money';
 import { SERVICE_MODE_HINT, SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode, serviceModeOf } from '@shared/service-mode';
 import { fmtDateTime } from '@shared/time';
-import { nextZNo } from '@shared/z-no';
+import { nextZNo, zStartPlaceholder } from '@shared/z-no';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Segmented, Textarea, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
@@ -371,7 +371,7 @@ export default function SettingsAdmin() {
                   }}
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  placeholder="Boşsa 1’den"
+                  placeholder={zStartPlaceholder(lastZ)}
                   aria-describedby="z-chain-info"
                   className="tabular text-right sm:max-w-48"
                 />

@@ -78,7 +78,9 @@ Her dalga: kod + birim testleri + tip denetimi + tarayıcıda deneme + GitHub'a 
    (`askOptions`): "Zorunlu seçim varsa" (`zorunlu`, varsayılan) ya da "Seçenekli her üründe" (`hep`: Latte da
    pencereyle). Tek boylu seçenekli ürün her iki ayarda pencereyle eklenir. Sunucu değişmedi: kasa satışında (eski
    istemci) seçeneksiz gelen zorunlu tek seçimlik gruba sunucu varsayılanı yazar; varsayılan kasada tükendiyse 409
-   `option_sold_out` (`docs/03-ENTEGRASYON.md` §2.3); paket platformu ve site satırına varsayılan yazılmaz, seçim notta
+   `option_sold_out` ("Orta tükendi; Şeker seçin", `docs/03-ENTEGRASYON.md` §2.3). İsteğe bağlı grubun tükenen
+   varsayılanı (Normal süt) satışı durdurmaz: sunucu o grup için seçenek yazmaz, pencerede yalnız "Normal tükendi"
+   bilgisi çıkar (su ve espresso süt sormadan satılır). Paket platformu ve site satırına varsayılan yazılmaz, seçim notta
    ya da sitenin döküm metninde gelir. Kurallar `src/lib/boot.ts` (`needsChoice`, `asksOptions`, `defaultPicks`,
    `missingChoice`), testi `tests/varyant-secenek.test.ts`
 6. Masa işlemleri: taşı, birleştir, kalem taşı (böl), kişi sayısı, garson değiştir
@@ -200,15 +202,18 @@ yeniden denenmez) `docs/03-ENTEGRASYON.md` §2.3. Benzerleri: Square'in hızlı 
 (gönderirken ya da öderken masa no sorar), tezgâhta numaratör veren kafeler.
 
 **Seçenek grupları** (28 Ekim 2026, `claude/k-secenek`): kasaya özel (yerel) grup, ürün çekmecesindeki "Yeni grup"
-ile orada açılır ve ürüne seçili gelir; ürün ve grup bağları tek istekte, tek işlemde yazılır (`POST /admin/products`
+ile orada açılır ve ürüne seçili gelir (orada "Grup açık" anahtarı yok: yeni grup hep açık); ürün ve grup bağları tek
+istekte, tek işlemde yazılır (`POST /admin/products`
 ve `PATCH /admin/products/:id` gövdesinde isteğe bağlı `groupIds`; gönderilmezse bağlar değişmez, eski
 `PUT /admin/products/:id/groups` geriye uyum için yerinde). Grup penceresi (`src/components/admin/OptionGroupEditor.tsx`)
 Seçenekler'de bağlı ürünleri de seçer (`productIds`, aynı işlem; yalnız bağlar için `PUT /admin/option-groups/:id/products`:
 yeni bağ ürünün öteki gruplarının sonuna eklenir, bir ürüne en çok 12 grup) ve grubu kapatır ("Grup açık"; kapalı grup
 kasada sorulmaz, bağlar durur). Denetim kaydı: seçenek ek fiyatı `menu.option_price` (eski → yeni, eklenen ve
 kaldırılan seçenek, tek seçimlik grubun varsayılanı ücretli bir seçenekten ya da ücretli bir seçeneğe geçince
-`defaultChange`: seçeneksiz kasa satışının tutarı değişir; yalnız ad ya da ücretsizden ücretsize varsayılan değişince
-yazılmaz), ürün ↔ grup bağı `menu.product_groups` (eklenen, çıkarılan);
+`defaultChange`: seçeneksiz kasa satışının tutarı değişir; etkin varsayılan grubun açıklığına bağlı, ücretli
+varsayılanlı grubu kapatmak "grup kapatıldı; varsayılan Karton +₺5,00 → yok", açmak tersini yazar; yalnız ad,
+ücretsizden ücretsize varsayılan ya da ücretsiz varsayılanlı grubun açılıp kapanması yazılmaz), ürün ↔ grup bağı
+`menu.product_groups` (eklenen, çıkarılan);
 ikisi de yazmayla aynı işlemde. Süt, şurup ve shot sitenin kod sabitinden gelir (laffogato
 `src/lib/mobile/customization.ts`, mobil v1 sözleşmesi); LafPOS'ta salt okunur, panelden düzenlenmez. Testler
 `tests/secenek-grubu.test.ts`, e2e'de `/yonetim/menu` › `yeni-urun` ve `yeni-grup` durumları ve telefonda akış.

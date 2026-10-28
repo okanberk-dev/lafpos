@@ -195,13 +195,20 @@ yetkisi olan da) Tükenen ürünler › Seçenekler'den seçeneği Tükendi yapa
 {soldOut}`; denetim kaydı `menu.option_sold_out`, `menu` olayıyla bütün kasalar anında görür). Site grubunun seçeneği de
 işaretlenir. Sözleşmede böyle bir alan olmadığı için siteye ve uygulamaya gitmez; menü senkronu ve Yönetim › Seçenekler
 düzenlemesi işarete dokunmaz, gün açılışında sıfırlanmaz (ürünün Tükendi'si gibi). Seçenek penceresinde tükenen seçenek
-gri ve "Tükendi" yazar, seçilemez; varsayılanı tükenen grup (normal süt) önseçili gelmez, başka biri seçilene kadar Ekle
-kapalıdır, hızlı ekleme de pencereyi açar. Pencere açıkken tükenen ya da sepetteki gönderilmemiş satırda seçili olan
-seçenek seçili kalır (seçim, not ve adet korunur): grubu "Yulaf tükendi, başka birini seçin" der, Ekle / Güncelle
-kasiyer onu bırakana ya da başkasını seçene dek kapalıdır. Sunucu yalnız kasa satışını (`POST /api/orders/:id/items`)
-reddeder: tükenen seçenek seçildiyse ya da tek seçimlik grup boş gönderildi ve varsayılanı tükendiyse 409
-`option_sold_out` ("Yulaf tükendi", "Normal tükendi; Süt seçin"). Siteden gelen ödenmiş sipariş ve paket platformu
-siparişi reddedilmez.
+gri ve "Tükendi" yazar, seçilemez. Varsayılanı tükenen grup önseçili gelmez. Zorunlu grupta (Türk kahvesinde Orta şeker)
+başka biri seçilene kadar Ekle kapalıdır, hızlı ekleme de pencereyi açar. İsteğe bağlı grupta (Normal süt) satış
+durmaz: grup başlığında yalnız bilgi notu ("Normal tükendi") çıkar, Ekle açıktır, hızlı ekleme pencere açmaz ve sunucu
+o grup için seçenek yazmaz. Site Süt ve Kavrum gruplarını sudan çaya bütün içeceklere bağlar; normal süt bitti diye su
+ve espresso satılamaz olmasın, yerine Laktozsuz ya da Yulaf da yazılmasın (lafmaliyet'e yanlış `ALTERNATIF SÜT`
+satırı, fazladan ek fiyat). Pencere açıkken tükenen ya da sepetteki gönderilmemiş satırda seçili olan seçenek seçili
+kalır (seçim, not ve adet korunur): grubu "Yulaf tükendi, başka birini seçin" der, alt çubuk aynı nedeni "Süt: ..."
+diye yazar, Ekle / Güncelle kasiyer onu bırakana ya da başkasını seçene dek kapalıdır. Sepetteki gönderilemeyecek satırın
+altında kırmızı neden yazar ("Yulaf tükendi", "Orta tükendi, şeker seçin", grubu kapandıysa "Seçeneği kalktı,
+düzenleyin"); dokununca düzenleme penceresi açılır. Pencere açıkken ürünün bir grubu kapanır ya da açılırsa seçim
+uzlaştırılır: kapanan grubun seçimi atılır, yeni görünen grubun varsayılanı seçili gelir. Sunucu yalnız kasa satışını
+(`POST /api/orders/:id/items`) reddeder: tükenen seçenek açıkça seçildiyse (her grupta) ya da zorunlu tek seçimlik grup
+boş gönderildi ve varsayılanı tükendiyse 409 `option_sold_out` ("Yulaf tükendi", "Orta tükendi; Şeker seçin"). Siteden
+gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez.
 
 **Porsiyon:** siteye bağlı ürünün porsiyonu bitince Tükendi yazımı adisyon kalemiyle aynı işlemde giden kutusuna
 girer (`outbox`: target `laffogato`, kind `menu.isActive`, ürün başına tek kayıt `menu:<extId>`, son istenen durum) ve

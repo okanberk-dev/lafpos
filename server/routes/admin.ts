@@ -295,9 +295,11 @@ const effectiveDefault = (kind: GroupKind, items: PricedItem[]) => (kind === 'si
 
 /**
  * Seçenek ek fiyatı denetim kaydına yazılır (AGENTS kural 4): eski → yeni fiyat, eklenen ve kaldırılan seçenek, ve
- * tek seçimlik grubun varsayılanı ücretli bir seçenekten ya da ücretli bir seçeneğe geçtiyse (seçeneksiz kasa
- * satışının tutarı değişir: "varsayılan Cam → Karton +₺5,00"). Yalnız ad, adet sınırı ya da ücretsizden ücretsize
- * varsayılan değiştiyse kayıt yok.
+ * tek seçimlik grubun etkin varsayılanı ücretli bir seçenekten ya da ücretli bir seçeneğe geçtiyse (seçeneksiz kasa
+ * satışının tutarı değişir: "varsayılan Cam → Karton +₺5,00"). Etkin varsayılan grubun açıklığına bağlıdır: kapalı
+ * grup kasada yoktur, varsayılanı yazılmaz. Ücretli varsayılanlı grubu kapatmak "grup kapatıldı; varsayılan Karton
+ * +₺5,00 → yok", açmak tersini yazar. Yalnız ad, adet sınırı, ücretsizden ücretsize varsayılan ya da ücretsiz
+ * varsayılanlı grubun açılıp kapanması kayıt yazmaz.
  */
 function auditOptionPrices(
   t: Tx,
@@ -306,7 +308,7 @@ function auditOptionPrices(
   group: { id: string; name: string },
   before: PricedItem[],
   after: PricedItem[],
-  { created = false, kinds }: { created?: boolean; kinds?: { from: GroupKind; to: GroupKind } } = {},
+  { created = false, kinds, active }: { created?: boolean; kinds?: { from: GroupKind; to: GroupKind }; active?: { from: boolean; to: boolean } } = {},
 ) {
   const was = before.filter((i) => i.active);
   const now = after.filter((i) => i.active);
@@ -316,8 +318,9 @@ function auditOptionPrices(
   });
   const added = now.filter((a) => !was.some((b) => b.id === a.id)).map(({ id, name, price }) => ({ id, name, price }));
   const removed = was.filter((b) => !now.some((a) => a.id === b.id)).map(({ id, name, price }) => ({ id, name, price }));
-  const d0 = kinds ? effectiveDefault(kinds.from, was) : null;
-  const d1 = kinds ? effectiveDefault(kinds.to, now) : null;
+  const d0 = kinds && (active?.from ?? true) ? effectiveDefault(kinds.from, was) : null;
+  const d1 = kinds && (active?.to ?? true) ? effectiveDefault(kinds.to, now) : null;
+  const toggled = active && active.from !== active.to ? active.to : null;
   const defaultChange =
     d0?.id !== d1?.id && ((d0?.price ?? 0) > 0 || (d1?.price ?? 0) > 0)
       ? { from: d0 && { name: d0.name, price: d0.price }, to: d1 && { name: d1.name, price: d1.price } }
@@ -325,6 +328,7 @@ function auditOptionPrices(
   if (!changes.length && !added.length && !removed.length && !defaultChange) return;
   const priced = (i: { name: string; price: number }) => (i.price ? `${i.name} +${tl(i.price)}` : i.name);
   const parts = [
+    toggled === null ? '' : toggled ? 'grup açıldı' : 'grup kapatıldı',
     ...changes.map((ch) => `${ch.name} ${tl(ch.from)} → ${tl(ch.to)}`),
     added.length ? `eklenen ${added.map(priced).join(', ')}` : '',
     removed.length ? `kaldırılan ${removed.map((i) => i.name).join(', ')}` : '',
@@ -336,7 +340,7 @@ function auditOptionPrices(
     entity: 'option_group',
     entityId: group.id,
     message: created ? `${user.name} "${group.name}" seçenek grubunu ekledi: ${parts.join('; ')}` : `${user.name} ${group.name} seçeneklerini değiştirdi: ${parts.join('; ')}`,
-    data: { changes, added, removed, ...(defaultChange ? { defaultChange } : {}) },
+    data: { changes, added, removed, ...(defaultChange ? { defaultChange } : {}), ...(toggled === null ? {} : { groupActive: toggled }) },
   });
 }
 
@@ -388,7 +392,7 @@ adminRoutes.put('/option-groups/:id', async (c) => {
       }
     });
     for (const e of existing) if (!keep.has(e.id)) t.update(schema.optionItems).set({ active: false }).where(eq(schema.optionItems.id, e.id)).run();
-    auditOptionPrices(t, fx, user, { id: g.id, name: input.name }, existing, after, { kinds: { from: g.kind, to: input.kind } });
+    auditOptionPrices(t, fx, user, { id: g.id, name: input.name }, existing, after, { kinds: { from: g.kind, to: input.kind }, active: { from: g.active, to: input.active } });
     if (input.productIds && productNames) writeGroupProducts(t, fx, user, { id: g.id, name: input.name }, input.productIds, productNames);
   });
   fx.emit({ topic: 'menu', kind: 'group.updated', byUserId: user.id }).flush();

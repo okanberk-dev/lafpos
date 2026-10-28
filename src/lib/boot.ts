@@ -19,11 +19,12 @@ export function productGroups(boot: BootstrapDTO, p: ProductDTO): OptionGroupDTO
 }
 
 /**
- * Hızlı eklemede (seçeneksiz) sunucu tek seçimlik grupların varsayılanını yazar; varsayılanı kasada tükenen üründe
- * seçenek penceresi açılır (sunucu 409 `option_sold_out` döner)
+ * Hızlı eklemede (seçeneksiz) sunucu tek seçimlik grupların varsayılanını yazar; zorunlu grubun varsayılanı kasada
+ * tükendiyse seçenek penceresi açılır (sunucu 409 `option_sold_out` döner). İsteğe bağlı grubun tükenen varsayılanı
+ * (Normal süt) hızlı eklemeyi durdurmaz: sunucu o grup için seçenek yazmaz, su ve espresso sorulmadan eklenir
  */
 export function soldOutDefault(boot: BootstrapDTO, p: ProductDTO): boolean {
-  return productGroups(boot, p).some((g) => g.kind === 'single' && g.items.some((i) => i.isDefault && i.soldOut));
+  return productGroups(boot, p).some((g) => g.kind === 'single' && g.required && g.items.some((i) => i.isDefault && i.soldOut));
 }
 
 export function sizePrice(p: ProductDTO, size: Size): number {
@@ -110,10 +111,33 @@ export function defaultPicks(groups: OptionGroupDTO[]): Record<string, number> {
 /**
  * Sepetteki satırı düzenlerken ilk seçim: satırın seçimleri olduğu gibi. Bu arada tükenen seçenek de seçili kalır
  * (`pickHint` uyarır, Güncelle kapalı, kasiyer bırakır ya da başkasını seçer); süzülse isteğe bağlı grup boş kalır,
- * sunucu varsayılanı yazardı (müşteri yulaf istemişti, normal süt giderdi)
+ * sunucu varsayılanı yazardı (müşteri yulaf istemişti, normal süt giderdi). Pencere bunu `knownPicks`'ten geçirir:
+ * grubu kapanan ya da kaldırılan seçenek düşer
  */
 export function editingPicks(options: { itemId: string; qty?: number }[]): Record<string, number> {
   return Object.fromEntries(options.map((o) => [o.itemId, o.qty ?? 1]));
+}
+
+/**
+ * Seçimden ürünün açık gruplarında olmayan seçenekleri atar (grup kapandı, seçenek kaldırıldı): kalsa sunucu 400
+ * `option_invalid` döner ve bütün bekleyen satırlar takılır. Tükenen seçenek açılış verisinde durur, korunur.
+ * Atılacak bir şey yoksa aynı nesne döner
+ */
+export function knownPicks(groups: OptionGroupDTO[], picks: Record<string, number>): Record<string, number> {
+  const known = new Set(groups.flatMap((g) => g.items.map((i) => i.id)));
+  const ids = Object.keys(picks);
+  return ids.every((id) => known.has(id)) ? picks : Object.fromEntries(ids.filter((id) => known.has(id)).map((id) => [id, picks[id]!]));
+}
+
+/**
+ * Pencere açıkken ürünün grupları değişti (Yönetim › Seçenekler'de grup kapandı ya da açıldı, menü olayı): bilinmeyen
+ * seçenekler atılır (`knownPicks`), `seen`'de olmayan, yeni görünen grubun varsayılanı seçili gelir (`defaultPicks`;
+ * ücretli varsayılan ekranda seçili görünmeden ücrete eklenmesin). Değişen bir şey yoksa aynı nesne döner
+ */
+export function reconcilePicks(groups: OptionGroupDTO[], picks: Record<string, number>, seen: ReadonlySet<string>): Record<string, number> {
+  const kept = knownPicks(groups, picks);
+  const added = defaultPicks(groups.filter((g) => !seen.has(g.id)));
+  return Object.keys(added).length ? { ...kept, ...added } : kept;
 }
 
 /**
@@ -129,16 +153,47 @@ export function pickSingle(g: OptionGroupDTO, picks: Record<string, number>, ite
 
 /**
  * Tükenen seçenek yüzünden seçim bekleyen grubun uyarısı; varken Ekle kapalı (sunucu 409 `option_sold_out` döner).
- * Tek seçimlik grupta bir şey seçilmediyse sunucu varsayılanı yazar: o tükendiyse başkası seçilir. Seçiliyken
- * tükenen (başka kasa işaretledi, ya da sepetteki satır düzenleniyor) kaldırılır
+ * Seçiliyken tükenen (başka kasa işaretledi, ya da sepetteki satır düzenleniyor) her grupta bırakılır. Zorunlu tek
+ * seçimlik grupta bir şey seçilmediyse sunucu varsayılanı yazar: o tükendiyse başkası seçilir. İsteğe bağlı grubun
+ * tükenen varsayılanı satışı durdurmaz (sunucu o grup için seçenek yazmaz); onu yalnız `pickNote` söyler
  */
 export function pickHint(g: OptionGroupDTO, picks: Record<string, number>): string | null {
   const gone = g.items.find((i) => i.soldOut && picks[i.id]);
   if (gone) return `${gone.name} tükendi, ${g.kind === 'single' ? 'başka birini seçin' : 'kaldırın'}`;
-  if (g.kind !== 'single' || g.items.some((i) => picks[i.id])) return null;
+  if (g.kind !== 'single' || !g.required || g.items.some((i) => picks[i.id])) return null;
   const d = g.items.find((i) => i.isDefault);
   if (d) return d.soldOut ? `${d.name} tükendi, başka birini seçin` : null;
-  return g.required && g.items.some((i) => i.soldOut) ? 'Birini seçin' : null;
+  return g.items.some((i) => i.soldOut) ? 'Birini seçin' : null;
+}
+
+/**
+ * İsteğe bağlı tek seçimlik grupta bir şey seçilmedi ve varsayılan kasada tükendi: bilgi notu ("Normal tükendi"),
+ * Ekle açık kalır; sunucu o grup için seçenek yazmaz (su, espresso süt sormadan satılır)
+ */
+export function pickNote(g: OptionGroupDTO, picks: Record<string, number>): string | null {
+  if (g.kind !== 'single' || g.required || g.items.some((i) => picks[i.id])) return null;
+  const d = g.items.find((i) => i.isDefault);
+  return d?.soldOut ? `${d.name} tükendi` : null;
+}
+
+/**
+ * Gönderilmemiş satırı sunucu neden reddeder (sepette satırın altında kırmızı; dokununca düzenleme penceresi açılır):
+ * seçili seçenek tükendi ("Yulaf tükendi"), zorunlu grupta seçim yok ve varsayılanı tükendi ("Orta tükendi, şeker
+ * seçin") ya da varsayılanı yok ("Şeker seçin"), ya da seçeneğinin grubu kapandı / seçenek kaldırıldı. Yoksa null.
+ * Kurallar sunucunun `resolveOptions`'ıyla aynı
+ */
+export function pendingProblem(boot: BootstrapDTO, p: ProductDTO, options: { itemId: string; qty?: number }[]): string | null {
+  const groups = productGroups(boot, p);
+  const picks = editingPicks(options);
+  for (const g of groups) {
+    const gone = g.items.find((i) => i.soldOut && (picks[i.id] ?? 0) > 0);
+    if (gone) return `${gone.name} tükendi`;
+    if (!g.required || g.kind === 'counter' || g.items.some((i) => (picks[i.id] ?? 0) > 0)) continue;
+    const d = g.kind === 'single' ? g.items.find((i) => i.isDefault) : undefined;
+    if (!d) return `${g.name} seçin`;
+    if (d.soldOut) return `${d.name} tükendi, ${g.name.toLocaleLowerCase('tr-TR')} seçin`;
+  }
+  return knownPicks(groups, picks) === picks ? null : 'Seçeneği kalktı, düzenleyin';
 }
 
 /** Seçim bekleyen ilk zorunlu grup: varken pencerede Ekle kapalı, altında "Şeker seçin" */

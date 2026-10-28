@@ -58,6 +58,7 @@ export function OptionGroupEditor({
   onSaved,
   products,
   note,
+  canClose = true,
 }: {
   initial: OptionGroupDraft;
   onClose: () => void;
@@ -66,6 +67,11 @@ export function OptionGroupEditor({
   products?: { id: string; name: string; category?: string }[];
   /** Pencerenin altındaki açıklama */
   note?: ReactNode;
+  /**
+   * "Grup açık" anahtarı gösterilsin mi. Ürün çekmecesinden açılan yeni grup hep açıktır: kapalı kaydedilse ürüne
+   * görünmeden bağlanır, çekmecede çipi çıkmaz, oradan çıkarılamazdı
+   */
+  canClose?: boolean;
 }) {
   const [edit, setEdit] = useState(initial);
   const [saving, setSaving] = useState(false);
@@ -194,7 +200,7 @@ export function OptionGroupEditor({
             </ul>
           </div>
         )}
-        <Toggle checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Grup açık" hint="Kapalı grup kasada sorulmaz; ürün bağları durur" />
+        {canClose && <Toggle checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Grup açık" hint="Kapalı grup kasada sorulmaz; ürün bağları durur" />}
         {note && <p className="text-xs text-[var(--admin-text-mute)]">{note}</p>}
       </div>
     </Modal>

@@ -673,6 +673,7 @@ function ProductDrawer({
       {newGroup && (
         <OptionGroupEditor
           initial={newGroupDraft()}
+          canClose={false}
           note="Kaydedince grup bu ürün için seçilir; ürünü kaydedince bağlanır"
           onClose={() => setNewGroup(false)}
           onSaved={({ id, name }) => {

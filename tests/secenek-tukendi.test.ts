@@ -1,15 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PlatformOrderPayload } from '@shared/platforms';
 import type { BootstrapDTO, OptionGroupDTO, OrderDTO } from '@shared/types';
-import { editingPicks, missingChoice, pickHint, pickSingle } from '../src/lib/boot';
+import { defaultPicks, editingPicks, knownPicks, missingChoice, pendingProblem, pickHint, pickNote, pickSingle, reconcilePicks, soldOutDefault } from '../src/lib/boot';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
 
 /**
  * Seçenek tükendi (p-6, yulaf sütü bitti): kasada Tükenen ürünler › Seçenekler işaretler (ürünün Tükendi yetkisi,
- * denetim kaydı, `menu` olayı). Kasa satışı tükenen seçeneği ve tükenen varsayılanı 409 `option_sold_out` ile
- * reddeder; siteden gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez. Menü senkronu ve yönetimdeki grup
- * düzenlemesi işarete dokunmaz.
+ * denetim kaydı, `menu` olayı). Kasa satışı açıkça seçilen tükenen seçeneği ve zorunlu grubun tükenen varsayılanını
+ * 409 `option_sold_out` ile reddeder; isteğe bağlı grubun tükenen varsayılanı (Normal süt) satışı durdurmaz, o grup
+ * için seçenek yazılmaz. Siteden gelen ödenmiş sipariş ve paket platformu siparişi reddedilmez. Menü senkronu ve
+ * yönetimdeki grup düzenlemesi işarete dokunmaz.
  */
 const SECRET = 'q'.repeat(48);
 let h: Harness;
@@ -87,27 +88,57 @@ describe('kasada seçenek tükendi', () => {
     expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${order.id}`)).items).toHaveLength(0);
   });
 
-  it('seçilmeyen grubun varsayılanı tükendiyse 409 ("Normal tükendi; Süt seçin"); başka süt seçilince satılır', async () => {
+  it('isteğe bağlı grubun varsayılanı tükendiyse satış durmaz, o grup için seçenek yazılmaz (Normal süt bitti: su, latte)', async () => {
+    // Site Süt grubunu sudan çaya bütün içeceklere bağlar: Normal bitti diye su satılamaz olmasın, yerine başka süt
+    // yazılmasın (lafmaliyet'e yanlış ALTERNATIF SÜT satırı, fazladan ek fiyat)
     const b = await boot();
-    const latte = product(b, 'Latte');
-    const { item: normal } = option(b, 'Latte', 'Süt', 'Normal');
+    const [water, latte] = [product(b, 'Su'), product(b, 'Latte')];
+    const { group: milk, item: normal } = option(b, 'Latte', 'Süt', 'Normal');
     const { item: lactoseFree } = option(b, 'Latte', 'Süt', 'Laktozsuz');
+    const { item: oat } = option(b, 'Latte', 'Süt', 'Yulaf');
+    expect([milk.required, water.optionGroupIds.includes(milk.id)]).toEqual([false, true]);
+    // Yulaf ilk testten beri tükendi; sonda o hâline döner (aşağıdaki müdür testi açar)
+    const oatWas = oat.soldOut;
     await mark('kasa', normal.id, true);
+    await mark('kasa', oat.id, true);
     try {
-      const empty = await sell([{ productId: latte.id, size: 'M', qty: 1 }]);
-      expect(empty.res.status).toBe(409);
-      expect(empty.res.json).toMatchObject({ code: 'option_sold_out', error: 'Normal tükendi; Süt seçin' });
-      const ok = await sell([{ productId: latte.id, size: 'M', qty: 1, options: [{ itemId: lactoseFree.id }] }]);
-      expect(ok.res.status).toBe(200);
-      expect(ok.res.json.items[0].options.map((o) => o.name)).toContain('Laktozsuz');
+      const plain = await sell([
+        { productId: water.id, qty: 1 },
+        { productId: latte.id, size: 'M', qty: 1 },
+      ]);
+      expect(plain.res.status).toBe(200);
+      const items = plain.res.json.items;
+      expect(items.map((i) => i.options.filter((o) => o.groupId === milk.id))).toEqual([[], []]);
+      // Tutar menü fiyatı: yerine ücretli süt (Yulaf +25 TL) yazılmadı
+      expect(items.map((i) => i.unitPrice)).toEqual([water.price, latte.price]);
+
+      // Açıkça seçilen tükenen seçenek her grupta reddedilir
+      const picked = await sell([{ productId: latte.id, size: 'M', qty: 1, options: [{ itemId: oat.id }] }]);
+      expect(picked.res.status).toBe(409);
+      expect(picked.res.json).toMatchObject({ code: 'option_sold_out', error: 'Yulaf tükendi' });
+      const chosen = await sell([{ productId: latte.id, size: 'M', qty: 1, options: [{ itemId: lactoseFree.id }] }]);
+      expect(chosen.res.status).toBe(200);
+      expect(chosen.res.json.items[0].options.map((o) => o.name)).toContain('Laktozsuz');
+
+      // lafmaliyet gün yükünde su ve latte, ALTERNATIF SÜT yok
+      const cash = b.paymentMethods.find((m) => m.name === 'Nakit')!;
+      const paid = await h.ok<{ closed: boolean }>('kasa', 'POST', `/orders/${plain.order.id}/payments`, { methodId: cash.id, amount: plain.res.json.total });
+      expect(paid.closed).toBe(true);
+      const { salesLines } = await import('../server/sync/lafmaliyet');
+      const names = salesLines([plain.order.dayId]).map((l) => l.posName);
+      expect(names).toEqual(expect.arrayContaining(['SU', 'LATTE MEDIUM']));
+      expect(names).not.toContain('ALTERNATIF SÜT');
     } finally {
       await mark('kasa', normal.id, false);
+      await mark('kasa', oat.id, oatWas);
     }
     // Açılınca seçeneksiz satış yine varsayılanı yazar
-    expect((await sell([{ productId: latte.id, size: 'M', qty: 1 }])).res.status).toBe(200);
+    const again = await sell([{ productId: latte.id, size: 'M', qty: 1 }]);
+    expect(again.res.status).toBe(200);
+    expect(again.res.json.items[0].options.filter((o) => o.groupId === milk.id).map((o) => o.name)).toEqual(['Normal']);
   });
 
-  it('zorunlu tek seçimlik grup: varsayılan tükendi ve boş gönderildi 409; seçilince satılır', async () => {
+  it('zorunlu tek seçimlik grup: varsayılan tükendi ve boş gönderildi 409 (değişmedi); seçilince satılır', async () => {
     const b = await boot();
     const coffee = product(b, 'Türk Kahvesi');
     const { group, item: medium } = option(b, 'Türk Kahvesi', 'Şeker', 'Orta');
@@ -262,14 +293,72 @@ describe('seçenek penceresi: seçiliyken tükenen seçenek (saf kurallar)', () 
     expect(pickHint(sugar, { orta: 1 })).toBe('Orta tükendi, başka birini seçin');
     expect(pickSingle(sugar, { orta: 1 }, 'orta')).toEqual({});
     expect(missingChoice([sugar], {})?.name).toBe('Şeker');
+    // Zorunlu grubun tükenen varsayılanı Ekle'yi kapatır
+    const sugarSoldDefault: OptionGroupDTO = { ...sugar, items: [item('sade', 'Sade'), item('orta', 'Orta', { isDefault: true, soldOut: true })] };
+    expect(pickHint(sugarSoldDefault, {})).toBe('Orta tükendi, başka birini seçin');
+    expect(pickNote(sugarSoldDefault, {})).toBeNull();
+  });
+
+  it('isteğe bağlı grubun tükenen varsayılanı: önseçim yok, yalnız bilgi notu, Ekle açık (sunucu seçenek yazmaz)', () => {
     const soldDefault: OptionGroupDTO = { ...milk, items: milk.items.map((i) => ({ ...i, soldOut: i.id !== 'lf' })) };
+    expect(defaultPicks([soldDefault])).toEqual({});
     expect(pickSingle(soldDefault, { oat: 1 }, 'oat')).toEqual({});
-    expect(pickHint(soldDefault, {})).toBe('Normal tükendi, başka birini seçin');
+    expect(pickHint(soldDefault, {})).toBeNull();
+    expect(pickNote(soldDefault, {})).toBe('Normal tükendi');
+    expect(missingChoice([soldDefault], {})).toBeUndefined();
+    // Başka süt seçilince not kalkar
+    expect(pickNote(soldDefault, { lf: 1 })).toBeNull();
   });
 
   it('çok seçimli grupta tükenen seçim "kaldırın" der', () => {
     const syrup: OptionGroupDTO = { ...milk, kind: 'multi', maxSelect: 2, items: [item('vanilya', 'Vanilya', { soldOut: true }), item('karamel', 'Karamel')] };
     expect(pickHint(syrup, { vanilya: 1, karamel: 1 })).toBe('Vanilya tükendi, kaldırın');
     expect(pickHint(syrup, { karamel: 1 })).toBeNull();
+  });
+
+  // Hızlı ekleme ve sepet: kurallar sunucunun resolveOptions'ıyla aynı
+  const sugar: OptionGroupDTO = { ...milk, id: 'g-seker', name: 'Şeker', required: true, extKey: 'sugar', items: [item('sade', 'Sade'), item('orta', 'Orta', { isDefault: true })] };
+  const bootOf = (groups: OptionGroupDTO[]) => ({ optionGroups: groups }) as unknown as BootstrapDTO;
+  const prod = (groupIds: string[]) => ({ id: 'p', optionGroupIds: groupIds }) as unknown as BootstrapDTO['products'][number];
+
+  it('hızlı ekleme pencereyi yalnız zorunlu grubun varsayılanı tükendiyse açar (Normal süt bitti, su hemen eklenir)', () => {
+    const milkSold = { ...milk, items: milk.items.map((i) => (i.id === 'normal' ? { ...i, soldOut: true } : i)) };
+    expect(soldOutDefault(bootOf([milkSold]), prod([milkSold.id]))).toBe(false);
+    const sugarSold = { ...sugar, items: sugar.items.map((i) => (i.id === 'orta' ? { ...i, soldOut: true } : i)) };
+    expect(soldOutDefault(bootOf([milkSold, sugarSold]), prod([milkSold.id, sugarSold.id]))).toBe(true);
+  });
+
+  it('sepette gönderilemeyecek satırın nedeni: tükenen seçim, zorunlu grubun tükenen varsayılanı, kapanan grubun seçimi', () => {
+    const milkNormalSold = { ...milk, items: milk.items.map((i) => (i.id === 'normal' ? { ...i, soldOut: true } : i)) };
+    const sugarSold = { ...sugar, items: sugar.items.map((i) => (i.id === 'orta' ? { ...i, soldOut: true } : i)) };
+    const boot = bootOf([milkNormalSold, sugarSold]);
+    const p = prod([milk.id, sugar.id]);
+    // Açıkça seçilen tükenen seçenek (her grupta)
+    expect(pendingProblem(boot, p, [{ itemId: 'oat' }, { itemId: 'sade' }])).toBe('Yulaf tükendi');
+    // Zorunlu grupta seçim yok, varsayılan tükendi
+    expect(pendingProblem(boot, p, [])).toBe('Orta tükendi, şeker seçin');
+    // İsteğe bağlı grubun tükenen varsayılanı satırı durdurmaz
+    expect(pendingProblem(boot, p, [{ itemId: 'sade' }])).toBeNull();
+    // Zorunlu grubun varsayılanı yoksa seçim ister (sunucu 400 option_required)
+    expect(pendingProblem(bootOf([{ ...sugar, items: [item('sade', 'Sade')] }]), prod([sugar.id]), [])).toBe('Şeker seçin');
+    // Grubu kapanan seçenek (açılış verisinde yok): sunucu 400 option_invalid
+    expect(pendingProblem(bootOf([milk]), prod([milk.id]), [{ itemId: 'karton' }])).toBe('Seçeneği kalktı, düzenleyin');
+    expect(pendingProblem(bootOf([milk]), prod([milk.id]), [{ itemId: 'lf' }])).toBeNull();
+  });
+
+  it('pencere açıkken grup kapanır ya da açılır: kapanan grubun seçimi atılır, yeni grubun varsayılanı gelir, tükenen seçim kalır', () => {
+    const cup: OptionGroupDTO = { ...milk, id: 'g-bardak', name: 'Bardak', extKey: null, items: [item('karton', 'Karton', { isDefault: true, price: 500 }), item('cam', 'Cam')] };
+    // Açılışta Süt ve Bardak; Yulaf seçiliyken tükendi
+    const picks = { oat: 1, karton: 1 };
+    // Bardak kapandı: kartonu atılır, tükenen Yulaf açılış verisinde durduğu için kalır
+    const closed = reconcilePicks([milk], picks, new Set([milk.id, cup.id]));
+    expect(closed).toEqual({ oat: 1 });
+    // Bardak yeniden açıldı: ücretli varsayılanı seçili gelir (ekranda görünmeden fiyata girmesin)
+    expect(reconcilePicks([milk, cup], closed, new Set([milk.id]))).toEqual({ oat: 1, karton: 1 });
+    // Gruplar aynıysa seçim aynı nesne (gereksiz çizim yok); kasiyerin bıraktığı varsayılan geri gelmez
+    const same = { lf: 1 };
+    expect(reconcilePicks([milk, cup], same, new Set([milk.id, cup.id]))).toBe(same);
+    // Düzenlenen satırda grubu kapanan seçenek düşer
+    expect(knownPicks([milk], editingPicks([{ itemId: 'lf' }, { itemId: 'karton' }]))).toEqual({ lf: 1 });
   });
 });

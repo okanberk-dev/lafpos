@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
-import { estimateUnit, pendingOptionsText, useBoot } from '@/lib/boot';
+import { estimateUnit, pendingOptionsText, pendingProblem, useBoot } from '@/lib/boot';
 import { type PendingLine, useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
@@ -143,6 +143,9 @@ export function CartPanel({
                 if (!p) return null;
                 const unit = l.priceOverride ?? estimateUnit(boot, p, l.size, l.options);
                 const text = [pendingOptionsText(boot, p, l.options), l.priceOverride != null ? 'elle fiyat' : ''].filter(Boolean).join(' · ');
+                // Sunucunun reddedeceği satır (seçeneği tükendi, grubu kapandı): Gönder'in 409 / 400 bildirimi satırı
+                // adlandırmaz, burada kırmızı yazar; dokununca düzenleme penceresi açılır
+                const problem = pendingProblem(boot, p, l.options);
                 return (
                   <li key={l.key} className="animate-in flex items-center gap-2 px-4 py-2">
                     <div className="flex items-center rounded-lg border border-line-strong bg-surface">
@@ -155,13 +158,23 @@ export function CartPanel({
                       </button>
                     </div>
                     {/* Satırın kendisi düzenlemeye açar; kalem ikonu yalnız ipucu */}
-                    <button className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors duration-150 active:bg-press" onClick={() => onEditPending(l)} aria-label={`${p.shortName || p.name} düzenle`}>
+                    <button
+                      className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors duration-150 active:bg-press"
+                      onClick={() => onEditPending(l)}
+                      aria-label={`${p.shortName || p.name} düzenle`}
+                      aria-describedby={problem ? `sorun-${l.key}` : undefined}
+                    >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">
                           {p.shortName || p.name}
                           {l.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[l.size]}</SizeTag>}
                         </span>
                         {(text || l.note) && <span className="block truncate text-xs text-ink-2">{[text, l.note && `Not: ${l.note}`].filter(Boolean).join(' · ')}</span>}
+                        {problem && (
+                          <span id={`sorun-${l.key}`} className="block truncate text-xs font-medium text-[var(--admin-danger-ink)]">
+                            {problem}
+                          </span>
+                        )}
                       </span>
                       <Pencil aria-hidden="true" className="size-3.5 shrink-0 text-muted" />
                     </button>

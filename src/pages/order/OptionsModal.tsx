@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
-import { defaultPicks, editingPicks, estimateUnit, menuUnit, missingChoice, pickHint, pickSingle, productGroups, useBoot } from '@/lib/boot';
+import { defaultPicks, editingPicks, estimateUnit, knownPicks, menuUnit, missingChoice, pickHint, pickNote, pickSingle, productGroups, reconcilePicks, useBoot } from '@/lib/boot';
 import type { PendingLine } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { useFinePointer } from '@/lib/hooks';
@@ -57,13 +57,17 @@ export function OptionsModal({
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
+  // Seçimin kurulduğu ya da son uzlaştırıldığı andaki gruplar: sonradan açılan grup bunlarda yoktur
+  const seenGroups = useRef<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     if (!product) return;
+    seenGroups.current = new Set(groupsRef.current.map((g) => g.id));
     if (editing) {
       setSize(editing.size);
-      // Bu arada tükenen seçenek seçili kalır: grubu uyarır, Güncelle kasiyer bırakana ya da başkasını seçene dek kapalı
-      setPicks(editingPicks(editing.options));
+      // Bu arada tükenen seçenek seçili kalır: grubu uyarır, Güncelle kasiyer bırakana ya da başkasını seçene dek kapalı.
+      // Grubu kapanan ya da kaldırılan seçenek düşer (sunucu 400 döner, bütün bekleyen satırlar takılırdı)
+      setPicks(knownPicks(groupsRef.current, editingPicks(editing.options)));
       setNote(editing.note);
       setQty(editing.qty);
       setPriceText(editing.priceOverride != null ? String(editing.priceOverride / 100).replace('.', ',') : '');
@@ -78,6 +82,16 @@ export function OptionsModal({
     }
   }, [product, editing, initialSize]);
 
+  // Pencere açıkken ürünün bir grubu kapanır ya da açılırsa (Yönetim › Seçenekler, menü olayı) seçim, not ve adet
+  // korunarak uzlaştırılır: kapanan grubun seçimi atılır (yoksa gönderim 400 alırdı), yeni görünen grubun varsayılanı
+  // seçili gelir (ücretli varsayılan ekranda seçili görünmeden fiyata girmesin). Yukarıdaki efektten sonra çalışır
+  useEffect(() => {
+    if (!product) return;
+    const seen = seenGroups.current;
+    seenGroups.current = new Set(groups.map((g) => g.id));
+    setPicks((cur) => reconcilePicks(groups, cur, seen));
+  }, [product, groups]);
+
   if (!product) return null;
   const options = Object.entries(picks)
     .filter(([, n]) => n > 0)
@@ -86,7 +100,10 @@ export function OptionsModal({
   const unit = override ?? estimateUnit(boot, product, size, options);
   // Zorunlu grup (şeker) seçilmeden Ekle kapalı: sunucu boş grupta varsayılanı yazardı, kasiyer sormadan geçmesin
   const missing = missingChoice(groups, picks);
-  const waiting = groups.some((g) => pickHint(g, picks));
+  const hinted = groups.find((g) => pickHint(g, picks));
+  const waiting = !!hinted;
+  // Ekle neden kapalı: alt çubukta yazar (telefonda grup başlığındaki ipucu ekranın dışında kalabilir)
+  const reason = missing ? `${missing.name} seçin` : hinted ? `${hinted.name}: ${pickHint(hinted, picks)}` : null;
 
   const setCount = (itemId: string, n: number) => setPicks({ ...picks, [itemId]: n });
 
@@ -98,7 +115,8 @@ export function OptionsModal({
       title={product.name}
       subtitle={product.description ?? undefined}
       footer={
-        // Eksik zorunlu seçimin yazısı Ekle'nin altında kendi satırında (bilgi cümlesi devre dışı düğmede durmaz)
+        // Eksik zorunlu seçimin ya da tükenen seçimin yazısı Ekle'nin altında kendi satırında (bilgi cümlesi devre dışı
+        // düğmede durmaz)
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <div className="flex items-center rounded-xl border border-line bg-surface">
             <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.max(1, qty - 1))}>
@@ -110,14 +128,13 @@ export function OptionsModal({
             </button>
           </div>
           <div className="flex-1" />
-          <Button variant="primary" size="lg" disabled={waiting || !!missing} aria-describedby={missing ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
+          <Button variant="primary" size="lg" disabled={waiting || !!missing} aria-describedby={reason ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
             {editing ? 'Güncelle' : 'Ekle'} · {tl(unit * qty)}
           </Button>
-          {missing && (
-            <p id="secenek-eksik" className="basis-full text-right text-sm font-medium text-ink-2">
-              {missing.name} seçin
-            </p>
-          )}
+          {/* Canlı bölge hep yerinde (boşken görünmez): tükenen seçim sonradan geldiğinde de okunur */}
+          <p id="secenek-eksik" role="status" className={cn('basis-full text-right text-sm font-medium', !reason ? 'sr-only' : missing ? 'text-ink-2' : 'text-[var(--admin-danger-ink)]')}>
+            {reason}
+          </p>
         </div>
       }
     >
@@ -146,7 +163,12 @@ export function OptionsModal({
             <h3 className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-ink-2">
               {g.name}
               {g.required && g.kind !== 'counter' && <Badge>Zorunlu</Badge>}
-              {pickHint(g, picks) && <span className="text-xs font-medium text-[var(--admin-danger-ink)]">{pickHint(g, picks)}</span>}
+              {pickHint(g, picks) ? (
+                <span className="text-xs font-medium text-[var(--admin-danger-ink)]">{pickHint(g, picks)}</span>
+              ) : (
+                // İsteğe bağlı grubun tükenen varsayılanı: yalnız bilgi, Ekle açık (sunucu o grup için seçenek yazmaz)
+                pickNote(g, picks) && <span className="text-xs font-medium text-muted">{pickNote(g, picks)}</span>
+              )}
             </h3>
             {g.kind === 'counter' ? (
               <div className="flex flex-wrap gap-2">

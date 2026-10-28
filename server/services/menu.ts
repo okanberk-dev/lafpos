@@ -58,13 +58,16 @@ export function normalizeSize(product: Product, size: Size | undefined): Size {
 
 /**
  * İstemcinin seçtiği seçenekleri veritabanındaki tanımlara göre doğrular ve fiyatlandırır; istemcinin
- * gönderdiği fiyata asla güvenilmez. Seçilmeyen zorunlu tek seçimlik gruplarda varsayılan kullanılır.
- */
-/**
+ * gönderdiği fiyata asla güvenilmez. Seçilmeyen tek seçimlik gruplarda varsayılan kullanılır.
+ *
  * `lenient`: paket platformu satırı. Platformun seçimleri notta yazar; seçilmeyen grupta varsayılan eklenmez, zorunlu
  * grup sorulmaz (kasada karşılığı olmayan seçim siparişi durdurmasın).
- * `refuseSoldOut`: kasa satışı. Kasada Tükendi işaretli seçenek seçildiyse ya da seçilmeyen tek seçimlik grubun
- * varsayılanı tükendiyse 409 `option_sold_out`. Paket platformu satırı reddedilmez (sipariş platformda verildi)
+ * `refuseSoldOut`: kasa satışı. Kasada Tükendi işaretli seçenek açıkça seçildiyse (her grupta) ya da seçilmeyen zorunlu
+ * tek seçimlik grubun varsayılanı tükendiyse (Türk kahvesinde Orta şeker) 409 `option_sold_out`. Paket platformu satırı
+ * reddedilmez (sipariş platformda verildi).
+ * Seçilmeyen isteğe bağlı tek seçimlik grubun varsayılanı tükendiyse o grup için seçenek yazılmaz, satış reddedilmez:
+ * site Süt ve Kavrum gruplarını sudan çaya bütün içeceklere bağlar; Normal süt bitti diye su ve espresso satılamaz
+ * olmasın, yerine başka bir süt de yazılmaz (lafmaliyet'e yanlış ALTERNATIF SÜT satırı, fazladan ek fiyat)
  */
 export function resolveOptions(
   sp: SaleProduct,
@@ -85,7 +88,9 @@ export function resolveOptions(
         if (g.required) throw bad(`${g.name} seçilmeli`, 'option_required');
         continue;
       }
-      // Seçilmeyen grupta varsayılan yazılırdı: o tükendiyse kasiyer başkasını seçer
+      // Seçilmeyen grupta varsayılan yazılır. Tükendiyse: isteğe bağlı grupta seçenek yazılmaz (Normal süt bitti, su
+      // yine satılır); zorunlu grupta kasiyer başkasını seçer (409 "Orta tükendi; Şeker seçin")
+      if (!chosen[0] && item.soldOut && !g.required) continue;
       refuse(item, chosen[0] ? undefined : `${g.name} seçin`);
       out.push(toSelected(g, item, 1));
     } else if (g.kind === 'multi') {

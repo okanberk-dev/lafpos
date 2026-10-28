@@ -300,6 +300,46 @@ describe('seçenek ek fiyatı denetim kaydında', () => {
     expect(line.options.map((o) => [o.name, o.price])).toEqual([['Karton', 500]]);
   });
 
+  it('ücretli varsayılanlı grubu kapatmak ya da açmak kayıt yazar (seçeneksiz satışın tutarı değişir); ücretsiz varsayılanlıda yazmaz', async () => {
+    // Kapalı grup kasada yoktur, varsayılanı yazılmaz: Karton +5 TL'lik grubu kapatmak seçeneksiz satışı 5 TL ucuzlatır
+    const group = async (name: string, items: { name: string; price: number; isDefault?: boolean }[]) => {
+      const { id } = await h.ok<{ id: string }>('patron', 'POST', '/admin/option-groups', { name, kind: 'single', items });
+      const rows = (await menu()).optionItems.filter((i) => i.groupId === id);
+      const put = (active: boolean) =>
+        h.ok('patron', 'PUT', `/admin/option-groups/${id}`, { name, kind: 'single', active, items: rows.map((r) => ({ id: r.id, name: r.name, price: r.price, isDefault: !!items.find((i) => i.name === r.name)?.isDefault })) });
+      const changed = async () => (await audits('menu.option_price', id)).filter((e) => e.message.includes('değiştirdi'));
+      return { id, put, changed };
+    };
+
+    const paid = await group('Kapak (kasa)', [
+      { name: 'Karton', price: 500, isDefault: true },
+      { name: 'Cam', price: 0 },
+    ]);
+    await paid.put(false);
+    let entries = await paid.changed();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!.message).toMatch(/Kapak \(kasa\) seçeneklerini değiştirdi: grup kapatıldı; varsayılan Karton \+₺5,00 → yok$/);
+    expect(entries[0]!.data).toEqual({ changes: [], added: [], removed: [], defaultChange: { from: { name: 'Karton', price: 500 }, to: null }, groupActive: false });
+    // Kapalıyken yeniden kaydetmek tutarı değiştirmez
+    await paid.put(false);
+    expect(await paid.changed()).toHaveLength(1);
+    await paid.put(true);
+    entries = await paid.changed();
+    expect(entries).toHaveLength(2);
+    const opened = entries.find((e) => e.message.includes('grup açıldı'))!;
+    expect(opened.message).toMatch(/Kapak \(kasa\) seçeneklerini değiştirdi: grup açıldı; varsayılan yok → Karton \+₺5,00$/);
+    expect(opened.data).toMatchObject({ defaultChange: { from: null, to: { name: 'Karton', price: 500 } }, groupActive: true });
+
+    // Ücretsiz varsayılanlı grup: açıp kapatmak seçeneksiz satışın tutarını değiştirmez, kayıt yok
+    const free = await group('Pipet (kasa)', [
+      { name: 'Yok', price: 0, isDefault: true },
+      { name: 'Kağıt pipet', price: 200 },
+    ]);
+    await free.put(false);
+    await free.put(true);
+    expect(await free.changed()).toHaveLength(0);
+  });
+
   it('site grubu LafPOS’ta düzenlenmez; mesaj nereden değiştiğini söyler, ürünlere bağlanabilir', async () => {
     const m = await menu();
     const site = m.optionGroups.find((g) => g.extSource)!;
