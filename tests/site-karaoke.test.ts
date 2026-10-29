@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { blockTerms, bookingsAtHand, linkableBooking, linkChoices, type SiteKaraokeBooking } from '@shared/karaoke';
+import { blockTerms, bookingPayment, bookingsAtHand, holdsRoom, linkableBooking, linkChoices, type SiteKaraokeBooking } from '@shared/karaoke';
 import type { BootstrapDTO, FloorStateDTO, OrderDTO, SiteKaraokeDTO } from '@shared/types';
 import { type FakeSite, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
@@ -99,6 +99,16 @@ describe('oda ücreti: rezervasyon bloğu (saf kural)', () => {
     expect(linkableBooking(b('requested', 'pending'))).toBe(true);
     expect(linkableBooking(b('confirmed', 'refunding'))).toBe(false);
     expect(linkableBooking(b('cancelled', 'paid'))).toBe(false);
+  });
+
+  it('iptalin iade tutarı (site 29 Ekim 2026) okunmaz: "iade yok" iptali de yalnız İptal, odayı tutmaz, bloğu yok', async () => {
+    const { toSiteBooking } = await karaokeModule();
+    const released = toSiteBooking({ id: 'krk-2', date: '2026-10-27', startHour: 20, hours: 2, status: 'cancelled', paymentStatus: 'refunded', refundMinor: 0, firstName: 'Ayşe', totalMinor: 180000 })!;
+    expect(released).not.toHaveProperty('refundMinor');
+    expect(bookingPayment(released)).toEqual({ text: 'İptal', tone: 'neutral' });
+    expect(holdsRoom(released)).toBe(false);
+    expect(blockTerms(released)).toBeNull();
+    expect(linkableBooking(released)).toBe(false);
   });
 
   it('bilinmeyen durum güvenli tarafa okunur; okunamayan satır listeyi düşürmez', async () => {

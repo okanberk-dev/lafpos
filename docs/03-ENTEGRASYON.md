@@ -253,9 +253,13 @@ yarına (İstanbul) açar; daha geniş pencere 403. Hiç istek gitmez: `.env`'de
 
 LafPOS `id`, `date`, `startHour`, `hours`, `guests`, `status`, `paymentStatus`, `firstName`, `note`, `totalMinor` ve
 `channel`'ı okur (`startsAt`/`endsAt` gün ve saatten yeniden hesaplanır, İstanbul sabit UTC+3); `createdAt`/`updatedAt`
-okunmaz. `reservations` dizisi olmayan 200 başarısız çekimdir, eldeki liste silinmez; okunamayan bir satır listeyi
-düşürmez. Bilinmeyen durum sitenin kuralıyla güvenli tarafa okunur: bilinmeyen `status` `requested`, bilinmeyen
-`paymentStatus` `none`.
+ve `refundMinor` okunmaz. `refundMinor` (laffogato 29 Ekim 2026, ekleme) iptal edilmiş rezervasyonun iade tutarıdır;
+`0` hiçbir şeyin geri gitmediğini söyler (sitede %0 kuralında misafirin geç isteğiyle saat satışa açıldı, ödeme
+durumu yine `refunded`). Kasa iptal satırını ödeme durumundan önce "İptal" diye okur ve hiçbir şeye saymaz, bu yüzden
+tutar kasada bir şey değiştirmez; köşkün panelindeki (lafmaliyet) bar ekranı onu "iade yok" yazmak için okur.
+`reservations` dizisi olmayan 200 başarısız çekimdir, eldeki liste silinmez; okunamayan bir satır listeyi düşürmez.
+Bilinmeyen durum sitenin kuralıyla güvenli tarafa okunur: bilinmeyen `status` `requested`, bilinmeyen `paymentStatus`
+`none`.
 
 **Satır nasıl okunur** (sitenin kuralı, `shared/karaoke.ts`):
 
