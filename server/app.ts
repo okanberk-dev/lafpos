@@ -17,6 +17,7 @@ import { posRoutes } from './routes/pos';
 import { reportRoutes } from './routes/reports';
 import { reservationRoutes } from './routes/reservations';
 import { syncRoutes } from './routes/sync';
+import { timeRoutes } from './routes/time';
 import { productImage, thumbFor } from './services/media';
 
 export function createApp() {
@@ -63,6 +64,7 @@ export function createApp() {
   app.route('/api/admin', adminRoutes);
   app.route('/api/reservations', reservationRoutes);
   app.route('/api/platforms', platformRoutes);
+  app.route('/api/time', timeRoutes);
   app.route('/api', posRoutes);
   app.all('/api/*', (c) => c.json({ error: 'Böyle bir uç yok', code: 'not_found' }, 404));
 

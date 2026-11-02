@@ -205,6 +205,22 @@ export function recordPinChoice(addr: string, user: { id: string; name: string }
   if (lock.alarm) pinAlarm('pin', addr, user, lock.ms);
 }
 
+/**
+ * Giriş PIN'i: giriş ekranı (`/auth/login`) ve kilit ekranındaki mesai saati (`/time/punch`) aynı denetimi ve aynı
+ * deneme sınırını ('giris', cihaz başına) kullanır; mesai saati PIN taramanın yan kapısı olmasın. Hatalı PIN ile
+ * kapalı hesabın PIN'i aynı yanıtı alır.
+ */
+export function verifyLoginPin(pin: string, addr: string): UserRow {
+  assertNotLocked('giris', addr);
+  const row = isValidPin(pin) ? db.select().from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get() : undefined;
+  if (!row || !row.active) {
+    recordFailure('giris', addr);
+    throw new HttpError(401, 'PIN hatalı', 'pin_invalid');
+  }
+  clearFailures('giris', addr);
+  return row;
+}
+
 /** Testler için: sayaçları ve güvenilen adresleri sıfırlar */
 export function resetFailures() {
   counters.clear();
@@ -306,7 +322,8 @@ export function resolveToken(token: string): AuthUser | null {
   return resolveSession(sha256(token), true);
 }
 
-const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health'];
+/** Oturumsuz uçlar. Mesai saati kilit ekranında PIN'le basılır: PIN giriş gibi denetlenir, oturum açılmaz */
+const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health', '/api/time/punch'];
 
 export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const path = c.req.path;
@@ -370,6 +387,23 @@ export function approverFor(actor: Actor, perm: Permission): string {
   if (!approver) throw new HttpError(403, 'Bu işlem yetkili onayı gerektirir', 'approval_required', { permission: perm });
   const addr = actor.approverAddr ?? 'yerel';
   if (!can(approver, perm)) {
+    recordFailure('onay', addr, actor.user);
+    throw approvalRejected();
+  }
+  clearFailures('onay', addr, actor.user.id);
+  return approver.id;
+}
+
+/**
+ * İki kişilik işlemde karşı tarafın PIN'i (vardiya devrinde kasayı devralan): onaylayanın kimliğini döner. PIN'in
+ * sahibi beklenen kişi değilse ya da işlemi yapanın kendisiyse hatalı PIN gibi sayılır, yanıtı da aynıdır (PIN'in
+ * kimde olduğu anlaşılmasın; `approverFor` gibi). Beklenen kişi verilmediyse PIN'in sahibi karşı taraftır.
+ */
+export function counterpartFor(actor: Actor, expectedId: string | null): string {
+  const approver = actor.approver;
+  if (!approver) throw new HttpError(403, 'Bu işlem karşı tarafın PIN onayını gerektirir', 'approval_required');
+  const addr = actor.approverAddr ?? 'yerel';
+  if (approver.id === actor.user.id || (expectedId !== null && approver.id !== expectedId)) {
     recordFailure('onay', addr, actor.user);
     throw approvalRejected();
   }

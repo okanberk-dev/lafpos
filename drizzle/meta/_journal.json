@@ -99,6 +99,13 @@
       "when": 1793211443431,
       "tag": "0013_secenek_tukendi",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1793639887989,
+      "tag": "0014_mesai_vardiya",
+      "breakpoints": true
     }
   ]
 }
