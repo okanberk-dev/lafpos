@@ -595,33 +595,36 @@ describe('online siparişin iş günü', () => {
     const { upsertOnlineOrders } = await import('../server/sync/laffogato-orders');
     await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
     const ist = (s: string) => Date.parse(`${s}:00+03:00`);
+    // Sabit tarih gerçek bugüne denk gelirse (o günün Z'si yukarıda alındı) gün açılmaz: bugünden 10 ve 11 gün sonrası
+    const isDay = (offset: number) => new Date(Date.now() + offset * 86_400_000 + 3 * 3_600_000).toISOString().slice(0, 10);
+    const [D1, D2] = [isDay(10), isDay(11)];
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
       const at = (s: string) => vi.setSystemTime(ist(s));
-      at('2026-11-02T09:00');
+      at(`${D1}T09:00`);
       await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
-      at('2026-11-03T03:00');
+      at(`${D2}T03:00`);
       await h.ok('mudur', 'POST', '/cash/day/close', { countedCash: null });
-      // Gece 04:25'te ödenen sipariş 2 Kasım'ın; sabah 07:55'te ödenen 3 Kasım'ın (gün 09:00'da açılır)
-      at('2026-11-03T04:30');
-      upsertOnlineOrders([panelOrder('ord-gece', { paidAt: new Date(ist('2026-11-03T04:25')).toISOString(), totalMinor: 20000 })]);
-      at('2026-11-03T08:00');
-      upsertOnlineOrders([panelOrder('ord-sabah', { paidAt: new Date(ist('2026-11-03T07:55')).toISOString(), totalMinor: 30000 })]);
-      at('2026-11-03T09:00');
+      // Gece 04:25'te ödenen sipariş D1'in; sabah 07:55'te ödenen D2'nin (gün 09:00'da açılır)
+      at(`${D2}T04:30`);
+      upsertOnlineOrders([panelOrder('ord-gece', { paidAt: new Date(ist(`${D2}T04:25`)).toISOString(), totalMinor: 20000 })]);
+      at(`${D2}T08:00`);
+      upsertOnlineOrders([panelOrder('ord-sabah', { paidAt: new Date(ist(`${D2}T07:55`)).toISOString(), totalMinor: 30000 })]);
+      at(`${D2}T09:00`);
       await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
-      at('2026-11-03T09:30');
-      upsertOnlineOrders([panelOrder('ord-acik', { paidAt: new Date(ist('2026-11-03T09:28')).toISOString(), totalMinor: 40000 })]);
+      at(`${D2}T09:30`);
+      upsertOnlineOrders([panelOrder('ord-acik', { paidAt: new Date(ist(`${D2}T09:28`)).toISOString(), totalMinor: 40000 })]);
       // Site hepsini tamamladı (raporlar kapanmış siparişleri sayar)
-      at('2026-11-03T09:40');
+      at(`${D2}T09:40`);
       upsertOnlineOrders([]);
-      at('2026-11-03T12:00');
+      at(`${D2}T12:00`);
 
       type Online = { online: { orders: number; amount: number } };
-      const nov2 = await h.ok<Online>('mudur', 'GET', '/reports/summary?from=2026-11-02&to=2026-11-02');
-      const nov3 = await h.ok<Online>('mudur', 'GET', '/reports/summary?from=2026-11-03&to=2026-11-03');
+      const first = await h.ok<Online>('mudur', 'GET', `/reports/summary?from=${D1}&to=${D1}`);
+      const second = await h.ok<Online>('mudur', 'GET', `/reports/summary?from=${D2}&to=${D2}`);
       const live = await h.ok<Online>('patron', 'GET', '/reports/patron');
-      expect(nov2.online).toEqual({ orders: 1, amount: 20000 });
-      expect(nov3.online).toEqual({ orders: 2, amount: 70000 });
+      expect(first.online).toEqual({ orders: 1, amount: 20000 });
+      expect(second.online).toEqual({ orders: 2, amount: 70000 });
       expect(live.online.orders).toBe(2);
     } finally {
       vi.useRealTimers();

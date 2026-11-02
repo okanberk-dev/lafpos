@@ -279,6 +279,17 @@ ve fark saklanır, fark gün sonu sayımının eşiğiyle uyarı ya da alarm (`c
 onaylayabilir. Kör kasada beklenen ve fark, başkasının sayımında sayılan da gitmez; sayımlar `GET /api/cash/day` ve
 `/days/:id`'de. Kasa hareketi değildir, lafmaliyet'e gitmez. Testler `tests/mesai.test.ts`, `tests/vardiya-sayim.test.ts`.
 
+**Ekranlar, müşteri ekranı ayarı ve görünüm** (2 Kasım 2026): giriş ekranında **Mesai** sekmesi (aynı PIN, oturum
+açılmaz; sonuç kartı "Hoş geldin" ya da "Görüşmek üzere"), kullanıcı menüsünde mesai satırı (avatarda yeşil nokta),
+Yönetim › Mesai çizelgesi (`/yonetim/mesai`, `mesai.yonet`: dönem, kişi toplamları, düzeltme, şimdi kapatma, CSV);
+Kasa'da **Vardiya devri** penceresi (banknotla sayım, devralanın PIN'i, not) ve günün sayımları kartı. Müşteri ekranı
+ayarlanır: `settings.customerDisplay` (tema gece, porselen ya da ev yeşili; saat; karşılama, alt satır ve teşekkür
+metni; 6 saniyede bir dönen en çok 6 duyuru; karekod adresi ve etiketi), Yönetim › Müşteri ekranı
+(`/yonetim/musteri-ekrani`, `ayar.yonet`) birebir önizlemeyle. Ekran ayarı oturumsuz `GET /api/public/display-config`'ten
+alır (yalnız bu alanlar ve işletme adı), son ayarı cihazda saklar; bağlantı koparsa onunla açılır. Görünüm laffogato.net
+kimliğindedir (`DESIGN.md`). Test `tests/musteri-ekrani-ayar.test.ts`; e2e taramasında yeni ekranlar ve durumları,
+akışlarda mesai ve vardiya devri.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

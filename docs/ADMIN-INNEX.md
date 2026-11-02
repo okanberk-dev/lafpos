@@ -2,8 +2,8 @@
 
 > **2 Kasım 2026'dan beri:** bu tarif yalnız **yerleşim** kaynağıdır (kenar çubuğu, başlık
 > şeridi, KPI şeridi, tablo, çekmece, ölçüler). Renk ve yazı LafPOS Sade'dir
-> (`DESIGN.md`: Poppins, sıcak kırık beyaz, mürekkep birincil); aşağıdaki hex
-> değerleri ve Inter tarihsel kayıttır.
+> (`DESIGN.md`: laffogato.net kimliği; Poppins ve Gabarito, porselen zemin, ev yeşili
+> birincil); aşağıdaki hex değerleri ve Inter tarihsel kayıttır.
 >
 > **LafPOS'ta:** yönetim paneli (`/yonetim/*`, `/raporlar`) bu tarifi 26 Ekim
 > 2026'dan beri izler (operatör: _"laffogato admindeki innex admin skills

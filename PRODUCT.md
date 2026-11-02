@@ -37,4 +37,4 @@ Patron Yönetim › Ayarlar ve yedek › Servis modu'ndan seçer; seçince hemen
 
 - Para kuruş tam sayı; fiyatlar KDV dahil; personel maliyet ve kâr görmez (KVKK, `rapor.maliyet`).
 - Arayüz Türkçe ve doğal; başlıklarda sonda nokta yok; büyük harf dönüşümü Türkçe kurala göre (`lang="tr"`).
-- Çevrimdışı çalışır: yazılar pakette (`@fontsource`: Poppins ve Outfit rakamları), dış kaynaktan yazı ya da betik yüklenmez.
+- Çevrimdışı çalışır: yazılar pakette (`@fontsource`: Poppins, başlık ve rakamlarda Gabarito), dış kaynaktan yazı ya da betik yüklenmez.

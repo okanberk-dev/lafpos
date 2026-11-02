@@ -36,8 +36,12 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
    tipi poppins ve benzeri kullan minimalist basit ve UI UX olarak üst düzey olsun her özelliği düşün ve tasarımı yap eğer
    özellik bende yoksa onu da kurgulayarak yap"_ (2 Kasım 2026): tasarımlar Claude Design tuvalinde yapıldı (tasarım sistemi,
    giriş, masalar, adisyon, bar ekranı, patron telefonda, mesai ve vardiya devri) ve kodda **LafPOS Sade** olarak yerleşti
-   (`DESIGN.md`): Poppins harfler, Outfit rakamlar (Poppins'te tablo rakamı yok), sıcak kırık beyaz zemin, mürekkep birincil,
-   durum mavisi ayrı, marka yeşili logo karosunda. Innex'in yerleşimi kaldı, renkleri ve Inter bıraktı;
+   (`DESIGN.md`). Aynı gün gelen iki istek tasarımı biçimledi: _"laffogato.net reposuna bak orada logomuz vs. var
+   ordan alıp buraya uyarla"_ ile renkler, logo ve çizimler sitenin kimliğinden (`RiosenBeq/laffogato`
+   `docs/BRAND.md`) alındı: porselen zemin, ev yeşili birincil, ödeme düğmesi mürekkep, durum kobalt mavisi, Poppins
+   metin ve Gabarito başlık ve rakamlar (Poppins'te tablo rakamı yok); _"2 ekranlı kasalarda müşteriye gözüken kısmı
+   da tasarla ve o da değiştirilebilsin"_ ile müşteri ekranı yeniden çizildi ve Yönetim › Müşteri ekranı'ndan
+   ayarlanır hale geldi (tema, metinler, duyurular, karekod). Innex'in yerleşimi kaldı, renkleri ve Inter bıraktı;
    `tests/design-tokens.test.ts` yeni değerleri ve yazı dosyalarını sabitler. Eksik özellik olarak personel mesaisi
    (PIN'le giriş-çıkış, mesai çizelgesi) ve vardiya devri sayımı eklendi (`docs/02-PLAN.md`).
 

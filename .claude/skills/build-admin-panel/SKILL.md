@@ -11,8 +11,8 @@ description: Research, scope, build and verify a new LafPOS admin area (a new se
 > aşamasından yeniden yazılmıştı. Next.js, server action ve Postgres varsayımları burada geçerli değil:
 > LafPOS yerel bir Hono sunucusu, SQLite (Drizzle) ve React SPA'dır.
 
-Görünümün kaynağı `DESIGN.md` (**LafPOS Sade**, 2 Kasım 2026: Poppins ve Outfit rakamları, sıcak kırık beyaz zemin,
-mürekkep birincil, durum mavisi ayrı) ve yerleşimin kaynağı **Innex** tarifi (`docs/ADMIN-INNEX.md`: ölçüler, kenar çubuğu,
+Görünümün kaynağı `DESIGN.md` (**LafPOS Sade**, 2 Kasım 2026, laffogato.net kimliği: Poppins metin, Gabarito başlık
+ve rakamlar, porselen zemin, ev yeşili birincil, ödeme mürekkep, durum kobalt mavisi) ve yerleşimin kaynağı **Innex** tarifi (`docs/ADMIN-INNEX.md`: ölçüler, kenar çubuğu,
 sayfa başlığı şeridi, KPI şeridi, tablo, çekmece). Renk ve yazı için tarifin hex değerleri değil `src/index.css`'teki
 `--admin-*` değerleri geçerlidir. Yeni bir desen icat etmeden önce kite bak: `src/components/admin/`
 (`AdminShell`, `PageHeader`, `Card`, `KpiStrip`, `StatusTabs`, `Segmented`, `DataTable`, `ActionMenu`,
