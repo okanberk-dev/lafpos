@@ -313,7 +313,7 @@ function PlatformCard({
         {/* Kurulum metni yalnız henüz canlı olmayan (ya da canlıda anahtarı eksik) platformda */}
         {(settings.mode !== 'canli' || (live?.supported && !live.configured)) && (
           <details className="group text-xs">
-            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-[var(--admin-primary)] pointer-fine:min-h-0 [&::-webkit-details-marker]:hidden">
+            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-[var(--admin-blue)] pointer-fine:min-h-0 [&::-webkit-details-marker]:hidden">
               <ChevronRight className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
               Gerçek bağlantı için ne gerekir
             </summary>

@@ -658,7 +658,7 @@ function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
                       key={c}
                       title={label}
                       className="h-7 min-w-7 rounded-[4px]"
-                      style={{ background: k < 0 ? 'var(--admin-surface-2)' : `color-mix(in oklab, var(--admin-primary) ${HEAT_STEPS[k]}%, var(--admin-surface))` }}
+                      style={{ background: k < 0 ? 'var(--admin-surface-2)' : `color-mix(in oklab, var(--chart-accent) ${HEAT_STEPS[k]}%, var(--admin-surface))` }}
                     >
                       <span className="sr-only">{label}</span>
                     </td>
@@ -671,7 +671,7 @@ function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
         <div className="mt-3 flex items-center gap-1.5 text-xs text-muted" aria-hidden>
           <span>Az</span>
           {HEAT_STEPS.map((p) => (
-            <span key={p} className="size-3.5 rounded-[3px]" style={{ background: `color-mix(in oklab, var(--admin-primary) ${p}%, var(--admin-surface))` }} />
+            <span key={p} className="size-3.5 rounded-[3px]" style={{ background: `color-mix(in oklab, var(--chart-accent) ${p}%, var(--admin-surface))` }} />
           ))}
           <span>Çok · en yüksek {tl(max)}</span>
         </div>
@@ -751,7 +751,7 @@ function PrepReport({ range }: { range: Range }) {
                   <tr key={`${r.name}|${r.size}`}>
                     <td className="px-4 py-2 font-medium">
                       {r.name}
-                      {r.size !== 'TEK' && <span className="ml-1.5 rounded-md bg-surface-3 px-1.5 text-xs font-semibold">{r.size}</span>}
+                      {r.size !== 'TEK' && <span className="ml-1.5 rounded-lg bg-surface-3 px-1.5 text-xs font-semibold">{r.size}</span>}
                     </td>
                     <td className="tabular px-2 py-2 text-right text-muted">{r.count}</td>
                     <td className="tabular px-2 py-2 text-right">{dur(r.avg)}</td>

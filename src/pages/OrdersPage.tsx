@@ -122,7 +122,7 @@ export default function OrdersPage() {
             {boot.integrations.laffogatoUrl ? 'Site bağlantı anahtarı tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor' : 'Site bağlantısı kurulmadığı için uygulama ve web siparişleri buraya düşmüyor'}
           </span>
           {can('ayar.yonet') || can('senkron.yonet') ? (
-            <Link to="/yonetim/entegrasyon" className="inline-flex min-h-11 items-center font-medium text-primary hover:underline pointer-fine:min-h-0">
+            <Link to="/yonetim/entegrasyon" className="inline-flex min-h-11 items-center font-medium text-blue-ink hover:underline pointer-fine:min-h-0">
               Site ve lafmaliyet
             </Link>
           ) : null}
@@ -161,7 +161,7 @@ export default function OrdersPage() {
             const stageButton = flow && !stageFromBar(o);
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
-              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
+              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
                 <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex items-start gap-3 rounded-lg text-left">
                   <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
                     <Icon />
@@ -211,7 +211,7 @@ export default function OrdersPage() {
                 {(o.deliveryAddress || o.deliveryPhone) && (
                   <div className="mt-2 rounded-xl bg-surface-2 p-2.5 text-sm">
                     {o.deliveryPhone && (
-                      <a href={`tel:${o.deliveryPhone}`} className="flex min-h-11 items-center gap-1.5 font-medium text-primary pointer-fine:min-h-0">
+                      <a href={`tel:${o.deliveryPhone}`} className="flex min-h-11 items-center gap-1.5 font-medium text-blue-ink pointer-fine:min-h-0">
                         <Phone className="size-3.5" /> {o.deliveryPhone}
                       </a>
                     )}

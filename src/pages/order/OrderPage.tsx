@@ -285,7 +285,7 @@ export default function OrderPage() {
       </button>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-[-0.01em]">
+          <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold">
             {titleBadge}
             <span className="truncate">{title}</span>
           </h1>
@@ -377,11 +377,11 @@ export default function OrderPage() {
         <div className="flex min-h-0 flex-1 gap-3">
           {/* Uzaktan salt okunur: katalog yok, adisyon tam genişlikte */}
           {!REMOTE && (
-            <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface">
+            <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
               <ProductPanel disabled={!editable} onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
             </section>
           )}
-          <section className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface', REMOTE ? 'mx-auto w-full max-w-2xl' : 'w-[clamp(300px,40vw,440px)]')}>
+          <section className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]', REMOTE ? 'mx-auto w-full max-w-2xl' : 'w-[clamp(300px,40vw,440px)]')}>
             {header}
             {right}
           </section>
@@ -404,7 +404,7 @@ export default function OrderPage() {
                   // Tutar ekranın en önemli rakamı: sekme pasifken de koyu; gönderilmemiş adet amber sayaçta
                   <>
                     Adisyon
-                    {pendingCount > 0 && <span className="tabular rounded-md bg-[var(--admin-warning-soft)] px-1.5 text-xs font-semibold text-[var(--admin-warning)]">+{pendingCount}</span>}
+                    {pendingCount > 0 && <span className="tabular rounded-full bg-[var(--admin-warning-soft)] px-2 text-xs font-semibold text-[var(--admin-warning)]">+{pendingCount}</span>}
                     <span className="tabular ml-0.5 font-semibold text-ink">{tl(previewTotals(boot, order, pending)?.total ?? order.total)}</span>
                   </>
                 )}

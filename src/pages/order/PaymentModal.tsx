@@ -569,7 +569,7 @@ export function PaymentModal({
                   <li key={p.id} className={cn('flex items-center gap-2 px-3 py-2 text-sm', !!p.refundedAt && 'text-muted line-through')}>
                     <span className="min-w-0 flex-1">
                       {p.methodName}
-                      {p.shareNo != null && <span className="tabular ml-1.5 rounded-md bg-surface-3 px-1.5 py-0.5 text-xs font-medium text-ink-2">Pay {p.shareNo}/{p.shareOf}</span>}{' '}
+                      {p.shareNo != null && <span className="tabular ml-1.5 rounded-full bg-surface-3 px-2 py-0.5 text-xs font-medium text-ink-2">Pay {p.shareNo}/{p.shareOf}</span>}{' '}
                       <span className="text-xs text-muted">
                         {fmtTime(p.createdAt)}
                         {p.userName && ` · ${p.userName}`}

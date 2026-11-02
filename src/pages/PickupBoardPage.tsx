@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { PLATFORM_LABEL } from '@shared/platforms';
 import { fmtTime } from '@shared/time';
 import type { PickupBoardDTO, PickupEntryDTO } from '@shared/types';
-import { LafMark } from '@/components/LafMark';
+import { LafTile } from '@/components/LafMark';
 import { IconButton } from '@/components/ui/Button';
 import { get } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -52,11 +52,9 @@ export default function PickupBoardPage() {
   return (
     <div className="flex h-full flex-col gap-3 bg-bg p-3 md:p-5" onPointerDown={unlockAudio}>
       <header className="flex items-center gap-4 px-1">
-        <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-          <LafMark className="h-5" onNight />
-        </span>
+        <LafTile size="lg" />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-xl font-semibold tracking-[-0.01em] md:text-2xl">{businessName}</h1>
+          <h1 className="truncate text-xl font-semibold md:text-2xl">{businessName}</h1>
           {/* Telefonda sütunlar alt alta: yön tarifi yalnız geniş ekranda */}
           <p className="hidden text-base text-muted md:block">Numaranız Hazır listesine geçince siparişiniz hazırdır</p>
         </div>
@@ -97,7 +95,7 @@ function Column({ title, count, tone, empty, children }: { title: string; count:
     <section className={cn('flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-surface', tone === 'ready' ? 'border-[var(--admin-success-line)]' : 'border-line')}>
       <header className={cn('flex items-center gap-3 border-b px-5 py-3.5', tone === 'ready' ? 'border-[var(--admin-success-line)] bg-[var(--admin-success-soft)]' : 'border-[var(--admin-divider)]')}>
         <h2 className={cn('text-2xl font-bold tracking-[-0.01em] md:text-3xl', tone === 'ready' ? 'text-[var(--admin-success)]' : 'text-ink-2')}>{title}</h2>
-        <span className="tabular inline-flex min-h-7 items-center rounded-md bg-surface-3 px-2.5 text-base font-semibold text-ink-2">{count}</span>
+        <span className="tabular inline-flex min-h-7 items-center rounded-full bg-surface-3 px-3 text-base font-semibold text-ink-2">{count}</span>
       </header>
       {/* Hazır numaralar daha büyük: sütun hücresi de geniş (üç haneli numara kırpılmasın) */}
       <div className={cn('scroll-thin grid min-h-0 flex-1 auto-rows-min gap-3 overflow-y-auto p-4', tone === 'ready' ? 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(160px,1fr))]')}>

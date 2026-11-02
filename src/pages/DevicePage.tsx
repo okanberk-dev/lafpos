@@ -226,7 +226,7 @@ export default function DevicePage() {
                       </div>
                     ))}
                     <div className="flex justify-between text-sm">
-                      <button className="min-h-11 text-primary" onClick={() => setSplit([...split, { type: 3, amount: '' }])}>
+                      <button className="min-h-11 text-blue-ink" onClick={() => setSplit([...split, { type: 3, amount: '' }])}>
                         + Ödeme ekle
                       </button>
                       <span className={cn('tabular self-center', splitTotal === current.amount ? 'text-[var(--admin-success)]' : 'text-[var(--admin-warning)]')}>

@@ -106,7 +106,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
                           {c.stamps}/{goal} damga
                         </span>
                       )}
-                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-danger-ink' : 'text-primary'}>{tl(c.balance)}</span>}
+                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-danger-ink' : 'text-blue-ink'}>{tl(c.balance)}</span>}
                     </span>
                   </button>
                 </li>

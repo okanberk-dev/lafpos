@@ -4,9 +4,9 @@ import { cn } from '@/lib/cn';
 
 /**
  * Tek düğme kaynağı (kasa ve yönetim). Yönetimdeki `BTN` sınıfları da buradan türer (admin/ui.tsx).
- *   primary        dolu mavi: ekranın birincil eylemi
- *   secondary      beyaz, ince kenarlı (Innex "ghost"; yönetimde BTN.ghost)
- *   soft           açık mavi zemin, mavi yazı (Innex "View ›")
+ *   primary        dolu mürekkep (koyuda kırık beyaz): ekranın birincil eylemi, ekranda bir tane
+ *   secondary      beyaz, ince kenarlı (yönetimde BTN.ghost)
+ *   soft           sıcak gri zemin, mürekkep yazı: ikincil ama öne çıkan eylem ("Tümünü gör", "Değiştir")
  *   ghost          yalnız metin, zemin üzerine gelince
  *   danger         dolu kırmızı: kasada iptal, sil
  *   dangerOutline  kenarlı kırmızı yazı (yönetimde BTN.danger): sakin yıkıcı eylem
@@ -20,14 +20,14 @@ import { cn } from '@/lib/cn';
 export type ButtonVariant = 'primary' | 'secondary' | 'soft' | 'ghost' | 'danger' | 'dangerOutline' | 'dangerGhost' | 'success' | 'warn' | 'outline';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'xl';
 
-// Innex (docs/ADMIN-INNEX.md §1.5). Dört durum: dinlenme, üzerinde, basılı (bir ton koyu), devre dışı; odak halkası index.css'te
+// Dört durum: dinlenme, üzerinde, basılı (bir ton koyu), devre dışı; odak halkası index.css'te (mavi, eylem renginden ayrı)
 const secondary =
   'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-surface-3 active:border-[var(--admin-border-field)] active:bg-[var(--admin-border)]';
 const variants: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-primary-ink hover:bg-[var(--admin-primary-hover)] active:bg-[var(--admin-primary-hover)] active:brightness-95',
+  primary: 'bg-primary text-primary-ink shadow-[var(--shadow-card)] hover:bg-[var(--admin-primary-hover)] active:bg-[var(--admin-primary-hover)] active:brightness-95',
   secondary,
   outline: secondary,
-  soft: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] hover:brightness-95 active:brightness-90',
+  soft: 'bg-[var(--admin-primary-soft)] text-[var(--admin-text)] hover:bg-[var(--admin-panel)] hover:brightness-95 active:brightness-90',
   ghost: 'bg-transparent text-ink-2 hover:bg-hover hover:text-ink active:bg-press',
   danger: 'bg-danger-600 text-white hover:bg-danger-700 active:bg-danger-700 active:brightness-95',
   dangerOutline:

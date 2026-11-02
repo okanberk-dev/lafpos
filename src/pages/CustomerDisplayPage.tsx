@@ -3,7 +3,7 @@ import { useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { tl } from '@shared/money';
 import type { DisplayStateDTO } from '@shared/types';
-import { LafMark } from '@/components/LafMark';
+import { LafMark, LafTile } from '@/components/LafMark';
 import { get } from '@/lib/api';
 import { useTick } from '@/lib/hooks';
 import { useBusinessName } from '@/lib/publicInfo';
@@ -45,19 +45,17 @@ export default function CustomerDisplayPage() {
     <div className="flex h-full flex-col bg-bg p-3 md:p-6">
       {state.kind === 'order' ? (
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
             <header className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-5 py-4">
-              <span className="grid size-11 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-                <LafMark className="h-4" onNight />
-              </span>
-              <h1 className="text-xl font-semibold tracking-[-0.01em]">Siparişiniz</h1>
+              <LafTile />
+              <h1 className="text-xl font-semibold">Siparişiniz</h1>
               <span className="flex-1" />
               <span className="text-sm text-muted">{state.label}</span>
             </header>
             <ul className="scroll-thin min-h-0 flex-1 divide-y divide-[var(--admin-divider)] overflow-y-auto">
               {state.lines.map((l, i) => (
                 <li key={`${l.name}-${i}`} className="flex items-start gap-4 px-5 py-3.5">
-                  <span className="tabular grid min-w-9 place-items-center rounded-lg bg-surface-3 px-2 py-1 text-lg font-semibold">{l.qty}</span>
+                  <span className="tabular grid min-w-10 place-items-center rounded-xl bg-surface-3 px-2 py-1 text-lg font-semibold">{l.qty}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-lg font-semibold leading-snug">
                       {l.name}
@@ -70,7 +68,7 @@ export default function CustomerDisplayPage() {
               ))}
             </ul>
           </section>
-          <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6">
+          <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-6">
             <div className="flex flex-1 flex-col items-center justify-center text-center">
               <LafMark className="h-16 text-ink" />
               <p className="mt-4 text-lg font-medium text-ink-2">{businessName}</p>
@@ -95,18 +93,22 @@ export default function CustomerDisplayPage() {
             )}
             <div>
               <p className="text-lg text-muted">{state.paid > 0 ? 'Kalan' : 'Toplam'}</p>
-              <p className="tabular text-6xl font-bold tracking-tight md:text-7xl">{tl(state.paid > 0 ? state.due : state.total)}</p>
+              <p className="tabular text-6xl font-semibold tracking-[-0.03em] md:text-7xl">{tl(state.paid > 0 ? state.due : state.total)}</p>
             </div>
           </section>
         </div>
       ) : (
-        // Koyuda boş ekranda kart yok: içerik doğrudan zeminde, gecenin tek açık yüzeyi logonun karosu
-        <div className={cn('grid flex-1 place-items-center p-8 text-center', !forced && 'rounded-2xl border border-line bg-surface')}>
+        // Boş ekranda kart yok: içerik doğrudan zeminde; gecenin tek açık yüzeyi logonun karosu ve arkasındaki L'Affogato
+        // yeşili ışıltı (yalnız süs)
+        <div
+          className={cn(
+            'grid flex-1 place-items-center p-8 text-center',
+            forced === 'light' ? 'bg-[radial-gradient(60%_55%_at_50%_38%,rgb(28_106_83/0.1),transparent_70%)]' : 'bg-[radial-gradient(55%_50%_at_50%_40%,rgb(28_106_83/0.3),transparent_70%)]',
+          )}
+        >
           {/* Izgara öğesi içeriğin en geniş kelimesine göre büyümesin: uzun masa no telefonda taşmasın */}
           <div className="w-full min-w-0">
-            <span className="mx-auto grid size-24 place-items-center rounded-[20px] bg-night text-white dark:bg-surface-3">
-              <LafMark className="h-9" onNight />
-            </span>
+            <LafTile size="xl" className="mx-auto" />
             {state.kind === 'thanks' ? (
               <>
                 <h1 className="mt-8 text-4xl font-semibold tracking-tight md:text-5xl">Teşekkürler, afiyet olsun</h1>
@@ -136,7 +138,7 @@ function CallNumber({ call }: { call: string }) {
   // Uzun kimlik ("Masa WWWWWW"): çağrı ekranındaki gibi ekranla küçülen yazı ve kırılan kelime (390 px'te taşmasın)
   const long = shown.length > 5;
   return (
-    <div className="mx-auto mt-8 w-fit min-w-56 max-w-full rounded-2xl border border-line bg-surface-2 px-8 py-5 max-sm:min-w-0 max-sm:px-5">
+    <div className="mx-auto mt-8 w-fit min-w-56 max-w-full rounded-3xl border border-line bg-surface-2 px-8 py-5 max-sm:min-w-0 max-sm:px-5">
       <p className="text-lg font-medium text-muted">{no ? 'Numaranız' : 'Siparişiniz'}</p>
       <p className={cn('tabular font-bold leading-tight tracking-tight [overflow-wrap:anywhere]', long ? 'text-[clamp(2.25rem,9vw,5rem)]' : 'text-7xl md:text-8xl')}>{shown}</p>
       <p className="mt-1 text-lg text-ink-2">{no ? 'Hazır olunca çağrı ekranında görünür' : 'Masanıza getirilecek'}</p>

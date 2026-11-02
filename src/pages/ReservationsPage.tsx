@@ -160,7 +160,7 @@ export default function ReservationsPage() {
       ) : (
         <div aria-busy={list.isPlaceholderData || undefined} className={cn('space-y-2 transition-opacity duration-150', list.isPlaceholderData && 'opacity-60')}>
           {rows.map((r) => (
-            <div key={r.id} className={cn('flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-4', r.status === 'iptal' && 'opacity-60')}>
+            <div key={r.id} className={cn('flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-4', r.status === 'iptal' && 'opacity-60')}>
               <div className="tabular w-14 text-xl font-semibold">{r.time}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 font-semibold">
@@ -172,7 +172,7 @@ export default function ReservationsPage() {
                   </span>
                   {r.tableName && <span>{r.tableName}</span>}
                   {r.phone && (
-                    <a href={`tel:${r.phone}`} className="inline-flex min-h-11 items-center gap-1 text-primary pointer-fine:min-h-0">
+                    <a href={`tel:${r.phone}`} className="inline-flex min-h-11 items-center gap-1 text-blue-ink pointer-fine:min-h-0">
                       <Phone className="size-3.5" /> {r.phone}
                     </a>
                   )}

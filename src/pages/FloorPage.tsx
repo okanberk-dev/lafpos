@@ -84,15 +84,15 @@ export default function FloorPage() {
     // Innex: gri zemin üstünde iki beyaz kart; telefonda kartlar kenara yapışmasın diye zeminde 8 px
     // Telefonda tek kaydırma yüzeyi (masa kartı içinde ayrı kaydırma yok); tablet ve bilgisayarda kartlar kendi içinde kayar
     <div className="flex h-full flex-col gap-3 p-2 max-md:overflow-y-auto md:p-0 lg:flex-row">
-      <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface max-md:flex-none">
+      <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] max-md:flex-none">
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3">
           <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-            <h1 className="text-lg font-semibold tracking-[-0.01em]">{section?.name ?? 'Masalar'}</h1>
+            <h1 className="text-xl font-semibold">{section?.name ?? 'Masalar'}</h1>
             <p className="text-[13px] text-muted">{summary}</p>
           </div>
           <div className="flex items-center gap-2 max-sm:w-full">
             {wide && (
-              <div role="radiogroup" aria-label="Görünüm" className="inline-flex rounded-lg bg-surface-3 p-0.5">
+              <div role="radiogroup" aria-label="Görünüm" className="inline-flex rounded-full bg-surface-3 p-[3px]">
                 {(
                   [
                     ['plan', 'Plan görünümü', LayoutGrid],
@@ -108,8 +108,8 @@ export default function FloorPage() {
                     title={label}
                     onClick={() => setView(v)}
                     className={cn(
-                      'grid size-9 place-items-center rounded-md transition-colors duration-150 focus-visible:-outline-offset-2 pointer-coarse:size-11',
-                      view === v ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08),0_0_0_1px_rgb(12_14_27/0.04)]' : 'text-muted hover:text-ink',
+                      'grid h-9 w-10 place-items-center rounded-full transition-colors duration-150 focus-visible:-outline-offset-2 pointer-coarse:size-11',
+                      view === v ? 'bg-surface text-ink shadow-[0_1px_3px_rgb(26_25_23/0.1),0_0_0_1px_rgb(26_25_23/0.04)] dark:bg-[var(--admin-border-strong)]' : 'text-muted hover:text-ink',
                     )}
                   >
                     <Icon className="size-4" />
@@ -201,17 +201,17 @@ export default function FloorPage() {
         </div>
         <footer className="hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-4 py-2.5 text-xs text-muted sm:flex">
           <Legend className="border border-line bg-surface" label="Boş" />
-          <Legend className="border border-primary-line bg-primary-soft" label="Dolu" />
+          <Legend className="border border-blue-line bg-blue-soft" label="Dolu" />
           <Legend className="border border-warning-line bg-warning-soft" label="Hesap istendi" />
           <Legend className="border border-rose-line bg-rose-soft" label="Kısmen ödendi" />
           <Legend className="border border-line bg-surface" dot label="Rezerve" />
         </footer>
       </section>
 
-      <aside className="flex max-h-[40%] flex-col rounded-2xl border border-line bg-surface max-md:max-h-none max-md:flex-none lg:max-h-none lg:w-80">
+      <aside className="flex max-h-[40%] flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] max-md:max-h-none max-md:flex-none lg:max-h-none lg:w-80">
         <div className="flex min-h-12 items-center gap-2 border-b border-[var(--admin-divider)] px-4 py-2.5">
           <h2 className="flex-1 text-[15px] font-semibold">Masasız siparişler</h2>
-          <span className="tabular min-w-5 rounded-md bg-surface-3 px-1.5 py-px text-center text-xs font-medium text-ink-2">{others.length}</span>
+          <span className="tabular min-w-5 rounded-full bg-surface-3 px-2 py-px text-center text-xs font-medium text-ink-2">{others.length}</span>
         </div>
         <div className="scroll-thin flex-1 overflow-y-auto p-2">
           {others.length === 0 && (
@@ -221,7 +221,7 @@ export default function FloorPage() {
           )}
           {others.map((o) => (
             <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
-              <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
+              <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
                 {o.source === 'laffogato' ? <Globe /> : o.type === 'paket' ? <Bike /> : o.type === 'gelal' ? <ShoppingBag /> : <Store />}
               </span>
               <span className="min-w-0 flex-1">
@@ -234,7 +234,7 @@ export default function FloorPage() {
                 <span className="tabular text-right text-sm font-semibold">
                   {tlShort(o.total)}
                   {/* Hazırlanan mavi (bar ekranıyla aynı dil); amber yalnız zamana */}
-                  {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-primary">{o.pendingKitchen} barda</span>}
+                  {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-blue-ink">{o.pendingKitchen} barda</span>}
                 </span>
               )}
             </button>
@@ -315,15 +315,15 @@ function SiteKaraokeRow({ booking: b, past }: { booking: SiteKaraokeBookingDTO; 
 function Legend({ className, dot, label }: { className: string; dot?: boolean; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={cn('relative size-3 rounded-[4px]', className)}>{dot && <span className="absolute inset-[2px] rounded-[2px] bg-[var(--admin-primary-soft)] ring-1 ring-inset ring-[var(--admin-primary)]/50" />}</span>
+      <span className={cn('relative size-3 rounded-full', className)}>{dot && <span className="absolute inset-[2px] rounded-full bg-[var(--admin-blue-soft)] ring-1 ring-inset ring-[var(--admin-blue)]/50" />}</span>
       {label}
     </span>
   );
 }
 
 /**
- * Masa: durum dolguyla değil açık tonla (Innex durum rozeti gibi). Boş beyaz, dolu mavi ton, hesap istendi amber,
- * kısmen ödendi pembe; bara gitmiş ve hazır kalemler küçük rozet, hazır olan yeşil ve dikkat çeker.
+ * Masa: durum dolguyla değil açık tonla (durum rozeti gibi). Boş beyaz, dolu mavi ton, hesap istendi amber, kısmen
+ * ödendi pembe; bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil ve dikkat çeker. Tutar kartın en büyük yazısı.
  */
 function TableTile({
   table,
@@ -360,12 +360,12 @@ function TableTile({
       onClick={onClick}
       style={style}
       className={cn(
-        '@container group flex flex-col overflow-hidden border p-2.5 text-left transition-[border-color,background-color,transform] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
+        '@container group flex flex-col overflow-hidden border p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
         busy || reservation ? 'justify-between' : 'justify-start gap-1',
-        round ? 'items-center rounded-[999px] text-center' : 'rounded-xl',
-        tone === 'free' && 'border-line bg-surface hover:border-[var(--admin-border-field)]',
+        round ? 'items-center rounded-[999px] text-center' : 'rounded-2xl',
+        tone === 'free' && 'border-line bg-surface shadow-[var(--shadow-card)] hover:border-[var(--admin-border-field)]',
         // Durum çizgisi belirteçleri iki temada da görünür (koyuda dolu, hesap istendi ve kısmen ödendi karışmasın)
-        tone === 'busy' && 'border-primary-line bg-primary-soft hover:border-[var(--admin-primary)]',
+        tone === 'busy' && 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)]',
         tone === 'billed' && 'border-warning-line bg-warning-soft hover:border-[var(--admin-warning)]',
         tone === 'partial' && 'border-rose-line bg-rose-soft hover:border-[var(--admin-hue-rose)]',
         className,
@@ -383,7 +383,7 @@ function TableTile({
       </div>
       {busy ? (
         <div className={cn('w-full', round && 'text-center')}>
-          <div className="tabular text-sm font-bold leading-none @min-[6rem]:text-lg">{tlShort(total)}</div>
+          <div className="tabular text-base font-semibold leading-none tracking-[-0.02em] @min-[6rem]:text-xl">{tlShort(total)}</div>
           {/* Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır */}
           {partial && <div className="tabular mt-0.5 text-xs font-medium text-[var(--admin-hue-rose)]">{tlShort(total - paid)} kaldı</div>}
           <div className={cn('mt-1 hidden items-center gap-1.5 text-xs text-ink-2 @min-[6.5rem]:flex', round && 'justify-center')}>
@@ -393,18 +393,18 @@ function TableTile({
           {(pending > 0 || ready > 0) && (
             <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
               {pending > 0 && (
-                <span className="tabular inline-flex items-center gap-0.5 rounded-md bg-surface px-1.5 py-0.5 text-ink-2 ring-1 ring-inset ring-primary-line" title={`${pending} kalem barda`}>
+                <span className="tabular inline-flex items-center gap-0.5 rounded-full bg-surface px-2 py-0.5 text-ink-2 ring-1 ring-inset ring-blue-line" title={`${pending} kalem barda`}>
                   <ChefHat className="size-3" />
                   {pending}
                 </span>
               )}
-              {ready > 0 && <span className="animate-ring tabular rounded-md bg-success-600 px-1.5 py-0.5 text-white">{ready} hazır</span>}
+              {ready > 0 && <span className="animate-ring tabular rounded-full bg-success-600 px-2 py-0.5 text-white">{ready} hazır</span>}
             </div>
           )}
         </div>
       ) : reservation ? (
         <div className="w-full">
-          <span className="tabular inline-flex rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-primary)]">{reservation.time}</span>
+          <span className="tabular inline-flex rounded-full bg-[var(--admin-blue-soft)] px-2 py-0.5 text-xs font-medium text-[var(--admin-blue)]">{reservation.time}</span>
           <div className="mt-0.5 hidden truncate text-xs text-ink-2 @min-[6rem]:block">{reservation.name}</div>
         </div>
       ) : (

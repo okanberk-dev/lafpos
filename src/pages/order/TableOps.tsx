@@ -54,7 +54,7 @@ export function MoveModal({ order, open, onClose, act, onMoved }: { order: Order
           {tables.map((t) => {
             const busy = checkOn(t.id);
             return (
-              <button key={t.id} onClick={() => pick(t.id)} className={cn('h-20 rounded-xl border p-2 text-left transition-colors duration-150', busy ? 'border-primary-line bg-primary-soft hover:border-[var(--admin-primary)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}>
+              <button key={t.id} onClick={() => pick(t.id)} className={cn('h-20 rounded-xl border p-2 text-left transition-colors duration-150', busy ? 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}>
                 <div className="font-semibold">{t.name}</div>
                 <div className="text-xs opacity-80">{busy ? `Dolu · ${tl(busy.total)}` : 'Boş'}</div>
               </button>

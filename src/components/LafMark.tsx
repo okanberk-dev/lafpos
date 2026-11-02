@@ -1,3 +1,5 @@
+import { cn } from '@/lib/cn';
+
 /**
  * L'Af: L'Affogato'nun logosu, laffogato.net ve uygulama ikonuyla aynı vektör (laffogato public/brand/laf-letters.svg
  * ve laf-bean.svg). Harfler yazının rengini alır; çekirdek pirinç. Yazı tipine bağlı değil: Didot'u olmayan Windows
@@ -19,5 +21,28 @@ export function LafMark({ className, bean, onNight, title }: { className?: strin
       <path fillRule="evenodd" fill="currentColor" d={LETTERS} />
       <path fillRule="evenodd" fill={fill} d={BEAN} />
     </svg>
+  );
+}
+
+const TILE = {
+  sm: { box: 'size-8 rounded-[10px]', mark: 'h-3' },
+  md: { box: 'size-11 rounded-xl', mark: 'h-4' },
+  lg: { box: 'size-12 rounded-[14px]', mark: 'h-5' },
+  xl: { box: 'size-24 rounded-[22px]', mark: 'h-11' },
+} as const;
+
+/**
+ * Marka karosu: uygulama ikonunun kendisi (L'Affogato yeşili, krem harfler, pirinç çekirdek; `public/favicon.svg`).
+ * Kasa rayında, yönetim kenar çubuğunda, girişte ve müşteriye dönük ekranlarda tek kaynak; iki temada aynı.
+ */
+export function LafTile({ size = 'md', className }: { size?: keyof typeof TILE; className?: string }) {
+  const t = TILE[size];
+  return (
+    <span
+      className={cn('grid shrink-0 place-items-center text-[var(--brand-cream)] shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08),0_1px_2px_rgb(13_63_48/0.25)]', t.box, className)}
+      style={{ background: 'var(--brand-tile)' }}
+    >
+      <LafMark className={t.mark} onNight />
+    </span>
   );
 }

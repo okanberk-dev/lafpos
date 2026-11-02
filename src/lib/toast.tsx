@@ -20,7 +20,7 @@ export const toast = {
 
 const icons = { ok: CheckCircle2, err: AlertTriangle, info: Info, warn: AlertTriangle };
 const tones: Record<Tone, string> = {
-  // Innex araç ipucu gibi koyu; durum rengi yalnız ikonda. Koyu temada gece mürekkebi zeminde kaybolur: yüzen yüzey
+  // Mürekkep zeminli hap; durum rengi yalnız ikonda. Koyu temada mürekkep zeminde kaybolur: yüzen yüzey
   ok: 'bg-night text-white [&>svg:first-child]:text-success-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-success)]',
   err: 'bg-night text-white [&>svg:first-child]:text-danger-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-danger)]',
   info: 'bg-night text-white dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink',
@@ -73,7 +73,7 @@ function ToastItem({ t }: { t: Toast }) {
       // Kapanırken (150 ms) dokunuşu yine bildirim alır, hiçbir şey olmaz: act() ve leave() kapanmakta olanı yok sayar
       // ("Geri al"a çift dokunuş eylemi iki kez çalıştırmaz). inert ya da pointer-events-none dokunuşu alttaki ürüne,
       // pencerenin arka planına geçirirdi
-      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
+      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
     >
       <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span className="flex-1 leading-snug">{t.text}</span>

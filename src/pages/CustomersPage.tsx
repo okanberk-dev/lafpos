@@ -112,7 +112,7 @@ export default function CustomersPage() {
   return (
     // Innex: gri zemin üstünde iki beyaz kart (liste ve kayıt), Masalar ekranıyla aynı iskelet
     <div className="flex h-full flex-col gap-3 p-2 md:p-0 lg:flex-row">
-      <aside className={cn('flex min-h-0 flex-col rounded-2xl border border-line bg-surface lg:w-[400px]', c ? 'max-h-[40%] lg:max-h-none' : 'flex-1 lg:flex-none')}>
+      <aside className={cn('flex min-h-0 flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] lg:w-[400px]', c ? 'max-h-[40%] lg:max-h-none' : 'flex-1 lg:flex-none')}>
         <div className="space-y-3 p-4 pb-3">
           <PageHeader
             title="Müşteriler"
@@ -149,7 +149,7 @@ export default function CustomersPage() {
                       {x.stamps}/{goal}
                     </span>
                   )}
-                  {x.balance !== 0 && <span className={x.balance > 0 ? 'text-danger-ink' : 'text-primary'}>{tl(x.balance)}</span>}
+                  {x.balance !== 0 && <span className={x.balance > 0 ? 'text-danger-ink' : 'text-blue-ink'}>{tl(x.balance)}</span>}
                 </span>
               </button>
             </li>
@@ -175,7 +175,7 @@ export default function CustomersPage() {
         </ul>
       </aside>
 
-      <section className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 md:p-6', !selected && 'max-lg:hidden')}>
+      <section className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-4 md:p-6', !selected && 'max-lg:hidden')}>
         {!selected ? (
           <EmptyState icon={<Wallet />} title="Bir müşteri seçin">
             {stamps ? 'Açık hesap bakiyesi, tahsilat, damga kartı ve sipariş geçmişi burada görünür' : 'Açık hesap bakiyesi, tahsilat ve sipariş geçmişi burada görünür'}

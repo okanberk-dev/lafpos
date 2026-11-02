@@ -18,7 +18,8 @@ sipariş, lafmaliyet'le gün sonu ve maliyet alışverişi yapar.
 | Kasiyer ve barista | Tezgâhta tablet (dikey ya da yatay) ya da dokunmatik ekran | Tezgâh satışı, ödeme, yazarkasaya gönderme, gün sonu | Tablette ürünler ve adisyon yan yana; büyük ödeme düğmeleri |
 | Bar ekranı | Barın üstünde tablet, uzaktan okunur | Fişleri hazırla, bitti işaretle | Koyu zemin, büyük yazı, renkli durum |
 | Müdür | Bilgisayar ya da tablet, vardiya arasında | İndirim/iptal onayı, kasa, rapor | Yetkili PIN onayı, net tutarlar |
-| Patron | Telefon (dışarıdayken) ve bilgisayar (yönetimde) | Canlı ciro, dikkat isteyenler; menü, personel, ayar | Patron paneli telefonda tek sütun; yönetim Innex düzeninde |
+| Patron | Telefon (dışarıdayken) ve bilgisayar (yönetimde) | Canlı ciro, dikkat isteyenler; menü, personel, mesai, ayar | Patron paneli telefonda tek sütun; yönetim Innex düzeninde, LafPOS Sade görünümünde |
+| Herkes | Kasadaki giriş ekranı ya da kendi telefonu | Vardiya başında ve sonunda PIN'le mesai; kasiyer çıkarken vardiya devri sayımı | Giriş ekranında Mesai sekmesi (oturum açmadan), kullanıcı menüsünde süre ve "Mesaiyi bitir" |
 
 ## Servis modu
 
@@ -36,4 +37,4 @@ Patron Yönetim › Ayarlar ve yedek › Servis modu'ndan seçer; seçince hemen
 
 - Para kuruş tam sayı; fiyatlar KDV dahil; personel maliyet ve kâr görmez (KVKK, `rapor.maliyet`).
 - Arayüz Türkçe ve doğal; başlıklarda sonda nokta yok; büyük harf dönüşümü Türkçe kurala göre (`lang="tr"`).
-- Çevrimdışı çalışır: yazılar pakette (`@fontsource`), dış kaynaktan yazı ya da betik yüklenmez.
+- Çevrimdışı çalışır: yazılar pakette (`@fontsource`: Poppins ve Outfit rakamları), dış kaynaktan yazı ya da betik yüklenmez.

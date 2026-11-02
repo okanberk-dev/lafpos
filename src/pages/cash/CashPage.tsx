@@ -352,7 +352,7 @@ export default function CashPage() {
           ) : (
             // Kör kasa: başlıksız tek not; yetkinin adı ipucunda
             <div
-              className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3 text-[13px] text-muted"
+              className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] px-4 py-3 text-[13px] text-muted"
               title="Rakamları görmek için yöneticiden “Ara rapor (X) ve kasa rakamlarını görme” yetkisi isteyin"
             >
               <EyeOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />

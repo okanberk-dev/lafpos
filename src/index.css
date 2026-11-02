@@ -1,29 +1,102 @@
 @import 'tailwindcss';
-/* Inter (Innex, docs/ADMIN-INNEX.md §1.4): kasa ekranları ve yönetim paneli aynı yazıyla, rakamlar tablo hizalı */
-@import '@fontsource/inter/latin-400.css';
-@import '@fontsource/inter/latin-ext-400.css';
-@import '@fontsource/inter/latin-500.css';
-@import '@fontsource/inter/latin-ext-500.css';
-@import '@fontsource/inter/latin-600.css';
-@import '@fontsource/inter/latin-ext-600.css';
-@import '@fontsource/inter/latin-700.css';
-@import '@fontsource/inter/latin-ext-700.css';
+
+/*
+ * Yazı: Poppins (harfler) ve Outfit (rakamlar). Poppins'in rakamları orantılıdır, tablo rakamı (tnum) yoktur; tutarlar
+ * alt alta hizalansın diye bütün rakamlar ona çok benzeyen Outfit'ten gelir ("LafPOS Rakam", yalnız 0-9). Rakamlar
+ * metinde orantılı, `.tabular` / `tabular-nums` ile eşit genişlikte. Dosyalar pakette (@fontsource), çevrimdışı çalışır.
+ * Latin ve latin-ext ayrı dosya; tarayıcı yalnız gereken harf aralığını indirir (Türkçe harfler ve ₺ latin-ext'te).
+ */
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/poppins/files/poppins-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('@fontsource/poppins/files/poppins-latin-ext-400-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('@fontsource/poppins/files/poppins-latin-500-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('@fontsource/poppins/files/poppins-latin-ext-500-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url('@fontsource/poppins/files/poppins-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url('@fontsource/poppins/files/poppins-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('@fontsource/poppins/files/poppins-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('@fontsource/poppins/files/poppins-latin-ext-700-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Outfit (değişken ağırlık) yalnız rakamlar için: Poppins'in harfleriyle aynı geometri, tablo rakamı var */
+@font-face {
+  font-family: 'LafPOS Rakam';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/outfit/files/outfit-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0030-0039;
+}
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * LafPOS tek tasarım dilinde: Innex (docs/ADMIN-INNEX.md, DESIGN.md). Gri zemin üstünde beyaz kartlar, 1 px
- * kenarlık, 12 px köşe, mavi birincil. Kasa ekranları ve yönetim paneli aynı değerleri kullanır; panel yalnız
- * daha sık (fareyle 36 px düğme). Durum ölçekleri anlamıyla adlandırılır:
- *   brand   mavi: birincil eylem, seçim, dolu masa
- *   success yeşil: hazır, ödendi, canlı bağlantı
- *   warn    amber: hesap istendi, geciken sipariş
- *   danger  kırmızı: iptal, alarm, hata
- *   rose    pembe: kısmen ödendi
- * L'Affogato'nun kendisi logoda (L'Af).
+ * LafPOS Sade (2 Kasım 2026, operatör: "Poppins ve benzeri, minimalist, basit, UI/UX olarak üst düzey"): sıcak
+ * kırık beyaz zemin, üstünde beyaz kartlar ve kâğıt inceliğinde çizgi; köşeler yumuşak (düğme 12, kart 16, pencere
+ * 20). Renk anlam taşır, süs değildir:
+ *   mürekkep  birincil eylem ve seçim (dolu siyah düğme; koyu temada kırık beyaz)
+ *   mavi      durum: dolu masa, hazırlanıyor, bilgi; odak halkası
+ *   yeşil     hazır, ödendi, canlı bağlantı
+ *   amber     hesap istendi, geciken sipariş, uyarı
+ *   kırmızı   iptal, alarm, hata
+ *   pembe     kısmen ödendi;  mor  online (siteden gelen) sipariş
+ * Marka (L'Affogato yeşili, krem harf, pirinç çekirdek) yalnız logo karosunda ve grafikte.
+ * Yerleşim Innex'ten kaldı (docs/ADMIN-INNEX.md): kenar çubuğu, sayfa başlığı şeridi, KPI şeridi, tablo, çekmece.
  */
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'LafPOS Rakam', 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --color-brand-50: #f5f7ff;
@@ -74,53 +147,59 @@
    * uyarı kutusu ve kenar için anlam adları (aşağıdaki @theme inline: text-danger-ink, bg-warning-soft,
    * border-warning-line…) ya da --admin-* belirteçleri; onlar iki temada da AA (tests/design-tokens.test.ts)
    */
-  --color-night: #0c0e1b;
+  --color-night: #1a1917;
 
-  /* Innex köşeleri: düğme ve alan 8, kart 12 (sınıf adları aynı kaldı: rounded-xl düğme, rounded-2xl kart) */
-  --radius-xl: 0.5rem;
-  --radius-2xl: 0.75rem;
-  --radius-3xl: 0.75rem;
-  /* Kartta gölge yok, ayrımı 1 px kenarlık yapar; gölge yalnız yüzen katmanda (pencere, menü) */
-  --shadow-card: none;
-  --shadow-pop: 0 12px 32px rgb(12 14 27 / 0.12), 0 0 0 1px rgb(12 14 27 / 0.04);
+  /* Köşeler: küçük denetim 10, düğme ve alan 12, kart 16, pencere 20 (sınıf adları aynı: rounded-xl düğme, rounded-2xl kart) */
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
+  /* Kart neredeyse düz: ayrımı ince çizgi ve kâğıt gölgesi yapar; belirgin gölge yalnız yüzen katmanda (pencere, menü) */
+  --shadow-card: 0 1px 2px rgb(26 25 23 / 0.04);
+  --shadow-pop: 0 18px 44px -12px rgb(26 25 23 / 0.22), 0 0 0 1px rgb(26 25 23 / 0.05);
   /* Durum geçişleri: kısa, üstel yavaşlayan; sayfa yüklenirken koreografi yok (Operate) */
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --default-transition-duration: 150ms;
   --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* Innex açık: değerler laffogato'nun paneliyle aynı (src/app/admin/layout.tsx) */
+/* Açık tema: sıcak kırık beyaz (kâğıt), mürekkep yazı ve eylem */
 :root {
-  --admin-bg: #edeff1;
+  --admin-bg: #f4f3ef;
   --admin-surface: #ffffff;
-  --admin-surface-2: #f9fbfc;
-  --admin-panel: #f3f5f7;
-  --admin-border: #e8e8e8;
-  --admin-border-strong: #e3e3e3;
-  --admin-divider: #f2f2f2;
-  --admin-border-field: #898d94;
-  --admin-text: #0c0e1b;
-  --admin-text-soft: #3d4048;
-  --admin-text-mute: #616367;
-  --admin-primary: #2f58f7;
+  --admin-surface-2: #faf9f7;
+  --admin-panel: #efede8;
+  --admin-border: #e7e4de;
+  --admin-border-strong: #dcd9d2;
+  --admin-divider: #f0eee9;
+  --admin-border-field: #8a857c;
+  --admin-text: #1a1917;
+  --admin-text-soft: #46433d;
+  --admin-text-mute: #6b675f;
+  /* Birincil: mürekkep. Dolu düğme, seçili öğe, bağlantı; üstünde beyaz */
+  --admin-primary: #1a1917;
   /* L'Af logosundaki çekirdek: açık zeminde koyu pirinç (açık pirinç 1.5:1 kalır), koyuda uygulama ikonunun pirinci */
   --laf-bean: #b08a2e;
-  --admin-primary-hover: #2449e0;
+  --admin-primary-hover: #34312c;
   --admin-on-primary: #ffffff;
-  --admin-primary-soft: #ecf1ff;
-  --admin-neutral-soft: #f3f5f7;
+  --admin-primary-soft: #ecebe6;
+  --admin-neutral-soft: #f0eee9;
+  /* Durum mavisi: dolu masa, hazırlanıyor, bilgi rozeti, odak halkası (eylem rengi değil) */
+  --admin-blue: #2b55e6;
+  --admin-blue-soft: #edf1fe;
+  --admin-blue-line: #d3dcfc;
   --admin-accent: #794ffd;
   --admin-accent-ink: #6d3fea;
   --admin-accent-soft: #f6f1ff;
   --admin-info: #0b7392;
   --admin-info-soft: #eaf8fd;
   --admin-success: #15803d;
-  --admin-success-soft: #e1faed;
+  --admin-success-soft: #ebf8f0;
   --admin-warning: #b45309;
-  --admin-warning-soft: #fff2e6;
+  --admin-warning-soft: #fff3e6;
   --admin-danger: #dc2626;
   --admin-danger-ink: #b42318;
-  --admin-danger-soft: #feebed;
+  --admin-danger-soft: #feecec;
   --admin-hue-blue: #3346d3;
   --admin-hue-blue-soft: #eff1fe;
   --admin-hue-amber: #a1500b;
@@ -131,7 +210,13 @@
   --admin-hue-violet-soft: #f6f1ff;
   --admin-hue-green: #15803d;
   --admin-hue-green-soft: #eefbf2;
-  --admin-chart-line: #2132ba;
+  /* Grafik serisi: L'Affogato yeşili (uygulama ikonu), kartta 6:1 */
+  --admin-chart-line: #1f6f58;
+  /* Marka karosu (uygulama ikonu): yeşil, krem harf, pirinç çekirdek; iki temada aynı */
+  --brand-tile: radial-gradient(120% 120% at 50% 18%, #25896b 0%, #1c6a53 48%, #0d3f30 100%);
+  --brand-cream: #fbf6f1;
+  /* Geniş marka yüzeyi (giriş ekranı): karodan bir ton koyu, krem yazı 6:1, soluk krem (%80) 4.8:1 */
+  --brand-panel: radial-gradient(130% 90% at 18% 0%, #1c6a53 0%, #145240 46%, #0b3528 100%);
 
   --bg: var(--admin-bg);
   --surface: var(--admin-surface);
@@ -144,54 +229,59 @@
   --line-strong: var(--admin-border-field);
   --primary: var(--admin-primary);
   --primary-ink: var(--admin-on-primary);
+  --focus: var(--admin-blue);
   --chart-accent: var(--admin-chart-line);
   /* Kıyas çizgisi (geçen hafta): gri ama kartta 3:1 (WCAG 1.4.11 grafik nesnesi) */
-  --chart-context: #8a909a;
-  --chart-grid: #eef0f3;
+  --chart-context: #8a857c;
+  --chart-grid: #efede8;
   --chart-track: var(--admin-panel);
 
   /* Durum çizgisi: yumuşak zeminli kutunun ya da kartın kenarı (masa durumu, uyarı kutusu, KPI karosu) */
-  --admin-primary-line: #d9e2ff;
-  --admin-success-line: #c1f0d3;
-  --admin-warning-line: #fde2c3;
-  --admin-danger-line: #fbd2d7;
-  --admin-rose-line: #f7b3c4;
+  --admin-primary-line: #cfcbc3;
+  --admin-success-line: #bfe6cc;
+  --admin-warning-line: #f6dcbc;
+  --admin-danger-line: #f6cdcd;
+  --admin-rose-line: #f5b9c7;
   --admin-info-line: #b9e3f2;
   /* Yüzen katmanlar: karartma (pencere; çekmece ve palet hafif), yüzen yüzey (menü, bildirim, grafik ipucu) */
-  --scrim: rgb(12 14 27 / 0.32);
-  --scrim-soft: rgb(12 14 27 / 0.18);
+  --scrim: rgb(26 25 23 / 0.36);
+  --scrim-soft: rgb(26 25 23 / 0.2);
   --surface-raised: var(--admin-surface);
   /* Üzerine gelme ve basılı: zeminden bağımsız örtü (saydam öğede), sabit kopyası yapışkan hücre gibi opak yerde */
-  --hover: rgb(12 14 27 / 0.04);
-  --press: rgb(12 14 27 / 0.08);
+  --hover: rgb(26 25 23 / 0.04);
+  --press: rgb(26 25 23 / 0.08);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 96%, var(--admin-text));
   /* Hazır rozetinin nabız halkası */
   --ring-ready: rgb(21 128 61 / 0.45);
-  /* L'Af çekirdeği koyu karoda (gece karosu, giriş ekranı logosu): her temada açık pirinç */
+  /* L'Af çekirdeği koyu karoda (marka karosu, gece ekranı): her temada açık pirinç */
   --laf-bean-night: #e8c877;
   color-scheme: light;
 }
 
-/* Koyu (LafPOS eklemesi; Innex yalnız açık): aynı roller, gece kafesi ve bar ekranı için koyu yüzey */
+/* Koyu tema: sıcak gece (gece kafesi, bar ekranı); aynı roller, mürekkebin yerini kırık beyaz alır */
 .dark {
-  --shadow-pop: 0 12px 32px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.06);
-  --admin-bg: #0d0f13;
-  --admin-surface: #16191f;
-  --admin-surface-2: #1b1f26;
-  --admin-panel: #232832;
-  --admin-border: #2a2f38;
-  --admin-border-strong: #353b46;
-  --admin-divider: #20242c;
-  --admin-border-field: #6f7682;
-  --admin-text: #f2f4f7;
-  --admin-text-soft: #c9cdd4;
-  --admin-text-mute: #9aa1ac;
-  --admin-primary: #7b93ff;
+  --shadow-card: none;
+  --shadow-pop: 0 18px 44px -12px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --admin-bg: #0f0e0d;
+  --admin-surface: #181715;
+  --admin-surface-2: #1d1c1a;
+  --admin-panel: #272522;
+  --admin-border: #2e2c29;
+  --admin-border-strong: #3a3834;
+  --admin-divider: #22211e;
+  --admin-border-field: #7a766e;
+  --admin-text: #f3f1ec;
+  --admin-text-soft: #cfcbc3;
+  --admin-text-mute: #a39f96;
+  --admin-primary: #f3f1ec;
   --laf-bean: #e8c877;
-  --admin-primary-hover: #96a8ff;
-  --admin-on-primary: #0b1020;
-  --admin-primary-soft: #1d2547;
-  --admin-neutral-soft: #232832;
+  --admin-primary-hover: #dedad2;
+  --admin-on-primary: #161513;
+  --admin-primary-soft: #2a2825;
+  --admin-neutral-soft: #272522;
+  --admin-blue: #8ba0ff;
+  --admin-blue-soft: #1f2647;
+  --admin-blue-line: #44509a;
   --admin-accent: #a78bfa;
   --admin-accent-ink: #c4b5fd;
   --admin-accent-soft: #261f42;
@@ -214,12 +304,12 @@
   --admin-hue-violet-soft: #261f42;
   --admin-hue-green: #6ee7a0;
   --admin-hue-green-soft: #13301f;
-  --admin-chart-line: #9aa8ff;
+  --admin-chart-line: #5cc9a2;
   /* Kıyas çizgisi kartta en az 3:1 (WCAG 1.4.11 grafik nesnesi) */
-  --chart-context: #6b7381;
-  --chart-grid: #232832;
+  --chart-context: #77736b;
+  --chart-grid: #272522;
   /* Durum rengi %45 yumuşak zemine karışık: koyu zeminde 2.5:1'in üstünde, yazıyla yarışmaz */
-  --admin-primary-line: #47569a;
+  --admin-primary-line: #5d5a53;
   --admin-success-line: #337a4f;
   --admin-warning-line: #896529;
   --admin-danger-line: #8f4346;
@@ -228,7 +318,7 @@
   /* Koyuda gece mürekkebi zeminle aynı renk: karartma siyah ve daha yoğun, yüzen yüzey bir ton açık */
   --scrim: rgb(0 0 0 / 0.62);
   --scrim-soft: rgb(0 0 0 / 0.5);
-  --surface-raised: #1d2129;
+  --surface-raised: #1f1e1b;
   --hover: rgb(255 255 255 / 0.06);
   --press: rgb(255 255 255 / 0.1);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 93%, var(--admin-text));
@@ -236,9 +326,9 @@
   color-scheme: dark;
 }
 
-/* Yönetim paneli: aynı değerler; yalnız odak rengi ve sıklık (bileşenlerde [data-area=admin]) */
+/* Yönetim paneli: aynı değerler; yalnız sıklık (bileşenlerde [data-area=admin]) */
 :root[data-area='admin'] :focus-visible {
-  outline-color: var(--admin-primary);
+  outline-color: var(--focus);
 }
 
 /* Dokunmatikte iOS odaklanınca yakınlaştırmasın: alan yazısı en az 16 px (katmansız, sınıfları ezer) */
@@ -268,6 +358,9 @@
    */
   --color-primary-soft: var(--admin-primary-soft);
   --color-primary-line: var(--admin-primary-line);
+  --color-blue-ink: var(--admin-blue);
+  --color-blue-soft: var(--admin-blue-soft);
+  --color-blue-line: var(--admin-blue-line);
   --color-success-ink: var(--admin-success);
   --color-success-soft: var(--admin-success-soft);
   --color-success-line: var(--admin-success-line);
@@ -302,6 +395,8 @@
     color: var(--ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     /* Dokunmatik ekranda çift dokunmayla yakınlaşma ve metin seçimi POS'u bozar */
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
@@ -320,18 +415,21 @@
   select {
     font: inherit;
   }
-  /* Tarayıcının çizdiği yüzeyler de paletten: odak halkası, seçim, imleç, kaydırma çubuğu, yerel onay kutusu */
+  /*
+   * Tarayıcının çizdiği yüzeyler de paletten: odak halkası, seçim, imleç, kaydırma çubuğu, yerel onay kutusu. Odak
+   * halkası mavi: mürekkep düğmenin etrafında da, kırık beyaz zeminde de seçilir (eylem renginden ayrı)
+   */
   :focus-visible {
-    outline: 2px solid var(--admin-primary);
+    outline: 2px solid var(--focus);
     outline-offset: 2px;
   }
   ::selection {
-    background: var(--admin-primary-soft);
+    background: var(--admin-blue-soft);
     color: var(--admin-text);
   }
-  /* Koyuda yumuşak mavi karttan ayrışmaz (1.2:1): birincilin %40'ı, üstünde metin 7:1 */
+  /* Koyuda yumuşak mavi karttan ayrışmaz (1.2:1): mavinin %40'ı, üstünde metin 7:1 */
   .dark ::selection {
-    background: color-mix(in oklab, var(--admin-primary) 40%, transparent);
+    background: color-mix(in oklab, var(--admin-blue) 40%, transparent);
   }
   * {
     scrollbar-color: var(--line-strong) transparent;
@@ -339,7 +437,7 @@
   input,
   textarea,
   select {
-    caret-color: var(--admin-primary);
+    caret-color: var(--focus);
     accent-color: var(--admin-primary);
   }
   input[type='checkbox'],
@@ -353,17 +451,19 @@
     color: var(--ink);
   }
   /*
-   * Innex ikonları ince çizgi (1.75): lucide'nin stroke-width özniteliğini CSS ezer, bu yüzden `strokeWidth={2}`
+   * İkonlar ince çizgi (1.75): lucide'nin stroke-width özniteliğini CSS ezer, bu yüzden `strokeWidth={2}`
    * prop'u işlemez. Kalınlık yalnız sınıfla değişir (`stroke-2`, `stroke-[2.25]`; utilities katmanı bunu yener)
    */
   svg.lucide {
     stroke-width: 1.75;
     flex-shrink: 0;
   }
+  /* Poppins geniş harfli: başlıkta hafif sıkı aralık, gövdede doğal */
   h1,
   h2,
   h3 {
     text-wrap: balance;
+    letter-spacing: -0.015em;
   }
 }
 
@@ -381,12 +481,12 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
-  /* Yerel select oku: paletten (açıkta --admin-text-mute, koyuda onun koyu değeri; değişirse burası da); çizgi 1.75 */
+  /* Yerel select oku: paletten (açıkta --admin-text-mute #6b675f, koyuda #a39f96; değişirse burası da); çizgi 1.75 */
   .select-arrow {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23616367' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b675f' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   .dark .select-arrow {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa1ac' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a39f96' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   /* Yükleme iskeleti: içeriğin yerini tutan soluk blok (spinner yerine, Operate) */
   .skeleton {

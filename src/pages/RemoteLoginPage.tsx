@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, CircleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { fmtDateTime } from '@shared/time';
-import { LafMark } from '@/components/LafMark';
+import { LafTile } from '@/components/LafMark';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Field';
 import { errorMessage, get, post, setToken } from '@/lib/api';
@@ -94,11 +94,9 @@ export function RemoteLoginPage() {
 
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-4">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-line bg-surface p-6">
-        <span className="grid size-12 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-          <LafMark className="h-5" onNight />
-        </span>
-        <h1 className="mt-4 text-xl font-semibold tracking-[-0.01em]">LafPOS Uzaktan</h1>
+      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-6">
+        <LafTile size="lg" />
+        <h1 className="mt-4 text-xl font-semibold">LafPOS Uzaktan</h1>
         <p className="mt-1 text-sm text-muted">Kafenin canlı durumu: patron paneli, masalar, bar. Salt okunur; işlemler kafedeki kasadan</p>
         {setup.data && !ready && <SetupChecklist s={setup.data} />}
         {ready && setup.data && (

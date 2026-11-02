@@ -80,7 +80,7 @@ function DemoBar() {
 
   return (
     <div role="region" aria-label="Demo" className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-line bg-surface px-3 py-0.5 text-sm">
-      <span className="rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-semibold text-[var(--admin-primary)]">Demo</span>
+      <span className="rounded-full bg-[var(--admin-blue-soft)] px-2 py-0.5 text-xs font-semibold text-[var(--admin-blue)]">Demo</span>
       <span className="hidden min-w-0 truncate text-muted md:inline">
         {server.persistent ? 'Gerçek LafPOS bu tarayıcıda çalışıyor; veriler yalnız burada kalır' : 'Gerçek LafPOS bu sekmede çalışıyor; sekme kapanınca veriler silinir'}
       </span>

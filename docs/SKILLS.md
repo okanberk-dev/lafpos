@@ -6,7 +6,7 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
 
 | Skill | Ne için | Kaynak | Lisans |
 |---|---|---|---|
-| `build-admin-panel` | Yönetim paneline alan eklemek: oku, kapsamı sor, kur, gerçek tarayıcıda doğrula. Görünüm Innex | `RiosenBeq/laffogato` @ `ab5c0ae` (operatörün kendi skill'i), LafPOS'a uyarlandı | depo içi |
+| `build-admin-panel` | Yönetim paneline alan eklemek: oku, kapsamı sor, kur, gerçek tarayıcıda doğrula. Yerleşim Innex, görünüm LafPOS Sade | `RiosenBeq/laffogato` @ `ab5c0ae` (operatörün kendi skill'i), LafPOS'a uyarlandı | depo içi |
 | `impeccable` | Telefon ve tablet uyarlaması (`adapt`), teslim öncesi `audit` ve `polish`, kenar durumları (`harden`) | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) @ `3671d50` | Apache-2.0 |
 | `webapp-testing` | Yerel uygulamayı gerçek tarayıcıyla sınamak (sunucu yaşam döngüsü, önce gözle sonra eylem) | [anthropics/skills](https://github.com/anthropics/skills) @ `b9e19e6` | Apache-2.0 |
 | `verification-before-completion` | "Bitti" demeden önce kanıt: typecheck, test, build, e2e çıktısı | [obra/superpowers](https://github.com/obra/superpowers) @ `3be5aad` | MIT |
@@ -31,6 +31,15 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
    kalması için Vercel'in Web Interface Guidelines'ı (`web-interface-guidelines`) alındı. İkisinin de "Bu
    projede" bölümü LafPOS kurallarına bağlar; Vercel kurallarından Title Case, `&`, `overflow-x-hidden`,
    `…` ile biten yer tutucu ve doğrudan `Intl` LafPOS kurallarıyla çakışır, LafPOS'unki geçerli.
+
+5. _"tüm sistemdeki her parçası için sistem mantığı anlayışına uygun claude design ile tasarımlar yap ve yerleştir yazı
+   tipi poppins ve benzeri kullan minimalist basit ve UI UX olarak üst düzey olsun her özelliği düşün ve tasarımı yap eğer
+   özellik bende yoksa onu da kurgulayarak yap"_ (2 Kasım 2026): tasarımlar Claude Design tuvalinde yapıldı (tasarım sistemi,
+   giriş, masalar, adisyon, bar ekranı, patron telefonda, mesai ve vardiya devri) ve kodda **LafPOS Sade** olarak yerleşti
+   (`DESIGN.md`): Poppins harfler, Outfit rakamlar (Poppins'te tablo rakamı yok), sıcak kırık beyaz zemin, mürekkep birincil,
+   durum mavisi ayrı, marka yeşili logo karosunda. Innex'in yerleşimi kaldı, renkleri ve Inter bıraktı;
+   `tests/design-tokens.test.ts` yeni değerleri ve yazı dosyalarını sabitler. Eksik özellik olarak personel mesaisi
+   (PIN'le giriş-çıkış, mesai çizelgesi) ve vardiya devri sayımı eklendi (`docs/02-PLAN.md`).
 
 ## Nasıl kullanılır
 
