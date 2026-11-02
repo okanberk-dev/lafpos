@@ -2,19 +2,37 @@ import { Hono } from 'hono';
 import { staleDayMessage } from '@shared/time';
 import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
-import type { ZSummary } from '@shared/types';
+import type { ShiftCountDTO, ZSummary } from '@shared/types';
 import { db, schema } from '../db/client';
 import { type AppEnv, type AuthUser, actorFrom, can, requirePermission, seesCashNumbers } from '../lib/auth';
 import { body, kurus, query } from '../lib/http';
-import { addCashMovement, closeDay, closedToday, collectCustomerPayment, computeSummary, dayToDTO, getDay, lafmaliyetZ, listDays, openDay, recordCount, reopenDay } from '../services/days';
+import {
+  addCashMovement,
+  closeDay,
+  closedToday,
+  collectCustomerPayment,
+  computeSummary,
+  dayToDTO,
+  getDay,
+  lafmaliyetZ,
+  listDays,
+  openDay,
+  recordCount,
+  recordShiftCount,
+  reopenDay,
+  shiftCountsOf,
+  shiftCountToDTO,
+} from '../services/days';
 import { afterDayClosed, enqueueDay, flushOutbox } from '../sync/lafmaliyet';
 import { getOpenDay } from '../services/orders';
 import { write } from './pos';
 
 export const cashRoutes = new Hono<AppEnv>();
 
+const userNames = () => new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
+
 function movementsOf(dayId: string) {
-  const names = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
+  const names = userNames();
   return db
     .select()
     .from(schema.cashMovements)
@@ -40,6 +58,21 @@ function summaryFor(user: AuthUser, s: ZSummary | null): ZSummary | null {
   return s && !can(user, 'rapor.maliyet') ? { ...s, byUser: [] } : s;
 }
 
+/**
+ * Vardiya sayımı kişiye göre: kör kasada beklenen nakit ve fark gitmez (sayılandan çıkarılıp beklenen nakit
+ * bulunmasın); sayılan tutar ve banknotlar yalnız sayana ve devralana.
+ */
+function blindShiftCount(user: AuthUser, s: ShiftCountDTO): ShiftCountDTO {
+  if (seesNumbers(user)) return s;
+  const own = s.userId === user.id || s.toUserId === user.id;
+  return { ...s, expected: null, diff: null, ...(own ? {} : { counted: null, banknotes: null }) };
+}
+
+function shiftCountsFor(user: AuthUser, dayId: string): ShiftCountDTO[] {
+  const names = userNames();
+  return shiftCountsOf(db, dayId).map((s) => blindShiftCount(user, shiftCountToDTO(s, names)));
+}
+
 /** Açık gün, ara rapor (X) ve kasa hareketleri */
 cashRoutes.get('/day', (c) => {
   const user = c.get('user');
@@ -47,10 +80,50 @@ cashRoutes.get('/day', (c) => {
   const blind = !seesNumbers(user);
   if (!day) {
     const closed = closedToday(db);
-    return c.json({ day: null, summary: null, movements: [], blind, closedToday: closed ? dayToDTO(db, closed) : null });
+    return c.json({ day: null, summary: null, movements: [], shiftCounts: [], blind, closedToday: closed ? dayToDTO(db, closed) : null });
   }
   // Dünden açık kalan gün: yeni satış reddedilir (409 stale_day), kasa aynı metni bant olarak gösterir
-  return c.json({ day: dayToDTO(db, day), summary: blind ? null : summaryFor(user, computeSummary(db, day)), movements: movementsOf(day.id), blind, stale: staleDayMessage(day) });
+  return c.json({
+    day: dayToDTO(db, day),
+    summary: blind ? null : summaryFor(user, computeSummary(db, day)),
+    movements: movementsOf(day.id),
+    shiftCounts: shiftCountsFor(user, day.id),
+    blind,
+    stale: staleDayMessage(day),
+  });
+});
+
+/**
+ * Vardiya kasa sayımı: kasiyer değişirken devreden kasayı sayar (açık ve bugünün günü, `kasa.gun`). `approverPin`
+ * devralanın PIN'idir: verilirse devir onaylanır, `toUserId` yoksa PIN'in sahibi devralır.
+ */
+cashRoutes.post('/shift-counts', async (c) => {
+  const input = await body(
+    c,
+    z.object({
+      countedCash: kurus,
+      banknotes: z.record(z.string().regex(/^\d{1,7}$/), z.number().int().min(0).max(100000)).optional(),
+      note: z.string().max(500).nullish(),
+      toUserId: z.string().max(40).nullish(),
+      approverPin: z.string().nullish(),
+    }),
+  );
+  const actor = actorFrom(c, input.approverPin);
+  const row = write((t, fx) => recordShiftCount(t, actor, fx, input));
+  return c.json(blindShiftCount(c.get('user'), shiftCountToDTO(row, userNames())));
+});
+
+/** Günün vardiya sayımları (varsayılan açık gün); başka bir günün sayımları rapor yetkisi ister */
+cashRoutes.get('/shift-counts', (c) => {
+  const user = c.get('user');
+  const q = query(c, z.object({ dayId: z.string().max(40).optional() }));
+  const open = getOpenDay(db);
+  if (q.dayId && q.dayId !== open?.id) {
+    requirePermission(user, 'rapor.gor');
+    getDay(db, q.dayId);
+  }
+  const dayId = q.dayId ?? open?.id;
+  return c.json(dayId ? shiftCountsFor(user, dayId) : []);
 });
 
 cashRoutes.post('/day/open', async (c) => {
@@ -140,7 +213,15 @@ cashRoutes.get('/days/:id', (c) => {
   requirePermission(c.get('user'), 'rapor.gor');
   const day = getDay(db, c.req.param('id'));
   const summary = day.summary ?? computeSummary(db, day);
-  return c.json({ day: dayToDTO(db, day), summary: summaryFor(c.get('user'), summary), movements: movementsOf(day.id), lafmaliyet: lafmaliyetZ(day, summary), note: day.note, cashCounts: day.cashCounts });
+  return c.json({
+    day: dayToDTO(db, day),
+    summary: summaryFor(c.get('user'), summary),
+    movements: movementsOf(day.id),
+    shiftCounts: shiftCountsFor(c.get('user'), day.id),
+    lafmaliyet: lafmaliyetZ(day, summary),
+    note: day.note,
+    cashCounts: day.cashCounts,
+  });
 });
 
 cashRoutes.get('/days/:id/lafmaliyet.json', (c) => {

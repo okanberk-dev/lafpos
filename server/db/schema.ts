@@ -4,7 +4,7 @@ import type { Role } from '@shared/permissions';
 import type { Permission } from '@shared/permissions';
 import type { OrderTotals } from '@shared/order-calc';
 import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
-import type { CompKind, SelectedOption, ZField, ZSummary } from '@shared/types';
+import type { CompKind, SelectedOption, TimeEntrySource, ZField, ZSummary } from '@shared/types';
 import type { RoomBookingSnapshot } from '@shared/karaoke';
 
 export type { CompKind, ZField, ZSummary };
@@ -55,6 +55,36 @@ export const sessions = sqliteTable(
     expiresAt: integer('expires_at').notNull(),
   },
   (t) => [index('sessions_user_idx').on(t.userId)],
+);
+
+/**
+ * Personel mesaisi (giriş-çıkış): kilit ekranında PIN'le, açık oturumdan ya da yöneticinin elle girdiği kayıt.
+ * Açık mesaide çıkış boş. Kişi başına en çok bir açık mesai, aynı kişinin mesaileri çakışmaz, mesai 24 saati geçmez
+ * (services/time.ts). İş günü girişten (05:00 kuralı): gece 02:00'de biten vardiya başladığı günün mesaisidir.
+ */
+export const timeEntries = sqliteTable(
+  'time_entries',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    clockIn: integer('clock_in').notNull(),
+    clockOut: integer('clock_out'),
+    /** İş günü (YYYY-MM-DD), girişten */
+    businessDate: text('business_date').notNull(),
+    note: text('note'),
+    source: text('source').$type<TimeEntrySource>().notNull(),
+    /** Kaydı son düzelten yönetici (elle giriş, düzeltme, kapatma) */
+    editedBy: text('edited_by').references(() => users.id),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [
+    index('time_entries_user_idx').on(t.userId, t.clockIn),
+    index('time_entries_date_idx').on(t.businessDate),
+    // Kişi başına tek açık mesai: yazma kuralının (services/time.ts) veritabanındaki güvencesi
+    uniqueIndex('time_entries_open_idx').on(t.userId).where(sql`clock_out IS NULL`),
+  ],
 );
 
 // ─── Masa planı, istasyon, yazıcı ───────────────────────────────────────────
@@ -324,6 +354,37 @@ export const cashMovements = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [index('cash_movements_day_idx').on(t.dayId)],
+);
+
+/**
+ * Vardiya kasa sayımı: gün içinde kasiyer değişirken devreden kasayı sayar; o anki beklenen nakit (ara rapor) ve fark
+ * saklanır. Kasa hareketi değildir: beklenen nakdi, Z'yi ve gün sonu sayımını değiştirmez; lafmaliyet'e gitmez.
+ */
+export const shiftCounts = sqliteTable(
+  'shift_counts',
+  {
+    id: text('id').primaryKey(),
+    dayId: text('day_id')
+      .notNull()
+      .references(() => businessDays.id),
+    /** Sayan (devreden) */
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id),
+    /** Devralan; boşsa yalnız ara sayım */
+    toUserId: text('to_user_id').references(() => users.id),
+    /** Devralan sayımı kendi PIN'iyle onayladı */
+    confirmed: bool('confirmed').notNull().default(false),
+    counted: integer('counted').notNull(),
+    expected: integer('expected').notNull(),
+    /** Sayılan − beklenen */
+    diff: integer('diff').notNull(),
+    /** Banknot ve madenî para adetleri: kuruş değeri → adet (gün sonu sayımıyla aynı biçim); toplam girildiyse boş */
+    banknotes: text('banknotes', { mode: 'json' }).$type<Record<string, number> | null>(),
+    note: text('note'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [index('shift_counts_day_idx').on(t.dayId)],
 );
 
 // ─── Müşteri ────────────────────────────────────────────────────────────────

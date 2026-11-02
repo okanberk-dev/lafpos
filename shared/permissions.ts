@@ -43,6 +43,7 @@ export const PERMISSIONS = {
   'stok.yonet': 'Stok, reçete, sayım ve zayi',
   'ayar.yonet': 'Masa planı, yazıcı ve genel ayarlar',
   'personel.yonet': 'Personel ve yetkiler',
+  'mesai.yonet': 'Mesai çizelgesi: personelin giriş-çıkışını görme ve düzeltme',
   'senkron.yonet': 'laffogato / lafmaliyet bağlantısı',
   'patron.panel': 'Patron paneli ve uyarılar',
 } as const;
@@ -80,7 +81,7 @@ export const PERMISSION_GROUPS: { key: string; label: string; permissions: Permi
   { key: 'odeme', label: 'Ödeme ve kasa', permissions: ['odeme.al', 'odeme.iade', 'kasa.gun', 'kasa.rakam', 'kasa.hareket', 'cari.yonet'] },
   { key: 'bar', label: 'Bar ve mutfak', permissions: ['mutfak.ekran', 'urun.tukendi'] },
   { key: 'rapor', label: 'Raporlar', permissions: ['rapor.gor', 'rapor.maliyet', 'patron.panel'] },
-  { key: 'yonetim', label: 'Yönetim', permissions: ['menu.yonet', 'stok.yonet', 'ayar.yonet', 'personel.yonet', 'senkron.yonet'] },
+  { key: 'yonetim', label: 'Yönetim', permissions: ['menu.yonet', 'stok.yonet', 'ayar.yonet', 'personel.yonet', 'mesai.yonet', 'senkron.yonet'] },
 ];
 
 /** Patron rolü her yetkiye sahiptir ve değiştirilemez: kimse kendini paneldan dışarıda bırakamasın */
