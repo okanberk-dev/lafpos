@@ -916,6 +916,8 @@ export async function runFlows(ctx) {
         });
         const sheet = await api.call('patron', 'GET', '/time');
         assert(sheet.clockedIn.some((e) => e.userName === 'Garson'), 'garson mesaide görünmüyor');
+        // Personel çekmecesindeki kayıt (önceki akış) garsonun oturumlarını kapatır: yeni oturum
+        api.tokens.garson = (await api.call('', 'POST', '/auth/login', { pin: PINS.garson })).token;
         await withPage(ctx, 'telefon', 'garson', async (page) => {
           await go(ctx, page, '/masalar');
           await page.getByRole('button', { name: /menüsü$/ }).first().click();

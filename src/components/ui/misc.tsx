@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, RotateCcw, WifiOff } from '
 import type { CSSProperties, ReactNode } from 'react';
 import { ApiError, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { Illustration, type IllustrationName } from '../Illustration';
 import { Button } from './Button';
 
 /**
@@ -95,12 +96,14 @@ export function PageLoading({ label = 'Yükleniyor…', delay = 300 }: { label?:
 }
 
 /**
- * Boş durum: ne olmadığını ve nasıl dolacağını söyler; ikon gri kutuda (boşluk vurgulanmaz). Üç boy: kart içinde
- * `compact`, sayfa gövdesinde varsayılan, uzaktan okunan ekranda (bar) `large`. Eylem: ilk kullanımda birincil
- * düğme, süzgeçte ghost. Yönetimdeki EmptyState (admin/ui.tsx) bunu sarar.
+ * Boş durum: ne olmadığını ve nasıl dolacağını söyler; ikon gri kutuda (boşluk vurgulanmaz) ya da `art` ile sitenin
+ * çizimi (fiş, boş fincan tabağı, kek standı…). Üç boy: kart içinde `compact`, sayfa gövdesinde varsayılan, uzaktan
+ * okunan ekranda (bar) `large`. Eylem: ilk kullanımda birincil düğme, süzgeçte ghost. Yönetimdeki EmptyState
+ * (admin/ui.tsx) bunu sarar.
  */
 export function EmptyState({
   icon,
+  art,
   title,
   children,
   action,
@@ -109,6 +112,8 @@ export function EmptyState({
   className,
 }: {
   icon?: ReactNode;
+  /** Simge yerine sitenin çizimi */
+  art?: IllustrationName;
   title: ReactNode;
   children?: ReactNode;
   action?: ReactNode;
@@ -118,7 +123,9 @@ export function EmptyState({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center text-center', compact ? 'px-4 py-8' : large ? 'px-6 py-16' : 'px-6 py-12', className)}>
-      {icon && (
+      {art ? (
+        <Illustration name={art} className={cn(compact ? 'mb-3 size-16' : large ? 'mb-5 size-32' : 'mb-4 size-24')} />
+      ) : icon && (
         <span
           aria-hidden="true"
           className={cn(
@@ -129,7 +136,7 @@ export function EmptyState({
           {icon}
         </span>
       )}
-      <p className={cn('text-balance text-ink', compact ? 'text-sm font-medium' : large ? 'text-lg font-semibold' : 'text-[15px] font-semibold')}>{title}</p>
+      <p className={cn('text-balance font-headline text-ink', compact ? 'text-[15px] font-semibold' : large ? 'text-xl font-bold' : 'text-base font-bold')}>{title}</p>
       {children && <div className={cn('max-w-[36ch] text-pretty text-muted', compact ? 'mt-0.5 text-[13px]' : large ? 'mt-1.5 text-[15px]' : 'mt-1 text-[13px] leading-relaxed')}>{children}</div>}
       {action && <div className={compact ? 'mt-3' : 'mt-4'}>{action}</div>}
     </div>

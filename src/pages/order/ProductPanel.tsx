@@ -1,4 +1,4 @@
-import { Search, SlidersHorizontal, Star } from 'lucide-react';
+import { SlidersHorizontal, Star } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
@@ -155,7 +155,7 @@ export function ProductPanel({
               {q.trim() ? (
                 <EmptyState
                   compact
-                  icon={<Search />}
+                  art="arama"
                   title={`“${q.trim()}” ile eşleşen ürün yok`}
                   action={
                     <Button size="sm" variant="ghost" onClick={() => setQ('')}>
@@ -166,7 +166,7 @@ export function ProductPanel({
                   Adın, kısa adın ya da barkodun bir bölümünü yazın
                 </EmptyState>
               ) : (
-                <EmptyState compact title="Bu kategoride satışta ürün yok" />
+                <EmptyState compact art="kategori" title="Bu kategoride satışta ürün yok" />
               )}
             </div>
           )}

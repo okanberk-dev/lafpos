@@ -53,7 +53,7 @@ export function CashCount({ summary, value, onChange, cashOnly }: { summary: ZSu
           />
         </div>
         {mode === 'banknot' ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:grid-cols-3">
             {DENOMINATIONS.map((d) => {
               const n = value.banknotes[String(d)] ?? 0;
               // ₺ başta, uygulamanın her yerindeki gibi (₺200, ₺0,50)

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Coffee, Receipt, Table2, TrendingUp, Wallet } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Receipt, Table2, TrendingUp, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl } from '@shared/money';
@@ -241,7 +241,7 @@ export default function PatronPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card title="En çok satanlar">
           {d.top.length === 0 ? (
-            <EmptyState compact icon={<Coffee />} title="Bugün henüz satış yok">
+            <EmptyState compact art="affogato" title="Bugün henüz satış yok">
               İlk adisyon kapanınca en çok satanlar burada sıralanır
             </EmptyState>
           ) : (
@@ -268,7 +268,7 @@ export default function PatronPage() {
         </Card>
         <Card title={`Açık hesaplar (${d.openChecks.length})`}>
           {d.openChecks.length === 0 ? (
-            <EmptyState compact icon={<Receipt />} title="Şu an açık hesap yok">
+            <EmptyState compact art="fis" title="Şu an açık hesap yok">
               Açılan adisyonlar ödenene kadar burada görünür
             </EmptyState>
           ) : (

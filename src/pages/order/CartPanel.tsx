@@ -1,4 +1,4 @@
-import { Check, ChefHat, CircleDot, Droplets, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
+import { Check, ChefHat, CircleDot, Droplets, Gift, Minus, Pencil, Percent, Plus, Trash2, Undo2, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { COMP_LABEL, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
@@ -14,6 +14,7 @@ import { post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { estimateUnit, pendingOptionsText, pendingProblem, useBoot } from '@/lib/boot';
 import { type PendingLine, useCart } from '@/lib/cart';
+import { Illustration } from '@/components/Illustration';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
@@ -71,10 +72,8 @@ export function CartPanel({
       <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
         {visibleItems.length === 0 && pending.length === 0 && (
           <div className="my-auto flex flex-col items-center px-6 py-10 text-center">
-            <span aria-hidden="true" className="grid size-12 place-items-center rounded-2xl bg-surface-3 text-muted">
-              <ReceiptText className="size-5" />
-            </span>
-            <p className="mt-3 text-[15px] font-semibold text-ink">Adisyon boş</p>
+            <Illustration name="fincan" className="size-20" />
+            <p className="mt-3 font-headline text-base font-bold text-ink">Adisyon boş</p>
             <p className="mt-1 max-w-[32ch] text-[13px] text-pretty text-muted">
               {wide ? 'Soldan ürün seçin. ' : 'Menü sekmesinden ürün seçin. '}
               {payFirst ? 'Ödeme alınınca sipariş bara gider' : 'Gönder’e basınca sipariş bara ve mutfağa gider'}

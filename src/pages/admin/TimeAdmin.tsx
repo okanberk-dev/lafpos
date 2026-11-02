@@ -254,7 +254,7 @@ export default function TimeAdmin() {
             selectedKey={edit?.id ?? null}
             phoneMeta={(e) => joinMeta([fmtDateShort(e.businessDate), `${fmtTime(e.clockIn)}–${e.clockOut ? fmtTime(e.clockOut) : 'mesaide'}`, fmtDuration(e.open ? now - e.clockIn : e.durationMs)])}
             empty={
-              <EmptyState icon={<Clock3 />} title={period === 'bugun' ? 'Bugün henüz mesai yok' : 'Bu dönemde mesai yok'} action={<Button onClick={openNew}>Elle kayıt</Button>}>
+              <EmptyState art="saat" title={period === 'bugun' ? 'Bugün henüz mesai yok' : 'Bu dönemde mesai yok'} action={<Button onClick={openNew}>Elle kayıt</Button>}>
                 Personel kilit ekranındaki Mesai sekmesinden PIN’iyle ya da kullanıcı menüsünden giriş-çıkış yapar
               </EmptyState>
             }

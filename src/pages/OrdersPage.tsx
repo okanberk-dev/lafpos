@@ -137,7 +137,7 @@ export default function OrdersPage() {
       ) : list.isError && !list.data ? (
         <ErrorState title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState icon={<PackageCheck />} title={tab === 'kapanan' ? 'Bugün kapanan adisyon yok' : tab === 'online' ? 'Açık online sipariş yok' : tab === 'paket' ? 'Açık paket ya da gel-al siparişi yok' : 'Açık tezgâh siparişi yok'}>
+        <EmptyState art="fis" title={tab === 'kapanan' ? 'Bugün kapanan adisyon yok' : tab === 'online' ? 'Açık online sipariş yok' : tab === 'paket' ? 'Açık paket ya da gel-al siparişi yok' : 'Açık tezgâh siparişi yok'}>
           {tab === 'online' ? 'Uygulama ve web siparişleri hazırlanırken burada görünür' : tab === 'kapanan' ? 'Bugün kapanan adisyonlar burada listelenir' : 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın'}
         </EmptyState>
       ) : (

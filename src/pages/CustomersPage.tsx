@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Gift, MapPin, Plus, Receipt, Search, Wallet } from 'lucide-react';
+import { Gift, MapPin, Plus, Receipt, Wallet } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
@@ -158,7 +158,7 @@ export default function CustomersPage() {
             <li>
               <EmptyState
                 compact
-                icon={q ? <Search /> : <Plus />}
+                art={q ? 'arama' : 'kupon'}
                 title={q ? 'Müşteri bulunamadı' : 'Henüz müşteri yok'}
                 action={
                   q ? undefined : (

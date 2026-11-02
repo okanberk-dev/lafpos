@@ -233,7 +233,7 @@ export default function KitchenPage() {
         )}
         {tickets.isSuccess && list.length === 0 && (
           <div className="grid h-full place-items-center">
-            <EmptyState large icon={<CheckCheck />} title={history ? 'Son 90 dakikada hazırlanan yok' : readyView ? 'Teslim bekleyen sipariş yok' : 'Bekleyen sipariş yok'}>
+            <EmptyState large art="espresso" title={history ? 'Son 90 dakikada hazırlanan yok' : readyView ? 'Teslim bekleyen sipariş yok' : 'Bekleyen sipariş yok'}>
               {history
                 ? 'Hazır işaretlenen fişler 90 dakika burada kalır'
                 : readyView

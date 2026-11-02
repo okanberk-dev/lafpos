@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { buttonClass, CloseButton } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
 import { Badge as KitBadge, EmptyState as KitEmptyState, Skeleton } from '@/components/ui/misc';
+import type { IllustrationName } from '@/components/Illustration';
 import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
 
@@ -525,9 +526,9 @@ export function DataTable<T>({
  * Boş durum: kasadakiyle tek bileşen (ui/misc.tsx), gri ikon kutusu. Sayfada kart içinde durur; kartın içindeyse
  * `bare` (iç içe kart olmaz, kompakt boy).
  */
-export function EmptyState({ icon, title, children, action, bare }: { icon?: ReactNode; title: ReactNode; children?: ReactNode; action?: ReactNode; bare?: boolean }) {
+export function EmptyState({ icon, art, title, children, action, bare }: { icon?: ReactNode; art?: IllustrationName; title: ReactNode; children?: ReactNode; action?: ReactNode; bare?: boolean }) {
   return (
-    <KitEmptyState compact={bare} icon={icon} title={title} action={action} className={cn(!bare && CARD)}>
+    <KitEmptyState compact={bare} icon={icon} art={art} title={title} action={action} className={cn(!bare && CARD)}>
       {children}
     </KitEmptyState>
   );

@@ -215,7 +215,7 @@ export default function FloorPage() {
         </div>
         <div className="scroll-thin flex-1 overflow-y-auto p-2">
           {others.length === 0 && (
-            <EmptyState compact icon={<Store />} title="Masasız açık sipariş yok">
+            <EmptyState compact art="fis" title="Masasız açık sipariş yok">
               Tezgâh, gel-al, paket ve online siparişler burada
             </EmptyState>
           )}

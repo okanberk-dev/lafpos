@@ -1,4 +1,3 @@
-import { BarChart3 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { EmptyState } from './ui/misc';
@@ -108,7 +107,7 @@ export function ColumnChart({
     // Grafik yüksekliğinde (veri gelince kart zıplamasın); kesik çerçeve yok (bırakma alanı çağrışımı)
     return (
       <div role="img" aria-label={`${ariaLabel}: ${emptyLabel}`} className="grid place-items-center rounded-xl bg-surface-2" style={{ height }}>
-        <EmptyState compact icon={<BarChart3 />} title={emptyLabel}>
+        <EmptyState compact art="affogato" title={emptyLabel}>
           {emptyHint}
         </EmptyState>
       </div>

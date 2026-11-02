@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, CalendarCheck, Coins, EyeOff, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Coins, EyeOff, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { parseTL, tl } from '@shared/money';
@@ -18,6 +18,7 @@ import { useBoot } from '@/lib/boot';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { TypedAmount } from '../order/TypedAmount';
+import { Illustration } from '@/components/Illustration';
 import { CashCount, type CountResult } from './CashCount';
 import { ShiftCountsCard, ShiftHandoverModal } from './ShiftHandover';
 import { ZView } from './ZView';
@@ -309,10 +310,8 @@ export default function CashPage() {
         <div className="mx-auto max-w-md">
           <Card>
             <div className="space-y-4 p-6 text-center">
-              {/* Gün sonu kartıyla aynı ikon kutusu ve başlık ölçüsü */}
-              <span aria-hidden="true" className="mx-auto grid size-12 place-items-center rounded-2xl bg-surface-3 text-ink-2">
-                <CalendarCheck className="size-6" />
-              </span>
+              {/* Gün açılmadı: sitenin kapı çizimi (açılış) */}
+              <Illustration name="kapi" className="mx-auto size-20" />
               <div>
                 <h2 className="text-lg font-semibold tracking-[-0.01em]">Günü aç</h2>
                 <p className="mt-1 text-pretty text-sm text-muted">Çekmecedeki açılış nakdini girin. Gece 05:00’e kadarki satışlar bu güne yazılır</p>

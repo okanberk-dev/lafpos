@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, ChevronLeft, ChevronRight, Phone, Plus, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Phone, Plus, Users } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { addDays, businessDate, fmtDateLong, fmtDateShort } from '@shared/time';
@@ -147,7 +147,7 @@ export default function ReservationsPage() {
         <ErrorState title="Rezervasyonlar alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
         <EmptyState
-          icon={<CalendarClock />}
+          art="bilet"
           title="Bu gün için rezervasyon yok"
           action={
             <Button size="sm" icon={<Plus className="size-4" />} onClick={openForm}>

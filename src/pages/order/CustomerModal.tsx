@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Gift, Search, UserPlus, X } from 'lucide-react';
+import { Gift, UserPlus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { tl } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
@@ -113,7 +113,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
               ))}
               {list.isSuccess && list.data.length === 0 && (
                 <li>
-                  <EmptyState compact icon={<Search />} title={q.trim() ? 'Müşteri bulunamadı' : 'Henüz müşteri yok'}>
+                  <EmptyState compact art={q.trim() ? 'arama' : 'kupon'} title={q.trim() ? 'Müşteri bulunamadı' : 'Henüz müşteri yok'}>
                     {q.trim() ? 'Telefonun ya da adın bir bölümünü yazın ya da yeni müşteri ekleyin' : 'Yeni müşteri ile ilk kaydı açın'}
                   </EmptyState>
                 </li>
