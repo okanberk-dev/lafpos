@@ -128,7 +128,7 @@ export default function PatronPage() {
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
         <div className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-5">
           <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
-          <div className="tabular mt-2 text-[44px] font-semibold leading-none tracking-[-0.02em] sm:text-[56px]">{tl(d.netSales)}</div>
+          <div className="tabular font-headline mt-2 text-[44px] font-semibold leading-none tracking-[-0.02em] sm:text-[56px]">{tl(d.netSales)}</div>
           <div className="mt-2 text-sm text-muted">{joinMeta([`${d.orders} adisyon`, d.orders > 0 && `ortalama ${tl(d.avgCheck)}`, d.open.count > 0 && `açıkta ${tl(d.open.total)}`])}</div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <CompareRow label="Geçen hafta bu saate kadar" value={d.compare.lastWeek.netSales} change={d.compare.lastWeek.change} />

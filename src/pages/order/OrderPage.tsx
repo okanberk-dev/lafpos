@@ -322,7 +322,7 @@ export default function OrderPage() {
           <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label="Gönder" title="Gönder" className="md:max-lg:w-14 md:max-lg:px-0">
             <span className="md:max-lg:sr-only">Gönder</span>
           </Button>
-          <Button size="lg" variant="primary" loading={sending} onClick={() => void sendAndPay()}>
+          <Button size="lg" variant="ink" loading={sending} onClick={() => void sendAndPay()}>
             Öde · <span className="tabular">{tl((previewTotals(boot, order, pending)?.total ?? order.total) - order.paid)}</span>
           </Button>
         </div>
@@ -348,7 +348,7 @@ export default function OrderPage() {
           <Button size="lg" icon={<Printer className="size-4" />} onClick={printBill} disabled={!hasItems} aria-label="Hesap yazdır" title="Hesap yazdır" className="md:max-lg:w-14 md:max-lg:px-0">
             <span className="md:max-lg:sr-only">Hesap</span>
           </Button>
-          <Button size="lg" variant="primary" disabled={due <= 0} onClick={() => setDialog('odeme')}>
+          <Button size="lg" variant="ink" disabled={due <= 0} onClick={() => setDialog('odeme')}>
             Ödeme · <span className="tabular">{tl(due)}</span>
           </Button>
         </div>

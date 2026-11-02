@@ -104,7 +104,7 @@ export function PageHeader({ title, description, actions, children }: { title: R
     <div className={cn('-mx-4 mb-5 border-b border-[var(--admin-border)] px-4 pb-4 sm:-mx-5 sm:px-5', titleOnly && 'max-md:mb-0 max-md:border-0 max-md:pb-0')}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className={cn('min-w-0', !description && 'max-md:contents')}>
-          <h1 className="text-xl font-semibold text-[var(--admin-text)] max-md:sr-only">{title}</h1>
+          <h1 className="text-[22px] font-bold text-[var(--admin-text)] max-md:sr-only">{title}</h1>
           {description && <p className="mt-0.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
@@ -180,7 +180,7 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
               <span className="min-w-0 truncate text-[13px] font-medium text-[var(--admin-text-soft)]">{c.label}</span>
             </span>
             <span className="mt-3 flex w-full flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span className={cn('text-[26px] font-semibold leading-none tracking-[-0.02em] text-[var(--admin-text)]', NUM)}>{c.value}</span>
+              <span className={cn('font-headline text-[28px] font-bold leading-none tracking-[-0.02em] text-[var(--admin-text)]', NUM)}>{c.value}</span>
               {c.delta && <Badge tone={c.delta.good ? 'success' : 'danger'}>{c.delta.text}</Badge>}
             </span>
             {c.reference && <span className="mt-1 block w-full text-xs text-[var(--admin-text-mute)]">{c.reference}</span>}
@@ -260,7 +260,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
               COMPACT_H,
               FOCUS,
               'focus-visible:-outline-offset-2',
-              on ? 'bg-[var(--admin-surface)] text-[var(--admin-text)] shadow-[0_1px_3px_rgba(26,25,23,0.1),0_0_0_1px_rgba(26,25,23,0.04)] dark:bg-[var(--admin-border-strong)]' : 'text-[var(--admin-text-mute)] hover:text-[var(--admin-text)]',
+              on ? 'bg-[var(--admin-surface)] text-[var(--admin-text)] shadow-[var(--rim),var(--shadow-lift)] dark:bg-[var(--admin-border-strong)]' : 'text-[var(--admin-text-mute)] hover:text-[var(--admin-text)]',
             )}
           >
             {o.label}
@@ -468,7 +468,7 @@ export function DataTable<T>({
                     </td>
                   ))}
                   {actions && (
-                    <td className={cn('sticky right-0 px-2 text-right shadow-[-10px_0_10px_-10px_rgba(26,25,23,0.18)]', selected ? 'bg-[var(--admin-surface-2)]' : 'bg-[var(--admin-surface)] group-hover:bg-[var(--hover-solid)]')}>{actions(r)}</td>
+                    <td className={cn('sticky right-0 px-2 text-right shadow-[-10px_0_10px_-10px_rgba(59,42,30,0.18)]', selected ? 'bg-[var(--admin-surface-2)]' : 'bg-[var(--admin-surface)] group-hover:bg-[var(--hover-solid)]')}>{actions(r)}</td>
                   )}
                 </tr>
               );
@@ -600,7 +600,7 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-[var(--admin-border-field)]/50 md:hidden" aria-hidden="true" />
         <div className="flex items-center gap-3 border-b border-[var(--admin-border)] py-2 pl-4 pr-3 sm:pl-5">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-[15px] font-semibold leading-6 tracking-[-0.01em] text-[var(--admin-text)]">{title}</h2>
+            <h2 className="truncate text-base font-semibold leading-6 text-[var(--admin-text)]">{title}</h2>
             {subtitle && <p className="mt-0.5 text-xs text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
           <CloseButton onClick={onClose} className="mr-0" />

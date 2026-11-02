@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * Renk değerlerinin erişilebilirliği (WCAG 2.2): okunan metin zeminde en az 4.5:1, alan kenarı ve odak halkası 3:1.
- * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı LafPOS Sade değerlerini kullanır
- * (açık `:root`, koyu `.dark`; DESIGN.md); kasa ekranlarının adları (`--bg`, `--ink`...) `--admin-*`'e bağlanır.
+ * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı LafPOS Sade değerlerini kullanır (L'Affogato
+ * kimliği, laffogato docs/BRAND.md; açık `:root`, koyu `.dark`; DESIGN.md); ortak adlar (`--bg`, `--ink`...) `--admin-*`'e bağlanır.
  * Test düşerse değeri düzelt, eşiği gevşetme.
  */
 const css = readFileSync(join(__dirname, '../src/index.css'), 'utf8');
@@ -100,9 +100,13 @@ describe('yönetim paneli (LafPOS Sade)', () => {
     it(`${name}: boş alanın kenarı kartta bulunur (3:1)`, () => {
       expect(contrast(get('admin-border-field'), get('admin-surface'))).toBeGreaterThanOrEqual(3);
     });
-    it(`${name}: odak halkası (durum mavisi) kartta, zeminde ve mürekkep düğmenin yanında seçilir (3:1)`, () => {
-      for (const ground of ['admin-surface', 'admin-bg', 'admin-surface-2']) expect(contrast(get('focus'), get(ground)), ground).toBeGreaterThanOrEqual(3);
-      expect(contrast(get('focus'), get('admin-primary')), 'mürekkep düğme').toBeGreaterThanOrEqual(1.5);
+    it(`${name}: odak halkası (ev yeşili) kartta ve zeminde seçilir (3:1)`, () => {
+      for (const ground of ['admin-surface', 'admin-bg', 'admin-surface-2', 'admin-panel']) expect(contrast(get('focus'), get(ground)), ground).toBeGreaterThanOrEqual(3);
+    });
+    it(`${name}: mürekkep düğme (ödeme) ve pirinç dolgu okunur`, () => {
+      expect(contrast(get('admin-on-ink'), get('admin-ink-fill')), 'mürekkep düğme').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-gold-ink'), get('admin-gold-fill')), 'pirinç dolgu').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-gold'), get('admin-bg')), 'altın metin').toBeGreaterThanOrEqual(4.5);
     });
     it(`${name}: durum mavisi kartta okunur (bağlantı, "barda")`, () => {
       expect(contrast(get('admin-blue'), get('admin-surface'))).toBeGreaterThanOrEqual(4.5);
@@ -110,30 +114,42 @@ describe('yönetim paneli (LafPOS Sade)', () => {
     });
   }
 
-  it('kasa ekranları da LafPOS Sade: adlar aynı değerlere bağlı (sıcak kırık beyaz zemin, mürekkep birincil)', () => {
-    expect(posLight('bg')).toBe('#f4f3ef');
-    expect(posLight('primary')).toBe('#1a1917');
-    expect(posLight('ink')).toBe('#1a1917');
-    expect(posDark('primary')).toBe('#f3f1ec');
+  it('kasa ekranları da LafPOS Sade: adlar laffogato.net değerlerine bağlı (porselen zemin, ev yeşili birincil)', () => {
+    expect(posLight('bg')).toBe('#f7f3ed');
+    expect(posLight('primary')).toBe('#1d6d56');
+    expect(posLight('ink')).toBe('#211c18');
+    expect(posDark('primary')).toBe('#5cc9a2');
   });
 
-  it('LafPOS Sade açık değerleri (DESIGN.md §2 tablosu)', () => {
-    expect(adminLight('admin-bg')).toBe('#f4f3ef');
-    expect(adminLight('admin-primary')).toBe('#1a1917');
-    expect(adminLight('admin-border-field')).toBe('#8a857c');
-    expect(adminLight('admin-text')).toBe('#1a1917');
-    expect(adminLight('admin-blue')).toBe('#2b55e6');
+  it('sitenin paleti (laffogato docs/BRAND.md §1; DESIGN.md §2 tablosu)', () => {
+    expect(adminLight('admin-bg')).toBe('#f7f3ed');
+    expect(adminLight('admin-surface-2')).toBe('#fbf8f4');
+    expect(adminLight('admin-panel')).toBe('#f2ece4');
+    expect(adminLight('admin-primary')).toBe('#1d6d56');
+    expect(adminLight('admin-primary-hover')).toBe('#165543');
+    expect(adminLight('admin-text')).toBe('#211c18');
+    expect(adminLight('admin-text-soft')).toBe('#564d46');
+    expect(adminLight('admin-text-mute')).toBe('#675e56');
+    expect(adminLight('admin-border-field')).toBe('#877d74');
+    expect(adminLight('admin-blue')).toBe('#3442b8');
+    expect(adminLight('admin-gold-fill')).toBe('#e8c877');
+    expect(adminLight('admin-bordo')).toBe('#9d2543');
+    // Uygulama ikonunun ve sitenin altbilgisinin yeşili
+    expect(css).toMatch(/--brand-tile:\s*radial-gradient\([^;]*#23876a[^;]*#1d6d56[^;]*#0c3b2d/);
   });
 
-  it('yazı: Poppins (harfler) ve Outfit (yalnız rakamlar, tablo rakamı) pakette; dış kaynaktan yazı yok', () => {
+  it('yazı: sitenin iki sesi pakette (başlık ve rakam Gabarito, metin Poppins); dış kaynaktan yazı yok', () => {
     expect(css).toMatch(/--font-sans:\s*'LafPOS Rakam',\s*'Poppins'/);
+    expect(css).toMatch(/--font-headline:\s*'LafPOS Rakam',\s*'Gabarito'/);
     for (const w of [400, 500, 600, 700]) {
       expect(css, `Poppins ${w} latin`).toContain(`@fontsource/poppins/files/poppins-latin-${w}-normal.woff2`);
       expect(css, `Poppins ${w} latin-ext (ğ, ş, ı, İ, ₺)`).toContain(`@fontsource/poppins/files/poppins-latin-ext-${w}-normal.woff2`);
     }
+    expect(css).toContain('@fontsource-variable/gabarito/files/gabarito-latin-ext-wght-normal.woff2');
     const digits = css.slice(css.indexOf("font-family: 'LafPOS Rakam'"));
-    expect(digits).toMatch(/@fontsource-variable\/outfit\/files\/outfit-latin-wght-normal\.woff2/);
+    expect(digits).toMatch(/@fontsource-variable\/gabarito\/files\/gabarito-latin-wght-normal\.woff2/);
     expect(digits.slice(0, digits.indexOf('}'))).toMatch(/unicode-range:\s*U\+0030-0039;/);
-    expect(css).not.toMatch(/fonts\.googleapis|fonts\.gstatic|@fontsource\/inter/);
+    expect(css).toMatch(/h1,\s*h2,\s*h3 \{[^}]*font-family: var\(--font-headline\)/);
+    expect(css).not.toMatch(/fonts\.googleapis|fonts\.gstatic|@fontsource\/inter|outfit/i);
   });
 });

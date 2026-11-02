@@ -903,6 +903,49 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Telefonda kilit ekranı: garson PIN’iyle mesai başlatır, kullanıcı menüsünden bitirir',
+      async () => {
+        await withPage(ctx, 'telefon', null, async (page) => {
+          await go(ctx, page, '/giris');
+          await page.getByRole('button', { name: 'Mesai', exact: true }).click();
+          for (const d of PINS.garson) await page.getByRole('button', { name: d, exact: true }).click();
+          await page.getByRole('button', { name: 'Onayla', exact: true }).click();
+          await page.getByRole('status').filter({ hasText: 'Hoş geldin' }).waitFor({ timeout: 8000 });
+          // Mesai oturum açmaz: ekran girişte kalır
+          assert(new URL(page.url()).pathname === '/giris', `mesai oturum açtı: ${page.url()}`);
+        });
+        const sheet = await api.call('patron', 'GET', '/time');
+        assert(sheet.clockedIn.some((e) => e.userName === 'Garson'), 'garson mesaide görünmüyor');
+        await withPage(ctx, 'telefon', 'garson', async (page) => {
+          await go(ctx, page, '/masalar');
+          await page.getByRole('button', { name: /menüsü$/ }).first().click();
+          await page.getByRole('button', { name: 'Mesaiyi bitir', exact: true }).click();
+          await page.getByRole('button', { name: 'Mesaiyi başlat', exact: true }).waitFor({ timeout: 8000 });
+        });
+        const after = await api.call('patron', 'GET', '/time');
+        assert(!after.clockedIn.some((e) => e.userName === 'Garson'), 'garson hâlâ mesaide');
+      },
+    ],
+    [
+      'Tablette kasiyer: vardiya devrini sayar, garson PIN’iyle devralır',
+      () =>
+        withPage(ctx, 'tablet', 'kasa', async (page) => {
+          await go(ctx, page, '/kasa');
+          await page.getByRole('button', { name: 'Vardiya devri', exact: true }).click();
+          const dialog = page.getByRole('dialog', { name: 'Vardiya devri' });
+          await dialog.getByRole('button', { name: 'Toplam tutar', exact: true }).click();
+          await dialog.getByRole('textbox', { name: 'Çekmecedeki nakit' }).fill('1000');
+          await dialog.getByRole('combobox', { name: /^Devralan/ }).selectOption({ label: 'Garson' });
+          await dialog.getByLabel(/^Devralanın PIN/).fill(PINS.garson);
+          await dialog.getByRole('button', { name: /^Devri kaydet/ }).click();
+          await dialog.waitFor({ state: 'detached', timeout: 8000 });
+          const counts = await api.call('kasa', 'GET', '/cash/shift-counts');
+          const last = counts.at(-1);
+          assert(last && last.toUserName === 'Garson' && last.confirmed && last.counted === 100000, `vardiya devri yazılmadı: ${JSON.stringify(last)}`);
+          await page.getByText('Vardiya devirleri').waitFor({ timeout: 8000 });
+        }),
+    ],
+    [
       // Günü kapattığı için en sonda
       'Tablette kasiyer: gece gün sonundan sonra günü müdürün PIN onayıyla yeniden açar',
       async () => {

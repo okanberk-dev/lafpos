@@ -64,7 +64,7 @@ export default function PickupBoardPage() {
         </IconButton>
         {/* Saat numaralarla yarışmaz; yoklama düşerse personel küçük bir işaret görür (müşteriyi korkutmaz) */}
         <span className="flex flex-col items-end">
-          <span className="tabular text-xl font-semibold text-muted md:text-2xl">{fmtTime(now)}</span>
+          <span className="tabular font-headline text-xl font-semibold text-muted md:text-2xl">{fmtTime(now)}</span>
           {board.isError && (
             <span role="status" className="inline-flex items-center gap-1.5 text-[13px] text-muted">
               <span aria-hidden="true" className="size-2 rounded-full bg-[var(--admin-warning)]" />

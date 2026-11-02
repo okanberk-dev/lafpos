@@ -102,12 +102,12 @@ export function LoginPage() {
             </span>
           </div>
           <div className="shrink-0 text-right lg:text-left">
-            <div className="tabular text-3xl font-light leading-none tracking-[-0.02em] lg:text-[96px]">{fmtTime(now)}</div>
+            <div className="tabular font-headline text-3xl font-light leading-none tracking-[-0.02em] lg:text-[96px]">{fmtTime(now)}</div>
             <div className="mt-1 hidden text-sm text-[var(--brand-cream)]/80 sm:block lg:mt-3 lg:text-base">{fmtDateLong(today)}</div>
           </div>
           {!!users.length && (
             <div className="hidden lg:block">
-              <div className="mb-2.5 text-xs font-medium uppercase tracking-[0.08em] text-[var(--brand-cream)]/80">Bugünkü ekip</div>
+              <div className="mb-2.5 text-[13px] font-medium text-[var(--brand-cream)]/80">Bugünkü ekip</div>
               <div className="flex flex-wrap gap-1.5">
                 {users.map((u) => (
                   <span key={u.id} className="inline-flex items-center gap-2 rounded-full bg-white/10 py-1 pl-1 pr-3 text-xs font-medium ring-1 ring-inset ring-white/15">

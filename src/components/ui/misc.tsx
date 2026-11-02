@@ -259,18 +259,18 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
       )}
     >
       <div className="text-[13px] font-medium text-muted">{label}</div>
-      <div className={cn('tabular mt-1.5 font-semibold leading-none tracking-[-0.02em]', strong ? 'text-[32px]' : 'text-[26px]')}>{value}</div>
+      <div className={cn('tabular mt-1.5 font-headline font-bold leading-none tracking-[-0.02em]', strong ? 'text-[34px]' : 'text-[28px]')}>{value}</div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
     </div>
   );
 }
 
-/** Sayfa başlığı: 20/600 (telefonda 18) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile) */
+/** Sayfa başlığı: Gabarito 22/700 (telefonda 20) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile) */
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
       <div className="min-w-0 sm:flex-1">
-        <h1 className="text-lg font-semibold sm:text-xl">{title}</h1>
+        <h1 className="text-xl font-bold sm:text-[22px]">{title}</h1>
         {subtitle && <p className="mt-0.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
       </div>
       {/* Telefonda eylemler kendi satırında, eşit genişlikte; geniş ekranda sağda */}

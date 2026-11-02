@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { DisplayStateDTO } from '@shared/types';
+import type { DisplayConfigDTO, DisplayStateDTO } from '@shared/types';
+import { getPublicSettings } from '../lib/settings';
 import { db } from '../db/client';
 import { pickupBoard } from '../services/floor';
 import { type AppEnv, requirePermission } from '../lib/auth';
@@ -56,6 +57,15 @@ displayRoutes.put('/:code', async (c) => {
   states.set(k, state);
   bus.publish({ topic: 'orders', kind: 'display.update', message: k, byUserId: user.id });
   return c.json({ ok: true });
+});
+
+/**
+ * Müşteri ekranının görünümü (oturumsuz): tema, karşılama ve teşekkür metni, duyurular, karekod. Ekran yarım dakikada bir
+ * okur; ayar değişince bir sonraki okumada yeni görünüm gelir
+ */
+displayPublicRoutes.get('/display-config', (c) => {
+  const s = getPublicSettings();
+  return c.json({ ...s.customerDisplay, businessName: s.businessName } satisfies DisplayConfigDTO);
 });
 
 /** Çağrı ekranı (oturumsuz): numara ve yalnız ad; televizyonda zaten herkes görür */

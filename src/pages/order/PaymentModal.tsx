@@ -290,14 +290,14 @@ export function PaymentModal({
           {call && (
             <div className="mt-5 rounded-xl border border-line bg-surface-2 p-4">
               <div className="text-[13px] font-medium text-muted">{call.kind === 'masa' ? 'Masaya götürülecek' : 'Sipariş numarası'}</div>
-              <div className="tabular text-5xl font-bold tracking-tight">{call.kind === 'masa' ? numaratorLabel(call.value) : call.value}</div>
+              <div className="tabular font-headline text-5xl font-bold tracking-tight">{call.kind === 'masa' ? numaratorLabel(call.value) : call.value}</div>
               {call.kind === 'numara' && <div className="mt-1 text-xs text-muted">Hazır olunca çağrı ekranında görünür</div>}
             </div>
           )}
           {result.change > 0 && (
             <div className="mt-5 rounded-xl bg-[var(--admin-warning-soft)] p-4">
               <div className="text-[13px] font-medium text-[var(--admin-warning)]">Para üstü</div>
-              <div className="tabular text-5xl font-bold tracking-tight">{tl(result.change)}</div>
+              <div className="tabular font-headline text-5xl font-bold tracking-tight">{tl(result.change)}</div>
             </div>
           )}
           <div className="mt-6 grid gap-2">
@@ -543,7 +543,7 @@ export function PaymentModal({
             </div>
           )}
 
-          <Button variant="primary" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
+          <Button variant="ink" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
             {splitBlocks ? 'Hesap bölünmüş: payları Paylaş’tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
           </Button>
 

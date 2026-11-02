@@ -326,7 +326,7 @@ function ProductTile({
         >
           {withImage ? (
             // Fotoğrafın üstünde okunur kalsın: beyaz hap; dokunma alanı yine 44 px
-            <span className="grid size-9 place-items-center rounded-full bg-surface/90 text-ink-2 shadow-[0_1px_3px_rgb(26_25_23/0.18)] backdrop-blur-sm">
+            <span className="grid size-9 place-items-center rounded-full bg-surface/90 text-ink-2 shadow-[0_1px_3px_rgb(59_42_30/0.18)] backdrop-blur-sm">
               <SlidersHorizontal className="size-[18px]" />
             </span>
           ) : (

@@ -50,7 +50,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
               disabled={confirm.disabled}
               onClick={confirm.onPress}
               className={cn(
-                'rounded-2xl bg-primary text-base font-semibold text-primary-ink transition-[background-color,transform] duration-150 hover:bg-[var(--admin-primary-hover)] active:scale-[0.97] active:bg-[var(--admin-primary-hover)] motion-reduce:active:scale-100 disabled:bg-[var(--admin-primary-soft)] disabled:text-ink-2 disabled:active:scale-100',
+                'rounded-xl bg-primary text-base font-semibold text-primary-ink transition-[background-color,transform] duration-150 hover:bg-[var(--admin-primary-hover)] active:scale-[0.97] active:bg-[var(--admin-primary-hover)] motion-reduce:active:scale-100 disabled:bg-[var(--admin-primary-soft)] disabled:text-ink-2 disabled:active:scale-100',
                 size === 'lg' ? 'h-16' : 'h-12',
               )}
             >
@@ -65,7 +65,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
             onClick={() => onKey(k)}
             aria-label={k === 'back' ? 'Geri sil' : undefined}
             className={cn(
-              'tabular rounded-2xl bg-surface-2 font-medium text-ink ring-1 ring-inset ring-line transition-[background-color,transform,box-shadow] duration-150 hover:bg-surface-3 active:scale-[0.97] active:bg-[var(--admin-border)] motion-reduce:active:scale-100',
+              'tabular rounded-xl bg-surface-2 font-medium text-ink ring-1 ring-inset ring-line transition-[background-color,transform,box-shadow] duration-150 hover:bg-surface-3 active:scale-[0.97] active:bg-[var(--admin-border)] motion-reduce:active:scale-100',
               size === 'lg' ? 'h-16 text-2xl' : 'h-12 text-xl',
               k === 'clear' && 'text-[15px] text-ink-2',
             )}

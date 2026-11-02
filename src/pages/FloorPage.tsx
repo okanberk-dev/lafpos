@@ -109,7 +109,7 @@ export default function FloorPage() {
                     onClick={() => setView(v)}
                     className={cn(
                       'grid h-9 w-10 place-items-center rounded-full transition-colors duration-150 focus-visible:-outline-offset-2 pointer-coarse:size-11',
-                      view === v ? 'bg-surface text-ink shadow-[0_1px_3px_rgb(26_25_23/0.1),0_0_0_1px_rgb(26_25_23/0.04)] dark:bg-[var(--admin-border-strong)]' : 'text-muted hover:text-ink',
+                      view === v ? 'bg-surface text-ink shadow-[var(--rim),var(--shadow-lift)] dark:bg-[var(--admin-border-strong)]' : 'text-muted hover:text-ink',
                     )}
                   >
                     <Icon className="size-4" />
@@ -383,7 +383,7 @@ function TableTile({
       </div>
       {busy ? (
         <div className={cn('w-full', round && 'text-center')}>
-          <div className="tabular text-base font-semibold leading-none tracking-[-0.02em] @min-[6rem]:text-xl">{tlShort(total)}</div>
+          <div className="tabular font-headline text-[17px] font-bold leading-none tracking-[-0.02em] @min-[6rem]:text-[22px]">{tlShort(total)}</div>
           {/* Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır */}
           {partial && <div className="tabular mt-0.5 text-xs font-medium text-[var(--admin-hue-rose)]">{tlShort(total - paid)} kaldı</div>}
           <div className={cn('mt-1 hidden items-center gap-1.5 text-xs text-ink-2 @min-[6.5rem]:flex', round && 'justify-center')}>

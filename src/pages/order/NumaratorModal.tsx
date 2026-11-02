@@ -47,7 +47,7 @@ export function NumaratorModal({
             autoComplete="off"
             spellCheck={false}
             maxLength={NUMARATOR_MAX}
-            className="tabular min-h-11 w-[7ch] bg-transparent text-4xl font-bold tracking-tight text-ink outline-none placeholder:text-muted"
+            className="tabular font-headline min-h-11 w-[7ch] bg-transparent text-4xl font-bold tracking-tight text-ink outline-none placeholder:text-muted"
           />
         </label>
         <Numpad size="md" keyboard onEnter={() => value && onConfirm(value)} onKey={(k) => setValue((v) => applyNumpadKey(v, k, { maxLength: NUMARATOR_MAX }))} />

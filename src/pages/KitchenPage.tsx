@@ -256,7 +256,7 @@ export default function KitchenPage() {
                       {[r.waiting && `${r.waiting} bekliyor`, r.making && `${r.making} hazırlanıyor`].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  <span className="tabular text-4xl font-bold leading-none tracking-tight">×{r.qty}</span>
+                  <span className="tabular font-headline text-4xl font-bold leading-none tracking-tight">×{r.qty}</span>
                 </div>
                 {r.options.length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -302,7 +302,7 @@ export default function KitchenPage() {
                     </span>
                   )}
                   {head.call && (
-                    <span className="tabular shrink-0 rounded-xl bg-[var(--admin-blue-soft)] px-2.5 py-0.5 text-xl font-bold leading-tight text-[var(--admin-blue)] md:px-3 md:text-2xl">{head.call}</span>
+                    <span className="tabular font-headline shrink-0 rounded-xl bg-[var(--admin-blue-soft)] px-2.5 py-0.5 text-xl font-bold leading-tight text-[var(--admin-blue)] md:px-3 md:text-2xl">{head.call}</span>
                   )}
                   {/* Nereye gideceği en büyük yazı: barın üstündeki tablet 1-2 m'den okunur */}
                   {head.label && <span className={cn('truncate', head.call ? 'text-sm text-ink-2' : 'text-xl font-bold tracking-[-0.01em] md:text-2xl')}>{head.label}</span>}

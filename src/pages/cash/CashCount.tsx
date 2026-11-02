@@ -21,12 +21,12 @@ export interface CountResult {
  * raporları). Sistemle farkı anında gösterir. `summary` yoksa kör sayımdır (kasiyer `kasa.rakam` yetkisiz):
  * beklenen tutar ve fark gösterilmez, yalnız sayılan yazılır; fark yöneticinin ekranında.
  */
-export function CashCount({ summary, value, onChange }: { summary: ZSummary | null; value: CountResult; onChange: (v: CountResult) => void }) {
+export function CashCount({ summary, value, onChange, cashOnly }: { summary: ZSummary | null; value: CountResult; onChange: (v: CountResult) => void; /** Yalnız nakit (vardiya devri): ödeme türü slipleri sorulmaz */ cashOnly?: boolean }) {
   const boot = useBoot();
   const [mode, setMode] = useState<'banknot' | 'toplam'>('banknot');
   const [totalText, setTotalText] = useState(value.countedCash ? String(value.countedCash / 100).replace('.', ',') : '');
   const blind = !summary;
-  const methods = slipRows(summary, boot.paymentMethods);
+  const methods = cashOnly ? [] : slipRows(summary, boot.paymentMethods);
   const fromNotes = useMemo(() => DENOMINATIONS.reduce((a, d) => a + d * (value.banknotes[String(d)] ?? 0), 0), [value.banknotes]);
 
   const setNote = (d: number, n: number) => {
@@ -92,7 +92,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
             autoComplete="off"
             aria-label="Çekmecedeki nakit"
             placeholder="Çekmecedeki nakit"
-            className="tabular h-14 w-full rounded-2xl border border-line-strong bg-surface px-4 text-right text-2xl font-semibold"
+            className="tabular font-headline h-14 w-full rounded-2xl border border-line-strong bg-surface px-4 text-right text-2xl font-semibold"
           />
         )}
         {summary ? (

@@ -213,6 +213,39 @@ export interface PublicSettings {
   serviceMode: ServiceMode;
   /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
   tipsEnabled: boolean;
+  /** İki ekranlı kasanın müşteriye dönük ekranı (`/musteri-ekrani`): görünüm ve metinler, Yönetim › Müşteri ekranı */
+  customerDisplay: CustomerDisplaySettings;
+}
+
+/** Müşteri ekranının teması: gece (koyu, varsayılan), porselen (açık, sitenin zemini), yeşil (marka yüzeyi) */
+export const CUSTOMER_DISPLAY_THEMES = ['gece', 'porselen', 'yesil'] as const;
+export type CustomerDisplayTheme = (typeof CUSTOMER_DISPLAY_THEMES)[number];
+
+/**
+ * Müşteri ekranının özelleştirmesi. Metinler müşteriye görünür; boş başlık varsayılan metne döner. Oturumsuz okunur
+ * (`GET /api/public/display-config`): ekran personel PIN'iyle açık durmaz, burada gizli bir şey yoktur.
+ */
+export interface CustomerDisplaySettings {
+  theme: CustomerDisplayTheme;
+  /** Karşılama başlığı ("Hoş geldiniz") ve altındaki satır (slogan) */
+  welcomeTitle: string;
+  welcomeSubtitle: string;
+  /** Ödemeden sonraki teşekkür başlığı */
+  thanksTitle: string;
+  /** Boştayken sırayla dönen kısa duyurular (en çok 6): happy hour, kampanya, uygulama */
+  messages: string[];
+  /** Karekod (uygulama, menü, Wi-Fi, Instagram); adres boşsa çizilmez */
+  qrUrl: string;
+  qrLabel: string;
+  /** Sağ üstte saat */
+  showClock: boolean;
+  /** Sipariş satırlarında seçenekler (süt, şurup) */
+  showOptions: boolean;
+}
+
+/** `GET /api/public/display-config`: müşteri ekranının ayarları ve işletme adı */
+export interface DisplayConfigDTO extends CustomerDisplaySettings {
+  businessName: string;
 }
 
 export interface BootstrapDTO {

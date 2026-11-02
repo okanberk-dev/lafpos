@@ -205,7 +205,7 @@ export function CartPanel({
         )}
         <div className="flex items-baseline justify-between">
           <span className="text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
-          <span className="tabular text-2xl font-bold tracking-tight">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
+          <span className="tabular font-headline text-2xl font-bold tracking-tight">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
         </div>
         {order.paid > 0 && !order.extPaid && !partlyPaid && (
           <div className="mt-1 space-y-0.5 text-[13px]">
@@ -349,7 +349,7 @@ function ItemSheet({
                 ))}
               </div>
               {/* İşaret başta, sönük (₺120, %10); klavyeyle de yazılır */}
-              <output aria-label={discType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular block rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
+              <output aria-label={discType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular font-headline block rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
                 {discType === 'percent' ? (
                   <>
                     <span className="mr-0.5 align-baseline text-[0.6em] font-medium text-muted">%</span>

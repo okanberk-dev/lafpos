@@ -79,9 +79,11 @@ export default function TimeAdmin() {
     return { clockIn, clockOut };
   };
   const timeError = edit && (!/^\d{2}:\d{2}$/.test(edit.inTime) ? 'Giriş saati gerekli' : edit.outTime && !/^\d{2}:\d{2}$/.test(edit.outTime) ? 'Saat ss:dd biçiminde' : null);
-  const futureError = edit && !timeError && (() => {
+  const futureError = (() => {
+    if (!edit || timeError) return null;
     const t = draftTimes(edit);
-    return t.clockIn > now || (t.clockOut != null && t.clockOut > now) ? 'Gelecekteki bir saat girilemez' : null;
+    // Sunucu bir dakikaya kadar ileriyi kabul eder (saat kayması); ötesi gelecektir
+    return t.clockIn > Date.now() + 60_000 || (t.clockOut != null && t.clockOut > Date.now() + 60_000) ? 'Gelecekteki bir saat girilemez' : null;
   })();
 
   const save = async () => {
