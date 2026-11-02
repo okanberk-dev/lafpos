@@ -116,6 +116,7 @@ const ROUTES = {
     '/yonetim/masa-plani',
     state('/yonetim/masa-plani', 'secili-masa', (page) => page.locator('[data-table-id]').first().click({ timeout: 5000 })),
     '/yonetim/personel',
+    '/yonetim/mesai',
     '/yonetim/roller',
     '/yonetim/odeme',
     '/yonetim/yazarkasa',

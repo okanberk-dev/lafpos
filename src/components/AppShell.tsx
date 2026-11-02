@@ -14,8 +14,10 @@ import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
+import { useMyTime } from '@/lib/mesai';
 import { CommandPalette } from './CommandPalette';
 import { LafMark, LafTile } from './LafMark';
+import { MesaiRow } from './MesaiRow';
 import { PlatformInbox } from './PlatformInbox';
 import { Segmented } from './ui/Field';
 import { Modal } from './ui/Modal';
@@ -73,6 +75,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
   useReadyAlerts();
+  // Mesaide olan kişinin avatarında yeşil nokta (kullanıcı menüsünde süre ve Mesaiyi bitir)
+  const onClock = !!useMyTime().data?.open;
   const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
     const on = () => setFull(!!document.fullscreenElement);
@@ -132,9 +136,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
     );
   const avatar = (size: 'sm' | 'md') => (
-    // Kişinin rengi koyu kartta kaybolmasın: ince iç halka
-    <span className={cn('grid place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', size === 'md' ? 'size-9 text-xs' : 'size-8 text-[11px]')} style={{ background: me.color }}>
+    // Kişinin rengi koyu kartta kaybolmasın: ince iç halka. Mesaideyse sağ altta yeşil nokta (adı menünün başlığında)
+    <span className={cn('relative grid place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', size === 'md' ? 'size-9 text-xs' : 'size-8 text-[11px]')} style={{ background: me.color }}>
       {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
+      {onClock && <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-surface bg-[var(--admin-success)]" />}
     </span>
   );
   const sheetRow = 'flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-[background-color,border-color,color] duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press';
@@ -263,8 +268,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </Modal>
 
-      <Modal open={menuOpen} onClose={() => setMenuOpen(false)} title={me.name} subtitle={boot.settings.businessName} size="sm">
+      <Modal open={menuOpen} onClose={() => setMenuOpen(false)} title={me.name} subtitle={onClock ? `${boot.settings.businessName} · mesaide` : boot.settings.businessName} size="sm">
         <div className="space-y-2 p-4">
+          {!REMOTE && <MesaiRow className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line px-3 py-2.5" />}
           {REMOTE && (
             // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
             <a href="/demo/" className={sheetRow}>
