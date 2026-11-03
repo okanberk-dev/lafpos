@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import type { CustomerDisplaySettings, DisplayConfigDTO, DisplayStateDTO } from '@shared/types';
 import { CustomerDisplayView, DISPLAY_DEFAULTS } from '@/components/display/CustomerDisplayView';
@@ -60,7 +60,16 @@ export default function CustomerDisplayPage() {
   const q = useQuery({ queryKey: ['display', code], queryFn: () => get<DisplayStateDTO>(`/public/display/${code}`), refetchInterval: 1_500 });
 
   const s = q.data;
-  const state: DisplayStateDTO = !s || (s.kind === 'thanks' && now - s.at > (s.call ? THANKS_CALL_MS : THANKS_MS)) ? { kind: 'idle', at: 0 } : s;
+  // Teşekkürün süresi bu cihazın saatiyle, teşekkürü ilk gördüğü andan sayılır: tablet ile kasanın saati yerel ağda
+  // kolayca 15 sn'den fazla kayar (ileride olan ekran teşekkürü hiç göstermiyor, geride olan bir sonraki siparişe dek
+  // tutuyordu). Açılışta zaten duran teşekkür (ekran yeniden yüklendi) sunucunun anına göre de eskiyebilir; yine de en
+  // çok süresi kadar kalır. Önceki çizimin bilgisi çizim sırasında saklanır (React'in "önceki değeri saklama" kalıbı)
+  const [loaded, setLoaded] = useState(false);
+  const [seen, setSeen] = useState<{ at: number; localAt: number; initial: boolean } | null>(null);
+  if (s && !loaded) setLoaded(true);
+  if (s?.kind === 'thanks' && seen?.at !== s.at) setSeen({ at: s.at, localAt: Date.now(), initial: !loaded });
+  const thanksAge = s?.kind !== 'thanks' || seen?.at !== s.at ? 0 : seen.initial ? Math.max(now - seen.localAt, now - s.at) : now - seen.localAt;
+  const state: DisplayStateDTO = !s || (s.kind === 'thanks' && thanksAge > (s.call ? THANKS_CALL_MS : THANKS_MS)) ? { kind: 'idle', at: 0 } : s;
 
   return <CustomerDisplayView className="h-full" state={state} config={settings} businessName={config.data?.businessName || businessName} now={now} />;
 }
