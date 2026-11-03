@@ -36,8 +36,9 @@
   rakam şart olduğu için bilinçli ayrışma). Dosyalar pakette (`@fontsource/poppins`, `@fontsource-variable/gabarito`),
   latin ve latin-ext ayrı (`unicode-range`: Türkçe harfler ve ₺ latin-ext'te), dış kaynaktan yazı yüklenmez.
 - **Ölçek:** sayfa başlığı Gabarito 22/700 (telefonda 20), kart başlığı 15/600, gövde 14/400, açıklama 13, mikro 12/500
-  (en küçük 11); KPI 28/700 (`strong` 34), müşteri ekranında tutar 48-88/800, saat 96. Başlıkta -0.01em, büyük rakamda
-  -0.02/-0.035em; büyük harf yalnız kenar çubuğu grup etiketlerinde. İkon çizgisi 1.75.
+  (en küçük 11); KPI 28/700 (`strong` 34; rakam tek satır, dar karoda boyu karonun iç genişliğinin %17'sine iner, 11
+  karakterden uzun tutar ayrıca küçülür: `fitFigure`), müşteri ekranında tutar 48-88/800, saat 96. Başlıkta -0.01em,
+  büyük rakamda -0.02/-0.035em; büyük harf yalnız kenar çubuğu grup etiketlerinde. İkon çizgisi 1.75.
 
 ### Renk
 
@@ -52,7 +53,7 @@
 | Birincil: ev yeşili (eylem, seçim, olumlu durum, odak halkası) | `#1D6D56`, basılı `#165543`, üstünde `#FBF8F4` | `#5CC9A2`, üstünde `#0B1F18` |
 | Mürekkep dolgu (ödeme, tahsilat) | `#211C18`, üstünde `#FBF8F4` | `#F3F1EC`, üstünde `#161513` |
 | Kobalt (dolu masa, hazırlanıyor, bilgi) | `#3442B8` zemin `#ECEEFB` | `#9AA8FF` zemin `#1F2647` |
-| Pirinç (damga kartı; L'Af çekirdeği) | dolgu `#E8C877` üstünde `#2E2113` (`bg-gold-fill text-on-gold`), metin `#765923` (`text-gold-ink`) | dolgu ve üstündeki aynı, metin `#E8C877` |
+| Pirinç (damga kartı, ödül düğmesi `variant="gold"`: Hediye içecek; L'Af çekirdeği) | dolgu `#E8C877` üstünde `#2E2113` (`bg-gold-fill text-on-gold`), metin `#765923` (`text-gold-ink`) | dolgu ve üstündeki aynı, metin `#E8C877` |
 | Bordo (imza yüzeyi, ekran başına bir) | `#9D2543` zemin `#F9E6EA` | `#F6E9EC` |
 | Durum tonları | amber `#B45309`, kırmızı `#B42318`, pembe `#C0264A`, mor `#6D3FEA`, camgöbeği `#0B7392` (açık zeminleriyle) | aynı roller, açık tonlar |
 | Grafik serisi ve ısı haritası | ev yeşili `#1D6D56` | `#5CC9A2` |
@@ -65,6 +66,9 @@
   `tests/ui-rules.test.ts` izinli listeyle tutar. Olumlu durum (hazır, ödendi) sitedeki gibi ev yeşilidir.
 - **Odak halkası** 2 px ev yeşili, 2 px dışarıda; alan odakta yeşil kenar ve yumuşak yeşil halka (sitenin `--ring`'i).
   Mürekkep zeminli bildirimde halka krem ve düğmenin içinde (yeşil mürekkepte 3:1'in altında kalır).
+- **İkon kutusu** (`IconBox`: KPI hücresi, hızlı bakış satırı, telefondaki yönetim listesi) varsayılan nötr taş; renk
+  yalnız anlam taşıyınca (`src/components/admin/hues.ts`): mor online, kobalt açık / dolu, yeşil ciro ve olumlu durum
+  (mesaide), pembe kayıp ve iptal, amber gecikme ve bekleyen; durumsuz sayı ve süre nötr.
 
 ### Biçim
 
@@ -99,12 +103,20 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 - **Ürün kartı:** köşe 20, ad 15/500, fiyat 14/600; sitedeki görsel (dekupaj kuyuda, fotoğraf kuyuyu doldurur), görseli
   olmayanda baş harfler kategori renginin açık tonunda. Telefonda kategoriler hap çip (seçili yeşil dolgu).
 - **Logo:** L'Af, laffogato.net ve uygulama ikonuyla aynı vektör (`src/components/LafMark.tsx`); karoda (`LafTile`)
-  uygulama ikonunun kendisi. Yazı tipine bağlı değil, Didot'u olmayan Windows ve Android'de de aynı.
+  uygulama ikonunun kendisi. Yazı tipine bağlı değil, Didot'u olmayan Windows ve Android'de de aynı. Karo uygulama
+  ikonunun oranında: logo karonun yüksekliğinin yarısı, köşe kenarın %22'si (arayüzün köşe ölçeğinden bağımsız; `TILE`,
+  `src/components/LafMark.tsx`).
 - **Giriş ekranı:** solda marka yüzeyi (yeşil, krem yazı, 96 px saat, ekip), sağda PIN kartı (sade tuşlar,
   yeşil "Giriş"); **Mesai** sekmesinde aynı PIN'le giriş-çıkış yapılır, oturum açılmaz.
 - **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş (hesap N
   kişiye eşit bölünür, paylar sırayla ve istenen yöntemle alınır; pay tutarını sunucu hesaplar,
-  `shared/order-calc.ts` `splitState`). Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme.
+  `shared/order-calc.ts` `splitState`). Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme. Ödeme düğmesi
+  pencerenin alt şeridinde, kaydırınca kaybolmaz; yanında para üstü, eksik ya da bahşiş notu. Düğmenin tutarı bahşişi
+  içerir (kartta bankanın POS'una girilen tutar) ve eksik adımı söyler ("Ödenecek kalemleri seçin", "Önce hesabı
+  bölün"; açık hesapta "açık hesaba yaz"). Tablet ve bilgisayarda iki sütun: solda tutar, tuş takımı, yazarkasa ve
+  alınan ödemeler; sağda ödeme türleri, Verilen, Bahşiş ve ciro dışı kapanış. Sepet yazarkasada beklerken LafPOS'ta
+  ödeme, ciro dışı kapanış ve ödeme iptali kapalı; durum ve "Sepeti iptal et" en üstte. Sonuç ekranında para üstü en
+  üstte, mürekkep kenarlı nötr kutuda.
 - **Adisyon:** geniş ekranda kategoriler solda dikey liste (sayılarıyla), ürün kartında sitedeki görsel; "/" aramaya
   götürür.
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok):
@@ -120,7 +132,10 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   İkisi de ilk karesinden koyu açılır (gece loş salonda en parlak yüzey olmasın).
 - **Grafik:** tek seri tek renk (ev yeşili), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli
   adım yok, verisi olmayan dönemde eksen yerine ekranın zamanını söyleyen boş durum çizilir (Bugün henüz satış
-  yok, Bu günde satış yok, Bu dönemde satış yok; `ColumnChart` `emptyLabel`, `src/components/charts.tsx`). Isı haritası
+  yok, Bu günde satış yok, Bu dönemde satış yok; `ColumnChart` `emptyLabel`, `src/components/charts.tsx`). Dokunmatikte
+  dokunulan sütunun değeri dışarı dokunulana dek kalır; klavyede grafik odak alır, oklar sütunlar arasında gezer; ekran
+  okuyucu gizli veri tablosundan okur. Süre grafiğinin ekseni dakikayla (0, 2 dk, 4 dk; `ColumnChart` `unitDivisor` 60
+  ve `tickFormat`). Kıyas döneminde hiç değer yoksa kıyas çizgisi, açıklaması ve ipucu satırı çizilmez. Isı haritası
   aynı yeşilin tonları.
 
 ## 4. Yönetim paneli
@@ -132,13 +147,18 @@ Panel açıkken `<html data-area="admin">`; aynı değerler, yalnız sıklık fa
   altında sayfa başlığı şeridi (Gabarito 22/700 başlık, 13 px açıklama, sağda önce ikincil sonra birincil düğme).
 - **Kenar çubuğu:** gruplar büyük harfli küçük etiketle (Genel, Menü, Salon ve kasa, Ekip, Bağlantılar,
   Sistem), etkin satır gri ve renksiz, sayaç hap ve yalnız iş bekleyen yerde (tükenen ürün,
-  gönderilemeyen gün). Altta "Kasa ekranlarına dön", "Menüyü daralt" ve kullanıcı.
-- **Bileşenler** (`src/components/admin/ui.tsx`): `PageHeader`, `Card`, `KpiStrip` (tek kart, hücreler
-  arası 1 px, her rakamın yanında referans), `StatusTabs` (sayılı hap çipler, etkin mürekkep kenar), `Segmented` (gri
-  hap ray, beyaz hap), `DataTable` (kuyuda başlık, satır ayracı, yapışkan eylem sütunu, seçili satır solda mürekkep
-  çizgi), `ActionMenu` (⋯, köşe 14, portalda), `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, köşe 20),
-  `ActionRows`, `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme kapsül, 14 px; dokunmatikte 44, farede 36,
-  sıkı görünümde 32 px.
+  gönderilemeyen gün). Üstte logo karosu, işletme ve "Menüyü daralt"; altta "Kasa ekranlarına dön" ve kullanıcı.
+  Tablette dar ikon menüsünde iş bekleyen bölümün ikonunun köşesinde nötr sayaç (renk değil sayı); "Menüyü aç" adlı ve
+  sayaçlı tam menüyü soldan çekmecede açar.
+- **Bileşenler** (`src/components/admin/ui.tsx`): `PageHeader`, `Card` (başlık eylemlerle dikeyde ortalı, başlık
+  bloğunun taban genişliği 9rem: geniş eylem telefonda alt satıra iner), `KpiStrip` (tek kart, hücreler arası 1 px, her
+  rakamın yanında referans), `StatusTabs` (sayılı hap çipler, etkin mürekkep kenar; telefonda kayan rayda seçili çip
+  görünür kalır, gizlenen kenar solar), `Segmented` (gri hap ray, beyaz hap; telefonda tam genişlikte satıra kırılır;
+  radyo grubu klavyesi: Tab seçili seçenekte girer, oklar ve Home/End gezer, Enter ya da boşluk seçer), `DataTable`
+  (kuyuda başlık, satır ayracı, yapışkan eylem sütunu, seçili satır solda ev yeşili çizgi), `ActionMenu` (⋯, köşe 14,
+  portalda), `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, köşe 28, telefonda alt sayfa), `ActionRows`,
+  `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme kapsül, 14 px; dokunmatikte 44, farede 36, sıkı görünümde
+  32 px.
 - **Sayfalar:** Genel bakış (KPI şeridi: net ciro geçen haftanın aynı günü aynı saatine göre, adisyon,
   açık adisyon, indirim ve ikram, online sipariş; saatlik grafik; en çok satanlar; dikkat isteyenler;
   sistem sağlığı), Ürünler, Seçenekler, Masa planı, Ödeme türleri, Personel ve yetki, Mesai çizelgesi, Yazarkasa, Site
@@ -174,25 +194,40 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   birincil düğme gri zemin ve soluk yazıdır, yarı saydam değil; bir bilgi cümlesi devre dışı düğme olarak
   çizilmez ("Ödemeyi kasa alır" düğmenin altında yazıdır).
 - **Sekme ve seçim:** `Tabs` (bölüm, istasyon, sipariş listesi; seçili gri zemin, sayı hapı sıfırsa gizli, dar
-  ekranda yatay kayar) ve `Segmented` (2-4 eşit seçenek; gri ray, beyaz hap). Dolu yeşil seçim yalnız gezinmede: raydaki
+  ekranda yatay kayar: seçili sekme rayda görünür kalır, içeriğin gizlendiği kenar solar, `useRail`) ve `Segmented`
+  (2-4 eşit seçenek; gri ray, beyaz hap). Dolu yeşil seçim yalnız gezinmede: raydaki
   etkin ekran ve telefondaki seçili kategori çipi. Öteki seçimler gri zemin, beyaz hap ya da yeşil veya mürekkep
   kenardır; sekme sayısı ve sıradaki pay nötrdür (beyaz hap, mürekkep kenar), dolu yeşil hap olumlu durumla (hazır,
   ödendi) karışmasın. Amber durum rengidir, seçim için kullanılmaz; bağlantı birincil yeşil, kobalt yalnız durum.
+  Seçim çipi `Chip` (`src/components/ui/Field.tsx`; kapsül, `aria-pressed`): seçenek ve süzgeçte yeşil kenar ve açık
+  yeşil zemin (`tone="primary"`), hazır neden ve süre seçiminde mürekkep kenar, taş zemin ve tik (`tone="ink"`). Adet
+  ve kişi sayısı `Stepper` ile: alan kenarlı grup, eksi, değer, artı; en küçük adette Kaldır; tek değerli pencerede
+  `size="lg"`. Seçenek penceresinin 10 px seçenek çipleri tükendi durumuyla ayrı kalır.
 - **Boş, yükleniyor, hata:** `EmptyState` (kart içinde `compact`, sayfada varsayılan, bar ve çağrı ekranında
   `large`; başlık ekranın sözüyle, "Liste boş" değil), `Skeleton` / `ListSkeleton` (ilk yüklemede), `ErrorState`
-  (yeniden dene ile). Yüklenirken ya da hata varken "yok" yazılmaz.
+  (boş durumla aynı ölçek ve üç boy: kart içinde `compact`, sayfada varsayılan, tam ekranda ve bar ekranında `large`;
+  yeniden dene ile). Yüklenirken ya da hata varken "yok" yazılmaz.
 - **Onay ve metin isteme:** tarayıcının `confirm()` / `prompt()` pencereleri yok; `confirmDialog` /
   `promptDialog` (`src/components/ui/Confirm.tsx`) eylemi adlandıran düğmeyle, yıkıcı eylemde kırmızı. Para ya da
-  kayıt değiştiren her düğme istek sürerken kilitlidir (`loading`), ikinci dokunuş gitmez.
+  kayıt değiştiren her düğme istek sürerken kilitlidir (`loading`), ikinci dokunuş gitmez. Pencere ve çekmece başlığı
+  18/700, Kapat başlığın ilk satırında; pencerede başlık kesilmez, hızlı bakış çekmecesinde en çok iki satır. Onay ve
+  metin isteme penceresinde Kapat yok (Vazgeç aynı işi yapar, Escape ve arka plan da vazgeçer).
 - **Tutar girişi:** ekrandaki tuş takımı (`Numpad`) fiziksel klavyeyle de çalışır: rakam, `,` ve sayısal
   takımın ondalığı virgül; ana sıradaki `.` ardından üç rakam gelirse binlik ayıracı ("2.000"), değilse ondalık
   ("45.90" = 45,90 TL); Enter onaylar, odaktaki tuşa yeniden basmaz. Önceden dolu tutarın üstüne ilk tuş yazar.
-  Kalandan fazlası sessizce kırpılmaz, alan uyarır.
-- **Bildirim:** telefonda alt sekmenin üstünde, tablet ve bilgisayarda sağ üstte (aksiyon şeridini örtmez);
-  "Geri al" gibi tek eylem taşıyabilir, eylem bir kez çalışır. Hata bildirimi daha uzun kalır.
+  Kalandan fazlası sessizce kırpılmaz, alan uyarır. Tümünü silen tuş "Temizle", tek rakamı ⌫ siler.
+- **Alan:** kısa ipucu (16 karaktere kadar: "zorunlu", "5–120") etiketin sağında; uzunu alanın altında yardım metni ve
+  alanın açıklaması (`aria-describedby`); etiket satırı tek satır kalır, iki sütunlu formda alanlar hizalı. Odakta yeşil
+  kenar ve 3 px hale, hatada kırmızı kenar ve ileti alanın altında (`Field`, `src/components/ui/Field.tsx`).
+- **Bildirim:** mürekkep zeminli hap; dört tonda da (başarı, bilgi, uyarı, hata) durum rengi yalnız ikonda, bilgi
+  renksiz; koyu temada yüzen yüzey. Telefonda alt sekme çubuğunun üstünde, ev çubuğu payıyla; alt eylem şeridi olan
+  ekranda (`data-action-bar`: adisyonun Gönder / Ödeme şeridi) şeridin de üstünde. Tablet ve bilgisayarda üst ortada.
+  "Geri al" gibi tek eylem taşıyabilir, eylem bir kez çalışır; hata ve uyarı hemen okunur ve daha uzun kalır.
 - **Sınıflar:** `cn()` (`src/lib/cn.ts`) çakışan Tailwind sınıflarını birleştirir, sonraki kazanır (`px-0`
-  `px-3`'ü, `max-sm:hidden` gizlemeyi ezer). Geçiş yalnız değişen özelliklere, 150 ms; hareket azaltmada dekoratif
-  hareket ve nabız durur.
+  `px-3`'ü ezer). Yalnız aynı varyanttaki sınıflar birleşir: sayfanın `max-md:hidden` sınıfı kitin `max-sm:flex`
+  sınıfını ezmez, ikisi de kalır ve derlenmiş CSS'te sonra gelen kazanır; kit bileşenini bir kırılımda gizlemek için ona
+  sınıf vermeyin, `max-md:hidden` sınıflı bir kaba sarın. Geçiş yalnız değişen özelliklere, 150 ms; hareket azaltmada
+  dekoratif hareket ve nabız durur.
 - **Kaydedilmemiş değişiklik:** uzun ayar formu değişiklik varken altta yapışkan şerit (Vazgeç, Kaydet) gösterir;
   sekme kapanırken, uygulama içi geçişte ve geri tuşunda sorar (`src/lib/unsavedGuard.ts`).
 
@@ -200,10 +235,16 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
 
 - Kırılımlar: telefon `< 768`, tablet `768-1023`, bilgisayar `1024+`. Giriş türü genişlikten değil
   `pointer-coarse` / `pointer-fine` sorgusundan: dokunmatikte her hedef en az 44 px.
-- Telefon: tek sütun, alt sekme çubuğu (en çok 4 ekran + "Daha"), birincil eylem altta (adisyonda
-  Gönder / Ödeme şeridi), modal yerine alt sayfa, tablo yerine satır kartı, çentik için `safe-area`.
-- Tablet: adisyonda ürünler ve hesap yan yana (`min-width: 768px`), yönetimde dar ikon menüsü.
-- Dokunmatikte alan yazısı en az 16 px (iOS odaklanınca yakınlaştırmasın).
+- Telefon: tek sütun, alt sekme çubuğu (beş yer: ekran azsa hepsi sekme, "Daha" yok; çoksa dört ekran ve "Daha";
+  patron panelini görende Patron sekmesi Bar'ın yerinde; üst şeridi olmayan bar ve adisyon ekranında yer varsa son
+  sekme kişinin menüsü; `phoneTabs`, `src/lib/nav.ts`), birincil eylem altta (adisyonda Gönder / Ödeme şeridi), modal
+  yerine alt sayfa, tablo yerine satır kartı, çentik için `safe-area`.
+- Tablet: adisyonda ürünler ve hesap yan yana (`min-width: 768px`), yönetimde dar ikon menüsü (sayaçlı; "Menüyü aç"
+  tam menüyü çekmecede açar).
+- Yönetim › Masa planı'nda masa klavyeyle seçilir (Tab, Enter ya da boşluk), oklarla taşınır, Shift ve oklarla
+  boyutlanır; kutunun boyu plandan geldiği için `data-tap-ok` taşır (44 px denetiminin dışında).
+- Dokunmatikte alan yazısı en az 16 px (iOS odaklanınca yakınlaştırmasın). Kural katmansızdır ve alanın yazı boyu
+  sınıfını ezer: daha büyük alan yazısı (ör. 36 px tutar) alanın kabına verilir, alan onu 1em ile alır.
 - **Doğrulama:** `npm run build && npm run e2e`. Tarama her rolün her ekranını 390 px (dokunmatik), 768 px
   (dokunmatik), 1280 px ve koyu temada açar; konsol ve ağ hatası, yatay taşma ve 44 px altı hedefi hata
   sayar; görüntüler `e2e/out/`. Emülasyon gerçek iPhone ve Android dokunuşunu, Safari'yi kanıtlamaz; ilk

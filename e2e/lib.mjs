@@ -157,8 +157,8 @@ export async function settle(page) {
 }
 
 /**
- * Yatay taşma: ekran dışına uzanan ve yatay kaydırılabilir bir kabın içinde olmayan görünür öğeler.
- * Tablo ve şerit gibi bilerek kayan kaplar sayılmaz; kırpılan içerik sayılır.
+ * Yatay taşma: ekran dışına uzanan ve yatay kaydırılabilir bir kabın içinde olmayan görünür öğeler, ayrıca yana da
+ * kayan sayfa kabı (dikey kaydırma kabı). Tablo ve şerit gibi bilerek kayan kaplar sayılmaz; kırpılan içerik sayılır.
  */
 export async function overflowReport(page) {
   return page.evaluate(() => {
@@ -187,6 +187,19 @@ export async function overflowReport(page) {
       // Taşan öğenin içindekileri ayrıca sayma: en dıştaki yeter
       if (bad.some((b) => b.el.contains(el))) continue;
       bad.push({ el, text: describe(el), right: Math.round(r.right), left: Math.round(r.left) });
+    }
+    // Sayfanın kaydırma kabı yana kaymamalı. overflow-y: auto, overflow-x'i de auto yapar: telefondan geniş sayfa yana
+    // kayan bir sayfa olur, içindekileri de yukarıdaki inScroller muaf tuttuğu için taşma görünmezdi (Patron 390 px
+    // telefonda 462 px genişti). Bilerek yana kayan kap (overflow-x-auto: ray, tablo) sayılmaz; kaydırma sınıfı
+    // varyantlı da olabilir (max-md:overflow-y-auto)
+    for (const el of document.querySelectorAll('main [class*="overflow-y-auto"]:not([class*="overflow-x-auto"])')) {
+      if (el.closest('[aria-hidden="true"], [data-overflow-ok]')) continue;
+      if (!/(auto|scroll)/.test(getComputedStyle(el).overflowX)) continue;
+      if (el.scrollWidth <= el.clientWidth + 1) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 1 || r.height < 1) continue;
+      if (bad.some((b) => b.el.contains(el))) continue;
+      bad.push({ el, text: `${describe(el)} yatay kayıyor (${el.scrollWidth - el.clientWidth} px)`, right: Math.round(r.right), left: Math.round(r.left) });
     }
     return { page: document.documentElement.scrollWidth - vw, items: bad.slice(0, 8).map(({ text, right, left }) => ({ text, right, left })) };
   });

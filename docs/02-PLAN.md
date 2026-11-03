@@ -284,7 +284,8 @@ onaylayabilir. Kör kasada beklenen ve fark, başkasının sayımında sayılan 
 `/days/:id`'de. Kasa hareketi değildir, lafmaliyet'e gitmez. Testler `tests/mesai.test.ts`, `tests/vardiya-sayim.test.ts`.
 
 **Ekranlar, müşteri ekranı ayarı ve görünüm** (2 Kasım 2026): giriş ekranında **Mesai** sekmesi (aynı PIN, oturum
-açılmaz; sonuç kartı "Hoş geldin" ya da "Görüşmek üzere"), kullanıcı menüsünde mesai satırı (avatarda yeşil nokta),
+açılmaz; sonuç kartı kişinin adıyla "Hoş geldiniz, …" ya da "Görüşmek üzere, …"), kullanıcı menüsünde mesai
+satırı (avatarda yeşil nokta),
 Yönetim › Mesai çizelgesi (`/yonetim/mesai`, `mesai.yonet`: dönem, kişi toplamları, düzeltme, şimdi kapatma, CSV);
 Kasa'da **Vardiya devri** penceresi (banknotla sayım, devralanın PIN'i, not) ve günün sayımları kartı. Müşteri ekranı
 ayarlanır: `settings.customerDisplay` (tema gece, porselen ya da ev yeşili; saat; karşılama, alt satır ve teşekkür

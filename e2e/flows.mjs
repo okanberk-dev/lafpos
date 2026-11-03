@@ -467,7 +467,8 @@ export async function runFlows(ctx) {
           await go(ctx, page, `/adisyon/${o.id}`);
           await page.getByRole('button', { name: /^Ödeme · / }).click();
           await page.getByRole('button', { name: 'Paylaş', exact: true }).click();
-          await page.getByRole('button', { name: 'Kişi artır' }).click();
+          // Kitin adet seçicisi: düğmeler Azalt / Artır, adı grubun etiketinde ("Kişi")
+          await page.getByRole('group', { name: 'Kişi', exact: true }).getByRole('button', { name: 'Artır', exact: true }).click();
           await page.getByRole('button', { name: 'Hesabı 3 kişiye böl' }).click();
           await page.getByText('Pay 1 · sıradaki').waitFor();
           const cash = async () => {

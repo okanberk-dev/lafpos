@@ -33,6 +33,72 @@ const list = (v) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : nul
  */
 const state = (path, name, act) => ({ path, name, act });
 
+/**
+ * Tezgâh satışında gönderilmemiş beş San Sebastian (₺290): bekleyen satır ve dört haneli Öde (₺1.500'ü aşar). Yalnız
+ * cihazın sepeti değişir (localStorage), sunucuya bir şey gitmez
+ */
+const pending = state('@tz', 'bekleyen', async (page) => {
+  await page.getByPlaceholder('Ürün ara').fill('San Sebastian', { timeout: 5000 });
+  const card = page.getByRole('button', { name: /^San Sebastian/ }).first();
+  for (let i = 0; i < 5; i++) await card.click({ timeout: 5000 });
+});
+
+/** Telefonda adisyon Menü sekmesinde açılır; hesap ve Ödeme şeridi Adisyon sekmesinde (tablet ve bilgisayarda sekme yok) */
+const checkTab = async (page) => {
+  const tab = page.getByRole('tablist', { name: 'Adisyon görünümü' }).getByRole('tab', { name: /^Adisyon/ });
+  if (await tab.isVisible()) await tab.click({ timeout: 5000 });
+};
+
+/**
+ * Masa adisyonunun (@s2, hesap istendi) ödeme penceresi ve İşlemler'in pencereleri: yalnız açılır, hiçbir şey
+ * onaylanmaz; sunucuda bir şey değişmez. Taranmayanlar: bölünmüş hesapta Paylaş ve yazarkasada bekleyen sepet
+ * (seed.s2'yi değiştirir, flows.mjs onu sonra açar), yarı self Masa no (bütün tarama için başka servis modu ister)
+ */
+const checkDialogs = [
+  ...[
+    ['odeme', null],
+    ['odeme-nakit', 'Nakit'],
+    ['odeme-kalem', 'Kalem seç'],
+    ['odeme-paylas', 'Paylaş'],
+  ].map(([name, button]) =>
+    state('@s2', name, async (page) => {
+      await checkTab(page);
+      await page.getByRole('button', { name: /^Ödeme · / }).first().click({ timeout: 5000 });
+      const dialog = page.getByRole('dialog', { name: /^Ödeme · / });
+      await dialog.waitFor({ timeout: 5000 });
+      if (button) await dialog.getByRole('button', { name: button, exact: true }).click({ timeout: 5000 });
+    }),
+  ),
+  ...[
+    ['islem-tasi', /^Masa taşı/, 'Masa taşı / birleştir'],
+    ['islem-bol', /^Hesabı böl/, 'Hesabı böl / kalem taşı'],
+    ['islem-indirim', /^Adisyon indirimi/, 'Adisyon indirimi'],
+    ['islem-kisi', /^Kişi sayısı/, 'Kişi sayısı'],
+    ['islem-musteri', /^Müşteri ekle/, 'Müşteri'],
+  ].map(([name, item, title]) =>
+    state('@s2', name, async (page) => {
+      await page.getByRole('button', { name: 'İşlemler', exact: true }).click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: 'İşlemler' }).getByRole('button', { name: item }).click({ timeout: 5000 });
+      await page.getByRole('dialog', { name: title, exact: true }).waitFor({ timeout: 5000 });
+    }),
+  ),
+];
+
+/**
+ * Bar ekranı açık temada (cihaz tercihi: cam önündeki tablet); telefon ve tablette Diğer penceresi açık (56 px
+ * satırlar). Tercih tarayıcı bağlamında kalır: listede /mutfak'ın son durumu
+ */
+const barLight = state('/mutfak', 'acik-tema', async (page) => {
+  await page.evaluate(() => localStorage.setItem('lafpos.pref.kds.tema', JSON.stringify('acik')));
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await settle(page);
+  const more = page.getByRole('button', { name: 'Diğer', exact: true });
+  if (await more.isVisible()) {
+    await more.click({ timeout: 5000 });
+    await page.getByRole('dialog', { name: 'Bar ekranı' }).waitFor({ timeout: 5000 });
+  }
+});
+
 const ROUTES = {
   giris: ['/giris', state('/giris', 'mesai', (page) => page.getByRole('button', { name: 'Mesai', exact: true }).click({ timeout: 5000 }))],
   patron: [
@@ -44,6 +110,7 @@ const ROUTES = {
       await page.getByRole('button', { name: /^Büyük / }).first().click({ timeout: 5000 });
       await page.getByRole('dialog', { name: 'Türk Kahvesi' }).waitFor({ timeout: 5000 });
     }),
+    pending,
     '/siparisler',
     '/mutfak',
     // Tükenen ürünler › Seçenekler (yulaf sütü bitti); telefon ve tablette araçlar "Diğer" penceresinde
@@ -54,6 +121,7 @@ const ROUTES = {
       await page.getByRole('dialog', { name: 'Tükenen ürünler' }).getByRole('tab', { name: /Seçenekler/ }).click({ timeout: 5000 });
     }),
     state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })),
+    barLight,
     '/cagri',
     '/musteri-ekrani',
     state('/musteri-ekrani', 'uzun-masa', async (page) => {
@@ -138,9 +206,26 @@ const ROUTES = {
     '/yonetim/ayarlar',
     '/yonetim/denetim',
   ],
-  garson: ['/masalar', '/siparisler', '/mutfak', '@s1'],
-  kasa: ['/kasa', state('/kasa', 'vardiya', (page) => page.getByRole('button', { name: 'Vardiya devri', exact: true }).click({ timeout: 5000 })), '/masalar', '/satis', '@s2', '@tz', '/cihaz'],
-  bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 }))],
+  garson: [
+    '/masalar',
+    // Bahçe: yuvarlak masalar
+    state('/masalar', 'bahce', (page) => page.getByRole('tab', { name: /^Bahçe/ }).click({ timeout: 5000 })),
+    '/siparisler',
+    '/mutfak',
+    '@s1',
+  ],
+  kasa: [
+    '/kasa',
+    state('/kasa', 'vardiya', (page) => page.getByRole('button', { name: 'Vardiya devri', exact: true }).click({ timeout: 5000 })),
+    '/masalar',
+    '/satis',
+    '@s2',
+    ...checkDialogs,
+    '@tz',
+    pending,
+    '/cihaz',
+  ],
+  bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 })), barLight],
 };
 
 /** Kendiliğinden başka adrese geçen ekranlar: "/satis" boş tezgâh satışını açıp adisyona geçer */
