@@ -82,9 +82,12 @@ describe('müşteri ekranı ayarının ekranları', () => {
     expect(settings).toMatch(/comparable = \(x: Settings\) => JSON\.stringify\(\{ \.\.\.x, serviceMode: null, customerDisplay: null \}\)/);
   });
 
-  it('karekod adresi alanı sunucunun sınırında (300); sığmayan içerik çizimi düşürmez', () => {
+  it('karekod adresi sunucunun sınırında (300, kesmeden hatayla); sığmayan içerik çizimi düşürmez', () => {
     expect(src('server/routes/admin.ts')).toMatch(/qrUrl: z\.union\(\[z\.literal\(''\), z\.string\(\)\.trim\(\)\.max\(300\)/);
-    expect(src('src/pages/admin/DisplayAdmin.tsx')).toMatch(/value=\{draft\.qrUrl\}[^>]*maxLength=\{300\}/);
+    // Uzun adres kesilmez (kesilen bağlantı geçerli görünür ama bozuktur): hata gösterilir, önizleme çizmez
+    const page = src('src/pages/admin/DisplayAdmin.tsx');
+    expect(page).toContain("qrTrim.length > 300 ? 'Adres en çok 300 karakter olabilir'");
+    expect(page).not.toMatch(/value=\{draft\.qrUrl\}[^>]*maxLength/);
     // uqr bu boyu karekoda sığdıramaz: QrCode bunu yakalar
     expect(() => encode(`https://laffogato.net/${'x'.repeat(2400)}`, { ecc: 'M', border: 2 })).toThrow();
     expect(src('src/components/QrCode.tsx')).toMatch(/try \{\s*qr = encode\(value/);

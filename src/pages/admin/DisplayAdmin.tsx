@@ -85,7 +85,9 @@ export default function DisplayAdmin() {
   }, [savedKey]);
 
   const set = <K extends keyof CustomerDisplaySettings>(k: K, v: CustomerDisplaySettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
-  const qrError = draft.qrUrl.trim() && !/^https?:\/\/\S+$/.test(draft.qrUrl.trim()) ? 'Adres http:// ya da https:// ile başlamalı' : null;
+  // Sınır kesilerek değil hatayla: yapıştırılan uzun bağlantı 300'de kesilse geçerli görünen bozuk bir adres kaydedilirdi
+  const qrTrim = draft.qrUrl.trim();
+  const qrError = !qrTrim ? null : qrTrim.length > 300 ? 'Adres en çok 300 karakter olabilir' : !/^https?:\/\/\S+$/.test(qrTrim) ? 'Adres http:// ya da https:// ile başlamalı' : null;
   // Önizleme geçersiz adresi çizmez (kaydedilemeyecek karekod gösterilmesin)
   const shown = qrError ? { ...draft, qrUrl: '' } : draft;
   const screenUrl = appUrl('/musteri-ekrani?ekran=kasa');
@@ -101,6 +103,7 @@ export default function DisplayAdmin() {
       return;
     }
     setSaving(true);
+    const sent = draft;
     try {
       const body: CustomerDisplaySettings = {
         ...draft,
@@ -112,8 +115,9 @@ export default function DisplayAdmin() {
         messages: draft.messages.map((m) => m.trim()).filter(Boolean),
       };
       await put('/admin/settings', { customerDisplay: body });
-      // Taslak kaydedilen (kırpılmış) biçimi alır: baştaki ya da sondaki boşluk "kaydedilmemiş" diye kalmasın
-      setDraft(body);
+      // Taslak kaydedilen (kırpılmış) biçimi alır: baştaki ya da sondaki boşluk "kaydedilmemiş" diye kalmasın; kayıt
+      // sürerken yazılan değişiklik korunur
+      setDraft((cur) => (cur === sent ? body : cur));
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['bootstrap'] }),
         qc.invalidateQueries({ queryKey: ['display-config'] }),
@@ -232,7 +236,7 @@ export default function DisplayAdmin() {
           <Card title="Karekod" subtitle="Uygulama, menü ya da Instagram: http ya da https ile başlayan bir adres; boşsa çizilmez">
             <div className="space-y-4">
               <Field label="Adres" error={tried ? qrError : null}>
-                <Input value={draft.qrUrl} inputMode="url" maxLength={300} placeholder="https://laffogato.net" onChange={(e) => set('qrUrl', e.target.value)} />
+                <Input value={draft.qrUrl} inputMode="url" placeholder="https://laffogato.net" onChange={(e) => set('qrUrl', e.target.value)} />
               </Field>
               <Field label="Karekodun yanındaki yazı" hint={`${draft.qrLabel.length}/60`}>
                 <Input value={draft.qrLabel} maxLength={60} placeholder="Uygulamayı indirin, damga kazanın" onChange={(e) => set('qrLabel', e.target.value)} />
