@@ -24,11 +24,13 @@ export function LafMark({ className, bean, onNight, title }: { className?: strin
   );
 }
 
+// Uygulama ikonunun oranları (`public/favicon.svg`, 512 px): logo karonun yüksekliğinin yarısı (258/512), köşe
+// kenarın %22'si (112/512). Karo arayüzün köşe ölçeğine değil ikona uyar: ana ekrandaki ikonla aynı biçim
 const TILE = {
-  sm: { box: 'size-8 rounded-[10px]', mark: 'h-3' },
-  md: { box: 'size-11 rounded-xl', mark: 'h-4' },
-  lg: { box: 'size-12 rounded-[14px]', mark: 'h-5' },
-  xl: { box: 'size-24 rounded-[22px]', mark: 'h-11' },
+  sm: { box: 'size-8 rounded-[7px]', mark: 'h-4' },
+  md: { box: 'size-11 rounded-[10px]', mark: 'h-[22px]' },
+  lg: { box: 'size-12 rounded-[11px]', mark: 'h-6' },
+  xl: { box: 'size-24 rounded-[21px]', mark: 'h-12' },
 } as const;
 
 /**

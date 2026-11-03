@@ -16,12 +16,15 @@ export function homePath(can: (p: Permission) => boolean, mode: ServiceMode = DE
 
 export interface NavItem {
   to: string;
+  /** Rayda ve alt sekmede görünen kısa ad (68 px'lik sütuna sığar) */
   label: string;
-  /** Komut paletinde görünen uzun ad */
+  /** Tam ad: telefonun üst şeridi, "Daha" listesi, komut paleti, rayın ipucu ve ekran okuyucu */
   title: string;
   icon: typeof LayoutGrid;
   perms: Permission[];
   primary?: boolean;
+  /** Komut paletinde bu kelimelerle de bulunur */
+  keywords?: string;
 }
 
 /** Kasa ekranları: tablette sol menü, telefonda alt sekmeler, komut paletinde "Ekranlar" */
@@ -30,15 +33,15 @@ export const POS_NAV: NavItem[] = [
   { to: '/siparisler', label: 'Siparişler', title: 'Siparişler', icon: ClipboardList, perms: ['siparis.al', 'paket.yonet'], primary: true },
   { to: '/mutfak', label: 'Bar', title: 'Bar ve mutfak ekranı', icon: ChefHat, perms: ['mutfak.ekran'], primary: true },
   { to: '/kasa', label: 'Kasa', title: 'Kasa ve gün sonu', icon: Wallet, perms: ['kasa.gun', 'kasa.hareket', 'odeme.al'], primary: true },
-  { to: '/musteriler', label: 'Müşteri', title: 'Müşteriler ve cari', icon: Users, perms: ['cari.yonet'] },
+  { to: '/musteriler', label: 'Müşteriler', title: 'Müşteriler ve cari', icon: Users, perms: ['cari.yonet'] },
   { to: '/rezervasyon', label: 'Rezerv.', title: 'Rezervasyonlar', icon: CalendarClock, perms: ['rezervasyon.yonet'] },
-  { to: '/raporlar', label: 'Rapor', title: 'Raporlar', icon: BarChart3, perms: ['rapor.gor'] },
+  { to: '/raporlar', label: 'Raporlar', title: 'Raporlar', icon: BarChart3, perms: ['rapor.gor'] },
   { to: '/patron', label: 'Patron', title: 'Patron paneli', icon: Gauge, perms: ['patron.panel'], primary: true },
   { to: '/yonetim', label: 'Yönetim', title: 'Yönetim paneli', icon: Settings, perms: ['menu.yonet', 'ayar.yonet', 'personel.yonet', 'mesai.yonet', 'senkron.yonet'] },
 ];
 
-/** Self ve yarı self serviste ilk sekme: yeni tezgâh satışı */
-export const SALE_NAV: NavItem = { to: '/satis', label: 'Satış', title: 'Yeni satış (tezgâh)', icon: Store, perms: ['siparis.al'], primary: true };
+/** Self ve yarı self serviste ilk sekme: yeni tezgâh satışı (masa planındaki düğmeyle aynı ad) */
+export const SALE_NAV: NavItem = { to: '/satis', label: 'Satış', title: 'Tezgâh satışı', icon: Store, perms: ['siparis.al'], primary: true, keywords: 'yeni satış' };
 
 /**
  * Servis moduna göre kasa menüsü. Masaya servis bugünkü menü. Yarı self ve QR + self: "Satış" başta, Masalar kalır
@@ -58,6 +61,29 @@ export function navFor(mode: ServiceMode, opts: { tablesInUse?: boolean } = {}):
 /** Kişinin yetkisine göre süzülmüş menü */
 export function visibleNav(can: (p: Permission) => boolean, mode: ServiceMode, opts: { tablesInUse?: boolean } = {}): NavItem[] {
   return navFor(mode, opts).filter((n) => n.perms.some((p) => can(p)));
+}
+
+/**
+ * Telefonun alt sekmeleri (beş yer). Ekran az ise hepsi sekmedir, "Daha" yok (garsonun üç ekranı). Çoksa dört sekme
+ * ve "Daha": önce birincil ekranlar, eksik kalan yer menü sırasıyla dolar. Patron panelini görebilende (patron,
+ * müdür) Patron sekmesi Bar'ın yerini alır: dışarıdayken telefonda baktığı ekran o, bar ekranı bar tabletinin.
+ */
+export function phoneTabs(items: NavItem[]): { tabs: NavItem[]; more: NavItem[] } {
+  if (items.length <= 5) return { tabs: items, more: [] };
+  let pick = items.filter((n) => n.primary);
+  if (pick.some((n) => n.to === '/patron')) pick = pick.filter((n) => n.to !== '/mutfak');
+  pick = [...pick, ...items.filter((n) => !pick.includes(n))].slice(0, 4);
+  const tabs = items.filter((n) => pick.includes(n));
+  return { tabs, more: items.filter((n) => !pick.includes(n)) };
+}
+
+/**
+ * Ekran okuyucunun ve sesle kullanımın adı: tam ad görünen kısa adla başlıyorsa tam ad ("Rezerv." → "Rezervasyonlar",
+ * "Bar" → "Bar ve mutfak ekranı"); başlamıyorsa görünen ad kalır (WCAG 2.5.3: söylenen etiket adın başında).
+ */
+export function navAriaLabel(n: NavItem): string | undefined {
+  const short = n.label.replace(/\.$/, '').toLocaleLowerCase('tr-TR');
+  return n.title !== n.label && n.title.toLocaleLowerCase('tr-TR').startsWith(short) ? n.title : undefined;
 }
 
 /** Yönetim paneli ve raporlar Innex kabuğunda açılır; kasanın sol menüsü ve üst şeridi orada çizilmez */

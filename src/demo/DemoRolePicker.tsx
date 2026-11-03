@@ -32,11 +32,12 @@ export function DemoRolePicker() {
 
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
-      <section className="w-full max-w-md rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-5 sm:p-6">
+      {/* Giriş ekranlarıyla aynı kart (köşe 28): demoda PIN ekranının yerine geçer */}
+      <section className="w-full max-w-md rounded-3xl border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
         <div className="mb-5 flex items-center gap-3">
           <LafTile />
           <span>
-            <h1 className="text-lg font-semibold">Kimle devam edelim?</h1>
+            <h1 className="text-xl font-bold sm:text-[22px]">Kimle devam edelim?</h1>
             <span className="block text-[13px] text-muted">Demoda PIN sorulmaz; her rol kendi ekranlarını görür</span>
           </span>
         </div>
