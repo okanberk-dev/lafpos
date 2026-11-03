@@ -96,6 +96,16 @@ const ROUTES = {
       await settle(page);
       await page.getByRole('tab', { name: 'Paket platformları', exact: true }).click({ timeout: 5000 });
     }),
+    // Raporun öteki sekmeleri de taranır (44 px, taşma; görüntüsü tasarım denetimi için)
+    ...[
+      ['saatlik', 'Saatlik'],
+      ['hazirlama', 'Hazırlama süresi'],
+      ['adisyon', 'Adisyonlar'],
+      ['kayip', 'İptal ve indirim'],
+      ['happy', 'Happy hour'],
+      ['personel', 'Personel'],
+      ['aktarim', 'lafmaliyet aktarımı'],
+    ].map(([name, label]) => state('/raporlar', name, (page) => page.getByRole('tab', { name: label, exact: true }).click({ timeout: 5000 }))),
     '/yonetim',
     '/yonetim/genel',
     '/yonetim/menu',
