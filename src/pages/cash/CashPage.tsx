@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Coins, EyeOff, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, ChevronLeft, ChevronRight, Coins, EyeOff, FileText, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { parseTL, tl } from '@shared/money';
@@ -19,17 +19,26 @@ import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { TypedAmount } from '../order/TypedAmount';
 import { Illustration } from '@/components/Illustration';
-import { CashCount, type CountResult } from './CashCount';
+import { CashCount, type CountResult, signedTL } from './CashCount';
 import { ShiftCountsCard, ShiftHandoverModal } from './ShiftHandover';
 import { ZView } from './ZView';
 
 /** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
 const MOVE_BTN = 'max-sm:gap-1.5 max-sm:px-2 max-sm:whitespace-normal max-sm:leading-tight max-[400px]:[&>svg]:hidden';
 
+type MoveKind = 'harcama' | 'teslim' | 'giris';
+interface Movement {
+  id: string;
+  kind: MoveKind;
+  amount: number;
+  description: string;
+  userName: string | null;
+  createdAt: number;
+}
 interface DayResponse {
   day: BusinessDayDTO | null;
   summary: ZSummary | null;
-  movements: { id: string; kind: 'harcama' | 'teslim' | 'giris'; amount: number; description: string; userName: string | null; createdAt: number }[];
+  movements: Movement[];
   /** Kör kasa: bu kullanıcı kasa rakamlarını görmez */
   blind?: boolean;
   /** Açık gün yokken bugünün kapanmış günü: bir iş gününe tek Z, yeni gün 05:00'ten sonra */
@@ -48,12 +57,31 @@ interface DayDetail {
   day: BusinessDayDTO;
   summary: ZSummary;
   lafmaliyet: Record<string, unknown>;
-  movements: DayResponse['movements'];
+  movements: Movement[];
   shiftCounts?: ShiftCountDTO[];
+  /** Gün sonu notu */
+  note?: string | null;
+  /** Kaydedilmiş sayım: `b:<kuruş>` banknot adedi, `m:<ödeme türü>` sayılan tutar; föy düzeltilirken pencereye gelir */
+  cashCounts?: Record<string, number> | null;
 }
 
-const MOVE_LABEL = { harcama: 'Harcama', teslim: 'Teslim', giris: 'Kasaya giriş' };
+const MOVE_KINDS: MoveKind[] = ['harcama', 'teslim', 'giris'];
+const MOVE_LABEL: Record<MoveKind, string> = { harcama: 'Harcama', teslim: 'Teslim', giris: 'Kasaya giriş' };
+const MOVE_ICON = { harcama: ArrowUpFromLine, teslim: Wallet, giris: ArrowDownToLine } satisfies Record<MoveKind, unknown>;
+const MOVE_HINT: Record<MoveKind, string> = { harcama: 'Kasadan nakit çıkan masraf', teslim: 'Patrona ya da bankaya teslim edilen nakit', giris: 'Kasaya eklenen nakit (bozuk para gibi)' };
+const MOVE_SAVE: Record<MoveKind, string> = { harcama: 'Harcamayı kaydet', teslim: 'Teslimi kaydet', giris: 'Girişi kaydet' };
 const emptyCount = (): CountResult => ({ countedCash: 0, banknotes: {}, methodCounts: {} });
+
+/** Kaydedilmiş sayım (`b:` banknot, `m:` ödeme türü) pencerenin sayımına: düzeltme boş föyle değil, girilenle açılır */
+function savedCount(d: DayDetail): CountResult {
+  const of = (prefix: string) =>
+    Object.fromEntries(
+      Object.entries(d.cashCounts ?? {})
+        .filter(([k]) => k.startsWith(prefix))
+        .map(([k, n]) => [k.slice(prefix.length), n]),
+    );
+  return { countedCash: d.summary.countedCash ?? 0, banknotes: of('b:'), methodCounts: of('m:') };
+}
 
 export default function CashPage() {
   const boot = useBoot();
@@ -66,7 +94,7 @@ export default function CashPage() {
   const detail = useQuery({ queryKey: ['cash', 'detail', selected], queryFn: () => get<DayDetail>(`/cash/days/${selected}`), enabled: !!selected });
 
   const [opening, setOpening] = useState('');
-  const [moveKind, setMoveKind] = useState<null | 'harcama' | 'teslim' | 'giris'>(null);
+  const [moveKind, setMoveKind] = useState<null | MoveKind>(null);
   const [moveAmount, setMoveAmount] = useState('');
   const [moveDesc, setMoveDesc] = useState('');
   const [closing, setClosing] = useState(false);
@@ -75,7 +103,10 @@ export default function CashPage() {
   const [counted, setCounted] = useState(true);
   const [note, setNote] = useState('');
   const [zResult, setZResult] = useState<DayDetail | null>(null);
+  // Föy düzeltmenin kendi sayımı ve notu: gün sonu penceresinin yarım kalan sayımına karışmaz
   const [fillFor, setFillFor] = useState<DayDetail | null>(null);
+  const [fillCount, setFillCount] = useState<CountResult>(emptyCount());
+  const [fillNote, setFillNote] = useState('');
   const [reopenReason, setReopenReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
   const reasonRef = useRef<HTMLInputElement>(null);
@@ -128,7 +159,7 @@ export default function CashPage() {
     }
   };
 
-  const openMove = (kind: 'harcama' | 'teslim' | 'giris') => {
+  const openMove = (kind: MoveKind) => {
     setMoveError({});
     setMoveKind(kind);
   };
@@ -183,18 +214,24 @@ export default function CashPage() {
     }
   };
 
+  // Föy penceresi kaydedilmiş sayımla ve notla açılır (düzeltme sıfırdan sayım istemez)
+  const openFill = (d: DayDetail) => {
+    setFillCount(savedCount(d));
+    setFillNote(d.note ?? '');
+    setFillFor(d);
+  };
   const saveCount = async () => {
-    if (!fillFor) return;
+    if (!fillFor || busy) return;
     setBusy(true);
     try {
       // Kaydedilmiş sayımı değiştirmek yetkili onayı ister
+      const banknotes = Object.fromEntries(Object.entries(fillCount.banknotes).filter(([, n]) => n > 0));
       const done = await withApproval((pin) =>
-        post(`/cash/days/${fillFor.day.id}/count`, { countedCash: count.countedCash, methodCounts: count.methodCounts, banknotes: count.banknotes, note: note || null, approverPin: pin }),
+        post(`/cash/days/${fillFor.day.id}/count`, { countedCash: fillCount.countedCash, methodCounts: fillCount.methodCounts, banknotes, note: fillNote || null, approverPin: pin }),
       );
       if (done === null) return;
       toast.ok('Kasa föyü kaydedildi');
       setFillFor(null);
-      setCount(emptyCount());
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -216,7 +253,11 @@ export default function CashPage() {
   // Kör kasa: kasiyerin `kasa.rakam` yetkisi yoksa sunucu ara raporu ve beklenen nakdi göndermez
   const blind = current.data?.blind ?? false;
   const movements = current.data?.movements ?? [];
+  const shiftCounts = current.data?.shiftCounts ?? [];
+  const stale = current.data?.stale ?? null;
   const closedDay = day ? null : (current.data?.closedToday ?? null);
+  const views = can('rapor.gor');
+  const simulator = boot.integrations.okc.provider === 'simulator';
 
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
@@ -228,42 +269,33 @@ export default function CashPage() {
             : 'Gün kapalı'
         }
         actions={
-          <>
-            {boot.integrations.okc.provider === 'simulator' && (
-              <Link to="/cihaz" className={buttonClass('secondary')}>
-                <MonitorSmartphone className="size-4" />
-                Eğitim cihazı
-              </Link>
-            )}
-            {/* Vardiya devri: gün içinde kasiyer değişirken çekmece sayımı (gün sonu değil) */}
-            {tab === 'bugun' && day && !current.data?.stale && can('kasa.gun') && (
-              <Button icon={<ArrowLeftRight className="size-4" />} onClick={() => setHandover(true)}>
-                Vardiya devri
-              </Button>
-            )}
-            {/* Gün sonu rutin bir kapanıştır: birincil yeşil; kırmızı iptal ve alarma ayrılır */}
-            {tab === 'bugun' && day && can('kasa.gun') && (
-              <Button variant="primary" icon={<Lock className="size-4" />} onClick={() => setClosing(true)}>
-                Gün sonu (Z)
-              </Button>
-            )}
-            {/* Telefonda kendi satırında, tam genişlik: eylemlerle aynı satıra sıkışıp "Geçmiş günler" kırpılmasın */}
-            {can('rapor.gor') && (
-              <Segmented
-                className="max-sm:min-w-full max-sm:[&>button]:flex-1"
-                label="Kasa görünümü"
-                value={tab}
-                onChange={(v) => {
-                  setTab(v);
-                  setSelected(null);
-                }}
-                options={[
-                  { value: 'bugun', label: 'Bugün' },
-                  { value: 'gecmis', label: 'Geçmiş günler' },
-                ]}
-              />
-            )}
-          </>
+          // Başlıkta yalnız gezinme: görünüm ve eğitim cihazı. Eylemler Bugün'ün kendi şeridinde
+          (views || simulator) && (
+            <div className="flex items-center gap-2 max-sm:w-full">
+              {views && (
+                <Segmented
+                  className="max-sm:flex-1 max-sm:[&>button]:flex-1"
+                  label="Kasa görünümü"
+                  value={tab}
+                  onChange={(v) => {
+                    setTab(v);
+                    setSelected(null);
+                  }}
+                  options={[
+                    { value: 'bugun', label: 'Bugün' },
+                    { value: 'gecmis', label: 'Geçmiş günler' },
+                  ]}
+                />
+              )}
+              {simulator && (
+                // Telefonda görünüm seçicinin yanında yalnız ikon (adı ekran okuyucuda ve ipucunda)
+                <Link to="/cihaz" title="Eğitim cihazı" className={buttonClass('ghost', 'md', { className: views ? 'max-sm:w-11 max-sm:shrink-0 max-sm:px-0' : undefined })}>
+                  <MonitorSmartphone aria-hidden="true" className="size-4" />
+                  <span className={views ? 'max-sm:sr-only' : undefined}>Eğitim cihazı</span>
+                </Link>
+              )}
+            </div>
+          )
         }
       />
 
@@ -278,9 +310,23 @@ export default function CashPage() {
                 <h2 className="text-lg font-semibold tracking-[-0.01em]">Bugünün gün sonu alındı</h2>
                 <p className="tabular mt-1 text-sm font-medium text-ink-2">{joinMeta([`Z ${closedDay.zNo}`, closedDay.closedAt && `kapanış ${fmtTime(closedDay.closedAt)}`])}</p>
                 <p className="mt-1 text-pretty text-sm text-muted">Yeni gün 05:00’ten sonra açılır; kapanıştan sonra satış gerekirse günü yeniden açın</p>
+                {views && (
+                  <Button
+                    size="sm"
+                    variant="soft"
+                    icon={<FileText className="size-4" />}
+                    className="mt-3"
+                    onClick={() => {
+                      setTab('gecmis');
+                      setSelected(closedDay.id);
+                    }}
+                  >
+                    Z raporunu gör
+                  </Button>
+                )}
               </div>
               {can('kasa.gun') ? (
-                <>
+                <div className="space-y-4 border-t border-[var(--admin-divider)] pt-4">
                   <Field label="Neden" hint="zorunlu, Z raporuna yazılır" className="text-left" error={reasonError}>
                     <Input
                       ref={reasonRef}
@@ -297,7 +343,7 @@ export default function CashPage() {
                     Günü yeniden aç
                   </Button>
                   <p className="text-xs text-muted">Yetkili onayı gerekir. Gün yeniden kapanınca Z raporu ve lafmaliyet’teki kayıt güncellenir</p>
-                </>
+                </div>
               ) : (
                 <p className="text-sm text-muted">Günü yeniden açma yetkiniz yok. Kasiyer, müdür ya da patron açabilir</p>
               )}
@@ -337,70 +383,68 @@ export default function CashPage() {
 
       {tab === 'bugun' && day && (
         <div className="space-y-3">
-          {current.data?.stale && (
-            <Notice tone="warn" role="alert" title={current.data.stale}>
+          {stale && (
+            <Notice tone="warn" role="alert" title={stale}>
               Bu güne yeni adisyon ve ürün eklenmez; açık adisyonların ödemesi alınır. Gün sonunu aldıktan sonra yeni günü açın
             </Notice>
           )}
-          {can('kasa.hareket') && (
-            // Telefonda üç eşit sütun: dolgu daralır, dar telefonda ikon düşer ve etiket gerekirse iki satıra iner (kenara dayanmasın)
-            <div className="grid grid-cols-3 gap-2 sm:flex">
-              <Button icon={<ArrowUpFromLine className="size-4" />} className={MOVE_BTN} onClick={() => openMove('harcama')}>
-                Harcama
-              </Button>
-              <Button icon={<Wallet className="size-4" />} className={MOVE_BTN} onClick={() => openMove('teslim')}>
-                Teslim
-              </Button>
-              <Button icon={<ArrowDownToLine className="size-4" />} className={MOVE_BTN} onClick={() => openMove('giris')}>
-                Kasaya giriş
-              </Button>
+          {(can('kasa.hareket') || can('kasa.gun')) && (
+            // Günün eylem şeridi: solda kasa hareketleri, sağda vardiya devri ve gün sonu (telefonda gün sonu sayfanın sonunda)
+            <div className="flex flex-wrap items-center gap-2">
+              {can('kasa.hareket') && (
+                // Telefonda üç eşit sütun: dolgu daralır, dar telefonda ikon düşer ve etiket gerekirse iki satıra iner (kenara dayanmasın)
+                <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto">
+                  {MOVE_KINDS.map((k) => {
+                    const Icon = MOVE_ICON[k];
+                    return (
+                      <Button key={k} icon={<Icon className="size-4" />} className={MOVE_BTN} onClick={() => openMove(k)}>
+                        {MOVE_LABEL[k]}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
+              {can('kasa.gun') && (
+                <div className={cn('flex gap-2 max-sm:w-full max-sm:[&>*]:flex-1 sm:ml-auto', stale && 'max-sm:hidden')}>
+                  {/* Vardiya devri: gün içinde kasiyer değişirken çekmece sayımı (gün sonu değil) */}
+                  {!stale && (
+                    <Button icon={<ArrowLeftRight className="size-4" />} onClick={() => setHandover(true)}>
+                      Vardiya devri
+                    </Button>
+                  )}
+                  {/* Gün sonu rutin bir kapanıştır: birincil yeşil; kırmızı iptal ve alarma ayrılır */}
+                  <Button variant="primary" icon={<Lock className="size-4" />} className="max-sm:hidden" onClick={() => setClosing(true)}>
+                    Gün sonu (Z)
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
           {summary ? (
-            <ZView day={day} summary={summary} lafmaliyet={null} title={`Ara rapor (X) · Z ${day.zNo}`} />
+            <ZView day={day} summary={summary} lafmaliyet={null} title="Ara rapor (X)">
+              <CashActivity movements={movements} counts={shiftCounts} />
+            </ZView>
           ) : (
-            // Kör kasa: başlıksız tek not; yetkinin adı ipucunda
-            <div
-              className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] px-4 py-3 text-[13px] text-muted"
-              title="Rakamları görmek için yöneticiden “Ara rapor (X) ve kasa rakamlarını görme” yetkisi isteyin"
-            >
-              <EyeOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-              <p className="text-pretty">
-                <span className="font-medium text-ink-2">Kör kasa</span>: ara rapor ve beklenen nakit bu rolde gizli. Gün sonunda çekmeceyi sayıp girin; farkı yönetici görür
-              </p>
-            </div>
+            <>
+              <Notice tone="info" icon={<EyeOff />} title="Kör kasa">
+                Ara rapor ve beklenen nakit bu rolde gizli. Gün sonunda çekmeceyi sayıp girin; farkı yönetici görür
+              </Notice>
+              <CashActivity movements={movements} counts={shiftCounts} />
+            </>
           )}
 
-          <ShiftCountsCard counts={current.data?.shiftCounts ?? []} />
-
-          <Card title="Kasa hareketleri">
-            {movements.length === 0 ? (
-              <EmptyState compact icon={<Coins />} title="Bugün kasa hareketi yok">
-                Harcama, teslim ve kasaya giriş burada listelenir
-              </EmptyState>
-            ) : (
-              <ul className="divide-y divide-line">
-                {movements.map((m) => (
-                  // Yön işaretle: giriş artı ve yeşil, çıkan para eksi
-                  <li key={m.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    <Badge tone={m.kind === 'giris' ? 'green' : m.kind === 'teslim' ? 'blue' : 'red'}>{MOVE_LABEL[m.kind]}</Badge>
-                    <span className="min-w-0 flex-1 truncate">{m.description}</span>
-                    <span className="shrink-0 text-right text-xs text-muted sm:w-28">{joinMeta([m.userName, fmtTime(m.createdAt)])}</span>
-                    <span className={cn('tabular w-24 shrink-0 text-right font-semibold', m.kind === 'giris' ? 'text-[var(--admin-success)]' : 'text-ink')}>
-                      {m.kind === 'giris' ? '+' : '−'}
-                      {tl(m.amount)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+          {/* Telefonda günün birincil eylemi altta: rapora bakılıp sonra kapanır */}
+          {can('kasa.gun') && (
+            <Button variant="primary" size="lg" block icon={<Lock className="size-4" />} className="sm:hidden" onClick={() => setClosing(true)}>
+              Gün sonu (Z)
+            </Button>
+          )}
         </div>
       )}
 
       {tab === 'gecmis' && !selected && (
-        <Card>
+        <Card className="overflow-hidden">
           {days.isPending ? (
             <ListSkeleton rows={6} />
           ) : days.isError && !days.data ? (
@@ -410,18 +454,25 @@ export default function CashPage() {
               Gün sonu alınan günler Z raporlarıyla burada listelenir
             </EmptyState>
           ) : (
-            <ul className="divide-y divide-line">
+            <ul className="divide-y divide-[var(--admin-divider)]">
               {days.data.map((d) => (
                 <li key={d.id}>
-                  <button onClick={() => setSelected(d.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
-                    <span className="tabular w-14 font-semibold">Z {d.zNo}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block">{fmtDateLong(d.date)}</span>
-                      <span className="text-xs text-muted">{d.closedAt ? `${d.receipts ?? 0} adisyon` : 'Açık'}</span>
+                  {/* Z no, tarih ve altında adisyon ile durum rozetleri, ciro, ok: telefonda tarih kırılmaz, satırın açıldığı belli */}
+                  <button
+                    onClick={() => setSelected(d.id)}
+                    className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 px-4 py-3 text-left transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press"
+                  >
+                    <span className="tabular font-headline text-[15px] font-bold">Z {d.zNo}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{fmtDateLong(d.date)}</span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                        <span>{d.closedAt ? `${d.receipts ?? 0} adisyon` : 'Açık'}</span>
+                        {d.closedAt && d.cashDiff == null && <Badge tone="warn">Föy girilmedi</Badge>}
+                        {d.cashDiff != null && d.cashDiff !== 0 && <Badge tone="red">Fark {signedTL(d.cashDiff)}</Badge>}
+                      </span>
                     </span>
-                    {d.closedAt && d.cashDiff == null && <Badge tone="warn">Föy girilmedi</Badge>}
-                    {d.cashDiff != null && d.cashDiff !== 0 && <Badge tone="red">Fark {tl(d.cashDiff)}</Badge>}
-                    <span className="tabular w-28 text-right font-semibold">{d.netSales != null ? tl(d.netSales) : '—'}</span>
+                    <span className="tabular text-right text-sm font-semibold">{d.netSales != null ? tl(d.netSales) : '—'}</span>
+                    <ChevronRight aria-hidden="true" className="size-4 text-muted" />
                   </button>
                 </li>
               ))}
@@ -433,7 +484,9 @@ export default function CashPage() {
       {tab === 'gecmis' && selected && !detail.data && (
         // Detay gelene dek sayfa boş kalmaz: dönüş düğmesi ve iskelet ya da hata
         <div className="space-y-3">
-          <Button onClick={() => setSelected(null)}>Listeye dön</Button>
+          <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="-ml-2" onClick={() => setSelected(null)}>
+            Listeye dön
+          </Button>
           <Card>
             {detail.isError ? (
               <ErrorState compact title="Gün raporu alınamadı" error={detail.error} retrying={detail.isFetching} onRetry={() => void detail.refetch()} />
@@ -446,26 +499,23 @@ export default function CashPage() {
 
       {tab === 'gecmis' && selected && detail.data && (
         <div className="space-y-3">
-          <div className="flex gap-2">
-            <Button onClick={() => setSelected(null)}>Listeye dön</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="-ml-2" onClick={() => setSelected(null)}>
+              Listeye dön
+            </Button>
             {detail.data.day.closedAt && can('kasa.gun') && (
-              <Button icon={<Coins className="size-4" />} onClick={() => { setCount(emptyCount()); setNote(''); setFillFor(detail.data!); }}>
+              <Button icon={<Coins className="size-4" />} className="ml-auto" onClick={() => openFill(detail.data!)}>
                 {detail.data.summary.countedCash == null ? 'Kasa föyü gir' : 'Kasa föyünü düzelt'}
               </Button>
             )}
           </div>
-          <ZView day={detail.data.day} summary={detail.data.summary} lafmaliyet={detail.data.lafmaliyet} />
-          <ShiftCountsCard counts={detail.data.shiftCounts ?? []} />
+          <ZView day={detail.data.day} summary={detail.data.summary} lafmaliyet={detail.data.lafmaliyet}>
+            <CashActivity movements={detail.data.movements} counts={detail.data.shiftCounts ?? []} past />
+          </ZView>
         </div>
       )}
 
-      <Modal
-        open={!!moveKind}
-        onClose={() => setMoveKind(null)}
-        size="sm"
-        title={moveKind ? MOVE_LABEL[moveKind] : ''}
-        subtitle={moveKind === 'harcama' ? 'Kasadan yapılan masraf (lafmaliyet: kasadan çıkan)' : moveKind === 'teslim' ? 'Patrona ya da bankaya teslim edilen nakit' : 'Kasaya konan bozuk para vb.'}
-      >
+      <Modal open={!!moveKind} onClose={() => setMoveKind(null)} size="sm" title={moveKind ? MOVE_LABEL[moveKind] : ''} subtitle={moveKind ? MOVE_HINT[moveKind] : undefined}>
         <div className="space-y-3 p-4">
           <div>
             <output
@@ -508,7 +558,7 @@ export default function CashPage() {
             />
           </Field>
           <Button variant="primary" block loading={moveSaving} onClick={addMove}>
-            Kaydet
+            {moveKind ? MOVE_SAVE[moveKind] : 'Kaydet'}
           </Button>
         </div>
       </Modal>
@@ -520,16 +570,22 @@ export default function CashPage() {
         title={`Gün sonu · Z ${day?.zNo ?? ''}`}
         subtitle="Çekmeceyi sayın; banka POS slipi ve yemek kartı tutarlarını girin"
         footer={
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex min-h-11 items-center gap-2 text-sm">
-              <input type="checkbox" checked={!counted} onChange={(e) => setCounted(!e.target.checked)} className="size-5 accent-[var(--admin-primary)]" />
-              Sayımı sonra gireceğim
-            </label>
-            <div className="flex-1" />
-            <Button onClick={() => setClosing(false)}>Vazgeç</Button>
-            <Button variant="danger" loading={busy} onClick={closeDay}>
-              Günü kapat
-            </Button>
+          // Telefonda iki satır: seçim ve sayılan toplam üstte, Vazgeç ve Günü kapat eşit genişlikte altta
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center justify-between gap-3 sm:flex-1">
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input type="checkbox" checked={!counted} onChange={(e) => setCounted(!e.target.checked)} className="size-5 accent-[var(--admin-primary)]" />
+                Sayımı sonra gireceğim
+              </label>
+              {/* Banknot satırları uzun: telefonda sayılan toplam düğmelerin hemen üstünde de görünür */}
+              {counted && <span className="tabular whitespace-nowrap text-sm text-muted sm:hidden">Sayılan {tl(count.countedCash)}</span>}
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Button onClick={() => setClosing(false)}>Vazgeç</Button>
+              <Button variant="primary" icon={<Lock className="size-4" />} loading={busy} onClick={closeDay}>
+                Günü kapat
+              </Button>
+            </div>
           </div>
         }
       >
@@ -541,22 +597,88 @@ export default function CashPage() {
         </div>
       </Modal>
 
-      <Modal open={!!fillFor} onClose={() => setFillFor(null)} size="lg" title={`Kasa föyü · Z ${fillFor?.day.zNo ?? ''}`} subtitle="Otomatik ya da sayımsız kapanan günün sayımı">
+      <Modal
+        open={!!fillFor}
+        onClose={() => setFillFor(null)}
+        size="lg"
+        title={`Kasa föyü · Z ${fillFor?.day.zNo ?? ''}`}
+        subtitle={fillFor?.summary.countedCash == null ? 'Sayımsız kapanan günün sayımı' : 'Kaydedilmiş sayımı düzeltmek yetkili onayı ister'}
+        footer={
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+            <Button onClick={() => setFillFor(null)}>Vazgeç</Button>
+            <Button variant="primary" loading={busy} onClick={saveCount}>
+              Föyü kaydet
+            </Button>
+          </div>
+        }
+      >
         <div className="space-y-4 p-5">
-          {fillFor && <CashCount summary={fillFor.summary} value={count} onChange={setCount} />}
+          {fillFor && <CashCount summary={fillFor.summary} value={fillCount} onChange={setFillCount} />}
           <Field label="Not">
-            <Input value={note} onChange={(e) => setNote(e.target.value)} />
+            <Input value={fillNote} onChange={(e) => setFillNote(e.target.value)} />
           </Field>
-          <Button variant="primary" block loading={busy} onClick={saveCount}>
-            Föyü kaydet
-          </Button>
         </div>
       </Modal>
 
       <Modal open={!!zResult} onClose={() => setZResult(null)} size="xl" title="Gün sonu alındı" subtitle="Z raporu ve lafmaliyet alanları">
         <div className="p-5">{zResult && <ZView day={zResult.day} summary={zResult.summary} lafmaliyet={zResult.lafmaliyet} />}</div>
       </Modal>
-      <ShiftHandoverModal open={handover} onClose={() => setHandover(false)} summary={summary} prevDiff={current.data?.shiftCounts?.at(-1)?.diff ?? 0} />
+      <ShiftHandoverModal open={handover} onClose={() => setHandover(false)} summary={summary} prevDiff={shiftCounts.at(-1)?.diff ?? 0} />
     </div>
+  );
+}
+
+/** Kasa hareketleri ve vardiya devirleri yan yana (devir yoksa hareketler tam genişlik); rakam şeridinin altında */
+function CashActivity({ movements, counts, past }: { movements: Movement[]; counts: ShiftCountDTO[]; past?: boolean }) {
+  return (
+    <div className={cn('grid gap-3 lg:items-start', counts.length > 0 && 'lg:grid-cols-2')}>
+      <MovementsCard movements={movements} past={past} />
+      <ShiftCountsCard counts={counts} />
+    </div>
+  );
+}
+
+/**
+ * Kasa hareketleri: paranın neye gittiği (açıklama) ilk satırda, türü, kim ve saat altında; yön işarette ve renkte
+ * (giriş artı ve yeşil, çıkan eksi). Tür durum değildir: renkli rozet yok, düğmesindeki ikonla yazılır.
+ */
+function MovementsCard({ movements, past }: { movements: Movement[]; past?: boolean }) {
+  return (
+    <Card title="Kasa hareketleri">
+      {movements.length === 0 ? (
+        <EmptyState compact icon={<Coins />} title={past ? 'Bu gün kasa hareketi yok' : 'Bugün kasa hareketi yok'}>
+          {past ? undefined : 'Harcama, teslim ve kasaya giriş burada listelenir'}
+        </EmptyState>
+      ) : (
+        <ul className="divide-y divide-[var(--admin-divider)]">
+          {movements.map((m) => {
+            const Icon = MOVE_ICON[m.kind];
+            return (
+              <li key={m.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{m.description || MOVE_LABEL[m.kind]}</span>
+                  <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+                    {m.description && (
+                      <>
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap text-ink-2">
+                          <Icon aria-hidden="true" className="size-3.5" />
+                          {MOVE_LABEL[m.kind]}
+                        </span>
+                        <span aria-hidden="true">·</span>
+                      </>
+                    )}
+                    <span className="whitespace-nowrap">{joinMeta([m.userName, fmtTime(m.createdAt)])}</span>
+                  </span>
+                </span>
+                <span className={cn('tabular shrink-0 text-right font-semibold', m.kind === 'giris' ? 'text-success-ink' : 'text-ink')}>
+                  {m.kind === 'giris' ? '+' : '−'}
+                  {tl(m.amount)}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
