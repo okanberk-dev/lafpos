@@ -33,13 +33,14 @@ export const ILLUSTRATIONS = {
 export type IllustrationName = keyof typeof ILLUSTRATIONS;
 
 /**
- * Çizim: koyu temada espresso kontur kaybolmasın diye porselen bir diskin üstünde. Diskteki boşluk çizimin boyuyla
- * (%76) verilir, dolguyla değil: yüzdeli dolgu kabın değil üst öğenin genişliğine göre hesaplanır, geniş kartta çizim
- * sıfıra iner.
+ * Çizim: koyu temada espresso kontur kaybolmasın diye porselen bir diskin üstünde (`--illustration-disk`, index.css:
+ * bir ton kırık porselen, gece ekranının en parlak yüzeyi olmasın; kontur 10:1'in üstünde). Diskteki boşluk çizimin
+ * boyuyla (%76) verilir, dolguyla değil: yüzdeli dolgu kabın değil üst öğenin genişliğine göre hesaplanır, geniş
+ * kartta çizim sıfıra iner.
  */
 export function Illustration({ name, className }: { name: IllustrationName; className?: string }) {
   return (
-    <span aria-hidden="true" className={cn('inline-grid shrink-0 place-items-center dark:rounded-full dark:bg-[#f3eee0]', className)}>
+    <span aria-hidden="true" className={cn('inline-grid shrink-0 place-items-center dark:rounded-full dark:bg-[var(--illustration-disk)]', className)}>
       <img src={ILLUSTRATIONS[name]} alt="" draggable={false} className="size-full object-contain dark:size-[76%]" />
     </span>
   );

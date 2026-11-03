@@ -17,11 +17,12 @@ import { cn } from '@/lib/cn';
 import { isFinePointer } from '@/lib/hooks';
 
 /**
- * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (yeşil kenar ve yumuşak yeşil halka), hatalı (`aria-invalid`:
- * kırmızı kenar ve halka), devre dışı (soluk, zemin gri). Hata `Field error` ile verilince alana kendiliğinden geçer.
+ * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (yeşil kenar ve 3 px yumuşak yeşil hale: yeşilin %24'ü, iki
+ * temada da seçilir), hatalı (`aria-invalid`: kırmızı kenar ve kırmızı hale), devre dışı (soluk, zemin gri). Hata
+ * `Field error` ile verilince alana kendiliğinden geçer.
  */
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-4 focus:ring-[color-mix(in_oklab,var(--admin-primary)_9%,transparent)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger-soft)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-[3px] focus:ring-[color-mix(in_oklab,var(--admin-primary)_24%,transparent)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[color-mix(in_oklab,var(--admin-danger)_22%,transparent)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
 
 /** Alanla aynı görünümde kullanılan tek seferlik input'lar için (dışarıdan `className` ile) */
 export const fieldClass = base;
@@ -41,6 +42,9 @@ export function Label({ children, hint, className }: { children: ReactNode; hint
  * Etiketli alan. `error` verilince alan kırmızı kenar alır, ekran okuyucuya bağlanır (`aria-invalid`,
  * `aria-describedby`) ve ileti alanın hemen altında duyurulur. `required` ipucu yoksa "zorunlu" yazar:
  * zorunlu alanı eksik formda düğme sessizce soluk kalmaz, gönderince bu ileti gösterilir.
+ * Kısa ipucu (16 karaktere kadar: "zorunlu", "düğme ve fişte") etiketin sağında; uzunu ("boşsa takip edilmez")
+ * alanın altında yardım metni olur: etiket satırı hep tek satır kalır, iki sütunlu formda yan yana alanlar hizalı
+ * durur. Yardım metni alanın açıklamasıdır (`aria-describedby`), adına karışmaz.
  */
 export function Field({
   label,
@@ -58,20 +62,36 @@ export function Field({
   className?: string;
 }) {
   const errorId = useId();
+  const hintId = useId();
+  const help = typeof hint === 'string' && hint.length > 16 ? hint : null;
+  const requiredHint = required ? 'zorunlu' : undefined;
   let control = children;
-  // Alanın kendisine (Input, Select, NumberInput ya da yerli input) aria-invalid geçer; alan bir kabın içindeyse
-  // kenarı sarmalayıcıdaki data-invalid boyar. Sarmalayıcı hata yokken de durur: hata çıkıp kaybolunca ağaç
+  // Alanın kendisine (Input, Select, NumberInput ya da yerli input) aria-invalid ve açıklama geçer; alan bir kabın
+  // içindeyse kenarı sarmalayıcıdaki data-invalid boyar. Sarmalayıcı hata yokken de durur: hata çıkıp kaybolunca ağaç
   // değişmesin, alan yeniden kurulup yazarken odağı kaybetmesin
-  if (error && isValidElement(children) && (typeof children.type !== 'string' || ['input', 'select', 'textarea'].includes(children.type))) {
-    const el = children as ReactElement<{ 'aria-invalid'?: boolean; 'aria-describedby'?: string }>;
-    control = cloneElement(el, { 'aria-invalid': true, 'aria-describedby': [el.props['aria-describedby'], errorId].filter(Boolean).join(' ') });
+  const el = isValidElement(children) ? (children as ReactElement<{ 'aria-invalid'?: boolean; 'aria-describedby'?: string }>) : null;
+  const own = !!el && (typeof el.type !== 'string' || ['input', 'select', 'textarea'].includes(el.type));
+  // Yardım metni yalnız özniteliği alana kesin ulaştıran denetime bağlanır (yerli alan ya da kitin alanı); sayfanın
+  // kendi sarmalayıcısında (ör. satır listesi) etiketin metni olarak kalır, kaybolmaz
+  const describes = !!help && !!el && (typeof el.type === 'string' ? own : el.type === Input || el.type === Textarea || el.type === Select || el.type === NumberInput);
+  if (el && own && (error || describes)) {
+    control = cloneElement(el, {
+      ...(error ? { 'aria-invalid': true } : {}),
+      'aria-describedby': [el.props['aria-describedby'], describes && hintId, error && errorId].filter(Boolean).join(' '),
+    });
   }
   return (
     <label className={cn('block', className)}>
-      {label && <Label hint={hint ?? (required ? 'zorunlu' : undefined)}>{label}</Label>}
+      {label && <Label hint={help ? requiredHint : (hint ?? requiredHint)}>{label}</Label>}
       <span data-invalid={error ? '' : undefined} className="contents">
         {control}
       </span>
+      {/* Alana bağlı açıklama adın parçası olmaz (etiketin içinde dursa da): ekran okuyucu bir kez, açıklama olarak okur */}
+      {help && (
+        <span id={hintId} aria-hidden={describes || undefined} className="mt-1.5 block text-pretty text-xs leading-4 text-muted">
+          {help}
+        </span>
+      )}
       {error && (
         <span id={errorId} role="alert" className="mt-1.5 flex items-start gap-1 text-[13px] leading-5 text-[var(--admin-danger-ink)]">
           <AlertCircle aria-hidden="true" className="mt-[3px] size-3.5 shrink-0" />
@@ -88,7 +108,8 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...rest }, ref) {
-  return <textarea ref={ref} className={cn(base, 'min-h-20 py-2.5', className)} {...rest} />;
+  // Yalnız dikeyde büyür: yan tutamaç alanı pencereden ya da çekmeceden taşırmasın
+  return <textarea ref={ref} className={cn(base, 'min-h-20 resize-y py-2.5', className)} {...rest} />;
 });
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {

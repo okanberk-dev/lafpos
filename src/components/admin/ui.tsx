@@ -1,9 +1,9 @@
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
-import { type CSSProperties, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buttonClass, CloseButton } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
-import { Badge as KitBadge, EmptyState as KitEmptyState, Skeleton } from '@/components/ui/misc';
+import { fitFigure, Badge as KitBadge, EmptyState as KitEmptyState, Skeleton } from '@/components/ui/misc';
 import type { IllustrationName } from '@/components/Illustration';
 import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
@@ -36,10 +36,10 @@ export const BTN = {
   menuDanger: `${MENU_ITEM} text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)] focus-visible:bg-[var(--admin-danger-soft)] focus-visible:outline-[var(--admin-danger)]`,
 } as const;
 
-/** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, dokunmatikte 44 px, farede 32 px */
-export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
+/** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, daire (kitin ikon düğmeleri gibi), dokunmatikte 44 px, farede 32 px */
+export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
 
-/** Kart: köşe 16 (düğme ve alan 12, rozet hap; kap > denetim), kâğıt gölgesi */
+/** Kart: köşe 20 (alan ve iç kutu 14; düğme, rozet ve sekme kapsül; kap > denetim), kâğıt gölgesi */
 export const CARD = 'rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-card)]';
 export const LABEL = 'text-xs font-medium text-[var(--admin-text-mute)]';
 export const NUM = 'tabular-nums';
@@ -48,9 +48,10 @@ export const CODE = 'rounded bg-[var(--admin-surface-2)] px-1 py-px font-mono te
 
 export type Tone = 'neutral' | 'primary' | 'accent' | 'info' | 'success' | 'warning' | 'danger';
 
+/** Açık tonlu zemin (zaman çizelgesi dairesi): rozetle aynı eşleme, primary ev yeşili, accent yalnız online (mor) */
 export const TONE_SOFT: Record<Tone, string> = {
   neutral: 'bg-[var(--admin-neutral-soft)] text-[var(--admin-text-soft)]',
-  primary: 'bg-[var(--admin-blue-soft)] text-[var(--admin-blue)]',
+  primary: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
   accent: 'bg-[var(--admin-accent-soft)] text-[var(--admin-accent-ink)]',
   info: 'bg-[var(--admin-info-soft)] text-[var(--admin-info)]',
   success: 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]',
@@ -63,6 +64,7 @@ import { KPI_LAST_ODD, kpiCellSpan, kpiGridCols } from '@/lib/kpiGrid';
 
 export type { Hue };
 const HUE: Record<Hue, string> = {
+  neutral: 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]',
   blue: 'bg-[var(--admin-hue-blue-soft)] text-[var(--admin-hue-blue)]',
   amber: 'bg-[var(--admin-hue-amber-soft)] text-[var(--admin-hue-amber)]',
   rose: 'bg-[var(--admin-hue-rose-soft)] text-[var(--admin-hue-rose)]',
@@ -70,7 +72,7 @@ const HUE: Record<Hue, string> = {
   green: 'bg-[var(--admin-hue-green-soft)] text-[var(--admin-hue-green)]',
 };
 
-/** Durum rozeti: açık zemin üstünde renkli metin, köşe 6, 22 px (kasa rozetiyle tek bileşen: ui/misc.tsx) */
+/** Durum rozeti: açık zemin üstünde renkli metin, hap, 22 px (kasa rozetiyle tek bileşen: ui/misc.tsx) */
 export function Badge({ tone = 'neutral', dot, children, className, title }: { tone?: Tone; dot?: boolean; children: ReactNode; className?: string; title?: string }) {
   return (
     <KitBadge tone={tone} dot={dot} className={className} title={title}>
@@ -79,8 +81,11 @@ export function Badge({ tone = 'neutral', dot, children, className, title }: { t
   );
 }
 
-/** Renkli ikon kutusu (KPI hücresi, hızlı bakış satırı, komut paleti) */
-export function IconBox({ hue = 'blue', children, size = 'md' }: { hue?: Hue; children: ReactNode; size?: 'sm' | 'md' | 'lg' }) {
+/**
+ * İkon kutusu (KPI hücresi, hızlı bakış satırı, bölüm listesi): varsayılan nötr taş; renk yalnız anlam taşıyınca
+ * (hues.ts: mor online, mavi açık / dolu, yeşil canlı / olumlu, pembe kayıp / iptal, amber süre)
+ */
+export function IconBox({ hue = 'neutral', children, size = 'md' }: { hue?: Hue; children: ReactNode; size?: 'sm' | 'md' | 'lg' }) {
   return (
     <span
       aria-hidden="true"
@@ -115,7 +120,12 @@ export function PageHeader({ title, description, actions, children }: { title: R
   );
 }
 
-/** Yönetim kartı: çizgisiz Innex başlığı; `divided` başlığın altına çizgi koyar (içerik satır listesiyse) */
+/**
+ * Yönetim kartı: çizgisiz Innex başlığı; `divided` başlığın altına çizgi koyar (içerik satır listesiyse). Başlık
+ * eylemlerle (arama, CSV, rozet) dikeyde ortalı: yanındaki 36/44 px denetimin üstünde yüzmez. Başlık bloğunun taban
+ * genişliği 9rem: geniş eylem (segment, arama ve CSV) telefonda sığmazsa alt satıra iner, açıklama kelime kelime
+ * dar sütuna ezilmez
+ */
 export function Card({
   title,
   subtitle,
@@ -138,8 +148,8 @@ export function Card({
   return (
     <section className={cn(CARD, 'min-w-0', className)}>
       {(title || actions) && (
-        <header className={cn('flex flex-wrap items-start gap-x-3 gap-y-2 px-4 pt-4 sm:px-5', divided && 'border-b border-[var(--admin-divider)] pb-3')}>
-          <div className="min-w-0 flex-1">
+        <header className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 sm:px-5', divided && 'border-b border-[var(--admin-divider)] pb-3')}>
+          <div className="min-w-0 flex-[1_1_9rem]">
             {title && <h2 className="text-[15px] font-semibold leading-6 text-[var(--admin-text)]">{title}</h2>}
             {subtitle && <p className="text-xs text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
@@ -155,7 +165,8 @@ export interface KpiCell {
   key: string;
   label: string;
   icon: ReactNode;
-  hue: Hue;
+  /** İkon kutusunun tonu: verilmezse nötr; renk yalnız anlam taşıyınca (online mor, açık mavi, kayıp pembe…) */
+  hue?: Hue;
   value: ReactNode;
   /** Değişim hapı: iyi haber yeşil, kötü haber kırmızı */
   delta?: { text: string; good: boolean } | null;
@@ -167,7 +178,9 @@ export interface KpiCell {
 
 /**
  * KPI şeridi: tek kart, hücreler arasında 1 px çizgi (kartın grisi 1 px boşluktan görünür). Beş hücre
- * tablette 3 + 2 dizilir (altı sütunlu ızgarada 2 ve 3 sütun kaplar), boş gri hücre kalmaz.
+ * tablette 3 + 2 dizilir (altı sütunlu ızgarada 2 ve 3 sütun kaplar), boş gri hücre kalmaz. Etiket satırı 32 px'tir
+ * ve etiket en çok iki satıra kırılır (kesilmez): hücreler arasında rakamlar aynı hizada kalır. Rakam tek satır, dar
+ * hücrede küçülür (`fitFigure`). Tıklanan hücre etiketinin yanında › taşır: dokunmatikte üzerine gelme yok.
  */
 export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: string }) {
   const n = cells.length;
@@ -176,19 +189,22 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
       {cells.map((c, i) => {
         const body = (
           <>
-            <span className="flex w-full items-center gap-2">
+            <span className="flex min-h-8 w-full items-center gap-2">
               <IconBox hue={c.hue}>{c.icon}</IconBox>
-              <span className="min-w-0 truncate text-[13px] font-medium text-[var(--admin-text-soft)]">{c.label}</span>
+              <span className="line-clamp-2 min-w-0 text-[13px] font-medium leading-4 text-[var(--admin-text-soft)]">{c.label}</span>
+              {c.onClick && <ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 text-[var(--admin-text-mute)]" />}
             </span>
             <span className="mt-3 flex w-full flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span className={cn('font-headline text-[28px] font-bold leading-none tracking-[-0.02em] text-[var(--admin-text)]', NUM)}>{c.value}</span>
+              <span style={fitFigure(c.value)} className={cn('whitespace-nowrap font-headline text-[length:min(28px,var(--fit,17cqi))] font-bold leading-none tracking-[-0.02em] text-[var(--admin-text)]', NUM)}>
+                {c.value}
+              </span>
               {c.delta && <Badge tone={c.delta.good ? 'success' : 'danger'}>{c.delta.text}</Badge>}
             </span>
             {c.reference && <span className="mt-1 block w-full text-xs text-[var(--admin-text-mute)]">{c.reference}</span>}
           </>
         );
         const span = kpiCellSpan(n, i);
-        const cls = cn('flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left sm:p-5', span, c.active && 'bg-[var(--admin-surface-2)] shadow-[inset_0_-2px_0_var(--admin-primary)]');
+        const cls = cn('@container flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left sm:p-5', span, c.active && 'bg-[var(--admin-surface-2)] shadow-[inset_0_-2px_0_var(--admin-primary)]');
         return c.onClick ? (
           <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors', !c.active && 'hover:bg-[var(--hover-solid)]', FOCUS, 'focus-visible:-outline-offset-2')}>
             {body}
@@ -243,11 +259,32 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
   );
 }
 
-/** Segment denetimi: gri hap ray, seçili beyaz hap (dönem, görünüm) */
+/**
+ * Segment denetimi: gri hap ray, seçili beyaz hap (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır
+ * (yedi dönem iki satır; hiçbir seçenek gizli kaydırıcıda kalmaz), seçenekler satırı doldurur; köşe eş merkezli
+ * (hap 22 + ray boşluğu 3). Radyo grubu klavyesi: Tab gruba seçili seçenekte girer, oklar ve Home/End seçenekler
+ * arasında gezer, Enter ya da boşluk seçer (seçim kendiliğinden değişmez: dönem ya da mod istemeden kaydedilmesin).
+ */
 export function Segmented<T extends string>({ value, onChange, options, label, className }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; label: string; className?: string }) {
+  const tabStop = Math.max(0, options.findIndex((o) => o.value === value));
+  const move = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const radios = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    const at = radios.indexOf(document.activeElement as HTMLButtonElement);
+    if (at < 0) return;
+    const last = radios.length - 1;
+    const to = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (at === last ? 0 : at + 1) : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? (at === 0 ? last : at - 1) : e.key === 'Home' ? 0 : e.key === 'End' ? last : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    radios[to].focus();
+  };
   return (
-    <div role="radiogroup" aria-label={label} className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-full bg-[var(--admin-panel)] p-[3px]', className)}>
-      {options.map((o) => {
+    <div
+      role="radiogroup"
+      aria-label={label}
+      onKeyDown={move}
+      className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-full bg-[var(--admin-panel)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[25px] max-sm:pointer-fine:rounded-[21px]', className)}
+    >
+      {options.map((o, i) => {
         const on = o.value === value;
         return (
           <button
@@ -255,9 +292,10 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
             type="button"
             role="radio"
             aria-checked={on}
+            tabIndex={i === tabStop ? 0 : -1}
             onClick={() => onChange(o.value)}
             className={cn(
-              'inline-flex min-h-9 shrink-0 items-center justify-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11',
+              'inline-flex min-h-9 shrink-0 items-center justify-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11 max-sm:grow',
               COMPACT_H,
               FOCUS,
               'focus-visible:-outline-offset-2',
@@ -303,7 +341,10 @@ export interface MenuItem {
   onSelect: () => void;
 }
 
-/** Satır eylemleri (⋯). Menü köşe 14 px, yüzen gölge; Escape ve dışarı tıklama kapatır, oklar gezdirir. */
+/**
+ * Satır eylemleri (⋯). Menü köşe 14 px, yüzen gölge; Escape, Tab ve dışarı tıklama kapatır, oklar gezdirir. Menü
+ * portalda (body sonunda): Tab'da odak önce ⋯'ye döner, sıra oradan sürer (menü açık kalıp sayfanın üstünde kalmaz).
+ */
 export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label: string; trigger?: ReactNode }) {
   const [open, setOpen] = useState(false);
   const btn = useRef<HTMLButtonElement>(null);
@@ -319,6 +360,12 @@ export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label
       if (e.key === 'Escape') {
         setOpen(false);
         btn.current?.focus();
+      }
+      if (e.key === 'Tab') {
+        // Varsayılan Tab hareketi ⋯'den başlar: Shift+Tab önceki, Tab sonraki denetime gider
+        setOpen(false);
+        btn.current?.focus();
+        return;
       }
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
@@ -399,8 +446,9 @@ const alignCls = (a?: Column<unknown>['align']) => (a === 'right' ? 'text-right'
 const fromControl = (e: MouseEvent) => !!(e.target as HTMLElement).closest('button, a, input, select, textarea, label, [role="switch"], [role="menu"]');
 
 /**
- * Innex tablosu: kart içinde, başlık satırı soluk kuyuda 13 px gri, satır ayracı #F2F2F2, son sütun
- * yapışkan eylem. Telefonda satır kartı: başlık ve rozet, altında ikincil satır, sağda eylem menüsü.
+ * Innex tablosu: kart içinde, başlık satırı soluk kuyuda 13 px gri, satır ayracı (--admin-divider), son sütun
+ * yapışkan eylem, seçili satır solda ev yeşili çizgi. Telefonda satır kartı: başlık ve rozet, altında ikincil satır,
+ * sağda eylem menüsü.
  */
 export function DataTable<T>({
   rows,
@@ -460,7 +508,7 @@ export function DataTable<T>({
                   {columns.map((c, i) => (
                     <td key={c.key} className={cn('px-4 py-3 align-middle pointer-fine:[[data-density=compact]_&]:py-2', alignCls(c.align), hideCls(c), c.className)}>
                       {i === 0 && onOpen ? (
-                        <button type="button" onClick={() => onOpen(r)} className={cn('flex w-full items-center rounded text-left pointer-coarse:min-h-11', FOCUS)}>
+                        <button type="button" onClick={() => onOpen(r)} className={cn('flex w-full items-center rounded-lg text-left pointer-coarse:min-h-11', FOCUS)}>
                           {c.cell(r)}
                         </button>
                       ) : (
@@ -599,27 +647,28 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
         className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-2 md:left-auto md:right-2 md:max-h-none md:w-[min(460px,calc(100vw-1rem))] md:rounded-3xl dark:border-[var(--admin-border-strong)]"
       >
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-[var(--admin-border-field)]/50 md:hidden" aria-hidden="true" />
-        <div className="flex items-center gap-3 border-b border-[var(--admin-border)] py-2 pl-4 pr-3 sm:pl-5">
+        {/* Başlık şeridi pencereyle (Modal) aynı: 18/700 başlık, 13 px alt satır, Kapat başlığın ilk satırında */}
+        <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-4 py-3 sm:px-5">
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-base font-semibold leading-6 text-[var(--admin-text)]">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-xs text-[var(--admin-text-mute)]">{subtitle}</p>}
+            <h2 className="line-clamp-2 text-lg font-bold leading-6 tracking-[-0.01em] text-[var(--admin-text)]">{title}</h2>
+            {subtitle && <p className="mt-0.5 text-[13px] text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
-          <CloseButton onClick={onClose} className="mr-0" />
+          <CloseButton onClick={onClose} />
         </div>
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
-        {footer && <div className="flex flex-wrap items-center gap-2 border-t border-[var(--admin-border)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">{footer}</div>}
+        {footer && <div className="flex flex-wrap items-center gap-2 border-t border-[var(--admin-divider)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">{footer}</div>}
       </div>
     </div>,
     document.body,
   );
 }
 
-/** Gri kap içinde beyaz işlem satırları (hızlı bakış): renkli ikon kutusu, etiket, sağda değer ya da ›; köşeler eş merkezli (12, 4, 8) */
+/** Gri kap içinde beyaz işlem satırları (hızlı bakış): ikon kutusu, etiket, sağda değer ya da ›; kap köşesi 20, 4 px boşluk, satır 14 */
 export function ActionRows({ children }: { children: ReactNode }) {
   return <div className="space-y-1 rounded-2xl bg-[var(--admin-panel)] p-1">{children}</div>;
 }
 
-export function ActionRow({ icon, hue = 'blue', label, value, onClick, danger, disabled }: { icon: ReactNode; hue?: Hue; label: ReactNode; value?: ReactNode; onClick?: () => void; danger?: boolean; disabled?: boolean }) {
+export function ActionRow({ icon, hue = 'neutral', label, value, onClick, danger, disabled }: { icon: ReactNode; hue?: Hue; label: ReactNode; value?: ReactNode; onClick?: () => void; danger?: boolean; disabled?: boolean }) {
   const inner = (
     <>
       <IconBox hue={danger ? 'rose' : hue}>{icon}</IconBox>
@@ -706,15 +755,21 @@ export function SearchField({ value, onChange, placeholder, label }: { value: st
   return <SearchInput dense value={value} onChange={onChange} placeholder={placeholder} label={label} wrapperClassName="basis-full sm:max-w-xs sm:flex-1 sm:basis-auto" />;
 }
 
-/** KPI şeridi iskeleti (Raporlar, Genel bakış ilk yüklemede): aynı kabuk, her hücrede etiket, rakam, referans */
+/**
+ * KPI şeridi iskeleti (Raporlar, Genel bakış ilk yüklemede): aynı kabuk, gölge ve hücre ölçüsü (32 px etiket satırı,
+ * 28 px rakam, 16 px referans satırı): veri gelince şerit zıplamaz
+ */
 export function KpiStripSkeleton({ count = 5, className }: { count?: number; className?: string }) {
   return (
-    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
+    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)] shadow-[var(--shadow-card)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className={cn('space-y-2.5 bg-[var(--admin-surface)] p-4', kpiCellSpan(count, i))}>
-          <Skeleton className="h-3.5 w-20" />
-          <Skeleton className="h-7 w-28" />
-          <Skeleton className="h-3 w-32 max-w-full" />
+        <div key={i} className={cn('bg-[var(--admin-surface)] p-4 sm:p-5', kpiCellSpan(count, i))}>
+          <span className="flex min-h-8 items-center gap-2">
+            <Skeleton className="size-7 rounded-lg" />
+            <Skeleton className="h-3.5 w-20" />
+          </span>
+          <Skeleton className="mt-3 h-7 w-28 max-w-full" />
+          <Skeleton className="mt-2 h-3 w-32 max-w-full" />
         </div>
       ))}
     </div>

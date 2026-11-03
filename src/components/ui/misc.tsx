@@ -7,12 +7,13 @@ import { Button } from './Button';
 
 /**
  * Rozet tonu. Kasa adları (green, red, warn, pink, blue, violet) ile yönetim adları (success, danger, warning,
- * accent, primary, info) aynı tonlara çözülür; yeni kodda anlam adı yazın.
+ * accent, primary, info) aynı tonlara çözülür; yeni kodda anlam adı yazın. primary ev yeşilidir (success ile aynı:
+ * olumlu, eklenen); accent violet'in eşi, yalnız online sipariş.
  */
 export type BadgeTone = 'neutral' | 'green' | 'red' | 'warn' | 'pink' | 'blue' | 'violet' | 'success' | 'danger' | 'warning' | 'info' | 'accent' | 'primary';
 type Tone = BadgeTone;
 // Durum rozeti: hap biçimi, açık zemin üstünde koyu ton (AA, tests/design-tokens.test.ts). Mavi durum mavisidir (dolu,
-// hazırlanıyor, bilgi); eylem rengi (mürekkep) rozette kullanılmaz
+// hazırlanıyor, bilgi); mürekkep (ödeme eylemi) rozette kullanılmaz
 const tones: Record<Tone, string> = {
   neutral: 'bg-[var(--admin-neutral-soft)] text-ink-2',
   green: 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]',
@@ -27,7 +28,7 @@ const tones: Record<Tone, string> = {
   warning: 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]',
   info: 'bg-[var(--admin-info-soft)] text-[var(--admin-info)]',
   accent: 'bg-[var(--admin-accent-soft)] text-[var(--admin-accent-ink)]',
-  primary: 'bg-[var(--admin-blue-soft)] text-[var(--admin-blue)]',
+  primary: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
 };
 const dots: Record<Tone, string> = {
   neutral: 'bg-[var(--admin-text-mute)]',
@@ -42,7 +43,7 @@ const dots: Record<Tone, string> = {
   warning: 'bg-[var(--admin-warning)]',
   info: 'bg-[var(--admin-info)]',
   accent: 'bg-[var(--admin-accent)]',
-  primary: 'bg-[var(--admin-blue)]',
+  primary: 'bg-[var(--admin-primary)]',
 };
 
 /** Durum rozeti (kasa ve yönetimde tek): 22 px, hap, 12 px yazı; `dot` renkli nokta (renk yazının yanında) */
@@ -144,7 +145,8 @@ export function EmptyState({
 }
 
 /**
- * Veri alınamadı: boş durumla aynı iskelet, renk yalnız ikonda. "Sipariş yok" yerine bunu göster: bağlantı
+ * Veri alınamadı: boş durumla aynı iskelet ve aynı yazı ölçeği (üç boy: kart içinde `compact`, sayfada varsayılan,
+ * tam ekranda ya da uzaktan okunan ekranda `large`), renk yalnız ikonda. "Sipariş yok" yerine bunu göster: bağlantı
  * koptuğunda sahte boşluk yanlış karar verdirir. Ağ hatasında WifiOff, sunucu hatasında üçgen; ileti
  * `errorMessage(error)`. Sayfa kalıbı:
  *   if (q.isPending) return <iskelet />;
@@ -158,6 +160,7 @@ export function ErrorState({
   retrying,
   action,
   compact,
+  large,
   className,
 }: {
   title: ReactNode;
@@ -169,21 +172,31 @@ export function ErrorState({
   /** Yeniden denemenin yanında ikinci eylem (ör. Çıkış) */
   action?: ReactNode;
   compact?: boolean;
+  large?: boolean;
   className?: string;
 }) {
   const network = error instanceof ApiError && error.status === 0;
   const Icon = network ? WifiOff : AlertTriangle;
   return (
-    <div role="alert" className={cn('flex flex-col items-center justify-center text-center', compact ? 'px-4 py-8' : 'px-6 py-12', className)}>
-      <span aria-hidden="true" className={cn('grid place-items-center bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]', compact ? 'mb-2.5 size-9 rounded-lg [&>svg]:size-4' : 'mb-3 size-11 rounded-xl [&>svg]:size-5')}>
+    <div role="alert" className={cn('flex flex-col items-center justify-center text-center', compact ? 'px-4 py-8' : large ? 'px-6 py-16' : 'px-6 py-12', className)}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'grid place-items-center bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]',
+          compact ? 'mb-2.5 size-9 rounded-lg [&>svg]:size-4' : large ? 'mb-4 size-16 rounded-2xl [&>svg]:size-8' : 'mb-3 size-11 rounded-xl [&>svg]:size-5',
+        )}
+      >
         <Icon />
       </span>
-      <p className={cn('text-balance text-ink', compact ? 'text-sm font-medium' : 'text-[15px] font-semibold')}>{title}</p>
-      {(children || error != null) && <div className="mt-1 max-w-[40ch] text-pretty text-[13px] leading-relaxed text-muted">{children ?? errorMessage(error)}</div>}
+      <p className={cn('text-balance font-headline text-ink', compact ? 'text-[15px] font-semibold' : large ? 'text-xl font-bold' : 'text-base font-bold')}>{title}</p>
+      {(children || error != null) && (
+        <div className={cn('max-w-[36ch] text-pretty text-muted', compact ? 'mt-0.5 text-[13px]' : large ? 'mt-1.5 text-[15px]' : 'mt-1 text-[13px] leading-relaxed')}>{children ?? errorMessage(error)}</div>
+      )}
       {(onRetry || action) && (
         <div className={cn('flex flex-wrap items-center justify-center gap-2', compact ? 'mt-3' : 'mt-4')}>
           {onRetry && (
-            <Button size="sm" icon={<RotateCcw className="size-4" />} loading={retrying} onClick={onRetry}>
+            // Tam ekranda tek büyük eylem; kart ve sayfada sayfanın ikinci eylemiyle (`action`, sm) aynı boy
+            <Button size={large ? 'md' : 'sm'} icon={<RotateCcw className="size-4" />} loading={retrying} onClick={onRetry}>
               Yeniden dene
             </Button>
           )}
@@ -246,15 +259,28 @@ export function ListSkeleton({ rows = 4, className }: { rows?: number; className
 }
 
 /**
- * KPI karosu: kasa, patron, raporlar ve müşteri kartında tek ölçek (13 px etiket, 24 px rakam; `strong` 30 px).
- * Durum zemini yalnız anlam taşıyınca (kasa farkı tuttu / tutmadı); kelime rakam yerine konmaz, ipucuya iner.
- * Tonlu karonun kenarı durum çizgisi (iki temada da görünür)
+ * Gösterim rakamının sığması (Stat, yönetimdeki KPI şeridi): rakam tek satırdır (eksi işareti ayrı satıra düşmez) ve
+ * karodan taşmaz. Karo `@container`; rakam karonun iç genişliğinin %17'sine kadar küçülür (sınıf
+ * `text-[length:min(28px,var(--fit,17cqi))]`): 390 px telefonun iki sütunlu karosunda ₺113.250,00 ve -₺12.480,00
+ * sığar, geniş karoda boy değişmez, aynı ızgaradaki karolar aynı boyda kalır. 11 karakterden uzun değer (₺1.250.000,00,
+ * "312 sa 45 dk") yalnız kendisi biraz daha küçülür: uzun tutar Gabarito kalında karakter başına ~0,5 em, karonun
+ * %95'ine sığar.
+ */
+export function fitFigure(value: ReactNode): CSSProperties | undefined {
+  const length = typeof value === 'string' || typeof value === 'number' ? String(value).length : 0;
+  return length > 11 ? ({ '--fit': `${(190 / length).toFixed(2)}cqi` } as CSSProperties) : undefined;
+}
+
+/**
+ * KPI karosu: kasa, patron, raporlar ve müşteri kartında tek ölçek (13 px etiket, Gabarito 28 px rakam; `strong` 34
+ * px, dar karoda `fitFigure` ile küçülür). Durum zemini yalnız anlam taşıyınca (kasa farkı tuttu / tutmadı); kelime
+ * rakam yerine konmaz, ipucuya iner. Tonlu karonun kenarı durum çizgisi (iki temada da görünür)
  */
 export function Stat({ label, value, hint, tone, strong, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: 'ok' | 'warn' | 'bad'; strong?: boolean; className?: string }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border p-4 shadow-[var(--shadow-card)]',
+        '@container rounded-2xl border p-4 shadow-[var(--shadow-card)]',
         tone === 'bad'
           ? 'border-[var(--admin-danger-line)] bg-[var(--admin-danger-soft)]'
           : tone === 'ok'
@@ -266,7 +292,12 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
       )}
     >
       <div className="text-[13px] font-medium text-muted">{label}</div>
-      <div className={cn('tabular mt-1.5 font-headline font-bold leading-none tracking-[-0.02em]', strong ? 'text-[34px]' : 'text-[28px]')}>{value}</div>
+      <div
+        style={fitFigure(value)}
+        className={cn('tabular mt-1.5 whitespace-nowrap font-headline font-bold leading-none tracking-[-0.02em]', strong ? 'text-[length:min(34px,var(--fit,17cqi))]' : 'text-[length:min(28px,var(--fit,17cqi))]')}
+      >
+        {value}
+      </div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
     </div>
   );
@@ -276,7 +307,8 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
-      <div className="min-w-0 sm:flex-1">
+      {/* Başlığın taban genişliği 18rem: eylemler sığmazsa alt satıra iner, açıklama düğmelerin yanında dar sütuna ezilmez */}
+      <div className="min-w-0 sm:flex-[1_1_18rem]">
         <h1 className="text-xl font-bold sm:text-[22px]">{title}</h1>
         {subtitle && <p className="mt-0.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
       </div>

@@ -120,16 +120,6 @@
   --font-headline: 'LafPOS Rakam', 'Gabarito', 'Poppins', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --color-brand-50: #f5f7ff;
-  --color-brand-100: #ecf1ff;
-  --color-brand-200: #d9e2ff;
-  --color-brand-300: #a9bbff;
-  --color-brand-400: #7b93ff;
-  --color-brand-500: #3f63f5;
-  --color-brand-600: #2f58f7;
-  --color-brand-700: #2449e0;
-  --color-brand-800: #1d2f8c;
-
   --color-success-200: #c1f0d3;
   --color-success-300: #7fd8a3;
   --color-success-600: #1d6d56;
@@ -163,10 +153,11 @@
   --color-rose-700: #c0264a;
 
   /*
-   * Ham ölçekler (brand-*, success-*, warn-*, danger-*, rose-*) koyu temada değişmez: yalnız dolu düğmede
-   * (danger-600/700, success-600/700, beyaz yazı) ve bar ekranının süre durumlarında kullanılır. Metin, rozet,
-   * uyarı kutusu ve kenar için anlam adları (aşağıdaki @theme inline: text-danger-ink, bg-warning-soft,
-   * border-warning-line…) ya da --admin-* belirteçleri; onlar iki temada da AA (tests/design-tokens.test.ts)
+   * Ham ölçekler (success-*, warn-*, danger-*, rose-*) koyu temada değişmez: yalnız dolu düğmede (danger-600/700,
+   * success-600/700, beyaz yazı), bar ekranının süre durumlarında ve gece mürekkebindeki bildirim ikonunda kullanılır.
+   * Metin, rozet, uyarı kutusu ve kenar için anlam adları (aşağıdaki @theme inline: text-danger-ink, bg-warning-soft,
+   * border-warning-line…) ya da --admin-* belirteçleri; onlar iki temada da AA (tests/design-tokens.test.ts). Mavi
+   * ham ölçek yok: birincil ev yeşili, mavi yalnız durum (--admin-blue, text-blue-ink)
    */
   --color-night: #211c18;
 
@@ -376,6 +367,8 @@
   --press: rgb(255 255 255 / 0.1);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 93%, var(--admin-text));
   --ring-ready: rgb(92 201 162 / 0.5);
+  /* Çizimlerin diski (Illustration): espresso kontur okunsun diye porselen, ama bir ton kırık (gece ekranında parlamasın) */
+  --illustration-disk: #ece5d8;
   color-scheme: dark;
 }
 

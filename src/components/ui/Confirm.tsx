@@ -33,7 +33,7 @@ export interface PromptOptions extends ConfirmOptions {
   placeholder?: string;
   hint?: ReactNode;
   initial?: string;
-  /** Boş geçilemez; metin verilirse boşken o ileti gösterilir */
+  /** Boş geçilemez; metin verilirse boşken o ileti gösterilir (yoksa "Bu alan boş bırakılamaz") */
   required?: boolean | string;
   multiline?: boolean;
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email';
@@ -113,7 +113,8 @@ function ConfirmDialog({ pending }: { pending: Pending }) {
     if (!prompt) return close(true);
     const v = value.trim();
     if (prompt.required && !v) {
-      setError(typeof prompt.required === 'string' ? prompt.required : `${prompt.label} gerekli`);
+      // İleti etiketli alanın hemen altında: etiketi yinelemez ("Neden gerekli" soru gibi okunuyordu)
+      setError(typeof prompt.required === 'string' ? prompt.required : 'Bu alan boş bırakılamaz');
       return;
     }
     const msg = prompt.validate?.(v) ?? null;
@@ -136,7 +137,8 @@ function ConfirmDialog({ pending }: { pending: Pending }) {
   );
 
   return (
-    <Modal open size="sm" title={o.title} onClose={() => close(null)} footer={footer}>
+    // Kapat yok: "Vazgeç" aynı işi yapar (Escape ve arka plan da vazgeçer)
+    <Modal open size="sm" hideClose title={o.title} onClose={() => close(null)} footer={footer}>
       <form id={formId} onSubmit={submit} className="space-y-3 px-5 py-4" noValidate>
         {o.body && <div className="text-pretty text-sm leading-relaxed text-ink-2">{o.body}</div>}
         {prompt && (

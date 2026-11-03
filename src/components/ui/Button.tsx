@@ -127,10 +127,18 @@ export function IconButton({ label, className, variant = 'ghost', size = 'md', c
   );
 }
 
-/** Pencere, çekmece ve alt sayfanın tek Kapat düğmesi: dokunmatikte 44, yönetimde fareyle 36 px, ikon 20 px */
+/**
+ * Pencere, çekmece ve alt sayfanın tek Kapat düğmesi: dokunmatikte 44, yönetimde fareyle 36 (sıkı görünümde 32) px,
+ * ikon 20 px. Dikey eksi boşluk düğmeyi başlığın 24 px'lik ilk satırına ortalar (şerit `items-start`): uzun başlık
+ * ya da alt satır kırılınca Kapat başlığın yanında kalır, şerit düğme yüzünden büyümez
+ */
 export function CloseButton({ onClick, label = 'Kapat', className }: { onClick: () => void; label?: string; className?: string }) {
   return (
-    <IconButton label={label} onClick={onClick} className={cn('-mr-1.5 shrink-0 text-muted hover:text-ink', className)}>
+    <IconButton
+      label={label}
+      onClick={onClick}
+      className={cn('-my-2.5 -mr-1.5 shrink-0 text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:-my-1.5 [[data-area=admin][data-density=compact]_&]:pointer-fine:-my-1', className)}
+    >
       <X className="size-5" />
     </IconButton>
   );
