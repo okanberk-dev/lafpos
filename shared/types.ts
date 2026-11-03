@@ -683,7 +683,7 @@ export interface PunchResultDTO {
   state: 'in' | 'out';
   /** Açılan, kapanan ya da (yinelenen basışta) olduğu gibi duran mesai */
   entry: TimeEntryDTO;
-  /** Bugün (iş günü) çalışılan süre, ms */
+  /** Çalışılan süre, ms: girişte bugünün (iş günü), çıkışta kapanan mesainin iş gününün (gece yarısını geçen vardiya) */
   todayMs: number;
   /** Yön verilmeden aynı kişi bir dakika içinde yeniden bastı: hiçbir şey değişmedi (çift dokunuş, yinelenen istek) */
   repeated: boolean;
@@ -707,8 +707,10 @@ export interface ShiftCountDTO {
   confirmed: boolean;
   counted: number | null;
   expected: number | null;
-  /** Sayılan − beklenen (eksi: kasa eksik) */
+  /** Sayılan − beklenen, günün başından (eksi: kasa eksik) */
   diff: number | null;
+  /** Bu vardiyanın kendi farkı: önceki sayımdan bu yana (ilk sayımda `diff`); uyarı ve alarm bununla */
+  shiftDiff: number | null;
   /** Banknot ve madenî para adetleri: kuruş değeri → adet (gün sonu sayımıyla aynı biçim); toplam girildiyse null */
   banknotes: Record<string, number> | null;
   note: string | null;

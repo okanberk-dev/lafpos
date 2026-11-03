@@ -23,7 +23,7 @@ export interface ConfirmOptions {
   /** Eylemi adlandıran düğme metni (fiil + nesne) */
   confirmLabel: string;
   cancelLabel?: string;
-  /** danger (varsayılan): kırmızı düğme, odak Vazgeç'te; primary: mürekkep düğme, odak onayda */
+  /** danger (varsayılan): kırmızı düğme, odak Vazgeç'te; primary: yeşil düğme, odak onayda */
   tone?: 'danger' | 'primary';
 }
 

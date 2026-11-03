@@ -347,3 +347,62 @@ describe('yetki ve canlı olaylar', () => {
     expect(seen).toEqual(['time.in', 'time.out', 'time.edit', 'time.edit', 'time.delete']);
   });
 });
+
+describe('çıkışı unutulan mesai (inceleme)', () => {
+  it('yönsüz basış 14 saatten eski açık mesaiyi şimdiye kapatmaz; yetkili çıkışı girince kişi yeniden basar', async () => {
+    const day = addDays(D, 9);
+    const c = clock(at(day, 14));
+    let id = '';
+    try {
+      const inn = await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.garson });
+      expect(inn.state).toBe('in');
+      id = inn.entry.id;
+      // Ertesi sabah 09:00 (19 saat sonra): dünkü mesaiyi 19 saatle kapatıp kişiyi dışarıda bırakmaz
+      c.to(at(addDays(day, 1), 9));
+      const stale = await h.call<{ error: string; code: string }>('', 'POST', '/time/punch', { pin: PINS.garson });
+      expect([stale.status, stale.json.code]).toEqual([409, 'stale_shift']);
+      expect(stale.json.error).toContain('bir yetkili girsin');
+      expect((await h.ok<TimeSheetDTO>('mudur', 'GET', `/time?from=${day}&to=${day}`)).clockedIn.map((e) => e.id)).toContain(id);
+      // Yetkili çıkış saatini girer; kişi yeniden basınca bugünün mesaisi başlar
+      await h.ok('mudur', 'POST', `/time/entries/${id}/close`, { at: at(day, 22) });
+      expect(await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.garson })).toMatchObject({ state: 'in', repeated: false, entry: { businessDate: addDays(day, 1) } });
+      c.advance(8 * H);
+      expect(await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.garson })).toMatchObject({ state: 'out', entry: { durationMs: 8 * H } });
+    } finally {
+      c.restore();
+    }
+    expect((await audit()).find((a) => a.action === 'time.close' && a.entityId === id)).toMatchObject({ severity: 'info' });
+  });
+
+  it('gece yarısını geçen mesaide çıkış o mesainin iş gününü sayar (bugün 0 dk değil)', async () => {
+    // Patronun bu günden sonra kaydı yok (kasa ve müdürün gerçek saatte kayıtları var: yinelenen basış sayılırdı)
+    const day = addDays(D, 10);
+    const c = clock(at(day, 22));
+    try {
+      expect(await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.patron })).toMatchObject({ state: 'in', repeated: false });
+      c.to(at(addDays(day, 1), 6));
+      expect(await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.patron })).toMatchObject({ state: 'out', todayMs: 8 * H, entry: { businessDate: day, durationMs: 8 * H } });
+    } finally {
+      c.restore();
+    }
+  });
+
+  it('açık mesai raporda en çok 24 saat sayılır; 24 saati geçen açık mesaiye çıkış saati girilir', async () => {
+    const day = addDays(D, 9);
+    const c = clock(at(day, 8));
+    try {
+      const inn = await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.mudur, action: 'in' });
+      c.to(at(addDays(day, 2), 8));
+      const sheet = await h.ok<TimeSheetDTO>('patron', 'GET', `/time?from=${day}&to=${day}&userId=${userId('Müdür')}`);
+      expect(sheet.entries.map((e) => [e.id, e.durationMs])).toEqual([[inn.entry.id, 24 * H]]);
+      expect(sheet.totals[0].workedMs).toBe(24 * H);
+      expect(sheet.clockedIn.find((e) => e.id === inn.entry.id)?.durationMs).toBe(24 * H);
+      const csv = await h.call<string>('patron', 'GET', `/time/export.csv?from=${day}&to=${day}`);
+      expect(csv.json.split('\r\n').find((l) => l.startsWith('Müdür;'))).toContain(';Açık;1440;24;');
+      expect(await codeOf(h.call('patron', 'POST', `/time/entries/${inn.entry.id}/close`, {}))).toEqual([400, 'shift_too_long']);
+      expect(await h.ok<TimeEntryDTO>('patron', 'POST', `/time/entries/${inn.entry.id}/close`, { at: at(day, 17) })).toMatchObject({ open: false, durationMs: 9 * H });
+    } finally {
+      c.restore();
+    }
+  });
+});

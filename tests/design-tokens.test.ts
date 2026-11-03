@@ -152,4 +152,33 @@ describe('yönetim paneli (LafPOS Sade)', () => {
     expect(css).toMatch(/h1,\s*h2,\s*h3 \{[^}]*font-family: var\(--font-headline\)/);
     expect(css).not.toMatch(/fonts\.googleapis|fonts\.gstatic|@fontsource\/inter|outfit/i);
   });
+
+  const src = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8');
+
+  it('mürekkep zeminli bildirimde odak halkası krem (yeşil halka mürekkepte 3:1 altında)', () => {
+    expect(contrast(adminLight('admin-primary'), adminLight('admin-ink-fill')), 'yeşil halka mürekkepte zayıf').toBeLessThan(3);
+    expect(contrast(adminLight('admin-on-ink'), '#211c18'), 'krem halka mürekkepte').toBeGreaterThanOrEqual(3);
+    expect(css).toMatch(/--color-night:\s*#211c18;/);
+    expect(src('src/lib/toast.tsx')).toContain('[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]');
+  });
+
+  it('pirinç dolgunun üstündeki yazının kendi adı var (text-on-gold); text-gold-ink altın metindir', () => {
+    expect(css).toMatch(/--color-on-gold:\s*var\(--admin-gold-ink\);/);
+    expect(css).toMatch(/--color-gold-ink:\s*var\(--admin-gold\);/);
+  });
+
+  it('tarayıcı çubuğu ve kurulu uygulama zeminle aynı renkte (theme-color, manifest)', () => {
+    const light = adminLight('admin-bg');
+    const dark = block('.dark')['admin-bg'];
+    expect(src('src/lib/theme.ts')).toContain(`dark ? '${dark}' : '${light}'`);
+    expect(src('index.html')).toContain(`<meta name="theme-color" content="${light}" />`);
+    const manifest = JSON.parse(src('public/manifest.webmanifest')) as { background_color: string; theme_color: string };
+    expect([manifest.background_color, manifest.theme_color]).toEqual([light, light]);
+  });
+
+  it('koyu temadaki çizim diskinde yüzdeli dolgu yok (üst öğenin genişliğine göre hesaplanır, çizim sıfıra iner)', () => {
+    const ill = src('src/components/Illustration.tsx');
+    expect(ill).not.toMatch(/dark:p-\[\d+%\]/);
+    expect(ill).toContain('dark:size-[76%]');
+  });
 });

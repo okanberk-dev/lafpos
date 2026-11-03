@@ -19,11 +19,13 @@ export const toast = {
 };
 
 const icons = { ok: CheckCircle2, err: AlertTriangle, info: Info, warn: AlertTriangle };
+// Mürekkep zeminde yeşil odak halkası 3:1'in altında kalır: halka krem (koyu temada yüzen yüzeyde yine yeşil)
+const NIGHT_FOCUS = '[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]';
 const tones: Record<Tone, string> = {
   // Mürekkep zeminli hap; durum rengi yalnız ikonda. Koyu temada mürekkep zeminde kaybolur: yüzen yüzey
-  ok: 'bg-night text-white [&>svg:first-child]:text-success-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-success)]',
-  err: 'bg-night text-white [&>svg:first-child]:text-danger-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-danger)]',
-  info: 'bg-night text-white dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink',
+  ok: `${NIGHT_FOCUS} bg-night text-white [&>svg:first-child]:text-success-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-success)]`,
+  err: `${NIGHT_FOCUS} bg-night text-white [&>svg:first-child]:text-danger-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-danger)]`,
+  info: `${NIGHT_FOCUS} bg-night text-white dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink`,
   warn: 'border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]',
 };
 

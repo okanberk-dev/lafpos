@@ -104,7 +104,7 @@ export function CashCount({ summary, value, onChange, cashOnly }: { summary: ZSu
         ) : (
           <div className="mt-3 grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:items-center">
             <Cell label="Sayılan" value={tl(value.countedCash)} />
-            <p className="text-xs text-muted">Kör sayım: beklenen tutar ve fark bu rolde görünmez; yöneticinin ekranında ve Z raporunda</p>
+            <p className="text-xs text-muted">Kör sayım: beklenen tutar ve fark bu rolde görünmez; {cashOnly ? 'yöneticinin ekranında, vardiya devirlerinde' : 'yöneticinin ekranında ve Z raporunda'}</p>
           </div>
         )}
       </section>

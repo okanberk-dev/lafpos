@@ -9,8 +9,8 @@ import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
 
 /**
- * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm LafPOS Sade (DESIGN.md: Poppins, sıcak
- * kırık beyaz, mürekkep birincil). Dokunmatikte her hedef 44 px, farede 36 px, "Sıkı görünüm"de 32 px.
+ * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm LafPOS Sade (DESIGN.md: Poppins ve
+ * Gabarito, porselen zemin, ev yeşili birincil). Dokunmatikte her hedef 44 px, farede 36 px, "Sıkı görünüm"de 32 px.
  * Telefonda (md altı) tablo satır kartına, çekmece alt sayfaya döner.
  */
 

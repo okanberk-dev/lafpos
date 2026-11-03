@@ -17,7 +17,7 @@ import { cn } from '@/lib/cn';
 import { isFinePointer } from '@/lib/hooks';
 
 /**
- * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (mürekkep kenar ve yumuşak gri halka), hatalı (`aria-invalid`:
+ * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (yeşil kenar ve yumuşak yeşil halka), hatalı (`aria-invalid`:
  * kırmızı kenar ve halka), devre dışı (soluk, zemin gri). Hata `Field error` ile verilince alana kendiliğinden geçer.
  */
 const base =

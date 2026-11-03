@@ -65,12 +65,12 @@ function summaryFor(user: AuthUser, s: ZSummary | null): ZSummary | null {
 function blindShiftCount(user: AuthUser, s: ShiftCountDTO): ShiftCountDTO {
   if (seesNumbers(user)) return s;
   const own = s.userId === user.id || s.toUserId === user.id;
-  return { ...s, expected: null, diff: null, ...(own ? {} : { counted: null, banknotes: null }) };
+  return { ...s, expected: null, diff: null, shiftDiff: null, ...(own ? {} : { counted: null, banknotes: null }) };
 }
 
 function shiftCountsFor(user: AuthUser, dayId: string): ShiftCountDTO[] {
   const names = userNames();
-  return shiftCountsOf(db, dayId).map((s) => blindShiftCount(user, shiftCountToDTO(s, names)));
+  return shiftCountsOf(db, dayId).map((s, i, all) => blindShiftCount(user, shiftCountToDTO(s, names, i ? all[i - 1].diff : 0)));
 }
 
 /** Açık gün, ara rapor (X) ve kasa hareketleri */
@@ -110,7 +110,7 @@ cashRoutes.post('/shift-counts', async (c) => {
   );
   const actor = actorFrom(c, input.approverPin);
   const row = write((t, fx) => recordShiftCount(t, actor, fx, input));
-  return c.json(blindShiftCount(c.get('user'), shiftCountToDTO(row, userNames())));
+  return c.json(shiftCountsFor(c.get('user'), row.dayId).find((s) => s.id === row.id));
 });
 
 /** Günün vardiya sayımları (varsayılan açık gün); başka bir günün sayımları rapor yetkisi ister */

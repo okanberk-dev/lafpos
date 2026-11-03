@@ -52,7 +52,7 @@
 | Birincil: ev yeşili (eylem, seçim, olumlu durum, odak halkası) | `#1D6D56`, basılı `#165543`, üstünde `#FBF8F4` | `#5CC9A2`, üstünde `#0B1F18` |
 | Mürekkep dolgu (ödeme, tahsilat) | `#211C18`, üstünde `#FBF8F4` | `#F3F1EC`, üstünde `#161513` |
 | Kobalt (dolu masa, hazırlanıyor, bilgi) | `#3442B8` zemin `#ECEEFB` | `#9AA8FF` zemin `#1F2647` |
-| Pirinç (ödül: damga, kupon; L'Af çekirdeği) | dolgu `#E8C877` üstünde `#2E2113`, metin `#765923` | aynı |
+| Pirinç (ödül: damga, kupon; L'Af çekirdeği) | dolgu `#E8C877` üstünde `#2E2113` (`bg-gold-fill text-on-gold`), metin `#765923` (`text-gold-ink`) | dolgu ve üstündeki aynı, metin `#E8C877` |
 | Bordo (imza yüzeyi, ekran başına bir) | `#9D2543` zemin `#F9E6EA` | `#F6E9EC` |
 | Durum tonları | amber `#B45309`, kırmızı `#B42318`, pembe `#C0264A`, mor `#6D3FEA`, camgöbeği `#0B7392` (açık zeminleriyle) | aynı roller, açık tonlar |
 | Grafik serisi ve ısı haritası | ev yeşili `#1D6D56` | `#5CC9A2` |
@@ -60,7 +60,7 @@
 
 - Değer adları `--admin-*` (`:root` açık, `.dark` koyu); ortak adlar (`--bg`, `--ink`, `--primary`, `--focus`...) onlara
   çözülür. Tailwind anlam adları iki temada doğru tonu verir: `text-blue-ink`, `bg-blue-soft`, `border-blue-line`,
-  `text-gold-ink`, `bg-gold-fill`, `text-danger-ink`, `bg-warning-soft`... Ham ölçekler (`danger-600`, `success-600`...)
+  `text-gold-ink`, `bg-gold-fill` (üstünde `text-on-gold`), `text-danger-ink`, `bg-warning-soft`... Ham ölçekler (`danger-600`, `success-600`...)
   koyuda değişmez; yalnız beyaz yazılı dolu yüzeyde (dolu düğme, alarm süre rozeti, hazır rozeti) kalır,
   `tests/ui-rules.test.ts` izinli listeyle tutar. Olumlu durum (hazır, ödendi) sitedeki gibi ev yeşilidir.
 - **Odak halkası** 2 px ev yeşili, 2 px dışarıda; alan odakta yeşil kenar ve yumuşak yeşil halka (sitenin `--ring`'i).
@@ -99,8 +99,8 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   olmayanda baş harfler kategori renginin açık tonunda. Telefonda kategoriler hap çip (seçili yeşil dolgu).
 - **Logo:** L'Af, laffogato.net ve uygulama ikonuyla aynı vektör (`src/components/LafMark.tsx`); karoda (`LafTile`)
   uygulama ikonunun kendisi. Yazı tipine bağlı değil, Didot'u olmayan Windows ve Android'de de aynı.
-- **Giriş ekranı:** solda marka yüzeyi (yeşil, krem yazı, 96 px saat, bugünkü ekip), sağda PIN kartı (sade tuşlar,
-  mürekkep "Giriş"); **Mesai** sekmesinde aynı PIN'le giriş-çıkış yapılır, oturum açılmaz.
+- **Giriş ekranı:** solda marka yüzeyi (yeşil, krem yazı, 96 px saat, ekip), sağda PIN kartı (sade tuşlar,
+  yeşil "Giriş"); **Mesai** sekmesinde aynı PIN'le giriş-çıkış yapılır, oturum açılmaz.
 - **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş (hesap N
   kişiye eşit bölünür, paylar sırayla ve istenen yöntemle alınır; pay tutarını sunucu hesaplar,
   `shared/order-calc.ts` `splitState`). Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme.

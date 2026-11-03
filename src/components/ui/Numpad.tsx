@@ -15,7 +15,7 @@ interface NumpadProps {
   size?: 'md' | 'lg';
   /**
    * Son hücrede birincil onay tuşu (giriş ekranı: "Giriş"). Verilince alt sıra "Sil · 0 · onay" olur; "," ve "00"
-   * gösterilmez. Devre dışıyken de okunur (sıcak gri zemin, soluk yazı)
+   * gösterilmez. Devre dışıyken de okunur (açık yeşil zemin, soluk yazı)
    */
   confirm?: { label: string; disabled?: boolean; onPress: () => void };
   /**
@@ -39,7 +39,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
     onEnter: confirm ? () => !confirm.disabled && confirm.onPress() : onEnter,
   });
   return (
-    // Sade tuşlar: tepsi yok, kâğıt beyazı üstünde ince çizgili yumuşak kareler; onay tuşu mürekkep
+    // Sade tuşlar: tepsi yok, kâğıt beyazı üstünde ince çizgili yumuşak kareler; onay tuşu ev yeşili
     <div ref={root} data-numpad-enter="" className={cn('grid grid-cols-3 gap-2', className)}>
       {keys.map((k) => {
         if (k === 'ok' && confirm) {

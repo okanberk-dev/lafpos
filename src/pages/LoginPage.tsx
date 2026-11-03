@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Coffee } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -20,6 +20,7 @@ interface LoginInfo {
 export function LoginPage() {
   const login = useAuth((s) => s.login);
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,6 +48,8 @@ export function LoginPage() {
         const r = await post<PunchResultDTO>('/time/punch', { pin: value });
         setPunched(r);
         setPin('');
+        // Bu cihazda az sonra açılacak oturum (kullanıcı menüsü, avatar noktası) güncel mesaiyle başlasın
+        void qc.invalidateQueries({ queryKey: ['time'] });
         if (clearPunch.current) clearTimeout(clearPunch.current);
         clearPunch.current = setTimeout(() => setPunched(null), 8000);
         return;
@@ -107,7 +110,7 @@ export function LoginPage() {
           </div>
           {!!users.length && (
             <div className="hidden lg:block">
-              <div className="mb-2.5 text-[13px] font-medium text-[var(--brand-cream)]/80">Bugünkü ekip</div>
+              <div className="mb-2.5 text-[13px] font-medium text-[var(--brand-cream)]/80">Ekip</div>
               <div className="flex flex-wrap gap-1.5">
                 {users.map((u) => (
                   <span key={u.id} className="inline-flex items-center gap-2 rounded-full bg-white/10 py-1 pl-1 pr-3 text-xs font-medium ring-1 ring-inset ring-white/15">
@@ -130,6 +133,9 @@ export function LoginPage() {
             className="mx-auto mb-5"
             value={mode}
             onChange={(m) => {
+              // Tıklanan düğme odakta kalırsa fiziksel klavyenin Enter'ı PIN'i onaylamaz, düğmeye basar: odak bırakılır
+              if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+              if (m === mode) return;
               setMode(m);
               setPin('');
               setError(null);
@@ -153,8 +159,8 @@ export function LoginPage() {
                   {punched.repeated
                     ? `Kaydın zaten alındı (${fmtTime(punched.state === 'in' ? punched.entry.clockIn : (punched.entry.clockOut ?? punched.entry.clockIn))})`
                     : punched.state === 'in'
-                      ? `Mesain ${fmtTime(punched.entry.clockIn)}’de başladı`
-                      : `Mesain ${fmtTime(punched.entry.clockOut ?? now)}’de bitti · bugün ${fmtDuration(punched.todayMs)}`}
+                      ? `Giriş ${fmtTime(punched.entry.clockIn)} · mesain başladı`
+                      : `Çıkış ${fmtTime(punched.entry.clockOut ?? now)} · bu mesai ${fmtDuration(punched.entry.durationMs)}`}
                 </span>
               </span>
             </div>

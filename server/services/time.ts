@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, isNull, lt, lte, ne, or } from 'drizzle-orm';
 import { TIME_SOURCE_LABEL } from '@shared/labels';
-import { addDays, businessDate, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
+import { addDays, businessDate, fmtDateTime, fmtTime, istanbulParts, MAX_SHIFT_MS, STALE_SHIFT_MS } from '@shared/time';
 import type { MyTimeDTO, PunchResultDTO, TimeEntryDTO, TimeSheetDTO, TimeSheetTotalDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import type { AuthUser } from '../lib/auth';
@@ -20,8 +20,7 @@ import { ulid } from '../lib/ids';
 type EntryRow = typeof schema.timeEntries.$inferSelect;
 type Person = { id: string; name: string };
 
-/** Bir mesai en çok 24 saat */
-export const MAX_SHIFT_MS = 24 * 3600_000;
+export { MAX_SHIFT_MS };
 /** Çizelge dönemi en çok 93 gün (üç ay) */
 export const MAX_SHEET_DAYS = 93;
 /** Yön verilmeden aynı kişinin bu süre içindeki ikinci basışı yok sayılır (çift dokunuş, yanıtı kaybolup yinelenen istek) */
@@ -42,7 +41,8 @@ function people(t: Tx | DB) {
 }
 type People = ReturnType<typeof people>;
 
-const durationOf = (e: EntryRow, now: number) => Math.max(0, (e.clockOut ?? now) - e.clockIn);
+/** Açık mesai şimdiye kadar, ama en çok 24 saat: çıkışı unutulan mesai toplamları ve CSV'yi günlerce şişirmesin */
+const durationOf = (e: EntryRow, now: number) => Math.max(0, Math.min(e.clockOut ?? now, e.clockIn + MAX_SHIFT_MS) - e.clockIn);
 
 function toDTO(e: EntryRow, who: People, now: number): TimeEntryDTO {
   const u = who.get(e.userId);
@@ -156,12 +156,12 @@ export function clockOut(t: Tx, person: Person, fx: Effects, now = Date.now()): 
   return { ...open, clockOut: now };
 }
 
-/** Bugün (iş günü) çalışılan süre */
-function workedToday(t: Tx | DB, userId: string, now: number): number {
+/** Bir iş gününde çalışılan süre */
+function workedOn(t: Tx | DB, userId: string, date: string, now: number): number {
   return t
     .select()
     .from(T)
-    .where(and(eq(T.userId, userId), eq(T.businessDate, businessDate(now))))
+    .where(and(eq(T.userId, userId), eq(T.businessDate, date)))
     .all()
     .reduce((a, e) => a + durationOf(e, now), 0);
 }
@@ -169,7 +169,10 @@ function workedToday(t: Tx | DB, userId: string, now: number): number {
 /**
  * Kilit ekranında PIN'le giriş-çıkış (oturum açılmaz). Yön verilmezse durum değişir: içerideyse çıkış, değilse giriş.
  * Yön verilmeden aynı kişinin kendi basışından bir dakika içinde gelen ikinci basış yok sayılır (çift dokunuş ya da
- * yanıtı kaybolup yinelenen istek kişiyi az önce girdiği mesaiden çıkarmasın); durum olduğu gibi döner.
+ * yanıtı kaybolup yinelenen istek kişiyi az önce girdiği mesaiden çıkarmasın); durum olduğu gibi döner. Yönsüz basış
+ * çıkışı unutulmuş eski mesaiyi (`STALE_SHIFT_MS`) şimdiye kapatmaz: sabah işe gelen kişi dünkü mesaiyi 19 saatle
+ * kapatıp dışarıda kalmasın; çıkış saatini bir yetkili girer. `todayMs` girişte bugünün, çıkışta kapanan mesainin iş
+ * gününün toplamı.
  */
 export function punch(t: Tx, person: Person & { color: string }, fx: Effects, action: 'in' | 'out' | undefined, now = Date.now()): PunchResultDTO {
   const user = { id: person.id, name: person.name, color: person.color };
@@ -180,12 +183,15 @@ export function punch(t: Tx, person: Person & { color: string }, fx: Effects, ac
     // Yalnız kişinin kendi basışı: yöneticinin az önce kapattığı ya da girdiği mesai yinelenen basış sayılmaz
     const own = last && last.editedBy == null && last.source !== 'yonetim';
     if (last && own && at != null && now - at < REPEAT_PUNCH_MS) {
-      return { user, state: open ? 'in' : 'out', entry: entryDTO(t, last, now), todayMs: workedToday(t, person.id, now), repeated: true };
+      return { user, state: open ? 'in' : 'out', entry: entryDTO(t, last, now), todayMs: workedOn(t, person.id, open ? businessDate(now) : last.businessDate, now), repeated: true };
     }
+  }
+  if (!action && open && now - open.clockIn > STALE_SHIFT_MS) {
+    throw conflict(`Açık kalmış bir mesainiz var (giriş ${fmtDateTime(open.clockIn)}); çıkışı unutulmuş olabilir. Çıkış saatini bir yetkili girsin, sonra yeniden basın`, 'stale_shift');
   }
   const goIn = action ? action === 'in' : !open;
   const row = goIn ? clockIn(t, person, fx, 'pin', now) : clockOut(t, person, fx, now);
-  return { user, state: goIn ? 'in' : 'out', entry: entryDTO(t, row, now), todayMs: workedToday(t, person.id, now), repeated: false };
+  return { user, state: goIn ? 'in' : 'out', entry: entryDTO(t, row, now), todayMs: workedOn(t, person.id, goIn ? businessDate(now) : row.businessDate, now), repeated: false };
 }
 
 /** Kişinin kendi mesaisi: açık mesai, bugün (iş günü) ve son 7 iş günü; açık mesai şimdiye kadar sayılır */

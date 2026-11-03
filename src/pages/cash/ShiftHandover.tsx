@@ -18,6 +18,9 @@ import { CashCount, type CountResult } from './CashCount';
 
 const emptyCount = (): CountResult => ({ countedCash: 0, banknotes: {}, methodCounts: {} });
 
+/** "+₺50,00" / "-₺150,00": fazla ya da eksik olduğu ilk bakışta okunur */
+const signed = (k: number) => `${k > 0 ? '+' : ''}${tl(k)}`;
+
 /**
  * Vardiya devri: gün içinde kasiyer değişirken devreden kasayı sayar. Beklenen nakit ve fark o anın ara raporundan
  * (kör kasada gizli); devralan PIN'ini girerse devir onaylı yazılır. Sayım, beklenen ve fark denetim kaydına düşer.
@@ -38,6 +41,20 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
     setPin('');
     setNote('');
   };
+  // Pencere her kapanışta boşalır: devralanın PIN'i ve sayım sonraki açılışa kalıp görmediği bir sayımı onaylamasın
+  const close = () => {
+    reset();
+    onClose();
+  };
+  // PIN, devralanın o an gördüğü sayımı onaylar: sayım ya da devralan değişirse yeniden girilir
+  const changeCount = (v: CountResult) => {
+    setCount(v);
+    setPin('');
+  };
+  const changeTaker = (id: string) => {
+    setToUserId(id);
+    setPin('');
+  };
   const save = async () => {
     setBusy(true);
     try {
@@ -51,10 +68,11 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
       });
       await qc.invalidateQueries({ queryKey: ['cash'] });
       const who = r.toUserName ? `${r.toUserName} devraldı` : 'Ara sayım kaydedildi';
-      toast.ok(r.diff == null ? `${who}; fark yöneticinin ekranında` : r.diff === 0 ? `${who}; kasa tuttu` : `${who}; fark ${tl(r.diff)}`);
-      reset();
-      onClose();
+      toast.ok(r.shiftDiff == null ? `${who}; fark yöneticinin ekranında` : r.shiftDiff === 0 ? `${who}; kasa tuttu` : `${who}; fark ${signed(r.shiftDiff)}`);
+      close();
     } catch (e) {
+      // Reddedilen PIN alanda kalmasın (yanlış girildiyse yeniden, doğruysa devralan yeniden girer)
+      setPin('');
       toast.err(errorMessage(e));
     } finally {
       setBusy(false);
@@ -63,14 +81,14 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={close}
       persistent={count.countedCash > 0}
       size="lg"
       title="Vardiya devri"
       subtitle="Çekmeceyi sayın, devralanı seçin; devralan PIN'ini girerse devir onaylı yazılır"
       footer={
         <div className="flex gap-2">
-          <Button className="flex-1" onClick={onClose}>
+          <Button className="flex-1" onClick={close}>
             Vazgeç
           </Button>
           <Button className="flex-[2]" variant="primary" icon={<ArrowLeftRight className="size-4" />} loading={busy} disabled={count.countedCash <= 0} onClick={() => void save()}>
@@ -80,10 +98,10 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
       }
     >
       <div className="space-y-5 p-5">
-        <CashCount cashOnly summary={summary} value={count} onChange={setCount} />
+        <CashCount cashOnly summary={summary} value={count} onChange={changeCount} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Devralan" hint="boşsa ara sayım">
-            <Select value={toUserId} onChange={(e) => setToUserId(e.target.value)}>
+            <Select value={toUserId} onChange={(e) => changeTaker(e.target.value)}>
               <option value="">Seçilmedi</option>
               {staff.map((u) => (
                 <option key={u.id} value={u.id}>
@@ -92,8 +110,8 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
               ))}
             </Select>
           </Field>
-          <Field label="Devralanın PIN'i" hint="isteğe bağlı, onay">
-            <Input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" />
+          <Field label="Devralanın PIN'i" hint="isteğe bağlı, sayımdan sonra">
+            <Input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="Devralan girer" />
           </Field>
         </div>
         <Field label="Not" hint="isteğe bağlı">
@@ -104,7 +122,10 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
   );
 }
 
-/** Günün vardiya devirleri: kim kime, ne saydı; beklenen ve fark yalnız kasa rakamlarını görene */
+/**
+ * Günün vardiya devirleri: kim kime, ne saydı; beklenen ve fark yalnız kasa rakamlarını görene. Fark vardiyanın
+ * kendisininki (önceki devirden bu yana); günün başından biriken fark ayrıysa yanında.
+ */
 export function ShiftCountsCard({ counts }: { counts: ShiftCountDTO[] }) {
   if (!counts.length) return null;
   return (
@@ -129,9 +150,10 @@ export function ShiftCountsCard({ counts }: { counts: ShiftCountDTO[] }) {
             </span>
             <span className="text-right">
               <span className="tabular block font-semibold">{s.counted != null ? tl(s.counted) : '—'}</span>
-              {s.diff != null && (
-                <span className={cn('tabular block text-xs font-medium', s.diff === 0 ? 'text-success-ink' : 'text-danger-ink')}>
-                  {s.diff === 0 ? 'Tuttu' : `Fark ${tl(s.diff)}`}
+              {s.shiftDiff != null && (
+                <span className={cn('tabular block text-xs font-medium', s.shiftDiff === 0 ? 'text-success-ink' : 'text-danger-ink')}>
+                  {s.shiftDiff === 0 ? 'Tuttu' : `Fark ${signed(s.shiftDiff)}`}
+                  {s.diff != null && s.diff !== s.shiftDiff && <span className="font-normal text-muted"> · gün toplamı {s.diff === 0 ? 'denk' : signed(s.diff)}</span>}
                   {s.expected != null && <span className="font-normal text-muted"> · beklenen {tl(s.expected)}</span>}
                 </span>
               )}

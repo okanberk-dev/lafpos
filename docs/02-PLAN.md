@@ -270,12 +270,16 @@ zamanlayıcı teşekkürü ezip ekranı ödenmemiş adisyona döndürüyordu (bu
 kasa oturumundan (`POST /api/time/clock-in`, `/clock-out`) ya da kilit ekranında oturum açmadan PIN'le yapar
 (`POST /api/time/punch`: PIN giriş ekranıyla aynı denetim ve deneme sınırı; yön verilmezse durum değişir, bir dakika
 içindeki ikinci basış yok sayılır). Kurallar her yazmada: çıkış girişten sonra, ileri tarih yok, mesai en çok 24 saat
-(çıkışı unutulan mesai şimdiye uzatılmaz, yetkili düzeltir), kişi başına tek açık mesai, aynı kişide çakışma yok. Yeni
+(çıkışı unutulan mesai şimdiye uzatılmaz, yetkili düzeltir; kilit ekranındaki yönsüz basış 14 saatten eski açık mesaiyi
+de kapatmaz, 409 `stale_shift`: kişi ertesi sabah dünkü mesaiyi 19 saatle kapatıp dışarıda kalmasın), kişi başına tek
+açık mesai, aynı kişide çakışma yok; raporda ve CSV'de açık mesai en çok 24 saat sayılır. Yeni
 yetki `mesai.yonet` (Yönetim grubu; müdür ve patron): çizelge (`GET /api/time`, en çok 93 gün, kişi toplamları ve şu an
 içeridekiler), elle mesai, düzeltme, açık mesaiyi kapatma, silme, CSV; kendi mesaisini yalnız patron düzeltir. Yöneticinin
 her yazması denetime düşer (düzeltme ve silme uyarı), kişinin kendi basışı düşmez; canlı konu `time`. Vardiya kasa
 sayımı (`POST /api/cash/shift-counts`, `kasa.gun`, açık ve bugünün günü): devreden kasayı sayar, o anki beklenen nakit
-ve fark saklanır, fark gün sonu sayımının eşiğiyle uyarı ya da alarm (`cash.shift_count`); devralan kendi PIN'iyle
+ve fark (günün başından) saklanır; uyarı ya da alarm gün sonu sayımının eşiğiyle ve vardiyanın kendi farkıyla
+(`shiftDiff`: önceki sayımdan bu yana), önceki devirde bulunan eksik sonraki devirde yeniden alarm olmaz
+(`cash.shift_count`); devralan kendi PIN'iyle
 onaylayabilir. Kör kasada beklenen ve fark, başkasının sayımında sayılan da gitmez; sayımlar `GET /api/cash/day` ve
 `/days/:id`'de. Kasa hareketi değildir, lafmaliyet'e gitmez. Testler `tests/mesai.test.ts`, `tests/vardiya-sayim.test.ts`.
 
@@ -286,7 +290,8 @@ Kasa'da **Vardiya devri** penceresi (banknotla sayım, devralanın PIN'i, not) v
 ayarlanır: `settings.customerDisplay` (tema gece, porselen ya da ev yeşili; saat; karşılama, alt satır ve teşekkür
 metni; 6 saniyede bir dönen en çok 6 duyuru; karekod adresi ve etiketi), Yönetim › Müşteri ekranı
 (`/yonetim/musteri-ekrani`, `ayar.yonet`) birebir önizlemeyle. Ekran ayarı oturumsuz `GET /api/public/display-config`'ten
-alır (yalnız bu alanlar ve işletme adı), son ayarı cihazda saklar; bağlantı koparsa onunla açılır. Görünüm laffogato.net
+alır (yalnız bu alanlar ve işletme adı), son görünümü cihazda saklar: sonraki açılışta ilk kare ayar gelmeden doğru temada, ayar ucu yanıt vermezse bu görünümle
+çizilir (çevrimdışı açılış yok: sayfanın kendisi sunucudan gelir). Görünüm laffogato.net
 kimliğindedir (`DESIGN.md`). Test `tests/musteri-ekrani-ayar.test.ts`; e2e taramasında yeni ekranlar ve durumları,
 akışlarda mesai ve vardiya devri.
 

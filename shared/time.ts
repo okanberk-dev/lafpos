@@ -3,6 +3,14 @@ export const TZ = 'Europe/Istanbul';
 /** İş günü bu saatte döner: 03:00'te kapanan gece önceki günün cirosudur. */
 export const DAY_ROLLOVER_HOUR = 5;
 
+/** Mesai: bir mesai en çok 24 saat (yazmada; açık mesai raporda da en çok bu kadar sayılır) */
+export const MAX_SHIFT_MS = 24 * 3600_000;
+/**
+ * Mesai: bu süreden uzun açık mesainin çıkışı unutulmuş sayılır. Kilit ekranındaki yönsüz basış onu şimdiye kapatmaz
+ * (kişiyi ertesi sabah 19 saatlik mesaiyle çıkarmasın), çizelge "Çıkış yok" diye gösterir.
+ */
+export const STALE_SHIFT_MS = 14 * 3600_000;
+
 const partsFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: TZ,
   year: 'numeric',

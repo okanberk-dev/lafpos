@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock3, Download, LogOut, Pencil, Plus, Timer, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
-import { addDays, businessDate, fmtDateShort, fmtTime, istanbulParts } from '@shared/time';
+import { businessDate, fmtDateShort, fmtTime, istanbulParts, MAX_SHIFT_MS, STALE_SHIFT_MS } from '@shared/time';
 import type { TimeEntryDTO, TimeSheetDTO } from '@shared/types';
 import { ActionMenu, Badge, Card, CARD, type Column, DataTable, EmptyState, KpiStrip, PageHeader, QuickLook, Segmented, TableSkeleton } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
@@ -9,9 +9,11 @@ import { confirmDialog } from '@/components/ui/Confirm';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
 import { ErrorState } from '@/components/ui/misc';
 import { del, errorMessage, get, getToken, patch, post } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { useTick } from '@/lib/hooks';
 import { fmtDuration } from '@/lib/mesai';
+import { draftErrors, draftOf, draftTimes, editBody, type MesaiDraft } from '@/lib/mesaiDraft';
 import { periodRange } from '@/lib/period';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
@@ -23,24 +25,9 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: 'ay', label: 'Bu ay' },
 ];
 const SOURCE: Record<TimeEntryDTO['source'], string> = { pin: 'Kilit ekranından', oturum: 'Oturumdan', yonetim: 'Elle kayıt' };
-/** 14 saatten uzun açık mesai: çıkışı unutulmuş olabilir */
-const STALE_MS = 14 * 3600_000;
 
-interface Draft {
-  id?: string;
-  userId: string;
-  date: string;
-  inTime: string;
-  outTime: string;
-  note: string;
-}
-
-const hm = (ms: number) => {
-  const p = istanbulParts(ms);
-  return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
-};
-/** İstanbul saatiyle "YYYY-MM-DD" ve "HH:MM" → an (UTC+3, yaz saati yok) */
-const toMs = (date: string, time: string) => Date.parse(`${date}T${time}:00+03:00`);
+/** Açık mesai en çok 24 saat sayılır (sunucunun kuralı) */
+const openMs = (e: TimeEntryDTO, now: number) => (e.open ? Math.min(Math.max(0, now - e.clockIn), MAX_SHIFT_MS) : e.durationMs);
 
 /**
  * Yönetim › Mesai çizelgesi: personelin PIN'le ya da oturumdan yaptığı giriş-çıkışlar, kişi başına süre, şu an
@@ -55,10 +42,13 @@ export default function TimeAdmin() {
   const [period, setPeriod] = useState<Period>('bugun');
   const range = periodRange(period, today);
   const sheet = useQuery({ queryKey: ['time', 'sheet', range.from, range.to], queryFn: () => get<TimeSheetDTO>(`/time?from=${range.from}&to=${range.to}`) });
-  const [edit, setEdit] = useState<Draft | null>(null);
+  const [edit, setEdit] = useState<MesaiDraft | null>(null);
   const [tried, setTried] = useState(false);
   const [saving, setSaving] = useState(false);
-  const staff = boot.users.filter((u) => u.active);
+  const me = useAuth((s) => s.me);
+  /** Sunucunun kuralı: yönetici kendi mesaisini değiştiremez (patron hariç); seçenek baştan sunulmaz */
+  const canChange = (userId: string) => me?.role === 'patron' || userId !== me?.id;
+  const staff = boot.users.filter((u) => u.active && canChange(u.id));
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['time'] });
   const openNew = () => {
@@ -66,39 +56,35 @@ export default function TimeAdmin() {
     setEdit({ userId: staff[0]?.id ?? '', date: today, inTime: '09:00', outTime: '17:00', note: '' });
   };
   const openEdit = (e: TimeEntryDTO) => {
+    if (!canChange(e.userId)) return;
     setTried(false);
-    const inParts = istanbulParts(e.clockIn);
-    setEdit({ id: e.id, userId: e.userId, date: inParts.date, inTime: hm(e.clockIn), outTime: e.clockOut ? hm(e.clockOut) : '', note: e.note ?? '' });
+    setEdit(draftOf(e));
   };
 
-  // Çıkış girişten önceyse ertesi güne taşar (gece yarısını geçen vardiya)
-  const draftTimes = (d: Draft) => {
-    const clockIn = toMs(d.date, d.inTime);
-    let clockOut = d.outTime ? toMs(d.date, d.outTime) : null;
-    if (clockOut != null && clockOut <= clockIn) clockOut = toMs(addDays(d.date, 1), d.outTime);
-    return { clockIn, clockOut };
-  };
-  const timeError = edit && (!/^\d{2}:\d{2}$/.test(edit.inTime) ? 'Giriş saati gerekli' : edit.outTime && !/^\d{2}:\d{2}$/.test(edit.outTime) ? 'Saat ss:dd biçiminde' : null);
-  const futureError = (() => {
-    if (!edit || timeError) return null;
-    const t = draftTimes(edit);
-    // Sunucu bir dakikaya kadar ileriyi kabul eder (saat kayması); ötesi gelecektir
-    return t.clockIn > Date.now() + 60_000 || (t.clockOut != null && t.clockOut > Date.now() + 60_000) ? 'Gelecekteki bir saat girilemez' : null;
-  })();
+  const errors = edit ? draftErrors(edit, Date.now()) : {};
 
   const save = async () => {
     if (!edit) return;
-    if (timeError || futureError || !edit.userId) {
+    if (errors.in || errors.out || errors.who) {
       setTried(true);
       return;
     }
     setSaving(true);
     try {
-      const { clockIn, clockOut } = draftTimes(edit);
       const note = edit.note.trim() || null;
-      if (edit.id) await patch(`/time/entries/${edit.id}`, { clockIn, clockOut, note });
-      else await post('/time/entries', { userId: edit.userId, clockIn, clockOut, note });
-      toast.ok(edit.id ? 'Mesai düzeltildi; denetim kaydına yazıldı' : 'Mesai kaydı eklendi');
+      if (edit.entry) {
+        // Yalnız değişen alan gider (editBody); değişiklik yoksa istek de yok
+        const body = editBody(edit);
+        if (!body) {
+          setEdit(null);
+          return;
+        }
+        await patch(`/time/entries/${edit.entry.id}`, body);
+      } else {
+        const { clockIn, clockOut } = draftTimes(edit);
+        await post('/time/entries', { userId: edit.userId, clockIn, clockOut, note });
+      }
+      toast.ok(edit.entry ? 'Mesai düzeltildi; denetim kaydına yazıldı' : 'Mesai kaydı eklendi');
       setEdit(null);
       await refresh();
     } catch (e) {
@@ -143,6 +129,8 @@ export default function TimeAdmin() {
   };
 
   const data = sheet.data;
+  // Dönemden bağımsız: çıkışı unutulan eski mesai seçili dönemde görünmese de buradan düzeltilir
+  const forgotten = data?.clockedIn.filter((e) => now - e.clockIn > STALE_SHIFT_MS) ?? [];
   const totalMs = data?.totals.reduce((a, t) => a + t.workedMs, 0) ?? 0;
   const top = Math.max(1, ...(data?.totals.map((t) => t.workedMs) ?? [1]));
   const columns: Column<TimeEntryDTO>[] = [
@@ -166,14 +154,14 @@ export default function TimeAdmin() {
       header: 'Çıkış',
       cell: (e) =>
         e.open ? (
-          <Badge tone={now - e.clockIn > STALE_MS ? 'warning' : 'success'} dot>
-            {now - e.clockIn > STALE_MS ? 'Çıkış yok' : 'Mesaide'}
+          <Badge tone={now - e.clockIn > STALE_SHIFT_MS ? 'warning' : 'success'} dot>
+            {now - e.clockIn > STALE_SHIFT_MS ? 'Çıkış yok' : 'Mesaide'}
           </Badge>
         ) : (
           <span className="tabular-nums">{fmtTime(e.clockOut!)}</span>
         ),
     },
-    { key: 'sure', header: 'Süre', align: 'right', cell: (e) => <span className="font-semibold tabular-nums">{fmtDuration(e.open ? now - e.clockIn : e.durationMs)}</span> },
+    { key: 'sure', header: 'Süre', align: 'right', cell: (e) => <span className="font-semibold tabular-nums">{fmtDuration(openMs(e, now))}</span> },
     { key: 'not', header: 'Not', cell: (e) => <span className="text-[var(--admin-text-mute)]">{joinMeta([e.note, e.editedByName && `düzelten ${e.editedByName}`]) || '—'}</span>, hideBelow: 'xl' },
   ];
 
@@ -216,6 +204,29 @@ export default function TimeAdmin() {
             ]}
           />
 
+          {forgotten.length > 0 && (
+            <Card title="Çıkışı unutulanlar" subtitle="14 saatten uzun açık mesai; çıkış saati girilene kadar kişi kilit ekranından yeniden giriş yapamaz" flush>
+              <ul className="divide-y divide-[var(--admin-divider)]">
+                {forgotten.map((e) => (
+                  <li key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+                    <Avatar name={e.userName} color={e.userColor} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{e.userName}</span>
+                      <span className="block text-xs text-[var(--admin-text-mute)]">
+                        Giriş {fmtDateShort(istanbulParts(e.clockIn).date)} {fmtTime(e.clockIn)} · {now - e.clockIn > MAX_SHIFT_MS ? '24 saatten uzun açık' : `${fmtDuration(now - e.clockIn)} açık`}
+                      </span>
+                    </span>
+                    {canChange(e.userId) && (
+                      <Button icon={<Pencil className="size-4" />} onClick={() => openEdit(e)}>
+                        Çıkış saatini gir
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
+
           {data.totals.length > 0 && (
             <Card title="Kişi toplamları" subtitle="Dönemdeki mesailerin toplamı; açık mesai şu ana kadar" flush>
               <ul className="divide-y divide-[var(--admin-divider)]">
@@ -251,23 +262,32 @@ export default function TimeAdmin() {
             columns={columns}
             rowKey={(e) => e.id}
             onOpen={openEdit}
-            selectedKey={edit?.id ?? null}
-            phoneMeta={(e) => joinMeta([fmtDateShort(e.businessDate), `${fmtTime(e.clockIn)}–${e.clockOut ? fmtTime(e.clockOut) : 'mesaide'}`, fmtDuration(e.open ? now - e.clockIn : e.durationMs)])}
+            selectedKey={edit?.entry?.id ?? null}
+            phoneMeta={(e) => joinMeta([fmtDateShort(e.businessDate), `${fmtTime(e.clockIn)}–${e.clockOut ? fmtTime(e.clockOut) : 'mesaide'}`, fmtDuration(openMs(e, now))])}
             empty={
               <EmptyState art="saat" title={period === 'bugun' ? 'Bugün henüz mesai yok' : 'Bu dönemde mesai yok'} action={<Button onClick={openNew}>Elle kayıt</Button>}>
                 Personel kilit ekranındaki Mesai sekmesinden PIN’iyle ya da kullanıcı menüsünden giriş-çıkış yapar
               </EmptyState>
             }
-            actions={(e) => (
-              <ActionMenu
-                label={`${e.userName} mesaisi`}
-                items={[
-                  { key: 'duzelt', label: 'Düzelt', icon: <Pencil />, onSelect: () => openEdit(e) },
-                  ...(e.open ? [{ key: 'kapat', label: 'Şimdi kapat', icon: <LogOut />, onSelect: () => void closeNow(e) }] : []),
-                  { key: 'sil', label: 'Sil', icon: <Trash2 />, danger: true, onSelect: () => void remove(e) },
-                ]}
-              />
-            )}
+            actions={(e) =>
+              canChange(e.userId) ? (
+                <ActionMenu
+                  label={`${e.userName} mesaisi`}
+                  items={[
+                    { key: 'duzelt', label: 'Düzelt', icon: <Pencil />, onSelect: () => openEdit(e) },
+                    // 24 saatten eski açık mesai şimdiye kapatılamaz (sunucu reddeder): çıkış saati girilir
+                    ...(e.open
+                      ? [
+                          now - e.clockIn > MAX_SHIFT_MS
+                            ? { key: 'cikis', label: 'Çıkış saatini gir', icon: <LogOut />, onSelect: () => openEdit(e) }
+                            : { key: 'kapat', label: 'Şimdi kapat', icon: <LogOut />, onSelect: () => void closeNow(e) },
+                        ]
+                      : []),
+                    { key: 'sil', label: 'Sil', icon: <Trash2 />, danger: true, onSelect: () => void remove(e) },
+                  ]}
+                />
+              ) : null
+            }
           />
         </div>
       ) : null}
@@ -275,9 +295,9 @@ export default function TimeAdmin() {
       <QuickLook
         open={!!edit}
         onClose={() => setEdit(null)}
-        label={edit?.id ? 'Mesai düzeltme' : 'Elle mesai kaydı'}
-        title={edit?.id ? 'Mesaiyi düzelt' : 'Elle mesai kaydı'}
-        subtitle={edit?.id ? 'Eski ve yeni saat denetim kaydına yazılır' : 'Unutulan giriş-çıkış için; denetim kaydına yazılır'}
+        label={edit?.entry ? 'Mesai düzeltme' : 'Elle mesai kaydı'}
+        title={edit?.entry ? 'Mesaiyi düzelt' : 'Elle mesai kaydı'}
+        subtitle={edit?.entry ? 'Eski ve yeni saat denetim kaydına yazılır' : 'Unutulan giriş-çıkış için; denetim kaydına yazılır'}
         footer={
           <div className="flex gap-2">
             <Button className="flex-1" onClick={() => setEdit(null)}>
@@ -291,27 +311,28 @@ export default function TimeAdmin() {
       >
         {edit && (
           <div className="space-y-4">
-            <Field label="Kişi">
-              <Select value={edit.userId} disabled={!!edit.id} onChange={(e) => setEdit({ ...edit, userId: e.target.value })}>
-                {staff.map((u) => (
+            <Field label="Kişi" error={tried ? errors.who : null}>
+              {/* Düzeltmede kaydın kendi kişisi (hesabı kapanmış olsa da); elle kayıtta değiştirilebilecek kişiler */}
+              <Select value={edit.userId} disabled={!!edit.entry} onChange={(e) => setEdit({ ...edit, userId: e.target.value })}>
+                {(edit.entry ? [{ id: edit.entry.userId, name: edit.entry.userName }] : staff).map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label="İş günü" hint="girişin günü">
+            <Field label="İş günü" hint="sabah 05:00'te başlar">
               <Input type="date" value={edit.date} max={today} onChange={(e) => setEdit({ ...edit, date: e.target.value })} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Giriş" error={tried ? timeError : null}>
+              <Field label="Giriş" error={tried ? errors.in : null}>
                 <Input type="time" value={edit.inTime} onChange={(e) => setEdit({ ...edit, inTime: e.target.value })} />
               </Field>
-              <Field label="Çıkış" hint="boşsa mesaide" error={tried ? futureError : null}>
+              <Field label="Çıkış" hint="boşsa mesaide" error={tried ? errors.out : null}>
                 <Input type="time" value={edit.outTime} onChange={(e) => setEdit({ ...edit, outTime: e.target.value })} />
               </Field>
             </div>
-            <p className="text-xs text-[var(--admin-text-mute)]">Çıkış girişten önceyse ertesi güne sayılır (gece yarısını geçen vardiya).</p>
+            <p className="text-xs text-[var(--admin-text-mute)]">Gece 00:00–04:59 arası giriş seçili iş gününün gecesidir; girişten önceki çıkış ertesi güne sayılır.</p>
             <Field label="Not" hint="isteğe bağlı">
               <Textarea value={edit.note} maxLength={200} onChange={(e) => setEdit({ ...edit, note: e.target.value })} placeholder="Ör. çıkışı unuttu, kamerayla doğrulandı" />
             </Field>

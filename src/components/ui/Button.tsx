@@ -21,7 +21,7 @@ import { cn } from '@/lib/cn';
 export type ButtonVariant = 'primary' | 'ink' | 'secondary' | 'soft' | 'ghost' | 'danger' | 'dangerOutline' | 'dangerGhost' | 'success' | 'warn' | 'outline';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'xl';
 
-// Dört durum: dinlenme, üzerinde, basılı (bir ton koyu), devre dışı; odak halkası index.css'te (mavi, eylem renginden ayrı)
+// Dört durum: dinlenme, üzerinde, basılı (bir ton koyu), devre dışı; odak halkası index.css'te (ev yeşili, 2 px dışarıda)
 const secondary =
   'border border-[var(--admin-border-strong)] bg-surface text-ink shadow-[var(--rim)] hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:border-[var(--admin-border-field)] active:bg-surface-3';
 const variants: Record<ButtonVariant, string> = {

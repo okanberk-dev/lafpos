@@ -41,7 +41,7 @@ export function MesaiRow({ className }: { className?: string }) {
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium">{open ? `Mesaide · ${fmtDuration(now - open.clockIn)}` : 'Mesai başlamadı'}</span>
         <span className="block text-xs text-muted">
-          {open ? `${fmtTime(open.clockIn)}’de başladı · bugün ${fmtDuration(today.workedMs + drift)}` : `Bugün ${fmtDuration(today.workedMs)} · son 7 gün ${fmtDuration(weekMs)}`}
+          {open ? `Giriş ${fmtTime(open.clockIn)} · bugün ${fmtDuration(today.workedMs + drift)}` : `Bugün ${fmtDuration(today.workedMs)} · son 7 gün ${fmtDuration(weekMs)}`}
         </span>
       </span>
       <Button size="sm" variant={open ? 'secondary' : 'primary'} loading={busy} onClick={punch}>

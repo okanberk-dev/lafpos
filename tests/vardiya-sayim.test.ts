@@ -58,8 +58,9 @@ describe('vardiya sayımı', () => {
 
     const blind = await h.ok<ShiftCountDTO>('kasa', 'POST', '/cash/shift-counts', { countedCash: exp - 1250, toUserId: userId('Garson'), note: 'Akşam vardiyası' });
     expect(blind).toMatchObject({ userName: 'Kasa', toUserName: 'Garson', confirmed: false, counted: exp - 1250, expected: null, diff: null, note: 'Akşam vardiyası', banknotes: null });
+    expect(blind.shiftDiff).toBeNull();
     const seen = (await h.ok<ShiftCountDTO[]>('mudur', 'GET', '/cash/shift-counts')).find((s) => s.id === blind.id)!;
-    expect(seen).toMatchObject({ counted: exp - 1250, expected: exp, diff: -1250 });
+    expect(seen).toMatchObject({ counted: exp - 1250, expected: exp, diff: -1250, shiftDiff: -1250 });
     const a = await shiftAudit(blind.id);
     expect(a).toMatchObject({ severity: 'uyari', amount: -1250, userName: 'Kasa', approverName: null });
     expect(a.message).toMatch(/^Kasa vardiyayı devretti, kasayı Garson devraldı \(Z \d+\): sayılan ₺[\d.,]+, fark -₺12,50$/);
@@ -67,15 +68,21 @@ describe('vardiya sayımı', () => {
     expect(await expected()).toBe(exp);
   });
 
-  it('fark yoksa bilgi, eşiği aşan fark alarm; devralansız ara sayım', async () => {
+  it('fark vardiyanın kendisininki (önceki sayımdan bu yana): fark yoksa bilgi, eşiği aşan alarm; devralansız ara sayım', async () => {
     const exp = await expected();
+    // Önceki sayım 12,50 eksikti, para bulundu: gün toplamı denk, bu sayımın farkı +12,50
+    const found = await h.ok<ShiftCountDTO>('mudur', 'POST', '/cash/shift-counts', { countedCash: exp });
+    expect(found).toMatchObject({ toUserId: null, expected: exp, diff: 0, shiftDiff: 1250 });
+    const fa = await shiftAudit(found.id);
+    expect(fa).toMatchObject({ severity: 'uyari', amount: 1250 });
+    expect(fa.message).toMatch(/: sayılan ₺[\d.,]+, bu vardiyada fark \+₺12,50 \(gün toplamı denk\)$/);
     const even = await h.ok<ShiftCountDTO>('mudur', 'POST', '/cash/shift-counts', { countedCash: exp });
-    expect(even).toMatchObject({ toUserId: null, expected: exp, diff: 0 });
+    expect(even).toMatchObject({ diff: 0, shiftDiff: 0 });
     const ea = await shiftAudit(even.id);
     expect(ea.severity).toBe('info');
     expect(ea.message).toMatch(/^Müdür vardiya sayımı yaptı \(Z \d+\): sayılan ₺[\d.,]+, fark yok$/);
     const big = await h.ok<ShiftCountDTO>('mudur', 'POST', '/cash/shift-counts', { countedCash: exp + 10000 });
-    expect(big.diff).toBe(10000);
+    expect([big.diff, big.shiftDiff]).toEqual([10000, 10000]);
     expect((await shiftAudit(big.id)).severity).toBe('alarm');
   });
 
@@ -87,7 +94,8 @@ describe('vardiya sayımı', () => {
   it('devralan PIN\'iyle onaylar; başka birinin PIN\'i hatalı PIN gibi reddedilir; devralan seçilmediyse PIN\'in sahibi', async () => {
     auth.resetFailures();
     try {
-      const exp = await expected();
+      // Önceki ara sayımda fazla çıkan 100 TL çekmecede: bu devrin kendi farkı yok
+      const exp = (await expected()) + 10000;
       const wrongPerson = await h.call<{ code: string; error: string }>('kasa', 'POST', '/cash/shift-counts', { countedCash: exp, toUserId: userId('Müdür'), approverPin: PINS.garson });
       const wrongPin = await h.call<{ code: string; error: string }>('kasa', 'POST', '/cash/shift-counts', { countedCash: exp, toUserId: userId('Müdür'), approverPin: '9898' });
       expect([wrongPerson.status, wrongPerson.json.code]).toEqual([403, 'approval_invalid']);
@@ -120,18 +128,20 @@ describe('vardiya sayımı', () => {
     const mine = await h.ok<CashDay>('kasa', 'GET', '/cash/day');
     expect(mine.blind).toBe(true);
     expect(mine.shiftCounts.length).toBeGreaterThanOrEqual(6);
-    expect(mine.shiftCounts.every((s) => s.expected === null && s.diff === null)).toBe(true);
+    expect(mine.shiftCounts.every((s) => s.expected === null && s.diff === null && s.shiftDiff === null)).toBe(true);
     // Kendi sayımı ve devraldığı sayım tutarlı; yalnız müdürün kendi ara sayımı (devralansız) tutarsız
     for (const s of mine.shiftCounts) {
       const own = s.userName === 'Kasa' || s.toUserName === 'Kasa';
       expect(s.counted === null, `${s.userName} → ${s.toUserName}`).toBe(!own);
     }
-    expect(mine.shiftCounts.filter((s) => s.counted === null).map((s) => s.userName)).toEqual(['Müdür', 'Müdür']);
+    expect(mine.shiftCounts.filter((s) => s.counted === null).map((s) => s.userName)).toEqual(['Müdür', 'Müdür', 'Müdür']);
     // Sırayla (ilk sayım ilk)
     expect(mine.shiftCounts.map((s) => s.createdAt)).toEqual([...mine.shiftCounts.map((s) => s.createdAt)].sort((a, b) => a - b));
 
     const boss = await h.ok<CashDay>('patron', 'GET', '/cash/day');
-    expect(boss.shiftCounts.every((s) => s.counted !== null && s.expected !== null && s.diff !== null)).toBe(true);
+    expect(boss.shiftCounts.every((s) => s.counted !== null && s.expected !== null && s.diff !== null && s.shiftDiff !== null)).toBe(true);
+    // Vardiyanın farkı önceki sayımdan bu yana: farkların farkı
+    boss.shiftCounts.forEach((s, i) => expect(s.shiftDiff, s.id).toBe(s.diff! - (i ? boss.shiftCounts[i - 1].diff! : 0)));
     const dayId = boss.day!.id;
     const detail = await h.ok<{ shiftCounts: ShiftCountDTO[] }>('patron', 'GET', `/cash/days/${dayId}`);
     expect(detail.shiftCounts).toEqual(boss.shiftCounts);
@@ -142,6 +152,20 @@ describe('vardiya sayımı', () => {
     expect(await codeOf(h.call('kasa', 'GET', `/cash/shift-counts?dayId=${staleDayId}`))).toEqual([403, 'forbidden']);
     expect(await h.ok('mudur', 'GET', `/cash/shift-counts?dayId=${staleDayId}`)).toEqual([]);
     expect(await codeOf(h.call('mudur', 'GET', '/cash/shift-counts?dayId=yok-boyle-gun'))).toEqual([404, 'not_found']);
+  });
+
+  it('önceki devirde bulunan eksik sonraki devirde yeniden alarm olmaz, devralana yazılmaz (inceleme)', async () => {
+    const exp = await expected();
+    const before = (await h.ok<ShiftCountDTO[]>('patron', 'GET', '/cash/shift-counts')).at(-1)!.diff!;
+    // Kasa kasayı Müdür'e 150 TL eksik devreder: alarm
+    const short = await h.ok<ShiftCountDTO>('kasa', 'POST', '/cash/shift-counts', { countedCash: exp + before - 15000, toUserId: userId('Müdür') });
+    expect((await shiftAudit(short.id)).severity).toBe('alarm');
+    // Müdür aldığı kadarını Kasa'ya devreder: kendi vardiyası tuttu; gün toplamındaki eksik yine görünür ama alarm değil
+    const next = await h.ok<ShiftCountDTO>('mudur', 'POST', '/cash/shift-counts', { countedCash: exp + before - 15000, toUserId: userId('Kasa') });
+    expect([next.diff, next.shiftDiff]).toEqual([before - 15000, 0]);
+    const a = await shiftAudit(next.id);
+    expect(a).toMatchObject({ severity: 'info', amount: 0 });
+    expect(a.message).toContain('bu vardiyada fark yok (gün toplamı -₺');
   });
 
   it('canlı olay cash konusunda; gün sonu ve Z sayımlardan etkilenmez', async () => {

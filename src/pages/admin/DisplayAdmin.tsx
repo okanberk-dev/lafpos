@@ -9,6 +9,7 @@ import { Field, Input, Toggle } from '@/components/ui/Field';
 import { errorMessage, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { appUrl } from '@/lib/demo';
 import { useTick } from '@/lib/hooks';
 import { toast } from '@/lib/toast';
 import { useUnsavedGuard } from '@/lib/unsavedGuard';
@@ -85,6 +86,9 @@ export default function DisplayAdmin() {
 
   const set = <K extends keyof CustomerDisplaySettings>(k: K, v: CustomerDisplaySettings[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const qrError = draft.qrUrl.trim() && !/^https?:\/\/\S+$/.test(draft.qrUrl.trim()) ? 'Adres http:// ya da https:// ile başlamalı' : null;
+  // Önizleme geçersiz adresi çizmez (kaydedilemeyecek karekod gösterilmesin)
+  const shown = qrError ? { ...draft, qrUrl: '' } : draft;
+  const screenUrl = appUrl('/musteri-ekrani?ekran=kasa');
   const addMessage = () => {
     const m = newMessage.trim();
     if (!m || draft.messages.length >= 6) return;
@@ -108,7 +112,13 @@ export default function DisplayAdmin() {
         messages: draft.messages.map((m) => m.trim()).filter(Boolean),
       };
       await put('/admin/settings', { customerDisplay: body });
-      await Promise.all([qc.invalidateQueries({ queryKey: ['bootstrap'] }), qc.invalidateQueries({ queryKey: ['display-config'] })]);
+      // Taslak kaydedilen (kırpılmış) biçimi alır: baştaki ya da sondaki boşluk "kaydedilmemiş" diye kalmasın
+      setDraft(body);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['bootstrap'] }),
+        qc.invalidateQueries({ queryKey: ['display-config'] }),
+        qc.invalidateQueries({ queryKey: ['admin', 'settings'] }),
+      ]);
       toast.ok('Müşteri ekranı kaydedildi; ekran yarım dakika içinde yenilenir');
     } catch (e) {
       toast.err(errorMessage(e));
@@ -125,7 +135,7 @@ export default function DisplayAdmin() {
         description="İki ekranlı kasada müşteriye dönük ekran: görünüm, karşılama ve teşekkür metni, duyurular ve karekod"
         actions={
           <>
-            <a href="/musteri-ekrani?ekran=kasa" target="_blank" rel="noreferrer" className={buttonClass('secondary', 'md')}>
+            <a href={screenUrl} target="_blank" rel="noreferrer" className={buttonClass('secondary', 'md')}>
               <ExternalLink className="size-4" aria-hidden="true" />
               Ekranı aç
             </a>
@@ -153,7 +163,8 @@ export default function DisplayAdmin() {
                       on ? 'border-[var(--admin-primary)] shadow-[0_0_0_3px_var(--admin-primary-soft)]' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-field)]',
                     )}
                   >
-                    <span className="grid h-20 place-items-center border-b border-[var(--admin-border)]" style={{ background: THEMES[t].swatch, color: THEMES[t].ink }}>
+                    {/* Örnek yazı süs: seçeneğin adı temanın adıdır */}
+                    <span aria-hidden="true" className="grid h-20 place-items-center border-b border-[var(--admin-border)]" style={{ background: THEMES[t].swatch, color: THEMES[t].ink }}>
                       <span className="font-headline text-lg font-extrabold tracking-[-0.03em]">Hoş geldiniz</span>
                     </span>
                     <span className="px-3 py-2.5">
@@ -221,7 +232,7 @@ export default function DisplayAdmin() {
           <Card title="Karekod" subtitle="Uygulama, menü, Wi-Fi ya da Instagram; adres boşsa çizilmez">
             <div className="space-y-4">
               <Field label="Adres" error={tried ? qrError : null}>
-                <Input value={draft.qrUrl} inputMode="url" placeholder="https://laffogato.net" onChange={(e) => set('qrUrl', e.target.value)} />
+                <Input value={draft.qrUrl} inputMode="url" maxLength={300} placeholder="https://laffogato.net" onChange={(e) => set('qrUrl', e.target.value)} />
               </Field>
               <Field label="Karekodun yanındaki yazı" hint={`${draft.qrLabel.length}/60`}>
                 <Input value={draft.qrLabel} maxLength={60} placeholder="Uygulamayı indirin, damga kazanın" onChange={(e) => set('qrLabel', e.target.value)} />
@@ -248,16 +259,16 @@ export default function DisplayAdmin() {
             }
           >
             <ScaledScreen>
-              <CustomerDisplayView state={SAMPLE[preview]} config={draft} businessName={boot.settings.businessName} now={now} />
+              <CustomerDisplayView state={SAMPLE[preview]} config={shown} businessName={boot.settings.businessName} now={now} />
             </ScaledScreen>
           </Card>
           <Card title="Kurulum" subtitle="İki ekranlı kasa ya da müşteriye dönük tablet">
             <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--admin-text-soft)]">
               <li>
-                İkinci ekranda tarayıcıyla <span className={CODE}>{origin}/musteri-ekrani?ekran=kasa</span> adresini tam ekran açın; personel girişi istemez.
+                İkinci ekranda tarayıcıyla <span className={CODE}>{origin}{screenUrl}</span> adresini tam ekran açın; personel girişi istemez.
               </li>
-              <li>Kasada Adisyon › İşlemler › Müşteri ekranı'ndan aynı ekran adını seçin: adisyon, tutar ve teşekkür o ekrana gider.</li>
-              <li>Birden çok kasa varsa her birine ayrı ad verin (ekran=kasa2).</li>
+              <li>Kasada Adisyon › İşlemler › Müşteri ekranı'nda “Bu cihazdaki adisyonlar müşteri ekranına yansısın”ı açın: adisyon, tutar ve teşekkür bu ekrana gider.</li>
+              <li>Şimdilik bir kasa bir müşteri ekranına yansır; ikinci bir kasa açarsa ekran son işlemi gösterir.</li>
             </ol>
             <div className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--admin-surface-2)] px-3.5 py-3 text-xs text-[var(--admin-text-mute)]">
               <MonitorPlay className="size-4 shrink-0" aria-hidden="true" />

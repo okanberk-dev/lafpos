@@ -413,8 +413,10 @@
   --color-primary-line: var(--admin-primary-line);
   --color-ink-fill: var(--admin-ink-fill);
   --color-on-ink: var(--admin-on-ink);
+  /* Altın metin (beyaz ya da porselen zeminde); pirinç dolgunun üstündeki yazı on-gold */
   --color-gold-ink: var(--admin-gold);
   --color-gold-fill: var(--admin-gold-fill);
+  --color-on-gold: var(--admin-gold-ink);
   --color-bordo-ink: var(--admin-bordo);
   --color-bordo-soft: var(--admin-bordo-soft);
   --color-blue-ink: var(--admin-blue);

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { MyTimeDTO } from '@shared/types';
 import { get } from './api';
+import { useAuth } from './auth';
 import { REMOTE } from './remote';
 
 /** Mesai süresi: "45 dk", "7 sa 03 dk" (saatli süre dakikayı iki haneyle yazar, alt alta hizalı okunur) */
@@ -12,8 +13,10 @@ export function fmtDuration(ms: number): string {
 
 /**
  * Kişinin kendi mesaisi (kullanıcı menüsü, avatardaki "mesaide" noktası). Canlı olayla (`time`) ve dakikada bir
- * yenilenir; uzaktan görünümde mesai yok (kafedeki kasa bilgisayarının işi).
+ * yenilenir; uzaktan görünümde mesai yok (kafedeki kasa bilgisayarının işi). Anahtar kişiye göre: kasada kullanıcı
+ * değişince sıradaki kişi öncekinin mesaisini görmesin.
  */
 export function useMyTime(enabled = true) {
-  return useQuery({ queryKey: ['time', 'me'], queryFn: () => get<MyTimeDTO>('/time/me'), refetchInterval: 60_000, enabled: enabled && !REMOTE });
+  const userId = useAuth((s) => s.me?.id);
+  return useQuery({ queryKey: ['time', 'me', userId], queryFn: () => get<MyTimeDTO>('/time/me'), refetchInterval: 60_000, enabled: enabled && !REMOTE && !!userId });
 }

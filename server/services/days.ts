@@ -466,6 +466,10 @@ export function recordShiftCount(
   if (toUserId && !to?.active) throw new HttpError(422, 'Devralan personel bulunamadı ya da hesabı kapalı', 'invalid_reference');
   const expected = computeSummary(t, day).expectedCash;
   const diff = counted - expected;
+  // Fark günün başından birikir: önceki devirde bulunan eksik sonraki devirde yeniden alarm olmasın, devralana
+  // yazılmasın. Uyarı ve mesaj bu vardiyanın kendi farkıyla (önceki sayımdan bu yana); saklanan fark gün toplamı.
+  const prevDiff = shiftCountsOf(t, day.id).at(-1)?.diff ?? 0;
+  const shiftDiff = diff - prevDiff;
   const now = Date.now();
   const row: ShiftCountRow = {
     id: ulid(now),
@@ -487,15 +491,22 @@ export function recordShiftCount(
     userId: actor.user.id,
     approverId: confirmed ? toUserId : null,
     action: 'cash.shift_count',
-    severity: Math.abs(diff) >= threshold ? 'alarm' : diff !== 0 ? 'uyari' : 'info',
+    severity: Math.abs(shiftDiff) >= threshold ? 'alarm' : shiftDiff !== 0 ? 'uyari' : 'info',
     entity: 'shift_count',
     entityId: row.id,
-    amount: diff,
-    message: `${who} (Z ${day.zNo}): sayılan ${tl(counted)}, fark ${diff === 0 ? 'yok' : tl(diff)}`,
-    data: { dayId: day.id, counted, expected, toUserId },
+    amount: shiftDiff,
+    message: `${who} (Z ${day.zNo}): sayılan ${tl(counted)}, ${shiftDiffText(shiftDiff, diff)}`,
+    data: { dayId: day.id, counted, expected, diff, shiftDiff, toUserId },
   });
   fx.emit({ topic: 'cash', kind: 'shift.counted', byUserId: actor.user.id });
   return row;
+}
+
+/** "fark yok", "fark -₺150,00"; gün toplamı vardiyanınkinden ayrıysa o da: "bu vardiyada fark yok (gün toplamı -₺150,00)" */
+function shiftDiffText(shiftDiff: number, dayDiff: number): string {
+  const signed = (k: number) => `${k > 0 ? '+' : ''}${tl(k)}`;
+  const own = shiftDiff === 0 ? 'yok' : signed(shiftDiff);
+  return dayDiff === shiftDiff ? `fark ${own}` : `bu vardiyada fark ${own} (gün toplamı ${dayDiff === 0 ? 'denk' : signed(dayDiff)})`;
 }
 
 /** Günün vardiya sayımları, sırayla */
@@ -503,7 +514,8 @@ export function shiftCountsOf(t: Tx | DB, dayId: string): ShiftCountRow[] {
   return t.select().from(schema.shiftCounts).where(eq(schema.shiftCounts.dayId, dayId)).orderBy(asc(schema.shiftCounts.createdAt)).all();
 }
 
-export function shiftCountToDTO(s: ShiftCountRow, names: Map<string, string>): ShiftCountDTO {
+/** `prevDiff`: aynı günün bir önceki sayımının farkı (yoksa 0); vardiyanın kendi farkı bundan bulunur */
+export function shiftCountToDTO(s: ShiftCountRow, names: Map<string, string>, prevDiff: number): ShiftCountDTO {
   return {
     id: s.id,
     dayId: s.dayId,
@@ -515,6 +527,7 @@ export function shiftCountToDTO(s: ShiftCountRow, names: Map<string, string>): S
     counted: s.counted,
     expected: s.expected,
     diff: s.diff,
+    shiftDiff: s.diff - prevDiff,
     banknotes: s.banknotes,
     note: s.note,
     createdAt: s.createdAt,
