@@ -5,18 +5,20 @@ import { tl } from '@shared/money';
 import {
   AUTO_ACCEPT_MAX_DEFAULT,
   AUTO_ACCEPT_MAX_LIMIT,
+  AUTO_SKIP_PREFIX,
+  PLATFORM_COLOR,
   PLATFORM_LABEL,
-  PLATFORM_MODE_LABEL,
   PLATFORM_STATUS_LABEL,
   PLATFORMS,
   type PlatformId,
   type PlatformLiveStatus,
   type PlatformMode,
+  type PlatformOrderStatus,
   type PlatformProductDTO,
   type PlatformSettings,
 } from '@shared/platforms';
-import { fmtDateTime, fmtTime } from '@shared/time';
-import { Badge, Card, CARD, CODE, EmptyState, PageHeader, Segmented } from '@/components/admin/ui';
+import { addDays, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
+import { Badge, Card, CARD, CODE, EmptyState, PageHeader, Segmented, type Tone } from '@/components/admin/ui';
 import { PlatformBadge } from '@/components/PlatformBadge';
 import { type PlatformsData, usePlatforms } from '@/components/PlatformInbox';
 import { Button } from '@/components/ui/Button';
@@ -25,6 +27,7 @@ import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 
 /** Ayar adları kitin eş genişlikli kodu (`CODE`) ile, virgülle */
@@ -72,7 +75,18 @@ const LIVE_NEEDS: Record<PlatformId, ReactNode> = {
   migros: 'Belgeler herkese açık değil; Migros Yemek ile görüşme gerekir.',
 };
 
-const MODE_TONE: Record<PlatformMode, 'neutral' | 'info' | 'success'> = { kapali: 'neutral', deneme: 'info', canli: 'success' };
+/**
+ * Son 12 saatteki kararın rozeti: kabul yeşil, platformun iptali kırmızı (kayıp), ret ve süresi dolan amber (elimizden
+ * çıkan sipariş, dikkat), bekleyen bilgi
+ */
+const STATUS_TONE: Record<PlatformOrderStatus, Tone> = { bekliyor: 'info', kabul: 'success', ret: 'warning', iptal: 'danger', suresi_doldu: 'warning' };
+
+/** Satırdaki zaman: bugünse yalnız saat, dünse "dün 18:50", daha eskiyse tarihiyle (eski kalem bugünmüş gibi okunmasın) */
+function seenAt(ms: number) {
+  const today = istanbulParts(Date.now()).date;
+  const day = istanbulParts(ms).date;
+  return day === today ? fmtTime(ms) : day === addDays(today, -1) ? `dün ${fmtTime(ms)}` : fmtDateTime(ms);
+}
 
 export default function PlatformsAdmin() {
   const data = usePlatforms();
@@ -118,18 +132,27 @@ export default function PlatformsAdmin() {
           </EmptyState>
         ) : (
           <ul className="divide-y divide-[var(--admin-divider)]">
-            {recent.map((o) => (
-              <li key={o.id} className="flex flex-wrap items-center gap-2 px-4 py-2.5 text-sm">
-                <PlatformBadge platform={o.platform} code={o.payload.code} />
-                <span className="tabular text-[var(--admin-text-mute)]">{fmtTime(o.receivedAt)}</span>
-                <span className="tabular">{tl(o.payload.customerTotal)}</span>
-                <span className="flex-1" />
-                <Badge tone={o.status === 'kabul' ? 'success' : o.status === 'ret' ? 'warning' : 'neutral'}>{PLATFORM_STATUS_LABEL[o.status]}</Badge>
-                {o.reason && <span className="text-xs text-[var(--admin-text-mute)]">{o.reason}</span>}
-                {o.decidedBy && <span className="text-xs text-[var(--admin-text-mute)]">{o.decidedBy}</span>}
-                {o.lastError && <span className="w-full text-xs text-[var(--admin-danger-ink)]">{o.lastError}</span>}
-              </li>
-            ))}
+            {recent.map((o) => {
+              // Kabulde `reason` platforma bildirilen hazırlık süresidir ("20 dk", otomatikse "20 dk, otomatik")
+              const why = o.reason ? (o.status === 'kabul' ? `hazırlık ${o.reason}` : o.reason) : null;
+              const detail = [why, o.decidedBy].filter(Boolean).join(' · ');
+              return (
+                // Her genişlikte iki sabit satır: kim, ne zaman, ne kadar; altında karar, nedeni ve kişi
+                <li key={o.id} className="space-y-1 px-4 py-2.5 text-sm sm:px-5">
+                  <div className="flex items-center gap-2">
+                    <PlatformBadge platform={o.platform} code={o.payload.code} />
+                    <span className="tabular text-[var(--admin-text-mute)]">{fmtTime(o.receivedAt)}</span>
+                    <span className="tabular ml-auto font-medium">{tl(o.payload.customerTotal)}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--admin-text-mute)]">
+                    <Badge tone={STATUS_TONE[o.status]}>{PLATFORM_STATUS_LABEL[o.status]}</Badge>
+                    {detail && <span>{detail}</span>}
+                  </div>
+                  {/* Otomatik kabul edilmedi notu hata değil (nedeni): gri; gerçek hata kırmızı */}
+                  {o.lastError && <p className={cn('text-xs', o.lastError.startsWith(AUTO_SKIP_PREFIX) ? 'text-[var(--admin-text-mute)]' : 'text-[var(--admin-danger-ink)]')}>{o.lastError}</p>}
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
@@ -156,7 +179,7 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
   };
   const unmatched = rows.filter((r) => !r.productId).length;
   return (
-    <Card title="Ürün eşleme" subtitle="Platformdan gelen kalem kasadaki ürüne bağlanır; bağlanmayan ada göre eşlenir, kasada yoksa kabulde “Platform ürünü” satırı olur" className="mt-4" flush actions={unmatched > 0 ? <Badge tone="warning">{unmatched} eşlenmemiş</Badge> : undefined}>
+    <Card title="Ürün eşleme" subtitle="Platformdaki kalemi kasadaki ürüne bağlayın; bağlanmayan ada göre eşlenir" className="mt-4" flush actions={unmatched > 0 ? <Badge tone="warning">{unmatched} eşlenmemiş</Badge> : undefined}>
       {q.isPending ? (
         <ListSkeleton rows={3} />
       ) : q.isError && !q.data ? (
@@ -168,11 +191,14 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
       ) : (
         <ul className="divide-y divide-[var(--admin-divider)]">
           {rows.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
+            <li key={r.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm sm:px-5">
               <PlatformBadge platform={r.platform} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{r.name}</span>
-                <span className="block truncate text-xs text-[var(--admin-text-mute)]">#{r.externalId} · son {fmtTime(r.lastSeenAt)}</span>
+                {/* Platformun kimliği yalnız ipucunda: sahibe bir şey söylemez, telefonda satırı kesiyordu */}
+                <span className="block truncate text-xs text-[var(--admin-text-mute)]" title={`#${r.externalId}`}>
+                  son sipariş {seenAt(r.lastSeenAt)}
+                </span>
               </span>
               <label className="w-full sm:w-64">
                 <span className="sr-only">{r.name} için kasadaki ürün</span>
@@ -236,72 +262,138 @@ function PlatformCard({
       setTesting(false);
     }
   };
+  // Yalnız sunucunun kabul edeceği modlar (seçili olan hep kalır): Deneme kurulum modunda (siparişi ciroya girer),
+  // Canlı bağdaştırıcısı olan ve anahtarı bu kasada tanımlı platformda
+  const modes: { value: PlatformMode; label: string }[] = [
+    { value: 'kapali', label: 'Kapalı' },
+    ...(boot.settings.demoMode || settings.mode === 'deneme' ? [{ value: 'deneme' as const, label: 'Deneme' }] : []),
+    ...(live?.supported && (live.configured || settings.mode === 'canli') ? [{ value: 'canli' as const, label: 'Canlı' }] : []),
+  ];
+  const off = settings.mode === 'kapali';
+  const keysMissing = !!live?.supported && !live.configured;
+  // Otomatik kabul kişisiz açılamaz (sunucu reddeder): önce paket yetkili, etkin bir kabul eden seçilir
+  const needsAcceptor = !settings.autoAccept && (!acceptorId || !!staleAcceptor);
+  // Başlıkta rozet yalnız canlı bağlantının durumu (mod segmentte yazıyor); yeşil ancak yoklama yanıt verince
+  const liveBadge =
+    settings.mode === 'canli' && live ? (
+      keysMissing ? (
+        <Badge tone="danger" dot>
+          Anahtar eksik
+        </Badge>
+      ) : live.lastError ? (
+        <Badge tone="danger" dot>
+          Bağlantı hatası
+        </Badge>
+      ) : live.lastPollAt ? (
+        <Badge tone="success" dot>
+          Bağlı
+        </Badge>
+      ) : (
+        <Badge tone="info" dot>
+          Bekliyor
+        </Badge>
+      )
+    ) : undefined;
   return (
-    <Card title={<PlatformBadge platform={platform} />} actions={<Badge tone={MODE_TONE[settings.mode]} dot>{PLATFORM_MODE_LABEL[settings.mode]}</Badge>}>
+    <Card
+      title={
+        // Platformun adı kartın başlığı (15/600); rengi yalnız noktada (marka rengi durum renkleriyle karışmasın)
+        <span className="inline-flex items-center gap-2">
+          <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: PLATFORM_COLOR[platform] }} />
+          {PLATFORM_LABEL[platform]}
+        </span>
+      }
+      actions={liveBadge}
+    >
       <div className="space-y-3">
-        <Segmented
-          label={`${PLATFORM_LABEL[platform]} modu`}
-          value={settings.mode}
-          onChange={(mode) => canEdit && save({ mode })}
-          options={[
-            { value: 'kapali', label: 'Kapalı' },
-            { value: 'deneme', label: 'Deneme' },
-            ...(live?.supported ? [{ value: 'canli' as const, label: 'Canlı' }] : []),
-          ]}
-        />
-        {live?.supported && !live.configured && <p className="text-xs text-[var(--admin-warning)]">Canlı bağlantının anahtarları bu kasada tanımlı değil</p>}
-        {settings.mode === 'canli' && live && (
-          <p className={live.lastError ? 'text-xs text-[var(--admin-danger-ink)]' : 'text-xs text-[var(--admin-success)]'}>
-            {live.lastError ?? (live.lastPollAt ? `Son yoklama ${fmtDateTime(live.lastPollAt)}` : 'Henüz yoklanmadı')}
-            {live.openOrders > 0 && ` · ${live.openOrders} açık sipariş`}
-          </p>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Hazırlık süresi (dk)" hint="5–120">
-            <NumberInput value={settings.prepMinutes} min={5} max={120} fallback={20} disabled={!canEdit} onCommit={(prepMinutes) => void save({ prepMinutes })} />
-          </Field>
-          {/* Oran maliyettir: yalnız ayarı yöneten ya da maliyeti gören alır (sunucu ötekilere göndermez) */}
-          {settings.commissionPct != null && (
-            <Field label="Tahmini komisyon (%)" hint="0–60">
-              <NumberInput decimals={2} value={settings.commissionPct} min={0} max={60} fallback={0} disabled={!canEdit} onCommit={(commissionPct) => void save({ commissionPct })} />
-            </Field>
-          )}
-        </div>
-        <div className="space-y-3 border-t border-[var(--admin-divider)] pt-3">
-          <Toggle
-            block
-            checked={settings.autoAccept}
-            disabled={!canEdit}
-            onChange={(autoAccept) => void save({ autoAccept })}
-            label="Otomatik kabul"
-            hint="Yalnız Canlı modda; tutarı tutan, bütün ürünleri eşleşmiş, ödemesi platformda alınmış siparişler. Diğerleri elle kabul bekler"
+        {modes.length > 1 ? (
+          <Segmented
+            label={`${PLATFORM_LABEL[platform]} modu`}
+            value={settings.mode}
+            onChange={(mode) => {
+              if (canEdit) void save({ mode });
+            }}
+            options={modes}
           />
-          <div className="grid grid-cols-2 items-end gap-3">
-            <Field label="Kabul eden">
-              <Select value={acceptorId} disabled={!canEdit} onChange={(e) => void save({ autoAcceptUserId: e.target.value || null })}>
-                <option value="">Seçilmedi</option>
-                {acceptors.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-                {staleAcceptor && <option value={acceptorId}>{staleAcceptor} (etkin değil ya da yetkisiz)</option>}
-              </Select>
-            </Field>
-            <Field label="En yüksek tutar (₺)">
-              <NumberInput
-                value={Math.round(settings.autoAcceptMaxKurus / 100)}
-                min={1}
-                max={AUTO_ACCEPT_MAX_LIMIT / 100}
-                fallback={AUTO_ACCEPT_MAX_DEFAULT / 100}
-                disabled={!canEdit}
-                onCommit={(lira) => void save({ autoAcceptMaxKurus: lira * 100 })}
-              />
-            </Field>
+        ) : (
+          <p className="text-sm text-[var(--admin-text-mute)]">{keysMissing ? 'Kapalı: canlı bağlantının anahtarları bu kasada tanımlı değil' : 'Kapalı: LafPOS’ta bu platformun canlı bağlantısı henüz yok'}</p>
+        )}
+        {/* Modun notları tek blokta, sıkı aralıkla. Eksik anahtar yalnız Canlı seçiliyken engeldir (kırmızı), öteki
+            modlarda bilgi */}
+        {((modes.length > 1 && keysMissing) || (settings.mode === 'canli' && live) || (off && modes.length > 1)) && (
+          <div className="space-y-1 text-xs text-[var(--admin-text-mute)]">
+            {modes.length > 1 && keysMissing && <p className={cn(settings.mode === 'canli' && 'text-[var(--admin-danger-ink)]')}>Canlı için anahtarlar bu kasada tanımlı değil; gerekenler kartın altında</p>}
+            {settings.mode === 'canli' && live && (
+              <p className={cn(live.lastError && 'text-[var(--admin-danger-ink)]')}>
+                {live.lastError ?? (live.lastPollAt ? `Son yoklama ${fmtDateTime(live.lastPollAt)}` : 'Henüz yoklanmadı')}
+                {live.openOrders > 0 && ` · ${live.openOrders} açık sipariş`}
+              </p>
+            )}
+            {off && modes.length > 1 && <p>Açınca hazırlık süresi ve otomatik kabul burada ayarlanır</p>}
           </div>
-          {settings.autoAccept && staleAcceptor && <p className="text-xs text-[var(--admin-warning)]">Kabul eden kişi etkin değil ya da paket yetkisi yok: siparişler elle kabul bekler</p>}
-          {settings.autoAccept && settings.mode === 'deneme' && <p className="text-xs text-[var(--admin-text-mute)]">Deneme modunda deneme siparişleri de otomatik kabul edilir; platforma bir şey gitmez</p>}
-        </div>
+        )}
+        {/* Kapalı platformda sipariş gelmez: yalnız komisyon kalır (raporlar geçmiş siparişe bugünkü oranı uygular) */}
+        {(!off || settings.commissionPct != null) && (
+          <div className="grid grid-cols-2 gap-3">
+            {!off && (
+              <Field label="Hazırlık süresi (dk)" hint="5–120">
+                <NumberInput value={settings.prepMinutes} min={5} max={120} fallback={20} disabled={!canEdit} onCommit={(prepMinutes) => void save({ prepMinutes })} />
+              </Field>
+            )}
+            {/* Oran maliyettir: yalnız ayarı yöneten ya da maliyeti gören alır (sunucu ötekilere göndermez) */}
+            {settings.commissionPct != null && (
+              <Field label="Tahmini komisyon (%)" hint="0–60">
+                <NumberInput decimals={2} value={settings.commissionPct} min={0} max={60} fallback={0} disabled={!canEdit} onCommit={(commissionPct) => void save({ commissionPct })} />
+              </Field>
+            )}
+          </div>
+        )}
+        {!off && (
+          // Önce kişi ve sınır, sonra anahtar: kişisiz açmaya çalışmak hata bildirimiyle bitiyordu
+          <div className="space-y-3 border-t border-[var(--admin-divider)] pt-3">
+            <div className="grid grid-cols-2 items-end gap-3">
+              <Field label="Kabul eden">
+                <Select value={acceptorId} disabled={!canEdit} onChange={(e) => void save({ autoAcceptUserId: e.target.value || null })}>
+                  {/* Otomatik kabul açıkken kişi boşaltılamaz (sunucu reddeder): önce anahtar kapatılır */}
+                  <option value="" disabled={settings.autoAccept}>
+                    Seçilmedi
+                  </option>
+                  {acceptors.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                  {staleAcceptor && <option value={acceptorId}>{staleAcceptor} (etkin değil ya da yetkisiz)</option>}
+                </Select>
+              </Field>
+              <Field label="En yüksek tutar (₺)">
+                <NumberInput
+                  value={Math.round(settings.autoAcceptMaxKurus / 100)}
+                  min={1}
+                  max={AUTO_ACCEPT_MAX_LIMIT / 100}
+                  fallback={AUTO_ACCEPT_MAX_DEFAULT / 100}
+                  disabled={!canEdit}
+                  onCommit={(lira) => void save({ autoAcceptMaxKurus: lira * 100 })}
+                />
+              </Field>
+            </div>
+            <Toggle
+              block
+              checked={settings.autoAccept}
+              disabled={!canEdit || needsAcceptor}
+              onChange={(autoAccept) => void save({ autoAccept })}
+              label="Otomatik kabul"
+              hint={
+                needsAcceptor
+                  ? staleAcceptor
+                    ? 'Açmak için paket yetkisi olan etkin bir kişi seçin'
+                    : 'Açmak için önce kabul eden kişiyi seçin'
+                  : 'Canlı ve Deneme modunda; tutarı tutan, bütün ürünleri eşleşmiş, ödemesi platformda alınmış siparişler. Diğerleri elle kabul bekler'
+              }
+            />
+            {settings.autoAccept && staleAcceptor && <p className="text-xs text-[var(--admin-warning)]">Kabul eden kişi etkin değil ya da paket yetkisi yok: siparişler elle kabul bekler</p>}
+          </div>
+        )}
         {settings.mode === 'deneme' && canTest && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <Button variant="soft" icon={<Send className="size-4" />} loading={testing} onClick={() => void test()}>
@@ -311,7 +403,7 @@ function PlatformCard({
           </div>
         )}
         {/* Kurulum metni yalnız henüz canlı olmayan (ya da canlıda anahtarı eksik) platformda */}
-        {(settings.mode !== 'canli' || (live?.supported && !live.configured)) && (
+        {(settings.mode !== 'canli' || keysMissing) && (
           <details className="group text-xs">
             <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-[var(--admin-primary)] pointer-fine:min-h-0 [&::-webkit-details-marker]:hidden">
               <ChevronRight className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />

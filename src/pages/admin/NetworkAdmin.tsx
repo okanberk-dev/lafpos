@@ -8,8 +8,21 @@ import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
-/** Karekod ve adres yan yana; telefonda alt alta */
-function Address({ item, children }: { item: NetAddressDTO; children: React.ReactNode }) {
+/**
+ * Karekod ve adres yan yana; telefonda alt alta. `off`: sunucu bu adresi dinlemiyor (LAFPOS_HOST): karekod çizilmez,
+ * adres soluk (okutulan adres açılmazdı); yerine ne zaman çalışacağı yazar
+ */
+function Address({ item, off, children }: { item: NetAddressDTO; off?: boolean; children: React.ReactNode }) {
+  if (off) {
+    return (
+      <div className="min-w-0 space-y-2">
+        <p className="tabular break-all text-lg font-semibold text-[var(--admin-text-mute)]">{item.url}</p>
+        <p className={HINT}>
+          Bu adres, <code className={CODE}>LAFPOS_HOST</code> düzelip LafPOS yeniden başlayınca çalışır; karekod o zaman burada çıkar
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
       <QrCode value={item.url} label={`${item.url} karekodu`} />
@@ -51,15 +64,33 @@ export default function NetworkAdmin() {
   return (
     <div className="space-y-4">
       {header}
+      {/* Sorunun yanında çaresi: ayar Kurulum adımları'nın kapalı açılırında kalmasın */}
       {n.loopbackOnly && (
-        <Notice tone="warn" role="status">
-          Sunucu yalnız bu bilgisayarı dinliyor: tablet ve telefonlar bağlanamaz
+        <Notice tone="warn" role="status" title="Tablet ve telefonlar bağlanamaz">
+          Sunucu yalnız bu bilgisayarı dinliyor. Kasa bilgisayarının ayarında <code className={CODE}>LAFPOS_HOST</code> değerini <code className={CODE}>0.0.0.0</code> yapıp LafPOS’u yeniden başlatın
         </Notice>
       )}
+      {/* Üç kartın rozeti aynı dil: yeşil yalnız gerçekten açık ya da bağlıyken */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Kafenin ağı" subtitle="Tablet, garson telefonu, bar ekranı">
+        <Card
+          title="Kafenin ağı"
+          subtitle="Tablet, garson telefonu, bar ekranı"
+          actions={
+            !local ? (
+              <Badge>Bağlı değil</Badge>
+            ) : n.loopbackOnly ? (
+              <Badge tone="warning" dot>
+                Kapalı
+              </Badge>
+            ) : (
+              <Badge tone="success" dot>
+                Açık
+              </Badge>
+            )
+          }
+        >
           {local ? (
-            <Address item={local}>
+            <Address item={local} off={n.loopbackOnly}>
               <p className={HINT}>Aynı Wi-Fi’deki tablet ya da telefonun kamerasıyla okutun; Chrome menüsünden “Ana ekrana ekle” ile uygulama gibi açılır</p>
               <p className={HINT}>Adres değişmesin diye modemde bu bilgisayara sabit IP verin (DHCP rezervasyonu)</p>
             </Address>
@@ -83,10 +114,22 @@ export default function NetworkAdmin() {
         <Card
           title="Dışarıdan (Tailscale)"
           subtitle="Patronun telefonu, evdeki bilgisayar"
-          actions={remote ? <Badge tone="success" dot>Bağlı</Badge> : <Badge>Kurulmadı</Badge>}
+          actions={
+            !remote ? (
+              <Badge>Kurulmadı</Badge>
+            ) : n.loopbackOnly ? (
+              <Badge tone="warning" dot>
+                Kapalı
+              </Badge>
+            ) : (
+              <Badge tone="success" dot>
+                Bağlı
+              </Badge>
+            )
+          }
         >
           {remote ? (
-            <Address item={remote}>
+            <Address item={remote} off={n.loopbackOnly}>
               <p className={HINT}>Telefonda Tailscale açıkken açın: masalar, adisyonlar, kasa ve patron paneli her yerden canlı</p>
               <p className={HINT}>Bağlantı yalnız sizin Tailscale hesabınızdaki cihazlara açık ve şifreli</p>
             </Address>
@@ -104,7 +147,24 @@ export default function NetworkAdmin() {
       <Card
         title="LafPOS Uzaktan (Vercel)"
         subtitle="Kurulum gerektirmeyen salt okunur görünüm: patron paneli, masalar, bar"
-        actions={n.cloud?.configured ? <Badge tone={n.cloud.lastError ? 'warning' : 'success'} dot>{n.cloud.lastError ? 'Gönderilemiyor' : 'Açık'}</Badge> : <Badge>Kapalı</Badge>}
+        actions={
+          // Açık ancak bir gönderim gittiyse; anahtar tanımlı ama henüz gönderilmediyse bekliyor
+          !n.cloud?.configured ? (
+            <Badge>Kapalı</Badge>
+          ) : n.cloud.lastError ? (
+            <Badge tone="danger" dot>
+              Gönderilemiyor
+            </Badge>
+          ) : n.cloud.lastSuccessAt ? (
+            <Badge tone="success" dot>
+              Açık
+            </Badge>
+          ) : (
+            <Badge tone="info" dot>
+              Bekliyor
+            </Badge>
+          )
+        }
       >
         {n.cloud?.configured ? (
           <>
