@@ -63,6 +63,8 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
   // Seçim penceresi: sayacı başlatırken ya da çalışan rezervasyonsuz sayacı bağlarken
   const [choose, setChoose] = useState<'start' | 'link' | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  /** Durdurma sürüyor (gerekirse yetkili onayı): ikinci dokunuş oda ücretini iki kez yazmasın */
+  const [stopping, setStopping] = useState(false);
 
   const list = karaoke.data?.bookings ?? [];
   const room = order.room;
@@ -83,8 +85,11 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
     if (res) void qc.invalidateQueries({ queryKey: ['site-karaoke'] });
   };
   const stop = async () => {
+    if (stopping) return;
     const before = new Set(order.items.map((i) => i.id));
+    setStopping(true);
     const res = await act((pin) => post<OrderDTO>(`/orders/${order.id}/room/stop`, { approverPin: pin }));
+    setStopping(false);
     if (!res) return;
     void qc.invalidateQueries({ queryKey: ['site-karaoke'] });
     // Bağlı blokta kalan süre adisyona satır yazmaz; adisyonda başka bir şey yoksa sunucu adisyonu da kapatır
@@ -119,32 +124,34 @@ export function RoomBox({ order, table, editable, act, now, onClosed }: { order:
   const siteNote = !siteOn || REMOTE ? null : state === 'kapali' ? (karaoke.data?.message ?? 'Site karaoke rezervasyonlarını kasaya açmadı') : state === 'hata' ? `Liste güncel olmayabilir: ${karaoke.data?.message ?? 'site yanıt vermedi'}` : null;
 
   return (
-    <div className={cn('border-b border-[var(--admin-divider)]', room && 'bg-[var(--admin-hue-violet-soft)]')}>
+    // Sayacı çalışan oda dolu masa gibi mavi (durum); mor yalnız siteden gelen siparişin rengi
+    <div className={cn('border-b border-[var(--admin-divider)]', room && 'bg-blue-soft')}>
       <div className="flex items-center gap-3 px-4 py-2">
-        <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg', room ? 'bg-surface text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
-          <Mic2 className="size-4" />
+        <span className={cn('grid size-8 shrink-0 place-items-center rounded-lg', room ? 'bg-surface text-blue-ink' : 'bg-surface-3 text-ink-2')}>
+          <Mic2 aria-hidden="true" className="size-4" />
         </span>
         <span className="min-w-0 flex-1 text-[13px]">
           {room ? (
             <>
               <span className="tabular block font-semibold">Oda açık · {fmtElapsed(room.startedAt, now)}</span>
-              <span className="block text-muted">
-                başlangıç {fmtTime(room.startedAt)} · saatlik {tl(room.hourlyRate)}
+              <span className="tabular block text-ink-2">
+                Başlangıç {fmtTime(room.startedAt)} · saatlik {tl(room.hourlyRate)}
               </span>
             </>
           ) : (
-            <span className="font-medium text-ink-2">Oda sayacı kapalı</span>
+            <span className="font-medium text-ink-2">{editable && listLoading ? 'Rezervasyonlar alınıyor…' : 'Oda sayacı kapalı'}</span>
           )}
         </span>
         {editable &&
           (room ? (
-            <Button size="sm" variant="danger" icon={<Square className="size-3.5" />} onClick={() => void stop()}>
+            // Durdurmak olağan hesap adımıdır (süre adisyona yazılır): kırmızı değil, ikincil
+            <Button size="sm" variant="secondary" icon={<Square className="size-3.5" />} loading={stopping} onClick={() => void stop()}>
               Durdur
             </Button>
           ) : (
             // Liste gelirken düğme bekler: sitede ödenmiş rezervasyon görünmeden sayaç rezervasyonsuz başlamasın
             <Button size="sm" variant="secondary" icon={<Play className="size-3.5" />} loading={listLoading} onClick={onStart}>
-              {listLoading ? 'Rezervasyonlar yükleniyor…' : 'Başlat'}
+              Başlat
             </Button>
           ))}
       </div>

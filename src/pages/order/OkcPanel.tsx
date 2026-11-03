@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, MonitorSmartphone, RefreshCw, XCircle } from 'lucide-react';
+import { Ban, CheckCircle2, Loader2, MonitorSmartphone, RefreshCw, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { tl, tlShort } from '@shared/money';
@@ -34,6 +34,23 @@ export interface ReceiptDTO {
 const PENDING = ['gonderildi', 'kilitli'];
 
 /**
+ * Adisyonun yazarkasa sepetleri ve bekleyeni (cihazda ödeme sürüyor). Ödeme penceresi ve yazarkasa kutusu aynı
+ * sorguyu paylaşır: sepet beklerken pencere ödemeyi, ciro dışı kapanışı ve ödeme iptalini kapatır (sunucu okc_pending
+ * der). Yazarkasa kapalıysa ya da `enabled` değilse sorulmaz; bekleyen sepet varken 4 sn'de bir yenilenir.
+ */
+export function useOkcReceipts(order: OrderDTO, enabled = true) {
+  const boot = useBoot();
+  const provider = boot.integrations.okc.provider;
+  const receipts = useQuery({
+    queryKey: ['okc', order.id],
+    queryFn: () => get<ReceiptDTO[]>(`/okc/orders/${order.id}/receipts`),
+    enabled: enabled && provider !== 'kapali',
+    refetchInterval: (q) => (q.state.data?.some((r) => PENDING.includes(r.status)) ? 4000 : false),
+  });
+  return { data: receipts.data, pending: receipts.data?.find((r) => PENDING.includes(r.status)) };
+}
+
+/**
  * Ödeme penceresindeki "Yazarkasa POS'a gönder" bölümü. Adisyon (ya da seçilen kalemler) cihaza sepet olarak
  * gider; ödeme ve mali fiş cihazda alınır, sonuç gelince adisyon kendiliğinden kapanır.
  */
@@ -43,13 +60,10 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
   const qc = useQueryClient();
   const provider = boot.integrations.okc.provider;
   const [busy, setBusy] = useState(false);
-  const receipts = useQuery({
-    queryKey: ['okc', order.id],
-    queryFn: () => get<ReceiptDTO[]>(`/okc/orders/${order.id}/receipts`),
-    enabled: provider !== 'kapali',
-    refetchInterval: (q) => (q.state.data?.some((r) => PENDING.includes(r.status)) ? 4000 : false),
-  });
-  const pending = receipts.data?.find((r) => PENDING.includes(r.status));
+  /** Sepet iptali sürüyor (cihaza sorulur, gerekirse yetkili onayı): ikinci dokunuş gitmez */
+  const [cancelling, setCancelling] = useState(false);
+  const receipts = useOkcReceipts(order);
+  const pending = receipts.pending;
   const notified = useRef<string | null>(null);
 
   useEffect(() => {
@@ -81,6 +95,8 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
     }
   };
   const cancel = async (id: string) => {
+    if (cancelling) return;
+    setCancelling(true);
     try {
       await post(`/okc/receipts/${id}/cancel`);
       await qc.invalidateQueries({ queryKey: ['okc', order.id] });
@@ -111,6 +127,8 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
         return;
       }
       toast.err(errorMessage(e));
+    } finally {
+      setCancelling(false);
     }
   };
   const refresh = async (id: string) => {
@@ -123,6 +141,19 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
     }
   };
   const last = receipts.data?.[0];
+  // Sunucunun gönderim kuralı (okc_partial, split_active): gidemeyecek sepet için düğme yerine ne yapılacağı yazılır.
+  // Cihazın ödemesi de kalem taşımayabilir: tamamlanmış fiş varken hangisinin LafPOS'ta alındığı bilinmez, karar sunucuda
+  const splitOpen = !!order.split?.shares.length;
+  const amountPaidHere = !!receipts.data && !receipts.data.some((r) => r.status === 'tamamlandi') && order.payments.some((p) => !p.refundedAt && !p.items?.length);
+  const blocked = items?.length
+    ? splitOpen
+      ? 'Hesap kişilere bölünmüş: payları “Paylaş”tan alın ya da paylaşımı kaldırın'
+      : null
+    : amountPaidHere
+      ? splitOpen
+        ? 'Pay LafPOS’ta alındı: kalan payları da burada alın'
+        : 'Adisyonda tutar olarak alınmış ödeme var: kalanı burada alın ya da kalemleri “Kalem seç” ile cihaza gönderin'
+      : null;
 
   return (
     <div className="rounded-xl border border-line p-3">
@@ -130,12 +161,13 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
         <span className="grid size-7 place-items-center rounded-lg bg-surface-3 text-ink-2">
           <MonitorSmartphone className="size-4" />
         </span>
-        Yazarkasa POS {provider === 'simulator' && <Badge tone="warning">eğitim cihazı</Badge>}
+        Yazarkasa POS {provider === 'simulator' && <Badge tone="warning">Eğitim cihazı</Badge>}
       </div>
       {pending ? (
-        <div className="flex items-center gap-3">
-          <Loader2 aria-hidden="true" className="size-5 animate-spin text-primary" />
-          <div role="status" className="min-w-0 flex-1 text-sm">
+        // Dar ekranda eylemler durumun altına iner (durum yazısı iki kelimelik sütuna ezilmez)
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Loader2 aria-hidden="true" className="size-5 shrink-0 animate-spin text-muted" />
+          <div role="status" className="min-w-0 flex-1 basis-44 text-sm">
             <div className="font-medium">{pending.status === 'kilitli' ? 'Cihazda açıldı, ödeme alınıyor…' : 'Cihazda ödeme bekleniyor…'}</div>
             <div className="text-xs text-muted">
               {tl(pending.amount)}
@@ -149,18 +181,31 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
               )}
             </div>
           </div>
-          {provider === 'tokenx' && (
-            <IconButton size="sm" label="Durumu sorgula" onClick={() => refresh(pending.id)}>
-              <RefreshCw className="size-4" />
-            </IconButton>
-          )}
-          <Button size="sm" variant="dangerGhost" onClick={() => cancel(pending.id)}>
-            İptal
-          </Button>
+          <div className="ml-auto flex items-center gap-1">
+            {provider === 'tokenx' && (
+              <IconButton size="sm" label="Durumu sorgula" onClick={() => refresh(pending.id)}>
+                <RefreshCw className="size-4" />
+              </IconButton>
+            )}
+            <Button size="sm" variant="dangerGhost" loading={cancelling} onClick={() => void cancel(pending.id)}>
+              Sepeti iptal et
+            </Button>
+          </div>
         </div>
+      ) : blocked ? (
+        <p className="text-[13px] text-ink-2">{blocked}</p>
       ) : (
         <>
-          <Button block variant="secondary" icon={<MonitorSmartphone className="size-4" />} loading={busy} onClick={send} disabled={order.total - order.paid <= 0}>
+          {/* Dar ekranda uzun yazı ("Seçilen kalemleri…") kapsülün kenarına dayanmaz, iki satıra iner */}
+          <Button
+            block
+            variant="secondary"
+            icon={<MonitorSmartphone className="size-4" />}
+            loading={busy}
+            onClick={send}
+            disabled={order.total - order.paid <= 0}
+            className="h-auto min-h-11 whitespace-normal py-2 leading-tight"
+          >
             {items?.length ? 'Seçilen kalemleri' : 'Hesabı'} yazarkasaya gönder
           </Button>
           {/* Paylaşımlı hesap cihazda tek mali fiştir: paylar cihazda ayrı ayrı ödeme olarak alınır. LafPOS'ta pay
@@ -176,7 +221,14 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
       )}
       {last && !pending && last.status !== 'gonderildi' && (
         <div className="mt-2 flex items-center gap-1.5 text-xs">
-          {last.status === 'tamamlandi' ? <CheckCircle2 className="size-3.5 text-[var(--admin-success)]" /> : <XCircle className="size-3.5 text-[var(--admin-danger-ink)]" />}
+          {/* Kasiyerin iptal ettiği sepet hata değil: gri yasak işareti; kırmızı yalnız cihaz hatası */}
+          {last.status === 'tamamlandi' ? (
+            <CheckCircle2 className="size-3.5 shrink-0 text-[var(--admin-success)]" />
+          ) : last.status === 'hata' ? (
+            <XCircle className="size-3.5 shrink-0 text-[var(--admin-danger-ink)]" />
+          ) : (
+            <Ban className="size-3.5 shrink-0 text-muted" />
+          )}
           <span className="text-muted">
             Son sepet: {last.status === 'tamamlandi' ? `ödendi${last.zNo != null ? ` · Z ${last.zNo}` : ''}${last.receiptNo != null ? ` · ${last.docKind === 'bilgi_fisi' ? 'bilgi fişi' : 'fiş'} ${last.receiptNo}` : ''}${last.docId ? ` · ${last.docKind === 'e_fatura' ? 'e-Fatura' : 'e-Arşiv'} ${last.docId}` : ''}` : last.status === 'hata' ? (last.error ?? 'hata') : last.status === 'fis_iptal' ? 'fiş iptal edildi' : 'iptal edildi'}
           </span>
