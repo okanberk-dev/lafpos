@@ -35,7 +35,7 @@
   metinde orantılı, `.tabular` / `tabular-nums` ile eşit genişlikte (sitede liste fiyatları Poppins'tir; kasada hizalı
   rakam şart olduğu için bilinçli ayrışma). Dosyalar pakette (`@fontsource/poppins`, `@fontsource-variable/gabarito`),
   latin ve latin-ext ayrı (`unicode-range`: Türkçe harfler ve ₺ latin-ext'te), dış kaynaktan yazı yüklenmez.
-- **Ölçek:** sayfa başlığı Gabarito 22/700 (telefonda 20), kart başlığı 16/600, gövde 14/400, açıklama 13, mikro 12/500
+- **Ölçek:** sayfa başlığı Gabarito 22/700 (telefonda 20), kart başlığı 15/600, gövde 14/400, açıklama 13, mikro 12/500
   (en küçük 11); KPI 28/700 (`strong` 34), müşteri ekranında tutar 48-88/800, saat 96. Başlıkta -0.01em, büyük rakamda
   -0.02/-0.035em; büyük harf yalnız kenar çubuğu grup etiketlerinde. İkon çizgisi 1.75.
 
@@ -52,7 +52,7 @@
 | Birincil: ev yeşili (eylem, seçim, olumlu durum, odak halkası) | `#1D6D56`, basılı `#165543`, üstünde `#FBF8F4` | `#5CC9A2`, üstünde `#0B1F18` |
 | Mürekkep dolgu (ödeme, tahsilat) | `#211C18`, üstünde `#FBF8F4` | `#F3F1EC`, üstünde `#161513` |
 | Kobalt (dolu masa, hazırlanıyor, bilgi) | `#3442B8` zemin `#ECEEFB` | `#9AA8FF` zemin `#1F2647` |
-| Pirinç (ödül: damga, kupon; L'Af çekirdeği) | dolgu `#E8C877` üstünde `#2E2113` (`bg-gold-fill text-on-gold`), metin `#765923` (`text-gold-ink`) | dolgu ve üstündeki aynı, metin `#E8C877` |
+| Pirinç (damga kartı; L'Af çekirdeği) | dolgu `#E8C877` üstünde `#2E2113` (`bg-gold-fill text-on-gold`), metin `#765923` (`text-gold-ink`) | dolgu ve üstündeki aynı, metin `#E8C877` |
 | Bordo (imza yüzeyi, ekran başına bir) | `#9D2543` zemin `#F9E6EA` | `#F6E9EC` |
 | Durum tonları | amber `#B45309`, kırmızı `#B42318`, pembe `#C0264A`, mor `#6D3FEA`, camgöbeği `#0B7392` (açık zeminleriyle) | aynı roller, açık tonlar |
 | Grafik serisi ve ısı haritası | ev yeşili `#1D6D56` | `#5CC9A2` |
@@ -93,9 +93,9 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   `*-line`); online (siteden gelen) sipariş her ekranda mor. Bar ekranında kalem bekliyor nötr (gri halka),
   hazırlanıyor mavi, hazır yeşil, teslim edildi gri (yazıyla "Teslim edildi"); amber yalnız zamanı söyler (ayardaki
   dakikayı geçen fişin süre rozeti, planlı saat), kırmızı alarm ve iptal.
-- **Masa kartı:** köşe 16, ad üstte, tutar kartın en büyük yazısı (Gabarito 22/700, dar kartta 17), altında süre ve garson; bara gitmiş ve hazır
+- **Masa kartı:** köşe 20, ad üstte, tutar kartın en büyük yazısı (Gabarito 22/700, dar kartta 17), altında süre ve garson; bara gitmiş ve hazır
   kalemler küçük hap, hazır olan yeşil ve nabızlı.
-- **Ürün kartı:** köşe 16, ad 15/500, fiyat 14/600; sitedeki görsel (dekupaj kuyuda, fotoğraf kuyuyu doldurur), görseli
+- **Ürün kartı:** köşe 20, ad 15/500, fiyat 14/600; sitedeki görsel (dekupaj kuyuda, fotoğraf kuyuyu doldurur), görseli
   olmayanda baş harfler kategori renginin açık tonunda. Telefonda kategoriler hap çip (seçili yeşil dolgu).
 - **Logo:** L'Af, laffogato.net ve uygulama ikonuyla aynı vektör (`src/components/LafMark.tsx`); karoda (`LafTile`)
   uygulama ikonunun kendisi. Yazı tipine bağlı değil, Didot'u olmayan Windows ve Android'de de aynı.
@@ -126,17 +126,17 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 
 Panel açıkken `<html data-area="admin">`; aynı değerler, yalnız sıklık farklı (fareyle 36 px düğme, "Sıkı görünüm"de 32).
 
-- **Yerleşim** (Innex §1.1): zemin üstünde iki beyaz kart, köşe 16, pencereye 8 px, aralarında 12 px.
+- **Yerleşim** (Innex §1.1): zemin üstünde iki beyaz kart, köşe 14 (içlerindeki kartlar 20), pencereye 8 px, aralarında 12 px.
   Kenar çubuğu 15.5rem; sayfa kartının ilk şeridi üst çubuk (yol, ⌘K arama, sıkı görünüm, canlı bağlantı),
-  altında sayfa başlığı şeridi (20 px başlık, 13 px açıklama, sağda önce ikincil sonra birincil düğme).
+  altında sayfa başlığı şeridi (Gabarito 22/700 başlık, 13 px açıklama, sağda önce ikincil sonra birincil düğme).
 - **Kenar çubuğu:** gruplar büyük harfli küçük etiketle (Genel, Menü, Salon ve kasa, Ekip, Bağlantılar,
-  Sistem), etkin satır gri ve renksiz, sayaç hap ve yalnız iş bekleyen yerde (tükenen ürün, gönderilemeyen gün, şu an
-  mesaide olan). Altta "Kasa ekranlarına dön", "Menüyü daralt" ve kullanıcı.
+  Sistem), etkin satır gri ve renksiz, sayaç hap ve yalnız iş bekleyen yerde (tükenen ürün,
+  gönderilemeyen gün). Altta "Kasa ekranlarına dön", "Menüyü daralt" ve kullanıcı.
 - **Bileşenler** (`src/components/admin/ui.tsx`): `PageHeader`, `Card`, `KpiStrip` (tek kart, hücreler
   arası 1 px, her rakamın yanında referans), `StatusTabs` (sayılı hap çipler, etkin mürekkep kenar), `Segmented` (gri
   hap ray, beyaz hap), `DataTable` (kuyuda başlık, satır ayracı, yapışkan eylem sütunu, seçili satır solda mürekkep
   çizgi), `ActionMenu` (⋯, köşe 14, portalda), `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, köşe 20),
-  `ActionRows`, `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme köşe 12, 14 px; dokunmatikte 44, farede 36,
+  `ActionRows`, `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme kapsül, 14 px; dokunmatikte 44, farede 36,
   sıkı görünümde 32 px.
 - **Sayfalar:** Genel bakış (KPI şeridi: net ciro geçen haftanın aynı günü aynı saatine göre, adisyon,
   açık adisyon, indirim ve ikram, online sipariş; saatlik grafik; en çok satanlar; dikkat isteyenler;
@@ -165,16 +165,17 @@ Panel açıkken `<html data-area="admin">`; aynı değerler, yalnız sıklık fa
 Kasa ekranları `src/components/ui/*`, yönetim `src/components/admin/ui.tsx` kullanır; ikisi aynı belirteçlerden
 ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denetimini yazmaz.
 
-- **Ölçek:** sayfa başlığı 18/600 ve 13 px açıklama (`PageHeader`), bölüm 16/600, kart başlığı 15/600, mikro
-  etiket 12/500; kart arası 12 px, pencereye 8 px. KPI karosu tek bileşen (`Stat`: 13 px etiket, 24 px rakam,
-  `strong` 30 px); rakam yerine kelime yazılmaz ("—" ve ipucunda "Sayılmadı").
+- **Ölçek:** sayfa başlığı Gabarito 22/700 (telefonda 20) ve 13 px açıklama (`PageHeader`), bölüm 16/600, kart başlığı 15/600, mikro
+  etiket 12/500; kart arası 12 px, pencereye 8 px. KPI karosu tek bileşen (`Stat`: 13 px etiket, Gabarito 28 px rakam,
+  `strong` 34 px); rakam yerine kelime yazılmaz ("—" ve ipucunda "Sayılmadı").
 - **Durumlar:** her denetimin dinlenme, üzerine gelme, basılı (zemin bir ton koyu; dokunmatikte `hover`
   çalışmadığı için basılı renk ayrıca yazılır), odak (2 px birincil halka) ve devre dışı hali var. Devre dışı
-  birincil düğme gri zemin ve soluk yazıdır, yarı saydam mavi değil; bir bilgi cümlesi devre dışı düğme olarak
+  birincil düğme gri zemin ve soluk yazıdır, yarı saydam değil; bir bilgi cümlesi devre dışı düğme olarak
   çizilmez ("Ödemeyi kasa alır" düğmenin altında yazıdır).
 - **Sekme ve seçim:** `Tabs` (bölüm, istasyon, sipariş listesi; seçili gri zemin, sayı hapı sıfırsa gizli, dar
-  ekranda yatay kayar) ve `Segmented` (2-4 eşit seçenek; gri ray, beyaz hap). Seçim rengi mavidir; amber durum
-  rengidir, seçim için kullanılmaz.
+  ekranda yatay kayar) ve `Segmented` (2-4 eşit seçenek; gri ray, beyaz hap). Seçim ev yeşili kenar ya da gri zemindir;
+  dolu yeşil hap olumlu duruma (hazır, ödendi) ayrılır, sekme sayısı ve sıradaki pay onunla karışmaz (beyaz hap,
+  mürekkep kenar). Amber durum rengidir, seçim için kullanılmaz; bağlantı birincil yeşil, kobalt yalnız durum.
 - **Boş, yükleniyor, hata:** `EmptyState` (kart içinde `compact`, sayfada varsayılan, bar ve çağrı ekranında
   `large`; başlık ekranın sözüyle, "Liste boş" değil), `Skeleton` / `ListSkeleton` (ilk yüklemede), `ErrorState`
   (yeniden dene ile). Yüklenirken ya da hata varken "yok" yazılmaz.

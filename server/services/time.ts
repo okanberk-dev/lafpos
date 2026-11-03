@@ -41,8 +41,12 @@ function people(t: Tx | DB) {
 }
 type People = ReturnType<typeof people>;
 
-/** Açık mesai şimdiye kadar, ama en çok 24 saat: çıkışı unutulan mesai toplamları ve CSV'yi günlerce şişirmesin */
-const durationOf = (e: EntryRow, now: number) => Math.max(0, Math.min(e.clockOut ?? now, e.clockIn + MAX_SHIFT_MS) - e.clockIn);
+/**
+ * Açık mesai şimdiye kadar sayılır; 24 saati geçen açık mesai hiç sayılmaz (sıfır): çıkışı unutulmuştur, kimsenin
+ * çalışmadığı saatler toplamı, bordroyu ve CSV'yi şişirmesin. Çıkış saati girilince gerçek süresiyle sayılır.
+ */
+const overdue = (e: EntryRow, now: number) => e.clockOut == null && now - e.clockIn > MAX_SHIFT_MS;
+const durationOf = (e: EntryRow, now: number) => (overdue(e, now) ? 0 : Math.max(0, (e.clockOut ?? now) - e.clockIn));
 
 function toDTO(e: EntryRow, who: People, now: number): TimeEntryDTO {
   const u = who.get(e.userId);
@@ -377,18 +381,22 @@ export function timeSheet(t: Tx | DB, range: { from: string; to: string; userId?
   };
 }
 
-/** Excel'in Türkçe ayarıyla açılan döküm: kişiye, sonra girişe göre; süre dakika ve ondalık saat (açık mesai şimdiye kadar) */
+/**
+ * Excel'in Türkçe ayarıyla açılan döküm: kişiye, sonra girişe göre; süre dakika ve ondalık saat (açık mesai şimdiye
+ * kadar). 24 saati geçen açık mesainin süresi boş ve "Açık (çıkış girilmeli)": bordroya yanlış saat girmesin.
+ */
 export function timeSheetCsv(sheet: TimeSheetDTO): string {
   const rows = [...sheet.entries].sort((a, b) => a.userName.localeCompare(b.userName, 'tr') || a.clockIn - b.clockIn);
+  const late = (e: TimeEntryDTO) => e.open && sheet.serverTime - e.clockIn > MAX_SHIFT_MS;
   return toCsv([
     ['Personel', 'İş günü', 'Giriş', 'Çıkış', 'Dakika', 'Saat', 'Kaynak', 'Not', 'Düzelten'],
     ...rows.map((e) => [
       e.userName,
       e.businessDate,
       fmtDateTime(e.clockIn),
-      e.clockOut == null ? 'Açık' : fmtDateTime(e.clockOut),
-      Math.floor(e.durationMs / 60_000),
-      Math.round(e.durationMs / 36_000) / 100,
+      e.clockOut == null ? (late(e) ? 'Açık (çıkış girilmeli)' : 'Açık') : fmtDateTime(e.clockOut),
+      late(e) ? '' : Math.floor(e.durationMs / 60_000),
+      late(e) ? '' : Math.round(e.durationMs / 36_000) / 100,
       TIME_SOURCE_LABEL[e.source],
       e.note ?? '',
       e.editedByName ?? '',

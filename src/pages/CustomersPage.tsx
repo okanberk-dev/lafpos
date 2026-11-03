@@ -145,7 +145,7 @@ export default function CustomersPage() {
                 </span>
                 <span className="text-right text-xs">
                   {stamps && (
-                    <span className="block font-semibold text-warning-ink">
+                    <span className="block font-semibold text-gold-ink">
                       {x.stamps}/{goal}
                     </span>
                   )}

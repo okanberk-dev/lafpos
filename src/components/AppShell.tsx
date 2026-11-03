@@ -173,7 +173,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {({ isActive }) => (
                 <>
-                  {/* Etkin ekran: mürekkep hap içinde ikon (renk tek başına durum taşımaz: yazı da kalın) */}
+                  {/* Etkin ekran: yeşil hap içinde ikon (renk tek başına durum taşımaz: yazı da kalın) */}
                   <span
                     className={cn(
                       'grid h-7 w-12 place-items-center rounded-full transition-colors duration-150',

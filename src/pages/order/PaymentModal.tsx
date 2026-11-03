@@ -544,7 +544,7 @@ export function PaymentModal({
           )}
 
           <Button variant="ink" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
-            {splitBlocks ? 'Hesap bölünmüş: payları Paylaş’tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
+            {splitBlocks ? 'Payları Paylaş’tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
           </Button>
 
           <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />
@@ -683,8 +683,9 @@ function SplitPanel({
           const no = freeNos[i] ?? i + 1;
           const next = i === 0;
           return (
-            <li key={`pay-${no}`} className={cn('relative rounded-xl border px-3 py-2.5', next ? 'border-primary bg-[var(--admin-primary-soft)] ring-4 ring-[var(--admin-primary-soft)]' : 'border-line bg-surface')}>
-              <div className={cn('text-xs font-medium', next ? 'text-primary' : 'text-muted')}>{next ? `Pay ${no} · sıradaki` : `Pay ${no}`}</div>
+            // Sıradaki pay seçili (mürekkep kenar, taş halka); yeşil yalnız ödenen pay: "2'si ödendi" diye okunmasın
+            <li key={`pay-${no}`} className={cn('relative rounded-xl border px-3 py-2.5', next ? 'border-[var(--admin-text)] bg-surface ring-4 ring-[var(--admin-panel)]' : 'border-line bg-surface')}>
+              <div className={cn('text-xs font-medium', next ? 'font-semibold text-ink' : 'text-muted')}>{next ? `Pay ${no} · sıradaki` : `Pay ${no}`}</div>
               <div className="tabular mt-0.5 text-lg font-bold">{tlShort(amount)}</div>
               <button aria-label={`Pay ${no} fişini yazdır`} title="Pay fişini yazdır" onClick={() => onPrint(no, amount)} className="absolute right-0.5 top-0.5 grid size-11 place-items-center rounded-lg text-muted hover:text-ink">
                 <Printer className="size-4" />

@@ -154,6 +154,15 @@ describe('vardiya sayımı', () => {
     expect(await codeOf(h.call('mudur', 'GET', '/cash/shift-counts?dayId=yok-boyle-gun'))).toEqual([404, 'not_found']);
   });
 
+  it('devirleri kasa ekranının yetkileriyle görülür: yalnız garson sayımları ve notları göremez (inceleme)', async () => {
+    expect((await h.ok<ShiftCountDTO[]>('kasa', 'GET', '/cash/shift-counts')).length).toBeGreaterThan(0);
+    const r = await h.call<{ code: string; permission: string }>('garson', 'GET', '/cash/shift-counts');
+    expect([r.status, r.json.code]).toEqual([403, 'forbidden']);
+    const day = await h.ok<CashDay>('garson', 'GET', '/cash/day');
+    expect(day.day).not.toBeNull();
+    expect(day.shiftCounts).toEqual([]);
+  });
+
   it('önceki devirde bulunan eksik sonraki devirde yeniden alarm olmaz, devralana yazılmaz (inceleme)', async () => {
     const exp = await expected();
     const before = (await h.ok<ShiftCountDTO[]>('patron', 'GET', '/cash/shift-counts')).at(-1)!.diff!;

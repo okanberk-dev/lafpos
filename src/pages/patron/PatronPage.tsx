@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Receipt, Table2, TrendingUp, Wallet } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Receipt, Table2, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl } from '@shared/money';
@@ -255,8 +255,9 @@ export default function PatronPage() {
                   <span className="text-muted">{p.qty} adet</span>
                   <span className="tabular w-24 text-right font-semibold">{tl(p.revenue)}</span>
                   {can('rapor.maliyet') && p.margin != null && (
-                    <span className="tabular hidden w-24 text-right text-xs text-success-ink sm:block">
-                      <TrendingUp className="mr-0.5 inline size-3" />
+                    // İndirim ya da reçete maliyeti neti aşınca kâr eksi: olumlu yeşille gösterilmez
+                    <span className={cn('tabular hidden w-24 text-right text-xs sm:block', p.margin < 0 ? 'text-danger-ink' : 'text-success-ink')}>
+                      {p.margin < 0 ? <TrendingDown className="mr-0.5 inline size-3" /> : <TrendingUp className="mr-0.5 inline size-3" />}
                       {tl(p.margin)}
                     </span>
                   )}

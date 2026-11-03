@@ -272,7 +272,7 @@ kasa oturumundan (`POST /api/time/clock-in`, `/clock-out`) ya da kilit ekranınd
 içindeki ikinci basış yok sayılır). Kurallar her yazmada: çıkış girişten sonra, ileri tarih yok, mesai en çok 24 saat
 (çıkışı unutulan mesai şimdiye uzatılmaz, yetkili düzeltir; kilit ekranındaki yönsüz basış 14 saatten eski açık mesaiyi
 de kapatmaz, 409 `stale_shift`: kişi ertesi sabah dünkü mesaiyi 19 saatle kapatıp dışarıda kalmasın), kişi başına tek
-açık mesai, aynı kişide çakışma yok; raporda ve CSV'de açık mesai en çok 24 saat sayılır. Yeni
+açık mesai, aynı kişide çakışma yok; 24 saati geçen açık mesai raporda sayılmaz, CSV'de "Açık (çıkış girilmeli)". Yeni
 yetki `mesai.yonet` (Yönetim grubu; müdür ve patron): çizelge (`GET /api/time`, en çok 93 gün, kişi toplamları ve şu an
 içeridekiler), elle mesai, düzeltme, açık mesaiyi kapatma, silme, CSV; kendi mesaisini yalnız patron düzeltir. Yöneticinin
 her yazması denetime düşer (düzeltme ve silme uyarı), kişinin kendi basışı düşmez; canlı konu `time`. Vardiya kasa

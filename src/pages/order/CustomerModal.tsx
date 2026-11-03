@@ -102,7 +102,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
                     </span>
                     <span className="text-right text-xs">
                       {stamps && (
-                        <span className="block font-semibold text-warning-ink">
+                        <span className="block font-semibold text-gold-ink">
                           {c.stamps}/{goal} damga
                         </span>
                       )}

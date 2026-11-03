@@ -14,20 +14,18 @@ import { useBoot } from '@/lib/boot';
 import { useTick } from '@/lib/hooks';
 import { fmtDuration } from '@/lib/mesai';
 import { draftErrors, draftOf, draftTimes, editBody, type MesaiDraft } from '@/lib/mesaiDraft';
-import { periodRange } from '@/lib/period';
+import { PERIOD_LABELS, type PeriodKey, periodRange } from '@/lib/period';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 
-type Period = 'bugun' | 'hafta' | 'ay';
-const PERIODS: { value: Period; label: string }[] = [
-  { value: 'bugun', label: 'Bugün' },
-  { value: 'hafta', label: 'Bu hafta' },
-  { value: 'ay', label: 'Bu ay' },
-];
+// Geçen hafta ve geçen ay: bordro geçmiş dönemin çizelgesini ve CSV'sini ister
+type Period = Exclude<PeriodKey, 'ozel'>;
+const PERIODS: Period[] = ['bugun', 'dun', 'hafta', 'gecenhafta', 'ay', 'gecenay'];
 const SOURCE: Record<TimeEntryDTO['source'], string> = { pin: 'Kilit ekranından', oturum: 'Oturumdan', yonetim: 'Elle kayıt' };
 
-/** Açık mesai en çok 24 saat sayılır (sunucunun kuralı) */
-const openMs = (e: TimeEntryDTO, now: number) => (e.open ? Math.min(Math.max(0, now - e.clockIn), MAX_SHIFT_MS) : e.durationMs);
+/** 24 saati geçen açık mesai: çıkışı unutulmuş, süresi sayılmaz (sunucunun kuralı); çıkış saati girilmeli */
+const overdue = (e: TimeEntryDTO, now: number) => e.open && now - e.clockIn > MAX_SHIFT_MS;
+const openMs = (e: TimeEntryDTO, now: number) => (e.open ? Math.max(0, now - e.clockIn) : e.durationMs);
 
 /**
  * Yönetim › Mesai çizelgesi: personelin PIN'le ya da oturumdan yaptığı giriş-çıkışlar, kişi başına süre, şu an
@@ -161,7 +159,12 @@ export default function TimeAdmin() {
           <span className="tabular-nums">{fmtTime(e.clockOut!)}</span>
         ),
     },
-    { key: 'sure', header: 'Süre', align: 'right', cell: (e) => <span className="font-semibold tabular-nums">{fmtDuration(openMs(e, now))}</span> },
+    {
+      key: 'sure',
+      header: 'Süre',
+      align: 'right',
+      cell: (e) => (overdue(e, now) ? <span className="text-[var(--admin-warning)]">Çıkış girilmeli</span> : <span className="font-semibold tabular-nums">{fmtDuration(openMs(e, now))}</span>),
+    },
     { key: 'not', header: 'Not', cell: (e) => <span className="text-[var(--admin-text-mute)]">{joinMeta([e.note, e.editedByName && `düzelten ${e.editedByName}`]) || '—'}</span>, hideBelow: 'xl' },
   ];
 
@@ -172,7 +175,7 @@ export default function TimeAdmin() {
         description="PIN ile giriş-çıkış (kilit ekranındaki Mesai sekmesi ya da kullanıcı menüsü); düzeltmeler denetim kaydına yazılır"
         actions={
           <>
-            <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIODS} />
+            <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIODS.map((value) => ({ value, label: PERIOD_LABELS[value] }))} className="max-lg:w-full max-lg:[&>*]:grow" />
             <Button icon={<Download className="size-4" />} onClick={() => void exportCsv()}>
               CSV
             </Button>
@@ -198,7 +201,7 @@ export default function TimeAdmin() {
                 value: data.clockedIn.length,
                 reference: data.clockedIn.length ? data.clockedIn.map((e) => e.userName).join(', ') : 'Kimse içeride değil',
               },
-              { key: 'toplam', label: 'Toplam süre', icon: <Timer />, hue: 'blue', value: fmtDuration(totalMs), reference: `${data.totals.length} kişi · ${PERIODS.find((p) => p.value === period)!.label.toLocaleLowerCase('tr-TR')}` },
+              { key: 'toplam', label: 'Toplam süre', icon: <Timer />, hue: 'blue', value: fmtDuration(totalMs), reference: `${data.totals.length} kişi · ${PERIOD_LABELS[period].toLocaleLowerCase('tr-TR')}` },
               { key: 'mesai', label: 'Mesai', icon: <Clock3 />, hue: 'violet', value: data.entries.length, reference: `${data.entries.filter((e) => e.open).length} açık` },
               { key: 'ortalama', label: 'Kişi başı', icon: <Timer />, hue: 'amber', value: fmtDuration(data.totals.length ? totalMs / data.totals.length : 0), reference: 'dönem ortalaması' },
             ]}
@@ -213,7 +216,7 @@ export default function TimeAdmin() {
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium">{e.userName}</span>
                       <span className="block text-xs text-[var(--admin-text-mute)]">
-                        Giriş {fmtDateShort(istanbulParts(e.clockIn).date)} {fmtTime(e.clockIn)} · {now - e.clockIn > MAX_SHIFT_MS ? '24 saatten uzun açık' : `${fmtDuration(now - e.clockIn)} açık`}
+                        Giriş {fmtDateShort(istanbulParts(e.clockIn).date)} {fmtTime(e.clockIn)} · {overdue(e, now) ? '24 saatten uzun açık, süresi sayılmıyor' : `${fmtDuration(now - e.clockIn)} açık`}
                       </span>
                     </span>
                     {canChange(e.userId) && (
@@ -263,7 +266,7 @@ export default function TimeAdmin() {
             rowKey={(e) => e.id}
             onOpen={openEdit}
             selectedKey={edit?.entry?.id ?? null}
-            phoneMeta={(e) => joinMeta([fmtDateShort(e.businessDate), `${fmtTime(e.clockIn)}–${e.clockOut ? fmtTime(e.clockOut) : 'mesaide'}`, fmtDuration(openMs(e, now))])}
+            phoneMeta={(e) => joinMeta([fmtDateShort(e.businessDate), `${fmtTime(e.clockIn)}–${e.clockOut ? fmtTime(e.clockOut) : 'mesaide'}`, overdue(e, now) ? 'çıkış girilmeli' : fmtDuration(openMs(e, now))])}
             empty={
               <EmptyState art="saat" title={period === 'bugun' ? 'Bugün henüz mesai yok' : 'Bu dönemde mesai yok'} action={<Button onClick={openNew}>Elle kayıt</Button>}>
                 Personel kilit ekranındaki Mesai sekmesinden PIN’iyle ya da kullanıcı menüsünden giriş-çıkış yapar
@@ -278,7 +281,7 @@ export default function TimeAdmin() {
                     // 24 saatten eski açık mesai şimdiye kapatılamaz (sunucu reddeder): çıkış saati girilir
                     ...(e.open
                       ? [
-                          now - e.clockIn > MAX_SHIFT_MS
+                          overdue(e, now)
                             ? { key: 'cikis', label: 'Çıkış saatini gir', icon: <LogOut />, onSelect: () => openEdit(e) }
                             : { key: 'kapat', label: 'Şimdi kapat', icon: <LogOut />, onSelect: () => void closeNow(e) },
                         ]

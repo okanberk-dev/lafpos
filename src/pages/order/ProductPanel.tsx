@@ -201,7 +201,7 @@ function CategoryRow({ active, color, count, favorite, onClick, children }: { ac
   );
 }
 
-/** Kategori çipi (telefon, tablet): hap; seçili mürekkep dolgu. Kategori rengi yalnız küçük nokta */
+/** Kategori çipi (telefon, tablet): hap; seçili ev yeşili dolgu. Kategori rengi yalnız küçük nokta */
 function CategoryChip({ active, color, onClick, children }: { active: boolean; color?: string | null; onClick: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLButtonElement>(null);
   // Seçili kategori (sayfa yenilenince de) rayda görünür kalsın

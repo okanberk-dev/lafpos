@@ -387,18 +387,18 @@ describe('çıkışı unutulan mesai (inceleme)', () => {
     }
   });
 
-  it('açık mesai raporda en çok 24 saat sayılır; 24 saati geçen açık mesaiye çıkış saati girilir', async () => {
+  it('24 saati geçen açık mesai raporda sayılmaz, CSV\'de çıkış girilmeli diye görünür; çıkış saati girilince sayılır', async () => {
     const day = addDays(D, 9);
     const c = clock(at(day, 8));
     try {
       const inn = await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.mudur, action: 'in' });
       c.to(at(addDays(day, 2), 8));
       const sheet = await h.ok<TimeSheetDTO>('patron', 'GET', `/time?from=${day}&to=${day}&userId=${userId('Müdür')}`);
-      expect(sheet.entries.map((e) => [e.id, e.durationMs])).toEqual([[inn.entry.id, 24 * H]]);
-      expect(sheet.totals[0].workedMs).toBe(24 * H);
-      expect(sheet.clockedIn.find((e) => e.id === inn.entry.id)?.durationMs).toBe(24 * H);
+      expect(sheet.entries.map((e) => [e.id, e.durationMs, e.open])).toEqual([[inn.entry.id, 0, true]]);
+      expect(sheet.totals[0].workedMs).toBe(0);
+      expect(sheet.clockedIn.find((e) => e.id === inn.entry.id)?.durationMs).toBe(0);
       const csv = await h.call<string>('patron', 'GET', `/time/export.csv?from=${day}&to=${day}`);
-      expect(csv.json.split('\r\n').find((l) => l.startsWith('Müdür;'))).toContain(';Açık;1440;24;');
+      expect(csv.json.split('\r\n').find((l) => l.startsWith('Müdür;'))).toContain(';Açık (çıkış girilmeli);;;');
       expect(await codeOf(h.call('patron', 'POST', `/time/entries/${inn.entry.id}/close`, {}))).toEqual([400, 'shift_too_long']);
       expect(await h.ok<TimeEntryDTO>('patron', 'POST', `/time/entries/${inn.entry.id}/close`, { at: at(day, 17) })).toMatchObject({ open: false, durationMs: 9 * H });
     } finally {

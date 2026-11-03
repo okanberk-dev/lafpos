@@ -229,7 +229,7 @@ export default function DisplayAdmin() {
             </div>
           </Card>
 
-          <Card title="Karekod" subtitle="Uygulama, menü, Wi-Fi ya da Instagram; adres boşsa çizilmez">
+          <Card title="Karekod" subtitle="Uygulama, menü ya da Instagram: http ya da https ile başlayan bir adres; boşsa çizilmez">
             <div className="space-y-4">
               <Field label="Adres" error={tried ? qrError : null}>
                 <Input value={draft.qrUrl} inputMode="url" maxLength={300} placeholder="https://laffogato.net" onChange={(e) => set('qrUrl', e.target.value)} />

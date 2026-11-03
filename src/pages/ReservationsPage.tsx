@@ -172,7 +172,7 @@ export default function ReservationsPage() {
                   </span>
                   {r.tableName && <span>{r.tableName}</span>}
                   {r.phone && (
-                    <a href={`tel:${r.phone}`} className="inline-flex min-h-11 items-center gap-1 text-blue-ink pointer-fine:min-h-0">
+                    <a href={`tel:${r.phone}`} className="inline-flex min-h-11 items-center gap-1 text-primary pointer-fine:min-h-0">
                       <Phone className="size-3.5" /> {r.phone}
                     </a>
                   )}

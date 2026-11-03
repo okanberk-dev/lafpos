@@ -68,7 +68,12 @@ function blindShiftCount(user: AuthUser, s: ShiftCountDTO): ShiftCountDTO {
   return { ...s, expected: null, diff: null, shiftDiff: null, ...(own ? {} : { counted: null, banknotes: null }) };
 }
 
+/** Vardiya devirlerini kasa ekranını kullanan görür (Kasa'nın yetkileri); kurye, mutfak, yalnız garson görmez (notlar) */
+const SHIFT_COUNT_READERS = ['kasa.gun', 'kasa.hareket', 'odeme.al', 'rapor.gor'] as const;
+const readsShiftCounts = (user: AuthUser) => SHIFT_COUNT_READERS.some((p) => can(user, p));
+
 function shiftCountsFor(user: AuthUser, dayId: string): ShiftCountDTO[] {
+  if (!readsShiftCounts(user)) return [];
   const names = userNames();
   return shiftCountsOf(db, dayId).map((s, i, all) => blindShiftCount(user, shiftCountToDTO(s, names, i ? all[i - 1].diff : 0)));
 }
@@ -117,6 +122,7 @@ cashRoutes.post('/shift-counts', async (c) => {
 cashRoutes.get('/shift-counts', (c) => {
   const user = c.get('user');
   const q = query(c, z.object({ dayId: z.string().max(40).optional() }));
+  if (!readsShiftCounts(user)) requirePermission(user, 'kasa.gun');
   const open = getOpenDay(db);
   if (q.dayId && q.dayId !== open?.id) {
     requirePermission(user, 'rapor.gor');

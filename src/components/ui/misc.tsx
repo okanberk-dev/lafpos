@@ -326,7 +326,8 @@ export function Tabs<T extends string>({
             {o.icon}
             {o.label}
             {!!o.count && (
-              <span className={cn('tabular min-w-5 rounded-full px-1.5 py-px text-center text-xs font-medium', on ? 'bg-primary text-primary-ink' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
+              // Etkin sekmenin sayısı beyaz hap (gri zeminde); yeşil dolu hap "N hazır"ın, sayı onunla karışmasın
+              <span className={cn('tabular min-w-5 rounded-full px-1.5 py-px text-center text-xs font-medium', on ? 'bg-surface text-ink shadow-[var(--rim)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
             )}
           </button>
         );
