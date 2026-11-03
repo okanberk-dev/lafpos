@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, CircleCheck, Coffee, ExternalLink, Eye, EyeOff, Globe, Pencil, Plus, RefreshCw, Save, Star, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import type { ProductDTO } from '@shared/types';
@@ -32,7 +32,9 @@ interface Preview {
   warning?: string;
 }
 type Category = AdminMenu['categories'][number];
-type Tab = 'tumu' | 'satista' | 'tukendi' | 'gizli' | 'site' | 'yerel';
+/** Durum sekmeleri yalnız satış durumu; kaynak (siteden, yerel) ayrı süzgeç: ikisi aynı ürünü kesişen iki boyut */
+type Tab = 'tumu' | 'satista' | 'tukendi' | 'gizli';
+type Source = '' | 'site' | 'yerel';
 
 const CHANGE_LABEL: Record<string, string> = { yeni: 'Yeni', fiyat: 'Fiyat', ad: 'Ad', kdv: 'KDV', boy: 'Boy', kalkti: 'Satışta değil', geri: 'Yeniden satışta', diger: 'Diğer' };
 
@@ -43,12 +45,25 @@ const status = (p: ProductDTO) =>
       ? { tone: 'success' as const, label: 'Satışta' }
       : { tone: 'danger' as const, label: p.soldOutBy === 'site' ? 'Sitede satışta değil' : 'Tükendi' };
 
-/** Ürünün kategori renginde baş harfleri (Innex tablosundaki avatar yerine) */
+/**
+ * Ürünün baş harfleri kategori renginin açık tonunda (kasadaki ürün kartıyla aynı dil): dolu renk ve beyaz harf
+ * listenin en yüksek sesiydi, açık seçilmiş kategori renginde de okunmazdı. Harf, kategori rengiyle mürekkebin
+ * karışımı: iki temada ve her renkte okunur
+ */
 function ProductMark({ name, color }: { name: string; color: string }) {
   return (
-    <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-lg text-xs font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: color || 'var(--admin-text-mute)' }}>
+    <span
+      aria-hidden="true"
+      className="grid size-9 shrink-0 place-items-center rounded-[10px] text-xs font-semibold"
+      style={
+        color
+          ? { background: `color-mix(in oklab, ${color} 14%, var(--admin-surface-2))`, color: `color-mix(in oklab, ${color} 45%, var(--admin-text))` }
+          : { background: 'var(--admin-panel)', color: 'var(--admin-text-soft)' }
+      }
+    >
       {name
         .split(/\s+/)
+        .filter(Boolean)
         .slice(0, 2)
         .map((w) => w[0])
         .join('')
@@ -56,6 +71,16 @@ function ProductMark({ name, color }: { name: string; color: string }) {
     </span>
   );
 }
+
+/** Çoklu seçim çipi (seçenek grubu): Seçenekler'deki gün ve kategori çipiyle aynı, kapsül ve yeşil seçim */
+const chip = (on: boolean) =>
+  cn(
+    'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium transition-colors duration-150 pointer-fine:min-h-9',
+    on ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'border-[var(--admin-border-strong)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press',
+  );
+
+/** Boş hücre: tire değil, kitin soluk uzun çizgisi */
+const EMPTY = <span className="text-[var(--admin-text-mute)]">—</span>;
 
 /**
  * Ürünler (Innex): durum sekmeleri sayılı, tek satır araç çubuğu, kart içinde tablo, satıra tıklayınca sağdan
@@ -70,6 +95,7 @@ export default function MenuAdmin() {
   const data = useQuery({ queryKey: ['admin', 'menu'], queryFn: () => get<AdminMenu>('/admin/menu') });
   const [tab, setTab] = useState<Tab>('tumu');
   const [catId, setCatId] = useState('');
+  const [source, setSource] = useState<Source>('');
   const [q, setQ] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -88,7 +114,7 @@ export default function MenuAdmin() {
   const all = useMemo(() => data.data?.products ?? [], [data.data]);
   const cats = data.data?.categories ?? [];
   const catOf = (p: ProductDTO) => cats.find((c) => c.id === p.categoryId);
-  const counts: Record<Tab, number> = {
+  const counts = {
     tumu: all.length,
     satista: all.filter((p) => p.active && !p.hidden).length,
     tukendi: all.filter((p) => !p.active && !p.hidden).length,
@@ -96,19 +122,25 @@ export default function MenuAdmin() {
     site: all.filter((p) => p.extSource).length,
     yerel: all.filter((p) => !p.extSource).length,
   };
+  // Kaynak süzgeci yalnız iki tür de varken (site bağlantısı yokken her ürün yereldir)
+  const bySource = counts.site > 0 && counts.yerel > 0;
+  const src: Source = bySource ? source : '';
   const rows = useMemo(() => {
     const k = fold(q.trim());
     return all.filter((p) => {
+      // lafmaliyet adı da aranır (yer tutucuda yazmasa da)
       if (k && !fold(`${p.name} ${p.shortName ?? ''} ${p.posName ?? ''}`).includes(k)) return false;
       if (catId && p.categoryId !== catId) return false;
+      if (src === 'site' && !p.extSource) return false;
+      if (src === 'yerel' && p.extSource) return false;
       if (tab === 'satista') return p.active && !p.hidden;
       if (tab === 'tukendi') return !p.active && !p.hidden;
       if (tab === 'gizli') return p.hidden;
-      if (tab === 'site') return !!p.extSource;
-      if (tab === 'yerel') return !p.extSource;
       return true;
     });
-  }, [all, q, catId, tab]);
+  }, [all, q, catId, src, tab]);
+  // Porsiyon sütunu yalnız günlük porsiyonu izlenen ürün varken (yoksa baştan sona boş sütun)
+  const portions = all.some((p) => p.portionsLeft != null);
 
   const availability = async (p: ProductDTO, active: boolean) => {
     try {
@@ -165,7 +197,9 @@ export default function MenuAdmin() {
           <ProductMark name={p.name} color={catOf(p)?.color ?? ''} />
           <span className="min-w-0">
             <span className="flex items-center gap-1.5 font-medium text-[var(--admin-text)]">
-              <span className="truncate">{p.name}</span>
+              {/* Gizli ürün soluk değil (metin AA altına, ⋯ devre dışı görünürdü): ikon ve sakin ad; durum rozeti de söyler */}
+              <span className={cn('truncate', p.hidden && 'text-[var(--admin-text-soft)]')}>{p.name}</span>
+              {p.hidden && <EyeOff role="img" aria-label="POS’ta gizli" className="size-3.5 shrink-0 text-[var(--admin-text-mute)]" />}
               {p.favorite && <Star aria-label="Sık kullanılan" className="size-3.5 shrink-0 fill-[var(--admin-warning)] text-[var(--admin-warning)]" />}
             </span>
             <span className="block truncate text-xs text-[var(--admin-text-mute)]">
@@ -175,7 +209,7 @@ export default function MenuAdmin() {
         </span>
       ),
     },
-    { key: 'kategori', header: 'Kategori', cell: (p) => <span className="whitespace-nowrap text-[var(--admin-text-soft)]">{catOf(p)?.name ?? '-'}</span>, hideOnPhone: true, hideBelow: 'xl' },
+    { key: 'kategori', header: 'Kategori', cell: (p) => <span className="whitespace-nowrap text-[var(--admin-text-soft)]">{catOf(p)?.name ?? EMPTY}</span>, hideOnPhone: true, hideBelow: 'xl' },
     {
       key: 'fiyat',
       header: 'Fiyat',
@@ -189,31 +223,37 @@ export default function MenuAdmin() {
       ),
     },
     { key: 'kdv', header: 'KDV', align: 'right', cell: (p) => <span className="tabular-nums">%{p.kdvRate}</span>, hideOnPhone: true, hideBelow: 'lg' },
-    { key: 'porsiyon', header: 'Porsiyon', align: 'right', cell: (p) => <span className="tabular-nums">{p.portionsLeft ?? '-'}</span>, hideOnPhone: true, hideBelow: 'lg' },
+    ...(portions ? [{ key: 'porsiyon', header: 'Porsiyon', align: 'right' as const, cell: (p: ProductDTO) => <span className="tabular-nums">{p.portionsLeft ?? EMPTY}</span>, hideOnPhone: true, hideBelow: 'lg' as const }] : []),
     { key: 'durum', header: 'Durum', cell: (p) => <Badge tone={status(p).tone}>{status(p).label}</Badge> },
   ];
 
   const siteUrl = boot.integrations.laffogatoUrl;
+  const localButton = (primary: boolean) => (
+    <Button variant={primary ? 'primary' : 'secondary'} icon={<Plus className="size-4" />} onClick={() => open('yeni')}>
+      Yerel ürün
+    </Button>
+  );
   const header = (
     <PageHeader
       title="Ürünler"
-      description="Ad, fiyat ve KDV sitede değişir; burada satış durumu, istasyon, kısa ad ve porsiyon"
+      description={siteUrl ? 'Ad, fiyat ve KDV sitede değişir; burada satış durumu, istasyon, kısa ad ve porsiyon' : 'Site bağlantısı kurulmadı; burada satış durumu, istasyon, kısa ad, porsiyon ve yerel ürünler'}
       actions={
-        <>
-          <Button icon={<RefreshCw className="size-4" />} loading={syncing} onClick={syncPreview}>
-            Siteyle eşitle
-          </Button>
-          <Button icon={<Plus className="size-4" />} onClick={() => open('yeni')}>
-            Yerel ürün
-          </Button>
-          {/* Site bağlantısı yokken (LAFFOGATO_URL) sitede eklenen ürün kasaya gelmez; düğme de yok */}
-          {siteUrl && (
+        // Site bağlantısı yokken (LAFFOGATO_URL, varsayılan kapalı) eşitleme hep "kurulmadı" der ve sitede eklenen ürün
+        // kasaya gelmez: iki düğme de yok, çalışan tek eylem (Yerel ürün) birincil olur
+        siteUrl ? (
+          <>
+            <Button icon={<RefreshCw className="size-4" />} loading={syncing} onClick={syncPreview}>
+              Siteyle eşitle
+            </Button>
+            {localButton(false)}
             <a href={`${siteUrl.replace(/\/+$/, '')}/admin/menu/yeni`} target="_blank" rel="noreferrer" className={buttonClass('primary')}>
               <ExternalLink className="size-4" aria-hidden="true" />
               Sitede ürün ekle
             </a>
-          )}
-        </>
+          </>
+        ) : (
+          localButton(true)
+        )
       }
     />
   );
@@ -235,6 +275,7 @@ export default function MenuAdmin() {
   const clearFilters = () => {
     setQ('');
     setCatId('');
+    setSource('');
     setTab('tumu');
   };
 
@@ -251,13 +292,11 @@ export default function MenuAdmin() {
           { value: 'satista', label: 'Satışta', count: counts.satista },
           { value: 'tukendi', label: 'Tükendi', count: counts.tukendi },
           { value: 'gizli', label: 'POS’ta gizli', count: counts.gizli },
-          { value: 'site', label: 'Siteden', count: counts.site },
-          { value: 'yerel', label: 'Yerel', count: counts.yerel },
         ]}
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <SearchField value={q} onChange={setQ} placeholder="Ürün, kısa ad ya da lafmaliyet adı" label="Ürün ara" />
+        <SearchField value={q} onChange={setQ} placeholder="Ürün ya da kısa ad ara" label="Ürün ara" />
         <label className="min-w-0 flex-1 sm:w-56 sm:flex-none">
           <span className="sr-only">Kategori</span>
           <Select value={catId} onChange={(e) => setCatId(e.target.value)} className="[[data-area=admin]_&]:pointer-fine:h-9">
@@ -270,10 +309,41 @@ export default function MenuAdmin() {
             ))}
           </Select>
         </label>
+        {/* Telefonda yok: iki seçim kutusu yan yana sığmaz; satır kartı kaynağı zaten yazar ("Siteden", "Yerel") */}
+        {bySource && (
+          <label className="hidden min-w-0 sm:block sm:w-44">
+            <span className="sr-only">Kaynak</span>
+            <Select value={source} onChange={(e) => setSource(e.target.value as Source)} className="[[data-area=admin]_&]:pointer-fine:h-9">
+              <option value="">Siteden ve yerel</option>
+              <option value="site">Siteden ({counts.site})</option>
+              <option value="yerel">Yerel ({counts.yerel})</option>
+            </Select>
+          </label>
+        )}
         <span className="ml-auto text-xs text-[var(--admin-text-mute)] tabular-nums">{rows.length} ürün</span>
       </div>
 
-      {cat && <CategoryBar cat={cat} onChange={(body) => patch(`/admin/categories/${cat.id}`, body).then(refresh, (e) => toast.err(errorMessage(e)))} />}
+      {cat && (
+        <CategoryBar
+          // Kategori değişince renk taslağı taşınmasın (bekleyen renk öteki kategoriye yazılmasın)
+          key={cat.id}
+          cat={cat}
+          onChange={(body) =>
+            patch(`/admin/categories/${cat.id}`, body).then(
+              () => {
+                refresh();
+                // Bütün kasalarda kategoriyi gizler ya da açar: sessiz kalmaz
+                if ('active' in body) toast.ok(body.active ? `${cat.name} POS’ta yeniden görünüyor` : `${cat.name} POS’ta gizlendi; ürünleri kasada görünmez`);
+                return true;
+              },
+              (e) => {
+                toast.err(errorMessage(e));
+                return false;
+              },
+            )
+          }
+        />
+      )}
 
       <DataTable
         caption="Ürünler"
@@ -282,7 +352,6 @@ export default function MenuAdmin() {
         rowKey={(p) => p.id}
         onOpen={(p) => open(p.id)}
         selectedKey={openId}
-        rowClassName={(p) => p.hidden && 'opacity-70'}
         phoneTitle={(p) => columns[0].cell(p)}
         phoneMeta={(p) => (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -328,7 +397,7 @@ export default function MenuAdmin() {
             </EmptyState>
           ) : (
             <EmptyState art="arama" title={q.trim() ? `“${q.trim()}” ile eşleşen ürün yok` : 'Bu süzgeçte ürün yok'} action={<Button onClick={clearFilters}>Süzgeci temizle</Button>}>
-              Arama ya da kategori seçimini değiştirin
+              Aramayı ya da süzgeçleri değiştirin
             </EmptyState>
           )
         }
@@ -368,7 +437,8 @@ export default function MenuAdmin() {
         title="Site menüsü"
         subtitle={preview?.status === 'degismedi' ? 'Son eşitlemeden beri sitede değişiklik yok' : `${preview?.preview?.itemCount ?? 0} ürün · ${preview?.preview?.changes.length ?? 0} değişiklik`}
         footer={
-          <div className="flex justify-end gap-2">
+          // Telefonda eşit genişlikte düğmeler (onay penceresi gibi); geniş ekranda sağa yaslı
+          <div className="flex justify-end gap-2 max-sm:[&>*]:flex-1">
             <Button onClick={() => setPreview(null)}>Kapat</Button>
             {preview?.status === 'onizleme' && (
               <Button variant="primary" loading={syncing} onClick={syncApply}>
@@ -404,18 +474,35 @@ export default function MenuAdmin() {
   );
 }
 
-function CategoryBar({ cat, onChange }: { cat: Category; onChange: (b: Record<string, unknown>) => void }) {
+function CategoryBar({ cat, onChange }: { cat: Category; onChange: (b: Record<string, unknown>) => Promise<boolean> }) {
   const boot = useBoot();
+  // Renk seçici sürüklerken her harekette olay verir: renk taslakta kalır, el durunca (400 ms) bir kez yazılır. Sunucunun
+  // rengi taslağa yetişene dek taslak gösterilir (seçici arada eski renge zıplamaz); yazılamazsa sunucununkine döner
+  const [draft, setDraft] = useState<string | null>(null);
+  const latest = useRef(onChange);
+  useEffect(() => {
+    latest.current = onChange;
+  });
+  useEffect(() => {
+    if (draft == null) return;
+    if (draft.toLowerCase() === cat.color.toLowerCase()) {
+      setDraft(null);
+      return;
+    }
+    const t = setTimeout(() => void latest.current({ color: draft }).then((ok) => !ok && setDraft(null)), 400);
+    return () => clearTimeout(t);
+  }, [draft, cat.color]);
+  const color = draft ?? cat.color;
   return (
     <Card className="mb-3" bodyClassName="flex flex-wrap items-center gap-x-5 gap-y-3 py-3 sm:py-3">
       <span className="flex items-center gap-2 text-sm font-semibold">
-        <span aria-hidden="true" className="size-3 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: cat.color }} />
+        <span aria-hidden="true" className="size-3 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color }} />
         {cat.name}
         {cat.extSource && <Badge tone="info">Site kategorisi</Badge>}
       </span>
       <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--admin-text-soft)]">
         Renk
-        <input type="color" value={cat.color} onChange={(e) => onChange({ color: e.target.value })} className="h-9 w-11 cursor-pointer rounded-md border border-[var(--admin-border)]" />
+        <input type="color" value={color} onChange={(e) => setDraft(e.target.value)} className="h-11 w-12 cursor-pointer rounded-[10px] border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] p-1 pointer-fine:h-9 pointer-fine:w-11" />
       </label>
       <label className="flex items-center gap-2 text-sm text-[var(--admin-text-soft)]">
         İstasyon
@@ -555,11 +642,13 @@ function ProductDrawer({
               </div>
             </div>
             <div className="rounded-xl border border-[var(--admin-border)] p-3">
-              <div className="text-xs text-[var(--admin-text-mute)]">Fiyat {product.priceL != null ? '(M / L)' : ''}</div>
+              <div className="text-xs text-[var(--admin-text-mute)]">{product.priceL != null ? 'Fiyat (M / L)' : 'Fiyat'}</div>
               <div className="mt-1 text-lg font-bold tabular-nums">
                 {tl(product.price)}
                 {product.priceL != null && <span className="text-sm font-medium text-[var(--admin-text-mute)]"> / {tl(product.priceL)}</span>}
               </div>
+              {/* Site ürününde KDV formda yok (sitede değişir): oran burada okunur */}
+              <div className="text-xs text-[var(--admin-text-mute)]">%{product.kdvRate} KDV dahil</div>
               {can('rapor.maliyet') && product.cost != null && (
                 <div className="text-xs text-[var(--admin-text-mute)]">
                   maliyet {tl(product.cost)} · marj %{Math.round(((product.price - product.cost) / product.price) * 100)}
@@ -583,33 +672,40 @@ function ProductDrawer({
       <div className="space-y-3">
         <h3 className="text-sm font-semibold">{product ? 'Kasa alanları' : 'Ürün bilgisi'}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Ad" className="sm:col-span-2" required={!synced} error={tried ? nameError : null}>
-            <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} disabled={synced} autoFocus={!product && fine} />
-          </Field>
-          <Field label="Kategori">
-            <Select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })} disabled={synced}>
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="KDV">
-            <Select value={f.kdvRate} onChange={(e) => setF({ ...f, kdvRate: Number(e.target.value) })} disabled={synced}>
-              {[0, 10, 20].map((r) => (
-                <option key={r} value={r}>
-                  %{r}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Fiyat (₺)" hint="M ya da tek boy" error={tried ? priceError : null}>
-            <Input value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} inputMode="decimal" disabled={synced} />
-          </Field>
-          <Field label="L fiyatı (₺)" hint="boşsa tek boy">
-            <Input value={f.priceL} onChange={(e) => setF({ ...f, priceL: e.target.value })} inputMode="decimal" disabled={synced} />
-          </Field>
+          {/* Siteden gelen üründe ad, kategori, KDV ve fiyat sitede değişir (yukarıda okunur): devre dışı beş alan kasa
+              alanlarını aşağı itmesin diye hiç çizilmez; kayıt da yalnız kasa alanlarını gönderir */}
+          {!synced && (
+            <>
+              <Field label="Ad" className="sm:col-span-2" required error={tried ? nameError : null}>
+                <Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} autoFocus={!product && fine} />
+              </Field>
+              <Field label="Kategori">
+                <Select value={f.categoryId} onChange={(e) => setF({ ...f, categoryId: e.target.value })}>
+                  {cats.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="KDV">
+                <Select value={f.kdvRate} onChange={(e) => setF({ ...f, kdvRate: Number(e.target.value) })}>
+                  {[0, 10, 20].map((r) => (
+                    <option key={r} value={r}>
+                      %{r}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Fiyat (₺)" hint="M ya da tek boy" error={tried ? priceError : null}>
+                <Input value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} inputMode="decimal" />
+              </Field>
+              <Field label="L fiyatı (₺)" hint="boşsa tek boy">
+                <Input value={f.priceL} onChange={(e) => setF({ ...f, priceL: e.target.value })} inputMode="decimal" />
+              </Field>
+              <Toggle block checked={f.isService} onChange={(v) => setF({ ...f, isService: v })} label="Hizmet ürünü" hint="Karaoke, etkinlik ücreti gibi" className="sm:col-span-2" />
+            </>
+          )}
           <Field label="Kısa ad" hint="düğme ve fişte">
             <Input value={f.shortName} onChange={(e) => setF({ ...f, shortName: e.target.value })} />
           </Field>
@@ -626,14 +722,12 @@ function ProductDrawer({
               ))}
             </Select>
           </Field>
-          <Field label="Günlük porsiyon" hint="boşsa takip edilmez">
+          {/* Kısa ipucu tek satırda kalır: alan yanındaki İstasyon'la aynı hizada */}
+          <Field label="Günlük porsiyon" hint="boşsa sınırsız">
             <Input value={f.portionsLeft} onChange={(e) => setF({ ...f, portionsLeft: e.target.value.replace(/\D/g, '') })} inputMode="numeric" />
           </Field>
           <Field label="Barkod">
             <Input value={f.barcode} onChange={(e) => setF({ ...f, barcode: e.target.value })} spellCheck={false} />
-          </Field>
-          <Field label="Hizmet" hint="karaoke gibi">
-            <Toggle checked={f.isService} onChange={(v) => setF({ ...f, isService: v })} disabled={synced} label={f.isService ? 'Evet' : 'Hayır'} />
           </Field>
         </div>
         <div>
@@ -644,25 +738,17 @@ function ProductDrawer({
               .map((g) => {
                 const on = f.groupIds.includes(g.id);
                 return (
-                  <button
-                    key={g.id}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => setF({ ...f, groupIds: on ? f.groupIds.filter((x) => x !== g.id) : [...f.groupIds, g.id] })}
-                    className={cn(
-                      'min-h-11 rounded-full border px-3 text-[13px] font-medium transition-colors pointer-fine:min-h-8',
-                      on ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'border-[var(--admin-border-strong)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)]',
-                    )}
-                  >
+                  <button key={g.id} type="button" aria-pressed={on} onClick={() => setF({ ...f, groupIds: on ? f.groupIds.filter((x) => x !== g.id) : [...f.groupIds, g.id] })} className={chip(on)}>
                     {g.name}
-                    {g.extSource && <span className="ml-1 text-xs opacity-70">site</span>}
+                    {/* Kaynak işareti çipin renginde (soluk yazı değil); ekran okuyucuya "Siteden" */}
+                    {g.extSource && <Globe role="img" aria-label="Siteden" className="size-3.5 shrink-0" />}
                   </button>
                 );
               })}
             <button
               type="button"
               onClick={() => setNewGroup(true)}
-              className="inline-flex min-h-11 items-center gap-1 rounded-full border border-dashed border-[var(--admin-border-strong)] px-3 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] pointer-fine:min-h-8"
+              className="inline-flex min-h-11 items-center gap-1 rounded-full border border-dashed border-[var(--admin-border-strong)] px-3.5 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press pointer-fine:min-h-9"
             >
               <Plus aria-hidden="true" className="size-3.5" />
               Yeni grup

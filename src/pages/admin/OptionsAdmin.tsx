@@ -39,6 +39,24 @@ interface Item {
 const KIND_LABEL = { single: 'Tek seçim', multi: 'Çoklu seçim', counter: 'Adetli' };
 const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
+/** Kuralın günleri okunur biçimde: bütün hafta, hafta içi ve hafta sonu adıyla; öteki günler kısaltmayla */
+function dayText(days: number[]): string {
+  const sorted = [...days].sort((a, b) => a - b);
+  const key = sorted.join();
+  if (key === '1,2,3,4,5,6,7') return 'Her gün';
+  if (key === '1,2,3,4,5') return 'Hafta içi';
+  if (key === '6,7') return 'Hafta sonu';
+  return sorted.map((x) => DAYS[x - 1]).join(', ');
+}
+
+/** Çoklu seçim çipi (gün, kategori): ürün çekmecesindeki seçenek grubu çipiyle aynı, kapsül ve yeşil seçim */
+const chip = (on: boolean, className?: string) =>
+  cn(
+    'inline-flex min-h-11 items-center justify-center rounded-full border px-3.5 text-[13px] font-medium transition-colors duration-150 pointer-fine:min-h-9',
+    on ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'border-[var(--admin-border-strong)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press',
+    className,
+  );
+
 export default function OptionsAdmin() {
   const boot = useBoot();
   const qc = useQueryClient();
@@ -109,7 +127,7 @@ export default function OptionsAdmin() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Seçenekler ve happy hour"
+        title="Seçenek ve happy hour"
         description="Süt, şurup ve shot site kodundaki sabit listeden gelir; kasaya özel seçenek için yerel grup ekleyin"
         actions={
           <Button variant="primary" icon={<Plus className="size-4" />} onClick={newGroup}>
@@ -137,22 +155,26 @@ export default function OptionsAdmin() {
           return (
             <Card flush
               key={g.id}
-              className={cn(!g.active && 'opacity-60')}
+              // Kapalı grup soluk değil (metin AA altına düşer, Düzenle devre dışı görünür): gri zemin ve "Kapalı" rozeti
+              className={cn(!g.active && 'bg-[var(--admin-surface-2)]')}
               title={
-                <span className="flex items-center gap-2">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {g.name}
+                  {/* Kaynak bilgidir, olumlu durum değil: sitenin her yerdeki tonu (kategori çubuğunda "Site kategorisi") */}
                   {g.extSource ? (
-                    <Badge tone="success">
-                      <Globe className="size-3" /> Site
+                    <Badge tone="info">
+                      <Globe aria-hidden="true" className="size-3" /> Site
                     </Badge>
                   ) : (
                     <Badge>Yerel</Badge>
                   )}
+                  {!g.active && <Badge>Kapalı</Badge>}
                 </span>
               }
               actions={
                 !g.extSource && (
-                  <Button size="sm" onClick={() => setEdit(groupDraft(g, its, linked))}>
+                  // Düğme başlık satırını uzatmaz: yerel grubun ayrıntı satırı yanındaki site grubununkiyle aynı hizada kalır
+                  <Button size="sm" className="-my-1.5 pointer-coarse:-my-2.5" onClick={() => setEdit(groupDraft(g, its, linked))}>
                     Düzenle
                   </Button>
                 )
@@ -161,9 +183,10 @@ export default function OptionsAdmin() {
               <div className="px-4 pb-4 text-sm sm:px-5">
                 <div className="mb-2 text-xs text-[var(--admin-text-mute)]">
                   {KIND_LABEL[g.kind]}
-                  {g.required && ' · zorunlu'}
+                  {g.kind === 'multi' && ` · en çok ${g.maxSelect}`}
+                  {/* Adetli grupta zorunluluk sayılmaz (sıfır adet de geçerli) */}
+                  {g.required && g.kind !== 'counter' && ' · zorunlu'}
                   {` · ${linked.length ? `${linked.length} ürün` : 'ürüne bağlı değil'}`}
-                  {!g.active && ' · kapalı'}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {its.map((i) => (
@@ -209,7 +232,7 @@ export default function OptionsAdmin() {
               <span className="min-w-0 flex-1">
                 <span className="font-semibold text-[var(--admin-text)]">{h.name}</span> <Badge tone={h.active ? 'success' : 'neutral'}>{h.active ? 'Açık' : 'Kapalı'}</Badge>
                 <span className="mt-0.5 block text-xs text-[var(--admin-text-mute)]">
-                  %{h.percent} · {h.days.map((d) => DAYS[d - 1]).join(', ')} · {h.start}–{h.end} · {h.categoryIds.length ? h.categoryIds.map((c) => boot.categories.find((x) => x.id === c)?.name).filter(Boolean).join(', ') : 'bütün menü'}
+                  %{h.percent} · {dayText(h.days)} · {h.start}–{h.end} · {h.categoryIds.length ? h.categoryIds.map((c) => boot.categories.find((x) => x.id === c)?.name).filter(Boolean).join(', ') : 'bütün menü'}
                 </span>
               </span>
               <Button size="sm" onClick={() => openHappy({ ...h })}>
@@ -243,7 +266,8 @@ export default function OptionsAdmin() {
         onClose={() => setHappy(null)}
         title="Happy hour kuralı"
         footer={
-          <div className="flex justify-end gap-2">
+          // Telefonda iki eşit düğme (onay penceresi gibi); geniş ekranda sağa yaslı
+          <div className="flex justify-end gap-2 max-sm:[&>*]:flex-1">
             <Button onClick={() => setHappy(null)}>Vazgeç</Button>
             <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void saveHappy()}>
               Kaydet
@@ -269,11 +293,12 @@ export default function OptionsAdmin() {
             </div>
             <div role="group" aria-label="Günler">
               <Label hint="en az bir gün">Günler</Label>
-              <div className="flex flex-wrap gap-1.5">
+              {/* Yedi gün tek sırada eşit hücrelerde: telefonda "Paz" alt satıra tek başına düşmez */}
+              <div className="grid grid-cols-7 gap-1.5">
                 {DAYS.map((d, i) => {
                   const on = happy.days.includes(i + 1);
                   return (
-                    <button key={d} type="button" aria-pressed={on} onClick={() => setHappy({ ...happy, days: on ? happy.days.filter((x) => x !== i + 1) : [...happy.days, i + 1].sort() })} className={cn('min-h-9 rounded-lg border px-3 text-sm transition-colors pointer-coarse:min-h-11', on ? 'border-[var(--admin-text)] font-semibold text-[var(--admin-text)]' : 'border-[var(--admin-border)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)]')}>
+                    <button key={d} type="button" aria-pressed={on} onClick={() => setHappy({ ...happy, days: on ? happy.days.filter((x) => x !== i + 1) : [...happy.days, i + 1].sort((a, b) => a - b) })} className={chip(on, 'px-0')}>
                       {d}
                     </button>
                   );
@@ -291,14 +316,17 @@ export default function OptionsAdmin() {
                 {boot.categories.map((c) => {
                   const on = happy.categoryIds.includes(c.id);
                   return (
-                    <button key={c.id} type="button" aria-pressed={on} onClick={() => setHappy({ ...happy, categoryIds: on ? happy.categoryIds.filter((x) => x !== c.id) : [...happy.categoryIds, c.id] })} className={cn('min-h-9 rounded-lg border px-3 text-sm transition-colors pointer-coarse:min-h-11', on ? 'border-[var(--admin-text)] font-semibold text-[var(--admin-text)]' : 'border-[var(--admin-border)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)]')}>
+                    <button key={c.id} type="button" aria-pressed={on} onClick={() => setHappy({ ...happy, categoryIds: on ? happy.categoryIds.filter((x) => x !== c.id) : [...happy.categoryIds, c.id] })} className={chip(on)}>
                       {c.name}
                     </button>
                   );
                 })}
               </div>
             </div>
-            <Toggle checked={happy.active} onChange={(v) => setHappy({ ...happy, active: v })} label="Kural açık" />
+            {/* Seçenek grubundaki "Grup açık" gibi: etiket ve ipucu solda, anahtar sağda */}
+            <div className="border-t border-[var(--admin-divider)] pt-3">
+              <Toggle block checked={happy.active} onChange={(v) => setHappy({ ...happy, active: v })} label="Kural açık" hint="Kapalı kural indirim uygulamaz; kayıtlı kalır" />
+            </div>
           </div>
         )}
       </Modal>
