@@ -1,4 +1,4 @@
-import { addDays, DAY_ROLLOVER_HOUR, istanbulParts, MAX_SHIFT_MS } from '@shared/time';
+import { addDays, DAY_ROLLOVER_HOUR, isCalendarDate, istanbulParts, MAX_SHIFT_MS } from '@shared/time';
 import type { TimeEntryDTO } from '@shared/types';
 
 /**
@@ -34,10 +34,17 @@ export function draftOf(e: TimeEntryDTO): MesaiDraft {
   return { entry: e, userId: e.userId, date: e.businessDate, inTime: hm(e.clockIn), outTime: e.clockOut ? hm(e.clockOut) : '', note: e.note ?? '' };
 }
 
-/** Taslağın anları: giriş iş gününe göre (05:00'ten önceki saat ertesi takvim günü), çıkış girişten önceyse ertesi gün */
+const HM = /^\d{2}:\d{2}$/;
+
+/**
+ * Taslağın anları: giriş iş gününe göre (05:00'ten önceki saat ertesi takvim günü), çıkış girişten önceyse ertesi gün.
+ * Tarih ya da saat eksikse (alan temizlendi) NaN: tarih hesabı çizim sırasında hata atıp sayfayı düşürmesin.
+ */
 export function draftTimes(d: MesaiDraft): { clockIn: number; clockOut: number | null } {
+  if (!isCalendarDate(d.date) || !HM.test(d.inTime)) return { clockIn: Number.NaN, clockOut: d.outTime ? Number.NaN : null };
   const clockIn = toMs(d.inTime < ROLLOVER ? addDays(d.date, 1) : d.date, d.inTime);
   if (!d.outTime) return { clockIn, clockOut: null };
+  if (!HM.test(d.outTime)) return { clockIn, clockOut: Number.NaN };
   const inDate = istanbulParts(clockIn).date;
   const out = toMs(inDate, d.outTime);
   return { clockIn, clockOut: out < clockIn ? toMs(addDays(inDate, 1), d.outTime) : out };
@@ -53,11 +60,12 @@ const sameMinute = (a: number, b: number) => Math.floor(a / 60_000) === Math.flo
  * Alan hataları. Saatler yalnız değiştiyse denetlenir: açıldığı gibi kalan saat (bir dakikadan kısa mesai, 24 saatten
  * eski açık mesai) yalnız not düzeltilirken engel olmasın. Sunucu bir dakikaya kadar ileriyi kabul eder (saat kayması).
  */
-export function draftErrors(d: MesaiDraft, now: number): { who?: string; in?: string; out?: string } {
+export function draftErrors(d: MesaiDraft, now: number): { who?: string; date?: string; in?: string; out?: string } {
   if (!d.userId) return { who: 'Kişi seçin' };
   if (!timesChanged(d)) return {};
-  if (!/^\d{2}:\d{2}$/.test(d.inTime)) return { in: 'Giriş saati gerekli' };
-  if (d.outTime && !/^\d{2}:\d{2}$/.test(d.outTime)) return { out: 'Saat ss:dd biçiminde' };
+  if (!isCalendarDate(d.date)) return { date: 'Gün seçin' };
+  if (!HM.test(d.inTime)) return { in: 'Giriş saati gerekli' };
+  if (d.outTime && !HM.test(d.outTime)) return { out: 'Saat ss:dd biçiminde' };
   const t = draftTimes(d);
   const limit = now + 60_000;
   if (t.clockIn > limit) return { in: 'Gelecekteki bir saat girilemez' };

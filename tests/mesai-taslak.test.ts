@@ -98,6 +98,19 @@ describe('yalnız değişen alan', () => {
 describe('alan hataları', () => {
   const base: MesaiDraft = { userId: 'u1', date: '2026-11-03', inTime: '09:00', outTime: '17:00', note: '' };
 
+  it('tarih alanı temizlenince çizim düşmez: hata gün alanında, anlar NaN', () => {
+    for (const inTime of ['09:00', '03:00']) {
+      const d = { ...base, date: '', inTime };
+      expect(() => draftTimes(d)).not.toThrow();
+      expect(Number.isNaN(draftTimes(d).clockIn)).toBe(true);
+      expect(draftErrors(d, NOW)).toEqual({ date: 'Gün seçin' });
+    }
+    const opened = { ...draftOf(entry({})), date: '' };
+    expect(() => draftErrors(opened, NOW)).not.toThrow();
+    expect(draftErrors(opened, NOW)).toEqual({ date: 'Gün seçin' });
+    expect(() => draftTimes({ ...base, outTime: '1' })).not.toThrow();
+  });
+
   it('hata kendi alanının altında: ileri giriş girişte, ileri çıkış çıkışta', () => {
     expect(draftErrors({ ...base, inTime: '13:00', outTime: '' }, NOW)).toEqual({ in: 'Gelecekteki bir saat girilemez' });
     expect(draftErrors({ ...base, inTime: '09:00', outTime: '15:00' }, NOW)).toEqual({ out: 'Gelecekteki bir saat girilemez' });

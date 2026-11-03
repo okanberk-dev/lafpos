@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Clock3 } from 'lucide-react';
 import { useState } from 'react';
-import { fmtTime } from '@shared/time';
+import { fmtDateTime, fmtTime, shiftForgotten } from '@shared/time';
 import { errorMessage, post } from '@/lib/api';
 import { useTick } from '@/lib/hooks';
 import { fmtDuration, useMyTime } from '@/lib/mesai';
@@ -19,6 +19,20 @@ export function MesaiRow({ className }: { className?: string }) {
   const [busy, setBusy] = useState(false);
   if (me.isPending || me.isError || !me.data) return null;
   const { open, today, weekMs } = me.data;
+  // Önceki günden açık kalan mesai şimdiye kapatılmaz (sunucu da reddeder): "Mesaiyi bitir" yerine ne yapılacağı
+  if (open && shiftForgotten(open.clockIn, now)) {
+    return (
+      <div className={className}>
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-[var(--admin-warning-soft)] text-[var(--admin-warning)] [&>svg]:size-[18px]">
+          <Clock3 />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">Önceki günden açık mesai</span>
+          <span className="block text-xs text-muted">Giriş {fmtDateTime(open.clockIn)} · çıkışını bir yetkili girer</span>
+        </span>
+      </div>
+    );
+  }
   // Sunucunun saatiyle çizilen toplam, istemcinin saatine göre ilerler (açık mesai şu ana kadar)
   const drift = open ? Math.max(0, now - me.data.serverTime) : 0;
   const punch = async () => {

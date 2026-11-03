@@ -315,7 +315,8 @@ export function PaymentModal({
 
   return (
     <Modal open onClose={onClose} size="xl" persistent={!!comp} title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
-      <div ref={panelRef} tabIndex={-1} className="grid gap-0 outline-none lg:grid-cols-[1.1fr_1fr]">
+      {/* Sütunlar içerikle genişlemez (minmax 0): uzun, kırılmayan bir düğme yazısı telefonda sayfayı ekrandan taşırmasın */}
+      <div ref={panelRef} tabIndex={-1} className="grid grid-cols-[minmax(0,1fr)] gap-0 outline-none lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div className="border-b border-[var(--admin-divider)] p-5 lg:border-b-0 lg:border-r">
           <div className="mb-4 flex items-center justify-between gap-3">
             <Segmented<Mode>

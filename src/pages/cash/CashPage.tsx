@@ -556,7 +556,7 @@ export default function CashPage() {
       <Modal open={!!zResult} onClose={() => setZResult(null)} size="xl" title="Gün sonu alındı" subtitle="Z raporu ve lafmaliyet alanları">
         <div className="p-5">{zResult && <ZView day={zResult.day} summary={zResult.summary} lafmaliyet={zResult.lafmaliyet} />}</div>
       </Modal>
-      <ShiftHandoverModal open={handover} onClose={() => setHandover(false)} summary={summary} />
+      <ShiftHandoverModal open={handover} onClose={() => setHandover(false)} summary={summary} prevDiff={current.data?.shiftCounts?.at(-1)?.diff ?? 0} />
     </div>
   );
 }

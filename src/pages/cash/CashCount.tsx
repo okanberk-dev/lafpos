@@ -21,7 +21,21 @@ export interface CountResult {
  * raporları). Sistemle farkı anında gösterir. `summary` yoksa kör sayımdır (kasiyer `kasa.rakam` yetkisiz):
  * beklenen tutar ve fark gösterilmez, yalnız sayılan yazılır; fark yöneticinin ekranında.
  */
-export function CashCount({ summary, value, onChange, cashOnly }: { summary: ZSummary | null; value: CountResult; onChange: (v: CountResult) => void; /** Yalnız nakit (vardiya devri): ödeme türü slipleri sorulmaz */ cashOnly?: boolean }) {
+export function CashCount({
+  summary,
+  value,
+  onChange,
+  cashOnly,
+  baseDiff = 0,
+}: {
+  summary: ZSummary | null;
+  value: CountResult;
+  onChange: (v: CountResult) => void;
+  /** Yalnız nakit (vardiya devri): ödeme türü slipleri sorulmaz */
+  cashOnly?: boolean;
+  /** Vardiya devrinde önceki sayımın farkı: gösterilen fark bu vardiyanınki olur (sunucunun shiftDiff'i), gün toplamı ayrıca */
+  baseDiff?: number;
+}) {
   const boot = useBoot();
   const [mode, setMode] = useState<'banknot' | 'toplam'>('banknot');
   const [totalText, setTotalText] = useState(value.countedCash ? String(value.countedCash / 100).replace('.', ',') : '');
@@ -34,7 +48,8 @@ export function CashCount({ summary, value, onChange, cashOnly }: { summary: ZSu
     const countedCash = DENOMINATIONS.reduce((a, x) => a + x * (banknotes[String(x)] ?? 0), 0);
     onChange({ ...value, banknotes, countedCash });
   };
-  const diff = summary ? value.countedCash - summary.expectedCash : 0;
+  const dayDiff = summary ? value.countedCash - summary.expectedCash : 0;
+  const diff = dayDiff - baseDiff;
 
   return (
     <div className="space-y-5">
@@ -100,6 +115,7 @@ export function CashCount({ summary, value, onChange, cashOnly }: { summary: ZSu
             <Cell label="Beklenen" value={tl(summary.expectedCash)} />
             <Cell label="Sayılan" value={tl(value.countedCash)} />
             <Cell label="Fark" value={tl(diff)} tone={diff === 0 ? 'ok' : Math.abs(diff) < 5000 ? 'warn' : 'bad'} />
+            {baseDiff !== 0 && <p className="col-span-3 text-xs text-muted">Fark bu vardiyanın: önceki devirden bu yana; gün toplamı {dayDiff === 0 ? 'denk' : tl(dayDiff)}</p>}
           </div>
         ) : (
           <div className="mt-3 grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:items-center">

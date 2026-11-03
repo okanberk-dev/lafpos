@@ -1,7 +1,7 @@
 import { ChevronRight, Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, SunMoon, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { fmtTime } from '@shared/time';
+import { fmtTime, shiftForgotten } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -76,7 +76,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   useWakeLock(boot.settings.keepAwake);
   useReadyAlerts();
   // Mesaide olan kişinin avatarında yeşil nokta (kullanıcı menüsünde süre ve Mesaiyi bitir)
-  const onClock = !!useMyTime().data?.open;
+  // Önceki günden açık kalmış (çıkışı unutulmuş) mesai "mesaide" sayılmaz
+  const myOpen = useMyTime().data?.open;
+  const onClock = !!myOpen && !shiftForgotten(myOpen.clockIn, Date.now());
   const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
     const on = () => setFull(!!document.fullscreenElement);

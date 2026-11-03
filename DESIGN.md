@@ -64,6 +64,7 @@
   koyuda değişmez; yalnız beyaz yazılı dolu yüzeyde (dolu düğme, alarm süre rozeti, hazır rozeti) kalır,
   `tests/ui-rules.test.ts` izinli listeyle tutar. Olumlu durum (hazır, ödendi) sitedeki gibi ev yeşilidir.
 - **Odak halkası** 2 px ev yeşili, 2 px dışarıda; alan odakta yeşil kenar ve yumuşak yeşil halka (sitenin `--ring`'i).
+  Mürekkep zeminli bildirimde halka krem ve düğmenin içinde (yeşil mürekkepte 3:1'in altında kalır).
 
 ### Biçim
 
@@ -173,9 +174,10 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   birincil düğme gri zemin ve soluk yazıdır, yarı saydam değil; bir bilgi cümlesi devre dışı düğme olarak
   çizilmez ("Ödemeyi kasa alır" düğmenin altında yazıdır).
 - **Sekme ve seçim:** `Tabs` (bölüm, istasyon, sipariş listesi; seçili gri zemin, sayı hapı sıfırsa gizli, dar
-  ekranda yatay kayar) ve `Segmented` (2-4 eşit seçenek; gri ray, beyaz hap). Seçim ev yeşili kenar ya da gri zemindir;
-  dolu yeşil hap olumlu duruma (hazır, ödendi) ayrılır, sekme sayısı ve sıradaki pay onunla karışmaz (beyaz hap,
-  mürekkep kenar). Amber durum rengidir, seçim için kullanılmaz; bağlantı birincil yeşil, kobalt yalnız durum.
+  ekranda yatay kayar) ve `Segmented` (2-4 eşit seçenek; gri ray, beyaz hap). Dolu yeşil seçim yalnız gezinmede: raydaki
+  etkin ekran ve telefondaki seçili kategori çipi. Öteki seçimler gri zemin, beyaz hap ya da yeşil veya mürekkep
+  kenardır; sekme sayısı ve sıradaki pay nötrdür (beyaz hap, mürekkep kenar), dolu yeşil hap olumlu durumla (hazır,
+  ödendi) karışmasın. Amber durum rengidir, seçim için kullanılmaz; bağlantı birincil yeşil, kobalt yalnız durum.
 - **Boş, yükleniyor, hata:** `EmptyState` (kart içinde `compact`, sayfada varsayılan, bar ve çağrı ekranında
   `large`; başlık ekranın sözüyle, "Liste boş" değil), `Skeleton` / `ListSkeleton` (ilk yüklemede), `ErrorState`
   (yeniden dene ile). Yüklenirken ya da hata varken "yok" yazılmaz.

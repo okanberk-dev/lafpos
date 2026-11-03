@@ -5,11 +5,8 @@ export const DAY_ROLLOVER_HOUR = 5;
 
 /** Mesai: bir mesai en çok 24 saat (yazmada; açık mesai raporda da en çok bu kadar sayılır) */
 export const MAX_SHIFT_MS = 24 * 3600_000;
-/**
- * Mesai: bu süreden uzun açık mesainin çıkışı unutulmuş sayılır. Kilit ekranındaki yönsüz basış onu şimdiye kapatmaz
- * (kişiyi ertesi sabah 19 saatlik mesaiyle çıkarmasın), çizelge "Çıkış yok" diye gösterir.
- */
-export const STALE_SHIFT_MS = 14 * 3600_000;
+/** Mesai: önceki iş gününden açık kalan mesai en az bu kadar sürüyorsa çıkışı unutulmuştur (bkz. `shiftForgotten`) */
+export const FORGOTTEN_MIN_MS = 8 * 3600_000;
 
 const partsFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: TZ,
@@ -66,6 +63,16 @@ export function staleDayMessage(day: { date: string; zNo: number }, nowMs = Date
   if (day.date >= today) return null;
   const when = dayMonthFmt.format(new Date(`${day.date}T12:00:00Z`));
   return day.date === addDays(today, -1) ? `Dünün günü açık (${when}, Z ${day.zNo}). Önce gün sonunu alın` : `${when} günü hâlâ açık (Z ${day.zNo}). Önce gün sonunu alın`;
+}
+
+/**
+ * Mesai: açık mesainin çıkışı unutulmuş mu. Ölçü süre değil iş günü: mesai önceki iş gününde (05:00 kuralı) başladı
+ * ve 8 saatten uzun sürüyor. 20:00 girişi ertesi sabah 09:00'da unutulmuştur (13 saat); aynı günün 08:00–22:30'u
+ * ve 22:00–06:00 gece vardiyası değildir. Unutulan mesai şimdiye kapatılmaz (kilit ekranı da kullanıcı menüsü de;
+ * çıkış saatini bir yetkili girer), raporda ve CSV'de süresi sayılmaz.
+ */
+export function shiftForgotten(clockIn: number, now: number): boolean {
+  return businessDate(clockIn) < businessDate(now) && now - clockIn > FORGOTTEN_MIN_MS;
 }
 
 /** İş gününün başladığı an (o tarihin 05:00'i, İstanbul = UTC+3, yaz saati yok) */

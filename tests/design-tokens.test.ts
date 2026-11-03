@@ -89,10 +89,10 @@ describe('yönetim paneli (LafPOS Sade)', () => {
         for (const ground of ['admin-bg', 'admin-surface', 'admin-surface-2', 'admin-panel']) expect(contrast(get(text), get(ground)), `${text}/${ground}`).toBeGreaterThanOrEqual(4.5);
       }
     });
-    it(`${name}: birincil mavi hem düğmede hem bağlantıda`, () => {
+    it(`${name}: birincil (ev yeşili) hem düğmede hem bağlantıda`, () => {
       expect(contrast(get('admin-on-primary'), get('admin-primary')), 'düğme yazısı').toBeGreaterThanOrEqual(4.5);
       expect(contrast(get('admin-primary'), get('admin-surface')), 'bağlantı kartta').toBeGreaterThanOrEqual(4.5);
-      expect(contrast(get('admin-primary'), get('admin-bg')), 'bağlantı gri zeminde').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-primary'), get('admin-bg')), 'bağlantı porselen zeminde').toBeGreaterThanOrEqual(4.5);
     });
     it(`${name}: her durum tonu ve grup rengi kendi açık zemininde AA`, () => {
       for (const [fg, bg] of tones) expect(contrast(get(`admin-${fg}`), get(`admin-${bg}`)), `${fg}/${bg}`).toBeGreaterThanOrEqual(4.5);
@@ -108,7 +108,7 @@ describe('yönetim paneli (LafPOS Sade)', () => {
       expect(contrast(get('admin-gold-ink'), get('admin-gold-fill')), 'pirinç dolgu').toBeGreaterThanOrEqual(4.5);
       expect(contrast(get('admin-gold'), get('admin-bg')), 'altın metin').toBeGreaterThanOrEqual(4.5);
     });
-    it(`${name}: durum mavisi kartta okunur (bağlantı, "barda")`, () => {
+    it(`${name}: durum mavisi kartta okunur (dolu masa, "barda"; bağlantı birincil yeşil)`, () => {
       expect(contrast(get('admin-blue'), get('admin-surface'))).toBeGreaterThanOrEqual(4.5);
       expect(contrast(get('admin-blue'), get('admin-bg'))).toBeGreaterThanOrEqual(4.5);
     });
@@ -159,7 +159,11 @@ describe('yönetim paneli (LafPOS Sade)', () => {
     expect(contrast(adminLight('admin-primary'), adminLight('admin-ink-fill')), 'yeşil halka mürekkepte zayıf').toBeLessThan(3);
     expect(contrast(adminLight('admin-on-ink'), '#211c18'), 'krem halka mürekkepte').toBeGreaterThanOrEqual(3);
     expect(css).toMatch(/--color-night:\s*#211c18;/);
-    expect(src('src/lib/toast.tsx')).toContain('[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]');
+    const toast = src('src/lib/toast.tsx');
+    expect(toast).toContain("const NIGHT_FOCUS = '[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]'");
+    // Bildirim tonlarının kendisi (yalnız sabitin tanımı değil): mürekkep zeminli üç ton halkayı krem yapar
+    for (const tone of ['ok', 'err', 'info']) expect(toast, tone).toContain(`${tone}: \`\${NIGHT_FOCUS} bg-night`);
+    expect(toast.match(/focus-visible:-outline-offset-2/g)?.length, 'halka düğmenin içinde').toBe(2);
   });
 
   it('pirinç dolgunun üstündeki yazının kendi adı var (text-on-gold); text-gold-ink altın metindir', () => {

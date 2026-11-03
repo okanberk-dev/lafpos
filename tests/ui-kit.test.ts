@@ -362,6 +362,10 @@ describe('zorla tema (bar, çağrı, müşteri ekranı)', () => {
     expect(bootThemeFor('/mutfak', '', 'acik')).toBe('light');
     expect(bootThemeFor('/mutfak', '', 'koyu')).toBe('dark');
     expect(bootThemeFor('/musteri-ekrani', '?tema=acik', 'koyu')).toBe('light');
+    // Müşteri ekranının son görünümü porselense ilk kare açık (yeniden açılışta koyu flaş yok)
+    expect(bootThemeFor('/musteri-ekrani', '', 'koyu', 'porselen')).toBe('light');
+    expect(bootThemeFor('/musteri-ekrani', '', 'koyu', 'gece')).toBe('dark');
+    expect(bootThemeFor('/musteri-ekrani', '', 'koyu', null)).toBe('dark');
     expect(bootThemeFor('/cagri', '', 'acik')).toBe('dark');
     expect(bootThemeFor('/masalar', '', 'koyu')).toBeNull();
   });

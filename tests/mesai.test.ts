@@ -405,4 +405,34 @@ describe('çıkışı unutulan mesai (inceleme)', () => {
       c.restore();
     }
   });
+
+  it('unutulma ölçüsü iş günü: 20:00 girişi ertesi sabah ne basışla ne menüden kapanır, süresi sayılmaz; aynı günün 14,5 saati kapanır', async () => {
+    const day = addDays(D, 10);
+    const c = clock(at(day, 20));
+    try {
+      const inn = await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.mudur, action: 'in' });
+      // Ertesi sabah 09:00: 13 saat ama önceki iş günü (eski 14 saat kuralı bunu kaçırıyordu)
+      c.to(at(addDays(day, 1), 9));
+      expect(await codeOf(h.call('', 'POST', '/time/punch', { pin: PINS.mudur }))).toEqual([409, 'stale_shift']);
+      expect(await codeOf(h.call('', 'POST', '/time/punch', { pin: PINS.mudur, action: 'out' }))).toEqual([409, 'stale_shift']);
+      // Kullanıcı menüsü de şimdiye kapatamaz (oturumun kendi çıkışı)
+      expect(await codeOf(h.call('mudur', 'POST', '/time/clock-out'))).toEqual([409, 'stale_shift']);
+      const sheet = await h.ok<TimeSheetDTO>('patron', 'GET', `/time?from=${day}&to=${day}&userId=${userId('Müdür')}`);
+      expect(sheet.entries.find((e) => e.id === inn.entry.id)).toMatchObject({ open: true, durationMs: 0 });
+      // Yetkili çıkışı girer; mesai gerçek süresiyle sayılır
+      expect(await h.ok<TimeEntryDTO>('patron', 'POST', `/time/entries/${inn.entry.id}/close`, { at: at(addDays(day, 1), 1) })).toMatchObject({ open: false, durationMs: 5 * H });
+    } finally {
+      c.restore();
+    }
+    const same = addDays(D, 11);
+    const c2 = clock(at(same, 8));
+    try {
+      expect(await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.garson })).toMatchObject({ state: 'in' });
+      c2.to(at(same, 22, 30));
+      expect(await h.ok<PunchResultDTO>('', 'POST', '/time/punch', { pin: PINS.garson })).toMatchObject({ state: 'out', entry: { durationMs: 14.5 * H } });
+    } finally {
+      c2.restore();
+    }
+  });
 });
+

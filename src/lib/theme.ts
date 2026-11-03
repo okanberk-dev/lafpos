@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { type AppTheme, bootThemeFor, type ForcedTheme, forcedForKds, KDS_THEME_PREF, type KdsTheme, resolveDark } from './bootDark';
+import { type AppTheme, bootThemeFor, DISPLAY_CONFIG_KEY, type ForcedTheme, forcedForKds, KDS_THEME_PREF, type KdsTheme, resolveDark } from './bootDark';
 import { readLocalPref, writeLocalPref } from './hooks';
 
 export { isBootDarkPath, KDS_THEME_PREF, type ForcedTheme, type KdsTheme } from './bootDark';
@@ -76,10 +76,20 @@ export function useIsDark(): boolean {
 
 /**
  * `path` yönlendiricinin gördüğü adres (demoda /demo öneki atılmış). Bar ekranı (cihaz tercihinde), çağrı ekranı ve
- * müşteri ekranı (`?tema=acik` ise açık, değilse koyu) ilk karede kendi temasında
+ * müşteri ekranı (`?tema=acik` ya da son görünümü porselense açık, değilse koyu) ilk karede kendi temasında
  */
+/** Müşteri ekranının saklanan son teması (yoksa ya da okunamıyorsa null) */
+function readDisplayTheme(): string | null {
+  try {
+    const cached = JSON.parse(localStorage.getItem(DISPLAY_CONFIG_KEY) ?? 'null') as { theme?: unknown } | null;
+    return typeof cached?.theme === 'string' ? cached.theme : null;
+  } catch {
+    return null;
+  }
+}
+
 export function initTheme(path?: string) {
-  const bootForce = path ? bootThemeFor(path, window.location.search, readKdsTheme()) : null;
+  const bootForce = path ? bootThemeFor(path, window.location.search, readKdsTheme(), readDisplayTheme()) : null;
   useTheme.setState({ bootForce });
   apply(read(), bootForce);
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {

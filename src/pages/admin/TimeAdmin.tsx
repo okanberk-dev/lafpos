@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Clock3, Download, LogOut, Pencil, Plus, Timer, Trash2, Users } from 'lucide-react';
 import { useState } from 'react';
-import { businessDate, fmtDateShort, fmtTime, istanbulParts, MAX_SHIFT_MS, STALE_SHIFT_MS } from '@shared/time';
+import { businessDate, fmtDateShort, fmtTime, istanbulParts, shiftForgotten } from '@shared/time';
 import type { TimeEntryDTO, TimeSheetDTO } from '@shared/types';
 import { ActionMenu, Badge, Card, CARD, type Column, DataTable, EmptyState, KpiStrip, PageHeader, QuickLook, Segmented, TableSkeleton } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
@@ -23,8 +23,8 @@ type Period = Exclude<PeriodKey, 'ozel'>;
 const PERIODS: Period[] = ['bugun', 'dun', 'hafta', 'gecenhafta', 'ay', 'gecenay'];
 const SOURCE: Record<TimeEntryDTO['source'], string> = { pin: 'Kilit ekranından', oturum: 'Oturumdan', yonetim: 'Elle kayıt' };
 
-/** 24 saati geçen açık mesai: çıkışı unutulmuş, süresi sayılmaz (sunucunun kuralı); çıkış saati girilmeli */
-const overdue = (e: TimeEntryDTO, now: number) => e.open && now - e.clockIn > MAX_SHIFT_MS;
+/** Çıkışı unutulmuş açık mesai (önceki iş gününden, 8 saatten uzun; sunucunun kuralı): süresi sayılmaz, çıkış girilmeli */
+const forgottenEntry = (e: TimeEntryDTO, now: number) => e.open && shiftForgotten(e.clockIn, now);
 const openMs = (e: TimeEntryDTO, now: number) => (e.open ? Math.max(0, now - e.clockIn) : e.durationMs);
 
 /**
@@ -54,7 +54,10 @@ export default function TimeAdmin() {
     setEdit({ userId: staff[0]?.id ?? '', date: today, inTime: '09:00', outTime: '17:00', note: '' });
   };
   const openEdit = (e: TimeEntryDTO) => {
-    if (!canChange(e.userId)) return;
+    if (!canChange(e.userId)) {
+      toast.info('Kendi mesai kaydınızı başka bir yetkili düzeltir');
+      return;
+    }
     setTried(false);
     setEdit(draftOf(e));
   };
@@ -63,7 +66,7 @@ export default function TimeAdmin() {
 
   const save = async () => {
     if (!edit) return;
-    if (errors.in || errors.out || errors.who) {
+    if (errors.in || errors.out || errors.who || errors.date) {
       setTried(true);
       return;
     }
@@ -128,7 +131,10 @@ export default function TimeAdmin() {
 
   const data = sheet.data;
   // Dönemden bağımsız: çıkışı unutulan eski mesai seçili dönemde görünmese de buradan düzeltilir
-  const forgotten = data?.clockedIn.filter((e) => now - e.clockIn > STALE_SHIFT_MS) ?? [];
+  const forgotten = data?.clockedIn.filter((e) => forgottenEntry(e, now)) ?? [];
+  // Şu an mesaide: çıkışı unutulmuş eski mesai içeride sayılmaz (ayrıca söylenir)
+  const atWork = data?.clockedIn.filter((e) => !forgottenEntry(e, now)) ?? [];
+  const openOf = new Map((data?.clockedIn ?? []).map((e) => [e.userId, e]));
   const totalMs = data?.totals.reduce((a, t) => a + t.workedMs, 0) ?? 0;
   const top = Math.max(1, ...(data?.totals.map((t) => t.workedMs) ?? [1]));
   const columns: Column<TimeEntryDTO>[] = [
@@ -152,8 +158,8 @@ export default function TimeAdmin() {
       header: 'Çıkış',
       cell: (e) =>
         e.open ? (
-          <Badge tone={now - e.clockIn > STALE_SHIFT_MS ? 'warning' : 'success'} dot>
-            {now - e.clockIn > STALE_SHIFT_MS ? 'Çıkış yok' : 'Mesaide'}
+          <Badge tone={forgottenEntry(e, now) ? 'warning' : 'success'} dot>
+            {forgottenEntry(e, now) ? 'Çıkış yok' : 'Mesaide'}
           </Badge>
         ) : (
           <span className="tabular-nums">{fmtTime(e.clockOut!)}</span>
@@ -163,7 +169,7 @@ export default function TimeAdmin() {
       key: 'sure',
       header: 'Süre',
       align: 'right',
-      cell: (e) => (overdue(e, now) ? <span className="text-[var(--admin-warning)]">Çıkış girilmeli</span> : <span className="font-semibold tabular-nums">{fmtDuration(openMs(e, now))}</span>),
+      cell: (e) => (forgottenEntry(e, now) ? <span className="text-[var(--admin-warning)]">Çıkış girilmeli</span> : <span className="font-semibold tabular-nums">{fmtDuration(openMs(e, now))}</span>),
     },
     { key: 'not', header: 'Not', cell: (e) => <span className="text-[var(--admin-text-mute)]">{joinMeta([e.note, e.editedByName && `düzelten ${e.editedByName}`]) || '—'}</span>, hideBelow: 'xl' },
   ];
@@ -175,7 +181,6 @@ export default function TimeAdmin() {
         description="PIN ile giriş-çıkış (kilit ekranındaki Mesai sekmesi ya da kullanıcı menüsü); düzeltmeler denetim kaydına yazılır"
         actions={
           <>
-            <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIODS.map((value) => ({ value, label: PERIOD_LABELS[value] }))} className="max-lg:w-full max-lg:[&>*]:grow" />
             <Button icon={<Download className="size-4" />} onClick={() => void exportCsv()}>
               CSV
             </Button>
@@ -184,7 +189,12 @@ export default function TimeAdmin() {
             </Button>
           </>
         }
-      />
+      >
+        {/* Altı dönem başlığın yanına sığmaz (1024 px'te başlık eziliyordu): kendi satırında */}
+        <div className="mt-3">
+          <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIODS.map((value) => ({ value, label: PERIOD_LABELS[value] }))} className="max-lg:w-full max-lg:[&>*]:grow" />
+        </div>
+      </PageHeader>
       {sheet.isPending ? (
         <TableSkeleton rows={5} />
       ) : sheet.isError && !data ? (
@@ -198,8 +208,8 @@ export default function TimeAdmin() {
                 label: 'Şu an mesaide',
                 icon: <Users />,
                 hue: 'green',
-                value: data.clockedIn.length,
-                reference: data.clockedIn.length ? data.clockedIn.map((e) => e.userName).join(', ') : 'Kimse içeride değil',
+                value: atWork.length,
+                reference: `${atWork.length ? atWork.map((e) => e.userName).join(', ') : 'Kimse içeride değil'}${forgotten.length ? ` · ${forgotten.length} çıkışı unutulmuş` : ''}`,
               },
               { key: 'toplam', label: 'Toplam süre', icon: <Timer />, hue: 'blue', value: fmtDuration(totalMs), reference: `${data.totals.length} kişi · ${PERIOD_LABELS[period].toLocaleLowerCase('tr-TR')}` },
               { key: 'mesai', label: 'Mesai', icon: <Clock3 />, hue: 'violet', value: data.entries.length, reference: `${data.entries.filter((e) => e.open).length} açık` },
@@ -208,7 +218,7 @@ export default function TimeAdmin() {
           />
 
           {forgotten.length > 0 && (
-            <Card title="Çıkışı unutulanlar" subtitle="14 saatten uzun açık mesai; çıkış saati girilene kadar kişi kilit ekranından yeniden giriş yapamaz" flush>
+            <Card title="Çıkışı unutulanlar" subtitle="Önceki günden açık kalan mesai: çıkış saati girilene kadar süresi sayılmaz, kişi yeniden giriş yapamaz" flush>
               <ul className="divide-y divide-[var(--admin-divider)]">
                 {forgotten.map((e) => (
                   <li key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
@@ -216,7 +226,7 @@ export default function TimeAdmin() {
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium">{e.userName}</span>
                       <span className="block text-xs text-[var(--admin-text-mute)]">
-                        Giriş {fmtDateShort(istanbulParts(e.clockIn).date)} {fmtTime(e.clockIn)} · {overdue(e, now) ? '24 saatten uzun açık, süresi sayılmıyor' : `${fmtDuration(now - e.clockIn)} açık`}
+                        Giriş {fmtDateShort(istanbulParts(e.clockIn).date)} {fmtTime(e.clockIn)} · süresi sayılmıyor
                       </span>
                     </span>
                     {canChange(e.userId) && (
@@ -239,11 +249,16 @@ export default function TimeAdmin() {
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2 text-sm font-medium">
                         {t.userName}
-                        {t.openNow && (
-                          <Badge tone="success" dot>
-                            Mesaide
-                          </Badge>
-                        )}
+                        {openOf.has(t.userId) &&
+                          (forgottenEntry(openOf.get(t.userId)!, now) ? (
+                            <Badge tone="warning" dot>
+                              Çıkış yok
+                            </Badge>
+                          ) : (
+                            <Badge tone="success" dot>
+                              Mesaide
+                            </Badge>
+                          ))}
                       </span>
                       <span className="mt-1.5 block h-1.5 w-full max-w-sm rounded-full bg-[var(--chart-track)]">
                         <span className="block h-1.5 rounded-full" style={{ width: `${Math.max(2, (t.workedMs / top) * 100)}%`, background: 'var(--chart-accent)' }} />
@@ -266,7 +281,7 @@ export default function TimeAdmin() {
             rowKey={(e) => e.id}
             onOpen={openEdit}
             selectedKey={edit?.entry?.id ?? null}
-            phoneMeta={(e) => joinMeta([fmtDateShort(e.businessDate), `${fmtTime(e.clockIn)}–${e.clockOut ? fmtTime(e.clockOut) : 'mesaide'}`, overdue(e, now) ? 'çıkış girilmeli' : fmtDuration(openMs(e, now))])}
+            phoneMeta={(e) => joinMeta([fmtDateShort(e.businessDate), `${fmtTime(e.clockIn)}–${e.clockOut ? fmtTime(e.clockOut) : 'mesaide'}`, forgottenEntry(e, now) ? 'çıkış girilmeli' : fmtDuration(openMs(e, now))])}
             empty={
               <EmptyState art="saat" title={period === 'bugun' ? 'Bugün henüz mesai yok' : 'Bu dönemde mesai yok'} action={<Button onClick={openNew}>Elle kayıt</Button>}>
                 Personel kilit ekranındaki Mesai sekmesinden PIN’iyle ya da kullanıcı menüsünden giriş-çıkış yapar
@@ -278,10 +293,10 @@ export default function TimeAdmin() {
                   label={`${e.userName} mesaisi`}
                   items={[
                     { key: 'duzelt', label: 'Düzelt', icon: <Pencil />, onSelect: () => openEdit(e) },
-                    // 24 saatten eski açık mesai şimdiye kapatılamaz (sunucu reddeder): çıkış saati girilir
+                    // Çıkışı unutulmuş mesai şimdiye kapatılmaz (uydurma uzun mesai yazılmasın): çıkış saati girilir
                     ...(e.open
                       ? [
-                          overdue(e, now)
+                          forgottenEntry(e, now)
                             ? { key: 'cikis', label: 'Çıkış saatini gir', icon: <LogOut />, onSelect: () => openEdit(e) }
                             : { key: 'kapat', label: 'Şimdi kapat', icon: <LogOut />, onSelect: () => void closeNow(e) },
                         ]
@@ -324,7 +339,7 @@ export default function TimeAdmin() {
                 ))}
               </Select>
             </Field>
-            <Field label="İş günü" hint="sabah 05:00'te başlar">
+            <Field label="İş günü" hint="sabah 05:00'te başlar" error={tried ? errors.date : null}>
               <Input type="date" value={edit.date} max={today} onChange={(e) => setEdit({ ...edit, date: e.target.value })} />
             </Field>
             <div className="grid grid-cols-2 gap-3">

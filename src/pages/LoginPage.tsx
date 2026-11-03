@@ -170,7 +170,7 @@ export function LoginPage() {
             <p className="mt-1 text-[13px] text-muted">{mode === 'mesai' ? 'PIN kodunuzu girin; oturum açılmaz' : 'Devam etmek için PIN kodunuzu girin'}</p>
           </div>
           <PinDots filled={pin.length} className="mb-2" />
-          <div role="alert" className="mb-4 h-5 text-center text-[13px] font-medium text-[var(--admin-danger-ink)]">
+          <div role="alert" className="mb-4 min-h-5 text-balance text-center text-[13px] font-medium text-[var(--admin-danger-ink)]">
             {error}
           </div>
           {/* Ortak tuş takımı; fiziksel klavye de girer (rakam, Backspace, Delete, Enter) */}

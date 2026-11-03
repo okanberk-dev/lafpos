@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gt, gte, isNull, lt, lte, ne, or } from 'drizzle-orm';
 import { TIME_SOURCE_LABEL } from '@shared/labels';
-import { addDays, businessDate, fmtDateTime, fmtTime, istanbulParts, MAX_SHIFT_MS, STALE_SHIFT_MS } from '@shared/time';
+import { addDays, businessDate, fmtDateTime, fmtTime, istanbulParts, MAX_SHIFT_MS, shiftForgotten } from '@shared/time';
 import type { MyTimeDTO, PunchResultDTO, TimeEntryDTO, TimeSheetDTO, TimeSheetTotalDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import type { AuthUser } from '../lib/auth';
@@ -42,11 +42,16 @@ function people(t: Tx | DB) {
 type People = ReturnType<typeof people>;
 
 /**
- * Açık mesai şimdiye kadar sayılır; 24 saati geçen açık mesai hiç sayılmaz (sıfır): çıkışı unutulmuştur, kimsenin
+ * Açık mesai şimdiye kadar sayılır; çıkışı unutulan açık mesai (`shiftForgotten`) hiç sayılmaz (sıfır): kimsenin
  * çalışmadığı saatler toplamı, bordroyu ve CSV'yi şişirmesin. Çıkış saati girilince gerçek süresiyle sayılır.
  */
-const overdue = (e: EntryRow, now: number) => e.clockOut == null && now - e.clockIn > MAX_SHIFT_MS;
-const durationOf = (e: EntryRow, now: number) => (overdue(e, now) ? 0 : Math.max(0, (e.clockOut ?? now) - e.clockIn));
+const forgotten = (e: { clockIn: number; clockOut: number | null }, now: number) => e.clockOut == null && shiftForgotten(e.clockIn, now);
+const durationOf = (e: EntryRow, now: number) => (forgotten(e, now) ? 0 : Math.max(0, (e.clockOut ?? now) - e.clockIn));
+
+/** Unutulan mesaiyi kişi kendisi kapatamaz: çıkış saatini bir yetkili girer (Yönetim › Mesai çizelgesi) */
+function refuseForgotten(open: EntryRow, now: number) {
+  if (forgotten(open, now)) throw conflict(`Önceki günden açık kalmış mesainiz var (giriş ${fmtDateTime(open.clockIn)}). Çıkışını bir yetkili girsin, sonra yeniden basın`, 'stale_shift');
+}
 
 function toDTO(e: EntryRow, who: People, now: number): TimeEntryDTO {
   const u = who.get(e.userId);
@@ -150,7 +155,8 @@ export function clockIn(t: Tx, person: Person, fx: Effects, source: 'pin' | 'otu
 export function clockOut(t: Tx, person: Person, fx: Effects, now = Date.now()): EntryRow {
   const open = openEntryOf(t, person.id);
   if (!open) throw conflict('Açık mesainiz yok; önce giriş yapın', 'not_clocked_in');
-  // Çıkışı unutulmuş eski mesai şimdiye uzatılmaz: saati bir yetkili girer (Yönetim › Mesai)
+  // Çıkışı unutulmuş mesai şimdiye uzatılmaz: saati bir yetkili girer (Yönetim › Mesai); kilit ekranı ve menü aynı
+  refuseForgotten(open, now);
   if (now - open.clockIn > MAX_SHIFT_MS) {
     throw conflict(`Girişiniz 24 saatten eski (${fmtDateTime(open.clockIn)}); çıkış saatini bir yetkili düzeltsin`, 'shift_too_long');
   }
@@ -173,10 +179,10 @@ function workedOn(t: Tx | DB, userId: string, date: string, now: number): number
 /**
  * Kilit ekranında PIN'le giriş-çıkış (oturum açılmaz). Yön verilmezse durum değişir: içerideyse çıkış, değilse giriş.
  * Yön verilmeden aynı kişinin kendi basışından bir dakika içinde gelen ikinci basış yok sayılır (çift dokunuş ya da
- * yanıtı kaybolup yinelenen istek kişiyi az önce girdiği mesaiden çıkarmasın); durum olduğu gibi döner. Yönsüz basış
- * çıkışı unutulmuş eski mesaiyi (`STALE_SHIFT_MS`) şimdiye kapatmaz: sabah işe gelen kişi dünkü mesaiyi 19 saatle
- * kapatıp dışarıda kalmasın; çıkış saatini bir yetkili girer. `todayMs` girişte bugünün, çıkışta kapanan mesainin iş
- * gününün toplamı.
+ * yanıtı kaybolup yinelenen istek kişiyi az önce girdiği mesaiden çıkarmasın); durum olduğu gibi döner. Çıkışı
+ * unutulmuş mesai (`shiftForgotten`) şimdiye kapatılmaz: sabah işe gelen kişi dünkü mesaiyi 13-19 saatle kapatıp
+ * dışarıda kalmasın; çıkış saatini bir yetkili girer. `todayMs` girişte bugünün, çıkışta kapanan mesainin iş gününün
+ * toplamı.
  */
 export function punch(t: Tx, person: Person & { color: string }, fx: Effects, action: 'in' | 'out' | undefined, now = Date.now()): PunchResultDTO {
   const user = { id: person.id, name: person.name, color: person.color };
@@ -190,9 +196,7 @@ export function punch(t: Tx, person: Person & { color: string }, fx: Effects, ac
       return { user, state: open ? 'in' : 'out', entry: entryDTO(t, last, now), todayMs: workedOn(t, person.id, open ? businessDate(now) : last.businessDate, now), repeated: true };
     }
   }
-  if (!action && open && now - open.clockIn > STALE_SHIFT_MS) {
-    throw conflict(`Açık kalmış bir mesainiz var (giriş ${fmtDateTime(open.clockIn)}); çıkışı unutulmuş olabilir. Çıkış saatini bir yetkili girsin, sonra yeniden basın`, 'stale_shift');
-  }
+  if (open && action !== 'in') refuseForgotten(open, now);
   const goIn = action ? action === 'in' : !open;
   const row = goIn ? clockIn(t, person, fx, 'pin', now) : clockOut(t, person, fx, now);
   return { user, state: goIn ? 'in' : 'out', entry: entryDTO(t, row, now), todayMs: workedOn(t, person.id, goIn ? businessDate(now) : row.businessDate, now), repeated: false };
@@ -383,11 +387,11 @@ export function timeSheet(t: Tx | DB, range: { from: string; to: string; userId?
 
 /**
  * Excel'in Türkçe ayarıyla açılan döküm: kişiye, sonra girişe göre; süre dakika ve ondalık saat (açık mesai şimdiye
- * kadar). 24 saati geçen açık mesainin süresi boş ve "Açık (çıkış girilmeli)": bordroya yanlış saat girmesin.
+ * kadar). Çıkışı unutulan açık mesainin süresi boş ve "Açık (çıkış girilmeli)": bordroya yanlış saat girmesin.
  */
 export function timeSheetCsv(sheet: TimeSheetDTO): string {
   const rows = [...sheet.entries].sort((a, b) => a.userName.localeCompare(b.userName, 'tr') || a.clockIn - b.clockIn);
-  const late = (e: TimeEntryDTO) => e.open && sheet.serverTime - e.clockIn > MAX_SHIFT_MS;
+  const late = (e: TimeEntryDTO) => forgotten(e, sheet.serverTime);
   return toCsv([
     ['Personel', 'İş günü', 'Giriş', 'Çıkış', 'Dakika', 'Saat', 'Kaynak', 'Not', 'Düzelten'],
     ...rows.map((e) => [

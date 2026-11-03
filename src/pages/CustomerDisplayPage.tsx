@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router';
 import type { CustomerDisplaySettings, DisplayConfigDTO, DisplayStateDTO } from '@shared/types';
 import { CustomerDisplayView, DISPLAY_DEFAULTS } from '@/components/display/CustomerDisplayView';
 import { get } from '@/lib/api';
+import { DISPLAY_CONFIG_KEY } from '@/lib/bootDark';
 import { useTick } from '@/lib/hooks';
 import { useBusinessName } from '@/lib/publicInfo';
 import { useTheme } from '@/lib/theme';
@@ -12,8 +13,8 @@ import { useWakeLock } from '@/lib/wakelock';
 /** "Teşekkürler" bu kadar kalır, sonra hoş geldiniz; çağrı numarası varsa müşteri onu okuyabilsin diye biraz daha */
 const THANKS_MS = 10_000;
 const THANKS_CALL_MS = 15_000;
-/** Son görünüm bu cihazda saklanır: sonraki açılışta ilk kare doğru temada (ayar gelmeden) */
-const CONFIG_KEY = 'lafpos.musteri-ekrani';
+/** Son görünüm bu cihazda saklanır: sonraki açılışta ilk kare doğru temada (ayar gelmeden; bootDark okur) */
+const CONFIG_KEY = DISPLAY_CONFIG_KEY;
 
 function cachedConfig(): DisplayConfigDTO | undefined {
   try {

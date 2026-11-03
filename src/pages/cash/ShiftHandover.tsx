@@ -25,7 +25,7 @@ const signed = (k: number) => `${k > 0 ? '+' : ''}${tl(k)}`;
  * Vardiya devri: gün içinde kasiyer değişirken devreden kasayı sayar. Beklenen nakit ve fark o anın ara raporundan
  * (kör kasada gizli); devralan PIN'ini girerse devir onaylı yazılır. Sayım, beklenen ve fark denetim kaydına düşer.
  */
-export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; onClose: () => void; summary: ZSummary | null }) {
+export function ShiftHandoverModal({ open, onClose, summary, prevDiff = 0 }: { open: boolean; onClose: () => void; summary: ZSummary | null; /** Günün son vardiya sayımının farkı */ prevDiff?: number }) {
   const boot = useBoot();
   const me = useAuth((s) => s.me);
   const qc = useQueryClient();
@@ -34,26 +34,34 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
   const [pin, setPin] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  // Sayım ya da devralan değişince silinen PIN: devralan yeniden girsin diye alanın altında söylenir
+  const [pinDropped, setPinDropped] = useState(false);
   const staff = boot.users.filter((u) => u.active && u.id !== me?.id);
   const reset = () => {
     setCount(emptyCount());
     setToUserId('');
     setPin('');
     setNote('');
+    setPinDropped(false);
+  };
+  const dropPin = () => {
+    if (pin) setPinDropped(true);
+    setPin('');
   };
   // Pencere her kapanışta boşalır: devralanın PIN'i ve sayım sonraki açılışa kalıp görmediği bir sayımı onaylamasın
   const close = () => {
     reset();
     onClose();
   };
-  // PIN, devralanın o an gördüğü sayımı onaylar: sayım ya da devralan değişirse yeniden girilir
+  // PIN, devralanın o an gördüğü sayımı onaylar: sayım ya da devralan gerçekten değişirse yeniden girilir (aynı tutarı
+  // yeniden yazmak ya da sıfırdaki banknotu eksiltmek PIN'i silmez)
   const changeCount = (v: CountResult) => {
+    if (v.countedCash !== count.countedCash || JSON.stringify(v.banknotes) !== JSON.stringify(count.banknotes)) dropPin();
     setCount(v);
-    setPin('');
   };
   const changeTaker = (id: string) => {
+    if (id !== toUserId) dropPin();
     setToUserId(id);
-    setPin('');
   };
   const save = async () => {
     setBusy(true);
@@ -67,11 +75,11 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
         note: note.trim() || null,
       });
       await qc.invalidateQueries({ queryKey: ['cash'] });
-      const who = r.toUserName ? `${r.toUserName} devraldı` : 'Ara sayım kaydedildi';
+      const who = r.toUserName ? `${r.toUserName} devraldı${r.confirmed ? '' : ' (PIN onayı yok)'}` : 'Ara sayım kaydedildi';
       toast.ok(r.shiftDiff == null ? `${who}; fark yöneticinin ekranında` : r.shiftDiff === 0 ? `${who}; kasa tuttu` : `${who}; fark ${signed(r.shiftDiff)}`);
       close();
     } catch (e) {
-      // Reddedilen PIN alanda kalmasın (yanlış girildiyse yeniden, doğruysa devralan yeniden girer)
+      // Reddedilen PIN alanda kalmasın (yanlış girildiyse yeniden, doğruysa devralan yeniden girer); hata kendisi söyler
       setPin('');
       toast.err(errorMessage(e));
     } finally {
@@ -98,7 +106,7 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
       }
     >
       <div className="space-y-5 p-5">
-        <CashCount cashOnly summary={summary} value={count} onChange={changeCount} />
+        <CashCount cashOnly summary={summary} value={count} onChange={changeCount} baseDiff={prevDiff} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Devralan" hint="boşsa ara sayım">
             <Select value={toUserId} onChange={(e) => changeTaker(e.target.value)}>
@@ -110,8 +118,19 @@ export function ShiftHandoverModal({ open, onClose, summary }: { open: boolean; 
               ))}
             </Select>
           </Field>
-          <Field label="Devralanın PIN'i" hint="isteğe bağlı, sayımdan sonra">
-            <Input type="password" inputMode="numeric" autoComplete="off" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="Devralan girer" />
+          <Field label="Devralanın PIN'i" hint={pinDropped && !pin ? "sayım değişti; devralan PIN'ini yeniden girsin" : 'isteğe bağlı, sayımdan sonra'}>
+            <Input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={6}
+              value={pin}
+              onChange={(e) => {
+                setPin(e.target.value.replace(/\D/g, ''));
+                setPinDropped(false);
+              }}
+              placeholder="Devralan girer"
+            />
           </Field>
         </div>
         <Field label="Not" hint="isteğe bağlı">
