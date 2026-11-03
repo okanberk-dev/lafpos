@@ -35,7 +35,7 @@ import { ADMIN_SECTIONS } from '@/components/admin/sections';
 import { PlatformBadge } from '@/components/PlatformBadge';
 import { Badge, Card, CARD, type Column, type KpiCell, KpiStrip, KpiStripSkeleton, PageHeader, Segmented, SetupNotes, StatusTabs, TableSkeleton } from '@/components/admin/ui';
 import { Field, Input, SearchInput, Select } from '@/components/ui/Field';
-import { EmptyState, ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
+import { EmptyState, ErrorState, ListSkeleton, Notice, SizeTag, Skeleton } from '@/components/ui/misc';
 import { get, getToken } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -170,7 +170,11 @@ export default function ReportsPage() {
                 </option>
               ))}
             </Select>
-            <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIOD_KEYS.map((k) => ({ value: k, label: PERIOD_LABELS[k] }))} className="max-md:hidden max-lg:w-full max-lg:[&>*]:grow" />
+            {/* Telefonda sarmalayıcı gizlenir (Mesai'deki gibi): Segmented'e verilen max-md:hidden'ı derlenmiş CSS'te kitin
+                max-sm:flex'i ezer, 640 px altında liste ve yedi dönemlik ray yan yana kalırdı */}
+            <div className="max-md:hidden max-lg:w-full">
+              <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIOD_KEYS.map((k) => ({ value: k, label: PERIOD_LABELS[k] }))} className="max-lg:w-full max-lg:[&>*]:grow" />
+            </div>
           </>
         }
       >
@@ -258,12 +262,6 @@ function KpiAmount({ value }: { value: number }) {
 function useSizeName() {
   const labels = useBoot().settings.sizeLabels;
   return (size: string) => (size === 'M' || size === 'L' ? labels[size] : null);
-}
-
-/** Boy çipi: sepetteki gibi çerçeveli hap, adın yanında; satır sonuna tek başına düşmez */
-function SizeTag({ children }: { children: ReactNode }) {
-  if (!children) return null;
-  return <span className="ml-1.5 inline-block whitespace-nowrap rounded-full border border-line px-1.5 align-[2px] text-[11px] font-medium leading-4 text-ink-2">{children}</span>;
 }
 
 const Dash = () => <span className="text-muted">—</span>;
@@ -473,7 +471,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
         const prev = previousShort(s.previous.label, s.previous.range);
         const compared = `Kıyas: ${s.previous.label}`;
         // Etiket en çok 18, referans en çok 30 karakter; ayrıntı döküm kartlarında ve tıklanınca açılan raporda. Renk anlam
-        // taşır: ciro yeşil (grafik serisi), online mor (her ekranda), kayıp pembe, durumsuz sayılar mavi
+        // taşır: ciro yeşil (grafik serisi), online mor (her ekranda), kayıp pembe, durumsuz sayılar nötr
         const cells: KpiCell[] = [
           {
             key: 'ciro',
@@ -489,7 +487,6 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             key: 'adisyon',
             label: 'Adisyon',
             icon: <ReceiptText />,
-            hue: 'blue',
             value: fmtN(s.receipts),
             delta: deltaOf(changeOf(s.receipts, s.previous.receipts)),
             reference: (
@@ -506,7 +503,6 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             key: 'urun',
             label: 'Satılan ürün',
             icon: <Package />,
-            hue: 'blue',
             value: fmtN(s.itemsSold),
             reference: s.days > 1 ? `${s.days} iş günü` : s.days === 1 ? 'Tek iş günü' : 'Gün açılmadı',
             onClick: () => onOpen('urunler', { product: 'urun' }),
@@ -859,12 +855,11 @@ function HourlyReport({ range, today, onExport, exporting }: { range: Range; tod
         const oneHour = !!h.busiest && !!h.quietest && h.busiest.offset === h.quietest.offset;
         const cells: KpiCell[] = [
           { key: 'toplam', label: 'Toplam', icon: <TurkishLira />, hue: 'green', value: <KpiAmount value={h.total} />, reference: `${active} aktif saat` },
-          { key: 'yogun', label: 'En yoğun saat', icon: <Clock />, hue: 'blue', value: h.busiest ? hh(h.busiest.hour) : '—', reference: h.busiest ? hourRef(h.busiest) : 'Sayılmadı' },
+          { key: 'yogun', label: 'En yoğun saat', icon: <Clock />, value: h.busiest ? hh(h.busiest.hour) : '—', reference: h.busiest ? hourRef(h.busiest) : 'Sayılmadı' },
           {
             key: 'sakin',
             label: 'En sakin saat',
             icon: <Clock />,
-            hue: 'blue',
             value: h.quietest && !oneHour ? hh(h.quietest.hour) : '—',
             reference: oneHour ? 'Satış yalnız bir saatte' : h.quietest ? hourRef(h.quietest) : 'Sayılmadı',
           },
@@ -1053,8 +1048,8 @@ function PrepReport({ range, today }: { range: Range; today: string }) {
         const products = all ? p.products : p.products.slice(0, PREP_PRODUCTS);
         // Süre durum değil, nötr; amber yalnız yavaşlığı söyleyen iki hücrede (zaman uyarısı)
         const cells: KpiCell[] = [
-          { key: 'ortalama', label: 'Ortalama', icon: <Timer />, hue: 'blue', value: dur(p.overall.avg), reference: `${fmtN(p.overall.count)} kalem` },
-          { key: 'ortanca', label: 'Ortanca', icon: <Timer />, hue: 'blue', value: dur(p.overall.median), reference: 'Kalemlerin yarısı bundan kısa' },
+          { key: 'ortalama', label: 'Ortalama', icon: <Timer />, value: dur(p.overall.avg), reference: `${fmtN(p.overall.count)} kalem` },
+          { key: 'ortanca', label: 'Ortanca', icon: <Timer />, value: dur(p.overall.median), reference: 'Kalemlerin yarısı bundan kısa' },
           { key: 'p90', label: 'En yavaş %10', icon: <Hourglass />, hue: 'amber', value: dur(p.overall.p90), reference: 'Her 10 kalemden biri daha uzun' },
           { key: 'enuzun', label: 'En uzun', icon: <Hourglass />, hue: 'amber', value: dur(p.overall.max), reference: 'Tek kalemde' },
           // Müşterinin hazır siparişi ne kadar sürede aldığı: bar ekranında ya da kasada "Teslim edildi"
@@ -1062,7 +1057,6 @@ function PrepReport({ range, today }: { range: Range; today: string }) {
             key: 'teslim',
             label: 'Hazırdan teslime',
             icon: <HandPlatter />,
-            hue: 'blue',
             value: p.handoff?.count ? dur(p.handoff.median) : '—',
             reference: p.handoff?.count ? `Ortanca · ${fmtN(p.handoff.count)} teslim` : 'Sayılmadı · teslim işaretlenmedi',
           },
@@ -1303,11 +1297,11 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
           );
         const max = Math.max(1, ...d.platforms.map((p) => p.revenue));
         const showCost = withCost && d.commission != null;
-        const commission: KpiCell = { key: 'komisyon', label: 'Komisyon', icon: <BadgePercent />, hue: 'blue', value: <KpiAmount value={d.commission ?? 0} />, reference: 'Bugünkü oranla tahmin' };
-        // Ciro yeşil, durumsuz sayılar mavi, bekleyen amber (zaman), kaçan pembe (kayıp)
+        const commission: KpiCell = { key: 'komisyon', label: 'Komisyon', icon: <BadgePercent />, value: <KpiAmount value={d.commission ?? 0} />, reference: 'Bugünkü oranla tahmin' };
+        // Ciro yeşil, durumsuz sayılar nötr, bekleyen amber (zaman), kaçan pembe (kayıp)
         const cells: KpiCell[] = [
           { key: 'ciro', label: 'Platform cirosu', icon: <Bike />, hue: 'green', value: <KpiAmount value={d.revenue} />, reference: `Toplam ciroda pay %${d.share.toLocaleString('tr-TR')}` },
-          { key: 'siparis', label: 'Sipariş', icon: <ReceiptText />, hue: 'blue', value: fmtN(d.orders), reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
+          { key: 'siparis', label: 'Sipariş', icon: <ReceiptText />, value: fmtN(d.orders), reference: d.orders ? `Ortalama sepet ${tlShort(d.avgBasket)}` : 'Kapanan sipariş yok' },
           ...(showCost ? [commission] : []),
           { key: 'acik', label: 'Açık sipariş', icon: <Clock />, hue: 'amber', value: fmtN(d.open.orders), reference: d.open.orders ? `${tlShort(d.open.amount)} · ciroya girmedi` : 'Hepsi kapandı' },
           { key: 'kacan', label: 'Kaçan sipariş', icon: <XCircle />, hue: 'rose', value: fmtN(d.missed.orders), reference: d.missed.orders ? `Müşteri tutarı ${tlShort(d.missed.amount)}` : 'Ret, süre, iptal ya da kasaya alınmayan yok' },

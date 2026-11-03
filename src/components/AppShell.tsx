@@ -8,7 +8,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { DEMO } from '@/lib/demo';
 import { useLive } from '@/lib/live';
-import { isAdminArea, navAriaLabel, phoneTabs, visibleNav } from '@/lib/nav';
+import { EXTRA_TITLES, isAdminArea, navAlias, navAriaLabel, phoneTabs, useNavOrigin, visibleNav } from '@/lib/nav';
 import { useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
 import { confirmLeave } from '@/lib/unsavedGuard';
@@ -23,7 +23,7 @@ import { LafMark, LafTile } from './LafMark';
 import { MesaiRow } from './MesaiRow';
 import { PlatformInbox } from './PlatformInbox';
 import { Segmented } from './ui/Field';
-import { Badge } from './ui/misc';
+import { Avatar, Badge } from './ui/misc';
 import { Modal } from './ui/Modal';
 import { REMOTE, REMOTE_PATHS } from '@/lib/remote';
 
@@ -131,9 +131,15 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const { tabs, more } = phoneTabs(items);
   const [railNav, railMore] = useMoreBelow(items.length);
   const isAt = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
+  // Menüde olmayan ekranın menüdeki yeri (navAlias): adisyon açıkken geldiği ekran (Masalar, Tezgâh satışı ya da
+  // Siparişler), Eğitim cihazında Kasa etkin görünür. Yalnız görünüm: aria-current'ı NavLink verir, yalnız adresin ekranına
+  const origin = useNavOrigin((s) => s.to);
+  const alias = navAlias(location.pathname, origin);
+  const on = (to: string, isActive: boolean) => isActive || to === alias;
   // Telefon üst şeridinde saat yerine ekranın adı (saat rayda ve kilit ekranında); "Daha"daki ekrandaysa Daha etkin
   const current = items.find((n) => isAt(n.to));
-  const moreActive = more.some((n) => isAt(n.to));
+  const moreHere = more.some((n) => isAt(n.to));
+  const moreActive = moreHere || more.some((n) => n.to === alias);
   const admin = isAdminArea(location.pathname);
   const fullBleed = admin || location.pathname.startsWith('/adisyon/') || location.pathname === '/mutfak';
   // Üst şeridi olmayan ekranda (adisyon, bar ekranı) kişinin menüsü alt sekmede: tek ekranlı rol (Bar) de telefonda
@@ -224,11 +230,11 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     );
   };
   const avatar = (size: keyof typeof AVATAR, dot = true) => (
-    // Kişinin rengi koyu kartta kaybolmasın: ince iç halka. Mesaideyse sağ altta yeşil nokta. Ad düğmenin etiketinde
-    <span aria-hidden="true" className={cn('relative grid shrink-0 place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', AVATAR[size])} style={{ background: me.color }}>
-      {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
+    // Kitin avatarı (personel ve giriş ekranıyla tek): ince iç halka, açık kişi renginde koyu harf. Mesaideyse sağ altta
+    // yeşil nokta. Ad düğmenin etiketinde
+    <Avatar name={me.name} color={me.color} className={AVATAR[size]}>
       {dot && onClock && <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-surface bg-[var(--admin-success)]" />}
-    </span>
+    </Avatar>
   );
   // Alt sekme: ikon hapın içinde; etkin sekme yalnız renkle değil, gri hap ve kalın yazıyla da ayrılır
   const tab = (on: boolean) => cn('group flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150', on ? 'font-semibold text-ink' : 'font-medium text-muted');
@@ -271,7 +277,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               className={({ isActive }) =>
                 cn(
                   'group flex w-full flex-col items-center gap-0.5 rounded-xl py-0.5 text-[11px] font-medium transition-colors duration-150 [@media(max-height:860px)]:py-0',
-                  isActive ? 'text-ink' : 'text-muted hover:text-ink',
+                  on(n.to, isActive) ? 'text-ink' : 'text-muted hover:text-ink',
                 )
               }
             >
@@ -281,12 +287,12 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
                   <span
                     className={cn(
                       'grid h-7 w-12 place-items-center rounded-full transition-colors duration-150',
-                      isActive ? 'bg-primary text-primary-ink' : 'group-hover:bg-hover group-active:bg-press',
+                      on(n.to, isActive) ? 'bg-primary text-primary-ink' : 'group-hover:bg-hover group-active:bg-press',
                     )}
                   >
                     <n.icon className="size-5" />
                   </span>
-                  <span className={cn('leading-4', isActive && 'font-semibold')}>{n.label}</span>
+                  <span className={cn('leading-4', on(n.to, isActive) && 'font-semibold')}>{n.label}</span>
                 </>
               )}
             </NavLink>
@@ -309,7 +315,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
           <header className="flex items-center gap-0.5 border-b border-line bg-surface pb-1 pl-4 pr-2 pt-[max(0.25rem,env(safe-area-inset-top))] md:hidden">
             <LafMark className="h-4 shrink-0 text-ink" title="L'Affogato" />
-            <span className="ml-2.5 min-w-0 flex-1 truncate text-base font-semibold tracking-[-0.01em]">{current?.title ?? ''}</span>
+            <span className="ml-2.5 min-w-0 flex-1 truncate text-base font-semibold tracking-[-0.01em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
             <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted active:bg-press">
               <Search className="size-5" />
             </button>
@@ -326,12 +332,12 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         {showTabs && (
           <nav aria-label="Ekranlar" className="flex border-t border-line bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
             {tabs.map((n) => (
-              <NavLink key={n.to} to={n.to} aria-label={navAriaLabel(n)} className={({ isActive }) => tab(isActive)}>
+              <NavLink key={n.to} to={n.to} aria-label={navAriaLabel(n)} className={({ isActive }) => tab(on(n.to, isActive))}>
                 {({ isActive }) => (
                   <>
                     {/* Etkin sekme: ikon gri hapın içinde ve kalın (index.css svg.lucide 1.75'i sınıf ezer) */}
-                    <span className={tabPill(isActive)}>
-                      <n.icon className={cn('size-[22px]', isActive && 'stroke-[2.25]')} />
+                    <span className={tabPill(on(n.to, isActive))}>
+                      <n.icon className={cn('size-[22px]', on(n.to, isActive) && 'stroke-[2.25]')} />
                     </span>
                     <span className="max-w-full truncate px-1">{n.label}</span>
                   </>
@@ -339,7 +345,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               </NavLink>
             ))}
             {more.length > 0 && (
-              <button type="button" onClick={() => setMoreOpen(true)} aria-current={moreActive ? 'page' : undefined} className={tab(moreActive)}>
+              <button type="button" onClick={() => setMoreOpen(true)} aria-current={moreHere ? 'page' : undefined} className={tab(moreActive)}>
                 <span className={tabPill(moreActive)}>
                   <MoreHorizontal className={cn('size-[22px]', moreActive && 'stroke-[2.25]')} />
                 </span>
@@ -360,7 +366,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         {/* Liste: ekranın tam adı (raydaki kısaltma değil), sağda ok */}
         <div className="space-y-2 p-4">
           {more.map((n) => (
-            <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => cn(sheetRow, isActive && 'border-[var(--admin-border-field)] bg-surface-3')}>
+            <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => cn(sheetRow, on(n.to, isActive) && 'border-[var(--admin-border-field)] bg-surface-3')}>
               <span className={sheetIcon}>
                 <n.icon />
               </span>

@@ -5,6 +5,7 @@ import { tl } from '@shared/money';
 import { fmtTime } from '@shared/time';
 import { AUTO_SKIP_PREFIX, COURIER_LABEL, PLATFORM_LABEL, type PlatformLiveStatus, type PlatformOrderDTO, type PlatformSettings, type PlatformId, REJECT_REASONS } from '@shared/platforms';
 import { Button } from '@/components/ui/Button';
+import { Chip } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, Notice } from '@/components/ui/misc';
 import { ApiError, errorMessage, get, post } from '@/lib/api';
@@ -53,13 +54,6 @@ function Countdown({ expiresAt, now, calm = 'text-ink-2', short, className }: { 
     </span>
   );
 }
-
-/** Seçim çipi (hazırlık süresi, ret nedeni): kapsül, seçili mürekkep kenar ve gri zemin (yeşil dolgu gezinmeye ayrılmış) */
-const chip = (on: boolean) =>
-  cn(
-    'min-h-11 rounded-full border px-3.5 text-sm transition-colors duration-150 disabled:opacity-50 pointer-fine:min-h-9',
-    on ? 'border-ink bg-surface-3 font-semibold text-ink' : 'border-line text-ink-2 hover:bg-hover active:bg-press',
-  );
 
 /** Kartın içindeki uyarı: Notice'in sıkı ölçüsü (pencerede 13 px) */
 const NOTE = 'mt-2 px-3 py-2 text-[13px]';
@@ -241,11 +235,12 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
       ) : rejecting ? (
         <div className="mt-3 space-y-2.5">
           <p className="text-sm font-medium">Neden reddediyorsunuz?</p>
+          {/* Hazır neden ve süre kitin mürekkep çipi (adisyondaki iptal ve indirim nedeniyle aynı): seçili tikli */}
           <div role="group" aria-label="Ret nedeni" className="flex flex-wrap gap-1.5">
             {REJECT_REASONS.map((r) => (
-              <button key={r} type="button" aria-pressed={reason === r} disabled={busy} onClick={() => setReason(r)} className={chip(reason === r)}>
+              <Chip key={r} tone="ink" on={reason === r} disabled={busy} onClick={() => setReason(r)}>
                 {r}
-              </button>
+              </Chip>
             ))}
           </div>
           {/* Onay penceresinin dili: Vazgeç ve eylemi adlandıran kırmızı düğme; neden seçilmeden gitmez */}
@@ -264,9 +259,9 @@ function PendingCard({ order, now, defaultPrep, onDone }: { order: PlatformOrder
             <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Hazırlık süresi">
               <span className="mr-1 text-sm text-muted">Hazırlık</span>
               {preps.map((m) => (
-                <button key={m} type="button" onClick={() => setPrep(m)} aria-pressed={prep === m} className={chip(prep === m)}>
+                <Chip key={m} tone="ink" on={prep === m} onClick={() => setPrep(m)}>
                   {m} dk
-                </button>
+                </Chip>
               ))}
             </div>
           )}

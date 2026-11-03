@@ -6,7 +6,7 @@ import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-ca
 import { fmtTime } from '@shared/time';
 import type { CompKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Segmented } from '@/components/ui/Field';
+import { Segmented, Stepper } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad, useNumpadKeys } from '@/components/ui/Numpad';
 import { Badge, Notice } from '@/components/ui/misc';
@@ -23,7 +23,7 @@ import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
 import { CustomerModal } from './CustomerModal';
 import { OkcPanel, useOkcReceipts } from './OkcPanel';
-import { QtyStepper, ReasonModal } from './TableOps';
+import { ReasonModal } from './TableOps';
 import { TypedAmount } from './TypedAmount';
 
 type Mode = 'tutar' | 'kalem' | 'paylas';
@@ -284,7 +284,7 @@ export function PaymentModal({
       label: 'Neden',
       placeholder: 'Ör. yanlış tutar girildi',
       maxLength: 200,
-      required: true,
+      required: 'İptal nedenini yazın',
       confirmLabel: 'Ödemeyi iptal et',
     });
     if (!reason) return;
@@ -308,13 +308,15 @@ export function PaymentModal({
   if (result) {
     // Self ve yarı self servis: müşteriye söylenecek numara ya da personelin götüreceği masa sonuç ekranında büyük
     const call = result.closed ? callFor(order, serviceMode) : null;
+    // Başlık gövdede çizilir (pencerenin başlık şeridi yok): pencerenin erişilebilir adı da odur
+    const heading = result.closed ? 'Adisyon kapandı' : result.share ? `Pay ${result.share} alındı` : 'Ödeme alındı';
     return (
-      <Modal open onClose={() => (result.closed ? onDone(true) : setResult(null))} size="sm" persistent>
+      <Modal open onClose={() => (result.closed ? onDone(true) : setResult(null))} size="sm" persistent ariaLabel={heading}>
         <div className="p-6 text-center">
           <span className="mx-auto grid size-14 place-items-center rounded-full bg-[var(--admin-success-soft)] text-[var(--admin-success)]">
             <CheckCircle2 aria-hidden="true" className="size-8" />
           </span>
-          <h2 className="mt-3 text-lg font-semibold">{result.closed ? 'Adisyon kapandı' : result.share ? `Pay ${result.share} alındı` : 'Ödeme alındı'}</h2>
+          <h2 className="mt-3 text-lg font-semibold">{heading}</h2>
           <p className="tabular mt-0.5 text-sm text-muted">
             {tl(result.amount + result.tip)} · {result.method}
             {result.tip > 0 && ` · ${tl(result.tip)} bahşiş dahil`}
@@ -547,7 +549,7 @@ export function PaymentModal({
                             {left} adet · {tl(unpaidLineAmount(order.totals, payLines.find((l) => l.id === i.id) ?? i, remaining))}
                           </span>
                         </button>
-                        <QtyStepper value={sel} max={left} onChange={(v) => setSelection({ ...selection, [i.id]: v })} />
+                        <Stepper value={sel} max={left} label={`${i.name} adedi`} onChange={(v) => setSelection({ ...selection, [i.id]: v })} />
                       </div>
                     );
                   })}
@@ -778,7 +780,7 @@ function SplitPanel({
 }) {
   const split = order.split;
   const minPeople = Math.max(2, paidShares.length + 1);
-  const stepper = <QtyStepper label="Kişi" value={people} min={minPeople} max={30} onChange={setPeople} />;
+  const stepper = <Stepper label="Kişi" value={people} min={minPeople} max={30} onChange={setPeople} />;
 
   if (!split) {
     // Önizleme sunucunun bölüşüyle aynı (shared/money splitEven, order-calc splitState): kuruş artığı baştaki paylara

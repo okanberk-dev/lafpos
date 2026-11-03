@@ -6,8 +6,8 @@ import { isCounterFirst, serviceModeOf } from '@shared/service-mode';
 import { fmtTime } from '@shared/time';
 import type { CompKind, OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Input, Label, Segmented } from '@/components/ui/Field';
-import { EmptyState } from '@/components/ui/misc';
+import { Chip, Input, Label, Segmented, Stepper } from '@/components/ui/Field';
+import { EmptyState, SizeTag } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { post } from '@/lib/api';
@@ -19,7 +19,6 @@ import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
 import { parseTL } from '@shared/money';
 import { groupTyped } from '@/lib/numpad';
-import { QtyStepper } from './OptionsModal';
 import { TypedAmount } from './TypedAmount';
 
 // Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
@@ -154,7 +153,7 @@ export function CartPanel({
                   // Dar hesap kartında (telefon, tablet) ad, seçenek ve not ilk satırın tamamını alır; adet ve tutar altta.
                   // Bilgisayarda tek satır. Odak sırası geniş düzenin sırası (adet, ad, tutar)
                   <li key={l.key} className="animate-in flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 lg:flex-nowrap">
-                    <QtyStepper
+                    <Stepper
                       value={l.qty}
                       min={1}
                       max={99}
@@ -240,11 +239,6 @@ export function CartPanel({
     </div>
   );
 }
-
-/** Boy etiketi: ürün adına yapışık düz metin yerine küçük çerçeveli çip; seçenek metniyle karışmaz */
-const SizeTag = ({ children }: { children: React.ReactNode }) => (
-  <span className="ml-1.5 inline-block rounded-full border border-line px-1.5 align-[2px] text-[11px] font-medium leading-4 text-ink-2">{children}</span>
-);
 
 const Row = ({ l, r }: { l: React.ReactNode; r: React.ReactNode }) => (
   <div className="flex justify-between">
@@ -366,7 +360,7 @@ function ItemSheet({
           {mode !== 'indirim' && unpaid > 1 && (
             <div className="flex items-center justify-between gap-3">
               <Label className="mb-0">Adet</Label>
-              <QtyStepper value={qty} onChange={setQty} min={1} max={unpaid} label="Adet" />
+              <Stepper value={qty} onChange={setQty} min={1} max={unpaid} label="Adet" />
             </div>
           )}
           {mode === 'indirim' && (
@@ -407,11 +401,12 @@ function ItemSheet({
           )}
           <div>
             <Label hint={removesDiscount ? 'kaldırırken gerekmez' : undefined}>Neden</Label>
+            {/* Hazır neden: kitin mürekkep çipi (adisyon indirimi, iptal ve ret nedeniyle aynı) */}
             <div className="flex flex-wrap gap-1.5">
               {reasons.map((r) => (
-                <button key={r} aria-pressed={reason === r} onClick={() => setReason(r)} className={cn('min-h-11 rounded-lg border bg-surface px-3 text-sm transition-colors duration-150 active:bg-press pointer-fine:min-h-9', reason === r ? 'border-ink font-semibold text-ink' : 'border-line-strong text-ink-2 hover:border-[var(--admin-border-field)]')}>
+                <Chip key={r} tone="ink" on={reason === r} onClick={() => setReason(r)}>
                   {r}
-                </button>
+                </Chip>
               ))}
             </div>
             <Input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="Ya da nedeni yazın" aria-label="Neden" className="mt-2" />

@@ -20,13 +20,6 @@ import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 import { openCounterSale } from '@/lib/counter';
 
-/**
- * Online (siteden gelen) sipariş her ekranda mor. Kenarı öteki durum çizgileri gibi kendi yumuşak zeminine karışık
- * renk (açıkta %20, koyuda %45); kitte `--admin-violet-line` belirteci tanımlanınca o kullanılır
- */
-const VIOLET_LINE =
-  'border-[var(--admin-violet-line,color-mix(in_oklab,var(--admin-hue-violet)_20%,var(--admin-hue-violet-soft)))] dark:border-[var(--admin-violet-line,color-mix(in_oklab,var(--admin-hue-violet)_45%,var(--admin-hue-violet-soft)))]';
-
 export default function FloorPage() {
   const boot = useBoot();
   const can = useCan();
@@ -218,7 +211,7 @@ export default function FloorPage() {
           <Legend className="border border-blue-line bg-blue-soft" label="Dolu" />
           <Legend className="border border-warning-line bg-warning-soft" label="Hesap istendi" />
           <Legend className="border border-rose-line bg-rose-soft" label="Kısmen ödendi" />
-          <Legend className={cn('border bg-violet-soft', VIOLET_LINE)} label="Online" />
+          <Legend className="border border-violet-line bg-violet-soft" label="Online" />
           <Legend className="border border-line bg-surface" dot label="Rezerve" />
         </footer>
       </section>
@@ -392,7 +385,8 @@ function TableTile({
         tone === 'busy' && 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)]',
         tone === 'billed' && 'border-warning-line bg-warning-soft hover:border-[var(--admin-warning)]',
         tone === 'partial' && 'border-rose-line bg-rose-soft hover:border-[var(--admin-hue-rose)]',
-        tone === 'online' && cn('bg-violet-soft hover:border-[var(--admin-hue-violet)]', VIOLET_LINE),
+        // Online (siteden gelen) sipariş her ekranda mor; kenarı öteki durumlar gibi kendi çizgi belirteci
+        tone === 'online' && 'border-violet-line bg-violet-soft hover:border-[var(--admin-hue-violet)]',
         className,
       )}
     >

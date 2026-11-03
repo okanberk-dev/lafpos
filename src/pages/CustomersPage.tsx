@@ -15,7 +15,7 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { useFinePointer } from '@/lib/hooks';
 import { newRequestId } from '@/lib/requestId';
-import { joinMeta } from '@/lib/text';
+import { fmtPhone, joinMeta, telHref } from '@/lib/text';
 import { toast } from '@/lib/toast';
 
 interface Customer {
@@ -42,18 +42,6 @@ interface Detail {
 const LEDGER_LABEL = { borc: 'Borç', tahsilat: 'Tahsilat', duzeltme: 'Düzeltme' };
 const emptyForm = () => ({ name: '', phone: '', email: '', birthday: '', note: '', creditLimit: '' });
 const MONEY_HINT = 'Tutarı ör. 500 ya da 1.250,50 biçiminde yazın';
-/** Pirinç dolgu: damga ve ödül (DESIGN; amber zamanındır). Kitte gold varyantı gelene dek ikincil düğmenin üstüne */
-const GOLD = 'border-transparent bg-gold-fill font-semibold text-on-gold shadow-[var(--shadow-lift)] hover:border-transparent hover:bg-gold-fill hover:brightness-95 active:border-transparent active:bg-gold-fill active:brightness-90';
-
-/** Sunucu telefonu 10 rakam saklar (normalizePhone): "5321112233" → "0532 111 22 33"; başka biçim olduğu gibi */
-function fmtPhone(p: string): string {
-  const d = p.replace(/\D/g, '');
-  return d.length === 10 ? `0${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8)}` : p;
-}
-const telHref = (p: string) => {
-  const d = p.replace(/\D/g, '');
-  return `tel:${d.length === 10 ? '+90' : ''}${d}`;
-};
 const birthdayFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long' });
 /** Doğum günü yılsız: "14 Mayıs" */
 const fmtBirthday = (d: string) => (isCalendarDate(d) ? birthdayFmt.format(new Date(`${d}T12:00:00Z`)) : d);
@@ -306,8 +294,9 @@ export default function CustomersPage() {
               <h2 className="min-w-0 flex-1 text-xl font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">{c.name}</h2>
               {((stamps && c.stamps >= goal) || (can('cari.yonet') && c.balance > 0)) && (
                 <div className="flex gap-2 max-sm:order-last max-sm:mt-1 max-sm:w-full max-sm:[&>*]:flex-1">
+                  {/* Ödül pirinçte (damga kartının rengi; amber zamanındır): adisyonun Müşteri penceresiyle aynı düğme */}
                   {stamps && c.stamps >= goal && (
-                    <Button icon={<Gift className="size-4" />} className={GOLD} loading={busy === 'redeem'} onClick={() => void redeem(c)}>
+                    <Button variant="gold" icon={<Gift className="size-4" />} loading={busy === 'redeem'} onClick={() => void redeem(c)}>
                       Hediye içecek
                     </Button>
                   )}

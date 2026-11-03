@@ -74,9 +74,8 @@ function AdminIndex() {
                 {list.map((s) => (
                   <li key={s.key}>
                     <Link to={s.to} className="flex min-h-[68px] items-center gap-3 px-4 py-3.5 transition-colors hover:bg-hover active:bg-press">
-                      {/* Tek ton (bilgisayardaki kenar çubuğu gibi sakin): kobalt, amber, pembe ve mor durum rengidir,
-                          bölümleri süslemez */}
-                      <IconBox hue="green" size="lg">
+                      {/* Tek ve renksiz ton, bilgisayardaki kenar çubuğu gibi: renk durumun, bölümleri süslemez */}
+                      <IconBox size="lg">
                         <s.icon />
                       </IconBox>
                       <span className="min-w-0 flex-1">

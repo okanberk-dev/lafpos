@@ -1,6 +1,7 @@
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { LafTile } from '@/components/LafMark';
+import { Avatar } from '@/components/ui/misc';
 import { errorMessage } from '@/lib/api';
 import { enterAs, useDemo } from '@/lib/demo';
 import { toast } from '@/lib/toast';
@@ -51,10 +52,8 @@ export function DemoRolePicker() {
               aria-busy={busy === u.role || undefined}
               className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 enabled:hover:border-[var(--admin-border-field)] enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-not-allowed disabled:opacity-60 aria-busy:opacity-100"
             >
-              {/* Kişinin rengi koyu kartta kaybolmasın: ince iç halka */}
-              <span className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: u.color }}>
-                {u.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-              </span>
+              {/* Kitin avatarı: kişinin rengi koyu kartta kaybolmasın diye ince iç halka, açık renkte koyu harf */}
+              <Avatar name={u.name} color={u.color} className="size-9 text-xs" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">{u.name}</span>
                 <span className="block text-xs text-muted">{ROLE_HINTS[u.role]}</span>

@@ -17,7 +17,7 @@ import { deliverItems } from '@/lib/handoff';
 import { orderCardName, readyToHand, stageFromBar } from '@/lib/readyToHand';
 import { useServiceMode } from '@/lib/serviceMode';
 import { useTick } from '@/lib/hooks';
-import { joinMeta } from '@/lib/text';
+import { fmtPhone, joinMeta, telHref } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { PlatformBadge } from '@/components/PlatformBadge';
 
@@ -126,17 +126,18 @@ export default function OrdersPage() {
 
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
+      {/* Telefonda ekranın adını üst şerit yazar: başlık ve açıklama yalnız ekran okuyucuda, sekmeler hemen üstte. Eylem
+          yalnız varsa verilir (boş parça eylem sayılır, alt boşluğu tutardı) */}
       <PageHeader
         title="Siparişler"
         subtitle="Tezgâh, gel-al, paket ve sitede verilen online siparişler"
+        compactOnPhone
         actions={
-          <>
-            {boot.integrations.laffogatoPanel && (
-              <Button icon={<RefreshCw className={cn('size-4', refreshOnline.isPending && 'animate-spin')} />} onClick={() => refreshOnline.mutate()}>
-                Online siparişleri yenile
-              </Button>
-            )}
-          </>
+          boot.integrations.laffogatoPanel ? (
+            <Button icon={<RefreshCw className={cn('size-4', refreshOnline.isPending && 'animate-spin')} />} onClick={() => refreshOnline.mutate()}>
+              Online siparişleri yenile
+            </Button>
+          ) : undefined
         }
       />
       {/* Telefonda ray ekran kenarına taşar: kırpılan sekme kenarda biter (kaydırma işareti), sayfa boşluğunda yarım kalmaz */}
@@ -258,8 +259,8 @@ export default function OrdersPage() {
                 {(o.deliveryAddress || o.deliveryPhone) && (
                   <div className="mt-2 rounded-xl bg-surface-2 p-2.5 text-sm">
                     {o.deliveryPhone && (
-                      <a href={`tel:${o.deliveryPhone}`} className="flex min-h-11 items-center gap-1.5 font-medium text-primary pointer-fine:min-h-0">
-                        <Phone className="size-3.5" /> {o.deliveryPhone}
+                      <a href={telHref(o.deliveryPhone)} className="flex min-h-11 items-center gap-1.5 font-medium text-primary pointer-fine:min-h-0">
+                        <Phone className="size-3.5" /> {fmtPhone(o.deliveryPhone)}
                       </a>
                     )}
                     {o.deliveryAddress && <div className="mt-1 text-ink-2">{o.deliveryAddress}</div>}

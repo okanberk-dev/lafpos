@@ -1,11 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Check, Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import type { FloorStateDTO, OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
-import { Field, Input, Label, Segmented, Select } from '@/components/ui/Field';
+import { Chip, Field, Input, Label, Segmented, Select, Stepper } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { EmptyState, ErrorState, Skeleton, Tabs } from '@/components/ui/misc';
@@ -182,7 +181,7 @@ export function TransferModal({ order, open, onClose, act, onDone }: { order: Or
                   {i.optionsText && ` · ${i.optionsText}`}
                 </span>
               </button>
-              <QtyStepper value={q} max={left} onChange={(v) => setSel({ ...sel, [i.id]: v })} />
+              <Stepper value={q} max={left} label={`${i.name} adedi`} onChange={(v) => setSel({ ...sel, [i.id]: v })} />
             </div>
           );
         })}
@@ -302,8 +301,9 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
           {boot.settings.discountReasons.length > 0 && (
             <div role="group" aria-label="Hazır nedenler" className="mb-2 flex flex-wrap gap-1.5">
               {boot.settings.discountReasons.map((r) => (
-                <ReasonChip
+                <Chip
                   key={r}
+                  tone="ink"
                   on={reason === r}
                   onClick={() => {
                     setReason(r);
@@ -311,7 +311,7 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
                   }}
                 >
                   {r}
-                </ReasonChip>
+                </Chip>
               ))}
             </div>
           )}
@@ -362,7 +362,7 @@ export function GuestsModal({ order, open, onClose, act }: { order: OrderDTO; op
       }
     >
       <div className="flex justify-center px-5 py-6">
-        <QtyStepper size="lg" label="Kişi" value={n} min={1} max={99} onChange={setN} />
+        <Stepper size="lg" label="Kişi" value={n} min={1} max={99} onChange={setN} />
       </div>
     </Modal>
   );
@@ -434,8 +434,9 @@ export function ReasonModal({
         {reasons.length > 0 && (
           <div role="group" aria-label="Hazır nedenler" className="mb-2 flex flex-wrap gap-1.5">
             {reasons.map((r) => (
-              <ReasonChip
+              <Chip
                 key={r}
+                tone="ink"
                 on={reason === r}
                 onClick={() => {
                   setReason(r);
@@ -443,7 +444,7 @@ export function ReasonModal({
                 }}
               >
                 {r}
-              </ReasonChip>
+              </Chip>
             ))}
           </div>
         )}
@@ -464,62 +465,5 @@ export function ReasonModal({
         </Field>
       </div>
     </Modal>
-  );
-}
-
-/**
- * Adet seçici (ödemede kalem seç ve paylaş, hesabı böl, kişi sayısı): − değer +, tuşlar 44 px (`lg` 56), basılı
- * tonu, sınırda devre dışı; değer Gabarito. `label` erişilebilir adın başıdır ("Kişi" → "Kişi azalt"), yoksa
- * "Azalt" / "Artır".
- */
-export function QtyStepper({
-  value,
-  min = 0,
-  max = Number.POSITIVE_INFINITY,
-  onChange,
-  label,
-  size = 'md',
-  className,
-}: {
-  value: number;
-  min?: number;
-  max?: number;
-  onChange: (v: number) => void;
-  label?: string;
-  size?: 'md' | 'lg';
-  className?: string;
-}) {
-  const key = cn(
-    'grid shrink-0 place-items-center bg-surface-3 text-ink transition-[background-color,transform] duration-150 enabled:hover:bg-[var(--admin-border)] enabled:active:scale-[0.97] enabled:active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:enabled:active:scale-100',
-    size === 'lg' ? 'size-14 rounded-2xl [&>svg]:size-6' : 'size-11 rounded-xl [&>svg]:size-4',
-  );
-  return (
-    <div className={cn('flex shrink-0 items-center', size === 'lg' ? 'gap-4' : 'gap-1', className)}>
-      <button type="button" aria-label={label ? `${label} azalt` : 'Azalt'} className={key} disabled={value <= min} onClick={() => onChange(Math.max(min, value - 1))}>
-        <Minus aria-hidden="true" />
-      </button>
-      <span className={cn('tabular text-center font-headline font-semibold text-ink', size === 'lg' ? 'w-16 text-5xl' : 'min-w-8 text-lg')}>{value}</span>
-      <button type="button" aria-label={label ? `${label} artır` : 'Artır'} className={key} disabled={value >= max} onClick={() => onChange(Math.min(max, value + 1))}>
-        <Plus aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
-/** Hazır neden çipi (kapsül): seçili mürekkep kenar, taş zemin ve tik (renk tek başına değil); dinlenmede ince kenar */
-function ReasonChip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        'inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3.5 text-sm transition-colors duration-150 active:bg-press pointer-fine:min-h-9',
-        on ? 'border-ink bg-surface-3 font-semibold text-ink' : 'border-[var(--admin-border-strong)] bg-surface text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
-      )}
-    >
-      {on && <Check aria-hidden="true" className="size-3.5 shrink-0" />}
-      {children}
-    </button>
   );
 }

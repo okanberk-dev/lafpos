@@ -56,7 +56,8 @@ import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal 
 import { useOrder } from './useOrder';
 import { REMOTE } from '@/lib/remote';
 import { openCounterSale } from '@/lib/counter';
-import { asksNumarator, callFor, callText, numaratorLabel } from '@shared/service-mode';
+import { asksNumarator, callFor, callText, isCounterFirst, numaratorLabel } from '@shared/service-mode';
+import { useSetNavOrigin } from '@/lib/nav';
 import { useServiceMode } from '@/lib/serviceMode';
 import { NumaratorModal } from './NumaratorModal';
 import { appUrl } from '@/lib/demo';
@@ -126,6 +127,9 @@ export default function OrderPage() {
   const call = order ? callFor(order, mode) : null;
   const displayLabel = order ? (table?.name ?? (call ? callText(call) : ORDER_TYPE_LABEL[order.type])) : '';
   useCustomerDisplay(boot, order, pending, displayLabel);
+  // Menüde geldiği ekran etkin görünür (rayda ve alt sekmede): masa adisyonu Masalar, self modda tezgâh satışı Tezgâh
+  // satışı, gerisi Siparişler
+  useSetNavOrigin(order ? (order.tableId ? '/masalar' : order.type === 'tezgah' && isCounterFirst(mode) ? '/satis' : '/siparisler') : null);
 
   if (isLoading) return <PageLoading />;
   if (!order) {

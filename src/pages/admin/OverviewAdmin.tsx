@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgePercent, ChevronRight, CircleDollarSign, Globe, HardDrive, Info, MonitorSmartphone, PlugZap, Receipt, ShieldAlert, ShoppingBag, Utensils } from 'lucide-react';
+import { AlertTriangle, BadgePercent, ChevronRight, Globe, HardDrive, Info, MonitorSmartphone, PlugZap, ReceiptText, ShieldAlert, ShoppingBag, TurkishLira, Utensils } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { Link } from 'react-router';
 import { tl, tlShort } from '@shared/money';
@@ -9,9 +9,10 @@ import { Badge, Card, CARD, EmptyState, type KpiCell, KpiStrip, KpiStripSkeleton
 import type { PlatformsData } from '@/components/PlatformInbox';
 import { ColumnChart } from '@/components/charts';
 import { buttonClass } from '@/components/ui/Button';
-import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
+import { ErrorState, ListSkeleton, SizeTag, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
+import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { onLive } from '@/lib/live';
 import { hourBars } from '@/lib/period';
@@ -48,6 +49,8 @@ function RowLink({ to, children, className }: { to?: string; children: ReactNode
 export default function OverviewAdmin() {
   const can = useCan();
   const qc = useQueryClient();
+  // Boyun ayardaki adı (Orta, Büyük): Raporlar ve Patron'daki gibi
+  const sizeLabels = useBoot().settings.sizeLabels;
   const live = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: 60_000, enabled: can('patron.panel') });
   const sync = useQuery({ queryKey: ['sync', 'status'], queryFn: () => get<SyncStatus>('/sync/status'), refetchInterval: 60_000 });
   const backups = useQuery({ queryKey: ['admin', 'backups'], queryFn: () => get<{ files: { name: string; at: number }[] }>('/admin/backups'), enabled: can('ayar.yonet') });
@@ -72,14 +75,14 @@ export default function OverviewAdmin() {
   const d = live.data;
   const s = sync.data;
 
-  // İkon kutusunun tonu ekranların durum diliyle çakışmaz: ciro ve kapanan adisyon yeşil (olumlu), açık adisyon kobalt
-  // (dolu masa), indirim ve ikram pembe (kayıp), online sipariş mor (her ekranda online)
+  // İkon tonu Raporlar'la aynı: ciro yeşil, açık adisyon kobalt (dolu masa), indirim ve ikram pembe (kayıp), online mor;
+  // kapanan adisyon sayısı durumsuz, nötr
   const cells: KpiCell[] = d
     ? [
         {
           key: 'ciro',
           label: 'Net ciro',
-          icon: <CircleDollarSign />,
+          icon: <TurkishLira />,
           hue: 'green',
           value: tl(d.netSales),
           delta: pct(d.compare.lastWeek.change),
@@ -89,8 +92,7 @@ export default function OverviewAdmin() {
           key: 'adisyon',
           // Kısa etiket hücreye sığar ("Kapanan adisyon" bilgisayarda da kesiliyordu); "kapanan" referansta
           label: 'Adisyon',
-          icon: <Receipt />,
-          hue: 'green',
+          icon: <ReceiptText />,
           value: d.orders,
           delta: pct(d.compare.lastWeek.orders ? Math.round(((d.orders - d.compare.lastWeek.orders) / d.compare.lastWeek.orders) * 100) : null),
           reference: d.orders ? `Kapanan · ortalama ${tl(d.avgCheck)} · geçen hafta ${d.compare.lastWeek.orders}` : `Henüz kapanan yok · geçen hafta ${d.compare.lastWeek.orders}`,
@@ -142,8 +144,10 @@ export default function OverviewAdmin() {
 
   // İş günü sırasıyla (05:00'ten): gece yarısından sonraki satış günün sonunda
   const hours = d ? hourBars(d, 8) : [];
-  // Hiç seri yokken grafik boş durumu çizer: "sütun, gri çizgi" açıklaması orada boşa düşer
+  // Hiç seri yokken grafik boş durumu çizer: "sütun, gri çizgi" açıklaması orada boşa düşer. Geçen hafta satış yoksa
+  // grafik gri çizgiyi çizmez (hep sıfır kıyas): açıklama da onu vaat etmez
   const charted = hours.some((h) => h.value || h.compare);
+  const lastWeek = hours.some((h) => (h.compare ?? 0) > 0);
   const lastBackup = backups.data?.files[0];
 
   const health: { key: string; icon: ReactNode; label: string; tone: Tone; state: string; detail: string; to?: string }[] = s
@@ -249,19 +253,19 @@ export default function OverviewAdmin() {
               </Card>
             )}
             {d && (
-              <Card title="Bugün saat saat" subtitle={charted ? 'Sütun bugün, gri çizgi geçen haftanın aynı günü' : undefined}>
+              <Card title="Bugün saat saat" subtitle={charted ? (lastWeek ? 'Sütun bugün, gri çizgi geçen haftanın aynı günü' : 'Geçen haftanın aynı günü satış yoktu') : undefined}>
                 <ColumnChart data={hours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} emptyLabel="Bugün henüz satış yok" emptyHint="İlk adisyon kapanınca saat saat ciro burada çizilir" />
               </Card>
             )}
             {d && (
-              <Card title="En çok satanlar" subtitle="Bugün, adet sırasıyla" flush>
+              <Card title="En çok satanlar" subtitle="Bugün, ciro sırasıyla" flush>
                 {d.top.length ? (
                   <ul className="divide-y divide-[var(--admin-divider)]">
                     {d.top.slice(0, 6).map((p) => (
                       <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-5">
                         <span className="min-w-0 flex-1 truncate font-medium">
                           {p.name}
-                          {p.size && p.size !== 'TEK' ? <span className="text-[var(--admin-text-mute)]"> · {p.size}</span> : null}
+                          {(p.size === 'M' || p.size === 'L') && <SizeTag>{sizeLabels[p.size]}</SizeTag>}
                         </span>
                         <span className="tabular-nums text-[var(--admin-text-mute)]">{p.qty} adet</span>
                         {/* Tutar ₺'yle: adedin yanında ikinci bir sayı gibi okunmasın */}

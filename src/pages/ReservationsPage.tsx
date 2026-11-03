@@ -12,7 +12,7 @@ import { errorMessage, get, patch, post } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useFinePointer, useTick } from '@/lib/hooks';
-import { joinMeta } from '@/lib/text';
+import { fmtPhone, joinMeta, telHref } from '@/lib/text';
 import { toast } from '@/lib/toast';
 
 type Status = 'bekliyor' | 'geldi' | 'iptal' | 'gelmedi';
@@ -52,16 +52,6 @@ function startOf(r: Reservation): number {
   const fromRollover = (hmToMinutes(r.time) - DAY_ROLLOVER_HOUR * 60 + 1440) % 1440;
   return businessDayStartMs(r.date) + fromRollover * 60_000;
 }
-
-/** Sunucu telefonu 10 rakam saklar (normalizePhone): "5321112233" → "0532 111 22 33"; başka biçim olduğu gibi */
-function fmtPhone(p: string): string {
-  const d = p.replace(/\D/g, '');
-  return d.length === 10 ? `0${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8)}` : p;
-}
-const telHref = (p: string) => {
-  const d = p.replace(/\D/g, '');
-  return `tel:${d.length === 10 ? '+90' : ''}${d}`;
-};
 
 export default function ReservationsPage() {
   const boot = useBoot();

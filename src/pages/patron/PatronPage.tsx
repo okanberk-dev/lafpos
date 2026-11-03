@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronRight, RotateCcw } from 'lucide-react';
-import { Fragment, type ReactNode, useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
 import { fmtAgo, fmtTime, shiftForgotten } from '@shared/time';
@@ -8,7 +8,7 @@ import type { TimeSheetDTO } from '@shared/types';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
-import { Badge, Card, EmptyState, ErrorState, PageHeader, Skeleton, Stat } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, ErrorState, PageHeader, SizeTag, Skeleton, Stat } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -97,11 +97,6 @@ function Change({ value, base }: { value: number | null; base: number }) {
       <span className="sr-only">{up ? ' arttı' : ' azaldı'}</span>
     </Badge>
   );
-}
-
-/** Boyun ayardaki adı (Orta, Büyük), Raporlar'daki gibi çerçeveli hap; tek boylu üründe yok */
-function SizeTag({ children }: { children: ReactNode }) {
-  return <span className="ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 text-[11px] font-medium leading-4 text-ink-2">{children}</span>;
 }
 
 export default function PatronPage() {

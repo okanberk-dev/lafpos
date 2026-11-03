@@ -7,7 +7,7 @@ import { ActionMenu, Badge, Card, CARD, type Column, DataTable, EmptyState, KpiS
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Field, Input, Select, Textarea } from '@/components/ui/Field';
-import { ErrorState } from '@/components/ui/misc';
+import { Avatar, ErrorState } from '@/components/ui/misc';
 import { del, errorMessage, get, getToken, patch, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -158,6 +158,14 @@ export default function TimeAdmin() {
   const top = Math.max(1, ...(data?.totals.map((t) => t.workedMs) ?? [1]));
   const people = data?.totals.length ?? 0;
   const openCount = data?.entries.filter((e) => e.open).length ?? 0;
+  // Kişi hücresinin yazısı: tabloda avatarın yanında, telefonun satır kartında başlık (avatar kartın solunda, alt satır
+  // adın hizasından başlar)
+  const who = (e: TimeEntryDTO) => (
+    <span className="min-w-0">
+      <span className="block font-medium text-[var(--admin-text)]">{e.userName}</span>
+      <span className="block text-xs text-[var(--admin-text-mute)]">{SOURCE[e.source]}</span>
+    </span>
+  );
   const columns: Column<TimeEntryDTO>[] = [
     {
       key: 'kisi',
@@ -165,10 +173,7 @@ export default function TimeAdmin() {
       cell: (e) => (
         <span className="flex items-center gap-3">
           <Avatar name={e.userName} color={e.userColor} />
-          <span className="min-w-0">
-            <span className="block font-medium text-[var(--admin-text)]">{e.userName}</span>
-            <span className="block text-xs text-[var(--admin-text-mute)]">{SOURCE[e.source]}</span>
-          </span>
+          {who(e)}
         </span>
       ),
     },
@@ -274,12 +279,12 @@ export default function TimeAdmin() {
                 value: atWork.length,
                 reference: `${atWork.length ? atWork.map((e) => e.userName).join(', ') : 'Kimse içeride değil'}${forgotten.length ? ` · ${forgotten.length} çıkışı unutulmuş` : ''}`,
               },
-              // Renk anlamla (hues.ts): mesaide yeşil, süre amber, sayı nötr (mor yalnız online siparişin). Dönemin tarihleri
-              // çizelgenin kendisinden: önceki dönem yerinde dururken yeni dönemin tarihi yazılmaz
-              { key: 'toplam', label: 'Toplam süre', icon: <Hourglass />, hue: 'amber', value: fmtDuration(totalMs), reference: `${people} kişi · ${rangeLabel(data)}` },
+              // Renk anlamla (hues.ts): mesaide yeşil; süre ve sayı nötr (amber gecikmenin, mor online siparişin). Dönemin
+              // tarihleri çizelgenin kendisinden: önceki dönem yerinde dururken yeni dönemin tarihi yazılmaz
+              { key: 'toplam', label: 'Toplam süre', icon: <Hourglass />, value: fmtDuration(totalMs), reference: `${people} kişi · ${rangeLabel(data)}` },
               { key: 'mesai', label: 'Mesai kaydı', icon: <Clock3 />, value: data.entries.length, reference: openCount ? `${openCount} açık` : 'Açık mesai yok' },
               // Kimse çalışmadıysa ortalama uydurulmaz ("0 dk" değil "—")
-              { key: 'ortalama', label: 'Kişi başı', icon: <UserRound />, hue: 'amber', value: people ? fmtDuration(totalMs / people) : '—', reference: people ? 'dönem ortalaması' : 'Dönemde mesai yok' },
+              { key: 'ortalama', label: 'Kişi başı', icon: <UserRound />, value: people ? fmtDuration(totalMs / people) : '—', reference: people ? 'dönem ortalaması' : 'Dönemde mesai yok' },
             ]}
           />
 
@@ -349,6 +354,8 @@ export default function TimeAdmin() {
             rowKey={(e) => e.id}
             onOpen={(e) => openEdit(e)}
             selectedKey={edit?.entry?.id ?? null}
+            phoneLead={(e) => <Avatar name={e.userName} color={e.userColor} />}
+            phoneTitle={who}
             // Açık mesai "mesaide" diye saat aralığına yazılmaz: durumu masaüstündeki gibi rozet söyler
             phoneMeta={(e) => (
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -462,13 +469,5 @@ export default function TimeAdmin() {
         )}
       </QuickLook>
     </>
-  );
-}
-
-function Avatar({ name, color }: { name: string; color: string }) {
-  return (
-    <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: color }}>
-      {name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-    </span>
   );
 }

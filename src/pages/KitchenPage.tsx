@@ -253,7 +253,7 @@ export default function KitchenPage() {
         )}
         {tickets.isError && !tickets.data && (
           <div className="grid h-full place-items-center">
-            <ErrorState title="Kasaya bağlanılamıyor" error={tickets.error} retrying={tickets.isFetching} onRetry={() => void tickets.refetch()}>
+            <ErrorState large title="Kasaya bağlanılamıyor" error={tickets.error} retrying={tickets.isFetching} onRetry={() => void tickets.refetch()}>
               Yeni siparişler bu ekrana gelmiyor; bağlantı gelince fişler kendiliğinden görünür
             </ErrorState>
           </div>

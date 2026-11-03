@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router';
 import { LafTile } from '@/components/LafMark';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
-import { Notice } from '@/components/ui/misc';
+import { Avatar, Notice } from '@/components/ui/misc';
 import { Numpad, PinDots } from '@/components/ui/Numpad';
 import { errorMessage, get, post } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -19,9 +19,6 @@ interface LoginInfo {
   businessName: string;
   demoPins: { name: string; pin: string }[] | null;
 }
-
-/** Avatardaki baş harfler: kabuk, yönetim ve personel ekranlarıyla aynı (iki harf) */
-const initials = (name: string) => name.slice(0, 2).toLocaleUpperCase('tr-TR');
 
 export function LoginPage() {
   const login = useAuth((s) => s.login);
@@ -122,9 +119,8 @@ export function LoginPage() {
               <ul className="flex flex-wrap gap-x-4 gap-y-2">
                 {users.map((u) => (
                   <li key={u.id} className="inline-flex items-center gap-2 text-xs font-medium text-[var(--brand-cream)]/90">
-                    <span aria-hidden="true" className="grid size-6 place-items-center rounded-full text-[11px] font-semibold text-white ring-1 ring-inset ring-white/25" style={{ background: u.color }}>
-                      {initials(u.name)}
-                    </span>
+                    {/* Kitin avatarı (kabuk, yönetim ve personel ekranlarıyla aynı); yeşil marka yüzeyinde açık halka */}
+                    <Avatar name={u.name} color={u.color} className="size-6 text-[11px] ring-white/25 dark:ring-white/25" />
                     {u.name}
                   </li>
                 ))}
@@ -179,9 +175,7 @@ export function LoginPage() {
               </div>
               {showPunch && punched && (
                 <div role="status" className="animate-fade flex w-full items-center gap-3 rounded-2xl border border-success-line bg-success-soft px-3 py-2.5 text-left">
-                  <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-black/5" style={{ background: punched.user.color }}>
-                    {initials(punched.user.name)}
-                  </span>
+                  <Avatar name={punched.user.name} color={punched.user.color} className="size-9 text-xs" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5 text-[15px] font-semibold leading-5">
                       <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-success-ink" />

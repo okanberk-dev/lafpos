@@ -7,7 +7,7 @@ import { fmtDateTime } from '@shared/time';
 import { ActionMenu, Badge, CARD, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, StatusTabs, TableSkeleton } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Label, NumberInput, Select, Toggle } from '@/components/ui/Field';
-import { ErrorState, Notice } from '@/components/ui/misc';
+import { Avatar, ErrorState, Notice } from '@/components/ui/misc';
 import { errorMessage, get, patch, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
@@ -42,18 +42,6 @@ function since(at: number | null): string {
 
 /** Ad altındaki satır: "Son giriş 12 dk önce" ya da "Hiç girmedi" */
 const lastSeen = (at: number | null) => (at ? `Son giriş ${since(at).toLocaleLowerCase('tr-TR')}` : since(at));
-
-function Avatar({ name, color, size = 'md', className }: { name: string; color: string; size?: 'md' | 'lg'; className?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn('grid shrink-0 place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', size === 'lg' ? 'size-11 text-sm' : 'size-8 text-xs', className)}
-      style={{ background: color }}
-    >
-      {name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-    </span>
-  );
-}
 
 /**
  * Rol rozeti sakin ve renksiz; her şeyi gören patron Roller'deki kilitle ayrılır (mor online siparişin, kırmızı
@@ -119,18 +107,24 @@ export default function UsersAdmin() {
 
   const selected = openId && openId !== 'yeni' ? all.find((u) => u.id === openId) ?? null : null;
 
+  // Kapalı kişi: rozet durumu söyler; yalnız avatar solar, yazılar okunur kalır (bütün satırı soldurmak AA altı)
+  const avatar = (u: UserRow) => <Avatar name={u.name} color={u.color} className={u.active ? undefined : 'opacity-50 grayscale'} />;
+  // Personel hücresinin yazısı: tabloda avatarın yanında, telefonun satır kartında başlık (avatar kartın solunda, alt
+  // satır adın hizasından başlar)
+  const who = (u: UserRow) => (
+    <span className="min-w-0">
+      <span className={cn('block truncate font-medium', u.active ? 'text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)]')}>{u.name}</span>
+      <span className="block text-xs text-[var(--admin-text-mute)]">{u.id === me?.id ? 'Siz' : lastSeen(u.lastLoginAt)}</span>
+    </span>
+  );
   const columns: Column<UserRow>[] = [
     {
       key: 'kisi',
       header: 'Personel',
       cell: (u) => (
         <span className="flex items-center gap-3">
-          {/* Kapalı kişi: rozet durumu söyler; yalnız avatar solar, yazılar okunur kalır (bütün satırı soldurmak AA altı) */}
-          <Avatar name={u.name} color={u.color} className={u.active ? undefined : 'opacity-50 grayscale'} />
-          <span className="min-w-0">
-            <span className={cn('block truncate font-medium', u.active ? 'text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)]')}>{u.name}</span>
-            <span className="block text-xs text-[var(--admin-text-mute)]">{u.id === me?.id ? 'Siz' : lastSeen(u.lastLoginAt)}</span>
-          </span>
+          {avatar(u)}
+          {who(u)}
         </span>
       ),
     },
@@ -194,6 +188,8 @@ export default function UsersAdmin() {
             rowKey={(u) => u.id}
             onOpen={(u) => open(u.id)}
             selectedKey={openId}
+            phoneLead={avatar}
+            phoneTitle={who}
             phoneMeta={(u) => (
               <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <RoleBadge role={u.role} />

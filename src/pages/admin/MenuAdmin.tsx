@@ -8,7 +8,7 @@ import { newGroupDraft, OptionGroupEditor } from '@/components/admin/OptionGroup
 import { ActionMenu, ActionRow, ActionRows, Badge, Card, CARD, CODE, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, SetupNotes, StatusTabs, TableSkeleton } from '@/components/admin/ui';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
-import { Field, Input, Label, Select, Toggle } from '@/components/ui/Field';
+import { Chip, Field, Input, Label, Select, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, Notice } from '@/components/ui/misc';
 import { del, errorMessage, get, patch, post } from '@/lib/api';
@@ -71,13 +71,6 @@ function ProductMark({ name, color }: { name: string; color: string }) {
     </span>
   );
 }
-
-/** Çoklu seçim çipi (seçenek grubu): Seçenekler'deki gün ve kategori çipiyle aynı, kapsül ve yeşil seçim */
-const chip = (on: boolean) =>
-  cn(
-    'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3.5 text-[13px] font-medium transition-colors duration-150 pointer-fine:min-h-9',
-    on ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'border-[var(--admin-border-strong)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press',
-  );
 
 /** Boş hücre: tire değil, kitin soluk uzun çizgisi */
 const EMPTY = <span className="text-[var(--admin-text-mute)]">—</span>;
@@ -737,12 +730,13 @@ function ProductDrawer({
               .filter((g) => g.active)
               .map((g) => {
                 const on = f.groupIds.includes(g.id);
+                // Kitin seçim çipi (Seçenekler'deki gün ve kategori çipiyle aynı): kapsül, yeşil seçim
                 return (
-                  <button key={g.id} type="button" aria-pressed={on} onClick={() => setF({ ...f, groupIds: on ? f.groupIds.filter((x) => x !== g.id) : [...f.groupIds, g.id] })} className={chip(on)}>
+                  <Chip key={g.id} on={on} onClick={() => setF({ ...f, groupIds: on ? f.groupIds.filter((x) => x !== g.id) : [...f.groupIds, g.id] })}>
                     {g.name}
                     {/* Kaynak işareti çipin renginde (soluk yazı değil); ekran okuyucuya "Siteden" */}
                     {g.extSource && <Globe role="img" aria-label="Siteden" className="size-3.5 shrink-0" />}
-                  </button>
+                  </Chip>
                 );
               })}
             <button

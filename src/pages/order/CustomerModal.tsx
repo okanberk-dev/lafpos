@@ -11,7 +11,7 @@ import { get, patch, post } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useFinePointer } from '@/lib/hooks';
-import { joinMeta } from '@/lib/text';
+import { fmtPhone, joinMeta } from '@/lib/text';
 
 type Act = <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 
@@ -132,11 +132,11 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
             <div className="flex items-center gap-3 rounded-2xl border border-primary-line bg-primary-soft py-2 pl-4 pr-2">
               <div className="min-w-0 flex-1 py-1">
                 <div className="font-semibold">{current.name}</div>
-                <div className="tabular text-xs text-ink-2">{joinMeta([current.phone, stamps && `${current.stamps}/${goal} damga`, current.balance !== 0 && balanceText(current.balance).toLocaleLowerCase('tr')])}</div>
+                <div className="tabular text-xs text-ink-2">{joinMeta([current.phone && fmtPhone(current.phone), stamps && `${current.stamps}/${goal} damga`, current.balance !== 0 && balanceText(current.balance).toLocaleLowerCase('tr')])}</div>
               </div>
-              {/* Damga ödülü pirinçte (damga kartının rengi); amber zamanın rengidir */}
+              {/* Damga ödülü pirinçte (damga kartının rengi; amber zamanın rengidir): Müşteriler ekranıyla aynı düğme */}
               {stamps && current.stamps >= goal && (
-                <Button size="sm" icon={<Gift className="size-4 text-gold-ink" />} loading={busy === 'redeem'} disabled={!!busy && busy !== 'redeem'} onClick={() => void redeem(current.id)}>
+                <Button size="sm" variant="gold" icon={<Gift className="size-4" />} loading={busy === 'redeem'} disabled={!!busy && busy !== 'redeem'} onClick={() => void redeem(current.id)}>
                   Hediye içecek
                 </Button>
               )}
@@ -167,7 +167,7 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{c.name}</span>
-                    <span className="tabular text-xs text-muted">{joinMeta([c.phone, `${c.visits} ziyaret`])}</span>
+                    <span className="tabular text-xs text-muted">{joinMeta([c.phone && fmtPhone(c.phone), `${c.visits} ziyaret`])}</span>
                   </span>
                   <span className="tabular shrink-0 text-right text-xs">
                     {stamps && (

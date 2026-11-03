@@ -29,6 +29,8 @@ export interface ReceiptDTO {
   lockedBy: string | null;
   createdAt: number;
   completedAt: number | null;
+  /** Fişin LafPOS'ta oluşturduğu ödemeler (tamamlanınca); eski sunucu göndermez */
+  paymentIds?: string[];
 }
 
 const PENDING = ['gonderildi', 'kilitli'];
@@ -142,9 +144,11 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
   };
   const last = receipts.data?.[0];
   // Sunucunun gönderim kuralı (okc_partial, split_active): gidemeyecek sepet için düğme yerine ne yapılacağı yazılır.
-  // Cihazın ödemesi de kalem taşımayabilir: tamamlanmış fiş varken hangisinin LafPOS'ta alındığı bilinmez, karar sunucuda
+  // okc_partial'ın kendisi: kalem taşımayan, iptal edilmemiş ve tamamlanmış bir cihaz fişinden gelmeyen ödeme (cihazın
+  // ödemesi de kalem taşımayabilir; hangisinin cihazdan geldiğini fişin paymentIds'i söyler)
   const splitOpen = !!order.split?.shares.length;
-  const amountPaidHere = !!receipts.data && !receipts.data.some((r) => r.status === 'tamamlandi') && order.payments.some((p) => !p.refundedAt && !p.items?.length);
+  const deviceIds = new Set((receipts.data ?? []).filter((r) => r.status === 'tamamlandi').flatMap((r) => r.paymentIds ?? []));
+  const amountPaidHere = !!receipts.data && order.payments.some((p) => !p.refundedAt && !p.items?.length && !deviceIds.has(p.id));
   const blocked = items?.length
     ? splitOpen
       ? 'Hesap kişilere bölünmüş: payları “Paylaş”tan alın ya da paylaşımı kaldırın'

@@ -71,19 +71,25 @@ export default function PaymentsAdmin() {
       toast.err(errorMessage(e));
     }
   };
+  // Kapalı tür: durumu rozet söyler; yalnız renk karesi solar, yazılar okunur kalır
+  const swatch = (m: Method) => <span aria-hidden="true" className={cn('block size-8 shrink-0 rounded-lg ring-1 ring-inset ring-black/5 dark:ring-white/15', !m.active && 'opacity-40')} style={{ background: m.color }} />;
+  // Ad ve tür: tabloda renk karesinin yanında, telefonun satır kartında başlık (kare kartın solunda, alt satır adın
+  // hizasından başlar)
+  const named = (m: Method) => (
+    <span className="min-w-0">
+      <span className={cn('block font-medium md:whitespace-nowrap', m.active ? 'text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)]')}>{m.name}</span>
+      {/* Tür adla aynıysa yinelenmez ("Nakit / Nakit") */}
+      {KIND[m.kind] !== m.name && <span className="block text-xs text-[var(--admin-text-mute)] md:whitespace-nowrap">{KIND[m.kind]}</span>}
+    </span>
+  );
   const columns: Column<Method>[] = [
     {
       key: 'ad',
       header: 'Ödeme türü',
       cell: (m) => (
         <span className="flex items-center gap-3">
-          {/* Kapalı tür: durumu rozet söyler; yalnız renk karesi solar, yazılar okunur kalır */}
-          <span aria-hidden="true" className={cn('size-8 shrink-0 rounded-lg ring-1 ring-inset ring-black/5 dark:ring-white/15', !m.active && 'opacity-40')} style={{ background: m.color }} />
-          <span className="min-w-0">
-            <span className={cn('block font-medium md:whitespace-nowrap', m.active ? 'text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)]')}>{m.name}</span>
-            {/* Tür adla aynıysa yinelenmez ("Nakit / Nakit") */}
-            {KIND[m.kind] !== m.name && <span className="block text-xs text-[var(--admin-text-mute)] md:whitespace-nowrap">{KIND[m.kind]}</span>}
-          </span>
+          {swatch(m)}
+          {named(m)}
         </span>
       ),
     },
@@ -119,6 +125,8 @@ export default function PaymentsAdmin() {
           rowKey={(m) => m.id}
           onOpen={(m) => openEdit({ ...m })}
           selectedKey={edit?.id ?? null}
+          phoneLead={swatch}
+          phoneTitle={named}
           // Telefonda yalnız türden farklı olan söylenir: lafmaliyet alanı türle aynıysa yazılmaz, kanal markanın adıyla
           phoneMeta={(m) => (
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">

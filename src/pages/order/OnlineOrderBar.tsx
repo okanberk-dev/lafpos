@@ -5,18 +5,10 @@ import { fmtTime } from '@shared/time';
 import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { post } from '@/lib/api';
-import { cn } from '@/lib/cn';
 
 type Act = <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 
 const FULFILL = { table: { label: 'Masaya', icon: UtensilsCrossed }, pickup: { label: 'Gel-al', icon: PackageCheck }, delivery: { label: 'Kurye', icon: Bike } };
-
-/**
- * Şeridin mor kenarı: öteki durum şeritleri (hazır, gönderilmedi) gibi kendi çizgisi. Kitte `--admin-violet-line`
- * belirteci tanımlanınca o kullanılır; o güne dek mor, yumuşak zemine karışık (açıkta %20, koyuda %45)
- */
-const VIOLET_LINE =
-  'border-[var(--admin-violet-line,color-mix(in_oklab,var(--admin-hue-violet)_20%,var(--admin-hue-violet-soft)))] dark:border-[var(--admin-violet-line,color-mix(in_oklab,var(--admin-hue-violet)_45%,var(--admin-hue-violet-soft)))]';
 
 /** Sitede ödenmiş online sipariş: yalnız aşama değişir, tahsilat yok. "Sitede ödendi" yalnız burada (başlıkta yinelenmez) */
 export function OnlineOrderBar({ order, act }: { order: OrderDTO; act: Act }) {
@@ -30,8 +22,9 @@ export function OnlineOrderBar({ order, act }: { order: OrderDTO; act: Act }) {
   };
   const readyLabel = order.extFulfillment === 'table' ? 'Masaya götürüldü' : order.extFulfillment === 'delivery' ? 'Kuryeye verildi' : 'Hazır';
   return (
-    // Online her ekranda mor (Siparişler'deki "Sitede ödendi" rozetiyle aynı); pembe masa planında "kısmen ödendi" demek
-    <div className={cn('border-b bg-violet-soft px-4 py-3', VIOLET_LINE)}>
+    // Online her ekranda mor (Siparişler'deki "Sitede ödendi" rozetiyle aynı); pembe masa planında "kısmen ödendi" demek.
+    // Kenar öteki durum şeritleri (hazır, gönderilmedi) gibi kendi çizgi belirteci
+    <div className="border-b border-violet-line bg-violet-soft px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <Globe aria-hidden="true" className="size-4 text-violet-ink" />
         <span className="font-semibold text-violet-ink">

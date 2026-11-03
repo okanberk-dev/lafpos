@@ -4,7 +4,7 @@ import { Button } from './components/ui/Button';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import type { Permission } from '@shared/permissions';
 import { AppShell } from './components/AppShell';
-import { ErrorState, PageLoading } from './components/ui/misc';
+import { ErrorState, Notice, PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
@@ -66,14 +66,16 @@ function Authed() {
     const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
     return (
       <div className="grid h-full place-items-center p-6">
+        {/* Tam ekran durum: büyük boy, Yeniden dene ve Çıkış aynı boyda */}
         <ErrorState
+          large
           title={noSnapshot ? 'Kafeden henüz veri gelmedi' : 'Sunucuya bağlanılamadı'}
           error={boot.error}
           onRetry={() => void boot.refetch()}
           retrying={boot.isFetching}
           action={
             REMOTE && (
-              <Button size="sm" variant="ghost" onClick={() => void useAuth.getState().logout()}>
+              <Button size="md" variant="ghost" onClick={() => void useAuth.getState().logout()}>
                 Çıkış
               </Button>
             )
@@ -93,15 +95,26 @@ function Authed() {
 
   const demo = REMOTE && sessionStorage.getItem('lafpos.demo') === '1';
   return (
-    <AppShell>
-      {demo && (
-        <div role="note" className="mb-3 rounded-xl border border-[var(--admin-warning)]/30 bg-[var(--admin-warning-soft)] px-3 py-2 text-sm text-[var(--admin-warning)]">
-          Demo verileri: kafedeki kasa bağlanınca gerçek veriler gelir ve giriş parolası devreye girer.{' '}
-          <a href="/demo/" className="font-medium underline underline-offset-2">
-            Kasa ekranını dene
-          </a>
-        </div>
-      )}
+    // Uzaktan görünümün demo notu kabuğun şeridinde, sayfanın dışında: sayfa main'in tam yüksekliğini kullanır, içeride
+    // dursa her ekranın altını keserdi. Uyarı değil bilgi
+    <AppShell
+      notice={
+        demo && (
+          <Notice
+            tone="info"
+            role="note"
+            className="rounded-none border-x-0 border-t-0 md:mb-2 md:rounded-xl md:border"
+            action={
+              <a href="/demo/" className="inline-flex min-h-11 items-center font-medium text-primary underline underline-offset-2 pointer-fine:min-h-0">
+                Kasa ekranını dene
+              </a>
+            }
+          >
+            Demo verileri: kafedeki kasa bağlanınca gerçek veriler gelir
+          </Notice>
+        )
+      }
+    >
       <Suspense fallback={<PageLoading />}>
         <Routes>
           <Route path="/" element={<Navigate to={home} replace />} />

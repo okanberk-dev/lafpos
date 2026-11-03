@@ -5,7 +5,7 @@ import { tl } from '@shared/money';
 import type { HappyHourDTO, ProductDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
-import { Field, Input, Label, NumberInput, Toggle } from '@/components/ui/Field';
+import { Chip, Field, Input, Label, NumberInput, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
 import { groupDraft, newGroupDraft, OptionGroupEditor, type OptionGroupDraft } from '@/components/admin/OptionGroupEditor';
@@ -48,14 +48,6 @@ function dayText(days: number[]): string {
   if (key === '6,7') return 'Hafta sonu';
   return sorted.map((x) => DAYS[x - 1]).join(', ');
 }
-
-/** Çoklu seçim çipi (gün, kategori): ürün çekmecesindeki seçenek grubu çipiyle aynı, kapsül ve yeşil seçim */
-const chip = (on: boolean, className?: string) =>
-  cn(
-    'inline-flex min-h-11 items-center justify-center rounded-full border px-3.5 text-[13px] font-medium transition-colors duration-150 pointer-fine:min-h-9',
-    on ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'border-[var(--admin-border-strong)] text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press',
-    className,
-  );
 
 export default function OptionsAdmin() {
   const boot = useBoot();
@@ -293,14 +285,15 @@ export default function OptionsAdmin() {
             </div>
             <div role="group" aria-label="Günler">
               <Label hint="en az bir gün">Günler</Label>
-              {/* Yedi gün tek sırada eşit hücrelerde: telefonda "Paz" alt satıra tek başına düşmez */}
+              {/* Yedi gün tek sırada eşit hücrelerde: telefonda "Paz" alt satıra tek başına düşmez. Kitin seçim çipi (ürün
+                  çekmecesindeki seçenek grubu çipiyle aynı): kapsül, yeşil seçim */}
               <div className="grid grid-cols-7 gap-1.5">
                 {DAYS.map((d, i) => {
                   const on = happy.days.includes(i + 1);
                   return (
-                    <button key={d} type="button" aria-pressed={on} onClick={() => setHappy({ ...happy, days: on ? happy.days.filter((x) => x !== i + 1) : [...happy.days, i + 1].sort((a, b) => a - b) })} className={chip(on, 'px-0')}>
+                    <Chip key={d} on={on} onClick={() => setHappy({ ...happy, days: on ? happy.days.filter((x) => x !== i + 1) : [...happy.days, i + 1].sort((a, b) => a - b) })} className="px-0">
                       {d}
-                    </button>
+                    </Chip>
                   );
                 })}
               </div>
@@ -316,9 +309,9 @@ export default function OptionsAdmin() {
                 {boot.categories.map((c) => {
                   const on = happy.categoryIds.includes(c.id);
                   return (
-                    <button key={c.id} type="button" aria-pressed={on} onClick={() => setHappy({ ...happy, categoryIds: on ? happy.categoryIds.filter((x) => x !== c.id) : [...happy.categoryIds, c.id] })} className={chip(on)}>
+                    <Chip key={c.id} on={on} onClick={() => setHappy({ ...happy, categoryIds: on ? happy.categoryIds.filter((x) => x !== c.id) : [...happy.categoryIds, c.id] })}>
                       {c.name}
-                    </button>
+                    </Chip>
                   );
                 })}
               </div>

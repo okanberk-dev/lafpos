@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation } from 'react-router';
 import { LafTile } from '@/components/LafMark';
+import { Avatar } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -207,9 +208,7 @@ export function AdminShell({ title, children }: { title: string; children: React
           aria-label={`${me.name} menüsü`}
           className={cn('flex min-h-11 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-hover active:bg-press', narrow ? 'mx-auto size-11 justify-center' : 'w-full px-2 pointer-fine:min-h-9')}
         >
-          <span className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: me.color }}>
-            {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-          </span>
+          <Avatar name={me.name} color={me.color} className="size-7 text-[11px]" />
           {!narrow && (
             <>
               <span className="min-w-0 flex-1">
@@ -293,9 +292,7 @@ export function AdminShell({ title, children }: { title: string; children: React
             )}
           </span>
           <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className="grid size-11 shrink-0 place-items-center md:hidden">
-            <span className="grid size-8 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: me.color }}>
-              {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-            </span>
+            <Avatar name={me.name} color={me.color} />
           </button>
         </header>
         <div className="scroll-thin @container min-h-0 flex-1 overflow-y-auto">

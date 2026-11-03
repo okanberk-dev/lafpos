@@ -3,6 +3,7 @@ import { AlertOctagon, AlertTriangle, ClipboardList, Info } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { tl } from '@shared/money';
 import { addDays, fmtDateLong, fmtTime, istanbulParts } from '@shared/time';
+import { settingLabel } from '@shared/settings-labels';
 import { Badge, Card, CARD, EmptyState, PageHeader, SearchField, StatusTabs, Timeline, type TimelineItem } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
 import { ErrorState, ListSkeleton } from '@/components/ui/misc';
@@ -126,49 +127,11 @@ const PREFIX_LABEL: Record<string, string> = {
 const actionLabel = (code: string): string | null => ACTION_LABEL[code] ?? PREFIX_LABEL[code.split('.')[0]] ?? null;
 
 /**
- * Ayar kaydının alan adları. Sunucu `settings.update` iletisine kod adlarını yazar ("Patron ayarları değiştirdi:
- * businessName, receiptFooter"); ekranda Türkçe adı durur, listede olmayan ad olduğu gibi kalır. Veritabanındaki eski
- * kayıtlar da (Kaydet her alanı gönderiyordu: 35 ad) böyle okunur
+ * Ayar kaydının iletisi: "Patron ayarları değiştirdi: <adlar>". Adlar tek listeden (`@shared/settings-labels`; sunucu
+ * iletiyi de onunla yazar): yeni kayıtlar Türkçe adla gelir ve olduğu gibi kalır; kod adıyla yazılmış eski kayıtlar
+ * ("businessName, receiptFooter"; Kaydet her alanı gönderiyordu: 35 ad) Türkçe adına çevrilir, listede olmayan ad
+ * olduğu gibi kalır
  */
-const SETTING_LABEL: Record<string, string> = {
-  businessName: 'İşletme adı',
-  businessAddress: 'Adres',
-  businessPhone: 'Telefon',
-  receiptHeader: 'Fiş üstü',
-  receiptFooter: 'Fiş altı',
-  serviceRate: 'Servis ücreti',
-  autoLockMinutes: 'Otomatik kilit',
-  keepAwake: 'Ekran kararmasın',
-  productImages: 'Ürün görselleri',
-  askOptions: 'Seçenekleri sor',
-  voidReasons: 'İptal nedenleri',
-  compReasons: 'İkram nedenleri',
-  odenmezReasons: 'Ödenmez nedenleri',
-  zayiReasons: 'Zayi nedenleri',
-  discountReasons: 'İndirim nedenleri',
-  quickCash: 'Hızlı nakit',
-  sizeLabels: 'Boy adları',
-  requireDayOpen: 'Gün açık olmalı',
-  kitchenWarnMinutes: 'Bar fişi uyarısı',
-  kitchenAlarmMinutes: 'Bar fişi alarmı',
-  roomBillingStepMinutes: 'Oda ücret adımı',
-  roomMinimumMinutes: 'Oda en az süre',
-  stampGoal: 'Damga hedefi',
-  stampCategoryKeys: 'Damga kategorileri',
-  demoMode: 'Kurulum modu',
-  menuAutoSync: 'Otomatik menü eşitleme',
-  onlineOrdersSync: 'Online sipariş çekme',
-  posSizeSuffix: 'lafmaliyet boy ekleri',
-  alertDiscountPct: 'İndirim uyarısı',
-  alertCashDiffKurus: 'Kasa farkı alarmı',
-  backupKeep: 'Yedek süresi',
-  autoDayEnd: 'Otomatik gün sonu',
-  autoDayEndHour: 'Gün sonu saati',
-  serviceMode: 'Servis modu',
-  tipsEnabled: 'Bahşiş',
-  zNoStart: 'İlk Z numarası',
-  customerDisplay: 'Müşteri ekranı',
-};
 const SETTINGS_MARK = ' ayarları değiştirdi: ';
 
 /** Ayar kaydının iletisi Türkçe alan adlarıyla; dörtten uzun liste kısalır, tamamı (`full`) ipucunda ve aramada */
@@ -182,7 +145,7 @@ function settingsText(a: AuditRow): { text: string; full: string } | null {
     .slice(at + SETTINGS_MARK.length)
     .split(', ')
     .filter(Boolean)
-    .map((k) => SETTING_LABEL[k] ?? k);
+    .map(settingLabel);
   if (!names.length) return { text: head, full: head };
   const full = `${head}: ${names.join(', ')}`;
   return { full, text: names.length > 4 ? `${head}: ${names.slice(0, 3).join(', ')} ve ${names.length - 3} ayar daha` : full };
