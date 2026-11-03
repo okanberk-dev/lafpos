@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { tl } from '@shared/money';
 import { fmtAgo, fmtTime } from '@shared/time';
+import { isCounterFirst } from '@shared/service-mode';
 import type { OrderDTO } from '@shared/types';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Field';
-import { Badge, EmptyState, ErrorState, PageHeader, Skeleton, Tabs } from '@/components/ui/misc';
+import { Badge, type BadgeTone, EmptyState, ErrorState, Notice, PageHeader, Skeleton, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -22,11 +23,28 @@ import { PlatformBadge } from '@/components/PlatformBadge';
 
 type Tab = 'acik' | 'online' | 'paket' | 'kapanan';
 
-const DELIVERY_FLOW: Record<string, { next: 'hazir' | 'yolda' | 'teslim'; label: string } | null> = {
+type DeliveryStatus = NonNullable<OrderDTO['deliveryStatus']>;
+
+const DELIVERY_FLOW: Record<DeliveryStatus, { next: 'hazir' | 'yolda' | 'teslim'; label: string } | null> = {
   hazirlaniyor: { next: 'hazir', label: 'Hazır' },
   hazir: { next: 'yolda', label: 'Yola çıktı' },
   yolda: { next: 'teslim', label: 'Teslim edildi' },
   teslim: null,
+};
+
+/** Sıradaki aşama: gel-al'da yol yok, müşteri tezgâhtan alır (hazırdan doğrudan teslime; platformun aşamalarını sunucu sırayla yazar) */
+function flowOf(o: OrderDTO) {
+  if (!o.deliveryStatus) return null;
+  if (o.type === 'gelal' && o.deliveryStatus === 'hazir') return { next: 'teslim', label: 'Teslim edildi' } as const;
+  return DELIVERY_FLOW[o.deliveryStatus];
+}
+
+/** Aşama rozeti: bar ekranının dili (hazırlanıyor ve yolda mavi, hazır yeşil, teslim edildi gri) */
+const DELIVERY_BADGE: Record<DeliveryStatus, { tone: BadgeTone; label: string }> = {
+  hazirlaniyor: { tone: 'blue', label: 'Hazırlanıyor' },
+  hazir: { tone: 'green', label: 'Hazır' },
+  yolda: { tone: 'blue', label: 'Yolda' },
+  teslim: { tone: 'neutral', label: 'Teslim edildi' },
 };
 
 export default function OrdersPage() {
@@ -36,11 +54,12 @@ export default function OrdersPage() {
   const qc = useQueryClient();
   const now = useTick(30_000);
   const mode = useServiceMode();
-  const [tab, setTab] = useState<Tab>('acik');
-  const open = useQuery({ queryKey: ['orders', 'acik'], queryFn: () => get<OrderDTO[]>('/orders?status=acik&limit=200'), refetchInterval: 60_000 });
-  const closed = useQuery({ queryKey: ['orders', 'kapali'], queryFn: () => get<OrderDTO[]>('/orders?status=kapali&limit=300'), enabled: tab === 'kapanan' });
   // Hazır tezgâh ve gel-al siparişi kasadan da teslim edilir (Geri al bildirimde)
   const canHand = can('mutfak.ekran') || can('siparis.al');
+  // Yalnız paket yetkisi olan (kurye) kendi işinde açılır: Açık'taki tezgâh satışlarında yapabileceği bir şey yok
+  const [tab, setTab] = useState<Tab>(() => (canHand ? 'acik' : 'paket'));
+  const open = useQuery({ queryKey: ['orders', 'acik'], queryFn: () => get<OrderDTO[]>('/orders?status=acik&limit=200'), refetchInterval: 60_000 });
+  const closed = useQuery({ queryKey: ['orders', 'kapali'], queryFn: () => get<OrderDTO[]>('/orders?status=kapali&limit=300'), enabled: tab === 'kapanan' });
   // Önce ödenmiş (kapanmış) tezgâh ve gel-al satışı hazır olunca teslim bekler (self servis): Açık'ta da görünür. Sunucu
   // bar ekranının Hazır sekmesinin koşuluyla süzer (`ready=1`: son 30 dakikada hazır, açık günün); yalnız teslim edebilene
   const paidReady = useQuery({
@@ -88,6 +107,22 @@ export default function OrdersPage() {
           ? all.filter((o) => o.type === 'paket' || o.type === 'gelal')
           : (closed.data ?? []);
   const couriers = boot.users.filter((u) => u.active && (u.role === 'kurye' || u.role === 'garson'));
+  // Boş durum ekranın sözüyle ve bu kişinin yapabileceğiyle: self modlarda satış Satış ekranından açılır, kurye açmaz
+  const opens = can('siparis.al');
+  const empty =
+    tab === 'kapanan'
+      ? { title: 'Bugün kapanan adisyon yok', body: 'Ödemesi alınan adisyonlar gün boyunca burada listelenir' }
+      : tab === 'online'
+        ? { title: 'Açık online sipariş yok', body: 'Uygulama ve web siparişleri hazırlanırken burada görünür' }
+        : tab === 'paket'
+          ? {
+              title: 'Açık paket ya da gel-al siparişi yok',
+              body: opens && !isCounterFirst(mode) ? 'Masalar ekranından gel-al ya da paket açın' : 'Gel-al ve paket siparişleri açılınca burada görünür',
+            }
+          : {
+              title: 'Açık sipariş yok',
+              body: !opens ? 'Tezgâh, gel-al ve paket siparişleri açılınca burada görünür' : isCounterFirst(mode) ? 'Satış ekranından yeni satış açın' : 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın',
+            };
 
   return (
     <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
@@ -104,9 +139,10 @@ export default function OrdersPage() {
           </>
         }
       />
+      {/* Telefonda ray ekran kenarına taşar: kırpılan sekme kenarda biter (kaydırma işareti), sayfa boşluğunda yarım kalmaz */}
       <Tabs<Tab>
         label="Sipariş listesi"
-        className="mb-3"
+        className="-mx-4 mb-3 px-4 md:mx-0 md:px-0"
         value={tab}
         onChange={setTab}
         options={[
@@ -117,19 +153,22 @@ export default function OrdersPage() {
         ]}
       />
       {tab === 'online' && !boot.integrations.laffogatoPanel && (
-        <div className="mb-3 flex flex-col gap-2 rounded-2xl border border-dashed border-line-strong p-4 text-sm text-muted sm:flex-row sm:items-center">
-          <span className="flex-1 text-pretty">
-            {boot.integrations.laffogatoUrl ? 'Site bağlantı anahtarı tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor' : 'Site bağlantısı kurulmadığı için uygulama ve web siparişleri buraya düşmüyor'}
-          </span>
-          {can('ayar.yonet') || can('senkron.yonet') ? (
-            <Link to="/yonetim/entegrasyon" className="inline-flex min-h-11 items-center font-medium text-primary hover:underline pointer-fine:min-h-0">
-              Site ve lafmaliyet
-            </Link>
-          ) : null}
-        </div>
+        <Notice
+          tone="info"
+          className="mb-3"
+          action={
+            can('ayar.yonet') || can('senkron.yonet') ? (
+              <Link to="/yonetim/entegrasyon" className={buttonClass('secondary', 'sm')}>
+                Bağlantıyı kur
+              </Link>
+            ) : undefined
+          }
+        >
+          {boot.integrations.laffogatoUrl ? 'Site bağlantı anahtarı tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor' : 'Site bağlantısı kurulmadığı için uygulama ve web siparişleri buraya düşmüyor'}
+        </Notice>
       )}
       {list.isPending ? (
-        <div role="status" aria-label="Siparişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+        <div role="status" aria-label="Siparişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-[92px] rounded-2xl" />
           ))}
@@ -137,14 +176,15 @@ export default function OrdersPage() {
       ) : list.isError && !list.data ? (
         <ErrorState title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState art="fis" title={tab === 'kapanan' ? 'Bugün kapanan adisyon yok' : tab === 'online' ? 'Açık online sipariş yok' : tab === 'paket' ? 'Açık paket ya da gel-al siparişi yok' : 'Açık tezgâh siparişi yok'}>
-          {tab === 'online' ? 'Uygulama ve web siparişleri hazırlanırken burada görünür' : tab === 'kapanan' ? 'Bugün kapanan adisyonlar burada listelenir' : 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın'}
+        <EmptyState art="fis" title={empty.title}>
+          {empty.body}
         </EmptyState>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3 animate-fade">
+        // Tablette dikeyde iki sütun (608 px), dar telefonda taşmaz
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3 animate-fade">
           {rows.map((o) => {
             const Icon = o.source === 'laffogato' ? Globe : o.type === 'paket' ? Bike : o.type === 'gelal' ? ShoppingBag : o.type === 'masa' ? UtensilsCrossed : Store;
-            const flow = o.deliveryStatus ? DELIVERY_FLOW[o.deliveryStatus] : null;
+            const flow = flowOf(o);
             const pendingKitchen = o.items.filter((i) => !i.voided && i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length;
             const readyIds = canHand ? readyToHand(o) : [];
             // Adet olarak ("2 ürün" yazan kartta "2 hazır")
@@ -159,10 +199,12 @@ export default function OrdersPage() {
             // Kasanın gel-al siparişinde bara kalem gittiyse aşama bardan izlenir (kalemlerin hepsi teslim edilince
             // "Teslim edildi"): elle aşama düğmesi yok, teslim kalemin Teslim edildi düğmesiyle (sunucu da reddeder)
             const stageButton = flow && !stageFromBar(o);
+            const courierPick = o.type === 'paket' && couriers.length > 0;
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
               <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
-                <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex items-start gap-3 rounded-lg text-left">
+                {/* Kartın dokunulan yüzü: basılı ton dokunmatikte de geri bildirir (kenar payı içeriği yerinde tutar) */}
+                <button onClick={() => navigate(`/adisyon/${o.id}`)} className="-m-1.5 flex items-start gap-3 rounded-xl p-1.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
                   <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
                     <Icon />
                   </span>
@@ -177,7 +219,7 @@ export default function OrdersPage() {
                     </span>
                   </span>
                   {itemCount === 0 ? (
-                    <span className="text-xs text-muted">Boş</span>
+                    <span className="text-[13px] leading-6 text-muted">Boş</span>
                   ) : (
                     <span className="tabular text-right font-semibold">
                       {tl(o.extPaid ? (o.extTotal ?? 0) : o.total)}
@@ -204,7 +246,12 @@ export default function OrdersPage() {
                         {readyQty} hazır
                       </Badge>
                     )}
-                    {o.deliveryStatus && <Badge tone={o.deliveryStatus === 'teslim' ? 'green' : 'blue'}>{{ hazirlaniyor: 'Hazırlanıyor', hazir: 'Hazır', yolda: 'Yolda', teslim: 'Teslim edildi' }[o.deliveryStatus]}</Badge>}
+                    {o.deliveryStatus && (
+                      <Badge tone={DELIVERY_BADGE[o.deliveryStatus].tone}>
+                        {o.deliveryStatus === 'hazir' && <Check aria-hidden="true" className="size-3" />}
+                        {DELIVERY_BADGE[o.deliveryStatus].label}
+                      </Badge>
+                    )}
                     {methods.length > 0 && <Badge>{methods.join(', ')}</Badge>}
                   </div>
                 )}
@@ -223,9 +270,9 @@ export default function OrdersPage() {
                     Teslim edildi
                   </Button>
                 )}
-                {o.status === 'acik' && (o.type === 'paket' || o.type === 'gelal') && (can('paket.yonet') || can('siparis.al')) && ((o.type === 'paket' && couriers.length > 0) || stageButton) && (
+                {o.status === 'acik' && (o.type === 'paket' || o.type === 'gelal') && (can('paket.yonet') || can('siparis.al')) && (courierPick || stageButton) && (
                   <div className="mt-3 flex gap-2">
-                    {o.type === 'paket' && couriers.length > 0 && (
+                    {courierPick && (
                       <Select value={o.courierId ?? ''} onChange={(e) => delivery(o, { courierId: e.target.value || null })} aria-label="Kurye" className="min-w-0 flex-1">
                         <option value="">Kurye seç</option>
                         {couriers.map((u) => (
@@ -235,8 +282,9 @@ export default function OrdersPage() {
                         ))}
                       </Select>
                     )}
+                    {/* Kurye seçimi yoksa aşama düğmesi satırı doldurur (Teslim edildi düğmesi gibi) */}
                     {stageButton && (
-                      <Button variant="primary" onClick={() => delivery(o, { deliveryStatus: flow.next })}>
+                      <Button variant="primary" className={cn(!courierPick && 'flex-1')} onClick={() => delivery(o, { deliveryStatus: flow.next })}>
                         {flow.label}
                       </Button>
                     )}

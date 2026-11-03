@@ -6,6 +6,7 @@ import { fmtTime } from '@shared/time';
 import type { PickupBoardDTO, PickupEntryDTO } from '@shared/types';
 import { LafTile } from '@/components/LafMark';
 import { IconButton } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
@@ -48,6 +49,9 @@ export default function PickupBoardPage() {
 
   const preparing = board.data?.preparing ?? [];
   const ready = board.data?.ready ?? [];
+  // İlk yüklemede iskelet; hiç veri gelmeden bağlantı koptuysa sütun bunu söyler: bekleyen müşteri sahte "sipariş yok" görmesin
+  const loading = board.isPending;
+  const offline = board.isError && !board.data;
 
   return (
     <div className="flex h-full flex-col gap-3 bg-bg p-3 md:p-5" onPointerDown={unlockAudio}>
@@ -58,14 +62,14 @@ export default function PickupBoardPage() {
           {/* Telefonda sütunlar alt alta: yön tarifi yalnız geniş ekranda */}
           <p className="hidden text-base text-muted md:block">Numaranız Hazır listesine geçince siparişiniz hazırdır</p>
         </div>
-        {/* Personel kontrolü müşteri yüzünde sessiz: yalnız ikon */}
-        <IconButton label={sound ? 'Sesi kapat' : 'Sesi aç'} aria-pressed={sound} onClick={() => setSound(!sound)} className="text-muted">
+        {/* Personel kontrolü müşteri yüzünde sessiz: yalnız ikon; aç-kapa düğmesinin adı sabit, durumu aria-pressed */}
+        <IconButton label="Hazır sesi" title={sound ? 'Sesi kapat' : 'Sesi aç'} aria-pressed={sound} onClick={() => setSound(!sound)} className="text-muted">
           {sound ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
         </IconButton>
         {/* Saat numaralarla yarışmaz; yoklama düşerse personel küçük bir işaret görür (müşteriyi korkutmaz) */}
         <span className="flex flex-col items-end">
           <span className="tabular font-headline text-xl font-semibold text-muted md:text-2xl">{fmtTime(now)}</span>
-          {board.isError && (
+          {board.isError && !offline && (
             <span role="status" className="inline-flex items-center gap-1.5 text-[13px] text-muted">
               <span aria-hidden="true" className="size-2 rounded-full bg-[var(--admin-warning)]" />
               Bağlantı bekleniyor
@@ -75,12 +79,12 @@ export default function PickupBoardPage() {
       </header>
 
       <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[1fr_1.4fr]">
-        <Column title="Hazırlanıyor" count={preparing.length} tone="muted" empty="Şu an hazırlanan sipariş yok">
+        <Column title="Hazırlanıyor" count={preparing.length} tone="muted" loading={loading} empty={offline ? 'Bağlantı bekleniyor' : 'Şu an hazırlanan sipariş yok'}>
           {preparing.map((e) => (
             <Entry key={e.id} entry={e} />
           ))}
         </Column>
-        <Column title="Hazır" count={ready.length} tone="ready" empty="Numaranız hazır olunca burada görünür">
+        <Column title="Hazır" count={ready.length} tone="ready" loading={loading} empty={offline ? 'Bağlantı gelince numaralar burada görünür' : 'Numaranız hazır olunca burada görünür'}>
           {ready.map((e) => (
             <Entry key={e.id} entry={e} ready fresh={now - e.readyAt < FRESH_MS} />
           ))}
@@ -90,17 +94,25 @@ export default function PickupBoardPage() {
   );
 }
 
-function Column({ title, count, tone, empty, children }: { title: string; count: number; tone: 'muted' | 'ready'; empty: string; children: React.ReactNode }) {
+function Column({ title, count, tone, loading, empty, children }: { title: string; count: number; tone: 'muted' | 'ready'; loading: boolean; empty: string; children: React.ReactNode }) {
   return (
     <section className={cn('flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-surface', tone === 'ready' ? 'border-[var(--admin-success-line)]' : 'border-line')}>
       <header className={cn('flex items-center gap-3 border-b px-5 py-3.5', tone === 'ready' ? 'border-[var(--admin-success-line)] bg-[var(--admin-success-soft)]' : 'border-[var(--admin-divider)]')}>
         <h2 className={cn('text-2xl font-bold tracking-[-0.01em] md:text-3xl', tone === 'ready' ? 'text-[var(--admin-success)]' : 'text-ink-2')}>{title}</h2>
-        <span className="tabular inline-flex min-h-7 items-center rounded-full bg-surface-3 px-3 text-base font-semibold text-ink-2">{count}</span>
+        {/* Sıfır sayı yazılmaz (kitin sekme sayısı gibi): boş sütun yarım kalmış görünmesin */}
+        {count > 0 && <span className="tabular inline-flex min-h-7 items-center rounded-full bg-surface-3 px-3 text-base font-semibold text-ink-2">{count}</span>}
       </header>
-      {/* Hazır numaralar daha büyük: sütun hücresi de geniş (üç haneli numara kırpılmasın) */}
-      <div className={cn('scroll-thin grid min-h-0 flex-1 auto-rows-min gap-3 overflow-y-auto p-4', tone === 'ready' ? 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(160px,1fr))]')}>
-        {count === 0 ? <p className="col-span-full text-balance py-12 text-center text-lg text-muted">{empty}</p> : children}
-      </div>
+      {!loading && count === 0 ? (
+        // Boş sütunun sözü ortada: televizyonu dolduran sütunun tepesinde yalnız bir satır bitmemiş görünüyordu
+        <div className="grid flex-1 place-items-center p-6">
+          <p className="max-w-[24ch] text-balance text-center text-xl text-muted md:text-2xl">{empty}</p>
+        </div>
+      ) : (
+        // Hazır numaralar daha büyük: sütun hücresi de geniş (üç haneli numara kırpılmasın)
+        <div className={cn('scroll-thin grid min-h-0 flex-1 auto-rows-min gap-3 overflow-y-auto p-4', tone === 'ready' ? 'grid-cols-[repeat(auto-fill,minmax(220px,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(160px,1fr))]')}>
+          {loading ? [0, 1, 2].map((i) => <Skeleton key={i} className={cn('rounded-xl', tone === 'ready' ? 'h-40' : 'h-28')} />) : children}
+        </div>
+      )}
     </section>
   );
 }
@@ -118,8 +130,8 @@ function Entry({ entry, ready, fresh }: { entry: PickupEntryDTO; ready?: boolean
         fresh && 'animate-ring motion-reduce:animate-none',
       )}
     >
-      {/* Yarı self servis: numara yerine masa; müşteri kalkmaz, personel getirir */}
-      {entry.table && <span className="mb-1 text-sm font-semibold uppercase tracking-[0.06em] text-muted">Masa</span>}
+      {/* Yarı self servis: numara yerine masa; müşteri kalkmaz, personel getirir. Etiketler büyük harfsiz, uzaktan okunur boyda */}
+      {entry.table && <span className="mb-1 text-base font-semibold text-ink-2">Masa</span>}
       <span
         className={cn(
           'tabular max-w-full leading-none tracking-tight',
@@ -130,9 +142,9 @@ function Entry({ entry, ready, fresh }: { entry: PickupEntryDTO; ready?: boolean
         {big}
       </span>
       {entry.table && <span className="mt-2 text-sm font-medium text-ink-2">{ready ? 'Masanıza geliyor' : 'Masanıza getirilecek'}</span>}
-      {entry.platform && !entry.table && <span className="mt-2 text-sm font-semibold uppercase tracking-[0.06em] text-ink-2">{PLATFORM_LABEL[entry.platform]}</span>}
+      {entry.platform && !entry.table && <span className="mt-2 text-base font-semibold text-ink-2">{PLATFORM_LABEL[entry.platform]}</span>}
       {entry.name && <span className="mt-2 max-w-full truncate text-lg font-semibold">{entry.name}</span>}
-      {entry.online && <span className="mt-1 text-xs font-medium uppercase tracking-[0.06em] text-muted">Uygulama</span>}
+      {entry.online && <span className="mt-1 text-sm font-medium text-muted">Uygulama</span>}
     </div>
   );
 }
