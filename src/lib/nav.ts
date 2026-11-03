@@ -1,4 +1,6 @@
 import { BarChart3, CalendarClock, ChefHat, ClipboardList, Gauge, LayoutGrid, Settings, Store, Users, Wallet } from 'lucide-react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import type { Permission } from '@shared/permissions';
 import { DEFAULT_SERVICE_MODE, isCounterFirst, type ServiceMode, showsTables } from '@shared/service-mode';
 
@@ -33,7 +35,8 @@ export const POS_NAV: NavItem[] = [
   { to: '/siparisler', label: 'Siparişler', title: 'Siparişler', icon: ClipboardList, perms: ['siparis.al', 'paket.yonet'], primary: true },
   { to: '/mutfak', label: 'Bar', title: 'Bar ve mutfak ekranı', icon: ChefHat, perms: ['mutfak.ekran'], primary: true },
   { to: '/kasa', label: 'Kasa', title: 'Kasa ve gün sonu', icon: Wallet, perms: ['kasa.gun', 'kasa.hareket', 'odeme.al'], primary: true },
-  { to: '/musteriler', label: 'Müşteriler', title: 'Müşteriler ve cari', icon: Users, perms: ['cari.yonet'] },
+  // Ekranın adı sayfanın başlığıyla aynı ("Açık hesap" sayfada); palet "açık hesap" ve "cari" ile de bulur
+  { to: '/musteriler', label: 'Müşteriler', title: 'Müşteriler', icon: Users, perms: ['cari.yonet'], keywords: 'açık hesap cari veresiye tahsilat damga' },
   { to: '/rezervasyon', label: 'Rezerv.', title: 'Rezervasyonlar', icon: CalendarClock, perms: ['rezervasyon.yonet'] },
   { to: '/raporlar', label: 'Raporlar', title: 'Raporlar', icon: BarChart3, perms: ['rapor.gor'] },
   { to: '/patron', label: 'Patron', title: 'Patron paneli', icon: Gauge, perms: ['patron.panel'], primary: true },
@@ -85,6 +88,30 @@ export function navAriaLabel(n: NavItem): string | undefined {
   const short = n.label.replace(/\.$/, '').toLocaleLowerCase('tr-TR');
   return n.title !== n.label && n.title.toLocaleLowerCase('tr-TR').startsWith(short) ? n.title : undefined;
 }
+
+/** Adisyonun geldiği ekran: rayda ve alt sekmede o ekran etkin görünür */
+export const useNavOrigin = create<{ to: string | null }>(() => ({ to: null }));
+
+/** Sayfa açıkken geldiği ekranı (`useNavOrigin`) bildirir; sayfa kapanınca boşalır */
+export function useSetNavOrigin(to: string | null) {
+  useEffect(() => {
+    useNavOrigin.setState({ to });
+    return () => useNavOrigin.setState({ to: null });
+  }, [to]);
+}
+
+/**
+ * Menüde olmayan ekranın menüdeki yeri: Eğitim cihazı Kasa'dan açılır, adisyon geldiği ekranın (`origin`; bilinmiyorsa
+ * hiçbir öğe etkin değil). Menüdeki ekranlar için null: onları adres zaten eşler
+ */
+export function navAlias(pathname: string, origin: string | null): string | null {
+  if (pathname === '/cihaz') return '/kasa';
+  if (pathname.startsWith('/adisyon/')) return origin;
+  return null;
+}
+
+/** Menüde olmayan ekranların telefon üst şeridindeki adı */
+export const EXTRA_TITLES: Record<string, string> = { '/cihaz': 'Eğitim cihazı' };
 
 /** Yönetim paneli ve raporlar Innex kabuğunda açılır; kasanın sol menüsü ve üst şeridi orada çizilmez */
 export function isAdminArea(pathname: string): boolean {

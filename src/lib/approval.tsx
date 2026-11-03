@@ -50,21 +50,12 @@ export function ApprovalHost() {
         ) : (
           <>
             <PinDots filled={pin.length} className="py-1" />
-            {/* Kasa bilgisayarında PIN klavyeden de girilir; Enter onaylar */}
-            <Numpad
-              keyboard
-              onEnter={() => submit()}
-              onKey={(k) => {
-                const next = applyNumpadKey(pin, k, { maxLength: 6 });
-                setPin(next);
-              }}
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <Button onClick={cancel}>Vazgeç</Button>
-              <Button variant="primary" disabled={pin.length < 4} onClick={() => submit()}>
-                Onayla
-              </Button>
-            </div>
+            {/* Giriş ekranıyla tek PIN düzeni: onay tuş takımının son sırasında (⌫ · 0 · Onayla). Kasa bilgisayarında
+                PIN klavyeden de girilir; Enter etkin onay tuşuna gider */}
+            <Numpad keyboard onKey={(k) => setPin(applyNumpadKey(pin, k, { maxLength: 6 }))} confirm={{ label: 'Onayla', disabled: pin.length < 4, onPress: () => submit() }} />
+            <Button variant="ghost" block onClick={cancel}>
+              Vazgeç
+            </Button>
           </>
         )}
       </div>

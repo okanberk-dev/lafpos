@@ -60,6 +60,11 @@ export function receiptDTO(r: ReceiptRow) {
     createdAt: r.createdAt,
     completedAt: r.completedAt,
     basket: r.basket,
+    /**
+     * Cihaz fişinin LafPOS'ta oluşturduğu ödemeler: istemci "tutar olarak alınmış ödeme" kuralını (`okc_partial`:
+     * tamamlanmış fişlerin ödemeleri cihazdan sayılır) sunucuyla birebir uygular
+     */
+    paymentIds: r.paymentIds,
   };
 }
 export type ReceiptDTO = ReturnType<typeof receiptDTO>;

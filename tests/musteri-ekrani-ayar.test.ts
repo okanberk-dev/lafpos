@@ -49,7 +49,9 @@ describe('müşteri ekranı ayarı', () => {
     const boot = await h.ok<{ settings: { customerDisplay: DisplayConfigDTO } }>('kasa', 'GET', '/bootstrap');
     expect(boot.settings.customerDisplay.thanksTitle).toBe('Afiyet olsun');
     const audit = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=20');
-    expect(audit.some((a) => a.action === 'settings.update' && a.message.includes('customerDisplay'))).toBe(true);
+    // Denetim kaydı ayarın Türkçe adıyla (kod adıyla değil)
+    expect(audit.some((a) => a.action === 'settings.update' && a.message.includes('Müşteri ekranı'))).toBe(true);
+    expect(audit.some((a) => a.message.includes('customerDisplay'))).toBe(false);
   });
 
   it('yalnız ayar yetkisi yazar (kasiyer ve garson yazamaz)', async () => {

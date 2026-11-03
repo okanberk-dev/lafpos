@@ -64,8 +64,10 @@ describe('akış', () => {
     expect(paid).toMatchObject({ status: 'kapali', paid: o.total });
     expect(paid.payments).toHaveLength(1);
     expect(paid.payments[0]!.note).toBe('Yazarkasa e-Arşiv LAF2026000000042');
-    const [receipt] = await h.ok<{ status: string }[]>('kasa', 'GET', `/okc/orders/${o.id}/receipts`);
+    const [receipt] = await h.ok<{ status: string; paymentIds: string[] }[]>('kasa', 'GET', `/okc/orders/${o.id}/receipts`);
     expect(receipt).toMatchObject({ status: 'tamamlandi', docKind: 'e_arsiv', docId: 'LAF2026000000042' });
+    // Fiş oluşturduğu ödemeleri taşır: kasa "tutar olarak alınmış ödeme" kuralını (okc_partial) sunucuyla aynı uygular
+    expect(receipt!.paymentIds).toEqual(paid.payments.map((p) => p.id));
   });
 
   it('Token seçili ama bilgileri yoksa sepet gitmez, eksik ayarlar adıyla söylenir', async () => {

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { BootstrapDTO } from '@shared/types';
 import type { SiteMenu } from '../server/sync/laffogato-menu';
 import { type FakeSite, siteMenuFixture, startFakeSite } from './fake-site';
@@ -211,5 +211,33 @@ describe('yerel damga kartı, site bağlantısı kuruluyken', () => {
     expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).integrations.localStamps).toBe(false);
     const c = await h.ok<{ id: string }>('kasa', 'POST', '/customers', { name: 'Uygulama üyesi' });
     expect((await h.call<{ code: string }>('kasa', 'POST', `/customers/${c.id}/redeem`, {})).json.code).toBe('stamps_off');
+  });
+});
+
+describe('site kapalıyken', () => {
+  it('menü eşitlemesi Node\'un "fetch failed"ı yerine "Siteye ulaşılamadı" ve nedenini yazar; kart ve bildirim aynısını gösterir', async () => {
+    const { getSyncState } = await import('../server/lib/settings');
+    const lastError = () => getSyncState<{ lastError: string | null }>('laffogato.menu')?.lastError;
+    const real = globalThis.fetch;
+    // Node fetch'inin ağ hatası: "fetch failed", nedeni cause'da (ECONNREFUSED); zaman aşımı TimeoutError
+    let failure: unknown = Object.assign(new TypeError('fetch failed'), { cause: Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:3000'), { code: 'ECONNREFUSED' }) });
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => (String(input).includes('/api/mobile/v1/menu') ? Promise.reject(failure) : real(input, init)));
+    try {
+      await expect(sync()).rejects.toThrow(/^Siteye ulaşılamadı \(ECONNREFUSED\)$/);
+      expect(lastError()).toBe('Siteye ulaşılamadı (ECONNREFUSED)');
+      // Elle eşitlemenin bildirimi
+      const manual = await h.call<{ error: string; code: string }>('patron', 'POST', '/sync/menu/preview', {});
+      expect(manual.status).toBe(502);
+      expect(manual.json).toMatchObject({ code: 'site_menu', error: 'Site menüsü alınamadı: Siteye ulaşılamadı (ECONNREFUSED)' });
+
+      failure = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      await expect(sync()).rejects.toThrow(/^Siteye ulaşılamadı \(15 saniyede yanıt yok\)$/);
+      expect(lastError()).toBe('Siteye ulaşılamadı (15 saniyede yanıt yok)');
+    } finally {
+      spy.mockRestore();
+    }
+    // Site dönünce eşitleme yine çalışır, hata kalkar
+    await sync();
+    expect(lastError()).toBeNull();
   });
 });

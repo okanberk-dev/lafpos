@@ -21,6 +21,7 @@ import { generateTableCode, tableQrUrl } from '@shared/table-qr';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { CUSTOMER_DISPLAY_THEMES } from '@shared/types';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
+import { settingLabel } from '@shared/settings-labels';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
 import { lastZNo } from '../services/days';
 import { nextZNo, Z_NO_MAX } from '@shared/z-no';
@@ -979,14 +980,25 @@ const settingsShape = patchOf(
   }),
 );
 
+/**
+ * Ayarın değeri aynı mı: nesneler anahtar sırası gözetmeden (aynı müşteri ekranı ya da boy adları başka sırayla da
+ * gelebilir), diziler sırasıyla karşılaştırılır
+ */
+function sameSetting(a: unknown, b: unknown): boolean {
+  const canonical = (v: unknown) =>
+    JSON.stringify(v, (_k, x: unknown) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([p], [q]) => (p < q ? -1 : p > q ? 1 : 0))) : x));
+  return canonical(a) === canonical(b);
+}
+
 adminRoutes.put('/settings', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   const input = await body(c, settingsShape);
   if (input.menuAutoSync !== undefined || input.onlineOrdersSync !== undefined) requirePermission(user, 'senkron.yonet');
-  const before = serviceModeOf(getSettings());
-  const zFrom = getSettings().zNoStart;
-  // Kaydet bütün formu gönderir: ilk Z numarası yalnız değiştiyse denetlenir ve kayda düşer
+  const prev = getSettings();
+  const before = serviceModeOf(prev);
+  const zFrom = prev.zNoStart;
+  // İlk Z numarası yalnız değiştiyse denetlenir ve kayda düşer (aynı değeri yeniden göndermek değişiklik değil)
   const zChanged = input.zNoStart !== undefined && input.zNoStart !== zFrom;
   const fx = new Effects();
   tx((t) => {
@@ -996,7 +1008,12 @@ adminRoutes.put('/settings', async (c) => {
       if (input.zNoStart <= last) throw new HttpError(422, `Z numarası geri alınamaz; son Z ${last}`, 'z_start_low');
     }
     updateSettings(input, t);
-    fx.audit(t, { userId: user.id, action: 'settings.update', message: `${user.name} ayarları değiştirdi: ${Object.keys(input).join(', ')}` });
+    // Denetime yalnız gerçekten değişen ayarlar, Türkçe adlarıyla (Denetim kaydı ", " ile böler); hiçbiri değişmediyse
+    // kayıt yok. Servis modu ve ilk Z numarası aşağıdaki kendi okunur kayıtlarına düşer, burada ikinci kez yazılmaz
+    const was = prev as unknown as Record<string, unknown>;
+    const sent = input as Record<string, unknown>;
+    const changedKeys = Object.keys(sent).filter((k) => k !== 'serviceMode' && k !== 'zNoStart' && sent[k] !== undefined && !sameSetting(sent[k], was[k]));
+    if (changedKeys.length) fx.audit(t, { userId: user.id, action: 'settings.update', message: `${user.name} ayarları değiştirdi: ${changedKeys.map(settingLabel).join(', ')}` });
     // Servis modu bütün sistemin akışını değiştirir (açılış ekranı, menü, tezgâh satışı): ayrı ve okunur kayıt
     if (input.serviceMode && input.serviceMode !== before) {
       fx.audit(t, {
