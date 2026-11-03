@@ -6,7 +6,7 @@ Bu repoda çalışan her ajan ve geliştirici için.
 
 1. `docs/02-PLAN.md`: mimari, veri modeli, dalgalar.
 2. `docs/03-ENTEGRASYON.md`: laffogato ve lafmaliyet ile sözleşme. Burada olmayan alan sistemler arasında gitmez.
-3. Arayüze dokunacaksan `DESIGN.md` (kasa ekranları, Innex yönetim paneli, telefon ve tablet) ve `PRODUCT.md`.
+3. Arayüze dokunacaksan `DESIGN.md` (LafPOS Sade, laffogato.net kimliği: Poppins ve Gabarito, kasa ekranları, yönetim paneli, telefon ve tablet) ve `PRODUCT.md`.
    Yönetim paneline alan eklerken `build-admin-panel`, telefona uyarlarken `impeccable` skill'i
    (`docs/SKILLS.md`).
 

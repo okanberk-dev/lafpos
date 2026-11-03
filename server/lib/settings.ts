@@ -38,6 +38,18 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   // Var olan kurulumlarda hiçbir şey değişmesin: patron Yönetim › Ayarlar'dan seçer
   serviceMode: DEFAULT_SERVICE_MODE,
   tipsEnabled: false,
+  // Müşteri ekranı: gece teması, sitenin tescilli sloganı; duyuru ve karekod patron girene kadar yok
+  customerDisplay: {
+    theme: 'gece',
+    welcomeTitle: 'Hoş geldiniz',
+    welcomeSubtitle: 'Drink it. Eat the cup.',
+    thanksTitle: 'Teşekkürler, afiyet olsun',
+    messages: [],
+    qrUrl: '',
+    qrLabel: 'Uygulamayı indirin, damga kazanın',
+    showClock: true,
+    showOptions: true,
+  },
 };
 
 /** Yalnız sunucuda kullanılan ayarlar */
@@ -162,7 +174,12 @@ export function setSyncState(key: string, value: unknown) {
  * kaydedildiği günün yetkilerini sayar, yeni yetki o rolde sessizce kapalı kalırdı (ör. müdür ödenmez onaylayamazdı).
  * Benzer yetkileri (`like`) taşıyan rollere eklenir; patron sonra kaldırırsa bir daha eklenmez.
  */
-const ADDED_PERMISSIONS: { permission: Permission; like: Permission[] }[] = [{ permission: 'siparis.odenmez', like: ['siparis.ikram', 'odeme.iade'] }];
+const ADDED_PERMISSIONS: { permission: Permission; like: Permission[] }[] = [
+  { permission: 'siparis.odenmez', like: ['siparis.ikram', 'odeme.iade'] },
+  // Mesai çizelgesi personel verisidir: personel tutarlarını gören ya da personeli yöneten rol alır (müdür)
+  { permission: 'mesai.yonet', like: ['rapor.maliyet'] },
+  { permission: 'mesai.yonet', like: ['personel.yonet'] },
+];
 
 const SETTINGS_UPGRADES_KEY = 'ayar-guncellemeleri';
 

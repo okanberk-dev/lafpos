@@ -39,6 +39,7 @@ lafpos/
 | --- | --- | --- |
 | `settings` | anahtar → JSON ayar | işletme adı, fiş metinleri, servis oranı, otomatik kilit, senkron ayarları, servis modu (`serviceMode`) |
 | `users`, `sessions` | personel, PIN, rol, kişi bazlı yetki; oturumlar | PIN `HMAC(secret, pin)` olarak tekil |
+| `time_entries` | personel mesaisi (giriş-çıkış) | iş günü girişten (05:00 kuralı); `source`: pin (kilit ekranı), oturum ya da yonetim (elle); kişi başına tek açık mesai, aynı kişide çakışma yok, en çok 24 saat; düzelten yönetici `edited_by` (göç 0014) |
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
 | `categories`, `products` | menü | `price` (M/tek), `priceL` (L), `kdvRate`, `extSource/extId` (`laffogato`/`mnu-0011`), POS'a özel alanlar, porsiyon sayacı, `isService` |
@@ -48,6 +49,7 @@ lafpos/
 | `business_days` | iş günü (05:00 kuralı), açılış/sayım, Z özeti | `zNo`, `lastOrderNo` |
 | `orders`, `order_items`, `payments` | adisyon, kalem, ödeme | kalemde KDV, boy, seçenekler, iptal/ikram/indirim bilgisi, istasyon durumu, ödenen adet; online sipariş alanları (`extId`, `extPaid`); ödemede istemcinin deneme kimliği (`request_id`, adisyon başına tekil: yanıtı kaybolup yeniden gelen aynı istek ikinci kez yazılmaz, ilk sonuç döner; aynı kimlikle başka tür, tutar, pay ya da kalem gelirse ya da o ödeme iptal edildiyse 409 `request_reused` / `request_refunded`, göç 0004; açık hesap tahsilatı da kimlik gönderir ve bakiyeden fazlası tahsil edilmez: 409 `over_balance`); yarı self serviste masa no / numaratör (`numarator`, göç 0005) |
 | `cash_movements` | harcama, teslim, giriş | lafmaliyet `cash_outs` türleriyle uyumlu |
+| `shift_counts` | vardiya kasa sayımı (gün içinde kasiyer değişirken) | sayılan, o anki beklenen nakit ve fark, banknotlar, devralan ve PIN onayı; kasa hareketi değil, Z'yi değiştirmez, lafmaliyet'e gitmez (göç 0014) |
 | `room_sessions` | karaoke odası sayacı | `bookingId`, `booking`, `prepaidMinutes`: sitedeki rezervasyona bağlı sayaç (`docs/03-ENTEGRASYON.md` §2.4) |
 | `customers`, `customer_addresses`, `customer_ledger` | müşteri, adres, açık hesap | damga kartı sayacı |
 | `reservations` | rezervasyon | |
@@ -185,7 +187,7 @@ ve ödemeyi açar, satış bitince yeni satış; boş tezgâh adisyonu yeniden k
 ekranında Toplam görünümü, Hazır çağrı ekranı (`/cagri`), hazırlama süresi raporu, siparişi alana hazır bildirimi,
 elle fiyat, müşteri ekranı (`/musteri-ekrani`), adisyonda görselli ürün kartları ve kategori listesi, LafPOS Uzaktan
 (Vercel, salt okunur; `docs/07-UZAKTAN-ERISIM.md` §4). Sırada: patronun telefonuna alarm bildirimi (lafmaliyet Web
-Push), vardiya kasa sayımı, personel giriş-çıkış, kampanya kuralları (fiyatın sahibi site; karar gerekir).
+Push), kampanya kuralları (fiyatın sahibi site; karar gerekir).
 
 **Servis modu** (27 Ekim 2026, `claude/servis-modu`): Yönetim › Ayarlar'da masaya servis (varsayılan, bugünkü
 akış), yarı self ve self servis. Self modlarda açılış ve menünün ilk sekmesi yeni tezgâh satışı (`/satis`), "Öde"
@@ -263,6 +265,35 @@ gerçek teşekkür gönderimi (bara giden satışta numara, gitmeyende numarası
 "Ödendi" ve çağrı numarasıyla teslim edilmesi. Teşekkür gidince 300 ms toplanan
 adisyon görüntüsü iptal olur ve gönderimler sırayla gider (`src/lib/display.ts`): ödemeden hemen önce kurulan
 zamanlayıcı teşekkürü ezip ekranı ödenmemiş adisyona döndürüyordu (bu akış buldu).
+
+**Mesai ve vardiya kasa sayımı** (2 Kasım 2026, `claude/mesai-vardiya`; sunucu ve API, ekranlar ayrı): personel girişini
+kasa oturumundan (`POST /api/time/clock-in`, `/clock-out`) ya da kilit ekranında oturum açmadan PIN'le yapar
+(`POST /api/time/punch`: PIN giriş ekranıyla aynı denetim ve deneme sınırı; yön verilmezse durum değişir, bir dakika
+içindeki ikinci basış yok sayılır). Kurallar her yazmada: çıkış girişten sonra, ileri tarih yok, mesai en çok 24 saat
+(çıkışı unutulan mesai şimdiye uzatılmaz, yetkili düzeltir: önceki iş gününde başlayıp 8 saatten uzun süren açık
+mesai unutulmuştur, `shiftForgotten`; ne kilit ekranındaki basış ne kullanıcı menüsü onu kapatır, 409 `stale_shift`;
+raporda sayılmaz, CSV'de "Açık (çıkış girilmeli)"), kişi başına tek açık mesai, aynı kişide çakışma yok. Yeni
+yetki `mesai.yonet` (Yönetim grubu; müdür ve patron): çizelge (`GET /api/time`, en çok 93 gün, kişi toplamları ve şu an
+içeridekiler), elle mesai, düzeltme, açık mesaiyi kapatma, silme, CSV; kendi mesaisini yalnız patron düzeltir. Yöneticinin
+her yazması denetime düşer (düzeltme ve silme uyarı), kişinin kendi basışı düşmez; canlı konu `time`. Vardiya kasa
+sayımı (`POST /api/cash/shift-counts`, `kasa.gun`, açık ve bugünün günü): devreden kasayı sayar, o anki beklenen nakit
+ve fark (günün başından) saklanır; uyarı ya da alarm gün sonu sayımının eşiğiyle ve vardiyanın kendi farkıyla
+(`shiftDiff`: önceki sayımdan bu yana), önceki devirde bulunan eksik sonraki devirde yeniden alarm olmaz
+(`cash.shift_count`); devralan kendi PIN'iyle
+onaylayabilir. Kör kasada beklenen ve fark, başkasının sayımında sayılan da gitmez; sayımlar `GET /api/cash/day` ve
+`/days/:id`'de. Kasa hareketi değildir, lafmaliyet'e gitmez. Testler `tests/mesai.test.ts`, `tests/vardiya-sayim.test.ts`.
+
+**Ekranlar, müşteri ekranı ayarı ve görünüm** (2 Kasım 2026): giriş ekranında **Mesai** sekmesi (aynı PIN, oturum
+açılmaz; sonuç kartı "Hoş geldin" ya da "Görüşmek üzere"), kullanıcı menüsünde mesai satırı (avatarda yeşil nokta),
+Yönetim › Mesai çizelgesi (`/yonetim/mesai`, `mesai.yonet`: dönem, kişi toplamları, düzeltme, şimdi kapatma, CSV);
+Kasa'da **Vardiya devri** penceresi (banknotla sayım, devralanın PIN'i, not) ve günün sayımları kartı. Müşteri ekranı
+ayarlanır: `settings.customerDisplay` (tema gece, porselen ya da ev yeşili; saat; karşılama, alt satır ve teşekkür
+metni; 6 saniyede bir dönen en çok 6 duyuru; karekod adresi ve etiketi), Yönetim › Müşteri ekranı
+(`/yonetim/musteri-ekrani`, `ayar.yonet`) birebir önizlemeyle. Ekran ayarı oturumsuz `GET /api/public/display-config`'ten
+alır (yalnız bu alanlar ve işletme adı), son görünümü cihazda saklar: sonraki açılışta ilk kare ayar gelmeden doğru temada, ayar ucu yanıt vermezse bu görünümle
+çizilir (çevrimdışı açılış yok: sayfanın kendisi sunucudan gelir). Görünüm laffogato.net
+kimliğindedir (`DESIGN.md`). Test `tests/musteri-ekrani-ayar.test.ts`; e2e taramasında yeni ekranlar ve durumları,
+akışlarda mesai ve vardiya devri.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,

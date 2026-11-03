@@ -1,4 +1,3 @@
-import { Wallet } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/Button';
@@ -32,7 +31,7 @@ export default function CounterSalePage() {
     return (
       <div className="grid h-full place-items-center p-4">
         <EmptyState
-          icon={<Wallet />}
+          art="kapi"
           title="Gün açılmamış"
           action={
             can('kasa.gun') ? (

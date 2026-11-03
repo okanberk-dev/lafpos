@@ -1,4 +1,4 @@
-import { Check, ChefHat, CircleDot, Droplets, Gift, Minus, Pencil, Percent, Plus, ReceiptText, Trash2, Undo2, XCircle } from 'lucide-react';
+import { Check, ChefHat, CircleDot, Droplets, Gift, Minus, Pencil, Percent, Plus, Trash2, Undo2, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { COMP_LABEL, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
@@ -14,6 +14,7 @@ import { post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { estimateUnit, pendingOptionsText, pendingProblem, useBoot } from '@/lib/boot';
 import { type PendingLine, useCart } from '@/lib/cart';
+import { Illustration } from '@/components/Illustration';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
@@ -24,7 +25,7 @@ import { TypedAmount } from './TypedAmount';
 // Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
 const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
   yeni: { label: 'Bara gitti', cls: 'text-muted' },
-  hazirlaniyor: { label: 'Hazırlanıyor', cls: 'text-primary' },
+  hazirlaniyor: { label: 'Hazırlanıyor', cls: 'text-blue-ink' },
   hazir: { label: 'Hazır', cls: 'text-[var(--admin-success)]' },
   servis: { label: 'Serviste', cls: 'text-muted' },
 };
@@ -71,10 +72,8 @@ export function CartPanel({
       <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
         {visibleItems.length === 0 && pending.length === 0 && (
           <div className="my-auto flex flex-col items-center px-6 py-10 text-center">
-            <span aria-hidden="true" className="grid size-11 place-items-center rounded-xl bg-surface-3 text-muted">
-              <ReceiptText className="size-5" />
-            </span>
-            <p className="mt-3 text-[15px] font-semibold text-ink">Adisyon boş</p>
+            <Illustration name="fincan" className="size-20" />
+            <p className="mt-3 font-headline text-base font-bold text-ink">Adisyon boş</p>
             <p className="mt-1 max-w-[32ch] text-[13px] text-pretty text-muted">
               {wide ? 'Soldan ürün seçin. ' : 'Menü sekmesinden ürün seçin. '}
               {payFirst ? 'Ödeme alınınca sipariş bara gider' : 'Gönder’e basınca sipariş bara ve mutfağa gider'}
@@ -88,7 +87,7 @@ export function CartPanel({
                 onClick={() => !i.voided && !order.extPaid && order.status === 'acik' && setItemSheet(i)}
                 className={cn('flex min-h-12 w-full items-start gap-3 px-4 py-2.5 text-left transition-colors duration-150', !i.voided && order.status === 'acik' && 'hover:bg-hover active:bg-press')}
               >
-                <span className={cn('tabular h-6 min-w-7 rounded-md px-1.5 text-center text-[13px] font-semibold leading-6', i.voided ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'bg-surface-3 text-ink')}>
+                <span className={cn('tabular h-7 min-w-7 rounded-lg px-1.5 text-center text-[13px] font-semibold leading-7', i.voided ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'bg-surface-3 text-ink')}>
                   {i.qty}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -117,7 +116,7 @@ export function CartPanel({
                             {COMP_LABEL[i.compKind ?? 'ikram']}
                           </span>
                         )}
-                        {i.discount > 0 && <span className="tabular text-primary">−{tl(i.discount)}</span>}
+                        {i.discount > 0 && <span className="tabular text-blue-ink">−{tl(i.discount)}</span>}
                         {i.happyHour && <span className="text-[var(--admin-warning)]">Happy hour</span>}
                         {i.paidQty > 0 && <span className="text-[var(--admin-success)]">{i.paidQty === i.qty ? 'Ödendi' : `${i.paidQty} ödendi`}</span>}
                       </>
@@ -148,12 +147,12 @@ export function CartPanel({
                 const problem = pendingProblem(boot, p, l.options);
                 return (
                   <li key={l.key} className="animate-in flex items-center gap-2 px-4 py-2">
-                    <div className="flex items-center rounded-lg border border-line-strong bg-surface">
-                      <button aria-label={l.qty > 1 ? 'Azalt' : 'Kaldır'} className="grid size-9 place-items-center rounded-l-lg transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
+                    <div className="flex items-center rounded-xl border border-line-strong bg-surface">
+                      <button aria-label={l.qty > 1 ? 'Azalt' : 'Kaldır'} className="grid size-9 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
                         {l.qty > 1 ? <Minus className="size-4" /> : <Trash2 className="size-4 text-[var(--admin-danger-ink)]" />}
                       </button>
                       <span className="tabular w-6 text-center text-sm font-semibold">{l.qty}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-r-lg transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
+                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
                         <Plus className="size-4" />
                       </button>
                     </div>
@@ -205,7 +204,7 @@ export function CartPanel({
         )}
         <div className="flex items-baseline justify-between">
           <span className="text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
-          <span className="tabular text-2xl font-bold tracking-tight">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
+          <span className="tabular font-headline text-2xl font-bold tracking-tight">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
         </div>
         {order.paid > 0 && !order.extPaid && !partlyPaid && (
           <div className="mt-1 space-y-0.5 text-[13px]">
@@ -223,7 +222,7 @@ export function CartPanel({
 
 /** Boy etiketi: ürün adına yapışık düz metin yerine küçük çerçeveli çip; seçenek metniyle karışmaz */
 const SizeTag = ({ children }: { children: React.ReactNode }) => (
-  <span className="ml-1.5 inline-block rounded border border-line px-1 align-[2px] text-[11px] font-medium leading-4 text-ink-2">{children}</span>
+  <span className="ml-1.5 inline-block rounded-full border border-line px-1.5 align-[2px] text-[11px] font-medium leading-4 text-ink-2">{children}</span>
 );
 
 const Row = ({ l, r }: { l: React.ReactNode; r: React.ReactNode }) => (
@@ -320,7 +319,7 @@ function ItemSheet({
               <SheetButton icon={<Droplets className="size-[18px] text-[var(--admin-warning)]" />} title="Zayi yaz" hint="Döküldü, yanlış hazırlandı; ciro dışı, zayi raporuna girer" onClick={() => setMode('zayi')} disabled={unpaid < 1} />
             </>
           )}
-          <SheetButton icon={<Percent className="size-[18px] text-primary" />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
+          <SheetButton icon={<Percent className="size-[18px] text-blue-ink" />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
           {item.paidQty > 0 && <p className="px-1 text-xs text-muted">{item.paidQty} adedin ödemesi alındı; bu adetler değiştirilemez</p>}
         </div>
       ) : (
@@ -349,7 +348,7 @@ function ItemSheet({
                 ))}
               </div>
               {/* İşaret başta, sönük (₺120, %10); klavyeyle de yazılır */}
-              <output aria-label={discType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular block rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
+              <output aria-label={discType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular font-headline block rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
                 {discType === 'percent' ? (
                   <>
                     <span className="mr-0.5 align-baseline text-[0.6em] font-medium text-muted">%</span>

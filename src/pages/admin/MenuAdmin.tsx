@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, CircleCheck, Coffee, ExternalLink, Eye, EyeOff, Globe, Pencil, Plus, RefreshCw, Save, SearchX, Star, Trash2 } from 'lucide-react';
+import { Ban, CircleCheck, Coffee, ExternalLink, Eye, EyeOff, Globe, Pencil, Plus, RefreshCw, Save, Star, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { parseTL, tl } from '@shared/money';
@@ -327,7 +327,7 @@ export default function MenuAdmin() {
               {siteUrl ? 'Ürünler laffogato panelinde eklenir; eşitleyince buraya gelir' : 'Site bağlantısı kurulmadı. Yalnız kafede satılan hizmetler için yerel ürün ekleyin'}
             </EmptyState>
           ) : (
-            <EmptyState icon={<SearchX />} title={q.trim() ? `“${q.trim()}” ile eşleşen ürün yok` : 'Bu süzgeçte ürün yok'} action={<Button onClick={clearFilters}>Süzgeci temizle</Button>}>
+            <EmptyState art="arama" title={q.trim() ? `“${q.trim()}” ile eşleşen ürün yok` : 'Bu süzgeçte ürün yok'} action={<Button onClick={clearFilters}>Süzgeci temizle</Button>}>
               Arama ya da kategori seçimini değiştirin
             </EmptyState>
           )

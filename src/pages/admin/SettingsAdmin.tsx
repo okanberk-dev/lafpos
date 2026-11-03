@@ -54,7 +54,8 @@ type Settings = Record<string, unknown> & {
 
 const lines = (a: string[]) => a.join('\n');
 /** Kaydedilmemiş değişiklik karşılaştırması: servis modu seçilince kendisi kaydedilir, sayılmaz */
-const comparable = (x: Settings) => JSON.stringify({ ...x, serviceMode: null });
+// Servis modu ve müşteri ekranı kendi ekranlarında kaydedilir: bu taslağın değişikliği sayılmaz, kayıtla gitmez
+const comparable = (x: Settings) => JSON.stringify({ ...x, serviceMode: null, customerDisplay: null });
 
 /**
  * Tutar alanı (₺): yazarken serbest ("12," yazılabilir), alandan çıkınca kuruşa çevrilip biçimlenir. Her tuşta
@@ -225,8 +226,9 @@ export default function SettingsAdmin() {
     if (saving) return;
     setSaving(true);
     try {
-      // Senkron anahtarları ayrı yetkiyle (Site ve lafmaliyet ekranı) değişir; servis modu seçilince kendisi kaydedilir
-      const rest = Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'menuAutoSync' && k !== 'onlineOrdersSync' && k !== 'serviceMode'));
+      // Senkron anahtarları ayrı yetkiyle (Site ve lafmaliyet ekranı) değişir; servis modu seçilince kendisi kaydedilir;
+      // müşteri ekranı kendi ekranında (Yönetim › Müşteri ekranı): açılıştaki kopyası geri yazılıp oradaki kaydı ezmesin
+      const rest = Object.fromEntries(Object.entries(s).filter(([k]) => k !== 'menuAutoSync' && k !== 'onlineOrdersSync' && k !== 'serviceMode' && k !== 'customerDisplay'));
       const sent = s;
       // Kayıt ucu kaydedilen ayarları döndürür (GET ile aynı biçim): taslak onunla yeniden kurulur. Ayrı bir yenileme
       // başarısız olsa ya da çevrimdışı diye duraklasa önbellekteki eski ayarlar taslağı geri alırdı

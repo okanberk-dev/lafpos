@@ -21,13 +21,17 @@ const IntegrationAdmin = lazy(() => import('./IntegrationAdmin'));
 const PlatformsAdmin = lazy(() => import('./PlatformsAdmin'));
 const NetworkAdmin = lazy(() => import('./NetworkAdmin'));
 const AuditAdmin = lazy(() => import('./AuditAdmin'));
+const TimeAdmin = lazy(() => import('./TimeAdmin'));
+const DisplayAdmin = lazy(() => import('./DisplayAdmin'));
 
 const PAGES: Record<string, ReactNode> = {
   genel: <OverviewAdmin />,
   menu: <MenuAdmin />,
   secenekler: <OptionsAdmin />,
   'masa-plani': <FloorAdmin />,
+  'musteri-ekrani': <DisplayAdmin />,
   personel: <UsersAdmin />,
+  mesai: <TimeAdmin />,
   roller: <RolesAdmin />,
   odeme: <PaymentsAdmin />,
   yazarkasa: <OkcAdmin />,

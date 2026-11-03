@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownToLine, ArrowUpFromLine, CalendarCheck, Coins, EyeOff, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Coins, EyeOff, Lock, MonitorSmartphone, Receipt, Wallet } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import { fmtDateLong, fmtTime } from '@shared/time';
-import type { BusinessDayDTO, ZSummary } from '@shared/types';
+import type { BusinessDayDTO, ShiftCountDTO, ZSummary } from '@shared/types';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, Input, Segmented } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
@@ -18,7 +18,9 @@ import { useBoot } from '@/lib/boot';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { TypedAmount } from '../order/TypedAmount';
+import { Illustration } from '@/components/Illustration';
 import { CashCount, type CountResult } from './CashCount';
+import { ShiftCountsCard, ShiftHandoverModal } from './ShiftHandover';
 import { ZView } from './ZView';
 
 /** Kasa hareketi düğmesi: telefonda üç eşit sütuna sığar */
@@ -34,6 +36,8 @@ interface DayResponse {
   closedToday?: BusinessDayDTO | null;
   /** Açık gün dünden kalmışsa uyarı metni: yeni satış alınmaz, önce gün sonu */
   stale?: string | null;
+  /** Günün vardiya devirleri (kör kasada beklenen ve fark gizli) */
+  shiftCounts?: ShiftCountDTO[];
 }
 interface DayListItem extends BusinessDayDTO {
   netSales: number | null;
@@ -45,6 +49,7 @@ interface DayDetail {
   summary: ZSummary;
   lafmaliyet: Record<string, unknown>;
   movements: DayResponse['movements'];
+  shiftCounts?: ShiftCountDTO[];
 }
 
 const MOVE_LABEL = { harcama: 'Harcama', teslim: 'Teslim', giris: 'Kasaya giriş' };
@@ -65,6 +70,7 @@ export default function CashPage() {
   const [moveAmount, setMoveAmount] = useState('');
   const [moveDesc, setMoveDesc] = useState('');
   const [closing, setClosing] = useState(false);
+  const [handover, setHandover] = useState(false);
   const [count, setCount] = useState<CountResult>(emptyCount());
   const [counted, setCounted] = useState(true);
   const [note, setNote] = useState('');
@@ -229,7 +235,13 @@ export default function CashPage() {
                 Eğitim cihazı
               </Link>
             )}
-            {/* Gün sonu rutin bir kapanıştır: birincil mavi; kırmızı iptal ve alarma ayrılır */}
+            {/* Vardiya devri: gün içinde kasiyer değişirken çekmece sayımı (gün sonu değil) */}
+            {tab === 'bugun' && day && !current.data?.stale && can('kasa.gun') && (
+              <Button icon={<ArrowLeftRight className="size-4" />} onClick={() => setHandover(true)}>
+                Vardiya devri
+              </Button>
+            )}
+            {/* Gün sonu rutin bir kapanıştır: birincil yeşil; kırmızı iptal ve alarma ayrılır */}
             {tab === 'bugun' && day && can('kasa.gun') && (
               <Button variant="primary" icon={<Lock className="size-4" />} onClick={() => setClosing(true)}>
                 Gün sonu (Z)
@@ -298,10 +310,8 @@ export default function CashPage() {
         <div className="mx-auto max-w-md">
           <Card>
             <div className="space-y-4 p-6 text-center">
-              {/* Gün sonu kartıyla aynı ikon kutusu ve başlık ölçüsü */}
-              <span aria-hidden="true" className="mx-auto grid size-12 place-items-center rounded-2xl bg-surface-3 text-ink-2">
-                <CalendarCheck className="size-6" />
-              </span>
+              {/* Gün açılmadı: sitenin kapı çizimi (açılış) */}
+              <Illustration name="kapi" className="mx-auto size-20" />
               <div>
                 <h2 className="text-lg font-semibold tracking-[-0.01em]">Günü aç</h2>
                 <p className="mt-1 text-pretty text-sm text-muted">Çekmecedeki açılış nakdini girin. Gece 05:00’e kadarki satışlar bu güne yazılır</p>
@@ -309,7 +319,7 @@ export default function CashPage() {
               {can('kasa.gun') ? (
                 <>
                   {/* Kasa bilgisayarında tutar klavyeyle de yazılır (rakam, virgül, Backspace, Enter: günü aç) */}
-                  <output aria-label="Açılış nakdi" aria-live="polite" className="tabular block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-4xl font-semibold">
+                  <output aria-label="Açılış nakdi" aria-live="polite" className="tabular font-headline block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-4xl font-semibold">
                     <TypedAmount text={opening} />
                   </output>
                   <Numpad decimal keyboard onEnter={() => void openDay()} onKey={(k) => setOpening(applyNumpadKey(opening, k, { decimal: true, maxLength: 9 }))} />
@@ -352,7 +362,7 @@ export default function CashPage() {
           ) : (
             // Kör kasa: başlıksız tek not; yetkinin adı ipucunda
             <div
-              className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3 text-[13px] text-muted"
+              className="flex items-start gap-2.5 rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] px-4 py-3 text-[13px] text-muted"
               title="Rakamları görmek için yöneticiden “Ara rapor (X) ve kasa rakamlarını görme” yetkisi isteyin"
             >
               <EyeOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -361,6 +371,8 @@ export default function CashPage() {
               </p>
             </div>
           )}
+
+          <ShiftCountsCard counts={current.data?.shiftCounts ?? []} />
 
           <Card title="Kasa hareketleri">
             {movements.length === 0 ? (
@@ -443,6 +455,7 @@ export default function CashPage() {
             )}
           </div>
           <ZView day={detail.data.day} summary={detail.data.summary} lafmaliyet={detail.data.lafmaliyet} />
+          <ShiftCountsCard counts={detail.data.shiftCounts ?? []} />
         </div>
       )}
 
@@ -459,7 +472,7 @@ export default function CashPage() {
               aria-label="Tutar"
               aria-live="polite"
               aria-invalid={!!moveError.amount || undefined}
-              className={cn('tabular block rounded-2xl border bg-surface-2 px-4 py-3 text-right text-3xl font-semibold', moveError.amount ? 'border-[var(--admin-danger)]' : 'border-line-strong')}
+              className={cn('tabular font-headline block rounded-2xl border bg-surface-2 px-4 py-3 text-right text-3xl font-semibold', moveError.amount ? 'border-[var(--admin-danger)]' : 'border-line-strong')}
             >
               <TypedAmount text={moveAmount} />
             </output>
@@ -543,6 +556,7 @@ export default function CashPage() {
       <Modal open={!!zResult} onClose={() => setZResult(null)} size="xl" title="Gün sonu alındı" subtitle="Z raporu ve lafmaliyet alanları">
         <div className="p-5">{zResult && <ZView day={zResult.day} summary={zResult.summary} lafmaliyet={zResult.lafmaliyet} />}</div>
       </Modal>
+      <ShiftHandoverModal open={handover} onClose={() => setHandover(false)} summary={summary} prevDiff={current.data?.shiftCounts?.at(-1)?.diff ?? 0} />
     </div>
   );
 }

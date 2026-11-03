@@ -5,7 +5,13 @@ import { cn } from '@/lib/cn';
 /** Karekod: beyaz zeminde koyu modüller (okuyucular ters renkte zorlanır), kenarda iki modül sessiz alan */
 export function QrCode({ value, label, className }: { value: string; label: string; className?: string }) {
   const { d, n } = useMemo(() => {
-    const qr = encode(value, { ecc: 'M', border: 2 });
+    let qr: ReturnType<typeof encode>;
+    try {
+      qr = encode(value, { ecc: 'M', border: 2 });
+    } catch {
+      // Karekoda sığmayan uzun içerik çizimi (ve sayfayı) düşürmesin: boş beyaz kare
+      return { d: '', n: 1 };
+    }
     let path = '';
     qr.data.forEach((row, y) =>
       row.forEach((on, x) => {

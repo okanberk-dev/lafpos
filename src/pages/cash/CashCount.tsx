@@ -21,12 +21,26 @@ export interface CountResult {
  * raporları). Sistemle farkı anında gösterir. `summary` yoksa kör sayımdır (kasiyer `kasa.rakam` yetkisiz):
  * beklenen tutar ve fark gösterilmez, yalnız sayılan yazılır; fark yöneticinin ekranında.
  */
-export function CashCount({ summary, value, onChange }: { summary: ZSummary | null; value: CountResult; onChange: (v: CountResult) => void }) {
+export function CashCount({
+  summary,
+  value,
+  onChange,
+  cashOnly,
+  baseDiff = 0,
+}: {
+  summary: ZSummary | null;
+  value: CountResult;
+  onChange: (v: CountResult) => void;
+  /** Yalnız nakit (vardiya devri): ödeme türü slipleri sorulmaz */
+  cashOnly?: boolean;
+  /** Vardiya devrinde önceki sayımın farkı: gösterilen fark bu vardiyanınki olur (sunucunun shiftDiff'i), gün toplamı ayrıca */
+  baseDiff?: number;
+}) {
   const boot = useBoot();
   const [mode, setMode] = useState<'banknot' | 'toplam'>('banknot');
   const [totalText, setTotalText] = useState(value.countedCash ? String(value.countedCash / 100).replace('.', ',') : '');
   const blind = !summary;
-  const methods = slipRows(summary, boot.paymentMethods);
+  const methods = cashOnly ? [] : slipRows(summary, boot.paymentMethods);
   const fromNotes = useMemo(() => DENOMINATIONS.reduce((a, d) => a + d * (value.banknotes[String(d)] ?? 0), 0), [value.banknotes]);
 
   const setNote = (d: number, n: number) => {
@@ -34,7 +48,8 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
     const countedCash = DENOMINATIONS.reduce((a, x) => a + x * (banknotes[String(x)] ?? 0), 0);
     onChange({ ...value, banknotes, countedCash });
   };
-  const diff = summary ? value.countedCash - summary.expectedCash : 0;
+  const dayDiff = summary ? value.countedCash - summary.expectedCash : 0;
+  const diff = dayDiff - baseDiff;
 
   return (
     <div className="space-y-5">
@@ -53,7 +68,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
           />
         </div>
         {mode === 'banknot' ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:grid-cols-3">
             {DENOMINATIONS.map((d) => {
               const n = value.banknotes[String(d)] ?? 0;
               // ₺ başta, uygulamanın her yerindeki gibi (₺200, ₺0,50)
@@ -92,7 +107,7 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
             autoComplete="off"
             aria-label="Çekmecedeki nakit"
             placeholder="Çekmecedeki nakit"
-            className="tabular h-14 w-full rounded-2xl border border-line-strong bg-surface px-4 text-right text-2xl font-semibold"
+            className="tabular font-headline h-14 w-full rounded-2xl border border-line-strong bg-surface px-4 text-right text-2xl font-semibold"
           />
         )}
         {summary ? (
@@ -100,11 +115,12 @@ export function CashCount({ summary, value, onChange }: { summary: ZSummary | nu
             <Cell label="Beklenen" value={tl(summary.expectedCash)} />
             <Cell label="Sayılan" value={tl(value.countedCash)} />
             <Cell label="Fark" value={tl(diff)} tone={diff === 0 ? 'ok' : Math.abs(diff) < 5000 ? 'warn' : 'bad'} />
+            {baseDiff !== 0 && <p className="col-span-3 text-xs text-muted">Fark bu vardiyanın: önceki devirden bu yana; gün toplamı {dayDiff === 0 ? 'denk' : tl(dayDiff)}</p>}
           </div>
         ) : (
           <div className="mt-3 grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:items-center">
             <Cell label="Sayılan" value={tl(value.countedCash)} />
-            <p className="text-xs text-muted">Kör sayım: beklenen tutar ve fark bu rolde görünmez; yöneticinin ekranında ve Z raporunda</p>
+            <p className="text-xs text-muted">Kör sayım: beklenen tutar ve fark bu rolde görünmez; {cashOnly ? 'yöneticinin ekranında, vardiya devirlerinde' : 'yöneticinin ekranında ve Z raporunda'}</p>
           </div>
         )}
       </section>

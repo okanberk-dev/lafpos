@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Renk değerlerinin erişilebilirliği (WCAG 2.2): okunan metin zeminde en az 4.5:1, alan kenarı 3:1.
- * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı Innex değerlerini kullanır
- * (açık `:root`, koyu `.dark`); kasa ekranlarının adları (`--bg`, `--ink`...) Innex'e bağlanır.
+ * Renk değerlerinin erişilebilirliği (WCAG 2.2): okunan metin zeminde en az 4.5:1, alan kenarı ve odak halkası 3:1.
+ * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı LafPOS Sade değerlerini kullanır (L'Affogato
+ * kimliği, laffogato docs/BRAND.md; açık `:root`, koyu `.dark`; DESIGN.md); ortak adlar (`--bg`, `--ink`...) `--admin-*`'e bağlanır.
  * Test düşerse değeri düzelt, eşiği gevşetme.
  */
 const css = readFileSync(join(__dirname, '../src/index.css'), 'utf8');
@@ -49,7 +49,7 @@ const posDark = resolver(block('.dark'), block(':root'));
 const adminLight = posLight;
 const adminDark = posDark;
 
-describe('kasa ekranları (Innex)', () => {
+describe('kasa ekranları (LafPOS Sade)', () => {
   for (const [name, get] of [
     ['açık', posLight],
     ['koyu', posDark],
@@ -63,9 +63,10 @@ describe('kasa ekranları (Innex)', () => {
   }
 });
 
-describe('yönetim paneli (Innex)', () => {
+describe('yönetim paneli (LafPOS Sade)', () => {
   const tones = [
     ['primary', 'primary-soft'],
+    ['blue', 'blue-soft'],
     ['success', 'success-soft'],
     ['warning', 'warning-soft'],
     ['danger-ink', 'danger-soft'],
@@ -88,10 +89,10 @@ describe('yönetim paneli (Innex)', () => {
         for (const ground of ['admin-bg', 'admin-surface', 'admin-surface-2', 'admin-panel']) expect(contrast(get(text), get(ground)), `${text}/${ground}`).toBeGreaterThanOrEqual(4.5);
       }
     });
-    it(`${name}: birincil mavi hem düğmede hem bağlantıda`, () => {
+    it(`${name}: birincil (ev yeşili) hem düğmede hem bağlantıda`, () => {
       expect(contrast(get('admin-on-primary'), get('admin-primary')), 'düğme yazısı').toBeGreaterThanOrEqual(4.5);
       expect(contrast(get('admin-primary'), get('admin-surface')), 'bağlantı kartta').toBeGreaterThanOrEqual(4.5);
-      expect(contrast(get('admin-primary'), get('admin-bg')), 'bağlantı gri zeminde').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-primary'), get('admin-bg')), 'bağlantı porselen zeminde').toBeGreaterThanOrEqual(4.5);
     });
     it(`${name}: her durum tonu ve grup rengi kendi açık zemininde AA`, () => {
       for (const [fg, bg] of tones) expect(contrast(get(`admin-${fg}`), get(`admin-${bg}`)), `${fg}/${bg}`).toBeGreaterThanOrEqual(4.5);
@@ -99,19 +100,89 @@ describe('yönetim paneli (Innex)', () => {
     it(`${name}: boş alanın kenarı kartta bulunur (3:1)`, () => {
       expect(contrast(get('admin-border-field'), get('admin-surface'))).toBeGreaterThanOrEqual(3);
     });
+    it(`${name}: odak halkası (ev yeşili) kartta ve zeminde seçilir (3:1)`, () => {
+      for (const ground of ['admin-surface', 'admin-bg', 'admin-surface-2', 'admin-panel']) expect(contrast(get('focus'), get(ground)), ground).toBeGreaterThanOrEqual(3);
+    });
+    it(`${name}: mürekkep düğme (ödeme) ve pirinç dolgu okunur`, () => {
+      expect(contrast(get('admin-on-ink'), get('admin-ink-fill')), 'mürekkep düğme').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-gold-ink'), get('admin-gold-fill')), 'pirinç dolgu').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-gold'), get('admin-bg')), 'altın metin').toBeGreaterThanOrEqual(4.5);
+    });
+    it(`${name}: durum mavisi kartta okunur (dolu masa, "barda"; bağlantı birincil yeşil)`, () => {
+      expect(contrast(get('admin-blue'), get('admin-surface'))).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-blue'), get('admin-bg'))).toBeGreaterThanOrEqual(4.5);
+    });
   }
 
-  it('kasa ekranları da Innex: adlar Innex değerlerine bağlı', () => {
-    expect(posLight('bg')).toBe('#edeff1');
-    expect(posLight('primary')).toBe('#2f58f7');
-    expect(posLight('ink')).toBe('#0c0e1b');
-    expect(css).not.toMatch(/poppins/i);
+  it('kasa ekranları da LafPOS Sade: adlar laffogato.net değerlerine bağlı (porselen zemin, ev yeşili birincil)', () => {
+    expect(posLight('bg')).toBe('#f7f3ed');
+    expect(posLight('primary')).toBe('#1d6d56');
+    expect(posLight('ink')).toBe('#211c18');
+    expect(posDark('primary')).toBe('#5cc9a2');
   });
 
-  it('laffogato paneliyle aynı açık değerler (docs/ADMIN-INNEX.md)', () => {
-    expect(adminLight('admin-bg')).toBe('#edeff1');
-    expect(adminLight('admin-primary')).toBe('#2f58f7');
-    expect(adminLight('admin-border-field')).toBe('#898d94');
-    expect(adminLight('admin-text')).toBe('#0c0e1b');
+  it('sitenin paleti (laffogato docs/BRAND.md §1; DESIGN.md §2 tablosu)', () => {
+    expect(adminLight('admin-bg')).toBe('#f7f3ed');
+    expect(adminLight('admin-surface-2')).toBe('#fbf8f4');
+    expect(adminLight('admin-panel')).toBe('#f2ece4');
+    expect(adminLight('admin-primary')).toBe('#1d6d56');
+    expect(adminLight('admin-primary-hover')).toBe('#165543');
+    expect(adminLight('admin-text')).toBe('#211c18');
+    expect(adminLight('admin-text-soft')).toBe('#564d46');
+    expect(adminLight('admin-text-mute')).toBe('#675e56');
+    expect(adminLight('admin-border-field')).toBe('#877d74');
+    expect(adminLight('admin-blue')).toBe('#3442b8');
+    expect(adminLight('admin-gold-fill')).toBe('#e8c877');
+    expect(adminLight('admin-bordo')).toBe('#9d2543');
+    // Uygulama ikonunun ve sitenin altbilgisinin yeşili
+    expect(css).toMatch(/--brand-tile:\s*radial-gradient\([^;]*#23876a[^;]*#1d6d56[^;]*#0c3b2d/);
+  });
+
+  it('yazı: sitenin iki sesi pakette (başlık ve rakam Gabarito, metin Poppins); dış kaynaktan yazı yok', () => {
+    expect(css).toMatch(/--font-sans:\s*'LafPOS Rakam',\s*'Poppins'/);
+    expect(css).toMatch(/--font-headline:\s*'LafPOS Rakam',\s*'Gabarito'/);
+    for (const w of [400, 500, 600, 700]) {
+      expect(css, `Poppins ${w} latin`).toContain(`@fontsource/poppins/files/poppins-latin-${w}-normal.woff2`);
+      expect(css, `Poppins ${w} latin-ext (ğ, ş, ı, İ, ₺)`).toContain(`@fontsource/poppins/files/poppins-latin-ext-${w}-normal.woff2`);
+    }
+    expect(css).toContain('@fontsource-variable/gabarito/files/gabarito-latin-ext-wght-normal.woff2');
+    const digits = css.slice(css.indexOf("font-family: 'LafPOS Rakam'"));
+    expect(digits).toMatch(/@fontsource-variable\/gabarito\/files\/gabarito-latin-wght-normal\.woff2/);
+    expect(digits.slice(0, digits.indexOf('}'))).toMatch(/unicode-range:\s*U\+0030-0039;/);
+    expect(css).toMatch(/h1,\s*h2,\s*h3 \{[^}]*font-family: var\(--font-headline\)/);
+    expect(css).not.toMatch(/fonts\.googleapis|fonts\.gstatic|@fontsource\/inter|outfit/i);
+  });
+
+  const src = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8');
+
+  it('mürekkep zeminli bildirimde odak halkası krem (yeşil halka mürekkepte 3:1 altında)', () => {
+    expect(contrast(adminLight('admin-primary'), adminLight('admin-ink-fill')), 'yeşil halka mürekkepte zayıf').toBeLessThan(3);
+    expect(contrast(adminLight('admin-on-ink'), '#211c18'), 'krem halka mürekkepte').toBeGreaterThanOrEqual(3);
+    expect(css).toMatch(/--color-night:\s*#211c18;/);
+    const toast = src('src/lib/toast.tsx');
+    expect(toast).toContain("const NIGHT_FOCUS = '[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]'");
+    // Bildirim tonlarının kendisi (yalnız sabitin tanımı değil): mürekkep zeminli üç ton halkayı krem yapar
+    for (const tone of ['ok', 'err', 'info']) expect(toast, tone).toContain(`${tone}: \`\${NIGHT_FOCUS} bg-night`);
+    expect(toast.match(/focus-visible:-outline-offset-2/g)?.length, 'halka düğmenin içinde').toBe(2);
+  });
+
+  it('pirinç dolgunun üstündeki yazının kendi adı var (text-on-gold); text-gold-ink altın metindir', () => {
+    expect(css).toMatch(/--color-on-gold:\s*var\(--admin-gold-ink\);/);
+    expect(css).toMatch(/--color-gold-ink:\s*var\(--admin-gold\);/);
+  });
+
+  it('tarayıcı çubuğu ve kurulu uygulama zeminle aynı renkte (theme-color, manifest)', () => {
+    const light = adminLight('admin-bg');
+    const dark = block('.dark')['admin-bg'];
+    expect(src('src/lib/theme.ts')).toContain(`dark ? '${dark}' : '${light}'`);
+    expect(src('index.html')).toContain(`<meta name="theme-color" content="${light}" />`);
+    const manifest = JSON.parse(src('public/manifest.webmanifest')) as { background_color: string; theme_color: string };
+    expect([manifest.background_color, manifest.theme_color]).toEqual([light, light]);
+  });
+
+  it('koyu temadaki çizim diskinde yüzdeli dolgu yok (üst öğenin genişliğine göre hesaplanır, çizim sıfıra iner)', () => {
+    const ill = src('src/components/Illustration.tsx');
+    expect(ill).not.toMatch(/dark:p-\[\d+%\]/);
+    expect(ill).toContain('dark:size-[76%]');
   });
 });

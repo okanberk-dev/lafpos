@@ -34,7 +34,7 @@ const list = (v) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : nul
 const state = (path, name, act) => ({ path, name, act });
 
 const ROUTES = {
-  giris: ['/giris'],
+  giris: ['/giris', state('/giris', 'mesai', (page) => page.getByRole('button', { name: 'Mesai', exact: true }).click({ timeout: 5000 }))],
   patron: [
     '/patron',
     '/masalar',
@@ -114,8 +114,11 @@ const ROUTES = {
       await page.getByRole('dialog', { name: 'Yeni seçenek grubu' }).waitFor({ timeout: 5000 });
     }),
     '/yonetim/masa-plani',
+    '/yonetim/musteri-ekrani',
+    state('/yonetim/musteri-ekrani', 'siparis', (page) => page.getByRole('radio', { name: 'Sipariş', exact: true }).click({ timeout: 5000 })),
     state('/yonetim/masa-plani', 'secili-masa', (page) => page.locator('[data-table-id]').first().click({ timeout: 5000 })),
     '/yonetim/personel',
+    '/yonetim/mesai',
     '/yonetim/roller',
     '/yonetim/odeme',
     '/yonetim/yazarkasa',
@@ -126,7 +129,7 @@ const ROUTES = {
     '/yonetim/denetim',
   ],
   garson: ['/masalar', '/siparisler', '/mutfak', '@s1'],
-  kasa: ['/kasa', '/masalar', '/satis', '@s2', '@tz', '/cihaz'],
+  kasa: ['/kasa', state('/kasa', 'vardiya', (page) => page.getByRole('button', { name: 'Vardiya devri', exact: true }).click({ timeout: 5000 })), '/masalar', '/satis', '@s2', '@tz', '/cihaz'],
   bar: ['/mutfak', state('/mutfak', 'hazir', (page) => page.getByRole('tab', { name: /^Hazır/ }).click({ timeout: 5000 }))],
 };
 

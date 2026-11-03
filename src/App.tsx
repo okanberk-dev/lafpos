@@ -116,7 +116,7 @@ function Authed() {
           <Route path="/rezervasyon" element={<Guard perm="rezervasyon.yonet"><ReservationsPage /></Guard>} />
           <Route path="/raporlar/*" element={<Guard perm="rapor.gor"><ReportsPage /></Guard>} />
           <Route path="/patron" element={<Guard perm="patron.panel"><PatronPage /></Guard>} />
-          <Route path="/yonetim/*" element={<Guard perm={['menu.yonet', 'ayar.yonet', 'personel.yonet', 'senkron.yonet', 'stok.yonet']}><AdminPage /></Guard>} />
+          <Route path="/yonetim/*" element={<Guard perm={['menu.yonet', 'ayar.yonet', 'personel.yonet', 'mesai.yonet', 'senkron.yonet', 'stok.yonet']}><AdminPage /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

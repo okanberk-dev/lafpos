@@ -19,6 +19,7 @@ import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
 import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
+import { CUSTOMER_DISPLAY_THEMES } from '@shared/types';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
 import { menuOptionGroups, menuProducts } from '../services/bootstrap';
 import { lastZNo } from '../services/days';
@@ -963,6 +964,18 @@ const settingsShape = patchOf(
     serviceMode: z.enum(SERVICE_MODES),
     tipsEnabled: z.boolean(),
     zNoStart: z.number().int().min(1).max(Z_NO_MAX).nullable(),
+    // Müşteri ekranı bütün olarak gelir (Yönetim › Müşteri ekranı formu); adres yalnız http(s), boşsa karekod yok
+    customerDisplay: z.object({
+      theme: z.enum(CUSTOMER_DISPLAY_THEMES),
+      welcomeTitle: z.string().trim().max(60),
+      welcomeSubtitle: z.string().trim().max(90),
+      thanksTitle: z.string().trim().max(60),
+      messages: z.array(z.string().trim().min(1).max(90)).max(6),
+      qrUrl: z.union([z.literal(''), z.string().trim().max(300).regex(/^https?:\/\/\S+$/, 'Adres http:// ya da https:// ile başlamalı')]),
+      qrLabel: z.string().trim().max(60),
+      showClock: z.boolean(),
+      showOptions: z.boolean(),
+    }),
   }),
 );
 

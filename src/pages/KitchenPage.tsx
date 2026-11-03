@@ -156,19 +156,19 @@ export default function KitchenPage() {
   return (
     <div className="flex h-full flex-col gap-3 bg-bg p-2 md:p-0" onPointerDown={unlockAudio}>
       {/* Başlık kartı iki satır: üstte ad, sayaçlar ve araçlar; altta istasyon sekmeleri (telefonda kayar) */}
-      <div className="rounded-2xl border border-line bg-surface">
+      <div className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5">
           {/* Telefonda ikon yok: başlık ve sayaçlar tek satıra sığsın */}
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 max-sm:hidden">
             <ChefHat className="size-5" />
           </span>
-          <h1 className="min-w-0 truncate text-lg font-semibold tracking-[-0.01em]">Bar ve mutfak</h1>
+          <h1 className="min-w-0 truncate text-lg font-semibold">Bar ve mutfak</h1>
           <div className="flex-1" />
           {view === 'aktif' && (
             // Renk dili: bekliyor nötr, hazırlanıyor mavi, hazır yeşil; amber yalnız zaman (gecikme, planlı saat)
             <div className="flex shrink-0 gap-1.5 whitespace-nowrap text-[13px] font-medium md:text-sm">
-              <span className={cn('tabular inline-flex min-h-6 items-center rounded-md bg-surface-3 px-2 md:min-h-7 md:px-2.5', counts.waiting > 0 ? 'text-ink' : 'text-muted')}>{counts.waiting} bekliyor</span>
-              {counts.making > 0 && <span className="tabular inline-flex min-h-6 items-center rounded-md bg-[var(--admin-primary-soft)] px-2 text-[var(--admin-primary)] md:min-h-7 md:px-2.5">{counts.making} hazırlanıyor</span>}
+              <span className={cn('tabular inline-flex min-h-6 items-center rounded-full bg-surface-3 px-2.5 md:min-h-7 md:px-3', counts.waiting > 0 ? 'text-ink' : 'text-muted')}>{counts.waiting} bekliyor</span>
+              {counts.making > 0 && <span className="tabular inline-flex min-h-6 items-center rounded-full bg-[var(--admin-blue-soft)] px-2.5 text-[var(--admin-blue)] md:min-h-7 md:px-3">{counts.making} hazırlanıyor</span>}
             </div>
           )}
           {/* Araçlar 1024 px üstünde satırda; tablet ve telefonda "Diğer" penceresinde (768 px'te satır taşıyordu) */}
@@ -233,7 +233,7 @@ export default function KitchenPage() {
         )}
         {tickets.isSuccess && list.length === 0 && (
           <div className="grid h-full place-items-center">
-            <EmptyState large icon={<CheckCheck />} title={history ? 'Son 90 dakikada hazırlanan yok' : readyView ? 'Teslim bekleyen sipariş yok' : 'Bekleyen sipariş yok'}>
+            <EmptyState large art="espresso" title={history ? 'Son 90 dakikada hazırlanan yok' : readyView ? 'Teslim bekleyen sipariş yok' : 'Bekleyen sipariş yok'}>
               {history
                 ? 'Hazır işaretlenen fişler 90 dakika burada kalır'
                 : readyView
@@ -245,23 +245,23 @@ export default function KitchenPage() {
         {showTotals && list.length > 0 && (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] items-start gap-3">
             {totals.map((r) => (
-              <article key={r.key} className="rounded-2xl border border-line bg-surface p-3">
+              <article key={r.key} className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-3">
                 <div className="flex items-start gap-3">
                   <span className="min-w-0 flex-1">
                     <span className="block text-[19px] font-semibold leading-tight">
                       {r.name}
-                      {r.size !== 'TEK' && <span className="ml-1.5 rounded-md bg-surface-3 px-1.5 text-sm font-semibold">{r.size}</span>}
+                      {r.size !== 'TEK' && <span className="ml-1.5 rounded-lg bg-surface-3 px-1.5 text-sm font-semibold">{r.size}</span>}
                     </span>
                     <span className="tabular mt-1 block text-[13px] text-muted">
                       {[r.waiting && `${r.waiting} bekliyor`, r.making && `${r.making} hazırlanıyor`].filter(Boolean).join(' · ')}
                     </span>
                   </span>
-                  <span className="tabular text-4xl font-bold leading-none tracking-tight">×{r.qty}</span>
+                  <span className="tabular font-headline text-4xl font-bold leading-none tracking-tight">×{r.qty}</span>
                 </div>
                 {r.options.length > 0 && (
                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                     {r.options.map((o) => (
-                      <span key={o.text} className="tabular rounded-md bg-surface-3 px-2 py-0.5 text-sm font-medium text-ink md:text-base">
+                      <span key={o.text} className="tabular rounded-lg bg-surface-3 px-2 py-0.5 text-sm font-medium text-ink md:text-base">
                         {o.text} {o.qty}
                       </span>
                     ))}
@@ -297,12 +297,12 @@ export default function KitchenPage() {
               >
                 <header className={cn('flex items-center gap-2 border-b border-[var(--admin-divider)] px-3 py-2.5', late === 'alarm' && 'bg-[var(--admin-danger-soft)]')}>
                   {online && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-[var(--admin-hue-violet-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-hue-violet)]">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--admin-hue-violet-soft)] px-2 py-0.5 text-xs font-medium text-[var(--admin-hue-violet)]">
                       <Globe className="size-3.5" /> Online
                     </span>
                   )}
                   {head.call && (
-                    <span className="tabular shrink-0 rounded-lg bg-[var(--admin-primary-soft)] px-2 py-0.5 text-xl font-bold leading-tight text-[var(--admin-primary)] md:px-2.5 md:text-2xl">{head.call}</span>
+                    <span className="tabular font-headline shrink-0 rounded-xl bg-[var(--admin-blue-soft)] px-2.5 py-0.5 text-xl font-bold leading-tight text-[var(--admin-blue)] md:px-3 md:text-2xl">{head.call}</span>
                   )}
                   {/* Nereye gideceği en büyük yazı: barın üstündeki tablet 1-2 m'den okunur */}
                   {head.label && <span className={cn('truncate', head.call ? 'text-sm text-ink-2' : 'text-xl font-bold tracking-[-0.01em] md:text-2xl')}>{head.label}</span>}
@@ -311,7 +311,7 @@ export default function KitchenPage() {
                   <span className="flex-1" />
                   <span
                     className={cn(
-                      'tabular inline-flex min-h-7 shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[15px] font-semibold md:min-h-8 md:text-[17px]',
+                      'tabular inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[15px] font-semibold md:min-h-8 md:text-[17px]',
                       history ? 'bg-surface-3 text-muted' : readyView ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : late === 'alarm' ? 'bg-danger-600 text-white' : late === 'warn' ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-ink-2',
                     )}
                   >
@@ -338,11 +338,11 @@ export default function KitchenPage() {
                         className={cn('flex w-full items-start gap-3 px-3 py-3 text-left transition-colors duration-150 md:py-3.5', !i.voided && !online && 'active:bg-press', i.voided && 'bg-[var(--admin-danger-soft)]')}
                       >
                         {/* Uzaktan okunur: adet, ad ve seçenek geniş ekranda büyür (telefonda bugünkü ölçü) */}
-                        <span className={cn('tabular min-w-8 rounded-md px-1.5 py-0.5 text-center text-lg font-bold md:grid md:h-10 md:min-w-10 md:place-items-center md:px-2 md:py-0 md:text-[22px]', i.voided ? 'bg-danger-600 text-white' : 'bg-surface-3')}>{i.qty}</span>
+                        <span className={cn('tabular min-w-8 rounded-lg px-1.5 py-0.5 text-center text-lg font-bold md:grid md:h-10 md:min-w-10 md:place-items-center md:px-2 md:py-0 md:text-[22px]', i.voided ? 'bg-danger-600 text-white' : 'bg-surface-3')}>{i.qty}</span>
                         <span className="min-w-0 flex-1">
                           <span className={cn('block text-[17px] font-semibold leading-tight md:text-xl', i.voided && 'line-through opacity-70')}>
                             {i.name}
-                            {i.size !== 'TEK' && <span className="ml-1.5 rounded-md bg-surface-3 px-1.5 text-sm font-semibold md:px-2 md:text-base">{i.size}</span>}
+                            {i.size !== 'TEK' && <span className="ml-1.5 rounded-lg bg-surface-3 px-1.5 text-sm font-semibold md:px-2 md:text-base">{i.size}</span>}
                           </span>
                           {i.optionsText && <span className="mt-0.5 block text-sm font-medium text-ink-2 md:text-base">{i.optionsText}</span>}
                           {i.note && (
@@ -433,7 +433,7 @@ const FOOT = 'h-12 flex-1 text-base';
 /** Not (fişin ya da kalemin): renk yerine biçimle ayrılır, gri çip ve konuşma ikonu; amber zamana ayrılmış */
 function NoteChip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex max-w-full items-start gap-1 rounded-md bg-surface-3 px-1.5 py-0.5 font-medium text-ink">
+    <span className="inline-flex max-w-full items-start gap-1 rounded-lg bg-surface-3 px-1.5 py-0.5 font-medium text-ink">
       <MessageSquareText aria-hidden="true" className="mt-[3px] size-4 shrink-0 text-muted" />
       <span className="sr-only">Not:</span>
       <span className="min-w-0 break-words">{children}</span>
@@ -445,7 +445,7 @@ function NoteChip({ children }: { children: React.ReactNode }) {
 function StatusDot({ status }: { status: KitchenTicketItem['status'] }) {
   const map = {
     yeni: { cls: 'border-2 border-[var(--admin-border-field)]', label: 'Bekliyor' },
-    hazirlaniyor: { cls: 'bg-[var(--admin-primary)]', label: 'Hazırlanıyor' },
+    hazirlaniyor: { cls: 'bg-[var(--admin-blue)]', label: 'Hazırlanıyor' },
     hazir: { cls: 'bg-[var(--admin-success)]', label: 'Hazır' },
     servis: { cls: 'bg-muted', label: 'Teslim edildi' },
   }[status];

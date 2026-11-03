@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, ChevronLeft, ChevronRight, Phone, Plus, Users } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Phone, Plus, Users } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { addDays, businessDate, fmtDateLong, fmtDateShort } from '@shared/time';
@@ -147,7 +147,7 @@ export default function ReservationsPage() {
         <ErrorState title="Rezervasyonlar alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
         <EmptyState
-          icon={<CalendarClock />}
+          art="bilet"
           title="Bu gün için rezervasyon yok"
           action={
             <Button size="sm" icon={<Plus className="size-4" />} onClick={openForm}>
@@ -160,7 +160,7 @@ export default function ReservationsPage() {
       ) : (
         <div aria-busy={list.isPlaceholderData || undefined} className={cn('space-y-2 transition-opacity duration-150', list.isPlaceholderData && 'opacity-60')}>
           {rows.map((r) => (
-            <div key={r.id} className={cn('flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-4', r.status === 'iptal' && 'opacity-60')}>
+            <div key={r.id} className={cn('flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-4', r.status === 'iptal' && 'opacity-60')}>
               <div className="tabular w-14 text-xl font-semibold">{r.time}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 font-semibold">

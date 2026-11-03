@@ -290,14 +290,14 @@ export function PaymentModal({
           {call && (
             <div className="mt-5 rounded-xl border border-line bg-surface-2 p-4">
               <div className="text-[13px] font-medium text-muted">{call.kind === 'masa' ? 'Masaya götürülecek' : 'Sipariş numarası'}</div>
-              <div className="tabular text-5xl font-bold tracking-tight">{call.kind === 'masa' ? numaratorLabel(call.value) : call.value}</div>
+              <div className="tabular font-headline text-5xl font-bold tracking-tight">{call.kind === 'masa' ? numaratorLabel(call.value) : call.value}</div>
               {call.kind === 'numara' && <div className="mt-1 text-xs text-muted">Hazır olunca çağrı ekranında görünür</div>}
             </div>
           )}
           {result.change > 0 && (
             <div className="mt-5 rounded-xl bg-[var(--admin-warning-soft)] p-4">
               <div className="text-[13px] font-medium text-[var(--admin-warning)]">Para üstü</div>
-              <div className="tabular text-5xl font-bold tracking-tight">{tl(result.change)}</div>
+              <div className="tabular font-headline text-5xl font-bold tracking-tight">{tl(result.change)}</div>
             </div>
           )}
           <div className="mt-6 grid gap-2">
@@ -315,7 +315,8 @@ export function PaymentModal({
 
   return (
     <Modal open onClose={onClose} size="xl" persistent={!!comp} title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
-      <div ref={panelRef} tabIndex={-1} className="grid gap-0 outline-none lg:grid-cols-[1.1fr_1fr]">
+      {/* Sütunlar içerikle genişlemez (minmax 0): uzun, kırılmayan bir düğme yazısı telefonda sayfayı ekrandan taşırmasın */}
+      <div ref={panelRef} tabIndex={-1} className="grid grid-cols-[minmax(0,1fr)] gap-0 outline-none lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div className="border-b border-[var(--admin-divider)] p-5 lg:border-b-0 lg:border-r">
           <div className="mb-4 flex items-center justify-between gap-3">
             <Segmented<Mode>
@@ -543,8 +544,8 @@ export function PaymentModal({
             </div>
           )}
 
-          <Button variant="primary" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
-            {splitBlocks ? 'Hesap bölünmüş: payları Paylaş’tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
+          <Button variant="ink" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
+            {splitBlocks ? 'Payları Paylaş’tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
           </Button>
 
           <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />
@@ -569,7 +570,7 @@ export function PaymentModal({
                   <li key={p.id} className={cn('flex items-center gap-2 px-3 py-2 text-sm', !!p.refundedAt && 'text-muted line-through')}>
                     <span className="min-w-0 flex-1">
                       {p.methodName}
-                      {p.shareNo != null && <span className="tabular ml-1.5 rounded-md bg-surface-3 px-1.5 py-0.5 text-xs font-medium text-ink-2">Pay {p.shareNo}/{p.shareOf}</span>}{' '}
+                      {p.shareNo != null && <span className="tabular ml-1.5 rounded-full bg-surface-3 px-2 py-0.5 text-xs font-medium text-ink-2">Pay {p.shareNo}/{p.shareOf}</span>}{' '}
                       <span className="text-xs text-muted">
                         {fmtTime(p.createdAt)}
                         {p.userName && ` · ${p.userName}`}
@@ -683,8 +684,9 @@ function SplitPanel({
           const no = freeNos[i] ?? i + 1;
           const next = i === 0;
           return (
-            <li key={`pay-${no}`} className={cn('relative rounded-xl border px-3 py-2.5', next ? 'border-primary bg-[var(--admin-primary-soft)] ring-4 ring-[var(--admin-primary-soft)]' : 'border-line bg-surface')}>
-              <div className={cn('text-xs font-medium', next ? 'text-primary' : 'text-muted')}>{next ? `Pay ${no} · sıradaki` : `Pay ${no}`}</div>
+            // Sıradaki pay seçili (mürekkep kenar, taş halka); yeşil yalnız ödenen pay: "2'si ödendi" diye okunmasın
+            <li key={`pay-${no}`} className={cn('relative rounded-xl border px-3 py-2.5', next ? 'border-[var(--admin-text)] bg-surface ring-4 ring-[var(--admin-panel)]' : 'border-line bg-surface')}>
+              <div className={cn('text-xs font-medium', next ? 'font-semibold text-ink' : 'text-muted')}>{next ? `Pay ${no} · sıradaki` : `Pay ${no}`}</div>
               <div className="tabular mt-0.5 text-lg font-bold">{tlShort(amount)}</div>
               <button aria-label={`Pay ${no} fişini yazdır`} title="Pay fişini yazdır" onClick={() => onPrint(no, amount)} className="absolute right-0.5 top-0.5 grid size-11 place-items-center rounded-lg text-muted hover:text-ink">
                 <Printer className="size-4" />

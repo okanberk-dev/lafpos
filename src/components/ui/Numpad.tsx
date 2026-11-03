@@ -15,7 +15,7 @@ interface NumpadProps {
   size?: 'md' | 'lg';
   /**
    * Son hücrede birincil onay tuşu (giriş ekranı: "Giriş"). Verilince alt sıra "Sil · 0 · onay" olur; "," ve "00"
-   * gösterilmez. Devre dışıyken de okunur (açık mavi zemin, mavi yazı)
+   * gösterilmez. Devre dışıyken de okunur (açık yeşil zemin, soluk yazı)
    */
   confirm?: { label: string; disabled?: boolean; onPress: () => void };
   /**
@@ -39,8 +39,8 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
     onEnter: confirm ? () => !confirm.disabled && confirm.onPress() : onEnter,
   });
   return (
-    // Innex segment dili: gri tepsi üstünde beyaz tuşlar; köşeler eş merkezli (tepsi 12, boşluk 4, tuş 8)
-    <div ref={root} data-numpad-enter="" className={cn('grid grid-cols-3 gap-1 rounded-2xl bg-surface-3 p-1', className)}>
+    // Sade tuşlar: tepsi yok, kâğıt beyazı üstünde ince çizgili yumuşak kareler; onay tuşu ev yeşili
+    <div ref={root} data-numpad-enter="" className={cn('grid grid-cols-3 gap-2', className)}>
       {keys.map((k) => {
         if (k === 'ok' && confirm) {
           return (
@@ -50,7 +50,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
               disabled={confirm.disabled}
               onClick={confirm.onPress}
               className={cn(
-                'rounded-lg bg-primary text-base font-semibold text-primary-ink transition-[background-color,transform] duration-150 hover:bg-[var(--admin-primary-hover)] active:scale-[0.97] active:bg-[var(--admin-primary-hover)] motion-reduce:active:scale-100 disabled:bg-[var(--admin-primary-soft)] disabled:text-primary disabled:active:scale-100',
+                'rounded-xl bg-primary text-base font-semibold text-primary-ink transition-[background-color,transform] duration-150 hover:bg-[var(--admin-primary-hover)] active:scale-[0.97] active:bg-[var(--admin-primary-hover)] motion-reduce:active:scale-100 disabled:bg-[var(--admin-primary-soft)] disabled:text-ink-2 disabled:active:scale-100',
                 size === 'lg' ? 'h-16' : 'h-12',
               )}
             >
@@ -65,7 +65,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
             onClick={() => onKey(k)}
             aria-label={k === 'back' ? 'Geri sil' : undefined}
             className={cn(
-              'tabular rounded-lg bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08)] transition-[background-color,transform,box-shadow] duration-150 hover:bg-[var(--hover-solid)] active:scale-[0.97] active:bg-[var(--hover-solid)] active:shadow-none motion-reduce:active:scale-100',
+              'tabular rounded-xl bg-surface-2 font-medium text-ink ring-1 ring-inset ring-line transition-[background-color,transform,box-shadow] duration-150 hover:bg-surface-3 active:scale-[0.97] active:bg-[var(--admin-border)] motion-reduce:active:scale-100',
               size === 'lg' ? 'h-16 text-2xl' : 'h-12 text-xl',
               k === 'clear' && 'text-[15px] text-ink-2',
             )}
@@ -144,7 +144,7 @@ export function PinDots({ length = 6, filled, min = 4, className }: { length?: n
         <span
           key={i}
           aria-hidden="true"
-          className={cn('size-3.5 rounded-full transition-colors duration-150', i < filled ? 'bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-line', i >= min && i >= filled && 'opacity-40')}
+          className={cn('size-3 rounded-full transition-[background-color,transform] duration-150', i < filled ? 'scale-110 bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-[var(--admin-border-strong)]', i >= min && i >= filled && 'opacity-40')}
         />
       ))}
     </div>

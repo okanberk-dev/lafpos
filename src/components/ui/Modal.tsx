@@ -95,7 +95,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         aria-describedby={subtitle ? descId : undefined}
         onKeyDown={(e) => trapTab(e, panel.current)}
         className={cn(
-          'animate-in flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-surface shadow-[var(--shadow-pop)] outline-none sm:max-h-[92dvh] sm:rounded-2xl dark:border-[var(--admin-border-strong)]',
+          'animate-in flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-line bg-surface shadow-[var(--shadow-pop)] outline-none sm:max-h-[92dvh] sm:rounded-3xl dark:border-[var(--admin-border-strong)]',
           widths[size],
           className,
         )}
@@ -103,10 +103,10 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         {/* Telefonda alt sayfa işareti (sürüklenmez; kapatmak için Kapat ya da arka plan) */}
         <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-[var(--admin-border-field)]/50 sm:hidden" />
         {(title || subtitle) && (
-          <div className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-5 py-2.5">
+          <div className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-5 py-3">
             <div className="min-w-0 flex-1">
               {title && (
-                <h2 id={titleId} className="truncate text-[15px] font-semibold leading-6 tracking-[-0.01em]">
+                <h2 id={titleId} className="truncate text-base font-semibold leading-6">
                   {title}
                 </h2>
               )}

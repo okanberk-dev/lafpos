@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Gift, Search, UserPlus, X } from 'lucide-react';
+import { Gift, UserPlus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { tl } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
@@ -102,18 +102,18 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
                     </span>
                     <span className="text-right text-xs">
                       {stamps && (
-                        <span className="block font-semibold text-warning-ink">
+                        <span className="block font-semibold text-gold-ink">
                           {c.stamps}/{goal} damga
                         </span>
                       )}
-                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-danger-ink' : 'text-primary'}>{tl(c.balance)}</span>}
+                      {c.balance !== 0 && <span className={c.balance > 0 ? 'text-danger-ink' : 'text-blue-ink'}>{tl(c.balance)}</span>}
                     </span>
                   </button>
                 </li>
               ))}
               {list.isSuccess && list.data.length === 0 && (
                 <li>
-                  <EmptyState compact icon={<Search />} title={q.trim() ? 'Müşteri bulunamadı' : 'Henüz müşteri yok'}>
+                  <EmptyState compact art={q.trim() ? 'arama' : 'kupon'} title={q.trim() ? 'Müşteri bulunamadı' : 'Henüz müşteri yok'}>
                     {q.trim() ? 'Telefonun ya da adın bir bölümünü yazın ya da yeni müşteri ekleyin' : 'Yeni müşteri ile ilk kaydı açın'}
                   </EmptyState>
                 </li>

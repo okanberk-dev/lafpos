@@ -15,7 +15,9 @@ export type LiveTopic =
   | 'customers'
   | 'users'
   | 'alerts'
-  | 'okc';
+  | 'okc'
+  /** Mesai: giriş-çıkış ve yöneticinin düzeltmeleri (time.in, time.out, time.edit, time.delete) */
+  | 'time';
 
 export interface LiveEvent {
   seq: number;

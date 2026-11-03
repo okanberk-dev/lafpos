@@ -3,20 +3,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
 import { DEMO_USERS } from '../db/seed';
-import {
-  type AppEnv,
-  approverFor,
-  assertNotLocked,
-  clearFailures,
-  clientKey,
-  createSession,
-  destroySession,
-  findApprover,
-  hashPin,
-  isValidPin,
-  recordFailure,
-  toAuthUser,
-} from '../lib/auth';
+import { type AppEnv, approverFor, clientKey, createSession, destroySession, findApprover, toAuthUser, verifyLoginPin } from '../lib/auth';
 import { body, HttpError } from '../lib/http';
 import { getSettings } from '../lib/settings';
 import { meDTO } from '../services/bootstrap';
@@ -42,14 +29,7 @@ authRoutes.get('/users', (c) => {
 
 authRoutes.post('/login', async (c) => {
   const { pin, device } = await body(c, z.object({ pin: z.string(), device: z.string().max(120).optional() }));
-  const addr = clientKey(c);
-  assertNotLocked('giris', addr);
-  const row = isValidPin(pin) ? db.select().from(schema.users).where(eq(schema.users.pinHash, hashPin(pin))).get() : undefined;
-  if (!row || !row.active) {
-    recordFailure('giris', addr);
-    throw new HttpError(401, 'PIN hatalı', 'pin_invalid');
-  }
-  clearFailures('giris', addr);
+  const row = verifyLoginPin(pin, clientKey(c));
   const token = createSession(row.id, device ?? c.req.header('user-agent') ?? '');
   return c.json({ token, me: meDTO(toAuthUser(row)) });
 });

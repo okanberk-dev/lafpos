@@ -1,24 +1,35 @@
 import { useQuery } from '@tanstack/react-query';
-import { useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { useSearchParams } from 'react-router';
-import { tl } from '@shared/money';
-import type { DisplayStateDTO } from '@shared/types';
-import { LafMark } from '@/components/LafMark';
+import type { CustomerDisplaySettings, DisplayConfigDTO, DisplayStateDTO } from '@shared/types';
+import { CustomerDisplayView, DISPLAY_DEFAULTS } from '@/components/display/CustomerDisplayView';
 import { get } from '@/lib/api';
+import { DISPLAY_CONFIG_KEY } from '@/lib/bootDark';
 import { useTick } from '@/lib/hooks';
 import { useBusinessName } from '@/lib/publicInfo';
-import { cn } from '@/lib/cn';
 import { useTheme } from '@/lib/theme';
 import { useWakeLock } from '@/lib/wakelock';
 
 /** "Teşekkürler" bu kadar kalır, sonra hoş geldiniz; çağrı numarası varsa müşteri onu okuyabilsin diye biraz daha */
 const THANKS_MS = 10_000;
 const THANKS_CALL_MS = 15_000;
+/** Son görünüm bu cihazda saklanır: sonraki açılışta ilk kare doğru temada (ayar gelmeden; bootDark okur) */
+const CONFIG_KEY = DISPLAY_CONFIG_KEY;
+
+function cachedConfig(): DisplayConfigDTO | undefined {
+  try {
+    const raw = localStorage.getItem(CONFIG_KEY);
+    return raw ? ({ ...DISPLAY_DEFAULTS, businessName: '', ...JSON.parse(raw) } as DisplayConfigDTO) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
- * Müşteri ekranı (ikinci monitör ya da müşteriye dönük tablet): kasadaki adisyonun kalemleri ve tutarı, ödeme
- * bitince teşekkür, boşta hoş geldiniz. Kasa Adisyon › İşlemler › Müşteri ekranı'ndan yansıtır; ekran adı ?ekran=. Personel girişi istemez.
- * Varsayılan koyu (gece loş salonda müşterinin gözünü almasın); `?tema=acik` zorla koyu açmaz, cihazın temasında kalır.
+ * Müşteri ekranı (iki ekranlı kasanın ikinci monitörü ya da müşteriye dönük tablet): kasadaki adisyonun kalemleri ve
+ * tutarı, ödeme bitince teşekkür, boşta karşılama. Kasa Adisyon › İşlemler › Müşteri ekranı'ndan yansıtır; ekran adı
+ * ?ekran=. Personel girişi istemez. Görünüm Yönetim › Müşteri ekranı'ndan (tema, metinler, duyurular, karekod);
+ * `?tema=acik` ayarın temasını porselene çevirir (eski kurulum adresleri).
  */
 export default function CustomerDisplayPage() {
   const businessName = useBusinessName();
@@ -26,8 +37,18 @@ export default function CustomerDisplayPage() {
   const [params] = useSearchParams();
   const code = (params.get('ekran') ?? 'kasa').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24) || 'kasa';
   useWakeLock(true);
-  // Varsayılan koyu; ?tema=acik ise cihaz ya da uygulama teması ne olursa olsun açık
-  const forced = params.get('tema') === 'acik' ? 'light' : 'dark';
+  const config = useQuery({ queryKey: ['display-config'], queryFn: () => get<DisplayConfigDTO>('/public/display-config'), refetchInterval: 30_000, initialData: cachedConfig, initialDataUpdatedAt: 0 });
+  useEffect(() => {
+    if (!config.data || !config.dataUpdatedAt) return;
+    try {
+      localStorage.setItem(CONFIG_KEY, JSON.stringify(config.data));
+    } catch {
+      /* özel pencere */
+    }
+  }, [config.data, config.dataUpdatedAt]);
+  const settings: CustomerDisplaySettings = { ...DISPLAY_DEFAULTS, ...config.data, ...(params.get('tema') === 'acik' ? { theme: 'porselen' as const } : {}) };
+  // Sayfanın kendi teması ekranın temasını izler (kaydırma çubuğu, odak): porselen açık, gece ve yeşil koyu
+  const forced = settings.theme === 'porselen' ? 'light' : 'dark';
   const setForce = useTheme((s) => s.setForce);
   useLayoutEffect(() => {
     setForce(forced);
@@ -41,105 +62,5 @@ export default function CustomerDisplayPage() {
   const s = q.data;
   const state: DisplayStateDTO = !s || (s.kind === 'thanks' && now - s.at > (s.call ? THANKS_CALL_MS : THANKS_MS)) ? { kind: 'idle', at: 0 } : s;
 
-  return (
-    <div className="flex h-full flex-col bg-bg p-3 md:p-6">
-      {state.kind === 'order' ? (
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
-          <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface">
-            <header className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-5 py-4">
-              <span className="grid size-11 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-                <LafMark className="h-4" onNight />
-              </span>
-              <h1 className="text-xl font-semibold tracking-[-0.01em]">Siparişiniz</h1>
-              <span className="flex-1" />
-              <span className="text-sm text-muted">{state.label}</span>
-            </header>
-            <ul className="scroll-thin min-h-0 flex-1 divide-y divide-[var(--admin-divider)] overflow-y-auto">
-              {state.lines.map((l, i) => (
-                <li key={`${l.name}-${i}`} className="flex items-start gap-4 px-5 py-3.5">
-                  <span className="tabular grid min-w-9 place-items-center rounded-lg bg-surface-3 px-2 py-1 text-lg font-semibold">{l.qty}</span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-lg font-semibold leading-snug">
-                      {l.name}
-                      {l.size && <span className="ml-2 text-base font-medium text-muted">{l.size}</span>}
-                    </span>
-                    {l.options && <span className="block text-sm text-muted">{l.options}</span>}
-                  </span>
-                  <span className="tabular text-lg font-semibold">{l.total ? tl(l.total) : 'İkram'}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-          <section className="flex flex-col gap-4 rounded-2xl border border-line bg-surface p-6">
-            <div className="flex flex-1 flex-col items-center justify-center text-center">
-              <LafMark className="h-16 text-ink" />
-              <p className="mt-4 text-lg font-medium text-ink-2">{businessName}</p>
-            </div>
-            {state.discount > 0 && (
-              <div className="tabular flex justify-between text-lg text-muted">
-                <span>İndirim</span>
-                <span>−{tl(state.discount)}</span>
-              </div>
-            )}
-            {state.service > 0 && (
-              <div className="tabular flex justify-between text-lg text-muted">
-                <span>Servis</span>
-                <span>{tl(state.service)}</span>
-              </div>
-            )}
-            {state.paid > 0 && (
-              <div className="tabular flex justify-between text-lg text-muted">
-                <span>Ödenen</span>
-                <span>{tl(state.paid)}</span>
-              </div>
-            )}
-            <div>
-              <p className="text-lg text-muted">{state.paid > 0 ? 'Kalan' : 'Toplam'}</p>
-              <p className="tabular text-6xl font-bold tracking-tight md:text-7xl">{tl(state.paid > 0 ? state.due : state.total)}</p>
-            </div>
-          </section>
-        </div>
-      ) : (
-        // Koyuda boş ekranda kart yok: içerik doğrudan zeminde, gecenin tek açık yüzeyi logonun karosu
-        <div className={cn('grid flex-1 place-items-center p-8 text-center', !forced && 'rounded-2xl border border-line bg-surface')}>
-          {/* Izgara öğesi içeriğin en geniş kelimesine göre büyümesin: uzun masa no telefonda taşmasın */}
-          <div className="w-full min-w-0">
-            <span className="mx-auto grid size-24 place-items-center rounded-[20px] bg-night text-white dark:bg-surface-3">
-              <LafMark className="h-9" onNight />
-            </span>
-            {state.kind === 'thanks' ? (
-              <>
-                <h1 className="mt-8 text-4xl font-semibold tracking-tight md:text-5xl">Teşekkürler, afiyet olsun</h1>
-                <p className="tabular mt-3 text-xl text-muted">{tl(state.total)}</p>
-                {state.call && <CallNumber call={state.call} />}
-              </>
-            ) : (
-              <>
-                <h1 className="mt-8 text-4xl font-semibold tracking-tight md:text-5xl">Hoş geldiniz</h1>
-                <p className="mt-3 text-xl text-muted">{businessName}</p>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Self servisin çağrı kimliği teşekkürde: "No 34" numara (müşteri çağrı ekranında bekler), "Masa 12" masa (personel
- * getirir). Kasa `callText` biçiminde gönderir.
- */
-function CallNumber({ call }: { call: string }) {
-  const no = /^No (.+)$/.exec(call)?.[1];
-  const shown = no ?? call;
-  // Uzun kimlik ("Masa WWWWWW"): çağrı ekranındaki gibi ekranla küçülen yazı ve kırılan kelime (390 px'te taşmasın)
-  const long = shown.length > 5;
-  return (
-    <div className="mx-auto mt-8 w-fit min-w-56 max-w-full rounded-2xl border border-line bg-surface-2 px-8 py-5 max-sm:min-w-0 max-sm:px-5">
-      <p className="text-lg font-medium text-muted">{no ? 'Numaranız' : 'Siparişiniz'}</p>
-      <p className={cn('tabular font-bold leading-tight tracking-tight [overflow-wrap:anywhere]', long ? 'text-[clamp(2.25rem,9vw,5rem)]' : 'text-7xl md:text-8xl')}>{shown}</p>
-      <p className="mt-1 text-lg text-ink-2">{no ? 'Hazır olunca çağrı ekranında görünür' : 'Masanıza getirilecek'}</p>
-    </div>
-  );
+  return <CustomerDisplayView className="h-full" state={state} config={settings} businessName={config.data?.businessName || businessName} now={now} />;
 }

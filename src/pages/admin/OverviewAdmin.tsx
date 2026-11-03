@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgePercent, BarChart3, CheckCircle2, CircleDollarSign, Globe, HardDrive, MonitorSmartphone, PlugZap, Receipt, ShieldAlert, ShoppingBag, Utensils } from 'lucide-react';
+import { AlertTriangle, BadgePercent, CircleDollarSign, Globe, HardDrive, MonitorSmartphone, PlugZap, Receipt, ShieldAlert, ShoppingBag, Utensils } from 'lucide-react';
 import { useEffect } from 'react';
 import { Link } from 'react-router';
 import { tl, tlCompact } from '@shared/money';
@@ -229,7 +229,7 @@ export default function OverviewAdmin() {
                     ))}
                   </ul>
                 ) : (
-                  <EmptyState bare icon={<BarChart3 />} title="Bugün henüz satış yok">
+                  <EmptyState bare art="affogato" title="Bugün henüz satış yok">
                     İlk adisyon kapanınca en çok satanlar burada sıralanır
                   </EmptyState>
                 )}
@@ -263,7 +263,7 @@ export default function OverviewAdmin() {
                   Rakamlar ya da bağlantı durumu alınamadı; gelince uyarılar burada görünür
                 </EmptyState>
               ) : (
-                <EmptyState bare icon={<CheckCircle2 />} title="Her şey yolunda">
+                <EmptyState bare art="favori" title="Her şey yolunda">
                   İptal, ikram ve kasa farkı uyarıları burada görünür
                 </EmptyState>
               )}

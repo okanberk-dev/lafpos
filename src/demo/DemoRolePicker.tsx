@@ -1,6 +1,6 @@
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { useState } from 'react';
-import { LafMark } from '@/components/LafMark';
+import { LafTile } from '@/components/LafMark';
 import { errorMessage } from '@/lib/api';
 import { enterAs, useDemo } from '@/lib/demo';
 import { toast } from '@/lib/toast';
@@ -32,13 +32,11 @@ export function DemoRolePicker() {
 
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
-      <section className="w-full max-w-md rounded-2xl border border-line bg-surface p-5 sm:p-6">
+      <section className="w-full max-w-md rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-5 sm:p-6">
         <div className="mb-5 flex items-center gap-3">
-          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-night text-white dark:bg-surface-3">
-            <LafMark className="h-4" onNight />
-          </span>
+          <LafTile />
           <span>
-            <h1 className="text-lg font-semibold tracking-[-0.01em]">Kimle devam edelim?</h1>
+            <h1 className="text-lg font-semibold">Kimle devam edelim?</h1>
             <span className="block text-[13px] text-muted">Demoda PIN sorulmaz; her rol kendi ekranlarını görür</span>
           </span>
         </div>

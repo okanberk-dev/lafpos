@@ -1,7 +1,7 @@
 import { ChevronRight, Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, SunMoon, Wifi, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
-import { fmtTime } from '@shared/time';
+import { fmtTime, shiftForgotten } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -14,8 +14,10 @@ import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
+import { useMyTime } from '@/lib/mesai';
 import { CommandPalette } from './CommandPalette';
-import { LafMark } from './LafMark';
+import { LafMark, LafTile } from './LafMark';
+import { MesaiRow } from './MesaiRow';
 import { PlatformInbox } from './PlatformInbox';
 import { Segmented } from './ui/Field';
 import { Modal } from './ui/Modal';
@@ -73,6 +75,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
   useReadyAlerts();
+  // Mesaide olan kişinin avatarında yeşil nokta (kullanıcı menüsünde süre ve Mesaiyi bitir)
+  // Önceki günden açık kalmış (çıkışı unutulmuş) mesai "mesaide" sayılmaz
+  const myOpen = useMyTime().data?.open;
+  const onClock = !!myOpen && !shiftForgotten(myOpen.clockIn, Date.now());
   const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
     const on = () => setFull(!!document.fullscreenElement);
@@ -111,7 +117,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const liveLabel = live === 'canli' ? 'Canlı bağlantı' : live === 'baglaniyor' ? 'Bağlanıyor…' : 'Bağlantı koptu; yeniden deneniyor';
   const status = (rail = false) =>
     REMOTE ? (
-      <span title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir" className="rounded-md bg-[var(--admin-primary-soft)] px-1.5 py-0.5 text-xs font-medium text-[var(--admin-primary)]">
+      <span title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir" className="rounded-full bg-[var(--admin-blue-soft)] px-2 py-0.5 text-xs font-medium text-[var(--admin-blue)]">
         Uzaktan
       </span>
     ) : (
@@ -122,9 +128,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </span>
       <NavLink to="/kasa" title="Kasa ve gün sonu" className="inline-flex min-h-11 min-w-11 items-center justify-center pointer-fine:min-h-0 pointer-fine:min-w-0">
         {boot.day ? (
-          <span className="tabular rounded-md bg-surface-3 px-1.5 py-0.5 font-medium text-ink-2">Z {boot.day.zNo}</span>
+          <span className="tabular rounded-full bg-surface-3 px-2 py-0.5 font-medium text-ink-2">Z {boot.day.zNo}</span>
         ) : (
-          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-[var(--admin-warning-soft)] px-1.5 py-0.5 font-medium text-[var(--admin-warning)]">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--admin-warning-soft)] px-2 py-0.5 font-medium text-[var(--admin-warning)]">
             <Lock className="size-3 stroke-2" /> Kapalı
           </span>
         )}
@@ -132,9 +138,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
     );
   const avatar = (size: 'sm' | 'md') => (
-    // Kişinin rengi koyu kartta kaybolmasın: ince iç halka
-    <span className={cn('grid place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', size === 'md' ? 'size-9 text-xs' : 'size-8 text-[11px]')} style={{ background: me.color }}>
+    // Kişinin rengi koyu kartta kaybolmasın: ince iç halka. Mesaideyse sağ altta yeşil nokta (adı menünün başlığında)
+    <span className={cn('relative grid place-items-center rounded-full font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15', size === 'md' ? 'size-9 text-xs' : 'size-8 text-[11px]')} style={{ background: me.color }}>
       {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
+      {onClock && <span aria-hidden="true" className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-surface bg-[var(--admin-success)]" />}
     </span>
   );
   const sheetRow = 'flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-[background-color,border-color,color] duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press';
@@ -150,9 +157,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       )}
     >
       {/* Tablet ve bilgisayar: ikon rayı (Innex'in daraltılmış kenar çubuğu, docs/ADMIN-INNEX.md §1.2) */}
-      <aside className={cn('hidden w-[84px] shrink-0 flex-col items-center rounded-2xl border border-line bg-surface py-3', !admin && 'md:flex')}>
-        <NavLink to="/" className="mb-3 grid size-11 place-items-center rounded-xl bg-night text-white dark:bg-surface-3" title="LafPOS">
-          <LafMark className="h-4" onNight />
+      <aside className={cn('hidden w-[84px] shrink-0 flex-col items-center rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] py-3 shadow-[var(--shadow-card)]', !admin && 'md:flex')}>
+        <NavLink to="/" className="mb-3 rounded-xl" title="LafPOS">
+          <LafTile />
         </NavLink>
         <nav className="scroll-thin flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-2">
           {items.map((n) => (
@@ -161,13 +168,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               to={n.to}
               className={({ isActive }) =>
                 cn(
-                  'flex w-full flex-col items-center gap-1 rounded-xl py-2 text-[11px] font-medium transition-colors duration-150',
-                  isActive ? 'bg-surface-3 text-ink' : 'text-muted hover:bg-hover hover:text-ink active:bg-press',
+                  'group flex w-full flex-col items-center gap-0.5 rounded-xl py-1 text-[11px] font-medium transition-colors duration-150',
+                  isActive ? 'text-ink' : 'text-muted hover:text-ink',
                 )
               }
             >
-              <n.icon className="size-5" />
-              {n.label}
+              {({ isActive }) => (
+                <>
+                  {/* Etkin ekran: yeşil hap içinde ikon (renk tek başına durum taşımaz: yazı da kalın) */}
+                  <span
+                    className={cn(
+                      'grid h-7 w-12 place-items-center rounded-full transition-colors duration-150',
+                      isActive ? 'bg-primary text-primary-ink' : 'group-hover:bg-hover group-active:bg-press',
+                    )}
+                  >
+                    <n.icon className="size-5" />
+                  </span>
+                  <span className={cn(isActive && 'font-semibold')}>{n.label}</span>
+                </>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -208,12 +227,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavLink
               key={n.to}
               to={n.to}
-              className={({ isActive }) => cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-press', isActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
+              className={({ isActive }) => cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150', isActive ? 'font-semibold text-ink' : 'font-medium text-muted')}
             >
               {({ isActive }) => (
                 <>
-                  {/* Kalınlık sınıfla (index.css svg.lucide 1.75'i öznitelikten üstün) */}
-                  <n.icon className={cn('size-6', isActive && 'stroke-[2.25]')} />
+                  {/* Etkin sekme: ikon gri hapın içinde ve kalın (index.css svg.lucide 1.75'i sınıf ezer) */}
+                  <span className={cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', isActive ? 'bg-surface-3' : 'active:bg-press')}>
+                    <n.icon className={cn('size-[22px]', isActive && 'stroke-[2.25]')} />
+                  </span>
                   {n.label}
                 </>
               )}
@@ -223,9 +244,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               onClick={() => setMoreOpen(true)}
               aria-current={restActive ? 'page' : undefined}
-              className={cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-150 active:bg-press', restActive ? 'font-semibold text-primary' : 'font-medium text-muted')}
+              className={cn('flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150', restActive ? 'font-semibold text-ink' : 'font-medium text-muted')}
             >
-              <MoreHorizontal className={cn('size-6', restActive && 'stroke-[2.25]')} />
+              <span className={cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', restActive ? 'bg-surface-3' : 'active:bg-press')}>
+                <MoreHorizontal className={cn('size-[22px]', restActive && 'stroke-[2.25]')} />
+              </span>
               Daha
             </button>
           )}
@@ -247,8 +270,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </Modal>
 
-      <Modal open={menuOpen} onClose={() => setMenuOpen(false)} title={me.name} subtitle={boot.settings.businessName} size="sm">
+      <Modal open={menuOpen} onClose={() => setMenuOpen(false)} title={me.name} subtitle={onClock ? `${boot.settings.businessName} · mesaide` : boot.settings.businessName} size="sm">
         <div className="space-y-2 p-4">
+          {!REMOTE && <MesaiRow className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line px-3 py-2.5" />}
           {REMOTE && (
             // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
             <a href="/demo/" className={sheetRow}>

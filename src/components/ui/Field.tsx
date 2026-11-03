@@ -17,11 +17,11 @@ import { cn } from '@/lib/cn';
 import { isFinePointer } from '@/lib/hooks';
 
 /**
- * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (mavi kenar ve yumuşak halka), hatalı (`aria-invalid`:
+ * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (yeşil kenar ve yumuşak yeşil halka), hatalı (`aria-invalid`:
  * kırmızı kenar ve halka), devre dışı (soluk, zemin gri). Hata `Field error` ile verilince alana kendiliğinden geçer.
  */
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-4 focus:ring-[var(--admin-primary-soft)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger-soft)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-4 focus:ring-[color-mix(in_oklab,var(--admin-primary)_9%,transparent)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger-soft)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
 
 /** Alanla aynı görünümde kullanılan tek seferlik input'lar için (dışarıdan `className` ile) */
 export const fieldClass = base;
@@ -270,7 +270,7 @@ export function Toggle({
 }) {
   const track = (
     <span className={cn('relative mt-px h-[26px] w-11 shrink-0 rounded-full transition-colors duration-150', checked ? 'bg-primary group-hover:bg-[var(--admin-primary-hover)]' : 'bg-line-strong group-hover:bg-[var(--admin-text-mute)]')}>
-      <span className={cn('absolute left-0.5 top-0.5 size-[22px] rounded-full bg-white shadow-[0_1px_2px_rgb(12_14_27/0.25)] transition-transform duration-150 ease-out motion-reduce:transition-none', checked && 'translate-x-[18px]')} />
+      <span className={cn('absolute left-0.5 top-0.5 size-[22px] rounded-full bg-white shadow-[0_1px_2px_rgb(59_42_30/0.25)] transition-transform duration-150 ease-out motion-reduce:transition-none', checked && 'translate-x-[18px]')} />
     </span>
   );
   const text = label && (
@@ -309,8 +309,8 @@ export function Toggle({
 }
 
 /**
- * Yan yana seçenek düğmeleri (ödeme yolu, kasa sekmesi): gri ray, seçili beyaz hap; köşeler eş merkezli (ray 8,
- * boşluk 2, hap 6). Hap odağı rayın içinde çizilir (kaydırmalı ray dış halkayı kırpar). `label` grubu adlandırır.
+ * Yan yana seçenek düğmeleri (ödeme yolu, kasa sekmesi): gri hap ray, seçili beyaz hap; köşeler eş merkezli (`wrap`
+ * modunda ray 12, hap 10). Hap odağı rayın içinde çizilir (kaydırmalı ray dış halkayı kırpar). `label` grubu adlandırır.
  * Kısa etiketler tek satırda kalır, sığmazsa ray kayar. `wrap`: uzun etiketli seçenekler (yazarkasa bağlantısı ve
  * ödeme yeri) rayı tam genişlikte eşit böler, etiket kendi içinde kırılır, telefonda alt alta dizilir; hiçbiri gizli
  * kaydırıcıda kalmaz.
@@ -336,7 +336,7 @@ export function Segmented<T extends string>({
     <div
       role={label ? 'group' : undefined}
       aria-label={label}
-      className={cn(wrap ? 'flex w-full gap-0.5 max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full overflow-x-auto', 'rounded-lg bg-surface-3 p-0.5', className)}
+      className={cn(wrap ? 'flex w-full gap-0.5 rounded-xl max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full overflow-x-auto rounded-full', 'bg-surface-3 p-[3px]', className)}
     >
       {options.map((o) => (
         <button
@@ -345,11 +345,12 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           aria-pressed={value === o.value}
           className={cn(
-            'inline-flex items-center justify-center rounded-md font-medium',
+            'inline-flex items-center justify-center font-medium',
+            wrap ? 'rounded-[10px]' : 'rounded-full',
             wrap ? 'min-w-0 flex-1 whitespace-normal py-1.5 text-center leading-snug max-sm:flex-auto' : 'shrink-0 whitespace-nowrap',
             'transition-[color,background-color,box-shadow] duration-150 focus-visible:-outline-offset-2 pointer-coarse:min-h-11',
             size === 'sm' ? 'min-h-7 px-2.5 text-xs' : 'min-h-9 px-3.5 text-sm [[data-area=admin]_&]:text-[13px]',
-            value === o.value ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08),0_0_0_1px_rgb(12_14_27/0.04)]' : 'text-muted hover:text-ink',
+            value === o.value ? 'bg-surface text-ink shadow-[var(--rim),var(--shadow-lift)] dark:bg-[var(--admin-border-strong)]' : 'text-muted hover:text-ink',
           )}
         >
           {o.label}

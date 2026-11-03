@@ -21,7 +21,7 @@ const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
 const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
 // Kasada tükenen seçenek: gri, seçilemez, yanında "Tükendi" (Tükenen ürünler › Seçenekler)
 const CHIP_SOLD = 'border-line bg-surface-2 text-muted disabled:cursor-not-allowed';
-const SOLD_BADGE = 'ml-1.5 rounded-md bg-[var(--admin-danger-soft)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]';
+const SOLD_BADGE = 'ml-1.5 rounded-full bg-[var(--admin-danger-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]';
 
 /** Ürün seçenekleri: boy, süt, kavrum, şurup, ekstra shot, şeker, not ve adet. */
 export function OptionsModal({

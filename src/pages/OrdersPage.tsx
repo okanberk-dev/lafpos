@@ -137,7 +137,7 @@ export default function OrdersPage() {
       ) : list.isError && !list.data ? (
         <ErrorState title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState icon={<PackageCheck />} title={tab === 'kapanan' ? 'Bugün kapanan adisyon yok' : tab === 'online' ? 'Açık online sipariş yok' : tab === 'paket' ? 'Açık paket ya da gel-al siparişi yok' : 'Açık tezgâh siparişi yok'}>
+        <EmptyState art="fis" title={tab === 'kapanan' ? 'Bugün kapanan adisyon yok' : tab === 'online' ? 'Açık online sipariş yok' : tab === 'paket' ? 'Açık paket ya da gel-al siparişi yok' : 'Açık tezgâh siparişi yok'}>
           {tab === 'online' ? 'Uygulama ve web siparişleri hazırlanırken burada görünür' : tab === 'kapanan' ? 'Bugün kapanan adisyonlar burada listelenir' : 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın'}
         </EmptyState>
       ) : (
@@ -161,7 +161,7 @@ export default function OrdersPage() {
             const stageButton = flow && !stageFromBar(o);
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
-              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
+              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
                 <button onClick={() => navigate(`/adisyon/${o.id}`)} className="flex items-start gap-3 rounded-lg text-left">
                   <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
                     <Icon />

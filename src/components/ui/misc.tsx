@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Info, Loader2, RotateCcw, WifiOff } from '
 import type { CSSProperties, ReactNode } from 'react';
 import { ApiError, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { Illustration, type IllustrationName } from '../Illustration';
 import { Button } from './Button';
 
 /**
@@ -10,14 +11,15 @@ import { Button } from './Button';
  */
 export type BadgeTone = 'neutral' | 'green' | 'red' | 'warn' | 'pink' | 'blue' | 'violet' | 'success' | 'danger' | 'warning' | 'info' | 'accent' | 'primary';
 type Tone = BadgeTone;
-// Innex durum rozeti: 6 px köşe, açık zemin üstünde koyu ton (AA, tests/design-tokens.test.ts)
+// Durum rozeti: hap biçimi, açık zemin üstünde koyu ton (AA, tests/design-tokens.test.ts). Mavi durum mavisidir (dolu,
+// hazırlanıyor, bilgi); eylem rengi (mürekkep) rozette kullanılmaz
 const tones: Record<Tone, string> = {
   neutral: 'bg-[var(--admin-neutral-soft)] text-ink-2',
   green: 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]',
   red: 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]',
   warn: 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]',
   pink: 'bg-[var(--admin-hue-rose-soft)] text-[var(--admin-hue-rose)]',
-  blue: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
+  blue: 'bg-[var(--admin-blue-soft)] text-[var(--admin-blue)]',
   // Online (siteden gelen) sipariş her ekranda mor; pembe yalnız "kısmen ödendi"
   violet: 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]',
   success: 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]',
@@ -25,7 +27,7 @@ const tones: Record<Tone, string> = {
   warning: 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]',
   info: 'bg-[var(--admin-info-soft)] text-[var(--admin-info)]',
   accent: 'bg-[var(--admin-accent-soft)] text-[var(--admin-accent-ink)]',
-  primary: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
+  primary: 'bg-[var(--admin-blue-soft)] text-[var(--admin-blue)]',
 };
 const dots: Record<Tone, string> = {
   neutral: 'bg-[var(--admin-text-mute)]',
@@ -33,20 +35,20 @@ const dots: Record<Tone, string> = {
   red: 'bg-[var(--admin-danger)]',
   warn: 'bg-[var(--admin-warning)]',
   pink: 'bg-[var(--admin-hue-rose)]',
-  blue: 'bg-[var(--admin-primary)]',
+  blue: 'bg-[var(--admin-blue)]',
   violet: 'bg-[var(--admin-hue-violet)]',
   success: 'bg-[var(--admin-success)]',
   danger: 'bg-[var(--admin-danger)]',
   warning: 'bg-[var(--admin-warning)]',
   info: 'bg-[var(--admin-info)]',
   accent: 'bg-[var(--admin-accent)]',
-  primary: 'bg-[var(--admin-primary)]',
+  primary: 'bg-[var(--admin-blue)]',
 };
 
-/** Durum rozeti (kasa ve yönetimde tek): 22 px, köşe 6, 12 px yazı; `dot` renkli nokta (renk yazının yanında) */
+/** Durum rozeti (kasa ve yönetimde tek): 22 px, hap, 12 px yazı; `dot` renkli nokta (renk yazının yanında) */
 export function Badge({ tone = 'neutral', dot, children, className, title }: { tone?: Tone; dot?: boolean; children: ReactNode; className?: string; title?: string }) {
   return (
-    <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium leading-4', tones[tone], className)}>
+    <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium leading-4', tones[tone], className)}>
       {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dots[tone])} />}
       {children}
     </span>
@@ -59,11 +61,11 @@ export function Badge({ tone = 'neutral', dot, children, className, title }: { t
  */
 export function Card({ children, className, title, subtitle, actions, divided = true }: { children: ReactNode; className?: string; title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; divided?: boolean }) {
   return (
-    <section className={cn('rounded-2xl border border-line bg-surface', className)}>
+    <section className={cn('rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]', className)}>
       {(title || actions) && (
-        <header className={cn('flex min-h-12 items-center gap-3 px-4', divided ? 'border-b border-[var(--admin-divider)] py-2.5' : 'pb-1 pt-4')}>
+        <header className={cn('flex min-h-[52px] items-center gap-3 px-4', divided ? 'border-b border-[var(--admin-divider)] py-2.5' : 'pb-1 pt-4')}>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[15px] font-semibold leading-6 tracking-[-0.01em]">{title}</h3>
+            <h3 className="truncate text-[15px] font-semibold leading-6">{title}</h3>
             {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
           </div>
           {actions}
@@ -94,12 +96,14 @@ export function PageLoading({ label = 'Yükleniyor…', delay = 300 }: { label?:
 }
 
 /**
- * Boş durum: ne olmadığını ve nasıl dolacağını söyler; ikon gri kutuda (boşluk vurgulanmaz). Üç boy: kart içinde
- * `compact`, sayfa gövdesinde varsayılan, uzaktan okunan ekranda (bar) `large`. Eylem: ilk kullanımda birincil
- * düğme, süzgeçte ghost. Yönetimdeki EmptyState (admin/ui.tsx) bunu sarar.
+ * Boş durum: ne olmadığını ve nasıl dolacağını söyler; ikon gri kutuda (boşluk vurgulanmaz) ya da `art` ile sitenin
+ * çizimi (fiş, boş fincan tabağı, kek standı…). Üç boy: kart içinde `compact`, sayfa gövdesinde varsayılan, uzaktan
+ * okunan ekranda (bar) `large`. Eylem: ilk kullanımda birincil düğme, süzgeçte ghost. Yönetimdeki EmptyState
+ * (admin/ui.tsx) bunu sarar.
  */
 export function EmptyState({
   icon,
+  art,
   title,
   children,
   action,
@@ -108,6 +112,8 @@ export function EmptyState({
   className,
 }: {
   icon?: ReactNode;
+  /** Simge yerine sitenin çizimi */
+  art?: IllustrationName;
   title: ReactNode;
   children?: ReactNode;
   action?: ReactNode;
@@ -117,7 +123,9 @@ export function EmptyState({
 }) {
   return (
     <div className={cn('flex flex-col items-center justify-center text-center', compact ? 'px-4 py-8' : large ? 'px-6 py-16' : 'px-6 py-12', className)}>
-      {icon && (
+      {art ? (
+        <Illustration name={art} className={cn(compact ? 'mb-3 size-16' : large ? 'mb-5 size-32' : 'mb-4 size-24')} />
+      ) : icon && (
         <span
           aria-hidden="true"
           className={cn(
@@ -128,7 +136,7 @@ export function EmptyState({
           {icon}
         </span>
       )}
-      <p className={cn('text-balance text-ink', compact ? 'text-sm font-medium' : large ? 'text-lg font-semibold' : 'text-[15px] font-semibold')}>{title}</p>
+      <p className={cn('text-balance font-headline text-ink', compact ? 'text-[15px] font-semibold' : large ? 'text-xl font-bold' : 'text-base font-bold')}>{title}</p>
       {children && <div className={cn('max-w-[36ch] text-pretty text-muted', compact ? 'mt-0.5 text-[13px]' : large ? 'mt-1.5 text-[15px]' : 'mt-1 text-[13px] leading-relaxed')}>{children}</div>}
       {action && <div className={compact ? 'mt-3' : 'mt-4'}>{action}</div>}
     </div>
@@ -246,7 +254,7 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
   return (
     <div
       className={cn(
-        'rounded-2xl border p-4',
+        'rounded-2xl border p-4 shadow-[var(--shadow-card)]',
         tone === 'bad'
           ? 'border-[var(--admin-danger-line)] bg-[var(--admin-danger-soft)]'
           : tone === 'ok'
@@ -258,18 +266,18 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
       )}
     >
       <div className="text-[13px] font-medium text-muted">{label}</div>
-      <div className={cn('tabular mt-1 font-semibold tracking-[-0.01em]', strong ? 'text-3xl' : 'text-2xl')}>{value}</div>
+      <div className={cn('tabular mt-1.5 font-headline font-bold leading-none tracking-[-0.02em]', strong ? 'text-[34px]' : 'text-[28px]')}>{value}</div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
     </div>
   );
 }
 
-/** Sayfa başlığı: Innex 18/600 ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile) */
+/** Sayfa başlığı: Gabarito 22/700 (telefonda 20) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile) */
 export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
       <div className="min-w-0 sm:flex-1">
-        <h1 className="text-lg font-semibold tracking-[-0.01em]">{title}</h1>
+        <h1 className="text-xl font-bold sm:text-[22px]">{title}</h1>
         {subtitle && <p className="mt-0.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
       </div>
       {/* Telefonda eylemler kendi satırında, eşit genişlikte; geniş ekranda sağda */}
@@ -279,7 +287,7 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
 }
 
 /**
- * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri): Innex "etkin satır gri ve renksiz". Seçili gri zemin,
+ * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri): hap biçimi, etkin olan gri zeminde ve kalın, renksiz;
  * diğerleri düz; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; odak halkası çipin içinde.
  * Sayılı filtre çipi (koyu kenarlı seçili) yönetimdeki StatusTabs'tır.
  */
@@ -310,7 +318,7 @@ export function Tabs<T extends string>({
             aria-selected={on}
             onClick={() => onChange(o.value)}
             className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press [[data-area=admin]_&]:text-[13px]',
+              'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press [[data-area=admin]_&]:text-[13px]',
               size === 'sm' ? 'min-h-9 pointer-coarse:min-h-11' : 'min-h-11 pointer-fine:min-h-9',
               on ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
             )}
@@ -318,7 +326,8 @@ export function Tabs<T extends string>({
             {o.icon}
             {o.label}
             {!!o.count && (
-              <span className={cn('tabular min-w-5 rounded-md px-1.5 py-px text-center text-xs font-medium', on ? 'bg-surface text-ink shadow-[0_1px_2px_rgb(12_14_27/0.08)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
+              // Etkin sekmenin sayısı beyaz hap (gri zeminde); yeşil dolu hap "N hazır"ın, sayı onunla karışmasın
+              <span className={cn('tabular min-w-5 rounded-full px-1.5 py-px text-center text-xs font-medium', on ? 'bg-surface text-ink shadow-[var(--rim)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
             )}
           </button>
         );

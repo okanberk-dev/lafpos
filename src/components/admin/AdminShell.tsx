@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeftRight, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Rows3, Rows4, Search, WifiOff } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
-import { LafMark } from '@/components/LafMark';
+import { LafTile } from '@/components/LafMark';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -78,7 +78,7 @@ export function AdminShell({ title, children }: { title: string; children: React
     >
       <s.icon className="size-4 shrink-0" aria-hidden="true" />
       {!narrow && <span className="min-w-0 flex-1 truncate">{s.label}</span>}
-      {!narrow && counts[s.key] != null && <span className="min-w-5 rounded-md bg-[var(--admin-panel)] px-1.5 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)]">{counts[s.key]}</span>}
+      {!narrow && counts[s.key] != null && <span className="min-w-5 rounded-full bg-[var(--admin-panel)] px-2 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)]">{counts[s.key]}</span>}
     </NavLink>
   );
 
@@ -86,9 +86,7 @@ export function AdminShell({ title, children }: { title: string; children: React
   const sidebar = (narrow: boolean, canRail: boolean) => (
     <nav aria-label="Yönetim" className="flex h-full flex-col">
       <div className={cn('flex items-center gap-2.5 px-3 pb-2.5 pt-3.5', narrow && 'flex-col justify-center gap-1.5 px-0')}>
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-night text-white dark:bg-surface-3">
-          <LafMark className="h-3" onNight />
-        </span>
+        <LafTile size="sm" />
         {!narrow && (
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold text-[var(--admin-text)]">{boot.settings.businessName}</span>

@@ -54,7 +54,7 @@ export function MoveModal({ order, open, onClose, act, onMoved }: { order: Order
           {tables.map((t) => {
             const busy = checkOn(t.id);
             return (
-              <button key={t.id} onClick={() => pick(t.id)} className={cn('h-20 rounded-xl border p-2 text-left transition-colors duration-150', busy ? 'border-primary-line bg-primary-soft hover:border-[var(--admin-primary)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}>
+              <button key={t.id} onClick={() => pick(t.id)} className={cn('h-20 rounded-xl border p-2 text-left transition-colors duration-150', busy ? 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}>
                 <div className="font-semibold">{t.name}</div>
                 <div className="text-xs opacity-80">{busy ? `Dolu · ${tl(busy.total)}` : 'Boş'}</div>
               </button>
@@ -191,7 +191,7 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
           ))}
         </div>
         {/* İşaret başta, sönük (₺120, %10); klavyeyle de yazılır */}
-        <output aria-label={type === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
+        <output aria-label={type === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular font-headline block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
           {type === 'percent' ? (
             <>
               <span className="mr-0.5 align-baseline text-[0.6em] font-medium text-muted">%</span>
@@ -244,7 +244,7 @@ export function GuestsModal({ order, open, onClose, act }: { order: OrderDTO; op
           <button aria-label="Azalt" className="grid size-14 place-items-center rounded-2xl bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setN(Math.max(1, n - 1))}>
             <Minus className="size-6" />
           </button>
-          <span className="tabular w-16 text-center text-5xl font-semibold">{n}</span>
+          <span className="tabular font-headline w-16 text-center text-5xl font-semibold">{n}</span>
           <button aria-label="Artır" className="grid size-14 place-items-center rounded-2xl bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setN(Math.min(99, n + 1))}>
             <Plus className="size-6" />
           </button>

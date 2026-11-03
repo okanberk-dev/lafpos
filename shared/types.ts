@@ -213,6 +213,39 @@ export interface PublicSettings {
   serviceMode: ServiceMode;
   /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
   tipsEnabled: boolean;
+  /** İki ekranlı kasanın müşteriye dönük ekranı (`/musteri-ekrani`): görünüm ve metinler, Yönetim › Müşteri ekranı */
+  customerDisplay: CustomerDisplaySettings;
+}
+
+/** Müşteri ekranının teması: gece (koyu, varsayılan), porselen (açık, sitenin zemini), yeşil (marka yüzeyi) */
+export const CUSTOMER_DISPLAY_THEMES = ['gece', 'porselen', 'yesil'] as const;
+export type CustomerDisplayTheme = (typeof CUSTOMER_DISPLAY_THEMES)[number];
+
+/**
+ * Müşteri ekranının özelleştirmesi. Metinler müşteriye görünür; boş başlık varsayılan metne döner. Oturumsuz okunur
+ * (`GET /api/public/display-config`): ekran personel PIN'iyle açık durmaz, burada gizli bir şey yoktur.
+ */
+export interface CustomerDisplaySettings {
+  theme: CustomerDisplayTheme;
+  /** Karşılama başlığı ("Hoş geldiniz") ve altındaki satır (slogan) */
+  welcomeTitle: string;
+  welcomeSubtitle: string;
+  /** Ödemeden sonraki teşekkür başlığı */
+  thanksTitle: string;
+  /** Boştayken sırayla dönen kısa duyurular (en çok 6): happy hour, kampanya, uygulama */
+  messages: string[];
+  /** Karekod (uygulama, menü, Wi-Fi, Instagram); adres boşsa çizilmez */
+  qrUrl: string;
+  qrLabel: string;
+  /** Sağ üstte saat */
+  showClock: boolean;
+  /** Sipariş satırlarında seçenekler (süt, şurup) */
+  showOptions: boolean;
+}
+
+/** `GET /api/public/display-config`: müşteri ekranının ayarları ve işletme adı */
+export interface DisplayConfigDTO extends CustomerDisplaySettings {
+  businessName: string;
 }
 
 export interface BootstrapDTO {
@@ -579,3 +612,107 @@ export type DisplayStateDTO =
       /** Self servisin çağrı kimliği ("No 34" ya da "Masa 12"); bara giden kalemi olmayan satışta ve eski kasada yok */
       call?: string;
     };
+
+/** Mesai kaydının kaynağı: kilit ekranında PIN'le, açık oturumdan ya da yöneticinin elle girdiği (Yönetim) */
+export type TimeEntrySource = 'pin' | 'oturum' | 'yonetim';
+
+/**
+ * Personelin bir mesaisi (giriş-çıkış). Zamanlar epoch ms; iş günü girişten (05:00 kuralı): gece 02:00'de biten
+ * vardiya başladığı günün mesaisidir. Açık mesaide çıkış boş, süre şu ana kadar sayılır.
+ */
+export interface TimeEntryDTO {
+  id: string;
+  userId: string;
+  userName: string;
+  userColor: string;
+  clockIn: number;
+  clockOut: number | null;
+  /** İş günü (YYYY-MM-DD), girişten */
+  businessDate: string;
+  note: string | null;
+  source: TimeEntrySource;
+  /** Kaydı son düzelten yönetici (elle giriş, düzeltme, kapatma); kişinin kendi girişinde null */
+  editedBy: string | null;
+  editedByName: string | null;
+  createdAt: number;
+  /** Süre (ms); açık mesaide şu ana kadar */
+  durationMs: number;
+  open: boolean;
+}
+
+/** Mesai çizelgesinde kişi başına toplam (dönemin iş günleri) */
+export interface TimeSheetTotalDTO {
+  userId: string;
+  userName: string;
+  userColor: string;
+  /** Dönemdeki mesailerin toplamı (ms); açık mesai şu ana kadar */
+  workedMs: number;
+  /** Dönemdeki mesai sayısı */
+  shifts: number;
+  /** Şu an içeride (açık mesaisi var; dönemden bağımsız) */
+  openNow: boolean;
+}
+
+/** Yönetim › Mesai: dönemin kayıtları (en yeni üstte), kişi toplamları ve şu an içeride olanlar */
+export interface TimeSheetDTO {
+  from: string;
+  to: string;
+  entries: TimeEntryDTO[];
+  /** Kişi adına göre */
+  totals: TimeSheetTotalDTO[];
+  /** Açık mesailer, dönemden bağımsız (çıkışı unutulan eski mesai de görünür); en eski üstte */
+  clockedIn: TimeEntryDTO[];
+  serverTime: number;
+}
+
+/** Kişinin kendi mesaisi (kasa kabuğundaki giriş-çıkış düğmesi) */
+export interface MyTimeDTO {
+  /** Açık mesai (giriş yapılmış); yoksa null */
+  open: TimeEntryDTO | null;
+  /** Bugünün (iş günü) mesaileri, girişe göre; açık mesai şu ana kadar sayılır */
+  today: { date: string; workedMs: number; entries: TimeEntryDTO[] };
+  /** Son 7 iş günü (bugün dahil) */
+  weekMs: number;
+  serverTime: number;
+}
+
+/** Kilit ekranında PIN'le giriş-çıkış (`POST /api/time/punch`, oturum açmadan) */
+export interface PunchResultDTO {
+  user: { id: string; name: string; color: string };
+  /** Basıştan sonraki durum: içeride ya da çıktı */
+  state: 'in' | 'out';
+  /** Açılan, kapanan ya da (yinelenen basışta) olduğu gibi duran mesai */
+  entry: TimeEntryDTO;
+  /** Çalışılan süre, ms: girişte bugünün (iş günü), çıkışta kapanan mesainin iş gününün (gece yarısını geçen vardiya) */
+  todayMs: number;
+  /** Yön verilmeden aynı kişi bir dakika içinde yeniden bastı: hiçbir şey değişmedi (çift dokunuş, yinelenen istek) */
+  repeated: boolean;
+}
+
+/**
+ * Vardiya kasa sayımı: gün içinde kasiyer değişirken devreden kasayı sayar; o anki beklenen nakit ve fark saklanır.
+ * Kör kasada (kasa rakamlarını görmeyen) beklenen ve fark null; sayılan tutar ve banknotlar yalnız sayana ve
+ * devralana gider.
+ */
+export interface ShiftCountDTO {
+  id: string;
+  dayId: string;
+  /** Sayan (devreden) */
+  userId: string;
+  userName: string;
+  /** Devralan; boşsa yalnız ara sayım */
+  toUserId: string | null;
+  toUserName: string | null;
+  /** Devralan sayımı kendi PIN'iyle onayladı */
+  confirmed: boolean;
+  counted: number | null;
+  expected: number | null;
+  /** Sayılan − beklenen, günün başından (eksi: kasa eksik) */
+  diff: number | null;
+  /** Bu vardiyanın kendi farkı: önceki sayımdan bu yana (ilk sayımda `diff`); uyarı ve alarm bununla */
+  shiftDiff: number | null;
+  /** Banknot ve madenî para adetleri: kuruş değeri → adet (gün sonu sayımıyla aynı biçim); toplam girildiyse null */
+  banknotes: Record<string, number> | null;
+  note: string | null;
+  createdAt: number;
+}

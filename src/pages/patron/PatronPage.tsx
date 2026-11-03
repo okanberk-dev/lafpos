@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Coffee, Receipt, Table2, TrendingUp, Wallet } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, Receipt, Table2, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl } from '@shared/money';
@@ -61,7 +61,7 @@ function Change({ value, base }: { value: number | null; base: number }) {
     );
   const up = value >= 0;
   return (
-    <span className={cn('tabular inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold', up ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
+    <span className={cn('tabular inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold', up ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
       {up ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}%{Math.abs(value).toLocaleString('tr-TR')}
     </span>
   );
@@ -126,9 +126,9 @@ export default function PatronPage() {
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-2xl border border-line bg-surface p-5">
+        <div className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-5">
           <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
-          <div className="tabular mt-2 text-[44px] font-semibold leading-none tracking-[-0.02em] sm:text-[56px]">{tl(d.netSales)}</div>
+          <div className="tabular font-headline mt-2 text-[44px] font-semibold leading-none tracking-[-0.02em] sm:text-[56px]">{tl(d.netSales)}</div>
           <div className="mt-2 text-sm text-muted">{joinMeta([`${d.orders} adisyon`, d.orders > 0 && `ortalama ${tl(d.avgCheck)}`, d.open.count > 0 && `açıkta ${tl(d.open.total)}`])}</div>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <CompareRow label="Geçen hafta bu saate kadar" value={d.compare.lastWeek.netSales} change={d.compare.lastWeek.change} />
@@ -241,7 +241,7 @@ export default function PatronPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card title="En çok satanlar">
           {d.top.length === 0 ? (
-            <EmptyState compact icon={<Coffee />} title="Bugün henüz satış yok">
+            <EmptyState compact art="affogato" title="Bugün henüz satış yok">
               İlk adisyon kapanınca en çok satanlar burada sıralanır
             </EmptyState>
           ) : (
@@ -255,8 +255,9 @@ export default function PatronPage() {
                   <span className="text-muted">{p.qty} adet</span>
                   <span className="tabular w-24 text-right font-semibold">{tl(p.revenue)}</span>
                   {can('rapor.maliyet') && p.margin != null && (
-                    <span className="tabular hidden w-24 text-right text-xs text-primary sm:block">
-                      <TrendingUp className="mr-0.5 inline size-3" />
+                    // İndirim ya da reçete maliyeti neti aşınca kâr eksi: olumlu yeşille gösterilmez
+                    <span className={cn('tabular hidden w-24 text-right text-xs sm:block', p.margin < 0 ? 'text-danger-ink' : 'text-success-ink')}>
+                      {p.margin < 0 ? <TrendingDown className="mr-0.5 inline size-3" /> : <TrendingUp className="mr-0.5 inline size-3" />}
                       {tl(p.margin)}
                     </span>
                   )}
@@ -268,7 +269,7 @@ export default function PatronPage() {
         </Card>
         <Card title={`Açık hesaplar (${d.openChecks.length})`}>
           {d.openChecks.length === 0 ? (
-            <EmptyState compact icon={<Receipt />} title="Şu an açık hesap yok">
+            <EmptyState compact art="fis" title="Şu an açık hesap yok">
               Açılan adisyonlar ödenene kadar burada görünür
             </EmptyState>
           ) : (

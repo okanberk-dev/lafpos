@@ -1,17 +1,17 @@
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs } from '@shared/time';
-import type { BusinessDayDTO } from '@shared/types';
+import type { BusinessDayDTO, ShiftCountDTO } from '@shared/types';
 import { nextZNo } from '@shared/z-no';
 import { type DB, schema, type Tx } from '../db/client';
 import type { ZField, ZSummary } from '../db/schema';
-import { type Actor, need, needDirect } from '../lib/auth';
+import { type Actor, counterpartFor, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
-import { bad, conflict, notFound } from '../lib/http';
+import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings, trainingMode } from '../lib/settings';
-import { getOpenDay, isEmptyOrder, requireOpenDay } from './orders';
+import { getOpenDay, isEmptyOrder, requireCurrentDay, requireOpenDay } from './orders';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
 
@@ -433,6 +433,104 @@ export function lafmaliyetZ(day: DayRow, s: ZSummary) {
     cash_in: toTL(Math.max(0, s.expectedCash - s.openingCash - s.byZField.cash + s.cashOut + s.handedOver)),
     expected_cash: toTL(s.expectedCash),
     cash_diff: s.cashDiff == null ? null : toTL(s.cashDiff),
+  };
+}
+
+type ShiftCountRow = typeof schema.shiftCounts.$inferSelect;
+
+/**
+ * Vardiya kasa sayımı (gün içinde kasiyer değişirken): devreden kasayı sayar, o anki beklenen nakit (ara rapor) ve
+ * fark saklanır. Kasa hareketi değildir: beklenen nakdi, Z'yi ve gün sonu sayımını değiştirmez; lafmaliyet'e gitmez.
+ * Devralan kendi PIN'ini girerse (`approverPin`) devir iki kişilik onaylanır; devralan seçilmediyse PIN'in sahibidir.
+ * Fark gün sonu sayımıyla aynı eşikte uyarı ya da alarm yazar.
+ */
+export function recordShiftCount(
+  t: Tx,
+  actor: Actor,
+  fx: Effects,
+  input: { countedCash: number; banknotes?: Record<string, number>; note?: string | null; toUserId?: string | null },
+): ShiftCountRow {
+  needDirect(actor, 'kasa.gun');
+  const day = requireCurrentDay(t);
+  const counted = Math.max(0, Math.trunc(input.countedCash));
+  const notes = Object.fromEntries(Object.entries(input.banknotes ?? {}).filter(([, n]) => n > 0).map(([k, n]) => [k, Math.trunc(n)]));
+  const fromNotes = Object.entries(notes).reduce((a, [k, n]) => a + Number(k) * n, 0);
+  if (Object.keys(notes).length && fromNotes !== counted) {
+    throw new HttpError(422, `Banknotların toplamı (${tl(fromNotes)}) sayılan tutarla (${tl(counted)}) aynı değil`, 'validation');
+  }
+  let toUserId = input.toUserId ?? null;
+  if (toUserId === actor.user.id) throw bad('Kasa kendinize devredilmez; devralanı seçin ya da boş bırakın', 'self_handover');
+  const confirmed = !!actor.approver;
+  if (actor.approver) toUserId = counterpartFor(actor, toUserId);
+  const to = toUserId ? t.select({ id: schema.users.id, name: schema.users.name, active: schema.users.active }).from(schema.users).where(eq(schema.users.id, toUserId)).get() : null;
+  if (toUserId && !to?.active) throw new HttpError(422, 'Devralan personel bulunamadı ya da hesabı kapalı', 'invalid_reference');
+  const expected = computeSummary(t, day).expectedCash;
+  const diff = counted - expected;
+  // Fark günün başından birikir: önceki devirde bulunan eksik sonraki devirde yeniden alarm olmasın, devralana
+  // yazılmasın. Uyarı ve mesaj bu vardiyanın kendi farkıyla (önceki sayımdan bu yana); saklanan fark gün toplamı.
+  const prevDiff = shiftCountsOf(t, day.id).at(-1)?.diff ?? 0;
+  const shiftDiff = diff - prevDiff;
+  const now = Date.now();
+  const row: ShiftCountRow = {
+    id: ulid(now),
+    dayId: day.id,
+    userId: actor.user.id,
+    toUserId,
+    confirmed,
+    counted,
+    expected,
+    diff,
+    banknotes: Object.keys(notes).length ? notes : null,
+    note: input.note?.trim() || null,
+    createdAt: now,
+  };
+  t.insert(schema.shiftCounts).values(row).run();
+  const threshold = getSettings().alertCashDiffKurus;
+  const who = to ? `${actor.user.name} vardiyayı devretti, kasayı ${to.name} devraldı${confirmed ? ' (PIN ile onayladı)' : ''}` : `${actor.user.name} vardiya sayımı yaptı`;
+  fx.audit(t, {
+    userId: actor.user.id,
+    approverId: confirmed ? toUserId : null,
+    action: 'cash.shift_count',
+    severity: Math.abs(shiftDiff) >= threshold ? 'alarm' : shiftDiff !== 0 ? 'uyari' : 'info',
+    entity: 'shift_count',
+    entityId: row.id,
+    amount: shiftDiff,
+    message: `${who} (Z ${day.zNo}): sayılan ${tl(counted)}, ${shiftDiffText(shiftDiff, diff)}`,
+    data: { dayId: day.id, counted, expected, diff, shiftDiff, toUserId },
+  });
+  fx.emit({ topic: 'cash', kind: 'shift.counted', byUserId: actor.user.id });
+  return row;
+}
+
+/** "fark yok", "fark -₺150,00"; gün toplamı vardiyanınkinden ayrıysa o da: "bu vardiyada fark yok (gün toplamı -₺150,00)" */
+function shiftDiffText(shiftDiff: number, dayDiff: number): string {
+  const signed = (k: number) => `${k > 0 ? '+' : ''}${tl(k)}`;
+  const own = shiftDiff === 0 ? 'yok' : signed(shiftDiff);
+  return dayDiff === shiftDiff ? `fark ${own}` : `bu vardiyada fark ${own} (gün toplamı ${dayDiff === 0 ? 'denk' : signed(dayDiff)})`;
+}
+
+/** Günün vardiya sayımları, sırayla */
+export function shiftCountsOf(t: Tx | DB, dayId: string): ShiftCountRow[] {
+  return t.select().from(schema.shiftCounts).where(eq(schema.shiftCounts.dayId, dayId)).orderBy(asc(schema.shiftCounts.createdAt)).all();
+}
+
+/** `prevDiff`: aynı günün bir önceki sayımının farkı (yoksa 0); vardiyanın kendi farkı bundan bulunur */
+export function shiftCountToDTO(s: ShiftCountRow, names: Map<string, string>, prevDiff: number): ShiftCountDTO {
+  return {
+    id: s.id,
+    dayId: s.dayId,
+    userId: s.userId,
+    userName: names.get(s.userId) ?? 'Bilinmiyor',
+    toUserId: s.toUserId,
+    toUserName: s.toUserId ? (names.get(s.toUserId) ?? 'Bilinmiyor') : null,
+    confirmed: s.confirmed,
+    counted: s.counted,
+    expected: s.expected,
+    diff: s.diff,
+    shiftDiff: s.diff - prevDiff,
+    banknotes: s.banknotes,
+    note: s.note,
+    createdAt: s.createdAt,
   };
 }
 
