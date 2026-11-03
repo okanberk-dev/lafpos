@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseTL } from '../shared/money';
 import { fmtAgo } from '../shared/time';
+import { initialsInk } from '../src/components/ui/initials';
 import { cn, cx, mergeClasses } from '../src/lib/cn';
 import { joinMeta } from '../src/lib/text';
 import { ApiError } from '../src/lib/api';
@@ -118,7 +119,7 @@ describe('yeni renk belirteçleri (index.css)', () => {
     for (const vars of [light, dark]) expect(contrast(hex(vars, 'chart-context'), hex(vars, 'admin-surface'))).toBeGreaterThanOrEqual(3);
   });
   it('koyu temada durum çizgileri zeminde seçilir (2.5:1)', () => {
-    for (const k of ['primary', 'success', 'warning', 'danger', 'rose', 'info']) expect(contrast(hex(dark, `admin-${k}-line`), hex(dark, 'admin-bg')), k).toBeGreaterThanOrEqual(2.5);
+    for (const k of ['primary', 'success', 'warning', 'danger', 'rose', 'info', 'violet']) expect(contrast(hex(dark, `admin-${k}-line`), hex(dark, 'admin-bg')), k).toBeGreaterThanOrEqual(2.5);
   });
   it('yüzen yüzeyde metin okunur', () => {
     for (const vars of [light, dark]) {
@@ -127,7 +128,7 @@ describe('yeni renk belirteçleri (index.css)', () => {
   });
   it('bildirim ikonları gece mürekkebinde seçilir (3:1, renk yalnız ikonda)', () => {
     const night = css.match(/--color-night:\s*(#[0-9a-f]{6})/i)![1];
-    for (const name of ['danger-300', 'success-300']) {
+    for (const name of ['danger-300', 'success-300', 'warn-300']) {
       const v = css.match(new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`, 'i'))![1];
       expect(contrast(v, night), name).toBeGreaterThanOrEqual(3);
     }
@@ -137,6 +138,23 @@ describe('yeni renk belirteçleri (index.css)', () => {
     expect(alpha(dark.scrim)).toBeGreaterThanOrEqual(0.5);
     expect(alpha(dark.scrim)).toBeGreaterThan(alpha(light.scrim));
     expect(dark['surface-raised']).not.toBe(dark['admin-surface']);
+  });
+});
+
+describe('baş harf avatarı', () => {
+  it('avatarın baş harfleri kişinin renginde okunur: açık renkte gece mürekkebi, koyu renkte beyaz', () => {
+    // Kasa ve Bar ekranı kullanıcılarının tohum renkleri: beyaz 12 px harf ~3.8:1'de kalıyordu
+    expect(initialsInk('#a87c2e')).toBe('#211c18');
+    expect(initialsInk('#5e8f45')).toBe('#211c18');
+    expect(initialsInk('#3f6b8a')).toBe('#fff');
+    expect(initialsInk('#1e4031')).toBe('#fff');
+    // Seçilen harf rengi o zeminde ötekinden okunaklı
+    for (const c of ['#a87c2e', '#5e8f45', '#3f6b8a', '#1e4031']) {
+      const [chosen, other] = initialsInk(c) === '#fff' ? ['#ffffff', '#211c18'] : ['#211c18', '#ffffff'];
+      expect(contrast(chosen, c), c).toBeGreaterThan(contrast(other, c));
+    }
+    // #rrggbb dışındaki değer (belirteç, kısa yazım) beyaz
+    expect(initialsInk('var(--admin-primary)')).toBe('#fff');
   });
 });
 

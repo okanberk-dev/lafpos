@@ -95,7 +95,8 @@ export function ColumnChart({
   // Veri yenilenip sütun sayısı değişince eski seçim yok sayılır (sütunlar soluk kalmasın)
   const active = hover != null && hover < data.length ? hover : null;
   const empty = emptyProp ?? data.every((d) => !d.value && !d.compare);
-  const hasCompare = !!compareLabel && data.some((d) => d.compare != null);
+  // Hep sıfır kıyas (geçen hafta satış yok; saat dolgusu 0) çizilmez: eksende düz gri çizgi, açıklama ve ipucu satırı olmaz
+  const hasCompare = !!compareLabel && data.some((d) => (d.compare ?? 0) > 0);
   const scale = niceScale(Math.max(1, ...data.map((d) => Math.max(d.value, d.compare ?? 0))), unitDivisor);
   const max = scale.max;
   const padL = 44;

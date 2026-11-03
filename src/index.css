@@ -276,6 +276,7 @@
   --admin-warning-line: #f6dcbc;
   --admin-danger-line: #f6cdcd;
   --admin-rose-line: #f5b9c7;
+  --admin-violet-line: #d6c8fa;
   --admin-info-line: #b9e3f2;
   /* Yüzen katmanlar: karartma (pencere; çekmece ve palet hafif), yüzen yüzey (menü, bildirim, grafik ipucu) */
   --scrim: rgb(33 28 24 / 0.36);
@@ -358,6 +359,7 @@
   --admin-warning-line: #896529;
   --admin-danger-line: #8f4346;
   --admin-rose-line: #935061;
+  --admin-violet-line: #5f5296;
   --admin-info-line: #327189;
   /* Koyuda gece mürekkebi zeminle aynı renk: karartma siyah ve daha yoğun, yüzen yüzey bir ton açık */
   --scrim: rgb(0 0 0 / 0.62);
@@ -377,7 +379,11 @@
   outline-color: var(--focus);
 }
 
-/* Dokunmatikte iOS odaklanınca yakınlaştırmasın: alan yazısı en az 16 px (katmansız, sınıfları ezer) */
+/*
+ * Dokunmatikte iOS odaklanınca yakınlaştırmasın: alan yazısı en az 16 px. Kural katmansızdır ve alanın yazı boyu
+ * sınıfını ezer (1em kabın boyudur): daha büyük alan yazısı (ör. 36 px tutar, NumaratorModal) alanın kabına verilir,
+ * alan onu 1em ile alır
+ */
 @media (pointer: coarse) {
   input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
   select,
@@ -432,6 +438,7 @@
   --color-rose-line: var(--admin-rose-line);
   --color-violet-ink: var(--admin-hue-violet);
   --color-violet-soft: var(--admin-hue-violet-soft);
+  --color-violet-line: var(--admin-violet-line);
   --color-hover: var(--hover);
   --color-press: var(--press);
   --color-raised: var(--surface-raised);

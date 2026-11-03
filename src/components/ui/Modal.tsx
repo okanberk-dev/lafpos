@@ -19,6 +19,8 @@ interface ModalProps {
    * olmaz; Escape ve arka plan yine vazgeçer
    */
   hideClose?: boolean;
+  /** Başlıksız pencerenin erişilebilir adı (başlığı gövdede çizen pencere: ödeme sonucu) */
+  ariaLabel?: string;
   className?: string;
 }
 
@@ -35,7 +37,7 @@ const widths = {
  * zaten odaklıysa ona dokunulmaz), Tab pencerenin içinde döner, Escape yalnız en üstteki pencereyi kapatır,
  * kapanınca odak açan düğmeye döner.
  */
-export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', persistent, hideClose, className }: ModalProps) {
+export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', persistent, hideClose, ariaLabel, className }: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -97,6 +99,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : ariaLabel}
         aria-describedby={subtitle ? descId : undefined}
         onKeyDown={(e) => trapTab(e, panel.current)}
         className={cn(

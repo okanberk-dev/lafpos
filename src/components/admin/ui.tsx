@@ -3,7 +3,7 @@ import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type Mous
 import { createPortal } from 'react-dom';
 import { buttonClass, CloseButton } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
-import { fitFigure, Badge as KitBadge, EmptyState as KitEmptyState, Skeleton } from '@/components/ui/misc';
+import { fitFigure, Badge as KitBadge, EmptyState as KitEmptyState, RAIL_FADE, Skeleton, useRail } from '@/components/ui/misc';
 import type { IllustrationName } from '@/components/Illustration';
 import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
@@ -83,7 +83,8 @@ export function Badge({ tone = 'neutral', dot, children, className, title }: { t
 
 /**
  * İkon kutusu (KPI hücresi, hızlı bakış satırı, bölüm listesi): varsayılan nötr taş; renk yalnız anlam taşıyınca
- * (hues.ts: mor online, mavi açık / dolu, yeşil canlı / olumlu, pembe kayıp / iptal, amber süre)
+ * (hues.ts): mor online, mavi açık / dolu, yeşil ciro ve olumlu, pembe kayıp / iptal, amber gecikme ve bekleyen;
+ * durumsuz sayı ve süre nötr
  */
 export function IconBox({ hue = 'neutral', children, size = 'md' }: { hue?: Hue; children: ReactNode; size?: 'sm' | 'md' | 'lg' }) {
   return (
@@ -156,7 +157,7 @@ export function Card({
           {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={cn(flush ? (title || actions ? 'pt-3' : '') : 'p-4 sm:p-5 pointer-fine:[[data-density=compact]_&]:p-4', bodyClassName)}>{children}</div>
+      <div className={cn(flush ? (title || actions ? 'pt-3' : '') : 'p-4 sm:p-5 pointer-fine:[[data-density=compact]_&]:py-4', bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -165,7 +166,10 @@ export interface KpiCell {
   key: string;
   label: string;
   icon: ReactNode;
-  /** İkon kutusunun tonu: verilmezse nötr; renk yalnız anlam taşıyınca (online mor, açık mavi, kayıp pembe…) */
+  /**
+   * İkon kutusunun tonu, verilmezse nötr. Renk yalnız anlam taşıyınca: mor online, mavi açık / dolu, yeşil ciro ve
+   * olumlu, pembe kayıp / iptal, amber gecikme ve bekleyen; durumsuz sayı ve süre nötr
+   */
   hue?: Hue;
   value: ReactNode;
   /** Değişim hapı: iyi haber yeşil, kötü haber kırmızı */
@@ -225,10 +229,14 @@ export interface TabOption<T extends string> {
   count?: number;
 }
 
-/** Durum sekmeleri: hap çipler, etkin olan mürekkep kenarlı, sayaç gri (etkinde mürekkep) */
+/**
+ * Durum sekmeleri: hap çipler, etkin olan mürekkep kenarlı, sayaç gri (etkinde mürekkep). Telefonda ray ekran
+ * kenarına uzanır ve yatay kayar: seçili sekme rayın içinde görünür kalır, içeriğin gizlendiği kenar solar (useRail)
+ */
 export function StatusTabs<T extends string>({ value, onChange, tabs, label }: { value: T; onChange: (v: T) => void; tabs: TabOption<T>[]; label: string }) {
+  const rail = useRail<HTMLDivElement>(value);
   return (
-    <div role="tablist" aria-label={label} className="no-scrollbar -mx-4 mb-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+    <div ref={rail} role="tablist" aria-label={label} className={cn('no-scrollbar -mx-4 mb-4 overflow-x-auto px-4 sm:mx-0 sm:px-0', RAIL_FADE)}>
       <div className="inline-flex min-w-max gap-1.5 sm:min-w-0 sm:flex-wrap">
         {tabs.map((t) => {
           const on = t.value === value;
@@ -262,10 +270,12 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
 /**
  * Segment denetimi: gri hap ray, seçili beyaz hap (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır
  * (yedi dönem iki satır; hiçbir seçenek gizli kaydırıcıda kalmaz), seçenekler satırı doldurur; köşe eş merkezli
- * (hap 22 + ray boşluğu 3). Radyo grubu klavyesi: Tab gruba seçili seçenekte girer, oklar ve Home/End seçenekler
- * arasında gezer, Enter ya da boşluk seçer (seçim kendiliğinden değişmez: dönem ya da mod istemeden kaydedilmesin).
+ * (hap 22 + ray boşluğu 3). Daha geniş ekranda sığmayan ray kayar: seçili seçenek görünür kalır, gizli kenar solar
+ * (useRail). Radyo grubu klavyesi: Tab gruba seçili seçenekte girer, oklar ve Home/End seçenekler arasında gezer,
+ * Enter ya da boşluk seçer (seçim kendiliğinden değişmez: dönem ya da mod istemeden kaydedilmesin).
  */
 export function Segmented<T extends string>({ value, onChange, options, label, className }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode }[]; label: string; className?: string }) {
+  const rail = useRail<HTMLDivElement>(value);
   const tabStop = Math.max(0, options.findIndex((o) => o.value === value));
   const move = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const radios = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
@@ -279,10 +289,11 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
   };
   return (
     <div
+      ref={rail}
       role="radiogroup"
       aria-label={label}
       onKeyDown={move}
-      className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-full bg-[var(--admin-panel)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[25px] max-sm:pointer-fine:rounded-[21px]', className)}
+      className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-full bg-[var(--admin-panel)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[25px] max-sm:pointer-fine:rounded-[21px]', RAIL_FADE, className)}
     >
       {options.map((o, i) => {
         const on = o.value === value;
@@ -462,6 +473,7 @@ export function DataTable<T>({
   phoneTitle,
   phoneMeta,
   phoneAside,
+  phoneLead,
   rowClassName,
 }: {
   rows: T[];
@@ -476,12 +488,16 @@ export function DataTable<T>({
   phoneTitle?: (row: T) => ReactNode;
   phoneMeta?: (row: T) => ReactNode;
   phoneAside?: (row: T) => ReactNode;
+  /** Telefondaki satır kartında başlığın solunda: avatar ya da renk karesi; başlık ve alt satır onun yanında hizalanır */
+  phoneLead?: (row: T) => ReactNode;
   rowClassName?: (row: T) => string | false | undefined;
 }) {
   if (!rows.length) return <>{empty ?? <EmptyState title="Henüz kayıt yok" />}</>;
   return (
     <div className={cn(CARD, 'overflow-hidden')}>
-      <div className="hidden overflow-x-auto md:block" data-overflow-ok>
+      {/* Konumlu kap: hücredeki mutlak konumlu ekran okuyucu metni (sr-only) sayfaya göre değil tabloya göre durur,
+          tablo kayarken sayfayı yana genişletmez */}
+      <div className="relative hidden overflow-x-auto md:block" data-overflow-ok>
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
@@ -551,15 +567,20 @@ export function DataTable<T>({
               )}
             </span>
           );
+          const lead = phoneLead && <span className="shrink-0 self-start pr-1">{phoneLead(r)}</span>;
           return (
             <li key={k} className={cn('flex items-center gap-1 pr-1', selectedKey === k && 'bg-[var(--admin-surface-2)]', rowClassName?.(r))}>
               {onOpen ? (
                 <button type="button" onClick={() => onOpen(r)} className={cn('flex min-h-16 min-w-0 flex-1 items-center gap-2 py-3 pl-4 text-left', FOCUS)}>
+                  {lead}
                   {body}
                   {!actions && <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-[var(--admin-text-mute)]" />}
                 </button>
               ) : (
-                <div className="flex min-h-16 min-w-0 flex-1 items-center py-3 pl-4">{body}</div>
+                <div className="flex min-h-16 min-w-0 flex-1 items-center gap-2 py-3 pl-4">
+                  {lead}
+                  {body}
+                </div>
               )}
               {actions && <div className="shrink-0">{actions(r)}</div>}
             </li>

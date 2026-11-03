@@ -1,9 +1,12 @@
 import { AlertTriangle, CheckCircle2, Info, Loader2, RotateCcw, WifiOff } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react';
 import { ApiError, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { Illustration, type IllustrationName } from '../Illustration';
 import { Button } from './Button';
+import { initialsInk } from './initials';
+
+export { initialsInk };
 
 /**
  * Rozet tonu. Kasa adları (green, red, warn, pink, blue, violet) ile yönetim adları (success, danger, warning,
@@ -51,6 +54,33 @@ export function Badge({ tone = 'neutral', dot, children, className, title }: { t
   return (
     <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium leading-4', tones[tone], className)}>
       {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dots[tone])} />}
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Boy çipi (ayardaki ad: Orta, Büyük): ürün adının yanında çerçeveli hap; sepet, raporlar, patron ve genel bakışta
+ * tek; satır sonuna tek başına düşmez. Ad boşsa (tek boylu ürün) çizilmez
+ */
+export function SizeTag({ children, className }: { children?: ReactNode; className?: string }) {
+  if (!children) return null;
+  return <span className={cn('ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 align-[2px] text-[11px] font-medium leading-4 text-ink-2', className)}>{children}</span>;
+}
+
+/**
+ * Baş harf avatarı (personel, mesai, kabuk, giriş ekranı): kişinin renginde daire, adın ilk iki harfi; harf beyaz ya
+ * da gece mürekkebi, hangisi o zeminde okunursa (`initialsInk`). Boy `className`'den ('size-7 text-[11px]',
+ * 'size-11 text-sm'); `children` üstüne biner (mesaide noktası). Süstür: adı yanındaki yazı söyler
+ */
+export function Avatar({ name, color, className, children }: { name: string; color: string; className?: string; children?: ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('relative grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold ring-1 ring-inset ring-black/5 dark:ring-white/15', className)}
+      style={{ background: color, color: initialsInk(color) }}
+    >
+      {name.slice(0, 2).toLocaleUpperCase('tr-TR')}
       {children}
     </span>
   );
@@ -303,12 +333,16 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
   );
 }
 
-/** Sayfa başlığı: Gabarito 22/700 (telefonda 20) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile) */
-export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+/**
+ * Sayfa başlığı: Gabarito 22/700 (telefonda 20) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile).
+ * `compactOnPhone`: telefonda (md altı) başlık ve açıklama yalnız ekran okuyucuda; ekranın adını kabuğun üst şeridi
+ * zaten yazar (yönetimdeki PageHeader gibi); eylem yoksa alt boşluk da kalkar
+ */
+export function PageHeader({ title, subtitle, actions, compactOnPhone }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; compactOnPhone?: boolean }) {
   return (
-    <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
+    <div className={cn('flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end', compactOnPhone && !actions && 'max-md:pb-0')}>
       {/* Başlığın taban genişliği 18rem: eylemler sığmazsa alt satıra iner, açıklama düğmelerin yanında dar sütuna ezilmez */}
-      <div className="min-w-0 sm:flex-[1_1_18rem]">
+      <div className={cn('min-w-0 sm:flex-[1_1_18rem]', compactOnPhone && 'max-md:sr-only')}>
         <h1 className="text-xl font-bold sm:text-[22px]">{title}</h1>
         {subtitle && <p className="mt-0.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
       </div>
@@ -318,10 +352,71 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
   );
 }
 
+/** Rayın kenar payı: seçili öğe kenara bu kadar yaklaşmaz, solma da bu genişlikte (RAIL_FADE) */
+const RAIL_EDGE = 24;
+
+/**
+ * Yatay kayan ray (sekme, filtre çipi, segment): dönen ref kaydırılan öğeye (rayın kendisi) verilir, sınıfına
+ * `RAIL_FADE` eklenir. Seçim değişince (ve açılışta) seçili öğe (`aria-selected` ya da `aria-checked`) görünmüyorsa
+ * yalnız rayın `scrollLeft`'i değişir, kenarda 24 px pay kalır; `scrollIntoView` yok, sayfa kaymaz (yenilemeden ya
+ * da KPI'dan açılan rapor çipi ekran dışında kalmaz). Ray taşarken kaydırılmış başta `data-fade-start`, gizli içerik
+ * kalan sonda `data-fade-end` durur; kaydırınca, ray ya da öğeleri boyut değiştirince ve öğe eklenip çıkınca yenilenir.
+ */
+export function useRail<T extends HTMLElement>(selected: unknown) {
+  const ref = useRef<T>(null);
+  useLayoutEffect(() => {
+    const rail = ref.current;
+    if (!rail || rail.scrollWidth <= rail.clientWidth + 1) return;
+    const el = rail.querySelector('[aria-selected=true], [aria-checked=true]');
+    if (!el) return;
+    const r = rail.getBoundingClientRect();
+    const e = el.getBoundingClientRect();
+    if (e.left < r.left + RAIL_EDGE) rail.scrollLeft -= r.left + RAIL_EDGE - e.left;
+    else if (e.right > r.right - RAIL_EDGE) rail.scrollLeft += e.right - (r.right - RAIL_EDGE);
+  }, [selected]);
+  useEffect(() => {
+    const rail = ref.current;
+    if (!rail) return;
+    const update = () => {
+      const max = rail.scrollWidth - rail.clientWidth;
+      rail.toggleAttribute('data-fade-start', max > 1 && rail.scrollLeft > 1);
+      rail.toggleAttribute('data-fade-end', max > 1 && rail.scrollLeft < max - 1);
+    };
+    update();
+    rail.addEventListener('scroll', update, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    ro?.observe(rail);
+    for (const child of rail.children) ro?.observe(child);
+    // Rayın boyunu değiştirmeden eklenen ya da kalkan sekme (ör. veri gelince açılan liste) de solmayı yeniler
+    const mo =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver((records) => {
+            for (const m of records) {
+              m.addedNodes.forEach((n) => n instanceof Element && ro?.observe(n));
+              m.removedNodes.forEach((n) => n instanceof Element && ro?.unobserve(n));
+            }
+            update();
+          });
+    mo?.observe(rail, { childList: true });
+    return () => {
+      rail.removeEventListener('scroll', update);
+      ro?.disconnect();
+      mo?.disconnect();
+    };
+  }, []);
+  return ref;
+}
+
+/** Kayan rayın gizli içerik kalan kenarı 24 px'te solar (useRail'in koyduğu data-fade-start / data-fade-end) */
+export const RAIL_FADE =
+  'data-[fade-end]:[mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] data-[fade-start]:[mask-image:linear-gradient(to_left,#000_calc(100%_-_24px),transparent)] data-[fade-start]:data-[fade-end]:[mask-image:linear-gradient(to_right,transparent,#000_24px,#000_calc(100%_-_24px),transparent)]';
+
 /**
  * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri): hap biçimi, etkin olan gri zeminde ve kalın, renksiz;
- * diğerleri düz; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; odak halkası çipin içinde.
- * Sayılı filtre çipi (koyu kenarlı seçili) yönetimdeki StatusTabs'tır.
+ * diğerleri düz; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; seçili sekme rayın içinde
+ * görünür kalır, içeriğin gizlendiği kenar solar (useRail); odak halkası çipin içinde. Sayılı filtre çipi (koyu
+ * kenarlı seçili) yönetimdeki StatusTabs'tır.
  */
 export function Tabs<T extends string>({
   value,
@@ -338,8 +433,9 @@ export function Tabs<T extends string>({
   label: string;
   size?: 'sm' | 'md';
 }) {
+  const rail = useRail<HTMLDivElement>(value);
   return (
-    <div role="tablist" aria-label={label} className={cn('no-scrollbar flex gap-1 overflow-x-auto', className)}>
+    <div ref={rail} role="tablist" aria-label={label} className={cn('no-scrollbar flex gap-1 overflow-x-auto', RAIL_FADE, className)}>
       {options.map((o) => {
         const on = o.value === value;
         return (

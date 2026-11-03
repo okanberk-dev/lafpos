@@ -1,4 +1,4 @@
-import { AlertCircle, Search, X } from 'lucide-react';
+import { AlertCircle, Check, Minus, Plus, Search, Trash2, X } from 'lucide-react';
 import {
   cloneElement,
   forwardRef,
@@ -325,6 +325,110 @@ export function Toggle({
           {text}
         </>
       )}
+    </button>
+  );
+}
+
+/** Adet seçicinin tuşu: basılı ton, sınırda soluk; boyu ve köşesi aşağıda */
+const STEP = 'grid place-items-center transition-colors duration-150 hover:bg-hover active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+
+/**
+ * Adet seçici (kasada tek): adisyonun gönderilmemiş satırı, seçenek sayacı (şeker, ekstra shot), seçenek penceresinin
+ * ve kalem penceresinin adedi, ödemede kalem seç ve paylaş, hesabı böl. − değer + tek grupta: alan kenarı, köşe 14;
+ * tuşlar dokunmatikte 44, farede 36 px, rakam 15 px; sınırda tuş kapanır. `label` grubun adı ("Adet", "Ekstra shot").
+ * `onRemove`: en küçük adette eksi kırmızı çöp kutusu olur ("Kaldır"). `size="lg"`: tek değerli pencere (Kişi
+ * sayısı), köşe 20, tuşlar 56 px (farede de), rakam Gabarito 48 px. Değer eksinin hemen ardındaki yazıdır
+ * (e2e/flows.mjs onu Azalt'ın kardeşinden okur).
+ */
+export function Stepper({
+  value,
+  onChange,
+  min = 0,
+  max = 99,
+  label = 'Adet',
+  onRemove,
+  disabledUp,
+  size = 'md',
+  className,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  max?: number;
+  /** Grubun adı (ekran okuyucu): "Adet", "Ekstra shot", "Kişi" */
+  label?: string;
+  onRemove?: () => void;
+  /** Artırma kapalı (seçenek tükendi) */
+  disabledUp?: boolean;
+  size?: 'md' | 'lg';
+  className?: string;
+}) {
+  const removes = !!onRemove && value <= Math.max(min, 1);
+  const lg = size === 'lg';
+  const key = cn(STEP, lg ? 'size-14' : 'size-11 pointer-fine:size-9');
+  const icon = lg ? 'size-6' : 'size-4';
+  return (
+    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center rounded-xl border border-line-strong bg-surface', lg && 'rounded-2xl', className)}>
+      <button
+        type="button"
+        aria-label={removes ? 'Kaldır' : 'Azalt'}
+        disabled={!removes && value <= min}
+        onClick={() => (removes ? onRemove?.() : onChange(Math.max(min, value - 1)))}
+        className={cn(key, lg ? 'rounded-l-[19px]' : 'rounded-l-[13px]')}
+      >
+        {removes ? <Trash2 aria-hidden="true" className={cn(icon, 'text-[var(--admin-danger-ink)]')} /> : <Minus aria-hidden="true" className={icon} />}
+      </button>
+      <span aria-live="polite" className={cn('tabular text-center font-semibold', lg ? 'min-w-16 px-1 font-headline text-5xl' : 'min-w-8 px-0.5 text-[15px]')}>
+        {value}
+      </span>
+      <button type="button" aria-label="Artır" disabled={disabledUp || value >= max} onClick={() => onChange(Math.min(max, value + 1))} className={cn(key, lg ? 'rounded-r-[19px]' : 'rounded-r-[13px]')}>
+        <Plus aria-hidden="true" className={icon} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Seçim çipi: kapsül, `aria-pressed`; dokunmatikte 44, farede 36 px. İki aile:
+ *   primary  seçenek ve süzgeç (seçenek grubu, gün, kategori): seçili yeşil kenar ve yumuşak yeşil zemin
+ *   ink      hazır neden ya da süre (iptal, ikram, hazırlık süresi): seçili mürekkep kenar, taş zemin ve tik
+ * Amber durum rengidir, seçim rengi değil (DESIGN §5: seçim yeşil ya da mürekkep kenar)
+ */
+export function Chip({
+  on,
+  onClick,
+  children,
+  tone = 'primary',
+  disabled,
+  className,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  tone?: 'primary' | 'ink';
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3.5 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-9 [[data-area=admin]_&]:text-[13px]',
+        tone === 'ink'
+          ? on
+            ? 'border-ink bg-surface-3 font-semibold text-ink'
+            : 'border-[var(--admin-border-strong)] bg-surface text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink active:bg-press'
+          : on
+            ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] font-medium text-[var(--admin-primary)]'
+            : 'border-[var(--admin-border-strong)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press',
+        className,
+      )}
+    >
+      {tone === 'ink' && on && <Check aria-hidden="true" className="size-3.5 shrink-0" />}
+      {children}
     </button>
   );
 }

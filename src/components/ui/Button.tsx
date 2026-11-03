@@ -13,12 +13,14 @@ import { cn } from '@/lib/cn';
  *   dangerOutline  kenarlı kırmızı yazı (yönetimde BTN.danger): sakin yıkıcı eylem
  *   dangerGhost    yalnız kırmızı metin (pencerede "İptal", "Sil ve çık")
  *   success        dolu yeşil (barda "Hepsi hazır")
+ *   gold           dolu pirinç, mürekkep yazı: ödül (damga kartında Hediye içecek); amber zamanın ve uyarının
+ *                  rengi, burada değil
  *   warn           amber yumuşak zemin (uyarıya bağlı eylem)
  *   outline        secondary ile aynı (eski ad)
  * Renk ve ölçü varyanttan gelir; `className` yerleşim içindir (genişlik, kenar boşluğu). Çakışan sınıfta sayfanın
  * verdiği kazanır (cn birleştirir).
  */
-export type ButtonVariant = 'primary' | 'ink' | 'secondary' | 'soft' | 'ghost' | 'danger' | 'dangerOutline' | 'dangerGhost' | 'success' | 'warn' | 'outline';
+export type ButtonVariant = 'primary' | 'ink' | 'secondary' | 'soft' | 'ghost' | 'danger' | 'dangerOutline' | 'dangerGhost' | 'success' | 'gold' | 'warn' | 'outline';
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'xl';
 
 // Dört durum: dinlenme, üzerinde, basılı (bir ton koyu), devre dışı; odak halkası index.css'te (ev yeşili, 2 px dışarıda)
@@ -37,6 +39,8 @@ const variants: Record<ButtonVariant, string> = {
   dangerGhost: 'bg-transparent text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)] active:bg-[var(--admin-danger-soft)] active:brightness-95',
   // Koyuda doygun yeşil blok barın en parlak öğesi olmasın: bir ton koyu (beyaz yazı 7:1)
   success: 'bg-success-600 font-semibold text-white hover:bg-success-700 active:bg-success-700 active:brightness-95 dark:bg-success-700 dark:enabled:hover:bg-success-600',
+  // Pirinç dolgu ve üstündeki mürekkep iki temada aynı (#E8C877 üstünde #2E2113, ~10:1)
+  gold: 'bg-gold-fill font-semibold text-on-gold shadow-[var(--shadow-lift)] hover:brightness-95 active:brightness-90',
   warn: 'border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] text-[var(--admin-warning)] hover:border-[var(--admin-warning)] active:brightness-95',
 };
 
@@ -50,6 +54,7 @@ const disabledStyles: Record<ButtonVariant, string> = {
   ink: FILLED_DISABLED,
   danger: FILLED_DISABLED,
   success: FILLED_DISABLED,
+  gold: FILLED_DISABLED,
   secondary: 'disabled:opacity-50',
   outline: 'disabled:opacity-50',
   soft: 'disabled:opacity-50',

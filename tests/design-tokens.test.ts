@@ -161,8 +161,8 @@ describe('yönetim paneli (LafPOS Sade)', () => {
     expect(css).toMatch(/--color-night:\s*#211c18;/);
     const toast = src('src/lib/toast.tsx');
     expect(toast).toContain("const NIGHT_FOCUS = '[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]'");
-    // Bildirim tonlarının kendisi (yalnız sabitin tanımı değil): mürekkep zeminli üç ton halkayı krem yapar
-    for (const tone of ['ok', 'err', 'info']) expect(toast, tone).toContain(`${tone}: \`\${NIGHT_FOCUS} bg-night`);
+    // Bildirim tonlarının kendisi (yalnız sabitin tanımı değil): mürekkep zeminli dört ton da halkayı krem yapar
+    for (const tone of ['ok', 'err', 'info', 'warn']) expect(toast, tone).toContain(`${tone}: \`\${NIGHT_FOCUS} bg-night`);
     expect(toast.match(/focus-visible:-outline-offset-2/g)?.length, 'halka düğmenin içinde').toBe(2);
   });
 
