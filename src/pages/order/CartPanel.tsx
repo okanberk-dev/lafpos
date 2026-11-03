@@ -1,25 +1,25 @@
-import { Check, ChefHat, CircleDot, Droplets, Gift, Minus, Pencil, Percent, Plus, Trash2, Undo2, XCircle } from 'lucide-react';
+import { Check, ChefHat, CircleDot, Droplets, Gift, HandCoins, Pencil, Percent, Undo2, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { COMP_LABEL, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
-import { calcOrder } from '@shared/order-calc';
 import { isCounterFirst, serviceModeOf } from '@shared/service-mode';
 import { fmtTime } from '@shared/time';
-import type { OrderDTO, OrderItemDTO } from '@shared/types';
+import type { CompKind, OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Field';
+import { Input, Label, Segmented } from '@/components/ui/Field';
+import { EmptyState } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
 import { post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { estimateUnit, pendingOptionsText, pendingProblem, useBoot } from '@/lib/boot';
 import { type PendingLine, useCart } from '@/lib/cart';
-import { Illustration } from '@/components/Illustration';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
 import { parseTL } from '@shared/money';
 import { groupTyped } from '@/lib/numpad';
+import { QtyStepper } from './OptionsModal';
 import { TypedAmount } from './TypedAmount';
 
 // Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
@@ -28,6 +28,17 @@ const STATUS: Record<OrderItemDTO['status'], { label: string; cls: string }> = {
   hazirlaniyor: { label: 'Hazırlanıyor', cls: 'text-blue-ink' },
   hazir: { label: 'Hazır', cls: 'text-[var(--admin-success)]' },
   servis: { label: 'Serviste', cls: 'text-muted' },
+};
+
+/**
+ * Ciro dışı kalemin işareti, ikonu İşlemler ve ödeme ekranındakiyle aynı: ücretsiz verilen (ikram, ödenmez) pirinç
+ * (hediye ve ödülün, damga kartının rengi), zayi (kayıp) amber. Pembe yalnız masa planında "kısmen ödendi", kırmızı
+ * iptal; burada kullanılmaz
+ */
+const COMP_MARK: Record<CompKind, { Icon: typeof Gift; cls: string }> = {
+  ikram: { Icon: Gift, cls: 'text-gold-ink' },
+  odenmez: { Icon: HandCoins, cls: 'text-gold-ink' },
+  zayi: { Icon: Droplets, cls: 'text-warning-ink' },
 };
 
 export function CartPanel({
@@ -54,6 +65,7 @@ export function CartPanel({
   const wide = useMediaQuery('(min-width: 768px)');
 
   const visibleItems = order.items.filter((i) => !i.voided || i.voidAfterSend || Date.now() - (i.createdAt ?? 0) < 3600_000);
+  const empty = visibleItems.length === 0 && pending.length === 0 && order.paid === 0;
 
   // Yeni eklenen kalem uzun adisyonda da görünsün: gönderilmemişler bloğu görünür alana kayar
   const pendingRef = useRef<HTMLDivElement>(null);
@@ -70,15 +82,11 @@ export function CartPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="scroll-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
-        {visibleItems.length === 0 && pending.length === 0 && (
-          <div className="my-auto flex flex-col items-center px-6 py-10 text-center">
-            <Illustration name="fincan" className="size-20" />
-            <p className="mt-3 font-headline text-base font-bold text-ink">Adisyon boş</p>
-            <p className="mt-1 max-w-[32ch] text-[13px] text-pretty text-muted">
-              {wide ? 'Soldan ürün seçin. ' : 'Menü sekmesinden ürün seçin. '}
-              {payFirst ? 'Ödeme alınınca sipariş bara gider' : 'Gönder’e basınca sipariş bara ve mutfağa gider'}
-            </p>
-          </div>
+        {empty && (
+          <EmptyState art="fincan" title="Adisyon boş" className="my-auto">
+            {wide ? 'Soldan ürün seçin. ' : 'Menü sekmesinden ürün seçin. '}
+            {payFirst ? 'Ödeme alınınca sipariş bara gider' : 'Gönder’e basınca sipariş bara ve mutfağa gider'}
+          </EmptyState>
         )}
         <ul className="divide-y divide-[var(--admin-divider)]">
           {visibleItems.map((i) => (
@@ -110,13 +118,9 @@ export function CartPanel({
                           </span>
                         )}
                         <span className="tabular font-normal text-muted">{fmtTime(i.sentAt)}</span>
-                        {i.complimentary && (
-                          <span className={cn('inline-flex items-center gap-0.5', i.compKind === 'zayi' ? 'text-[var(--admin-warning)]' : 'text-[var(--admin-hue-rose)]')}>
-                            {i.compKind === 'zayi' ? <Droplets className="size-3.5" /> : <Gift className="size-3.5" />}
-                            {COMP_LABEL[i.compKind ?? 'ikram']}
-                          </span>
-                        )}
-                        {i.discount > 0 && <span className="tabular text-blue-ink">−{tl(i.discount)}</span>}
+                        {i.complimentary && <CompMark kind={i.compKind ?? 'ikram'} />}
+                        {/* İndirim durum değil: nötr ve adıyla (mavi "Hazırlanıyor"la tek durum gibi okunmasın) */}
+                        {i.discount > 0 && <span className="tabular text-ink-2">−{tl(i.discount)} indirim</span>}
                         {i.happyHour && <span className="text-[var(--admin-warning)]">Happy hour</span>}
                         {i.paidQty > 0 && <span className="text-[var(--admin-success)]">{i.paidQty === i.qty ? 'Ödendi' : `${i.paidQty} ödendi`}</span>}
                       </>
@@ -145,27 +149,29 @@ export function CartPanel({
                 // Sunucunun reddedeceği satır (seçeneği tükendi, grubu kapandı): Gönder'in 409 / 400 bildirimi satırı
                 // adlandırmaz, burada kırmızı yazar; dokununca düzenleme penceresi açılır
                 const problem = pendingProblem(boot, p, l.options);
+                const name = p.shortName || p.name;
                 return (
-                  <li key={l.key} className="animate-in flex items-center gap-2 px-4 py-2">
-                    <div className="flex items-center rounded-xl border border-line-strong bg-surface">
-                      <button aria-label={l.qty > 1 ? 'Azalt' : 'Kaldır'} className="grid size-9 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => (l.qty > 1 ? cart.update(order.id, l.key, { qty: l.qty - 1 }) : cart.remove(order.id, l.key))}>
-                        {l.qty > 1 ? <Minus className="size-4" /> : <Trash2 className="size-4 text-[var(--admin-danger-ink)]" />}
-                      </button>
-                      <span className="tabular w-6 text-center text-sm font-semibold">{l.qty}</span>
-                      <button aria-label="Artır" className="grid size-9 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press pointer-coarse:size-11" onClick={() => cart.update(order.id, l.key, { qty: Math.min(99, l.qty + 1) })}>
-                        <Plus className="size-4" />
-                      </button>
-                    </div>
+                  // Dar hesap kartında (telefon, tablet) ad, seçenek ve not ilk satırın tamamını alır; adet ve tutar altta.
+                  // Bilgisayarda tek satır. Odak sırası geniş düzenin sırası (adet, ad, tutar)
+                  <li key={l.key} className="animate-in flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 lg:flex-nowrap">
+                    <QtyStepper
+                      value={l.qty}
+                      min={1}
+                      max={99}
+                      label={`${name} adedi`}
+                      onChange={(n) => cart.update(order.id, l.key, { qty: n })}
+                      onRemove={() => cart.remove(order.id, l.key)}
+                    />
                     {/* Satırın kendisi düzenlemeye açar; kalem ikonu yalnız ipucu */}
                     <button
-                      className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg text-left transition-colors duration-150 active:bg-press"
+                      className="order-first flex min-h-11 min-w-0 basis-full items-center gap-2 rounded-lg text-left transition-colors duration-150 active:bg-press lg:order-none lg:flex-1 lg:basis-0"
                       onClick={() => onEditPending(l)}
-                      aria-label={`${p.shortName || p.name} düzenle`}
+                      aria-label={`${name} düzenle`}
                       aria-describedby={problem ? `sorun-${l.key}` : undefined}
                     >
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">
-                          {p.shortName || p.name}
+                          {name}
                           {l.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[l.size]}</SizeTag>}
                         </span>
                         {(text || l.note) && <span className="block truncate text-xs text-ink-2">{[text, l.note && `Not: ${l.note}`].filter(Boolean).join(' · ')}</span>}
@@ -177,7 +183,7 @@ export function CartPanel({
                       </span>
                       <Pencil aria-hidden="true" className="size-3.5 shrink-0 text-muted" />
                     </button>
-                    <span className="tabular text-right text-sm font-semibold">{tl(unit * l.qty)}</span>
+                    <span className="tabular ml-auto whitespace-nowrap text-right text-sm font-semibold">{tl(unit * l.qty)}</span>
                   </li>
                 );
               })}
@@ -186,6 +192,8 @@ export function CartPanel({
         )}
       </div>
 
+      {/* Boş adisyonda "Toplam ₺0,00" yazılmaz: boş durum yeter */}
+      {!empty && (
       <div className="border-t border-[var(--admin-divider)] px-4 py-3 text-sm">
         {(t.lineDiscounts + t.orderDiscount > 0 || t.complimentary > 0 || t.service > 0) && (
           <div className="mb-1.5 space-y-0.5 text-[13px] text-muted">
@@ -206,14 +214,27 @@ export function CartPanel({
           <span className="text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
           <span className="tabular font-headline text-2xl font-bold tracking-tight">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
         </div>
-        {order.paid > 0 && !order.extPaid && !partlyPaid && (
-          <div className="mt-1 space-y-0.5 text-[13px]">
-            <Row l="Ödenen" r={tl(order.paid)} />
-            <Row l={<b>Kalan</b>} r={<b>{tl(due)}</b>} />
-          </div>
-        )}
+        {/* Tamamı ödendiyse vurgu sıfıra ("Kalan ₺0,00") değil ödemeye: yeşil "Ödendi" */}
+        {order.paid > 0 &&
+          !order.extPaid &&
+          !partlyPaid &&
+          (due <= 0 ? (
+            <div className="mt-1 flex justify-between text-[13px] font-medium text-[var(--admin-success)]">
+              <span className="inline-flex items-center gap-1">
+                <Check aria-hidden="true" className="size-3.5" />
+                Ödendi
+              </span>
+              <span className="tabular">{tl(order.paid)}</span>
+            </div>
+          ) : (
+            <div className="mt-1 space-y-0.5 text-[13px] text-muted">
+              <Row l="Ödenen" r={tl(order.paid)} />
+              <Row l={<span className="font-semibold text-ink">Kalan</span>} r={<span className="font-semibold text-ink">{tl(due)}</span>} />
+            </div>
+          ))}
         {preview && <div className="mt-1 text-xs text-[var(--admin-warning)]">Gönderilmemiş {pending.reduce((a, l) => a + l.qty, 0)} ürün dahil, tahmini</div>}
       </div>
+      )}
 
       <ItemSheet item={itemSheet} order={order} onClose={() => setItemSheet(null)} act={act} />
     </div>
@@ -271,7 +292,11 @@ function ItemSheet({
   };
   const reasons = mode === 'iptal' ? boot.settings.voidReasons : mode === 'indirim' ? boot.settings.discountReasons : mode ? compReasonsOf(boot.settings, mode) : [];
 
-  const ready = !!reason.trim() || (mode === 'indirim' && (discValue === '' || discValue === '0'));
+  // Boş ya da 0 değer indirimi kaldırır: yalnız kalemde indirim varken ve nedensiz ("İndirimi kaldır"). İndirimsiz kalemde
+  // %0 ile "Uygula" açık kalıp olmayan bir kaldırmayı bildirmesin; değer yazılınca neden ister
+  const clearing = mode === 'indirim' && (discValue === '' || discValue === '0');
+  const removesDiscount = clearing && item.discount > 0;
+  const ready = clearing ? removesDiscount : !!reason.trim();
   const submit = async () => {
     if (busyRef.current || !ready) return;
     busyRef.current = true;
@@ -303,50 +328,59 @@ function ItemSheet({
       size="sm"
       title={`${item.qty}× ${item.name}${item.size !== 'TEK' ? ` ${boot.settings.sizeLabels[item.size]}` : ''}`}
       subtitle={[item.optionsText, tl(item.qty * item.unitPrice)].filter(Boolean).join(' · ')}
+      // Geri ve onay pencerenin altında sabit (seçenek ve onay pencereleriyle aynı): telefonda tuş takımıyla kayıp gitmez
+      footer={
+        mode ? (
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={() => setMode(null)} disabled={busy}>
+              Geri
+            </Button>
+            <Button variant={mode === 'iptal' ? 'danger' : 'primary'} disabled={!ready} loading={busy} onClick={() => void submit()}>
+              {mode === 'iptal' ? `${qty} adet iptal` : mode === 'ikram' ? `${qty} adet ikram` : mode === 'zayi' ? `${qty} adet zayi` : removesDiscount ? 'İndirimi kaldır' : 'Uygula'}
+            </Button>
+          </div>
+        ) : undefined
+      }
     >
       {!mode ? (
+        // İşlemler menüsüyle aynı dil: ikonlar nötr karoda, yalnız iptal kırmızı
         <div className="grid gap-2 p-4">
-          <SheetButton icon={<XCircle className="size-[18px] text-[var(--admin-danger-ink)]" />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
+          <SheetButton danger icon={<XCircle />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
           {item.complimentary ? (
             <SheetButton
-              icon={<Undo2 className="size-[18px] text-[var(--admin-hue-rose)]" />}
+              icon={<Undo2 />}
               title={item.compKind === 'ikram' || !item.compKind ? 'İkramı geri al' : `${COMP_LABEL[item.compKind]} kaydını geri al`}
               onClick={async () => (await act((pin) => post(`/orders/${order.id}/items/${item.id}/comp`, { undo: true, reason: '', approverPin: pin }), `${COMP_LABEL[item.compKind ?? 'ikram']} geri alındı`)) && close()}
             />
           ) : (
             <>
-              <SheetButton icon={<Gift className="size-[18px] text-[var(--admin-hue-rose)]" />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
-              <SheetButton icon={<Droplets className="size-[18px] text-[var(--admin-warning)]" />} title="Zayi yaz" hint="Döküldü, yanlış hazırlandı; ciro dışı, zayi raporuna girer" onClick={() => setMode('zayi')} disabled={unpaid < 1} />
+              <SheetButton icon={<Gift />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
+              <SheetButton icon={<Droplets />} title="Zayi yaz" hint="Döküldü, yanlış hazırlandı; ciro dışı, zayi raporuna girer" onClick={() => setMode('zayi')} disabled={unpaid < 1} />
             </>
           )}
-          <SheetButton icon={<Percent className="size-[18px] text-blue-ink" />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
+          <SheetButton icon={<Percent />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
           {item.paidQty > 0 && <p className="px-1 text-xs text-muted">{item.paidQty} adedin ödemesi alındı; bu adetler değiştirilemez</p>}
         </div>
       ) : (
         <div className="space-y-4 p-4">
           {mode !== 'indirim' && unpaid > 1 && (
-            <div className="flex items-center justify-between rounded-xl border border-line p-1.5 pl-4">
-              <span className="text-sm font-medium">Adet</span>
-              <div className="flex items-center gap-1">
-                <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setQty(Math.max(1, qty - 1))}>
-                  <Minus className="size-4" />
-                </button>
-                <span className="tabular w-10 text-center text-lg font-semibold">{qty}</span>
-                <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setQty(Math.min(unpaid, qty + 1))}>
-                  <Plus className="size-4" />
-                </button>
-              </div>
+            <div className="flex items-center justify-between gap-3">
+              <Label className="mb-0">Adet</Label>
+              <QtyStepper value={qty} onChange={setQty} min={1} max={unpaid} label="Adet" />
             </div>
           )}
           {mode === 'indirim' && (
             <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                {(['percent', 'amount'] as const).map((k) => (
-                  <button key={k} aria-pressed={discType === k} onClick={() => setDiscType(k)} className={cn('min-h-11 rounded-lg border text-sm font-medium transition-colors duration-150', discType === k ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line-strong hover:border-[var(--admin-border-field)] active:bg-press')}>
-                    {k === 'percent' ? 'Yüzde (%)' : 'Tutar (₺)'}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                label="İndirim türü"
+                className="flex w-full [&>button]:flex-1"
+                value={discType}
+                onChange={setDiscType}
+                options={[
+                  { value: 'percent', label: 'Yüzde (%)' },
+                  { value: 'amount', label: 'Tutar (₺)' },
+                ]}
+              />
               {/* İşaret başta, sönük (₺120, %10); klavyeyle de yazılır */}
               <output aria-label={discType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular font-headline block rounded-xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
                 {discType === 'percent' ? (
@@ -372,7 +406,7 @@ function ItemSheet({
             </div>
           )}
           <div>
-            <div className="mb-2 text-sm font-medium text-ink-2">Neden</div>
+            <Label hint={removesDiscount ? 'kaldırırken gerekmez' : undefined}>Neden</Label>
             <div className="flex flex-wrap gap-1.5">
               {reasons.map((r) => (
                 <button key={r} aria-pressed={reason === r} onClick={() => setReason(r)} className={cn('min-h-11 rounded-lg border bg-surface px-3 text-sm transition-colors duration-150 active:bg-press pointer-fine:min-h-9', reason === r ? 'border-ink font-semibold text-ink' : 'border-line-strong text-ink-2 hover:border-[var(--admin-border-field)]')}>
@@ -382,24 +416,37 @@ function ItemSheet({
             </div>
             <Input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} placeholder="Ya da nedeni yazın" aria-label="Neden" className="mt-2" />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button onClick={() => setMode(null)} disabled={busy}>
-              Geri
-            </Button>
-            <Button variant={mode === 'iptal' ? 'danger' : 'primary'} disabled={!ready} loading={busy} onClick={() => void submit()}>
-              {mode === 'iptal' ? `${qty} adet iptal` : mode === 'ikram' ? `${qty} adet ikram` : mode === 'zayi' ? `${qty} adet zayi` : 'Uygula'}
-            </Button>
-          </div>
         </div>
       )}
     </Modal>
   );
 }
 
-function SheetButton({ icon, title, hint, onClick, disabled }: { icon: React.ReactNode; title: string; hint?: string; onClick: () => void; disabled?: boolean }) {
+/** Gönderilmiş kalemin ciro dışı işareti (ikram, ödenmez, zayi): ikon ve adıyla */
+function CompMark({ kind }: { kind: CompKind }) {
+  const { Icon, cls } = COMP_MARK[kind];
   return (
-    <button disabled={disabled} onClick={onClick} className="flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 enabled:hover:border-[var(--admin-border-field)] enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-not-allowed disabled:opacity-40">
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3">{icon}</span>
+    <span className={cn('inline-flex items-center gap-0.5', cls)}>
+      <Icon aria-hidden="true" className="size-3.5" />
+      {COMP_LABEL[kind]}
+    </span>
+  );
+}
+
+/** Kalem penceresinin satırı: ikon nötr karoda (İşlemler menüsü gibi); yıkıcı olan (iptal) kırmızı karo ve yazı */
+function SheetButton({ icon, title, hint, onClick, disabled, danger }: { icon: React.ReactNode; title: string; hint?: string; onClick: () => void; disabled?: boolean; danger?: boolean }) {
+  return (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 enabled:hover:border-[var(--admin-border-field)] enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-not-allowed disabled:opacity-40',
+        danger && 'text-[var(--admin-danger-ink)]',
+      )}
+    >
+      <span aria-hidden="true" className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', danger ? 'bg-[var(--admin-danger-soft)]' : 'bg-surface-3 text-ink-2')}>
+        {icon}
+      </span>
       <span>
         <span className="block text-sm font-medium">{title}</span>
         {hint && <span className="block text-xs text-muted">{hint}</span>}

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bike, CalendarClock, ChefHat, Globe, LayoutGrid, List, Lock, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
+import { Bike, CalendarClock, ChefHat, Clock3, Globe, LayoutGrid, List, Lock, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { tlShort } from '@shared/money';
@@ -19,6 +19,13 @@ import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { REMOTE } from '@/lib/remote';
 import { openCounterSale } from '@/lib/counter';
+
+/**
+ * Online (siteden gelen) sipariş her ekranda mor. Kenarı öteki durum çizgileri gibi kendi yumuşak zeminine karışık
+ * renk (açıkta %20, koyuda %45); kitte `--admin-violet-line` belirteci tanımlanınca o kullanılır
+ */
+const VIOLET_LINE =
+  'border-[var(--admin-violet-line,color-mix(in_oklab,var(--admin-hue-violet)_20%,var(--admin-hue-violet-soft)))] dark:border-[var(--admin-violet-line,color-mix(in_oklab,var(--admin-hue-violet)_45%,var(--admin-hue-violet-soft)))]';
 
 export default function FloorPage() {
   const boot = useBoot();
@@ -48,7 +55,7 @@ export default function FloorPage() {
     if (orders.length === 1 && orders[0].source === 'pos') return navigate(`/adisyon/${orders[0].id}`);
     if (orders.length) return setChoose({ table: t, orders });
     if (!boot.day) {
-      toast.warn('Gün açılmamış. Önce Kasa ekranından günü açın');
+      toast.warn('Gün açılmadı. Önce Kasa ekranından günü açın');
       return navigate('/kasa');
     }
     open.mutate({ type: 'masa', tableId: t.id });
@@ -76,9 +83,14 @@ export default function FloorPage() {
   /** Masanın kartındaki rezervasyon: yerel (masa) ya da oda için sitedeki sıradaki karaoke */
   const reservationOf = (t: TableDTO) =>
     reservations.find((r) => r.tableId === t.id) ?? (t.kind === 'oda' && nextKaraoke ? { time: String(nextKaraoke.startHour).padStart(2, '0') + ':00', name: nextKaraoke.firstName || 'Karaoke', guests: nextKaraoke.guests, status: 'site' } : undefined);
-  const busyTables = tables.filter((t) => (floor.data?.tables[t.id]?.length ?? 0) > 0);
-  const billed = busyTables.filter((t) => floor.data?.tables[t.id]?.some((o) => o.billPrintedAt)).length;
-  const summary = [`${tables.length} masa`, `${busyTables.length} dolu`, billed ? `${billed} hesap bekliyor` : null].filter(Boolean).join(' · ');
+  // Özet bütün salonun (başlık "Masalar"; bölüm sekmeleri kendi dolu sayısını taşır). Hesabı istenen yalnız kasanın
+  // adisyonu: sitede ödenmiş QR siparişinin hesabı yok. Söz açıklama satırı ve masa kartındaki ikonla aynı
+  const occupied = boot.tables.filter((t) => (floor.data?.tables[t.id]?.length ?? 0) > 0);
+  const billed = occupied.filter((t) => floor.data?.tables[t.id]?.some((o) => o.source === 'pos' && o.billPrintedAt)).length;
+  const summary = joinMeta([`${boot.tables.length} masa`, `${occupied.length} dolu`, billed > 0 && `${billed} hesap istendi`]);
+  // Her cihazın yeniden kullanılan boş tezgâh satışı (yeni satışın bekleme yeri) bir sipariş değil: listede birikmez.
+  // Boş gel-al ve paket kalır (müşterinin adı, adresi var)
+  const list = others.filter((o) => !(o.source === 'pos' && o.type === 'tezgah' && o.itemCount === 0));
 
   return (
     // Innex: gri zemin üstünde iki beyaz kart; telefonda kartlar kenara yapışmasın diye zeminde 8 px
@@ -86,9 +98,11 @@ export default function FloorPage() {
     <div className="flex h-full flex-col gap-3 p-2 max-md:overflow-y-auto md:p-0 lg:flex-row">
       <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] max-md:flex-none">
         <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3">
+          {/* Başlık ekranın adı (kitin sayfa başlığı ölçeği); seçili bölüm hemen altındaki sekmede. Telefonda üst şerit
+              "Masalar" der: başlık yalnız ekran okuyucuda kalır, özet ilk satır olur */}
           <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-            <h1 className="text-xl font-semibold">{section?.name ?? 'Masalar'}</h1>
-            <p className="text-[13px] text-muted">{summary}</p>
+            <h1 className="text-xl font-bold sm:text-[22px] max-md:sr-only">Masalar</h1>
+            <p className="text-[13px] text-pretty text-muted md:mt-0.5">{summary}</p>
           </div>
           <div className="flex items-center gap-2 max-sm:w-full">
             {wide && (
@@ -204,6 +218,7 @@ export default function FloorPage() {
           <Legend className="border border-blue-line bg-blue-soft" label="Dolu" />
           <Legend className="border border-warning-line bg-warning-soft" label="Hesap istendi" />
           <Legend className="border border-rose-line bg-rose-soft" label="Kısmen ödendi" />
+          <Legend className={cn('border bg-violet-soft', VIOLET_LINE)} label="Online" />
           <Legend className="border border-line bg-surface" dot label="Rezerve" />
         </footer>
       </section>
@@ -211,15 +226,16 @@ export default function FloorPage() {
       <aside className="flex max-h-[40%] flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] max-md:max-h-none max-md:flex-none lg:max-h-none lg:w-80">
         <div className="flex min-h-12 items-center gap-2 border-b border-[var(--admin-divider)] px-4 py-2.5">
           <h2 className="flex-1 text-[15px] font-semibold">Masasız siparişler</h2>
-          <span className="tabular min-w-5 rounded-full bg-surface-3 px-2 py-px text-center text-xs font-medium text-ink-2">{others.length}</span>
+          {/* Sayı hapı sıfırsa gizli (kit kuralı) */}
+          {list.length > 0 && <span className="tabular min-w-5 rounded-full bg-surface-3 px-2 py-px text-center text-xs font-medium text-ink-2">{list.length}</span>}
         </div>
         <div className="scroll-thin flex-1 overflow-y-auto p-2">
-          {others.length === 0 && (
+          {list.length === 0 && (
             <EmptyState compact art="fis" title="Masasız açık sipariş yok">
               Tezgâh, gel-al, paket ve online siparişler burada
             </EmptyState>
           )}
-          {others.map((o) => (
+          {list.map((o) => (
             <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
               <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
                 {o.source === 'laffogato' ? <Globe /> : o.type === 'paket' ? <Bike /> : o.type === 'gelal' ? <ShoppingBag /> : <Store />}
@@ -233,6 +249,8 @@ export default function FloorPage() {
               ) : (
                 <span className="tabular text-right text-sm font-semibold">
                   {tlShort(o.total)}
+                  {/* Sitede ödenen tutar tahsil edilecek gibi okunmasın: mor "Sitede ödendi" (seçim penceresiyle aynı söz) */}
+                  {o.source === 'laffogato' && <span className="block text-xs font-medium text-violet-ink">Sitede ödendi</span>}
                   {/* Hazırlanan mavi (bar ekranıyla aynı dil); amber yalnız zamana */}
                   {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-blue-ink">{o.pendingKitchen} barda</span>}
                 </span>
@@ -241,7 +259,8 @@ export default function FloorPage() {
           ))}
           {(reservations.length > 0 || siteKaraoke.length > 0) && (
             <div className="mt-2 border-t border-[var(--admin-divider)] px-2 pt-3">
-              <h3 className="flex items-center gap-1.5 pb-1.5 text-xs font-medium text-muted">
+              {/* Mikro etiket Poppins (h3 kendiliğinden Gabarito alır) */}
+              <h3 className="flex items-center gap-1.5 pb-1.5 font-sans text-xs font-medium tracking-normal text-muted">
                 <CalendarClock className="size-3.5" /> Bugünkü rezervasyonlar
               </h3>
               {reservations.map((r) => (
@@ -259,7 +278,7 @@ export default function FloorPage() {
         </div>
       </aside>
 
-      <Modal open={!!choose} onClose={() => setChoose(null)} title={choose ? `${choose.table.name}: hesaplar` : ''} size="sm">
+      <Modal open={!!choose} onClose={() => setChoose(null)} title={choose ? `${choose.table.name} hesapları` : ''} size="sm">
         <div className="space-y-2 p-4">
           {choose?.orders.map((o) => {
             const online = o.source === 'laffogato';
@@ -272,7 +291,7 @@ export default function FloorPage() {
                     {online ? 'Online sipariş' : `Hesap ${checkNo}`} <span className="text-muted">#{o.no}</span>
                   </span>
                 </span>
-                {online ? <span className="shrink-0 text-xs text-muted">Sitede ödendi</span> : <span className="tabular shrink-0 font-semibold">{tlShort(o.total)}</span>}
+                {online ? <span className="shrink-0 text-xs font-medium text-violet-ink">Sitede ödendi</span> : <span className="tabular shrink-0 font-semibold">{tlShort(o.total)}</span>}
               </button>
             );
           })}
@@ -323,7 +342,8 @@ function Legend({ className, dot, label }: { className: string; dot?: boolean; l
 
 /**
  * Masa: durum dolguyla değil açık tonla (durum rozeti gibi). Boş beyaz, dolu mavi ton, hesap istendi amber, kısmen
- * ödendi pembe; bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil ve dikkat çeker. Tutar kartın en büyük yazısı.
+ * ödendi pembe, yalnız sitede ödenmiş siparişi olan masa mor; bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil
+ * ve dikkat çeker. Tutar kartın en büyük yazısı. Yuvarlak masada içerik dairenin ortasında (kenardaki dar kısımda değil).
  */
 function TableTile({
   table,
@@ -343,16 +363,21 @@ function TableTile({
   style?: React.CSSProperties;
 }) {
   const busy = orders.length > 0;
-  const total = orders.reduce((a, o) => a + o.total, 0);
-  const paid = orders.reduce((a, o) => a + o.paid, 0);
-  const billed = orders.some((o) => o.billPrintedAt);
+  // Tutar, hesap ve kısmi ödeme yalnız kasanın adisyonlarından: sunucu sitede ödenmiş QR siparişini tutarı kadar ödenmiş
+  // yazar; toplama girse yalnız onu olan masa borçlu "Dolu", yanında adisyon olan masa "Kısmen ödendi" görünürdü
+  const pos = orders.filter((o) => o.source === 'pos');
+  const online = pos.length < orders.length;
+  const total = pos.reduce((a, o) => a + o.total, 0);
+  const paid = pos.reduce((a, o) => a + o.paid, 0);
+  const billed = pos.some((o) => o.billPrintedAt);
   const partial = paid > 0 && paid < total;
   const pending = orders.reduce((a, o) => a + o.pendingKitchen, 0);
   const ready = orders.reduce((a, o) => a + o.readyToServe, 0);
   const openedAt = Math.min(...orders.map((o) => o.openedAt));
-  const online = orders.some((o) => o.source === 'laffogato');
   const room = orders.find((o) => o.roomStartedAt)?.roomStartedAt ?? null;
-  const tone = !busy ? 'free' : partial ? 'partial' : billed ? 'billed' : 'busy';
+  // Açılmış ama sipariş girilmemiş adisyon "₺0" yazmaz (çalışan oda sayacı boş sayılmaz: ücreti kalemde görünmez)
+  const empty = pos.length > 0 && !room && pos.every((o) => o.itemCount === 0);
+  const tone = !busy ? 'free' : !pos.length ? 'online' : partial ? 'partial' : billed ? 'billed' : 'busy';
   const round = table.shape === 'round';
 
   return (
@@ -361,13 +386,13 @@ function TableTile({
       style={style}
       className={cn(
         '@container group flex flex-col overflow-hidden border p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
-        busy || reservation ? 'justify-between' : 'justify-start gap-1',
-        round ? 'items-center rounded-[999px] text-center' : 'rounded-2xl',
+        round ? 'items-center justify-center gap-1 rounded-[999px] text-center' : cn('rounded-2xl', busy || reservation ? 'justify-between' : 'justify-start gap-1'),
         tone === 'free' && 'border-line bg-surface shadow-[var(--shadow-card)] hover:border-[var(--admin-border-field)]',
         // Durum çizgisi belirteçleri iki temada da görünür (koyuda dolu, hesap istendi ve kısmen ödendi karışmasın)
         tone === 'busy' && 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)]',
         tone === 'billed' && 'border-warning-line bg-warning-soft hover:border-[var(--admin-warning)]',
         tone === 'partial' && 'border-rose-line bg-rose-soft hover:border-[var(--admin-hue-rose)]',
+        tone === 'online' && cn('bg-violet-soft hover:border-[var(--admin-hue-violet)]', VIOLET_LINE),
         className,
       )}
     >
@@ -377,18 +402,26 @@ function TableTile({
         {!round && <span className="flex-1" />}
         <span className="flex gap-1 text-ink-2">
           {billed && <Receipt className="size-4 shrink-0" aria-label="Hesap istendi" />}
-          {online && <Globe className="hidden size-4 shrink-0 @min-[6rem]:block" aria-label="Online sipariş" />}
+          {/* Online her boyda ve mor: adisyonlu masada da sitedeki sipariş görünür kalır */}
+          {online && <Globe className="size-4 shrink-0 text-violet-ink" aria-label="Online sipariş" />}
           {table.kind === 'oda' && <Mic2 className="hidden size-4 shrink-0 @min-[6rem]:block" aria-label="Oda" />}
         </span>
       </div>
       {busy ? (
         <div className={cn('w-full', round && 'text-center')}>
-          <div className="tabular font-headline text-[17px] font-bold leading-none tracking-[-0.02em] @min-[6rem]:text-[22px]">{tlShort(total)}</div>
+          {tone === 'online' ? (
+            // Tahsil edilecek bir şey yok: tutar yerine söz
+            <div className="text-[13px] font-semibold leading-tight text-violet-ink">Sitede ödendi</div>
+          ) : empty ? (
+            <div className="text-[13px] font-medium leading-tight text-ink-2">Boş adisyon</div>
+          ) : (
+            <div className="tabular font-headline text-[17px] font-bold leading-none tracking-[-0.02em] @min-[6rem]:text-[22px]">{tlShort(total)}</div>
+          )}
           {/* Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır */}
           {partial && <div className="tabular mt-0.5 text-xs font-medium text-[var(--admin-hue-rose)]">{tlShort(total - paid)} kaldı</div>}
-          <div className={cn('mt-1 hidden items-center gap-1.5 text-xs text-ink-2 @min-[6.5rem]:flex', round && 'justify-center')}>
-            <span className="tabular whitespace-nowrap">{room ? `Oda ${fmtElapsed(room, now)}` : fmtElapsed(openedAt, now)}</span>
-            {orders[0]?.waiterName && !round && <span className="truncate">· {orders[0].waiterName}</span>}
+          {/* Meta satırı: bir dakikadan kısa süre "az önce" ("0 dk" değil), ayraç joinMeta'nın (eşit boşluk); oda sayacı süre */}
+          <div className="mt-1 hidden min-w-0 truncate text-xs text-ink-2 @min-[6.5rem]:block">
+            <span className="tabular">{joinMeta([room ? `Oda ${fmtElapsed(room, now)}` : fmtAgo(openedAt, now), !round && pos[0]?.waiterName])}</span>
           </div>
           {(pending > 0 || ready > 0) && (
             <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
@@ -408,9 +441,10 @@ function TableTile({
           <div className="mt-0.5 hidden truncate text-xs text-ink-2 @min-[6rem]:block">{reservation.name}</div>
         </div>
       ) : (
+        // Odanın ikonu köşede (mikrofon); satırda ücretin türü
         <span className={cn('hidden items-center gap-1 text-[13px] text-ink-2 @min-[5rem]:inline-flex', round && 'justify-center')}>
-          {table.kind === 'oda' ? <Mic2 className="size-3.5 shrink-0" /> : <Users className="size-3.5 shrink-0" />}
-          {table.kind === 'oda' ? 'Saatlik' : `${table.seats} kişilik`}
+          {table.kind === 'oda' ? <Clock3 aria-hidden="true" className="size-3.5 shrink-0" /> : <Users aria-hidden="true" className="size-3.5 shrink-0" />}
+          {table.kind === 'oda' ? 'Saatlik ücret' : `${table.seats} kişilik`}
         </span>
       )}
     </button>
@@ -449,8 +483,8 @@ function TakeawayModal({
     <Modal
       open
       onClose={onClose}
-      title={kind === 'gelal' ? 'Gel-al siparişi' : 'Paket sipariş'}
-      subtitle={kind === 'paket' ? 'Müşteri ve adres bilgisi kurye fişine yazılır' : 'İsim, hazır olunca çağırmak için'}
+      title={kind === 'gelal' ? 'Gel-al siparişi' : 'Paket siparişi'}
+      subtitle={kind === 'paket' ? 'Müşteri ve adres bilgisi kurye fişine yazılır' : 'Sipariş hazır olunca bu adla çağrılır'}
       footer={
         <div className="flex justify-end gap-2">
           <Button onClick={onClose}>Vazgeç</Button>

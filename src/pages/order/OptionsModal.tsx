@@ -1,4 +1,4 @@
-import { Minus, Pencil, Plus } from 'lucide-react';
+import { Minus, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
@@ -13,9 +13,82 @@ import { useFinePointer } from '@/lib/hooks';
 
 const QUICK_NOTES = ['Az buzlu', 'Buzsuz', 'Çok sıcak', 'Ilık', 'Ayrı tabakta', 'Paket', 'Kremasız'];
 
+/**
+ * Sitenin alerjen anahtarları (TGK Ek-1, laffogato src/lib/menu/allergens.ts) ve seçeneklerdeki `nuts` etiketi:
+ * personel müşteriye okur, anahtar ("sut, sert_kabuklu") değil ad yazılır. Bilinmeyen anahtar alt çizgisiz kalır
+ */
+const ALLERGEN_LABEL: Record<string, string> = {
+  gluten: 'Gluten',
+  kabuklular: 'Kabuklular',
+  yumurta: 'Yumurta',
+  balik: 'Balık',
+  yer_fistigi: 'Yer fıstığı',
+  soya: 'Soya',
+  sut: 'Süt',
+  sert_kabuklu: 'Sert kabuklu meyveler',
+  kereviz: 'Kereviz',
+  hardal: 'Hardal',
+  susam: 'Susam',
+  sulfit: 'Sülfit',
+  aci_bakla: 'Acı bakla',
+  yumusakcalar: 'Yumuşakçalar',
+  nuts: 'Kuruyemiş',
+};
+const allergenLabel = (key: string) => ALLERGEN_LABEL[key] ?? key.replace(/_/g, ' ');
+
 type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
 
-// Seçenek ve hızlı not çipleri aynı dilde: 8 px köşe, seçilince mavi; amber bu sistemde durum rengidir, seçim rengi değil
+const STEP = 'grid size-11 place-items-center transition-colors duration-150 hover:bg-hover active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent pointer-fine:size-9';
+
+/**
+ * Adet seçici: adisyonun gönderilmemiş satırında, seçenek sayacında (şeker, ekstra shot), bu pencerenin adedinde ve
+ * kalem penceresinde aynı görünüm (alan kenarı, köşe 14; düğmeler dokunmatikte 44, farede 36 px, rakam 15 px). Sınırda
+ * düğme kapanır. `onRemove`: en küçük adette eksi çöp kutusu olur ("Kaldır"). Kitin adet seçicisi gelince onunla değişir.
+ */
+export function QtyStepper({
+  value,
+  onChange,
+  min = 0,
+  max = 99,
+  label = 'Adet',
+  onRemove,
+  disabledUp,
+  className,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  max?: number;
+  /** Grubun adı (ekran okuyucu): "Adet", "Ekstra shot" */
+  label?: string;
+  onRemove?: () => void;
+  /** Artırma kapalı (seçenek tükendi) */
+  disabledUp?: boolean;
+  className?: string;
+}) {
+  const removes = !!onRemove && value <= Math.max(min, 1);
+  return (
+    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center rounded-xl border border-line-strong bg-surface', className)}>
+      <button
+        type="button"
+        aria-label={removes ? 'Kaldır' : 'Azalt'}
+        disabled={!removes && value <= min}
+        onClick={() => (removes ? onRemove?.() : onChange(Math.max(min, value - 1)))}
+        className={cn(STEP, 'rounded-l-[13px]')}
+      >
+        {removes ? <Trash2 aria-hidden="true" className="size-4 text-[var(--admin-danger-ink)]" /> : <Minus aria-hidden="true" className="size-4" />}
+      </button>
+      <span aria-live="polite" className="tabular min-w-8 px-0.5 text-center text-[15px] font-semibold">
+        {value}
+      </span>
+      <button type="button" aria-label="Artır" disabled={disabledUp || value >= max} onClick={() => onChange(Math.min(max, value + 1))} className={cn(STEP, 'rounded-r-[13px]')}>
+        <Plus aria-hidden="true" className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+// Seçenek ve hızlı not çipleri aynı dilde: 10 px köşe, seçilince ev yeşili; amber bu sistemde durum rengidir, seçim rengi değil
 const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
 const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
 const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
@@ -116,15 +189,7 @@ export function OptionsModal({
         // Eksik zorunlu seçimin ya da tükenen seçimin yazısı Ekle'nin altında kendi satırında (bilgi cümlesi devre dışı
         // düğmede durmaz)
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <div className="flex items-center rounded-xl border border-line bg-surface">
-            <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.max(1, qty - 1))}>
-              <Minus className="size-4" />
-            </button>
-            <span className="tabular w-8 text-center text-lg font-semibold">{qty}</span>
-            <button aria-label="Artır" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.min(99, qty + 1))}>
-              <Plus className="size-4" />
-            </button>
-          </div>
+          <QtyStepper value={qty} onChange={setQty} min={1} max={99} label="Adet" />
           <div className="flex-1" />
           <Button variant="primary" size="lg" disabled={waiting || !!missing} aria-describedby={reason ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
             {editing ? 'Güncelle' : 'Ekle'} · {tl(unit * qty)}
@@ -137,6 +202,12 @@ export function OptionsModal({
       }
     >
       <div className="space-y-5 p-5">
+        {/* Alerjen bilgisi gösterilmek zorunda ve personel okur: pencerenin ilk satırı, anahtar değil ad */}
+        {product.allergens?.length ? (
+          <p className="text-[13px] text-ink-2">
+            <span className="font-medium text-ink">Alerjen:</span> {product.allergens.map(allergenLabel).join(', ')}
+          </p>
+        ) : null}
         {product.priceL != null && (
           <section>
             <h3 className="mb-2 text-sm font-semibold text-ink-2">Boy</h3>
@@ -169,24 +240,26 @@ export function OptionsModal({
               )}
             </h3>
             {g.kind === 'counter' ? (
-              <div className="flex flex-wrap gap-2">
-                {g.items.map((i) => (
-                  <div key={i.id} className={cn('flex items-center gap-3 rounded-xl border border-line px-3 py-1.5', i.soldOut ? 'bg-surface-2 text-muted' : 'bg-surface')}>
-                    <span className="font-medium">
-                      {i.name}
-                      {i.soldOut ? <span className={SOLD_BADGE}>Tükendi</span> : i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" disabled={i.soldOut && !picks[i.id]} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
-                        <Minus className="size-4" />
-                      </button>
-                      <span className="tabular w-6 text-center font-semibold">{picks[i.id] ?? 0}</span>
-                      <button aria-label="Artır" disabled={i.soldOut} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
-                        <Plus className="size-4" />
-                      </button>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                {g.items.map((i) => {
+                  // Tek kalemli sayaçta (Şeker, Ekstra shot) kalemin adı grubun başlığıyla aynı: yinelenmez, yalnız ek fiyat
+                  const named = !(g.items.length === 1 && i.name === g.name);
+                  return (
+                    <div key={i.id} className="inline-flex items-center gap-3">
+                      <QtyStepper value={picks[i.id] ?? 0} onChange={(n) => setCount(i.id, n)} min={0} max={i.maxQty} disabledUp={i.soldOut} label={i.name} />
+                      {(named || i.soldOut || i.price > 0) && (
+                        <span className={cn('text-[15px]', i.soldOut ? 'text-muted' : 'text-ink')}>
+                          {named && <span className="font-medium">{i.name}</span>}
+                          {i.soldOut ? (
+                            <span className={cn(SOLD_BADGE, !named && 'ml-0')}>Tükendi</span>
+                          ) : (
+                            i.price > 0 && <span className={cn('tabular text-sm text-muted', named && 'ml-1')}>+{tlCompact(i.price)}</span>
+                          )}
+                        </span>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
@@ -253,7 +326,6 @@ export function OptionsModal({
             Elle fiyat
           </Button>
         )}
-        {product.allergens && product.allergens.length > 0 && <p className="text-xs text-muted">Alerjen: {product.allergens.join(', ')}</p>}
       </div>
     </Modal>
   );
