@@ -93,7 +93,10 @@ export default function OkcAdmin() {
   // Elle değiştirilen eşleme sunucudan gelen yenilemeyle (bağlantı ya da ödeme yeri kaydı, canlı akış) ezilmez
   const [mapDirty, setMapDirty] = useState(false);
   const [test, setTest] = useState<TestResult | null>(null);
-  const [busy, setBusy] = useState<'test' | 'webhook' | 'map' | 'provider' | 'mode' | null>(null);
+  // Ayar kaydı (bağlantı, ödeme yeri, eşleme) ile Token'a giden istek (deneme, webhook) ayrı izlenir: bulut yanıt
+  // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
+  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | null>(null);
+  const [checking, setChecking] = useState<'test' | 'webhook' | null>(null);
 
   useEffect(() => {
     if (status.data && !mapDirty) setMap(Object.fromEntries(Object.entries(status.data.sectionMap).map(([k, v]) => [k, String(v)])));
@@ -118,24 +121,24 @@ export default function OkcAdmin() {
     }
   };
   const saveMap = async () => {
-    if (busy) return;
-    setBusy('map');
+    if (saving) return;
+    setSaving('map');
     if (await save({ sectionMap: Object.fromEntries(Object.entries(map).filter(([, v]) => v).map(([k, v]) => [k, Number(v)])) }, 'Kısım eşlemesi kaydedildi')) setMapDirty(false);
-    setBusy(null);
+    setSaving(null);
   };
   const registerWebhook = async () => {
-    setBusy('webhook');
+    setChecking('webhook');
     try {
       const r = await post<{ url: string }>('/okc/webhook/register');
       toast.ok(`Webhook kaydedildi: ${r.url}`);
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {
-      setBusy(null);
+      setChecking(null);
     }
   };
   const runTest = async () => {
-    setBusy('test');
+    setChecking('test');
     try {
       const r = await post<TestResult>('/okc/test');
       setTest(r);
@@ -143,7 +146,7 @@ export default function OkcAdmin() {
     } catch (e) {
       toast.err(errorMessage(e));
     } finally {
-      setBusy(null);
+      setChecking(null);
     }
   };
 
@@ -164,21 +167,23 @@ export default function OkcAdmin() {
     );
   const s = status.data;
 
-  // Bağlantı tek dokunuşla değişmez: sorulur, istek sürerken seçim kilitli (ikinci dokunuş ikinci istek göndermez)
+  // Bağlantı tek dokunuşla değişmez: sorulur, istek sürerken seçim kilitli (ikinci dokunuş ikinci istek göndermez).
+  // Token denemesi ve webhook kaydı kilitlemez: bulut yanıt vermezken de bağlantı kapatılabilir
   const setProvider = async (v: Provider) => {
-    if (v === s.provider || busy) return;
+    if (v === s.provider || saving) return;
     if (!(await confirmDialog(PROVIDER_CONFIRM[v]))) return;
-    setBusy('provider');
+    setSaving('provider');
     await save({ provider: v }, v === 'kapali' ? 'Yazarkasa bağlantısı kapatıldı' : `Yazarkasa bağlantısı: ${PROVIDER_LABEL[v]}`);
-    setBusy(null);
+    setSaving(null);
   };
   const setMode = async (v: Mode) => {
-    if (v === s.mode || busy) return;
-    setBusy('mode');
+    if (v === s.mode || saving) return;
+    setSaving('mode');
     await save({ mode: v }, `Ödeme yeri: ${MODE_LABEL[v]}`);
-    setBusy(null);
+    setSaving(null);
   };
-  const locked = (key: 'provider' | 'mode') => ({ 'aria-busy': busy === key || undefined, className: cn('transition-opacity duration-150', busy === key && 'pointer-events-none opacity-60') });
+  // Ayarlar sırayla kaydedilir: biri kaydedilirken iki ray da soluk ve kilitli (dokunuş sessizce yutulmaz, kilit görünür)
+  const locked = (key: 'provider' | 'mode') => ({ 'aria-busy': saving === key || undefined, className: cn('transition-opacity duration-150', saving && 'pointer-events-none opacity-60') });
 
   const caps = s.active
     ? [
@@ -243,10 +248,10 @@ export default function OkcAdmin() {
               {s.tokenx.configured ? joinMeta(['Bilgiler tanımlı', s.tokenx.terminalId && `terminal ${s.tokenx.terminalId}`, s.tokenx.branchId && `şube ${s.tokenx.branchId}`]) : 'Token bilgileri eksik; kurulum adımları aşağıda'}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button icon={<PlugZap className="size-4" />} loading={busy === 'test'} disabled={!s.tokenx.configured} onClick={() => void runTest()}>
+              <Button icon={<PlugZap className="size-4" />} loading={checking === 'test'} disabled={!s.tokenx.configured} onClick={() => void runTest()}>
                 Bağlantıyı dene
               </Button>
-              <Button icon={<Webhook className="size-4" />} loading={busy === 'webhook'} disabled={!s.tokenx.configured || !s.tokenx.webhookUrl || !s.tokenx.webhookSecret} onClick={() => void registerWebhook()}>
+              <Button icon={<Webhook className="size-4" />} loading={checking === 'webhook'} disabled={!s.tokenx.configured || !s.tokenx.webhookUrl || !s.tokenx.webhookSecret} onClick={() => void registerWebhook()}>
                 Webhook’u Token’a kaydet
               </Button>
             </div>
@@ -306,7 +311,8 @@ export default function OkcAdmin() {
               );
             })}
           </div>
-          <Button variant="primary" icon={<Save className="size-4" />} loading={busy === 'map'} disabled={!mapDirty || missing.length > 0 || invalid.length > 0} onClick={() => void saveMap()}>
+          {/* Bağlantı ya da ödeme yeri kaydedilirken kapalı görünür (tıklama yutulmaz); Token denemesi sürerken kaydeder */}
+          <Button variant="primary" icon={<Save className="size-4" />} loading={saving === 'map'} disabled={!!saving || !mapDirty || missing.length > 0 || invalid.length > 0} onClick={() => void saveMap()}>
             Eşlemeyi kaydet
           </Button>
         </Card>

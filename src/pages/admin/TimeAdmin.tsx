@@ -27,8 +27,12 @@ const SOURCE: Record<TimeEntryDTO['source'], string> = { pin: 'Kilit ekranından
 /** Çıkışı unutulmuş açık mesai (önceki iş gününden, 8 saatten uzun; sunucunun kuralı): süresi sayılmaz, çıkış girilmeli */
 const forgottenEntry = (e: TimeEntryDTO, now: number) => e.open && shiftForgotten(e.clockIn, now);
 const openMs = (e: TimeEntryDTO, now: number) => (e.open ? Math.max(0, now - e.clockIn) : e.durationMs);
-/** Kaydı yöneticinin kendisi girdiyse "kaydeden", kişinin girişini düzelttiyse ya da kapattıysa "düzelten" */
-const editorNote = (e: TimeEntryDTO) => e.editedByName && (e.source === 'yonetim' ? `kaydeden ${e.editedByName}` : `düzelten ${e.editedByName}`);
+/**
+ * Kayda son dokunan yönetici (elle kayıt, düzeltme ya da kapatma), CSV'deki "Düzelten" sütunu gibi. Sunucu yalnız
+ * sonuncuyu tutar (`editedBy`): elle kaydı ikinci bir yönetici düzeltirse ya da kapatırsa kaydı girenin adı ezilir,
+ * bu yüzden elle kayıtta da "kaydeden" denmez (kimin girdiği denetim kaydında)
+ */
+const editorNote = (e: TimeEntryDTO) => e.editedByName && `düzelten ${e.editedByName}`;
 
 /**
  * Yönetim › Mesai çizelgesi: personelin PIN'le ya da oturumdan yaptığı giriş-çıkışlar, kişi başına süre, şu an

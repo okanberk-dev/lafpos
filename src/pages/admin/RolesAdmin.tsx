@@ -61,7 +61,8 @@ export default function RolesAdmin() {
   };
   const reset = (r: RoleRow) => setDraft({ ...draft, [r.role]: r.defaults });
   // Roller sırayla kaydedilir: biri reddedilirse önce kaydedilenler taslaktan düşer (sayaç kalanları gösterir), ekran
-  // sunucudaki durumu yeniden okur, ileti hangi rolün kaydedilemediğini söyler
+  // sunucudaki durumu yeniden okur, ileti hangi rolün kaydedilemediğini söyler. Başarı bildirimi taslak düştükten sonra:
+  // telefonda bildirim şerit varken onun üstünde durur, şerit kalkınca aşağı zıplamasın
   const save = async () => {
     if (saving) return;
     setSaving(true);
@@ -76,7 +77,6 @@ export default function RolesAdmin() {
         }
         saved.push(r);
       }
-      toast.ok(saved.length === 1 ? `${saved[0].label} rolünün yetkileri kaydedildi` : `${saved.length} rolün yetkileri kaydedildi`);
     } finally {
       // Önce sunucunun yeni hâli okunur, sonra taslak düşer (kaydedilen rol bir an eski yetkileriyle görünmesin)
       await qc.invalidateQueries({ queryKey: ['admin', 'roles'] }).catch(() => undefined);
@@ -90,6 +90,7 @@ export default function RolesAdmin() {
       }
       setSaving(false);
     }
+    toast.ok(saved.length === 1 ? `${saved[0].label} rolünün yetkileri kaydedildi` : `${saved.length} rolün yetkileri kaydedildi`);
   };
 
   // Telefonda Kaydet yalnız alttaki yapışkan şeritte (değişiklik varken); başlıkta gri, dolu bir düğme durmaz
@@ -235,8 +236,9 @@ export default function RolesAdmin() {
       </div>
 
       {dirty.length > 0 && (
-        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır; burada yalnız iç boşluk
-        <div className="sticky bottom-0 z-10 -mx-4 mt-4 flex items-center gap-3 border-t border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
+        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır; burada yalnız iç boşluk. Telefonda bildirim
+        // bu şeridin üstünde durur (data-action-bar): kaydedilemeyen rolün hatası Vazgeç ve Kaydet'i örtmez
+        <div data-action-bar="" className="sticky bottom-0 z-10 -mx-4 mt-4 flex items-center gap-3 border-t border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
           <span className="min-w-0 text-[13px] text-[var(--admin-text-mute)]">
             {/* Telefonda kısa (hangi rolün değiştiği seçicide "değişti" diye yazar) */}
             <span className="sm:hidden">Kaydedilmemiş değişiklik</span>
