@@ -35,7 +35,14 @@ export function LoginPage() {
   useEffect(() => () => {
     if (clearPunch.current) clearTimeout(clearPunch.current);
   }, []);
-  const info = useQuery({ queryKey: ['login-info'], queryFn: () => get<LoginInfo>('/auth/users'), retry: 2 });
+  const info = useQuery({
+    queryKey: ['login-info'],
+    queryFn: () => get<LoginInfo>('/auth/users'),
+    retry: 2,
+    // "Kasa sunucusuna ulaşılamıyor" kendiliğinden kalksın: kilit ekranı kasada saatlerce açık durur, odak ya da ağ
+    // olayı gelmeyebilir. Hata sürerken 5 sn'de bir yeniden sorulur, yanıt gelince sorgu durur
+    refetchInterval: (q) => (q.state.status === 'error' ? 5000 : false),
+  });
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
@@ -51,6 +58,8 @@ export function LoginPage() {
         const r = await post<PunchResultDTO>('/time/punch', { pin: value });
         setPunched(r);
         setPin('');
+        // Sunucu yanıt verdi: "ulaşılamıyor" uyarısı mesai sonucunun yanında kalmasın (Kurulum modu çipleri de gelsin)
+        if (info.isError) void info.refetch();
         // Bu cihazda az sonra açılacak oturum (kullanıcı menüsü, avatar noktası) güncel mesaiyle başlasın
         void qc.invalidateQueries({ queryKey: ['time'] });
         if (clearPunch.current) clearTimeout(clearPunch.current);
@@ -209,7 +218,12 @@ export function LoginPage() {
                       <button
                         key={d.name}
                         type="button"
-                        onClick={() => void submit(d.pin)}
+                        onClick={(e) => {
+                          // Mesai'de sayfa açık kalır: çip odakta kalırsa sıradaki kişinin klavyede yazdığı PIN'in
+                          // Enter'ı çipe basar, çipin kişisinin mesaisi yeniden gider. Giriş türü düğmeleri gibi odak bırakılır
+                          e.currentTarget.blur();
+                          void submit(d.pin);
+                        }}
                         className="inline-flex min-h-8 items-center gap-1 rounded-full bg-surface px-3 text-xs font-medium text-ink ring-1 ring-inset ring-warning-line transition-[box-shadow,background-color] duration-150 hover:ring-[var(--admin-warning)] active:bg-press pointer-coarse:min-h-11"
                       >
                         {d.name} <b className="tabular font-semibold">{d.pin}</b>

@@ -11,7 +11,7 @@ import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
 import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
-import { REMOTE, REMOTE_PATHS } from './lib/remote';
+import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from './lib/remote';
 import { isBootDarkPath, useTheme } from './lib/theme';
 import { DemoRolePicker } from './demo/DemoRolePicker';
 import { DEMO } from './lib/demo';
@@ -46,6 +46,7 @@ function Authed() {
   const boot = useBootQuery();
   const home = useHomePath();
   const location = useLocation();
+  const remoteSignOut = useRemoteSignOut();
 
   useEffect(() => {
     // Uzaktan görünümde canlı bağlantı yok: veri kafeden gelen özette, sorgular kısa aralıkla yenilenir
@@ -67,7 +68,8 @@ function Authed() {
     const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
     return (
       <div className="grid h-full place-items-center p-6">
-        {/* Tam ekran durum: büyük boy, Yeniden dene ve Çıkış aynı boyda */}
+        {/* Tam ekran durum: büyük boy, Yeniden dene ve Çıkış aynı boyda. Uzaktan giriş parola sormadan giriyorsa Çıkış
+            yok: aynı oturum hemen yeniden açılıp bu ekrana dönerdi, Yeniden dene yeter */}
         <ErrorState
           large
           title={noSnapshot ? 'Kafeden henüz veri gelmedi' : 'Sunucuya bağlanılamadı'}
@@ -75,7 +77,7 @@ function Authed() {
           onRetry={() => void boot.refetch()}
           retrying={boot.isFetching}
           action={
-            REMOTE && (
+            remoteSignOut && (
               <Button size="md" variant="ghost" onClick={() => void useAuth.getState().logout()}>
                 Çıkış
               </Button>

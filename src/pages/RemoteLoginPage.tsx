@@ -6,46 +6,21 @@ import { LafTile } from '@/components/LafMark';
 import { Button } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
 import { Notice, PageLoading } from '@/components/ui/misc';
-import { errorMessage, get, post, setToken } from '@/lib/api';
+import { errorMessage, post, setToken } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-
-interface Setup {
-  secret: boolean;
-  password: boolean;
-  redis: boolean;
-  snapshotAt: number | null;
-  /** Kafe bağlanmadı: örnek gün parolasız açılır */
-  demo?: boolean;
-  /** Parolasız görünüm (LAFPOS_UZAKTAN_PAROLA_GEREKLI yoksa): gerçek veri de parola sormadan açılır */
-  open?: boolean;
-}
-
-/** Bu sekmedeki uzaktan oturum parolasız mı açıldı (demo ya da parolasız görünüm) */
-const OPEN_KEY = 'lafpos.uzaktan.acik';
-
-/**
- * Parolasız açılmış uzaktan oturumda çıkış anlamsızdır: giriş ekranı aynı oturumu hemen yeniden açar. Kullanıcı
- * menüsü ve komut paleti "Çıkış yap"ı yalnız parolayla açılmış oturumda gösterir.
- */
-export function remoteOpenSession(): boolean {
-  try {
-    return sessionStorage.getItem(OPEN_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
+import { type RemoteSetup, remoteAutoEnters, remoteSetupQuery, remoteSetupReady } from '@/lib/remote';
 
 function remember(key: string, on: boolean) {
   try {
     if (on) sessionStorage.setItem(key, '1');
     else sessionStorage.removeItem(key);
   } catch {
-    /* depolama kapalı: yalnız çıkış satırı görünür kalır */
+    /* depolama kapalı: yalnız demo notu görünmez */
   }
 }
 
 /** Kurulum adımları: eksik olan varsa giriş yerine ne yapılacağı görünür (parolayı denemeye gerek kalmaz) */
-function SetupChecklist({ s }: { s: Setup }) {
+function SetupChecklist({ s }: { s: RemoteSetup }) {
   const steps = [
     { ok: s.secret, label: 'Ortak anahtar (LAFPOS_CLOUD_SECRET)' },
     { ok: s.password, label: 'Uzaktan giriş parolası (LAFPOS_UZAKTAN_PAROLA)' },
@@ -77,10 +52,11 @@ export function RemoteLoginPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const setup = useQuery({ queryKey: ['uzaktan', 'kurulum'], queryFn: () => get<Setup>('/uzaktan/kurulum'), retry: false });
-  const ready = !!setup.data && setup.data.secret && setup.data.password && setup.data.redis;
-  // Demo ya da parolasız görünüm: parola sorulmaz, doğrudan girilir (form hiç görünmez)
-  const auto = !!setup.data && (!!setup.data.demo || (!!setup.data.open && ready));
+  const setup = useQuery({ ...remoteSetupQuery, retry: false });
+  const ready = !!setup.data && remoteSetupReady(setup.data);
+  // Demo ya da parolasız görünüm: parola sorulmaz, doğrudan girilir (form hiç görünmez). Kabuk "Çıkış"ı aynı kuralla
+  // gizler (useRemoteSignOut): çıkış bu ekranı açar, bu ekran da aynı oturumu hemen yeniden açardı
+  const auto = !!setup.data && remoteAutoEnters(setup.data);
   const autoTried = useRef(false);
 
   /** Oturumu açar; açılamazsa ileti. Parolasız girişte boş gövde gider */
@@ -91,7 +67,6 @@ export function RemoteLoginPage() {
       const res = await post<{ token: string }>('/uzaktan/giris', body);
       const demo = !body.parola && !!setup.data?.demo;
       remember('lafpos.demo', demo);
-      remember(OPEN_KEY, !body.parola);
       setToken(res.token);
       await init();
       // Jeton alındı ama oturum okunamadı: bekleme ekranında takılı kalınmasın

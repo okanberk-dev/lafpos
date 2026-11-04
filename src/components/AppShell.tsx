@@ -17,7 +17,6 @@ import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
 import { useMyTime } from '@/lib/mesai';
-import { remoteOpenSession } from '@/pages/RemoteLoginPage';
 import { CommandPalette } from './CommandPalette';
 import { LafMark, LafTile } from './LafMark';
 import { MesaiRow } from './MesaiRow';
@@ -25,7 +24,7 @@ import { PlatformInbox } from './PlatformInbox';
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
 import { Modal } from './ui/Modal';
-import { REMOTE, REMOTE_PATHS } from '@/lib/remote';
+import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
 
 function useClock() {
   const [now, setNow] = useState(Date.now());
@@ -244,8 +243,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   // Menünün başlığı kişi: adı ve rolü (tek şubeli kasada işletmenin adı bilgi taşımaz)
   const roleLabel = ROLE_LABELS[me.role];
   const menuSubtitle = REMOTE ? 'Yalnız görüntüleme' : [roleLabel !== me.name && roleLabel, onClock && 'mesaide'].filter(Boolean).join(' · ') || undefined;
-  // Uzaktan oturum parolasız açıldıysa (demo ya da parolasız görünüm) çıkış aynı oturumu yeniden açar: satır yok
-  const remoteSignOut = REMOTE && !remoteOpenSession();
+  // Uzaktan giriş ekranı parola sormadan giriyorsa (demo ya da parolasız görünüm) çıkış aynı oturumu yeniden açar: satır yok
+  const remoteSignOut = useRemoteSignOut();
 
   return (
     // Innex düzeni: gri zemin üstünde beyaz menü kartı; kasa ekranları zeminde kendi kartlarını çizer
@@ -327,7 +326,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         )}
         {!REMOTE && <PlatformInbox />}
         {notice && <div className="shrink-0">{notice}</div>}
-        <main className="min-h-0 flex-1 overflow-hidden">{children}</main>
+        {/* Alt sekme çubuğu yokken (tek ekranlı rol: kuryenin Siparişler'i) ev çubuğu payını ana alan bırakır */}
+        <main className={cn('min-h-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>{children}</main>
         {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir */}
         {showTabs && (
           <nav aria-label="Ekranlar" className="flex border-t border-line bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 md:hidden">

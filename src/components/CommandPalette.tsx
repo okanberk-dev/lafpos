@@ -14,10 +14,9 @@ import { navFor } from '@/lib/nav';
 import { useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
 import { resolveDark } from '@/lib/bootDark';
-import { REMOTE, REMOTE_PATHS } from '@/lib/remote';
+import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
 import { setBarTheme, useTheme } from '@/lib/theme';
 import { confirmLeave } from '@/lib/unsavedGuard';
-import { remoteOpenSession } from '@/pages/RemoteLoginPage';
 import { visibleSections } from './admin/sections';
 
 interface Entry {
@@ -62,6 +61,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const barDark = useTheme((s) => s.force === 'dark');
   const onBar = useLocation().pathname === '/mutfak';
   const mode = useServiceMode();
+  const remoteSignOut = useRemoteSignOut();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -127,9 +127,9 @@ function Palette({ onClose }: { onClose: () => void }) {
         else setTheme(dark ? 'acik' : 'koyu');
       },
     });
-    // Kullanıcı menüsündeki satırla aynı ad. Uzaktan görünümde kilit yok: parolayla açılmış oturumdan çıkış var,
-    // parolasız oturumda çıkış aynı oturumu yeniden açacağından eylem de yok
-    if (!REMOTE || !remoteOpenSession()) {
+    // Kullanıcı menüsündeki satırla aynı ad. Uzaktan görünümde kilit yok: parolalı girişte çıkış var; giriş ekranı
+    // parola sormadan giriyorsa çıkış aynı oturumu yeniden açacağından eylem de yok
+    if (!REMOTE || remoteSignOut) {
       out.push({
         id: 'eylem:kilit',
         group: 'Eylemler',
@@ -147,7 +147,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boot.products, users.data, theme, mode, onBar, barDark]);
+  }, [boot.products, users.data, theme, mode, onBar, barDark, remoteSignOut]);
 
   const results = useMemo(() => {
     const k = fold(q.trim());
