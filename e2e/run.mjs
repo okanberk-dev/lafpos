@@ -100,7 +100,7 @@ const barLight = state('/mutfak', 'acik-tema', async (page) => {
 });
 
 const ROUTES = {
-  giris: ['/giris', state('/giris', 'mesai', (page) => page.getByRole('button', { name: 'Mesai', exact: true }).click({ timeout: 5000 }))],
+  giris: ['/giris'],
   patron: [
     '/patron',
     '/masalar',
@@ -196,7 +196,6 @@ const ROUTES = {
     state('/yonetim/musteri-ekrani', 'siparis', (page) => page.getByRole('radio', { name: 'Sipariş', exact: true }).click({ timeout: 5000 })),
     state('/yonetim/masa-plani', 'secili-masa', (page) => page.locator('[data-table-id]').first().click({ timeout: 5000 })),
     '/yonetim/personel',
-    '/yonetim/mesai',
     '/yonetim/roller',
     '/yonetim/odeme',
     '/yonetim/yazarkasa',

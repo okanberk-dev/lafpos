@@ -4,7 +4,7 @@ import type { Role } from '@shared/permissions';
 import type { Permission } from '@shared/permissions';
 import type { OrderTotals } from '@shared/order-calc';
 import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
-import type { CompKind, SelectedOption, TimeEntrySource, ZField, ZSummary } from '@shared/types';
+import type { CompKind, SelectedOption, ZField, ZSummary } from '@shared/types';
 import type { RoomBookingSnapshot } from '@shared/karaoke';
 
 export type { CompKind, ZField, ZSummary };
@@ -58,9 +58,8 @@ export const sessions = sqliteTable(
 );
 
 /**
- * Personel mesaisi (giriş-çıkış): kilit ekranında PIN'le, açık oturumdan ya da yöneticinin elle girdiği kayıt.
- * Açık mesaide çıkış boş. Kişi başına en çok bir açık mesai, aynı kişinin mesaileri çakışmaz, mesai 24 saati geçmez
- * (services/time.ts). İş günü girişten (05:00 kuralı): gece 02:00'de biten vardiya başladığı günün mesaisidir.
+ * Eski personel mesaisi (giriş-çıkış). Mesai özelliği 4 Kasım 2026'da kaldırıldı: tablo ve kayıtları silinmez,
+ * hiçbir kod okumaz ya da yazmaz (tablo kalır ki `db:generate` göç üretmesin, eski veriler kaybolmasın).
  */
 export const timeEntries = sqliteTable(
   'time_entries',
@@ -74,7 +73,8 @@ export const timeEntries = sqliteTable(
     /** İş günü (YYYY-MM-DD), girişten */
     businessDate: text('business_date').notNull(),
     note: text('note'),
-    source: text('source').$type<TimeEntrySource>().notNull(),
+    /** pin, oturum ya da yonetim */
+    source: text('source').notNull(),
     /** Kaydı son düzelten yönetici (elle giriş, düzeltme, kapatma) */
     editedBy: text('edited_by').references(() => users.id),
     createdAt: integer('created_at').notNull(),
@@ -82,7 +82,6 @@ export const timeEntries = sqliteTable(
   (t) => [
     index('time_entries_user_idx').on(t.userId, t.clockIn),
     index('time_entries_date_idx').on(t.businessDate),
-    // Kişi başına tek açık mesai: yazma kuralının (services/time.ts) veritabanındaki güvencesi
     uniqueIndex('time_entries_open_idx').on(t.userId).where(sql`clock_out IS NULL`),
   ],
 );

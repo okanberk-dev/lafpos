@@ -1,11 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { addDays, businessDate } from '@shared/time';
-import type { TimeEntryDTO, TimeSheetDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
 /**
- * Tasarım geçişinin incelemesi (4 Kas 2026): Yönetim › Mesai çizelgesi, Roller ve yetkiler, Yazarkasa. Sunucunun
+ * Tasarım geçişinin incelemesi (4 Kas 2026): Yönetim › Roller ve yetkiler, Yazarkasa. Sunucunun
  * kuralı süreç içi uygulamayla, ekranın kuralı kaynaktan denetlenir.
  */
 let h: Harness;
@@ -20,28 +18,6 @@ const at = (date: string, hh: number) => {
   const [y, m, d] = date.split('-').map(Number);
   return Date.UTC(y, m - 1, d, hh - 3);
 };
-
-describe('Mesai çizelgesi: Not sütunundaki yönetici', () => {
-  it('sunucu kayda son dokunan yöneticiyi tutar: elle kaydı ikinci yönetici düzeltince kaydı girenin adı kalmaz', async () => {
-    const day = addDays(businessDate(Date.now()), -3);
-    const garson = h.boot.users.find((u) => u.name === 'Garson')!.id;
-    const made = await h.ok<TimeEntryDTO>('mudur', 'POST', '/time/entries', { userId: garson, clockIn: at(day, 10), clockOut: at(day, 18) });
-    expect(made).toMatchObject({ source: 'yonetim', editedByName: 'Müdür' });
-    await h.ok('patron', 'PATCH', `/time/entries/${made.id}`, { note: 'Kamerayla doğrulandı' });
-    const row = (await h.ok<TimeSheetDTO>('patron', 'GET', `/time?from=${day}&to=${day}`)).entries.find((e) => e.id === made.id);
-    expect(row).toMatchObject({ source: 'yonetim', editedByName: 'Patron', note: 'Kamerayla doğrulandı' });
-    // Kaydı Müdür girdi, Patron yalnız not ekledi: bunu denetim kaydı bilir, çizelgenin satırı bilmez
-    const audits = await h.ok<{ action: string; userName: string | null; entityId: string | null }[]>('patron', 'GET', '/admin/audit?limit=50');
-    const mine = audits.filter((a) => a.entityId === made.id).map((a) => [a.action, a.userName]);
-    expect(mine).toEqual(expect.arrayContaining([['time.create', 'Müdür'], ['time.edit', 'Patron']]));
-  });
-
-  it('ekran bu yüzden elle kayıtta da kaydı gireni adlandırmaz: her kaynakta "düzelten" (CSV’deki Düzelten sütunu gibi)', () => {
-    const page = src('pages/admin/TimeAdmin.tsx');
-    expect(page).not.toMatch(/kaydeden \$\{/);
-    expect(page).toMatch(/const editorNote = \(e: TimeEntryDTO\) => e\.editedByName && `düzelten \$\{e\.editedByName\}`;/);
-  });
-});
 
 describe('Yazarkasa: Token denemesi ayar kaydını kilitlemez', () => {
   const page = src('pages/admin/OkcAdmin.tsx');

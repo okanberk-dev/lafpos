@@ -3,8 +3,7 @@ import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronRight
 import { Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
-import { fmtAgo, fmtTime, shiftForgotten } from '@shared/time';
-import type { TimeSheetDTO } from '@shared/types';
+import { fmtAgo, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
@@ -108,10 +107,6 @@ export default function PatronPage() {
   const [table, setTable] = useState(false);
   const [allAttention, setAllAttention] = useState(false);
   const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: REMOTE ? 10_000 : 60_000 });
-  // Şu an mesaide: mesai çizelgesinin bugünü, yalnız mesai yetkisiyle (uzaktan görünümde çizelge yok). Canlı mesai
-  // olayı ['time'] sorgularını kendisi yeniler (lib/live.ts)
-  const timeAllowed = !REMOTE && can('mesai.yonet');
-  const sheet = useQuery({ queryKey: ['time', 'sheet', 'patron'], queryFn: () => get<TimeSheetDTO>('/time'), enabled: timeAllowed, refetchInterval: 60_000 });
 
   // Satış ve kasa olaylarında yenile; uyarılar anında bildirim olarak düşer
   useEffect(
@@ -181,12 +176,7 @@ export default function PatronPage() {
     .filter((p): p is string => !!p)
     .map((p, i) => (i === 0 ? p.charAt(0).toLocaleUpperCase('tr-TR') + p.slice(1) : p));
 
-  // Mesaide olanlar: önceki günden çıkışı unutulmuş açık mesai içeride sayılmaz (Mesai çizelgesindeki gibi)
-  const atWork = sheet.data?.clockedIn.filter((e) => !shiftForgotten(e.clockIn, now));
-  const atWorkNames = atWork?.map((e) => e.userName) ?? [];
-  const timeLoading = timeAllowed && sheet.isPending && sheet.fetchStatus === 'fetching';
-
-  // Karolar: sayıları ızgarayı seçer (mesai yüklenirken yeri iskeletle tutulur, karolar sonradan kaymaz)
+  // Karolar: sayıları ızgarayı seçer (tek kalan son karo satırı doldurur, boşluk kalmaz)
   const tiles = [
     <Stat key="dun" label="Dünkü ciro" value={tl(d.yesterday.netSales)} hint={`${d.yesterday.receipts} adisyon`} />,
     // "Açık hesap" kasada müşterinin cari hesabıdır (ödeme türü, Müşteriler); burada ödenmemiş adisyonlar
@@ -207,20 +197,9 @@ export default function PatronPage() {
         hint={`${d.online.orders} sipariş · sitede ödendi`}
       />
     ),
-    timeLoading ? (
-      <Skeleton key="mesai" className="min-h-[104px] rounded-2xl" />
-    ) : (
-      atWork && (
-        <Stat
-          key="mesai"
-          label="Şu an mesaide"
-          value={String(atWork.length)}
-          hint={atWorkNames.length ? (atWorkNames.length > 3 ? `${atWorkNames.slice(0, 3).join(', ')} +${atWorkNames.length - 3}` : atWorkNames.join(', ')) : 'Kimse içeride değil'}
-        />
-      )
-    ),
   ].filter(Boolean);
-  // Beş-altı karo iki sütunda üç satır olur ve ciro kartını uzatırdı: geniş ekranda karolar üç sütun, iki satır
+  // Beş karo iki sütunda üç satır olur ve ciro kartını uzatırdı: geniş ekranda karolar üç sütun, iki satır; tek kalan
+  // son karo iki sütun kaplar (2 + 3 ya da 3 + 1 + 2), ızgarada boş hücre kalmaz
   const wideTiles = tiles.length >= 5;
 
   // Dikkat isteyenler tek listede: önce günün anomalileri, sonra uyarılar (en yeni üstte). Adisyonu olan satır

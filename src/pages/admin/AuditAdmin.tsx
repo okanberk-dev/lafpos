@@ -120,6 +120,7 @@ const PREFIX_LABEL: Record<string, string> = {
   settings: 'Ayar',
   sync: 'Senkron',
   table: 'Masa',
+  // Mesai kaldırıldı (4 Kas 2026); eski kayıtlar (time.in, time.edit…) adıyla okunur kalır
   time: 'Mesai',
   user: 'Personel',
 };

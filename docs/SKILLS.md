@@ -43,7 +43,8 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
    da tasarla ve o da değiştirilebilsin"_ ile müşteri ekranı yeniden çizildi ve Yönetim › Müşteri ekranı'ndan
    ayarlanır hale geldi (tema, metinler, duyurular, karekod). Innex'in yerleşimi kaldı, renkleri ve Inter bıraktı;
    `tests/design-tokens.test.ts` yeni değerleri ve yazı dosyalarını sabitler. Eksik özellik olarak personel mesaisi
-   (PIN'le giriş-çıkış, mesai çizelgesi) ve vardiya devri sayımı eklendi (`docs/02-PLAN.md`).
+   (PIN'le giriş-çıkış, mesai çizelgesi) ve vardiya devri sayımı eklendi (`docs/02-PLAN.md`); mesai 4 Kasım 2026'da
+   operatör kararıyla kaldırıldı, vardiya devri kaldı.
 
 ## Nasıl kullanılır
 

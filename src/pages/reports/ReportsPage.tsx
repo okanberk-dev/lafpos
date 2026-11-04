@@ -170,7 +170,7 @@ export default function ReportsPage() {
                 </option>
               ))}
             </Select>
-            {/* Telefonda sarmalayıcı gizlenir (Mesai'deki gibi): Segmented'e verilen max-md:hidden'ı derlenmiş CSS'te kitin
+            {/* Telefonda sarmalayıcı gizlenir: Segmented'e verilen max-md:hidden'ı derlenmiş CSS'te kitin
                 max-sm:flex'i ezer, 640 px altında liste ve yedi dönemlik ray yan yana kalırdı */}
             <div className="max-md:hidden max-lg:w-full">
               <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIOD_KEYS.map((k) => ({ value: k, label: PERIOD_LABELS[k] }))} className="max-lg:w-full max-lg:[&>*]:grow" />
@@ -1071,7 +1071,7 @@ function PrepReport({ range, today }: { range: Range; today: string }) {
       {(p) => {
         if (!p.overall.count)
           return (
-            <EmptyState className={CARD} icon={<Timer />} title={emptyTitle(range, today, 'hazırlanan kalem')}>
+            <EmptyState className={CARD} art="saat" title={emptyTitle(range, today, 'hazırlanan kalem')}>
               Bar ve mutfak ekranında “Hazır”a basılan kalemler burada sayılır
             </EmptyState>
           );

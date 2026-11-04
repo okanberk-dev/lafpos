@@ -39,7 +39,7 @@ lafpos/
 | --- | --- | --- |
 | `settings` | anahtar → JSON ayar | işletme adı, fiş metinleri, servis oranı, otomatik kilit, senkron ayarları, servis modu (`serviceMode`) |
 | `users`, `sessions` | personel, PIN, rol, kişi bazlı yetki; oturumlar | PIN `HMAC(secret, pin)` olarak tekil |
-| `time_entries` | personel mesaisi (giriş-çıkış) | iş günü girişten (05:00 kuralı); `source`: pin (kilit ekranı), oturum ya da yonetim (elle); kişi başına tek açık mesai, aynı kişide çakışma yok, en çok 24 saat; düzelten yönetici `edited_by` (göç 0014) |
+| `time_entries` | eski personel mesaisi (giriş-çıkış) | mesai 4 Kasım 2026'da kaldırıldı: tablo ve kayıtları durur, hiçbir kod okumaz ya da yazmaz (göç 0014; silinmedi, `db:generate` göç üretmez) |
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
 | `categories`, `products` | menü | `price` (M/tek), `priceL` (L), `kdvRate`, `extSource/extId` (`laffogato`/`mnu-0011`), POS'a özel alanlar, porsiyon sayacı, `isService` |
@@ -266,7 +266,8 @@ gerçek teşekkür gönderimi (bara giden satışta numara, gitmeyende numarası
 adisyon görüntüsü iptal olur ve gönderimler sırayla gider (`src/lib/display.ts`): ödemeden hemen önce kurulan
 zamanlayıcı teşekkürü ezip ekranı ödenmemiş adisyona döndürüyordu (bu akış buldu).
 
-**Mesai ve vardiya kasa sayımı** (2 Kasım 2026, `claude/mesai-vardiya`; sunucu ve API, ekranlar ayrı): personel girişini
+**Mesai ve vardiya kasa sayımı** (2 Kasım 2026, `claude/mesai-vardiya`; mesai kısmı 4 Kasım'da kaldırıldı, aşağıda
+"Mesai kaldırıldı"; vardiya kasa sayımı yerinde): personel girişini
 kasa oturumundan (`POST /api/time/clock-in`, `/clock-out`) ya da kilit ekranında oturum açmadan PIN'le yapar
 (`POST /api/time/punch`: PIN giriş ekranıyla aynı denetim ve deneme sınırı; yön verilmezse durum değişir, bir dakika
 içindeki ikinci basış yok sayılır). Kurallar her yazmada: çıkış girişten sonra, ileri tarih yok, mesai en çok 24 saat
@@ -295,6 +296,15 @@ alır (yalnız bu alanlar ve işletme adı), son görünümü cihazda saklar: so
 çizilir (çevrimdışı açılış yok: sayfanın kendisi sunucudan gelir). Görünüm laffogato.net
 kimliğindedir (`DESIGN.md`). Test `tests/musteri-ekrani-ayar.test.ts`; e2e taramasında yeni ekranlar ve durumları,
 akışlarda mesai ve vardiya devri.
+
+**Mesai kaldırıldı** (4 Kasım 2026, operatör kararı): kilit ekranının Mesai sekmesi (yalnız "Oturum aç" kalır),
+kullanıcı menüsündeki mesai satırı ve avatarın "mesaide" noktası, Yönetim › Mesai çizelgesi, patron panelindeki "Şu an
+mesaide" karosu (kalan beş karo ızgarayı boşluksuz doldurur), `/api/time` uçları, `mesai.yonet` yetkisi, `time` canlı
+konusu ve mesai yardımcıları (`shiftForgotten`) kalktı. **Vardiya devri** (banknotla sayım, devralanın PIN'i) olduğu
+gibi kalır; kasa, gün ve Z değişmedi. `time_entries` tablosu ve kayıtları silinmedi (şemada not, yeni göç yok); eski
+denetim kayıtları (`time.*`) "Mesai" adıyla okunur. Kayıtlı rol setlerinde ya da kişinin ek yetkilerinde kalan
+`mesai.yonet` okurken düşer (`isPermission`): roller ve personel ekranı açılır, düzenleme "Bilinmeyen yetki"ye takılmaz.
+Testi `tests/mesai-kaldirildi.test.ts`.
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,

@@ -904,29 +904,20 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Telefonda kilit ekranı: garson PIN’iyle mesai başlatır, kullanıcı menüsünden bitirir',
+      'Telefonda kilit ekranı: garson PIN’iyle oturum açar; mesai sekmesi ve satırı yok',
       async () => {
         await withPage(ctx, 'telefon', null, async (page) => {
           await go(ctx, page, '/giris');
-          await page.getByRole('button', { name: 'Mesai', exact: true }).click();
+          assert(!(await page.getByRole('button', { name: 'Mesai', exact: true }).count()), 'kilit ekranında Mesai sekmesi var');
           for (const d of PINS.garson) await page.getByRole('button', { name: d, exact: true }).click();
-          await page.getByRole('button', { name: 'Onayla', exact: true }).click();
-          await page.getByRole('status').filter({ hasText: 'Hoş geldin' }).waitFor({ timeout: 8000 });
-          // Mesai oturum açmaz: ekran girişte kalır
-          assert(new URL(page.url()).pathname === '/giris', `mesai oturum açtı: ${page.url()}`);
+          if (PINS.garson.length < 6) await page.getByRole('button', { name: 'Giriş', exact: true }).click();
+          await page.waitForURL((u) => u.pathname !== '/giris', { timeout: 8000 });
+          await page.getByRole('button', { name: /menüsü$/ }).first().click();
+          await page.getByRole('button', { name: /^Ekranı kilitle/ }).waitFor({ timeout: 8000 });
+          assert(!(await page.getByRole('button', { name: /^Mesaiyi/ }).count()), 'kullanıcı menüsünde mesai satırı var');
         });
-        const sheet = await api.call('patron', 'GET', '/time');
-        assert(sheet.clockedIn.some((e) => e.userName === 'Garson'), 'garson mesaide görünmüyor');
         // Personel çekmecesindeki kayıt (önceki akış) garsonun oturumlarını kapatır: yeni oturum
         api.tokens.garson = (await api.call('', 'POST', '/auth/login', { pin: PINS.garson })).token;
-        await withPage(ctx, 'telefon', 'garson', async (page) => {
-          await go(ctx, page, '/masalar');
-          await page.getByRole('button', { name: /menüsü$/ }).first().click();
-          await page.getByRole('button', { name: 'Mesaiyi bitir', exact: true }).click();
-          await page.getByRole('button', { name: 'Mesaiyi başlat', exact: true }).waitFor({ timeout: 8000 });
-        });
-        const after = await api.call('patron', 'GET', '/time');
-        assert(!after.clockedIn.some((e) => e.userName === 'Garson'), 'garson hâlâ mesaide');
       },
     ],
     [

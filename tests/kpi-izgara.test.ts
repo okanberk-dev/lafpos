@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { kpiCellSpan, kpiGridCols } from '../src/lib/kpiGrid';
 
 /**
- * Dört hücreli KPI şeridi (Mesai çizelgesi, Raporlar › Saatlik, Paket platformları) tablette 2+2: dörde bölünen
+ * Dört hücreli KPI şeridi (Raporlar › Saatlik, Paket platformları) tablette 2+2: dörde bölünen
  * şeritte hücre başına ~107 px kalıyor, etiket kırılıyor ve rakam 18-19 px'e iniyordu. Geniş ekranda tek satır.
  * İskelet aynı yardımcıyı kullanır (src/components/admin/ui.tsx), veri gelince şerit zıplamaz.
  */

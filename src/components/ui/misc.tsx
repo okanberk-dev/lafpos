@@ -69,9 +69,9 @@ export function SizeTag({ children, className }: { children?: ReactNode; classNa
 }
 
 /**
- * Baş harf avatarı (personel, mesai, kabuk, giriş ekranı): kişinin renginde daire, adın ilk iki harfi; harf beyaz ya
+ * Baş harf avatarı (personel, kabuk, giriş ekranı): kişinin renginde daire, adın ilk iki harfi; harf beyaz ya
  * da gece mürekkebi, hangisi o zeminde okunursa (`initialsInk`). Boy `className`'den ('size-7 text-[11px]',
- * 'size-11 text-sm'); `children` üstüne biner (mesaide noktası). Süstür: adı yanındaki yazı söyler
+ * 'size-11 text-sm'); `children` üstüne biner (durum noktası). Süstür: adı yanındaki yazı söyler
  */
 export function Avatar({ name, color, className, children }: { name: string; color: string; className?: string; children?: ReactNode }) {
   return (

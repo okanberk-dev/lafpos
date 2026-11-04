@@ -206,9 +206,8 @@ export function recordPinChoice(addr: string, user: { id: string; name: string }
 }
 
 /**
- * Giriş PIN'i: giriş ekranı (`/auth/login`) ve kilit ekranındaki mesai saati (`/time/punch`) aynı denetimi ve aynı
- * deneme sınırını ('giris', cihaz başına) kullanır; mesai saati PIN taramanın yan kapısı olmasın. Hatalı PIN ile
- * kapalı hesabın PIN'i aynı yanıtı alır.
+ * Giriş PIN'i (`/auth/login`): deneme sınırı cihaz başına ('giris'). Hatalı PIN ile kapalı hesabın PIN'i aynı yanıtı
+ * alır.
  */
 export function verifyLoginPin(pin: string, addr: string): UserRow {
   assertNotLocked('giris', addr);
@@ -322,8 +321,8 @@ export function resolveToken(token: string): AuthUser | null {
   return resolveSession(sha256(token), true);
 }
 
-/** Oturumsuz uçlar. Mesai saati kilit ekranında PIN'le basılır: PIN giriş gibi denetlenir, oturum açılmaz */
-const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health', '/api/time/punch'];
+/** Oturumsuz uçlar */
+const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health'];
 
 export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const path = c.req.path;

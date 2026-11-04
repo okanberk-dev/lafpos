@@ -2,7 +2,7 @@ import { ChevronRight, Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
-import { fmtTime, shiftForgotten } from '@shared/time';
+import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -16,10 +16,8 @@ import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
-import { useMyTime } from '@/lib/mesai';
 import { CommandPalette } from './CommandPalette';
 import { LafMark, LafTile } from './LafMark';
-import { MesaiRow } from './MesaiRow';
 import { PlatformInbox } from './PlatformInbox';
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
@@ -107,10 +105,6 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
   useReadyAlerts();
-  // Mesaide olan kişinin avatarında yeşil nokta (kullanıcı menüsünde süre ve Mesaiyi bitir)
-  // Önceki günden açık kalmış (çıkışı unutulmuş) mesai "mesaide" sayılmaz
-  const myOpen = useMyTime().data?.open;
-  const onClock = !!myOpen && !shiftForgotten(myOpen.clockIn, Date.now());
   const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
     const on = () => setFull(!!document.fullscreenElement);
@@ -142,7 +136,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const admin = isAdminArea(location.pathname);
   const fullBleed = admin || location.pathname.startsWith('/adisyon/') || location.pathname === '/mutfak';
   // Üst şeridi olmayan ekranda (adisyon, bar ekranı) kişinin menüsü alt sekmede: tek ekranlı rol (Bar) de telefonda
-  // kilitleyip mesaisini bitirebilsin. Tek sekmelik çubuk çizilmez (kuryenin tek ekranı; menüsü üst şeritte)
+  // kilitleyip oturumu kapatabilsin. Tek sekmelik çubuk çizilmez (kuryenin tek ekranı; menüsü üst şeritte)
   const meTab = !admin && fullBleed && tabs.length + (more.length ? 1 : 0) < 5;
   const showTabs = tabs.length > 1 || meTab;
   const lock = async () => {
@@ -228,13 +222,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       </div>
     );
   };
-  const avatar = (size: keyof typeof AVATAR, dot = true) => (
-    // Kitin avatarı (personel ve giriş ekranıyla tek): ince iç halka, açık kişi renginde koyu harf. Mesaideyse sağ altta
-    // yeşil nokta. Ad düğmenin etiketinde
-    <Avatar name={me.name} color={me.color} className={AVATAR[size]}>
-      {dot && onClock && <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-surface bg-[var(--admin-success)]" />}
-    </Avatar>
-  );
+  // Kitin avatarı (personel ve giriş ekranıyla tek): ince iç halka, açık kişi renginde koyu harf. Ad düğmenin etiketinde
+  const avatar = (size: keyof typeof AVATAR) => <Avatar name={me.name} color={me.color} className={AVATAR[size]} />;
   // Alt sekme: ikon hapın içinde; etkin sekme yalnız renkle değil, gri hap ve kalın yazıyla da ayrılır
   const tab = (on: boolean) => cn('group flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150', on ? 'font-semibold text-ink' : 'font-medium text-muted');
   const tabPill = (on: boolean) => cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', on ? 'bg-surface-3' : 'group-active:bg-press');
@@ -242,7 +231,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const sheetIcon = 'grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 [&>svg]:size-[18px]';
   // Menünün başlığı kişi: adı ve rolü (tek şubeli kasada işletmenin adı bilgi taşımaz)
   const roleLabel = ROLE_LABELS[me.role];
-  const menuSubtitle = REMOTE ? 'Yalnız görüntüleme' : [roleLabel !== me.name && roleLabel, onClock && 'mesaide'].filter(Boolean).join(' · ') || undefined;
+  const menuSubtitle = REMOTE ? 'Yalnız görüntüleme' : (roleLabel !== me.name ? roleLabel : undefined);
   // Uzaktan giriş ekranı parola sormadan giriyorsa (demo ya da parolasız görünüm) çıkış aynı oturumu yeniden açar: satır yok
   const remoteSignOut = useRemoteSignOut();
 
@@ -383,7 +372,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         title={
           // Dokunulan avatar başlıkta da: menünün kimin olduğu bir bakışta
           <span className="flex min-w-0 items-center gap-2.5">
-            {avatar('sm', false)}
+            {avatar('sm')}
             <span className="truncate">{me.name}</span>
           </span>
         }
@@ -391,7 +380,6 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         size="sm"
       >
         <div className="space-y-2 p-4">
-          {!REMOTE && <MesaiRow className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line px-3 py-2.5" />}
           {REMOTE && (
             // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
             <a href="/demo/" className={sheetRow}>

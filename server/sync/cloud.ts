@@ -116,9 +116,9 @@ function schedule() {
 
 export function startCloudSync(): NodeJS.Timeout[] {
   if (!cloudEnabled()) return [];
-  // Personel ve mesai olayları uzaktan özetini değiştirmez
+  // Personel olayları uzaktan özetini değiştirmez
   bus.on('event', (e: { topic: string }) => {
-    if (e.topic !== 'users' && e.topic !== 'time') schedule();
+    if (e.topic !== 'users') schedule();
   });
   return [setTimeout(schedule, 5_000), setInterval(schedule, HEARTBEAT_MS)];
 }

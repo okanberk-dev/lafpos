@@ -176,9 +176,6 @@ export function setSyncState(key: string, value: unknown) {
  */
 const ADDED_PERMISSIONS: { permission: Permission; like: Permission[] }[] = [
   { permission: 'siparis.odenmez', like: ['siparis.ikram', 'odeme.iade'] },
-  // Mesai çizelgesi personel verisidir: personel tutarlarını gören ya da personeli yöneten rol alır (müdür)
-  { permission: 'mesai.yonet', like: ['rapor.maliyet'] },
-  { permission: 'mesai.yonet', like: ['personel.yonet'] },
 ];
 
 const SETTINGS_UPGRADES_KEY = 'ayar-guncellemeleri';

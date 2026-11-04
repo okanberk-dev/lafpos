@@ -43,13 +43,18 @@ export const PERMISSIONS = {
   'stok.yonet': 'Stok, reçete, sayım ve zayi',
   'ayar.yonet': 'Masa planı, yazıcı ve genel ayarlar',
   'personel.yonet': 'Personel ve yetkiler',
-  'mesai.yonet': 'Mesai çizelgesi: personelin giriş-çıkışını görme ve düzeltme',
   'senkron.yonet': 'laffogato / lafmaliyet bağlantısı',
   'patron.panel': 'Patron paneli ve uyarılar',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
+
+/**
+ * Bugün tanımlı bir yetki mi. Kaldırılan yetkinin anahtarı (ör. mesai kaldırılınca `mesai.yonet`) kayıtlı rol
+ * setlerinde ve kişinin ek ya da kaldırılan yetkilerinde kalabilir: okurken düşer, yükleme ve düzenleme bozulmaz
+ */
+export const isPermission = (p: string): p is Permission => Object.hasOwn(PERMISSIONS, p);
 
 export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
   patron: ALL_PERMISSIONS,
@@ -81,7 +86,7 @@ export const PERMISSION_GROUPS: { key: string; label: string; permissions: Permi
   { key: 'odeme', label: 'Ödeme ve kasa', permissions: ['odeme.al', 'odeme.iade', 'kasa.gun', 'kasa.rakam', 'kasa.hareket', 'cari.yonet'] },
   { key: 'bar', label: 'Bar ve mutfak', permissions: ['mutfak.ekran', 'urun.tukendi'] },
   { key: 'rapor', label: 'Raporlar', permissions: ['rapor.gor', 'rapor.maliyet', 'patron.panel'] },
-  { key: 'yonetim', label: 'Yönetim', permissions: ['menu.yonet', 'stok.yonet', 'ayar.yonet', 'personel.yonet', 'mesai.yonet', 'senkron.yonet'] },
+  { key: 'yonetim', label: 'Yönetim', permissions: ['menu.yonet', 'stok.yonet', 'ayar.yonet', 'personel.yonet', 'senkron.yonet'] },
 ];
 
 /** Patron rolü her yetkiye sahiptir ve değiştirilemez: kimse kendini paneldan dışarıda bırakamasın */
@@ -93,7 +98,7 @@ export type RoleMatrix = Partial<Record<Role, Permission[]>>;
 export function rolePermissions(role: Role, matrix?: RoleMatrix | null): Permission[] {
   if (LOCKED_ROLES.includes(role)) return ALL_PERMISSIONS;
   const custom = matrix?.[role];
-  return custom ? custom.filter((p) => p in PERMISSIONS) : (ROLE_DEFAULTS[role] ?? []);
+  return custom ? custom.filter(isPermission) : (ROLE_DEFAULTS[role] ?? []);
 }
 
 export interface PermissionOverrides {
@@ -103,7 +108,7 @@ export interface PermissionOverrides {
 
 export function effectivePermissions(role: Role, overrides?: PermissionOverrides | null, matrix?: RoleMatrix | null): Set<Permission> {
   const set = new Set<Permission>(rolePermissions(role, matrix));
-  for (const p of overrides?.grant ?? []) if (p in PERMISSIONS) set.add(p);
+  for (const p of overrides?.grant ?? []) if (isPermission(p)) set.add(p);
   for (const p of overrides?.revoke ?? []) set.delete(p);
   return set;
 }
