@@ -395,12 +395,15 @@ oradan sayar), hepsi tek yeni fişte. Hesap açık kalırken kalemi seçilerek t
 seçili kalemle sepet) bekleyen satır hemen gider (`releasePaidHeld`). Satır bölünmez: bölmek satır ve adisyon indirimini
 yeniden yuvarlar, ödenen adedin yazılı tutarı yeni payını tutmaz (yazarkasa kalanı 1 kuruşla reddeder ya da 0,01 ₺ açık
 kalır). Bir kısmı ödenen satır ve tutarla kısmi ödeme hesap kapanınca gider; hesabı kapatan ödemede bekleyenlerin hepsi
-tek fişle gider. Masaya taşınan ("Masa taşı") ya da masa veya gel-al adisyonuna aktarılan bekleyen kalem bara gider. "Ödemeden
+tek fişle gider. Ödeme dışı bir işlem (kalem iptali, ikram, kalem taşıma ya da bölme, indirim) ödeme alınmış hesapta
+ödenecek bir şey bırakmazsa bekleyenler de tek fişle hemen gider, adisyon açık kalır ("Adisyonu kapat" kapatır, ikinci
+fiş çıkmaz; `releaseSettledHeld`). Masaya taşınan ("Masa taşı") ya da masa veya gel-al adisyonuna aktarılan bekleyen kalem bara gider. "Ödemeden
 gönder" (`POST /orders/:id/release`, `siparis.al`, denetimde `order.release`) bekleyenleri hemen yollar. Müşteri
 vazgeçerse satış onaysız iptal edilir; bekleyen kalem bara hiç gitmediği için fire sayılmaz (`voidAfterSend` yok), bar
 iptal sesi duymaz. "Bara gönder" eskisi gibi hemen gönderir. Bar fişinde tahsil edilecek bir şey yoksa "Ödendi"
 (`KitchenTicket.paid`): hesap kapanmış (ödenmiş ya da ciro dışı) ya da tamamı ödenmiş, ya da fişin bütün canlı kalemleri
-kalemi seçilerek ödenmiş ya da ikram; "Ödemeden gönder" ile gidende yok. Siparişler kartı bekleyen
+kalemi seçilerek ödenmiş ya da ikram; "Ödemeden gönder" ile gidende yok. Ödeme, iade, iptal, ikram, indirim ve
+taşıma bar ekranını hemen tazeler (`kitchen` konusunda `ticket.payment`, zil çalmaz). Siparişler kartı bekleyen
 kalemi "barda" saymaz, "Ödeme bekliyor" rozeti gösterir. Testler `tests/odeme-sonrasi-bar.test.ts` (sql.js ile de), e2e
 akışı tablette.
 

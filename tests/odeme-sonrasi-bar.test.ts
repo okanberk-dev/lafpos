@@ -222,6 +222,81 @@ describe('tezgâh satışında "Öde": ödeme alınınca bara', () => {
     expect(tickets[0].paid).toBe(true);
   });
 
+  describe('ödeme dışı işlem hesapta ödenecek bir şey bırakmazsa bekleyenler hemen gider (adisyon açık kalır)', () => {
+    /** İki müşteri tek satırda 2× latte; biri kendi lattesini "Kalem seç" ile öder: satır kısmen ödendi, bekler */
+    const halfPaid = async () => {
+      let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+      o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte().id, size: 'M', qty: 2 }], hold: true });
+      await payItems(o.id, [{ lineId: o.items[0].id, qty: 1 }]);
+      expect(await kitchenItemIds()).not.toContain(o.items[0].id);
+      return { o, line: o.items[0] };
+    };
+
+    it('öteki adet iptal edilince ödenen latte bara gider ("Ödendi")', async () => {
+      const { o, line } = await halfPaid();
+      await h.ok('kasa', 'POST', `/orders/${o.id}/items/${line.id}/void`, { qty: 1, reason: 'Vazgeçti' });
+      const tickets = await ticketsOf(o.id);
+      expect(tickets.map((t) => t.items.map((i) => i.id))).toEqual([[line.id]]);
+      expect(tickets[0].paid).toBe(true);
+      expect((await h.ok<OrderDTO>('mudur', 'GET', `/orders/${o.id}`)).status).toBe('acik');
+    });
+
+    it('öteki adet ikram edilince ikisi tek fişle gider; sonra kapatınca ikinci fiş çıkmaz', async () => {
+      const { o } = await halfPaid();
+      await h.ok('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/comp`, { qty: 1, reason: 'Müdavim', approverPin: PINS.mudur });
+      let tickets = await ticketsOf(o.id);
+      expect(tickets).toHaveLength(1);
+      expect(tickets[0].items).toHaveLength(2);
+      expect(tickets[0].paid).toBe(true);
+      await h.ok('kasa', 'POST', `/orders/${o.id}/close`, {});
+      tickets = await ticketsOf(o.id);
+      expect(tickets).toHaveLength(1);
+    });
+
+    it('öteki adet masaya taşınınca ödenen latte de bara gider', async () => {
+      const { o, line } = await halfPaid();
+      const table = h.boot.tables.filter((t) => t.kind === 'masa')[5];
+      await h.ok('kasa', 'POST', `/orders/${o.id}/transfer`, { items: [{ itemId: line.id, qty: 1 }], tableId: table.id });
+      expect(await kitchenItemIds()).toContain(line.id);
+      expect((await ticketsOf(o.id)).find((t) => t.items.some((i) => i.id === line.id))?.paid).toBe(true);
+    });
+
+    it('tutarla kısmi ödemeden sonra indirim kalanı sıfırlarsa bekleyenler gider', async () => {
+      const o = await counterSale(1);
+      await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash().id, amount: 10000 });
+      expect(await kitchenItemIds()).not.toContain(o.items[0].id);
+      await h.ok('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: o.total - 10000, reason: 'Müdavim', approverPin: PINS.mudur });
+      expect(await kitchenItemIds()).toContain(o.items[0].id);
+    });
+
+    it('ödeme alınmamış ₺0 satış (hepsi ikram) eskisi gibi kapanınca gider', async () => {
+      const o = await counterSale(1);
+      await h.ok('kasa', 'POST', `/orders/${o.id}/items/${o.items[0].id}/comp`, { reason: 'Müdavim', approverPin: PINS.mudur });
+      expect(await kitchenItemIds()).not.toContain(o.items[0].id);
+      await h.ok('kasa', 'POST', `/orders/${o.id}/close`, {});
+      expect(await kitchenItemIds()).toContain(o.items[0].id);
+    });
+  });
+
+  it('ödeme bar ekranını hemen tazeler ("Ödendi" 15 saniyelik yoklamayı beklemez; zil çalmaz)', async () => {
+    const { bus } = await import('../server/lib/events');
+    const table = h.boot.tables.filter((t) => t.kind === 'masa')[6];
+    let o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 1 });
+    o = await h.ok<OrderDTO>('garson', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte().id, size: 'M', qty: 1 }] });
+    expect((await ticketsOf(o.id))[0].paid).toBe(false);
+    const seen: { topic: string; kind: string; orderId?: string }[] = [];
+    const listen = (e: { topic: string; kind: string; orderId?: string }) => seen.push(e);
+    bus.on('event', listen);
+    try {
+      await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash().id, amount: o.total });
+    } finally {
+      bus.off('event', listen);
+    }
+    expect(seen.some((e) => e.topic === 'kitchen' && e.kind === 'ticket.payment' && e.orderId === o.id)).toBe(true);
+    expect(seen.some((e) => e.topic === 'kitchen' && e.kind === 'ticket.new')).toBe(false);
+    expect((await ticketsOf(o.id))[0].paid).toBe(true);
+  });
+
   it('yalnız tezgâh satışında: masa siparişinde "hold" reddedilir', async () => {
     const table = h.boot.tables.filter((t) => t.kind === 'masa')[3];
     const o = await h.ok<OrderDTO>('garson', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 1 });

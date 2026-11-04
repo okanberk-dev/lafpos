@@ -172,7 +172,7 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   hazırlanıyor, yeşil hazır, amber ve kırmızı gecikme); başlıkta yer (masa, numara, çağrı) en büyük yazı, ikinci satırda
   numara, garson ve gönderim saati, tahsil edilecek bir şey yoksa yeşil "Ödendi" (hesap kapanmış ya da tamamı ödenmiş,
   ya da fişin kalemleri seçilerek ödenmiş; tezgâh satışı ödeme alınınca düşer; "Ödemeden gönder" ile gidende yok,
-  teslimde tahsil edilir).
+  teslimde tahsil edilir). Ödeme ya da iade anında görünür ya da kalkar.
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok):
   - **Müşteri ekranı** `/musteri-ekrani` (iki ekranlı kasanın ikinci monitörü ya da müşteriye dönük tablet): boşta
     karşılama (L'Af, Gabarito 800 başlık, bayrak çizgisi, slogan; dönen duyurular, karekod, saat), adisyon açıkken

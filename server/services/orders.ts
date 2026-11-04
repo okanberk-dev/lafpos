@@ -154,9 +154,29 @@ export function assertNoActiveRoom(t: Tx | DB, orderId: string) {
   if (activeRoom(t, orderId)) throw conflict('Önce oda sayacını durdurun', 'room_running');
 }
 
+/**
+ * Hesabın ödenen ya da ödenecek tutarını değiştiren olaylar: bar fişindeki "Ödendi" (KitchenTicket.paid) değişebilir,
+ * bar ekranı 15 saniyelik yoklamayı beklemeden tazelenir (zil çalmaz: yalnız ticket.new ve ticket.void çalar)
+ */
+const PAYMENT_KINDS = new Set([
+  'payment.added',
+  'payment.refunded',
+  'order.closed',
+  'order.reopened',
+  'order.discount',
+  'item.discount',
+  'item.voided',
+  'item.comped',
+  'item.uncomped',
+  'order.items_moved',
+  'order.split',
+  'order.merged',
+]);
+
 function orderEvents(fx: Effects, o: Pick<OrderRow, 'id' | 'tableId'>, userId: string, kind: string) {
   fx.emit({ topic: 'orders', kind, orderId: o.id, tableId: o.tableId ?? undefined, byUserId: userId });
   fx.emit({ topic: 'tables', kind, orderId: o.id, tableId: o.tableId ?? undefined, byUserId: userId });
+  if (PAYMENT_KINDS.has(kind)) fx.emit({ topic: 'kitchen', kind: 'ticket.payment', orderId: o.id, byUserId: userId });
 }
 
 /**
@@ -500,6 +520,19 @@ function releasePaidHeld(t: Tx, fx: Effects, orderId: string, byUserId: string):
 }
 
 /**
+ * Ödeme dışı bir işlem (kalem iptali, ikram, kalem taşıma ya da bölme, indirim) tezgâh satışında satırın ödenmemiş
+ * adedini ya da ödenecek tutarı kaldırınca: ödeme alınmış ve ödenecek tutar kalmamışsa bekleyenlerin hepsi tek fişle bara
+ * gider (adisyon açık kalır, "Adisyonu kapat" kapatır; kapanışta ikinci fiş çıkmaz); yoksa tamamen ödenen satır gider.
+ * Hiç ödeme alınmamış ₺0 satış (hepsi ikram) eskisi gibi kapanınca gider
+ */
+function releaseSettledHeld(t: Tx, fx: Effects, orderId: string, userId: string): void {
+  const o = loadOrder(t, orderId);
+  if (o.status !== 'acik' || !holdsUntilPaid(o)) return;
+  if (o.paid > 0 && o.total - o.paid <= 0) releaseHeld(t, fx, orderId, userId);
+  else releasePaidHeld(t, fx, orderId, userId);
+}
+
+/**
  * "Bara gönder": ödeme bekleyen kalemler ödeme alınmadan bara gider (müşteri sonra ödeyecek, kasiyer karar verdi).
  * Sipariş yetkisi ister; denetime bilgi olarak yazılır (ödenmemiş siparişin bara gittiği izlenebilsin)
  */
@@ -604,6 +637,7 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     data: { afterSend, fresh },
   });
   approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} iptal etti`);
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.voided');
   if (it.stationId && !it.held) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: it.stationId, byUserId: actor.user.id });
   return updated;
@@ -725,6 +759,7 @@ export function compItem(
     data: { kind, ...(person ? { person: { kind: person.compPersonKind, id: person.compPersonId, name: person.compPersonName } } : {}) },
   });
   approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} ${did}`);
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.comped');
   return updated;
 }
@@ -925,6 +960,7 @@ export function setItemDiscount(
       message: `${actor.user.name} #${o.no} adisyonda ${it.name} için ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
     });
   }
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.discount');
   return updated;
 }
@@ -991,6 +1027,7 @@ export function setOrderDiscount(
     amount,
     message: `${actor.user.name} #${o.no} adisyona ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
   });
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'order.discount');
   return updated;
 }
@@ -1245,6 +1282,8 @@ export function transferItems(
       .where(eq(schema.orders.id, orderId))
       .run();
   }
+  // Kaynakta kalan bekleyen kalem: taşınan ödenmemiş adet gidince hesap ödenmiş olabilir
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
