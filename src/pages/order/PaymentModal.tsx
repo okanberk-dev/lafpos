@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Check, CheckCircle2, Droplets, Gift, HandCoins, Printer, RotateCcw, UserPlus, Users } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, COMP_LABEL, compCloseSubtitle, compReasonsOf } from '@shared/comp';
@@ -17,6 +18,7 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { newRequestId } from '@/lib/requestId';
+import { onLive } from '@/lib/live';
 import { BillReceipt, printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
 import { callFor, numaratorLabel } from '@shared/service-mode';
@@ -65,6 +67,7 @@ export function PaymentModal({
 }) {
   const boot = useBoot();
   const can = useCan();
+  const qc = useQueryClient();
   const serviceMode = useServiceMode();
   const remaining = order.total - order.paid;
   const split = order.split;
@@ -105,6 +108,34 @@ export function PaymentModal({
   useEffect(() => {
     if (devicePending) pendingRef.current?.scrollIntoView({ block: 'nearest' });
   }, [devicePending]);
+
+  /**
+   * Yazarkasa sonucu burada karşılanır; pencere kapalıyken de (bileşen adisyon ekranıyla birlikte durur). Cihaz ödeyince
+   * satış tamamlanır: sepet temizlenir, müşteri ekranı teşekkür eder, tezgâhta yeni satış açılır. Sepeti bu cihaz
+   * gönderdiyse pencere Kapat'la kapatılmış olsa da sonuç kaybolmaz; kapalı pencerede başka cihazın sepeti bu ekranı
+   * değiştirmez. Güncel `open` ve `onDone` ref'ten okunur: dinleyici her çizimde yeniden kurulmaz
+   */
+  const okcSentHere = useRef<string | null>(null);
+  const latest = useRef({ open, onDone });
+  useEffect(() => {
+    latest.current = { open, onDone };
+  });
+  useEffect(() => {
+    let seen: number | null = null;
+    return onLive((e) => {
+      if (e.topic !== 'okc' || e.orderId !== order.id) return;
+      if (e.kind === 'okc.cancelled') okcSentHere.current = null;
+      if (e.kind !== 'okc.paid' || e.seq === seen) return;
+      const { open: shown, onDone: done } = latest.current;
+      if (!shown && okcSentHere.current !== order.id) return;
+      seen = e.seq;
+      okcSentHere.current = null;
+      const closed = !!e.message?.includes('kapandı');
+      toast.ok(e.message ?? 'Yazarkasada ödendi');
+      // Kapalı pencerede adisyonu kapatmayan cihaz ödemesi yalnız bildirilir: açık başka pencere (İşlemler) kapanmasın
+      if (shown || closed) done(closed);
+    });
+  }, [order.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -168,9 +199,13 @@ export function PaymentModal({
   const cariBlocked = method?.kind === 'cari' && !order.customer;
   // Açık hesapta para alınmaz; bahşiş yazılırsa raporda alınmış görünür (sunucu da reddeder)
   const tipBlocked = method?.kind === 'cari' && tip > 0;
+  // Açık hesap sınırını aşan yazımı sunucu yetkili onayıyla da yazmaz (credit_limit): düğme kapanır, nedeni söyler
+  const cust = order.customer;
+  const cariAfter = cust ? cust.balance + amount : 0;
+  const cariOver = method?.kind === 'cari' && !!cust && cust.creditLimit != null && cariAfter > cust.creditLimit;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
-  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks && !devicePending;
+  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending;
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
   const closeComp = async (reason: string) => {
@@ -273,14 +308,20 @@ export function PaymentModal({
       return;
     }
     // Kartla alınan kısmi ödeme ve pay sonuç ekranı açmaz: alındığı bildirilir (sıfırlanan alan dokunuş boşa gitti
-    // sanılıp ödeme ikinci kez alınmasın)
-    toast.ok(res.share ? `Pay ${res.share.no}/${res.share.of} alındı · ${method.name}` : `${tl(res.amount + tip)} alındı · ${method.name}${tip > 0 ? ` · ${tl(tip)} bahşiş dahil` : ''}`);
+    // sanılıp ödeme ikinci kez alınmasın). Açık hesapta para alınmaz: tutar müşterinin hesabına yazılır
+    if (method.kind === 'cari') {
+      const owner = res.order.customer?.name;
+      toast.ok(`${shareLabel ? `Pay ${shareLabel}` : tl(res.amount)} açık hesaba yazıldı${owner ? ` · ${owner}` : ''}`);
+      return;
+    }
+    toast.ok(shareLabel ? `Pay ${shareLabel} alındı · ${method.name}` : `${tl(res.amount + tip)} alındı · ${method.name}${tip > 0 ? ` · ${tl(tip)} bahşiş dahil` : ''}`);
   };
 
   const refund = async (p: OrderDTO['payments'][number]) => {
     const reason = await promptDialog({
       title: 'Ödeme iptali',
-      body: `${p.methodName} · ${tl(p.amount)}. İptal denetim kaydına yazılır`,
+      // Bahşiş de ödemeyle birlikte düşer: tutar bankanın POS'unda iptal edilecek olandır (ödeme düğmesindeki gibi)
+      body: `${p.methodName} · ${tl(p.amount + p.tip)}${p.tip > 0 ? ` (${tl(p.tip)} bahşiş dahil)` : ''}. İptal denetim kaydına yazılır`,
       label: 'Neden',
       placeholder: 'Ör. yanlış tutar girildi',
       maxLength: 200,
@@ -348,21 +389,24 @@ export function PaymentModal({
     );
   }
 
-  // Ödeme düğmesi ne yapacağını söyler: hazır değilse eksik adımı, açık hesapta "yaz" (para alınmaz); tutar bahşişi
-  // de içerir (bankanın POS'una girilen ve gün sonunda kart slipiyle karşılaştırılan tutar)
-  const payStep = splitBlocks
-    ? 'Payları Paylaş’tan alın'
-    : mode === 'paylas' && !split
-      ? 'Önce hesabı bölün'
-      : mode === 'paylas' && !nextShare
-        ? 'Kalanı Tutar’dan alın'
-        : mode === 'kalem' && !picked.length
-          ? 'Ödenecek kalemleri seçin'
-          : mode === 'tutar' && typed <= 0
-            ? 'Tutar girin'
-            : !method
-              ? 'Ödeme türü seçin'
-              : null;
+  // Ödeme düğmesi ne yapacağını söyler: hazır değilse eksik adımı ya da engeli, açık hesapta "yaz" (para alınmaz); tutar
+  // bahşişi de içerir (bankanın POS'una girilen ve gün sonunda kart slipiyle karşılaştırılan tutar). Sınırı zaten dolu
+  // açık hesaba hiçbir tutar yazılmaz: engel eksik adımlardan önce söylenir
+  const payStep = cariOver
+    ? 'Açık hesap sınırı aşılıyor'
+    : splitBlocks
+      ? 'Payları Paylaş’tan alın'
+      : mode === 'paylas' && !split
+        ? 'Önce hesabı bölün'
+        : mode === 'paylas' && !nextShare
+          ? 'Kalanı Tutar’dan alın'
+          : mode === 'kalem' && !picked.length
+            ? 'Ödenecek kalemleri seçin'
+            : mode === 'tutar' && typed <= 0
+              ? 'Tutar girin'
+              : !method
+                ? 'Ödeme türü seçin'
+                : null;
   const payLabel = payStep ?? (method?.kind === 'cari' ? `${tl(amount)} açık hesaba yaz` : `${tl(amount + tip)} ${method?.name ?? ''} al`);
   // Para üstü ve bahşiş notu yalnız düğme tutarı gösterirken (eksik adım varken "Para üstü" yanıltır)
   const changeNote = !payStep && change != null && change !== 0 ? change : null;
@@ -370,11 +414,17 @@ export function PaymentModal({
 
   // Yazarkasa kutusu: ayar açık ve yetki varsa (OkcPanel'in kendi kuralı); sepet beklerken pencerenin en üstünde
   const okcOn = boot.integrations.okc.provider !== 'kapali' && can('odeme.al');
-  const okcPanel = <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />;
+  const okcPanel = (
+    <OkcPanel
+      order={order}
+      amount={amount}
+      items={mode === 'kalem' ? picked : null}
+      onSend={() => {
+        okcSentHere.current = order.id;
+      }}
+    />
+  );
   const hasLower = (okcOn && !devicePending) || order.payments.length > 0;
-  const cust = order.customer;
-  const cariAfter = cust ? cust.balance + amount : 0;
-  const overLimit = !!cust && cust.creditLimit != null && cariAfter > cust.creditLimit;
   const compNote = devicePending
     ? 'Sepet yazarkasada beklerken adisyon ciro dışı kapanmaz'
     : order.paid > 0
@@ -384,9 +434,9 @@ export function PaymentModal({
         : !compable
           ? 'Adisyonda ücretli kalem yok'
           : null;
-  // Yarım kalan ödeme arka plana dokununca kaybolmasın: yazılan tutar, seçilen tür, verilen, bahşiş, seçili kalem ya da
-  // süren istek varken yalnız Kapat kapatır
-  const dirty = busy || !!splitBusy || !!comp || !!method || givenText !== '' || tipText !== '' || !prefilled || picked.length > 0;
+  // Yarım kalan ödeme arka plana dokununca kaybolmasın: yazarkasada bekleyen sepet, yazılan tutar, seçilen tür, verilen,
+  // bahşiş, seçili kalem ya da süren istek varken yalnız Kapat kapatır (Kapat'tan sonra da cihazın sonucu karşılanır)
+  const dirty = devicePending || busy || !!splitBusy || !!comp || !!method || givenText !== '' || tipText !== '' || !prefilled || picked.length > 0;
 
   const footer = devicePending ? (
     <p role="status" className="py-2 text-center text-sm font-medium text-ink-2">
@@ -603,6 +653,9 @@ export function PaymentModal({
                     key={m.id}
                     onClick={() => {
                       setMethod(m);
+                      // Açık hesap sınırı ekrandaki bakiyeyle denetlenir: bakiye başka cihazda değişmiş olabilir, adisyon
+                      // (müşterinin bakiyesi ve sınırı) yenilenir
+                      if (m.kind === 'cari') void qc.invalidateQueries({ queryKey: ['order', order.id] });
                       if (m.kind === 'nakit') setFocus('verilen');
                       else if (focus === 'verilen') setFocus('tutar');
                       // Bahşiş yazılırken kart seçmek bahşiş girişini kesmez: DOM odağı tutar alanına gitse onFocus
@@ -621,9 +674,9 @@ export function PaymentModal({
               {/* Açık hesap: müşteri yoksa eksik adım ve eylemi (pencere kapanmadan eklenir); varsa kimin hesabına ne yazılacağı */}
               {method?.kind === 'cari' &&
                 (cust ? (
-                  <p className={cn('tabular mt-2 text-[13px]', overLimit ? 'text-[var(--admin-warning)]' : 'text-ink-2')}>
+                  <p className={cn('tabular mt-2 text-[13px]', cariOver ? 'text-[var(--admin-danger-ink)]' : 'text-ink-2')}>
                     <span className="font-semibold">{cust.name}</span> · açık hesap {tl(cust.balance)} → {tl(cariAfter)}
-                    {cust.creditLimit != null && ` · sınır ${tl(cust.creditLimit)}${overLimit ? ' aşılır' : ''}`}
+                    {cust.creditLimit != null && ` · sınır ${tl(cust.creditLimit)}${cariOver ? ' aşılıyor, yazılamaz' : ''}`}
                   </p>
                 ) : (
                   <Notice

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, CheckCircle2, Loader2, MonitorSmartphone, RefreshCw, XCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { tl, tlShort } from '@shared/money';
 import type { OrderDTO } from '@shared/types';
@@ -54,9 +54,10 @@ export function useOkcReceipts(order: OrderDTO, enabled = true) {
 
 /**
  * Ödeme penceresindeki "Yazarkasa POS'a gönder" bölümü. Adisyon (ya da seçilen kalemler) cihaza sepet olarak
- * gider; ödeme ve mali fiş cihazda alınır, sonuç gelince adisyon kendiliğinden kapanır.
+ * gider; ödeme ve mali fiş cihazda alınır, sonuç gelince adisyon kendiliğinden kapanır. "Ödendi" sonucunu ödeme
+ * penceresi karşılar (pencere Kapat'la kapatılmış olsa da); `onSend` sepetin bu cihazdan gittiğini ona bildirir.
  */
-export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amount: number; items: { itemId: string; qty: number }[] | null; onCompleted: (closed: boolean) => void }) {
+export function OkcPanel({ order, items, onSend }: { order: OrderDTO; amount: number; items: { itemId: string; qty: number }[] | null; onSend?: () => void }) {
   const boot = useBoot();
   const can = useCan();
   const qc = useQueryClient();
@@ -66,26 +67,22 @@ export function OkcPanel({ order, items, onCompleted }: { order: OrderDTO; amoun
   const [cancelling, setCancelling] = useState(false);
   const receipts = useOkcReceipts(order);
   const pending = receipts.pending;
-  const notified = useRef<string | null>(null);
 
   useEffect(() => {
     return onLive((e) => {
       if (e.topic !== 'okc' || e.orderId !== order.id) return;
       qc.invalidateQueries({ queryKey: ['okc', order.id] });
       qc.invalidateQueries({ queryKey: ['order', order.id] });
-      if (e.kind === 'okc.paid' && notified.current !== `${e.seq}`) {
-        notified.current = `${e.seq}`;
-        toast.ok(e.message ?? 'Yazarkasada ödendi');
-        onCompleted(!!e.message?.includes('kapandı'));
-      }
       if (e.kind === 'okc.cancelled' || e.kind === 'okc.error' || e.kind === 'okc.void') toast.warn(e.message ?? 'Cihaz işlemi iptal edildi');
     });
-  }, [order.id, qc, onCompleted]);
+  }, [order.id, qc]);
 
   if (provider === 'kapali' || !can('odeme.al')) return null;
 
   const send = async () => {
     setBusy(true);
+    // İstek gitmeden: yanıtı kaybolan sepet de cihaza ulaşmış olabilir (okc_unknown), ödenirse sonuç bu cihazda karşılanır
+    onSend?.();
     try {
       await post(`/okc/orders/${order.id}/send`, { items });
       await qc.invalidateQueries({ queryKey: ['okc', order.id] });

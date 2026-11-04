@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift, UserPlus, X } from 'lucide-react';
 import { useId, useRef, useState } from 'react';
 import { tl } from '@shared/money';
@@ -30,6 +30,7 @@ const balanceText = (balance: number) => (balance > 0 ? `Borç ${tl(balance)}` :
 /** Adisyona müşteri: telefonla bul ya da ekle. Damga kartı ve açık hesap için. */
 export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; open: boolean; onClose: () => void; act: Act }) {
   const boot = useBoot();
+  const qc = useQueryClient();
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -89,7 +90,15 @@ export function CustomerModal({ order, open, onClose, act }: { order: OrderDTO; 
     if (busy) return;
     setBusy('redeem');
     try {
-      await act((pin) => post(`/customers/${customerId}/redeem`, { approverPin: pin }), `${goal} damga kullanıldı; bir içeceği ikram edin`);
+      const res = await act((pin) => post<{ customer: { stamps: number } }>(`/customers/${customerId}/redeem`, { approverPin: pin }), `${goal} damga kullanıldı; bir içeceği ikram edin`);
+      // Yanıt müşteri kartıdır, adisyon değil: adisyondaki damga sayısı hemen düşsün. Yoksa adisyon yenilenene dek kart
+      // eski sayıyı gösterir, düğme yeniden etkin kalır ve "oldu mu" diye ikinci dokunuş ikinci hediyeyi yazar
+      if (res) {
+        qc.setQueryData<OrderDTO>(['order', order.id], (o) => {
+          if (!o?.customer || o.customer.id !== customerId) return o;
+          return { ...o, customer: { ...o.customer, stamps: res.customer.stamps } };
+        });
+      }
     } finally {
       setBusy(null);
     }

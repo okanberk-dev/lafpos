@@ -208,8 +208,10 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
   }, [open]);
   if (!open) return null;
   const numeric = type === 'percent' ? Number(value || 0) : (parseTL(value || '0') ?? 0);
-  // Sunucu yüzdeyi 100'e kırpar: %150 sessizce %100 olmasın, alan söyler
-  const overLimit = type === 'percent' && numeric > 100;
+  // İndirim kalem indirimlerinden sonraki ara toplama uygulanır (sunucuyla aynı)
+  const subtotal = order.totals.gross - order.totals.lineDiscounts;
+  // Sunucu yüzdeyi 100'e, tutarı ara toplama kırpar: %150 ya da ₺19,50 yerine yazılan ₺1.950 sessizce %100 olmasın, alan söyler
+  const overLimit = type === 'percent' ? numeric > 100 : numeric > subtotal;
   const ready = numeric > 0 && !overLimit;
   const submit = async (remove = false) => {
     if (busy) return;
@@ -236,7 +238,7 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
       size="sm"
       persistent={!!busy}
       title="Adisyon indirimi"
-      subtitle={`Ara toplam ${tl(order.totals.gross - order.totals.lineDiscounts)}`}
+      subtitle={`Ara toplam ${tl(subtotal)}`}
       footer={
         <div className="grid grid-cols-2 gap-2">
           {order.discountType ? (
@@ -284,7 +286,7 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
           </output>
           {overLimit && (
             <p id="indirim-fazla" role="alert" className="mt-1.5 text-[13px] text-[var(--admin-danger-ink)]">
-              Yüzde en çok 100 olur
+              {type === 'percent' ? 'Yüzde en çok 100 olur' : `İndirim ara toplamdan (${tl(subtotal)}) fazla olamaz`}
             </p>
           )}
         </div>
