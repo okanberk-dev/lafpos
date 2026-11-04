@@ -27,10 +27,10 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, compCloseSubtitle, compReasonsOf } from '@shared/comp';
-import { tl } from '@shared/money';
+import { tl, tlShort } from '@shared/money';
 import { fmtElapsed, fmtTime } from '@shared/time';
 import type { CompKind, FloorStateDTO, OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
@@ -129,6 +129,32 @@ export default function OrderPage() {
   // Gönderim akışı tek seferlik: masa no kaydedilirken ya da kalemler giderken ikinci basış kalemi yinelemez
   const flowBusy = useRef(false);
   const [afterNumarator, setAfterNumarator] = useState<null | 'send' | 'pay'>(null);
+  // Telefonda ürünler ve sepet arasında geçiş odağı kaybetmesin: basılan düğme görünümle sökülür, odak öteki görünümün
+  // geçiş düğmesine geçer (sepette "Ürün ekle", ürünlerde sepet çubuğu)
+  const cartBarRef = useRef<HTMLButtonElement>(null);
+  const addProductRef = useRef<HTMLButtonElement>(null);
+  const focusOnSwitch = useRef(false);
+  const showView = (next: 'menu' | 'adisyon') => {
+    if (next !== tab) focusOnSwitch.current = true;
+    setTab(next);
+  };
+  useEffect(() => {
+    if (!focusOnSwitch.current) return;
+    focusOnSwitch.current = false;
+    (tab === 'adisyon' ? addProductRef : cartBarRef).current?.focus();
+  }, [tab]);
+  // Telefonda bildirim alttaki eylem bloğunun (hızlı işlemler ve eylem şeridi ya da sepet çubuğu) üstünde durur: bloğun
+  // boyu html'de --action-bar-h (lib/toast.tsx); şerit bir ya da iki satır, hızlı işlemli ya da değil. Blok sökülünce silinir
+  const measureActionBar = useCallback((el: HTMLDivElement | null) => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const ro = new ResizeObserver(() => root.style.setProperty('--action-bar-h', `${Math.ceil(el.getBoundingClientRect().height)}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty('--action-bar-h');
+    };
+  }, []);
 
   const table = useMemo(() => boot.tables.find((t) => t.id === order?.tableId), [boot.tables, order?.tableId]);
   const pendingCount = pending.reduce((a, l) => a + l.qty, 0);
@@ -217,7 +243,7 @@ export default function OrderPage() {
     if (!res) return false;
     cart.consume(order.id, sent);
     qc.invalidateQueries({ queryKey: ['kitchen'] });
-    if (!wide) setTab('adisyon');
+    if (!wide) showView('adisyon');
     return true;
   };
 
@@ -510,9 +536,9 @@ export default function OrderPage() {
   ) : (
     backButton
   );
-  // Telefonda bildirim bu şeridin üstünde durur (data-action-bar; Gönder ve Öde'yi örtmesin)
+  // Eylem şeridi: hızlı işlemlerle birlikte ölçülen alt blokta (aşağıda `right`)
   const actionBar = barContent && (
-    <div data-action-bar="" className="grid gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+    <div className="grid gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       {barContent}
     </div>
   );
@@ -547,34 +573,42 @@ export default function OrderPage() {
     </div>
   ) : null;
 
-  // Telefonda önce ürünler: alttaki yapışkan sepet çubuğu ("3 ürün · ₺780 · Sepet") sepeti açar; gönderilmemiş ürün
-  // varsa yanında "Bara gönder (N)" (sepeti açmadan gönderilir)
+  // Telefonda önce ürünler: alttaki yapışkan sepet çubuğu ("3 ürün · ₺780 · Sepet") sepeti açar. Kalemsiz adisyonda da
+  // durur: oda sayacı (Başlat), "Masayı boşalt" ve boş durum sepette. Gönderilmemiş ürün varsa yanında "Bara gönder"
+  // (sepeti açmadan gönderilir; adedi çantadaki sayaçta, erişilebilir adı "Bara gönder (N)"): 360-390 px telefonda tutar
+  // kısa yazılır ve kesilmez
   const itemCount = order.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0) + pendingCount;
   const cartTotal = previewTotals(boot, order, pending)?.total ?? order.total;
-  const cartBar = (itemCount > 0 || order.paid > 0) && (
-    <div data-action-bar="" className="flex items-stretch gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+  const cartBar = (
+    <div ref={measureActionBar} data-action-bar="" className="flex items-stretch gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       <button
+        ref={cartBarRef}
         type="button"
-        onClick={() => setTab('adisyon')}
+        onClick={() => showView('adisyon')}
         aria-label={`Sepet: ${itemCount} ürün, ${tl(cartTotal)}`}
-        className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-line-strong bg-surface-2 px-3 text-left transition-colors duration-150 active:bg-press"
+        className="flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded-2xl border border-line-strong bg-surface-2 px-3 text-left transition-colors duration-150 active:bg-press"
       >
         <span aria-hidden="true" className="relative grid size-9 shrink-0 place-items-center rounded-xl bg-surface-3 text-ink">
           <ShoppingBag className="size-[18px]" />
-          {pendingCount > 0 && <span className="tabular absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--admin-warning)] px-1 text-center text-[11px] font-semibold leading-5 text-white">{pendingCount}</span>}
+          {/* Gönderilmemiş adet amber sayaçta: yumuşak zemin, koyu amber yazı (iki temada da okunur) */}
+          {pendingCount > 0 && (
+            <span className="tabular absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-[var(--admin-warning-soft)] px-1 text-center text-[11px] font-semibold leading-5 text-[var(--admin-warning)] ring-1 ring-[var(--admin-warning-line)]">
+              {pendingCount}
+            </span>
+          )}
         </span>
         <span aria-hidden="true" className="min-w-0 flex-1 leading-tight">
-          <span className="block text-xs text-muted">{itemCount} ürün</span>
-          <span className="tabular block truncate font-headline text-lg font-bold">{tl(cartTotal)}</span>
+          <span className="block truncate text-xs text-muted">{itemCount > 0 ? `${itemCount} ürün` : 'Sepet boş'}</span>
+          <span className="tabular block whitespace-nowrap font-headline text-lg font-bold">{tlShort(cartTotal)}</span>
         </span>
         <span aria-hidden="true" className="inline-flex shrink-0 items-center gap-0.5 text-sm font-semibold text-ink">
-          Sepet
+          {pending.length === 0 && 'Sepet'}
           <ChevronRight className="size-4" />
         </span>
       </button>
       {pending.length > 0 && (
-        <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} className="shrink-0 px-4">
-          {sendLabel}
+        <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label={sendLabel} className="shrink-0 px-4">
+          Bara gönder
         </Button>
       )}
     </div>
@@ -592,14 +626,26 @@ export default function OrderPage() {
           const p = boot.products.find((x) => x.id === l.productId);
           if (p) setOptions({ product: p, size: l.size, editing: l });
         }}
-        onMoveItem={(item) => {
-          setMoveItem({ itemId: item.id, qty: item.qty - item.paidQty });
-          setDialog('bol');
-        }}
+        // Taşı ve not sipariş işi: ürün eklenemeyen adisyonda (yalnız ödeme alan rol, kapanmış, online) kalem penceresinde yok
+        onMoveItem={
+          editable
+            ? (item) => {
+                setMoveItem({ itemId: item.id, qty: item.qty - item.paidQty });
+                setDialog('bol');
+              }
+            : undefined
+        }
+        canNote={editable}
         act={act}
       />
-      {quickRow}
-      {actionBar}
+      {(quickRow || actionBar) && (
+        // Telefonda bildirim bu bloğun üstünde durur (data-action-bar, boyu --action-bar-h): Gönder, Öde ve hızlı
+        // işlemleri örtmez
+        <div ref={measureActionBar} data-action-bar="">
+          {quickRow}
+          {actionBar}
+        </div>
+      )}
     </div>
   );
 
@@ -636,8 +682,9 @@ export default function OrderPage() {
                 {editable && (
                   // Sepetten ürünlere dönüş: başlığın Geri'si masalara gider, bu düğme menüye
                   <button
+                    ref={addProductRef}
                     type="button"
-                    onClick={() => setTab('menu')}
+                    onClick={() => showView('menu')}
                     className="flex min-h-11 items-center gap-2 border-b border-[var(--admin-divider)] bg-surface px-4 text-sm font-semibold text-primary transition-colors duration-150 active:bg-press"
                   >
                     <Plus aria-hidden="true" className="size-4" />

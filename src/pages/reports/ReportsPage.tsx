@@ -274,7 +274,8 @@ const TABLE_FROM = { md: 'md:block', lg: 'lg:block', xl: 'xl:block' } as const;
 const CARDS_UNTIL = { md: 'md:hidden', lg: 'lg:hidden', xl: 'xl:hidden' } as const;
 
 /**
- * Rapor kartındaki tablo: kitin DataTable'ıyla aynı görünüm (kuyuda 13 px başlık, satır ayracı, telefonda satır kartı)
+ * Rapor kartındaki tablo: kitin DataTable'ıyla aynı görünüm (13 px başlık, zemini `--table-head-bg`, başlık çizgisi, satır
+ * ayracı, telefonda satır kartı)
  * ama kendi kartı yok; başlıklı rapor kartının (CSV, arama, açıklama) içinde durur. Rapor satırının çekmecesi yok: tablette
  * (lg altında) gizlenecek sütunu olan tablo o genişliğe dek satır kartıdır, gizli sütunun değeri kartın meta satırında
  * (`phoneMeta`). İlk ve son görünen sütun kart başlığıyla aynı hizada (20 px). Kitin DataTable'ı kartsız (`bare`)
@@ -323,7 +324,8 @@ function ReportTable<T>({
         <table className="tabular w-full border-collapse text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
-            <tr className="bg-[var(--admin-surface-2)]">
+            {/* Başlık şeridi kitin DataTable'ı gibi: kasada kuyuda, kurumsal yüzeyde zeminsiz; altında başlık çizgisi */}
+            <tr className="border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]">
               {columns.map((c, i) => (
                 <th key={c.key} scope="col" style={c.width ? { width: c.width } : undefined} className={cn('h-10 text-[13px] font-medium whitespace-nowrap text-[var(--admin-text-mute)]', pad(i), alignCls(c.align), hideCls(c), c.className)}>
                   {c.header}

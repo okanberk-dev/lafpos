@@ -416,6 +416,25 @@
   --table-head-bg: transparent;
 }
 
+/*
+ * Kasa köşeleri kurumsal yüzeyin içinde de: kasa ekranının yönetimdeki birebir önizlemesi (Yönetim › Müşteri ekranı)
+ * gerçek ekranla aynı köşeyi çizer. Değerler @theme'deki köşeler ve :root'un --r-* değerleri (tests/design-tokens.test.ts
+ * denetler); gölgeye dokunmaz (önizlenen ekran kendi --d-* gölgesini kullanır)
+ */
+.surface-soft {
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+  --r-card: 1.25rem;
+  --r-control: 0.875rem;
+  --r-btn: 9999px;
+  --r-chip: 9999px;
+  --r-segment: 9999px;
+  --r-bar: 4px;
+  --r-track: 9999px;
+}
+
 /* Yönetim paneli: aynı değerler; yalnız sıklık (bileşenlerde [data-area=admin]) */
 :root[data-area='admin'] :focus-visible {
   outline-color: var(--focus);

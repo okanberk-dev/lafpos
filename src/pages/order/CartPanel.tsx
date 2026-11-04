@@ -55,6 +55,7 @@ export function CartPanel({
   pending,
   onEditPending,
   onMoveItem,
+  canNote = false,
   act,
 }: {
   order: OrderDTO;
@@ -62,6 +63,8 @@ export function CartPanel({
   onEditPending: (line: PendingLine) => void;
   /** Kalem işlemlerinden "Taşı": kalemi başka hesaba ya da masaya taşıma penceresi bu kalem seçili açılır */
   onMoveItem?: (item: OrderItemDTO) => void;
+  /** Gönderilmiş kaleme not: sipariş işi (sunucu `siparis.al` ister); yalnız ödeme alan rolde kalem penceresinde yok */
+  canNote?: boolean;
   act: <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 }) {
   const boot = useBoot();
@@ -271,7 +274,7 @@ export function CartPanel({
       </div>
       )}
 
-      <ItemSheet item={itemSheet} order={order} onClose={() => setItemSheet(null)} onMove={onMoveItem} act={act} />
+      <ItemSheet item={itemSheet} order={order} onClose={() => setItemSheet(null)} onMove={onMoveItem} canNote={canNote} act={act} />
     </div>
   );
 }
@@ -289,12 +292,14 @@ function ItemSheet({
   order,
   onClose,
   onMove,
+  canNote,
   act,
 }: {
   item: OrderItemDTO | null;
   order: OrderDTO;
   onClose: () => void;
   onMove?: (item: OrderItemDTO) => void;
+  canNote: boolean;
   act: <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 }) {
   const boot = useBoot();
@@ -418,15 +423,17 @@ function ItemSheet({
           )}
           <SheetButton icon={<Percent />} title={item.discount > 0 ? `İndirimi değiştir (${tl(item.discount)})` : 'Kaleme indirim'} onClick={() => setMode('indirim')} disabled={item.complimentary || item.paidQty > 0} />
           {onMove && <SheetButton icon={<ArrowRightLeft />} title="Taşı" hint="Ayrı hesaba ya da başka masaya" onClick={() => { const it = item; close(); onMove(it); }} disabled={unpaid < 1} />}
-          <SheetButton
-            icon={<StickyNote />}
-            title={item.note ? 'Notu değiştir' : 'Not ekle'}
-            hint={item.note ? `Not: ${item.note}` : 'Bar fişinde görünür'}
-            onClick={() => {
-              setNoteText(item.note ?? '');
-              setMode('not');
-            }}
-          />
+          {canNote && (
+            <SheetButton
+              icon={<StickyNote />}
+              title={item.note ? 'Notu değiştir' : 'Not ekle'}
+              hint={item.note ? `Not: ${item.note}` : 'Bar fişinde görünür'}
+              onClick={() => {
+                setNoteText(item.note ?? '');
+                setMode('not');
+              }}
+            />
+          )}
           <SheetButton danger icon={<XCircle />} title="İptal et" hint={can('siparis.iptal') ? 'Gerekçe ile' : 'Hazırlanmaya başladıysa yetkili onayı ister'} onClick={() => setMode('iptal')} disabled={unpaid < 1} />
           {item.paidQty > 0 && <p className="px-1 text-xs text-muted">{item.paidQty} adedin ödemesi alındı; bu adetler değiştirilemez</p>}
         </div>

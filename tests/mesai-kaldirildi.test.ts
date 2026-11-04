@@ -26,6 +26,17 @@ function walk(dir: string): string[] {
 }
 
 describe('mesai kaldırıldı', () => {
+  it('patron panelinin iskeleti dört karo ve sayfayla aynı ızgara kuralı: mesai karosu gitti, yüklenince kaymaz', () => {
+    const page = readFileSync(join(root, 'src/pages/patron/PatronPage.tsx'), 'utf8');
+    const skeleton = page.slice(page.indexOf('if (data.isPending)'), page.indexOf('// Rakamlar alınamadıysa'));
+    expect(skeleton).toContain('<div className={topGrid(false)}>');
+    expect(skeleton).toContain('<div className={tileGrid(false)}>');
+    expect(skeleton).toContain('{[0, 1, 2, 3].map((i) => (');
+    expect(skeleton).not.toContain('xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]');
+    expect(page).toContain('<div className={topGrid(wideTiles)}>');
+    expect(page).toContain('<div className={tileGrid(wideTiles)}>{tiles}</div>');
+  });
+
   it('uçlar yok: oturumsuz basış oturum ister, oturumla çizelge ve giriş-çıkış 404', async () => {
     expect((await h.call('', 'POST', '/time/punch', { pin: '2222' })).status).toBe(401);
     for (const [method, path] of [

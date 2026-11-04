@@ -151,7 +151,11 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
     gönderir); gönderilmemiş kalem varken ikincil "Bara gönder (N)" ve geri alınabilir çöp kutusu. Ödeme alamayan rolde
     (garson) birincil eylem "Bara gönder (N)" ya da "Hesap yazdır" ve altında "Ödemeyi kasa alır".
   - **Telefonda önce ürünler:** alttaki yapışkan sepet çubuğu ("3 ürün · ₺780 · Sepet", gönderilmemiş sayısı amber
-    rozette) sepeti açar, yanında "Bara gönder (N)"; sepette en üstte "Ürün ekle" ürünlere döner.
+    rozette: yumuşak zemin, koyu amber yazı) sepeti açar, yanında "Bara gönder" (erişilebilir adı "Bara gönder (N)");
+    tutar kısa yazılır, 360 px'te de kesilmez. Kalemsiz adisyonda da durur ("Sepet boş"): oda sayacı, "Masayı boşalt"
+    ve boş durum sepette. Sepette en üstte "Ürün ekle" ürünlere döner; geçişte odak öteki görünümün geçiş düğmesine
+    geçer. Bildirim alttaki bloğun (hızlı işlemler ve eylem şeridi ya da sepet çubuğu) ölçülen boyunun üstünde durur
+    (`--action-bar-h`).
   - **Durumlar:** boş masa (fincan çizimi, "Masayı boşalt"), kapanmış adisyon (yeşil "Kapandı", katalog yok, adisyon
     ortada), sitede ödenmiş online sipariş (mor şerit, tahsil edilmez, Z'ye girmez), tezgâh satışı (Öde gönderir ve
     ödemeyi açar, satış bitince yeni satış).
@@ -196,7 +200,9 @@ yönetim kabuğunun kökündeki `.surface-corporate` (`AdminShell`; raporlar da 
   sayaç gri hapta.
 - **Sayfa başlığı** şeridinin altında ince çizgi (`PageHeader`).
 - **Tablolar:** yalnız başlık ve satır çizgileri (başlık şeridi zeminsiz, `--table-head-bg`), rakam sağa hizalı ve
-  Gabarito tablo rakamı.
+  Gabarito tablo rakamı; kitin `DataTable`'ı, raporların `ReportTable`'ı ve roller matrisi aynı başlığı çizer.
+- **Kasa ekranının önizlemesi:** yönetimdeki birebir önizleme (Yönetim › Müşteri ekranı) `.surface-soft` ile kasa
+  köşelerinde kalır (@theme köşeleri ve `:root`'un `--r-*` değerleri); gerçek ekranla aynı görünür.
 - **KPI şeridi:** ince bölmeli, tek çerçeveli ızgara (`KpiStrip`, hücreler arası 1 px).
 - **Grafikler:** ince çizgiler, köşesi yuvarlatılmamış çubuklar (`--r-bar` 0, `--r-track` 0; `ColumnChart` köşeyi
   kabın hesaplanmış stilinden okur).

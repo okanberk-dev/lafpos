@@ -98,6 +98,13 @@ function Change({ value, base }: { value: number | null; base: number }) {
   );
 }
 
+/**
+ * Üst blok: ciro kartı ve karolar. Beş karo (online siparişli gün) iki sütunda üç satır olup ciro kartını uzatırdı: geniş
+ * ızgarada karolar tablette ve geniş ekranda üç sütun, ciro kartı daralır. İskelet ve sayfa aynı kuraldan çizer.
+ */
+const topGrid = (wide: boolean) => cn('grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]', wide && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]');
+const tileGrid = (wide: boolean) => cn('grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2', wide && 'md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3');
+
 export default function PatronPage() {
   const can = useCan();
   const qc = useQueryClient();
@@ -118,7 +125,9 @@ export default function PatronPage() {
     [qc],
   );
 
-  // İlk yükleme: sayfanın biçiminde iskelet (başlık, büyük ciro kartı ve patronun altı karosu), spinner değil
+  // İlk yükleme: sayfanın biçiminde iskelet (başlık, büyük ciro kartı ve dört karo), spinner değil. Izgara içerikle aynı
+  // kuraldan (topGrid, tileGrid): online siparişli günün beşinci karosu veriyle gelir; kurulumun çoğunda (site bağlı değil
+  // ya da günün ilk online siparişi gelmedi) dört karo kalır, sayfa yüklenince kaymaz
   if (data.isPending) {
     return (
       <div role="status" aria-label="Canlı rakamlar yükleniyor…" className="h-full overflow-hidden p-4 md:p-6">
@@ -126,10 +135,10 @@ export default function PatronPage() {
           <PageHeader title="Patron paneli" subtitle="Canlı rakamlar yükleniyor…" />
         </div>
         <Skeleton className="mb-4 h-5 w-56 md:hidden" />
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+        <div className={topGrid(false)}>
           <Skeleton className="h-[236px] rounded-2xl" />
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div className={tileGrid(false)}>
+            {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-[112px] rounded-2xl" />
             ))}
           </div>
@@ -237,7 +246,7 @@ export default function PatronPage() {
         {retry}
       </div>
 
-      <div className={cn('grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]', wideTiles && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]')}>
+      <div className={topGrid(wideTiles)}>
         {/* Kart boyu karolarla uzarsa boşluk kıyasların üstünde kalır, altında değil */}
         <div className="@container flex flex-col rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
           <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
@@ -250,8 +259,8 @@ export default function PatronPage() {
             <CompareRow label="4 hafta önce bu saate kadar" value={d.compare.fourWeeks.netSales} change={d.compare.fourWeeks.change} />
           </div>
         </div>
-        {/* Tek kalan son karo satırı doldurur (boş hücre bırakmaz); beş-altı karo tablette ve geniş ekranda üç sütun */}
-        <div className={cn('grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2', wideTiles && 'md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3')}>{tiles}</div>
+        {/* Tek kalan son karo satırı doldurur (boş hücre bırakmaz); beş karo tablette ve geniş ekranda üç sütun */}
+        <div className={tileGrid(wideTiles)}>{tiles}</div>
       </div>
 
       <Card

@@ -251,6 +251,27 @@ describe('köşe ve gölge belirteçleri, kurumsal yüzey', () => {
     expect(charts).toContain('rounded-[var(--r-track)]');
   });
 
+  it('kasa ekranının yönetimdeki birebir önizlemesi kasa köşelerinde (surface-soft = @theme köşeleri ve :root --r-*)', () => {
+    const soft = block('.surface-soft');
+    const theme = block('@theme');
+    for (const k of ['radius-lg', 'radius-xl', 'radius-2xl', 'radius-3xl']) expect(soft[k], k).toBe(theme[k]);
+    for (const k of ['r-card', 'r-control', 'r-btn', 'r-chip', 'r-segment', 'r-bar', 'r-track']) expect(soft[k], k).toBe(tokens[k]);
+    // Kurumsalın bütün köşe değişkenleri geri alınır (gölgeye dokunulmaz: önizlenen ekranın kendi gölgesi var)
+    for (const k of Object.keys(corporate).filter((k) => k.startsWith('radius-') || k.startsWith('r-'))) expect(soft, k).toHaveProperty(k);
+    expect(src('components/display/CustomerDisplayView.tsx')).toMatch(/className=\{cn\('surface-soft relative h-full w-full/);
+  });
+
+  it('rapor tablosu ve roller matrisi kitin DataTable başlığıyla aynı: zemin --table-head-bg, başlık çizgisi', () => {
+    const head = 'border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]';
+    expect(src('components/admin/ui.tsx')).toContain(`<tr className="${head}">`);
+    expect(src('pages/reports/ReportsPage.tsx')).toContain(`<tr className="${head}">`);
+    const roles = src('pages/admin/RolesAdmin.tsx');
+    expect(roles).toContain(`<tr className="${head}">`);
+    // Yapışkan ilk hücre opak: yatay kayan hücreler altından görünmez
+    expect(roles).toContain('sticky left-0 z-[1] h-12 min-w-44 bg-[var(--admin-surface)]');
+    expect(src('pages/reports/ReportsPage.tsx')).not.toContain('<tr className="bg-[var(--admin-surface-2)]">');
+  });
+
   it('kenar çubuğu: etkin öğede dolgu kapsül yok, 2 px yeşil sol çizgi ve kalın yazı; gruplar arası ince ayraç', () => {
     const shell = src('components/admin/AdminShell.tsx');
     expect(shell).toContain("'relative font-semibold text-[var(--admin-text)] before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:bg-[var(--admin-primary)]'");

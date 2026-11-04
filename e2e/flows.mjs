@@ -86,6 +86,78 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Telefonda garson: kalemsiz masada ve karaoke odasında sepet çubuğu durur, sepetten "Masayı boşalt" ve "Başlat"a ulaşılır; geçişte odak kaybolmaz; gönderilmemiş ürünle tutar kesilmez',
+      async () => {
+        const table = seed.tables[7];
+        const room = seed.boot.tables.find((t) => t.kind === 'oda');
+        assert(table && room, 'boş masa ya da karaoke odası yok');
+        const blank = await api.call('garson', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 1 });
+        const roomOrder = await api.call('garson', 'POST', '/orders', { type: 'masa', tableId: room.id, guests: 2 });
+        await withPage(ctx, 'telefon', 'garson', async (page) => {
+          // Odak etkiden sonra geçer: kısa süre beklenir
+          const focused = async (loc) => {
+            for (let i = 0; i < 40; i++) {
+              if (await loc.evaluate((el) => el === document.activeElement)) return true;
+              await page.waitForTimeout(50);
+            }
+            return false;
+          };
+          await go(ctx, page, `/adisyon/${blank.id}`);
+          const bar = page.getByRole('button', { name: 'Sepet: 0 ürün, ₺0,00', exact: true });
+          await bar.click();
+          // Sepete geçince odak "Ürün ekle"de (basılan çubuk görünümle söküldü), dönüşte sepet çubuğunda
+          const add = page.getByRole('button', { name: 'Ürün ekle', exact: true });
+          await add.waitFor();
+          assert(await focused(add), 'sepete geçince odak Ürün ekle\'de değil');
+          await page.getByRole('button', { name: 'Masayı boşalt', exact: true }).waitFor();
+          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-garson-bos-masa-sepet.png` });
+          await add.click();
+          await bar.waitFor();
+          assert(await focused(bar), 'ürünlere dönünce odak sepet çubuğunda değil');
+          // Kendi adisyonu: tek dokunuşla boşalır
+          await bar.click();
+          await page.getByRole('button', { name: 'Masayı boşalt', exact: true }).click();
+          await page.waitForURL((u) => !u.pathname.startsWith('/adisyon/'), { timeout: 8000 });
+
+          // Karaoke odası: sayaç sepette, ürün eklenmeden başlatılabilir; boş oda boşaltılır
+          await go(ctx, page, `/adisyon/${roomOrder.id}`);
+          await page.getByRole('button', { name: 'Sepet: 0 ürün, ₺0,00', exact: true }).click();
+          await page.getByRole('button', { name: 'Başlat', exact: true }).waitFor();
+          await page.getByRole('button', { name: 'Odayı boşalt', exact: true }).click();
+          await page.waitForURL((u) => !u.pathname.startsWith('/adisyon/'), { timeout: 8000 });
+
+          // Gönderilmemiş beş ürünle sepet çubuğu: tutar 390 ve 360 px'te tam okunur, "Bara gönder"in adında adet var
+          await go(ctx, page, `/adisyon/${seed.s1.id}`);
+          await page.getByPlaceholder('Ürün ara').fill(simple.name);
+          const tile = page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first();
+          for (let i = 0; i < 5; i++) await tile.click();
+          const cart = page.getByRole('button', { name: /^Sepet: \d+ ürün, / });
+          await page.getByRole('button', { name: 'Bara gönder (5)', exact: true }).waitFor();
+          // Yalnız sepet çubuğu: 360 px'te sayfanın başka yerleri bu akışın konusu değil (tarama 390 px'te bakar)
+          for (const width of [390, 360]) {
+            await page.setViewportSize({ width, height: 844 });
+            const bad = await cart.evaluate((btn) => {
+              const total = btn.querySelector('.font-headline');
+              const bar = btn.parentElement;
+              const r = (el) => el.getBoundingClientRect();
+              return [
+                total.scrollWidth > total.clientWidth && 'tutar kesiliyor',
+                r(total).right > r(btn).right && 'tutar düğmeden taşıyor',
+                bar.scrollWidth > bar.clientWidth + 1 && 'çubuk taşıyor',
+                r(bar).right > document.documentElement.clientWidth + 1 && 'çubuk ekrandan taşıyor',
+              ].filter(Boolean);
+            });
+            assert(!bad.length, `${width} px sepet çubuğu: ${bad.join(', ')}`);
+          }
+          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-garson-sepet-cubugu-bekleyen.png` });
+        });
+        for (const o of [blank, roomOrder]) {
+          const after = await api.call('patron', 'GET', `/orders/${o.id}`);
+          assert(after.status !== 'acik', `boş adisyon boşalmadı: ${after.status}`);
+        }
+      },
+    ],
+    [
       'Tablette kasiyer: hesabı nakit alır, adisyon kapanır',
       () =>
         withPage(ctx, 'tablet', 'kasa', async (page) => {

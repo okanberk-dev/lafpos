@@ -332,9 +332,11 @@ denetim iletisi kişiyi adlandırır ("Garson adına (personel)", `data.person`)
 ödenmez kalem kalmadıysa adisyonunkini de). Raporlar: İptal ve indirim › ikram listesinde ödenmez satırı kişiyi
 gösterir, aynı yerde "Kişi bazında ödenmez" (kişi, tür, adet, tutar; `shared/comp.ts` `odenmezByPerson`); Personel
 raporunda "Adına ödenmez"; CSV'de Kişi sütunu; Z'de ödenmez satırının altında kişi kişi döküm (`odenmezPeople`). Kişi
-bilgisi lafmaliyet'e ve siteye gitmez, müşteri ekranında görünmez; LafPOS Uzaktan'a yalnız ilk ad (açık adisyon ve
-patron uyarısının denetim iletisi, `data.person`'dan). Personel adına yazılan ödenmez personel tutarıdır: maliyet
-yetkisi olmayana başkasınınki "Personel" diye gider (adisyon uçları `blindOrder`, rapor, CSV, X ve Z). Testler
+bilgisi lafmaliyet'e ve siteye gitmez, müşteri ekranında görünmez; LafPOS Uzaktan'a müşterinin yalnız ilk adı (açık
+adisyon ve patron uyarısının denetim iletisi, `data.person`'dan; personelin adı, kaydı yapan kişinin adı gibi, olduğu
+gibi). Personel adına yazılan ödenmez personel tutarıdır: maliyet yetkisi olmayana başkasınınki "Personel" diye gider
+(adisyon uçları `blindOrder`, rapor, CSV, X ve Z); denetim kaydı ve patron uyarıları ayrıcalıklı yüzeydir, kişiyi
+adlandırır (denetim kaydında etiket "Ödenmez", geri almada "Ödenmezi geri alma"). Testler
 `tests/odenmez-kisi.test.ts`, e2e akışı garsonu seçer, tarama İşlemler › Ödenmez kapat penceresini açar.
 
 **Seçenek profili: varyant ve seçenek gerektirmeyen ürünler** (4 Kasım 2026, operatör: _"bazı ürünlere varyant vs.

@@ -86,6 +86,37 @@ describe('ekranın kuralları (kaynak)', () => {
     expect(page).toContain('Ürün ekle');
   });
 
+  it('telefonda sepet çubuğu kalemsiz adisyonda da durur (oda sayacı, "Masayı boşalt" sepette); tutar kısa ve kesilmez', () => {
+    expect(page).toContain('const cartBar = (\n');
+    expect(page).not.toMatch(/const cartBar = \(itemCount > 0/);
+    expect(page).toContain("{itemCount > 0 ? `${itemCount} ürün` : 'Sepet boş'}");
+    expect(page).toContain('whitespace-nowrap font-headline text-lg font-bold">{tlShort(cartTotal)}');
+    // Dar çubukta görünen ad kısa, erişilebilir ad adetli ("Bara gönder (N)")
+    expect(page).toMatch(/aria-label=\{sendLabel\} className="shrink-0 px-4">\s*Bara gönder\s*</);
+  });
+
+  it('gönderilmemiş adet rozeti iki temada okunur: amber dolgu üstünde beyaz değil, yumuşak zemin ve koyu amber yazı', () => {
+    expect(page).toContain('bg-[var(--admin-warning-soft)] px-1 text-center text-[11px] font-semibold leading-5 text-[var(--admin-warning)]');
+    expect(page).not.toMatch(/bg-\[var\(--admin-warning\)\][^"]*text-white/);
+  });
+
+  it('telefonda görünüm geçişi odağı öteki görünümün geçiş düğmesine verir; bildirim alt bloğun ölçülen boyunun üstünde', () => {
+    expect(page).toContain("(tab === 'adisyon' ? addProductRef : cartBarRef).current?.focus();");
+    expect(page).toContain('ref={addProductRef}');
+    expect(page).toContain('ref={cartBarRef}');
+    // Bütün geçişler showView'dan (odak bayrağı); düz setTab('menu' | 'adisyon') kalmadı
+    expect(page).not.toMatch(/setTab\('(menu|adisyon)'\)/);
+    expect(page.match(/ref=\{measureActionBar\} data-action-bar=""/g)?.length).toBe(2);
+    expect(page).toContain("root.style.setProperty('--action-bar-h'");
+    expect(page).toContain("root.style.removeProperty('--action-bar-h')");
+  });
+
+  it('kalem penceresinde taşı ve not yalnız sipariş alınabilen adisyonda (yalnız ödeme alan rolde, kapanmış, online yok)', () => {
+    expect(page).toMatch(/onMoveItem=\{\s*editable\s*\?/);
+    expect(page).toContain('canNote={editable}');
+    expect(cart).toContain('{canNote && (');
+  });
+
   it('kalemler gruplu, işlemleri kalemden: taşı ve not da', () => {
     expect(cart).toContain('groupCartItems(visibleItems)');
     expect(cart).toContain('title="Taşı"');

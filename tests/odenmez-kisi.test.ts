@@ -143,6 +143,8 @@ describe('tek kalem ödenmez', () => {
     expect(o.items.every((i) => !i.complimentary && i.compPerson === null)).toBe(true);
     const undo = (await audits()).find((x) => x.action === 'item.uncomp' && x.orderId === o.id)!;
     expect(undo.message).toMatch(/ödenmez kaydını geri aldı \(Ayşe Yılmaz adına \(müşteri\)\)/);
+    // Denetim kaydı etiketi türden: "Ödenmezi geri alma" (AuditAdmin UNCOMP_LABEL)
+    expect((undo as unknown as { data: { kind: string } }).data.kind).toBe('odenmez');
 
     // Yeniden yazılır ve ödenir: kapanmış adisyon raporlara girer
     o = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/items/${o.items[0].id}/comp`, { qty: 1, kind: 'odenmez', reason: 'Müşteri şikâyeti', person: { kind: 'customer', id: c.id } });
@@ -259,5 +261,17 @@ describe('kişi bilgisi dışarı gitmez', () => {
     expect(snap).not.toContain('Kaya');
     expect(snap).toContain('Ayşe adına');
     expect(snap).not.toContain(customerId);
+  });
+});
+
+describe('denetim kaydında ciro dışı etiketleri', () => {
+  it("sunucunun yazdığı her ciro dışı kodunun adı var; geri alma kaydın türünden (ikram, ödenmez, zayi)", () => {
+    const audit = readFileSync(new URL('../src/pages/admin/AuditAdmin.tsx', import.meta.url), 'utf8');
+    const orders = readFileSync(new URL('../server/services/orders.ts', import.meta.url), 'utf8');
+    // Kod üçlü ifadeyle kurulur ("grep action: '" bulmaz): kalem ve adisyon için her tür
+    expect(orders).toContain("action: kind === 'zayi' ? 'item.zayi' : kind === 'odenmez' ? 'item.odenmez' : 'item.comp',");
+    expect(orders).toContain("action: input.kind === 'ikram' ? 'order.comp' : `order.${input.kind}`,");
+    for (const code of ['item.comp', 'item.odenmez', 'item.zayi', 'item.uncomp', 'order.comp', 'order.odenmez', 'order.zayi']) expect(audit, code).toContain(`'${code}': '`);
+    expect(audit).toContain("const UNCOMP_LABEL: Record<string, string> = { ikram: 'İkramı geri alma', odenmez: 'Ödenmezi geri alma', zayi: 'Zayiyi geri alma' };");
   });
 });

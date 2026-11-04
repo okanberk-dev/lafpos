@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { splitEven, tl } from '@shared/money';
 import { splitAmountsError, splitState } from '@shared/order-calc';
@@ -197,5 +198,25 @@ describe('hesap değişince elle paylar düşer', () => {
     await split(o.id, { people: 3, amounts: [o.total - 3000, 2000, 1000] });
     const first = await payShare(o.id, 'Nakit');
     expect(first.json.order.split).toMatchObject({ shares: [2000, 1000], manual: true, reset: false });
+  });
+});
+
+describe('ödeme penceresi (kaynak)', () => {
+  const modal = readFileSync(new URL('../src/pages/order/PaymentModal.tsx', import.meta.url), 'utf8');
+
+  it('kaydedilmemiş elle paylar pencereyi açık tutar: Escape ve arka plan kapatmaz, yalnız Kapat', () => {
+    expect(modal).toMatch(/const dirty = devicePending \|\|[^;]*\|\| \(mode === 'paylas' && sharesDirty\);/);
+  });
+
+  it('Elle görünümünde her ödenmemiş payın fişi yazdırılır, son pay da', () => {
+    expect(modal).not.toContain('{!last && !dirty && (');
+    expect(modal).toMatch(/\{!dirty && \(\s*<button\s+aria-label=\{`Pay \$\{no\} fişini yazdır`\}/);
+  });
+
+  it('eskimiş ekrandan kaydedilen paylar (toplam ya da adet tutmuyor) adisyonu yeniden okutur', () => {
+    const save = modal.slice(modal.indexOf('const setSplit = async'), modal.indexOf('const pay = async'));
+    expect(save).toContain("e instanceof ApiError && (e.code === 'split_amounts_total' || e.code === 'split_amounts_count')");
+    expect(save).toContain("void qc.invalidateQueries({ queryKey: ['order', order.id] })");
+    expect(save).toContain('throw e;');
   });
 });

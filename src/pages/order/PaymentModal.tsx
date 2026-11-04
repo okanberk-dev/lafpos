@@ -259,7 +259,16 @@ export function PaymentModal({
     if (splitBusy) return;
     setSplitBusy(n ? 'set' : 'clear');
     await act(
-      () => put<OrderDTO>(`/orders/${order.id}/split`, { people: n, ...(amounts ? { amounts } : {}) }),
+      async () => {
+        try {
+          return await put<OrderDTO>(`/orders/${order.id}/split`, { people: n, ...(amounts ? { amounts } : {}) });
+        } catch (e) {
+          // Ekran eskimiş (başka cihazda pay ödendi ya da hesap değişti, canlı olay gecikti): ekranın kendi kalanına göre
+          // yazılan paylar tutmaz. Adisyon yeniden okunur, alanlar sunucunun güncel paylarıyla dolar (bildirim act'ten)
+          if (e instanceof ApiError && (e.code === 'split_amounts_total' || e.code === 'split_amounts_count')) void qc.invalidateQueries({ queryKey: ['order', order.id] });
+          throw e;
+        }
+      },
       amounts ? 'Paylar kaydedildi' : n ? `Hesap ${n} kişiye eşit bölündü` : 'Paylaşım kaldırıldı',
     );
     setSplitBusy(null);
@@ -442,8 +451,9 @@ export function PaymentModal({
           ? 'Adisyonda ücretli kalem yok'
           : null;
   // Yarım kalan ödeme arka plana dokununca kaybolmasın: yazarkasada bekleyen sepet, yazılan tutar, seçilen tür, verilen,
-  // bahşiş, seçili kalem ya da süren istek varken yalnız Kapat kapatır (Kapat'tan sonra da cihazın sonucu karşılanır)
-  const dirty = devicePending || busy || !!splitBusy || !!comp || !!method || givenText !== '' || tipText !== '' || !prefilled || picked.length > 0;
+  // bahşiş, seçili kalem, kaydedilmemiş elle paylar ya da süren istek varken yalnız Kapat kapatır (Kapat'tan sonra da
+  // cihazın sonucu karşılanır)
+  const dirty = devicePending || busy || !!splitBusy || !!comp || !!method || givenText !== '' || tipText !== '' || !prefilled || picked.length > 0 || (mode === 'paylas' && sharesDirty);
 
   const footer = devicePending ? (
     <p role="status" className="py-2 text-center text-sm font-medium text-ink-2">
@@ -1044,7 +1054,8 @@ function SplitPanel({
                           className={cn('tabular w-32 text-right font-headline text-lg font-semibold', error && 'border-[var(--admin-danger)]')}
                         />
                       )}
-                      {!last && !dirty && (
+                      {/* Her ödenmemiş payın fişi yazdırılır (son pay da: kaydedilmiş tutarı kalandır) */}
+                      {!dirty && (
                         <button
                           aria-label={`Pay ${no} fişini yazdır`}
                           title="Pay fişini yazdır"
