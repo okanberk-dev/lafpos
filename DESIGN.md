@@ -108,9 +108,14 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   `src/components/LafMark.tsx`).
 - **Giriş ekranı:** solda marka yüzeyi (yeşil, krem yazı, 96 px saat, ekip), sağda PIN kartı (sade tuşlar,
   yeşil "Giriş"); kilit ekranında yalnız oturum açılır (mesai 4 Kasım 2026'da kaldırıldı).
-- **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş (hesap N
-  kişiye eşit bölünür, paylar sırayla ve istenen yöntemle alınır; pay tutarını sunucu hesaplar,
-  `shared/order-calc.ts` `splitState`). Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme. Ödeme düğmesi
+- **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş. Paylaş'ta önce
+  "Kaç kişiye bölünsün?": 2, 3, 4, 5, 6 büyük çipler (56 px, Gabarito rakam) tek dokunuşla böler, daha kalabalık masa
+  adet seçiciyle (en çok 30). Altında **Eşit | Elle**: Eşit'te kalan kuruşu kuruşuna bölünür; Elle'de her ödenmemiş
+  payın kendi tutar alanı olur, eşit bölüşle dolu gelir, son pay kalanı kendisi gösterir ("Kalanı alır"); pay sıfır ya
+  da eksi olamaz, toplam kalana eşittir, düğme "Payları kaydet" (kaydedilmeden ödeme düğmesi "Önce payları kaydedin"
+  der). Paylar sırayla ve istenen yöntemle alınır: sıradaki pay mürekkep kenarlı, ödenen pay yeşil onaylı. Pay tutarını
+  sunucu hesaplar (`shared/order-calc.ts` `splitState`, elle tutarlar `orders.split_amounts`); hesap değişince (kalem,
+  iptal, indirim, ödeme iptali) elle paylar düşer, kalan yeniden eşit bölünür ve pencere bunu kısa notla söyler. Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme. Ödeme düğmesi
   pencerenin alt şeridinde, kaydırınca kaybolmaz; yanında para üstü, eksik ya da bahşiş notu. Düğmenin tutarı bahşişi
   içerir (kartta bankanın POS'una girilen tutar) ve eksik adımı söyler ("Ödenecek kalemleri seçin", "Önce hesabı
   bölün"; açık hesapta "açık hesaba yaz"). Tablet ve bilgisayarda iki sütun: solda tutar, tuş takımı, yazarkasa ve

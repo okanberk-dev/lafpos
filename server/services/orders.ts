@@ -3,7 +3,7 @@ import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { PLATFORM_LABEL } from '@shared/platforms';
 import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
-import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
+import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitAmountsError, splitState } from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
 import { COMP_LABEL, compPermission } from '@shared/comp';
 import type { CompKind, OrderDTO, Size } from '@shared/types';
@@ -159,7 +159,11 @@ function orderEvents(fx: Effects, o: Pick<OrderRow, 'id' | 'tableId'>, userId: s
   fx.emit({ topic: 'tables', kind, orderId: o.id, tableId: o.tableId ?? undefined, byUserId: userId });
 }
 
-/** Toplamları yeniden hesaplar ve saklar. Her para değişikliğinden sonra çağrılır. */
+/**
+ * Toplamları yeniden hesaplar ve saklar. Her para değişikliğinden sonra çağrılır. Hesap değiştiyse (kalem eklendi,
+ * iptal, ikram, indirim, taşıma, oda ücreti: saklı toplamlar tutmuyor) elle girilen paylar düşer, kalan yeniden eşit
+ * bölünür ve Paylaş ekranı bunu not olarak söyler (`splitResetAt`). Ödeme toplamları değiştirmez, payları düşürmez.
+ */
 export function recalc(t: Tx | DB, orderId: string): OrderRow {
   const o = loadOrder(t, orderId);
   const items = orderItems(t, orderId);
@@ -167,11 +171,17 @@ export function recalc(t: Tx | DB, orderId: string): OrderRow {
   const paid = orderPayments(t, orderId).reduce((a, p) => a + (p.refundedAt ? 0 : p.amount), 0);
   // İptal, ikram, indirim ya da taşıma ödenmiş tutarın altına indiremez: önce fazla ödeme iptal edilir
   if (paid > totals.total) throw conflict(`Ödenen ${tl(paid)} yeni toplamı (${tl(totals.total)}) aşıyor; önce fazla ödemeyi iptal edin`, 'overpaid');
+  const billChanged = JSON.stringify(o.totals ?? null) !== JSON.stringify(totals);
   t.update(schema.orders)
-    .set({ total: totals.total, paid, totals, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` })
+    .set({ total: totals.total, paid, totals, ...(billChanged ? dropManualShares(o) : {}), updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` })
     .where(eq(schema.orders.id, orderId))
     .run();
   return loadOrder(t, orderId);
+}
+
+/** Elle girilen paylar varsa düşürür (yazılacak alanlar); yoksa hiçbir şey yazılmaz */
+function dropManualShares(o: Pick<OrderRow, 'splitAmounts'>): Partial<OrderRow> {
+  return o.splitAmounts ? { splitAmounts: null, splitResetAt: Date.now() } : {};
 }
 
 function nextOrderNo(t: Tx | DB, dayId: string): number {
@@ -958,7 +968,7 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
     .run();
   // Paylaşım birleşmede kalkar: iki hesabın pay numaraları karışır (ödenmiş payların etiketi kalır)
   t.update(schema.orders)
-    .set({ guests: target.guests + source.guests, customerId: target.customerId ?? source.customerId, splitPeople: null })
+    .set({ guests: target.guests + source.guests, customerId: target.customerId ?? source.customerId, splitPeople: null, splitAmounts: null, splitResetAt: null })
     .where(eq(schema.orders.id, targetId))
     .run();
   recalc(t, sourceId);
@@ -1142,27 +1152,47 @@ export function splitActive(t: Tx | DB, o: OrderRow, remaining: number): boolean
 }
 
 /**
- * Hesabı kişilere eşit böler (paylaşımlı hesap) ya da bölmeyi kaldırır. Kalan tutar ödenmemiş paylara eşit
- * dağılır; ödenmiş pay sayısından aza indirilemez.
+ * Hesabı kişilere böler (paylaşımlı hesap) ya da bölmeyi kaldırır. `amounts` yoksa kalan tutar ödenmemiş paylara eşit
+ * dağılır; varsa paylar elle girilmiştir: ödenmemiş her paya bir tutar, tam sayı kuruş, her biri sıfırdan büyük,
+ * toplamı o anki kalana eşit (`splitAmountsError`). Kişi sayısı ödenmiş pay sayısından aza indirilemez. Bölüş
+ * denetime yazılır: kim, kaç kişi, eşit ya da elle, payların tutarları.
  */
-export function setSplit(t: Tx, actor: Actor, fx: Effects, orderId: string, people: number | null): OrderRow {
+export function setSplit(t: Tx, actor: Actor, fx: Effects, orderId: string, people: number | null, amounts?: number[] | null): OrderRow {
   needDirect(actor, 'odeme.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  const paid = sharePayments(t, orderId).length;
+  const remaining = o.total - o.paid;
+  if (people == null && amounts) throw bad('Paylaşım kaldırılırken pay tutarı gönderilmez', 'split_amounts_count');
   if (people != null) {
     const n = Math.trunc(people);
     if (n < 2 || n > 30) throw bad('Kişi sayısı 2 ile 30 arasında olmalı', 'split_people');
-    const paid = sharePayments(t, orderId).length;
     if (n <= paid) throw bad(`${paid} pay ödendi; kişi sayısı en az ${paid + 1} olmalı`, 'split_people');
     people = n;
+    if (amounts) {
+      if (remaining <= 0) throw conflict('Bu adisyonun ödenecek tutarı kalmadı', 'nothing_due');
+      const err = splitAmountsError(amounts, people - paid, remaining);
+      if (err) throw bad(err.message, err.code);
+    }
   }
-  t.update(schema.orders).set({ splitPeople: people, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` }).where(eq(schema.orders.id, orderId)).run();
+  const manual = people != null && !!amounts;
+  t.update(schema.orders)
+    .set({ splitPeople: people, splitAmounts: manual ? [...amounts!] : null, splitResetAt: null, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` })
+    .where(eq(schema.orders.id, orderId))
+    .run();
+  const state = people != null ? splitState(people, paid, remaining, manual ? amounts : null) : null;
+  const shares = state?.shares ?? [];
+  const paidNote = paid ? ` (${paid} pay ödendi)` : '';
   fx.audit(t, {
     userId: actor.user.id,
     action: 'order.split',
     orderId,
-    message: people ? `#${o.no} hesap ${people} kişiye bölündü` : `#${o.no} hesap paylaşımı kaldırıldı`,
+    amount: people != null ? remaining : null,
+    message: people
+      ? `#${o.no} hesap ${people} kişiye ${manual ? 'elle' : 'eşit'} bölündü${paidNote}${shares.length ? `: ${shares.map(tl).join(' · ')}` : ''}`
+      : `#${o.no} hesap paylaşımı kaldırıldı`,
+    data: people ? { people, mode: manual ? 'elle' : 'esit', shares, paidShares: paid } : { people: null },
   });
   const updated = loadOrder(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.split');
@@ -1272,6 +1302,8 @@ export function addPayment(
   // Aynı kalem iki kez gönderilirse adetler birleşir: iki kez ücret alınmaz
   const wanted = mergeSelection(input.items ?? []);
   let share: { no: number; of: number } | null = null;
+  /** Elle paylarda bu pay ödendikten sonra kalan paylar (baştaki düşer); eşit bölüşte null */
+  let sharesAfter: number[] | null = null;
   // Bölünmüş hesapta pay dışı ödeme payları düşürmez: masa paylarını ödeyip kalkar, kalan kimseye kalmaz
   if (!input.share && splitActive(t, o, remaining)) {
     throw conflict('Hesap kişilere bölünmüş: payları "Paylaş"tan alın ya da paylaşımı kaldırın', 'split_active');
@@ -1280,8 +1312,9 @@ export function addPayment(
     if (!o.splitPeople) throw bad('Hesap paylaşılmadı; önce kişi sayısını seçin', 'split_off');
     if (wanted.length) throw bad('Pay ödemesinde kalem seçilmez', 'split_items');
     const paid = sharePayments(t, orderId);
-    const state = splitState(o.splitPeople, paid.length, remaining);
+    const state = splitState(o.splitPeople, paid.length, remaining, o.splitAmounts);
     if (!state.shares.length) throw conflict('Bütün paylar ödendi; kalan tutarı "Tutar" ile alın', 'split_done');
+    sharesAfter = state.manual && state.shares.length > 1 ? state.shares.slice(1) : null;
     // Pay tutarını sunucu belirler; numara ilk boş pay (iptal edilen payın numarası yeniden kullanılır)
     const used = new Set(paid.map((p) => p.shareNo));
     let no = 1;
@@ -1383,6 +1416,14 @@ export function addPayment(
       requestId: input.requestId ?? null,
     })
     .run();
+  // Pay ödendi: elle paylarda sıradaki pay başa geçer; "paylar yeniden eşit bölündü" notu görülmüş sayılır. Pay dışı
+  // ödeme (bölüş yokken ya da bütün paylar ödendikten sonra) elle tutarları geçersiz kılar: düşer
+  if (share || o.splitAmounts) {
+    t.update(schema.orders)
+      .set(share ? { splitAmounts: sharesAfter, splitResetAt: null } : { splitAmounts: null })
+      .where(eq(schema.orders.id, orderId))
+      .run();
+  }
 
   let updated = recalc(t, orderId);
   let closed = false;
@@ -1448,6 +1489,8 @@ export function refundPayment(t: Tx, actor: Actor, fx: Effects, orderId: string,
     uncreditCustomer(t, o);
     t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, orderId)).run();
   }
+  // Ödeme iptali hesabı değiştirir: elle paylar düşer, kalan yeniden eşit bölünür
+  if (o.splitAmounts) t.update(schema.orders).set(dropManualShares(o)).where(eq(schema.orders.id, orderId)).run();
   const updated = recalc(t, orderId);
   fx.audit(t, {
     userId: actor.user.id,

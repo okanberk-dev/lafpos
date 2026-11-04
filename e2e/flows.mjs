@@ -458,7 +458,7 @@ export async function runFlows(ctx) {
         }),
     ],
     [
-      'Tablette kasiyer: hesabı üç kişiye böler, payları nakit ve kartla ayrı ayrı alır',
+      'Tablette kasiyer: hesabı tek dokunuşla üç kişiye böler, ikinci payı elle değiştirir (son pay kalanı alır), payları nakit ve kartla ayrı ayrı alır',
       async () => {
         const product = (name) => seed.boot.products.find((p) => p.name === name);
         const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
@@ -467,9 +467,8 @@ export async function runFlows(ctx) {
           await go(ctx, page, `/adisyon/${o.id}`);
           await page.getByRole('button', { name: /^Ödeme · / }).click();
           await page.getByRole('button', { name: 'Paylaş', exact: true }).click();
-          // Kitin adet seçicisi: düğmeler Azalt / Artır, adı grubun etiketinde ("Kişi")
-          await page.getByRole('group', { name: 'Kişi', exact: true }).getByRole('button', { name: 'Artır', exact: true }).click();
-          await page.getByRole('button', { name: 'Hesabı 3 kişiye böl' }).click();
+          // "Kaç kişiye bölünsün?" çipleri: tek dokunuş bölüşü kurar
+          await page.getByRole('button', { name: '3 kişi', exact: true }).click();
           await page.getByText('Pay 1 · sıradaki').waitFor();
           const cash = async () => {
             await page.getByRole('button', { name: 'Nakit', exact: true }).click();
@@ -480,16 +479,30 @@ export async function runFlows(ctx) {
           await page.getByRole('button', { name: 'Sıradaki pay' }).click();
           await page.getByText('Pay 2 · sıradaki').waitFor();
           await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-paylas.png` });
+          // Elle: ikinci pay 100 TL, son pay kalanı kendisi gösterir; kaydedilmeden ödeme alınmaz
+          await page.getByRole('button', { name: 'Elle', exact: true }).click();
+          await page.getByRole('textbox', { name: 'Pay 2 tutarı' }).fill('100');
+          await page.getByRole('button', { name: 'Önce payları kaydedin' }).waitFor();
+          let small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-paylas-elle.png` });
+          await page.getByRole('button', { name: 'Payları kaydet', exact: true }).click();
           await page.getByRole('button', { name: 'Kredi kartı', exact: true }).click();
-          await page.getByRole('button', { name: /Kredi kartı al$/ }).click();
+          await page.getByRole('button', { name: '₺100,00 Kredi kartı al' }).click();
+          // Kartta para üstü yok: pencere sonuç göstermeden sıradaki paya geçer
           await page.getByText('Pay 3 · sıradaki').waitFor();
+          small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
           await cash();
           await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor();
         });
         const done = await api.call('mudur', 'GET', `/orders/${o.id}`);
-        const shares = done.payments.filter((p) => !p.refundedAt).map((p) => `${p.shareNo}/${p.shareOf} ${p.methodName}`);
+        const live = done.payments.filter((p) => !p.refundedAt);
+        const shares = live.map((p) => `${p.shareNo}/${p.shareOf} ${p.methodName}`);
         assert(done.status === 'kapali', `adisyon kapanmadı: ${done.status}`);
         assert(shares.join(', ') === '1/3 Nakit, 2/3 Kredi kartı, 3/3 Nakit', `paylar beklenen gibi değil: ${shares.join(', ')}`);
+        assert(live[1].amount === 10000, `ikinci pay elle girilen tutar değil: ${live[1].amount}`);
+        assert(live[0].amount + live[1].amount + live[2].amount === done.total, 'paylar toplamı tutmuyor');
       },
     ],
     [

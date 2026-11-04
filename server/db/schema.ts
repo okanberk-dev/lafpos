@@ -465,6 +465,13 @@ export const orders = sqliteTable(
     guests: integer('guests').notNull().default(1),
     /** Hesap paylaşımı: kaç kişiye eşit bölündü (yoksa null). Paylar ödemelerdeki shareNo/shareOf'tan sayılır */
     splitPeople: integer('split_people'),
+    /**
+     * Elle paylar: ödenmemiş payların tutarları sırayla (kuruş); eşit bölüşte null. Pay ödenince baştaki düşer. Hesap
+     * değişince (toplamlar, `recalc`) ya da bir ödeme iptal edilince silinir ve paylar yeniden eşit bölünür
+     */
+    splitAmounts: text('split_amounts', { mode: 'json' }).$type<number[]>(),
+    /** Elle paylar hesap değiştiği için düştü (an): Paylaş ekranı kısa notla söyler; yeni bölüşte ya da sıradaki payda silinir */
+    splitResetAt: integer('split_reset_at'),
     note: text('note'),
     openedAt: integer('opened_at').notNull(),
     openedBy: text('opened_by').references(() => users.id),

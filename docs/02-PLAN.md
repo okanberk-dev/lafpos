@@ -306,6 +306,19 @@ denetim kayıtları (`time.*`) "Mesai" adıyla okunur. Kayıtlı rol setlerinde 
 `mesai.yonet` okurken düşer (`isPermission`): roller ve personel ekranı açılır, düzenleme "Bilinmeyen yetki"ye takılmaz.
 Testi `tests/mesai-kaldirildi.test.ts`.
 
+**Hesap bölme: hazır sayılar ve elle paylar** (4 Kasım 2026): ödeme penceresinin Paylaş'ı "Kaç kişiye bölünsün?" ile
+açılır: 2-6 çipleri tek dokunuşla böler, daha fazlası adet seçiciyle (en çok 30). Eşit | Elle: elle tutarlar siparişte
+saklanır (`orders.split_amounts`, ödenmemiş payların tutarları sırayla, kuruş; göç `0016_elle_paylar`). Bölüş ucu
+(`PUT /orders/:id/split`) isteğe bağlı `amounts` alır ve sunucuda doğrular: adet ödenmemiş pay sayısı
+(`split_amounts_count`), tam kuruş (`split_amount_kurus`), her biri sıfırdan büyük (`split_amount_positive`), toplam o
+anki kalana eşit (`split_amounts_total`); kural `shared/order-calc.ts` `splitAmountsError`, `splitState` kayıtlı
+tutarları yalnız geçerliyse kullanır. Pay ödenince baştaki tutar düşer; pay ödemesi sunucunun hesapladığı paya göre
+doğrulanır (tutmazsa 409 `split_changed`). Hesap değişince toplamlar değişir ve `recalc` elle payları siler
+(`split_reset_at`: pencere "Hesap değişti; elle girilen paylar silindi, kalan yeniden eşit bölündü" der, yeni bölüşte ya
+da sıradaki payda kalkar); ödeme iptali de siler. Bölüş denetime yazılır: kim, kaç kişi, eşit ya da elle, payların
+tutarları (`order.split`, `data`). Testler `tests/hesap-bolme-elle.test.ts`, e2e akışı çiple böler, ikinci payı elle
+değiştirir.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

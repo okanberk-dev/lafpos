@@ -250,11 +250,14 @@ posRoutes.post('/orders/:id/payments', async (c) => {
   return c.json({ order: dto(c, res.order.id), closed: res.closed, change: res.change, amount: res.amount, share: res.share });
 });
 
-/** Hesap paylaşımı: kişi sayısı (2-30) ya da kaldırmak için null */
+/**
+ * Hesap paylaşımı: kişi sayısı (2-30) ya da kaldırmak için null. `amounts` isteğe bağlı elle paylardır: ödenmemiş
+ * payların tutarları sırayla, kuruş; sunucu doğrular (tam sayı, her biri > 0, toplam = kalan, adet = ödenmemiş pay)
+ */
 posRoutes.put('/orders/:id/split', async (c) => {
-  const input = await body(c, z.object({ people: z.number().int().nullable() }));
+  const input = await body(c, z.object({ people: z.number().int().nullable(), amounts: z.array(z.number()).max(30).nullish() }));
   const actor = actorFrom(c);
-  write((t, fx) => orders.setSplit(t, actor, fx, c.req.param('id'), input.people));
+  write((t, fx) => orders.setSplit(t, actor, fx, c.req.param('id'), input.people, input.amounts ?? null));
   return c.json(dto(c, c.req.param('id')));
 });
 

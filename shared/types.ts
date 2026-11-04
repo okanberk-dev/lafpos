@@ -400,8 +400,11 @@ export interface OrderDTO {
   platformCode: string | null;
   items: OrderItemDTO[];
   payments: PaymentDTO[];
-  /** Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar); bölünmediyse null */
-  split: SplitState | null;
+  /**
+   * Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar, elle mi); bölünmediyse null. `reset`: elle paylar hesap
+   * değiştiği için düştü, paylar yeniden eşit (ekran kısa notla söyler)
+   */
+  split: (SplitState & { reset: boolean }) | null;
   room: RoomSessionDTO | null;
   version: number;
   updatedAt: number;

@@ -31,7 +31,8 @@ geçerlidir. Rehberin genel kuralları LafPOS'ta şu karşılıklarla zaten bağ
 ### Modüllerin LafPOS'taki durumu (yeni iş planlarken bak)
 
 - **Kasa ekranı ve adisyon:** kategoriler, boy ve seçenek (zorunlu ve isteğe bağlı grup), not, adet, indirim, iptal,
-  ikram, ödenmez, zayi, taşı, birleştir, ayrı hesap, hesap bölme, parçalı ve kalem bazlı ödeme,
+  ikram, ödenmez, zayi, taşı, birleştir, ayrı hesap, hesap bölme (2-6 çipleri, eşit ve elle paylar), parçalı ve kalem
+  bazlı ödeme,
   yeniden açma. Ekranlar `src/pages/order/`, kurallar `server/services/orders.ts`.
 - **Masa:** plan, bölümler, karaoke odası sayacı, durum renkleri, süre ve garson, rezervasyon. `server/services/floor.ts`.
 - **Bar ve mutfak ekranı:** istasyonlar, hazırlanıyor, hazır, teslim, hazırlama süresi raporu, çağrı ekranı.

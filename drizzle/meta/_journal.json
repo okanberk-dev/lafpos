@@ -113,6 +113,13 @@
       "when": 1793775078330,
       "tag": "0015_iptal_hesap_sonrasi",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1793780576004,
+      "tag": "0016_elle_paylar",
+      "breakpoints": true
     }
   ]
 }
