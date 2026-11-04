@@ -9,6 +9,7 @@ import { Field, Input, NumberInput, Select, Textarea } from '@/components/ui/Fie
 import { Modal } from '@/components/ui/Modal';
 import { Badge, EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, patch, post } from '@/lib/api';
+import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useFinePointer, useTick } from '@/lib/hooks';
@@ -55,6 +56,7 @@ function startOf(r: Reservation): number {
 
 export default function ReservationsPage() {
   const boot = useBoot();
+  const can = useCan();
   const qc = useQueryClient();
   const navigate = useNavigate();
   // Gecikme rozeti ve "Bugün" yarım dakikada bir yenilenir (iş günü 05:00'te döner)
@@ -106,17 +108,24 @@ export default function ReservationsPage() {
       toast.err(errorMessage(e));
     }
   };
+  // "Geldi, masa aç" yalnız masa açılabilecekken: gün açık, adisyon açma yetkisi var, masa planda (kapatılmamış). Öteki
+  // durumda Geldi yalnız durumu işaretler (geri alınır); masa Masalar'dan açılır
+  const opensTable = (r: Reservation) => !!r.tableId && !!boot.day && can('siparis.al') && boot.tables.some((t) => t.id === r.tableId);
   const setStatus = async (r: Reservation, status: Exclude<Status, 'bekliyor'>) => {
     if (busy) return;
     setBusy({ id: r.id, status });
     try {
-      await patch(`/reservations/${r.id}`, { status });
-      refresh();
-      if (status === 'geldi' && r.tableId && boot.day) {
+      if (status === 'geldi' && opensTable(r)) {
+        // Önce masa açılır, sonra Geldi işaretlenir: masa açılamazsa (dünden açık kalan gün, bağlantı) rezervasyon
+        // Bekliyor kalır ve yeniden denenir; adisyonsuz Geldi'de takılmaz. Yeniden denemede masanın açık adisyonu döner
         const o = await post<OrderDTO>('/orders', { type: 'masa', tableId: r.tableId, guests: r.guests, note: `Rezervasyon: ${r.name}` });
+        await patch(`/reservations/${r.id}`, { status });
+        refresh();
         navigate(`/adisyon/${o.id}`);
         return;
       }
+      await patch(`/reservations/${r.id}`, { status });
+      refresh();
       toast.ok(DONE[status](r.name), { action: { label: 'Geri al', run: () => void undo(r) } });
     } catch (e) {
       toast.err(errorMessage(e));
@@ -255,7 +264,7 @@ export default function ReservationsPage() {
                   // Telefonda satırı içerikleri oranında doldurur; tablette adın hizasında, bilgisayarda sağda
                   <div className="flex gap-2 max-sm:[&>*]:flex-auto sm:pl-[68px] lg:shrink-0 lg:pl-0">
                     <Button size="sm" variant="primary" className={ACTION} loading={doing === 'geldi'} disabled={!!doing} onClick={() => void setStatus(r, 'geldi')}>
-                      {r.tableId && boot.day ? 'Geldi, masa aç' : 'Geldi'}
+                      {opensTable(r) ? 'Geldi, masa aç' : 'Geldi'}
                     </Button>
                     <Button size="sm" className={ACTION} loading={doing === 'gelmedi'} disabled={!!doing} onClick={() => void setStatus(r, 'gelmedi')}>
                       Gelmedi

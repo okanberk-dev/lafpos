@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cake, ChevronLeft, Gift, Mail, MapPin, Phone, Plus, Receipt, Wallet } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { fmtDateTime, isCalendarDate } from '@shared/time';
 import { Button } from '@/components/ui/Button';
@@ -13,7 +13,7 @@ import { ApiError, errorMessage, get, patch, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
-import { useFinePointer } from '@/lib/hooks';
+import { useFinePointer, useMediaQuery } from '@/lib/hooks';
 import { newRequestId } from '@/lib/requestId';
 import { fmtPhone, joinMeta, telHref } from '@/lib/text';
 import { toast } from '@/lib/toast';
@@ -69,6 +69,35 @@ export default function CustomersPage() {
   const fine = useFinePointer();
   const refresh = () => qc.invalidateQueries({ queryKey: ['customers'] });
 
+  // Telefonda ve tablette (lg altı) liste ile kayıt yer değiştirir: odak gizlenen satırda ya da kalkan geri düğmesinde
+  // kaybolmaz. Açılan müşterinin adına (ekran okuyucu adı okur), geri dönünce o müşterinin satırına geçer
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const detailRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const focusTo = useRef<{ detail: true } | { row: string } | null>(null);
+  const openCustomer = (id: string) => {
+    setSelected(id);
+    if (!wide) focusTo.current = { detail: true };
+  };
+  const backToList = () => {
+    if (selected) focusTo.current = { row: selected };
+    setSelected(null);
+  };
+  useEffect(() => {
+    const to = focusTo.current;
+    if (!to) return;
+    if ('row' in to) {
+      focusTo.current = null;
+      rowRefs.current.get(to.row)?.focus();
+      return;
+    }
+    // Kart gelene dek iskelet: ad gelince ona; kart alınamadıysa geri düğmesine
+    if (detail.isPending) return;
+    focusTo.current = null;
+    (headingRef.current ?? detailRef.current?.querySelector<HTMLElement>('button'))?.focus();
+  }, [selected, detail.isPending]);
+
   const openCreate = () => {
     setFormError({});
     setCreating(true);
@@ -90,7 +119,7 @@ export default function CustomersPage() {
       toast.ok('Müşteri kaydedildi');
       setCreating(false);
       setForm(emptyForm());
-      setSelected(res.id);
+      openCustomer(res.id);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -229,7 +258,11 @@ export default function CustomersPage() {
             <li key={x.id}>
               {/* Odak halkası satırın içinde: kaydırılan liste dış halkayı kırpardı */}
               <button
-                onClick={() => setSelected(x.id)}
+                ref={(el) => {
+                  if (el) rowRefs.current.set(x.id, el);
+                  else rowRefs.current.delete(x.id);
+                }}
+                onClick={() => openCustomer(x.id)}
                 aria-current={selected === x.id || undefined}
                 className={cn(
                   'flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press',
@@ -262,9 +295,9 @@ export default function CustomersPage() {
         </ul>
       </aside>
 
-      <section className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)] md:p-6', !selected && 'max-lg:hidden')}>
+      <section ref={detailRef} className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)] md:p-6', !selected && 'max-lg:hidden')}>
         {selected && (
-          <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="-ml-2 mb-2 lg:hidden" onClick={() => setSelected(null)}>
+          <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="-ml-2 mb-2 lg:hidden" onClick={backToList}>
             Müşteriler
           </Button>
         )}
@@ -291,7 +324,10 @@ export default function CustomersPage() {
           <div className="space-y-4">
             {/* Ad ve eylemler aynı satırda, iletişim ve not altında tam genişlikte; telefonda eylemler en altta, eşit genişlikte */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <h2 className="min-w-0 flex-1 text-xl font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">{c.name}</h2>
+              {/* Telefonda ve tablette satır seçilince odak buraya gelir (liste gizlenir); halka yok, ad okunur */}
+              <h2 ref={headingRef} tabIndex={-1} className="min-w-0 flex-1 text-xl font-semibold tracking-[-0.01em] outline-none [overflow-wrap:anywhere]">
+                {c.name}
+              </h2>
               {((stamps && c.stamps >= goal) || (can('cari.yonet') && c.balance > 0)) && (
                 <div className="flex gap-2 max-sm:order-last max-sm:mt-1 max-sm:w-full max-sm:[&>*]:flex-1">
                   {/* Ödül pirinçte (damga kartının rengi; amber zamanındır): adisyonun Müşteri penceresiyle aynı düğme */}

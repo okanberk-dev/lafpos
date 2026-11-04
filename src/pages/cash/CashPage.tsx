@@ -15,11 +15,12 @@ import { errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { closeDayBody, countStarted, type CountResult, emptyCount, savedCount } from '@/lib/cashCount';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { TypedAmount } from '../order/TypedAmount';
 import { Illustration } from '@/components/Illustration';
-import { CashCount, type CountResult, signedTL } from './CashCount';
+import { CashCount, signedTL } from './CashCount';
 import { ShiftCountsCard, ShiftHandoverModal } from './ShiftHandover';
 import { ZView } from './ZView';
 
@@ -70,18 +71,6 @@ const MOVE_LABEL: Record<MoveKind, string> = { harcama: 'Harcama', teslim: 'Tesl
 const MOVE_ICON = { harcama: ArrowUpFromLine, teslim: Wallet, giris: ArrowDownToLine } satisfies Record<MoveKind, unknown>;
 const MOVE_HINT: Record<MoveKind, string> = { harcama: 'Kasadan nakit çıkan masraf', teslim: 'Patrona ya da bankaya teslim edilen nakit', giris: 'Kasaya eklenen nakit (bozuk para gibi)' };
 const MOVE_SAVE: Record<MoveKind, string> = { harcama: 'Harcamayı kaydet', teslim: 'Teslimi kaydet', giris: 'Girişi kaydet' };
-const emptyCount = (): CountResult => ({ countedCash: 0, banknotes: {}, methodCounts: {} });
-
-/** Kaydedilmiş sayım (`b:` banknot, `m:` ödeme türü) pencerenin sayımına: düzeltme boş föyle değil, girilenle açılır */
-function savedCount(d: DayDetail): CountResult {
-  const of = (prefix: string) =>
-    Object.fromEntries(
-      Object.entries(d.cashCounts ?? {})
-        .filter(([k]) => k.startsWith(prefix))
-        .map(([k, n]) => [k.slice(prefix.length), n]),
-    );
-  return { countedCash: d.summary.countedCash ?? 0, banknotes: of('b:'), methodCounts: of('m:') };
-}
 
 export default function CashPage() {
   const boot = useBoot();
@@ -193,19 +182,13 @@ export default function CashPage() {
   const closeDay = async () => {
     setBusy(true);
     try {
-      const cashCounts = {
-        ...Object.fromEntries(Object.entries(count.banknotes).filter(([, n]) => n > 0).map(([k, n]) => [`b:${k}`, n])),
-        ...Object.fromEntries(Object.entries(count.methodCounts).map(([k, v]) => [`m:${k}`, v])),
-      };
-      const res = await post<{ day: BusinessDayDTO; summary: ZSummary | null; lafmaliyet: Record<string, unknown> | null; blind?: boolean }>('/cash/day/close', {
-        countedCash: counted ? count.countedCash : null,
-        cashCounts,
-        note: note || null,
-      });
+      // Dokunulmamış sayaç "Sayılmadı"dır: gün ₺0 sayılmış gibi değil, sayımsız kapanır (föy sonra girilir)
+      const body = closeDayBody(count, !counted, note);
+      const res = await post<{ day: BusinessDayDTO; summary: ZSummary | null; lafmaliyet: Record<string, unknown> | null; blind?: boolean }>('/cash/day/close', body);
       setClosing(false);
       setCount(emptyCount());
       if (res.summary) setZResult({ day: res.day, summary: res.summary, lafmaliyet: res.lafmaliyet ?? {}, movements: [] });
-      else toast.ok(`Gün kapandı (Z ${res.day.zNo}); sayım kaydedildi, fark yöneticinin ekranında`);
+      else toast.ok(body.countedCash == null ? `Gün kapandı (Z ${res.day.zNo}); sayım girilmedi, kasa föyünü yönetici girer` : `Gün kapandı (Z ${res.day.zNo}); sayım kaydedildi, fark yöneticinin ekranında`);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -216,18 +199,23 @@ export default function CashPage() {
 
   // Föy penceresi kaydedilmiş sayımla ve notla açılır (düzeltme sıfırdan sayım istemez)
   const openFill = (d: DayDetail) => {
-    setFillCount(savedCount(d));
+    setFillCount(savedCount(d.summary.countedCash, d.cashCounts));
     setFillNote(d.note ?? '');
     setFillFor(d);
   };
   const saveCount = async () => {
     if (!fillFor || busy) return;
+    // Föy nakit sayımıyla kaydedilir: "Sayılmadı" görünen sayaç ₺0 sayılmış gibi yazılmaz
+    if (!countStarted(fillCount)) {
+      toast.warn('Önce çekmecedeki nakdi girin; çekmece boşsa Toplam tutar’a 0 yazın');
+      return;
+    }
     setBusy(true);
     try {
-      // Kaydedilmiş sayımı değiştirmek yetkili onayı ister
+      // Kaydedilmiş sayımı değiştirmek yetkili onayı ister. Not yazıldığı gibi gider: silinen not silinir
       const banknotes = Object.fromEntries(Object.entries(fillCount.banknotes).filter(([, n]) => n > 0));
       const done = await withApproval((pin) =>
-        post(`/cash/days/${fillFor.day.id}/count`, { countedCash: fillCount.countedCash, methodCounts: fillCount.methodCounts, banknotes, note: fillNote || null, approverPin: pin }),
+        post(`/cash/days/${fillFor.day.id}/count`, { countedCash: fillCount.countedCash, methodCounts: fillCount.methodCounts, banknotes, note: fillNote.trim(), approverPin: pin }),
       );
       if (done === null) return;
       toast.ok('Kasa föyü kaydedildi');
@@ -577,8 +565,8 @@ export default function CashPage() {
                 <input type="checkbox" checked={!counted} onChange={(e) => setCounted(!e.target.checked)} className="size-5 accent-[var(--admin-primary)]" />
                 Sayımı sonra gireceğim
               </label>
-              {/* Banknot satırları uzun: telefonda sayılan toplam düğmelerin hemen üstünde de görünür */}
-              {counted && <span className="tabular whitespace-nowrap text-sm text-muted sm:hidden">Sayılan {tl(count.countedCash)}</span>}
+              {/* Banknot satırları uzun: telefonda sayılan toplam düğmelerin hemen üstünde de görünür; sayım başlamadıysa gün sayımsız kapanır */}
+              {counted && <span className="tabular whitespace-nowrap text-sm text-muted sm:hidden">{countStarted(count) ? `Sayılan ${tl(count.countedCash)}` : 'Sayılmadı'}</span>}
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex">
               <Button onClick={() => setClosing(false)}>Vazgeç</Button>

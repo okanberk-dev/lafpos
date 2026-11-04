@@ -165,7 +165,8 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
             <Line l="Kasa girişi" k={summary.cashIn} />
             <Line l="Harcama" k={summary.cashOut} />
             <Line l="Teslim" k={summary.handedOver} />
-            {summary.cariCollections > 0 && <Line l="Açık hesap tahsilatı" k={summary.cariCollections} />}
+            {/* Kart ve havaleyle alınan tahsilat da bu tutarda (çekmeceye yalnız nakdi girer, beklenen nakit onu sayar) */}
+            {summary.cariCollections > 0 && <Line l="Açık hesap tahsilatı (tüm ödeme türleri)" k={summary.cariCollections} />}
             {summary.kdv.length > 0 && <Group>KDV</Group>}
             {summary.kdv.map((k) => (
               <Line key={k.rate} l={`%${k.rate} · matrah ${tl(k.base)}`} k={k.kdv} />

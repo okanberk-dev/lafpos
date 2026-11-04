@@ -3,21 +3,14 @@ import { useState } from 'react';
 import { parseTL, tl, tlShort } from '@shared/money';
 import type { ZSummary } from '@shared/types';
 import { useBoot } from '@/lib/boot';
-import { slipDiff, slipRows } from '@/lib/cashCount';
+import { countStarted, type CountResult, DENOMINATIONS, slipDiff, slipRows } from '@/lib/cashCount';
 import { fieldClass, Segmented } from '@/components/ui/Field';
 import { cn } from '@/lib/cn';
 
-/** Türk lirası banknot ve madeni paralar (kuruş) */
-export const DENOMINATIONS = [20000, 10000, 5000, 2000, 1000, 500, 100, 50, 25, 10, 5];
+export { DENOMINATIONS, type CountResult };
 
 /** İşaretli tutar: "+₺50,00", "−₺150,00" (eksi işareti, kısa çizgi değil), "₺0,00"; fazla mı eksik mi ilk bakışta okunur */
 export const signedTL = (k: number) => (k > 0 ? `+${tl(k)}` : k < 0 ? `−${tl(-k)}` : tl(0));
-
-export interface CountResult {
-  countedCash: number;
-  banknotes: Record<string, number>;
-  methodCounts: Record<string, number>;
-}
 
 /**
  * Kasa föyü: banknot sayacıyla nakit, ödeme türü bazında sayılan tutar (banka POS gün sonu slipi, yemek kartı
@@ -51,10 +44,11 @@ export function CashCount({
   const setNote = (d: number, n: number) => {
     const banknotes = { ...value.banknotes, [String(d)]: Math.max(0, n) };
     const countedCash = DENOMINATIONS.reduce((a, x) => a + x * (banknotes[String(x)] ?? 0), 0);
-    onChange({ ...value, banknotes, countedCash });
+    onChange({ ...value, banknotes, countedCash, touched: true });
   };
-  // Sayım başlamadan fark yazılmaz (boş çekmece "eksik" görünmesin): bir adet ya da tutar girilince
-  const touched = value.countedCash > 0 || Object.keys(value.banknotes).length > 0 || totalText.trim() !== '';
+  // Sayım başlamadan fark yazılmaz (boş çekmece "eksik" görünmesin): bir adet ya da tutar girilince (sıfır da). Gün
+  // sonu aynı kuralla gönderir: "Sayılmadı" görünen sayaç ₺0 sayılmış gibi kaydedilmez (countStarted)
+  const touched = countStarted(value);
   // Vardiya devrinde beklenen bu vardiyanınki: önceki devirde bulunan fark eklenir, üç hücre birbirini tutar
   // (sayılan − beklenen = fark, sunucunun shiftDiff'i); günün başından biriken fark notta
   const expected = summary ? summary.expectedCash + baseDiff : 0;
@@ -111,7 +105,8 @@ export function CashCount({
             value={totalText}
             onChange={(e) => {
               setTotalText(e.target.value);
-              onChange({ ...value, countedCash: parseTL(e.target.value) ?? 0, banknotes: {} });
+              // Silinip boş bırakılan tutar sayım değildir: yeniden "Sayılmadı"
+              onChange({ ...value, countedCash: parseTL(e.target.value) ?? 0, banknotes: {}, touched: e.target.value.trim() !== '' });
             }}
             inputMode="decimal"
             autoComplete="off"
@@ -141,7 +136,7 @@ export function CashCount({
           </div>
         ) : (
           <div className="mt-3 grid gap-2 text-sm sm:grid-cols-[auto_1fr] sm:items-center">
-            <Cell label="Sayılan" value={tl(value.countedCash)} />
+            <Cell label="Sayılan" value={tl(value.countedCash)} hint={touched ? undefined : 'Sayılmadı'} />
             <p className="text-xs text-muted">Kör sayım: beklenen tutar ve fark bu rolde görünmez; {cashOnly ? 'yöneticinin ekranında, vardiya devirlerinde' : 'yöneticinin ekranında ve Z raporunda'}</p>
           </div>
         )}

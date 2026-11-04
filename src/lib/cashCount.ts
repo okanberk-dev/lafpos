@@ -1,5 +1,61 @@
 import type { PaymentMethodDTO, ZSummary } from '@shared/types';
 
+/** Türk lirası banknot ve madeni paralar (kuruş) */
+export const DENOMINATIONS = [20000, 10000, 5000, 2000, 1000, 500, 100, 50, 25, 10, 5];
+
+/** Kasa sayımı: banknot adetleri (kuruş değeri → adet), sayılan nakit, ödeme türü bazında sayılan tutarlar */
+export interface CountResult {
+  countedCash: number;
+  banknotes: Record<string, number>;
+  methodCounts: Record<string, number>;
+  /**
+   * Nakit sayımı başladı: bir adet ya da tutar girildi (sıfır da sayılır) ya da kaydedilmiş sayım açıldı. Başlamamış
+   * sayım "Sayılmadı"dır: fark yazılmaz ve ₺0 sayılmış gibi kaydedilmez
+   */
+  touched?: boolean;
+}
+
+export const emptyCount = (): CountResult => ({ countedCash: 0, banknotes: {}, methodCounts: {} });
+
+/** Nakit sayımı başladı mı: ekrandaki "Sayılmadı" ile gün sonuna giden sayım aynı kuralla */
+export function countStarted(v: CountResult): boolean {
+  return !!v.touched || v.countedCash > 0 || Object.keys(v.banknotes).length > 0;
+}
+
+/**
+ * Gün sonu isteğinin gövdesi. Nakit yalnız sayım başladıysa ve "Sayımı sonra gireceğim" seçilmediyse gider: dokunulmamış
+ * sayaç ₺0 sayılmış gibi kaydedilmez (fark eksi beklenen nakit, alarm, lafmaliyet'e 0), gün sayımsız kapanır ve föy
+ * sonra girilir. Banknot adetleri yalnız sayılan nakitle gider (yarım kalıp sonraya bırakılan sayım föye taşınmaz);
+ * yazılan slip tutarları her durumda gider.
+ */
+export function closeDayBody(count: CountResult, later: boolean, note: string) {
+  const cash = !later && countStarted(count);
+  const banknotes = cash ? Object.entries(count.banknotes).filter(([, n]) => n > 0).map(([k, n]) => [`b:${k}`, n] as const) : [];
+  const methods = Object.entries(count.methodCounts).map(([k, v]) => [`m:${k}`, v] as const);
+  return { countedCash: cash ? count.countedCash : null, cashCounts: Object.fromEntries([...banknotes, ...methods]), note: note || null };
+}
+
+/**
+ * Kaydedilmiş sayım (`b:` banknot adedi, `m:` ödeme türünün sayılan tutarı) föy penceresinin sayımına: düzeltme boş
+ * föyle değil, girilenle açılır. Sayımsız kapanan günün banknotları gelmez (sayaç boş, "Sayılmadı"); toplamı tutmayan
+ * banknotlar da gelmez, sayım toplam tutarla açılır: Sayılan ile adetler hep birbirini tutar.
+ */
+export function savedCount(countedCash: number | null, cashCounts: Record<string, number> | null | undefined): CountResult {
+  const of = (prefix: string) =>
+    Object.fromEntries(
+      Object.entries(cashCounts ?? {})
+        .filter(([k]) => k.startsWith(prefix))
+        .map(([k, n]) => [k.slice(prefix.length), n]),
+    );
+  const methodCounts = of('m:');
+  if (countedCash == null) return { countedCash: 0, banknotes: {}, methodCounts };
+  const saved = of('b:');
+  const notes: Record<string, number> = {};
+  for (const d of DENOMINATIONS) if ((saved[String(d)] ?? 0) > 0) notes[String(d)] = saved[String(d)];
+  const fromNotes = DENOMINATIONS.reduce((a, d) => a + d * (notes[String(d)] ?? 0), 0);
+  return { countedCash, banknotes: fromNotes === countedCash ? notes : {}, methodCounts, touched: true };
+}
+
 /** Kasa föyünde nakit dışı ödeme türü satırı; kör sayımda sistem tarafı (beklenen, bahşiş, işlem) null */
 export interface SlipRow {
   methodId: string;
