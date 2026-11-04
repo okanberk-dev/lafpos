@@ -15,7 +15,7 @@ import { del, errorMessage, get, patch, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { useFinePointer } from '@/lib/hooks';
+import { useFinePointer, useMediaQuery } from '@/lib/hooks';
 import { fold } from '@/lib/shell';
 import { toast } from '@/lib/toast';
 
@@ -89,6 +89,10 @@ export default function MenuAdmin() {
   const [tab, setTab] = useState<Tab>('tumu');
   const [catId, setCatId] = useState('');
   const [source, setSource] = useState<Source>('');
+  // Kaynak seçimi telefonda gizli (sm altında, Tailwind'in sm'i 40rem): gizliyken süzmez. Yoksa yatay tutulan telefonda
+  // seçilen "Yerel" dikeye dönünce görünür bir denetim olmadan listeyi süzmeye devam eder, siteden gelen ürünler
+  // kaybolmuş görünürdü
+  const sourceShown = useMediaQuery('(min-width: 40rem)');
   const [q, setQ] = useState('');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -115,9 +119,9 @@ export default function MenuAdmin() {
     site: all.filter((p) => p.extSource).length,
     yerel: all.filter((p) => !p.extSource).length,
   };
-  // Kaynak süzgeci yalnız iki tür de varken (site bağlantısı yokken her ürün yereldir)
+  // Kaynak süzgeci yalnız iki tür de varken (site bağlantısı yokken her ürün yereldir) ve seçimi göründüğü genişlikte
   const bySource = counts.site > 0 && counts.yerel > 0;
-  const src: Source = bySource ? source : '';
+  const src: Source = bySource && sourceShown ? source : '';
   const rows = useMemo(() => {
     const k = fold(q.trim());
     return all.filter((p) => {
@@ -302,7 +306,8 @@ export default function MenuAdmin() {
             ))}
           </Select>
         </label>
-        {/* Telefonda yok: iki seçim kutusu yan yana sığmaz; satır kartı kaynağı zaten yazar ("Siteden", "Yerel") */}
+        {/* Telefonda yok: iki seçim kutusu yan yana sığmaz; satır kartı kaynağı zaten yazar ("Siteden", "Yerel"). Gizliyken
+            seçili kaynak da süzmez (sourceShown) */}
         {bySource && (
           <label className="hidden min-w-0 sm:block sm:w-44">
             <span className="sr-only">Kaynak</span>

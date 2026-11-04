@@ -145,6 +145,9 @@ export default function IntegrationAdmin() {
   const canSync = can('senkron.yonet');
   const menu = s.menu.state;
   const orders = s.online.state;
+  // Sipariş çekimi anahtar ve "Online siparişleri çek" ikisi açıkken (sunucunun turu kapalıyken sipariş çekmez, yalnız
+  // karaoke işaretini okur): kapalıyken kart siparişin düştüğünü söylemez, son çekim yeşil onay almaz
+  const pulling = s.online.configured && s.online.enabled;
 
   return (
     <div className="space-y-4">
@@ -173,22 +176,28 @@ export default function IntegrationAdmin() {
       </Card>
       <Card title="laffogato · online siparişler ve Tükendi">
         <div className="space-y-2">
-          {/* Anahtarın varlığı bağlantının çalıştığını söylemez: ilk başarılı çekime dek sakin */}
-          <Status ok={s.online.configured && !!orders?.lastSuccessAt} idle={s.online.configured ? !orders?.lastSuccessAt : !s.menu.linked}>
+          {/* Anahtarın varlığı bağlantının çalıştığını söylemez: ilk başarılı çekime dek sakin. Çekim kapalıysa (anahtar
+              tanımlı olsa da) sakin ve kapalı olduğunu söyler */}
+          <Status ok={pulling && !!orders?.lastSuccessAt} idle={s.online.configured ? !pulling || !orders?.lastSuccessAt : !s.menu.linked}>
             {s.online.configured
-              ? 'Anahtar tanımlı, siparişler imzalı bağlantıyla çekilir'
+              ? s.online.enabled
+                ? 'Anahtar tanımlı, siparişler imzalı bağlantıyla çekilir'
+                : 'Online sipariş çekimi kapalı: uygulama ve web siparişleri kasaya düşmez'
               : s.menu.linked
                 ? 'Anahtar yok: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'
                 : 'Site bağlantısı kurulmadı: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'}
           </Status>
           {s.online.configured && (
             <>
-              <Status ok={s.online.versionSignal && !!orders?.lastSuccessAt} idle={s.online.versionSignal && !orders?.lastSuccessAt}>
-                {s.online.versionSignal
-                  ? 'Yeni online sipariş 20 sn içinde kasaya düşer; gün açıkken 15 dakikada bir liste ayrıca yenilenir'
-                  : 'Site anlık bildirim göndermiyor: online siparişler 5 dakikada bir kontrol edilir'}
-              </Status>
-              <Status ok={!!orders?.lastSuccessAt} idle={!orders?.lastSuccessAt} error={!!orders?.lastError}>
+              {s.online.enabled && (
+                <Status ok={s.online.versionSignal && !!orders?.lastSuccessAt} idle={s.online.versionSignal && !orders?.lastSuccessAt}>
+                  {s.online.versionSignal
+                    ? 'Yeni online sipariş 20 sn içinde kasaya düşer; gün açıkken 15 dakikada bir liste ayrıca yenilenir'
+                    : 'Site anlık bildirim göndermiyor: online siparişler 5 dakikada bir kontrol edilir'}
+                </Status>
+              )}
+              {/* Kapalıyken son çekim eski bilgidir: onay almaz */}
+              <Status ok={pulling && !!orders?.lastSuccessAt} idle={!pulling || !orders?.lastSuccessAt} error={!!orders?.lastError}>
                 {orders?.lastSuccessAt ? `Son çekim ${fmtDateTime(orders.lastSuccessAt)} · ${s.online.open} açık online sipariş` : 'Henüz çekilmedi'}
                 {orders?.lastError && <span className={ERR}>Hata: {orders.lastError}</span>}
               </Status>

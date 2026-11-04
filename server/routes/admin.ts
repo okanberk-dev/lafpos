@@ -996,6 +996,11 @@ adminRoutes.put('/settings', async (c) => {
   const input = await body(c, settingsShape);
   if (input.menuAutoSync !== undefined || input.onlineOrdersSync !== undefined) requirePermission(user, 'senkron.yonet');
   const prev = getSettings();
+  // Bar fişi alarmı uyarıdan uzun olmalı: bar ekranı önce alarma bakar, kısa ya da eşit alarmda fiş amberi hiç
+  // göstermez. Yalnız çift değişiyorsa denetlenir (bütün formu yeniden gönderen kayıt eski bir çifte takılmasın)
+  const warn = input.kitchenWarnMinutes ?? prev.kitchenWarnMinutes;
+  const alarm = input.kitchenAlarmMinutes ?? prev.kitchenAlarmMinutes;
+  if ((warn !== prev.kitchenWarnMinutes || alarm !== prev.kitchenAlarmMinutes) && alarm <= warn) throw new HttpError(422, 'Bar fişi alarmı uyarıdan uzun olmalı', 'kitchen_alarm');
   const before = serviceModeOf(prev);
   const zFrom = prev.zNoStart;
   // İlk Z numarası yalnız değiştiyse denetlenir ve kayda düşer (aynı değeri yeniden göndermek değişiklik değil)

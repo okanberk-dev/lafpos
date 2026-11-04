@@ -207,6 +207,8 @@ export default function SettingsAdmin() {
   const lastZ = zChain.data ? (zChain.data.lastZ ?? 0) : null;
   const zError =
     s.zNoStart != null && s.zNoStart !== data.data?.zNoStart ? (s.zNoStart < 1 ? 'Z numarası 1 ya da daha büyük olmalı' : lastZ != null && s.zNoStart <= lastZ ? `Z numarası geri alınamaz; son Z ${lastZ}` : null) : null;
+  // Alarm uyarıdan önce gelirse amber hiç görünmez (bar ekranı önce alarma bakar): alanda hata, Kaydet göndermez
+  const kitchenError = s.kitchenAlarmMinutes <= s.kitchenWarnMinutes ? 'Alarm süresi uyarıdan uzun olmalı' : null;
 
   // Servis modu seçilince hemen uygulanır (yalnız bu alan gider): kasalar açılış verisiyle birlikte yenilenir
   const chooseMode = async (next: ServiceMode) => {
@@ -239,6 +241,11 @@ export default function SettingsAdmin() {
     // Gönderilecek fark yoksa istek gitmez (boş kayıt denetime düşmesin): taslak tabana döner
     if (!Object.keys(rest).length) {
       if (was) setS({ ...was, serviceMode: s.serviceMode });
+      return;
+    }
+    // Alanın altında hata yazarken kayıt gitmez ("kaydedildi" ile hata yan yana kalmasın); sunucu da reddeder
+    if (kitchenError) {
+      toast.err('Bar fişi alarmı uyarıdan uzun olmalı');
       return;
     }
     setSaving(true);
@@ -435,8 +442,7 @@ export default function SettingsAdmin() {
             <Field label="Bar fişi uyarısı (dk)" hint="bu süreyi geçen fiş ambere döner">
               <NumberInput commitOnChange value={s.kitchenWarnMinutes} min={1} max={120} onCommit={(kitchenWarnMinutes) => set({ kitchenWarnMinutes })} />
             </Field>
-            {/* Alarm uyarıdan önce gelirse amber hiç görünmez (bar ekranı önce alarma bakar) */}
-            <Field label="Bar fişi alarmı (dk)" hint="bu süreyi geçen fiş kırmızıya döner" error={s.kitchenAlarmMinutes <= s.kitchenWarnMinutes ? 'Alarm süresi uyarıdan uzun olmalı' : null}>
+            <Field label="Bar fişi alarmı (dk)" hint="bu süreyi geçen fiş kırmızıya döner" error={kitchenError}>
               <NumberInput commitOnChange value={s.kitchenAlarmMinutes} min={1} max={240} onCommit={(kitchenAlarmMinutes) => set({ kitchenAlarmMinutes })} />
             </Field>
             <Field label="Oda ücret adımı (dk)">

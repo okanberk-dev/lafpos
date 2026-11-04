@@ -166,7 +166,8 @@ export default function OverviewAdmin() {
           icon: <ShoppingBag className="size-4" />,
           to: integration,
           label: 'Online siparişler',
-          tone: !s.online.configured ? 'neutral' : s.online.state?.lastError ? 'danger' : 'success',
+          // Çekim kapalıyken yeşil değil (sipariş kasaya düşmüyor): Yazarkasa'nın "Kapalı"sı gibi nötr
+          tone: !s.online.configured || !s.online.enabled ? 'neutral' : s.online.state?.lastError ? 'danger' : 'success',
           state: !s.menu.linked ? 'Kurulmadı' : !s.online.configured ? 'Anahtar yok' : s.online.enabled ? 'Açık' : 'Kapalı',
           detail: !s.menu.linked ? 'Site bağlantısı kurulmadı' : (s.online.state?.lastError ?? `Son kontrol ${ago(s.online.state?.lastSuccessAt)} · açık ${s.online.open}`),
         },

@@ -35,6 +35,17 @@ function useCounts(): Partial<Record<AdminSection['key'], number>> {
 }
 
 /**
+ * Sayacın ne saydığı, bölümün kendi sözüyle (dar menünün adı, sayacın ipucu): Ürünler'de tükenen ürün (Tükendi
+ * sekmesinin sayısı), Site ve lafmaliyet'te gidemeyen gün ve Satışta bilgisi, menü hatası. Çıplak "N bekleyen" onay ya
+ * da eşitleme bekleyen ürün gibi okunuyordu
+ */
+const COUNT_TEXT: Partial<Record<AdminSection['key'], (n: number) => string>> = {
+  menu: (n) => `${n} ürün tükendi`,
+  entegrasyon: (n) => `${n} sorun`,
+};
+const countText = (key: AdminSection['key'], n: number) => COUNT_TEXT[key]?.(n) ?? String(n);
+
+/**
  * Tablette menünün tamamı (adlar ve sayaçlarla): dar ikon menüsündeki "Menüyü aç"la soldan açılır; dokunmatikte
  * ikonların ipucu görünmez, ad burada okunur. Kurallar hızlı bakış çekmecesiyle aynı: Escape (yalnız en üstteyken) ve
  * karartmaya dokunuş kapatır, Tab çekmecede döner, kapanınca odak açan düğmeye döner. Sayfa geçişinde kabuk kapatır
@@ -129,13 +140,15 @@ export function AdminShell({ title, children }: { title: string; children: React
 
   const item = (s: AdminSection, narrow: boolean) => {
     const count = counts[s.key];
+    const counted = count ? countText(s.key, count) : null;
+    // Dar menüde yazı yok: ad ve sayacın ne saydığı ekran okuyucuya ve ipucuna (aynı metin: ad açıklama diye yinelenmez)
+    const name = counted ? `${s.label}, ${counted}` : s.label;
     return (
       <NavLink
         key={s.key}
         to={s.to}
-        title={narrow ? s.label : undefined}
-        // Dar menüde yazı yok: ad ve bekleyen iş ekran okuyucuya
-        aria-label={narrow ? `${s.label}${count ? `, ${count} bekleyen` : ''}` : undefined}
+        title={narrow ? name : undefined}
+        aria-label={narrow ? name : undefined}
         className={({ isActive }) =>
           cn(
             'flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors pointer-fine:min-h-8',
@@ -145,7 +158,13 @@ export function AdminShell({ title, children }: { title: string; children: React
         }
       >
         <s.icon className="size-4 shrink-0" aria-hidden="true" />
-        {!narrow && <span className="min-w-0 flex-1 truncate">{s.label}</span>}
+        {/* Geniş menüde rakam hapta gözle okunur; ne saydığı adın parçası olarak ekran okuyucuya ("Ürünler 3" değil) */}
+        {!narrow && (
+          <span className="min-w-0 flex-1 truncate">
+            {s.label}
+            {counted && <span className="sr-only">, {counted}</span>}
+          </span>
+        )}
         {count != null &&
           (narrow ? (
             // Dar menüde de iş bekleyen yer görünür: ikonun köşesinde nötr sayaç (renk değil, sayı)
@@ -153,8 +172,8 @@ export function AdminShell({ title, children }: { title: string; children: React
               {count}
             </span>
           ) : (
-            // Etkin satır da gri: orada sayaç beyaz hapta kalır (gri üstünde gri, yalnız rakam kalmaz)
-            <span className="min-w-5 rounded-full bg-[var(--admin-panel)] px-2 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)] [[aria-current=page]_&]:bg-[var(--admin-surface)] [[aria-current=page]_&]:text-[var(--admin-text)]">
+            // Etkin satır da gri: orada sayaç beyaz hapta kalır (gri üstünde gri, yalnız rakam kalmaz); ipucu ne saydığını söyler
+            <span aria-hidden="true" title={counted ?? undefined} className="min-w-5 rounded-full bg-[var(--admin-panel)] px-2 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)] [[aria-current=page]_&]:bg-[var(--admin-surface)] [[aria-current=page]_&]:text-[var(--admin-text)]">
               {count}
             </span>
           ))}

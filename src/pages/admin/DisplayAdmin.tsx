@@ -150,7 +150,30 @@ export default function DisplayAdmin() {
         }
       />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div className="min-w-0 space-y-4">
+        {/* Önizleme tablette ve telefonda formun önünde: tema ya da metin değişince sonucu iki ekran aşağıda aramak
+            gerekmez. Sayfada da önce gelir (görsel sıra ile odak ve okuma sırası aynı; `order` yalnız görüntüyü taşırdı);
+            geniş ekranda açık yerleşimle sağ sütunda, kayarken yerinde */}
+        <div className="min-w-0 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1 xl:self-start">
+          <Card title="Önizleme" subtitle="Gerçek ekranın birebir küçüğü; kaydetmeden görürsünüz">
+            {/* Durum seçimi kartın içinde: başlık şeridinde telefonda başlığı tek kelimelik sütuna sıkıştırıyordu */}
+            <Segmented<Preview>
+              label="Önizlenen durum"
+              value={preview}
+              onChange={setPreview}
+              className="mb-3 max-sm:flex max-sm:w-full max-sm:[&>button]:flex-1"
+              options={[
+                { value: 'karsilama', label: 'Karşılama' },
+                { value: 'siparis', label: 'Sipariş' },
+                { value: 'tesekkur', label: 'Teşekkür' },
+              ]}
+            />
+            <ScaledScreen>
+              <CustomerDisplayView state={SAMPLE[preview]} config={shown} businessName={boot.settings.businessName} now={now} />
+            </ScaledScreen>
+          </Card>
+        </div>
+
+        <div className="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
           <Card title="Görünüm" subtitle="Tema ekranın bütününü değiştirir; tutar paneli her temada markanın yüzeyidir">
             <div role="radiogroup" aria-label="Tema" className="grid gap-3 sm:grid-cols-3">
               {CUSTOMER_DISPLAY_THEMES.map((t) => {
@@ -244,28 +267,6 @@ export default function DisplayAdmin() {
                 <Input value={draft.qrLabel} maxLength={60} placeholder="Uygulamayı indirin, damga kazanın" onChange={(e) => set('qrLabel', e.target.value)} />
               </Field>
             </div>
-          </Card>
-        </div>
-
-        {/* Önizleme tablette ve telefonda formun önünde: tema ya da metin değişince sonucu iki ekran aşağıda aramak
-            gerekmez. Geniş ekranda sağda ve kayarken yerinde */}
-        <div className="min-w-0 max-xl:order-first xl:sticky xl:top-4 xl:self-start">
-          <Card title="Önizleme" subtitle="Gerçek ekranın birebir küçüğü; kaydetmeden görürsünüz">
-            {/* Durum seçimi kartın içinde: başlık şeridinde telefonda başlığı tek kelimelik sütuna sıkıştırıyordu */}
-            <Segmented<Preview>
-              label="Önizlenen durum"
-              value={preview}
-              onChange={setPreview}
-              className="mb-3 max-sm:flex max-sm:w-full max-sm:[&>button]:flex-1"
-              options={[
-                { value: 'karsilama', label: 'Karşılama' },
-                { value: 'siparis', label: 'Sipariş' },
-                { value: 'tesekkur', label: 'Teşekkür' },
-              ]}
-            />
-            <ScaledScreen>
-              <CustomerDisplayView state={SAMPLE[preview]} config={shown} businessName={boot.settings.businessName} now={now} />
-            </ScaledScreen>
           </Card>
         </div>
       </div>
