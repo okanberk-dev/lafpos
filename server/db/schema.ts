@@ -575,6 +575,12 @@ export const orderItems = sqliteTable(
     note: text('note'),
     stationId: text('station_id'),
     status: text('status').$type<ItemStatus>().notNull().default('yeni'),
+    /**
+     * Ödeme bekliyor: tezgâh satışında "Öde" ile eklenen kalem ödeme alınana dek bara ve mutfağa düşmez (bar ekranı,
+     * çağrı ekranı ve masa planı saymaz). Adisyon kapanınca (ödeme, yazarkasa, ciro dışı ya da ₺0) ya da "Bara gönder"
+     * ile bara gider: o an gönderim anı ve fiş numarası yenilenir. İptal edilen bekleyen kalem bara hiç gitmemiştir
+     */
+    held: bool('held').notNull().default(false),
     /** Aynı anda gönderilen kalemler aynı fiş numarasını taşır */
     batch: integer('batch').notNull().default(1),
     sentAt: integer('sent_at').notNull(),

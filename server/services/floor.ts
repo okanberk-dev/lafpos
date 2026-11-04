@@ -55,7 +55,7 @@ export function floorState(t: Tx | DB): FloorStateDTO {
       waiterName: o.waiterId ? (names.get(o.waiterId) ?? null) : null,
       billPrintedAt: o.billPrintedAt,
       itemCount: mine.reduce((a, i) => a + i.qty, 0),
-      pendingKitchen: mine.filter((i) => i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length,
+      pendingKitchen: mine.filter((i) => i.stationId && !i.held && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length,
       readyToServe: mine.filter((i) => i.status === 'hazir').length,
       source: o.source,
       roomStartedAt: room?.startedAt ?? null,
@@ -107,7 +107,8 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
     : [];
   const board: PickupBoardDTO = { preparing: [], ready: [] };
   for (const o of orders) {
-    const mine = items.filter((i) => i.orderId === o.id && i.stationId);
+    // Ödeme bekleyen kalem çağrı ekranında "Hazırlanıyor" göstermez: bar henüz görmedi
+    const mine = items.filter((i) => i.orderId === o.id && i.stationId && !i.held);
     if (!mine.length) continue;
     if (o.platform && o.deliveryStatus === 'teslim') continue;
     const entry: PickupEntryDTO = {
@@ -181,7 +182,8 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
   const now = Date.now();
   const since = kitchenSince(getOpenDay(t), now);
 
-  const base = and(gt(schema.orderItems.sentAt, since), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
+  // Ödeme bekleyen kalem (tezgâh satışında "Öde") bara henüz gitmedi: ödeme alınınca gönderim anıyla düşer
+  const base = and(gt(schema.orderItems.sentAt, since), eq(schema.orderItems.held, false), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
   const where = opts.history
     ? and(base, eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['hazir', 'servis']), gt(schema.orderItems.readyAt, now - 90 * 60_000))
     : opts.ready
@@ -226,6 +228,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
         scheduledFor: order.scheduledFor,
         numarator: order.numarator ?? null,
         platform: order.platform ?? null,
+        paid: order.status === 'kapali' || (order.total > 0 && order.paid >= order.total),
         items: [],
       };
       tickets.set(key, ticket);

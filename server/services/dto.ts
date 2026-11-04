@@ -37,6 +37,7 @@ export function itemToDTO(i: ItemRow): OrderItemDTO {
     note: i.note,
     stationId: i.stationId,
     status: i.status,
+    held: i.held,
     batch: i.batch,
     sentAt: i.sentAt,
     readyAt: i.readyAt,

@@ -145,11 +145,20 @@ posRoutes.post('/orders/:id/items', async (c) => {
         )
         .min(1)
         .max(60),
+      /** Tezgâh satışında "Öde": kalemler ödeme alınınca bara gider (holdsUntilPaid) */
+      hold: z.boolean().optional(),
       ...approver,
     }),
   );
   const actor = actorFrom(c, input.approverPin);
-  write((t, fx) => orders.addItems(t, actor, fx, c.req.param('id'), input.items));
+  write((t, fx) => orders.addItems(t, actor, fx, c.req.param('id'), input.items, { hold: input.hold ?? false }));
+  return c.json(dto(c, c.req.param('id')));
+});
+
+/** Ödeme bekleyen kalemleri ödeme alınmadan bara gönderir ("Bara gönder") */
+posRoutes.post('/orders/:id/release', (c) => {
+  const actor = actorFrom(c);
+  write((t, fx) => orders.sendHeld(t, actor, fx, c.req.param('id')));
   return c.json(dto(c, c.req.param('id')));
 });
 

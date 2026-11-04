@@ -1,6 +1,7 @@
 /**
  * Servis modu (Yönetim › Ayarlar): işletmenin siparişi nasıl aldığı ve sunduğu. Sistemin akışı buna göre değişir;
- * ödeme kuralları değişmez, kalemler bara her modda aynı gider.
+ * ödeme kuralları değişmez. Kalemler bara her modda aynı kuralla gider: "Bara gönder" hemen; tezgâh satışında "Öde"
+ * ödeme alınınca (`holdsUntilPaid`).
  *
  * - `masa` (varsayılan): garson masayı açar, sipariş masada alınır, hesap sonda ödenir (bugünkü akış).
  * - `yari_self`: sipariş ve ödeme kasada; kasiyer masa no ya da numaratör girer, personel masaya götürür.
@@ -37,6 +38,15 @@ export function serviceModeOf(settings?: { serviceMode?: unknown } | null): Serv
 /** Yeni satış tezgâhta başlar, önce ödeme alınır (self ve yarı self) */
 export function isCounterFirst(mode: ServiceMode): boolean {
   return mode !== 'masa';
+}
+
+/**
+ * Tezgâh satışı (kasanın kendi siparişi, her servis modunda): "Öde" ile eklenen kalem ödeme bekler (`held`), ödeme
+ * alınınca (adisyon kapanınca) kendiliğinden bara ve mutfağa gider. Müşteri ödemekten vazgeçerse bar boşuna hazırlamaz.
+ * Masa, gel-al, paket, site ve platform siparişinde kalem eklenince gider
+ */
+export function holdsUntilPaid(o: { type: string; source: string }): boolean {
+  return o.type === 'tezgah' && o.source === 'pos';
 }
 
 /** Masalar menüde hep görünür: masaya serviste ve yarı selfte (doluluk), QR + selfte (QR siparişi masaya düşer); selfte yalnız masa kullanılıyorsa */
