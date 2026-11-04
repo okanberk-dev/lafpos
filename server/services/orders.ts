@@ -477,23 +477,24 @@ export function releaseHeld(t: Tx, fx: Effects, orderId: string, byUserId: strin
 }
 
 /**
- * Kalemi seçilerek ödenen bekleyen adet ("Kalem seç", yazarkasada seçili kalemle sepet) hemen bara gider: iki müşterili
- * tezgâhta ödeyenin içeceği ötekini beklemez. Satırın ödenmemiş adedi ayrı satır olur ve beklemeye devam eder (ödeme
- * kayıtları orijinal satırı, yani ödenen adedi gösterir). Tutarla kısmi ödeme kalem seçmez: hesap kapanınca gider
+ * Kalemi seçilerek tamamen ödenen bekleyen satır ("Kalem seç", yazarkasada seçili kalemle sepet) hesabın kalanını
+ * beklemeden bara gider: iki müşterili tezgâhta ödeyenin içeceği ötekini beklemez. Satır bölünmez: bölmek satır ve
+ * adisyon indirimini yeniden yuvarlar, ödenen adedin yazılı tutarı yeni payını tutmaz (yazarkasa kalanı 1 kuruşla
+ * reddeder ya da her adet ödendiği hâlde 0,01 ₺ açık kalır; yazarkasada basılıp ödenmeyen adet de korumasından kopar).
+ * Bir kısmı ödenen satır, tutarla kısmi ödeme gibi, hesap kapanınca gider. Hesabı kapatan ödemede çağrılmaz:
+ * bekleyenlerin hepsi kapanışta tek fişle gider (closeOrderRow → releaseHeld)
  */
 function releasePaidHeld(t: Tx, fx: Effects, orderId: string, byUserId: string): number {
   const rows = t
     .select()
     .from(schema.orderItems)
     .where(and(eq(schema.orderItems.orderId, orderId), eq(schema.orderItems.held, true), eq(schema.orderItems.voided, false), gt(schema.orderItems.paidQty, 0)))
-    .all();
+    .all()
+    .filter((it) => it.paidQty >= it.qty);
   if (!rows.length) return 0;
   const now = Date.now();
   const batch = nextBatch(t, orderId);
-  for (const it of rows) {
-    if (it.paidQty < it.qty) splitItem(t, it, it.qty - it.paidQty, {});
-    t.update(schema.orderItems).set({ held: false, sentAt: now, batch }).where(eq(schema.orderItems.id, it.id)).run();
-  }
+  for (const it of rows) t.update(schema.orderItems).set({ held: false, sentAt: now, batch }).where(eq(schema.orderItems.id, it.id)).run();
   for (const s of new Set(rows.map((i) => i.stationId).filter(Boolean))) fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId, stationId: s!, byUserId });
   return rows.length;
 }
@@ -1596,9 +1597,6 @@ export function addPayment(
       .where(eq(schema.orders.id, orderId))
       .run();
   }
-  // Kalemi seçilerek ödenen bekleyen adet bara gider (hesabın kalanı beklerken)
-  releasePaidHeld(t, fx, orderId, actor.user.id);
-
   let updated = recalc(t, orderId);
   let closed = false;
   if (updated.total - updated.paid <= 0) {
@@ -1606,6 +1604,8 @@ export function addPayment(
     updated = loadOrder(t, orderId);
     closed = true;
   }
+  // Hesap açık kaldı: kalemi seçilerek tamamen ödenen bekleyen satır bara gider (kapanışta hepsi tek fişle gider)
+  if (!closed) releasePaidHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, closed ? 'order.closed' : 'payment.added');
   fx.emit({ topic: 'cash', kind: 'payment.added', orderId, byUserId: actor.user.id });
   if (customerId) fx.emit({ topic: 'customers', kind: 'ledger', byUserId: actor.user.id });
@@ -1973,9 +1973,6 @@ export function addExternalPayments(
       .run();
     ids.push(id);
   });
-  // Yazarkasada seçili kalemle ödenen bekleyen adet bara gider
-  releasePaidHeld(t, fx, orderId, userId);
-
   let updated = recalc(t, orderId);
   let closed = false;
   if (updated.total - updated.paid <= 0) {
@@ -1995,6 +1992,8 @@ export function addExternalPayments(
       closed = true;
     }
   }
+  // Hesap açık kaldı: yazarkasada seçili kalemle tamamen ödenen bekleyen satır bara gider
+  if (!closed) releasePaidHeld(t, fx, orderId, userId);
   orderEvents(fx, updated, userId, closed ? 'order.closed' : 'payment.added');
   fx.emit({ topic: 'cash', kind: 'payment.added', orderId, byUserId: userId });
   return { order: updated, closed, paymentIds: ids };

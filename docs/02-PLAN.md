@@ -391,13 +391,16 @@ mürekkep "Öde · ₺X", gönderilmemiş varken ikincil "Bara gönder (N)", hı
 (`order_items.held`, göç `0018_odeme_bekleyen`; `POST /orders/:id/items` `hold: true`). Bekleyen kalem bar ekranına, çağrı
 ekranına ve sipariş sayacına girmez, fiş sesi çalmaz. Adisyon kapanınca (ödeme, yazarkasanın bildirdiği ödeme, ciro dışı
 ya da ₺0; `closeOrderRow` → `releaseHeld`) kendiliğinden bara gider: gönderim anı o an (bar süresi ve hazırlama raporu
-oradan sayar), hepsi tek yeni fişte. Kalemi seçilerek ödenen ("Kalem seç", yazarkasada seçili kalemle sepet) bekleyen
-adet hemen gider, satırın kalanı ayrı satırda bekler (`releasePaidHeld`); tutarla kısmi ödeme kalem seçmez, hesap
-kapanınca gider. Masaya taşınan ("Masa taşı") ya da masa veya gel-al adisyonuna aktarılan bekleyen kalem bara gider. "Ödemeden
+oradan sayar), hepsi tek yeni fişte. Hesap açık kalırken kalemi seçilerek tamamen ödenen ("Kalem seç", yazarkasada
+seçili kalemle sepet) bekleyen satır hemen gider (`releasePaidHeld`). Satır bölünmez: bölmek satır ve adisyon indirimini
+yeniden yuvarlar, ödenen adedin yazılı tutarı yeni payını tutmaz (yazarkasa kalanı 1 kuruşla reddeder ya da 0,01 ₺ açık
+kalır). Bir kısmı ödenen satır ve tutarla kısmi ödeme hesap kapanınca gider; hesabı kapatan ödemede bekleyenlerin hepsi
+tek fişle gider. Masaya taşınan ("Masa taşı") ya da masa veya gel-al adisyonuna aktarılan bekleyen kalem bara gider. "Ödemeden
 gönder" (`POST /orders/:id/release`, `siparis.al`, denetimde `order.release`) bekleyenleri hemen yollar. Müşteri
 vazgeçerse satış onaysız iptal edilir; bekleyen kalem bara hiç gitmediği için fire sayılmaz (`voidAfterSend` yok), bar
-iptal sesi duymaz. "Bara gönder" eskisi gibi hemen gönderir. Bar fişinde hesabı kapanmış (ödenmiş ya da ciro dışı) ya
-da tamamı ödenmiş siparişe "Ödendi" (`KitchenTicket.paid`); "Ödemeden gönder" ile gidende yok. Siparişler kartı bekleyen
+iptal sesi duymaz. "Bara gönder" eskisi gibi hemen gönderir. Bar fişinde tahsil edilecek bir şey yoksa "Ödendi"
+(`KitchenTicket.paid`): hesap kapanmış (ödenmiş ya da ciro dışı) ya da tamamı ödenmiş, ya da fişin bütün canlı kalemleri
+kalemi seçilerek ödenmiş ya da ikram; "Ödemeden gönder" ile gidende yok. Siparişler kartı bekleyen
 kalemi "barda" saymaz, "Ödeme bekliyor" rozeti gösterir. Testler `tests/odeme-sonrasi-bar.test.ts` (sql.js ile de), e2e
 akışı tablette.
 

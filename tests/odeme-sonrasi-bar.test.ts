@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { amountForItems, itemPayLines } from '@shared/order-calc';
 import { holdsUntilPaid } from '@shared/service-mode';
 import type { FloorStateDTO, KitchenTicket, OrderDTO, PickupBoardDTO } from '@shared/types';
 import { cartGroupOf, groupCartItems } from '../src/pages/order/cartGroups';
@@ -20,6 +21,14 @@ afterAll(() => h.cleanup());
 
 const latte = () => h.boot.products.find((p) => p.name === 'Latte')!;
 const cash = () => h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+const espresso = () => h.boot.products.find((p) => p.name === 'Espresso')!;
+/** "Kalem seç" ödemesi: tutar ekrandaki gibi (seçilenlerin payı, kalanla sınırlı) */
+const payItems = async (orderId: string, sel: { lineId: string; qty: number }[]) => {
+  const cur = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${orderId}`);
+  const amount = Math.min(cur.total - cur.paid, amountForItems(cur.totals, itemPayLines(cur.items, cur.payments), sel));
+  return h.ok<{ order: OrderDTO; closed: boolean }>('kasa', 'POST', `/orders/${orderId}/payments`, { methodId: cash().id, amount, items: sel.map((x) => ({ itemId: x.lineId, qty: x.qty })) });
+};
+const ticketsOf = async (orderId: string) => (await h.ok<KitchenTicket[]>('kasa', 'GET', '/kitchen')).filter((t) => t.orderId === orderId);
 const kitchenItemIds = async () => (await h.ok<KitchenTicket[]>('kasa', 'GET', '/kitchen')).flatMap((t) => t.items.map((i) => i.id));
 const counterSale = async (qty = 2) => {
   const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
@@ -157,6 +166,8 @@ describe('tezgâh satışında "Öde": ödeme alınınca bara', () => {
     let ids = await kitchenItemIds();
     expect(ids).toContain(first.id);
     expect(ids).not.toContain(second.id);
+    // Ödeyenin içeceği fişte "Ödendi" (hesabın kalanı açık olsa da): barista "Ödemeden gönder" fişiyle karıştırmaz
+    expect((await ticketsOf(o.id)).find((t) => t.items.some((i) => i.id === first.id))?.paid).toBe(true);
     const mid = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${o.id}`);
     expect(mid.items.find((i) => i.id === second.id)?.held).toBe(true);
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash().id, amount: mid.total - mid.paid });
@@ -164,20 +175,51 @@ describe('tezgâh satışında "Öde": ödeme alınınca bara', () => {
     expect(ids).toContain(second.id);
   });
 
-  it('satırın bir adedi ödenince o adet bara gider, kalan adet ayrı satırda bekler', async () => {
+  it('satırın bir kısmı ödenince satır bölünmez, bekler; kalanı ödenince bütün satır tek fişle gider', async () => {
     let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte().id, size: 'M', qty: 2 }], hold: true });
     const line = o.items[0];
-    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash().id, amount: o.totals.lineNet[line.id] / 2, items: [{ itemId: line.id, qty: 1 }] });
+    await payItems(o.id, [{ lineId: line.id, qty: 1 }]);
     const after = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${o.id}`);
-    const sent = after.items.find((i) => i.id === line.id)!;
-    const rest = after.items.find((i) => i.id !== line.id)!;
-    expect([sent.qty, sent.paidQty, sent.held]).toEqual([1, 1, false]);
-    expect([rest.qty, rest.paidQty, rest.held]).toEqual([1, 0, true]);
+    // Bölmek satır ve adisyon indirimini yeniden yuvarlar (ödenen adedin yazılı tutarı yeni payını tutmaz): satır bütün kalır
+    expect(after.items).toHaveLength(1);
+    expect([after.items[0].qty, after.items[0].paidQty, after.items[0].held]).toEqual([2, 1, true]);
     expect(after.total).toBe(o.total);
-    const ids = await kitchenItemIds();
-    expect(ids).toContain(sent.id);
-    expect(ids).not.toContain(rest.id);
+    expect(await kitchenItemIds()).not.toContain(line.id);
+    const done = await payItems(o.id, [{ lineId: line.id, qty: 1 }]);
+    expect(done.closed).toBe(true);
+    const tickets = await ticketsOf(o.id);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0].items.map((i) => [i.id, i.qty])).toEqual([[line.id, 2]]);
+  });
+
+  it('indirimli hesapta kalemle kısmi ödeme kuruşu kuruşuna kapanır (satır ve adisyon indirimi)', async () => {
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, {
+      items: [{ productId: latte().id, size: 'M', qty: 3 }, { productId: espresso().id, size: 'M', qty: 1 }],
+      hold: true,
+    });
+    const [lat, esp] = o.items;
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items/${lat.id}/discount`, { type: 'amount', value: 500, reason: 'Müdavim', approverPin: PINS.mudur });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/discount`, { type: 'amount', value: 1000, reason: 'Müdavim', approverPin: PINS.mudur });
+    await payItems(o.id, [{ lineId: lat.id, qty: 2 }]);
+    const done = await payItems(o.id, [{ lineId: lat.id, qty: 1 }, { lineId: esp.id, qty: 1 }]);
+    // Her adet ödendi: 0,01 ₺ açık kalmaz, adisyon kapanır
+    expect(done.closed).toBe(true);
+    expect(done.order.paid).toBe(done.order.total);
+  });
+
+  it('hesabı kapatan kalem ödemesi bekleyenleri tek fişle gönderir (ikram satırı da aynı fişte)', async () => {
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte().id, size: 'M', qty: 1 }, { productId: latte().id, size: 'L', qty: 1 }], hold: true });
+    const [paidLine, gift] = o.items;
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items/${gift.id}/comp`, { reason: 'Müdavim', approverPin: PINS.mudur });
+    const r = await payItems(o.id, [{ lineId: paidLine.id, qty: 1 }]);
+    expect(r.closed).toBe(true);
+    const tickets = await ticketsOf(o.id);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0].items.map((i) => i.id).sort()).toEqual([paidLine.id, gift.id].sort());
+    expect(tickets[0].paid).toBe(true);
   });
 
   it('yalnız tezgâh satışında: masa siparişinde "hold" reddedilir', async () => {

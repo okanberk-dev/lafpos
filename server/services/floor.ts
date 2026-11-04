@@ -210,6 +210,10 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
   const names = userNameMap(t);
   const tableNames = new Map(t.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((x) => [x.id, x.name]));
   const tickets = new Map<string, KitchenTicket>();
+  // Fişte tahsil edilecek canlı kalem kaldı mı: kalemi seçilerek ödenen satır hesabın kalanı açıkken bara gider
+  // (releasePaidHeld); fişin bütün canlı kalemleri ödenmiş ya da ikramsa fiş de "Ödendi" der. "Ödemeden gönder" ile
+  // gidenin ödenen adedi 0: "Ödendi" yok, teslimde tahsil edilir
+  const due = new Map<string, boolean>();
   for (const { item, order } of rows) {
     const key = opts.ready ? `${order.id}:hazir` : `${order.id}:${item.batch}`;
     let ticket = tickets.get(key);
@@ -235,6 +239,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
       };
       tickets.set(key, ticket);
     }
+    if (!item.voided) due.set(key, (due.get(key) ?? false) || (!item.complimentary && item.paidQty < item.qty));
     ticket.items.push({
       id: item.id,
       name: item.name,
@@ -250,6 +255,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
       readyAt: item.readyAt,
     });
   }
+  for (const [key, open] of due) if (!open) tickets.get(key)!.paid = true;
   // Yalnız iptal satırı kalan fişte bile iptal bildirimi gösterilsin; ama hiç kalemi kalmayan fiş yok
   const list = [...tickets.values()].filter((tk) => tk.items.length);
   // Hazır: en uzun bekleyen önce (alınmayan sipariş üstte kalır)
