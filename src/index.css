@@ -374,6 +374,48 @@
   color-scheme: dark;
 }
 
+/*
+ * Köşe ve gölge belirteçleri (DESIGN.md §2 "Biçim" ve §4 "Kurumsal yüzey"). Ortak kit (src/components/ui/*,
+ * src/components/admin/ui.tsx) bunları okur. Kasa ekranları bugünkü yumuşak değerlerle: kart 20, alan 14, düğme, çip
+ * ve segment kapsül, sütun grafiğinin üst köşesi 4, yatay çubuk kapsül; gölge sıcak toprak (@theme'deki --shadow-*).
+ */
+:root {
+  --r-card: 1.25rem;
+  --r-control: 0.875rem;
+  --r-btn: 9999px;
+  --r-chip: 9999px;
+  --r-segment: 9999px;
+  --r-bar: 4px;
+  --r-track: 9999px;
+  --table-head-bg: var(--admin-surface-2);
+}
+
+/*
+ * Kurumsal yüzey: yönetim ve raporlar (AdminShell kökündeki .surface-corporate; portalda açılan pencere, çekmece ve
+ * menüler için yönetim açıkken <html data-area="admin">). Küçük köşe (kart, tablo, alan, düğme, segment 6; çip ve rozet
+ * 4), gölge yerine 1 px ince çizgi, taş zemin üstünde düz beyaz yüzey, köşesi yuvarlatılmamış grafik çubuğu. Tailwind'in
+ * köşe değişkenleri de burada küçülür: sayfalardaki rounded-xl / rounded-2xl / rounded-3xl kendiliğinden uyar. Renk ve
+ * marka aynı (yeşil birincil, mürekkep ödeme, pirinç yalnız ödülde); açık ve koyu temada aynı ölçü
+ */
+.surface-corporate,
+:root[data-area='admin'] {
+  --radius-lg: 6px;
+  --radius-xl: 6px;
+  --radius-2xl: 6px;
+  --radius-3xl: 8px;
+  --r-card: 6px;
+  --r-control: 6px;
+  --r-btn: 6px;
+  --r-chip: 4px;
+  --r-segment: 6px;
+  --r-bar: 0px;
+  --r-track: 0px;
+  --shadow-card: none;
+  --shadow-lift: none;
+  --rim: none;
+  --table-head-bg: transparent;
+}
+
 /* Yönetim paneli: aynı değerler; yalnız sıklık (bileşenlerde [data-area=admin]) */
 :root[data-area='admin'] :focus-visible {
   outline-color: var(--focus);

@@ -64,13 +64,14 @@ const disabledStyles: Record<ButtonVariant, string> = {
   warn: 'disabled:opacity-50',
 };
 
-// Dokunmatikte en az 44 px (AGENTS.md kural 8); yönetimde fareyle 36 px, "Sıkı görünüm"de 32 px. Düğme kapsüldür (sitenin --r-btn'i)
+// Dokunmatikte en az 44 px (AGENTS.md kural 8); yönetimde fareyle 36 px, "Sıkı görünüm"de 32 px. Köşe --r-btn: kasada
+// kapsül (sitenin --r-btn'i), yönetim ve raporlarda 6 px dikdörtgen (kurumsal yüzey, index.css)
 const COMPACT = '[[data-area=admin][data-density=compact]_&]:pointer-fine:h-8';
 const sizes: Record<ButtonSize, string> = {
-  sm: `h-9 px-3.5 text-sm gap-1.5 rounded-full pointer-coarse:h-11 pointer-coarse:min-w-11 ${COMPACT}`,
-  md: `h-11 px-5 text-[15px] gap-2 rounded-full [[data-area=admin]_&]:text-sm [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:px-4 ${COMPACT}`,
-  lg: 'h-14 px-6 text-base gap-2 rounded-full',
-  xl: 'h-16 px-7 text-lg gap-3 rounded-full',
+  sm: `h-9 px-3.5 text-sm gap-1.5 rounded-[var(--r-btn)] pointer-coarse:h-11 pointer-coarse:min-w-11 ${COMPACT}`,
+  md: `h-11 px-5 text-[15px] gap-2 rounded-[var(--r-btn)] [[data-area=admin]_&]:text-sm [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:px-4 ${COMPACT}`,
+  lg: 'h-14 px-6 text-base gap-2 rounded-[var(--r-btn)]',
+  xl: 'h-16 px-7 text-lg gap-3 rounded-[var(--r-btn)]',
 };
 /** Kare ikon düğmesi: genişlik yükseklikle aynı adımda (yönetimde fareyle 36, sıkıda 32); dar satırda daralmaz (44 px) */
 const squares: Record<ButtonSize, string> = {

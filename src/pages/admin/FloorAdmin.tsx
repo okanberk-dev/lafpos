@@ -389,7 +389,7 @@ export default function FloorAdmin() {
           // Kesilen dokunuş (sistem hareketi, kaydırma) sürüklemeyi bırakır: masa sonraki harekette parmağı izlemez
           onPointerCancel={onPointerUp}
           onPointerDown={() => select(null)}
-          className="relative aspect-[16/10] w-full touch-none select-none rounded-[14px] border border-[var(--admin-border)] bg-[radial-gradient(circle_at_1px_1px,var(--admin-border-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-[var(--admin-surface-2)]"
+          className="relative aspect-[16/10] w-full touch-none select-none rounded-[var(--r-control)] border border-[var(--admin-border)] bg-[radial-gradient(circle_at_1px_1px,var(--admin-border-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-[var(--admin-surface-2)]"
         >
           {visible.length === 0 && (
             <div className="absolute inset-0 grid place-items-center p-4" onPointerDown={(e) => e.stopPropagation()}>

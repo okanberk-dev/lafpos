@@ -182,7 +182,7 @@ export default function OptionsAdmin() {
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {its.map((i) => (
-                    <span key={i.id} className={cn('inline-flex items-baseline gap-1.5 rounded-full border border-[var(--admin-border)] px-2.5 py-1 text-xs text-[var(--admin-text)]', i.isDefault && 'bg-[var(--admin-panel)]')}>
+                    <span key={i.id} className={cn('inline-flex items-baseline gap-1.5 rounded-[var(--r-chip)] border border-[var(--admin-border)] px-2.5 py-1 text-xs text-[var(--admin-text)]', i.isDefault && 'bg-[var(--admin-panel)]')}>
                       <span>
                         {i.name}
                         {i.price > 0 && ` +${tl(i.price)}`}

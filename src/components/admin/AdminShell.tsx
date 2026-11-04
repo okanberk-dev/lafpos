@@ -153,7 +153,10 @@ export function AdminShell({ title, children }: { title: string; children: React
           cn(
             'flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors pointer-fine:min-h-8',
             narrow && 'relative mx-auto size-11 justify-center px-0 pointer-fine:size-10',
-            isActive ? 'bg-[var(--admin-panel)] text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)] hover:bg-hover hover:text-[var(--admin-text)] active:bg-press',
+            // Kurumsal yüzey: etkin öğe dolgu kapsül değil, 2 px yeşil sol çizgi ve kalın yazı
+            isActive
+              ? 'relative font-semibold text-[var(--admin-text)] before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:bg-[var(--admin-primary)]'
+              : 'text-[var(--admin-text-soft)] hover:bg-hover hover:text-[var(--admin-text)] active:bg-press',
           )
         }
       >
@@ -172,8 +175,8 @@ export function AdminShell({ title, children }: { title: string; children: React
               {count}
             </span>
           ) : (
-            // Etkin satır da gri: orada sayaç beyaz hapta kalır (gri üstünde gri, yalnız rakam kalmaz); ipucu ne saydığını söyler
-            <span aria-hidden="true" title={counted ?? undefined} className="min-w-5 rounded-full bg-[var(--admin-panel)] px-2 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)] [[aria-current=page]_&]:bg-[var(--admin-surface)] [[aria-current=page]_&]:text-[var(--admin-text)]">
+            // Sayaç gri hapta (etkin satır dolgusuz, yalnız yeşil sol çizgi); ipucu ne saydığını söyler
+            <span aria-hidden="true" title={counted ?? undefined} className="min-w-5 rounded-[var(--r-chip)] bg-[var(--admin-panel)] px-2 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)] [[aria-current=page]_&]:text-[var(--admin-text)]">
               {count}
             </span>
           ))}
@@ -201,11 +204,11 @@ export function AdminShell({ title, children }: { title: string; children: React
         {toggle}
       </div>
       <div className={cn('scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto pb-5 [mask-image:linear-gradient(to_bottom,black_calc(100%-20px),transparent)]', narrow ? 'px-2' : 'px-2.5')}>
-        {ADMIN_GROUPS.map((g) => {
+        {ADMIN_GROUPS.filter((g) => sections.some((s) => s.group === g.key)).map((g, gi) => {
           const list = sections.filter((s) => s.group === g.key);
-          if (!list.length) return null;
           return (
-            <div key={g.key}>
+            // Gruplar arasında ince ayraç (geniş menüde ilk grup hariç)
+            <div key={g.key} className={cn(!narrow && gi > 0 && 'border-t border-[var(--admin-border)] pt-3')}>
               {narrow ? <div className="mx-2 mb-1.5 border-t border-[var(--admin-border)]" /> : <div className="px-2.5 pb-0.5 text-[11px] font-medium uppercase leading-4 tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</div>}
               <div className="space-y-0.5">{list.map((s) => item(s, narrow))}</div>
             </div>
@@ -244,7 +247,8 @@ export function AdminShell({ title, children }: { title: string; children: React
   const current = sections.find((s) => location.pathname.startsWith(s.to));
   const back = !atIndex && (location.pathname.startsWith('/yonetim') || sections.length > 1);
   return (
-    <div className="flex h-full min-h-0 bg-[var(--admin-surface)] text-[var(--admin-text)] md:gap-3 md:bg-[var(--admin-bg)] md:p-2">
+    // Kurumsal yüzey (index.css .surface-corporate): yönetim ve raporlar küçük köşe, gölgesiz ince çizgi
+    <div className="surface-corporate flex h-full min-h-0 bg-[var(--admin-surface)] text-[var(--admin-text)] md:gap-3 md:bg-[var(--admin-bg)] md:p-2">
       <aside className={cn('hidden shrink-0 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] md:block', rail ? 'md:w-16' : 'md:w-16 lg:w-[15.5rem]')}>
         {/* Tablette dar ikon menüsü (daraltma yok); üstteki düğme adlı tam menüyü çekmecede açar */}
         <div className="h-full lg:hidden">{sidebar(true, panelToggle('Menüyü aç', true, () => setDrawer(true)))}</div>

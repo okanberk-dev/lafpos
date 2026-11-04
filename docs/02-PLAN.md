@@ -384,6 +384,15 @@ mürekkep "Öde · ₺X", gönderilmemiş varken ikincil "Bara gönder (N)", hı
 İşlemler), telefonda önce ürünler ve yapışkan sepet çubuğu. Davranış, istekler ve yetki denetimleri aynı; e2e adları
 "Öde · ", "Bara gönder (N)", "Sepet: …" ve "Ürün ekle"ye güncellendi. Test `tests/adisyon-ekrani.test.ts`.
 
+**Yönetim ve raporlar: kurumsal yüzey** (4 Kasım 2026; araştırma `docs/08-POS-ARASTIRMA.md` §5): kasa ekranları
+yumuşak kalır; yönetim ve raporlar küçük köşe (kart, tablo, alan, düğme, segment 6; çip ve rozet 4), gölge yerine 1 px
+çizgi, kenar çubuğunda ince ayraç ve etkin öğede 2 px yeşil sol çizgi, zeminsiz tablo başlığı, köşesiz grafik çubuğu.
+Belirteçler `src/index.css` `:root`'ta bugünkü değerlerle (`--r-card`, `--r-control`, `--r-btn`, `--r-chip`,
+`--r-segment`, `--r-bar`, `--r-track`, `--table-head-bg`, `--shadow-card`), kurumsal değerler `.surface-corporate`
+(AdminShell kökü) ve portal için `:root[data-area='admin']`; ortak kit köşeyi belirteçten okur, sayfaların yerel
+köşeleri belirtece ya da Tailwind'in kapsamda küçülen köşe değişkenine taşındı. Ayrıntı `DESIGN.md` §4 "Kurumsal
+yüzey"; test `tests/design-tokens.test.ts` "köşe ve gölge belirteçleri".
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

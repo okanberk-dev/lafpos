@@ -163,7 +163,7 @@ export default function RolesAdmin() {
                             aria-label={`${r.label}: varsayılana dön`}
                             title="Varsayılana dön"
                             className={cn(
-                              'grid size-8 place-items-center rounded-full text-[var(--admin-primary)] transition-colors hover:bg-[var(--admin-primary-soft)] active:bg-[var(--admin-primary-soft)] pointer-coarse:size-11',
+                              'grid size-8 place-items-center rounded-[var(--r-btn)] text-[var(--admin-primary)] transition-colors hover:bg-[var(--admin-primary-soft)] active:bg-[var(--admin-primary-soft)] pointer-coarse:size-11',
                               same && 'invisible',
                             )}
                           >

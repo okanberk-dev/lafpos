@@ -750,8 +750,8 @@ function ProductsReport({
               width: '26%',
               cell: (p) => (
                 <div className="flex items-center gap-3">
-                  <div aria-hidden="true" className="h-2 min-w-10 flex-1 rounded-full" style={{ background: 'var(--chart-track)' }}>
-                    <div className="h-2 rounded-full" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+                  <div aria-hidden="true" className="h-2 min-w-10 flex-1 rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
+                    <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
                   </div>
                   <span className="min-w-24 shrink-0 text-right font-semibold whitespace-nowrap">{tl(p.revenue)}</span>
                 </div>
@@ -1363,8 +1363,8 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
                         <span className="text-base font-semibold text-ink">{tl(p.revenue)}</span> · ciroda %{p.share.toLocaleString('tr-TR')}
                       </span>
                     </div>
-                    <div aria-hidden="true" className="mt-2 h-2 rounded-full" style={{ background: 'var(--chart-track)' }}>
-                      <div className="h-2 rounded-full" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+                    <div aria-hidden="true" className="mt-2 h-2 rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
+                      <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm sm:grid-cols-3 xl:grid-cols-4">
                       <Metric label="Sipariş" value={p.orders.toLocaleString('tr-TR')} hint={p.orders ? `ortalama ${tlShort(p.avgBasket)}` : null} />

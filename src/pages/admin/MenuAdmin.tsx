@@ -54,7 +54,7 @@ function ProductMark({ name, color }: { name: string; color: string }) {
   return (
     <span
       aria-hidden="true"
-      className="grid size-9 shrink-0 place-items-center rounded-[10px] text-xs font-semibold"
+      className="grid size-9 shrink-0 place-items-center rounded-lg text-xs font-semibold"
       style={
         color
           ? { background: `color-mix(in oklab, ${color} 14%, var(--admin-surface-2))`, color: `color-mix(in oklab, ${color} 45%, var(--admin-text))` }
@@ -500,7 +500,7 @@ function CategoryBar({ cat, onChange }: { cat: Category; onChange: (b: Record<st
       </span>
       <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--admin-text-soft)]">
         Renk
-        <input type="color" value={color} onChange={(e) => setDraft(e.target.value)} className="h-11 w-12 cursor-pointer rounded-[10px] border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] p-1 pointer-fine:h-9 pointer-fine:w-11" />
+        <input type="color" value={color} onChange={(e) => setDraft(e.target.value)} className="h-11 w-12 cursor-pointer rounded-lg border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] p-1 pointer-fine:h-9 pointer-fine:w-11" />
       </label>
       <label className="flex items-center gap-2 text-sm text-[var(--admin-text-soft)]">
         İstasyon
@@ -747,7 +747,7 @@ function ProductDrawer({
             <button
               type="button"
               onClick={() => setNewGroup(true)}
-              className="inline-flex min-h-11 items-center gap-1 rounded-full border border-dashed border-[var(--admin-border-strong)] px-3.5 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press pointer-fine:min-h-9"
+              className="inline-flex min-h-11 items-center gap-1 rounded-[var(--r-chip)] border border-dashed border-[var(--admin-border-strong)] px-3.5 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press pointer-fine:min-h-9"
             >
               <Plus aria-hidden="true" className="size-3.5" />
               Yeni grup

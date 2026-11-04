@@ -73,7 +73,10 @@
 ### Biçim
 
 - **Köşeler** (sitenin ölçüsü): küçük denetim 10, alan, iç kutu ve tuş 14, kart 20, pencere ve alt sayfa 28; düğme,
-  rozet, sekme, kategori çipi ve segment kapsül (`rounded-full`).
+  rozet, sekme, kategori çipi ve segment kapsül. Belirteçler `src/index.css`'te (`:root`): `--r-card` 20, `--r-control`
+  14, `--r-btn`, `--r-chip`, `--r-segment` kapsül, sütun grafiğinin üst köşesi `--r-bar` 4, yatay çubuk `--r-track`
+  kapsül, tablo başlığının zemini `--table-head-bg`; ortak kit (`src/components/ui/*`, `src/components/admin/ui.tsx`)
+  köşeyi bunlardan okur. Yönetim ve raporlarda kurumsal değerler (§4 "Kurumsal yüzey").
 - **Gölge** sıcak topraktır (`#3B2A1E`, en çok %12; nötr siyah porselende griye kaçar): kart `--shadow-card`, seçili ya
   da basılabilir öğe `--shadow-lift`, yüzen katman `--shadow-pop`; denetimin cam kenarı `--rim` (üstte beyaz dudak).
   Koyuda kart gölgesiz, ayrımı çizgi yapar.
@@ -175,13 +178,37 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 
 ## 4. Yönetim paneli
 
-Panel açıkken `<html data-area="admin">`; aynı değerler, yalnız sıklık farklı (fareyle 36 px düğme, "Sıkı görünüm"de 32).
+Panel açıkken `<html data-area="admin">`; aynı renkler, sıklık farklı (fareyle 36 px düğme, "Sıkı görünüm"de 32) ve
+biçim kurumsal.
 
-- **Yerleşim** (Innex §1.1): zemin üstünde iki beyaz kart, köşe 14 (içlerindeki kartlar 20), pencereye 8 px, aralarında 12 px.
+### Kurumsal yüzey (4 Kasım 2026)
+
+Yönetim ve raporlar kurumsal, sade ve keskin çizgili; kasa ekranları bugünkü yumuşak görünümde kalır. Kapsam
+yönetim kabuğunun kökündeki `.surface-corporate` (`AdminShell`; raporlar da aynı kabukta) ve portalda açılan pencere,
+çekmece ve menüler için yönetim açıkken `<html data-area="admin">`; ikisi aynı değerleri verir (`src/index.css`):
+
+- **Köşe:** kart, tablo, alan, düğme ve segment 6 px; çip ve rozet 4 px (`--r-card`, `--r-control`, `--r-btn`,
+  `--r-segment`, `--r-chip`). Tailwind'in köşe değişkenleri de (`--radius-lg/xl/2xl` 6, `--radius-3xl` 8) kapsamda
+  küçülür: sayfalardaki `rounded-xl` / `rounded-2xl` kendiliğinden uyar.
+- **Gölge yerine 1 px ince çizgi:** `--shadow-card`, `--shadow-lift` ve denetimin cam kenarı `--rim` yok; taş zemin
+  üstünde düz beyaz yüzey (koyuda gece yüzeyi), ayrımı çizgi yapar. Yüzen katman (`--shadow-pop`) kalır.
+- **Kenar çubuğu:** gruplar arasında ince ayraç; etkin öğede dolgu kapsül yok, 2 px yeşil sol çizgi ve kalın yazı;
+  sayaç gri hapta.
+- **Sayfa başlığı** şeridinin altında ince çizgi (`PageHeader`).
+- **Tablolar:** yalnız başlık ve satır çizgileri (başlık şeridi zeminsiz, `--table-head-bg`), rakam sağa hizalı ve
+  Gabarito tablo rakamı.
+- **KPI şeridi:** ince bölmeli, tek çerçeveli ızgara (`KpiStrip`, hücreler arası 1 px).
+- **Grafikler:** ince çizgiler, köşesi yuvarlatılmamış çubuklar (`--r-bar` 0, `--r-track` 0; `ColumnChart` köşeyi
+  kabın hesaplanmış stilinden okur).
+- **Düğmeler** dikdörtgen, 6 px köşe; farede 36, dokunmatikte 44 px yükseklik.
+- **Renk ve marka korunur:** yeşil birincil, mürekkep ödeme, pirinç yalnız ödülde.
+
+- **Yerleşim** (Innex §1.1): zemin üstünde iki beyaz kart, köşe 6 (kurumsal yüzey), pencereye 8 px, aralarında 12 px.
   Kenar çubuğu 15.5rem; sayfa kartının ilk şeridi üst çubuk (yol, ⌘K arama, sıkı görünüm, canlı bağlantı),
   altında sayfa başlığı şeridi (Gabarito 22/700 başlık, 13 px açıklama, sağda önce ikincil sonra birincil düğme).
 - **Kenar çubuğu:** gruplar büyük harfli küçük etiketle (Genel, Menü, Salon ve kasa, Ekip, Bağlantılar,
-  Sistem), etkin satır gri ve renksiz, sayaç hap ve yalnız iş bekleyen yerde (tükenen ürün,
+  Sistem) ve aralarında ince ayraç, etkin satırda 2 px yeşil sol çizgi ve kalın yazı (dolgu yok), sayaç yalnız iş
+  bekleyen yerde (tükenen ürün,
   gönderilemeyen gün). Üstte logo karosu, işletme ve "Menüyü daralt"; altta "Kasa ekranlarına dön" ve kullanıcı.
   Tablette dar ikon menüsünde iş bekleyen bölümün ikonunun köşesinde nötr sayaç (renk değil sayı); "Menüyü aç" adlı ve
   sayaçlı tam menüyü soldan çekmecede açar.
@@ -190,10 +217,10 @@ Panel açıkken `<html data-area="admin">`; aynı değerler, yalnız sıklık fa
   rakamın yanında referans), `StatusTabs` (sayılı hap çipler, etkin mürekkep kenar; telefonda kayan rayda seçili çip
   görünür kalır, gizlenen kenar solar), `Segmented` (gri hap ray, beyaz hap; telefonda tam genişlikte satıra kırılır;
   radyo grubu klavyesi: Tab seçili seçenekte girer, oklar ve Home/End gezer, Enter ya da boşluk seçer), `DataTable`
-  (kuyuda başlık, satır ayracı, yapışkan eylem sütunu, seçili satır solda ev yeşili çizgi), `ActionMenu` (⋯, köşe 14,
-  portalda), `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, köşe 28, telefonda alt sayfa), `ActionRows`,
-  `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme kapsül, 14 px; dokunmatikte 44, farede 36, sıkı görünümde
-  32 px.
+  (zeminsiz başlık çizgisi, satır ayracı, yapışkan eylem sütunu, seçili satır solda ev yeşili çizgi), `ActionMenu` (⋯,
+  köşe 6, portalda), `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, köşe 8, telefonda alt sayfa), `ActionRows`,
+  `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme dikdörtgen, 6 px köşe; dokunmatikte 44, farede 36, sıkı
+  görünümde 32 px.
 - **Sayfalar:** Genel bakış (KPI şeridi: net ciro geçen haftanın aynı günü aynı saatine göre, adisyon,
   açık adisyon, indirim ve ikram, online sipariş; saatlik grafik; en çok satanlar; dikkat isteyenler;
   sistem sağlığı), Ürünler, Seçenekler, Masa planı, Ödeme türleri, Personel ve yetki, Yazarkasa, Site
