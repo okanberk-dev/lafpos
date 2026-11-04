@@ -2,7 +2,7 @@ import { ArrowRightLeft, Check, ChefHat, CircleDot, Droplets, Gift, HandCoins, P
 import { useEffect, useRef, useState } from 'react';
 import { COMP_LABEL, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
-import { isCounterFirst, serviceModeOf } from '@shared/service-mode';
+import { holdsUntilPaid } from '@shared/service-mode';
 import { fmtTime } from '@shared/time';
 import type { CompKind, OrderDTO, OrderItemDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
@@ -17,6 +17,7 @@ import { type PendingLine, useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
+import { REMOTE } from '@/lib/remote';
 import { parseTL } from '@shared/money';
 import { groupTyped } from '@/lib/numpad';
 import { OdenmezModal } from './OdenmezModal';
@@ -26,6 +27,7 @@ import { CART_GROUP_LABEL, type CartGroupKey, groupCartItems } from './cartGroup
 // Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
 /** Grup başlığının noktası: barda kobalt (hazırlanıyor), hazır yeşil, teslim nötr, iptal kırmızı; Gönderilmedi amber */
 const GROUP_DOT: Record<CartGroupKey, string> = {
+  odeme: 'bg-[var(--admin-warning)]',
   barda: 'bg-blue-ink',
   hazir: 'bg-[var(--admin-success)]',
   teslim: 'bg-[var(--admin-border-field)]',
@@ -69,8 +71,25 @@ export function CartPanel({
 }) {
   const boot = useBoot();
   const cart = useCart();
-  // Self ve yarı self servis: tezgâh satışında önce ödeme
-  const payFirst = isCounterFirst(serviceModeOf(boot.settings)) && order.type === 'tezgah' && order.source === 'pos';
+  const can = useCan();
+  // Self ve yarı self servis, ayrıca masa servisinde kasanın kendi tezgâh satışı: "Öde" kalemleri ödeme bekleyen olarak
+  // ekler, ödeme alınınca bara gider (holdsUntilPaid). Ödeme alamayan rolün (garson) tek düğmesi "Bara gönder": ona
+  // eski ipucu
+  const payFirst = holdsUntilPaid(order) && can('odeme.al');
+  // "Ödemeden gönder" istek sürerken kilitli: çift dokunuş ikinci isteği yollayıp başarının ardından hata göstermesin
+  const releasing = useRef(false);
+  const [sendingHeld, setSendingHeld] = useState(false);
+  const sendHeldNow = async () => {
+    if (releasing.current) return;
+    releasing.current = true;
+    setSendingHeld(true);
+    try {
+      await act(() => post<OrderDTO>(`/orders/${order.id}/release`, {}), 'Bara gönderildi');
+    } finally {
+      releasing.current = false;
+      setSendingHeld(false);
+    }
+  };
   const [itemSheet, setItemSheet] = useState<OrderItemDTO | null>(null);
   const t = order.totals;
   const due = order.total - order.paid;
@@ -170,7 +189,20 @@ export function CartPanel({
               <span aria-hidden="true" className={cn('size-1.5 rounded-full', GROUP_DOT[g.key])} />
               {g.label}
               <span className="tabular font-normal">· {g.items.reduce((a, i) => a + i.qty, 0)}</span>
+              {/* Ödeme bekleyen: ödeme alınınca kendiliğinden bara gider; kasiyer isterse ödemeden gönderir */}
+              {g.key === 'odeme' && order.status === 'acik' && !REMOTE && can('siparis.al') && (
+                <button
+                  type="button"
+                  onClick={() => void sendHeldNow()}
+                  disabled={sendingHeld}
+                  aria-busy={sendingHeld || undefined}
+                  className="-my-2 ml-auto inline-flex min-h-11 items-center rounded-full px-2.5 text-[13px] font-semibold text-primary transition-colors duration-150 hover:bg-hover active:bg-press disabled:opacity-60 pointer-fine:min-h-8"
+                >
+                  Ödemeden gönder
+                </button>
+              )}
             </h3>
+            {g.key === 'odeme' && <p className="px-4 pb-1.5 text-xs text-muted">Ödeme alınınca bara ve mutfağa gider</p>}
             <ul className="divide-y divide-[var(--admin-divider)]">
               {g.items.map((i) => (
                 <li key={i.id}>

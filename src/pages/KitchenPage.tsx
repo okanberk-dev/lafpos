@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, Layers, MessageSquareText, MonitorUp, Moon, MoreHorizontal, PackageCheck, PackageX, Sun, Undo2, WifiOff } from 'lucide-react';
+import { AlarmClock, Ban, Bell, BellOff, CheckCheck, ChefHat, CircleCheck, CircleDashed, Clock, Flame, Globe, Layers, MessageSquareText, MonitorUp, Moon, MoreHorizontal, PackageCheck, PackageX, Sun, Undo2, WifiOff } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { kitchenTotals } from '@shared/kitchen';
 import { PLATFORM_COLOR, PLATFORM_LABEL } from '@shared/platforms';
@@ -134,6 +134,14 @@ export default function KitchenPage() {
   const totals = useMemo(() => kitchenTotals(list), [list]);
   const showTotals = totalsView && view === 'aktif';
   const counts = useMemo(() => ({ waiting: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'yeni').length, 0), making: list.reduce((a, t) => a + t.items.filter((i) => !i.voided && i.status === 'hazirlaniyor').length, 0) }), [list]);
+  // Gecikme: uyarı süresini geçen açık fiş (alarm ayrıca sayılır; şeritte kırmızı)
+  const lateCounts = useMemo(() => {
+    if (view !== 'aktif') return { late: 0, alarm: 0 };
+    const warnMs = boot.settings.kitchenWarnMinutes * 60_000;
+    const alarmMs = boot.settings.kitchenAlarmMinutes * 60_000;
+    const open = list.filter((t) => t.items.some((i) => !i.voided));
+    return { late: open.filter((t) => now - t.sentAt > warnMs).length, alarm: open.filter((t) => now - t.sentAt > alarmMs).length };
+  }, [list, view, now, boot.settings.kitchenWarnMinutes, boot.settings.kitchenAlarmMinutes]);
 
   const canSoldOut = can('urun.tukendi') || can('menu.yonet');
   const callScreen = REMOTE ? null : (
@@ -174,7 +182,7 @@ export default function KitchenPage() {
           <div className="flex-1" />
           {view === 'aktif' && (
             // Renk dili: bekliyor nötr, hazırlanıyor mavi, hazır yeşil; amber yalnız zaman (gecikme, planlı saat)
-            <div className="flex shrink-0 gap-1.5 whitespace-nowrap text-[13px] font-medium max-sm:order-first md:text-sm">
+            <div className="flex shrink-0 gap-1.5 whitespace-nowrap text-[13px] font-medium max-sm:order-first sm:hidden">
               <span className={cn('tabular inline-flex min-h-6 items-center rounded-full bg-surface-3 px-2.5 md:min-h-7 md:px-3', counts.waiting > 0 ? 'text-ink' : 'text-muted')}>{counts.waiting} bekliyor</span>
               {counts.making > 0 && <span className="tabular inline-flex min-h-6 items-center rounded-full bg-[var(--admin-blue-soft)] px-2.5 text-[var(--admin-blue)] md:min-h-7 md:px-3">{counts.making} hazırlanıyor</span>}
             </div>
@@ -236,6 +244,18 @@ export default function KitchenPage() {
         </div>
       </Modal>
 
+      {/* Sayaç şeridi (tek çerçeve, ince bölmeler): bekleyen ve hazırlanan kalem, teslim bekleyen sipariş, geciken fiş bir
+          bakışta. Telefonda başlıktaki hap sayaçlar yeter */}
+      {/* Veriye bağlı (durum değil): bağlantı kopunca eski fişler ekranda kalırken sayaçlar da kalır */}
+      {view === 'aktif' && !!tickets.data && (
+        <dl className="grid shrink-0 grid-cols-4 overflow-hidden rounded-2xl border border-line bg-surface max-sm:hidden">
+          <Count icon={<CircleDashed />} label="Bekliyor" value={counts.waiting} tone="neutral" />
+          <Count icon={<Flame />} label="Hazırlanıyor" value={counts.making} tone="blue" />
+          <Count icon={<CheckCheck />} label="Teslim bekliyor" value={ready.data?.length ?? 0} tone="green" />
+          <Count icon={<AlarmClock />} label="Geciken" value={lateCounts.late} tone={lateCounts.alarm ? 'red' : 'amber'} />
+        </dl>
+      )}
+
       {/* Fişler ekrandayken bağlantı koparsa: üstte, uzaktan görünür; "sipariş yok" ile karışmasın */}
       {tickets.isError && !!tickets.data && (
         <Notice tone="danger" role="alert" icon={<WifiOff />}>
@@ -243,9 +263,10 @@ export default function KitchenPage() {
         </Notice>
       )}
 
-      <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+      {/* Izgara kabın genişliğine göre 1-5 sütun (container query): fişler satır satır hizalı, aynı satırdakiler eşit boyda */}
+      <div className="@container scroll-thin min-h-0 flex-1 overflow-y-auto">
         {tickets.isPending && (
-          <div role="status" aria-label="Fişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] items-start gap-3">
+          <div role="status" aria-label="Fişler yükleniyor…" className={GRID}>
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-48 rounded-2xl" />
             ))}
@@ -272,7 +293,7 @@ export default function KitchenPage() {
           </div>
         )}
         {showTotals && list.length > 0 && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] items-start gap-3">
+          <div className={GRID}>
             {totals.map((r) => (
               <article key={r.key} className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-3">
                 <div className="flex items-start gap-3">
@@ -300,7 +321,7 @@ export default function KitchenPage() {
             ))}
           </div>
         )}
-        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] items-start gap-3', showTotals && 'hidden')}>
+        <div className={cn(GRID, showTotals && 'hidden')}>
           {list.map((t) => {
             const live = t.items.filter((i) => !i.voided);
             // Gönderildikten sonra kalemlerin hepsi iptal edildi: sunucu fişi 10 dakika gösterir (iptal bildirimi). Yapılacak
@@ -318,6 +339,21 @@ export default function KitchenPage() {
             // Self modlarda numara, yarı selfte masa no büyük rozet: barista çağıracağı ya da götürüleceği yeri görür
             const head = t.platform ? { call: null, label: platformCode || t.label, showNo: false } : ticketHead(t, mode);
             const late = history || readyView || cancelled ? 'ok' : level;
+            const making = live.some((i) => i.status === 'hazirlaniyor');
+            // Durum çizgisi: gri bekliyor, mavi hazırlanıyor, yeşil hazır, amber ve kırmızı gecikme (iptal kırmızı, geçmiş sakin)
+            const accent = cancelled
+              ? 'bg-[var(--admin-danger)]'
+              : history
+                ? 'bg-[var(--admin-border)]'
+                : readyView
+                  ? 'bg-[var(--admin-success)]'
+                  : late === 'alarm'
+                    ? 'bg-[var(--admin-danger)]'
+                    : late === 'warn'
+                      ? 'bg-[var(--admin-warning)]'
+                      : making
+                        ? 'bg-[var(--admin-blue)]'
+                        : 'bg-[var(--admin-border-field)]';
             const name = head.call ?? t.label;
             // Platform siparişinin notu etiketle başlar ("Getir Yemek 0761 · Kapıda Pluxee"): başlıktaki kod notta yinelenmez
             const note = t.platform && t.note?.startsWith(t.label) ? t.note.slice(t.label.length).replace(/^\s*·\s*/, '') || null : t.note;
@@ -329,33 +365,48 @@ export default function KitchenPage() {
               <article
                 key={t.key}
                 className={cn(
-                  'overflow-hidden rounded-2xl border bg-surface',
+                  'flex flex-col overflow-hidden rounded-2xl border bg-surface',
                   late === 'alarm' ? 'border-transparent ring-2 ring-[var(--admin-danger)]' : late === 'warn' ? 'border-[var(--admin-warning-line)] ring-1 ring-[var(--admin-warning-line)]' : 'border-line',
                 )}
               >
-                <header className={cn('flex items-center gap-2 border-b border-[var(--admin-divider)] px-3 py-2.5', late === 'alarm' && 'bg-[var(--admin-danger-soft)]')}>
-                  {/* Online (siteden gelen) her ekranda mor: kitin rozeti */}
-                  {online && (
-                    <Badge tone="violet" className="shrink-0">
-                      <Globe aria-hidden="true" className="size-3.5" />
-                      Online
-                    </Badge>
-                  )}
-                  {/* Çağrı numarası nötr hap: bu ekranda mavi "hazırlanıyor" demek (kalemleri bekleyen No 9 da işte görünüyordu) */}
-                  {head.call && (
-                    <span className="tabular font-headline shrink-0 rounded-full bg-surface-3 px-3 py-0.5 text-xl font-bold leading-tight text-ink md:px-3.5 md:text-2xl">{head.call}</span>
-                  )}
-                  {/* Nereye gideceği en büyük yazı: barın üstündeki tablet 1-2 m'den okunur */}
-                  {head.label && <span className={cn(head.call ? 'text-sm text-ink-2' : 'text-xl font-bold tracking-[-0.01em] md:text-2xl', platformCode ? 'shrink-0' : 'truncate')}>{head.label}</span>}
-                  {t.platform && platformCode && (
-                    <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-2">
-                      <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: PLATFORM_COLOR[t.platform] }} />
-                      <span className="truncate">{platformName}</span>
-                    </span>
-                  )}
-                  {head.showNo && <span className="tabular shrink-0 text-sm text-muted">#{t.orderNo}</span>}
-                  {t.waiterName && !t.platform && <span className="min-w-0 truncate text-sm text-muted">· {t.waiterName}</span>}
-                  <span className="flex-1" />
+                <span aria-hidden="true" className={cn('h-1 shrink-0', accent)} />
+                <header className={cn('flex items-start gap-2 border-b border-[var(--admin-divider)] px-3 pb-2 pt-2', late === 'alarm' && 'bg-[var(--admin-danger-soft)]')}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex min-w-0 items-center gap-2">
+                      {/* Online (siteden gelen) her ekranda mor: kitin rozeti */}
+                      {online && (
+                        <Badge tone="violet" className="shrink-0">
+                          <Globe aria-hidden="true" className="size-3.5" />
+                          Online
+                        </Badge>
+                      )}
+                      {/* Çağrı numarası nötr hap: bu ekranda mavi "hazırlanıyor" demek (kalemleri bekleyen No 9 da işte görünüyordu) */}
+                      {head.call && (
+                        <span className="tabular font-headline shrink-0 rounded-full bg-surface-3 px-3 py-0.5 text-xl font-bold leading-tight text-ink md:px-3.5 md:text-2xl">{head.call}</span>
+                      )}
+                      {/* Nereye gideceği en büyük yazı: barın üstündeki tablet 1-2 m'den okunur */}
+                      {head.label && <span className={cn(head.call ? 'text-sm text-ink-2' : 'text-xl font-bold tracking-[-0.01em] md:text-2xl', platformCode ? 'shrink-0' : 'truncate')}>{head.label}</span>}
+                      {t.platform && platformCode && (
+                        <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-2">
+                          <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: PLATFORM_COLOR[t.platform] }} />
+                          <span className="truncate">{platformName}</span>
+                        </span>
+                      )}
+                    </div>
+                    {/* Künye ikinci satırda: numara, garson, gönderim saati; ödemesi alınmış sipariş "Ödendi" (tezgâhta ödeme
+                        alınınca bara düşer) */}
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted">
+                      {head.showNo && <span className="tabular">#{t.orderNo}</span>}
+                      {t.waiterName && !t.platform && <span className="min-w-0 truncate">{t.waiterName}</span>}
+                      <span className="tabular">{fmtTime(t.sentAt)}</span>
+                      {t.paid && !online && !history && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[var(--admin-success-soft)] px-2 py-px text-xs font-semibold text-[var(--admin-success)]">
+                          <CircleCheck aria-hidden="true" className="size-3.5" />
+                          Ödendi
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   {cancelled ? (
                     <span className={cn(PILL, 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
                       <Ban aria-hidden="true" className="size-4 md:size-[18px]" />
@@ -380,7 +431,7 @@ export default function KitchenPage() {
                     {note && <NoteChip>{note}</NoteChip>}
                   </div>
                 )}
-                <ul className="divide-y divide-[var(--admin-divider)]">
+                <ul className="flex-1 divide-y divide-[var(--admin-divider)]">
                   {t.items.map((i) => (
                     <li key={i.id}>
                       <button
@@ -411,7 +462,7 @@ export default function KitchenPage() {
                     </li>
                   ))}
                 </ul>
-                <footer className={cn('flex gap-2 border-t border-[var(--admin-divider)] p-2', (REMOTE || cancelled) && 'hidden')}>
+                <footer className={cn('mt-auto flex gap-2 border-t border-[var(--admin-divider)] p-2', (REMOTE || cancelled) && 'hidden')}>
                   {/* Ortak düğme: istek sürerken kilitli ve yükleniyor; ana eylem 48 px, 16 px yazı (uzaktan okunur). Site
                       siparişinde de kasa fişinin sözü ve oranı: 322 px kartta "Hazır (siteye bildir)" kırpılıyordu, nereye
                       bildirildiğini başlıktaki mor Online ve bildirim söyler */}
@@ -481,6 +532,32 @@ function ToolButton({ pressed, className, children, ...rest }: React.ButtonHTMLA
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Fiş ızgarası: kabın genişliğine göre 1 (telefon), 2 (tablet dikey), 3 (bilgisayar), 4-5 (geniş ekran) sütun. Aynı
+ * satırdaki fişler eşit boyda (kartın düğmeleri dipte hizalı); yükleme iskeleti ve Toplam aynı ızgarada
+ */
+const GRID = 'grid grid-cols-1 gap-3 @[38rem]:grid-cols-2 @[58rem]:grid-cols-3 @[80rem]:grid-cols-4 @[104rem]:grid-cols-5';
+
+/**
+ * Sayaç şeridinin hücresi: etiket ve Gabarito rakam, sıfırken sakin gri. dt ve dd hücrenin doğrudan çocukları (geçerli
+ * tanım listesi: ekran okuyucu "Bekliyor, 3" diye eşler); ikon kutusu dt'nin içinde, yalnız geniş ekranda (tablet dikeyde
+ * etiket sığsın)
+ */
+function Count({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone: 'neutral' | 'blue' | 'green' | 'amber' | 'red' }) {
+  const color = { neutral: 'text-ink', blue: 'text-[var(--admin-blue)]', green: 'text-[var(--admin-success)]', amber: 'text-[var(--admin-warning)]', red: 'text-[var(--admin-danger-ink)]' }[tone];
+  return (
+    <div className="relative min-w-0 border-l border-[var(--admin-divider)] px-3 py-3 first:border-l-0 lg:pl-16 lg:pr-4">
+      <dt className="truncate text-[13px] font-medium text-muted">
+        <span aria-hidden="true" className={cn('absolute left-4 top-1/2 hidden size-9 -translate-y-1/2 place-items-center rounded-xl bg-surface-3 lg:grid [&>svg]:size-[18px]', value > 0 ? color : 'text-muted')}>
+          {icon}
+        </span>
+        {label}
+      </dt>
+      <dd className={cn('tabular font-headline text-[26px] font-bold leading-tight', value > 0 ? color : 'text-muted')}>{value}</dd>
+    </div>
   );
 }
 

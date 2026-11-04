@@ -157,8 +157,22 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
     geçer. Bildirim alttaki bloğun (hızlı işlemler ve eylem şeridi ya da sepet çubuğu) ölçülen boyunun üstünde durur
     (`--action-bar-h`).
   - **Durumlar:** boş masa (fincan çizimi, "Masayı boşalt"), kapanmış adisyon (yeşil "Kapandı", katalog yok, adisyon
-    ortada), sitede ödenmiş online sipariş (mor şerit, tahsil edilmez, Z'ye girmez), tezgâh satışı (Öde gönderir ve
-    ödemeyi açar, satış bitince yeni satış).
+    ortada), sitede ödenmiş online sipariş (mor şerit, tahsil edilmez, Z'ye girmez), tezgâh satışı (Öde kalemleri ödeme
+    bekleyen olarak yazar ve ödemeyi açar, ödeme alınınca kalemler kendiliğinden bara gider, satış bitince yeni satış).
+  - **Ödeme bekliyor:** tezgâh satışında "Öde"den sonra ödeme alınmadan pencere kapanırsa kalemler sepette en üstte
+    amber noktalı "Ödeme bekliyor" grubunda ("Ödeme alınınca bara ve mutfağa gider"); bar ve çağrı ekranı görmez,
+    Siparişler kartı "barda" saymaz, amber "Ödeme bekliyor" rozeti gösterir. Grubun "Ödemeden gönder"i (sipariş
+    yetkisi) bekleyenleri hemen bara yollar; istek sürerken kilitli. Ödeme alamayan rol (garson) "Öde" görmez, boş
+    sepette "Bara gönder" ipucunu görür.
+- **Bar ekranı:** fişler kabın genişliğine göre 1-5 sütunlu ızgarada (telefon 1, tablet dikey 2, bilgisayar 3, geniş
+  ekran 4-5; container query). Aynı satırdaki fişler eşit boyda, Başla ve Hepsi hazır dipte hizalı. Üstte sayaç şeridi
+  tek çerçevede, ince bölmeli (Bekliyor, Hazırlanıyor, Teslim bekliyor, Geciken; sıfırken gri; telefonda başlıkta hap
+  sayaç). İkon kutusu yalnız geniş ekranda (lg); tablet dikeyde hücre etiket ve rakamdır, etiket kesilmez. Şerit veriye
+  bağlı: bağlantı kopunca eski fişlerle birlikte kalır. Fişin üstünde 4 px durum çizgisi (gri bekliyor, mavi
+  hazırlanıyor, yeşil hazır, amber ve kırmızı gecikme); başlıkta yer (masa, numara, çağrı) en büyük yazı, ikinci satırda
+  numara, garson ve gönderim saati, tahsil edilecek bir şey yoksa yeşil "Ödendi" (hesap kapanmış ya da tamamı ödenmiş,
+  ya da fişin kalemleri seçilerek ödenmiş; tezgâh satışı ödeme alınınca düşer; "Ödemeden gönder" ile gidende yok,
+  teslimde tahsil edilir). Ödeme ya da iade anında görünür ya da kalkar.
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok):
   - **Müşteri ekranı** `/musteri-ekrani` (iki ekranlı kasanın ikinci monitörü ya da müşteriye dönük tablet): boşta
     karşılama (L'Af, Gabarito 800 başlık, bayrak çizgisi, slogan; dönen duyurular, karekod, saat), adisyon açıkken

@@ -55,7 +55,7 @@ export function floorState(t: Tx | DB): FloorStateDTO {
       waiterName: o.waiterId ? (names.get(o.waiterId) ?? null) : null,
       billPrintedAt: o.billPrintedAt,
       itemCount: mine.reduce((a, i) => a + i.qty, 0),
-      pendingKitchen: mine.filter((i) => i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length,
+      pendingKitchen: mine.filter((i) => i.stationId && !i.held && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length,
       readyToServe: mine.filter((i) => i.status === 'hazir').length,
       source: o.source,
       roomStartedAt: room?.startedAt ?? null,
@@ -107,7 +107,8 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
     : [];
   const board: PickupBoardDTO = { preparing: [], ready: [] };
   for (const o of orders) {
-    const mine = items.filter((i) => i.orderId === o.id && i.stationId);
+    // Ödeme bekleyen kalem çağrı ekranında "Hazırlanıyor" göstermez: bar henüz görmedi
+    const mine = items.filter((i) => i.orderId === o.id && i.stationId && !i.held);
     if (!mine.length) continue;
     if (o.platform && o.deliveryStatus === 'teslim') continue;
     const entry: PickupEntryDTO = {
@@ -181,7 +182,8 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
   const now = Date.now();
   const since = kitchenSince(getOpenDay(t), now);
 
-  const base = and(gt(schema.orderItems.sentAt, since), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
+  // Ödeme bekleyen kalem (tezgâh satışında "Öde") bara henüz gitmedi: ödeme alınınca gönderim anıyla düşer
+  const base = and(gt(schema.orderItems.sentAt, since), eq(schema.orderItems.held, false), opts.stationId ? eq(schema.orderItems.stationId, opts.stationId) : undefined);
   const where = opts.history
     ? and(base, eq(schema.orderItems.voided, false), inArray(schema.orderItems.status, ['hazir', 'servis']), gt(schema.orderItems.readyAt, now - 90 * 60_000))
     : opts.ready
@@ -208,6 +210,10 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
   const names = userNameMap(t);
   const tableNames = new Map(t.select({ id: schema.tables.id, name: schema.tables.name }).from(schema.tables).all().map((x) => [x.id, x.name]));
   const tickets = new Map<string, KitchenTicket>();
+  // Fişte tahsil edilecek canlı kalem kaldı mı: kalemi seçilerek ödenen satır hesabın kalanı açıkken bara gider
+  // (releasePaidHeld); fişin bütün canlı kalemleri ödenmiş ya da ikramsa fiş de "Ödendi" der. "Ödemeden gönder" ile
+  // gidenin ödenen adedi 0: "Ödendi" yok, teslimde tahsil edilir
+  const due = new Map<string, boolean>();
   for (const { item, order } of rows) {
     const key = opts.ready ? `${order.id}:hazir` : `${order.id}:${item.batch}`;
     let ticket = tickets.get(key);
@@ -226,10 +232,14 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
         scheduledFor: order.scheduledFor,
         numarator: order.numarator ?? null,
         platform: order.platform ?? null,
+        // Hesabı kapanmış (ödenmiş ya da ciro dışı: ikram, ödenmez, zayi) ya da tamamı ödenmiş: barista tahsil edecek bir
+        // şey olmadığını bilir. Açık ₺0 adisyon "Ödendi" demez
+        paid: order.status === 'kapali' || (order.total > 0 && order.paid >= order.total),
         items: [],
       };
       tickets.set(key, ticket);
     }
+    if (!item.voided) due.set(key, (due.get(key) ?? false) || (!item.complimentary && item.paidQty < item.qty));
     ticket.items.push({
       id: item.id,
       name: item.name,
@@ -245,6 +255,7 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
       readyAt: item.readyAt,
     });
   }
+  for (const [key, open] of due) if (!open) tickets.get(key)!.paid = true;
   // Yalnız iptal satırı kalan fişte bile iptal bildirimi gösterilsin; ama hiç kalemi kalmayan fiş yok
   const list = [...tickets.values()].filter((tk) => tk.items.length);
   // Hazır: en uzun bekleyen önce (alınmayan sipariş üstte kalır)

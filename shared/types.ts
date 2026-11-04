@@ -301,6 +301,8 @@ export interface OrderItemDTO {
   note: string | null;
   stationId: string | null;
   status: 'yeni' | 'hazirlaniyor' | 'hazir' | 'servis';
+  /** Ödeme bekliyor (tezgâh satışında "Öde"): bara henüz gitmedi, ödeme alınınca gider */
+  held: boolean;
   batch: number;
   sentAt: number;
   readyAt: number | null;
@@ -503,6 +505,11 @@ export interface KitchenTicket {
   numarator: string | null;
   /** Paket platformunun siparişi: teslimi platformun akışında, bar ekranında Teslim edildi düğmesi yok (eski sunucu göndermez) */
   platform?: PlatformId | null;
+  /**
+   * Tahsil edilecek bir şey yok: hesap kapandı ya da tamamı ödendi, ya da fişin bütün canlı kalemleri kalemi seçilerek
+   * ödendi ya da ikram (tezgâh satışı ödeme alınınca bara düşer): fişte "Ödendi"; eski sunucu göndermez
+   */
+  paid?: boolean;
   items: KitchenTicketItem[];
 }
 

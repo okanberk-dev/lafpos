@@ -386,6 +386,32 @@ mürekkep "Öde · ₺X", gönderilmemiş varken ikincil "Bara gönder (N)", hı
 İşlemler), telefonda önce ürünler ve yapışkan sepet çubuğu. Davranış, istekler ve yetki denetimleri aynı; e2e adları
 "Öde · ", "Bara gönder (N)", "Sepet: …" ve "Ürün ekle"ye güncellendi. Test `tests/adisyon-ekrani.test.ts`.
 
+**Ödeme alınınca bara** (4 Kasım 2026, operatör: "ödemesi alınınca bar tarafına gitsin"): tezgâh satışında
+(`holdsUntilPaid`: kasanın tezgâh siparişi, her servis modunda) "Öde" kalemleri ödeme bekleyen olarak yazar
+(`order_items.held`, göç `0018_odeme_bekleyen`; `POST /orders/:id/items` `hold: true`). Bekleyen kalem bar ekranına, çağrı
+ekranına ve sipariş sayacına girmez, fiş sesi çalmaz. Adisyon kapanınca (ödeme, yazarkasanın bildirdiği ödeme, ciro dışı
+ya da ₺0; `closeOrderRow` → `releaseHeld`) kendiliğinden bara gider: gönderim anı o an (bar süresi ve hazırlama raporu
+oradan sayar), hepsi tek yeni fişte. Hesap açık kalırken kalemi seçilerek tamamen ödenen ("Kalem seç", yazarkasada
+seçili kalemle sepet) bekleyen satır hemen gider (`releasePaidHeld`). Satır bölünmez: bölmek satır ve adisyon indirimini
+yeniden yuvarlar, ödenen adedin yazılı tutarı yeni payını tutmaz (yazarkasa kalanı 1 kuruşla reddeder ya da 0,01 ₺ açık
+kalır). Bir kısmı ödenen satır ve tutarla kısmi ödeme hesap kapanınca gider; hesabı kapatan ödemede bekleyenlerin hepsi
+tek fişle gider. Ödeme dışı bir işlem (kalem iptali, ikram, kalem taşıma ya da bölme, indirim) ödeme alınmış hesapta
+ödenecek bir şey bırakmazsa bekleyenler de tek fişle hemen gider, adisyon açık kalır ("Adisyonu kapat" kapatır, ikinci
+fiş çıkmaz; `releaseSettledHeld`). Masaya taşınan ("Masa taşı") ya da masa veya gel-al adisyonuna aktarılan bekleyen kalem bara gider. "Ödemeden
+gönder" (`POST /orders/:id/release`, `siparis.al`, denetimde `order.release`) bekleyenleri hemen yollar. Müşteri
+vazgeçerse satış onaysız iptal edilir; bekleyen kalem bara hiç gitmediği için fire sayılmaz (`voidAfterSend` yok), bar
+iptal sesi duymaz. "Bara gönder" eskisi gibi hemen gönderir. Bar fişinde tahsil edilecek bir şey yoksa "Ödendi"
+(`KitchenTicket.paid`): hesap kapanmış (ödenmiş ya da ciro dışı) ya da tamamı ödenmiş, ya da fişin bütün canlı kalemleri
+kalemi seçilerek ödenmiş ya da ikram; "Ödemeden gönder" ile gidende yok. Ödeme, iade, iptal, ikram, indirim ve
+taşıma bar ekranını hemen tazeler (`kitchen` konusunda `ticket.payment`, zil çalmaz). Siparişler kartı bekleyen
+kalemi "barda" saymaz, "Ödeme bekliyor" rozeti gösterir. Testler `tests/odeme-sonrasi-bar.test.ts` (sql.js ile de), e2e
+akışı tablette.
+
+**Bar ekranı ızgarası** (4 Kasım 2026, operatör: "daha grid dayalı düzenli"): fişler kabın genişliğine göre 1-5
+sütunlu ızgarada, aynı satırdakiler eşit boyda ve düğmeleri dipte hizalı; sayaç şeridi (bekliyor, hazırlanıyor, teslim
+bekliyor, geciken; geçerli tanım listesi, ikon kutusu yalnız geniş ekranda, veriye bağlı), fişin üstünde durum çizgisi,
+künye ikinci satırda. Davranış ve e2e adları aynı. Test `tests/bar-ekrani.test.ts`.
+
 **Yönetim ve raporlar: kurumsal yüzey** (4 Kasım 2026; araştırma `docs/08-POS-ARASTIRMA.md` §5): kasa ekranları
 yumuşak kalır; yönetim ve raporlar küçük köşe (kart, tablo, alan, düğme, segment 6; çip ve rozet 4), gölge yerine 1 px
 çizgi, kenar çubuğunda ince ayraç ve etkin öğede 2 px yeşil sol çizgi, zeminsiz tablo başlığı, köşesiz grafik çubuğu.

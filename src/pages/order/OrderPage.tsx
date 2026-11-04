@@ -63,7 +63,7 @@ import { GuestsModal, MoveModal, OrderDiscountModal, ReasonModal, TransferModal 
 import { useOrder } from './useOrder';
 import { REMOTE } from '@/lib/remote';
 import { openCounterSale } from '@/lib/counter';
-import { asksNumarator, callFor, callText, isCounterFirst, numaratorLabel } from '@shared/service-mode';
+import { asksNumarator, callFor, callText, holdsUntilPaid, isCounterFirst, numaratorLabel } from '@shared/service-mode';
 import { useSetNavOrigin } from '@/lib/nav';
 import { useServiceMode } from '@/lib/serviceMode';
 import { NumaratorModal } from './NumaratorModal';
@@ -224,7 +224,11 @@ export default function OrderPage() {
     if (navigator.vibrate) navigator.vibrate(8);
   };
 
-  const send = async (): Promise<boolean> => {
+  /**
+   * Gönderilmemiş satırları sunucuya yazar. `hold`: tezgâh satışında "Öde" yolu; kalemler ödeme bekler, ödeme alınınca
+   * (adisyon kapanınca) bara gider. "Bara gönder" hemen gönderir
+   */
+  const send = async (hold = false): Promise<boolean> => {
     if (!pending.length) return false;
     // Yalnız gönderilen adetler sepetten düşer: istek sürerken eklenen ya da "Geri al"la geri konan satır beklemede kalır
     const sent = new Map(pending.map((l) => [l.key, l.qty]));
@@ -235,9 +239,11 @@ export default function OrderPage() {
       (pin) =>
         post<OrderDTO>(`/orders/${order.id}/items`, {
           items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: sendableOptions(boot, l.productId, l.options), note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
+          ...(hold ? { hold: true } : {}),
           approverPin: pin,
         }),
-      `${pendingCount} ürün gönderildi`,
+      // Ödeme bekleyende bildirim yok: ödeme penceresi açılır, bara ödeme alınınca gider
+      hold ? undefined : `${pendingCount} ürün gönderildi`,
     );
     setSending(false);
     if (!res) return false;
@@ -247,8 +253,10 @@ export default function OrderPage() {
     return true;
   };
 
-  // Tezgâhta tek ekran: "Öde" kalemleri bara gönderir ve ödemeyi açar; satış kapanınca ekran yeni satışa hazırdır
+  // Tezgâhta tek ekran: "Öde" kalemleri ödeme bekleyen olarak yazar ve ödemeyi açar; ödeme alınınca kalemler kendiliğinden
+  // bara gider, satış kapanınca ekran yeni satışa hazırdır ("Bara gönder" hemen gönderir)
   const counter = order.type === 'tezgah' && !isOnline;
+  const holdOnPay = holdsUntilPaid(order);
   // Yarı self servis: tezgâh satışında gönderimden önce masa no / numaratör (bar fişine numara yerine o yazılır)
   const numaratorOn = asksNumarator(mode) && counter;
   const promptNumarator = (next: 'send' | 'pay') => {
@@ -271,7 +279,7 @@ export default function OrderPage() {
   const sendAndPay = () =>
     once(async () => {
       if (promptNumarator('pay')) return;
-      if (await send()) setDialog('odeme');
+      if (await send(holdOnPay)) setDialog('odeme');
     });
   const sendOnly = () =>
     void once(async () => {
@@ -290,7 +298,7 @@ export default function OrderPage() {
       if (!res && next) return;
     }
     if (next === 'pay') {
-      if (await send()) setDialog('odeme');
+      if (await send(holdOnPay)) setDialog('odeme');
     } else if (next === 'send') await send();
   };
   const nextSale = async () => {

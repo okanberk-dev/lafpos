@@ -269,7 +269,7 @@ export function stopRoom(t: Tx, actor: Actor, fx: Effects, orderId: string, opts
     // "iptal" diye kapatılmasın
     finish(null);
     const closes = isEmptyOrder(t, orderId);
-    if (closes) closeOrderRow(t, o, actor.user.id);
+    if (closes) closeOrderRow(t, fx, o, actor.user.id);
     fx.audit(t, {
       userId: actor.user.id,
       action: 'room.stop',

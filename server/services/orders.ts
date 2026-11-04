@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { PLATFORM_LABEL } from '@shared/platforms';
-import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
+import { holdsUntilPaid, normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
 import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitAmountsError, splitState } from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
@@ -154,9 +154,29 @@ export function assertNoActiveRoom(t: Tx | DB, orderId: string) {
   if (activeRoom(t, orderId)) throw conflict('Önce oda sayacını durdurun', 'room_running');
 }
 
+/**
+ * Hesabın ödenen ya da ödenecek tutarını değiştiren olaylar: bar fişindeki "Ödendi" (KitchenTicket.paid) değişebilir,
+ * bar ekranı 15 saniyelik yoklamayı beklemeden tazelenir (zil çalmaz: yalnız ticket.new ve ticket.void çalar)
+ */
+const PAYMENT_KINDS = new Set([
+  'payment.added',
+  'payment.refunded',
+  'order.closed',
+  'order.reopened',
+  'order.discount',
+  'item.discount',
+  'item.voided',
+  'item.comped',
+  'item.uncomped',
+  'order.items_moved',
+  'order.split',
+  'order.merged',
+]);
+
 function orderEvents(fx: Effects, o: Pick<OrderRow, 'id' | 'tableId'>, userId: string, kind: string) {
   fx.emit({ topic: 'orders', kind, orderId: o.id, tableId: o.tableId ?? undefined, byUserId: userId });
   fx.emit({ topic: 'tables', kind, orderId: o.id, tableId: o.tableId ?? undefined, byUserId: userId });
+  if (PAYMENT_KINDS.has(kind)) fx.emit({ topic: 'kitchen', kind: 'ticket.payment', orderId: o.id, byUserId: userId });
 }
 
 /**
@@ -327,7 +347,14 @@ export interface AddItemLine {
  * `platformPrice`: paket platformundan gelen satırlar (server/delivery). Fiyat platformun: `priceOverride` yetki
  * onayı ve fiyat değişikliği kaydı istemez, happy hour uygulanmaz.
  */
-export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, lines: AddItemLine[], { platformPrice = false }: { platformPrice?: boolean } = {}): OrderRow {
+export function addItems(
+  t: Tx,
+  actor: Actor,
+  fx: Effects,
+  orderId: string,
+  lines: AddItemLine[],
+  { platformPrice = false, hold = false }: { platformPrice?: boolean; hold?: boolean } = {},
+): OrderRow {
   needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
@@ -335,6 +362,8 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
   if (!platformPrice) assertNotPlatform(o);
   requireCurrentDay(t);
   if (!lines.length) throw bad('Eklenecek ürün yok');
+  // Ödeme bekleyen kalem yalnız tezgâh satışında: masa, gel-al ve paket siparişi kalem eklenince bara gider
+  if (hold && !holdsUntilPaid(o)) throw bad('Ödeme alınınca gönderim yalnız tezgâh satışında', 'hold_not_counter');
   const now = Date.now();
   const batch = nextBatch(t, orderId);
   const stations = new Set<string>();
@@ -397,7 +426,9 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
     }
 
     const stationId = stationFor(p, sp.category);
-    if (stationId) stations.add(stationId);
+    // Ödeme bekleyen kalem bara henüz gitmez: fiş sesi ve bar ekranı ödeme alınınca (releaseHeld)
+    const held = hold && !!stationId;
+    if (stationId && !held) stations.add(stationId);
     t.insert(schema.orderItems)
       .values({
         id: ulid(now),
@@ -415,6 +446,7 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
         note: line.note?.trim().slice(0, 200) || null,
         stationId,
         status: stationId ? 'yeni' : 'servis',
+        held,
         batch,
         sentAt: now,
         servedAt: stationId ? null : now,
@@ -435,6 +467,90 @@ export function addItems(t: Tx, actor: Actor, fx: Effects, orderId: string, line
     fx.emit({ topic: 'menu', kind: 'product.sold_out', byUserId: actor.user.id });
     for (const id of soldOut) fx.emit({ topic: 'sync', kind: 'availability.push', message: id });
   }
+  return updated;
+}
+
+/**
+ * Ödeme bekleyen kalemler bara ve mutfağa gider (tezgâh satışında "Öde" ile eklenenler, `holdsUntilPaid`): gönderim anı
+ * şimdi (bar süresi ve hazırlama raporu buradan sayar), hepsi tek yeni fişte; istasyonlar sesli uyarı alır. Adisyon
+ * kapanınca (closeOrderRow), masa adisyonuna taşınınca ya da "Bara gönder" ile çağrılır. Döndürür: bara giden kalem sayısı
+ */
+export function releaseHeld(t: Tx, fx: Effects, orderId: string, byUserId: string): number {
+  const held = t
+    .select()
+    .from(schema.orderItems)
+    .where(and(eq(schema.orderItems.orderId, orderId), eq(schema.orderItems.held, true)))
+    .all();
+  if (!held.length) return 0;
+  const live = held.filter((i) => !i.voided);
+  const now = Date.now();
+  const batch = nextBatch(t, orderId);
+  // İptal edilmiş bekleyen kalemin de işareti kalkar (bara hiç gitmedi; voidAfterSend zaten yok)
+  t.update(schema.orderItems).set({ held: false }).where(and(eq(schema.orderItems.orderId, orderId), eq(schema.orderItems.held, true), eq(schema.orderItems.voided, true))).run();
+  if (!live.length) return 0;
+  t.update(schema.orderItems)
+    .set({ held: false, sentAt: now, batch })
+    .where(and(eq(schema.orderItems.orderId, orderId), eq(schema.orderItems.held, true), eq(schema.orderItems.voided, false)))
+    .run();
+  for (const s of new Set(live.map((i) => i.stationId).filter(Boolean))) fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId, stationId: s!, byUserId });
+  return live.length;
+}
+
+/**
+ * Kalemi seçilerek tamamen ödenen bekleyen satır ("Kalem seç", yazarkasada seçili kalemle sepet) hesabın kalanını
+ * beklemeden bara gider: iki müşterili tezgâhta ödeyenin içeceği ötekini beklemez. Satır bölünmez: bölmek satır ve
+ * adisyon indirimini yeniden yuvarlar, ödenen adedin yazılı tutarı yeni payını tutmaz (yazarkasa kalanı 1 kuruşla
+ * reddeder ya da her adet ödendiği hâlde 0,01 ₺ açık kalır; yazarkasada basılıp ödenmeyen adet de korumasından kopar).
+ * Bir kısmı ödenen satır, tutarla kısmi ödeme gibi, hesap kapanınca gider. Hesabı kapatan ödemede çağrılmaz:
+ * bekleyenlerin hepsi kapanışta tek fişle gider (closeOrderRow → releaseHeld)
+ */
+function releasePaidHeld(t: Tx, fx: Effects, orderId: string, byUserId: string): number {
+  const rows = t
+    .select()
+    .from(schema.orderItems)
+    .where(and(eq(schema.orderItems.orderId, orderId), eq(schema.orderItems.held, true), eq(schema.orderItems.voided, false), gt(schema.orderItems.paidQty, 0)))
+    .all()
+    .filter((it) => it.paidQty >= it.qty);
+  if (!rows.length) return 0;
+  const now = Date.now();
+  const batch = nextBatch(t, orderId);
+  for (const it of rows) t.update(schema.orderItems).set({ held: false, sentAt: now, batch }).where(eq(schema.orderItems.id, it.id)).run();
+  for (const s of new Set(rows.map((i) => i.stationId).filter(Boolean))) fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId, stationId: s!, byUserId });
+  return rows.length;
+}
+
+/**
+ * Ödeme dışı bir işlem (kalem iptali, ikram, kalem taşıma ya da bölme, indirim) tezgâh satışında satırın ödenmemiş
+ * adedini ya da ödenecek tutarı kaldırınca: ödeme alınmış ve ödenecek tutar kalmamışsa bekleyenlerin hepsi tek fişle bara
+ * gider (adisyon açık kalır, "Adisyonu kapat" kapatır; kapanışta ikinci fiş çıkmaz); yoksa tamamen ödenen satır gider.
+ * Hiç ödeme alınmamış ₺0 satış (hepsi ikram) eskisi gibi kapanınca gider
+ */
+function releaseSettledHeld(t: Tx, fx: Effects, orderId: string, userId: string): void {
+  const o = loadOrder(t, orderId);
+  if (o.status !== 'acik' || !holdsUntilPaid(o)) return;
+  if (o.paid > 0 && o.total - o.paid <= 0) releaseHeld(t, fx, orderId, userId);
+  else releasePaidHeld(t, fx, orderId, userId);
+}
+
+/**
+ * "Bara gönder": ödeme bekleyen kalemler ödeme alınmadan bara gider (müşteri sonra ödeyecek, kasiyer karar verdi).
+ * Sipariş yetkisi ister; denetime bilgi olarak yazılır (ödenmemiş siparişin bara gittiği izlenebilsin)
+ */
+export function sendHeld(t: Tx, actor: Actor, fx: Effects, orderId: string): OrderRow {
+  needDirect(actor, 'siparis.al');
+  const o = loadOrder(t, orderId);
+  assertOpen(o);
+  assertPosOrder(o);
+  const n = releaseHeld(t, fx, orderId, actor.user.id);
+  if (!n) throw conflict('Ödeme bekleyen kalem yok', 'nothing_held');
+  fx.audit(t, {
+    userId: actor.user.id,
+    action: 'order.release',
+    orderId,
+    message: `${actor.user.name} #${o.no} siparişi ödeme alınmadan bara gönderdi (${n} kalem)`,
+  });
+  const updated = loadOrder(t, orderId);
+  orderEvents(fx, updated, actor.user.id, 'order.items_released');
   return updated;
 }
 
@@ -488,7 +604,8 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
   if (qty > unpaid) throw conflict('Ödenmiş kalem iptal edilemez; önce ödemeyi iptal edin', 'item_paid');
 
   const now = Date.now();
-  const fresh = it.status === 'yeni' && !it.startedAt && it.createdBy === actor.user.id && now - it.sentAt < VOID_GRACE_MS;
+  // Ödeme bekleyen kalem bara hiç gitmedi: gönderilmemiş satır gibi onaysız silinir, bar uyarılmaz
+  const fresh = it.held || (it.status === 'yeni' && !it.startedAt && it.createdBy === actor.user.id && now - it.sentAt < VOID_GRACE_MS);
   const approverId = fresh ? null : need(actor, 'siparis.iptal', 'Gönderilmiş kalemi iptal etmek yetkili onayı gerektirir');
   const afterSend = !fresh && it.status !== 'yeni';
   const value = qty * it.unitPrice;
@@ -520,8 +637,9 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     data: { afterSend, fresh },
   });
   approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} iptal etti`);
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.voided');
-  if (it.stationId) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: it.stationId, byUserId: actor.user.id });
+  if (it.stationId && !it.held) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: it.stationId, byUserId: actor.user.id });
   return updated;
 }
 
@@ -641,6 +759,7 @@ export function compItem(
     data: { kind, ...(person ? { person: { kind: person.compPersonKind, id: person.compPersonId, name: person.compPersonName } } : {}) },
   });
   approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} ${did}`);
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.comped');
   return updated;
 }
@@ -685,7 +804,7 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
   const value = live.reduce((a, i) => a + i.qty * i.unitPrice, 0);
   const updated = recalc(t, orderId);
   if (updated.total !== 0) throw conflict(`Ödenecek ${tl(updated.total)} kaldı`, 'due');
-  closeOrderRow(t, updated, actor.user.id);
+  closeOrderRow(t, fx, updated, actor.user.id);
   const did = input.kind === 'ikram' ? 'tamamını ikram etti' : `${label.toLocaleLowerCase('tr-TR')} kapattı${person ? `: ${personNote(person)}` : ''}`;
   fx.audit(t, {
     userId: actor.user.id,
@@ -841,6 +960,7 @@ export function setItemDiscount(
       message: `${actor.user.name} #${o.no} adisyonda ${it.name} için ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
     });
   }
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'item.discount');
   return updated;
 }
@@ -907,6 +1027,7 @@ export function setOrderDiscount(
     amount,
     message: `${actor.user.name} #${o.no} adisyona ${tl(amount)} indirim yaptı (%${Math.round(pct)}${Math.round(total) > Math.round(pct) ? `, adisyonda toplam %${Math.round(total)}` : ''}, ${reason})`,
   });
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, 'order.discount');
   return updated;
 }
@@ -1015,6 +1136,8 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
     .set({ tableId, type: 'masa', numarator: null, updatedAt: Date.now() })
     .where(eq(schema.orders.id, orderId))
     .run();
+  // Masaya oturan tezgâh satışı: ödeme bekleyen kalem masada beklemez (hesap sonda ödenir), bara gider
+  releaseHeld(t, fx, orderId, actor.user.id);
   t.update(schema.roomSessions).set({ tableId }).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).run();
   fx.audit(t, { userId: actor.user.id, approverId, action: 'order.move', orderId, message: `#${o.no} adisyon ${table.name} masasına taşındı` });
   const updated = loadOrder(t, orderId);
@@ -1039,6 +1162,8 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
   assertNoPendingDevice(t, sourceId);
   const discountBefore = orderDiscountOf(t, targetId, sourceId);
   t.update(schema.orderItems).set({ orderId: targetId }).where(eq(schema.orderItems.orderId, sourceId)).run();
+  // Ödeme bekleyen kalem masa adisyonunda beklemez: hedef tezgâh satışı değilse bara gider
+  if (!holdsUntilPaid(target)) releaseHeld(t, fx, targetId, actor.user.id);
   t.update(schema.payments).set({ orderId: targetId }).where(eq(schema.payments.orderId, sourceId)).run();
   t.update(schema.roomSessions).set({ orderId: targetId }).where(eq(schema.roomSessions.orderId, sourceId)).run();
   // Yazarkasa fişleri de ödemeleriyle birlikte gider: fiş iptali hedef adisyondan düşer, sonraki sepet o fişleri bilir
@@ -1129,6 +1254,8 @@ export function transferItems(
     if (qty >= it.qty) t.update(schema.orderItems).set({ orderId: target.id }).where(eq(schema.orderItems.id, it.id)).run();
     else splitItem(t, it, qty, { orderId: target.id });
   }
+  // Ödeme bekleyen kalem masaya ya da gel-al siparişine taşınınca bara gider (orada ödeme sonda alınır)
+  if (!holdsUntilPaid(target)) releaseHeld(t, fx, target.id, actor.user.id);
 
   // Taşınan kalem iki gel-al siparişinin de aşamasını değiştirebilir: kalan hepsi hazırsa kaynak "Hazır", hedefe
   // bekleyen kalem gelirse "Hazırlanıyor" (aşama kalemlerden türer)
@@ -1155,6 +1282,8 @@ export function transferItems(
       .where(eq(schema.orders.id, orderId))
       .run();
   }
+  // Kaynakta kalan bekleyen kalem: taşınan ödenmemiş adet gidince hesap ödenmiş olabilir
+  releaseSettledHeld(t, fx, orderId, actor.user.id);
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
@@ -1318,9 +1447,11 @@ function uncreditCustomer(t: Tx, o: OrderRow) {
     .run();
 }
 
-export function closeOrderRow(t: Tx, o: OrderRow, userId: string) {
+export function closeOrderRow(t: Tx, fx: Effects, o: OrderRow, userId: string) {
   const now = Date.now();
   t.update(schema.orders).set({ status: 'kapali', closedAt: now, closedBy: userId, updatedAt: now }).where(eq(schema.orders.id, o.id)).run();
+  // Ödemesi alındı (ya da ciro dışı, ₺0, yazarkasada ödendi): ödeme bekleyen kalemler kendiliğinden bara gider
+  releaseHeld(t, fx, o.id, userId);
   // Masada bekleyen (istasyonsuz) kalemler servis edilmiş sayılır
   if (o.customerId) {
     const stampQty = stampQtyOf(t, o.id);
@@ -1505,14 +1636,15 @@ export function addPayment(
       .where(eq(schema.orders.id, orderId))
       .run();
   }
-
   let updated = recalc(t, orderId);
   let closed = false;
   if (updated.total - updated.paid <= 0) {
-    closeOrderRow(t, updated, actor.user.id);
+    closeOrderRow(t, fx, updated, actor.user.id);
     updated = loadOrder(t, orderId);
     closed = true;
   }
+  // Hesap açık kaldı: kalemi seçilerek tamamen ödenen bekleyen satır bara gider (kapanışta hepsi tek fişle gider)
+  if (!closed) releasePaidHeld(t, fx, orderId, actor.user.id);
   orderEvents(fx, updated, actor.user.id, closed ? 'order.closed' : 'payment.added');
   fx.emit({ topic: 'cash', kind: 'payment.added', orderId, byUserId: actor.user.id });
   if (customerId) fx.emit({ topic: 'customers', kind: 'ledger', byUserId: actor.user.id });
@@ -1528,7 +1660,7 @@ export function closeOrder(t: Tx, actor: Actor, fx: Effects, orderId: string): O
   assertPosOrder(o);
   assertNoActiveRoom(t, orderId);
   if (o.total - o.paid > 0) throw conflict(`Ödenecek ${tl(o.total - o.paid)} var`, 'due');
-  closeOrderRow(t, o, actor.user.id);
+  closeOrderRow(t, fx, o, actor.user.id);
   const updated = loadOrder(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.closed');
   return updated;
@@ -1625,7 +1757,7 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
   if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Önce alınan ödemeleri iptal edin', 'has_payments');
   const live = orderItems(t, orderId).filter((i) => !i.voided);
   const now = Date.now();
-  const allFresh = live.every((i) => i.status === 'yeni' && !i.startedAt && i.createdBy === actor.user.id && now - i.sentAt < VOID_GRACE_MS);
+  const allFresh = live.every((i) => i.held || (i.status === 'yeni' && !i.startedAt && i.createdBy === actor.user.id && now - i.sentAt < VOID_GRACE_MS));
   const approverId = live.length && !allFresh ? need(actor, 'siparis.iptal', 'Adisyon iptali yetkili onayı gerektirir') : null;
   if (live.length && !reason.trim()) throw bad('İptal nedeni yazılmalı', 'reason_required');
   for (const it of live) {
@@ -1651,7 +1783,8 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
     message: live.length ? `${actor.user.name} #${o.no} adisyonu iptal etti (${tl(value)}, ${reason.trim()})` : `#${o.no} boş adisyon kapatıldı`,
   });
   orderEvents(fx, updated, actor.user.id, 'order.cancelled');
-  for (const s of new Set(live.map((i) => i.stationId).filter(Boolean))) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: s!, byUserId: actor.user.id });
+  // Ödeme bekleyen kalem bara gitmemişti: o istasyon iptal sesi duymaz
+  for (const s of new Set(live.filter((i) => !i.held).map((i) => i.stationId).filter(Boolean))) fx.emit({ topic: 'kitchen', kind: 'ticket.void', orderId, stationId: s!, byUserId: actor.user.id });
   return updated;
 }
 
@@ -1879,7 +2012,6 @@ export function addExternalPayments(
       .run();
     ids.push(id);
   });
-
   let updated = recalc(t, orderId);
   let closed = false;
   if (updated.total - updated.paid <= 0) {
@@ -1894,11 +2026,13 @@ export function addExternalPayments(
         message: `#${o.no} adisyon yazarkasada ödendi ama oda sayacı çalışıyor; adisyon açık kaldı. Sayacı durdurup oda ücretini alın`,
       });
     } else {
-      closeOrderRow(t, updated, userId);
+      closeOrderRow(t, fx, updated, userId);
       updated = loadOrder(t, orderId);
       closed = true;
     }
   }
+  // Hesap açık kaldı: yazarkasada seçili kalemle tamamen ödenen bekleyen satır bara gider
+  if (!closed) releasePaidHeld(t, fx, orderId, userId);
   orderEvents(fx, updated, userId, closed ? 'order.closed' : 'payment.added');
   fx.emit({ topic: 'cash', kind: 'payment.added', orderId, byUserId: userId });
   return { order: updated, closed, paymentIds: ids };
