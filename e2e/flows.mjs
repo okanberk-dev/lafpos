@@ -158,6 +158,44 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Tablette kasiyer: tezgâh satışında Öde kalemleri ödeme bekletir (bar görmez, vazgeçince sepette "Ödeme bekliyor"); nakit alınınca fiş bara "Ödendi" düşer',
+      async () => {
+        const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+        const atBar = async () => (await api.call('kasa', 'GET', '/kitchen')).find((t) => t.orderId === o.id);
+        await withPage(ctx, 'tablet', 'kasa', async (page) => {
+          await go(ctx, page, `/adisyon/${o.id}`);
+          await page.getByPlaceholder('Ürün ara').fill(simple.name);
+          await page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first().click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
+          const dialog = page.getByRole('dialog', { name: /^Ödeme · / });
+          await dialog.waitFor({ timeout: 8000 });
+          // Ödeme penceresi açıkken kalem ödeme bekliyor: bar ekranına düşmedi
+          const held = await api.call('kasa', 'GET', `/orders/${o.id}`);
+          assert(held.items.length === 1 && held.items[0].held, `kalem ödeme beklemiyor: ${JSON.stringify(held.items.map((i) => i.held))}`);
+          assert(!(await atBar()), 'ödeme alınmadan fiş bara düştü');
+          // Müşteri vazgeçer gibi pencere kapanır: sepette "Ödeme bekliyor" grubu, bar hâlâ görmez
+          await dialog.getByRole('button', { name: 'Kapat', exact: true }).first().click();
+          await dialog.waitFor({ state: 'detached', timeout: 8000 });
+          await page.getByRole('region', { name: 'Ödeme bekliyor' }).waitFor({ timeout: 8000 });
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-odeme-bekliyor.png` });
+          assert(!(await atBar()), 'pencere kapanınca fiş bara düştü');
+          // Ödeme alınır: adisyon kapanır, kalemler kendiliğinden bara gider
+          await page.getByRole('button', { name: /^Öde · / }).click();
+          await dialog.getByRole('button', { name: 'Nakit', exact: true }).click();
+          await dialog.getByRole('button', { name: 'Tam', exact: true }).click();
+          await dialog.getByRole('button', { name: /Nakit al$/ }).click();
+          await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor({ timeout: 8000 });
+        });
+        const ticket = await atBar();
+        assert(ticket && ticket.paid === true, `ödeme alınınca fiş bara düşmedi ya da ödendi değil: ${JSON.stringify(ticket)}`);
+        await withPage(ctx, 'bilgisayar', 'bar', async (page) => {
+          await go(ctx, page, '/mutfak');
+          await page.getByText('Ödendi', { exact: true }).first().waitFor({ timeout: 8000 });
+          await page.screenshot({ path: `${ROOT}/e2e/out/bilgisayar-bar-odendi.png` });
+        });
+      },
+    ],
+    [
       'Tablette kasiyer: hesabı nakit alır, adisyon kapanır',
       () =>
         withPage(ctx, 'tablet', 'kasa', async (page) => {

@@ -386,6 +386,22 @@ mürekkep "Öde · ₺X", gönderilmemiş varken ikincil "Bara gönder (N)", hı
 İşlemler), telefonda önce ürünler ve yapışkan sepet çubuğu. Davranış, istekler ve yetki denetimleri aynı; e2e adları
 "Öde · ", "Bara gönder (N)", "Sepet: …" ve "Ürün ekle"ye güncellendi. Test `tests/adisyon-ekrani.test.ts`.
 
+**Ödeme alınınca bara** (4 Kasım 2026, operatör: "ödemesi alınınca bar tarafına gitsin"): tezgâh satışında
+(`holdsUntilPaid`: kasanın tezgâh siparişi, her servis modunda) "Öde" kalemleri ödeme bekleyen olarak yazar
+(`order_items.held`, göç `0018_odeme_bekleyen`; `POST /orders/:id/items` `hold: true`). Bekleyen kalem bar ekranına, çağrı
+ekranına ve sipariş sayacına girmez, fiş sesi çalmaz. Adisyon kapanınca (ödeme, yazarkasanın bildirdiği ödeme, ciro dışı
+ya da ₺0; `closeOrderRow` → `releaseHeld`) kendiliğinden bara gider: gönderim anı o an (bar süresi ve hazırlama raporu
+oradan sayar), hepsi tek yeni fişte. Masa ya da gel-al adisyonuna taşınan bekleyen kalem orada bara gider. "Ödemeden
+gönder" (`POST /orders/:id/release`, `siparis.al`, denetimde `order.release`) bekleyenleri hemen yollar. Müşteri
+vazgeçerse satış onaysız iptal edilir; bekleyen kalem bara hiç gitmediği için fire sayılmaz (`voidAfterSend` yok), bar
+iptal sesi duymaz. "Bara gönder" eskisi gibi hemen gönderir. Bar fişinde ödemesi alınmış siparişe "Ödendi"
+(`KitchenTicket.paid`). Testler `tests/odeme-sonrasi-bar.test.ts` (sql.js ile de), e2e akışı tablette.
+
+**Bar ekranı ızgarası** (4 Kasım 2026, operatör: "daha grid dayalı düzenli"): fişler kabın genişliğine göre 1-5
+sütunlu ızgarada, aynı satırdakiler eşit boyda ve düğmeleri dipte hizalı; sayaç şeridi (bekliyor, hazırlanıyor, teslim
+bekliyor, geciken), fişin üstünde durum çizgisi, künye ikinci satırda. Davranış ve e2e adları aynı. Test
+`tests/bar-ekrani.test.ts`.
+
 **Yönetim ve raporlar: kurumsal yüzey** (4 Kasım 2026; araştırma `docs/08-POS-ARASTIRMA.md` §5): kasa ekranları
 yumuşak kalır; yönetim ve raporlar küçük köşe (kart, tablo, alan, düğme, segment 6; çip ve rozet 4), gölge yerine 1 px
 çizgi, kenar çubuğunda ince ayraç ve etkin öğede 2 px yeşil sol çizgi, zeminsiz tablo başlığı, köşesiz grafik çubuğu.
