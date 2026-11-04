@@ -5,7 +5,7 @@
 > UI/UX olarak üst düzey"_, _"laffogato.net reposuna bak, orada logomuz vs. var, oradan alıp buraya uyarla"_ ve _"tüm
 > sayfaların butonların bileşenlerine kadar en estetik tasarımı yap; 2 ekranlı kasalarda müşteriye gözüken kısmı da
 > tasarla, o da değiştirilebilsin"_. Tasarımlar Claude Design tuvalinde (tasarım sistemi, bileşenler, giriş, masalar,
-> adisyon, bar ekranı, patron telefonda, mesai, vardiya devri, müşteri ekranının üç durumu ve özelleştirmesi) ve kodda
+> adisyon, bar ekranı, patron telefonda, vardiya devri, müşteri ekranının üç durumu ve özelleştirmesi) ve kodda
 > aynı değerlerle. Renk ve yazı laffogato.net'in kimliği (laffogato `docs/BRAND.md`, `src/app/globals.css`); yerleşim
 > Innex'ten kaldı (`docs/ADMIN-INNEX.md`: kenar çubuğu, sayfa başlığı şeridi, KPI şeridi, tablo, çekmece). Değerler
 > `src/index.css`'te; erişilebilirlik oranları `tests/design-tokens.test.ts` ve `tests/ui-kit.test.ts`'te sabit. Test
@@ -68,12 +68,15 @@
   Mürekkep zeminli bildirimde halka krem ve düğmenin içinde (yeşil mürekkepte 3:1'in altında kalır).
 - **İkon kutusu** (`IconBox`: KPI hücresi, hızlı bakış satırı, telefondaki yönetim listesi) varsayılan nötr taş; renk
   yalnız anlam taşıyınca (`src/components/admin/hues.ts`): mor online, kobalt açık / dolu, yeşil ciro ve olumlu durum
-  (mesaide), pembe kayıp ve iptal, amber gecikme ve bekleyen; durumsuz sayı ve süre nötr.
+  (satışta, bağlı), pembe kayıp ve iptal, amber gecikme ve bekleyen; durumsuz sayı ve süre nötr.
 
 ### Biçim
 
 - **Köşeler** (sitenin ölçüsü): küçük denetim 10, alan, iç kutu ve tuş 14, kart 20, pencere ve alt sayfa 28; düğme,
-  rozet, sekme, kategori çipi ve segment kapsül (`rounded-full`).
+  rozet, sekme, kategori çipi ve segment kapsül. Belirteçler `src/index.css`'te (`:root`): `--r-card` 20, `--r-control`
+  14, `--r-btn`, `--r-chip`, `--r-segment` kapsül, sütun grafiğinin üst köşesi `--r-bar` 4, yatay çubuk `--r-track`
+  kapsül, tablo başlığının zemini `--table-head-bg`; ortak kit (`src/components/ui/*`, `src/components/admin/ui.tsx`)
+  köşeyi bunlardan okur. Yönetim ve raporlarda kurumsal değerler (§4 "Kurumsal yüzey").
 - **Gölge** sıcak topraktır (`#3B2A1E`, en çok %12; nötr siyah porselende griye kaçar): kart `--shadow-card`, seçili ya
   da basılabilir öğe `--shadow-lift`, yüzen katman `--shadow-pop`; denetimin cam kenarı `--rim` (üstte beyaz dudak).
   Koyuda kart gölgesiz, ayrımı çizgi yapar.
@@ -86,7 +89,7 @@
 laffogato'nun çizimleri (`public/illustrations/`, docs/BRAND.md §6.1: düz dolgu, 2 px espresso kontur, altı renk,
 yazısız) `src/assets/illustrations/`'ta; `EmptyState art=` ya da `<Illustration>` basar (`alt=""`, anlamı başlık taşır;
 koyu temada porselen bir disk üstünde). Eşleme: fiş (açık sipariş yok), boş fincan tabağı (sonuçsuz arama), boş kek
-standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş yok), çalar saat (mesai yok), bilet
+standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş yok), çalar saat (hazırlanan kalem yok), bilet
 (rezervasyon yok), kupon (müşteri yok), kapı (gün açılmadı), affogato (bugün satış yok), kalp (her şey yolunda).
 
 ## 3. Kasa ekranları (masalar, adisyon, bar, kasa, patron)
@@ -107,18 +110,55 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   ikonunun oranında: logo karonun yüksekliğinin yarısı, köşe kenarın %22'si (arayüzün köşe ölçeğinden bağımsız; `TILE`,
   `src/components/LafMark.tsx`).
 - **Giriş ekranı:** solda marka yüzeyi (yeşil, krem yazı, 96 px saat, ekip), sağda PIN kartı (sade tuşlar,
-  yeşil "Giriş"); **Mesai** sekmesinde aynı PIN'le giriş-çıkış yapılır, oturum açılmaz.
-- **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş (hesap N
-  kişiye eşit bölünür, paylar sırayla ve istenen yöntemle alınır; pay tutarını sunucu hesaplar,
-  `shared/order-calc.ts` `splitState`). Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme. Ödeme düğmesi
+  yeşil "Giriş"); kilit ekranında yalnız oturum açılır (mesai 4 Kasım 2026'da kaldırıldı).
+- **Ödeme penceresi** üç yol: Tutar (nakit ya da kart, para üstü), Kalem (seçili kalemler), Paylaş. Paylaş'ta önce
+  "Kaç kişiye bölünsün?": 2, 3, 4, 5, 6 büyük çipler (56 px, Gabarito rakam) tek dokunuşla böler, daha kalabalık masa
+  adet seçiciyle (en çok 30). Altında **Eşit | Elle**: Eşit'te kalan kuruşu kuruşuna bölünür; Elle'de her ödenmemiş
+  payın kendi tutar alanı olur, eşit bölüşle dolu gelir, son pay kalanı kendisi gösterir ("Kalanı alır"); pay sıfır ya
+  da eksi olamaz, toplam kalana eşittir, düğme "Payları kaydet" (kaydedilmeden ödeme düğmesi "Önce payları kaydedin"
+  der). Paylar sırayla ve istenen yöntemle alınır: sıradaki pay mürekkep kenarlı, ödenen pay yeşil onaylı. Pay tutarını
+  sunucu hesaplar (`shared/order-calc.ts` `splitState`, elle tutarlar `orders.split_amounts`); hesap değişince (kalem,
+  iptal, indirim, ödeme iptali) elle paylar düşer, kalan yeniden eşit bölünür ve pencere bunu kısa notla söyler.
+- **Ödenmez kişi seçimi** (`OdenmezModal`): ödenmez (adisyonun tamamı, ödeme penceresinden ya da İşlemler'den; tek
+  kalem, kalem sayfasındaki "Ödenmez yaz") kayıtlı bir kişi seçilmeden yapılmaz. Tek pencere: "Kimin adına?" araması
+  (ad ya da telefon), iki grup: Personel (etkin kullanıcılar, avatar ve rolüyle) ve Müşteriler (boş aramada son gelenler,
+  telefonun son 4 hanesiyle "Telefon •• 1122"); seçili satır yeşil kenar ve tik. Altında neden çipleri (mürekkep) ve
+  alan; personel seçilince "Personel yemeği", patron seçilince "Patron hesabı" önerilir, yazılan neden ezilmez. Kişi
+  seçilmeden onaylanınca ileti alanın altında ("Kimin adına yazılacağını seçin"). İkram ve zayide kişi sorulmaz.
+  Sepette ödenmez kalem "Ödenmez · Garson" diye işaretlenir; raporda "Garson adına", Z'de ödenmez satırının altında
+  kişi kişi döküm. Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme. Ödeme düğmesi
   pencerenin alt şeridinde, kaydırınca kaybolmaz; yanında para üstü, eksik ya da bahşiş notu. Düğmenin tutarı bahşişi
   içerir (kartta bankanın POS'una girilen tutar) ve eksik adımı söyler ("Ödenecek kalemleri seçin", "Önce hesabı
   bölün"; açık hesapta "açık hesaba yaz"). Tablet ve bilgisayarda iki sütun: solda tutar, tuş takımı, yazarkasa ve
   alınan ödemeler; sağda ödeme türleri, Verilen, Bahşiş ve ciro dışı kapanış. Sepet yazarkasada beklerken LafPOS'ta
   ödeme, ciro dışı kapanış ve ödeme iptali kapalı; durum ve "Sepeti iptal et" en üstte. Sonuç ekranında para üstü en
   üstte, mürekkep kenarlı nötr kutuda.
-- **Adisyon:** geniş ekranda kategoriler solda dikey liste (sayılarıyla), ürün kartında sitedeki görsel; "/" aramaya
-  götürür.
+- **Adisyon** (4 Kasım 2026 yenilemesi): iki kart, ürünler | hesap. Ürünlerde üstte arama ("/" ile), geniş ekranda
+  solda kategori rayı (sayılarıyla), telefonda kategori çipleri; kartta sitedeki görsel ya da kategori renginde baş
+  harf, ad, fiyat, iki boylu üründe boy düğmeleri, tükendi soluk ve rozetli. Hesap bir bakışta okunur:
+  - **Başlık:** Gabarito masa adı (22/700) ve numara; künye (kişi, garson, açılış saati ve süresi, müşteri, not); durum
+    çipleri (Kapandı, İptal, Birleşti; Hesap yazdırıldı amber, Kısmen ödendi pembe, "3 kişiye bölündü", "2 ürün
+    gönderilmedi").
+  - **Kalemler duruma göre gruplu** (`src/pages/order/cartGroups.ts`): Gönderilmedi (amber, cihazdaki sepet, en üstte),
+    Barda (kobalt nokta; bekliyor mu hazırlanıyor mu kalemde yazar), Hazır (yeşil), Teslim (nötr; bara gitmeyen kalem
+    de), İptal edilenler (kırmızı). Grup başlığı yapışkan, sayısıyla. Her kalemde adet hapı, ad ve boy, seçenek çipleri,
+    not ve sağa hizalı Gabarito tutar.
+  - **Kalem işlemleri kalemden tek dokunuşta:** İkram et, Ödenmez yaz (kişi seçilir), Zayi yaz, Kaleme indirim, Taşı
+    (taşıma penceresi kalem seçili açılır), Not ekle (bar fişi canlı görür, `PUT /orders/:id/items/:itemId/note`), en
+    altta kırmızı İptal et.
+  - **Toplam** Gabarito 28/700; altında hızlı işlemler sakin bir sırada, ikon ve kısa ad: Böl, İndirim, Taşı, Hesap
+    yazdır, İşlemler (İşlemler telefonda başlıkta). Tek birincil eylem mürekkep "Öde · ₺X" (gönderilmemiş varsa önce
+    gönderir); gönderilmemiş kalem varken ikincil "Bara gönder (N)" ve geri alınabilir çöp kutusu. Ödeme alamayan rolde
+    (garson) birincil eylem "Bara gönder (N)" ya da "Hesap yazdır" ve altında "Ödemeyi kasa alır".
+  - **Telefonda önce ürünler:** alttaki yapışkan sepet çubuğu ("3 ürün · ₺780 · Sepet", gönderilmemiş sayısı amber
+    rozette: yumuşak zemin, koyu amber yazı) sepeti açar, yanında "Bara gönder" (erişilebilir adı "Bara gönder (N)");
+    tutar kısa yazılır, 360 px'te de kesilmez. Kalemsiz adisyonda da durur ("Sepet boş"): oda sayacı, "Masayı boşalt"
+    ve boş durum sepette. Sepette en üstte "Ürün ekle" ürünlere döner; geçişte odak öteki görünümün geçiş düğmesine
+    geçer. Bildirim alttaki bloğun (hızlı işlemler ve eylem şeridi ya da sepet çubuğu) ölçülen boyunun üstünde durur
+    (`--action-bar-h`).
+  - **Durumlar:** boş masa (fincan çizimi, "Masayı boşalt"), kapanmış adisyon (yeşil "Kapandı", katalog yok, adisyon
+    ortada), sitede ödenmiş online sipariş (mor şerit, tahsil edilmez, Z'ye girmez), tezgâh satışı (Öde gönderir ve
+    ödemeyi açar, satış bitince yeni satış).
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok):
   - **Müşteri ekranı** `/musteri-ekrani` (iki ekranlı kasanın ikinci monitörü ya da müşteriye dönük tablet): boşta
     karşılama (L'Af, Gabarito 800 başlık, bayrak çizgisi, slogan; dönen duyurular, karekod, saat), adisyon açıkken
@@ -142,13 +182,39 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 
 ## 4. Yönetim paneli
 
-Panel açıkken `<html data-area="admin">`; aynı değerler, yalnız sıklık farklı (fareyle 36 px düğme, "Sıkı görünüm"de 32).
+Panel açıkken `<html data-area="admin">`; aynı renkler, sıklık farklı (fareyle 36 px düğme, "Sıkı görünüm"de 32) ve
+biçim kurumsal.
 
-- **Yerleşim** (Innex §1.1): zemin üstünde iki beyaz kart, köşe 14 (içlerindeki kartlar 20), pencereye 8 px, aralarında 12 px.
+### Kurumsal yüzey (4 Kasım 2026)
+
+Yönetim ve raporlar kurumsal, sade ve keskin çizgili; kasa ekranları bugünkü yumuşak görünümde kalır. Kapsam
+yönetim kabuğunun kökündeki `.surface-corporate` (`AdminShell`; raporlar da aynı kabukta) ve portalda açılan pencere,
+çekmece ve menüler için yönetim açıkken `<html data-area="admin">`; ikisi aynı değerleri verir (`src/index.css`):
+
+- **Köşe:** kart, tablo, alan, düğme ve segment 6 px; çip ve rozet 4 px (`--r-card`, `--r-control`, `--r-btn`,
+  `--r-segment`, `--r-chip`). Tailwind'in köşe değişkenleri de (`--radius-lg/xl/2xl` 6, `--radius-3xl` 8) kapsamda
+  küçülür: sayfalardaki `rounded-xl` / `rounded-2xl` kendiliğinden uyar.
+- **Gölge yerine 1 px ince çizgi:** `--shadow-card`, `--shadow-lift` ve denetimin cam kenarı `--rim` yok; taş zemin
+  üstünde düz beyaz yüzey (koyuda gece yüzeyi), ayrımı çizgi yapar. Yüzen katman (`--shadow-pop`) kalır.
+- **Kenar çubuğu:** gruplar arasında ince ayraç; etkin öğede dolgu kapsül yok, 2 px yeşil sol çizgi ve kalın yazı;
+  sayaç gri hapta.
+- **Sayfa başlığı** şeridinin altında ince çizgi (`PageHeader`).
+- **Tablolar:** yalnız başlık ve satır çizgileri (başlık şeridi zeminsiz, `--table-head-bg`), rakam sağa hizalı ve
+  Gabarito tablo rakamı; kitin `DataTable`'ı, raporların `ReportTable`'ı ve roller matrisi aynı başlığı çizer.
+- **Kasa ekranının önizlemesi:** yönetimdeki birebir önizleme (Yönetim › Müşteri ekranı) `.surface-soft` ile kasa
+  köşelerinde kalır (@theme köşeleri ve `:root`'un `--r-*` değerleri); gerçek ekranla aynı görünür.
+- **KPI şeridi:** ince bölmeli, tek çerçeveli ızgara (`KpiStrip`, hücreler arası 1 px).
+- **Grafikler:** ince çizgiler, köşesi yuvarlatılmamış çubuklar (`--r-bar` 0, `--r-track` 0; `ColumnChart` köşeyi
+  kabın hesaplanmış stilinden okur).
+- **Düğmeler** dikdörtgen, 6 px köşe; farede 36, dokunmatikte 44 px yükseklik.
+- **Renk ve marka korunur:** yeşil birincil, mürekkep ödeme, pirinç yalnız ödülde.
+
+- **Yerleşim** (Innex §1.1): zemin üstünde iki beyaz kart, köşe 6 (kurumsal yüzey), pencereye 8 px, aralarında 12 px.
   Kenar çubuğu 15.5rem; sayfa kartının ilk şeridi üst çubuk (yol, ⌘K arama, sıkı görünüm, canlı bağlantı),
   altında sayfa başlığı şeridi (Gabarito 22/700 başlık, 13 px açıklama, sağda önce ikincil sonra birincil düğme).
 - **Kenar çubuğu:** gruplar büyük harfli küçük etiketle (Genel, Menü, Salon ve kasa, Ekip, Bağlantılar,
-  Sistem), etkin satır gri ve renksiz, sayaç hap ve yalnız iş bekleyen yerde (tükenen ürün,
+  Sistem) ve aralarında ince ayraç, etkin satırda 2 px yeşil sol çizgi ve kalın yazı (dolgu yok), sayaç yalnız iş
+  bekleyen yerde (tükenen ürün,
   gönderilemeyen gün). Üstte logo karosu, işletme ve "Menüyü daralt"; altta "Kasa ekranlarına dön" ve kullanıcı.
   Tablette dar ikon menüsünde iş bekleyen bölümün ikonunun köşesinde nötr sayaç (renk değil sayı); "Menüyü aç" adlı ve
   sayaçlı tam menüyü soldan çekmecede açar.
@@ -157,13 +223,13 @@ Panel açıkken `<html data-area="admin">`; aynı değerler, yalnız sıklık fa
   rakamın yanında referans), `StatusTabs` (sayılı hap çipler, etkin mürekkep kenar; telefonda kayan rayda seçili çip
   görünür kalır, gizlenen kenar solar), `Segmented` (gri hap ray, beyaz hap; telefonda tam genişlikte satıra kırılır;
   radyo grubu klavyesi: Tab seçili seçenekte girer, oklar ve Home/End gezer, Enter ya da boşluk seçer), `DataTable`
-  (kuyuda başlık, satır ayracı, yapışkan eylem sütunu, seçili satır solda ev yeşili çizgi), `ActionMenu` (⋯, köşe 14,
-  portalda), `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, köşe 28, telefonda alt sayfa), `ActionRows`,
-  `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme kapsül, 14 px; dokunmatikte 44, farede 36, sıkı görünümde
-  32 px.
+  (zeminsiz başlık çizgisi, satır ayracı, yapışkan eylem sütunu, seçili satır solda ev yeşili çizgi), `ActionMenu` (⋯,
+  köşe 6, portalda), `QuickLook` (sağdan hızlı bakış ve düzenleme çekmecesi, köşe 8, telefonda alt sayfa), `ActionRows`,
+  `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme dikdörtgen, 6 px köşe; dokunmatikte 44, farede 36, sıkı
+  görünümde 32 px.
 - **Sayfalar:** Genel bakış (KPI şeridi: net ciro geçen haftanın aynı günü aynı saatine göre, adisyon,
   açık adisyon, indirim ve ikram, online sipariş; saatlik grafik; en çok satanlar; dikkat isteyenler;
-  sistem sağlığı), Ürünler, Seçenekler, Masa planı, Ödeme türleri, Personel ve yetki, Mesai çizelgesi, Yazarkasa, Site
+  sistem sağlığı), Ürünler, Seçenekler, Masa planı, Ödeme türleri, Personel ve yetki, Yazarkasa, Site
   ve lafmaliyet, Ağ ve uzaktan erişim (yerel adres ve Tailscale karekodu), Ayarlar, Denetim kaydı (zaman çizelgesi),
   Raporlar (dönem segmenti, rapor sekmeleri, önceki dönemle KPI şeridi).
 
@@ -239,7 +305,7 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   `pointer-coarse` / `pointer-fine` sorgusundan: dokunmatikte her hedef en az 44 px.
 - Telefon: tek sütun, alt sekme çubuğu (beş yer: ekran azsa hepsi sekme, "Daha" yok; çoksa dört ekran ve "Daha";
   patron panelini görende Patron sekmesi Bar'ın yerinde; üst şeridi olmayan bar ve adisyon ekranında yer varsa son
-  sekme kişinin menüsü; `phoneTabs`, `src/lib/nav.ts`), birincil eylem altta (adisyonda Gönder / Ödeme şeridi), modal
+  sekme kişinin menüsü; `phoneTabs`, `src/lib/nav.ts`), birincil eylem altta (adisyonda "Bara gönder" / "Öde" şeridi; ürünlerdeyken yapışkan sepet çubuğu), modal
   yerine alt sayfa, tablo yerine satır kartı, çentik için `safe-area`.
 - Tablet: adisyonda ürünler ve hesap yan yana (`min-width: 768px`), yönetimde dar ikon menüsü (sayaçlı; "Menüyü aç"
   tam menüyü çekmecede açar).

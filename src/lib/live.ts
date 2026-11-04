@@ -27,7 +27,6 @@ const INVALIDATE: Record<LiveTopic, string[][]> = {
   users: [['bootstrap'], ['users']],
   alerts: [['alerts'], ['patron']],
   okc: [['okc']],
-  time: [['time']],
 };
 
 type Listener = (e: LiveEvent) => void;

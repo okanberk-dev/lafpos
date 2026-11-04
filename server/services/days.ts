@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { odenmezByPerson } from '@shared/comp';
 import { tl } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs } from '@shared/time';
@@ -184,6 +185,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   let complimentary = 0;
   let odenmez = 0;
   let zayi = 0;
+  const odenmezItems: (typeof items)[number][] = [];
   let service = 0;
   let netSales = 0;
   const kdv = new Map<number, { gross: number; base: number; kdv: number }>();
@@ -206,7 +208,10 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
       kdv.set(r.rate, k);
     }
     for (const i of its) {
-      if (!i.voided && i.complimentary && i.compKind === 'odenmez') odenmez += i.qty * i.unitPrice;
+      if (!i.voided && i.complimentary && i.compKind === 'odenmez') {
+        odenmez += i.qty * i.unitPrice;
+        odenmezItems.push(i);
+      }
       if (!i.voided && i.complimentary && i.compKind === 'zayi') zayi += i.qty * i.unitPrice;
       if (i.voided || i.complimentary) continue;
       const key = `${i.name}|${i.size}`;
@@ -267,6 +272,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
     complimentary,
     odenmez,
     zayi,
+    odenmezPeople: odenmezByPerson(odenmezItems),
     voided,
     voidAfterSendCount,
     service,

@@ -3,8 +3,7 @@ import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronRight
 import { Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
-import { fmtAgo, fmtTime, shiftForgotten } from '@shared/time';
-import type { TimeSheetDTO } from '@shared/types';
+import { fmtAgo, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
@@ -99,6 +98,13 @@ function Change({ value, base }: { value: number | null; base: number }) {
   );
 }
 
+/**
+ * Üst blok: ciro kartı ve karolar. Beş karo (online siparişli gün) iki sütunda üç satır olup ciro kartını uzatırdı: geniş
+ * ızgarada karolar tablette ve geniş ekranda üç sütun, ciro kartı daralır. İskelet ve sayfa aynı kuraldan çizer.
+ */
+const topGrid = (wide: boolean) => cn('grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]', wide && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]');
+const tileGrid = (wide: boolean) => cn('grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2', wide && 'md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3');
+
 export default function PatronPage() {
   const can = useCan();
   const qc = useQueryClient();
@@ -108,10 +114,6 @@ export default function PatronPage() {
   const [table, setTable] = useState(false);
   const [allAttention, setAllAttention] = useState(false);
   const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: REMOTE ? 10_000 : 60_000 });
-  // Şu an mesaide: mesai çizelgesinin bugünü, yalnız mesai yetkisiyle (uzaktan görünümde çizelge yok). Canlı mesai
-  // olayı ['time'] sorgularını kendisi yeniler (lib/live.ts)
-  const timeAllowed = !REMOTE && can('mesai.yonet');
-  const sheet = useQuery({ queryKey: ['time', 'sheet', 'patron'], queryFn: () => get<TimeSheetDTO>('/time'), enabled: timeAllowed, refetchInterval: 60_000 });
 
   // Satış ve kasa olaylarında yenile; uyarılar anında bildirim olarak düşer
   useEffect(
@@ -123,7 +125,9 @@ export default function PatronPage() {
     [qc],
   );
 
-  // İlk yükleme: sayfanın biçiminde iskelet (başlık, büyük ciro kartı ve patronun altı karosu), spinner değil
+  // İlk yükleme: sayfanın biçiminde iskelet (başlık, büyük ciro kartı ve dört karo), spinner değil. Izgara içerikle aynı
+  // kuraldan (topGrid, tileGrid): online siparişli günün beşinci karosu veriyle gelir; kurulumun çoğunda (site bağlı değil
+  // ya da günün ilk online siparişi gelmedi) dört karo kalır, sayfa yüklenince kaymaz
   if (data.isPending) {
     return (
       <div role="status" aria-label="Canlı rakamlar yükleniyor…" className="h-full overflow-hidden p-4 md:p-6">
@@ -131,10 +135,10 @@ export default function PatronPage() {
           <PageHeader title="Patron paneli" subtitle="Canlı rakamlar yükleniyor…" />
         </div>
         <Skeleton className="mb-4 h-5 w-56 md:hidden" />
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+        <div className={topGrid(false)}>
           <Skeleton className="h-[236px] rounded-2xl" />
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div className={tileGrid(false)}>
+            {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-[112px] rounded-2xl" />
             ))}
           </div>
@@ -181,12 +185,7 @@ export default function PatronPage() {
     .filter((p): p is string => !!p)
     .map((p, i) => (i === 0 ? p.charAt(0).toLocaleUpperCase('tr-TR') + p.slice(1) : p));
 
-  // Mesaide olanlar: önceki günden çıkışı unutulmuş açık mesai içeride sayılmaz (Mesai çizelgesindeki gibi)
-  const atWork = sheet.data?.clockedIn.filter((e) => !shiftForgotten(e.clockIn, now));
-  const atWorkNames = atWork?.map((e) => e.userName) ?? [];
-  const timeLoading = timeAllowed && sheet.isPending && sheet.fetchStatus === 'fetching';
-
-  // Karolar: sayıları ızgarayı seçer (mesai yüklenirken yeri iskeletle tutulur, karolar sonradan kaymaz)
+  // Karolar: sayıları ızgarayı seçer (tek kalan son karo satırı doldurur, boşluk kalmaz)
   const tiles = [
     <Stat key="dun" label="Dünkü ciro" value={tl(d.yesterday.netSales)} hint={`${d.yesterday.receipts} adisyon`} />,
     // "Açık hesap" kasada müşterinin cari hesabıdır (ödeme türü, Müşteriler); burada ödenmemiş adisyonlar
@@ -207,20 +206,9 @@ export default function PatronPage() {
         hint={`${d.online.orders} sipariş · sitede ödendi`}
       />
     ),
-    timeLoading ? (
-      <Skeleton key="mesai" className="min-h-[104px] rounded-2xl" />
-    ) : (
-      atWork && (
-        <Stat
-          key="mesai"
-          label="Şu an mesaide"
-          value={String(atWork.length)}
-          hint={atWorkNames.length ? (atWorkNames.length > 3 ? `${atWorkNames.slice(0, 3).join(', ')} +${atWorkNames.length - 3}` : atWorkNames.join(', ')) : 'Kimse içeride değil'}
-        />
-      )
-    ),
   ].filter(Boolean);
-  // Beş-altı karo iki sütunda üç satır olur ve ciro kartını uzatırdı: geniş ekranda karolar üç sütun, iki satır
+  // Beş karo iki sütunda üç satır olur ve ciro kartını uzatırdı: geniş ekranda karolar üç sütun, iki satır; tek kalan
+  // son karo iki sütun kaplar (2 + 3 ya da 3 + 1 + 2), ızgarada boş hücre kalmaz
   const wideTiles = tiles.length >= 5;
 
   // Dikkat isteyenler tek listede: önce günün anomalileri, sonra uyarılar (en yeni üstte). Adisyonu olan satır
@@ -258,7 +246,7 @@ export default function PatronPage() {
         {retry}
       </div>
 
-      <div className={cn('grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]', wideTiles && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]')}>
+      <div className={topGrid(wideTiles)}>
         {/* Kart boyu karolarla uzarsa boşluk kıyasların üstünde kalır, altında değil */}
         <div className="@container flex flex-col rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
           <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
@@ -271,8 +259,8 @@ export default function PatronPage() {
             <CompareRow label="4 hafta önce bu saate kadar" value={d.compare.fourWeeks.netSales} change={d.compare.fourWeeks.change} />
           </div>
         </div>
-        {/* Tek kalan son karo satırı doldurur (boş hücre bırakmaz); beş-altı karo tablette ve geniş ekranda üç sütun */}
-        <div className={cn('grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2', wideTiles && 'md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3')}>{tiles}</div>
+        {/* Tek kalan son karo satırı doldurur (boş hücre bırakmaz); beş karo tablette ve geniş ekranda üç sütun */}
+        <div className={tileGrid(wideTiles)}>{tiles}</div>
       </div>
 
       <Card

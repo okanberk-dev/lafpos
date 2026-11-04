@@ -160,18 +160,34 @@ posRoutes.post('/orders/:id/items/:itemId/void', async (c) => {
   return c.json(dto(c, c.req.param('id')));
 });
 
+/** Gönderilmiş kaleme not (boş metin siler); bar fişi canlı güncellenir */
+posRoutes.put('/orders/:id/items/:itemId/note', async (c) => {
+  const input = await body(c, z.object({ note: z.string().max(200).nullable() }));
+  const actor = actorFrom(c);
+  write((t, fx) => orders.setItemNote(t, actor, fx, c.req.param('id'), c.req.param('itemId'), input.note));
+  return c.json(dto(c, c.req.param('id')));
+});
+
+/** Ödenmezin kişisi: kayıtlı personel (`user`) ya da müşteri (`customer`); ödenmezde zorunlu, öteki türlerde reddedilir */
+const compPerson = z.object({ kind: z.enum(['user', 'customer']), id: z.string().min(1).max(64) }).nullish();
+
 posRoutes.post('/orders/:id/items/:itemId/comp', async (c) => {
-  // kind: ikram (varsayılan) ya da zayi; geri almada (undo) tür kalemin kendisinden
-  const input = await body(c, z.object({ qty: z.number().int().min(1).optional(), reason, undo: z.boolean().optional(), kind: z.enum(['ikram', 'zayi']).optional(), ...approver }));
+  // kind: ikram (varsayılan), ödenmez ya da zayi; geri almada (undo) tür kalemin kendisinden
+  const input = await body(
+    c,
+    z.object({ qty: z.number().int().min(1).optional(), reason, undo: z.boolean().optional(), kind: z.enum(['ikram', 'odenmez', 'zayi']).optional(), person: compPerson, ...approver }),
+  );
   const actor = actorFrom(c, input.approverPin);
-  write((t, fx) => orders.compItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason, undo: input.undo, kind: input.kind }));
+  write((t, fx) =>
+    orders.compItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason, undo: input.undo, kind: input.kind, person: input.person }),
+  );
   return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/comp', async (c) => {
-  const input = await body(c, z.object({ kind: z.enum(['ikram', 'odenmez', 'zayi']), reason, ...approver }));
+  const input = await body(c, z.object({ kind: z.enum(['ikram', 'odenmez', 'zayi']), reason, person: compPerson, ...approver }));
   const actor = actorFrom(c, input.approverPin);
-  write((t, fx) => orders.compOrder(t, actor, fx, c.req.param('id'), { kind: input.kind, reason: input.reason }));
+  write((t, fx) => orders.compOrder(t, actor, fx, c.req.param('id'), { kind: input.kind, reason: input.reason, person: input.person }));
   return c.json(dto(c, c.req.param('id')));
 });
 
@@ -250,11 +266,14 @@ posRoutes.post('/orders/:id/payments', async (c) => {
   return c.json({ order: dto(c, res.order.id), closed: res.closed, change: res.change, amount: res.amount, share: res.share });
 });
 
-/** Hesap paylaşımı: kişi sayısı (2-30) ya da kaldırmak için null */
+/**
+ * Hesap paylaşımı: kişi sayısı (2-30) ya da kaldırmak için null. `amounts` isteğe bağlı elle paylardır: ödenmemiş
+ * payların tutarları sırayla, kuruş; sunucu doğrular (tam sayı, her biri > 0, toplam = kalan, adet = ödenmemiş pay)
+ */
 posRoutes.put('/orders/:id/split', async (c) => {
-  const input = await body(c, z.object({ people: z.number().int().nullable() }));
+  const input = await body(c, z.object({ people: z.number().int().nullable(), amounts: z.array(z.number()).max(30).nullish() }));
   const actor = actorFrom(c);
-  write((t, fx) => orders.setSplit(t, actor, fx, c.req.param('id'), input.people));
+  write((t, fx) => orders.setSplit(t, actor, fx, c.req.param('id'), input.people, input.amounts ?? null));
   return c.json(dto(c, c.req.param('id')));
 });
 

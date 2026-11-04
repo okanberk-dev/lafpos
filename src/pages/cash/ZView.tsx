@@ -157,6 +157,15 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
             <Line l="İndirim" k={summary.discounts} minus />
             <Line l="İkram (ciro dışı)" k={ikram} />
             {(summary.odenmez ?? 0) > 0 && <Line l="Ödenmez (ciro dışı)" k={summary.odenmez ?? 0} />}
+            {/* Ödenmez dökümü kişiyle (kimin adına); eski Z'lerde yok. Personel adı maliyet yetkisi olmayana "Personel" */}
+            {(summary.odenmezPeople ?? []).map((p) => (
+              <li key={`${p.kind ?? 'yok'}:${p.id ?? p.name}`} className="flex justify-between gap-3 py-1.5 pl-8 pr-4 text-[13px] text-muted">
+                <span className="min-w-0 truncate">
+                  {p.name} adına · {p.qty} adet
+                </span>
+                <span className="tabular whitespace-nowrap">{tl(p.amount)}</span>
+              </li>
+            ))}
             {(summary.zayi ?? 0) > 0 && <Line l="Zayi (ciro dışı)" k={summary.zayi ?? 0} />}
             <Line l={summary.voidAfterSendCount > 0 ? `İptal · ${summary.voidAfterSendCount} kalem hazırlandıktan sonra` : 'İptal'} k={summary.voided} />
             {summary.onlineOrders > 0 && <Line l={`Online (sitede ödendi, ${summary.onlineOrders})`} k={summary.onlineTotal} />}

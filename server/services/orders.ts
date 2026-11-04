@@ -3,10 +3,10 @@ import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { PLATFORM_LABEL } from '@shared/platforms';
 import { normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
-import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitState } from '@shared/order-calc';
+import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitAmountsError, splitState } from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
 import { COMP_LABEL, compPermission } from '@shared/comp';
-import type { CompKind, OrderDTO, Size } from '@shared/types';
+import type { CompKind, CompPersonKind, OrderDTO, Size } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 import { type Actor, approverFor, can, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
@@ -159,7 +159,11 @@ function orderEvents(fx: Effects, o: Pick<OrderRow, 'id' | 'tableId'>, userId: s
   fx.emit({ topic: 'tables', kind, orderId: o.id, tableId: o.tableId ?? undefined, byUserId: userId });
 }
 
-/** Toplamları yeniden hesaplar ve saklar. Her para değişikliğinden sonra çağrılır. */
+/**
+ * Toplamları yeniden hesaplar ve saklar. Her para değişikliğinden sonra çağrılır. Hesap değiştiyse (kalem eklendi,
+ * iptal, ikram, indirim, taşıma, oda ücreti: saklı toplamlar tutmuyor) elle girilen paylar düşer, kalan yeniden eşit
+ * bölünür ve Paylaş ekranı bunu not olarak söyler (`splitResetAt`). Ödeme toplamları değiştirmez, payları düşürmez.
+ */
 export function recalc(t: Tx | DB, orderId: string): OrderRow {
   const o = loadOrder(t, orderId);
   const items = orderItems(t, orderId);
@@ -167,11 +171,17 @@ export function recalc(t: Tx | DB, orderId: string): OrderRow {
   const paid = orderPayments(t, orderId).reduce((a, p) => a + (p.refundedAt ? 0 : p.amount), 0);
   // İptal, ikram, indirim ya da taşıma ödenmiş tutarın altına indiremez: önce fazla ödeme iptal edilir
   if (paid > totals.total) throw conflict(`Ödenen ${tl(paid)} yeni toplamı (${tl(totals.total)}) aşıyor; önce fazla ödemeyi iptal edin`, 'overpaid');
+  const billChanged = JSON.stringify(o.totals ?? null) !== JSON.stringify(totals);
   t.update(schema.orders)
-    .set({ total: totals.total, paid, totals, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` })
+    .set({ total: totals.total, paid, totals, ...(billChanged ? dropManualShares(o) : {}), updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` })
     .where(eq(schema.orders.id, orderId))
     .run();
   return loadOrder(t, orderId);
+}
+
+/** Elle girilen paylar varsa düşürür (yazılacak alanlar); yoksa hiçbir şey yazılmaz */
+function dropManualShares(o: Pick<OrderRow, 'splitAmounts'>): Partial<OrderRow> {
+  return o.splitAmounts ? { splitAmounts: null, splitResetAt: Date.now() } : {};
 }
 
 function nextOrderNo(t: Tx | DB, dayId: string): number {
@@ -530,7 +540,46 @@ function assertNotPlatformCollected(t: Tx, o: OrderRow) {
   if (row?.payload.platformCollects) throw conflict('Tahsilatı platformun yaptığı sipariş ciro dışı kapanmaz; iptal platformdan gelir', 'platform_order');
 }
 
-export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { itemId: string; qty?: number; reason: string; undo?: boolean; kind?: 'ikram' | 'zayi' }): OrderRow {
+/** Ödenmezin bağlanacağı kayıtlı kişi (istekte tür ve kimlik; ad sunucuda kayıttan okunur) */
+export interface CompPersonInput {
+  kind: CompPersonKind;
+  id: string;
+}
+
+/** Kişi alanlarının boş hali: ödenmez olmayan kayıt ve geri alma */
+const NO_COMP_PERSON = { compPersonKind: null, compPersonId: null, compPersonName: null } as const;
+
+/**
+ * Ödenmezin kişisi: ödenmezde zorunlu, ikram ve zayide reddedilir. Personel etkin bir kullanıcı, müşteri kayıtlı bir
+ * müşteri olmalı; adın o anki kopyası kalem ve adisyona yazılır (kişi sonradan silinse ya da adı değişse de okunur).
+ */
+function resolveCompPerson(t: Tx, kind: CompKind, person: CompPersonInput | null | undefined): { compPersonKind: CompPersonKind; compPersonId: string; compPersonName: string } | null {
+  if (kind !== 'odenmez') {
+    if (person) throw bad('Kişi yalnız ödenmezde seçilir; ikram ve zayi kişiye yazılmaz', 'person_not_allowed');
+    return null;
+  }
+  if (!person?.id) throw bad('Ödenmez kayıtlı bir kişiye yazılır: personel ya da müşteri seçin', 'person_required');
+  if (person.kind === 'user') {
+    const u = t.select({ id: schema.users.id, name: schema.users.name, active: schema.users.active }).from(schema.users).where(eq(schema.users.id, person.id)).get();
+    if (!u) throw notFound('Personel');
+    if (!u.active) throw conflict(`${u.name} kapalı bir hesap; ödenmez etkin bir personele yazılır`, 'person_inactive');
+    return { compPersonKind: 'user', compPersonId: u.id, compPersonName: u.name };
+  }
+  const c = t.select({ id: schema.customers.id, name: schema.customers.name }).from(schema.customers).where(eq(schema.customers.id, person.id)).get();
+  if (!c) throw notFound('Müşteri');
+  return { compPersonKind: 'customer', compPersonId: c.id, compPersonName: c.name };
+}
+
+/** Denetim iletisinde kişi: "Garson adına (personel)", "Ayşe Yılmaz adına (müşteri)" */
+const personNote = (p: { compPersonKind: CompPersonKind; compPersonName: string }) => `${p.compPersonName} adına (${p.compPersonKind === 'user' ? 'personel' : 'müşteri'})`;
+
+export function compItem(
+  t: Tx,
+  actor: Actor,
+  fx: Effects,
+  orderId: string,
+  input: { itemId: string; qty?: number; reason: string; undo?: boolean; kind?: CompKind; person?: CompPersonInput | null },
+): OrderRow {
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
@@ -543,39 +592,53 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     if (!it.complimentary) throw conflict('Kalem ikram ya da zayi değil');
     const was: CompKind = it.compKind ?? 'ikram';
     const approverId = need(actor, compPermission(was), `${COMP_LABEL[was]} kaydını geri almak yetkili onayı gerektirir`);
-    t.update(schema.orderItems).set({ complimentary: false, compReason: null, compBy: null, compKind: null }).where(eq(schema.orderItems.id, it.id)).run();
+    // Geri alma kişiyi de temizler; adisyonda başka ödenmez kalem kalmadıysa adisyonun kişisi de silinir
+    t.update(schema.orderItems).set({ complimentary: false, compReason: null, compBy: null, compKind: null, ...NO_COMP_PERSON }).where(eq(schema.orderItems.id, it.id)).run();
+    if (o.compPersonId && !orderItems(t, orderId).some((i) => i.complimentary && i.compKind === 'odenmez')) {
+      t.update(schema.orders).set(NO_COMP_PERSON).where(eq(schema.orders.id, orderId)).run();
+    }
     const updated = recalc(t, orderId);
     const what = was === 'ikram' ? 'ikramını' : `${COMP_LABEL[was].toLocaleLowerCase('tr-TR')} kaydını`;
-    fx.audit(t, { userId: actor.user.id, approverId, action: 'item.uncomp', orderId, entityId: it.id, message: `${actor.user.name} #${o.no} adisyonda ${it.name} ${what} geri aldı`, data: { kind: was } });
+    const whose = it.compPersonKind && it.compPersonName ? ` (${personNote({ compPersonKind: it.compPersonKind, compPersonName: it.compPersonName })})` : '';
+    fx.audit(t, {
+      userId: actor.user.id,
+      approverId,
+      action: 'item.uncomp',
+      orderId,
+      entityId: it.id,
+      message: `${actor.user.name} #${o.no} adisyonda ${it.name} ${what} geri aldı${whose}`,
+      data: { kind: was, ...(it.compPersonId ? { person: { kind: it.compPersonKind, id: it.compPersonId, name: it.compPersonName } } : {}) },
+    });
     orderEvents(fx, updated, actor.user.id, 'item.uncomped');
     return updated;
   }
 
   const kind: CompKind = input.kind ?? 'ikram';
-  const zayi = kind === 'zayi';
-  const approverId = need(actor, compPermission(kind), zayi ? 'Zayi yazmak yetkili onayı gerektirir' : 'İkram yetkili onayı gerektirir');
-  if (it.complimentary) throw conflict('Kalem zaten ikram ya da zayi');
+  const label = COMP_LABEL[kind];
+  const approverId = need(actor, compPermission(kind), kind === 'ikram' ? 'İkram yetkili onayı gerektirir' : `${label} yazmak yetkili onayı gerektirir`);
+  if (it.complimentary) throw conflict('Kalem zaten ikram, ödenmez ya da zayi');
+  const person = resolveCompPerson(t, kind, input.person);
   const reason = input.reason.trim();
-  if (!reason) throw bad(zayi ? 'Zayi nedeni yazılmalı' : 'İkram nedeni yazılmalı', 'reason_required');
+  if (!reason) throw bad(`${label} nedeni yazılmalı`, 'reason_required');
   const unpaid = it.qty - it.paidQty;
   const qty = Math.max(1, Math.min(input.qty ?? unpaid, it.qty));
-  if (qty > unpaid) throw conflict(zayi ? 'Ödenmiş kalem zayi yazılamaz' : 'Ödenmiş kalem ikram edilemez', 'item_paid');
+  if (qty > unpaid) throw conflict(kind === 'ikram' ? 'Ödenmiş kalem ikram edilemez' : `Ödenmiş kalem ${label.toLocaleLowerCase('tr-TR')} yazılamaz`, 'item_paid');
   const value = qty * it.unitPrice;
   const before = calcFor(o, orderItems(t, orderId));
-  splitItem(t, it, qty, { complimentary: true, compReason: reason, compBy: actor.user.id, compKind: kind, discount: 0 });
+  splitItem(t, it, qty, { complimentary: true, compReason: reason, compBy: actor.user.id, compKind: kind, discount: 0, ...(person ?? NO_COMP_PERSON) });
   const updated = recalc(t, orderId);
-  const did = zayi ? 'zayi yazdı' : 'ikram etti';
+  const did = kind === 'zayi' ? 'zayi yazdı' : kind === 'odenmez' ? 'ödenmez yazdı' : 'ikram etti';
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
-    action: zayi ? 'item.zayi' : 'item.comp',
+    action: kind === 'zayi' ? 'item.zayi' : kind === 'odenmez' ? 'item.odenmez' : 'item.comp',
     severity: 'uyari',
     orderId,
     entity: 'order_item',
     entityId: it.id,
     amount: value,
-    message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ${did} (${tl(value)}, ${reason})`,
-    data: { kind },
+    message: `${actor.user.name} #${o.no} adisyonda ${qty}× ${it.name} ${did}${person ? `: ${personNote(person)}` : ''} (${tl(value)}, ${reason})`,
+    data: { kind, ...(person ? { person: { kind: person.compPersonKind, id: person.compPersonId, name: person.compPersonName } } : {}) },
   });
   approveDiscountShrink(t, actor, fx, orderId, before, `#${o.no} adisyonda ${qty}× ${it.name} ${did}`);
   orderEvents(fx, updated, actor.user.id, 'item.comped');
@@ -588,7 +651,7 @@ export function compItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
  * ödeme alınmamış adisyonda: tutarla alınan ödeme kaleme bağlı değildir, kalanı kalem kalem ikram edilir. Ödenmez ve
  * zayi ayrı yetki ister (`siparis.odenmez`).
  */
-export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { kind: CompKind; reason: string }): OrderRow {
+export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { kind: CompKind; reason: string; person?: CompPersonInput | null }): OrderRow {
   needDirect(actor, 'siparis.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
@@ -601,21 +664,29 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
   if (fiscalHeldQty(t, orderId).size) throw conflict('Adisyonda yazarkasada kesilmiş ama işlenmemiş bir fiş var. Kalanı kasadan alın ya da fişi cihazdan iptal edin', 'okc_unresolved');
   const label = COMP_LABEL[input.kind];
   const approverId = need(actor, compPermission(input.kind), input.kind === 'ikram' ? 'İkram yetkili onayı gerektirir' : `${label} kapatmak yetkili onayı gerektirir`);
-  if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Ödeme alınmış adisyonun kalanı kalem kalem ikram ya da zayi yazılır', 'has_payments');
+  if (orderPayments(t, orderId).some((p) => !p.refundedAt)) throw conflict('Ödeme alınmış adisyonun kalanı kalem kalem ikram, ödenmez ya da zayi yazılır', 'has_payments');
+  const person = resolveCompPerson(t, input.kind, input.person);
   const reason = input.reason.trim();
   if (!reason) throw bad(`${label} nedeni yazılmalı`, 'reason_required');
   const live = orderItems(t, orderId).filter((i) => !i.voided && !i.complimentary);
   if (!live.length) throw conflict('Ücretli kalem yok', 'nothing_to_comp');
   for (const it of live) {
-    t.update(schema.orderItems).set({ complimentary: true, compReason: reason, compBy: actor.user.id, compKind: input.kind, discount: 0 }).where(eq(schema.orderItems.id, it.id)).run();
+    t.update(schema.orderItems)
+      .set({ complimentary: true, compReason: reason, compBy: actor.user.id, compKind: input.kind, discount: 0, ...(person ?? NO_COMP_PERSON) })
+      .where(eq(schema.orderItems.id, it.id))
+      .run();
   }
-  // Kalmayan ücretin indirimi de kalmaz: sıfır tutarlı adisyonda açık indirim raporda iz bırakmasın
-  t.update(schema.orders).set({ discountType: null, discountValue: null, discountReason: null }).where(eq(schema.orders.id, orderId)).run();
+  // Kalmayan ücretin indirimi de kalmaz: sıfır tutarlı adisyonda açık indirim raporda iz bırakmasın. Ödenmezde kişi
+  // adisyona da yazılır (kalemlerle aynı)
+  t.update(schema.orders)
+    .set({ discountType: null, discountValue: null, discountReason: null, ...(person ?? NO_COMP_PERSON) })
+    .where(eq(schema.orders.id, orderId))
+    .run();
   const value = live.reduce((a, i) => a + i.qty * i.unitPrice, 0);
   const updated = recalc(t, orderId);
   if (updated.total !== 0) throw conflict(`Ödenecek ${tl(updated.total)} kaldı`, 'due');
   closeOrderRow(t, updated, actor.user.id);
-  const did = input.kind === 'ikram' ? 'tamamını ikram etti' : `${label.toLocaleLowerCase('tr-TR')} kapattı`;
+  const did = input.kind === 'ikram' ? 'tamamını ikram etti' : `${label.toLocaleLowerCase('tr-TR')} kapattı${person ? `: ${personNote(person)}` : ''}`;
   fx.audit(t, {
     userId: actor.user.id,
     approverId,
@@ -625,7 +696,7 @@ export function compOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, inp
     orderId,
     amount: value,
     message: `${actor.user.name} #${o.no} adisyonu ${did} (${tl(value)}, ${reason})${o.billPrintedAt ? ', hesap yazdırıldıktan sonra' : ''}`,
-    data: { kind: input.kind, items: live.length },
+    data: { kind: input.kind, items: live.length, ...(person ? { person: { kind: person.compPersonKind, id: person.compPersonId, name: person.compPersonName } } : {}) },
   });
   const closed = loadOrder(t, orderId);
   orderEvents(fx, closed, actor.user.id, 'order.closed');
@@ -876,6 +947,26 @@ export function updateOrder(
 }
 
 /**
+ * Gönderilmiş kaleme not (adisyon ekranındaki kalem işlemlerinden "Not"): bar fişi ve hesap notu canlı görür. Parasal
+ * değildir, denetim kaydına yazılmaz; iptal edilmiş kaleme ve kapanmış adisyona yazılmaz. Boş not siler.
+ */
+export function setItemNote(t: Tx, actor: Actor, fx: Effects, orderId: string, itemId: string, note: string | null): OrderRow {
+  needDirect(actor, 'siparis.al');
+  const o = loadOrder(t, orderId);
+  assertOpen(o);
+  assertPosOrder(o);
+  const it = loadItem(t, orderId, itemId);
+  if (it.voided) throw conflict('İptal edilmiş kaleme not yazılmaz');
+  const text = note?.trim().slice(0, 200) || null;
+  t.update(schema.orderItems).set({ note: text }).where(eq(schema.orderItems.id, it.id)).run();
+  t.update(schema.orders).set({ updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` }).where(eq(schema.orders.id, orderId)).run();
+  const updated = loadOrder(t, orderId);
+  orderEvents(fx, updated, actor.user.id, 'item.note');
+  if (it.stationId) fx.emit({ topic: 'kitchen', kind: 'ticket.updated', orderId, stationId: it.stationId, byUserId: actor.user.id });
+  return updated;
+}
+
+/**
  * Yarı self servis: tezgâh ya da gel-al siparişine masa no / numaratör ("12") yazar ya da siler. Parasal değildir:
  * ödeme alındıktan sonra da düzeltilebilir (tezgâh satışı ödemeyle kapanır, sipariş barda hazırlanırken). Bar
  * ekranı, çağrı ekranı ve masa listesi yenilensin diye kitchen ve orders konularına olay düşer.
@@ -958,7 +1049,7 @@ export function mergeOrders(t: Tx, actor: Actor, fx: Effects, targetId: string, 
     .run();
   // Paylaşım birleşmede kalkar: iki hesabın pay numaraları karışır (ödenmiş payların etiketi kalır)
   t.update(schema.orders)
-    .set({ guests: target.guests + source.guests, customerId: target.customerId ?? source.customerId, splitPeople: null })
+    .set({ guests: target.guests + source.guests, customerId: target.customerId ?? source.customerId, splitPeople: null, splitAmounts: null, splitResetAt: null })
     .where(eq(schema.orders.id, targetId))
     .run();
   recalc(t, sourceId);
@@ -1142,27 +1233,47 @@ export function splitActive(t: Tx | DB, o: OrderRow, remaining: number): boolean
 }
 
 /**
- * Hesabı kişilere eşit böler (paylaşımlı hesap) ya da bölmeyi kaldırır. Kalan tutar ödenmemiş paylara eşit
- * dağılır; ödenmiş pay sayısından aza indirilemez.
+ * Hesabı kişilere böler (paylaşımlı hesap) ya da bölmeyi kaldırır. `amounts` yoksa kalan tutar ödenmemiş paylara eşit
+ * dağılır; varsa paylar elle girilmiştir: ödenmemiş her paya bir tutar, tam sayı kuruş, her biri sıfırdan büyük,
+ * toplamı o anki kalana eşit (`splitAmountsError`). Kişi sayısı ödenmiş pay sayısından aza indirilemez. Bölüş
+ * denetime yazılır: kim, kaç kişi, eşit ya da elle, payların tutarları.
  */
-export function setSplit(t: Tx, actor: Actor, fx: Effects, orderId: string, people: number | null): OrderRow {
+export function setSplit(t: Tx, actor: Actor, fx: Effects, orderId: string, people: number | null, amounts?: number[] | null): OrderRow {
   needDirect(actor, 'odeme.al');
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
+  const paid = sharePayments(t, orderId).length;
+  const remaining = o.total - o.paid;
+  if (people == null && amounts) throw bad('Paylaşım kaldırılırken pay tutarı gönderilmez', 'split_amounts_count');
   if (people != null) {
     const n = Math.trunc(people);
     if (n < 2 || n > 30) throw bad('Kişi sayısı 2 ile 30 arasında olmalı', 'split_people');
-    const paid = sharePayments(t, orderId).length;
     if (n <= paid) throw bad(`${paid} pay ödendi; kişi sayısı en az ${paid + 1} olmalı`, 'split_people');
     people = n;
+    if (amounts) {
+      if (remaining <= 0) throw conflict('Bu adisyonun ödenecek tutarı kalmadı', 'nothing_due');
+      const err = splitAmountsError(amounts, people - paid, remaining);
+      if (err) throw bad(err.message, err.code);
+    }
   }
-  t.update(schema.orders).set({ splitPeople: people, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` }).where(eq(schema.orders.id, orderId)).run();
+  const manual = people != null && !!amounts;
+  t.update(schema.orders)
+    .set({ splitPeople: people, splitAmounts: manual ? [...amounts!] : null, splitResetAt: null, updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` })
+    .where(eq(schema.orders.id, orderId))
+    .run();
+  const state = people != null ? splitState(people, paid, remaining, manual ? amounts : null) : null;
+  const shares = state?.shares ?? [];
+  const paidNote = paid ? ` (${paid} pay ödendi)` : '';
   fx.audit(t, {
     userId: actor.user.id,
     action: 'order.split',
     orderId,
-    message: people ? `#${o.no} hesap ${people} kişiye bölündü` : `#${o.no} hesap paylaşımı kaldırıldı`,
+    amount: people != null ? remaining : null,
+    message: people
+      ? `#${o.no} hesap ${people} kişiye ${manual ? 'elle' : 'eşit'} bölündü${paidNote}${shares.length ? `: ${shares.map(tl).join(' · ')}` : ''}`
+      : `#${o.no} hesap paylaşımı kaldırıldı`,
+    data: people ? { people, mode: manual ? 'elle' : 'esit', shares, paidShares: paid } : { people: null },
   });
   const updated = loadOrder(t, orderId);
   orderEvents(fx, updated, actor.user.id, 'order.split');
@@ -1272,6 +1383,8 @@ export function addPayment(
   // Aynı kalem iki kez gönderilirse adetler birleşir: iki kez ücret alınmaz
   const wanted = mergeSelection(input.items ?? []);
   let share: { no: number; of: number } | null = null;
+  /** Elle paylarda bu pay ödendikten sonra kalan paylar (baştaki düşer); eşit bölüşte null */
+  let sharesAfter: number[] | null = null;
   // Bölünmüş hesapta pay dışı ödeme payları düşürmez: masa paylarını ödeyip kalkar, kalan kimseye kalmaz
   if (!input.share && splitActive(t, o, remaining)) {
     throw conflict('Hesap kişilere bölünmüş: payları "Paylaş"tan alın ya da paylaşımı kaldırın', 'split_active');
@@ -1280,8 +1393,9 @@ export function addPayment(
     if (!o.splitPeople) throw bad('Hesap paylaşılmadı; önce kişi sayısını seçin', 'split_off');
     if (wanted.length) throw bad('Pay ödemesinde kalem seçilmez', 'split_items');
     const paid = sharePayments(t, orderId);
-    const state = splitState(o.splitPeople, paid.length, remaining);
+    const state = splitState(o.splitPeople, paid.length, remaining, o.splitAmounts);
     if (!state.shares.length) throw conflict('Bütün paylar ödendi; kalan tutarı "Tutar" ile alın', 'split_done');
+    sharesAfter = state.manual && state.shares.length > 1 ? state.shares.slice(1) : null;
     // Pay tutarını sunucu belirler; numara ilk boş pay (iptal edilen payın numarası yeniden kullanılır)
     const used = new Set(paid.map((p) => p.shareNo));
     let no = 1;
@@ -1383,6 +1497,14 @@ export function addPayment(
       requestId: input.requestId ?? null,
     })
     .run();
+  // Pay ödendi: elle paylarda sıradaki pay başa geçer; "paylar yeniden eşit bölündü" notu görülmüş sayılır. Pay dışı
+  // ödeme (bölüş yokken ya da bütün paylar ödendikten sonra) elle tutarları geçersiz kılar: düşer
+  if (share || o.splitAmounts) {
+    t.update(schema.orders)
+      .set(share ? { splitAmounts: sharesAfter, splitResetAt: null } : { splitAmounts: null })
+      .where(eq(schema.orders.id, orderId))
+      .run();
+  }
 
   let updated = recalc(t, orderId);
   let closed = false;
@@ -1448,6 +1570,8 @@ export function refundPayment(t: Tx, actor: Actor, fx: Effects, orderId: string,
     uncreditCustomer(t, o);
     t.update(schema.orders).set({ status: 'acik', closedAt: null, closedBy: null }).where(eq(schema.orders.id, orderId)).run();
   }
+  // Ödeme iptali hesabı değiştirir: elle paylar düşer, kalan yeniden eşit bölünür
+  if (o.splitAmounts) t.update(schema.orders).set(dropManualShares(o)).where(eq(schema.orders.id, orderId)).run();
   const updated = recalc(t, orderId);
   fx.audit(t, {
     userId: actor.user.id,

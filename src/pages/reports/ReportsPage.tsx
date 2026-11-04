@@ -26,7 +26,7 @@ import { COMP_LABEL } from '@shared/comp';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl, tlShort } from '@shared/money';
 import type { PlatformId } from '@shared/platforms';
-import type { CompKind } from '@shared/types';
+import type { CompKind, CompPersonKind, OdenmezPersonDTO } from '@shared/types';
 import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
@@ -170,7 +170,7 @@ export default function ReportsPage() {
                 </option>
               ))}
             </Select>
-            {/* Telefonda sarmalayıcı gizlenir (Mesai'deki gibi): Segmented'e verilen max-md:hidden'ı derlenmiş CSS'te kitin
+            {/* Telefonda sarmalayıcı gizlenir: Segmented'e verilen max-md:hidden'ı derlenmiş CSS'te kitin
                 max-sm:flex'i ezer, 640 px altında liste ve yedi dönemlik ray yan yana kalırdı */}
             <div className="max-md:hidden max-lg:w-full">
               <Segmented label="Dönem" value={period} onChange={setPeriod} options={PERIOD_KEYS.map((k) => ({ value: k, label: PERIOD_LABELS[k] }))} className="max-lg:w-full max-lg:[&>*]:grow" />
@@ -274,7 +274,8 @@ const TABLE_FROM = { md: 'md:block', lg: 'lg:block', xl: 'xl:block' } as const;
 const CARDS_UNTIL = { md: 'md:hidden', lg: 'lg:hidden', xl: 'xl:hidden' } as const;
 
 /**
- * Rapor kartındaki tablo: kitin DataTable'ıyla aynı görünüm (kuyuda 13 px başlık, satır ayracı, telefonda satır kartı)
+ * Rapor kartındaki tablo: kitin DataTable'ıyla aynı görünüm (13 px başlık, zemini `--table-head-bg`, başlık çizgisi, satır
+ * ayracı, telefonda satır kartı)
  * ama kendi kartı yok; başlıklı rapor kartının (CSV, arama, açıklama) içinde durur. Rapor satırının çekmecesi yok: tablette
  * (lg altında) gizlenecek sütunu olan tablo o genişliğe dek satır kartıdır, gizli sütunun değeri kartın meta satırında
  * (`phoneMeta`). İlk ve son görünen sütun kart başlığıyla aynı hizada (20 px). Kitin DataTable'ı kartsız (`bare`)
@@ -323,7 +324,8 @@ function ReportTable<T>({
         <table className="tabular w-full border-collapse text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
-            <tr className="bg-[var(--admin-surface-2)]">
+            {/* Başlık şeridi kitin DataTable'ı gibi: kasada kuyuda, kurumsal yüzeyde zeminsiz; altında başlık çizgisi */}
+            <tr className="border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]">
               {columns.map((c, i) => (
                 <th key={c.key} scope="col" style={c.width ? { width: c.width } : undefined} className={cn('h-10 text-[13px] font-medium whitespace-nowrap text-[var(--admin-text-mute)]', pad(i), alignCls(c.align), hideCls(c), c.className)}>
                   {c.header}
@@ -750,8 +752,8 @@ function ProductsReport({
               width: '26%',
               cell: (p) => (
                 <div className="flex items-center gap-3">
-                  <div aria-hidden="true" className="h-2 min-w-10 flex-1 rounded-full" style={{ background: 'var(--chart-track)' }}>
-                    <div className="h-2 rounded-full" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+                  <div aria-hidden="true" className="h-2 min-w-10 flex-1 rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
+                    <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
                   </div>
                   <span className="min-w-24 shrink-0 text-right font-semibold whitespace-nowrap">{tl(p.revenue)}</span>
                 </div>
@@ -1071,7 +1073,7 @@ function PrepReport({ range, today }: { range: Range; today: string }) {
       {(p) => {
         if (!p.overall.count)
           return (
-            <EmptyState className={CARD} icon={<Timer />} title={emptyTitle(range, today, 'hazırlanan kalem')}>
+            <EmptyState className={CARD} art="saat" title={emptyTitle(range, today, 'hazırlanan kalem')}>
               Bar ve mutfak ekranında “Hazır”a basılan kalemler burada sayılır
             </EmptyState>
           );
@@ -1363,8 +1365,8 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
                         <span className="text-base font-semibold text-ink">{tl(p.revenue)}</span> · ciroda %{p.share.toLocaleString('tr-TR')}
                       </span>
                     </div>
-                    <div aria-hidden="true" className="mt-2 h-2 rounded-full" style={{ background: 'var(--chart-track)' }}>
-                      <div className="h-2 rounded-full" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+                    <div aria-hidden="true" className="mt-2 h-2 rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
+                      <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm sm:grid-cols-3 xl:grid-cols-4">
                       <Metric label="Sipariş" value={p.orders.toLocaleString('tr-TR')} hint={p.orders ? `ortalama ${tlShort(p.avgBasket)}` : null} />
@@ -1404,9 +1406,33 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
 interface ItemsData {
   total: number;
   count: number;
-  /** `afterBill`: iptal anında hesap yazdırılmıştı (adisyonun hesabının sonradan yazdırılması saymaz) */
-  rows: { id: string; at: number; orderNo: number; place: string; name: string; size: string; qty: number; value: number; reason: string | null; compKind: CompKind | null; by: string | null; approvedBy: string | null; afterSend: boolean; afterBill: boolean }[];
+  /**
+   * `afterBill`: iptal anında hesap yazdırılmıştı (adisyonun hesabının sonradan yazdırılması saymaz). `person`: ödenmezin
+   * kimin adına yazıldığı (personel adı maliyet yetkisi olmayana "Personel")
+   */
+  rows: {
+    id: string;
+    at: number;
+    orderNo: number;
+    place: string;
+    name: string;
+    size: string;
+    qty: number;
+    value: number;
+    reason: string | null;
+    compKind: CompKind | null;
+    person: { kind: CompPersonKind; name: string } | null;
+    by: string | null;
+    approvedBy: string | null;
+    afterSend: boolean;
+    afterBill: boolean;
+  }[];
+  /** Kişi bazında ödenmez (yalnız ikram listesinde): kişi, adet, tutar */
+  odenmezPeople: OdenmezPersonDTO[];
 }
+
+/** Ödenmez kişisinin türü sözle: tablo ve satır kartı */
+const personKindLabel = (kind: CompPersonKind | null) => (kind === 'customer' ? 'Müşteri' : kind === 'user' ? 'Personel' : 'Eski kayıt');
 type ItemRow = ItemsData['rows'][number];
 type ItemKind = 'iptal' | 'ikram' | 'indirim' | 'happy';
 
@@ -1425,12 +1451,39 @@ function ItemName({ r, kind, size }: { r: ItemRow; kind: ItemKind; size: string 
       </span>
       <SizeTag>{size}</SizeTag>
       {(comp || late) && (
-        <span className="mt-1 flex flex-wrap gap-1">
+        <span className="mt-1 flex flex-wrap items-center gap-1">
           {comp && <Badge tone="neutral">{comp}</Badge>}
+          {/* Ödenmezin kişisi: "Garson adına" */}
+          {r.person && <span className="text-xs text-ink-2">{r.person.name} adına</span>}
           {late && <Badge tone="danger">{late}</Badge>}
         </span>
       )}
     </>
+  );
+}
+
+/** Kişi bazında ödenmez: kimin adına kaç adet, ne tutarda (personel yemeği, patron hesabı, müşteri) */
+function OdenmezPeopleCard({ rows }: { rows: OdenmezPersonDTO[] }) {
+  const sum = rows.reduce((a, r) => ({ qty: a.qty + r.qty, amount: a.amount + r.amount }), { qty: 0, amount: 0 });
+  const columns: Column<OdenmezPersonDTO>[] = [
+    { key: 'kisi', header: 'Kişi', cell: (r) => <span className="font-medium">{r.name}</span> },
+    { key: 'tur', header: 'Tür', cell: (r) => <span className="text-ink-2">{personKindLabel(r.kind)}</span> },
+    { key: 'adet', header: 'Adet', align: 'right', cell: (r) => fmtN(r.qty) },
+    { key: 'tutar', header: 'Tutar', align: 'right', className: 'whitespace-nowrap', cell: (r) => <span className="font-semibold">{tl(r.amount)}</span> },
+  ];
+  return (
+    <Card flush title="Kişi bazında ödenmez" subtitle={`${rows.length} kişi · ${fmtN(sum.qty)} adet · ${tl(sum.amount)}`} className="overflow-hidden">
+      <ReportTable
+        caption="Kişi bazında ödenmez"
+        rows={rows}
+        rowKey={(r) => `${r.kind ?? 'yok'}:${r.id ?? r.name}`}
+        columns={columns}
+        foot={rows.length > 1 ? { cells: { kisi: 'Toplam', adet: fmtN(sum.qty), tutar: tl(sum.amount) }, phoneMeta: `${fmtN(sum.qty)} adet`, phoneAside: tl(sum.amount) } : undefined}
+        phoneTitle={(r) => r.name}
+        phoneMeta={(r) => joinMeta([personKindLabel(r.kind), `${fmtN(r.qty)} adet`])}
+        phoneAside={(r) => tl(r.amount)}
+      />
+    </Card>
   );
 }
 
@@ -1471,33 +1524,36 @@ function ItemsReport({ range, today, kind, onExport, exporting }: { range: Range
   return (
     <ReportBody q={data} skeleton={<TableSkeleton rows={6} />}>
       {(d) => (
-        <Card
-          flush
-          title={ITEM_TITLES[kind]}
-          subtitle={d.count ? (happy ? `${fmtN(d.count)} kalem · verilen indirim ${tl(d.total)}` : `${fmtN(d.count)} kayıt · ${tl(d.total)}`) : undefined}
-          actions={
-            onExport && d.count > 0 ? (
-              <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>
-                CSV
-              </Button>
-            ) : undefined
-          }
-          className="overflow-hidden"
-        >
-          {d.rows.length === 0 ? (
-            <EmptyState compact icon={happy ? <BadgePercent /> : <ReceiptText />} title={emptyTitle(range, today, ITEM_EMPTY[kind], false)} />
-          ) : (
-            <ReportTable
-              caption={ITEM_TITLES[kind]}
-              rows={d.rows}
-              rowKey={(r) => r.id}
-              columns={columns}
-              phoneTitle={(r) => <ItemName r={r} kind={kind} size={sizeName(r.size)} />}
-              phoneMeta={(r) => joinMeta([at(r.at), `#${r.orderNo} ${r.place}`, !happy && r.reason, r.by && (r.approvedBy ? `${r.by} (onay: ${r.approvedBy})` : r.by)])}
-              phoneAside={(r) => tl(r.value)}
-            />
-          )}
-        </Card>
+        <div className="space-y-3">
+          <Card
+            flush
+            title={ITEM_TITLES[kind]}
+            subtitle={d.count ? (happy ? `${fmtN(d.count)} kalem · verilen indirim ${tl(d.total)}` : `${fmtN(d.count)} kayıt · ${tl(d.total)}`) : undefined}
+            actions={
+              onExport && d.count > 0 ? (
+                <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>
+                  CSV
+                </Button>
+              ) : undefined
+            }
+            className="overflow-hidden"
+          >
+            {d.rows.length === 0 ? (
+              <EmptyState compact icon={happy ? <BadgePercent /> : <ReceiptText />} title={emptyTitle(range, today, ITEM_EMPTY[kind], false)} />
+            ) : (
+              <ReportTable
+                caption={ITEM_TITLES[kind]}
+                rows={d.rows}
+                rowKey={(r) => r.id}
+                columns={columns}
+                phoneTitle={(r) => <ItemName r={r} kind={kind} size={sizeName(r.size)} />}
+                phoneMeta={(r) => joinMeta([at(r.at), `#${r.orderNo} ${r.place}`, !happy && r.reason, r.by && (r.approvedBy ? `${r.by} (onay: ${r.approvedBy})` : r.by)])}
+                phoneAside={(r) => tl(r.value)}
+              />
+            )}
+          </Card>
+          {kind === 'ikram' && d.odenmezPeople.length > 0 && <OdenmezPeopleCard rows={d.odenmezPeople} />}
+        </div>
       )}
     </ReportBody>
   );
@@ -1553,6 +1609,9 @@ interface StaffRow {
   comps: number;
   compValue: number;
   discounts: number;
+  /** Çalışanın adına yazılan ödenmez (personel yemeği, patron hesabı): adet ve menü değeri */
+  odenmez: number;
+  odenmezValue: number;
 }
 
 /** Tutar önde, adet altında (sunucu iptal ve ikramı adetle sayar: İptal ve indirim sekmesindeki kayıt sayısından farklı) */
@@ -1577,6 +1636,7 @@ function StaffReport({ range, today }: { range: Range; today: string }) {
       r.voidValue > 0 && `iptal ${tl(r.voidValue)}`,
       r.compValue > 0 && `ikram ve zayi ${tl(r.compValue)}`,
       r.discounts > 0 && `indirim ${tl(r.discounts)}`,
+      r.odenmezValue > 0 && `adına ödenmez ${tl(r.odenmezValue)}`,
     ]);
   const columns: Column<StaffRow>[] = [
     { key: 'ad', header: 'Personel', cell: (r) => <span className="font-medium">{r.name}</span> },
@@ -1586,16 +1646,27 @@ function StaffReport({ range, today }: { range: Range; today: string }) {
     { key: 'indirim', header: 'İndirim', align: 'right', hideBelow: 'lg', className: 'whitespace-nowrap', cell: (r) => (r.discounts ? tl(r.discounts) : <Dash />) },
     { key: 'iptal', header: 'İptal', align: 'right', className: 'whitespace-nowrap', cell: (r) => valueWithUnits(r.voidValue, r.voids) },
     { key: 'ikram', header: 'İkram ve zayi', align: 'right', className: 'whitespace-nowrap', cell: (r) => valueWithUnits(r.compValue, r.comps) },
+    { key: 'odenmez', header: 'Adına ödenmez', align: 'right', className: 'whitespace-nowrap', cell: (r) => valueWithUnits(r.odenmezValue, r.odenmez) },
   ];
   return (
     <ReportBody q={data} skeleton={<TableSkeleton rows={5} />}>
       {({ staff: rows }) => {
         const sum = rows.reduce(
-          (a, r) => ({ orders: a.orders + r.orders, revenue: a.revenue + r.revenue, voids: a.voids + r.voids, voidValue: a.voidValue + r.voidValue, comps: a.comps + r.comps, compValue: a.compValue + r.compValue, discounts: a.discounts + r.discounts }),
-          { orders: 0, revenue: 0, voids: 0, voidValue: 0, comps: 0, compValue: 0, discounts: 0 },
+          (a, r) => ({
+            orders: a.orders + r.orders,
+            revenue: a.revenue + r.revenue,
+            voids: a.voids + r.voids,
+            voidValue: a.voidValue + r.voidValue,
+            comps: a.comps + r.comps,
+            compValue: a.compValue + r.compValue,
+            discounts: a.discounts + r.discounts,
+            odenmez: a.odenmez + r.odenmez,
+            odenmezValue: a.odenmezValue + r.odenmezValue,
+          }),
+          { orders: 0, revenue: 0, voids: 0, voidValue: 0, comps: 0, compValue: 0, discounts: 0, odenmez: 0, odenmezValue: 0 },
         );
         return (
-          <Card flush title="Personel" subtitle={rows.length ? 'Ciro ve indirim garsona, iptal ve ikram işlemi yapana yazılır' : undefined} className="overflow-hidden">
+          <Card flush title="Personel" subtitle={rows.length ? 'Ciro ve indirim garsona, iptal ve ikram işlemi yapana, ödenmez adına yazılana' : undefined} className="overflow-hidden">
             {rows.length === 0 ? (
               <EmptyState compact icon={<Users />} title={emptyTitle(range, today, 'personel satışı')}>
                 {emptyHint(range, today, 'Açık adisyonlar kapanınca burada sayılır')}
@@ -1616,6 +1687,7 @@ function StaffReport({ range, today }: { range: Range; today: string }) {
                           indirim: sum.discounts ? tl(sum.discounts) : <Dash />,
                           iptal: valueWithUnits(sum.voidValue, sum.voids),
                           ikram: valueWithUnits(sum.compValue, sum.comps),
+                          odenmez: valueWithUnits(sum.odenmezValue, sum.odenmez),
                         },
                         phoneMeta: cardMeta(sum),
                         phoneAside: tl(sum.revenue),

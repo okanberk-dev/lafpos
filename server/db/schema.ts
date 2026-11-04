@@ -4,7 +4,7 @@ import type { Role } from '@shared/permissions';
 import type { Permission } from '@shared/permissions';
 import type { OrderTotals } from '@shared/order-calc';
 import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
-import type { CompKind, SelectedOption, TimeEntrySource, ZField, ZSummary } from '@shared/types';
+import type { CompKind, CompPersonKind, SelectedOption, ZField, ZSummary } from '@shared/types';
 import type { RoomBookingSnapshot } from '@shared/karaoke';
 
 export type { CompKind, ZField, ZSummary };
@@ -58,9 +58,8 @@ export const sessions = sqliteTable(
 );
 
 /**
- * Personel mesaisi (giriş-çıkış): kilit ekranında PIN'le, açık oturumdan ya da yöneticinin elle girdiği kayıt.
- * Açık mesaide çıkış boş. Kişi başına en çok bir açık mesai, aynı kişinin mesaileri çakışmaz, mesai 24 saati geçmez
- * (services/time.ts). İş günü girişten (05:00 kuralı): gece 02:00'de biten vardiya başladığı günün mesaisidir.
+ * Eski personel mesaisi (giriş-çıkış). Mesai özelliği 4 Kasım 2026'da kaldırıldı: tablo ve kayıtları silinmez,
+ * hiçbir kod okumaz ya da yazmaz (tablo kalır ki `db:generate` göç üretmesin, eski veriler kaybolmasın).
  */
 export const timeEntries = sqliteTable(
   'time_entries',
@@ -74,7 +73,8 @@ export const timeEntries = sqliteTable(
     /** İş günü (YYYY-MM-DD), girişten */
     businessDate: text('business_date').notNull(),
     note: text('note'),
-    source: text('source').$type<TimeEntrySource>().notNull(),
+    /** pin, oturum ya da yonetim */
+    source: text('source').notNull(),
     /** Kaydı son düzelten yönetici (elle giriş, düzeltme, kapatma) */
     editedBy: text('edited_by').references(() => users.id),
     createdAt: integer('created_at').notNull(),
@@ -82,7 +82,6 @@ export const timeEntries = sqliteTable(
   (t) => [
     index('time_entries_user_idx').on(t.userId, t.clockIn),
     index('time_entries_date_idx').on(t.businessDate),
-    // Kişi başına tek açık mesai: yazma kuralının (services/time.ts) veritabanındaki güvencesi
     uniqueIndex('time_entries_open_idx').on(t.userId).where(sql`clock_out IS NULL`),
   ],
 );
@@ -466,6 +465,13 @@ export const orders = sqliteTable(
     guests: integer('guests').notNull().default(1),
     /** Hesap paylaşımı: kaç kişiye eşit bölündü (yoksa null). Paylar ödemelerdeki shareNo/shareOf'tan sayılır */
     splitPeople: integer('split_people'),
+    /**
+     * Elle paylar: ödenmemiş payların tutarları sırayla (kuruş); eşit bölüşte null. Pay ödenince baştaki düşer. Hesap
+     * değişince (toplamlar, `recalc`) ya da bir ödeme iptal edilince silinir ve paylar yeniden eşit bölünür
+     */
+    splitAmounts: text('split_amounts', { mode: 'json' }).$type<number[]>(),
+    /** Elle paylar hesap değiştiği için düştü (an): Paylaş ekranı kısa notla söyler; yeni bölüşte ya da sıradaki payda silinir */
+    splitResetAt: integer('split_reset_at'),
     note: text('note'),
     openedAt: integer('opened_at').notNull(),
     openedBy: text('opened_by').references(() => users.id),
@@ -482,6 +488,10 @@ export const orders = sqliteTable(
     totals: text('totals', { mode: 'json' }).$type<OrderTotals | null>(),
     billPrintedAt: integer('bill_printed_at'),
     billPrints: integer('bill_prints').notNull().default(0),
+    /** Adisyonun tamamı ödenmez kapandıysa adına yazılan kayıtlı kişi (kalemlerde de aynısı); geri alınınca silinir */
+    compPersonKind: text('comp_person_kind').$type<CompPersonKind>(),
+    compPersonId: text('comp_person_id'),
+    compPersonName: text('comp_person_name'),
     source: text('source').$type<'pos' | 'laffogato'>().notNull().default('pos'),
     /** Online sipariş: sitedeki kimlik (ord-0042), aşama, teslim türü, etiket; ödemesi sitede alınmış */
     extId: text('ext_id'),
@@ -546,6 +556,10 @@ export const orderItems = sqliteTable(
      * ve Z'de ayrı görünür. Eski kayıtlarda boş = ikram
      */
     compKind: text('comp_kind').$type<CompKind>(),
+    /** Ödenmezde adına yazılan kayıtlı kişi: tür, kimlik ve o anki adının kopyası (yalnız LafPOS'ta kalır) */
+    compPersonKind: text('comp_person_kind').$type<CompPersonKind>(),
+    compPersonId: text('comp_person_id'),
+    compPersonName: text('comp_person_name'),
     voided: bool('voided').notNull().default(false),
     voidReason: text('void_reason'),
     voidBy: text('void_by'),

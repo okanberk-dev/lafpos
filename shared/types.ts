@@ -293,6 +293,8 @@ export interface OrderItemDTO {
   compReason: string | null;
   /** İkramın türü; ikram değilse null (eski ikramlar 'ikram') */
   compKind: CompKind | null;
+  /** Ödenmezde adına yazılan kişi; başka türde ve eski kayıtlarda null */
+  compPerson: CompPersonDTO | null;
   voided: boolean;
   voidReason: string | null;
   voidAfterSend: boolean;
@@ -377,6 +379,8 @@ export interface OrderDTO {
   totals: OrderTotals;
   billPrintedAt: number | null;
   billPrints: number;
+  /** Adisyonun tamamı ödenmez kapandıysa adına yazılan kişi; yoksa null */
+  compPerson: CompPersonDTO | null;
   source: 'pos' | 'laffogato';
   extId: string | null;
   extNo: number | null;
@@ -400,8 +404,11 @@ export interface OrderDTO {
   platformCode: string | null;
   items: OrderItemDTO[];
   payments: PaymentDTO[];
-  /** Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar); bölünmediyse null */
-  split: SplitState | null;
+  /**
+   * Hesap paylaşımı (kişi sayısı, ödenen ve kalan paylar, elle mi); bölünmediyse null. `reset`: elle paylar hesap
+   * değiştiği için düştü, paylar yeniden eşit (ekran kısa notla söyler)
+   */
+  split: (SplitState & { reset: boolean }) | null;
   room: RoomSessionDTO | null;
   version: number;
   updatedAt: number;
@@ -505,6 +512,30 @@ export interface KitchenTicket {
  */
 export type CompKind = 'ikram' | 'odenmez' | 'zayi';
 
+/** Ödenmezin bağlandığı kayıtlı kişinin türü: personel (kullanıcı) ya da müşteri */
+export type CompPersonKind = 'user' | 'customer';
+
+/**
+ * Ödenmez yazılan kişi: tür, kimlik ve yazıldığı andaki adının kopyası (kişi sonradan silinse ya da adı değişse de
+ * kayıt okunur). Yalnız LafPOS'ta kalır: lafmaliyet'e, siteye ve müşteri ekranına gitmez. Maliyet yetkisi olmayana
+ * başkasının adına yazılmış personel ödenmezinde kimlik boş, ad "Personel" gelir (personel tutarı)
+ */
+export interface CompPersonDTO {
+  kind: CompPersonKind;
+  id: string;
+  name: string;
+}
+
+/** Kişi bazında ödenmez (rapor, Z): kimin adına, kaç adet, menü değeri. Kişisi olmayan eski kayıtta tür ve kimlik boş */
+export interface OdenmezPersonDTO {
+  kind: CompPersonKind | null;
+  /** Gösterilmeyen personelde (maliyet yetkisi yok) null, adı "Personel" */
+  id: string | null;
+  name: string;
+  qty: number;
+  amount: number;
+}
+
 /** lafmaliyet Kasa raporundaki ödeme alanı */
 export type ZField = 'cash' | 'card' | 'meal_card' | 'online' | 'other';
 
@@ -521,6 +552,8 @@ export interface ZSummary {
   odenmez?: number;
   /** Ciro dışının zayi kısmı (döküldü, yanlış hazırlandı, bozuk); eski Z'lerde yok */
   zayi?: number;
+  /** Ödenmezin kişi bazında dökümü (kapanmış adisyonlar); eski Z'lerde yok. lafmaliyet'e gitmez */
+  odenmezPeople?: OdenmezPersonDTO[];
   voided: number;
   voidAfterSendCount: number;
   service: number;
@@ -618,82 +651,6 @@ export type DisplayStateDTO =
       /** Self servisin çağrı kimliği ("No 34" ya da "Masa 12"); bara giden kalemi olmayan satışta ve eski kasada yok */
       call?: string;
     };
-
-/** Mesai kaydının kaynağı: kilit ekranında PIN'le, açık oturumdan ya da yöneticinin elle girdiği (Yönetim) */
-export type TimeEntrySource = 'pin' | 'oturum' | 'yonetim';
-
-/**
- * Personelin bir mesaisi (giriş-çıkış). Zamanlar epoch ms; iş günü girişten (05:00 kuralı): gece 02:00'de biten
- * vardiya başladığı günün mesaisidir. Açık mesaide çıkış boş, süre şu ana kadar sayılır.
- */
-export interface TimeEntryDTO {
-  id: string;
-  userId: string;
-  userName: string;
-  userColor: string;
-  clockIn: number;
-  clockOut: number | null;
-  /** İş günü (YYYY-MM-DD), girişten */
-  businessDate: string;
-  note: string | null;
-  source: TimeEntrySource;
-  /** Kaydı son düzelten yönetici (elle giriş, düzeltme, kapatma); kişinin kendi girişinde null */
-  editedBy: string | null;
-  editedByName: string | null;
-  createdAt: number;
-  /** Süre (ms); açık mesaide şu ana kadar */
-  durationMs: number;
-  open: boolean;
-}
-
-/** Mesai çizelgesinde kişi başına toplam (dönemin iş günleri) */
-export interface TimeSheetTotalDTO {
-  userId: string;
-  userName: string;
-  userColor: string;
-  /** Dönemdeki mesailerin toplamı (ms); açık mesai şu ana kadar */
-  workedMs: number;
-  /** Dönemdeki mesai sayısı */
-  shifts: number;
-  /** Şu an içeride (açık mesaisi var; dönemden bağımsız) */
-  openNow: boolean;
-}
-
-/** Yönetim › Mesai: dönemin kayıtları (en yeni üstte), kişi toplamları ve şu an içeride olanlar */
-export interface TimeSheetDTO {
-  from: string;
-  to: string;
-  entries: TimeEntryDTO[];
-  /** Kişi adına göre */
-  totals: TimeSheetTotalDTO[];
-  /** Açık mesailer, dönemden bağımsız (çıkışı unutulan eski mesai de görünür); en eski üstte */
-  clockedIn: TimeEntryDTO[];
-  serverTime: number;
-}
-
-/** Kişinin kendi mesaisi (kasa kabuğundaki giriş-çıkış düğmesi) */
-export interface MyTimeDTO {
-  /** Açık mesai (giriş yapılmış); yoksa null */
-  open: TimeEntryDTO | null;
-  /** Bugünün (iş günü) mesaileri, girişe göre; açık mesai şu ana kadar sayılır */
-  today: { date: string; workedMs: number; entries: TimeEntryDTO[] };
-  /** Son 7 iş günü (bugün dahil) */
-  weekMs: number;
-  serverTime: number;
-}
-
-/** Kilit ekranında PIN'le giriş-çıkış (`POST /api/time/punch`, oturum açmadan) */
-export interface PunchResultDTO {
-  user: { id: string; name: string; color: string };
-  /** Basıştan sonraki durum: içeride ya da çıktı */
-  state: 'in' | 'out';
-  /** Açılan, kapanan ya da (yinelenen basışta) olduğu gibi duran mesai */
-  entry: TimeEntryDTO;
-  /** Çalışılan süre, ms: girişte bugünün (iş günü), çıkışta kapanan mesainin iş gününün (gece yarısını geçen vardiya) */
-  todayMs: number;
-  /** Yön verilmeden aynı kişi bir dakika içinde yeniden bastı: hiçbir şey değişmedi (çift dokunuş, yinelenen istek) */
-  repeated: boolean;
-}
 
 /**
  * Vardiya kasa sayımı: gün içinde kasiyer değişirken devreden kasayı sayar; o anki beklenen nakit ve fark saklanır.

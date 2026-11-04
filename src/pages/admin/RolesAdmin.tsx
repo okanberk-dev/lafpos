@@ -136,8 +136,9 @@ export default function RolesAdmin() {
           <table className="w-full border-collapse text-sm">
             <caption className="sr-only">Rollere göre yetkiler</caption>
             <thead>
-              <tr className="bg-[var(--admin-surface-2)]">
-                <th scope="col" className="sticky left-0 z-[1] h-12 min-w-44 bg-[var(--admin-surface-2)] px-4 text-left text-[13px] font-medium text-[var(--admin-text-mute)] md:w-[38%]">
+              {/* Başlık şeridi kitin DataTable'ı gibi (zemini --table-head-bg); yapışkan ilk hücre opak: kayan hücreler altından görünmez */}
+              <tr className="border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]">
+                <th scope="col" className="sticky left-0 z-[1] h-12 min-w-44 bg-[var(--admin-surface)] px-4 text-left text-[13px] font-medium text-[var(--admin-text-mute)] md:w-[38%]">
                   Yetki
                 </th>
                 {roles.map((r) => {
@@ -163,7 +164,7 @@ export default function RolesAdmin() {
                             aria-label={`${r.label}: varsayılana dön`}
                             title="Varsayılana dön"
                             className={cn(
-                              'grid size-8 place-items-center rounded-full text-[var(--admin-primary)] transition-colors hover:bg-[var(--admin-primary-soft)] active:bg-[var(--admin-primary-soft)] pointer-coarse:size-11',
+                              'grid size-8 place-items-center rounded-[var(--r-btn)] text-[var(--admin-primary)] transition-colors hover:bg-[var(--admin-primary-soft)] active:bg-[var(--admin-primary-soft)] pointer-coarse:size-11',
                               same && 'invisible',
                             )}
                           >

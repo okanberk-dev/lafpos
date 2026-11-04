@@ -53,9 +53,11 @@ reportRoutes.get('/staff', (c) => {
   requirePermission(c.get('user'), 'rapor.maliyet');
   return c.json(staffReport(range(c)));
 });
+/** Personelin adına yazılan ödenmez personel tutarıdır: maliyet yetkisi olmayana yalnız kendisininki adıyla */
+const staffFor = (c: Context<AppEnv>) => (userId: string) => seesStaffOf(c.get('user'), userId);
 reportRoutes.get('/items', (c) => {
   const kind = query(c, z.object({ kind: z.enum(['iptal', 'ikram', 'indirim', 'happy']) })).kind;
-  return c.json(itemListReport(range(c), kind));
+  return c.json(itemListReport(range(c), kind, staffFor(c)));
 });
 reportRoutes.get('/refunds', (c) => c.json(refundReport(range(c))));
 /** Paket platformları: tahmini komisyon bir maliyettir, yalnız maliyet yetkisine gider */
@@ -108,12 +110,23 @@ reportRoutes.get('/export.csv', (c) => {
       ]),
     ];
   } else {
-    const rep = itemListReport(r, type);
-    // İkram listesinde tür (ikram, ödenmez, zayi) Excel'de süzülebilsin
+    const rep = itemListReport(r, type, staffFor(c));
+    // İkram listesinde tür (ikram, ödenmez, zayi) Excel'de süzülebilsin; ödenmezde kimin adına yazıldığı Kişi sütununda
     const kind = type === 'ikram';
     rows = [
-      ['Zaman', 'Adisyon', 'Yer', 'Ürün', 'Adet', 'Tutar', ...(kind ? ['Tür'] : []), 'Neden', 'Yapan', 'Onaylayan'],
-      ...rep.rows.map((x) => [fmtDateTime(x.at), x.orderNo, x.place, x.name, x.qty, money(x.value), ...(kind ? [COMP_LABEL[x.compKind ?? 'ikram']] : []), x.reason ?? '', x.by ?? '', x.approvedBy ?? '']),
+      ['Zaman', 'Adisyon', 'Yer', 'Ürün', 'Adet', 'Tutar', ...(kind ? ['Tür', 'Kişi'] : []), 'Neden', 'Yapan', 'Onaylayan'],
+      ...rep.rows.map((x) => [
+        fmtDateTime(x.at),
+        x.orderNo,
+        x.place,
+        x.name,
+        x.qty,
+        money(x.value),
+        ...(kind ? [COMP_LABEL[x.compKind ?? 'ikram'], x.person ? `${x.person.name} (${x.person.kind === 'user' ? 'personel' : 'müşteri'})` : ''] : []),
+        x.reason ?? '',
+        x.by ?? '',
+        x.approvedBy ?? '',
+      ]),
     ];
   }
   c.header('content-type', 'text/csv; charset=utf-8');

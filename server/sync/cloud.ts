@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { Permission } from '@shared/permissions';
 import type { OrderDTO } from '@shared/types';
 import { db, schema } from '../db/client';
@@ -50,9 +50,33 @@ function remoteOrder(o: OrderDTO): OrderDTO {
     extId: null,
     // Oda sayacına bağlı site rezervasyonunun kodu buluta gitmez (yalnız bağlı olduğu ve bloğun koşulu); oda satırının
     // notu ("Site rezervasyonu KRK-00042") kodsuz
-    items: o.items.map((i) => (i.note && BOOKING_NOTE.test(i.note) ? { ...i, note: 'Site rezervasyonu' } : i)),
+    // Ödenmez yazılan kişi (personel ya da müşteri) yalnız adıyla: kimlik ve soyadı buluta gitmez
+    compPerson: o.compPerson ? { ...o.compPerson, id: '', name: firstName(o.compPerson.name) ?? '' } : null,
+    items: o.items.map((i) => {
+      const it = i.compPerson ? { ...i, compPerson: { ...i.compPerson, id: '', name: firstName(i.compPerson.name) ?? '' } } : i;
+      return it.note && BOOKING_NOTE.test(it.note) ? { ...it, note: 'Site rezervasyonu' } : it;
+    }),
     room: o.room ? { ...o.room, bookingId: o.room.bookingId ? REMOTE_BOOKING : null, booking: o.room.booking ? { ...o.room.booking, id: REMOTE_BOOKING } : null } : null,
   };
+}
+
+/**
+ * Ödenmez denetim iletisi müşteriyi tam adıyla anar ("Ayşe Yılmaz adına"): patron uyarıları buluta giderken müşteri
+ * yalnız adıyla kalır (kişisel veri). Ad, denetim kaydının kendi kişi verisinden (`data.person`): kalem sonradan geri
+ * alınsa ya da müşterinin adı değişse de iletideki ad bulunur
+ */
+function scrubCustomerNames<T extends { id: number; message: string }>(alerts: T[]): T[] {
+  const ids = alerts.map((a) => a.id);
+  if (!ids.length) return alerts;
+  const people = new Map<number, string>();
+  for (const r of db.select({ id: schema.auditLog.id, data: schema.auditLog.data }).from(schema.auditLog).where(inArray(schema.auditLog.id, ids)).all()) {
+    const person = (r.data as { person?: { kind?: string; name?: string } } | null)?.person;
+    if (person?.kind === 'customer' && person.name) people.set(r.id, person.name);
+  }
+  return alerts.map((a) => {
+    const name = people.get(a.id);
+    return name && a.message.includes(name) ? { ...a, message: a.message.split(name).join(firstName(name) ?? '') } : a;
+  });
 }
 
 export function buildSnapshot(now = Date.now()) {
@@ -64,7 +88,10 @@ export function buildSnapshot(now = Date.now()) {
     v: 1,
     at: now,
     bootstrap: bootstrap(db, VIEWER),
-    patron: patronLive(false),
+    patron: (() => {
+      const live = patronLive(false);
+      return { ...live, alerts: scrubCustomerNames(live.alerts) };
+    })(),
     floor: {
       ...floor,
       others: floor.others.map((x) => ({ ...x, label: shorten(x.label) })),
@@ -116,9 +143,9 @@ function schedule() {
 
 export function startCloudSync(): NodeJS.Timeout[] {
   if (!cloudEnabled()) return [];
-  // Personel ve mesai olayları uzaktan özetini değiştirmez
+  // Personel olayları uzaktan özetini değiştirmez
   bus.on('event', (e: { topic: string }) => {
-    if (e.topic !== 'users' && e.topic !== 'time') schedule();
+    if (e.topic !== 'users') schedule();
   });
   return [setTimeout(schedule, 5_000), setInterval(schedule, HEARTBEAT_MS)];
 }

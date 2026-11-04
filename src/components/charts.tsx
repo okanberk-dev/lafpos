@@ -46,6 +46,20 @@ function useWidth<T extends HTMLElement>() {
   return [ref, width] as const;
 }
 
+/**
+ * Sütunun üst köşesi belirteçten (--r-bar, index.css): kasa ekranlarında 4 px, kurumsal yüzeyde (yönetim, raporlar)
+ * köşesiz. SVG yolu JavaScript'te çizildiği için değer kabın hesaplanmış stilinden okunur
+ */
+function useBarRadius(ref: { current: HTMLElement | null }, width: number): number {
+  const [radius, setRadius] = useState(4);
+  useEffect(() => {
+    if (!ref.current) return;
+    const v = parseFloat(getComputedStyle(ref.current).getPropertyValue('--r-bar'));
+    setRadius(Number.isFinite(v) ? v : 4);
+  }, [ref, width]);
+  return radius;
+}
+
 export interface ColumnDatum {
   label: string;
   /** İpucunda etiket yerine (ör. "06:00 · ertesi gün") */
@@ -90,6 +104,7 @@ export function ColumnChart({
   emptyHint?: string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
+  const barRadius = useBarRadius(ref, width);
   const [hover, setHover] = useState<number | null>(null);
   // Klavyeyle gezilen değer ekran okuyucuya da söylenir (fareyle gezinti sessiz)
   const [said, setSaid] = useState('');
@@ -209,7 +224,9 @@ export function ColumnChart({
         onPointerMove={(e) => setHover(columnAt(e.clientX, e.pointerType === 'touch'))}
         onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}
         onPointerCancel={() => setHover(null)}
-        className="relative w-full touch-pan-y touch-pinch-zoom rounded-lg"
+        // contain: inline-size: kabın genişliği içeriğinden (ölçülen eski genişlikte çizilmiş SVG) değil, yerleşimden gelir;
+        // tek sütunlu ızgarada grafik izini genişletip sayfayı yana taşırmaz (telefonda 3 px, Genel bakış)
+        className="relative w-full touch-pan-y touch-pinch-zoom rounded-lg [contain:inline-size]"
         style={{ height }}
       >
         {width > 0 && (
@@ -226,7 +243,7 @@ export function ColumnChart({
               const x = padL + band * i + (band - barW) / 2;
               const top = y(d.value);
               const h = padT + plotH - top;
-              const r = Math.min(4, h, barW / 2);
+              const r = Math.max(0, Math.min(barRadius, h, barW / 2));
               const path =
                 h <= 0
                   ? ''
@@ -327,8 +344,8 @@ export function BarList({
               {it.sub && <span className="ml-1.5 text-xs font-normal text-muted">{it.sub}</span>}
             </span>
           </div>
-          <div className="h-2 w-full rounded-full" style={{ background: 'var(--chart-track)' }}>
-            <div className="h-2 rounded-full transition-[width] group-hover:brightness-110" style={{ width: `${it.value > 0 ? Math.max(1, (it.value / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+          <div className="h-2 w-full rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
+            <div className="h-2 rounded-[var(--r-track)] transition-[width] group-hover:brightness-110" style={{ width: `${it.value > 0 ? Math.max(1, (it.value / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
           </div>
         </li>
       ))}

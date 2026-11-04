@@ -89,15 +89,18 @@ describe('uzaktan görünüm: "Çıkış" yalnız parola soran girişte', () => 
 describe('giriş ve kilit ekranı', () => {
   const page = src('pages/LoginPage.tsx');
 
-  it('örnek PIN çipi gönderirken odağı bırakır: Mesai’de sıradaki kişinin Enter’ı çipin PIN’ini yeniden göndermez (kaynak)', () => {
+  it('örnek PIN çipi gönderirken odağı bırakır: hatalı girişten sonra klavyenin Enter’ı çipin PIN’ini yeniden göndermez (kaynak)', () => {
     const chips = page.slice(page.indexOf('info.data.demoPins.map'));
     expect(chips).toMatch(/onClick=\{\(e\) => \{[^}]*e\.currentTarget\.blur\(\);\s*void submit\(d\.pin\);\s*\}\}/);
     expect(chips).not.toMatch(/onClick=\{\(\) => void submit\(d\.pin\)\}/);
   });
 
-  it('"Kasa sunucusuna ulaşılamıyor" hata sürerken yeniden sorar; mesai kaydı gidince hemen tazelenir (kaynak)', () => {
+  it('"Kasa sunucusuna ulaşılamıyor" hata sürerken yeniden sorar (kaynak)', () => {
     expect(page).toMatch(/queryKey: \['login-info'\],[\s\S]{0,500}refetchInterval: \(q\) => \(q\.state\.status === 'error' \? 5000 : false\),/);
-    expect(page).toMatch(/setPin\(''\);[\s\S]{0,200}if \(info\.isError\) void info\.refetch\(\);/);
+  });
+
+  it('kilit ekranında yalnız oturum açılır: giriş türü seçimi ve mesai yok (kaynak)', () => {
+    expect(page).not.toMatch(/Segmented|mesai|\/time\//i);
   });
 
   it('aynı seçenekle sorgu sunucu dönünce hatadan çıkar, yanıt gelince sormayı bırakır', async () => {

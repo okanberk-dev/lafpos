@@ -43,10 +43,10 @@ const pending = state('@tz', 'bekleyen', async (page) => {
   for (let i = 0; i < 5; i++) await card.click({ timeout: 5000 });
 });
 
-/** Telefonda adisyon Menü sekmesinde açılır; hesap ve Ödeme şeridi Adisyon sekmesinde (tablet ve bilgisayarda sekme yok) */
+/** Telefonda adisyon ürünlerle açılır; hesap ve Öde şeridi alttaki sepet çubuğundan (tablet ve bilgisayarda yan yana) */
 const checkTab = async (page) => {
-  const tab = page.getByRole('tablist', { name: 'Adisyon görünümü' }).getByRole('tab', { name: /^Adisyon/ });
-  if (await tab.isVisible()) await tab.click({ timeout: 5000 });
+  const bar = page.getByRole('button', { name: /^Sepet: / });
+  if (await bar.isVisible()) await bar.click({ timeout: 5000 });
 };
 
 /**
@@ -63,7 +63,7 @@ const checkDialogs = [
   ].map(([name, button]) =>
     state('@s2', name, async (page) => {
       await checkTab(page);
-      await page.getByRole('button', { name: /^Ödeme · / }).first().click({ timeout: 5000 });
+      await page.getByRole('button', { name: /^Öde · / }).first().click({ timeout: 5000 });
       const dialog = page.getByRole('dialog', { name: /^Ödeme · / });
       await dialog.waitFor({ timeout: 5000 });
       if (button) await dialog.getByRole('button', { name: button, exact: true }).click({ timeout: 5000 });
@@ -75,6 +75,8 @@ const checkDialogs = [
     ['islem-indirim', /^Adisyon indirimi/, 'Adisyon indirimi'],
     ['islem-kisi', /^Kişi sayısı/, 'Kişi sayısı'],
     ['islem-musteri', /^Müşteri ekle/, 'Müşteri'],
+    // Ödenmez kişi seçicisi (personel ve müşteriler, neden): yalnız açılır
+    ['islem-odenmez', /^Ödenmez kapat/, 'Ödenmez kapat · kimin adına?'],
   ].map(([name, item, title]) =>
     state('@s2', name, async (page) => {
       await page.getByRole('button', { name: 'İşlemler', exact: true }).click({ timeout: 5000 });
@@ -100,7 +102,7 @@ const barLight = state('/mutfak', 'acik-tema', async (page) => {
 });
 
 const ROUTES = {
-  giris: ['/giris', state('/giris', 'mesai', (page) => page.getByRole('button', { name: 'Mesai', exact: true }).click({ timeout: 5000 }))],
+  giris: ['/giris'],
   patron: [
     '/patron',
     '/masalar',
@@ -196,7 +198,6 @@ const ROUTES = {
     state('/yonetim/musteri-ekrani', 'siparis', (page) => page.getByRole('radio', { name: 'Sipariş', exact: true }).click({ timeout: 5000 })),
     state('/yonetim/masa-plani', 'secili-masa', (page) => page.locator('[data-table-id]').first().click({ timeout: 5000 })),
     '/yonetim/personel',
-    '/yonetim/mesai',
     '/yonetim/roller',
     '/yonetim/odeme',
     '/yonetim/yazarkasa',

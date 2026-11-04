@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
+import { maskOdenmezPeople } from '@shared/comp';
 import { staleDayMessage } from '@shared/time';
 import { z } from 'zod';
 import { asc, eq } from 'drizzle-orm';
 import type { ShiftCountDTO, ZSummary } from '@shared/types';
 import { db, schema } from '../db/client';
-import { type AppEnv, type AuthUser, actorFrom, can, requirePermission, seesCashNumbers } from '../lib/auth';
+import { type AppEnv, type AuthUser, actorFrom, can, requirePermission, seesCashNumbers, seesStaffOf } from '../lib/auth';
 import { body, kurus, query } from '../lib/http';
 import {
   addCashMovement,
@@ -55,7 +56,9 @@ const seesNumbers = seesCashNumbers;
  * gitmez (`seesStaffOf`: adisyon uçları `blindOrder`, adisyon raporu ve CSV dökümü).
  */
 function summaryFor(user: AuthUser, s: ZSummary | null): ZSummary | null {
-  return s && !can(user, 'rapor.maliyet') ? { ...s, byUser: [] } : s;
+  if (!s || can(user, 'rapor.maliyet')) return s;
+  // Personelin adına yazılan ödenmez de personel tutarıdır: kendisininki dışındakiler tek "Personel" satırında
+  return { ...s, byUser: [], ...(s.odenmezPeople ? { odenmezPeople: maskOdenmezPeople(s.odenmezPeople, (id) => seesStaffOf(user, id)) } : {}) };
 }
 
 /**

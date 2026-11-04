@@ -247,7 +247,7 @@ export default function OverviewAdmin() {
         {liveFailed && <ErrorState className={CARD} title="Bugünün rakamları alınamadı" error={live.error} onRetry={() => void live.refetch()} retrying={live.isFetching} />}
 
         <div className="grid gap-4 xl:grid-cols-3">
-          <div className="space-y-4 xl:col-span-2">
+          <div className="min-w-0 space-y-4 xl:col-span-2">
             {livePending && (
               <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü">
                 <Skeleton className="h-[220px] rounded-xl" />

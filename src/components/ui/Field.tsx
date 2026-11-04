@@ -374,14 +374,14 @@ export function Stepper({
         aria-label={removes ? 'Kaldır' : 'Azalt'}
         disabled={!removes && value <= min}
         onClick={() => (removes ? onRemove?.() : onChange(Math.max(min, value - 1)))}
-        className={cn(key, lg ? 'rounded-l-[19px]' : 'rounded-l-[13px]')}
+        className={cn(key, lg ? 'rounded-l-[calc(var(--radius-2xl)-1px)]' : 'rounded-l-[calc(var(--radius-xl)-1px)]')}
       >
         {removes ? <Trash2 aria-hidden="true" className={cn(icon, 'text-[var(--admin-danger-ink)]')} /> : <Minus aria-hidden="true" className={icon} />}
       </button>
       <span aria-live="polite" className={cn('tabular text-center font-semibold', lg ? 'min-w-16 px-1 font-headline text-5xl' : 'min-w-8 px-0.5 text-[15px]')}>
         {value}
       </span>
-      <button type="button" aria-label="Artır" disabled={disabledUp || value >= max} onClick={() => onChange(Math.min(max, value + 1))} className={cn(key, lg ? 'rounded-r-[19px]' : 'rounded-r-[13px]')}>
+      <button type="button" aria-label="Artır" disabled={disabledUp || value >= max} onClick={() => onChange(Math.min(max, value + 1))} className={cn(key, lg ? 'rounded-r-[calc(var(--radius-2xl)-1px)]' : 'rounded-r-[calc(var(--radius-xl)-1px)]')}>
         <Plus aria-hidden="true" className={icon} />
       </button>
     </div>
@@ -416,7 +416,7 @@ export function Chip({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3.5 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-9 [[data-area=admin]_&]:text-[13px]',
+        'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--r-chip)] border px-3.5 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-9 [[data-area=admin]_&]:text-[13px]',
         tone === 'ink'
           ? on
             ? 'border-ink bg-surface-3 font-semibold text-ink'
@@ -461,7 +461,7 @@ export function Segmented<T extends string>({
     <div
       role={label ? 'group' : undefined}
       aria-label={label}
-      className={cn(wrap ? 'flex w-full gap-0.5 rounded-xl max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full overflow-x-auto rounded-full', 'bg-surface-3 p-[3px]', className)}
+      className={cn(wrap ? 'flex w-full gap-0.5 rounded-xl max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full overflow-x-auto rounded-[var(--r-segment)]', 'bg-surface-3 p-[3px]', className)}
     >
       {options.map((o) => (
         <button
@@ -471,7 +471,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           className={cn(
             'inline-flex items-center justify-center font-medium',
-            wrap ? 'rounded-[10px]' : 'rounded-full',
+            wrap ? 'rounded-[calc(var(--radius-xl)-4px)]' : 'rounded-[var(--r-segment)]',
             wrap ? 'min-w-0 flex-1 whitespace-normal py-1.5 text-center leading-snug max-sm:flex-auto' : 'shrink-0 whitespace-nowrap',
             'transition-[color,background-color,box-shadow] duration-150 focus-visible:-outline-offset-2 pointer-coarse:min-h-11',
             size === 'sm' ? 'min-h-7 px-2.5 text-xs' : 'min-h-9 px-3.5 text-sm [[data-area=admin]_&]:text-[13px]',

@@ -40,7 +40,7 @@ export const POS_NAV: NavItem[] = [
   { to: '/rezervasyon', label: 'Rezerv.', title: 'Rezervasyonlar', icon: CalendarClock, perms: ['rezervasyon.yonet'] },
   { to: '/raporlar', label: 'Raporlar', title: 'Raporlar', icon: BarChart3, perms: ['rapor.gor'] },
   { to: '/patron', label: 'Patron', title: 'Patron paneli', icon: Gauge, perms: ['patron.panel'], primary: true },
-  { to: '/yonetim', label: 'Yönetim', title: 'Yönetim paneli', icon: Settings, perms: ['menu.yonet', 'ayar.yonet', 'personel.yonet', 'mesai.yonet', 'senkron.yonet'] },
+  { to: '/yonetim', label: 'Yönetim', title: 'Yönetim paneli', icon: Settings, perms: ['menu.yonet', 'ayar.yonet', 'personel.yonet', 'senkron.yonet'] },
 ];
 
 /** Self ve yarı self serviste ilk sekme: yeni tezgâh satışı (masa planındaki düğmeyle aynı ad) */

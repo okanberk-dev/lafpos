@@ -52,7 +52,7 @@ const dots: Record<Tone, string> = {
 /** Durum rozeti (kasa ve yönetimde tek): 22 px, hap, 12 px yazı; `dot` renkli nokta (renk yazının yanında) */
 export function Badge({ tone = 'neutral', dot, children, className, title }: { tone?: Tone; dot?: boolean; children: ReactNode; className?: string; title?: string }) {
   return (
-    <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium leading-4', tones[tone], className)}>
+    <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-[var(--r-chip)] px-2.5 py-0.5 text-xs font-medium leading-4', tones[tone], className)}>
       {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dots[tone])} />}
       {children}
     </span>
@@ -65,13 +65,13 @@ export function Badge({ tone = 'neutral', dot, children, className, title }: { t
  */
 export function SizeTag({ children, className }: { children?: ReactNode; className?: string }) {
   if (!children) return null;
-  return <span className={cn('ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 align-[2px] text-[11px] font-medium leading-4 text-ink-2', className)}>{children}</span>;
+  return <span className={cn('ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-[var(--r-chip)] border border-line px-1.5 align-[2px] text-[11px] font-medium leading-4 text-ink-2', className)}>{children}</span>;
 }
 
 /**
- * Baş harf avatarı (personel, mesai, kabuk, giriş ekranı): kişinin renginde daire, adın ilk iki harfi; harf beyaz ya
+ * Baş harf avatarı (personel, kabuk, giriş ekranı): kişinin renginde daire, adın ilk iki harfi; harf beyaz ya
  * da gece mürekkebi, hangisi o zeminde okunursa (`initialsInk`). Boy `className`'den ('size-7 text-[11px]',
- * 'size-11 text-sm'); `children` üstüne biner (mesaide noktası). Süstür: adı yanındaki yazı söyler
+ * 'size-11 text-sm'); `children` üstüne biner (durum noktası). Süstür: adı yanındaki yazı söyler
  */
 export function Avatar({ name, color, className, children }: { name: string; color: string; className?: string; children?: ReactNode }) {
   return (
@@ -446,7 +446,7 @@ export function Tabs<T extends string>({
             aria-selected={on}
             onClick={() => onChange(o.value)}
             className={cn(
-              'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press [[data-area=admin]_&]:text-[13px]',
+              'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[var(--r-segment)] px-3.5 text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press [[data-area=admin]_&]:text-[13px]',
               size === 'sm' ? 'min-h-9 pointer-coarse:min-h-11' : 'min-h-11 pointer-fine:min-h-9',
               on ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
             )}
@@ -455,7 +455,7 @@ export function Tabs<T extends string>({
             {o.label}
             {!!o.count && (
               // Etkin sekmenin sayısı beyaz hap (gri zeminde); yeşil dolu hap "N hazır"ın, sayı onunla karışmasın
-              <span className={cn('tabular min-w-5 rounded-full px-1.5 py-px text-center text-xs font-medium', on ? 'bg-surface text-ink shadow-[var(--rim)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
+              <span className={cn('tabular min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium', on ? 'bg-surface text-ink shadow-[var(--rim)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
             )}
           </button>
         );

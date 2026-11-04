@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { tl } from '@shared/money';
 import { posNameKey, posNamesOf, posSlotOf } from '@shared/pos-name';
 import { PAYMENT_CHANNELS } from '@shared/labels';
-import { ALL_PERMISSIONS, effectivePermissions, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
+import { ALL_PERMISSIONS, effectivePermissions, isPermission, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
 import { type AppEnv, assertNotLocked, type AuthUser, can, clientKey, hashPin, isValidPin, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
@@ -655,12 +655,14 @@ adminRoutes.patch('/stations/:id', async (c) => {
 
 adminRoutes.get('/users', (c) => {
   requirePermission(c.get('user'), 'personel.yonet');
+  // Kaldırılmış yetkinin anahtarı listede gelmez: ekran onu geri gönderse "Bilinmeyen yetki" diye düzenleme düşerdi
   return c.json(
     db
       .select({ id: schema.users.id, name: schema.users.name, role: schema.users.role, color: schema.users.color, active: schema.users.active, permGrant: schema.users.permGrant, permRevoke: schema.users.permRevoke, maxDiscountPct: schema.users.maxDiscountPct, lastLoginAt: schema.users.lastLoginAt })
       .from(schema.users)
       .orderBy(asc(schema.users.name))
-      .all(),
+      .all()
+      .map((u) => ({ ...u, permGrant: u.permGrant.filter(isPermission), permRevoke: u.permRevoke.filter(isPermission) })),
   );
 });
 

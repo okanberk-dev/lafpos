@@ -1,4 +1,4 @@
-import { allocate, type Kurus, percentOf, splitEven, splitKdv } from './money';
+import { allocate, type Kurus, percentOf, splitEven, splitKdv, tl } from './money';
 import { hmToMinutes, istanbulParts } from './time';
 
 /** Servis ücretinin KDV oranı (yiyecek-içecek servisi; yazarkasa sepetindeki servis satırı da bunu kullanır) */
@@ -299,15 +299,45 @@ export interface SplitState {
   paid: number;
   /** Ödenmemiş pay sayısı */
   left: number;
-  /** Ödenmemiş payların tutarları (toplamları kalan tutara eşit; kuruş artığı baştakilere) */
+  /** Ödenmemiş payların tutarları, sırayla (toplamları kalan tutara eşit; eşit bölüşte kuruş artığı baştakilere) */
   shares: Kurus[];
+  /** Paylar elle girildi: `shares` kayıtlı tutarlardır. Eşit bölüşte ya da kayıtlı tutarlar geçersizse false */
+  manual: boolean;
+}
+
+/** Elle payların doğrulamasındaki hata: Türkçe ileti ve kodu (sunucu 400 olarak döner, ekran aynı iletiyi söyler) */
+export interface SplitAmountsError {
+  code: 'split_amounts_count' | 'split_amount_kurus' | 'split_amount_positive' | 'split_amounts_total';
+  message: string;
 }
 
 /**
- * Paylaşımlı hesap: kalan tutar ödenmemiş paylara eşit bölünür. Bölündükten sonra kalem eklenir ya da bir pay
- * iptal edilirse paylar kendiliğinden yeniden dağılır; sunucu da ödemeyi bu hesapla alır (istemciye güvenilmez).
+ * Elle girilen pay tutarları geçerli mi: ödenmemiş her paya bir tutar, her biri tam sayı kuruş ve sıfırdan büyük,
+ * toplamı o anki kalan tutara kuruşu kuruşuna eşit. Geçerliyse null. Sunucu kaydederken de okurken de buna bakar:
+ * hesap değiştiyse kayıtlı tutarlar tutmaz, eşit bölüşe dönülür (bayat tutar çekilmez)
  */
-export function splitState(people: number, paidShares: number, remaining: Kurus): SplitState {
+export function splitAmountsError(amounts: readonly number[], left: number, remaining: Kurus): SplitAmountsError | null {
+  if (amounts.length !== left) {
+    return { code: 'split_amounts_count', message: `Ödenmemiş ${left} pay var; her paya bir tutar girin (${amounts.length} tutar geldi)` };
+  }
+  if (amounts.some((a) => !Number.isSafeInteger(a))) return { code: 'split_amount_kurus', message: 'Pay tutarı tam kuruş olmalı' };
+  if (amounts.some((a) => a <= 0)) return { code: 'split_amount_positive', message: 'Pay sıfır ya da eksi olamaz' };
+  const sum = amounts.reduce((a, b) => a + b, 0);
+  if (sum !== remaining) {
+    return { code: 'split_amounts_total', message: `Payların toplamı (${tl(sum)}) kalan tutara (${tl(remaining)}) eşit olmalı` };
+  }
+  return null;
+}
+
+/**
+ * Paylaşımlı hesap: kalan tutar ödenmemiş paylara eşit bölünür ya da elle girilen tutarlarla (`amounts`, ödenmemiş
+ * payların tutarları sırayla). Elle tutarlar yalnız geçerliyse kullanılır (`splitAmountsError`): bölündükten sonra
+ * kalem eklenir, iptal edilir ya da bir pay iptal edilirse sunucu onları düşürür ve paylar kendiliğinden yeniden eşit
+ * dağılır; sunucu ödemeyi de bu hesapla alır (istemciye güvenilmez).
+ */
+export function splitState(people: number, paidShares: number, remaining: Kurus, amounts?: readonly Kurus[] | null): SplitState {
   const left = Math.max(0, people - paidShares);
-  return { people, paid: paidShares, left, shares: left > 0 && remaining > 0 ? splitEven(remaining, left) : [] };
+  if (left <= 0 || remaining <= 0) return { people, paid: paidShares, left, shares: [], manual: false };
+  const manual = !!amounts && splitAmountsError(amounts, left, remaining) === null;
+  return { people, paid: paidShares, left, shares: manual ? [...amounts!] : splitEven(remaining, left), manual };
 }

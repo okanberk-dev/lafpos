@@ -158,7 +158,8 @@ export function CustomerDisplayView({
   const amount = state.kind === 'order' ? tl(state.paid > 0 ? state.due : state.total) : '';
 
   return (
-    <div className={cn('relative h-full w-full overflow-hidden text-[var(--d-text)] [container-type:size]', className)} style={{ ...style, background: 'var(--d-bg)' }}>
+    // surface-soft: Yönetim › Müşteri ekranı'ndaki önizlemede de kasanın köşeleri (gerçek ekranın birebir küçüğü)
+    <div className={cn('surface-soft relative h-full w-full overflow-hidden text-[var(--d-text)] [container-type:size]', className)} style={{ ...style, background: 'var(--d-bg)' }}>
       <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: 'var(--d-glow)' }} />
 
       {state.kind === 'order' ? (

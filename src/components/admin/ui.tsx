@@ -37,7 +37,7 @@ export const BTN = {
 } as const;
 
 /** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, daire (kitin ikon düğmeleri gibi), dokunmatikte 44 px, farede 32 px */
-export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-full text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
+export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--r-btn)] text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
 
 /** Kart: köşe 20 (alan ve iç kutu 14; düğme, rozet ve sekme kapsül; kap > denetim), kâğıt gölgesi */
 export const CARD = 'rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-card)]';
@@ -248,7 +248,7 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
               aria-selected={on}
               onClick={() => onChange(t.value)}
               className={cn(
-                'inline-flex min-h-9 items-center gap-1.5 rounded-full border bg-[var(--admin-surface)] px-3.5 text-[13px] whitespace-nowrap transition-[color,border-color] pointer-coarse:min-h-11',
+                'inline-flex min-h-9 items-center gap-1.5 rounded-[var(--r-chip)] border bg-[var(--admin-surface)] px-3.5 text-[13px] whitespace-nowrap transition-[color,border-color] pointer-coarse:min-h-11',
                 COMPACT_H,
                 FOCUS,
                 'focus-visible:-outline-offset-2',
@@ -257,7 +257,7 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
             >
               {t.label}
               {t.count !== undefined && (
-                <span className={cn('min-w-5 rounded-full px-1.5 py-px text-center text-xs font-medium leading-4', NUM, on ? 'bg-[var(--admin-text)] text-[var(--admin-surface)]' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]')}>{t.count}</span>
+                <span className={cn('min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium leading-4', NUM, on ? 'bg-[var(--admin-text)] text-[var(--admin-surface)]' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]')}>{t.count}</span>
               )}
             </button>
           );
@@ -293,7 +293,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
       role="radiogroup"
       aria-label={label}
       onKeyDown={move}
-      className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-full bg-[var(--admin-panel)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[25px] max-sm:pointer-fine:rounded-[21px]', RAIL_FADE, className)}
+      className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-[var(--r-segment)] bg-[var(--admin-panel)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[min(25px,var(--r-segment))] max-sm:pointer-fine:rounded-[min(21px,var(--r-segment))]', RAIL_FADE, className)}
     >
       {options.map((o, i) => {
         const on = o.value === value;
@@ -306,7 +306,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
             tabIndex={i === tabStop ? 0 : -1}
             onClick={() => onChange(o.value)}
             className={cn(
-              'inline-flex min-h-9 shrink-0 items-center justify-center rounded-full px-3.5 text-[13px] font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11 max-sm:grow',
+              'inline-flex min-h-9 shrink-0 items-center justify-center rounded-[var(--r-segment)] px-3.5 text-[13px] font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11 max-sm:grow',
               COMPACT_H,
               FOCUS,
               'focus-visible:-outline-offset-2',
@@ -411,7 +411,7 @@ export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label
       </button>
       {open &&
         createPortal(
-          <div ref={menu} role="menu" style={style} className="z-[60] rounded-[14px] border border-[var(--admin-border)] bg-[var(--surface-raised)] p-1.5 shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]">
+          <div ref={menu} role="menu" style={style} className="z-[60] rounded-[var(--r-control)] border border-[var(--admin-border)] bg-[var(--surface-raised)] p-1.5 shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]">
             {items.map((it) => (
               <button
                 key={it.key}
@@ -501,13 +501,14 @@ export function DataTable<T>({
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
-            <tr className="bg-[var(--admin-surface-2)]">
+            {/* Başlık şeridi kasada kuyuda, kurumsal yüzeyde zeminsiz: yalnız başlık ve satır çizgileri */}
+            <tr className="border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]">
               {columns.map((c) => (
                 <th key={c.key} scope="col" style={c.width ? { width: c.width } : undefined} className={cn('h-10 px-4 text-[13px] font-medium whitespace-nowrap text-[var(--admin-text-mute)]', alignCls(c.align), hideCls(c), c.className)}>
                   {c.header}
                 </th>
               ))}
-              {actions && <th scope="col" className="sticky right-0 w-14 bg-[var(--admin-surface-2)] px-2"><span className="sr-only">Eylemler</span></th>}
+              {actions && <th scope="col" className="sticky right-0 w-14 bg-[var(--admin-surface)] px-2"><span className="sr-only">Eylemler</span></th>}
             </tr>
           </thead>
           <tbody>

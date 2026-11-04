@@ -111,11 +111,12 @@ export function Toaster() {
   return (
     // Telefonda alt sekmenin üstü (başparmak): sekme çubuğu 57 px artı ev çubuğu payı, bildirim 72 px artı aynı pay
     // (ev çubuklu iPhone'da da sekme ikonlarının hapına binmez). Ekranın altında `data-action-bar` işaretli eylem
-    // şeridi varsa (adisyonun Gönder / Ödeme şeridi, garsonun "Ödemeyi kasa alır" satırıyla ~106 px, 57 px sekme
-    // çubuğunun üstünde) bildirim o şeridin de üstünde durur: Hesap yazdır ve Ödeme'yi örtmez. Tablet ve bilgisayarda
+    // şeridi varsa bildirim o şeridin de üstünde durur: şeridin boyunu bilen ekran onu html'de `--action-bar-h` yazar
+    // (adisyon: hızlı işlemler ve bir ya da iki satırlık eylem şeridi, telefonda sepet çubuğu; ölçülür), bilmeyen için
+    // 6rem (Roller ve yetkiler'in kaydetme şeridi). Hesap yazdır, Gönder ve Öde örtülmez. Tablet ve bilgisayarda
     // üst orta: başlık solda, eylemler sağda, orta boş (sağ üst arama kutusunu, sayfa düğmelerini ve tam ekran
     // pencerenin Kapat'ını örtmesin). İki canlı bölge: başarı ve bilgi sırayı bekler, hata ve uyarı hemen okunur
-    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:[html:has([data-action-bar])_&]:bottom-[calc(10.5rem+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 md:bottom-auto md:top-3">
+    <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] max-md:[html:has([data-action-bar])_&]:bottom-[calc(4.5rem+var(--action-bar-h,6rem)+env(safe-area-inset-bottom))] z-[60] flex flex-col items-center gap-2 px-4 md:bottom-auto md:top-3">
       <div role="alert" aria-live="assertive" className="flex w-full flex-col items-center gap-2">
         {urgent.map((t) => (
           <ToastItem key={t.id} t={t} />

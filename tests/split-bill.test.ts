@@ -40,8 +40,8 @@ async function payShare(orderId: string, methodName: string) {
 
 describe('paylaşımlı hesap', () => {
   it('pay hesabı: kalan tutar ödenmemiş paylara eşit, kuruş artığı baştakilere', () => {
-    expect(splitState(3, 0, 10001)).toEqual({ people: 3, paid: 0, left: 3, shares: [3334, 3334, 3333] });
-    expect(splitState(3, 1, 1001)).toEqual({ people: 3, paid: 1, left: 2, shares: [501, 500] });
+    expect(splitState(3, 0, 10001)).toEqual({ people: 3, paid: 0, left: 3, shares: [3334, 3334, 3333], manual: false });
+    expect(splitState(3, 1, 1001)).toEqual({ people: 3, paid: 1, left: 2, shares: [501, 500], manual: false });
     expect(splitState(2, 2, 500).shares).toEqual([]);
     expect(splitState(4, 1, 0).shares).toEqual([]);
   });
@@ -49,7 +49,7 @@ describe('paylaşımlı hesap', () => {
   it('hesap üç kişiye bölünür; paylar ayrı yöntemlerle ödenir, sonradan eklenen kalem kalanlara dağılır', async () => {
     let o = await newOrder([{ name: 'Latte', size: 'M', qty: 3 }, { name: 'Türk Kahvesi' }]);
     o = await h.ok<OrderDTO>('kasa', 'PUT', `/orders/${o.id}/split`, { people: 3 });
-    expect(o.split).toEqual({ people: 3, paid: 0, left: 3, shares: splitEven(o.total, 3) });
+    expect(o.split).toEqual({ people: 3, paid: 0, left: 3, shares: splitEven(o.total, 3), manual: false, reset: false });
 
     const first = await payShare(o.id, 'Nakit');
     expect(first.closed).toBe(false);

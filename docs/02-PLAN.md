@@ -39,7 +39,7 @@ lafpos/
 | --- | --- | --- |
 | `settings` | anahtar → JSON ayar | işletme adı, fiş metinleri, servis oranı, otomatik kilit, senkron ayarları, servis modu (`serviceMode`) |
 | `users`, `sessions` | personel, PIN, rol, kişi bazlı yetki; oturumlar | PIN `HMAC(secret, pin)` olarak tekil |
-| `time_entries` | personel mesaisi (giriş-çıkış) | iş günü girişten (05:00 kuralı); `source`: pin (kilit ekranı), oturum ya da yonetim (elle); kişi başına tek açık mesai, aynı kişide çakışma yok, en çok 24 saat; düzelten yönetici `edited_by` (göç 0014) |
+| `time_entries` | eski personel mesaisi (giriş-çıkış) | mesai 4 Kasım 2026'da kaldırıldı: tablo ve kayıtları durur, hiçbir kod okumaz ya da yazmaz (göç 0014; silinmedi, `db:generate` göç üretmez) |
 | `sections`, `tables` | masa planı | `kind: masa | oda` (karaoke), `siteTableCode` (site QR masası eşlemesi), saatlik ücret |
 | `stations`, `printers` | bar/mutfak yönlendirme, yazıcılar | ağ yazıcısı (IP:9100) ya da tarayıcı |
 | `categories`, `products` | menü | `price` (M/tek), `priceL` (L), `kdvRate`, `extSource/extId` (`laffogato`/`mnu-0011`), POS'a özel alanlar, porsiyon sayacı, `isService` |
@@ -78,7 +78,9 @@ Her dalga: kod + birim testleri + tip denetimi + tarayıcıda deneme + GitHub'a 
    Pencerede zorunlu grup boyun hemen altında, önseçimsiz, başlığında "Zorunlu" yazar; seçilene kadar Ekle kapalı,
    altında "Şeker seçin". İsteğe bağlı grupta varsayılan seçili gelir (Normal süt). Yönetim › Ayarlar › Seçenekleri sor
    (`askOptions`): "Zorunlu seçim varsa" (`zorunlu`, varsayılan) ya da "Seçenekli her üründe" (`hep`: Latte da
-   pencereyle). Tek boylu seçenekli ürün her iki ayarda pencereyle eklenir. Sunucu değişmedi: kasa satışında (eski
+   pencereyle). Tek boylu seçenekli ürün eskiden her iki ayarda pencereyle eklenirdi; 4 Kasım 2026'dan beri yalnız
+   isteğe bağlı seçeneği olan ürün (tek boylu da) "Zorunlu seçim varsa"da tek dokunuşla eklenir ("Seçenek profili",
+   aşağıda). Sunucu değişmedi: kasa satışında (eski
    istemci) seçeneksiz gelen zorunlu tek seçimlik gruba sunucu varsayılanı yazar; varsayılan kasada tükendiyse 409
    `option_sold_out` ("Orta tükendi; Şeker seçin", `docs/03-ENTEGRASYON.md` §2.3). İsteğe bağlı grubun tükenen
    varsayılanı (Normal süt) satışı durdurmaz: sunucu o grup için seçenek yazmaz, pencerede yalnız "Normal tükendi"
@@ -266,7 +268,8 @@ gerçek teşekkür gönderimi (bara giden satışta numara, gitmeyende numarası
 adisyon görüntüsü iptal olur ve gönderimler sırayla gider (`src/lib/display.ts`): ödemeden hemen önce kurulan
 zamanlayıcı teşekkürü ezip ekranı ödenmemiş adisyona döndürüyordu (bu akış buldu).
 
-**Mesai ve vardiya kasa sayımı** (2 Kasım 2026, `claude/mesai-vardiya`; sunucu ve API, ekranlar ayrı): personel girişini
+**Mesai ve vardiya kasa sayımı** (2 Kasım 2026, `claude/mesai-vardiya`; mesai kısmı 4 Kasım'da kaldırıldı, aşağıda
+"Mesai kaldırıldı"; vardiya kasa sayımı yerinde): personel girişini
 kasa oturumundan (`POST /api/time/clock-in`, `/clock-out`) ya da kilit ekranında oturum açmadan PIN'le yapar
 (`POST /api/time/punch`: PIN giriş ekranıyla aynı denetim ve deneme sınırı; yön verilmezse durum değişir, bir dakika
 içindeki ikinci basış yok sayılır). Kurallar her yazmada: çıkış girişten sonra, ileri tarih yok, mesai en çok 24 saat
@@ -295,6 +298,102 @@ alır (yalnız bu alanlar ve işletme adı), son görünümü cihazda saklar: so
 çizilir (çevrimdışı açılış yok: sayfanın kendisi sunucudan gelir). Görünüm laffogato.net
 kimliğindedir (`DESIGN.md`). Test `tests/musteri-ekrani-ayar.test.ts`; e2e taramasında yeni ekranlar ve durumları,
 akışlarda mesai ve vardiya devri.
+
+**Mesai kaldırıldı** (4 Kasım 2026, operatör kararı): kilit ekranının Mesai sekmesi (yalnız "Oturum aç" kalır),
+kullanıcı menüsündeki mesai satırı ve avatarın "mesaide" noktası, Yönetim › Mesai çizelgesi, patron panelindeki "Şu an
+mesaide" karosu (kalan beş karo ızgarayı boşluksuz doldurur), `/api/time` uçları, `mesai.yonet` yetkisi, `time` canlı
+konusu ve mesai yardımcıları (`shiftForgotten`) kalktı. **Vardiya devri** (banknotla sayım, devralanın PIN'i) olduğu
+gibi kalır; kasa, gün ve Z değişmedi. `time_entries` tablosu ve kayıtları silinmedi (şemada not, yeni göç yok); eski
+denetim kayıtları (`time.*`) "Mesai" adıyla okunur. Kayıtlı rol setlerinde ya da kişinin ek yetkilerinde kalan
+`mesai.yonet` okurken düşer (`isPermission`): roller ve personel ekranı açılır, düzenleme "Bilinmeyen yetki"ye takılmaz.
+Testi `tests/mesai-kaldirildi.test.ts`.
+
+**Hesap bölme: hazır sayılar ve elle paylar** (4 Kasım 2026): ödeme penceresinin Paylaş'ı "Kaç kişiye bölünsün?" ile
+açılır: 2-6 çipleri tek dokunuşla böler, daha fazlası adet seçiciyle (en çok 30). Eşit | Elle: elle tutarlar siparişte
+saklanır (`orders.split_amounts`, ödenmemiş payların tutarları sırayla, kuruş; göç `0016_elle_paylar`). Bölüş ucu
+(`PUT /orders/:id/split`) isteğe bağlı `amounts` alır ve sunucuda doğrular: adet ödenmemiş pay sayısı
+(`split_amounts_count`), tam kuruş (`split_amount_kurus`), her biri sıfırdan büyük (`split_amount_positive`), toplam o
+anki kalana eşit (`split_amounts_total`); kural `shared/order-calc.ts` `splitAmountsError`, `splitState` kayıtlı
+tutarları yalnız geçerliyse kullanır. Pay ödenince baştaki tutar düşer; pay ödemesi sunucunun hesapladığı paya göre
+doğrulanır (tutmazsa 409 `split_changed`). Hesap değişince toplamlar değişir ve `recalc` elle payları siler
+(`split_reset_at`: pencere "Hesap değişti; elle girilen paylar silindi, kalan yeniden eşit bölündü" der, yeni bölüşte ya
+da sıradaki payda kalkar); ödeme iptali de siler. Bölüş denetime yazılır: kim, kaç kişi, eşit ya da elle, payların
+tutarları (`order.split`, `data`). Testler `tests/hesap-bolme-elle.test.ts`, e2e akışı çiple böler, ikinci payı elle
+değiştirir.
+
+**Ödenmez kayıtlı bir kişiye bağlı** (4 Kasım 2026): ödenmez kapatma (adisyonun tamamı ya da tek kalem; tek kalem
+ödenmez yeni, kalem sayfasında "Ödenmez yaz") kayıtlı bir kişi seçilmeden yapılmaz: aranabilir liste, Personel (etkin
+kullanıcılar, rolüyle) ve Müşteriler (telefonun son 4 hanesiyle); ikram ve zayide kişi sorulmaz; personel seçilince
+"Personel yemeği", patron seçilince "Patron hesabı" önerilir (varsayılan ödenmez nedenleri de "Patron hesabı"). Sunucu:
+`compOrder` ve `compItem` `person: { kind: 'user' | 'customer', id }` alır; ödenmezde zorunlu (400 `person_required`),
+öteki türlerde reddedilir (400 `person_not_allowed`); kişinin var (404) ve etkin olduğu (409 `person_inactive`)
+doğrulanır; siparişe ve kaleme tür, kimlik ve adın anlık kopyası yazılır (`comp_person_*`, göç `0017_odenmez_kisi`);
+denetim iletisi kişiyi adlandırır ("Garson adına (personel)", `data.person`), geri alma kişiyi temizler (adisyonda
+ödenmez kalem kalmadıysa adisyonunkini de). Raporlar: İptal ve indirim › ikram listesinde ödenmez satırı kişiyi
+gösterir, aynı yerde "Kişi bazında ödenmez" (kişi, tür, adet, tutar; `shared/comp.ts` `odenmezByPerson`); Personel
+raporunda "Adına ödenmez"; CSV'de Kişi sütunu; Z'de ödenmez satırının altında kişi kişi döküm (`odenmezPeople`). Kişi
+bilgisi lafmaliyet'e ve siteye gitmez, müşteri ekranında görünmez; LafPOS Uzaktan'a müşterinin yalnız ilk adı (açık
+adisyon ve patron uyarısının denetim iletisi, `data.person`'dan; personelin adı, kaydı yapan kişinin adı gibi, olduğu
+gibi). Personel adına yazılan ödenmez personel tutarıdır: maliyet yetkisi olmayana başkasınınki "Personel" diye gider
+(adisyon uçları `blindOrder`, rapor, CSV, X ve Z); denetim kaydı ve patron uyarıları ayrıcalıklı yüzeydir, kişiyi
+adlandırır (denetim kaydında etiket "Ödenmez", geri almada "Ödenmezi geri alma"). Testler
+`tests/odenmez-kisi.test.ts`, e2e akışı garsonu seçer, tarama İşlemler › Ödenmez kapat penceresini açar.
+
+**Seçenek profili: varyant ve seçenek gerektirmeyen ürünler** (4 Kasım 2026, operatör: _"bazı ürünlere varyant vs.
+eklemeye gerek olmuyor onları da seç bul ve buna göre bir plan yap"_; araştırma `docs/08-POS-ARASTIRMA.md` §4). Bulgu:
+site seçenek gruplarını (süt, kavrum, şurup, ekstra shot, şeker) seçenek alan her kategoriye sunuyor, LafPOS da site
+ürünü gelince beşini birden bağlıyordu: Su ve Soda'ya süt, Çay'a kavrum, frozen'a ekstra shot soruluyor, tek boylu
+seçenekli ürün (Su, Soda, L'Af Limon, matcha'lar) her dokunuşta pencere açıyordu. Boylar (M/L) sitenin fiyatıdır,
+doğru: Espresso, Türk kahvesi ve Çay'ın L'si duble; tek boylu üründe boy düğmesi zaten yok. Kural: yalnız cevabı
+olmadan hazırlanamayan ve güvenli varsayılanı olmayan şey sorulur (L'Affogato'da Türk kahvesinin şekeri ve açık fiyatlı
+kalemin tutarı); isteğe bağlı seçenek varsayılanla eklenir, değişiklik kartın köşesindeki seçenek düğmesinden.
+
+| Ürünler | Bağlanan site grupları | Kasada |
+|---|---|---|
+| Su, Soda, L'Af Limon, Cool Lime, Sürpriz İçecek (soğuk içecekler) | yok | tek dokunuş |
+| Çay | yok | tek dokunuş (L: duble) |
+| Frozen (Çilek, Frambuaz…), soğuk çaylar, Matcha Affogato | yok | tek dokunuş |
+| Tatlılar, atıştırmalıklar, ekstralar | yok (site de sunmaz) | tek dokunuş |
+| Matcha Latte, Çilekli Matcha; sıcak çikolatalar | süt, şurup, şeker | tek dokunuş, seçenek düğmesiyle değişir |
+| Salep, smoothie'ler, Protein Shake | süt | tek dokunuş |
+| Frappe'ler | süt, şurup, ekstra shot | boy düğmesiyle tek dokunuş |
+| Chai Latte, Buzlu Chai | süt, şurup, ekstra shot ("dirty"), şeker | boy düğmesiyle tek dokunuş |
+| Espresso | kavrum, ekstra shot, şeker | boy düğmesi (L duble) |
+| L'Affogato | kavrum, ekstra shot | tek dokunuş |
+| Filtre kahve, Cold Brew | süt, şurup, şeker | boy düğmesi |
+| Sütlü espresso içecekleri ve buzlu kahveler (Latte, Cappuccino, Flat White, Mocha, Cortado, Macchiato…) | hepsi | boy düğmesi; tek boylular (Cortado, Macchiato, Çıtır Latte) tek dokunuş |
+| Türk kahvesi | yok (kasanın zorunlu Şeker grubu ve Bardak) | şekeri sorar |
+
+Uygulama: kural `server/sync/option-profile.ts` (`siteGroupsFor`: kategori varsayılanı ve site kimliğiyle ürün
+istisnası), menü eşitlemesi ürünü ilk kez alırken bunu bağlar (sonra yöneticinin seçimi korunur, Yönetim › Ürünler'den
+ürün başına grup eklenir ya da çıkarılır). Var olan kurulumda bir kez (`upgradeOptionProfiles`, açılışta ve demoda):
+yalnız yöneticinin hiç değiştirmediği ürünlerden (sitenin beş grubu birden bağlı; Türk kahvesinde kurulumun şekeri
+yüzünden dördü) profilde olmayan bağlar kalkar, eklenmez; denetime tek bilgi kaydı (`menu.product_groups`, "Seçenek
+profili: N üründen…"). Kasa kartı: "Zorunlu seçim varsa"da yalnız isteğe bağlı seçeneği olan ürün, tek boylu da, tek
+dokunuşla eklenir (sunucu boş isteğe bağlı gruba varsayılanı yazar; varsayılanı tükendiyse pencere açılır);
+"Seçenekli her üründe"de eskisi gibi pencere. Sitenin menüsüne ve mobil uygulamasına dokunulmaz. Testler
+`tests/secenek-profili.test.ts`; e2e'de önseçili sütün tükenmesi akışı Su yerine tek boylu Cortado'yla.
+
+Sonra (araştırmanın önerileri, karar gerekirse): tek zorunlu tek seçimlik grupta (Türk kahvesi şekeri) seçime dokunmak
+ürünü eklesin (ikinci "Ekle" kalksın); grup başına "her seferinde göster" işareti (genel "hep" ayarının yerine); karta
+uzun basınca Tükendi; gönderilmiş kalemde "Bir daha".
+
+**Masa adisyon ekranı yeniden** (4 Kasım 2026; araştırma `docs/08-POS-ARASTIRMA.md` §1): sepet bir bakışta okunur
+(Gabarito başlık, künye ve durum çipleri; kalemler Gönderilmedi, Barda, Hazır, Teslim ve İptal gruplarında, seçenek
+çipleri ve sağa hizalı tutar), kalem işlemleri kalemden tek dokunuşta (ikram, ödenmez, zayi, indirim, taşı, not, iptal;
+gönderilmiş kaleme not yeni uç `PUT /orders/:id/items/:itemId/note`, `siparis.al`, bar fişi canlı), tek birincil eylem
+mürekkep "Öde · ₺X", gönderilmemiş varken ikincil "Bara gönder (N)", hızlı işlemler (Böl, İndirim, Taşı, Hesap yazdır,
+İşlemler), telefonda önce ürünler ve yapışkan sepet çubuğu. Davranış, istekler ve yetki denetimleri aynı; e2e adları
+"Öde · ", "Bara gönder (N)", "Sepet: …" ve "Ürün ekle"ye güncellendi. Test `tests/adisyon-ekrani.test.ts`.
+
+**Yönetim ve raporlar: kurumsal yüzey** (4 Kasım 2026; araştırma `docs/08-POS-ARASTIRMA.md` §5): kasa ekranları
+yumuşak kalır; yönetim ve raporlar küçük köşe (kart, tablo, alan, düğme, segment 6; çip ve rozet 4), gölge yerine 1 px
+çizgi, kenar çubuğunda ince ayraç ve etkin öğede 2 px yeşil sol çizgi, zeminsiz tablo başlığı, köşesiz grafik çubuğu.
+Belirteçler `src/index.css` `:root`'ta bugünkü değerlerle (`--r-card`, `--r-control`, `--r-btn`, `--r-chip`,
+`--r-segment`, `--r-bar`, `--r-track`, `--table-head-bg`, `--shadow-card`), kurumsal değerler `.surface-corporate`
+(AdminShell kökü) ve portal için `:root[data-area='admin']`; ortak kit köşeyi belirteçten okur, sayfaların yerel
+köşeleri belirtece ya da Tailwind'in kapsamda küçülen köşe değişkenine taşındı. Ayrıntı `DESIGN.md` §4 "Kurumsal
+yüzey"; test `tests/design-tokens.test.ts` "köşe ve gölge belirteçleri".
 
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,

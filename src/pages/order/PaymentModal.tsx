@@ -5,9 +5,9 @@ import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_
 import { parseTL, splitEven, suggestCash, tl, tlShort } from '@shared/money';
 import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
-import type { CompKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
+import type { CompKind, CompPersonKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Segmented, Stepper } from '@/components/ui/Field';
+import { Chip, Input, Segmented, Stepper } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad, useNumpadKeys } from '@/components/ui/Numpad';
 import { Badge, Notice } from '@/components/ui/misc';
@@ -24,6 +24,7 @@ import { toast } from '@/lib/toast';
 import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
 import { CustomerModal } from './CustomerModal';
+import { OdenmezModal } from './OdenmezModal';
 import { OkcPanel, useOkcReceipts } from './OkcPanel';
 import { ReasonModal } from './TableOps';
 import { TypedAmount } from './TypedAmount';
@@ -78,7 +79,8 @@ export function PaymentModal({
   const [tipText, setTipText] = useState('');
   const [focus, setFocus] = useState<'tutar' | 'verilen' | 'bahsis'>('tutar');
   const [selection, setSelection] = useState<Record<string, number>>({});
-  const [people, setPeople] = useState(2);
+  /** Paylaş › Elle'de kaydedilmemiş pay tutarı var */
+  const [sharesDirty, setSharesDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   /** Hesabı bölme ya da paylaşımı kaldırma sürüyor (ödeme düğmesinin göstergesinden ayrı) */
   const [splitBusy, setSplitBusy] = useState<'set' | 'clear' | null>(null);
@@ -149,7 +151,6 @@ export function PaymentModal({
     setTipText('');
     setFocus('tutar');
     setSelection({});
-    setPeople(order.split?.people ?? Math.min(30, Math.max(2, order.guests)));
     setResult(null);
     setComp(null);
     setCustomerOpen(false);
@@ -205,13 +206,14 @@ export function PaymentModal({
   const cariOver = method?.kind === 'cari' && !!cust && cust.creditLimit != null && cariAfter > cust.creditLimit;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
-  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending;
+  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending && !(mode === 'paylas' && sharesDirty);
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
-  const closeComp = async (reason: string) => {
+  /** Ödenmezde kişi zorunlu (OdenmezModal), ikram ve zayide kişi sorulmaz */
+  const closeComp = async (reason: string, person?: { kind: CompPersonKind; id: string }) => {
     if (!comp) return;
     const kind = comp;
-    const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), COMP_DONE_TOAST[kind]);
+    const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, ...(person ? { person } : {}), approverPin: pin }), COMP_DONE_TOAST[kind]);
     if (!res) return;
     setComp(null);
     onDone(true, { comp: kind });
@@ -253,10 +255,22 @@ export function PaymentModal({
     },
   });
 
-  const setSplit = async (n: number | null) => {
+  const setSplit = async (n: number | null, amounts?: number[]) => {
     if (splitBusy) return;
     setSplitBusy(n ? 'set' : 'clear');
-    await act(() => put<OrderDTO>(`/orders/${order.id}/split`, { people: n }), n ? `Hesap ${n} kişiye bölündü` : 'Paylaşım kaldırıldı');
+    await act(
+      async () => {
+        try {
+          return await put<OrderDTO>(`/orders/${order.id}/split`, { people: n, ...(amounts ? { amounts } : {}) });
+        } catch (e) {
+          // Ekran eskimiş (başka cihazda pay ödendi ya da hesap değişti, canlı olay gecikti): ekranın kendi kalanına göre
+          // yazılan paylar tutmaz. Adisyon yeniden okunur, alanlar sunucunun güncel paylarıyla dolar (bildirim act'ten)
+          if (e instanceof ApiError && (e.code === 'split_amounts_total' || e.code === 'split_amounts_count')) void qc.invalidateQueries({ queryKey: ['order', order.id] });
+          throw e;
+        }
+      },
+      amounts ? 'Paylar kaydedildi' : n ? `Hesap ${n} kişiye eşit bölündü` : 'Paylaşım kaldırıldı',
+    );
     setSplitBusy(null);
   };
 
@@ -398,6 +412,8 @@ export function PaymentModal({
       ? 'Payları Paylaş’tan alın'
       : mode === 'paylas' && !split
         ? 'Önce hesabı bölün'
+        : mode === 'paylas' && sharesDirty
+          ? 'Önce payları kaydedin'
         : mode === 'paylas' && !nextShare
           ? 'Kalanı Tutar’dan alın'
           : mode === 'kalem' && !picked.length
@@ -435,8 +451,9 @@ export function PaymentModal({
           ? 'Adisyonda ücretli kalem yok'
           : null;
   // Yarım kalan ödeme arka plana dokununca kaybolmasın: yazarkasada bekleyen sepet, yazılan tutar, seçilen tür, verilen,
-  // bahşiş, seçili kalem ya da süren istek varken yalnız Kapat kapatır (Kapat'tan sonra da cihazın sonucu karşılanır)
-  const dirty = devicePending || busy || !!splitBusy || !!comp || !!method || givenText !== '' || tipText !== '' || !prefilled || picked.length > 0;
+  // bahşiş, seçili kalem, kaydedilmemiş elle paylar ya da süren istek varken yalnız Kapat kapatır (Kapat'tan sonra da
+  // cihazın sonucu karşılanır)
+  const dirty = devicePending || busy || !!splitBusy || !!comp || !!method || givenText !== '' || tipText !== '' || !prefilled || picked.length > 0 || (mode === 'paylas' && sharesDirty);
 
   const footer = devicePending ? (
     <p role="status" className="py-2 text-center text-sm font-medium text-ink-2">
@@ -613,7 +630,7 @@ export function PaymentModal({
             )}
 
             {mode === 'paylas' && (
-              <SplitPanel order={order} people={people} setPeople={setPeople} busy={splitBusy} freeNos={freeNos} paidShares={paidShares} onSplit={setSplit} onPrint={printShare} />
+              <SplitPanel order={order} busy={splitBusy} freeNos={freeNos} paidShares={paidShares} onSplit={setSplit} onPrint={printShare} onDirty={setSharesDirty} />
             )}
 
             {(mode === 'tutar' || method?.kind === 'nakit' || focus === 'bahsis') && <Numpad decimal size="md" onKey={pressKey} />}
@@ -781,7 +798,17 @@ export function PaymentModal({
         </div>
       </div>
 
-      {comp && (
+      {comp === 'odenmez' && (
+        <OdenmezModal
+          open
+          title="Ödenmez kapat · kimin adına?"
+          subtitle={compCloseSubtitle('odenmez', tl(order.total))}
+          confirmLabel={() => COMP_CONFIRM_LABEL.odenmez}
+          onClose={() => setComp(null)}
+          onConfirm={({ person, reason }) => closeComp(reason, person)}
+        />
+      )}
+      {comp && comp !== 'odenmez' && (
         <ReasonModal
           open
           title={COMP_CLOSE_LABEL[comp]}
@@ -808,122 +835,259 @@ export function PaymentModal({
   );
 }
 
+/** Hazır kişi sayıları: tek dokunuşla bölüş kurulur; daha kalabalık masa adet seçiciyle (en çok 30) */
+const QUICK_PEOPLE = [2, 3, 4, 5, 6] as const;
+/** Adet seçicinin ilk değeri: hazır çiplerin bir fazlası */
+const MORE_MIN = QUICK_PEOPLE[QUICK_PEOPLE.length - 1] + 1;
+const MAX_PEOPLE = 30;
+
 /**
- * Paylaşımlı hesap: kişi sayısı seçilip hesap bölünür. Her pay ayrı ödenir (nakit, kart, yazarkasa); ödenen pay
- * yeşil, sıradaki mürekkep kenarlı. Bölündükten sonra eklenen kalem ya da iptal edilen pay kalanlara kendiliğinden dağılır.
+ * Paylaşımlı hesap: "Kaç kişiye bölünsün?" çiplerinden biri (2-6) ya da adet seçiciyle (7-30) tek dokunuşla bölünür.
+ * Eşit'te kalan ödenmemiş paylara kuruşu kuruşuna bölünür (artık baştakilere); Elle'de her ödenmemiş payın kendi tutarı
+ * olur, eşit bölüşle dolu gelir, son pay kalanı kendisi gösterir. Pay sıfır ya da eksi olamaz, toplam kalana eşittir;
+ * sunucu yeniden doğrular. Her pay ayrı ödenir (nakit, kart, yazarkasa): ödenen pay yeşil onaylı, sıradaki mürekkep
+ * kenarlı. Hesap değişince elle paylar düşer, kalan yeniden eşit bölünür ve bu not olarak söylenir.
  */
 function SplitPanel({
   order,
-  people,
-  setPeople,
   busy,
   freeNos,
   paidShares,
   onSplit,
   onPrint,
+  onDirty,
 }: {
   order: OrderDTO;
-  people: number;
-  setPeople: (n: number) => void;
   busy: 'set' | 'clear' | null;
   freeNos: number[];
   paidShares: OrderDTO['payments'];
-  onSplit: (n: number | null) => void;
+  onSplit: (n: number | null, amounts?: number[]) => void;
   onPrint: (no: number, amount: number) => void;
+  /** Elle'de kaydedilmemiş tutar var: ödeme düğmesi "Önce payları kaydedin" der */
+  onDirty: (dirty: boolean) => void;
 }) {
   const split = order.split;
+  const remaining = order.total - order.paid;
   const minPeople = Math.max(2, paidShares.length + 1);
-  const stepper = <Stepper label="Kişi" value={people} min={minPeople} max={30} onChange={setPeople} />;
+  // Adet seçici hazır çiplerin üstünden başlar; masada 6'dan fazla kişi varsa o sayıyla
+  const [more, setMore] = useState(() => Math.min(MAX_PEOPLE, Math.max(MORE_MIN, split?.people ?? 0, order.guests, minPeople)));
+  // Eşit | Elle: sunucunun bölüşünden başlar; Elle'ye geçmek yalnız alanları açar, "Payları kaydet" yazar
+  const [kind, setKind] = useState<'esit' | 'elle'>(split?.manual ? 'elle' : 'esit');
+  /** Son basılan denetim: bekleme göstergesi yalnız onda döner (çip, adet seçicinin düğmesi, Payları kaydet) */
+  const [via, setVia] = useState<'more' | 'save' | null>(null);
+  const run = (from: 'more' | 'save' | null, n: number | null, amounts?: number[]) => {
+    setVia(from);
+    onSplit(n, amounts);
+  };
+  useEffect(() => {
+    setKind(split?.manual ? 'elle' : 'esit');
+  }, [split?.manual, split?.people]);
+  const shares = split?.shares ?? [];
+  const sharesKey = shares.join(',');
+  // Elle alanları: son pay hariç her ödenmemiş payın yazılan tutarı; son pay kalanı gösterir
+  const [drafts, setDrafts] = useState<string[]>(() => shares.slice(0, -1).map(toInput));
+  useEffect(() => {
+    setDrafts(shares.slice(0, -1).map(toInput));
+    // Paylar sunucuda değişince (pay ödendi, kalem eklendi, başka cihaz kaydetti) alanlar sunucunun tutarıyla dolar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharesKey]);
+  const typed = drafts.map((d) => parseTL(d));
+  const lastAmount = remaining - typed.reduce<number>((a, b) => a + (b ?? 0), 0);
+  const manualAmounts = [...typed.map((v) => v ?? 0), lastAmount];
+  const dirty = kind === 'elle' && shares.length > 1 && manualAmounts.join(',') !== sharesKey;
+  const rowError = (v: number | null) => (v == null ? 'Tutarı girin' : v <= 0 ? 'Pay sıfır ya da eksi olamaz' : null);
+  const errors = typed.map(rowError);
+  const lastError = lastAmount <= 0 ? 'Son paya tutar kalmadı; öteki payları azaltın' : null;
+  const valid = errors.every((e) => !e) && !lastError;
+  useEffect(() => {
+    onDirty(dirty);
+  }, [dirty, onDirty]);
+  useEffect(() => () => onDirty(false), [onDirty]);
 
-  if (!split) {
-    // Önizleme sunucunun bölüşüyle aynı (shared/money splitEven, order-calc splitState): kuruş artığı baştaki paylara
-    const preview = splitEven(order.total - order.paid, Math.max(1, people - paidShares.length));
-    const lo = preview[preview.length - 1] ?? 0;
-    const hi = preview[0] ?? 0;
-    const extra = preview.filter((s) => s > lo).length;
+  const peopleChip = (n: number) => {
+    const on = split?.people === n;
     return (
-      <div className="mb-3 rounded-xl border border-line p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="inline-flex items-center gap-2 text-sm font-medium">
-            <Users aria-hidden="true" className="size-4 text-muted" /> Kaç kişi ödeyecek?
-          </span>
-          {stepper}
-        </div>
-        <p className="tabular mt-3 text-[13px] text-muted">
-          Kişi başı <b className="font-semibold text-ink">{tl(lo)}</b>
-          {extra > 0 && (
-            <>
-              {' '}
-              · ilk {extra > 1 ? `${extra} pay` : 'pay'} <b className="font-semibold text-ink">{tl(hi)}</b>
-            </>
-          )}
-        </p>
-        <Button variant="primary" block className="mt-3" loading={busy === 'set'} disabled={!!busy} onClick={() => onSplit(people)}>
-          Hesabı {people} kişiye böl
-        </Button>
-      </div>
+      <Chip
+        key={n}
+        on={on}
+        disabled={!!busy || n < minPeople}
+        onClick={() => {
+          if (!on) run(null, n);
+        }}
+        className="tabular h-14 min-w-0 px-0 font-headline text-xl font-bold pointer-fine:h-12"
+      >
+        <span aria-hidden="true">{n}</span>
+        <span className="sr-only">{n} kişi</span>
+      </Chip>
     );
-  }
+  };
 
-  const changed = people !== split.people;
+  const shareLabel = (no: number, next: boolean) => (next ? `Pay ${no} · sıradaki` : `Pay ${no}`);
+  // Sıradaki pay seçili (mürekkep kenar, taş halka); yeşil yalnız ödenen pay: "2'si ödendi" diye okunmasın
+  const shareBox = (next: boolean) => cn('relative rounded-xl border bg-surface', next ? 'border-[var(--admin-text)] ring-4 ring-[var(--admin-panel)]' : 'border-line');
+
   return (
     <div className="@container mb-3 space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm">
-          <span className="font-semibold">{split.people} kişi</span>
-          <span className="text-muted"> · {split.paid} pay ödendi</span>
+      <div className="rounded-xl border border-line p-4">
+        <div id="paylas-kisi" className="flex items-center gap-2 text-sm font-medium">
+          <Users aria-hidden="true" className="size-4 text-muted" /> Kaç kişiye bölünsün?
         </div>
-        <div className="flex items-center gap-2">
-          {stepper}
-          {changed && (
-            <Button size="sm" variant="primary" loading={busy === 'set'} disabled={!!busy} onClick={() => onSplit(people)}>
-              Uygula
+        <div role="group" aria-labelledby="paylas-kisi" className="mt-3 grid grid-cols-5 gap-2">
+          {QUICK_PEOPLE.map(peopleChip)}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <span className="text-[13px] text-muted">Daha kalabalık masa</span>
+          <div className="flex items-center gap-2">
+            <Stepper label="Kişi" value={more} min={Math.max(MORE_MIN, minPeople)} max={MAX_PEOPLE} onChange={setMore} />
+            <Button size="sm" loading={busy === 'set' && via === 'more'} disabled={!!busy || split?.people === more} onClick={() => run('more', more)}>
+              {more} kişiye böl
             </Button>
-          )}
+          </div>
         </div>
+        {!split && remaining > 0 && (
+          <p className="tabular mt-3 text-[13px] text-muted">
+            {order.guests > 1 && `Masada ${order.guests} kişi · `}Kalan <b className="font-semibold text-ink">{tl(remaining)}</b>; seçilen sayıya eşit bölünür, sonra
+            Elle ile değiştirilebilir
+          </p>
+        )}
       </div>
-      <ul className="grid grid-cols-2 gap-2 @md:grid-cols-3">
-        {paidShares.map((p) => (
-          <li key={p.id} className="rounded-xl border border-success-line bg-success-soft px-3 py-2.5">
-            <div className="flex items-center justify-between text-xs font-medium text-[var(--admin-success)]">
-              <span className="tabular">
-                Pay {p.shareNo}
-                <span className="sr-only"> ödendi</span>
-              </span>
-              <Check className="size-4" />
+
+      {split && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm">
+              <span className="font-semibold">{split.people} kişi</span>
+              <span className="text-muted"> · {split.paid ? `${split.paid} pay ödendi` : 'henüz pay ödenmedi'}</span>
             </div>
-            <div className="tabular mt-0.5 font-headline text-lg font-bold">{tl(p.amount)}</div>
-            <div className="truncate text-xs text-ink-2">{p.methodName}</div>
-          </li>
-        ))}
-        {split.shares.map((amount, i) => {
-          const no = freeNos[i] ?? i + 1;
-          const next = i === 0;
-          return (
-            // Sıradaki pay seçili (mürekkep kenar, taş halka); yeşil yalnız ödenen pay: "2'si ödendi" diye okunmasın
-            <li key={`pay-${no}`} className={cn('relative rounded-xl border py-2.5 pl-3 pr-10', next ? 'border-[var(--admin-text)] bg-surface ring-4 ring-[var(--admin-panel)]' : 'border-line bg-surface')}>
-              <div className={cn('text-xs font-medium', next ? 'font-semibold text-ink' : 'text-muted')}>{next ? `Pay ${no} · sıradaki` : `Pay ${no}`}</div>
-              <div className="tabular mt-0.5 font-headline text-lg font-bold">{tl(amount)}</div>
-              <button
-                aria-label={`Pay ${no} fişini yazdır`}
-                title="Pay fişini yazdır"
-                onClick={() => onPrint(no, amount)}
-                className="absolute right-0.5 top-0.5 grid size-11 place-items-center rounded-full text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press"
-              >
-                <Printer aria-hidden="true" className="size-4" />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-      {split.shares.length === 0 && order.total - order.paid > 0 && (
-        <Notice tone="warn">
-          Bütün paylar ödendi ama {tl(order.total - order.paid)} kaldı (sonradan eklenen kalem). Kişi ekleyin ya da “Tutar” ile alın
-        </Notice>
+            {shares.length > 1 && (
+              <Segmented
+                label="Bölüş"
+                value={kind}
+                onChange={(k) => {
+                  if (busy || k === kind) return;
+                  // Elle'den Eşit'e dönmek kayıtlı elle payları siler: sunucu kalanı yeniden eşit böler
+                  if (k === 'esit' && split.manual) run(null, split.people);
+                  setKind(k);
+                }}
+                options={[
+                  { value: 'esit', label: 'Eşit' },
+                  { value: 'elle', label: 'Elle' },
+                ]}
+              />
+            )}
+          </div>
+          {split.reset && (
+            <Notice tone="info" role="status">
+              Hesap değişti; elle girilen paylar silindi, kalan yeniden eşit bölündü
+            </Notice>
+          )}
+          <ul className="grid grid-cols-2 gap-2 @md:grid-cols-3">
+            {paidShares.map((p) => (
+              <li key={p.id} className="rounded-xl border border-success-line bg-success-soft px-3 py-2.5">
+                <div className="flex items-center justify-between text-xs font-medium text-[var(--admin-success)]">
+                  <span className="tabular">
+                    Pay {p.shareNo}
+                    <span className="sr-only"> ödendi</span>
+                  </span>
+                  <Check aria-hidden="true" className="size-4" />
+                </div>
+                <div className="tabular mt-0.5 font-headline text-lg font-bold">{tl(p.amount)}</div>
+                <div className="truncate text-xs text-ink-2">{p.methodName}</div>
+              </li>
+            ))}
+            {/* Elle'de alanlar aşağıda; tek pay kaldıysa (elle de olsa) kart: düzenlenecek bölüş yok */}
+            {(kind === 'esit' || shares.length < 2) &&
+              shares.map((amount, i) => {
+                const no = freeNos[i] ?? i + 1;
+                const next = i === 0;
+                return (
+                  <li key={`pay-${no}`} className={cn(shareBox(next), 'py-2.5 pl-3 pr-10')}>
+                    <div className={cn('text-xs font-medium', next ? 'font-semibold text-ink' : 'text-muted')}>{shareLabel(no, next)}</div>
+                    <div className="tabular mt-0.5 font-headline text-lg font-bold">{tl(amount)}</div>
+                    <button
+                      aria-label={`Pay ${no} fişini yazdır`}
+                      title="Pay fişini yazdır"
+                      onClick={() => onPrint(no, amount)}
+                      className="absolute right-0.5 top-0.5 grid size-11 place-items-center rounded-full text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press"
+                    >
+                      <Printer aria-hidden="true" className="size-4" />
+                    </button>
+                  </li>
+                );
+              })}
+          </ul>
+
+          {kind === 'elle' && shares.length > 1 && (
+            <div className="space-y-2">
+              <ul className="space-y-2">
+                {shares.map((saved, i) => {
+                  const no = freeNos[i] ?? i + 1;
+                  const next = i === 0;
+                  const last = i === shares.length - 1;
+                  const error = last ? lastError : errors[i];
+                  const id = `pay-tutar-${no}`;
+                  return (
+                    <li key={`elle-${no}`} className={cn(shareBox(next), 'flex items-center gap-3 py-2 pl-3 pr-2')}>
+                      <label htmlFor={last ? undefined : id} className="min-w-0 flex-1">
+                        <span className={cn('block text-xs font-medium', next ? 'font-semibold text-ink' : 'text-muted')}>{shareLabel(no, next)}</span>
+                        {last && <span className="block text-xs text-muted">Kalanı alır</span>}
+                        {error && (
+                          <span id={`${id}-hata`} role="alert" className="block text-xs font-medium text-[var(--admin-danger-ink)]">
+                            {error}
+                          </span>
+                        )}
+                      </label>
+                      {last ? (
+                        <output aria-label={`Pay ${no} tutarı`} className={cn('tabular min-w-28 px-3 text-right font-headline text-lg font-bold', lastError && 'text-[var(--admin-danger-ink)]')}>
+                          {tl(lastAmount)}
+                        </output>
+                      ) : (
+                        <Input
+                          id={id}
+                          inputMode="decimal"
+                          aria-label={`Pay ${no} tutarı`}
+                          aria-invalid={!!error || undefined}
+                          aria-describedby={error ? `${id}-hata` : undefined}
+                          value={drafts[i] ?? ''}
+                          onChange={(e) => setDrafts(drafts.map((d, j) => (j === i ? e.target.value.replace(/[^0-9.,]/g, '') : d)))}
+                          onFocus={(e) => e.currentTarget.select()}
+                          className={cn('tabular w-32 text-right font-headline text-lg font-semibold', error && 'border-[var(--admin-danger)]')}
+                        />
+                      )}
+                      {/* Her ödenmemiş payın fişi yazdırılır (son pay da: kaydedilmiş tutarı kalandır) */}
+                      {!dirty && (
+                        <button
+                          aria-label={`Pay ${no} fişini yazdır`}
+                          title="Pay fişini yazdır"
+                          onClick={() => onPrint(no, saved)}
+                          className="grid size-11 shrink-0 place-items-center rounded-full text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press"
+                        >
+                          <Printer aria-hidden="true" className="size-4" />
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                <span className="tabular text-[13px] text-muted">
+                  Toplam {tl(manualAmounts.reduce((a, b) => a + b, 0))} · kalan {tl(remaining)}
+                </span>
+                <Button variant="primary" size="sm" loading={busy === 'set' && via === 'save'} disabled={!!busy || !dirty || !valid} onClick={() => run('save', split.people, manualAmounts)}>
+                  Payları kaydet
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {shares.length === 0 && remaining > 0 && (
+            <Notice tone="warn">Bütün paylar ödendi ama {tl(remaining)} kaldı (sonradan eklenen kalem). Kişi ekleyin ya da “Tutar” ile alın</Notice>
+          )}
+          <Button size="sm" variant="ghost" className="-ml-2" loading={busy === 'clear'} disabled={!!busy} onClick={() => run(null, null)}>
+            Paylaşımı kaldır
+          </Button>
+        </>
       )}
-      <Button size="sm" variant="ghost" className="-ml-2" loading={busy === 'clear'} disabled={!!busy} onClick={() => onSplit(null)}>
-        Paylaşımı kaldır
-      </Button>
     </div>
   );
 }

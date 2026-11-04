@@ -95,7 +95,22 @@ export function MoveModal({ order, open, onClose, act, onMoved }: { order: Order
 }
 
 /** Hesap bölme: seçilen kalemleri (adetleriyle) başka masaya ya da ayrı hesaba taşır. */
-export function TransferModal({ order, open, onClose, act, onDone }: { order: OrderDTO; open: boolean; onClose: () => void; act: Act; onDone: (targetOrderId: string) => void }) {
+export function TransferModal({
+  order,
+  open,
+  initial,
+  onClose,
+  act,
+  onDone,
+}: {
+  order: OrderDTO;
+  open: boolean;
+  /** Kalem işlemlerinden "Taşı": pencere bu kalem ve adediyle seçili açılır */
+  initial?: { itemId: string; qty: number } | null;
+  onClose: () => void;
+  act: Act;
+  onDone: (targetOrderId: string) => void;
+}) {
   const boot = useBoot();
   const [sel, setSel] = useState<Record<string, number>>({});
   const [target, setTarget] = useState<'ayri' | string>('ayri');
@@ -103,8 +118,8 @@ export function TransferModal({ order, open, onClose, act, onDone }: { order: Or
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   useEffect(() => {
-    if (open) setSel({});
-  }, [open]);
+    if (open) setSel(initial && initial.qty > 0 ? { [initial.itemId]: initial.qty } : {});
+  }, [open, initial]);
   if (!open) return null;
   const items = order.items.filter((i) => !i.voided && i.qty - i.paidQty > 0);
   const chosen = Object.entries(sel).filter(([, q]) => q > 0);

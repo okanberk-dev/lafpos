@@ -1,18 +1,13 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { LafTile } from '@/components/LafMark';
 import { Button } from '@/components/ui/Button';
-import { Segmented } from '@/components/ui/Field';
 import { Avatar, Notice } from '@/components/ui/misc';
 import { Numpad, PinDots } from '@/components/ui/Numpad';
-import { errorMessage, get, post } from '@/lib/api';
-import { cn } from '@/lib/cn';
-import { fmtDuration } from '@/lib/mesai';
+import { errorMessage, get } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { businessDate, fmtDateLong, fmtTime } from '@shared/time';
-import type { PunchResultDTO } from '@shared/types';
 
 interface LoginInfo {
   users: { id: string; name: string; role: string; color: string }[];
@@ -23,18 +18,10 @@ interface LoginInfo {
 export function LoginPage() {
   const login = useAuth((s) => s.login);
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
-  // Oturum aç ya da mesai (aynı PIN'le giriş-çıkış; oturum açılmaz, sonuç birkaç saniye görünür)
-  const [mode, setMode] = useState<'oturum' | 'mesai'>('oturum');
-  const [punched, setPunched] = useState<PunchResultDTO | null>(null);
-  const clearPunch = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (clearPunch.current) clearTimeout(clearPunch.current);
-  }, []);
   const info = useQuery({
     queryKey: ['login-info'],
     queryFn: () => get<LoginInfo>('/auth/users'),
@@ -54,18 +41,6 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      if (mode === 'mesai') {
-        const r = await post<PunchResultDTO>('/time/punch', { pin: value });
-        setPunched(r);
-        setPin('');
-        // Sunucu yanıt verdi: "ulaşılamıyor" uyarısı mesai sonucunun yanında kalmasın (Kurulum modu çipleri de gelsin)
-        if (info.isError) void info.refetch();
-        // Bu cihazda az sonra açılacak oturum (kullanıcı menüsü, avatar noktası) güncel mesaiyle başlasın
-        void qc.invalidateQueries({ queryKey: ['time'] });
-        if (clearPunch.current) clearTimeout(clearPunch.current);
-        clearPunch.current = setTimeout(() => setPunched(null), 8000);
-        return;
-      }
       await login(value);
       navigate('/', { replace: true });
     } catch (e) {
@@ -79,8 +54,6 @@ export function LoginPage() {
   const press = (k: string) => {
     if (busy) return;
     setError(null);
-    // Sıradaki kişi yazmaya başlayınca öncekinin mesai sonucu kalkar
-    if (k !== 'ok') setPunched(null);
     if (k === 'back') {
       setPin(pin.slice(0, -1));
       return;
@@ -101,7 +74,6 @@ export function LoginPage() {
 
   const today = businessDate(now);
   const users = info.data?.users ?? [];
-  const showPunch = mode === 'mesai' && !!punched;
   return (
     // Solda marka yüzeyi (L'Affogato yeşili, krem yazı): kim ve ne zaman; sağda PIN. Telefonda marka şeridi üstte
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6 lg:p-4">
@@ -143,23 +115,6 @@ export function LoginPage() {
         <section className="flex flex-col justify-center rounded-3xl border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-7">
           {/* Tuş takımı PIN tuşu ölçüsünde kalır: dikey tablette kart geniş, tuşlar 640 px'e yayılmaz */}
           <div className="mx-auto flex w-full max-w-[400px] flex-col">
-            <Segmented
-              label="Giriş türü"
-              className="mx-auto mb-4"
-              value={mode}
-              onChange={(m) => {
-                // Tıklanan düğme odakta kalırsa fiziksel klavyenin Enter'ı PIN'i onaylamaz, düğmeye basar: odak bırakılır
-                if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
-                if (m === mode) return;
-                setMode(m);
-                setPin('');
-                setError(null);
-              }}
-              options={[
-                { value: 'oturum', label: 'Oturum aç' },
-                { value: 'mesai', label: 'Mesai' },
-              ]}
-            />
             {info.isError && (
               // PIN yazılmadan önce söylenir: yoğun sabahta aynı PIN'i defalarca denemesin
               <Notice
@@ -175,41 +130,18 @@ export function LoginPage() {
                 Kasa sunucusuna ulaşılamıyor; LafPOS bilgisayarının açık ve aynı ağda olduğunu kontrol edin
               </Notice>
             )}
-            {/* Başlık ile mesai sonucu aynı sabit yükseklikte yer paylaşır: sonuç kartı gelip gidince tuşlar kaymaz
-                (sıradaki kişinin parmağı yanlış sıraya düşmez). Kart görünürken başlık ekran okuyucuda kalır */}
-            <div className="relative mb-4 grid min-h-[58px] place-items-center text-center">
-              <div className={cn(showPunch && 'sr-only')}>
-                <h1 className="text-xl font-bold sm:text-[22px]">{mode === 'mesai' ? 'Mesai başlat ya da bitir' : 'Hoş geldiniz'}</h1>
-                <p className="mt-1 text-[13px] text-muted">{mode === 'mesai' ? 'PIN kodunuzu girin; oturum açılmaz' : 'Devam etmek için PIN kodunuzu girin'}</p>
-              </div>
-              {showPunch && punched && (
-                <div role="status" className="animate-fade flex w-full items-center gap-3 rounded-2xl border border-success-line bg-success-soft px-3 py-2.5 text-left">
-                  <Avatar name={punched.user.name} color={punched.user.color} className="size-9 text-xs" />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-[15px] font-semibold leading-5">
-                      <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-success-ink" />
-                      <span className="truncate">{punched.state === 'in' ? `Hoş geldiniz, ${punched.user.name}` : `Görüşmek üzere, ${punched.user.name}`}</span>
-                    </span>
-                    <span className="block truncate text-[13px] leading-4 text-ink-2">
-                      {punched.repeated
-                        ? `${punched.state === 'in' ? `Giriş ${fmtTime(punched.entry.clockIn)}` : `Çıkış ${fmtTime(punched.entry.clockOut ?? punched.entry.clockIn)}`} · zaten kayıtlı`
-                        : punched.state === 'in'
-                          ? `Giriş ${fmtTime(punched.entry.clockIn)} · mesainiz başladı`
-                          : `Çıkış ${fmtTime(punched.entry.clockOut ?? now)} · bu mesai ${fmtDuration(punched.entry.durationMs)}`}
-                    </span>
-                  </span>
-                </div>
-              )}
+            <div className="mb-4 text-center">
+              <h1 className="text-xl font-bold sm:text-[22px]">Hoş geldiniz</h1>
+              <p className="mt-1 text-[13px] text-muted">Devam etmek için PIN kodunuzu girin</p>
             </div>
             <PinDots filled={pin.length} className="mb-2" />
             <div role="alert" className="mb-3 min-h-5 text-balance text-center text-[13px] font-medium text-[var(--admin-danger-ink)]">
               {error}
             </div>
             {/* Ortak tuş takımı; fiziksel klavye de girer (rakam, Backspace, Delete, Enter) */}
-            <Numpad size="lg" keyboard onKey={press} confirm={{ label: mode === 'mesai' ? 'Onayla' : 'Giriş', disabled: pin.length < 4 || busy, onPress: () => press('ok') }} />
+            <Numpad size="lg" keyboard onKey={press} confirm={{ label: 'Giriş', disabled: pin.length < 4 || busy, onPress: () => press('ok') }} />
             {info.data?.demoPins && (
-              // Kurulum modu iki sekmede de aynı yerde (kart sekme değişince zıplamaz); örnek PIN'e dokunmak onu girer:
-              // Oturum aç'ta oturum açar, Mesai'de o kişinin mesaisini başlatır ya da bitirir
+              // Kurulum modu: örnek PIN'e dokunmak o kişiyle oturum açar
               <Notice tone="warn" className="mt-4" title="Kurulum modu: örnek PIN’ler">
                 {/* Gövde ikonun altından başlar (kitin ikon payı 16 + 12 px): telefonda örnek PIN'ler iki satıra sığar */}
                 <div className="-ml-7">
@@ -219,8 +151,8 @@ export function LoginPage() {
                         key={d.name}
                         type="button"
                         onClick={(e) => {
-                          // Mesai'de sayfa açık kalır: çip odakta kalırsa sıradaki kişinin klavyede yazdığı PIN'in
-                          // Enter'ı çipe basar, çipin kişisinin mesaisi yeniden gider. Giriş türü düğmeleri gibi odak bırakılır
+                          // Giriş hatalı dönerse sayfa açık kalır: çip odakta kalırsa klavyeyle yazılan PIN'in Enter'ı
+                          // çipe basar, çipin PIN'i yeniden gider. Odak bırakılır
                           e.currentTarget.blur();
                           void submit(d.pin);
                         }}

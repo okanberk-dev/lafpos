@@ -79,18 +79,90 @@ export async function runFlows(ctx) {
           const orderId = new URL(page.url()).pathname.split('/').pop();
           await page.getByPlaceholder('Ürün ara').fill(simple.name);
           await page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first().click();
-          await page.getByRole('button', { name: /^Gönder \(1\)/ }).click();
-          await page.getByRole('button', { name: /^Gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
+          await page.getByRole('button', { name: /^Bara gönder \(1\)/ }).click();
+          await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
           const order = await api.call('garson', 'GET', `/orders/${orderId}`);
           assert(order.items.length === 1 && order.items[0].productId === simple.id, `adisyonda beklenen kalem yok: ${JSON.stringify(order.items.map((i) => i.name))}`);
         }),
+    ],
+    [
+      'Telefonda garson: kalemsiz masada ve karaoke odasında sepet çubuğu durur, sepetten "Masayı boşalt" ve "Başlat"a ulaşılır; geçişte odak kaybolmaz; gönderilmemiş ürünle tutar kesilmez',
+      async () => {
+        const table = seed.tables[7];
+        const room = seed.boot.tables.find((t) => t.kind === 'oda');
+        assert(table && room, 'boş masa ya da karaoke odası yok');
+        const blank = await api.call('garson', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 1 });
+        const roomOrder = await api.call('garson', 'POST', '/orders', { type: 'masa', tableId: room.id, guests: 2 });
+        await withPage(ctx, 'telefon', 'garson', async (page) => {
+          // Odak etkiden sonra geçer: kısa süre beklenir
+          const focused = async (loc) => {
+            for (let i = 0; i < 40; i++) {
+              if (await loc.evaluate((el) => el === document.activeElement)) return true;
+              await page.waitForTimeout(50);
+            }
+            return false;
+          };
+          await go(ctx, page, `/adisyon/${blank.id}`);
+          const bar = page.getByRole('button', { name: 'Sepet: 0 ürün, ₺0,00', exact: true });
+          await bar.click();
+          // Sepete geçince odak "Ürün ekle"de (basılan çubuk görünümle söküldü), dönüşte sepet çubuğunda
+          const add = page.getByRole('button', { name: 'Ürün ekle', exact: true });
+          await add.waitFor();
+          assert(await focused(add), 'sepete geçince odak Ürün ekle\'de değil');
+          await page.getByRole('button', { name: 'Masayı boşalt', exact: true }).waitFor();
+          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-garson-bos-masa-sepet.png` });
+          await add.click();
+          await bar.waitFor();
+          assert(await focused(bar), 'ürünlere dönünce odak sepet çubuğunda değil');
+          // Kendi adisyonu: tek dokunuşla boşalır
+          await bar.click();
+          await page.getByRole('button', { name: 'Masayı boşalt', exact: true }).click();
+          await page.waitForURL((u) => !u.pathname.startsWith('/adisyon/'), { timeout: 8000 });
+
+          // Karaoke odası: sayaç sepette, ürün eklenmeden başlatılabilir; boş oda boşaltılır
+          await go(ctx, page, `/adisyon/${roomOrder.id}`);
+          await page.getByRole('button', { name: 'Sepet: 0 ürün, ₺0,00', exact: true }).click();
+          await page.getByRole('button', { name: 'Başlat', exact: true }).waitFor();
+          await page.getByRole('button', { name: 'Odayı boşalt', exact: true }).click();
+          await page.waitForURL((u) => !u.pathname.startsWith('/adisyon/'), { timeout: 8000 });
+
+          // Gönderilmemiş beş ürünle sepet çubuğu: tutar 390 ve 360 px'te tam okunur, "Bara gönder"in adında adet var
+          await go(ctx, page, `/adisyon/${seed.s1.id}`);
+          await page.getByPlaceholder('Ürün ara').fill(simple.name);
+          const tile = page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first();
+          for (let i = 0; i < 5; i++) await tile.click();
+          const cart = page.getByRole('button', { name: /^Sepet: \d+ ürün, / });
+          await page.getByRole('button', { name: 'Bara gönder (5)', exact: true }).waitFor();
+          // Yalnız sepet çubuğu: 360 px'te sayfanın başka yerleri bu akışın konusu değil (tarama 390 px'te bakar)
+          for (const width of [390, 360]) {
+            await page.setViewportSize({ width, height: 844 });
+            const bad = await cart.evaluate((btn) => {
+              const total = btn.querySelector('.font-headline');
+              const bar = btn.parentElement;
+              const r = (el) => el.getBoundingClientRect();
+              return [
+                total.scrollWidth > total.clientWidth && 'tutar kesiliyor',
+                r(total).right > r(btn).right && 'tutar düğmeden taşıyor',
+                bar.scrollWidth > bar.clientWidth + 1 && 'çubuk taşıyor',
+                r(bar).right > document.documentElement.clientWidth + 1 && 'çubuk ekrandan taşıyor',
+              ].filter(Boolean);
+            });
+            assert(!bad.length, `${width} px sepet çubuğu: ${bad.join(', ')}`);
+          }
+          await page.screenshot({ path: `${ROOT}/e2e/out/telefon-garson-sepet-cubugu-bekleyen.png` });
+        });
+        for (const o of [blank, roomOrder]) {
+          const after = await api.call('patron', 'GET', `/orders/${o.id}`);
+          assert(after.status !== 'acik', `boş adisyon boşalmadı: ${after.status}`);
+        }
+      },
     ],
     [
       'Tablette kasiyer: hesabı nakit alır, adisyon kapanır',
       () =>
         withPage(ctx, 'tablet', 'kasa', async (page) => {
           await go(ctx, page, `/adisyon/${seed.s1.id}`);
-          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
           await page.getByRole('button', { name: 'Nakit', exact: true }).click();
           await page.getByRole('button', { name: 'Tam', exact: true }).click();
           await page.getByRole('button', { name: /Nakit al$/ }).click();
@@ -247,7 +319,7 @@ export async function runFlows(ctx) {
             await modal.waitFor({ state: 'detached' });
             // Sepetteki "Latte (Yulaf)" düzenlenir: Yulaf seçili kalır, ipucu var, Güncelle kapalı; seçili Yulaf'a dokununca
             // bırakılır, grup varsayılana (Normal) döner
-            await page.getByRole('tab', { name: /^Adisyon/ }).click();
+            await page.getByRole('button', { name: /^Sepet: / }).click();
             await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).click();
             await gone.waitFor({ timeout: 8000 });
             assert(await pressed('Yulaf'), 'düzenlenen satırın tükenen Yulaf\'ı süzüldü');
@@ -259,7 +331,7 @@ export async function runFlows(ctx) {
             await modal.getByRole('button', { name: /^Güncelle/ }).click();
             await modal.waitFor({ state: 'detached' });
             assert((await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).count()) === 0, 'sepette Yulaf kaldı');
-            await page.getByRole('tab', { name: 'Menü', exact: true }).click();
+            await page.getByRole('button', { name: 'Ürün ekle', exact: true }).click();
             // Aşağıdaki adım Yulaf'ı Tükenen ürünler penceresinden işaretler
             await api.call('kasa', 'POST', `/option-items/${item('Yulaf').id}/sold-out`, { soldOut: false });
 
@@ -303,7 +375,7 @@ export async function runFlows(ctx) {
             await modal.waitFor({ state: 'detached' });
             // Sepette Yulaf bırakılınca varsayılana dönen, sonra tükenen Normal (düzenlenen satır) işaretlenmez: önseçili
             // varsayılan gibi gönderimde çıkar, Gönder 409 almaz (pencere yukarıda "Normal tükendi" dedi, menü güncel)
-            await page.getByRole('tab', { name: /^Adisyon/ }).click();
+            await page.getByRole('button', { name: /^Sepet: / }).click();
             await page.getByRole('button', { name: `${label} düzenle`, exact: true }).first().waitFor({ timeout: 8000 });
             assert((await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'tükendi' }).count()) === 0, 'tükenen önseçili Normal yüzünden satır işaretli');
             await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-sepet-tukendi.png` });
@@ -314,12 +386,13 @@ export async function runFlows(ctx) {
         }),
     ],
     [
-      'Tablette kasiyer: Su penceresi açıkken ve Su sepetteyken önseçili Normal süt tükenir; Ekle açık, satır işaretsiz, Gönder süt yazmadan geçer; açıkça seçilen Yulaf tükenince uyarır',
+      'Tablette kasiyer: tek boylu Cortado penceresi açıkken ve Cortado sepetteyken önseçili Normal süt tükenir; Ekle açık, satır işaretsiz, Gönder süt yazmadan geçer; açıkça seçilen Yulaf tükenince uyarır',
       async () => {
         const boot = await api.call('kasa', 'GET', '/bootstrap');
-        const water = boot.products.find((p) => p.name === 'Su');
+        // Su'ya süt bağlanmaz (seçenek profili): isteğe bağlı Süt grubu olan tek boylu ürün Cortado
+        const water = boot.products.find((p) => p.name === 'Cortado');
         const milk = boot.optionGroups.find((g) => g.name === 'Süt' && water.optionGroupIds.includes(g.id));
-        assert(water && milk && !milk.required, 'Su ya da isteğe bağlı Süt grubu bulunamadı');
+        assert(water && milk && !milk.required, 'Cortado ya da isteğe bağlı Süt grubu bulunamadı');
         const item = (name) => milk.items.find((i) => i.name === name);
         const mark = (name, soldOut) => api.call('kasa', 'POST', `/option-items/${item(name).id}/sold-out`, { soldOut });
         const label = water.shortName?.trim() || water.name;
@@ -336,7 +409,7 @@ export async function runFlows(ctx) {
               await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
               await modal.waitFor();
             };
-            // Pencereyle eklenen Su: Normal süt önseçili, satıra yazılır
+            // Pencereyle eklenen Cortado: Normal süt önseçili, satıra yazılır
             await open();
             await chip('Normal', true).waitFor({ timeout: 8000 });
             await add.click();
@@ -358,8 +431,8 @@ export async function runFlows(ctx) {
             // Sepette ilk satırın seçeneğinde tükenen Normal var: işaretlenmez (Gönder onu çıkarır)
             const lines = page.getByRole('button', { name: `${label} düzenle`, exact: true });
             await lines.nth(1).waitFor({ timeout: 8000 });
-            assert((await lines.count()) === 2, `sepette ${await lines.count()} Su satırı var`);
-            assert((await lines.filter({ hasText: 'tükendi' }).count()) === 0, 'önseçili Normal tükenen Su satırı işaretli');
+            assert((await lines.count()) === 2, `sepette ${await lines.count()} Cortado satırı var`);
+            assert((await lines.filter({ hasText: 'tükendi' }).count()) === 0, 'önseçili Normal tükenen Cortado satırı işaretli');
             await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-sepet-onsecili-tukendi.png` });
             // Açıkça seçilen Yulaf tükenince eskisi gibi: seçili kalır, uyarı, Ekle kapalı
             await open();
@@ -373,15 +446,15 @@ export async function runFlows(ctx) {
             await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-secenek-yulaf-tukendi.png` });
             await page.keyboard.press('Escape');
             await modal.waitFor({ state: 'detached' });
-            // Gönder 409 almaz: iki Su bara gider (tezgâhta Öde'nin yanındaki Gönder)
-            await page.getByRole('button', { name: 'Gönder', exact: true }).click();
-            await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+            // Gönder 409 almaz: iki Cortado bara gider (tezgâhta Öde'nin yanındaki Gönder)
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).click();
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
           });
           const done = await api.call('kasa', 'GET', `/orders/${o.id}`);
           const sold = done.items.filter((i) => i.productId === water.id && !i.voided);
-          assert(sold.reduce((a, i) => a + i.qty, 0) === 2, `adisyonda ${sold.length} Su kalemi var`);
-          assert(sold.every((i) => !i.options.some((x) => x.groupId === milk.id)), `Su'ya süt yazıldı: ${JSON.stringify(sold.map((i) => i.options.map((x) => x.name)))}`);
-          assert(sold.every((i) => i.unitPrice === water.price), `Su fiyatı değişti: ${sold.map((i) => i.unitPrice)}`);
+          assert(sold.reduce((a, i) => a + i.qty, 0) === 2, `adisyonda ${sold.length} Cortado kalemi var`);
+          assert(sold.every((i) => !i.options.some((x) => x.groupId === milk.id)), `Cortado'ya süt yazıldı: ${JSON.stringify(sold.map((i) => i.options.map((x) => x.name)))}`);
+          assert(sold.every((i) => i.unitPrice === water.price), `Cortado fiyatı değişti: ${sold.map((i) => i.unitPrice)}`);
         } finally {
           for (const name of ['Normal', 'Yulaf']) await mark(name, false);
         }
@@ -418,8 +491,8 @@ export async function runFlows(ctx) {
           await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-secenek-grup-acildi.png` });
           await add.click();
           await modal.waitFor({ state: 'detached' });
-          await page.getByRole('button', { name: 'Gönder', exact: true }).click();
-          await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+          await page.getByRole('button', { name: /^Bara gönder \(/ }).click();
+          await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
         });
         const done = await api.call('kasa', 'GET', `/orders/${o.id}`);
         const line = done.items.find((i) => i.productId === product.id);
@@ -458,18 +531,17 @@ export async function runFlows(ctx) {
         }),
     ],
     [
-      'Tablette kasiyer: hesabı üç kişiye böler, payları nakit ve kartla ayrı ayrı alır',
+      'Tablette kasiyer: hesabı tek dokunuşla üç kişiye böler, ikinci payı elle değiştirir (son pay kalanı alır), payları nakit ve kartla ayrı ayrı alır',
       async () => {
         const product = (name) => seed.boot.products.find((p) => p.name === name);
         const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
         await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 3 }, { productId: product('Türk Kahvesi').id, qty: 1 }] });
         await withPage(ctx, 'tablet', 'kasa', async (page) => {
           await go(ctx, page, `/adisyon/${o.id}`);
-          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
           await page.getByRole('button', { name: 'Paylaş', exact: true }).click();
-          // Kitin adet seçicisi: düğmeler Azalt / Artır, adı grubun etiketinde ("Kişi")
-          await page.getByRole('group', { name: 'Kişi', exact: true }).getByRole('button', { name: 'Artır', exact: true }).click();
-          await page.getByRole('button', { name: 'Hesabı 3 kişiye böl' }).click();
+          // "Kaç kişiye bölünsün?" çipleri: tek dokunuş bölüşü kurar
+          await page.getByRole('button', { name: '3 kişi', exact: true }).click();
           await page.getByText('Pay 1 · sıradaki').waitFor();
           const cash = async () => {
             await page.getByRole('button', { name: 'Nakit', exact: true }).click();
@@ -480,16 +552,30 @@ export async function runFlows(ctx) {
           await page.getByRole('button', { name: 'Sıradaki pay' }).click();
           await page.getByText('Pay 2 · sıradaki').waitFor();
           await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-paylas.png` });
+          // Elle: ikinci pay 100 TL, son pay kalanı kendisi gösterir; kaydedilmeden ödeme alınmaz
+          await page.getByRole('button', { name: 'Elle', exact: true }).click();
+          await page.getByRole('textbox', { name: 'Pay 2 tutarı' }).fill('100');
+          await page.getByRole('button', { name: 'Önce payları kaydedin' }).waitFor();
+          let small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-paylas-elle.png` });
+          await page.getByRole('button', { name: 'Payları kaydet', exact: true }).click();
           await page.getByRole('button', { name: 'Kredi kartı', exact: true }).click();
-          await page.getByRole('button', { name: /Kredi kartı al$/ }).click();
+          await page.getByRole('button', { name: '₺100,00 Kredi kartı al' }).click();
+          // Kartta para üstü yok: pencere sonuç göstermeden sıradaki paya geçer
           await page.getByText('Pay 3 · sıradaki').waitFor();
+          small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
           await cash();
           await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor();
         });
         const done = await api.call('mudur', 'GET', `/orders/${o.id}`);
-        const shares = done.payments.filter((p) => !p.refundedAt).map((p) => `${p.shareNo}/${p.shareOf} ${p.methodName}`);
+        const live = done.payments.filter((p) => !p.refundedAt);
+        const shares = live.map((p) => `${p.shareNo}/${p.shareOf} ${p.methodName}`);
         assert(done.status === 'kapali', `adisyon kapanmadı: ${done.status}`);
         assert(shares.join(', ') === '1/3 Nakit, 2/3 Kredi kartı, 3/3 Nakit', `paylar beklenen gibi değil: ${shares.join(', ')}`);
+        assert(live[1].amount === 10000, `ikinci pay elle girilen tutar değil: ${live[1].amount}`);
+        assert(live[0].amount + live[1].amount + live[2].amount === done.total, 'paylar toplamı tutmuyor');
       },
     ],
     [
@@ -659,7 +745,7 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Tablette kasiyer: personel yemeğini ödenmez kapatır, müdür onaylar',
+      'Tablette kasiyer: personel yemeğini garsonun adına ödenmez kapatır (kişi seçilmeden olmaz, neden önerilir), müdür onaylar',
       async () => {
         const table = seed.tables[5];
         const o = await api.call('kasa', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 1 });
@@ -668,17 +754,26 @@ export async function runFlows(ctx) {
           await go(ctx, page, `/adisyon/${o.id}`);
           await page.getByRole('button', { name: 'İşlemler', exact: true }).click();
           await page.getByRole('button', { name: /^Ödenmez kapat/ }).click();
-          const reason = page.getByRole('dialog', { name: 'Ödenmez kapat' });
-          await reason.getByRole('button', { name: 'Personel yemeği', exact: true }).click();
+          const reason = page.getByRole('dialog', { name: 'Ödenmez kapat · kimin adına?' });
+          // Kişi seçilmeden yazılmaz
+          await reason.getByRole('button', { name: 'Ödenmez kapat', exact: true }).click();
+          await reason.getByText('Kimin adına yazılacağını seçin').waitFor();
+          await reason.getByRole('group', { name: 'Personel', exact: true }).getByRole('button', { name: /^Garson/ }).click();
+          // Personel seçilince neden "Personel yemeği" önerilir
+          await reason.getByRole('button', { name: 'Personel yemeği', exact: true, pressed: true }).waitFor();
+          const small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-odenmez-kisi.png` });
           await reason.getByRole('button', { name: 'Ödenmez kapat', exact: true }).click();
           const approval = page.getByRole('dialog', { name: 'Yetkili onayı' });
           for (const d of PINS.mudur) await approval.getByRole('button', { name: d, exact: true }).click();
           await approval.getByRole('button', { name: 'Onayla', exact: true }).click();
           await page.waitForURL((u) => !u.pathname.startsWith('/adisyon/'), { timeout: 8000 });
         }, [/istek 403: POST \/api\/orders\/[^/]+\/comp/, /konsol: Failed to load resource: .*403/]);
-        const closed = await api.call('kasa', 'GET', `/orders/${o.id}`);
+        const closed = await api.call('mudur', 'GET', `/orders/${o.id}`);
         assert(closed.status === 'kapali' && closed.total === 0, `adisyon kapanmadı: ${closed.status} ${closed.total}`);
         assert(closed.items.every((i) => i.compKind === 'odenmez' && i.compReason === 'Personel yemeği'), 'kalemler ödenmez değil');
+        assert(closed.compPerson?.name === 'Garson' && closed.items.every((i) => i.compPerson?.name === 'Garson'), `ödenmez garsona yazılmadı: ${JSON.stringify(closed.compPerson)}`);
       },
     ],
     [
@@ -688,7 +783,7 @@ export async function runFlows(ctx) {
         await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: simple.id, qty: 1 }] });
         await withPage(ctx, 'tablet', 'mudur', async (page) => {
           await go(ctx, page, `/adisyon/${o.id}`);
-          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
           await page.getByRole('button', { name: 'Zayi', exact: true }).click();
           const reason = page.getByRole('dialog', { name: 'Zayi kapat' });
           await reason.getByRole('button', { name: 'Döküldü', exact: true }).click();
@@ -736,8 +831,8 @@ export async function runFlows(ctx) {
             await page.getByPlaceholder('Ürün ara').fill('Latte');
             await latteTile(page).getByRole('button', { name: new RegExp(`^${M} `) }).click();
             assert((await page.getByRole('dialog').count()) === 0, 'Latte için pencere açıldı');
-            await page.getByRole('button', { name: 'Gönder', exact: true }).click();
-            await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).click();
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
           });
           const sent = await api.call('kasa', 'GET', `/orders/${o.id}`);
           const rows = sent.items.map((i) => `${i.name} ${i.size} ${i.optionsText}`.trim());
@@ -887,7 +982,7 @@ export async function runFlows(ctx) {
           await page.getByRole('status').filter({ hasText: `Selin Bulut #${pickup.no} teslim edildi` }).waitFor({ timeout: 5000 });
 
           await go(ctx, page, `/adisyon/${counter.id}`);
-          await page.getByRole('tab', { name: /^Adisyon/ }).click();
+          await page.getByRole('button', { name: /^Sepet: / }).click();
           await page.getByText('2 ürün hazır', { exact: true }).waitFor({ timeout: 8000 });
           await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-adisyon-hazir.png` });
           overflow = await overflowReport(page);
@@ -904,29 +999,20 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Telefonda kilit ekranı: garson PIN’iyle mesai başlatır, kullanıcı menüsünden bitirir',
+      'Telefonda kilit ekranı: garson PIN’iyle oturum açar; mesai sekmesi ve satırı yok',
       async () => {
         await withPage(ctx, 'telefon', null, async (page) => {
           await go(ctx, page, '/giris');
-          await page.getByRole('button', { name: 'Mesai', exact: true }).click();
+          assert(!(await page.getByRole('button', { name: 'Mesai', exact: true }).count()), 'kilit ekranında Mesai sekmesi var');
           for (const d of PINS.garson) await page.getByRole('button', { name: d, exact: true }).click();
-          await page.getByRole('button', { name: 'Onayla', exact: true }).click();
-          await page.getByRole('status').filter({ hasText: 'Hoş geldin' }).waitFor({ timeout: 8000 });
-          // Mesai oturum açmaz: ekran girişte kalır
-          assert(new URL(page.url()).pathname === '/giris', `mesai oturum açtı: ${page.url()}`);
+          if (PINS.garson.length < 6) await page.getByRole('button', { name: 'Giriş', exact: true }).click();
+          await page.waitForURL((u) => u.pathname !== '/giris', { timeout: 8000 });
+          await page.getByRole('button', { name: /menüsü$/ }).first().click();
+          await page.getByRole('button', { name: /^Ekranı kilitle/ }).waitFor({ timeout: 8000 });
+          assert(!(await page.getByRole('button', { name: /^Mesaiyi/ }).count()), 'kullanıcı menüsünde mesai satırı var');
         });
-        const sheet = await api.call('patron', 'GET', '/time');
-        assert(sheet.clockedIn.some((e) => e.userName === 'Garson'), 'garson mesaide görünmüyor');
         // Personel çekmecesindeki kayıt (önceki akış) garsonun oturumlarını kapatır: yeni oturum
         api.tokens.garson = (await api.call('', 'POST', '/auth/login', { pin: PINS.garson })).token;
-        await withPage(ctx, 'telefon', 'garson', async (page) => {
-          await go(ctx, page, '/masalar');
-          await page.getByRole('button', { name: /menüsü$/ }).first().click();
-          await page.getByRole('button', { name: 'Mesaiyi bitir', exact: true }).click();
-          await page.getByRole('button', { name: 'Mesaiyi başlat', exact: true }).waitFor({ timeout: 8000 });
-        });
-        const after = await api.call('patron', 'GET', '/time');
-        assert(!after.clockedIn.some((e) => e.userName === 'Garson'), 'garson hâlâ mesaide');
       },
     ],
     [

@@ -129,9 +129,9 @@ export function needsChoice(boot: BootstrapDTO, p: ProductDTO): boolean {
 }
 
 /**
- * İki boylu ürünün kartı ve boy düğmesi seçenek penceresini o boy seçili mi açar (hemen eklemek yerine): zorunlu seçim
- * varsa, Yönetim › Ayarlar › Seçenekleri sor "Seçenekli her üründe" ise seçeneği olan her üründe. Tek boylu seçenekli
- * ürün zaten hep pencereyle eklenir
+ * Ürün kartı ve boy düğmesi seçenek penceresini mi açar (hemen eklemek yerine): zorunlu seçim varsa, Yönetim › Ayarlar ›
+ * Seçenekleri sor "Seçenekli her üründe" ise seçeneği olan her üründe. Yalnız isteğe bağlı seçeneği olan ürün, tek boylu
+ * da, tek dokunuşla eklenir (sunucu varsayılanı yazar; 4 Kasım 2026, seçenek profili)
  */
 export function asksOptions(boot: BootstrapDTO, p: ProductDTO): boolean {
   if (!productGroups(boot, p).length) return false;

@@ -19,6 +19,8 @@ interface AuditRow {
   amount: number | null;
   userName: string | null;
   approverName: string | null;
+  /** Kaydın ayrıntısı: ciro dışı kayıtlarında tür (`kind`: ikram, odenmez, zayi) ve kişi */
+  data?: { kind?: string } | null;
 }
 
 /**
@@ -46,6 +48,7 @@ const ACTION_LABEL: Record<string, string> = {
   'item.comp': 'İkram',
   'item.discount': 'Kalem indirimi',
   'item.discount_removed': 'İndirim kaldırma',
+  'item.odenmez': 'Ödenmez',
   'item.price_override': 'Elle fiyat',
   'item.uncomp': 'İkramı geri alma',
   'item.void': 'Kalem iptali',
@@ -120,11 +123,16 @@ const PREFIX_LABEL: Record<string, string> = {
   settings: 'Ayar',
   sync: 'Senkron',
   table: 'Masa',
+  // Mesai kaldırıldı (4 Kas 2026); eski kayıtlar (time.in, time.edit…) adıyla okunur kalır
   time: 'Mesai',
   user: 'Personel',
 };
 
-const actionLabel = (code: string): string | null => ACTION_LABEL[code] ?? PREFIX_LABEL[code.split('.')[0]] ?? null;
+/** Ciro dışı kaydı geri alma tek kod (`item.uncomp`); adı kaydın türünden (ödenmez ve zayi de geri alınır) */
+const UNCOMP_LABEL: Record<string, string> = { ikram: 'İkramı geri alma', odenmez: 'Ödenmezi geri alma', zayi: 'Zayiyi geri alma' };
+
+const actionLabel = (a: Pick<AuditRow, 'action' | 'data'>): string | null =>
+  (a.action === 'item.uncomp' ? UNCOMP_LABEL[a.data?.kind ?? ''] : undefined) ?? ACTION_LABEL[a.action] ?? PREFIX_LABEL[a.action.split('.')[0]] ?? null;
 
 /**
  * Ayar kaydının iletisi: "Patron ayarları değiştirdi: <adlar>". Adlar tek listeden (`@shared/settings-labels`; sunucu
@@ -160,7 +168,7 @@ export default function AuditAdmin() {
   const rows = useMemo(() => {
     const k = fold(q.trim());
     return all.filter(
-      (a) => (severity === 'tum' || a.severity === severity) && (!k || fold(`${a.message} ${settingsText(a)?.full ?? ''} ${actionLabel(a.action) ?? ''} ${a.action} ${a.userName ?? ''} ${a.approverName ?? ''}`).includes(k)),
+      (a) => (severity === 'tum' || a.severity === severity) && (!k || fold(`${a.message} ${settingsText(a)?.full ?? ''} ${actionLabel(a) ?? ''} ${a.action} ${a.userName ?? ''} ${a.approverName ?? ''}`).includes(k)),
     );
   }, [all, severity, q]);
 
@@ -171,7 +179,7 @@ export default function AuditAdmin() {
   for (const a of rows) {
     const st = settingsText(a);
     // Kim ve ne, tek sakin satırda: "Kasa · Hesap yazdırma · onaylayan Müdür"; ileti kişinin adıyla başlıyorsa ad yinelenmez
-    const meta = [a.userName && !a.message.startsWith(`${a.userName} `) ? a.userName : null, actionLabel(a.action), a.approverName && `onaylayan ${a.approverName}`].filter(Boolean).join(' · ');
+    const meta = [a.userName && !a.message.startsWith(`${a.userName} `) ? a.userName : null, actionLabel(a), a.approverName && `onaylayan ${a.approverName}`].filter(Boolean).join(' · ');
     const item: TimelineItem = {
       key: String(a.id),
       tone: a.severity === 'alarm' ? 'danger' : a.severity === 'uyari' ? 'warning' : 'neutral',

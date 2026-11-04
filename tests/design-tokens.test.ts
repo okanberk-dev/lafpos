@@ -186,3 +186,96 @@ describe('yönetim paneli (LafPOS Sade)', () => {
     expect(ill).toContain('dark:size-[76%]');
   });
 });
+
+/**
+ * Köşe ve gölge belirteçleri (DESIGN.md §2 "Biçim", §4 "Kurumsal yüzey"): kasa ekranları bugünkü yumuşak değerlerle
+ * (:root), yönetim ve raporlar kurumsal kapsamda (.surface-corporate, portal için :root[data-area='admin']). Ortak kit
+ * köşeyi belirteçten okur; sayfaların rounded-xl / rounded-2xl'si Tailwind'in köşe değişkeniyle kapsamda küçülür.
+ */
+describe('köşe ve gölge belirteçleri, kurumsal yüzey', () => {
+  const src = (f: string) => readFileSync(join(__dirname, '../src', f), 'utf8');
+  const tokens = (() => {
+    const at = css.indexOf(':root {\n  --r-card:');
+    if (at < 0) throw new Error('index.css: köşe belirteçleri yok');
+    const body = css.slice(at, css.indexOf('}', at));
+    return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+  })();
+  const corporate = block(".surface-corporate,\n:root[data-area='admin']");
+
+  it('kasa ekranlarının değerleri bugünkü gibi: kart 20, alan 14, düğme, çip ve segment kapsül, sütun 4', () => {
+    expect(tokens).toMatchObject({ 'r-card': '1.25rem', 'r-control': '0.875rem', 'r-btn': '9999px', 'r-chip': '9999px', 'r-segment': '9999px', 'r-bar': '4px', 'r-track': '9999px' });
+    expect(block('@theme')).toMatchObject({ 'radius-xl': '0.875rem', 'radius-2xl': '1.25rem' });
+    expect(block('@theme')['shadow-card']).toMatch(/rgb\(59 42 30/);
+  });
+
+  it('kurumsal yüzey: kart, tablo, alan, düğme, segment 6; çip ve rozet 4; gölge yok; çubuk köşesiz', () => {
+    expect(corporate).toMatchObject({
+      'radius-lg': '6px',
+      'radius-xl': '6px',
+      'radius-2xl': '6px',
+      'r-card': '6px',
+      'r-control': '6px',
+      'r-btn': '6px',
+      'r-chip': '4px',
+      'r-segment': '6px',
+      'r-bar': '0px',
+      'r-track': '0px',
+      'shadow-card': 'none',
+      'shadow-lift': 'none',
+      rim: 'none',
+      'table-head-bg': 'transparent',
+    });
+  });
+
+  it('kapsam yönetim kabuğunun kökünde (raporlar da aynı kabukta); kasa ekranlarında yok', () => {
+    expect(src('components/admin/AdminShell.tsx')).toMatch(/className="surface-corporate /);
+    expect(src('pages/reports/ReportsPage.tsx')).toMatch(/<AdminShell title="Raporlar">/);
+    for (const f of ['components/AppShell.tsx', 'pages/order/OrderPage.tsx', 'pages/FloorPage.tsx', 'pages/cash/CashPage.tsx']) expect(src(f), f).not.toContain('surface-corporate');
+  });
+
+  it('ortak kit köşeyi belirteçten okur (kapsül sabit değil)', () => {
+    const button = src('components/ui/Button.tsx');
+    expect(button.match(/rounded-\[var\(--r-btn\)\]/g)?.length).toBe(4);
+    expect(button).not.toMatch(/rounded-full/);
+    const field = src('components/ui/Field.tsx');
+    expect(field).toContain('rounded-[var(--r-chip)] border px-3.5');
+    expect(field).toContain("'rounded-[var(--r-segment)]'");
+    const misc = src('components/ui/misc.tsx');
+    expect(misc).toMatch(/whitespace-nowrap rounded-\[var\(--r-chip\)\] px-2\.5 py-0\.5/);
+    const admin = src('components/admin/ui.tsx');
+    expect(admin).toContain('justify-center rounded-[var(--r-btn)] ');
+    expect(admin).toContain('bg-[var(--table-head-bg)]');
+    expect(admin.match(/rounded-\[var\(--r-segment\)\]/g)?.length).toBeGreaterThanOrEqual(2);
+    const charts = src('components/charts.tsx');
+    expect(charts).toContain("getPropertyValue('--r-bar')");
+    expect(charts).toContain('rounded-[var(--r-track)]');
+  });
+
+  it('kasa ekranının yönetimdeki birebir önizlemesi kasa köşelerinde (surface-soft = @theme köşeleri ve :root --r-*)', () => {
+    const soft = block('.surface-soft');
+    const theme = block('@theme');
+    for (const k of ['radius-lg', 'radius-xl', 'radius-2xl', 'radius-3xl']) expect(soft[k], k).toBe(theme[k]);
+    for (const k of ['r-card', 'r-control', 'r-btn', 'r-chip', 'r-segment', 'r-bar', 'r-track']) expect(soft[k], k).toBe(tokens[k]);
+    // Kurumsalın bütün köşe değişkenleri geri alınır (gölgeye dokunulmaz: önizlenen ekranın kendi gölgesi var)
+    for (const k of Object.keys(corporate).filter((k) => k.startsWith('radius-') || k.startsWith('r-'))) expect(soft, k).toHaveProperty(k);
+    expect(src('components/display/CustomerDisplayView.tsx')).toMatch(/className=\{cn\('surface-soft relative h-full w-full/);
+  });
+
+  it('rapor tablosu ve roller matrisi kitin DataTable başlığıyla aynı: zemin --table-head-bg, başlık çizgisi', () => {
+    const head = 'border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]';
+    expect(src('components/admin/ui.tsx')).toContain(`<tr className="${head}">`);
+    expect(src('pages/reports/ReportsPage.tsx')).toContain(`<tr className="${head}">`);
+    const roles = src('pages/admin/RolesAdmin.tsx');
+    expect(roles).toContain(`<tr className="${head}">`);
+    // Yapışkan ilk hücre opak: yatay kayan hücreler altından görünmez
+    expect(roles).toContain('sticky left-0 z-[1] h-12 min-w-44 bg-[var(--admin-surface)]');
+    expect(src('pages/reports/ReportsPage.tsx')).not.toContain('<tr className="bg-[var(--admin-surface-2)]">');
+  });
+
+  it('kenar çubuğu: etkin öğede dolgu kapsül yok, 2 px yeşil sol çizgi ve kalın yazı; gruplar arası ince ayraç', () => {
+    const shell = src('components/admin/AdminShell.tsx');
+    expect(shell).toContain("'relative font-semibold text-[var(--admin-text)] before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:bg-[var(--admin-primary)]'");
+    expect(shell).not.toContain("isActive ? 'bg-[var(--admin-panel)]");
+    expect(shell).toContain("!narrow && gi > 0 && 'border-t border-[var(--admin-border)] pt-3'");
+  });
+});
