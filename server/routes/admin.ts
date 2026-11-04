@@ -962,6 +962,9 @@ const settingsShape = patchOf(
     alertDiscountPct: z.number().int().min(1).max(100),
     alertCashDiffKurus: kurus,
     backupKeep: z.number().int().min(1).max(365),
+    // Şube kimliği lafmaliyet'teki kuralla aynı olmalı (docs/SUBE.md): harfle başlar,
+    // küçük harf / rakam / tire, 2-24 karakter. Yanlış yazılırsa gün yanlış şubeye gider
+    branchId: z.string().regex(/^[a-z][a-z0-9-]{1,23}$/, 'Şube kimliği harfle başlamalı; küçük harf, rakam ve tire'),
     autoDayEnd: z.boolean(),
     autoDayEndHour: z.number().int().min(0).max(23),
     serviceMode: z.enum(SERVICE_MODES),

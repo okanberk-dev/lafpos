@@ -225,6 +225,9 @@ export function buildDayPayload(dayId: string) {
   return {
     version: 1,
     source: 'lafpos',
+    // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel günü bu şubeye yazar. Eski panel alanı yok sayar ve günü
+    // Tuzla'ya yazar (geri uyumlu, docs/03-ENTEGRASYON.md §4)
+    sube: getSettings().branchId,
     date: day.date,
     z: {
       zNo: z.z_no,

@@ -33,6 +33,8 @@ afterAll(() => h.cleanup());
 type Line = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; revenue: number; isService: boolean };
 type Ikram = { posName: string; siteMenuId: string | null; slot: 'M' | 'L' | null; qty: number; menuValue: number; reason: string | null };
 type Payload = {
+  /** Kasanın şubesi (docs/03-ENTEGRASYON.md §4) */
+  sube: string;
   date: string;
   z: Record<string, number | null>;
   lines: Line[];
@@ -416,5 +418,31 @@ describe('yönetim doğrulamaları', () => {
     expect(z.expectedCash).toBeCloseTo(z.openingCash! + z.cash!, 2);
     expect(z.cashIn).toBe(0);
     await h.ok('patron', 'PATCH', `/admin/payment-methods/${m.id}`, { active: false });
+  });
+});
+
+/**
+ * Şube kimliği (docs/03-ENTEGRASYON.md §4, 4 Kasım 2026): gün sonu paketi kasanın şubesini taşır, böylece
+ * lafmaliyet günü doğru şubenin cirosuna yazar (lafmaliyet docs/SUBE.md). Varsayılan `tuzla`: tek şubeli
+ * kurulumda ve eski kayıtlarda bugünkü davranış değişmez.
+ */
+describe('şube kimliği pakete girer', () => {
+  it('varsayılan tuzla, ayar değişince paket onu taşır', async () => {
+    const day = await freshDay();
+    expect((await payloadOf(day.id)).sube).toBe('tuzla');
+
+    await h.ok('patron', 'PUT', '/admin/settings', { branchId: 'marina' });
+    expect((await payloadOf(day.id)).sube).toBe('marina');
+    await h.ok('patron', 'PUT', '/admin/settings', { branchId: 'tuzla' });
+  });
+
+  it('geçersiz kimlik ayarlanamaz (lafmaliyet ile aynı kural)', async () => {
+    for (const kotu of ['', 'M', 'Marina', '1marina', 'mar na', 'marina!', 'm'.repeat(25)]) {
+      const r = await h.call('patron', 'PUT', '/admin/settings', { branchId: kotu });
+      expect(r.status, `şube kimliği kabul edilmemeli: ${JSON.stringify(kotu)}`).toBe(422);
+    }
+    // Ayar değişmedi
+    const day = await freshDay();
+    expect((await payloadOf(day.id)).sube).toBe('tuzla');
   });
 });

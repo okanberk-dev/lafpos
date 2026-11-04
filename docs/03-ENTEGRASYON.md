@@ -423,12 +423,20 @@ idempotent). İstek giden kutusunda (`outbox`) bekler; internet yoksa artan bekl
 `LAFMALIYET_URL` ve `LAFMALIYET_SYNC_SECRET` yokken hiçbir şey kuyruğa girmez, istek gitmez. Kurulum modunda kapanan
 gün (eğitim günü) hiç gitmez, kurulum modu sonra kapansa da (§4.3).
 
+**Şube (`sube`, 4 Kasım 2026, ekleme).** Marina şubesi açılınca lafmaliyet ciroyu şubeye göre ayırmaya başladı
+(lafmaliyet `docs/SUBE.md`). Paket, kasanın şubesinin kimliğini taşır: Yönetim › Ayarlar'daki `branchId`
+(varsayılan `tuzla`), lafmaliyet'teki kimliğin aynısı (harfle başlar, küçük harf / rakam / tire, 2-24 karakter).
+Panel günü o şubeye yazar; alanı tanımayan ya da şube kırılımı olmayan panel yok sayar ve günü bugünkü gibi
+Tuzla'ya yazar (geri uyumlu). **İkinci bir kasa kurarken ilk iş bu alanı değiştirmektir:** yanlış kimlik, günün
+yanlış şubeye yazılması demektir ve panelde aynı güne iki Z çakışır (§4.2 `z_conflict`).
+
 ```
 POST {LAFMALIYET_URL}/api/pos/gun
 x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYNC_SECRET, LafPOS'ta LAFMALIYET_SYNC_SECRET)
 {
   "version": 1,
   "source": "lafpos",
+  "sube": "tuzla",
   "date": "2026-10-26",
   "z": {
     "zNo": 128, "receipts": 214, "zTotal": 45210.5,
