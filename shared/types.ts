@@ -425,6 +425,12 @@ export interface FloorOrderSummary {
   readyToServe: number;
   source: 'pos' | 'laffogato';
   roomStartedAt: number | null;
+  /**
+   * Parasal izi yok (sunucunun `isEmptyOrder`'ı: kalem, iptal edilmiş kalem ve ödeme satırı yok; oda sayacı ve yazarkasa
+   * sepeti yok): gün sonu kendiliğinden kapatır, boş tezgâh satışı yeni satışta yeniden kullanılır. Kalemleri iptal
+   * edilmiş adisyon `itemCount` 0 olsa da boş değildir, gün sonunu tutar. Eski Uzaktan özetinde yok
+   */
+  empty?: boolean;
 }
 
 /** Sitedeki karaoke rezervasyonu ve sayaca bağlandıysa adisyonu (docs/03-ENTEGRASYON.md §2.4) */

@@ -213,22 +213,23 @@ export function CartPanel({
           <span className="text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
           <span className="tabular font-headline text-2xl font-bold tracking-tight">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
         </div>
-        {/* Tamamı ödendiyse vurgu sıfıra ("Kalan ₺0,00") değil ödemeye: yeşil "Ödendi" */}
+        {/* Tamamı ödendiyse vurgu sıfıra ("Kalan ₺0,00") değil ödemeye: yeşil "Ödendi". Gönderilmemiş ürün varken (yeniden
+            açılmış, ödenmiş adisyona ekleme) tutar artacak: "Ödendi" değil, tahmini toplamdan kalan */}
         {order.paid > 0 &&
           !order.extPaid &&
           !partlyPaid &&
-          (due <= 0 ? (
+          (preview ? (
+            <div className="mt-1 space-y-0.5 text-[13px] text-muted">
+              <Row l="Ödenen" r={tl(order.paid)} />
+              <Row l={<span className="font-semibold text-ink">Kalan</span>} r={<span className="font-semibold text-ink">{tl(Math.max(0, preview.total - order.paid))}</span>} />
+            </div>
+          ) : (
             <div className="mt-1 flex justify-between text-[13px] font-medium text-[var(--admin-success)]">
               <span className="inline-flex items-center gap-1">
                 <Check aria-hidden="true" className="size-3.5" />
                 Ödendi
               </span>
               <span className="tabular">{tl(order.paid)}</span>
-            </div>
-          ) : (
-            <div className="mt-1 space-y-0.5 text-[13px] text-muted">
-              <Row l="Ödenen" r={tl(order.paid)} />
-              <Row l={<span className="font-semibold text-ink">Kalan</span>} r={<span className="font-semibold text-ink">{tl(due)}</span>} />
             </div>
           ))}
         {preview && <div className="mt-1 text-xs text-[var(--admin-warning)]">Gönderilmemiş {pending.reduce((a, l) => a + l.qty, 0)} ürün dahil, tahmini</div>}

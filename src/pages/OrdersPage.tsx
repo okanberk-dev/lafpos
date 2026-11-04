@@ -107,8 +107,10 @@ export default function OrdersPage() {
           ? all.filter((o) => o.type === 'paket' || o.type === 'gelal')
           : (closed.data ?? []);
   const couriers = boot.users.filter((u) => u.active && (u.role === 'kurye' || u.role === 'garson'));
-  // Boş durum ekranın sözüyle ve bu kişinin yapabileceğiyle: self modlarda satış Satış ekranından açılır, kurye açmaz
+  // Boş durum ekranın sözüyle ve bu kişinin yapabileceğiyle: self modlarda satış Satış ekranından açılır, kurye açmaz.
+  // Paket yalnız paket yetkisiyle açılır (Masalar'da düğmesi de yalnız ona; garson yalnız gel-al açar)
   const opens = can('siparis.al');
+  const opensPaket = can('paket.yonet');
   const empty =
     tab === 'kapanan'
       ? { title: 'Bugün kapanan adisyon yok', body: 'Ödemesi alınan adisyonlar gün boyunca burada listelenir' }
@@ -117,11 +119,17 @@ export default function OrdersPage() {
         : tab === 'paket'
           ? {
               title: 'Açık paket ya da gel-al siparişi yok',
-              body: opens && !isCounterFirst(mode) ? 'Masalar ekranından gel-al ya da paket açın' : 'Gel-al ve paket siparişleri açılınca burada görünür',
+              body: !opens || isCounterFirst(mode) ? 'Gel-al ve paket siparişleri açılınca burada görünür' : opensPaket ? 'Masalar ekranından gel-al ya da paket açın' : 'Masalar ekranından gel-al açın',
             }
           : {
               title: 'Açık sipariş yok',
-              body: !opens ? 'Tezgâh, gel-al ve paket siparişleri açılınca burada görünür' : isCounterFirst(mode) ? 'Satış ekranından yeni satış açın' : 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın',
+              body: !opens
+                ? 'Tezgâh, gel-al ve paket siparişleri açılınca burada görünür'
+                : isCounterFirst(mode)
+                  ? 'Satış ekranından yeni satış açın'
+                  : opensPaket
+                    ? 'Masalar ekranından tezgâh satışı, gel-al ya da paket açın'
+                    : 'Masalar ekranından tezgâh satışı ya da gel-al açın',
             };
 
   return (

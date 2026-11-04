@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Ban,
@@ -30,11 +30,12 @@ import { fmtTime } from '@shared/time';
 import type { CompKind, FloorStateDTO, OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button, buttonClass, IconButton } from '@/components/ui/Button';
+import { confirmDialog } from '@/components/ui/Confirm';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea, Toggle } from '@/components/ui/Field';
 import { Badge, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
-import { patch, post, put } from '@/lib/api';
-import { useCan } from '@/lib/auth';
+import { get, patch, post, put } from '@/lib/api';
+import { useAuth, useCan } from '@/lib/auth';
 import { sendableOptions, soldOutDefault, useBoot } from '@/lib/boot';
 import { type PendingLine, restoreLines, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
@@ -130,6 +131,14 @@ export default function OrderPage() {
   // Menüde geldiği ekran etkin görünür (rayda ve alt sekmede): masa adisyonu Masalar, self modda tezgâh satışı Tezgâh
   // satışı, gerisi Siparişler
   useSetNavOrigin(order ? (order.tableId ? '/masalar' : order.type === 'tezgah' && isCounterFirst(mode) ? '/satis' : '/siparisler') : null);
+  const me = useAuth((s) => s.me);
+  const hasItems = !!order?.items.some((i) => !i.voided);
+  // Kalemsiz, ödemesiz açık adisyon (masa açıldı, sipariş yok; boş tezgâh satışı): eylem şeridi aşağıda. Çalışan oda
+  // sayacı boş sayılmaz (ücret işler)
+  const blank = !!order && order.status === 'acik' && order.source !== 'laffogato' && !REMOTE && !hasItems && !pending.length && order.paid === 0 && !order.room;
+  // Boş masa adisyonunun düğmesi masadaki öteki hesaplara göre adlanır (sharesTable, aşağıda): masa planı yalnız o zaman
+  // ve güncel sorulur. Önbellek sayfa yeniden yüklenince ya da Patron'dan açılınca boştur, Masalar kapalıyken eskir
+  const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), enabled: blank && !!order?.tableId && can('siparis.al') });
 
   if (isLoading) return <PageLoading />;
   if (!order) {
@@ -280,7 +289,6 @@ export default function OrderPage() {
     if (res) printNow(<BillReceipt order={res} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} />);
   };
 
-  const hasItems = order.items.some((i) => !i.voided);
   // Tutarı sıfır, kalemi olan adisyon (hepsi ikram ya da tam indirim): "Ödeme · ₺0,00" yerine kapanış; tezgâhta sonra
   // yeni satış (ödemeyle kapanan satış gibi). Sunucu sipariş yetkisi ister (editable). Çalışan oda sayacının ücreti henüz
   // tutarda değil: o zaman ödeme yolu kalır; gönderilmemiş satır da tutarı değiştirir. Kalemi hiç kalmamış adisyon
@@ -291,6 +299,9 @@ export default function OrderPage() {
       const done = await act(() => post<OrderDTO>(`/orders/${order.id}/close`), 'Adisyon kapandı');
       if (!done) return;
       cart.clear(order.id);
+      // Tahsilat yok: müşteri ekranı teşekkür etmez, hoş geldinize döner (ödeme penceresinin ciro dışı kapanışı gibi). Yeni
+      // satışta sayfa kaldırılmaz, boş satış da ekrana bir şey göndermez: kapanan adisyon ekranda kalırdı
+      sendDisplay(displayCode, { kind: 'idle' });
       if (counter) await nextSale();
       else navigate(backPath);
     });
@@ -359,20 +370,42 @@ export default function OrderPage() {
     </div>
   );
 
-  // Kalemsiz, ödemesiz açık adisyon (masa açıldı, sipariş yok; boş tezgâh satışı): devre dışı "Hesap" ve "Ödeme · ₺0,00"
-  // çizilmez. Masada tek eylem masayı boşaltmak (sunucu boş adisyonu nedensiz kapatır, kayda "boş adisyon kapatıldı"
-  // yazar); tezgâhta şerit yok, boş durum yeter. Çalışan oda sayacı boş sayılmaz (ücret işler)
-  const blank = isOpen && !isOnline && !REMOTE && !hasItems && !pending.length && order.paid === 0 && !order.room;
-  // Masada başka adisyon da varsa (ayrı hesap) masa boşalmaz, yalnız bu boş hesap kapanır (masa planının son verisi)
-  const sharesTable = !!order.tableId && (qc.getQueryData<FloorStateDTO>(['floor'])?.tables[order.tableId] ?? []).some((o) => o.id !== order.id);
+  // Boş adisyonda (blank, yukarıda) devre dışı "Hesap" ve "Ödeme · ₺0,00" çizilmez. Masada tek eylem masayı boşaltmak
+  // (sunucu boş adisyonu nedensiz kapatır, kayda "boş adisyon kapatıldı" yazar); tezgâhta şerit yok, boş durum yeter.
+  // Masada başka adisyon da varsa (ayrı hesap) masa boşalmaz, yalnız bu boş hesap kapanır. Masa planı henüz gelmediyse
+  // söz nötr ("Boş hesabı kapat"): masa dolu kalırken "Masa boşaltıldı" denmesin
+  const tableChecks = order.tableId ? floor.data?.tables[order.tableId] : undefined;
+  const sharesTable = !!order.tableId && (!floor.data || (tableChecks ?? []).some((o) => o.id !== order.id));
   const isRoom = table?.kind === 'oda';
-  const [blankLabel, blankDone] =
-    order.type !== 'masa' ? ['Boş siparişi kapat', 'Sipariş kapatıldı'] : sharesTable ? ['Boş hesabı kapat', 'Hesap kapatıldı'] : isRoom ? ['Odayı boşalt', 'Oda boşaltıldı'] : ['Masayı boşalt', 'Masa boşaltıldı'];
-  const clearBlank = () =>
-    void once(async () => {
+  const place = table?.name ?? (isRoom ? 'Oda' : 'Masa');
+  const [blankLabel, blankAsk, blankDone] =
+    order.type !== 'masa'
+      ? ['Boş siparişi kapat', 'Boş sipariş kapatılsın mı', 'Sipariş kapatıldı']
+      : sharesTable
+        ? ['Boş hesabı kapat', 'Boş hesap kapatılsın mı', 'Hesap kapatıldı']
+        : isRoom
+          ? ['Odayı boşalt', `${place} boşaltılsın mı`, 'Oda boşaltıldı']
+          : ['Masayı boşalt', `${place} boşaltılsın mı`, 'Masa boşaltıldı'];
+  // Başkasının adisyonunda önce sorulur: başka bir cihazda girilen ya da "Bu cihazda beklesin" denen ürünler bu cihazdan
+  // görünmez; boşaltılınca o cihazın Gönder'i "Bu adisyon kapalı" alır, sipariş yeniden girilir. Kendi adisyonunda
+  // (yanlış masa açıldı) tek dokunuş
+  const ownCheck = !!me && order.waiterId === me.id;
+  const clearBlank = async () => {
+    if (flowBusy.current) return;
+    if (
+      !ownCheck &&
+      !(await confirmDialog({
+        title: blankAsk,
+        body: order.waiterName ? `${order.waiterName} başka bir cihazda ürün giriyor olabilir; gönderilmemiş ürünler kaybolur` : 'Başka bir cihazda gönderilmemiş ürün varsa kaybolur',
+        confirmLabel: blankLabel,
+      }))
+    )
+      return;
+    await once(async () => {
       const done = await act(() => post<OrderDTO>(`/orders/${order.id}/cancel`, { reason: '' }), blankDone);
       if (done) navigate(backPath);
     });
+  };
   const backButton = (
     <Button size="lg" block icon={<ArrowLeft className="size-4" />} onClick={() => navigate(backPath)}>
       {order.tableId ? 'Masalara dön' : 'Siparişlere dön'}
@@ -388,7 +421,7 @@ export default function OrderPage() {
   // olsa da düğmeler kartın içinde kalır (lg altında tutar "Öde"nin altında)
   const barContent = blank ? (
     counter ? null : editable ? (
-      <Button size="lg" block icon={<X className="size-4" />} loading={sending} onClick={clearBlank}>
+      <Button size="lg" block icon={<X className="size-4" />} loading={sending} onClick={() => void clearBlank()}>
         {blankLabel}
       </Button>
     ) : (

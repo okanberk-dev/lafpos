@@ -82,8 +82,9 @@ export default function FloorPage() {
   const billed = occupied.filter((t) => floor.data?.tables[t.id]?.some((o) => o.source === 'pos' && o.billPrintedAt)).length;
   const summary = joinMeta([`${boot.tables.length} masa`, `${occupied.length} dolu`, billed > 0 && `${billed} hesap istendi`]);
   // Her cihazın yeniden kullanılan boş tezgâh satışı (yeni satışın bekleme yeri) bir sipariş değil: listede birikmez.
-  // Boş gel-al ve paket kalır (müşterinin adı, adresi var)
-  const list = others.filter((o) => !(o.source === 'pos' && o.type === 'tezgah' && o.itemCount === 0));
+  // Ölçüt sunucunun (`empty`: gün sonu kendiliğinden kapatır). Kalemleri iptal edilmiş tezgâh satışı ürünsüz de olsa
+  // kalır: yeniden kullanılmaz, gün sonunu tutar, kapatılacak yer burası. Boş gel-al ve paket kalır (müşterinin adı, adresi var)
+  const list = others.filter((o) => !(o.source === 'pos' && o.type === 'tezgah' && o.empty));
 
   return (
     // Innex: gri zemin üstünde iki beyaz kart; telefonda kartlar kenara yapışmasın diye zeminde 8 px
