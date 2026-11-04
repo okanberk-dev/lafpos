@@ -947,6 +947,26 @@ export function updateOrder(
 }
 
 /**
+ * Gönderilmiş kaleme not (adisyon ekranındaki kalem işlemlerinden "Not"): bar fişi ve hesap notu canlı görür. Parasal
+ * değildir, denetim kaydına yazılmaz; iptal edilmiş kaleme ve kapanmış adisyona yazılmaz. Boş not siler.
+ */
+export function setItemNote(t: Tx, actor: Actor, fx: Effects, orderId: string, itemId: string, note: string | null): OrderRow {
+  needDirect(actor, 'siparis.al');
+  const o = loadOrder(t, orderId);
+  assertOpen(o);
+  assertPosOrder(o);
+  const it = loadItem(t, orderId, itemId);
+  if (it.voided) throw conflict('İptal edilmiş kaleme not yazılmaz');
+  const text = note?.trim().slice(0, 200) || null;
+  t.update(schema.orderItems).set({ note: text }).where(eq(schema.orderItems.id, it.id)).run();
+  t.update(schema.orders).set({ updatedAt: Date.now(), version: sql`${schema.orders.version} + 1` }).where(eq(schema.orders.id, orderId)).run();
+  const updated = loadOrder(t, orderId);
+  orderEvents(fx, updated, actor.user.id, 'item.note');
+  if (it.stationId) fx.emit({ topic: 'kitchen', kind: 'ticket.updated', orderId, stationId: it.stationId, byUserId: actor.user.id });
+  return updated;
+}
+
+/**
  * Yarı self servis: tezgâh ya da gel-al siparişine masa no / numaratör ("12") yazar ya da siler. Parasal değildir:
  * ödeme alındıktan sonra da düzeltilebilir (tezgâh satışı ödemeyle kapanır, sipariş barda hazırlanırken). Bar
  * ekranı, çağrı ekranı ve masa listesi yenilensin diye kitchen ve orders konularına olay düşer.

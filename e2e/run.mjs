@@ -43,10 +43,10 @@ const pending = state('@tz', 'bekleyen', async (page) => {
   for (let i = 0; i < 5; i++) await card.click({ timeout: 5000 });
 });
 
-/** Telefonda adisyon Menü sekmesinde açılır; hesap ve Ödeme şeridi Adisyon sekmesinde (tablet ve bilgisayarda sekme yok) */
+/** Telefonda adisyon ürünlerle açılır; hesap ve Öde şeridi alttaki sepet çubuğundan (tablet ve bilgisayarda yan yana) */
 const checkTab = async (page) => {
-  const tab = page.getByRole('tablist', { name: 'Adisyon görünümü' }).getByRole('tab', { name: /^Adisyon/ });
-  if (await tab.isVisible()) await tab.click({ timeout: 5000 });
+  const bar = page.getByRole('button', { name: /^Sepet: / });
+  if (await bar.isVisible()) await bar.click({ timeout: 5000 });
 };
 
 /**
@@ -63,7 +63,7 @@ const checkDialogs = [
   ].map(([name, button]) =>
     state('@s2', name, async (page) => {
       await checkTab(page);
-      await page.getByRole('button', { name: /^Ödeme · / }).first().click({ timeout: 5000 });
+      await page.getByRole('button', { name: /^Öde · / }).first().click({ timeout: 5000 });
       const dialog = page.getByRole('dialog', { name: /^Ödeme · / });
       await dialog.waitFor({ timeout: 5000 });
       if (button) await dialog.getByRole('button', { name: button, exact: true }).click({ timeout: 5000 });

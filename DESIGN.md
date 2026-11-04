@@ -130,8 +130,28 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   alınan ödemeler; sağda ödeme türleri, Verilen, Bahşiş ve ciro dışı kapanış. Sepet yazarkasada beklerken LafPOS'ta
   ödeme, ciro dışı kapanış ve ödeme iptali kapalı; durum ve "Sepeti iptal et" en üstte. Sonuç ekranında para üstü en
   üstte, mürekkep kenarlı nötr kutuda.
-- **Adisyon:** geniş ekranda kategoriler solda dikey liste (sayılarıyla), ürün kartında sitedeki görsel; "/" aramaya
-  götürür.
+- **Adisyon** (4 Kasım 2026 yenilemesi): iki kart, ürünler | hesap. Ürünlerde üstte arama ("/" ile), geniş ekranda
+  solda kategori rayı (sayılarıyla), telefonda kategori çipleri; kartta sitedeki görsel ya da kategori renginde baş
+  harf, ad, fiyat, iki boylu üründe boy düğmeleri, tükendi soluk ve rozetli. Hesap bir bakışta okunur:
+  - **Başlık:** Gabarito masa adı (22/700) ve numara; künye (kişi, garson, açılış saati ve süresi, müşteri, not); durum
+    çipleri (Kapandı, İptal, Birleşti; Hesap yazdırıldı amber, Kısmen ödendi pembe, "3 kişiye bölündü", "2 ürün
+    gönderilmedi").
+  - **Kalemler duruma göre gruplu** (`src/pages/order/cartGroups.ts`): Gönderilmedi (amber, cihazdaki sepet, en üstte),
+    Barda (kobalt nokta; bekliyor mu hazırlanıyor mu kalemde yazar), Hazır (yeşil), Teslim (nötr; bara gitmeyen kalem
+    de), İptal edilenler (kırmızı). Grup başlığı yapışkan, sayısıyla. Her kalemde adet hapı, ad ve boy, seçenek çipleri,
+    not ve sağa hizalı Gabarito tutar.
+  - **Kalem işlemleri kalemden tek dokunuşta:** İkram et, Ödenmez yaz (kişi seçilir), Zayi yaz, Kaleme indirim, Taşı
+    (taşıma penceresi kalem seçili açılır), Not ekle (bar fişi canlı görür, `PUT /orders/:id/items/:itemId/note`), en
+    altta kırmızı İptal et.
+  - **Toplam** Gabarito 28/700; altında hızlı işlemler sakin bir sırada, ikon ve kısa ad: Böl, İndirim, Taşı, Hesap
+    yazdır, İşlemler (İşlemler telefonda başlıkta). Tek birincil eylem mürekkep "Öde · ₺X" (gönderilmemiş varsa önce
+    gönderir); gönderilmemiş kalem varken ikincil "Bara gönder (N)" ve geri alınabilir çöp kutusu. Ödeme alamayan rolde
+    (garson) birincil eylem "Bara gönder (N)" ya da "Hesap yazdır" ve altında "Ödemeyi kasa alır".
+  - **Telefonda önce ürünler:** alttaki yapışkan sepet çubuğu ("3 ürün · ₺780 · Sepet", gönderilmemiş sayısı amber
+    rozette) sepeti açar, yanında "Bara gönder (N)"; sepette en üstte "Ürün ekle" ürünlere döner.
+  - **Durumlar:** boş masa (fincan çizimi, "Masayı boşalt"), kapanmış adisyon (yeşil "Kapandı", katalog yok, adisyon
+    ortada), sitede ödenmiş online sipariş (mor şerit, tahsil edilmez, Z'ye girmez), tezgâh satışı (Öde gönderir ve
+    ödemeyi açar, satış bitince yeni satış).
 - **Müşteriye dönük ekranlar** (kasa menüsü olmadan, otomatik kilit yok):
   - **Müşteri ekranı** `/musteri-ekrani` (iki ekranlı kasanın ikinci monitörü ya da müşteriye dönük tablet): boşta
     karşılama (L'Af, Gabarito 800 başlık, bayrak çizgisi, slogan; dönen duyurular, karekod, saat), adisyon açıkken
@@ -252,7 +272,7 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   `pointer-coarse` / `pointer-fine` sorgusundan: dokunmatikte her hedef en az 44 px.
 - Telefon: tek sütun, alt sekme çubuğu (beş yer: ekran azsa hepsi sekme, "Daha" yok; çoksa dört ekran ve "Daha";
   patron panelini görende Patron sekmesi Bar'ın yerinde; üst şeridi olmayan bar ve adisyon ekranında yer varsa son
-  sekme kişinin menüsü; `phoneTabs`, `src/lib/nav.ts`), birincil eylem altta (adisyonda Gönder / Ödeme şeridi), modal
+  sekme kişinin menüsü; `phoneTabs`, `src/lib/nav.ts`), birincil eylem altta (adisyonda "Bara gönder" / "Öde" şeridi; ürünlerdeyken yapışkan sepet çubuğu), modal
   yerine alt sayfa, tablo yerine satır kartı, çentik için `safe-area`.
 - Tablet: adisyonda ürünler ve hesap yan yana (`min-width: 768px`), yönetimde dar ikon menüsü (sayaçlı; "Menüyü aç"
   tam menüyü çekmecede açar).

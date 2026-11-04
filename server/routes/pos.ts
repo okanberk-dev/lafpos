@@ -160,6 +160,14 @@ posRoutes.post('/orders/:id/items/:itemId/void', async (c) => {
   return c.json(dto(c, c.req.param('id')));
 });
 
+/** Gönderilmiş kaleme not (boş metin siler); bar fişi canlı güncellenir */
+posRoutes.put('/orders/:id/items/:itemId/note', async (c) => {
+  const input = await body(c, z.object({ note: z.string().max(200).nullable() }));
+  const actor = actorFrom(c);
+  write((t, fx) => orders.setItemNote(t, actor, fx, c.req.param('id'), c.req.param('itemId'), input.note));
+  return c.json(dto(c, c.req.param('id')));
+});
+
 /** Ödenmezin kişisi: kayıtlı personel (`user`) ya da müşteri (`customer`); ödenmezde zorunlu, öteki türlerde reddedilir */
 const compPerson = z.object({ kind: z.enum(['user', 'customer']), id: z.string().min(1).max(64) }).nullish();
 

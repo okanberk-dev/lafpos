@@ -376,6 +376,14 @@ Sonra (araştırmanın önerileri, karar gerekirse): tek zorunlu tek seçimlik g
 ürünü eklesin (ikinci "Ekle" kalksın); grup başına "her seferinde göster" işareti (genel "hep" ayarının yerine); karta
 uzun basınca Tükendi; gönderilmiş kalemde "Bir daha".
 
+**Masa adisyon ekranı yeniden** (4 Kasım 2026; araştırma `docs/08-POS-ARASTIRMA.md` §1): sepet bir bakışta okunur
+(Gabarito başlık, künye ve durum çipleri; kalemler Gönderilmedi, Barda, Hazır, Teslim ve İptal gruplarında, seçenek
+çipleri ve sağa hizalı tutar), kalem işlemleri kalemden tek dokunuşta (ikram, ödenmez, zayi, indirim, taşı, not, iptal;
+gönderilmiş kaleme not yeni uç `PUT /orders/:id/items/:itemId/note`, `siparis.al`, bar fişi canlı), tek birincil eylem
+mürekkep "Öde · ₺X", gönderilmemiş varken ikincil "Bara gönder (N)", hızlı işlemler (Böl, İndirim, Taşı, Hesap yazdır,
+İşlemler), telefonda önce ürünler ve yapışkan sepet çubuğu. Davranış, istekler ve yetki denetimleri aynı; e2e adları
+"Öde · ", "Bara gönder (N)", "Sepet: …" ve "Ürün ekle"ye güncellendi. Test `tests/adisyon-ekrani.test.ts`.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

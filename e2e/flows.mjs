@@ -79,8 +79,8 @@ export async function runFlows(ctx) {
           const orderId = new URL(page.url()).pathname.split('/').pop();
           await page.getByPlaceholder('Ürün ara').fill(simple.name);
           await page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first().click();
-          await page.getByRole('button', { name: /^Gönder \(1\)/ }).click();
-          await page.getByRole('button', { name: /^Gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
+          await page.getByRole('button', { name: /^Bara gönder \(1\)/ }).click();
+          await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
           const order = await api.call('garson', 'GET', `/orders/${orderId}`);
           assert(order.items.length === 1 && order.items[0].productId === simple.id, `adisyonda beklenen kalem yok: ${JSON.stringify(order.items.map((i) => i.name))}`);
         }),
@@ -90,7 +90,7 @@ export async function runFlows(ctx) {
       () =>
         withPage(ctx, 'tablet', 'kasa', async (page) => {
           await go(ctx, page, `/adisyon/${seed.s1.id}`);
-          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
           await page.getByRole('button', { name: 'Nakit', exact: true }).click();
           await page.getByRole('button', { name: 'Tam', exact: true }).click();
           await page.getByRole('button', { name: /Nakit al$/ }).click();
@@ -247,7 +247,7 @@ export async function runFlows(ctx) {
             await modal.waitFor({ state: 'detached' });
             // Sepetteki "Latte (Yulaf)" düzenlenir: Yulaf seçili kalır, ipucu var, Güncelle kapalı; seçili Yulaf'a dokununca
             // bırakılır, grup varsayılana (Normal) döner
-            await page.getByRole('tab', { name: /^Adisyon/ }).click();
+            await page.getByRole('button', { name: /^Sepet: / }).click();
             await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).click();
             await gone.waitFor({ timeout: 8000 });
             assert(await pressed('Yulaf'), 'düzenlenen satırın tükenen Yulaf\'ı süzüldü');
@@ -259,7 +259,7 @@ export async function runFlows(ctx) {
             await modal.getByRole('button', { name: /^Güncelle/ }).click();
             await modal.waitFor({ state: 'detached' });
             assert((await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'Yulaf' }).count()) === 0, 'sepette Yulaf kaldı');
-            await page.getByRole('tab', { name: 'Menü', exact: true }).click();
+            await page.getByRole('button', { name: 'Ürün ekle', exact: true }).click();
             // Aşağıdaki adım Yulaf'ı Tükenen ürünler penceresinden işaretler
             await api.call('kasa', 'POST', `/option-items/${item('Yulaf').id}/sold-out`, { soldOut: false });
 
@@ -303,7 +303,7 @@ export async function runFlows(ctx) {
             await modal.waitFor({ state: 'detached' });
             // Sepette Yulaf bırakılınca varsayılana dönen, sonra tükenen Normal (düzenlenen satır) işaretlenmez: önseçili
             // varsayılan gibi gönderimde çıkar, Gönder 409 almaz (pencere yukarıda "Normal tükendi" dedi, menü güncel)
-            await page.getByRole('tab', { name: /^Adisyon/ }).click();
+            await page.getByRole('button', { name: /^Sepet: / }).click();
             await page.getByRole('button', { name: `${label} düzenle`, exact: true }).first().waitFor({ timeout: 8000 });
             assert((await page.getByRole('button', { name: `${label} düzenle`, exact: true }).filter({ hasText: 'tükendi' }).count()) === 0, 'tükenen önseçili Normal yüzünden satır işaretli');
             await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-sepet-tukendi.png` });
@@ -375,8 +375,8 @@ export async function runFlows(ctx) {
             await page.keyboard.press('Escape');
             await modal.waitFor({ state: 'detached' });
             // Gönder 409 almaz: iki Cortado bara gider (tezgâhta Öde'nin yanındaki Gönder)
-            await page.getByRole('button', { name: 'Gönder', exact: true }).click();
-            await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).click();
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
           });
           const done = await api.call('kasa', 'GET', `/orders/${o.id}`);
           const sold = done.items.filter((i) => i.productId === water.id && !i.voided);
@@ -419,8 +419,8 @@ export async function runFlows(ctx) {
           await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-secenek-grup-acildi.png` });
           await add.click();
           await modal.waitFor({ state: 'detached' });
-          await page.getByRole('button', { name: 'Gönder', exact: true }).click();
-          await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+          await page.getByRole('button', { name: /^Bara gönder \(/ }).click();
+          await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
         });
         const done = await api.call('kasa', 'GET', `/orders/${o.id}`);
         const line = done.items.find((i) => i.productId === product.id);
@@ -466,7 +466,7 @@ export async function runFlows(ctx) {
         await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, size: 'M', qty: 3 }, { productId: product('Türk Kahvesi').id, qty: 1 }] });
         await withPage(ctx, 'tablet', 'kasa', async (page) => {
           await go(ctx, page, `/adisyon/${o.id}`);
-          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
           await page.getByRole('button', { name: 'Paylaş', exact: true }).click();
           // "Kaç kişiye bölünsün?" çipleri: tek dokunuş bölüşü kurar
           await page.getByRole('button', { name: '3 kişi', exact: true }).click();
@@ -711,7 +711,7 @@ export async function runFlows(ctx) {
         await api.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: simple.id, qty: 1 }] });
         await withPage(ctx, 'tablet', 'mudur', async (page) => {
           await go(ctx, page, `/adisyon/${o.id}`);
-          await page.getByRole('button', { name: /^Ödeme · / }).click();
+          await page.getByRole('button', { name: /^Öde · / }).click();
           await page.getByRole('button', { name: 'Zayi', exact: true }).click();
           const reason = page.getByRole('dialog', { name: 'Zayi kapat' });
           await reason.getByRole('button', { name: 'Döküldü', exact: true }).click();
@@ -759,8 +759,8 @@ export async function runFlows(ctx) {
             await page.getByPlaceholder('Ürün ara').fill('Latte');
             await latteTile(page).getByRole('button', { name: new RegExp(`^${M} `) }).click();
             assert((await page.getByRole('dialog').count()) === 0, 'Latte için pencere açıldı');
-            await page.getByRole('button', { name: 'Gönder', exact: true }).click();
-            await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).click();
+            await page.getByRole('button', { name: /^Bara gönder \(/ }).waitFor({ state: 'detached', timeout: 8000 });
           });
           const sent = await api.call('kasa', 'GET', `/orders/${o.id}`);
           const rows = sent.items.map((i) => `${i.name} ${i.size} ${i.optionsText}`.trim());
@@ -910,7 +910,7 @@ export async function runFlows(ctx) {
           await page.getByRole('status').filter({ hasText: `Selin Bulut #${pickup.no} teslim edildi` }).waitFor({ timeout: 5000 });
 
           await go(ctx, page, `/adisyon/${counter.id}`);
-          await page.getByRole('tab', { name: /^Adisyon/ }).click();
+          await page.getByRole('button', { name: /^Sepet: / }).click();
           await page.getByText('2 ürün hazır', { exact: true }).waitFor({ timeout: 8000 });
           await page.screenshot({ path: `${ROOT}/e2e/out/telefon-kasa-adisyon-hazir.png` });
           overflow = await overflowReport(page);

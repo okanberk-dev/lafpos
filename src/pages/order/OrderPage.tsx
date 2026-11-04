@@ -1,19 +1,24 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  ArrowRightLeft,
   Ban,
+  ChevronRight,
   CircleDollarSign,
   Droplets,
   Gift,
   HandCoins,
   Merge,
   MonitorUp,
+  MoreHorizontal,
   MoreVertical,
   PackageX,
   Percent,
+  Plus,
   Printer,
   RotateCcw,
   Send,
+  ShoppingBag,
   Split,
   StickyNote,
   TableProperties,
@@ -25,15 +30,15 @@ import {
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, compCloseSubtitle, compReasonsOf } from '@shared/comp';
-import { tl, tlShort } from '@shared/money';
-import { fmtTime } from '@shared/time';
+import { tl } from '@shared/money';
+import { fmtElapsed, fmtTime } from '@shared/time';
 import type { CompKind, FloorStateDTO, OrderDTO, ProductDTO, Size } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button, buttonClass, IconButton } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Modal } from '@/components/ui/Modal';
 import { Textarea, Toggle } from '@/components/ui/Field';
-import { Badge, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
+import { Badge, type BadgeTone, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
 import { get, patch, post, put } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { sendableOptions, soldOutDefault, useBoot } from '@/lib/boot';
@@ -85,12 +90,13 @@ const MENU_GROUPS: [MenuGroup, string | null][] = [
  * içinde kalır. Bilgisayarda tek satır ("Öde · ₺580,00"). Ayraç dar ekranda yalnız ekran okuyucuda kalır: düğmenin adı
  * her boyda "Öde · ₺580,00"
  */
-function PayLabel({ action, amount }: { action: string; amount: number }) {
+function PayLabel({ action, amount, inline }: { action: string; amount: number; inline?: boolean }) {
+  // Satırın tamamını alan düğmede (inline) her boyda tek satır
   return (
-    <span className="flex min-w-0 flex-col items-center leading-tight lg:flex-row lg:gap-1">
-      <span className="max-lg:text-[13px] max-lg:font-medium">
+    <span className={cn('flex min-w-0 items-center leading-tight', inline ? 'flex-row gap-1' : 'flex-col lg:flex-row lg:gap-1')}>
+      <span className={cn(!inline && 'max-lg:text-[13px] max-lg:font-medium')}>
         {action}
-        <span className="max-lg:sr-only"> ·</span>
+        <span className={cn(!inline && 'max-lg:sr-only')}> ·</span>
       </span>
       <span className="tabular">{tl(amount)}</span>
     </span>
@@ -111,6 +117,8 @@ export default function OrderPage() {
   const cart = useCart();
   const [tab, setTab] = useState<'menu' | 'adisyon'>(REMOTE ? 'adisyon' : 'menu');
   const [dialog, setDialog] = useState<Dialog>(null);
+  /** Kalem işlemlerinden "Taşı": taşıma penceresi bu kalem seçili açılır */
+  const [moveItem, setMoveItem] = useState<{ itemId: string; qty: number } | null>(null);
   const [options, setOptions] = useState<{ product: ProductDTO; size: Size; editing: PendingLine | null } | null>(null);
   const [sending, setSending] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -337,37 +345,62 @@ export default function OrderPage() {
   ];
   const menuSections = MENU_GROUPS.map(([group, label]) => ({ group, label, items: menuItems.filter((m) => m.show && m.group === group) })).filter((s) => s.items.length > 0);
 
-  // Innex başlık şeridi: geri, başlık ve künye, sağda işlemler
+  // Durum çipleri: başlığın altında, bir bakışta (kapanmış, iptal, birleşmiş; hesap yazdırıldı, kısmen ödendi, bölündü,
+  // gönderilmemiş ürün). Online siparişin "Sitede ödendi"si hemen altındaki mor şeritte, burada yinelenmez
+  const chips: { key: string; tone: BadgeTone; label: string }[] = [
+    ...(order.status !== 'acik'
+      ? [{ key: 'durum', tone: (order.status === 'kapali' ? 'green' : order.status === 'iptal' ? 'red' : 'neutral') as BadgeTone, label: order.status === 'kapali' ? 'Kapandı' : order.status === 'iptal' ? 'İptal' : 'Birleşti' }]
+      : []),
+    ...(isOpen && !isOnline && order.billPrintedAt ? [{ key: 'hesap', tone: 'warn' as const, label: 'Hesap yazdırıldı' }] : []),
+    ...(isOpen && order.paid > 0 && due > 0 ? [{ key: 'kismen', tone: 'pink' as const, label: 'Kısmen ödendi' }] : []),
+    ...(isOpen && order.split ? [{ key: 'bolundu', tone: 'neutral' as const, label: `${order.split.people} kişiye bölündü` }] : []),
+    ...(pendingCount > 0 ? [{ key: 'bekleyen', tone: 'warn' as const, label: `${pendingCount} ürün gönderilmedi` }] : []),
+  ];
+  // Başlık: Gabarito masa adı ve numara; künye (kişi, garson, açılış saati ve süresi, müşteri, not); durum çipleri
   const header = (
     // Telefonda tam ekran: ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
-    <div className="flex items-center gap-1.5 border-b border-[var(--admin-divider)] bg-surface px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
-      <IconButton label="Geri" onClick={goBack}>
-        <ArrowLeft className="size-5" />
-      </IconButton>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold">
-            {titleBadge}
-            <span className="truncate">{title}</span>
-          </h1>
-          <span className="tabular text-[13px] text-muted max-lg:hidden">#{orderNo}</span>
-          {/* Kırmızı yalnız iptal; başka adisyona katılan adisyon bir durum değil, bilgi (nötr). Online sipariş: hemen
-              altındaki mor şerit "Sitede ödendi" der, başlıkta yinelenmez */}
-          {order.status !== 'acik' && (
-            <Badge tone={order.status === 'kapali' ? 'green' : order.status === 'iptal' ? 'red' : 'neutral'}>{order.status === 'kapali' ? 'Kapandı' : order.status === 'iptal' ? 'İptal' : 'Birleşti'}</Badge>
+    <div className="border-b border-[var(--admin-divider)] bg-surface px-2 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <div className="flex items-start gap-1.5">
+        <IconButton label="Geri" onClick={goBack}>
+          <ArrowLeft className="size-5" />
+        </IconButton>
+        <div className="min-w-0 flex-1 pt-1">
+          <div className="flex min-w-0 items-baseline gap-2">
+            {titleBadge && <span className="self-center">{titleBadge}</span>}
+            <h1 className="min-w-0 truncate font-headline text-xl font-bold leading-tight tracking-[-0.01em] lg:text-[22px]">{title}</h1>
+            <span className="tabular shrink-0 text-[13px] text-muted">#{orderNo}</span>
+          </div>
+          {/* Künye: boş parça düşer ("—" ve "0 dk" yok); kişi sayısı yalnız masada anlamlı */}
+          <div className="mt-0.5 truncate text-xs text-muted">
+            {joinMeta([
+              titleType,
+              order.type === 'masa' && `${order.guests} kişi`,
+              order.waiterName,
+              `açılış ${fmtTime(order.openedAt)}`,
+              isOpen && now - order.openedAt >= 60_000 && fmtElapsed(order.openedAt, now),
+              order.customer?.name,
+              order.note && `Not: ${order.note}`,
+            ])}
+          </div>
+          {chips.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {chips.map((c) => (
+                <Badge key={c.key} tone={c.tone}>
+                  {c.label}
+                </Badge>
+              ))}
+            </div>
           )}
         </div>
-        {/* Künye: boş parça düşer ("—" ve "0 dk" yok); kişi sayısı yalnız masada anlamlı */}
-        <div className="truncate text-xs text-muted">
-          <span className="tabular lg:hidden">#{orderNo} · </span>
-          {joinMeta([titleType, order.type === 'masa' && `${order.guests} kişi`, order.waiterName, `açılış ${fmtTime(order.openedAt)}`, order.customer?.name, order.note && `Not: ${order.note}`])}
-        </div>
+        {!REMOTE && (
+          // Telefonda İşlemler başlıkta (ürünler görünümünde de erişilir); tablet ve bilgisayarda hızlı işlemlerin sonunda
+          <div className="md:hidden">
+            <IconButton label="İşlemler" onClick={() => setDialog('menu')}>
+              <MoreVertical className="size-5" />
+            </IconButton>
+          </div>
+        )}
       </div>
-      {!REMOTE && (
-        <IconButton label="İşlemler" onClick={() => setDialog('menu')}>
-          <MoreVertical className="size-5" />
-        </IconButton>
-      )}
     </div>
   );
 
@@ -418,8 +451,12 @@ export default function OrderPage() {
       <Trash2 className="size-4" />
     </IconButton>
   );
-  // Tablette (768-1023 px) hesap kartı ~300 px: ikincil düğme ikona iner. Izgara izleri en küçük 0: tutar ne kadar büyük
-  // olsa da düğmeler kartın içinde kalır (lg altında tutar "Öde"nin altında)
+  // Tek birincil eylem mürekkep "Öde · ₺X" (gönderilmemiş varsa önce gönderir); gönderilmemiş kalem varken ikincil
+  // "Bara gönder (N)". Ödeme alamayan (garson) için birincil eylem göndermek ya da hesabı yazdırmak. Tutar gönderilmemişler
+  // dahil tahmini (sunucu gönderince yeniden hesaplar). Izgara izleri en küçük 0: büyük tutar da kartın içinde kalır
+  const canPay = can('odeme.al');
+  const payNow = (previewTotals(boot, order, pending)?.total ?? order.total) - order.paid;
+  const sendLabel = `Bara gönder (${pendingCount})`;
   const barContent = blank ? (
     counter ? null : editable ? (
       <Button size="lg" block icon={<X className="size-4" />} loading={sending} onClick={() => void clearBlank()}>
@@ -428,25 +465,31 @@ export default function OrderPage() {
     ) : (
       backButton
     )
-  ) : pending.length > 0 && counter && can('odeme.al') ? (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)_minmax(0,1.3fr)] gap-2 md:max-lg:grid-cols-[auto_auto_minmax(0,1fr)]">
-      {discardButton}
-      <Button size="lg" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label="Gönder" title="Gönder" className="min-w-0 px-4 md:max-lg:w-14 md:max-lg:px-0">
-        <span className="md:max-lg:sr-only">Gönder</span>
-      </Button>
-      <Button size="lg" variant="ink" loading={sending} onClick={() => void sendAndPay()} className="min-w-0 px-4">
-        <PayLabel action="Öde" amount={(previewTotals(boot, order, pending)?.total ?? order.total) - order.paid} />
+  ) : pending.length > 0 && canPay ? (
+    // İki satır: üstte ikincil eylemler (sil, Bara gönder), altta tek birincil eylem satırın tamamında: ikisi de tam
+    // yazılır (dar hesap kartında üç düğme yan yana sığmıyordu)
+    <div className="grid gap-2">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
+        <IconButton label="Gönderilmemişleri sil" variant="secondary" disabled={sending} onClick={discardPending}>
+          <Trash2 className="size-4" />
+        </IconButton>
+        <Button loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} className="min-w-0">
+          <span className="truncate">{sendLabel}</span>
+        </Button>
+      </div>
+      <Button size="lg" variant="ink" block loading={sending} onClick={() => void sendAndPay()}>
+        <PayLabel action="Öde" amount={payNow} inline />
       </Button>
     </div>
   ) : pending.length > 0 ? (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
       {discardButton}
       <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly}>
-        Gönder ({pendingCount})
+        {sendLabel}
       </Button>
     </div>
-  ) : isOpen && !isOnline && !REMOTE && !can('odeme.al') && !zeroClose ? (
-    // Garson ödeme alamaz: birincil eylemi hesabı yazdırmak; devre dışı bir "Ödeme" düğmesi yerine kısa açıklama. Tutarı
+  ) : isOpen && !isOnline && !REMOTE && !canPay && !zeroClose ? (
+    // Garson ödeme alamaz: birincil eylemi hesabı yazdırmak; devre dışı bir "Öde" düğmesi yerine kısa açıklama. Tutarı
     // sıfır adisyonu kapatmak ödeme değil, sipariş işi: o zaman aşağıdaki kapanış şeridi
     <>
       <Button size="lg" variant="primary" block icon={<Printer className="size-4" />} onClick={printBill} disabled={!hasItems}>
@@ -455,27 +498,85 @@ export default function OrderPage() {
       <p className="-mt-0.5 text-center text-xs text-muted">Ödemeyi kasa alır</p>
     </>
   ) : isOpen && !isOnline && !REMOTE ? (
-    <div className="grid grid-cols-2 gap-2 md:max-lg:grid-cols-[auto_minmax(0,1fr)]">
-      <Button size="lg" icon={<Printer className="size-4" />} onClick={printBill} disabled={!hasItems} aria-label="Hesap yazdır" title="Hesap yazdır" className="min-w-0 px-4 md:max-lg:w-14 md:max-lg:px-0">
-        <span className="md:max-lg:sr-only">Hesap yazdır</span>
+    zeroClose ? (
+      <Button size="lg" variant="ink" block loading={sending} onClick={closeZero}>
+        Adisyonu kapat
       </Button>
-      {zeroClose ? (
-        <Button size="lg" variant="ink" loading={sending} onClick={closeZero} className="min-w-0 px-4">
-          Adisyonu kapat
-        </Button>
-      ) : (
-        <Button size="lg" variant="ink" disabled={due <= 0} onClick={() => setDialog('odeme')} className="min-w-0 px-4">
-          <PayLabel action="Ödeme" amount={due} />
-        </Button>
-      )}
-    </div>
+    ) : (
+      <Button size="lg" variant="ink" block disabled={due <= 0} onClick={() => setDialog('odeme')}>
+        <PayLabel action="Öde" amount={due} inline />
+      </Button>
+    )
   ) : (
     backButton
   );
-  // Telefonda bildirim bu şeridin üstünde durur (data-action-bar; Gönder ve Ödeme'yi örtmesin)
+  // Telefonda bildirim bu şeridin üstünde durur (data-action-bar; Gönder ve Öde'yi örtmesin)
   const actionBar = barContent && (
     <div data-action-bar="" className="grid gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
       {barContent}
+    </div>
+  );
+
+  // Hızlı işlemler, sakin bir sırada ve tek dokunuşla: Böl, İndirim, Taşı, Hesap yazdır, İşlemler. Garsonun birincil
+  // eylemi hesabı yazdırmaksa burada yinelenmez; İşlemler telefonda başlıkta (ürünler görünümünde de erişilsin)
+  const printIsPrimary = isOpen && !isOnline && !canPay && !zeroClose && !pending.length;
+  const quickActions = [
+    { key: 'bol', label: 'Böl', icon: <Split />, onClick: () => setDialog('bol'), show: editable && order.items.some((i) => !i.voided && i.qty - i.paidQty > 0) },
+    { key: 'indirim', label: 'İndirim', icon: <Percent />, onClick: () => setDialog('indirim'), show: editable && hasItems },
+    { key: 'tasi', label: 'Taşı', icon: <ArrowRightLeft />, onClick: () => setDialog('tasi'), show: editable },
+    { key: 'yazdir', label: 'Hesap yazdır', icon: <Printer />, onClick: printBill, show: !isOnline && !REMOTE && hasItems && !printIsPrimary },
+    { key: 'islemler', label: 'İşlemler', icon: <MoreHorizontal />, onClick: () => setDialog('menu'), show: !REMOTE, wideOnly: true },
+  ].filter((q) => q.show);
+  const quickRow = quickActions.some((q) => !q.wideOnly) || (wide && quickActions.length > 0) ? (
+    <div role="group" aria-label="Hızlı işlemler" className="flex gap-1 border-t border-[var(--admin-divider)] px-2 pt-2">
+      {quickActions.map((q) => (
+        <button
+          key={q.key}
+          type="button"
+          onClick={q.onClick}
+          className={cn(
+            'flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-center text-[11px] font-medium leading-tight text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press [&>svg]:size-[18px] [&>svg]:shrink-0',
+            q.wideOnly && 'max-md:hidden',
+          )}
+        >
+          {q.icon}
+          {/* Dar kartta iki satıra kırılır ("Hesap / yazdır"), kesilmez */}
+          <span className="max-w-full text-balance break-words">{q.label}</span>
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  // Telefonda önce ürünler: alttaki yapışkan sepet çubuğu ("3 ürün · ₺780 · Sepet") sepeti açar; gönderilmemiş ürün
+  // varsa yanında "Bara gönder (N)" (sepeti açmadan gönderilir)
+  const itemCount = order.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0) + pendingCount;
+  const cartTotal = previewTotals(boot, order, pending)?.total ?? order.total;
+  const cartBar = (itemCount > 0 || order.paid > 0) && (
+    <div data-action-bar="" className="flex items-stretch gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+      <button
+        type="button"
+        onClick={() => setTab('adisyon')}
+        aria-label={`Sepet: ${itemCount} ürün, ${tl(cartTotal)}`}
+        className="flex min-h-12 min-w-0 flex-1 items-center gap-3 rounded-2xl border border-line-strong bg-surface-2 px-3 text-left transition-colors duration-150 active:bg-press"
+      >
+        <span aria-hidden="true" className="relative grid size-9 shrink-0 place-items-center rounded-xl bg-surface-3 text-ink">
+          <ShoppingBag className="size-[18px]" />
+          {pendingCount > 0 && <span className="tabular absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--admin-warning)] px-1 text-center text-[11px] font-semibold leading-5 text-white">{pendingCount}</span>}
+        </span>
+        <span aria-hidden="true" className="min-w-0 flex-1 leading-tight">
+          <span className="block text-xs text-muted">{itemCount} ürün</span>
+          <span className="tabular block truncate font-headline text-lg font-bold">{tl(cartTotal)}</span>
+        </span>
+        <span aria-hidden="true" className="inline-flex shrink-0 items-center gap-0.5 text-sm font-semibold text-ink">
+          Sepet
+          <ChevronRight className="size-4" />
+        </span>
+      </button>
+      {pending.length > 0 && (
+        <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} className="shrink-0 px-4">
+          {sendLabel}
+        </Button>
+      )}
     </div>
   );
 
@@ -484,7 +585,20 @@ export default function OrderPage() {
       {isOnline && <OnlineOrderBar order={order} act={act} />}
       {!REMOTE && (can('mutfak.ekran') || can('siparis.al')) && <ReadyBar order={order} name={call ? callText(call) : `${title} #${orderNo}`} />}
       {table?.kind === 'oda' && (order.room || editable) && <RoomBox order={order} table={table} editable={editable} act={act} now={now} onClosed={() => navigate(backPath)} />}
-      <CartPanel order={order} pending={pending} onEditPending={(l) => { const p = boot.products.find((x) => x.id === l.productId); if (p) setOptions({ product: p, size: l.size, editing: l }); }} act={act} />
+      <CartPanel
+        order={order}
+        pending={pending}
+        onEditPending={(l) => {
+          const p = boot.products.find((x) => x.id === l.productId);
+          if (p) setOptions({ product: p, size: l.size, editing: l });
+        }}
+        onMoveItem={(item) => {
+          setMoveItem({ itemId: item.id, qty: item.qty - item.paidQty });
+          setDialog('bol');
+        }}
+        act={act}
+      />
+      {quickRow}
       {actionBar}
     </div>
   );
@@ -509,41 +623,29 @@ export default function OrderPage() {
       ) : (
         <>
           {header}
-          {/* Telefonda Menü sekmesi yalnız ürün eklenebilen adisyonda: kapanmış ya da online adisyonda seçili "Menü" adisyonun
-              üstünde durmasın */}
-          <div role="tablist" aria-label="Adisyon görünümü" className={cn('grid grid-cols-2 border-b border-line bg-surface', !editable && 'hidden')}>
-            {(['menu', 'adisyon'] as const).map((k) => (
-              <button
-                key={k}
-                role="tab"
-                aria-selected={tab === k}
-                onClick={() => setTab(k)}
-                className={cn('relative inline-flex min-h-11 items-center justify-center gap-1.5 py-2 text-[15px] transition-colors duration-150 active:bg-press', tab === k ? 'font-semibold text-ink after:absolute after:inset-x-6 after:bottom-0 after:h-0.5 after:rounded-full after:bg-ink' : 'font-medium text-muted')}
-              >
-                {k === 'menu' ? (
-                  'Menü'
-                ) : (
-                  // Tutar ekranın en önemli rakamı: sekme pasifken de koyu; gönderilmemiş adet amber sayaçta. Yarım ekranlık
-                  // sekmede kısa tutar (₺13.050; kuruşu varsa yazılır): büyük hesap da sekmeden taşmaz. Boş adisyonda tutar yok
-                  <>
-                    Adisyon
-                    {pendingCount > 0 && <span className="tabular rounded-full bg-[var(--admin-warning-soft)] px-2 text-xs font-semibold text-[var(--admin-warning)]">+{pendingCount}</span>}
-                    {(hasItems || pendingCount > 0) && <span className="tabular ml-0.5 font-semibold text-ink">{tlShort(previewTotals(boot, order, pending)?.total ?? order.total)}</span>}
-                  </>
-                )}
-              </button>
-            ))}
-          </div>
           <div className="min-h-0 flex-1">
             {tab === 'menu' && editable ? (
               <div className="flex h-full flex-col">
                 <div className="min-h-0 flex-1">
                   <ProductPanel onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
                 </div>
-                {pending.length > 0 && actionBar}
+                {cartBar}
               </div>
             ) : (
-              <div className="flex h-full flex-col">{right}</div>
+              <div className="flex h-full flex-col">
+                {editable && (
+                  // Sepetten ürünlere dönüş: başlığın Geri'si masalara gider, bu düğme menüye
+                  <button
+                    type="button"
+                    onClick={() => setTab('menu')}
+                    className="flex min-h-11 items-center gap-2 border-b border-[var(--admin-divider)] bg-surface px-4 text-sm font-semibold text-primary transition-colors duration-150 active:bg-press"
+                  >
+                    <Plus aria-hidden="true" className="size-4" />
+                    Ürün ekle
+                  </button>
+                )}
+                {right}
+              </div>
             )}
           </div>
         </>
@@ -645,7 +747,20 @@ export default function OrderPage() {
         }}
       />
       <MoveModal order={order} open={dialog === 'tasi'} onClose={() => setDialog(null)} act={act} onMoved={(target) => { setDialog(null); if (target) navigate(`/adisyon/${target}`, { replace: true }); }} />
-      <TransferModal order={order} open={dialog === 'bol'} onClose={() => setDialog(null)} act={act} onDone={() => setDialog(null)} />
+      <TransferModal
+        order={order}
+        open={dialog === 'bol'}
+        initial={moveItem}
+        onClose={() => {
+          setDialog(null);
+          setMoveItem(null);
+        }}
+        act={act}
+        onDone={() => {
+          setDialog(null);
+          setMoveItem(null);
+        }}
+      />
       <OrderDiscountModal order={order} open={dialog === 'indirim'} onClose={() => setDialog(null)} act={act} />
       <GuestsModal order={order} open={dialog === 'kisi'} onClose={() => setDialog(null)} act={act} />
       <CustomerModal order={order} open={dialog === 'musteri'} onClose={() => setDialog(null)} act={act} />
