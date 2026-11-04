@@ -3,7 +3,18 @@ import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { PLATFORM_LABEL } from '@shared/platforms';
 import { holdsUntilPaid, normalizeNumarator, numaratorLabel } from '@shared/service-mode';
 import { allocate, percentOf, tl } from '@shared/money';
-import { discountGrowth, happyHourUnit, itemPayLines, itemsBreakdown, lineGross, type OrderTotals, type PaidItem, splitAmountsError, splitState } from '@shared/order-calc';
+import {
+  discountGrowth,
+  happyHourUnit,
+  itemPayLines,
+  itemsBreakdown,
+  lineGross,
+  type OrderTotals,
+  type PaidItem,
+  splitAmountsError,
+  splitLineDiscount,
+  splitState,
+} from '@shared/order-calc';
 import { staleDayMessage } from '@shared/time';
 import { COMP_LABEL, compPermission } from '@shared/comp';
 import type { CompKind, CompPersonKind, OrderDTO, Size } from '@shared/types';
@@ -15,7 +26,7 @@ import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
 import { localStampsOn } from '../sync/laffogato-link';
 import { enqueueSiteAvailability, enqueueSiteSoldOut } from '../sync/site-outbox';
-import { calcFor, orderItems, orderPayments, orderToDTO } from './dto';
+import { calcFor, calcInputFor, orderItems, orderPayments, orderToDTO } from './dto';
 import {
   defaultsOf,
   happyHourPercent,
@@ -229,13 +240,15 @@ function splitItem(t: Tx | DB, it: ItemRow, part: number, patch: Partial<ItemRow
     t.update(schema.orderItems).set(patch).where(eq(schema.orderItems.id, it.id)).run();
     return { ...it, ...patch };
   }
-  // Kalem indirimi adetle orantılı bölünür
-  const partDiscount = Math.round((it.discount * part) / it.qty);
+  // Kalem indiriminin bölüşü ortak hesapta: kısmen ödenmiş satırda ödenmiş adetler ödendikleri payı korur, ayrılan
+  // parça kalanını alır (yoksa kalan satır ₺0,01 borçlu kalıyor ya da işlem 1 kuruşla "fazla ödeme" sayılıyordu)
+  const items = orderItems(t, it.orderId);
+  const discount = splitLineDiscount(calcInputFor(loadOrder(t, it.orderId), items), itemPayLines(items, orderPayments(t, it.orderId)), it.id, part);
   t.update(schema.orderItems)
-    .set({ qty: it.qty - part, discount: it.discount - partDiscount })
+    .set({ qty: it.qty - part, discount: discount.kept })
     .where(eq(schema.orderItems.id, it.id))
     .run();
-  const copy: ItemRow = { ...it, id: ulid(), qty: part, discount: partDiscount, paidQty: 0, ...patch };
+  const copy: ItemRow = { ...it, id: ulid(), qty: part, discount: discount.part, paidQty: 0, ...patch };
   t.insert(schema.orderItems).values(copy).run();
   return copy;
 }

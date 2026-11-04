@@ -421,6 +421,19 @@ Belirteçler `src/index.css` `:root`'ta bugünkü değerlerle (`--r-card`, `--r-
 köşeleri belirtece ya da Tailwind'in kapsamda küçülen köşe değişkenine taşındı. Ayrıntı `DESIGN.md` §4 "Kurumsal
 yüzey"; test `tests/design-tokens.test.ts` "köşe ve gölge belirteçleri".
 
+**Kalemle kısmen ödenen satırın bölünmesi** (4 Kasım 2026, inceleme: toplam 51985, ödenen 51984): "Kalem seç"le bir
+kısmı ödenen satırın ödenmemiş adetleri iptal, ikram ya da başka adisyona taşımayla ayrılınca kalem indiriminin bölüşü
+ortak hesapta (`splitLineDiscount`, `shared/order-calc.ts`; `splitItem` onu çağırır). Ödenmiş adetler kalem bazlı
+ödemenin adet paylarındaki indirimi korur (`allocate`, en büyük kalan), ayrılan parça kalanını alır. Kalan adetlerin
+hepsi ödenmişse adisyon indiriminin yeni dağılımının yuvarlaması da kapatılır: kalan parçanın indirimi en çok 2 kuruş
+kaydırılarak ödenmiş satırların net payı ödenen tutara eşitlenir. Eskiden bölme indirimi yeniden yuvarlıyor, ödenmiş
+satırın yeni payı yazılı ödemeyi 1 kuruşla tutmuyordu: adisyon ₺0,01 borçla, seçilecek kalem kalmadan açık kalıyor (gün
+sonu alınmıyor) ya da işlem "ödenen yeni toplamı aşıyor" diye reddediliyordu. Ödenmiş adedi olmayan satır eskisi gibi
+orantılı bölünür. Tutar indirimi kalan (ödenmiş) adetlere 2 kuruştan fazla binerse bu yuvarlama değildir, fazla ödeme
+eskisi gibi reddedilir. Açık kalan: satırda geri verilecek kalem indirimi yoksa (0-3 kuruş) ve ödenecek kalem
+kalmamışsa adisyon indiriminin 1-2 kuruşluk yuvarlaması yine fazla ödeme sayılır; kapatmak adisyon düzeyinde bir
+yuvarlama alanı ister. Testler `tests/kalem-odeme-bolme.test.ts` (sql.js ile de) ve `tests/order-calc.test.ts`.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

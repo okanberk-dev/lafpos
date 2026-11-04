@@ -263,6 +263,64 @@ export function itemsBreakdown(
   return out;
 }
 
+/**
+ * Bölmede ödenmiş satırların yeniden hesaplanan net payıyla ödenen tutarı arasındaki bu kadar fark yuvarlamadır
+ * (`splitLineDiscount`); indirim büyümesi denetimiyle aynı sınır (server/services/orders.ts `approveDiscountShrink`)
+ */
+const SPLIT_ROUNDING: Kurus = 2;
+
+/** Tamamı ödenmiş, ödenen tutarı bilinen satırlarda net pay eksi ödenen tutarın toplamı (0: ödenenle aynı) */
+function settledResidue(totals: Pick<OrderTotals, 'lineNet'>, lines: ItemPayLine[]): Kurus {
+  let residue = 0;
+  for (const l of lines) if (l.paidQty > 0 && l.paidQty >= l.qty && l.paidAmount != null) residue += (totals.lineNet[l.id] ?? 0) - l.paidAmount;
+  return residue;
+}
+
+/**
+ * Satırın ödenmemiş adetlerinden bir kısmı ayrılırken (iptal, ikram, başka adisyona taşıma) kalem indiriminin kalan
+ * ve ayrılan parçaya bölüşü; ikisinin toplamı satırın indirimidir. `input` bölmeden önceki adisyon, `lines` onun
+ * ödeme satırları (`itemPayLines`).
+ * - Ödenmiş adedi olmayan satırda indirim adetle orantılı bölünür (ayrılan parçanın payı yarım-yukarı yuvarlanır).
+ * - Ödenmiş adedi olan satırda kalan adetler kalem bazlı ödemenin adet paylarındaki (`itemsBreakdown`, en büyük kalan)
+ *   indirimi korur, ayrılan parça kalanını alır. Kalan adetlerin hepsi ödenmişse adisyon indiriminin yeni dağılımının
+ *   yuvarlaması da kapatılır: kalan parçanın indirimi en çok `SPLIT_ROUNDING` kuruş kaydırılarak ödenmiş satırların
+ *   net payı ödenen tutara eşitlenir. Daha büyük fark yuvarlama değildir (tutar indirimi kalan adetlere biner): bölüş
+ *   değişmez, fazla ödeme eskisi gibi reddedilir.
+ * Yoksa ödenmiş satırın yeni payı yazılı ödemeyi 1 kuruşla tutmuyordu: adisyon ₺0,01 borçla ve seçilecek kalem
+ * kalmadan açık kalıyor ya da işlem "ödenen yeni toplamı aşıyor" diye reddediliyordu (inceleme, 4 Kas 2026).
+ */
+export function splitLineDiscount(input: CalcInput, lines: ItemPayLine[], lineId: string, part: number): { kept: Kurus; part: Kurus } {
+  const line = input.lines.find((l) => l.id === lineId);
+  if (!line || part <= 0) return { kept: line?.discount ?? 0, part: 0 };
+  if (part >= line.qty) return { kept: 0, part: line.discount };
+  const keep = line.qty - part;
+  const pay = lines.find((l) => l.id === lineId);
+  if (!pay || pay.paidQty <= 0) {
+    const share = Math.round((line.discount * part) / line.qty);
+    return { kept: line.discount - share, part: share };
+  }
+  const gross = lineGross(line);
+  const discount = Math.min(Math.max(0, line.discount), gross);
+  const unitShares = allocate(gross - discount, Array.from({ length: line.qty }, () => 1));
+  const natural = keep * line.unitPrice - unitShares.slice(0, keep).reduce((a, b) => a + b, 0);
+  const split = (kept: Kurus) => ({ kept, part: line.discount - kept });
+  if (pay.paidQty < keep || pay.paidAmount == null) return split(natural);
+
+  const keptLines = lines.map((l) => (l.id === lineId ? { ...l, qty: keep } : l));
+  const residueWith = (kept: Kurus) =>
+    settledResidue(calcOrder({ ...input, lines: input.lines.map((l) => (l.id === lineId ? { ...l, qty: keep, discount: kept } : l)) }), keptLines);
+  const residue = residueWith(natural);
+  if (residue === 0 || Math.abs(residue) > SPLIT_ROUNDING) return split(natural);
+  // Net pay ödenenden fazlaysa kalan parçanın indirimi artar, azsa azalır; ayrılan parça kendi brütünden fazlasını almaz
+  const step = residue > 0 ? 1 : -1;
+  const lo = Math.max(0, discount - part * line.unitPrice);
+  const hi = Math.min(discount, keep * line.unitPrice);
+  for (let n = 1, kept = natural + step; n <= SPLIT_ROUNDING && kept >= lo && kept <= hi; n++, kept += step) {
+    if (residueWith(kept) === 0) return split(kept);
+  }
+  return split(natural);
+}
+
 /** Kalem bazlı ödemede seçilen adetlerin tutarı (`itemsBreakdown` toplamı) */
 export function amountForItems(totals: Pick<OrderTotals, 'lineNet'>, lines: ItemPayLine[], selection: { lineId: string; qty: number }[]): Kurus {
   return itemsBreakdown(totals, lines, selection).reduce((a, l) => a + l.amount, 0);
