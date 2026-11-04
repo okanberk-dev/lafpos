@@ -19,6 +19,7 @@ import { useMediaQuery } from '@/lib/hooks';
 import { previewTotals } from '@/lib/estimate';
 import { parseTL } from '@shared/money';
 import { groupTyped } from '@/lib/numpad';
+import { OdenmezModal } from './OdenmezModal';
 import { TypedAmount } from './TypedAmount';
 
 // Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
@@ -117,7 +118,7 @@ export function CartPanel({
                           </span>
                         )}
                         <span className="tabular font-normal text-muted">{fmtTime(i.sentAt)}</span>
-                        {i.complimentary && <CompMark kind={i.compKind ?? 'ikram'} />}
+                        {i.complimentary && <CompMark kind={i.compKind ?? 'ikram'} person={i.compPerson?.name} />}
                         {/* İndirim durum değil: nötr ve adıyla (mavi "Hazırlanıyor"la tek durum gibi okunmasın) */}
                         {i.discount > 0 && <span className="tabular text-ink-2">−{tl(i.discount)} indirim</span>}
                         {i.happyHour && <span className="text-[var(--admin-warning)]">Happy hour</span>}
@@ -263,6 +264,8 @@ function ItemSheet({
   const boot = useBoot();
   const can = useCan();
   const [mode, setMode] = useState<null | 'iptal' | 'ikram' | 'zayi' | 'indirim'>(null);
+  /** Ödenmez kişi seçicisi açık (kalem penceresinin yerine) */
+  const [odenmez, setOdenmez] = useState(false);
   const [qty, setQty] = useState(1);
   const [reason, setReason] = useState('');
   const [discType, setDiscType] = useState<'percent' | 'amount'>('percent');
@@ -275,6 +278,7 @@ function ItemSheet({
   const unpaid = item.qty - item.paidQty;
   const close = () => {
     setMode(null);
+    setOdenmez(false);
     setReason('');
     setDiscValue('');
     setQty(1);
@@ -315,13 +319,31 @@ function ItemSheet({
     if (res) close();
   };
 
+  const itemTitle = `${item.qty}× ${item.name}${item.size !== 'TEK' ? ` ${boot.settings.sizeLabels[item.size]}` : ''}`;
+  if (odenmez) {
+    // Ödenmez kayıtlı bir kişiye yazılır: kişi, neden ve adet tek pencerede
+    return (
+      <OdenmezModal
+        open
+        title={`Ödenmez yaz · ${itemTitle}`}
+        subtitle={`${tl(item.unitPrice)} adet başı; seçilen kişinin adına ciro dışı yazılır`}
+        qtyMax={unpaid}
+        confirmLabel={(n) => `${n} adet ödenmez`}
+        onClose={() => setOdenmez(false)}
+        onConfirm={async ({ person, reason: why, qty: n }) => {
+          const res = await act((pin) => post(`/orders/${order.id}/items/${item.id}/comp`, { qty: n, reason: why, kind: 'odenmez', person, approverPin: pin }), 'Ödenmez yazıldı');
+          if (res) close();
+        }}
+      />
+    );
+  }
   return (
     <Modal
       open
       onClose={dismiss}
       persistent={busy}
       size="sm"
-      title={`${item.qty}× ${item.name}${item.size !== 'TEK' ? ` ${boot.settings.sizeLabels[item.size]}` : ''}`}
+      title={itemTitle}
       subtitle={[item.optionsText, tl(item.qty * item.unitPrice)].filter(Boolean).join(' · ')}
       // Geri ve onay pencerenin altında sabit (seçenek ve onay pencereleriyle aynı): telefonda tuş takımıyla kayıp gitmez
       footer={
@@ -350,6 +372,7 @@ function ItemSheet({
           ) : (
             <>
               <SheetButton icon={<Gift />} title="İkram et" hint="Ücret alınmaz, ikram raporuna girer" onClick={() => setMode('ikram')} disabled={unpaid < 1} />
+              <SheetButton icon={<HandCoins />} title="Ödenmez yaz" hint="Personel yemeği, patron hesabı; kayıtlı kişinin adına" onClick={() => setOdenmez(true)} disabled={unpaid < 1} />
               <SheetButton icon={<Droplets />} title="Zayi yaz" hint="Döküldü, yanlış hazırlandı; ciro dışı, zayi raporuna girer" onClick={() => setMode('zayi')} disabled={unpaid < 1} />
             </>
           )}
@@ -419,12 +442,14 @@ function ItemSheet({
 }
 
 /** Gönderilmiş kalemin ciro dışı işareti (ikram, ödenmez, zayi): ikon ve adıyla */
-function CompMark({ kind }: { kind: CompKind }) {
+/** İkram, ödenmez, zayi işareti; ödenmezde kimin adına yazıldığı yanında ("Ödenmez · Garson") */
+function CompMark({ kind, person }: { kind: CompKind; person?: string | null }) {
   const { Icon, cls } = COMP_MARK[kind];
   return (
     <span className={cn('inline-flex items-center gap-0.5', cls)}>
       <Icon aria-hidden="true" className="size-3.5" />
       {COMP_LABEL[kind]}
+      {kind === 'odenmez' && person && <span className="font-normal text-ink-2"> · {person}</span>}
     </span>
   );
 }

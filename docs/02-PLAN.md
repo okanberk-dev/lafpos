@@ -319,6 +319,22 @@ da sıradaki payda kalkar); ödeme iptali de siler. Bölüş denetime yazılır:
 tutarları (`order.split`, `data`). Testler `tests/hesap-bolme-elle.test.ts`, e2e akışı çiple böler, ikinci payı elle
 değiştirir.
 
+**Ödenmez kayıtlı bir kişiye bağlı** (4 Kasım 2026): ödenmez kapatma (adisyonun tamamı ya da tek kalem; tek kalem
+ödenmez yeni, kalem sayfasında "Ödenmez yaz") kayıtlı bir kişi seçilmeden yapılmaz: aranabilir liste, Personel (etkin
+kullanıcılar, rolüyle) ve Müşteriler (telefonun son 4 hanesiyle); ikram ve zayide kişi sorulmaz; personel seçilince
+"Personel yemeği", patron seçilince "Patron hesabı" önerilir (varsayılan ödenmez nedenleri de "Patron hesabı"). Sunucu:
+`compOrder` ve `compItem` `person: { kind: 'user' | 'customer', id }` alır; ödenmezde zorunlu (400 `person_required`),
+öteki türlerde reddedilir (400 `person_not_allowed`); kişinin var (404) ve etkin olduğu (409 `person_inactive`)
+doğrulanır; siparişe ve kaleme tür, kimlik ve adın anlık kopyası yazılır (`comp_person_*`, göç `0017_odenmez_kisi`);
+denetim iletisi kişiyi adlandırır ("Garson adına (personel)", `data.person`), geri alma kişiyi temizler (adisyonda
+ödenmez kalem kalmadıysa adisyonunkini de). Raporlar: İptal ve indirim › ikram listesinde ödenmez satırı kişiyi
+gösterir, aynı yerde "Kişi bazında ödenmez" (kişi, tür, adet, tutar; `shared/comp.ts` `odenmezByPerson`); Personel
+raporunda "Adına ödenmez"; CSV'de Kişi sütunu; Z'de ödenmez satırının altında kişi kişi döküm (`odenmezPeople`). Kişi
+bilgisi lafmaliyet'e ve siteye gitmez, müşteri ekranında görünmez; LafPOS Uzaktan'a yalnız ilk ad (açık adisyon ve
+patron uyarısının denetim iletisi, `data.person`'dan). Personel adına yazılan ödenmez personel tutarıdır: maliyet
+yetkisi olmayana başkasınınki "Personel" diye gider (adisyon uçları `blindOrder`, rapor, CSV, X ve Z). Testler
+`tests/odenmez-kisi.test.ts`, e2e akışı garsonu seçer, tarama İşlemler › Ödenmez kapat penceresini açar.
+
 Açık: ESC/POS ağ yazıcısına doğrudan basım (şimdilik tarayıcıdan 80 mm), yemek platformlarının canlı
 bağlantısı, kasada damga (laffogato M2M), gerçek cihazla (iPhone, Android, fiş yazıcısı, ÖKC) kurulum turu,
 kurulum dosyasının gerçek Windows'ta ilk turu (`docs/05-KASA-BILGISAYARI.md` §2 sonundaki liste), kurulum

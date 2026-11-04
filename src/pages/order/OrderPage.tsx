@@ -49,6 +49,7 @@ import { sendDisplay, useCustomerDisplay, useDisplayCode } from '@/lib/display';
 import { CartPanel } from './CartPanel';
 import { CustomerModal } from './CustomerModal';
 import { OnlineOrderBar } from './OnlineOrderBar';
+import { OdenmezModal } from './OdenmezModal';
 import { OptionsModal } from './OptionsModal';
 import { PaymentModal } from './PaymentModal';
 import { ProductPanel } from './ProductPanel';
@@ -664,7 +665,21 @@ export default function OrderPage() {
           }
         }}
       />
-      {COMP_KINDS.map((kind) => (
+      <OdenmezModal
+        open={dialog === 'odenmez'}
+        title="Ödenmez kapat · kimin adına?"
+        subtitle={compCloseSubtitle('odenmez', tl(order.total))}
+        confirmLabel={() => COMP_CONFIRM_LABEL.odenmez}
+        onClose={() => setDialog(null)}
+        onConfirm={async ({ person, reason }) => {
+          const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind: 'odenmez', reason, person, approverPin: pin }), COMP_DONE_TOAST.odenmez);
+          if (res) {
+            cart.clear(order.id);
+            navigate(backPath);
+          }
+        }}
+      />
+      {COMP_KINDS.filter((kind) => kind !== 'odenmez').map((kind) => (
         <ReasonModal
           key={kind}
           open={dialog === kind}

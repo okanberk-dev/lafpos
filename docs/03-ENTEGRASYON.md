@@ -471,7 +471,8 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
   adisyonun ikramı tüketim değildir); ikram edilen içeceğin ekleri ayrı kayıttır, menü değeri satıştaki oranla
   bölünür. `ikram` menü değerlerinin toplamı `offRevenue`'a eşittir. Ödenmez kapanan adisyonun kalemleri
   (personel yemeği, patron hesabı) de buradadır; ayrı alan yoktur, `reason` "Ödenmez: " ile başlar
-  (ör. `"Ödenmez: Personel yemeği"`). Zayi yazılan kalem (döküldü, yanlış hazırlandı, bozuk; ödeme ekranındaki
+  (ör. `"Ödenmez: Personel yemeği"`); ödenmezin LafPOS'ta bağlandığı kayıtlı kişi (personel ya da müşteri) pakete
+  girmez. Zayi yazılan kalem (döküldü, yanlış hazırlandı, bozuk; ödeme ekranındaki
   "Zayi" ya da kalem sayfasındaki "Zayi yaz") de aynı listededir, `reason` "Zayi: " ile başlar (ör. `"Zayi: Döküldü"`);
   lafmaliyet bunları `waste_entries`'e `kind = 'zayi'` ile alabilir. Ön ekler `shared/comp.ts` `compReasonText`.
 - `payments` yemek kartı ve platform kanallarını lafmaliyet'in komisyon anahtarlarıyla verir (`pluxee`,

@@ -81,7 +81,7 @@ Girdi: rol, öğretilecek iş ya da süreç ve dükkânın kendi standardı. Ç�
 LafPOS ekranlarını gerçek adlarıyla anlatır ve bugünkü akışı izler (ekranlar değiştiyse önce kodu ya da `DESIGN.md`'yi
 oku): kilit ekranında PIN'le oturum açma; masayı açma, ürün ekleme, seçenek ve not, **Bara gönder**; hazır kalemi
 teslim etme; **Öde** (nakit, kart, yemek kartı, açık hesap), hesabı bölme (kişi çipleri, eşit ya da elle paylar),
-ikram, ödenmez ve zayi; vardiya devri sayımı (devreden sayar, devralan PIN'iyle onaylar); gün sonu
+ikram, ödenmez (kayıtlı kişi seçilir: personel ya da müşteri) ve zayi; vardiya devri sayımı (devreden sayar, devralan PIN'iyle onaylar); gün sonu
 (Z) ve sayım. Yetki gerektiren adımda "yetkili onayı" anlatılır, kasiyerin göremediği rakam (kör kasa) yazılmaz.
 Barista için reçete ve sunum standardı operatörden alınır, uydurulmaz.
 

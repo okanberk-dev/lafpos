@@ -293,6 +293,8 @@ export interface OrderItemDTO {
   compReason: string | null;
   /** İkramın türü; ikram değilse null (eski ikramlar 'ikram') */
   compKind: CompKind | null;
+  /** Ödenmezde adına yazılan kişi; başka türde ve eski kayıtlarda null */
+  compPerson: CompPersonDTO | null;
   voided: boolean;
   voidReason: string | null;
   voidAfterSend: boolean;
@@ -377,6 +379,8 @@ export interface OrderDTO {
   totals: OrderTotals;
   billPrintedAt: number | null;
   billPrints: number;
+  /** Adisyonun tamamı ödenmez kapandıysa adına yazılan kişi; yoksa null */
+  compPerson: CompPersonDTO | null;
   source: 'pos' | 'laffogato';
   extId: string | null;
   extNo: number | null;
@@ -508,6 +512,30 @@ export interface KitchenTicket {
  */
 export type CompKind = 'ikram' | 'odenmez' | 'zayi';
 
+/** Ödenmezin bağlandığı kayıtlı kişinin türü: personel (kullanıcı) ya da müşteri */
+export type CompPersonKind = 'user' | 'customer';
+
+/**
+ * Ödenmez yazılan kişi: tür, kimlik ve yazıldığı andaki adının kopyası (kişi sonradan silinse ya da adı değişse de
+ * kayıt okunur). Yalnız LafPOS'ta kalır: lafmaliyet'e, siteye ve müşteri ekranına gitmez. Maliyet yetkisi olmayana
+ * başkasının adına yazılmış personel ödenmezinde kimlik boş, ad "Personel" gelir (personel tutarı)
+ */
+export interface CompPersonDTO {
+  kind: CompPersonKind;
+  id: string;
+  name: string;
+}
+
+/** Kişi bazında ödenmez (rapor, Z): kimin adına, kaç adet, menü değeri. Kişisi olmayan eski kayıtta tür ve kimlik boş */
+export interface OdenmezPersonDTO {
+  kind: CompPersonKind | null;
+  /** Gösterilmeyen personelde (maliyet yetkisi yok) null, adı "Personel" */
+  id: string | null;
+  name: string;
+  qty: number;
+  amount: number;
+}
+
 /** lafmaliyet Kasa raporundaki ödeme alanı */
 export type ZField = 'cash' | 'card' | 'meal_card' | 'online' | 'other';
 
@@ -524,6 +552,8 @@ export interface ZSummary {
   odenmez?: number;
   /** Ciro dışının zayi kısmı (döküldü, yanlış hazırlandı, bozuk); eski Z'lerde yok */
   zayi?: number;
+  /** Ödenmezin kişi bazında dökümü (kapanmış adisyonlar); eski Z'lerde yok. lafmaliyet'e gitmez */
+  odenmezPeople?: OdenmezPersonDTO[];
   voided: number;
   voidAfterSendCount: number;
   service: number;

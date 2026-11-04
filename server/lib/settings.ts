@@ -20,7 +20,7 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   askOptions: 'zorunlu',
   voidReasons: ['Yanlış giriş', 'Müşteri vazgeçti', 'Ürün bitti', 'Geç kaldı', 'Hatalı hazırlandı'],
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
-  odenmezReasons: ['Personel yemeği', 'Patron / ortak', 'Müşteri şikâyeti', 'Deneme'],
+  odenmezReasons: ['Personel yemeği', 'Patron hesabı', 'Müşteri şikâyeti', 'Deneme'],
   zayiReasons: ['Döküldü', 'Yanlış hazırlandı', 'Bozuk / bayat', 'Müşteri iade etti'],
   discountReasons: ['Öğrenci', 'Personel', 'Müdavim', 'Kampanya', 'Şikâyet telafisi'],
   quickCash: [10000, 20000, 50000, 100000, 200000],

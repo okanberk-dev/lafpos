@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
+import { odenmezByPerson } from '@shared/comp';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
@@ -436,10 +437,15 @@ export function prepReport(range: Range) {
 export function staffReport(range: Range) {
   const ds = load(range);
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
-  const rows = new Map<string, { userId: string; name: string; orders: number; revenue: number; voids: number; voidValue: number; comps: number; compValue: number; discounts: number }>();
-  const row = (id: string | null) => {
+  const rows = new Map<
+    string,
+    { userId: string; name: string; orders: number; revenue: number; voids: number; voidValue: number; comps: number; compValue: number; discounts: number; odenmez: number; odenmezValue: number }
+  >();
+  const row = (id: string | null, fallbackName?: string | null) => {
     const key = id ?? 'yok';
-    if (!rows.has(key)) rows.set(key, { userId: key, name: id ? (users.get(id) ?? 'Bilinmiyor') : 'Atanmamış', orders: 0, revenue: 0, voids: 0, voidValue: 0, comps: 0, compValue: 0, discounts: 0 });
+    if (!rows.has(key)) {
+      rows.set(key, { userId: key, name: id ? (users.get(id) ?? fallbackName ?? 'Bilinmiyor') : 'Atanmamış', orders: 0, revenue: 0, voids: 0, voidValue: 0, comps: 0, compValue: 0, discounts: 0, odenmez: 0, odenmezValue: 0 });
+    }
     return rows.get(key)!;
   };
   const closed = ds.orders.filter(isSale);
@@ -464,6 +470,12 @@ export function staffReport(range: Range) {
       const r = row(i.compBy);
       r.comps += i.qty;
       r.compValue += i.qty * i.unitPrice;
+      // Çalışanın adına yazılan ödenmez (personel yemeği, patron hesabı): kalemi kim yazdıysa değil, kimin adınaysa
+      if (i.compKind === 'odenmez' && i.compPersonKind === 'user' && i.compPersonId) {
+        const p = row(i.compPersonId, i.compPersonName);
+        p.odenmez += i.qty;
+        p.odenmezValue += i.qty * i.unitPrice;
+      }
     }
   }
   return { range, staff: [...rows.values()].sort((a, b) => b.revenue - a.revenue) };
@@ -484,7 +496,7 @@ function compKindOf(ds: { items: ItemRow[] }, closedIds: Set<string>, kind: Comp
 const voidedAfterBill = (i: ItemRow, o: OrderRow) => i.voidAfterBill || (o.billPrintedAt != null && i.voidedAt != null && i.voidedAt > o.billPrintedAt);
 
 /** Bütün POS adisyonlarından (açık ve kalemleri taşınmış olanlar dahil): iptal listesi X/Z'nin iptal tutarını verir */
-export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy') {
+export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy', showStaff: (userId: string) => boolean = () => true) {
   const ds = load(range);
   const orders = new Map(ds.orders.map((o) => [o.id, o]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
@@ -509,6 +521,11 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         value,
         reason: kind === 'iptal' ? i.voidReason : kind === 'ikram' ? i.compReason : kind === 'indirim' ? i.discountReason : 'Happy hour',
         compKind: kind === 'ikram' ? (i.compKind ?? 'ikram') : null,
+        // Ödenmezin kimin adına yazıldığı (personel adı yalnız görebilene; ötekine "Personel")
+        person:
+          kind === 'ikram' && i.compKind === 'odenmez' && i.compPersonKind && i.compPersonId
+            ? { kind: i.compPersonKind, name: i.compPersonKind === 'user' && !showStaff(i.compPersonId) ? 'Personel' : (i.compPersonName ?? 'Bilinmiyor') }
+            : null,
         by: users.get((kind === 'iptal' ? i.voidBy : kind === 'ikram' ? i.compBy : i.createdBy) ?? '') ?? null,
         approvedBy: kind === 'iptal' && i.voidApprovedBy ? (users.get(i.voidApprovedBy) ?? null) : null,
         afterSend: i.voidAfterSend,
@@ -533,6 +550,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         value: t.orderDiscount,
         reason: o.discountReason,
         compKind: null,
+        person: null,
         by: o.discountBy ? (users.get(o.discountBy) ?? null) : null,
         approvedBy: null,
         afterSend: false,
@@ -541,7 +559,10 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
     }
     rows.sort((a, b) => b.at - a.at);
   }
-  return { range, total: rows.reduce((a, r) => a + r.value, 0), count: rows.length, rows };
+  // Kişi bazında ödenmez: listedeki ödenmez satırlarıyla aynı kapsam (yalnız ikram listesinde)
+  const odenmezPeople =
+    kind === 'ikram' ? odenmezByPerson(ds.items.filter((i) => orders.get(i.orderId)?.source === 'pos' && i.complimentary && !i.voided && i.compKind === 'odenmez'), showStaff) : [];
+  return { range, total: rows.reduce((a, r) => a + r.value, 0), count: rows.length, rows, odenmezPeople };
 }
 
 export function refundReport(range: Range) {

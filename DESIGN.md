@@ -115,7 +115,15 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   da eksi olamaz, toplam kalana eşittir, düğme "Payları kaydet" (kaydedilmeden ödeme düğmesi "Önce payları kaydedin"
   der). Paylar sırayla ve istenen yöntemle alınır: sıradaki pay mürekkep kenarlı, ödenen pay yeşil onaylı. Pay tutarını
   sunucu hesaplar (`shared/order-calc.ts` `splitState`, elle tutarlar `orders.split_amounts`); hesap değişince (kalem,
-  iptal, indirim, ödeme iptali) elle paylar düşer, kalan yeniden eşit bölünür ve pencere bunu kısa notla söyler. Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme. Ödeme düğmesi
+  iptal, indirim, ödeme iptali) elle paylar düşer, kalan yeniden eşit bölünür ve pencere bunu kısa notla söyler.
+- **Ödenmez kişi seçimi** (`OdenmezModal`): ödenmez (adisyonun tamamı, ödeme penceresinden ya da İşlemler'den; tek
+  kalem, kalem sayfasındaki "Ödenmez yaz") kayıtlı bir kişi seçilmeden yapılmaz. Tek pencere: "Kimin adına?" araması
+  (ad ya da telefon), iki grup: Personel (etkin kullanıcılar, avatar ve rolüyle) ve Müşteriler (boş aramada son gelenler,
+  telefonun son 4 hanesiyle "Telefon •• 1122"); seçili satır yeşil kenar ve tik. Altında neden çipleri (mürekkep) ve
+  alan; personel seçilince "Personel yemeği", patron seçilince "Patron hesabı" önerilir, yazılan neden ezilmez. Kişi
+  seçilmeden onaylanınca ileti alanın altında ("Kimin adına yazılacağını seçin"). İkram ve zayide kişi sorulmaz.
+  Sepette ödenmez kalem "Ödenmez · Garson" diye işaretlenir; raporda "Garson adına", Z'de ödenmez satırının altında
+  kişi kişi döküm. Yazarkasada fiş tek kesilir, paylar cihazda ayrı ödeme. Ödeme düğmesi
   pencerenin alt şeridinde, kaydırınca kaybolmaz; yanında para üstü, eksik ya da bahşiş notu. Düğmenin tutarı bahşişi
   içerir (kartta bankanın POS'una girilen tutar) ve eksik adımı söyler ("Ödenecek kalemleri seçin", "Önce hesabı
   bölün"; açık hesapta "açık hesaba yaz"). Tablet ve bilgisayarda iki sütun: solda tutar, tuş takımı, yazarkasa ve

@@ -672,7 +672,7 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Tablette kasiyer: personel yemeğini ödenmez kapatır, müdür onaylar',
+      'Tablette kasiyer: personel yemeğini garsonun adına ödenmez kapatır (kişi seçilmeden olmaz, neden önerilir), müdür onaylar',
       async () => {
         const table = seed.tables[5];
         const o = await api.call('kasa', 'POST', '/orders', { type: 'masa', tableId: table.id, guests: 1 });
@@ -681,17 +681,26 @@ export async function runFlows(ctx) {
           await go(ctx, page, `/adisyon/${o.id}`);
           await page.getByRole('button', { name: 'İşlemler', exact: true }).click();
           await page.getByRole('button', { name: /^Ödenmez kapat/ }).click();
-          const reason = page.getByRole('dialog', { name: 'Ödenmez kapat' });
-          await reason.getByRole('button', { name: 'Personel yemeği', exact: true }).click();
+          const reason = page.getByRole('dialog', { name: 'Ödenmez kapat · kimin adına?' });
+          // Kişi seçilmeden yazılmaz
+          await reason.getByRole('button', { name: 'Ödenmez kapat', exact: true }).click();
+          await reason.getByText('Kimin adına yazılacağını seçin').waitFor();
+          await reason.getByRole('group', { name: 'Personel', exact: true }).getByRole('button', { name: /^Garson/ }).click();
+          // Personel seçilince neden "Personel yemeği" önerilir
+          await reason.getByRole('button', { name: 'Personel yemeği', exact: true, pressed: true }).waitFor();
+          const small = await smallTargets(page);
+          assert(!small.length, `44 px altı: ${small.join(', ')}`);
+          await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-odenmez-kisi.png` });
           await reason.getByRole('button', { name: 'Ödenmez kapat', exact: true }).click();
           const approval = page.getByRole('dialog', { name: 'Yetkili onayı' });
           for (const d of PINS.mudur) await approval.getByRole('button', { name: d, exact: true }).click();
           await approval.getByRole('button', { name: 'Onayla', exact: true }).click();
           await page.waitForURL((u) => !u.pathname.startsWith('/adisyon/'), { timeout: 8000 });
         }, [/istek 403: POST \/api\/orders\/[^/]+\/comp/, /konsol: Failed to load resource: .*403/]);
-        const closed = await api.call('kasa', 'GET', `/orders/${o.id}`);
+        const closed = await api.call('mudur', 'GET', `/orders/${o.id}`);
         assert(closed.status === 'kapali' && closed.total === 0, `adisyon kapanmadı: ${closed.status} ${closed.total}`);
         assert(closed.items.every((i) => i.compKind === 'odenmez' && i.compReason === 'Personel yemeği'), 'kalemler ödenmez değil');
+        assert(closed.compPerson?.name === 'Garson' && closed.items.every((i) => i.compPerson?.name === 'Garson'), `ödenmez garsona yazılmadı: ${JSON.stringify(closed.compPerson)}`);
       },
     ],
     [

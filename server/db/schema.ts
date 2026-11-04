@@ -4,7 +4,7 @@ import type { Role } from '@shared/permissions';
 import type { Permission } from '@shared/permissions';
 import type { OrderTotals } from '@shared/order-calc';
 import type { PlatformId, PlatformOrderPayload, PlatformOrderStatus } from '@shared/platforms';
-import type { CompKind, SelectedOption, ZField, ZSummary } from '@shared/types';
+import type { CompKind, CompPersonKind, SelectedOption, ZField, ZSummary } from '@shared/types';
 import type { RoomBookingSnapshot } from '@shared/karaoke';
 
 export type { CompKind, ZField, ZSummary };
@@ -488,6 +488,10 @@ export const orders = sqliteTable(
     totals: text('totals', { mode: 'json' }).$type<OrderTotals | null>(),
     billPrintedAt: integer('bill_printed_at'),
     billPrints: integer('bill_prints').notNull().default(0),
+    /** Adisyonun tamamı ödenmez kapandıysa adına yazılan kayıtlı kişi (kalemlerde de aynısı); geri alınınca silinir */
+    compPersonKind: text('comp_person_kind').$type<CompPersonKind>(),
+    compPersonId: text('comp_person_id'),
+    compPersonName: text('comp_person_name'),
     source: text('source').$type<'pos' | 'laffogato'>().notNull().default('pos'),
     /** Online sipariş: sitedeki kimlik (ord-0042), aşama, teslim türü, etiket; ödemesi sitede alınmış */
     extId: text('ext_id'),
@@ -552,6 +556,10 @@ export const orderItems = sqliteTable(
      * ve Z'de ayrı görünür. Eski kayıtlarda boş = ikram
      */
     compKind: text('comp_kind').$type<CompKind>(),
+    /** Ödenmezde adına yazılan kayıtlı kişi: tür, kimlik ve o anki adının kopyası (yalnız LafPOS'ta kalır) */
+    compPersonKind: text('comp_person_kind').$type<CompPersonKind>(),
+    compPersonId: text('comp_person_id'),
+    compPersonName: text('comp_person_name'),
     voided: bool('voided').notNull().default(false),
     voidReason: text('void_reason'),
     voidBy: text('void_by'),

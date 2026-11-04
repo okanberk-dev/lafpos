@@ -75,6 +75,8 @@ const checkDialogs = [
     ['islem-indirim', /^Adisyon indirimi/, 'Adisyon indirimi'],
     ['islem-kisi', /^Kişi sayısı/, 'Kişi sayısı'],
     ['islem-musteri', /^Müşteri ekle/, 'Müşteri'],
+    // Ödenmez kişi seçicisi (personel ve müşteriler, neden): yalnız açılır
+    ['islem-odenmez', /^Ödenmez kapat/, 'Ödenmez kapat · kimin adına?'],
   ].map(([name, item, title]) =>
     state('@s2', name, async (page) => {
       await page.getByRole('button', { name: 'İşlemler', exact: true }).click({ timeout: 5000 });

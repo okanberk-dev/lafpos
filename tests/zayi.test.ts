@@ -15,6 +15,8 @@ beforeAll(async () => {
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
 });
 afterAll(() => h.cleanup());
+/** Ödenmez kayıtlı bir kişiye yazılır: personelin kimliği (kurulum verisindeki ad) */
+const staff = (name: string) => ({ kind: 'user' as const, id: h.boot.users.find((u) => u.name === name)!.id });
 
 const product = (name: string) => h.boot.products.find((p) => p.name === name)!;
 const method = (name: string) => h.boot.paymentMethods.find((m) => m.name === name)!;
@@ -97,7 +99,7 @@ describe('zayi', () => {
 
   it('ödenmez ve ikram zayiden ayrı sayılır; Z ve rapor özeti: complimentary = ikram + ödenmez + zayi, ciro 0 kalmaz', async () => {
     const o = await table([{ name: 'Americano', qty: 1 }]);
-    await h.ok('mudur', 'POST', `/orders/${o.id}/comp`, { kind: 'odenmez', reason: 'Personel yemeği' });
+    await h.ok('mudur', 'POST', `/orders/${o.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: 'Personel yemeği' });
     odenmezValue += 15000;
     const { summary } = await day();
     expect(summary.complimentary).toBe(ikramValue + odenmezValue + zayiValue);

@@ -13,6 +13,8 @@ beforeAll(async () => {
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
 });
 afterAll(() => h.cleanup());
+/** Ödenmez kayıtlı bir kişiye yazılır: personelin kimliği (kurulum verisindeki ad) */
+const staff = (name: string) => ({ kind: 'user' as const, id: h.boot.users.find((u) => u.name === name)!.id });
 
 const product = (name: string) => h.boot.products.find((p) => p.name === name)!;
 const method = (name: string) => h.boot.paymentMethods.find((m) => m.name === name)!;
@@ -51,10 +53,10 @@ describe('adisyonu ciro dışı kapatma', () => {
   it('ödenmez: kasiyerin yetkisi yok, müdür onaylar; ikramdan ayrı sayılır', async () => {
     await h.pinPrice('Latte', 16000);
     const o = await table([{ name: 'Latte', qty: 3 }], 'kasa');
-    const denied = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/comp`, { kind: 'odenmez', reason: 'Personel yemeği' });
+    const denied = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: 'Personel yemeği' });
     expect(denied.status).toBe(403);
     expect(denied.json.code).toBe('approval_required');
-    const closed = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/comp`, { kind: 'odenmez', reason: 'Personel yemeği', approverPin: PINS.mudur });
+    const closed = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: 'Personel yemeği', approverPin: PINS.mudur });
     expect(closed.status).toBe('kapali');
     expect(closed.items.every((i) => i.compKind === 'odenmez')).toBe(true);
     odenmezValue = o.items.reduce((a, i) => a + i.qty * i.unitPrice, 0);
@@ -69,7 +71,7 @@ describe('adisyonu ciro dışı kapatma', () => {
   it('ödeme alınmış, ücretli kalemi olmayan ya da yazarkasada bekleyen adisyon kapatılmaz', async () => {
     const paid = await table([{ name: 'Americano', qty: 2 }], 'kasa');
     await h.ok('kasa', 'POST', `/orders/${paid.id}/payments`, { methodId: method('Nakit').id, amount: 15000 });
-    const r1 = await h.call<{ code: string }>('patron', 'POST', `/orders/${paid.id}/comp`, { kind: 'odenmez', reason: 'Zayi' });
+    const r1 = await h.call<{ code: string }>('patron', 'POST', `/orders/${paid.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: 'Zayi' });
     expect([r1.status, r1.json.code]).toEqual([409, 'has_payments']);
 
     const empty = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
@@ -77,9 +79,9 @@ describe('adisyonu ciro dışı kapatma', () => {
     expect([r2.status, r2.json.code]).toEqual([409, 'nothing_to_comp']);
 
     const blank = await table([{ name: 'Americano', qty: 1 }], 'kasa');
-    const r3 = await h.call<{ code: string }>('patron', 'POST', `/orders/${blank.id}/comp`, { kind: 'odenmez', reason: '  ' });
+    const r3 = await h.call<{ code: string }>('patron', 'POST', `/orders/${blank.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: '  ' });
     expect([r3.status, r3.json.code]).toEqual([400, 'reason_required']);
-    await h.ok('patron', 'POST', `/orders/${blank.id}/comp`, { kind: 'odenmez', reason: 'Zayi' });
+    await h.ok('patron', 'POST', `/orders/${blank.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: 'Zayi' });
     odenmezExtra += 15000;
 
     const device = await table([{ name: 'Americano', qty: 1 }], 'kasa');
@@ -88,7 +90,7 @@ describe('adisyonu ciro dışı kapatma', () => {
     expect(r4.status).toBe(409);
     // Cihaz fişi kesti ama ödeme LafPOS'a işlenmedi (ödemesiz kapanış): kalemler cihazda ödenmiş olabilir, ödenmez yazılmaz
     await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 9, amount: sent.receipt.amount }] });
-    const r5 = await h.call<{ code: string }>('patron', 'POST', `/orders/${device.id}/comp`, { kind: 'odenmez', reason: 'Zayi' });
+    const r5 = await h.call<{ code: string }>('patron', 'POST', `/orders/${device.id}/comp`, { kind: 'odenmez', person: staff('Garson'), reason: 'Zayi' });
     expect([r5.status, r5.json.code]).toEqual([409, 'okc_unresolved']);
   });
 

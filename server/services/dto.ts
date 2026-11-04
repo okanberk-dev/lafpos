@@ -1,11 +1,16 @@
 import { asc, eq, inArray } from 'drizzle-orm';
 import { calcOrder, splitState } from '@shared/order-calc';
-import type { OrderDTO, OrderItemDTO, PaymentDTO } from '@shared/types';
+import type { CompPersonDTO, CompPersonKind, OrderDTO, OrderItemDTO, PaymentDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 
 type OrderRow = typeof schema.orders.$inferSelect;
 type ItemRow = typeof schema.orderItems.$inferSelect;
 type PaymentRow = typeof schema.payments.$inferSelect;
+
+/** Ödenmez kişisi (kalem ya da adisyon): tür, kimlik ve adın kopyası üçü de varsa */
+export function compPersonOf(r: { compPersonKind: CompPersonKind | null; compPersonId: string | null; compPersonName: string | null }): CompPersonDTO | null {
+  return r.compPersonKind && r.compPersonId && r.compPersonName ? { kind: r.compPersonKind, id: r.compPersonId, name: r.compPersonName } : null;
+}
 
 export function itemToDTO(i: ItemRow): OrderItemDTO {
   return {
@@ -25,6 +30,7 @@ export function itemToDTO(i: ItemRow): OrderItemDTO {
     complimentary: i.complimentary,
     compReason: i.compReason,
     compKind: i.complimentary ? (i.compKind ?? 'ikram') : null,
+    compPerson: compPersonOf(i),
     voided: i.voided,
     voidReason: i.voidReason,
     voidAfterSend: i.voidAfterSend,
@@ -126,6 +132,7 @@ export function orderToDTO(t: Tx | DB, order: OrderRow): OrderDTO {
     totals: order.totals ?? calcFor(order, items),
     billPrintedAt: order.billPrintedAt,
     billPrints: order.billPrints,
+    compPerson: compPersonOf(order),
     source: order.source,
     extId: order.extId,
     extNo: order.extNo,

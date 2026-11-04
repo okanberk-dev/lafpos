@@ -5,7 +5,7 @@ import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_
 import { parseTL, splitEven, suggestCash, tl, tlShort } from '@shared/money';
 import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
-import type { CompKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
+import type { CompKind, CompPersonKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Chip, Input, Segmented, Stepper } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
@@ -24,6 +24,7 @@ import { toast } from '@/lib/toast';
 import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
 import { CustomerModal } from './CustomerModal';
+import { OdenmezModal } from './OdenmezModal';
 import { OkcPanel, useOkcReceipts } from './OkcPanel';
 import { ReasonModal } from './TableOps';
 import { TypedAmount } from './TypedAmount';
@@ -208,10 +209,11 @@ export function PaymentModal({
   const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending && !(mode === 'paylas' && sharesDirty);
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
-  const closeComp = async (reason: string) => {
+  /** Ödenmezde kişi zorunlu (OdenmezModal), ikram ve zayide kişi sorulmaz */
+  const closeComp = async (reason: string, person?: { kind: CompPersonKind; id: string }) => {
     if (!comp) return;
     const kind = comp;
-    const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, approverPin: pin }), COMP_DONE_TOAST[kind]);
+    const res = await act((pin) => post(`/orders/${order.id}/comp`, { kind, reason, ...(person ? { person } : {}), approverPin: pin }), COMP_DONE_TOAST[kind]);
     if (!res) return;
     setComp(null);
     onDone(true, { comp: kind });
@@ -786,7 +788,17 @@ export function PaymentModal({
         </div>
       </div>
 
-      {comp && (
+      {comp === 'odenmez' && (
+        <OdenmezModal
+          open
+          title="Ödenmez kapat · kimin adına?"
+          subtitle={compCloseSubtitle('odenmez', tl(order.total))}
+          confirmLabel={() => COMP_CONFIRM_LABEL.odenmez}
+          onClose={() => setComp(null)}
+          onConfirm={({ person, reason }) => closeComp(reason, person)}
+        />
+      )}
+      {comp && comp !== 'odenmez' && (
         <ReasonModal
           open
           title={COMP_CLOSE_LABEL[comp]}

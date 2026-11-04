@@ -120,6 +120,13 @@
       "when": 1793780576004,
       "tag": "0016_elle_paylar",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1793781402123,
+      "tag": "0017_odenmez_kisi",
+      "breakpoints": true
     }
   ]
 }

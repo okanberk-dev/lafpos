@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { and, eq, gt } from 'drizzle-orm';
 import type { Context, MiddlewareHandler } from 'hono';
 import { effectivePermissions, type Permission, type Role } from '@shared/permissions';
-import type { OrderDTO } from '@shared/types';
+import type { CompPersonDTO, OrderDTO } from '@shared/types';
 import { type AuditEntry, Effects } from './effects';
 import { getSettings } from './settings';
 import { db, schema, sqlite } from '../db/client';
@@ -436,7 +436,9 @@ export function seesStaffOf(user: AuthUser, waiterId: string | null): boolean {
  */
 export function blindOrder(user: AuthUser, dto: OrderDTO): OrderDTO {
   if (dto.status === 'acik') return dto;
-  const out = seesCashNumbers(user) ? dto : { ...dto, payments: [] };
+  const paid = seesCashNumbers(user) ? dto : { ...dto, payments: [] };
+  // Personel adına yazılan ödenmez personel tutarıdır: maliyet yetkisi olmayana yalnız kendisininki adıyla gider
+  const out = maskCompPeople(user, paid);
   if (seesStaffOf(user, dto.waiterId)) return out;
   return {
     ...out,
@@ -445,6 +447,17 @@ export function blindOrder(user: AuthUser, dto: OrderDTO): OrderDTO {
     items: out.items.map((i) => ({ ...i, createdBy: null })),
     payments: out.payments.map((p) => ({ ...p, userId: null, userName: null })),
   };
+}
+
+/** Başkasının adına yazılmış personel ödenmezi: kimlik boş, ad "Personel" (müşteri ödenmezi olduğu gibi) */
+export function maskCompPerson<T extends CompPersonDTO | null>(user: AuthUser, p: T): T {
+  if (!p || p.kind !== 'user' || seesStaffOf(user, p.id)) return p;
+  return { ...p, id: '', name: 'Personel' };
+}
+
+function maskCompPeople(user: AuthUser, dto: OrderDTO): OrderDTO {
+  if (!dto.compPerson && !dto.items.some((i) => i.compPerson)) return dto;
+  return { ...dto, compPerson: maskCompPerson(user, dto.compPerson), items: dto.items.map((i) => (i.compPerson ? { ...i, compPerson: maskCompPerson(user, i.compPerson) } : i)) };
 }
 
 export function actorFrom(c: Context<AppEnv>, approverPin?: string | null): Actor {
