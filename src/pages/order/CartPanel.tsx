@@ -71,11 +71,25 @@ export function CartPanel({
 }) {
   const boot = useBoot();
   const cart = useCart();
-  // Self ve yarı self servis: tezgâh satışında önce ödeme
-  // Tezgâh satışında "Öde" kalemleri ödeme bekleyen olarak ekler: ödeme alınınca bara gider (holdsUntilPaid)
-  const payFirst = holdsUntilPaid(order);
   const can = useCan();
-  const sendHeldNow = () => void act(() => post<OrderDTO>(`/orders/${order.id}/release`, {}), 'Bara gönderildi');
+  // Self ve yarı self servis, ayrıca masa servisinde kasanın kendi tezgâh satışı: "Öde" kalemleri ödeme bekleyen olarak
+  // ekler, ödeme alınınca bara gider (holdsUntilPaid). Ödeme alamayan rolün (garson) tek düğmesi "Bara gönder": ona
+  // eski ipucu
+  const payFirst = holdsUntilPaid(order) && can('odeme.al');
+  // "Ödemeden gönder" istek sürerken kilitli: çift dokunuş ikinci isteği yollayıp başarının ardından hata göstermesin
+  const releasing = useRef(false);
+  const [sendingHeld, setSendingHeld] = useState(false);
+  const sendHeldNow = async () => {
+    if (releasing.current) return;
+    releasing.current = true;
+    setSendingHeld(true);
+    try {
+      await act(() => post<OrderDTO>(`/orders/${order.id}/release`, {}), 'Bara gönderildi');
+    } finally {
+      releasing.current = false;
+      setSendingHeld(false);
+    }
+  };
   const [itemSheet, setItemSheet] = useState<OrderItemDTO | null>(null);
   const t = order.totals;
   const due = order.total - order.paid;
@@ -179,8 +193,10 @@ export function CartPanel({
               {g.key === 'odeme' && order.status === 'acik' && !REMOTE && can('siparis.al') && (
                 <button
                   type="button"
-                  onClick={sendHeldNow}
-                  className="-my-2 ml-auto inline-flex min-h-11 items-center rounded-full px-2.5 text-[13px] font-semibold text-primary transition-colors duration-150 hover:bg-hover active:bg-press pointer-fine:min-h-8"
+                  onClick={() => void sendHeldNow()}
+                  disabled={sendingHeld}
+                  aria-busy={sendingHeld || undefined}
+                  className="-my-2 ml-auto inline-flex min-h-11 items-center rounded-full px-2.5 text-[13px] font-semibold text-primary transition-colors duration-150 hover:bg-hover active:bg-press disabled:opacity-60 pointer-fine:min-h-8"
                 >
                   Ödemeden gönder
                 </button>

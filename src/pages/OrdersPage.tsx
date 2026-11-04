@@ -194,7 +194,9 @@ export default function OrdersPage() {
           {rows.map((o) => {
             const Icon = o.source === 'laffogato' ? Globe : o.type === 'paket' ? Bike : o.type === 'gelal' ? ShoppingBag : o.type === 'masa' ? UtensilsCrossed : Store;
             const flow = flowOf(o);
-            const pendingKitchen = o.items.filter((i) => !i.voided && i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length;
+            // Ödeme bekleyen kalem (tezgâh satışında "Öde") bara henüz gitmedi: "barda" sayılmaz, ayrı rozet
+            const pendingKitchen = o.items.filter((i) => !i.voided && i.stationId && !i.held && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length;
+            const awaitingPay = o.status === 'acik' && o.items.some((i) => i.held && !i.voided);
             const readyIds = canHand ? readyToHand(o) : [];
             // Adet olarak ("2 ürün" yazan kartta "2 hazır")
             const readyQty = o.items.filter((i) => readyIds.includes(i.id)).reduce((a, i) => a + i.qty, 0);
@@ -204,7 +206,7 @@ export default function OrdersPage() {
             const paidAhead = o.status === 'kapali' && tab !== 'kapanan';
             const itemCount = o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);
             const methods = [...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))];
-            const hasBadges = paidAhead || !!o.platform || o.extPaid || o.extStage === 'gone' || pendingKitchen > 0 || readyIds.length > 0 || !!o.deliveryStatus || methods.length > 0;
+            const hasBadges = paidAhead || !!o.platform || o.extPaid || o.extStage === 'gone' || awaitingPay || pendingKitchen > 0 || readyIds.length > 0 || !!o.deliveryStatus || methods.length > 0;
             // Kasanın gel-al siparişinde bara kalem gittiyse aşama bardan izlenir (kalemlerin hepsi teslim edilince
             // "Teslim edildi"): elle aşama düğmesi yok, teslim kalemin Teslim edildi düğmesiyle (sunucu da reddeder)
             const stageButton = flow && !stageFromBar(o);
@@ -242,6 +244,7 @@ export default function OrdersPage() {
                     {o.platform && <PlatformBadge platform={o.platform} code={o.platformCode} />}
                     {o.extPaid && <Badge tone="violet">Sitede ödendi</Badge>}
                     {o.extStage === 'gone' && <Badge>Siteden kalktı</Badge>}
+                    {awaitingPay && <Badge tone="warn">Ödeme bekliyor</Badge>}
                     {pendingKitchen > 0 && (
                       <Badge>
                         <ChefHat aria-hidden="true" className="size-3" />

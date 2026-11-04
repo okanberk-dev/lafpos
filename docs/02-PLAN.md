@@ -391,16 +391,20 @@ mürekkep "Öde · ₺X", gönderilmemiş varken ikincil "Bara gönder (N)", hı
 (`order_items.held`, göç `0018_odeme_bekleyen`; `POST /orders/:id/items` `hold: true`). Bekleyen kalem bar ekranına, çağrı
 ekranına ve sipariş sayacına girmez, fiş sesi çalmaz. Adisyon kapanınca (ödeme, yazarkasanın bildirdiği ödeme, ciro dışı
 ya da ₺0; `closeOrderRow` → `releaseHeld`) kendiliğinden bara gider: gönderim anı o an (bar süresi ve hazırlama raporu
-oradan sayar), hepsi tek yeni fişte. Masa ya da gel-al adisyonuna taşınan bekleyen kalem orada bara gider. "Ödemeden
+oradan sayar), hepsi tek yeni fişte. Kalemi seçilerek ödenen ("Kalem seç", yazarkasada seçili kalemle sepet) bekleyen
+adet hemen gider, satırın kalanı ayrı satırda bekler (`releasePaidHeld`); tutarla kısmi ödeme kalem seçmez, hesap
+kapanınca gider. Masaya taşınan ("Masa taşı") ya da masa veya gel-al adisyonuna aktarılan bekleyen kalem bara gider. "Ödemeden
 gönder" (`POST /orders/:id/release`, `siparis.al`, denetimde `order.release`) bekleyenleri hemen yollar. Müşteri
 vazgeçerse satış onaysız iptal edilir; bekleyen kalem bara hiç gitmediği için fire sayılmaz (`voidAfterSend` yok), bar
-iptal sesi duymaz. "Bara gönder" eskisi gibi hemen gönderir. Bar fişinde ödemesi alınmış siparişe "Ödendi"
-(`KitchenTicket.paid`). Testler `tests/odeme-sonrasi-bar.test.ts` (sql.js ile de), e2e akışı tablette.
+iptal sesi duymaz. "Bara gönder" eskisi gibi hemen gönderir. Bar fişinde hesabı kapanmış (ödenmiş ya da ciro dışı) ya
+da tamamı ödenmiş siparişe "Ödendi" (`KitchenTicket.paid`); "Ödemeden gönder" ile gidende yok. Siparişler kartı bekleyen
+kalemi "barda" saymaz, "Ödeme bekliyor" rozeti gösterir. Testler `tests/odeme-sonrasi-bar.test.ts` (sql.js ile de), e2e
+akışı tablette.
 
 **Bar ekranı ızgarası** (4 Kasım 2026, operatör: "daha grid dayalı düzenli"): fişler kabın genişliğine göre 1-5
 sütunlu ızgarada, aynı satırdakiler eşit boyda ve düğmeleri dipte hizalı; sayaç şeridi (bekliyor, hazırlanıyor, teslim
-bekliyor, geciken), fişin üstünde durum çizgisi, künye ikinci satırda. Davranış ve e2e adları aynı. Test
-`tests/bar-ekrani.test.ts`.
+bekliyor, geciken; geçerli tanım listesi, ikon kutusu yalnız geniş ekranda, veriye bağlı), fişin üstünde durum çizgisi,
+künye ikinci satırda. Davranış ve e2e adları aynı. Test `tests/bar-ekrani.test.ts`.
 
 **Yönetim ve raporlar: kurumsal yüzey** (4 Kasım 2026; araştırma `docs/08-POS-ARASTIRMA.md` §5): kasa ekranları
 yumuşak kalır; yönetim ve raporlar küçük köşe (kart, tablo, alan, düğme, segment 6; çip ve rozet 4), gölge yerine 1 px

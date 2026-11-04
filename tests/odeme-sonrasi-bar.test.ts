@@ -77,6 +77,9 @@ describe('tezgâh satışında "Öde": ödeme alınınca bara', () => {
     const garson = (await h.ok<{ id: string; name: string }[]>('patron', 'GET', '/admin/users')).find((u) => u.name === 'Garson')!;
     await h.ok('kasa', 'POST', `/orders/${o.id}/comp`, { kind: 'odenmez', reason: 'Personel yemeği', person: { kind: 'user', id: garson.id }, approverPin: PINS.mudur });
     expect(await kitchenItemIds()).toContain(o.items[0].id);
+    // Hesap ciro dışı kapandı: fişte "Ödendi" (barista tahsil edecek bir şey olmadığını bilir)
+    const ticket = (await h.ok<KitchenTicket[]>('kasa', 'GET', '/kitchen')).find((t) => t.orderId === o.id)!;
+    expect(ticket.paid).toBe(true);
   });
 
   it('müşteri vazgeçerse satış onaysız iptal edilir; bara hiç gitmez, fire sayılmaz', async () => {
@@ -101,11 +104,13 @@ describe('tezgâh satışında "Öde": ödeme alınınca bara', () => {
     expect(voided.items.find((i) => !i.voided)?.held).toBe(true);
   });
 
-  it('"Ödemeden gönder" bekleyenleri hemen yollar ve denetime yazar; bekleyen yoksa 409', async () => {
+  it('"Ödemeden gönder" bekleyenleri hemen yollar ve denetime yazar; bekleyen yoksa 409; fiş "Ödendi" demez', async () => {
     const o = await counterSale(1);
     const r = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/release`, {});
     expect(r.items[0].held).toBe(false);
     expect(await kitchenItemIds()).toContain(o.items[0].id);
+    // Ödeme alınmadan gitti: barista fişte "Ödendi" görmez, teslimde tahsil edileceğini bilir
+    expect((await h.ok<KitchenTicket[]>('kasa', 'GET', '/kitchen')).find((t) => t.orderId === o.id)?.paid).toBe(false);
     const log = (await audits()).find((a) => a.action === 'order.release' && a.orderId === o.id)!;
     expect(log.message).toMatch(/siparişi ödeme alınmadan bara gönderdi \(1 kalem\)/);
     const again = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/release`, {});
@@ -129,6 +134,50 @@ describe('tezgâh satışında "Öde": ödeme alınınca bara', () => {
     const floor = await h.ok<FloorStateDTO>('kasa', 'GET', '/floor');
     const moved = floor.tables[table.id]?.[0];
     expect(moved?.pendingKitchen).toBe(1);
+  });
+
+  it('"Masa taşı" ile boş masaya oturan satışın bekleyen kalemi bara gider (masada hesap sonda ödenir)', async () => {
+    const o = await counterSale(1);
+    const table = h.boot.tables.filter((t) => t.kind === 'masa')[6];
+    const moved = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/move`, { tableId: table.id });
+    expect(moved.type).toBe('masa');
+    expect(moved.items[0].held).toBe(false);
+    expect(await kitchenItemIds()).toContain(o.items[0].id);
+    const floor = await h.ok<FloorStateDTO>('kasa', 'GET', '/floor');
+    expect(floor.tables[table.id]?.[0]?.pendingKitchen).toBe(1);
+  });
+
+  it('kalemi seçilerek ödenen bekleyen satır hemen bara gider; ödenmeyen bekler, hesap kapanınca o da gider', async () => {
+    // İki ayrı satır, ikisi de bara gider (orta ve büyük latte); istasyonsuz kalem zaten beklemez
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte().id, size: 'M', qty: 1 }, { productId: latte().id, size: 'L', qty: 1 }], hold: true });
+    expect(o.items.every((i) => i.held)).toBe(true);
+    const [first, second] = o.items;
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash().id, amount: o.totals.lineNet[first.id], items: [{ itemId: first.id, qty: 1 }] });
+    let ids = await kitchenItemIds();
+    expect(ids).toContain(first.id);
+    expect(ids).not.toContain(second.id);
+    const mid = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${o.id}`);
+    expect(mid.items.find((i) => i.id === second.id)?.held).toBe(true);
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash().id, amount: mid.total - mid.paid });
+    ids = await kitchenItemIds();
+    expect(ids).toContain(second.id);
+  });
+
+  it('satırın bir adedi ödenince o adet bara gider, kalan adet ayrı satırda bekler', async () => {
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte().id, size: 'M', qty: 2 }], hold: true });
+    const line = o.items[0];
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash().id, amount: o.totals.lineNet[line.id] / 2, items: [{ itemId: line.id, qty: 1 }] });
+    const after = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${o.id}`);
+    const sent = after.items.find((i) => i.id === line.id)!;
+    const rest = after.items.find((i) => i.id !== line.id)!;
+    expect([sent.qty, sent.paidQty, sent.held]).toEqual([1, 1, false]);
+    expect([rest.qty, rest.paidQty, rest.held]).toEqual([1, 0, true]);
+    expect(after.total).toBe(o.total);
+    const ids = await kitchenItemIds();
+    expect(ids).toContain(sent.id);
+    expect(ids).not.toContain(rest.id);
   });
 
   it('yalnız tezgâh satışında: masa siparişinde "hold" reddedilir', async () => {
@@ -168,5 +217,17 @@ describe('ekran (kaynak)', () => {
     expect(cart).toContain("g.key === 'odeme' && order.status === 'acik' && !REMOTE && can('siparis.al')");
     expect(cart).toContain('post<OrderDTO>(`/orders/${order.id}/release`, {})');
     expect(cart).toContain("{payFirst ? 'Ödeme alınınca sipariş bara gider'");
+    // Ödeme alamayan (garson) "Öde" görmez, tek düğmesi hemen gönderir: ona "ödeme alınınca" denmez
+    expect(cart).toContain("const payFirst = holdsUntilPaid(order) && can('odeme.al');");
+    // Çift dokunuş ikinci isteği yollamaz
+    expect(cart).toContain('if (releasing.current) return;');
+    expect(cart).toContain('disabled={sendingHeld}');
+  });
+
+  it('Siparişler kartı: bekleyen kalem "barda" sayılmaz, "Ödeme bekliyor" rozeti', () => {
+    const list = readFileSync(new URL('../src/pages/OrdersPage.tsx', import.meta.url), 'utf8');
+    expect(list).toContain("i.stationId && !i.held && (i.status === 'yeni' || i.status === 'hazirlaniyor')");
+    expect(list).toContain('{awaitingPay && <Badge tone="warn">Ödeme bekliyor</Badge>}');
+    expect(list).toMatch(/const hasBadges = [^;]*awaitingPay/);
   });
 });

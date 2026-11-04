@@ -38,6 +38,20 @@ describe('bar ekranı: ızgara ve düzen', () => {
     for (const label of ['label="Bekliyor"', 'label="Hazırlanıyor"', 'label="Teslim bekliyor"', 'label="Geciken"']) expect(page).toContain(label);
     expect(page).toContain('<dl className="grid shrink-0 grid-cols-4 overflow-hidden rounded-2xl border border-line bg-surface max-sm:hidden">');
     expect(page).toContain("max-sm:order-first sm:hidden");
+    // Bağlantı kopunca eski fişler ekranda kalır: şerit de durumla değil veriyle görünür
+    expect(page).toContain("{view === 'aktif' && !!tickets.data && (");
+    expect(page).not.toContain('tickets.isSuccess && (');
+  });
+
+  it('sayaç hücresi geçerli tanım listesi; tablet dikeyde etiket sığar (ikon yalnız geniş ekranda)', () => {
+    const count = page.slice(page.indexOf('function Count('));
+    // dt ve dd hücrenin doğrudan çocukları: araya sarmalayıcı div yok
+    expect(count).toMatch(/<div className="relative min-w-0 border-l[^"]*">\s*<dt /);
+    expect(count).not.toContain('<div className="min-w-0">');
+    expect(count).toMatch(/<\/dt>\s*<dd /);
+    // İkon dt'nin içinde, ekran okuyucudan gizli, lg altında gizli; dar hücrede yatay boşluk az
+    expect(count).toMatch(/<dt [^>]*>\s*<span aria-hidden="true" className=\{cn\('absolute [^']*hidden[^']*lg:grid/);
+    expect(count).toContain('px-3 py-3 first:border-l-0 lg:pl-16 lg:pr-4');
   });
 
   it("e2e'nin ve barın alıştığı adlar aynı", () => {

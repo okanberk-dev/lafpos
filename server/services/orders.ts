@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { PLATFORM_LABEL } from '@shared/platforms';
 import { holdsUntilPaid, normalizeNumarator, numaratorLabel } from '@shared/service-mode';
@@ -474,6 +474,28 @@ export function releaseHeld(t: Tx, fx: Effects, orderId: string, byUserId: strin
     .run();
   for (const s of new Set(live.map((i) => i.stationId).filter(Boolean))) fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId, stationId: s!, byUserId });
   return live.length;
+}
+
+/**
+ * Kalemi seçilerek ödenen bekleyen adet ("Kalem seç", yazarkasada seçili kalemle sepet) hemen bara gider: iki müşterili
+ * tezgâhta ödeyenin içeceği ötekini beklemez. Satırın ödenmemiş adedi ayrı satır olur ve beklemeye devam eder (ödeme
+ * kayıtları orijinal satırı, yani ödenen adedi gösterir). Tutarla kısmi ödeme kalem seçmez: hesap kapanınca gider
+ */
+function releasePaidHeld(t: Tx, fx: Effects, orderId: string, byUserId: string): number {
+  const rows = t
+    .select()
+    .from(schema.orderItems)
+    .where(and(eq(schema.orderItems.orderId, orderId), eq(schema.orderItems.held, true), eq(schema.orderItems.voided, false), gt(schema.orderItems.paidQty, 0)))
+    .all();
+  if (!rows.length) return 0;
+  const now = Date.now();
+  const batch = nextBatch(t, orderId);
+  for (const it of rows) {
+    if (it.paidQty < it.qty) splitItem(t, it, it.qty - it.paidQty, {});
+    t.update(schema.orderItems).set({ held: false, sentAt: now, batch }).where(eq(schema.orderItems.id, it.id)).run();
+  }
+  for (const s of new Set(rows.map((i) => i.stationId).filter(Boolean))) fx.emit({ topic: 'kitchen', kind: 'ticket.new', orderId, stationId: s!, byUserId });
+  return rows.length;
 }
 
 /**
@@ -1076,6 +1098,8 @@ export function moveOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, tab
     .set({ tableId, type: 'masa', numarator: null, updatedAt: Date.now() })
     .where(eq(schema.orders.id, orderId))
     .run();
+  // Masaya oturan tezgâh satışı: ödeme bekleyen kalem masada beklemez (hesap sonda ödenir), bara gider
+  releaseHeld(t, fx, orderId, actor.user.id);
   t.update(schema.roomSessions).set({ tableId }).where(and(eq(schema.roomSessions.orderId, orderId), isNull(schema.roomSessions.endedAt))).run();
   fx.audit(t, { userId: actor.user.id, approverId, action: 'order.move', orderId, message: `#${o.no} adisyon ${table.name} masasına taşındı` });
   const updated = loadOrder(t, orderId);
@@ -1572,6 +1596,8 @@ export function addPayment(
       .where(eq(schema.orders.id, orderId))
       .run();
   }
+  // Kalemi seçilerek ödenen bekleyen adet bara gider (hesabın kalanı beklerken)
+  releasePaidHeld(t, fx, orderId, actor.user.id);
 
   let updated = recalc(t, orderId);
   let closed = false;
@@ -1947,6 +1973,8 @@ export function addExternalPayments(
       .run();
     ids.push(id);
   });
+  // Yazarkasada seçili kalemle ödenen bekleyen adet bara gider
+  releasePaidHeld(t, fx, orderId, userId);
 
   let updated = recalc(t, orderId);
   let closed = false;

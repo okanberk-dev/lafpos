@@ -228,6 +228,8 @@ export function kitchenTickets(t: Tx | DB, opts: { stationId?: string | null; hi
         scheduledFor: order.scheduledFor,
         numarator: order.numarator ?? null,
         platform: order.platform ?? null,
+        // Hesabı kapanmış (ödenmiş ya da ciro dışı: ikram, ödenmez, zayi) ya da tamamı ödenmiş: barista tahsil edecek bir
+        // şey olmadığını bilir. Açık ₺0 adisyon "Ödendi" demez
         paid: order.status === 'kapali' || (order.total > 0 && order.paid >= order.total),
         items: [],
       };

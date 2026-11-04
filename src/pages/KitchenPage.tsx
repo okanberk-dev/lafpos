@@ -246,7 +246,8 @@ export default function KitchenPage() {
 
       {/* Sayaç şeridi (tek çerçeve, ince bölmeler): bekleyen ve hazırlanan kalem, teslim bekleyen sipariş, geciken fiş bir
           bakışta. Telefonda başlıktaki hap sayaçlar yeter */}
-      {view === 'aktif' && tickets.isSuccess && (
+      {/* Veriye bağlı (durum değil): bağlantı kopunca eski fişler ekranda kalırken sayaçlar da kalır */}
+      {view === 'aktif' && !!tickets.data && (
         <dl className="grid shrink-0 grid-cols-4 overflow-hidden rounded-2xl border border-line bg-surface max-sm:hidden">
           <Count icon={<CircleDashed />} label="Bekliyor" value={counts.waiting} tone="neutral" />
           <Count icon={<Flame />} label="Hazırlanıyor" value={counts.making} tone="blue" />
@@ -540,18 +541,22 @@ function ToolButton({ pressed, className, children, ...rest }: React.ButtonHTMLA
  */
 const GRID = 'grid grid-cols-1 gap-3 @[38rem]:grid-cols-2 @[58rem]:grid-cols-3 @[80rem]:grid-cols-4 @[104rem]:grid-cols-5';
 
-/** Sayaç şeridinin hücresi: ikon kutusu, etiket ve Gabarito rakam; sıfırken sakin gri */
+/**
+ * Sayaç şeridinin hücresi: etiket ve Gabarito rakam, sıfırken sakin gri. dt ve dd hücrenin doğrudan çocukları (geçerli
+ * tanım listesi: ekran okuyucu "Bekliyor, 3" diye eşler); ikon kutusu dt'nin içinde, yalnız geniş ekranda (tablet dikeyde
+ * etiket sığsın)
+ */
 function Count({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: number; tone: 'neutral' | 'blue' | 'green' | 'amber' | 'red' }) {
   const color = { neutral: 'text-ink', blue: 'text-[var(--admin-blue)]', green: 'text-[var(--admin-success)]', amber: 'text-[var(--admin-warning)]', red: 'text-[var(--admin-danger-ink)]' }[tone];
   return (
-    <div className="flex min-w-0 items-center gap-3 border-l border-[var(--admin-divider)] px-4 py-3 first:border-l-0">
-      <span aria-hidden="true" className={cn('grid size-9 shrink-0 place-items-center rounded-xl bg-surface-3 [&>svg]:size-[18px]', value > 0 ? color : 'text-muted')}>
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <dt className="truncate text-[13px] font-medium text-muted">{label}</dt>
-        <dd className={cn('tabular font-headline text-[26px] font-bold leading-tight', value > 0 ? color : 'text-muted')}>{value}</dd>
-      </div>
+    <div className="relative min-w-0 border-l border-[var(--admin-divider)] px-3 py-3 first:border-l-0 lg:pl-16 lg:pr-4">
+      <dt className="truncate text-[13px] font-medium text-muted">
+        <span aria-hidden="true" className={cn('absolute left-4 top-1/2 hidden size-9 -translate-y-1/2 place-items-center rounded-xl bg-surface-3 lg:grid [&>svg]:size-[18px]', value > 0 ? color : 'text-muted')}>
+          {icon}
+        </span>
+        {label}
+      </dt>
+      <dd className={cn('tabular font-headline text-[26px] font-bold leading-tight', value > 0 ? color : 'text-muted')}>{value}</dd>
     </div>
   );
 }
