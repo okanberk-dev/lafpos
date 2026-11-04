@@ -1,5 +1,5 @@
 import { asc, eq, inArray } from 'drizzle-orm';
-import { calcOrder, splitState } from '@shared/order-calc';
+import { type CalcInput, calcOrder, splitState } from '@shared/order-calc';
 import type { CompPersonDTO, CompPersonKind, OrderDTO, OrderItemDTO, PaymentDTO } from '@shared/types';
 import { type DB, schema, type Tx } from '../db/client';
 
@@ -83,8 +83,9 @@ export function orderPayments(t: Tx | DB, orderId: string): PaymentRow[] {
   return t.select().from(schema.payments).where(eq(schema.payments.orderId, orderId)).orderBy(asc(schema.payments.createdAt)).all();
 }
 
-export function calcFor(order: Pick<OrderRow, 'discountType' | 'discountValue' | 'serviceRate'>, items: ItemRow[]) {
-  return calcOrder({
+/** Adisyonun hesap girdisi (kalemler ve adisyon indirimi): toplamlar ve kalem bölme aynı girdiyle hesaplanır */
+export function calcInputFor(order: Pick<OrderRow, 'discountType' | 'discountValue' | 'serviceRate'>, items: ItemRow[]): CalcInput {
+  return {
     lines: items.map((i) => ({
       id: i.id,
       qty: i.qty,
@@ -96,7 +97,11 @@ export function calcFor(order: Pick<OrderRow, 'discountType' | 'discountValue' |
     })),
     discount: order.discountType && order.discountValue != null ? { type: order.discountType, value: order.discountValue } : null,
     serviceRate: order.serviceRate,
-  });
+  };
+}
+
+export function calcFor(order: Pick<OrderRow, 'discountType' | 'discountValue' | 'serviceRate'>, items: ItemRow[]) {
+  return calcOrder(calcInputFor(order, items));
 }
 
 export function orderToDTO(t: Tx | DB, order: OrderRow): OrderDTO {

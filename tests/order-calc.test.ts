@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { amountForItems, calcOrder, type CalcLine, remainingDue } from '@shared/order-calc';
+import { amountForItems, type CalcInput, calcOrder, type CalcLine, itemPayLines, remainingDue, splitLineDiscount } from '@shared/order-calc';
 
 const line = (p: Partial<CalcLine> & { id: string }): CalcLine => ({
   qty: 1,
@@ -76,5 +76,61 @@ describe('adisyon hesabı', () => {
 
   it('kalan tutar iade edilen ödemeyi saymaz', () => {
     expect(remainingDue(10000, [{ amount: 4000 }, { amount: 6000, refunded: true }])).toBe(6000);
+  });
+});
+
+describe('kalem bölünürken indirimin bölüşü (iptal, ikram, taşıma)', () => {
+  /** Satırın ilk `qty` adedini kalem bazlı ödeyen ödeme: tutar ödeme ekranının hesabı (`amountForItems`) */
+  const paidLines = (input: CalcInput, paid: Record<string, number>) => {
+    const t = calcOrder(input);
+    const items = input.lines.map((l) => ({ id: l.id, qty: l.qty, paidQty: paid[l.id] ?? 0 }));
+    const payments = Object.entries(paid).map(([id, qty]) => {
+      const amount = amountForItems(t, itemPayLines(items.map((i) => ({ ...i, paidQty: 0 })), []), [{ lineId: id, qty }]);
+      return { items: [{ itemId: id, qty, amount }] };
+    });
+    return itemPayLines(items, payments);
+  };
+  /** Bölmeden sonraki adisyon: kalan parça `kept` indirimiyle kalır, ayrılan parça adisyondan çıkar */
+  const after = (input: CalcInput, id: string, part: number, kept: number) =>
+    calcOrder({ ...input, lines: input.lines.map((l) => (l.id === id ? { ...l, qty: l.qty - part, discount: kept } : l)) });
+
+  it('ödenmiş adedi olmayan satır eskisi gibi adetle orantılı bölünür', () => {
+    const input = { lines: [line({ id: 'a', qty: 4, unitPrice: 13000, discount: 250 })] };
+    expect(splitLineDiscount(input, paidLines(input, {}), 'a', 1)).toEqual({ kept: 187, part: 63 });
+    const one = { lines: [line({ id: 'a', qty: 3, unitPrice: 13000, discount: 1 })] };
+    expect(splitLineDiscount(one, paidLines(one, {}), 'a', 1)).toEqual({ kept: 1, part: 0 });
+  });
+
+  it('ödenmiş adetler adet paylarındaki indirimi korur, ayrılan parça kalanını alır', () => {
+    // 517,50 ₺ adet payları 129,38 / 129,38 / 129,37 / 129,37: ilk iki adet 258,76 ₺ ödendi
+    const input = { lines: [line({ id: 'a', qty: 4, unitPrice: 13000, discount: 250 })] };
+    const lines = paidLines(input, { a: 2 });
+    expect(lines[0]!.paidAmount).toBe(25876);
+    // Orantılı bölüş 125 / 125 olurdu: kalan satır 258,75 ₺, ödenenden 1 kuruş az
+    const split = splitLineDiscount(input, lines, 'a', 2);
+    expect(split).toEqual({ kept: 124, part: 126 });
+    expect(after(input, 'a', 2, split.kept).lineNet.a).toBe(25876);
+    // Kalan adetlerin bir kısmı ödenmemişse de ödenmiş adet payını korur; kalanı sonra kalem kalanıyla ödenir
+    expect(splitLineDiscount(input, paidLines(input, { a: 1 }), 'a', 1)).toEqual({ kept: 187, part: 63 });
+  });
+
+  it('adisyon indiriminin yeni dağılımındaki yuvarlama kalan parçanın indirimiyle kapatılır, gerçek kayma kapatılmaz', () => {
+    // İncelemedeki durum: 4 latte (2,50 ₺ kalem indirimi) ve espresso, %25 adisyon indirimi; 3 latte ve espresso ödendi
+    const input: CalcInput = {
+      lines: [line({ id: 'latte', qty: 4, unitPrice: 19500, discount: 250 }), line({ id: 'espresso', unitPrice: 11000 })],
+      discount: { type: 'percent', value: 25 },
+    };
+    const lines = paidLines(input, { latte: 3, espresso: 1 });
+    expect(lines.map((l) => l.paidAmount)).toEqual([43734, 8250]);
+    // Adet paylarına göre bölüş 187 / 63: toplam 519,85 ₺, ödenen 519,84 ₺. Kalan parçaya 1 kuruş indirim kayar
+    const split = splitLineDiscount(input, lines, 'latte', 1);
+    expect(split).toEqual({ kept: 188, part: 62 });
+    expect(after(input, 'latte', 1, split.kept).total).toBe(43734 + 8250);
+
+    // 10 ₺ tutar indirimi 4 kahveden 3'üne kalır: ödenmiş kahvelerin payı 2,50 ₺ düşer. Bölüş değişmez (fazla ödeme)
+    const amount: CalcInput = { lines: [line({ id: 'a', qty: 4, unitPrice: 13000, discount: 250 })], discount: { type: 'amount', value: 1000 } };
+    const paid = paidLines(amount, { a: 3 });
+    expect(splitLineDiscount(amount, paid, 'a', 1)).toEqual({ kept: 187, part: 63 });
+    expect(paid[0]!.paidAmount! - after(amount, 'a', 1, 187).total).toBe(250);
   });
 });
