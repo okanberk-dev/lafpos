@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ADMIN_SECTIONS } from '../src/components/admin/sections';
+import { ADMIN_ROUTE_PERMS, ADMIN_SECTIONS } from '../src/components/admin/sections';
 import { fold } from '../src/lib/shell';
 import { bootDarkFor } from '../src/lib/bootDark';
 
@@ -80,6 +80,13 @@ describe('yönetim paneli bölümleri', () => {
   });
   it('her bölüm e2e taramasında (telefon, tablet, bilgisayar, koyu)', () => {
     for (const s of ADMIN_SECTIONS) expect(sweep, s.to).toContain(`'${s.to}'`);
+  });
+  it('yönetim rotası her bölümün yetkisiyle açılır: patron paneli Denetim kaydına, raporcu Genel bakışa girer', () => {
+    // Rota bir bölümün yetkisini geri çevirirse kenar çubuğundaki ve patron panelinin "Dikkat isteyenler"indeki
+    // bağlantı kişiyi ana ekranına atar
+    for (const s of ADMIN_SECTIONS.filter((x) => x.to.startsWith('/yonetim/'))) for (const p of s.perm) expect(ADMIN_ROUTE_PERMS, `${s.key}: ${p}`).toContain(p);
+    expect(ADMIN_ROUTE_PERMS).toEqual(expect.arrayContaining(['patron.panel', 'rapor.gor']));
+    expect(read('src/App.tsx')).toMatch(/path="\/yonetim\/\*" element=\{<Guard perm=\{ADMIN_ROUTE_PERMS\}>/);
   });
   it('bölüm anahtarları ve adresleri tekil', () => {
     expect(new Set(ADMIN_SECTIONS.map((s) => s.key)).size).toBe(ADMIN_SECTIONS.length);

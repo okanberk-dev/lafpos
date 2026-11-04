@@ -4,6 +4,7 @@ import { Button } from './components/ui/Button';
 import { Navigate, Route, Routes, useLocation } from 'react-router';
 import type { Permission } from '@shared/permissions';
 import { AppShell } from './components/AppShell';
+import { ADMIN_ROUTE_PERMS } from './components/admin/sections';
 import { ErrorState, Notice, PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
@@ -129,7 +130,8 @@ function Authed() {
           <Route path="/rezervasyon" element={<Guard perm="rezervasyon.yonet"><ReservationsPage /></Guard>} />
           <Route path="/raporlar/*" element={<Guard perm="rapor.gor"><ReportsPage /></Guard>} />
           <Route path="/patron" element={<Guard perm="patron.panel"><PatronPage /></Guard>} />
-          <Route path="/yonetim/*" element={<Guard perm={['menu.yonet', 'ayar.yonet', 'personel.yonet', 'mesai.yonet', 'senkron.yonet', 'stok.yonet']}><AdminPage /></Guard>} />
+          {/* Bölümlerden birini açabilen girer (patron paneli Denetim kaydına, raporcu Genel bakışa); bölümün izni AdminPage'de */}
+          <Route path="/yonetim/*" element={<Guard perm={ADMIN_ROUTE_PERMS}><AdminPage /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>

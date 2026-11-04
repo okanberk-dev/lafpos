@@ -370,8 +370,10 @@ export function hourlyReport(range: Range) {
     days: ds.days.length,
     hours,
     parts,
+    // Eşit cirolu saatlerde en yoğun ilki, en sakin sonuncusu: aktif saatlerin hepsi eşitse ikisi aynı saati göstermez
+    // (aynı saat yalnız tek aktif saatte)
     busiest: active.length ? active.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null,
-    quietest: active.length ? active.reduce((a, b) => (b.revenue < a.revenue ? b : a)) : null,
+    quietest: active.length ? active.reduce((a, b) => (b.revenue <= a.revenue ? b : a)) : null,
     peaks: [...active].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
     week,
   };
@@ -474,6 +476,13 @@ function compKindOf(ds: { items: ItemRow[] }, closedIds: Set<string>, kind: Comp
 
 // ─── Kalem listeleri: iptal, ikram, indirim, iade, happy hour ───────────────
 
+/**
+ * Kalem hesap yazdırıldıktan sonra mı iptal edildi: iptal anında yazılan bayrak (`voidAfterBill`). Adisyonun
+ * `billPrintedAt`'i iptalden sonra yazdırılan hesapla da dolar, tek başına yetmez. Bayraktan önce iptal edilmiş kalemde
+ * adisyonun son yazdırılması iptalden önceyse hesap kesin iptalden önce görülmüştür; sonraysa bilinmez, sayılmaz
+ */
+const voidedAfterBill = (i: ItemRow, o: OrderRow) => i.voidAfterBill || (o.billPrintedAt != null && i.voidedAt != null && i.voidedAt > o.billPrintedAt);
+
 /** Bütün POS adisyonlarından (açık ve kalemleri taşınmış olanlar dahil): iptal listesi X/Z'nin iptal tutarını verir */
 export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy') {
   const ds = load(range);
@@ -503,7 +512,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         by: users.get((kind === 'iptal' ? i.voidBy : kind === 'ikram' ? i.compBy : i.createdBy) ?? '') ?? null,
         approvedBy: kind === 'iptal' && i.voidApprovedBy ? (users.get(i.voidApprovedBy) ?? null) : null,
         afterSend: i.voidAfterSend,
-        billPrinted: !!o.billPrintedAt,
+        afterBill: kind === 'iptal' && voidedAfterBill(i, o),
       };
     })
     .sort((a, b) => b.at - a.at);
@@ -527,7 +536,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         by: o.discountBy ? (users.get(o.discountBy) ?? null) : null,
         approvedBy: null,
         afterSend: false,
-        billPrinted: !!o.billPrintedAt,
+        afterBill: false,
       });
     }
     rows.sort((a, b) => b.at - a.at);

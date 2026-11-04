@@ -269,10 +269,16 @@ const Dash = () => <span className="text-muted">—</span>;
 const alignCls = (a?: 'left' | 'right' | 'center') => (a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left');
 const hideCls = (c: { hideBelow?: 'lg' | 'xl' }) => (c.hideBelow === 'lg' ? 'hidden lg:table-cell' : c.hideBelow === 'xl' ? 'hidden xl:table-cell' : '');
 
+/** Tablonun göründüğü (satır kartının gizlendiği) kırılım: Tailwind sınıfları derlemede bulunsun diye tam yazılır */
+const TABLE_FROM = { md: 'md:block', lg: 'lg:block', xl: 'xl:block' } as const;
+const CARDS_UNTIL = { md: 'md:hidden', lg: 'lg:hidden', xl: 'xl:hidden' } as const;
+
 /**
- * Rapor kartındaki tablo: kitin DataTable'ıyla aynı görünüm (kuyuda 13 px başlık, satır ayracı, tablette sığmayan ikincil
- * sütun gizli, telefonda satır kartı) ama kendi kartı yok; başlıklı rapor kartının (CSV, arama, açıklama) içinde durur.
- * İlk ve son görünen sütun kart başlığıyla aynı hizada (20 px). Kitin DataTable'ı kartsız (`bare`) çizebilince ona döner.
+ * Rapor kartındaki tablo: kitin DataTable'ıyla aynı görünüm (kuyuda 13 px başlık, satır ayracı, telefonda satır kartı)
+ * ama kendi kartı yok; başlıklı rapor kartının (CSV, arama, açıklama) içinde durur. Rapor satırının çekmecesi yok: tablette
+ * (lg altında) gizlenecek sütunu olan tablo o genişliğe dek satır kartıdır, gizli sütunun değeri kartın meta satırında
+ * (`phoneMeta`). İlk ve son görünen sütun kart başlığıyla aynı hizada (20 px). Kitin DataTable'ı kartsız (`bare`)
+ * çizebilince ona döner.
  */
 function ReportTable<T>({
   rows,
@@ -283,7 +289,7 @@ function ReportTable<T>({
   phoneMeta,
   phoneAside,
   foot,
-  stackBelow = 'md',
+  stackBelow,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -294,9 +300,13 @@ function ReportTable<T>({
   phoneAside?: (row: T) => ReactNode;
   /** Toplam satırı: sütun anahtarına göre hücreler (ilk sütun yoksa "Toplam"); telefonda son satır kartı */
   foot?: { cells: Partial<Record<string, ReactNode>>; phoneMeta?: ReactNode; phoneAside?: ReactNode };
-  /** Satır kartından tabloya geçiş: yarım genişlikteki kartta geniş ekrana dek satır kartı */
-  stackBelow?: 'md' | 'xl';
+  /**
+   * Satır kartından tabloya geçiş (yarım genişlikteki kartta geniş ekrana dek satır kartı). Verilmezse tablette (md)
+   * tablo; lg altında gizlenecek sütun varsa lg'ye dek kart: tablette o sütun hiçbir yerde görünmezdi
+   */
+  stackBelow?: 'md' | 'lg' | 'xl';
 }) {
+  const stack = stackBelow ?? (columns.some((c) => c.hideBelow === 'lg') ? 'lg' : 'md');
   const shown = (c: Column<T>, bp: 'md' | 'lg' | 'xl') => !c.hideBelow || (c.hideBelow === 'lg' ? bp !== 'md' : bp === 'xl');
   const lastAt = (bp: 'md' | 'lg' | 'xl') => columns.reduce((a, c, i) => (shown(c, bp) ? i : a), -1);
   const last = [lastAt('md'), lastAt('lg'), lastAt('xl')];
@@ -309,7 +319,7 @@ function ReportTable<T>({
   const phoneRow = 'flex flex-col gap-0.5 px-4 py-3 sm:px-5';
   return (
     <>
-      <div className={cn('relative hidden overflow-x-auto', stackBelow === 'xl' ? 'xl:block' : 'md:block')} data-overflow-ok>
+      <div className={cn('relative hidden overflow-x-auto', TABLE_FROM[stack])} data-overflow-ok>
         <table className="tabular w-full border-collapse text-sm">
           <caption className="sr-only">{caption}</caption>
           <thead>
@@ -351,7 +361,7 @@ function ReportTable<T>({
           )}
         </table>
       </div>
-      <ul aria-label={caption} className={cn('divide-y divide-[var(--admin-divider)] text-sm', stackBelow === 'xl' ? 'xl:hidden' : 'md:hidden')}>
+      <ul aria-label={caption} className={cn('divide-y divide-[var(--admin-divider)] text-sm', CARDS_UNTIL[stack])}>
         {rows.map((r) => (
           <li key={rowKey(r)} className={phoneRow}>
             <span className="flex items-start gap-3">
@@ -787,7 +797,8 @@ function ProductsReport({
                       `%${p.share.toLocaleString('tr-TR')}`,
                       p.complimentary > 0 && `${p.complimentary} ikram`,
                       p.voided > 0 && `${p.voided} iptal`,
-                      withCost && p.qty > 0 && p.margin != null && `kâr ${tl(p.margin)}`,
+                      // Tablonun Brüt kâr sütunu ve alttaki açıklamayla aynı: maliyeti girilmemiş üründe —
+                      withCost && p.qty > 0 && `brüt kâr ${p.margin == null ? '—' : tl(p.margin)}`,
                     ])
                   }
                   phoneAside={(p) => tl(p.revenue)}
@@ -851,8 +862,9 @@ function HourlyReport({ range, today, onExport, exporting }: { range: Range; tod
           );
         const active = h.hours.filter((x) => x.orders).length;
         const hourRef = (r: HourRow) => `${r.nextDay ? 'Ertesi gün · ' : ''}${tlShort(r.revenue)} · ${r.orders} adisyon`;
-        // Tek saatte satış varsa en yoğun ve en sakin aynı saat: ikinci kez yazılmaz
-        const oneHour = !!h.busiest && !!h.quietest && h.busiest.offset === h.quietest.offset;
+        // Tek saatte satış varsa en yoğun ve en sakin aynı saat: ikinci kez yazılmaz. Ölçüt Toplam'daki aktif saat sayısı;
+        // saatlerin cirosu eşit diye "yalnız bir saatte" denmez
+        const oneHour = active === 1;
         const cells: KpiCell[] = [
           { key: 'toplam', label: 'Toplam', icon: <TurkishLira />, hue: 'green', value: <KpiAmount value={h.total} />, reference: `${active} aktif saat` },
           { key: 'yogun', label: 'En yoğun saat', icon: <Clock />, value: h.busiest ? hh(h.busiest.hour) : '—', reference: h.busiest ? hourRef(h.busiest) : 'Sayılmadı' },
@@ -923,16 +935,26 @@ const heat = (pct: number) => `color-mix(in oklab, var(--chart-accent) ${pct}%, 
 
 /**
  * Haftanın günü × saat ısı haritası: personel planı için hangi gün hangi saat yoğun (sütunlar iş günü sırasıyla). Gün
- * adları kayarken yerinde kalır; hücrenin değeri fareyle ipucunda, dokunmatikte dokununca lejantın altında
+ * adları kayarken yerinde kalır; hücrenin değeri fareyle ipucunda, dokunmatikte dokununca lejantın altında (hücre
+ * dokunmatikte 44 px, harita yana kayar)
  */
 function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
-  const [picked, setPicked] = useState<string | null>(null);
+  // Seçilen hücre yeriyle (gün sırası, saat) tutulur, yazısı her çizimde o anki veriden: dönem değişince ya da veri
+  // yenilenince altta önceki dönemin rakamı kalmaz
+  const [picked, setPicked] = useState<{ wi: number; hour: number } | null>(null);
   const all = week.flatMap((w) => w.hours);
   const max = Math.max(0, ...all);
   if (max === 0) return null;
   const used = all.map((v, i) => (v > 0 ? businessHourIndex(i % 24) : -1)).filter((x) => x >= 0);
   const cols = BUSINESS_HOURS.slice(Math.min(...used), Math.max(...used) + 1);
   const step = (v: number) => (v <= 0 ? -1 : Math.min(HEAT_STEPS.length - 1, Math.floor((v / max) * HEAT_STEPS.length)));
+  const labelOf = (wi: number, hour: number) => {
+    const w = week[wi];
+    const v = w.hours[hour] ?? 0;
+    return `${WEEKDAY_LONG[wi]} ${String(hour).padStart(2, '0')}:00 · ${v > 0 ? tl(v) : 'satış yok'}${w.days > 1 ? ` (${w.days} günün ortalaması)` : ''}`;
+  };
+  // Yeni dönemin haritasında o saat sütunu yoksa seçim de yazısı da görünmez
+  const shown = picked && week[picked.wi] && cols.includes(picked.hour) ? picked : null;
   return (
     <Card flush title="Gün ve saat" subtitle="Haftanın günlerine göre saatlik ortalama ciro">
       {/* relative: hücrelerin gizli etiketi (sr-only, mutlak konumlu) kayan kutuda kalsın, telefonda sayfayı genişletmesin */}
@@ -940,7 +962,10 @@ function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
         <table
           className="w-full border-separate border-spacing-[3px] text-[11px]"
           aria-label="Haftanın günlerine ve saatlere göre ortalama ciro"
-          onClick={(e) => setPicked((e.target as HTMLElement).closest<HTMLElement>('td[data-label]')?.dataset.label ?? null)}
+          onClick={(e) => {
+            const cell = (e.target as HTMLElement).closest<HTMLElement>('td[data-hour]');
+            setPicked(cell ? { wi: Number(cell.dataset.wi), hour: Number(cell.dataset.hour) } : null);
+          }}
         >
           <thead>
             <tr>
@@ -959,15 +984,20 @@ function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
                   {WEEKDAY_SHORT[wi]}
                 </th>
                 {cols.map((c) => {
-                  const v = w.hours[c] ?? 0;
-                  const k = step(v);
-                  const label = `${WEEKDAY_LONG[wi]} ${String(c).padStart(2, '0')}:00 · ${v > 0 ? tl(v) : 'satış yok'}${w.days > 1 ? ` (${w.days} günün ortalaması)` : ''}`;
+                  const k = step(w.hours[c] ?? 0);
+                  const label = labelOf(wi, c);
                   return (
                     <td
                       key={c}
                       title={label}
-                      data-label={label}
-                      className={cn('h-7 min-w-7 rounded-[4px]', k < 0 && 'shadow-[inset_0_0_0_1px_var(--admin-divider)]', picked === label && 'shadow-[inset_0_0_0_2px_var(--admin-text)]')}
+                      data-wi={wi}
+                      data-hour={c}
+                      className={cn(
+                        // Dokunmatikte dokunulan hedef 44 px (genişlik tablo hücresinde en az genişlik olarak işler)
+                        'h-7 min-w-7 rounded-[4px] pointer-coarse:h-11 pointer-coarse:w-11 pointer-coarse:min-w-11',
+                        k < 0 && 'shadow-[inset_0_0_0_1px_var(--admin-divider)]',
+                        shown?.wi === wi && shown.hour === c && 'shadow-[inset_0_0_0_2px_var(--admin-text)]',
+                      )}
                       style={{ background: k < 0 ? 'var(--admin-surface-2)' : heat(HEAT_STEPS[k]) }}
                     >
                       <span className="sr-only">{label}</span>
@@ -990,9 +1020,9 @@ function WeekHeatmap({ week }: { week: HourlyData['week'] }) {
           <span className="tabular">En yüksek {tl(max)}</span>
           <span className="pointer-fine:hidden">Değer için hücreye dokunun</span>
         </div>
-        {picked && (
+        {shown && (
           <p aria-live="polite" className="tabular mt-2 text-xs font-medium text-ink-2">
-            {picked}
+            {labelOf(shown.wi, shown.hour)}
           </p>
         )}
       </div>
@@ -1211,7 +1241,7 @@ function ChecksReport({ range, today, onExport, exporting }: { range: Range; tod
                   {o.status === 'iptal' && <Badge tone="danger">İptal</Badge>}
                 </span>
               )}
-              phoneMeta={(o) => joinMeta([span(o), o.methods.join(', '), withWaiter && o.waiter])}
+              phoneMeta={(o) => joinMeta([span(o), `${fmtN(o.qty)} adet`, o.methods.join(', '), withWaiter && o.waiter])}
               phoneAside={(o) => tl(o.total)}
             />
           )}
@@ -1374,7 +1404,8 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
 interface ItemsData {
   total: number;
   count: number;
-  rows: { id: string; at: number; orderNo: number; place: string; name: string; size: string; qty: number; value: number; reason: string | null; compKind: CompKind | null; by: string | null; approvedBy: string | null; afterSend: boolean; billPrinted: boolean }[];
+  /** `afterBill`: iptal anında hesap yazdırılmıştı (adisyonun hesabının sonradan yazdırılması saymaz) */
+  rows: { id: string; at: number; orderNo: number; place: string; name: string; size: string; qty: number; value: number; reason: string | null; compKind: CompKind | null; by: string | null; approvedBy: string | null; afterSend: boolean; afterBill: boolean }[];
 }
 type ItemRow = ItemsData['rows'][number];
 type ItemKind = 'iptal' | 'ikram' | 'indirim' | 'happy';
@@ -1386,7 +1417,7 @@ const ITEM_EMPTY: Record<ItemKind, string> = { iptal: 'iptal edilen kalem', ikra
 /** Kalemin adı ve türü: ikramın türü (ödenmez, zayi) nötr, geç iptal kırmızı rozetle, adın altında */
 function ItemName({ r, kind, size }: { r: ItemRow; kind: ItemKind; size: string | null }) {
   const comp = r.compKind && r.compKind !== 'ikram' ? COMP_LABEL[r.compKind] : null;
-  const late = kind === 'iptal' && (r.afterSend || r.billPrinted) ? (r.billPrinted ? 'Hesaptan sonra' : 'Hazırlandıktan sonra') : null;
+  const late = kind === 'iptal' && (r.afterSend || r.afterBill) ? (r.afterBill ? 'Hesaptan sonra' : 'Hazırlandıktan sonra') : null;
   return (
     <>
       <span className="font-medium">
@@ -1538,6 +1569,15 @@ const valueWithUnits = (value: number, units: number) =>
 function StaffReport({ range, today }: { range: Range; today: string }) {
   const data = useReport<{ staff: StaffRow[] }>(['staff', range], `/reports/staff?${qs(range)}`);
   const avg = (r: { orders: number; revenue: number }) => (r.orders ? tl(Math.round(r.revenue / r.orders)) : <Dash />);
+  // Satır kartı (telefon ve tablet) tablonun bütün tutarlarını taşır: ortalama ve indirim de
+  const cardMeta = (r: Omit<StaffRow, 'userId' | 'name'>) =>
+    joinMeta([
+      `${fmtN(r.orders)} adisyon`,
+      r.orders > 0 && `ortalama ${tl(Math.round(r.revenue / r.orders))}`,
+      r.voidValue > 0 && `iptal ${tl(r.voidValue)}`,
+      r.compValue > 0 && `ikram ve zayi ${tl(r.compValue)}`,
+      r.discounts > 0 && `indirim ${tl(r.discounts)}`,
+    ]);
   const columns: Column<StaffRow>[] = [
     { key: 'ad', header: 'Personel', cell: (r) => <span className="font-medium">{r.name}</span> },
     { key: 'adisyon', header: 'Adisyon', align: 'right', cell: (r) => fmtN(r.orders) },
@@ -1577,13 +1617,13 @@ function StaffReport({ range, today }: { range: Range; today: string }) {
                           iptal: valueWithUnits(sum.voidValue, sum.voids),
                           ikram: valueWithUnits(sum.compValue, sum.comps),
                         },
-                        phoneMeta: joinMeta([`${fmtN(sum.orders)} adisyon`, sum.voidValue > 0 && `iptal ${tl(sum.voidValue)}`, sum.compValue > 0 && `ikram ve zayi ${tl(sum.compValue)}`, sum.discounts > 0 && `indirim ${tl(sum.discounts)}`]),
+                        phoneMeta: cardMeta(sum),
                         phoneAside: tl(sum.revenue),
                       }
                     : undefined
                 }
                 phoneTitle={(r) => r.name}
-                phoneMeta={(r) => joinMeta([`${fmtN(r.orders)} adisyon`, r.voidValue > 0 && `iptal ${tl(r.voidValue)}`, r.compValue > 0 && `ikram ve zayi ${tl(r.compValue)}`, r.discounts > 0 && `indirim ${tl(r.discounts)}`])}
+                phoneMeta={cardMeta}
                 phoneAside={(r) => tl(r.revenue)}
               />
             )}

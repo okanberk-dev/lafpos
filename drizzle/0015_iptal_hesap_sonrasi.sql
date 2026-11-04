@@ -1,0 +1,1 @@
+ALTER TABLE `order_items` ADD `void_after_bill` integer DEFAULT false NOT NULL;

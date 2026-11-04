@@ -43,6 +43,13 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { key: 'denetim', to: '/yonetim/denetim', label: 'Denetim kaydı', desc: 'İptal, ikram, indirim, kasa ve gün sonu izi', icon: ClipboardList, group: 'sistem', perm: ['ayar.yonet', 'patron.panel'], keywords: 'log alarm uyarı' },
 ];
 
+/**
+ * Yönetim rotasına (`/yonetim/*`) girebilen yetkiler: bölümlerin izinlerinin birleşimi. Genel bakış raporcuya, Ağ ve
+ * Denetim kaydı patron paneline de açık; rota onları geri çevirirse kenar çubuğundaki ve patron panelindeki bağlantılar
+ * kişiyi ana ekranına atar. Hangi bölümün açılacağına AdminPage (SectionRoute) bakar, asıl denetim sunucuda
+ */
+export const ADMIN_ROUTE_PERMS: Permission[] = [...new Set(ADMIN_SECTIONS.filter((s) => s.to.startsWith('/yonetim/')).flatMap((s) => s.perm))];
+
 export function visibleSections(can: (p: Permission) => boolean): AdminSection[] {
   return ADMIN_SECTIONS.filter((s) => s.perm.some((p) => can(p)));
 }

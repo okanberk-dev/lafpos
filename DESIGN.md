@@ -133,10 +133,12 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 - **Grafik:** tek seri tek renk (ev yeşili), kıyas serisi gri çizgi, tek eksen; tutar ekseninde kesirli
   adım yok, verisi olmayan dönemde eksen yerine ekranın zamanını söyleyen boş durum çizilir (Bugün henüz satış
   yok, Bu günde satış yok, Bu dönemde satış yok; `ColumnChart` `emptyLabel`, `src/components/charts.tsx`). Dokunmatikte
-  dokunulan sütunun değeri dışarı dokunulana dek kalır; klavyede grafik odak alır, oklar sütunlar arasında gezer; ekran
-  okuyucu gizli veri tablosundan okur. Süre grafiğinin ekseni dakikayla (0, 2 dk, 4 dk; `ColumnChart` `unitDivisor` 60
-  ve `tickFormat`). Kıyas döneminde hiç değer yoksa kıyas çizgisi, açıklaması ve ipucu satırı çizilmez. Isı haritası
-  aynı yeşilin tonları.
+  grafiğin tamamı tek hedeftir (telefonda 24 saatin sütunu 11 px): dokunulan ya da parmak yana kaydırılınca altına gelen
+  sütunun değeri dışarı dokunulana dek kalır, dikey kaydırma sayfanındır; klavyede grafik odak alır, oklar sütunlar
+  arasında gezer; ekran okuyucu gizli veri tablosundan okur. Süre grafiğinin ekseni dakikayla (0, 2 dk, 4 dk;
+  `ColumnChart` `unitDivisor` 60 ve `tickFormat`). Kıyas döneminde hiç değer yoksa kıyas çizgisi, açıklaması ve ipucu
+  satırı çizilmez. Isı haritası aynı yeşilin tonları; dokunmatikte hücresi 44 px (harita yana kayar), dokunulan hücrenin
+  değeri lejantın altında.
 
 ## 4. Yönetim paneli
 

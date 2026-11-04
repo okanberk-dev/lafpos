@@ -491,6 +491,8 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     voidApprovedBy: approverId,
     voidedAt: now,
     voidAfterSend: afterSend,
+    // Hesap iptalden önce yazdırılmış mı: iptal anında (adisyonun yazdırma zamanı sonradan da dolar)
+    voidAfterBill: !!o.billPrintedAt,
   });
   if (notStarted(it)) releasePortions(t, fx, actor.user.id, [{ productId: it.productId, qty }]);
   // Bekleyen son bar kalemi iptal edilince gel-al siparişi kalanların durumuna geçer (hepsi hazırsa "Hazır")
@@ -1504,7 +1506,7 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
   if (live.length && !reason.trim()) throw bad('İptal nedeni yazılmalı', 'reason_required');
   for (const it of live) {
     t.update(schema.orderItems)
-      .set({ voided: true, voidReason: reason.trim() || 'Adisyon iptali', voidBy: actor.user.id, voidApprovedBy: approverId, voidedAt: now, voidAfterSend: !allFresh && it.status !== 'yeni' })
+      .set({ voided: true, voidReason: reason.trim() || 'Adisyon iptali', voidBy: actor.user.id, voidApprovedBy: approverId, voidedAt: now, voidAfterSend: !allFresh && it.status !== 'yeni', voidAfterBill: !!o.billPrintedAt })
       .where(eq(schema.orderItems.id, it.id))
       .run();
   }

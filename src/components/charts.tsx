@@ -5,8 +5,9 @@ import { EmptyState } from './ui/misc';
 /**
  * Grafikler (dataviz kuralları): tek seri tek renk (ev yeşili), kıyas serisi gri ve ince (vurgu biçimi), tek eksen,
  * sütun en çok 24 px, uçları 4 px yuvarlak ve tabanda düz, ızgara 1 px ve geride, değer etiketi seçici. Değer ipucu
- * fareyle üzerine gelince, dokunmatikte dokununca (başka yere dokunana dek durur), klavyede oklarla açılır; ekran
- * okuyucu aynı değerleri gizli tablodan okur. Renkler CSS değişkenlerinden gelir, koyu temada kendi adımları var.
+ * fareyle üzerine gelince, dokunmatikte dokununca ya da parmak yana kayınca (başka yere dokunana dek durur), klavyede
+ * oklarla açılır; ekran okuyucu aynı değerleri gizli tablodan okur. Renkler CSS değişkenlerinden gelir, koyu temada
+ * kendi adımları var.
  */
 
 const compact = new Intl.NumberFormat('tr-TR', { notation: 'compact', maximumFractionDigits: 1 });
@@ -140,6 +141,18 @@ export function ColumnChart({
 
   const describe = (d: ColumnDatum) => `${d.title ?? d.label}: ${format(d.value)}${hasCompare && d.compare != null ? `, ${compareLabel} ${format(d.compare)}` : ''}`;
 
+  /**
+   * İmlecin ya da parmağın altındaki sütun. Telefonda 24 saatlik grafikte sütun 11 px'e iner: dokunmatikte grafiğin
+   * tamamı tek hedeftir (eksen yazısının üstü en yakın sütuna), farede yalnız çizim alanı
+   */
+  const columnAt = (clientX: number, touch: boolean): number | null => {
+    const el = ref.current;
+    if (!el || band <= 0) return null;
+    const i = Math.floor((clientX - el.getBoundingClientRect().left - padL) / band);
+    if (touch) return Math.min(data.length - 1, Math.max(0, i));
+    return i >= 0 && i < data.length ? i : null;
+  };
+
   /** Sol ve sağ ok sütunlar arasında gezer, Home ve End uçlara gider */
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!data.length) return;
@@ -181,7 +194,10 @@ export function ColumnChart({
           </span>
         </div>
       )}
-      {/* Klavye odağı grafiğin kendisinde: oklar ipucunu sütundan sütuna taşır, odak çıkınca kapanır */}
+      {/* Klavye odağı grafiğin kendisinde: oklar ipucunu sütundan sütuna taşır, odak çıkınca kapanır. Fare ve kalem
+          üzerine gelince gösterir, çıkınca kapatır. Dokunmatikte dokunuş gösterir, parmak yana kaydıkça altındaki sütuna
+          geçer (dikey kaydırma ve yakınlaştırma sayfanın: touch-action pan-y pinch-zoom); parmak kalkınca gelen
+          pointerleave ipucunu silmez, kaydırmaya dönen dokunuş (pointercancel) siler */}
       <div
         ref={ref}
         tabIndex={0}
@@ -189,7 +205,11 @@ export function ColumnChart({
         aria-label={`${ariaLabel}; değerler için sol ve sağ ok tuşları`}
         onKeyDown={onKeyDown}
         onBlur={() => setHover(null)}
-        className="relative w-full rounded-lg"
+        onPointerDown={(e) => setHover(columnAt(e.clientX, e.pointerType === 'touch'))}
+        onPointerMove={(e) => setHover(columnAt(e.clientX, e.pointerType === 'touch'))}
+        onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}
+        onPointerCancel={() => setHover(null)}
+        className="relative w-full touch-pan-y touch-pinch-zoom rounded-lg"
         style={{ height }}
       >
         {width > 0 && (
@@ -229,22 +249,6 @@ export function ColumnChart({
                   <circle key={`c${i}`} cx={padL + band * i + band / 2} cy={y(d.compare)} r={4} fill="var(--chart-context)" stroke="var(--surface)" strokeWidth={2} />
                 ),
               )}
-            {data.map((_, i) => (
-              <rect
-                key={`h${i}`}
-                x={padL + band * i}
-                y={padT}
-                width={band}
-                height={plotH}
-                fill="transparent"
-                // Fare ve kalem üzerine gelince gösterir, çıkınca kapatır. Dokunmatikte dokunuş gösterir; parmak kalkınca
-                // gelen pointerleave ipucunu silmez, kaydırmaya dönen dokunuş (pointercancel) siler
-                onPointerEnter={(e) => e.pointerType !== 'touch' && setHover(i)}
-                onPointerLeave={(e) => e.pointerType !== 'touch' && setHover((h) => (h === i ? null : h))}
-                onPointerDown={() => setHover(i)}
-                onPointerCancel={() => setHover((h) => (h === i ? null : h))}
-              />
-            ))}
           </svg>
         )}
         {tip && width > 0 && (
