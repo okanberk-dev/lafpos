@@ -52,10 +52,14 @@ export class Effects {
     }
   }
 
+  /**
+   * Aynı olay bir işlemde bir kez yayılır. İstasyon anahtarın parçasıdır: mutfak olayı istasyon başına ayrıdır (bar ve
+   * mutfağa giden tek yazmada ikisi de fiş sesini alır; istasyonsuz anahtarda yalnız ilki yayılıyordu)
+   */
   flush() {
     const seen = new Set<string>();
     for (const e of this.events) {
-      const key = `${e.topic}|${e.kind}|${e.orderId ?? ''}|${e.tableId ?? ''}|${e.message ?? ''}`;
+      const key = `${e.topic}|${e.kind}|${e.orderId ?? ''}|${e.tableId ?? ''}|${e.stationId ?? ''}|${e.message ?? ''}`;
       if (seen.has(key)) continue;
       seen.add(key);
       bus.publish(e);
