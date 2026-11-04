@@ -11,6 +11,8 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
 | `webapp-testing` | Yerel uygulamayı gerçek tarayıcıyla sınamak (sunucu yaşam döngüsü, önce gözle sonra eylem) | [anthropics/skills](https://github.com/anthropics/skills) @ `b9e19e6` | Apache-2.0 |
 | `verification-before-completion` | "Bitti" demeden önce kanıt: typecheck, test, build, e2e çıktısı | [obra/superpowers](https://github.com/obra/superpowers) @ `3be5aad` | MIT |
 | `validate-data` | Rapor ve KPI asla yanlış değil: tanımlar, kıyas dönemi, mutabakat değişmezleri, hata ₺0 gösterilmez | [anthropics/knowledge-work-plugins](https://github.com/anthropics/knowledge-work-plugins) `data/skills/validate-data` @ `33d3dea` | Apache-2.0 |
+| `restaurant-pos` | POS özelliğini ürün mimarı gözüyle planlamak: modüllerin LafPOS'taki yeri, para, yetki, denetim, çevrimdışı ve mali kurallar, geliştirme sırası, alınmayanlar | Operatörün yapıştırdığı "Restaurant POS Development Skill" (4 Kas 2026), uyarlanarak alındı | belirtilmedi (metin kopyalanmadı) |
+| `restaurant-operations` | İşletme işleri: menü metni, maliyet yüzdesi ve kâr kaçağı, haftalık malzeme tahmini, Google yorumu yanıtı, iş ilanı, LafPOS akışlarıyla eğitim belgesi | Operatörün yapıştırdığı "Restaurant Operations" (4 Kas 2026), uyarlanarak alındı | belirtilmedi (metin kopyalanmadı) |
 | `web-interface-guidelines` | Arayüzü sade ve hatasız tutmak: erişilebilirlik, odak, form, dokunma, taşma, metin denetimi | [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) `command.md` @ `434b7f9` | MIT |
 
 ## Kararlar (26 Ekim 2026, operatör)
@@ -46,6 +48,13 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
    (PIN'le giriş-çıkış, mesai çizelgesi) ve vardiya devri sayımı eklendi (`docs/02-PLAN.md`); mesai 4 Kasım 2026'da
    operatör kararıyla kaldırıldı, vardiya devri kaldı.
 
+6. _"ayrıca aşağıdaki skillsten alınabilirleri al bizim için"_ (4 Kasım 2026, iki metin: "Restaurant Operations" ve
+   "Restaurant POS Development Skill"): kaynağı ve lisansı belirtilmediği için metinler olduğu gibi kopyalanmadı; LafPOS'a
+   ve L'Affogato'ya uyan kısımları Türkçe, projenin kurallarına bağlanarak `restaurant-pos` ve `restaurant-operations`
+   olarak yazıldı. Alınmayanlar skill'lerin sonunda: çok şube ve terminal tabloları, ayrı stok ve satın alma modülü
+   (lafmaliyet'in işi), personel mesaisi (aynı gün kaldırıldı; vardiya devri kalır), sadakat puanı ve kampanya (operatör
+   kararı gerekir), muhasebe, bordro, mevzuat ve sözleşme.
+
 ## Nasıl kullanılır
 
 - Yeni yönetim ekranı: `build-admin-panel` (yöntem) + `docs/ADMIN-INNEX.md` (ölçüler) + `DESIGN.md`.
@@ -55,3 +64,6 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
   `verification-before-completion` tablosundaki komutlar.
 - Ekranı sadeleştirmek ya da gözden geçirmek: `web-interface-guidelines` (çakışan kurallar skill'in başında).
 - Rapor ya da KPI eklemek, değiştirmek: `validate-data`; değişmez `tests/report-reconciliation.test.ts`'e eklenir.
+- Yeni satış, ödeme, kasa, masa ya da müşteri özelliği planlamak, yerli ve yabancı sistemlerle kıyaslamak:
+  `restaurant-pos` (modül haritası ve geliştirme sırası).
+- Menü metni, maliyet yüzdesi, malzeme tahmini, yorum yanıtı, iş ilanı ya da eğitim belgesi: `restaurant-operations`.
