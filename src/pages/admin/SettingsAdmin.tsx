@@ -49,6 +49,7 @@ type Settings = Record<string, unknown> & {
   posSizeSuffix: { M: string; L: string; TEK: string };
   serviceMode: ServiceMode;
   zNoStart: number | null;
+  branchId: string;
 };
 
 const lines = (a: string[]) => a.join('\n');
@@ -205,6 +206,8 @@ export default function SettingsAdmin() {
   const mode = serviceModeOf(s);
   // İlk Z numarası yalnız değiştiyse denetlenir (sunucu da öyle): zincir geri alınmaz
   const lastZ = zChain.data ? (zChain.data.lastZ ?? 0) : null;
+  // Şube kimliği lafmaliyet'le aynı kuralda (docs/03-ENTEGRASYON.md §4): yanlış kimlik günü yanlış şubeye yazar
+  const branchError = /^[a-z][a-z0-9-]{1,23}$/.test(s.branchId) ? null : 'Harfle başlamalı; küçük harf, rakam ve tire (en az 2 karakter)';
   const zError =
     s.zNoStart != null && s.zNoStart !== data.data?.zNoStart ? (s.zNoStart < 1 ? 'Z numarası 1 ya da daha büyük olmalı' : lastZ != null && s.zNoStart <= lastZ ? `Z numarası geri alınamaz; son Z ${lastZ}` : null) : null;
   // Alarm uyarıdan önce gelirse amber hiç görünmez (bar ekranı önce alarma bakar): alanda hata, Kaydet göndermez
@@ -246,6 +249,10 @@ export default function SettingsAdmin() {
     // Alanın altında hata yazarken kayıt gitmez ("kaydedildi" ile hata yan yana kalmasın); sunucu da reddeder
     if (kitchenError) {
       toast.err('Bar fişi alarmı uyarıdan uzun olmalı');
+      return;
+    }
+    if (branchError) {
+      toast.err('Şube kimliği geçersiz: harfle başlamalı, küçük harf, rakam ve tire');
       return;
     }
     setSaving(true);
@@ -400,6 +407,20 @@ export default function SettingsAdmin() {
                 </Select>
               </label>
             </div>
+            <Field
+              label="Şube kimliği"
+              hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır. Paneldeki kimliğin aynısı olmalı (Ayarlar › Şubeler); tek şubeli kurulumda tuzla kalır"
+              error={branchError}
+            >
+              <Input
+                value={s.branchId}
+                onChange={(e) => set({ branchId: e.target.value.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9-]/g, '').slice(0, 24) })}
+                placeholder="tuzla"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="sm:max-w-60"
+              />
+            </Field>
             <div>
               <Field label="İlk Z numarası" hint="ModPOS’un son Z numarasının bir fazlası. Geçiş gününden önce bir kez girilir; sonraki gün sonları buradan devam eder" error={zError}>
                 <Input

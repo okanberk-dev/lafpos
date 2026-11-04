@@ -81,6 +81,13 @@ export interface PrivateSettings {
   /** İlk Z numarası: geçişte ModPOS'un son Z'si + 1; zincir yalnız yukarı doğru etkilenir (`nextZNo`). null: 1'den */
   zNoStart: number | null;
   /**
+   * Bu kasanın şubesi: lafmaliyet'teki şube kimliği (`tuzla`, `marina`; lafmaliyet docs/SUBE.md). Gün sonu paketine
+   * konur ki panel günü doğru şubeye yazsın (docs/03-ENTEGRASYON.md §4). Tek şubeli kurulumda varsayılan `tuzla`
+   * yeter; ikinci bir kasa kurulurken Yönetim › Ayarlar'dan değiştirilir. Boş bırakılamaz: panel şubesiz günü
+   * bugünkü gibi Tuzla'ya yazar, bu da yanlış şubeye ciro demektir.
+   */
+  branchId: string;
+  /**
    * Paket platformları: mod, hazırlık süresi, otomatik kabul, tahmini komisyon (shared/platforms.ts). Arayüze
    * bootstrap'la gitmez: komisyon oranı maliyettir; ekranlar `GET /api/platforms`'tan okur (oran yalnız maliyet,
    * ayar ya da senkron yetkisine)
@@ -103,6 +110,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcOperatorMethods: {},
   rolePermissions: {},
   zNoStart: null,
+  branchId: 'tuzla',
   platforms: PLATFORM_DEFAULTS,
 };
 
