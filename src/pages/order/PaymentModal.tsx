@@ -1,14 +1,16 @@
-import { Check, CheckCircle2, Droplets, Gift, HandCoins, Minus, Plus, Printer, RotateCcw, Users, X } from 'lucide-react';
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Check, CheckCircle2, Droplets, Gift, HandCoins, Printer, RotateCcw, UserPlus, Users } from 'lucide-react';
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, COMP_LABEL, compCloseSubtitle, compReasonsOf } from '@shared/comp';
-import { parseTL, suggestCash, tl, tlShort } from '@shared/money';
+import { parseTL, splitEven, suggestCash, tl, tlShort } from '@shared/money';
 import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import type { CompKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Segmented } from '@/components/ui/Field';
+import { Segmented, Stepper } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad, useNumpadKeys } from '@/components/ui/Numpad';
+import { Badge, Notice } from '@/components/ui/misc';
 import { typeOverPrefill } from '@/lib/numpad';
 import { promptDialog } from '@/components/ui/Confirm';
 import { ApiError, post, put } from '@/lib/api';
@@ -16,10 +18,13 @@ import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { newRequestId } from '@/lib/requestId';
+import { onLive } from '@/lib/live';
 import { BillReceipt, printNow } from '@/lib/print';
+import { toast } from '@/lib/toast';
 import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
-import { OkcPanel } from './OkcPanel';
+import { CustomerModal } from './CustomerModal';
+import { OkcPanel, useOkcReceipts } from './OkcPanel';
 import { ReasonModal } from './TableOps';
 import { TypedAmount } from './TypedAmount';
 
@@ -30,15 +35,22 @@ const COMP_ICON: Record<CompKind, ReactNode> = { ikram: <Gift className="size-4"
 
 const toInput = (k: number) => (k % 100 === 0 ? String(k / 100) : (k / 100).toFixed(2).replace('.', ','));
 
-
-/** Innex seçim kartı/çipi: seçili mavi kenar ve açık mavi zemin */
+/** Seçim kartı (ödeme türü, kalem satırı): seçili yeşil kenar ve açık yeşil zemin; dinlenmede ince kenar */
 const choice = (on: boolean) =>
   cn('rounded-xl border transition-colors duration-150', on ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press');
 
-/** Tuş takımıyla yazılan alan (Tutar, Verilen): düğme görünümünde; seçili olan mavi kenar ve halka */
+/** Tuş takımıyla yazılan alan (Tutar, Verilen): düğme görünümünde, rakam Gabarito; seçili olan yeşil kenar ve halka */
 const typedField = (on: boolean) =>
-  cn('tabular w-full rounded-xl border px-4 text-right font-semibold transition-[border-color,box-shadow] duration-150', on ? 'border-primary ring-4 ring-[var(--admin-primary-soft)]' : 'border-line-strong hover:border-[var(--admin-border-field)]');
+  cn('tabular w-full rounded-xl border px-4 text-right font-headline font-semibold transition-[border-color,box-shadow] duration-150', on ? 'border-primary ring-4 ring-[var(--admin-primary-soft)]' : 'border-line-strong hover:border-[var(--admin-border-field)]');
 
+/** Bölüm etiketi (Ödeme türü, Verilen, Ciro dışı kapat): 13 px, gri */
+const SECTION = 'mb-2 text-[13px] font-medium text-muted';
+
+/**
+ * Ödeme penceresi. Telefonda tek sütun; tablet ve bilgisayarda solda tutar (tuş takımı, kalem seçimi ya da paylar) ve
+ * altında yazarkasa ile alınan ödemeler, sağda ödeme türü, verilen ve bahşiş. Ödeme düğmesi pencerenin alt şeridinde:
+ * kaydırınca kaybolmaz, para üstü ve bahşiş yanında yazar.
+ */
 export function PaymentModal({
   order,
   open,
@@ -55,6 +67,7 @@ export function PaymentModal({
 }) {
   const boot = useBoot();
   const can = useCan();
+  const qc = useQueryClient();
   const serviceMode = useServiceMode();
   const remaining = order.total - order.paid;
   const split = order.split;
@@ -67,9 +80,14 @@ export function PaymentModal({
   const [selection, setSelection] = useState<Record<string, number>>({});
   const [people, setPeople] = useState(2);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; method: string; share: string | null } | null>(null);
+  /** Hesabı bölme ya da paylaşımı kaldırma sürüyor (ödeme düğmesinin göstergesinden ayrı) */
+  const [splitBusy, setSplitBusy] = useState<'set' | 'clear' | null>(null);
+  const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; tip: number; method: string; share: string | null } | null>(null);
   /** Ciro dışı kapanış: gerekçe penceresi açık olan tür */
   const [comp, setComp] = useState<CompKind | null>(null);
+  /** Açık hesap için müşteri bu pencerenin içinden eklenir (İşlemler menüsü pencerenin arkasında kalır) */
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const methodsId = useId();
   /** Fiziksel klavye dinleyicisinin kökü: üstte onay ya da gerekçe penceresi açıkken tuşlar ona gider */
   const panelRef = useRef<HTMLDivElement>(null);
   /** Tutar alanı ve Verilen alanı: tür ya da hızlı tutar seçilince odak buraya döner, Enter ödemeyi alır */
@@ -82,6 +100,42 @@ export function PaymentModal({
   const [prefilled, setPrefilled] = useState(true);
   /** Süren ödeme denemesi: ekranda görülenler (tür, tutar, pay, kalemler, bahşiş, ödeme listesi) ve kimliği */
   const attempt = useRef<{ key: string; id: string } | null>(null);
+  // Yazarkasada bekleyen sepet: sunucu bu adisyonda ödemeyi, ciro dışı kapanışı ve ödeme iptalini reddeder (okc_pending)
+  const okc = useOkcReceipts(order, open);
+  const devicePending = !!okc.pending;
+  /** Sepet cihaza gidince durumu ve iptali en üstte: telefonda gönder düğmesi aşağıdaydı, kutu görünür yere gelsin */
+  const pendingRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (devicePending) pendingRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [devicePending]);
+
+  /**
+   * Yazarkasa sonucu burada karşılanır; pencere kapalıyken de (bileşen adisyon ekranıyla birlikte durur). Cihaz ödeyince
+   * satış tamamlanır: sepet temizlenir, müşteri ekranı teşekkür eder, tezgâhta yeni satış açılır. Sepeti bu cihaz
+   * gönderdiyse pencere Kapat'la kapatılmış olsa da sonuç kaybolmaz; kapalı pencerede başka cihazın sepeti bu ekranı
+   * değiştirmez. Güncel `open` ve `onDone` ref'ten okunur: dinleyici her çizimde yeniden kurulmaz
+   */
+  const okcSentHere = useRef<string | null>(null);
+  const latest = useRef({ open, onDone });
+  useEffect(() => {
+    latest.current = { open, onDone };
+  });
+  useEffect(() => {
+    let seen: number | null = null;
+    return onLive((e) => {
+      if (e.topic !== 'okc' || e.orderId !== order.id) return;
+      if (e.kind === 'okc.cancelled') okcSentHere.current = null;
+      if (e.kind !== 'okc.paid' || e.seq === seen) return;
+      const { open: shown, onDone: done } = latest.current;
+      if (!shown && okcSentHere.current !== order.id) return;
+      seen = e.seq;
+      okcSentHere.current = null;
+      const closed = !!e.message?.includes('kapandı');
+      toast.ok(e.message ?? 'Yazarkasada ödendi');
+      // Kapalı pencerede adisyonu kapatmayan cihaz ödemesi yalnız bildirilir: açık başka pencere (İşlemler) kapanmasın
+      if (shown || closed) done(closed);
+    });
+  }, [order.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +152,7 @@ export function PaymentModal({
     setPeople(order.split?.people ?? Math.min(30, Math.max(2, order.guests)));
     setResult(null);
     setComp(null);
+    setCustomerOpen(false);
     // Yalnız pencere açılınca sıfırla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -144,9 +199,13 @@ export function PaymentModal({
   const cariBlocked = method?.kind === 'cari' && !order.customer;
   // Açık hesapta para alınmaz; bahşiş yazılırsa raporda alınmış görünür (sunucu da reddeder)
   const tipBlocked = method?.kind === 'cari' && tip > 0;
+  // Açık hesap sınırını aşan yazımı sunucu yetkili onayıyla da yazmaz (credit_limit): düğme kapanır, nedeni söyler
+  const cust = order.customer;
+  const cariAfter = cust ? cust.balance + amount : 0;
+  const cariOver = method?.kind === 'cari' && !!cust && cust.creditLimit != null && cariAfter > cust.creditLimit;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
-  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !splitBlocks;
+  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending;
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
   const closeComp = async (reason: string) => {
@@ -190,14 +249,15 @@ export function PaymentModal({
     decimal: true,
     onKey: pressKey,
     onEnter: () => {
-      if (valid && !busy) void pay();
+      if (valid && !busy && !splitBusy) void pay();
     },
   });
 
   const setSplit = async (n: number | null) => {
-    setBusy(true);
+    if (splitBusy) return;
+    setSplitBusy(n ? 'set' : 'clear');
     await act(() => put<OrderDTO>(`/orders/${order.id}/split`, { people: n }), n ? `Hesap ${n} kişiye bölündü` : 'Paylaşım kaldırıldı');
-    setBusy(false);
+    setSplitBusy(null);
   };
 
   const pay = async () => {
@@ -243,17 +303,29 @@ export function PaymentModal({
     setFocus('tutar');
     // Sonuç ekranı sunucunun kaydettiğini gösterir (kör kasada kapanan adisyonun dökümü gelmez)
     const shareLabel = res.share ? `${res.share.no}/${res.share.of}` : null;
-    if (res.closed || method.kind === 'nakit') setResult({ change: res.change, closed: res.closed, amount: res.amount, method: method.name, share: shareLabel });
+    if (res.closed || method.kind === 'nakit') {
+      setResult({ change: res.change, closed: res.closed, amount: res.amount, tip, method: method.name, share: shareLabel });
+      return;
+    }
+    // Kartla alınan kısmi ödeme ve pay sonuç ekranı açmaz: alındığı bildirilir (sıfırlanan alan dokunuş boşa gitti
+    // sanılıp ödeme ikinci kez alınmasın). Açık hesapta para alınmaz: tutar müşterinin hesabına yazılır
+    if (method.kind === 'cari') {
+      const owner = res.order.customer?.name;
+      toast.ok(`${shareLabel ? `Pay ${shareLabel}` : tl(res.amount)} açık hesaba yazıldı${owner ? ` · ${owner}` : ''}`);
+      return;
+    }
+    toast.ok(shareLabel ? `Pay ${shareLabel} alındı · ${method.name}` : `${tl(res.amount + tip)} alındı · ${method.name}${tip > 0 ? ` · ${tl(tip)} bahşiş dahil` : ''}`);
   };
 
   const refund = async (p: OrderDTO['payments'][number]) => {
     const reason = await promptDialog({
       title: 'Ödeme iptali',
-      body: `${p.methodName} · ${tl(p.amount)}. İptal denetim kaydına yazılır`,
+      // Bahşiş de ödemeyle birlikte düşer: tutar bankanın POS'unda iptal edilecek olandır (ödeme düğmesindeki gibi)
+      body: `${p.methodName} · ${tl(p.amount + p.tip)}${p.tip > 0 ? ` (${tl(p.tip)} bahşiş dahil)` : ''}. İptal denetim kaydına yazılır`,
       label: 'Neden',
       placeholder: 'Ör. yanlış tutar girildi',
       maxLength: 200,
-      required: true,
+      required: 'İptal nedenini yazın',
       confirmLabel: 'Ödemeyi iptal et',
     });
     if (!reason) return;
@@ -277,27 +349,31 @@ export function PaymentModal({
   if (result) {
     // Self ve yarı self servis: müşteriye söylenecek numara ya da personelin götüreceği masa sonuç ekranında büyük
     const call = result.closed ? callFor(order, serviceMode) : null;
+    // Başlık gövdede çizilir (pencerenin başlık şeridi yok): pencerenin erişilebilir adı da odur
+    const heading = result.closed ? 'Adisyon kapandı' : result.share ? `Pay ${result.share} alındı` : 'Ödeme alındı';
     return (
-      <Modal open onClose={() => (result.closed ? onDone(true) : setResult(null))} size="sm" persistent>
+      <Modal open onClose={() => (result.closed ? onDone(true) : setResult(null))} size="sm" persistent ariaLabel={heading}>
         <div className="p-6 text-center">
           <span className="mx-auto grid size-14 place-items-center rounded-full bg-[var(--admin-success-soft)] text-[var(--admin-success)]">
-            <CheckCircle2 className="size-8" />
+            <CheckCircle2 aria-hidden="true" className="size-8" />
           </span>
-          <h2 className="mt-3 text-lg font-semibold">{result.closed ? 'Adisyon kapandı' : result.share ? `Pay ${result.share} alındı` : 'Ödeme alındı'}</h2>
+          <h2 className="mt-3 text-lg font-semibold">{heading}</h2>
           <p className="tabular mt-0.5 text-sm text-muted">
-            {tl(result.amount)} · {result.method}
+            {tl(result.amount + result.tip)} · {result.method}
+            {result.tip > 0 && ` · ${tl(result.tip)} bahşiş dahil`}
           </p>
+          {/* Para üstü kasiyerin ilk işi: en üstte, nötr kutuda mürekkep kenarla (amber zamanın rengidir) */}
+          {result.change > 0 && (
+            <div className="mt-5 rounded-xl border border-[var(--admin-ink-fill)] bg-surface p-4">
+              <div className="text-[13px] font-medium text-ink-2">Para üstü</div>
+              <div className="tabular font-headline text-5xl font-bold tracking-tight">{tl(result.change)}</div>
+            </div>
+          )}
           {call && (
-            <div className="mt-5 rounded-xl border border-line bg-surface-2 p-4">
+            <div className={cn('rounded-xl border border-line bg-surface-2 p-4', result.change > 0 ? 'mt-3' : 'mt-5')}>
               <div className="text-[13px] font-medium text-muted">{call.kind === 'masa' ? 'Masaya götürülecek' : 'Sipariş numarası'}</div>
               <div className="tabular font-headline text-5xl font-bold tracking-tight">{call.kind === 'masa' ? numaratorLabel(call.value) : call.value}</div>
               {call.kind === 'numara' && <div className="mt-1 text-xs text-muted">Hazır olunca çağrı ekranında görünür</div>}
-            </div>
-          )}
-          {result.change > 0 && (
-            <div className="mt-5 rounded-xl bg-[var(--admin-warning-soft)] p-4">
-              <div className="text-[13px] font-medium text-[var(--admin-warning)]">Para üstü</div>
-              <div className="tabular font-headline text-5xl font-bold tracking-tight">{tl(result.change)}</div>
             </div>
           )}
           <div className="mt-6 grid gap-2">
@@ -313,205 +389,335 @@ export function PaymentModal({
     );
   }
 
-  return (
-    <Modal open onClose={onClose} size="xl" persistent={!!comp} title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`} subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}>
-      {/* Sütunlar içerikle genişlemez (minmax 0): uzun, kırılmayan bir düğme yazısı telefonda sayfayı ekrandan taşırmasın */}
-      <div ref={panelRef} tabIndex={-1} className="grid grid-cols-[minmax(0,1fr)] gap-0 outline-none lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <div className="border-b border-[var(--admin-divider)] p-5 lg:border-b-0 lg:border-r">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <Segmented<Mode>
-              label="Ödeme yolu"
-              value={mode}
-              onChange={(m) => {
-                setMode(m);
-                setFocus('tutar');
-              }}
-              options={[
-                { value: 'tutar', label: 'Tutar' },
-                { value: 'kalem', label: 'Kalem seç' },
-                { value: 'paylas', label: 'Paylaş' },
-              ]}
-            />
-            <div className="text-right">
-              <div className="text-xs font-medium text-muted">Kalan</div>
-              <div className="tabular text-xl font-bold tracking-tight">{tl(remaining)}</div>
-            </div>
-          </div>
+  // Ödeme düğmesi ne yapacağını söyler: hazır değilse eksik adımı ya da engeli, açık hesapta "yaz" (para alınmaz); tutar
+  // bahşişi de içerir (bankanın POS'una girilen ve gün sonunda kart slipiyle karşılaştırılan tutar). Sınırı zaten dolu
+  // açık hesaba hiçbir tutar yazılmaz: engel eksik adımlardan önce söylenir
+  const payStep = cariOver
+    ? 'Açık hesap sınırı aşılıyor'
+    : splitBlocks
+      ? 'Payları Paylaş’tan alın'
+      : mode === 'paylas' && !split
+        ? 'Önce hesabı bölün'
+        : mode === 'paylas' && !nextShare
+          ? 'Kalanı Tutar’dan alın'
+          : mode === 'kalem' && !picked.length
+            ? 'Ödenecek kalemleri seçin'
+            : mode === 'tutar' && typed <= 0
+              ? 'Tutar girin'
+              : !method
+                ? 'Ödeme türü seçin'
+                : null;
+  const payLabel = payStep ?? (method?.kind === 'cari' ? `${tl(amount)} açık hesaba yaz` : `${tl(amount + tip)} ${method?.name ?? ''} al`);
+  // Para üstü ve bahşiş notu yalnız düğme tutarı gösterirken (eksik adım varken "Para üstü" yanıltır)
+  const changeNote = !payStep && change != null && change !== 0 ? change : null;
+  const tipNote = !payStep && tip > 0 && method?.kind !== 'cari';
 
-          {mode === 'tutar' && (
-            <>
-              <button
-                ref={amountRef}
-                onClick={() => setFocus('tutar')}
-                onFocus={() => setFocus('tutar')}
-                data-numpad-enter=""
-                aria-label={`Alınacak tutar: ${amountText || '0'}`}
-                aria-pressed={focus === 'tutar'}
-                aria-invalid={overRemaining || undefined}
-                aria-describedby={overRemaining ? 'odeme-tutar-fazla' : undefined}
-                className={cn(typedField(focus === 'tutar'), 'py-3 text-4xl', overRemaining ? 'mb-1 border-[var(--admin-danger)]' : 'mb-3', prefilled && focus === 'tutar' && 'text-ink-2')}
-              >
-                <TypedAmount text={amountText} />
-              </button>
-              {overRemaining && (
-                <p id="odeme-tutar-fazla" role="alert" className="mb-3 text-sm text-[var(--admin-danger-ink)]">
-                  Kalandan fazla: en çok {tl(remaining)} alınır
-                </p>
-              )}
-            </>
-          )}
+  // Yazarkasa kutusu: ayar açık ve yetki varsa (OkcPanel'in kendi kuralı); sepet beklerken pencerenin en üstünde
+  const okcOn = boot.integrations.okc.provider !== 'kapali' && can('odeme.al');
+  const okcPanel = (
+    <OkcPanel
+      order={order}
+      amount={amount}
+      items={mode === 'kalem' ? picked : null}
+      onSend={() => {
+        okcSentHere.current = order.id;
+      }}
+    />
+  );
+  const hasLower = (okcOn && !devicePending) || order.payments.length > 0;
+  const compNote = devicePending
+    ? 'Sepet yazarkasada beklerken adisyon ciro dışı kapanmaz'
+    : order.paid > 0
+      ? 'Ödeme alınmış adisyon ciro dışı kapanmaz; kalan kalemi hesap listesinden tek tek ikram ya da zayi yazın'
+      : order.room
+        ? 'Oda sayaçlı adisyon ciro dışı kapanmaz; kalemleri hesap listesinden tek tek yazın'
+        : !compable
+          ? 'Adisyonda ücretli kalem yok'
+          : null;
+  // Yarım kalan ödeme arka plana dokununca kaybolmasın: yazarkasada bekleyen sepet, yazılan tutar, seçilen tür, verilen,
+  // bahşiş, seçili kalem ya da süren istek varken yalnız Kapat kapatır (Kapat'tan sonra da cihazın sonucu karşılanır)
+  const dirty = devicePending || busy || !!splitBusy || !!comp || !!method || givenText !== '' || tipText !== '' || !prefilled || picked.length > 0;
 
-          {mode === 'kalem' && (
-            <div className="scroll-thin mb-3 max-h-72 space-y-1.5 overflow-y-auto">
-              {unpaidItems.map((i) => {
-                const left = i.qty - i.paidQty;
-                const sel = selection[i.id] ?? 0;
-                return (
-                  <div key={i.id} className={cn('flex items-center gap-2 px-3 py-2', choice(sel > 0))}>
-                    <button className="min-w-0 flex-1 text-left" onClick={() => setSelection({ ...selection, [i.id]: sel === left ? 0 : left })}>
-                      <span className="block truncate text-sm font-medium text-ink">
-                        {i.name} {i.size !== 'TEK' && <span className="text-muted">{boot.settings.sizeLabels[i.size]}</span>}
-                      </span>
-                      <span className="tabular text-xs text-muted">
-                        {left} adet · {tl(unpaidLineAmount(order.totals, payLines.find((l) => l.id === i.id) ?? i, remaining))}
-                      </span>
-                    </button>
-                    <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 text-ink transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setSelection({ ...selection, [i.id]: Math.max(0, sel - 1) })}>
-                        <Minus className="size-4" />
-                      </button>
-                      <span className="tabular w-6 text-center font-semibold text-ink">{sel}</span>
-                      <button aria-label="Artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 text-ink transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setSelection({ ...selection, [i.id]: Math.min(left, sel + 1) })}>
-                        <Plus className="size-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              <div className="flex justify-between px-1 pt-2 text-sm font-semibold">
-                <span>Seçilen</span>
-                {/* Sunucunun alacağı: ödenecek kalanla sınırlı (ödeme düğmesindeki tutarla aynı) */}
-                <span className="tabular">{tl(amount)}</span>
-              </div>
-            </div>
+  const footer = devicePending ? (
+    <p role="status" className="py-2 text-center text-sm font-medium text-ink-2">
+      Sepet yazarkasada: ödemeyi cihazdan alın ya da sepeti iptal edin
+    </p>
+  ) : (
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+      {(changeNote != null || tipNote) && (
+        <div className="min-w-0 sm:flex-1">
+          {changeNote != null && changeNote > 0 && (
+            <p className="text-sm text-ink-2">
+              Para üstü <span className="tabular font-headline text-lg font-bold text-ink">{tl(changeNote)}</span>
+            </p>
           )}
-
-          {mode === 'paylas' && (
-            <SplitPanel
-              order={order}
-              people={people}
-              setPeople={setPeople}
-              busy={busy}
-              freeNos={freeNos}
-              paidShares={paidShares}
-              onSplit={setSplit}
-              onPrint={printShare}
-            />
+          {changeNote != null && changeNote < 0 && (
+            <p className="text-sm text-[var(--admin-danger-ink)]">
+              Eksik <span className="tabular font-headline text-lg font-bold">{tl(-changeNote)}</span>
+            </p>
           )}
-
-          {(mode === 'tutar' || method?.kind === 'nakit' || focus === 'bahsis') && <Numpad decimal size="md" onKey={pressKey} />}
-          {mode === 'tutar' && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              <QuickButton
-                onClick={() => {
-                  prefillAmount(remaining);
-                  setFocus('tutar');
-                  focusTyped('tutar');
-                }}
-              >
-                Tamamı
-              </QuickButton>
-              <QuickButton
-                onClick={() => {
-                  prefillAmount(Math.ceil(remaining / 2));
-                  setFocus('tutar');
-                  focusTyped('tutar');
-                }}
-              >
-                Yarısı
-              </QuickButton>
-            </div>
-          )}
+          {tipNote && <p className="tabular text-xs text-muted">{tl(tip)} bahşiş dahil, ciroya girmez</p>}
         </div>
+      )}
+      <Button
+        variant="ink"
+        size="xl"
+        block
+        className="whitespace-normal leading-tight sm:ml-auto sm:w-auto sm:min-w-[22rem]"
+        disabled={!valid || !!splitBusy}
+        loading={busy}
+        onClick={() => void pay()}
+      >
+        {payLabel}
+      </Button>
+    </div>
+  );
 
-        <div className="space-y-4 p-5">
-          <div>
-            <div className="mb-2 text-[13px] font-medium text-muted">Ödeme türü</div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {boot.paymentMethods.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => {
-                    setMethod(m);
-                    if (m.kind === 'nakit') setFocus('verilen');
-                    else if (focus === 'verilen') setFocus('tutar');
-                    // Bahşiş yazılırken kart seçmek bahşiş girişini kesmez: DOM odağı tutar alanına gitse onFocus
-                    // odağı 'tutar'a çeker, bahşiş diye yazılan rakam ödeme tutarının yerine geçerdi
-                    if (m.kind !== 'nakit' && focus === 'bahsis') requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
-                    else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
-                  }}
-                  aria-pressed={method?.id === m.id}
-                  className={cn('flex h-14 items-center gap-2 px-3 text-left text-sm font-semibold', choice(method?.id === m.id))}
-                >
-                  <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: m.color }} />
-                  <span className="min-w-0 truncate">{m.name}</span>
-                </button>
-              ))}
-            </div>
-            {cariBlocked && <p className="mt-2 text-sm text-[var(--admin-danger-ink)]">Açık hesap için önce adisyona müşteri ekleyin (İşlemler › Müşteri)</p>}
-          </div>
-
-          {/* Ciro dışı kapanış: ücret alınmadan kapanır; ikram, ödenmez ve zayi raporda ve Z'de ayrı (shared/comp.ts) */}
-          {order.status === 'acik' && order.source === 'pos' && (
-            <div>
-              <div className="mb-2 text-[13px] font-medium text-muted">Ciro dışı kapat</div>
-              <div className="grid grid-cols-3 gap-2">
-                {COMP_KINDS.map((k) => (
-                  <button key={k} onClick={() => setComp(k)} disabled={!compable} title={COMP_HINT[k]} className={cn('flex h-14 items-center justify-center gap-2 px-3 text-sm font-semibold disabled:opacity-40', choice(false))}>
-                    {COMP_ICON[k]}
-                    {COMP_LABEL[k]}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted">
-                {order.paid > 0
-                  ? 'Ödeme alınmış adisyon ciro dışı kapanmaz; kalan kalemi hesap listesinden tek tek ikram ya da zayi yazın'
-                  : order.room
-                    ? 'Oda sayaçlı adisyon ciro dışı kapanmaz; kalemleri hesap listesinden tek tek yazın'
-                    : 'Adisyon ücret alınmadan kapanır; ikram, ödenmez ve zayi raporda ve Z’de ayrı görünür'}
-              </p>
-            </div>
-          )}
-
-          {method?.kind === 'nakit' && (
-            <div>
-              <div className="mb-2 flex items-center justify-between text-[13px] font-medium text-muted">
-                <span>Verilen</span>
-                {change != null && change >= 0 && <span className="tabular text-sm font-semibold text-[var(--admin-success)]">Para üstü {tl(change)}</span>}
-                {change != null && change < 0 && <span className="tabular text-sm font-semibold text-[var(--admin-danger-ink)]">Eksik {tl(-change)}</span>}
-              </div>
+  // Sepet yazarkasada beklerken ödeme iptal edilmez (sunucu da reddeder)
+  const refundable = (p: OrderDTO['payments'][number]) => !p.refundedAt && !devicePending && (can('odeme.iade') || can('odeme.al'));
+  const anyRefundable = order.payments.some(refundable);
+  const payments = order.payments.length > 0 && (
+    <div>
+      <div className="mb-1.5 text-[13px] font-medium text-muted">Alınan ödemeler</div>
+      <ul className="divide-y divide-[var(--admin-divider)] rounded-xl border border-line">
+        {order.payments.map((p) => (
+          <li key={p.id} className={cn('flex items-center gap-2 py-1.5 pl-3 pr-1.5 text-sm', !!p.refundedAt && 'text-muted line-through')}>
+            <span className="min-w-0 flex-1 py-0.5">
+              {p.methodName}
+              {p.shareNo != null && (
+                <Badge className="tabular ml-1.5">
+                  Pay {p.shareNo}/{p.shareOf}
+                </Badge>
+              )}{' '}
+              <span className="tabular text-xs text-muted">
+                {fmtTime(p.createdAt)}
+                {p.userName && ` · ${p.userName}`}
+                {p.tip > 0 && ` · ${tl(p.tip)} bahşiş`}
+              </span>
+            </span>
+            <span className={cn('tabular font-semibold', !anyRefundable && 'pr-1.5')}>{tl(p.amount)}</span>
+            {/* İptal düğmesi olmayan satırda boşluk: tutarlar alt alta hizalı kalır */}
+            {refundable(p) ? (
               <button
-                ref={givenRef}
-                onClick={() => setFocus('verilen')}
-                onFocus={() => setFocus('verilen')}
-                data-numpad-enter=""
-                aria-label={`Verilen nakit: ${givenText || '0'}`}
-                aria-pressed={focus === 'verilen'}
-                className={cn(typedField(focus === 'verilen'), 'py-2.5 text-2xl')}
+                aria-label="Ödemeyi iptal et"
+                title="Ödemeyi iptal et"
+                onClick={() => void refund(p)}
+                className="grid size-9 shrink-0 place-items-center rounded-full text-muted transition-colors duration-150 hover:bg-[var(--admin-danger-soft)] hover:text-[var(--admin-danger-ink)] active:bg-[var(--admin-danger-soft)] active:text-[var(--admin-danger-ink)] pointer-coarse:size-11"
               >
-                <TypedAmount text={givenText} />
+                <RotateCcw aria-hidden="true" className="size-4" />
               </button>
+            ) : (
+              anyRefundable && <span aria-hidden="true" className="size-9 shrink-0 pointer-coarse:size-11" />
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      persistent={dirty}
+      title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`}
+      subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}
+      footer={footer}
+    >
+      <div ref={panelRef} tabIndex={-1} className="outline-none">
+        {/* Sepet yazarkasada: durumu ve iptali en üstte (telefonda da ilk görülen), ödeme alınamaz */}
+        {devicePending && (
+          <div ref={pendingRef} className="border-b border-[var(--admin-divider)] px-5 py-4">
+            {okcPanel}
+          </div>
+        )}
+        {/* Sütunlar içerikle genişlemez (minmax 0): uzun, kırılmayan bir yazı telefonda pencereyi ekrandan taşırmasın.
+            Sıra tutar → ödeme türü → yazarkasa ve ödemeler (telefonda alt alta, Tab sırası da bu); geniş ekranda yazarkasa
+            ve ödemeler sol sütunda tutarın altında */}
+        <div className="grid grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:grid-rows-[auto_1fr]">
+          <div className={cn('border-b border-[var(--admin-divider)] p-5 md:col-start-1 md:row-start-1 md:border-b-0 md:border-r', !hasLower && 'md:row-span-2')}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <Segmented<Mode>
+                label="Ödeme yolu"
+                value={mode}
+                onChange={(m) => {
+                  setMode(m);
+                  setFocus('tutar');
+                }}
+                options={[
+                  { value: 'tutar', label: 'Tutar' },
+                  { value: 'kalem', label: 'Kalem seç' },
+                  { value: 'paylas', label: 'Paylaş' },
+                ]}
+              />
+              <div className="ml-auto text-right">
+                <div className="text-xs font-medium text-muted">Kalan</div>
+                <div className="tabular font-headline text-xl font-bold tracking-tight">{tl(remaining)}</div>
+              </div>
+            </div>
+
+            {mode === 'tutar' && (
+              <>
+                <button
+                  ref={amountRef}
+                  onClick={() => setFocus('tutar')}
+                  onFocus={() => setFocus('tutar')}
+                  data-numpad-enter=""
+                  aria-label={`Alınacak tutar: ${amountText || '0'}`}
+                  aria-pressed={focus === 'tutar'}
+                  aria-invalid={overRemaining || undefined}
+                  aria-describedby={overRemaining ? 'odeme-tutar-fazla' : undefined}
+                  className={cn(typedField(focus === 'tutar'), 'py-3 text-4xl', overRemaining ? 'mb-1 border-[var(--admin-danger)]' : 'mb-3', prefilled && focus === 'tutar' && 'text-ink-2')}
+                >
+                  <TypedAmount text={amountText} />
+                </button>
+                {overRemaining && (
+                  <p id="odeme-tutar-fazla" role="alert" className="mb-3 text-sm text-[var(--admin-danger-ink)]">
+                    Kalandan fazla: en çok {tl(remaining)} alınır
+                  </p>
+                )}
+              </>
+            )}
+
+            {mode === 'kalem' && (
+              <div className="mb-3">
+                {/* Telefon ve tablette liste pencereyle birlikte kayar (iç içe kaydırma parmağı tutmaz); bilgisayarda kendi
+                    kaydırıcısı, Seçilen toplamı hep altında görünür */}
+                <div className="scroll-thin space-y-1.5 lg:max-h-72 lg:overflow-y-auto">
+                  {unpaidItems.length === 0 && <p className="py-6 text-center text-sm text-muted">Ödenecek kalem kalmadı</p>}
+                  {unpaidItems.map((i) => {
+                    const left = i.qty - i.paidQty;
+                    const sel = selection[i.id] ?? 0;
+                    return (
+                      <div key={i.id} className={cn('flex items-center gap-2 py-1 pl-3 pr-1', choice(sel > 0))}>
+                        <button aria-pressed={sel > 0} className="min-h-11 min-w-0 flex-1 text-left" onClick={() => setSelection({ ...selection, [i.id]: sel === left ? 0 : left })}>
+                          <span className="block truncate text-sm font-medium text-ink">
+                            {i.name} {i.size !== 'TEK' && <span className="font-normal text-muted">{boot.settings.sizeLabels[i.size]}</span>}
+                          </span>
+                          <span className="tabular block text-xs text-muted">
+                            {left} adet · {tl(unpaidLineAmount(order.totals, payLines.find((l) => l.id === i.id) ?? i, remaining))}
+                          </span>
+                        </button>
+                        <Stepper value={sel} max={left} label={`${i.name} adedi`} onChange={(v) => setSelection({ ...selection, [i.id]: v })} />
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between px-1 pt-3 text-sm font-semibold">
+                  <span>Seçilen</span>
+                  {/* Sunucunun alacağı: ödenecek kalanla sınırlı (ödeme düğmesindeki tutarla aynı) */}
+                  <span className="tabular font-headline text-base">{tl(amount)}</span>
+                </div>
+              </div>
+            )}
+
+            {mode === 'paylas' && (
+              <SplitPanel order={order} people={people} setPeople={setPeople} busy={splitBusy} freeNos={freeNos} paidShares={paidShares} onSplit={setSplit} onPrint={printShare} />
+            )}
+
+            {(mode === 'tutar' || method?.kind === 'nakit' || focus === 'bahsis') && <Numpad decimal size="md" onKey={pressKey} />}
+            {mode === 'tutar' && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <QuickButton
                   onClick={() => {
-                    setGivenText(toInput(amount + tip));
-                    setFocus('verilen');
-                    focusTyped('verilen');
+                    prefillAmount(remaining);
+                    setFocus('tutar');
+                    focusTyped('tutar');
                   }}
                 >
-                  Tam
+                  Tamamı
                 </QuickButton>
-                {suggestCash(amount + tip, boot.settings.quickCash).map((c) => (
+                <QuickButton
+                  onClick={() => {
+                    // Yarısı sunucunun bölüşüyle (shared/money splitEven): tek kuruş artığı bu yarıya
+                    prefillAmount(splitEven(remaining, 2)[0] ?? 0);
+                    setFocus('tutar');
+                    focusTyped('tutar');
+                  }}
+                >
+                  Yarısı
+                </QuickButton>
+              </div>
+            )}
+          </div>
+
+          <div className="@container space-y-5 p-5 md:col-start-2 md:row-span-2 md:row-start-1">
+            <div>
+              <div id={methodsId} className={SECTION}>
+                Ödeme türü
+              </div>
+              <div role="group" aria-labelledby={methodsId} className="grid grid-cols-2 gap-2 @sm:grid-cols-3">
+                {boot.paymentMethods.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setMethod(m);
+                      // Açık hesap sınırı ekrandaki bakiyeyle denetlenir: bakiye başka cihazda değişmiş olabilir, adisyon
+                      // (müşterinin bakiyesi ve sınırı) yenilenir
+                      if (m.kind === 'cari') void qc.invalidateQueries({ queryKey: ['order', order.id] });
+                      if (m.kind === 'nakit') setFocus('verilen');
+                      else if (focus === 'verilen') setFocus('tutar');
+                      // Bahşiş yazılırken kart seçmek bahşiş girişini kesmez: DOM odağı tutar alanına gitse onFocus
+                      // odağı 'tutar'a çeker, bahşiş diye yazılan rakam ödeme tutarının yerine geçerdi
+                      if (m.kind !== 'nakit' && focus === 'bahsis') requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+                      else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
+                    }}
+                    aria-pressed={method?.id === m.id}
+                    className={cn('flex h-14 min-w-0 items-center gap-2 px-3 text-left text-sm font-semibold', choice(method?.id === m.id))}
+                  >
+                    <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: m.color }} />
+                    <span className="min-w-0 truncate">{m.name}</span>
+                  </button>
+                ))}
+              </div>
+              {/* Açık hesap: müşteri yoksa eksik adım ve eylemi (pencere kapanmadan eklenir); varsa kimin hesabına ne yazılacağı */}
+              {method?.kind === 'cari' &&
+                (cust ? (
+                  <p className={cn('tabular mt-2 text-[13px]', cariOver ? 'text-[var(--admin-danger-ink)]' : 'text-ink-2')}>
+                    <span className="font-semibold">{cust.name}</span> · açık hesap {tl(cust.balance)} → {tl(cariAfter)}
+                    {cust.creditLimit != null && ` · sınır ${tl(cust.creditLimit)}${cariOver ? ' aşılıyor, yazılamaz' : ''}`}
+                  </p>
+                ) : (
+                  <Notice
+                    tone="info"
+                    className="mt-2"
+                    action={
+                      <Button size="sm" icon={<UserPlus className="size-4" />} onClick={() => setCustomerOpen(true)}>
+                        Müşteri ekle
+                      </Button>
+                    }
+                  >
+                    Açık hesap için adisyona müşteri ekleyin
+                  </Notice>
+                ))}
+            </div>
+
+            {method?.kind === 'nakit' && (
+              <div>
+                <div className={SECTION}>Verilen</div>
+                <button
+                  ref={givenRef}
+                  onClick={() => setFocus('verilen')}
+                  onFocus={() => setFocus('verilen')}
+                  data-numpad-enter=""
+                  aria-label={`Verilen nakit: ${givenText || '0'}`}
+                  aria-pressed={focus === 'verilen'}
+                  className={cn(typedField(focus === 'verilen'), 'py-2.5 text-2xl')}
+                >
+                  <TypedAmount text={givenText} />
+                </button>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <QuickButton
+                    onClick={() => {
+                      setGivenText(toInput(amount + tip));
+                      setFocus('verilen');
+                      focusTyped('verilen');
+                    }}
+                  >
+                    Tam
+                  </QuickButton>
+                  {suggestCash(amount + tip, boot.settings.quickCash).map((c) => (
                     <QuickButton
                       key={c}
                       onClick={() => {
@@ -523,79 +729,88 @@ export function PaymentModal({
                       {tlShort(c)}
                     </QuickButton>
                   ))}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* İşletme bahşiş almıyorsa (varsayılan) alan yok */}
-          {boot.settings.tipsEnabled && (
-            <div className="flex items-center justify-between gap-3 text-[13px]">
-              <button
-                onClick={() => setFocus(focus === 'bahsis' ? 'tutar' : 'bahsis')}
-                className={cn('min-h-11 px-3 font-medium pointer-fine:min-h-9', choice(focus === 'bahsis'))}
-              >
-                Bahşiş {tip > 0 ? tl(tip) : 'ekle'}
-              </button>
-              {tipBlocked ? (
-                <span className="text-right text-[var(--admin-danger-ink)]">Açık hesaba bahşiş yazılmaz</span>
-              ) : (
-                <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
-              )}
-            </div>
-          )}
+            {/* İşletme bahşiş almıyorsa (varsayılan) alan yok */}
+            {boot.settings.tipsEnabled && (
+              <div className="flex items-center justify-between gap-3 text-[13px]">
+                <button
+                  onClick={() => setFocus(focus === 'bahsis' ? 'tutar' : 'bahsis')}
+                  aria-pressed={focus === 'bahsis'}
+                  className={cn('tabular min-h-11 shrink-0 px-4 font-medium pointer-fine:min-h-9', choice(focus === 'bahsis'), 'rounded-full')}
+                >
+                  Bahşiş {tip > 0 ? tl(tip) : 'ekle'}
+                </button>
+                {tipBlocked ? (
+                  <span className="text-right text-[var(--admin-danger-ink)]">Açık hesaba bahşiş yazılmaz</span>
+                ) : (
+                  <span className="text-right text-muted">Bahşiş ciroya girmez, ayrı raporlanır</span>
+                )}
+              </div>
+            )}
 
-          <Button variant="ink" size="xl" block disabled={!valid} loading={busy} onClick={pay}>
-            {splitBlocks ? 'Payları Paylaş’tan alın' : method ? `${tl(amount)} ${method.name} al` : 'Ödeme türü seçin'}
-          </Button>
+            {/* Ciro dışı kapanış seyrek ve denetime yazılır: ödeme adımlarının ardında, sakin düğmelerle. Ücret alınmadan
+                kapanır; ikram, ödenmez ve zayi raporda ve Z'de ayrı (shared/comp.ts) */}
+            {order.status === 'acik' && order.source === 'pos' && (
+              <div className="border-t border-[var(--admin-divider)] pt-4">
+                <div className={SECTION}>Ciro dışı kapat</div>
+                {/* Açıklama düğmenin ipucunda ve gerekçe penceresinin alt satırında (tutar ve nereye düştüğü) */}
+                {compNote ? (
+                  <p className="text-xs text-muted">{compNote}</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {COMP_KINDS.map((k) => (
+                      <Button key={k} size="sm" icon={COMP_ICON[k]} title={COMP_HINT[k]} onClick={() => setComp(k)}>
+                        {COMP_LABEL[k]}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-          <OkcPanel order={order} amount={amount} items={mode === 'kalem' ? picked : null} onCompleted={(closed) => onDone(closed)} />
-
-          {comp && (
-            <ReasonModal
-              open
-              title={COMP_CLOSE_LABEL[comp]}
-              subtitle={compCloseSubtitle(comp, tl(order.total))}
-              reasons={compReasonsOf(boot.settings, comp)}
-              confirmLabel={COMP_CONFIRM_LABEL[comp]}
-              onClose={() => setComp(null)}
-              onConfirm={closeComp}
-            />
-          )}
-
-          {order.payments.length > 0 && (
-            <div>
-              <div className="mb-1.5 text-[13px] font-medium text-muted">Alınan ödemeler</div>
-              <ul className="divide-y divide-[var(--admin-divider)] rounded-xl border border-line">
-                {order.payments.map((p) => (
-                  <li key={p.id} className={cn('flex items-center gap-2 px-3 py-2 text-sm', !!p.refundedAt && 'text-muted line-through')}>
-                    <span className="min-w-0 flex-1">
-                      {p.methodName}
-                      {p.shareNo != null && <span className="tabular ml-1.5 rounded-full bg-surface-3 px-2 py-0.5 text-xs font-medium text-ink-2">Pay {p.shareNo}/{p.shareOf}</span>}{' '}
-                      <span className="text-xs text-muted">
-                        {fmtTime(p.createdAt)}
-                        {p.userName && ` · ${p.userName}`}
-                      </span>
-                    </span>
-                    <span className="tabular font-semibold">{tl(p.amount)}</span>
-                    {!p.refundedAt && (can('odeme.iade') || can('odeme.al')) && (
-                      <button aria-label="Ödemeyi iptal et" title="Ödemeyi iptal et" onClick={() => void refund(p)} className="grid size-9 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-[var(--admin-danger-soft)] hover:text-[var(--admin-danger-ink)] pointer-coarse:size-11">
-                        <RotateCcw className="size-4" />
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
+          {hasLower && (
+            <div className="space-y-4 border-t border-[var(--admin-divider)] p-5 md:col-start-1 md:row-start-2 md:border-r md:border-t-0 md:pt-0">
+              {okcOn && !devicePending && okcPanel}
+              {payments}
             </div>
           )}
         </div>
       </div>
+
+      {comp && (
+        <ReasonModal
+          open
+          title={COMP_CLOSE_LABEL[comp]}
+          subtitle={compCloseSubtitle(comp, tl(order.total))}
+          reasons={compReasonsOf(boot.settings, comp)}
+          confirmLabel={COMP_CONFIRM_LABEL[comp]}
+          onClose={() => setComp(null)}
+          onConfirm={closeComp}
+        />
+      )}
+      <CustomerModal
+        order={order}
+        open={customerOpen}
+        onClose={() => {
+          setCustomerOpen(false);
+          // Müşteri eklenince "Müşteri ekle" düğmesi kalkar: odak sayfaya düşmesin, ödeme penceresine dönsün
+          requestAnimationFrame(() => {
+            if (!panelRef.current?.closest('[role=dialog]')?.contains(document.activeElement)) panelRef.current?.focus({ preventScroll: true });
+          });
+        }}
+        act={act}
+      />
     </Modal>
   );
 }
 
 /**
  * Paylaşımlı hesap: kişi sayısı seçilip hesap bölünür. Her pay ayrı ödenir (nakit, kart, yazarkasa); ödenen pay
- * yeşil, sıradaki seçili. Bölündükten sonra eklenen kalem ya da iptal edilen pay kalanlara kendiliğinden dağılır.
+ * yeşil, sıradaki mürekkep kenarlı. Bölündükten sonra eklenen kalem ya da iptal edilen pay kalanlara kendiliğinden dağılır.
  */
 function SplitPanel({
   order,
@@ -610,7 +825,7 @@ function SplitPanel({
   order: OrderDTO;
   people: number;
   setPeople: (n: number) => void;
-  busy: boolean;
+  busy: 'set' | 'clear' | null;
   freeNos: number[];
   paidShares: OrderDTO['payments'];
   onSplit: (n: number | null) => void;
@@ -618,31 +833,32 @@ function SplitPanel({
 }) {
   const split = order.split;
   const minPeople = Math.max(2, paidShares.length + 1);
-  const stepper = (
-    <div className="flex items-center gap-1">
-      <button aria-label="Kişi azalt" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 enabled:hover:bg-[var(--admin-border)] disabled:opacity-40" disabled={people <= minPeople} onClick={() => setPeople(Math.max(minPeople, people - 1))}>
-        <Minus className="size-4" />
-      </button>
-      <span className="tabular w-10 text-center text-xl font-semibold">{people}</span>
-      <button aria-label="Kişi artır" className="grid size-11 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 enabled:hover:bg-[var(--admin-border)] disabled:opacity-40" disabled={people >= 30} onClick={() => setPeople(Math.min(30, people + 1))}>
-        <Plus className="size-4" />
-      </button>
-    </div>
-  );
+  const stepper = <Stepper label="Kişi" value={people} min={minPeople} max={30} onChange={setPeople} />;
 
   if (!split) {
+    // Önizleme sunucunun bölüşüyle aynı (shared/money splitEven, order-calc splitState): kuruş artığı baştaki paylara
+    const preview = splitEven(order.total - order.paid, Math.max(1, people - paidShares.length));
+    const lo = preview[preview.length - 1] ?? 0;
+    const hi = preview[0] ?? 0;
+    const extra = preview.filter((s) => s > lo).length;
     return (
       <div className="mb-3 rounded-xl border border-line p-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="inline-flex items-center gap-2 text-sm font-medium">
-            <Users className="size-4 text-muted" /> Kaç kişi ödeyecek?
+            <Users aria-hidden="true" className="size-4 text-muted" /> Kaç kişi ödeyecek?
           </span>
           {stepper}
         </div>
         <p className="tabular mt-3 text-[13px] text-muted">
-          Kişi başı yaklaşık <b className="text-ink">{tl(Math.ceil((order.total - order.paid) / people))}</b>; kuruş artığı ilk paylara eklenir
+          Kişi başı <b className="font-semibold text-ink">{tl(lo)}</b>
+          {extra > 0 && (
+            <>
+              {' '}
+              · ilk {extra > 1 ? `${extra} pay` : 'pay'} <b className="font-semibold text-ink">{tl(hi)}</b>
+            </>
+          )}
         </p>
-        <Button variant="primary" block className="mt-3" loading={busy} onClick={() => onSplit(people)}>
+        <Button variant="primary" block className="mt-3" loading={busy === 'set'} disabled={!!busy} onClick={() => onSplit(people)}>
           Hesabı {people} kişiye böl
         </Button>
       </div>
@@ -651,7 +867,7 @@ function SplitPanel({
 
   const changed = people !== split.people;
   return (
-    <div className="mb-3 space-y-3">
+    <div className="@container mb-3 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="text-sm">
           <span className="font-semibold">{split.people} kişi</span>
@@ -660,23 +876,23 @@ function SplitPanel({
         <div className="flex items-center gap-2">
           {stepper}
           {changed && (
-            <Button size="sm" variant="primary" loading={busy} onClick={() => onSplit(people)}>
+            <Button size="sm" variant="primary" loading={busy === 'set'} disabled={!!busy} onClick={() => onSplit(people)}>
               Uygula
             </Button>
           )}
-          <button aria-label="Paylaşımı kaldır" title="Paylaşımı kaldır" onClick={() => onSplit(null)} className="grid size-11 place-items-center rounded-lg text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press">
-            <X className="size-4" />
-          </button>
         </div>
       </div>
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <ul className="grid grid-cols-2 gap-2 @md:grid-cols-3">
         {paidShares.map((p) => (
           <li key={p.id} className="rounded-xl border border-success-line bg-success-soft px-3 py-2.5">
             <div className="flex items-center justify-between text-xs font-medium text-[var(--admin-success)]">
-              <span className="tabular">Pay {p.shareNo}</span>
+              <span className="tabular">
+                Pay {p.shareNo}
+                <span className="sr-only"> ödendi</span>
+              </span>
               <Check className="size-4" />
             </div>
-            <div className="tabular mt-0.5 text-lg font-bold">{tlShort(p.amount)}</div>
+            <div className="tabular mt-0.5 font-headline text-lg font-bold">{tl(p.amount)}</div>
             <div className="truncate text-xs text-ink-2">{p.methodName}</div>
           </li>
         ))}
@@ -685,29 +901,38 @@ function SplitPanel({
           const next = i === 0;
           return (
             // Sıradaki pay seçili (mürekkep kenar, taş halka); yeşil yalnız ödenen pay: "2'si ödendi" diye okunmasın
-            <li key={`pay-${no}`} className={cn('relative rounded-xl border px-3 py-2.5', next ? 'border-[var(--admin-text)] bg-surface ring-4 ring-[var(--admin-panel)]' : 'border-line bg-surface')}>
+            <li key={`pay-${no}`} className={cn('relative rounded-xl border py-2.5 pl-3 pr-10', next ? 'border-[var(--admin-text)] bg-surface ring-4 ring-[var(--admin-panel)]' : 'border-line bg-surface')}>
               <div className={cn('text-xs font-medium', next ? 'font-semibold text-ink' : 'text-muted')}>{next ? `Pay ${no} · sıradaki` : `Pay ${no}`}</div>
-              <div className="tabular mt-0.5 text-lg font-bold">{tlShort(amount)}</div>
-              <button aria-label={`Pay ${no} fişini yazdır`} title="Pay fişini yazdır" onClick={() => onPrint(no, amount)} className="absolute right-0.5 top-0.5 grid size-11 place-items-center rounded-lg text-muted hover:text-ink">
-                <Printer className="size-4" />
+              <div className="tabular mt-0.5 font-headline text-lg font-bold">{tl(amount)}</div>
+              <button
+                aria-label={`Pay ${no} fişini yazdır`}
+                title="Pay fişini yazdır"
+                onClick={() => onPrint(no, amount)}
+                className="absolute right-0.5 top-0.5 grid size-11 place-items-center rounded-full text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press"
+              >
+                <Printer aria-hidden="true" className="size-4" />
               </button>
             </li>
           );
         })}
       </ul>
       {split.shares.length === 0 && order.total - order.paid > 0 && (
-        <p className="rounded-xl bg-[var(--admin-warning-soft)] px-3 py-2 text-[13px] text-[var(--admin-warning)]">
+        <Notice tone="warn">
           Bütün paylar ödendi ama {tl(order.total - order.paid)} kaldı (sonradan eklenen kalem). Kişi ekleyin ya da “Tutar” ile alın
-        </p>
+        </Notice>
       )}
+      <Button size="sm" variant="ghost" className="-ml-2" loading={busy === 'clear'} disabled={!!busy} onClick={() => onSplit(null)}>
+        Paylaşımı kaldır
+      </Button>
     </div>
   );
 }
 
-function QuickButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+/** Hızlı tutar (Tamamı, Yarısı, Tam, ₺200): kitin küçük ikincil düğmesi, rakam hizalı */
+function QuickButton({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
-    <button onClick={onClick} className="tabular min-h-11 rounded-lg border border-[var(--admin-border-strong)] bg-surface px-3 text-sm font-semibold transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press pointer-fine:min-h-9">
+    <Button size="sm" className="tabular" onClick={onClick}>
       {children}
-    </button>
+    </Button>
   );
 }

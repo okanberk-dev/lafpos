@@ -553,6 +553,11 @@ export const orderItems = sqliteTable(
     voidedAt: integer('voided_at'),
     /** İptal edildiğinde bara/mutfağa gönderilmiş miydi (zayi riski) */
     voidAfterSend: bool('void_after_send').notNull().default(false),
+    /**
+     * İptal edildiğinde adisyonun hesabı yazdırılmış mıydı (müşteri tutarı görmüştü): iptal anında yazılır. Adisyonun
+     * `billPrintedAt`'i sonradan da dolar (iptalden sonra hesap yazdırılır), iptalin ne zaman yapıldığını söylemez
+     */
+    voidAfterBill: bool('void_after_bill').notNull().default(false),
     note: text('note'),
     stationId: text('station_id'),
     status: text('status').$type<ItemStatus>().notNull().default('yeni'),

@@ -49,15 +49,7 @@ const initials = (name: string) =>
     .map((w) => w[0]!.toLocaleUpperCase('tr-TR'))
     .join('');
 
-export function ProductPanel({
-  onQuickAdd,
-  onCustomize,
-  disabled,
-}: {
-  onQuickAdd: (p: ProductDTO, size: Size) => void;
-  onCustomize: (p: ProductDTO, size: Size) => void;
-  disabled?: boolean;
-}) {
+export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: ProductDTO, size: Size) => void; onCustomize: (p: ProductDTO, size: Size) => void }) {
   const boot = useBoot();
   const [categoryId, setCategoryId] = useLocalPref<string>('order.category', FAVORITES);
   const [q, setQ] = useState('');
@@ -100,6 +92,13 @@ export function ProductPanel({
   // gelir: site bağlantısı kurulmamışken (LAFFOGATO_URL) sunucu onları indirmez, kartlar görselsiz çizilir
   const withImages = boot.settings.productImages && !!boot.integrations.laffogatoUrl && list.some((p) => p.image);
 
+  // Arama sürerken kategoriye dokunmak o kategoriyi gösterir: arama temizlenir (yoksa ızgara arama sonucunda kalır, dokunuş
+  // boşa gider)
+  const pick = (id: string) => {
+    setQ('');
+    setCategoryId(id);
+  };
+
   const categoryItems = [
     ...(showFavorites ? [{ id: FAVORITES, name: 'Sık', color: null as string | null, count: favorites.length }] : []),
     ...categories.map((c) => ({ id: c.id, name: c.name, color: c.color, count: counts.get(c.id) ?? 0 })),
@@ -110,7 +109,7 @@ export function ProductPanel({
       {/* Geniş ekran: kategoriler solda alt alta, hepsi görünür (Innex kenar çubuğu satırı gibi) */}
       <div role="tablist" aria-orientation="vertical" aria-label="Kategoriler" className="scroll-thin hidden w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-[var(--admin-divider)] p-2 xl:flex">
         {categoryItems.map((c) => (
-          <CategoryRow key={c.id} active={!q && current === c.id} color={c.color} count={c.count} onClick={() => setCategoryId(c.id)} favorite={c.id === FAVORITES}>
+          <CategoryRow key={c.id} active={!q && current === c.id} color={c.color} count={c.count} onClick={() => pick(c.id)} favorite={c.id === FAVORITES}>
             {c.name}
           </CategoryRow>
         ))}
@@ -135,7 +134,7 @@ export function ProductPanel({
           className="no-scrollbar flex snap-x snap-proximity scroll-px-4 gap-2 overflow-x-auto px-4 py-2 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] md:py-3 xl:hidden"
         >
           {categoryItems.map((c) => (
-            <CategoryChip key={c.id} active={!q && current === c.id} color={c.color} onClick={() => setCategoryId(c.id)}>
+            <CategoryChip key={c.id} active={!q && current === c.id} color={c.color} onClick={() => pick(c.id)}>
               {c.id === FAVORITES && <Star aria-hidden="true" className="size-3.5" />}
               {c.name}
             </CategoryChip>
@@ -148,7 +147,7 @@ export function ProductPanel({
           )}
         >
           {list.map((p) => (
-            <ProductTile key={p.id} p={p} withImage={withImages} disabled={disabled} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
+            <ProductTile key={p.id} p={p} withImage={withImages} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
           ))}
           {list.length === 0 && (
             <div className="col-span-full">
@@ -234,13 +233,11 @@ function CategoryChip({ active, color, onClick, children }: { active: boolean; c
 function ProductTile({
   p,
   withImage,
-  disabled,
   onQuickAdd,
   onCustomize,
 }: {
   p: ProductDTO;
   withImage: boolean;
-  disabled?: boolean;
   onQuickAdd: (p: ProductDTO, size: Size) => void;
   onCustomize: (p: ProductDTO, size: Size) => void;
 }) {
@@ -253,7 +250,6 @@ function ProductTile({
   const hasOptions = productGroups(boot, p).length > 0;
   const twoSizes = p.priceL != null;
   const label = p.shortName?.trim() || p.name;
-  const off = soldOut || disabled;
   // İki boylu üründe zorunlu seçim (Türk kahvesinde şeker) varsa ya da ayar "Seçenekli her üründe" ise kart ve boy
   // düğmesi hemen eklemez, seçenek penceresini o boy seçili açar
   const ask = twoSizes && asksOptions(boot, p);
@@ -267,11 +263,11 @@ function ProductTile({
       className={cn(
         'group relative flex flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] transition-[border-color,transform] duration-150 hover:border-[var(--admin-border-field)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-border-field)] motion-reduce:has-[button:active]:scale-100',
         withImage ? 'min-h-[176px]' : 'min-h-[88px]',
-        off && 'opacity-50',
+        soldOut && 'opacity-50',
       )}
     >
       <button
-        disabled={off}
+        disabled={soldOut}
         // Fiyatı 0 olan açık ürün (etkinlik ücreti, özel pasta) fiyat girilsin diye pencereyle açılır
         onClick={() => (twoSizes ? addSize('M') : !hasOptions && p.price > 0 ? onQuickAdd(p, 'TEK') : onCustomize(p, 'TEK'))}
         aria-haspopup={ask ? 'dialog' : undefined}
@@ -315,7 +311,7 @@ function ProductTile({
       </button>
       {hasOptions && (
         <button
-          disabled={off}
+          disabled={soldOut}
           onClick={() => onCustomize(p, twoSizes ? 'M' : 'TEK')}
           aria-label={`${label} seçenekleri`}
           title="Seçenekler"
@@ -336,8 +332,8 @@ function ProductTile({
       )}
       {twoSizes && (
         <div className="grid grid-cols-2 gap-2 px-2 pb-2">
-          <SizeButton disabled={off} dialog={ask} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => addSize('M')} />
-          <SizeButton disabled={off} dialog={ask} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => addSize('L')} />
+          <SizeButton disabled={soldOut} dialog={ask} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => addSize('M')} />
+          <SizeButton disabled={soldOut} dialog={ask} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => addSize('L')} />
         </div>
       )}
     </div>

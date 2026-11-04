@@ -80,8 +80,11 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
   };
 
   const noun = optionTab ? 'seçenek' : 'ürün';
+  const sold = optionTab ? soldOptions : soldProducts;
+  const searching = !!q.trim();
   return (
-    <Modal open={open} onClose={onClose} title="Tükenen ürünler" subtitle={optionTab ? `${soldOptions} seçenek tükendi` : `${soldProducts} ürün tükendi`} size="md">
+    // Başlık sekmeyle değişmez (e2e pencereyi "Tükenen ürünler" adıyla bulur); hangi listede olunduğunu alt satır söyler
+    <Modal open={open} onClose={onClose} title="Tükenen ürünler" subtitle={sold ? `${sold} ${noun} tükendi` : `Tükenen ${noun} yok`} size="md">
       <div className="sticky top-0 z-10 space-y-2 border-b border-line bg-surface p-3">
         {groups.length > 0 && (
           <Tabs<Tab>
@@ -97,18 +100,20 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
         <SearchInput value={q} onChange={setQ} label={optionTab ? 'Seçenek ara' : 'Ürün ara'} placeholder={optionTab ? 'Seçenek ara (yulaf, karamel…)' : 'Ürün ara'} />
       </div>
       {(optionTab ? optionRows.length : rows.length) === 0 && (
+        // Sonuçsuz arama her yerde boş fincan tabağıyla (DESIGN §2 çizimler); hiç ürün yoksa simge
         <EmptyState
           compact
-          icon={<PackageSearch />}
-          title={q.trim() ? `“${q.trim()}” ile eşleşen ${noun} yok` : `Kasada satılan ${noun} yok`}
-          action={q.trim() ? <Button size="sm" variant="ghost" onClick={() => setQ('')}>Aramayı temizle</Button> : undefined}
+          art={searching ? 'arama' : undefined}
+          icon={searching ? undefined : <PackageSearch />}
+          title={searching ? `“${q.trim()}” ile eşleşen ${noun} yok` : `Kasada satılan ${noun} yok`}
+          action={searching ? <Button size="sm" variant="ghost" onClick={() => setQ('')}>Aramayı temizle</Button> : undefined}
         />
       )}
       {optionTab &&
         optionRows.map((g) => (
           <section key={g.id} aria-label={g.name}>
             <h3 className="flex items-baseline gap-2 border-b border-line bg-surface-2 px-4 py-1.5">
-              <span className="shrink-0 text-xs font-semibold text-ink-2">{g.name}</span>
+              <span className="shrink-0 text-[13px] font-semibold text-ink">{g.name}</span>
               <span className="min-w-0 truncate text-xs text-muted">{g.usedBy.length > 2 ? `${g.usedBy.slice(0, 2).join(', ')} ve ${g.usedBy.length - 2} ürün daha` : g.usedBy.join(', ')}</span>
             </h3>
             <ul className="divide-y divide-line border-b border-line">
@@ -118,7 +123,8 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
                     <span className="block truncate font-medium">{i.name}</span>
                     {i.soldOut && <span className="text-xs font-semibold text-[var(--admin-danger-ink)]">Tükendi</span>}
                   </span>
-                  <Button variant={i.soldOut ? 'primary' : 'dangerOutline'} loading={busy === i.id} disabled={!!busy && busy !== i.id} onClick={() => setOption(i.id, `${i.name} (${g.name})`, !i.soldOut)} className="shrink-0 text-sm font-semibold">
+                  {/* Kırmızı durumu söyler (adın altındaki "Tükendi"), eylemi değil: işaretleme sakin, satışa açma yeşilin açık tonu */}
+                  <Button variant={i.soldOut ? 'soft' : 'secondary'} loading={busy === i.id} disabled={!!busy && busy !== i.id} onClick={() => setOption(i.id, `${i.name} (${g.name})`, !i.soldOut)} className="shrink-0 text-sm font-semibold">
                     {i.soldOut ? 'Satışa aç' : 'Tükendi'}
                   </Button>
                 </li>
@@ -138,7 +144,7 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
               {siteClosed && !manager ? (
                 <span className="shrink-0 text-xs text-muted">Yönetici açar</span>
               ) : (
-                <Button variant={p.active ? 'dangerOutline' : 'primary'} loading={busy === p.id} disabled={!!busy && busy !== p.id} onClick={() => set(p.id, p.name, !p.active)} className="shrink-0 text-sm font-semibold">
+                <Button variant={p.active ? 'secondary' : 'soft'} loading={busy === p.id} disabled={!!busy && busy !== p.id} onClick={() => set(p.id, p.name, !p.active)} className="shrink-0 text-sm font-semibold">
                   {p.active ? 'Tükendi' : 'Satışa aç'}
                 </Button>
               )}

@@ -1,4 +1,4 @@
-import { AlertCircle, Search, X } from 'lucide-react';
+import { AlertCircle, Check, Minus, Plus, Search, Trash2, X } from 'lucide-react';
 import {
   cloneElement,
   forwardRef,
@@ -17,11 +17,12 @@ import { cn } from '@/lib/cn';
 import { isFinePointer } from '@/lib/hooks';
 
 /**
- * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (yeşil kenar ve yumuşak yeşil halka), hatalı (`aria-invalid`:
- * kırmızı kenar ve halka), devre dışı (soluk, zemin gri). Hata `Field error` ile verilince alana kendiliğinden geçer.
+ * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (yeşil kenar ve 3 px yumuşak yeşil hale: yeşilin %24'ü, iki
+ * temada da seçilir), hatalı (`aria-invalid`: kırmızı kenar ve kırmızı hale), devre dışı (soluk, zemin gri). Hata
+ * `Field error` ile verilince alana kendiliğinden geçer.
  */
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-4 focus:ring-[color-mix(in_oklab,var(--admin-primary)_9%,transparent)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger-soft)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-[3px] focus:ring-[color-mix(in_oklab,var(--admin-primary)_24%,transparent)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[color-mix(in_oklab,var(--admin-danger)_22%,transparent)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
 
 /** Alanla aynı görünümde kullanılan tek seferlik input'lar için (dışarıdan `className` ile) */
 export const fieldClass = base;
@@ -41,6 +42,9 @@ export function Label({ children, hint, className }: { children: ReactNode; hint
  * Etiketli alan. `error` verilince alan kırmızı kenar alır, ekran okuyucuya bağlanır (`aria-invalid`,
  * `aria-describedby`) ve ileti alanın hemen altında duyurulur. `required` ipucu yoksa "zorunlu" yazar:
  * zorunlu alanı eksik formda düğme sessizce soluk kalmaz, gönderince bu ileti gösterilir.
+ * Kısa ipucu (16 karaktere kadar: "zorunlu", "düğme ve fişte") etiketin sağında; uzunu ("boşsa takip edilmez")
+ * alanın altında yardım metni olur: etiket satırı hep tek satır kalır, iki sütunlu formda yan yana alanlar hizalı
+ * durur. Yardım metni alanın açıklamasıdır (`aria-describedby`), adına karışmaz.
  */
 export function Field({
   label,
@@ -58,20 +62,36 @@ export function Field({
   className?: string;
 }) {
   const errorId = useId();
+  const hintId = useId();
+  const help = typeof hint === 'string' && hint.length > 16 ? hint : null;
+  const requiredHint = required ? 'zorunlu' : undefined;
   let control = children;
-  // Alanın kendisine (Input, Select, NumberInput ya da yerli input) aria-invalid geçer; alan bir kabın içindeyse
-  // kenarı sarmalayıcıdaki data-invalid boyar. Sarmalayıcı hata yokken de durur: hata çıkıp kaybolunca ağaç
+  // Alanın kendisine (Input, Select, NumberInput ya da yerli input) aria-invalid ve açıklama geçer; alan bir kabın
+  // içindeyse kenarı sarmalayıcıdaki data-invalid boyar. Sarmalayıcı hata yokken de durur: hata çıkıp kaybolunca ağaç
   // değişmesin, alan yeniden kurulup yazarken odağı kaybetmesin
-  if (error && isValidElement(children) && (typeof children.type !== 'string' || ['input', 'select', 'textarea'].includes(children.type))) {
-    const el = children as ReactElement<{ 'aria-invalid'?: boolean; 'aria-describedby'?: string }>;
-    control = cloneElement(el, { 'aria-invalid': true, 'aria-describedby': [el.props['aria-describedby'], errorId].filter(Boolean).join(' ') });
+  const el = isValidElement(children) ? (children as ReactElement<{ 'aria-invalid'?: boolean; 'aria-describedby'?: string }>) : null;
+  const own = !!el && (typeof el.type !== 'string' || ['input', 'select', 'textarea'].includes(el.type));
+  // Yardım metni yalnız özniteliği alana kesin ulaştıran denetime bağlanır (yerli alan ya da kitin alanı); sayfanın
+  // kendi sarmalayıcısında (ör. satır listesi) etiketin metni olarak kalır, kaybolmaz
+  const describes = !!help && !!el && (typeof el.type === 'string' ? own : el.type === Input || el.type === Textarea || el.type === Select || el.type === NumberInput);
+  if (el && own && (error || describes)) {
+    control = cloneElement(el, {
+      ...(error ? { 'aria-invalid': true } : {}),
+      'aria-describedby': [el.props['aria-describedby'], describes && hintId, error && errorId].filter(Boolean).join(' '),
+    });
   }
   return (
     <label className={cn('block', className)}>
-      {label && <Label hint={hint ?? (required ? 'zorunlu' : undefined)}>{label}</Label>}
+      {label && <Label hint={help ? requiredHint : (hint ?? requiredHint)}>{label}</Label>}
       <span data-invalid={error ? '' : undefined} className="contents">
         {control}
       </span>
+      {/* Alana bağlı açıklama adın parçası olmaz (etiketin içinde dursa da): ekran okuyucu bir kez, açıklama olarak okur */}
+      {help && (
+        <span id={hintId} aria-hidden={describes || undefined} className="mt-1.5 block text-pretty text-xs leading-4 text-muted">
+          {help}
+        </span>
+      )}
       {error && (
         <span id={errorId} role="alert" className="mt-1.5 flex items-start gap-1 text-[13px] leading-5 text-[var(--admin-danger-ink)]">
           <AlertCircle aria-hidden="true" className="mt-[3px] size-3.5 shrink-0" />
@@ -88,7 +108,8 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...rest }, ref) {
-  return <textarea ref={ref} className={cn(base, 'min-h-20 py-2.5', className)} {...rest} />;
+  // Yalnız dikeyde büyür: yan tutamaç alanı pencereden ya da çekmeceden taşırmasın
+  return <textarea ref={ref} className={cn(base, 'min-h-20 resize-y py-2.5', className)} {...rest} />;
 });
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -304,6 +325,110 @@ export function Toggle({
           {text}
         </>
       )}
+    </button>
+  );
+}
+
+/** Adet seçicinin tuşu: basılı ton, sınırda soluk; boyu ve köşesi aşağıda */
+const STEP = 'grid place-items-center transition-colors duration-150 hover:bg-hover active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+
+/**
+ * Adet seçici (kasada tek): adisyonun gönderilmemiş satırı, seçenek sayacı (şeker, ekstra shot), seçenek penceresinin
+ * ve kalem penceresinin adedi, ödemede kalem seç ve paylaş, hesabı böl. − değer + tek grupta: alan kenarı, köşe 14;
+ * tuşlar dokunmatikte 44, farede 36 px, rakam 15 px; sınırda tuş kapanır. `label` grubun adı ("Adet", "Ekstra shot").
+ * `onRemove`: en küçük adette eksi kırmızı çöp kutusu olur ("Kaldır"). `size="lg"`: tek değerli pencere (Kişi
+ * sayısı), köşe 20, tuşlar 56 px (farede de), rakam Gabarito 48 px. Değer eksinin hemen ardındaki yazıdır
+ * (e2e/flows.mjs onu Azalt'ın kardeşinden okur).
+ */
+export function Stepper({
+  value,
+  onChange,
+  min = 0,
+  max = 99,
+  label = 'Adet',
+  onRemove,
+  disabledUp,
+  size = 'md',
+  className,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  min?: number;
+  max?: number;
+  /** Grubun adı (ekran okuyucu): "Adet", "Ekstra shot", "Kişi" */
+  label?: string;
+  onRemove?: () => void;
+  /** Artırma kapalı (seçenek tükendi) */
+  disabledUp?: boolean;
+  size?: 'md' | 'lg';
+  className?: string;
+}) {
+  const removes = !!onRemove && value <= Math.max(min, 1);
+  const lg = size === 'lg';
+  const key = cn(STEP, lg ? 'size-14' : 'size-11 pointer-fine:size-9');
+  const icon = lg ? 'size-6' : 'size-4';
+  return (
+    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center rounded-xl border border-line-strong bg-surface', lg && 'rounded-2xl', className)}>
+      <button
+        type="button"
+        aria-label={removes ? 'Kaldır' : 'Azalt'}
+        disabled={!removes && value <= min}
+        onClick={() => (removes ? onRemove?.() : onChange(Math.max(min, value - 1)))}
+        className={cn(key, lg ? 'rounded-l-[19px]' : 'rounded-l-[13px]')}
+      >
+        {removes ? <Trash2 aria-hidden="true" className={cn(icon, 'text-[var(--admin-danger-ink)]')} /> : <Minus aria-hidden="true" className={icon} />}
+      </button>
+      <span aria-live="polite" className={cn('tabular text-center font-semibold', lg ? 'min-w-16 px-1 font-headline text-5xl' : 'min-w-8 px-0.5 text-[15px]')}>
+        {value}
+      </span>
+      <button type="button" aria-label="Artır" disabled={disabledUp || value >= max} onClick={() => onChange(Math.min(max, value + 1))} className={cn(key, lg ? 'rounded-r-[19px]' : 'rounded-r-[13px]')}>
+        <Plus aria-hidden="true" className={icon} />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Seçim çipi: kapsül, `aria-pressed`; dokunmatikte 44, farede 36 px. İki aile:
+ *   primary  seçenek ve süzgeç (seçenek grubu, gün, kategori): seçili yeşil kenar ve yumuşak yeşil zemin
+ *   ink      hazır neden ya da süre (iptal, ikram, hazırlık süresi): seçili mürekkep kenar, taş zemin ve tik
+ * Amber durum rengidir, seçim rengi değil (DESIGN §5: seçim yeşil ya da mürekkep kenar)
+ */
+export function Chip({
+  on,
+  onClick,
+  children,
+  tone = 'primary',
+  disabled,
+  className,
+}: {
+  on: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  tone?: 'primary' | 'ink';
+  disabled?: boolean;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-full border px-3.5 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-9 [[data-area=admin]_&]:text-[13px]',
+        tone === 'ink'
+          ? on
+            ? 'border-ink bg-surface-3 font-semibold text-ink'
+            : 'border-[var(--admin-border-strong)] bg-surface text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink active:bg-press'
+          : on
+            ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] font-medium text-[var(--admin-primary)]'
+            : 'border-[var(--admin-border-strong)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press',
+        className,
+      )}
+    >
+      {tone === 'ink' && on && <Check aria-hidden="true" className="size-3.5 shrink-0" />}
+      {children}
     </button>
   );
 }

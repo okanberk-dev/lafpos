@@ -14,6 +14,13 @@ interface ModalProps {
   size?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   /** Arka plana dokununca kapanmasın (ödeme gibi yarım kalmaması gereken akışlar) */
   persistent?: boolean;
+  /**
+   * Başlıkta Kapat yok: kendi vazgeç düğmesi olan soru penceresi (onay, metin isteme). Aynı iş için iki denetim
+   * olmaz; Escape ve arka plan yine vazgeçer
+   */
+  hideClose?: boolean;
+  /** Başlıksız pencerenin erişilebilir adı (başlığı gövdede çizen pencere: ödeme sonucu) */
+  ariaLabel?: string;
   className?: string;
 }
 
@@ -30,7 +37,7 @@ const widths = {
  * zaten odaklıysa ona dokunulmaz), Tab pencerenin içinde döner, Escape yalnız en üstteki pencereyi kapatır,
  * kapanınca odak açan düğmeye döner.
  */
-export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', persistent, className }: ModalProps) {
+export function Modal({ open, onClose, title, subtitle, children, footer, size = 'md', persistent, hideClose, ariaLabel, className }: ModalProps) {
   const panel = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -92,6 +99,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : ariaLabel}
         aria-describedby={subtitle ? descId : undefined}
         onKeyDown={(e) => trapTab(e, panel.current)}
         className={cn(
@@ -102,11 +110,12 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
       >
         {/* Telefonda alt sayfa işareti (sürüklenmez; kapatmak için Kapat ya da arka plan) */}
         <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-[var(--admin-border-field)]/50 sm:hidden" />
+        {/* Başlık pencerenin tepesi: 18/700 (içerideki bölüm başlığı 16/600), kesilmez, dengeli kırılır; Kapat ilk satırda */}
         {(title || subtitle) && (
-          <div className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-5 py-3">
+          <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-5 py-3">
             <div className="min-w-0 flex-1">
               {title && (
-                <h2 id={titleId} className="truncate text-base font-semibold leading-6">
+                <h2 id={titleId} className="text-lg font-bold leading-6 tracking-[-0.01em]">
                   {title}
                 </h2>
               )}
@@ -116,7 +125,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
                 </p>
               )}
             </div>
-            <CloseButton onClick={onClose} />
+            {!hideClose && <CloseButton onClick={onClose} />}
           </div>
         )}
         <div className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain', !footer && 'max-sm:pb-[env(safe-area-inset-bottom)]')}>{children}</div>

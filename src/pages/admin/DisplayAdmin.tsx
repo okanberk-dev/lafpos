@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, MonitorPlay, Plus, Save, X } from 'lucide-react';
+import { Check, ExternalLink, MonitorPlay, Plus, Save, X } from 'lucide-react';
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CUSTOMER_DISPLAY_THEMES, type CustomerDisplaySettings, type CustomerDisplayTheme, type DisplayStateDTO } from '@shared/types';
-import { Card, CODE, PageHeader, Segmented } from '@/components/admin/ui';
+import { Card, CODE, PageHeader, Segmented, SetupNotes } from '@/components/admin/ui';
 import { CustomerDisplayView, DISPLAY_DEFAULTS } from '@/components/display/CustomerDisplayView';
 import { Button, buttonClass, IconButton } from '@/components/ui/Button';
 import { Field, Input, Toggle } from '@/components/ui/Field';
@@ -150,7 +150,30 @@ export default function DisplayAdmin() {
         }
       />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div className="min-w-0 space-y-4">
+        {/* Önizleme tablette ve telefonda formun önünde: tema ya da metin değişince sonucu iki ekran aşağıda aramak
+            gerekmez. Sayfada da önce gelir (görsel sıra ile odak ve okuma sırası aynı; `order` yalnız görüntüyü taşırdı);
+            geniş ekranda açık yerleşimle sağ sütunda, kayarken yerinde */}
+        <div className="min-w-0 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1 xl:self-start">
+          <Card title="Önizleme" subtitle="Gerçek ekranın birebir küçüğü; kaydetmeden görürsünüz">
+            {/* Durum seçimi kartın içinde: başlık şeridinde telefonda başlığı tek kelimelik sütuna sıkıştırıyordu */}
+            <Segmented<Preview>
+              label="Önizlenen durum"
+              value={preview}
+              onChange={setPreview}
+              className="mb-3 max-sm:flex max-sm:w-full max-sm:[&>button]:flex-1"
+              options={[
+                { value: 'karsilama', label: 'Karşılama' },
+                { value: 'siparis', label: 'Sipariş' },
+                { value: 'tesekkur', label: 'Teşekkür' },
+              ]}
+            />
+            <ScaledScreen>
+              <CustomerDisplayView state={SAMPLE[preview]} config={shown} businessName={boot.settings.businessName} now={now} />
+            </ScaledScreen>
+          </Card>
+        </div>
+
+        <div className="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
           <Card title="Görünüm" subtitle="Tema ekranın bütününü değiştirir; tutar paneli her temada markanın yüzeyidir">
             <div role="radiogroup" aria-label="Tema" className="grid gap-3 sm:grid-cols-3">
               {CUSTOMER_DISPLAY_THEMES.map((t) => {
@@ -163,7 +186,7 @@ export default function DisplayAdmin() {
                     aria-checked={on}
                     onClick={() => set('theme', t)}
                     className={cn(
-                      'group flex flex-col overflow-hidden rounded-2xl border text-left transition-[border-color,box-shadow] duration-150',
+                      'group relative flex flex-col overflow-hidden rounded-2xl border text-left transition-[border-color,box-shadow] duration-150',
                       on ? 'border-[var(--admin-primary)] shadow-[0_0_0_3px_var(--admin-primary-soft)]' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-field)]',
                     )}
                   >
@@ -171,6 +194,8 @@ export default function DisplayAdmin() {
                     <span aria-hidden="true" className="grid h-20 place-items-center border-b border-[var(--admin-border)]" style={{ background: THEMES[t].swatch, color: THEMES[t].ink }}>
                       <span className="font-headline text-lg font-extrabold tracking-[-0.03em]">Hoş geldiniz</span>
                     </span>
+                    {/* Seçili tema yalnız yeşil kenarla değil, işaretle de ayrılır; beyaz halka her zeminde (yeşil temada da) seçilir */}
+                    {on && <Check aria-hidden="true" className="absolute right-2 top-2 size-5 rounded-full bg-primary p-0.5 text-primary-ink ring-2 ring-[var(--admin-surface)]" />}
                     <span className="px-3 py-2.5">
                       <span className="block text-sm font-semibold text-[var(--admin-text)]">{THEMES[t].label}</span>
                       <span className="block text-xs text-[var(--admin-text-mute)]">{THEMES[t].hint}</span>
@@ -190,7 +215,7 @@ export default function DisplayAdmin() {
               <Field label="Karşılama başlığı" hint={`${draft.welcomeTitle.length}/60`}>
                 <Input value={draft.welcomeTitle} maxLength={60} placeholder={DISPLAY_DEFAULTS.welcomeTitle} onChange={(e) => set('welcomeTitle', e.target.value)} />
               </Field>
-              <Field label="Alt satır" hint="slogan; boşsa yok">
+              <Field label="Alt satır" hint={`slogan, boşsa gösterilmez · ${draft.welcomeSubtitle.length}/90`}>
                 <Input value={draft.welcomeSubtitle} maxLength={90} placeholder="Drink it. Eat the cup." onChange={(e) => set('welcomeSubtitle', e.target.value)} />
               </Field>
               <Field label="Teşekkür başlığı" hint={`${draft.thanksTitle.length}/60`}>
@@ -244,43 +269,44 @@ export default function DisplayAdmin() {
             </div>
           </Card>
         </div>
-
-        <div className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:self-start">
-          <Card
-            title="Önizleme"
-            subtitle="Gerçek ekranın birebir küçüğü; kaydetmeden görürsünüz"
-            actions={
-              <Segmented<Preview>
-                label="Önizlenen durum"
-                value={preview}
-                onChange={setPreview}
-                options={[
-                  { value: 'karsilama', label: 'Karşılama' },
-                  { value: 'siparis', label: 'Sipariş' },
-                  { value: 'tesekkur', label: 'Teşekkür' },
-                ]}
-              />
-            }
-          >
-            <ScaledScreen>
-              <CustomerDisplayView state={SAMPLE[preview]} config={shown} businessName={boot.settings.businessName} now={now} />
-            </ScaledScreen>
-          </Card>
-          <Card title="Kurulum" subtitle="İki ekranlı kasa ya da müşteriye dönük tablet">
-            <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--admin-text-soft)]">
-              <li>
-                İkinci ekranda tarayıcıyla <span className={CODE}>{origin}{screenUrl}</span> adresini tam ekran açın; personel girişi istemez.
-              </li>
-              <li>Kasada Adisyon › İşlemler › Müşteri ekranı'nda “Bu cihazdaki adisyonlar müşteri ekranına yansısın”ı açın: adisyon, tutar ve teşekkür bu ekrana gider.</li>
-              <li>Şimdilik bir kasa bir müşteri ekranına yansır; ikinci bir kasa açarsa ekran son işlemi gösterir.</li>
-            </ol>
-            <div className="mt-4 flex items-center gap-2 rounded-xl bg-[var(--admin-surface-2)] px-3.5 py-3 text-xs text-[var(--admin-text-mute)]">
-              <MonitorPlay className="size-4 shrink-0" aria-hidden="true" />
-              Ekran ayarı yarım dakikada bir okur; Kaydet'ten sonra yenilemeye gerek yok.
-            </div>
-          </Card>
-        </div>
       </div>
+      {/* Kurulum bir kez okunur: sayfa sonunda, kapalı (öteki yönetim sayfalarındaki gibi) */}
+      <div className="mt-4">
+        <SetupNotes summary="Kurulum: ikinci ekran ya da müşteriye dönük tablet">
+          <ol className="list-decimal space-y-1.5 pl-4">
+            <li>
+              İkinci ekranda tarayıcıyla <span className={CODE}>{origin}{screenUrl}</span> adresini tam ekran açın; personel girişi istemez
+            </li>
+            <li>Kasada Adisyon › İşlemler › Müşteri ekranı’nda “Bu cihazdaki adisyonlar müşteri ekranına yansısın”ı açın: adisyon, tutar ve teşekkür bu ekrana gider</li>
+            <li>Şimdilik bir kasa bir müşteri ekranına yansır; ikinci bir kasa açarsa ekran son işlemi gösterir</li>
+          </ol>
+          <p className="flex items-start gap-2">
+            <MonitorPlay className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            Ekran yeni ayarı yarım dakika içinde kendisi alır; kaydettikten sonra yenilemeye gerek yok
+          </p>
+        </SetupNotes>
+      </div>
+      {/* Uzun formda Kaydet başlıkla birlikte yukarıda kalır: değişiklik varken altta yapışkan şerit (Ayarlar'daki gibi) */}
+      {dirty && (
+        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır; burada yalnız iç boşluk
+        <div className="sticky bottom-0 z-10 -mx-4 mt-4 flex items-center gap-3 border-t border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
+          <span className="text-[13px] text-[var(--admin-text-mute)]">Kaydedilmemiş değişiklik</span>
+          <span className="flex-1" />
+          <Button
+            disabled={saving}
+            onClick={() => {
+              setDraft(saved);
+              setTried(false);
+              setNewMessage('');
+            }}
+          >
+            Vazgeç
+          </Button>
+          <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
+            Kaydet
+          </Button>
+        </div>
+      )}
     </>
   );
 }

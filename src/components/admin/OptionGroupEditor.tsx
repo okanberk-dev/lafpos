@@ -5,6 +5,7 @@ import { Button, IconButton } from '@/components/ui/Button';
 import { Field, Input, Label, NumberInput, SearchInput, Select, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { errorMessage, post, put } from '@/lib/api';
+import { cn } from '@/lib/cn';
 import { fold } from '@/lib/shell';
 import { toast } from '@/lib/toast';
 
@@ -26,6 +27,9 @@ export interface OptionGroupDraft {
 }
 
 export const newGroupDraft = (): OptionGroupDraft => ({ name: '', kind: 'single', required: false, maxSelect: 1, sort: 50, active: true, items: [{ name: '', price: '', isDefault: true, maxQty: 1 }], productIds: [] });
+
+/** Sunucunun sınırı (admin `groupShape`): çoklu seçimde bir üründe en çok bu kadar seçenek */
+const MAX_SELECT = 10;
 
 /** Var olan yerel grubun taslağı (yalnız etkin seçenekleri) */
 export function groupDraft(
@@ -85,6 +89,10 @@ export function OptionGroupEditor({
   }, [products, q]);
   const setItem = (i: number, patch: Partial<EditItem>) => setEdit({ ...edit, items: edit.items.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
   const toggleProduct = (id: string) => setEdit({ ...edit, productIds: edit.productIds.includes(id) ? edit.productIds.filter((x) => x !== id) : [...edit.productIds, id] });
+  // Sunucu çoklu seçimde sınırı uygular (`en çok N seçim`): 1'de kalsa kasada ikinci seçim reddedilirdi. Çokluya
+  // geçince sınır seçenek sayısına (en az 2) açılır; tek seçim ve adetlide kullanılmaz, 1'e döner
+  const setKind = (kind: OptionKind) => setEdit({ ...edit, kind, maxSelect: kind === 'multi' ? Math.min(MAX_SELECT, Math.max(2, edit.maxSelect, edit.items.length)) : 1 });
+  const multi = edit.kind === 'multi';
 
   const save = async () => {
     if (errors.name || errors.items) {
@@ -123,7 +131,8 @@ export function OptionGroupEditor({
       size="lg"
       title={edit.id ? 'Seçenek grubu' : 'Yeni seçenek grubu'}
       footer={
-        <div className="flex justify-end gap-2">
+        // Telefonda iki eşit düğme (onay penceresi gibi); geniş ekranda sağa yaslı
+        <div className="flex justify-end gap-2 max-sm:[&>*]:flex-1">
           <Button onClick={onClose}>Vazgeç</Button>
           <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
             Kaydet
@@ -132,20 +141,23 @@ export function OptionGroupEditor({
       }
     >
       <div className="space-y-4 p-5">
-        <div className="grid gap-3 sm:grid-cols-3">
+        {/* Grubun kendi ayarları tek satırda; çoklu seçimde yanına sınır gelir */}
+        <div className={cn('grid gap-3', multi ? 'sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_9rem]' : 'sm:grid-cols-2')}>
           <Field label="Ad" required error={tried ? errors.name : null}>
             <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} placeholder="Ör. bardak" maxLength={40} />
           </Field>
           <Field label="Tür">
-            <Select value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value as OptionKind })}>
+            <Select value={edit.kind} onChange={(e) => setKind(e.target.value as OptionKind)}>
               <option value="single">Tek seçim</option>
               <option value="multi">Çoklu seçim</option>
               <option value="counter">Adetli (ör. ekstra şeker)</option>
             </Select>
           </Field>
-          <Field label="Zorunlu">
-            <Toggle checked={edit.required} onChange={(v) => setEdit({ ...edit, required: v })} label={edit.required ? 'Evet' : 'Hayır'} />
-          </Field>
+          {multi && (
+            <Field label="En çok seçim" hint={`1–${MAX_SELECT}`}>
+              <NumberInput value={edit.maxSelect} min={1} max={MAX_SELECT} onCommit={(maxSelect) => setEdit({ ...edit, maxSelect })} />
+            </Field>
+          )}
         </div>
         <div className="space-y-2">
           {/* Sütun adları: satırdaki alanlar yalnız yer tutucu taşımasın */}
@@ -158,7 +170,8 @@ export function OptionGroupEditor({
           </div>
           {edit.items.map((it, i) => (
             <div key={i} className="flex items-center gap-2">
-              <Input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} placeholder="Ör. yulaf sütü" aria-label={`${i + 1}. seçenek adı`} maxLength={40} className="min-w-0 flex-1" />
+              {/* Kısa örnek: telefonda ad alanı ~130 px kalır, uzun örnek yarıda kesilirdi */}
+              <Input value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} placeholder="Ör. yulaf" aria-label={`${i + 1}. seçenek adı`} maxLength={40} className="min-w-0 flex-1" />
               <Input value={it.price} onChange={(e) => setItem(i, { price: e.target.value })} placeholder="0" aria-label={`${i + 1}. seçenek ek fiyatı (₺)`} className="tabular w-20 shrink-0 text-right" inputMode="decimal" />
               {edit.kind === 'single' && (
                 // Bütün hücre dokunma alanı (44 px); sütun adı üstte, ekran okuyucuya satırın kendi adı
@@ -182,6 +195,14 @@ export function OptionGroupEditor({
             Seçenek ekle
           </Button>
         </div>
+        {/* Anahtarlar etiket ve ipucuyla, durumu anahtarın kendisi gösterir ("Evet / Hayır" yazısı yok). Adetli grupta
+            zorunluluk yok: sıfır adet de geçerli (sunucu ve kasa saymaz) */}
+        {(edit.kind !== 'counter' || canClose) && (
+          <div className="space-y-3 border-t border-[var(--admin-divider)] pt-4">
+            {edit.kind !== 'counter' && <Toggle block checked={edit.required} onChange={(v) => setEdit({ ...edit, required: v })} label="Zorunlu" hint="Kasada seçim yapılmadan ürün eklenmez" />}
+            {canClose && <Toggle block checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Grup açık" hint="Kapalı grup kasada sorulmaz; ürün bağları durur" />}
+          </div>
+        )}
         {products && (
           <div role="group" aria-label="Ürünler">
             <Label hint={edit.productIds.length ? `${edit.productIds.length} ürün seçili` : 'kasada bu ürünlerde sorulur'}>Ürünler</Label>
@@ -200,7 +221,6 @@ export function OptionGroupEditor({
             </ul>
           </div>
         )}
-        {canClose && <Toggle checked={edit.active} onChange={(v) => setEdit({ ...edit, active: v })} label="Grup açık" hint="Kapalı grup kasada sorulmaz; ürün bağları durur" />}
         {note && <p className="text-xs text-[var(--admin-text-mute)]">{note}</p>}
       </div>
     </Modal>

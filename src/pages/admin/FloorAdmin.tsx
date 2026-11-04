@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { LayoutGrid, Plus, Printer, QrCode as QrCodeIcon, RefreshCw, Save, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { LayoutGrid, Mic2, Plus, Printer, QrCode as QrCodeIcon, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { type KeyboardEvent, useEffect, useId, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import { tableQrUrl } from '@shared/table-qr';
 import { Badge, CARD, EmptyState, PageHeader, StatusTabs } from '@/components/admin/ui';
@@ -14,6 +14,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { printNow } from '@/lib/print';
 import { toast } from '@/lib/toast';
+import { useUnsavedGuard } from '@/lib/unsavedGuard';
 import { layoutChanges, mergeServerTables, settleSaved } from '@/lib/floorLayout';
 
 interface Section {
@@ -60,6 +61,35 @@ function TableCardsSheet({ tables, businessName }: { tables: Table[]; businessNa
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const snap = (v: number) => Math.round(v);
+/** Klavyeyle taşıma ve boyutlandırma: ok başına planın %1'i (sürüklemenin adımı) */
+const ARROWS: Partial<Record<string, [number, number]>> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+/** Yeni masanın boyu (planın yüzdesi) */
+const NEW_W = 12;
+const NEW_H = 16;
+
+/**
+ * Yeni masanın adı: bölümdeki adlandırmayı sürdürür (S1…S8 varsa S9), numaralı masa yoksa "Masa N"; salonda
+ * kullanılan ad atlanır (kasada iki aynı adlı masa karışmasın)
+ */
+function nextTableName(section: Table[], all: Table[]): string {
+  const taken = new Set(all.filter((t) => t.active).map((t) => t.name.toLocaleLowerCase('tr-TR')));
+  const numbered = section.map((t) => /^(.*?)(\d+)$/.exec(t.name)).filter((m): m is RegExpExecArray => m != null);
+  const freq = new Map<string, number>();
+  for (const m of numbered) freq.set(m[1], (freq.get(m[1]) ?? 0) + 1);
+  const prefix = [...freq].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'Masa ';
+  let n = Math.max(0, ...numbered.filter((m) => m[1] === prefix).map((m) => Number(m[2]))) + 1;
+  while (taken.has(`${prefix}${n}`.toLocaleLowerCase('tr-TR'))) n++;
+  const name = `${prefix}${n}`;
+  return name.length <= 30 ? name : `Masa ${section.length + 1}`;
+}
+
+/** Yeni masaya boş yer: planı yukarıdan aşağı, soldan sağa tarar, masalar birbirine değmez; yer yoksa sol üst köşe */
+function freeSpot(taken: Table[], w: number, h: number): { x: number; y: number } {
+  const gap = 2;
+  const clear = (x: number, y: number) => taken.every((t) => x >= t.x + t.w + gap || x + w + gap <= t.x || y >= t.y + t.h + gap || y + h + gap <= t.y);
+  for (let y = 4; y + h <= 96; y += 4) for (let x = 4; x + w <= 96; x += 4) if (clear(x, y)) return { x, y };
+  return { x: 5, y: 5 };
+}
 
 export default function FloorAdmin() {
   const boot = useBoot();
@@ -80,7 +110,10 @@ export default function FloorAdmin() {
   // Çift gönderim olmasın: kayıt ve ekleme sürerken düğme döner gösterge alır
   const [busy, setBusy] = useState<'plan' | 'masa' | 'qr' | null>(null);
   const canvas = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ id: string; mode: 'move' | 'size'; startX: number; startY: number; orig: Table } | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const keysHint = useId();
+  // `moved`: dokunup bırakmayı sürüklemeden ayırır (birkaç piksellik titreme masayı oynatmaz)
+  const drag = useRef<{ id: string; mode: 'move' | 'size'; startX: number; startY: number; orig: Table; moved: boolean } | null>(null);
 
   // Sunucu verisi yalnız kendisi değişince yeniden kurulur (bölüm sekmesi değişince değil); sürüklenip kaydedilmemiş
   // masaların yeri korunur (öteki masada Kişi, Şekil, QR, kaldırma da listeyi yeniler)
@@ -100,6 +133,8 @@ export default function FloorAdmin() {
   }, [data.data, sectionId]);
   // Sayaç ve kayıt yalnız yeri gerçekten değişen masalar (sürüklenip eski yerine bırakılan sayılmaz)
   const changes = layoutChanges(tables, data.data?.tables ?? [], dirty);
+  // Kaydedilmemiş yerleşim: kenar çubuğu, geri, komut paleti ve sekme kapanırken sorulur (yoksa plan sessizce kaybolurdu)
+  useUnsavedGuard(changes.length > 0);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['admin', 'floor'] });
@@ -116,12 +151,14 @@ export default function FloorAdmin() {
   const onPointerDown = (e: React.PointerEvent, t: Table, mode: 'move' | 'size') => {
     e.stopPropagation();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    drag.current = { id: t.id, mode, startX: e.clientX, startY: e.clientY, orig: t };
+    drag.current = { id: t.id, mode, startX: e.clientX, startY: e.clientY, orig: t, moved: false };
     select(t.id);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current;
     if (!d || !canvas.current) return;
+    if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 4) return;
+    d.moved = true;
     const rect = canvas.current.getBoundingClientRect();
     const dx = ((e.clientX - d.startX) / rect.width) * 100;
     const dy = ((e.clientY - d.startY) / rect.height) * 100;
@@ -135,7 +172,36 @@ export default function FloorAdmin() {
     setDirty((s) => new Set(s).add(d.id));
   };
   const onPointerUp = () => {
+    const d = drag.current;
     drag.current = null;
+    // Dokunup bırakınca (sürüklemeden) düzenleme kartı dar ekranda planın altında kalır, telefonda çoğu ekranın dışında:
+    // kart ekranın alt kısmından başlıyorsa ona kaydırılır (yan yana düzende ve kart zaten göz önündeyken kaydırma yok)
+    const el = panel.current;
+    if (!d || d.moved || !el || window.matchMedia('(min-width: 1280px)').matches) return;
+    if (el.getBoundingClientRect().top < window.innerHeight * 0.6) return;
+    el.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  };
+  /** Klavye: Enter ya da boşluk seçer, oklar taşır, Shift ile oklar boyutlandırır (sürüklemeyle aynı sınırlar) */
+  const onTileKey = (e: KeyboardEvent, t: Table) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      select(t.id);
+      return;
+    }
+    const step = ARROWS[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const [dx, dy] = step;
+    const resize = e.shiftKey;
+    if (selected !== t.id) select(t.id);
+    setTables((all) =>
+      all.map((x) => {
+        if (x.id !== t.id) return x;
+        if (resize) return { ...x, w: clamp(x.w + dx, 4, 100 - x.x), h: clamp(x.h + dy, 4, 100 - x.y) };
+        return { ...x, x: clamp(x.x + dx, 0, 100 - x.w), y: clamp(x.y + dy, 0, 100 - x.h) };
+      }),
+    );
+    setDirty((s) => new Set(s).add(t.id));
   };
 
   const saveLayout = async () => {
@@ -159,8 +225,13 @@ export default function FloorAdmin() {
   const addTable = async () => {
     setBusy('masa');
     try {
-      const n = tables.filter((t) => t.sectionId === sectionId).length + 1;
-      await post('/admin/tables', { sectionId, name: `M${n}`, seats: 2, shape: 'square', x: 5, y: 5, w: 12, h: 16 });
+      // Bölümün düzenini sürdürür (ad ve boş yer): dolu bölümde yeni masa S1'in üstüne binip gözden kaçmaz; eklenen
+      // masa seçili gelir, düzenleme kartında adı ve kişisi hemen değişir
+      const here = tables.filter((t) => t.sectionId === sectionId && t.active);
+      const name = nextTableName(here, tables);
+      const r = await post<{ id: string }>('/admin/tables', { sectionId, name, seats: 2, shape: 'square', ...freeSpot(here, NEW_W, NEW_H), w: NEW_W, h: NEW_H });
+      setSelected(r.id);
+      toast.ok(`${name} eklendi; sürükleyip yerine koyun`);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -306,14 +377,19 @@ export default function FloorAdmin() {
           <span className="max-sm:sr-only">Bölüm ekle</span>
         </Button>
       </div>
+      <p id={keysHint} className="sr-only">
+        Enter ile seçin; ok tuşları masayı taşır, Shift ile ok tuşları boyutlandırır
+      </p>
       {/* items-start: uzun düzenleme paneli satırı uzatınca 16/10 plan, oranı yüzünden genişleyip kartı taşırıyordu */}
       <div className="grid items-start gap-4 xl:grid-cols-[1fr_320px]">
         <div
           ref={canvas}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
+          // Kesilen dokunuş (sistem hareketi, kaydırma) sürüklemeyi bırakır: masa sonraki harekette parmağı izlemez
+          onPointerCancel={onPointerUp}
           onPointerDown={() => select(null)}
-          className="relative aspect-[16/10] w-full touch-none select-none rounded-xl border border-[var(--admin-border)] bg-[radial-gradient(circle_at_1px_1px,var(--admin-border-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-[var(--admin-surface-2)]"
+          className="relative aspect-[16/10] w-full touch-none select-none rounded-[14px] border border-[var(--admin-border)] bg-[radial-gradient(circle_at_1px_1px,var(--admin-border-strong)_1px,transparent_0)] bg-[length:20px_20px] bg-[var(--admin-surface-2)]"
         >
           {visible.length === 0 && (
             <div className="absolute inset-0 grid place-items-center p-4" onPointerDown={(e) => e.stopPropagation()}>
@@ -332,19 +408,37 @@ export default function FloorAdmin() {
           {visible.map((t) => (
             <div
               key={t.id}
+              // Klavye ve ekran okuyucu da seçer: Tab ile gelinir, Enter seçer, oklar taşır (aria-describedby)
+              role="button"
+              tabIndex={0}
+              aria-pressed={selected === t.id}
+              aria-label={`${t.name}, ${t.kind === 'oda' ? 'saatlik oda' : `${t.seats} kişilik`}${t.qrCode ? ', QR kodu var' : ''}`}
+              aria-describedby={keysHint}
+              // Karonun boyu salonun planından gelir (telefonda plan küçülür): 44 px taraması bu karoları saymaz
+              data-tap-ok
               onPointerDown={(e) => onPointerDown(e, t, 'move')}
+              onKeyDown={(e) => onTileKey(e, t)}
               data-table-id={t.id}
               style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
               className={cn(
-                'group absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing',
-                t.shape === 'round' ? 'rounded-full' : 'rounded-lg',
+                'group absolute flex cursor-grab flex-col items-center justify-center border bg-[var(--admin-surface)] text-center text-sm font-semibold text-[var(--admin-text)] active:cursor-grabbing focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus)]',
+                t.shape === 'round' ? 'rounded-full' : 'rounded-[10px]',
                 selected === t.id ? 'border-[var(--admin-primary)] ring-2 ring-[var(--admin-primary)]/30' : 'border-[var(--admin-border-field)]/60',
-                t.kind === 'oda' && 'bg-[var(--admin-accent-soft)]',
               )}
             >
               {t.name}
-              <span className="text-[11px] font-normal text-[var(--admin-text-mute)]">{t.kind === 'oda' ? 'oda' : `${t.seats} kişi`}</span>
-              {t.qrCode && <QrCodeIcon aria-label="QR kodu var" className="absolute left-1 top-1 size-3.5 text-[var(--admin-text-mute)]" />}
+              {/* Oda kasadaki masa planı gibi mikrofon ve "Saatlik"le ayrılır (mor zemin değil: mor online siparişin rengi) */}
+              <span className="inline-flex items-center gap-1 text-[11px] font-normal text-[var(--admin-text-mute)]">
+                {t.kind === 'oda' ? (
+                  <>
+                    <Mic2 aria-hidden="true" className="size-3" />
+                    Saatlik
+                  </>
+                ) : (
+                  `${t.seats} kişi`
+                )}
+              </span>
+              {t.qrCode && <QrCodeIcon aria-hidden="true" className="absolute left-1 top-1 size-3.5 text-[var(--admin-text-mute)]" />}
               {/* Boyutlandırma kulpu yalnız seçili masada (farede üzerine gelince de): her masada hep görünen mavi köşe
                   gürültüydü. Görünen köşe 16 px; parmakla tutturulsun diye dokunma alanı 44 px (farede 24) */}
               <span
@@ -360,14 +454,18 @@ export default function FloorAdmin() {
             </div>
           ))}
         </div>
-        <div className={cn(CARD, 'p-4')}>
+        <div ref={panel} className={cn(CARD, 'scroll-m-4 p-4')}>
           {!sel ? (
             <EmptyState bare icon={<LayoutGrid />} title="Masa seçilmedi">
               Düzenlemek için plandan bir masaya dokunun
             </EmptyState>
           ) : (
             <div className="space-y-3">
-              <h3 className="font-semibold text-[var(--admin-text)]">{sel.name}</h3>
+              <div>
+                <h3 className="font-semibold text-[var(--admin-text)]">{sel.name}</h3>
+                {/* Klavyeli cihazda: seçili masa oklarla da taşınır */}
+                <p className="text-xs text-[var(--admin-text-mute)] pointer-coarse:hidden">Ok tuşları taşır, Shift ile boyutlandırır</p>
+              </div>
               <Field label="Ad">
                 <Input defaultValue={sel.name} key={`n${sel.id}`} onBlur={(e) => e.target.value.trim() && e.target.value !== sel.name && updateTable(sel.id, { name: e.target.value.trim() })} />
               </Field>

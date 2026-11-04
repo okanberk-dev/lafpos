@@ -2,12 +2,16 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Lock, RotateCcw, Save } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { type Permission, PERMISSIONS, type Role } from '@shared/permissions';
-import { Badge, CARD, PageHeader, StatusTabs, TableSkeleton } from '@/components/admin/ui';
+import { Badge, CARD, PageHeader, TableSkeleton } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
+import { Field, Select } from '@/components/ui/Field';
 import { ErrorState } from '@/components/ui/misc';
 import { errorMessage, get, put } from '@/lib/api';
 import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/hooks';
+import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
+import { useUnsavedGuard } from '@/lib/unsavedGuard';
 
 interface RoleRow {
   role: Role;
@@ -24,11 +28,16 @@ interface RolesData {
 }
 
 const sameSet = (a: Permission[], b: Permission[]) => a.length === b.length && a.every((p) => b.includes(p));
+/** Yetki grubunun etiketi: cümle düzeninde (büyük harf yalnız kenar çubuğunun grup etiketlerinde) */
+const GROUP_LABEL = 'text-[13px] font-semibold text-[var(--admin-text-soft)]';
+/** "Kasiyer / Barista" dar sütunda "Kasiyer /" ve "Barista" diye kırılır: eğik çizgi yalnız kalmaz (bölünmez boşluk) */
+const keepSlash = (label: string) => label.replace(' / ', '\u00a0/ ');
 
 /**
  * Roller ve yetkiler (ModPOS "Pozisyonlar" ve "Özel Yetkiler" gibi): her rolün yetki seti burada düzenlenir,
  * o roldeki herkese uygulanır; kişiye özel ek ya da kaldırılan yetki Personel sayfasında kalır. Patron rolü
- * kilitli. Bilgisayarda roller sütun, yetkiler satır; telefonda rol seçilip yetkileri liste olarak.
+ * kilitli. Bilgisayarda roller sütun, yetkiler satır; telefonda rol seçilip yetkileri liste olarak. Matris iki
+ * ekran boyu: değişiklik varken altta yapışkan şerit (Vazgeç, Kaydet), sayfadan çıkarken sorulur (Ayarlar gibi).
  */
 export default function RolesAdmin() {
   const qc = useQueryClient();
@@ -36,10 +45,14 @@ export default function RolesAdmin() {
   const [draft, setDraft] = useState<Partial<Record<Role, Permission[]>>>({});
   const [phoneRole, setPhoneRole] = useState<Role>('kasiyer');
   const [saving, setSaving] = useState(false);
+  const wide = useMediaQuery('(min-width: 768px)');
 
   const roles = useMemo(() => data.data?.roles ?? [], [data.data]);
   const current = (r: RoleRow) => draft[r.role] ?? r.permissions;
-  const dirty = roles.filter((r) => draft[r.role] && !sameSet(draft[r.role]!, r.permissions));
+  const changed = (r: RoleRow) => !!draft[r.role] && !sameSet(draft[r.role]!, r.permissions);
+  const dirty = roles.filter(changed);
+  // Kenar çubuğu, alt sekme, komut paleti, geri tuşu ve sekmeyi kapatmak kaydedilmemiş değişikliği sorar
+  useUnsavedGuard(dirty.length > 0);
 
   const toggle = (r: RoleRow, p: Permission) => {
     if (r.locked) return;
@@ -48,8 +61,10 @@ export default function RolesAdmin() {
   };
   const reset = (r: RoleRow) => setDraft({ ...draft, [r.role]: r.defaults });
   // Roller sırayla kaydedilir: biri reddedilirse önce kaydedilenler taslaktan düşer (sayaç kalanları gösterir), ekran
-  // sunucudaki durumu yeniden okur, ileti hangi rolün kaydedilemediğini söyler
+  // sunucudaki durumu yeniden okur, ileti hangi rolün kaydedilemediğini söyler. Başarı bildirimi taslak düştükten sonra:
+  // telefonda bildirim şerit varken onun üstünde durur, şerit kalkınca aşağı zıplamasın
   const save = async () => {
+    if (saving) return;
     setSaving(true);
     const saved: RoleRow[] = [];
     try {
@@ -62,7 +77,6 @@ export default function RolesAdmin() {
         }
         saved.push(r);
       }
-      toast.ok(saved.length === 1 ? `${saved[0].label} rolünün yetkileri kaydedildi` : `${saved.length} rolün yetkileri kaydedildi`);
     } finally {
       // Önce sunucunun yeni hâli okunur, sonra taslak düşer (kaydedilen rol bir an eski yetkileriyle görünmesin)
       await qc.invalidateQueries({ queryKey: ['admin', 'roles'] }).catch(() => undefined);
@@ -76,17 +90,23 @@ export default function RolesAdmin() {
       }
       setSaving(false);
     }
+    toast.ok(saved.length === 1 ? `${saved[0].label} rolünün yetkileri kaydedildi` : `${saved.length} rolün yetkileri kaydedildi`);
   };
 
-  const actions = (
-    <>
-      {dirty.length > 0 && <Button onClick={() => setDraft({})}>Vazgeç</Button>}
-      <Button variant="primary" icon={<Save className="size-4" />} loading={saving} disabled={!dirty.length} onClick={() => void save()}>
-        {dirty.length ? `Kaydet (${dirty.length})` : 'Kaydet'}
-      </Button>
-    </>
+  // Telefonda Kaydet yalnız alttaki yapışkan şeritte (değişiklik varken); başlıkta gri, dolu bir düğme durmaz
+  const header = (
+    <PageHeader
+      title="Roller ve yetkiler"
+      description="Rolün yetkisi o roldeki herkese uygulanır; kişiye özel ek Personel’de"
+      actions={
+        data.data && wide ? (
+          <Button variant="primary" icon={<Save className="size-4" />} loading={saving} disabled={!dirty.length} onClick={() => void save()}>
+            Kaydet
+          </Button>
+        ) : undefined
+      }
+    />
   );
-  const header = <PageHeader title="Roller ve yetkiler" description="Rolün yetkisi o roldeki herkese uygulanır; kişiye özel ek Personel’de" actions={data.data ? actions : undefined} />;
 
   if (data.isPending)
     return (
@@ -103,6 +123,7 @@ export default function RolesAdmin() {
       </>
     );
   const groups = data.data.groups;
+  const total = groups.reduce((n, g) => n + g.permissions.length, 0);
   const phone = roles.find((r) => r.role === phoneRole) ?? roles[0];
 
   return (
@@ -119,23 +140,40 @@ export default function RolesAdmin() {
                 <th scope="col" className="sticky left-0 z-[1] h-12 min-w-44 bg-[var(--admin-surface-2)] px-4 text-left text-[13px] font-medium text-[var(--admin-text-mute)] md:w-[38%]">
                   Yetki
                 </th>
-                {roles.map((r) => (
-                  <th key={r.role} scope="col" className="px-1 py-2 text-center align-bottom">
-                    <span className="flex flex-col items-center gap-1">
-                      <span className="inline-flex max-w-20 items-center justify-center gap-1 text-center text-[13px] font-semibold leading-tight text-[var(--admin-text)]">
-                        {r.locked && <Lock className="size-3.5 text-[var(--admin-text-mute)]" aria-label="kilitli" />}
-                        {r.label}
+                {roles.map((r) => {
+                  const same = sameSet(current(r), r.defaults);
+                  return (
+                    <th key={r.role} scope="col" className="px-1 py-2 text-center align-bottom">
+                      <span className="flex flex-col items-center gap-1">
+                        <span className="inline-flex max-w-20 items-center justify-center gap-1 text-center text-[13px] font-semibold leading-tight text-[var(--admin-text)]">
+                          {r.locked && <Lock className="size-3.5 shrink-0 text-[var(--admin-text-mute)]" aria-label="kilitli" />}
+                          {keepSlash(r.label)}
+                        </span>
+                        <span className="text-xs font-normal text-[var(--admin-text-mute)]">{r.users} kişi</span>
+                        {/* "Varsayılana dön" yeri her sütunda ayrılır: değişen sütunun başlığı zıplamaz, komşuları ezilmez */}
+                        {r.locked ? (
+                          <span aria-hidden="true" className="size-8 pointer-coarse:size-11" />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => reset(r)}
+                            disabled={same}
+                            aria-hidden={same || undefined}
+                            tabIndex={same ? -1 : undefined}
+                            aria-label={`${r.label}: varsayılana dön`}
+                            title="Varsayılana dön"
+                            className={cn(
+                              'grid size-8 place-items-center rounded-full text-[var(--admin-primary)] transition-colors hover:bg-[var(--admin-primary-soft)] active:bg-[var(--admin-primary-soft)] pointer-coarse:size-11',
+                              same && 'invisible',
+                            )}
+                          >
+                            <RotateCcw className="size-4" aria-hidden="true" />
+                          </button>
+                        )}
                       </span>
-                      <span className="text-xs font-normal text-[var(--admin-text-mute)]">{r.users} kişi</span>
-                      {!r.locked && !sameSet(current(r), r.defaults) && (
-                        <button type="button" onClick={() => reset(r)} className="inline-flex min-h-8 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-[var(--admin-primary)] hover:bg-[var(--admin-primary-soft)] pointer-coarse:min-h-11">
-                          <RotateCcw className="size-3" aria-hidden="true" />
-                          Varsayılan
-                        </button>
-                      )}
-                    </span>
-                  </th>
-                ))}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             {groups.map((g) => (
@@ -145,10 +183,29 @@ export default function RolesAdmin() {
         </div>
       </div>
 
-      {/* Telefon: önce rol, sonra o rolün yetkileri */}
+      {/* Telefon: önce rol (seçicide hepsi görünür), sonra o rolün yetkileri */}
       <div className="md:hidden">
-        <StatusTabs label="Rol" value={phone.role} onChange={setPhoneRole} tabs={roles.map((r) => ({ value: r.role, label: r.label, count: current(r).length }))} />
-        {phone.locked && <p className="mb-3 text-[13px] text-[var(--admin-text-mute)]">Patron rolü her yetkiye sahiptir ve değiştirilemez</p>}
+        <Field label="Rol" className="mb-2">
+          <Select value={phone.role} onChange={(e) => setPhoneRole(e.target.value as Role)}>
+            {roles.map((r) => (
+              <option key={r.role} value={r.role}>
+                {joinMeta([r.label, `${r.users} kişi`, changed(r) && 'değişti'])}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <p className="mb-3 text-[13px] text-[var(--admin-text-mute)]">
+          {phone.locked ? (
+            'Patron rolü her yetkiye sahiptir ve değiştirilemez'
+          ) : (
+            <>
+              <span className="tabular-nums">
+                {current(phone).length} / {total}
+              </span>{' '}
+              yetki açık
+            </>
+          )}
+        </p>
         {!phone.locked && !sameSet(current(phone), phone.defaults) && (
           <Button icon={<RotateCcw className="size-4" />} onClick={() => reset(phone)} className="mb-3">
             Varsayılana dön
@@ -157,7 +214,7 @@ export default function RolesAdmin() {
         <div className="space-y-4">
           {groups.map((g) => (
             <section key={g.key}>
-              <h2 className="px-1 pb-2 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</h2>
+              <h2 className={cn('px-1 pb-2', GROUP_LABEL)}>{g.label}</h2>
               <ul className={cn(CARD, 'divide-y divide-[var(--admin-divider)] overflow-hidden')}>
                 {g.permissions.map((p) => {
                   const on = current(phone).includes(p);
@@ -166,7 +223,8 @@ export default function RolesAdmin() {
                       <label className={cn('flex min-h-14 items-center gap-3 px-4 py-2.5 text-sm', phone.locked ? 'opacity-70' : 'cursor-pointer')}>
                         <input type="checkbox" checked={on} disabled={phone.locked} onChange={() => toggle(phone, p)} className="size-5 shrink-0 accent-[var(--admin-primary)]" />
                         <span className="min-w-0 flex-1">{PERMISSIONS[p]}</span>
-                        {!phone.locked && on !== phone.defaults.includes(p) && <Badge tone={on ? 'primary' : 'danger'}>{on ? 'eklendi' : 'kaldırıldı'}</Badge>}
+                        {/* Varsayılandan fark: seçim olağan bir karar, alarm değil (kırmızı yalnız alarm ve iptal) */}
+                        {!phone.locked && on !== phone.defaults.includes(p) && <Badge tone={on ? 'primary' : 'neutral'}>{on ? 'Eklendi' : 'Kaldırıldı'}</Badge>}
                       </label>
                     </li>
                   );
@@ -176,6 +234,25 @@ export default function RolesAdmin() {
           ))}
         </div>
       </div>
+
+      {dirty.length > 0 && (
+        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır; burada yalnız iç boşluk. Telefonda bildirim
+        // bu şeridin üstünde durur (data-action-bar): kaydedilemeyen rolün hatası Vazgeç ve Kaydet'i örtmez
+        <div data-action-bar="" className="sticky bottom-0 z-10 -mx-4 mt-4 flex items-center gap-3 border-t border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
+          <span className="min-w-0 text-[13px] text-[var(--admin-text-mute)]">
+            {/* Telefonda kısa (hangi rolün değiştiği seçicide "değişti" diye yazar) */}
+            <span className="sm:hidden">Kaydedilmemiş değişiklik</span>
+            <span className="max-sm:hidden">{dirty.length === 1 ? `${dirty[0].label} rolünde kaydedilmemiş değişiklik` : `${dirty.length} rolde kaydedilmemiş değişiklik`}</span>
+          </span>
+          <span className="flex-1" />
+          <Button disabled={saving} onClick={() => setDraft({})}>
+            Vazgeç
+          </Button>
+          <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
+            Kaydet
+          </Button>
+        </div>
+      )}
     </>
   );
 }
@@ -195,7 +272,7 @@ function GroupRows({
   return (
     <tbody>
       <tr className="border-t border-[var(--admin-border)] bg-[var(--admin-panel)]">
-        <th scope="rowgroup" className="sticky left-0 z-[1] bg-[var(--admin-panel)] px-4 py-1.5 text-left text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">
+        <th scope="rowgroup" className={cn('sticky left-0 z-[1] bg-[var(--admin-panel)] px-4 py-1.5 text-left', GROUP_LABEL)}>
           {group.label}
         </th>
         <td colSpan={roles.length} aria-hidden="true" />

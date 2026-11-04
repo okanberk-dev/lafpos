@@ -15,7 +15,7 @@ import {
   ticketHead,
 } from '@shared/service-mode';
 import type { BootstrapDTO, KitchenTicket, OrderDTO, PickupBoardDTO } from '@shared/types';
-import { homePath, navFor, POS_NAV, visibleNav } from '../src/lib/nav';
+import { EXTRA_TITLES, homePath, navAlias, navAriaLabel, navFor, POS_NAV, useNavOrigin, visibleNav } from '../src/lib/nav';
 import { type Harness, startApp } from './harness';
 
 /**
@@ -136,6 +136,27 @@ describe('servis modu: saf yardımcılar', () => {
   });
 });
 
+describe('kasa menüsü: menüde olmayan ekranlar ve adlar', () => {
+  it('Eğitim cihazı Kasa’nın altında, adisyon geldiği ekranın; menüdeki ekran kendi adresiyle eşlenir', () => {
+    expect(navAlias('/cihaz', null)).toBe('/kasa');
+    expect(navAlias('/adisyon/x', '/masalar')).toBe('/masalar');
+    expect(navAlias('/adisyon/x', null)).toBeNull();
+    expect(navAlias('/masalar', '/satis')).toBeNull();
+    // Telefonun üst şeridinde menüde olmayan ekranın da adı var
+    expect(EXTRA_TITLES['/cihaz']).toBe('Eğitim cihazı');
+    // Adisyon açılmadan geldiği ekran bilinmez
+    expect(useNavOrigin.getState().to).toBeNull();
+  });
+
+  it('Müşteriler ekranının adı sayfanınkiyle aynı; palet "açık hesap" ve "cari" ile de bulur', () => {
+    const n = POS_NAV.find((x) => x.to === '/musteriler')!;
+    expect(n.title).toBe('Müşteriler');
+    expect(navAriaLabel(n)).toBeUndefined();
+    expect(n.keywords).toContain('açık hesap');
+    expect(n.keywords).toContain('cari');
+  });
+});
+
 let h: Harness;
 beforeAll(async () => {
   h = await startApp();
@@ -198,6 +219,28 @@ describe('servis modu ayarı (sunucu)', () => {
     audit = await h.ok<Audit[]>('patron', 'GET', '/admin/audit?limit=50');
     expect(audit.filter((a) => a.action === 'settings.servis_modu')).toHaveLength(2);
     expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).settings.serviceMode).toBe('yari_self');
+  });
+
+  it('"ayarları değiştirdi" yalnız değişen ayarları Türkçe adıyla yazar; yalnız servis modu ve aynı değerler ikinci kayıt yazmaz', async () => {
+    const rows = () => h.ok<(Audit & { id: number })[]>('patron', 'GET', '/admin/audit?limit=1000');
+    /** Kaydın yazdığı denetim satırları: [eylem, ileti] */
+    const written = async (put: Record<string, unknown>) => {
+      const before = new Set((await rows()).map((a) => a.id));
+      await h.ok('patron', 'PUT', '/admin/settings', put);
+      return (await rows()).filter((a) => !before.has(a.id)).map((a) => [a.action, a.message]);
+    };
+    const s = await h.ok<{ serviceMode: (typeof SERVICE_MODES)[number]; kitchenWarnMinutes: number; tipsEnabled: boolean; sizeLabels: { M: string; L: string } }>('patron', 'GET', '/admin/settings');
+
+    // Yalnız servis modu: kendi okunur kaydı yazılır; "ayarları değiştirdi: serviceMode" yazılmaz
+    expect(await written({ serviceMode: 'masa' })).toEqual([['settings.servis_modu', `Patron servis modunu değiştirdi: ${SERVICE_MODE_LABEL[s.serviceMode]} → Masaya servis`]]);
+    // Aynı değerleri yeniden kaydetmek (nesne alanı dahil) kayıt yazmaz
+    expect(await written({ serviceMode: 'masa', kitchenWarnMinutes: s.kitchenWarnMinutes, sizeLabels: { ...s.sizeLabels } })).toEqual([]);
+    // Değişenler kod adıyla değil Türkçe adıyla, değişmeyen (boy adları) yazılmaz
+    expect(await written({ kitchenWarnMinutes: s.kitchenWarnMinutes + 1, tipsEnabled: !s.tipsEnabled, sizeLabels: { ...s.sizeLabels } })).toEqual([
+      ['settings.update', 'Patron ayarları değiştirdi: Bar fişi uyarısı, Bahşiş'],
+    ]);
+
+    await h.ok('patron', 'PUT', '/admin/settings', { serviceMode: s.serviceMode, kitchenWarnMinutes: s.kitchenWarnMinutes, tipsEnabled: s.tipsEnabled });
   });
 });
 

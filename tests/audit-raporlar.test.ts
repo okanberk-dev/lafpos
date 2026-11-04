@@ -150,7 +150,7 @@ describe('raporlar denetimi', () => {
 
     const x = await h.ok<{ summary: ZSummary }>('mudur', 'GET', '/cash/day');
     const summary = await h.ok<{ voided: number }>('mudur', 'GET', '/reports/summary');
-    const patron = await h.ok<{ voided: number; anomalies: { title: string }[] }>('patron', 'GET', '/reports/patron');
+    const patron = await h.ok<{ voided: number; anomalies: { title: string; detail: string }[] }>('patron', 'GET', '/reports/patron');
     const list = await h.ok<{ total: number; count: number; rows: { qty: number }[] }>('mudur', 'GET', '/reports/items?kind=iptal');
     const staff = await h.ok<{ staff: { voids: number; voidValue: number }[] }>('patron', 'GET', '/reports/staff');
     const products = await h.ok<{ products: { voided: number }[] }>('mudur', 'GET', '/reports/products');
@@ -169,6 +169,25 @@ describe('raporlar denetimi', () => {
     expect((await csv('type=iptal')).length - 1).toBe(list.count);
     // İptal oranı açık adisyonlarla birlikte: satılanın çoğu iptal edildi
     expect(patron.anomalies.map((a) => a.title)).toContain('İptal oranı yüksek');
+    // Dikkat isteyenlerin açıklaması ekranın geri kalanı gibi Türkçe: virgüllü yüzde ("%4.5" değil), kısa tarih
+    // (ISO "2026-10-19" değil). Geçen pazartesi sayılmadan kapandı
+    const detail = (title: string) => patron.anomalies.find((a) => a.title === title)?.detail;
+    expect(detail('İptal oranı yüksek')).toMatch(/^Bugün %\d+(,\d)?; son 4 haftanın aynı günü ortalaması %0$/);
+    expect(detail('Kasa föyü girilmedi')).toMatch(/^Z \d+ \(19 Eki Pzt\) sayılmadan kapandı$/);
+  });
+
+  it('kasa farkı satırı farkın yönünü ve tutarını Türkçe yazar: "₺5,00 eksik", "₺2,50 fazla" ("-5 ₺ fark" değil)', async () => {
+    await at('2026-10-26T10:30:00+03:00');
+    const { db, schema } = await import('../server/db/client');
+    const day = db.select().from(schema.businessDays).where(eq(schema.businessDays.date, '2026-10-19')).get()!;
+    const cash = async () =>
+      (await h.ok<{ anomalies: { level: string; title: string; detail: string }[] }>('patron', 'GET', '/reports/patron')).anomalies.filter((a) => a.title === 'Kasa farkı' || a.title === 'Kasa föyü girilmedi');
+    // Geçen pazartesinin kasa föyü girilir: kasada beklenenden 5 lira az (fark sayılan eksi beklenen)
+    await h.ok('kasa', 'POST', `/cash/days/${day.id}/count`, { countedCash: day.expectedCash! - 500 });
+    expect(await cash()).toEqual([{ level: 'uyari', title: 'Kasa farkı', detail: `Z ${day.zNo} (19 Eki Pzt) gün sonunda ₺5,00 eksik` }]);
+    // Düzeltilen sayım beklenenden fazla
+    await h.ok('kasa', 'POST', `/cash/days/${day.id}/count`, { countedCash: day.expectedCash! + 250, approverPin: MUDUR });
+    expect(await cash()).toEqual([{ level: 'uyari', title: 'Kasa farkı', detail: `Z ${day.zNo} (19 Eki Pzt) gün sonunda ₺2,50 fazla` }]);
   });
 
   it('adisyon sayısı her ekranda aynı: ₺0 adisyon sayılmaz, satılan ürün ikramı saymaz, geçen hafta aynı ölçütle (reports-35, client-63)', async () => {

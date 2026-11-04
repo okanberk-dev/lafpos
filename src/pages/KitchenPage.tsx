@@ -1,14 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, Layers, MessageSquareText, MonitorUp, Moon, MoreHorizontal, PackageCheck, PackageX, Sun, Undo2, WifiOff } from 'lucide-react';
+import { Ban, Bell, BellOff, CheckCheck, ChefHat, Clock, Globe, Layers, MessageSquareText, MonitorUp, Moon, MoreHorizontal, PackageCheck, PackageX, Sun, Undo2, WifiOff } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { kitchenTotals } from '@shared/kitchen';
+import { PLATFORM_COLOR, PLATFORM_LABEL } from '@shared/platforms';
 import { ticketHead } from '@shared/service-mode';
 import { fmtTime } from '@shared/time';
 import type { KitchenTicket, KitchenTicketItem } from '@shared/types';
 import { SoldOutDialog } from '@/components/SoldOutDialog';
 import { Button, IconButton } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
-import { EmptyState, Notice, Skeleton, Tabs } from '@/components/ui/misc';
+import { Badge, EmptyState, ErrorState, Notice, Skeleton, Tabs } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
 import { deliverItems } from '@/lib/handoff';
 import { historyHandIds, undoStep } from '@/lib/readyToHand';
@@ -63,12 +64,15 @@ export default function KitchenPage() {
     return () => setForce(null);
   }, [setForce]);
   const toggleScreenTheme = () => setBarTheme(dark ? 'acik' : 'koyu');
+  // Tek istasyonda ray gizli, süzgeç yok (Tümü ile aynı); silinmiş istasyonun kaydı da Tümü'ye düşer: ray gizliyken
+  // ekran boş kalmasın
+  const activeStation = boot.stations.length > 1 && boot.stations.some((s) => s.id === station) ? station : '';
   // Fiş düğmesi istek sürerken kilitlenir (çift dokunuş iki kez göndermesin)
   const [busy, setBusy] = useState<string | null>(null);
 
   const ticketsOf = (v: View) => ({
-    queryKey: ['kitchen', station, v],
-    queryFn: () => get<KitchenTicket[]>(`/kitchen?${new URLSearchParams({ ...(station ? { station } : {}), ...VIEW_QUERY[v] })}`),
+    queryKey: ['kitchen', activeStation, v],
+    queryFn: () => get<KitchenTicket[]>(`/kitchen?${new URLSearchParams({ ...(activeStation ? { station: activeStation } : {}), ...VIEW_QUERY[v] })}`),
     refetchInterval: 15_000,
   });
   const tickets = useQuery(ticketsOf(view));
@@ -79,11 +83,11 @@ export default function KitchenPage() {
     () =>
       onLive((e) => {
         if (e.topic !== 'kitchen' || !sound) return;
-        if (station && e.stationId && e.stationId !== station) return;
+        if (activeStation && e.stationId && e.stationId !== activeStation) return;
         if (e.kind === 'ticket.new') beep('yeni');
         if (e.kind === 'ticket.void') beep('iptal');
       }),
-    [sound, station],
+    [sound, activeStation],
   );
 
   const setStatus = async (ids: string[], status?: KitchenTicketItem['status'], busyKey?: string) => {
@@ -101,6 +105,8 @@ export default function KitchenPage() {
     setBusy(busyKey);
     try {
       await post(`/sync/online/${orderId}/stage`, { action });
+      // Düğmenin adı kasa fişindeki gibi "Hepsi hazır"; siteye gittiğini bildirim söyler
+      if (action === 'ready') toast.ok('Hazır olduğu siteye bildirildi');
       await qc.invalidateQueries({ queryKey: ['kitchen'] });
     } catch (e) {
       toast.err(errorMessage(e));
@@ -138,8 +144,9 @@ export default function KitchenPage() {
   const tools = (
     <>
       {view === 'aktif' && (
-        <ToolButton pressed={totalsView} onClick={() => setTotalsView(!totalsView)} title="Açık fişlerdeki ürünleri topla">
-          <Layers className="size-4" /> {totalsView ? 'Fişler' : 'Toplam'}
+        // Aç-kapa düğmesi adını değiştirmez (yanındaki "Fişler" sekmesiyle karışıyordu); durumu aria-pressed ve gri zemin
+        <ToolButton pressed={totalsView} onClick={() => setTotalsView(!totalsView)} title={totalsView ? 'Fişlere dön' : 'Açık fişlerdeki ürünleri topla'}>
+          <Layers className="size-4" /> Toplam
         </ToolButton>
       )}
       {canSoldOut && (
@@ -158,15 +165,16 @@ export default function KitchenPage() {
       {/* Başlık kartı iki satır: üstte ad, sayaçlar ve araçlar; altta istasyon sekmeleri (telefonda kayar) */}
       <div className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5">
-          {/* Telefonda ikon yok: başlık ve sayaçlar tek satıra sığsın */}
+          {/* Telefonda ikon yok; Fişler'de başlık da yalnız ekran okuyucuya (alt sekme "Bar" diyor): sayaçların yeri, iki
+              sayaç birlikteyken başlık "B…"ya iniyordu */}
           <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 max-sm:hidden">
             <ChefHat className="size-5" />
           </span>
-          <h1 className="min-w-0 truncate text-lg font-semibold">Bar ve mutfak</h1>
+          <h1 className={cn('min-w-0 truncate text-lg font-semibold', view === 'aktif' && 'max-sm:sr-only')}>Bar ve mutfak</h1>
           <div className="flex-1" />
           {view === 'aktif' && (
             // Renk dili: bekliyor nötr, hazırlanıyor mavi, hazır yeşil; amber yalnız zaman (gecikme, planlı saat)
-            <div className="flex shrink-0 gap-1.5 whitespace-nowrap text-[13px] font-medium md:text-sm">
+            <div className="flex shrink-0 gap-1.5 whitespace-nowrap text-[13px] font-medium max-sm:order-first md:text-sm">
               <span className={cn('tabular inline-flex min-h-6 items-center rounded-full bg-surface-3 px-2.5 md:min-h-7 md:px-3', counts.waiting > 0 ? 'text-ink' : 'text-muted')}>{counts.waiting} bekliyor</span>
               {counts.making > 0 && <span className="tabular inline-flex min-h-6 items-center rounded-full bg-[var(--admin-blue-soft)] px-2.5 text-[var(--admin-blue)] md:min-h-7 md:px-3">{counts.making} hazırlanıyor</span>}
             </div>
@@ -179,9 +187,10 @@ export default function KitchenPage() {
           <IconButton label="Diğer" className="lg:hidden" onClick={() => setMore(true)}>
             <MoreHorizontal className="size-5" />
           </IconButton>
-          <button onClick={() => setSound(!sound)} aria-label={sound ? 'Sesi kapat' : 'Sesi aç'} title={sound ? 'Sesi kapat' : 'Sesi aç'} aria-pressed={sound} className="grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover active:bg-press">
-            {sound ? <Bell className="size-[18px]" /> : <BellOff className="size-[18px] text-muted" />}
-          </button>
+          {/* Aç-kapa: adı sabit, durumu aria-pressed; kapsül, yanındaki Diğer ile aynı biçim */}
+          <IconButton label="Yeni sipariş sesi" title={sound ? 'Sesi kapat' : 'Sesi aç'} aria-pressed={sound} onClick={() => setSound(!sound)}>
+            {sound ? <Bell className="size-5" /> : <BellOff className="size-5 text-muted" />}
+          </IconButton>
         </div>
         {/* Görünüm ve istasyon: geniş ekranda tek satır, telefonda alt alta (istasyonlar yatay kayar) */}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--admin-divider)] px-2 py-1.5 md:flex-nowrap md:px-3">
@@ -189,20 +198,38 @@ export default function KitchenPage() {
             label="Görünüm"
             className="shrink-0"
             value={view}
-            onChange={setView}
+            onChange={(v) => {
+              // Seçili Fişler'e yeniden dokunmak Toplam görünümünden fişlere döndürür
+              if (v === 'aktif' && view === 'aktif') setTotalsView(false);
+              setView(v);
+            }}
             options={[
               { value: 'aktif', label: 'Fişler' },
               { value: 'hazir', label: 'Hazır', count: ready.data?.length },
               { value: 'gecmis', label: 'Geçmiş' },
             ]}
           />
-          <span aria-hidden="true" className="h-6 w-px shrink-0 bg-[var(--admin-divider)] max-md:hidden" />
-          <Tabs label="İstasyon" className="min-w-0 max-md:basis-full" value={station} onChange={setStation} options={[{ value: '', label: 'Tümü' }, ...boot.stations.map((s) => ({ value: s.id, label: s.name }))]} />
+          {/* İstasyon rayı yalnız birden çok istasyonda; görünüm rayından adıyla ayrılır (iki gri seçili hap tek grup sanılıyordu) */}
+          {boot.stations.length > 1 && (
+            <>
+              <span aria-hidden="true" className="h-6 w-px shrink-0 bg-[var(--admin-divider)] max-md:hidden" />
+              <div className="flex min-w-0 items-center gap-1 max-md:basis-full">
+                <span aria-hidden="true" className="shrink-0 pl-1.5 text-xs font-medium text-muted">
+                  İstasyon
+                </span>
+                <Tabs label="İstasyon" className="min-w-0" value={activeStation} onChange={setStation} options={[{ value: '', label: 'Tümü' }, ...boot.stations.map((s) => ({ value: s.id, label: s.name }))]} />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       <Modal open={more} onClose={() => setMore(false)} title="Bar ekranı" size="sm">
-        <div className="grid gap-1.5 p-3 [&_button]:w-full [&_button]:justify-start [&_button]:px-3" onClick={() => setMore(false)}>
+        {/* Satırlar kabuğun "Diğer ekranlar" sayfası gibi: 56 px, kenarlı, köşe 14 */}
+        <div
+          className="grid gap-2 p-4 [&_button]:min-h-14 [&_button]:w-full [&_button]:justify-start [&_button]:gap-3 [&_button]:rounded-xl [&_button]:border [&_button]:border-line [&_button]:px-3 [&_button]:text-[15px] [&_svg]:size-[18px]"
+          onClick={() => setMore(false)}
+        >
           {tools}
           {/* Telefonda çağrı ekranı açılmaz (televizyon ya da müşteriye dönük tablet içindir) */}
           <span className="contents max-md:hidden">{callScreen}</span>
@@ -218,7 +245,7 @@ export default function KitchenPage() {
 
       <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
         {tickets.isPending && (
-          <div role="status" aria-label="Fişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-3">
+          <div role="status" aria-label="Fişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] items-start gap-3">
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-48 rounded-2xl" />
             ))}
@@ -226,24 +253,26 @@ export default function KitchenPage() {
         )}
         {tickets.isError && !tickets.data && (
           <div className="grid h-full place-items-center">
-            <EmptyState large icon={<WifiOff />} title="Kasaya bağlanılamıyor">
-              Yeni siparişler bu ekrana gelmiyor. Bağlantı gelince fişler kendiliğinden görünür
-            </EmptyState>
+            <ErrorState large title="Kasaya bağlanılamıyor" error={tickets.error} retrying={tickets.isFetching} onRetry={() => void tickets.refetch()}>
+              Yeni siparişler bu ekrana gelmiyor; bağlantı gelince fişler kendiliğinden görünür
+            </ErrorState>
           </div>
         )}
         {tickets.isSuccess && list.length === 0 && (
           <div className="grid h-full place-items-center">
-            <EmptyState large art="espresso" title={history ? 'Son 90 dakikada hazırlanan yok' : readyView ? 'Teslim bekleyen sipariş yok' : 'Bekleyen sipariş yok'}>
+            <EmptyState large art="espresso" title={history ? 'Son 90 dakikada hazırlanan sipariş yok' : readyView ? 'Teslim bekleyen sipariş yok' : 'Bekleyen sipariş yok'}>
               {history
                 ? 'Hazır işaretlenen fişler 90 dakika burada kalır'
                 : readyView
                   ? 'Hazır olan sipariş alınana dek 30 dakika burada bekler; teslim edince düşer'
-                  : 'Yeni sipariş gelince ses çalar ve fiş burada belirir'}
+                  : sound
+                    ? 'Yeni sipariş gelince ses çalar ve fiş burada belirir'
+                    : 'Yeni sipariş gelince fiş burada belirir'}
             </EmptyState>
           </div>
         )}
         {showTotals && list.length > 0 && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] items-start gap-3">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] items-start gap-3">
             {totals.map((r) => (
               <article key={r.key} className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-3">
                 <div className="flex items-start gap-3">
@@ -271,18 +300,27 @@ export default function KitchenPage() {
             ))}
           </div>
         )}
-        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] items-start gap-3', showTotals && 'hidden')}>
+        <div className={cn('grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] items-start gap-3', showTotals && 'hidden')}>
           {list.map((t) => {
             const live = t.items.filter((i) => !i.voided);
+            // Gönderildikten sonra kalemlerin hepsi iptal edildi: sunucu fişi 10 dakika gösterir (iptal bildirimi). Yapılacak
+            // iş yok: alarm, süre ve düğme de yok ("Hepsi hazır" boş listeyle reddediliyordu)
+            const cancelled = live.length === 0;
             // Hazır sekmesinde süre hazır olduğundan beri (müşteri ne zamandır almadı)
             const age = readyView ? now - Math.max(...live.map((i) => i.readyAt ?? t.sentAt)) : now - t.sentAt;
             const level = age > boot.settings.kitchenAlarmMinutes * 60_000 ? 'alarm' : age > boot.settings.kitchenWarnMinutes * 60_000 ? 'warn' : 'ok';
             const online = t.source === 'laffogato';
             const allStarted = live.every((i) => i.status !== 'yeni');
+            // Paket platformu: kurye ve müşteri platformun kodunu söyler ("0761"); kod büyük yazılır, platformun adı yanında
+            // küçük (dar kartta kırpılan ad, kod değil). LafPOS'un çağrı numarası ve kabul eden kişi platform fişinde yok
+            const platformName = t.platform ? PLATFORM_LABEL[t.platform] : '';
+            const platformCode = t.platform && t.label.startsWith(platformName) ? t.label.slice(platformName.length).trim() : '';
             // Self modlarda numara, yarı selfte masa no büyük rozet: barista çağıracağı ya da götürüleceği yeri görür
-            const head = ticketHead(t, mode);
-            const late = history || readyView ? 'ok' : level;
+            const head = t.platform ? { call: null, label: platformCode || t.label, showNo: false } : ticketHead(t, mode);
+            const late = history || readyView || cancelled ? 'ok' : level;
             const name = head.call ?? t.label;
+            // Platform siparişinin notu etiketle başlar ("Getir Yemek 0761 · Kapıda Pluxee"): başlıktaki kod notta yinelenmez
+            const note = t.platform && t.note?.startsWith(t.label) ? t.note.slice(t.label.length).replace(/^\s*·\s*/, '') || null : t.note;
             // Bu fişin bir isteği sürerken fişin öteki düğmeleri de kilitli (çift dokunuş iki kez göndermesin)
             const ticketBusy = !!busy && busy.startsWith(`${t.key}:`);
             return (
@@ -296,34 +334,50 @@ export default function KitchenPage() {
                 )}
               >
                 <header className={cn('flex items-center gap-2 border-b border-[var(--admin-divider)] px-3 py-2.5', late === 'alarm' && 'bg-[var(--admin-danger-soft)]')}>
+                  {/* Online (siteden gelen) her ekranda mor: kitin rozeti */}
                   {online && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--admin-hue-violet-soft)] px-2 py-0.5 text-xs font-medium text-[var(--admin-hue-violet)]">
-                      <Globe className="size-3.5" /> Online
-                    </span>
+                    <Badge tone="violet" className="shrink-0">
+                      <Globe aria-hidden="true" className="size-3.5" />
+                      Online
+                    </Badge>
                   )}
+                  {/* Çağrı numarası nötr hap: bu ekranda mavi "hazırlanıyor" demek (kalemleri bekleyen No 9 da işte görünüyordu) */}
                   {head.call && (
-                    <span className="tabular font-headline shrink-0 rounded-xl bg-[var(--admin-blue-soft)] px-2.5 py-0.5 text-xl font-bold leading-tight text-[var(--admin-blue)] md:px-3 md:text-2xl">{head.call}</span>
+                    <span className="tabular font-headline shrink-0 rounded-full bg-surface-3 px-3 py-0.5 text-xl font-bold leading-tight text-ink md:px-3.5 md:text-2xl">{head.call}</span>
                   )}
                   {/* Nereye gideceği en büyük yazı: barın üstündeki tablet 1-2 m'den okunur */}
-                  {head.label && <span className={cn('truncate', head.call ? 'text-sm text-ink-2' : 'text-xl font-bold tracking-[-0.01em] md:text-2xl')}>{head.label}</span>}
+                  {head.label && <span className={cn(head.call ? 'text-sm text-ink-2' : 'text-xl font-bold tracking-[-0.01em] md:text-2xl', platformCode ? 'shrink-0' : 'truncate')}>{head.label}</span>}
+                  {t.platform && platformCode && (
+                    <span className="flex min-w-0 items-center gap-1.5 text-sm text-ink-2">
+                      <span aria-hidden="true" className="size-2 shrink-0 rounded-full" style={{ background: PLATFORM_COLOR[t.platform] }} />
+                      <span className="truncate">{platformName}</span>
+                    </span>
+                  )}
                   {head.showNo && <span className="tabular shrink-0 text-sm text-muted">#{t.orderNo}</span>}
-                  {t.waiterName && <span className="min-w-0 truncate text-sm text-muted">· {t.waiterName}</span>}
+                  {t.waiterName && !t.platform && <span className="min-w-0 truncate text-sm text-muted">· {t.waiterName}</span>}
                   <span className="flex-1" />
-                  <span
-                    className={cn(
-                      'tabular inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[15px] font-semibold md:min-h-8 md:text-[17px]',
-                      history ? 'bg-surface-3 text-muted' : readyView ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : late === 'alarm' ? 'bg-danger-600 text-white' : late === 'warn' ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-ink-2',
-                    )}
-                  >
-                    {readyView ? <CheckCheck aria-hidden="true" className="size-4 md:size-[18px]" /> : <Clock aria-hidden="true" className="size-4 md:size-[18px]" />}
-                    {readyView && <span className="sr-only">Hazır olalı</span>}
-                    {mmss(age)}
-                  </span>
+                  {cancelled ? (
+                    <span className={cn(PILL, 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]')}>
+                      <Ban aria-hidden="true" className="size-4 md:size-[18px]" />
+                      İptal edildi
+                    </span>
+                  ) : (
+                    <span
+                      className={cn(
+                        PILL,
+                        history ? 'bg-surface-3 text-muted' : readyView ? 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]' : late === 'alarm' ? 'bg-danger-600 text-white' : late === 'warn' ? 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]' : 'bg-surface-3 text-ink-2',
+                      )}
+                    >
+                      {readyView ? <CheckCheck aria-hidden="true" className="size-4 md:size-[18px]" /> : <Clock aria-hidden="true" className="size-4 md:size-[18px]" />}
+                      {readyView && <span className="sr-only">Hazır olalı</span>}
+                      {mmss(age)}
+                    </span>
+                  )}
                 </header>
-                {(t.note || t.scheduledFor) && (
+                {(note || t.scheduledFor) && (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--admin-divider)] px-3 py-2 text-sm md:text-base">
                     {t.scheduledFor && <span className="font-semibold text-[var(--admin-warning)]">Saat {fmtTime(Date.parse(t.scheduledFor))}</span>}
-                    {t.note && <NoteChip>{t.note}</NoteChip>}
+                    {note && <NoteChip>{note}</NoteChip>}
                   </div>
                 )}
                 <ul className="divide-y divide-[var(--admin-divider)]">
@@ -350,28 +404,31 @@ export default function KitchenPage() {
                               <NoteChip>{i.note}</NoteChip>
                             </span>
                           )}
-                          {i.voided && <span className="block text-sm font-bold text-[var(--admin-danger-ink)]">İPTAL EDİLDİ, YAPMAYIN</span>}
+                          {i.voided && <span className="block text-sm font-bold text-[var(--admin-danger-ink)]">İptal edildi, yapmayın</span>}
                         </span>
                         {!i.voided && <StatusDot status={i.status} />}
                       </button>
                     </li>
                   ))}
                 </ul>
-                <footer className={cn('flex gap-2 border-t border-[var(--admin-divider)] p-2', REMOTE && 'hidden')}>
-                  {/* Ortak düğme: istek sürerken kilitli ve yükleniyor; ana eylem 48 px, 16 px yazı (uzaktan okunur) */}
+                <footer className={cn('flex gap-2 border-t border-[var(--admin-divider)] p-2', (REMOTE || cancelled) && 'hidden')}>
+                  {/* Ortak düğme: istek sürerken kilitli ve yükleniyor; ana eylem 48 px, 16 px yazı (uzaktan okunur). Site
+                      siparişinde de kasa fişinin sözü ve oranı: 322 px kartta "Hazır (siteye bildir)" kırpılıyordu, nereye
+                      bildirildiğini başlıktaki mor Online ve bildirim söyler */}
                   {online ? (
                     <>
                       {!allStarted && (
                         <Button size="lg" className={FOOT} disabled={ticketBusy} loading={busy === `${t.key}:start`} onClick={() => onlineStage(t.orderId, 'preparing', `${t.key}:start`)}>
-                          Hazırlanıyor
+                          Başla
                         </Button>
                       )}
-                      <Button variant="success" size="lg" className={FOOT} disabled={ticketBusy} loading={busy === `${t.key}:ready`} onClick={() => onlineStage(t.orderId, 'ready', `${t.key}:ready`)}>
-                        Hazır (siteye bildir)
+                      <Button variant="success" size="lg" className={cn(FOOT, 'flex-[2]')} title="Hazır olduğu siteye ve uygulamaya bildirilir" disabled={ticketBusy} loading={busy === `${t.key}:ready`} onClick={() => onlineStage(t.orderId, 'ready', `${t.key}:ready`)}>
+                        Hepsi hazır
                       </Button>
                     </>
                   ) : readyView ? (
-                    <Button variant="primary" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(live.filter((i) => i.status === 'hazir').map((i) => i.id), name, `${t.key}:deliver`)}>
+                    // Barın adımları tek yeşil ailede: koyuda da "Hepsi hazır" gibi derin yeşil (primary nane blok en parlak öğeydi)
+                    <Button variant="success" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(live.filter((i) => i.status === 'hazir').map((i) => i.id), name, `${t.key}:deliver`)}>
                       Teslim edildi
                     </Button>
                   ) : history ? (
@@ -381,7 +438,7 @@ export default function KitchenPage() {
                       </Button>
                       {/* Teslimi geri alınan eski sipariş Hazır sekmesine dönmez (30 dk): Geçmiş'ten yeniden teslim edilir */}
                       {historyHandIds(t).length > 0 && (
-                        <Button variant="primary" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(historyHandIds(t), name, `${t.key}:deliver`)}>
+                        <Button variant="success" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(historyHandIds(t), name, `${t.key}:deliver`)}>
                           Teslim edildi
                         </Button>
                       )}
@@ -409,14 +466,14 @@ export default function KitchenPage() {
   );
 }
 
-/** Araç çubuğu düğmesi: Tabs ile aynı dil (basılı gri, renksiz); aria-pressed ile açık/kapalı */
+/** Araç çubuğu düğmesi: Tabs ile aynı dil (kapsül, basılı gri, renksiz); aria-pressed ile açık/kapalı */
 function ToolButton({ pressed, className, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { pressed?: boolean }) {
   return (
     <button
       type="button"
       aria-pressed={pressed}
       className={cn(
-        'inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors duration-150 active:bg-press pointer-fine:min-h-9',
+        'inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 text-sm transition-colors duration-150 active:bg-press pointer-fine:min-h-9',
         pressed ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
         className,
       )}
@@ -429,6 +486,9 @@ function ToolButton({ pressed, className, children, ...rest }: React.ButtonHTMLA
 
 /** Fiş düğmesi: 48 px yükseklik, 16 px yazı, satırı paylaşır */
 const FOOT = 'h-12 flex-1 text-base';
+
+/** Fiş başlığının sağındaki durum hapı (süre, hazır olalı, iptal): uzaktan okunur, 15-17 px */
+const PILL = 'tabular inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[15px] font-semibold md:min-h-8 md:text-[17px]';
 
 /** Not (fişin ya da kalemin): renk yerine biçimle ayrılır, gri çip ve konuşma ikonu; amber zamana ayrılmış */
 function NoteChip({ children }: { children: React.ReactNode }) {

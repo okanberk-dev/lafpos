@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Coffee, CornerDownLeft, Lock, Moon, Plus, Search, Sun, UserPlus, Users } from 'lucide-react';
+import { Coffee, CornerDownLeft, Lock, LogOut, Moon, Plus, Search, Sun, UserPlus, UserRound } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
-import { tl } from '@shared/money';
+import { tlShort } from '@shared/money';
+import { ROLE_LABELS, type Role } from '@shared/permissions';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -13,6 +14,7 @@ import { navFor } from '@/lib/nav';
 import { useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
 import { resolveDark } from '@/lib/bootDark';
+import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
 import { setBarTheme, useTheme } from '@/lib/theme';
 import { confirmLeave } from '@/lib/unsavedGuard';
 import { visibleSections } from './admin/sections';
@@ -59,6 +61,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const barDark = useTheme((s) => s.force === 'dark');
   const onBar = useLocation().pathname === '/mutfak';
   const mode = useServiceMode();
+  const remoteSignOut = useRemoteSignOut();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -66,7 +69,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDivElement>(null);
   /** Basış karartmada mı başladı: kapanış click'te (Modal gibi), aynı dokunuş alttaki öğeye düşmesin */
   const downOnBackdrop = useRef(false);
-  const users = useQuery({ queryKey: ['users', 'admin'], queryFn: () => get<{ id: string; name: string; role: string; active: boolean }[]>('/admin/users'), enabled: can('personel.yonet'), staleTime: 60_000 });
+  const users = useQuery({ queryKey: ['users', 'admin'], queryFn: () => get<{ id: string; name: string; role: Role; active: boolean }[]>('/admin/users'), enabled: can('personel.yonet'), staleTime: 60_000 });
 
   // Kapanınca odak açan öğeye döner (⌘K'ya basılan alan, sol menüdeki büyüteç)
   useEffect(() => {
@@ -85,24 +88,29 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   const entries = useMemo<Entry[]>(() => {
     const out: Entry[] = [];
-    // Paletten her ekran bulunur (self serviste kullanılmayan Masalar da)
+    // Paletten her ekran bulunur (self serviste kullanılmayan Masalar da); uzaktan görünümde yalnız oradaki ekranlar
     for (const n of navFor(mode, { tablesInUse: true })) {
-      if (n.to === '/yonetim' || !n.perms.some((p) => can(p))) continue;
-      out.push({ id: `ekran:${n.to}`, group: 'Ekranlar', label: n.title, icon: <n.icon />, run: go(n.to) });
+      if (n.to === '/yonetim' || !n.perms.some((p) => can(p)) || (REMOTE && !REMOTE_PATHS.includes(n.to))) continue;
+      out.push({ id: `ekran:${n.to}`, group: 'Ekranlar', label: n.title, icon: <n.icon />, keywords: n.keywords, run: go(n.to) });
     }
-    for (const s of visibleSections(can)) {
+    // Bölümün açıklaması satırda yazılmaz (dar satırda yarım kalırdı), aramada bulunur ("süt" Seçenekler'i bulur)
+    for (const s of REMOTE ? [] : visibleSections(can)) {
       if (out.some((e) => e.id === `ekran:${s.to}`)) continue;
-      out.push({ id: `yonetim:${s.key}`, group: 'Yönetim', label: s.label, hint: s.desc, icon: <s.icon />, keywords: s.keywords, run: go(s.to) });
+      out.push({ id: `yonetim:${s.key}`, group: 'Yönetim', label: s.label, icon: <s.icon />, keywords: `${s.keywords ?? ''} ${s.desc}`, run: go(s.to) });
     }
     if (can('menu.yonet')) {
       out.push({ id: 'eylem:urun', group: 'Eylemler', label: 'Yerel ürün ekle', icon: <Plus />, keywords: 'yeni ürün', run: go('/yonetim/menu?urun=yeni') });
       for (const p of boot.products) {
-        out.push({ id: `urun:${p.id}`, group: 'Ürünler', label: p.name, hint: `${tl(p.price)}${p.active ? '' : ' · tükendi'}`, icon: <Coffee />, run: go(`/yonetim/menu?urun=${p.id}`) });
+        out.push({ id: `urun:${p.id}`, group: 'Ürünler', label: p.name, hint: `${tlShort(p.price)}${p.active ? '' : ' · tükendi'}`, icon: <Coffee />, run: go(`/yonetim/menu?urun=${p.id}`) });
       }
     }
     if (can('personel.yonet')) {
       out.push({ id: 'eylem:personel', group: 'Eylemler', label: 'Personel ekle', icon: <UserPlus />, keywords: 'yeni kullanıcı pin', run: go('/yonetim/personel?kisi=yeni') });
-      for (const u of users.data ?? []) out.push({ id: `kisi:${u.id}`, group: 'Personel', label: u.name, hint: u.active ? undefined : 'kapalı', icon: <Users />, run: go(`/yonetim/personel?kisi=${u.id}`) });
+      // Kişi tek kişi ikonuyla ve rolüyle (aynı adlı iki kişi ayrılsın); rolüyle aynı adlı hesapta rol yinelenmez
+      for (const u of users.data ?? []) {
+        const role = ROLE_LABELS[u.role];
+        out.push({ id: `kisi:${u.id}`, group: 'Personel', label: u.name, hint: [role !== u.name && role, !u.active && 'kapalı'].filter(Boolean).join(' · '), icon: <UserRound />, run: go(`/yonetim/personel?kisi=${u.id}`) });
+      }
     }
     // Bar ekranında eylem bu cihazın bar tercihini değiştirir (kullanıcı menüsündeki satır gibi); başka ekranda genel
     // temayı. Yön `.dark` sınıfından değil (bar zorlaması onu ezer) temanın kendisinden okunur: etiket ve sonuç aynı yönde
@@ -119,29 +127,33 @@ function Palette({ onClose }: { onClose: () => void }) {
         else setTheme(dark ? 'acik' : 'koyu');
       },
     });
-    out.push({
-      id: 'eylem:kilit',
-      group: 'Eylemler',
-      label: 'Kilitle ve kullanıcı değiştir',
-      icon: <Lock />,
-      keywords: 'çıkış oturum',
-      run: async () => {
-        onClose();
-        // Kilitlemek sayfadan çıkmaktır: Ayarlarda kaydedilmemiş değişiklik varsa önce sorulur
-        if (!(await confirmLeave())) return;
-        await logout();
-        navigate('/giris');
-      },
-    });
+    // Kullanıcı menüsündeki satırla aynı ad. Uzaktan görünümde kilit yok: parolalı girişte çıkış var; giriş ekranı
+    // parola sormadan giriyorsa çıkış aynı oturumu yeniden açacağından eylem de yok
+    if (!REMOTE || remoteSignOut) {
+      out.push({
+        id: 'eylem:kilit',
+        group: 'Eylemler',
+        label: REMOTE ? 'Çıkış yap' : 'Ekranı kilitle',
+        icon: REMOTE ? <LogOut /> : <Lock />,
+        keywords: REMOTE ? 'oturum kapat' : 'çıkış oturum kullanıcı değiştir',
+        run: async () => {
+          onClose();
+          // Kilitlemek sayfadan çıkmaktır: Ayarlarda kaydedilmemiş değişiklik varsa önce sorulur
+          if (!(await confirmLeave())) return;
+          await logout();
+          navigate('/giris');
+        },
+      });
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boot.products, users.data, theme, mode, onBar, barDark]);
+  }, [boot.products, users.data, theme, mode, onBar, barDark, remoteSignOut]);
 
   const results = useMemo(() => {
     const k = fold(q.trim());
     if (!k) return entries.filter((e) => e.group !== 'Ürünler' && e.group !== 'Personel');
     const words = k.split(/\s+/);
-    return entries
+    const ranked = entries
       .map((e) => {
         const hay = fold(`${e.label} ${e.keywords ?? ''} ${e.group}`);
         if (!words.every((w) => hay.includes(w))) return null;
@@ -150,8 +162,12 @@ function Palette({ onClose }: { onClose: () => void }) {
       })
       .filter((x): x is { e: Entry; score: number } => !!x)
       .sort((a, b) => a.score - b.score)
-      .slice(0, 40)
-      .map((x) => x.e);
+      .slice(0, 40);
+    // En iyi 40 eşleşme gruplanır (başlık bir kez, ok tuşu grubun içinde ilerler; kalabalık grup ötekileri dışarıda
+    // bırakmaz): en iyi eşleşmesi önde olan grup önce, grubun içinde eşleşme sırası; sıralama kararlı, eşitlerde
+    // ekleme sırası kalır
+    const order = [...new Set(ranked.map((x) => x.e.group))];
+    return ranked.sort((a, b) => order.indexOf(a.e.group) - order.indexOf(b.e.group) || a.score - b.score).map((x) => x.e);
   }, [entries, q]);
 
   useEffect(() => setActive(0), [q]);
@@ -176,7 +192,8 @@ function Palette({ onClose }: { onClose: () => void }) {
 
   let lastGroup = '';
   return (
-    <div className="animate-fade fixed inset-0 z-[70] flex items-start justify-center bg-[var(--scrim-soft)] p-3 pt-[min(18vh,140px)]" onPointerDown={(e) => {
+    // Telefonda pencere üstte başlar: ekran klavyesi açıkken sonuçların yarısı altında kalmasın
+    <div className="animate-fade fixed inset-0 z-[70] flex items-start justify-center bg-[var(--scrim-soft)] p-3 pt-[min(18vh,140px)] max-sm:px-2 max-sm:pt-[max(0.5rem,env(safe-area-inset-top))]" onPointerDown={(e) => {
         downOnBackdrop.current = e.target === e.currentTarget;
       }}
       onClick={(e) => {
@@ -206,7 +223,11 @@ function Palette({ onClose }: { onClose: () => void }) {
             aria-activedescendant={results[active] ? `palette-${results[active].id}` : undefined}
             className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
           />
-          <kbd className="rounded border border-line px-1.5 text-[11px] text-muted pointer-coarse:hidden">Esc</kbd>
+          {/* Fareyle Esc tuşu (yönetimdeki Ctrl K tuşuyla aynı); dokunmatikte kapatma düğmesi */}
+          <kbd className="rounded border border-line bg-surface-2 px-1.5 py-px font-sans text-xs text-muted pointer-coarse:hidden">Esc</kbd>
+          <button type="button" onClick={onClose} className="-mr-2 hidden min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-medium text-ink-2 transition-colors duration-150 active:bg-press pointer-coarse:inline-flex">
+            Vazgeç
+          </button>
         </div>
         <ul ref={list} id="palette-list" role="listbox" className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5">
           {results.length === 0 && (
@@ -228,7 +249,7 @@ function Palette({ onClose }: { onClose: () => void }) {
                   data-index={i}
                   onPointerMove={() => setActive(i)}
                   onClick={() => r.run()}
-                  className={cn('flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2.5 text-sm pointer-fine:min-h-10', i === active ? 'bg-surface-3 text-ink' : 'text-ink-2')}
+                  className={cn('flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-2.5 text-sm pointer-fine:min-h-10', i === active ? 'bg-surface-3 text-ink' : 'text-ink-2')}
                 >
                   <span className="shrink-0 text-muted [&>svg]:size-4" aria-hidden="true">
                     {r.icon}

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { OrderDTO } from '@shared/types';
+import type { FloorStateDTO, OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
 /**
@@ -60,6 +60,29 @@ describe('tezgâh satışı', () => {
     const audit = await h.ok<{ action: string }[]>('patron', 'GET', '/admin/audit?limit=20');
     expect(audit.some((a) => a.action === 'item.price_override')).toBe(true);
     await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('Nakit').id, amount: done.total });
+  });
+
+  it('kalemleri iptal edilmiş tezgâh satışı boş sayılmaz: Masalar listesinde kalır, yeniden kullanılmaz, gün sonunu tutar', async () => {
+    const sale = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const sent = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${sale.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
+    // Müşteri hemen vazgeçti: gönderilir gönderilmez iptal (yanlış giriş penceresi, onaysız)
+    await h.ok('kasa', 'POST', `/orders/${sale.id}/items/${sent.items[0]!.id}/void`, { reason: 'Müşteri vazgeçti' });
+
+    // Masalar'ın Masasız siparişler listesi yalnız sunucunun boş saydığı tezgâh satışını gizler (FloorPage `empty`)
+    let floor = await h.ok<FloorStateDTO>('kasa', 'GET', '/floor');
+    expect(floor.others.find((x) => x.id === sale.id)).toMatchObject({ itemCount: 0, empty: false });
+    // Sıradaki müşteri için Tezgâh satışı onu yeniden kullanmaz; yeni boş satış boş sayılır (listede birikmez)
+    const next = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah', reuse: sale.id });
+    expect(next.id).not.toBe(sale.id);
+    floor = await h.ok<FloorStateDTO>('kasa', 'GET', '/floor');
+    expect(floor.others.find((x) => x.id === next.id)).toMatchObject({ itemCount: 0, empty: true });
+
+    // Gün sonu onu kendiliğinden kapatmaz: listede görünmeseydi engelin yeri bulunamazdı
+    const blocked = await h.call<{ code: string; error: string }>('mudur', 'POST', '/cash/day/close', { countedCash: 0 });
+    expect(blocked.json.code).toBe('open_orders');
+    expect(blocked.json.error).toContain(`#${sale.no}`);
+    // Canlı kalemi kalmayan adisyon nedensiz ve onaysız kapanır
+    expect((await h.ok<OrderDTO>('kasa', 'POST', `/orders/${sale.id}/cancel`, { reason: '' })).status).toBe('iptal');
   });
 
   it('gün sonunda kalemsiz ve ödemesiz adisyonlar kapanır, dolu adisyon yine engeller', async () => {

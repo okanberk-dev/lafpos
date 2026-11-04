@@ -1,14 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { Minus, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parseTL, tl } from '@shared/money';
 import type { FloorStateDTO, OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
-import { Field, Input, Select } from '@/components/ui/Field';
+import { Chip, Field, Input, Label, Segmented, Select, Stepper } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
-import { Tabs } from '@/components/ui/misc';
+import { EmptyState, ErrorState, Skeleton, Tabs } from '@/components/ui/misc';
 import { get, patch, post } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -17,13 +16,24 @@ import { TypedAmount } from './TypedAmount';
 
 type Act = <T>(fn: (approverPin?: string) => Promise<T>, ok?: string) => Promise<T | null>;
 
-/** Masa seçici: boş masaya taşı, dolu masayla birleştir. `mode = 'kalem'` iken hedef masa seçer. */
+/**
+ * Masa seçici: boş masaya taşı, dolu masayla birleştir. Açılınca adisyonun kendi bölümü seçili gelir. Masaların
+ * doluluğu gelmeden masa "Boş" yazmaz ve dokunulmaz (dolu masaya taşıma isteği gitmesin); alınamazsa yeniden denenir.
+ */
 export function MoveModal({ order, open, onClose, act, onMoved }: { order: OrderDTO; open: boolean; onClose: () => void; act: Act; onMoved: (targetOrderId?: string) => void }) {
   const boot = useBoot();
   const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), enabled: open });
-  const [sectionId, setSectionId] = useState(boot.sections[0]?.id);
+  const homeSection = boot.tables.find((t) => t.id === order.tableId)?.sectionId ?? boot.sections[0]?.id;
+  const [sectionId, setSectionId] = useState(homeSection);
+  useEffect(() => {
+    if (open) setSectionId(homeSection);
+    // Yalnız pencere açılınca: açıkken başka bölüme geçilebilir
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   if (!open) return null;
   const tables = boot.tables.filter((t) => t.sectionId === sectionId && t.id !== order.tableId);
+  const loading = floor.isPending;
+  const failed = floor.isError && !floor.data;
 
   // Masadaki kasa adisyonu; sitede ödenmiş online sipariş masayı tutmaz, onunla birleştirilmez
   const checkOn = (tableId: string) => floor.data?.tables[tableId]?.find((o) => o.source === 'pos');
@@ -47,20 +57,38 @@ export function MoveModal({ order, open, onClose, act, onMoved }: { order: Order
 
   return (
     <Modal open onClose={onClose} title="Masa taşı / birleştir" subtitle="Boş masaya dokunun: taşınır. Dolu masaya dokunun: birleştirilir" size="lg">
-      <div className="p-4">
+      <div className="px-5 py-4">
         {/* Bölüm sekmesi ortak bileşenle: seçili durum ekran okuyucuya söylenir, odak halkası çipin içinde */}
         {boot.sections.length > 1 && <Tabs label="Bölümler" className="mb-3" value={sectionId ?? ''} onChange={setSectionId} options={boot.sections.map((s) => ({ value: s.id, label: s.name }))} />}
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">
-          {tables.map((t) => {
-            const busy = checkOn(t.id);
-            return (
-              <button key={t.id} onClick={() => pick(t.id)} className={cn('h-20 rounded-xl border p-2 text-left transition-colors duration-150', busy ? 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)]')}>
-                <div className="font-semibold">{t.name}</div>
-                <div className="text-xs opacity-80">{busy ? `Dolu · ${tl(busy.total)}` : 'Boş'}</div>
-              </button>
-            );
-          })}
-        </div>
+        {failed ? (
+          <ErrorState compact title="Masalar alınamadı" error={floor.error} retrying={floor.isFetching} onRetry={() => void floor.refetch()} />
+        ) : tables.length === 0 ? (
+          <EmptyState compact title="Bu bölümde başka masa yok" />
+        ) : (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2" aria-busy={loading || undefined}>
+            {tables.map((t) => {
+              const busy = checkOn(t.id);
+              return (
+                <button
+                  key={t.id}
+                  disabled={loading}
+                  onClick={() => void pick(t.id)}
+                  className={cn(
+                    'min-h-20 min-w-0 rounded-xl border p-2.5 text-left transition-[background-color,border-color,filter] duration-150 disabled:cursor-progress',
+                    busy ? 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)] active:brightness-95' : 'border-line bg-surface enabled:hover:border-[var(--admin-border-field)] enabled:active:bg-press',
+                  )}
+                >
+                  <div className="truncate font-semibold">{t.name}</div>
+                  {loading ? (
+                    <Skeleton className="mt-1.5 h-3 w-14" />
+                  ) : (
+                    <div className={cn('tabular truncate text-xs', busy ? 'text-blue-ink' : 'text-muted')}>{busy ? `Dolu · ${tl(busy.total)}` : 'Boş'}</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -80,6 +108,7 @@ export function TransferModal({ order, open, onClose, act, onDone }: { order: Or
   if (!open) return null;
   const items = order.items.filter((i) => !i.voided && i.qty - i.paidQty > 0);
   const chosen = Object.entries(sel).filter(([, q]) => q > 0);
+  const count = chosen.reduce((a, [, q]) => a + q, 0);
   const submit = async () => {
     if (busyRef.current || !chosen.length) return;
     busyRef.current = true;
@@ -105,48 +134,54 @@ export function TransferModal({ order, open, onClose, act, onDone }: { order: Or
       open
       onClose={onClose}
       size="lg"
+      persistent={busy}
       title="Hesabı böl / kalem taşı"
       subtitle="Taşınacak kalemleri ve adetlerini seçin"
       footer={
-        <div className="flex flex-wrap items-center gap-2">
-          <Select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Taşınacak yer" className="min-w-0 flex-1 basis-48">
-            <option value="ayri">Aynı masada ayrı hesap</option>
-            {boot.tables
-              .filter((t) => t.id !== order.tableId)
-              .map((t) => (
-                <option key={t.id} value={t.id}>
-                  {boot.sections.find((s) => s.id === t.sectionId)?.name} · {t.name}
-                </option>
-              ))}
-          </Select>
-          <Button variant="primary" disabled={!chosen.length} loading={busy} onClick={() => void submit()}>
-            {chosen.reduce((a, [, q]) => a + q, 0)} kalemi taşı
+        // Telefonda yer seçimi tam genişlikte, düğme altında; geniş ekranda yan yana
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <Field label="Taşınacak yer" className="min-w-0 flex-1">
+            <Select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Taşınacak yer">
+              <option value="ayri">Aynı masada ayrı hesap</option>
+              {boot.tables
+                .filter((t) => t.id !== order.tableId)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {boot.sections.find((s) => s.id === t.sectionId)?.name} · {t.name}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <Button variant="primary" className="max-sm:w-full sm:min-w-40" disabled={!chosen.length} loading={busy} onClick={() => void submit()}>
+            {count ? `${count} kalemi taşı` : 'Kalem seçin'}
           </Button>
         </div>
       }
     >
-      <div className="space-y-1.5 p-4">
+      <div className="space-y-1.5 px-5 py-4">
+        {items.length === 0 && <EmptyState compact title="Taşınacak kalem yok">Adisyonun bütün kalemleri ödenmiş ya da iptal edilmiş</EmptyState>}
         {items.map((i) => {
           const left = i.qty - i.paidQty;
           const q = sel[i.id] ?? 0;
           return (
-            <div key={i.id} className={cn('flex items-center gap-3 rounded-xl border px-3 py-2 transition-colors duration-150', q ? 'border-primary bg-[var(--admin-primary-soft)]' : 'border-line')}>
-              <button className="min-w-0 flex-1 text-left" onClick={() => setSel({ ...sel, [i.id]: q ? 0 : left })}>
-                <div className="truncate font-medium">
-                  {i.name} {i.size !== 'TEK' && <span className="text-sm text-muted">{boot.settings.sizeLabels[i.size]}</span>}
-                </div>
-                <div className="text-xs text-muted">
-                  {left} adet · {tl(i.unitPrice)}
+            <div
+              key={i.id}
+              className={cn(
+                'flex items-center gap-3 rounded-xl border py-1.5 pl-3 pr-1.5 transition-colors duration-150',
+                q ? 'border-primary bg-[var(--admin-primary-soft)]' : 'border-line hover:border-[var(--admin-border-field)] active:bg-press',
+              )}
+            >
+              <button aria-pressed={q > 0} className="min-h-11 min-w-0 flex-1 text-left" onClick={() => setSel({ ...sel, [i.id]: q ? 0 : left })}>
+                <span className="block truncate font-medium">
+                  {i.name} {i.size !== 'TEK' && <span className="text-sm font-normal text-muted">{boot.settings.sizeLabels[i.size]}</span>}
+                </span>
+                {/* Birim fiyat: "2 × ₺195,00" (ödeme penceresindeki "2 adet · ₺390,00" satır tutarıdır) */}
+                <span className="tabular block truncate text-xs text-muted">
+                  {left} × {tl(i.unitPrice)}
                   {i.optionsText && ` · ${i.optionsText}`}
-                </div>
+                </span>
               </button>
-              <button aria-label="Azalt" className={STEP} onClick={() => setSel({ ...sel, [i.id]: Math.max(0, q - 1) })}>
-                <Minus className="size-4" />
-              </button>
-              <span className="tabular w-6 text-center font-semibold">{q}</span>
-              <button aria-label="Artır" className={STEP} onClick={() => setSel({ ...sel, [i.id]: Math.min(left, q + 1) })}>
-                <Plus className="size-4" />
-              </button>
+              <Stepper value={q} max={left} label={`${i.name} adedi`} onChange={(v) => setSel({ ...sel, [i.id]: v })} />
             </div>
           );
         })}
@@ -160,47 +195,101 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
   const [type, setType] = useState<'percent' | 'amount'>('percent');
   const [value, setValue] = useState('');
   const [reason, setReason] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'apply' | 'remove' | null>(null);
   useEffect(() => {
     if (!open) return;
     setType(order.discountType ?? 'percent');
     setValue(order.discountValue ? (order.discountType === 'amount' ? String(order.discountValue / 100).replace('.', ',') : String(order.discountValue)) : '');
     setReason(order.discountReason ?? '');
-  }, [open, order]);
+    setError(null);
+    // Yalnız pencere açılınca: açıkken gelen adisyon yenilemesi yazılan tutarı ve nedeni silmesin
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   if (!open) return null;
   const numeric = type === 'percent' ? Number(value || 0) : (parseTL(value || '0') ?? 0);
-  const ready = !!reason.trim() && numeric > 0;
+  // İndirim kalem indirimlerinden sonraki ara toplama uygulanır (sunucuyla aynı)
+  const subtotal = order.totals.gross - order.totals.lineDiscounts;
+  // Sunucu yüzdeyi 100'e, tutarı ara toplama kırpar: %150 ya da ₺19,50 yerine yazılan ₺1.950 sessizce %100 olmasın, alan söyler
+  const overLimit = type === 'percent' ? numeric > 100 : numeric > subtotal;
+  const ready = numeric > 0 && !overLimit;
   const submit = async (remove = false) => {
     if (busy) return;
-    setBusy(true);
+    if (!remove) {
+      if (!ready) return;
+      // Neden zorunlu (denetim kaydına yazılır): düğme sessizce soluk kalmaz, ileti alanın altında
+      if (!reason.trim()) {
+        setError('Bir neden seçin ya da yazın');
+        return;
+      }
+    }
+    setBusy(remove ? 'remove' : 'apply');
     const res = await act(
-      (pin) => post(`/orders/${order.id}/discount`, remove ? { type: 'percent', value: 0, reason: '', remove: true, approverPin: pin } : { type, value: numeric, reason, approverPin: pin }),
+      (pin) => post(`/orders/${order.id}/discount`, remove ? { type: 'percent', value: 0, reason: '', remove: true, approverPin: pin } : { type, value: numeric, reason: reason.trim(), approverPin: pin }),
       remove ? 'İndirim kaldırıldı' : 'İndirim uygulandı',
     );
-    setBusy(false);
+    setBusy(null);
     if (res) onClose();
   };
   return (
-    <Modal open onClose={onClose} size="sm" title="Adisyon indirimi" subtitle={`Ara toplam ${tl(order.totals.gross - order.totals.lineDiscounts)}`}>
-      <div className="space-y-3 p-4">
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      persistent={!!busy}
+      title="Adisyon indirimi"
+      subtitle={`Ara toplam ${tl(subtotal)}`}
+      footer={
         <div className="grid grid-cols-2 gap-2">
-          {(['percent', 'amount'] as const).map((k) => (
-            <button key={k} aria-pressed={type === k} onClick={() => setType(k)} className={cn('min-h-11 rounded-lg border text-sm font-medium transition-colors duration-150', type === k ? 'border-primary bg-[var(--admin-primary-soft)] text-primary' : 'border-line-strong hover:border-[var(--admin-border-field)] active:bg-press')}>
-              {k === 'percent' ? 'Yüzde (%)' : 'Tutar (₺)'}
-            </button>
-          ))}
-        </div>
-        {/* İşaret başta, sönük (₺120, %10); klavyeyle de yazılır */}
-        <output aria-label={type === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'} aria-live="polite" className="tabular font-headline block rounded-2xl border border-line-strong bg-surface-2 px-4 py-3 text-right text-3xl font-semibold">
-          {type === 'percent' ? (
-            <>
-              <span className="mr-0.5 align-baseline text-[0.6em] font-medium text-muted">%</span>
-              {groupTyped(value)}
-            </>
+          {order.discountType ? (
+            <Button variant="dangerOutline" disabled={!!busy} loading={busy === 'remove'} onClick={() => void submit(true)}>
+              Kaldır
+            </Button>
           ) : (
-            <TypedAmount text={value} />
+            <Button disabled={!!busy} onClick={onClose}>
+              Vazgeç
+            </Button>
           )}
-        </output>
+          <Button variant="primary" disabled={!ready || busy === 'remove'} loading={busy === 'apply'} onClick={() => void submit()}>
+            Uygula
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3 px-5 py-4">
+        <Segmented<'percent' | 'amount'>
+          label="İndirim türü"
+          value={type}
+          onChange={setType}
+          options={[
+            { value: 'percent', label: 'Yüzde (%)' },
+            { value: 'amount', label: 'Tutar (₺)' },
+          ]}
+        />
+        {/* İşaret başta, sönük (₺120, %10); klavyeyle de yazılır */}
+        <div>
+          <output
+            aria-label={type === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'}
+            aria-live="polite"
+            aria-invalid={overLimit || undefined}
+            aria-describedby={overLimit ? 'indirim-fazla' : undefined}
+            className={cn('tabular font-headline block rounded-2xl border bg-surface-2 px-4 py-3 text-right text-3xl font-semibold', overLimit ? 'border-[var(--admin-danger)]' : 'border-line-strong')}
+          >
+            {type === 'percent' ? (
+              <>
+                <span className="mr-0.5 align-baseline text-[0.6em] font-medium text-muted">%</span>
+                {groupTyped(value)}
+              </>
+            ) : (
+              <TypedAmount text={value} />
+            )}
+          </output>
+          {overLimit && (
+            <p id="indirim-fazla" role="alert" className="mt-1.5 text-[13px] text-[var(--admin-danger-ink)]">
+              {type === 'percent' ? 'Yüzde en çok 100 olur' : `İndirim ara toplamdan (${tl(subtotal)}) fazla olamaz`}
+            </p>
+          )}
+        </div>
         {/* Enter, Uygula etkinse indirimi uygular; değilse hiçbir şey yapmaz (odaktaki rakamı yinelemez) */}
         <Numpad
           size="md"
@@ -209,24 +298,41 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
           onEnter={() => ready && void submit()}
           onKey={(k) => setValue(applyNumpadKey(value, k, { decimal: type === 'amount', maxLength: type === 'percent' ? 3 : 8 }))}
         />
-        <div className="flex flex-wrap gap-1.5">
-          {boot.settings.discountReasons.map((r) => (
-            <ReasonChip key={r} on={reason === r} onClick={() => setReason(r)}>
-              {r}
-            </ReasonChip>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {order.discountType ? (
-            <Button variant="danger" disabled={busy} onClick={() => submit(true)}>
-              Kaldır
-            </Button>
-          ) : (
-            <Button onClick={onClose}>Vazgeç</Button>
+        <div>
+          <Label hint="zorunlu">Neden</Label>
+          {boot.settings.discountReasons.length > 0 && (
+            <div role="group" aria-label="Hazır nedenler" className="mb-2 flex flex-wrap gap-1.5">
+              {boot.settings.discountReasons.map((r) => (
+                <Chip
+                  key={r}
+                  tone="ink"
+                  on={reason === r}
+                  onClick={() => {
+                    setReason(r);
+                    setError(null);
+                  }}
+                >
+                  {r}
+                </Chip>
+              ))}
+            </div>
           )}
-          <Button variant="primary" disabled={!ready} loading={busy} onClick={() => submit()}>
-            Uygula
-          </Button>
+          {/* Ayarlarda hazır neden yoksa ya da hiçbiri uymuyorsa elle yazılır */}
+          <Field error={error}>
+            <Input
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value.slice(0, 200));
+                setError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.repeat) void submit();
+              }}
+              enterKeyHint="done"
+              placeholder={boot.settings.discountReasons.length ? 'Ya da başka bir neden yazın' : 'Nedeni yazın'}
+              aria-label="Neden"
+            />
+          </Field>
         </div>
       </div>
     </Modal>
@@ -235,23 +341,30 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
 
 export function GuestsModal({ order, open, onClose, act }: { order: OrderDTO; open: boolean; onClose: () => void; act: Act }) {
   const [n, setN] = useState(order.guests);
+  const [busy, setBusy] = useState(false);
   useEffect(() => setN(order.guests), [order.guests, open]);
   if (!open) return null;
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    const res = await act(() => patch(`/orders/${order.id}`, { guests: n }));
+    setBusy(false);
+    if (res) onClose();
+  };
   return (
-    <Modal open onClose={onClose} size="sm" title="Kişi sayısı">
-      <div className="space-y-4 p-5">
-        <div className="flex items-center justify-center gap-4">
-          <button aria-label="Azalt" className="grid size-14 place-items-center rounded-2xl bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setN(Math.max(1, n - 1))}>
-            <Minus className="size-6" />
-          </button>
-          <span className="tabular font-headline w-16 text-center text-5xl font-semibold">{n}</span>
-          <button aria-label="Artır" className="grid size-14 place-items-center rounded-2xl bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)]" onClick={() => setN(Math.min(99, n + 1))}>
-            <Plus className="size-6" />
-          </button>
-        </div>
-        <Button variant="primary" block onClick={async () => (await act(() => patch(`/orders/${order.id}`, { guests: n }))) && onClose()}>
+    <Modal
+      open
+      onClose={onClose}
+      size="sm"
+      title="Kişi sayısı"
+      footer={
+        <Button variant="primary" block loading={busy} onClick={() => void save()}>
           Kaydet
         </Button>
+      }
+    >
+      <div className="flex justify-center px-5 py-6">
+        <Stepper size="lg" label="Kişi" value={n} min={1} max={99} onChange={setN} />
       </div>
     </Modal>
   );
@@ -264,6 +377,7 @@ export function ReasonModal({
   reasons,
   confirmLabel,
   danger,
+  placeholder,
   onClose,
   onConfirm,
 }: {
@@ -273,6 +387,8 @@ export function ReasonModal({
   reasons: string[];
   confirmLabel: string;
   danger?: boolean;
+  /** Alanın örneği; verilmezse hazır neden varken "Ya da başka bir neden yazın" */
+  placeholder?: string;
   onClose: () => void;
   /** Söz dönerse yanıt gelene dek ikinci Enter ya da dokunuş yok sayılır (iptal, ciro dışı kapanış iki kez gitmesin) */
   onConfirm: (reason: string) => unknown;
@@ -302,23 +418,38 @@ export function ReasonModal({
       setBusy(false);
     }
   };
+  // Düğmeler onay ve metin isteme pencereleriyle (confirmDialog, promptDialog) aynı yerde: altta, eşit iki sütun
+  const footer = (
+    <div className="grid grid-cols-2 gap-2">
+      <Button onClick={onClose} disabled={busy}>
+        Vazgeç
+      </Button>
+      <Button variant={danger ? 'danger' : 'primary'} className="whitespace-normal leading-tight" loading={busy} onClick={() => void confirm()}>
+        {confirmLabel}
+      </Button>
+    </div>
+  );
   return (
-    <Modal open onClose={onClose} size="sm" title={title} subtitle={subtitle}>
-      <div className="space-y-3 p-4">
-        <div role="group" aria-label="Hazır nedenler" className="flex flex-wrap gap-1.5">
-          {reasons.map((r) => (
-            <ReasonChip
-              key={r}
-              on={reason === r}
-              onClick={() => {
-                setReason(r);
-                setError(null);
-              }}
-            >
-              {r}
-            </ReasonChip>
-          ))}
-        </div>
+    <Modal open onClose={onClose} size="sm" persistent={busy} title={title} subtitle={subtitle} footer={footer}>
+      <div className="px-5 py-4">
+        <Label hint="zorunlu">Neden</Label>
+        {reasons.length > 0 && (
+          <div role="group" aria-label="Hazır nedenler" className="mb-2 flex flex-wrap gap-1.5">
+            {reasons.map((r) => (
+              <Chip
+                key={r}
+                tone="ink"
+                on={reason === r}
+                onClick={() => {
+                  setReason(r);
+                  setError(null);
+                }}
+              >
+                {r}
+              </Chip>
+            ))}
+          </div>
+        )}
         <Field error={error}>
           <Input
             value={reason}
@@ -330,36 +461,11 @@ export function ReasonModal({
               if (e.key === 'Enter' && !e.repeat) void confirm();
             }}
             enterKeyHint="done"
-            placeholder="Ör. yanlış masa"
+            placeholder={placeholder ?? (reasons.length ? 'Ya da başka bir neden yazın' : 'Nedeni yazın')}
             aria-label="Neden"
           />
         </Field>
-        <div className="grid grid-cols-2 gap-2">
-          <Button onClick={onClose} disabled={busy}>
-            Vazgeç
-          </Button>
-          <Button variant={danger ? 'danger' : 'primary'} loading={busy} onClick={() => void confirm()}>
-            {confirmLabel}
-          </Button>
-        </div>
       </div>
     </Modal>
-  );
-}
-
-/** Adet düğmesi: farede 36, dokunmatikte 44 px */
-const STEP = 'grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)] pointer-coarse:size-11';
-
-/** Hazır neden çipi: seçili koyu kenar (yazıyla birlikte, renk tek başına değil) */
-function ReasonChip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn('min-h-11 rounded-lg border bg-surface px-3 text-sm transition-colors duration-150 active:bg-press pointer-fine:min-h-9', on ? 'border-ink font-semibold text-ink' : 'border-line-strong text-ink-2 hover:border-[var(--admin-border-field)]')}
-    >
-      {children}
-    </button>
   );
 }

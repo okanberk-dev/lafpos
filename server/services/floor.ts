@@ -7,7 +7,7 @@ import { type DB, schema, type Tx } from '../db/client';
 import { holdsRoom } from '@shared/karaoke';
 import { siteKaraokeView } from '../sync/laffogato-karaoke';
 import { userNameMap } from './dto';
-import { getOpenDay } from './orders';
+import { getOpenDay, isEmptyOrder } from './orders';
 
 const TYPE_LABEL: Record<string, string> = { tezgah: 'Tezgâh', gelal: 'Gel-al', paket: 'Paket', online: 'Online', masa: 'Masa' };
 
@@ -41,7 +41,9 @@ export function floorState(t: Tx | DB): FloorStateDTO {
 
   const result: FloorStateDTO = { tables: {}, reservations: [], others: [] };
   for (const o of open) {
-    const mine = items.filter((i) => i.orderId === o.id && !i.voided);
+    const rows = items.filter((i) => i.orderId === o.id);
+    const mine = rows.filter((i) => !i.voided);
+    const room = rooms.find((r) => r.orderId === o.id);
     const summary: FloorOrderSummary = {
       id: o.id,
       no: o.no,
@@ -56,7 +58,10 @@ export function floorState(t: Tx | DB): FloorStateDTO {
       pendingKitchen: mine.filter((i) => i.stationId && (i.status === 'yeni' || i.status === 'hazirlaniyor')).length,
       readyToServe: mine.filter((i) => i.status === 'hazir').length,
       source: o.source,
-      roomStartedAt: rooms.find((r) => r.orderId === o.id)?.startedAt ?? null,
+      roomStartedAt: room?.startedAt ?? null,
+      // Gün sonunun ve tezgâhta yeniden kullanmanın ölçütü (isEmptyOrder); kalem satırı (iptal edilmiş de) ya da çalışan
+      // oda sayacı varsa sorguya gerek yok. İptal edilmiş kalemi olan tezgâh satışı Masalar'da kalır: gün sonunu tutar
+      empty: !rows.length && !room && isEmptyOrder(t, o.id),
     };
     if (o.tableId) (result.tables[o.tableId] ??= []).push(summary);
     else result.others.push({ ...summary, type: o.type, label: orderLabel(o, o.tableId ? tableNames.get(o.tableId) : null) });

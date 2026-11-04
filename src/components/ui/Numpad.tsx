@@ -14,8 +14,9 @@ interface NumpadProps {
   className?: string;
   size?: 'md' | 'lg';
   /**
-   * Son hücrede birincil onay tuşu (giriş ekranı: "Giriş"). Verilince alt sıra "Sil · 0 · onay" olur; "," ve "00"
-   * gösterilmez. Devre dışıyken de okunur (açık yeşil zemin, soluk yazı)
+   * Son hücrede birincil onay tuşu (giriş ekranı: "Giriş"). Verilince alt sıra "⌫ · 0 · onay" olur; "," ve "00"
+   * gösterilmez. Devre dışıyken kitin devre dışı dolu düğmesi gibi gri zemin ve soluk ama okunur yazı (5.4:1): etkin
+   * açık yeşil düğmeyle karışmaz
    */
   confirm?: { label: string; disabled?: boolean; onPress: () => void };
   /**
@@ -50,7 +51,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
               disabled={confirm.disabled}
               onClick={confirm.onPress}
               className={cn(
-                'rounded-xl bg-primary text-base font-semibold text-primary-ink transition-[background-color,transform] duration-150 hover:bg-[var(--admin-primary-hover)] active:scale-[0.97] active:bg-[var(--admin-primary-hover)] motion-reduce:active:scale-100 disabled:bg-[var(--admin-primary-soft)] disabled:text-ink-2 disabled:active:scale-100',
+                'rounded-xl bg-primary text-base font-semibold text-primary-ink transition-[background-color,transform] duration-150 hover:bg-[var(--admin-primary-hover)] active:scale-[0.97] active:bg-[var(--admin-primary-hover)] motion-reduce:active:scale-100 disabled:bg-surface-3 disabled:text-muted disabled:active:scale-100',
                 size === 'lg' ? 'h-16' : 'h-12',
               )}
             >
@@ -70,7 +71,8 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
               k === 'clear' && 'text-[15px] text-ink-2',
             )}
           >
-            {k === 'back' ? <Delete aria-hidden="true" className="mx-auto size-5" /> : k === 'clear' ? 'Sil' : k}
+            {/* "Temizle" hepsini siler; ⌫ tek rakam (ikisi de "Sil" diye okunup karışmasın) */}
+            {k === 'back' ? <Delete aria-hidden="true" className="mx-auto size-5" /> : k === 'clear' ? 'Temizle' : k}
           </button>
         );
       })}
@@ -134,8 +136,9 @@ export function useNumpadKeys({
 }
 
 /**
- * PIN noktaları (giriş ekranı, yetkili onayı): dolu koyu, boş gri halkalı; `min`'den sonraki isteğe bağlı haneler
- * boşken soluk. Kaç hane girildiği ekran okuyucuya söylenir.
+ * PIN noktaları (giriş ekranı, yetkili onayı): dolu koyu; boş zorunlu hane (ilk `min`) alan kenarı renginde halka
+ * (kartta 3.6:1, gün ışığında da kaç hane gerektiği okunur); isteğe bağlı boş haneler soluk. Kaç hane girildiği
+ * ekran okuyucuya söylenir.
  */
 export function PinDots({ length = 6, filled, min = 4, className }: { length?: number; filled: number; min?: number; className?: string }) {
   return (
@@ -144,7 +147,10 @@ export function PinDots({ length = 6, filled, min = 4, className }: { length?: n
         <span
           key={i}
           aria-hidden="true"
-          className={cn('size-3 rounded-full transition-[background-color,transform] duration-150', i < filled ? 'scale-110 bg-ink' : 'bg-surface-3 ring-1 ring-inset ring-[var(--admin-border-strong)]', i >= min && i >= filled && 'opacity-40')}
+          className={cn(
+            'size-3 rounded-full transition-[background-color,transform,opacity] duration-150',
+            i < filled ? 'scale-110 bg-ink' : i < min ? 'bg-surface ring-[1.5px] ring-inset ring-[var(--admin-border-field)]' : 'bg-surface-3 opacity-60 ring-1 ring-inset ring-[var(--admin-border-strong)]',
+          )}
         />
       ))}
     </div>

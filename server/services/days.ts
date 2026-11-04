@@ -346,6 +346,8 @@ export function closeDay(
 ): DayRow {
   if (actor) needDirect(actor, 'kasa.gun');
   const day = requireOpenDay(t);
+  const counted = input.countedCash == null ? null : Math.max(0, Math.trunc(input.countedCash));
+  const cashCounts = closeCounts(input.cashCounts, counted);
   const open = t
     .select({ id: schema.orders.id, no: schema.orders.no })
     .from(schema.orders)
@@ -363,7 +365,6 @@ export function closeDay(
     throw conflict(`Açık adisyon var: ${openPos.map((o) => `#${o.no}`).join(', ')}. Gün sonundan önce kapatın ya da iptal edin`, 'open_orders');
   }
   // Açık kalan online siparişler sitenin; Z'ye girmezler, gün kapandıktan sonra da aşamaları güncellenebilir
-  const counted = input.countedCash == null ? null : Math.max(0, Math.trunc(input.countedCash));
   const summary = computeSummary(t, day);
   const diff = counted == null ? null : counted - summary.expectedCash;
   const now = Date.now();
@@ -374,7 +375,7 @@ export function closeDay(
       closedAt: now,
       closedBy: actor?.user.id ?? null,
       countedCash: counted,
-      cashCounts: input.cashCounts ?? null,
+      cashCounts,
       expectedCash: summary.expectedCash,
       cashDiff: diff,
       note: input.note?.trim() || null,
@@ -396,6 +397,29 @@ export function closeDay(
   fx.emit({ topic: 'cash', kind: 'day.closed', byUserId: actor?.user.id });
   fx.emit({ topic: 'settings', kind: 'day.closed', byUserId: actor?.user.id });
   return t.select().from(schema.businessDays).where(eq(schema.businessDays.id, day.id)).get()!;
+}
+
+/**
+ * Banknot dökümü sayılan nakdi tutmalı (vardiya sayımındaki gibi): föy penceresi kaydedilmiş adetlerle açılır, toplamı
+ * tutmayan döküm sayılanla çelişen bir gün kaydı bırakırdı. `notes` banknotun kuruş değeri → adet; sıfırlar sayılmaz.
+ */
+function checkBanknotes(notes: Record<string, number>, counted: number) {
+  const positive = Object.entries(notes).filter(([, n]) => n > 0);
+  const fromNotes = positive.reduce((a, [k, n]) => a + Number(k) * n, 0);
+  if (positive.length && fromNotes !== counted) {
+    throw new HttpError(422, `Banknotların toplamı (${tl(fromNotes)}) sayılan tutarla (${tl(counted)}) aynı değil`, 'validation');
+  }
+}
+
+/**
+ * Gün sonunda saklanan sayım (`b:` banknot adedi, `m:` ödeme türünün sayılan tutarı). Sayımsız kapanışta ("sonra
+ * gireceğim") banknot adedi saklanmaz: yarım kalan sayım föye taşınıp sayılanla çelişmesin; slip tutarları kalır.
+ */
+function closeCounts(input: Record<string, number> | null | undefined, counted: number | null): Record<string, number> | null {
+  if (!input) return null;
+  if (counted == null) return Object.fromEntries(Object.entries(input).filter(([k]) => !k.startsWith('b:')));
+  checkBanknotes(Object.fromEntries(Object.entries(input).filter(([k]) => k.startsWith('b:')).map(([k, n]) => [k.slice(2), n])), counted);
+  return input;
 }
 
 export function listDays(t: Tx | DB, limit = 60) {
@@ -552,16 +576,16 @@ export function recordCount(
   const approverId = day.countedCash != null ? need(actor, 'rapor.gor', 'Kaydedilmiş kasa sayımını değiştirmek yetkili onayı gerektirir') : null;
   const summary = day.summary ?? computeSummary(t, day);
   const counted = Math.max(0, Math.trunc(input.countedCash));
+  checkBanknotes(input.banknotes ?? {}, counted);
   const diff = counted - summary.expectedCash;
   summary.countedCash = counted;
   summary.cashDiff = diff;
   const counts: Record<string, number> = {};
   for (const [k, v] of Object.entries(input.banknotes ?? {})) counts[`b:${k}`] = Math.max(0, Math.trunc(v));
   for (const [k, v] of Object.entries(input.methodCounts ?? {})) counts[`m:${k}`] = Math.max(0, Math.trunc(v));
-  t.update(schema.businessDays)
-    .set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note: input.note?.trim() || day.note })
-    .where(eq(schema.businessDays.id, dayId))
-    .run();
+  // Not gönderilmezse (ya da null) kalır; gönderilen metin yerine geçer, boş metin notu siler (föy kayıtlı notla açılır)
+  const note = input.note == null ? day.note : input.note.trim() || null;
+  t.update(schema.businessDays).set({ countedCash: counted, cashDiff: diff, cashCounts: counts, summary, note }).where(eq(schema.businessDays.id, dayId)).run();
   const threshold = getSettings().alertCashDiffKurus;
   fx.audit(t, {
     userId: actor.user.id,

@@ -14,12 +14,9 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
-import { CashCount, type CountResult } from './CashCount';
+import { CashCount, type CountResult, signedTL } from './CashCount';
 
 const emptyCount = (): CountResult => ({ countedCash: 0, banknotes: {}, methodCounts: {} });
-
-/** "+₺50,00" / "-₺150,00": fazla ya da eksik olduğu ilk bakışta okunur */
-const signed = (k: number) => `${k > 0 ? '+' : ''}${tl(k)}`;
 
 /**
  * Vardiya devri: gün içinde kasiyer değişirken devreden kasayı sayar. Beklenen nakit ve fark o anın ara raporundan
@@ -36,7 +33,8 @@ export function ShiftHandoverModal({ open, onClose, summary, prevDiff = 0 }: { o
   const [busy, setBusy] = useState(false);
   // Sayım ya da devralan değişince silinen PIN: devralan yeniden girsin diye alanın altında söylenir
   const [pinDropped, setPinDropped] = useState(false);
-  const staff = boot.users.filter((u) => u.active && u.id !== me?.id);
+  // Devralan kasayı alacak bir kişi: bar ekranı hesabı (mutfak rolü) listede yok
+  const staff = boot.users.filter((u) => u.active && u.id !== me?.id && u.role !== 'mutfak');
   const reset = () => {
     setCount(emptyCount());
     setToUserId('');
@@ -76,7 +74,7 @@ export function ShiftHandoverModal({ open, onClose, summary, prevDiff = 0 }: { o
       });
       await qc.invalidateQueries({ queryKey: ['cash'] });
       const who = r.toUserName ? `${r.toUserName} devraldı${r.confirmed ? '' : ' (PIN onayı yok)'}` : 'Ara sayım kaydedildi';
-      toast.ok(r.shiftDiff == null ? `${who}; fark yöneticinin ekranında` : r.shiftDiff === 0 ? `${who}; kasa tuttu` : `${who}; fark ${signed(r.shiftDiff)}`);
+      toast.ok(r.shiftDiff == null ? `${who}; fark yöneticinin ekranında` : r.shiftDiff === 0 ? `${who}; kasa tuttu` : `${who}; fark ${signedTL(r.shiftDiff)}`);
       close();
     } catch (e) {
       // Reddedilen PIN alanda kalmasın (yanlış girildiyse yeniden, doğruysa devralan yeniden girer); hata kendisi söyler
@@ -142,8 +140,9 @@ export function ShiftHandoverModal({ open, onClose, summary, prevDiff = 0 }: { o
 }
 
 /**
- * Günün vardiya devirleri: kim kime, ne saydı; beklenen ve fark yalnız kasa rakamlarını görene. Fark vardiyanın
- * kendisininki (önceki devirden bu yana); günün başından biriken fark ayrıysa yanında.
+ * Günün vardiya devirleri: kim kime, ne saydı; beklenen ve fark yalnız kasa rakamlarını görene. Fark ve beklenen
+ * vardiyanın kendisininki (önceki devirden bu yana; beklenen = sayılan − fark, pencerede gösterilenle aynı taban);
+ * günün başından biriken fark ayrıysa meta satırında.
  */
 export function ShiftCountsCard({ counts }: { counts: ShiftCountDTO[] }) {
   if (!counts.length) return null;
@@ -151,30 +150,33 @@ export function ShiftCountsCard({ counts }: { counts: ShiftCountDTO[] }) {
     <Card title="Vardiya devirleri" subtitle="Gün içinde kasiyer değişirken yapılan sayımlar">
       <ul className="divide-y divide-[var(--admin-divider)]">
         {counts.map((s) => (
-          <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-sm">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface-3 text-ink-2">
-              <ArrowLeftRight className="size-4" aria-hidden="true" />
+          <li key={s.id} className="flex items-center gap-3 px-4 py-3 text-sm">
+            <span aria-hidden="true" className="grid size-9 shrink-0 place-items-center rounded-xl bg-surface-3 text-ink-2 max-sm:hidden">
+              <ArrowLeftRight className="size-4" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="flex flex-wrap items-center gap-1.5 font-medium">
-                {s.toUserName ? `${s.userName} → ${s.toUserName}` : `${s.userName} · ara sayım`}
+              <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                <span className="truncate">{s.toUserName ? `${s.userName} → ${s.toUserName}` : `${s.userName} · ara sayım`}</span>
                 {s.confirmed && (
-                  <Badge tone="success">
+                  <Badge tone="success" className="shrink-0">
                     <BadgeCheck className="size-3" aria-hidden="true" />
                     Onaylı
                   </Badge>
                 )}
               </span>
-              <span className="block text-xs text-muted">{joinMeta([fmtTime(s.createdAt), s.note])}</span>
+              <span className="mt-0.5 block text-pretty text-xs text-muted">
+                {joinMeta([
+                  fmtTime(s.createdAt),
+                  s.counted != null && s.shiftDiff != null && `beklenen ${tl(s.counted - s.shiftDiff)}`,
+                  s.diff != null && s.shiftDiff != null && s.diff !== s.shiftDiff && (s.diff === 0 ? 'günün toplam farkı yok' : `günün toplam farkı ${signedTL(s.diff)}`),
+                ])}
+              </span>
+              {s.note && <span className="mt-0.5 block text-pretty text-xs text-ink-2">{s.note}</span>}
             </span>
-            <span className="text-right">
+            <span className="shrink-0 text-right">
               <span className="tabular block font-semibold">{s.counted != null ? tl(s.counted) : '—'}</span>
               {s.shiftDiff != null && (
-                <span className={cn('tabular block text-xs font-medium', s.shiftDiff === 0 ? 'text-success-ink' : 'text-danger-ink')}>
-                  {s.shiftDiff === 0 ? 'Tuttu' : `Fark ${signed(s.shiftDiff)}`}
-                  {s.diff != null && s.diff !== s.shiftDiff && <span className="font-normal text-muted"> · gün toplamı {s.diff === 0 ? 'denk' : signed(s.diff)}</span>}
-                  {s.expected != null && <span className="font-normal text-muted"> · beklenen {tl(s.expected)}</span>}
-                </span>
+                <span className={cn('tabular block text-xs font-medium', s.shiftDiff === 0 ? 'text-success-ink' : 'text-danger-ink')}>{s.shiftDiff === 0 ? 'Tuttu' : `Fark ${signedTL(s.shiftDiff)}`}</span>
               )}
             </span>
           </li>

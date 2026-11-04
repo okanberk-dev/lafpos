@@ -65,15 +65,39 @@ const hashItem = (i: SiteMenuItem) =>
     .digest('hex')
     .slice(0, 16);
 
+const isTimeout = (e: unknown) => e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+
+/**
+ * Siteye hiç ulaşılamadı (site kapalı, ağ yok, adres çözülmedi, 15 saniyede yanıt yok): Entegrasyon kartında ve
+ * bildirimde Node'un İngilizce "fetch failed"ı yerine. Nedeni ağ hatasının kodu (ECONNREFUSED, ENOTFOUND…)
+ */
+function siteUnreachable(e: unknown): Error {
+  if (isTimeout(e)) return new Error('Siteye ulaşılamadı (15 saniyede yanıt yok)');
+  const cause = (e as { cause?: { code?: unknown; message?: unknown } } | null)?.cause;
+  const why = typeof cause?.code === 'string' ? cause.code : typeof cause?.message === 'string' && cause.message ? cause.message : e instanceof Error ? e.message : String(e);
+  return new Error(`Siteye ulaşılamadı (${why})`);
+}
+
 export async function fetchPublicMenu(force = false): Promise<{ status: 'degismedi' } | { status: 'yeni'; menu: SiteMenu; etag: string | null }> {
   requireSiteLinked();
   const prev = getSyncState<{ etag?: string }>('laffogato.menu');
   const headers: Record<string, string> = { accept: 'application/json', 'user-agent': 'LafPOS/0.1 (+kafe kasasi)' };
   if (prev?.etag && !force) headers['if-none-match'] = prev.etag;
-  const res = await fetch(`${env.laffogatoUrl}/api/mobile/v1/menu`, { headers, signal: AbortSignal.timeout(15000) });
+  let res: Response;
+  try {
+    res = await fetch(`${env.laffogatoUrl}/api/mobile/v1/menu`, { headers, signal: AbortSignal.timeout(15000) });
+  } catch (e) {
+    throw siteUnreachable(e);
+  }
   if (res.status === 304) return { status: 'degismedi' };
   if (!res.ok) throw new Error(`Site menüsü alınamadı (HTTP ${res.status})`);
-  const menu = (await res.json()) as SiteMenu;
+  let menu: SiteMenu;
+  try {
+    menu = (await res.json()) as SiteMenu;
+  } catch (e) {
+    // Gövde 15 saniyede bitmedi ya da JSON değil (sitenin hata sayfası): İngilizce ayrıştırıcı iletisi yazılmaz
+    throw isTimeout(e) ? siteUnreachable(e) : new Error('Site menüsü beklenen biçimde değil');
+  }
   if (!Array.isArray(menu?.categories)) throw new Error('Site menüsü beklenen biçimde değil');
   return { status: 'yeni', menu, etag: res.headers.get('etag') };
 }

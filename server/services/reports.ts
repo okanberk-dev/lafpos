@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
-import { percentOf } from '@shared/money';
+import { percentOf, tl } from '@shared/money';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
 import { PLATFORM_LABEL, PLATFORMS, type PlatformId } from '@shared/platforms';
-import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, istanbulParts } from '@shared/time';
+import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, fmtDateShort, istanbulParts } from '@shared/time';
 import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
 import { auditForViewer } from '../delivery/commission';
@@ -370,8 +370,10 @@ export function hourlyReport(range: Range) {
     days: ds.days.length,
     hours,
     parts,
+    // Eşit cirolu saatlerde en yoğun ilki, en sakin sonuncusu: aktif saatlerin hepsi eşitse ikisi aynı saati göstermez
+    // (aynı saat yalnız tek aktif saatte)
     busiest: active.length ? active.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null,
-    quietest: active.length ? active.reduce((a, b) => (b.revenue < a.revenue ? b : a)) : null,
+    quietest: active.length ? active.reduce((a, b) => (b.revenue <= a.revenue ? b : a)) : null,
     peaks: [...active].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
     week,
   };
@@ -474,6 +476,13 @@ function compKindOf(ds: { items: ItemRow[] }, closedIds: Set<string>, kind: Comp
 
 // ─── Kalem listeleri: iptal, ikram, indirim, iade, happy hour ───────────────
 
+/**
+ * Kalem hesap yazdırıldıktan sonra mı iptal edildi: iptal anında yazılan bayrak (`voidAfterBill`). Adisyonun
+ * `billPrintedAt`'i iptalden sonra yazdırılan hesapla da dolar, tek başına yetmez. Bayraktan önce iptal edilmiş kalemde
+ * adisyonun son yazdırılması iptalden önceyse hesap kesin iptalden önce görülmüştür; sonraysa bilinmez, sayılmaz
+ */
+const voidedAfterBill = (i: ItemRow, o: OrderRow) => i.voidAfterBill || (o.billPrintedAt != null && i.voidedAt != null && i.voidedAt > o.billPrintedAt);
+
 /** Bütün POS adisyonlarından (açık ve kalemleri taşınmış olanlar dahil): iptal listesi X/Z'nin iptal tutarını verir */
 export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim' | 'happy') {
   const ds = load(range);
@@ -503,7 +512,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         by: users.get((kind === 'iptal' ? i.voidBy : kind === 'ikram' ? i.compBy : i.createdBy) ?? '') ?? null,
         approvedBy: kind === 'iptal' && i.voidApprovedBy ? (users.get(i.voidApprovedBy) ?? null) : null,
         afterSend: i.voidAfterSend,
-        billPrinted: !!o.billPrintedAt,
+        afterBill: kind === 'iptal' && voidedAfterBill(i, o),
       };
     })
     .sort((a, b) => b.at - a.at);
@@ -527,7 +536,7 @@ export function itemListReport(range: Range, kind: 'iptal' | 'ikram' | 'indirim'
         by: o.discountBy ? (users.get(o.discountBy) ?? null) : null,
         approvedBy: null,
         afterSend: false,
-        billPrinted: !!o.billPrintedAt,
+        afterBill: false,
       });
     }
     rows.sort((a, b) => b.at - a.at);
@@ -844,7 +853,8 @@ export function patronLive(withCost: boolean) {
  * Basit anomali kuralları (robotPOS'un "aiR anomali" karşılığı): bugünün iptal oranı son 4 haftanın aynı gününe
  * göre belirgin yüksekse, son gün sonunda kasa farkı varsa, hesap yazdırıldıktan sonra iptal ya da kapanmış
  * adisyon yeniden açıldıysa uyarır. İptal açık adisyonlardan da sayıldığından oranın paydasına açık adisyonların
- * kalemleri (`openGross`) de girer: açık masası çok olan öğleden sonra yalancı alarm vermez.
+ * kalemleri (`openGross`) de girer: açık masası çok olan öğleden sonra yalancı alarm vermez. Açıklamalar ekranın
+ * geri kalanı gibi Türkçe biçimde: "%4,5", "₺120,00 eksik", "(2 Kas Pzt)".
  */
 function anomalies(today: string, s: ReturnType<typeof summaryReport>, openGross: number) {
   const out: { level: 'uyari' | 'alarm'; title: string; detail: string }[] = [];
@@ -853,15 +863,19 @@ function anomalies(today: string, s: ReturnType<typeof summaryReport>, openGross
   const past = [7, 14, 21, 28].map((d) => summaryReport({ from: addDays(today, -d), to: addDays(today, -d) }));
   const pastRates = past.filter((p) => p.gross > 0).map((p) => p.voided / (p.gross + p.voided));
   const avg = pastRates.length ? pastRates.reduce((a, b) => a + b, 0) / pastRates.length : 0;
+  // Oran yüzde olarak tek ondalıkla, virgüllü ("%4,5"; tam sayıda ondalık yok: "%12")
+  const pct1 = (r: number) => (r * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
   if (s.voided > 0 && rateNow > Math.max(0.03, avg * 2)) {
-    out.push({ level: rateNow > 0.08 ? 'alarm' : 'uyari', title: 'İptal oranı yüksek', detail: `Bugün %${(rateNow * 100).toFixed(1)}; son 4 haftanın aynı günü ortalaması %${(avg * 100).toFixed(1)}` });
+    out.push({ level: rateNow > 0.08 ? 'alarm' : 'uyari', title: 'İptal oranı yüksek', detail: `Bugün %${pct1(rateNow)}; son 4 haftanın aynı günü ortalaması %${pct1(avg)}` });
   }
   const lastClosed = db.select().from(schema.businessDays).orderBy(desc(schema.businessDays.openedAt)).all().find((d) => d.closedAt);
   if (lastClosed?.cashDiff != null && lastClosed.cashDiff !== 0) {
-    out.push({ level: Math.abs(lastClosed.cashDiff) >= 10000 ? 'alarm' : 'uyari', title: 'Kasa farkı', detail: `Z ${lastClosed.zNo} (${lastClosed.date}) gün sonunda ${(lastClosed.cashDiff / 100).toLocaleString('tr-TR')} ₺ fark` });
+    // Fark sayılan eksi beklenen: eksi kasada eksik, artı fazla para
+    const diff = lastClosed.cashDiff;
+    out.push({ level: Math.abs(diff) >= 10000 ? 'alarm' : 'uyari', title: 'Kasa farkı', detail: `Z ${lastClosed.zNo} (${fmtDateShort(lastClosed.date)}) gün sonunda ${tl(Math.abs(diff))} ${diff < 0 ? 'eksik' : 'fazla'}` });
   }
   if (lastClosed && lastClosed.closedAt && lastClosed.countedCash == null) {
-    out.push({ level: 'uyari', title: 'Kasa föyü girilmedi', detail: `Z ${lastClosed.zNo} (${lastClosed.date}) sayılmadan kapandı` });
+    out.push({ level: 'uyari', title: 'Kasa föyü girilmedi', detail: `Z ${lastClosed.zNo} (${fmtDateShort(lastClosed.date)}) sayılmadan kapandı` });
   }
   const since = businessDayStartMs(today);
   const reopen = db.select().from(schema.auditLog).where(and(gte(schema.auditLog.at, since), eq(schema.auditLog.action, 'order.reopen'))).all();

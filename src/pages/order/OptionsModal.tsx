@@ -1,9 +1,9 @@
-import { Minus, Pencil, Plus } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { parseTL, tl, tlCompact, tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Field';
+import { Input, Stepper } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/misc';
 import { Modal } from '@/components/ui/Modal';
 import { defaultPicks, editingPicks, estimateUnit, menuUnit, missingChoice, pickHint, pickNote, pickSingle, productGroups, reconcilePicks, useBoot } from '@/lib/boot';
@@ -13,9 +13,32 @@ import { useFinePointer } from '@/lib/hooks';
 
 const QUICK_NOTES = ['Az buzlu', 'Buzsuz', 'Çok sıcak', 'Ilık', 'Ayrı tabakta', 'Paket', 'Kremasız'];
 
+/**
+ * Sitenin alerjen anahtarları (TGK Ek-1, laffogato src/lib/menu/allergens.ts) ve seçeneklerdeki `nuts` etiketi:
+ * personel müşteriye okur, anahtar ("sut, sert_kabuklu") değil ad yazılır. Bilinmeyen anahtar alt çizgisiz kalır
+ */
+const ALLERGEN_LABEL: Record<string, string> = {
+  gluten: 'Gluten',
+  kabuklular: 'Kabuklular',
+  yumurta: 'Yumurta',
+  balik: 'Balık',
+  yer_fistigi: 'Yer fıstığı',
+  soya: 'Soya',
+  sut: 'Süt',
+  sert_kabuklu: 'Sert kabuklu meyveler',
+  kereviz: 'Kereviz',
+  hardal: 'Hardal',
+  susam: 'Susam',
+  sulfit: 'Sülfit',
+  aci_bakla: 'Acı bakla',
+  yumusakcalar: 'Yumuşakçalar',
+  nuts: 'Kuruyemiş',
+};
+const allergenLabel = (key: string) => ALLERGEN_LABEL[key] ?? key.replace(/_/g, ' ');
+
 type Picks = Record<string, number>; // itemId -> adet (tek seçimde 1)
 
-// Seçenek ve hızlı not çipleri aynı dilde: 8 px köşe, seçilince mavi; amber bu sistemde durum rengidir, seçim rengi değil
+// Seçenek ve hızlı not çipleri aynı dilde: 10 px köşe, seçilince ev yeşili; amber bu sistemde durum rengidir, seçim rengi değil
 const CHIP = 'min-h-11 rounded-lg border px-3.5 text-sm font-medium transition-colors duration-150 pointer-fine:min-h-10';
 const CHIP_ON = 'border-primary bg-[var(--admin-primary-soft)] text-primary';
 const CHIP_OFF = 'border-line bg-surface text-ink hover:border-[var(--admin-border-field)] active:bg-press';
@@ -116,15 +139,7 @@ export function OptionsModal({
         // Eksik zorunlu seçimin ya da tükenen seçimin yazısı Ekle'nin altında kendi satırında (bilgi cümlesi devre dışı
         // düğmede durmaz)
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <div className="flex items-center rounded-xl border border-line bg-surface">
-            <button aria-label="Azalt" className="grid size-11 place-items-center rounded-l-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.max(1, qty - 1))}>
-              <Minus className="size-4" />
-            </button>
-            <span className="tabular w-8 text-center text-lg font-semibold">{qty}</span>
-            <button aria-label="Artır" className="grid size-11 place-items-center rounded-r-xl transition-colors duration-150 hover:bg-hover active:bg-press" onClick={() => setQty(Math.min(99, qty + 1))}>
-              <Plus className="size-4" />
-            </button>
-          </div>
+          <Stepper value={qty} onChange={setQty} min={1} max={99} label="Adet" />
           <div className="flex-1" />
           <Button variant="primary" size="lg" disabled={waiting || !!missing} aria-describedby={reason ? 'secenek-eksik' : undefined} onClick={() => onSubmit({ productId: product.id, size, qty, options, note: note.trim(), priceOverride: override })}>
             {editing ? 'Güncelle' : 'Ekle'} · {tl(unit * qty)}
@@ -137,6 +152,12 @@ export function OptionsModal({
       }
     >
       <div className="space-y-5 p-5">
+        {/* Alerjen bilgisi gösterilmek zorunda ve personel okur: pencerenin ilk satırı, anahtar değil ad */}
+        {product.allergens?.length ? (
+          <p className="text-[13px] text-ink-2">
+            <span className="font-medium text-ink">Alerjen:</span> {product.allergens.map(allergenLabel).join(', ')}
+          </p>
+        ) : null}
         {product.priceL != null && (
           <section>
             <h3 className="mb-2 text-sm font-semibold text-ink-2">Boy</h3>
@@ -156,67 +177,75 @@ export function OptionsModal({
           </section>
         )}
 
-        {groups.map((g) => (
-          <section key={g.id}>
-            <h3 className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-ink-2">
-              {g.name}
-              {g.required && g.kind !== 'counter' && <Badge>Zorunlu</Badge>}
-              {pickHint(g, picks) ? (
-                <span className="text-xs font-medium text-[var(--admin-danger-ink)]">{pickHint(g, picks)}</span>
+        {groups.map((g) => {
+          // Çok seçimlik grubun sınırı (sunucu fazlasını "en çok N seçim" diye reddeder, ancak satır gidince): dolunca
+          // seçilmemiş çipler kapanır, bir seçim bırakılınca yeniden açılır
+          const full = g.kind === 'multi' && g.items.filter((i) => picks[i.id]).length >= g.maxSelect;
+          return (
+            <section key={g.id}>
+              <h3 className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-semibold text-ink-2">
+                {g.name}
+                {g.required && g.kind !== 'counter' && <Badge>Zorunlu</Badge>}
+                {g.kind === 'multi' && g.maxSelect < g.items.length && <span className="text-xs font-medium text-muted">en çok {g.maxSelect}</span>}
+                {pickHint(g, picks) ? (
+                  <span className="text-xs font-medium text-[var(--admin-danger-ink)]">{pickHint(g, picks)}</span>
+                ) : (
+                  // İsteğe bağlı grubun tükenen varsayılanı: yalnız bilgi, Ekle açık (sunucu o grup için seçenek yazmaz)
+                  pickNote(g, picks) && <span className="text-xs font-medium text-muted">{pickNote(g, picks)}</span>
+                )}
+              </h3>
+              {g.kind === 'counter' ? (
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  {g.items.map((i) => {
+                    // Tek kalemli sayaçta (Şeker, Ekstra shot) kalemin adı grubun başlığıyla aynı: yinelenmez, yalnız ek fiyat
+                    const named = !(g.items.length === 1 && i.name === g.name);
+                    return (
+                      <div key={i.id} className="inline-flex items-center gap-3">
+                        <Stepper value={picks[i.id] ?? 0} onChange={(n) => setCount(i.id, n)} min={0} max={i.maxQty} disabledUp={i.soldOut} label={i.name} />
+                        {(named || i.soldOut || i.price > 0) && (
+                          <span className={cn('text-[15px]', i.soldOut ? 'text-muted' : 'text-ink')}>
+                            {named && <span className="font-medium">{i.name}</span>}
+                            {i.soldOut ? (
+                              <span className={cn(SOLD_BADGE, !named && 'ml-0')}>Tükendi</span>
+                            ) : (
+                              i.price > 0 && <span className={cn('tabular text-sm text-muted', named && 'ml-1')}>+{tlCompact(i.price)}</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
-                // İsteğe bağlı grubun tükenen varsayılanı: yalnız bilgi, Ekle açık (sunucu o grup için seçenek yazmaz)
-                pickNote(g, picks) && <span className="text-xs font-medium text-muted">{pickNote(g, picks)}</span>
+                <div className="flex flex-wrap gap-2">
+                  {g.items.map((i) => {
+                    const on = !!picks[i.id];
+                    // Seçiliyken tükenen (başka kasa işaretledi ya da sepetteki satır düzenleniyor) bırakılabilsin diye yalnız
+                    // seçili değilken kapalı; seçiliyse gri zeminde mavi çerçeve
+                    const sold = i.soldOut && !on;
+                    return (
+                      <button
+                        key={i.id}
+                        aria-pressed={on}
+                        disabled={sold || (full && !on)}
+                        onClick={() => (g.kind === 'single' ? setPicks(pickSingle(g, picks, i.id)) : setCount(i.id, on ? 0 : 1))}
+                        className={cn(CHIP, i.soldOut ? cn(CHIP_SOLD, on && 'border-primary active:bg-press') : on ? CHIP_ON : CHIP_OFF, full && !on && !i.soldOut && 'cursor-not-allowed opacity-50')}
+                      >
+                        {i.name}
+                        {i.soldOut ? (
+                          <span className={SOLD_BADGE}>Tükendi</span>
+                        ) : (
+                          i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>
+                        )}
+                        {i.allergens.includes('nuts') && <span className="ml-1 text-[11px] text-[var(--admin-warning)]">(kuruyemiş)</span>}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-            </h3>
-            {g.kind === 'counter' ? (
-              <div className="flex flex-wrap gap-2">
-                {g.items.map((i) => (
-                  <div key={i.id} className={cn('flex items-center gap-3 rounded-xl border border-line px-3 py-1.5', i.soldOut ? 'bg-surface-2 text-muted' : 'bg-surface')}>
-                    <span className="font-medium">
-                      {i.name}
-                      {i.soldOut ? <span className={SOLD_BADGE}>Tükendi</span> : i.price > 0 && <span className="ml-1 text-sm text-muted">+{tlShort(i.price)}</span>}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button aria-label="Azalt" disabled={i.soldOut && !picks[i.id]} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.max(0, (picks[i.id] ?? 0) - 1))}>
-                        <Minus className="size-4" />
-                      </button>
-                      <span className="tabular w-6 text-center font-semibold">{picks[i.id] ?? 0}</span>
-                      <button aria-label="Artır" disabled={i.soldOut} className="grid size-9 place-items-center rounded-lg bg-surface-3 transition-colors duration-150 active:bg-[var(--admin-border)] disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:size-11" onClick={() => setCount(i.id, Math.min(i.maxQty, (picks[i.id] ?? 0) + 1))}>
-                        <Plus className="size-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {g.items.map((i) => {
-                  const on = !!picks[i.id];
-                  // Seçiliyken tükenen (başka kasa işaretledi ya da sepetteki satır düzenleniyor) bırakılabilsin diye yalnız
-                  // seçili değilken kapalı; seçiliyse gri zeminde mavi çerçeve
-                  const sold = i.soldOut && !on;
-                  return (
-                    <button
-                      key={i.id}
-                      aria-pressed={on}
-                      disabled={sold}
-                      onClick={() => (g.kind === 'single' ? setPicks(pickSingle(g, picks, i.id)) : setCount(i.id, on ? 0 : 1))}
-                      className={cn(CHIP, i.soldOut ? cn(CHIP_SOLD, on && 'border-primary active:bg-press') : on ? CHIP_ON : CHIP_OFF)}
-                    >
-                      {i.name}
-                      {i.soldOut ? (
-                        <span className={SOLD_BADGE}>Tükendi</span>
-                      ) : (
-                        i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>
-                      )}
-                      {i.allergens.includes('nuts') && <span className="ml-1 text-[11px] text-[var(--admin-warning)]">(kuruyemiş)</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        ))}
+            </section>
+          );
+        })}
 
         <section>
           <h3 className="mb-2 text-sm font-semibold text-ink-2">Not</h3>
@@ -253,7 +282,6 @@ export function OptionsModal({
             Elle fiyat
           </Button>
         )}
-        {product.allergens && product.allergens.length > 0 && <p className="text-xs text-muted">Alerjen: {product.allergens.join(', ')}</p>}
       </div>
     </Modal>
   );

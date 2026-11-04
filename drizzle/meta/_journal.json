@@ -106,6 +106,13 @@
       "when": 1793639887989,
       "tag": "0014_mesai_vardiya",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1793775078330,
+      "tag": "0015_iptal_hesap_sonrasi",
+      "breakpoints": true
     }
   ]
 }

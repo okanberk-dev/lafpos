@@ -1,6 +1,7 @@
 import { ChevronRight, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { LafTile } from '@/components/LafMark';
+import { Avatar } from '@/components/ui/misc';
 import { errorMessage } from '@/lib/api';
 import { enterAs, useDemo } from '@/lib/demo';
 import { toast } from '@/lib/toast';
@@ -32,11 +33,12 @@ export function DemoRolePicker() {
 
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
-      <section className="w-full max-w-md rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-5 sm:p-6">
+      {/* Giriş ekranlarıyla aynı kart (köşe 28): demoda PIN ekranının yerine geçer */}
+      <section className="w-full max-w-md rounded-3xl border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
         <div className="mb-5 flex items-center gap-3">
           <LafTile />
           <span>
-            <h1 className="text-lg font-semibold">Kimle devam edelim?</h1>
+            <h1 className="text-xl font-bold sm:text-[22px]">Kimle devam edelim?</h1>
             <span className="block text-[13px] text-muted">Demoda PIN sorulmaz; her rol kendi ekranlarını görür</span>
           </span>
         </div>
@@ -50,10 +52,8 @@ export function DemoRolePicker() {
               aria-busy={busy === u.role || undefined}
               className="flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 enabled:hover:border-[var(--admin-border-field)] enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-not-allowed disabled:opacity-60 aria-busy:opacity-100"
             >
-              {/* Kişinin rengi koyu kartta kaybolmasın: ince iç halka */}
-              <span className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: u.color }}>
-                {u.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-              </span>
+              {/* Kitin avatarı: kişinin rengi koyu kartta kaybolmasın diye ince iç halka, açık renkte koyu harf */}
+              <Avatar name={u.name} color={u.color} className="size-9 text-xs" />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">{u.name}</span>
                 <span className="block text-xs text-muted">{ROLE_HINTS[u.role]}</span>

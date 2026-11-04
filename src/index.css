@@ -120,16 +120,6 @@
   --font-headline: 'LafPOS Rakam', 'Gabarito', 'Poppins', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  --color-brand-50: #f5f7ff;
-  --color-brand-100: #ecf1ff;
-  --color-brand-200: #d9e2ff;
-  --color-brand-300: #a9bbff;
-  --color-brand-400: #7b93ff;
-  --color-brand-500: #3f63f5;
-  --color-brand-600: #2f58f7;
-  --color-brand-700: #2449e0;
-  --color-brand-800: #1d2f8c;
-
   --color-success-200: #c1f0d3;
   --color-success-300: #7fd8a3;
   --color-success-600: #1d6d56;
@@ -163,10 +153,11 @@
   --color-rose-700: #c0264a;
 
   /*
-   * Ham ölçekler (brand-*, success-*, warn-*, danger-*, rose-*) koyu temada değişmez: yalnız dolu düğmede
-   * (danger-600/700, success-600/700, beyaz yazı) ve bar ekranının süre durumlarında kullanılır. Metin, rozet,
-   * uyarı kutusu ve kenar için anlam adları (aşağıdaki @theme inline: text-danger-ink, bg-warning-soft,
-   * border-warning-line…) ya da --admin-* belirteçleri; onlar iki temada da AA (tests/design-tokens.test.ts)
+   * Ham ölçekler (success-*, warn-*, danger-*, rose-*) koyu temada değişmez: yalnız dolu düğmede (danger-600/700,
+   * success-600/700, beyaz yazı), bar ekranının süre durumlarında ve gece mürekkebindeki bildirim ikonunda kullanılır.
+   * Metin, rozet, uyarı kutusu ve kenar için anlam adları (aşağıdaki @theme inline: text-danger-ink, bg-warning-soft,
+   * border-warning-line…) ya da --admin-* belirteçleri; onlar iki temada da AA (tests/design-tokens.test.ts). Mavi
+   * ham ölçek yok: birincil ev yeşili, mavi yalnız durum (--admin-blue, text-blue-ink)
    */
   --color-night: #211c18;
 
@@ -285,6 +276,7 @@
   --admin-warning-line: #f6dcbc;
   --admin-danger-line: #f6cdcd;
   --admin-rose-line: #f5b9c7;
+  --admin-violet-line: #d6c8fa;
   --admin-info-line: #b9e3f2;
   /* Yüzen katmanlar: karartma (pencere; çekmece ve palet hafif), yüzen yüzey (menü, bildirim, grafik ipucu) */
   --scrim: rgb(33 28 24 / 0.36);
@@ -367,6 +359,7 @@
   --admin-warning-line: #896529;
   --admin-danger-line: #8f4346;
   --admin-rose-line: #935061;
+  --admin-violet-line: #5f5296;
   --admin-info-line: #327189;
   /* Koyuda gece mürekkebi zeminle aynı renk: karartma siyah ve daha yoğun, yüzen yüzey bir ton açık */
   --scrim: rgb(0 0 0 / 0.62);
@@ -376,6 +369,8 @@
   --press: rgb(255 255 255 / 0.1);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 93%, var(--admin-text));
   --ring-ready: rgb(92 201 162 / 0.5);
+  /* Çizimlerin diski (Illustration): espresso kontur okunsun diye porselen, ama bir ton kırık (gece ekranında parlamasın) */
+  --illustration-disk: #ece5d8;
   color-scheme: dark;
 }
 
@@ -384,7 +379,11 @@
   outline-color: var(--focus);
 }
 
-/* Dokunmatikte iOS odaklanınca yakınlaştırmasın: alan yazısı en az 16 px (katmansız, sınıfları ezer) */
+/*
+ * Dokunmatikte iOS odaklanınca yakınlaştırmasın: alan yazısı en az 16 px. Kural katmansızdır ve alanın yazı boyu
+ * sınıfını ezer (1em kabın boyudur): daha büyük alan yazısı (ör. 36 px tutar, NumaratorModal) alanın kabına verilir,
+ * alan onu 1em ile alır
+ */
 @media (pointer: coarse) {
   input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
   select,
@@ -439,6 +438,7 @@
   --color-rose-line: var(--admin-rose-line);
   --color-violet-ink: var(--admin-hue-violet);
   --color-violet-soft: var(--admin-hue-violet-soft);
+  --color-violet-line: var(--admin-violet-line);
   --color-hover: var(--hover);
   --color-press: var(--press);
   --color-raised: var(--surface-raised);

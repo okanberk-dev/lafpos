@@ -35,6 +35,8 @@ export function MesaiRow({ className }: { className?: string }) {
   }
   // Sunucunun saatiyle çizilen toplam, istemcinin saatine göre ilerler (açık mesai şu ana kadar)
   const drift = open ? Math.max(0, now - me.data.serverTime) : 0;
+  // Sıfırlar bilgi taşımaz: bugün çalışılmadıysa yalnız haftanın toplamı, hiç kayıt yoksa bu söylenir
+  const summary = today.workedMs ? `Bugün ${fmtDuration(today.workedMs)} · son 7 günde ${fmtDuration(weekMs)}` : weekMs ? `Son 7 günde ${fmtDuration(weekMs)}` : 'Son 7 günde mesai kaydı yok';
   const punch = async () => {
     setBusy(true);
     try {
@@ -54,9 +56,7 @@ export function MesaiRow({ className }: { className?: string }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-medium">{open ? `Mesaide · ${fmtDuration(now - open.clockIn)}` : 'Mesai başlamadı'}</span>
-        <span className="block text-xs text-muted">
-          {open ? `Giriş ${fmtTime(open.clockIn)} · bugün ${fmtDuration(today.workedMs + drift)}` : `Bugün ${fmtDuration(today.workedMs)} · son 7 gün ${fmtDuration(weekMs)}`}
-        </span>
+        <span className="block text-pretty text-xs text-muted">{open ? `Giriş ${fmtTime(open.clockIn)} · bugün ${fmtDuration(today.workedMs + drift)}` : summary}</span>
       </span>
       <Button size="sm" variant={open ? 'secondary' : 'primary'} loading={busy} onClick={punch}>
         {open ? 'Mesaiyi bitir' : 'Mesaiyi başlat'}

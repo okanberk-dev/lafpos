@@ -2,9 +2,10 @@
  * KPI şeridinin ızgarası (yönetim ui.tsx KpiStrip ve iskeleti): iskelet yüklenecek şeritle aynı sütun ve satır
  * sayısını kullanır, veri gelince sayfa zıplamaz. Telefonda iki sütun, tek kalan son hücre tam genişlik.
  * Beş hücre tablette 2+2+2 / 3+3 (altı sütunlu ızgarada), geniş ekranda tek satır.
+ * Dört hücre tablette 2+2, geniş ekranda tek satır (tablette dörde bölünen şeritte etiket kırılır, rakam küçülürdü).
  */
 export function kpiGridCols(n: number): string {
-  return n === 5 ? 'md:grid-cols-6 xl:grid-cols-5' : n >= 6 ? 'md:grid-cols-3 xl:grid-cols-6' : n === 4 ? 'md:grid-cols-4' : n === 2 ? 'md:grid-cols-2' : n === 1 ? 'md:grid-cols-1' : 'md:grid-cols-3';
+  return n === 5 ? 'md:grid-cols-6 xl:grid-cols-5' : n >= 6 ? 'md:grid-cols-3 xl:grid-cols-6' : n === 4 ? 'md:grid-cols-2 xl:grid-cols-4' : n === 2 ? 'md:grid-cols-2' : n === 1 ? 'md:grid-cols-1' : 'md:grid-cols-3';
 }
 
 export function kpiCellSpan(n: number, i: number): string | null {

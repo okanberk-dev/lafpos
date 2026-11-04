@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ADMIN_SECTIONS } from '../src/components/admin/sections';
+import { ADMIN_ROUTE_PERMS, ADMIN_SECTIONS } from '../src/components/admin/sections';
 import { fold } from '../src/lib/shell';
 import { bootDarkFor } from '../src/lib/bootDark';
 
@@ -53,9 +53,8 @@ describe('kaynak taraması', () => {
       },
       'src/pages/KitchenPage.tsx': { tokens: ['bg-danger-600'], why: 'bar ekranında alarm süre rozeti ve iptal edilen kalemin adedi, beyaz yazı' },
       'src/pages/FloorPage.tsx': { tokens: ['bg-success-600'], why: 'masa kartında hazır rozeti, beyaz yazı' },
-      'src/pages/DevicePage.tsx': { tokens: ['bg-warn-600'], why: 'eğitim cihazında yemek kartı ödeme tipi (TYPES), beyaz yazı' },
       'src/lib/toast.tsx': {
-        tokens: ['[&>svg:first-child]:text-success-300', '[&>svg:first-child]:text-danger-300'],
+        tokens: ['[&>svg:first-child]:text-success-300', '[&>svg:first-child]:text-danger-300', '[&>svg:first-child]:text-warn-300'],
         why: 'bildirimin ikonu gece mürekkebi zeminde (iki temada koyu); koyu temada dark: ile belirtece döner',
       },
     };
@@ -81,6 +80,13 @@ describe('yönetim paneli bölümleri', () => {
   });
   it('her bölüm e2e taramasında (telefon, tablet, bilgisayar, koyu)', () => {
     for (const s of ADMIN_SECTIONS) expect(sweep, s.to).toContain(`'${s.to}'`);
+  });
+  it('yönetim rotası her bölümün yetkisiyle açılır: patron paneli Denetim kaydına, raporcu Genel bakışa girer', () => {
+    // Rota bir bölümün yetkisini geri çevirirse kenar çubuğundaki ve patron panelinin "Dikkat isteyenler"indeki
+    // bağlantı kişiyi ana ekranına atar
+    for (const s of ADMIN_SECTIONS.filter((x) => x.to.startsWith('/yonetim/'))) for (const p of s.perm) expect(ADMIN_ROUTE_PERMS, `${s.key}: ${p}`).toContain(p);
+    expect(ADMIN_ROUTE_PERMS).toEqual(expect.arrayContaining(['patron.panel', 'rapor.gor']));
+    expect(read('src/App.tsx')).toMatch(/path="\/yonetim\/\*" element=\{<Guard perm=\{ADMIN_ROUTE_PERMS\}>/);
   });
   it('bölüm anahtarları ve adresleri tekil', () => {
     expect(new Set(ADMIN_SECTIONS.map((s) => s.key)).size).toBe(ADMIN_SECTIONS.length);

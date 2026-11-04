@@ -1,18 +1,22 @@
 import { AlertTriangle, CheckCircle2, Info, Loader2, RotateCcw, WifiOff } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef } from 'react';
 import { ApiError, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { Illustration, type IllustrationName } from '../Illustration';
 import { Button } from './Button';
+import { initialsInk } from './initials';
+
+export { initialsInk };
 
 /**
  * Rozet tonu. Kasa adları (green, red, warn, pink, blue, violet) ile yönetim adları (success, danger, warning,
- * accent, primary, info) aynı tonlara çözülür; yeni kodda anlam adı yazın.
+ * accent, primary, info) aynı tonlara çözülür; yeni kodda anlam adı yazın. primary ev yeşilidir (success ile aynı:
+ * olumlu, eklenen); accent violet'in eşi, yalnız online sipariş.
  */
 export type BadgeTone = 'neutral' | 'green' | 'red' | 'warn' | 'pink' | 'blue' | 'violet' | 'success' | 'danger' | 'warning' | 'info' | 'accent' | 'primary';
 type Tone = BadgeTone;
 // Durum rozeti: hap biçimi, açık zemin üstünde koyu ton (AA, tests/design-tokens.test.ts). Mavi durum mavisidir (dolu,
-// hazırlanıyor, bilgi); eylem rengi (mürekkep) rozette kullanılmaz
+// hazırlanıyor, bilgi); mürekkep (ödeme eylemi) rozette kullanılmaz
 const tones: Record<Tone, string> = {
   neutral: 'bg-[var(--admin-neutral-soft)] text-ink-2',
   green: 'bg-[var(--admin-success-soft)] text-[var(--admin-success)]',
@@ -27,7 +31,7 @@ const tones: Record<Tone, string> = {
   warning: 'bg-[var(--admin-warning-soft)] text-[var(--admin-warning)]',
   info: 'bg-[var(--admin-info-soft)] text-[var(--admin-info)]',
   accent: 'bg-[var(--admin-accent-soft)] text-[var(--admin-accent-ink)]',
-  primary: 'bg-[var(--admin-blue-soft)] text-[var(--admin-blue)]',
+  primary: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
 };
 const dots: Record<Tone, string> = {
   neutral: 'bg-[var(--admin-text-mute)]',
@@ -42,7 +46,7 @@ const dots: Record<Tone, string> = {
   warning: 'bg-[var(--admin-warning)]',
   info: 'bg-[var(--admin-info)]',
   accent: 'bg-[var(--admin-accent)]',
-  primary: 'bg-[var(--admin-blue)]',
+  primary: 'bg-[var(--admin-primary)]',
 };
 
 /** Durum rozeti (kasa ve yönetimde tek): 22 px, hap, 12 px yazı; `dot` renkli nokta (renk yazının yanında) */
@@ -50,6 +54,33 @@ export function Badge({ tone = 'neutral', dot, children, className, title }: { t
   return (
     <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium leading-4', tones[tone], className)}>
       {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dots[tone])} />}
+      {children}
+    </span>
+  );
+}
+
+/**
+ * Boy çipi (ayardaki ad: Orta, Büyük): ürün adının yanında çerçeveli hap; sepet, raporlar, patron ve genel bakışta
+ * tek; satır sonuna tek başına düşmez. Ad boşsa (tek boylu ürün) çizilmez
+ */
+export function SizeTag({ children, className }: { children?: ReactNode; className?: string }) {
+  if (!children) return null;
+  return <span className={cn('ml-1.5 inline-block shrink-0 whitespace-nowrap rounded-full border border-line px-1.5 align-[2px] text-[11px] font-medium leading-4 text-ink-2', className)}>{children}</span>;
+}
+
+/**
+ * Baş harf avatarı (personel, mesai, kabuk, giriş ekranı): kişinin renginde daire, adın ilk iki harfi; harf beyaz ya
+ * da gece mürekkebi, hangisi o zeminde okunursa (`initialsInk`). Boy `className`'den ('size-7 text-[11px]',
+ * 'size-11 text-sm'); `children` üstüne biner (mesaide noktası). Süstür: adı yanındaki yazı söyler
+ */
+export function Avatar({ name, color, className, children }: { name: string; color: string; className?: string; children?: ReactNode }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('relative grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold ring-1 ring-inset ring-black/5 dark:ring-white/15', className)}
+      style={{ background: color, color: initialsInk(color) }}
+    >
+      {name.slice(0, 2).toLocaleUpperCase('tr-TR')}
       {children}
     </span>
   );
@@ -144,7 +175,8 @@ export function EmptyState({
 }
 
 /**
- * Veri alınamadı: boş durumla aynı iskelet, renk yalnız ikonda. "Sipariş yok" yerine bunu göster: bağlantı
+ * Veri alınamadı: boş durumla aynı iskelet ve aynı yazı ölçeği (üç boy: kart içinde `compact`, sayfada varsayılan,
+ * tam ekranda ya da uzaktan okunan ekranda `large`), renk yalnız ikonda. "Sipariş yok" yerine bunu göster: bağlantı
  * koptuğunda sahte boşluk yanlış karar verdirir. Ağ hatasında WifiOff, sunucu hatasında üçgen; ileti
  * `errorMessage(error)`. Sayfa kalıbı:
  *   if (q.isPending) return <iskelet />;
@@ -158,6 +190,7 @@ export function ErrorState({
   retrying,
   action,
   compact,
+  large,
   className,
 }: {
   title: ReactNode;
@@ -169,21 +202,31 @@ export function ErrorState({
   /** Yeniden denemenin yanında ikinci eylem (ör. Çıkış) */
   action?: ReactNode;
   compact?: boolean;
+  large?: boolean;
   className?: string;
 }) {
   const network = error instanceof ApiError && error.status === 0;
   const Icon = network ? WifiOff : AlertTriangle;
   return (
-    <div role="alert" className={cn('flex flex-col items-center justify-center text-center', compact ? 'px-4 py-8' : 'px-6 py-12', className)}>
-      <span aria-hidden="true" className={cn('grid place-items-center bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]', compact ? 'mb-2.5 size-9 rounded-lg [&>svg]:size-4' : 'mb-3 size-11 rounded-xl [&>svg]:size-5')}>
+    <div role="alert" className={cn('flex flex-col items-center justify-center text-center', compact ? 'px-4 py-8' : large ? 'px-6 py-16' : 'px-6 py-12', className)}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          'grid place-items-center bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]',
+          compact ? 'mb-2.5 size-9 rounded-lg [&>svg]:size-4' : large ? 'mb-4 size-16 rounded-2xl [&>svg]:size-8' : 'mb-3 size-11 rounded-xl [&>svg]:size-5',
+        )}
+      >
         <Icon />
       </span>
-      <p className={cn('text-balance text-ink', compact ? 'text-sm font-medium' : 'text-[15px] font-semibold')}>{title}</p>
-      {(children || error != null) && <div className="mt-1 max-w-[40ch] text-pretty text-[13px] leading-relaxed text-muted">{children ?? errorMessage(error)}</div>}
+      <p className={cn('text-balance font-headline text-ink', compact ? 'text-[15px] font-semibold' : large ? 'text-xl font-bold' : 'text-base font-bold')}>{title}</p>
+      {(children || error != null) && (
+        <div className={cn('max-w-[36ch] text-pretty text-muted', compact ? 'mt-0.5 text-[13px]' : large ? 'mt-1.5 text-[15px]' : 'mt-1 text-[13px] leading-relaxed')}>{children ?? errorMessage(error)}</div>
+      )}
       {(onRetry || action) && (
         <div className={cn('flex flex-wrap items-center justify-center gap-2', compact ? 'mt-3' : 'mt-4')}>
           {onRetry && (
-            <Button size="sm" icon={<RotateCcw className="size-4" />} loading={retrying} onClick={onRetry}>
+            // Tam ekranda tek büyük eylem; kart ve sayfada sayfanın ikinci eylemiyle (`action`, sm) aynı boy
+            <Button size={large ? 'md' : 'sm'} icon={<RotateCcw className="size-4" />} loading={retrying} onClick={onRetry}>
               Yeniden dene
             </Button>
           )}
@@ -246,15 +289,28 @@ export function ListSkeleton({ rows = 4, className }: { rows?: number; className
 }
 
 /**
- * KPI karosu: kasa, patron, raporlar ve müşteri kartında tek ölçek (13 px etiket, 24 px rakam; `strong` 30 px).
- * Durum zemini yalnız anlam taşıyınca (kasa farkı tuttu / tutmadı); kelime rakam yerine konmaz, ipucuya iner.
- * Tonlu karonun kenarı durum çizgisi (iki temada da görünür)
+ * Gösterim rakamının sığması (Stat, yönetimdeki KPI şeridi): rakam tek satırdır (eksi işareti ayrı satıra düşmez) ve
+ * karodan taşmaz. Karo `@container`; rakam karonun iç genişliğinin %17'sine kadar küçülür (sınıf
+ * `text-[length:min(28px,var(--fit,17cqi))]`): 390 px telefonun iki sütunlu karosunda ₺113.250,00 ve -₺12.480,00
+ * sığar, geniş karoda boy değişmez, aynı ızgaradaki karolar aynı boyda kalır. 11 karakterden uzun değer (₺1.250.000,00,
+ * "312 sa 45 dk") yalnız kendisi biraz daha küçülür: uzun tutar Gabarito kalında karakter başına ~0,5 em, karonun
+ * %95'ine sığar.
+ */
+export function fitFigure(value: ReactNode): CSSProperties | undefined {
+  const length = typeof value === 'string' || typeof value === 'number' ? String(value).length : 0;
+  return length > 11 ? ({ '--fit': `${(190 / length).toFixed(2)}cqi` } as CSSProperties) : undefined;
+}
+
+/**
+ * KPI karosu: kasa, patron, raporlar ve müşteri kartında tek ölçek (13 px etiket, Gabarito 28 px rakam; `strong` 34
+ * px, dar karoda `fitFigure` ile küçülür). Durum zemini yalnız anlam taşıyınca (kasa farkı tuttu / tutmadı); kelime
+ * rakam yerine konmaz, ipucuya iner. Tonlu karonun kenarı durum çizgisi (iki temada da görünür)
  */
 export function Stat({ label, value, hint, tone, strong, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; tone?: 'ok' | 'warn' | 'bad'; strong?: boolean; className?: string }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border p-4 shadow-[var(--shadow-card)]',
+        '@container rounded-2xl border p-4 shadow-[var(--shadow-card)]',
         tone === 'bad'
           ? 'border-[var(--admin-danger-line)] bg-[var(--admin-danger-soft)]'
           : tone === 'ok'
@@ -266,17 +322,27 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
       )}
     >
       <div className="text-[13px] font-medium text-muted">{label}</div>
-      <div className={cn('tabular mt-1.5 font-headline font-bold leading-none tracking-[-0.02em]', strong ? 'text-[34px]' : 'text-[28px]')}>{value}</div>
+      <div
+        style={fitFigure(value)}
+        className={cn('tabular mt-1.5 whitespace-nowrap font-headline font-bold leading-none tracking-[-0.02em]', strong ? 'text-[length:min(34px,var(--fit,17cqi))]' : 'text-[length:min(28px,var(--fit,17cqi))]')}
+      >
+        {value}
+      </div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
     </div>
   );
 }
 
-/** Sayfa başlığı: Gabarito 22/700 (telefonda 20) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile) */
-export function PageHeader({ title, subtitle, actions }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode }) {
+/**
+ * Sayfa başlığı: Gabarito 22/700 (telefonda 20) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile).
+ * `compactOnPhone`: telefonda (md altı) başlık ve açıklama yalnız ekran okuyucuda; ekranın adını kabuğun üst şeridi
+ * zaten yazar (yönetimdeki PageHeader gibi); eylem yoksa alt boşluk da kalkar
+ */
+export function PageHeader({ title, subtitle, actions, compactOnPhone }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; compactOnPhone?: boolean }) {
   return (
-    <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end">
-      <div className="min-w-0 sm:flex-1">
+    <div className={cn('flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end', compactOnPhone && !actions && 'max-md:pb-0')}>
+      {/* Başlığın taban genişliği 18rem: eylemler sığmazsa alt satıra iner, açıklama düğmelerin yanında dar sütuna ezilmez */}
+      <div className={cn('min-w-0 sm:flex-[1_1_18rem]', compactOnPhone && 'max-md:sr-only')}>
         <h1 className="text-xl font-bold sm:text-[22px]">{title}</h1>
         {subtitle && <p className="mt-0.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
       </div>
@@ -286,10 +352,71 @@ export function PageHeader({ title, subtitle, actions }: { title: ReactNode; sub
   );
 }
 
+/** Rayın kenar payı: seçili öğe kenara bu kadar yaklaşmaz, solma da bu genişlikte (RAIL_FADE) */
+const RAIL_EDGE = 24;
+
+/**
+ * Yatay kayan ray (sekme, filtre çipi, segment): dönen ref kaydırılan öğeye (rayın kendisi) verilir, sınıfına
+ * `RAIL_FADE` eklenir. Seçim değişince (ve açılışta) seçili öğe (`aria-selected` ya da `aria-checked`) görünmüyorsa
+ * yalnız rayın `scrollLeft`'i değişir, kenarda 24 px pay kalır; `scrollIntoView` yok, sayfa kaymaz (yenilemeden ya
+ * da KPI'dan açılan rapor çipi ekran dışında kalmaz). Ray taşarken kaydırılmış başta `data-fade-start`, gizli içerik
+ * kalan sonda `data-fade-end` durur; kaydırınca, ray ya da öğeleri boyut değiştirince ve öğe eklenip çıkınca yenilenir.
+ */
+export function useRail<T extends HTMLElement>(selected: unknown) {
+  const ref = useRef<T>(null);
+  useLayoutEffect(() => {
+    const rail = ref.current;
+    if (!rail || rail.scrollWidth <= rail.clientWidth + 1) return;
+    const el = rail.querySelector('[aria-selected=true], [aria-checked=true]');
+    if (!el) return;
+    const r = rail.getBoundingClientRect();
+    const e = el.getBoundingClientRect();
+    if (e.left < r.left + RAIL_EDGE) rail.scrollLeft -= r.left + RAIL_EDGE - e.left;
+    else if (e.right > r.right - RAIL_EDGE) rail.scrollLeft += e.right - (r.right - RAIL_EDGE);
+  }, [selected]);
+  useEffect(() => {
+    const rail = ref.current;
+    if (!rail) return;
+    const update = () => {
+      const max = rail.scrollWidth - rail.clientWidth;
+      rail.toggleAttribute('data-fade-start', max > 1 && rail.scrollLeft > 1);
+      rail.toggleAttribute('data-fade-end', max > 1 && rail.scrollLeft < max - 1);
+    };
+    update();
+    rail.addEventListener('scroll', update, { passive: true });
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    ro?.observe(rail);
+    for (const child of rail.children) ro?.observe(child);
+    // Rayın boyunu değiştirmeden eklenen ya da kalkan sekme (ör. veri gelince açılan liste) de solmayı yeniler
+    const mo =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver((records) => {
+            for (const m of records) {
+              m.addedNodes.forEach((n) => n instanceof Element && ro?.observe(n));
+              m.removedNodes.forEach((n) => n instanceof Element && ro?.unobserve(n));
+            }
+            update();
+          });
+    mo?.observe(rail, { childList: true });
+    return () => {
+      rail.removeEventListener('scroll', update);
+      ro?.disconnect();
+      mo?.disconnect();
+    };
+  }, []);
+  return ref;
+}
+
+/** Kayan rayın gizli içerik kalan kenarı 24 px'te solar (useRail'in koyduğu data-fade-start / data-fade-end) */
+export const RAIL_FADE =
+  'data-[fade-end]:[mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] data-[fade-start]:[mask-image:linear-gradient(to_left,#000_calc(100%_-_24px),transparent)] data-[fade-start]:data-[fade-end]:[mask-image:linear-gradient(to_right,transparent,#000_24px,#000_calc(100%_-_24px),transparent)]';
+
 /**
  * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri): hap biçimi, etkin olan gri zeminde ve kalın, renksiz;
- * diğerleri düz; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; odak halkası çipin içinde.
- * Sayılı filtre çipi (koyu kenarlı seçili) yönetimdeki StatusTabs'tır.
+ * diğerleri düz; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; seçili sekme rayın içinde
+ * görünür kalır, içeriğin gizlendiği kenar solar (useRail); odak halkası çipin içinde. Sayılı filtre çipi (koyu
+ * kenarlı seçili) yönetimdeki StatusTabs'tır.
  */
 export function Tabs<T extends string>({
   value,
@@ -306,8 +433,9 @@ export function Tabs<T extends string>({
   label: string;
   size?: 'sm' | 'md';
 }) {
+  const rail = useRail<HTMLDivElement>(value);
   return (
-    <div role="tablist" aria-label={label} className={cn('no-scrollbar flex gap-1 overflow-x-auto', className)}>
+    <div ref={rail} role="tablist" aria-label={label} className={cn('no-scrollbar flex gap-1 overflow-x-auto', RAIL_FADE, className)}>
       {options.map((o) => {
         const on = o.value === value;
         return (

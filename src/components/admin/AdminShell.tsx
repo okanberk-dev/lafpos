@@ -1,12 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeftRight, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Rows3, Rows4, Search, WifiOff } from 'lucide-react';
-import { type ReactNode, useEffect } from 'react';
+import { ArrowLeftRight, ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen, Rows4, Search, WifiOff } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, NavLink, useLocation } from 'react-router';
 import { LafTile } from '@/components/LafMark';
+import { Avatar } from '@/components/ui/misc';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { topDialog, trapTab } from '@/lib/focus';
+import { useMediaQuery } from '@/lib/hooks';
 import { useLive } from '@/lib/live';
 import { useHomePath } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
@@ -31,6 +35,72 @@ function useCounts(): Partial<Record<AdminSection['key'], number>> {
 }
 
 /**
+ * Sayacın ne saydığı, bölümün kendi sözüyle (dar menünün adı, sayacın ipucu): Ürünler'de tükenen ürün (Tükendi
+ * sekmesinin sayısı), Site ve lafmaliyet'te gidemeyen gün ve Satışta bilgisi, menü hatası. Çıplak "N bekleyen" onay ya
+ * da eşitleme bekleyen ürün gibi okunuyordu
+ */
+const COUNT_TEXT: Partial<Record<AdminSection['key'], (n: number) => string>> = {
+  menu: (n) => `${n} ürün tükendi`,
+  entegrasyon: (n) => `${n} sorun`,
+};
+const countText = (key: AdminSection['key'], n: number) => COUNT_TEXT[key]?.(n) ?? String(n);
+
+/**
+ * Tablette menünün tamamı (adlar ve sayaçlarla): dar ikon menüsündeki "Menüyü aç"la soldan açılır; dokunmatikte
+ * ikonların ipucu görünmez, ad burada okunur. Kurallar hızlı bakış çekmecesiyle aynı: Escape (yalnız en üstteyken) ve
+ * karartmaya dokunuş kapatır, Tab çekmecede döner, kapanınca odak açan düğmeye döner. Sayfa geçişinde kabuk kapatır
+ */
+function MenuDrawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null);
+  const latest = useRef(onClose);
+  useEffect(() => {
+    latest.current = onClose;
+  });
+  const downOnScrim = useRef(false);
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    // Odak etkin bölüme (yoksa çekmeceye): klavyeyle açan kişi bulunduğu yerden devam eder
+    (panel.current?.querySelector<HTMLElement>('[aria-current="page"]') ?? panel.current)?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && topDialog() === panel.current) latest.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+  return createPortal(
+    <div className="fixed inset-0 z-40">
+      {/* Karartmaya dokunuş click'te kapatır (basış da karartmada başladıysa): alttaki sayfaya geçmez */}
+      <div
+        aria-hidden="true"
+        className="animate-fade absolute inset-0 bg-[var(--scrim-soft)]"
+        onPointerDown={(e) => {
+          downOnScrim.current = e.target === e.currentTarget;
+        }}
+        onClick={(e) => {
+          if (downOnScrim.current && e.target === e.currentTarget) onClose();
+          downOnScrim.current = false;
+        }}
+      />
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Yönetim menüsü"
+        tabIndex={-1}
+        onKeyDown={(e) => trapTab(e, panel.current)}
+        className="animate-fade absolute inset-y-2 left-2 w-[15.5rem] overflow-hidden rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none dark:border-[var(--admin-border-strong)]"
+      >
+        {children}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
  * Yönetim paneli kabuğu (Innex §1.1): gri zemin üstünde iki beyaz kart, solda gruplu kenar çubuğu, sağda
  * sayfa kartı (üstte yol ve arama). Tablette dar menü (yalnız ikon), telefonda kart yok: beyaz sayfa,
  * kendi üst çubuğu ve kasanın alt sekme çubuğu.
@@ -48,6 +118,12 @@ export function AdminShell({ title, children }: { title: string; children: React
   const atIndex = location.pathname === '/yonetim' || location.pathname === '/yonetim/';
   const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
   const searchKey = mac ? '⌘K' : 'Ctrl K';
+  // Tablette açılan tam menü: sayfa geçişinde ve bilgisayar genişliğinde (kenar çubuğu zaten tam) kapanır
+  const [drawer, setDrawer] = useState(false);
+  const desktop = useMediaQuery('(min-width: 1024px)');
+  useEffect(() => {
+    setDrawer(false);
+  }, [location.pathname, desktop]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -62,28 +138,57 @@ export function AdminShell({ title, children }: { title: string; children: React
     else delete root.dataset.density;
   }, [compact]);
 
-  const item = (s: AdminSection, narrow: boolean) => (
-    <NavLink
-      key={s.key}
-      to={s.to}
-      title={narrow ? s.label : undefined}
-      aria-label={narrow ? s.label : undefined}
-      className={({ isActive }) =>
-        cn(
-          'flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors pointer-fine:min-h-8',
-          narrow && 'mx-auto size-11 justify-center px-0 pointer-fine:size-10',
-          isActive ? 'bg-[var(--admin-panel)] text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)] hover:bg-hover hover:text-[var(--admin-text)] active:bg-press',
-        )
-      }
-    >
-      <s.icon className="size-4 shrink-0" aria-hidden="true" />
-      {!narrow && <span className="min-w-0 flex-1 truncate">{s.label}</span>}
-      {!narrow && counts[s.key] != null && <span className="min-w-5 rounded-full bg-[var(--admin-panel)] px-2 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)]">{counts[s.key]}</span>}
-    </NavLink>
+  const item = (s: AdminSection, narrow: boolean) => {
+    const count = counts[s.key];
+    const counted = count ? countText(s.key, count) : null;
+    // Dar menüde yazı yok: ad ve sayacın ne saydığı ekran okuyucuya ve ipucuna (aynı metin: ad açıklama diye yinelenmez)
+    const name = counted ? `${s.label}, ${counted}` : s.label;
+    return (
+      <NavLink
+        key={s.key}
+        to={s.to}
+        title={narrow ? name : undefined}
+        aria-label={narrow ? name : undefined}
+        className={({ isActive }) =>
+          cn(
+            'flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-sm font-medium transition-colors pointer-fine:min-h-8',
+            narrow && 'relative mx-auto size-11 justify-center px-0 pointer-fine:size-10',
+            isActive ? 'bg-[var(--admin-panel)] text-[var(--admin-text)]' : 'text-[var(--admin-text-soft)] hover:bg-hover hover:text-[var(--admin-text)] active:bg-press',
+          )
+        }
+      >
+        <s.icon className="size-4 shrink-0" aria-hidden="true" />
+        {/* Geniş menüde rakam hapta gözle okunur; ne saydığı adın parçası olarak ekran okuyucuya ("Ürünler 3" değil) */}
+        {!narrow && (
+          <span className="min-w-0 flex-1 truncate">
+            {s.label}
+            {counted && <span className="sr-only">, {counted}</span>}
+          </span>
+        )}
+        {count != null &&
+          (narrow ? (
+            // Dar menüde de iş bekleyen yer görünür: ikonun köşesinde nötr sayaç (renk değil, sayı)
+            <span aria-hidden="true" className="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-[var(--admin-text)] px-1 text-[11px] font-semibold leading-none tabular-nums text-[var(--admin-surface)]">
+              {count}
+            </span>
+          ) : (
+            // Etkin satır da gri: orada sayaç beyaz hapta kalır (gri üstünde gri, yalnız rakam kalmaz); ipucu ne saydığını söyler
+            <span aria-hidden="true" title={counted ?? undefined} className="min-w-5 rounded-full bg-[var(--admin-panel)] px-2 text-center text-xs font-medium tabular-nums text-[var(--admin-text-soft)] [[aria-current=page]_&]:bg-[var(--admin-surface)] [[aria-current=page]_&]:text-[var(--admin-text)]">
+              {count}
+            </span>
+          ))}
+      </NavLink>
+    );
+  };
+
+  /** Menünün sağ üstteki düğmesi: bilgisayarda daralt / genişlet, tablette tam menüyü aç, çekmecede kapat */
+  const panelToggle = (label: string, opens: boolean, onClick: () => void) => (
+    <button type="button" onClick={onClick} title={label} aria-label={label} className={cn(ROW_ICON, 'shrink-0')}>
+      {opens ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+    </button>
   );
 
-  /** `canRail`: daraltma düğmesi yalnız bilgisayarda (tablette menü hep dar) */
-  const sidebar = (narrow: boolean, canRail: boolean) => (
+  const sidebar = (narrow: boolean, toggle: ReactNode) => (
     <nav aria-label="Yönetim" className="flex h-full flex-col">
       <div className={cn('flex items-center gap-2.5 px-3 pb-2.5 pt-3.5', narrow && 'flex-col justify-center gap-1.5 px-0')}>
         <LafTile size="sm" />
@@ -93,11 +198,7 @@ export function AdminShell({ title, children }: { title: string; children: React
             <span className="block truncate text-xs text-[var(--admin-text-mute)]">{boot.day ? `Z ${boot.day.zNo} açık` : 'Gün kapalı'} · LafPOS</span>
           </span>
         )}
-        {canRail && (
-          <button type="button" onClick={toggleRail} title={rail ? 'Menüyü genişlet' : 'Menüyü daralt'} aria-label={rail ? 'Menüyü genişlet' : 'Menüyü daralt'} className={cn(ROW_ICON, 'shrink-0')}>
-            {rail ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
-          </button>
-        )}
+        {toggle}
       </div>
       <div className={cn('scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto pb-5 [mask-image:linear-gradient(to_bottom,black_calc(100%-20px),transparent)]', narrow ? 'px-2' : 'px-2.5')}>
         {ADMIN_GROUPS.map((g) => {
@@ -116,10 +217,17 @@ export function AdminShell({ title, children }: { title: string; children: React
           <ArrowLeftRight className="size-4 shrink-0" aria-hidden="true" />
           {!narrow && 'Kasa ekranlarına dön'}
         </Link>
-        <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className={cn('flex min-h-11 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-hover active:bg-press', narrow ? 'mx-auto size-11 justify-center' : 'w-full px-2 pointer-fine:min-h-9')}>
-          <span className="grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: me.color }}>
-            {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-          </span>
+        <button
+          type="button"
+          // Çekmeceden açılırsa çekmece kapanır: kullanıcı menüsü onun arkasında kalmasın
+          onClick={() => {
+            setDrawer(false);
+            setUserMenu(true);
+          }}
+          aria-label={`${me.name} menüsü`}
+          className={cn('flex min-h-11 items-center gap-2.5 rounded-lg text-left transition-colors hover:bg-hover active:bg-press', narrow ? 'mx-auto size-11 justify-center' : 'w-full px-2 pointer-fine:min-h-9')}
+        >
+          <Avatar name={me.name} color={me.color} className="size-7 text-[11px]" />
           {!narrow && (
             <>
               <span className="min-w-0 flex-1">
@@ -134,21 +242,25 @@ export function AdminShell({ title, children }: { title: string; children: React
   );
 
   const current = sections.find((s) => location.pathname.startsWith(s.to));
+  const back = !atIndex && (location.pathname.startsWith('/yonetim') || sections.length > 1);
   return (
     <div className="flex h-full min-h-0 bg-[var(--admin-surface)] text-[var(--admin-text)] md:gap-3 md:bg-[var(--admin-bg)] md:p-2">
       <aside className={cn('hidden shrink-0 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface)] md:block', rail ? 'md:w-16' : 'md:w-16 lg:w-[15.5rem]')}>
-        <div className="h-full lg:hidden">{sidebar(true, false)}</div>
-        <div className="hidden h-full lg:block">{sidebar(rail, true)}</div>
+        {/* Tablette dar ikon menüsü (daraltma yok); üstteki düğme adlı tam menüyü çekmecede açar */}
+        <div className="h-full lg:hidden">{sidebar(true, panelToggle('Menüyü aç', true, () => setDrawer(true)))}</div>
+        <div className="hidden h-full lg:block">{sidebar(rail, panelToggle(rail ? 'Menüyü genişlet' : 'Menüyü daralt', rail, toggleRail))}</div>
       </aside>
+      {drawer && !desktop && <MenuDrawer onClose={() => setDrawer(false)}>{sidebar(false, panelToggle('Menüyü kapat', false, () => setDrawer(false)))}</MenuDrawer>}
       <div className="flex min-w-0 flex-1 flex-col md:overflow-hidden md:rounded-xl md:border md:border-[var(--admin-border)] md:bg-[var(--admin-surface)]">
         {/* Telefonda (ana ekrandan açılınca) çentik ve saat başlığın üstünde kalır */}
         <header className="flex min-h-14 shrink-0 items-center gap-2 border-b border-[var(--admin-border)] px-2 max-md:pt-[env(safe-area-inset-top)] sm:px-4">
-          {!atIndex && (location.pathname.startsWith('/yonetim') || sections.length > 1) ? (
+          {back ? (
             <Link to="/yonetim" aria-label="Yönetim listesi" className={cn(ROW_ICON, 'md:hidden')}>
               <ChevronLeft className="size-5" />
             </Link>
           ) : null}
-          <nav aria-label="Konum" className="min-w-0 flex-1 pl-1 md:pl-0">
+          {/* Geri düğmesi yokken başlık içerikle aynı çizgide başlar (telefonda 16 px) */}
+          <nav aria-label="Konum" className={cn('min-w-0 flex-1 md:pl-0', back ? 'pl-1' : 'pl-2 sm:pl-1')}>
             <ol className="flex min-w-0 items-center gap-1.5 text-sm">
               <li className="hidden text-[var(--admin-text-mute)] md:block">
                 <Link to="/yonetim" className="inline-flex min-h-11 items-center hover:text-[var(--admin-text)] pointer-fine:min-h-0">
@@ -172,33 +284,34 @@ export function AdminShell({ title, children }: { title: string; children: React
             {/* Kısayol yalnız klavyeli cihazda: dokunmatik tablette basılamayacak bir ipucu gürültü olur */}
             <kbd className="hidden rounded border border-[var(--admin-border)] bg-[var(--admin-surface-2)] px-1.5 py-px font-sans text-xs text-[var(--admin-text-mute)] md:pointer-fine:block">{searchKey}</kbd>
           </button>
+          {/* Aç-kapa düğmesi: adı sabit, durumu aria-pressed ve gri zemin söyler (ad durumla değişseydi "Ferah görünüm,
+              basılı" ters okunurdu); yalnız fareyle etkili, dokunmatikte hedefler 44 px kalır */}
           <button
             type="button"
             onClick={toggleCompact}
             aria-pressed={compact}
-            title={compact ? 'Ferah görünüm' : 'Sıkı görünüm'}
-            aria-label={compact ? 'Ferah görünüm' : 'Sıkı görünüm'}
-            className="hidden min-h-8 min-w-8 items-center justify-center rounded-md text-[var(--admin-text-mute)] hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:inline-flex"
+            aria-label="Sıkı görünüm"
+            title={compact ? 'Sıkı görünüm açık' : 'Sıkı görünüm'}
+            className={cn(ROW_ICON, 'hidden pointer-fine:inline-flex', compact && 'bg-[var(--admin-panel)] text-[var(--admin-text)]')}
           >
-            {compact ? <Rows3 className="size-4" /> : <Rows4 className="size-4" />}
+            <Rows4 className="size-4" aria-hidden="true" />
           </button>
-          {/* Canlı bağlantı: sağlıklıyken sakin nokta; kopunca yazıyla söylenir (renk tek başına durum taşımaz) */}
-          <span role="status" aria-live="polite" className="hidden shrink-0 sm:inline-flex">
+          {/* Canlı bağlantı: sağlıklıyken sakin nokta (telefonda yalnız ekran okuyucuya); kopunca her genişlikte yazıyla
+              söylenir (renk tek başına durum taşımaz). Telefonda kasanın üst şeridi yok: işaret burada */}
+          <span role="status" aria-live="polite" className="inline-flex shrink-0">
             {live === 'kopuk' ? (
               <Badge tone="danger" title="Canlı güncellemeler gelmiyor; bağlantı gelince kendiliğinden yenilenir">
                 <WifiOff aria-hidden="true" className="size-3" />
                 Kopuk
               </Badge>
             ) : (
-              <span title={live === 'canli' ? 'Canlı bağlantı' : 'Bağlanıyor…'} className={cn('size-2 rounded-full', live === 'canli' ? 'bg-[var(--admin-success)]' : 'bg-[var(--admin-warning)]')}>
+              <span title={live === 'canli' ? 'Canlı bağlantı' : 'Bağlanıyor…'} className={cn('size-2 rounded-full max-sm:sr-only', live === 'canli' ? 'bg-[var(--admin-success)]' : 'bg-[var(--admin-warning)]')}>
                 <span className="sr-only">{live === 'canli' ? 'Canlı bağlantı' : 'Bağlanıyor…'}</span>
               </span>
             )}
           </span>
           <button type="button" onClick={() => setUserMenu(true)} aria-label={`${me.name} menüsü`} className="grid size-11 shrink-0 place-items-center md:hidden">
-            <span className="grid size-8 place-items-center rounded-full text-xs font-semibold text-white ring-1 ring-inset ring-black/5 dark:ring-white/15" style={{ background: me.color }}>
-              {me.name.slice(0, 2).toLocaleUpperCase('tr-TR')}
-            </span>
+            <Avatar name={me.name} color={me.color} />
           </button>
         </header>
         <div className="scroll-thin @container min-h-0 flex-1 overflow-y-auto">

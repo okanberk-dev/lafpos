@@ -1,27 +1,32 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/cn';
 import { EmptyState } from './ui/misc';
 
 /**
- * Grafikler (dataviz kuralları): tek seri tek renk (birincil mavi), kıyas serisi gri ve ince (vurgu biçimi),
- * tek eksen, sütun en çok 24 px, uçları 4 px yuvarlak ve tabanda düz, ızgara 1 px ve geride, değer etiketi
- * seçici, her işarette üzerine gelince ipucu. Renkler CSS değişkenlerinden gelir, koyu temada kendi adımları var.
+ * Grafikler (dataviz kuralları): tek seri tek renk (ev yeşili), kıyas serisi gri ve ince (vurgu biçimi), tek eksen,
+ * sütun en çok 24 px, uçları 4 px yuvarlak ve tabanda düz, ızgara 1 px ve geride, değer etiketi seçici. Değer ipucu
+ * fareyle üzerine gelince, dokunmatikte dokununca ya da parmak yana kayınca (başka yere dokunana dek durur), klavyede
+ * oklarla açılır; ekran okuyucu aynı değerleri gizli tablodan okur. Renkler CSS değişkenlerinden gelir, koyu temada
+ * kendi adımları var.
  */
 
 const compact = new Intl.NumberFormat('tr-TR', { notation: 'compact', maximumFractionDigits: 1 });
 
-/** 1-2-2,5-5 dizisinden adım: eksen değerleri yuvarlak olsun (100, 200, 300…) */
+/**
+ * 1-2-2,5-5 dizisinden adım: eksen değerleri yuvarlak olsun (100, 200, 250…). 2,5 yalnız onluk ve üstünde (25, 250);
+ * birler basamağında 2 olur, eksende kesirli etiket çıkmaz (2,5 ₺ ya da 7,5 dk)
+ */
 function niceStep(raw: number): number {
   if (raw <= 0) return 1;
   const exp = Math.pow(10, Math.floor(Math.log10(raw)));
   const f = raw / exp;
-  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * exp;
+  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? (exp >= 10 ? 2.5 : 2) : f <= 5 ? 5 : 10) * exp;
 }
 
-/** Ekseni gösterim biriminde (₺) kurar; döndürülen değerler ham birimde (kuruş) */
+/** Ekseni gösterim biriminde (₺, dakika) kurar; döndürülen değerler ham birimde (kuruş, saniye) */
 function niceScale(maxRaw: number, divisor: number, targetTicks = 4) {
   const maxDisplay = Math.max(1, maxRaw / divisor);
-  // Tutar ekseninde kesirli adım olmasın (0,3 ₺ gibi)
+  // Eksende kesirli adım olmasın (0,3 ₺ gibi)
   const step = Math.max(1, niceStep(maxDisplay / targetTicks));
   const top = Math.ceil(maxDisplay / step) * step;
   const ticks: number[] = [];
@@ -49,6 +54,9 @@ export interface ColumnDatum {
   compare?: number | null;
 }
 
+/** İpucunun genişliği (etiket ve "Ortalama süre" satırı): sağ kenara bu kadar yakın sütunda ipucu sağa yaslanır */
+const TIP_WIDTH = 190;
+
 export function ColumnChart({
   data,
   format,
@@ -57,6 +65,8 @@ export function ColumnChart({
   height = 220,
   ariaLabel,
   unitDivisor = 100,
+  tickFormat,
+  empty: emptyProp,
   emptyLabel = 'Bu dönemde satış yok',
   emptyHint,
 }: {
@@ -66,8 +76,12 @@ export function ColumnChart({
   compareLabel?: string;
   height?: number;
   ariaLabel: string;
-  /** Eksen değerlerini kuruştan liraya çevirmek için */
+  /** Eksen adımının birimi: kuruştan liraya 100 (varsayılan), saniyeden dakikaya 60 */
   unitDivisor?: number;
+  /** Eksen etiketi ham değerden ("4 dk"); verilmezse gösterim biriminde kısa sayı ("30 B") */
+  tickFormat?: (raw: number) => string;
+  /** Boş durum sayfadan: değerler sıfıra yuvarlansa da veri varsa (1 saniyelik hazırlama) grafik çizilir */
+  empty?: boolean;
   /**
    * Veri yokken ekranın zamanını söyleyen boş durum: "Bugün henüz satış yok", "Bu günde satış yok",
    * "Bu dönemde hazırlanan kalem yok". "Veri" denmez
@@ -77,8 +91,13 @@ export function ColumnChart({
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
-  const empty = data.every((d) => !d.value && !d.compare);
-  const hasCompare = !!compareLabel && data.some((d) => d.compare != null);
+  // Klavyeyle gezilen değer ekran okuyucuya da söylenir (fareyle gezinti sessiz)
+  const [said, setSaid] = useState('');
+  // Veri yenilenip sütun sayısı değişince eski seçim yok sayılır (sütunlar soluk kalmasın)
+  const active = hover != null && hover < data.length ? hover : null;
+  const empty = emptyProp ?? data.every((d) => !d.value && !d.compare);
+  // Hep sıfır kıyas (geçen hafta satış yok; saat dolgusu 0) çizilmez: eksende düz gri çizgi, açıklama ve ipucu satırı olmaz
+  const hasCompare = !!compareLabel && data.some((d) => (d.compare ?? 0) > 0);
   const scale = niceScale(Math.max(1, ...data.map((d) => Math.max(d.value, d.compare ?? 0))), unitDivisor);
   const max = scale.max;
   const padL = 44;
@@ -103,6 +122,52 @@ export function ColumnChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, hasCompare, band, max, plotH]);
 
+  // Dokunmatikte ipucu dokunulan sütunda kalır: grafiğin dışına dokunmak ya da Escape kapatır
+  useEffect(() => {
+    if (hover == null) return;
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setHover(null);
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setHover(null);
+    };
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [hover, ref]);
+
+  const describe = (d: ColumnDatum) => `${d.title ?? d.label}: ${format(d.value)}${hasCompare && d.compare != null ? `, ${compareLabel} ${format(d.compare)}` : ''}`;
+
+  /**
+   * İmlecin ya da parmağın altındaki sütun. Telefonda 24 saatlik grafikte sütun 11 px'e iner: dokunmatikte grafiğin
+   * tamamı tek hedeftir (eksen yazısının üstü en yakın sütuna), farede yalnız çizim alanı
+   */
+  const columnAt = (clientX: number, touch: boolean): number | null => {
+    const el = ref.current;
+    if (!el || band <= 0) return null;
+    const i = Math.floor((clientX - el.getBoundingClientRect().left - padL) / band);
+    if (touch) return Math.min(data.length - 1, Math.max(0, i));
+    return i >= 0 && i < data.length ? i : null;
+  };
+
+  /** Sol ve sağ ok sütunlar arasında gezer, Home ve End uçlara gider */
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!data.length) return;
+    const last = data.length - 1;
+    let next: number;
+    if (e.key === 'ArrowRight') next = active == null ? 0 : Math.min(last, active + 1);
+    else if (e.key === 'ArrowLeft') next = active == null ? last : Math.max(0, active - 1);
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = last;
+    else return;
+    e.preventDefault();
+    setHover(next);
+    setSaid(describe(data[next]));
+  };
+
   if (empty) {
     // Grafik yüksekliğinde (veri gelince kart zıplamasın); kesik çerçeve yok (bırakma alanı çağrışımı)
     return (
@@ -113,6 +178,8 @@ export function ColumnChart({
       </div>
     );
   }
+  const tip = active != null ? data[active] : undefined;
+  const center = active != null ? padL + band * active + band / 2 : 0;
   return (
     <div className="w-full">
       {hasCompare && (
@@ -127,14 +194,31 @@ export function ColumnChart({
           </span>
         </div>
       )}
-      <div ref={ref} className="relative w-full" style={{ height }}>
+      {/* Klavye odağı grafiğin kendisinde: oklar ipucunu sütundan sütuna taşır, odak çıkınca kapanır. Fare ve kalem
+          üzerine gelince gösterir, çıkınca kapatır. Dokunmatikte dokunuş gösterir, parmak yana kaydıkça altındaki sütuna
+          geçer (dikey kaydırma ve yakınlaştırma sayfanın: touch-action pan-y pinch-zoom); parmak kalkınca gelen
+          pointerleave ipucunu silmez, kaydırmaya dönen dokunuş (pointercancel) siler */}
+      <div
+        ref={ref}
+        tabIndex={0}
+        role="img"
+        aria-label={`${ariaLabel}; değerler için sol ve sağ ok tuşları`}
+        onKeyDown={onKeyDown}
+        onBlur={() => setHover(null)}
+        onPointerDown={(e) => setHover(columnAt(e.clientX, e.pointerType === 'touch'))}
+        onPointerMove={(e) => setHover(columnAt(e.clientX, e.pointerType === 'touch'))}
+        onPointerLeave={(e) => e.pointerType !== 'touch' && setHover(null)}
+        onPointerCancel={() => setHover(null)}
+        className="relative w-full touch-pan-y touch-pinch-zoom rounded-lg"
+        style={{ height }}
+      >
         {width > 0 && (
-          <svg width={width} height={height} role="img" aria-label={ariaLabel} className="block">
+          <svg width={width} height={height} aria-hidden="true" className="block">
             {ticks.map((t) => (
               <g key={t}>
                 <line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} stroke="var(--chart-grid)" strokeWidth={1} />
                 <text x={padL - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill="var(--muted)" className="tabular">
-                  {compact.format(t / unitDivisor)}
+                  {tickFormat ? tickFormat(t) : compact.format(t / unitDivisor)}
                 </text>
               </g>
             ))}
@@ -149,7 +233,7 @@ export function ColumnChart({
                   : `M${x},${padT + plotH} L${x},${top + r} Q${x},${top} ${x + r},${top} L${x + barW - r},${top} Q${x + barW},${top} ${x + barW},${top + r} L${x + barW},${padT + plotH} Z`;
               return (
                 <g key={i}>
-                  {path && <path d={path} fill="var(--chart-accent)" opacity={hover == null || hover === i ? 1 : 0.55} />}
+                  {path && <path d={path} fill="var(--chart-accent)" opacity={active == null || active === i ? 1 : 0.55} />}
                   {i % labelEvery === 0 && (
                     <text x={padL + band * i + band / 2} y={height - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">
                       {d.label}
@@ -161,55 +245,65 @@ export function ColumnChart({
             {hasCompare && <path d={comparePath} fill="none" stroke="var(--chart-context)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
             {hasCompare &&
               data.map((d, i) =>
-                d.compare == null || hover !== i ? null : (
+                d.compare == null || active !== i ? null : (
                   <circle key={`c${i}`} cx={padL + band * i + band / 2} cy={y(d.compare)} r={4} fill="var(--chart-context)" stroke="var(--surface)" strokeWidth={2} />
                 ),
               )}
-            {data.map((_, i) => (
-              <rect
-                key={`h${i}`}
-                x={padL + band * i}
-                y={padT}
-                width={band}
-                height={plotH}
-                fill="transparent"
-                onPointerEnter={() => setHover(i)}
-                onPointerLeave={() => setHover((h) => (h === i ? null : h))}
-                onPointerDown={() => setHover(i)}
-              />
-            ))}
           </svg>
         )}
-        {hover != null && data[hover] && width > 0 && (
+        {tip && width > 0 && (
           <div
-            className="pointer-events-none absolute z-10 min-w-36 rounded-xl border border-line bg-[var(--surface-raised)] px-3 py-2 text-xs shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
-            style={{ left: Math.min(width - 160, Math.max(0, padL + band * hover + band / 2 - 72)), top: 0 }}
+            className="pointer-events-none absolute top-0 z-10 min-w-36 whitespace-nowrap rounded-xl border border-line bg-[var(--surface-raised)] px-3 py-2 text-xs shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
+            style={center + TIP_WIDTH - 72 > width ? { right: 0 } : { left: Math.max(0, center - 72) }}
           >
-            <div className="font-semibold text-ink">{data[hover].title ?? data[hover].label}</div>
+            <div className="font-semibold text-ink">{tip.title ?? tip.label}</div>
             <div className="mt-1 flex items-center justify-between gap-3 text-ink-2">
               <span className="inline-flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-sm" style={{ background: 'var(--chart-accent)' }} />
                 {seriesLabel}
               </span>
-              <span className="tabular font-semibold text-ink">{format(data[hover].value)}</span>
+              <span className="tabular font-semibold text-ink">{format(tip.value)}</span>
             </div>
-            {hasCompare && data[hover].compare != null && (
+            {hasCompare && tip.compare != null && (
               <div className="flex items-center justify-between gap-3 text-ink-2">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-0.5 w-3 rounded" style={{ background: 'var(--chart-context)' }} />
                   {compareLabel}
                 </span>
-                <span className="tabular">{format(data[hover].compare!)}</span>
+                <span className="tabular">{format(tip.compare)}</span>
               </div>
             )}
           </div>
         )}
       </div>
+      <span className="sr-only" aria-live="polite">
+        {said}
+      </span>
+      {/* Ekran okuyucu için değerler: çizimin kendisi bir görüntü, rakamlar burada */}
+      <table className="sr-only">
+        <caption>{ariaLabel}</caption>
+        <thead>
+          <tr>
+            <td />
+            <th scope="col">{seriesLabel}</th>
+            {hasCompare && <th scope="col">{compareLabel}</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d, i) => (
+            <tr key={i}>
+              <th scope="row">{d.title ?? d.label}</th>
+              <td>{format(d.value)}</td>
+              {hasCompare && <td>{d.compare == null ? '—' : format(d.compare)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-/** Yatay çubuk listesi: sıralama ve pay (ödeme türleri, kategoriler, ürünler). Tek renk, değer uçta. */
+/** Yatay çubuk listesi: sıralama ve pay (ödeme türleri, kategoriler, ürünler). Tek renk, değer uçta; sıfır çubuk çizilmez */
 export function BarList({
   items,
   format,
@@ -234,25 +328,10 @@ export function BarList({
             </span>
           </div>
           <div className="h-2 w-full rounded-full" style={{ background: 'var(--chart-track)' }}>
-            <div className="h-2 rounded-full transition-[width] group-hover:brightness-110" style={{ width: `${Math.max(1, (it.value / top) * 100)}%`, background: 'var(--chart-accent)' }} />
+            <div className="h-2 rounded-full transition-[width] group-hover:brightness-110" style={{ width: `${it.value > 0 ? Math.max(1, (it.value / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
           </div>
         </li>
       ))}
     </ul>
-  );
-}
-
-/** Stat tile için küçük eğilim çizgisi (geçmiş gri, son nokta vurgulu) */
-export function Sparkline({ values, width = 120, height = 32 }: { values: number[]; width?: number; height?: number }) {
-  if (values.length < 2) return null;
-  const max = Math.max(1, ...values);
-  const step = width / (values.length - 1);
-  const pts = values.map((v, i) => `${i * step},${height - 3 - (v / max) * (height - 6)}`);
-  const last = pts[pts.length - 1].split(',').map(Number);
-  return (
-    <svg width={width} height={height} aria-hidden="true">
-      <polyline points={pts.join(' ')} fill="none" stroke="var(--chart-context)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={last[0]} cy={last[1]} r={4} fill="var(--chart-accent)" stroke="var(--surface)" strokeWidth={2} />
-    </svg>
   );
 }

@@ -32,7 +32,7 @@ export default function CounterSalePage() {
       <div className="grid h-full place-items-center p-4">
         <EmptyState
           art="kapi"
-          title="Gün açılmamış"
+          title="Gün açılmadı"
           action={
             can('kasa.gun') ? (
               <Button variant="primary" size="lg" onClick={() => navigate('/kasa')}>

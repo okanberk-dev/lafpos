@@ -119,7 +119,7 @@ describe('Seçenekleri sor ayarı (sunucu)', () => {
     expect(saved.askOptions).toBe('hep');
     expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).settings.askOptions).toBe('hep');
     const audit = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=20');
-    expect(audit.find((a) => a.action === 'settings.update')?.message).toMatch(/askOptions/);
+    expect(audit.find((a) => a.action === 'settings.update')?.message).toMatch(/Seçenekleri sor/);
     await h.ok('patron', 'PUT', '/admin/settings', { kitchenWarnMinutes: 9 });
     expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).settings.askOptions).toBe('hep');
     await h.ok('patron', 'PUT', '/admin/settings', { askOptions: 'zorunlu' });

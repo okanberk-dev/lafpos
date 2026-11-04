@@ -491,6 +491,8 @@ export function voidItem(t: Tx, actor: Actor, fx: Effects, orderId: string, inpu
     voidApprovedBy: approverId,
     voidedAt: now,
     voidAfterSend: afterSend,
+    // Hesap iptalden önce yazdırılmış mı: iptal anında (adisyonun yazdırma zamanı sonradan da dolar)
+    voidAfterBill: !!o.billPrintedAt,
   });
   if (notStarted(it)) releasePortions(t, fx, actor.user.id, [{ productId: it.productId, qty }]);
   // Bekleyen son bar kalemi iptal edilince gel-al siparişi kalanların durumuna geçer (hepsi hazırsa "Hazır")
@@ -812,12 +814,15 @@ export function setOrderDiscount(
   // Boş adisyona indirim verilmez: yetki ve uyarı eşiği tutara göre ölçülür, sonra eklenen kalemlere sessizce uygulanırdı
   if (subtotal <= 0) throw bad('Önce ürün ekleyin; indirim boş adisyona verilmez', 'empty_order');
   const amount = input.type === 'percent' ? percentOf(subtotal, value) : Math.min(subtotal, value);
+  // Tutar indirimi uygulanan tutarla saklanır: ara toplamdan büyük tutar (₺19,50 yerine ₺1.950) %100 olarak onaylanır,
+  // fazlası saklansaydı sonra eklenen kalemler onaysız ve denetime yazılmadan indirimli olurdu (yüzde de 100'e kırpılır)
+  const stored = input.type === 'amount' ? amount : value;
   const pct = subtotal > 0 ? (amount * 100) / subtotal : 0;
   // Sınır kalem indirimleriyle birlikte toplam etkiye uygulanır (toplam oran, kalem indirimi varken adisyonunkinden büyük)
-  const total = totalDiscountPct(calcFor({ ...o, discountType: input.type, discountValue: value }, items));
+  const total = totalDiscountPct(calcFor({ ...o, discountType: input.type, discountValue: stored }, items));
   const approverId = discountApproval(actor, Math.max(pct, total));
   t.update(schema.orders)
-    .set({ discountType: input.type, discountValue: value, discountReason: reason, discountBy: approverId ?? actor.user.id })
+    .set({ discountType: input.type, discountValue: stored, discountReason: reason, discountBy: approverId ?? actor.user.id })
     .where(eq(schema.orders.id, orderId))
     .run();
   const updated = recalc(t, orderId);
@@ -1501,7 +1506,7 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
   if (live.length && !reason.trim()) throw bad('İptal nedeni yazılmalı', 'reason_required');
   for (const it of live) {
     t.update(schema.orderItems)
-      .set({ voided: true, voidReason: reason.trim() || 'Adisyon iptali', voidBy: actor.user.id, voidApprovedBy: approverId, voidedAt: now, voidAfterSend: !allFresh && it.status !== 'yeni' })
+      .set({ voided: true, voidReason: reason.trim() || 'Adisyon iptali', voidBy: actor.user.id, voidApprovedBy: approverId, voidedAt: now, voidAfterSend: !allFresh && it.status !== 'yeni', voidAfterBill: !!o.billPrintedAt })
       .where(eq(schema.orderItems.id, it.id))
       .run();
   }

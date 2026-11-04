@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ClipboardList, Info, SearchX } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ClipboardList, Info } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { tl } from '@shared/money';
-import { fmtDateTime } from '@shared/time';
+import { addDays, fmtDateLong, fmtTime, istanbulParts } from '@shared/time';
+import { settingLabel } from '@shared/settings-labels';
 import { Badge, Card, CARD, EmptyState, PageHeader, SearchField, StatusTabs, Timeline, type TimelineItem } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
 import { ErrorState, ListSkeleton } from '@/components/ui/misc';
@@ -29,6 +30,7 @@ const ACTION_LABEL: Record<string, string> = {
   'auth.pin_lock': 'PIN kilidi',
   'cash.giris': 'Kasaya giriş',
   'cash.harcama': 'Kasadan harcama',
+  'cash.shift_count': 'Vardiya sayımı',
   'cash.teslim': 'Kasa teslimi',
   'customer.collect': 'Açık hesap tahsilatı',
   'customer.stamps': 'Damga hediyesi',
@@ -87,11 +89,15 @@ const ACTION_LABEL: Record<string, string> = {
   'product.available': 'Satışta',
   'product.sold_out': 'Tükendi',
   'role.permissions': 'Rol yetkileri',
+  'settings.servis_modu': 'Servis modu',
+  'settings.update': 'Ayar değişikliği',
+  'settings.z_start': 'İlk Z numarası',
   'sync.lafmaliyet_backfill': 'lafmaliyet aktarımı',
   'table.qr_created': 'Masa QR',
   'table.qr_rotated': 'Masa QR yenileme',
   'user.create': 'Personel ekleme',
   'user.pin_conflict': 'PIN çakışması',
+  'user.update': 'Personel düzenleme',
 };
 
 const PREFIX_LABEL: Record<string, string> = {
@@ -114,10 +120,36 @@ const PREFIX_LABEL: Record<string, string> = {
   settings: 'Ayar',
   sync: 'Senkron',
   table: 'Masa',
+  time: 'Mesai',
   user: 'Personel',
 };
 
 const actionLabel = (code: string): string | null => ACTION_LABEL[code] ?? PREFIX_LABEL[code.split('.')[0]] ?? null;
+
+/**
+ * Ayar kaydının iletisi: "Patron ayarları değiştirdi: <adlar>". Adlar tek listeden (`@shared/settings-labels`; sunucu
+ * iletiyi de onunla yazar): yeni kayıtlar Türkçe adla gelir ve olduğu gibi kalır; kod adıyla yazılmış eski kayıtlar
+ * ("businessName, receiptFooter"; Kaydet her alanı gönderiyordu: 35 ad) Türkçe adına çevrilir, listede olmayan ad
+ * olduğu gibi kalır
+ */
+const SETTINGS_MARK = ' ayarları değiştirdi: ';
+
+/** Ayar kaydının iletisi Türkçe alan adlarıyla; dörtten uzun liste kısalır, tamamı (`full`) ipucunda ve aramada */
+function settingsText(a: AuditRow): { text: string; full: string } | null {
+  if (a.action !== 'settings.update') return null;
+  const at = a.message.indexOf(SETTINGS_MARK);
+  if (at < 0) return null;
+  // "Patron ayarları değiştirdi"
+  const head = a.message.slice(0, at + SETTINGS_MARK.length - 2);
+  const names = a.message
+    .slice(at + SETTINGS_MARK.length)
+    .split(', ')
+    .filter(Boolean)
+    .map(settingLabel);
+  if (!names.length) return { text: head, full: head };
+  const full = `${head}: ${names.join(', ')}`;
+  return { full, text: names.length > 4 ? `${head}: ${names.slice(0, 3).join(', ')} ve ${names.length - 3} ayar daha` : full };
+}
 
 /** Denetim kaydı: Innex zaman çizelgesi (§1.5 "Zaman çizelgesi"), önem derecesine göre sayılı sekmeler */
 export default function AuditAdmin() {
@@ -127,30 +159,42 @@ export default function AuditAdmin() {
   const all = useMemo(() => data.data ?? [], [data.data]);
   const rows = useMemo(() => {
     const k = fold(q.trim());
-    return all.filter((a) => (severity === 'tum' || a.severity === severity) && (!k || fold(`${a.message} ${actionLabel(a.action) ?? ''} ${a.action} ${a.userName ?? ''} ${a.approverName ?? ''}`).includes(k)));
+    return all.filter(
+      (a) => (severity === 'tum' || a.severity === severity) && (!k || fold(`${a.message} ${settingsText(a)?.full ?? ''} ${actionLabel(a.action) ?? ''} ${a.action} ${a.userName ?? ''} ${a.approverName ?? ''}`).includes(k)),
+    );
   }, [all, severity, q]);
 
-  const items = rows.map((a): TimelineItem => {
-    // Kim ve ne, tek sakin satırda: "Kasa · Hesap yazdırma · onaylayan Müdür"
-    const meta = [a.userName, actionLabel(a.action), a.approverName && `onaylayan ${a.approverName}`].filter(Boolean).join(' · ');
-    return {
+  // Günlere bölünür (İstanbul takvim günü): gün başlıkta bir kez ("Bugün", "Dün", "1 Kasım 2026 Pazar"), satırda yalnız saat
+  const today = istanbulParts(Date.now()).date;
+  const dayName = (d: string) => (d === today ? 'Bugün' : d === addDays(today, -1) ? 'Dün' : fmtDateLong(d));
+  const groups: { day: string; items: TimelineItem[] }[] = [];
+  for (const a of rows) {
+    const st = settingsText(a);
+    // Kim ve ne, tek sakin satırda: "Kasa · Hesap yazdırma · onaylayan Müdür"; ileti kişinin adıyla başlıyorsa ad yinelenmez
+    const meta = [a.userName && !a.message.startsWith(`${a.userName} `) ? a.userName : null, actionLabel(a.action), a.approverName && `onaylayan ${a.approverName}`].filter(Boolean).join(' · ');
+    const item: TimelineItem = {
       key: String(a.id),
       tone: a.severity === 'alarm' ? 'danger' : a.severity === 'uyari' ? 'warning' : 'neutral',
       icon: a.severity === 'alarm' ? <AlertOctagon /> : a.severity === 'uyari' ? <AlertTriangle /> : <Info />,
-      title: a.message,
+      title: st ? <span title={st.full !== st.text ? st.full : undefined}>{st.text}</span> : a.message,
       description: meta ? <span className="text-xs text-[var(--admin-text-mute)]">{meta}</span> : undefined,
       // Tutar başlık satırının sağında, saatin solunda
       time:
         a.amount != null ? (
           <span className="inline-flex items-center gap-2">
             <Badge tone={a.severity === 'alarm' ? 'danger' : 'neutral'}>{tl(a.amount)}</Badge>
-            {fmtDateTime(a.at)}
+            {fmtTime(a.at)}
           </span>
         ) : (
-          fmtDateTime(a.at)
+          fmtTime(a.at)
         ),
     };
-  });
+    const day = istanbulParts(a.at).date;
+    const last = groups[groups.length - 1];
+    if (last?.day === day) last.items.push(item);
+    else groups.push({ day, items: [item] });
+  }
+  const query = q.trim();
 
   return (
     <>
@@ -174,18 +218,26 @@ export default function AuditAdmin() {
         </Card>
       ) : data.isError && !data.data ? (
         <ErrorState className={CARD} title="Denetim kaydı alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
-      ) : items.length ? (
+      ) : groups.length ? (
         <Card bodyClassName="[&_ol>li]:pb-4">
-          <Timeline items={items} />
+          <div className="space-y-6">
+            {groups.map((g) => (
+              <section key={g.day}>
+                <h2 className="mb-3 text-[13px] font-semibold text-[var(--admin-text-mute)]">{dayName(g.day)}</h2>
+                <Timeline items={g.items} />
+              </section>
+            ))}
+          </div>
         </Card>
       ) : all.length === 0 ? (
         <EmptyState icon={<ClipboardList />} title="Henüz kayıt yok">
           İptal, ikram, indirim, kasa hareketi ve gün sonu yapıldıkça burada listelenir
         </EmptyState>
-      ) : (
+      ) : query ? (
+        // Sonuçsuz arama: boş fincan tabağı ve aranan söz (Ürünler'deki gibi)
         <EmptyState
-          icon={<SearchX />}
-          title="Bu süzgeçte kayıt yok"
+          art="arama"
+          title={`“${query}” ile eşleşen kayıt yok`}
           action={
             <Button
               onClick={() => {
@@ -197,7 +249,12 @@ export default function AuditAdmin() {
             </Button>
           }
         >
-          Aramayı ya da önem süzgecini değiştirin
+          Başka bir kelime deneyin ya da süzgeci temizleyin
+        </EmptyState>
+      ) : (
+        // Boş Uyarı ya da Alarm sekmesi iyi haberdir: hata gibi görünmez (Genel bakış'taki "Her şey yolunda" çizimi)
+        <EmptyState art="favori" title={severity === 'alarm' ? 'Alarm yok' : 'Uyarı yok'}>
+          Son 300 kayıtta {severity === 'alarm' ? 'alarm' : 'uyarı'} düşmedi
         </EmptyState>
       )}
     </>
