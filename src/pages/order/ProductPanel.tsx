@@ -250,9 +250,11 @@ function ProductTile({
   const hasOptions = productGroups(boot, p).length > 0;
   const twoSizes = p.priceL != null;
   const label = p.shortName?.trim() || p.name;
-  // İki boylu üründe zorunlu seçim (Türk kahvesinde şeker) varsa ya da ayar "Seçenekli her üründe" ise kart ve boy
-  // düğmesi hemen eklemez, seçenek penceresini o boy seçili açar
-  const ask = twoSizes && asksOptions(boot, p);
+  // Zorunlu seçim (Türk kahvesinde şeker) varsa ya da ayar "Seçenekli her üründe" ise kart ve boy düğmesi hemen
+  // eklemez, seçenek penceresini o boy seçili açar. Yalnız isteğe bağlı seçeneği olan ürün (tek boylu da) tek dokunuşla
+  // eklenir, sunucu varsayılanı yazar (Normal süt); değişiklik köşedeki seçenek düğmesinden. Fiyatı 0 olan açık ürün
+  // (etkinlik ücreti, özel pasta) fiyat girilsin diye hep pencereyle
+  const ask = asksOptions(boot, p) || (!twoSizes && p.price <= 0);
   const addSize = (size: Size) => (ask ? onCustomize(p, size) : onQuickAdd(p, size));
   const src = !p.image || broken ? null : DEMO ? demoProductImage(p.image) : `/media/products/${p.id}?v=${imageVersion(p.image)}`;
   // Görseli olmayan üründe baş harfler kategori renginin açık tonunda (kart ızgarada kategorisiyle tanınır)
@@ -268,8 +270,7 @@ function ProductTile({
     >
       <button
         disabled={soldOut}
-        // Fiyatı 0 olan açık ürün (etkinlik ücreti, özel pasta) fiyat girilsin diye pencereyle açılır
-        onClick={() => (twoSizes ? addSize('M') : !hasOptions && p.price > 0 ? onQuickAdd(p, 'TEK') : onCustomize(p, 'TEK'))}
+        onClick={() => addSize(twoSizes ? 'M' : 'TEK')}
         aria-haspopup={ask ? 'dialog' : undefined}
         // İki boylu kartta ad tek satırsa düğme 41 px kalıyordu: dokunmatikte 44 (kart da pencereyi açabilir)
         className={cn('flex min-h-11 flex-1 flex-col items-stretch rounded-2xl text-left transition-colors duration-150 active:bg-press pointer-fine:min-h-0', !withImage && hasOptions && 'pr-12')}

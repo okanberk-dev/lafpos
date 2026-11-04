@@ -89,10 +89,11 @@ describe('kasada seçenek tükendi', () => {
   });
 
   it('isteğe bağlı grubun varsayılanı tükendiyse satış durmaz, o grup için seçenek yazılmaz (Normal süt bitti: su, latte)', async () => {
-    // Site Süt grubunu sudan çaya bütün içeceklere bağlar: Normal bitti diye su satılamaz olmasın, yerine başka süt
-    // yazılmasın (lafmaliyet'e yanlış ALTERNATIF SÜT satırı, fazladan ek fiyat)
+    // Süt grubu bütün kahvelere bağlı: Normal bitti diye tek boylu Cortado satılamaz olmasın, yerine başka süt yazılmasın
+    // (lafmaliyet'e yanlış ALTERNATIF SÜT satırı, fazladan ek fiyat). Su'ya süt bağlanmaz (seçenek profili)
     const b = await boot();
-    const [water, latte] = [product(b, 'Su'), product(b, 'Latte')];
+    const [water, latte] = [product(b, 'Cortado'), product(b, 'Latte')];
+    expect(product(b, 'Su').optionGroupIds).toEqual([]);
     const { group: milk, item: normal } = option(b, 'Latte', 'Süt', 'Normal');
     const { item: lactoseFree } = option(b, 'Latte', 'Süt', 'Laktozsuz');
     const { item: oat } = option(b, 'Latte', 'Süt', 'Yulaf');
@@ -120,8 +121,8 @@ describe('kasada seçenek tükendi', () => {
       expect(chosen.res.status).toBe(200);
       expect(chosen.res.json.items[0].options.map((o) => o.name)).toContain('Laktozsuz');
 
-      // Pencerenin önseçtiği Normal, Su sepetteyken tükendi: olduğu gibi gitse 409; kasa gönderimden önce çıkarır
-      // (sendableOptions), Su süt yazılmadan satılır
+      // Pencerenin önseçtiği Normal, Cortado sepetteyken tükendi: olduğu gibi gitse 409; kasa gönderimden önce çıkarır
+      // (sendableOptions), Cortado süt yazılmadan satılır
       const preselected = [{ itemId: normal.id }];
       expect((await sell([{ productId: water.id, qty: 1, options: preselected }])).res.status).toBe(409);
       const cleaned = await sell([{ productId: water.id, qty: 1, options: sendableOptions(await boot(), water.id, preselected) }]);
@@ -129,13 +130,14 @@ describe('kasada seçenek tükendi', () => {
       expect(cleaned.res.json.items[0].options.filter((o) => o.groupId === milk.id)).toEqual([]);
       expect(cleaned.res.json.items[0].unitPrice).toBe(water.price);
 
-      // lafmaliyet gün yükünde su ve latte, ALTERNATIF SÜT yok
+      // lafmaliyet gün yükünde cortado ve latte, ALTERNATIF SÜT yok
       const cash = b.paymentMethods.find((m) => m.name === 'Nakit')!;
       const paid = await h.ok<{ closed: boolean }>('kasa', 'POST', `/orders/${plain.order.id}/payments`, { methodId: cash.id, amount: plain.res.json.total });
       expect(paid.closed).toBe(true);
       const { salesLines } = await import('../server/sync/lafmaliyet');
       const names = salesLines([plain.order.dayId]).map((l) => l.posName);
-      expect(names).toEqual(expect.arrayContaining(['SU', 'LATTE MEDIUM']));
+      expect(names).toEqual(expect.arrayContaining(['LATTE MEDIUM']));
+      expect(names.some((n) => n.startsWith('CORTADO'))).toBe(true);
       expect(names).not.toContain('ALTERNATIF SÜT');
     } finally {
       await mark('kasa', normal.id, false);

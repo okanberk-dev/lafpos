@@ -314,12 +314,13 @@ export async function runFlows(ctx) {
         }),
     ],
     [
-      'Tablette kasiyer: Su penceresi açıkken ve Su sepetteyken önseçili Normal süt tükenir; Ekle açık, satır işaretsiz, Gönder süt yazmadan geçer; açıkça seçilen Yulaf tükenince uyarır',
+      'Tablette kasiyer: tek boylu Cortado penceresi açıkken ve Cortado sepetteyken önseçili Normal süt tükenir; Ekle açık, satır işaretsiz, Gönder süt yazmadan geçer; açıkça seçilen Yulaf tükenince uyarır',
       async () => {
         const boot = await api.call('kasa', 'GET', '/bootstrap');
-        const water = boot.products.find((p) => p.name === 'Su');
+        // Su'ya süt bağlanmaz (seçenek profili): isteğe bağlı Süt grubu olan tek boylu ürün Cortado
+        const water = boot.products.find((p) => p.name === 'Cortado');
         const milk = boot.optionGroups.find((g) => g.name === 'Süt' && water.optionGroupIds.includes(g.id));
-        assert(water && milk && !milk.required, 'Su ya da isteğe bağlı Süt grubu bulunamadı');
+        assert(water && milk && !milk.required, 'Cortado ya da isteğe bağlı Süt grubu bulunamadı');
         const item = (name) => milk.items.find((i) => i.name === name);
         const mark = (name, soldOut) => api.call('kasa', 'POST', `/option-items/${item(name).id}/sold-out`, { soldOut });
         const label = water.shortName?.trim() || water.name;
@@ -336,7 +337,7 @@ export async function runFlows(ctx) {
               await page.getByRole('button', { name: `${label} seçenekleri`, exact: true }).click();
               await modal.waitFor();
             };
-            // Pencereyle eklenen Su: Normal süt önseçili, satıra yazılır
+            // Pencereyle eklenen Cortado: Normal süt önseçili, satıra yazılır
             await open();
             await chip('Normal', true).waitFor({ timeout: 8000 });
             await add.click();
@@ -358,8 +359,8 @@ export async function runFlows(ctx) {
             // Sepette ilk satırın seçeneğinde tükenen Normal var: işaretlenmez (Gönder onu çıkarır)
             const lines = page.getByRole('button', { name: `${label} düzenle`, exact: true });
             await lines.nth(1).waitFor({ timeout: 8000 });
-            assert((await lines.count()) === 2, `sepette ${await lines.count()} Su satırı var`);
-            assert((await lines.filter({ hasText: 'tükendi' }).count()) === 0, 'önseçili Normal tükenen Su satırı işaretli');
+            assert((await lines.count()) === 2, `sepette ${await lines.count()} Cortado satırı var`);
+            assert((await lines.filter({ hasText: 'tükendi' }).count()) === 0, 'önseçili Normal tükenen Cortado satırı işaretli');
             await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-sepet-onsecili-tukendi.png` });
             // Açıkça seçilen Yulaf tükenince eskisi gibi: seçili kalır, uyarı, Ekle kapalı
             await open();
@@ -373,15 +374,15 @@ export async function runFlows(ctx) {
             await page.screenshot({ path: `${ROOT}/e2e/out/tablet-kasa-secenek-yulaf-tukendi.png` });
             await page.keyboard.press('Escape');
             await modal.waitFor({ state: 'detached' });
-            // Gönder 409 almaz: iki Su bara gider (tezgâhta Öde'nin yanındaki Gönder)
+            // Gönder 409 almaz: iki Cortado bara gider (tezgâhta Öde'nin yanındaki Gönder)
             await page.getByRole('button', { name: 'Gönder', exact: true }).click();
             await page.getByRole('button', { name: 'Gönder', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
           });
           const done = await api.call('kasa', 'GET', `/orders/${o.id}`);
           const sold = done.items.filter((i) => i.productId === water.id && !i.voided);
-          assert(sold.reduce((a, i) => a + i.qty, 0) === 2, `adisyonda ${sold.length} Su kalemi var`);
-          assert(sold.every((i) => !i.options.some((x) => x.groupId === milk.id)), `Su'ya süt yazıldı: ${JSON.stringify(sold.map((i) => i.options.map((x) => x.name)))}`);
-          assert(sold.every((i) => i.unitPrice === water.price), `Su fiyatı değişti: ${sold.map((i) => i.unitPrice)}`);
+          assert(sold.reduce((a, i) => a + i.qty, 0) === 2, `adisyonda ${sold.length} Cortado kalemi var`);
+          assert(sold.every((i) => !i.options.some((x) => x.groupId === milk.id)), `Cortado'ya süt yazıldı: ${JSON.stringify(sold.map((i) => i.options.map((x) => x.name)))}`);
+          assert(sold.every((i) => i.unitPrice === water.price), `Cortado fiyatı değişti: ${sold.map((i) => i.unitPrice)}`);
         } finally {
           for (const name of ['Normal', 'Yulaf']) await mark(name, false);
         }

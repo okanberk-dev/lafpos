@@ -117,6 +117,7 @@ async function startServer() {
   const fresh = seedIfEmpty();
   upgradeRoleSets();
   upgradeStoredSettings();
+  (await import('../server/sync/option-profile')).upgradeOptionProfiles();
   const app = createApp();
   if (fresh) {
     await seedDemoDay((req) => app.fetch(req));

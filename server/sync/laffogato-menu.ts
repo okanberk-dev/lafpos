@@ -7,6 +7,7 @@ import { ulid } from '../lib/ids';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { requireSiteLinked, siteSigned, unknownSiteListVersion } from './laffogato-link';
+import { SITE_GROUP_KEYS, siteGroupsFor } from './option-profile';
 
 /**
  * laffogato menüsünü LafPOS'a çeker. Kaynak: herkese açık, CDN önbellekli `GET /api/mobile/v1/menu` (ETag).
@@ -345,9 +346,13 @@ export function applyMenu(
       t.insert(schema.products).values({ id: productId, ...values, sort: idx, active, soldOutBy: active ? null : 'site', extSource: 'laffogato', extId: i.id, createdAt: now }).run();
       created++;
     }
-    // Site seçenekleri (süt, şurup…) yalnız ürün ilk kez gelirken bağlanır; sonra yöneticinin seçimi korunur
+    // Site seçenekleri (süt, şurup…) yalnız ürün ilk kez gelirken bağlanır, seçenek profiline göre (Su'ya süt, Çay'a
+    // kavrum sorulmaz: option-profile.ts); sonra yöneticinin seçimi korunur
     if (!existing && !NON_CUSTOMIZABLE.includes(i.categoryKey)) {
-      groupIds.forEach((g, gi) => t.insert(schema.productOptionGroups).values({ productId, groupId: g, sort: gi }).onConflictDoNothing().run());
+      const wanted = new Set(siteGroupsFor(i.categoryKey, i.id));
+      SITE_GROUP_KEYS.forEach((key, gi) => {
+        if (wanted.has(key)) t.insert(schema.productOptionGroups).values({ productId, groupId: groupIds[gi], sort: gi }).onConflictDoNothing().run();
+      });
     }
   });
 

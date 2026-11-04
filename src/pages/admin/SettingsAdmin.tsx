@@ -366,7 +366,7 @@ export default function SettingsAdmin() {
             <Toggle checked={s.requireDayOpen} onChange={(v) => set({ requireDayOpen: v })} label="Satış için gün açılmış olmalı" />
             <Toggle checked={s.keepAwake} onChange={(v) => set({ keepAwake: v })} label="Ekran kararmasın" hint="kasa bilgisayarı, bar ve tablet ekranları" />
             <Toggle checked={s.productImages} onChange={(v) => set({ productImages: v })} label="Ürün kartlarında görsel" hint="sitedeki fotoğraf, kasa bilgisayarında saklanır" />
-            {/* İki boylu ürünün boy düğmesi: hemen ekler ya da seçenek penceresini açar (tek boylu seçenekli ürün hep pencereyle) */}
+            {/* Ürün kartı ve boy düğmesi: hemen ekler ya da seçenek penceresini açar (seçenek profili, docs/02-PLAN.md) */}
             <div>
               <div className="mb-1.5 text-[13px] font-medium text-ink-2">Seçenekleri sor</div>
               <Segmented
@@ -380,7 +380,9 @@ export default function SettingsAdmin() {
                 ]}
               />
               <p className="mt-1.5 text-xs text-muted">
-                {s.askOptions === 'hep' ? 'Seçeneği olan iki boylu ürün de pencereyle eklenir, dokunulan boy seçili gelir' : 'İki boylu ürün boy düğmesiyle hemen eklenir; şeker gibi zorunlu seçimi olan pencereyle açılır'}
+                {s.askOptions === 'hep'
+                  ? 'Seçeneği olan her ürün pencereyle eklenir; iki boyluda dokunulan boy seçili gelir'
+                  : 'Ürün tek dokunuşla eklenir (süt gibi isteğe bağlı seçenek varsayılanıyla); şeker gibi zorunlu seçimi olan pencereyle açılır'}
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">

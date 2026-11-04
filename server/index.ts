@@ -5,12 +5,14 @@ import { runMigrations, sqlite } from './db/client';
 import { seedIfEmpty } from './db/seed';
 import { upgradeRoleSets, upgradeStoredSettings } from './lib/settings';
 import { env } from './env';
+import { upgradeOptionProfiles } from './sync/option-profile';
 import { startJobs, stopJobs } from './jobs';
 
 runMigrations();
 if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi');
 upgradeRoleSets();
 upgradeStoredSettings();
+upgradeOptionProfiles();
 
 const app = createApp();
 
