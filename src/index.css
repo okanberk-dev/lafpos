@@ -949,7 +949,7 @@
   .lp-hero {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px 24px;
+    gap: 8px 22px;
     min-width: 0;
   }
   .lp-hs {
@@ -988,10 +988,10 @@
   }
   @media (min-width: 64rem) {
     .lp-split .lp-hs > b {
-      --hs-size: min(2.75rem, 20cqi);
+      --hs-size: min(2.5rem, 18cqi);
     }
     .lp-split .lp-hs[data-money] > b {
-      --hs-size: min(2.125rem, 12cqi);
+      --hs-size: min(1.875rem, 11cqi);
     }
   }
   .lp-actions {
