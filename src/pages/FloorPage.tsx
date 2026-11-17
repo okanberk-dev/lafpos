@@ -9,7 +9,8 @@ import type { FloorOrderSummary, FloorStateDTO, OrderDTO, SiteKaraokeBookingDTO,
 import { Button, buttonClass, IconButton } from '@/components/ui/Button';
 import { Field, Input, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, EmptyState, ErrorState, PageLoading, Tabs } from '@/components/ui/misc';
+import { Badge, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
+import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -86,75 +87,166 @@ export default function FloorPage() {
   // kalır: yeniden kullanılmaz, gün sonunu tutar, kapatılacak yer burası. Boş gel-al ve paket kalır (müşterinin adı, adresi var)
   const list = others.filter((o) => !(o.source === 'pos' && o.type === 'tezgah' && o.empty));
 
-  return (
-    // Innex: gri zemin üstünde iki beyaz kart; telefonda kartlar kenara yapışmasın diye zeminde 8 px
-    // Telefonda tek kaydırma yüzeyi (masa kartı içinde ayrı kaydırma yok); tablet ve bilgisayarda kartlar kendi içinde kayar
-    <div className="flex h-full flex-col gap-3 p-2 max-md:overflow-y-auto md:p-0 lg:flex-row">
-      <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] max-md:flex-none">
-        <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3">
-          {/* Başlık ekranın adı (kitin sayfa başlığı ölçeği); seçili bölüm hemen altındaki sekmede. Telefonda üst şerit
-              "Masalar" der: başlık yalnız ekran okuyucuda kalır, özet ilk satır olur */}
-          <div className="min-w-0 flex-1 basis-full sm:basis-auto">
-            <h1 className="text-xl font-bold sm:text-[22px] max-md:sr-only">Masalar</h1>
-            <p className="text-[13px] text-pretty text-muted md:mt-0.5">{summary}</p>
+  // Açık hesap: kasanın adisyonlarında tahsil edilecek (sitede ödenmiş QR siparişi girmez)
+  const openDue = occupied.reduce((sum, t) => sum + (floor.data?.tables[t.id] ?? []).filter((o) => o.source === 'pos').reduce((a, o) => a + Math.max(0, o.total - o.paid), 0), 0);
+  const sectionBusy = tables.filter((t) => (floor.data?.tables[t.id]?.length ?? 0) > 0).length;
+  const today = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', weekday: 'long' }).format(now);
+
+  const viewToggle = wide && (
+    <div role="radiogroup" aria-label="Görünüm" className="inline-flex gap-0.5 rounded-full border border-[var(--admin-border-strong)] bg-surface p-[3px]">
+      {(
+        [
+          ['plan', 'Plan görünümü', LayoutGrid],
+          ['liste', 'Liste görünümü', List],
+        ] as const
+      ).map(([v, label, Icon]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={view === v}
+          aria-label={label}
+          title={label}
+          onClick={() => setView(v)}
+          className={cn(
+            'grid h-9 w-10 place-items-center rounded-full transition-colors duration-150 focus-visible:-outline-offset-2 pointer-coarse:size-11',
+            view === v ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'text-muted hover:bg-hover hover:text-ink',
+          )}
+        >
+          <Icon className="size-4" />
+        </button>
+      ))}
+    </div>
+  );
+
+  const actions = !REMOTE && (
+    <>
+      {/* Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır */}
+      <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden">
+        Gel-al
+      </Button>
+      <IconButton label="Gel-al" variant="secondary" onClick={() => setTakeaway('gelal')} className="sm:hidden">
+        <ShoppingBag className="size-[18px]" />
+      </IconButton>
+      {can('paket.yonet') && (
+        <>
+          <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="max-sm:hidden">
+            Paket
+          </Button>
+          <IconButton label="Paket" variant="secondary" onClick={() => setTakeaway('paket')} className="sm:hidden">
+            <Bike className="size-[18px]" />
+          </IconButton>
+        </>
+      )}
+      <Button variant="primary" className="max-sm:flex-1" loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
+        Tezgâh satışı
+      </Button>
+    </>
+  );
+
+  // Masasız siparişler ve bugünkü rezervasyonlar: geniş ekranda sahnenin sol sütununda (kitin dizini gibi), darda yaprakta
+  const othersList = (
+    <section aria-label="Masasız siparişler">
+          <div className="flex items-end gap-2 px-4 pb-2 pt-4 md:px-5 md:pt-5 lg:px-0 lg:pt-1">
+            <h2 className="flex-1 font-headline text-lg font-bold tracking-[-0.025em] lg:text-[15px] lg:text-muted">Masasız siparişler</h2>
+            {/* Sayı hapı sıfırsa gizli (kit kuralı) */}
+            {list.length > 0 && <span className="tabular min-w-6 rounded-full bg-[var(--admin-ink-fill)] px-2 py-0.5 text-center text-xs font-semibold text-[var(--admin-on-ink)]">{list.length}</span>}
           </div>
-          <div className="flex items-center gap-2 max-sm:w-full">
-            {wide && (
-              <div role="radiogroup" aria-label="Görünüm" className="inline-flex rounded-full bg-surface-3 p-[3px]">
-                {(
-                  [
-                    ['plan', 'Plan görünümü', LayoutGrid],
-                    ['liste', 'Liste görünümü', List],
-                  ] as const
-                ).map(([v, label, Icon]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    role="radio"
-                    aria-checked={view === v}
-                    aria-label={label}
-                    title={label}
-                    onClick={() => setView(v)}
-                    className={cn(
-                      'grid h-9 w-10 place-items-center rounded-full transition-colors duration-150 focus-visible:-outline-offset-2 pointer-coarse:size-11',
-                      view === v ? 'bg-surface text-ink shadow-[var(--rim),var(--shadow-lift)] dark:bg-[var(--admin-border-strong)]' : 'text-muted hover:text-ink',
-                    )}
-                  >
-                    <Icon className="size-4" />
-                  </button>
+          <div className="flex-1 px-2 pb-3 md:px-3 lg:px-0 lg:pb-0">
+            {list.length === 0 && (
+              <EmptyState compact art="fis" title="Masasız açık sipariş yok">
+                Tezgâh, gel-al, paket ve online siparişler burada
+              </EmptyState>
+            )}
+            <div className="lp-enter">
+              {list.map((o) => (
+                <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press lg:-mx-1 lg:w-[calc(100%+0.5rem)] lg:hover:bg-surface">
+                  <span className={cn('grid size-10 shrink-0 place-items-center rounded-full [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]')}>
+                    {o.source === 'laffogato' ? <Globe /> : o.type === 'paket' ? <Bike /> : o.type === 'gelal' ? <ShoppingBag /> : <Store />}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-headline text-[15px] font-bold tracking-[-0.02em]">{o.label}</span>
+                    <span className="text-xs text-muted">{joinMeta([o.itemCount > 0 && `${o.itemCount} ürün`, fmtAgo(o.openedAt, now)])}</span>
+                  </span>
+                  {o.itemCount === 0 ? (
+                    <span className="text-xs text-muted">Boş</span>
+                  ) : (
+                    <span className="tabular text-right font-headline text-base font-bold">
+                      {tlShort(o.total)}
+                      {/* Sitede ödenen tutar tahsil edilecek gibi okunmasın: mor "Sitede ödendi" (seçim penceresiyle aynı söz) */}
+                      {o.source === 'laffogato' && <span className="block font-sans text-xs font-medium text-violet-ink">Sitede ödendi</span>}
+                      {/* Hazırlanan mavi (bar ekranıyla aynı dil); amber yalnız zamana */}
+                      {o.pendingKitchen > 0 && <span className="block font-sans text-xs font-medium text-blue-ink">{o.pendingKitchen} barda</span>}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {(reservations.length > 0 || siteKaraoke.length > 0) && (
+              <div className="mt-2 border-t border-[var(--admin-divider)] px-2 pt-3">
+                {/* Mikro etiket Poppins (h3 kendiliğinden Gabarito alır) */}
+                <h3 className="flex items-center gap-1.5 pb-1.5 font-sans text-xs font-medium tracking-normal text-muted">
+                  <CalendarClock className="size-3.5" /> Bugünkü rezervasyonlar
+                </h3>
+                {reservations.map((r) => (
+                  <div key={r.id} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-sm">
+                    <span className="tabular font-semibold">{r.time}</span>
+                    <span className="flex-1 truncate">{r.name}</span>
+                    <span className="text-xs text-muted">{r.guests} kişi</span>
+                  </div>
+                ))}
+                {siteKaraoke.map((b) => (
+                  <SiteKaraokeRow key={b.id} booking={b} past={Date.parse(b.endsAt) <= now} />
                 ))}
               </div>
             )}
-            {!REMOTE && (
-            <>
-            {/* Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır */}
-            <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden">
-              Gel-al
-            </Button>
-            <IconButton label="Gel-al" variant="secondary" onClick={() => setTakeaway('gelal')} className="sm:hidden">
-              <ShoppingBag className="size-[18px]" />
-            </IconButton>
-            {can('paket.yonet') && (
-              <>
-                <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="max-sm:hidden">
-                  Paket
-                </Button>
-                <IconButton label="Paket" variant="secondary" onClick={() => setTakeaway('paket')} className="sm:hidden">
-                  <Bike className="size-[18px]" />
-                </IconButton>
-              </>
-            )}
-            <Button variant="primary" className="max-sm:flex-1" icon={<Store className="size-4" />} loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
-              Tezgâh satışı
-            </Button>
-            </>
-            )}
           </div>
+    </section>
+  );
+
+  return (
+    // Sahne (kitin Main List'i): solda bölümlerin numaralı dizini, büyük sayılar, tek ana eylem ve dev ad; sağda yaprakta
+    // masa planı ve masasız siparişler. Telefonda kimlik üstte sıkı şerit, bölümler yatay hap şeridi
+    <Stage
+      name="Masalar"
+      sub={`${today} · ${summary}`}
+      hero={[
+        { label: 'Dolu masa', value: occupied.length },
+        ...(billed > 0 ? [{ label: 'Hesap istendi', value: billed, tone: 'signal' as const }] : []),
+        { label: 'Açık hesap', value: tlShort(openDue), money: true },
+      ]}
+      actions={actions}
+      menu={
+        boot.sections.length > 1 && (
+          // Bölümler: geniş ekranda numaralı büyük satırlar (dolu masa sayısıyla), darda hap şeridi
+          <div role="tablist" aria-label="Bölümler" className="lp-menu">
+            {boot.sections.map((sec) => (
+              <button key={sec.id} type="button" role="tab" aria-selected={sec.id === section?.id} onClick={() => setSectionId(sec.id)} className="lp-menu-item">
+                <span className="min-w-0 flex-1 truncate">{sec.name}</span>
+                {!!counts.get(sec.id) && <span className="n">{counts.get(sec.id)}</span>}
+              </button>
+            ))}
+          </div>
+        )
+      }
+      aside={othersList}
+      leafLabel="Masa planı"
+      leafClassName="flex flex-col"
+    >
+      {/* Telefonda yaprak tek parça kayar; tablet ve bilgisayarda plan kalan yüksekliğe sığar, liste kendi içinde kayar */}
+      <section aria-label={section?.name ?? 'Masalar'} className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
+        {/* Yaprağın başı: seçili bölümün adı ve doluluğu, sağda görünüm */}
+        <header className="flex flex-wrap items-end gap-x-4 gap-y-2 px-4 pb-2 pt-4 md:px-6 md:pt-5">
+          <div className="min-w-0 flex-1">
+            <h2 className="lp-section-title">{section?.name ?? 'Masalar'}</h2>
+            <p className="mt-1 text-[13px] text-muted">{joinMeta([`${tables.length} masa`, `${sectionBusy} dolu`])}</p>
+          </div>
+          {viewToggle}
         </header>
 
         {/* Gün kapalıyken kalıcı şerit: masaya dokununca yalnız toast çıkmasın; renk ikonda, metin mürekkepte */}
         {!boot.day && !REMOTE && (
-          <div role="status" className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] px-4 py-1.5 text-[13px] text-ink">
+          <div role="status" className="mx-4 mt-2 flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-full border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] py-1 pl-4 pr-1.5 text-[13px] text-ink md:mx-6">
             <Lock aria-hidden="true" className="size-3.5 shrink-0 text-[var(--admin-warning)]" />
             <span className="min-w-0 flex-1">{can('kasa.gun') ? 'Gün açılmadı. Masa açmak için önce günü açın' : 'Gün açılmadı. Yetkili birinin günü açması gerekiyor'}</span>
             {can('kasa.gun') && (
@@ -165,11 +257,7 @@ export default function FloorPage() {
           </div>
         )}
 
-        {boot.sections.length > 1 && (
-          <Tabs label="Bölümler" className="px-4 pt-3" value={section?.id ?? ''} onChange={setSectionId} options={boot.sections.map((s) => ({ value: s.id, label: s.name, count: counts.get(s.id) ?? 0 }))} />
-        )}
-
-        <div className="scroll-thin min-h-0 flex-1 overflow-auto p-4 max-md:overflow-visible">
+        <div className={cn('p-4 md:min-h-0 md:flex-1 md:px-6 md:pb-5', effectiveView === 'plan' && tables.length > 0 ? '[container-type:size]' : 'md:overflow-y-auto')}>
           {tables.length === 0 ? (
             <EmptyState
               icon={<LayoutGrid />}
@@ -185,7 +273,8 @@ export default function FloorPage() {
               Masaları Yönetim › Masa planı’ndan ekleyin; tezgâh, gel-al ve paket satışı masasız da çalışır
             </EmptyState>
           ) : effectiveView === 'plan' ? (
-            <div className="relative mx-auto aspect-[16/10] w-full max-w-6xl">
+            // Plan kabın hem enine hem boyuna sığar (16:10; en çok kabın eni ya da boyunun 1.6 katı)
+            <div className="relative mx-auto aspect-[16/10] w-[min(100%,160cqh)] max-w-6xl">
               {tables.map((t) => (
                 <TableTile
                   key={t.id}
@@ -200,77 +289,25 @@ export default function FloorPage() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+            <div key={section?.id} className="lp-enter grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
               {tables.map((t) => (
-                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="min-h-24 md:h-28" />
+                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="min-h-28 md:h-32" />
               ))}
             </div>
           )}
         </div>
-        <footer className="hidden flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-4 py-2.5 text-xs text-muted sm:flex">
-          <Legend className="border border-line bg-surface" label="Boş" />
-          <Legend className="border border-blue-line bg-blue-soft" label="Dolu" />
-          <Legend className="border border-warning-line bg-warning-soft" label="Hesap istendi" />
-          <Legend className="border border-rose-line bg-rose-soft" label="Kısmen ödendi" />
+        <footer className="hidden shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-6 py-3 text-xs text-muted sm:flex">
+          <Legend className="border border-dashed border-[var(--admin-border-field)]" label="Boş" />
+          <Legend className="bg-[var(--admin-ink-fill)]" label="Dolu" />
+          <Legend className="bg-[var(--admin-ink-fill)] shadow-[inset_3px_0_0_var(--admin-signal)]" label="Hesap istendi" />
+          <Legend className="bg-[linear-gradient(90deg,var(--ok-ring)_50%,var(--admin-ink-fill)_50%)]" label="Kısmen ödendi" />
           <Legend className="border border-violet-line bg-violet-soft" label="Online" />
-          <Legend className="border border-line bg-surface" dot label="Rezerve" />
+          <Legend className="border border-dashed border-[var(--admin-border-field)]" dot label="Rezerve" />
         </footer>
       </section>
 
-      <aside className="flex max-h-[40%] flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] max-md:max-h-none max-md:flex-none lg:max-h-none lg:w-80">
-        <div className="flex min-h-12 items-center gap-2 border-b border-[var(--admin-divider)] px-4 py-2.5">
-          <h2 className="flex-1 text-[15px] font-semibold">Masasız siparişler</h2>
-          {/* Sayı hapı sıfırsa gizli (kit kuralı) */}
-          {list.length > 0 && <span className="tabular min-w-5 rounded-full bg-surface-3 px-2 py-px text-center text-xs font-medium text-ink-2">{list.length}</span>}
-        </div>
-        <div className="scroll-thin flex-1 overflow-y-auto p-2">
-          {list.length === 0 && (
-            <EmptyState compact art="fis" title="Masasız açık sipariş yok">
-              Tezgâh, gel-al, paket ve online siparişler burada
-            </EmptyState>
-          )}
-          {list.map((o) => (
-            <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
-              <span className={cn('grid size-10 shrink-0 place-items-center rounded-xl [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
-                {o.source === 'laffogato' ? <Globe /> : o.type === 'paket' ? <Bike /> : o.type === 'gelal' ? <ShoppingBag /> : <Store />}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{o.label}</span>
-                <span className="text-xs text-muted">{joinMeta([o.itemCount > 0 && `${o.itemCount} ürün`, fmtAgo(o.openedAt, now)])}</span>
-              </span>
-              {o.itemCount === 0 ? (
-                <span className="text-xs text-muted">Boş</span>
-              ) : (
-                <span className="tabular text-right text-sm font-semibold">
-                  {tlShort(o.total)}
-                  {/* Sitede ödenen tutar tahsil edilecek gibi okunmasın: mor "Sitede ödendi" (seçim penceresiyle aynı söz) */}
-                  {o.source === 'laffogato' && <span className="block text-xs font-medium text-violet-ink">Sitede ödendi</span>}
-                  {/* Hazırlanan mavi (bar ekranıyla aynı dil); amber yalnız zamana */}
-                  {o.pendingKitchen > 0 && <span className="block text-xs font-medium text-blue-ink">{o.pendingKitchen} barda</span>}
-                </span>
-              )}
-            </button>
-          ))}
-          {(reservations.length > 0 || siteKaraoke.length > 0) && (
-            <div className="mt-2 border-t border-[var(--admin-divider)] px-2 pt-3">
-              {/* Mikro etiket Poppins (h3 kendiliğinden Gabarito alır) */}
-              <h3 className="flex items-center gap-1.5 pb-1.5 font-sans text-xs font-medium tracking-normal text-muted">
-                <CalendarClock className="size-3.5" /> Bugünkü rezervasyonlar
-              </h3>
-              {reservations.map((r) => (
-                <div key={r.id} className="flex items-center gap-2 rounded-lg px-1 py-1.5 text-sm">
-                  <span className="tabular font-semibold">{r.time}</span>
-                  <span className="flex-1 truncate">{r.name}</span>
-                  <span className="text-xs text-muted">{r.guests} kişi</span>
-                </div>
-              ))}
-              {siteKaraoke.map((b) => (
-                <SiteKaraokeRow key={b.id} booking={b} past={Date.parse(b.endsAt) <= now} />
-              ))}
-            </div>
-          )}
-        </div>
-      </aside>
+      {/* Masasız siparişler: geniş ekranda sol sütunda (bölümlerin altında), darda yaprağın altında saç teliyle ayrılan bölüm */}
+      <div className="shrink-0 border-t border-[var(--admin-border)] lg:hidden">{othersList}</div>
 
       <Modal open={!!choose} onClose={() => setChoose(null)} title={choose ? `${choose.table.name} hesapları` : ''} size="sm">
         <div className="space-y-2 p-4">
@@ -296,7 +333,7 @@ export default function FloorPage() {
       </Modal>
 
       <TakeawayModal kind={takeaway} onClose={() => setTakeaway(null)} onCreate={(body) => open.mutate(body)} busy={open.isPending} />
-    </div>
+    </Stage>
   );
 }
 
@@ -335,9 +372,10 @@ function Legend({ className, dot, label }: { className: string; dot?: boolean; l
 }
 
 /**
- * Masa: durum dolguyla değil açık tonla (durum rozeti gibi). Boş beyaz, dolu mavi ton, hesap istendi amber, kısmen
- * ödendi pembe, yalnız sitede ödenmiş siparişi olan masa mor; bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil
- * ve dikkat çeker. Tutar kartın en büyük yazısı. Yuvarlak masada içerik dairenin ortasında (kenardaki dar kısımda değil).
+ * Masa (kitin gemi kartı ve siyah hap etiketi): boş masa kesikli kenarlı açık kart, dolu masa mürekkep kart (uzaktan
+ * bir bakışta ayrılır), tutar kartın en büyük yazısı. Hesap istendi soldaki magenta şerit ve "Hesap" hapı (kitin
+ * zamanı daralan rengi), kısmen ödendi altta yeşil ilerleme çubuğu ve kalan tutar; yalnız sitede ödenmiş siparişi
+ * olan masa mor. Bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil ve nabızlı. Yuvarlak masada içerik ortada.
  */
 function TableTile({
   table,
@@ -372,33 +410,41 @@ function TableTile({
   // Açılmış ama sipariş girilmemiş adisyon "₺0" yazmaz (çalışan oda sayacı boş sayılmaz: ücreti kalemde görünmez)
   const empty = pos.length > 0 && !room && pos.every((o) => o.itemCount === 0);
   const tone = !busy ? 'free' : !pos.length ? 'online' : partial ? 'partial' : billed ? 'billed' : 'busy';
+  const inked = tone === 'busy' || tone === 'billed' || tone === 'partial';
   const round = table.shape === 'round';
+  // Mürekkep kartta ikincil yazı: açık yazının %72'si (iki temada da 8:1'in üstünde)
+  const soft = inked ? 'text-[color-mix(in_oklab,var(--admin-on-ink)_72%,transparent)]' : 'text-ink-2';
 
   return (
     <button
       onClick={onClick}
       style={style}
       className={cn(
-        '@container group flex flex-col overflow-hidden border p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
-        round ? 'items-center justify-center gap-1 rounded-[999px] text-center' : cn('rounded-2xl', busy || reservation ? 'justify-between' : 'justify-start gap-1'),
-        tone === 'free' && 'border-line bg-surface shadow-[var(--shadow-card)] hover:border-[var(--admin-border-field)]',
-        // Durum çizgisi belirteçleri iki temada da görünür (koyuda dolu, hesap istendi ve kısmen ödendi karışmasın)
-        tone === 'busy' && 'border-blue-line bg-blue-soft hover:border-[var(--admin-blue)]',
-        tone === 'billed' && 'border-warning-line bg-warning-soft hover:border-[var(--admin-warning)]',
-        tone === 'partial' && 'border-rose-line bg-rose-soft hover:border-[var(--admin-hue-rose)]',
+        '@container group relative flex flex-col overflow-hidden p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
+        round ? 'items-center justify-center gap-1 rounded-[999px] text-center' : cn('rounded-[1.125rem]', busy || reservation ? 'justify-between' : 'justify-start gap-1'),
+        tone === 'free' && 'border border-dashed border-[color-mix(in_oklab,var(--admin-border-field)_70%,transparent)] bg-surface-2 hover:border-solid hover:border-[var(--admin-text)] hover:bg-surface',
+        inked && 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)] shadow-[var(--shadow-lift)] hover:bg-[var(--admin-ink-fill-hover)]',
+        // Hesap istendi: soldaki magenta şerit (yuvarlak masada halka); renk tek başına taşımaz, "Hesap" hapı da var
+        tone === 'billed' && (round ? 'ring-[3px] ring-[var(--admin-signal)]' : 'shadow-[inset_4px_0_0_var(--admin-signal),var(--shadow-lift)]'),
         // Online (siteden gelen) sipariş her ekranda mor; kenarı öteki durumlar gibi kendi çizgi belirteci
-        tone === 'online' && 'border-violet-line bg-violet-soft hover:border-[var(--admin-hue-violet)]',
+        tone === 'online' && 'border border-violet-line bg-violet-soft hover:border-[var(--admin-hue-violet)]',
         className,
       )}
     >
       <div className={cn('flex w-full items-start gap-1', round && 'justify-center')}>
-        {/* Boş masanın adı hafif, dolununki koyu: dolu masa kol mesafesinden seçilir */}
-        <span className={cn('truncate text-sm leading-tight @min-[6rem]:text-[15px]', busy ? 'font-semibold text-ink' : 'font-medium text-ink-2')}>{table.name}</span>
+        {/* Masanın adı Gabarito kalın; boş masada soluk */}
+        <span className={cn('truncate font-headline text-[15px] font-bold leading-tight tracking-[-0.02em] @min-[6rem]:text-base', busy ? '' : 'text-ink-2')}>{table.name}</span>
         {!round && <span className="flex-1" />}
-        <span className="flex gap-1 text-ink-2">
-          {billed && <Receipt className="size-4 shrink-0" aria-label="Hesap istendi" />}
+        <span className={cn('flex items-center gap-1', soft)}>
+          {billed && (
+            <span className="inline-flex h-5 items-center gap-1 rounded-full bg-[var(--admin-signal)] px-1.5 text-[11px] font-semibold text-[var(--admin-surface)]" title="Hesap istendi">
+              <Receipt aria-hidden="true" className="size-3 shrink-0" />
+              <span className="hidden @min-[7rem]:inline">Hesap</span>
+              <span className="sr-only @min-[7rem]:hidden">Hesap istendi</span>
+            </span>
+          )}
           {/* Online her boyda ve mor: adisyonlu masada da sitedeki sipariş görünür kalır */}
-          {online && <Globe className="size-4 shrink-0 text-violet-ink" aria-label="Online sipariş" />}
+          {online && <Globe className={cn('size-4 shrink-0', inked ? '' : 'text-violet-ink')} aria-label="Online sipariş" />}
           {table.kind === 'oda' && <Mic2 className="hidden size-4 shrink-0 @min-[6rem]:block" aria-label="Oda" />}
         </span>
       </div>
@@ -408,26 +454,31 @@ function TableTile({
             // Tahsil edilecek bir şey yok: tutar yerine söz
             <div className="text-[13px] font-semibold leading-tight text-violet-ink">Sitede ödendi</div>
           ) : empty ? (
-            <div className="text-[13px] font-medium leading-tight text-ink-2">Boş adisyon</div>
+            <div className={cn('text-[13px] font-medium leading-tight', soft)}>Boş adisyon</div>
           ) : (
-            <div className="tabular font-headline text-[17px] font-bold leading-none tracking-[-0.02em] @min-[6rem]:text-[22px]">{tlShort(total)}</div>
+            <div className="tabular font-headline text-[20px] font-bold leading-none tracking-[-0.045em] @min-[6rem]:text-[26px]">{tlShort(total)}</div>
           )}
-          {/* Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır */}
-          {partial && <div className="tabular mt-0.5 text-xs font-medium text-[var(--admin-hue-rose)]">{tlShort(total - paid)} kaldı</div>}
+          {/* Kısmen ödendi: renk tek başına taşımaz, kalan tutar yazılır; altta ödenen pay yeşil çubuk */}
+          {partial && <div className={cn('tabular mt-1 text-xs font-medium', soft)}>{tlShort(total - paid)} kaldı</div>}
           {/* Meta satırı: bir dakikadan kısa süre "az önce" ("0 dk" değil), ayraç joinMeta'nın (eşit boşluk); oda sayacı süre */}
-          <div className="mt-1 hidden min-w-0 truncate text-xs text-ink-2 @min-[6.5rem]:block">
+          <div className={cn('mt-1 hidden min-w-0 truncate text-xs @min-[6.5rem]:block', soft)}>
             <span className="tabular">{joinMeta([room ? `Oda ${fmtElapsed(room, now)}` : fmtAgo(openedAt, now), !round && pos[0]?.waiterName])}</span>
           </div>
           {(pending > 0 || ready > 0) && (
             <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
               {pending > 0 && (
-                <span className="tabular inline-flex items-center gap-0.5 rounded-full bg-surface px-2 py-0.5 text-ink-2 ring-1 ring-inset ring-blue-line" title={`${pending} kalem barda`}>
+                <span className={cn('tabular inline-flex items-center gap-0.5 rounded-full px-2 py-0.5', inked ? 'bg-[color-mix(in_oklab,var(--admin-on-ink)_14%,transparent)] text-[var(--admin-on-ink)]' : 'bg-surface text-ink-2 ring-1 ring-inset ring-blue-line')} title={`${pending} kalem barda`}>
                   <ChefHat className="size-3" />
                   {pending}
                 </span>
               )}
-              {ready > 0 && <span className="animate-ring tabular rounded-full bg-success-600 px-2 py-0.5 text-white">{ready} hazır</span>}
+              {ready > 0 && <span className="animate-ring tabular whitespace-nowrap rounded-full bg-success-600 px-2 py-0.5 text-white">{ready} hazır</span>}
             </div>
+          )}
+          {partial && !round && (
+            <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-[color-mix(in_oklab,var(--admin-on-ink)_14%,transparent)]">
+              <span className="block h-full bg-[var(--ok-ring)]" style={{ width: `${Math.round((paid / total) * 100)}%` }} />
+            </span>
           )}
         </div>
       ) : reservation ? (
@@ -437,7 +488,7 @@ function TableTile({
         </div>
       ) : (
         // Odanın ikonu köşede (mikrofon); satırda ücretin türü
-        <span className={cn('hidden items-center gap-1 text-[13px] text-ink-2 @min-[5rem]:inline-flex', round && 'justify-center')}>
+        <span className={cn('hidden items-center gap-1 text-[13px] text-muted @min-[5rem]:inline-flex', round && 'justify-center')}>
           {table.kind === 'oda' ? <Clock3 aria-hidden="true" className="size-3.5 shrink-0" /> : <Users aria-hidden="true" className="size-3.5 shrink-0" />}
           {table.kind === 'oda' ? 'Saatlik ücret' : `${table.seats} kişilik`}
         </span>

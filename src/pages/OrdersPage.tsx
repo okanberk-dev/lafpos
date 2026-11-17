@@ -8,7 +8,8 @@ import { isCounterFirst } from '@shared/service-mode';
 import type { OrderDTO } from '@shared/types';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Field';
-import { Badge, type BadgeTone, EmptyState, ErrorState, Notice, PageHeader, Skeleton, Tabs } from '@/components/ui/misc';
+import { Badge, type BadgeTone, EmptyState, ErrorState, Notice, PageHeader, Skeleton } from '@/components/ui/misc';
+import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -132,8 +133,29 @@ export default function OrdersPage() {
                     : 'Masalar ekranından tezgâh satışı ya da gel-al açın',
             };
 
+  // Liste sekmeleri sahnenin numaralı menüsünde (geniş ekranda solda büyük satırlar, darda hap şeridi); sayı sıfırsa yok
+  const tabOptions: { value: Tab; label: string; count?: number }[] = [
+    { value: 'acik', label: 'Açık', count: awaitingHand.length + openPos.length },
+    { value: 'online', label: 'Online', count: all.filter((o) => o.source === 'laffogato').length },
+    { value: 'paket', label: 'Paket ve gel-al', count: all.filter((o) => o.type === 'paket' || o.type === 'gelal').length },
+    { value: 'kapanan', label: 'Kapanan' },
+  ];
+
   return (
-    <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
+    <Stage
+      leafLabel="Siparişler"
+      menu={
+        <div role="tablist" aria-label="Sipariş listesi" className="lp-menu">
+          {tabOptions.map((o) => (
+            <button key={o.value} type="button" role="tab" aria-selected={tab === o.value} onClick={() => setTab(o.value)} className="lp-menu-item">
+              <span className="min-w-0 flex-1 truncate">{o.label}</span>
+              {!!o.count && <span className="n">{o.count}</span>}
+            </button>
+          ))}
+        </div>
+      }
+    >
+    <div className="lp-leaf-pad">
       {/* Telefonda ekranın adını üst şerit yazar: başlık ve açıklama yalnız ekran okuyucuda, sekmeler hemen üstte. Eylem
           yalnız varsa verilir (boş parça eylem sayılır, alt boşluğu tutardı) */}
       <PageHeader
@@ -147,19 +169,6 @@ export default function OrdersPage() {
             </Button>
           ) : undefined
         }
-      />
-      {/* Telefonda ray ekran kenarına taşar: kırpılan sekme kenarda biter (kaydırma işareti), sayfa boşluğunda yarım kalmaz */}
-      <Tabs<Tab>
-        label="Sipariş listesi"
-        className="-mx-4 mb-3 px-4 md:mx-0 md:px-0"
-        value={tab}
-        onChange={setTab}
-        options={[
-          { value: 'acik', label: 'Açık', count: awaitingHand.length + openPos.length },
-          { value: 'online', label: 'Online', count: all.filter((o) => o.source === 'laffogato').length },
-          { value: 'paket', label: 'Paket ve gel-al', count: all.filter((o) => o.type === 'paket' || o.type === 'gelal').length },
-          { value: 'kapanan', label: 'Kapanan' },
-        ]}
       />
       {tab === 'online' && !boot.integrations.laffogatoPanel && (
         <Notice
@@ -213,7 +222,7 @@ export default function OrdersPage() {
             const courierPick = o.type === 'paket' && couriers.length > 0;
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
-              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-border-field)]">
+              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-text)]">
                 {/* Kartın dokunulan yüzü: basılı ton dokunmatikte de geri bildirir (kenar payı içeriği yerinde tutar) */}
                 <button onClick={() => navigate(`/adisyon/${o.id}`)} className="-m-1.5 flex items-start gap-3 rounded-xl p-1.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
                   <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>
@@ -308,5 +317,6 @@ export default function OrdersPage() {
         </div>
       )}
     </div>
+    </Stage>
   );
 }

@@ -393,7 +393,7 @@ export default function OrderPage() {
   // Başlık: Gabarito masa adı ve numara; künye (kişi, garson, açılış saati ve süresi, müşteri, not); durum çipleri
   const header = (
     // Telefonda tam ekran: ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
-    <div className="border-b border-[var(--admin-divider)] bg-surface px-2 pb-2.5 pt-[max(0.5rem,env(safe-area-inset-top))]">
+    <div className="border-b border-[var(--admin-divider)] bg-surface px-2 pb-3 pt-[max(0.5rem,env(safe-area-inset-top))] md:px-3 md:pt-3">
       <div className="flex items-start gap-1.5">
         <IconButton label="Geri" onClick={goBack}>
           <ArrowLeft className="size-5" />
@@ -401,7 +401,8 @@ export default function OrderPage() {
         <div className="min-w-0 flex-1 pt-1">
           <div className="flex min-w-0 items-baseline gap-2">
             {titleBadge && <span className="self-center">{titleBadge}</span>}
-            <h1 className="min-w-0 truncate font-headline text-xl font-bold leading-tight tracking-[-0.01em] lg:text-[22px]">{title}</h1>
+            {/* Masanın adı adisyonun en iri yazısı: Gabarito kalın, sıkı aralık */}
+            <h1 className="min-w-0 truncate font-headline text-2xl font-bold leading-tight tracking-[-0.035em] lg:text-[28px]">{title}</h1>
             <span className="tabular shrink-0 text-[13px] text-muted">#{orderNo}</span>
           </div>
           {/* Künye: boş parça düşer ("—" ve "0 dk" yok); kişi sayısı yalnız masada anlamlı */}
@@ -660,16 +661,16 @@ export default function OrderPage() {
   return (
     <div className="flex h-full flex-col">
       {wide ? (
-        // Innex: iki beyaz kart; solda katalog, sağda adisyon (başlığıyla)
-        <div className="flex min-h-0 flex-1 gap-3">
+        // Kitin sahnesi: gri sahnede solda numaralı kategoriler ve ürün kartları, sağda adisyonun beyaz yaprağı
+        <div className="lp-stage min-h-0 flex-1 md:flex-row md:gap-4">
           {/* Ürün eklenemeyen adisyonda (kapanmış, online, uzaktan, siparişe yetkisiz rol) katalog çizilmez: soluk ama
               aranabilir yarım ekran yerine adisyon ortada */}
           {editable && (
-            <section className="min-w-0 flex-1 overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+            <section aria-label="Ürünler" className="min-w-0 flex-1 overflow-hidden">
               <ProductPanel onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
             </section>
           )}
-          <section className={cn('flex shrink-0 flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]', editable ? 'w-[clamp(300px,40vw,440px)]' : 'mx-auto w-full max-w-2xl')}>
+          <section className={cn('lp-leaf flex flex-none flex-col overflow-hidden', editable ? 'w-[clamp(320px,38vw,460px)]' : 'mx-auto w-full max-w-2xl')}>
             {header}
             {right}
           </section>

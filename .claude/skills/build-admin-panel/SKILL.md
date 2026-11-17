@@ -1,6 +1,6 @@
 ---
 name: build-admin-panel
-description: Research, scope, build and verify a new LafPOS admin area (a new section under /yonetim, a new entity, a report or dashboard view) end to end, in the LafPOS Sade look (Poppins, Innex layout). Use when the user asks to add or redesign a management screen, "yönetime X ekle", "yönetim paneli", "panelde şunu yönet", "arka ofis", or asks what the panel should manage.
+description: Research, scope, build and verify a new LafPOS admin area (a new section under /yonetim, a new entity, a report or dashboard view) end to end, in the LafPOS Sahne look (Area Board stage, shadcn-style sidebar, Poppins and Gabarito). Use when the user asks to add or redesign a management screen, "yönetime X ekle", "yönetim paneli", "panelde şunu yönet", "arka ofis", or asks what the panel should manage.
 ---
 
 # Yönetim paneline bir alan eklemek: oku, kapsamı sor, kur, gerçekten doğrula
@@ -11,9 +11,10 @@ description: Research, scope, build and verify a new LafPOS admin area (a new se
 > aşamasından yeniden yazılmıştı. Next.js, server action ve Postgres varsayımları burada geçerli değil:
 > LafPOS yerel bir Hono sunucusu, SQLite (Drizzle) ve React SPA'dır.
 
-Görünümün kaynağı `DESIGN.md` (**LafPOS Sade**, 2 Kasım 2026, laffogato.net kimliği: Poppins metin, Gabarito başlık
-ve rakamlar, porselen zemin, ev yeşili birincil, ödeme mürekkep, durum kobalt mavisi) ve yerleşimin kaynağı **Innex** tarifi (`docs/ADMIN-INNEX.md`: ölçüler, kenar çubuğu,
-sayfa başlığı şeridi, KPI şeridi, tablo, çekmece). Renk ve yazı için tarifin hex değerleri değil `src/index.css`'teki
+Görünümün kaynağı `DESIGN.md` (**LafPOS Sahne**, 17 Kasım 2026: gnbsite'ın Area Board kiti L'Affogato kimliğinde;
+Poppins metin, Gabarito başlık ve rakamlar, porselen sayfa, sütlü köpük sahne, beyaz yaprak, mürekkep ana eylem ve yeşil ok
+halkası, durum kobalt mavisi, zamanı daralan bordo; yönetimde shadcn'in Sidebar'ı gibi sade yan menü) ve tablo, KPI
+şeridi ve çekmece ölçüleri için **Innex** tarifi (`docs/ADMIN-INNEX.md`). Renk ve yazı için tarifin hex değerleri değil `src/index.css`'teki
 `--admin-*` değerleri geçerlidir. Yeni bir desen icat etmeden önce kite bak: `src/components/admin/`
 (`AdminShell`, `PageHeader`, `Card`, `KpiStrip`, `StatusTabs`, `Segmented`, `DataTable`, `ActionMenu`,
 `QuickLook`, `Timeline`, `Badge`, `CommandPalette`). Kütüphane sınırı: React, Tailwind, `lucide-react`;
@@ -56,7 +57,7 @@ paleti (`CommandPalette` aynı listeyi okur).
 ## Aşama 4: Kur, her adımda doğrula
 
 - Her adımdan sonra `npm run typecheck` ve ilgili test (`tests/api-flow.test.ts` sunucu akışları için).
-- Liste sayfası Innex düzenindedir (görünümü LafPOS Sade): sayfa başlığı şeridi (başlık, açıklama, sağda ikincil sonra birincil
+- Liste sayfası yönetim sahnesinin yaprağındadır (görünümü LafPOS Sahne): sayfa başlığı şeridi (başlık, açıklama, sağda ikincil sonra birincil
   düğme), varsa KPI şeridi (her rakamın yanında referans), durum sekmeleri (sayılı), tek satır araç
   çubuğu, kart içinde tablo, satıra tıklayınca sağdan hızlı bakış.
 - Telefon: kart yok, tablo satır kartına döner, çekmece alt sayfa olur, her hedef en az 44 px

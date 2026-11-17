@@ -28,11 +28,12 @@ export const DISPLAY_DEFAULTS: CustomerDisplaySettings = {
  */
 const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
   gece: {
-    '--d-bg': '#0f0e0d',
-    '--d-glow': 'radial-gradient(60% 55% at 50% 40%, rgb(29 109 86 / 0.34), transparent 72%)',
-    '--d-surface': '#181715',
-    '--d-chip': '#272522',
-    '--d-line': '#2e2c29',
+    '--d-bg': '#0e0d0c',
+    // Kitin siyah bandı: espresso gecesinde krema dalgaları, ortada ev yeşili hale
+    '--d-glow': 'var(--waves-light) 0 0 / 800px 240px repeat, radial-gradient(60% 55% at 50% 40%, rgb(29 109 86 / 0.34), transparent 72%)',
+    '--d-surface': '#1d1c1a',
+    '--d-chip': '#2a2825',
+    '--d-line': '#2f2d2a',
     '--d-text': '#f3f1ec',
     '--d-soft': '#cfcbc3',
     '--d-mute': '#a39f96',
@@ -48,14 +49,14 @@ const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
     '--d-qr-shadow': '0 10px 30px rgb(0 0 0 / 0.18)',
   },
   porselen: {
-    '--d-bg': '#f7f3ed',
-    '--d-glow': 'radial-gradient(60% 55% at 50% 40%, rgb(29 109 86 / 0.1), transparent 72%)',
+    '--d-bg': '#f4f1ec',
+    '--d-glow': 'var(--waves-dark) 0 0 / 800px 240px repeat, radial-gradient(60% 55% at 50% 40%, rgb(29 109 86 / 0.1), transparent 72%)',
     '--d-surface': '#ffffff',
-    '--d-chip': '#f2ece4',
-    '--d-line': '#ebe5dc',
-    '--d-text': '#211c18',
-    '--d-soft': '#564d46',
-    '--d-mute': '#675e56',
+    '--d-chip': '#f0ebe5',
+    '--d-line': '#e7e1d8',
+    '--d-text': '#17130f',
+    '--d-soft': '#4b433c',
+    '--d-mute': '#665d55',
     '--d-accent': '#1d6d56',
     '--d-letters': '#211c18',
     '--d-bean': '#b08a2e',
@@ -69,7 +70,7 @@ const PALETTE: Record<CustomerDisplayTheme, Record<string, string>> = {
   },
   yesil: {
     '--d-bg': '#0c3b2d',
-    '--d-glow': 'radial-gradient(130% 95% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%)',
+    '--d-glow': 'var(--waves-light) 0 0 / 800px 240px repeat, radial-gradient(130% 95% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%)',
     '--d-surface': 'rgb(255 255 255 / 0.07)',
     '--d-chip': 'rgb(255 255 255 / 0.12)',
     '--d-line': 'rgb(255 255 255 / 0.14)',

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/ui/misc';
+import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, patch, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -141,7 +142,9 @@ export default function ReservationsPage() {
   const dayLabel = isToday ? 'Bugün' : date === addDays(today, -1) ? 'Dün' : date === addDays(today, 1) ? 'Yarın' : fmtDateShort(date);
 
   return (
-    <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
+    // Sahne: başlık, tarih ve ekleme sol sütunda (PageHeader taşınır), gün listesi yaprakta
+    <Stage leafLabel="Rezervasyonlar">
+    <div className="lp-leaf-pad">
       <PageHeader
         title="Rezervasyon"
         // Gün yüklenirken önceki günün sayıları yeni tarihin altında kalmaz; rezervasyon yoksa yalnız tarih
@@ -346,5 +349,6 @@ export default function ReservationsPage() {
         )}
       </Modal>
     </div>
+    </Stage>
   );
 }

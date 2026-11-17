@@ -6,7 +6,7 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
 
 | Skill | Ne için | Kaynak | Lisans |
 |---|---|---|---|
-| `build-admin-panel` | Yönetim paneline alan eklemek: oku, kapsamı sor, kur, gerçek tarayıcıda doğrula. Yerleşim Innex, görünüm LafPOS Sade | `RiosenBeq/laffogato` @ `ab5c0ae` (operatörün kendi skill'i), LafPOS'a uyarlandı | depo içi |
+| `build-admin-panel` | Yönetim paneline alan eklemek: oku, kapsamı sor, kur, gerçek tarayıcıda doğrula. Görünüm LafPOS Sahne (sade yan menü, yaprak), ölçüler Innex | `RiosenBeq/laffogato` @ `ab5c0ae` (operatörün kendi skill'i), LafPOS'a uyarlandı | depo içi |
 | `impeccable` | Telefon ve tablet uyarlaması (`adapt`), teslim öncesi `audit` ve `polish`, kenar durumları (`harden`) | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) @ `3671d50` | Apache-2.0 |
 | `webapp-testing` | Yerel uygulamayı gerçek tarayıcıyla sınamak (sunucu yaşam döngüsü, önce gözle sonra eylem) | [anthropics/skills](https://github.com/anthropics/skills) @ `b9e19e6` | Apache-2.0 |
 | `verification-before-completion` | "Bitti" demeden önce kanıt: typecheck, test, build, e2e çıktısı | [obra/superpowers](https://github.com/obra/superpowers) @ `3be5aad` | MIT |

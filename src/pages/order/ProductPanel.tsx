@@ -105,23 +105,27 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
   ];
 
   return (
-    <div className="flex h-full min-h-0">
-      {/* Geniş ekran: kategoriler solda alt alta, hepsi görünür (Innex kenar çubuğu satırı gibi) */}
-      <div role="tablist" aria-orientation="vertical" aria-label="Kategoriler" className="scroll-thin hidden w-52 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-[var(--admin-divider)] p-2 xl:flex">
-        {categoryItems.map((c) => (
-          <CategoryRow key={c.id} active={!q && current === c.id} color={c.color} count={c.count} onClick={() => pick(c.id)} favorite={c.id === FAVORITES}>
-            {c.name}
-          </CategoryRow>
-        ))}
+    // Kitin sahnesi: solda kategorilerin numaralı menüsü, ortada ürün kartları gri sahnenin üstünde (kitin tepsisindeki
+    // kartlar gibi); hesap sağdaki beyaz yaprakta (OrderPage). Telefonda sahne zemini, çip şeridi ve kartlar
+    <div className="flex h-full min-h-0 bg-[var(--admin-stage)] md:bg-transparent">
+      {/* Geniş ekran: kategoriler solda alt alta, numaralı (01, 02…), hepsi görünür */}
+      <div className="scroll-thin hidden w-60 shrink-0 overflow-y-auto pr-4 xl:block">
+        <div role="tablist" aria-orientation="vertical" aria-label="Kategoriler" className="lp-menu lp-menu-col">
+          {categoryItems.map((c) => (
+            <CategoryRow key={c.id} active={!q && current === c.id} color={c.color} count={c.count} onClick={() => pick(c.id)} favorite={c.id === FAVORITES}>
+              {c.name}
+            </CategoryRow>
+          ))}
+        </div>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="px-4 pt-2 md:pt-3">
-          {/* Ortak arama alanı (temizle düğmesi, Escape); boşken farede "/" kısayolu ipucu */}
+        <div className="px-3 pt-2 md:px-0 md:pt-0">
+          {/* Ortak arama alanı (hap; temizle düğmesi, Escape); boşken farede "/" kısayolu ipucu */}
           <div className="relative">
-            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" />
+            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" className="h-12 border-[var(--admin-border-strong)] text-base md:h-12" />
             {!q && (
-              <kbd aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-2 px-1.5 text-xs font-medium text-muted pointer-fine:inline-block">
+              <kbd aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-2 px-1.5 text-xs font-medium text-muted pointer-fine:inline-block">
                 /
               </kbd>
             )}
@@ -131,7 +135,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
         <div
           role="tablist"
           aria-label="Kategoriler"
-          className="no-scrollbar flex snap-x snap-proximity scroll-px-4 gap-2 overflow-x-auto px-4 py-2 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] md:py-3 xl:hidden"
+          className="no-scrollbar flex snap-x snap-proximity scroll-px-3 gap-1.5 overflow-x-auto px-3 py-2 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] md:px-0 md:py-3 xl:hidden"
         >
           {categoryItems.map((c) => (
             <CategoryChip key={c.id} active={!q && current === c.id} color={c.color} onClick={() => pick(c.id)}>
@@ -141,16 +145,17 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
           ))}
         </div>
         <div
+          key={q ? 'arama' : current}
           className={cn(
-            // 140 px: 768 px tablette hesap kartının yanında iki sütun, bilgisayarda üç
-            'scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 overflow-y-auto border-t border-[var(--admin-divider)] bg-surface-2 p-4 xl:mt-3',
+            // 150 px: 768 px tablette hesap yaprağının yanında iki sütun, bilgisayarda üç-dört
+            'lp-enter scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 overflow-y-auto px-3 pb-3 pt-1 md:px-0 md:pb-1 xl:pt-3',
           )}
         >
           {list.map((p) => (
             <ProductTile key={p.id} p={p} withImage={withImages} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
           ))}
           {list.length === 0 && (
-            <div className="col-span-full">
+            <div className="col-span-full rounded-[1.125rem] bg-surface">
               {q.trim() ? (
                 <EmptyState
                   compact
@@ -175,32 +180,26 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
   );
 }
 
-/** Dikey kategori satırı: seçili satır gri, renksiz; kategori rengi yalnız nokta, sağda ürün sayısı */
+/**
+ * Dikey kategori satırı (kitin numaralı menüsü): 01, 02… numara, kategori rengi küçük nokta, sağda ürün sayısı; seçili
+ * satırın solunda mürekkep nokta ve satır içeri kayar
+ */
 function CategoryRow({ active, color, count, favorite, onClick, children }: { active: boolean; color: string | null; count: number; favorite?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        'flex min-h-11 w-full shrink-0 items-center gap-2.5 rounded-xl px-3 text-left text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press pointer-fine:min-h-10',
-        active ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
-      )}
-    >
+    <button type="button" role="tab" aria-selected={active} onClick={onClick} className="lp-menu-item min-h-11 text-base focus-visible:-outline-offset-2">
       {favorite ? (
         <Star aria-hidden="true" className="size-3.5 shrink-0 stroke-2 text-[var(--laf-bean)]" />
       ) : (
         // Kategori rengi koyu kartta kaybolmasın: ince halka
-        <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color ?? 'var(--admin-border-field)' }} />
+        <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color ?? 'var(--admin-border-field)' }} />
       )}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      <span className="tabular text-xs font-medium text-muted">{count}</span>
+      <span className="n text-base">{count}</span>
     </button>
   );
 }
 
-/** Kategori çipi (telefon, tablet): hap; seçili ev yeşili dolgu. Kategori rengi yalnız küçük nokta */
+/** Kategori çipi (telefon, tablet; kitin çipi): beyaz hap; seçili mürekkep dolgu. Kategori rengi yalnız küçük nokta */
 function CategoryChip({ active, color, onClick, children }: { active: boolean; color?: string | null; onClick: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLButtonElement>(null);
   // Seçili kategori (sayfa yenilenince de) rayda görünür kalsın
@@ -215,8 +214,8 @@ function CategoryChip({ active, color, onClick, children }: { active: boolean; c
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-full border px-4 text-sm whitespace-nowrap transition-[color,border-color,background-color] duration-150 active:brightness-95 pointer-fine:min-h-9',
-        active ? 'border-primary bg-primary font-semibold text-primary-ink' : 'border-line bg-surface font-medium text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink',
+        'inline-flex min-h-11 shrink-0 snap-start items-center gap-1.5 rounded-full border px-4 font-headline text-[15px] tracking-[-0.015em] whitespace-nowrap transition-[color,border-color,background-color] duration-150 active:brightness-95 pointer-fine:min-h-10',
+        active ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'border-[var(--admin-border-strong)] bg-surface font-medium text-ink-2 hover:border-[var(--admin-text)] hover:text-ink',
       )}
     >
       {color && <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color }} />}
@@ -263,7 +262,7 @@ function ProductTile({
   return (
     <div
       className={cn(
-        'group relative flex flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] transition-[border-color,transform] duration-150 hover:border-[var(--admin-border-field)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-border-field)] motion-reduce:has-[button:active]:scale-100',
+        'group relative flex flex-col rounded-[1.125rem] border border-transparent bg-surface shadow-[var(--shadow-card)] transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-px hover:border-[var(--admin-text)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-text)] motion-reduce:hover:translate-y-0 motion-reduce:has-[button:active]:scale-100 dark:border-[var(--admin-border)]',
         withImage ? 'min-h-[176px]' : 'min-h-[88px]',
         soldOut && 'opacity-50',
       )}
@@ -273,7 +272,7 @@ function ProductTile({
         onClick={() => addSize(twoSizes ? 'M' : 'TEK')}
         aria-haspopup={ask ? 'dialog' : undefined}
         // İki boylu kartta ad tek satırsa düğme 41 px kalıyordu: dokunmatikte 44 (kart da pencereyi açabilir)
-        className={cn('flex min-h-11 flex-1 flex-col items-stretch rounded-2xl text-left transition-colors duration-150 active:bg-press pointer-fine:min-h-0', !withImage && hasOptions && 'pr-12')}
+        className={cn('flex min-h-11 flex-1 flex-col items-stretch rounded-[1.125rem] text-left transition-colors duration-150 active:bg-press pointer-fine:min-h-0', !withImage && hasOptions && 'pr-12')}
       >
         {withImage && (
           <span
@@ -301,13 +300,13 @@ function ProductTile({
           </span>
         )}
         <span className={cn('flex flex-1 flex-col items-start gap-1.5 px-3 pb-2.5', withImage ? 'pt-2' : 'justify-between pt-2.5')}>
-          <span className="line-clamp-2 text-[15px] font-medium leading-snug">{label}</span>
+          <span className="line-clamp-2 font-headline text-[16px] font-bold leading-[1.15] tracking-[-0.025em]">{label}</span>
           {soldOut ? (
             <span className="rounded-full bg-[var(--admin-danger-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]">Tükendi</span>
           ) : p.portionsLeft != null ? (
             <span className="tabular rounded-full bg-[var(--admin-warning-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--admin-warning)]">Son {p.portionsLeft}</span>
           ) : null}
-          {!twoSizes && <span className="tabular mt-auto text-sm font-semibold text-ink">{tlShort(p.price)}</span>}
+          {!twoSizes && <span className="tabular mt-auto font-headline text-[17px] font-bold tracking-[-0.03em] text-ink">{tlShort(p.price)}</span>}
         </span>
       </button>
       {hasOptions && (
@@ -348,10 +347,10 @@ function SizeButton({ label, price, onClick, disabled, dialog }: { label: string
       onClick={onClick}
       aria-label={`${label} ${tlShort(price)}`}
       aria-haspopup={dialog ? 'dialog' : undefined}
-      className="flex min-h-11 flex-col items-center justify-center rounded-xl bg-surface-3 leading-tight transition-[background-color,color,box-shadow] duration-150 hover:bg-[var(--admin-border)] active:bg-[var(--admin-border)] active:ring-1 active:ring-inset active:ring-primary pointer-fine:min-h-10"
+      className="flex min-h-11 flex-col items-center justify-center rounded-full bg-surface-3 leading-tight transition-[background-color,color,box-shadow] duration-150 hover:bg-[var(--admin-ink-fill)] hover:text-[var(--admin-on-ink)] active:bg-[var(--admin-ink-fill)] active:text-[var(--admin-on-ink)] pointer-fine:min-h-10"
     >
-      <span className="text-xs font-medium text-muted">{label}</span>
-      <span className="tabular text-[13px] font-semibold">{tlShort(price)}</span>
+      <span className="text-[11px] font-medium opacity-75">{label}</span>
+      <span className="tabular font-headline text-[14px] font-bold">{tlShort(price)}</span>
     </button>
   );
 }

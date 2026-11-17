@@ -1,4 +1,4 @@
-import { Delete } from 'lucide-react';
+import { ArrowUpRight, Delete } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/cn';
 import { isTopLayer, isTypingTarget } from '@/lib/focus';
@@ -15,8 +15,8 @@ interface NumpadProps {
   size?: 'md' | 'lg';
   /**
    * Son hücrede birincil onay tuşu (giriş ekranı: "Giriş"). Verilince alt sıra "⌫ · 0 · onay" olur; "," ve "00"
-   * gösterilmez. Devre dışıyken kitin devre dışı dolu düğmesi gibi gri zemin ve soluk ama okunur yazı (5.4:1): etkin
-   * açık yeşil düğmeyle karışmaz
+   * gösterilmez. Kitin ana düğmesi: mürekkep, sağda yeşil ok halkası. Devre dışıyken gri zemin ve soluk ama okunur yazı
+   * (5.4:1), halka gri
    */
   confirm?: { label: string; disabled?: boolean; onPress: () => void };
   /**
@@ -40,7 +40,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
     onEnter: confirm ? () => !confirm.disabled && confirm.onPress() : onEnter,
   });
   return (
-    // Sade tuşlar: tepsi yok, kâğıt beyazı üstünde ince çizgili yumuşak kareler; onay tuşu ev yeşili
+    // Sade tuşlar (kitin kart köşesi 18): beyaz, ince çizgili, rakam Gabarito; onay tuşu mürekkep ve ok halkalı
     <div ref={root} data-numpad-enter="" className={cn('grid grid-cols-3 gap-2', className)}>
       {keys.map((k) => {
         if (k === 'ok' && confirm) {
@@ -51,11 +51,14 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
               disabled={confirm.disabled}
               onClick={confirm.onPress}
               className={cn(
-                'rounded-xl bg-primary text-base font-semibold text-primary-ink transition-[background-color,transform] duration-150 hover:bg-[var(--admin-primary-hover)] active:scale-[0.97] active:bg-[var(--admin-primary-hover)] motion-reduce:active:scale-100 disabled:bg-surface-3 disabled:text-muted disabled:active:scale-100',
-                size === 'lg' ? 'h-16' : 'h-12',
+                'inline-flex items-center justify-between gap-2 rounded-2xl bg-[var(--admin-ink-fill)] pl-4 pr-2 text-base font-semibold text-[var(--admin-on-ink)] transition-[background-color,transform] duration-150 hover:bg-[var(--admin-ink-fill-hover)] active:scale-[0.97] motion-reduce:active:scale-100 disabled:bg-surface-3 disabled:text-muted disabled:active:scale-100',
+                size === 'lg' ? 'h-16 [--ring:2.25rem]' : 'h-12 [--ring:1.75rem]',
               )}
             >
               {confirm.label}
+              <span aria-hidden="true" className="lp-ring">
+                <ArrowUpRight />
+              </span>
             </button>
           );
         }
@@ -66,9 +69,9 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
             onClick={() => onKey(k)}
             aria-label={k === 'back' ? 'Geri sil' : undefined}
             className={cn(
-              'tabular rounded-xl bg-surface-2 font-medium text-ink ring-1 ring-inset ring-line transition-[background-color,transform,box-shadow] duration-150 hover:bg-surface-3 active:scale-[0.97] active:bg-[var(--admin-border)] motion-reduce:active:scale-100',
-              size === 'lg' ? 'h-16 text-2xl' : 'h-12 text-xl',
-              k === 'clear' && 'text-[15px] text-ink-2',
+              'tabular rounded-2xl bg-surface font-headline font-semibold text-ink ring-1 ring-inset ring-[var(--admin-border-strong)] transition-[background-color,transform,box-shadow] duration-150 hover:ring-[var(--admin-text)] active:scale-[0.97] active:bg-surface-3 motion-reduce:active:scale-100',
+              size === 'lg' ? 'h-16 text-[28px]' : 'h-12 text-[22px]',
+              k === 'clear' && 'font-sans text-[15px] font-medium text-ink-2',
             )}
           >
             {/* "Temizle" hepsini siler; ⌫ tek rakam (ikisi de "Sil" diye okunup karışmasın) */}

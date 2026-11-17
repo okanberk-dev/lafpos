@@ -1,9 +1,8 @@
 # Innex (Filllo) — Admin Paneli Tasarım Tarifi
 
-> **2 Kasım 2026'dan beri:** bu tarif yalnız **yerleşim** kaynağıdır (kenar çubuğu, başlık
-> şeridi, KPI şeridi, tablo, çekmece, ölçüler). Renk ve yazı LafPOS Sade'dir
-> (`DESIGN.md`: laffogato.net kimliği; Poppins ve Gabarito, porselen zemin, ev yeşili
-> birincil); aşağıdaki hex değerleri ve Inter tarihsel kayıttır.
+> **17 Kasım 2026'dan beri:** görünüm ve yerleşim LafPOS Sahne'dir (`DESIGN.md`: gnbsite'ın Area Board kiti
+> L'Affogato kimliğinde; sahne, yaprak, shadcn'in Sidebar'ı gibi sade yan menü). Bu tarif yalnız başlık şeridi, KPI
+> şeridi, tablo ve çekmece ölçüleri için okunur; aşağıdaki hex değerleri, Inter ve kenar çubuğu tarihsel kayıttır.
 >
 > **LafPOS'ta:** yönetim paneli (`/yonetim/*`, `/raporlar`) bu tarifi 26 Ekim
 > 2026'dan beri izler (operatör: _"laffogato admindeki innex admin skills

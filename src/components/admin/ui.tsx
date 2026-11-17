@@ -5,13 +5,14 @@ import { buttonClass, CloseButton } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
 import { fitFigure, Badge as KitBadge, EmptyState as KitEmptyState, RAIL_FADE, Skeleton, useRail } from '@/components/ui/misc';
 import type { IllustrationName } from '@/components/Illustration';
+import { useStageHeader } from '@/components/ui/Stage';
 import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
 
 /**
- * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm LafPOS Sade (DESIGN.md: Poppins ve
- * Gabarito, porselen zemin, ev yeşili birincil). Dokunmatikte her hedef 44 px, farede 36 px, "Sıkı görünüm"de 32 px.
- * Telefonda (md altı) tablo satır kartına, çekmece alt sayfaya döner.
+ * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm LafPOS Sahne (DESIGN.md: gnbsite'ın
+ * Area Board kiti; Poppins ve Gabarito, hap denetimler, mürekkep ana eylem, saç teli ayraçlar). Dokunmatikte her hedef
+ * 44 px, farede 36 px, "Sıkı görünüm"de 32 px. Telefonda (md altı) tablo satır kartına, çekmece alt sayfaya döner.
  */
 
 /* Odak halkası her yerde aynı (index.css :focus-visible): 2 px birincil, 2 px dışarıda; burada yalnız açıkça yazılır */
@@ -23,7 +24,7 @@ const COMPACT_H = 'pointer-fine:[[data-density=compact]_&]:min-h-8';
  * bağlantıda `buttonClass(…)` yazın. Eşleme: primary = primary, ghost = secondary (beyaz, kenarlı), soft = soft,
  * danger = dangerOutline, icon = IconButton variant="secondary". Menü öğeleri yalnız burada.
  */
-const MENU_ITEM = `flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm disabled:opacity-50 pointer-fine:min-h-9 focus-visible:outline-2 focus-visible:-outline-offset-2 ${COMPACT_H}`;
+const MENU_ITEM = `flex min-h-11 w-full items-center gap-2.5 rounded-xl px-3 py-1.5 text-left text-sm disabled:opacity-50 pointer-fine:min-h-9 focus-visible:outline-2 focus-visible:-outline-offset-2 ${COMPACT_H}`;
 
 export const BTN = {
   primary: buttonClass('primary', 'md'),
@@ -39,8 +40,8 @@ export const BTN = {
 /** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, daire (kitin ikon düğmeleri gibi), dokunmatikte 44 px, farede 32 px */
 export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--r-btn)] text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
 
-/** Kart: köşe 20 (alan ve iç kutu 14; düğme, rozet ve sekme kapsül; kap > denetim), kâğıt gölgesi */
-export const CARD = 'rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-card)]';
+/** Kart (kitin tablo ve form kabı): köşe 18, saç teli kenar, gölgesiz; derinliği zeminin tonu verir */
+export const CARD = 'rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)]';
 export const LABEL = 'text-xs font-medium text-[var(--admin-text-mute)]';
 export const NUM = 'tabular-nums';
 /** Karakter karakter okunan ad (env değişkeni, klasör, adres): sistem eş genişlikli, gri kutu */
@@ -102,17 +103,20 @@ export function IconBox({ hue = 'neutral', children, size = 'md' }: { hue?: Hue;
 }
 
 /**
- * Sayfa başlığı şeridi: solda başlık ve açıklama, sağda önce ikincil sonra birincil düğme; kart boyu çizgi.
- * Telefonda (md altı) başlığı kabuğun üst şeridi yazar: h1 yalnız ekran okuyucuya kalır, açıklama iki satır.
+ * Sayfa başlığı. Sahnenin içinde (AdminShell, Stage.tsx) başlık ve açıklama sol sütunun başına, eylemler ana
+ * eylemin yeri olur (portal); `children` (sekme, not) yaprakta kalır. Sahne dışında (telefondaki bölüm listesi) ölçülü
+ * başlık: Gabarito 26/700; telefonda başlığı kabuğun üst şeridi yazar, h1 yalnız ekran okuyucuya kalır.
  */
 export function PageHeader({ title, description, actions, children }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; children?: ReactNode }) {
+  const staged = useStageHeader({ title, subtitle: description, actions });
+  if (staged) return children ? <>{staged}<div className="mb-5">{children}</div></> : <>{staged}</>;
   const titleOnly = !description && !actions && !children;
   return (
     <div className={cn('-mx-4 mb-5 border-b border-[var(--admin-border)] px-4 pb-4 sm:-mx-5 sm:px-5', titleOnly && 'max-md:mb-0 max-md:border-0 max-md:pb-0')}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className={cn('min-w-0', !description && 'max-md:contents')}>
-          <h1 className="text-[22px] font-bold text-[var(--admin-text)] max-md:sr-only">{title}</h1>
-          {description && <p className="mt-0.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
+          <h1 className="font-headline text-[26px] font-bold leading-tight tracking-[-0.03em] text-[var(--admin-text)] max-md:sr-only">{title}</h1>
+          {description && <p className="mt-1.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
       </div>
@@ -151,7 +155,7 @@ export function Card({
       {(title || actions) && (
         <header className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 sm:px-5', divided && 'border-b border-[var(--admin-divider)] pb-3')}>
           <div className="min-w-0 flex-[1_1_9rem]">
-            {title && <h2 className="text-[15px] font-semibold leading-6 text-[var(--admin-text)]">{title}</h2>}
+            {title && <h2 className="text-base font-bold leading-6 tracking-[-0.025em] text-[var(--admin-text)]">{title}</h2>}
             {subtitle && <p className="text-xs text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
           {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -189,7 +193,7 @@ export interface KpiCell {
 export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: string }) {
   const n = cells.length;
   return (
-    <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)] shadow-[var(--shadow-card)]', kpiGridCols(n), KPI_LAST_ODD, className)}>
+    <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', kpiGridCols(n), KPI_LAST_ODD, className)}>
       {cells.map((c, i) => {
         const body = (
           <>
@@ -199,7 +203,7 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
               {c.onClick && <ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 text-[var(--admin-text-mute)]" />}
             </span>
             <span className="mt-3 flex w-full flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span style={fitFigure(c.value)} className={cn('whitespace-nowrap font-headline text-[length:min(28px,var(--fit,17cqi))] font-bold leading-none tracking-[-0.02em] text-[var(--admin-text)]', NUM)}>
+              <span style={fitFigure(c.value)} className={cn('whitespace-nowrap font-headline text-[length:min(34px,var(--fit,17cqi))] font-bold leading-[0.9] tracking-[-0.045em] text-[var(--admin-text)]', NUM)}>
                 {c.value}
               </span>
               {c.delta && <Badge tone={c.delta.good ? 'success' : 'danger'}>{c.delta.text}</Badge>}
@@ -208,7 +212,7 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
           </>
         );
         const span = kpiCellSpan(n, i);
-        const cls = cn('@container flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left sm:p-5', span, c.active && 'bg-[var(--admin-surface-2)] shadow-[inset_0_-2px_0_var(--admin-primary)]');
+        const cls = cn('@container flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left sm:p-5', span, c.active && 'bg-[var(--admin-surface-2)] shadow-[inset_0_-2px_0_var(--admin-text)]');
         return c.onClick ? (
           <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors', !c.active && 'hover:bg-[var(--hover-solid)]', FOCUS, 'focus-visible:-outline-offset-2')}>
             {body}
@@ -230,7 +234,7 @@ export interface TabOption<T extends string> {
 }
 
 /**
- * Durum sekmeleri: hap çipler, etkin olan mürekkep kenarlı, sayaç gri (etkinde mürekkep). Telefonda ray ekran
+ * Durum sekmeleri (kitin süzgeç çipi): beyaz hap çipler, etkin olan mürekkep dolgu, sayaç soluk. Telefonda ray ekran
  * kenarına uzanır ve yatay kayar: seçili sekme rayın içinde görünür kalır, içeriğin gizlendiği kenar solar (useRail)
  */
 export function StatusTabs<T extends string>({ value, onChange, tabs, label }: { value: T; onChange: (v: T) => void; tabs: TabOption<T>[]; label: string }) {
@@ -252,12 +256,12 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
                 COMPACT_H,
                 FOCUS,
                 'focus-visible:-outline-offset-2',
-                on ? 'border-[var(--admin-text)] font-semibold text-[var(--admin-text)]' : 'border-[var(--admin-border)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)]',
+                on ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'border-[var(--admin-border-strong)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-text)] hover:text-[var(--admin-text)]',
               )}
             >
               {t.label}
               {t.count !== undefined && (
-                <span className={cn('min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium leading-4', NUM, on ? 'bg-[var(--admin-text)] text-[var(--admin-surface)]' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]')}>{t.count}</span>
+                <span className={cn('min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium leading-4', NUM, on ? 'bg-[color-mix(in_oklab,var(--admin-on-ink)_18%,transparent)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]')}>{t.count}</span>
               )}
             </button>
           );
@@ -268,7 +272,7 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
 }
 
 /**
- * Segment denetimi: gri hap ray, seçili beyaz hap (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır
+ * Segment denetimi (kitin .seg'i): beyaz hap ray, ince kenar, seçili mürekkep hap (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır
  * (yedi dönem iki satır; hiçbir seçenek gizli kaydırıcıda kalmaz), seçenekler satırı doldurur; köşe eş merkezli
  * (hap 22 + ray boşluğu 3). Daha geniş ekranda sığmayan ray kayar: seçili seçenek görünür kalır, gizli kenar solar
  * (useRail). Radyo grubu klavyesi: Tab gruba seçili seçenekte girer, oklar ve Home/End seçenekler arasında gezer,
@@ -293,7 +297,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
       role="radiogroup"
       aria-label={label}
       onKeyDown={move}
-      className={cn('no-scrollbar inline-flex max-w-full overflow-x-auto rounded-[var(--r-segment)] bg-[var(--admin-panel)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[min(25px,var(--r-segment))] max-sm:pointer-fine:rounded-[min(21px,var(--r-segment))]', RAIL_FADE, className)}
+      className={cn('no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)] border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[min(26px,var(--r-segment))] max-sm:pointer-fine:rounded-[min(22px,var(--r-segment))]', RAIL_FADE, className)}
     >
       {options.map((o, i) => {
         const on = o.value === value;
@@ -310,7 +314,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
               COMPACT_H,
               FOCUS,
               'focus-visible:-outline-offset-2',
-              on ? 'bg-[var(--admin-surface)] text-[var(--admin-text)] shadow-[var(--rim),var(--shadow-lift)] dark:bg-[var(--admin-border-strong)]' : 'text-[var(--admin-text-mute)] hover:text-[var(--admin-text)]',
+              on ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'text-[var(--admin-text-soft)] hover:bg-[var(--hover)] hover:text-[var(--admin-text)]',
             )}
           >
             {o.label}
@@ -411,7 +415,7 @@ export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label
       </button>
       {open &&
         createPortal(
-          <div ref={menu} role="menu" style={style} className="z-[60] rounded-[var(--r-control)] border border-[var(--admin-border)] bg-[var(--surface-raised)] p-1.5 shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]">
+          <div ref={menu} role="menu" style={style} className="z-[60] rounded-[1.25rem] border border-[var(--admin-border)] bg-[var(--surface-raised)] p-1.5 shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]">
             {items.map((it) => (
               <button
                 key={it.key}
@@ -504,7 +508,7 @@ export function DataTable<T>({
             {/* Başlık şeridi kasada kuyuda, kurumsal yüzeyde zeminsiz: yalnız başlık ve satır çizgileri */}
             <tr className="border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]">
               {columns.map((c) => (
-                <th key={c.key} scope="col" style={c.width ? { width: c.width } : undefined} className={cn('h-10 px-4 text-[13px] font-medium whitespace-nowrap text-[var(--admin-text-mute)]', alignCls(c.align), hideCls(c), c.className)}>
+                <th key={c.key} scope="col" style={c.width ? { width: c.width } : undefined} className={cn('h-11 px-4 text-[13px] font-medium whitespace-nowrap text-[var(--admin-text-mute)]', alignCls(c.align), hideCls(c), c.className)}>
                   {c.header}
                 </th>
               ))}
@@ -520,7 +524,7 @@ export function DataTable<T>({
                   key={k}
                   aria-selected={onOpen ? selected : undefined}
                   onClick={onOpen ? (e) => !fromControl(e) && onOpen(r) : undefined}
-                  className={cn('group border-t border-[var(--admin-divider)]', onOpen && 'cursor-pointer', selected ? 'bg-[var(--admin-surface-2)] shadow-[inset_2px_0_0_var(--admin-primary)]' : 'hover:bg-[var(--hover-solid)]', rowClassName?.(r))}
+                  className={cn('group border-t border-[var(--admin-divider)]', onOpen && 'cursor-pointer', selected ? 'bg-[var(--admin-surface-2)] shadow-[inset_3px_0_0_var(--admin-text)]' : 'hover:bg-[var(--hover-solid)]', rowClassName?.(r))}
                 >
                   {columns.map((c, i) => (
                     <td key={c.key} className={cn('px-4 py-3 align-middle pointer-fine:[[data-density=compact]_&]:py-2', alignCls(c.align), hideCls(c), c.className)}>
@@ -783,7 +787,7 @@ export function SearchField({ value, onChange, placeholder, label }: { value: st
  */
 export function KpiStripSkeleton({ count = 5, className }: { count?: number; className?: string }) {
   return (
-    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)] shadow-[var(--shadow-card)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
+    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className={cn('bg-[var(--admin-surface)] p-4 sm:p-5', kpiCellSpan(count, i))}>
           <span className="flex min-h-8 items-center gap-2">

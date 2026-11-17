@@ -279,9 +279,10 @@ export function CartPanel({
             <Row l="Ödenen" r={tl(order.paid)} />
           </div>
         )}
-        <div className="flex items-baseline justify-between">
-          <span className="text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
-          <span className="tabular font-headline text-[28px] font-bold leading-tight tracking-[-0.02em]">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
+        {/* Kitin büyük sayısı: etiket üstte küçük, tutar Gabarito kalın ve sıkı */}
+        <div className="flex items-end justify-between gap-3">
+          <span className="pb-1 text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
+          <span className="tabular font-headline text-[34px] font-bold leading-none tracking-[-0.05em]">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
         </div>
         {/* Tamamı ödendiyse vurgu sıfıra ("Kalan ₺0,00") değil ödemeye: yeşil "Ödendi". Gönderilmemiş ürün varken (yeniden
             açılmış, ödenmiş adisyona ekleme) tutar artacak: "Ödendi" değil, tahmini toplamdan kalan */}

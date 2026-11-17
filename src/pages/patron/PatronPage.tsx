@@ -7,7 +7,9 @@ import { fmtAgo, fmtTime } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
-import { Badge, Card, EmptyState, ErrorState, PageHeader, SizeTag, Skeleton, Stat } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, ErrorState, SizeTag, Skeleton, Stat } from '@/components/ui/misc';
+import { Dial } from '@/components/ui/Dial';
+import { Stage } from '@/components/ui/Stage';
 import { get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -130,20 +132,18 @@ export default function PatronPage() {
   // ya da günün ilk online siparişi gelmedi) dört karo kalır, sayfa yüklenince kaymaz
   if (data.isPending) {
     return (
-      <div role="status" aria-label="Canlı rakamlar yükleniyor…" className="h-full overflow-hidden p-4 md:p-6">
-        <div className="max-md:hidden">
-          <PageHeader title="Patron paneli" subtitle="Canlı rakamlar yükleniyor…" />
-        </div>
-        <Skeleton className="mb-4 h-5 w-56 md:hidden" />
-        <div className={topGrid(false)}>
-          <Skeleton className="h-[236px] rounded-2xl" />
-          <div className={tileGrid(false)}>
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-[112px] rounded-2xl" />
-            ))}
+      <Stage name="Patron paneli" sub="Canlı rakamlar yükleniyor…" leafLabel="Patron paneli">
+        <div role="status" aria-label="Canlı rakamlar yükleniyor…" className="lp-leaf-pad">
+          <div className={topGrid(false)}>
+            <Skeleton className="h-[236px] rounded-2xl" />
+            <div className={tileGrid(false)}>
+              {[0, 1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-[112px] rounded-2xl" />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </Stage>
     );
   }
   // Rakamlar alınamadıysa ₺0 gösterilmez: patron "satış yok" sanmasın
@@ -225,26 +225,30 @@ export default function PatronPage() {
   const sizeName = (size: string) => (size === 'M' || size === 'L' ? (sizeLabels?.[size] ?? size) : null);
 
   return (
-    <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
-      {/* Telefonda ekranın adı üst şeritte: burada yalnız durum satırı (başlık ekran okuyucuya) */}
-      <div className="max-md:hidden">
-        <PageHeader
-          title="Patron paneli"
-          subtitle={
-            <span className="inline-flex items-center gap-2">
-              {dot}
-              {statusText}
-            </span>
-          }
-          actions={retry}
-        />
-      </div>
-      <div className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 md:hidden">
-        <h1 className="sr-only">Patron paneli</h1>
-        {dot}
-        <span className="text-[13px] text-muted">{statusText}</span>
-        {retry}
-      </div>
+    // Sahne (kitin Open Positions'ı): solda 24 saat kadranı (saatlik ciro), büyük sayılar, dev ad ve canlılık; sağda
+    // yaprakta ciro kartı, karolar, dikkat isteyenler, saatlik grafik, ödeme türleri ve en çok satanlar
+    <Stage
+      name="Patron paneli"
+      sub={
+        <span className="inline-flex items-center gap-2">
+          {dot}
+          {statusText}
+        </span>
+      }
+      // Ciro yaprağın ilk kartında (kıyaslarıyla); sütunda ortalama adisyon ve açıkta kalan adisyon sayısı
+      hero={[
+        { label: 'Ortalama adisyon', value: d.orders > 0 ? tlShort(d.avgCheck) : '—', money: true, title: d.orders > 0 ? tl(d.avgCheck) : 'Henüz kapanan adisyon yok' },
+        { label: 'Açık adisyon', value: d.open.count, tone: d.open.count > 0 ? 'signal' : undefined },
+      ]}
+      actions={retry || undefined}
+      visual={
+        <div className="mx-auto aspect-square w-full max-w-[16.5rem]">
+          <Dial values={d.hourly} hour={new Date(d.now).getHours()} value={d.orders} label="Adisyon bugün" title={`Saat saat ciro kadranı: bugün ${d.orders} adisyon kapandı`} />
+        </div>
+      }
+      leafLabel="Patron paneli"
+    >
+    <div className="lp-leaf-pad">
 
       <div className={topGrid(wideTiles)}>
         {/* Kart boyu karolarla uzarsa boşluk kıyasların üstünde kalır, altında değil */}
@@ -473,6 +477,7 @@ export default function PatronPage() {
         </Card>
       </div>
     </div>
+    </Stage>
   );
 }
 

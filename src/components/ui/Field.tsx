@@ -17,12 +17,12 @@ import { cn } from '@/lib/cn';
 import { isFinePointer } from '@/lib/hooks';
 
 /**
- * Alanın dört durumu: dinlenme (alan kenarı, 3:1), odak (yeşil kenar ve 3 px yumuşak yeşil hale: yeşilin %24'ü, iki
- * temada da seçilir), hatalı (`aria-invalid`: kırmızı kenar ve kırmızı hale), devre dışı (soluk, zemin gri). Hata
- * `Field error` ile verilince alana kendiliğinden geçer.
+ * Alanın dört durumu (kitin formu): dinlenme (alan kenarı, 3:1), odak (mürekkep kenar ve 1 px mürekkep halka; kitin
+ * odağı), hatalı (`aria-invalid`: kırmızı kenar ve kırmızı halka), devre dışı (soluk, zemin gri). Köşe 12 (kitin
+ * --r-ctl'si); arama alanı hap. Hata `Field error` ile verilince alana kendiliğinden geçer.
  */
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-primary focus:ring-[3px] focus:ring-[color-mix(in_oklab,var(--admin-primary)_24%,transparent)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[color-mix(in_oklab,var(--admin-danger)_22%,transparent)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-[var(--admin-text)] focus:ring-1 focus:ring-[var(--admin-text)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
 
 /** Alanla aynı görünümde kullanılan tek seferlik input'lar için (dışarıdan `className` ile) */
 export const fieldClass = base;
@@ -31,7 +31,7 @@ export const fieldClass = base;
 export function Label({ children, hint, className }: { children: ReactNode; hint?: ReactNode; className?: string }) {
   return (
     // Dar alanda ipucu etiketi ezmez, alta iner; kısa ipucu ("5–120", "zorunlu") tek parça kalır
-    <span className={cn('mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 text-[13px] font-medium text-ink-2', className)}>
+    <span className={cn('mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 text-[13px] font-semibold text-ink', className)}>
       <span className="min-w-0">{children}</span>
       {hint && <span className={cn('text-xs font-normal text-muted', typeof hint === 'string' && hint.length <= 16 && 'whitespace-nowrap')}>{hint}</span>}
     </span>
@@ -145,7 +145,7 @@ export const SearchInput = forwardRef<
   return (
     <label className={cn('relative block min-w-0', wrapperClassName)}>
       <span className="sr-only">{label}</span>
-      <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+      <Search aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" />
       <input
         ref={setRef}
         type="search"
@@ -164,7 +164,7 @@ export const SearchInput = forwardRef<
           }
           onKeyDown?.(e);
         }}
-        className={cn(base, 'h-11 pl-9 pr-11 [&::-webkit-search-cancel-button]:appearance-none [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:pr-9', dense && 'pointer-fine:h-9 pointer-fine:pr-9', className)}
+        className={cn(base, 'h-11 rounded-[var(--r-chip)] pl-10 pr-11 [&::-webkit-search-cancel-button]:appearance-none [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:pr-9', dense && 'pointer-fine:h-9 pointer-fine:pr-9', className)}
         {...rest}
       />
       {value && (
@@ -183,7 +183,7 @@ export const SearchInput = forwardRef<
               else e.currentTarget.blur();
             }
           }}
-          className={cn('absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-xl text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
+          className={cn('absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-[var(--r-chip)] text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
         >
           <X aria-hidden="true" className="size-4" />
         </button>
@@ -330,7 +330,7 @@ export function Toggle({
 }
 
 /** Adet seçicinin tuşu: basılı ton, sınırda soluk; boyu ve köşesi aşağıda */
-const STEP = 'grid place-items-center transition-colors duration-150 hover:bg-hover active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+const STEP = 'grid place-items-center rounded-[var(--r-chip)] transition-colors duration-150 hover:bg-hover active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
 
 /**
  * Adet seçici (kasada tek): adisyonun gönderilmemiş satırı, seçenek sayacı (şeker, ekstra shot), seçenek penceresinin
@@ -368,20 +368,20 @@ export function Stepper({
   const key = cn(STEP, lg ? 'size-14' : 'size-11 pointer-fine:size-9');
   const icon = lg ? 'size-6' : 'size-4';
   return (
-    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center rounded-xl border border-line-strong bg-surface', lg && 'rounded-2xl', className)}>
+    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center rounded-[var(--r-chip)] border border-line-strong bg-surface', className)}>
       <button
         type="button"
         aria-label={removes ? 'Kaldır' : 'Azalt'}
         disabled={!removes && value <= min}
         onClick={() => (removes ? onRemove?.() : onChange(Math.max(min, value - 1)))}
-        className={cn(key, lg ? 'rounded-l-[calc(var(--radius-2xl)-1px)]' : 'rounded-l-[calc(var(--radius-xl)-1px)]')}
+        className={key}
       >
         {removes ? <Trash2 aria-hidden="true" className={cn(icon, 'text-[var(--admin-danger-ink)]')} /> : <Minus aria-hidden="true" className={icon} />}
       </button>
       <span aria-live="polite" className={cn('tabular text-center font-semibold', lg ? 'min-w-16 px-1 font-headline text-5xl' : 'min-w-8 px-0.5 text-[15px]')}>
         {value}
       </span>
-      <button type="button" aria-label="Artır" disabled={disabledUp || value >= max} onClick={() => onChange(Math.min(max, value + 1))} className={cn(key, lg ? 'rounded-r-[calc(var(--radius-2xl)-1px)]' : 'rounded-r-[calc(var(--radius-xl)-1px)]')}>
+      <button type="button" aria-label="Artır" disabled={disabledUp || value >= max} onClick={() => onChange(Math.min(max, value + 1))} className={key}>
         <Plus aria-hidden="true" className={icon} />
       </button>
     </div>
@@ -389,10 +389,9 @@ export function Stepper({
 }
 
 /**
- * Seçim çipi: kapsül, `aria-pressed`; dokunmatikte 44, farede 36 px. İki aile:
- *   primary  seçenek ve süzgeç (seçenek grubu, gün, kategori): seçili yeşil kenar ve yumuşak yeşil zemin
- *   ink      hazır neden ya da süre (iptal, ikram, hazırlık süresi): seçili mürekkep kenar, taş zemin ve tik
- * Amber durum rengidir, seçim rengi değil (DESIGN §5: seçim yeşil ya da mürekkep kenar)
+ * Seçim çipi (kitin .chip'i): beyaz hap, ince kenar, üstüne gelince kenar mürekkep; seçili mürekkep dolgu, açık yazı.
+ * `aria-pressed`; dokunmatikte 44, farede 36 px. İki aile aynı görünür, `ink` (hazır neden ya da süre: iptal, ikram,
+ * hazırlık süresi) ayrıca tik taşır. Amber durum rengidir, seçim rengi değil (DESIGN §5: seçim mürekkep)
  */
 export function Chip({
   on,
@@ -417,13 +416,9 @@ export function Chip({
       onClick={onClick}
       className={cn(
         'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--r-chip)] border px-3.5 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-9 [[data-area=admin]_&]:text-[13px]',
-        tone === 'ink'
-          ? on
-            ? 'border-ink bg-surface-3 font-semibold text-ink'
-            : 'border-[var(--admin-border-strong)] bg-surface text-ink-2 hover:border-[var(--admin-border-field)] hover:text-ink active:bg-press'
-          : on
-            ? 'border-[var(--admin-primary)] bg-[var(--admin-primary-soft)] font-medium text-[var(--admin-primary)]'
-            : 'border-[var(--admin-border-strong)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press',
+        on
+          ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]'
+          : cn('border-[var(--admin-border-strong)] bg-surface font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-text)] hover:text-[var(--admin-text)] active:bg-press', tone === 'ink' && 'text-ink-2'),
         className,
       )}
     >
@@ -434,8 +429,9 @@ export function Chip({
 }
 
 /**
- * Yan yana seçenek düğmeleri (ödeme yolu, kasa sekmesi): gri hap ray, seçili beyaz hap; köşeler eş merkezli (`wrap`
- * modunda ray 12, hap 10). Hap odağı rayın içinde çizilir (kaydırmalı ray dış halkayı kırpar). `label` grubu adlandırır.
+ * Yan yana seçenek düğmeleri (ödeme yolu, kasa sekmesi; kitin .seg'i): beyaz hap ray, ince kenar, seçili mürekkep hap;
+ * köşeler eş merkezli (`wrap` modunda ray 22, hap 18). Hap odağı rayın içinde çizilir (kaydırmalı ray dış halkayı
+ * kırpar). `label` grubu adlandırır.
  * Kısa etiketler tek satırda kalır, sığmazsa ray kayar. `wrap`: uzun etiketli seçenekler (yazarkasa bağlantısı ve
  * ödeme yeri) rayı tam genişlikte eşit böler, etiket kendi içinde kırılır, telefonda alt alta dizilir; hiçbiri gizli
  * kaydırıcıda kalmaz.
@@ -461,7 +457,7 @@ export function Segmented<T extends string>({
     <div
       role={label ? 'group' : undefined}
       aria-label={label}
-      className={cn(wrap ? 'flex w-full gap-0.5 rounded-xl max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full overflow-x-auto rounded-[var(--r-segment)]', 'bg-surface-3 p-[3px]', className)}
+      className={cn(wrap ? 'flex w-full gap-0.5 rounded-[1.375rem] max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)]', 'border border-[var(--admin-border-strong)] bg-surface p-[3px]', className)}
     >
       {options.map((o) => (
         <button
@@ -471,11 +467,11 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           className={cn(
             'inline-flex items-center justify-center font-medium',
-            wrap ? 'rounded-[calc(var(--radius-xl)-4px)]' : 'rounded-[var(--r-segment)]',
+            wrap ? 'rounded-[1.125rem]' : 'rounded-[var(--r-segment)]',
             wrap ? 'min-w-0 flex-1 whitespace-normal py-1.5 text-center leading-snug max-sm:flex-auto' : 'shrink-0 whitespace-nowrap',
             'transition-[color,background-color,box-shadow] duration-150 focus-visible:-outline-offset-2 pointer-coarse:min-h-11',
             size === 'sm' ? 'min-h-7 px-2.5 text-xs' : 'min-h-9 px-3.5 text-sm [[data-area=admin]_&]:text-[13px]',
-            value === o.value ? 'bg-surface text-ink shadow-[var(--rim),var(--shadow-lift)] dark:bg-[var(--admin-border-strong)]' : 'text-muted hover:text-ink',
+            value === o.value ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'text-ink-2 hover:bg-hover hover:text-ink',
           )}
         >
           {o.label}

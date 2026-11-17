@@ -107,9 +107,10 @@ describe('yönetim ekranlarının kuralları (kaynak)', () => {
     expect(shell).not.toMatch(/\bbekleyen`/);
     expect(shell).toMatch(/menu: \(n\) => `\$\{n\} ürün tükendi`/);
     expect(shell).toMatch(/entegrasyon: \(n\) => `\$\{n\} sorun`/);
-    expect(shell).toMatch(/const name = counted \? `\$\{s\.label\}, \$\{counted\}` : s\.label;/);
-    expect(shell).toMatch(/title=\{narrow \? name : undefined\}\s*aria-label=\{narrow \? name : undefined\}/);
-    // Geniş menüde rakam gözle, ne saydığı adın parçası olarak ekran okuyucuya
-    expect(shell).toMatch(/\{counted && <span className="sr-only">, \{counted\}<\/span>\}/);
+    // Sahnenin numaralı menüsü (17 Kas 2026): rakam gözle okunur (ipucu ne saydığını söyler), ne saydığı adın parçası
+    // olarak ekran okuyucuya ("Ürünler 3" değil "Ürünler, 3 ürün tükendi")
+    expect(shell).toMatch(/return count \? \{ count, text: countText\(key, count\) \} : null;/);
+    expect(shell).toMatch(/\{c && <span className="sr-only">, \{c\.text\}<\/span>\}/);
+    expect(shell).toMatch(/<span aria-hidden="true" title=\{c\.text\} className="n">/);
   });
 });
