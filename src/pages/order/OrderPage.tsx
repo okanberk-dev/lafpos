@@ -616,7 +616,8 @@ export default function OrderPage() {
         </span>
       </button>
       {pending.length > 0 && (
-        <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label={sendLabel} className="shrink-0 px-4">
+        // Dar sepet çubuğunda halka yok: 360 px'te tutar kesilmesin
+        <Button size="lg" variant="primary" ring={false} loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label={sendLabel} className="shrink-0 px-4">
           Bara gönder
         </Button>
       )}
