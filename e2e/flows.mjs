@@ -278,7 +278,7 @@ export async function runFlows(ctx) {
       () =>
         withPage(ctx, 'tablet', 'kasa', async (page) => {
           await go(ctx, page, '/masalar');
-          const rail = await page.locator('aside').first().innerText();
+          const rail = await page.locator('header nav[aria-label="Ekranlar"]').first().textContent();
           assert(!/Yönetim|Rapor|Patron/.test(rail), `kasiyer menüsünde olmaması gereken: ${rail.replace(/\s+/g, ' ')}`);
           await go(ctx, page, '/yonetim/menu');
           assert(!new URL(page.url()).pathname.startsWith('/yonetim'), 'kasiyer yönetime girebildi');
@@ -555,15 +555,15 @@ export async function runFlows(ctx) {
         }),
     ],
     [
-      'Bilgisayarda yönetim: daraltılan menü ve sıkı görünüm yeniden açılışta kalır',
+      // Yan menü 17 Kas 2026'dan beri sade (shadcn düzeni) ve daraltılmaz; sıkı görünüm tercihi kalır
+      'Bilgisayarda yönetim: sıkı görünüm yeniden açılışta kalır',
       () =>
         withPage(ctx, 'bilgisayar', 'patron', async (page) => {
           await go(ctx, page, '/yonetim/menu');
-          await page.getByRole('button', { name: 'Menüyü daralt' }).click();
           await page.getByRole('button', { name: 'Sıkı görünüm' }).click();
           await page.reload({ waitUntil: 'domcontentloaded' });
           await settle(page);
-          await page.getByRole('button', { name: 'Menüyü genişlet' }).waitFor();
+          await page.getByRole('button', { name: 'Sıkı görünüm', pressed: true }).waitFor();
           const density = await page.evaluate(() => document.documentElement.dataset.density);
           assert(density === 'compact', `sıkı görünüm kalmadı: ${density}`);
         }),
@@ -643,7 +643,7 @@ export async function runFlows(ctx) {
             await go(ctx, page, '/');
             await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
             orderId = new URL(page.url()).pathname.split('/').pop();
-            const rail = await page.locator('aside').first().innerText();
+            const rail = await page.locator('header nav[aria-label="Ekranlar"]').first().textContent();
             assert(/Satış/.test(rail), `self serviste menüde Satış yok: ${rail.replace(/\s+/g, ' ')}`);
             await page.getByPlaceholder('Ürün ara').fill(simple.name);
             await page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first().click();

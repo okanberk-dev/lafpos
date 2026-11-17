@@ -229,8 +229,9 @@ export default function CustomersPage() {
   return (
     // Innex: gri zemin üstünde iki beyaz kart (liste ve kayıt), Masalar ekranıyla aynı iskelet. Telefon ve tablette biri
     // görünür: liste ya da seçilen müşteri (geri düğmesiyle listeye dönülür); iki kaydırma alanı iç içe sıkışmaz
-    <div className="flex h-full flex-col gap-3 p-2 md:p-0 lg:flex-row">
-      <aside className={cn('flex min-h-0 flex-col rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)] lg:w-[400px] lg:flex-none', selected ? 'max-lg:hidden' : 'flex-1')}>
+    // Kitin sahnesi: gri sahnede iki yaprak (liste ve kayıt)
+    <div className="lp-stage lg:flex-row lg:gap-4">
+      <aside className={cn('lp-leaf flex min-h-0 flex-col overflow-hidden lg:w-[400px] lg:flex-none', selected ? 'max-lg:hidden' : 'flex-1')}>
         <div className="space-y-3 p-4 pb-3">
           <PageHeader
             title="Müşteriler"
@@ -295,7 +296,7 @@ export default function CustomersPage() {
         </ul>
       </aside>
 
-      <section ref={detailRef} className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)] md:p-6', !selected && 'max-lg:hidden')}>
+      <section ref={detailRef} className={cn('lp-leaf scroll-thin min-h-0 flex-1 overflow-y-auto p-4 md:p-6', !selected && 'max-lg:hidden')}>
         {selected && (
           <Button size="sm" variant="ghost" icon={<ChevronLeft className="size-4" />} className="-ml-2 mb-2 lg:hidden" onClick={backToList}>
             Müşteriler
@@ -325,7 +326,7 @@ export default function CustomersPage() {
             {/* Ad ve eylemler aynı satırda, iletişim ve not altında tam genişlikte; telefonda eylemler en altta, eşit genişlikte */}
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               {/* Telefonda ve tablette satır seçilince odak buraya gelir (liste gizlenir); halka yok, ad okunur */}
-              <h2 ref={headingRef} tabIndex={-1} className="min-w-0 flex-1 text-xl font-semibold tracking-[-0.01em] outline-none [overflow-wrap:anywhere]">
+              <h2 ref={headingRef} tabIndex={-1} className="min-w-0 flex-1 font-headline text-2xl font-bold tracking-[-0.035em] outline-none [overflow-wrap:anywhere]">
                 {c.name}
               </h2>
               {((stamps && c.stamps >= goal) || (can('cari.yonet') && c.balance > 0)) && (

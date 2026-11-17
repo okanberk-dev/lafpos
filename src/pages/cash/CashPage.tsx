@@ -5,11 +5,12 @@ import { Link } from 'react-router';
 import { parseTL, tl } from '@shared/money';
 import { fmtDateLong, fmtTime } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO, ZSummary } from '@shared/types';
-import { Button, buttonClass } from '@/components/ui/Button';
-import { Field, Input, Segmented } from '@/components/ui/Field';
+import { Button } from '@/components/ui/Button';
+import { Field, Input } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad } from '@/components/ui/Numpad';
-import { Badge, Card, EmptyState, ErrorState, ListSkeleton, Notice, PageHeader, PageLoading } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, ErrorState, ListSkeleton, Notice, PageLoading } from '@/components/ui/misc';
+import { Stage } from '@/components/ui/Stage';
 import { cn } from '@/lib/cn';
 import { errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
@@ -247,46 +248,53 @@ export default function CashPage() {
   const views = can('rapor.gor');
   const simulator = boot.integrations.okc.provider === 'simulator';
 
-  return (
-    <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
-      <PageHeader
-        title="Kasa"
-        subtitle={
-          day
-            ? joinMeta([`Z ${day.zNo}`, fmtDateLong(day.date), day.reopenedAt ? `yeniden açılış ${fmtTime(day.reopenedAt)}` : [`açılış ${fmtTime(day.openedAt)}`, day.openedByName].filter(Boolean).join(', ')])
-            : 'Gün kapalı'
-        }
-        actions={
-          // Başlıkta yalnız gezinme: görünüm ve eğitim cihazı. Eylemler Bugün'ün kendi şeridinde
-          (views || simulator) && (
-            <div className="flex items-center gap-2 max-sm:w-full">
-              {views && (
-                <Segmented
-                  className="max-sm:flex-1 max-sm:[&>button]:flex-1"
-                  label="Kasa görünümü"
-                  value={tab}
-                  onChange={(v) => {
-                    setTab(v);
-                    setSelected(null);
-                  }}
-                  options={[
-                    { value: 'bugun', label: 'Bugün' },
-                    { value: 'gecmis', label: 'Geçmiş günler' },
-                  ]}
-                />
-              )}
-              {simulator && (
-                // Telefonda görünüm seçicinin yanında yalnız ikon (adı ekran okuyucuda ve ipucunda)
-                <Link to="/cihaz" title="Eğitim cihazı" className={buttonClass('ghost', 'md', { className: views ? 'max-sm:w-11 max-sm:shrink-0 max-sm:px-0' : undefined })}>
-                  <MonitorSmartphone aria-hidden="true" className="size-4" />
-                  <span className={views ? 'max-sm:sr-only' : undefined}>Eğitim cihazı</span>
-                </Link>
-              )}
-            </div>
-          )
-        }
-      />
+  // Görünüm (Bugün, Geçmiş günler) ve eğitim cihazı sahnenin numaralı menüsünde: geniş ekranda solda, darda hap şeridi.
+  // Eylemler Bugün'ün kendi şeridinde
+  const menu =
+    views || simulator ? (
+      <div role="tablist" aria-label="Kasa görünümü" className="lp-menu">
+        {views &&
+          (
+            [
+              ['bugun', 'Bugün'],
+              ['gecmis', 'Geçmiş günler'],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={tab === v}
+              onClick={() => {
+                setTab(v);
+                setSelected(null);
+              }}
+              className="lp-menu-item"
+            >
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+            </button>
+          ))}
+        {simulator && (
+          <Link to="/cihaz" className="lp-menu-item">
+            <span className="min-w-0 flex-1 truncate">Eğitim cihazı</span>
+            <MonitorSmartphone aria-hidden="true" className="size-4 shrink-0" />
+          </Link>
+        )}
+      </div>
+    ) : undefined;
 
+  return (
+    <Stage
+      name="Kasa"
+      sub={
+        day
+          ? joinMeta([`Z ${day.zNo}`, fmtDateLong(day.date), day.reopenedAt ? `yeniden açılış ${fmtTime(day.reopenedAt)}` : [`açılış ${fmtTime(day.openedAt)}`, day.openedByName].filter(Boolean).join(', ')])
+          : 'Gün kapalı'
+      }
+      menu={menu}
+      leafLabel="Kasa"
+    >
+    <div className="lp-leaf-pad">
       {tab === 'bugun' && !day && closedDay && (
         <div className="mx-auto max-w-md">
           <Card>
@@ -613,6 +621,7 @@ export default function CashPage() {
       </Modal>
       <ShiftHandoverModal open={handover} onClose={() => setHandover(false)} summary={summary} prevDiff={shiftCounts.at(-1)?.diff ?? 0} />
     </div>
+    </Stage>
   );
 }
 

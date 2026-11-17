@@ -1,5 +1,5 @@
-import { ChevronRight, Expand, Lock, LogOut, MonitorPlay, MoreHorizontal, Moon, Search, Shrink, SunMoon, WifiOff } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, WifiOff } from 'lucide-react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
@@ -8,7 +8,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { DEMO } from '@/lib/demo';
 import { useLive } from '@/lib/live';
-import { EXTRA_TITLES, isAdminArea, navAlias, navAriaLabel, phoneTabs, useNavOrigin, visibleNav } from '@/lib/nav';
+import { EXTRA_TITLES, isAdminArea, navAlias, navAriaLabel, type NavItem, phoneTabs, useNavOrigin, visibleNav } from '@/lib/nav';
 import { useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
 import { confirmLeave } from '@/lib/unsavedGuard';
@@ -17,11 +17,12 @@ import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
-import { LafMark, LafTile } from './LafMark';
+import { LafTile } from './LafMark';
 import { PlatformInbox } from './PlatformInbox';
+import { DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
+import { buttonClass, Ring } from './ui/Button';
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
-import { Modal } from './ui/Modal';
 import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
 
 function useClock() {
@@ -53,27 +54,47 @@ function useAutoLock(minutes: number) {
 }
 
 /**
- * Raydaki ekran listesi sığmıyorsa (alçak ekran, çok ekranlı rol) altı solar: dokunmatikte kaydırma çubuğu
- * görünmez, listenin devam ettiği böyle anlaşılır. Sona kaydırılınca solma kalkar.
+ * Üst çubuktaki ekranlar: sığdığı kadarı çubukta, gerisi Araçlar çekmecesinde (kitte üst menüde 2-3 sayfa, gerisi
+ * Tools). Genişlik görünmez ölçü kopyasından okunur; çubuk ya da yazı (yazı tipi geç yüklenince) boyut değiştirince
+ * yeniden hesaplanır. Etkin ekran sığmayanlardaysa son görünen yerin yerine geçer (nerede olduğu hep görünür)
  */
-function useMoreBelow(dep: unknown) {
-  const ref = useRef<HTMLElement>(null);
-  const [more, setMore] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const check = () => setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    el.addEventListener('scroll', check, { passive: true });
-    return () => {
-      ro.disconnect();
-      el.removeEventListener('scroll', check);
+function useNavFit(count: number) {
+  const nav = useRef<HTMLElement>(null);
+  const measure = useRef<HTMLSpanElement>(null);
+  const [fit, setFit] = useState(count);
+  useLayoutEffect(() => {
+    const n = nav.current;
+    const m = measure.current;
+    if (!n || !m) return;
+    const calc = () => {
+      const avail = n.clientWidth;
+      if (!avail) return;
+      let used = 0;
+      let k = 0;
+      for (const c of m.children) {
+        const w = (c as HTMLElement).offsetWidth + (k ? 4 : 0);
+        if (used + w > avail) break;
+        used += w;
+        k++;
+      }
+      setFit(k);
     };
-  }, [dep]);
-  return [ref, more] as const;
+    calc();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(calc);
+    ro.observe(n);
+    ro.observe(m);
+    return () => ro.disconnect();
+  }, [count]);
+  return [nav, measure, fit] as const;
 }
+
+/** Üst çubuktaki ekran bağlantısı (kitin .mainnav'ı): düz yazı, seçilinin altında mürekkep çizgi, üstüne gelince soldan çizilir */
+const NAV_LINK =
+  "relative inline-flex h-10 items-center rounded-full px-3.5 font-headline text-[15.5px] font-medium tracking-[-0.015em] text-ink-2 transition-colors duration-150 after:absolute after:inset-x-3.5 after:bottom-1.5 after:h-[1.5px] after:origin-left after:scale-x-0 after:bg-[var(--admin-text)] after:transition-transform after:duration-300 after:content-[''] hover:text-ink hover:after:scale-x-100 pointer-coarse:h-11";
+const NAV_ON = 'font-bold text-ink after:h-0.5 after:scale-x-100';
+/** Çubukta kısaltma yok: kısa ad noktayla bitiyorsa ("Rezerv.") tam ad */
+const navText = (n: NavItem) => (n.label.endsWith('.') ? n.title : n.label);
 
 const AVATAR = { xs: 'size-7 text-[11px]', sm: 'size-8 text-[11px]', md: 'size-9 text-xs' } as const;
 
@@ -122,13 +143,17 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const tablesInUse = useTablesInUse(mode);
   const items = visibleNav(can, mode, { tablesInUse }).filter((n) => !REMOTE || REMOTE_PATHS.includes(n.to));
   const { tabs, more } = phoneTabs(items);
-  const [railNav, railMore] = useMoreBelow(items.length);
+  const [railNav, measure, fit] = useNavFit(items.length);
   const isAt = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
   // Menüde olmayan ekranın menüdeki yeri (navAlias): adisyon açıkken geldiği ekran (Masalar, Tezgâh satışı ya da
   // Siparişler), Eğitim cihazında Kasa etkin görünür. Yalnız görünüm: aria-current'ı NavLink verir, yalnız adresin ekranına
   const origin = useNavOrigin((s) => s.to);
   const alias = navAlias(location.pathname, origin);
   const on = (to: string, isActive: boolean) => isActive || to === alias;
+  // Sığan ekranlar üst çubukta; etkin ekran sığmayanlardaysa son görünen yere o geçer
+  const activeIndex = items.findIndex((n) => isAt(n.to) || n.to === alias);
+  const shown = activeIndex >= fit && fit > 0 ? [...items.slice(0, fit - 1), items[activeIndex]] : items.slice(0, fit);
+  const hidden = items.filter((n) => !shown.includes(n));
   // Telefon üst şeridinde saat yerine ekranın adı (saat rayda ve kilit ekranında); "Daha"daki ekrandaysa Daha etkin
   const current = items.find((n) => isAt(n.to));
   const moreHere = more.some((n) => isAt(n.to));
@@ -171,7 +196,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       )}
     </span>
   );
-  const clock = <span className="tabular font-medium text-ink-2">{fmtTime(now)}</span>;
+  const dayText = boot.day ? `Z ${boot.day.zNo}` : 'Gün kapalı';
   // Gün: kasaya girebilene Z no (dokununca kasa); giremeyene yalnız gün kapalıyken, dokunulmaz bir durum olarak
   const canKasa = (['kasa.gun', 'kasa.hareket', 'odeme.al', 'rapor.gor'] as const).some((p) => can(p));
   const closed = (
@@ -191,271 +216,263 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       </span>
     )
   );
-  // Rayda (84 px) alt alta: bağlantı ve saat tek satırda, altında gün; telefonun üst şeridinde yan yana, saatsiz
-  const status = (rail = false) => {
+  // Telefonun üst şeridinde bağlantı ve gün yan yana, saatsiz
+  const status = () => {
     if (REMOTE) {
-      const badge = (
-        <Badge tone="blue" className={cn(rail && 'px-2')} title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir">
+      return (
+        <Badge tone="blue" title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir">
           Uzaktan
         </Badge>
       );
-      return rail ? (
-        <div className="flex flex-col items-center gap-1.5 text-xs">
-          {clock}
-          {badge}
-        </div>
-      ) : (
-        badge
-      );
     }
     return (
-      <div className={cn('flex items-center text-xs', rail ? 'flex-col gap-1.5' : 'gap-1')}>
-        {rail ? (
-          <div className="flex items-center gap-1">
-            {conn}
-            {live !== 'kopuk' && clock}
-          </div>
-        ) : (
-          conn
-        )}
+      <div className="flex items-center gap-1 text-xs">
+        {conn}
         {day}
       </div>
     );
   };
+  /**
+   * Durum hapı (kitin .health'i): nokta bağlantıyı söyler (canlı yeşil ve halkalı, bağlanıyor amber), yanında saat ve
+   * gün; kopunca kırmızı dolgu ve yazı. Kasaya girebilene dokununca kasa (Z no), giremeyene yalnız durum
+   */
+  const healthText = REMOTE ? `Uzaktan · ${fmtTime(now)}` : live === 'kopuk' ? 'Bağlantı koptu' : `${fmtTime(now)} · ${dayText}`;
+  const healthCls = cn(
+    'hidden h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border pl-3.5 pr-4 text-[13px] font-medium lg:inline-flex',
+    live === 'kopuk' && !REMOTE ? 'border-[var(--admin-danger)] bg-[var(--admin-danger)] text-white' : 'border-[var(--admin-border-strong)] bg-surface text-ink-2',
+    !boot.day && !REMOTE && live !== 'kopuk' && 'border-warning-line bg-warning-soft text-warning-ink',
+  );
+  const healthDot = REMOTE ? (
+    <span aria-hidden="true" className="size-2 rounded-full bg-[var(--admin-blue)]" />
+  ) : live === 'kopuk' ? (
+    <WifiOff aria-hidden="true" className="size-3.5" />
+  ) : (
+    <span aria-hidden="true" className={cn('size-2 rounded-full', live === 'canli' ? 'bg-[var(--admin-success)] shadow-[0_0_0_4px_var(--admin-success-soft)]' : 'bg-[var(--admin-warning)]')} />
+  );
+  const healthPill =
+    canKasa && !REMOTE ? (
+      <NavLink to="/kasa" title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`} aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`} className={cn(healthCls, 'transition-colors duration-150 hover:border-[var(--admin-text)]')}>
+        {healthDot}
+        <span className="tabular">{healthText}</span>
+      </NavLink>
+    ) : (
+      <span role="status" title={liveLabel} className={healthCls}>
+        {healthDot}
+        <span className="tabular">{healthText}</span>
+        <span className="sr-only">, {liveLabel}</span>
+      </span>
+    );
   // Kitin avatarı (personel ve giriş ekranıyla tek): ince iç halka, açık kişi renginde koyu harf. Ad düğmenin etiketinde
   const avatar = (size: keyof typeof AVATAR) => <Avatar name={me.name} color={me.color} className={AVATAR[size]} />;
-  // Alt sekme: ikon hapın içinde; etkin sekme yalnız renkle değil, gri hap ve kalın yazıyla da ayrılır
+  // Alt sekme: ikon hapın içinde; etkin sekme mürekkep hapta açık ikonla (kitin seçimi) ve kalın yazıyla
   const tab = (on: boolean) => cn('group flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150', on ? 'font-semibold text-ink' : 'font-medium text-muted');
-  const tabPill = (on: boolean) => cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', on ? 'bg-surface-3' : 'group-active:bg-press');
-  const sheetRow = 'flex min-h-14 w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-[background-color,border-color,color] duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press';
-  const sheetIcon = 'grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 [&>svg]:size-[18px]';
+  const tabPill = (on: boolean) => cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', on ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'group-active:bg-press');
   // Menünün başlığı kişi: adı ve rolü (tek şubeli kasada işletmenin adı bilgi taşımaz)
   const roleLabel = ROLE_LABELS[me.role];
   const menuSubtitle = REMOTE ? 'Yalnız görüntüleme' : (roleLabel !== me.name ? roleLabel : undefined);
   // Uzaktan giriş ekranı parola sormadan giriyorsa (demo ya da parolasız görünüm) çıkış aynı oturumu yeniden açar: satır yok
   const remoteSignOut = useRemoteSignOut();
 
-  return (
-    // Innex düzeni: gri zemin üstünde beyaz menü kartı; kasa ekranları zeminde kendi kartlarını çizer
-    // Yatay telefonda çentik yanlarda: kök kapsayıcı yan güvenli alanı bırakır
-    <div
-      className={cn(
-        'flex h-full bg-bg pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]',
-        !admin && 'md:gap-3 md:p-2 md:pl-[max(0.5rem,env(safe-area-inset-left))] md:pr-[max(0.5rem,env(safe-area-inset-right))]',
-      )}
+  // Araçlar çekmecesi kişinin menüsüdür de: telefonda avatar, "Daha" sekmesi ve geniş ekranda Araçlar düğmesi açar
+  const toolsOpen = menuOpen || moreOpen;
+  const closeTools = () => {
+    setMenuOpen(false);
+    setMoreOpen(false);
+  };
+  const drawerRows = items.map((n, i) => (
+    <NavLink
+      key={n.to}
+      to={n.to}
+      onClick={closeTools}
+      aria-label={navAriaLabel(n)}
+      aria-current={on(n.to, isAt(n.to)) ? 'page' : undefined}
+      style={{ animationDelay: `${120 + i * 35}ms` }}
+      className={cn(drawerRow, on(n.to, isAt(n.to)) && 'text-[var(--band-accent)]')}
     >
-      {/* Tablet ve bilgisayar: ikon rayı (Innex'in daraltılmış kenar çubuğu, docs/ADMIN-INNEX.md §1.2) */}
-      <aside className={cn('hidden w-[84px] shrink-0 flex-col items-center rounded-2xl border border-line bg-surface py-3 shadow-[var(--shadow-card)]', !admin && 'md:flex')}>
-        <NavLink to="/" className="mb-3 rounded-[10px]" title="LafPOS">
-          <LafTile />
+      <DrawerLabel>{n.title}</DrawerLabel>
+      <DrawerArrow />
+    </NavLink>
+  ));
+  const themeRow = (
+    // Tema: üç seçenek (Cihaz bir dokunuşta kaybolmasın); bar ekranında bu cihazın bar tercihi
+    <div className={cn(drawerRow, 'flex-wrap gap-y-2 hover:pl-0.5')} style={{ animationDelay: `${120 + items.length * 35}ms` }}>
+      <DrawerLabel hint={onBar ? 'Bu cihazda saklanır' : undefined}>{onBar ? 'Bar teması' : 'Tema'}</DrawerLabel>
+      <span className="[--admin-surface:var(--band-2)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:var(--band)] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--hover:rgb(255_255_255/0.08)]">
+        {onBar ? (
+          <Segmented<KdsTheme>
+            label="Bar ekranı teması"
+            value={barDark ? 'koyu' : 'acik'}
+            onChange={setBarTheme}
+            options={[
+              { value: 'acik', label: 'Açık' },
+              { value: 'koyu', label: 'Koyu' },
+            ]}
+          />
+        ) : (
+          <Segmented<typeof theme>
+            label="Tema"
+            value={theme}
+            onChange={setTheme}
+            options={[
+              { value: 'acik', label: 'Açık' },
+              { value: 'koyu', label: 'Koyu' },
+              { value: 'sistem', label: 'Cihaz' },
+            ]}
+          />
+        )}
+      </span>
+    </div>
+  );
+
+  return (
+    // Kitin kabuğu: üstte buzlu çubuk (marka, ana ekranlar, durum, Araçlar), altında ekranın sahnesi. Telefonda üst şerit
+    // ve alt sekme çubuğu. Yatay telefonda çentik yanlarda: kök kapsayıcı yan güvenli alanı bırakır
+    <div className="flex h-full flex-col bg-bg pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+      {/* Tablet ve bilgisayar: üst çubuk (kitin .rail'i) */}
+      <header className="relative z-30 hidden h-16 shrink-0 items-center gap-3 px-3 md:flex lg:gap-4 lg:px-4">
+        <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="flex shrink-0 items-center gap-2.5 rounded-[10px]">
+          <LafTile size="md" />
+          <span className="hidden flex-col leading-none xl:flex">
+            <span className="font-headline text-[17px] font-bold tracking-[-0.03em]">L’Affogato</span>
+            <span className="mt-1 text-[11.5px] text-muted">LafPOS · {roleLabel}</span>
+          </span>
         </NavLink>
-        {/* 768 px yüksek ekranda (yatay tablet, dizüstü) on ekran da sığsın: alçak ekranda satır boşluğu kalkar (46 px) */}
-        <nav
-          ref={railNav}
-          aria-label="Ekranlar"
-          data-more={railMore || undefined}
-          className="scroll-thin flex w-full flex-1 flex-col items-center gap-0.5 overflow-y-auto px-2 data-[more]:[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_28px),transparent)]"
-        >
-          {items.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              title={n.title}
-              aria-label={navAriaLabel(n)}
-              className={({ isActive }) =>
-                cn(
-                  'group flex w-full flex-col items-center gap-0.5 rounded-xl py-0.5 text-[11px] font-medium transition-colors duration-150 [@media(max-height:860px)]:py-0',
-                  on(n.to, isActive) ? 'text-ink' : 'text-muted hover:text-ink',
-                )
-              }
-            >
+        <nav ref={railNav} aria-label="Ekranlar" className="relative ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-hidden lg:ml-3">
+          {/* Ölçü kopyası: bağlantıların genişliği buradan okunur, sığmayanlar Araçlar'da (görünmez, okunmaz) */}
+          <span ref={measure} aria-hidden="true" className="pointer-events-none invisible absolute left-0 top-0 flex gap-1 whitespace-nowrap">
+            {items.map((n) => (
+              <span key={n.to} className={NAV_LINK}>
+                {navText(n)}
+              </span>
+            ))}
+          </span>
+          {shown.map((n) => (
+            <NavLink key={n.to} to={n.to} title={n.title} aria-label={navText(n) === n.label ? navAriaLabel(n) : undefined} className={({ isActive }) => cn(NAV_LINK, 'shrink-0', on(n.to, isActive) && NAV_ON)}>
+              {navText(n)}
+            </NavLink>
+          ))}
+        </nav>
+        <div className="flex shrink-0 items-center gap-2">
+          {healthPill}
+          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full border border-[var(--admin-border-strong)] bg-surface text-ink-2 transition-colors duration-150 hover:border-[var(--admin-text)] hover:text-ink">
+            <Search className="size-[18px]" />
+          </button>
+          <span className="hidden min-w-0 flex-col items-end leading-tight 2xl:flex">
+            <span className="max-w-40 truncate text-[13.5px] font-semibold">{me.name}</span>
+            <span className="text-xs text-muted">{roleLabel}</span>
+          </span>
+          {/* Araçlar: kitin Tools düğmesi (mürekkep hap + yeşil ok halkası); kişinin menüsü ve sığmayan ekranlar */}
+          <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} className={buttonClass('primary', 'md', { ring: true, className: 'font-headline text-[15px]' })}>
+            <Avatar name={me.name} color={me.color} className="-ml-2.5 size-8 text-[11px] ring-2 ring-[color-mix(in_oklab,var(--admin-on-ink)_25%,transparent)]" />
+            Araçlar
+            {hidden.length > 0 && (
+              <span aria-hidden="true" className="tabular grid h-5 min-w-5 place-items-center rounded-full bg-[color-mix(in_oklab,var(--admin-on-ink)_18%,transparent)] px-1.5 text-[11.5px] font-semibold">
+                {hidden.length}
+              </span>
+            )}
+            <Ring />
+          </button>
+        </div>
+      </header>
+
+      {/* Telefon: üst şerit (adisyon, bar ve yönetimde yok: onların kendi şeridi var) */}
+      {!fullBleed && (
+        // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
+        <header className="flex items-center gap-0.5 bg-bg pb-1 pl-3 pr-1.5 pt-[max(0.25rem,env(safe-area-inset-top))] md:hidden">
+          <LafTile size="sm" />
+          <span className="ml-2.5 min-w-0 flex-1 truncate font-headline text-[17px] font-bold tracking-[-0.025em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
+          <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full text-ink-2 active:bg-press">
+            <Search className="size-5" />
+          </button>
+          {status()}
+          <button type="button" onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 place-items-center">
+            {avatar('sm')}
+          </button>
+        </header>
+      )}
+      {!REMOTE && <PlatformInbox />}
+      {notice && <div className="shrink-0">{notice}</div>}
+      {/* Alt sekme çubuğu yokken (tek ekranlı rol: kuryenin Siparişler'i) ev çubuğu payını ana alan bırakır */}
+      <main className={cn('min-h-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>
+        <div className="h-full md:px-3 md:pb-3 lg:px-4 lg:pb-4">{children}</div>
+      </main>
+      {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir. Etkin sekme mürekkep hapta (kitin seçimi) */}
+      {showTabs && (
+        <nav aria-label="Ekranlar" className="flex border-t border-line bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
+          {tabs.map((n) => (
+            <NavLink key={n.to} to={n.to} aria-label={navAriaLabel(n)} className={({ isActive }) => tab(on(n.to, isActive))}>
               {({ isActive }) => (
                 <>
-                  {/* Etkin ekran: yeşil hap içinde ikon (renk tek başına durum taşımaz: yazı da kalın) */}
-                  <span
-                    className={cn(
-                      'grid h-7 w-12 place-items-center rounded-full transition-colors duration-150',
-                      on(n.to, isActive) ? 'bg-primary text-primary-ink' : 'group-hover:bg-hover group-active:bg-press',
-                    )}
-                  >
-                    <n.icon className="size-5" />
+                  <span className={tabPill(on(n.to, isActive))}>
+                    <n.icon className={cn('size-[22px]', on(n.to, isActive) && 'stroke-[2.25]')} />
                   </span>
-                  <span className={cn('leading-4', on(n.to, isActive) && 'font-semibold')}>{n.label}</span>
+                  <span className="max-w-full truncate px-1">{n.label}</span>
                 </>
               )}
             </NavLink>
           ))}
-        </nav>
-        <div className="mt-2 flex flex-col items-center gap-1.5 border-t border-[var(--admin-divider)] px-2 pt-2">
-          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press">
-            <Search className="size-5" />
-          </button>
-          {status(true)}
-          <button type="button" onClick={() => setMenuOpen(true)} className="grid size-11 place-items-center rounded-full" title={me.name} aria-label={`${me.name} menüsü`}>
-            {avatar('md')}
-          </button>
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        {/* Telefon: üst şerit */}
-        {!fullBleed && (
-          // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
-          <header className="flex items-center gap-0.5 border-b border-line bg-surface pb-1 pl-4 pr-2 pt-[max(0.25rem,env(safe-area-inset-top))] md:hidden">
-            <LafMark className="h-4 shrink-0 text-ink" title="L'Affogato" />
-            <span className="ml-2.5 min-w-0 flex-1 truncate text-base font-semibold tracking-[-0.01em]">{current?.title ?? EXTRA_TITLES[location.pathname] ?? ''}</span>
-            <button type="button" onClick={() => setPalette(true)} aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-xl text-muted active:bg-press">
-              <Search className="size-5" />
-            </button>
-            {status()}
-            <button type="button" onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className="grid size-11 place-items-center">
-              {avatar('sm')}
-            </button>
-          </header>
-        )}
-        {!REMOTE && <PlatformInbox />}
-        {notice && <div className="shrink-0">{notice}</div>}
-        {/* Alt sekme çubuğu yokken (tek ekranlı rol: kuryenin Siparişler'i) ev çubuğu payını ana alan bırakır */}
-        <main className={cn('min-h-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>{children}</main>
-        {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir */}
-        {showTabs && (
-          <nav aria-label="Ekranlar" className="flex border-t border-line bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
-            {tabs.map((n) => (
-              <NavLink key={n.to} to={n.to} aria-label={navAriaLabel(n)} className={({ isActive }) => tab(on(n.to, isActive))}>
-                {({ isActive }) => (
-                  <>
-                    {/* Etkin sekme: ikon gri hapın içinde ve kalın (index.css svg.lucide 1.75'i sınıf ezer) */}
-                    <span className={tabPill(on(n.to, isActive))}>
-                      <n.icon className={cn('size-[22px]', on(n.to, isActive) && 'stroke-[2.25]')} />
-                    </span>
-                    <span className="max-w-full truncate px-1">{n.label}</span>
-                  </>
-                )}
-              </NavLink>
-            ))}
-            {more.length > 0 && (
-              <button type="button" onClick={() => setMoreOpen(true)} aria-current={moreHere ? 'page' : undefined} className={tab(moreActive)}>
-                <span className={tabPill(moreActive)}>
-                  <MoreHorizontal className={cn('size-[22px]', moreActive && 'stroke-[2.25]')} />
-                </span>
-                Daha
-              </button>
-            )}
-            {meTab && (
-              <button type="button" onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className={tab(false)}>
-                <span className={tabPill(false)}>{avatar('xs')}</span>
-                <span className="max-w-full truncate px-1">{me.name}</span>
-              </button>
-            )}
-          </nav>
-        )}
-      </div>
-
-      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="Diğer ekranlar" size="sm">
-        {/* Liste: ekranın tam adı (raydaki kısaltma değil), sağda ok */}
-        <div className="space-y-2 p-4">
-          {more.map((n) => (
-            <NavLink key={n.to} to={n.to} onClick={() => setMoreOpen(false)} className={({ isActive }) => cn(sheetRow, on(n.to, isActive) && 'border-[var(--admin-border-field)] bg-surface-3')}>
-              <span className={sheetIcon}>
-                <n.icon />
+          {more.length > 0 && (
+            <button type="button" onClick={() => setMoreOpen(true)} aria-current={moreHere ? 'page' : undefined} className={tab(moreActive)}>
+              <span className={tabPill(moreActive)}>
+                <MoreHorizontal className={cn('size-[22px]', moreActive && 'stroke-[2.25]')} />
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">{n.title}</span>
-              <ChevronRight className="size-4 shrink-0 text-muted" />
-            </NavLink>
-          ))}
-        </div>
-      </Modal>
+              Daha
+            </button>
+          )}
+          {meTab && (
+            <button type="button" onClick={() => setMenuOpen(true)} aria-label={`${me.name} menüsü`} className={tab(false)}>
+              <span className={tabPill(false)}>{avatar('xs')}</span>
+              <span className="max-w-full truncate px-1">{me.name}</span>
+            </button>
+          )}
+        </nav>
+      )}
 
-      <Modal
-        open={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        title={
-          // Dokunulan avatar başlıkta da: menünün kimin olduğu bir bakışta
-          <span className="flex min-w-0 items-center gap-2.5">
+      <ToolsDrawer
+        open={toolsOpen}
+        onClose={closeTools}
+        subtitle={
+          <span className="flex items-center gap-2.5">
             {avatar('sm')}
-            <span className="truncate">{me.name}</span>
+            <span className="truncate">
+              {me.name}
+              {menuSubtitle && <span className="text-[var(--band-muted)]"> · {menuSubtitle}</span>}
+            </span>
           </span>
         }
-        subtitle={menuSubtitle}
-        size="sm"
+        foot={`L’Affogato · LafPOS · ${dayText}${boot.day ? ' açık' : ''} · ${fmtTime(now)}`}
       >
-        <div className="space-y-2 p-4">
+        <DrawerGroup label="Ekranlar">{drawerRows}</DrawerGroup>
+        <DrawerGroup label="Bu cihaz ve oturum">
           {REMOTE && (
             // Uzaktan görünüm salt okunur; kasanın kendisi tarayıcı demosunda denenir (ayrı adres, ayrı veri)
-            <a href="/demo/" className={sheetRow}>
-              <span className={sheetIcon}>
-                <MonitorPlay />
-              </span>
-              <span>
-                <span className="block text-sm font-medium">Kasa ekranını dene</span>
-                <span className="block text-xs text-muted">Gerçek LafPOS tarayıcıda çalışır; PIN yok, veriler yalnız bu tarayıcıda</span>
-              </span>
+            <a href="/demo/" className={drawerRow}>
+              <DrawerLabel hint="Gerçek LafPOS tarayıcıda çalışır; PIN yok, veriler yalnız bu tarayıcıda">Kasa ekranını dene</DrawerLabel>
+              <DrawerArrow />
             </a>
           )}
           {/* Kilit ve çıkış tek satır: ikisi de oturumu kapatıp giriş ekranına döner */}
           {!REMOTE && (
-            <button type="button" onClick={lock} className={sheetRow}>
-              <span className={sheetIcon}>
-                <Lock />
-              </span>
-              <span>
-                <span className="block text-sm font-medium">Ekranı kilitle</span>
-                <span className="block text-xs text-muted">{DEMO ? 'Oturum kapanır; başka bir rolle devam edilir' : 'Oturum kapanır; sıradaki kişi PIN’iyle girer'}</span>
-              </span>
+            <button type="button" onClick={lock} className={drawerRow}>
+              <DrawerLabel hint={DEMO ? 'Oturum kapanır; başka bir rolle devam edilir' : 'Oturum kapanır; sıradaki kişi PIN’iyle girer'}>Ekranı kilitle</DrawerLabel>
+              <Lock aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />
             </button>
           )}
           {remoteSignOut && (
-            <button type="button" onClick={lock} className={sheetRow}>
-              <span className={sheetIcon}>
-                <LogOut />
-              </span>
-              <span>
-                <span className="block text-sm font-medium">Çıkış yap</span>
-                <span className="block text-xs text-muted">Bu tarayıcıdaki uzaktan oturum kapanır</span>
-              </span>
+            <button type="button" onClick={lock} className={drawerRow}>
+              <DrawerLabel hint="Bu tarayıcıdaki uzaktan oturum kapanır">Çıkış yap</DrawerLabel>
+              <LogOut aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />
             </button>
           )}
-          {/* Tema: üç seçenek (Cihaz bir dokunuşta kaybolmasın); bar ekranında bu cihazın bar tercihi */}
-          <div className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-line px-3 py-2.5">
-            <span className={sheetIcon}>{onBar ? <Moon /> : <SunMoon />}</span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">{onBar ? 'Bar ekranı' : 'Tema'}</span>
-              {onBar && <span className="block text-xs text-muted">Bu cihazda saklanır</span>}
-            </span>
-            {onBar ? (
-              <Segmented<KdsTheme>
-                label="Bar ekranı teması"
-                value={barDark ? 'koyu' : 'acik'}
-                onChange={setBarTheme}
-                options={[
-                  { value: 'acik', label: 'Açık' },
-                  { value: 'koyu', label: 'Koyu' },
-                ]}
-              />
-            ) : (
-              <Segmented<typeof theme>
-                label="Tema"
-                value={theme}
-                onChange={setTheme}
-                options={[
-                  { value: 'acik', label: 'Açık' },
-                  { value: 'koyu', label: 'Koyu' },
-                  { value: 'sistem', label: 'Cihaz' },
-                ]}
-              />
-            )}
-          </div>
+          {themeRow}
           {typeof document !== 'undefined' && document.fullscreenEnabled && (
-            <button type="button" onClick={toggleFull} className={sheetRow}>
-              <span className={sheetIcon}>{full ? <Shrink /> : <Expand />}</span>
-              <span>
-                <span className="block text-sm font-medium">{full ? 'Tam ekrandan çık' : 'Tam ekran'}</span>
-                <span className="block text-xs text-muted">{full ? 'Tarayıcının sekme ve adres çubuğu geri gelir' : 'Tarayıcının sekme ve adres çubuğu gizlenir'}</span>
-              </span>
+            <button type="button" onClick={toggleFull} className={drawerRow}>
+              <DrawerLabel hint={full ? 'Tarayıcının sekme ve adres çubuğu geri gelir' : 'Tarayıcının sekme ve adres çubuğu gizlenir'}>{full ? 'Tam ekrandan çık' : 'Tam ekran'}</DrawerLabel>
+              {full ? <Shrink aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" /> : <Expand aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />}
             </button>
           )}
-        </div>
-      </Modal>
+        </DrawerGroup>
+      </ToolsDrawer>
       <CommandPalette />
     </div>
   );

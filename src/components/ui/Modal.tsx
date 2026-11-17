@@ -112,10 +112,10 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         <div aria-hidden="true" className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-[var(--admin-border-field)]/50 sm:hidden" />
         {/* Başlık pencerenin tepesi: 18/700 (içerideki bölüm başlığı 16/600), kesilmez, dengeli kırılır; Kapat ilk satırda */}
         {(title || subtitle) && (
-          <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-5 py-3">
+          <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-5 py-3.5">
             <div className="min-w-0 flex-1">
               {title && (
-                <h2 id={titleId} className="text-lg font-bold leading-6 tracking-[-0.01em]">
+                <h2 id={titleId} className="font-headline text-xl font-extrabold leading-6 tracking-[-0.035em]">
                   {title}
                 </h2>
               )}
@@ -129,7 +129,7 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
           </div>
         )}
         <div className={cn('scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain', !footer && 'max-sm:pb-[env(safe-area-inset-bottom)]')}>{children}</div>
-        {footer && <div className="border-t border-[var(--admin-divider)] bg-surface-2 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
+        {footer && <div className="border-t border-[var(--admin-divider)] bg-surface px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">{footer}</div>}
       </div>
     </div>,
     document.body,

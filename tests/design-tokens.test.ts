@@ -4,9 +4,9 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * Renk değerlerinin erişilebilirliği (WCAG 2.2): okunan metin zeminde en az 4.5:1, alan kenarı ve odak halkası 3:1.
- * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı LafPOS Sade değerlerini kullanır (L'Affogato
- * kimliği, laffogato docs/BRAND.md; açık `:root`, koyu `.dark`; DESIGN.md); ortak adlar (`--bg`, `--ink`...) `--admin-*`'e bağlanır.
- * Test düşerse değeri düzelt, eşiği gevşetme.
+ * Değerler src/index.css'ten okunur. Kasa ekranları ve yönetim paneli aynı LafPOS Sahne değerlerini kullanır (gnbsite'ın
+ * Area Board kiti, L'Affogato kimliğinde; açık `:root`, koyu `.dark`; DESIGN.md); ortak adlar (`--bg`, `--ink`...)
+ * `--admin-*`'e bağlanır. Test düşerse değeri düzelt, eşiği gevşetme.
  */
 const css = readFileSync(join(__dirname, '../src/index.css'), 'utf8');
 
@@ -49,7 +49,7 @@ const posDark = resolver(block('.dark'), block(':root'));
 const adminLight = posLight;
 const adminDark = posDark;
 
-describe('kasa ekranları (LafPOS Sade)', () => {
+describe('kasa ekranları (LafPOS Sahne)', () => {
   for (const [name, get] of [
     ['açık', posLight],
     ['koyu', posDark],
@@ -63,7 +63,7 @@ describe('kasa ekranları (LafPOS Sade)', () => {
   }
 });
 
-describe('yönetim paneli (LafPOS Sade)', () => {
+describe('yönetim paneli (LafPOS Sahne)', () => {
   const tones = [
     ['primary', 'primary-soft'],
     ['blue', 'blue-soft'],
@@ -86,13 +86,24 @@ describe('yönetim paneli (LafPOS Sade)', () => {
   ] as const) {
     it(`${name}: metin gri zeminde, kartta ve kuyuda okunur`, () => {
       for (const text of ['admin-text', 'admin-text-soft', 'admin-text-mute']) {
-        for (const ground of ['admin-bg', 'admin-surface', 'admin-surface-2', 'admin-panel']) expect(contrast(get(text), get(ground)), `${text}/${ground}`).toBeGreaterThanOrEqual(4.5);
+        // Sahne (gri ve sol sütun) de okunan metnin zemini: durum cümlesi, numaralı menü, büyük sayıların etiketi
+        for (const ground of ['admin-bg', 'admin-stage', 'admin-surface', 'admin-surface-2', 'admin-panel']) expect(contrast(get(text), get(ground)), `${text}/${ground}`).toBeGreaterThanOrEqual(4.5);
       }
+    });
+    it(`${name}: ana eylem (mürekkep hap) ve ok halkası seçilir`, () => {
+      // Halka mürekkep düğmenin üstünde 3:1 (grafik nesne), halkadaki ok halkanın üstünde 3:1
+      expect(contrast(get('ok-ring'), get('admin-ink-fill')), 'halka düğmede').toBeGreaterThanOrEqual(3);
+      expect(contrast(get('ok-arrow'), get('ok-ring')), 'ok halkada').toBeGreaterThanOrEqual(3);
+      // Zamanı daralan (bordo): yumuşak zemininde ve sahnede okunur
+      expect(contrast(get('admin-signal'), get('admin-signal-soft')), 'bordo yumuşak zeminde').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-signal'), get('admin-stage')), 'bordo sahnede').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-signal'), get('admin-surface')), 'bordo yaprakta').toBeGreaterThanOrEqual(4.5);
     });
     it(`${name}: birincil (ev yeşili) hem düğmede hem bağlantıda`, () => {
       expect(contrast(get('admin-on-primary'), get('admin-primary')), 'düğme yazısı').toBeGreaterThanOrEqual(4.5);
       expect(contrast(get('admin-primary'), get('admin-surface')), 'bağlantı kartta').toBeGreaterThanOrEqual(4.5);
       expect(contrast(get('admin-primary'), get('admin-bg')), 'bağlantı porselen zeminde').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('admin-primary'), get('admin-stage')), 'bağlantı sahnede').toBeGreaterThanOrEqual(4.5);
     });
     it(`${name}: her durum tonu ve grup rengi kendi açık zemininde AA`, () => {
       for (const [fg, bg] of tones) expect(contrast(get(`admin-${fg}`), get(`admin-${bg}`)), `${fg}/${bg}`).toBeGreaterThanOrEqual(4.5);
@@ -101,7 +112,7 @@ describe('yönetim paneli (LafPOS Sade)', () => {
       expect(contrast(get('admin-border-field'), get('admin-surface'))).toBeGreaterThanOrEqual(3);
     });
     it(`${name}: odak halkası (ev yeşili) kartta ve zeminde seçilir (3:1)`, () => {
-      for (const ground of ['admin-surface', 'admin-bg', 'admin-surface-2', 'admin-panel']) expect(contrast(get('focus'), get(ground)), ground).toBeGreaterThanOrEqual(3);
+      for (const ground of ['admin-surface', 'admin-bg', 'admin-stage', 'admin-surface-2', 'admin-panel']) expect(contrast(get('focus'), get(ground)), ground).toBeGreaterThanOrEqual(3);
     });
     it(`${name}: mürekkep düğme (ödeme) ve pirinç dolgu okunur`, () => {
       expect(contrast(get('admin-on-ink'), get('admin-ink-fill')), 'mürekkep düğme').toBeGreaterThanOrEqual(4.5);
@@ -114,22 +125,28 @@ describe('yönetim paneli (LafPOS Sade)', () => {
     });
   }
 
-  it('kasa ekranları da LafPOS Sade: adlar laffogato.net değerlerine bağlı (porselen zemin, ev yeşili birincil)', () => {
-    expect(posLight('bg')).toBe('#f7f3ed');
+  it('kasa ekranları da LafPOS Sahne: porselen sayfa, sütlü köpük sahne, espresso mürekkep, ev yeşili', () => {
+    expect(posLight('bg')).toBe('#f4f1ec');
     expect(posLight('primary')).toBe('#1d6d56');
-    expect(posLight('ink')).toBe('#211c18');
+    expect(posLight('ink')).toBe('#17130f');
     expect(posDark('primary')).toBe('#5cc9a2');
   });
 
-  it('sitenin paleti (laffogato docs/BRAND.md §1; DESIGN.md §2 tablosu)', () => {
-    expect(adminLight('admin-bg')).toBe('#f7f3ed');
-    expect(adminLight('admin-surface-2')).toBe('#fbf8f4');
-    expect(adminLight('admin-panel')).toBe('#f2ece4');
+  it('LafPOS Sahne paleti (DESIGN.md §2 tablosu): kitin ton merdiveni L’Affogato ısısında', () => {
+    expect(adminLight('admin-bg')).toBe('#f4f1ec');
+    expect(adminLight('admin-stage')).toBe('#eae4dc');
+    expect(adminLight('admin-surface')).toBe('#ffffff');
+    expect(adminLight('admin-surface-2')).toBe('#faf8f5');
+    expect(adminLight('admin-panel')).toBe('#f0ebe5');
     expect(adminLight('admin-primary')).toBe('#1d6d56');
     expect(adminLight('admin-primary-hover')).toBe('#165543');
-    expect(adminLight('admin-text')).toBe('#211c18');
-    expect(adminLight('admin-text-soft')).toBe('#564d46');
-    expect(adminLight('admin-text-mute')).toBe('#675e56');
+    expect(adminLight('admin-text')).toBe('#17130f');
+    expect(adminLight('admin-text-soft')).toBe('#4b433c');
+    expect(adminLight('admin-text-mute')).toBe('#665d55');
+    expect(adminLight('admin-ink-fill')).toBe('#1a1714');
+    expect(adminLight('ok-ring')).toBe('#2f9e7a');
+    // Zamanı daralan kitte magenta; kasada sitenin bordosu
+    expect(adminLight('admin-signal')).toBe('#9d2543');
     expect(adminLight('admin-border-field')).toBe('#877d74');
     expect(adminLight('admin-blue')).toBe('#3442b8');
     expect(adminLight('admin-gold-fill')).toBe('#e8c877');
@@ -188,11 +205,12 @@ describe('yönetim paneli (LafPOS Sade)', () => {
 });
 
 /**
- * Köşe ve gölge belirteçleri (DESIGN.md §2 "Biçim", §4 "Kurumsal yüzey"): kasa ekranları bugünkü yumuşak değerlerle
- * (:root), yönetim ve raporlar kurumsal kapsamda (.surface-corporate, portal için :root[data-area='admin']). Ortak kit
- * köşeyi belirteçten okur; sayfaların rounded-xl / rounded-2xl'si Tailwind'in köşe değişkeniyle kapsamda küçülür.
+ * Köşe ve gölge belirteçleri (DESIGN.md §2 "Biçim"; gnbsite Area Board kitinin yarıçap merdiveni): kasa ve yönetim aynı
+ * sahne dilinde (sahne 28, yaprak 24, cam çubuk 22, kart 18, alan 12; düğme, çip, rozet ve segment hap). Ortak kit köşeyi
+ * belirteçten okur; sayfaların rounded-xl / rounded-2xl'si Tailwind'in köşe değişkeniyle aynı merdivene uyar. Gölge yalnız
+ * açılan ve yüzen parçada (kart çok hafif, sıcak toprak).
  */
-describe('köşe ve gölge belirteçleri, kurumsal yüzey', () => {
+describe('köşe ve gölge belirteçleri, sahne', () => {
   const src = (f: string) => readFileSync(join(__dirname, '../src', f), 'utf8');
   const tokens = (() => {
     const at = css.indexOf(':root {\n  --r-card:');
@@ -200,37 +218,30 @@ describe('köşe ve gölge belirteçleri, kurumsal yüzey', () => {
     const body = css.slice(at, css.indexOf('}', at));
     return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
   })();
-  const corporate = block(".surface-corporate,\n:root[data-area='admin']");
 
-  it('kasa ekranlarının değerleri bugünkü gibi: kart 20, alan 14, düğme, çip ve segment kapsül, sütun 4', () => {
-    expect(tokens).toMatchObject({ 'r-card': '1.25rem', 'r-control': '0.875rem', 'r-btn': '9999px', 'r-chip': '9999px', 'r-segment': '9999px', 'r-bar': '4px', 'r-track': '9999px' });
-    expect(block('@theme')).toMatchObject({ 'radius-xl': '0.875rem', 'radius-2xl': '1.25rem' });
+  it('kitin merdiveni: sahne 28, yaprak 24, cam 22, kart 18, alan 12; düğme, çip ve segment hap, sütun 3', () => {
+    expect(tokens).toMatchObject({
+      'r-stage': '1.75rem',
+      'r-leaf': '1.5rem',
+      'r-glass': '1.375rem',
+      'r-card': '1.125rem',
+      'r-control': '0.75rem',
+      'r-btn': '9999px',
+      'r-chip': '9999px',
+      'r-segment': '9999px',
+      'r-bar': '3px',
+      'r-track': '9999px',
+    });
+    expect(block('@theme')).toMatchObject({ 'radius-xl': '0.75rem', 'radius-2xl': '1.125rem', 'radius-3xl': '1.5rem' });
     expect(block('@theme')['shadow-card']).toMatch(/rgb\(59 42 30/);
   });
 
-  it('kurumsal yüzey: kart, tablo, alan, düğme, segment 6; çip ve rozet 4; gölge yok; çubuk köşesiz', () => {
-    expect(corporate).toMatchObject({
-      'radius-lg': '6px',
-      'radius-xl': '6px',
-      'radius-2xl': '6px',
-      'r-card': '6px',
-      'r-control': '6px',
-      'r-btn': '6px',
-      'r-chip': '4px',
-      'r-segment': '6px',
-      'r-bar': '0px',
-      'r-track': '0px',
-      'shadow-card': 'none',
-      'shadow-lift': 'none',
-      rim: 'none',
-      'table-head-bg': 'transparent',
-    });
-  });
-
-  it('kapsam yönetim kabuğunun kökünde (raporlar da aynı kabukta); kasa ekranlarında yok', () => {
-    expect(src('components/admin/AdminShell.tsx')).toMatch(/className="surface-corporate /);
+  it('kurumsal yüzey yok: yönetim ve raporlar kasayla aynı sahnede (Stage), köşeler küçülmez', () => {
+    expect(css).not.toContain('.surface-corporate');
+    expect(src('components/admin/AdminShell.tsx')).not.toContain('surface-corporate');
+    expect(src('components/admin/AdminShell.tsx')).toMatch(/<Stage\b/);
     expect(src('pages/reports/ReportsPage.tsx')).toMatch(/<AdminShell title="Raporlar">/);
-    for (const f of ['components/AppShell.tsx', 'pages/order/OrderPage.tsx', 'pages/FloorPage.tsx', 'pages/cash/CashPage.tsx']) expect(src(f), f).not.toContain('surface-corporate');
+    for (const f of ['pages/FloorPage.tsx', 'pages/patron/PatronPage.tsx', 'pages/cash/CashPage.tsx', 'pages/OrdersPage.tsx']) expect(src(f), f).toMatch(/<Stage\b/);
   });
 
   it('ortak kit köşeyi belirteçten okur (kapsül sabit değil)', () => {
@@ -251,13 +262,20 @@ describe('köşe ve gölge belirteçleri, kurumsal yüzey', () => {
     expect(charts).toContain('rounded-[var(--r-track)]');
   });
 
+  it('ana eylem kitin düğmesi: mürekkep hap ve sağında ok halkası (primary ve ink), kare ikon düğmesinde halka yok', () => {
+    const button = src('components/ui/Button.tsx');
+    expect(button).toMatch(/const RING: ButtonVariant\[\] = \['primary', 'ink'\];/);
+    expect(button).toMatch(/primary: INK,\s*ink: INK,/);
+    expect(button).toContain('<span aria-hidden="true" className="lp-ring">');
+    expect(button).toMatch(/ring=\{false\} className=\{cn\(squares\[size\], className\)\}/);
+    expect(css).toMatch(/\.lp-ring \{[^}]*background: var\(--ok-ring\);/);
+  });
+
   it('kasa ekranının yönetimdeki birebir önizlemesi kasa köşelerinde (surface-soft = @theme köşeleri ve :root --r-*)', () => {
     const soft = block('.surface-soft');
     const theme = block('@theme');
     for (const k of ['radius-lg', 'radius-xl', 'radius-2xl', 'radius-3xl']) expect(soft[k], k).toBe(theme[k]);
     for (const k of ['r-card', 'r-control', 'r-btn', 'r-chip', 'r-segment', 'r-bar', 'r-track']) expect(soft[k], k).toBe(tokens[k]);
-    // Kurumsalın bütün köşe değişkenleri geri alınır (gölgeye dokunulmaz: önizlenen ekranın kendi gölgesi var)
-    for (const k of Object.keys(corporate).filter((k) => k.startsWith('radius-') || k.startsWith('r-'))) expect(soft, k).toHaveProperty(k);
     expect(src('components/display/CustomerDisplayView.tsx')).toMatch(/className=\{cn\('surface-soft relative h-full w-full/);
   });
 
@@ -272,10 +290,23 @@ describe('köşe ve gölge belirteçleri, kurumsal yüzey', () => {
     expect(src('pages/reports/ReportsPage.tsx')).not.toContain('<tr className="bg-[var(--admin-surface-2)]">');
   });
 
-  it('kenar çubuğu: etkin öğede dolgu kapsül yok, 2 px yeşil sol çizgi ve kalın yazı; gruplar arası ince ayraç', () => {
+  it('yan menü shadcn düzeninde sade: grup başlığı, ikonlu satır, seçili satır beyaz yüzeyde; numara yok (operatör, 17 Kas 2026)', () => {
     const shell = src('components/admin/AdminShell.tsx');
-    expect(shell).toContain("'relative font-semibold text-[var(--admin-text)] before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:bg-[var(--admin-primary)]'");
-    expect(shell).not.toContain("isActive ? 'bg-[var(--admin-panel)]");
-    expect(shell).toContain("!narrow && gi > 0 && 'border-t border-[var(--admin-border)] pt-3'");
+    expect(shell).toContain('<div className="lp-menu lp-menu-col">');
+    expect(shell).toContain('<span className="lp-menu-label">{g.label}</span>');
+    expect(shell).toMatch(/\{icon && <sec\.icon aria-hidden="true" \/>\}/);
+    // Sol sütun yalnız gezinme; başlık, açıklama ve eylemler yaprağın başında
+    expect(shell).toMatch(/<Stage\s+\/\/[^\n]*\n[^<]*headerInLeaf/);
+    expect(shell).toMatch(/<div ref=\{strip\} className=\{cn\('lp-menu', RAIL_FADE\)\}>/);
+    expect(css).not.toMatch(/counter\(/);
+    const selected = css.slice(css.indexOf(":where(.lp-split > .lp-side) .lp-menu-item:is([aria-current='page']"));
+    expect(selected.slice(0, selected.indexOf('}'))).toMatch(/background: var\(--admin-surface\);[\s\S]*box-shadow: 0 1px 2px rgb\(59 42 30 \/ 0\.06\);/);
+  });
+
+  it('dev büyük harfli ad yok: ekranın başlığı ölçülü, büyük harf dönüşümü yok (operatör, 17 Kas 2026)', () => {
+    const name = css.slice(css.indexOf('  .lp-name {'), css.indexOf('}', css.indexOf('  .lp-name {')));
+    expect(name).not.toMatch(/text-transform/);
+    expect(name).toMatch(/font: 700 1\.375rem\/1\.1 var\(--font-headline\);/);
+    for (const f of ['components/ui/Stage.tsx', 'components/ui/misc.tsx', 'components/admin/ui.tsx', 'components/ToolsDrawer.tsx', 'pages/FloorPage.tsx', 'pages/order/OrderPage.tsx']) expect(src(f), f).not.toMatch(/\buppercase\b/);
   });
 });

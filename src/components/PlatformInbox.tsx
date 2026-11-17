@@ -93,15 +93,18 @@ export function PlatformInbox() {
   const waiting = waitingOrders.length;
   return (
     <>
-      {/* Şerit: telefonda üst şeridin altında tam genişlik; tablet ve bilgisayarda ekranın kartları gibi yuvarlak, altında
-          boşlukla (bar kartına yapışıktı). Yazı mürekkepte, renk ikonda ve geri sayımda (kitin Notice dili) */}
+      {/* Şerit (kitin "N waiting in Review" hapı): zamanı daralan iş magenta yıkamada, başında dolu magenta daire;
+          telefonda üst şeridin altında tam genişlik, tablet ve bilgisayarda sahnenin üstünde hap. Yazı mürekkepte, geri
+          sayım sağda */}
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex min-h-11 w-full shrink-0 items-center gap-2 border-b border-warning-line bg-warning-soft px-4 py-1.5 text-left text-sm text-ink transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95 md:mb-3 md:rounded-2xl md:border"
+        className="flex min-h-11 w-full shrink-0 items-center gap-2.5 border-b border-signal-line bg-signal-soft py-1.5 pl-3 pr-4 text-left text-sm text-ink transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95 md:mx-3 md:mb-3 md:w-auto md:rounded-full md:border md:pl-2 lg:mx-4"
       >
-        <Bell aria-hidden="true" className="size-4 shrink-0 text-warning-ink" />
-        <span className="min-w-0 flex-1 truncate font-medium">
+        <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-signal)] text-[var(--admin-surface)]">
+          <Bell className="size-3.5 stroke-[2.25]" />
+        </span>
+        <span className="min-w-0 flex-1 truncate font-semibold text-signal-ink">
           {waiting === 0 ? 'Platform iptal etti: kasadaki ödemeyi geri alın' : waiting === 1 ? 'Platform siparişi onay bekliyor' : `${waiting} platform siparişi onay bekliyor`}
           {waiting > 0 && cancelOrders.length > 0 && <span className="font-normal"> · {cancelOrders.length} iptal: ödemeyi geri alın</span>}
           <span className="font-normal text-ink-2 max-sm:hidden">
@@ -109,8 +112,8 @@ export function PlatformInbox() {
             · {PLATFORM_LABEL[first.platform]} {first.payload.code} · {tl(first.payload.customerTotal)}
           </span>
         </span>
-        {first.expiresAt && first.status === 'bekliyor' && !first.announced && !first.payload.preAccepted && <Countdown expiresAt={first.expiresAt} now={now} calm="text-warning-ink" short />}
-        <span className="shrink-0 font-semibold underline underline-offset-2">Gör</span>
+        {first.expiresAt && first.status === 'bekliyor' && !first.announced && !first.payload.preAccepted && <Countdown expiresAt={first.expiresAt} now={now} calm="text-signal-ink" short />}
+        <span className="shrink-0 font-semibold text-signal-ink underline underline-offset-2">Gör</span>
       </button>
       <Modal open={open} onClose={() => setOpen(false)} title={waiting && cancelOrders.length ? 'Platform siparişleri' : waiting ? 'Onay bekleyen platform siparişleri' : 'Platformun iptal ettiği siparişler'} size="md">
         <div className="space-y-3 p-4">

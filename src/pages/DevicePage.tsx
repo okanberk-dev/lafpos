@@ -7,6 +7,7 @@ import { fmtTime } from '@shared/time';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Input, Select } from '@/components/ui/Field';
 import { Badge, Card, EmptyState, ErrorState, ListSkeleton, PageHeader } from '@/components/ui/misc';
+import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
@@ -147,7 +148,8 @@ export default function DevicePage() {
   const splitTotal = (split ?? []).reduce((a, s) => a + (parseTL(s.amount) ?? 0), 0);
 
   return (
-    <div className="scroll-thin h-full overflow-y-auto p-4 md:p-6">
+    <Stage leafLabel="Eğitim cihazı">
+    <div className="lp-leaf-pad">
       <PageHeader title="Eğitim cihazı" subtitle="Token ÖKC benzeri: kasadan gönderilen sepetler burada ödenir. Gerçek cihaz bağlanınca bu ekran kullanılmaz" />
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,420px)_1fr]">
         {/* Cihazın çerçevesi gece mürekkebi; ekran uygulamanın temasında. İnce açık halka çerçeveyi koyu sayfadan ayırır */}
@@ -320,5 +322,6 @@ export default function DevicePage() {
         </div>
       </div>
     </div>
+    </Stage>
   );
 }

@@ -5,6 +5,7 @@ import { cn } from '@/lib/cn';
 import { Illustration, type IllustrationName } from '../Illustration';
 import { Button } from './Button';
 import { initialsInk } from './initials';
+import { useStageHeader } from './Stage';
 
 export { initialsInk };
 
@@ -92,11 +93,11 @@ export function Avatar({ name, color, className, children }: { name: string; col
  */
 export function Card({ children, className, title, subtitle, actions, divided = true }: { children: ReactNode; className?: string; title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; divided?: boolean }) {
   return (
-    <section className={cn('rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]', className)}>
+    <section className={cn('rounded-2xl border border-line bg-surface', className)}>
       {(title || actions) && (
         <header className={cn('flex min-h-[52px] items-center gap-3 px-4', divided ? 'border-b border-[var(--admin-divider)] py-2.5' : 'pb-1 pt-4')}>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[15px] font-semibold leading-6">{title}</h3>
+            <h3 className="truncate text-base font-bold leading-6 tracking-[-0.025em]">{title}</h3>
             {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
           </div>
           {actions}
@@ -167,7 +168,7 @@ export function EmptyState({
           {icon}
         </span>
       )}
-      <p className={cn('text-balance font-headline text-ink', compact ? 'text-[15px] font-semibold' : large ? 'text-xl font-bold' : 'text-base font-bold')}>{title}</p>
+      <p className={cn('text-balance font-headline tracking-[-0.025em] text-ink', compact ? 'text-base font-bold' : large ? 'text-2xl font-extrabold' : 'text-lg font-bold')}>{title}</p>
       {children && <div className={cn('max-w-[36ch] text-pretty text-muted', compact ? 'mt-0.5 text-[13px]' : large ? 'mt-1.5 text-[15px]' : 'mt-1 text-[13px] leading-relaxed')}>{children}</div>}
       {action && <div className={compact ? 'mt-3' : 'mt-4'}>{action}</div>}
     </div>
@@ -253,7 +254,7 @@ const noticeTones: Record<NoticeTone, { box: string; icon: string; Icon: typeof 
 export function Notice({ tone = 'warn', icon, title, action, children, className, role }: { tone?: NoticeTone; icon?: ReactNode; title?: ReactNode; action?: ReactNode; children?: ReactNode; className?: string; role?: 'status' | 'alert' | 'note' }) {
   const t = noticeTones[tone];
   return (
-    <div role={role} className={cn('flex items-start gap-3 rounded-xl border px-4 py-3 text-sm text-ink', t.box, className)}>
+    <div role={role} className={cn('flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm text-ink', t.box, className)}>
       <span aria-hidden="true" className={cn('mt-0.5 shrink-0 [&>svg]:size-4', t.icon)}>
         {icon ?? <t.Icon />}
       </span>
@@ -310,7 +311,7 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
   return (
     <div
       className={cn(
-        '@container rounded-2xl border p-4 shadow-[var(--shadow-card)]',
+        '@container rounded-2xl border p-4',
         tone === 'bad'
           ? 'border-[var(--admin-danger-line)] bg-[var(--admin-danger-soft)]'
           : tone === 'ok'
@@ -324,7 +325,7 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
       <div className="text-[13px] font-medium text-muted">{label}</div>
       <div
         style={fitFigure(value)}
-        className={cn('tabular mt-1.5 whitespace-nowrap font-headline font-bold leading-none tracking-[-0.02em]', strong ? 'text-[length:min(34px,var(--fit,17cqi))]' : 'text-[length:min(28px,var(--fit,17cqi))]')}
+        className={cn('tabular mt-2 whitespace-nowrap font-headline font-bold leading-[0.9] tracking-[-0.045em]', strong ? 'text-[length:min(40px,var(--fit,17cqi))]' : 'text-[length:min(30px,var(--fit,17cqi))]')}
       >
         {value}
       </div>
@@ -334,17 +335,21 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
 }
 
 /**
- * Sayfa başlığı: Gabarito 22/700 (telefonda 20) ve 13 px açıklama; kasa ve yönetimde aynı ölçek (admin/ui.tsx PageHeader ile).
+ * Sayfa başlığı. Sahnenin içindeyse (Stage.tsx) başlık ve açıklama sol sütunun başına, eylemler tek ana eylemin yeri
+ * olur (portal; geniş ekranda solda, dar ekranda yaprağın üstündeki şerit). Sahne dışında ölçülü başlık: Gabarito 700,
+ * sıkı aralık (telefonda 22, geniş ekranda 26 px) ve 13 px açıklama.
  * `compactOnPhone`: telefonda (md altı) başlık ve açıklama yalnız ekran okuyucuda; ekranın adını kabuğun üst şeridi
- * zaten yazar (yönetimdeki PageHeader gibi); eylem yoksa alt boşluk da kalkar
+ * zaten yazar; eylem yoksa alt boşluk da kalkar
  */
 export function PageHeader({ title, subtitle, actions, compactOnPhone }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; compactOnPhone?: boolean }) {
+  const staged = useStageHeader({ title, subtitle, actions, compactOnPhone });
+  if (staged) return staged;
   return (
     <div className={cn('flex flex-col gap-3 pb-4 sm:flex-row sm:flex-wrap sm:items-end', compactOnPhone && !actions && 'max-md:pb-0')}>
       {/* Başlığın taban genişliği 18rem: eylemler sığmazsa alt satıra iner, açıklama düğmelerin yanında dar sütuna ezilmez */}
       <div className={cn('min-w-0 sm:flex-[1_1_18rem]', compactOnPhone && 'max-md:sr-only')}>
-        <h1 className="text-xl font-bold sm:text-[22px]">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
+        <h1 className="font-headline text-[22px] font-bold leading-tight tracking-[-0.03em] sm:text-[26px]">{title}</h1>
+        {subtitle && <p className="mt-1.5 text-pretty text-[13px] text-muted">{subtitle}</p>}
       </div>
       {/* Telefonda eylemler kendi satırında, eşit genişlikte; geniş ekranda sağda */}
       {actions && <div className="flex flex-wrap items-center gap-2 max-sm:[&>*]:flex-1">{actions}</div>}
@@ -413,7 +418,7 @@ export const RAIL_FADE =
   'data-[fade-end]:[mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] data-[fade-start]:[mask-image:linear-gradient(to_left,#000_calc(100%_-_24px),transparent)] data-[fade-start]:data-[fade-end]:[mask-image:linear-gradient(to_right,transparent,#000_24px,#000_calc(100%_-_24px),transparent)]';
 
 /**
- * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri): hap biçimi, etkin olan gri zeminde ve kalın, renksiz;
+ * Bölüm sekmesi (bölümler, istasyonlar, sipariş listeleri; kitin .tab'ı): hap biçimi, etkin olan mürekkep hapta ve kalın;
  * diğerleri düz; sayı hapı sıfırsa gizli. Dar ekranda ray yatay kayar, çipler kırılmaz; seçili sekme rayın içinde
  * görünür kalır, içeriğin gizlendiği kenar solar (useRail); odak halkası çipin içinde. Sayılı filtre çipi (koyu
  * kenarlı seçili) yönetimdeki StatusTabs'tır.
@@ -448,14 +453,14 @@ export function Tabs<T extends string>({
             className={cn(
               'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[var(--r-segment)] px-3.5 text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press [[data-area=admin]_&]:text-[13px]',
               size === 'sm' ? 'min-h-9 pointer-coarse:min-h-11' : 'min-h-11 pointer-fine:min-h-9',
-              on ? 'bg-surface-3 font-semibold text-ink' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
+              on ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
             )}
           >
             {o.icon}
             {o.label}
             {!!o.count && (
               // Etkin sekmenin sayısı beyaz hap (gri zeminde); yeşil dolu hap "N hazır"ın, sayı onunla karışmasın
-              <span className={cn('tabular min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium', on ? 'bg-surface text-ink shadow-[var(--rim)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
+              <span className={cn('tabular min-w-5 rounded-[var(--r-chip)] px-1.5 py-px text-center text-xs font-medium', on ? 'bg-[color-mix(in_oklab,var(--admin-on-ink)_18%,transparent)] text-[var(--admin-on-ink)]' : 'bg-surface-3 text-ink-2')}>{o.count}</span>
             )}
           </button>
         );

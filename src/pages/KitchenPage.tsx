@@ -169,16 +169,17 @@ export default function KitchenPage() {
   );
 
   return (
-    <div className="flex h-full flex-col gap-3 bg-bg p-2 md:p-0" onPointerDown={unlockAudio}>
-      {/* Başlık kartı iki satır: üstte ad, sayaçlar ve araçlar; altta istasyon sekmeleri (telefonda kayar) */}
-      <div className="rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]">
+    // Kitin sahnesi (Whiteboard düzeni): gri sahnede üstte cam çubuk, altında sayaç şeridi ve fiş ızgarası
+    <div className="lp-stage gap-3" onPointerDown={unlockAudio}>
+      {/* Cam çubuk iki satır: üstte ad, sayaçlar ve araçlar; altta istasyon sekmeleri (telefonda kayar) */}
+      <div className="lp-glass block p-0">
         <div className="flex items-center gap-2 px-3 py-2 md:px-4 md:py-2.5">
           {/* Telefonda ikon yok; Fişler'de başlık da yalnız ekran okuyucuya (alt sekme "Bar" diyor): sayaçların yeri, iki
               sayaç birlikteyken başlık "B…"ya iniyordu */}
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-surface-3 text-ink-2 max-sm:hidden">
-            <ChefHat className="size-5" />
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)] max-sm:hidden">
+            <ChefHat className="size-[18px]" />
           </span>
-          <h1 className={cn('min-w-0 truncate text-lg font-semibold', view === 'aktif' && 'max-sm:sr-only')}>Bar ve mutfak</h1>
+          <h1 className={cn('min-w-0 truncate font-headline text-xl font-bold tracking-[-0.03em]', view === 'aktif' && 'max-sm:sr-only')}>Bar ve mutfak</h1>
           <div className="flex-1" />
           {view === 'aktif' && (
             // Renk dili: bekliyor nötr, hazırlanıyor mavi, hazır yeşil; amber yalnız zaman (gecikme, planlı saat)
@@ -556,7 +557,7 @@ function Count({ icon, label, value, tone }: { icon: React.ReactNode; label: str
         </span>
         {label}
       </dt>
-      <dd className={cn('tabular font-headline text-[26px] font-bold leading-tight', value > 0 ? color : 'text-muted')}>{value}</dd>
+      <dd className={cn('tabular mt-1 font-headline text-[34px] font-bold leading-none tracking-[-0.045em]', value > 0 ? color : 'text-muted')}>{value}</dd>
     </div>
   );
 }
