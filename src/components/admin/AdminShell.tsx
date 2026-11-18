@@ -126,8 +126,8 @@ export function AdminShell({ title, children }: { title: string; children: React
   );
   // Sütunun dibi (shadcn'in SidebarFooter'ı): kasaya dönüş ve sıkı görünüm
   const tools = (
-    <div className="flex w-full items-center gap-1 border-t border-[var(--menu-rule)] pt-2 max-md:hidden">
-      <Link to={home} className={cn(ROW_ICON, 'flex-1 justify-start gap-2.5 px-2.5 text-sm font-medium text-[var(--admin-text-soft)] hover:bg-[color-mix(in_oklab,var(--admin-surface)_55%,transparent)]')}>
+    <div className="flex w-full items-center gap-1 border-t border-[var(--admin-border)] pt-2 max-md:hidden">
+      <Link to={home} className={cn(ROW_ICON, 'flex-1 justify-start gap-2.5 rounded-[0.625rem] px-2.5 text-sm font-medium text-[var(--admin-text-soft)] hover:bg-hover pointer-fine:min-h-9')}>
         <ArrowLeftRight className="size-4 shrink-0" aria-hidden="true" />
         Kasa ekranlarına dön
       </Link>
@@ -138,7 +138,7 @@ export function AdminShell({ title, children }: { title: string; children: React
         aria-pressed={compact}
         aria-label="Sıkı görünüm"
         title={compact ? 'Sıkı görünüm açık' : 'Sıkı görünüm'}
-        className={cn(ROW_ICON, 'hidden pointer-fine:inline-flex', compact && 'bg-[var(--admin-surface)] text-[var(--admin-text)]')}
+        className={cn(ROW_ICON, 'hidden rounded-[0.625rem] hover:bg-hover pointer-fine:inline-flex pointer-fine:min-h-9 pointer-fine:min-w-9', compact && 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)] hover:bg-[var(--menu-active-bg)]')}
       >
         <Rows4 className="size-4" aria-hidden="true" />
       </button>

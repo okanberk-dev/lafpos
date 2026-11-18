@@ -102,16 +102,18 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 
 ## 3. Kasa ekranları (masalar, adisyon, bar, kasa, patron)
 
-- **Kabuk** (`src/components/AppShell.tsx`, kitin `.rail`'i): tablet ve bilgisayarda 64 px buzlu üst çubuk: solda
-  L'Af karosu ve "L'Affogato · LafPOS · rol", ortada ekranlar (düz yazı; seçilinin altında mürekkep çizgi, üstüne gelince
-  soldan çizilir; sığmayanlar ölçülüp Araçlar'a geçer, etkin ekran hep görünür), sağda durum hapı (canlı nokta, saat, Z;
-  dokununca kasa; kopunca kırmızı), arama (⌘K) ve **Araçlar**: mürekkep hap, kişinin avatarı, sığmayan ekran sayısı ve
-  yeşil ok halkası. Telefonda üst şerit (karo, ekranın adı, arama, bağlantı ve gün, kişi) ve alt sekme çubuğu (etkin
-  sekmenin ikonu mürekkep hapta). Platform siparişi onay bekliyorsa üst çubuğun altında bordo hap şerit (kitin "N
-  waiting in Review" hapı).
-- **Araçlar çekmecesi** (`src/components/ToolsDrawer.tsx`, kitin Tools'u): tam ekran espresso gecesi, kayan krema
-  dalgaları, yukarıdan perde gibi iner; satırlar iri (Gabarito 22-30, büyük harf yok), satırlar sırayla gelir, üstüne
-  gelince ve etkin ekranda yeşil ok halkası belirir. İki grup: Ekranlar; Bu cihaz ve oturum (Ekranı kilitle, tema
+- **Kabuk** (`src/components/AppShell.tsx`; 18 Kasım 2026, operatör: "yukarıdaki menüyü daha minimalist", shadcn/ui ve
+  Untitled UI'ın sekme düzeni): tablet ve bilgisayarda 56 px sade üst çubuk: solda L'Af karosu ve "L'Affogato · LafPOS ·
+  rol", ortada ekranlar (Poppins 14 px, kenarsız sekme; üstüne gelince çok açık gri, seçili olan yan menüyle aynı açık
+  nane hapta yeşil ve kalın; sığmayanlar ölçülüp Araçlar'a geçer, etkin ekran hep görünür), sağda durum (kenarsız: canlı
+  nokta, saat, Z; dokununca kasa; kopunca kırmızı, gün kapalıyken amber hap), kenarsız arama düğmesi (⌘K) ve
+  **Araçlar**: sade beyaz hap, solda kişinin avatarı, sığmayan ekran sayısı gri rozette; ekranın tek ana eylemiyle
+  yarışmasın diye mürekkep ve ok halkası yok. Telefonda üst şerit (karo, ekranın adı, arama, bağlantı ve gün, kişi) ve
+  alt sekme çubuğu (etkin sekmenin ikonu açık nane hapta, yeşil). Platform siparişi onay bekliyorsa üst çubuğun altında
+  bordo hap şerit (kitin "N waiting in Review" hapı).
+- **Araçlar çekmecesi** (`src/components/ToolsDrawer.tsx`, kitin Tools'u, sadeleşti): tam ekran gece zemini, üstte yumuşak
+  yeşil ışık (kayan dalga yok), yukarıdan perde gibi iner; satırlar ölçülü (Poppins 18 px yarı kalın, 56 px, büyük harf
+  yok), satırlar sırayla gelir, üstüne gelince ve etkin ekranda küçük yeşil ok halkası belirir. İki grup: Ekranlar; Bu cihaz ve oturum (Ekranı kilitle, tema
   Açık / Koyu / Cihaz ya da bar teması, tam ekran, uzaktan çıkış). Kişinin menüsü de budur ("… menüsü"): telefonda
   avatar ve "Daha" sekmesi açar.
 - **Sahne** (`src/components/ui/Stage.tsx`, kitin `.sahne-sayfa`'sı): geniş ekranda (lg) iki sütun. Solda ekranın kimliği:
@@ -119,16 +121,16 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   sayılar (`Hero`) ve tek ana eylem; sağda yaprak. Dar ekranda tek sütun: başlık ve sayılar bir şeritte, eylemler altında,
   yan menü yatay hap şeridi; telefonda başlığı üst şerit yazar (sahnedeki yalnız ekran okuyucuda). Sayfanın `PageHeader`'ı
   sahnede başlığını sol sütuna, eylemlerini ana eylemin yerine taşır (portal); `headerInLeaf` ile yaprağın başında kalır.
-- **Sol sütun paneli** (18 Kasım 2026, operatör: "modernleştir, açık ve canlı renkler"): geniş ekranda sütun 240 px
-  (80rem üstünde 264), yaprakla aynı köşede açık şafak paneli: beyaza yakın zemin (`--side-base`), sol üstte açık nane
-  (`--side-tint-a`), sağ üstte buz mavisi (`--side-tint-b`), dip düz; beyaz saç teli kenar ve yeşilimsi yumuşak gölge. Ana
-  eylem sütun kaysa da dipte yapışık kalır. Koyu temada
-  aynı şafak düşük ışıkta.
-- **Yan menü** (`.lp-menu`, shadcn'in Sidebar'ı gibi): satır 36 px (dokunmatikte 44), ikon, ad, sağda soluk sayı. İkon açık
-  renkli çipte, ton sırayla zümrüt, mavi, mor, kehribar, gül (`--admin-hue-*`; yalnız süs). Seçili satır zümrütten
-  camgöbeğine canlı geçiş (`--menu-active-from/via/to`), beyaz yazı ve sayı (her durakta 4.9:1 üstü), altında yeşil hâle;
-  üstüne gelince yarı saydam beyaz; grup başlığı küçük ve soluk (`.lp-menu-label`). Numara yok. Dar ekranda hap şeridi
-  (seçili hap aynı canlı geçişte).
+- **Sol sütun paneli** (18 Kasım 2026, operatör: "daha minimalist; dashboard kütüphanelerine bak"): shadcn/ui Sidebar'ın
+  "floating" düzeni. Geniş ekranda sütun 240 px (80rem üstünde 256), yaprakla aynı köşede düz beyaz panel (`--side-bg`),
+  saç teli kenar (`--side-line`); gölge ve renk geçişi yok. Başlık ve büyük sayılar menü ikonuyla hizalı; ana eylem sütun
+  kaysa da dipte yapışık kalır. Koyu temada panel koyu yüzey.
+- **Yan menü** (`.lp-menu`; ölçüler shadcn/ui Sidebar'dan, sakinlik Linear ve Catalyst'ten): satır 36 px (alçak ekranda 32,
+  dokunmatikte 44), köşe 10 px; ikon 16 px tek renk soluk, ad, sağda soluk sayı. Üstüne gelince çok açık gri
+  (`--menu-hover`), seçili satır açık nane zeminde (`--menu-active-bg`) yeşil yazı, ikon ve sayı (`--menu-active-ink`,
+  5.4:1), kalın; kenar, gölge, renk geçişi yok. Grup başlığı 12 px soluk (`.lp-menu-label`). Numara yok. Dar ekranda
+  kenarsız sekme şeridi, seçili aynı nane hap. Üst çubuğun sekmesi, telefonun alt sekmesi, yönetimin sütunu ve adisyonun
+  kategori sütunu aynı seçim dilini konuşur.
 - **Durum renkleri:** masa boş kesikli kenarlı açık kart, dolu L'Affogato yeşilinin degradesinde beyaz yazılı kart (iki
   temada), hesap istendi soldaki ahududu şerit ve "Hesap" hapı, kısmen ödendi altta beyaz ilerleme çubuğu ve "₺X kaldı";
   hazır kalem beyaz hapta nabızlı; online (siteden gelen) sipariş her

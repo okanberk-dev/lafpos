@@ -254,21 +254,16 @@
   /* Grafik: tek seri canlı zümrüt (kartta 3:1'in üstünde), kıyas gri çizgi */
   --admin-chart-line: #0e9f6e;
   /*
-   * Yan sütun paneli (operatör, 18 Kas 2026: "modernleştir, açık ve canlı renkler"): beyaza yakın zeminde sol üstte açık
-   * nane, sağ üstte buz mavisi şafak; dip düz. Seçili menü satırı zümrütten camgöbeğine canlı geçiş, beyaz yazı (her durakta 4.9:1
-   * üstü), altında yeşil hale; satır ikonları sırayla beş canlı tonun açık çipinde
+   * Yan sütun ve menü (18 Kas 2026, operatör: "daha minimalist; dashboard kütüphanelerine bak"): shadcn/ui Sidebar'ın
+   * "floating" düzeni gibi düz beyaz panel ve saç teli kenar, gölge ve renk geçişi yok. Satır nötr, ikon tek renk soluk;
+   * üstüne gelince çok açık gri; seçili satır açık nane zeminde yeşil yazı ve ikon (5.4:1). Üst çubuğun sekmesi, telefonun
+   * alt sekmesi ve hap şeridi aynı seçim dilini konuşur
    */
-  --side-base: #fafcfb;
-  --side-tint-a: #d9f4e6;
-  --side-tint-b: #e1eaff;
-  --side-line: rgb(255 255 255 / 0.95);
-  --side-shadow: 0 1px 2px rgb(15 21 19 / 0.04), 0 10px 28px -14px rgb(10 110 82 / 0.22);
-  --side-hover: rgb(255 255 255 / 0.85);
-  --menu-active-from: #0a6e52;
-  --menu-active-via: #0c7f62;
-  --menu-active-to: #0e7490;
-  --menu-active-ink: #ffffff;
-  --menu-active-glow: 0 8px 18px -10px rgb(12 127 98 / 0.75);
+  --side-bg: var(--admin-surface);
+  --side-line: var(--admin-border);
+  --menu-hover: var(--hover);
+  --menu-active-bg: var(--admin-primary-soft);
+  --menu-active-ink: var(--admin-primary);
   /* Marka karosu (uygulama ikonu, sitenin altbilgisi): radyal yeşil, krem harf, pirinç çekirdek; iki temada aynı */
   --brand-tile: radial-gradient(120% 120% at 50% 18%, #23876a 0%, #1d6d56 48%, #0c3b2d 100%);
   --brand-cream: #fbf6f1;
@@ -408,13 +403,6 @@
   --admin-hue-green: #34d399;
   --admin-hue-green-soft: #0f3327;
   --admin-chart-line: #34d399;
-  --side-base: #161d1a;
-  --side-tint-a: #15342a;
-  --side-tint-b: #19223d;
-  --side-line: rgb(255 255 255 / 0.07);
-  --side-shadow: none;
-  --side-hover: rgb(255 255 255 / 0.06);
-  --menu-active-glow: 0 8px 20px -10px rgb(52 211 153 / 0.5);
   --glass: rgb(25 32 29 / 0.8);
   --glass-line: rgb(255 255 255 / 0.07);
   --frost: rgb(18 23 21 / 0.82);
@@ -922,31 +910,24 @@
       overflow-y: auto;
       overscroll-behavior: contain;
       scrollbar-width: none;
-      /* Açık şafak paneli: sahnenin grisinden ayrılır, yaprakla aynı köşe; iç boşluk odak halkasına da yer bırakır */
-      padding: 14px 10px 12px;
+      /* Düz beyaz panel: saç teli kenar, gölgesiz, yaprakla aynı köşe; iç boşluk odak halkasına da yer bırakır */
+      padding: 14px 8px 12px;
       border: 1px solid var(--side-line);
       border-radius: var(--r-leaf);
-      background:
-        radial-gradient(120% 50% at 0% 0%, var(--side-tint-a) 0%, transparent 70%),
-        radial-gradient(100% 45% at 100% 6%, var(--side-tint-b) 0%, transparent 70%),
-        var(--side-base);
-      box-shadow: var(--side-shadow);
+      background: var(--side-bg);
     }
-    /*
-     * Ana eylem sütun kaysa da görünür kalır (alçak ekran, yatay tablet): dipte yapışık, üstü panelin düz zeminine
-     * yumuşak geçişle (şafak yalnız panelin üstünde, dip düz)
-     */
+    /* Ana eylem sütun kaysa da görünür kalır (alçak ekran, yatay tablet): dipte yapışık, üstü panel zeminine yumuşak geçiş */
     .lp-split > .lp-side > .lp-actions:not(:empty) {
       position: sticky;
       bottom: -12px;
       z-index: 1;
       margin-bottom: -12px;
       padding-block: 10px 12px;
-      background: linear-gradient(to bottom, color-mix(in srgb, var(--side-base) 0%, transparent), var(--side-base) 14px);
+      background: linear-gradient(to bottom, color-mix(in srgb, var(--side-bg) 0%, transparent), var(--side-bg) 14px);
     }
-    /* Başlık, sayılar ve ana eylem menü satırının yazısıyla aynı hizada */
-    .lp-split > .lp-side > :is(.lp-side-head, .lp-hero, .lp-actions) {
-      padding-inline: 6px;
+    /* Başlık ve sayılar menü satırının ikonuyla aynı hizada; ana eylem satırın kenarıyla */
+    .lp-split > .lp-side > :is(.lp-side-head, .lp-hero) {
+      padding-inline: 10px;
     }
     .lp-split > .lp-side::-webkit-scrollbar {
       display: none;
@@ -1061,14 +1042,14 @@
   }
 
   /*
-   * Yan menü (17 Kasım 2026, operatör: "side bar kısmını daha basit ve shadcn tarzında, estetik ama profesyonel"): shadcn'in
-   * Sidebar'ı gibi sade satırlar. Geniş ekranda sol sütunda alt alta: ikon, ad, sağda soluk sayı; grup başlığı küçük ve
-   * soluk; seçili satır beyaz yüzeyde ince kenar ve hafif gölgeyle (sahnenin üstünde içeri gömülü "inset" görünüm),
-   * üstüne gelince yarı saydam beyaz. Daha darda yatay kayan hap şeridi (seçili mürekkep). Numara yok
+   * Yan menü (shadcn/ui Sidebar'ın ölçüleri; Linear ve Catalyst gibi sakin): satır ikon, ad ve sağda soluk sayı; ikon tek
+   * renk soluk. Üstüne gelince çok açık gri, seçili satır açık nane zeminde yeşil yazı ve ikon, kalın; kenar, gölge, renk
+   * geçişi yok. Geniş ekranda sol sütunda alt alta (grup başlığı küçük ve soluk), daha darda yatay kayan sekme şeridi
+   * (kenarsız; seçili aynı nane hap). Numara yok
    */
   .lp-menu {
     display: flex;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
     margin: 0;
     padding: 2px;
@@ -1089,24 +1070,24 @@
     gap: 8px;
     min-height: 2.75rem;
     padding: 0 14px;
-    border: 1px solid var(--admin-border-strong);
+    border: 0;
     border-radius: 9999px;
-    background: var(--admin-surface);
+    background: transparent;
     color: var(--admin-text-soft);
     font: 500 0.875rem/1.2 var(--font-sans);
     white-space: nowrap;
     text-decoration: none;
     cursor: pointer;
     transition:
-      color 160ms var(--ease-out),
-      background-color 160ms var(--ease-out),
-      border-color 160ms var(--ease-out),
-      box-shadow 160ms var(--ease-out);
+      color 150ms var(--ease-out),
+      background-color 150ms var(--ease-out);
   }
   .lp-menu-item > svg {
     width: 1rem;
     height: 1rem;
     flex: none;
+    color: var(--admin-text-mute);
+    transition: color 150ms var(--ease-out);
   }
   .lp-menu-item > .n {
     color: var(--admin-text-mute);
@@ -1114,18 +1095,18 @@
     font-variant-numeric: tabular-nums;
   }
   .lp-menu-item:hover {
-    border-color: var(--admin-text);
+    background: var(--menu-hover);
     color: var(--admin-text);
   }
-  /* Seçili: zümrütten camgöbeğine canlı geçiş, beyaz yazı ve sayı (soluk beyaz geçişin açık ucunda 4.5:1'in altına düşer) */
+  .lp-menu-item:hover > svg {
+    color: var(--admin-text-soft);
+  }
   .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) {
-    border-color: transparent;
-    background: linear-gradient(115deg, var(--menu-active-from) 0%, var(--menu-active-via) 50%, var(--menu-active-to) 100%);
+    background: var(--menu-active-bg);
     color: var(--menu-active-ink);
     font-weight: 600;
-    box-shadow: var(--menu-active-glow);
   }
-  .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > .n {
+  .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > :is(svg, .n) {
     color: var(--menu-active-ink);
   }
   .lp-menu-item:focus-visible {
@@ -1146,44 +1127,8 @@
       gap: 10px;
       min-height: 2.25rem;
       padding: 0 10px;
-      border: 1px solid transparent;
-      border-radius: 0.5rem;
-      background: none;
-      color: var(--admin-text-soft);
-      font-size: 0.875rem;
+      border-radius: 0.625rem;
       text-align: left;
-    }
-    /* Satır ikonu açık renkli çipte; ton sırayla zümrüt, mavi, mor, kehribar, gül (yalnız süs: adı yazı taşır) */
-    :where(.lp-split > .lp-side, .lp-menu-col) .lp-menu-item {
-      --hue: var(--admin-hue-green);
-      --hue-soft: var(--admin-hue-green-soft);
-    }
-    :where(.lp-split > .lp-side, .lp-menu-col) .lp-menu-item:nth-of-type(5n + 2) {
-      --hue: var(--admin-hue-blue);
-      --hue-soft: var(--admin-hue-blue-soft);
-    }
-    :where(.lp-split > .lp-side, .lp-menu-col) .lp-menu-item:nth-of-type(5n + 3) {
-      --hue: var(--admin-hue-violet);
-      --hue-soft: var(--admin-hue-violet-soft);
-    }
-    :where(.lp-split > .lp-side, .lp-menu-col) .lp-menu-item:nth-of-type(5n + 4) {
-      --hue: var(--admin-hue-amber);
-      --hue-soft: var(--admin-hue-amber-soft);
-    }
-    :where(.lp-split > .lp-side, .lp-menu-col) .lp-menu-item:nth-of-type(5n) {
-      --hue: var(--admin-hue-rose);
-      --hue-soft: var(--admin-hue-rose-soft);
-    }
-    :where(.lp-split > .lp-side, .lp-menu-col) .lp-menu-item > svg {
-      width: 1.625rem;
-      height: 1.625rem;
-      padding: 0.3125rem;
-      border-radius: 0.5rem;
-      background: var(--hue-soft);
-      color: var(--hue);
-      transition:
-        background-color 160ms var(--ease-out),
-        color 160ms var(--ease-out);
     }
     :where(.lp-split > .lp-side) .lp-menu-item > span:not(.n),
     :where(.lp-menu-col) .lp-menu-item > span:not(.n) {
@@ -1197,38 +1142,18 @@
       margin-left: auto;
       text-align: right;
     }
-    :where(.lp-split > .lp-side) .lp-menu-item:hover,
-    :where(.lp-menu-col) .lp-menu-item:hover {
-      border-color: transparent;
-      background: var(--side-hover);
-      color: var(--admin-text);
-    }
-    :where(.lp-split > .lp-side) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']),
-    :where(.lp-menu-col) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) {
-      border-color: transparent;
-      background: linear-gradient(115deg, var(--menu-active-from) 0%, var(--menu-active-via) 50%, var(--menu-active-to) 100%);
-      color: var(--menu-active-ink);
-      box-shadow: var(--menu-active-glow);
-    }
-    :where(.lp-split > .lp-side) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > svg,
-    :where(.lp-menu-col) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > svg {
-      background: rgb(255 255 255 / 0.18);
-      color: var(--menu-active-ink);
-    }
-    :where(.lp-split > .lp-side) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > .n,
-    :where(.lp-menu-col) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > .n {
-      color: var(--menu-active-ink);
-    }
-    /* Grup başlığı (yönetimde Genel, Menü…): küçük, soluk; ilk grupta üst boşluk yok */
+    /* Grup başlığı (yönetimde Genel, Menü…): küçük, soluk, satırın yazısıyla hizalı; ilk grupta üst boşluk yok */
     .lp-menu-col .lp-menu-label {
-      display: block;
-      padding: 14px 10px 6px;
+      display: flex;
+      align-items: center;
+      height: 2rem;
+      margin-top: 10px;
+      padding: 0 10px;
       color: var(--admin-text-mute);
-      font: 600 0.75rem/1 var(--font-sans);
-      letter-spacing: 0.02em;
+      font: 500 0.75rem/1 var(--font-sans);
     }
     .lp-menu-col .lp-menu-label:first-child {
-      padding-top: 2px;
+      margin-top: 0;
     }
   }
   /* Alçak geniş ekranda (dizüstü, yatay tablet) sol sütun sıkışır: aralık ve büyük sayılar bir boy küçük, ana eylem görünür kalır */
@@ -1248,12 +1173,15 @@
     .lp-split .lp-hs[data-money] > b {
       --hs-size: min(1.625rem, 11cqi);
     }
-    /* Yönetimin uzun menüsü alçak ekranda da kaydırmadan sığsın: satır 34 px, grup arası daha sıkı (fareyle) */
+    /* Yönetimin uzun menüsü alçak ekranda da kaydırmadan sığsın: satır 32 px, grup arası daha sıkı (fareyle) */
     :where(.lp-split > .lp-side) .lp-menu-item {
-      min-height: 2.125rem;
+      min-height: 2rem;
+    }
+    .lp-split .lp-menu-col .lp-menu-label {
+      height: 1.75rem;
     }
     .lp-split .lp-menu-col .lp-menu-label:not(:first-child) {
-      padding-top: 10px;
+      margin-top: 6px;
     }
   }
   /* Dokunmatikte yan menünün satırı da 44 px */
@@ -1351,14 +1279,12 @@
   }
 
   /* Araçlar çekmecesi: perde gibi yukarıdan iner, çizgiler kayar; satırları sırayla gelir (ToolsDrawer.tsx) */
+  /* Araçlar çekmecesi sade gece (18 Kas 2026, "daha minimalist"): kayan dalga çizgileri yok, yalnız üstte yumuşak yeşil ışık */
   .lp-drawer {
     background:
-      var(--waves-light) 0 0 / 800px 240px repeat,
       var(--band-glow) 0 0 / 100% 100% no-repeat,
       var(--band);
-    animation:
-      lp-drawer-in 620ms var(--ease-out) backwards,
-      lp-waves 120s linear infinite;
+    animation: lp-drawer-in 520ms var(--ease-out) backwards;
   }
   .lp-drawer-row {
     animation: lp-drawer-row 600ms var(--ease-out) backwards;

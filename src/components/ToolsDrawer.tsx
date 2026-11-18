@@ -5,9 +5,9 @@ import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
 
 /**
- * Araçlar çekmecesi (gnbsite Area Board kitinin Tools çekmecesi): tam ekran espresso gecesi, kremalı dalga çizgili zemin,
- * yukarıdan perde gibi iner; satırlar iri ve sakin (büyük harf yok), üstüne gelince ve etkin ekranda sağda yeşil ok
- * halkası belirir.
+ * Araçlar çekmecesi (gnbsite Area Board kitinin Tools çekmecesi, sadeleşti: 18 Kasım 2026, "daha minimalist"): tam ekran
+ * gece zemini, yukarıdan perde gibi iner; satırlar ölçülü (18 px, büyük harf yok), üstüne gelince ve etkin ekranda sağda
+ * küçük yeşil ok halkası belirir.
  * Ekranlar, bu cihaz (tema, tam ekran) ve oturum (kilitle). Escape ve Kapat kapatır, Tab çekmecede döner, kapanınca odak
  * açan düğmeye döner. Bantta odak halkası açık yeşil (ev yeşili gecede 3:1'in sınırında)
  */
@@ -80,22 +80,22 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
 /** Çekmecenin grubu: soluk küçük etiket, altında satırlar (geniş ekranda üç, tablette iki sütun, telefonda tek) */
 export function DrawerGroup({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <section aria-label={label} className={cn('mt-7', className)}>
-      <h2 className="mb-1 font-sans text-[13px] font-semibold tracking-normal text-[var(--band-muted)]">{label}</h2>
-      <div className="grid gap-x-10 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
+    <section aria-label={label} className={cn('mt-6', className)}>
+      <h2 className="mb-1 font-sans text-xs font-medium tracking-normal text-[var(--band-muted)]">{label}</h2>
+      <div className="grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3">{children}</div>
     </section>
   );
 }
 
 /** Çekmece satırı: iri ad, altında isteğe bağlı küçük açıklama; satırlar sırayla gecikmeli iner */
 export const drawerRow =
-  'lp-drawer-row group relative flex min-h-[4.25rem] w-full items-center gap-4 border-b border-[var(--band-line)] py-2 pl-0.5 pr-0.5 text-left text-[var(--band-text)] no-underline transition-[padding] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:pl-3 focus-visible:pl-3 focus-visible:-outline-offset-2';
+  'lp-drawer-row group relative flex min-h-14 w-full items-center gap-4 border-b border-[var(--band-line)] py-2 pl-0.5 pr-0.5 text-left text-[var(--band-text)] no-underline transition-[padding] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:pl-2 focus-visible:pl-2 focus-visible:-outline-offset-2';
 
 export function DrawerLabel({ children, hint }: { children: ReactNode; hint?: ReactNode }) {
   return (
     <span className="min-w-0 flex-1">
-      <span className="block font-headline text-[clamp(1.375rem,2.2vw,1.875rem)] font-bold leading-tight tracking-[-0.03em]">{children}</span>
-      {hint && <span className="mt-1 block text-[13px] font-normal leading-4 text-[var(--band-muted)]">{hint}</span>}
+      <span className="block text-lg font-semibold leading-tight tracking-[-0.015em]">{children}</span>
+      {hint && <span className="mt-0.5 block text-[13px] font-normal leading-4 text-[var(--band-muted)]">{hint}</span>}
     </span>
   );
 }
@@ -105,9 +105,9 @@ export function DrawerArrow() {
   return (
     <span
       aria-hidden="true"
-      className="grid size-10 shrink-0 -rotate-45 scale-0 place-items-center rounded-full bg-[var(--ok-ring)] text-[var(--ok-arrow)] transition-transform duration-300 group-hover:rotate-0 group-hover:scale-100 group-focus-visible:rotate-0 group-focus-visible:scale-100 group-aria-[current=page]:rotate-0 group-aria-[current=page]:scale-100 motion-reduce:transition-none"
+      className="grid size-8 shrink-0 -rotate-45 scale-0 place-items-center rounded-full bg-[var(--ok-ring)] text-[var(--ok-arrow)] transition-transform duration-300 group-hover:rotate-0 group-hover:scale-100 group-focus-visible:rotate-0 group-focus-visible:scale-100 group-aria-[current=page]:rotate-0 group-aria-[current=page]:scale-100 motion-reduce:transition-none"
     >
-      <ArrowUpRight className="size-4 stroke-[2.25]" />
+      <ArrowUpRight className="size-3.5 stroke-[2.25]" />
     </span>
   );
 }

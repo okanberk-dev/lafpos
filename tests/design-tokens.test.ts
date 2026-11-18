@@ -292,7 +292,7 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     expect(src('pages/reports/ReportsPage.tsx')).not.toContain('<tr className="bg-[var(--admin-surface-2)]">');
   });
 
-  it('yan menü shadcn düzeninde sade: grup başlığı, ikonlu satır, seçili satır canlı geçişte; numara yok (operatör, 17-18 Kas 2026)', () => {
+  it('yan menü shadcn düzeninde sade: grup başlığı, ikonlu satır, seçili satır açık nane zeminde; numara yok (operatör, 17-18 Kas 2026)', () => {
     const shell = src('components/admin/AdminShell.tsx');
     expect(shell).toContain('<div className="lp-menu lp-menu-col">');
     expect(shell).toContain('<span className="lp-menu-label">{g.label}</span>');
@@ -301,22 +301,40 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     expect(shell).toMatch(/<Stage\s+\/\/[^\n]*\n[^<]*headerInLeaf/);
     expect(shell).toMatch(/<div ref=\{strip\} className=\{cn\('lp-menu', RAIL_FADE\)\}>/);
     expect(css).not.toMatch(/counter\(/);
-    const selected = css.slice(css.indexOf(":where(.lp-split > .lp-side) .lp-menu-item:is([aria-current='page']"));
-    expect(selected.slice(0, selected.indexOf('}'))).toMatch(/background: linear-gradient\(115deg, var\(--menu-active-from\) 0%, var\(--menu-active-via\) 50%, var\(--menu-active-to\) 100%\);[\s\S]*box-shadow: var\(--menu-active-glow\);/);
+    const selected = css.slice(css.indexOf("  .lp-menu-item:is([aria-current='page']"));
+    const rule = selected.slice(0, selected.indexOf('}'));
+    expect(rule).toMatch(/background: var\(--menu-active-bg\);\s*color: var\(--menu-active-ink\);\s*font-weight: 600;/);
+    expect(rule).not.toMatch(/gradient|box-shadow/);
   });
 
-  it('yan sütun açık şafak paneli, seçili satır canlı ve okunur (operatör, 18 Kas 2026: "açık ve canlı renkler")', () => {
+  it('yan sütun minimalist: düz beyaz panel, renk geçişi ve gölge yok, seçili satır okunur (operatör, 18 Kas 2026)', () => {
     const side = css.slice(css.indexOf('    .lp-split > .lp-side {\n      display: flex;'));
-    expect(side.slice(0, side.indexOf('\n    }'))).toMatch(/background:\s*radial-gradient\(120% 50% at 0% 0%, var\(--side-tint-a\)[\s\S]*var\(--side-base\);/);
+    const panel = side.slice(0, side.indexOf('\n    }'));
+    expect(panel).toMatch(/border: 1px solid var\(--side-line\);[\s\S]*background: var\(--side-bg\);/);
+    expect(panel).not.toMatch(/gradient|box-shadow/);
+    // Satır ikonu tek renk: renkli çip ve sırayla ton yok
+    expect(css).not.toMatch(/nth-of-type\(5n/);
     for (const [name, get] of [
       ['açık', posLight],
       ['koyu', posDark],
     ] as const) {
-      for (const stop of ['menu-active-from', 'menu-active-via', 'menu-active-to']) expect(contrast(get('menu-active-ink'), get(stop)), `${name} ${stop}`).toBeGreaterThanOrEqual(4.5);
-      for (const ground of ['side-base', 'side-tint-a', 'side-tint-b']) {
-        for (const text of ['admin-text', 'admin-text-soft', 'admin-text-mute']) expect(contrast(get(text), get(ground)), `${name} ${text}/${ground}`).toBeGreaterThanOrEqual(4.5);
-      }
+      expect(contrast(get('menu-active-ink'), get('menu-active-bg')), `${name} seçili`).toBeGreaterThanOrEqual(4.5);
+      for (const text of ['admin-text', 'admin-text-soft', 'admin-text-mute']) expect(contrast(get(text), get('side-bg')), `${name} ${text}/panel`).toBeGreaterThanOrEqual(4.5);
+      // Sekme şeridi sahnenin grisinde: soluk yazı ve sayı da okunur
+      for (const text of ['admin-text-soft', 'admin-text-mute']) expect(contrast(get(text), get('admin-stage')), `${name} ${text}/sahne`).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it('üst menü minimalist ve yan menüyle aynı seçim dilinde; Araçlar sade hap (operatör, 18 Kas 2026)', () => {
+    const shell = src('components/AppShell.tsx');
+    expect(shell).toContain("const NAV_ON = 'bg-[var(--menu-active-bg)] font-semibold text-[var(--menu-active-ink)]");
+    // Sekme Poppins 14 px, kenarsız; alt çizgi ve Gabarito iri yazı yok
+    expect(shell).toMatch(/const NAV_LINK =\s*'relative inline-flex h-9 items-center rounded-full px-3 text-sm font-medium/);
+    expect(shell).not.toMatch(/font-headline text-\[15\.5px\]|after:scale-x-100/);
+    // Araçlar ana eylemle yarışmaz: mürekkep ve ok halkası yok
+    expect(shell).not.toMatch(/<Ring \/>|buttonClass\('primary'/);
+    // Telefonun alt sekmesi de açık nane hapta
+    expect(shell).toContain("on ? 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)]'");
   });
 
   it('dev büyük harfli ad yok: ekranın başlığı ölçülü, büyük harf dönüşümü yok (operatör, 17 Kas 2026)', () => {
