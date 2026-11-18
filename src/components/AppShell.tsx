@@ -20,7 +20,6 @@ import { CommandPalette } from './CommandPalette';
 import { LafTile } from './LafMark';
 import { PlatformInbox } from './PlatformInbox';
 import { DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
-import { buttonClass, Ring } from './ui/Button';
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
 import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
@@ -90,9 +89,13 @@ function useNavFit(count: number) {
 }
 
 /** Üst çubuktaki ekran bağlantısı (kitin .mainnav'ı): düz yazı, seçilinin altında mürekkep çizgi, üstüne gelince soldan çizilir */
+/*
+ * Üst çubuğun sekmesi (18 Kasım 2026, operatör: "yukarıdaki menüyü daha minimalist"; shadcn/ui ve Untitled UI'ın sekme
+ * düzeni): Poppins 14 px, kenarsız; üstüne gelince çok açık gri, seçili olan yan menüyle aynı açık nane hapta yeşil ve kalın
+ */
 const NAV_LINK =
-  "relative inline-flex h-10 items-center rounded-full px-3.5 font-headline text-[15.5px] font-medium tracking-[-0.015em] text-ink-2 transition-colors duration-150 after:absolute after:inset-x-3.5 after:bottom-1.5 after:h-[1.5px] after:origin-left after:scale-x-0 after:bg-[var(--admin-text)] after:transition-transform after:duration-300 after:content-[''] hover:text-ink hover:after:scale-x-100 pointer-coarse:h-11";
-const NAV_ON = 'font-bold text-ink after:h-0.5 after:scale-x-100 after:bg-[var(--admin-primary)]';
+  'relative inline-flex h-9 items-center rounded-full px-3 text-sm font-medium text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:h-11 pointer-coarse:px-3.5';
+const NAV_ON = 'bg-[var(--menu-active-bg)] font-semibold text-[var(--menu-active-ink)] hover:bg-[var(--menu-active-bg)] hover:text-[var(--menu-active-ink)]';
 /** Çubukta kısaltma yok: kısa ad noktayla bitiyorsa ("Rezerv.") tam ad */
 const navText = (n: NavItem) => (n.label.endsWith('.') ? n.title : n.label);
 
@@ -238,10 +241,12 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
    */
   const healthText = REMOTE ? `Uzaktan · ${fmtTime(now)}` : live === 'kopuk' ? 'Bağlantı koptu' : `${fmtTime(now)} · ${dayText}`;
   const healthCls = cn(
-    'hidden h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border pl-3 pr-3.5 text-[13px] font-medium pointer-coarse:h-11 lg:inline-flex',
-    live === 'kopuk' && !REMOTE ? 'border-[var(--admin-danger)] bg-[var(--admin-danger)] text-white' : 'border-[var(--admin-border-strong)] bg-surface text-ink-2',
-    !boot.day && !REMOTE && live !== 'kopuk' && 'border-warning-line bg-warning-soft text-warning-ink',
+    // Sakin durumda kenarsız metin (saat ve Z); kopukta kırmızı, gün kapalıyken amber hap: yalnız dikkat isteyen durum dolu
+    'hidden h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-full px-3 text-[13px] font-medium pointer-coarse:h-11 lg:inline-flex',
+    live === 'kopuk' && !REMOTE ? 'bg-[var(--admin-danger)] text-white' : 'text-ink-2',
+    !boot.day && !REMOTE && live !== 'kopuk' && 'bg-warning-soft text-warning-ink',
   );
+  const healthCalm = live !== 'kopuk' && !!boot.day;
   const healthDot = REMOTE ? (
     <span aria-hidden="true" className="size-2 rounded-full bg-[var(--admin-blue)]" />
   ) : live === 'kopuk' ? (
@@ -251,7 +256,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   );
   const healthPill =
     canKasa && !REMOTE ? (
-      <NavLink to="/kasa" title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`} aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`} className={cn(healthCls, 'transition-colors duration-150 hover:border-[var(--admin-text)]')}>
+      <NavLink to="/kasa" title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`} aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`} className={cn(healthCls, 'transition-[color,background-color,filter] duration-150', healthCalm ? 'hover:bg-hover hover:text-ink' : 'hover:brightness-95')}>
         {healthDot}
         <span className="tabular">{healthText}</span>
       </NavLink>
@@ -264,9 +269,9 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     );
   // Kitin avatarı (personel ve giriş ekranıyla tek): ince iç halka, açık kişi renginde koyu harf. Ad düğmenin etiketinde
   const avatar = (size: keyof typeof AVATAR) => <Avatar name={me.name} color={me.color} className={AVATAR[size]} />;
-  // Alt sekme: ikon hapın içinde; etkin sekme mürekkep hapta açık ikonla (kitin seçimi) ve kalın yazıyla
+  // Alt sekme: ikon hapın içinde; etkin sekme yan menüyle aynı açık nane hapta yeşil ikonla ve kalın yazıyla
   const tab = (on: boolean) => cn('group flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] transition-colors duration-150', on ? 'font-semibold text-ink' : 'font-medium text-muted');
-  const tabPill = (on: boolean) => cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', on ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'group-active:bg-press');
+  const tabPill = (on: boolean) => cn('grid h-7 w-14 place-items-center rounded-full transition-colors duration-150', on ? 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)]' : 'group-active:bg-press');
   // Menünün başlığı kişi: adı ve rolü (tek şubeli kasada işletmenin adı bilgi taşımaz)
   const roleLabel = ROLE_LABELS[me.role];
   const menuSubtitle = REMOTE ? 'Yalnız görüntüleme' : (roleLabel !== me.name ? roleLabel : undefined);
@@ -354,23 +359,31 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         </nav>
         <div className="flex shrink-0 items-center gap-2">
           {healthPill}
-          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-full border border-[var(--admin-border-strong)] bg-surface text-ink-2 pointer-coarse:size-11 transition-colors duration-150 hover:border-[var(--admin-text)] hover:text-ink">
+          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-9 place-items-center rounded-full text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:size-11">
             <Search className="size-[18px]" />
           </button>
           <span className="hidden min-w-0 flex-col items-end leading-tight 2xl:flex">
             <span className="max-w-40 truncate text-[13.5px] font-semibold">{me.name}</span>
             <span className="text-xs text-muted">{roleLabel}</span>
           </span>
-          {/* Araçlar: kitin Tools düğmesi (mürekkep hap + yeşil ok halkası); kişinin menüsü ve sığmayan ekranlar */}
-          <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} className={buttonClass('primary', 'md', { ring: true, className: 'font-headline' })}>
-            <Avatar name={me.name} color={me.color} className="-ml-2.5 size-7 text-[10.5px] pointer-coarse:size-8 ring-2 ring-[color-mix(in_oklab,var(--admin-on-ink)_25%,transparent)]" />
+          {/*
+           * Araçlar: kişinin menüsü ve sığmayan ekranlar. Sade beyaz hap, solda avatar (dashboard'ların kullanıcı düğmesi);
+           * ekranın tek ana eylemiyle yarışmasın diye mürekkep ve ok halkası yok
+           */}
+          <button
+            type="button"
+            onClick={() => setMenuOpen(true)}
+            aria-expanded={toolsOpen}
+            aria-label={`${me.name} menüsü · Araçlar`}
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-full border border-[var(--admin-border-strong)] bg-surface pl-1 pr-3 text-sm font-medium text-ink transition-colors duration-150 hover:border-[var(--admin-text-mute)] pointer-coarse:h-11 pointer-coarse:pl-1.5"
+          >
+            <Avatar name={me.name} color={me.color} className="size-7 text-[10.5px]" />
             Araçlar
             {hidden.length > 0 && (
-              <span aria-hidden="true" className="tabular grid h-5 min-w-5 place-items-center rounded-full bg-[color-mix(in_oklab,var(--admin-on-ink)_18%,transparent)] px-1.5 text-[11.5px] font-semibold">
+              <span aria-hidden="true" className="tabular grid h-5 min-w-5 place-items-center rounded-full bg-surface-3 px-1.5 text-[11px] font-semibold text-ink-2">
                 {hidden.length}
               </span>
             )}
-            <Ring />
           </button>
         </div>
       </header>
@@ -396,7 +409,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       <main className={cn('min-h-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>
         <div className="h-full md:px-3 md:pb-3">{children}</div>
       </main>
-      {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir. Etkin sekme mürekkep hapta (kitin seçimi) */}
+      {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir. Etkin sekme açık nane hapta (yan menünün seçimi) */}
       {showTabs && (
         <nav aria-label="Ekranlar" className="flex border-t border-line bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
           {tabs.map((n) => (
