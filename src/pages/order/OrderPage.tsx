@@ -671,7 +671,7 @@ export default function OrderPage() {
               <ProductPanel onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
             </section>
           )}
-          <section className={cn('lp-leaf flex flex-none flex-col overflow-hidden', editable ? 'w-[clamp(320px,38vw,460px)]' : 'mx-auto w-full max-w-2xl')}>
+          <section className={cn('lp-leaf flex flex-none flex-col overflow-hidden', editable ? 'w-[clamp(320px,35vw,440px)]' : 'mx-auto w-full max-w-2xl')}>
             {header}
             {right}
           </section>

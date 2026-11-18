@@ -120,7 +120,8 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   sahnede başlığını sol sütuna, eylemlerini ana eylemin yerine taşır (portal); `headerInLeaf` ile yaprağın başında kalır.
 - **Sol sütun paneli** (18 Kasım 2026, operatör: "modernleştir, açık ve canlı renkler"): geniş ekranda sütun 240 px
   (80rem üstünde 264), yaprakla aynı köşede açık şafak paneli: beyaza yakın zemin (`--side-base`), sol üstte açık nane
-  (`--side-tint-a`), sağ altta buz mavisi (`--side-tint-b`), beyaz saç teli kenar ve yeşilimsi yumuşak gölge. Koyu temada
+  (`--side-tint-a`), sağ üstte buz mavisi (`--side-tint-b`), dip düz; beyaz saç teli kenar ve yeşilimsi yumuşak gölge. Ana
+  eylem sütun kaysa da dipte yapışık kalır. Koyu temada
   aynı şafak düşük ışıkta.
 - **Yan menü** (`.lp-menu`, shadcn'in Sidebar'ı gibi): satır 36 px (dokunmatikte 44), ikon, ad, sağda soluk sayı. İkon açık
   renkli çipte, ton sırayla zümrüt, mavi, mor, kehribar, gül (`--admin-hue-*`; yalnız süs). Seçili satır zümrütten

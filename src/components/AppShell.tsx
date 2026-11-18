@@ -329,7 +329,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     // ve alt sekme çubuğu. Yatay telefonda çentik yanlarda: kök kapsayıcı yan güvenli alanı bırakır
     <div className="flex h-full flex-col bg-bg pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       {/* Tablet ve bilgisayar: üst çubuk (kitin .rail'i) */}
-      <header className="relative z-30 hidden h-16 shrink-0 items-center gap-3 px-3 md:flex lg:gap-4 lg:px-4">
+      <header className="relative z-30 hidden h-14 shrink-0 items-center gap-3 px-3 md:flex lg:gap-4">
         <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="flex shrink-0 items-center gap-2.5 rounded-[10px]">
           <LafTile size="md" />
           <span className="hidden flex-col leading-none xl:flex">
@@ -394,7 +394,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       {notice && <div className="shrink-0">{notice}</div>}
       {/* Alt sekme çubuğu yokken (tek ekranlı rol: kuryenin Siparişler'i) ev çubuğu payını ana alan bırakır */}
       <main className={cn('min-h-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>
-        <div className="h-full md:px-3 md:pb-3 lg:px-4 lg:pb-4">{children}</div>
+        <div className="h-full md:px-3 md:pb-3">{children}</div>
       </main>
       {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir. Etkin sekme mürekkep hapta (kitin seçimi) */}
       {showTabs && (
