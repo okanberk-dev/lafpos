@@ -109,7 +109,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
     // kartlar gibi); hesap sağdaki beyaz yaprakta (OrderPage). Telefonda sahne zemini, çip şeridi ve kartlar
     <div className="flex h-full min-h-0 bg-[var(--admin-stage)] md:bg-transparent">
       {/* Geniş ekran: kategoriler solda alt alta, numaralı (01, 02…), hepsi görünür */}
-      <div className="scroll-thin hidden w-56 shrink-0 overflow-y-auto pr-3 xl:block">
+      <div className="scroll-thin hidden w-52 shrink-0 overflow-y-auto pr-2.5 xl:block">
         <div role="tablist" aria-orientation="vertical" aria-label="Kategoriler" className="lp-menu lp-menu-col">
           {categoryItems.map((c) => (
             <CategoryRow key={c.id} active={!q && current === c.id} color={c.color} count={c.count} onClick={() => pick(c.id)} favorite={c.id === FAVORITES}>
@@ -148,7 +148,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
           key={q ? 'arama' : current}
           className={cn(
             // 150 px: 768 px tablette hesap yaprağının yanında iki sütun, bilgisayarda üç-dört
-            'lp-enter scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 overflow-y-auto px-3 pb-3 pt-1 md:px-0 md:pb-1 xl:pt-3',
+            'lp-enter scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(132px,1fr))] gap-2.5 overflow-y-auto px-3 pb-3 pt-1 md:px-0 md:pb-1 xl:pt-3',
           )}
         >
           {list.map((p) => (
@@ -186,7 +186,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
  */
 function CategoryRow({ active, color, count, favorite, onClick, children }: { active: boolean; color: string | null; count: number; favorite?: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button type="button" role="tab" aria-selected={active} onClick={onClick} className="lp-menu-item min-h-11 text-base focus-visible:-outline-offset-2">
+    <button type="button" role="tab" aria-selected={active} onClick={onClick} className="lp-menu-item min-h-11 text-[15px] focus-visible:-outline-offset-2">
       {favorite ? (
         <Star aria-hidden="true" className="size-3.5 shrink-0 stroke-2 text-[var(--laf-bean)]" />
       ) : (
@@ -194,7 +194,7 @@ function CategoryRow({ active, color, count, favorite, onClick, children }: { ac
         <span aria-hidden="true" className="size-1.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color ?? 'var(--admin-border-field)' }} />
       )}
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      <span className="n text-base">{count}</span>
+      <span className="n text-sm">{count}</span>
     </button>
   );
 }

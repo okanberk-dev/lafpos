@@ -307,7 +307,7 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
 
   it('yan sütun açık şafak paneli, seçili satır canlı ve okunur (operatör, 18 Kas 2026: "açık ve canlı renkler")', () => {
     const side = css.slice(css.indexOf('    .lp-split > .lp-side {\n      display: flex;'));
-    expect(side.slice(0, side.indexOf('\n    }'))).toMatch(/background:\s*radial-gradient\(130% 55% at 0% 0%, var\(--side-tint-a\)[\s\S]*var\(--side-base\);/);
+    expect(side.slice(0, side.indexOf('\n    }'))).toMatch(/background:\s*radial-gradient\(120% 50% at 0% 0%, var\(--side-tint-a\)[\s\S]*var\(--side-base\);/);
     for (const [name, get] of [
       ['açık', posLight],
       ['koyu', posDark],

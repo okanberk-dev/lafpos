@@ -120,8 +120,11 @@ export default function FloorPage() {
 
   const actions = !REMOTE && (
     <>
-      {/* Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır */}
-      <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden">
+      {/*
+       * Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır. Geniş ekranın dar sol sütununda Gel-al
+       * ve Paket bir satırı paylaşır, Tezgâh satışı altında tam en
+       */}
+      <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden lg:flex-1 lg:px-3">
         Gel-al
       </Button>
       <IconButton label="Gel-al" variant="secondary" onClick={() => setTakeaway('gelal')} className="sm:hidden">
@@ -129,7 +132,7 @@ export default function FloorPage() {
       </IconButton>
       {can('paket.yonet') && (
         <>
-          <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="max-sm:hidden">
+          <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="max-sm:hidden lg:flex-1 lg:px-3">
             Paket
           </Button>
           <IconButton label="Paket" variant="secondary" onClick={() => setTakeaway('paket')} className="sm:hidden">
@@ -137,7 +140,7 @@ export default function FloorPage() {
           </IconButton>
         </>
       )}
-      <Button variant="primary" className="max-sm:flex-1" loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
+      <Button variant="primary" className="max-sm:flex-1 lg:basis-full" loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
         Tezgâh satışı
       </Button>
     </>
@@ -146,7 +149,7 @@ export default function FloorPage() {
   // Masasız siparişler ve bugünkü rezervasyonlar: geniş ekranda sahnenin sol sütununda (kitin dizini gibi), darda yaprakta
   const othersList = (
     <section aria-label="Masasız siparişler">
-          <div className="flex items-end gap-2 px-4 pb-2 pt-4 md:px-5 md:pt-5 lg:px-0 lg:pt-1">
+          <div className="flex items-end gap-2 px-4 pb-2 pt-4 md:px-5 md:pt-5 lg:px-1.5 lg:pt-1">
             <h2 className="flex-1 font-headline text-lg font-bold tracking-[-0.025em] lg:text-[15px] lg:text-muted">Masasız siparişler</h2>
             {/* Sayı hapı sıfırsa gizli (kit kuralı) */}
             {list.length > 0 && <span className="tabular min-w-6 rounded-full bg-[var(--admin-ink-fill)] px-2 py-0.5 text-center text-xs font-semibold text-[var(--admin-on-ink)]">{list.length}</span>}

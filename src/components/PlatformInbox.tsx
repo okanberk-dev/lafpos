@@ -99,7 +99,7 @@ export function PlatformInbox() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex min-h-11 w-full shrink-0 items-center gap-2.5 border-b border-signal-line bg-signal-soft py-1.5 pl-3 pr-4 text-left text-sm text-ink transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95 md:mx-3 md:mb-3 md:w-auto md:rounded-full md:border md:pl-2 lg:mx-4"
+        className="flex min-h-11 w-full shrink-0 items-center gap-2.5 border-b border-signal-line bg-signal-soft py-1.5 pl-3 pr-4 text-left text-sm text-ink transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95 md:mx-3 md:mb-2 md:w-auto md:rounded-full md:border md:pl-2"
       >
         <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-signal)] text-[var(--admin-surface)]">
           <Bell className="size-3.5 stroke-[2.25]" />
