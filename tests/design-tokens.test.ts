@@ -125,31 +125,33 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     });
   }
 
-  it('kasa ekranları da LafPOS Sahne: porselen sayfa, sütlü köpük sahne, espresso mürekkep, ev yeşili', () => {
-    expect(posLight('bg')).toBe('#f4f1ec');
-    expect(posLight('primary')).toBe('#1d6d56');
-    expect(posLight('ink')).toBe('#17130f');
-    expect(posDark('primary')).toBe('#5cc9a2');
+  it('kasa ekranları da LafPOS Sahne (canlı): ferah sayfa, açık adaçayı sahne, yeşilimsi mürekkep, derin yeşil', () => {
+    expect(posLight('bg')).toBe('#f5f6f3');
+    expect(posLight('primary')).toBe('#0a6e52');
+    expect(posLight('ink')).toBe('#0f1513');
+    expect(posDark('primary')).toBe('#34d399');
   });
 
-  it('LafPOS Sahne paleti (DESIGN.md §2 tablosu): kitin ton merdiveni L’Affogato ısısında', () => {
-    expect(adminLight('admin-bg')).toBe('#f4f1ec');
-    expect(adminLight('admin-stage')).toBe('#eae4dc');
+  it('LafPOS Sahne paleti (DESIGN.md §2 tablosu; 18 Kas 2026 canlı tur): kitin ton merdiveni, canlı durum renkleri', () => {
+    expect(adminLight('admin-bg')).toBe('#f5f6f3');
+    expect(adminLight('admin-stage')).toBe('#e9ece7');
     expect(adminLight('admin-surface')).toBe('#ffffff');
-    expect(adminLight('admin-surface-2')).toBe('#faf8f5');
-    expect(adminLight('admin-panel')).toBe('#f0ebe5');
-    expect(adminLight('admin-primary')).toBe('#1d6d56');
-    expect(adminLight('admin-primary-hover')).toBe('#165543');
-    expect(adminLight('admin-text')).toBe('#17130f');
-    expect(adminLight('admin-text-soft')).toBe('#4b433c');
-    expect(adminLight('admin-text-mute')).toBe('#665d55');
-    expect(adminLight('admin-ink-fill')).toBe('#1a1714');
-    expect(adminLight('ok-ring')).toBe('#2f9e7a');
-    // Zamanı daralan kitte magenta; kasada sitenin bordosu
-    expect(adminLight('admin-signal')).toBe('#9d2543');
-    expect(adminLight('admin-border-field')).toBe('#877d74');
-    expect(adminLight('admin-blue')).toBe('#3442b8');
-    expect(adminLight('admin-gold-fill')).toBe('#e8c877');
+    expect(adminLight('admin-surface-2')).toBe('#f8f9f7');
+    expect(adminLight('admin-panel')).toBe('#eef1ec');
+    expect(adminLight('admin-primary')).toBe('#0a6e52');
+    expect(adminLight('admin-primary-hover')).toBe('#075a43');
+    expect(adminLight('admin-text')).toBe('#0f1513');
+    expect(adminLight('admin-text-soft')).toBe('#3f4a45');
+    expect(adminLight('admin-text-mute')).toBe('#58635e');
+    expect(adminLight('admin-ink-fill')).toBe('#111816');
+    expect(adminLight('ok-ring')).toBe('#12b886');
+    // Zamanı daralan: canlı ahududu (kitin magentası)
+    expect(adminLight('admin-signal')).toBe('#c8175d');
+    // Dolu masa L'Affogato yeşilinin degradesi
+    expect(css).toMatch(/--table-busy:\s*linear-gradient\(155deg, #0e7a5a/);
+    expect(adminLight('admin-border-field')).toBe('#7a837e');
+    expect(adminLight('admin-blue')).toBe('#2459e0');
+    expect(adminLight('admin-gold-fill')).toBe('#f2c94c');
     expect(adminLight('admin-bordo')).toBe('#9d2543');
     // Uygulama ikonunun ve sitenin altbilgisinin yeşili
     expect(css).toMatch(/--brand-tile:\s*radial-gradient\([^;]*#23876a[^;]*#1d6d56[^;]*#0c3b2d/);
@@ -174,8 +176,8 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
 
   it('mürekkep zeminli bildirimde odak halkası krem (yeşil halka mürekkepte 3:1 altında)', () => {
     expect(contrast(adminLight('admin-primary'), adminLight('admin-ink-fill')), 'yeşil halka mürekkepte zayıf').toBeLessThan(3);
-    expect(contrast(adminLight('admin-on-ink'), '#211c18'), 'krem halka mürekkepte').toBeGreaterThanOrEqual(3);
-    expect(css).toMatch(/--color-night:\s*#211c18;/);
+    expect(contrast(adminLight('admin-on-ink'), '#111816'), 'açık halka mürekkepte').toBeGreaterThanOrEqual(3);
+    expect(css).toMatch(/--color-night:\s*#111816;/);
     const toast = src('src/lib/toast.tsx');
     expect(toast).toContain("const NIGHT_FOCUS = '[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-primary)]'");
     // Bildirim tonlarının kendisi (yalnız sabitin tanımı değil): mürekkep zeminli dört ton da halkayı krem yapar

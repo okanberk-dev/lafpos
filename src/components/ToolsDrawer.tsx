@@ -51,7 +51,7 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
       tabIndex={-1}
       onKeyDown={(e) => trapTab(e, panel.current)}
       style={{ '--focus': 'var(--band-accent)' } as CSSProperties}
-      className="lp-drawer fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-[var(--band)] text-[var(--band-text)] outline-none [background-image:var(--waves-light)] [background-size:800px_240px]"
+      className="lp-drawer fixed inset-0 z-[60] overflow-y-auto overscroll-contain text-[var(--band-text)] outline-none"
     >
       <div className="mx-auto flex min-h-full w-full max-w-[1480px] flex-col px-5 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] sm:px-7">
         <header className="flex items-center justify-between gap-4 pb-2 pt-[max(1.25rem,env(safe-area-inset-top))]">

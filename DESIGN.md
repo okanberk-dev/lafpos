@@ -8,7 +8,7 @@
 > `docs/LAYOUTS.md`): kutu ve pencere değil **sahne**; derinlik gölgeyle değil tonla (sayfa → gri sahne → beyaz yaprak);
 > her etkileşimli öğe hap; ekranın tek ana eylemi **mürekkep hap ve sağında yeşil ok halkası**; cam filtre çubuğu;
 > siyah bantta dalga çizgileri; tek açılış anı. Kimlik L'Affogato'nun (laffogato `docs/BRAND.md`): L'Af logosu, ev yeşili,
-> espresso mürekkep, porselen ısısı, bordo; yazı Poppins ve Gabarito (kitin Helvetica'sı yerine, pakette, çevrimdışı).
+> yeşilimsi mürekkep, canlı durum renkleri (18 Kasım 2026 canlı tur); yazı Poppins ve Gabarito (kitin Helvetica'sı yerine, pakette, çevrimdışı).
 > Kitten bilerek alınmayanlar: dev büyük harfli ekran adı (ölçülü başlık var), masaüstüne özel düzen (telefon ve tablet
 > birinci sınıf), koyu temasızlık (LafPOS'ta sıcak gece var), Helvetica. Değerler `src/index.css`'te; erişilebilirlik
 > oranları `tests/design-tokens.test.ts` ve `tests/ui-kit.test.ts`'te sabit. Test düşerse değeri düzelt, eşiği gevşetme.
@@ -16,11 +16,11 @@
 
 ## 1. İlkeler
 
-1. **Sahne, yaprak, cam:** ekranı dolduran sütlü köpük rengi sahne (`--admin-stage`), içerik beyaz yaprakta kendi içinde
+1. **Sahne, yaprak, cam:** ekranı dolduran açık adaçayı rengi sahne (`--admin-stage`), içerik beyaz yaprakta kendi içinde
    kayar; üstte buzlu cam çubuk. Kart içinde kart yok; bölümler boşluk ve saç teliyle ayrılır. Gölge yalnız açılan ve
    yüzen parçada (pencere, menü, cam çubuk, mürekkep masa kartı); kart ve satır tonla ayrılır.
-2. **Renk anlam taşır:** mürekkep ana eylem ve seçimdir (seçili çip, sekme, segment, dolu masa); ok halkası ve olumlu
-   durum ev yeşili; zamanı daralan (hesap istendi, onay bekleyen platform siparişi) sitenin bordosu (kitin magentası);
+2. **Renk anlam taşır:** mürekkep ana eylem ve seçimdir (seçili çip, sekme, segment); dolu masa yeşil degrade; ok halkası
+   ve olumlu durum zümrüt; zamanı daralan (hesap istendi, onay bekleyen platform siparişi) canlı ahududu (kitin magentası);
    amber uyarı ve gecikme, kırmızı hata ve iptal, kobalt hazırlanıyor ve bilgi, mor online sipariş, pirinç ödül. Renk
    tek başına durum taşımaz, yanında yazı ya da ikon olur.
 3. **Sakin başlık, iri rakam:** ekranın adı ölçülü (Gabarito 700, 22-28 px, büyük harf yok); öne çıkan rakamdır (büyük
@@ -48,21 +48,29 @@
 
 | Rol | Açık | Koyu |
 |---|---|---|
-| Sayfa (porselen) / sahne (sütlü köpük) | `#F4F1EC` / `#EAE4DC` | `#0E0D0C` / `#161513` |
-| Yaprak, kart | `#FFFFFF` | `#1D1C1A` |
-| Yüzey içi hafif alan / taş (rozet, segment, kuyu) | `#FAF8F5` / `#F0EBE5` | `#222120` / `#2A2825` |
-| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E7E1D8` / `#D8D0C5` / `#F0EBE4` / `#877D74` | `#2F2D2A` / `#3B3935` / `#262422` / `#7A766E` |
-| Mürekkep / gövde / etiket | `#17130F` / `#4B433C` / `#665D55` | `#F3F1EC` / `#CFCBC3` / `#A39F96` |
-| Ana eylem ve seçim (mürekkep dolgu) | `#1A1714`, üstünde `#FBF8F4` | `#F3F1EC`, üstünde `#161513` |
-| Ok halkası (ana düğmenin sağı) | `#2F9E7A`, içinde ok `#16130F` | `#23876A`, ok `#0B1F18` |
-| Ev yeşili (bağlantı, olumlu, odak halkası, grafik) | `#1D6D56` | `#5CC9A2` |
-| Zamanı daralan (bordo) | `#9D2543` zemin `#F9E6EA` | `#F59BB0` zemin `#3A1D27` |
-| Kobalt (hazırlanıyor, bilgi) | `#3442B8` zemin `#ECEEFB` | `#9AA8FF` zemin `#1F2647` |
-| Pirinç (ödül) | dolgu `#E8C877` üstünde `#2E2113`, metin `#765923` | dolgu aynı, metin `#E8C877` |
-| Durum tonları | amber `#B45309`, kırmızı `#B42318`, pembe `#C0264A`, mor `#6D3FEA`, camgöbeği `#0B7392` | açık tonları |
-| Bant (giriş, Araçlar, bildirim) | `#16130F` + krema dalgaları | `#080706` |
+| Sayfa / sahne (açık adaçayı) | `#F5F6F3` / `#E9ECE7` | `#0B0E0D` / `#121715` |
+| Yaprak, kart | `#FFFFFF` | `#19201D` |
+| Yüzey içi hafif alan / taş (rozet, segment, kuyu) | `#F8F9F7` / `#EEF1EC` | `#1E2622` / `#26302B` |
+| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E3E7E1` / `#D3D9D1` / `#EDF0EB` / `#7A837E` | `#2A332F` / `#36413C` / `#212925` / `#78837D` |
+| Mürekkep / gövde / etiket | `#0F1513` / `#3F4A45` / `#58635E` | `#F1F5F3` / `#C9D2CD` / `#9AA6A0` |
+| Ana eylem ve seçim (mürekkep dolgu) | `#111816`, üstünde `#FFFFFF` | `#F1F5F3`, üstünde `#0F1513` |
+| Ok halkası (ana düğmenin sağı) | canlı zümrüt `#12B886`, ok `#06261B` | `#059669`, ok `#04261A` |
+| Derin yeşil (bağlantı, olumlu, odak halkası) | `#0A6E52`, yumuşak `#DDF5EA` | `#34D399`, yumuşak `#0F3327` |
+| Dolu masa | yeşil degrade `#0E7A5A → #086348 → #05432F`, beyaz yazı | aynı |
+| Zamanı daralan (ahududu) | `#C8175D` zemin `#FCE4EE` | `#FF7EB6` zemin `#3D1528` |
+| Mavi (hazırlanıyor, bilgi) | `#2459E0` zemin `#E6EEFF` | `#8FB0FF` zemin `#172548` |
+| Mor (online sipariş) | `#6D28D9` zemin `#F1EAFF` | `#C4B5FD` zemin `#261D45` |
+| Turuncu (uyarı, gecikme) / kırmızı (hata, iptal) | `#B45309` / `#C81E1E` | `#FBBF24` / `#FCA5A5` |
+| Grafik serisi | canlı zümrüt `#0E9F6E` | `#34D399` |
+| Pirinç (ödül) | dolgu `#F2C94C` üstünde `#2E2113`, metin `#765923` | dolgu aynı, metin `#F2C94C` |
+| Bant (giriş, Araçlar, bildirim) | `#0B100E` + yeşil hâle + krema dalgaları | `#060908` |
 | Marka karosu (uygulama ikonu) | `radial-gradient(#23876A → #1D6D56 → #0C3B2D)`, krem `#FBF6F1`, pirinç `#E8C877` | aynı |
 
+- **Canlı tur (18 Kasım 2026, operatör: "renkleri canlı yap, modernleştir ve estetikleştir"):** bej ve sütlü kahve yerine
+  ferah, hafif yeşil tonlu nötrler (kitin kendi sahne grisine yakın); renk durumlarda ve marka anlarında canlı: dolu
+  masalar L'Affogato yeşilinin degradesi, zamanı daralan ahududu, ok halkası parlak zümrüt, ürün kartının tepesinde
+  kategori renginde kısa şerit, bantlarda yeşil hâle, yan menüde ve üst çubukta seçili öğenin yeşili. Bütün çiftler iki
+  temada AA (`tests/design-tokens.test.ts`).
 - Değer adları `--admin-*` (`:root` açık, `.dark` koyu); ortak adlar (`--bg`, `--ink`, `--primary`, `--focus`...) onlara
   çözülür; kitin adları: `--admin-stage`, `--ok-ring`, `--ok-arrow`, `--admin-signal*`, `--band*`, `--glass`, `--waves-*`.
   Tailwind anlam adları iki temada doğru tonu verir: `text-signal-ink`, `bg-signal-soft`, `bg-stage`, `text-blue-ink`,
@@ -113,8 +121,9 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 - **Yan menü** (`.lp-menu`, shadcn'in Sidebar'ı gibi): satır 40 px (dokunmatikte 44), ikon, ad, sağda soluk sayı; seçili
   satır beyaz yüzeyde ince kenar ve hafif gölgeyle, üstüne gelince yarı saydam beyaz; grup başlığı küçük ve soluk
   (`.lp-menu-label`). Numara yok. Dar ekranda hap şeridi (seçili mürekkep).
-- **Durum renkleri:** masa boş kesikli kenarlı açık kart, dolu mürekkep kart (koyuda açık kart), hesap istendi soldaki
-  bordo şerit ve "Hesap" hapı, kısmen ödendi altta yeşil ilerleme çubuğu ve "₺X kaldı"; online (siteden gelen) sipariş her
+- **Durum renkleri:** masa boş kesikli kenarlı açık kart, dolu L'Affogato yeşilinin degradesinde beyaz yazılı kart (iki
+  temada), hesap istendi soldaki ahududu şerit ve "Hesap" hapı, kısmen ödendi altta beyaz ilerleme çubuğu ve "₺X kaldı";
+  hazır kalem beyaz hapta nabızlı; online (siteden gelen) sipariş her
   ekranda mor. Bar ekranında kalem bekliyor nötr (gri halka), hazırlanıyor mavi, hazır yeşil, teslim edildi gri (yazıyla
   "Teslim edildi"); amber yalnız zamanı söyler (ayardaki dakikayı geçen fişin süre rozeti, planlı saat), kırmızı alarm ve
   iptal.
