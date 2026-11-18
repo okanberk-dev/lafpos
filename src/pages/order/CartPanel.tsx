@@ -571,7 +571,7 @@ function SheetButton({ icon, title, hint, onClick, disabled, danger }: { icon: R
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'flex min-h-14 items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left transition-colors duration-150 enabled:hover:border-[var(--admin-border-field)] enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-not-allowed disabled:opacity-40',
+        'flex min-h-12 items-center gap-3 rounded-xl border border-line px-3 py-2 text-left transition-colors duration-150 enabled:hover:border-[var(--admin-border-field)] enabled:hover:bg-hover enabled:active:bg-press disabled:cursor-not-allowed disabled:opacity-40',
         danger && 'text-[var(--admin-danger-ink)]',
       )}
     >

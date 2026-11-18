@@ -681,7 +681,7 @@ export function PaymentModal({
                       else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
                     }}
                     aria-pressed={method?.id === m.id}
-                    className={cn('flex h-14 min-w-0 items-center gap-2 px-3 text-left text-sm font-semibold', choice(method?.id === m.id))}
+                    className={cn('flex h-12 min-w-0 items-center gap-2 px-3 text-left text-sm font-semibold pointer-fine:h-11', choice(method?.id === m.id))}
                   >
                     <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: m.color }} />
                     <span className="min-w-0 truncate">{m.name}</span>

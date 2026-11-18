@@ -64,7 +64,7 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
             onClick={onClose}
             aria-label="Kapat"
             title="Kapat"
-            className="grid size-12 shrink-0 place-items-center rounded-full border border-[var(--band-line)] text-[var(--band-text)] transition-colors duration-150 hover:border-[var(--band-muted)] hover:bg-[var(--band-2)]"
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-[var(--band-line)] text-[var(--band-text)] transition-colors duration-150 hover:border-[var(--band-muted)] hover:bg-[var(--band-2)]"
           >
             <X aria-hidden="true" className="size-5" />
           </button>

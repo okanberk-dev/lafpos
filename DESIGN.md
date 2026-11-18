@@ -25,8 +25,9 @@
    tek başına durum taşımaz, yanında yazı ya da ikon olur.
 3. **Sakin başlık, iri rakam:** ekranın adı ölçülü (Gabarito 700, 22-28 px, büyük harf yok); öne çıkan rakamdır (büyük
    sayılar, tutar, masa kartındaki toplam: Gabarito kalın, sıkı aralık).
-4. **Dokunmatik önce:** her hedef en az 44 px (AGENTS.md kural 8), POS düğmeleri 44-64 px; yönetimde fareyle 36, sıkı
-   görünümde 32 px.
+4. **Dokunmatik önce, aşırı büyük değil:** dokunmatikte her hedef en az 44 px (AGENTS.md kural 8); fareyle ölçülü
+   (18 Kasım 2026, operatör: "butonları düzgün yap, aşırı büyük yapma"): düğme ve alan 40 px, küçük düğme 32, büyük 44,
+   en büyük 48; yönetimde fareyle 36, sıkı görünümde 32 px.
 5. **Tek açılış anı:** ekrana girerken cam çubuk kalkar, başlık aşağıdan açılır, yaprak gelir, ilk satırlar 30 ms arayla;
    sonra sakin. Sürekli hareket yalnız siyah bantlarda (90-120 sn'de bir kayan dalgalar) ve hazır rozetinin nabzı.
    Hareket azaltmada hepsi kapalı.
@@ -297,7 +298,9 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   mürekkep hap, yazı kalın, sağında yeşil **ok halkası** (`Ring`, `.lp-ring`; üstüne gelince ve odakta ok 45° döner,
   devre dışıyken gri); geniş ana düğmede yazı solda, halka sağda. Ana eylemde baştaki ikon yok. `secondary` beyaz hap ve
   ince kenar (üstüne gelince mürekkep kenar), `ghost` kenarsız, `success` dolu yeşil (bar ekranında "Hepsi hazır"),
-  `danger*` kırmızı. Kapat düğmesi mürekkep halkalı daire. Kare ikon düğmesinde halka yok.
+  `danger*` kırmızı. Kapat düğmesi mürekkep halkalı daire. Kare ikon düğmesinde halka yok. Ölçü merdiveni (fareyle /
+  dokunmatikte): `sm` 32 / 44, `md` 40 / 44 (yönetimde fareyle 36), `lg` 44 / 48, `xl` 48 / 56; yazı 13, 14, 15, 16 px.
+  Giriş alanı, açılır liste ve arama alanı düğmeyle aynı boyda (40 / 44; yönetimde fareyle 36), yazı fareyle 14 px.
 - **Ölçek:** sayfa başlığı Gabarito 22-26/700 ve 13 px açıklama (`PageHeader`), bölüm 16/700, kart başlığı 16/700, mikro
   etiket 12/500; kart arası 10-12 px. KPI karosu tek bileşen (`Stat`: 13 px etiket, Gabarito 30 px rakam, `strong` 40
   px, sıkı aralık); rakam yerine kelime yazılmaz ("—" ve ipucunda "Sayılmadı").

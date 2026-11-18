@@ -22,7 +22,7 @@ import { isFinePointer } from '@/lib/hooks';
  * --r-ctl'si); arama alanı hap. Hata `Field error` ile verilince alana kendiliğinden geçer.
  */
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-[var(--admin-text)] focus:ring-1 focus:ring-[var(--admin-text)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-sm pointer-coarse:text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-[var(--admin-text)] focus:ring-1 focus:ring-[var(--admin-text)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
 
 /** Alanla aynı görünümde kullanılan tek seferlik input'lar için (dışarıdan `className` ile) */
 export const fieldClass = base;
@@ -104,7 +104,7 @@ export function Field({
 
 /** Kasa alanları müşteri verisi taşır: tarayıcı önceki müşterileri önermesin diye varsayılan `autoComplete="off"` */
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function Input({ className, autoComplete = 'off', ...rest }, ref) {
-  return <input ref={ref} autoComplete={autoComplete} className={cn(base, 'h-11 [[data-area=admin]_&]:pointer-fine:h-10', className)} {...rest} />;
+  return <input ref={ref} autoComplete={autoComplete} className={cn(base, 'h-10 pointer-coarse:h-11 [[data-area=admin]_&]:pointer-fine:h-9', className)} {...rest} />;
 });
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...rest }, ref) {
@@ -114,7 +114,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(base, 'select-arrow h-11 [[data-area=admin]_&]:pointer-fine:h-10 appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} {...rest}>
+    <select className={cn(base, 'select-arrow h-10 pointer-coarse:h-11 [[data-area=admin]_&]:pointer-fine:h-9 appearance-none bg-[length:16px] bg-[right_12px_center] bg-no-repeat pr-9', className)} {...rest}>
       {children}
     </select>
   );
@@ -164,7 +164,7 @@ export const SearchInput = forwardRef<
           }
           onKeyDown?.(e);
         }}
-        className={cn(base, 'h-11 rounded-[var(--r-chip)] pl-10 pr-11 [&::-webkit-search-cancel-button]:appearance-none [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:pr-9', dense && 'pointer-fine:h-9 pointer-fine:pr-9', className)}
+        className={cn(base, 'h-10 pointer-coarse:h-11 rounded-[var(--r-chip)] pl-10 pr-10 pointer-coarse:pr-11 [&::-webkit-search-cancel-button]:appearance-none [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:pr-9', dense && 'pointer-fine:h-9 pointer-fine:pr-9', className)}
         {...rest}
       />
       {value && (
@@ -183,7 +183,7 @@ export const SearchInput = forwardRef<
               else e.currentTarget.blur();
             }
           }}
-          className={cn('absolute right-0 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-[var(--r-chip)] text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
+          className={cn('absolute right-0 top-1/2 grid size-10 pointer-coarse:size-11 -translate-y-1/2 place-items-center rounded-[var(--r-chip)] text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
         >
           <X aria-hidden="true" className="size-4" />
         </button>
