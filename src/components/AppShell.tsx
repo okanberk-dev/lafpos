@@ -238,7 +238,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
    */
   const healthText = REMOTE ? `Uzaktan · ${fmtTime(now)}` : live === 'kopuk' ? 'Bağlantı koptu' : `${fmtTime(now)} · ${dayText}`;
   const healthCls = cn(
-    'hidden h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border pl-3.5 pr-4 text-[13px] font-medium lg:inline-flex',
+    'hidden h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border pl-3 pr-3.5 text-[13px] font-medium pointer-coarse:h-11 lg:inline-flex',
     live === 'kopuk' && !REMOTE ? 'border-[var(--admin-danger)] bg-[var(--admin-danger)] text-white' : 'border-[var(--admin-border-strong)] bg-surface text-ink-2',
     !boot.day && !REMOTE && live !== 'kopuk' && 'border-warning-line bg-warning-soft text-warning-ink',
   );
@@ -354,7 +354,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         </nav>
         <div className="flex shrink-0 items-center gap-2">
           {healthPill}
-          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-11 place-items-center rounded-full border border-[var(--admin-border-strong)] bg-surface text-ink-2 transition-colors duration-150 hover:border-[var(--admin-text)] hover:text-ink">
+          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-full border border-[var(--admin-border-strong)] bg-surface text-ink-2 pointer-coarse:size-11 transition-colors duration-150 hover:border-[var(--admin-text)] hover:text-ink">
             <Search className="size-[18px]" />
           </button>
           <span className="hidden min-w-0 flex-col items-end leading-tight 2xl:flex">
@@ -362,8 +362,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
             <span className="text-xs text-muted">{roleLabel}</span>
           </span>
           {/* Araçlar: kitin Tools düğmesi (mürekkep hap + yeşil ok halkası); kişinin menüsü ve sığmayan ekranlar */}
-          <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} className={buttonClass('primary', 'md', { ring: true, className: 'font-headline text-[15px]' })}>
-            <Avatar name={me.name} color={me.color} className="-ml-2.5 size-8 text-[11px] ring-2 ring-[color-mix(in_oklab,var(--admin-on-ink)_25%,transparent)]" />
+          <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} className={buttonClass('primary', 'md', { ring: true, className: 'font-headline' })}>
+            <Avatar name={me.name} color={me.color} className="-ml-2.5 size-7 text-[10.5px] pointer-coarse:size-8 ring-2 ring-[color-mix(in_oklab,var(--admin-on-ink)_25%,transparent)]" />
             Araçlar
             {hidden.length > 0 && (
               <span aria-hidden="true" className="tabular grid h-5 min-w-5 place-items-center rounded-full bg-[color-mix(in_oklab,var(--admin-on-ink)_18%,transparent)] px-1.5 text-[11.5px] font-semibold">

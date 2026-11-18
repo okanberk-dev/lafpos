@@ -236,7 +236,7 @@ export default function KitchenPage() {
       <Modal open={more} onClose={() => setMore(false)} title="Bar ekranı" size="sm">
         {/* Satırlar kabuğun "Diğer ekranlar" sayfası gibi: 56 px, kenarlı, köşe 14 */}
         <div
-          className="grid gap-2 p-4 [&_button]:min-h-14 [&_button]:w-full [&_button]:justify-start [&_button]:gap-3 [&_button]:rounded-xl [&_button]:border [&_button]:border-line [&_button]:px-3 [&_button]:text-[15px] [&_svg]:size-[18px]"
+          className="grid gap-2 p-4 [&_button]:min-h-12 [&_button]:w-full [&_button]:justify-start [&_button]:gap-3 [&_button]:rounded-xl [&_button]:border [&_button]:border-line [&_button]:px-3 [&_button]:text-[15px] [&_svg]:size-[18px]"
           onClick={() => setMore(false)}
         >
           {tools}
@@ -563,7 +563,7 @@ function Count({ icon, label, value, tone }: { icon: React.ReactNode; label: str
 }
 
 /** Fiş düğmesi: 48 px yükseklik, 16 px yazı, satırı paylaşır */
-const FOOT = 'h-12 flex-1 text-base';
+const FOOT = 'h-11 flex-1 text-[15px] pointer-coarse:h-12';
 
 /** Fiş başlığının sağındaki durum hapı (süre, hazır olalı, iptal): uzaktan okunur, 15-17 px */
 const PILL = 'tabular inline-flex min-h-7 shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[15px] font-semibold md:min-h-8 md:text-[17px]';

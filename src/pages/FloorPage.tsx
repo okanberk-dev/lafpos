@@ -318,7 +318,7 @@ export default function FloorPage() {
             const online = o.source === 'laffogato';
             const checkNo = choose.orders.filter((x) => x.source === 'pos').indexOf(o) + 1;
             return (
-              <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-line px-4 text-left transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press">
+              <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-line px-4 text-left transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:bg-hover active:bg-press">
                 <span className="flex min-w-0 items-center gap-2 text-sm font-medium">
                   {online && <Globe className="size-4 shrink-0 text-[var(--admin-hue-violet)]" />}
                   <span className="truncate">

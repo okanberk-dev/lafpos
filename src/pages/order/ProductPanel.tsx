@@ -123,7 +123,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
         <div className="px-3 pt-2 md:px-0 md:pt-0">
           {/* Ortak arama alanı (hap; temizle düğmesi, Escape); boşken farede "/" kısayolu ipucu */}
           <div className="relative">
-            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" className="h-12 border-[var(--admin-border-strong)] text-base md:h-12" />
+            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" className="border-[var(--admin-border-strong)]" />
             {!q && (
               <kbd aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-2 px-1.5 text-xs font-medium text-muted pointer-fine:inline-block">
                 /

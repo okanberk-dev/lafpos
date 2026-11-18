@@ -68,32 +68,40 @@ const disabledStyles: Record<ButtonVariant, string> = {
   warn: 'disabled:opacity-50',
 };
 
-// Dokunmatikte en az 44 px (AGENTS.md kural 8); yönetimde fareyle 36 px, "Sıkı görünüm"de 32 px. Köşe --r-btn: kasada
-// kapsül (sitenin --r-btn'i), yönetim ve raporlarda 6 px dikdörtgen (kurumsal yüzey, index.css)
+/*
+ * Ölçü merdiveni (18 Kasım 2026, operatör: "butonları düzgün yap, aşırı büyük yapma"): fareyle ölçülü, dokunmatikte en az
+ * 44 px (AGENTS.md kural 8; e2e telefon ve tablette denetler).
+ *          fareyle   dokunmatik   yönetimde fareyle (sıkı görünüm)
+ *   sm     32        44           32
+ *   md     40        44           36 (32)
+ *   lg     44        48
+ *   xl     48        56
+ * Köşe --r-btn: kasada kapsül, yönetim ve raporlarda dikdörtgen (index.css)
+ */
 const COMPACT = '[[data-area=admin][data-density=compact]_&]:pointer-fine:h-8';
 const sizes: Record<ButtonSize, string> = {
-  sm: `h-9 px-3.5 text-sm gap-1.5 rounded-[var(--r-btn)] pointer-coarse:h-11 pointer-coarse:min-w-11 ${COMPACT}`,
-  md: `h-11 px-5 text-[15px] gap-2 rounded-[var(--r-btn)] [[data-area=admin]_&]:text-sm [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:px-4 ${COMPACT}`,
-  lg: 'h-14 px-6 text-base gap-2 rounded-[var(--r-btn)]',
-  xl: 'h-16 px-7 text-lg gap-3 rounded-[var(--r-btn)]',
+  sm: `h-8 px-3 text-[13px] gap-1.5 rounded-[var(--r-btn)] pointer-coarse:h-11 pointer-coarse:min-w-11 pointer-coarse:px-3.5 pointer-coarse:text-sm ${COMPACT}`,
+  md: `h-10 px-4 text-sm gap-2 rounded-[var(--r-btn)] pointer-coarse:h-11 pointer-coarse:px-5 pointer-coarse:text-[15px] [[data-area=admin]_&]:pointer-fine:h-9 ${COMPACT}`,
+  lg: 'h-11 px-5 text-[15px] gap-2 rounded-[var(--r-btn)] pointer-coarse:h-12',
+  xl: 'h-12 px-6 text-base gap-2.5 rounded-[var(--r-btn)] pointer-coarse:h-14',
 };
-/** Kare ikon düğmesi: genişlik yükseklikle aynı adımda (yönetimde fareyle 36, sıkıda 32); dar satırda daralmaz (44 px) */
+/** Kare ikon düğmesi: genişlik yükseklikle aynı adımda; dar satırda daralmaz */
 const squares: Record<ButtonSize, string> = {
-  sm: 'w-9 shrink-0 px-0 pointer-coarse:w-11 [[data-area=admin][data-density=compact]_&]:pointer-fine:w-8',
-  md: 'w-11 shrink-0 px-0 [[data-area=admin]_&]:pointer-fine:w-9 [[data-area=admin][data-density=compact]_&]:pointer-fine:w-8',
-  lg: 'w-14 shrink-0 px-0',
-  xl: 'w-16 shrink-0 px-0',
+  sm: 'w-8 shrink-0 px-0 pointer-coarse:w-11 pointer-coarse:px-0 [[data-area=admin][data-density=compact]_&]:pointer-fine:w-8',
+  md: 'w-10 shrink-0 px-0 pointer-coarse:w-11 pointer-coarse:px-0 [[data-area=admin]_&]:pointer-fine:w-9 [[data-area=admin][data-density=compact]_&]:pointer-fine:w-8',
+  lg: 'w-11 shrink-0 px-0 pointer-coarse:w-12',
+  xl: 'w-12 shrink-0 px-0 pointer-coarse:w-14',
 };
 const spinnerSize: Record<ButtonSize, string> = { sm: 'size-4', md: 'size-4', lg: 'size-5', xl: 'size-6' };
 /**
- * Ok halkalı düğmenin ölçüsü: sağ pay küçülür, halka düğmenin içinde 6 px boşlukla durur (kit: 42 px düğmede 30 px
- * halka). Dokunmatikte 44, yönetimde fareyle 36, sıkı görünümde 32 px düğmeye göre
+ * Ok halkalı düğmenin ölçüsü: sağ pay küçülür, halka düğmenin içinde 4–8 px boşlukla durur (kit: 42 px düğmede 30 px
+ * halka). Ölçüler yukarıdaki merdivene göre
  */
 const ringSizes: Record<ButtonSize, string> = {
-  sm: 'pl-3.5 pr-1 gap-2.5 [--ring:1.75rem] pointer-coarse:[--ring:2rem] [[data-area=admin][data-density=compact]_&]:pointer-fine:[--ring:1.5rem]',
-  md: 'pl-5 pr-1.5 gap-3 [--ring:2rem] [[data-area=admin]_&]:pointer-fine:pl-4 [[data-area=admin]_&]:pointer-fine:pr-1 [[data-area=admin]_&]:pointer-fine:[--ring:1.75rem] [[data-area=admin][data-density=compact]_&]:pointer-fine:[--ring:1.5rem]',
-  lg: 'pl-6 pr-2 gap-3 [--ring:2.5rem]',
-  xl: 'pl-7 pr-2 gap-4 [--ring:3rem]',
+  sm: 'pl-3 pr-1 gap-2 [--ring:1.5rem] pointer-coarse:pl-3.5 pointer-coarse:pr-1.5 pointer-coarse:[--ring:2rem] [[data-area=admin][data-density=compact]_&]:pointer-fine:[--ring:1.5rem]',
+  md: 'pl-4 pr-1.5 gap-2.5 [--ring:1.75rem] pointer-coarse:pl-5 pointer-coarse:[--ring:2rem] [[data-area=admin]_&]:pointer-fine:pr-1 [[data-area=admin][data-density=compact]_&]:pointer-fine:[--ring:1.5rem]',
+  lg: 'pl-5 pr-1.5 gap-3 [--ring:2rem] pointer-coarse:[--ring:2.25rem]',
+  xl: 'pl-6 pr-1.5 gap-3 [--ring:2.25rem] pointer-coarse:pr-2 pointer-coarse:[--ring:2.5rem]',
 };
 /** Ok halkası taşıyan varyantlar: ekranın ana eylemi ve ödeme */
 const RING: ButtonVariant[] = ['primary', 'ink'];
