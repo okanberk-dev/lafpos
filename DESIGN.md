@@ -40,7 +40,7 @@
 - **Poppins** 400/500/600/700: gövde, etiket, düğme, form, yan menü. Bütün rakamlar Gabarito'dan (`LafPOS Rakam`, yalnız
   0-9): metinde orantılı, `.tabular` / `tabular-nums` ile eşit genişlikte. Dosyalar pakette (`@fontsource/poppins`,
   `@fontsource-variable/gabarito`), latin ve latin-ext ayrı; dış kaynaktan yazı yüklenmez.
-- **Ölçek:** ekran başlığı (`.lp-name`) 22, geniş ekranın sol sütununda 28 px / 700 / -0.03em; durum cümlesi 13 px; kart
+- **Ölçek:** ekran başlığı (`.lp-name`) 22, geniş ekranın sol sütununda 24 px / 700 / -0.03em; durum cümlesi 13 px; kart
   başlığı 16/700 -0.025em; gövde 14-15; mikro 12/500 (en küçük 11). Büyük sayılar (`.lp-hs`) 28-44 px, tutar 22-34 px,
   -0.045em; KPI 30-40 px; müşteri ekranında tutar 48-88/800. Büyük harf dönüşümü yok (yalnız kısaltmalar kendiliğinden).
 
@@ -118,9 +118,15 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   sayılar (`Hero`) ve tek ana eylem; sağda yaprak. Dar ekranda tek sütun: başlık ve sayılar bir şeritte, eylemler altında,
   yan menü yatay hap şeridi; telefonda başlığı üst şerit yazar (sahnedeki yalnız ekran okuyucuda). Sayfanın `PageHeader`'ı
   sahnede başlığını sol sütuna, eylemlerini ana eylemin yerine taşır (portal); `headerInLeaf` ile yaprağın başında kalır.
-- **Yan menü** (`.lp-menu`, shadcn'in Sidebar'ı gibi): satır 40 px (dokunmatikte 44), ikon, ad, sağda soluk sayı; seçili
-  satır beyaz yüzeyde ince kenar ve hafif gölgeyle, üstüne gelince yarı saydam beyaz; grup başlığı küçük ve soluk
-  (`.lp-menu-label`). Numara yok. Dar ekranda hap şeridi (seçili mürekkep).
+- **Sol sütun paneli** (18 Kasım 2026, operatör: "modernleştir, açık ve canlı renkler"): geniş ekranda sütun 240 px
+  (80rem üstünde 264), yaprakla aynı köşede açık şafak paneli: beyaza yakın zemin (`--side-base`), sol üstte açık nane
+  (`--side-tint-a`), sağ altta buz mavisi (`--side-tint-b`), beyaz saç teli kenar ve yeşilimsi yumuşak gölge. Koyu temada
+  aynı şafak düşük ışıkta.
+- **Yan menü** (`.lp-menu`, shadcn'in Sidebar'ı gibi): satır 36 px (dokunmatikte 44), ikon, ad, sağda soluk sayı. İkon açık
+  renkli çipte, ton sırayla zümrüt, mavi, mor, kehribar, gül (`--admin-hue-*`; yalnız süs). Seçili satır zümrütten
+  camgöbeğine canlı geçiş (`--menu-active-from/via/to`), beyaz yazı ve sayı (her durakta 4.9:1 üstü), altında yeşil hâle;
+  üstüne gelince yarı saydam beyaz; grup başlığı küçük ve soluk (`.lp-menu-label`). Numara yok. Dar ekranda hap şeridi
+  (seçili hap aynı canlı geçişte).
 - **Durum renkleri:** masa boş kesikli kenarlı açık kart, dolu L'Affogato yeşilinin degradesinde beyaz yazılı kart (iki
   temada), hesap istendi soldaki ahududu şerit ve "Hesap" hapı, kısmen ödendi altta beyaz ilerleme çubuğu ve "₺X kaldı";
   hazır kalem beyaz hapta nabızlı; online (siteden gelen) sipariş her
@@ -242,7 +248,7 @@ görünüm"de 32). Kurumsal 6 px yüzey (4 Kasım 2026) kalktı: yönetim ve rap
 
 - **Yerleşim** (`src/components/admin/AdminShell.tsx`): kasanın üst çubuğunun altında sahne. Geniş ekranda (lg) solda
   **shadcn'in Sidebar'ı gibi sade yan menü**: grup başlıkları küçük ve soluk (Genel, Menü, Salon ve kasa, Ekip,
-  Bağlantılar, Sistem), altında bölümler ikon ve adlarıyla; seçili satır beyaz yüzeyde ince kenarla; sayaç yalnız iş
+  Bağlantılar, Sistem), altında bölümler renkli ikon çipleri ve adlarıyla; seçili satır canlı zümrüt geçişte; sayaç yalnız iş
   bekleyen yerde (tükenen ürün, gönderilemeyen gün), ne saydığı ipucunda ve ekran okuyucuda; dipte "Kasa ekranlarına
   dön" ve "Sıkı görünüm". Sağda beyaz yaprakta sayfanın başlığı (Gabarito 26/700), açıklaması ve eylemleri (sağda önce
   ikincil sonra ana eylem), altında içerik (`Stage headerInLeaf`). Tablette menü yatay kayan hap şeridi, telefonda kabuğun
