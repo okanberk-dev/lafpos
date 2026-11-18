@@ -81,7 +81,6 @@ export default function FloorPage() {
   // adisyonu: sitede ödenmiş QR siparişinin hesabı yok. Söz açıklama satırı ve masa kartındaki ikonla aynı
   const occupied = boot.tables.filter((t) => (floor.data?.tables[t.id]?.length ?? 0) > 0);
   const billed = occupied.filter((t) => floor.data?.tables[t.id]?.some((o) => o.source === 'pos' && o.billPrintedAt)).length;
-  const summary = joinMeta([`${boot.tables.length} masa`, `${occupied.length} dolu`, billed > 0 && `${billed} hesap istendi`]);
   // Her cihazın yeniden kullanılan boş tezgâh satışı (yeni satışın bekleme yeri) bir sipariş değil: listede birikmez.
   // Ölçüt sunucunun (`empty`: gün sonu kendiliğinden kapatır). Kalemleri iptal edilmiş tezgâh satışı ürünsüz de olsa
   // kalır: yeniden kullanılmaz, gün sonunu tutar, kapatılacak yer burası. Boş gel-al ve paket kalır (müşterinin adı, adresi var)
@@ -209,7 +208,8 @@ export default function FloorPage() {
     // masa planı ve masasız siparişler. Telefonda kimlik üstte sıkı şerit, bölümler yatay hap şeridi
     <Stage
       name="Masalar"
-      sub={`${today} · ${summary}`}
+      // Doluluk ve hesap büyük sayılarda: cümle yalnız günü ve salonun büyüklüğünü söyler (sütun kısa kalır)
+      sub={`${today} · ${boot.tables.length} masa`}
       hero={[
         { label: 'Dolu masa', value: occupied.length },
         ...(billed > 0 ? [{ label: 'Hesap istendi', value: billed, tone: 'signal' as const }] : []),
@@ -298,9 +298,9 @@ export default function FloorPage() {
         </div>
         <footer className="hidden shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-6 py-3 text-xs text-muted sm:flex">
           <Legend className="border border-dashed border-[var(--admin-border-field)]" label="Boş" />
-          <Legend className="bg-[var(--admin-ink-fill)]" label="Dolu" />
-          <Legend className="bg-[var(--admin-ink-fill)] shadow-[inset_3px_0_0_var(--admin-signal)]" label="Hesap istendi" />
-          <Legend className="bg-[linear-gradient(90deg,var(--ok-ring)_50%,var(--admin-ink-fill)_50%)]" label="Kısmen ödendi" />
+          <Legend className="[background:var(--table-busy)]" label="Dolu" />
+          <Legend className="shadow-[inset_3px_0_0_var(--admin-signal)] [background:var(--table-busy)]" label="Hesap istendi" />
+          <Legend className="bg-[linear-gradient(90deg,#fff_50%,#0e7a5a_50%)] ring-1 ring-inset ring-[#0e7a5a]" label="Kısmen ödendi" />
           <Legend className="border border-violet-line bg-violet-soft" label="Online" />
           <Legend className="border border-dashed border-[var(--admin-border-field)]" dot label="Rezerve" />
         </footer>
@@ -372,9 +372,9 @@ function Legend({ className, dot, label }: { className: string; dot?: boolean; l
 }
 
 /**
- * Masa (kitin gemi kartı ve siyah hap etiketi): boş masa kesikli kenarlı açık kart, dolu masa mürekkep kart (uzaktan
- * bir bakışta ayrılır), tutar kartın en büyük yazısı. Hesap istendi soldaki magenta şerit ve "Hesap" hapı (kitin
- * zamanı daralan rengi), kısmen ödendi altta yeşil ilerleme çubuğu ve kalan tutar; yalnız sitede ödenmiş siparişi
+ * Masa (kitin gemi kartı): boş masa kesikli kenarlı açık kart, dolu masa L'Affogato yeşilinin degradesinde (uzaktan bir
+ * bakışta ayrılır), tutar kartın en büyük yazısı. Hesap istendi soldaki ahududu şerit ve "Hesap" hapı (kitin zamanı
+ * daralan rengi), kısmen ödendi altta beyaz ilerleme çubuğu ve kalan tutar; yalnız sitede ödenmiş siparişi
  * olan masa mor. Bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil ve nabızlı. Yuvarlak masada içerik ortada.
  */
 function TableTile({
@@ -412,8 +412,8 @@ function TableTile({
   const tone = !busy ? 'free' : !pos.length ? 'online' : partial ? 'partial' : billed ? 'billed' : 'busy';
   const inked = tone === 'busy' || tone === 'billed' || tone === 'partial';
   const round = table.shape === 'round';
-  // Mürekkep kartta ikincil yazı: açık yazının %72'si (iki temada da 8:1'in üstünde)
-  const soft = inked ? 'text-[color-mix(in_oklab,var(--admin-on-ink)_72%,transparent)]' : 'text-ink-2';
+  // Yeşil kartta ikincil yazı: beyazın %90'ı (degradenin en açık yerinde de 4.5:1'in üstünde)
+  const soft = inked ? 'text-white/90' : 'text-ink-2';
 
   return (
     <button
@@ -423,7 +423,8 @@ function TableTile({
         '@container group relative flex flex-col overflow-hidden p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
         round ? 'items-center justify-center gap-1 rounded-[999px] text-center' : cn('rounded-[1.125rem]', busy || reservation ? 'justify-between' : 'justify-start gap-1'),
         tone === 'free' && 'border border-dashed border-[color-mix(in_oklab,var(--admin-border-field)_70%,transparent)] bg-surface-2 hover:border-solid hover:border-[var(--admin-text)] hover:bg-surface',
-        inked && 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)] shadow-[var(--shadow-lift)] hover:bg-[var(--admin-ink-fill-hover)]',
+        // Dolu masa L'Affogato yeşilinin degradesinde, beyaz yazı: uzaktan bir bakışta seçilir, salon canlı görünür
+        inked && 'text-white shadow-[var(--shadow-lift)] [background:var(--table-busy)] hover:[background:var(--table-busy-hover)]',
         // Hesap istendi: soldaki magenta şerit (yuvarlak masada halka); renk tek başına taşımaz, "Hesap" hapı da var
         tone === 'billed' && (round ? 'ring-[3px] ring-[var(--admin-signal)]' : 'shadow-[inset_4px_0_0_var(--admin-signal),var(--shadow-lift)]'),
         // Online (siteden gelen) sipariş her ekranda mor; kenarı öteki durumlar gibi kendi çizgi belirteci
@@ -467,17 +468,18 @@ function TableTile({
           {(pending > 0 || ready > 0) && (
             <div className={cn('mt-1.5 flex gap-1 text-[11px] font-medium', round && 'justify-center')}>
               {pending > 0 && (
-                <span className={cn('tabular inline-flex items-center gap-0.5 rounded-full px-2 py-0.5', inked ? 'bg-[color-mix(in_oklab,var(--admin-on-ink)_14%,transparent)] text-[var(--admin-on-ink)]' : 'bg-surface text-ink-2 ring-1 ring-inset ring-blue-line')} title={`${pending} kalem barda`}>
+                <span className={cn('tabular inline-flex items-center gap-0.5 rounded-full px-2 py-0.5', inked ? 'bg-white/15 text-white' : 'bg-surface text-ink-2 ring-1 ring-inset ring-blue-line')} title={`${pending} kalem barda`}>
                   <ChefHat className="size-3" />
                   {pending}
                 </span>
               )}
-              {ready > 0 && <span className="animate-ring tabular whitespace-nowrap rounded-full bg-success-600 px-2 py-0.5 text-white">{ready} hazır</span>}
+              {/* Hazır: yeşil kartta beyaz hap, yeşil yazı ve nabız (kartın kendi yeşilinden ayrılır) */}
+              {ready > 0 && <span className="animate-ring tabular whitespace-nowrap rounded-full bg-white px-2 py-0.5 font-semibold text-[#05432f]">{ready} hazır</span>}
             </div>
           )}
           {partial && !round && (
-            <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-[color-mix(in_oklab,var(--admin-on-ink)_14%,transparent)]">
-              <span className="block h-full bg-[var(--ok-ring)]" style={{ width: `${Math.round((paid / total) * 100)}%` }} />
+            <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-1 bg-white/20">
+              <span className="block h-full bg-white" style={{ width: `${Math.round((paid / total) * 100)}%` }} />
             </span>
           )}
         </div>

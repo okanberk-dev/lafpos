@@ -159,7 +159,7 @@
    * Metin, rozet, uyarı kutusu ve kenar için anlam adları (aşağıdaki @theme inline: text-danger-ink, bg-warning-soft,
    * border-warning-line…) ya da --admin-* belirteçleri; onlar iki temada da AA (tests/design-tokens.test.ts)
    */
-  --color-night: #211c18;
+  --color-night: #111816;
 
   /*
    * Köşe merdiveni (kitin yarıçapı): sahne 28, yaprak ve pencere 24, cam çubuk 22, kart 18, alan 12, küçük denetim 10;
@@ -185,73 +185,74 @@
 
 /* Açık tema: kitin ton merdiveni porselen ısısında; mürekkep espresso, birincil ev yeşili */
 :root {
-  /* Porselen sayfa, sütlü kahve köpüğü sahne, beyaz yaprak; mürekkep espresso */
-  --admin-bg: #f4f1ec;
-  --admin-stage: #eae4dc;
+  /* Canlı ve ferah (18 Kasım 2026, operatör: "renkleri canlı yap, modernleştir"): temiz, hafif yeşil tonlu nötrler, beyaz
+   * yaprak, derin yeşilimsi mürekkep; renk durumlarda ve marka anlarında canlı (zümrüt, ahududu, mavi, mor, turuncu) */
+  --admin-bg: #f5f6f3;
+  --admin-stage: #e9ece7;
   --admin-surface: #ffffff;
-  --admin-surface-2: #faf8f5;
-  --admin-panel: #f0ebe5;
-  --admin-border: #e7e1d8;
-  --admin-border-strong: #d8d0c5;
-  --admin-divider: #f0ebe4;
-  --admin-border-field: #877d74;
-  --admin-text: #17130f;
-  --admin-text-soft: #4b433c;
-  --admin-text-mute: #665d55;
+  --admin-surface-2: #f8f9f7;
+  --admin-panel: #eef1ec;
+  --admin-border: #e3e7e1;
+  --admin-border-strong: #d3d9d1;
+  --admin-divider: #edf0eb;
+  --admin-border-field: #7a837e;
+  --admin-text: #0f1513;
+  --admin-text-soft: #3f4a45;
+  --admin-text-mute: #58635e;
   /* Ev yeşili: bağlantı, olumlu durum, açma anahtarı, grafik serisi; dolu düğmede yalnız "Hepsi hazır" gibi olumlu eylem */
-  --admin-primary: #1d6d56;
+  --admin-primary: #0a6e52;
   /* L'Af logosundaki çekirdek: porselende koyu pirinç (açık pirinç 1.5:1 kalır), koyuda uygulama ikonunun pirinci */
   --laf-bean: #b08a2e;
-  --admin-primary-hover: #165543;
-  --admin-on-primary: #fbf8f4;
-  --admin-primary-soft: #e3efe8;
-  --admin-neutral-soft: #f0ebe5;
+  --admin-primary-hover: #075a43;
+  --admin-on-primary: #ffffff;
+  --admin-primary-soft: #ddf5ea;
+  --admin-neutral-soft: #eef1ec;
   /* Mürekkep: ekranın ana eylemi (Öde, Kaydet, Giriş) ve seçim (çip, sekme, dolu masa); kitin .btn.primary'si */
-  --admin-ink-fill: #1a1714;
+  --admin-ink-fill: #111816;
   --admin-ink-fill-hover: #000000;
-  --admin-on-ink: #fbf8f4;
-  /* Ok halkası: ana düğmenin sağındaki yeşil daire ve içindeki çapraz ok (kitin --accent'i, ev yeşilinin parlak tonu) */
-  --ok-ring: #2f9e7a;
-  --ok-arrow: #16130f;
-  /* Bordo: zamanı daralan (hesap istendi, onay bekleyen sipariş; kitin --signal'ı L'Affogato'nun bordosunda) */
-  --admin-signal: #9d2543;
-  --admin-signal-soft: #f9e6ea;
-  --admin-signal-line: #efc4cf;
+  --admin-on-ink: #ffffff;
+  /* Ok halkası: ana düğmenin sağındaki canlı zümrüt daire ve içindeki çapraz ok (kitin --accent'i) */
+  --ok-ring: #12b886;
+  --ok-arrow: #06261b;
+  /* Ahududu: zamanı daralan (hesap istendi, onay bekleyen sipariş; kitin --signal'ı, canlı) */
+  --admin-signal: #c8175d;
+  --admin-signal-soft: #fce4ee;
+  --admin-signal-line: #f6bed4;
   /* Durum mavisi (uygulamanın kobaltı): hazırlanıyor, bilgi rozeti (eylem rengi değil) */
-  --admin-blue: #3442b8;
-  --admin-blue-soft: #eceefb;
-  --admin-blue-line: #cdd2f3;
+  --admin-blue: #2459e0;
+  --admin-blue-soft: #e6eeff;
+  --admin-blue-line: #c7d7ff;
   /* Pirinç: ödül (damga, kupon); dolgunun üstüne mürekkep yazılır, porselende metin taşıyan altın */
   --admin-gold: #765923;
-  --admin-gold-fill: #e8c877;
+  --admin-gold-fill: #f2c94c;
   --admin-gold-ink: #2e2113;
   /* Bordo: imza yüzeyi, ekran başına bir */
   --admin-bordo: #9d2543;
   --admin-bordo-soft: #f9e6ea;
-  --admin-accent: #794ffd;
-  --admin-accent-ink: #6d3fea;
-  --admin-accent-soft: #f6f1ff;
-  --admin-info: #0b7392;
-  --admin-info-soft: #eaf8fd;
-  --admin-success: #1d6d56;
-  --admin-success-soft: #e3efe8;
+  --admin-accent: #7c3aed;
+  --admin-accent-ink: #6d28d9;
+  --admin-accent-soft: #f1eaff;
+  --admin-info: #0e7490;
+  --admin-info-soft: #e0f7fc;
+  --admin-success: #0a6e52;
+  --admin-success-soft: #ddf5ea;
   --admin-warning: #b45309;
-  --admin-warning-soft: #fff3e6;
-  --admin-danger: #dc2626;
-  --admin-danger-ink: #b42318;
-  --admin-danger-soft: #feecec;
-  --admin-hue-blue: #3442b8;
-  --admin-hue-blue-soft: #eceefb;
-  --admin-hue-amber: #a1500b;
-  --admin-hue-amber-soft: #fff6e5;
-  --admin-hue-rose: #c0264a;
-  --admin-hue-rose-soft: #feeff1;
-  --admin-hue-violet: #6d3fea;
-  --admin-hue-violet-soft: #f6f1ff;
-  --admin-hue-green: #1d6d56;
-  --admin-hue-green-soft: #e3efe8;
-  /* Grafik: tek seri mürekkep çubuk, öne çıkan (bugün, şimdi) ev yeşili; geri planda kalan soluk taş (kit) */
-  --admin-chart-line: #1d6d56;
+  --admin-warning-soft: #fff2d9;
+  --admin-danger: #e02424;
+  --admin-danger-ink: #c81e1e;
+  --admin-danger-soft: #fde8e8;
+  --admin-hue-blue: #2459e0;
+  --admin-hue-blue-soft: #e6eeff;
+  --admin-hue-amber: #b45309;
+  --admin-hue-amber-soft: #fff2d9;
+  --admin-hue-rose: #c8175d;
+  --admin-hue-rose-soft: #fce4ee;
+  --admin-hue-violet: #6d28d9;
+  --admin-hue-violet-soft: #f1eaff;
+  --admin-hue-green: #0a6e52;
+  --admin-hue-green-soft: #ddf5ea;
+  /* Grafik: tek seri canlı zümrüt (kartta 3:1'in üstünde), kıyas gri çizgi */
+  --admin-chart-line: #0e9f6e;
   /* Marka karosu (uygulama ikonu, sitenin altbilgisi): radyal yeşil, krem harf, pirinç çekirdek; iki temada aynı */
   --brand-tile: radial-gradient(120% 120% at 50% 18%, #23876a 0%, #1d6d56 48%, #0c3b2d 100%);
   --brand-cream: #fbf6f1;
@@ -266,19 +267,24 @@
   --shadow-leaf: 0 1px 2px rgb(59 42 30 / 0.05), 0 30px 60px -36px rgb(59 42 30 / 0.32);
   --glass: rgb(255 255 255 / 0.78);
   --glass-line: rgb(255 255 255 / 0.7);
-  --frost: rgb(234 228 220 / 0.82);
+  --frost: rgb(233 236 231 / 0.82);
   /* Sol sütunun ayraç çizgisi (numaralı menü, dizin): mürekkebin %12'si */
-  --menu-rule: rgb(22 19 15 / 0.12);
+  --menu-rule: rgb(15 21 19 / 0.12);
   /* Siyah bantta (giriş, Araçlar) çok yavaş kayan dalga çizgileri: espressonun üstündeki krema (kitin --cizgi-acik'i) */
   --waves-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='240' viewBox='0 0 800 240'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='1' stroke-opacity='.10'%3E%3Cpath d='M0 12 C133 -8 267 -8 400 12 S667 32 800 12'/%3E%3Cpath d='M0 36 C133 16 267 16 400 36 S667 56 800 36'/%3E%3Cpath d='M0 60 C133 40 267 40 400 60 S667 80 800 60'/%3E%3Cpath d='M0 84 C133 64 267 64 400 84 S667 104 800 84'/%3E%3Cpath d='M0 108 C133 88 267 88 400 108 S667 128 800 108'/%3E%3Cpath d='M0 132 C133 112 267 112 400 132 S667 152 800 132'/%3E%3Cpath d='M0 156 C133 136 267 136 400 156 S667 176 800 156'/%3E%3Cpath d='M0 180 C133 160 267 160 400 180 S667 200 800 180'/%3E%3Cpath d='M0 204 C133 184 267 184 400 204 S667 224 800 204'/%3E%3Cpath d='M0 228 C133 208 267 208 400 228 S667 248 800 228'/%3E%3C/g%3E%3C/svg%3E");
   --waves-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='240' viewBox='0 0 800 240'%3E%3Cg fill='none' stroke='%2316130f' stroke-width='1' stroke-opacity='.07'%3E%3Cpath d='M0 12 C133 -8 267 -8 400 12 S667 32 800 12'/%3E%3Cpath d='M0 36 C133 16 267 16 400 36 S667 56 800 36'/%3E%3Cpath d='M0 60 C133 40 267 40 400 60 S667 80 800 60'/%3E%3Cpath d='M0 84 C133 64 267 64 400 84 S667 104 800 84'/%3E%3Cpath d='M0 108 C133 88 267 88 400 108 S667 128 800 108'/%3E%3Cpath d='M0 132 C133 112 267 112 400 132 S667 152 800 132'/%3E%3Cpath d='M0 156 C133 136 267 136 400 156 S667 176 800 156'/%3E%3Cpath d='M0 180 C133 160 267 160 400 180 S667 200 800 180'/%3E%3Cpath d='M0 204 C133 184 267 184 400 204 S667 224 800 204'/%3E%3Cpath d='M0 228 C133 208 267 208 400 228 S667 248 800 228'/%3E%3C/g%3E%3C/svg%3E");
-  /* Bantların rengi (giriş, Araçlar çekmecesi, bildirim): iki temada da espresso gecesi */
-  --band: #16130f;
-  --band-2: #211d19;
-  --band-line: #34302b;
-  --band-text: #f4f1ec;
-  --band-muted: #a7a097;
-  --band-accent: #5cc9a2;
+  /* Dolu masa kartı: L'Affogato yeşilinin degradesi, üstünde beyaz yazı (5:1'in üstünde); iki temada aynı */
+  --table-busy: linear-gradient(155deg, #0e7a5a 0%, #086348 55%, #05432f 100%);
+  --table-busy-hover: linear-gradient(155deg, #10865f 0%, #096b4e 55%, #064a34 100%);
+  /* Siyah bantların yeşil hâlesi (giriş, Araçlar): dalgaların altında derin yeşil ışık */
+  --band-glow: radial-gradient(120% 90% at 18% 0%, rgb(18 184 134 / 0.32) 0%, rgb(10 110 82 / 0.16) 38%, transparent 70%);
+  /* Bantların rengi (giriş, Araçlar çekmecesi, bildirim): iki temada da yeşilimsi gece */
+  --band: #0b100e;
+  --band-2: #16201c;
+  --band-line: #2a3631;
+  --band-text: #f1f5f3;
+  --band-muted: #9fb0a8;
+  --band-accent: #34d399;
 
   --bg: var(--admin-bg);
   --surface: var(--admin-surface);
@@ -295,25 +301,25 @@
   --focus: var(--admin-primary);
   --chart-accent: var(--admin-chart-line);
   /* Kıyas çizgisi (geçen hafta): gri ama kartta 3:1 (WCAG 1.4.11 grafik nesnesi) */
-  --chart-context: #877d74;
-  --chart-grid: #f0ebe4;
+  --chart-context: #7a837e;
+  --chart-grid: #edf0eb;
   --chart-track: var(--admin-panel);
 
   /* Durum çizgisi: yumuşak zeminli kutunun ya da kartın kenarı (uyarı kutusu, durum şeridi) */
-  --admin-primary-line: #c5dcd0;
-  --admin-success-line: #c5dcd0;
-  --admin-warning-line: #f6dcbc;
-  --admin-danger-line: #f6cdcd;
-  --admin-rose-line: #f5b9c7;
-  --admin-violet-line: #d6c8fa;
-  --admin-info-line: #b9e3f2;
+  --admin-primary-line: #a7e3c8;
+  --admin-success-line: #a7e3c8;
+  --admin-warning-line: #f8d9a0;
+  --admin-danger-line: #f7c4c4;
+  --admin-rose-line: #f6bed4;
+  --admin-violet-line: #d9c8ff;
+  --admin-info-line: #a9e4f0;
   /* Yüzen katmanlar: karartma (pencere; çekmece ve palet hafif), yüzen yüzey (menü, bildirim, grafik ipucu) */
-  --scrim: rgb(22 19 15 / 0.5);
-  --scrim-soft: rgb(22 19 15 / 0.28);
+  --scrim: rgb(15 21 19 / 0.5);
+  --scrim-soft: rgb(15 21 19 / 0.28);
   --surface-raised: var(--admin-surface);
   /* Üzerine gelme ve basılı: zeminden bağımsız örtü (saydam öğede), sabit kopyası yapışkan hücre gibi opak yerde */
-  --hover: rgb(22 19 15 / 0.045);
-  --press: rgb(22 19 15 / 0.09);
+  --hover: rgb(15 21 19 / 0.045);
+  --press: rgb(15 21 19 / 0.09);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 96%, var(--admin-text));
   /* Hazır rozetinin nabız halkası */
   --ring-ready: rgb(29 109 86 / 0.45);
@@ -329,85 +335,85 @@
   --shadow-pop: 0 30px 60px -20px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.07);
   --shadow-leaf: 0 0 0 1px rgb(255 255 255 / 0.05);
   --rim: 0 0 0 0 transparent;
-  --admin-bg: #0e0d0c;
-  --admin-stage: #161513;
-  --admin-surface: #1d1c1a;
-  --admin-surface-2: #222120;
-  --admin-panel: #2a2825;
-  --admin-border: #2f2d2a;
-  --admin-border-strong: #3b3935;
-  --admin-divider: #262422;
-  --admin-border-field: #7a766e;
-  --admin-text: #f3f1ec;
-  --admin-text-soft: #cfcbc3;
-  --admin-text-mute: #a39f96;
-  --admin-primary: #5cc9a2;
+  --admin-bg: #0b0e0d;
+  --admin-stage: #121715;
+  --admin-surface: #19201d;
+  --admin-surface-2: #1e2622;
+  --admin-panel: #26302b;
+  --admin-border: #2a332f;
+  --admin-border-strong: #36413c;
+  --admin-divider: #212925;
+  --admin-border-field: #78837d;
+  --admin-text: #f1f5f3;
+  --admin-text-soft: #c9d2cd;
+  --admin-text-mute: #9aa6a0;
+  --admin-primary: #34d399;
   --laf-bean: #e8c877;
-  --admin-primary-hover: #7ad6b4;
-  --admin-on-primary: #0b1f18;
-  --admin-primary-soft: #17302a;
-  --admin-neutral-soft: #2a2825;
-  --admin-ink-fill: #f3f1ec;
+  --admin-primary-hover: #6ee7b7;
+  --admin-on-primary: #052e1f;
+  --admin-primary-soft: #0f3327;
+  --admin-neutral-soft: #26302b;
+  --admin-ink-fill: #f1f5f3;
   --admin-ink-fill-hover: #ffffff;
-  --admin-on-ink: #161513;
-  --ok-ring: #23876a;
-  --ok-arrow: #0b1f18;
-  --admin-signal: #f59bb0;
-  --admin-signal-soft: #3a1d27;
-  --admin-signal-line: #8f4459;
-  --admin-blue: #9aa8ff;
-  --admin-blue-soft: #1f2647;
-  --admin-blue-line: #44509a;
-  --admin-gold: #e8c877;
-  --admin-gold-fill: #e8c877;
+  --admin-on-ink: #0f1513;
+  --ok-ring: #059669;
+  --ok-arrow: #04261a;
+  --admin-signal: #ff7eb6;
+  --admin-signal-soft: #3d1528;
+  --admin-signal-line: #8f3d62;
+  --admin-blue: #8fb0ff;
+  --admin-blue-soft: #172548;
+  --admin-blue-line: #3f5aa6;
+  --admin-gold: #f2c94c;
+  --admin-gold-fill: #f2c94c;
   --admin-gold-ink: #2e2113;
   --admin-bordo: #f6e9ec;
   --admin-bordo-soft: #3a1d27;
   --admin-accent: #a78bfa;
   --admin-accent-ink: #c4b5fd;
-  --admin-accent-soft: #261f42;
-  --admin-info: #5cc8ee;
-  --admin-info-soft: #0f2a36;
-  --admin-success: #5cc9a2;
-  --admin-success-soft: #17302a;
-  --admin-warning: #f2b14a;
-  --admin-warning-soft: #33260f;
+  --admin-accent-soft: #261d45;
+  --admin-info: #67e8f9;
+  --admin-info-soft: #0b2e36;
+  --admin-success: #34d399;
+  --admin-success-soft: #0f3327;
+  --admin-warning: #fbbf24;
+  --admin-warning-soft: #33270a;
   --admin-danger: #f87171;
   --admin-danger-ink: #fca5a5;
-  --admin-danger-soft: #3a1d22;
-  --admin-hue-blue: #9aa8ff;
-  --admin-hue-blue-soft: #1f2647;
-  --admin-hue-amber: #f5b04c;
-  --admin-hue-amber-soft: #33260f;
-  --admin-hue-rose: #ff8fa8;
-  --admin-hue-rose-soft: #3a1d27;
+  --admin-danger-soft: #3b1618;
+  --admin-hue-blue: #8fb0ff;
+  --admin-hue-blue-soft: #172548;
+  --admin-hue-amber: #fbbf24;
+  --admin-hue-amber-soft: #33270a;
+  --admin-hue-rose: #ff7eb6;
+  --admin-hue-rose-soft: #3d1528;
   --admin-hue-violet: #c4b5fd;
-  --admin-hue-violet-soft: #261f42;
-  --admin-hue-green: #5cc9a2;
-  --admin-hue-green-soft: #17302a;
-  --admin-chart-line: #5cc9a2;
-  --glass: rgb(29 28 26 / 0.8);
+  --admin-hue-violet-soft: #261d45;
+  --admin-hue-green: #34d399;
+  --admin-hue-green-soft: #0f3327;
+  --admin-chart-line: #34d399;
+  --glass: rgb(25 32 29 / 0.8);
   --glass-line: rgb(255 255 255 / 0.07);
-  --frost: rgb(22 21 19 / 0.82);
-  --menu-rule: rgb(243 241 236 / 0.12);
-  --band: #080706;
-  --band-2: #171513;
-  --band-line: #2c2925;
+  --frost: rgb(18 23 21 / 0.82);
+  --menu-rule: rgb(241 245 243 / 0.12);
+  --band: #060908;
+  --band-2: #121a17;
+  --band-line: #26312c;
   /* Kıyas çizgisi kartta en az 3:1 (WCAG 1.4.11 grafik nesnesi) */
-  --chart-context: #7f7a71;
-  --chart-grid: #2a2825;
+  --chart-context: #7d8983;
+  --chart-grid: #26302b;
   /* Durum rengi %45 yumuşak zemine karışık: koyu zeminde 2.5:1'in üstünde, yazıyla yarışmaz */
-  --admin-primary-line: #2f6b55;
-  --admin-success-line: #2f6b55;
-  --admin-warning-line: #896529;
+  --admin-primary-line: #1f7a5a;
+  --admin-success-line: #1f7a5a;
+  --admin-warning-line: #8a6a1c;
   --admin-danger-line: #8f4346;
-  --admin-rose-line: #935061;
-  --admin-violet-line: #5f5296;
-  --admin-info-line: #327189;
+  --admin-rose-line: #8f3d62;
+  --admin-violet-line: #5f4fa8;
+  --admin-info-line: #2b7486;
   /* Koyuda mürekkep açık renk: karartma siyah ve daha yoğun, yüzen yüzey bir ton açık */
   --scrim: rgb(0 0 0 / 0.66);
   --scrim-soft: rgb(0 0 0 / 0.5);
-  --surface-raised: #252321;
+  --surface-raised: #222b27;
   --hover: rgb(255 255 255 / 0.06);
   --press: rgb(255 255 255 / 0.1);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 93%, var(--admin-text));
@@ -1116,6 +1122,10 @@
       color: var(--admin-text);
       box-shadow: 0 1px 2px rgb(59 42 30 / 0.06);
     }
+    :where(.lp-split > .lp-side) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > svg,
+    :where(.lp-menu-col) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > svg {
+      color: var(--admin-primary);
+    }
     :where(.lp-split > .lp-side) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > .n,
     :where(.lp-menu-col) .lp-menu-item:is([aria-current='page'], [aria-current='true'], [aria-selected='true'], [aria-pressed='true']) > .n {
       color: var(--admin-text-mute);
@@ -1129,6 +1139,18 @@
     }
     .lp-menu-col .lp-menu-label:first-child {
       padding-top: 2px;
+    }
+  }
+  /* Alçak geniş ekranda (dizüstü, yatay tablet) sol sütun sıkışır: aralık ve büyük sayılar bir boy küçük, ana eylem görünür kalır */
+  @media (min-width: 64rem) and (max-height: 56rem) {
+    .lp-split > .lp-side {
+      gap: 12px;
+    }
+    .lp-split .lp-hs > b {
+      --hs-size: min(2.125rem, 18cqi);
+    }
+    .lp-split .lp-hs[data-money] > b {
+      --hs-size: min(1.625rem, 11cqi);
     }
   }
   /* Dokunmatikte yan menünün satırı da 44 px */
@@ -1217,13 +1239,20 @@
 
   /* Siyah bant: giriş ve Araçlar çekmecesi; deniz çizgileri değil kahvenin kreması, 90 sn'de bir döşeme kayar */
   .lp-band {
-    background: var(--band) var(--waves-light) 0 0 / 800px 240px;
+    background:
+      var(--waves-light) 0 0 / 800px 240px repeat,
+      var(--band-glow) 0 0 / 100% 100% no-repeat,
+      var(--band);
     color: var(--band-text);
     animation: lp-waves 90s linear infinite;
   }
 
   /* Araçlar çekmecesi: perde gibi yukarıdan iner, çizgiler kayar; satırları sırayla gelir (ToolsDrawer.tsx) */
   .lp-drawer {
+    background:
+      var(--waves-light) 0 0 / 800px 240px repeat,
+      var(--band-glow) 0 0 / 100% 100% no-repeat,
+      var(--band);
     animation:
       lp-drawer-in 620ms var(--ease-out) backwards,
       lp-waves 120s linear infinite;
@@ -1356,7 +1385,9 @@
 }
 @keyframes lp-waves {
   to {
-    background-position: 800px 0;
+    background-position:
+      800px 0,
+      0 0;
   }
 }
 @keyframes lp-dial-draw {

@@ -267,6 +267,8 @@ function ProductTile({
         soldOut && 'opacity-50',
       )}
     >
+      {/* Kategorinin rengi kartın tepesinde kısa bir şerit: ızgara canlı, kart kategorisiyle tanınır */}
+      {hue && <span aria-hidden="true" className="pointer-events-none absolute left-4 top-0 h-1 w-8 rounded-b-full" style={{ background: hue }} />}
       <button
         disabled={soldOut}
         onClick={() => addSize(twoSizes ? 'M' : 'TEK')}

@@ -92,7 +92,7 @@ function useNavFit(count: number) {
 /** Üst çubuktaki ekran bağlantısı (kitin .mainnav'ı): düz yazı, seçilinin altında mürekkep çizgi, üstüne gelince soldan çizilir */
 const NAV_LINK =
   "relative inline-flex h-10 items-center rounded-full px-3.5 font-headline text-[15.5px] font-medium tracking-[-0.015em] text-ink-2 transition-colors duration-150 after:absolute after:inset-x-3.5 after:bottom-1.5 after:h-[1.5px] after:origin-left after:scale-x-0 after:bg-[var(--admin-text)] after:transition-transform after:duration-300 after:content-[''] hover:text-ink hover:after:scale-x-100 pointer-coarse:h-11";
-const NAV_ON = 'font-bold text-ink after:h-0.5 after:scale-x-100';
+const NAV_ON = 'font-bold text-ink after:h-0.5 after:scale-x-100 after:bg-[var(--admin-primary)]';
 /** Çubukta kısaltma yok: kısa ad noktayla bitiyorsa ("Rezerv.") tam ad */
 const navText = (n: NavItem) => (n.label.endsWith('.') ? n.title : n.label);
 
