@@ -109,7 +109,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
     // kartlar gibi); hesap sağdaki beyaz yaprakta (OrderPage). Telefonda sahne zemini, çip şeridi ve kartlar
     <div className="flex h-full min-h-0 bg-[var(--admin-stage)] md:bg-transparent">
       {/* Geniş ekran: kategoriler solda alt alta, numaralı (01, 02…), hepsi görünür */}
-      <div className="scroll-thin hidden w-60 shrink-0 overflow-y-auto pr-4 xl:block">
+      <div className="scroll-thin hidden w-56 shrink-0 overflow-y-auto pr-3 xl:block">
         <div role="tablist" aria-orientation="vertical" aria-label="Kategoriler" className="lp-menu lp-menu-col">
           {categoryItems.map((c) => (
             <CategoryRow key={c.id} active={!q && current === c.id} color={c.color} count={c.count} onClick={() => pick(c.id)} favorite={c.id === FAVORITES}>
