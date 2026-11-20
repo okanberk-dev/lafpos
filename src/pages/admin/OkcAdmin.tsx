@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, PlugZap, Save, Webhook, XCircle } from 'lucide-react';
+import { CheckCircle2, Link2, PlugZap, Save, Webhook, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { fmtDateTime } from '@shared/time';
@@ -13,13 +13,22 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 
+interface PavoExchange {
+  at: number;
+  path: string;
+  ok: boolean;
+  errorCode: string | null;
+  message: string | null;
+  dataKeys: string[];
+}
 interface OkcStatus {
-  provider: 'kapali' | 'tokenx' | 'simulator';
+  provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
   mode: 'anlik' | 'liste';
   sectionMap: Record<string, number>;
   operatorMethods: Record<string, string>;
   active: { label: string; configured: boolean; capabilities: { instant: boolean; list: boolean; splitPayment: boolean; docKinds: string[] } } | null;
   tokenx: { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean };
+  pavo: { configured: boolean; url: string | null; serial: string | null; paired: boolean; certificate: string | null; busy: string | null; exchanges: PavoExchange[] };
   lastError: { message: string; at: number } | null;
 }
 interface TestResult {
@@ -28,13 +37,19 @@ interface TestResult {
   suggestedSectionMap: Record<string, number>;
   terminals: { id: string; mode: number }[] | null;
 }
+interface PavoTest {
+  ping: { ok: boolean; message: string | null };
+  paired: boolean;
+  pairingHint: string | null;
+  mediators: { id: number | null; name: string | null }[];
+}
 type Provider = OkcStatus['provider'];
 type Mode = OkcStatus['mode'];
 
 /** Cihazda her zaman eşlenebilen oranlar; menüde başka bir oran varsa o da listelenir */
 const RATES = ['1', '10', '20'];
 
-const PROVIDER_LABEL: Record<Provider, string> = { kapali: 'Kapalı', simulator: 'Eğitim cihazı', tokenx: 'Token · Beko' };
+const PROVIDER_LABEL: Record<Provider, string> = { kapali: 'Kapalı', simulator: 'Eğitim cihazı', tokenx: 'Token · Beko', pavo: 'Pavo' };
 const MODE_LABEL: Record<Mode, string> = { anlik: 'Kasada ödeme', liste: 'Masada ödeme' };
 /** Ödeme yerinin anlamı; Token cihazında aynı mod ayrıca seçilir */
 const MODE_HINT: Record<Mode, { what: string; token: string }> = {
@@ -51,12 +66,17 @@ const PROVIDER_CONFIRM: Record<Provider, ConfirmOptions> = {
   kapali: { title: 'Yazarkasa bağlantısı kapatılsın mı', body: 'Adisyonlar cihaza gitmez; mali fişi kasiyer yazarkasada elle keser', confirmLabel: 'Bağlantıyı kapat', tone: 'danger' },
   simulator: { title: 'Eğitim cihazına geçilsin mi', body: 'Hesaplar eğitim cihazı ekranına gider, mali fiş kesilmez; gerçek cihaz bağlanana kadar deneme ve eğitim için', confirmLabel: 'Eğitim cihazına geç', tone: 'primary' },
   tokenx: { title: 'Token cihazına geçilsin mi', body: 'Bundan sonraki hesaplar Token cihazına sepet olarak gider; ödeme ve mali fiş cihazda alınır', confirmLabel: 'Token’a geç', tone: 'primary' },
+  pavo: {
+    title: 'Pavo cihazına geçilsin mi',
+    body: 'Bundan sonraki hesaplar kafenin ağındaki Pavo cihazına gider; ödeme cihazda alınır, e-Arşiv belgesi cihazdan çıkar. Önce cihazı eşleştirin ve küçük bir satışla deneyin',
+    confirmLabel: 'Pavo’ya geç',
+    tone: 'primary',
+  },
 };
 
 /** Bağlantısı henüz olmayan markalar: neden ve üreticiden ne istenecek (docs/04-OKC.md'de ayrıntı) */
 const OTHER_VENDORS: { name: string; channel: string; state: string }[] = [
   { name: 'Hugin', channel: 'Cloud Link (TSM)', state: 'Açık belge eksik: satış sonucunun ödeme, Z ve fiş alanları istenecek' },
-  { name: 'Pavo', channel: 'IP REST, bulut', state: 'Yalnız iş ortaklarına belge veriyor; e-Arşiv hesabı gerekir' },
   { name: 'Ingenico', channel: 'GMP-3 DLL (Windows)', state: 'Geliştirici programı ve sürüm başına kayıt gerekir' },
   { name: 'Verifone, Inpos, Profilo, PayGo, Vera', channel: 'TSM ya da kablolu', state: 'Açık belge yok; üreticiden istenecek' },
 ];
@@ -68,6 +88,25 @@ const STEPS = [
   'Sonuç LafPOS’a gelir, ödemeler adisyona işlenir, adisyon kapanır; Z no ve fiş no adisyonda kalır',
   'Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır, adisyon yeniden açılır ve patron paneline alarm düşer',
 ];
+
+/** Pavo kurulumu: Pavo seçiliyse kartının altında (bilgiler eksikse açık) */
+function PavoSetup({ open }: { open?: boolean }) {
+  return (
+    <SetupNotes open={open}>
+      <p>
+        Cihaz ve kasa bilgisayarı aynı ağda olmalı (Wi-Fi ya da kablo). Cihazda Ayarlar › Çevresel Donanımlar › Network Ayarları’nda REST açık olmalı; cihazın IP adresi
+        modemden sabitlenirse adres değişmez. Bilgiler kasa bilgisayarının ayarlarına (<code className={CODE}>.env</code>) yazılır, LafPOS yeniden başlar:
+      </p>
+      <pre className="overflow-x-auto rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-3 font-mono text-xs leading-5 text-[var(--admin-text)] ring-1 ring-inset ring-[var(--admin-border)]">{`PAVO_URL=https://192.168.1.50:4567   (cihazın IP adresi ve REST portu)
+PAVO_SERIAL=                          (cihazın seri numarası)
+PAVO_FINGERPRINT=LafPOS               (isteğe bağlı; eşleştirmede cihaza kaydedilir)`}</pre>
+      <p>
+        Sonra “Eşleştir”e basıp cihazdaki onay ekranını onaylayın, “Bağlantıyı dene” ile doğrulayın. İlk satışı küçük bir tutarla deneyin: cihaz gerçek e-Arşiv belgesi keser. Pavo
+        günde bir eşleştirmeyi önerir. Ayrıntı: <code className={CODE}>docs/04-YAZARKASA.md</code>
+      </p>
+    </SetupNotes>
+  );
+}
 
 /** Token kurulumu: Token seçiliyse kartının hemen altında (eksikse açık), değilse sayfa sonunda kapalı */
 function TokenSetup({ open }: { open?: boolean }) {
@@ -100,10 +139,11 @@ export default function OkcAdmin() {
   // Elle değiştirilen eşleme sunucudan gelen yenilemeyle (bağlantı ya da ödeme yeri kaydı, canlı akış) ezilmez
   const [mapDirty, setMapDirty] = useState(false);
   const [test, setTest] = useState<TestResult | null>(null);
+  const [pavoTest, setPavoTest] = useState<PavoTest | null>(null);
   // Ayar kaydı (bağlantı, ödeme yeri, eşleme) ile Token'a giden istek (deneme, webhook) ayrı izlenir: bulut yanıt
   // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
   const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | null>(null);
-  const [checking, setChecking] = useState<'test' | 'webhook' | null>(null);
+  const [checking, setChecking] = useState<'test' | 'webhook' | 'pair' | null>(null);
 
   useEffect(() => {
     if (status.data && !mapDirty) setMap(Object.fromEntries(Object.entries(status.data.sectionMap).map(([k, v]) => [k, String(v)])));
@@ -154,6 +194,28 @@ export default function OkcAdmin() {
       toast.err(errorMessage(e));
     } finally {
       setChecking(null);
+    }
+  };
+  /** Pavo: deneme ve eşleştirme cihaza gider; bitince durum (son yanıtlar) yenilenir */
+  const runPavo = async (what: 'test' | 'pair') => {
+    if (checking) return;
+    setChecking(what);
+    try {
+      if (what === 'pair') {
+        await post('/okc/pair');
+        toast.ok('Pavo cihazı eşleştirildi');
+        setPavoTest(null);
+      } else {
+        const r = await post<PavoTest>('/okc/test');
+        setPavoTest(r);
+        if (r.paired) toast.ok('Pavo bağlantısı çalışıyor');
+        else toast.warn('Cihaz yanıt veriyor ama eşleştirme gerekli');
+      }
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setChecking(null);
+      void qc.invalidateQueries({ queryKey: ['okc', 'status'] });
     }
   };
 
@@ -218,7 +280,7 @@ export default function OkcAdmin() {
             label="Yazarkasa bağlantısı"
             value={s.provider}
             onChange={(v) => void setProvider(v)}
-            options={(['kapali', 'simulator', 'tokenx'] as const).map((value) => ({ value, label: PROVIDER_LABEL[value] }))}
+            options={(['kapali', 'simulator', 'tokenx', 'pavo'] as const).map((value) => ({ value, label: PROVIDER_LABEL[value] }))}
           />
         </div>
         {s.provider === 'kapali' && <p className="text-sm text-muted">Adisyon cihaza gitmez; mali fişi kasiyer yazarkasada elle keser</p>}
@@ -241,7 +303,10 @@ export default function OkcAdmin() {
             Gerçek cihaz bağlanana kadar akışı denemek ve personeli eğitmek için; sepetler <Link to="/cihaz" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">eğitim cihazı</Link> ekranında ödenir
           </p>
         )}
-        {s.provider !== 'kapali' && (
+        {s.provider === 'pavo' && (
+          <p className="border-t border-[var(--admin-divider)] pt-4 text-sm text-muted">Ödeme yeri: kasada ödeme. Hesap cihazın ekranına düşer; Pavo masada ödeme listesi tutmaz</p>
+        )}
+        {s.provider !== 'kapali' && s.provider !== 'pavo' && (
           // Bağlantıdan sonra ikinci karar: satır ayracıyla ayrı bölüm (seçim rayı ve açıklaması birlikte)
           <div className="border-t border-[var(--admin-divider)] pt-4">
             <Label>Ödeme yeri</Label>
@@ -253,6 +318,116 @@ export default function OkcAdmin() {
           </div>
         )}
       </Card>
+
+      {s.provider === 'pavo' && (
+        <>
+          <Card
+            title="Pavo (yerel ağ)"
+            actions={
+              s.pavo.configured ? (
+                <Badge tone={s.pavo.paired ? 'success' : 'warning'} dot>
+                  {s.pavo.paired ? 'Eşleştirildi' : 'Eşleştirilmedi'}
+                </Badge>
+              ) : (
+                <Badge tone="danger" dot>
+                  Bilgiler eksik
+                </Badge>
+              )
+            }
+            bodyClassName="space-y-4 text-sm"
+          >
+            {!s.pavo.configured ? (
+              <p className="flex items-center gap-2">
+                <XCircle aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-danger-ink)]" />
+                Cihazın adresi ya da seri numarası eksik; kurulum adımları aşağıda
+              </p>
+            ) : (
+              <div className="max-w-2xl">
+                <DefRow label="Cihaz adresi">
+                  <span className="break-all">{s.pavo.url}</span>
+                </DefRow>
+                <DefRow label="Seri no">
+                  <span className="tabular break-all">{s.pavo.serial}</span>
+                </DefRow>
+                {s.pavo.certificate && (
+                  <DefRow label="Sertifika izi">
+                    <span className="tabular break-all text-xs">{s.pavo.certificate.slice(0, 23)}…</span>
+                  </DefRow>
+                )}
+                {s.pavo.busy && (
+                  <DefRow label="Şu an">
+                    <span>Cihazın ekranında süren bir satış var</span>
+                  </DefRow>
+                )}
+              </div>
+            )}
+            {s.lastError && (
+              <Notice tone="danger" title={`Son hata · ${fmtDateTime(s.lastError.at)}`} className="text-[13px]">
+                {s.lastError.message}
+              </Notice>
+            )}
+            {pavoTest && (
+              <div className="space-y-3 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-4 ring-1 ring-inset ring-[var(--admin-border)]">
+                <p className="flex items-center gap-2">
+                  {pavoTest.ping.ok ? (
+                    <CheckCircle2 aria-hidden="true" className="size-4 shrink-0 text-[var(--admin-success)]" />
+                  ) : (
+                    <XCircle aria-hidden="true" className="size-4 shrink-0 text-[var(--admin-danger-ink)]" />
+                  )}
+                  {pavoTest.ping.ok ? 'Cihaz yanıt veriyor' : `Cihaz yanıtı: ${pavoTest.ping.message ?? 'hata'}`}
+                </p>
+                {pavoTest.pairingHint && <p className="text-[var(--admin-danger-ink)] [overflow-wrap:anywhere]">{pavoTest.pairingHint}</p>}
+                {pavoTest.mediators.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-[var(--admin-text-mute)]">Cihazdaki ödeme araçları</p>
+                    <ul className="mt-1 max-w-md divide-y divide-[var(--admin-divider)]">
+                      {pavoTest.mediators.map((m, i) => (
+                        <li key={`${m.id}-${i}`} className="flex items-center gap-2.5 py-1.5">
+                          <span className="grid size-6 shrink-0 place-items-center rounded-[var(--r-chip)] bg-[var(--admin-surface)] text-xs font-semibold tabular-nums text-[var(--admin-text-soft)] ring-1 ring-inset ring-[var(--admin-border)]">
+                            {m.id ?? '–'}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-[var(--admin-text)]">{m.name ?? 'Adsız'}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-4 max-sm:[&>*]:grow">
+              <Button icon={<Link2 className="size-4" />} loading={checking === 'pair'} disabled={!s.pavo.configured || !!checking} onClick={() => void runPavo('pair')}>
+                Eşleştir
+              </Button>
+              <Button icon={<PlugZap className="size-4" />} loading={checking === 'test'} disabled={!s.pavo.configured || !!checking} onClick={() => void runPavo('test')}>
+                Bağlantıyı dene
+              </Button>
+            </div>
+            {checking === 'pair' && <p className="text-xs text-muted">Cihazdaki onay ekranını onaylayın (en çok 2 dakika beklenir)</p>}
+          </Card>
+          {s.pavo.exchanges.length > 0 && (
+            // Destek için: cihazın son yanıtlarının özeti (gövde değil); belgesiz yanıt biçimi buradan tanınır
+            <SetupNotes summary="Cihazın son yanıtları">
+              <ul className="divide-y divide-[var(--admin-divider)]">
+                {s.pavo.exchanges.map((x, i) => (
+                  <li key={`${x.at}-${i}`} className="py-2 first:pt-0">
+                    <p className="text-[13px] font-medium text-[var(--admin-text)]">
+                      {x.path} <span className="font-normal text-[var(--admin-text-mute)]">· {fmtDateTime(x.at)} · {x.ok ? 'tamam' : 'hata'}</span>
+                    </p>
+                    {(x.message || x.errorCode) && (
+                      <p className="[overflow-wrap:anywhere]">
+                        {x.message}
+                        {x.errorCode ? ` (kod ${x.errorCode})` : ''}
+                      </p>
+                    )}
+                    {x.dataKeys.length > 0 && <p className="text-xs [overflow-wrap:anywhere]">Alanlar: {x.dataKeys.join(', ')}</p>}
+                  </li>
+                ))}
+              </ul>
+            </SetupNotes>
+          )}
+          <PavoSetup open={!s.pavo.configured} />
+        </>
+      )}
 
       {s.provider === 'tokenx' && (
         <>
@@ -347,7 +522,7 @@ export default function OkcAdmin() {
         </>
       )}
 
-      {s.provider !== 'kapali' && (
+      {s.provider !== 'kapali' && s.provider !== 'pavo' && (
         // Açıklama kartın alt satırında (13 px soluk); Kaydet kartın dibinde ayraçlı şeritte, alanların hizasında (telefonda tam genişlik)
         <Card
           title="KDV oranı → cihazdaki kısım"
@@ -403,6 +578,11 @@ export default function OkcAdmin() {
       </Card>
 
       {s.provider !== 'tokenx' && <TokenSetup />}
+      {s.provider !== 'pavo' && (
+        <SetupNotes summary="Pavo kurulumu">
+          <p>Pavo (N86 ve diğer PavoPay cihazları) kafenin ağında bağlanır: cihazın IP adresi ve seri numarası kasa bilgisayarının ayarlarına yazılır, yukarıdan Pavo seçilip cihaz eşleştirilir. Ayrıntı: <code className={CODE}>docs/04-YAZARKASA.md</code></p>
+        </SetupNotes>
+      )}
 
       {/* Geliştirici bilgisi ana akışta kart değil: kurulum notu gibi kapalı durur, telefonda tablo yerine liste */}
       <SetupNotes summary="Diğer yazarkasa markaları">

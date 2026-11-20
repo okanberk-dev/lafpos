@@ -70,8 +70,8 @@ export interface PrivateSettings {
   /** Otomatik gün sonu (ModPOS'taki 06:00 gibi); açık adisyon varsa alınmaz, uyarı düşer */
   autoDayEnd: boolean;
   autoDayEndHour: number;
-  /** Yazarkasa POS bağlantısı: kapalı, TokenX Connect (Cloud) ya da eğitim simülatörü */
-  okcProvider: 'kapali' | 'tokenx' | 'simulator';
+  /** Yazarkasa POS bağlantısı: kapalı, TokenX Connect (Cloud), Pavo (yerel ağ) ya da eğitim simülatörü */
+  okcProvider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
   /** anlik: kasada ödeme (sepet hemen cihaza düşer) · liste: masada ödeme (cihaz açık sepetleri listeler) */
   okcMode: 'anlik' | 'liste';
   /** KDV oranı -> cihazdaki kısım no ("10" -> 1) */

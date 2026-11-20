@@ -267,7 +267,7 @@ export interface BootstrapDTO {
   users: UserLite[];
   day: BusinessDayDTO | null;
   integrations: {
-    okc: { provider: 'kapali' | 'tokenx' | 'simulator'; mode: 'anlik' | 'liste' };
+    okc: { provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator'; mode: 'anlik' | 'liste' };
     laffogatoPanel: boolean;
     lafmaliyetPush: boolean;
     /** Site adresi; boşsa site bağlantısı kurulmadı (LAFFOGATO_URL yok) */

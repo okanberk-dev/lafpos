@@ -3,11 +3,12 @@ import { z } from 'zod';
 import { db } from '../db/client';
 import { type AppEnv, actorFrom, blindOrder, requirePermission } from '../lib/auth';
 import { body, conflict } from '../lib/http';
-import { updateSettings } from '../lib/settings';
+import { getSettings, updateSettings } from '../lib/settings';
 import {
   cancelDeviceBasket,
   handleTokenxWebhook,
   okcStatus,
+  pairDevice,
   receiptsForOrder,
   refreshReceipt,
   sendOrderToDevice,
@@ -31,15 +32,18 @@ okcRoutes.put('/settings', async (c) => {
   const input = await body(
     c,
     z.object({
-      provider: z.enum(['kapali', 'tokenx', 'simulator']).optional(),
+      provider: z.enum(['kapali', 'tokenx', 'pavo', 'simulator']).optional(),
       mode: z.enum(['anlik', 'liste']).optional(),
       sectionMap: z.record(z.string().regex(/^\d{1,2}$/), z.number().int().min(1).max(99)).optional(),
       operatorMethods: z.record(z.string().regex(/^\d{1,6}$/), z.string()).optional(),
     }),
   );
+  // Pavo yalnız kasada ödeme bilir (cihaz açık hesap listesi tutmaz)
+  const mode = input.provider === 'pavo' ? 'anlik' : input.mode;
+  if (input.mode === 'liste' && (input.provider ?? getSettings().okcProvider) === 'pavo') throw conflict('Pavo yalnız kasada ödemeyle çalışır', 'okc_mode');
   updateSettings({
     ...(input.provider ? { okcProvider: input.provider } : {}),
-    ...(input.mode ? { okcMode: input.mode } : {}),
+    ...(mode ? { okcMode: mode } : {}),
     ...(input.sectionMap ? { okcSectionMap: input.sectionMap } : {}),
     ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
   });
@@ -49,6 +53,12 @@ okcRoutes.put('/settings', async (c) => {
 okcRoutes.post('/test', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   return c.json(await testProvider());
+});
+
+/** Pavo eşleştirmesi: cihazda onay ekranı açılır (kasiyer onaylayana dek, en çok 2 dk) */
+okcRoutes.post('/pair', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json(await pairDevice(actorFrom(c)));
 });
 
 /** Webhook adresini Token'a kaydeder (LAFPOS_PUBLIC_URL ve TOKENX_WEBHOOK_SECRET gerekir) */

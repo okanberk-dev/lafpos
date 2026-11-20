@@ -94,7 +94,7 @@ export default function DevicePage() {
             )
           }
         >
-          Yazarkasa şu an {boot.integrations.okc.provider === 'tokenx' ? 'gerçek cihaza (TokenX) bağlı' : 'kapalı'}. Denemek için Yönetim › Yazarkasa POS’ta eğitim cihazını seçin
+          Yazarkasa şu an {boot.integrations.okc.provider === 'tokenx' ? 'gerçek cihaza (TokenX) bağlı' : boot.integrations.okc.provider === 'pavo' ? 'gerçek cihaza (Pavo) bağlı' : 'kapalı'}. Denemek için Yönetim › Yazarkasa POS’ta eğitim cihazını seçin
         </EmptyState>
       </div>
     );

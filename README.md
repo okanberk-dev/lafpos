@@ -57,6 +57,7 @@ panelinki `LAFMALIYET_SYNC_SECRET`'a yazılır; ikisi de sitenin `KARAOKE_SYNC_S
 | `LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET` | lafmaliyet'e günlük satış/Z itme, maliyet çekme (`https://ladmin.laffogato.net`); paneldeki `LAFPOS_SYNC_SECRET`. Boşken gün sonu gitmez (elle aktarım); kurulum modunda kapanan gün (eğitim günü) hiç gitmez |
 | `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET` | LafPOS Uzaktan (Vercel, salt okunur canlı özet; `docs/07-UZAKTAN-ERISIM.md` §4); Vercel'deki `LAFPOS_CLOUD_SECRET` |
 | `TOKENX_*` | Yazarkasa POS (Token ÖKC) bağlantısı, bkz. `docs/04-YAZARKASA.md` |
+| `PAVO_URL`, `PAVO_SERIAL`, `PAVO_FINGERPRINT` | Yazarkasa POS (Pavo N86, kafenin ağında), bkz. `docs/04-YAZARKASA.md` §8 |
 | `LAFPOS_PUBLIC_URL`, `TOKENX_WEBHOOK_SECRET` | Yazarkasa sonucunun webhook ile gelmesi (yoksa LafPOS sorar) |
 
 ## Komutlar

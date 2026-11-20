@@ -13,7 +13,9 @@ import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpe
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
 import { type FiscalProvider, type FiscalResult, providerFor } from './providers';
 import type { PendingReceipt } from './providers/types';
+import { pairPavo, pavoProvider, usePavoStore } from './providers/pavo';
 import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
+import { PavoError } from './pavo';
 import { type TokenxBasket, TokenxError, type TokenxSale } from './tokenx';
 
 /**
@@ -27,6 +29,13 @@ const PENDING = ['gonderildi', 'kilitli'] as const;
 
 export { tokenx, webhookUrl };
 
+usePavoStore({
+  getSequence: () => getSyncState<number>('pavo.sequence') ?? 0,
+  setSequence: (n) => setSyncState('pavo.sequence', n),
+  getCert: () => getSyncState<string>('pavo.cert'),
+  setCert: (fp) => setSyncState('pavo.cert', fp),
+});
+
 export function okcStatus() {
   const s = getSettings();
   const p = providerFor(s.okcProvider);
@@ -37,6 +46,7 @@ export function okcStatus() {
     operatorMethods: s.okcOperatorMethods,
     active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
     tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
+    pavo: pavoProvider.status(),
     lastError: getSyncState<{ message: string; at: number }>('okc.lastError'),
   };
 }
@@ -164,7 +174,8 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       payments: orderPayments(db, orderId),
       remainingDue: order.total - order.paid,
       prior: selection?.length || !order.totals ? undefined : priorOf(orderId, items, order.totals),
-      sectionMap: s.okcSectionMap,
+      // Pavo kısım no değil KDV grubu (KDV10, KDV20) alır: grup orandan çıkar, eşleme gerekmez
+      sectionMap: s.okcProvider === 'pavo' ? new Proxy({}, { get: () => 1 }) : s.okcSectionMap,
       sizeLabels: s.sizeLabels,
       callbackUrl: s.okcProvider === 'tokenx' ? (webhookUrl() ?? undefined) : undefined,
     });
@@ -212,7 +223,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
         recordError(message);
         if (!uncertain) {
           publish(orderId, 'okc.error', message, actor.user.id);
-          throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : 'okc_send');
+          throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : e instanceof PavoError ? 'pavo_send' : 'okc_send');
         }
         unknown = message;
       }
@@ -660,7 +671,7 @@ export async function refreshReceipt(receiptId: string) {
   const r = loadReceipt(receiptId);
   const provider = providerFor(r.provider);
   if (!provider?.poll || !provider.configured() || !PENDING.includes(r.status as (typeof PENDING)[number])) return receiptDTO(r);
-  const out = await provider.poll(pendingOf(r));
+  const out = await provider.poll(pendingOf(r)).catch(deviceError);
   const stillPending = and(eq(schema.fiscalReceipts.id, r.id), inArray(schema.fiscalReceipts.status, [...PENDING]));
   if (out.kind === 'result') applyResult(r.id, out.result, 'sorgu');
   else if (out.kind === 'deleted' || out.kind === 'missing') {
@@ -692,7 +703,7 @@ export async function refreshReceipt(receiptId: string) {
 }
 
 /** Durumu sorgulanabilen sağlayıcılar (sorgu döngüsü yalnız bunların sepetlerine bakar) */
-const POLLED = ['tokenx'] as const;
+const POLLED = ['tokenx', 'pavo'] as const;
 
 // ─── Sorgulama döngüsü ──────────────────────────────────────────────────────
 
@@ -823,7 +834,24 @@ export async function testProvider() {
   const provider = providerFor(getSettings().okcProvider);
   if (!provider?.test) throw conflict('Bu sağlayıcı için bağlantı denemesi yok', 'okc_no_test');
   if (!provider.configured()) throw conflict(provider.notConfigured, 'okc_not_configured');
-  return provider.test();
+  return provider.test().catch(deviceError);
+}
+
+/** Pavo eşleştirmesi: cihazda onay ekranı açılır, kasiyer onaylayınca LafPOS cihaza satış gönderebilir */
+export async function pairDevice(actor: Actor) {
+  if (getSettings().okcProvider !== 'pavo') throw conflict('Eşleştirme yalnız Pavo bağlantısında', 'okc_no_pair');
+  if (!pavoProvider.configured()) throw conflict(pavoProvider.notConfigured, 'okc_not_configured');
+  const out = await pairPavo().catch(deviceError);
+  const fx = new Effects();
+  fx.audit(db, { userId: actor.user.id, action: 'okc.pair', message: `Pavo cihazı eşleştirildi (${pavoProvider.terminalId()})` });
+  fx.flush();
+  return out;
+}
+
+/** Cihazın hatası arayüze okunur mesajla döner (beklenmeyen 500 değil) */
+function deviceError(e: unknown): never {
+  if (e instanceof PavoError) throw new HttpError(502, e.message, e.code === 'CERT_CHANGED' ? 'pavo_cert' : 'pavo_device');
+  throw e;
 }
 
 export function receiptActor(userId: string): Actor | null {

@@ -760,7 +760,7 @@ export const fiscalReceipts = sqliteTable(
     orderId: text('order_id')
       .notNull()
       .references(() => orders.id),
-    provider: text('provider').$type<'tokenx' | 'simulator'>().notNull(),
+    provider: text('provider').$type<'tokenx' | 'pavo' | 'simulator'>().notNull(),
     mode: text('mode').$type<'anlik' | 'liste'>().notNull(),
     terminalId: text('terminal_id'),
     status: text('status').$type<FiscalStatus>().notNull(),

@@ -3,10 +3,12 @@
 Mali fiş ÖKC'den (yazarkasa POS) kesilir. LafPOS adisyonu cihaza **sepet** olarak gönderir; ödeme ve mali fiş
 cihazda alınır; sonuç (Z no, fiş no, ödeme kalemleri) LafPOS'a döner ve adisyonun ödemesi olarak kaydedilir.
 Kod: `server/okc/` (markadan bağımsız akış `service.ts`, sepet hesabı `basket.ts`, sağlayıcılar `providers/`:
-sözleşme `types.ts`, Token `tokenx.ts` + istemci `../tokenx.ts`, eğitim cihazı `index.ts`), uçlar
+sözleşme `types.ts`, Token `tokenx.ts` + istemci `../tokenx.ts`, Pavo `pavo.ts` + istemci `../pavo.ts`, eğitim cihazı
+`index.ts`), uçlar
 `server/routes/okc.ts`, ekranlar adisyondaki **Yazarkasa** bölümü, `/cihaz` (eğitim cihazı) ve
 Yönetim › Yazarkasa POS. Testler: `tests/okc-basket.test.ts`, `tests/tokenx-client.test.ts`,
-`tests/api-flow.test.ts`, `tests/okc-providers.test.ts`, `tests/audit-yazarkasa.test.ts` (27 Eki 2026 denetimi:
+`tests/api-flow.test.ts`, `tests/okc-providers.test.ts`, `tests/pavo.test.ts` (sahte Pavo cihazı `tests/fake-pavo.ts`),
+`tests/audit-yazarkasa.test.ts` (27 Eki 2026 denetimi:
 birleşen adisyonda fiş iptali, kapanmış güne ait iptal, yanıtı alınamayan gönderim, ödemesiz kapanan fiş, servis
 ve KDV dökümü, açılışta sorgu, denetim kaydı).
 
@@ -17,6 +19,7 @@ ve KDV dökümü, açılışta sorgu, denetim kaydı).
 | `kapali` | Yazarkasa düğmeleri görünmez; ödeme LafPOS'ta alınır, mali fiş ayrıca kesilir |
 | `simulator` (eğitim cihazı) | Sepet `/cihaz` ekranına düşer; orada nakit/kart/yemek kartı seçilip "ödendi" denir. **Gerçek fiş kesilmez**; kurulum ve personel eğitimi içindir. İlk kurulum bununla gelir |
 | `tokenx` | TokenX Connect (Cloud) üzerinden gerçek cihaz |
+| `pavo` | Pavo (N86 ve diğer PavoPay cihazları) kafenin yerel ağında REST ile; yalnız kasada ödeme (§8) |
 
 Gerçek cihazla deneme yapılmaz: önce eğitim cihazı, sonra Token'ın test ortamı, en son canlı cihaz.
 
@@ -35,7 +38,7 @@ tutarına kırpılması `service.ts`'te her marka için aynıdır; yeni marka bu
 |---|---|---|---|
 | **Token · Beko** (300TR, X30TR; 400TR e-belge) | TokenX Connect Cloud | **Bağlı** | Canlı ve test client-id/secret; 300TR ve 400TR'nin Cloud desteği; Cloud'dan iade ve `documentType` değerleri; terminal başına TokenX Connect üyelik ücreti; webhook'ların geldiği IP listesi |
 | **Hugin** (Tiger T300, S1...) | Cloud Link: Hugin TSM bizim HTTPS adresimizi çağırır (`GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/result`, `POST /sales`, `X-ApiKey`) | Belge eksik; para yolu tahminle kurulmaz | Postman koleksiyonu ya da OpenAPI; `/sales` gövdesinin tamamı (ödeme kalemleri ve türleri, Z no, fiş no, cihaz seri no, siparişle bağı); iptal/iade bildirimi; tekrar gönderim ve idempotency; satıştan sonra siparişin listeden düşme kuralı, iki cihaz aynı masayı açarsa kilit; `documentType` değerleri; ödeme kodlarının anlamı (`CHECK`); desteklenen modeller, lisans ve kayıt |
-| **Pavo** (N86, N96, UN20, N6, CT20) | Yerel ağda IP REST (port 4567, cihazda "Eşleştir"), APP-TO-APP, bulut | Yalnız iş ortaklarına belge; VUK 507 cihazları e-Arşiv keser, kafenin e-Arşiv entegratör hesabı gerekir | IP REST / bulut API belgesi; entegratör parmak izimiz; iş ortaklığı sözleşmesi ve ücret; test cihazı; sonuç alanları (e-Arşiv ETTN/no, ödemeler); bölünmüş ödeme, iptal, iade; hangi model ÖKC, hangisi VUK 507 |
+| **Pavo** (N86, N96, UN20, N6, CT20) | Yerel ağda REST (cihazda "Eşleştir"); Intent, Cloud, UniCloud da var | **Bağlı (yerel ağ, Kasım 2026)**; gerçek cihazda ilk satışla doğrulanacak (§8). VUK 507 cihazları e-Arşiv keser, kafenin e-Arşiv hesabı gerekir | §8.4'teki liste: PavoPay REST belgesi, ödeme tipi ve belge türü kodları, `GetSaleResult` yanıtı, iptal ve iade |
 | **Ingenico** (Move5000F, iDE280, A910SF) | GMP-3, Windows DLL (USB/TCP) | Geliştirici ücreti ve her sürümün hash kaydı gerekir | Geliştirici programı, GMPSmartDLL ve belgesi, test cihazı, sürüm başına hash kaydı, bulut/TSM kanalı var mı |
 | **Verifone, Inpos, Profilo, PayGo, Vera** | TSM ya da kablolu | Açık belge yok | TSM/bulut satış API'si var mı; belge, sözleşme, test cihazı |
 | **Hepsi** | | | Güvenlik Taahhütnamesi (GMP-3 §5.3, §5.5: yazılım değişikliği üreticiye bildirilir); masada ödeme için GMP-3 §6.1'e uygunluğun yazılı teyidi |
@@ -171,3 +174,85 @@ Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında gör�
   alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir. Onay penceresi açıkken cihazda fiş kesildiyse
   (sepet ödendi ya da eksik ödenip `hata` oldu) iptal reddedilir (`okc_paid`, `okc_unresolved`): fişi kesilmiş
   sepet hiçbir yoldan "silindi" sayılmaz, fiş iptali ödemesini geri alabilsin.
+
+## 8. Pavo (N86) yerel ağ bağlantısı
+
+Pavo cihazı kafenin ağında bir HTTP sunucusudur; LafPOS (kasa bilgisayarı) satışı ona gönderir, kasiyer ödemeyi
+cihazda (nakit, kart; bölünmüş de) alır, cihaz VUK 507 belgesini keser (e-Arşiv, e-Fatura ya da bilgi fişi; Z yok).
+İnternet ya da bulut gerekmez; cihaz ile kasa bilgisayarı aynı ağda olmalı. Kod: istemci `server/okc/pavo.ts`,
+sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
+
+### 8.1 Kurulum
+
+1. Cihazda Ayarlar › Çevresel Donanımlar › Network Ayarları: REST açık, REST ağı Wi-Fi ya da Ethernet (mobil veri
+   REST'te çalışmaz). Cihazın IP adresini modemden sabitleyin.
+2. Kasa bilgisayarının ayarlarına (`.env` / `C:\ProgramData\LafPOS\ayarlar.env`):
+
+   | Değişken | Ne |
+   |---|---|
+   | `PAVO_URL` | Cihazın adresi ve REST portu, ör. `https://192.168.1.50:4567`. Pavo'nun belgesi 4568 HTTPS, 4567 HTTP der; entegratörlerin kodu N86'da `https://…:4567` kullanır. "Bağlantıyı dene" hangisinin açık olduğunu söyler |
+   | `PAVO_SERIAL` | Cihazın seri numarası (her istekte gider, cihaz kendi seri noyla karşılaştırır) |
+   | `PAVO_FINGERPRINT` | İsteğe bağlı (varsayılan `LafPOS`); eşleştirmede cihaza kaydedilir, her istekte aynısı gider |
+
+3. Yönetim › Yazarkasa POS: bağlantı **Pavo** (ödeme yeri kendiliğinden kasada ödeme), **Eşleştir** (cihazda onay
+   ekranı açılır, kasiyer onaylar; LafPOS en çok 2 dk bekler), **Bağlantıyı dene** (cihaz yanıt veriyor mu, eşleştirme
+   geçerli mi, cihazdaki ödeme araçları).
+4. İlk satışı küçük tutarla deneyin: cihaz gerçek e-Arşiv belgesi keser. "Cihazın son yanıtları" (yönetim
+   sayfasının altında) yanıtın alanlarını gösterir; tanınmayan biçim orada görünür.
+
+Pavo bulut API anahtarı (PavoPay portalında üretilen, 64 karakterlik) bu bağlantıda kullanılmaz: bulut kanalı ayrıca
+Pavo'nun entegratöre verdiği "App Token"ı ister (§8.4). Anahtar yalnız kafedeki ayar dosyasında durur, depoya girmez.
+
+### 8.2 Akış
+
+- **Eşleştirme** (`/Pairing`): sıra no 1'e döner; LafPOS cihazın sertifikasının parmak izini saklar. Sonraki her
+  istekte gövde gönderilmeden sertifika karşılaştırılır; farklıysa istek gitmez ("Cihazın sertifikası
+  eşleştirmedekinden farklı"): aynı ağdaki başka bir makine kendini cihaz gibi gösteremez. Cihaz değiştiyse ya da
+  uygulaması güncellendiyse yeniden eşleştirilir. Pavo günde bir eşleştirmeyi önerir.
+- **Her istek**: `TransactionHandle` (seri no, parmak izi, sıra no, yerel saat `yyyy-MM-ddTHH:mm:ss.fff`). Sıra no
+  kalıcıdır (`sync_state` `pavo.sequence`) ve istek gitmeden artırılır; yanıtı alınamayan istekten sonra da aynı
+  numara tekrar gitmez (cihaz tekrarı reddeder). Kasa bilgisayarının saati cihazınkinden 5 dakikadan fazla sapmamalı.
+- **Satış** (`/CompleteSale`): sepet Pavo satışına çevrilir (`pavoSale`). Tutarlar TL, KDV dahil; KDV grubu orandan
+  (`KDV10`, `KDV20`); birim `C62` (adet); sipariş no sepet kimliğinden (`pavoOrderNo`, 16 karakter). İndirim ayrı
+  alanla değil kalemin tutarıyla gider: tutar adede tam bölünmüyorsa satır iki olur (n-1 adet ve son adet), fiş
+  toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynıdır. Ödeme bilgisi gönderilmez: kasiyer cihazda seçer.
+- **Bekleme**: cihaz aynı anda tek istek işler; satış ekranı açıkken (yanıt gelene dek) sepet LafPOS'ta "kilitli"
+  görünür ve LafPOS cihaza başka istek göndermez. Cihaz ilk 6 sn içinde reddederse (KDV grubu, eşleştirme) kasiyer
+  hatayı hemen görür, sepet hataya düşer, adisyon kilitli kalmaz.
+- **Sonuç**: cihazın yanıtındaki satış kaydı (`Data` ya da `Data.Sale`): `AddedPayments` (`StatusId` 2 etkin;
+  `PaymentTypeId` 1 nakit, 2 kart; `PaymentAmount` TL) ve `FinancialDocuments` (`InvoiceNo` belge no, `Type.Name`
+  belge türü). Kasiyer vazgeçerse (`HasAbondon`) sepet kapanır, adisyon açık kalır. Hata dönen satışta belge kesilip
+  kesilmediği bir kez `/GetSaleResult` ile sorulur. Yanıt gelmezse (sunucu yeniden başladı, bağlantı koptu) sonuç
+  sipariş no ile `/GetSaleResult`'tan sorulur (en sık 5 sn'de bir).
+- **İptal**: satış cihazın ekranındayken LafPOS'tan silinmez, cihazda vazgeçilir. Ekranda değilse LafPOS cihaza
+  sorar: ödenmişse sonuç işlenir, ödenmemişse cihazda silinecek bir şey yoktur. Cihaza ulaşılamazsa yetkili onayıyla
+  LafPOS'ta iptal sayılır (§7, `okc.force_cancel`). LafPOS cihaza iptal (`/CancelSale`) göndermez: belgenin
+  anlamı belgesiz.
+
+### 8.3 Temkin kuralları (para yolu tahminle kurulmaz)
+
+- Satış kaydı tanınmayan **hatasız** yanıt ödendi sayılmaz; sonuç sorulur. Satış kaydı hiç gelmezse sepet bekler,
+  kasiyer cihaza bakıp iptal eder.
+- Anlamı belgelenmemiş ödeme tipi (1 ve 2 dışı: yemek kartı, havale...) tahminle bir türe yazılmaz: ödemesi
+  LafPOS'a işlenmez, sepet eksik ödenmiş sayılır (`okc.underpaid` alarmı), kalemler yeniden gönderilmez; kalanı
+  yönetici doğru türle kasadan alır.
+- Belge kesilmişse (`InvoiceNo` ya da etkin ödeme var) hata dönen yanıt da ödendi sayılır (ör. yazıcı hatası).
+- Cihazın ham yanıtı sepetin sonucunda (`fiscal_receipts.result.raw`) saklanır; ilk gerçek satıştan sonra alan
+  adları buradan doğrulanır.
+
+### 8.4 Kaynaklar ve Pavo'dan istenecekler
+
+Pavo'nun belge sitesi (docs.pavopay.dev) projeye özel ve kapalı. Doğrulanan: REST bağlantı kuralları ve eşleştirme
+(Pavo'nun REST sayfasının Ağustos 2026 kaydı); satış kaydının biçimi (Pavo'nun satış API'sinin yanıt modeli, bir
+entegratörün açık kodu). Entegratör kodundan, belgesiz: `/CompleteSale` ve `/GetSaleResult` uç adları ve satış
+gövdesi, `MainDocumentType: 1`, `KDV{oran}` grup kodu, N86'da port. Pavo'dan (info@pavo.com.tr, 0850 611 04 44)
+istenecekler:
+
+1. N86 / PavoPay (VUK 507) REST belgesine erişim (docs.pavopay.dev) ve hata kodları.
+2. `/CompleteSale` ve `/GetSaleResult` yanıtının tam biçimi; `PaymentTypeId`, `MainDocumentType`, `TaxGroupCode` ve
+   belge türü değerlerinin listesi.
+3. Kesilmiş belgenin iptali ve iadesi (e-Arşiv iptali) ve LafPOS'a nasıl bildirildiği.
+4. Bulut kanalı için App Token (kafenin PavoPay API anahtarıyla kullanılır) ve bulutta kalemli satışın seri no ile
+   cihaza gönderilmesi.
+5. Masada ödeme (cihazın açık hesap listesi) desteği.
+
