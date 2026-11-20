@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, MonitorSmartphone, PlugZap, Save, Webhook, XCircle } from 'lucide-react';
+import { CheckCircle2, PlugZap, Save, Webhook, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { fmtDateTime } from '@shared/time';
@@ -7,11 +7,10 @@ import { Button } from '@/components/ui/Button';
 import { confirmDialog, type ConfirmOptions } from '@/components/ui/Confirm';
 import { Field, Input, Label } from '@/components/ui/Field';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
-import { Card, CARD, CODE, PageHeader, Segmented, SetupNotes } from '@/components/admin/ui';
+import { Badge, Card, CARD, CODE, DefRow, PageHeader, Segmented, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
 
 interface OkcStatus {
@@ -62,6 +61,14 @@ const OTHER_VENDORS: { name: string; channel: string; state: string }[] = [
   { name: 'Verifone, Inpos, Profilo, PayGo, Vera', channel: 'TSM ya da kablolu', state: 'Açık belge yok; üreticiden istenecek' },
 ];
 
+/** Hesabın cihaza gidişi, sırasıyla ("Nasıl çalışır" kartı) */
+const STEPS = [
+  'Ödeme penceresinde “Hesabı yazarkasaya gönder”e basılır (kalem seçerek bölünmüş hesap da gönderilebilir)',
+  'Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar',
+  'Sonuç LafPOS’a gelir, ödemeler adisyona işlenir, adisyon kapanır; Z no ve fiş no adisyonda kalır',
+  'Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır, adisyon yeniden açılır ve patron paneline alarm düşer',
+];
+
 /** Token kurulumu: Token seçiliyse kartının hemen altında (eksikse açık), değilse sayfa sonunda kapalı */
 function TokenSetup({ open }: { open?: boolean }) {
   return (
@@ -69,7 +76,7 @@ function TokenSetup({ open }: { open?: boolean }) {
       <p>
         TokenX Connect bilgileri kasa bilgisayarının ayarlarına (<code className={CODE}>.env</code>) yazılır, sonra “Bağlantıyı dene”:
       </p>
-      <pre className="overflow-x-auto rounded-lg bg-[var(--admin-surface-2)] p-3 font-mono text-xs leading-5 text-[var(--admin-text)]">{`TOKENX_AUTH_URL=     (Token’ın verdiği kimlik adresi)
+      <pre className="overflow-x-auto rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-3 font-mono text-xs leading-5 text-[var(--admin-text)] ring-1 ring-inset ring-[var(--admin-border)]">{`TOKENX_AUTH_URL=     (Token’ın verdiği kimlik adresi)
 TOKENX_BASKET_URL=   (sepet API adresi)
 TOKENX_SETTINGS_URL= (client-settings adresi)
 TOKENX_CLIENT_ID=
@@ -159,8 +166,8 @@ export default function OkcAdmin() {
           <ErrorState className={CARD} title="Yazarkasa durumu alınamadı" error={status.error} onRetry={() => void status.refetch()} retrying={status.isFetching} />
         ) : (
           <div role="status" aria-label="Yükleniyor…" className="space-y-4">
-            <Skeleton className="h-40 rounded-2xl" />
-            <Skeleton className="h-28 rounded-2xl" />
+            <Skeleton className="h-40 rounded-[var(--r-card)]" />
+            <Skeleton className="h-28 rounded-[var(--r-card)]" />
           </div>
         )}
       </div>
@@ -235,7 +242,8 @@ export default function OkcAdmin() {
           </p>
         )}
         {s.provider !== 'kapali' && (
-          <div>
+          // Bağlantıdan sonra ikinci karar: satır ayracıyla ayrı bölüm (seçim rayı ve açıklaması birlikte)
+          <div className="border-t border-[var(--admin-divider)] pt-4">
             <Label>Ödeme yeri</Label>
             <div {...locked('mode')}>
               <Segmented label="Ödeme yeri" value={s.mode} onChange={(v) => void setMode(v)} options={(['anlik', 'liste'] as const).map((value) => ({ value, label: MODE_LABEL[value] }))} />
@@ -248,12 +256,84 @@ export default function OkcAdmin() {
 
       {s.provider === 'tokenx' && (
         <>
-          <Card title="TokenX Connect (bulut)" bodyClassName="space-y-3 text-sm">
-            <div className="flex items-center gap-2">
-              {s.tokenx.configured ? <CheckCircle2 aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-success)]" /> : <XCircle aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-danger-ink)]" />}
-              {s.tokenx.configured ? joinMeta(['Bilgiler tanımlı', s.tokenx.terminalId && `terminal ${s.tokenx.terminalId}`, s.tokenx.branchId && `şube ${s.tokenx.branchId}`]) : 'Token bilgileri eksik; kurulum adımları aşağıda'}
-            </div>
-            <div className="flex flex-wrap gap-2">
+          {/* Durum başlığın sağında rozet (Genel bakış'ın sistem sağlığı gibi); tanımlı bilgiler etiket ve değer satırları,
+              Token'a giden iki istek kartın dibinde kendi şeridinde */}
+          <Card
+            title="TokenX Connect (bulut)"
+            actions={
+              s.tokenx.configured ? (
+                <Badge tone="success" dot>
+                  Bilgiler tanımlı
+                </Badge>
+              ) : (
+                <Badge tone="danger" dot>
+                  Bilgiler eksik
+                </Badge>
+              )
+            }
+            bodyClassName="space-y-4 text-sm"
+          >
+            {!s.tokenx.configured && (
+              <p className="flex items-center gap-2">
+                <XCircle aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-danger-ink)]" />
+                Token bilgileri eksik; kurulum adımları aşağıda
+              </p>
+            )}
+            {((s.tokenx.configured && (s.tokenx.terminalId || s.tokenx.branchId)) || s.tokenx.webhookUrl) && (
+              // Okunur genişlikte: geniş ekranda etiket ile değer kartın iki ucuna kaçmaz
+              <div className="max-w-2xl">
+                {s.tokenx.configured && s.tokenx.terminalId && (
+                  <DefRow label="Terminal">
+                    <span className="tabular break-all">{s.tokenx.terminalId}</span>
+                  </DefRow>
+                )}
+                {s.tokenx.configured && s.tokenx.branchId && (
+                  <DefRow label="Şube">
+                    <span className="tabular break-all">{s.tokenx.branchId}</span>
+                  </DefRow>
+                )}
+                {s.tokenx.webhookUrl && (
+                  <DefRow label="Webhook adresi">
+                    <span className="break-all">{s.tokenx.webhookUrl}</span>
+                  </DefRow>
+                )}
+              </div>
+            )}
+            {!s.tokenx.webhookUrl && (
+              <p className="text-xs text-muted">Webhook adresi yok: kafedeki sunucu internetten erişilemiyorsa LafPOS sepet durumunu 2,5 sn’de bir sorgular; sonuç yine gelir</p>
+            )}
+            {s.lastError && (
+              <Notice tone="danger" title={`Son hata · ${fmtDateTime(s.lastError.at)}`} className="text-[13px]">
+                {s.lastError.message}
+              </Notice>
+            )}
+            {test && (
+              // Denemenin sonucu kart içinde karo: cihaz ve kısımları (no, ad, oran), altında önerilen eşleme
+              <div className="space-y-3 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-4 ring-1 ring-inset ring-[var(--admin-border)]">
+                <div>
+                  <p className="text-xs font-medium text-[var(--admin-text-mute)]">Cihaz</p>
+                  <p className={cn('mt-0.5 [overflow-wrap:anywhere]', test.terminal.error ? 'text-[var(--admin-danger-ink)]' : 'tabular font-medium text-[var(--admin-text)]')}>
+                    {test.terminal.error ? `Terminal bilgisi alınamadı: ${test.terminal.error}` : `${test.terminal.terminalId} · şube ${test.terminal.branchId}`}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-[var(--admin-text-mute)]">Kısımlar (KDV)</p>
+                  <ul className="mt-1 max-w-md divide-y divide-[var(--admin-divider)]">
+                    {test.sections.map((x) => (
+                      <li key={x.sectionNo} className="flex items-center gap-2.5 py-1.5">
+                        <span className="grid size-6 shrink-0 place-items-center rounded-[var(--r-chip)] bg-[var(--admin-surface)] text-xs font-semibold tabular-nums text-[var(--admin-text-soft)] ring-1 ring-inset ring-[var(--admin-border)]">{x.sectionNo}</span>
+                        <span className="min-w-0 flex-1 truncate text-[var(--admin-text)]">{x.name}</span>
+                        <span className="shrink-0 tabular-nums text-[var(--admin-text-mute)]">%{x.taxPercent / 100}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <Button size="sm" variant="soft" onClick={() => editMap(Object.fromEntries(Object.entries(test.suggestedSectionMap).map(([k, v]) => [k, String(v)])))}>
+                  Önerilen eşlemeyi kullan
+                </Button>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-4 max-sm:[&>*]:grow">
               <Button icon={<PlugZap className="size-4" />} loading={checking === 'test'} disabled={!s.tokenx.configured} onClick={() => void runTest()}>
                 Bağlantıyı dene
               </Button>
@@ -261,31 +341,6 @@ export default function OkcAdmin() {
                 Webhook’u Token’a kaydet
               </Button>
             </div>
-            <p className="text-xs text-muted">
-              {s.tokenx.webhookUrl ? `Webhook adresi: ${s.tokenx.webhookUrl}` : 'Webhook adresi yok: kafedeki sunucu internetten erişilemiyorsa LafPOS sepet durumunu 2,5 sn’de bir sorgular; sonuç yine gelir'}
-            </p>
-            {s.lastError && (
-              <Notice tone="danger" title={`Son hata · ${fmtDateTime(s.lastError.at)}`} className="text-[13px]">
-                {s.lastError.message}
-              </Notice>
-            )}
-            {test && (
-              <div className="rounded-xl border border-line p-3 text-xs">
-                <div className="mb-1 font-semibold">Cihaz</div>
-                <div>{test.terminal.error ? `Terminal bilgisi alınamadı: ${test.terminal.error}` : `${test.terminal.terminalId} · şube ${test.terminal.branchId}`}</div>
-                <div className="mb-1 mt-2 font-semibold">Kısımlar (KDV)</div>
-                <ul>
-                  {test.sections.map((x) => (
-                    <li key={x.sectionNo}>
-                      {x.sectionNo}. {x.name} · %{x.taxPercent / 100}
-                    </li>
-                  ))}
-                </ul>
-                <Button size="sm" className="mt-2" onClick={() => editMap(Object.fromEntries(Object.entries(test.suggestedSectionMap).map(([k, v]) => [k, String(v)])))}>
-                  Önerilen eşlemeyi kullan
-                </Button>
-              </div>
-            )}
           </Card>
           {/* Bilgiler eksikken açık gelir: o an gereken tek şey bu, sayfanın sonunda aranmaz */}
           <TokenSetup open={!s.tokenx.configured} />
@@ -293,11 +348,13 @@ export default function OkcAdmin() {
       )}
 
       {s.provider !== 'kapali' && (
-        <Card title="KDV oranı → cihazdaki kısım" bodyClassName="space-y-3">
-          <p className="text-sm text-muted">
-            Her KDV oranı cihazda tanımlı bir kısma (departman) gider. {usedRates.length ? `Menüde kullanılan oranlar: ${usedRates.map((r) => `%${r}`).join(', ')}` : 'Menüde KDV oranı tanımlı ürün yok'}
-          </p>
-          <div className="grid grid-cols-3 gap-3 sm:max-w-md">
+        // Açıklama kartın alt satırında (13 px soluk); Kaydet kartın dibinde ayraçlı şeritte, alanların hizasında (telefonda tam genişlik)
+        <Card
+          title="KDV oranı → cihazdaki kısım"
+          subtitle={`Her KDV oranı cihazda tanımlı bir kısma (departman) gider. ${usedRates.length ? `Menüde kullanılan oranlar: ${usedRates.map((r) => `%${r}`).join(', ')}` : 'Menüde KDV oranı tanımlı ürün yok'}`}
+          bodyClassName="space-y-4"
+        >
+          <div className="grid grid-cols-3 gap-3 sm:max-w-lg">
             {rates.map((r) => {
               const used = usedRates.includes(r);
               return (
@@ -307,7 +364,11 @@ export default function OkcAdmin() {
                   label={
                     <>
                       <span className="block">%{r} KDV</span>
-                      <span className="block text-xs font-normal text-muted">{used ? 'menüde var' : 'menüde yok'}</span>
+                      {/* Menüde olan oran ev yeşili noktalı: eşlenmesi gereken oranlar bir bakışta ayrılır */}
+                      <span className="flex items-center gap-1.5 text-xs font-normal text-muted">
+                        <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', used ? 'bg-[var(--admin-primary)]' : 'bg-[var(--admin-border-field)]')} />
+                        {used ? 'menüde var' : 'menüde yok'}
+                      </span>
                     </>
                   }
                   error={missing.includes(r) ? 'Kısım no gerekli' : invalid.includes(r) ? '1–99 arası' : null}
@@ -318,19 +379,26 @@ export default function OkcAdmin() {
             })}
           </div>
           {/* Bağlantı ya da ödeme yeri kaydedilirken kapalı görünür (tıklama yutulmaz); Token denemesi sürerken kaydeder */}
-          <Button variant="primary" icon={<Save className="size-4" />} loading={saving === 'map'} disabled={!!saving || !mapDirty || missing.length > 0 || invalid.length > 0} onClick={() => void saveMap()}>
-            Eşlemeyi kaydet
-          </Button>
+          <div className="flex border-t border-[var(--admin-divider)] pt-4 max-sm:[&>*]:flex-1">
+            <Button variant="primary" icon={<Save className="size-4" />} loading={saving === 'map'} disabled={!!saving || !mapDirty || missing.length > 0 || invalid.length > 0} onClick={() => void saveMap()}>
+              Eşlemeyi kaydet
+            </Button>
+          </div>
         </Card>
       )}
 
-      <Card title="Nasıl çalışır" bodyClassName="flex gap-3 text-sm text-ink-2">
-        <MonitorSmartphone aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-primary)]" />
-        <ol className="list-decimal space-y-1 pl-4">
-          <li>Ödeme penceresinde “Hesabı yazarkasaya gönder”e basılır (kalem seçerek bölünmüş hesap da gönderilebilir)</li>
-          <li>Kasiyer cihazda nakit, kart ya da yemek kartıyla ödemeyi alır; mali fiş cihazdan çıkar</li>
-          <li>Sonuç LafPOS’a gelir, ödemeler adisyona işlenir, adisyon kapanır; Z no ve fiş no adisyonda kalır</li>
-          <li>Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır, adisyon yeniden açılır ve patron paneline alarm düşer</li>
+      {/* Dört adım numaralı karolarda (açık nane dairede sıra no): telefonda alt alta, genişte ikişer; sırayı liste söyler,
+          daire yalnız göz için */}
+      <Card title="Nasıl çalışır">
+        <ol className="grid gap-3 sm:grid-cols-2">
+          {STEPS.map((step, i) => (
+            <li key={i} className="flex gap-3 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-3.5 text-sm text-[var(--admin-text-soft)] ring-1 ring-inset ring-[var(--admin-border)]">
+              <span aria-hidden="true" className={cn('grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums', TONE_SOFT.primary)}>
+                {i + 1}
+              </span>
+              <span className="min-w-0 pt-0.5 leading-5">{step}</span>
+            </li>
+          ))}
         </ol>
       </Card>
 

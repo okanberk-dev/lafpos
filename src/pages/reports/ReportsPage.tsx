@@ -459,7 +459,7 @@ function CardSkeleton({ rows = 5 }: { rows?: number }) {
 const stripSkeleton = (count: number) => (
   <div className="space-y-4">
     <KpiStripSkeleton count={count} />
-    <Skeleton className="h-[290px] rounded-2xl" />
+    <Skeleton className="h-[290px] rounded-[var(--r-card)]" />
   </div>
 );
 
@@ -472,8 +472,8 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
     <div className="space-y-4">
       <KpiStripSkeleton />
       <div role="status" aria-label="Yükleniyor…" className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <Skeleton className="h-[290px] rounded-2xl" />
-        <Skeleton className="h-[290px] rounded-2xl" />
+        <Skeleton className="h-[290px] rounded-[var(--r-card)]" />
+        <Skeleton className="h-[290px] rounded-[var(--r-card)]" />
       </div>
     </div>
   );
@@ -547,7 +547,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                   {!single ? (
                     <ColumnChart data={s.byDay.map((d) => ({ label: fmtShortDate(d.date), value: d.netSales }))} format={tl} seriesLabel="Ciro" ariaLabel="Günlük ciro" emptyLabel={noSales} />
                   ) : hourly.isPending ? (
-                    <Skeleton className="h-[220px] rounded-xl" />
+                    <Skeleton className="h-[220px] rounded-[var(--r-tile)]" />
                   ) : hourly.data ? (
                     <ColumnChart data={hourColumns(hourly.data.hours)} format={tl} seriesLabel="Ciro" ariaLabel="Saatlik ciro" emptyLabel={noSales} />
                   ) : (
@@ -570,26 +570,34 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <Card flush title="Ciro dökümü" subtitle="Kapanmış adisyonlar; iptaller düşülmez, bilgi olarak">
-                <dl className="divide-y divide-[var(--admin-divider)] text-sm">
-                  {[
-                    ['Liste değeri', s.waterfall.list, false],
-                    [s.odenmez || s.zayi ? 'Ciro dışı (ikram, ödenmez, zayi)' : 'İkram', -s.waterfall.complimentary, false],
-                    ['İndirim', -s.waterfall.discounts, false],
-                    ...(s.waterfall.service ? [['Servis ücreti', s.waterfall.service, false] as const] : []),
-                    ['Ciro (KDV dahil)', s.waterfall.revenue, true],
-                    ['KDV', -s.waterfall.kdv, false],
-                    ['Net satış (KDV hariç)', s.waterfall.netExKdv, true],
-                  ].map(([label, value, strong]) => {
-                    const v = value as number;
-                    return (
-                      <div key={String(label)} className={cn('flex justify-between gap-3 px-4 py-2.5 sm:px-5', strong === true && 'font-semibold')}>
-                        <dt>{label}</dt>
-                        {/* Sıfır eksi işaretsiz (-0 da sıfırdır); düşülen tutar matematik eksisiyle */}
-                        <dd className="tabular whitespace-nowrap">{v === 0 ? tl(0) : v < 0 ? `−${tl(-v)}` : tl(v)}</dd>
-                      </div>
-                    );
-                  })}
-                  <div className="flex justify-between gap-3 px-4 py-2.5 text-muted sm:px-5">
+                {/* Gelir tablosu gibi: düşülen kalem (ikram, indirim, KDV) ikincil tonda, ara toplam ve sonuç açık gri
+                    şeritte ve kalın; iptal yalnız bilgi, en altta soluk. Rakamlar aynı, yalnız görünüm */}
+                <dl className="divide-y divide-[var(--admin-divider)] pb-1.5 text-sm">
+                  {(
+                    [
+                      ['Liste değeri', s.waterfall.list, 'base'],
+                      [s.odenmez || s.zayi ? 'Ciro dışı (ikram, ödenmez, zayi)' : 'İkram', -s.waterfall.complimentary, 'minus'],
+                      ['İndirim', -s.waterfall.discounts, 'minus'],
+                      ...(s.waterfall.service ? [['Servis ücreti', s.waterfall.service, 'base'] as const] : []),
+                      ['Ciro (KDV dahil)', s.waterfall.revenue, 'total'],
+                      ['KDV', -s.waterfall.kdv, 'minus'],
+                      ['Net satış (KDV hariç)', s.waterfall.netExKdv, 'total'],
+                    ] as const
+                  ).map(([label, v, kind]) => (
+                    <div
+                      key={label}
+                      className={cn(
+                        'flex items-baseline justify-between gap-3 px-4 py-2.5 sm:px-5',
+                        kind === 'total' && 'bg-[var(--admin-surface-2)] font-semibold text-[var(--admin-text)]',
+                        kind === 'minus' && 'text-[var(--admin-text-soft)]',
+                      )}
+                    >
+                      <dt>{label}</dt>
+                      {/* Sıfır eksi işaretsiz (-0 da sıfırdır); düşülen tutar matematik eksisiyle */}
+                      <dd className={cn('tabular whitespace-nowrap', kind === 'total' && 'text-[15px]')}>{v === 0 ? tl(0) : v < 0 ? `−${tl(-v)}` : tl(v)}</dd>
+                    </div>
+                  ))}
+                  <div className="flex items-baseline justify-between gap-3 px-4 py-2.5 text-muted sm:px-5">
                     <dt>İptal edilen (bilgi, açık adisyonlar dahil)</dt>
                     <dd className="tabular whitespace-nowrap">{tl(s.voided)}</dd>
                   </div>
@@ -907,16 +915,28 @@ function HourlyReport({ range, today, onExport, exporting }: { range: Range; tod
                 </div>
               </Card>
               <Card flush title="Pik saatler" subtitle="En çok ciro yapan saatler">
-                <ol className="divide-y divide-[var(--admin-divider)]">
+                {/* Genel bakışın en çok satanlarıyla aynı satır: solda sıra dairesi (birinci dolu ev yeşili), saat ve altında
+                    adisyon sayısı, sağda tutar */}
+                <ol className="divide-y divide-[var(--admin-divider)] pb-1.5">
                   {h.peaks.map((p, i) => (
                     <li key={p.offset} className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-5">
-                      <span className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-surface-3 text-xs font-semibold">{i + 1}</span>
-                      <span className="tabular min-w-0 flex-1 font-medium">
-                        {hh(p.hour)} – {String(p.hour).padStart(2, '0')}:59
-                        {p.nextDay && <span className="ml-1.5 text-xs font-normal text-muted">ertesi gün</span>}
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          'tabular grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold',
+                          i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
+                        )}
+                      >
+                        {i + 1}
                       </span>
-                      <span className="shrink-0 text-muted">{p.orders} adisyon</span>
-                      <span className="tabular w-24 shrink-0 text-right font-semibold whitespace-nowrap">{tl(p.revenue)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="tabular block font-medium text-[var(--admin-text)]">
+                          {hh(p.hour)} – {String(p.hour).padStart(2, '0')}:59
+                          {p.nextDay && <span className="ml-1.5 text-xs font-normal text-muted">ertesi gün</span>}
+                        </span>
+                        <span className="tabular block text-xs text-muted">{p.orders} adisyon</span>
+                      </span>
+                      <span className="tabular shrink-0 text-right font-semibold whitespace-nowrap text-[var(--admin-text)]">{tl(p.revenue)}</span>
                     </li>
                   ))}
                 </ol>
@@ -1142,7 +1162,7 @@ function PrepReport({ range, today }: { range: Range; today: string }) {
                   phoneAside={(r) => dur(r.p90)}
                 />
                 {p.products.length > PREP_PRODUCTS && (
-                  <div className="border-t border-[var(--admin-divider)] px-2 py-1.5 sm:px-3">
+                  <div className="flex justify-center border-t border-[var(--admin-divider)] px-2 py-1.5 sm:px-3">
                     <Button variant="ghost" size="sm" aria-expanded={all} onClick={() => setAll((v) => !v)}>
                       {all ? 'Daha az göster' : `Tümünü göster (${fmtN(p.products.length)})`}
                     </Button>
@@ -1291,12 +1311,15 @@ interface PlatformsData {
 const missedParts = (m: PlatformRow['missed']) =>
   joinMeta([m.rejected > 0 && `${m.rejected} ret`, m.expired > 0 && `${m.expired} süre doldu`, m.cancelled > 0 && `${m.cancelled} iptal`, m.unrecorded > 0 && `${m.unrecorded} kasaya alınmadı`]);
 
-/** Platform satırının bir rakamı: küçük etiket, rakam, altında ipucu */
+/**
+ * Platform satırının bir rakamı kartın içindeki karoda (köşe 12, soluk zemin): küçük etiket, rakam (15/600), altında
+ * ipucu. Sekiz rakam telefonda da birbirine karışmaz
+ */
 function Metric({ label, value, hint }: { label: string; value: ReactNode; hint?: string | null }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] px-3 py-2.5">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="tabular font-medium">
+      <dd className="tabular mt-0.5 text-[15px] font-semibold text-[var(--admin-text)]">
         {value}
         {hint && <span className="block text-xs font-normal text-muted">{hint}</span>}
       </dd>
@@ -1368,7 +1391,7 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
                     <div aria-hidden="true" className="mt-2 h-2 rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
                       <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
                     </div>
-                    <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm sm:grid-cols-3 xl:grid-cols-4">
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 xl:grid-cols-4">
                       <Metric label="Sipariş" value={p.orders.toLocaleString('tr-TR')} hint={p.orders ? `ortalama ${tlShort(p.avgBasket)}` : null} />
                       <Metric label="Restoranın indirimi" value={tl(p.discounts)} />
                       <Metric label="Platformun kampanyası" value={tl(p.platformDiscount)} hint="Ciroyu düşürmez" />
@@ -1717,18 +1740,39 @@ function ExportReport({ range, linked, onDownload, downloading }: { range: Range
   // Kurulum belge yolu değil, bağlantının kurulduğu ekran: yalnız o ekranı açabilene bağlantı
   const setup = SETUP && SETUP.perm.some((p) => can(p)) ? SETUP : null;
   return (
-    <Card flush title="lafmaliyet aktarımı">
-      <div className="space-y-3 px-4 pb-5 text-sm sm:px-5">
-        <p>
-          Seçili dönemin ürün satış listesi lafmaliyet’in <b>Satışlar</b> ekranının okuduğu biçimde iner (Ürün; Adet; Tutar, KDV dahil). İkram, iptal ve sitede ödenmiş online siparişler listeye girmez; ekstra shot, şurup ve alternatif süt ayrı satır olarak çıkar.
-        </p>
+    <Card
+      title="lafmaliyet aktarımı"
+      subtitle={
+        <>
+          Seçili dönemin ürün satış listesi, lafmaliyet’in <span className="font-medium text-[var(--admin-text-soft)]">Satışlar</span> ekranının okuduğu biçimde iner
+        </>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        {/* Listenin biçimi bir bakışta: dönem, sütunlar, girmeyenler, ayrı satır; ince kenarlı karoda (köşe 12), geniş
+            ekranda etiket solda sabit sütunda, telefonda değerin üstünde */}
+        <dl className="divide-y divide-[var(--admin-divider)] rounded-[var(--r-tile)] border border-line">
+          {[
+            ['Dönem', rangeLabel(range)],
+            ['Sütunlar', 'Ürün; Adet; Tutar (KDV dahil)'],
+            ['Listeye girmez', 'İkram, iptal ve sitede ödenmiş online siparişler'],
+            ['Ayrı satır', 'Ekstra shot, şurup ve alternatif süt'],
+          ].map(([term, text]) => (
+            <div key={term} className="grid gap-0.5 px-3 py-2.5 sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:gap-3 sm:px-4">
+              <dt className="text-[13px] text-muted">{term}</dt>
+              <dd className="text-[var(--admin-text)]">{text}</dd>
+            </div>
+          ))}
+        </dl>
         {linked && (
           <Notice tone="warn">
             lafmaliyet bağlantısı kurulu: günler gün sonunda kendiliğinden gidiyor. Bu liste yalnız bağlantı yokken ya da lafmaliyet’teki geçiş gününden önceki aylar için; geçiş gününden sonraki günleri Satışlar’a yüklemeyin, aynı satış iki kez sayılır
           </Notice>
         )}
-        <Button variant="primary" icon={<FileSpreadsheet className="size-4" />} loading={downloading} onClick={onDownload}>
-          Satış listesini indir ({rangeLabel(range)})
+        {/* Dönem düğmenin adında kalır (ekran okuyucu), görünürde yukarıdaki satırda: uzun dönem adı telefonda düğmeyi
+            karttan taşırıyordu. Telefonda düğme tam genişlikte, halka sağda */}
+        <Button variant="primary" icon={<FileSpreadsheet className="size-4" />} loading={downloading} onClick={onDownload} className="max-sm:w-full max-sm:justify-between">
+          Satış listesini indir<span className="sr-only"> ({rangeLabel(range)})</span>
         </Button>
         {!linked && (
           <p className="text-xs text-muted">

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, DatabaseBackup, HardDrive, Save } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Armchair, BellRing, Check, DatabaseBackup, FolderOpen, HandPlatter, HardDrive, Loader2, type LucideIcon, QrCode, Save } from 'lucide-react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { parseTL, tlCompact } from '@shared/money';
 import { SERVICE_MODE_HINT, SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode, serviceModeOf } from '@shared/service-mode';
 import { fmtDateTime } from '@shared/time';
@@ -8,7 +8,7 @@ import { nextZNo, zStartPlaceholder } from '@shared/z-no';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Segmented, Select, Textarea, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
-import { Card, CARD, CODE, EmptyState, PageHeader } from '@/components/admin/ui';
+import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -148,6 +148,25 @@ const HOURS = Array.from({ length: 24 }, (_, h) => h);
 /** Kaydet tek yerde: değişiklik olunca altta yapışkan şeritte (DESIGN §5); başlıkta ikinci birincil düğme yok */
 const DESCRIPTION = 'Fiş, kasa, uyarılar ve nedenler; değişiklik yapınca Kaydet altta çıkar';
 
+/**
+ * Modun seçim karosundaki ikonu: masaya servis oturan misafir, yarı self masaya götürülen tepsi, self çağrılan numara, QR
+ * masadaki kod
+ */
+const MODE_ICON: Record<ServiceMode, LucideIcon> = { masa: Armchair, yari_self: HandPlatter, self: BellRing, qr_self: QrCode };
+
+/**
+ * Kartın içindeki alt bölüm (Gün sonu ve Z, Boylar...): üstünde satır ayracı, adı 15/600 mürekkep; kart başlığı (16/600)
+ * ile alan etiketi (13) arasında bir basamak. Uzun kart bir bakışta bölümlerine ayrılır, alanların sırası değişmez
+ */
+function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="mt-1 grid gap-3 border-t border-[var(--admin-divider)] pt-4">
+      <h3 className="text-[15px] font-semibold leading-5 tracking-[-0.01em] text-[var(--admin-text)]">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
 export default function SettingsAdmin() {
   const boot = useBoot();
   const qc = useQueryClient();
@@ -193,10 +212,10 @@ export default function SettingsAdmin() {
           <ErrorState className={CARD} title="Ayarlar alınamadı" error={data.error} onRetry={() => void data.refetch()} retrying={data.isFetching} />
         ) : (
           <div role="status" aria-label="Yükleniyor…" className="space-y-4">
-            <Skeleton className="h-36 rounded-2xl" />
+            <Skeleton className="h-36 rounded-[var(--r-card)]" />
             <div className="grid gap-4 xl:grid-cols-2">
-              <Skeleton className="h-80 rounded-2xl" />
-              <Skeleton className="h-80 rounded-2xl" />
+              <Skeleton className="h-80 rounded-[var(--r-card)]" />
+              <Skeleton className="h-80 rounded-[var(--r-card)]" />
             </div>
           </div>
         )}
@@ -306,29 +325,54 @@ export default function SettingsAdmin() {
         </Notice>
       )}
       <Card title="Servis modu" subtitle="Seçince hemen uygulanır; açılış ekranı, menü ve tezgâh satışı buna göre değişir">
-        <div role="radiogroup" aria-label="Servis modu" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div role="radiogroup" aria-label="Servis modu" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {SERVICE_MODES.map((m) => {
             const on = m === mode;
+            const busy = modeBusy === m;
+            const Icon = MODE_ICON[m];
             return (
               <button
                 key={m}
                 type="button"
                 role="radio"
                 aria-checked={on}
+                aria-busy={busy || undefined}
                 disabled={!!modeBusy}
                 onClick={() => void chooseMode(m)}
                 className={cn(
-                  'flex min-h-16 items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors disabled:opacity-70',
-                  on ? 'border-primary bg-[var(--admin-primary-soft)]' : 'border-line bg-surface hover:border-[var(--admin-border-field)] hover:bg-hover',
+                  // Seçim karosu (köşe 12): telefonda ikon solda, geniş ekranda üstte; seçim dairesi sağ üstte, ikonun
+                  // hizasında. Seçili açık nane zeminde, ikon beyaz karoda (kasanın ödeme türü karosu gibi); uygulanırken
+                  // seçilen karo soluklaşmaz, dairesinde dönen gösterge
+                  'relative flex min-h-16 items-start gap-3 rounded-[var(--r-tile)] border p-3.5 pr-11 text-left transition-[background-color,border-color,box-shadow] sm:flex-col sm:pr-3.5',
+                  !busy && 'disabled:opacity-60',
+                  on
+                    ? 'border-primary bg-[var(--admin-primary-soft)] shadow-[inset_0_0_0_1px_var(--admin-primary)]'
+                    : 'border-line bg-surface shadow-[var(--shadow-control)] hover:border-[var(--admin-border-field)] hover:bg-hover',
                 )}
               >
-                {/* Boş halka alan kenarı tonunda (iki temada 3:1): seçilmemiş kutucuk düz metin kutusu gibi okunmasın */}
-                <span className={cn('mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border', on ? 'border-primary bg-primary text-primary-ink' : 'border-[var(--admin-border-field)]')}>
-                  {on && <Check aria-hidden="true" className="size-3.5 stroke-[2.5]" />}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'grid size-9 shrink-0 place-items-center rounded-[var(--r-control)] [&>svg]:size-[18px]',
+                    on ? 'bg-[var(--admin-surface)] text-primary shadow-[var(--shadow-control)]' : 'bg-[var(--admin-panel)] text-[var(--admin-text-soft)]',
+                  )}
+                >
+                  <Icon />
                 </span>
                 <span className="min-w-0">
                   <span className={cn('block text-sm font-semibold', on && 'text-primary')}>{SERVICE_MODE_LABEL[m]}</span>
-                  <span className="block text-xs text-muted">{SERVICE_MODE_HINT[m]}</span>
+                  <span className="mt-0.5 block text-xs leading-4 text-muted">{SERVICE_MODE_HINT[m]}</span>
+                </span>
+                {/* Boş halka alan kenarı tonunda (iki temada 3:1): seçilmemiş kutucuk düz metin kutusu gibi okunmasın */}
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'absolute right-3.5 top-[22px] grid size-5 place-items-center rounded-full border',
+                    on ? 'border-primary bg-primary text-primary-ink' : 'border-[var(--admin-border-field)] bg-surface',
+                    busy && 'border-transparent bg-transparent text-primary',
+                  )}
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin motion-reduce:animate-none" /> : on && <Check className="size-3.5 stroke-[2.5]" />}
                 </span>
               </button>
             );
@@ -352,28 +396,33 @@ export default function SettingsAdmin() {
             <Field label="Fiş altı" hint="adisyona “mali değeri yoktur” kendiliğinden yazılır">
               <Textarea value={s.receiptFooter} onChange={(e) => set({ receiptFooter: e.target.value })} />
             </Field>
-            {/* Boy ayarları bir arada: kasadaki boy adı ve lafmaliyet'e giden adın boy eki, her alan kendi etiketiyle */}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="M boy adı">
-                <Input value={s.sizeLabels.M} onChange={(e) => set({ sizeLabels: { ...s.sizeLabels, M: e.target.value } })} />
-              </Field>
-              <Field label="L boy adı">
-                <Input value={s.sizeLabels.L} onChange={(e) => set({ sizeLabels: { ...s.sizeLabels, L: e.target.value } })} />
-              </Field>
-              <Field label="lafmaliyet’te M eki">
-                <Input value={s.posSizeSuffix.M} onChange={(e) => set({ posSizeSuffix: { ...s.posSizeSuffix, M: e.target.value } })} />
-              </Field>
-              <Field label="lafmaliyet’te L eki">
-                <Input value={s.posSizeSuffix.L} onChange={(e) => set({ posSizeSuffix: { ...s.posSizeSuffix, L: e.target.value } })} />
-              </Field>
-            </div>
+            {/* Boy ayarları bir arada, kendi bölümünde: kasadaki boy adı ve lafmaliyet'e giden adın boy eki, her alan kendi
+                etiketiyle */}
+            <Group title="Boylar">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="M boy adı">
+                  <Input value={s.sizeLabels.M} onChange={(e) => set({ sizeLabels: { ...s.sizeLabels, M: e.target.value } })} />
+                </Field>
+                <Field label="L boy adı">
+                  <Input value={s.sizeLabels.L} onChange={(e) => set({ sizeLabels: { ...s.sizeLabels, L: e.target.value } })} />
+                </Field>
+                <Field label="lafmaliyet’te M eki">
+                  <Input value={s.posSizeSuffix.M} onChange={(e) => set({ posSizeSuffix: { ...s.posSizeSuffix, M: e.target.value } })} />
+                </Field>
+                <Field label="lafmaliyet’te L eki">
+                  <Input value={s.posSizeSuffix.L} onChange={(e) => set({ posSizeSuffix: { ...s.posSizeSuffix, L: e.target.value } })} />
+                </Field>
+              </div>
+            </Group>
           </div>
         </Card>
+        {/* Üç bölüm: kasa ekranı (başlıksız, kartın adı söyler), gün sonu ve Z, ödeme ve kilit. Anahtarlar sayfanın
+            öteki anahtarları gibi yazı solda, anahtar sağda */}
         <Card title="Kasa ve gün" className="xl:row-span-2">
           <div className="grid gap-3">
-            <Toggle checked={s.requireDayOpen} onChange={(v) => set({ requireDayOpen: v })} label="Satış için gün açılmış olmalı" />
-            <Toggle checked={s.keepAwake} onChange={(v) => set({ keepAwake: v })} label="Ekran kararmasın" hint="kasa bilgisayarı, bar ve tablet ekranları" />
-            <Toggle checked={s.productImages} onChange={(v) => set({ productImages: v })} label="Ürün kartlarında görsel" hint="sitedeki fotoğraf, kasa bilgisayarında saklanır" />
+            <Toggle block checked={s.requireDayOpen} onChange={(v) => set({ requireDayOpen: v })} label="Satış için gün açılmış olmalı" />
+            <Toggle block checked={s.keepAwake} onChange={(v) => set({ keepAwake: v })} label="Ekran kararmasın" hint="kasa bilgisayarı, bar ve tablet ekranları" />
+            <Toggle block checked={s.productImages} onChange={(v) => set({ productImages: v })} label="Ürün kartlarında görsel" hint="sitedeki fotoğraf, kasa bilgisayarında saklanır" />
             {/* Ürün kartı ve boy düğmesi: hemen ekler ya da seçenek penceresini açar (seçenek profili, docs/02-PLAN.md) */}
             <div>
               <div className="mb-1.5 text-[13px] font-medium text-ink-2">Seçenekleri sor</div>
@@ -393,110 +442,124 @@ export default function SettingsAdmin() {
                   : 'Ürün tek dokunuşla eklenir (süt gibi isteğe bağlı seçenek varsayılanıyla); şeker gibi zorunlu seçimi olan pencereyle açılır'}
               </p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-              <Toggle checked={s.autoDayEnd} onChange={(v) => set({ autoDayEnd: v })} label="Otomatik gün sonu" hint="açık adisyon varsa alınmaz; sayım sonra Kasa föyünden girilir" />
-              {/* Saat "06:00" diye seçilir (çıplak "6" saat mi, kaçta mı belli değildi); anahtar kapalıyken kilitli, gün sonu
-                  o saatte alınıyormuş gibi görünmez. Telefonda anahtarın yazısının altına hizalı (anahtar 44 + aralık 12 px) */}
-              <label className="ml-14 flex shrink-0 items-center gap-2 text-sm text-muted sm:ml-0">
-                Saat
-                <Select value={String(s.autoDayEndHour)} disabled={!s.autoDayEnd} aria-label="Otomatik gün sonu saati" onChange={(e) => set({ autoDayEndHour: Number(e.target.value) })} className="tabular w-28">
-                  {HOURS.map((h) => (
-                    <option key={h} value={h}>
-                      {`${String(h).padStart(2, '0')}:00`}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-            </div>
-            <Field
-              label="Şube kimliği"
-              hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır. Paneldeki kimliğin aynısı olmalı (Ayarlar › Şubeler); tek şubeli kurulumda tuzla kalır"
-              error={branchError}
-            >
-              <Input
-                value={s.branchId}
-                onChange={(e) => set({ branchId: e.target.value.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9-]/g, '').slice(0, 24) })}
-                placeholder="tuzla"
-                autoCapitalize="none"
-                spellCheck={false}
-                className="sm:max-w-60"
-              />
-            </Field>
-            <div>
-              <Field label="İlk Z numarası" hint="ModPOS’un son Z numarasının bir fazlası. Geçiş gününden önce bir kez girilir; sonraki gün sonları buradan devam eder" error={zError}>
+            <Group title="Gün sonu ve Z">
+              <div>
+                <Toggle block checked={s.autoDayEnd} onChange={(v) => set({ autoDayEnd: v })} label="Otomatik gün sonu" hint="açık adisyon varsa alınmaz; sayım sonra Kasa föyünden girilir" />
+                {/* Saat "06:00" diye seçilir (çıplak "6" saat mi, kaçta mı belli değildi); anahtar kapalıyken kilitli, gün sonu
+                    o saatte alınıyormuş gibi görünmez. Anahtarın yazısının altında, onunla aynı hizadan */}
+                <label className="mt-2 flex items-center gap-2 text-sm text-muted">
+                  Saat
+                  <Select value={String(s.autoDayEndHour)} disabled={!s.autoDayEnd} aria-label="Otomatik gün sonu saati" onChange={(e) => set({ autoDayEndHour: Number(e.target.value) })} className="tabular w-28">
+                    {HOURS.map((h) => (
+                      <option key={h} value={h}>
+                        {`${String(h).padStart(2, '0')}:00`}
+                      </option>
+                    ))}
+                  </Select>
+                </label>
+              </div>
+              <Field
+                label="Şube kimliği"
+                hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır. Paneldeki kimliğin aynısı olmalı (Ayarlar › Şubeler); tek şubeli kurulumda tuzla kalır"
+                error={branchError}
+              >
                 <Input
-                  value={s.zNoStart == null ? '' : String(s.zNoStart)}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
-                    set({ zNoStart: digits === '' ? null : Number(digits) });
-                  }}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder={zStartPlaceholder(lastZ)}
-                  aria-describedby="z-chain-info"
-                  className="tabular text-right sm:max-w-60"
+                  value={s.branchId}
+                  onChange={(e) => set({ branchId: e.target.value.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9-]/g, '').slice(0, 24) })}
+                  placeholder="tuzla"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  className="sm:max-w-60"
                 />
               </Field>
-              {/* Yüklenirken ya da alınamazsa "yok" yazılmaz */}
-              {lastZ == null && !zChain.isError ? (
-                <Skeleton className="mt-2 h-3.5 w-52 rounded" />
-              ) : (
-                <p id="z-chain-info" className="tabular mt-1.5 text-xs text-muted">
-                  {lastZ == null ? 'Son Z alınamadı' : `${lastZ ? `Son Z: ${lastZ}` : 'Henüz gün açılmadı'} · sıradaki gün: Z ${nextZNo(lastZ, zError ? data.data?.zNoStart : s.zNoStart)}`}
-                </p>
-              )}
-            </div>
-            <Field label="Hızlı nakit düğmeleri (₺, satır satır)">
-              <LinesTextarea value={s.quickCash} format={formatQuickCash} parse={parseQuickCash} onChange={(quickCash) => set({ quickCash })} className={LIST_AREA} />
-            </Field>
-            {/* İkisinin açıklaması da alanın altında: etiketler tek satır kalır, alanlar her genişlikte aynı hizada */}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Servis ücreti (%)" hint="masa adisyonlarına eklenir">
-                <NumberInput commitOnChange value={s.serviceRate} min={0} max={30} fallback={0} onCommit={(serviceRate) => set({ serviceRate })} />
+              <div>
+                <Field label="İlk Z numarası" hint="ModPOS’un son Z numarasının bir fazlası. Geçiş gününden önce bir kez girilir; sonraki gün sonları buradan devam eder" error={zError}>
+                  <Input
+                    value={s.zNoStart == null ? '' : String(s.zNoStart)}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+                      set({ zNoStart: digits === '' ? null : Number(digits) });
+                    }}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    placeholder={zStartPlaceholder(lastZ)}
+                    aria-describedby="z-chain-info"
+                    className="tabular text-right sm:max-w-60"
+                  />
+                </Field>
+                {/* Yüklenirken ya da alınamazsa "yok" yazılmaz */}
+                {lastZ == null && !zChain.isError ? (
+                  <Skeleton className="mt-2 h-3.5 w-52 rounded" />
+                ) : (
+                  <p id="z-chain-info" className="tabular mt-1.5 text-xs text-muted">
+                    {lastZ == null ? 'Son Z alınamadı' : `${lastZ ? `Son Z: ${lastZ}` : 'Henüz gün açılmadı'} · sıradaki gün: Z ${nextZNo(lastZ, zError ? data.data?.zNoStart : s.zNoStart)}`}
+                  </p>
+                )}
+              </div>
+            </Group>
+            <Group title="Ödeme ve kilit">
+              <Field label="Hızlı nakit düğmeleri (₺, satır satır)">
+                <LinesTextarea value={s.quickCash} format={formatQuickCash} parse={parseQuickCash} onChange={(quickCash) => set({ quickCash })} className={LIST_AREA} />
               </Field>
-              <Field label="Otomatik kilit (dk)" hint="0 yazılırsa kilitlenmez">
-                <NumberInput commitOnChange value={s.autoLockMinutes} min={0} max={120} fallback={0} onCommit={(autoLockMinutes) => set({ autoLockMinutes })} />
-              </Field>
-            </div>
+              {/* İkisinin açıklaması da alanın altında: etiketler tek satır kalır, alanlar her genişlikte aynı hizada */}
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Servis ücreti (%)" hint="masa adisyonlarına eklenir">
+                  <NumberInput commitOnChange value={s.serviceRate} min={0} max={30} fallback={0} onCommit={(serviceRate) => set({ serviceRate })} />
+                </Field>
+                <Field label="Otomatik kilit (dk)" hint="0 yazılırsa kilitlenmez">
+                  <NumberInput commitOnChange value={s.autoLockMinutes} min={0} max={120} fallback={0} onCommit={(autoLockMinutes) => set({ autoLockMinutes })} />
+                </Field>
+              </div>
+            </Group>
           </div>
         </Card>
-        {/* Eşik adı ne olacağını söyler (amber, kırmızı, uyarı, alarm); açıklamalar alanın altında, etiketler tek satır */}
+        {/* Eşik adı ne olacağını söyler (amber, kırmızı, uyarı, alarm); açıklamalar alanın altında, etiketler tek satır.
+            Üç bölüm: bar ekranı ve fiş süreleri, karaoke odası, uyarılar */}
         <Card title={boot.integrations.localStamps ? 'Bar ekranı, karaoke, damga, uyarılar' : 'Bar ekranı, karaoke, uyarılar'}>
-          {/* Bar ekranı olmayan işletme kapatır (operatör 20 Kas 2026): sipariş bara gitmez, adisyonda "Bara gönder"
-              yerine "Kaydet", Bar menüden kalkar; fiş süreleri o zaman kullanılmaz */}
-          <Toggle
-            block
-            className="mb-3"
-            checked={s.barEnabled}
-            onChange={(v) => set({ barEnabled: v })}
-            label="Bar ekranı ve “Bara gönder”"
-            hint="kapalıyken sipariş bara gitmez, adisyonda “Kaydet” çıkar ve Bar menüden kalkar"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Bar fişi uyarısı (dk)" hint="bu süreyi geçen fiş ambere döner">
-              <NumberInput commitOnChange value={s.kitchenWarnMinutes} min={1} max={120} onCommit={(kitchenWarnMinutes) => set({ kitchenWarnMinutes })} />
-            </Field>
-            <Field label="Bar fişi alarmı (dk)" hint="bu süreyi geçen fiş kırmızıya döner" error={kitchenError}>
-              <NumberInput commitOnChange value={s.kitchenAlarmMinutes} min={1} max={240} onCommit={(kitchenAlarmMinutes) => set({ kitchenAlarmMinutes })} />
-            </Field>
-            <Field label="Oda ücret adımı (dk)">
-              <NumberInput commitOnChange value={s.roomBillingStepMinutes} min={1} max={120} onCommit={(roomBillingStepMinutes) => set({ roomBillingStepMinutes })} />
-            </Field>
-            <Field label="Oda en az süre (dk)">
-              <NumberInput commitOnChange value={s.roomMinimumMinutes} min={0} max={600} fallback={0} onCommit={(roomMinimumMinutes) => set({ roomMinimumMinutes })} />
-            </Field>
-            {/* Yerel damga kartı varsayılan kapalı, site bağlantısı kuruluyken hiç yok (tek sadakat programı uygulamada) */}
-            {boot.integrations.localStamps && (
-              <Field label="Hediye için damga">
-                <NumberInput commitOnChange value={s.stampGoal} min={1} max={50} onCommit={(stampGoal) => set({ stampGoal })} />
+          <div className="grid gap-3">
+            {/* Bar ekranı olmayan işletme kapatır (operatör 20 Kas 2026): sipariş bara gitmez, adisyonda "Bara gönder"
+                yerine "Kaydet", Bar menüden kalkar; fiş süreleri o zaman kullanılmaz */}
+            <Toggle
+              block
+              checked={s.barEnabled}
+              onChange={(v) => set({ barEnabled: v })}
+              label="Bar ekranı ve “Bara gönder”"
+              hint="kapalıyken sipariş bara gitmez, adisyonda “Kaydet” çıkar ve Bar menüden kalkar"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Bar fişi uyarısı (dk)" hint="bu süreyi geçen fiş ambere döner">
+                <NumberInput commitOnChange value={s.kitchenWarnMinutes} min={1} max={120} onCommit={(kitchenWarnMinutes) => set({ kitchenWarnMinutes })} />
               </Field>
-            )}
-            <Field label="İndirim uyarısı (%)" hint="bu oran ve üstü uyarı düşer">
-              <NumberInput commitOnChange value={s.alertDiscountPct} min={1} max={100} onCommit={(alertDiscountPct) => set({ alertDiscountPct })} />
-            </Field>
-            <Field label="Kasa farkı alarmı (₺)">
-              <TlInput value={s.alertCashDiffKurus} onCommit={(alertCashDiffKurus) => set({ alertCashDiffKurus })} />
-            </Field>
+              <Field label="Bar fişi alarmı (dk)" hint="bu süreyi geçen fiş kırmızıya döner" error={kitchenError}>
+                <NumberInput commitOnChange value={s.kitchenAlarmMinutes} min={1} max={240} onCommit={(kitchenAlarmMinutes) => set({ kitchenAlarmMinutes })} />
+              </Field>
+            </div>
+            <Group title="Karaoke odası">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Oda ücret adımı (dk)">
+                  <NumberInput commitOnChange value={s.roomBillingStepMinutes} min={1} max={120} onCommit={(roomBillingStepMinutes) => set({ roomBillingStepMinutes })} />
+                </Field>
+                <Field label="Oda en az süre (dk)">
+                  <NumberInput commitOnChange value={s.roomMinimumMinutes} min={0} max={600} fallback={0} onCommit={(roomMinimumMinutes) => set({ roomMinimumMinutes })} />
+                </Field>
+              </div>
+            </Group>
+            <Group title={boot.integrations.localStamps ? 'Damga ve uyarılar' : 'Uyarılar'}>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Yerel damga kartı varsayılan kapalı, site bağlantısı kuruluyken hiç yok (tek sadakat programı uygulamada) */}
+                {boot.integrations.localStamps && (
+                  <Field label="Hediye için damga">
+                    <NumberInput commitOnChange value={s.stampGoal} min={1} max={50} onCommit={(stampGoal) => set({ stampGoal })} />
+                  </Field>
+                )}
+                <Field label="İndirim uyarısı (%)" hint="bu oran ve üstü uyarı düşer">
+                  <NumberInput commitOnChange value={s.alertDiscountPct} min={1} max={100} onCommit={(alertDiscountPct) => set({ alertDiscountPct })} />
+                </Field>
+                <Field label="Kasa farkı alarmı (₺)">
+                  <TlInput value={s.alertCashDiffKurus} onCommit={(alertCashDiffKurus) => set({ alertCashDiffKurus })} />
+                </Field>
+              </div>
+            </Group>
           </div>
         </Card>
       </div>
@@ -521,30 +584,51 @@ export default function SettingsAdmin() {
       </Card>
       <Card
         title="Yedek"
+        subtitle={`Her gün kendiliğinden alınır, son ${s.backupKeep} gün tutulur`}
         actions={
           <Button size="sm" icon={<DatabaseBackup className="size-4" />} loading={backingUp} onClick={() => void backupNow()}>
             Şimdi yedek al
           </Button>
         }
       >
-        <div className="text-sm">
-          <p className="mb-2 text-muted">
-            Her gün kendiliğinden alınır, son {s.backupKeep} gün tutulur.{backups.data?.dir && <> Klasör: <code className={CODE}>{backups.data.dir}</code>.</>} Bu klasörü haftada bir başka diske ya da buluta kopyalayın
-          </p>
+        <div className="grid gap-4 text-sm">
+          {/* Yedeğin yeri ve elle kopyalama hatırlatması kartın içindeki karoda (köşe 12, soluk zemin): liste ya da boş
+              durum altında kalır */}
+          <div className="flex items-start gap-3 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-3">
+            <IconBox>
+              <FolderOpen />
+            </IconBox>
+            <p className="min-w-0 pt-1 text-[13px] leading-5 text-muted">
+              {backups.data?.dir && (
+                <>
+                  Klasör: <code className={CODE}>{backups.data.dir}</code>.{' '}
+                </>
+              )}
+              Bu klasörü haftada bir başka diske ya da buluta kopyalayın
+            </p>
+          </div>
           {backups.isPending ? (
-            <ListSkeleton rows={3} className="rounded-xl border border-line" />
+            <ListSkeleton rows={3} className="rounded-[var(--r-tile)] border border-line" />
           ) : backups.isError && !backups.data ? (
-            <ErrorState compact className="rounded-xl border border-line" title="Yedek listesi alınamadı" error={backups.error} onRetry={() => void backups.refetch()} retrying={backups.isFetching} />
+            <ErrorState compact className="rounded-[var(--r-tile)] border border-line" title="Yedek listesi alınamadı" error={backups.error} onRetry={() => void backups.refetch()} retrying={backups.isFetching} />
           ) : !backups.data?.files.length ? (
             <EmptyState bare icon={<HardDrive />} title="Henüz yedek alınmadı">
               Yedek her gün kendiliğinden alınır; hemen almak için Şimdi yedek al’a basın
             </EmptyState>
           ) : (
-            <ul className="divide-y divide-line rounded-xl border border-line">
-              {backups.data.files.slice(0, 8).map((f) => (
-                <li key={f.name} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3 py-2">
-                  <span className="min-w-0 break-all">{f.name}</span>
-                  <span className="tabular shrink-0">
+            // Satır: ikon karosu, dosya adı (en yenisinde "Son yedek" rozeti), sağda zamanı ve boyu; telefonda zaman adın
+            // altına, adın hizasından iner (sunucu en yeniden eskiye sıralar)
+            <ul className="divide-y divide-[var(--admin-divider)] overflow-hidden rounded-[var(--r-tile)] border border-line">
+              {backups.data.files.slice(0, 8).map((f, i) => (
+                <li key={f.name} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-2.5">
+                  <IconBox>
+                    <DatabaseBackup />
+                  </IconBox>
+                  <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="min-w-0 break-all font-medium text-[var(--admin-text)]">{f.name}</span>
+                    {i === 0 && <Badge tone="success">Son yedek</Badge>}
+                  </span>
+                  <span className="tabular shrink-0 text-[13px] max-sm:w-full max-sm:pl-10">
                     {fmtDateTime(f.at)} <span className="text-muted">· {(f.size / 1048576).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MB</span>
                   </span>
                 </li>
@@ -554,10 +638,14 @@ export default function SettingsAdmin() {
         </div>
       </Card>
       {dirty && (
-        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır; burada yalnız iç boşluk
-        <div className="sticky bottom-0 z-10 -mx-4 flex items-center gap-3 border-t border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
-          {/* Telefonda yazı yalnız ekran okuyucuya: iki düğmenin yanında iki satıra kırılıyordu */}
-          <span className="text-[13px] text-[var(--admin-text-mute)] max-sm:sr-only">Kaydedilmemiş değişiklik</span>
+        // Kaydet şeridi zeminde yüzen kart (kartların hizasında, köşe 18, hafif kalkık gölge): kenara taşan negatif pay
+        // yok, telefonda kabın 8 px payını aşmaz. Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır
+        <div className="sticky bottom-3 z-10 flex items-center gap-3 rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] px-4 py-3 shadow-[var(--shadow-lift)] sm:px-5">
+          {/* Telefonda yazı yalnız ekran okuyucuya: iki düğmenin yanında iki satıra kırılıyordu. Amber nokta: kaydedilmemiş */}
+          <span className="flex items-center gap-2 text-[13px] text-[var(--admin-text-soft)] max-sm:sr-only">
+            <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--admin-warning)]" />
+            Kaydedilmemiş değişiklik
+          </span>
           <span className="flex-1" />
           <Button disabled={saving} onClick={() => data.data && setS({ ...data.data, serviceMode: s.serviceMode })}>
             Vazgeç

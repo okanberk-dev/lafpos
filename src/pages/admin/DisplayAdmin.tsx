@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, ExternalLink, MonitorPlay, Plus, Save, X } from 'lucide-react';
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Check, ExternalLink, MonitorPlay, Plus, QrCode as QrCodeIcon, Save, X } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CUSTOMER_DISPLAY_THEMES, type CustomerDisplaySettings, type CustomerDisplayTheme, type DisplayStateDTO } from '@shared/types';
-import { Card, CODE, PageHeader, Segmented, SetupNotes } from '@/components/admin/ui';
+import { Badge, Card, CODE, PageHeader, Segmented, SetupNotes } from '@/components/admin/ui';
 import { CustomerDisplayView, DISPLAY_DEFAULTS } from '@/components/display/CustomerDisplayView';
+import { QrCode } from '@/components/QrCode';
 import { Button, buttonClass, IconButton } from '@/components/ui/Button';
 import { Field, Input, Toggle } from '@/components/ui/Field';
 import { errorMessage, put } from '@/lib/api';
@@ -41,7 +42,11 @@ const SAMPLE: Record<Preview, DisplayStateDTO> = {
   tesekkur: { kind: 'thanks', at: 0, total: 103000, call: 'No 34' },
 };
 
-/** 1280×720'lik ekranı kabın genişliğine ölçekleyen çerçeve: önizleme gerçek ekranın birebir küçüğüdür */
+/**
+ * 1280×720'lik ekranı kabın genişliğine ölçekleyen çerçeve: önizleme gerçek ekranın birebir küçüğüdür. Ekran ince bir
+ * kasanın içinde (açık gri çerçeve, saç teli; köşeler eş merkezli: kasa 18, ekran 12): beyaz kartta karanlık bir leke
+ * değil, masadaki monitör gibi okunur
+ */
 function ScaledScreen({ children }: { children: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
@@ -52,9 +57,11 @@ function ScaledScreen({ children }: { children: ReactNode }) {
     return () => ro.disconnect();
   }, []);
   return (
-    <div ref={box} className="relative aspect-video w-full overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface-2)] shadow-[var(--shadow-card)]">
-      <div className="absolute left-0 top-0 h-[720px] w-[1280px] origin-top-left" style={{ transform: `scale(${scale})` }} aria-hidden="true" inert>
-        {children}
+    <div className="rounded-[var(--r-card)] bg-[var(--admin-surface-2)] p-1.5 ring-1 ring-inset ring-[var(--admin-border)]">
+      <div ref={box} className="relative aspect-video w-full overflow-hidden rounded-[var(--r-tile)] bg-[var(--admin-panel)] shadow-[var(--shadow-control)]">
+        <div className="absolute left-0 top-0 h-[720px] w-[1280px] origin-top-left" style={{ transform: `scale(${scale})` }} aria-hidden="true" inert>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -131,6 +138,18 @@ export default function DisplayAdmin() {
     }
   };
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  // Telefonda bildirim (kaydedilemedi) yapışkan şeridin üstünde durur: boyu html'de --action-bar-h (lib/toast.tsx;
+  // Roller ve adisyondaki gibi). Şerit sökülünce silinir
+  const measureActionBar = useCallback((el: HTMLDivElement | null) => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const ro = new ResizeObserver(() => root.style.setProperty('--action-bar-h', `${Math.ceil(el.getBoundingClientRect().height)}px`));
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty('--action-bar-h');
+    };
+  }, []);
 
   return (
     <>
@@ -175,7 +194,9 @@ export default function DisplayAdmin() {
 
         <div className="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
           <Card title="Görünüm" subtitle="Tema ekranın bütününü değiştirir; tutar paneli her temada markanın yüzeyidir">
-            <div role="radiogroup" aria-label="Tema" className="grid gap-3 sm:grid-cols-3">
+            {/* Tema karosu: üstte temanın örneği, altta adı ve radyo işareti (seçili ev yeşili dairede tik, öteki boş halka);
+                telefonda üç iri karo alt alta iki ekran boyu tutmasın diye yatay satır, örnek solda */}
+            <div role="radiogroup" aria-label="Tema" className="grid gap-2 sm:grid-cols-3 sm:gap-3">
               {CUSTOMER_DISPLAY_THEMES.map((t) => {
                 const on = draft.theme === t;
                 return (
@@ -186,19 +207,35 @@ export default function DisplayAdmin() {
                     aria-checked={on}
                     onClick={() => set('theme', t)}
                     className={cn(
-                      'group relative flex flex-col overflow-hidden rounded-2xl border text-left transition-[border-color,box-shadow] duration-150',
-                      on ? 'border-[var(--admin-primary)] shadow-[0_0_0_3px_var(--admin-primary-soft)]' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-field)]',
+                      'flex overflow-hidden rounded-[var(--r-tile)] border bg-[var(--admin-surface)] text-left transition-[border-color,box-shadow] duration-150 sm:flex-col',
+                      on ? 'border-[var(--admin-ink-fill)] shadow-[0_0_0_3px_var(--admin-primary-soft)]' : 'border-[var(--admin-border)] hover:border-[var(--admin-border-field)] hover:shadow-[var(--shadow-control)]',
                     )}
                   >
                     {/* Örnek yazı süs: seçeneğin adı temanın adıdır */}
-                    <span aria-hidden="true" className="grid h-20 place-items-center border-b border-[var(--admin-border)]" style={{ background: THEMES[t].swatch, color: THEMES[t].ink }}>
-                      <span className="font-headline text-lg font-extrabold tracking-[-0.03em]">Hoş geldiniz</span>
+                    <span
+                      aria-hidden="true"
+                      className="grid shrink-0 place-items-center border-[var(--admin-border)] max-sm:min-h-16 max-sm:w-28 max-sm:border-r sm:h-20 sm:border-b"
+                      style={{ background: THEMES[t].swatch, color: THEMES[t].ink }}
+                    >
+                      <span className="font-headline text-[13px] font-extrabold tracking-[-0.03em] sm:text-[15px]">Hoş geldiniz</span>
                     </span>
-                    {/* Seçili tema yalnız yeşil kenarla değil, işaretle de ayrılır; beyaz halka her zeminde (yeşil temada da) seçilir */}
-                    {on && <Check aria-hidden="true" className="absolute right-2 top-2 size-5 rounded-full bg-primary p-0.5 text-primary-ink ring-2 ring-[var(--admin-surface)]" />}
-                    <span className="px-3 py-2.5">
-                      <span className="block text-sm font-semibold text-[var(--admin-text)]">{THEMES[t].label}</span>
-                      <span className="block text-xs text-[var(--admin-text-mute)]">{THEMES[t].hint}</span>
+                    {/* Telefonda daire satırın sağında ortada; geniş ekranda adın hizasında köşede (açıklama karonun bütün
+                        genişliğini kullanır, dar karoda üç satıra kırılmaz) */}
+                    <span className="relative flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 sm:block">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-[var(--admin-text)] sm:pr-7">{THEMES[t].label}</span>
+                        <span className="block text-xs text-[var(--admin-text-mute)]">{THEMES[t].hint}</span>
+                      </span>
+                      {/* Seçili tema yalnız yeşil kenarla değil, işaretle de ayrılır (radyo düğmesinin dairesi) */}
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          'grid size-5 shrink-0 place-items-center rounded-full transition-colors duration-150 sm:absolute sm:right-3 sm:top-2.5',
+                          on ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'border-[1.5px] border-[var(--admin-border-field)] bg-[var(--admin-surface)]',
+                        )}
+                      >
+                        {on && <Check className="size-3.5 stroke-[3]" />}
+                      </span>
                     </span>
                   </button>
                 );
@@ -224,18 +261,32 @@ export default function DisplayAdmin() {
             </div>
           </Card>
 
-          <Card title="Duyurular" subtitle="Boşta ve sipariş sırasında 6 saniyede bir döner; en çok 6">
+          <Card
+            title="Duyurular"
+            subtitle="Boşta ve sipariş sırasında 6 saniyede bir döner; en çok 6"
+            // Kaç yer kaldığı başlıkta: altıncı duyuruda alan kapanır, neden kapandığı önceden görünür
+            actions={
+              <Badge>
+                <span className="tabular-nums">{draft.messages.length} / 6</span>
+                <span className="sr-only"> duyuru</span>
+              </Badge>
+            }
+          >
             {draft.messages.length > 0 && (
-              <ul className="mb-3 space-y-2">
+              // Duyurular dönme sırasıyla numaralı (karo köşesi 12, kartın içinde açık gri)
+              <ol className="mb-3 space-y-2">
                 {draft.messages.map((m, i) => (
-                  <li key={`${i}-${m}`} className="flex items-center gap-2 rounded-xl border border-[var(--admin-border)] bg-[var(--admin-surface-2)] py-1 pl-3.5 pr-1 text-sm">
-                    <span className="min-w-0 flex-1 truncate">{m}</span>
+                  <li key={`${i}-${m}`} className="flex min-h-11 items-center gap-3 rounded-[var(--r-tile)] border border-[var(--admin-border)] bg-[var(--admin-surface-2)] py-1 pl-2 pr-1 text-sm">
+                    <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-lg bg-[var(--admin-surface)] text-xs font-semibold tabular-nums text-[var(--admin-text-soft)] ring-1 ring-inset ring-[var(--admin-border)]">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[var(--admin-text)]">{m}</span>
                     <IconButton label={`“${m}” duyurusunu kaldır`} size="sm" onClick={() => set('messages', draft.messages.filter((_, j) => j !== i))}>
                       <X className="size-4" />
                     </IconButton>
                   </li>
                 ))}
-              </ul>
+              </ol>
             )}
             <div className="flex gap-2">
               <Input
@@ -259,13 +310,26 @@ export default function DisplayAdmin() {
           </Card>
 
           <Card title="Karekod" subtitle="Uygulama, menü ya da Instagram: http ya da https ile başlayan bir adres; boşsa çizilmez">
-            <div className="space-y-4">
-              <Field label="Adres" error={tried ? qrError : null}>
-                <Input value={draft.qrUrl} inputMode="url" placeholder="https://laffogato.net" onChange={(e) => set('qrUrl', e.target.value)} />
-              </Field>
-              <Field label="Karekodun yanındaki yazı" hint={`${draft.qrLabel.length}/60`}>
-                <Input value={draft.qrLabel} maxLength={60} placeholder="Uygulamayı indirin, damga kazanın" onChange={(e) => set('qrLabel', e.target.value)} />
-              </Field>
+            {/* Alanların yanında ekrana çizilecek karekod (telefonda yukarıdaki önizleme yeter); adres boş ya da hatalıyken
+                kesikli boş kutu. Süs: anlamı alanlar taşır */}
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-5">
+              <div className="min-w-0 space-y-4">
+                <Field label="Adres" error={tried ? qrError : null}>
+                  <Input value={draft.qrUrl} inputMode="url" placeholder="https://laffogato.net" onChange={(e) => set('qrUrl', e.target.value)} />
+                </Field>
+                <Field label="Karekodun yanındaki yazı" hint={`${draft.qrLabel.length}/60`}>
+                  <Input value={draft.qrLabel} maxLength={60} placeholder="Uygulamayı indirin, damga kazanın" onChange={(e) => set('qrLabel', e.target.value)} />
+                </Field>
+              </div>
+              <div aria-hidden="true" className="grid size-32 place-items-center rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-2 ring-1 ring-inset ring-[var(--admin-border)] max-sm:hidden sm:mt-6">
+                {shown.qrUrl.trim() ? (
+                  <QrCode value={shown.qrUrl.trim()} label="Karekod" className="size-full" />
+                ) : (
+                  <span className="grid size-full place-items-center rounded-lg border border-dashed border-[var(--admin-border-field)] text-[var(--admin-text-mute)]">
+                    <QrCodeIcon className="size-7" />
+                  </span>
+                )}
+              </div>
             </div>
           </Card>
         </div>
@@ -288,23 +352,31 @@ export default function DisplayAdmin() {
       </div>
       {/* Uzun formda Kaydet başlıkla birlikte yukarıda kalır: değişiklik varken altta yapışkan şerit (Ayarlar'daki gibi) */}
       {dirty && (
-        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır; burada yalnız iç boşluk
-        <div className="sticky bottom-0 z-10 -mx-4 mt-4 flex items-center gap-3 border-t border-[var(--admin-border)] bg-[var(--admin-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
-          <span className="text-[13px] text-[var(--admin-text-mute)]">Kaydedilmemiş değişiklik</span>
-          <span className="flex-1" />
-          <Button
-            disabled={saving}
-            onClick={() => {
-              setDraft(saved);
-              setTried(false);
-              setNewMessage('');
-            }}
-          >
-            Vazgeç
-          </Button>
-          <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
-            Kaydet
-          </Button>
+        // Kaydet şeridi zeminde yüzen kart (Ayarlar ve Roller'deki gibi: kartların hizasında, köşe 18, hafif kalkık gölge),
+        // alttan 12 px yukarıda; kenara taşan negatif pay yok, telefonda kabın 8 px payını aşmaz. Ev çubuğu payını telefonda
+        // altındaki sekme çubuğu (AppShell) alır; bildirim şeridin üstünde durur (data-action-bar, boyu --action-bar-h)
+        <div data-action-bar="" ref={measureActionBar} className="pointer-events-none sticky bottom-0 z-10 mt-4 pb-3">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] px-4 py-3 shadow-[var(--shadow-lift)] sm:px-5">
+            {/* Telefonda yazı yalnız ekran okuyucuya: iki düğmenin yanında iki satıra kırılır. Amber nokta: kaydedilmemiş */}
+            <span className="flex items-center gap-2 text-[13px] text-[var(--admin-text-soft)] max-sm:sr-only">
+              <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--admin-warning)]" />
+              Kaydedilmemiş değişiklik
+            </span>
+            <span className="flex-1" />
+            <Button
+              disabled={saving}
+              onClick={() => {
+                setDraft(saved);
+                setTried(false);
+                setNewMessage('');
+              }}
+            >
+              Vazgeç
+            </Button>
+            <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
+              Kaydet
+            </Button>
+          </div>
         </div>
       )}
     </>

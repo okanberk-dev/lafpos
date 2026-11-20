@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import { WifiOff } from 'lucide-react';
+import { ShieldAlert, WifiOff } from 'lucide-react';
 import { fmtDateTime } from '@shared/time';
 import type { NetAddressDTO, NetworkInfoDTO } from '@shared/types';
-import { Badge, Card, CARD, CODE, DefRow, EmptyState, LABEL, PageHeader, SetupNotes } from '@/components/admin/ui';
+import { Badge, Card, CARD, CODE, DefRow, EmptyState, LABEL, PageHeader, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { QrCode } from '@/components/QrCode';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { get } from '@/lib/api';
@@ -25,7 +25,8 @@ function Address({ item, off, children }: { item: NetAddressDTO; off?: boolean; 
   }
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-      <QrCode value={item.url} label={`${item.url} karekodu`} />
+      {/* Karekod kart içindeki karo köşesinde (12), ince çerçeveli beyaz kâğıt */}
+      <QrCode value={item.url} label={`${item.url} karekodu`} className="size-40 rounded-[var(--r-tile)]" />
       <div className="min-w-0 space-y-2">
         <p className="tabular break-all text-lg font-semibold text-[var(--admin-text)]">{item.url}</p>
         {children}
@@ -35,6 +36,13 @@ function Address({ item, off, children }: { item: NetAddressDTO; off?: boolean; 
 }
 
 const HINT = 'text-[13px] text-[var(--admin-text-mute)]';
+
+/** Tailscale kurulumu, sırasıyla */
+const TAILSCALE_STEPS = [
+  'Bu bilgisayara Tailscale’i kurun ve hesabınızla girin (tailscale.com/download)',
+  'Telefonunuza Tailscale uygulamasını kurun, aynı hesapla girin',
+  'Bu sayfa kendini yeniler; uzaktan adres ve karekodu burada çıkar',
+];
 
 /**
  * Tablet ve telefonların bağlanacağı adresler: kafenin ağı (karekodla) ve Tailscale ile dışarıdan canlı erişim.
@@ -51,8 +59,8 @@ export default function NetworkAdmin() {
           <ErrorState className={CARD} title="Ağ bilgisi alınamadı" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
         ) : (
           <div role="status" aria-label="Yükleniyor…" className="grid gap-4 lg:grid-cols-2">
-            <Skeleton className="h-56 rounded-2xl" />
-            <Skeleton className="h-56 rounded-2xl" />
+            <Skeleton className="h-56 rounded-[var(--r-card)]" />
+            <Skeleton className="h-56 rounded-[var(--r-card)]" />
           </div>
         )}
       </div>
@@ -100,7 +108,8 @@ export default function NetworkAdmin() {
             </EmptyState>
           )}
           {others.length > 0 && (
-            <div className="mt-4">
+            // Ana adresten satır ayracıyla ayrı: bunlar çoğu zaman sanal kart (WSL, Hyper-V), karekodsuz
+            <div className="mt-4 border-t border-[var(--admin-divider)] pt-3">
               <p className={LABEL}>Diğer ağ kartları</p>
               {others.map((o) => (
                 <DefRow key={o.url} label={o.name}>
@@ -134,60 +143,73 @@ export default function NetworkAdmin() {
               <p className={HINT}>Bağlantı yalnız sizin Tailscale hesabınızdaki cihazlara açık ve şifreli</p>
             </Address>
           ) : (
-            <ol className="list-decimal space-y-2 pl-5 text-sm text-[var(--admin-text)]">
-              <li>Bu bilgisayara Tailscale’i kurun ve hesabınızla girin (tailscale.com/download)</li>
-              <li>Telefonunuza Tailscale uygulamasını kurun, aynı hesapla girin</li>
-              <li>Bu sayfa kendini yeniler; uzaktan adres ve karekodu burada çıkar</li>
+            // Adımlar numaralı dairede (açık nane; Yazarkasa'nın "Nasıl çalışır"ı gibi): sırayı liste söyler, daire göz için
+            <ol className="space-y-3 text-sm text-[var(--admin-text)]">
+              {TAILSCALE_STEPS.map((step, i) => (
+                <li key={i} className="flex gap-3">
+                  <span aria-hidden="true" className={cn('grid size-6 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums', TONE_SOFT.primary)}>
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 pt-0.5 leading-5">{step}</span>
+                </li>
+              ))}
             </ol>
           )}
-          <p className={cn(HINT, 'mt-4')}>LafPOS’u modemden port açarak internete açmayın; dışarıdan yalnız Tailscale ile</p>
+          {/* Güvenlik notu kartın dibinde ayraçlı satırda, kalkan ikonuyla: ipuçlarından ayrı okunur */}
+          <p className={cn(HINT, 'mt-4 flex gap-2 border-t border-[var(--admin-divider)] pt-3')}>
+            <ShieldAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span className="min-w-0">LafPOS’u modemden port açarak internete açmayın; dışarıdan yalnız Tailscale ile</span>
+          </p>
         </Card>
       </div>
 
-      <Card
-        title="LafPOS Uzaktan (Vercel)"
-        subtitle="Kurulum gerektirmeyen salt okunur görünüm: patron paneli, masalar, bar"
-        actions={
-          // Açık ancak bir gönderim gittiyse; anahtar tanımlı ama henüz gönderilmediyse bekliyor
-          !n.cloud?.configured ? (
-            <Badge>Kapalı</Badge>
-          ) : n.cloud.lastError ? (
-            <Badge tone="danger" dot>
-              Gönderilemiyor
-            </Badge>
-          ) : n.cloud.lastSuccessAt ? (
-            <Badge tone="success" dot>
-              Açık
-            </Badge>
+      {/* Etiket ve değer satırlı iki kart genişte yan yana (tam genişlikte etiketle değer kartın iki ucuna kaçıyordu) */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card
+          title="LafPOS Uzaktan (Vercel)"
+          subtitle="Kurulum gerektirmeyen salt okunur görünüm: patron paneli, masalar, bar"
+          actions={
+            // Açık ancak bir gönderim gittiyse; anahtar tanımlı ama henüz gönderilmediyse bekliyor
+            !n.cloud?.configured ? (
+              <Badge>Kapalı</Badge>
+            ) : n.cloud.lastError ? (
+              <Badge tone="danger" dot>
+                Gönderilemiyor
+              </Badge>
+            ) : n.cloud.lastSuccessAt ? (
+              <Badge tone="success" dot>
+                Açık
+              </Badge>
+            ) : (
+              <Badge tone="info" dot>
+                Bekliyor
+              </Badge>
+            )
+          }
+        >
+          {n.cloud?.configured ? (
+            <>
+              <DefRow label="Adres">
+                <span className="break-all">{n.cloud.url}</span>
+              </DefRow>
+              <DefRow label="Son gönderim">{n.cloud.lastSuccessAt ? fmtDateTime(n.cloud.lastSuccessAt) : 'Henüz yok'}</DefRow>
+              {n.cloud.lastError && <DefRow label="Son hata">{n.cloud.lastError}</DefRow>}
+            </>
           ) : (
-            <Badge tone="info" dot>
-              Bekliyor
-            </Badge>
-          )
-        }
-      >
-        {n.cloud?.configured ? (
-          <>
-            <DefRow label="Adres">
-              <span className="break-all">{n.cloud.url}</span>
-            </DefRow>
-            <DefRow label="Son gönderim">{n.cloud.lastSuccessAt ? fmtDateTime(n.cloud.lastSuccessAt) : 'Henüz yok'}</DefRow>
-            {n.cloud.lastError && <DefRow label="Son hata">{n.cloud.lastError}</DefRow>}
-          </>
-        ) : (
-          <p className={HINT}>Açmak için kasa bilgisayarına ve Vercel’e aynı anahtar tanımlanır; adımlar sayfanın sonunda</p>
-        )}
-      </Card>
+            <p className={HINT}>Açmak için kasa bilgisayarına ve Vercel’e aynı anahtar tanımlanır; adımlar sayfanın sonunda</p>
+          )}
+        </Card>
 
-      <Card title="Bu bilgisayar">
-        <DefRow label="Bilgisayar adı">{n.hostname}</DefRow>
-        <DefRow label="Port">
-          <span className="tabular">{n.port}</span>
-        </DefRow>
-        <DefRow label="Bu ekranın adresi">
-          <span className="break-all">{window.location.origin}</span>
-        </DefRow>
-      </Card>
+        <Card title="Bu bilgisayar">
+          <DefRow label="Bilgisayar adı">{n.hostname}</DefRow>
+          <DefRow label="Port">
+            <span className="tabular">{n.port}</span>
+          </DefRow>
+          <DefRow label="Bu ekranın adresi">
+            <span className="break-all">{window.location.origin}</span>
+          </DefRow>
+        </Card>
+      </div>
 
       <SetupNotes>
         <p>

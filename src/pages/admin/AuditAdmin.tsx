@@ -1,5 +1,31 @@
 import { useQuery } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ClipboardList, Info } from 'lucide-react';
+import {
+  AlertOctagon,
+  AlertTriangle,
+  Bike,
+  CalendarDays,
+  ClipboardList,
+  Clock,
+  Coffee,
+  CreditCard,
+  Globe,
+  Info,
+  KeyRound,
+  LayoutGrid,
+  type LucideIcon,
+  MonitorSmartphone,
+  PackageCheck,
+  PlugZap,
+  QrCode,
+  Receipt,
+  ReceiptText,
+  Settings2,
+  ShieldCheck,
+  Timer,
+  UserRound,
+  Users,
+  Wallet,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { tl } from '@shared/money';
 import { addDays, fmtDateLong, fmtTime, istanbulParts } from '@shared/time';
@@ -128,6 +154,35 @@ const PREFIX_LABEL: Record<string, string> = {
   user: 'Personel',
 };
 
+/**
+ * Kaydın konusu ikonla (önekten): olağan kayıt (bilgi) nötr dairede konusunun ikonuyla, kasadaki ve yönetimdeki ekranın
+ * ikonu neyse o (kasa cüzdan, ürün fincan, platform motosiklet, yazarkasa, site bağlantısı...); uyarı ve alarm konusundan
+ * bağımsız kendi işaretiyle ve renginde kalır (önem konudan önce gelir). Bilinmeyen önek bilgi işareti alır
+ */
+const PREFIX_ICON: Record<string, LucideIcon> = {
+  auth: KeyRound,
+  cash: Wallet,
+  customer: UserRound,
+  day: CalendarDays,
+  delivery: PackageCheck,
+  floor: LayoutGrid,
+  item: ReceiptText,
+  menu: Coffee,
+  okc: MonitorSmartphone,
+  online: Globe,
+  order: Receipt,
+  payment: CreditCard,
+  platform: Bike,
+  product: Coffee,
+  role: ShieldCheck,
+  room: Timer,
+  settings: Settings2,
+  sync: PlugZap,
+  table: QrCode,
+  time: Clock,
+  user: Users,
+};
+
 /** Ciro dışı kaydı geri alma tek kod (`item.uncomp`); adı kaydın türünden (ödenmez ve zayi de geri alınır) */
 const UNCOMP_LABEL: Record<string, string> = { ikram: 'İkramı geri alma', odenmez: 'Ödenmezi geri alma', zayi: 'Zayiyi geri alma' };
 
@@ -180,22 +235,25 @@ export default function AuditAdmin() {
     const st = settingsText(a);
     // Kim ve ne, tek sakin satırda: "Kasa · Hesap yazdırma · onaylayan Müdür"; ileti kişinin adıyla başlıyorsa ad yinelenmez
     const meta = [a.userName && !a.message.startsWith(`${a.userName} `) ? a.userName : null, actionLabel(a), a.approverName && `onaylayan ${a.approverName}`].filter(Boolean).join(' · ');
+    const Topic = PREFIX_ICON[a.action.split('.')[0]] ?? Info;
     const item: TimelineItem = {
       key: String(a.id),
       tone: a.severity === 'alarm' ? 'danger' : a.severity === 'uyari' ? 'warning' : 'neutral',
-      icon: a.severity === 'alarm' ? <AlertOctagon /> : a.severity === 'uyari' ? <AlertTriangle /> : <Info />,
+      icon: a.severity === 'alarm' ? <AlertOctagon /> : a.severity === 'uyari' ? <AlertTriangle /> : <Topic />,
       title: st ? <span title={st.full !== st.text ? st.full : undefined}>{st.text}</span> : a.message,
-      description: meta ? <span className="text-xs text-[var(--admin-text-mute)]">{meta}</span> : undefined,
+      // Telefonda kim ve ne saatin satırında ("19:48 · Platform kabulü"): başlık iki satıra kırılınca kayıt bir satır daha
+      // uzamaz; geniş ekranda saat başlığın sağında, kim ve ne altında
+      description: meta ? <span className="text-xs text-[var(--admin-text-mute)] max-sm:hidden">{meta}</span> : undefined,
       // Tutar başlık satırının sağında, saatin solunda
-      time:
-        a.amount != null ? (
-          <span className="inline-flex items-center gap-2">
-            <Badge tone={a.severity === 'alarm' ? 'danger' : 'neutral'}>{tl(a.amount)}</Badge>
+      time: (
+        <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+          {a.amount != null && <Badge tone={a.severity === 'alarm' ? 'danger' : 'neutral'}>{tl(a.amount)}</Badge>}
+          <span>
             {fmtTime(a.at)}
+            {meta && <span className="sm:hidden"> · {meta}</span>}
           </span>
-        ) : (
-          fmtTime(a.at)
-        ),
+        </span>
+      ),
     };
     const day = istanbulParts(a.at).date;
     const last = groups[groups.length - 1];
@@ -231,7 +289,12 @@ export default function AuditAdmin() {
           <div className="space-y-6">
             {groups.map((g) => (
               <section key={g.day}>
-                <h2 className="mb-3 text-[13px] font-semibold text-[var(--admin-text-mute)]">{dayName(g.day)}</h2>
+                {/* Gün başlığı: adı, ince çizgi ve o günün kayıt sayısı (gün gün taranırken nerede olduğunu söyler) */}
+                <h2 className="mb-3 flex items-center gap-3 text-[13px] font-semibold text-[var(--admin-text-soft)]">
+                  <span className="shrink-0">{dayName(g.day)}</span>
+                  <span aria-hidden="true" className="h-px min-w-4 flex-1 bg-[var(--admin-divider)]" />
+                  <span className="shrink-0 text-xs font-medium tabular-nums text-[var(--admin-text-mute)]">{g.items.length} kayıt</span>
+                </h2>
                 <Timeline items={g.items} />
               </section>
             ))}
