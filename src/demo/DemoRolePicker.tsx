@@ -33,7 +33,7 @@ export function DemoRolePicker() {
 
   return (
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
-      {/* Giriş ekranlarıyla aynı kart (köşe 28): demoda PIN ekranının yerine geçer */}
+      {/* Giriş ekranlarıyla aynı kart (köşe 18): demoda PIN ekranının yerine geçer */}
       <section className="w-full max-w-md rounded-3xl border border-line bg-surface p-5 shadow-[var(--shadow-card)] sm:p-6">
         <div className="mb-5 flex items-center gap-3">
           <LafTile />

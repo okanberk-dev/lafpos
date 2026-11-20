@@ -443,7 +443,26 @@ export function PaymentModal({
       }}
     />
   );
-  const hasLower = (okcOn && !devicePending) || order.payments.length > 0;
+  const hasExtra = (okcOn && !devicePending) || order.payments.length > 0 || (order.status === 'acik' && order.source === 'pos');
+  // Ödeme türleri gruplu (operatör: "seçenekleri kolay bulacak şekilde"): önce sık kullanılan nakit ve kart, sonra yemek
+  // kartları, sonra öteki türler (havale, açık hesap, online, diğer); boş grup yok, tek grup başlıksız
+  const methodGroups = [
+    { key: 'ana', label: null, items: boot.paymentMethods.filter((m) => m.kind === 'nakit' || m.kind === 'kart') },
+    { key: 'yemek', label: 'Yemek kartı', items: boot.paymentMethods.filter((m) => m.kind === 'yemek') },
+    { key: 'diger', label: 'Diğer', items: boot.paymentMethods.filter((m) => m.kind !== 'nakit' && m.kind !== 'kart' && m.kind !== 'yemek') },
+  ].filter((g) => g.items.length > 0);
+  const pickMethod = (m: PaymentMethodDTO) => {
+    setMethod(m);
+    // Açık hesap sınırı ekrandaki bakiyeyle denetlenir: bakiye başka cihazda değişmiş olabilir, adisyon (müşterinin
+    // bakiyesi ve sınırı) yenilenir
+    if (m.kind === 'cari') void qc.invalidateQueries({ queryKey: ['order', order.id] });
+    if (m.kind === 'nakit') setFocus('verilen');
+    else if (focus === 'verilen') setFocus('tutar');
+    // Bahşiş yazılırken kart seçmek bahşiş girişini kesmez: DOM odağı tutar alanına gitse onFocus odağı 'tutar'a çeker,
+    // bahşiş diye yazılan rakam ödeme tutarının yerine geçerdi
+    if (m.kind !== 'nakit' && focus === 'bahsis') requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+    else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
+  };
   const compNote = devicePending
     ? 'Sepet yazarkasada beklerken adisyon ciro dışı kapanmaz'
     : order.paid > 0
@@ -540,6 +559,8 @@ export function PaymentModal({
       open
       onClose={onClose}
       size="xl"
+      // Geniş ekranda üç sütun için daha geniş (70rem); tablette ekranın eni
+      className="sm:max-w-[70rem]"
       persistent={dirty}
       title={`Ödeme · ${order.tableName ?? (order.numarator ? `${numaratorLabel(order.numarator)} · #${order.no}` : `#${order.no}`)}`}
       subtitle={`Toplam ${tl(order.total)}${order.paid ? ` · ödenen ${tl(order.paid)}` : ''}`}
@@ -552,29 +573,32 @@ export function PaymentModal({
             {okcPanel}
           </div>
         )}
-        {/* Sütunlar içerikle genişlemez (minmax 0): uzun, kırılmayan bir yazı telefonda pencereyi ekrandan taşırmasın.
-            Sıra tutar → ödeme türü → yazarkasa ve ödemeler (telefonda alt alta, Tab sırası da bu); geniş ekranda yazarkasa
-            ve ödemeler sol sütunda tutarın altında */}
-        <div className="grid grid-cols-[minmax(0,1fr)] md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:grid-rows-[auto_1fr]">
-          <div className={cn('border-b border-[var(--admin-divider)] p-5 md:col-start-1 md:row-start-1 md:border-b-0 md:border-r', !hasLower && 'md:row-span-2')}>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <Segmented<Mode>
-                label="Ödeme yolu"
-                value={mode}
-                onChange={(m) => {
-                  setMode(m);
-                  setFocus('tutar');
-                }}
-                options={[
-                  { value: 'tutar', label: 'Tutar' },
-                  { value: 'kalem', label: 'Kalem seç' },
-                  { value: 'paylas', label: 'Paylaş' },
-                ]}
-              />
-              <div className="ml-auto text-right">
-                <div className="text-xs font-medium text-muted">Kalan</div>
-                <div className="tabular font-headline text-xl font-bold tracking-tight">{tl(remaining)}</div>
-              </div>
+        {/* Yerleşim (.lp-pay; operatör 20 Kas 2026: "küçült, geniş yap; seçenekleri kolay bulacak şekilde"): telefonda tek
+            sütun, sıra tutar → ödeme türü (verilen, bahşiş) → tuş takımı → ek işler; tablette iki sütun (solda tutar ve tuş
+            takımı, sağda türler ve ek işler); geniş ekranda üç sütun (tutar ve tuş takımı | ödeme türleri | yazarkasa,
+            alınan ödemeler, ciro dışı). Tab sırası da bu. Sütunlar içerikle genişlemez (minmax 0): uzun, kırılmayan bir
+            yazı telefonda pencereyi ekrandan taşırmasın */}
+        <div className="lp-pay">
+          <div className="lp-pay-amount">
+            <Segmented<Mode>
+              label="Ödeme yolu"
+              value={mode}
+              onChange={(m) => {
+                setMode(m);
+                setFocus('tutar');
+              }}
+              options={[
+                { value: 'tutar', label: 'Tutar' },
+                { value: 'kalem', label: 'Kalem seç' },
+                { value: 'paylas', label: 'Paylaş' },
+              ]}
+            />
+            {/* Tek satır: solda ne girildiği, sağda kalan (dar sütunda iki satıra kırılmaz) */}
+            <div className="mb-2 mt-3 flex items-baseline justify-between gap-2 text-[13px]">
+              <span className="font-medium text-muted">{mode === 'tutar' ? 'Alınacak tutar' : mode === 'kalem' ? 'Ödenecek kalemler' : 'Paylar'}</span>
+              <span className="text-muted">
+                Kalan <span className="tabular font-headline text-[15px] font-bold tracking-tight text-ink">{tl(remaining)}</span>
+              </span>
             </div>
 
             {mode === 'tutar' && (
@@ -588,12 +612,12 @@ export function PaymentModal({
                   aria-pressed={focus === 'tutar'}
                   aria-invalid={overRemaining || undefined}
                   aria-describedby={overRemaining ? 'odeme-tutar-fazla' : undefined}
-                  className={cn(typedField(focus === 'tutar'), 'py-3 text-4xl', overRemaining ? 'mb-1 border-[var(--admin-danger)]' : 'mb-3', prefilled && focus === 'tutar' && 'text-ink-2')}
+                  className={cn(typedField(focus === 'tutar'), 'py-2 text-3xl', overRemaining && 'border-[var(--admin-danger)]', prefilled && focus === 'tutar' && 'text-ink-2')}
                 >
                   <TypedAmount text={amountText} />
                 </button>
                 {overRemaining && (
-                  <p id="odeme-tutar-fazla" role="alert" className="mb-3 text-sm text-[var(--admin-danger-ink)]">
+                  <p id="odeme-tutar-fazla" role="alert" className="mt-1 text-sm text-[var(--admin-danger-ink)]">
                     Kalandan fazla: en çok {tl(remaining)} alınır
                   </p>
                 )}
@@ -636,60 +660,37 @@ export function PaymentModal({
               <SplitPanel order={order} busy={splitBusy} freeNos={freeNos} paidShares={paidShares} onSplit={setSplit} onPrint={printShare} onDirty={setSharesDirty} />
             )}
 
-            {(mode === 'tutar' || method?.kind === 'nakit' || focus === 'bahsis') && <Numpad decimal size="md" onKey={pressKey} />}
-            {mode === 'tutar' && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <QuickButton
-                  onClick={() => {
-                    prefillAmount(remaining);
-                    setFocus('tutar');
-                    focusTyped('tutar');
-                  }}
-                >
-                  Tamamı
-                </QuickButton>
-                <QuickButton
-                  onClick={() => {
-                    // Yarısı sunucunun bölüşüyle (shared/money splitEven): tek kuruş artığı bu yarıya
-                    prefillAmount(splitEven(remaining, 2)[0] ?? 0);
-                    setFocus('tutar');
-                    focusTyped('tutar');
-                  }}
-                >
-                  Yarısı
-                </QuickButton>
-              </div>
-            )}
           </div>
 
-          <div className="@container space-y-5 p-5 md:col-start-2 md:row-span-2 md:row-start-1">
+          <div className="lp-pay-methods space-y-4">
             <div>
               <div id={methodsId} className={SECTION}>
                 Ödeme türü
               </div>
-              <div role="group" aria-labelledby={methodsId} className="grid grid-cols-2 gap-2 @sm:grid-cols-3">
-                {boot.paymentMethods.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => {
-                      setMethod(m);
-                      // Açık hesap sınırı ekrandaki bakiyeyle denetlenir: bakiye başka cihazda değişmiş olabilir, adisyon
-                      // (müşterinin bakiyesi ve sınırı) yenilenir
-                      if (m.kind === 'cari') void qc.invalidateQueries({ queryKey: ['order', order.id] });
-                      if (m.kind === 'nakit') setFocus('verilen');
-                      else if (focus === 'verilen') setFocus('tutar');
-                      // Bahşiş yazılırken kart seçmek bahşiş girişini kesmez: DOM odağı tutar alanına gitse onFocus
-                      // odağı 'tutar'a çeker, bahşiş diye yazılan rakam ödeme tutarının yerine geçerdi
-                      if (m.kind !== 'nakit' && focus === 'bahsis') requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
-                      else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
-                    }}
-                    aria-pressed={method?.id === m.id}
-                    className={cn('flex h-12 min-w-0 items-center gap-2.5 pl-2 pr-3 text-left text-sm font-semibold pointer-fine:h-11 pointer-fine:pl-1.5', choice(method?.id === m.id))}
-                  >
-                    {/* Türün karosu (panonun ikon karesi): türün renginin açık tonunda kare, içinde türün ikonu; seçiliyken beyaz */}
-                    <PayIcon kind={m.kind} color={m.color} on={method?.id === m.id} />
-                    <span className="min-w-0 truncate">{m.name}</span>
-                  </button>
+              {/* Türler gruplu: önce sık kullanılan nakit ve kart (iri), sonra yemek kartları, sonra öteki türler */}
+              <div role="group" aria-labelledby={methodsId} className="space-y-3">
+                {methodGroups.map((g) => (
+                  <div key={g.key}>
+                    {g.label && methodGroups.length > 1 && <div className="mb-1.5 text-xs font-medium text-muted">{g.label}</div>}
+                    <div className={cn('grid gap-2', g.key === 'ana' ? 'grid-cols-2' : 'grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))]')}>
+                      {g.items.map((m) => (
+                        <button
+                          key={m.id}
+                          onClick={() => pickMethod(m)}
+                          aria-pressed={method?.id === m.id}
+                          className={cn(
+                            'flex min-w-0 items-center text-left font-semibold',
+                            g.key === 'ana' ? 'h-14 gap-3 pl-2.5 pr-3 text-[15px]' : 'h-11 gap-2 pl-1.5 pr-2.5 text-sm',
+                            choice(method?.id === m.id),
+                          )}
+                        >
+                          {/* Türün karosu: türün renginin açık tonunda kare, içinde türün ikonu; seçiliyken beyaz */}
+                          <PayIcon kind={m.kind} color={m.color} on={method?.id === m.id} big={g.key === 'ana'} />
+                          <span className="min-w-0 truncate">{m.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
               {/* Açık hesap: müşteri yoksa eksik adım ve eylemi (pencere kapanmadan eklenir); varsa kimin hesabına ne yazılacağı */}
@@ -724,7 +725,7 @@ export function PaymentModal({
                   data-numpad-enter=""
                   aria-label={`Verilen nakit: ${givenText || '0'}`}
                   aria-pressed={focus === 'verilen'}
-                  className={cn(typedField(focus === 'verilen'), 'py-2.5 text-2xl')}
+                  className={cn(typedField(focus === 'verilen'), 'py-2 text-2xl')}
                 >
                   <TypedAmount text={givenText} />
                 </button>
@@ -772,10 +773,47 @@ export function PaymentModal({
               </div>
             )}
 
+          </div>
+
+          {/* Tuş takımı: tutar, verilen ve bahşiş için; sıkı (44 px tuş), altında Tamamı ve Yarısı */}
+          {(mode === 'tutar' || method?.kind === 'nakit' || focus === 'bahsis') && (
+            <div className="lp-pay-pad">
+              <Numpad decimal size="sm" onKey={pressKey} />
+              {mode === 'tutar' && (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <QuickButton
+                    onClick={() => {
+                      prefillAmount(remaining);
+                      setFocus('tutar');
+                      focusTyped('tutar');
+                    }}
+                  >
+                    Tamamı
+                  </QuickButton>
+                  <QuickButton
+                    onClick={() => {
+                      // Yarısı sunucunun bölüşüyle (shared/money splitEven): tek kuruş artığı bu yarıya
+                      prefillAmount(splitEven(remaining, 2)[0] ?? 0);
+                      setFocus('tutar');
+                      focusTyped('tutar');
+                    }}
+                  >
+                    Yarısı
+                  </QuickButton>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Ek işler (seyrek): yazarkasa, alınan ödemeler, ciro dışı kapanış; geniş ekranda sağ sütun */}
+          {hasExtra && (
+            <div className="lp-pay-extra space-y-4">
+              {okcOn && !devicePending && okcPanel}
+              {payments}
             {/* Ciro dışı kapanış seyrek ve denetime yazılır: ödeme adımlarının ardında, sakin düğmelerle. Ücret alınmadan
                 kapanır; ikram, ödenmez ve zayi raporda ve Z'de ayrı (shared/comp.ts) */}
-            {order.status === 'acik' && order.source === 'pos' && (
-              <div className="border-t border-[var(--admin-divider)] pt-4">
+              {order.status === 'acik' && order.source === 'pos' && (
+              <div>
                 <div className={SECTION}>Ciro dışı kapat</div>
                 {/* Açıklama düğmenin ipucunda ve gerekçe penceresinin alt satırında (tutar ve nereye düştüğü) */}
                 {compNote ? (
@@ -791,12 +829,6 @@ export function PaymentModal({
                 )}
               </div>
             )}
-          </div>
-
-          {hasLower && (
-            <div className="space-y-4 border-t border-[var(--admin-divider)] p-5 md:col-start-1 md:row-start-2 md:border-r md:border-t-0 md:pt-0">
-              {okcOn && !devicePending && okcPanel}
-              {payments}
             </div>
           )}
         </div>
@@ -1106,12 +1138,12 @@ function QuickButton({ onClick, children }: { onClick: () => void; children: Rea
 }
 
 /** Ödeme türünün karosu: türün renginin açık tonunda yumuşak kare, ikon türün renginin koyu tonunda; seçiliyken beyaz */
-function PayIcon({ kind, color, on }: { kind: PaymentMethodDTO['kind']; color: string; on: boolean }) {
+function PayIcon({ kind, color, on, big }: { kind: PaymentMethodDTO['kind']; color: string; on: boolean; big?: boolean }) {
   const Icon = PAY_ICON[kind] ?? Wallet;
   return (
     <span
       aria-hidden="true"
-      className="grid size-8 shrink-0 place-items-center rounded-lg transition-colors duration-150 [&>svg]:size-4"
+      className={cn('grid shrink-0 place-items-center rounded-lg transition-colors duration-150', big ? 'size-9 [&>svg]:size-[18px]' : 'size-7 [&>svg]:size-[15px]')}
       style={{
         background: on ? '#ffffff' : `color-mix(in oklab, ${color} var(--cat-bg, 16%), var(--surface))`,
         color: on ? `color-mix(in oklab, ${color} 78%, #0f1513)` : `color-mix(in oklab, ${color} var(--cat-ink, 78%), var(--admin-text))`,

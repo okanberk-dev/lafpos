@@ -67,8 +67,8 @@ describe('ekranın kuralları (kaynak)', () => {
   const page = src('OrderPage.tsx');
   const cart = src('CartPanel.tsx');
 
-  it('tek birincil eylem mürekkep "Öde"; gönderilmemiş varken ikincil "Bara gönder (N)"', () => {
-    expect(page).toContain("const sendLabel = `Bara gönder (${pendingCount})`;");
+  it('tek birincil eylem mürekkep "Öde"; gönderilmemiş varken ikincil "Bara gönder (N)" (bar kapalıysa "Kaydet (N)")', () => {
+    expect(page).toContain("const sendLabel = barOn ? `Bara gönder (${pendingCount})` : `Kaydet (${pendingCount})`;");
     expect(page).toMatch(/variant="ink"[^>]*onClick=\{\(\) => void sendAndPay\(\)\}/);
     expect(page).toMatch(/<PayLabel action="Öde" amount=\{due\} inline \/>/);
     expect(page).not.toMatch(/action="Ödeme"/);
@@ -92,7 +92,7 @@ describe('ekranın kuralları (kaynak)', () => {
     expect(page).toContain("{itemCount > 0 ? `${itemCount} ürün` : 'Sepet boş'}");
     expect(page).toContain('whitespace-nowrap font-headline text-lg font-bold">{tlShort(cartTotal)}');
     // Dar çubukta görünen ad kısa, erişilebilir ad adetli ("Bara gönder (N)")
-    expect(page).toMatch(/aria-label=\{sendLabel\} className="shrink-0 px-4">\s*Bara gönder\s*</);
+    expect(page).toMatch(/aria-label=\{sendLabel\} className="shrink-0 px-4">\s*\{barOn \? 'Bara gönder' : 'Kaydet'\}\s*</);
   });
 
   it('gönderilmemiş adet rozeti iki temada okunur: amber dolgu üstünde beyaz değil, yumuşak zemin ve koyu amber yazı', () => {

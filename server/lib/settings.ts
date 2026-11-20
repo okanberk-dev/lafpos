@@ -38,6 +38,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   // Var olan kurulumlarda hiçbir şey değişmesin: patron Yönetim › Ayarlar'dan seçer
   serviceMode: DEFAULT_SERVICE_MODE,
   tipsEnabled: false,
+  // Bar ekranı ve "Bara gönder" açık: var olan kurulumlarda hiçbir şey değişmez; bar ekranı olmayan işletme kapatır
+  barEnabled: true,
   // Müşteri ekranı: gece teması, sitenin tescilli sloganı; duyuru ve karekod patron girene kadar yok
   customerDisplay: {
     theme: 'gece',

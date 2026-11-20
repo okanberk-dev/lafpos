@@ -49,12 +49,13 @@ export const SALE_NAV: NavItem = { to: '/satis', label: 'Satış', title: 'Tezg�
 /**
  * Servis moduna göre kasa menüsü. Masaya servis bugünkü menü. Yarı self ve QR + self: "Satış" başta, Masalar kalır
  * (doluluk; QR siparişi masaya düşer) ama telefonda alt sekmeden "Daha"ya iner. Self: Masalar yalnız masada açık
- * adisyon varsa (masa kullanılıyorsa) görünür.
+ * adisyon varsa (masa kullanılıyorsa) görünür. Bar ekranı ayardan kapalıysa (`bar: false`) Bar menüde yok.
  */
-export function navFor(mode: ServiceMode, opts: { tablesInUse?: boolean } = {}): NavItem[] {
-  if (!isCounterFirst(mode)) return POS_NAV;
+export function navFor(mode: ServiceMode, opts: { tablesInUse?: boolean; bar?: boolean } = {}): NavItem[] {
+  const pos = opts.bar === false ? POS_NAV.filter((n) => n.to !== '/mutfak') : POS_NAV;
+  if (!isCounterFirst(mode)) return pos;
   const out: NavItem[] = [SALE_NAV];
-  for (const n of POS_NAV) {
+  for (const n of pos) {
     if (n.to !== '/masalar') out.push(n);
     else if (showsTables(mode) || opts.tablesInUse) out.push({ ...n, primary: false });
   }
@@ -62,7 +63,7 @@ export function navFor(mode: ServiceMode, opts: { tablesInUse?: boolean } = {}):
 }
 
 /** Kişinin yetkisine göre süzülmüş menü */
-export function visibleNav(can: (p: Permission) => boolean, mode: ServiceMode, opts: { tablesInUse?: boolean } = {}): NavItem[] {
+export function visibleNav(can: (p: Permission) => boolean, mode: ServiceMode, opts: { tablesInUse?: boolean; bar?: boolean } = {}): NavItem[] {
   return navFor(mode, opts).filter((n) => n.perms.some((p) => can(p)));
 }
 

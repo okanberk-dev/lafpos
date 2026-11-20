@@ -1,4 +1,4 @@
-import { Plus, SlidersHorizontal, Star, Tag } from 'lucide-react';
+import { SlidersHorizontal, Star, Tag } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
@@ -126,7 +126,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
         <div className="px-3 pt-2 md:px-0 md:pt-0">
           {/* Ortak arama alanı (hap; temizle düğmesi, Escape); boşken farede "/" kısayolu ipucu */}
           <div className="relative">
-            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" className="h-11 rounded-[0.875rem] border-[var(--admin-border)] bg-surface shadow-[var(--shadow-control)]" />
+            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" className="h-11 rounded-[var(--r-control)] border-[var(--admin-border)] bg-surface" />
             {!q && (
               <kbd aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-2 px-1.5 text-xs font-medium text-muted pointer-fine:inline-block">
                 /
@@ -156,7 +156,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
             <ProductTile key={p.id} p={p} withImage={withImages} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
           ))}
           {list.length === 0 && (
-            <div className="col-span-full rounded-[1.125rem] bg-surface">
+            <div className="col-span-full rounded-[var(--r-tile)] border border-[var(--admin-border)] bg-surface">
               {q.trim() ? (
                 <EmptyState
                   compact
@@ -241,26 +241,24 @@ function ProductTile({
   return (
     <div
       className={cn(
-        // Pano kartı: beyaz, köşe 20, kenarsız ve yumuşak gölgeli; üstüne gelince kalkar, basılıyken hafif küçülür
-        // Pano kartı: beyaz, köşe 20, ince çerçeve ve çok hafif gölge; üstüne gelince çerçeve ev yeşili, kart kalkar
-        'group relative flex flex-col rounded-[1.25rem] border border-[var(--admin-border)] bg-surface shadow-[var(--shadow-control)] transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-[var(--admin-primary-line)] hover:shadow-[var(--shadow-lift)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-primary)] motion-reduce:hover:translate-y-0 motion-reduce:has-[button:active]:scale-100',
-        withImage ? 'min-h-[176px]' : 'min-h-[96px]',
+        // Sade karo (operatör 20 Kas 2026: "satış kısmını minimalist, temiz"): beyaz, saç teli çerçeve, köşe --r-tile;
+        // gölge, kalkma ve süs şerit yok. Üstüne gelince çerçeve bir ton koyu, basılan parça hafif gri
+        'group relative flex flex-col overflow-hidden rounded-[var(--r-tile)] border border-[var(--admin-border)] bg-surface transition-colors duration-150 hover:border-[var(--admin-border-strong)]',
+        withImage ? 'min-h-[176px]' : 'min-h-[92px]',
         soldOut && 'opacity-50',
       )}
     >
-      {/* Kategorinin rengi kartın tepesinde kısa bir şerit: aramada ve sık kullanılanlarda kart kategorisiyle tanınır */}
-      {hue && <span aria-hidden="true" className="pointer-events-none absolute left-4 top-0 h-1 w-7 rounded-b-full" style={{ background: hue }} />}
       <button
         disabled={soldOut}
         onClick={() => addSize(twoSizes ? 'M' : 'TEK')}
         aria-haspopup={ask ? 'dialog' : undefined}
         // İki boylu kartta ad tek satırsa düğme 41 px kalıyordu: dokunmatikte 44 (kart da pencereyi açabilir)
-        className="flex min-h-11 flex-1 flex-col items-stretch rounded-[1.25rem] text-left transition-colors duration-150 active:bg-press pointer-fine:min-h-0"
+        className="flex min-h-11 flex-1 flex-col items-stretch text-left transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press disabled:hover:bg-transparent pointer-fine:min-h-0"
       >
         {withImage && (
           <span
             aria-hidden="true"
-            className="relative mx-1.5 mt-1.5 grid h-[88px] place-items-center overflow-hidden rounded-xl bg-surface-2"
+            className="relative mx-1.5 mt-1.5 grid h-[88px] place-items-center overflow-hidden rounded-[0.5rem] bg-surface-2"
             style={!src && hue ? { background: `color-mix(in oklab, ${hue} 12%, var(--surface-2))` } : undefined}
           >
             {src ? (
@@ -272,7 +270,7 @@ function ProductTile({
                 draggable={false}
                 onError={() => setBroken(true)}
                 onLoad={(e) => setPhoto(isOpaque(e.currentTarget))}
-                // Görsel sabit: süs yakınlaşma yok; basılı durumu kartın kendi ölçeği verir
+                // Görsel sabit: süs yakınlaşma yok; basılı durumu kartın kendi zemini verir
                 className={photo ? 'size-full object-cover' : 'h-[80px] w-full object-contain'}
               />
             ) : (
@@ -282,25 +280,17 @@ function ProductTile({
             )}
           </span>
         )}
-        <span className={cn('flex flex-1 flex-col items-start gap-1.5 px-3.5 pb-3', withImage ? 'pt-2' : 'justify-between pt-3')}>
+        <span className={cn('flex flex-1 flex-col items-start gap-1 px-3 pb-2.5', withImage ? 'pt-2' : 'justify-between pt-2.5')}>
           {/* Seçenek düğmesi sağ üstte: ad onun altına girmesin */}
-          <span className={cn('line-clamp-2 font-headline text-[15px] font-semibold leading-[1.2] tracking-[-0.015em]', !withImage && hasOptions && 'pr-8')}>{label}</span>
+          <span className={cn('line-clamp-2 text-[14.5px] font-semibold leading-[1.25] tracking-[-0.01em]', !withImage && hasOptions && 'pr-7')}>{label}</span>
+          {/* Durum yalnız yazıyla (rozet kutusu yok): tükendi kırmızı, son porsiyon amber */}
           {soldOut ? (
-            <span className="rounded-lg bg-[var(--admin-danger-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--admin-danger-ink)]">Tükendi</span>
+            <span className="text-[11px] font-medium text-[var(--admin-danger-ink)]">Tükendi</span>
           ) : p.portionsLeft != null ? (
-            <span className="tabular rounded-lg bg-[var(--admin-warning-soft)] px-2 py-0.5 text-[11px] font-medium text-[var(--admin-warning)]">Son {p.portionsLeft}</span>
+            <span className="tabular text-[11px] font-medium text-[var(--admin-warning)]">Son {p.portionsLeft}</span>
           ) : null}
-          {!twoSizes && (
-            // Fiyat solda kalın; sağda ekle işareti (panonun yumuşak tonlu ikon dairesi): kartın tamamı ekler, daire yalnız işaret
-            <span className="mt-auto flex w-full items-center justify-between gap-2">
-              <span className="tabular font-headline text-[17px] font-bold tracking-[-0.03em] text-ink">{tlShort(p.price)}</span>
-              {!soldOut && (
-                <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] transition-colors duration-150 group-hover:bg-[var(--admin-ink-fill)] group-hover:text-[var(--admin-on-ink)]">
-                  <Plus className="size-4 stroke-[2.25]" />
-                </span>
-              )}
-            </span>
-          )}
+          {/* Tek boylu üründe fiyat dipte; kartın tamamı ekler (ayrı ekle işareti yok) */}
+          {!twoSizes && <span className="tabular mt-auto text-[15px] font-semibold tracking-[-0.01em] text-ink">{tlShort(p.price)}</span>}
         </span>
       </button>
       {hasOptions && (
@@ -309,19 +299,17 @@ function ProductTile({
           onClick={() => onCustomize(p, twoSizes ? 'M' : 'TEK')}
           aria-label={`${label} seçenekleri`}
           title="Seçenekler"
-          className={cn(
-            'absolute right-0.5 top-0.5 grid size-11 place-items-center text-ink-2 transition-colors duration-150 hover:text-primary active:text-primary',
-            withImage ? 'rounded-xl' : 'rounded-2xl',
-          )}
+          className="absolute right-0 top-0 grid size-11 place-items-center text-muted transition-colors duration-150 hover:text-ink focus-visible:-outline-offset-2 active:text-primary"
         >
-          {/* Seçenekler: yumuşak tonlu daire (panonun ikon dairesi); fotoğrafın üstünde beyaz. Dokunma alanı 44 px */}
-          <span className={cn('grid size-8 place-items-center rounded-full', withImage ? 'bg-surface/90 shadow-[0_1px_3px_rgb(15_35_28/0.18)] backdrop-blur-sm' : 'bg-surface-2')}>
+          {/* Seçenekler: zeminsiz soluk simge (fotoğrafın üstünde okunsun diye beyaz daire); dokunma alanı 44 px */}
+          <span className={cn('grid size-7 place-items-center rounded-full', withImage && 'bg-surface/90 shadow-[0_1px_3px_rgb(15_35_28/0.18)] backdrop-blur-sm')}>
             <SlidersHorizontal className="size-4" />
           </span>
         </button>
       )}
       {twoSizes && (
-        <div className="grid grid-cols-2 gap-2 px-2.5 pb-2.5">
+        // İki boy kartın dibinde ikiye bölünmüş sade şerit: üstte saç teli, ortada ayraç; dokununca açık nane
+        <div className="grid grid-cols-2 divide-x divide-[var(--admin-divider)] border-t border-[var(--admin-divider)]">
           <SizeButton disabled={soldOut} dialog={ask} label={boot.settings.sizeLabels.M} price={p.price} onClick={() => addSize('M')} />
           <SizeButton disabled={soldOut} dialog={ask} label={boot.settings.sizeLabels.L} price={p.priceL!} onClick={() => addSize('L')} />
         </div>
@@ -337,10 +325,10 @@ function SizeButton({ label, price, onClick, disabled, dialog }: { label: string
       onClick={onClick}
       aria-label={`${label} ${tlShort(price)}`}
       aria-haspopup={dialog ? 'dialog' : undefined}
-      className="flex min-h-11 flex-col items-center justify-center rounded-xl bg-[var(--admin-primary-soft)] leading-tight text-[var(--admin-primary)] transition-[background-color,color,box-shadow] duration-150 hover:bg-[var(--admin-ink-fill)] hover:text-[var(--admin-on-ink)] active:bg-[var(--admin-ink-fill)] active:text-[var(--admin-on-ink)] pointer-fine:min-h-10"
+      className="flex min-h-11 flex-col items-center justify-center gap-px py-1.5 leading-tight transition-colors duration-150 hover:bg-[var(--admin-primary-soft)] focus-visible:-outline-offset-2 active:bg-[var(--admin-primary-soft)] disabled:hover:bg-transparent pointer-fine:min-h-10"
     >
-      <span className="text-[11px] font-medium opacity-80">{label}</span>
-      <span className="tabular font-headline text-[14px] font-bold text-ink [button:hover>&]:text-[var(--admin-on-ink)] [button:active>&]:text-[var(--admin-on-ink)]">{tlShort(price)}</span>
+      <span className="text-[11px] font-medium text-muted">{label}</span>
+      <span className="tabular text-[14px] font-semibold text-ink">{tlShort(price)}</span>
     </button>
   );
 }

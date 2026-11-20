@@ -60,7 +60,7 @@ const ROWS = 'divide-y divide-[var(--admin-divider)]';
 
 /** Pano yaprağının iç payı: kart gölgesi kaydırma kabında kesilmesin diye kenardan biraz içeride */
 const PAD = 'px-1 pb-8 pt-1 md:px-2 md:pt-2';
-/** Pano kartı (ui/misc Card'ın kabı, başlıksız): köşe 24, zeminde kenarsız ve yumuşak gölgeli */
+/** Pano kartı (ui/misc Card'ın kabı, başlıksız): köşe 18, zeminde kenarsız ve yumuşak gölgeli */
 const PANEL = 'min-w-0 rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]';
 
 /**

@@ -39,6 +39,7 @@ export const SETTING_LABEL: Record<string, string> = {
   autoDayEndHour: 'Gün sonu saati',
   serviceMode: 'Servis modu',
   tipsEnabled: 'Bahşiş',
+  barEnabled: 'Bar ekranı ve Bara gönder',
   zNoStart: 'İlk Z numarası',
   customerDisplay: 'Müşteri ekranı',
 };

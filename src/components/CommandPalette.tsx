@@ -11,7 +11,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { trapTab } from '@/lib/focus';
 import { navFor } from '@/lib/nav';
-import { useServiceMode } from '@/lib/serviceMode';
+import { useBarEnabled, useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
 import { resolveDark } from '@/lib/bootDark';
 import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
@@ -61,6 +61,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const barDark = useTheme((s) => s.force === 'dark');
   const onBar = useLocation().pathname === '/mutfak';
   const mode = useServiceMode();
+  const bar = useBarEnabled();
   const remoteSignOut = useRemoteSignOut();
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
@@ -89,7 +90,7 @@ function Palette({ onClose }: { onClose: () => void }) {
   const entries = useMemo<Entry[]>(() => {
     const out: Entry[] = [];
     // Paletten her ekran bulunur (self serviste kullanılmayan Masalar da); uzaktan görünümde yalnız oradaki ekranlar
-    for (const n of navFor(mode, { tablesInUse: true })) {
+    for (const n of navFor(mode, { tablesInUse: true, bar })) {
       if (n.to === '/yonetim' || !n.perms.some((p) => can(p)) || (REMOTE && !REMOTE_PATHS.includes(n.to))) continue;
       out.push({ id: `ekran:${n.to}`, group: 'Ekranlar', label: n.title, icon: <n.icon />, keywords: n.keywords, run: go(n.to) });
     }
@@ -147,7 +148,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boot.products, users.data, theme, mode, onBar, barDark, remoteSignOut]);
+  }, [boot.products, users.data, theme, mode, bar, onBar, barDark, remoteSignOut]);
 
   const results = useMemo(() => {
     const k = fold(q.trim());
@@ -207,7 +208,7 @@ function Palette({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-label="Komut paleti"
         onKeyDown={(e) => trapTab(e, dialog.current)}
-        // Pano: köşe 24, kenarsız beyaz yüzey, derin yumuşak gölge (gecede saç teli kenar)
+        // Pano: köşe 18, kenarsız beyaz yüzey, derin yumuşak gölge (gecede saç teli kenar)
         className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-transparent bg-surface shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
       >
         <div className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-4">

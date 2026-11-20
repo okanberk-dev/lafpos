@@ -342,6 +342,8 @@ export function Toggle({
 
 /** Adet seçicinin tuşu: basılı ton, sınırda soluk; boyu ve köşesi aşağıda */
 const STEP = 'grid place-items-center rounded-[999px] bg-surface text-ink shadow-[var(--shadow-control)] transition-colors duration-150 hover:bg-surface-2 active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-surface dark:bg-[var(--surface-raised)]';
+/** Sade adet seçicinin tuşu (sepet satırı): ince çerçeveli boş daire, gölgesiz; üstüne gelince çok açık gri */
+const QUIET_STEP = 'grid place-items-center rounded-[999px] border border-[var(--admin-border)] bg-transparent text-ink-2 transition-colors duration-150 hover:border-[var(--admin-border-strong)] hover:bg-hover hover:text-ink active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
 
 /**
  * Adet seçici (kasada tek): adisyonun gönderilmemiş satırı, seçenek sayacı (şeker, ekstra shot), seçenek penceresinin
@@ -360,6 +362,7 @@ export function Stepper({
   onRemove,
   disabledUp,
   size = 'md',
+  quiet,
   className,
 }: {
   value: number;
@@ -372,23 +375,25 @@ export function Stepper({
   /** Artırma kapalı (seçenek tükendi) */
   disabledUp?: boolean;
   size?: 'md' | 'lg';
+  /** Sade (adisyonun sepet satırı): ray yok, eksi ve artı ince çerçeveli boş daire, çöp soluk (üstüne gelince kırmızı) */
+  quiet?: boolean;
   className?: string;
 }) {
   const removes = !!onRemove && value <= Math.max(min, 1);
   const lg = size === 'lg';
-  const key = cn(STEP, lg ? 'size-14' : 'size-11 pointer-fine:size-[34px]');
+  const key = cn(quiet ? QUIET_STEP : STEP, lg ? 'size-14' : quiet ? 'size-11 pointer-fine:size-8' : 'size-11 pointer-fine:size-[34px]');
   const icon = lg ? 'size-6' : 'size-4';
   return (
     // Pano: açık gri hap ray (segmentin rayı), içinde beyaz yuvarlak eksi ve artı, ortada kalın rakam
-    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center gap-0.5 rounded-[999px] border border-[var(--admin-border)] bg-surface-2 p-[3px]', className)}>
+    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center gap-0.5', !quiet && 'rounded-[999px] border border-[var(--admin-border)] bg-surface-2 p-[3px]', className)}>
       <button
         type="button"
         aria-label={removes ? 'Kaldır' : 'Azalt'}
         disabled={!removes && value <= min}
         onClick={() => (removes ? onRemove?.() : onChange(Math.max(min, value - 1)))}
-        className={key}
+        className={cn(key, quiet && removes && 'hover:text-[var(--admin-danger-ink)]')}
       >
-        {removes ? <Trash2 aria-hidden="true" className={cn(icon, 'text-[var(--admin-danger-ink)]')} /> : <Minus aria-hidden="true" className={icon} />}
+        {removes ? <Trash2 aria-hidden="true" className={cn(icon, !quiet && 'text-[var(--admin-danger-ink)]')} /> : <Minus aria-hidden="true" className={icon} />}
       </button>
       <span aria-live="polite" className={cn('tabular text-center font-semibold', lg ? 'min-w-16 px-1 font-headline text-5xl' : 'min-w-8 px-0.5 text-[15px]')}>
         {value}
@@ -469,7 +474,7 @@ export function Segmented<T extends string>({
     <div
       role={label ? 'group' : undefined}
       aria-label={label}
-      className={cn(wrap ? 'flex w-full gap-0.5 rounded-[1.375rem] max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)]', 'border border-[var(--admin-border)] bg-surface-2 p-[3px]', className)}
+      className={cn(wrap ? 'flex w-full gap-0.5 rounded-[var(--r-card)] max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)]', 'border border-[var(--admin-border)] bg-surface-2 p-[3px]', className)}
     >
       {options.map((o) => (
         <button
@@ -479,7 +484,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === o.value}
           className={cn(
             'inline-flex items-center justify-center font-medium',
-            wrap ? 'rounded-[1.125rem]' : 'rounded-[var(--r-segment)]',
+            wrap ? 'rounded-[0.875rem]' : 'rounded-[var(--r-segment)]',
             wrap ? 'min-w-0 flex-1 whitespace-normal py-1.5 text-center leading-snug max-sm:flex-auto' : 'shrink-0 whitespace-nowrap',
             'transition-[color,background-color,box-shadow] duration-150 focus-visible:-outline-offset-2 pointer-coarse:min-h-11',
             size === 'sm' ? 'min-h-7 px-2.5 text-xs' : 'min-h-9 px-3.5 text-sm [[data-area=admin]_&]:text-[13px]',

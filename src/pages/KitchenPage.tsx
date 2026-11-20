@@ -35,7 +35,25 @@ function mmss(ms: number) {
   return m >= 60 ? `${Math.floor(m / 60)} sa ${m % 60} dk` : `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
+/**
+ * Bar ekranı ayardan kapalıysa (Yönetim › Ayarlar › "Bar ekranı ve Bara gönder"; operatör 20 Kas 2026) fiş yerine kısa
+ * not: sipariş bara gitmez, adisyon "Kaydet" der. Adres elle açılsa da boş ve sessiz bir ekran kalmaz
+ */
 export default function KitchenPage() {
+  const boot = useBoot();
+  if (boot.settings.barEnabled === false) {
+    return (
+      <div className="grid h-full place-items-center p-6">
+        <EmptyState icon={<ChefHat />} title="Bar ekranı kapalı">
+          Siparişler bara gönderilmiyor; adisyonda “Kaydet” var. Yönetim › Ayarlar’dan açılır
+        </EmptyState>
+      </div>
+    );
+  }
+  return <KitchenScreen />;
+}
+
+function KitchenScreen() {
   const boot = useBoot();
   const qc = useQueryClient();
   const setForce = useTheme((s) => s.setForce);

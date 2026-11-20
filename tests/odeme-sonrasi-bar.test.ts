@@ -333,7 +333,7 @@ describe('ekran (kaynak)', () => {
     expect(groupCartItems(items).map((g) => g.label)).toEqual(['Ödeme bekliyor', 'Barda']);
     expect(cart).toContain("g.key === 'odeme' && order.status === 'acik' && !REMOTE && can('siparis.al')");
     expect(cart).toContain('post<OrderDTO>(`/orders/${order.id}/release`, {})');
-    expect(cart).toContain("{payFirst ? 'Ödeme alınınca sipariş bara gider'");
+    expect(cart).toContain(": payFirst ? 'Ödeme alınınca sipariş bara gider'");
     // Ödeme alamayan (garson) "Öde" görmez, tek düğmesi hemen gönderir: ona "ödeme alınınca" denmez
     expect(cart).toContain("const payFirst = holdsUntilPaid(order) && can('odeme.al');");
     // Çift dokunuş ikinci isteği yollamaz

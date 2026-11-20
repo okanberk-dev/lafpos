@@ -213,6 +213,11 @@ export interface PublicSettings {
   serviceMode: ServiceMode;
   /** Bahşiş alınır mı (varsayılan kapalı: işletme bahşiş almaz; eski kayıtlardaki bahşiş raporlarda kalır) */
   tipsEnabled: boolean;
+  /**
+   * Bar ekranı ve "Bara gönder" (operatör 20 Kas 2026; varsayılan açık). Kapalıyken kalem bara ve mutfağa gitmez
+   * (istasyonsuz yazılır, teslim sayılır), adisyonda "Bara gönder" yerine "Kaydet", bar ekranı menüde yok
+   */
+  barEnabled: boolean;
   /** İki ekranlı kasanın müşteriye dönük ekranı (`/musteri-ekrani`): görünüm ve metinler, Yönetim › Müşteri ekranı */
   customerDisplay: CustomerDisplaySettings;
 }
