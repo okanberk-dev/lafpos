@@ -18,18 +18,15 @@ export type LiveTopic =
   | 'okc';
 
 /**
- * Diğer sistemlerden (laffogato sitesi, lafmobil uygulaması, köşkün paneli ladmin) gelen ve cihazlarda sesli uyarı
- * çalan olaylar (docs/03-ENTEGRASYON.md §2.3 "Masa çağrıları", §2.4 "Uyarılar"; istemci `src/lib/siteAlerts.ts`,
- * `src/components/SiteInbox.tsx`). Hepsi var olan çekimlerden doğar (sipariş listesi, karaoke listesi): yeni istek
- * açmaz. Metinde ad, not, telefon yok; yalnız masa, saat, süre, kişi sayısı.
+ * Diğer sistemlerden (laffogato sitesi ve lafmobil uygulaması; aynı siparişleri köşkün paneli ladmin de görür) gelen
+ * ve cihazlarda sesli uyarı çalan olaylar (docs/03-ENTEGRASYON.md §2.5 "Sesli uyarılar"; istemci
+ * `src/lib/siteAlerts.ts`, `src/components/SiteInbox.tsx`). Hepsi var olan çekimlerden doğar (sipariş listesi, karaoke
+ * listesi): yeni istek açmaz. Metinde ad, not, telefon yok; yalnız masa, sipariş no, saat, süre, kişi sayısı.
  *
  * - `orders` › `online.new`: yeni online sipariş, `message` "Online sipariş: Masa 4 · Ayşe" (bar için ayrıca
  *   `kitchen` › `ticket.new`, `message: 'online'`). `online.updated`: aşaması ya da masası sitede değişti.
  *   `online.stage`: LafPOS aşamayı siteye yazdı. `online.done`: siteden kalktı, `message` "Online sipariş #N siteden
  *   kalktı".
- * - `orders` › `site.call.new`: masadan çağrı ("Garson çağır", lafmobil), `message` "Masa 4 · Su istiyor", masa
- *   eşlenebildiyse `tableId`. `site.call.done`: çağrı yanıtlandı (LafPOS, site ya da köşk "Gördüm" dedi) ya da
- *   listeden düştü.
  * - `reservations` › `site.karaoke.new`, `site.karaoke.cancelled`, `site.karaoke.moved`: bugünün site karaoke
  *   listesinde yeni, iptal edilen, saati değişen ya da günden kalkan rezervasyon, `message` "Karaoke 20:00 · 2 sa ·
  *   4 kişi". Listenin değiştiğini söyleyen `site.karaoke` de yayılır (ekranlar yenilenir).
@@ -39,8 +36,6 @@ export const SITE_EVENT = {
   onlineUpdated: 'online.updated',
   onlineStage: 'online.stage',
   onlineDone: 'online.done',
-  callNew: 'site.call.new',
-  callDone: 'site.call.done',
   karaokeNew: 'site.karaoke.new',
   karaokeCancelled: 'site.karaoke.cancelled',
   karaokeMoved: 'site.karaoke.moved',

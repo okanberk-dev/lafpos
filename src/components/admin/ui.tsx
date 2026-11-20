@@ -118,15 +118,16 @@ export function PageHeader({ title, description, actions, children }: { title: R
   const titleOnly = !description && !actions && !children;
   return (
     // Pano başlığı: zeminin üstünde, çizgisiz; başlık ve açıklama kartların, çiplerin sol kenarıyla aynı hizada (iç
-    // pay yok). Tablette de eylemler sığdıkça başlığın sağında (ana eylem başlık satırının en sağında); sığmayınca
-    // (yedi dönemli segment) başlığın altına kırılır, başlık sütunu 20rem'in altına ezilmez
+    // pay yok). Tablette de eylemler sığdıkça başlığın sağında (ana eylem başlık satırının en sağında; boş yeri başlık
+    // sütunu alır); sığmayınca (yedi dönemli segment) başlığın altına, sola yaslı kendi satırına iner (sayfanın
+    // w-full'ü o satırı doldurur); başlık sütunu 20rem'in altına ezilmez
     <div className={cn('mb-5', titleOnly && 'max-md:mb-0')}>
       <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
-        <div className={cn('min-w-0 md:flex-[1_1_20rem]', !description && 'max-md:contents')}>
+        <div className={cn('min-w-0 md:flex-[999_1_20rem]', !description && 'max-md:contents')}>
           <h1 className="font-headline text-[28px] font-bold leading-tight tracking-[-0.035em] text-[var(--admin-text)] max-md:sr-only xl:text-[30px]">{title}</h1>
           {description && <p className="mt-1.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
         </div>
-        {actions && <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
+        {actions && <div className="flex min-w-0 flex-wrap items-center gap-2 md:grow max-sm:[&>*]:flex-1">{actions}</div>}
       </div>
       {children}
     </div>

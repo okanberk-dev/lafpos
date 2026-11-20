@@ -6,10 +6,11 @@ import { body, HttpError, isoDate } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
 import { backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
-import { requireSiteLinked, siteLinked } from '../sync/laffogato-link';
+import type { SiteAlertsDTO } from '@shared/site-alerts';
+import { requireSiteLinked, siteLinked, siteSigned } from '../sync/laffogato-link';
 import { reportRange } from './reports';
 import { refreshSiteKaraoke, siteKaraokeOn, siteKaraokeStatus, siteKaraokeView } from '../sync/laffogato-karaoke';
-import { onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
+import { onlineAlertsView, onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
 import { runMenuSync } from '../sync/menu-sync';
 import { getSettings } from '../lib/settings';
 import { eq } from 'drizzle-orm';
@@ -76,6 +77,17 @@ syncRoutes.post('/karaoke/refresh', async (c) => {
   const user = c.get('user');
   if (!can(user, 'siparis.al')) requirePermission(user, 'rezervasyon.yonet');
   return c.json(await refreshSiteKaraoke({ force: true }));
+});
+
+/**
+ * Cihazın sesli uyarıları (src/components/SiteInbox.tsx): "yeni" aşamasında bekleyen online siparişler (son 4 saat).
+ * Yalnız yerel veritabanı; siteye istek atmaz (liste var olan sipariş çekiminden gelir, §2.5). Siparişi alan ya da bar
+ * ekranı yetkisi. Site bağlantısı yoksa `configured: false` ve boş liste
+ */
+syncRoutes.get('/alerts', (c) => {
+  const user = c.get('user');
+  if (!can(user, 'siparis.al')) requirePermission(user, 'mutfak.ekran');
+  return c.json({ configured: siteSigned(), online: onlineAlertsView() } satisfies SiteAlertsDTO);
 });
 
 syncRoutes.post('/online/refresh', async (c) => {

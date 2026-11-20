@@ -1,4 +1,5 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray } from 'drizzle-orm';
+import { ONLINE_ALERT_MAX_AGE_MS, type OnlineAlertDTO } from '@shared/site-alerts';
 import { normalizeTableCode } from '@shared/table-qr';
 import { businessDate } from '@shared/time';
 import { db, schema, tx } from '../db/client';
@@ -231,7 +232,8 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
           .run();
         fx.audit(t, { action: 'online.gone', orderId: o.id, message: `Online sipariş #${o.extNo ?? o.no} siteden kalktı (sitede tamamlandı, iptal edildi ya da süresi geçti)` });
         closed++;
-        fx.emit({ topic: 'orders', kind: 'online.done', orderId: o.id, tableId: o.tableId ?? undefined });
+        // Metin cihazlarda sakin bir ses ve bildirimle görünür (src/components/SiteInbox.tsx): yalnız sipariş numarası
+        fx.emit({ topic: 'orders', kind: 'online.done', orderId: o.id, tableId: o.tableId ?? undefined, message: `Online sipariş #${o.extNo ?? o.no} siteden kalktı` });
         fx.emit({ topic: 'kitchen', kind: 'online.done', orderId: o.id });
       }
     }
@@ -458,6 +460,22 @@ export async function refreshOnlineOrders() {
   if (now - lastFullPull < 30_000) return { skipped: true };
   lastFullPull = now;
   return syncOnlineOrders();
+}
+
+/**
+ * Cihazların çalacağı online siparişler (`GET /api/sync/alerts`, src/components/SiteInbox.tsx): açık, sitede hâlâ "yeni"
+ * aşamada (bar başlamadı) ve ödemesi son 4 saatte. Yalnız yerel veritabanını okur, siteye istek atmaz; liste var olan
+ * sipariş çekiminden gelir (§2.3). Site bağlantısı yoksa boş.
+ */
+export function onlineAlertsView(now = Date.now()): OnlineAlertDTO[] {
+  if (!configured()) return [];
+  return db
+    .select({ id: schema.orders.id, no: schema.orders.no, extNo: schema.orders.extNo, label: schema.orders.extLabel, fulfillment: schema.orders.extFulfillment, tableId: schema.orders.tableId, openedAt: schema.orders.openedAt })
+    .from(schema.orders)
+    .where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.status, 'acik'), eq(schema.orders.extStage, 'new'), gte(schema.orders.openedAt, now - ONLINE_ALERT_MAX_AGE_MS)))
+    .orderBy(asc(schema.orders.openedAt))
+    .all()
+    .map((o) => ({ orderId: o.id, no: o.extNo ?? o.no, label: o.label ?? '', table: o.fulfillment === 'table', tableId: o.tableId, openedAt: o.openedAt }));
 }
 
 export function onlineStatus() {

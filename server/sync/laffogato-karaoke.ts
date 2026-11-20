@@ -6,6 +6,7 @@ import {
   type SiteKaraokePayment,
   type SiteKaraokeStatus,
 } from '@shared/karaoke';
+import { karaokeAlertText } from '@shared/site-alerts';
 import { businessDate, isCalendarDate } from '@shared/time';
 import type { SiteKaraokeDTO } from '@shared/types';
 import { db, schema } from '../db/client';
@@ -145,6 +146,44 @@ function failureMessage(status: number, json: unknown): string {
   return `Site karaoke rezervasyonları alınamadı (HTTP ${status})`;
 }
 
+// ─── Uyarılar ───────────────────────────────────────────────────────────────
+
+export interface KaraokeChange {
+  kind: 'new' | 'cancelled' | 'moved';
+  id: string;
+  /** "Karaoke 20:00 · 2 sa · 4 kişi"; taşınanda önceki saat ya da "başka güne" parantez içinde. Ad ve not yok */
+  message: string;
+}
+
+/** Bir çekimde en çok bu kadar uyarı (toplu düzeltmede ekranlar ses yağmuruna dönmesin); liste yine tam yenilenir */
+const KARAOKE_ALERTS_MAX = 6;
+
+/**
+ * Aynı iş gününün iki listesi arasındaki, cihazlarda sesli uyarı çalan farklar (§2.5): yeni (iptal olmayan) rezervasyon,
+ * iptal edilen, saati ya da süresi değişen. İki liste de eksiksizse (`complete`) bugünün listesinden düşen iptal olmayan
+ * rezervasyon da "taşındı" sayılır (panel başka güne taşıdı). Ödeme durumu, kişi sayısı ya da not değişikliği çalmaz.
+ */
+export function karaokeChanges(prev: readonly SiteKaraokeBooking[], next: readonly SiteKaraokeBooking[], bothComplete: boolean): KaraokeChange[] {
+  const before = new Map(prev.map((b) => [b.id, b]));
+  const out: KaraokeChange[] = [];
+  for (const b of next) {
+    const p = before.get(b.id);
+    const text = karaokeAlertText(b);
+    if (b.status === 'cancelled') {
+      if (p && p.status !== 'cancelled') out.push({ kind: 'cancelled', id: b.id, message: text });
+      continue;
+    }
+    // Hiç görülmemiş ya da iptalden geri dönen rezervasyon: oda yeniden tutuldu
+    if (!p || p.status === 'cancelled') out.push({ kind: 'new', id: b.id, message: text });
+    else if (p.startHour !== b.startHour || p.hours !== b.hours) out.push({ kind: 'moved', id: b.id, message: `${text} (önce ${String(p.startHour).padStart(2, '0')}:00 · ${p.hours} sa)` });
+  }
+  if (bothComplete) {
+    const now = new Set(next.map((b) => b.id));
+    for (const p of prev) if (!now.has(p.id) && p.status !== 'cancelled') out.push({ kind: 'moved', id: p.id, message: `${karaokeAlertText(p)} (başka güne)` });
+  }
+  return out.slice(0, KARAOKE_ALERTS_MAX);
+}
+
 // ─── Çekim ──────────────────────────────────────────────────────────────────
 
 let seenMarker: string | null = null;
@@ -197,10 +236,14 @@ function pullOnce(now: number): Promise<SiteKaraokeDTO> {
     }
     retryAt = 0;
     const changed = before.date !== day || JSON.stringify(before.bookings) !== JSON.stringify(parsed.bookings);
+    // Günün ilk listesi kıyaslanmaz: gün açılınca sabahtan beri alınan her rezervasyon "yeni" diye çalmasın
+    const firstOfDay = before.date !== day || before.pulledAt == null;
+    const alerts = changed && !firstOfDay ? karaokeChanges(before.bookings, parsed.bookings, before.complete && parsed.complete) : [];
     setSyncState(STATE_KEY, { date: day, pulledAt: Date.now(), marker, complete: parsed.complete, bookings: parsed.bookings, lastError: null, lastErrorAt: null, lastStatus: null, closed: false } satisfies KaraokeState);
     if (changed) {
       const fx = new Effects();
       fx.emit({ topic: 'reservations', kind: 'site.karaoke' });
+      for (const a of alerts) fx.emit({ topic: 'reservations', kind: `site.karaoke.${a.kind}`, message: a.message });
       fx.flush();
     }
     return siteKaraokeView(now);
