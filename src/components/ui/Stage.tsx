@@ -1,18 +1,21 @@
 import { createContext, type ReactNode, useContext, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { TopTabsSlot } from '@/components/shellSlots';
 import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/hooks';
 
 /**
- * Sahne (gnbsite Area Board UI kitinin `.sahne-sayfa`'sı, LafPOS'a uyarlandı; DESIGN.md §3 "Sahne"). Ekranı dolduran gri
- * sahne; geniş ekranda (lg) iki sütun: solda ekranın kimliği (sakin başlık ve tek cümle durum, görsel, yan menü, büyük
- * sayılar, tek ana eylem), sağda içeriğin kendi içinde kaydığı beyaz yaprak; üstte isteğe bağlı cam çubuk. Daha dar
- * ekranda tek sütun: kimlik yaprağın üstünde sıkı bir şerit, yan menü yatay kayan hap şeridi.
+ * Sahne (pano, 20 Kasım 2026; DESIGN.md §3 "Sahne"). Zeminin üstünde ekranın başlık satırı (panonun "Welcome back"
+ * satırı): solda başlık ve tek cümle durum, sağda büyük sayılar (küçük beyaz kartlar) ve eylemler (en sağda ana eylem).
+ * Altında içeriğin kendi içinde kaydığı beyaz yaprak; geniş ekranda (lg) sağda ikinci dizin kartı (`aside`). Ekranın
+ * sekmeleri (`menu`) tablette ve bilgisayarda üst çubuğun ortasına taşınır (TopTabsSlot, portal), telefonda başlığın
+ * altında yatay hap şeridi. Ekranlar arası gezinme kabuğun marka rayında (AppShell).
  *
- * Kitin dev büyük harfli adı (OPEN POSITIONS) kasada yok (17 Kasım 2026, operatör: "dev patron vs. yazmasına gerek yok"):
- * ekranın adı ölçülü bir başlıktır, üst çubukta da etkin sekme olarak görünür.
+ * Yönetimde (`headerInLeaf`) sayfanın PageHeader'ı yaprağın başında kalır; `menu` ve `actions` geniş ekranda solda beyaz
+ * alt menü kartıdır, tablette içeriğin üstünde şerit.
  *
- * Sayfanın kendi `PageHeader`'ı (ui/misc ya da admin/ui) sahnenin içindeyse başlığı ve açıklaması sol sütunun başına,
- * eylemleri ana eylemin yerine taşınır (portal): sayfa yapısını değiştirmeden sahneye girer.
+ * Sayfanın kendi `PageHeader`'ı (ui/misc ya da admin/ui) sahnenin içindeyse başlığı ve açıklaması başlık satırına,
+ * eylemleri eylemlerin yerine taşınır (portal): sayfa yapısını değiştirmeden sahneye girer.
  */
 
 export interface HeroItem {
@@ -31,7 +34,7 @@ interface Slots {
 }
 const StageSlots = createContext<Slots | null>(null);
 
-/** Ekranın başlığı: Gabarito, ölçülü boy, sıkı aralık (büyük harf yok) */
+/** Ekranın başlığı: Inter kalın, sıkı aralık (büyük harf yok; panonun "Welcome back" başlığı) */
 export function StageTitle({ children, className, as: Tag = 'h1', id }: { children: ReactNode; className?: string; as?: 'h1' | 'h2' | 'p'; id?: string }) {
   return (
     <Tag id={id} className={cn('lp-name', className)}>
@@ -40,7 +43,7 @@ export function StageTitle({ children, className, as: Tag = 'h1', id }: { childr
   );
 }
 
-/** Büyük sayılar: etiket üstte (DOM'da sonra; ekran okuyucu "5, Dolu masa" okur), sayı altta */
+/** Büyük sayılar (küçük beyaz kartlar): etiket üstte (DOM'da sonra; ekran okuyucu "5, Dolu masa" okur), sayı altta */
 export function Hero({ items, className }: { items: HeroItem[]; className?: string }) {
   if (!items.length) return null;
   return (
@@ -56,8 +59,8 @@ export function Hero({ items, className }: { items: HeroItem[]; className?: stri
 }
 
 /**
- * Yan menü (shadcn'in Sidebar'ı gibi sade): geniş ekranın sol sütununda alt alta satırlar (ikon, ad, sağda soluk sayı;
- * seçili satır beyaz yüzeyde), daha darda yatay kayan hap şeridi. Öğeler sayfanın kendi düğmesi ya da bağlantısıdır:
+ * Ekranın sekmeleri (panonun üst sekmeleri): tablette ve bilgisayarda üst çubuğun ortasında, telefonda yatay kayan hap
+ * şeridi; seçili sekme açık nane zeminde yeşil. Yönetimin alt menü kartında alt alta. Öğeler sayfanın kendi düğmesi ya da bağlantısıdır:
  * `className="lp-menu-item"`, seçili olanda `aria-current` (bağlantı), `aria-selected` (sekme) ya da `aria-pressed`
  * (düğme); sayı `<span className="n">` içinde, grup başlığı `<span className="lp-menu-label">`
  */
@@ -81,6 +84,7 @@ export function Stage({
   side = true,
   headerInLeaf,
   bare,
+  float,
   leafLabel,
   leafClassName,
   className,
@@ -92,54 +96,76 @@ export function Stage({
   hero?: HeroItem[];
   actions?: ReactNode;
   menu?: ReactNode;
-  /** Sol sütunun ortasındaki tek görsel (kadran); yalnız geniş ekranda */
+  /** Tek görsel (kadran): geniş ekranda sağdaki ikinci dizin kartının başında */
   visual?: ReactNode;
-  /** Menünün altında ikinci dizin (masasız siparişler); yalnız geniş ekranda, darda sayfa yaprağa koyar */
+  /** İkinci dizin (masasız siparişler): geniş ekranda sağda kart, darda sayfa yaprağa koyar */
   aside?: ReactNode;
   /** Cam çubuğun içeriği */
   bar?: ReactNode;
-  /** Sol sütun yok: yaprak tam en (bar ekranı) */
+  /** Başlık satırı yok: yaprak tam en (bar ekranı) */
   side?: boolean;
   /**
-   * Sayfanın PageHeader'ı yaprağın başında kalır, sol sütun yalnız gezinmedir (yönetim: shadcn'in Sidebar düzeni; başlık,
-   * açıklama ve eylemler içeriğin üstünde)
+   * Sayfanın PageHeader'ı yaprağın başında kalır; `menu` ve `actions` alt menü kartıdır (yönetim: geniş ekranda solda
+   * beyaz kart, tablette şerit)
    */
   headerInLeaf?: boolean;
   /** Yaprak zeminsiz: içerik sahnenin üstünde kendi kartlarını çizer */
   bare?: boolean;
+  /**
+   * Pano yaprağı: zeminsiz ama kendi içinde kayar; kartlar zeminde yüzer (beyaz, köşe 24, kenarsız, yumuşak gölge).
+   * Patron paneli, yönetim ve raporlar
+   */
+  float?: boolean;
   leafLabel?: string;
   leafClassName?: string;
   className?: string;
   children: ReactNode;
 }) {
-  // Sayfanın PageHeader'ı buraya taşınır: başlık ve açıklama sütunun başına (display: contents), eylemler ana eylemin yerine
+  // Sayfanın PageHeader'ı buraya taşınır: başlık ve açıklama başlık satırının soluna, eylemler sağına
   const [head, setHead] = useState<HTMLElement | null>(null);
   const [actionSlot, setActionSlot] = useState<HTMLElement | null>(null);
   const slots: Slots | null = side && !headerInLeaf ? { head, actions: actionSlot } : null;
+  // Ekranın sekmeleri tablette ve bilgisayarda üst çubuğun ortasında (kabuk varsa); telefonda başlığın altında şerit
+  const topTabs = useContext(TopTabsSlot);
+  const wide = useMediaQuery('(min-width: 48rem)');
+  const menuNode = menu ? <div className="lp-side-menu">{menu}</div> : null;
+  const menuOnTop = !!menuNode && !headerInLeaf && wide && !!topTabs;
   return (
-    <div className={cn('lp-stage', side && 'lp-split', className)}>
+    <div className={cn('lp-stage', side && 'lp-split', side && headerInLeaf && 'lp-nav', className)}>
       {bar && <div className="lp-glass">{bar}</div>}
-      {side && (
-        <aside className="lp-side">
-          {!headerInLeaf && (
+      {side &&
+        (headerInLeaf ? (
+          // Yönetim: alt menü kartı (geniş ekranda solda), tablette içeriğin üstünde şerit; telefonda yok (kabuğun şeridi ve
+          // /yonetim'in bölüm listesi), boş kutu boşluk bırakmasın
+          <aside className="lp-side max-md:hidden">
+            {menuNode}
+            <div className="lp-actions">{actions}</div>
+          </aside>
+        ) : (
+          <header className="lp-side">
             <div className="lp-side-head">
               {name && <StageTitle>{name}</StageTitle>}
               {sub && <p className="lp-sub">{sub}</p>}
               <div ref={setHead} className="contents" />
             </div>
-          )}
-          {visual && <div className="lp-visual">{visual}</div>}
-          {menu && <div className="lp-side-menu">{menu}</div>}
-          {aside && <div className="lp-side-extra">{aside}</div>}
-          {hero && <Hero items={hero} />}
-          <div ref={setActionSlot} className="lp-actions">
-            {actions}
-          </div>
-        </aside>
-      )}
-      <section aria-label={leafLabel} className={cn('lp-leaf', bare && 'lp-bare', leafClassName)}>
-        <StageSlots.Provider value={slots}>{children}</StageSlots.Provider>
-      </section>
+            {hero && <Hero items={hero} />}
+            <div ref={setActionSlot} className="lp-actions">
+              {actions}
+            </div>
+            {menuOnTop ? createPortal(menuNode, topTabs) : menuNode}
+          </header>
+        ))}
+      <div className="lp-body">
+        <section aria-label={leafLabel} className={cn('lp-leaf', bare && 'lp-bare', float && 'lp-float', leafClassName)}>
+          <StageSlots.Provider value={slots}>{children}</StageSlots.Provider>
+        </section>
+        {(aside || visual) && (
+          <aside className="lp-side-extra">
+            {visual && <div className="lp-visual">{visual}</div>}
+            {aside}
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

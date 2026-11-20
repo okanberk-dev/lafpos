@@ -121,10 +121,10 @@ export default function FloorPage() {
   const actions = !REMOTE && (
     <>
       {/*
-       * Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır. Geniş ekranın dar sol sütununda Gel-al
-       * ve Paket bir satırı paylaşır, Tezgâh satışı altında tam en
+       * Telefonda Gel-al ve Paket ikon düğmesi; Tezgâh satışı satırın kalanını alır. Tablette ve bilgisayarda başlık
+       * satırının sağında yan yana, en sağda ana eylem (panonun "Add New Wallet"ı)
        */}
-      <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden lg:flex-1 lg:px-3">
+      <Button icon={<ShoppingBag className="size-4" />} onClick={() => setTakeaway('gelal')} className="max-sm:hidden">
         Gel-al
       </Button>
       <IconButton label="Gel-al" variant="secondary" onClick={() => setTakeaway('gelal')} className="sm:hidden">
@@ -132,7 +132,7 @@ export default function FloorPage() {
       </IconButton>
       {can('paket.yonet') && (
         <>
-          <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="max-sm:hidden lg:flex-1 lg:px-3">
+          <Button icon={<Bike className="size-4" />} onClick={() => setTakeaway('paket')} className="max-sm:hidden">
             Paket
           </Button>
           <IconButton label="Paket" variant="secondary" onClick={() => setTakeaway('paket')} className="sm:hidden">
@@ -140,17 +140,17 @@ export default function FloorPage() {
           </IconButton>
         </>
       )}
-      <Button variant="primary" className="max-sm:flex-1 lg:basis-full" loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
+      <Button variant="primary" className="max-sm:flex-1" loading={open.isPending && open.variables?.type === 'tezgah'} onClick={() => (boot.day ? open.mutate({ type: 'tezgah' }) : navigate('/kasa'))}>
         Tezgâh satışı
       </Button>
     </>
   );
 
-  // Masasız siparişler ve bugünkü rezervasyonlar: geniş ekranda sahnenin sol sütununda (kitin dizini gibi), darda yaprakta
+  // Masasız siparişler ve bugünkü rezervasyonlar: geniş ekranda sağdaki ikinci dizin kartında, darda yaprakta
   const othersList = (
     <section aria-label="Masasız siparişler">
-          <div className="flex items-end gap-2 px-4 pb-2 pt-4 md:px-5 md:pt-5 lg:px-2.5 lg:pt-1">
-            <h2 className="flex-1 font-headline text-lg font-bold tracking-[-0.025em] lg:text-[15px] lg:text-muted">Masasız siparişler</h2>
+          <div className="flex items-end gap-2 px-4 pb-2 pt-4 md:px-5 md:pt-5 lg:px-2.5 lg:pt-3">
+            <h2 className="flex-1 font-headline text-lg font-bold tracking-[-0.025em] lg:text-[17px]">Masasız siparişler</h2>
             {/* Sayı hapı sıfırsa gizli (kit kuralı) */}
             {list.length > 0 && <span className="tabular min-w-6 rounded-full bg-[var(--admin-ink-fill)] px-2 py-0.5 text-center text-xs font-semibold text-[var(--admin-on-ink)]">{list.length}</span>}
           </div>
@@ -162,7 +162,7 @@ export default function FloorPage() {
             )}
             <div className="lp-enter">
               {list.map((o) => (
-                <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press lg:-mx-1 lg:w-[calc(100%+0.5rem)] lg:hover:bg-surface">
+                <button key={o.id} onClick={() => navigate(`/adisyon/${o.id}`)} className="flex w-full items-center gap-3 rounded-2xl px-2.5 py-2.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
                   <span className={cn('grid size-10 shrink-0 place-items-center rounded-full [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]')}>
                     {o.source === 'laffogato' ? <Globe /> : o.type === 'paket' ? <Bike /> : o.type === 'gelal' ? <ShoppingBag /> : <Store />}
                   </span>
@@ -207,8 +207,8 @@ export default function FloorPage() {
   );
 
   return (
-    // Sahne (kitin Main List'i): solda bölümlerin numaralı dizini, büyük sayılar, tek ana eylem ve dev ad; sağda yaprakta
-    // masa planı ve masasız siparişler. Telefonda kimlik üstte sıkı şerit, bölümler yatay hap şeridi
+    // Pano: başlık satırında ad ve gün, sağda büyük sayılar ve eylemler; bölümler üst çubuğun ortasında (telefonda hap
+    // şeridi); yaprakta masa planı, geniş ekranda sağ kartta masasız siparişler
     <Stage
       name="Masalar"
       // Doluluk ve hesap büyük sayılarda: cümle yalnız günü ve salonun büyüklüğünü söyler (sütun kısa kalır)
@@ -309,7 +309,7 @@ export default function FloorPage() {
         </footer>
       </section>
 
-      {/* Masasız siparişler: geniş ekranda sol sütunda (bölümlerin altında), darda yaprağın altında saç teliyle ayrılan bölüm */}
+      {/* Masasız siparişler: geniş ekranda sağdaki kartta, darda yaprağın altında saç teliyle ayrılan bölüm */}
       <div className="shrink-0 border-t border-[var(--admin-border)] lg:hidden">{othersList}</div>
 
       <Modal open={!!choose} onClose={() => setChoose(null)} title={choose ? `${choose.table.name} hesapları` : ''} size="sm">

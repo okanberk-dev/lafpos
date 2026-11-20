@@ -93,11 +93,13 @@ export function Avatar({ name, color, className, children }: { name: string; col
  */
 export function Card({ children, className, title, subtitle, actions, divided = true }: { children: ReactNode; className?: string; title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; divided?: boolean }) {
   return (
-    <section className={cn('rounded-2xl border border-line bg-surface', className)}>
+    // Pano kartı: köşe 24; zeminde kenarsız ve yumuşak gölgeli, beyaz yaprağın içinde saç teli kenarlı (--card-line)
+    <section className={cn('rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]', className)}>
       {(title || actions) && (
-        <header className={cn('flex min-h-[52px] items-center gap-3 px-4', divided ? 'border-b border-[var(--admin-divider)] py-2.5' : 'pb-1 pt-4')}>
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-base font-bold leading-6 tracking-[-0.025em]">{title}</h3>
+        // Başlık ve eylemler (segment, rozet) yan yana; sığmazsa eylemler alt satıra iner, başlık kesilmez
+        <header className={cn('flex min-h-[56px] flex-wrap items-center gap-x-3 gap-y-2 px-5', divided ? 'border-b border-[var(--admin-divider)] py-3' : 'pb-1 pt-5')}>
+          <div className="min-w-0 flex-[1_1_9rem]">
+            <h3 className="truncate text-[17px] font-bold leading-6 tracking-[-0.025em]">{title}</h3>
             {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
           </div>
           {actions}
@@ -311,14 +313,14 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
   return (
     <div
       className={cn(
-        '@container rounded-2xl border p-4',
+        '@container rounded-[var(--r-card)] border p-5',
         tone === 'bad'
           ? 'border-[var(--admin-danger-line)] bg-[var(--admin-danger-soft)]'
           : tone === 'ok'
             ? 'border-[var(--admin-success-line)] bg-[var(--admin-success-soft)]'
             : tone === 'warn'
               ? 'border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)]'
-              : 'border-line bg-surface',
+              : 'border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]',
         className,
       )}
     >

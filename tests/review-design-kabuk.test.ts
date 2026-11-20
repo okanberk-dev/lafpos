@@ -150,7 +150,7 @@ describe('uygulama kabuğu', () => {
   it('alt sekme çubuğu çizilmeyen telefonda (tek ekranlı rol) ev çubuğu payını ana alan bırakır (kaynak)', () => {
     const shell = src('components/AppShell.tsx');
     expect(shell).toMatch(/const showTabs = tabs\.length > 1 \|\| meTab;/);
-    expect(shell).toMatch(/<main className=\{cn\('min-h-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-\[env\(safe-area-inset-bottom\)\]'\)\}>/);
+    expect(shell).toMatch(/<main className=\{cn\('min-h-0 min-w-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-\[env\(safe-area-inset-bottom\)\]'\)\}>/);
     // Çubuk çizilince payı çubuğun kendisi alır (ikisi birden değil)
     expect(shell).toMatch(/\{showTabs && \(\s*<nav aria-label="Ekranlar" className="[^"]*pb-\[max\(0\.25rem,env\(safe-area-inset-bottom\)\)\]/);
   });

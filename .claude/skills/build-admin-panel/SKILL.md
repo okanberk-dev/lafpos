@@ -1,6 +1,6 @@
 ---
 name: build-admin-panel
-description: Research, scope, build and verify a new LafPOS admin area (a new section under /yonetim, a new entity, a report or dashboard view) end to end, in the LafPOS Sahne look (Area Board stage, shadcn-style sidebar, Poppins and Gabarito). Use when the user asks to add or redesign a management screen, "yönetime X ekle", "yönetim paneli", "panelde şunu yönet", "arka ofis", or asks what the panel should manage.
+description: Research, scope, build and verify a new LafPOS admin area (a new section under /yonetim, a new entity, a report or dashboard view) end to end, in the LafPOS Pano look (finance-dashboard metrics in L'Affogato green: brand rail, floating white cards, Inter). Use when the user asks to add or redesign a management screen, "yönetime X ekle", "yönetim paneli", "panelde şunu yönet", "arka ofis", or asks what the panel should manage.
 ---
 
 # Yönetim paneline bir alan eklemek: oku, kapsamı sor, kur, gerçekten doğrula
@@ -11,9 +11,9 @@ description: Research, scope, build and verify a new LafPOS admin area (a new se
 > aşamasından yeniden yazılmıştı. Next.js, server action ve Postgres varsayımları burada geçerli değil:
 > LafPOS yerel bir Hono sunucusu, SQLite (Drizzle) ve React SPA'dır.
 
-Görünümün kaynağı `DESIGN.md` (**LafPOS Sahne**, 17 Kasım 2026: gnbsite'ın Area Board kiti L'Affogato kimliğinde;
-Poppins metin, Gabarito başlık ve rakamlar, porselen sayfa, sütlü köpük sahne, beyaz yaprak, mürekkep ana eylem ve yeşil ok
-halkası, durum kobalt mavisi, zamanı daralan bordo; yönetimde shadcn'in Sidebar'ı gibi sade yan menü) ve tablo, KPI
+Görünümün kaynağı `DESIGN.md` (**LafPOS Pano**, 20 Kasım 2026: finans panosunun ölçüleri L'Affogato kimliğinde; Inter,
+tek açık gri zemin, zeminde yüzen beyaz kartlar (köşe 24), solda ev yeşilinin degradesinde marka rayı, ev yeşili ana eylem
+ve açık nane ok halkası, durum kobalt mavisi, zamanı daralan ahududu; yönetimde solda beyaz alt menü kartı) ve tablo, KPI
 şeridi ve çekmece ölçüleri için **Innex** tarifi (`docs/ADMIN-INNEX.md`). Renk ve yazı için tarifin hex değerleri değil `src/index.css`'teki
 `--admin-*` değerleri geçerlidir. Yeni bir desen icat etmeden önce kite bak: `src/components/admin/`
 (`AdminShell`, `PageHeader`, `Card`, `KpiStrip`, `StatusTabs`, `Segmented`, `DataTable`, `ActionMenu`,

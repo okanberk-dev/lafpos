@@ -3,8 +3,9 @@ import { cn } from '@/lib/cn';
 import { EmptyState } from './ui/misc';
 
 /**
- * Grafikler (dataviz kuralları): tek seri tek renk (ev yeşili), kıyas serisi gri ve ince (vurgu biçimi), tek eksen,
- * sütun en çok 24 px, uçları 4 px yuvarlak ve tabanda düz, ızgara 1 px ve geride, değer etiketi seçici. Değer ipucu
+ * Grafikler (dataviz kuralları; pano ölçüleri, 20 Kasım 2026): tek seri, sütunlar açık nane ve tek vurgulu sütun ev
+ * yeşili (en yüksek değer ya da sayfanın seçtiği; üstünde değer hapı ve beyaz nokta, panonun "+37,8%" hapı), kıyas
+ * serisi gri ve ince, tek eksen, sütun en çok 36 px, uçları 6 px yuvarlak ve tabanda düz, ızgara 1 px ve geride. Değer ipucu
  * fareyle üzerine gelince, dokunmatikte dokununca ya da parmak yana kayınca (başka yere dokunana dek durur), klavyede
  * oklarla açılır; ekran okuyucu aynı değerleri gizli tablodan okur. Renkler CSS değişkenlerinden gelir, koyu temada
  * kendi adımları var.
@@ -83,6 +84,8 @@ export function ColumnChart({
   empty: emptyProp,
   emptyLabel = 'Bu dönemde satış yok',
   emptyHint,
+  highlight = 'max',
+  pillFormat,
 }: {
   data: ColumnDatum[];
   format: (v: number) => string;
@@ -102,6 +105,13 @@ export function ColumnChart({
    */
   emptyLabel?: string;
   emptyHint?: string;
+  /**
+   * Vurgulu sütun (ev yeşili, üstünde değer hapı): en yüksek değer (varsayılan), sayfanın verdiği sıra (şimdiki saat) ya
+   * da yok. Üzerine gelinen ya da oklarla seçilen sütun vurguyu alır
+   */
+  highlight?: number | 'max' | null;
+  /** Değer hapının yazısı (kısa tutar: "₺5.175"); verilmezse format */
+  pillFormat?: (v: number) => string;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const barRadius = useBarRadius(ref, width);
@@ -115,14 +125,19 @@ export function ColumnChart({
   const hasCompare = !!compareLabel && data.some((d) => (d.compare ?? 0) > 0);
   const scale = niceScale(Math.max(1, ...data.map((d) => Math.max(d.value, d.compare ?? 0))), unitDivisor);
   const max = scale.max;
+  // Vurgulu sütun: sayfanın verdiği sıra ya da en yüksek değer; değeri sıfırsa vurgu yok
+  const maxAt = data.reduce((best, d, i) => (d.value > (data[best]?.value ?? 0) ? i : best), 0);
+  const pinned = highlight === 'max' ? maxAt : highlight;
+  const pin = pinned != null && pinned >= 0 && pinned < data.length && data[pinned].value > 0 ? pinned : null;
   const padL = 44;
   const padR = 8;
-  const padT = 10;
+  // Vurgulu sütunun hapına yer: en yüksek sütunun üstünde de sığar
+  const padT = pin != null ? 34 : 10;
   const padB = 24;
   const plotW = Math.max(0, width - padL - padR);
   const plotH = height - padT - padB;
   const band = data.length ? plotW / data.length : 0;
-  const barW = Math.max(3, Math.min(24, band * 0.62));
+  const barW = Math.max(3, Math.min(36, band * 0.62));
   const y = (v: number) => padT + plotH - (v / max) * plotH;
   const ticks = scale.ticks;
   const labelEvery = Math.max(1, Math.ceil(28 / Math.max(1, band)));
@@ -248,9 +263,11 @@ export function ColumnChart({
                 h <= 0
                   ? ''
                   : `M${x},${padT + plotH} L${x},${top + r} Q${x},${top} ${x + r},${top} L${x + barW - r},${top} Q${x + barW},${top} ${x + barW},${top + r} L${x + barW},${padT + plotH} Z`;
+              // Vurgu: üzerine gelinen sütun, yoksa sabit vurgulu sütun; ötekiler açık nane
+              const on = active != null ? active === i : pin === i;
               return (
                 <g key={i}>
-                  {path && <path d={path} fill="var(--chart-accent)" opacity={active == null || active === i ? 1 : 0.55} />}
+                  {path && <path d={path} fill={on ? 'var(--chart-accent)' : 'var(--chart-soft)'} />}
                   {i % labelEvery === 0 && (
                     <text x={padL + band * i + band / 2} y={height - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">
                       {d.label}
@@ -260,6 +277,25 @@ export function ColumnChart({
               );
             })}
             {hasCompare && <path d={comparePath} fill="none" stroke="var(--chart-context)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
+            {/* Vurgulu sütunun hapı ve tepesindeki beyaz nokta (üzerine gelinince ipucu bu işi yapar) */}
+            {active == null &&
+              pin != null &&
+              (() => {
+                const cx = padL + band * pin + band / 2;
+                const top = y(data[pin].value);
+                const text = (pillFormat ?? format)(data[pin].value);
+                const w = Math.max(34, text.length * 6.6 + 18);
+                const left = Math.min(Math.max(padL - 6, cx - w / 2), width - padR - w);
+                return (
+                  <g>
+                    <rect x={left} y={top - 30} width={w} height={22} rx={8} fill="var(--chart-accent)" />
+                    <text x={left + w / 2} y={top - 15} textAnchor="middle" fontSize={11.5} fontWeight={600} fill="var(--chart-on-accent)" className="tabular">
+                      {text}
+                    </text>
+                    {barW >= 10 && <circle cx={cx} cy={top + Math.min(6, barW / 2 - 1)} r={Math.min(4, barW / 2 - 2)} fill="var(--surface)" stroke="var(--chart-accent)" strokeWidth={1.5} />}
+                  </g>
+                );
+              })()}
             {hasCompare &&
               data.map((d, i) =>
                 d.compare == null || active !== i ? null : (
