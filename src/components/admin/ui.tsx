@@ -245,12 +245,12 @@ export interface TabOption<T extends string> {
 
 /**
  * Durum sekmeleri (kitin süzgeç çipi): beyaz çipler (köşe 10), etkin olan ev yeşili dolgu, sayaç soluk. Telefonda ray ekran
- * kenarına uzanır ve yatay kayar: seçili sekme rayın içinde görünür kalır, içeriğin gizlendiği kenar solar (useRail)
+ * kenarına uzanır (yönetim kabının telefondaki 8 px payı kadar; fazlası taşar) ve yatay kayar: seçili sekme rayın içinde görünür kalır, içeriğin gizlendiği kenar solar (useRail)
  */
 export function StatusTabs<T extends string>({ value, onChange, tabs, label }: { value: T; onChange: (v: T) => void; tabs: TabOption<T>[]; label: string }) {
   const rail = useRail<HTMLDivElement>(value);
   return (
-    <div ref={rail} role="tablist" aria-label={label} className={cn('no-scrollbar -mx-4 mb-4 overflow-x-auto px-4 sm:mx-0 sm:px-0', RAIL_FADE)}>
+    <div ref={rail} role="tablist" aria-label={label} className={cn('no-scrollbar -mx-2 mb-4 overflow-x-auto px-2 sm:mx-0 sm:px-0', RAIL_FADE)}>
       <div className="inline-flex min-w-max gap-1.5 sm:min-w-0 sm:flex-wrap">
         {tabs.map((t) => {
           const on = t.value === value;
