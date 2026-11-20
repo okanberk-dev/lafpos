@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { confirmDialog, type ConfirmOptions } from '@/components/ui/Confirm';
 import { Field, Input, Label } from '@/components/ui/Field';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
-import { Badge, Card, CARD, CODE, PageHeader, Segmented, SetupNotes } from '@/components/admin/ui';
+import { Card, CARD, CODE, PageHeader, Segmented, SetupNotes } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -216,11 +216,17 @@ export default function OkcAdmin() {
         </div>
         {s.provider === 'kapali' && <p className="text-sm text-muted">Adisyon cihaza gitmez; mali fişi kasiyer yazarkasada elle keser</p>}
         {caps.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-0.5 text-xs text-[var(--admin-text-mute)]">Cihaz destekliyor:</span>
-            {caps.map((t) => (
-              <Badge key={t}>{t}</Badge>
-            ))}
+          // Cihazın yapabildikleri sakin bir onay listesi (kutu kalabalığı değil): yeşil tik, soluk yazı
+          <div>
+            <span className="text-xs font-medium text-[var(--admin-text-mute)]">Cihaz destekliyor</span>
+            <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
+              {caps.map((t) => (
+                <li key={t} className="inline-flex items-center gap-1.5 text-[13px] text-[var(--admin-text-soft)]">
+                  <CheckCircle2 aria-hidden="true" className="size-3.5 shrink-0 text-[var(--admin-success)]" />
+                  {t}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {s.provider === 'simulator' && (
