@@ -352,18 +352,18 @@ export default function DisplayAdmin() {
       </div>
       {/* Uzun formda Kaydet başlıkla birlikte yukarıda kalır: değişiklik varken altta yapışkan şerit (Ayarlar'daki gibi) */}
       {dirty && (
-        // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır. Şerit pano kartı gibi zeminde yüzer (köşe 18,
-        // saç teli, açılan parçanın gölgesi), alttan 12 px yukarıda; kenara taşan negatif pay yok (telefonda kabın payı 8 px)
+        // Kaydet şeridi zeminde yüzen kart (Ayarlar ve Roller'deki gibi: kartların hizasında, köşe 18, hafif kalkık gölge),
+        // alttan 12 px yukarıda; kenara taşan negatif pay yok, telefonda kabın 8 px payını aşmaz. Ev çubuğu payını telefonda
+        // altındaki sekme çubuğu (AppShell) alır; bildirim şeridin üstünde durur (data-action-bar, boyu --action-bar-h)
         <div data-action-bar="" ref={measureActionBar} className="pointer-events-none sticky bottom-0 z-10 mt-4 pb-3">
-          {/* Telefonda yazı kendi satırında, iki düğme altında eşit genişlikte (44 px düğmelerin yanına sığmaz) */}
-          <div className="pointer-events-auto flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] p-3 shadow-[var(--shadow-pop)] sm:py-2.5 sm:pl-5 sm:pr-2.5">
-            <span className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-[var(--admin-text-soft)] max-sm:basis-full max-sm:px-1">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] px-4 py-3 shadow-[var(--shadow-lift)] sm:px-5">
+            {/* Telefonda yazı yalnız ekran okuyucuya: iki düğmenin yanında iki satıra kırılır. Amber nokta: kaydedilmemiş */}
+            <span className="flex items-center gap-2 text-[13px] text-[var(--admin-text-soft)] max-sm:sr-only">
               <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--admin-warning)]" />
               Kaydedilmemiş değişiklik
             </span>
-            <span className="flex-1 max-sm:hidden" />
+            <span className="flex-1" />
             <Button
-              className="max-sm:flex-1"
               disabled={saving}
               onClick={() => {
                 setDraft(saved);
@@ -373,7 +373,7 @@ export default function DisplayAdmin() {
             >
               Vazgeç
             </Button>
-            <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()} className="max-sm:flex-1">
+            <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
               Kaydet
             </Button>
           </div>

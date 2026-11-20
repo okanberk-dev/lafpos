@@ -292,22 +292,23 @@ export default function RolesAdmin() {
 
       {dirty.length > 0 && (
         // Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır. Telefonda bildirim bu şeridin üstünde durur
-        // (data-action-bar): kaydedilemeyen rolün hatası Vazgeç ve Kaydet'i örtmez. Şerit pano kartı gibi zeminde yüzer
-        // (köşe 18, saç teli, açılan parçanın gölgesi), alttan 12 px yukarıda; kenara taşan negatif pay yok
+        // (data-action-bar, boyu --action-bar-h): kaydedilemeyen rolün hatası Vazgeç ve Kaydet'i örtmez. Şerit zeminde
+        // yüzen kart (Ayarlar'daki gibi: kartların hizasında, köşe 18, hafif kalkık gölge), alttan 12 px yukarıda; kenara
+        // taşan negatif pay yok, telefonda kabın 8 px payını aşmaz
         <div data-action-bar="" className="sticky bottom-0 pointer-events-none z-10 mt-4 pb-3" ref={measureActionBar}>
-          {/* Telefonda yazı kendi satırında, iki düğme altında eşit genişlikte (44 px düğmelerin yanına sığmaz) */}
-          <div className="pointer-events-auto flex flex-wrap items-center gap-x-3 gap-y-2.5 rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] p-3 shadow-[var(--shadow-pop)] sm:py-2.5 sm:pl-5 sm:pr-2.5">
-            <span className="flex min-w-0 items-center gap-2 text-[13px] font-medium text-[var(--admin-text-soft)] max-sm:basis-full max-sm:px-1">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] px-4 py-3 shadow-[var(--shadow-lift)] sm:px-5">
+            {/* Telefonda yazı yalnız ekran okuyucuya (kısa biçimiyle; hangi rolün değiştiği seçicide "değişti" diye yazar).
+                Amber nokta: kaydedilmemiş */}
+            <span className="flex min-w-0 items-center gap-2 text-[13px] text-[var(--admin-text-soft)] max-sm:sr-only">
               <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--admin-warning)]" />
-              {/* Telefonda kısa (hangi rolün değiştiği seçicide "değişti" diye yazar) */}
               <span className="sm:hidden">Kaydedilmemiş değişiklik</span>
               <span className="max-sm:hidden">{dirty.length === 1 ? `${dirty[0].label} rolünde kaydedilmemiş değişiklik` : `${dirty.length} rolde kaydedilmemiş değişiklik`}</span>
             </span>
-            <span className="flex-1 max-sm:hidden" />
-            <Button disabled={saving} onClick={() => setDraft({})} className="max-sm:flex-1">
+            <span className="flex-1" />
+            <Button disabled={saving} onClick={() => setDraft({})}>
               Vazgeç
             </Button>
-            <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()} className="max-sm:flex-1">
+            <Button variant="primary" icon={<Save className="size-4" />} loading={saving} onClick={() => void save()}>
               Kaydet
             </Button>
           </div>
