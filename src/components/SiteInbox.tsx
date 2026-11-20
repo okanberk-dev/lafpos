@@ -99,7 +99,9 @@ export function SiteInbox() {
 
   // Canlı olaylar: liste yenilenir, tek seferlik ses ve bildirim
   const latest = useRef({ prefs, perms });
-  latest.current = { prefs, perms };
+  useEffect(() => {
+    latest.current = { prefs, perms };
+  });
   useEffect(() => {
     if (!any) return;
     // Aynı olay ikinci kez gelirse (yeniden bağlanan akışın artığı) ikinci ses ve bildirim çıkmaz
@@ -136,7 +138,10 @@ export function SiteInbox() {
   // Zil: bekleyen varken 3 sn'de bir (sitenin panelindeki gibi); döngü yalnız başlar ya da durur, liste ref'ten okunur
   const ringing = pending.length > 0 && prefs.sound && unlocked;
   const ringRef = useRef({ pending, volume: prefs.volume });
-  ringRef.current = { pending, volume: prefs.volume };
+  // Çizimden sonra (zil efektinden önce): döngü en son listeyi ve düzeyi okur
+  useEffect(() => {
+    ringRef.current = { pending, volume: prefs.volume };
+  });
   useEffect(() => {
     if (!ringing) return;
     const tick = () => {
@@ -199,7 +204,7 @@ export function SiteInbox() {
             </span>
           </button>
         ) : (
-          <span className="min-w-0 flex-1 truncate font-semibold text-violet-ink">Ses kapalı: uyarılar çalamadı</span>
+          <span className="min-w-0 flex-1 truncate font-semibold text-violet-ink">Tarayıcının sesi kapalı; uyarı çalamadı</span>
         )}
         {unlockChip}
         {first && (

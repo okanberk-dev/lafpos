@@ -1,12 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { karaokeAlertText, type OnlineAlertDTO } from '@shared/site-alerts';
-import { ALERT_PREFS_DEFAULT, type AlertPrefs, parseAlertPrefs, VOLUME_STEPS, volumeStep } from '../src/lib/alertPrefs';
-import { ACK_KEEP_MS, addAcks, alertPerms, onlineRingActive, parseAcks, pendingOnline, pendingTitle, ringLevel, setOnlineRinger, siteEventCue } from '../src/lib/siteAlerts';
-import { BELL_PARTIALS, RING_NOTES_HZ, ringMotif } from '../src/lib/sound';
+import { BELL_PARTIALS, RING_NOTES_HZ, ringMotif } from '../src/lib/bell';
+import {
+  ACK_KEEP_MS,
+  addAcks,
+  ALERT_PREFS_DEFAULT,
+  type AlertPrefs,
+  alertPerms,
+  onlineRingActive,
+  parseAcks,
+  parseAlertPrefs,
+  pendingOnline,
+  pendingTitle,
+  ringLevel,
+  setOnlineRinger,
+  siteEventCue,
+  VOLUME_STEPS,
+  volumeStep,
+} from '../src/lib/siteAlerts';
 
 /**
  * Sesli uyarıların istemci kuralları (docs/03-ENTEGRASYON.md §2.5; src/lib/siteAlerts.ts, src/lib/alertPrefs.ts):
- * hangi online sipariş çalar ve ne zaman susar, olay → ses ve bildirim, cihaz tercihleri, sitenin zil motifi.
+ * hangi online sipariş çalar ve ne zaman susar, olay → ses ve bildirim, cihaz tercihleri, sitenin zil motifi
+ * (src/lib/bell.ts). DOM'suz modüller: sunucu tsconfig'i testleri DOM tipleri olmadan denetler.
  */
 const NOW = Date.parse('2026-11-20T15:00:00Z');
 const order = (o: Partial<OnlineAlertDTO> & { orderId: string }): OnlineAlertDTO => ({ no: 1, label: 'Gel-al', table: false, tableId: null, openedAt: NOW - 60_000, ...o });
@@ -26,7 +42,7 @@ describe('online sipariş: kuyruk', () => {
     expect(pendingOnline(data, {}, prefs(), ALL, NOW + 4 * 3600_000 - 60_000).map((o) => o.orderId)).toEqual(['b']);
     expect(pendingOnline(data, {}, prefs(), ALL, NOW + 4 * 3600_000)).toEqual([]);
     expect(pendingOnline(data, {}, prefs({ online: false }), ALL, NOW)).toEqual([]);
-    expect(pendingOnline(data, {}, prefs(), { online: false, karaoke: true }, NOW)).toEqual([]);
+    expect(pendingOnline(data, {}, prefs(), { online: false }, NOW)).toEqual([]);
     expect(pendingOnline(undefined, {}, prefs(), ALL, NOW)).toEqual([]);
   });
 

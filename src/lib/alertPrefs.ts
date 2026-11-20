@@ -1,4 +1,7 @@
 import { useSyncExternalStore } from 'react';
+import { ALERT_PREFS_DEFAULT, type AlertPrefs, parseAlertPrefs } from './siteAlerts';
+
+export { ALERT_PREFS_DEFAULT, type AlertPrefs, parseAlertPrefs, VOLUME_STEPS, type VolumeStep, volumeStep } from './siteAlerts';
 
 /**
  * Bu cihazın sesli uyarı tercihleri (Araçlar › Sesli uyarılar): ses açık mı, ses düzeyi, hangi uyarılar. Tarayıcıda
@@ -6,60 +9,11 @@ import { useSyncExternalStore } from 'react';
  * değişince `storage` olayıyla burada da değişir. Saklanamazsa (özel pencere) bu sekmede bellekte kalır.
  *
  * Varsayılan açık: uyarı sesi zaten bu yüzden var; ayarı hiç bulmamış kişi de online siparişi duymalı (laffogato
- * `sound-pref.ts`'in kuralı).
+ * `sound-pref.ts`'in kuralı). Okuma kuralı (`parseAlertPrefs`) src/lib/siteAlerts.ts'te (DOM'suz, testler çağırır).
  */
-export interface AlertPrefs {
-  /** Bütün uyarı sesleri (kapalıyken şerit ve bildirim yine görünür) */
-  sound: boolean;
-  /** 0..1 */
-  volume: number;
-  /** Online sipariş (uygulama, web, masa QR): yeni gelince zil, siteden kalkınca sakin ses */
-  online: boolean;
-  /** Sitedeki karaoke rezervasyonu: yeni, iptal, saati değişen */
-  karaoke: boolean;
-}
-
-export const ALERT_PREFS_DEFAULT: AlertPrefs = { sound: true, volume: 0.8, online: true, karaoke: true };
-
-/** Ses düzeyinin üç adımı (Araçlar'daki seçim); varsayılan Orta */
-export const VOLUME_STEPS = [
-  { value: 'kisik', label: 'Kısık', volume: 0.35 },
-  { value: 'orta', label: 'Orta', volume: 0.8 },
-  { value: 'yuksek', label: 'Yüksek', volume: 1 },
-] as const;
-export type VolumeStep = (typeof VOLUME_STEPS)[number]['value'];
-
-/** Kayıtlı düzeye en yakın adım */
-export function volumeStep(volume: number): VolumeStep {
-  let best: (typeof VOLUME_STEPS)[number] = VOLUME_STEPS[1];
-  for (const s of VOLUME_STEPS) if (Math.abs(s.volume - volume) < Math.abs(best.volume - volume)) best = s;
-  return best.value;
-}
 
 /** `useLocalPref` ile aynı önek (lafpos.pref.<ad>) */
 export const ALERT_PREFS_KEY = 'lafpos.pref.siteAlerts';
-
-const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
-
-/** Saklanan metni okur; bozuk ya da eksik alan varsayılanına döner */
-export function parseAlertPrefs(raw: string | null): AlertPrefs {
-  if (!raw) return ALERT_PREFS_DEFAULT;
-  let v: Record<string, unknown>;
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return ALERT_PREFS_DEFAULT;
-    v = parsed as Record<string, unknown>;
-  } catch {
-    return ALERT_PREFS_DEFAULT;
-  }
-  const volume = typeof v.volume === 'number' && Number.isFinite(v.volume) ? Math.min(1, Math.max(0, v.volume)) : ALERT_PREFS_DEFAULT.volume;
-  return {
-    sound: bool(v.sound, ALERT_PREFS_DEFAULT.sound),
-    volume,
-    online: bool(v.online, ALERT_PREFS_DEFAULT.online),
-    karaoke: bool(v.karaoke, ALERT_PREFS_DEFAULT.karaoke),
-  };
-}
 
 const listeners = new Set<() => void>();
 /** Saklanamayan tarayıcıda bu sekmenin seçimi */
