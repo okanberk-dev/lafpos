@@ -74,6 +74,8 @@ export default function OverviewAdmin() {
   const liveFailed = live.isError && !live.data;
   const d = live.data;
   const s = sync.data;
+  // Grafik ve en çok satanlar sütunu yalnız rakam gelirken ya da gelmişken: yoksa ızgarada boş sütun kalırdı
+  const main = livePending || !!d;
 
   // İkon tonu Raporlar'la aynı: ciro yeşil, açık adisyon kobalt (dolu masa), indirim ve ikram pembe (kayıp), online mor;
   // kapanan adisyon sayısı durumsuz, nötr
@@ -248,58 +250,64 @@ export default function OverviewAdmin() {
         {livePending ? <KpiStripSkeleton /> : cells.length > 0 && <KpiStrip cells={cells} />}
         {liveFailed && <ErrorState className={CARD} title="Bugünün rakamları alınamadı" error={live.error} onRetry={() => void live.refetch()} retrying={live.isFetching} />}
 
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="min-w-0 space-y-4 xl:col-span-2">
-            {livePending && (
-              <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü">
-                <Skeleton className="h-[220px] rounded-[var(--r-tile)]" />
-              </Card>
-            )}
-            {d && (
-              <Card title="Bugün saat saat" subtitle={charted ? (lastWeek ? 'Sütun bugün, gri çizgi geçen haftanın aynı günü' : 'Geçen haftanın aynı günü satış yoktu') : undefined}>
-                <ColumnChart data={hours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} emptyLabel="Bugün henüz satış yok" emptyHint="İlk adisyon kapanınca saat saat ciro burada çizilir" />
-              </Card>
-            )}
-            {d && (
-              <Card title="En çok satanlar" subtitle="Bugün, ciro sırasıyla" flush>
-                {d.top.length ? (
-                  // Patron'daki listeyle aynı satır: solda sıra dairesi (birinci dolu ev yeşili), ad ve boy, altında adet;
-                  // sağda tutar. Adet adın altında: telefonda ad kesilmez, genişte ad ile adet arasında boşluk kalmaz
-                  <ol className="divide-y divide-[var(--admin-divider)] pb-1.5">
-                    {d.top.slice(0, 6).map((p, i) => (
-                      <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-5">
-                        <span
-                          aria-hidden="true"
-                          className={cn(
-                            'grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums',
-                            i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
-                          )}
-                        >
-                          {i + 1}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex min-w-0 items-center">
-                            <span className="truncate font-medium text-[var(--admin-text)]" title={p.name}>
-                              {p.name}
-                            </span>
-                            {(p.size === 'M' || p.size === 'L') && <SizeTag>{sizeLabels[p.size]}</SizeTag>}
+        {/* Bilgisayarda solda grafik ve en çok satanlar, sağ sütunda dikkat isteyenler ve sistem sağlığı. Tablette grafik
+            tam genişlikte, altında en çok satanlar ile sağ sütun yan yana (sol sütun `md:contents`: kartları ızgaraya
+            düşer); tek sütunda satırlar yayılıyor, rozet addan kopuyordu. Rakam yoksa (yetki ya da hata) boş sol sütun
+            kalmaz: iki kart yan yana */}
+        <div className={cn('grid gap-4 md:grid-cols-2 md:items-start', main && 'xl:grid-cols-3')}>
+          {main && (
+            <div className="flex min-w-0 flex-col gap-4 md:contents xl:col-span-2 xl:flex">
+              {livePending && (
+                <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü" className="md:col-span-2">
+                  <Skeleton className="h-[220px] rounded-[var(--r-tile)]" />
+                </Card>
+              )}
+              {d && (
+                <Card title="Bugün saat saat" subtitle={charted ? (lastWeek ? 'Sütun bugün, gri çizgi geçen haftanın aynı günü' : 'Geçen haftanın aynı günü satış yoktu') : undefined} className="md:col-span-2">
+                  <ColumnChart data={hours} format={tl} seriesLabel="Bugün" compareLabel="Geçen hafta" ariaLabel="Bugünün saatlik cirosu" height={220} emptyLabel="Bugün henüz satış yok" emptyHint="İlk adisyon kapanınca saat saat ciro burada çizilir" />
+                </Card>
+              )}
+              {d && (
+                <Card title="En çok satanlar" subtitle="Bugün, ciro sırasıyla" flush>
+                  {d.top.length ? (
+                    // Patron'daki listeyle aynı satır: solda sıra dairesi (birinci dolu ev yeşili), ad ve boy, altında adet;
+                    // sağda tutar. Adet adın altında: telefonda ad kesilmez, genişte ad ile adet arasında boşluk kalmaz
+                    <ol className="divide-y divide-[var(--admin-divider)] pb-1.5">
+                      {d.top.slice(0, 6).map((p, i) => (
+                        <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-5">
+                          <span
+                            aria-hidden="true"
+                            className={cn(
+                              'grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums',
+                              i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
+                            )}
+                          >
+                            {i + 1}
                           </span>
-                          <span className="block text-xs tabular-nums text-[var(--admin-text-mute)]">{p.qty} adet</span>
-                        </span>
-                        {/* Tutar ₺'yle ve kısa: adetle karışmaz, sağda sütun gibi hizalı */}
-                        <span className="shrink-0 font-semibold tabular-nums text-[var(--admin-text)]">{tlShort(p.revenue)}</span>
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  // Boş günü saatlik grafiğin çizimi zaten söyler: ikinci kez aynı çizim yok, kısa not yeter
-                  <p className="px-4 pb-4 text-[13px] text-[var(--admin-text-mute)] sm:px-5">İlk satıştan sonra burada sıralanır</p>
-                )}
-              </Card>
-            )}
-          </div>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 items-center">
+                              <span className="truncate font-medium text-[var(--admin-text)]" title={p.name}>
+                                {p.name}
+                              </span>
+                              {(p.size === 'M' || p.size === 'L') && <SizeTag>{sizeLabels[p.size]}</SizeTag>}
+                            </span>
+                            <span className="block text-xs tabular-nums text-[var(--admin-text-mute)]">{p.qty} adet</span>
+                          </span>
+                          {/* Tutar ₺'yle ve kısa: adetle karışmaz, sağda sütun gibi hizalı */}
+                          <span className="shrink-0 font-semibold tabular-nums text-[var(--admin-text)]">{tlShort(p.revenue)}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    // Boş günü saatlik grafiğin çizimi zaten söyler: ikinci kez aynı çizim yok, kısa not yeter
+                    <p className="px-4 pb-4 text-[13px] text-[var(--admin-text-mute)] sm:px-5">İlk satıştan sonra burada sıralanır</p>
+                  )}
+                </Card>
+              )}
+            </div>
+          )}
 
-          <div className="space-y-4">
+          <div className={main ? 'min-w-0 space-y-4' : 'contents'}>
             <Card
               title="Dikkat isteyenler"
               actions={attention.length ? <Badge tone={attention.some((a) => a.tone === 'danger') ? 'danger' : attention.some((a) => a.tone === 'warning') ? 'warning' : 'neutral'}>{attention.length}</Badge> : undefined}

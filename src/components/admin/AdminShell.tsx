@@ -116,9 +116,11 @@ export function AdminShell({ title, children }: { title: string; children: React
       </div>
     </nav>
   );
-  // Tablet: bütün bölümler yatay kayan hap şeridinde (seçili olan görünür kalır)
+  // Tablet: bütün bölümler yatay kayan şeritte (seçili olan görünür kalır). Şerit geniş ekrandaki alt menü kartının
+  // aynısı bir kartta (beyaz, saç teli, köşe 18, zeminde hafif gölge; iç boşluk 6 + rayın 2'si: 10 px satırla eş merkezli),
+  // kenarı alttaki kartlarla aynı hizada; zeminde çerçevesiz yüzmez
   const stripMenu = (
-    <nav aria-label="Yönetim" className="max-md:hidden lg:hidden">
+    <nav aria-label="Yönetim" className="mx-1 rounded-[var(--r-card)] border border-[var(--admin-border)] bg-[var(--admin-surface)] p-1.5 shadow-[var(--shadow-card)] max-md:hidden lg:hidden dark:shadow-none">
       <div ref={strip} className={cn('lp-menu', RAIL_FADE)}>
         {sections.map((x) => sectionLink(x, false))}
       </div>
@@ -126,11 +128,13 @@ export function AdminShell({ title, children }: { title: string; children: React
   );
   // Sütunun dibi (shadcn'in SidebarFooter'ı): kasaya dönüş ve sıkı görünüm
   const tools = (
-    // Alt menü kartının dibi (geniş ekran); tablette kasaya dönüş kabuğun rayında
-    <div className="flex w-full items-center gap-1 border-t border-[var(--admin-border)] pt-2 max-lg:hidden">
-      <Link to={home} className={cn(ROW_ICON, 'flex-1 justify-start gap-2.5 rounded-[0.625rem] px-2.5 text-sm font-medium text-[var(--admin-text-soft)] hover:bg-hover pointer-fine:min-h-9')}>
+    // Alt menü kartının dibi (geniş ekran); tablette kasaya dönüş kabuğun rayında. Bağlantı menü satırıyla aynı hizada
+    // (ikon ve yazı satırların ikon ve yazısının altında); yazı 13 px ve tek satır: 240 px kartta Sıkı görünüm düğmesinin
+    // yanında iki satıra kırılmaz
+    <div className="flex w-full items-center gap-0.5 border-t border-[var(--admin-border)] pt-2 max-lg:hidden">
+      <Link to={home} className={cn(ROW_ICON, 'min-w-0 flex-1 justify-start gap-2.5 px-2.5 text-[13px] font-medium text-[var(--admin-text-soft)] hover:bg-hover pointer-fine:min-h-9')}>
         <ArrowLeftRight className="size-4 shrink-0" aria-hidden="true" />
-        Kasa ekranlarına dön
+        <span className="truncate">Kasa ekranlarına dön</span>
       </Link>
       {/* Aç-kapa düğmesi: adı sabit, durumu aria-pressed ve gri zemin söyler; yalnız fareyle etkili */}
       <button
@@ -139,7 +143,7 @@ export function AdminShell({ title, children }: { title: string; children: React
         aria-pressed={compact}
         aria-label="Sıkı görünüm"
         title={compact ? 'Sıkı görünüm açık' : 'Sıkı görünüm'}
-        className={cn(ROW_ICON, 'hidden rounded-[0.625rem] hover:bg-hover pointer-fine:inline-flex pointer-fine:min-h-9 pointer-fine:min-w-9', compact && 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)] hover:bg-[var(--menu-active-bg)]')}
+        className={cn(ROW_ICON, 'hidden hover:bg-hover pointer-fine:inline-flex pointer-fine:min-h-9 pointer-fine:min-w-9', compact && 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)] hover:bg-[var(--menu-active-bg)]')}
       >
         <Rows4 className="size-4" aria-hidden="true" />
       </button>

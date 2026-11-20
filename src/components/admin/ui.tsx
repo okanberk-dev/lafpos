@@ -10,9 +10,10 @@ import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
 
 /**
- * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm LafPOS Sahne (DESIGN.md: gnbsite'ın
- * Area Board kiti; Poppins ve Gabarito, hap denetimler, mürekkep ana eylem, saç teli ayraçlar). Dokunmatikte her hedef
- * 44 px, farede 36 px, "Sıkı görünüm"de 32 px. Telefonda (md altı) tablo satır kartına, çekmece alt sayfaya döner.
+ * Yönetim paneli kiti: yerleşim Innex'ten (docs/ADMIN-INNEX.md §1.5), görünüm LafPOS Pano (DESIGN.md §4-5: Inter, zeminde
+ * yüzen beyaz kartlar, saç teli çerçeve, ev yeşili seçim ve ana eylem; köşe merdiveni kart 18, karo 12, denetim 10,
+ * rozet 6). Dokunmatikte her hedef 44 px, farede 36 px, "Sıkı görünüm"de 32 px. Telefonda (md altı) tablo satır kartına,
+ * çekmece alt sayfaya döner.
  */
 
 /* Odak halkası her yerde aynı (index.css :focus-visible): 2 px birincil, 2 px dışarıda; burada yalnız açıkça yazılır */
@@ -37,7 +38,7 @@ export const BTN = {
   menuDanger: `${MENU_ITEM} text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)] focus-visible:bg-[var(--admin-danger-soft)] focus-visible:outline-[var(--admin-danger)]`,
 } as const;
 
-/** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, daire (kitin ikon düğmeleri gibi), dokunmatikte 44 px, farede 32 px */
+/** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, köşe 10 (kitin ikon düğmeleri gibi), dokunmatikte 44 px, farede 32 px */
 export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--r-btn)] text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
 
 /**
@@ -107,22 +108,25 @@ export function IconBox({ hue = 'neutral', children, size = 'md' }: { hue?: Hue;
 
 /**
  * Sayfa başlığı. Sahnenin içinde (AdminShell, Stage.tsx) başlık ve açıklama sol sütunun başına, eylemler ana
- * eylemin yeri olur (portal); `children` (sekme, not) yaprakta kalır. Sahne dışında (telefondaki bölüm listesi) ölçülü
- * başlık: Gabarito 26/700; telefonda başlığı kabuğun üst şeridi yazar, h1 yalnız ekran okuyucuya kalır.
+ * eylemin yeri olur (portal); `children` (sekme, not) yaprakta kalır. Sahne dışında (yönetimin yaprağı, telefondaki
+ * bölüm listesi) ölçülü başlık: Inter 28 (geniş ekranda 30) / 700; telefonda başlığı kabuğun üst şeridi yazar, h1 yalnız
+ * ekran okuyucuya kalır.
  */
 export function PageHeader({ title, description, actions, children }: { title: ReactNode; description?: ReactNode; actions?: ReactNode; children?: ReactNode }) {
   const staged = useStageHeader({ title, subtitle: description, actions });
   if (staged) return children ? <>{staged}<div className="mb-5">{children}</div></> : <>{staged}</>;
   const titleOnly = !description && !actions && !children;
   return (
-    // Pano başlığı: zeminin üstünde, çizgisiz; solda iri başlık ve açıklama, sağda ikincil ve ana eylem
-    <div className={cn('mb-5 px-1', titleOnly && 'max-md:mb-0')}>
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div className={cn('min-w-0', !description && 'max-md:contents')}>
+    // Pano başlığı: zeminin üstünde, çizgisiz; başlık ve açıklama kartların, çiplerin sol kenarıyla aynı hizada (iç
+    // pay yok). Tablette de eylemler sığdıkça başlığın sağında (ana eylem başlık satırının en sağında); sığmayınca
+    // (yedi dönemli segment) başlığın altına kırılır, başlık sütunu 20rem'in altına ezilmez
+    <div className={cn('mb-5', titleOnly && 'max-md:mb-0')}>
+      <div className="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:justify-between">
+        <div className={cn('min-w-0 md:flex-[1_1_20rem]', !description && 'max-md:contents')}>
           <h1 className="font-headline text-[28px] font-bold leading-tight tracking-[-0.035em] text-[var(--admin-text)] max-md:sr-only xl:text-[30px]">{title}</h1>
           {description && <p className="mt-1.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
+        {actions && <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
       </div>
       {children}
     </div>
@@ -239,7 +243,7 @@ export interface TabOption<T extends string> {
 }
 
 /**
- * Durum sekmeleri (kitin süzgeç çipi): beyaz hap çipler, etkin olan mürekkep dolgu, sayaç soluk. Telefonda ray ekran
+ * Durum sekmeleri (kitin süzgeç çipi): beyaz çipler (köşe 10), etkin olan ev yeşili dolgu, sayaç soluk. Telefonda ray ekran
  * kenarına uzanır ve yatay kayar: seçili sekme rayın içinde görünür kalır, içeriğin gizlendiği kenar solar (useRail)
  */
 export function StatusTabs<T extends string>({ value, onChange, tabs, label }: { value: T; onChange: (v: T) => void; tabs: TabOption<T>[]; label: string }) {
@@ -279,7 +283,7 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
 }
 
 /**
- * Segment denetimi (kitin .seg'i): beyaz hap ray, ince kenar, seçili mürekkep hap (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır
+ * Segment denetimi (kitin .seg'i): açık gri hap ray, ince kenar, seçili ev yeşili hap (dönem, görünüm). Telefonda ray tam genişlikte ve satıra kırılır
  * (yedi dönem iki satır; hiçbir seçenek gizli kaydırıcıda kalmaz), seçenekler satırı doldurur; köşe eş merkezli
  * (hap 22 + ray boşluğu 3). Daha geniş ekranda sığmayan ray kayar: seçili seçenek görünür kalır, gizli kenar solar
  * (useRail). Radyo grubu klavyesi: Tab gruba seçili seçenekte girer, oklar ve Home/End seçenekler arasında gezer,
@@ -473,9 +477,10 @@ const alignCls = (a?: Column<unknown>['align']) => (a === 'right' ? 'text-right'
 const fromControl = (e: MouseEvent) => !!(e.target as HTMLElement).closest('button, a, input, select, textarea, label, [role="switch"], [role="menu"]');
 
 /**
- * Innex tablosu: kart içinde, başlık satırı soluk kuyuda 13 px gri, satır ayracı (--admin-divider), son sütun
- * yapışkan eylem, seçili satır solda ev yeşili çizgi. Telefonda satır kartı: başlık ve rozet, altında ikincil satır,
- * sağda eylem menüsü.
+ * Innex tablosu: kart içinde, başlık satırı zeminsiz 12,5 px soluk, satır ayracı (--admin-divider), sağa yaslı sütun
+ * tablo rakamıyla (tutar ve oranlar alt alta hizalı), son sütun yapışkan eylem, seçili satır açık nane ve solda ev
+ * yeşili çizgi. Telefonda satır kartı: başlık ve rozet, altında ikincil satır, sağda eylem menüsü; seçili kart da aynı
+ * çizgiyi taşır, basılınca zemin bir ton koyulaşır (dokunmatikte üzerine gelme yok).
  */
 export function DataTable<T>({
   rows,
@@ -539,7 +544,7 @@ export function DataTable<T>({
                   className={cn('group border-t border-[var(--admin-divider)] transition-colors duration-150', onOpen && 'cursor-pointer', selected ? 'bg-[color-mix(in_oklab,var(--admin-primary-soft)_45%,var(--admin-surface))] shadow-[inset_3px_0_0_var(--admin-primary)]' : 'hover:bg-[var(--hover-solid)]', rowClassName?.(r))}
                 >
                   {columns.map((c, i) => (
-                    <td key={c.key} className={cn('px-4 py-3.5 align-middle pointer-fine:[[data-density=compact]_&]:py-2', alignCls(c.align), hideCls(c), c.className)}>
+                    <td key={c.key} className={cn('px-4 py-3.5 align-middle pointer-fine:[[data-density=compact]_&]:py-2', alignCls(c.align), c.align === 'right' && NUM, hideCls(c), c.className)}>
                       {i === 0 && onOpen ? (
                         <button type="button" onClick={() => onOpen(r)} className={cn('flex w-full items-center rounded-lg text-left pointer-coarse:min-h-11', FOCUS)}>
                           {c.cell(r)}
@@ -586,9 +591,9 @@ export function DataTable<T>({
           );
           const lead = phoneLead && <span className="shrink-0 self-start pr-1">{phoneLead(r)}</span>;
           return (
-            <li key={k} className={cn('flex items-center gap-1 pr-1', selectedKey === k && 'bg-[color-mix(in_oklab,var(--admin-primary-soft)_45%,var(--admin-surface))]', rowClassName?.(r))}>
+            <li key={k} className={cn('flex items-center gap-1 pr-1 transition-colors duration-150', onOpen && 'has-[>button:active]:bg-[var(--hover-solid)]', selectedKey === k && 'bg-[color-mix(in_oklab,var(--admin-primary-soft)_45%,var(--admin-surface))] shadow-[inset_3px_0_0_var(--admin-primary)]', rowClassName?.(r))}>
               {onOpen ? (
-                <button type="button" onClick={() => onOpen(r)} className={cn('flex min-h-16 min-w-0 flex-1 items-center gap-2 py-3 pl-4 text-left', FOCUS)}>
+                <button type="button" onClick={() => onOpen(r)} className={cn('flex min-h-16 min-w-0 flex-1 items-center gap-2 py-3 pl-4 text-left', FOCUS, 'focus-visible:-outline-offset-2')}>
                   {lead}
                   {body}
                   {!actions && <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-[var(--admin-text-mute)]" />}
@@ -682,7 +687,7 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
         aria-modal="true"
         aria-label={label}
         onKeyDown={(e) => trapTab(e, panel.current)}
-        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-[1.375rem] border border-transparent bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[min(480px,calc(100vw-1.5rem))] md:rounded-[1.375rem] dark:border-[var(--admin-border-strong)]"
+        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-[var(--r-stage)] border border-transparent bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[min(480px,calc(100vw-1.5rem))] md:rounded-[var(--r-stage)] dark:border-[var(--admin-border-strong)]"
       >
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-[var(--admin-border-field)]/50 md:hidden" aria-hidden="true" />
         {/* Başlık şeridi pencereyle (Modal) aynı: 19/700 başlık, 13 px alt satır, Kapat başlığın ilk satırında */}
@@ -694,14 +699,19 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
           <CloseButton onClick={onClose} />
         </div>
         <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">{children}</div>
-        {footer && <div className="flex flex-wrap items-center gap-2 border-t border-[var(--admin-divider)] bg-[var(--admin-surface)] px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">{footer}</div>}
+        {/* Alt şerit: telefonda üç düğme (Kaldır, Vazgeç, Kaydet) tek satıra sığmazsa ana eylem (son düğme) kendi satırında
+            tam genişlikte; sola yaslı tek başına kalmaz */}
+        {footer && <div className="flex flex-wrap items-center gap-2 border-t border-[var(--admin-divider)] bg-[var(--admin-surface)] px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 max-sm:[&>button:last-child]:grow">{footer}</div>}
       </div>
     </div>,
     document.body,
   );
 }
 
-/** Gri kap içinde beyaz işlem satırları (hızlı bakış): ikon kutusu, etiket, sağda değer ya da ›; kap köşesi 20, 4 px boşluk, satır 14 */
+/**
+ * Gri kap içinde beyaz işlem satırları (hızlı bakış): ikon kutusu, etiket, sağda değer ya da ›. Köşeler eş merkezli:
+ * kap 18 (--r-card), iç boşluk 6, satır 12 (--r-tile); satırlar arası 4 px
+ */
 export function ActionRows({ children }: { children: ReactNode }) {
   return <div className="space-y-1 rounded-[var(--r-card)] bg-[var(--admin-surface-2)] p-1.5 ring-1 ring-inset ring-[var(--admin-border)]">{children}</div>;
 }
@@ -715,7 +725,7 @@ export function ActionRow({ icon, hue = 'neutral', label, value, onClick, danger
       {onClick && <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-[var(--admin-text-mute)]" />}
     </>
   );
-  const cls = 'flex min-h-12 w-full items-center gap-3 rounded-xl bg-[var(--admin-surface)] px-3 py-2 text-left';
+  const cls = 'flex min-h-12 w-full items-center gap-3 rounded-[var(--r-tile)] bg-[var(--admin-surface)] px-3 py-2 text-left';
   return onClick ? (
     <button type="button" onClick={onClick} disabled={disabled} className={cn(cls, 'transition-colors hover:bg-[var(--hover-solid)] disabled:opacity-50', FOCUS)}>
       {inner}
@@ -765,8 +775,9 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
  */
 export function SetupNotes({ children, summary = 'Kurulum adımları', open }: { children: ReactNode; summary?: ReactNode; open?: boolean }) {
   return (
-    // Kartlarla aynı kap (köşe --r-card, saç teli): sayfadaki son kart gibi durur, açılınca içi kartın gövdesi
-    <details open={open} className="group rounded-[var(--r-card)] border border-[var(--admin-border)] bg-[var(--admin-surface)]">
+    // Kartlarla aynı kap (CARD: köşe --r-card, saç teli, zeminde aynı hafif gölge): sayfadaki son kart gibi durur, açılınca
+    // içi kartın gövdesi
+    <details open={open} className={cn(CARD, 'group')}>
       <summary className={cn('flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-[var(--r-card)] px-4 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors duration-150 hover:text-[var(--admin-text)] sm:px-5 pointer-fine:min-h-11 [&::-webkit-details-marker]:hidden', FOCUS)}>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none" />
         {summary}
@@ -815,13 +826,16 @@ export function KpiStripSkeleton({ count = 5, className }: { count?: number; cla
   );
 }
 
-/** Tablo iskeleti (Ürünler, Personel, Ödeme türleri ilk yüklemede): kart kabuğu, satır başına ikon ve iki çizgi */
+/**
+ * Tablo iskeleti (Ürünler, Personel, Ödeme türleri ilk yüklemede): kart kabuğu, tablonun başlık şeridi (48 px, zeminsiz,
+ * alt çizgi) ve satırı (64 px) aynı boyda: veri gelince tablo zıplamaz; satır başına ikon ve iki çizgi
+ */
 export function TableSkeleton({ rows = 8, className }: { rows?: number; className?: string }) {
   return (
     <div role="status" aria-label="Yükleniyor…" className={cn(CARD, 'overflow-hidden', className)}>
-      <div className="h-10 bg-[var(--admin-surface-2)]" />
+      <div className="h-12 border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]" />
       {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex h-14 items-center gap-3 border-t border-[var(--admin-divider)] px-4">
+        <div key={i} className="flex h-16 items-center gap-3 border-t border-[var(--admin-divider)] px-4 [&:nth-child(2)]:border-t-0">
           <Skeleton className="size-9 rounded-lg" />
           <span className="flex-1 space-y-1.5">
             <Skeleton className="h-3.5 w-40 max-w-[60%]" />
