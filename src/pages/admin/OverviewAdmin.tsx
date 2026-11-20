@@ -5,10 +5,10 @@ import { Link } from 'react-router';
 import { tl, tlShort } from '@shared/money';
 import { fmtDateTime, fmtTime } from '@shared/time';
 import { visibleSections } from '@/components/admin/sections';
-import { Badge, Card, CARD, EmptyState, type KpiCell, KpiStrip, KpiStripSkeleton, PageHeader, type Tone } from '@/components/admin/ui';
+import { Badge, Card, CARD, EmptyState, IconBox, type KpiCell, KpiStrip, KpiStripSkeleton, PageHeader, type Tone, TONE_SOFT } from '@/components/admin/ui';
 import type { PlatformsData } from '@/components/PlatformInbox';
 import { ColumnChart } from '@/components/charts';
-import { buttonClass } from '@/components/ui/Button';
+import { buttonClass, Ring } from '@/components/ui/Button';
 import { ErrorState, ListSkeleton, SizeTag, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -234,9 +234,11 @@ export default function OverviewAdmin() {
             <Link to="/raporlar" className={buttonClass('secondary')}>
               Raporlar
             </Link>
+            {/* Ana eylem öteki bölümlerdeki gibi ok halkalı (bağlantı da olsa düğmeyle aynı görünür) */}
             {can('kasa.gun') && (
-              <Link to="/kasa" className={buttonClass('primary')}>
+              <Link to="/kasa" className={buttonClass('primary', 'md', { ring: true })}>
                 Kasa ve gün sonu
+                <Ring />
               </Link>
             )}
           </>
@@ -250,7 +252,7 @@ export default function OverviewAdmin() {
           <div className="min-w-0 space-y-4 xl:col-span-2">
             {livePending && (
               <Card title="Bugün saat saat" subtitle="Sütun bugün, gri çizgi geçen haftanın aynı günü">
-                <Skeleton className="h-[220px] rounded-xl" />
+                <Skeleton className="h-[220px] rounded-[var(--r-tile)]" />
               </Card>
             )}
             {d && (
@@ -261,19 +263,34 @@ export default function OverviewAdmin() {
             {d && (
               <Card title="En çok satanlar" subtitle="Bugün, ciro sırasıyla" flush>
                 {d.top.length ? (
-                  <ul className="divide-y divide-[var(--admin-divider)]">
-                    {d.top.slice(0, 6).map((p) => (
+                  // Patron'daki listeyle aynı satır: solda sıra dairesi (birinci dolu ev yeşili), ad ve boy, altında adet;
+                  // sağda tutar. Adet adın altında: telefonda ad kesilmez, genişte ad ile adet arasında boşluk kalmaz
+                  <ol className="divide-y divide-[var(--admin-divider)] pb-1.5">
+                    {d.top.slice(0, 6).map((p, i) => (
                       <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-sm sm:px-5">
-                        <span className="min-w-0 flex-1 truncate font-medium">
-                          {p.name}
-                          {(p.size === 'M' || p.size === 'L') && <SizeTag>{sizeLabels[p.size]}</SizeTag>}
+                        <span
+                          aria-hidden="true"
+                          className={cn(
+                            'grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums',
+                            i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]',
+                          )}
+                        >
+                          {i + 1}
                         </span>
-                        <span className="tabular-nums text-[var(--admin-text-mute)]">{p.qty} adet</span>
-                        {/* Tutar ₺'yle: adedin yanında ikinci bir sayı gibi okunmasın */}
-                        <span className="w-24 text-right font-semibold tabular-nums">{tlShort(p.revenue)}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-center">
+                            <span className="truncate font-medium text-[var(--admin-text)]" title={p.name}>
+                              {p.name}
+                            </span>
+                            {(p.size === 'M' || p.size === 'L') && <SizeTag>{sizeLabels[p.size]}</SizeTag>}
+                          </span>
+                          <span className="block text-xs tabular-nums text-[var(--admin-text-mute)]">{p.qty} adet</span>
+                        </span>
+                        {/* Tutar ₺'yle ve kısa: adetle karışmaz, sağda sütun gibi hizalı */}
+                        <span className="shrink-0 font-semibold tabular-nums text-[var(--admin-text)]">{tlShort(p.revenue)}</span>
                       </li>
                     ))}
-                  </ul>
+                  </ol>
                 ) : (
                   // Boş günü saatlik grafiğin çizimi zaten söyler: ikinci kez aynı çizim yok, kısa not yeter
                   <p className="px-4 pb-4 text-[13px] text-[var(--admin-text-mute)] sm:px-5">İlk satıştan sonra burada sıralanır</p>
@@ -296,13 +313,14 @@ export default function OverviewAdmin() {
                     {attention.map((a) => (
                       <li key={a.key}>
                         <RowLink to={a.to}>
-                          {/* İkon tona göre: alarm kalkan, uyarı üçgen, bilgi (gün kapalı) sakin "i" */}
-                          <span aria-hidden="true" className="pt-0.5">
-                            {a.tone === 'danger' ? <ShieldAlert className="size-4 text-[var(--admin-danger)]" /> : a.tone === 'warning' ? <AlertTriangle className="size-4 text-[var(--admin-warning)]" /> : <Info className="size-4 text-[var(--admin-text-mute)]" />}
+                          {/* İkon tona göre, rozetin tonunda yumuşak karoda (KPI ve sistem sağlığı karosuyla aynı boy): alarm
+                              kalkan, uyarı üçgen, bilgi (gün kapalı) sakin "i" */}
+                          <span aria-hidden="true" className={cn('grid size-7 shrink-0 place-items-center rounded-lg [&>svg]:size-4', TONE_SOFT[a.tone])}>
+                            {a.tone === 'danger' ? <ShieldAlert /> : a.tone === 'warning' ? <AlertTriangle /> : <Info />}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block text-sm font-medium text-[var(--admin-text)]">{a.title}</span>
-                            <span className="block text-xs text-[var(--admin-text-mute)] [overflow-wrap:anywhere]">{a.detail}</span>
+                            <span className="mt-0.5 block text-xs text-[var(--admin-text-mute)] [overflow-wrap:anywhere]">{a.detail}</span>
                           </span>
                         </RowLink>
                       </li>
@@ -336,18 +354,19 @@ export default function OverviewAdmin() {
                 <ul className="divide-y divide-[var(--admin-divider)]">
                   {health.map((h) => (
                     <li key={h.key}>
-                      {/* Durumu rozet söyler; ikon sakin gri (her satır kobalt olunca durum rengi süse dönüyordu) */}
+                      {/* Durumu rozet söyler; ikon sakin gri karoda (her satır kobalt olunca durum rengi süse dönüyordu).
+                          Rozet adın satırında sağda: açıklama altta tam genişliği alır, dar sütunda üç satıra kırılmaz */}
                       <RowLink to={h.to} className="items-center">
-                        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center text-[var(--admin-text-mute)]">
-                          {h.icon}
-                        </span>
+                        <IconBox>{h.icon}</IconBox>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium text-[var(--admin-text)]">{h.label}</span>
-                          <span className="block text-xs text-[var(--admin-text-mute)] [overflow-wrap:anywhere]">{h.detail}</span>
+                          <span className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                            <span className="text-sm font-medium text-[var(--admin-text)]">{h.label}</span>
+                            <Badge tone={h.tone} dot className="shrink-0">
+                              {h.state}
+                            </Badge>
+                          </span>
+                          <span className="mt-0.5 block text-xs text-[var(--admin-text-mute)] [overflow-wrap:anywhere]">{h.detail}</span>
                         </span>
-                        <Badge tone={h.tone} dot className="shrink-0">
-                          {h.state}
-                        </Badge>
                       </RowLink>
                     </li>
                   ))}
