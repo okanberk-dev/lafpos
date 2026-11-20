@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Lock, Pencil, Plus, Power, Save, SearchX } from 'lucide-react';
+import { Check, KeyRound, Lock, Pencil, Plus, Power, Save, SearchX } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { ALL_PERMISSIONS, effectivePermissions, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, type RoleMatrix, ROLES } from '@shared/permissions';
@@ -58,6 +58,17 @@ function RoleBadge({ role }: { role: Role }) {
 
 /** Yetki grubunun etiketi: cümle düzeninde (büyük harf yalnız kenar çubuğunun grup etiketlerinde) */
 const GROUP_LABEL = 'text-[13px] font-semibold text-[var(--admin-text-soft)]';
+/** Çekmecenin bölüm başlığı kart başlığının ölçüsünde (16/600): 13 px alan etiketlerinden ayrılır (Ödeme türleri gibi) */
+const SECTION_TITLE = 'text-base font-semibold leading-6 tracking-[-0.015em] text-[var(--admin-text)]';
+
+/** Açık yetkinin oranı: ince hap iz, ev yeşili dolgu (raporların yatay çubuğu); sayı yanında yazılı, çubuk süs */
+function PermMeter({ on, total }: { on: number; total: number }) {
+  return (
+    <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
+      <div className="h-full rounded-[var(--r-track)] transition-[width] duration-300 motion-reduce:transition-none" style={{ width: `${total ? (on / total) * 100 : 0}%`, background: 'var(--chart-accent)' }} />
+    </div>
+  );
+}
 
 /**
  * Personel (Innex personel listesi ve §3 fikir 9): rol rozeti, kişiye özel ek ve kaldırılan yetki satırda, son giriş
@@ -316,74 +327,100 @@ function UserDrawer({ user, isMe, focusPin, matrix, onClose, onSaved }: { user: 
           Rolünüzü, yetkilerinizi ve indirim sınırınızı başka bir yetkili değiştirir; burada adınızı, renginizi ve PIN’inizi değiştirebilirsiniz
         </Notice>
       )}
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Ad" required error={tried ? nameError : null}>
-          <Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus={!user && fine} autoCapitalize="words" />
-        </Field>
-        <Field label="Rol">
-          <Select value={d.role} disabled={isMe} onChange={(e) => setD({ ...d, role: e.target.value as Role, permGrant: [], permRevoke: [] })}>
-            {ROLES.map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABELS[r]}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        {/* Kısa ipucu etiketle aynı satırda kalır: PIN alanı yanındaki İndirim sınırıyla aynı hizada */}
-        <Field label={user ? 'Yeni PIN' : 'PIN'} hint={user ? 'boşsa değişmez' : '4–6 hane'} error={(d.pin || tried) && pinError ? pinError : null}>
-          <div className="relative">
-            <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--admin-text-mute)]" aria-hidden="true" />
-            {/* "PIN değiştir" ile açılınca alan odaklı: kişi doğrudan yeni PIN'i yazar */}
-            <Input value={d.pin} onChange={(e) => setD({ ...d, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} inputMode="numeric" autoComplete="off" autoFocus={focusPin} className="pl-9 tracking-[0.3em]" />
-          </div>
-        </Field>
-        <Field label="İndirim sınırı (%)" hint="üstü onay ister">
-          <NumberInput value={d.maxDiscountPct} min={0} max={100} fallback={0} disabled={isMe} onCommit={(maxDiscountPct) => setD({ ...d, maxDiscountPct })} />
-        </Field>
-        <div className="sm:col-span-2" role="group" aria-label="Renk">
-          <Label>Renk</Label>
-          {/* Telefonda sekiz renk tek satır (8 × 44 px), arada boşluk yok; geniş ekranda 4 px */}
-          <div className="flex flex-wrap gap-0 sm:gap-1">
-            {COLORS.map((c, i) => (
-              <button key={c} type="button" aria-label={`Renk ${i + 1}`} aria-pressed={d.color === c} onClick={() => setD({ ...d, color: c })} className="grid size-11 place-items-center rounded-full">
-                <span
-                  className={cn('size-8 rounded-full', d.color === c ? 'ring-2 ring-[var(--admin-primary)] ring-offset-2 ring-offset-[var(--admin-surface)]' : 'ring-1 ring-inset ring-black/5 dark:ring-white/15')}
-                  style={{ background: c }}
-                />
-              </button>
-            ))}
+      {/* İki bölüm: kişinin kendisi (ad, rol, PIN, indirim, renk) ve yetkileri; başlıklar 16/600, araları ince çizgi */}
+      <section aria-labelledby="kisi-bilgi" className="space-y-3">
+        <h3 id="kisi-bilgi" className={SECTION_TITLE}>
+          Kişi
+        </h3>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Ad" required error={tried ? nameError : null}>
+            <Input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} autoFocus={!user && fine} autoCapitalize="words" />
+          </Field>
+          <Field label="Rol">
+            <Select value={d.role} disabled={isMe} onChange={(e) => setD({ ...d, role: e.target.value as Role, permGrant: [], permRevoke: [] })}>
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABELS[r]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {/* Kısa ipucu etiketle aynı satırda kalır: PIN alanı yanındaki İndirim sınırıyla aynı hizada */}
+          <Field label={user ? 'Yeni PIN' : 'PIN'} hint={user ? 'boşsa değişmez' : '4–6 hane'} error={(d.pin || tried) && pinError ? pinError : null}>
+            <div className="relative">
+              <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--admin-text-mute)]" aria-hidden="true" />
+              {/* "PIN değiştir" ile açılınca alan odaklı: kişi doğrudan yeni PIN'i yazar */}
+              <Input value={d.pin} onChange={(e) => setD({ ...d, pin: e.target.value.replace(/\D/g, '').slice(0, 6) })} inputMode="numeric" autoComplete="off" autoFocus={focusPin} className="pl-9 tracking-[0.3em]" />
+            </div>
+          </Field>
+          <Field label="İndirim sınırı (%)" hint="üstü onay ister">
+            <NumberInput value={d.maxDiscountPct} min={0} max={100} fallback={0} disabled={isMe} onCommit={(maxDiscountPct) => setD({ ...d, maxDiscountPct })} />
+          </Field>
+          <div className="sm:col-span-2" role="group" aria-label="Renk">
+            <Label>Renk</Label>
+            {/* Telefonda sekiz renk tek satır (8 × 44 px), arada boşluk yok: satır çekmecenin 20 px'lik payına 6 px uzanır (ilk
+                dairenin kenarı alanların kenarıyla hizalı; düğmenin 44 px'i dairenin 6 px dışına taşar), 390 px'te sekizi sığar;
+                geniş ekranda 4 px aralık */}
+            <div className="flex flex-wrap gap-0 max-sm:-mx-1.5 sm:gap-1">
+              {COLORS.map((c, i) => (
+                <button key={c} type="button" aria-label={`Renk ${i + 1}`} aria-pressed={d.color === c} onClick={() => setD({ ...d, color: c })} className="grid size-11 place-items-center rounded-full">
+                  {/* Seçili renk halkayla ve beyaz tikle (renk tek başına seçimi söylemez); renkler koyu, tik 3:1 üstünde */}
+                  <span
+                    className={cn(
+                      'grid size-8 place-items-center rounded-full text-white transition-shadow duration-150',
+                      d.color === c ? 'ring-2 ring-[var(--admin-ink-fill)] ring-offset-2 ring-offset-[var(--admin-surface)]' : 'ring-1 ring-inset ring-black/5 dark:ring-white/15',
+                    )}
+                    style={{ background: c }}
+                  >
+                    {d.color === c && <Check aria-hidden="true" className="size-4 stroke-[3]" />}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <h3 className="mb-1 mt-5 flex items-baseline justify-between gap-3 text-[15px] font-semibold">
-        Yetkiler
-        <span className="text-[13px] font-medium tabular-nums text-[var(--admin-text-mute)]">
-          {effective.size} / {ALL_PERMISSIONS.length}
-          <span className="sr-only"> yetki açık</span>
-        </span>
-      </h3>
-      {!isMe && <p className="mb-2 text-xs text-[var(--admin-text-mute)]">İşaretliler rolden gelir; burada değiştirilen yalnız bu kişiye uygulanır (rol setleri: Roller ve yetkiler)</p>}
-      <div className={cn('space-y-3', isMe && 'mt-2')}>
-        {PERMISSION_GROUPS.map((g) => (
-          <div key={g.key} className="overflow-hidden rounded-xl border border-[var(--admin-border)]">
-            <div className={cn('bg-[var(--admin-panel)] px-3 py-1.5', GROUP_LABEL)}>{g.label}</div>
-            {g.permissions.map((p) => {
-              const on = effective.has(p);
-              const byRole = roleBase(d.role).includes(p);
-              // Rolden fark sakin: kaldırma olağan bir karar, gri (kırmızı yalnız alarm ve iptal); ek ev yeşili (eklenen)
-              const source = byRole ? (on ? null : { tone: 'neutral' as const, text: 'Kişiden kaldırıldı' }) : on ? { tone: 'primary' as const, text: 'Kişiye ek' } : null;
-              return (
-                <label key={p} className={cn('flex min-h-11 items-center gap-3 border-t border-[var(--admin-divider)] px-3 py-2 text-sm', isMe ? 'opacity-70' : 'cursor-pointer transition-colors hover:bg-hover')}>
-                  <input type="checkbox" checked={on} disabled={isMe} onChange={() => toggle(p)} className="size-5 shrink-0 accent-[var(--admin-primary)] pointer-fine:size-4" />
-                  <span className="min-w-0 flex-1">{PERMISSIONS[p]}</span>
-                  {source && <Badge tone={source.tone}>{source.text}</Badge>}
-                </label>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+      <section aria-labelledby="kisi-yetki" className="mt-6 border-t border-[var(--admin-divider)] pt-5">
+        <h3 id="kisi-yetki" className={cn('flex items-baseline justify-between gap-3', SECTION_TITLE)}>
+          Yetkiler
+          <span className="text-[13px] font-medium tabular-nums text-[var(--admin-text-mute)]">
+            {effective.size} / {ALL_PERMISSIONS.length}
+            <span className="sr-only"> yetki açık</span>
+          </span>
+        </h3>
+        <div className="mt-2">
+          <PermMeter on={effective.size} total={ALL_PERMISSIONS.length} />
+        </div>
+        {!isMe && <p className="mt-2.5 text-[13px] text-[var(--admin-text-mute)]">İşaretliler rolden gelir; burada değiştirilen yalnız bu kişiye uygulanır (rol setleri: Roller ve yetkiler)</p>}
+        <div className="mt-4 space-y-3">
+          {PERMISSION_GROUPS.map((g) => (
+            // Grup karosu (köşe 12): başlık şeridi gri, sağında grubun açık yetkisi
+            <div key={g.key} className="overflow-hidden rounded-[var(--r-tile)] border border-[var(--admin-border)]">
+              <div className="flex items-center justify-between gap-3 bg-[var(--admin-panel)] px-3 py-2">
+                <span className={GROUP_LABEL}>{g.label}</span>
+                <span className="text-xs font-medium tabular-nums text-[var(--admin-text-mute)]">
+                  {g.permissions.filter((p) => effective.has(p)).length} / {g.permissions.length}
+                  <span className="sr-only"> açık</span>
+                </span>
+              </div>
+              {g.permissions.map((p) => {
+                const on = effective.has(p);
+                const byRole = roleBase(d.role).includes(p);
+                // Rolden fark sakin: kaldırma olağan bir karar, gri (kırmızı yalnız alarm ve iptal); ek ev yeşili (eklenen)
+                const source = byRole ? (on ? null : { tone: 'neutral' as const, text: 'Kişiden kaldırıldı' }) : on ? { tone: 'primary' as const, text: 'Kişiye ek' } : null;
+                return (
+                  <label key={p} className={cn('flex min-h-11 items-center gap-3 border-t border-[var(--admin-divider)] px-3 py-2 text-sm', isMe ? 'opacity-70' : 'cursor-pointer transition-colors hover:bg-hover')}>
+                    <input type="checkbox" checked={on} disabled={isMe} onChange={() => toggle(p)} className="size-5 shrink-0 accent-[var(--admin-primary)] pointer-fine:size-4" />
+                    <span className="min-w-0 flex-1">{PERMISSIONS[p]}</span>
+                    {source && <Badge tone={source.tone}>{source.text}</Badge>}
+                  </label>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </section>
     </QuickLook>
   );
 }

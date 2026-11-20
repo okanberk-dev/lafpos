@@ -101,7 +101,7 @@ export default function PlatformsAdmin() {
         ) : (
           <div role="status" aria-label="Yükleniyor…" className="grid items-start gap-4 lg:grid-cols-2">
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-52 rounded-2xl" />
+              <Skeleton key={i} className="h-52 rounded-[var(--r-card)]" />
             ))}
           </div>
         )}
@@ -191,10 +191,14 @@ function ProductMapping({ canEdit }: { canEdit: boolean }) {
       ) : (
         <ul className="divide-y divide-[var(--admin-divider)]">
           {rows.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm sm:px-5">
-              <PlatformBadge platform={r.platform} />
+            // Genişte rozet sabit genişlikte sütunda: farklı uzunluktaki platform adları ürün adlarını kaydırmaz, adlar alt
+            // alta hizalı okunur. Telefonda rozet ve ad bir satırda, seçim altta tam genişlikte
+            <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 text-sm sm:px-5">
+              <span className="shrink-0 sm:w-32">
+                <PlatformBadge platform={r.platform} />
+              </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{r.name}</span>
+                <span className="block truncate font-medium text-[var(--admin-text)]">{r.name}</span>
                 {/* Platformun kimliği yalnız ipucunda: sahibe bir şey söylemez, telefonda satırı kesiyordu */}
                 <span className="block truncate text-xs text-[var(--admin-text-mute)]" title={`#${r.externalId}`}>
                   son sipariş {seenAt(r.lastSeenAt)}
@@ -334,7 +338,8 @@ function PlatformCard({
         )}
         {/* Kapalı platformda sipariş gelmez: yalnız komisyon kalır (raporlar geçmiş siparişe bugünkü oranı uygular) */}
         {(!off || settings.commissionPct != null) && (
-          <div className="grid grid-cols-2 gap-3">
+          // Alanlar tabandan hizalı: dar ekranda bir etiketin ipucu alta inse de iki kutu aynı satırda durur
+          <div className="grid grid-cols-2 items-end gap-3">
             {!off && (
               <Field label="Hazırlık süresi (dk)" hint="5–120">
                 <NumberInput value={settings.prepMinutes} min={5} max={120} fallback={20} disabled={!canEdit} onCommit={(prepMinutes) => void save({ prepMinutes })} />
@@ -394,23 +399,29 @@ function PlatformCard({
             {settings.autoAccept && staleAcceptor && <p className="text-xs text-[var(--admin-warning)]">Kabul eden kişi etkin değil ya da paket yetkisi yok: siparişler elle kabul bekler</p>}
           </div>
         )}
-        {settings.mode === 'deneme' && canTest && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <Button variant="soft" icon={<Send className="size-4" />} loading={testing} onClick={() => void test()}>
-              Deneme siparişi gönder
-            </Button>
-            <span className="text-xs text-[var(--admin-text-mute)]">Deneme siparişi gerçek satış gibi ciroya girer</span>
+        {/* Deneme siparişi ve kurulum notu kartın dibinde, ayarlardan satır ayracıyla ayrı */}
+        {((settings.mode === 'deneme' && canTest) || settings.mode !== 'canli' || keysMissing) && (
+          <div className="space-y-2 border-t border-[var(--admin-divider)] pt-3">
+            {settings.mode === 'deneme' && canTest && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Button variant="soft" icon={<Send className="size-4" />} loading={testing} onClick={() => void test()}>
+                  Deneme siparişi gönder
+                </Button>
+                <span className="text-xs text-[var(--admin-text-mute)]">Deneme siparişi gerçek satış gibi ciroya girer</span>
+              </div>
+            )}
+            {/* Kurulum metni yalnız henüz canlı olmayan (ya da canlıda anahtarı eksik) platformda; açılınca saç telli karoda (zemin
+                beyaz kalır: içindeki ayar adlarının gri kutusu seçilir) */}
+            {(settings.mode !== 'canli' || keysMissing) && (
+              <details className="group text-xs">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-[var(--r-chip)] text-[13px] font-medium text-[var(--admin-primary)] hover:underline hover:underline-offset-2 pointer-fine:min-h-8 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
+                  Gerçek bağlantı için ne gerekir
+                </summary>
+                <p className="mt-1.5 rounded-[var(--r-tile)] p-3 leading-5 text-[var(--admin-text-soft)] ring-1 ring-inset ring-[var(--admin-border)]">{LIVE_NEEDS[platform]}</p>
+              </details>
+            )}
           </div>
-        )}
-        {/* Kurulum metni yalnız henüz canlı olmayan (ya da canlıda anahtarı eksik) platformda */}
-        {(settings.mode !== 'canli' || keysMissing) && (
-          <details className="group text-xs">
-            <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-[var(--admin-primary)] pointer-fine:min-h-0 [&::-webkit-details-marker]:hidden">
-              <ChevronRight className="size-3.5 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden="true" />
-              Gerçek bağlantı için ne gerekir
-            </summary>
-            <p className="mt-1.5 text-[var(--admin-text-mute)]">{LIVE_NEEDS[platform]}</p>
-          </details>
         )}
       </div>
     </Card>

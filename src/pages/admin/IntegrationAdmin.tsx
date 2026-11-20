@@ -1,14 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, CircleAlert, CloudDownload, History, Info, RefreshCw, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { createContext, type ReactNode, useContext, useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, Toggle } from '@/components/ui/Field';
 import { ErrorState, Skeleton } from '@/components/ui/misc';
-import { Card, CARD, CODE, PageHeader, SetupNotes } from '@/components/admin/ui';
+import { Badge, Card, CARD, CODE, PageHeader, SetupNotes, type Tone } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { cn } from '@/lib/cn';
 import { answerText, type DayAnswer, dayLabel, unmatchedCount, unmatchedText } from '@/lib/lafmaliyet';
 import { toast } from '@/lib/toast';
 
@@ -53,11 +54,12 @@ interface SyncStatus {
  * karşı taraftan yanıt alınınca: "Henüz eşitlenmedi" onay almaz. Satırda tek durum rengi: dikkat satırının ayrıntısı
  * gri, kırmızı yalnız hata satırında
  */
-function Status({ ok, idle, error, children }: { ok?: boolean; idle?: boolean; error?: boolean; children: React.ReactNode }) {
-  // Yumuşak durum paneli (pano, 20 Kas 2026): açık gri zemin, köşe 10; ikon durumun renginde küçük beyaz dairede.
-  // Zemin hep nötr: renk yalnız ikonda (satırda tek durum rengi kuralı)
+function Status({ ok, idle, error, children }: { ok?: boolean; idle?: boolean; error?: boolean; children: ReactNode }) {
+  // Yumuşak durum paneli (pano, 20 Kas 2026): açık gri zemin, kart içindeki karonun köşesi (12); ikon durumun renginde küçük beyaz dairede.
+  // Zemin hep nötr: renk yalnız ikonda (satırda tek durum rengi kuralı). Grubun içinde köşeyi grup çizer
+  const grouped = useContext(InGroup);
   return (
-    <div className="flex items-start gap-2.5 rounded-[var(--r-control)] bg-[var(--admin-surface-2)] px-3 py-2.5 text-sm">
+    <div className={cn('flex items-start gap-2.5 bg-[var(--admin-surface-2)] px-3 py-2.5 text-sm', !grouped && 'rounded-[var(--r-tile)]')}>
       <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--admin-surface)] ring-1 ring-inset ring-[var(--admin-border)] [&>svg]:size-3.5">
         {error ? (
           <XCircle className="text-[var(--admin-danger-ink)]" />
@@ -74,12 +76,54 @@ function Status({ ok, idle, error, children }: { ok?: boolean; idle?: boolean; e
   );
 }
 
+const InGroup = createContext(false);
+/**
+ * Art arda gelen durum satırları tek karoda, aralarında ince ayraç (ayrı ayrı gri kutular yığını değil): kartın durum
+ * listesi bir bakışta tek blok okunur
+ */
+function StatusGroup({ children }: { children: ReactNode }) {
+  return (
+    <InGroup.Provider value>
+      <div className="divide-y divide-[var(--admin-border)] overflow-hidden rounded-[var(--r-tile)]">{children}</div>
+    </InGroup.Provider>
+  );
+}
+
 /** Hata satırının ayrıntısı (kırmızı) */
 const ERR = 'block text-[var(--admin-danger-ink)] [overflow-wrap:anywhere]';
 /** Dikkat satırının ayrıntısı: gri, satırda ikinci bir durum rengi olmasın */
 const DETAIL = 'block text-xs text-muted [overflow-wrap:anywhere]';
-/** Kartın içindeki bölüm: aynı ayraç ve boşluk */
-const SECTION = 'space-y-2 border-t border-[var(--admin-divider)] pt-3';
+/** Kartın içindeki bölüm: aynı ayraç ve boşluk (ayracın iki yanı 16 px: üstteki satırlardan açıkça ayrılır) */
+const SECTION = 'mt-4 space-y-2 border-t border-[var(--admin-divider)] pt-4';
+/** Bölümün başlığı: alan etiketinden bir boy iri (14/600), kart başlığından küçük */
+const SECTION_TITLE = 'text-sm font-semibold text-[var(--admin-text)]';
+
+/**
+ * Kartın başlığındaki durum rozeti: Genel bakış'ın "Sistem sağlığı" satırlarıyla aynı kural ve aynı söz (iki ekran aynı
+ * bağlantıya ayrı şey demesin); ayrıntıyı kartın durum satırları söyler
+ */
+function health(s: SyncStatus): Record<'menu' | 'online' | 'lafmaliyet', { tone: Tone; state: string }> {
+  const lm = s.lafmaliyet;
+  return {
+    menu: {
+      tone: !s.menu.linked ? 'neutral' : s.menu.state?.lastError ? 'danger' : s.menu.state?.lastSuccessAt ? 'success' : 'neutral',
+      state: !s.menu.linked ? 'Kurulmadı' : s.menu.state?.lastError ? 'Hata' : s.menu.auto ? 'Otomatik' : 'Elle',
+    },
+    online: {
+      tone: !s.online.configured || !s.online.enabled ? 'neutral' : s.online.state?.lastError ? 'danger' : 'success',
+      state: !s.menu.linked ? 'Kurulmadı' : !s.online.configured ? 'Anahtar yok' : s.online.enabled ? 'Açık' : 'Kapalı',
+    },
+    lafmaliyet: {
+      tone: !lm.configured ? 'neutral' : lm.failing ? 'danger' : lm.pending || lm.training ? 'info' : 'success',
+      state: !lm.configured ? 'Kurulmadı' : lm.failing ? `${lm.failing} gidemedi` : lm.pending ? `${lm.pending} gün sırada` : lm.training ? 'Kurulum modu' : 'Güncel',
+    },
+  };
+}
+const StateBadge = ({ h }: { h: { tone: Tone; state: string } }) => (
+  <Badge tone={h.tone} dot>
+    {h.state}
+  </Badge>
+);
 
 /** Kart alt başlığındaki adres: uzun adres dar ekranda taşmaz */
 const address = (url: string | null | undefined) => (url ? <span className="[overflow-wrap:anywhere]">{url}</span> : undefined);
@@ -139,7 +183,7 @@ export default function IntegrationAdmin() {
         ) : (
           <div role="status" aria-label="Yükleniyor…" className="space-y-4">
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-2xl" />
+              <Skeleton key={i} className="h-36 rounded-[var(--r-card)]" />
             ))}
           </div>
         )}
@@ -152,12 +196,13 @@ export default function IntegrationAdmin() {
   // Sipariş çekimi anahtar ve "Online siparişleri çek" ikisi açıkken (sunucunun turu kapalıyken sipariş çekmez, yalnız
   // karaoke işaretini okur): kapalıyken kart siparişin düştüğünü söylemez, son çekim yeşil onay almaz
   const pulling = s.online.configured && s.online.enabled;
+  const state = health(s);
 
   return (
     <div className="space-y-4">
       {header}
       {/* Adres kartın alt başlığında (telefonda başlığa sıkışmaz); sağlığı durum satırları söyler */}
-      <Card title="laffogato · menü" subtitle={s.menu.linked ? address(boot.integrations.laffogatoUrl) : undefined}>
+      <Card title="laffogato · menü" subtitle={s.menu.linked ? address(boot.integrations.laffogatoUrl) : undefined} actions={<StateBadge h={state.menu} />}>
         <div className="space-y-2">
           {s.menu.linked ? (
             <>
@@ -178,69 +223,76 @@ export default function IntegrationAdmin() {
           )}
         </div>
       </Card>
-      <Card title="laffogato · online siparişler ve Tükendi">
+      <Card title="laffogato · online siparişler ve Tükendi" actions={<StateBadge h={state.online} />}>
         <div className="space-y-2">
-          {/* Anahtarın varlığı bağlantının çalıştığını söylemez: ilk başarılı çekime dek sakin. Çekim kapalıysa (anahtar
-              tanımlı olsa da) sakin ve kapalı olduğunu söyler */}
-          <Status ok={pulling && !!orders?.lastSuccessAt} idle={s.online.configured ? !pulling || !orders?.lastSuccessAt : !s.menu.linked}>
-            {s.online.configured
-              ? s.online.enabled
-                ? 'Anahtar tanımlı, siparişler imzalı bağlantıyla çekilir'
-                : 'Online sipariş çekimi kapalı: uygulama ve web siparişleri kasaya düşmez'
-              : s.menu.linked
-                ? 'Anahtar yok: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'
-                : 'Site bağlantısı kurulmadı: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'}
-          </Status>
+          <StatusGroup>
+            {/* Anahtarın varlığı bağlantının çalıştığını söylemez: ilk başarılı çekime dek sakin. Çekim kapalıysa (anahtar
+                tanımlı olsa da) sakin ve kapalı olduğunu söyler */}
+            <Status ok={pulling && !!orders?.lastSuccessAt} idle={s.online.configured ? !pulling || !orders?.lastSuccessAt : !s.menu.linked}>
+              {s.online.configured
+                ? s.online.enabled
+                  ? 'Anahtar tanımlı, siparişler imzalı bağlantıyla çekilir'
+                  : 'Online sipariş çekimi kapalı: uygulama ve web siparişleri kasaya düşmez'
+                : s.menu.linked
+                  ? 'Anahtar yok: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'
+                  : 'Site bağlantısı kurulmadı: online siparişler gelmez, Tükendi yalnız LafPOS’ta değişir'}
+            </Status>
+            {s.online.configured && (
+              <>
+                {s.online.enabled && (
+                  <Status ok={s.online.versionSignal && !!orders?.lastSuccessAt} idle={s.online.versionSignal && !orders?.lastSuccessAt}>
+                    {s.online.versionSignal
+                      ? 'Yeni online sipariş 20 sn içinde kasaya düşer; gün açıkken 15 dakikada bir liste ayrıca yenilenir'
+                      : 'Site anlık bildirim göndermiyor: online siparişler 5 dakikada bir kontrol edilir'}
+                  </Status>
+                )}
+                {/* Kapalıyken son çekim eski bilgidir: onay almaz */}
+                <Status ok={pulling && !!orders?.lastSuccessAt} idle={!pulling || !orders?.lastSuccessAt} error={!!orders?.lastError}>
+                  {orders?.lastSuccessAt ? `Son çekim ${fmtDateTime(orders.lastSuccessAt)} · ${s.online.open} açık online sipariş` : 'Henüz çekilmedi'}
+                  {orders?.lastError && <span className={ERR}>Hata: {orders.lastError}</span>}
+                </Status>
+                {s.online.soldOutPush.pending > 0 && (
+                  <Status>
+                    Satışta bilgisi siteye gidemedi: {s.online.soldOutPush.pending} ürün; yeniden denenecek
+                    {s.online.soldOutPush.lastError && <span className={DETAIL}>Son hata: {s.online.soldOutPush.lastError}</span>}
+                  </Status>
+                )}
+                {s.online.soldOutPush.rejected > 0 && (
+                  <Status>
+                    Site {s.online.soldOutPush.rejected} ürünün Satışta bilgisini reddetti; ürün LafPOS’ta açılınca ya da sitede aynı duruma gelince kalkar
+                    {!s.online.soldOutPush.pending && s.online.soldOutPush.lastError && <span className={DETAIL}>Son hata: {s.online.soldOutPush.lastError}</span>}
+                  </Status>
+                )}
+                {s.online.tablesPush?.unsupported && (
+                  <Status idle>
+                    Masa QR kodları siteye gönderildi ama site henüz almıyor: QR’lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer; 6 saatte bir yeniden denenir.{' '}
+                    <button type="button" disabled={busy === 'tables'} aria-busy={busy === 'tables' || undefined} className="min-h-11 font-medium text-primary underline underline-offset-2 disabled:cursor-progress disabled:opacity-60 pointer-fine:min-h-6" onClick={() => void resendTables()}>
+                      {busy === 'tables' ? 'Gönderiliyor…' : 'Şimdi yeniden gönder'}
+                    </button>
+                  </Status>
+                )}
+                {s.online.tablesPush?.lastError && !s.online.tablesPush.unsupported && (
+                  <Status error>
+                    Masa QR kodları siteye gidemedi
+                    <span className={ERR}>Hata: {s.online.tablesPush.lastError}</span>
+                  </Status>
+                )}
+                {s.online.tablesPush?.lastSentAt && !s.online.tablesPush.lastError && !s.online.tablesPush.unsupported && (
+                  <Status ok>Masa QR kodları sitede: {fmtDateTime(s.online.tablesPush.lastSentAt)}</Status>
+                )}
+              </>
+            )}
+          </StatusGroup>
           {s.online.configured && (
             <>
-              {s.online.enabled && (
-                <Status ok={s.online.versionSignal && !!orders?.lastSuccessAt} idle={s.online.versionSignal && !orders?.lastSuccessAt}>
-                  {s.online.versionSignal
-                    ? 'Yeni online sipariş 20 sn içinde kasaya düşer; gün açıkken 15 dakikada bir liste ayrıca yenilenir'
-                    : 'Site anlık bildirim göndermiyor: online siparişler 5 dakikada bir kontrol edilir'}
-                </Status>
-              )}
-              {/* Kapalıyken son çekim eski bilgidir: onay almaz */}
-              <Status ok={pulling && !!orders?.lastSuccessAt} idle={!pulling || !orders?.lastSuccessAt} error={!!orders?.lastError}>
-                {orders?.lastSuccessAt ? `Son çekim ${fmtDateTime(orders.lastSuccessAt)} · ${s.online.open} açık online sipariş` : 'Henüz çekilmedi'}
-                {orders?.lastError && <span className={ERR}>Hata: {orders.lastError}</span>}
-              </Status>
-              {s.online.soldOutPush.pending > 0 && (
-                <Status>
-                  Satışta bilgisi siteye gidemedi: {s.online.soldOutPush.pending} ürün; yeniden denenecek
-                  {s.online.soldOutPush.lastError && <span className={DETAIL}>Son hata: {s.online.soldOutPush.lastError}</span>}
-                </Status>
-              )}
-              {s.online.soldOutPush.rejected > 0 && (
-                <Status>
-                  Site {s.online.soldOutPush.rejected} ürünün Satışta bilgisini reddetti; ürün LafPOS’ta açılınca ya da sitede aynı duruma gelince kalkar
-                  {!s.online.soldOutPush.pending && s.online.soldOutPush.lastError && <span className={DETAIL}>Son hata: {s.online.soldOutPush.lastError}</span>}
-                </Status>
-              )}
-              {s.online.tablesPush?.unsupported && (
-                <Status idle>
-                  Masa QR kodları siteye gönderildi ama site henüz almıyor: QR’lar menüyü açar, uygulamadan masaya sipariş site güncellenince düşer; 6 saatte bir yeniden denenir.{' '}
-                  <button type="button" disabled={busy === 'tables'} aria-busy={busy === 'tables' || undefined} className="min-h-11 font-medium text-primary underline underline-offset-2 disabled:cursor-progress disabled:opacity-60 pointer-fine:min-h-6" onClick={() => void resendTables()}>
-                    {busy === 'tables' ? 'Gönderiliyor…' : 'Şimdi yeniden gönder'}
-                  </button>
-                </Status>
-              )}
-              {s.online.tablesPush?.lastError && !s.online.tablesPush.unsupported && (
-                <Status error>
-                  Masa QR kodları siteye gidemedi
-                  <span className={ERR}>Hata: {s.online.tablesPush.lastError}</span>
-                </Status>
-              )}
-              {s.online.tablesPush?.lastSentAt && !s.online.tablesPush.lastError && !s.online.tablesPush.unsupported && (
-                <Status ok>Masa QR kodları sitede: {fmtDateTime(s.online.tablesPush.lastSentAt)}</Status>
-              )}
-              <Toggle checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />
+              {/* Anahtar durum satırlarından menü kartındaki gibi bir boy açık */}
+              <Toggle className="pt-1" checked={s.online.enabled} disabled={!canSync} onChange={(v) => setting({ onlineOrdersSync: v })} label="Online siparişleri çek" />
               <KaraokeStatus k={s.karaoke} />
             </>
           )}
         </div>
       </Card>
-      <LafmaliyetCard s={s.lafmaliyet} canSync={canSync} canCost={can('rapor.maliyet')} run={run} busy={busy} />
+      <LafmaliyetCard s={s.lafmaliyet} badge={<StateBadge h={state.lafmaliyet} />} canSync={canSync} canCost={can('rapor.maliyet')} run={run} busy={busy} />
       <SetupNotes>
         <p>
           Kasa bilgisayarının ayarları: site için <code className={CODE}>LAFFOGATO_URL</code> ve <code className={CODE}>LAFFOGATO_SYNC_SECRET</code>, lafmaliyet için <code className={CODE}>LAFMALIYET_URL</code> ve <code className={CODE}>LAFMALIYET_SYNC_SECRET</code> (en az 32 karakter). Adres yoksa o sisteme hiç istek gitmez.
@@ -288,7 +340,7 @@ function KaraokeStatus({ k }: { k: SyncStatus['karaoke'] }) {
  * lafmaliyet kartı: bağlantı, kurulum modu kapısı, giden kutusu, son günün lafmaliyet'teki durumu (geçiş günü,
  * eşleşmeyen ürünler), geçmiş günler ve maliyet. Bağlantı yokken sakin dil (sahibin kararı: varsayılan kapalı)
  */
-function LafmaliyetCard({ s, canSync, canCost, run, busy }: { s: SyncStatus['lafmaliyet']; canSync: boolean; canCost: boolean; run: (path: string, ok: string) => Promise<void>; busy: string | null }) {
+function LafmaliyetCard({ s, badge, canSync, canCost, run, busy }: { s: SyncStatus['lafmaliyet']; badge: React.ReactNode; canSync: boolean; canCost: boolean; run: (path: string, ok: string) => Promise<void>; busy: string | null }) {
   const qc = useQueryClient();
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [sending, setSending] = useState(false);
@@ -318,7 +370,7 @@ function LafmaliyetCard({ s, canSync, canCost, run, busy }: { s: SyncStatus['laf
 
   return (
     // Adres alt başlıkta; bağlantının sağlığını giden kutusu satırı söyler (adresin tanımlı olması "bağlı" demek değil)
-    <Card title="lafmaliyet · günlük satış, Z ve maliyet" subtitle={s.configured ? address(s.url) : undefined}>
+    <Card title="lafmaliyet · günlük satış, Z ve maliyet" subtitle={s.configured ? address(s.url) : undefined} actions={badge}>
       <div className="space-y-2">
         {!s.configured ? (
           <Status idle>
@@ -326,33 +378,35 @@ function LafmaliyetCard({ s, canSync, canCost, run, busy }: { s: SyncStatus['laf
           </Status>
         ) : (
           <>
-            {s.training && (
-              <Status idle>
-                Kurulum modu: günler lafmaliyet’e gönderilmez (örnek PIN’ler açık ya da yazarkasa eğitim simülatöründe). Bu modda kapanan gün eğitim günüdür, kurulum modu kapansa da hiç gitmez.{canCost ? ' Bağlantıyı denemek için “Maliyetleri çek” yeterli.' : ''} Gerçek ilk gün kurulum modu kapandıktan sonra açılıp kapanınca gider
+            <StatusGroup>
+              {s.training && (
+                <Status idle>
+                  Kurulum modu: günler lafmaliyet’e gönderilmez (örnek PIN’ler açık ya da yazarkasa eğitim simülatöründe). Bu modda kapanan gün eğitim günüdür, kurulum modu kapansa da hiç gitmez.{canCost ? ' Bağlantıyı denemek için “Maliyetleri çek” yeterli.' : ''} Gerçek ilk gün kurulum modu kapandıktan sonra açılıp kapanınca gider
+                </Status>
+              )}
+              <Status ok={!s.failing} idle={!!s.pending && !s.failing} error={!!s.failing}>
+                {!s.pending
+                  ? 'Giden kutusu boş'
+                  : s.failing
+                    ? `Giden kutusunda ${s.pending} gün, ${s.failing} gün gönderilemedi (${s.pendingDays.join(', ')})`
+                    : `Giden kutusunda ${s.pending} gün sırasını bekliyor, dakikada 20 gün gider (${s.pendingDays.join(', ')})`}
+                {s.lastError && <span className={ERR}>Son hata: {s.lastError}</span>}
               </Status>
-            )}
-            <Status ok={!s.failing} idle={!!s.pending && !s.failing} error={!!s.failing}>
-              {!s.pending
-                ? 'Giden kutusu boş'
-                : s.failing
-                  ? `Giden kutusunda ${s.pending} gün, ${s.failing} gün gönderilemedi (${s.pendingDays.join(', ')})`
-                  : `Giden kutusunda ${s.pending} gün sırasını bekliyor, dakikada 20 gün gider (${s.pendingDays.join(', ')})`}
-              {s.lastError && <span className={ERR}>Son hata: {s.lastError}</span>}
-            </Status>
-            {answer && (
-              <Status ok idle={answer.tone === 'idle'}>
-                {answer.text}
-              </Status>
-            )}
-            {s.answer && unmatched > 0 && (
-              <Status>
-                lafmaliyet’te eşleşmeyen {unmatched} ürün ({dayLabel(s.answer.date)}){s.answer.unmatched?.length ? `: ${unmatchedText(s.answer.unmatched, unmatched)}` : ''}
-                <span className={DETAIL}>lafmaliyet Ayarlar › LafPOS (kasa) bölümünde Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden gönderilmeden bağlanır</span>
-              </Status>
-            )}
+              {answer && (
+                <Status ok idle={answer.tone === 'idle'}>
+                  {answer.text}
+                </Status>
+              )}
+              {s.answer && unmatched > 0 && (
+                <Status>
+                  lafmaliyet’te eşleşmeyen {unmatched} ürün ({dayLabel(s.answer.date)}){s.answer.unmatched?.length ? `: ${unmatchedText(s.answer.unmatched, unmatched)}` : ''}
+                  <span className={DETAIL}>lafmaliyet Ayarlar › LafPOS (kasa) bölümünde Bağla ya da Ürünler › Site menüsü; kayıtlı günler yeniden gönderilmeden bağlanır</span>
+                </Status>
+              )}
+            </StatusGroup>
 
             <div className={SECTION}>
-              <h3 className="text-[13px] font-semibold">Geçmiş günler</h3>
+              <h3 className={SECTION_TITLE}>Geçmiş günler</h3>
               <p className="text-xs text-muted">
                 {!s.backfill.from
                   ? 'lafmaliyet’in geçiş günü henüz bilinmiyor (seçilmedi ya da hiç gün gönderilmedi). Bağlantı sonradan kurulduysa gönderilecek aralığı seçin'
@@ -363,15 +417,16 @@ function LafmaliyetCard({ s, canSync, canCost, run, busy }: { s: SyncStatus['laf
                       : `Geçiş günü ${dayLabel(s.backfill.from)}: o günden bu yana gönderilmemiş kapanmış gün yok`}
                 . Daha önce gitmiş gün yeniden gitmez; tek günü yeniden göndermek için Kasa › Geçmiş günler › Z › Gönder
               </p>
-              {/* Telefonda iki tarih yan yana, düğme altta tam genişlik; genişte tek satır */}
-              <div className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
+              {/* Telefonda iki tarih yan yana, düğme altta tam genişlik; genişte tek satır. Düğme alanlarla aynı boyda (36 / 44 px):
+                  yan yana duran alan ve düğmenin tabanı ve tepesi hizalı */}
+              <div className="grid grid-cols-2 items-end gap-2 pt-1 sm:flex sm:flex-wrap sm:gap-3">
                 <Field label="Başlangıç" className="sm:w-40">
                   <Input type="date" value={from} max={to} onChange={(e) => setRange({ from: e.target.value, to })} />
                 </Field>
                 <Field label="Bitiş" className="sm:w-40">
                   <Input type="date" value={to} min={from || undefined} onChange={(e) => setRange({ from, to: e.target.value })} />
                 </Field>
-                <Button size="sm" className="col-span-2 sm:col-auto" icon={<History className="size-4" />} loading={sending} disabled={!canSync || s.training || !from || !to || from > to} onClick={backfill}>
+                <Button className="col-span-2 sm:col-auto" icon={<History className="size-4" />} loading={sending} disabled={!canSync || s.training || !from || !to || from > to} onClick={backfill}>
                   Geçmiş günleri gönder
                 </Button>
               </div>
