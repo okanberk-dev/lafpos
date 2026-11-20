@@ -41,7 +41,7 @@ export const BTN = {
 export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--r-btn)] text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
 
 /**
- * Kart (pano kartı; tablo ve form kabı): köşe 24, beyaz. Zeminde (pano yaprağı) kenarsız ve yumuşak gölgeli, beyaz
+ * Kart (pano kartı; tablo ve form kabı): köşe 18, beyaz. Zeminde (pano yaprağı) kenarsız ve yumuşak gölgeli, beyaz
  * yaprağın içinde saç teli kenarlı ve gölgesiz (--card-line, --card-shadow; index.css)
  */
 export const CARD = 'rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] shadow-[var(--card-shadow)]';
@@ -189,7 +189,7 @@ export interface KpiCell {
 }
 
 /**
- * KPI şeridi (pano): her hücre kendi kartı (köşe 24, zeminde yüzer), aralarında 12 px. İkon yumuşak tonlu dairede,
+ * KPI şeridi (pano): her hücre kendi kartı (köşe 18, zeminde yüzer), aralarında 12 px. İkon yumuşak tonlu dairede,
  * değişim rozeti rakamın sağında (panonun "+12,8%" rozeti). Beş hücre
  * tablette 3 + 2 dizilir (altı sütunlu ızgarada 2 ve 3 sütun kaplar), boş gri hücre kalmaz. Etiket satırı 32 px'tir
  * ve etiket en çok iki satıra kırılır (kesilmez): hücreler arasında rakamlar aynı hizada kalır. Rakam tek satır, dar
@@ -682,7 +682,7 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
         aria-modal="true"
         aria-label={label}
         onKeyDown={(e) => trapTab(e, panel.current)}
-        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-[1.75rem] border border-transparent bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[min(480px,calc(100vw-1.5rem))] md:rounded-[1.75rem] dark:border-[var(--admin-border-strong)]"
+        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-[1.375rem] border border-transparent bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[min(480px,calc(100vw-1.5rem))] md:rounded-[1.375rem] dark:border-[var(--admin-border-strong)]"
       >
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-[var(--admin-border-field)]/50 md:hidden" aria-hidden="true" />
         {/* Başlık şeridi pencereyle (Modal) aynı: 19/700 başlık, 13 px alt satır, Kapat başlığın ilk satırında */}
@@ -703,7 +703,7 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
 
 /** Gri kap içinde beyaz işlem satırları (hızlı bakış): ikon kutusu, etiket, sağda değer ya da ›; kap köşesi 20, 4 px boşluk, satır 14 */
 export function ActionRows({ children }: { children: ReactNode }) {
-  return <div className="space-y-1 rounded-[1.25rem] bg-[var(--admin-surface-2)] p-1.5 ring-1 ring-inset ring-[var(--admin-border)]">{children}</div>;
+  return <div className="space-y-1 rounded-[var(--r-card)] bg-[var(--admin-surface-2)] p-1.5 ring-1 ring-inset ring-[var(--admin-border)]">{children}</div>;
 }
 
 export function ActionRow({ icon, hue = 'neutral', label, value, onClick, danger, disabled }: { icon: ReactNode; hue?: Hue; label: ReactNode; value?: ReactNode; onClick?: () => void; danger?: boolean; disabled?: boolean }) {

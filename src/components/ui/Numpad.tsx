@@ -12,7 +12,8 @@ interface NumpadProps {
   decimal?: boolean;
   doubleZero?: boolean;
   className?: string;
-  size?: 'md' | 'lg';
+  /** sm: sıkı (ödeme penceresi; 44 px tuş), md: 48, lg: 64 */
+  size?: 'sm' | 'md' | 'lg';
   /**
    * Son hücrede birincil onay tuşu (giriş ekranı: "Giriş"). Verilince alt sıra "⌫ · 0 · onay" olur; "," ve "00"
    * gösterilmez. Kitin ana düğmesi: mürekkep, sağda yeşil ok halkası. Devre dışıyken gri zemin ve soluk ama okunur yazı
@@ -52,7 +53,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
               onClick={confirm.onPress}
               className={cn(
                 'inline-flex items-center justify-between gap-2 rounded-2xl bg-[var(--admin-ink-fill)] pl-4 pr-2 text-base font-semibold text-[var(--admin-on-ink)] transition-[background-color,transform] duration-150 hover:bg-[var(--admin-ink-fill-hover)] active:scale-[0.97] motion-reduce:active:scale-100 disabled:bg-surface-3 disabled:text-muted disabled:active:scale-100',
-                size === 'lg' ? 'h-16 [--ring:2.25rem]' : 'h-12 [--ring:1.75rem]',
+                size === 'lg' ? 'h-16 [--ring:2.25rem]' : size === 'sm' ? 'h-11 [--ring:1.75rem]' : 'h-12 [--ring:1.75rem]',
               )}
             >
               {confirm.label}
@@ -70,7 +71,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
             aria-label={k === 'back' ? 'Geri sil' : undefined}
             className={cn(
               'tabular rounded-2xl bg-surface-2 font-headline font-semibold text-ink ring-1 ring-inset ring-transparent transition-[background-color,transform,box-shadow] duration-150 hover:bg-surface-3 hover:ring-[var(--admin-primary-line)] active:scale-[0.97] active:bg-surface-3 motion-reduce:active:scale-100 dark:ring-[var(--admin-border)]',
-              size === 'lg' ? 'h-16 text-[28px]' : 'h-12 text-[22px]',
+              size === 'lg' ? 'h-16 text-[28px]' : size === 'sm' ? 'h-11 text-[20px]' : 'h-12 text-[22px]',
               k === 'clear' && 'font-sans text-[15px] font-medium text-ink-2',
             )}
           >

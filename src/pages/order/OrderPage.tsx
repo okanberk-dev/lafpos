@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRightLeft,
   Ban,
+  Check,
   ChevronRight,
   CircleDollarSign,
   Droplets,
@@ -106,6 +107,8 @@ function PayLabel({ action, amount, inline }: { action: string; amount: number; 
 export default function OrderPage() {
   const { id = '' } = useParams();
   const boot = useBoot();
+  // Bar ekranı ve "Bara gönder" (Yönetim › Ayarlar): kapalıyken kalemler bara gitmez, düğmeler "Kaydet" der
+  const barOn = boot.settings.barEnabled !== false;
   const can = useCan();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -242,8 +245,8 @@ export default function OrderPage() {
           ...(hold ? { hold: true } : {}),
           approverPin: pin,
         }),
-      // Ödeme bekleyende bildirim yok: ödeme penceresi açılır, bara ödeme alınınca gider
-      hold ? undefined : `${pendingCount} ürün gönderildi`,
+      // Ödeme bekleyende bildirim yok: ödeme penceresi açılır, bara ödeme alınınca gider. Bar kapalıysa "kaydedildi"
+      hold ? undefined : `${pendingCount} ürün ${barOn ? 'gönderildi' : 'kaydedildi'}`,
     );
     setSending(false);
     if (!res) return false;
@@ -379,8 +382,9 @@ export default function OrderPage() {
   ];
   const menuSections = MENU_GROUPS.map(([group, label]) => ({ group, label, items: menuItems.filter((m) => m.show && m.group === group) })).filter((s) => s.items.length > 0);
 
-  // Durum çipleri: başlığın altında, bir bakışta (kapanmış, iptal, birleşmiş; hesap yazdırıldı, kısmen ödendi, bölündü,
-  // gönderilmemiş ürün). Online siparişin "Sitede ödendi"si hemen altındaki mor şeritte, burada yinelenmez
+  // Durum çipleri: başlığın altında, bir bakışta (kapanmış, iptal, birleşmiş; hesap yazdırıldı, kısmen ödendi, bölündü).
+  // Gönderilmemiş ürün çip değil: sepetin "Gönderilmedi" grubu ve "Bara gönder (N)" söyler (sade ekran, tek uyarı).
+  // Online siparişin "Sitede ödendi"si hemen altındaki mor şeritte, burada yinelenmez
   const chips: { key: string; tone: BadgeTone; label: string }[] = [
     ...(order.status !== 'acik'
       ? [{ key: 'durum', tone: (order.status === 'kapali' ? 'green' : order.status === 'iptal' ? 'red' : 'neutral') as BadgeTone, label: order.status === 'kapali' ? 'Kapandı' : order.status === 'iptal' ? 'İptal' : 'Birleşti' }]
@@ -388,7 +392,6 @@ export default function OrderPage() {
     ...(isOpen && !isOnline && order.billPrintedAt ? [{ key: 'hesap', tone: 'warn' as const, label: 'Hesap yazdırıldı' }] : []),
     ...(isOpen && order.paid > 0 && due > 0 ? [{ key: 'kismen', tone: 'pink' as const, label: 'Kısmen ödendi' }] : []),
     ...(isOpen && order.split ? [{ key: 'bolundu', tone: 'neutral' as const, label: `${order.split.people} kişiye bölündü` }] : []),
-    ...(pendingCount > 0 ? [{ key: 'bekleyen', tone: 'warn' as const, label: `${pendingCount} ürün gönderilmedi` }] : []),
   ];
   // Başlık: Gabarito masa adı ve numara; künye (kişi, garson, açılış saati ve süresi, müşteri, not); durum çipleri
   const header = (
@@ -491,7 +494,9 @@ export default function OrderPage() {
   // dahil tahmini (sunucu gönderince yeniden hesaplar). Izgara izleri en küçük 0: büyük tutar da kartın içinde kalır
   const canPay = can('odeme.al');
   const payNow = (previewTotals(boot, order, pending)?.total ?? order.total) - order.paid;
-  const sendLabel = `Bara gönder (${pendingCount})`;
+  // Bar ekranı ayardan kapalıysa (barEnabled) kalemler bara gitmez: aynı düğme "Kaydet (N)" (adisyona yazar)
+  const sendLabel = barOn ? `Bara gönder (${pendingCount})` : `Kaydet (${pendingCount})`;
+  const sendIcon = barOn ? <Send className="size-4" /> : <Check className="size-4" />;
   const barContent = blank ? (
     counter ? null : editable ? (
       <Button size="lg" block icon={<X className="size-4" />} loading={sending} onClick={() => void clearBlank()}>
@@ -505,10 +510,10 @@ export default function OrderPage() {
     // yazılır (dar hesap kartında üç düğme yan yana sığmıyordu)
     <div className="grid gap-2">
       <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
-        <IconButton label="Gönderilmemişleri sil" variant="secondary" disabled={sending} onClick={discardPending}>
+        <IconButton label="Gönderilmemişleri sil" disabled={sending} onClick={discardPending}>
           <Trash2 className="size-4" />
         </IconButton>
-        <Button loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} className="min-w-0">
+        <Button loading={sending} icon={sendIcon} onClick={sendOnly} className="min-w-0">
           <span className="truncate">{sendLabel}</span>
         </Button>
       </div>
@@ -519,7 +524,7 @@ export default function OrderPage() {
   ) : pending.length > 0 ? (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
       {discardButton}
-      <Button size="lg" variant="primary" loading={sending} icon={<Send className="size-4" />} onClick={sendOnly}>
+      <Button size="lg" variant="primary" loading={sending} icon={sendIcon} onClick={sendOnly}>
         {sendLabel}
       </Button>
     </div>
@@ -545,9 +550,9 @@ export default function OrderPage() {
   ) : (
     backButton
   );
-  // Eylem şeridi: hızlı işlemlerle birlikte ölçülen alt blokta (aşağıda `right`)
+  // Eylem şeridi: hızlı işlemlerle birlikte ölçülen alt blokta (aşağıda `right`; tek saç teli o bloğun üstünde)
   const actionBar = barContent && (
-    <div className="grid gap-2 border-t border-[var(--admin-divider)] bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3">
+    <div className="grid gap-2 bg-surface px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
       {barContent}
     </div>
   );
@@ -563,14 +568,14 @@ export default function OrderPage() {
     { key: 'islemler', label: 'İşlemler', icon: <MoreHorizontal />, onClick: () => setDialog('menu'), show: !REMOTE, wideOnly: true },
   ].filter((q) => q.show);
   const quickRow = quickActions.some((q) => !q.wideOnly) || (wide && quickActions.length > 0) ? (
-    <div role="group" aria-label="Hızlı işlemler" className="flex gap-1 border-t border-[var(--admin-divider)] px-2 pt-2">
+    <div role="group" aria-label="Hızlı işlemler" className="flex gap-1 px-2 pt-2">
       {quickActions.map((q) => (
         <button
           key={q.key}
           type="button"
           onClick={q.onClick}
           className={cn(
-            'flex min-h-[52px] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-center text-[11px] font-medium leading-tight text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press [&>svg]:size-[18px] [&>svg]:shrink-0',
+            'flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[var(--r-btn)] px-1 py-1 text-center text-[11px] font-medium leading-tight text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink active:bg-press [&>svg]:size-[17px] [&>svg]:shrink-0',
             q.wideOnly && 'max-md:hidden',
           )}
         >
@@ -623,8 +628,8 @@ export default function OrderPage() {
       </button>
       {pending.length > 0 && (
         // Dar sepet çubuğunda halka yok: 360 px'te tutar kesilmesin
-        <Button size="lg" variant="primary" ring={false} loading={sending} icon={<Send className="size-4" />} onClick={sendOnly} aria-label={sendLabel} className="shrink-0 px-4">
-          Bara gönder
+        <Button size="lg" variant="primary" ring={false} loading={sending} icon={sendIcon} onClick={sendOnly} aria-label={sendLabel} className="shrink-0 px-4">
+          {barOn ? 'Bara gönder' : 'Kaydet'}
         </Button>
       )}
     </div>
@@ -657,7 +662,7 @@ export default function OrderPage() {
       {(quickRow || actionBar) && (
         // Telefonda bildirim bu bloğun üstünde durur (data-action-bar, boyu --action-bar-h): Gönder, Öde ve hızlı
         // işlemleri örtmez
-        <div ref={measureActionBar} data-action-bar="">
+        <div ref={measureActionBar} data-action-bar="" className="border-t border-[var(--admin-divider)]">
           {quickRow}
           {actionBar}
         </div>
@@ -919,13 +924,13 @@ export default function OrderPage() {
           <Textarea value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 300))} className="min-h-24" placeholder="Ör. doğum günü, pastayı 21:00’de getir" aria-label="Adisyon notu" />
         </div>
       </Modal>
-      <Modal open={dialog === 'cikis'} onClose={() => setDialog(null)} title="Gönderilmemiş ürünler var" subtitle={`${pendingCount} ürün henüz bara ya da mutfağa gitmedi`} size="sm">
+      <Modal open={dialog === 'cikis'} onClose={() => setDialog(null)} title={barOn ? 'Gönderilmemiş ürünler var' : 'Kaydedilmemiş ürünler var'} subtitle={barOn ? `${pendingCount} ürün henüz bara ya da mutfağa gitmedi` : `${pendingCount} ürün henüz adisyona yazılmadı`} size="sm">
         <div className="grid gap-2 p-4">
           {/* Tek seferlik (once): çift dokunuş kalemleri bara iki kez göndermez; gönderilemezse pencere açık kalır */}
           <Button
             variant="primary"
             size="lg"
-            icon={<Send className="size-4" />}
+            icon={sendIcon}
             loading={sending}
             onClick={() =>
               void once(async () => {
@@ -935,7 +940,7 @@ export default function OrderPage() {
               })
             }
           >
-            Gönder ve çık
+            {barOn ? 'Gönder ve çık' : 'Kaydet ve çık'}
           </Button>
           <Button size="lg" onClick={() => navigate(backPath)}>
             Bu cihazda beklesin

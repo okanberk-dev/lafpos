@@ -112,7 +112,7 @@ export function Stage({
   /** Yaprak zeminsiz: içerik sahnenin üstünde kendi kartlarını çizer */
   bare?: boolean;
   /**
-   * Pano yaprağı: zeminsiz ama kendi içinde kayar; kartlar zeminde yüzer (beyaz, köşe 24, kenarsız, yumuşak gölge).
+   * Pano yaprağı: zeminsiz ama kendi içinde kayar; kartlar zeminde yüzer (beyaz, köşe 18, kenarsız, yumuşak gölge).
    * Patron paneli, yönetim ve raporlar
    */
   float?: boolean;

@@ -13,6 +13,12 @@ export function useServiceMode(): ServiceMode {
   return serviceModeOf(data?.settings);
 }
 
+/** Bar ekranı ve "Bara gönder" açık mı (Yönetim › Ayarlar; açılış verisi gelmeden açık sayılır) */
+export function useBarEnabled(): boolean {
+  const { data } = useBootQuery();
+  return data?.settings.barEnabled !== false;
+}
+
 /** Bu kişinin servis moduna göre açılış sayfası */
 export function useHomePath(): string {
   const can = useCan();

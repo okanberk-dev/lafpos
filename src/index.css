@@ -30,7 +30,7 @@
  * LafPOS Pano (20 Kasım 2026, operatör: "Modern Financial Dashboard UI'ı bu tasarım metrikleriyle bizim renklerimize
  * uyarla, olmayanları da bu metriklerle uyarla, branding yap", "menüsüne kadar 1:1", "yazı tipini de görseldeki gibi";
  * DESIGN.md). Panonun ölçüleri L'Affogato kimliğinde: tek açık gri zemin (üst çubuk ve içerik aynı zeminde), kartlar
- * zeminde yüzer (beyaz, köşe 24, yumuşak gölge, kenarsız), tablette ve bilgisayarda solda ev yeşilinin degradesinde
+ * zeminde yüzer (beyaz, köşe 18, yumuşak gölge, kenarsız), tablette ve bilgisayarda solda ev yeşilinin degradesinde
  * marka rayı (ekranlar ikon üstte kısa ad altta, seçili ekran beyaz karo), üst çubukta ortada ekranın sekmeleri, ana
  * eylem ve seçim ev yeşili dolgu (köşe 12; segment hap), rozet köşe 8, sütun grafiğinde açık nane sütunlar ve tek
  * vurgulu ev yeşili sütun; yazı Inter. Önceki LafPOS Sahne'den (17-18 Kasım 2026, gnbsite'ın Area Board kiti) kalanlar:
@@ -88,13 +88,13 @@
   --color-night: #111816;
 
   /*
-   * Köşe merdiveni (kitin yarıçapı): sahne 28, yaprak ve pencere 24, cam çubuk 22, kart 18, alan 12, küçük denetim 10;
-   * düğme, rozet, sekme, çip ve segment hap. Sınıf adları aynı: rounded-xl alan, rounded-2xl kart, rounded-3xl pencere
+   * Köşe merdiveni (kitin yarıçapı; operatör 20 Kasım 2026: "radiusu biraz azalt"): pencere 18, kart 14, alan 10,
+   * küçük denetim 8; segment ve iz hap. Sınıf adları aynı: rounded-xl alan, rounded-2xl kart, rounded-3xl pencere
    */
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1.125rem;
-  --radius-3xl: 1.5rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.875rem;
+  --radius-3xl: 1.125rem;
   /*
    * Gölge (pano): zeminde yüzen kart çok yumuşak bir gölgeyle ayrılır (kenarsız), açılan ve yüzen parça (pencere, menü)
    * belirgin. Renk ev yeşilinin gecesi (#0F231C): soğuk gri zeminde sıcak toprak çamurlaşır
@@ -408,22 +408,22 @@
 
 /*
  * Köşe ve gölge belirteçleri (DESIGN.md §2 "Biçim"). Ortak kit (src/components/ui/*, src/components/admin/ui.tsx) ve
- * sahne (src/components/ui/Stage.tsx) bunları okur. Kasa ve yönetim aynı merdivende. Pano ölçüleri (20 Kasım 2026):
- * sahne 28, yaprak ve kart 24, cam çubuk 22, kart içindeki karo 16, alan ve düğme 12, rozet ve süzgeç çipi 8; segment
- * hap; sütun grafiğinin üst köşesi 6, yatay çubuk hap
+ * sahne (src/components/ui/Stage.tsx) bunları okur. Kasa ve yönetim aynı merdivende. Pano ölçüleri, bir boy sıkı
+ * (operatör 20 Kasım 2026: "radiusu biraz azalt"): ray 22, yaprak, kart ve cam çubuk 18, kart içindeki karo 12, alan
+ * ve düğme 10, rozet ve süzgeç çipi 6; segment hap; sütun grafiğinin üst köşesi 6, yatay çubuk hap
  */
 :root {
-  --r-card: 1.5rem;
-  --r-control: 0.75rem;
-  --r-btn: 0.75rem;
-  --r-chip: 0.5rem;
+  --r-card: 1.125rem;
+  --r-control: 0.625rem;
+  --r-btn: 0.625rem;
+  --r-chip: 0.375rem;
   --r-segment: 9999px;
   --r-bar: 6px;
   --r-track: 9999px;
-  --r-stage: 1.75rem;
-  --r-leaf: 1.5rem;
-  --r-glass: 1.375rem;
-  --r-tile: 1rem;
+  --r-stage: 1.375rem;
+  --r-leaf: 1.125rem;
+  --r-glass: 1.125rem;
+  --r-tile: 0.75rem;
   --table-head-bg: transparent;
 }
 
@@ -450,14 +450,14 @@
  * çizer. Değerler @theme'deki köşeler ve :root'un --r-* değerleri (tests/design-tokens.test.ts denetler)
  */
 .surface-soft {
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1.125rem;
-  --radius-3xl: 1.5rem;
-  --r-card: 1.5rem;
-  --r-control: 0.75rem;
-  --r-btn: 0.75rem;
-  --r-chip: 0.5rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.875rem;
+  --radius-3xl: 1.125rem;
+  --r-card: 1.125rem;
+  --r-control: 0.625rem;
+  --r-btn: 0.625rem;
+  --r-chip: 0.375rem;
   --r-segment: 9999px;
   --r-bar: 6px;
   --r-track: 9999px;
@@ -762,7 +762,7 @@
  */
 @layer components {
   /*
-   * Marka rayı: ev yeşilinin degradesi, köşe 28. İçinde yazı beyaz (7.2:1), soluk yazı #B9E3CF (5.1:1); seçili ekran beyaz
+   * Marka rayı: ev yeşilinin degradesi, köşe 22. İçinde yazı beyaz (7.2:1), soluk yazı #B9E3CF (5.1:1); seçili ekran beyaz
    * karo, ikonu açık nane karede yeşil (panonun seçili rayı). Satır en az 56 px (dokunmatikte 44'ün üstünde); ray
    * sığmazsa kendi içinde kayar, dipteki Araçlar ve Kilitle yerinde kalır
    */
@@ -821,7 +821,7 @@
     min-height: 3.5rem;
     padding: 5px 4px;
     border: 0;
-    border-radius: 1rem;
+    border-radius: 0.75rem;
     background: transparent;
     color: var(--rail-soft);
     font: 500 0.71875rem/1.15 var(--font-sans);
@@ -838,7 +838,7 @@
     place-items: center;
     width: 2.25rem;
     height: 1.875rem;
-    border-radius: 0.75rem;
+    border-radius: 0.625rem;
     transition: background-color 150ms var(--ease-out);
   }
   .lp-rail-icon > svg {
@@ -1042,7 +1042,7 @@
 
   /*
    * Alt menü kartı (tek bileşen, geniş ekran): yönetimin bölümleri (Stage headerInLeaf) ve adisyonun kategorileri
-   * (ProductPanel) aynı kartta, hep solda, genişlik --side-w. Beyaz kart, köşe 24, saç teli çerçeve, iç boşluk 14/10/10;
+   * (ProductPanel) aynı kartta, hep solda, genişlik --side-w. Beyaz kart, köşe 18, saç teli çerçeve, iç boşluk 14/10/10;
    * içinde `.lp-menu.lp-menu-col` (grup başlığı küçük ve soluk; satır ikon, ad, sağda sayı; seçili açık nane). Sığmazsa
    * kart kendi içinde kayar. `.lp-side`'tan sonra gelir: iç boşluğu o ezmesin
    */
@@ -1238,13 +1238,77 @@
   }
 
   /*
+   * Ödeme penceresi (PaymentModal; operatör 20 Kasım 2026: "küçült, geniş yap; seçenekleri kolay bulacak şekilde"):
+   * telefonda tek sütun (tutar, ödeme türleri, tuş takımı, ek işler); tablette iki sütun (solda tutar ve tuş takımı,
+   * sağda türler ve ek işler); geniş ekranda (72rem) üç sütun: tutar ve tuş takımı | ödeme türleri, verilen, bahşiş |
+   * yazarkasa, alınan ödemeler, ciro dışı. Bölgeler saç teliyle ayrılır; tablette ve bilgisayarda kaydırmadan sığar
+   */
+  .lp-pay {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'amount' 'methods' 'pad' 'extra';
+  }
+  .lp-pay > * {
+    min-width: 0;
+    padding: 16px;
+  }
+  .lp-pay-amount {
+    grid-area: amount;
+    padding-bottom: 4px;
+  }
+  .lp-pay-methods {
+    grid-area: methods;
+  }
+  .lp-pay-pad {
+    grid-area: pad;
+    padding-top: 0;
+  }
+  .lp-pay-extra {
+    grid-area: extra;
+    border-top: 1px solid var(--admin-divider);
+  }
+  @media (min-width: 48rem) {
+    .lp-pay {
+      grid-template-columns: minmax(0, 21rem) minmax(0, 1fr);
+      grid-template-rows: auto auto 1fr;
+      grid-template-areas: 'amount methods' 'pad methods' 'pad extra';
+    }
+    .lp-pay > * {
+      padding: 16px 20px;
+    }
+    .lp-pay-amount {
+      padding-bottom: 12px;
+    }
+    .lp-pay-pad {
+      padding-top: 0;
+    }
+    .lp-pay-amount,
+    .lp-pay-pad {
+      border-right: 1px solid var(--admin-divider);
+    }
+  }
+  @media (min-width: 72rem) {
+    .lp-pay {
+      grid-template-columns: minmax(0, 21rem) minmax(0, 1fr) minmax(0, 20rem);
+      grid-template-rows: auto 1fr;
+      grid-template-areas: 'amount methods extra' 'pad methods extra';
+    }
+    .lp-pay-methods {
+      border-right: 1px solid var(--admin-divider);
+    }
+    .lp-pay-extra {
+      border-top: 0;
+    }
+  }
+
+  /*
    * Salonun zemini (Masalar, plan görünümü): açık gri alan, 20 px aralıklı ince noktalar, köşe 20; masalar üstünde
    * beyaz (boş) ve yeşil (dolu) kartlar olarak ayrışır
    */
   .lp-floor {
     margin: 12px;
     border: 1px solid var(--admin-border);
-    border-radius: 1.25rem;
+    border-radius: var(--r-card);
     background:
       radial-gradient(circle, color-mix(in oklab, var(--admin-border-field) 34%, transparent) 1px, transparent 1.4px) 0 0 / 20px 20px,
       var(--admin-surface-2);
@@ -1383,7 +1447,7 @@
       gap: 10px;
       min-height: 2.375rem;
       padding: 0 10px;
-      border-radius: 0.75rem;
+      border-radius: var(--r-btn);
       text-align: left;
     }
     :where(.lp-menu-col) .lp-menu-item > span:not(.n) {
@@ -1438,7 +1502,7 @@
     overflow: auto;
     overscroll-behavior: contain;
     border: 1px solid var(--admin-border);
-    border-radius: 1.25rem;
+    border-radius: 1rem;
     background: var(--admin-surface);
     box-shadow: var(--shadow-leaf);
     scrollbar-width: thin;
@@ -1460,7 +1524,7 @@
   }
   /*
    * Pano yaprağı (patron paneli, yönetim, raporlar): zeminsiz ama kendi içinde kayar; kartlar zeminde yüzer (beyaz,
-   * köşe 24, kenarsız, yumuşak gölge). Gölge kaydırma kabında kesilmesin diye içerik kenardan biraz içeride başlar
+   * köşe 18, kenarsız, yumuşak gölge). Gölge kaydırma kabında kesilmesin diye içerik kenardan biraz içeride başlar
    */
   .lp-leaf.lp-float {
     border: 0;

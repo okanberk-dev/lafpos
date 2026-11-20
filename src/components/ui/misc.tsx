@@ -99,7 +99,7 @@ export function Avatar({ name, color, className, children }: { name: string; col
  */
 export function Card({ children, className, title, subtitle, actions, divided = true }: { children: ReactNode; className?: string; title?: ReactNode; subtitle?: ReactNode; actions?: ReactNode; divided?: boolean }) {
   return (
-    // Pano kartı: köşe 24; zeminde kenarsız ve yumuşak gölgeli, beyaz yaprağın içinde saç teli kenarlı (--card-line)
+    // Pano kartı: köşe 18; zeminde kenarsız ve yumuşak gölgeli, beyaz yaprağın içinde saç teli kenarlı (--card-line)
     <section className={cn('rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]', className)}>
       {(title || actions) && (
         // Başlık ve eylemler (segment, rozet) yan yana; sığmazsa eylemler alt satıra iner, başlık kesilmez
@@ -117,7 +117,7 @@ export function Card({ children, className, title, subtitle, actions, divided = 
 }
 
 /**
- * Pano kartının kabı (başlıksız): köşe 24, beyaz; zeminde (pano yaprağı) kenarsız ve yumuşak gölgeli, beyaz yaprağın
+ * Pano kartının kabı (başlıksız): köşe 18, beyaz; zeminde (pano yaprağı) kenarsız ve yumuşak gölgeli, beyaz yaprağın
  * içinde saç teli kenarlı. Pano yaprağında tek başına duran boş durum ve hata da bu kartta durur
  */
 export const FLOAT_CARD = 'rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]';

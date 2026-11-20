@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Check, ChefHat, CircleDot, Droplets, Gift, HandCoins, Pencil, Percent, StickyNote, Undo2, XCircle } from 'lucide-react';
+import { ArrowRightLeft, Check, ChefHat, CircleDot, Droplets, Gift, HandCoins, Percent, StickyNote, Undo2, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { COMP_LABEL, compReasonsOf } from '@shared/comp';
 import { tl } from '@shared/money';
@@ -76,6 +76,7 @@ export function CartPanel({
   // ekler, ödeme alınınca bara gider (holdsUntilPaid). Ödeme alamayan rolün (garson) tek düğmesi "Bara gönder": ona
   // eski ipucu
   const payFirst = holdsUntilPaid(order) && can('odeme.al');
+  const barOn = boot.settings.barEnabled !== false;
   // "Ödemeden gönder" istek sürerken kilitli: çift dokunuş ikinci isteği yollayıp başarının ardından hata göstermesin
   const releasing = useRef(false);
   const [sendingHeld, setSendingHeld] = useState(false);
@@ -105,7 +106,7 @@ export function CartPanel({
   const groupHead = 'sticky top-0 z-[1] flex items-center gap-1.5 bg-surface px-4 pb-1 pt-3 font-sans text-xs font-medium tracking-normal text-muted';
 
   // Yeni eklenen kalem uzun adisyonda da görünsün: gönderilmemişler bloğu görünür alana kayar
-  const pendingRef = useRef<HTMLDivElement>(null);
+  const pendingRef = useRef<HTMLElement>(null);
   const pendingQty = pending.reduce((a, l) => a + l.qty, 0);
   useEffect(() => {
     if (!pending.length) return;
@@ -122,18 +123,20 @@ export function CartPanel({
         {empty && (
           <EmptyState art="fincan" title="Adisyon boş" className="my-auto">
             {wide ? 'Soldan ürün seçin. ' : '“Ürün ekle”ye dokunup ürün seçin. '}
-            {payFirst ? 'Ödeme alınınca sipariş bara gider' : '“Bara gönder”e basınca sipariş bara ve mutfağa gider'}
+            {/* Bar ekranı ayardan kapalıysa (barEnabled) sipariş bara gitmez: kaydetmeyi ya da ödemeyi söyler */}
+            {!barOn ? (payFirst ? 'Ödeme alınınca satış tamamlanır' : '“Kaydet”e basınca ürünler adisyona yazılır') : payFirst ? 'Ödeme alınınca sipariş bara gider' : '“Bara gönder”e basınca sipariş bara ve mutfağa gider'}
           </EmptyState>
         )}
         {pending.length > 0 && (
-          // Gönderilmemişler: amber zemin ve durum çizgisi (iki temada tek tarif, dark: yaması yok)
-          <div ref={pendingRef} className="border-b border-warning-line bg-warning-soft">
-            <h3 className="sticky top-0 z-[1] flex items-center gap-1.5 bg-warning-soft px-4 pb-1 pt-2.5 font-sans text-xs font-medium tracking-normal text-warning-ink">
-              <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+          // Gönderilmemişler (bu cihazın sepeti) en üstte, öteki gruplarla aynı sade başlıkla: amber yalnız noktada
+          // (operatör 20 Kas 2026: "satış kısmını minimalist, temiz"; amber zemin ve dört ayrı uyarı kalktı)
+          <section ref={pendingRef} aria-label={CART_GROUP_LABEL.gonderilmedi}>
+            <h3 className={groupHead}>
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--admin-warning)]" />
               {CART_GROUP_LABEL.gonderilmedi}
               <span className="tabular font-normal">· {pendingQty}</span>
             </h3>
-            <ul className="divide-y divide-warning-line">
+            <ul className="divide-y divide-[var(--admin-divider)]">
               {pending.map((l) => {
                 const p = boot.products.find((x) => x.id === l.productId);
                 if (!p) return null;
@@ -148,6 +151,7 @@ export function CartPanel({
                   // Bilgisayarda tek satır. Odak sırası geniş düzenin sırası (adet, ad, tutar)
                   <li key={l.key} className="animate-in flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 lg:flex-nowrap">
                     <Stepper
+                      quiet
                       value={l.qty}
                       min={1}
                       max={99}
@@ -155,9 +159,9 @@ export function CartPanel({
                       onChange={(n) => cart.update(order.id, l.key, { qty: n })}
                       onRemove={() => cart.remove(order.id, l.key)}
                     />
-                    {/* Satırın kendisi düzenlemeye açar; kalem ikonu yalnız ipucu */}
+                    {/* Satırın kendisi düzenlemeye açar (seçenek, not, fiyat) */}
                     <button
-                      className="order-first flex min-h-11 min-w-0 basis-full items-center gap-2 rounded-lg text-left transition-colors duration-150 active:bg-press lg:order-none lg:flex-1 lg:basis-0"
+                      className="order-first flex min-h-11 min-w-0 basis-full items-center gap-2 rounded-[var(--r-btn)] text-left transition-colors duration-150 hover:bg-hover active:bg-press lg:order-none lg:flex-1 lg:basis-0 lg:px-2"
                       onClick={() => onEditPending(l)}
                       aria-label={`${name} düzenle`}
                       aria-describedby={problem ? `sorun-${l.key}` : undefined}
@@ -174,14 +178,13 @@ export function CartPanel({
                           </span>
                         )}
                       </span>
-                      <Pencil aria-hidden="true" className="size-3.5 shrink-0 text-muted" />
                     </button>
                     <span className="tabular ml-auto whitespace-nowrap text-right text-sm font-semibold">{tl(unit * l.qty)}</span>
                   </li>
                 );
               })}
             </ul>
-          </div>
+          </section>
         )}
         {groups.map((g) => (
           <section key={g.key} aria-label={g.label}>
@@ -210,7 +213,7 @@ export function CartPanel({
                     onClick={() => !i.voided && !order.extPaid && order.status === 'acik' && setItemSheet(i)}
                     className={cn('flex min-h-12 w-full items-start gap-3 px-4 py-2.5 text-left transition-colors duration-150', !i.voided && order.status === 'acik' && 'hover:bg-hover active:bg-press')}
                   >
-                    <span className={cn('tabular h-7 min-w-7 rounded-lg px-1.5 text-center text-[13px] font-semibold leading-7', i.voided ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'bg-surface-3 text-ink')}>
+                    <span className={cn('tabular h-7 min-w-7 rounded-[var(--r-chip)] px-1.5 text-center text-[13px] font-semibold leading-7', i.voided ? 'bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]' : 'bg-surface-2 text-ink-2')}>
                       {i.qty}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -218,16 +221,8 @@ export function CartPanel({
                         {i.name}
                         {i.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[i.size]}</SizeTag>}
                       </span>
-                      {/* Seçenekler çip, not ayrı satırda: kalem bir bakışta okunur */}
-                      {i.optionsText && (
-                        <span className="mt-1 flex flex-wrap gap-1">
-                          {i.optionsText.split(' · ').map((o) => (
-                            <span key={o} className="rounded-full bg-surface-3 px-2 py-0.5 text-[11px] font-medium leading-4 text-ink-2">
-                              {o}
-                            </span>
-                          ))}
-                        </span>
-                      )}
+                      {/* Seçenekler soluk tek satır, not ayrı satırda: kalem bir bakışta okunur, çip kalabalığı yok */}
+                      {i.optionsText && <span className="mt-0.5 block text-xs text-ink-2">{i.optionsText}</span>}
                       {i.note && <span className="mt-0.5 block text-xs text-ink-2">Not: {i.note}</span>}
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-medium">
                         {i.voided ? (
@@ -279,10 +274,13 @@ export function CartPanel({
             <Row l="Ödenen" r={tl(order.paid)} />
           </div>
         )}
-        {/* Kitin büyük sayısı: etiket üstte küçük, tutar Gabarito kalın ve sıkı */}
+        {/* Büyük sayı: etiket solda küçük (gönderilmemiş varken "tahmini"), tutar kalın ve sıkı */}
         <div className="flex items-end justify-between gap-3">
-          <span className="pb-1 text-[13px] font-medium text-muted">{partlyPaid ? 'Kalan' : 'Toplam'}</span>
-          <span className="tabular font-headline text-[34px] font-bold leading-none tracking-[-0.05em]">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
+          <span className="pb-1 text-[13px] font-medium text-muted">
+            {partlyPaid ? 'Kalan' : 'Toplam'}
+            {preview && <span className="font-normal"> · tahmini</span>}
+          </span>
+          <span className="tabular font-headline text-[32px] font-bold leading-none tracking-[-0.05em]">{tl(partlyPaid ? due : preview ? preview.total : order.extPaid ? (order.extTotal ?? 0) : order.total)}</span>
         </div>
         {/* Tamamı ödendiyse vurgu sıfıra ("Kalan ₺0,00") değil ödemeye: yeşil "Ödendi". Gönderilmemiş ürün varken (yeniden
             açılmış, ödenmiş adisyona ekleme) tutar artacak: "Ödendi" değil, tahmini toplamdan kalan */}
@@ -303,7 +301,6 @@ export function CartPanel({
               <span className="tabular">{tl(order.paid)}</span>
             </div>
           ))}
-        {preview && <div className="mt-1 text-xs text-[var(--admin-warning)]">Gönderilmemiş {pending.reduce((a, l) => a + l.qty, 0)} ürün dahil, tahmini</div>}
       </div>
       )}
 

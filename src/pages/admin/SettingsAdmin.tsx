@@ -35,6 +35,7 @@ type Settings = Record<string, unknown> & {
   quickCash: number[];
   sizeLabels: { M: string; L: string };
   requireDayOpen: boolean;
+  barEnabled: boolean;
   kitchenWarnMinutes: number;
   kitchenAlarmMinutes: number;
   roomBillingStepMinutes: number;
@@ -461,6 +462,16 @@ export default function SettingsAdmin() {
         </Card>
         {/* Eşik adı ne olacağını söyler (amber, kırmızı, uyarı, alarm); açıklamalar alanın altında, etiketler tek satır */}
         <Card title={boot.integrations.localStamps ? 'Bar ekranı, karaoke, damga, uyarılar' : 'Bar ekranı, karaoke, uyarılar'}>
+          {/* Bar ekranı olmayan işletme kapatır (operatör 20 Kas 2026): sipariş bara gitmez, adisyonda "Bara gönder"
+              yerine "Kaydet", Bar menüden kalkar; fiş süreleri o zaman kullanılmaz */}
+          <Toggle
+            block
+            className="mb-3"
+            checked={s.barEnabled}
+            onChange={(v) => set({ barEnabled: v })}
+            label="Bar ekranı ve “Bara gönder”"
+            hint="kapalıyken sipariş bara gitmez, adisyonda “Kaydet” çıkar ve Bar menüden kalkar"
+          />
           <div className="grid grid-cols-2 gap-3">
             <Field label="Bar fişi uyarısı (dk)" hint="bu süreyi geçen fiş ambere döner">
               <NumberInput commitOnChange value={s.kitchenWarnMinutes} min={1} max={120} onCommit={(kitchenWarnMinutes) => set({ kitchenWarnMinutes })} />

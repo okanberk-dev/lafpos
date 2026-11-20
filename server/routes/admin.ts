@@ -969,6 +969,7 @@ const settingsShape = patchOf(
     autoDayEndHour: z.number().int().min(0).max(23),
     serviceMode: z.enum(SERVICE_MODES),
     tipsEnabled: z.boolean(),
+    barEnabled: z.boolean(),
     zNoStart: z.number().int().min(1).max(Z_NO_MAX).nullable(),
     // Müşteri ekranı bütün olarak gelir (Yönetim › Müşteri ekranı formu); adres yalnız http(s), boşsa karekod yok
     customerDisplay: z.object({

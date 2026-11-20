@@ -226,21 +226,21 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
   })();
 
-  it('panonun merdiveni: sahne 28, yaprak ve kart 24, cam 22, karo 16, alan ve düğme 12, rozet 8; segment hap, sütun 6', () => {
+  it('panonun merdiveni bir boy sıkı (operatör 20 Kas 2026: "radiusu biraz azalt"): ray 22, yaprak, kart ve cam 18, karo 12, alan ve düğme 10, rozet 6; segment hap, sütun 6', () => {
     expect(tokens).toMatchObject({
-      'r-stage': '1.75rem',
-      'r-leaf': '1.5rem',
-      'r-glass': '1.375rem',
-      'r-card': '1.5rem',
-      'r-control': '0.75rem',
-      'r-btn': '0.75rem',
-      'r-chip': '0.5rem',
+      'r-stage': '1.375rem',
+      'r-leaf': '1.125rem',
+      'r-glass': '1.125rem',
+      'r-card': '1.125rem',
+      'r-control': '0.625rem',
+      'r-btn': '0.625rem',
+      'r-chip': '0.375rem',
       'r-segment': '9999px',
       'r-bar': '6px',
       'r-track': '9999px',
-      'r-tile': '1rem',
+      'r-tile': '0.75rem',
     });
-    expect(block('@theme')).toMatchObject({ 'radius-xl': '0.75rem', 'radius-2xl': '1.125rem', 'radius-3xl': '1.5rem' });
+    expect(block('@theme')).toMatchObject({ 'radius-lg': '0.5rem', 'radius-xl': '0.625rem', 'radius-2xl': '0.875rem', 'radius-3xl': '1.125rem' });
     // Zeminde yüzen kartın yumuşak gölgesi: ev yeşilinin gecesi
     expect(block('@theme')['shadow-card']).toMatch(/rgb\(15 35 28/);
   });

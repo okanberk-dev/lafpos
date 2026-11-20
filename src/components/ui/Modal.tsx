@@ -103,8 +103,8 @@ export function Modal({ open, onClose, title, subtitle, children, footer, size =
         aria-describedby={subtitle ? descId : undefined}
         onKeyDown={(e) => trapTab(e, panel.current)}
         className={cn(
-          // Pano penceresi: köşe 28, kenarsız beyaz yüzey ve derin yumuşak gölge (gecede saç teli kenar)
-          'animate-in flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[1.75rem] border border-transparent bg-surface shadow-[var(--shadow-pop)] outline-none sm:max-h-[92dvh] sm:rounded-[1.75rem] dark:border-[var(--admin-border-strong)]',
+          // Pano penceresi: köşe 22, kenarsız beyaz yüzey ve derin yumuşak gölge (gecede saç teli kenar)
+          'animate-in flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-[1.375rem] border border-transparent bg-surface shadow-[var(--shadow-pop)] outline-none sm:max-h-[92dvh] sm:rounded-[1.375rem] dark:border-[var(--admin-border-strong)]',
           widths[size],
           className,
         )}

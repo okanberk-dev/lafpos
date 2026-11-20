@@ -438,7 +438,8 @@ export function addItems(
       }
     }
 
-    const stationId = stationFor(p, sp.category);
+    // Bar ekranı ayardan kapalıysa (barEnabled) kalem hiçbir istasyona gitmez: istasyonsuz yazılır, teslim sayılır
+    const stationId = getSettings().barEnabled ? stationFor(p, sp.category) : null;
     // Ödeme bekleyen kalem bara henüz gitmez: fiş sesi ve bar ekranı ödeme alınınca (releaseHeld)
     const held = hold && !!stationId;
     if (stationId && !held) stations.add(stationId);
