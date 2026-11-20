@@ -1,8 +1,12 @@
-import { ArrowUpRight, X } from 'lucide-react';
+import { ArrowUpRight, Volume2, X } from 'lucide-react';
 import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { readAlertPrefs, useAlertPrefs, VOLUME_STEPS, type VolumeStep, volumeStep, writeAlertPrefs } from '@/lib/alertPrefs';
 import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
+import { ring, unlockAudio } from '@/lib/sound';
+import { toast } from '@/lib/toast';
+import { Segmented } from './ui/Field';
 
 /**
  * Araçlar çekmecesi (gnbsite Area Board kitinin Tools çekmecesi; pano: marka rayının ev yeşili degradesinde): tam ekran,
@@ -109,5 +113,66 @@ export function DrawerArrow() {
     >
       <ArrowUpRight className="size-3.5 stroke-[2.25]" />
     </span>
+  );
+}
+
+/** Çekmecedeki kit denetimi (Segmented) bantta: zemin yarı saydam, seçili açık yazı (Tema satırıyla aynı) */
+const BAND_CONTROLS =
+  '[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:#0a5c44] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)] [--hover:rgb(255_255_255/0.08)]';
+
+/**
+ * Çekmecenin anahtar satırı: bütün satır dokunulur (`role="switch"`), sağda bantın renginde anahtar (açıkken açık nane
+ * ray ve koyu yeşil top, kapalıyken yarı saydam ray)
+ */
+export function DrawerSwitch({ on, onChange, label, hint, style }: { on: boolean; onChange: (v: boolean) => void; label: ReactNode; hint?: ReactNode; style?: CSSProperties }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className={drawerRow} style={style}>
+      <DrawerLabel hint={hint}>{label}</DrawerLabel>
+      <span aria-hidden="true" className={cn('relative h-[26px] w-[46px] shrink-0 rounded-full ring-1 ring-inset transition-colors duration-200', on ? 'bg-[var(--band-accent)] ring-transparent' : 'bg-[var(--band-2)] ring-[var(--band-muted)]')}>
+        <span className={cn('absolute left-[3px] top-[3px] size-5 rounded-full transition-transform duration-200 motion-reduce:transition-none', on ? 'translate-x-5 bg-[#0a5c44]' : 'bg-[var(--band-muted)]')} />
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Araçlar › Sesli uyarılar (bu cihaz; src/lib/alertPrefs.ts): ses açık mı, düzeyi, hangi uyarılar ve "Sesi dene".
+ * Diğer sistemlerden gelen online sipariş ve karaoke uyarısı (src/components/SiteInbox.tsx); duyma yetkisi olmayana
+ * çizilmez. "Sesi dene" tarayıcının sesini de açar (ilk dokunuş kuralı)
+ */
+export function AlertSoundGroup({ online, karaoke, delay = 0 }: { online: boolean; karaoke: boolean; delay?: number }) {
+  const prefs = useAlertPrefs();
+  if (!online && !karaoke) return null;
+  const at = (i: number): CSSProperties => ({ animationDelay: `${delay + i * 35}ms` });
+  const test = async () => {
+    await unlockAudio();
+    if (!ring(readAlertPrefs().volume)) toast.warn('Tarayıcı sesi açmadı; ekrana bir kez dokunup yeniden deneyin');
+  };
+  return (
+    <DrawerGroup label="Sesli uyarılar">
+      <DrawerSwitch on={prefs.sound} onChange={(v) => writeAlertPrefs({ sound: v })} label="Uyarı sesi" hint="Sitenin ve uygulamanın siparişleri ve karaokesi; kapalıyken şerit ve bildirim kalır. Bu cihazda saklanır" style={at(0)} />
+      <div className={cn(drawerRow, 'flex-wrap gap-y-2 hover:pl-0.5')} style={at(1)}>
+        <DrawerLabel hint="Masa siparişi her düzeyde biraz daha yüksek">Ses düzeyi</DrawerLabel>
+        <span className={BAND_CONTROLS}>
+          <Segmented<VolumeStep>
+            label="Ses düzeyi"
+            value={volumeStep(prefs.volume)}
+            onChange={(v) => {
+              const volume = VOLUME_STEPS.find((s) => s.value === v)?.volume ?? prefs.volume;
+              writeAlertPrefs({ volume });
+              // Seçilen düzey hemen duyulsun (ses kapalıysa ya da kilitliyse çalmaz)
+              if (prefs.sound) ring(volume);
+            }}
+            options={VOLUME_STEPS.map((s) => ({ value: s.value, label: s.label }))}
+          />
+        </span>
+      </div>
+      {online && <DrawerSwitch on={prefs.online} onChange={(v) => writeAlertPrefs({ online: v })} label="Online siparişler" hint="Gelince Gördüm diyene dek 3 sn'de bir zil; siteden kalkınca tek ses" style={at(2)} />}
+      {karaoke && <DrawerSwitch on={prefs.karaoke} onChange={(v) => writeAlertPrefs({ karaoke: v })} label="Karaoke rezervasyonları" hint="Sitede yeni, iptal edilen ya da saati değişen rezervasyon" style={at(3)} />}
+      <button type="button" onClick={() => void test()} className={drawerRow} style={at(4)}>
+        <DrawerLabel hint="Zil bir kez çalar; tarayıcı sesi kapattıysa açar">Sesi dene</DrawerLabel>
+        <Volume2 aria-hidden="true" className="size-5 shrink-0 text-[var(--band-muted)]" />
+      </button>
+    </DrawerGroup>
   );
 }

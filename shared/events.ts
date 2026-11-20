@@ -17,11 +17,37 @@ export type LiveTopic =
   | 'alerts'
   | 'okc';
 
+/**
+ * Diğer sistemlerden (laffogato sitesi ve lafmobil uygulaması; aynı siparişleri köşkün paneli ladmin de görür) gelen
+ * ve cihazlarda sesli uyarı çalan olaylar (docs/03-ENTEGRASYON.md §2.5 "Sesli uyarılar"; istemci
+ * `src/lib/siteAlerts.ts`, `src/components/SiteInbox.tsx`). Hepsi var olan çekimlerden doğar (sipariş listesi, karaoke
+ * listesi): yeni istek açmaz. Metinde ad, not, telefon yok; yalnız masa, sipariş no, saat, süre, kişi sayısı.
+ *
+ * - `orders` › `online.new`: yeni online sipariş, `message` "Online sipariş: Masa 4 · Ayşe" (bar için ayrıca
+ *   `kitchen` › `ticket.new`, `message: 'online'`). `online.updated`: aşaması ya da masası sitede değişti.
+ *   `online.stage`: LafPOS aşamayı siteye yazdı. `online.done`: siteden kalktı, `message` "Online sipariş #N siteden
+ *   kalktı".
+ * - `reservations` › `site.karaoke.new`, `site.karaoke.cancelled`, `site.karaoke.moved`: bugünün site karaoke
+ *   listesinde yeni, iptal edilen, saati değişen ya da günden kalkan rezervasyon, `message` "Karaoke 20:00 · 2 sa ·
+ *   4 kişi". Listenin değiştiğini söyleyen `site.karaoke` de yayılır (ekranlar yenilenir).
+ */
+export const SITE_EVENT = {
+  onlineNew: 'online.new',
+  onlineUpdated: 'online.updated',
+  onlineStage: 'online.stage',
+  onlineDone: 'online.done',
+  karaokeNew: 'site.karaoke.new',
+  karaokeCancelled: 'site.karaoke.cancelled',
+  karaokeMoved: 'site.karaoke.moved',
+} as const;
+
+export type SiteEventKind = (typeof SITE_EVENT)[keyof typeof SITE_EVENT];
+
 export interface LiveEvent {
   seq: number;
   at: number;
   topic: LiveTopic;
-  /** Kısa açıklama: "order.sent", "payment.added" … */
+  /** Kısa açıklama: "order.sent", "payment.added" …; diğer sistemlerden gelenler `SITE_EVENT` */
   kind: string;
   orderId?: string;
   tableId?: string;

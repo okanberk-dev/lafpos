@@ -73,6 +73,13 @@ describe('LAFFOGATO_URL yokken site bağlantısı kapalı', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('sesli uyarılar (§2.5): liste boş, yoklama yok, siteye istek yok', async () => {
+    fetchSpy.mockClear();
+    expect(await h.ok('garson', 'GET', '/sync/alerts')).toEqual({ configured: false, online: [] });
+    expect(await h.ok('kasa', 'GET', '/sync/alerts')).toEqual({ configured: false, online: [] });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('zamanlayıcı iki saat boyunca hiç fetch çağırmaz (gün açık, otomatik eşitleme açık)', async () => {
     fetchSpy.mockClear();
     const jobs = await import('../server/jobs');

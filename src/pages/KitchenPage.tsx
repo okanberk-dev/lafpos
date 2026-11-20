@@ -18,6 +18,7 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLocalPref, useTick } from '@/lib/hooks';
 import { onLive } from '@/lib/live';
+import { onlineRingActive } from '@/lib/siteAlerts';
 import { beep, unlockAudio } from '@/lib/sound';
 import { readKdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
@@ -102,7 +103,8 @@ function KitchenScreen() {
       onLive((e) => {
         if (e.topic !== 'kitchen' || !sound) return;
         if (activeStation && e.stationId && e.stationId !== activeStation) return;
-        if (e.kind === 'ticket.new') beep('yeni');
+        // Online fişte kabuğun zili zaten çalıyor (src/components/SiteInbox.tsx): bar ikinci bir ses çalmaz
+        if (e.kind === 'ticket.new' && !(e.message === 'online' && onlineRingActive())) beep('yeni');
         if (e.kind === 'ticket.void') beep('iptal');
       }),
     [sound, activeStation],

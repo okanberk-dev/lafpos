@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CreditCard, Pencil, Plus, Power, Save } from 'lucide-react';
+import { Banknote, CreditCard, Globe, Landmark, type LucideIcon, NotebookPen, Pencil, Plus, Power, Save, UtensilsCrossed, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { PAYMENT_CHANNELS, type PaymentChannel } from '@shared/labels';
 import { PLATFORM_LABEL } from '@shared/platforms';
@@ -24,6 +24,29 @@ const ZFIELD_OF: Record<Method['kind'], Method['zField']> = { nakit: 'cash', kar
 /** Komisyon kanalının ekrandaki adı (kayıtta lafmaliyet'in anahtarı durur: pluxee, getir…); platformlar Paket platformlarındaki adla */
 const CHANNEL_LABEL: Record<PaymentChannel, string> = { pluxee: 'Pluxee', multinet: 'Multinet', edenred: 'Edenred', setcard: 'Setcard', metropol: 'Metropol', ...PLATFORM_LABEL };
 const channelName = (c: string) => CHANNEL_LABEL[c as PaymentChannel] ?? c;
+/** Türün ikonu: kasanın ödeme penceresindeki karoyla aynı (PaymentModal PAY_ICON) */
+const KIND_ICON: Record<Method['kind'], LucideIcon> = { nakit: Banknote, kart: CreditCard, yemek: UtensilsCrossed, havale: Landmark, cari: NotebookPen, online: Globe, diger: Wallet };
+
+/**
+ * Türün karosu, kasadaki gibi (PaymentModal PayIcon): rengin açık tonunda yumuşak kare, içinde türün ikonu rengin koyu
+ * tonunda; gecede zemin bir ton belirgin (--cat-bg, --cat-ink). Yönetim satırı kasiyerin gördüğünü gösterir, düz renk
+ * karesi değil. Kapalı türde karo griye döner; durumu rozet söyler, yazılar okunur kalır
+ */
+function KindTile({ kind, color, off, small }: { kind: Method['kind']; color: string; off?: boolean; small?: boolean }) {
+  const Icon = KIND_ICON[kind] ?? Wallet;
+  return (
+    <span
+      aria-hidden="true"
+      className={cn('grid shrink-0 place-items-center rounded-lg', small ? 'size-7 [&>svg]:size-[15px]' : 'size-9 [&>svg]:size-[18px]', off && 'opacity-60 saturate-0')}
+      style={{ background: `color-mix(in oklab, ${color} var(--cat-bg, 16%), var(--surface))`, color: `color-mix(in oklab, ${color} var(--cat-ink, 78%), var(--admin-text))` }}
+    >
+      <Icon className="stroke-2" />
+    </span>
+  );
+}
+
+/** Çekmecenin bölüm başlığı kart başlığının ölçüsünde (16/600): 13 px alan etiketlerinden ayrılır (Ürünler'deki gibi) */
+const SECTION_TITLE = 'text-base font-semibold leading-6 tracking-[-0.015em] text-[var(--admin-text)]';
 
 export default function PaymentsAdmin() {
   const qc = useQueryClient();
@@ -71,9 +94,8 @@ export default function PaymentsAdmin() {
       toast.err(errorMessage(e));
     }
   };
-  // Kapalı tür: durumu rozet söyler; yalnız renk karesi solar, yazılar okunur kalır
-  const swatch = (m: Method) => <span aria-hidden="true" className={cn('block size-8 shrink-0 rounded-lg ring-1 ring-inset ring-black/5 dark:ring-white/15', !m.active && 'opacity-40')} style={{ background: m.color }} />;
-  // Ad ve tür: tabloda renk karesinin yanında, telefonun satır kartında başlık (kare kartın solunda, alt satır adın
+  const swatch = (m: Method) => <KindTile kind={m.kind} color={m.color} off={!m.active} />;
+  // Ad ve tür: tabloda türün karosunun yanında, telefonun satır kartında başlık (karo kartın solunda, alt satır adın
   // hizasından başlar)
   const named = (m: Method) => (
     <span className="min-w-0">
@@ -168,56 +190,79 @@ export default function PaymentsAdmin() {
         }
       >
         {edit && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Ad" className="sm:col-span-2" required error={tried ? nameError : null}>
-              <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} autoFocus={!edit.id && fine} placeholder="Ör. Multinet" />
-            </Field>
-            <Field label="Tür">
-              <Select
-                value={edit.kind}
-                onChange={(e) => {
-                  const kind = e.target.value as Method['kind'];
-                  setEdit({ ...edit, kind, zField: kind === 'nakit' || edit.zField === 'cash' ? ZFIELD_OF[kind] : edit.zField });
-                }}
-              >
-                {Object.entries(KIND).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="lafmaliyet alanı">
-              <Select value={edit.zField} onChange={(e) => setEdit({ ...edit, zField: e.target.value as Method['zField'] })}>
-                {Object.entries(ZFIELD).map(([k, v]) => (
-                  <option key={k} value={k} disabled={(edit.kind === 'nakit') !== (k === 'cash')}>
-                    {v}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Komisyon kanalı">
-              <Select value={edit.channel ?? ''} onChange={(e) => setEdit({ ...edit, channel: e.target.value || null })}>
-                <option value="">Yok</option>
-                {PAYMENT_CHANNELS.map((c) => (
-                  <option key={c} value={c}>
-                    {CHANNEL_LABEL[c]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Sıra" hint="küçük olan önce">
-              <NumberInput value={edit.sort} min={0} max={999} fallback={0} onCommit={(sort) => setEdit({ ...edit, sort })} />
-            </Field>
-            <Field label="Renk">
-              {/* Kenar ve köşe alanlarla aynı (3:1 kenar, 14 px köşe) */}
-              <input
-                type="color"
-                value={edit.color}
-                onChange={(e) => setEdit({ ...edit, color: e.target.value })}
-                className="h-11 w-20 cursor-pointer rounded-xl border border-line-strong bg-surface p-1 [[data-area=admin]_&]:pointer-fine:h-10"
-              />
-            </Field>
+          // İki bölüm: kasiyerin gördüğü düğme (ad, tür, sıra, renk ve canlı önizlemesi) ve lafmaliyet'e giden satır
+          <div className="space-y-6">
+            <section aria-labelledby="odeme-kasa" className="space-y-3">
+              <h3 id="odeme-kasa" className={SECTION_TITLE}>
+                Kasa düğmesi
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Ad" className="sm:col-span-2" required error={tried ? nameError : null}>
+                  <Input value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} autoFocus={!edit.id && fine} placeholder="Ör. Multinet" />
+                </Field>
+                <Field label="Tür">
+                  <Select
+                    value={edit.kind}
+                    onChange={(e) => {
+                      const kind = e.target.value as Method['kind'];
+                      setEdit({ ...edit, kind, zField: kind === 'nakit' || edit.zField === 'cash' ? ZFIELD_OF[kind] : edit.zField });
+                    }}
+                  >
+                    {Object.entries(KIND).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Sıra" hint="küçük olan önce">
+                  <NumberInput value={edit.sort} min={0} max={999} fallback={0} onCommit={(sort) => setEdit({ ...edit, sort })} />
+                </Field>
+                <Field label="Renk" hint="kasadaki düğme" className="sm:col-span-2">
+                  <span className="flex items-center gap-3">
+                    {/* Kenar, köşe, gölge ve boy alanlarla aynı (3:1 kenar, köşe 10; fareyle 36, dokunmatikte 44 px) */}
+                    <input
+                      type="color"
+                      value={edit.color}
+                      onChange={(e) => setEdit({ ...edit, color: e.target.value })}
+                      className="h-10 w-16 shrink-0 cursor-pointer rounded-xl border border-line-strong bg-surface p-1 shadow-[var(--shadow-control)] hover:border-[var(--admin-text-mute)] pointer-coarse:h-11 [[data-area=admin]_&]:pointer-fine:h-9"
+                    />
+                    {/* Canlı önizleme: kasanın ödeme penceresindeki düğme (karo ve ad); renk, tür ya da ad değişince hemen
+                        görünür. Etiketin adına karışmaz (aria-hidden) */}
+                    <span aria-hidden="true" className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl border border-line bg-surface pl-1.5 pr-3 text-sm font-semibold text-ink pointer-coarse:h-11 [[data-area=admin]_&]:pointer-fine:h-9">
+                      <KindTile kind={edit.kind} color={edit.color} small />
+                      <span className="min-w-0 truncate">{edit.name.trim() || KIND[edit.kind]}</span>
+                    </span>
+                  </span>
+                </Field>
+              </div>
+            </section>
+            <section aria-labelledby="odeme-rapor" className="space-y-3 border-t border-[var(--admin-divider)] pt-5">
+              <h3 id="odeme-rapor" className={SECTION_TITLE}>
+                lafmaliyet Kasa raporu
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="lafmaliyet alanı">
+                  <Select value={edit.zField} onChange={(e) => setEdit({ ...edit, zField: e.target.value as Method['zField'] })}>
+                    {Object.entries(ZFIELD).map(([k, v]) => (
+                      <option key={k} value={k} disabled={(edit.kind === 'nakit') !== (k === 'cash')}>
+                        {v}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Komisyon kanalı">
+                  <Select value={edit.channel ?? ''} onChange={(e) => setEdit({ ...edit, channel: e.target.value || null })}>
+                    <option value="">Yok</option>
+                    {PAYMENT_CHANNELS.map((c) => (
+                      <option key={c} value={c}>
+                        {CHANNEL_LABEL[c]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            </section>
           </div>
         )}
       </QuickLook>

@@ -66,12 +66,14 @@ function AdminIndex() {
           const list = sections.filter((s) => s.group === g.key);
           if (!list.length) return null;
           return (
+            // Grup başlığı bilgisayardaki alt menü kartı gibi küçük, soluk ve büyük harfsiz (Genel, Menü, Salon ve kasa);
+            // kartın iç kenarıyla (16 px) hizalı
             <section key={g.key}>
-              <h2 className="px-4 pb-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-[var(--admin-text-mute)]">{g.label}</h2>
+              <h2 className="px-4 pb-2 text-[13px] font-medium text-[var(--admin-text-mute)]">{g.label}</h2>
               <ul className={`${CARD} divide-y divide-[var(--admin-divider)] overflow-hidden`}>
                 {list.map((s) => (
                   <li key={s.key}>
-                    <Link to={s.to} className="flex min-h-[68px] items-center gap-3 px-4 py-3.5 transition-colors hover:bg-hover active:bg-press">
+                    <Link to={s.to} className="flex min-h-[68px] items-center gap-3 px-4 py-3.5 transition-colors hover:bg-hover active:bg-press focus-visible:-outline-offset-2">
                       {/* Tek ve renksiz ton, bilgisayardaki kenar çubuğu gibi: renk durumun, bölümleri süslemez */}
                       <IconBox size="lg">
                         <s.icon />

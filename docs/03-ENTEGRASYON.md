@@ -333,6 +333,31 @@ kaydında ad ve not yoktur, yalnız rezervasyon kodu. LafPOS Uzaktan'a giden öz
 saat, kişi sayısı ve ödeme durumu. Laffogato `docs/LAFPOS.md` "Kişisel veri" rezervasyonu yalnız kafedeki makineye
 açar.
 
+### 2.5 Sesli uyarılar (20 Kasım 2026)
+
+Operatör: "diğerlerine sipariş, karaoke gelince LafPOS'ta da ötsün, ses çıkarsın ki ayarlama yapabilelim". Uyarılar
+yalnız var olan çekimlerden doğar (§2.3 online siparişler, §2.4 karaoke): **yeni uç, yeni alan, yeni istek yok**, sıklık
+değişmez (`AGENTS.md` kural 6); LafPOS siteye hiçbir şey yazmaz, "Gördüm" yalnız o cihazda kalır. Kod:
+`shared/site-alerts.ts`, `src/lib/siteAlerts.ts` (kurallar), `src/components/SiteInbox.tsx` (şerit ve ses),
+`src/lib/sound.ts` (zil); olay türleri `shared/events.ts` `SITE_EVENT`.
+
+- **Yeni online sipariş** (uygulama, web, masa QR): sitenin panelindeki ve köşk bar ekranındaki (ladmin) zille aynı
+  motif (Do6, Mi6, Sol6, iki kez; sıkıştırıcıdan) 3 saniyede bir çalar, masa siparişi biraz daha yüksek; ekranın üstünde
+  mor şerit durur ("Yeni online sipariş · #10101 · Masa 4", dokununca liste, "Aç" adisyonu açar). Susar: o cihazda
+  "Gördüm" (24 saat hatırlanır), sipariş o cihazda açılınca, aşaması değişince (LafPOS'ta, sitede ya da köşkte
+  "Hazırlanıyor"), siteden kalkınca ya da ödemesinden 4 saat geçince. Duyan: `siparis.al` ya da `mutfak.ekran`. Liste
+  `GET /api/sync/alerts` (aynı yetki; yalnız yerel veritabanı, açık ve sitede hâlâ `new` aşamasındaki siparişler).
+  Bar ekranı online fişte kendi sesini çalmaz (kabuğun zili çalıyorsa).
+- **Siteden kalkan sipariş** (§2.3 "Kapanış"): tek sakin nota ve bildirim "Online sipariş #N siteden kalktı".
+- **Karaoke:** aynı iş gününün iki listesi kıyaslanır, günün ilk listesi kıyaslanmaz (sabahtan beri alınanlar çalmasın).
+  Yeni rezervasyon (iptal olmayan) bir kez zil, iptal edilen inen ses, saati ya da süresi değişen ve (iki liste de tamsa)
+  günün listesinden düşen tek nota; bildirim "Yeni rezervasyon · Karaoke 20:00 · 2 sa · 4 kişi". Ad ve not uyarıya
+  girmez. Duyan: `siparis.al` ya da `rezervasyon.yonet`. Çekim en sık 5 dakikada bir olduğu için uyarı o kadar gecikebilir.
+- **Tercihler cihazda** (Araçlar › Sesli uyarılar): ses açık / kapalı (kapalıyken şerit ve bildirim kalır), düzey
+  (Kısık, Orta, Yüksek), online sipariş ve karaoke ayrı ayrı, "Sesi dene". Tarayıcı sesi ancak sayfaya dokunulunca
+  açar: kabuk ilk dokunuşta açar, kilitliyken şerit "Sesi açmak için dokunun" der.
+- `.env`'de `LAFFOGATO_URL` yoksa (varsayılan; tarayıcı demosu da) hiçbiri çalmaz: liste boş, olay yok, istek yok.
+
 ## 3. LafPOS → lafmaliyet: elle yedek (CSV / kopyala)
 
 Bağlantı kurulmamışken (ya da lafmaliyet'teki geçiş gününden önceki aylar için) gün sonu ve ürün satışları elle
@@ -623,6 +648,7 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | Tükendi / aşama yazma | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
 | Karaoke rezervasyonları (§2.4) | `karaoke` işareti değişince ya da gün dönünce, gün açıkken en sık 5 dk ("Online siparişleri çek" kapalıyken de); oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn); gece yok; planda oda yoksa hiç | küçük okuma |
 | Karaoke saat ücreti (§2.4) | Yönetim › Masa planı açılınca (en sık dakikada bir) | küçük okuma (herkese açık uç) |
+| Sesli uyarılar (§2.5) | yeni istek yok: sipariş ve karaoke çekimlerinin listesinden | yok |
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
 

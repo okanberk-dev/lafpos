@@ -9,7 +9,7 @@ import { Chip, Field, Input, Label, NumberInput, Toggle } from '@/components/ui/
 import { Modal } from '@/components/ui/Modal';
 import { ErrorState, ListSkeleton, Skeleton } from '@/components/ui/misc';
 import { groupDraft, newGroupDraft, OptionGroupEditor, type OptionGroupDraft } from '@/components/admin/OptionGroupEditor';
-import { Badge, Card, CARD, EmptyState, PageHeader } from '@/components/admin/ui';
+import { Badge, Card, CARD, EmptyState, PageHeader, TONE_SOFT } from '@/components/admin/ui';
 import { del, errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -113,6 +113,7 @@ export default function OptionsAdmin() {
       .map((p) => ({ id: p.id, name: p.name, category: cats.find((c) => c.id === p.categoryId)?.name }));
   }, [products, data.data]);
   const linkedTo = (groupId: string) => products.filter((p) => p.optionGroupIds.includes(groupId)).map((p) => p.id);
+  const localCount = groups.filter((g) => !g.extSource).length;
   const newGroup = () => setEdit(newGroupDraft());
   const newHappy = () => openHappy({ name: '', days: [1, 2, 3, 4, 5], start: '15:00', end: '17:00', percent: 15, categoryIds: [], productIds: [], active: true });
 
@@ -130,7 +131,7 @@ export default function OptionsAdmin() {
       {data.isPending ? (
         <div role="status" aria-label="Yükleniyor…" className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-32 rounded-2xl" />
+            <Skeleton key={i} className="h-32 rounded-[var(--r-card)]" />
           ))}
         </div>
       ) : data.isError && !data.data ? (
@@ -140,6 +141,17 @@ export default function OptionsAdmin() {
           Süt, şurup ve shot sitenin sabit listesinden, site bağlantısıyla gelir; kasaya özel seçenek için Grup ekle’ye basın
         </EmptyState>
       ) : (
+      <section aria-labelledby="secenek-gruplari" className="space-y-3">
+        {/* Bölüm başlığı kart başlığının ölçüsünde (16/600); yanında kaçının siteden, kaçının yerel olduğu: rozetleri açıklar
+            ve kartların ızgarasını aşağıdaki Happy hour kartından ayırır */}
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <h2 id="secenek-gruplari" className="text-base font-semibold leading-6 tracking-[-0.015em] text-[var(--admin-text)]">
+            Seçenek grupları
+          </h2>
+          <span className="text-[13px] tabular-nums text-[var(--admin-text-mute)]">
+            {groups.length} grup{localCount > 0 && ` · ${localCount} yerel`}
+          </span>
+        </div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((g) => {
           const its = items.filter((i) => i.groupId === g.id && i.active);
@@ -163,43 +175,50 @@ export default function OptionsAdmin() {
                   {!g.active && <Badge>Kapalı</Badge>}
                 </span>
               }
-              actions={
-                !g.extSource && (
-                  // Düğme başlık satırını uzatmaz: yerel grubun ayrıntı satırı yanındaki site grubununkiyle aynı hizada kalır
-                  <Button size="sm" className="-my-1.5 pointer-coarse:-my-2.5" onClick={() => setEdit(groupDraft(g, its, linked))}>
-                    Düzenle
-                  </Button>
-                )
-              }
-            >
-              <div className="px-4 pb-4 text-sm sm:px-5">
-                <div className="mb-2 text-xs text-[var(--admin-text-mute)]">
+              // Grubun türü ve kapsamı kartın alt satırında (13 px, kitin kart başlığı): başlık bloğu iki satır olunca
+              // Düzenle onun ortasında durur, site grubunun düğmesiz kartıyla çipler aynı hizadan başlar
+              subtitle={
+                <>
                   {KIND_LABEL[g.kind]}
                   {g.kind === 'multi' && ` · en çok ${g.maxSelect}`}
                   {/* Adetli grupta zorunluluk sayılmaz (sıfır adet de geçerli) */}
                   {g.required && g.kind !== 'counter' && ' · zorunlu'}
                   {` · ${linked.length ? `${linked.length} ürün` : 'ürüne bağlı değil'}`}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
+                </>
+              }
+              actions={
+                !g.extSource && (
+                  <Button size="sm" onClick={() => setEdit(groupDraft(g, its, linked))}>
+                    Düzenle
+                  </Button>
+                )
+              }
+            >
+              {/* Seçenek çipleri: ad mürekkepte, ek ücret ve adet sınırı ikincil tonda (tablo rakamı); varsayılan gri zeminde */}
+              {its.length ? (
+                <ul className="flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5">
                   {its.map((i) => (
-                    <span key={i.id} className={cn('inline-flex items-baseline gap-1.5 rounded-[var(--r-chip)] border border-[var(--admin-border)] px-2.5 py-1 text-xs text-[var(--admin-text)]', i.isDefault && 'bg-[var(--admin-panel)]')}>
-                      <span>
-                        {i.name}
-                        {i.price > 0 && ` +${tl(i.price)}`}
-                        {g.kind === 'counter' && i.maxQty > 1 && ` (en çok ${i.maxQty})`}
-                      </span>
+                    <li key={i.id} className={cn('inline-flex items-baseline gap-1.5 rounded-[var(--r-chip)] border border-[var(--admin-border)] px-2.5 py-1 text-xs text-[var(--admin-text)]', i.isDefault && 'bg-[var(--admin-panel)]')}>
+                      <span>{i.name}</span>
+                      {i.price > 0 && <span className="tabular-nums text-[var(--admin-text-soft)]">+{tl(i.price)}</span>}
+                      {g.kind === 'counter' && i.maxQty > 1 && <span className="text-[var(--admin-text-mute)]">en çok {i.maxQty}</span>}
                       {i.isDefault && <span className="text-[11px] text-[var(--admin-text-mute)]">varsayılan</span>}
-                    </span>
+                    </li>
                   ))}
-                </div>
-              </div>
+                </ul>
+              ) : (
+                <p className="px-4 pb-4 text-[13px] text-[var(--admin-text-mute)] sm:px-5 sm:pb-5">Açık seçenek yok</p>
+              )}
             </Card>
           );
         })}
       </div>
+      </section>
       )}
 
+      {/* Izgaradan bir boy açık durur (kartlar arası 12, bölümler arası 24): ayrı bir bölüm olduğu okunur */}
       <Card
+        className="mt-6"
         title="Happy hour"
         subtitle="Saat ve güne göre otomatik indirim"
         actions={
@@ -220,19 +239,29 @@ export default function OptionsAdmin() {
         ) : (
         <ul className="divide-y divide-[var(--admin-divider)]">
           {hh.data.map((h) => (
-            <li key={h.id} className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm sm:px-5">
-              <span className="min-w-0 flex-1">
-                <span className="font-semibold text-[var(--admin-text)]">{h.name}</span> <Badge tone={h.active ? 'success' : 'neutral'}>{h.active ? 'Açık' : 'Kapalı'}</Badge>
-                <span className="mt-0.5 block text-xs text-[var(--admin-text-mute)]">
-                  %{h.percent} · {dayText(h.days)} · {h.start}–{h.end} · {h.categoryIds.length ? h.categoryIds.map((c) => boot.categories.find((x) => x.id === c)?.name).filter(Boolean).join(', ') : 'bütün menü'}
+            // Solda indirim oranı karoda (açık kuralda ev yeşili açık nane, kapalıda gri): kurallar bir bakışta oranla
+            // ayrılır. Telefonda düğmeler adın altına, adın hizasından başlayan kendi satırına iner (ad sıkışmaz)
+            <li key={h.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3.5 text-sm sm:px-5">
+              <span className={cn('grid size-11 shrink-0 place-items-center rounded-[var(--r-tile)] text-sm font-bold tabular-nums tracking-[-0.02em]', h.active ? TONE_SOFT.primary : TONE_SOFT.neutral)}>%{h.percent}</span>
+              <span className="min-w-0 flex-[1_1_12rem]">
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-semibold text-[var(--admin-text)]">{h.name}</span>
+                  <Badge tone={h.active ? 'success' : 'neutral'} dot>
+                    {h.active ? 'Açık' : 'Kapalı'}
+                  </Badge>
+                </span>
+                <span className="mt-0.5 block text-[13px] text-[var(--admin-text-mute)]">
+                  {dayText(h.days)} · {h.start}–{h.end} · {h.categoryIds.length ? h.categoryIds.map((c) => boot.categories.find((x) => x.id === c)?.name).filter(Boolean).join(', ') : 'bütün menü'}
                 </span>
               </span>
-              <Button size="sm" onClick={() => openHappy({ ...h })}>
-                Düzenle
-              </Button>
-              <Button size="sm" variant="dangerOutline" onClick={() => void removeHappy(h)}>
-                Sil
-              </Button>
+              <span className="flex shrink-0 gap-2 max-sm:w-full max-sm:pl-14">
+                <Button size="sm" onClick={() => openHappy({ ...h })}>
+                  Düzenle
+                </Button>
+                <Button size="sm" variant="dangerOutline" onClick={() => void removeHappy(h)}>
+                  Sil
+                </Button>
+              </span>
             </li>
           ))}
         </ul>
@@ -269,11 +298,13 @@ export default function OptionsAdmin() {
       >
         {happy && (
           <div className="space-y-3 p-5">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Ad" required error={tried ? happyErrors?.name : null}>
+            {/* Başlangıç ve bitiş telefonda da yan yana (bir aralığın iki ucu, saat alanı dar sütuna sığar); ad ve oran
+                telefonda tam genişlikte */}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Ad" className="col-span-2 sm:col-span-1" required error={tried ? happyErrors?.name : null}>
                 <Input value={happy.name} onChange={(e) => setHappy({ ...happy, name: e.target.value })} placeholder="Ör. öğleden sonra kahvesi" />
               </Field>
-              <Field label="İndirim (%)" hint="1–100">
+              <Field label="İndirim (%)" className="col-span-2 sm:col-span-1" hint="1–100">
                 <NumberInput value={happy.percent} min={1} max={100} onCommit={(percent) => setHappy({ ...happy, percent })} />
               </Field>
               <Field label="Başlangıç">
