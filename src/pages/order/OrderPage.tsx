@@ -668,8 +668,9 @@ export default function OrderPage() {
   return (
     <div className="flex h-full flex-col">
       {wide ? (
-        // Kitin sahnesi: gri sahnede solda numaralı kategoriler ve ürün kartları, sağda adisyonun beyaz yaprağı
-        <div className="lp-stage min-h-0 flex-1 md:flex-row md:gap-4">
+        // İş ekranı ızgarası (DESIGN.md §5 "Yerleşim ve ızgara"): solda alt menü kartında kategoriler (--side-w), ortada
+        // ürün karoları, sağda hesabın yaprağı (--cart-w); sütun arası --grid-gap
+        <div className="lp-stage min-h-0 flex-1 md:flex-row md:gap-[var(--grid-gap)]">
           {/* Ürün eklenemeyen adisyonda (kapanmış, online, uzaktan, siparişe yetkisiz rol) katalog çizilmez: soluk ama
               aranabilir yarım ekran yerine adisyon ortada */}
           {editable && (
@@ -677,7 +678,7 @@ export default function OrderPage() {
               <ProductPanel onQuickAdd={quickAdd} onCustomize={(p, size) => setOptions({ product: p, size, editing: null })} />
             </section>
           )}
-          <section className={cn('lp-leaf flex flex-none flex-col overflow-hidden', editable ? 'w-[clamp(320px,35vw,440px)]' : 'mx-auto w-full max-w-2xl')}>
+          <section className={cn('lp-leaf flex flex-none flex-col overflow-hidden', editable ? 'w-[var(--cart-w)]' : 'mx-auto w-full max-w-2xl')}>
             {header}
             {right}
           </section>

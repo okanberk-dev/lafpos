@@ -19,18 +19,18 @@
 ## 1. İlkeler
 
 1. **Zemin, kart, ray:** üst çubuk ve içerik tek açık gri zeminde (`--admin-bg` = `--admin-stage`); içerik beyaz kartlarda
-   (köşe 24, kenarsız, yumuşak gölge) ya da ekranın büyük beyaz yaprağında, kendi içinde kayar. Kart içinde kart yok;
+   (köşe 24, ince saç teli çerçeve, çok hafif gölge) ya da ekranın büyük beyaz yaprağında (o da çerçeveli), kendi içinde kayar. Kart içinde kart yok;
    yaprağın içindeki kart saç teli kenarlı ve gölgesizdir (`--card-line`, `--card-shadow`). Tablette ve bilgisayarda solda
    ev yeşilinin degradesinde marka rayı: ekranlar arası gezinme yalnız orada.
-2. **Renk anlam taşır:** ev yeşili ana eylem ve seçimdir (Öde, Kaydet, seçili çip, segment, kategori); açık nane seçili
-   sekme ve yumuşak ikon dairesi; dolu masa yeşil degrade; zamanı daralan (hesap istendi, onay bekleyen platform siparişi)
+2. **Renk anlam taşır:** ev yeşili ana eylem ve seçimdir (Öde, Kaydet, seçili çip, segment); açık nane seçili sekme,
+   alt menü satırı ve kategori, yumuşak ikon dairesi; dolu masa yeşil degrade; zamanı daralan (hesap istendi, onay bekleyen platform siparişi)
    canlı ahududu; amber uyarı ve gecikme, kırmızı hata ve iptal, kobalt hazırlanıyor ve bilgi, mor online sipariş, pirinç
    ödül. Renk tek başına durum taşımaz, yanında yazı ya da ikon olur.
 3. **Sakin başlık, iri rakam:** ekranın adı başlık satırında (Inter 700, 28-32 px, büyük harf yok; patron panelinde
    selamlama, ad ev yeşilinde); öne çıkan rakamdır (tutar, KPI, büyük sayılar: Inter kalın, sıkı aralık).
 4. **Dokunmatik önce, aşırı büyük değil:** dokunmatikte her hedef en az 44 px (AGENTS.md kural 8); fareyle ölçülü:
    düğme ve alan 40 px, küçük düğme 32, büyük 44, en büyük 48; yönetimde fareyle 36, sıkı görünümde 32 px. Raydaki ekran
-   56 px, kategori satırı 48 px.
+   56 px (alçak ekranda 54, 768 px ve altında 44); alt menü ve kategori satırı 38 px, dokunmatikte 44.
 5. **Kullanıcı davranışı önce:** panonun görünümü akışı yavaşlatmaz: ürün kartları sık (ızgarada 4-6 sütun), kategoriler
    tek dokunuş, ana eylem başlık satırının ya da hesabın dibinde hep aynı yerde; telefonda ray yerine alt sekme çubuğu.
 6. **Tek açılış anı:** ekrana girerken başlık aşağıdan açılır, yaprak ve kartlar gelir, ilk satırlar 30 ms arayla; sonra
@@ -56,7 +56,7 @@
 | Zemin (üst çubuk ve sahne tek) | `#F1F4F2` | `#0D1110` |
 | Kart, yaprak | `#FFFFFF` | `#19201D` |
 | Kart içi hafif alan / taş (segment rayı, tuş, kuyu) | `#F7F9F8` / `#EDF1EE` | `#1E2622` / `#26302B` |
-| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E3E8E4` / `#D2D9D4` / `#EDF1EE` / `#7A837E` | `#2A332F` / `#36413C` / `#212925` / `#78837D` |
+| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E3E8E4` / `#D2D9D4` / `#EDF1EE` / `#868F8A` (kartta 3.3:1) | `#2A332F` / `#36413C` / `#212925` / `#78837D` |
 | Mürekkep / gövde / etiket | `#0F1513` / `#3F4A45` / `#58635E` | `#F1F5F3` / `#C9D2CD` / `#9AA6A0` |
 | Ana eylem ve seçim (eylem dolgusu, `--admin-ink-fill`) | ev yeşili `#0A6E52`, üstünde `#FFFFFF` (6.2:1) | zümrüt `#34D399`, üstünde `#052E1F` |
 | Ok halkası (ana düğmenin sağı) | açık nane `#D8F6E8`, ok `#075A43` | `#064E3B`, ok `#D1FAE5` |
@@ -81,14 +81,14 @@
   adları iki temada doğru tonu verir: `text-signal-ink`, `bg-signal-soft`, `text-blue-ink`, `bg-warning-soft`... Ham
   ölçekler (`danger-600`, `success-600`...) koyuda değişmez; yalnız beyaz yazılı dolu yüzeyde kalır, `tests/ui-rules.test.ts`
   izinli listeyle tutar.
-- **Odak halkası** 2 px ev yeşili, 2 px dışarıda; rayda beyaz, bantta açık yeşil. Alan odakta mürekkep kenar ve 1 px
-  mürekkep halka.
+- **Odak halkası** 2 px ev yeşili, 2 px dışarıda; rayda beyaz, bantta açık yeşil. Alan odakta ev yeşili kenar ve 3 px
+  açık nane hâle.
 
 ### Biçim
 
 - **Köşeler** (panonun merdiveni): sahne ve ray 28 (`--r-stage`), yaprak ve kart 24 (`--r-leaf`, `--r-card`), cam çubuk
   22, kart içindeki karo ve büyük sayı kartı 16 (`--r-tile`), alan ve düğme 12 (`--r-control`, `--r-btn`), rozet ve süzgeç
-  çipi 8 (`--r-chip`); segment, kategori çipi ve arama hap. Sütun grafiğinin üst köşesi 6, yatay çubuk hap.
+  çipi 8 (`--r-chip`); süzgeç sekmesi ve seçim çipi 12; segment, adet seçici ve kategori çipi hap. Sütun grafiğinin üst köşesi 6, yatay çubuk hap.
   `.surface-soft` müşteri ekranının yönetimdeki önizlemesinde aynı merdiveni çizer.
 - **Gölge** ev yeşilinin gecesi (`#0F231C`): zeminde yüzen kart `--shadow-card` (1 px ve 28 px yumuşak), yaprak
   `--shadow-leaf`, açılan ve yüzen parça (pencere, menü) `--shadow-pop`. Koyuda kart gölgesiz, ayrımı ton ve saç teli yapar.
@@ -132,8 +132,9 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   eylemlerin yerine taşınır (portal). Yönetimde (`headerInLeaf`) başlık yaprağın başında, solda beyaz **alt menü kartı**.
 - **Sekmeler** (`.lp-menu`, `.lp-menu-item`): satır ikon, ad ve sağda soluk sayı; köşe 12; üstüne gelince çok açık gri,
   seçili açık nane zeminde yeşil yazı, ikon ve sayı (5.4:1), kalın; kenar, gölge, renk geçişi yok. Üst çubukta 40 px
-  (dokunmatikte 44), yönetimin alt menü kartında alt alta (satır 38 px, grup başlığı 12 px soluk). Üst çubuğun sekmesi,
-  telefonun alt sekmesi ve yönetimin alt menüsü aynı seçim dilini konuşur.
+  (dokunmatikte 44), alt menü kartında (`.lp-subnav`) alt alta (satır 38 px, grup başlığı 12 px soluk). Üst çubuğun
+  sekmesi, telefonun sekme şeridi, yönetimin alt menüsü ve adisyonun kategorileri aynı bileşendir (§5 "Yerleşim ve
+  ızgara").
 - **Durum renkleri:** masa boş kesikli kenarlı açık kart, dolu L'Affogato yeşilinin degradesinde beyaz yazılı kart (iki
   temada), hesap istendi soldaki ahududu şerit ve "Hesap" hapı, kısmen ödendi altta beyaz ilerleme çubuğu ve "₺X kaldı";
   hazır kalem beyaz hapta nabızlı; online (siteden gelen) sipariş her
@@ -146,15 +147,16 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   ekranda sağdaki kartta masasız siparişler ve bugünkü rezervasyonlar, darda yaprağın altında. Masa kartı köşe 18, ad
   kalın, tutar kartın en büyük yazısı (26/700), altında süre ve garson; bara gitmiş ve hazır kalemler küçük hap, hazır
   olan yeşil ve nabızlı.
-- **Adisyon** (20 Kasım 2026, operatör: "menü kısımlarını da daha güzel tasarla"): geniş ekranda (xl) solda beyaz
-  **menü kartı** (köşe 24): "Menü" başlığı, kategoriler alt alta 48 px satırlarda; her satırda kategorinin **renkli ikon
-  karosu** (36 px, köşe 11: kategori renginin açık tonunda kare, içinde adından eşlenen ikon (`src/lib/categoryIcon.ts`:
-  matcha yaprak, espresso ve sıcak fincan, soğuk kahve ve frappe pipetli bardak, smoothie narenciye, frozen kar tanesi,
-  tatlı pasta dilimi, atıştırmalık sandviç, karaoke mikrofon, ekstra artı…) ya da adın baş harfi; sık kullanılanlar
-  pirinç yıldız), ad ve sağda ürün sayısı küçük kutuda. Seçili kategori ev yeşili dolgu, beyaz yazı, karo beyaz.
-  Tablette ve telefonda kategoriler yatay **çip şeridi**: beyaz hap çip zeminde yüzer (yumuşak gölge, kenarsız), solda
-  renkli yuvarlak karo, seçili çip ev yeşili. Ortada arama (beyaz, gölgeli, "/" kısayolu) ve ürün kartları: beyaz, köşe
-  20, kenarsız ve yumuşak gölgeli, üstüne gelince kalkar; ad 15/600 iki satır, altta solda fiyat (17/700), sağda açık nane
+- **Adisyon** (20 Kasım 2026, operatör: "espresso based vs. kısmı da ekteki gibi olabilir, componentleri bir yap"):
+  geniş ekranda (xl) solda **alt menü kartı**, yönetimin alt menüsüyle aynı bileşen (`.lp-subnav`, `.lp-menu-col`,
+  genişlik `--side-w` 240): "Kategoriler" grup başlığı küçük ve soluk, kategoriler alt alta 38 px satırlarda
+  (dokunmatikte 44); her satırda adından eşlenen **tek renk ikon** (16 px; `src/lib/categoryIcon.ts`: matcha yaprak,
+  espresso ve sıcak fincan, soğuk kahve ve frappe pipetli bardak, smoothie narenciye, frozen kar tanesi, tatlı pasta
+  dilimi, atıştırmalık sandviç, karaoke mikrofon, ekstra artı…; eşleşmeyende etiket; sık kullanılanlar yıldız), ad ve
+  sağda soluk ürün sayısı. Seçili kategori açık nane zeminde yeşil ve kalın. Tablette ve telefonda aynı satırlar yatay
+  **sekme şeridinde** (üst çubuğun sekmeleri gibi; seçili sekme görünür alana kayar, şeridin sağı solarak biter).
+  Renkli karo, dolu yeşil seçim ve gölgeli hap çip kalktı. Ortada arama (beyaz, gölgeli, "/" kısayolu) ve ürün kartları: beyaz, köşe
+  20, ince çerçeveli ve çok hafif gölgeli, üstüne gelince çerçeve ev yeşili ve kart kalkar; ad 15/600 iki satır, altta solda fiyat (17/700), sağda açık nane
   dairede artı (ekle işareti; kart dokununca ekler); seçenekli üründe sağ üstte yumuşak dairede seçenek düğmesi (44 px
   dokunma alanı); iki boyluda açık nane boy düğmeleri (köşe 12); kategorinin rengi kartın tepesinde kısa şerit; sitedeki
   görsel varsa üstte. Sağda hesap yaprağı: masanın adı (24-28/700), toplam 34 px, tek ana eylem "Öde · ₺X" ev yeşili ve ok
@@ -171,7 +173,7 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   Açık / Online / Paket ve gel-al / Kapanan) üst çubuğun ortasında, içerik yaprakta; Müşteriler iki yaprak (liste, kayıt).
 - **Bar ekranı:** sahnede üstte cam çubuk (karo, "Bar ve mutfak", sekmeler, araçlar), altında sayaç şeridi (34 px rakam)
   ve fiş ızgarası.
-- **Yaprağın içindeki kartlar** saç teli kenarlı ve gölgesizdir, zemindekiler kenarsız ve yumuşak gölgeli
+- **Yaprağın içindeki kartlar** saç teli kenarlı ve gölgesizdir, zemindekiler de saç teli çerçeveli ve çok hafif gölgeli
   (`--card-line`, `--card-shadow`); seçili kartın kenarı ev yeşili.
 - **Logo:** L'Af, laffogato.net ve uygulama ikonuyla aynı vektör (`src/components/LafMark.tsx`); karoda (`LafTile`)
   uygulama ikonunun kendisi. Yazı tipine bağlı değil, Didot'u olmayan Windows ve Android'de de aynı. Karo uygulama
@@ -204,7 +206,7 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   ödeme, ciro dışı kapanış ve ödeme iptali kapalı; durum ve "Sepeti iptal et" en üstte. Sonuç ekranında para üstü en
   üstte, mürekkep kenarlı nötr kutuda.
 - **Adisyon** (4 Kasım 2026 yenilemesi): iki kart, ürünler | hesap. Ürünlerde üstte arama ("/" ile), geniş ekranda
-  solda kategori rayı (sayılarıyla), telefonda kategori çipleri; kartta sitedeki görsel ya da kategori renginde baş
+  solda kategorilerin alt menü kartı (sayılarıyla), darda aynı sekmeler şeritte; kartta sitedeki görsel ya da kategori renginde baş
   harf, ad, fiyat, iki boylu üründe boy düğmeleri, tükendi soluk ve rozetli. Hesap bir bakışta okunur:
   - **Başlık:** masa adı (22/700) ve numara; künye (kişi, garson, açılış saati ve süresi, müşteri, not); durum
     çipleri (Kapandı, İptal, Birleşti; Hesap yazdırıldı amber, Kısmen ödendi pembe, "3 kişiye bölündü", "2 ürün
@@ -287,7 +289,7 @@ görünüm"de 32). Kurumsal 6 px yüzey (4 Kasım 2026) kalktı: yönetim ve rap
 - **KPI şeridi** (pano): her hücre kendi kartı (`KpiStrip`, köşe 24, aralarında 12 px), solda yumuşak tonlu ikon karosu ve
   etiket, rakam 34 px kalın sıkı, değişim rozeti (köşe 8) rakamın sağında; seçili hücre ev yeşili kenarlı.
 - **Bileşenler** (`src/components/admin/ui.tsx`): `PageHeader` (yaprağın başında zeminin üstünde; `headerInLeaf` değilse başlık
-  satırına taşınır), `Card` (köşe 24; zeminde kenarsız ve yumuşak gölgeli, yaprağın içinde saç teli; başlık 17/700, alt
+  satırına taşınır), `Card` (köşe 24, saç teli çerçeve; zeminde çok hafif gölge; başlık 16/600, alt
   satır 13 px), `KpiStrip`, `StatusTabs` (beyaz çipler, köşe 8, seçili ev yeşili dolgu), `Segmented` (kitin `.seg`'i: açık gri hap ray, ince kenar, seçili ev yeşili hap; telefonda tam
   genişlikte satıra kırılır; radyo grubu klavyesi), `DataTable`, `ActionMenu` (⋯, köşe 20, portalda), `QuickLook` (sağdan
   hızlı bakış, köşe 24, telefonda alt sayfa), `ActionRows`, `Timeline`, `Badge`, `EmptyState`, `SearchField`. Düğme köşe 12;
@@ -324,7 +326,9 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   odakta ok 45° döner, devre dışıyken gri); geniş ana düğmede yazı solda, halka sağda. Ana eylemde baştaki ikon yok.
   `soft` açık nane zeminde yeşil yazı (panonun "Receive" düğmesi), `secondary` beyaz ve ince kenar (üstüne gelince
   mürekkep kenar), `ghost` kenarsız, `success` dolu yeşil (bar ekranında "Hepsi hazır"),
-  `danger*` kırmızı. Kapat düğmesi mürekkep halkalı daire. Kare ikon düğmesinde halka yok. Ölçü merdiveni (fareyle /
+  `danger*` kırmızı. Kapat düğmesi yumuşak gri daire (panonun ikon dairesi). Kare ikon düğmesinde halka yok.
+  Gölgeler: ana eylem ev yeşili yumuşak gölge (`--shadow-action`), ikincil, alan ve çip çok hafif gölge
+  (`--shadow-control`); gecede ikisi de yok. İkincil düğmenin üstüne gelince zemin açık gri, kenar alanın kenarı. Ölçü merdiveni (fareyle /
   dokunmatikte): `sm` 32 / 44, `md` 40 / 44 (yönetimde fareyle 36), `lg` 44 / 48, `xl` 48 / 56; yazı 13, 14, 15, 16 px.
   Giriş alanı, açılır liste ve arama alanı düğmeyle aynı boyda (40 / 44; yönetimde fareyle 36), yazı fareyle 14 px.
 - **Ölçek:** sayfa başlığı 28-32/700 ve 13 px açıklama (`PageHeader`), bölüm 16/700, kart başlığı 17/700, mikro
@@ -348,8 +352,9 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   yeniden dene ile). Yüklenirken ya da hata varken "yok" yazılmaz.
 - **Onay ve metin isteme:** tarayıcının `confirm()` / `prompt()` pencereleri yok; `confirmDialog` /
   `promptDialog` (`src/components/ui/Confirm.tsx`) eylemi adlandıran düğmeyle, yıkıcı eylemde kırmızı. Para ya da
-  kayıt değiştiren her düğme istek sürerken kilitlidir (`loading`), ikinci dokunuş gitmez. Pencere köşe 24; pencere ve
-  çekmece başlığı 20/800, Kapat (mürekkep halkalı daire) başlığın ilk satırında; pencerede başlık kesilmez, hızlı bakış çekmecesinde en çok iki satır. Onay ve
+  kayıt değiştiren her düğme istek sürerken kilitlidir (`loading`), ikinci dokunuş gitmez. Pencere ve hızlı bakış
+  çekmecesi köşe 28, kenarsız, derin yumuşak gölge (gecede saç teli); başlık 20/700, Kapat
+  (yumuşak gri daire) başlığın ilk satırında; pencerede başlık kesilmez, hızlı bakış çekmecesinde en çok iki satır. Onay ve
   metin isteme penceresinde Kapat yok (Vazgeç aynı işi yapar, Escape ve arka plan da vazgeçer).
 - **Tutar girişi:** ekrandaki tuş takımı (`Numpad`) fiziksel klavyeyle de çalışır: rakam, `,` ve sayısal
   takımın ondalığı virgül; ana sıradaki `.` ardından üç rakam gelirse binlik ayıracı ("2.000"), değilse ondalık
@@ -357,10 +362,12 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   Kalandan fazlası sessizce kırpılmaz, alan uyarır. Tümünü silen tuş "Temizle", tek rakamı ⌫ siler.
 - **Alan:** kısa ipucu (16 karaktere kadar: "zorunlu", "5–120") etiketin sağında; uzunu alanın altında yardım metni ve
   alanın açıklaması (`aria-describedby`); etiket satırı tek satır kalır (13/600 mürekkep), iki sütunlu formda alanlar
-  hizalı. Köşe 12, arama alanı hap. Odakta mürekkep kenar ve 1 px mürekkep halka (kitin formu), hatada kırmızı kenar ve
-  ileti alanın altında (`Field`, `src/components/ui/Field.tsx`).
-- **Bildirim:** mürekkep zeminli hap; dört tonda da (başarı, bilgi, uyarı, hata) durum rengi yalnız ikonda, bilgi
-  renksiz; koyu temada yüzen yüzey. Telefonda alt sekme çubuğunun üstünde, ev çubuğu payıyla; alt eylem şeridi olan
+  hizalı. Köşe 12 (arama alanı da), çok hafif gölge. Odakta ev yeşili kenar ve 3 px açık nane hâle, hatada kırmızı kenar,
+  açık kırmızı hâle ve ileti alanın altında (`Field`, `src/components/ui/Field.tsx`). Aramanın temizle düğmesi küçük gri
+  dairede çarpı. **Anahtar** (`Toggle`): açıkken ev yeşili ve beyaz topta küçük tik, kapalıyken gri (3:1).
+  **Adet seçici** (`Stepper`): açık gri hap ray, içinde beyaz yuvarlak eksi ve artı.
+- **Bildirim:** mürekkep zeminli kart (köşe 16); dört tonda da (başarı, bilgi, uyarı, hata) durum rengi yalnız ikonda,
+  ikon yarı saydam dairede, bilgi renksiz; eylem ("Geri al") küçük yumuşak düğme; koyu temada yüzen yüzey. Telefonda alt sekme çubuğunun üstünde, ev çubuğu payıyla; alt eylem şeridi olan
   ekranda (`data-action-bar`: adisyonun Gönder / Ödeme şeridi) şeridin de üstünde. Tablet ve bilgisayarda üst ortada.
   "Geri al" gibi tek eylem taşıyabilir, eylem bir kez çalışır; hata ve uyarı hemen okunur ve daha uzun kalır.
 - **Sınıflar:** `cn()` (`src/lib/cn.ts`) çakışan Tailwind sınıflarını birleştirir, sonraki kazanır (`px-0`
@@ -370,6 +377,77 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   dekoratif hareket ve nabız durur.
 - **Kaydedilmemiş değişiklik:** uzun ayar formu değişiklik varken altta yapışkan şerit (Vazgeç, Kaydet) gösterir;
   sekme kapanırken, uygulama içi geçişte ve geri tuşunda sorar (`src/lib/unsavedGuard.ts`).
+
+### Bileşen turu (20 Kasım 2026, operatör: "bileşenleri ve elementleri tek tek daha estetik hale getir")
+
+Panonun ölçüleriyle her parça tek tek elden geçti; davranış ve erişilebilirlik aynı (44 px, 3:1 kenar, AA metin).
+
+- **Rozet:** köşe 8, 12 px yarı kalın, açık tonlu zemin ve aynı tonda çok ince iç kenar (panonun "+12,8%" rozeti).
+- **Süzgeç sekmesi ve seçim çipi** (`StatusTabs`, `Chip`): köşe 12, beyaz ve çok hafif gölge; üstüne gelince açık gri zemin
+  ve alanın kenarı; seçili ev yeşili dolgu ve yeşil yumuşak gölge. Kasanın `Tabs`'ı hap, seçili aynı dolgu ve gölge.
+- **Boş durum ve hata:** ikon açık nane (hatada açık kırmızı) dairede, çevresinde daha açık bir hâle; çizimli boş durum
+  aynı. Pano yaprağında tek başına duran boş durum ve hata kartta (`FLOAT_CARD`).
+- **Uyarı kutusu** (`Notice`): ikon beyaz dairede, renk ikonda; zemin durumun yumuşak tonu.
+- **Tablo** (`DataTable`): başlık 12,5 px soluk, satır 56 px; seçili satır açık nane ve solda 3 px ev yeşili çizgi;
+  yapışkan eylem sütununun gölgesi yeşilin gecesi.
+- **Açılır menü** (`ActionMenu`): köşe 16, her öğenin ikonu küçük yumuşak karede (tehlikelide açık kırmızı).
+- **Hızlı işlem satırları** (`ActionRows`): açık gri kap, ince iç kenar, köşe 20.
+- **Komut paleti:** köşe 24, kenarsız; büyüteç açık nane dairede; seçili satır açık nane zeminde yeşil, ikon karede.
+- **Araçlar çekmecesi:** marka rayının ev yeşili degradesinde, sağ üstte nane ışığı; tema segmenti yarı saydam rayda.
+- **Ödeme türleri** (`PaymentModal`): her tür kendi renginin açık tonunda karoda ikonuyla (nakit banknot, kart, yemek
+  kartı çatal bıçak, havale banka, açık hesap defter); seçili tür açık nane zeminde, karo beyaz.
+- **Masa kartı:** boş masa açık gri ve kesikli kenarlı; üstüne gelince düz ev yeşili kenar, beyaz zemin ve yumuşak gölge.
+- **Sipariş ve rezervasyon kartı:** pano kartı (köşe 24, zeminde yüzer), üstüne gelince kalkar. Kasa, Siparişler ve
+  Rezervasyon pano yaprağında (`float`): kartlar zeminde yüzer, eylem çubuğu zeminin üstünde.
+
+### İskelet, çerçeve ve yazı ölçeği (20 Kasım 2026, operatör: "belli bir iskelet, çerçevelerle ayrım, yazı tiplerini aynı yap")
+
+- **İskelet:** tablette ve bilgisayarda ekran üç çerçeveli bloktan oluşur, aralarında hep 12 px: üstte beyaz **üst çubuk**
+  (ince kenar, köşe 20), solda yeşil **marka rayı** (köşe 28), sağda içerik. Platform şeridi üst çubukla içerik arasında
+  aynı aralıkla, köşe 20. İçerikte başlık satırı zeminin üstünde, altında çerçeveli beyaz yaprak ya da çerçeveli kartlar.
+- **Çerçeve:** bölgeler gölgeyle değil ince çerçeveyle ayrılır: yaprak, kart, büyük sayı kartı, ikinci dizin, menü ve
+  alt menü kartı, ürün ve masa kartı 1 px saç teli (`--admin-border`), gölge yalnız çok hafif derinlik
+  (`--shadow-card`, `--shadow-control`). Kart içindeki bölümler satır ayracıyla.
+- **Yazı ölçeği (Inter, tek aile):** ekran başlığı 28 (geniş ekranda 30) / 700; pencere ve çekmece başlığı 20 / 700;
+  bölüm başlığı (yaprağın başı) 18 / 700; kart başlığı 16 / 600, alt satırı 13 / 400 soluk; etiket 13 / 500 soluk; gövde
+  14; mikro 12; büyük sayı kartı 22 / 700; KPI ve karo rakamı 30 / 700; marka ciro kartı 40 / 700. 800 ağırlık yalnız
+  müşteri ekranında.
+- **Salon ve masalar (sade):** yaprağın başında bölümün adı (18 / 700) ve yanında üç sayaç (toplam masa, ev yeşili
+  noktalı dolu, boş); plan görünümünde masalar açık gri **noktalı salon zemininde** (20 px aralık, köşe 20, ince
+  çerçeve): boş masa beyaz kart, ince düz çerçeve (kesikli değil), adı mürekkepte, altında kişi sayısı; dolu masa ev
+  yeşili degrade; açıklama satırında kutucuklar masa kartının küçük kopyası.
+
+### Yerleşim ve ızgara (20 Kasım 2026, operatör: "componentleri bir yap, belli yerlerde sabit olsun; layoutları gridleri de belirle")
+
+- **Aralık belirteçleri** (`src/index.css`, `:root`; bileşen sayı yazmaz, adı okur): kabuk `--shell-gap` 12 (ray, üst
+  çubuk, bildirim şeridi ve sahne arası, ekran kenarı); sahne `--grid-gap` 16 (sütunlar, başlık satırı ile gövde, pano
+  kartları ve bölümler arası); kart ızgarası `--tile-gap` 12 (ürün, masa, sipariş ve KPI kartları arası). Kart içinde
+  boşluk 16-20, satırlar arası 8-12.
+- **Sabit sütunlar:** marka rayı solda (tablette 84, bilgisayarda 100 px); alt menü kartı `--side-w` 240 **hep solda**
+  (yönetimin bölümleri, adisyonun kategorileri); sağ dizin kartı `--aside-w` 312 **hep sağda** (masasız siparişler,
+  bugünkü rezervasyonlar); adisyonun hesabı `--cart-w` 320-440 **hep sağda**. Orta sütun kalan yeri alır
+  (`minmax(0, 1fr)`); sabit sütun hiçbir ekranda yer değiştirmez, darda gizlenir ya da şeride döner.
+- **Dört sayfa kalıbı** (başkası yok):
+  1. **Pano** (`Stage float`): başlık satırı, altında zeminde yüzen kartlar; patron panosunda `.lp-board` (telefonda tek
+     sütun, tablette iki, geniş ekranda üç). Patron, raporlar, siparişler, kasa, rezervasyonlar.
+  2. **Liste** (`Stage` yaprak ve `aside`): başlık satırı, altında çerçeveli beyaz yaprak, geniş ekranda (lg) sağda
+     ikinci dizin kartı. Masalar.
+  3. **Alt menülü** (`Stage headerInLeaf`): iki sütunlu ızgara, solda alt menü kartı, sağda içerik (başlık içeriğin
+     başında). Yönetim; tablette alt menü içeriğin üstünde sekme şeridi.
+  4. **İş ekranı** (adisyon): solda kategorilerin alt menü kartı (xl), ortada arama, kategori şeridi (xl altında) ve
+     ürün karoları, sağda hesap yaprağı. Bar ekranı tam en (`side={false}`).
+- **Kart ızgaraları:** karo ızgarası `.lp-tiles` (ürün ve masa; en dar sütun `--tile-min` 140, masada 150) ve kart
+  ızgarası `.lp-cards` (sipariş kartı; en dar sütun `--card-min` 280); ikisinde de aralık `--tile-gap`, satır içeriği
+  kadar, sütun sayısını genişlik belirler (kaç sığarsa). KPI şeridi aynı aralıkla kendi ızgarasında (telefonda 2,
+  tablette 2-3, geniş ekranda hücre sayısı kadar; iskeleti de ayrı kartlar).
+- **Sabit yerler:** ekranlar arası gezinme yalnız marka rayında (telefonda alt sekme çubuğu; ray 768 px yüksekliğe
+  kadar kaydırmadan sığar); ekranın sekmeleri üst çubuğun ortasında (telefonda başlığın altında şerit); bölüm ve kategori
+  menüsü solda alt menü kartında (darda içeriğin üstünde aynı sekmeler şeritte); ana eylem başlık satırının en sağında,
+  adisyonda hesabın dibinde; ikinci dizin sağda; bildirim şeridi üst çubuğun altında.
+- **Tek menü bileşeni:** üst çubuğun sekmeleri, telefonun sekme şeridi, yönetimin alt menüsü ve adisyonun kategorileri
+  aynı `.lp-menu-item` satırıdır: tek renk ikon (16 px), ad, sağda soluk sayı; üstüne gelince çok açık gri, seçili açık
+  nane zeminde yeşil ve kalın. Alt alta dizilişte (`.lp-menu-col`) grup başlığı 12 px soluk ("Genel", "Kategoriler"),
+  satır 38 px (dokunmatikte 44). Menüde renkli karo, dolu yeşil seçim ya da gölgeli hap çip kullanılmaz.
 
 ## 6. Telefon ve tablet (impeccable `adapt`)
 
@@ -381,7 +459,7 @@ ve aynı kurallardan çizilir. Yeni ekran önce bu parçalara bakar, kendi denet
   yerine alt sayfa, tablo yerine satır kartı, çentik için `safe-area`.
 - Tablet: solda dar marka rayı (84 px, ekranlar ikon ve kısa adla), üst çubuğun ortasında ekranın sekmeleri; sahnede
   başlık satırı (sayılar ve eylemler sığmazsa alt satırda); adisyonda ürünler ve hesap yan yana (`min-width: 768px`),
-  kategoriler çip şeridinde; yönetimde bölümler hap şeridinde.
+  kategoriler ve yönetimin bölümleri aynı sekme şeridinde (alt menü kartının yatay hali).
 - Yönetim › Masa planı'nda masa klavyeyle seçilir (Tab, Enter ya da boşluk), oklarla taşınır, Shift ve oklarla
   boyutlanır; kutunun boyu plandan geldiği için `data-tap-ok` taşır (44 px denetiminin dışında).
 - Dokunmatikte alan yazısı en az 16 px (iOS odaklanınca yakınlaştırmasın). Kural katmansızdır ve alanın yazı boyu

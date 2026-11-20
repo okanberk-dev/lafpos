@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Check, CheckCircle2, Droplets, Gift, HandCoins, Printer, RotateCcw, UserPlus, Users } from 'lucide-react';
+import { Banknote, Check, CheckCircle2, CreditCard, Droplets, Gift, Globe, HandCoins, Landmark, type LucideIcon, NotebookPen, Printer, RotateCcw, UserPlus, Users, UtensilsCrossed, Wallet } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_KINDS, COMP_LABEL, compCloseSubtitle, compReasonsOf } from '@shared/comp';
 import { parseTL, splitEven, suggestCash, tl, tlShort } from '@shared/money';
@@ -43,6 +43,9 @@ const choice = (on: boolean) =>
 /** Tuş takımıyla yazılan alan (Tutar, Verilen): düğme görünümünde, rakam Gabarito; seçili olan yeşil kenar ve halka */
 const typedField = (on: boolean) =>
   cn('tabular w-full rounded-xl border px-4 text-right font-headline font-semibold transition-[border-color,box-shadow] duration-150', on ? 'border-primary ring-4 ring-[var(--admin-primary-soft)]' : 'border-line-strong hover:border-[var(--admin-border-field)]');
+
+/** Ödeme türünün ikonu (karonun içinde, türün renginde): nakit banknot, kart, yemek kartı çatal bıçak, havale banka */
+const PAY_ICON: Record<PaymentMethodDTO['kind'], LucideIcon> = { nakit: Banknote, kart: CreditCard, yemek: UtensilsCrossed, havale: Landmark, cari: NotebookPen, online: Globe, diger: Wallet };
 
 /** Bölüm etiketi (Ödeme türü, Verilen, Ciro dışı kapat): 13 px, gri */
 const SECTION = 'mb-2 text-[13px] font-medium text-muted';
@@ -681,9 +684,10 @@ export function PaymentModal({
                       else focusTyped(m.kind === 'nakit' ? 'verilen' : 'tutar');
                     }}
                     aria-pressed={method?.id === m.id}
-                    className={cn('flex h-12 min-w-0 items-center gap-2 px-3 text-left text-sm font-semibold pointer-fine:h-11', choice(method?.id === m.id))}
+                    className={cn('flex h-12 min-w-0 items-center gap-2.5 pl-2 pr-3 text-left text-sm font-semibold pointer-fine:h-11 pointer-fine:pl-1.5', choice(method?.id === m.id))}
                   >
-                    <span aria-hidden="true" className="size-2 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: m.color }} />
+                    {/* Türün karosu (panonun ikon karesi): türün renginin açık tonunda kare, içinde türün ikonu; seçiliyken beyaz */}
+                    <PayIcon kind={m.kind} color={m.color} on={method?.id === m.id} />
                     <span className="min-w-0 truncate">{m.name}</span>
                   </button>
                 ))}
@@ -1098,5 +1102,22 @@ function QuickButton({ onClick, children }: { onClick: () => void; children: Rea
     <Button size="sm" className="tabular" onClick={onClick}>
       {children}
     </Button>
+  );
+}
+
+/** Ödeme türünün karosu: türün renginin açık tonunda yumuşak kare, ikon türün renginin koyu tonunda; seçiliyken beyaz */
+function PayIcon({ kind, color, on }: { kind: PaymentMethodDTO['kind']; color: string; on: boolean }) {
+  const Icon = PAY_ICON[kind] ?? Wallet;
+  return (
+    <span
+      aria-hidden="true"
+      className="grid size-8 shrink-0 place-items-center rounded-lg transition-colors duration-150 [&>svg]:size-4"
+      style={{
+        background: on ? '#ffffff' : `color-mix(in oklab, ${color} var(--cat-bg, 16%), var(--surface))`,
+        color: on ? `color-mix(in oklab, ${color} 78%, #0f1513)` : `color-mix(in oklab, ${color} var(--cat-ink, 78%), var(--admin-text))`,
+      }}
+    >
+      <Icon className="stroke-2" />
+    </span>
   );
 }

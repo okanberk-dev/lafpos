@@ -24,10 +24,10 @@ const NIGHT_FOCUS = '[--focus:var(--admin-on-ink)] dark:[--focus:var(--admin-pri
 const tones: Record<Tone, string> = {
   // Dört ton da aynı mürekkep zeminli hap; durum rengi (yeşil, kırmızı, amber) yalnız ikonda, bilgi renksiz. Koyu
   // temada mürekkep zeminde kaybolur: yüzen yüzey
-  ok: `${NIGHT_FOCUS} bg-night text-white [&>svg:first-child]:text-success-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-success)]`,
-  err: `${NIGHT_FOCUS} bg-night text-white [&>svg:first-child]:text-danger-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-danger)]`,
+  ok: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:text-success-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:text-[var(--admin-success)]`,
+  err: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:text-danger-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:text-[var(--admin-danger)]`,
   info: `${NIGHT_FOCUS} bg-night text-white dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink`,
-  warn: `${NIGHT_FOCUS} bg-night text-white [&>svg:first-child]:text-warn-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&>svg:first-child]:text-[var(--admin-warning)]`,
+  warn: `${NIGHT_FOCUS} bg-night text-white [&_.toast-ic]:text-warn-300 dark:border dark:border-[var(--admin-border-strong)] dark:bg-[var(--surface-raised)] dark:text-ink dark:[&_.toast-ic]:text-[var(--admin-warning)]`,
 };
 
 function ToastItem({ t }: { t: Toast }) {
@@ -76,17 +76,20 @@ function ToastItem({ t }: { t: Toast }) {
       // Kapanırken (150 ms) dokunuşu yine bildirim alır, hiçbir şey olmaz: act() ve leave() kapanmakta olanı yok sayar
       // ("Geri al"a çift dokunuş eylemi iki kez çalıştırmaz). inert ya da pointer-events-none dokunuşu alttaki ürüne,
       // pencerenin arka planına geçirirdi
-      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-2xl px-4 py-3 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
+      className={cn('pointer-events-auto flex max-w-md items-start gap-3 rounded-2xl py-2.5 pl-2.5 pr-4 text-sm font-medium shadow-[var(--shadow-pop)] md:max-w-sm', tones[t.tone], t.leaving ? 'toast-out' : 'toast-in')}
     >
-      <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <span className="flex-1 leading-snug">{t.text}</span>
+      {/* İkon yarı saydam dairede (panonun ikon dairesi); durum rengi yalnız ikonda */}
+      <span aria-hidden="true" className="toast-ic grid size-7 shrink-0 place-items-center rounded-full bg-white/10 dark:bg-[var(--admin-panel)]">
+        <Icon className="size-4" />
+      </span>
+      <span className="flex-1 pt-[5px] leading-snug">{t.text}</span>
       {t.action && (
         <button
           type="button"
           tabIndex={t.leaving ? -1 : undefined}
           aria-disabled={t.leaving || undefined}
           onClick={() => act(t.id)}
-          className="-my-1.5 min-h-8 shrink-0 rounded-full px-2 text-sm font-semibold underline-offset-2 hover:underline focus-visible:-outline-offset-2 pointer-coarse:-my-3 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
+          className="-my-0.5 min-h-8 shrink-0 rounded-lg bg-white/12 px-2.5 text-[13px] font-semibold transition-colors hover:bg-white/20 focus-visible:-outline-offset-2 pointer-coarse:-my-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 dark:bg-[var(--admin-panel)] dark:hover:bg-[var(--admin-border)]"
         >
           {t.action.label}
         </button>
@@ -96,7 +99,7 @@ function ToastItem({ t }: { t: Toast }) {
         tabIndex={t.leaving ? -1 : undefined}
         onClick={() => leave(t.id)}
         aria-label="Kapat"
-        className="-my-2 -mr-2 grid size-9 shrink-0 place-items-center rounded-full opacity-70 transition-opacity hover:opacity-100 focus-visible:-outline-offset-2 pointer-coarse:-my-3 pointer-coarse:size-11"
+        className="-my-1 -mr-2 grid size-9 shrink-0 place-items-center rounded-full opacity-70 transition-opacity hover:opacity-100 focus-visible:-outline-offset-2 pointer-coarse:-my-2.5 pointer-coarse:size-11"
       >
         <X aria-hidden="true" className="size-4" />
       </button>

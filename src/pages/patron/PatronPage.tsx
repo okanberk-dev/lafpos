@@ -292,14 +292,14 @@ export default function PatronPage() {
               <PanelHead title="Bugünkü ciro" sub="Kapanan adisyonlar, KDV dahil" icon={<Wallet />} />
               <div className="@container relative mt-4 overflow-hidden rounded-[var(--r-tile)] bg-[image:var(--brand-card)] p-5 text-white shadow-[0_18px_36px_-20px_rgb(6_74_54/0.75)]">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-headline text-lg font-extrabold italic tracking-[-0.02em]">L’Affogato</span>
+                  <span className="font-headline text-lg font-bold italic tracking-[-0.02em]">L’Affogato</span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90">
                     <span aria-hidden="true" className={cn('size-1.5 rounded-full', stale ? 'bg-[#ffe39a]' : 'bg-[#7ff0c0]')} />
                     {stale ? 'Son güncelleme' : 'Canlı'}
                   </span>
                 </div>
                 <div className="mt-5 text-[13px] text-white/90">Net ciro</div>
-                <div className="tabular mt-1 whitespace-nowrap font-headline text-[length:min(42px,15cqi)] font-extrabold leading-none tracking-[-0.035em]">{tl(d.netSales)}</div>
+                <div className="tabular mt-1 whitespace-nowrap font-headline text-[length:min(40px,15cqi)] font-bold leading-none tracking-[-0.035em]">{tl(d.netSales)}</div>
                 <div className="mt-5 flex items-center justify-between gap-3 text-[13px] text-white/90">
                   <span className="tabular">{d.orders > 0 ? `${d.orders} adisyon · ortalama ${tlShort(d.avgCheck)}` : 'Henüz kapanan adisyon yok'}</span>
                   <span className="tabular shrink-0">{d.dayOpen && boot.day ? `Z ${boot.day.zNo}` : 'Gün kapalı'}</span>
@@ -603,7 +603,7 @@ function PanelHead({ title, sub, icon }: { title: string; sub?: string; icon: Re
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <h3 className="text-[17px] font-bold leading-6 tracking-[-0.025em]">{title}</h3>
+        <h3 className="text-base font-semibold leading-6 tracking-[-0.015em]">{title}</h3>
         {sub && <p className="text-[13px] text-muted">{sub}</p>}
       </div>
       <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] [&>svg]:size-[18px]">

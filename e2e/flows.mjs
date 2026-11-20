@@ -1007,7 +1007,8 @@ export async function runFlows(ctx) {
         await api.call('bar', 'POST', '/kitchen/status', { itemIds: [...p1.items, ...c1.items].map((i) => i.id), status: 'hazir' });
         await withPage(ctx, 'telefon', 'kasa', async (page) => {
           await go(ctx, page, '/siparisler');
-          const card = page.locator('div.rounded-2xl', { hasText: `Selin Bulut #${pickup.no}` }).filter({ has: page.getByRole('button', { name: 'Teslim edildi' }) });
+          // Sipariş kartı kendi işaretinden bulunur (biçim sınıfı değişince akış bozulmasın)
+          const card = page.locator('[data-order-card]', { hasText: `Selin Bulut #${pickup.no}` }).filter({ has: page.getByRole('button', { name: 'Teslim edildi' }) });
           await card.waitFor({ timeout: 8000 });
           // Kasanın gel-al siparişinde aşama düğmesi ("Hazır") o arada gizli: tek düğme
           assert((await card.getByRole('button', { name: 'Hazır', exact: true }).count()) === 0, 'gel-al kartında ikinci aşama düğmesi var');

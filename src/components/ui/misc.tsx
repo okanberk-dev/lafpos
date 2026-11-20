@@ -50,10 +50,16 @@ const dots: Record<Tone, string> = {
   primary: 'bg-[var(--admin-primary)]',
 };
 
-/** Durum rozeti (kasa ve yönetimde tek): 22 px, hap, 12 px yazı; `dot` renkli nokta (renk yazının yanında) */
+/**
+ * Durum rozeti (kasa ve yönetimde tek; panonun "+12,8%" rozeti): 22 px, köşe 8, 12 px yarı kalın yazı, açık tonlu
+ * zemin ve aynı tonda çok ince iç kenar; `dot` renkli nokta (renk yazının yanında)
+ */
 export function Badge({ tone = 'neutral', dot, children, className, title }: { tone?: Tone; dot?: boolean; children: ReactNode; className?: string; title?: string }) {
   return (
-    <span title={title} className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-[var(--r-chip)] px-2.5 py-0.5 text-xs font-medium leading-4', tones[tone], className)}>
+    <span
+      title={title}
+      className={cn('inline-flex min-h-[22px] items-center gap-1.5 whitespace-nowrap rounded-[var(--r-chip)] px-2 py-0.5 text-xs font-semibold leading-4 ring-1 ring-inset ring-[color-mix(in_oklab,currentColor_14%,transparent)]', tones[tone], className)}
+    >
       {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dots[tone])} />}
       {children}
     </span>
@@ -99,7 +105,7 @@ export function Card({ children, className, title, subtitle, actions, divided = 
         // Başlık ve eylemler (segment, rozet) yan yana; sığmazsa eylemler alt satıra iner, başlık kesilmez
         <header className={cn('flex min-h-[56px] flex-wrap items-center gap-x-3 gap-y-2 px-5', divided ? 'border-b border-[var(--admin-divider)] py-3' : 'pb-1 pt-5')}>
           <div className="min-w-0 flex-[1_1_9rem]">
-            <h3 className="truncate text-[17px] font-bold leading-6 tracking-[-0.025em]">{title}</h3>
+            <h3 className="truncate text-base font-semibold leading-6 tracking-[-0.015em]">{title}</h3>
             {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
           </div>
           {actions}
@@ -109,6 +115,12 @@ export function Card({ children, className, title, subtitle, actions, divided = 
     </section>
   );
 }
+
+/**
+ * Pano kartının kabı (başlıksız): köşe 24, beyaz; zeminde (pano yaprağı) kenarsız ve yumuşak gölgeli, beyaz yaprağın
+ * içinde saç teli kenarlı. Pano yaprağında tek başına duran boş durum ve hata da bu kartta durur
+ */
+export const FLOAT_CARD = 'rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]';
 
 export function Spinner({ className }: { className?: string }) {
   return <Loader2 aria-hidden="true" className={cn('size-5 animate-spin text-muted', className)} />;
@@ -163,14 +175,15 @@ export function EmptyState({
         <span
           aria-hidden="true"
           className={cn(
-            'grid place-items-center bg-surface-3 text-muted',
-            compact ? 'mb-2.5 size-9 rounded-lg [&>svg]:size-4' : large ? 'mb-4 size-16 rounded-2xl [&>svg]:size-8' : 'mb-3 size-11 rounded-xl [&>svg]:size-5',
+            // Panonun ikon dairesi: açık nane zeminde yeşil ikon, çevresinde daha açık bir hâle
+            'grid place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] shadow-[0_0_0_6px_color-mix(in_oklab,var(--admin-primary-soft)_45%,transparent)]',
+            compact ? 'mb-3 size-10 [&>svg]:size-[18px]' : large ? 'mb-5 size-16 [&>svg]:size-7' : 'mb-4 size-12 [&>svg]:size-5',
           )}
         >
           {icon}
         </span>
       )}
-      <p className={cn('text-balance font-headline tracking-[-0.025em] text-ink', compact ? 'text-base font-bold' : large ? 'text-2xl font-extrabold' : 'text-lg font-bold')}>{title}</p>
+      <p className={cn('text-balance font-headline tracking-[-0.025em] text-ink', compact ? 'text-base font-semibold' : large ? 'text-2xl font-bold' : 'text-lg font-semibold')}>{title}</p>
       {children && <div className={cn('max-w-[36ch] text-pretty text-muted', compact ? 'mt-0.5 text-[13px]' : large ? 'mt-1.5 text-[15px]' : 'mt-1 text-[13px] leading-relaxed')}>{children}</div>}
       {action && <div className={compact ? 'mt-3' : 'mt-4'}>{action}</div>}
     </div>
@@ -215,8 +228,8 @@ export function ErrorState({
       <span
         aria-hidden="true"
         className={cn(
-          'grid place-items-center bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)]',
-          compact ? 'mb-2.5 size-9 rounded-lg [&>svg]:size-4' : large ? 'mb-4 size-16 rounded-2xl [&>svg]:size-8' : 'mb-3 size-11 rounded-xl [&>svg]:size-5',
+          'grid place-items-center rounded-full bg-[var(--admin-danger-soft)] text-[var(--admin-danger-ink)] shadow-[0_0_0_6px_color-mix(in_oklab,var(--admin-danger-soft)_45%,transparent)]',
+          compact ? 'mb-3 size-10 [&>svg]:size-[18px]' : large ? 'mb-5 size-16 [&>svg]:size-7' : 'mb-4 size-12 [&>svg]:size-5',
         )}
       >
         <Icon />
@@ -257,10 +270,11 @@ export function Notice({ tone = 'warn', icon, title, action, children, className
   const t = noticeTones[tone];
   return (
     <div role={role} className={cn('flex items-start gap-3 rounded-2xl border px-4 py-3 text-sm text-ink', t.box, className)}>
-      <span aria-hidden="true" className={cn('mt-0.5 shrink-0 [&>svg]:size-4', t.icon)}>
+      {/* İkon beyaz dairede (panonun ikon dairesi): durumun rengi ikonda, zemin yumuşak ton */}
+      <span aria-hidden="true" className={cn('-ml-1 grid size-7 shrink-0 place-items-center rounded-full bg-surface shadow-[var(--shadow-control)] [&>svg]:size-4', t.icon)}>
         {icon ?? <t.Icon />}
       </span>
-      <div className="min-w-0 flex-1 leading-5">
+      <div className="min-w-0 flex-1 pt-[3px] leading-5">
         {title && <p className="font-semibold">{title}</p>}
         {children && <div className={cn(title && 'mt-0.5 text-ink-2')}>{children}</div>}
       </div>
@@ -455,7 +469,7 @@ export function Tabs<T extends string>({
             className={cn(
               'inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[var(--r-segment)] px-3.5 text-sm transition-colors duration-150 focus-visible:-outline-offset-2 active:bg-press [[data-area=admin]_&]:text-[13px]',
               size === 'sm' ? 'min-h-9 pointer-coarse:min-h-11' : 'min-h-11 pointer-fine:min-h-9',
-              on ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
+              on ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[var(--shadow-action)]' : 'font-medium text-ink-2 hover:bg-hover hover:text-ink',
             )}
           >
             {o.icon}

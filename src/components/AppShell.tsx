@@ -259,7 +259,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     // Tema: üç seçenek (Cihaz bir dokunuşta kaybolmasın); bar ekranında bu cihazın bar tercihi
     <div className={cn(drawerRow, 'flex-wrap gap-y-2 hover:pl-0.5')} style={{ animationDelay: `${120 + items.length * 35}ms` }}>
       <DrawerLabel hint={onBar ? 'Bu cihazda saklanır' : undefined}>{onBar ? 'Bar teması' : 'Tema'}</DrawerLabel>
-      <span className="[--admin-surface:var(--band-2)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:var(--band)] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--hover:rgb(255_255_255/0.08)]">
+      <span className="[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:#0a5c44] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)] [--hover:rgb(255_255_255/0.08)]">
         {onBar ? (
           <Segmented<KdsTheme>
             label="Bar ekranı teması"
@@ -294,10 +294,14 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
        * Tablet ve bilgisayar: üst çubuk (pano). Solda L'Af karosu ve ev yeşilinde L'Affogato; ortada ekranın sekmeleri
        * (sayfa sahnesi buraya taşır, TopTabsSlot); sağda durum (saat ve Z), arama ve kişinin düğmesi (avatar ve ok)
        */}
-      <header className="relative z-30 hidden h-16 shrink-0 items-center gap-3 px-4 md:flex lg:gap-4">
+      {/*
+       * İskelet (operatör, 20 Kas 2026: "belli bir iskelet, çerçevelerle ayrım"): üst çubuk, ray ve içerik zeminde
+       * --shell-gap (12 px) aralıklı çerçeveli bloklar. Üst çubuk beyaz, ince kenarlı ve köşe 20
+       */}
+      <header className="relative z-30 mx-[var(--shell-gap)] mt-[var(--shell-gap)] hidden h-16 shrink-0 items-center gap-3 rounded-[1.25rem] border border-line bg-surface px-3 shadow-[var(--shadow-control)] md:flex lg:gap-4">
         <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="flex shrink-0 items-center gap-2.5 rounded-[10px] md:w-[5.25rem] lg:w-auto lg:min-w-[6.25rem]">
           <LafTile size="md" />
-          <span className="hidden font-headline text-[21px] font-extrabold leading-none tracking-[-0.04em] text-[var(--admin-primary)] lg:inline">L’Affogato</span>
+          <span className="hidden font-headline text-xl font-bold leading-none tracking-[-0.035em] text-[var(--admin-primary)] lg:inline">L’Affogato</span>
         </NavLink>
         <div ref={setTabsSlot} className="lp-topnav flex min-w-0 flex-1 items-center justify-center" />
         <div className="flex shrink-0 items-center gap-1.5">
@@ -343,7 +347,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       )}
       {!REMOTE && <PlatformInbox />}
       {notice && <div className="shrink-0">{notice}</div>}
-      <div className="flex min-h-0 flex-1 md:gap-3 md:px-3 md:pb-3">
+      <div className="flex min-h-0 flex-1 md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)]">
         {/* Tablet ve bilgisayar: marka rayı (panonun menüsü). Ekranlar ikon ve kısa adla; dipte Araçlar ve Kilitle */}
         <nav aria-label="Ekranlar" className="lp-rail">
           <div className="lp-rail-list">

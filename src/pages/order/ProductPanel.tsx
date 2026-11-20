@@ -1,4 +1,4 @@
-import { Plus, SlidersHorizontal, Star } from 'lucide-react';
+import { Plus, SlidersHorizontal, Star, Tag } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { tlShort } from '@shared/money';
 import type { ProductDTO, Size } from '@shared/types';
@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
 import { EmptyState } from '@/components/ui/misc';
 import { asksOptions, productGroups, useBoot } from '@/lib/boot';
-import { categoryIcon, categoryLetter } from '@/lib/categoryIcon';
+import { categoryIcon } from '@/lib/categoryIcon';
 import { cn } from '@/lib/cn';
 import { useLocalPref } from '@/lib/hooks';
 import { DEMO, demoProductImage } from '@/lib/demo';
@@ -101,23 +101,24 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
   };
 
   const categoryItems = [
-    ...(showFavorites ? [{ id: FAVORITES, name: 'Sık', color: null as string | null, count: favorites.length }] : []),
-    ...categories.map((c) => ({ id: c.id, name: c.name, color: c.color, count: counts.get(c.id) ?? 0 })),
+    ...(showFavorites ? [{ id: FAVORITES, name: 'Sık kullanılanlar', count: favorites.length }] : []),
+    ...categories.map((c) => ({ id: c.id, name: c.name, count: counts.get(c.id) ?? 0 })),
   ];
 
   return (
-    // Pano: solda beyaz menü kartında kategoriler (renkli ikon karosu, ad, ürün sayısı; seçili ev yeşili), ortada ürün
-    // kartları zeminde yüzer; hesap sağdaki beyaz yaprakta (OrderPage). Tablette ve telefonda kategoriler çip şeridi
-    <div className="flex h-full min-h-0 gap-3 bg-[var(--admin-stage)] md:bg-transparent">
-      {/* Geniş ekran: menü kartı, kategoriler alt alta, hepsi görünür (sığmazsa kart kendi içinde kayar) */}
-      <nav aria-label="Menü" className="lp-catalog scroll-thin hidden w-60 shrink-0 overflow-y-auto xl:block">
-        <p className="px-2.5 pb-2 pt-1 text-xs font-medium text-muted">Menü</p>
-        <div role="tablist" aria-orientation="vertical" aria-label="Kategoriler" className="flex flex-col gap-1">
-          {categoryItems.map((c) => (
-            <CategoryRow key={c.id} active={!q && current === c.id} color={c.color} count={c.count} onClick={() => pick(c.id)} favorite={c.id === FAVORITES}>
-              {c.name}
-            </CategoryRow>
-          ))}
+    // Pano: solda alt menü kartında kategoriler (yönetimin alt menüsüyle tek bileşen: `.lp-subnav`, `.lp-menu-col`,
+    // `.lp-menu-item`; ikon, ad, sağda ürün sayısı; seçili açık nane), ortada ürün kartları zeminde; hesap sağdaki
+    // yaprakta (OrderPage). Tablette ve telefonda kategoriler aynı sekme şeridi (üst çubuğun sekmeleriyle aynı)
+    <div className="flex h-full min-h-0 gap-[var(--grid-gap)] bg-[var(--admin-stage)] md:bg-transparent">
+      {/* Geniş ekran: alt menü kartı (genişlik --side-w), kategoriler alt alta, sığmazsa kart kendi içinde kayar */}
+      <nav aria-label="Menü" className="lp-subnav hidden w-[var(--side-w)] shrink-0 xl:block">
+        <div className="lp-menu lp-menu-col">
+          <span className="lp-menu-label">Kategoriler</span>
+          <div role="tablist" aria-orientation="vertical" aria-label="Kategoriler" className="flex flex-col gap-0.5">
+            {categoryItems.map((c) => (
+              <CategoryItem key={c.id} active={!q && current === c.id} count={c.count} name={c.name} favorite={c.id === FAVORITES} onClick={() => pick(c.id)} />
+            ))}
+          </div>
         </div>
       </nav>
 
@@ -125,7 +126,7 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
         <div className="px-3 pt-2 md:px-0 md:pt-0">
           {/* Ortak arama alanı (hap; temizle düğmesi, Escape); boşken farede "/" kısayolu ipucu */}
           <div className="relative">
-            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" className="h-11 rounded-[0.875rem] border-transparent bg-surface shadow-[var(--shadow-card)] dark:border-[var(--admin-border)]" />
+            <SearchInput ref={searchRef} value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" className="h-11 rounded-[0.875rem] border-[var(--admin-border)] bg-surface shadow-[var(--shadow-control)]" />
             {!q && (
               <kbd aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border border-line bg-surface-2 px-1.5 text-xs font-medium text-muted pointer-fine:inline-block">
                 /
@@ -133,23 +134,22 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
             )}
           </div>
         </div>
-        {/* Rayın sağı solarak biter: devamı olduğu belli olur; seçili çip görünür alana kaydırılır */}
+        {/* Tablet ve telefon: aynı sekmeler yatay şeritte; sağı solarak biter (devamı belli olur), seçili sekme görünür alana kaydırılır */}
         <div
           role="tablist"
           aria-label="Kategoriler"
-          className="no-scrollbar -my-1 flex snap-x snap-proximity scroll-px-3 gap-2 overflow-x-auto px-3 py-3 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] md:px-1 md:py-3.5 xl:hidden"
+          className="lp-menu snap-x snap-proximity scroll-px-3 px-3 py-2.5 [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] md:px-0 md:py-3 xl:hidden"
         >
           {categoryItems.map((c) => (
-            <CategoryChip key={c.id} active={!q && current === c.id} color={c.color} name={c.name} favorite={c.id === FAVORITES} onClick={() => pick(c.id)}>
-              {c.name}
-            </CategoryChip>
+            <CategoryItem key={c.id} strip active={!q && current === c.id} count={c.count} name={c.name} favorite={c.id === FAVORITES} onClick={() => pick(c.id)} />
           ))}
         </div>
         <div
           key={q ? 'arama' : current}
           className={cn(
-            // 150 px: 768 px tablette hesap yaprağının yanında iki sütun, bilgisayarda üç-dört
-            'lp-enter scroll-thin grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 overflow-y-auto px-3 pb-3 pt-1 md:px-1 md:pb-2 xl:pt-3.5',
+            // Karo ızgarası (`.lp-tiles`, en dar sütun --tile-min 140): 768 px tablette hesabın yanında iki sütun,
+            // bilgisayarda üç-dört
+            'lp-enter lp-tiles scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1 md:px-1 md:pb-2 xl:pt-3.5',
           )}
         >
           {list.map((p) => (
@@ -182,75 +182,23 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
 }
 
 /**
- * Kategorinin karosu (pano: ödeme geçmişindeki renkli avatar gibi): kategori renginin açık tonunda kare, içinde
- * kategorinin ikonu ya da adının baş harfi kategori renginin koyu tonunda. Seçili satırda beyaz kare. Sık kullanılanlar
- * pirinç yıldız. Süs: adı yanındaki yazı taşır
+ * Kategori satırı (yönetimin alt menüsüyle tek bileşen, operatör 20 Kas 2026: "componentleri bir yap, farklı olmasın"):
+ * `.lp-menu-item`: tek renk ikon (adından eşlenir, yoksa etiket), ad, sağda ürün sayısı; üstüne gelince çok açık gri,
+ * seçili açık nane zeminde yeşil ve kalın. Geniş ekranda alt menü kartında alt alta, darda yatay sekme şeridinde
+ * (`strip`: seçili sekme görünür alana kaydırılır)
  */
-function CategoryBadge({ name, color, favorite, active, size = 'md' }: { name: string; color: string | null; favorite?: boolean; active: boolean; size?: 'sm' | 'md' }) {
-  const Icon = favorite ? Star : categoryIcon(name);
-  const hue = favorite ? 'var(--admin-gold-fill)' : (color ?? 'var(--admin-border-field)');
-  return (
-    <span
-      aria-hidden="true"
-      className={cn('grid shrink-0 place-items-center font-semibold', size === 'sm' ? 'size-8 rounded-full text-[12px] [&>svg]:size-4' : 'size-9 rounded-[0.7rem] text-[13px] [&>svg]:size-[18px]')}
-      style={{
-        // Gecede karo bir ton belirgin, ikon açık tona kayar (koyu bordo ikon koyu zeminde kaybolmasın)
-        background: active ? '#ffffff' : `color-mix(in oklab, ${hue} var(--cat-bg, 16%), var(--surface))`,
-        color: active ? `color-mix(in oklab, ${hue} 78%, #0f1513)` : `color-mix(in oklab, ${hue} var(--cat-ink, 78%), var(--admin-text))`,
-      }}
-    >
-      {Icon ? <Icon className="stroke-[2]" /> : categoryLetter(name)}
-    </span>
-  );
-}
-
-/**
- * Dikey kategori satırı (geniş ekranın menü kartı): renkli karo, ad, sağda ürün sayısı küçük kutuda. Üstüne gelince
- * açık gri; seçili satır ev yeşili dolgu, beyaz yazı (panonun seçili segmenti), karo beyaz. 48 px
- */
-function CategoryRow({ active, color, count, favorite, onClick, children }: { active: boolean; color: string | null; count: number; favorite?: boolean; onClick: () => void; children: string }) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        'flex min-h-12 w-full items-center gap-3 rounded-[0.9rem] py-1.5 pl-1.5 pr-2.5 text-left text-[14.5px] transition-[background-color,color,box-shadow] duration-150 focus-visible:-outline-offset-2',
-        active ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[0_8px_18px_-10px_rgb(6_74_54/0.7)]' : 'font-medium text-ink hover:bg-hover active:bg-press',
-      )}
-    >
-      <CategoryBadge name={children} color={color} favorite={favorite} active={active} />
-      <span className="min-w-0 flex-1 truncate">{favorite ? 'Sık kullanılanlar' : children}</span>
-      <span className={cn('tabular grid h-6 min-w-6 place-items-center rounded-lg px-1.5 text-xs font-semibold', active ? 'bg-white/20 text-[var(--admin-on-ink)]' : 'bg-surface-2 text-muted')}>{count}</span>
-    </button>
-  );
-}
-
-/**
- * Kategori çipi (telefon, tablet): beyaz hap, zeminde yüzer (yumuşak gölge, kenarsız); solda renkli yuvarlak karo.
- * Seçili çip ev yeşili dolgu, beyaz yazı, karo beyaz. Dokunmatikte 44 px
- */
-function CategoryChip({ active, color, name, favorite, onClick, children }: { active: boolean; color?: string | null; name: string; favorite?: boolean; onClick: () => void; children: React.ReactNode }) {
+function CategoryItem({ active, count, name, favorite, strip, onClick }: { active: boolean; count: number; name: string; favorite?: boolean; strip?: boolean; onClick: () => void }) {
   const ref = useRef<HTMLButtonElement>(null);
-  // Seçili kategori (sayfa yenilenince de) rayda görünür kalsın
   useEffect(() => {
-    if (active) ref.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-  }, [active]);
+    if (strip && active) ref.current?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [strip, active]);
+  const Icon = favorite ? Star : (categoryIcon(name) ?? Tag);
   return (
-    <button
-      ref={ref}
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        'inline-flex min-h-11 shrink-0 snap-start items-center gap-2 rounded-full py-1 pl-1.5 pr-4 text-[14.5px] whitespace-nowrap transition-[color,background-color,box-shadow] duration-150 active:brightness-95 dark:border dark:border-[var(--admin-border)]',
-        active ? 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[0_8px_18px_-10px_rgb(6_74_54/0.7)] dark:border-transparent' : 'bg-surface font-medium text-ink shadow-[var(--shadow-card)] hover:text-ink',
-      )}
-    >
-      <CategoryBadge size="sm" name={name} color={color ?? null} favorite={favorite} active={active} />
-      {favorite ? 'Sık' : children}
+    <button ref={ref} type="button" role="tab" aria-selected={active} onClick={onClick} className={cn('lp-menu-item focus-visible:-outline-offset-2', strip && 'snap-start')}>
+      <Icon aria-hidden="true" />
+      {/* Şeritte yer dar: sık kullanılanlar yıldızla "Sık" */}
+      <span className="min-w-0 flex-1 truncate">{favorite && strip ? 'Sık' : name}</span>
+      {!strip && <span className="n">{count}</span>}
     </button>
   );
 }
@@ -294,7 +242,8 @@ function ProductTile({
     <div
       className={cn(
         // Pano kartı: beyaz, köşe 20, kenarsız ve yumuşak gölgeli; üstüne gelince kalkar, basılıyken hafif küçülür
-        'group relative flex flex-col rounded-[1.25rem] border border-transparent bg-surface shadow-[var(--shadow-card)] transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-primary-line)] motion-reduce:hover:translate-y-0 motion-reduce:has-[button:active]:scale-100 dark:border-[var(--admin-border)]',
+        // Pano kartı: beyaz, köşe 20, ince çerçeve ve çok hafif gölge; üstüne gelince çerçeve ev yeşili, kart kalkar
+        'group relative flex flex-col rounded-[1.25rem] border border-[var(--admin-border)] bg-surface shadow-[var(--shadow-control)] transition-[border-color,transform,box-shadow] duration-150 hover:-translate-y-0.5 hover:border-[var(--admin-primary-line)] hover:shadow-[var(--shadow-lift)] has-[button:active]:scale-[0.985] has-[button:active]:border-[var(--admin-primary)] motion-reduce:hover:translate-y-0 motion-reduce:has-[button:active]:scale-100',
         withImage ? 'min-h-[176px]' : 'min-h-[96px]',
         soldOut && 'opacity-50',
       )}

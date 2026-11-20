@@ -26,18 +26,21 @@ export type ButtonVariant = 'primary' | 'ink' | 'secondary' | 'soft' | 'ghost' |
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'xl';
 
 // Dört durum: dinlenme, üzerinde, basılı (bir ton koyu), devre dışı; odak halkası index.css'te (ev yeşili, 2 px dışarıda)
+// Pano: ikincil beyaz, ince yumuşak kenar ve çok hafif gölge; üstüne gelince zemin bir ton açık gri, kenar belirginleşir
 const secondary =
-  'border border-[var(--admin-border-strong)] bg-surface text-ink hover:border-[var(--admin-text)] active:border-[var(--admin-text)] active:bg-surface-3';
-// Kitin ana düğmesi: mürekkep hap, yazı kalın; koyu temada mürekkep açık renktir (yazı koyu)
-const INK = 'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] hover:bg-[var(--admin-ink-fill-hover)] active:bg-[var(--admin-ink-fill-hover)] active:brightness-95';
+  'border border-[var(--admin-border-strong)] bg-surface text-ink shadow-[var(--shadow-control)] hover:border-[var(--admin-border-field)] hover:bg-surface-2 active:bg-surface-3';
+// Pano: ana düğme ev yeşili dolgu, yazı kalın, yeşil yumuşak gölge (gecede gölgesiz); koyu temada zümrüt, yazı koyu
+const INK =
+  'bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[var(--shadow-action)] hover:bg-[var(--admin-ink-fill-hover)] active:bg-[var(--admin-ink-fill-hover)] active:brightness-95';
 const variants: Record<ButtonVariant, string> = {
   primary: INK,
   ink: INK,
   secondary,
   outline: secondary,
-  soft: 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] hover:brightness-[0.97] active:brightness-95',
-  ghost: 'border border-transparent bg-transparent text-ink-2 hover:border-[var(--admin-border-strong)] hover:bg-surface hover:text-ink active:bg-press',
-  danger: 'bg-danger-600 font-semibold text-white hover:bg-danger-700 active:bg-danger-700 active:brightness-95',
+  // Panonun "Receive" düğmesi: açık nane zemin, yeşil yazı; üstüne gelince bir ton koyu nane
+  soft: 'bg-[var(--admin-primary-soft)] font-semibold text-[var(--admin-primary)] hover:bg-[var(--admin-primary-soft-hover)] active:brightness-95',
+  ghost: 'border border-transparent bg-transparent text-ink-2 hover:bg-hover hover:text-ink active:bg-press',
+  danger: 'bg-danger-600 font-semibold text-white shadow-[0_6px_16px_-9px_rgb(180_35_24/0.7)] hover:bg-danger-700 active:bg-danger-700 active:brightness-95 dark:shadow-none',
   dangerOutline:
     'border border-[var(--admin-danger-line)] bg-surface text-[var(--admin-danger-ink)] hover:border-[var(--admin-danger)] hover:bg-[var(--admin-danger-soft)] active:bg-[var(--admin-danger-soft)] active:brightness-95',
   dangerGhost: 'bg-transparent text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)] active:bg-[var(--admin-danger-soft)] active:brightness-95',
@@ -53,14 +56,15 @@ const variants: Record<ButtonVariant, string> = {
  * "Ödeme türü seçin"; açıkta 5.4:1). Kenarlı ve metin düğmeler yarı saydam. Yüklenirken bunlar uygulanmaz.
  */
 const FILLED_DISABLED = 'disabled:border-transparent disabled:bg-surface-3 disabled:text-muted disabled:shadow-none';
+const OUTLINE_DISABLED = 'disabled:opacity-50 disabled:shadow-none';
 const disabledStyles: Record<ButtonVariant, string> = {
   primary: FILLED_DISABLED,
   ink: FILLED_DISABLED,
   danger: FILLED_DISABLED,
   success: FILLED_DISABLED,
   gold: FILLED_DISABLED,
-  secondary: 'disabled:opacity-50',
-  outline: 'disabled:opacity-50',
+  secondary: OUTLINE_DISABLED,
+  outline: OUTLINE_DISABLED,
   soft: 'disabled:opacity-50',
   ghost: 'disabled:opacity-50',
   dangerOutline: 'disabled:opacity-50',
@@ -189,14 +193,14 @@ export function IconButton({ label, className, variant = 'ghost', size = 'md', c
  */
 export function CloseButton({ onClick, label = 'Kapat', className }: { onClick: () => void; label?: string; className?: string }) {
   return (
-    // Kitin kapat düğmesi: mürekkep halkalı daire; üstüne gelince dolar
+    // Pano: yumuşak gri daire (panonun ikon dairesi); üstüne gelince bir ton koyu, ikon mürekkep
     <IconButton
       label={label}
       onClick={onClick}
-      variant="secondary"
-      className={cn('-my-2.5 -mr-1.5 shrink-0 border-[1.5px] border-[var(--admin-text)] text-ink hover:border-[var(--admin-ink-fill)] hover:bg-[var(--admin-ink-fill)] hover:text-[var(--admin-on-ink)] [[data-area=admin]_&]:pointer-fine:-my-1.5 [[data-area=admin][data-density=compact]_&]:pointer-fine:-my-1', className)}
+      variant="ghost"
+      className={cn('-my-2.5 -mr-1.5 shrink-0 rounded-[999px] bg-surface-2 text-ink-2 hover:bg-surface-3 hover:text-ink active:bg-press [[data-area=admin]_&]:pointer-fine:-my-1.5 [[data-area=admin][data-density=compact]_&]:pointer-fine:-my-1', className)}
     >
-      <X className="size-[18px]" />
+      <X className="size-[18px] stroke-2" />
     </IconButton>
   );
 }

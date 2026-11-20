@@ -9,8 +9,9 @@ const fold = (s: string) =>
     .replace(/[̀-ͯ]/g, '');
 
 /**
- * Kategorinin ikonu (adisyonun menüsü, pano: kategori satırının renkli karosu). Ad anahtar kelimeyle eşlenir; sıra önemli
- * (önce "soğuk kahve", sonra "kahve"). Eşleşmeyen kategoride null: karo adın baş harfini yazar. Süs: anlamı ad taşır
+ * Kategorinin ikonu (adisyonun kategori menüsü: yönetimin alt menüsüyle aynı satır, tek renk ikon). Ad anahtar kelimeyle
+ * eşlenir; sıra önemli (önce "soğuk kahve", sonra "kahve"). Eşleşmeyen kategoride null: satır etiket ikonu çizer. Süs:
+ * anlamı ad taşır
  */
 const RULES: [string[], LucideIcon][] = [
   [['matcha'], Leaf],
@@ -40,5 +41,3 @@ export function categoryIcon(name: string): LucideIcon | null {
   return null;
 }
 
-/** Karonun yazısı (ikon yoksa): adın baş harfi, Türkçe büyük harf */
-export const categoryLetter = (name: string) => (name.trim()[0] ?? '?').toLocaleUpperCase('tr-TR');

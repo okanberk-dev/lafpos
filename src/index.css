@@ -99,7 +99,7 @@
    * Gölge (pano): zeminde yüzen kart çok yumuşak bir gölgeyle ayrılır (kenarsız), açılan ve yüzen parça (pencere, menü)
    * belirgin. Renk ev yeşilinin gecesi (#0F231C): soğuk gri zeminde sıcak toprak çamurlaşır
    */
-  --shadow-card: 0 1px 2px rgb(15 35 28 / 0.04), 0 10px 28px -14px rgb(15 35 28 / 0.14);
+  --shadow-card: 0 1px 2px rgb(15 35 28 / 0.04), 0 6px 18px -12px rgb(15 35 28 / 0.12);
   --shadow-lift: 0 1px 2px rgb(15 35 28 / 0.05), 0 12px 30px -18px rgb(15 35 28 / 0.28);
   --shadow-pop: 0 40px 80px -30px rgb(15 35 28 / 0.45), 0 12px 24px -12px rgb(15 35 28 / 0.2), 0 0 0 1px rgb(15 35 28 / 0.05);
   /* Hareket (kit): üzerine gelme 160 ms, durum 280 ms, açılış 620-1000 ms; hep yavaşlayarak biter */
@@ -122,7 +122,7 @@
   --admin-border: #e3e8e4;
   --admin-border-strong: #d2d9d4;
   --admin-divider: #edf1ee;
-  --admin-border-field: #7a837e;
+  --admin-border-field: #868f8a;
   --admin-text: #0f1513;
   --admin-text-soft: #3f4a45;
   --admin-text-mute: #58635e;
@@ -133,6 +133,8 @@
   --admin-primary-hover: #075a43;
   --admin-on-primary: #ffffff;
   --admin-primary-soft: #ddf5ea;
+  /* Açık nane düğmenin üstüne gelme tonu (soft düğme, seçili sekme); yeşil yazı 5:1 */
+  --admin-primary-soft-hover: #cdeedd;
   --admin-neutral-soft: #eef1ec;
   /*
    * Eylem dolgusu: ekranın ana eylemi (Öde, Kaydet, Giriş) ve seçim (çip, sekme, segment). Pano: markanın rengi
@@ -228,6 +230,9 @@
   --rim: 0 0 0 0 transparent;
   /* Yaprak (zemindeki büyük beyaz kart) ve cam çubuk: panonun yumuşak gölgesi, buzlu cam */
   --shadow-leaf: 0 1px 2px rgb(15 35 28 / 0.04), 0 14px 36px -18px rgb(15 35 28 / 0.16);
+  /* Denetimin gölgesi (alan, ikincil düğme, çip): çok hafif derinlik; ana eylemin yeşil yumuşak gölgesi */
+  --shadow-control: 0 1px 2px rgb(15 35 28 / 0.05);
+  --shadow-action: 0 6px 16px -8px rgb(10 110 82 / 0.55);
   --glass: rgb(255 255 255 / 0.78);
   --glass-line: rgb(255 255 255 / 0.7);
   --frost: rgb(241 244 242 / 0.82);
@@ -299,6 +304,8 @@
   --shadow-lift: 0 2px 10px rgb(0 0 0 / 0.45);
   --shadow-pop: 0 30px 60px -20px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.07);
   --shadow-leaf: 0 0 0 1px rgb(255 255 255 / 0.05);
+  --shadow-control: none;
+  --shadow-action: none;
   --rim: 0 0 0 0 transparent;
   --admin-bg: #0d1110;
   --admin-stage: #0d1110;
@@ -317,6 +324,7 @@
   --admin-primary-hover: #6ee7b7;
   --admin-on-primary: #052e1f;
   --admin-primary-soft: #0f3327;
+  --admin-primary-soft-hover: #14422f;
   --admin-neutral-soft: #26302b;
   /* Gecede eylem dolgusu parlak zümrüt, üstünde koyu yeşil yazı (7.7:1); halka koyu yeşil, ok açık nane */
   --admin-ink-fill: #34d399;
@@ -417,6 +425,24 @@
   --r-glass: 1.375rem;
   --r-tile: 1rem;
   --table-head-bg: transparent;
+}
+
+/*
+ * Yerleşim ve ızgara belirteçleri (DESIGN.md §5 "Yerleşim ve ızgara"; operatör 20 Kasım 2026: "layoutları gridleri de
+ * belirle"). Üç aralık: kabuk (ray, üst çubuk ve sahne arası) 12, sahne (sütunlar, bölümler ve kartlar arası) 16, kart
+ * ızgarası (ürün, masa, sipariş kartı) 12. Sabit sütunlar: alt menü kartı 240 (yönetimin bölümleri, adisyonun
+ * kategorileri; hep solda), sağ dizin kartı 312 (hep sağda), adisyonun hesabı 320-440 (hep sağda). Karo ve kart
+ * ızgarasının en dar sütunu: karo 140, kart 280. Bileşenler bu adları okur, sayı yazmaz
+ */
+:root {
+  --shell-gap: 12px;
+  --grid-gap: 16px;
+  --tile-gap: 12px;
+  --side-w: 15rem;
+  --aside-w: 19.5rem;
+  --cart-w: clamp(20rem, 35vw, 27.5rem);
+  --tile-min: 8.75rem;
+  --card-min: 17.5rem;
 }
 
 /*
@@ -864,6 +890,24 @@
       height: 1.75rem;
     }
   }
+  /*
+   * Daha alçakta (1024 × 768 yatay tablet, üstte bildirim şeridiyle) rayın bütün ekranları kaydırmadan görünsün (ray hep
+   * aynı yerde, hiçbir ekran gizli kalmaz): satır 44 px, ikon kutusu bir boy kısa, ad yine altında
+   */
+  @media (min-width: 48rem) and (max-height: 48rem) {
+    .lp-rail {
+      gap: 6px;
+      padding-block: 8px;
+    }
+    .lp-rail-item {
+      min-height: 2.75rem;
+      gap: 1px;
+      padding-block: 3px;
+    }
+    .lp-rail-icon {
+      height: 1.5rem;
+    }
+  }
 
   /* Üst çubuğun ortası: ekranın sekmeleri (Stage taşır); sığmazsa yatay kayar */
   .lp-topnav > .lp-side-menu {
@@ -895,7 +939,7 @@
   }
   @media (min-width: 48rem) {
     .lp-stage {
-      gap: 16px;
+      gap: var(--grid-gap);
       padding: 0;
     }
   }
@@ -997,39 +1041,47 @@
   }
 
   /*
-   * Yönetim (Stage headerInLeaf): geniş ekranda solda beyaz alt menü kartı (gruplu bölümler, seçili satır açık nane), sağda
-   * içerik; tablette alt menü içeriğin üstünde yatay hap şeridi
+   * Alt menü kartı (tek bileşen, geniş ekran): yönetimin bölümleri (Stage headerInLeaf) ve adisyonun kategorileri
+   * (ProductPanel) aynı kartta, hep solda, genişlik --side-w. Beyaz kart, köşe 24, saç teli çerçeve, iç boşluk 14/10/10;
+   * içinde `.lp-menu.lp-menu-col` (grup başlığı küçük ve soluk; satır ikon, ad, sağda sayı; seçili açık nane). Sığmazsa
+   * kart kendi içinde kayar. `.lp-side`'tan sonra gelir: iç boşluğu o ezmesin
+   */
+  @media (min-width: 64rem) {
+    .lp-subnav {
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 14px 10px 10px;
+      border: 1px solid var(--admin-border);
+      border-radius: var(--r-card);
+      background: var(--admin-surface);
+      box-shadow: var(--shadow-card);
+      scrollbar-width: none;
+    }
+    .dark .lp-subnav {
+      box-shadow: none;
+    }
+    .lp-subnav::-webkit-scrollbar {
+      display: none;
+    }
+  }
+
+  /*
+   * Yönetim (Stage headerInLeaf): geniş ekranda iki sütunlu ızgara, solda alt menü kartı (--side-w), sağda içerik;
+   * tablette alt menü içeriğin üstünde yatay şerit
    */
   @media (min-width: 64rem) {
     .lp-stage.lp-nav {
       display: grid;
-      grid-template-columns: 15rem minmax(0, 1fr);
+      grid-template-columns: var(--side-w) minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr);
-      gap: 16px;
+      gap: var(--grid-gap);
     }
     .lp-nav > .lp-side {
       flex-direction: column;
       flex-wrap: nowrap;
       align-items: stretch;
       gap: 12px;
-      min-height: 0;
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      padding: 14px 10px 10px;
-      border: 1px solid var(--card-line);
-      border-radius: var(--r-card);
-      background: var(--admin-surface);
-      box-shadow: var(--card-shadow);
-      scrollbar-width: none;
-      --card-line: transparent;
-      --card-shadow: var(--shadow-card);
-    }
-    .dark .lp-nav > .lp-side {
-      --card-line: var(--admin-border);
-      --card-shadow: none;
-    }
-    .lp-nav > .lp-side::-webkit-scrollbar {
-      display: none;
     }
     .lp-nav > .lp-side > .lp-side-menu {
       flex: none;
@@ -1059,7 +1111,7 @@
   }
   @media (min-width: 80rem) {
     .lp-split .lp-name {
-      font-size: 2rem;
+      font-size: 1.875rem;
     }
   }
   .lp-sub {
@@ -1093,13 +1145,12 @@
     gap: 6px;
     min-width: 6.25rem;
     padding: 9px 14px 10px;
-    border: 1px solid var(--hs-line, transparent);
+    border: 1px solid var(--hs-line, var(--admin-border));
     border-radius: var(--r-tile);
     background: var(--admin-surface);
     box-shadow: var(--shadow-card);
   }
   .dark .lp-hs {
-    --hs-line: var(--admin-border);
     box-shadow: none;
   }
   .lp-hs > b {
@@ -1152,7 +1203,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: 'ciro' 'tiles' 'chart' 'pay';
-    gap: 16px;
+    gap: var(--grid-gap);
   }
   @media (min-width: 48rem) {
     .lp-board {
@@ -1167,19 +1218,44 @@
     }
   }
 
-  /* Adisyonun menü kartı (geniş ekran): kategoriler beyaz kartta, zeminde yüzer */
-  .lp-catalog {
-    padding: 10px 8px;
-    border: 1px solid var(--hs-line, transparent);
-    border-radius: var(--r-card);
-    background: var(--admin-surface);
-    box-shadow: var(--shadow-card);
+  /*
+   * Kart ızgaraları (sabit): karo ızgarası (ürün, masa; en dar sütun --tile-min) ve kart ızgarası (sipariş, rezervasyon;
+   * en dar sütun --card-min). Aralık hep --tile-gap; satır içeriği kadar, ızgara üstten başlar. Ekran sütun sayısı
+   * yazmaz: en dar sütun yeter, kaç sütun sığarsa o kadar
+   */
+  .lp-tiles,
+  .lp-cards {
+    display: grid;
+    grid-auto-rows: min-content;
+    align-content: start;
+    gap: var(--tile-gap);
   }
-  .dark .lp-catalog {
-    --hs-line: var(--admin-border);
-    box-shadow: none;
+  .lp-tiles {
+    grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
   }
-  /* Kategori karosu gecede: zemin bir ton belirgin, ikon açık tona kayar (ProductPanel CategoryBadge) */
+  .lp-cards {
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--card-min)), 1fr));
+  }
+
+  /*
+   * Salonun zemini (Masalar, plan görünümü): açık gri alan, 20 px aralıklı ince noktalar, köşe 20; masalar üstünde
+   * beyaz (boş) ve yeşil (dolu) kartlar olarak ayrışır
+   */
+  .lp-floor {
+    margin: 12px;
+    border: 1px solid var(--admin-border);
+    border-radius: 1.25rem;
+    background:
+      radial-gradient(circle, color-mix(in oklab, var(--admin-border-field) 34%, transparent) 1px, transparent 1.4px) 0 0 / 20px 20px,
+      var(--admin-surface-2);
+  }
+  @media (min-width: 48rem) {
+    .lp-floor {
+      margin: 14px 16px;
+    }
+  }
+
+  /* Renkli ikon karosu gecede (ödeme yöntemi, PaymentModal PayIcon): zemin bir ton belirgin, ikon açık tona kayar */
   .dark {
     --cat-bg: 24%;
     --cat-ink: 52%;
@@ -1190,7 +1266,7 @@
     position: relative;
     display: flex;
     flex: 1 1 auto;
-    gap: 16px;
+    gap: var(--grid-gap);
     min-width: 0;
     min-height: 0;
   }
@@ -1206,12 +1282,12 @@
       flex: none;
       flex-direction: column;
       gap: 14px;
-      width: 19.5rem;
+      width: var(--aside-w);
       min-height: 0;
       overflow-y: auto;
       overscroll-behavior: contain;
       padding: 6px 10px 10px;
-      border: 1px solid var(--hs-line, transparent);
+      border: 1px solid var(--hs-line, var(--admin-border));
       border-radius: var(--r-card);
       background: var(--admin-surface);
       box-shadow: var(--shadow-leaf);
@@ -1361,6 +1437,7 @@
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
+    border: 1px solid var(--admin-border);
     border-radius: 1.25rem;
     background: var(--admin-surface);
     box-shadow: var(--shadow-leaf);
@@ -1375,6 +1452,7 @@
   }
   /* Yaprak zemini olmayan bölge (bar ekranı, adisyon): içerik sahnenin üstünde kendi kartlarını çizer */
   .lp-leaf.lp-bare {
+    border: 0;
     border-radius: 0;
     background: none;
     box-shadow: none;
@@ -1385,14 +1463,25 @@
    * köşe 24, kenarsız, yumuşak gölge). Gölge kaydırma kabında kesilmesin diye içerik kenardan biraz içeride başlar
    */
   .lp-leaf.lp-float {
+    border: 0;
     border-radius: 0;
     background: none;
     box-shadow: none;
     animation: none;
   }
+  /* Zemindeki kart: ince çerçeve (saç teli) ve çok hafif gölge; çerçeve bölgeleri ayırır, gölge yalnız derinlik */
   :is(.lp-bare, .lp-float) {
-    --card-line: transparent;
+    --card-line: var(--admin-border);
     --card-shadow: var(--shadow-card);
+  }
+  /* Pano yaprağında iç pay ince: kartlar zeminin hizasında başlar, gölgesi kaydırma kabında kesilmez */
+  .lp-float > .lp-leaf-pad {
+    padding: 4px 4px 24px;
+  }
+  @media (min-width: 48rem) {
+    .lp-float > .lp-leaf-pad {
+      padding: 4px 8px 28px;
+    }
   }
   .dark :is(.lp-bare, .lp-float) {
     --card-line: var(--admin-border);
@@ -1459,10 +1548,18 @@
 
   /* Araçlar çekmecesi: perde gibi yukarıdan iner, çizgiler kayar; satırları sırayla gelir (ToolsDrawer.tsx) */
   /* Araçlar çekmecesi sade gece (18 Kas 2026, "daha minimalist"): kayan dalga çizgileri yok, yalnız üstte yumuşak yeşil ışık */
+  /*
+   * Araçlar çekmecesi (pano): marka rayının ev yeşili degradesinde, sağ üstte yumuşak nane ışığı; raydan açılır, rayla
+   * aynı yüzey. Yazı beyaz, soluk yazı rayın soluğu (5.1:1), çizgi ve yüzey yarı saydam beyaz, odak açık nane
+   */
   .lp-drawer {
+    --band-muted: var(--rail-mute);
+    --band-line: rgb(255 255 255 / 0.16);
+    --band-2: rgb(255 255 255 / 0.1);
+    --band-accent: #b9f3d9;
     background:
-      var(--band-glow) 0 0 / 100% 100% no-repeat,
-      var(--band);
+      radial-gradient(110% 70% at 88% 0%, rgb(127 240 192 / 0.16) 0%, transparent 60%) 0 0 / 100% 100% no-repeat,
+      var(--rail-bg);
     animation: lp-drawer-in 520ms var(--ease-out) backwards;
   }
   .lp-drawer-row {

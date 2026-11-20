@@ -5,8 +5,8 @@ import { cn } from '@/lib/cn';
 import { topDialog, trapTab } from '@/lib/focus';
 
 /**
- * Araçlar çekmecesi (gnbsite Area Board kitinin Tools çekmecesi, sadeleşti: 18 Kasım 2026, "daha minimalist"): tam ekran
- * gece zemini, yukarıdan perde gibi iner; satırlar ölçülü (18 px, büyük harf yok), üstüne gelince ve etkin ekranda sağda
+ * Araçlar çekmecesi (gnbsite Area Board kitinin Tools çekmecesi; pano: marka rayının ev yeşili degradesinde): tam ekran,
+ * yukarıdan perde gibi iner; satırlar ölçülü (18 px, büyük harf yok), üstüne gelince ve etkin ekranda sağda
  * küçük yeşil ok halkası belirir.
  * Ekranlar, bu cihaz (tema, tam ekran) ve oturum (kilitle). Escape ve Kapat kapatır, Tab çekmecede döner, kapanınca odak
  * açan düğmeye döner. Bantta odak halkası açık yeşil (ev yeşili gecede 3:1'in sınırında)
@@ -64,7 +64,7 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
             onClick={onClose}
             aria-label="Kapat"
             title="Kapat"
-            className="grid size-11 shrink-0 place-items-center rounded-full border border-[var(--band-line)] text-[var(--band-text)] transition-colors duration-150 hover:border-[var(--band-muted)] hover:bg-[var(--band-2)]"
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-[var(--band-2)] text-[var(--band-text)] transition-colors duration-150 hover:bg-[rgb(255_255_255/0.18)]"
           >
             <X aria-hidden="true" className="size-5" />
           </button>
