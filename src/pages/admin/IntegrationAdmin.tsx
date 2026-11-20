@@ -54,18 +54,22 @@ interface SyncStatus {
  * gri, kırmızı yalnız hata satırında
  */
 function Status({ ok, idle, error, children }: { ok?: boolean; idle?: boolean; error?: boolean; children: React.ReactNode }) {
+  // Yumuşak durum paneli (pano, 20 Kas 2026): açık gri zemin, köşe 10; ikon durumun renginde küçük beyaz dairede.
+  // Zemin hep nötr: renk yalnız ikonda (satırda tek durum rengi kuralı)
   return (
-    <div className="flex items-start gap-2 text-sm">
-      {error ? (
-        <XCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--admin-danger-ink)]" />
-      ) : idle ? (
-        <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--admin-text-mute)]" />
-      ) : ok ? (
-        <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--admin-success)]" />
-      ) : (
-        <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--admin-warning)]" />
-      )}
-      <span className="min-w-0">{children}</span>
+    <div className="flex items-start gap-2.5 rounded-[var(--r-control)] bg-[var(--admin-surface-2)] px-3 py-2.5 text-sm">
+      <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--admin-surface)] ring-1 ring-inset ring-[var(--admin-border)] [&>svg]:size-3.5">
+        {error ? (
+          <XCircle className="text-[var(--admin-danger-ink)]" />
+        ) : idle ? (
+          <Info className="text-[var(--admin-text-mute)]" />
+        ) : ok ? (
+          <CheckCircle2 className="text-[var(--admin-success)]" />
+        ) : (
+          <CircleAlert className="text-[var(--admin-warning)]" />
+        )}
+      </span>
+      <span className="min-w-0 pt-0.5">{children}</span>
     </div>
   );
 }

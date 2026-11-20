@@ -765,12 +765,13 @@ export function Timeline({ items }: { items: TimelineItem[] }) {
  */
 export function SetupNotes({ children, summary = 'Kurulum adımları', open }: { children: ReactNode; summary?: ReactNode; open?: boolean }) {
   return (
-    <details open={open} className="group rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)]">
-      <summary className={cn('flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-2xl px-4 text-[13px] font-medium text-[var(--admin-text-mute)] hover:text-[var(--admin-text)] pointer-fine:min-h-9 [&::-webkit-details-marker]:hidden', FOCUS)}>
+    // Kartlarla aynı kap (köşe --r-card, saç teli): sayfadaki son kart gibi durur, açılınca içi kartın gövdesi
+    <details open={open} className="group rounded-[var(--r-card)] border border-[var(--admin-border)] bg-[var(--admin-surface)]">
+      <summary className={cn('flex min-h-12 cursor-pointer list-none items-center gap-2 rounded-[var(--r-card)] px-4 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors duration-150 hover:text-[var(--admin-text)] sm:px-5 pointer-fine:min-h-11 [&::-webkit-details-marker]:hidden', FOCUS)}>
         <ChevronRight aria-hidden="true" className="size-4 shrink-0 transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none" />
         {summary}
       </summary>
-      <div className="space-y-2 pb-4 pl-10 pr-4 text-xs leading-5 text-[var(--admin-text-soft)]">{children}</div>
+      <div className="space-y-2 pb-4 pl-10 pr-4 text-xs leading-5 text-[var(--admin-text-soft)] sm:pl-11 sm:pr-5">{children}</div>
     </details>
   );
 }
