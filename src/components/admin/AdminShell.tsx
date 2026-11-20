@@ -126,7 +126,8 @@ export function AdminShell({ title, children }: { title: string; children: React
   );
   // Sütunun dibi (shadcn'in SidebarFooter'ı): kasaya dönüş ve sıkı görünüm
   const tools = (
-    <div className="flex w-full items-center gap-1 border-t border-[var(--admin-border)] pt-2 max-md:hidden">
+    // Alt menü kartının dibi (geniş ekran); tablette kasaya dönüş kabuğun rayında
+    <div className="flex w-full items-center gap-1 border-t border-[var(--admin-border)] pt-2 max-lg:hidden">
       <Link to={home} className={cn(ROW_ICON, 'flex-1 justify-start gap-2.5 rounded-[0.625rem] px-2.5 text-sm font-medium text-[var(--admin-text-soft)] hover:bg-hover pointer-fine:min-h-9')}>
         <ArrowLeftRight className="size-4 shrink-0" aria-hidden="true" />
         Kasa ekranlarına dön
@@ -187,9 +188,11 @@ export function AdminShell({ title, children }: { title: string; children: React
           </>
         }
         actions={tools}
+        // Pano: kartlar zeminde yüzer; başlık ve eylemler zeminin üstünde (panonun "Welcome back" satırı)
+        float
         leafClassName="scroll-thin @container"
       >
-        <div className="px-4 pb-10 pt-5 sm:px-5 lg:px-7 lg:pt-6">{children}</div>
+        <div className="px-1 pb-10 pt-3 sm:px-2 lg:px-3 lg:pt-2">{children}</div>
       </Stage>
     </div>
   );

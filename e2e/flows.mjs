@@ -278,7 +278,8 @@ export async function runFlows(ctx) {
       () =>
         withPage(ctx, 'tablet', 'kasa', async (page) => {
           await go(ctx, page, '/masalar');
-          const rail = await page.locator('header nav[aria-label="Ekranlar"]').first().textContent();
+          // Ekranlar tablette ve bilgisayarda soldaki marka rayında (pano)
+          const rail = await page.locator('nav.lp-rail[aria-label="Ekranlar"]').textContent();
           assert(!/Yönetim|Rapor|Patron/.test(rail), `kasiyer menüsünde olmaması gereken: ${rail.replace(/\s+/g, ' ')}`);
           await go(ctx, page, '/yonetim/menu');
           assert(!new URL(page.url()).pathname.startsWith('/yonetim'), 'kasiyer yönetime girebildi');
@@ -643,7 +644,7 @@ export async function runFlows(ctx) {
             await go(ctx, page, '/');
             await page.waitForURL(/\/adisyon\//, { timeout: 8000 });
             orderId = new URL(page.url()).pathname.split('/').pop();
-            const rail = await page.locator('header nav[aria-label="Ekranlar"]').first().textContent();
+            const rail = await page.locator('nav.lp-rail[aria-label="Ekranlar"]').textContent();
             assert(/Satış/.test(rail), `self serviste menüde Satış yok: ${rail.replace(/\s+/g, ' ')}`);
             await page.getByPlaceholder('Ürün ara').fill(simple.name);
             await page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first().click();

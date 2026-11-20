@@ -457,7 +457,7 @@ export function Segmented<T extends string>({
     <div
       role={label ? 'group' : undefined}
       aria-label={label}
-      className={cn(wrap ? 'flex w-full gap-0.5 rounded-[1.375rem] max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)]', 'border border-[var(--admin-border-strong)] bg-surface p-[3px]', className)}
+      className={cn(wrap ? 'flex w-full gap-0.5 rounded-[1.375rem] max-sm:flex-col' : 'no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)]', 'border border-[var(--admin-border)] bg-surface-2 p-[3px]', className)}
     >
       {options.map((o) => (
         <button

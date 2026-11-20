@@ -75,11 +75,11 @@ export function LoginPage() {
   const today = businessDate(now);
   const users = info.data?.users ?? [];
   return (
-    // Kitin girişi: espresso gecesinde yavaş kayan krema dalgaları (siyah bant), üstünde beyaz PIN kartı. Geniş ekranda
-    // solda saat, tarih ve ekip; telefonda marka ve saat kartın üstünde tek satır
-    <div className="lp-band flex min-h-full items-center justify-center p-3 sm:p-6 lg:p-10">
-      <div className="grid w-full max-w-5xl items-center gap-4 lg:min-h-[560px] lg:grid-cols-[1fr_minmax(380px,430px)] lg:gap-10">
-        <section className="flex items-center justify-between gap-4 px-2 py-1 lg:h-full lg:flex-col lg:items-stretch lg:justify-between lg:px-0 lg:py-2">
+    // Pano girişi: açık gri zeminde solda ev yeşilinin degradesinde marka kartı (logo, işletme, iri saat, tarih ve ekip;
+    // panonun kredi kartı), sağda beyaz PIN kartı. Telefonda marka ve saat yeşil şerit olarak kartın üstünde
+    <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6 lg:p-10">
+      <div className="grid w-full max-w-5xl items-stretch gap-3 lg:min-h-[580px] lg:grid-cols-[1fr_minmax(380px,430px)] lg:gap-5">
+        <section className="relative flex items-center justify-between gap-4 overflow-hidden rounded-[var(--r-card)] bg-[image:var(--rail-bg)] px-4 py-3.5 text-white shadow-[0_24px_48px_-28px_rgb(6_74_54/0.8)] [--band-muted:var(--rail-mute)] [--band-text:#ffffff] sm:px-5 lg:h-full lg:flex-col lg:items-stretch lg:justify-between lg:rounded-[var(--r-stage)] lg:p-9">
           <div className="flex items-center gap-3">
             <LafTile className="shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)]" />
             <span className="min-w-0">
@@ -108,7 +108,7 @@ export function LoginPage() {
           )}
         </section>
 
-        <section className="flex flex-col justify-center rounded-[1.75rem] bg-surface p-5 text-ink shadow-[var(--shadow-pop)] sm:p-7">
+        <section className="flex flex-col justify-center rounded-[var(--r-card)] border border-transparent bg-surface p-5 text-ink shadow-[var(--shadow-leaf)] sm:p-7 lg:rounded-[var(--r-stage)] dark:border-[var(--admin-border)]">
           {/* Tuş takımı PIN tuşu ölçüsünde kalır: dikey tablette kart geniş, tuşlar 640 px'e yayılmaz */}
           <div className="mx-auto flex w-full max-w-[400px] flex-col">
             {info.isError && (

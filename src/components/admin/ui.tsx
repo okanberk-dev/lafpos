@@ -40,8 +40,11 @@ export const BTN = {
 /** Satırda tekrar eden küçük denetim (⋯, metin eylemi): sakin, daire (kitin ikon düğmeleri gibi), dokunmatikte 44 px, farede 32 px */
 export const ROW_ICON = `inline-flex min-h-11 min-w-11 items-center justify-center rounded-[var(--r-btn)] text-[var(--admin-text-mute)] transition-colors hover:bg-[var(--admin-panel)] hover:text-[var(--admin-text)] pointer-fine:min-h-8 pointer-fine:min-w-8 ${FOCUS}`;
 
-/** Kart (kitin tablo ve form kabı): köşe 18, saç teli kenar, gölgesiz; derinliği zeminin tonu verir */
-export const CARD = 'rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-surface)]';
+/**
+ * Kart (pano kartı; tablo ve form kabı): köşe 24, beyaz. Zeminde (pano yaprağı) kenarsız ve yumuşak gölgeli, beyaz
+ * yaprağın içinde saç teli kenarlı ve gölgesiz (--card-line, --card-shadow; index.css)
+ */
+export const CARD = 'rounded-[var(--r-card)] border border-[var(--card-line)] bg-[var(--admin-surface)] shadow-[var(--card-shadow)]';
 export const LABEL = 'text-xs font-medium text-[var(--admin-text-mute)]';
 export const NUM = 'tabular-nums';
 /** Karakter karakter okunan ad (env değişkeni, klasör, adres): sistem eş genişlikli, gri kutu */
@@ -112,10 +115,11 @@ export function PageHeader({ title, description, actions, children }: { title: R
   if (staged) return children ? <>{staged}<div className="mb-5">{children}</div></> : <>{staged}</>;
   const titleOnly = !description && !actions && !children;
   return (
-    <div className={cn('-mx-4 mb-5 border-b border-[var(--admin-border)] px-4 pb-4 sm:-mx-5 sm:px-5', titleOnly && 'max-md:mb-0 max-md:border-0 max-md:pb-0')}>
+    // Pano başlığı: zeminin üstünde, çizgisiz; solda iri başlık ve açıklama, sağda ikincil ve ana eylem
+    <div className={cn('mb-5 px-1', titleOnly && 'max-md:mb-0')}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className={cn('min-w-0', !description && 'max-md:contents')}>
-          <h1 className="font-headline text-[26px] font-bold leading-tight tracking-[-0.03em] text-[var(--admin-text)] max-md:sr-only">{title}</h1>
+          <h1 className="font-headline text-[30px] font-bold leading-tight tracking-[-0.035em] text-[var(--admin-text)] max-md:sr-only">{title}</h1>
           {description && <p className="mt-1.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
@@ -153,10 +157,10 @@ export function Card({
   return (
     <section className={cn(CARD, 'min-w-0', className)}>
       {(title || actions) && (
-        <header className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 sm:px-5', divided && 'border-b border-[var(--admin-divider)] pb-3')}>
+        <header className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 sm:px-5 sm:pt-5', divided && 'border-b border-[var(--admin-divider)] pb-3')}>
           <div className="min-w-0 flex-[1_1_9rem]">
-            {title && <h2 className="text-base font-bold leading-6 tracking-[-0.025em] text-[var(--admin-text)]">{title}</h2>}
-            {subtitle && <p className="text-xs text-[var(--admin-text-mute)]">{subtitle}</p>}
+            {title && <h2 className="text-[17px] font-bold leading-6 tracking-[-0.025em] text-[var(--admin-text)]">{title}</h2>}
+            {subtitle && <p className="mt-0.5 text-[13px] text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
           {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
         </header>
@@ -185,7 +189,8 @@ export interface KpiCell {
 }
 
 /**
- * KPI şeridi: tek kart, hücreler arasında 1 px çizgi (kartın grisi 1 px boşluktan görünür). Beş hücre
+ * KPI şeridi (pano): her hücre kendi kartı (köşe 24, zeminde yüzer), aralarında 12 px. İkon yumuşak tonlu dairede,
+ * değişim rozeti rakamın sağında (panonun "+12,8%" rozeti). Beş hücre
  * tablette 3 + 2 dizilir (altı sütunlu ızgarada 2 ve 3 sütun kaplar), boş gri hücre kalmaz. Etiket satırı 32 px'tir
  * ve etiket en çok iki satıra kırılır (kesilmez): hücreler arasında rakamlar aynı hizada kalır. Rakam tek satır, dar
  * hücrede küçülür (`fitFigure`). Tıklanan hücre etiketinin yanında › taşır: dokunmatikte üzerine gelme yok.
@@ -193,7 +198,7 @@ export interface KpiCell {
 export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: string }) {
   const n = cells.length;
   return (
-    <div className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', kpiGridCols(n), KPI_LAST_ODD, className)}>
+    <div className={cn('grid grid-cols-2 gap-3', kpiGridCols(n), KPI_LAST_ODD, className)}>
       {cells.map((c, i) => {
         const body = (
           <>
@@ -212,7 +217,7 @@ export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: s
           </>
         );
         const span = kpiCellSpan(n, i);
-        const cls = cn('@container flex min-w-0 flex-col items-stretch justify-start bg-[var(--admin-surface)] p-4 text-left sm:p-5', span, c.active && 'bg-[var(--admin-surface-2)] shadow-[inset_0_-2px_0_var(--admin-text)]');
+        const cls = cn(CARD, '@container flex min-w-0 flex-col items-stretch justify-start p-4 text-left sm:p-5', span, c.active && 'border-[var(--admin-ink-fill)] shadow-[inset_0_0_0_1px_var(--admin-ink-fill)]');
         return c.onClick ? (
           <button key={c.key} type="button" onClick={c.onClick} aria-pressed={c.active} className={cn(cls, 'transition-colors', !c.active && 'hover:bg-[var(--hover-solid)]', FOCUS, 'focus-visible:-outline-offset-2')}>
             {body}
@@ -297,7 +302,7 @@ export function Segmented<T extends string>({ value, onChange, options, label, c
       role="radiogroup"
       aria-label={label}
       onKeyDown={move}
-      className={cn('no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)] border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[min(26px,var(--r-segment))] max-sm:pointer-fine:rounded-[min(22px,var(--r-segment))]', RAIL_FADE, className)}
+      className={cn('no-scrollbar inline-flex max-w-full gap-0.5 overflow-x-auto rounded-[var(--r-segment)] border border-[var(--admin-border)] bg-[var(--admin-surface-2)] p-[3px] max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:rounded-[min(26px,var(--r-segment))] max-sm:pointer-fine:rounded-[min(22px,var(--r-segment))]', RAIL_FADE, className)}
     >
       {options.map((o, i) => {
         const on = o.value === value;

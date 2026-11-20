@@ -125,26 +125,31 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     });
   }
 
-  it('kasa ekranları da LafPOS Sahne (canlı): ferah sayfa, açık adaçayı sahne, yeşilimsi mürekkep, derin yeşil', () => {
-    expect(posLight('bg')).toBe('#f5f6f3');
+  it('kasa ekranları da pano (20 Kas 2026): tek açık gri zemin, yeşilimsi mürekkep, ev yeşili', () => {
+    expect(posLight('bg')).toBe('#f1f4f2');
     expect(posLight('primary')).toBe('#0a6e52');
     expect(posLight('ink')).toBe('#0f1513');
     expect(posDark('primary')).toBe('#34d399');
   });
 
-  it('LafPOS Sahne paleti (DESIGN.md §2 tablosu; 18 Kas 2026 canlı tur): kitin ton merdiveni, canlı durum renkleri', () => {
-    expect(adminLight('admin-bg')).toBe('#f5f6f3');
-    expect(adminLight('admin-stage')).toBe('#e9ece7');
+  it('pano paleti (DESIGN.md §2 tablosu; 20 Kas 2026): tek zemin, beyaz kart, ev yeşili eylem, canlı durum renkleri', () => {
+    // Üst çubuk ve sahne tek zeminde (panonun gri zemini, hafif yeşil); kartlar beyaz
+    expect(adminLight('admin-bg')).toBe('#f1f4f2');
+    expect(adminLight('admin-stage')).toBe(adminLight('admin-bg'));
     expect(adminLight('admin-surface')).toBe('#ffffff');
-    expect(adminLight('admin-surface-2')).toBe('#f8f9f7');
-    expect(adminLight('admin-panel')).toBe('#eef1ec');
+    expect(adminLight('admin-surface-2')).toBe('#f7f9f8');
+    expect(adminLight('admin-panel')).toBe('#edf1ee');
     expect(adminLight('admin-primary')).toBe('#0a6e52');
     expect(adminLight('admin-primary-hover')).toBe('#075a43');
     expect(adminLight('admin-text')).toBe('#0f1513');
     expect(adminLight('admin-text-soft')).toBe('#3f4a45');
     expect(adminLight('admin-text-mute')).toBe('#58635e');
-    expect(adminLight('admin-ink-fill')).toBe('#111816');
-    expect(adminLight('ok-ring')).toBe('#12b886');
+    // Eylem ve seçim dolgusu markanın rengi (panonun mavisinin yerine ev yeşili); halka açık nane
+    expect(adminLight('admin-ink-fill')).toBe(adminLight('admin-primary'));
+    expect(adminLight('ok-ring')).toBe('#d8f6e8');
+    expect(posDark('admin-ink-fill')).toBe('#34d399');
+    // Marka rayı ev yeşilinin degradesi
+    expect(css).toMatch(/--rail-bg:\s*linear-gradient\(180deg, #0b6449/);
     // Zamanı daralan: canlı ahududu (kitin magentası)
     expect(adminLight('admin-signal')).toBe('#c8175d');
     // Dolu masa L'Affogato yeşilinin degradesi
@@ -157,19 +162,18 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     expect(css).toMatch(/--brand-tile:\s*radial-gradient\([^;]*#23876a[^;]*#1d6d56[^;]*#0c3b2d/);
   });
 
-  it('yazı: sitenin iki sesi pakette (başlık ve rakam Gabarito, metin Poppins); dış kaynaktan yazı yok', () => {
-    expect(css).toMatch(/--font-sans:\s*'LafPOS Rakam',\s*'Poppins'/);
-    expect(css).toMatch(/--font-headline:\s*'LafPOS Rakam',\s*'Gabarito'/);
-    for (const w of [400, 500, 600, 700]) {
-      expect(css, `Poppins ${w} latin`).toContain(`@fontsource/poppins/files/poppins-latin-${w}-normal.woff2`);
-      expect(css, `Poppins ${w} latin-ext (ğ, ş, ı, İ, ₺)`).toContain(`@fontsource/poppins/files/poppins-latin-ext-${w}-normal.woff2`);
-    }
-    expect(css).toContain('@fontsource-variable/gabarito/files/gabarito-latin-ext-wght-normal.woff2');
-    const digits = css.slice(css.indexOf("font-family: 'LafPOS Rakam'"));
-    expect(digits).toMatch(/@fontsource-variable\/gabarito\/files\/gabarito-latin-wght-normal\.woff2/);
-    expect(digits.slice(0, digits.indexOf('}'))).toMatch(/unicode-range:\s*U\+0030-0039;/);
+  it('yazı: panodaki gibi Inter (değişken ağırlık ve optik boy), pakette; dış kaynaktan yazı yok (operatör, 20 Kas 2026)', () => {
+    expect(css).toMatch(/--font-sans:\s*'Inter',/);
+    expect(css).toMatch(/--font-headline:\s*'Inter',/);
+    expect(css).toContain('@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2');
+    // Türkçe harfler (ğ, ş, İ) ve ₺ (U+20BA) latin-ext dosyasında
+    const ext = css.slice(css.indexOf('@fontsource-variable/inter/files/inter-latin-ext-opsz-normal.woff2'));
+    expect(ext.slice(0, ext.indexOf('}'))).toMatch(/U\+0100-02BA[\s\S]*U\+20AD-20C0/);
     expect(css).toMatch(/h1,\s*h2,\s*h3 \{[^}]*font-family: var\(--font-headline\)/);
-    expect(css).not.toMatch(/fonts\.googleapis|fonts\.gstatic|@fontsource\/inter|outfit/i);
+    expect(css).not.toMatch(/fonts\.googleapis|fonts\.gstatic|@fontsource\/poppins|@fontsource-variable\/gabarito/i);
+    const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8')) as { dependencies: Record<string, string> };
+    expect(pkg.dependencies['@fontsource-variable/inter']).toBeTruthy();
+    expect(Object.keys(pkg.dependencies).filter((d) => /poppins|gabarito/.test(d))).toEqual([]);
   });
 
   const src = (path: string) => readFileSync(join(__dirname, '..', path), 'utf8');
@@ -221,21 +225,23 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     return Object.fromEntries([...body.matchAll(/--([\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
   })();
 
-  it('kitin merdiveni: sahne 28, yaprak 24, cam 22, kart 18, alan 12; düğme, çip ve segment hap, sütun 3', () => {
+  it('panonun merdiveni: sahne 28, yaprak ve kart 24, cam 22, karo 16, alan ve düğme 12, rozet 8; segment hap, sütun 6', () => {
     expect(tokens).toMatchObject({
       'r-stage': '1.75rem',
       'r-leaf': '1.5rem',
       'r-glass': '1.375rem',
-      'r-card': '1.125rem',
+      'r-card': '1.5rem',
       'r-control': '0.75rem',
-      'r-btn': '9999px',
-      'r-chip': '9999px',
+      'r-btn': '0.75rem',
+      'r-chip': '0.5rem',
       'r-segment': '9999px',
-      'r-bar': '3px',
+      'r-bar': '6px',
       'r-track': '9999px',
+      'r-tile': '1rem',
     });
     expect(block('@theme')).toMatchObject({ 'radius-xl': '0.75rem', 'radius-2xl': '1.125rem', 'radius-3xl': '1.5rem' });
-    expect(block('@theme')['shadow-card']).toMatch(/rgb\(59 42 30/);
+    // Zeminde yüzen kartın yumuşak gölgesi: ev yeşilinin gecesi
+    expect(block('@theme')['shadow-card']).toMatch(/rgb\(15 35 28/);
   });
 
   it('kurumsal yüzey yok: yönetim ve raporlar kasayla aynı sahnede (Stage), köşeler küçülmez', () => {
@@ -307,34 +313,44 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     expect(rule).not.toMatch(/gradient|box-shadow/);
   });
 
-  it('yan sütun minimalist: düz beyaz panel, renk geçişi ve gölge yok, seçili satır okunur (operatör, 18 Kas 2026)', () => {
-    const side = css.slice(css.indexOf('    .lp-split > .lp-side {\n      display: flex;'));
-    const panel = side.slice(0, side.indexOf('\n    }'));
-    expect(panel).toMatch(/border: 1px solid var\(--side-line\);[\s\S]*background: var\(--side-bg\);/);
-    expect(panel).not.toMatch(/gradient|box-shadow/);
-    // Satır ikonu tek renk: renkli çip ve sırayla ton yok
-    expect(css).not.toMatch(/nth-of-type\(5n/);
+  it('marka rayı (pano, operatör 20 Kas 2026: "menüsüne kadar 1:1"): ev yeşili degrade, ikon üstte kısa ad altta, seçili beyaz karo', () => {
+    const shell = src('components/AppShell.tsx');
+    expect(shell).toContain('<nav aria-label="Ekranlar" className="lp-rail">');
+    expect(shell).toMatch(/className="lp-rail-item">\s*<span aria-hidden="true" className="lp-rail-icon">\s*<n\.icon \/>/);
+    expect(shell).toContain('<span className="lp-rail-label">{n.label}</span>');
+    // Menüde olmayan ekranın yeri de seçili görünür (adisyonun geldiği ekran, Eğitim cihazında Kasa)
+    expect(shell).toContain('data-on={on(n.to, isAt(n.to)) || undefined}');
+    const rail = css.slice(css.indexOf('    .lp-rail {\n      display: flex;'));
+    expect(rail.slice(0, rail.indexOf('}'))).toMatch(/background: var\(--rail-bg\);/);
+    const on = css.slice(css.indexOf(".lp-rail-item:is([aria-current='page'], [data-on]) {"));
+    expect(on.slice(0, on.indexOf('}'))).toMatch(/background: var\(--rail-active-bg\);\s*color: var\(--rail-active-ink\);/);
     for (const [name, get] of [
       ['açık', posLight],
       ['koyu', posDark],
     ] as const) {
-      expect(contrast(get('menu-active-ink'), get('menu-active-bg')), `${name} seçili`).toBeGreaterThanOrEqual(4.5);
-      for (const text of ['admin-text', 'admin-text-soft', 'admin-text-mute']) expect(contrast(get(text), get('side-bg')), `${name} ${text}/panel`).toBeGreaterThanOrEqual(4.5);
-      // Sekme şeridi sahnenin grisinde: soluk yazı ve sayı da okunur
-      for (const text of ['admin-text-soft', 'admin-text-mute']) expect(contrast(get(text), get('admin-stage')), `${name} ${text}/sahne`).toBeGreaterThanOrEqual(4.5);
+      // Rayın yazısı degradenin en açık durağında da okunur
+      for (const t of ['rail-text', 'rail-soft', 'rail-mute']) expect(contrast(get(t), get('rail')), `${name} ${t}/ray`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('rail-active-ink'), get('rail-active-bg')), `${name} seçili karo`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(get('menu-active-ink'), get('menu-active-bg')), `${name} seçili sekme`).toBeGreaterThanOrEqual(4.5);
+      // Sekme şeridi ve başlık satırı zeminde: soluk yazı ve sayı da okunur
+      for (const text of ['admin-text-soft', 'admin-text-mute']) expect(contrast(get(text), get('admin-stage')), `${name} ${text}/zemin`).toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it('üst menü minimalist ve yan menüyle aynı seçim dilinde; Araçlar sade hap (operatör, 18 Kas 2026)', () => {
+  it('üst çubuk (pano): ortada ekranın sekmeleri, sağda durum, arama ve kişi; Araçlar ana eylemle yarışmaz', () => {
     const shell = src('components/AppShell.tsx');
-    expect(shell).toContain("const NAV_ON = 'bg-[var(--menu-active-bg)] font-semibold text-[var(--menu-active-ink)]");
-    // Sekme Poppins 14 px, kenarsız; alt çizgi ve Gabarito iri yazı yok
-    expect(shell).toMatch(/const NAV_LINK =\s*'relative inline-flex h-9 items-center rounded-full px-3 text-sm font-medium/);
-    expect(shell).not.toMatch(/font-headline text-\[15\.5px\]|after:scale-x-100/);
-    // Araçlar ana eylemle yarışmaz: mürekkep ve ok halkası yok
+    expect(shell).toContain('<div ref={setTabsSlot} className="lp-topnav');
+    expect(shell).toContain('<TopTabsSlot.Provider value={tabsSlot}>');
+    expect(src('components/ui/Stage.tsx')).toContain('{menuOnTop ? createPortal(menuNode, topTabs) : menuNode}');
+    // Araçlar ve kişinin düğmesi: ana eylemin mürekkebi ve ok halkası yok
     expect(shell).not.toMatch(/<Ring \/>|buttonClass\('primary'/);
     // Telefonun alt sekmesi de açık nane hapta
     expect(shell).toContain("on ? 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)]'");
+    // Sekmenin seçimi açık nane zeminde yeşil, kalın; renk geçişi ve gölge yok
+    const selected = css.slice(css.indexOf("  .lp-menu-item:is([aria-current='page']"));
+    const rule = selected.slice(0, selected.indexOf('}'));
+    expect(rule).toMatch(/background: var\(--menu-active-bg\);\s*color: var\(--menu-active-ink\);\s*font-weight: 600;/);
+    expect(rule).not.toMatch(/gradient|box-shadow/);
   });
 
   it('dev büyük harfli ad yok: ekranın başlığı ölçülü, büyük harf dönüşümü yok (operatör, 17 Kas 2026)', () => {

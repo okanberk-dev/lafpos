@@ -196,20 +196,22 @@ describe('lafmaliyet geçişi', () => {
   });
 
   it('yanıt alanları saklanır; "Gönder" kendi gününün sonucunu okur, başka günün başarısı sayılmaz', async () => {
+    // Geçiş günü bugünden sonra (sabit tarih yazılınca o gün geçince test kendiliğinden bozuluyordu)
+    const switchDay = addDays(today, 10);
     const { insertDay, outbox, lm, dayRow } = await mod();
-    dayReply = (date) => ({ status: 200, body: { ok: true, date, lines: 3, matched: 2, unmatched: ['PUMPKIN CHAI LATTE'], counted: false, switchDay: '2026-11-10' } });
+    dayReply = (date) => ({ status: 200, body: { ok: true, date, lines: 3, matched: 2, unmatched: ['PUMPKIN CHAI LATTE'], counted: false, switchDay: switchDay } });
     const d1 = insertDay(day(20), 10);
     const sent = await h.ok<{ sent: number; answer: Record<string, unknown> }>('kasa', 'POST', `/sync/lafmaliyet/gun/${d1}/push`);
     expect(sent.sent).toBe(1);
-    expect(sent.answer).toMatchObject({ date: day(20), lines: 3, matched: 2, unmatched: ['PUMPKIN CHAI LATTE'], counted: false, switchDay: '2026-11-10' });
+    expect(sent.answer).toMatchObject({ date: day(20), lines: 3, matched: 2, unmatched: ['PUMPKIN CHAI LATTE'], counted: false, switchDay: switchDay });
     const row = outbox().find((o) => o.dedupeKey === `gun:${day(20)}`)!;
-    expect(row.response).toMatchObject({ counted: false, switchDay: '2026-11-10', matched: 2, unmatched: ['PUMPKIN CHAI LATTE'] });
+    expect(row.response).toMatchObject({ counted: false, switchDay: switchDay, matched: 2, unmatched: ['PUMPKIN CHAI LATTE'] });
     expect(dayRow(d1).exportedAt).toBeGreaterThan(0);
     const s = await status();
-    expect(s.answer).toMatchObject({ date: day(20), counted: false, switchDay: '2026-11-10', unmatched: ['PUMPKIN CHAI LATTE'] });
+    expect(s.answer).toMatchObject({ date: day(20), counted: false, switchDay: switchDay, unmatched: ['PUMPKIN CHAI LATTE'] });
     expect(s).not.toHaveProperty('autoPush');
     // Geçiş günü gelecekte: o güne kadar gönderilecek geçmiş gün yok
-    expect(s.backfill).toEqual({ from: '2026-11-10', to: day(1), unsent: null });
+    expect(s.backfill).toEqual({ from: switchDay, to: day(1), unsent: null });
 
     // Önde bekleyen başka bir gün gönderilir ama bu gün 409 alır: "Gönder" 502 der, kayıtlı Z yazılır
     const d2 = insertDay(day(19), 11);

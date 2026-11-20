@@ -1,124 +1,50 @@
 @import 'tailwindcss';
 
 /*
- * Yazı: laffogato.net'in iki sesi (docs/BRAND.md §2 orada): başlık ve gösterim rakamları Gabarito, metin ve denetim
- * Poppins. Poppins'in rakamları orantılıdır, tablo rakamı (tnum) yoktur; kasada tutarlar alt alta hizalansın diye
- * bütün rakamlar Gabarito'dan gelir ("LafPOS Rakam", yalnız 0-9): metinde orantılı, `.tabular` / `tabular-nums` ile
- * eşit genişlikte. Dosyalar pakette (@fontsource), çevrimdışı çalışır; latin ve latin-ext ayrı, tarayıcı yalnız
- * gereken harf aralığını indirir (Türkçe harfler ve ₺ latin-ext'te).
+ * Yazı (pano, 20 Kasım 2026, operatör: "yazı tipini de görseldeki gibi yapabilirsin"): Inter, değişken (ağırlık ve optik
+ * boy). Gövde, denetim, başlık ve rakam tek aileden; iri başlık ve tutarda optik boy kendiliğinden Inter Display'e
+ * yaklaşır (sıkı, kalın). Inter'in tablo rakamı var: tutarlar `.tabular` / `tabular-nums` ile alt alta hizalanır.
+ * Dosyalar pakette (@fontsource-variable/inter), çevrimdışı çalışır; latin ve latin-ext ayrı, tarayıcı yalnız gereken
+ * harf aralığını indirir (ğ, ş, İ ve ₺ latin-ext'te)
  */
 @font-face {
-  font-family: 'Poppins';
+  font-family: 'Inter';
   font-style: normal;
   font-display: swap;
-  font-weight: 400;
-  src: url('@fontsource/poppins/files/poppins-latin-400-normal.woff2') format('woff2');
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-opsz-normal.woff2') format('woff2-variations');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: 'Poppins';
+  font-family: 'Inter';
   font-style: normal;
   font-display: swap;
-  font-weight: 400;
-  src: url('@fontsource/poppins/files/poppins-latin-ext-400-normal.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: 'Poppins';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 500;
-  src: url('@fontsource/poppins/files/poppins-latin-500-normal.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Poppins';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 500;
-  src: url('@fontsource/poppins/files/poppins-latin-ext-500-normal.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: 'Poppins';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 600;
-  src: url('@fontsource/poppins/files/poppins-latin-600-normal.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Poppins';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 600;
-  src: url('@fontsource/poppins/files/poppins-latin-ext-600-normal.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-@font-face {
-  font-family: 'Poppins';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 700;
-  src: url('@fontsource/poppins/files/poppins-latin-700-normal.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Poppins';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 700;
-  src: url('@fontsource/poppins/files/poppins-latin-ext-700-normal.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* Gabarito (değişken ağırlık): başlıklar ve rakamlar; Biennale'nin serbest akrabası, sitenin başlık yazısı */
-@font-face {
-  font-family: 'Gabarito';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 400 900;
-  src: url('@fontsource-variable/gabarito/files/gabarito-latin-wght-normal.woff2') format('woff2-variations');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-family: 'Gabarito';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 400 900;
-  src: url('@fontsource-variable/gabarito/files/gabarito-latin-ext-wght-normal.woff2') format('woff2-variations');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-/* Rakamlar her yerde Gabarito'dan (tablo rakamı var); harfler yığındaki sonraki yazıdan */
-@font-face {
-  font-family: 'LafPOS Rakam';
-  font-style: normal;
-  font-display: swap;
-  font-weight: 400 900;
-  src: url('@fontsource-variable/gabarito/files/gabarito-latin-wght-normal.woff2') format('woff2-variations');
-  unicode-range: U+0030-0039;
+  font-weight: 100 900;
+  src: url('@fontsource-variable/inter/files/inter-latin-ext-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * LafPOS Sahne (17 Kasım 2026, operatör: "gnbsite reposuna bak, ordaki tasarımı style css vs. tüm hepsini al ve
- * lafposa göre uyarla; sisteme uygun, UI/UX olarak gelişmiş"). Dil gnbsite'ın Area Board UI kitinden
- * (area-board-ui/css/00-tokens.css ve docs/UX.md): kutu ve pencere değil sahne; derinlik gölgeyle değil tonla kurulur
- * (sayfa → gri sahne → beyaz yaprak), her etkileşimli öğe hap, ekranın tek ana eylemi mürekkep hap ve sağında yeşil ok
- * halkası, dev büyük harfli ekran adı, numaralı menü, siyah bantta dalga çizgileri, tek açılış anı. Kimlik
- * L'Affogato'nun (laffogato docs/BRAND.md): ev yeşili, espresso mürekkep, porselen ısısı, L'Af logosu; yazı Poppins ve
- * Gabarito (kitin Helvetica'sı yerine, pakette, çevrimdışı). Renk anlam taşır:
- *   mürekkep  ana eylem ve seçim (kitin siyahı): ödeme, kaydet, seçili çip ve sekme, dolu masa
- *   yeşil     olumlu, şimdi, ok halkası: hazır, ödendi, canlı, bağlantı
- *   magenta   zamanı daralan: hesap istendi, onay bekleyen platform siparişi (kitin --signal'ı)
+ * LafPOS Pano (20 Kasım 2026, operatör: "Modern Financial Dashboard UI'ı bu tasarım metrikleriyle bizim renklerimize
+ * uyarla, olmayanları da bu metriklerle uyarla, branding yap", "menüsüne kadar 1:1", "yazı tipini de görseldeki gibi";
+ * DESIGN.md). Panonun ölçüleri L'Affogato kimliğinde: tek açık gri zemin (üst çubuk ve içerik aynı zeminde), kartlar
+ * zeminde yüzer (beyaz, köşe 24, yumuşak gölge, kenarsız), tablette ve bilgisayarda solda ev yeşilinin degradesinde
+ * marka rayı (ekranlar ikon üstte kısa ad altta, seçili ekran beyaz karo), üst çubukta ortada ekranın sekmeleri, ana
+ * eylem ve seçim ev yeşili dolgu (köşe 12; segment hap), rozet köşe 8, sütun grafiğinde açık nane sütunlar ve tek
+ * vurgulu ev yeşili sütun; yazı Inter. Önceki LafPOS Sahne'den (17-18 Kasım 2026, gnbsite'ın Area Board kiti) kalanlar:
+ * ana eylemin ok halkası, tek açılış anı, bantta dalga çizgileri, L'Af logosu ve marka karosu. Renk anlam taşır:
+ *   ev yeşili ana eylem ve seçim (panonun mavisi): ödeme, kaydet, seçili çip, sekme ve segment; olumlu, şimdi, bağlantı
+ *   magenta   zamanı daralan: hesap istendi, onay bekleyen platform siparişi
  *   amber     uyarı ve gecikme;  kırmızı  iptal, alarm, hata
  *   kobalt    durum: hazırlanıyor, bilgi;  mor  online (siteden gelen) sipariş;  pirinç  ödül
- * Kasa ekranları dokunmatik önce: her hedef en az 44 px; kitin koyu teması yok, LafPOS'unki sıcak gece.
+ * Kasa ekranları dokunmatik önce: her hedef en az 44 px; koyu tema gece kafesi ve bar ekranı için.
  */
 @theme {
-  --font-sans: 'LafPOS Rakam', 'Poppins', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  /* Başlık sesi: dev ekran adı, bölüm ve kart başlığı, gösterim rakamı (büyük sayılar, ödenecek tutar); yedeği Poppins */
-  --font-headline: 'LafPOS Rakam', 'Gabarito', 'Poppins', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Başlık sesi: aynı aile, kalın ve sıkı (ekran adı, kart başlığı, gösterim rakamı); ad eski, sınıflar değişmez */
+  --font-headline: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
   --color-success-200: #c1f0d3;
@@ -170,12 +96,12 @@
   --radius-2xl: 1.125rem;
   --radius-3xl: 1.5rem;
   /*
-   * Gölge yalnız açılan ve yüzen parçada (kit): kart ve satır tonla ayrılır. Renk sıcak toprak (#3B2A1E): nötr siyah
-   * porselende griye kaçar
+   * Gölge (pano): zeminde yüzen kart çok yumuşak bir gölgeyle ayrılır (kenarsız), açılan ve yüzen parça (pencere, menü)
+   * belirgin. Renk ev yeşilinin gecesi (#0F231C): soğuk gri zeminde sıcak toprak çamurlaşır
    */
-  --shadow-card: 0 1px 2px rgb(59 42 30 / 0.06);
-  --shadow-lift: 0 1px 2px rgb(59 42 30 / 0.05), 0 12px 30px -18px rgb(59 42 30 / 0.28);
-  --shadow-pop: 0 40px 80px -30px rgb(59 42 30 / 0.45), 0 12px 24px -12px rgb(59 42 30 / 0.2), 0 0 0 1px rgb(59 42 30 / 0.05);
+  --shadow-card: 0 1px 2px rgb(15 35 28 / 0.04), 0 10px 28px -14px rgb(15 35 28 / 0.14);
+  --shadow-lift: 0 1px 2px rgb(15 35 28 / 0.05), 0 12px 30px -18px rgb(15 35 28 / 0.28);
+  --shadow-pop: 0 40px 80px -30px rgb(15 35 28 / 0.45), 0 12px 24px -12px rgb(15 35 28 / 0.2), 0 0 0 1px rgb(15 35 28 / 0.05);
   /* Hareket (kit): üzerine gelme 160 ms, durum 280 ms, açılış 620-1000 ms; hep yavaşlayarak biter */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
@@ -187,14 +113,15 @@
 :root {
   /* Canlı ve ferah (18 Kasım 2026, operatör: "renkleri canlı yap, modernleştir"): temiz, hafif yeşil tonlu nötrler, beyaz
    * yaprak, derin yeşilimsi mürekkep; renk durumlarda ve marka anlarında canlı (zümrüt, ahududu, mavi, mor, turuncu) */
-  --admin-bg: #f5f6f3;
-  --admin-stage: #e9ece7;
+  /* Pano (20 Kasım 2026): üst çubuk ve sahne tek zeminde (soğuk, hafif yeşil gri); kartlar beyaz, zeminde yüzer */
+  --admin-bg: #f1f4f2;
+  --admin-stage: #f1f4f2;
   --admin-surface: #ffffff;
-  --admin-surface-2: #f8f9f7;
-  --admin-panel: #eef1ec;
-  --admin-border: #e3e7e1;
-  --admin-border-strong: #d3d9d1;
-  --admin-divider: #edf0eb;
+  --admin-surface-2: #f7f9f8;
+  --admin-panel: #edf1ee;
+  --admin-border: #e3e8e4;
+  --admin-border-strong: #d2d9d4;
+  --admin-divider: #edf1ee;
   --admin-border-field: #7a837e;
   --admin-text: #0f1513;
   --admin-text-soft: #3f4a45;
@@ -207,13 +134,16 @@
   --admin-on-primary: #ffffff;
   --admin-primary-soft: #ddf5ea;
   --admin-neutral-soft: #eef1ec;
-  /* Mürekkep: ekranın ana eylemi (Öde, Kaydet, Giriş) ve seçim (çip, sekme, dolu masa); kitin .btn.primary'si */
-  --admin-ink-fill: #111816;
-  --admin-ink-fill-hover: #000000;
+  /*
+   * Eylem dolgusu: ekranın ana eylemi (Öde, Kaydet, Giriş) ve seçim (çip, sekme, segment). Pano: markanın rengi
+   * (panonun mavisinin yerine ev yeşili), beyaz yazı 6.2:1. Ad eski ("ink"), rolü aynı
+   */
+  --admin-ink-fill: #0a6e52;
+  --admin-ink-fill-hover: #075a43;
   --admin-on-ink: #ffffff;
-  /* Ok halkası: ana düğmenin sağındaki canlı zümrüt daire ve içindeki çapraz ok (kitin --accent'i) */
-  --ok-ring: #12b886;
-  --ok-arrow: #06261b;
+  /* Ok halkası: ana düğmenin sağında açık nane daire ve içinde koyu yeşil çapraz ok (yeşil düğmede 5.4:1) */
+  --ok-ring: #d8f6e8;
+  --ok-arrow: #075a43;
   /* Ahududu: zamanı daralan (hesap istendi, onay bekleyen sipariş; kitin --signal'ı, canlı) */
   --admin-signal: #c8175d;
   --admin-signal-soft: #fce4ee;
@@ -251,22 +181,44 @@
   --admin-hue-violet-soft: #f1eaff;
   --admin-hue-green: #0a6e52;
   --admin-hue-green-soft: #ddf5ea;
-  /* Grafik: tek seri canlı zümrüt (kartta 3:1'in üstünde), kıyas gri çizgi */
-  --admin-chart-line: #0e9f6e;
   /*
-   * Yan sütun ve menü (18 Kas 2026, operatör: "daha minimalist; dashboard kütüphanelerine bak"): shadcn/ui Sidebar'ın
-   * "floating" düzeni gibi düz beyaz panel ve saç teli kenar, gölge ve renk geçişi yok. Satır nötr, ikon tek renk soluk;
-   * üstüne gelince çok açık gri; seçili satır açık nane zeminde yeşil yazı ve ikon (5.4:1). Üst çubuğun sekmesi, telefonun
-   * alt sekmesi ve hap şeridi aynı seçim dilini konuşur
+   * Grafik (pano): vurgulu sütun ev yeşili (kartta 6:1), öteki sütunlar açık nane (süs tonu; değer ipucunda ve gizli
+   * tabloda), kıyas gri çizgi
+   */
+  --admin-chart-line: #0a6e52;
+  --chart-soft: #bfe8d4;
+  --chart-on-accent: #ffffff;
+  /*
+   * Sekmeler ve alt menü: seçili sekme açık nane zeminde yeşil (5.4:1); üst çubuğun sekmesi, telefonun alt sekmesi,
+   * yönetimin alt menü kartı ve hap şeridi aynı seçim dilini konuşur. Ekranlar arası gezinme marka rayında (.lp-rail)
    */
   --side-bg: var(--admin-surface);
   --side-line: var(--admin-border);
   --menu-hover: var(--hover);
   --menu-active-bg: var(--admin-primary-soft);
   --menu-active-ink: var(--admin-primary);
+  /*
+   * Marka rayı (geniş ekranın sol sütunu): ev yeşilinin degradesi; --rail en açık durağı (yazının karşıtlığı buna göre).
+   * Rayın içindeki yazı beyaz (7.2:1), ikinci yazı #E3F2EA (6.2:1), soluk yazı #B9E3CF (5.1:1)
+   */
+  --rail: #0b6449;
+  --rail-bg: linear-gradient(180deg, #0b6449 0%, #095a42 58%, #074a37 100%);
+  --rail-text: #ffffff;
+  --rail-soft: #e3f2ea;
+  --rail-mute: #b9e3cf;
+  --rail-active-bg: #ffffff;
+  --rail-active-ink: #0a6e52;
+  /* Kart (zemindeki yüzen kart): kenarsız, yumuşak gölge; beyaz yaprağın içinde saç teli kenarlı, gölgesiz */
+  --card-line: var(--admin-border);
+  --card-shadow: none;
   /* Marka karosu (uygulama ikonu, sitenin altbilgisi): radyal yeşil, krem harf, pirinç çekirdek; iki temada aynı */
   --brand-tile: radial-gradient(120% 120% at 50% 18%, #23876a 0%, #1d6d56 48%, #0c3b2d 100%);
   --brand-cream: #fbf6f1;
+  /*
+   * Marka ciro kartı (patron paneli; panonun kredi kartı): ev yeşili degrade ve sağ üstte hafif ışık, beyaz yazı en açık
+   * durakta 5.3:1; iki temada aynı
+   */
+  --brand-card: radial-gradient(120% 90% at 100% 0%, rgb(255 255 255 / 0.12) 0%, transparent 55%), linear-gradient(135deg, #0b7556 0%, #0a6e52 45%, #075a43 100%);
   /* Geniş marka yüzeyi (müşteri ekranının ev yeşili teması): karodan bir ton koyu, krem yazı 6:1 */
   --brand-panel: radial-gradient(130% 90% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%);
   /* Bayrak çizgisi (sitenin TricoloreRule'u): yeşil, porselen, bordo; yalnız marka anlarında */
@@ -274,11 +226,11 @@
   --tricolore-on-dark: linear-gradient(to right, #d3e2d9 0 33.33%, #fbf8f4 33.33% 66.66%, #f6e9ec 66.66% 100%);
   /* Denetimin kenarı: kitte cam dudak yok, düz yüzey (eski --rim adı kalır, boş) */
   --rim: 0 0 0 0 transparent;
-  /* Yaprak (sahnedeki beyaz yüzey) ve cam çubuk: kitin --lift-leaf'i ve buzlu camı */
-  --shadow-leaf: 0 1px 2px rgb(59 42 30 / 0.05), 0 30px 60px -36px rgb(59 42 30 / 0.32);
+  /* Yaprak (zemindeki büyük beyaz kart) ve cam çubuk: panonun yumuşak gölgesi, buzlu cam */
+  --shadow-leaf: 0 1px 2px rgb(15 35 28 / 0.04), 0 14px 36px -18px rgb(15 35 28 / 0.16);
   --glass: rgb(255 255 255 / 0.78);
   --glass-line: rgb(255 255 255 / 0.7);
-  --frost: rgb(233 236 231 / 0.82);
+  --frost: rgb(241 244 242 / 0.82);
   /* Sol sütunun ayraç çizgisi (numaralı menü, dizin): mürekkebin %12'si */
   --menu-rule: rgb(15 21 19 / 0.12);
   /* Siyah bantta (giriş, Araçlar) çok yavaş kayan dalga çizgileri: espressonun üstündeki krema (kitin --cizgi-acik'i) */
@@ -313,7 +265,7 @@
   --chart-accent: var(--admin-chart-line);
   /* Kıyas çizgisi (geçen hafta): gri ama kartta 3:1 (WCAG 1.4.11 grafik nesnesi) */
   --chart-context: #7a837e;
-  --chart-grid: #edf0eb;
+  --chart-grid: #e8ede9;
   --chart-track: var(--admin-panel);
 
   /* Durum çizgisi: yumuşak zeminli kutunun ya da kartın kenarı (uyarı kutusu, durum şeridi) */
@@ -336,6 +288,8 @@
   --ring-ready: rgb(29 109 86 / 0.45);
   /* L'Af çekirdeği koyu karoda (marka karosu, gece ekranı): her temada açık pirinç */
   --laf-bean-night: #e8c877;
+  /* Kadranda şimdiki saat: canlı zümrüt (rayda açık nane) */
+  --dial-now: #12b886;
   color-scheme: light;
 }
 
@@ -346,8 +300,8 @@
   --shadow-pop: 0 30px 60px -20px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(255 255 255 / 0.07);
   --shadow-leaf: 0 0 0 1px rgb(255 255 255 / 0.05);
   --rim: 0 0 0 0 transparent;
-  --admin-bg: #0b0e0d;
-  --admin-stage: #121715;
+  --admin-bg: #0d1110;
+  --admin-stage: #0d1110;
   --admin-surface: #19201d;
   --admin-surface-2: #1e2622;
   --admin-panel: #26302b;
@@ -364,11 +318,12 @@
   --admin-on-primary: #052e1f;
   --admin-primary-soft: #0f3327;
   --admin-neutral-soft: #26302b;
-  --admin-ink-fill: #f1f5f3;
-  --admin-ink-fill-hover: #ffffff;
-  --admin-on-ink: #0f1513;
-  --ok-ring: #059669;
-  --ok-arrow: #04261a;
+  /* Gecede eylem dolgusu parlak zümrüt, üstünde koyu yeşil yazı (7.7:1); halka koyu yeşil, ok açık nane */
+  --admin-ink-fill: #34d399;
+  --admin-ink-fill-hover: #6ee7b7;
+  --admin-on-ink: #052e1f;
+  --ok-ring: #064e3b;
+  --ok-arrow: #d1fae5;
   --admin-signal: #ff7eb6;
   --admin-signal-soft: #3d1528;
   --admin-signal-line: #8f3d62;
@@ -403,9 +358,18 @@
   --admin-hue-green: #34d399;
   --admin-hue-green-soft: #0f3327;
   --admin-chart-line: #34d399;
+  --chart-soft: #1f4a3a;
+  --chart-on-accent: #052e1f;
+  /* Marka rayı gecede bir ton derin; yazı aynı (beyaz 11:1, soluk 8.6:1) */
+  --rail: #0f3d2f;
+  --rail-bg: linear-gradient(180deg, #0f3d2f 0%, #0c3125 58%, #09261d 100%);
+  --rail-active-bg: #e6f6ee;
+  --rail-active-ink: #0a5c44;
+  /* Gecede kart tonla ayrılır: kenar saç teli, gölge yok */
+  --card-line: var(--admin-border);
   --glass: rgb(25 32 29 / 0.8);
   --glass-line: rgb(255 255 255 / 0.07);
-  --frost: rgb(18 23 21 / 0.82);
+  --frost: rgb(13 17 16 / 0.82);
   --menu-rule: rgb(241 245 243 / 0.12);
   --band: #060908;
   --band-2: #121a17;
@@ -436,20 +400,22 @@
 
 /*
  * Köşe ve gölge belirteçleri (DESIGN.md §2 "Biçim"). Ortak kit (src/components/ui/*, src/components/admin/ui.tsx) ve
- * sahne (src/components/ui/Stage.tsx) bunları okur. Kasa ve yönetim aynı merdivende (kitte tek dil): sahne 28, yaprak
- * 24, cam çubuk 22, kart 18, alan 12; düğme, çip, rozet ve segment hap; sütun grafiğinin üst köşesi 3, yatay çubuk hap
+ * sahne (src/components/ui/Stage.tsx) bunları okur. Kasa ve yönetim aynı merdivende. Pano ölçüleri (20 Kasım 2026):
+ * sahne 28, yaprak ve kart 24, cam çubuk 22, kart içindeki karo 16, alan ve düğme 12, rozet ve süzgeç çipi 8; segment
+ * hap; sütun grafiğinin üst köşesi 6, yatay çubuk hap
  */
 :root {
-  --r-card: 1.125rem;
+  --r-card: 1.5rem;
   --r-control: 0.75rem;
-  --r-btn: 9999px;
-  --r-chip: 9999px;
+  --r-btn: 0.75rem;
+  --r-chip: 0.5rem;
   --r-segment: 9999px;
-  --r-bar: 3px;
+  --r-bar: 6px;
   --r-track: 9999px;
   --r-stage: 1.75rem;
   --r-leaf: 1.5rem;
   --r-glass: 1.375rem;
+  --r-tile: 1rem;
   --table-head-bg: transparent;
 }
 
@@ -462,12 +428,12 @@
   --radius-xl: 0.75rem;
   --radius-2xl: 1.125rem;
   --radius-3xl: 1.5rem;
-  --r-card: 1.125rem;
+  --r-card: 1.5rem;
   --r-control: 0.75rem;
-  --r-btn: 9999px;
-  --r-chip: 9999px;
+  --r-btn: 0.75rem;
+  --r-chip: 0.5rem;
   --r-segment: 9999px;
-  --r-bar: 3px;
+  --r-bar: 6px;
   --r-track: 9999px;
 }
 
@@ -622,7 +588,7 @@
     stroke-width: 1.75;
     flex-shrink: 0;
   }
-  /* Başlık sesi Gabarito (sitenin --headline'ı), kitteki gibi sıkı aralık (-0.02em); gövde Poppins, doğal aralık */
+  /* Başlık: Inter kalın, sıkı aralık (-0.02em; iri boyda optik boy Display'e yaklaşır); gövde Inter, doğal aralık */
   h1,
   h2,
   h3 {
@@ -760,14 +726,163 @@
 }
 
 /*
- * Sahne (Area Board UI, gnbsite area-board-ui/css/06-scene.css'ten uyarlandı). Kutu ve pencere yok, sahne var: ekranı
- * dolduran tek bir gri sahne, parçalar üstünde durur; içerik kendi beyaz yaprağında kayar. Bileşen
- * src/components/ui/Stage.tsx. Geniş ekranda (lg) iki sütun: solda ekranın kimliği (görsel, numaralı menü, büyük
- * sayılar, tek ana eylem, dev ad, tek cümle durum), sağda yaprak; üstte isteğe bağlı cam çubuk. Daha dar ekranda tek
- * sütun: kimlik üstte sıkı bir şerit (ad, sayılar, eylemler; menü yatay kayan hap şeridi), yaprak altta. Telefonda
- * sahne kenara dayanır (köşesiz, 8 px pay)
+ * Pano kabuğu ve sahne (20 Kasım 2026, operatör: "menüsüne kadar 1:1"; panonun yerleşimi LafPOS'a uyarlandı). Tablette ve
+ * bilgisayarda (md+) solda marka rayı (AppShell: ekranlar ikon üstte kısa ad altta, seçili ekran beyaz karo; dipte
+ * Araçlar ve Kilitle), üstte çubuk (logo, ortada ekranın sekmeleri, sağda durum, arama ve kişi). Ekranın sahnesi
+ * (src/components/ui/Stage.tsx) zeminin üstünde: başlık satırı (solda başlık ve tek cümle durum, sağda büyük sayılar ve
+ * eylemler; panonun "Welcome back" satırı), altında beyaz yaprak (içerik kendi içinde kayar) ve geniş ekranda sağda
+ * ikinci dizin kartı. Yönetimde solda beyaz alt menü kartı. Telefonda ray yok (alt sekme çubuğu), sahne kenara
+ * dayanır (8 px pay), sekmeler başlığın altında yatay hap şeridi
  */
 @layer components {
+  /*
+   * Marka rayı: ev yeşilinin degradesi, köşe 28. İçinde yazı beyaz (7.2:1), soluk yazı #B9E3CF (5.1:1); seçili ekran beyaz
+   * karo, ikonu açık nane karede yeşil (panonun seçili rayı). Satır en az 56 px (dokunmatikte 44'ün üstünde); ray
+   * sığmazsa kendi içinde kayar, dipteki Araçlar ve Kilitle yerinde kalır
+   */
+  .lp-rail {
+    display: none;
+  }
+  @media (min-width: 48rem) {
+    .lp-rail {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: none;
+      width: 5.25rem;
+      min-height: 0;
+      padding: 10px 7px;
+      border-radius: var(--r-stage);
+      background: var(--rail-bg);
+      color: var(--rail-text);
+      --focus: #ffffff;
+    }
+  }
+  @media (min-width: 64rem) {
+    .lp-rail {
+      width: 6.25rem;
+      padding: 12px 9px;
+    }
+  }
+  .lp-rail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    padding-bottom: 4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+  .lp-rail-list::-webkit-scrollbar {
+    display: none;
+  }
+  .lp-rail-foot {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid rgb(255 255 255 / 0.16);
+  }
+  .lp-rail-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 100%;
+    min-height: 3.5rem;
+    padding: 5px 4px;
+    border: 0;
+    border-radius: 1rem;
+    background: transparent;
+    color: var(--rail-soft);
+    font: 500 0.71875rem/1.15 var(--font-sans);
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      color 150ms var(--ease-out),
+      background-color 150ms var(--ease-out),
+      box-shadow 150ms var(--ease-out);
+  }
+  .lp-rail-icon {
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 1.875rem;
+    border-radius: 0.75rem;
+    transition: background-color 150ms var(--ease-out);
+  }
+  .lp-rail-icon > svg {
+    width: 1.375rem;
+    height: 1.375rem;
+  }
+  .lp-rail-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lp-rail-item:hover {
+    background: rgb(255 255 255 / 0.1);
+    color: var(--rail-text);
+  }
+  .lp-rail-item:active {
+    background: rgb(255 255 255 / 0.16);
+  }
+  .lp-rail-item:focus-visible {
+    outline: 2px solid #ffffff;
+    outline-offset: -2px;
+  }
+  .lp-rail-item:is([aria-current='page'], [data-on]) {
+    background: var(--rail-active-bg);
+    color: var(--rail-active-ink);
+    font-weight: 700;
+    box-shadow: 0 6px 14px -8px rgb(2 30 21 / 0.55);
+  }
+  .lp-rail-item:is([aria-current='page'], [data-on]) .lp-rail-icon {
+    background: var(--admin-primary-soft);
+  }
+  .dark .lp-rail-item:is([aria-current='page'], [data-on]) .lp-rail-icon {
+    background: #cdeedd;
+  }
+  .lp-rail-item:is([aria-current='page'], [data-on]) .lp-rail-icon > svg {
+    stroke-width: 2.1;
+  }
+  .lp-rail-item:is([aria-current='page'], [data-on]):focus-visible {
+    outline-color: var(--rail-active-ink);
+  }
+  /* Alçak ekranda (yatay tablet, dizüstü) satır bir boy sık: ekranların çoğu kaydırmadan sığar */
+  @media (min-width: 48rem) and (max-height: 50rem) {
+    .lp-rail-item {
+      min-height: 3.375rem;
+      gap: 2px;
+    }
+    .lp-rail-icon {
+      height: 1.75rem;
+    }
+  }
+
+  /* Üst çubuğun ortası: ekranın sekmeleri (Stage taşır); sığmazsa yatay kayar */
+  .lp-topnav > .lp-side-menu {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .lp-topnav .lp-menu {
+    gap: 4px;
+  }
+  .lp-topnav .lp-menu-item {
+    min-height: 2.5rem;
+    padding: 0 16px;
+  }
+  @media (pointer: coarse) {
+    .lp-topnav .lp-menu-item {
+      min-height: 2.75rem;
+    }
+  }
+
   .lp-stage {
     position: relative;
     display: flex;
@@ -776,33 +891,12 @@
     height: 100%;
     min-height: 0;
     padding: 8px;
-    background: var(--admin-stage);
     isolation: isolate;
   }
   @media (min-width: 48rem) {
     .lp-stage {
-      gap: 12px;
-      padding: 12px;
-      border-radius: var(--r-stage);
-    }
-  }
-  @media (min-width: 64rem) {
-    /*
-     * Sol sütun dar ve sabit (operatör, 18 Kas 2026: "side barı daralt"): 240 px, geniş ekranda 256 px. Sahnenin payı ve
-     * aralığı ince ("üst ekran ve sidebar içeriği daraltmasın"): içerik yaprağı eni ve boyu en çok alan
-     */
-    .lp-stage.lp-split {
-      display: grid;
-      grid-template-columns: 15rem minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 10px 12px;
-      padding: 10px;
-    }
-    .lp-stage.lp-split:not(:has(> .lp-glass)) {
-      grid-template-rows: minmax(0, 1fr);
-    }
-    .lp-stage.lp-split > .lp-glass {
-      grid-column: 1 / -1;
+      gap: 16px;
+      padding: 0;
     }
   }
 
@@ -837,50 +931,45 @@
   }
 
   /*
-   * Sol sütun: ekranın kimliği. Dar ekranda sıkı ızgara (solda başlık ve durum cümlesi, sağda büyük sayılar; altında ana
-   * eylem ve menünün hap şeridi). Geniş ekranda yukarıdan aşağı: başlık, görsel (kadran), numaralı menü; en altta büyük
-   * sayılar ve tek ana eylem (kitin sütunu, dev ad olmadan)
+   * Başlık satırı (panonun "Welcome back, Alex" satırı): solda başlık ve tek cümle durum, sağda büyük sayılar (küçük
+   * beyaz kartlar) ve eylemler (önce ikincil, en sağda ana eylem). Sığmayan parça alt satıra iner; telefonda alt alta
    */
   .lp-side {
     position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'head hero' 'actions actions' 'menu menu';
-    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
     gap: 10px 16px;
     flex-shrink: 0;
     min-width: 0;
-    container-type: inline-size;
   }
   .lp-side-head {
-    grid-area: head;
     display: flex;
+    flex: 1 1 15rem;
     flex-direction: column;
     gap: 4px;
     min-width: 0;
   }
   .lp-side > .lp-hero {
-    grid-area: hero;
+    flex: 0 1 auto;
   }
   .lp-side > .lp-actions {
-    grid-area: actions;
+    flex: 0 1 auto;
+    justify-content: flex-end;
   }
   .lp-side > .lp-side-menu {
-    grid-area: menu;
+    flex: 1 1 100%;
     min-width: 0;
   }
   .lp-actions:empty {
     display: none;
   }
-  .lp-visual,
-  .lp-side-extra {
+  .lp-visual {
     display: none;
   }
   @media (max-width: 39.99rem) {
-    .lp-side {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-areas: 'head' 'hero' 'actions' 'menu';
-      align-items: start;
+    .lp-side > .lp-actions {
+      flex-basis: 100%;
     }
   }
   /*
@@ -900,59 +989,59 @@
       border: 0;
     }
   }
+  @media (min-width: 48rem) {
+    .lp-side {
+      gap: 12px 20px;
+      padding: 2px 4px 0;
+    }
+  }
+
+  /*
+   * Yönetim (Stage headerInLeaf): geniş ekranda solda beyaz alt menü kartı (gruplu bölümler, seçili satır açık nane), sağda
+   * içerik; tablette alt menü içeriğin üstünde yatay hap şeridi
+   */
   @media (min-width: 64rem) {
-    .lp-split > .lp-side {
-      display: flex;
+    .lp-stage.lp-nav {
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr);
+      grid-template-rows: minmax(0, 1fr);
+      gap: 16px;
+    }
+    .lp-nav > .lp-side {
       flex-direction: column;
+      flex-wrap: nowrap;
       align-items: stretch;
-      gap: 18px;
+      gap: 12px;
       min-height: 0;
       overflow-y: auto;
       overscroll-behavior: contain;
+      padding: 14px 10px 10px;
+      border: 1px solid var(--card-line);
+      border-radius: var(--r-card);
+      background: var(--admin-surface);
+      box-shadow: var(--card-shadow);
       scrollbar-width: none;
-      /* Düz beyaz panel: saç teli kenar, gölgesiz, yaprakla aynı köşe; iç boşluk odak halkasına da yer bırakır */
-      padding: 14px 8px 12px;
-      border: 1px solid var(--side-line);
-      border-radius: var(--r-leaf);
-      background: var(--side-bg);
+      --card-line: transparent;
+      --card-shadow: var(--shadow-card);
     }
-    /* Ana eylem sütun kaysa da görünür kalır (alçak ekran, yatay tablet): dipte yapışık, üstü panel zeminine yumuşak geçiş */
-    .lp-split > .lp-side > .lp-actions:not(:empty) {
-      position: sticky;
-      bottom: -12px;
-      z-index: 1;
-      margin-bottom: -12px;
-      padding-block: 10px 12px;
-      background: linear-gradient(to bottom, color-mix(in srgb, var(--side-bg) 0%, transparent), var(--side-bg) 14px);
+    .dark .lp-nav > .lp-side {
+      --card-line: var(--admin-border);
+      --card-shadow: none;
     }
-    /* Başlık ve sayılar menü satırının ikonuyla aynı hizada; ana eylem satırın kenarıyla */
-    .lp-split > .lp-side > :is(.lp-side-head, .lp-hero) {
-      padding-inline: 10px;
-    }
-    .lp-split > .lp-side::-webkit-scrollbar {
+    .lp-nav > .lp-side::-webkit-scrollbar {
       display: none;
     }
-    .lp-split > .lp-side > .lp-visual,
-    .lp-split > .lp-side > .lp-side-extra {
-      display: block;
+    .lp-nav > .lp-side > .lp-side-menu {
+      flex: none;
     }
-    /* Sütun sığmazsa kendi içinde kayar: parçalar küçülüp üst üste binmez */
-    .lp-split > .lp-side > * {
-      flex-shrink: 0;
-    }
-    /* Sayılar ve ana eylem sütunun dibinde (kitte dev adın üstündeki yer) */
-    .lp-split > .lp-side > .lp-hero {
-      margin-top: auto;
-      padding-top: 6px;
-    }
-    .lp-split > .lp-side:not(:has(> .lp-hero)) > .lp-actions {
+    .lp-nav > .lp-side > .lp-actions {
       margin-top: auto;
     }
   }
 
   /*
-   * Ekranın başlığı: Gabarito 700, ölçülü boy, sıkı aralık; büyük harf yok (kitin dev adı kasada yok: "dev patron vs.
-   * yazmasına gerek yok"). Açılışta hafifçe aşağıdan gelir (hareket azaltmada yok)
+   * Ekranın başlığı (panonun "Welcome back"ı): Inter kalın, sıkı aralık; büyük harf yok. Açılışta hafifçe aşağıdan gelir
+   * (hareket azaltmada yok)
    */
   .lp-name {
     margin: 0;
@@ -962,14 +1051,15 @@
     text-wrap: balance;
     animation: lp-name-in 700ms var(--ease-out) 80ms backwards;
   }
-  @media (min-width: 64rem) {
+  @media (min-width: 48rem) {
     .lp-split .lp-name {
-      font-size: 1.5rem;
+      font-size: 1.75rem;
+      letter-spacing: -0.035em;
     }
   }
   @media (min-width: 80rem) {
-    .lp-stage.lp-split {
-      grid-template-columns: 16rem minmax(0, 1fr);
+    .lp-split .lp-name {
+      font-size: 2rem;
     }
   }
   .lp-sub {
@@ -978,42 +1068,53 @@
     -webkit-line-clamp: 3;
     overflow: hidden;
     margin: 0;
-    max-width: 46ch;
-    color: var(--admin-text-soft);
-    font-size: 0.8125rem;
+    max-width: 60ch;
+    color: var(--admin-text-mute);
+    font-size: 0.875rem;
     line-height: 1.45;
     text-wrap: pretty;
     animation: lp-name-in 700ms var(--ease-out) 180ms backwards;
   }
 
-  /* Büyük sayılar (kitin .hero-sayi'si): etiket üstte, sayı altında; tutar bir boy küçük */
+  /*
+   * Büyük sayılar (pano): başlık satırının sağında küçük beyaz kartlar; etiket üstte soluk, sayı altında kalın. Zeminde
+   * kenarsız ve yumuşak gölgeli, gecede saç teli kenarlı
+   */
   .lp-hero {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 22px;
+    gap: 8px;
     min-width: 0;
   }
   .lp-hs {
     display: flex;
     flex-direction: column-reverse;
+    justify-content: flex-end;
     gap: 6px;
-    min-width: 0;
+    min-width: 6.25rem;
+    padding: 9px 14px 10px;
+    border: 1px solid var(--hs-line, transparent);
+    border-radius: var(--r-tile);
+    background: var(--admin-surface);
+    box-shadow: var(--shadow-card);
+  }
+  .dark .lp-hs {
+    --hs-line: var(--admin-border);
+    box-shadow: none;
   }
   .lp-hs > b {
     color: var(--admin-text);
-    font: 700 var(--hs-size, 1.75rem) / 0.9 var(--font-headline);
-    letter-spacing: -0.045em;
+    font: 700 var(--hs-size, 1.375rem) / 1 var(--font-headline);
+    letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .lp-hs > span {
     color: var(--admin-text-mute);
-    font-size: 0.8125rem;
+    font-size: 0.75rem;
+    font-weight: 500;
     line-height: 1.2;
     white-space: nowrap;
-  }
-  .lp-hs[data-money] > b {
-    --hs-size: 1.375rem;
   }
   .lp-hs[data-tone='signal'] > b {
     color: var(--admin-signal);
@@ -1027,25 +1128,106 @@
   .lp-hs[data-tone='bad'] > b {
     color: var(--admin-danger-ink);
   }
-  @media (min-width: 64rem) {
-    .lp-split .lp-hs > b {
-      --hs-size: min(2.5rem, 18cqi);
+  @media (max-width: 47.99rem) {
+    .lp-hs {
+      min-width: 0;
+      padding: 7px 12px 8px;
     }
-    .lp-split .lp-hs[data-money] > b {
-      --hs-size: min(1.875rem, 11cqi);
+    .lp-hs > b {
+      --hs-size: 1.25rem;
     }
   }
   .lp-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    align-items: center;
+    gap: 8px;
   }
 
   /*
-   * Yan menü (shadcn/ui Sidebar'ın ölçüleri; Linear ve Catalyst gibi sakin): satır ikon, ad ve sağda soluk sayı; ikon tek
-   * renk soluk. Üstüne gelince çok açık gri, seçili satır açık nane zeminde yeşil yazı ve ikon, kalın; kenar, gölge, renk
-   * geçişi yok. Geniş ekranda sol sütunda alt alta (grup başlığı küçük ve soluk), daha darda yatay kayan sekme şeridi
-   * (kenarsız; seçili aynı nane hap). Numara yok
+   * Patron panosu (PatronPage): telefonda önce ciro kartı, sonra karolar, grafik ve ödemeler; tablette karolar üstte, ciro
+   * ve grafik yan yana, ödemeler tam en; geniş ekranda karolar üstte, altında ciro, grafik ve ödemeler üç sütun
+   */
+  .lp-board {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'ciro' 'tiles' 'chart' 'pay';
+    gap: 16px;
+  }
+  @media (min-width: 48rem) {
+    .lp-board {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-areas: 'tiles tiles' 'ciro chart' 'pay pay';
+    }
+  }
+  @media (min-width: 80rem) {
+    .lp-board {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 0.95fr);
+      grid-template-areas: 'tiles tiles tiles' 'ciro chart pay';
+    }
+  }
+
+  /* Adisyonun menü kartı (geniş ekran): kategoriler beyaz kartta, zeminde yüzer */
+  .lp-catalog {
+    padding: 10px 8px;
+    border: 1px solid var(--hs-line, transparent);
+    border-radius: var(--r-card);
+    background: var(--admin-surface);
+    box-shadow: var(--shadow-card);
+  }
+  .dark .lp-catalog {
+    --hs-line: var(--admin-border);
+    box-shadow: none;
+  }
+  /* Kategori karosu gecede: zemin bir ton belirgin, ikon açık tona kayar (ProductPanel CategoryBadge) */
+  .dark {
+    --cat-bg: 24%;
+    --cat-ink: 52%;
+  }
+
+  /* Gövde: yaprak ve geniş ekranda sağda ikinci dizin kartı (masasız siparişler, bugünkü rezervasyonlar) */
+  .lp-body {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    gap: 16px;
+    min-width: 0;
+    min-height: 0;
+  }
+  .lp-nav > .lp-body {
+    grid-column: 2;
+  }
+  .lp-side-extra {
+    display: none;
+  }
+  @media (min-width: 64rem) {
+    .lp-body > .lp-side-extra {
+      display: flex;
+      flex: none;
+      flex-direction: column;
+      gap: 14px;
+      width: 19.5rem;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 6px 10px 10px;
+      border: 1px solid var(--hs-line, transparent);
+      border-radius: var(--r-card);
+      background: var(--admin-surface);
+      box-shadow: var(--shadow-leaf);
+      scrollbar-width: thin;
+      scrollbar-color: var(--admin-border-strong) transparent;
+      animation: lp-leaf-in 800ms var(--ease-out) 60ms backwards;
+    }
+    .dark .lp-body > .lp-side-extra {
+      --hs-line: var(--admin-border);
+    }
+  }
+
+  /*
+   * Sekmeler (ekranın bölümleri, görünümleri; yönetimin bölümleri): satır ikon, ad ve sağda soluk sayı. Üstüne gelince
+   * çok açık gri, seçili açık nane zeminde yeşil yazı ve ikon, kalın (panonun seçili sekmesi); köşe 12. Üst çubukta ve
+   * telefonda yatay; yönetimin alt menü kartında (geniş ekran) alt alta, grup başlığı küçük ve soluk
    */
   .lp-menu {
     display: flex;
@@ -1071,7 +1253,7 @@
     min-height: 2.75rem;
     padding: 0 14px;
     border: 0;
-    border-radius: 9999px;
+    border-radius: var(--r-btn);
     background: transparent;
     color: var(--admin-text-soft);
     font: 500 0.875rem/1.2 var(--font-sans);
@@ -1113,36 +1295,32 @@
     outline-offset: 2px;
   }
   @media (min-width: 64rem) {
-    :where(.lp-split > .lp-side) .lp-menu,
     .lp-menu.lp-menu-col {
       flex-direction: column;
       gap: 2px;
       overflow: visible;
       padding: 0;
     }
-    :where(.lp-split > .lp-side) .lp-menu-item,
     :where(.lp-menu-col) .lp-menu-item {
       display: flex;
       width: 100%;
       gap: 10px;
-      min-height: 2.25rem;
+      min-height: 2.375rem;
       padding: 0 10px;
-      border-radius: 0.625rem;
+      border-radius: 0.75rem;
       text-align: left;
     }
-    :where(.lp-split > .lp-side) .lp-menu-item > span:not(.n),
     :where(.lp-menu-col) .lp-menu-item > span:not(.n) {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    :where(.lp-split > .lp-side) .lp-menu-item > .n,
     :where(.lp-menu-col) .lp-menu-item > .n {
       min-width: 1.25rem;
       margin-left: auto;
       text-align: right;
     }
-    /* Grup başlığı (yönetimde Genel, Menü…): küçük, soluk, satırın yazısıyla hizalı; ilk grupta üst boşluk yok */
+    /* Grup başlığı (Genel, Menü…): küçük, soluk, satırın yazısıyla hizalı; ilk grupta üst boşluk yok */
     .lp-menu-col .lp-menu-label {
       display: flex;
       align-items: center;
@@ -1156,37 +1334,20 @@
       margin-top: 0;
     }
   }
-  /* Alçak geniş ekranda (dizüstü, yatay tablet) sol sütun sıkışır: aralık ve büyük sayılar bir boy küçük, ana eylem görünür kalır */
+  /* Alçak geniş ekranda yönetimin uzun alt menüsü kaydırmadan sığsın: satır 32 px, grup arası daha sıkı (fareyle) */
   @media (min-width: 64rem) and (max-height: 56rem) {
-    .lp-split > .lp-side {
-      gap: 12px;
-      padding: 12px 8px 10px;
-    }
-    .lp-split > .lp-side > .lp-actions:not(:empty) {
-      bottom: -10px;
-      margin-bottom: -10px;
-      padding-bottom: 10px;
-    }
-    .lp-split .lp-hs > b {
-      --hs-size: min(2.125rem, 18cqi);
-    }
-    .lp-split .lp-hs[data-money] > b {
-      --hs-size: min(1.625rem, 11cqi);
-    }
-    /* Yönetimin uzun menüsü alçak ekranda da kaydırmadan sığsın: satır 32 px, grup arası daha sıkı (fareyle) */
-    :where(.lp-split > .lp-side) .lp-menu-item {
+    :where(.lp-menu-col) .lp-menu-item {
       min-height: 2rem;
     }
-    .lp-split .lp-menu-col .lp-menu-label {
+    .lp-menu-col .lp-menu-label {
       height: 1.75rem;
     }
-    .lp-split .lp-menu-col .lp-menu-label:not(:first-child) {
+    .lp-menu-col .lp-menu-label:not(:first-child) {
       margin-top: 6px;
     }
   }
-  /* Dokunmatikte yan menünün satırı da 44 px */
+  /* Dokunmatikte alt menünün satırı da 44 px */
   @media (min-width: 64rem) and (pointer: coarse) {
-    :where(.lp-split > .lp-side) .lp-menu-item,
     :where(.lp-menu-col) .lp-menu-item {
       min-height: 2.75rem;
     }
@@ -1219,6 +1380,24 @@
     box-shadow: none;
     overflow: visible;
   }
+  /*
+   * Pano yaprağı (patron paneli, yönetim, raporlar): zeminsiz ama kendi içinde kayar; kartlar zeminde yüzer (beyaz,
+   * köşe 24, kenarsız, yumuşak gölge). Gölge kaydırma kabında kesilmesin diye içerik kenardan biraz içeride başlar
+   */
+  .lp-leaf.lp-float {
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+    animation: none;
+  }
+  :is(.lp-bare, .lp-float) {
+    --card-line: transparent;
+    --card-shadow: var(--shadow-card);
+  }
+  .dark :is(.lp-bare, .lp-float) {
+    --card-line: var(--admin-border);
+    --card-shadow: none;
+  }
   .lp-leaf-pad {
     padding: 16px;
   }
@@ -1239,8 +1418,8 @@
   }
 
   /*
-   * Ok halkası: ana düğmenin (mürekkep hap) sağında yeşil daire, içinde çapraz ok; üstüne gelince, odakta ve açıkken ok
-   * 45° döner (kitin .btn.primary::after'ı). Devre dışı düğmede gri
+   * Ok halkası: ana düğmenin (ev yeşili dolgu) sağında açık nane daire, içinde çapraz ok; üstüne gelince, odakta ve
+   * açıkken ok 45° döner (kitin .btn.primary::after'ı). Devre dışı düğmede gri
    */
   .lp-ring {
     display: inline-grid;
@@ -1328,15 +1507,15 @@
     stroke: var(--admin-text);
   }
   .lp-dial line.now {
-    stroke: var(--ok-ring);
+    stroke: var(--dial-now);
     stroke-width: 2.6;
   }
   .lp-dial circle.tip {
     fill: var(--admin-text);
   }
   .lp-dial circle.now {
-    fill: var(--ok-ring);
-    stroke: color-mix(in oklab, var(--ok-ring) 28%, transparent);
+    fill: var(--dial-now);
+    stroke: color-mix(in oklab, var(--dial-now) 28%, transparent);
     stroke-width: 6;
   }
   .lp-dial text {

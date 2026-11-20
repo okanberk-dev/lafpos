@@ -1,17 +1,16 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, ChevronRight, RotateCcw } from 'lucide-react';
-import { Fragment, useEffect, useState } from 'react';
+import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronRight, CreditCard, Receipt, RotateCcw, Wallet } from 'lucide-react';
+import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
-import { fmtAgo, fmtTime } from '@shared/time';
+import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
 import { Badge, Card, EmptyState, ErrorState, SizeTag, Skeleton, Stat } from '@/components/ui/misc';
-import { Dial } from '@/components/ui/Dial';
 import { Stage } from '@/components/ui/Stage';
 import { get } from '@/lib/api';
-import { useCan } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useTick } from '@/lib/hooks';
@@ -59,6 +58,11 @@ const ATTENTION_ROWS = 4;
 /** Satır listesi ayracı (DESIGN: satır ayracı, kart çizgisinden bir ton açık) */
 const ROWS = 'divide-y divide-[var(--admin-divider)]';
 
+/** Pano yaprağının iç payı: kart gölgesi kaydırma kabında kesilmesin diye kenardan biraz içeride */
+const PAD = 'px-1 pb-8 pt-1 md:px-2 md:pt-2';
+/** Pano kartı (ui/misc Card'ın kabı, başlıksız): köşe 24, zeminde kenarsız ve yumuşak gölgeli */
+const PANEL = 'min-w-0 rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]';
+
 /**
  * Ayraçlı meta satırı: satır ayraçta kırılır, etiket tutarından ayrılmaz ("açıkta" bir satırda, "₺2.410,00"
  * ötekinde kalmaz). Boş ya da false parça düşer.
@@ -101,17 +105,22 @@ function Change({ value, base }: { value: number | null; base: number }) {
 }
 
 /**
- * Üst blok: ciro kartı ve karolar. Beş karo (online siparişli gün) iki sütunda üç satır olup ciro kartını uzatırdı: geniş
- * ızgarada karolar tablette ve geniş ekranda üç sütun, ciro kartı daralır. İskelet ve sayfa aynı kuraldan çizer.
+ * Pano yerleşimi (20 Kasım 2026, operatör: panonun ölçüleri; .lp-board, index.css). Geniş ekranda (xl) üstte karolar
+ * (dünkü ciro, açık adisyon, indirim ve ikram, iptal, online) tek sıra kart; altında üç sütun: solda marka ciro kartı ve
+ * geçen haftayla kıyas, ortada saat saat grafik, sağda ödeme türleri. Tablette karolar, sonra ciro ve grafik yan yana,
+ * ödeme türleri tam en. Telefonda önce ciro kartı (patronun ilk baktığı rakam), sonra karolar, grafik ve ödemeler. İskelet
+ * ve sayfa aynı kuraldan çizer, yüklenince kaymaz.
  */
-const topGrid = (wide: boolean) => cn('grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]', wide && 'xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]');
-const tileGrid = (wide: boolean) => cn('grid grid-cols-2 gap-3 [&>:last-child:nth-child(odd)]:col-span-2', wide && 'md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3');
+const topGrid = (wide: boolean) => cn('lp-board', wide && 'lp-board-wide');
+const tileGrid = (wide: boolean) => cn('grid grid-cols-2 gap-4 [grid-area:tiles] [&>:last-child:nth-child(odd)]:max-md:col-span-2', wide ? 'md:grid-cols-5' : 'md:grid-cols-4');
 
 export default function PatronPage() {
   const can = useCan();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const sizeLabels = useBoot().settings.sizeLabels;
+  const boot = useBoot();
+  const me = useAuth((s) => s.me)!;
+  const sizeLabels = boot.settings.sizeLabels;
   const now = useTick(30_000);
   const [table, setTable] = useState(false);
   const [allAttention, setAllAttention] = useState(false);
@@ -132,15 +141,17 @@ export default function PatronPage() {
   // ya da günün ilk online siparişi gelmedi) dört karo kalır, sayfa yüklenince kaymaz
   if (data.isPending) {
     return (
-      <Stage name="Patron paneli" sub="Canlı rakamlar yükleniyor…" leafLabel="Patron paneli">
-        <div role="status" aria-label="Canlı rakamlar yükleniyor…" className="lp-leaf-pad">
+      <Stage name="Patron paneli" sub="Canlı rakamlar yükleniyor…" leafLabel="Patron paneli" float>
+        <div role="status" aria-label="Canlı rakamlar yükleniyor…" className={PAD}>
           <div className={topGrid(false)}>
-            <Skeleton className="h-[236px] rounded-2xl" />
             <div className={tileGrid(false)}>
               {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-[112px] rounded-2xl" />
+                <Skeleton key={i} className="h-[118px] rounded-[var(--r-card)]" />
               ))}
             </div>
+            <Skeleton className="h-[330px] rounded-[var(--r-card)] [grid-area:ciro]" />
+            <Skeleton className="h-[330px] rounded-[var(--r-card)] [grid-area:chart]" />
+            <Skeleton className="h-[330px] rounded-[var(--r-card)] [grid-area:pay] max-xl:hidden" />
           </div>
         </div>
       </Stage>
@@ -224,275 +235,405 @@ export default function PatronPage() {
   const staleCosts = can('rapor.maliyet') ? staleCostsText(d.costsAt, d.now) : null;
   const sizeName = (size: string) => (size === 'M' || size === 'L' ? (sizeLabels?.[size] ?? size) : null);
 
+  // Selamlama (panonun "Welcome back, Alex"ı): günün saatine göre, ad ev yeşilinde
+  const hourNow = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(d.now));
+  const greeting = hourNow < 5 ? 'İyi geceler' : hourNow < 11 ? 'Günaydın' : hourNow < 17 ? 'İyi günler' : hourNow < 22 ? 'İyi akşamlar' : 'İyi geceler';
+  const firstName = me.name.trim().split(/\s+/)[0] ?? me.name;
+  const paid = d.payments.reduce((a, p) => a + p.amount, 0);
+  // Geçen haftaya göre fark (panonun "Haftalık gelir +3.945" kartı): bu saate kadar ciro farkı ve yüzdesi
+  const diff = d.netSales - d.compare.lastWeek.netSales;
+  // Ciro eğrisi (kıyas kartındaki küçük çizgi): bugünün saat saat birikimi
+  const spark = visibleHours.reduce<number[]>((acc, h) => [...acc, (acc.at(-1) ?? 0) + h.value], []);
+  const peak = visibleHours.reduce((best, h, i) => (h.value > (visibleHours[best]?.value ?? 0) ? i : best), 0);
+  const canKasa = !REMOTE && (['kasa.gun', 'kasa.hareket', 'odeme.al', 'rapor.gor'] as const).some((p) => can(p));
+  const canReports = !REMOTE && can('rapor.gor');
+
+  // Tarih (panonun tarih aralığı düğmesi): yalnız bilgi, dokunulmaz
+  const dateChip = (
+    <span className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--card-line)] bg-surface px-3.5 text-sm font-medium text-ink-2 shadow-[var(--card-shadow)] max-sm:hidden">
+      <CalendarDays aria-hidden="true" className="size-4 text-muted" />
+      <span className="tabular">{fmtDateLong(d.date)}</span>
+    </span>
+  );
+
   return (
-    // Sahne (kitin Open Positions'ı): solda 24 saat kadranı (saatlik ciro), büyük sayılar, dev ad ve canlılık; sağda
-    // yaprakta ciro kartı, karolar, dikkat isteyenler, saatlik grafik, ödeme türleri ve en çok satanlar
+    // Pano: başlık satırında selamlama (ad ev yeşilinde), canlılık ve tarih; zeminde yüzen kartlar: karolar, marka ciro
+    // kartı ve kıyas, saat saat grafik, ödeme türleri, açık adisyonlar, dikkat isteyenler ve en çok satanlar
     <Stage
-      name="Patron paneli"
+      name={
+        <>
+          {greeting}, <span className="text-[var(--admin-primary)]">{firstName}</span>
+          <span className="sr-only"> · Patron paneli</span>
+        </>
+      }
       sub={
         <span className="inline-flex items-center gap-2">
           {dot}
           {statusText}
         </span>
       }
-      // Ciro yaprağın ilk kartında (kıyaslarıyla); sütunda ortalama adisyon ve açıkta kalan adisyon sayısı
-      hero={[
-        { label: 'Ortalama adisyon', value: d.orders > 0 ? tlShort(d.avgCheck) : '—', money: true, title: d.orders > 0 ? tl(d.avgCheck) : 'Henüz kapanan adisyon yok' },
-        { label: 'Açık adisyon', value: d.open.count, tone: d.open.count > 0 ? 'signal' : undefined },
-      ]}
-      actions={retry || undefined}
-      visual={
-        <div className="mx-auto aspect-square w-full max-w-[16.5rem]">
-          <Dial values={d.hourly} hour={new Date(d.now).getHours()} value={d.orders} label="Adisyon bugün" title={`Saat saat ciro kadranı: bugün ${d.orders} adisyon kapandı`} />
-        </div>
+      actions={
+        <>
+          {retry}
+          {dateChip}
+        </>
       }
       leafLabel="Patron paneli"
+      float
     >
-    <div className="lp-leaf-pad">
+      <div className={PAD}>
+        <div className={topGrid(wideTiles)}>
+          {/* Karolar: tek sıra kart (telefonda iki sütun) */}
+          <div className={tileGrid(wideTiles)}>{tiles}</div>
 
-      <div className={topGrid(wideTiles)}>
-        {/* Kart boyu karolarla uzarsa boşluk kıyasların üstünde kalır, altında değil */}
-        <div className="@container flex flex-col rounded-2xl border border-line bg-surface p-5 shadow-[var(--shadow-card)]">
-          <div className="text-[13px] font-medium text-muted">Bugünkü ciro</div>
-          <div className="tabular mt-2 whitespace-nowrap font-headline text-[length:min(44px,14cqi)] font-extrabold leading-none tracking-[-0.035em] sm:text-[length:min(56px,14cqi)]">{tl(d.netSales)}</div>
-          <p className="mt-2 text-sm text-muted">
-            <Pairs parts={[d.orders > 0 ? `${d.orders} adisyon kapandı` : 'Henüz kapanan adisyon yok', d.orders > 0 && `ortalama ${tl(d.avgCheck)}`, d.open.count > 0 && `açıkta ${tl(d.open.total)}`]} />
-          </p>
-          <div className="mt-auto grid gap-2 pt-4 sm:grid-cols-2">
-            <CompareRow label="Geçen hafta bu saate kadar" value={d.compare.lastWeek.netSales} change={d.compare.lastWeek.change} />
-            <CompareRow label="4 hafta önce bu saate kadar" value={d.compare.fourWeeks.netSales} change={d.compare.fourWeeks.change} />
+          {/* Marka ciro kartı (panonun kart kartı): beyaz kartın içinde ev yeşili degrade, beyaz iri rakam */}
+          <section aria-label="Bugünkü ciro" className="flex flex-col gap-4 [grid-area:ciro]">
+            <div className={cn(PANEL, 'p-5')}>
+              <PanelHead title="Bugünkü ciro" sub="Kapanan adisyonlar, KDV dahil" icon={<Wallet />} />
+              <div className="@container relative mt-4 overflow-hidden rounded-[var(--r-tile)] bg-[image:var(--brand-card)] p-5 text-white shadow-[0_18px_36px_-20px_rgb(6_74_54/0.75)]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-headline text-lg font-extrabold italic tracking-[-0.02em]">L’Affogato</span>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90">
+                    <span aria-hidden="true" className={cn('size-1.5 rounded-full', stale ? 'bg-[#ffe39a]' : 'bg-[#7ff0c0]')} />
+                    {stale ? 'Son güncelleme' : 'Canlı'}
+                  </span>
+                </div>
+                <div className="mt-5 text-[13px] text-white/90">Net ciro</div>
+                <div className="tabular mt-1 whitespace-nowrap font-headline text-[length:min(42px,15cqi)] font-extrabold leading-none tracking-[-0.035em]">{tl(d.netSales)}</div>
+                <div className="mt-5 flex items-center justify-between gap-3 text-[13px] text-white/90">
+                  <span className="tabular">{d.orders > 0 ? `${d.orders} adisyon · ortalama ${tlShort(d.avgCheck)}` : 'Henüz kapanan adisyon yok'}</span>
+                  <span className="tabular shrink-0">{d.dayOpen && boot.day ? `Z ${boot.day.zNo}` : 'Gün kapalı'}</span>
+                </div>
+              </div>
+            </div>
+            {/* Geçen haftayla kıyas (panonun haftalık gelir kartı): fark, değişim rozeti ve günün ciro eğrisi */}
+            <div className={cn(PANEL, 'flex items-end justify-between gap-3 p-5')}>
+              <div className="min-w-0">
+                <div className="text-[13px] font-medium text-muted">Geçen hafta bu saate göre</div>
+                <div className="tabular mt-2 whitespace-nowrap font-headline text-[26px] font-bold leading-none tracking-[-0.035em]">
+                  {diff > 0 ? '+' : diff < 0 ? '−' : ''}
+                  {tl(Math.abs(diff))}
+                </div>
+                <div className="mt-1.5 text-xs text-muted">
+                  <Pairs parts={[`geçen hafta ${tlShort(d.compare.lastWeek.netSales)}`, `4 hafta önce ${tlShort(d.compare.fourWeeks.netSales)}`]} />
+                </div>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <Change value={d.compare.lastWeek.change} base={d.compare.lastWeek.netSales} />
+                <Spark values={spark} />
+              </div>
+            </div>
+          </section>
+
+          <Card
+            divided={false}
+            title={
+              <span className="flex items-center gap-2.5">
+                <IconChip>
+                  <BarChart3 />
+                </IconChip>
+                Bugün saat saat
+              </span>
+            }
+            className="flex flex-col [grid-area:chart]"
+            actions={
+              charted && (
+                <Segmented
+                  size="sm"
+                  label="Görünüm"
+                  value={table ? 'tablo' : 'grafik'}
+                  onChange={(v) => setTable(v === 'tablo')}
+                  options={[
+                    { value: 'grafik', label: 'Grafik' },
+                    { value: 'tablo', label: 'Tablo' },
+                  ]}
+                />
+              )
+            }
+          >
+            <div className="flex-1 px-5 pb-5 pt-3">
+              {table && charted ? (
+                <table className="tabular w-full text-sm">
+                  <caption className="sr-only">Bugünün saatlik cirosu{hasLastWeek ? ', geçen haftanın aynı günüyle' : ''}</caption>
+                  <thead className="text-xs text-muted">
+                    <tr>
+                      <th scope="col" className="py-1 text-left font-medium">
+                        Saat
+                      </th>
+                      <th scope="col" className="py-1 text-right font-medium">
+                        Bugün
+                      </th>
+                      {hasLastWeek && (
+                        <th scope="col" className="py-1 text-right font-medium">
+                          Geçen hafta
+                        </th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleHours
+                      .filter((h) => h.value || h.compare)
+                      .map((h) => (
+                        <tr key={h.key} className="border-t border-[var(--admin-divider)]">
+                          <td className="py-1.5">{h.title}</td>
+                          <td className="py-1.5 text-right font-semibold">{tl(h.value)}</td>
+                          {hasLastWeek && <td className="py-1.5 text-right text-muted">{tl(h.compare ?? 0)}</td>}
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              ) : (
+                <ColumnChart
+                  data={visibleHours}
+                  format={tl}
+                  pillFormat={tlShort}
+                  highlight={peak}
+                  height={292}
+                  seriesLabel="Bugün"
+                  compareLabel={hasLastWeek ? 'Geçen hafta aynı gün' : undefined}
+                  ariaLabel={hasLastWeek ? 'Bugünün saatlik cirosu, geçen haftayla' : 'Bugünün saatlik cirosu'}
+                  emptyLabel="Bugün henüz satış yok"
+                />
+              )}
+            </div>
+          </Card>
+
+          {/* Ödeme türleri (panonun bakiye kartı): ortada toplam tahsilat, dökümü ve kasaya, raporlara geçiş */}
+          <div className={cn(PANEL, 'flex flex-col p-5 [grid-area:pay]')}>
+            <PanelHead title="Ödeme türleri" sub="Bugün alınan ödemeler" icon={<CreditCard />} />
+            {d.payments.length ? (
+              <>
+                <div className="mt-4 text-center">
+                  <div className="text-[13px] text-muted">Toplam tahsilat</div>
+                  <div className="tabular mt-1 font-headline text-[32px] font-bold leading-none tracking-[-0.035em]">{tl(paid)}</div>
+                </div>
+                <div className="mt-5 rounded-[var(--r-tile)] bg-surface-2 p-4">
+                  <BarList items={d.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')}` }))} format={tl} />
+                </div>
+              </>
+            ) : (
+              // Satışsız günün çizimi grafikte; burada kısa not
+              <EmptyState compact className="flex-1" title="Bugün henüz ödeme alınmadı">
+                Adisyonlar kapandıkça ödeme türleri burada toplanır
+              </EmptyState>
+            )}
+            {(canKasa || canReports) && (
+              <div className="mt-auto grid grid-cols-2 gap-3 pt-5">
+                {canKasa && (
+                  <Button variant="primary" block onClick={() => navigate('/kasa')} className={cn(!canReports && 'col-span-2')}>
+                    Kasa
+                  </Button>
+                )}
+                {canReports && (
+                  <Button variant="soft" block icon={<BarChart3 className="size-4" />} onClick={() => navigate('/raporlar')} className={cn(!canKasa && 'col-span-2')}>
+                    Raporlar
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        {/* Tek kalan son karo satırı doldurur (boş hücre bırakmaz); beş karo tablette ve geniş ekranda üç sütun */}
-        <div className={tileGrid(wideTiles)}>{tiles}</div>
-      </div>
 
-      <Card
-        title="Dikkat isteyenler"
-        actions={attention.length > 0 && <Badge tone={attention.some((a) => a.alarm) ? 'danger' : 'warning'}>{attention.length}</Badge>}
-        // Satırın üzerine gelme zemini kartın yuvarlak köşesinden taşmasın
-        className="mt-3 overflow-hidden"
-      >
-        {attention.length === 0 ? (
-          <EmptyState compact art="favori" title="Her şey yolunda">
-            İptal, ikram ve kasa farkı uyarıları burada görünür
-          </EmptyState>
-        ) : (
-          <>
-            <ul className={ROWS}>
-              {shownAttention.map((a) => {
-                const to = a.to;
-                const body = (
-                  <>
-                    {a.alarm ? <AlertOctagon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-danger-ink" /> : <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-ink" />}
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium [overflow-wrap:anywhere]">
-                        <span className="sr-only">{a.alarm ? 'Alarm: ' : 'Uyarı: '}</span>
-                        {a.title}
-                      </span>
-                      <span className="block text-xs text-muted [overflow-wrap:anywhere]">{a.meta}</span>
-                    </span>
-                  </>
-                );
-                const row = 'flex min-h-11 w-full items-start gap-3 px-4 py-3 text-left text-sm';
-                return (
-                  <li key={a.key}>
-                    {to ? (
-                      <button type="button" onClick={() => navigate(to)} className={cn(row, 'transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press')}>
-                        {body}
-                        <ChevronRight aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
-                      </button>
-                    ) : (
-                      <div className={row}>{body}</div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-            {shownAttention.length < attention.length && (
-              <button
-                type="button"
-                onClick={() => setAllAttention(true)}
-                className="flex min-h-11 w-full items-center gap-1 border-t border-[var(--admin-divider)] px-4 text-left text-[13px] font-medium text-[var(--admin-primary)] transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press"
-              >
-                Tümünü göster ({attention.length})
-              </button>
-            )}
-          </>
-        )}
-      </Card>
-
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Card
-          title="Bugün saat saat"
-          actions={
-            charted && (
-              <Segmented
-                size="sm"
-                label="Görünüm"
-                value={table ? 'tablo' : 'grafik'}
-                onChange={(v) => setTable(v === 'tablo')}
-                options={[
-                  { value: 'grafik', label: 'Grafik' },
-                  { value: 'tablo', label: 'Tablo' },
-                ]}
-              />
-            )
-          }
-        >
-          <div className="p-4">
-            {table && charted ? (
-              <table className="tabular w-full text-sm">
-                <caption className="sr-only">Bugünün saatlik cirosu{hasLastWeek ? ', geçen haftanın aynı günüyle' : ''}</caption>
-                <thead className="text-xs text-muted">
-                  <tr>
-                    <th scope="col" className="py-1 text-left font-medium">
-                      Saat
-                    </th>
-                    <th scope="col" className="py-1 text-right font-medium">
-                      Bugün
-                    </th>
-                    {hasLastWeek && (
-                      <th scope="col" className="py-1 text-right font-medium">
-                        Geçen hafta
-                      </th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleHours
-                    .filter((h) => h.value || h.compare)
-                    .map((h) => (
-                      <tr key={h.key} className="border-t border-[var(--admin-divider)]">
-                        <td className="py-1.5">{h.title}</td>
-                        <td className="py-1.5 text-right font-semibold">{tl(h.value)}</td>
-                        {hasLastWeek && <td className="py-1.5 text-right text-muted">{tl(h.compare ?? 0)}</td>}
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+        {/* Alt blok (panonun ödeme geçmişi ve sağ sütunu): açık adisyonlar tablosu; dikkat isteyenler ve en çok satanlar */}
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,2.3fr)_minmax(0,0.95fr)] xl:items-start">
+          <Card divided={false} title="Açık adisyonlar" subtitle="Ödenene kadar burada; dokununca adisyon açılır" actions={d.openChecks.length > 0 && <Badge>{d.openChecks.length}</Badge>} className="overflow-hidden">
+            {d.openChecks.length === 0 ? (
+              <EmptyState compact art="fis" title="Şu an açık adisyon yok">
+                Açılan adisyonlar ödenene kadar burada görünür
+              </EmptyState>
             ) : (
-              <ColumnChart
-                data={visibleHours}
-                format={tl}
-                seriesLabel="Bugün"
-                compareLabel={hasLastWeek ? 'Geçen hafta aynı gün' : undefined}
-                ariaLabel={hasLastWeek ? 'Bugünün saatlik cirosu, geçen haftayla' : 'Bugünün saatlik cirosu'}
-                emptyLabel="Bugün henüz satış yok"
-              />
+              <div className="px-3 pb-3 pt-2">
+                {/* Sütun başlıkları (panonun tablosu): yer, açılış, durum, kalan; telefonda satır kartı */}
+                <div aria-hidden="true" className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)_1rem] gap-3 px-3 pb-2 text-xs font-medium text-muted max-md:hidden">
+                  <span>Yer</span>
+                  <span>Açıldı</span>
+                  <span>Durum</span>
+                  <span className="text-right">Kalan</span>
+                  <span />
+                </div>
+                <ul className="space-y-1.5">
+                  {d.openChecks.map((o) => {
+                    const state = o.billPrinted ? { text: 'Hesap istendi', cls: 'text-signal-ink', dot: 'bg-[var(--admin-signal)]' } : o.paid > 0 ? { text: 'Kısmen ödendi', cls: 'text-rose-ink', dot: 'bg-[var(--admin-hue-rose)]' } : { text: 'Açık', cls: 'text-success-ink', dot: 'bg-[var(--admin-success)]' };
+                    return (
+                      <li key={o.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/adisyon/${o.id}`)}
+                          className="grid min-h-14 w-full grid-cols-[auto_minmax(0,1fr)_auto_1rem] items-center gap-3 rounded-[var(--r-tile)] bg-surface-2 px-3 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-[var(--hover-solid)] focus-visible:-outline-offset-2 active:bg-press md:grid-cols-[minmax(0,1.6fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)_1rem]"
+                        >
+                          <span className="flex min-w-0 items-center gap-3 max-md:contents">
+                            <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]">
+                              <Receipt className="size-[18px]" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate font-semibold">
+                                {o.place} <span className="font-normal text-muted">#{o.no}</span>
+                              </span>
+                              <span className="block truncate text-xs text-muted">
+                                {o.waiter ?? 'Garson yok'}
+                                <span className="md:hidden"> · {fmtAgo(o.openedAt, now)}</span>
+                              </span>
+                            </span>
+                          </span>
+                          <span className="tabular text-ink-2 max-md:hidden">{fmtTime(o.openedAt)}</span>
+                          <span className={cn('inline-flex items-center gap-1.5 text-[13px] font-medium max-md:hidden', state.cls)}>
+                            <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', state.dot)} />
+                            {state.text}
+                          </span>
+                          <span className="tabular text-right font-semibold">
+                            {tl(o.total - o.paid)}
+                            <span className="block text-xs font-normal text-muted md:hidden">{state.text}</span>
+                          </span>
+                          <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
-          </div>
-        </Card>
-        {/* Boş durum kartın ortasında: kart grafikle aynı boya uzar */}
-        <Card title="Ödeme türleri" className="flex flex-col">
-          {d.payments.length ? (
-            <div className="p-4">
-              <BarList items={d.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')}` }))} format={tl} />
-            </div>
-          ) : (
-            // Satışsız günün çizimi grafikte; burada kısa not
-            <EmptyState compact className="flex-1" title="Bugün henüz ödeme alınmadı">
-              Adisyonlar kapandıkça ödeme türleri burada toplanır
-            </EmptyState>
-          )}
-        </Card>
-      </div>
+          </Card>
 
-      {/* Son satırda kartlar kendi boyunda: kısa liste uzun listenin boyuna uzayıp boş beyaz bırakmaz */}
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2 lg:items-start">
-        <Card title="En çok satanlar" subtitle={d.top.length ? 'Bugün, ciro sırasıyla' : undefined}>
-          {d.top.length === 0 ? (
-            <EmptyState compact title="Sıralama ilk satışla başlar">
-              İlk adisyon kapanınca en çok satanlar burada sıralanır
-            </EmptyState>
-          ) : (
-            <ol className={ROWS}>
-              {d.top.map((p, i) => {
-                const size = sizeName(p.size);
-                return (
-                  <li key={p.key} className="flex items-center gap-3 px-4 py-2.5 text-sm">
-                    <span aria-hidden="true" className="tabular grid size-7 shrink-0 place-items-center rounded-full bg-surface-3 text-xs font-semibold">
-                      {i + 1}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex min-w-0 items-center">
-                        <span className="truncate font-medium" title={p.name}>
-                          {p.name}
+          <div className="flex min-w-0 flex-col gap-4">
+            <Card
+              divided={false}
+              title="Dikkat isteyenler"
+              actions={attention.length > 0 && <Badge tone={attention.some((a) => a.alarm) ? 'danger' : 'warning'}>{attention.length}</Badge>}
+              // Satırın üzerine gelme zemini kartın yuvarlak köşesinden taşmasın
+              className="overflow-hidden"
+            >
+              {attention.length === 0 ? (
+                <EmptyState compact art="favori" title="Her şey yolunda">
+                  İptal, ikram ve kasa farkı uyarıları burada görünür
+                </EmptyState>
+              ) : (
+                <>
+                  <ul className={cn(ROWS, 'pt-1')}>
+                    {shownAttention.map((a) => {
+                      const to = a.to;
+                      const body = (
+                        <>
+                          {a.alarm ? <AlertOctagon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-danger-ink" /> : <AlertTriangle aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-ink" />}
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium [overflow-wrap:anywhere]">
+                              <span className="sr-only">{a.alarm ? 'Alarm: ' : 'Uyarı: '}</span>
+                              {a.title}
+                            </span>
+                            <span className="block text-xs text-muted [overflow-wrap:anywhere]">{a.meta}</span>
+                          </span>
+                        </>
+                      );
+                      const row = 'flex min-h-11 w-full items-start gap-3 px-5 py-3 text-left text-sm';
+                      return (
+                        <li key={a.key}>
+                          {to ? (
+                            <button type="button" onClick={() => navigate(to)} className={cn(row, 'transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press')}>
+                              {body}
+                              <ChevronRight aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted" />
+                            </button>
+                          ) : (
+                            <div className={row}>{body}</div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {shownAttention.length < attention.length && (
+                    <button
+                      type="button"
+                      onClick={() => setAllAttention(true)}
+                      className="flex min-h-11 w-full items-center gap-1 border-t border-[var(--admin-divider)] px-5 text-left text-[13px] font-medium text-[var(--admin-primary)] transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press"
+                    >
+                      Tümünü göster ({attention.length})
+                    </button>
+                  )}
+                </>
+              )}
+            </Card>
+
+            <Card divided={false} title="En çok satanlar" subtitle={d.top.length ? 'Bugün, ciro sırasıyla' : undefined}>
+              {d.top.length === 0 ? (
+                <EmptyState compact title="Sıralama ilk satışla başlar">
+                  İlk adisyon kapanınca en çok satanlar burada sıralanır
+                </EmptyState>
+              ) : (
+                <ol className={cn(ROWS, 'pt-1')}>
+                  {d.top.map((p, i) => {
+                    const size = sizeName(p.size);
+                    return (
+                      <li key={p.key} className="flex items-center gap-3 px-5 py-2.5 text-sm">
+                        <span aria-hidden="true" className={cn('tabular grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold', i === 0 ? 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)]' : 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]')}>
+                          {i + 1}
                         </span>
-                        {size && <SizeTag>{size}</SizeTag>}
-                      </span>
-                      <span className="block text-xs text-muted">
-                        {p.qty} adet
-                        {showCost && (
-                          <>
-                            {' · '}
-                            {/* Brüt kâr KDV hariç ciro − reçete maliyeti; indirim ya da maliyet neti aşınca eksi, kırmızı */}
-                            <span className={cn('whitespace-nowrap', p.margin != null && p.margin < 0 && 'text-danger-ink')}>{p.margin == null ? 'maliyet yok' : `brüt kâr ${tl(p.margin)}`}</span>
-                          </>
-                        )}
-                      </span>
-                    </span>
-                    <span className="tabular shrink-0 font-semibold">{tl(p.revenue)}</span>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-          {staleCosts && <p className="border-t border-[var(--admin-divider)] px-4 py-3 text-xs font-medium text-warning-ink">{staleCosts}</p>}
-        </Card>
-        <Card title="Açık adisyonlar" actions={d.openChecks.length > 0 && <Badge>{d.openChecks.length}</Badge>} className="overflow-hidden">
-          {d.openChecks.length === 0 ? (
-            <EmptyState compact art="fis" title="Şu an açık adisyon yok">
-              Açılan adisyonlar ödenene kadar burada görünür
-            </EmptyState>
-          ) : (
-            <ul className={ROWS}>
-              {d.openChecks.map((o) => (
-                <li key={o.id}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/adisyon/${o.id}`)}
-                    className="flex min-h-11 w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press"
-                  >
-                    <span className="min-w-0 flex-1">
-                      {/* Masa kartındaki durumlar yazıyla: hesap istendi amber, kısmen ödendi pembe */}
-                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium">{o.place}</span>
-                        <span className="text-muted">#{o.no}</span>
-                        {o.billPrinted && <Badge tone="warning">Hesap istendi</Badge>}
-                        {o.paid > 0 && <Badge tone="pink">Kısmen ödendi</Badge>}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-muted">{joinMeta([fmtAgo(o.openedAt, now), o.waiter])}</span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <span className="tabular block font-semibold">{tl(o.total - o.paid)}</span>
-                      {o.paid > 0 && <span className="block text-xs text-muted">kalan</span>}
-                    </span>
-                    <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-muted" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-center">
+                            <span className="truncate font-medium" title={p.name}>
+                              {p.name}
+                            </span>
+                            {size && <SizeTag>{size}</SizeTag>}
+                          </span>
+                          <span className="block text-xs text-muted">
+                            {p.qty} adet
+                            {showCost && (
+                              <>
+                                {' · '}
+                                {/* Brüt kâr KDV hariç ciro − reçete maliyeti; indirim ya da maliyet neti aşınca eksi, kırmızı */}
+                                <span className={cn('whitespace-nowrap', p.margin != null && p.margin < 0 && 'text-danger-ink')}>{p.margin == null ? 'maliyet yok' : `brüt kâr ${tl(p.margin)}`}</span>
+                              </>
+                            )}
+                          </span>
+                        </span>
+                        <span className="tabular shrink-0 font-semibold">{tl(p.revenue)}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+              {staleCosts && <p className="border-t border-[var(--admin-divider)] px-5 py-3 text-xs font-medium text-warning-ink">{staleCosts}</p>}
+            </Card>
+          </div>
+        </div>
       </div>
-    </div>
     </Stage>
   );
 }
 
-/**
- * Kıyas: telefonda tek satır (etiket solda, tutar ve değişim sağda; uzun etiket kırılır, kesilmez), geniş ekranda
- * etiket üstte, tutar ve değişim altta
- */
-function CompareRow({ label, value, change }: { label: string; value: number; change: number | null }) {
+/** Pano kartının başlığı: başlık ve alt satır solda, sağda yumuşak tonlu dairede ikon (panonun hedef ikonu) */
+function PanelHead({ title, sub, icon }: { title: string; sub?: string; icon: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-2.5 sm:flex-col sm:items-stretch sm:gap-1 sm:py-3">
-      <span className="min-w-0 text-balance text-xs text-muted">{label}</span>
-      <span className="flex shrink-0 items-center gap-2 sm:justify-between">
-        <span className="tabular text-[15px] font-semibold">{tl(value)}</span>
-        <Change value={change} base={value} />
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h3 className="text-[17px] font-bold leading-6 tracking-[-0.025em]">{title}</h3>
+        {sub && <p className="text-[13px] text-muted">{sub}</p>}
+      </div>
+      <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] [&>svg]:size-[18px]">
+        {icon}
       </span>
     </div>
+  );
+}
+
+/** Kart başlığındaki küçük ikon karosu (panonun takvim karosu) */
+function IconChip({ children }: { children: ReactNode }) {
+  return (
+    <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] [&>svg]:size-4">
+      {children}
+    </span>
+  );
+}
+
+/** Küçük ciro eğrisi (panonun dalga çizgisi): süs, değerler kartta yazılı */
+function Spark({ values }: { values: number[] }) {
+  const w = 96;
+  const h = 32;
+  const max = Math.max(1, ...values);
+  if (values.length < 2 || !values.some((v) => v > 0)) return null;
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * w, h - 3 - (v / max) * (h - 6)] as const);
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  return (
+    <svg aria-hidden="true" width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+      <path d={`${line} L${w},${h} L0,${h} Z`} fill="var(--admin-primary-soft)" />
+      <path d={line} fill="none" stroke="var(--chart-accent)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }

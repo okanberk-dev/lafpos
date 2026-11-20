@@ -40,7 +40,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
     onEnter: confirm ? () => !confirm.disabled && confirm.onPress() : onEnter,
   });
   return (
-    // Sade tuşlar (kitin kart köşesi 18): beyaz, ince çizgili, rakam Gabarito; onay tuşu mürekkep ve ok halkalı
+    // Pano tuşları: açık gri yumuşak karo (köşe 18, kenarsız), rakam kalın; onay tuşu ev yeşili dolgu ve ok halkalı
     <div ref={root} data-numpad-enter="" className={cn('grid grid-cols-3 gap-2', className)}>
       {keys.map((k) => {
         if (k === 'ok' && confirm) {
@@ -69,7 +69,7 @@ export function Numpad({ onKey, decimal, doubleZero, className, size = 'lg', con
             onClick={() => onKey(k)}
             aria-label={k === 'back' ? 'Geri sil' : undefined}
             className={cn(
-              'tabular rounded-2xl bg-surface font-headline font-semibold text-ink ring-1 ring-inset ring-[var(--admin-border-strong)] transition-[background-color,transform,box-shadow] duration-150 hover:ring-[var(--admin-text)] active:scale-[0.97] active:bg-surface-3 motion-reduce:active:scale-100',
+              'tabular rounded-2xl bg-surface-2 font-headline font-semibold text-ink ring-1 ring-inset ring-transparent transition-[background-color,transform,box-shadow] duration-150 hover:bg-surface-3 hover:ring-[var(--admin-primary-line)] active:scale-[0.97] active:bg-surface-3 motion-reduce:active:scale-100 dark:ring-[var(--admin-border)]',
               size === 'lg' ? 'h-16 text-[28px]' : 'h-12 text-[22px]',
               k === 'clear' && 'font-sans text-[15px] font-medium text-ink-2',
             )}
