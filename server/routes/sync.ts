@@ -12,6 +12,7 @@ import { reportRange } from './reports';
 import { refreshSiteKaraoke, siteKaraokeOn, siteKaraokeStatus, siteKaraokeView } from '../sync/laffogato-karaoke';
 import { onlineAlertsView, onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
 import { runMenuSync } from '../sync/menu-sync';
+import { ackTableCall, tableCallsView } from '../sync/table-calls';
 import { getSettings } from '../lib/settings';
 import { eq } from 'drizzle-orm';
 
@@ -80,14 +81,26 @@ syncRoutes.post('/karaoke/refresh', async (c) => {
 });
 
 /**
- * Cihazın sesli uyarıları (src/components/SiteInbox.tsx): "yeni" aşamasında bekleyen online siparişler (son 4 saat).
- * Yalnız yerel veritabanı; siteye istek atmaz (liste var olan sipariş çekiminden gelir, §2.5). Siparişi alan ya da bar
- * ekranı yetkisi. Site bağlantısı yoksa `configured: false` ve boş liste
+ * Cihazın sesli uyarıları (src/components/SiteInbox.tsx): "yeni" aşamasında bekleyen online siparişler (son 4 saat;
+ * planlı sipariş saatine göre) ve açık masa çağrıları (15 dk). Yalnız yerel veritabanı; siteye istek atmaz (listeler var
+ * olan sipariş çekiminden gelir, §2.5). Siparişi alan ya da bar ekranı yetkisi. Site bağlantısı yoksa `configured:
+ * false` ve boş listeler
  */
 syncRoutes.get('/alerts', (c) => {
   const user = c.get('user');
   if (!can(user, 'siparis.al')) requirePermission(user, 'mutfak.ekran');
-  return c.json({ configured: siteSigned(), online: onlineAlertsView() } satisfies SiteAlertsDTO);
+  return c.json({ configured: siteSigned(), online: onlineAlertsView(), calls: tableCallsView() } satisfies SiteAlertsDTO);
+});
+
+/**
+ * Masa çağrısına "Gördüm": çağrı sitede yanıtlanır (imzalı `POST /api/panel/calls/ack`, kullanıcı eylemi), denetim
+ * kaydına yazılır, bütün cihazlardan düşer. Uyarıyı gören yetki: siparişi alan (garson, kasiyer) ya da bar ekranı. Siteye
+ * ulaşılamazsa 502, çağrı açık kalır
+ */
+syncRoutes.post('/calls/:id/ack', async (c) => {
+  const user = c.get('user');
+  if (!can(user, 'siparis.al')) requirePermission(user, 'mutfak.ekran');
+  return c.json(await ackTableCall(c.req.param('id'), { id: user.id, name: user.name }));
 });
 
 syncRoutes.post('/online/refresh', async (c) => {

@@ -14,7 +14,9 @@ import { sign } from '../server/lib/signature';
  * `GET /api/mobile/v1/menu` yanıtının kopyası). `site-panel-karaoke.json` laffogato cc0e40a'nın (F1, #264)
  * `toPanelReservation` ve `sortForPanel` çıktısıdır (src/lib/panel/karaoke-sync-core.ts): beş satır, sitenin
  * okuma kurallarının her biri için bir tane (ödenmiş, köşkte ödenecek, ücretsiz telafi, iptal, ödemesi süren).
- * İmzalı uçlar imzayı sitenin kuralıyla doğrular, yanlışsa 401.
+ * Masa çağrıları (`calls`, laffogato 6 Kas 2026) sitenin `toPanelTableCalls` biçiminde (`panelCall`): site alanı her
+ * zaman gönderir, yoksa `[]`; `POST /api/panel/calls/ack` sitenin `parsePanelCallAck` kuralıyla gövdeyi tam `{id,
+ * actor}` ister, yanıtlanan çağrı listeden düşer. İmzalı uçlar imzayı sitenin kuralıyla doğrular, yanlışsa 401.
  */
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -75,6 +77,24 @@ export interface PanelKaraokeFixture {
   createdAt: string;
   updatedAt: string;
 }
+/** Sitenin `calls` satırı (laffogato `PanelTableCall`): masa ve sebep, misafir yok */
+export interface PanelCallFixture {
+  id: string;
+  tableCode: string;
+  label: string;
+  reason: string;
+  createdAt: string;
+}
+
+/** Açık bir masa çağrısı: varsayılan "Masa S4", garson, bir dakika önce */
+export const panelCall = (c: Partial<PanelCallFixture> & { id: string }): PanelCallFixture => ({
+  tableCode: '',
+  label: 'Masa S4',
+  reason: 'waiter',
+  createdAt: new Date(Date.now() - 60_000).toISOString(),
+  ...c,
+});
+
 export const siteKaraokeFixture = () => readJson<{ now: string; from: string; to: string; complete: boolean; reservations: PanelKaraokeFixture[] }>('tests/fixtures/site-panel-karaoke.json');
 
 /** Fikstürün satırlarını istenen güne taşır (fikstür 2026-10-27; saatler İstanbul, sabit UTC+3) */
@@ -92,6 +112,11 @@ export interface FakeSite {
   /** İmzalı panel menüsünde Satışta bilgisi: kimlik → isActive (fikstürde hepsi true) */
   panelActive: Map<string, boolean>;
   orders: { complete: boolean; orders: PanelOrderFixture[] };
+  /** Sipariş listesinin `calls` alanı (açık masa çağrıları); null: alan hiç gönderilmez (eski site) */
+  tableCalls: PanelCallFixture[] | null;
+  /** Çağrı yanıtı (`POST /api/panel/calls/ack`) için sırayla durum kodları; boşsa sitenin kuralı (200 ya da 404) */
+  callAckStatus: number[];
+  callAcks: { id: string; actor: string }[];
   /** Sipariş listesinin biçim sürümü (site 1 gönderir); undefined: alan hiç gönderilmez (eski site) */
   ordersVersion: unknown;
   /** Panel menüsünün biçim sürümü (site 1 gönderir); undefined: alan hiç gönderilmez (eski site) */
@@ -134,6 +159,9 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     menu: siteMenuFixture(),
     panelActive: new Map(panelMenu.items.map((i) => [i.id, i.isActive])),
     orders: (({ complete, orders }) => ({ complete, orders }))(siteOrdersFixture()),
+    tableCalls: [],
+    callAckStatus: [],
+    callAcks: [],
     ordersVersion: 1,
     panelMenuVersion: panelMenu.version,
     version: 'v1',
@@ -194,7 +222,36 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     if (call === 'GET /api/panel/orders') {
       const code = site.ordersStatus.shift() ?? 200;
       if (code !== 200) return send(code, { error: 'unavailable' });
-      return send(200, { version: site.ordersVersion, now: new Date().toISOString(), complete: site.orders.complete, orders: site.orders.orders });
+      return send(200, {
+        version: site.ordersVersion,
+        now: new Date().toISOString(),
+        complete: site.orders.complete,
+        orders: site.orders.orders,
+        ...(site.tableCalls === null ? {} : { calls: site.tableCalls }),
+      });
+    }
+    if (call === 'POST /api/panel/calls/ack') {
+      // Sitenin kuralı: katı JSON, tam olarak `{id, actor}`, ad 1-80 karakter
+      let ack: { id?: unknown; actor?: unknown };
+      try {
+        ack = JSON.parse(raw) as typeof ack;
+      } catch {
+        return send(400, { error: 'invalid', field: 'body' });
+      }
+      const extra = Object.keys(ack).find((k) => k !== 'id' && k !== 'actor');
+      if (extra) return send(400, { error: 'invalid', field: extra });
+      if (typeof ack.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(ack.id)) return send(400, { error: 'invalid', field: 'id' });
+      const actor = typeof ack.actor === 'string' ? ack.actor.trim() : '';
+      if (!actor || actor.length > 80) return send(400, { error: 'invalid', field: 'actor' });
+      // Daha önce yanıtlanmış çağrı yine 200 (site ikinci kez yazmaz); hiç olmayan 404
+      const known = !!site.tableCalls?.some((c) => c.id === ack.id) || site.callAcks.some((a) => a.id === ack.id);
+      site.callAcks.push({ id: ack.id, actor });
+      const code = site.callAckStatus.shift();
+      if (code && code !== 200) return send(code, { error: code === 404 ? 'not_found' : 'unavailable' });
+      if (!known && !code) return send(404, { error: 'not_found' });
+      // Yanıtlanan çağrı açık listeden düşer
+      if (site.tableCalls) site.tableCalls = site.tableCalls.filter((c) => c.id !== ack.id);
+      return send(200, { ok: true, call: { id: ack.id, status: 'acked' } });
     }
     if (call === 'POST /api/panel/orders/stage') {
       const change = JSON.parse(raw) as FakeSite['stagePosts'][number];

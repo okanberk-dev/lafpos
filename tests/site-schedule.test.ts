@@ -4,7 +4,7 @@ import { type Harness, startApp } from './harness';
 
 /**
  * Menü yoklamasının takvimi (L3 madde 6 ve 8, S8): gün açıkken 15 dk'da bir, açık iş günü yokken (gece) hiç, gün
- * açılınca bir kez; LafPOS'un siteye kendi Tükendi yazımından birkaç saniye sonra bir kez (site o an uyanık).
+ * açılınca bir kez (online siparişler de hemen); LafPOS'un siteye kendi Tükendi yazımından birkaç saniye sonra bir kez (site o an uyanık).
  * Site isteği sahte `fetch`'e gider, ağ yok; zamanlayıcı gerçek (`startJobs`), saat sahte.
  */
 let h: Harness;
@@ -38,16 +38,19 @@ describe('menü yoklaması', () => {
     process.env.LAFPOS_NO_JOBS = '0';
     try {
       jobs.startJobs();
-      // Açık iş günü yok: bir saat boyunca menü sorulmaz (sipariş sürüm sinyali sorulur, veritabanına gitmez)
+      // Hiç iş günü yok (ilk kurulum): bir saat boyunca siteye hiç istek gitmez; menü sorulmaz, sipariş yazılacak gün
+      // olmadığı için sipariş sürüm sinyali de (gece seyrekliği site-orders.test.ts'te, açık gün yokken 3 dk'da bir)
       await vi.advanceTimersByTimeAsync(60 * 60_000);
       expect(calls('/api/mobile/v1/menu')).toBe(0);
-      expect(calls('/api/pos/orders/version')).toBeGreaterThan(100);
-      expect(calls('/api/panel/orders')).toBe(1);
+      expect(calls('/api/pos/orders/version')).toBe(0);
+      expect(calls('/api/panel/orders')).toBe(0);
 
-      // Gün açılınca bir kez; aralığın sırası 75. dakikada
+      // Gün açılınca bir kez (menü ve online siparişler hemen); aralığın sırası 75. dakikada
       await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
       await settle();
       expect(calls('/api/mobile/v1/menu')).toBe(1);
+      expect(calls('/api/pos/orders/version')).toBe(1);
+      expect(calls('/api/panel/orders')).toBe(1);
       await vi.advanceTimersByTimeAsync(14 * 60_000);
       expect(calls('/api/mobile/v1/menu')).toBe(1);
       await vi.advanceTimersByTimeAsync(60_000);

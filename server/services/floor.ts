@@ -6,6 +6,7 @@ import type { FloorOrderSummary, FloorStateDTO, KitchenTicket, PickupBoardDTO, P
 import { type DB, schema, type Tx } from '../db/client';
 import { holdsRoom } from '@shared/karaoke';
 import { siteKaraokeView } from '../sync/laffogato-karaoke';
+import { tableCallsView } from '../sync/table-calls';
 import { userNameMap } from './dto';
 import { getOpenDay, isEmptyOrder } from './orders';
 
@@ -77,6 +78,8 @@ export function floorState(t: Tx | DB): FloorStateDTO {
     .map((r) => ({ id: r.id, tableId: r.tableId, time: r.time, name: r.name, guests: r.guests, status: r.status }));
   // Sitedeki karaoke rezervasyonları: odayı tutanlar (iptal ve süresi dolan değil); bağlantı yoksa boş
   result.siteKaraoke = siteKaraokeView().bookings.filter(holdsRoom);
+  // Masadan açık çağrılar (uygulamada "Garson çağır"): masa kartında rozet; bağlantı yoksa boş
+  result.siteCalls = tableCallsView(Date.now(), t);
   return result;
 }
 
@@ -92,6 +95,8 @@ export const KITCHEN_READY_MS = 30 * 60_000;
  * Paket platformunun gel-al siparişi LafPOS numarasıyla değil platformun kısa koduyla görünür (müşteri uygulamada
  * onu görür). "Teslim edildi" siparişi hemen düşürür: kasanın siparişinde kalemlerin durumu (teslimden sonra eklenen
  * kalem yeniden "Hazırlanıyor"), platform siparişinde teslim aşaması (teslimi platformun akışında, kalemler hazırda kalır).
+ * Sitenin planlı siparişi (geceden ödenmiş sabah gel-al'ı) ödeme anına değil planlı saatine göre pencerede: açık ve
+ * kalemi pencerede damgalı (`onlineDueAt`, planlı saatten 30 dk önce).
  */
 export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   const day = getOpenDay(t);
@@ -99,7 +104,12 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
   const orders = t
     .select()
     .from(schema.orders)
-    .where(and(gt(schema.orders.openedAt, since), inArray(schema.orders.status, ['acik', 'kapali'])))
+    .where(
+      and(
+        inArray(schema.orders.status, ['acik', 'kapali']),
+        or(gt(schema.orders.openedAt, since), and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.status, 'acik'), isNotNull(schema.orders.scheduledFor))),
+      ),
+    )
     .all()
     .filter((o) => (o.source === 'pos' && (o.type === 'tezgah' || o.type === 'gelal')) || (o.source === 'laffogato' && o.extFulfillment === 'pickup'));
   const items = orders.length
@@ -110,6 +120,8 @@ export function pickupBoard(t: Tx | DB, now = Date.now()): PickupBoardDTO {
     // Ödeme bekleyen kalem çağrı ekranında "Hazırlanıyor" göstermez: bar henüz görmedi
     const mine = items.filter((i) => i.orderId === o.id && i.stationId && !i.held);
     if (!mine.length) continue;
+    // Pencereden önce ödenmiş planlı sipariş: kalemi planlı saatine göre pencerede değilse görünmez
+    if (o.openedAt <= since && !mine.some((i) => i.sentAt > since)) continue;
     if (o.platform && o.deliveryStatus === 'teslim') continue;
     const entry: PickupEntryDTO = {
       id: o.id,

@@ -3,6 +3,7 @@ import type { Permission, Role } from './permissions';
 import type { PlatformId } from './platforms';
 import type { ServiceMode } from './service-mode';
 import type { RoomBookingSnapshot, SiteKaraokeBooking } from './karaoke';
+import type { TableCallDTO } from './site-alerts';
 
 /** Sunucu ile arayüz arasındaki veri biçimleri. Para alanları kuruş. */
 
@@ -475,6 +476,11 @@ export interface FloorStateDTO {
    * hepsine aittir: sitede tek karaoke odası var. Eski Uzaktan özetinde yok
    */
   siteKaraoke?: SiteKaraokeBookingDTO[];
+  /**
+   * Sitedeki açık masa çağrıları (uygulamada "Garson çağır", su, peçete), en eskisi önce; masa kartında rozet. Site
+   * bağlantısı yoksa boş. Eski Uzaktan özetinde yok
+   */
+  siteCalls?: TableCallDTO[];
   /** Masaya bağlı olmayan açık siparişler (tezgah, gel-al, paket, online) */
   others: (FloorOrderSummary & { type: string; label: string })[];
 }

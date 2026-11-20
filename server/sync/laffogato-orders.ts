@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, or } from 'drizzle-orm';
 import { ONLINE_ALERT_MAX_AGE_MS, type OnlineAlertDTO } from '@shared/site-alerts';
 import { normalizeTableCode } from '@shared/table-qr';
 import { businessDate } from '@shared/time';
@@ -13,6 +13,7 @@ import { getOpenDay } from '../services/orders';
 import { siteKaraokeOn, siteKaraokeTick } from './laffogato-karaoke';
 import { requireSiteSigned, siteLinked, siteSigned, unknownSiteListVersion } from './laffogato-link';
 import { dropSiteSoldOut, siteOutboxStatus, siteTablesPushStatus, withSiteMenuLock } from './site-outbox';
+import { applyTableCalls, type PanelCall, parsePanelCalls } from './table-calls';
 
 /**
  * laffogato online siparişleri (uygulama, web, masa QR). Sitede ödenmiştir: LafPOS yalnız gösterir (bar ekranı,
@@ -41,24 +42,49 @@ const STAGE_STATUS: Record<PanelOrder['stage'], 'yeni' | 'hazirlaniyor' | 'hazir
 
 const isPanelOrder = (o: unknown): o is PanelOrder => !!o && typeof (o as PanelOrder).id === 'string' && Array.isArray((o as PanelOrder).lines);
 
+/** Hiç iş günü yokken (ilk kurulum) çekimin durumu: sipariş yazılacak gün yok, liste gün açılınca alınır */
+export const NO_DAY_ERROR = 'Gün açılmadı; online siparişler gün açılınca alınır';
+
+/** Planlı siparişi (`scheduledFor`) bar bu kadar önceden görür */
+export const PLANNED_LEAD_MS = 30 * 60_000;
+
+/**
+ * Online siparişin bar ve uyarı ölçüsü (kalemlerin `sentAt`'ı, uyarının `dueAt`'ı): ödeme anı; planlı siparişte en
+ * erken planlı saatten 30 dakika önce. Geceden ödenmiş sabah siparişi bar ekranının, çağrı ekranının ve uyarının
+ * penceresinde saatinde görünür; erken ödenmiş sipariş ödendiği anda "gecikti" diye kızarmaz. Para ve iş günü ödeme
+ * anından kalır (`openedAt`, `dayId`). Okunamayan saat ödeme anı sayılır.
+ */
+export function onlineDueAt(paidAt: number, scheduledFor: string | null | undefined): number {
+  const at = scheduledFor ? Date.parse(scheduledFor) : Number.NaN;
+  return Number.isFinite(at) ? Math.max(paidAt, at - PLANNED_LEAD_MS) : paidAt;
+}
+
+function noteNoDay() {
+  const s = getSyncState<Record<string, unknown>>('laffogato.orders') ?? {};
+  if (s.lastError !== NO_DAY_ERROR) setSyncState('laffogato.orders', { ...s, lastError: NO_DAY_ERROR, lastErrorAt: Date.now() });
+}
+
+const hasAnyDay = () => !!db.select({ id: schema.businessDays.id }).from(schema.businessDays).limit(1).get();
+
 /**
  * Sitenin açık siparişleri. `orders` dizisi olmayan 200 (bakım sayfası, ağ geçidi, beklenmeyen gövde) başarısız
  * çekme sayılır: boş liste sanılıp sitede ödenmiş açık siparişler kapatılmasın. `complete: false` (site listeyi kesti,
  * en çok 200 sipariş; laffogato `src/app/api/panel/orders/route.ts`) ya da okunamayan kalem varsa liste eksik
  * sayılır, listede olmayan kapatılmaz; alanı göndermeyen eski site bütün liste sayılır. `version` 1 değilse (site
- * biçimi değiştirdi) liste okunmaz, çekim başarısız olur.
+ * biçimi değiştirdi) liste okunmaz, çekim başarısız olur. Yanındaki `calls` masadan çağrılardır (`parsePanelCalls`;
+ * alanı göndermeyen eski sitede null).
  */
-export async function fetchPanelOrders(): Promise<{ orders: PanelOrder[]; complete: boolean }> {
+export async function fetchPanelOrders(): Promise<{ orders: PanelOrder[]; complete: boolean; calls: PanelCall[] | null }> {
   requireSiteSigned();
   const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/panel/orders`));
   if (status !== 200) throw new HttpError(502, `Site siparişleri alınamadı (HTTP ${status})`, 'site_orders');
-  const body = json as { version?: unknown; orders?: unknown; complete?: unknown } | null;
+  const body = json as { version?: unknown; orders?: unknown; complete?: unknown; calls?: unknown } | null;
   if (!body || !Array.isArray(body.orders)) throw new HttpError(502, 'Site siparişleri beklenen biçimde gelmedi', 'site_orders');
   // Tanınmayan biçim: liste okunmaz, çekim başarısız sayılır, hiçbir sipariş kapanmaz (alanı göndermeyen eski site tanınır)
   const version = unknownSiteListVersion(body);
   if (version !== null) throw new HttpError(502, `Site siparişleri tanınmayan biçimde (sürüm ${version})`, 'site_orders');
   const orders = body.orders.filter(isPanelOrder);
-  return { orders, complete: body.complete !== false && orders.length === body.orders.length };
+  return { orders, complete: body.complete !== false && orders.length === body.orders.length, calls: parsePanelCalls(body.calls) };
 }
 
 const tableKey = (s: string) => s.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
@@ -109,25 +135,68 @@ function detailText(detail: string, size: string): string {
  * olduğunu bilmez, servis edildi saymaz. Site listeyi kestiyse (`complete: false`) hiçbiri kapatılmaz. Yerelde
  * kapanmış ama sitede hâlâ açık sipariş yeniden açılır.
  *
+ * Kalemin bar istasyonu ürünün ya da kategorisinin istasyonu; ürün LafPOS'ta yoksa (menü henüz eşitlenmedi) ya da
+ * kategorisinin istasyonu yoksa barın istasyonu (yoksa mutfak; menü eşitlemesinin kuralı): sitede ödenmiş sipariş bar
+ * ekranından ve çağrı ekranından düşmesin. Ürünü ya da istasyonu boş kalmış kalem sonraki çekimlerde yeniden bağlanır.
+ * Planlı siparişin kalemleri planlı saatine göre damgalanır (`onlineDueAt`), saat sitede değişince yeniden.
+ *
  * `requestedAt`: listenin istendiği an. Liste sitenin o anki hâlidir; yanıt ağdayken LafPOS'ta değişen sipariş
  * (kasada "Teslim edildi", aşama yazımı, araya giren daha yeni bir çekme) bu listeyle geri alınmaz: yeniden
  * açılmaz, kapanmaz, aşaması eskiye dönmez. Sonraki çekme geçerlidir. Verilmezse liste en yeni sayılır.
+ *
+ * `calls`: listenin masa çağrıları (server/sync/table-calls.ts), aynı işlemde. Hiç iş günü yoksa (ilk kurulum) sipariş
+ * yazılmaz, çekim başarılı sayılmaz (`waiting`, Entegrasyon'da "Gün açılmadı"): gün açılınca yeniden çekilir.
  */
-export function upsertOnlineOrders(list: PanelOrder[], complete = true, requestedAt = Number.POSITIVE_INFINITY): { created: number; updated: number; closed: number } {
+export function upsertOnlineOrders(
+  list: PanelOrder[],
+  complete = true,
+  requestedAt = Number.POSITIVE_INFINITY,
+  calls: PanelCall[] | null = null,
+): { created: number; updated: number; closed: number; waiting?: boolean } {
   const fx = new Effects();
   const result = tx((t) => {
+    const tables = t.select().from(schema.tables).all();
+    applyTableCalls(t, calls, fx, (c) => tableForOrder(tables, c), requestedAt);
     // Açık gün varsa sipariş onun (kasanın satışları gibi). Gün açık değilken iş günü (05:00 kuralı) ödeme anından:
     // o tarihin günü varsa ona, yoksa geçici olarak son güne yazılır; o tarihin günü açılınca oraya taşınır (openDay)
     const openDay = getOpenDay(t);
     const latest = openDay ?? t.select().from(schema.businessDays).orderBy(desc(schema.businessDays.openedAt)).get();
-    if (!latest) return { created: 0, updated: 0, closed: 0 };
+    if (!latest) return { created: 0, updated: 0, closed: 0, waiting: true };
     const dayIdFor = (paidAt: number) =>
       openDay?.id ??
       t.select({ id: schema.businessDays.id }).from(schema.businessDays).where(eq(schema.businessDays.date, businessDate(paidAt))).orderBy(desc(schema.businessDays.zNo)).get()?.id ??
       latest.id;
     const products = t.select().from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all();
     const categories = new Map(t.select().from(schema.categories).all().map((c) => [c.id, c]));
-    const tables = t.select().from(schema.tables).all();
+    const stations = t.select().from(schema.stations).where(eq(schema.stations.active, true)).orderBy(asc(schema.stations.sort)).all();
+    const fallbackStation = stations.find((s) => s.kind === 'bar')?.id ?? stations.find((s) => s.kind === 'mutfak')?.id ?? null;
+    /** Kalemin ürünü, KDV'si ve istasyonu: ürün LafPOS'ta yoksa ya da istasyonsuzsa barın istasyonu */
+    const resolve = (menuItemId: string | null, productId: string | null = null) => {
+      const p = (productId ? products.find((x) => x.id === productId) : undefined) ?? (menuItemId ? products.find((x) => x.extId === menuItemId) : undefined);
+      const cat = p ? categories.get(p.categoryId) : undefined;
+      return { product: p, stationId: p?.stationId ?? cat?.stationId ?? fallbackStation };
+    };
+    /** Önceki çekimde ürünü ya da istasyonu bulunamamış kalemler (menü sonradan eşitlendi, istasyon sonradan açıldı) */
+    const relink = (orderId: string): boolean => {
+      const loose = t
+        .select()
+        .from(schema.orderItems)
+        .where(and(eq(schema.orderItems.orderId, orderId), or(isNull(schema.orderItems.productId), isNull(schema.orderItems.stationId))))
+        .all();
+      let changed = false;
+      for (const it of loose) {
+        const r = resolve(it.extProductId, it.productId);
+        const linkProduct = !it.productId && !!r.product;
+        const linkStation = !it.stationId && !!r.stationId;
+        if (!linkProduct && !linkStation) continue;
+        t.update(schema.orderItems)
+          .set({ ...(linkProduct ? { productId: r.product!.id, kdvRate: r.product!.kdvRate } : {}), ...(linkStation ? { stationId: r.stationId } : {}) })
+          .where(eq(schema.orderItems.id, it.id))
+          .run();
+        changed = true;
+      }
+      return changed;
+    };
     let created = 0;
     let updated = 0;
     const seen = new Set<string>();
@@ -140,12 +209,16 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
       const existing = t.select().from(schema.orders).where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.extId, o.id))).get();
       const table = o.fulfillment === 'table' ? tableForOrder(tables, o) : undefined;
       const status = STAGE_STATUS[o.stage] ?? 'yeni';
+      const scheduledFor = o.scheduledFor || null;
       if (existing) {
         if (changedSince(existing)) continue;
         const tableId = table?.id ?? existing.tableId;
         // Sitede hâlâ açık: yerelde kapanmışsa (listeden kalkıp geri geldi, sitede geri alınan iptal gibi; ya da eski
         // sürümün bozuk ya da kesik listesi) yeniden açılır
         const reopen = existing.status === 'kapali';
+        // Planlı saat sitede değişti: kalemler yeni saate göre yeniden damgalanır (bar ekranı ve uyarı penceresi)
+        const replan = (existing.scheduledFor ?? null) !== scheduledFor;
+        let changed = false;
         if (reopen || existing.extStage !== o.stage || existing.tableId !== tableId) {
           t.update(schema.orders)
             .set({ extStage: o.stage, tableId, ...(reopen ? { status: 'acik' as const, closedAt: null } : {}), updatedAt: now })
@@ -155,14 +228,30 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
             .set({ status, ...(reopen ? { servedAt: null } : {}) })
             .where(eq(schema.orderItems.orderId, existing.id))
             .run();
-          updated++;
           fx.emit({ topic: 'orders', kind: 'online.updated', orderId: existing.id, tableId: tableId ?? undefined });
+          changed = true;
+        }
+        if (replan) {
+          t.update(schema.orders).set({ scheduledFor, updatedAt: now }).where(eq(schema.orders.id, existing.id)).run();
+          t.update(schema.orderItems).set({ sentAt: onlineDueAt(existing.openedAt, scheduledFor) }).where(eq(schema.orderItems.orderId, existing.id)).run();
+          changed = true;
+        }
+        if (relink(existing.id)) {
+          t.update(schema.orders).set({ updatedAt: now }).where(eq(schema.orders.id, existing.id)).run();
+          changed = true;
+        }
+        if (changed) {
+          updated++;
+          // Yalnız saati ya da kalemin bağlantısı değişen sipariş `online.updated` yaymaz: o olay cihazın zilini susturur
+          // (aşaması değişti sayılır), sipariş hâlâ "yeni"
+          fx.emit({ topic: 'orders', kind: 'online.detail', orderId: existing.id, tableId: tableId ?? undefined });
           fx.emit({ topic: 'kitchen', kind: 'online.updated', orderId: existing.id });
         }
         continue;
       }
       const id = ulid(now);
       const paidAt = Date.parse(o.paidAt) || now;
+      const dueAt = onlineDueAt(paidAt, scheduledFor);
       t.insert(schema.orders)
         .values({
           id,
@@ -182,32 +271,31 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
           extLabel: o.label,
           extPaid: true,
           extTotal: o.totalMinor,
-          scheduledFor: o.scheduledFor || null,
+          scheduledFor,
           deliveryName: o.firstName || null,
           updatedAt: now,
         })
         .run();
       o.lines.forEach((l, i) => {
-        const p = products.find((x) => x.extId === l.menuItemId);
-        const cat = p ? categories.get(p.categoryId) : undefined;
+        const r = resolve(l.menuItemId);
         const size = l.size === 'L' ? 'L' : l.size === 'M' ? 'M' : 'TEK';
         t.insert(schema.orderItems)
           .values({
             id: ulid(now + i),
             orderId: id,
-            productId: p?.id ?? null,
+            productId: r.product?.id ?? null,
             name: l.name,
             size,
             optionsText: detailText(l.detail, l.size),
             qty: l.qty,
             unitPrice: 0,
             basePrice: 0,
-            kdvRate: p?.kdvRate ?? 10,
+            kdvRate: r.product?.kdvRate ?? 10,
             note: l.note || null,
-            stationId: p?.stationId ?? cat?.stationId ?? null,
+            stationId: r.stationId,
             status,
             batch: 1,
-            sentAt: paidAt,
+            sentAt: dueAt,
             extProductId: l.menuItemId,
             createdAt: now,
           })
@@ -241,7 +329,8 @@ export function upsertOnlineOrders(list: PanelOrder[], complete = true, requeste
   });
   fx.emit({ topic: 'tables', kind: 'online.sync' });
   fx.flush();
-  setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastSuccessAt: Date.now(), lastError: null, count: list.length, complete });
+  if (result.waiting) noteNoDay();
+  else setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastSuccessAt: Date.now(), lastError: null, count: list.length, complete });
   return result;
 }
 
@@ -249,8 +338,8 @@ export async function syncOnlineOrders() {
   try {
     // İstek gitmeden önceki an: yanıt beklenirken yerelde olan değişiklik listeden yenidir
     const requestedAt = Date.now();
-    const { orders, complete } = await fetchPanelOrders();
-    return upsertOnlineOrders(orders, complete, requestedAt);
+    const { orders, complete, calls } = await fetchPanelOrders();
+    return upsertOnlineOrders(orders, complete, requestedAt, calls);
   } catch (e) {
     setSyncState('laffogato.orders', { ...(getSyncState<Record<string, unknown>>('laffogato.orders') ?? {}), lastError: e instanceof Error ? e.message : String(e), lastErrorAt: Date.now() });
     throw e;
@@ -380,12 +469,21 @@ export const ORDERS_SAFETY_PULL_MS = 15 * 60_000;
 const ORDERS_FALLBACK_PULL_MS = 5 * 60_000;
 /** Başarısız çekimden sonra yeniden deneme: ilki bir sonraki turda (20 sn), sonra katlanarak, en çok 5 dk arayla */
 const RETRY_FIRST_MS = 20_000;
+/**
+ * Gece (açık gün yokken) tur en sık bu aralıkla: sinyal 20 sn yerine 3 dakikada bir sorulur (kasa bilgisayarı ve site
+ * gece boşuna çalışmasın). Gün açılınca hemen ve yeniden 20 sn'de bir (`onlineOrdersDayOpened`)
+ */
+export const NIGHT_TICK_MS = 3 * 60_000;
 
 let lastVersion: string | null = null;
 let versionSupported = true;
 let lastFullPull = 0;
 let pullFailures = 0;
 let retryAt = 0;
+/** Son turun anı (gece seyrekliği için) */
+let lastTick = 0;
+/** Gün açıldı: sonraki tur sinyal değişmemiş olsa da bir kez çeker */
+let pullSoon = false;
 let inflight: Promise<void> | null = null;
 
 /** Testler için: zamanlayıcının belleğini sıfırlar */
@@ -395,13 +493,20 @@ export function resetOnlineTimer() {
   lastFullPull = 0;
   pullFailures = 0;
   retryAt = 0;
+  lastTick = 0;
+  pullSoon = false;
 }
 
-/** Tam çekim. Sürüm yalnız çekim başarılıysa kaydedilir: başarısız çekim sonraki turda yeniden denenir, sipariş kaybolmaz */
+/**
+ * Tam çekim. Sürüm yalnız çekim başarılıysa ve siparişler bir güne yazılabildiyse kaydedilir: başarısız çekim ya da
+ * hiç iş günü yokken gelen liste sonraki turda yeniden denenir, sipariş kaybolmaz
+ */
 async function pull(now: number, version: string | null) {
   lastFullPull = now;
+  pullSoon = false;
+  let waiting = false;
   try {
-    await syncOnlineOrders();
+    waiting = !!(await syncOnlineOrders()).waiting;
   } catch (e) {
     pullFailures++;
     retryAt = now + Math.min(ORDERS_FALLBACK_PULL_MS, RETRY_FIRST_MS * 2 ** (pullFailures - 1));
@@ -409,22 +514,31 @@ async function pull(now: number, version: string | null) {
   }
   pullFailures = 0;
   retryAt = 0;
-  if (version) lastVersion = version;
+  if (version && !waiting) lastVersion = version;
 }
 
 /**
  * 20 sn'de bir çağrılır. Sürüm sinyali varsa değişince çeker (gece de: sinyal veritabanına gitmez), gün açıkken
- * ayrıca 15 dk'da bir güvenlik çekimi yapar; sinyal yoksa en çok 5 dk'da bir çeker. Aynı sinyal karaoke işaretini de
- * taşır: "Online siparişleri çek" kapalıyken sipariş çekilmez ama sinyal, sitedeki karaoke rezervasyonları için
- * gün açıkken okunmaya devam eder (§2.4; sinyal sitenin veritabanına gitmez, kural 6'nın istisnası).
+ * ayrıca 15 dk'da bir güvenlik çekimi yapar; sinyal yoksa en çok 5 dk'da bir çeker. Gece (açık gün yokken) tur en sık
+ * 3 dakikada bir. Hiç iş günü yokken (ilk kurulum) istek gitmez: sipariş yazılacak gün yok, durum "Gün açılmadı" der,
+ * gün açılınca çekilir. Aynı sinyal karaoke işaretini de taşır: "Online siparişleri çek" kapalıyken sipariş çekilmez ama
+ * sinyal, sitedeki karaoke rezervasyonları için gün açıkken okunmaya devam eder (§2.4; sinyal sitenin veritabanına
+ * gitmez, kural 6'nın istisnası). Masa çağrıları sipariş listesiyle gelir (`calls`): ayrı istek yok.
  */
 export function onlineOrdersTick(): Promise<void> {
   if (!configured()) return Promise.resolve();
   const ordersOn = getSettings().onlineOrdersSync;
-  if (!ordersOn && !(siteKaraokeOn() && getOpenDay(db))) return Promise.resolve();
+  const dayOpen = !!getOpenDay(db);
+  if (!ordersOn && !(siteKaraokeOn() && dayOpen)) return Promise.resolve();
   if (inflight) return inflight;
+  const now = Date.now();
+  if (!dayOpen && now - lastTick < NIGHT_TICK_MS) return Promise.resolve();
+  if (!hasAnyDay()) {
+    noteNoDay();
+    return Promise.resolve();
+  }
+  lastTick = now;
   inflight = (async () => {
-    const now = Date.now();
     // Aynı yanıttaki karaoke işareti (laffogato F1; eski sitede yok): sipariş çekimi başarısız olsa da karaokeye gider
     let karaoke: unknown;
     try {
@@ -434,13 +548,13 @@ export function onlineOrdersTick(): Promise<void> {
         if (status === 200) karaoke = (json as { karaoke?: unknown } | null)?.karaoke;
         if (status === 404) versionSupported = false;
         else if (status === 200 && typeof v === 'string' && v) {
-          const safety = now - lastFullPull >= ORDERS_SAFETY_PULL_MS && !!getOpenDay(db);
-          if (ordersOn && (v !== lastVersion || safety) && now >= retryAt) await pull(now, v);
+          const safety = now - lastFullPull >= ORDERS_SAFETY_PULL_MS && dayOpen;
+          if (ordersOn && (v !== lastVersion || safety || pullSoon) && now >= retryAt) await pull(now, v);
           return;
         }
         // Sinyal okunamadı (5xx, bozuk gövde): 5 dk'lık yedek çekmeye düşer
       }
-      if (ordersOn && now - lastFullPull >= ORDERS_FALLBACK_PULL_MS && now >= retryAt) await pull(now, null);
+      if (ordersOn && (now - lastFullPull >= ORDERS_FALLBACK_PULL_MS || pullSoon) && now >= retryAt) await pull(now, null);
     } catch (e) {
       console.warn('[online] siparişler alınamadı:', e instanceof Error ? e.message : e);
     } finally {
@@ -451,6 +565,18 @@ export function onlineOrdersTick(): Promise<void> {
     inflight = null;
   });
   return inflight;
+}
+
+/**
+ * Gün açıldı ya da yeniden açıldı (server/routes/cash.ts): gecenin seyrek turu biter, bir tur hemen döner ve sinyal
+ * değişmemiş olsa da bir kez çeker (gün yokken bekleyen siparişler, gece gelen çağrılar). Kullanıcı eylemiyle tek
+ * istek; zamanlayıcı kapalıyken (`LAFPOS_NO_JOBS`, testler) hiçbir şey yapmaz.
+ */
+export function onlineOrdersDayOpened(): Promise<void> {
+  if (process.env.LAFPOS_NO_JOBS === '1' || !configured() || !getSettings().onlineOrdersSync) return Promise.resolve();
+  lastTick = 0;
+  pullSoon = true;
+  return onlineOrdersTick();
 }
 
 /** "Yenile" düğmesi: en sık 30 sn'de bir gerçek çekme */
@@ -464,18 +590,30 @@ export async function refreshOnlineOrders() {
 
 /**
  * Cihazların çalacağı online siparişler (`GET /api/sync/alerts`, src/components/SiteInbox.tsx): açık, sitede hâlâ "yeni"
- * aşamada (bar başlamadı) ve ödemesi son 4 saatte. Yalnız yerel veritabanını okur, siteye istek atmaz; liste var olan
- * sipariş çekiminden gelir (§2.3). Site bağlantısı yoksa boş.
+ * aşamada (bar başlamadı) ve ödemesi son 4 saatte; planlı sipariş planlı saatinden 30 dakika öncesinden 4 saat sonrasına
+ * dek (`dueAt`, `onlineDueAt`). Yalnız yerel veritabanını okur, siteye istek atmaz; liste var olan sipariş çekiminden
+ * gelir (§2.3). Site bağlantısı yoksa boş.
  */
 export function onlineAlertsView(now = Date.now()): OnlineAlertDTO[] {
   if (!configured()) return [];
+  const since = now - ONLINE_ALERT_MAX_AGE_MS;
   return db
-    .select({ id: schema.orders.id, no: schema.orders.no, extNo: schema.orders.extNo, label: schema.orders.extLabel, fulfillment: schema.orders.extFulfillment, tableId: schema.orders.tableId, openedAt: schema.orders.openedAt })
+    .select({
+      id: schema.orders.id,
+      no: schema.orders.no,
+      extNo: schema.orders.extNo,
+      label: schema.orders.extLabel,
+      fulfillment: schema.orders.extFulfillment,
+      tableId: schema.orders.tableId,
+      openedAt: schema.orders.openedAt,
+      scheduledFor: schema.orders.scheduledFor,
+    })
     .from(schema.orders)
-    .where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.status, 'acik'), eq(schema.orders.extStage, 'new'), gte(schema.orders.openedAt, now - ONLINE_ALERT_MAX_AGE_MS)))
+    .where(and(eq(schema.orders.source, 'laffogato'), eq(schema.orders.status, 'acik'), eq(schema.orders.extStage, 'new'), or(gte(schema.orders.openedAt, since), isNotNull(schema.orders.scheduledFor))))
     .orderBy(asc(schema.orders.openedAt))
     .all()
-    .map((o) => ({ orderId: o.id, no: o.extNo ?? o.no, label: o.label ?? '', table: o.fulfillment === 'table', tableId: o.tableId, openedAt: o.openedAt }));
+    .map((o) => ({ orderId: o.id, no: o.extNo ?? o.no, label: o.label ?? '', table: o.fulfillment === 'table', tableId: o.tableId, openedAt: o.openedAt, dueAt: onlineDueAt(o.openedAt, o.scheduledFor), scheduledFor: o.scheduledFor }))
+    .filter((o) => o.dueAt >= since);
 }
 
 export function onlineStatus() {

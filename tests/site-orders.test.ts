@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import type { BootstrapDTO } from '@shared/types';
+import type { LiveEvent } from '@shared/events';
+import type { SiteAlertsDTO } from '@shared/site-alerts';
+import type { BootstrapDTO, KitchenTicket } from '@shared/types';
 import { type FakeSite, siteOrdersFixture, startFakeSite } from './fake-site';
 import { type Harness, startApp } from './harness';
 
@@ -81,8 +83,9 @@ describe('online sipariş zamanlayıcısı', () => {
     expect(siteTableLabel('masa9')).toBe('masa9');
   });
 
-  it('gün açıkken sinyal değişmese de 15 dk\'da bir güvenlik çekimi; gece yalnız sinyal', async () => {
+  it('gün açıkken sinyal değişmese de 15 dk\'da bir güvenlik çekimi; gece yalnız sinyal, 3 dk\'da bir', async () => {
     const orders = await import('../server/sync/laffogato-orders');
+    const signals = () => site.count('GET /api/pos/orders/version');
     const c = clock();
     try {
       c.advance(15 * 60_000 + 1000);
@@ -94,9 +97,18 @@ describe('online sipariş zamanlayıcısı', () => {
       c.advance(16 * 60_000);
       await orders.onlineOrdersTick();
       expect(pulls()).toBe(3);
+      const asked = signals();
+      // Gece tur 20 sn'de bir değil, en sık 3 dk'da bir: sinyal de sorulmaz
       site.version = 'v2';
+      for (let i = 0; i < 8; i++) {
+        c.advance(20_000);
+        await orders.onlineOrdersTick();
+      }
+      expect(signals()).toBe(asked);
+      expect(pulls()).toBe(3);
       c.advance(20_000);
       await orders.onlineOrdersTick();
+      expect(signals()).toBe(asked + 1);
       expect(pulls()).toBe(4);
     } finally {
       c.restore();
@@ -107,14 +119,15 @@ describe('online sipariş zamanlayıcısı', () => {
     const orders = await import('../server/sync/laffogato-orders');
     const c = clock();
     try {
+      // Gün kapalı (önceki test): turlar 3 dk arayla
       site.version = '';
-      c.advance(20_000);
+      c.advance(3 * 60_000);
       await orders.onlineOrdersTick();
       expect(pulls()).toBe(4);
       c.advance(5 * 60_000);
       await orders.onlineOrdersTick();
       expect(pulls()).toBe(5);
-      c.advance(20_000);
+      c.advance(3 * 60_000);
       await orders.onlineOrdersTick();
       expect(pulls()).toBe(5);
     } finally {
@@ -206,5 +219,90 @@ describe('aşama yazımı', () => {
     expect(pulls()).toBe(before + 1);
     expect((await byExt('ord-0102')).extStage).toBe('gone');
     expect(site.stagePosts.at(-1)).toMatchObject({ id: 'ord-0102', action: 'ready', from: 'preparing' });
+  });
+});
+
+describe('bar istasyonu yedeği ve planlı sipariş', () => {
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const pickup = (o: { id: string; orderNo: number; paidAt: string; scheduledFor?: string; lines: (typeof site.orders.orders)[number]['lines'] }) => ({
+    ...siteOrdersFixture().orders[0]!,
+    stage: 'new' as const,
+    fulfillment: 'pickup' as const,
+    label: 'Gel-al',
+    scheduledFor: '',
+    ...o,
+  });
+  const itemsOf = async (orderId: string) => {
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    return db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId)).all();
+  };
+
+  it('LafPOS\'ta ürünü olmayan kalem barın istasyonuna düşer, bar ve çağrı ekranında görünür; boş kalmış kalem sonraki çekimde bağlanır', async () => {
+    const { syncOnlineOrders } = await import('../server/sync/laffogato-orders');
+    const { pickupBoard } = await import('../server/services/floor');
+    const { db, schema } = await import('../server/db/client');
+    const { eq } = await import('drizzle-orm');
+    const unknown = pickup({ id: 'ord-0201', orderNo: 10201, paidAt: iso(Date.now()), lines: [{ menuItemId: 'mnu-yok', name: 'Yeni Tatlı', size: 'single', detail: '', note: '', qty: 1 }] });
+    site.orders = { complete: true, orders: [...siteOrdersFixture().orders, unknown] };
+    await syncOnlineOrders();
+    const o = await byExt('ord-0201');
+    const bar = db.select().from(schema.stations).where(eq(schema.stations.kind, 'bar')).get()!;
+    expect(await itemsOf(o.id)).toMatchObject([{ productId: null, stationId: bar.id, name: 'Yeni Tatlı' }]);
+    const tickets = await h.ok<KitchenTicket[]>('mudur', 'GET', '/kitchen');
+    expect(tickets.find((t) => t.orderId === o.id)?.items.map((i) => i.name)).toEqual(['Yeni Tatlı']);
+    expect(pickupBoard(db).preparing.some((e) => e.id === o.id)).toBe(true);
+
+    // Eski sürümün bıraktığı boş kalem (ürünü ve istasyonu yok, bar ekranında görünmüyordu): sonraki çekimde bağlanır
+    const latte = await byExt('ord-0101');
+    db.update(schema.orderItems).set({ productId: null, stationId: null }).where(eq(schema.orderItems.orderId, latte.id)).run();
+    expect((await h.ok<KitchenTicket[]>('mudur', 'GET', '/kitchen')).some((t) => t.orderId === latte.id)).toBe(false);
+    await syncOnlineOrders();
+    const product = db.select().from(schema.products).where(eq(schema.products.extId, 'mnu-0007')).get()!;
+    const relinked = await itemsOf(latte.id);
+    expect(relinked.find((i) => i.extProductId === 'mnu-0007')).toMatchObject({ productId: product.id, kdvRate: product.kdvRate });
+    expect(relinked.every((i) => i.stationId)).toBe(true);
+    expect((await h.ok<KitchenTicket[]>('mudur', 'GET', '/kitchen')).some((t) => t.orderId === latte.id)).toBe(true);
+  });
+
+  it('planlı sipariş: geceden ödenmiş sabah siparişi bar, çağrı ekranı ve uyarı penceresinde saatinde; saat değişince yeniden damgalanır; ödeme anı değişmez', async () => {
+    const { syncOnlineOrders, PLANNED_LEAD_MS } = await import('../server/sync/laffogato-orders');
+    const { pickupBoard } = await import('../server/services/floor');
+    const { db } = await import('../server/db/client');
+    const { bus } = await import('../server/lib/events');
+    const now = Date.now();
+    // Ödeme 30 saat önce: ödeme anıyla bar ekranının (gün kapalı: son 24 saat) ve uyarının (4 saat) dışında kalırdı
+    const paidAt = now - 30 * 3600_000;
+    const at = now + 10 * 60_000;
+    const planned = pickup({ id: 'ord-0202', orderNo: 10202, paidAt: iso(paidAt), scheduledFor: iso(at), lines: [{ menuItemId: 'mnu-0007', name: 'Latte', size: 'M', detail: 'M', note: '', qty: 1 }] });
+    site.orders = { complete: true, orders: [...siteOrdersFixture().orders, planned] };
+    await syncOnlineOrders();
+    const o = await byExt('ord-0202');
+    expect(o.openedAt).toBe(paidAt);
+    expect((await itemsOf(o.id)).map((i) => i.sentAt)).toEqual([at - PLANNED_LEAD_MS]);
+    expect((await h.ok<KitchenTicket[]>('mudur', 'GET', '/kitchen')).some((t) => t.orderId === o.id)).toBe(true);
+    expect(pickupBoard(db).preparing.some((e) => e.id === o.id)).toBe(true);
+    const alert = (await h.ok<SiteAlertsDTO>('garson', 'GET', '/sync/alerts')).online.find((a) => a.orderId === o.id);
+    expect(alert).toMatchObject({ openedAt: paidAt, dueAt: at - PLANNED_LEAD_MS });
+
+    // Sitede saat 3 saat sonraya alındı: kalemler yeniden damgalanır; zil susmaz (aşama değişmedi)
+    const later = now + 3 * 3600_000;
+    site.orders = { complete: true, orders: [...siteOrdersFixture().orders, { ...planned, scheduledFor: iso(later) }] };
+    const events: LiveEvent[] = [];
+    const listen = (e: LiveEvent) => events.push(e);
+    bus.on('event', listen);
+    try {
+      await syncOnlineOrders();
+    } finally {
+      bus.off('event', listen);
+    }
+    expect((await itemsOf(o.id)).map((i) => i.sentAt)).toEqual([later - PLANNED_LEAD_MS]);
+    expect((await byExt('ord-0202')).scheduledFor).toBe(iso(later));
+    expect(events.some((e) => e.orderId === o.id && e.kind === 'online.updated' && e.topic === 'orders')).toBe(false);
+    expect(events.some((e) => e.orderId === o.id && e.kind === 'online.detail')).toBe(true);
+    expect((await h.ok<SiteAlertsDTO>('garson', 'GET', '/sync/alerts')).online.find((a) => a.orderId === o.id)?.dueAt).toBe(later - PLANNED_LEAD_MS);
+    // Para ve gün ödeme anından: değişmez
+    const after = await byExt('ord-0202');
+    expect([after.openedAt, after.dayId, after.extTotal]).toEqual([o.openedAt, o.dayId, o.extTotal]);
   });
 });

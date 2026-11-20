@@ -25,6 +25,7 @@ import {
   shiftCountToDTO,
 } from '../services/days';
 import { afterDayClosed, enqueueDay, flushOutbox } from '../sync/lafmaliyet';
+import { onlineOrdersDayOpened } from '../sync/laffogato-orders';
 import { getOpenDay } from '../services/orders';
 import { write } from './pos';
 
@@ -139,6 +140,8 @@ cashRoutes.post('/day/open', async (c) => {
   const input = await body(c, z.object({ openingCash: kurus }));
   const actor = actorFrom(c);
   const day = write((t, fx) => openDay(t, actor, fx, input));
+  // Online siparişler hemen çekilir: gece seyrek sorulan sinyal, gün yokken bekleyen liste (beklemeden)
+  void onlineOrdersDayOpened();
   return c.json(dayToDTO(db, day));
 });
 
@@ -159,6 +162,7 @@ cashRoutes.post('/days/:id/reopen', async (c) => {
   const input = await body(c, z.object({ reason: z.string().max(200), approverPin: z.string().nullish() }));
   const actor = actorFrom(c, input.approverPin);
   const day = write((t, fx) => reopenDay(t, actor, fx, c.req.param('id'), input.reason));
+  void onlineOrdersDayOpened();
   return c.json(dayToDTO(db, day));
 });
 
