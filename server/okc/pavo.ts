@@ -11,8 +11,9 @@ import type { TLSSocket } from 'node:tls';
  * her uç JSON `POST`'tur, aynı anda tek istek işler, her istekte `TransactionHandle` (seri no, eşleştirmedeki
  * parmak izi, kesin artan sıra no, cihaz saatinden en çok ±300 sn sapan tarih) gönderilir; `/Ping` ve `/Pairing`
  * bu denetimden muaftır. Satış uçları (`/CompleteSale`, `/GetSaleResult`) ve satış gövdesi entegratörlerin açık
- * kodlarından; satış sonucunun biçimi Pavo'nun satış kaydından (AddedPayments, FinancialDocuments). Ayrıntı ve
- * doğrulanmamış noktalar: docs/04-YAZARKASA.md §8.
+ * kodlarından; satış sonucunun biçimi Pavo'nun satış kaydından (AddedPayments, FinancialDocuments). Banka gün sonu
+ * (`/PerformEOD`, `/PrintEODCopy`) Pavo'nun REST paketinden (BKM TechPOS 509 REST V39, örnek istek ve yanıtlarıyla).
+ * Ayrıntı ve doğrulanmamış noktalar: docs/04-YAZARKASA.md §8.
  *
  * Güvenlik: cihaz kendi imzaladığı sertifikayla HTTPS sunar. LafPOS eşleştirmede gördüğü sertifikanın parmak izini
  * saklar ve sonraki isteklerde gövdeyi göndermeden önce karşılaştırır (aynı ağdaki başka bir makine kendini cihaz
@@ -91,10 +92,13 @@ export function certFingerprint(raw: Buffer): string {
   );
 }
 
+/** Gün sonu sürerken `busyWith` bu değeri taşır (sipariş no'ları `LP` ile başlar, karışmaz) */
+export const PAVO_EOD = 'GUNSONU';
+
 export class PavoClient {
   /** Cihaz aynı anda tek istek işler: istekler sıraya girer */
   private queue: Promise<unknown> = Promise.resolve();
-  /** Süren satış isteğinin sipariş no'su (cihazın ekranında açık satış) */
+  /** Süren satış isteğinin sipariş no'su (cihazın ekranında açık satış) ya da süren gün sonu (`PAVO_EOD`) */
   busyWith: string | null = null;
   readonly exchanges: PavoExchange[] = [];
 
@@ -135,6 +139,7 @@ export class PavoClient {
    * boyunca cihaz başka istek almaz.
    */
   async completeSale(sale: PavoSale): Promise<PavoResponse> {
+    if (this.busyWith === PAVO_EOD) throw new PavoError('Cihazda gün sonu sürüyor');
     this.busyWith = sale.OrderNo;
     try {
       return await this.call('/CompleteSale', { Sale: sale }, { timeoutMs: 5 * 60_000 });
@@ -146,6 +151,34 @@ export class PavoClient {
   /** Sipariş no ile satışın sonucunu sorar */
   saleResult(orderNo: string): Promise<PavoResponse> {
     return this.call('/GetSaleResult', { Sale: { OrderNo: orderNo } }, { timeoutMs: 15_000 });
+  }
+
+  /**
+   * Banka gün sonu (`/PerformEOD`): cihaz bankalardaki kart işlemlerini kapatır (batch). Sürerken (en çok 3 dk)
+   * `busyWith` gün sonu işaretidir, cihaz satış almaz. Özet istenir (`useSummary`); slip görüntüsü, JSON ve metin
+   * istenmez (yanıt küçük kalır, kart numarası taşıyan döküm gelmez). Yanıt alınamazsa gün sonu alınmış olabilir:
+   * yeniden denemeden önce `eodCopy` ile doğrulanır.
+   */
+  async performEod(opts: { print?: boolean; timeoutMs?: number } = {}): Promise<PavoResponse> {
+    if (this.busyWith) throw new PavoError(this.busyWith === PAVO_EOD ? 'Cihazda gün sonu sürüyor' : 'Cihazda süren bir satış var; bitince gün sonu alın');
+    this.busyWith = PAVO_EOD;
+    try {
+      return await this.call(
+        '/PerformEOD',
+        { PerformEOD: { AdditionalInfo: { useSummary: true, print: !!opts.print, receiptImage: false, receiptWidth: '58mm', printData: { receiptJsonEnabled: false, receiptTextEnabled: false } } } },
+        { timeoutMs: opts.timeoutMs ?? 180_000 },
+      );
+    } finally {
+      if (this.busyWith === PAVO_EOD) this.busyWith = null;
+    }
+  }
+
+  /**
+   * Önceki gün sonunun bilgisi (`/PrintEODCopy`); `batchNo` verilmezse son gün sonu. Pavo'da bu uç varsayılan olarak
+   * slip basar: `print: false` açıkça gönderilir, LafPOS yalnız özeti okur.
+   */
+  eodCopy(batchNo?: number, timeoutMs = 30_000): Promise<PavoResponse> {
+    return this.call('/PrintEODCopy', { EODCopy: { ...(batchNo != null ? { batchNo } : {}), useSummary: true, print: false, receiptImage: false } }, { timeoutMs });
   }
 
   private call(path: string, body: Record<string, unknown>, opts: { timeoutMs: number; sequence?: 'next' | 'pair' | 'none'; trustNewCert?: boolean }): Promise<PavoResponse> {

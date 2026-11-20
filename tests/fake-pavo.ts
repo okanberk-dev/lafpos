@@ -7,7 +7,8 @@ import type { AddressInfo } from 'node:net';
  * parmak izi eşleştirmedekiyle aynı olmalı, sıra no öncekinden kesin büyük olmalı, tarih ±300 sn içinde olmalı;
  * `/Ping` ve `/Pairing` muaf. Aynı anda tek istek: ikinci istek "meşgul" hatası alır. `/CompleteSale` kasiyer
  * cihazda bitirene kadar (testte `pay`, `abandon`, `reject`) açık kalır. Satış kaydı Pavo'nun satış biçiminde
- * (AddedPayments, FinancialDocuments).
+ * (AddedPayments, FinancialDocuments). Banka gün sonu (`/PerformEOD`, `/PrintEODCopy`) Pavo'nun REST paketindeki
+ * örnek yanıtların biçiminde: kartla alınan ödemeler açık batch'e girer, gün sonu batch'i kapatıp özeti döner.
  */
 
 export interface FakeSale {
@@ -30,8 +31,26 @@ export interface FakePavo {
   nextSaleReply: Record<string, unknown> | null;
   /** Bundan sonraki istekler yanıtsız kalır (bağlantı açık, cevap yok) */
   silent: boolean;
+  /**
+   * `/PerformEOD`: `ok` batch kapanır, özet döner · `fail` 5085 "Günsonu alınamadı" (batch açık kalır) · `silent` batch
+   * kapanır ama yanıt gelmez (yanıtı kaybolan gün sonu)
+   */
+  eodMode: 'ok' | 'fail' | 'silent';
+  /** Kapanmış batch'ler (son gün sonu en sonda) */
+  batches: { batchNo: number; dateTime: string; eodData: Record<string, unknown> }[];
+  /** Açık batch'e LafPOS dışından kart işlemi (TL) */
+  addCardTransaction(amount: number): void;
   close(): Promise<void>;
 }
+
+const tr = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const trAmount = (kurus: number) => tr.format(kurus / 100);
+const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+/** Cihazın saat biçimi: gg.aa.yyyy ss:dd (İstanbul) */
+const deviceTime = (ms: number) => {
+  const d = new Date(ms + 3 * 3600_000);
+  return `${pad(d.getUTCDate())}.${pad(d.getUTCMonth() + 1)}.${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+};
 
 const ok = (extra: Record<string, unknown> = {}) => ({ HasError: false, HasAbondon: false, ErrorCode: null, Message: 'İşlem başarılı', ...extra });
 const err = (code: string, message: string, extra: Record<string, unknown> = {}) => ({ HasError: true, HasAbondon: false, ErrorCode: code, Message: message, ...extra });
@@ -42,6 +61,59 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
   let lastSeq = 0;
   let busy = false;
   const waiting = new Map<string, (reply: Record<string, unknown>) => void>();
+  /** Açık batch'in kart işlemleri (kuruş; iptal eksi) */
+  let open: { amount: number; at: number }[] = [];
+
+  /** Pavo'nun örnek yanıtındaki biçim (kart no ve işlem dökümü dahil: LafPOS bunları saklamamalı) */
+  const closeBatch = () => {
+    const batchNo = (device.batches.at(-1)?.batchNo ?? 277) + 1;
+    const now = Date.now();
+    const total = open.reduce((a, t) => a + t.amount, 0);
+    const eodData = {
+      isyeriSlipIsim: 'PAVO TEST',
+      isyeriSlipAdres: 'PAVO TEST',
+      tcKimlikNo: '11111111111',
+      vergiNo: '1111111111',
+      serialNo: serial,
+      batchNo: pad(batchNo, 6),
+      dateTime: deviceTime(now),
+      acquirers: [
+        {
+          acquirerId: '1',
+          acquirerName: 'Test Bankası',
+          acquirerMerchantId: '000000000000002',
+          acquirerTerminalId: '10002791',
+          hasCard: 'true',
+          cardTransactions: [
+            {
+              title: 'Test Bankası - Kart İşlemleri - TL',
+              transactions: open.map((t, i) => ({
+                operationName: t.amount < 0 ? 'Satış İptal' : 'Satış',
+                transactionNo: pad(i + 1, 6),
+                dateTime: deviceTime(t.at),
+                amount: `${trAmount(Math.abs(t.amount))} TL`,
+                cardNo: '4111 **** **** 8707 ',
+                authorizationCode: pad(i + 2, 6),
+                cardTitle: 'Yurt İçi VISA Kredi',
+              })),
+              summaries: [{ operationName: 'Satış', transactionCount: String(open.length), totalAmount: trAmount(total) }],
+            },
+          ],
+          cardTotals: [{ currency: 'TL', transactionCount: String(open.length), totalAmount: `${trAmount(total)} TL` }],
+          acquirerTotalCount: String(open.length),
+          hasFast: 'false',
+          fastTransactions: [],
+          fastTotals: [],
+          acquirerEodMessage: 'TechPOS Günsonu Mesajı',
+        },
+      ],
+      grandTotals: [{ currency: 'TL', transactionCount: String(open.length), totalAmount: `${trAmount(total)} TL` }],
+    };
+    open = [];
+    const batch = { batchNo, dateTime: eodData.dateTime, eodData };
+    device.batches.push(batch);
+    return batch;
+  };
 
   const device: FakePavo = {
     url: '',
@@ -50,6 +122,11 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
     requests: [],
     nextSaleReply: null,
     silent: false,
+    eodMode: 'ok',
+    batches: [],
+    addCardTransaction(amount) {
+      open.push({ amount: Math.round(amount * 100), at: Date.now() });
+    },
     pay(orderNo, payments, doc) {
       const sale = device.sales.get(orderNo)!;
       sale.state = 'paid';
@@ -61,6 +138,8 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
         AddedPayments: payments.map((p, i) => ({ Id: i + 1, StatusId: p.status ?? 2, PaymentAmount: p.amount, PaymentTypeId: p.type, PaymentMediatorId: p.type })),
         FinancialDocuments: doc ? [{ Id: 1, InvoiceNo: doc.invoiceNo, DocumentNo: 'D1', Type: { Id: 1, Name: doc.typeName ?? 'e-Arşiv Fatura', Cancellable: true } }] : [],
       };
+      // Kartla alınan etkin ödemeler bankanın açık batch'ine girer (gün sonunda toplanır)
+      for (const p of payments) if (p.type === 2 && (p.status ?? 2) === 2) open.push({ amount: Math.round(p.amount * 100), at: Date.now() });
       waiting.get(orderNo)?.(ok({ Data: sale.record }));
     },
     abandon(orderNo) {
@@ -136,6 +215,18 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
       if (sale.state === 'abandoned') return send(res, { HasError: true, HasAbondon: true, ErrorCode: '1001', Message: 'İptal edildi' });
       if (sale.state === 'failed') return send(res, err('3002', 'Satış başarısız'));
       return send(res, ok({ Data: { OrderNo: orderNo, StatusId: 1 } }));
+    }
+    if (path === '/PerformEOD') {
+      if (device.eodMode === 'fail') return send(res, { HasAbondon: false, HasError: true, ErrorCode: 5085, Message: 'Günsonu alınamadı', Data: null });
+      const batch = closeBatch();
+      if (device.eodMode === 'silent') return; // gün sonu alındı ama yanıt gelmiyor
+      return send(res, ok({ Message: null, Data: { gunSonu: 'Günsonu Tamamlandı', eodData: batch.eodData, eodJson: [], eodText: [], eodImage: '' } }));
+    }
+    if (path === '/PrintEODCopy') {
+      const want = (body.EODCopy as { batchNo?: number } | undefined)?.batchNo;
+      const batch = want == null ? device.batches.at(-1) : device.batches.find((b) => b.batchNo === want);
+      if (!batch) return send(res, err('5075', 'Batch bulunamadı.'));
+      return send(res, ok({ Message: null, Data: { printEODCopyResultMessage: 'Başarılı', eodData: batch.eodData, eodJson: [], eodText: [], eodImage: '' } }));
     }
     return send(res, err('404', 'Bilinmeyen uç'));
   };

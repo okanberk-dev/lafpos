@@ -87,6 +87,11 @@ export interface FiscalProvider {
   /** Yönetim ekranında gösterilecek durum (gizli değer içermez) */
   status(): Record<string, unknown>;
   /**
+   * Sepetin cihaza gidebilir olduğunu sepet kaydı yazılmadan denetler (ör. cihazın bilmediği KDV grubu); gidemezse
+   * okunur mesajla hata fırlatır, kasiyer hatayı görür, adisyon kilitlenmez
+   */
+  validate?(basket: FiscalBasket): void;
+  /**
    * Sepeti cihaza yollar. Çekme (pull) sağlayıcısında sepet LafPOS'ta bekler, cihaz kendisi alır. Hata
    * `uncertain: true` taşıyorsa (zaman aşımı, bağlantı koptu) sepet cihaza ulaşmış olabilir: bekleyen kalır ve
    * `poll` ile sorgulanır; diğer hatalarda sepet cihazda yok sayılır.

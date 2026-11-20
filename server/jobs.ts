@@ -10,7 +10,7 @@ import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings } from './lib/settings';
-import { resumePolling } from './okc/service';
+import { deviceEndOfDay, resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -104,6 +104,8 @@ function autoDayEndTick() {
   const closed = tx((t) => closeDay(t, null, fx, { countedCash: null, note: 'Otomatik gün sonu' }));
   fx.flush();
   afterDayClosed(closed.id);
+  // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5)
+  void deviceEndOfDay(closed.id, null).catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
 }
 
 /** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi */

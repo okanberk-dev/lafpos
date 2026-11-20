@@ -24,6 +24,7 @@ import {
   shiftCountsOf,
   shiftCountToDTO,
 } from '../services/days';
+import { deviceEndOfDay } from '../okc/service';
 import { afterDayClosed, enqueueDay, flushOutbox } from '../sync/lafmaliyet';
 import { getOpenDay } from '../services/orders';
 import { write } from './pos';
@@ -151,6 +152,8 @@ cashRoutes.post('/day/close', async (c) => {
   const day = write((t, fx) => closeDay(t, actor, fx, input));
   // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir
   afterDayClosed(day.id);
+  // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5)
+  void deviceEndOfDay(day.id, actor.user.id).catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
   if (!seesNumbers(c.get('user'))) return c.json({ day: dayToDTO(db, day), summary: null, lafmaliyet: null, blind: true });
   return c.json({ day: dayToDTO(db, day), summary: summaryFor(c.get('user'), day.summary), lafmaliyet: day.summary ? lafmaliyetZ(day, day.summary) : null, blind: false });
 });

@@ -11,6 +11,7 @@ import {
   pairDevice,
   receiptsForOrder,
   refreshReceipt,
+  runDeviceEod,
   sendOrderToDevice,
   simulatorBaskets,
   simulatorCancel,
@@ -19,13 +20,14 @@ import {
   simulatorRecent,
   testProvider,
   tokenx,
+  verifyDeviceEod,
   webhookUrl,
 } from '../okc/service';
 import { getOrderDTO } from '../services/orders';
 
 export const okcRoutes = new Hono<AppEnv>();
 
-okcRoutes.get('/status', (c) => c.json(okcStatus()));
+okcRoutes.get('/status', (c) => c.json(okcStatus(c.get('user'))));
 
 okcRoutes.put('/settings', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
@@ -36,6 +38,8 @@ okcRoutes.put('/settings', async (c) => {
       mode: z.enum(['anlik', 'liste']).optional(),
       sectionMap: z.record(z.string().regex(/^\d{1,2}$/), z.number().int().min(1).max(99)).optional(),
       operatorMethods: z.record(z.string().regex(/^\d{1,6}$/), z.string()).optional(),
+      /** Pavo: gün kapanınca cihazda banka gün sonu */
+      pavoAutoEod: z.boolean().optional(),
     }),
   );
   // Pavo yalnız kasada ödeme bilir (cihaz açık hesap listesi tutmaz)
@@ -46,8 +50,25 @@ okcRoutes.put('/settings', async (c) => {
     ...(mode ? { okcMode: mode } : {}),
     ...(input.sectionMap ? { okcSectionMap: input.sectionMap } : {}),
     ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
+    ...(input.pavoAutoEod !== undefined ? { okcPavoAutoEod: input.pavoAutoEod } : {}),
   });
-  return c.json(okcStatus());
+  return c.json(okcStatus(c.get('user')));
+});
+
+/**
+ * Pavo cihazında banka gün sonu (elle ya da başarısız denemenin yenisi): gün sonu yetkisi (`kasa.gun`). Cihazın
+ * hatası 502; tutarlar kör kasada gitmez (`kasa.rakam`)
+ */
+okcRoutes.post('/eod', async (c) => {
+  requirePermission(c.get('user'), 'kasa.gun');
+  const input = await body(c, z.object({ print: z.boolean().optional(), force: z.boolean().optional() }));
+  return c.json(await runDeviceEod(actorFrom(c), input));
+});
+
+/** Cihazın son gün sonunu sorar (slip basılmaz); belirsiz ya da alınamayan deneme cihazdakine göre düzelir */
+okcRoutes.post('/eod/verify', async (c) => {
+  requirePermission(c.get('user'), 'kasa.gun');
+  return c.json(await verifyDeviceEod(actorFrom(c)));
 });
 
 okcRoutes.post('/test', async (c) => {

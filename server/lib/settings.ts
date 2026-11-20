@@ -78,6 +78,11 @@ export interface PrivateSettings {
   okcSectionMap: Record<string, number>;
   /** Yemek kartı operatör kimliği -> LafPOS ödeme türü (ör. "1005" -> Multinet) */
   okcOperatorMethods: Record<string, string>;
+  /**
+   * Pavo: LafPOS gün sonundan hemen sonra cihazda banka gün sonu (`/PerformEOD`). Gün sonunu beklemez ve bozmaz;
+   * cihaz yanıt vermezse alarm düşer, yeniden deneme elle (docs/04-YAZARKASA.md §8.5)
+   */
+  okcPavoAutoEod: boolean;
   /** Yönetim › Roller ve yetkiler'de düzenlenen rol yetki setleri; olmayan rol varsayılanını kullanır */
   rolePermissions: RoleMatrix;
   /** İlk Z numarası: geçişte ModPOS'un son Z'si + 1; zincir yalnız yukarı doğru etkilenir (`nextZNo`). null: 1'den */
@@ -110,6 +115,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcMode: 'anlik',
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
+  okcPavoAutoEod: true,
   rolePermissions: {},
   zNoStart: null,
   branchId: 'tuzla',

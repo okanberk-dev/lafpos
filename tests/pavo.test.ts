@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { OrderDTO } from '@shared/types';
 import { PavoClient, PavoError, type PavoStore } from '../server/okc/pavo';
-import { pavoOrderNo, pavoSale, pavoTiming, readSale } from '../server/okc/providers/pavo';
+import { eodSummary, eodTimeMs, pavoOrderNo, pavoSale, pavoTiming, readEod, readSale } from '../server/okc/providers/pavo';
 import { type FakePavo, startFakePavo } from './fake-pavo';
 import { type Harness, startApp } from './harness';
 
@@ -39,6 +39,106 @@ describe('sepet → Pavo satışı', () => {
 
   it('sipariş no sepetten tek anlamlı, 16 karakter', () => {
     expect(pavoOrderNo('0f8fad5b-d9cb-469f-a165-70867728950e')).toBe('LP0F8FAD5BD9CB46');
+  });
+
+  it('cihazın bilmediği KDV grubu (%0, %1) reddedilir; okunur mesajla', () => {
+    const basket = (taxPercent: number) => ({ basketID: 'b', items: [{ name: 'Su', price: 2000, sectionNo: 1, taxPercent, quantity: 1000 }] });
+    const e = (() => {
+      try {
+        pavoSale(basket(0), 'LP1');
+      } catch (x) {
+        return x;
+      }
+    })();
+    expect(e).toBeInstanceOf(PavoError);
+    expect((e as PavoError).message).toBe("%0 KDV'li kalem Pavo'ya gönderilemez (Su); ürünün KDV oranını düzeltin ya da hesabı kasadan alın");
+    expect(() => pavoSale(basket(100), 'LP1')).toThrow("%1 KDV'li kalem");
+    expect(pavoSale(basket(1000), 'LP1').AddedSaleItems[0]!.TaxGroupCode).toBe('KDV10');
+  });
+});
+
+describe('banka gün sonu yanıtı → özet', () => {
+  // Pavo'nun REST paketindeki örnek yanıt (PerformEODSuccessfulResponse.json), kısaltılmış
+  const sample = {
+    HasAbondon: false,
+    HasError: false,
+    ErrorCode: null,
+    Message: null,
+    Data: {
+      gunSonu: 'Günsonu Tamamlandı',
+      eodData: {
+        isyeriSlipIsim: 'PAVO TEST',
+        tcKimlikNo: '11111111111',
+        vergiNo: '1111111111',
+        serialNo: 'PAV60W636961',
+        batchNo: '000278',
+        dateTime: '12.06.2023 13:32',
+        acquirers: [
+          {
+            acquirerId: '1',
+            acquirerName: 'Test Bankası',
+            acquirerMerchantId: '000000000000002',
+            hasCard: 'true',
+            cardTransactions: [
+              {
+                title: 'Test Bankası - Kart İşlemleri - TL',
+                transactions: [
+                  { operationName: 'Satış', amount: '7,22 TL', cardNo: '4111 **** **** 8707 ', authorizationCode: '000002' },
+                  { operationName: 'Satış İptal', amount: '5,00 TL', cardNo: '4111 **** **** 8707 ', authorizationCode: '000007' },
+                ],
+                summaries: [
+                  { operationName: 'Satış', transactionCount: '3', totalAmount: '7,22' },
+                  { operationName: 'Satış İptal', transactionCount: '1', totalAmount: '-5,00' },
+                ],
+              },
+            ],
+            cardTotals: [{ currency: 'TL', transactionCount: '4', totalAmount: '2,22 TL' }],
+            acquirerTotalCount: '4',
+            hasFast: 'false',
+            fastTransactions: [],
+            fastTotals: [],
+          },
+          { acquirerName: 'Diğer Banka', cardTotals: [{ currency: 'TL', transactionCount: '2', totalAmount: '1.234,56 TL' }], acquirerTotalCount: '2' },
+        ],
+        grandTotals: [{ currency: 'TL', transactionCount: '6', totalAmount: '1.236,78 TL' }],
+      },
+      eodJson: [],
+      eodText: [],
+      eodImage: '',
+    },
+  };
+
+  it('batch no, cihaz saati, genel toplam ve banka satırları kuruşa; kart no ve döküm alınmaz', () => {
+    const r = readEod(sample);
+    expect(r).toEqual({
+      kind: 'ok',
+      message: null,
+      summary: {
+        batchNo: '000278',
+        deviceDateTime: '12.06.2023 13:32',
+        grandTotalKurus: 123678,
+        acquirers: [
+          { name: 'Test Bankası', count: 4, totalKurus: 222 },
+          { name: 'Diğer Banka', count: 2, totalKurus: 123456 },
+        ],
+      },
+    });
+    const text = JSON.stringify(r);
+    for (const secret of ['cardNo', '4111', 'tcKimlikNo', '11111111111', 'vergiNo', 'authorizationCode', 'transactions']) expect(text).not.toContain(secret);
+  });
+
+  it('başarısız (5085), vazgeçilen, özetsiz yazıcı hatası (belirsiz) ayrılır; özeti olan yazıcı hatası alınmış sayılır', () => {
+    expect(readEod({ HasAbondon: false, HasError: true, ErrorCode: 5085, Message: 'Günsonu alınamadı', Data: null })).toEqual({ kind: 'failed', code: '5085', message: 'Günsonu alınamadı (kod 5085)' });
+    expect(readEod({ HasAbondon: true, HasError: true, ErrorCode: 5061, Message: 'İşlemden vazgeçildi' })).toMatchObject({ kind: 'failed' });
+    expect(readEod({ HasError: true, ErrorCode: 5069, Message: 'Kağıt bitti. Yazdırma başarısız.' })).toMatchObject({ kind: 'unknown', code: '5069' });
+    expect(readEod({ ...sample, HasError: true, ErrorCode: 5069, Message: 'Kağıt bitti' })).toMatchObject({ kind: 'ok', summary: { batchNo: '000278' } });
+    expect(readEod({ HasError: false, HasAbondon: false, Data: { gunSonu: 'Günsonu Tamamlandı' } })).toMatchObject({ kind: 'ok', summary: null });
+  });
+
+  it('cihaz saati İstanbul saatidir (UTC+3)', () => {
+    expect(eodTimeMs('12.06.2023 13:32')).toBe(Date.UTC(2023, 5, 12, 10, 32));
+    expect(eodTimeMs('')).toBeNull();
+    expect(eodSummary(null)).toBeNull();
   });
 });
 
@@ -238,6 +338,275 @@ describe('akış (sahte cihaz)', () => {
     for (let i = 1; i < seqs.length; i++) expect(seqs[i]!).toBeGreaterThan(seqs[i - 1]!);
     expect(new Set(handles.map((x) => x.SerialNumber))).toEqual(new Set([device.serial]));
     expect(new Set(afterPair.map((x) => x.Fingerprint))).toEqual(new Set(['LafPOS-test']));
+  });
+
+  describe('banka gün sonu', () => {
+    type Eod = {
+      at: number;
+      dayId: string | null;
+      trigger: string;
+      status: 'ok' | 'failed' | 'unknown' | 'skipped';
+      batchNo: string | null;
+      deviceDateTime: string | null;
+      grandTotalKurus: number | null;
+      dayCardKurus: number | null;
+      acquirers: { name: string; count: number | null; totalKurus: number | null }[];
+      errorCode: string | null;
+      message: string | null;
+      amountsHidden: boolean;
+    };
+    type PavoStatus = { busy: string | null; eod: Eod | null };
+    type Day = { id: string; closedAt: number | null };
+    let mods: {
+      db: typeof import('../server/db/client').db;
+      schema: typeof import('../server/db/client').schema;
+      eq: typeof import('drizzle-orm').eq;
+      getSyncState: typeof import('../server/lib/settings').getSyncState;
+    };
+    beforeAll(async () => {
+      // Gün sonunun yanıtı 3 dk yerine 1 sn beklenir
+      pavoTiming.eodMs = 1_000;
+      pavoTiming.eodCopyMs = 2_000;
+      const { db, schema } = await import('../server/db/client');
+      const { eq } = await import('drizzle-orm');
+      const { getSyncState, updateSettings } = await import('../server/lib/settings');
+      mods = { db, schema, eq, getSyncState };
+      // Kurulum (eğitim) modunda cihaz gün sonu alınmaz: gerçek kurulum gibi
+      updateSettings({ demoMode: false });
+    });
+
+    const status = async (who = 'patron') => (await h.ok<{ pavo: PavoStatus; pavoAutoEod: boolean }>(who, 'GET', '/okc/status')).pavo;
+    const waitEod = async (since: number, want: Eod['status']) => {
+      const until = Date.now() + 4_000;
+      for (;;) {
+        const { eod } = await status();
+        if (eod && eod.at >= since && eod.status === want) return eod;
+        if (Date.now() > until) throw new Error(`gün sonu ${want} olmadı: ${JSON.stringify(eod)}`);
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    };
+    const audits = () =>
+      mods.db
+        .select()
+        .from(mods.schema.auditLog)
+        .where(mods.eq(mods.schema.auditLog.action, 'okc.eod'))
+        .all()
+        .sort((a, b) => b.id - a.id);
+    const eodRequests = () => device.requests.filter((q) => q.path === '/PerformEOD');
+    /** Açık adisyonlar nakitle kapatılır: gün sonu açık adisyonla alınmaz */
+    const payOpen = async () => {
+      const cash = h.boot.paymentMethods.find((m) => m.kind === 'nakit')!;
+      const open = mods.db.select().from(mods.schema.orders).where(mods.eq(mods.schema.orders.status, 'acik')).all();
+      for (const row of open) {
+        const o = await h.ok<OrderDTO>('mudur', 'GET', `/orders/${row.id}`);
+        if (o.total - o.paid > 0) await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: cash.id, amount: o.total - o.paid });
+      }
+    };
+    const closeDay = async () => {
+      await payOpen();
+      return (await h.ok<{ day: Day }>('kasa', 'POST', '/cash/day/close', { countedCash: null })).day;
+    };
+    const dayIsClosed = async () => (await h.ok<{ day: Day | null }>('mudur', 'GET', '/cash/day')).day === null;
+    const reopen = (id: string) => h.ok('mudur', 'POST', `/cash/days/${id}/reopen`, { reason: 'Pavo gün sonu testi' });
+
+    it("%0 KDV'li kalem cihaza gitmez: sepet kaydı yazılmadan okunur hata, adisyon kilitlenmez", async () => {
+      const p = product('Türk Kahvesi');
+      mods.db.update(mods.schema.products).set({ kdvRate: 0 }).where(mods.eq(mods.schema.products.id, p.id)).run();
+      try {
+        const o = await newOrder(1);
+        const r = await send(o);
+        expect(r.status).toBe(400);
+        expect(r.json).toMatchObject({ code: 'okc_basket' });
+        expect(r.json.error).toContain("%0 KDV'li kalem Pavo'ya gönderilemez");
+        expect(await h.ok<Receipt[]>('kasa', 'GET', `/okc/orders/${o.id}/receipts`)).toEqual([]);
+      } finally {
+        mods.db.update(mods.schema.products).set({ kdvRate: p.kdvRate }).where(mods.eq(mods.schema.products.id, p.id)).run();
+      }
+    });
+
+    it('gün kapanınca cihazda gün sonu alınır: özet saklanır (kart no yok), kart toplamı LafPOS ile aynı, slip istenmez', async () => {
+      const before = eodRequests().length;
+      const t0 = Date.now();
+      const day = await closeDay();
+      expect(day.closedAt).not.toBeNull();
+      const eod = await waitEod(t0, 'ok');
+      expect(eod).toMatchObject({ dayId: day.id, trigger: 'otomatik', batchNo: '000278', errorCode: null, amountsHidden: false });
+      expect(eod.dayCardKurus).toBeGreaterThan(0);
+      // Bu günün kart ödemelerinin hepsi cihazdan: bankanın batch'i LafPOS'un kart toplamıyla aynı
+      expect(eod.grandTotalKurus).toBe(eod.dayCardKurus);
+      expect(eod.acquirers).toEqual([{ name: 'Test Bankası', count: 2, totalKurus: eod.dayCardKurus }]);
+      expect(await dayIsClosed()).toBe(true);
+
+      const [req] = eodRequests().slice(before);
+      expect(req!.body.PerformEOD).toEqual({
+        AdditionalInfo: { useSummary: true, print: false, receiptImage: false, receiptWidth: '58mm', printData: { receiptJsonEnabled: false, receiptTextEnabled: false } },
+      });
+      // Saklanan yalnız özet: kart no, işlem dökümü, işyeri bilgisi yok
+      const stored = [mods.getSyncState('pavo.eod.last'), mods.getSyncState(`pavo.eod.${day.id}`)];
+      for (const s of stored) {
+        expect(s).toMatchObject({ status: 'ok', batchNo: '000278' });
+        const text = JSON.stringify(s);
+        for (const secret of ['cardNo', '4111', 'transactions', 'tcKimlikNo', 'vergiNo', 'PAVO TEST', 'eodImage']) expect(text).not.toContain(secret);
+      }
+      expect(audits()[0]).toMatchObject({ severity: 'info', amount: eod.grandTotalKurus });
+      expect(audits()[0]!.message).toContain('batch 000278');
+    });
+
+    it('cihaz gün sonunu alamazsa (5085) LafPOS günü yine kapanır; alarm düşer, elle yeniden denenir', async () => {
+      const closed = mods.db.select().from(mods.schema.businessDays).all().at(-1)!;
+      await reopen(closed.id);
+      device.eodMode = 'fail';
+      const t0 = Date.now();
+      const day = await closeDay();
+      expect(day.closedAt).not.toBeNull();
+      const eod = await waitEod(t0, 'failed');
+      expect(eod).toMatchObject({ dayId: day.id, errorCode: '5085', batchNo: null });
+      expect(eod.message).toContain('Günsonu alınamadı');
+      expect(audits()[0]).toMatchObject({ severity: 'alarm' });
+      expect(await dayIsClosed()).toBe(true);
+
+      // Elle yeniden deneme: yetki gün sonu yetkisi (garson alamaz). Cihazda LafPOS dışı bir kart işlemi var:
+      // toplam LafPOS'un kart toplamından farklı, uyarı düşer
+      device.eodMode = 'ok';
+      device.addCardTransaction(12.5);
+      expect((await h.call('garson', 'POST', '/okc/eod', {})).status).toBe(403);
+      const manual = await h.ok<Eod>('patron', 'POST', '/okc/eod', {});
+      expect(manual).toMatchObject({ status: 'ok', trigger: 'elle', dayId: day.id, batchNo: '000279', grandTotalKurus: 1250 });
+      expect(manual.dayCardKurus).toBeGreaterThan(1250);
+      expect(audits()[0]).toMatchObject({ severity: 'uyari' });
+      expect(audits()[0]!.message).toContain('kart toplamından');
+      expect(await dayIsClosed()).toBe(true);
+    });
+
+    it('kör kasa: kasiyer gün sonunu görür ve alabilir ama tutarları görmez', async () => {
+      const blind = await status('kasa');
+      expect(blind.eod).toMatchObject({ status: 'ok', batchNo: '000279', grandTotalKurus: null, dayCardKurus: null, amountsHidden: true });
+      expect(blind.eod!.acquirers.every((a) => a.totalKurus === null)).toBe(true);
+      const verified = await h.ok<{ changed: boolean; device: { batchNo: string; grandTotalKurus: number | null } }>('kasa', 'POST', '/okc/eod/verify', {});
+      expect(verified).toMatchObject({ changed: false, device: { batchNo: '000279', grandTotalKurus: null } });
+      // Doğrulama slip basmaz (Pavo'da bu ucun varsayılanı basmak)
+      const copy = device.requests.filter((q) => q.path === '/PrintEODCopy').at(-1)!;
+      expect(copy.body.EODCopy).toEqual({ useSummary: true, print: false, receiptImage: false });
+      expect((await status('patron')).eod).toMatchObject({ grandTotalKurus: 1250, amountsHidden: false });
+    });
+
+    it('gün sonu sürerken cihaz satış almaz; yanıt gelmezse sonuç belirsiz, yeniden deneme önce doğrulama ister', async () => {
+      const closed = mods.db.select().from(mods.schema.businessDays).all().at(-1)!;
+      await reopen(closed.id);
+      // Cihazın ekranında olmayan, sonucu beklenen bir sepet (satış alındı, kayıt henüz yok)
+      const waiting = await newOrder(1);
+      device.nextSaleReply = { HasError: false, Message: 'Satış alındı' };
+      const pending = await send(waiting);
+      expect(pending.json.receipt.status).toBe('gonderildi');
+      await settle();
+      device.eodMode = 'silent';
+      const run = h.call<{ code: string; error: string }>('patron', 'POST', '/okc/eod', {});
+      await new Promise((r) => setTimeout(r, 50));
+      expect((await status()).busy).toBe('GUNSONU');
+      const o = await newOrder(1);
+      const refused = await send(o);
+      expect(refused.status).toBe(502);
+      expect(refused.json.error).toContain('Cihazda gün sonu sürüyor');
+      // Bekleyen sepet gün sonu sürerken iptal edilmez; "cihaza ulaşılamadı" diye zorla da iptal sayılmaz
+      const cancel = await h.call<{ code: string; error: string }>('patron', 'POST', `/okc/receipts/${pending.json.receipt.id}/cancel`, { force: true });
+      expect(cancel.status).toBe(409);
+      expect(cancel.json).toMatchObject({ code: 'okc_busy' });
+      expect(cancel.json.error).toContain('gün sonu sürüyor');
+      expect((await refresh(pending.json.receipt.id)).status).toBe('gonderildi');
+      const res = await run;
+      expect(res.status).toBe(502);
+      expect(res.json.code).toBe('pavo_eod_unknown');
+      expect((await status()).eod).toMatchObject({ status: 'unknown', trigger: 'elle', batchNo: null });
+      expect(audits()[0]).toMatchObject({ severity: 'alarm' });
+      // Belirsiz sonucun üstüne ikinci gün sonu gönderilmez: önce doğrulama
+      const again = await h.call<{ code: string }>('patron', 'POST', '/okc/eod', {});
+      expect(again.status).toBe(409);
+      expect(again.json.code).toBe('okc_eod_unknown');
+      // Cihaz gün sonunu almıştı (yanıtı kayboldu): doğrulama sonucu "alındı" yapar, tutarlar cihazınkiyle
+      const verified = await h.ok<{ changed: boolean; record: Eod }>('patron', 'POST', '/okc/eod/verify', {});
+      expect(verified).toMatchObject({ changed: true, record: { status: 'ok', batchNo: '000280', grandTotalKurus: 0 } });
+      expect(audits()[0]!.message).toContain('doğrulandı');
+      device.eodMode = 'ok';
+      // Gün sonu bitti: bekleyen sepet yine sorgulanır, cihazda ödenince işlenir
+      device.pay(pavoOrderNo(pending.json.receipt.id), [{ type: 1, amount: waiting.total / 100 }], { invoiceNo: 'LAF2026000000047' });
+      expect((await refresh(pending.json.receipt.id)).status).toBe('tamamlandi');
+    });
+
+    it('gün kapanırken cihaz yanıt vermezse gün beklemeden kapanır ve kapalı kalır; doğrulama belirsizi çözer', async () => {
+      const closed = mods.db.select().from(mods.schema.businessDays).all().at(-1)!;
+      if (!closed.closedAt) await payOpen();
+      else await reopen(closed.id);
+      device.eodMode = 'silent';
+      const t0 = Date.now();
+      const day = await closeDay();
+      // Gün sonu yanıtı beklenmedi: gün kapalı, cihaz hâlâ gün sonunda
+      expect(day.closedAt).not.toBeNull();
+      expect((await status()).busy).toBe('GUNSONU');
+      expect(await dayIsClosed()).toBe(true);
+      const eod = await waitEod(t0, 'unknown');
+      expect(eod.dayId).toBe(day.id);
+      expect(await dayIsClosed()).toBe(true);
+      // Kendiliğinden yeniden denenmez
+      const sent = eodRequests().length;
+      await new Promise((r) => setTimeout(r, 600));
+      expect(eodRequests().length).toBe(sent);
+      device.eodMode = 'ok';
+      const verified = await h.ok<{ changed: boolean; record: Eod }>('patron', 'POST', '/okc/eod/verify', {});
+      expect(verified).toMatchObject({ changed: true, record: { status: 'ok', batchNo: '000281', dayId: day.id } });
+      expect(mods.getSyncState(`pavo.eod.${day.id}`)).toMatchObject({ status: 'ok', batchNo: '000281' });
+    });
+
+    it('doğrulama cihazda yeni gün sonu bulamazsa belirsiz sonuç "alınamadı" olur, yeniden denenebilir', async () => {
+      const closed = mods.db.select().from(mods.schema.businessDays).all().at(-1)!;
+      await reopen(closed.id);
+      // Cihaz yanıt vermedi ve gün sonunu da almadı (istek işlenmeden kaldı)
+      device.silent = true;
+      const t0 = Date.now();
+      const day = await closeDay();
+      await waitEod(t0, 'unknown');
+      device.silent = false;
+      const verified = await h.ok<{ changed: boolean; record: Eod; message: string }>('patron', 'POST', '/okc/eod/verify', {});
+      expect(verified).toMatchObject({ changed: true, record: { status: 'failed', dayId: day.id } });
+      expect(verified.message).toContain('alınmamış');
+      expect(await h.ok<Eod>('patron', 'POST', '/okc/eod', {})).toMatchObject({ status: 'ok', batchNo: '000282' });
+    });
+
+    it('cihazda kayıtlı gün sonu yoksa (5075) belirsiz deneme alınmamış sayılır; elle yenisi o güne yazılır', async () => {
+      const closed = mods.db.select().from(mods.schema.businessDays).all().at(-1)!;
+      await reopen(closed.id);
+      device.silent = true;
+      const t0 = Date.now();
+      const day = await closeDay();
+      await waitEod(t0, 'unknown');
+      device.silent = false;
+      const saved = device.batches.splice(0);
+      try {
+        const verified = await h.ok<{ changed: boolean; record: Eod; message: string }>('patron', 'POST', '/okc/eod/verify', {});
+        expect(verified).toMatchObject({ changed: true, record: { status: 'failed', dayId: day.id } });
+        expect(verified.message).toContain('kayıtlı gün sonu yok');
+        expect(audits()[0]).toMatchObject({ severity: 'uyari' });
+      } finally {
+        device.batches.push(...saved);
+      }
+      expect(await h.ok<Eod>('patron', 'POST', '/okc/eod', {})).toMatchObject({ status: 'ok', trigger: 'elle', dayId: day.id, batchNo: '000283' });
+      expect(mods.getSyncState(`pavo.eod.${day.id}`)).toMatchObject({ status: 'ok', batchNo: '000283' });
+    });
+
+    it('"Gün kapanınca cihazda gün sonu al" kapalıysa gün sonu atlanır (bilgi kaydıyla); elle alınabilir', async () => {
+      const s = await h.ok<{ pavoAutoEod: boolean }>('patron', 'PUT', '/okc/settings', { pavoAutoEod: false });
+      expect(s.pavoAutoEod).toBe(false);
+      const closed = mods.db.select().from(mods.schema.businessDays).all().at(-1)!;
+      await reopen(closed.id);
+      const before = eodRequests().length;
+      const t0 = Date.now();
+      await closeDay();
+      const eod = await waitEod(t0, 'skipped');
+      expect(eod.message).toContain('kapalı');
+      expect(audits()[0]).toMatchObject({ severity: 'info' });
+      expect(eodRequests().length).toBe(before);
+      expect(await h.ok<Eod>('patron', 'POST', '/okc/eod', {})).toMatchObject({ status: 'ok', batchNo: '000284' });
+      await h.ok('patron', 'PUT', '/okc/settings', { pavoAutoEod: true });
+    });
   });
 });
 

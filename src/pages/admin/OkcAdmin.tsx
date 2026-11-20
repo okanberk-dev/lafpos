@@ -1,11 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Link2, PlugZap, Save, Webhook, XCircle } from 'lucide-react';
+import { CheckCircle2, Landmark, Link2, PlugZap, Save, ShieldCheck, Webhook, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { tl } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog, type ConfirmOptions } from '@/components/ui/Confirm';
-import { Field, Input, Label } from '@/components/ui/Field';
+import { Field, Input, Label, Toggle } from '@/components/ui/Field';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { Badge, Card, CARD, CODE, DefRow, PageHeader, Segmented, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
@@ -21,14 +22,30 @@ interface PavoExchange {
   message: string | null;
   dataKeys: string[];
 }
+/** Cihazın son banka gün sonu (sunucu `PavoEodRecord`); kör kasada tutarlar null */
+interface PavoEod {
+  at: number;
+  trigger: 'otomatik' | 'elle';
+  status: 'ok' | 'failed' | 'unknown' | 'skipped';
+  batchNo: string | null;
+  deviceDateTime: string | null;
+  grandTotalKurus: number | null;
+  dayCardKurus: number | null;
+  acquirers: { name: string; count: number | null; totalKurus: number | null }[];
+  errorCode: string | null;
+  message: string | null;
+  verifiedAt?: number | null;
+  amountsHidden: boolean;
+}
 interface OkcStatus {
   provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
   mode: 'anlik' | 'liste';
   sectionMap: Record<string, number>;
   operatorMethods: Record<string, string>;
+  pavoAutoEod: boolean;
   active: { label: string; configured: boolean; capabilities: { instant: boolean; list: boolean; splitPayment: boolean; docKinds: string[] } } | null;
   tokenx: { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean };
-  pavo: { configured: boolean; url: string | null; serial: string | null; paired: boolean; certificate: string | null; busy: string | null; exchanges: PavoExchange[] };
+  pavo: { configured: boolean; url: string | null; serial: string | null; paired: boolean; certificate: string | null; busy: string | null; exchanges: PavoExchange[]; eod: PavoEod | null };
   lastError: { message: string; at: number } | null;
 }
 interface TestResult {
@@ -131,6 +148,148 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
   );
 }
 
+const EOD_BADGE: Record<PavoEod['status'], { tone: 'success' | 'danger' | 'warning' | 'neutral'; label: string }> = {
+  ok: { tone: 'success', label: 'Alındı' },
+  failed: { tone: 'danger', label: 'Alınamadı' },
+  unknown: { tone: 'warning', label: 'Sonuç belirsiz' },
+  skipped: { tone: 'neutral', label: 'Atlandı' },
+};
+
+/**
+ * Pavo banka gün sonu: cihaz bankalardaki kart işlemlerini kapatır (batch). Son sonuç (durum, batch, cihaz saati,
+ * toplam ve banka satırları), gün kapanınca otomatik alma anahtarı, elle alma ve doğrulama. Tutarlar kör kasada gelmez
+ */
+function PavoEodCard({ s, onAuto, savingAuto }: { s: OkcStatus; onAuto: (v: boolean) => void; savingAuto: boolean }) {
+  const qc = useQueryClient();
+  const [running, setRunning] = useState<'eod' | 'verify' | null>(null);
+  const eod = s.pavo.eod;
+  const ready = s.pavo.configured && s.pavo.paired;
+
+  const run = async (what: 'eod' | 'verify') => {
+    if (running) return;
+    if (
+      what === 'eod' &&
+      !(await confirmDialog({
+        title: 'Cihazda gün sonu alınsın mı',
+        body: 'Cihaz bankalardaki kart işlemlerini kapatır (batch). Bundan sonra bu işlemler iptal edilemez, yalnız iade edilebilir',
+        confirmLabel: 'Gün sonu al',
+        tone: 'primary',
+      }))
+    )
+      return;
+    setRunning(what);
+    try {
+      if (what === 'eod') {
+        await post('/okc/eod', {});
+        toast.ok('Cihazda gün sonu alındı');
+      } else {
+        // Değişen sonuç ya "alındı" (cihazda bulundu) ya da "alınmamış" (yeniden denenmeli)
+        const r = await post<{ changed: boolean; message: string; record: Pick<PavoEod, 'status'> | null }>('/okc/eod/verify', {});
+        if (!r.changed) toast.info(r.message);
+        else if (r.record?.status === 'ok') toast.ok(r.message);
+        else toast.warn(r.message);
+      }
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setRunning(null);
+      void qc.invalidateQueries({ queryKey: ['okc', 'status'] });
+    }
+  };
+
+  const badge = eod ? EOD_BADGE[eod.status] : null;
+  const diff = eod && eod.status === 'ok' && eod.grandTotalKurus != null && eod.dayCardKurus != null ? eod.grandTotalKurus - eod.dayCardKurus : 0;
+  return (
+    <Card
+      title="Gün sonu (banka)"
+      actions={
+        badge ? (
+          <Badge tone={badge.tone} dot>
+            {badge.label}
+          </Badge>
+        ) : undefined
+      }
+      bodyClassName="space-y-4 text-sm"
+    >
+      <p className="text-muted">Cihaz bankalardaki kart işlemlerini kapatır. LafPOS gün sonu bunu beklemez: cihaz yanıt vermese de gün kapanır, sonuç burada görünür</p>
+      {eod ? (
+        <div className="max-w-2xl">
+          <DefRow label="Son deneme">
+            {fmtDateTime(eod.at)} · {eod.trigger === 'elle' ? 'elle' : 'gün kapanınca'}
+          </DefRow>
+          {eod.batchNo && (
+            <DefRow label="Batch no">
+              <span className="tabular">{eod.batchNo}</span>
+            </DefRow>
+          )}
+          {eod.deviceDateTime && (
+            <DefRow label="Cihaz saati">
+              <span className="tabular">{eod.deviceDateTime}</span>
+            </DefRow>
+          )}
+          {eod.status === 'ok' && (eod.grandTotalKurus != null || eod.amountsHidden) && (
+            <DefRow label="Genel toplam">{eod.amountsHidden ? <span className="font-normal text-[var(--admin-text-mute)]">Gizli</span> : <span className="tabular">{tl(eod.grandTotalKurus!)}</span>}</DefRow>
+          )}
+          {diff !== 0 && (
+            <DefRow label="LafPOS kart toplamı">
+              <span className="tabular">{tl(eod.dayCardKurus!)}</span>
+            </DefRow>
+          )}
+        </div>
+      ) : (
+        <p className="text-muted">Bu cihazda LafPOS’tan henüz gün sonu alınmadı</p>
+      )}
+      {eod && eod.status === 'ok' && eod.acquirers.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-[var(--admin-text-mute)]">Bankalar</p>
+          <ul className="mt-1 max-w-md divide-y divide-[var(--admin-divider)]">
+            {eod.acquirers.map((a, i) => (
+              <li key={`${a.name}-${i}`} className="flex items-center gap-2.5 py-1.5">
+                <span className="min-w-0 flex-1 truncate text-[var(--admin-text)]">{a.name}</span>
+                {a.count != null && <span className="shrink-0 text-xs tabular-nums text-[var(--admin-text-mute)]">{a.count} işlem</span>}
+                {a.totalKurus != null && <span className="shrink-0 tabular-nums font-medium text-[var(--admin-text)]">{tl(a.totalKurus)}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {diff !== 0 && (
+        <Notice tone="warn" title="Cihazın toplamı LafPOS’un kart toplamından farklı" className="text-[13px]">
+          Cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi olabilir; denetim kaydında ayrıntı var
+        </Notice>
+      )}
+      {eod && eod.status !== 'ok' && eod.message && (
+        <Notice tone={eod.status === 'failed' ? 'danger' : eod.status === 'unknown' ? 'warn' : 'info'} title={eod.status === 'unknown' ? 'Önce doğrulayın' : undefined} className="text-[13px] [overflow-wrap:anywhere]">
+          {eod.message}
+        </Notice>
+      )}
+      <div className="max-w-2xl border-t border-[var(--admin-divider)] pt-4">
+        <Toggle
+          block
+          checked={s.pavoAutoEod}
+          disabled={savingAuto}
+          onChange={onAuto}
+          label="Gün kapanınca cihazda gün sonu al"
+          hint="LafPOS gün sonundan hemen sonra; cihaz alamazsa ya da yanıt vermezse alarm düşer, yeniden deneme elle"
+        />
+      </div>
+      <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-4 max-sm:[&>*]:grow">
+        <Button icon={<Landmark className="size-4" />} loading={running === 'eod'} disabled={!ready || !!running || !!s.pavo.busy} onClick={() => void run('eod')}>
+          Cihazda gün sonu al
+        </Button>
+        <Button icon={<ShieldCheck className="size-4" />} loading={running === 'verify'} disabled={!ready || !!running || !!s.pavo.busy} onClick={() => void run('verify')}>
+          Doğrula
+        </Button>
+      </div>
+      {running === 'eod' ? (
+        <p className="text-xs text-muted">Cihaz bankalara bağlanıyor; birkaç dakika sürebilir</p>
+      ) : (
+        !ready && <p className="text-xs text-muted">Gün sonu için cihaz eşleştirilmiş olmalı</p>
+      )}
+    </Card>
+  );
+}
+
 export default function OkcAdmin() {
   const boot = useBoot();
   const qc = useQueryClient();
@@ -142,7 +301,7 @@ export default function OkcAdmin() {
   const [pavoTest, setPavoTest] = useState<PavoTest | null>(null);
   // Ayar kaydı (bağlantı, ödeme yeri, eşleme) ile Token'a giden istek (deneme, webhook) ayrı izlenir: bulut yanıt
   // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
-  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | null>(null);
+  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | null>(null);
   const [checking, setChecking] = useState<'test' | 'webhook' | 'pair' | null>(null);
 
   useEffect(() => {
@@ -251,6 +410,12 @@ export default function OkcAdmin() {
     await save({ mode: v }, `Ödeme yeri: ${MODE_LABEL[v]}`);
     setSaving(null);
   };
+  const setAutoEod = async (v: boolean) => {
+    if (v === s.pavoAutoEod || saving) return;
+    setSaving('eod');
+    await save({ pavoAutoEod: v }, v ? 'Gün kapanınca cihazda gün sonu alınacak' : 'Cihazda gün sonu elle alınacak');
+    setSaving(null);
+  };
   // Ayarlar sırayla kaydedilir: biri kaydedilirken iki ray da soluk ve kilitli (dokunuş sessizce yutulmaz, kilit görünür)
   const locked = (key: 'provider' | 'mode') => ({ 'aria-busy': saving === key || undefined, className: cn('transition-opacity duration-150', saving && 'pointer-events-none opacity-60') });
 
@@ -356,7 +521,7 @@ export default function OkcAdmin() {
                 )}
                 {s.pavo.busy && (
                   <DefRow label="Şu an">
-                    <span>Cihazın ekranında süren bir satış var</span>
+                    <span>{s.pavo.busy === 'GUNSONU' ? 'Cihazda gün sonu sürüyor' : 'Cihazın ekranında süren bir satış var'}</span>
                   </DefRow>
                 )}
               </div>
@@ -404,6 +569,7 @@ export default function OkcAdmin() {
             </div>
             {checking === 'pair' && <p className="text-xs text-muted">Cihazdaki onay ekranını onaylayın (en çok 2 dakika beklenir)</p>}
           </Card>
+          {s.pavo.configured && <PavoEodCard s={s} onAuto={(v) => void setAutoEod(v)} savingAuto={saving === 'eod'} />}
           {s.pavo.exchanges.length > 0 && (
             // Destek için: cihazın son yanıtlarının özeti (gövde değil); belgesiz yanıt biçimi buradan tanınır
             <SetupNotes summary="Cihazın son yanıtları">
