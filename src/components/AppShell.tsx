@@ -11,6 +11,7 @@ import { useLive } from '@/lib/live';
 import { EXTRA_TITLES, isAdminArea, navAlias, navAriaLabel, type NavItem, phoneTabs, useNavOrigin, visibleNav } from '@/lib/nav';
 import { useBarEnabled, useServiceMode, useTablesInUse } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
+import { alertPerms } from '@/lib/siteAlerts';
 import { confirmLeave } from '@/lib/unsavedGuard';
 import { type KdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
@@ -19,7 +20,8 @@ import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
 import { LafTile } from './LafMark';
 import { PlatformInbox } from './PlatformInbox';
-import { DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
+import { SiteInbox } from './SiteInbox';
+import { AlertSoundGroup, DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
 import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
@@ -348,6 +350,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         </header>
       )}
       {!REMOTE && <PlatformInbox />}
+      {/* Diğer sistemlerin uyarıları: online sipariş zili ve karaoke (laffogato, lafmobil); ilk dokunuş sesi açar */}
+      {!REMOTE && <SiteInbox />}
       {notice && <div className="shrink-0">{notice}</div>}
       <div className="flex min-h-0 flex-1 md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)]">
         {/* Tablet ve bilgisayar: marka rayı (panonun menüsü). Ekranlar ikon ve kısa adla; dipte Araçlar ve Kilitle */}
@@ -472,6 +476,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
             </button>
           )}
         </DrawerGroup>
+        {!REMOTE && <AlertSoundGroup {...alertPerms(can)} delay={160 + items.length * 35} />}
       </ToolsDrawer>
       <CommandPalette />
     </div>

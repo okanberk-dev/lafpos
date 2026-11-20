@@ -196,7 +196,9 @@ export function AdminShell({ title, children }: { title: string; children: React
         float
         leafClassName="scroll-thin @container"
       >
-        <div className="px-1 pb-10 pt-3 sm:px-2 lg:px-3 lg:pt-2">{children}</div>
+        {/* Yatayda kırpılır (kaydırma kabı olmadan, yapışkan şeritler çalışır): telefonda kenara uzanan sekme rayı ve
+            kaydedilmemiş değişiklik şeridi (-mx-4) bu kabın 4 px payını aşar; kırpılmasa yaprak 12 px yana kayardı */}
+        <div className="overflow-x-clip px-1 pb-10 pt-3 sm:px-2 lg:px-3 lg:pt-2">{children}</div>
       </Stage>
     </div>
   );

@@ -354,9 +354,10 @@ export default function MenuAdmin() {
         phoneMeta={(p) => (
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <Badge tone={status(p).tone}>{status(p).label}</Badge>
-            <span className="tabular-nums text-[var(--admin-text-soft)]">
+            {/* Fiyat satır kartının rakamı: mürekkepte ve orta kalın (masaüstündeki Fiyat sütunu gibi), L fiyatı soluk */}
+            <span className="font-medium tabular-nums text-[var(--admin-text)]">
               {tl(p.price)}
-              {p.priceL != null && ` / ${tl(p.priceL)}`}
+              {p.priceL != null && <span className="font-normal text-[var(--admin-text-mute)]"> / {tl(p.priceL)}</span>}
             </span>
           </span>
         )}
@@ -446,20 +447,26 @@ export default function MenuAdmin() {
           </div>
         }
       >
-        <div className="p-4">
+        {/* Gövde payı pencerenin başlık ve alt şeridiyle aynı (20, genişte 24): içerik başlıkla aynı hizada başlar */}
+        <div className="px-5 py-4 sm:px-6">
           {preview?.warning ? (
             <Notice tone="warn" className="mb-3">
               {preview.warning}
             </Notice>
           ) : null}
-          {preview?.preview?.newCategories.length ? <p className="mb-2 text-sm">Yeni kategoriler: {preview.preview.newCategories.join(', ')}</p> : null}
+          {preview?.preview?.newCategories.length ? (
+            <p className="mb-3 text-sm text-[var(--admin-text-soft)]">
+              Yeni kategoriler: <span className="font-medium text-[var(--admin-text)]">{preview.preview.newCategories.join(', ')}</span>
+            </p>
+          ) : null}
           {preview?.preview?.changes.length ? (
-            <ul className="divide-y divide-[var(--admin-divider)] rounded-xl border border-[var(--admin-border)]">
+            // Kart içindeki karo (köşe --r-tile); satır tablo satırı gibi en az 44 px, uzun ad dar ekranda kırılır
+            <ul className="divide-y divide-[var(--admin-divider)] rounded-[var(--r-tile)] border border-[var(--admin-border)]">
               {preview.preview.changes.map((ch) => (
-                <li key={`${ch.extId}-${ch.kind}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                <li key={`${ch.extId}-${ch.kind}`} className="flex min-h-11 items-center gap-3 px-3.5 py-2.5 text-sm">
                   <Badge tone={ch.kind === 'yeni' || ch.kind === 'geri' ? 'success' : ch.kind === 'kalkti' ? 'danger' : 'warning'}>{CHANGE_LABEL[ch.kind] ?? ch.kind}</Badge>
-                  <span className="flex-1 font-medium">{ch.name}</span>
-                  <span className="tabular-nums text-[var(--admin-text-mute)]">{ch.detail}</span>
+                  <span className="min-w-0 flex-1 break-words font-medium text-[var(--admin-text)]">{ch.name}</span>
+                  <span className="shrink-0 text-right text-[13px] tabular-nums text-[var(--admin-text-mute)]">{ch.detail}</span>
                 </li>
               ))}
             </ul>
@@ -492,28 +499,38 @@ function CategoryBar({ cat, onChange }: { cat: Category; onChange: (b: Record<st
   }, [draft, cat.color]);
   const color = draft ?? cat.color;
   return (
-    <Card className="mb-3" bodyClassName="flex flex-wrap items-center gap-x-5 gap-y-3 py-3 sm:py-3">
-      <span className="flex items-center gap-2 text-sm font-semibold">
-        <span aria-hidden="true" className="size-3 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color }} />
-        {cat.name}
+    // Kategorinin adı solda, ayarları sağda tek kümede (ayar çubuğu). Telefonda ad üstte; Renk ve İstasyon bir satırda,
+    // İstasyon kalan yeri alır (uzun "Yok (bara...)" seçeneği kartın dışına taşmaz), anahtar altta
+    <Card className="mb-3" bodyClassName="flex flex-wrap items-center gap-x-6 gap-y-3 py-3 sm:py-3">
+      <span className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[var(--admin-text)] sm:mr-auto">
+        <span aria-hidden="true" className="size-3 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/25" style={{ background: color }} />
+        <span className="truncate">{cat.name}</span>
         {cat.extSource && <Badge tone="info">Site kategorisi</Badge>}
       </span>
-      <label className="flex min-h-11 items-center gap-2 text-sm text-[var(--admin-text-soft)]">
-        Renk
-        <input type="color" value={color} onChange={(e) => setDraft(e.target.value)} className="h-11 w-12 cursor-pointer rounded-lg border border-[var(--admin-border-strong)] bg-[var(--admin-surface)] p-1 pointer-fine:h-9 pointer-fine:w-11" />
-      </label>
-      <label className="flex items-center gap-2 text-sm text-[var(--admin-text-soft)]">
-        İstasyon
-        <Select value={cat.stationId ?? ''} onChange={(e) => onChange({ stationId: e.target.value || null })} className="w-auto [[data-area=admin]_&]:pointer-fine:h-9">
-          <option value="">Yok (bara ya da mutfağa gitmez)</option>
-          {boot.stations.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <Toggle checked={cat.active} onChange={(v) => onChange({ active: v })} label="POS’ta göster" />
+      <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-3 max-sm:w-full">
+        <label className="flex min-h-11 items-center gap-2 text-[13px] font-medium text-[var(--admin-text-soft)] pointer-fine:min-h-9">
+          Renk
+          {/* Alanların kenarı ve gölgesi (3:1); renk karesi köşeleri eş merkezli: kutu 10, iç boşluk 4, kare 6 */}
+          <input
+            type="color"
+            value={color}
+            onChange={(e) => setDraft(e.target.value)}
+            className="h-11 w-12 cursor-pointer rounded-[var(--r-control)] border border-[var(--admin-border-field)] bg-[var(--admin-surface)] p-1 shadow-[var(--shadow-control)] outline-none transition-[border-color,box-shadow] duration-150 hover:border-[var(--admin-text-mute)] focus-visible:border-[var(--admin-primary)] focus-visible:shadow-[0_0_0_3px_var(--admin-primary-soft)] pointer-fine:h-9 pointer-fine:w-11 [&::-moz-color-swatch]:rounded-[var(--r-chip)] [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-[var(--r-chip)] [&::-webkit-color-swatch]:border-0"
+          />
+        </label>
+        <label className="flex min-w-0 flex-1 basis-40 items-center gap-2 text-[13px] font-medium text-[var(--admin-text-soft)] sm:flex-none sm:basis-auto">
+          İstasyon
+          <Select value={cat.stationId ?? ''} onChange={(e) => onChange({ stationId: e.target.value || null })} className="min-w-0 flex-1 sm:w-auto sm:flex-none [[data-area=admin]_&]:pointer-fine:h-9">
+            <option value="">Yok (bara ya da mutfağa gitmez)</option>
+            {boot.stations.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <Toggle checked={cat.active} onChange={(v) => onChange({ active: v })} label="POS’ta göster" />
+      </div>
     </Card>
   );
 }
@@ -629,21 +646,23 @@ function ProductDrawer({
       }
     >
       {product && st && (
-        <div className="mb-5 space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl border border-[var(--admin-border)] p-3">
-              <div className="text-xs text-[var(--admin-text-mute)]">Satış durumu</div>
-              <div className="mt-1">
+        <div className="mb-6 space-y-3">
+          {/* Özet tek karoda iki hücre (köşe --r-tile, arada saç teli): rozet ile fiyatın boyu farklı, iki ayrı kutuda
+              durum kutusu yarı boş görünürdü. Etiket 13/500 soluk, rakam 20/700 */}
+          <div className="grid grid-cols-2 divide-x divide-[var(--admin-divider)] rounded-[var(--r-tile)] border border-[var(--admin-border)]">
+            <div className="min-w-0 p-3.5">
+              <div className="text-[13px] font-medium text-[var(--admin-text-mute)]">Satış durumu</div>
+              <div className="mt-2">
                 <Badge tone={st.tone} dot>
                   {st.label}
                 </Badge>
               </div>
             </div>
-            <div className="rounded-xl border border-[var(--admin-border)] p-3">
-              <div className="text-xs text-[var(--admin-text-mute)]">{product.priceL != null ? 'Fiyat (M / L)' : 'Fiyat'}</div>
-              <div className="mt-1 text-lg font-bold tabular-nums">
+            <div className="min-w-0 p-3.5">
+              <div className="text-[13px] font-medium text-[var(--admin-text-mute)]">{product.priceL != null ? 'Fiyat (M / L)' : 'Fiyat'}</div>
+              <div className="mt-1 text-xl font-bold leading-7 tracking-[-0.02em] tabular-nums text-[var(--admin-text)]">
                 {tl(product.price)}
-                {product.priceL != null && <span className="text-sm font-medium text-[var(--admin-text-mute)]"> / {tl(product.priceL)}</span>}
+                {product.priceL != null && <span className="text-sm font-medium tracking-normal text-[var(--admin-text-mute)]"> / {tl(product.priceL)}</span>}
               </div>
               {/* Site ürününde KDV formda yok (sitede değişir): oran burada okunur */}
               <div className="text-xs text-[var(--admin-text-mute)]">%{product.kdvRate} KDV dahil</div>
@@ -668,7 +687,8 @@ function ProductDrawer({
       )}
 
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold">{product ? 'Kasa alanları' : 'Ürün bilgisi'}</h3>
+        {/* Bölüm başlığı kart başlığının ölçüsünde (16/600): 13 px alan etiketlerinden ayrılır */}
+        <h3 className="text-base font-semibold leading-6 tracking-[-0.015em] text-[var(--admin-text)]">{product ? 'Kasa alanları' : 'Ürün bilgisi'}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           {/* Siteden gelen üründe ad, kategori, KDV ve fiyat sitede değişir (yukarıda okunur): devre dışı beş alan kasa
               alanlarını aşağı itmesin diye hiç çizilmez; kayıt da yalnız kasa alanlarını gönderir */}
@@ -710,7 +730,9 @@ function ProductDrawer({
           <Field label="lafmaliyet adı" hint={product?.priceL != null || (!synced && f.priceL) ? 'boy eki eklenir' : 'boşsa AD BOY'}>
             <Input value={f.posName} onChange={(e) => setF({ ...f, posName: e.target.value })} placeholder="Ör. LATTE" spellCheck={false} />
           </Field>
-          <Field label="İstasyon" hint="boşsa kategoriden">
+          {/* İpucu yok: boş seçenek zaten "Kategoriden" der. Uzun ipucu alanın altına inip satırı yanındaki Günlük
+              porsiyon'dan uzatıyordu */}
+          <Field label="İstasyon">
             <Select value={f.stationId} onChange={(e) => setF({ ...f, stationId: e.target.value })}>
               <option value="">Kategoriden</option>
               {boot.stations.map((s) => (
@@ -724,7 +746,8 @@ function ProductDrawer({
           <Field label="Günlük porsiyon" hint="boşsa sınırsız">
             <Input value={f.portionsLeft} onChange={(e) => setF({ ...f, portionsLeft: e.target.value.replace(/\D/g, '') })} inputMode="numeric" />
           </Field>
-          <Field label="Barkod">
+          {/* Tek sayılı son alan iki sütunu kaplar: sağında boş yarım satır kalmaz */}
+          <Field label="Barkod" className="sm:col-span-2">
             <Input value={f.barcode} onChange={(e) => setF({ ...f, barcode: e.target.value })} spellCheck={false} />
           </Field>
         </div>
@@ -744,10 +767,11 @@ function ProductDrawer({
                   </Chip>
                 );
               })}
+            {/* Ekleme çipi seçim çipleriyle aynı boyda ve köşede (--r-btn); kesikli kenar "yeni" der */}
             <button
               type="button"
               onClick={() => setNewGroup(true)}
-              className="inline-flex min-h-11 items-center gap-1 rounded-[var(--r-chip)] border border-dashed border-[var(--admin-border-strong)] px-3.5 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors duration-150 hover:border-[var(--admin-border-field)] hover:text-[var(--admin-text)] active:bg-press pointer-fine:min-h-9"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--r-btn)] border border-dashed border-[var(--admin-border-field)] px-3.5 text-[13px] font-medium text-[var(--admin-text-soft)] transition-colors duration-150 hover:border-[var(--admin-text-mute)] hover:bg-surface-2 hover:text-[var(--admin-text)] active:bg-press pointer-fine:min-h-9"
             >
               <Plus aria-hidden="true" className="size-3.5" />
               Yeni grup
