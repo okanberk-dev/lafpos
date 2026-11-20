@@ -8,7 +8,7 @@ import { isCounterFirst } from '@shared/service-mode';
 import type { OrderDTO } from '@shared/types';
 import { Button, buttonClass } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Field';
-import { Badge, type BadgeTone, EmptyState, ErrorState, Notice, PageHeader, Skeleton } from '@/components/ui/misc';
+import { Badge, type BadgeTone, EmptyState, ErrorState, FLOAT_CARD, Notice, PageHeader, Skeleton } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -144,6 +144,8 @@ export default function OrdersPage() {
   return (
     <Stage
       leafLabel="Siparişler"
+      // Pano: sipariş kartları zeminde yüzer
+      float
       menu={
         <div role="tablist" aria-label="Sipariş listesi" className="lp-menu">
           {tabOptions.map((o) => (
@@ -186,20 +188,20 @@ export default function OrdersPage() {
         </Notice>
       )}
       {list.isPending ? (
-        <div role="status" aria-label="Siparişler yükleniyor…" className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3">
+        <div role="status" aria-label="Siparişler yükleniyor…" className="lp-cards">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-[92px] rounded-2xl" />
           ))}
         </div>
       ) : list.isError && !list.data ? (
-        <ErrorState title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+        <ErrorState className={FLOAT_CARD} title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState art="fis" title={empty.title}>
+        <EmptyState art="fis" title={empty.title} className={FLOAT_CARD}>
           {empty.body}
         </EmptyState>
       ) : (
         // Tablette dikeyde iki sütun (608 px), dar telefonda taşmaz
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3 animate-fade">
+        <div className="lp-cards animate-fade">
           {rows.map((o) => {
             const Icon = o.source === 'laffogato' ? Globe : o.type === 'paket' ? Bike : o.type === 'gelal' ? ShoppingBag : o.type === 'masa' ? UtensilsCrossed : Store;
             const flow = flowOf(o);
@@ -222,7 +224,8 @@ export default function OrdersPage() {
             const courierPick = o.type === 'paket' && couriers.length > 0;
             return (
               // Kaynak rengi: POS gri, online mor (Masalar yan paneliyle aynı); kalın tutar yalnız dolu adisyonda
-              <div key={o.id} className="flex flex-col rounded-2xl border border-line bg-surface p-3.5 transition-[border-color] duration-150 hover:border-[var(--admin-text)]">
+              // Pano kartı: zeminde kenarsız ve yumuşak gölgeli (gecede saç teli); üstüne gelince kalkar
+              <div key={o.id} data-order-card="" className="flex flex-col rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface p-4 shadow-[var(--card-shadow)] transition-[border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] motion-reduce:hover:translate-y-0">
                 {/* Kartın dokunulan yüzü: basılı ton dokunmatikte de geri bildirir (kenar payı içeriği yerinde tutar) */}
                 <button onClick={() => navigate(`/adisyon/${o.id}`)} className="-m-1.5 flex items-start gap-3 rounded-xl p-1.5 text-left transition-colors duration-150 hover:bg-hover active:bg-press">
                   <span className={cn('grid size-9 shrink-0 place-items-center rounded-lg [&>svg]:size-[18px]', o.source === 'laffogato' ? 'bg-[var(--admin-hue-violet-soft)] text-[var(--admin-hue-violet)]' : 'bg-surface-3 text-ink-2')}>

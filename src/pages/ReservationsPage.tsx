@@ -7,7 +7,7 @@ import type { OrderDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Select, Textarea } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
-import { Badge, EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/ui/misc';
+import { Badge, EmptyState, ErrorState, FLOAT_CARD, PageHeader, Skeleton } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, patch, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
@@ -143,7 +143,7 @@ export default function ReservationsPage() {
 
   return (
     // Sahne: başlık, tarih ve ekleme sol sütunda (PageHeader taşınır), gün listesi yaprakta
-    <Stage leafLabel="Rezervasyonlar">
+    <Stage leafLabel="Rezervasyonlar" float>
     <div className="lp-leaf-pad">
       <PageHeader
         title="Rezervasyon"
@@ -211,10 +211,10 @@ export default function ReservationsPage() {
           ))}
         </div>
       ) : list.isError && !list.data ? (
-        <ErrorState title="Rezervasyonlar alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+        <ErrorState className={FLOAT_CARD} title="Rezervasyonlar alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
         // Ekleme düğmesi başlıkta: boş durum ikinci bir çağrı yapmaz
-        <EmptyState art="bilet" title={isToday ? 'Bugün rezervasyon yok' : 'Bu güne rezervasyon yok'}>
+        <EmptyState art="bilet" title={isToday ? 'Bugün rezervasyon yok' : 'Bu güne rezervasyon yok'} className={FLOAT_CARD}>
           Telefonla gelen rezervasyonu ekleyin; Geldi deyince masa açılır
         </EmptyState>
       ) : (
@@ -227,7 +227,7 @@ export default function ReservationsPage() {
             const status = STATUS[r.status];
             return (
               // Saat ve ad üstte; düğmeler telefonda ve tablette kendi satırında (ad hiç sıkışmaz), bilgisayarda aynı satırda sağda
-              <div key={r.id} className={cn('flex flex-col gap-3 rounded-2xl border border-line bg-surface p-4 shadow-[var(--shadow-card)] lg:flex-row lg:items-center', r.status === 'iptal' && 'opacity-60')}>
+              <div key={r.id} className={cn('flex flex-col gap-3 rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface p-4 shadow-[var(--card-shadow)] lg:flex-row lg:items-center', r.status === 'iptal' && 'opacity-60')}>
                 <div className="flex min-w-0 flex-1 items-baseline gap-3">
                   <div className="tabular w-14 shrink-0 font-headline text-xl font-bold tracking-[-0.01em]">{r.time}</div>
                   <div className="min-w-0 flex-1">

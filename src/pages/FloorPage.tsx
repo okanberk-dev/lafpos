@@ -150,7 +150,7 @@ export default function FloorPage() {
   const othersList = (
     <section aria-label="Masasız siparişler">
           <div className="flex items-end gap-2 px-4 pb-2 pt-4 md:px-5 md:pt-5 lg:px-2.5 lg:pt-3">
-            <h2 className="flex-1 font-headline text-lg font-bold tracking-[-0.025em] lg:text-[17px]">Masasız siparişler</h2>
+            <h2 className="flex-1 font-headline text-base font-semibold tracking-[-0.015em]">Masasız siparişler</h2>
             {/* Sayı hapı sıfırsa gizli (kit kuralı) */}
             {list.length > 0 && <span className="tabular min-w-6 rounded-full bg-[var(--admin-ink-fill)] px-2 py-0.5 text-center text-xs font-semibold text-[var(--admin-on-ink)]">{list.length}</span>}
           </div>
@@ -239,10 +239,18 @@ export default function FloorPage() {
       {/* Telefonda yaprak tek parça kayar; tablet ve bilgisayarda plan kalan yüksekliğe sığar, liste kendi içinde kayar */}
       <section aria-label={section?.name ?? 'Masalar'} className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
         {/* Yaprağın başı: seçili bölümün adı ve doluluğu, sağda görünüm */}
-        <header className="flex flex-wrap items-end gap-x-4 gap-y-2 px-4 pb-2 pt-4 md:px-6 md:pt-5">
-          <div className="min-w-0 flex-1">
-            <h2 className="lp-section-title">{section?.name ?? 'Masalar'}</h2>
-            <p className="mt-1 text-[13px] text-muted">{joinMeta([`${tables.length} masa`, `${sectionBusy} dolu`])}</p>
+        <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--admin-divider)] px-4 py-3.5 md:px-5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+            <h2 className="text-lg font-bold tracking-[-0.025em]">{section?.name ?? 'Masalar'}</h2>
+            {/* Bölümün özeti sade sayaçlarda: toplam, dolu (yeşil nokta), boş */}
+            <span className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-ink-2">
+              <span className="tabular inline-flex h-6 items-center rounded-lg bg-surface-2 px-2 ring-1 ring-inset ring-[var(--admin-border)]">{tables.length} masa</span>
+              <span className="tabular inline-flex h-6 items-center gap-1.5 rounded-lg bg-[var(--admin-primary-soft)] px-2 text-[var(--admin-primary)]">
+                <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--admin-primary)]" />
+                {sectionBusy} dolu
+              </span>
+              <span className="tabular inline-flex h-6 items-center rounded-lg bg-surface-2 px-2 ring-1 ring-inset ring-[var(--admin-border)]">{Math.max(0, tables.length - sectionBusy)} boş</span>
+            </span>
           </div>
           {viewToggle}
         </header>
@@ -260,7 +268,8 @@ export default function FloorPage() {
           </div>
         )}
 
-        <div className={cn('p-4 md:min-h-0 md:flex-1 md:px-6 md:pb-5', effectiveView === 'plan' && tables.length > 0 ? '[container-type:size]' : 'md:overflow-y-auto')}>
+        {/* Salonun zemini: plan görünümünde açık gri noktalı alan (masalar beyaz ve yeşil kartlar olarak üstünde ayrışır) */}
+        <div className={cn('p-4 md:min-h-0 md:flex-1 md:px-5 md:pb-4', effectiveView === 'plan' && tables.length > 0 ? 'lp-floor [container-type:size]' : 'md:overflow-y-auto')}>
           {tables.length === 0 ? (
             <EmptyState
               icon={<LayoutGrid />}
@@ -292,20 +301,20 @@ export default function FloorPage() {
               ))}
             </div>
           ) : (
-            <div key={section?.id} className="lp-enter grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+            <div key={section?.id} className="lp-enter lp-tiles [--tile-min:9.375rem]">
               {tables.map((t) => (
                 <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="min-h-28 md:h-32" />
               ))}
             </div>
           )}
         </div>
-        <footer className="hidden shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--admin-divider)] px-6 py-3 text-xs text-muted sm:flex">
-          <Legend className="border border-dashed border-[var(--admin-border-field)]" label="Boş" />
+        <footer className="hidden shrink-0 flex-wrap items-center gap-x-5 gap-y-1 border-t border-[var(--admin-divider)] px-5 py-3 text-xs text-muted sm:flex">
+          <Legend className="border border-[var(--admin-border-strong)] bg-surface" label="Boş" />
           <Legend className="[background:var(--table-busy)]" label="Dolu" />
           <Legend className="shadow-[inset_3px_0_0_var(--admin-signal)] [background:var(--table-busy)]" label="Hesap istendi" />
           <Legend className="bg-[linear-gradient(90deg,#fff_50%,#0e7a5a_50%)] ring-1 ring-inset ring-[#0e7a5a]" label="Kısmen ödendi" />
           <Legend className="border border-violet-line bg-violet-soft" label="Online" />
-          <Legend className="border border-dashed border-[var(--admin-border-field)]" dot label="Rezerve" />
+          <Legend className="border border-[var(--admin-border-strong)] bg-surface" dot label="Rezerve" />
         </footer>
       </section>
 
@@ -368,7 +377,8 @@ function SiteKaraokeRow({ booking: b, past }: { booking: SiteKaraokeBookingDTO; 
 function Legend({ className, dot, label }: { className: string; dot?: boolean; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={cn('relative size-3 rounded-full', className)}>{dot && <span className="absolute inset-[2px] rounded-full bg-[var(--admin-blue-soft)] ring-1 ring-inset ring-[var(--admin-blue)]/50" />}</span>
+      {/* Kutucuk masa kartının küçük kopyası (köşeli): kart nasılsa açıklama da öyle */}
+      <span className={cn('relative size-3.5 rounded-[4px]', className)}>{dot && <span className="absolute inset-[3px] rounded-full bg-[var(--admin-blue)]" />}</span>
       {label}
     </span>
   );
@@ -424,8 +434,10 @@ function TableTile({
       style={style}
       className={cn(
         '@container group relative flex flex-col overflow-hidden p-3 text-left transition-[border-color,background-color,transform,box-shadow] duration-150 active:scale-[0.98] motion-reduce:active:scale-100',
-        round ? 'items-center justify-center gap-1 rounded-[999px] text-center' : cn('rounded-[1.125rem]', busy || reservation ? 'justify-between' : 'justify-start gap-1'),
-        tone === 'free' && 'border border-dashed border-[color-mix(in_oklab,var(--admin-border-field)_70%,transparent)] bg-surface-2 hover:border-solid hover:border-[var(--admin-text)] hover:bg-surface',
+        round ? 'items-center justify-center gap-1 rounded-[999px] text-center' : cn('rounded-2xl', busy || reservation ? 'justify-between' : 'justify-start gap-1'),
+        // Boş masa (sade): beyaz kart, ince düz çerçeve ve çok hafif gölge; salonun noktalı zemininden ayrışır. Üstüne gelince
+        // çerçeve ev yeşili, kart kalkar
+        tone === 'free' && 'border border-[var(--admin-border-strong)] bg-surface shadow-[var(--shadow-control)] hover:-translate-y-0.5 hover:border-[var(--admin-primary)] hover:shadow-[var(--shadow-card)] motion-reduce:hover:translate-y-0',
         // Dolu masa L'Affogato yeşilinin degradesinde, beyaz yazı: uzaktan bir bakışta seçilir, salon canlı görünür
         inked && 'text-white shadow-[var(--shadow-lift)] [background:var(--table-busy)] hover:[background:var(--table-busy-hover)]',
         // Hesap istendi: soldaki magenta şerit (yuvarlak masada halka); renk tek başına taşımaz, "Hesap" hapı da var
@@ -437,7 +449,7 @@ function TableTile({
     >
       <div className={cn('flex w-full items-start gap-1', round && 'justify-center')}>
         {/* Masanın adı Gabarito kalın; boş masada soluk */}
-        <span className={cn('truncate font-headline text-[15px] font-bold leading-tight tracking-[-0.02em] @min-[6rem]:text-base', busy ? '' : 'text-ink-2')}>{table.name}</span>
+        <span className="truncate font-headline text-[15px] font-bold leading-tight tracking-[-0.02em] @min-[6rem]:text-base">{table.name}</span>
         {!round && <span className="flex-1" />}
         <span className={cn('flex items-center gap-1', soft)}>
           {billed && (

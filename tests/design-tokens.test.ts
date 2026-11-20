@@ -154,7 +154,8 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     expect(adminLight('admin-signal')).toBe('#c8175d');
     // Dolu masa L'Affogato yeşilinin degradesi
     expect(css).toMatch(/--table-busy:\s*linear-gradient\(155deg, #0e7a5a/);
-    expect(adminLight('admin-border-field')).toBe('#7a837e');
+    // Alanın kenarı panoda bir ton yumuşak, kartta yine 3:1'in üstünde (3.3:1)
+    expect(adminLight('admin-border-field')).toBe('#868f8a');
     expect(adminLight('admin-blue')).toBe('#2459e0');
     expect(adminLight('admin-gold-fill')).toBe('#f2c94c');
     expect(adminLight('admin-bordo')).toBe('#9d2543');
@@ -257,10 +258,11 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     expect(button.match(/rounded-\[var\(--r-btn\)\]/g)?.length).toBe(4);
     expect(button).not.toMatch(/rounded-full/);
     const field = src('components/ui/Field.tsx');
-    expect(field).toContain('rounded-[var(--r-chip)] border px-3.5');
+    // Seçim çipi düğmeyle aynı köşede (pano: 12)
+    expect(field).toContain('rounded-[var(--r-btn)] border px-3.5');
     expect(field).toContain("'rounded-[var(--r-segment)]'");
     const misc = src('components/ui/misc.tsx');
-    expect(misc).toMatch(/whitespace-nowrap rounded-\[var\(--r-chip\)\] px-2\.5 py-0\.5/);
+    expect(misc).toMatch(/whitespace-nowrap rounded-\[var\(--r-chip\)\] px-2 py-0\.5/);
     const admin = src('components/admin/ui.tsx');
     expect(admin).toContain('justify-center rounded-[var(--r-btn)] ');
     expect(admin).toContain('bg-[var(--table-head-bg)]');
@@ -311,6 +313,29 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     const rule = selected.slice(0, selected.indexOf('}'));
     expect(rule).toMatch(/background: var\(--menu-active-bg\);\s*color: var\(--menu-active-ink\);\s*font-weight: 600;/);
     expect(rule).not.toMatch(/gradient|box-shadow/);
+  });
+
+  it('adisyonun kategorileri yönetimin alt menüsüyle tek bileşen; yerleşim ve ızgara belirteçlerle (operatör, 20 Kas 2026)', () => {
+    // "espresso based vs. kısmı da ekteki gibi olabilir, componentleri bir yap farklı olmasın; layoutları gridleri de belirle"
+    const panel = src('pages/order/ProductPanel.tsx');
+    expect(panel).toContain('<nav aria-label="Menü" className="lp-subnav hidden w-[var(--side-w)] shrink-0 xl:block">');
+    expect(panel).toContain('<div className="lp-menu lp-menu-col">');
+    expect(panel).toContain('<span className="lp-menu-label">Kategoriler</span>');
+    expect(panel).toMatch(/role="tab" aria-selected=\{active\} onClick=\{onClick\} className=\{cn\('lp-menu-item/);
+    expect(panel).not.toMatch(/CategoryBadge|CategoryRow|CategoryChip|lp-catalog/);
+    // Yönetimin alt menüsü aynı kart; ızgara aynı genişliği okur
+    expect(src('components/ui/Stage.tsx')).toContain('<aside className="lp-side lp-subnav max-md:hidden">');
+    expect(css).toMatch(/grid-template-columns: var\(--side-w\) minmax\(0, 1fr\);/);
+    expect(css).not.toMatch(/\.lp-catalog/);
+    for (const token of ['--shell-gap: 12px;', '--grid-gap: 16px;', '--tile-gap: 12px;', '--side-w: 15rem;', '--aside-w: 19.5rem;']) {
+      expect(css).toContain(token);
+    }
+    // Kart ızgaraları sabit: ürün ve masa karo ızgarasında, sipariş kartları kart ızgarasında; hesap ve iskelet belirteçle
+    expect(panel).toContain("'lp-enter lp-tiles scroll-thin");
+    expect(src('pages/FloorPage.tsx')).toContain('className="lp-enter lp-tiles [--tile-min:9.375rem]"');
+    expect(src('pages/OrdersPage.tsx')).toContain('className="lp-cards animate-fade"');
+    expect(src('pages/order/OrderPage.tsx')).toContain("editable ? 'w-[var(--cart-w)]'");
+    expect(src('components/AppShell.tsx')).toContain('md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)]');
   });
 
   it('marka rayı (pano, operatör 20 Kas 2026: "menüsüne kadar 1:1"): ev yeşili degrade, ikon üstte kısa ad altta, seçili beyaz karo', () => {

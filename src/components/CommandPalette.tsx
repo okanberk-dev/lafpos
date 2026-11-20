@@ -207,10 +207,13 @@ function Palette({ onClose }: { onClose: () => void }) {
         aria-modal="true"
         aria-label="Komut paleti"
         onKeyDown={(e) => trapTab(e, dialog.current)}
-        className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
+        // Pano: köşe 24, kenarsız beyaz yüzey, derin yumuşak gölge (gecede saç teli kenar)
+        className="animate-in flex max-h-[min(560px,80dvh)] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-transparent bg-surface shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]"
       >
-        <div className="flex items-center gap-2.5 border-b border-line px-4">
-          <Search className="size-4 shrink-0 text-muted" aria-hidden="true" />
+        <div className="flex items-center gap-3 border-b border-[var(--admin-divider)] px-4">
+          <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]">
+            <Search className="size-4 stroke-2" />
+          </span>
           <input
             ref={input}
             value={q}
@@ -224,7 +227,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             className="h-14 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
           />
           {/* Fareyle Esc tuşu (yönetimdeki Ctrl K tuşuyla aynı); dokunmatikte kapatma düğmesi */}
-          <kbd className="rounded border border-line bg-surface-2 px-1.5 py-px font-sans text-xs text-muted pointer-coarse:hidden">Esc</kbd>
+          <kbd className="rounded-md border border-line bg-surface-2 px-1.5 py-px font-sans text-xs text-muted pointer-coarse:hidden">Esc</kbd>
           <button type="button" onClick={onClose} className="-mr-2 hidden min-h-11 shrink-0 items-center rounded-full px-3 text-sm font-medium text-ink-2 transition-colors duration-150 active:bg-press pointer-coarse:inline-flex">
             Vazgeç
           </button>
@@ -241,7 +244,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             lastGroup = r.group;
             return (
               <li key={r.id} role="presentation">
-                {head && <div className="px-2.5 pb-1 pt-2.5 text-xs font-medium text-muted">{r.group}</div>}
+                {head && <div className="px-2.5 pb-1.5 pt-3 text-xs font-medium text-muted">{r.group}</div>}
                 <div
                   id={`palette-${r.id}`}
                   role="option"
@@ -249,14 +252,15 @@ function Palette({ onClose }: { onClose: () => void }) {
                   data-index={i}
                   onPointerMove={() => setActive(i)}
                   onClick={() => r.run()}
-                  className={cn('flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-2.5 text-sm pointer-fine:min-h-10', i === active ? 'bg-surface-3 text-ink' : 'text-ink-2')}
+                  // Seçili satır panonun seçili sekmesi gibi: açık nane zemin, yeşil yazı; ikon küçük yumuşak karede
+                  className={cn('flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-2 text-sm pointer-fine:min-h-10', i === active ? 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)]' : 'text-ink-2')}
                 >
-                  <span className="shrink-0 text-muted [&>svg]:size-4" aria-hidden="true">
+                  <span className={cn('grid size-7 shrink-0 place-items-center rounded-lg [&>svg]:size-4', i === active ? 'bg-surface text-[var(--menu-active-ink)]' : 'bg-surface-2 text-muted')} aria-hidden="true">
                     {r.icon}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-medium">{r.label}</span>
                   {r.hint && <span className="hidden max-w-[45%] truncate text-xs text-muted sm:block">{r.hint}</span>}
-                  {i === active && <CornerDownLeft className="size-3.5 shrink-0 text-muted" aria-hidden="true" />}
+                  {i === active && <CornerDownLeft className="size-3.5 shrink-0" aria-hidden="true" />}
                 </div>
               </li>
             );

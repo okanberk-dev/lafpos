@@ -54,7 +54,7 @@ describe('kaynak taraması', () => {
       'src/pages/KitchenPage.tsx': { tokens: ['bg-danger-600'], why: 'bar ekranında alarm süre rozeti ve iptal edilen kalemin adedi, beyaz yazı' },
       'src/pages/FloorPage.tsx': { tokens: ['bg-success-600'], why: 'masa kartında hazır rozeti, beyaz yazı' },
       'src/lib/toast.tsx': {
-        tokens: ['[&>svg:first-child]:text-success-300', '[&>svg:first-child]:text-danger-300', '[&>svg:first-child]:text-warn-300'],
+        tokens: ['[&_.toast-ic]:text-success-300', '[&_.toast-ic]:text-danger-300', '[&_.toast-ic]:text-warn-300'],
         why: 'bildirimin ikonu gece mürekkebi zeminde (iki temada koyu); koyu temada dark: ile belirtece döner',
       },
     };

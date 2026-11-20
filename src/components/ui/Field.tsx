@@ -17,12 +17,12 @@ import { cn } from '@/lib/cn';
 import { isFinePointer } from '@/lib/hooks';
 
 /**
- * Alanın dört durumu (kitin formu): dinlenme (alan kenarı, 3:1), odak (mürekkep kenar ve 1 px mürekkep halka; kitin
- * odağı), hatalı (`aria-invalid`: kırmızı kenar ve kırmızı halka), devre dışı (soluk, zemin gri). Köşe 12 (kitin
- * --r-ctl'si); arama alanı hap. Hata `Field error` ile verilince alana kendiliğinden geçer.
+ * Alanın dört durumu (pano): dinlenme (alan kenarı 3:1, çok hafif gölge), odak (ev yeşili kenar ve 3 px açık nane
+ * hâle), hatalı (`aria-invalid`: kırmızı kenar ve açık kırmızı hâle), devre dışı (soluk, zemin gri). Köşe 12; arama
+ * alanı da 12. Hata `Field error` ile verilince alana kendiliğinden geçer.
  */
 const base =
-  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-sm pointer-coarse:text-[15px] text-ink placeholder:text-muted outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-[var(--admin-text)] focus:ring-1 focus:ring-[var(--admin-text)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:ring-[var(--admin-danger)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
+  'w-full rounded-xl border border-line-strong bg-surface px-3.5 text-sm pointer-coarse:text-[15px] text-ink placeholder:text-muted outline-none shadow-[var(--shadow-control)] transition-[border-color,box-shadow,background-color] duration-150 hover:border-[var(--admin-text-mute)] focus:border-[var(--admin-primary)] focus:shadow-[0_0_0_3px_var(--admin-primary-soft)] aria-invalid:border-[var(--admin-danger)] aria-invalid:hover:border-[var(--admin-danger)] aria-invalid:focus:border-[var(--admin-danger)] aria-invalid:focus:shadow-[0_0_0_3px_var(--admin-danger-soft)] [[data-invalid]_&]:border-[var(--admin-danger)] disabled:cursor-not-allowed disabled:bg-surface-2 disabled:opacity-60 disabled:shadow-none disabled:hover:border-line-strong [[data-area=admin]_&]:text-sm';
 
 /** Alanla aynı görünümde kullanılan tek seferlik input'lar için (dışarıdan `className` ile) */
 export const fieldClass = base;
@@ -164,7 +164,7 @@ export const SearchInput = forwardRef<
           }
           onKeyDown?.(e);
         }}
-        className={cn(base, 'h-10 pointer-coarse:h-11 rounded-[var(--r-chip)] pl-10 pr-10 pointer-coarse:pr-11 [&::-webkit-search-cancel-button]:appearance-none [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:pr-9', dense && 'pointer-fine:h-9 pointer-fine:pr-9', className)}
+        className={cn(base, 'h-10 pointer-coarse:h-11 pl-10 pr-10 pointer-coarse:pr-11 [&::-webkit-search-cancel-button]:appearance-none [[data-area=admin]_&]:pointer-fine:h-9 [[data-area=admin]_&]:pointer-fine:pr-9', dense && 'pointer-fine:h-9 pointer-fine:pr-9', className)}
         {...rest}
       />
       {value && (
@@ -183,9 +183,12 @@ export const SearchInput = forwardRef<
               else e.currentTarget.blur();
             }
           }}
-          className={cn('absolute right-0 top-1/2 grid size-10 pointer-coarse:size-11 -translate-y-1/2 place-items-center rounded-[var(--r-chip)] text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
+          className={cn('group/clear absolute right-0 top-1/2 grid size-10 pointer-coarse:size-11 -translate-y-1/2 place-items-center rounded-xl text-muted hover:text-ink [[data-area=admin]_&]:pointer-fine:size-9', dense && 'pointer-fine:size-9')}
         >
-          <X aria-hidden="true" className="size-4" />
+          {/* Temizle: küçük yumuşak daire içinde çarpı; dokunma alanı düğmenin tamamı */}
+          <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-surface-3 transition-colors duration-150 group-hover/clear:bg-[var(--admin-border-strong)]">
+            <X className="size-3 stroke-[2.5]" />
+          </span>
         </button>
       )}
     </label>
@@ -290,8 +293,16 @@ export function Toggle({
   block?: boolean;
 }) {
   const track = (
-    <span className={cn('relative mt-px h-[26px] w-11 shrink-0 rounded-full transition-colors duration-150', checked ? 'bg-primary group-hover:bg-[var(--admin-primary-hover)]' : 'bg-line-strong group-hover:bg-[var(--admin-text-mute)]')}>
-      <span className={cn('absolute left-0.5 top-0.5 size-[22px] rounded-full bg-white shadow-[0_1px_2px_rgb(59_42_30/0.25)] transition-transform duration-150 ease-out motion-reduce:transition-none', checked && 'translate-x-[18px]')} />
+    // Pano anahtarı: açıkken ev yeşili, kapalıyken gri (3:1); beyaz top yumuşak gölgeli, açıkken içinde küçük tik
+    <span className={cn('relative mt-px h-[26px] w-[46px] shrink-0 rounded-full transition-colors duration-200', checked ? 'bg-[var(--admin-ink-fill)] group-hover:bg-[var(--admin-ink-fill-hover)]' : 'bg-line-strong group-hover:bg-[var(--admin-text-mute)]')}>
+      <span
+        className={cn(
+          'absolute left-[3px] top-[3px] grid size-5 place-items-center rounded-full bg-white text-[var(--admin-primary)] shadow-[0_1px_3px_rgb(15_35_28/0.3)] transition-transform duration-200 ease-out motion-reduce:transition-none',
+          checked && 'translate-x-5',
+        )}
+      >
+        {checked && <Check aria-hidden="true" className="size-3 stroke-[3] text-[#0a6e52]" />}
+      </span>
     </span>
   );
   const text = label && (
@@ -330,7 +341,7 @@ export function Toggle({
 }
 
 /** Adet seçicinin tuşu: basılı ton, sınırda soluk; boyu ve köşesi aşağıda */
-const STEP = 'grid place-items-center rounded-[var(--r-chip)] transition-colors duration-150 hover:bg-hover active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent';
+const STEP = 'grid place-items-center rounded-[999px] bg-surface text-ink shadow-[var(--shadow-control)] transition-colors duration-150 hover:bg-surface-2 active:bg-press disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none disabled:hover:bg-surface dark:bg-[var(--surface-raised)]';
 
 /**
  * Adet seçici (kasada tek): adisyonun gönderilmemiş satırı, seçenek sayacı (şeker, ekstra shot), seçenek penceresinin
@@ -365,10 +376,11 @@ export function Stepper({
 }) {
   const removes = !!onRemove && value <= Math.max(min, 1);
   const lg = size === 'lg';
-  const key = cn(STEP, lg ? 'size-14' : 'size-11 pointer-fine:size-9');
+  const key = cn(STEP, lg ? 'size-14' : 'size-11 pointer-fine:size-[34px]');
   const icon = lg ? 'size-6' : 'size-4';
   return (
-    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center rounded-[var(--r-chip)] border border-line-strong bg-surface', className)}>
+    // Pano: açık gri hap ray (segmentin rayı), içinde beyaz yuvarlak eksi ve artı, ortada kalın rakam
+    <div role="group" aria-label={label} className={cn('inline-flex shrink-0 items-center gap-0.5 rounded-[999px] border border-[var(--admin-border)] bg-surface-2 p-[3px]', className)}>
       <button
         type="button"
         aria-label={removes ? 'Kaldır' : 'Azalt'}
@@ -415,10 +427,10 @@ export function Chip({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--r-chip)] border px-3.5 text-sm transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-9 [[data-area=admin]_&]:text-[13px]',
+        'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--r-btn)] border px-3.5 text-sm transition-[color,background-color,border-color,box-shadow] duration-150 disabled:cursor-not-allowed disabled:opacity-50 pointer-fine:min-h-9 [[data-area=admin]_&]:text-[13px]',
         on
-          ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]'
-          : cn('border-[var(--admin-border-strong)] bg-surface font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-text)] hover:text-[var(--admin-text)] active:bg-press', tone === 'ink' && 'text-ink-2'),
+          ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[var(--shadow-action)]'
+          : cn('border-[var(--admin-border-strong)] bg-surface font-medium text-[var(--admin-text-soft)] shadow-[var(--shadow-control)] hover:border-[var(--admin-border-field)] hover:bg-surface-2 hover:text-[var(--admin-text)] active:bg-press', tone === 'ink' && 'text-ink-2'),
         className,
       )}
     >

@@ -119,7 +119,7 @@ export function PageHeader({ title, description, actions, children }: { title: R
     <div className={cn('mb-5 px-1', titleOnly && 'max-md:mb-0')}>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div className={cn('min-w-0', !description && 'max-md:contents')}>
-          <h1 className="font-headline text-[30px] font-bold leading-tight tracking-[-0.035em] text-[var(--admin-text)] max-md:sr-only">{title}</h1>
+          <h1 className="font-headline text-[28px] font-bold leading-tight tracking-[-0.035em] text-[var(--admin-text)] max-md:sr-only xl:text-[30px]">{title}</h1>
           {description && <p className="mt-1.5 max-w-[72ch] text-[13px] text-[var(--admin-text-mute)] max-md:mt-0 max-md:line-clamp-2">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2 lg:shrink-0 lg:justify-end max-sm:[&>*]:flex-1">{actions}</div>}
@@ -159,7 +159,7 @@ export function Card({
       {(title || actions) && (
         <header className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pt-4 sm:px-5 sm:pt-5', divided && 'border-b border-[var(--admin-divider)] pb-3')}>
           <div className="min-w-0 flex-[1_1_9rem]">
-            {title && <h2 className="text-[17px] font-bold leading-6 tracking-[-0.025em] text-[var(--admin-text)]">{title}</h2>}
+            {title && <h2 className="text-base font-semibold leading-6 tracking-[-0.015em] text-[var(--admin-text)]">{title}</h2>}
             {subtitle && <p className="mt-0.5 text-[13px] text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
           {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -198,17 +198,17 @@ export interface KpiCell {
 export function KpiStrip({ cells, className }: { cells: KpiCell[]; className?: string }) {
   const n = cells.length;
   return (
-    <div className={cn('grid grid-cols-2 gap-3', kpiGridCols(n), KPI_LAST_ODD, className)}>
+    <div className={cn('grid grid-cols-2 gap-[var(--tile-gap)]', kpiGridCols(n), KPI_LAST_ODD, className)}>
       {cells.map((c, i) => {
         const body = (
           <>
             <span className="flex min-h-8 w-full items-center gap-2">
               <IconBox hue={c.hue}>{c.icon}</IconBox>
-              <span className="line-clamp-2 min-w-0 text-[13px] font-medium leading-4 text-[var(--admin-text-soft)]">{c.label}</span>
+              <span className="line-clamp-2 min-w-0 text-[13px] font-medium leading-4 text-[var(--admin-text-mute)]">{c.label}</span>
               {c.onClick && <ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 text-[var(--admin-text-mute)]" />}
             </span>
             <span className="mt-3 flex w-full flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span style={fitFigure(c.value)} className={cn('whitespace-nowrap font-headline text-[length:min(34px,var(--fit,17cqi))] font-bold leading-[0.9] tracking-[-0.045em] text-[var(--admin-text)]', NUM)}>
+              <span style={fitFigure(c.value)} className={cn('whitespace-nowrap font-headline text-[length:min(30px,var(--fit,17cqi))] font-bold leading-[0.9] tracking-[-0.04em] text-[var(--admin-text)]', NUM)}>
                 {c.value}
               </span>
               {c.delta && <Badge tone={c.delta.good ? 'success' : 'danger'}>{c.delta.text}</Badge>}
@@ -257,11 +257,13 @@ export function StatusTabs<T extends string>({ value, onChange, tabs, label }: {
               aria-selected={on}
               onClick={() => onChange(t.value)}
               className={cn(
-                'inline-flex min-h-9 items-center gap-1.5 rounded-[var(--r-chip)] border bg-[var(--admin-surface)] px-3.5 text-[13px] whitespace-nowrap transition-[color,border-color] pointer-coarse:min-h-11',
+                'inline-flex min-h-9 items-center gap-1.5 rounded-[var(--r-btn)] border bg-[var(--admin-surface)] px-3.5 text-[13px] whitespace-nowrap transition-[color,border-color,background-color,box-shadow] pointer-coarse:min-h-11',
                 COMPACT_H,
                 FOCUS,
                 'focus-visible:-outline-offset-2',
-                on ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)]' : 'border-[var(--admin-border-strong)] font-medium text-[var(--admin-text-soft)] hover:border-[var(--admin-text)] hover:text-[var(--admin-text)]',
+                on
+                  ? 'border-[var(--admin-ink-fill)] bg-[var(--admin-ink-fill)] font-semibold text-[var(--admin-on-ink)] shadow-[var(--shadow-action)]'
+                  : 'border-[var(--admin-border-strong)] font-medium text-[var(--admin-text-soft)] shadow-[var(--shadow-control)] hover:border-[var(--admin-border-field)] hover:bg-[var(--admin-surface-2)] hover:text-[var(--admin-text)]',
               )}
             >
               {t.label}
@@ -420,7 +422,7 @@ export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label
       </button>
       {open &&
         createPortal(
-          <div ref={menu} role="menu" style={style} className="z-[60] rounded-[1.25rem] border border-[var(--admin-border)] bg-[var(--surface-raised)] p-1.5 shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]">
+          <div ref={menu} role="menu" style={style} className="animate-fade z-[60] rounded-2xl border border-[var(--admin-border)] bg-[var(--surface-raised)] p-1.5 shadow-[var(--shadow-pop)] dark:border-[var(--admin-border-strong)]">
             {items.map((it) => (
               <button
                 key={it.key}
@@ -436,7 +438,12 @@ export function ActionMenu({ items, label, trigger }: { items: MenuItem[]; label
                 }}
                 className={it.danger ? BTN.menuDanger : BTN.menu}
               >
-                {it.icon && <span className="shrink-0 [&>svg]:size-4">{it.icon}</span>}
+                {/* İkon küçük yumuşak karede (panonun ikon karesi); tehlikeli öğede kırmızının açık tonu */}
+                {it.icon && (
+                  <span aria-hidden="true" className={cn('grid size-7 shrink-0 place-items-center rounded-lg [&>svg]:size-4', it.danger ? 'bg-[var(--admin-danger-soft)]' : 'bg-[var(--admin-surface-2)] text-[var(--admin-text-soft)]')}>
+                    {it.icon}
+                  </span>
+                )}
                 {it.label}
               </button>
             ))}
@@ -513,7 +520,7 @@ export function DataTable<T>({
             {/* Başlık şeridi kasada kuyuda, kurumsal yüzeyde zeminsiz: yalnız başlık ve satır çizgileri */}
             <tr className="border-b border-[var(--admin-border)] bg-[var(--table-head-bg)]">
               {columns.map((c) => (
-                <th key={c.key} scope="col" style={c.width ? { width: c.width } : undefined} className={cn('h-11 px-4 text-[13px] font-medium whitespace-nowrap text-[var(--admin-text-mute)]', alignCls(c.align), hideCls(c), c.className)}>
+                <th key={c.key} scope="col" style={c.width ? { width: c.width } : undefined} className={cn('h-12 px-4 text-[12.5px] font-medium whitespace-nowrap text-[var(--admin-text-mute)]', alignCls(c.align), hideCls(c), c.className)}>
                   {c.header}
                 </th>
               ))}
@@ -529,10 +536,10 @@ export function DataTable<T>({
                   key={k}
                   aria-selected={onOpen ? selected : undefined}
                   onClick={onOpen ? (e) => !fromControl(e) && onOpen(r) : undefined}
-                  className={cn('group border-t border-[var(--admin-divider)]', onOpen && 'cursor-pointer', selected ? 'bg-[var(--admin-surface-2)] shadow-[inset_3px_0_0_var(--admin-text)]' : 'hover:bg-[var(--hover-solid)]', rowClassName?.(r))}
+                  className={cn('group border-t border-[var(--admin-divider)] transition-colors duration-150', onOpen && 'cursor-pointer', selected ? 'bg-[color-mix(in_oklab,var(--admin-primary-soft)_45%,var(--admin-surface))] shadow-[inset_3px_0_0_var(--admin-primary)]' : 'hover:bg-[var(--hover-solid)]', rowClassName?.(r))}
                 >
                   {columns.map((c, i) => (
-                    <td key={c.key} className={cn('px-4 py-3 align-middle pointer-fine:[[data-density=compact]_&]:py-2', alignCls(c.align), hideCls(c), c.className)}>
+                    <td key={c.key} className={cn('px-4 py-3.5 align-middle pointer-fine:[[data-density=compact]_&]:py-2', alignCls(c.align), hideCls(c), c.className)}>
                       {i === 0 && onOpen ? (
                         <button type="button" onClick={() => onOpen(r)} className={cn('flex w-full items-center rounded-lg text-left pointer-coarse:min-h-11', FOCUS)}>
                           {c.cell(r)}
@@ -543,7 +550,7 @@ export function DataTable<T>({
                     </td>
                   ))}
                   {actions && (
-                    <td className={cn('sticky right-0 px-2 text-right shadow-[-10px_0_10px_-10px_rgba(59,42,30,0.18)]', selected ? 'bg-[var(--admin-surface-2)]' : 'bg-[var(--admin-surface)] group-hover:bg-[var(--hover-solid)]')}>{actions(r)}</td>
+                    <td className={cn('sticky right-0 px-2 text-right shadow-[-10px_0_10px_-10px_rgba(15,35,28,0.16)]', selected ? 'bg-[color-mix(in_oklab,var(--admin-primary-soft)_45%,var(--admin-surface))]' : 'bg-[var(--admin-surface)] group-hover:bg-[var(--hover-solid)]')}>{actions(r)}</td>
                   )}
                 </tr>
               );
@@ -579,7 +586,7 @@ export function DataTable<T>({
           );
           const lead = phoneLead && <span className="shrink-0 self-start pr-1">{phoneLead(r)}</span>;
           return (
-            <li key={k} className={cn('flex items-center gap-1 pr-1', selectedKey === k && 'bg-[var(--admin-surface-2)]', rowClassName?.(r))}>
+            <li key={k} className={cn('flex items-center gap-1 pr-1', selectedKey === k && 'bg-[color-mix(in_oklab,var(--admin-primary-soft)_45%,var(--admin-surface))]', rowClassName?.(r))}>
               {onOpen ? (
                 <button type="button" onClick={() => onOpen(r)} className={cn('flex min-h-16 min-w-0 flex-1 items-center gap-2 py-3 pl-4 text-left', FOCUS)}>
                   {lead}
@@ -675,19 +682,19 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
         aria-modal="true"
         aria-label={label}
         onKeyDown={(e) => trapTab(e, panel.current)}
-        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-2 md:left-auto md:right-2 md:max-h-none md:w-[min(460px,calc(100vw-1rem))] md:rounded-3xl dark:border-[var(--admin-border-strong)]"
+        className="animate-in absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-[1.75rem] border border-transparent bg-[var(--admin-surface)] shadow-[var(--shadow-pop)] outline-none md:inset-y-3 md:left-auto md:right-3 md:max-h-none md:w-[min(480px,calc(100vw-1.5rem))] md:rounded-[1.75rem] dark:border-[var(--admin-border-strong)]"
       >
         <div className="mx-auto mt-2 h-1 w-9 rounded-full bg-[var(--admin-border-field)]/50 md:hidden" aria-hidden="true" />
-        {/* Başlık şeridi pencereyle (Modal) aynı: 18/700 başlık, 13 px alt satır, Kapat başlığın ilk satırında */}
-        <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-4 py-3 sm:px-5">
+        {/* Başlık şeridi pencereyle (Modal) aynı: 19/700 başlık, 13 px alt satır, Kapat başlığın ilk satırında */}
+        <div className="flex items-start gap-3 border-b border-[var(--admin-divider)] px-5 pb-3.5 pt-4 sm:px-6">
           <div className="min-w-0 flex-1">
-            <h2 className="line-clamp-2 text-lg font-bold leading-6 tracking-[-0.01em] text-[var(--admin-text)]">{title}</h2>
+            <h2 className="line-clamp-2 text-xl font-bold leading-6 tracking-[-0.03em] text-[var(--admin-text)]">{title}</h2>
             {subtitle && <p className="mt-0.5 text-[13px] text-[var(--admin-text-mute)]">{subtitle}</p>}
           </div>
           <CloseButton onClick={onClose} />
         </div>
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
-        {footer && <div className="flex flex-wrap items-center gap-2 border-t border-[var(--admin-divider)] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-5">{footer}</div>}
+        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">{children}</div>
+        {footer && <div className="flex flex-wrap items-center gap-2 border-t border-[var(--admin-divider)] bg-[var(--admin-surface)] px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6">{footer}</div>}
       </div>
     </div>,
     document.body,
@@ -696,7 +703,7 @@ export function QuickLook({ open, onClose, title, subtitle, children, footer, la
 
 /** Gri kap içinde beyaz işlem satırları (hızlı bakış): ikon kutusu, etiket, sağda değer ya da ›; kap köşesi 20, 4 px boşluk, satır 14 */
 export function ActionRows({ children }: { children: ReactNode }) {
-  return <div className="space-y-1 rounded-2xl bg-[var(--admin-panel)] p-1">{children}</div>;
+  return <div className="space-y-1 rounded-[1.25rem] bg-[var(--admin-surface-2)] p-1.5 ring-1 ring-inset ring-[var(--admin-border)]">{children}</div>;
 }
 
 export function ActionRow({ icon, hue = 'neutral', label, value, onClick, danger, disabled }: { icon: ReactNode; hue?: Hue; label: ReactNode; value?: ReactNode; onClick?: () => void; danger?: boolean; disabled?: boolean }) {
@@ -787,14 +794,14 @@ export function SearchField({ value, onChange, placeholder, label }: { value: st
 }
 
 /**
- * KPI şeridi iskeleti (Raporlar, Genel bakış ilk yüklemede): aynı kabuk, gölge ve hücre ölçüsü (32 px etiket satırı,
- * 28 px rakam, 16 px referans satırı): veri gelince şerit zıplamaz
+ * KPI şeridi iskeleti (Raporlar, Genel bakış ilk yüklemede): şeridin aynısı, her hücre kendi kartı, aralık --tile-gap;
+ * hücre ölçüsü aynı (32 px etiket satırı, 28 px rakam, 16 px referans satırı): veri gelince şerit zıplamaz
  */
 export function KpiStripSkeleton({ count = 5, className }: { count?: number; className?: string }) {
   return (
-    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-[var(--admin-border)] bg-[var(--admin-border)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
+    <div role="status" aria-label="Yükleniyor…" className={cn('grid grid-cols-2 gap-[var(--tile-gap)]', kpiGridCols(count), KPI_LAST_ODD, className)}>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className={cn('bg-[var(--admin-surface)] p-4 sm:p-5', kpiCellSpan(count, i))}>
+        <div key={i} className={cn(CARD, 'p-4 sm:p-5', kpiCellSpan(count, i))}>
           <span className="flex min-h-8 items-center gap-2">
             <Skeleton className="size-7 rounded-lg" />
             <Skeleton className="h-3.5 w-20" />

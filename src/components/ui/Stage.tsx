@@ -135,9 +135,9 @@ export function Stage({
       {bar && <div className="lp-glass">{bar}</div>}
       {side &&
         (headerInLeaf ? (
-          // Yönetim: alt menü kartı (geniş ekranda solda), tablette içeriğin üstünde şerit; telefonda yok (kabuğun şeridi ve
-          // /yonetim'in bölüm listesi), boş kutu boşluk bırakmasın
-          <aside className="lp-side max-md:hidden">
+          // Yönetim: alt menü kartı (`.lp-subnav`, adisyonun kategorileriyle aynı kart; geniş ekranda solda), tablette
+          // içeriğin üstünde şerit; telefonda yok (kabuğun şeridi ve /yonetim'in bölüm listesi), boş kutu boşluk bırakmasın
+          <aside className="lp-side lp-subnav max-md:hidden">
             {menuNode}
             <div className="lp-actions">{actions}</div>
           </aside>

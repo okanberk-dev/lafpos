@@ -293,6 +293,8 @@ export default function CashPage() {
       }
       menu={menu}
       leafLabel="Kasa"
+      // Pano: kartlar zeminde yüzer, eylem çubuğu zeminin üstünde
+      float
     >
     <div className="lp-leaf-pad">
       {tab === 'bugun' && !day && closedDay && (
