@@ -951,6 +951,7 @@ const settingsShape = patchOf(
     businessPhone: z.string().max(30),
     receiptHeader: z.string().max(300),
     receiptFooter: z.string().max(300),
+    receiptCustomerName: z.boolean(),
     serviceRate: z.number().int().min(0).max(30),
     autoLockMinutes: z.number().int().min(0).max(120),
     keepAwake: z.boolean(),
