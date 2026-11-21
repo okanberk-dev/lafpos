@@ -12,6 +12,7 @@ import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets, pickupBoard } from '../services/floor';
 import { patronLive } from '../services/reports';
+import { startReportSync } from './cloud-reports';
 
 /**
  * LafPOS Uzaktan: kafedeki sunucu canlı özetini Vercel'deki uzaktan görünüme iter (patron paneli, salon, açık
@@ -209,5 +210,6 @@ export function startCloudSync(): NodeJS.Timeout[] {
   bus.on('event', (e: { topic: string }) => {
     if (e.topic !== 'users') schedule();
   });
-  return [setTimeout(() => schedule(), 5_000), setInterval(() => schedule(true), HEARTBEAT_MS)];
+  // Günlük rapor özetleri (server/sync/cloud-reports.ts): kendi ritmiyle
+  return [setTimeout(() => schedule(), 5_000), setInterval(() => schedule(true), HEARTBEAT_MS), ...startReportSync()];
 }

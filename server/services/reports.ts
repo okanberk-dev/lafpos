@@ -196,6 +196,8 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     },
     kdv: [...kdvByRate.values()].sort((a, b) => a.rate - b.rate),
     reconciliation: { paidClosed, difference: paidClosed - netSales, paidOpen },
+    /** Masa adisyonlarının cirosu (kişi başının payı; LafPOS Uzaktan günleri toplarken oranı yeniden kurar) */
+    tableSales,
     perGuest: tableGuests ? Math.round(tableSales / tableGuests) : null,
     days: ds.days.length,
     netSales,
@@ -326,7 +328,7 @@ function hourMemo() {
  * sabahının 06'sına karışmaz, gecenin ardından çizilir. Çok günlük dönemde satır günün saatidir (dağılım), 24 satır.
  * Adisyon sayısı Adisyon kutusuyla aynı ölçütle: tutarı olan adisyon (tamamı ikram edilen ₺0 adisyon sayılmaz).
  */
-export function hourlyReport(range: Range) {
+export function hourlyReport(range: Range, opts: { rawWeek?: boolean } = {}) {
   const ds = load(range, ORDERS_ONLY);
   const closed = ds.orders.filter(isSale);
   const hourOf = hourMemo();
@@ -359,7 +361,8 @@ export function hourlyReport(range: Range) {
     const date = dates.get(o.dayId);
     if (date) week[weekdayOf(date) - 1].hours[hourOf(o.openedAt)] += totalsOf(o).total;
   }
-  for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
+  // `rawWeek`: ortalamaya bölünmeden toplam (LafPOS Uzaktan günlük özetleri toplayıp kendisi böler)
+  if (!opts.rawWeek) for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
   const parts = PARTS.map((p) => {
     const hs = hours.filter((h) => (h.hour >= p.from && h.hour < p.to) || (p.to > 24 && h.hour < p.to - 24));
     const revenue = hs.reduce((a, h) => a + h.revenue, 0);
@@ -378,6 +381,25 @@ export function hourlyReport(range: Range) {
     peaks: [...active].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
     week,
   };
+}
+
+/**
+ * Bir iş gününün kapanmış satışları, kapandıkları dakikaya göre (gün başından, 05:00, geçen dakika): `[dakika, ciro,
+ * tutarı olan adisyon]`, yalnız dolu dakikalar. LafPOS Uzaktan (server/sync/cloud-reports.ts) bugünü içeren dönemin
+ * kıyasını ("aynı saate kadar", `comparison` `cutoffMs`) günlük özetten bununla kurar; ölçüt Ciro'nunkiyle aynı
+ */
+export function closingMinutes(date: string): [number, number, number][] {
+  const ds = load({ from: date, to: date }, ORDERS_ONLY);
+  const start = businessDayStartMs(date);
+  const byMinute = new Map<number, [number, number, number]>();
+  for (const o of ds.orders.filter(isSale)) {
+    const m = Math.floor(((o.closedAt ?? o.openedAt) - start) / 60_000);
+    const row = byMinute.get(m) ?? [m, 0, 0];
+    row[1] += totalsOf(o).total;
+    if (o.total > 0) row[2] += 1;
+    byMinute.set(m, row);
+  }
+  return [...byMinute.values()].sort((a, b) => a[0] - b[0]);
 }
 
 // ─── Hazırlama süresi (bara gönderilmesinden "Hazır"a) ───────────────────────

@@ -29,7 +29,7 @@ interface SyncStatus {
     since: number | null;
     lastOkAt: number | null;
     lastError: string | null;
-    pending: { lafmaliyet: number; site: number; cloud: number; total: number };
+    pending: { lafmaliyet: number; site: number; cloud: number; reports?: number; total: number };
     sent: { at: number; count: number } | null;
   };
   cloud: { configured: boolean; url: string | null; lastSuccessAt?: number; lastError?: string | null };
@@ -41,7 +41,7 @@ interface SyncStatus {
  * kayıt bekliyor", dönünce "Bekleyenler gönderildi")
  */
 function internetRow(n: SyncStatus['internet']) {
-  const parts = [n.pending.lafmaliyet ? `lafmaliyet ${n.pending.lafmaliyet} gün` : '', n.pending.site ? `site ${n.pending.site}` : '', n.pending.cloud ? 'Uzaktan özeti' : ''].filter(Boolean).join(' · ');
+  const parts = [n.pending.lafmaliyet ? `lafmaliyet ${n.pending.lafmaliyet} gün` : '', n.pending.site ? `site ${n.pending.site}` : '', n.pending.cloud ? 'Uzaktan özeti' : '', n.pending.reports ? `Uzaktan raporu ${n.pending.reports} gün` : ''].filter(Boolean).join(' · ');
   const base = { key: 'internet', icon: <Wifi className="size-4" />, label: 'İnternet' };
   if (n.state === 'yok') {
     return { ...base, tone: 'warning' as Tone, state: n.pending.total ? `Yok · ${n.pending.total} kayıt bekliyor` : 'Yok', detail: `${n.since ? `${fmtTime(n.since)}’den beri` : 'Bağlantı yok'}; satış sürer${parts ? `. Bekleyen: ${parts}` : ''}` };

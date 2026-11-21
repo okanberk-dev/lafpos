@@ -5,6 +5,7 @@ import { env } from '../env';
 import { bus } from '../lib/events';
 import { internetState, noteReachable, onInternetBack } from '../lib/internet';
 import { cloudEnabled, cloudState, pushSnapshot } from './cloud';
+import { pendingReportDays, reportTick } from './cloud-reports';
 import { flushOutbox } from './lafmaliyet';
 import { siteSigned } from './laffogato-link';
 import { onlineOrdersTick } from './laffogato-orders';
@@ -53,7 +54,9 @@ export function pendingCounts(now = Date.now()) {
   const lafmaliyet = env.lafmaliyetUrl ? count('lafmaliyet') : 0;
   const site = siteSigned() ? count('laffogato') : 0;
   const cloud = cloudEnabled() && cloudState().lastError ? 1 : 0;
-  return { lafmaliyet, site, cloud, total: lafmaliyet + site + cloud };
+  // Uzaktan'a gidemeyen günlük rapor özetleri (gün sayısı)
+  const reports = pendingReportDays();
+  return { lafmaliyet, site, cloud, reports, total: lafmaliyet + site + cloud + reports };
 }
 
 /**
@@ -74,7 +77,7 @@ export function catchUp(now = Date.now()): Promise<CatchUpResult> {
   catching = (async () => {
     const before = pendingCounts(now).total;
     releaseBackoff(now);
-    await Promise.allSettled([flushOutbox(), flushSiteOutbox(), cloudEnabled() ? pushSnapshot({ heartbeat: true }) : Promise.resolve(), onlineOrdersTick()]);
+    await Promise.allSettled([flushOutbox(), flushSiteOutbox(), cloudEnabled() ? pushSnapshot({ heartbeat: true }) : Promise.resolve(), cloudEnabled() ? reportTick() : Promise.resolve(), onlineOrdersTick()]);
     const after = pendingCounts().total;
     if (before > 0 && after === 0) lastSent = { at: Date.now(), count: before };
     if (before || after) console.log(`[internet] bekleyenler gönderildi: ${before - after}/${before}${after ? ` · ${after} hâlâ bekliyor` : ''}`);
