@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgePercent, ChevronRight, Globe, HardDrive, Info, MonitorSmartphone, PlugZap, ReceiptText, ShieldAlert, ShoppingBag, TurkishLira, Utensils } from 'lucide-react';
+import { AlertTriangle, BadgePercent, ChevronRight, Cloud, Globe, HardDrive, Info, MonitorSmartphone, PlugZap, ReceiptText, ShieldAlert, ShoppingBag, TurkishLira, Utensils, Wifi } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { Link } from 'react-router';
 import { tl, tlShort } from '@shared/money';
@@ -22,8 +22,33 @@ import type { PatronData } from '@/pages/patron/PatronPage';
 interface SyncStatus {
   menu: { linked: boolean; auto: boolean; state: { lastSuccessAt?: number; lastCheckAt?: number; lastError?: string | null; lastErrorAt?: number } | null };
   online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null; soldOutPush: { pending: number; rejected: number; lastError: string | null } };
-  lafmaliyet: { configured: boolean; training: boolean; pending: number; failing: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null };
+  lafmaliyet: { configured: boolean; training: boolean; pending: number; failing: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; lastSuccessAt?: number; sent?: number; failed?: number } | null };
+  internet: {
+    configured: boolean;
+    state: 'bilinmiyor' | 'var' | 'yok';
+    since: number | null;
+    lastOkAt: number | null;
+    lastError: string | null;
+    pending: { lafmaliyet: number; site: number; cloud: number; total: number };
+    sent: { at: number; count: number } | null;
+  };
+  cloud: { configured: boolean; url: string | null; lastSuccessAt?: number; lastError?: string | null };
   okc: { provider: 'kapali' | 'simulator' | 'tokenx' | 'pavo'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
+}
+
+/**
+ * İnternet satırı: kasa internetsiz çalışır; satır yalnız dışarı gidecek kayıtların durumunu söyler ("İnternet yok · 3
+ * kayıt bekliyor", dönünce "Bekleyenler gönderildi")
+ */
+function internetRow(n: SyncStatus['internet']) {
+  const parts = [n.pending.lafmaliyet ? `lafmaliyet ${n.pending.lafmaliyet} gün` : '', n.pending.site ? `site ${n.pending.site}` : '', n.pending.cloud ? 'Uzaktan özeti' : ''].filter(Boolean).join(' · ');
+  const base = { key: 'internet', icon: <Wifi className="size-4" />, label: 'İnternet' };
+  if (n.state === 'yok') {
+    return { ...base, tone: 'warning' as Tone, state: n.pending.total ? `Yok · ${n.pending.total} kayıt bekliyor` : 'Yok', detail: `${n.since ? `${fmtTime(n.since)}’den beri` : 'Bağlantı yok'}; satış sürer${parts ? `. Bekleyen: ${parts}` : ''}` };
+  }
+  if (n.sent) return { ...base, tone: 'success' as Tone, state: 'Bekleyenler gönderildi', detail: `${fmtTime(n.sent.at)} · ${n.sent.count} kayıt` };
+  if (n.pending.total) return { ...base, tone: 'info' as Tone, state: `${n.pending.total} kayıt sırada`, detail: parts };
+  return { ...base, tone: (n.state === 'var' ? 'success' : 'neutral') as Tone, state: n.state === 'var' ? 'Var' : 'Denetlenmedi', detail: n.lastOkAt ? `Son başarılı bağlantı ${fmtDateTime(n.lastOkAt)}` : 'Henüz dışarıya istek gitmedi' };
 }
 
 const pct = (v: number | null) => (v == null ? null : { text: `${v >= 0 ? '▲' : '▼'} %${Math.abs(v).toLocaleString('tr-TR')}`, good: v >= 0 });
@@ -154,6 +179,7 @@ export default function OverviewAdmin() {
 
   const health: { key: string; icon: ReactNode; label: string; tone: Tone; state: string; detail: string; to?: string }[] = s
     ? [
+        ...(s.internet.configured ? [internetRow(s.internet)] : []),
         {
           key: 'menu',
           icon: <Globe className="size-4" />,
@@ -190,8 +216,21 @@ export default function OverviewAdmin() {
                   : 'Güncel',
           detail: !s.lafmaliyet.configured
             ? 'Gün sonu gitmiyor; elle aktarım'
-            : (s.lafmaliyet.lastError ?? (s.lafmaliyet.training ? 'Kurulum modunda gün lafmaliyet’e gitmez' : `Son gönderim ${ago(s.lafmaliyet.push?.lastRunAt)}`)),
+            : (s.lafmaliyet.lastError ?? (s.lafmaliyet.training ? 'Kurulum modunda gün lafmaliyet’e gitmez' : `Son başarılı gönderim ${ago(s.lafmaliyet.push?.lastSuccessAt)}`)),
         },
+        ...(s.cloud.configured
+          ? [
+              {
+                key: 'uzaktan',
+                icon: <Cloud className="size-4" />,
+                to: to('/yonetim/ag'),
+                label: 'LafPOS Uzaktan',
+                tone: (s.cloud.lastError ? 'warning' : s.cloud.lastSuccessAt ? 'success' : 'neutral') as Tone,
+                state: s.cloud.lastError ? 'Gidemedi' : s.cloud.lastSuccessAt ? 'Güncel' : 'Bekliyor',
+                detail: s.cloud.lastError ? `${s.cloud.lastError} · son başarılı ${ago(s.cloud.lastSuccessAt)}` : `Son başarılı gönderim ${ago(s.cloud.lastSuccessAt)}`,
+              },
+            ]
+          : []),
         {
           key: 'okc',
           icon: <MonitorSmartphone className="size-4" />,
