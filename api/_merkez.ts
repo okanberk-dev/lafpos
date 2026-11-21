@@ -6,13 +6,15 @@
  * `POST merkez/kayit` ile bildirir; Merkez'de "Onay bekliyor" görünür. Kayıt bir kez açılır: aynı kimliğe başka anahtar
  * yazılamaz. Sonraki istekler (`merkez/nabiz`) kurulumun anahtarıyla imzalıdır (server/lib/signature.ts kuralı).
  *
- * Nabzın yanıtı kasanın lisans kaydı ve çalıştıracağı derleme (hedef): "otomatik" dükkânda kanalın son derlemesi,
- * "ben gönderince" dükkânda sahibin son gönderdiği derleme (hiç gönderilmediyse kurulu olan).
+ * Nabzın yanıtı kasanın lisans kaydı (bitiş tarihiyle), şube kodu, çalıştıracağı derleme (hedef) ve sahibin son "Şimdi
+ * güncelle" isteği: "otomatik" dükkânda hedef kanalın son derlemesi, "ben gönderince" dükkânda sahibin son gönderdiği
+ * derleme (hiç gönderilmediyse kurulu olan). Panelden kasaya giden her şey bu yanıtla gider (kasa 5 dakikada bir sorar;
+ * ayrı itme yok): "Şimdi güncelle" de kasaya en geç bir sonraki nabızda ulaşır.
  *
  * Redis: `lafpos:merkez:kurulum:<id>` (JSON), `lafpos:merkez:kurulumlar` (kimlik kümesi). Panel uçları yalnız gerçek
  * oturumla (üye ya da parolalı giriş); parolasız görünümde Merkez kapalıdır.
  */
-import { type LicenseRecord, licenseState, ONLINE_MS, UPDATE_LABELS } from '../shared/lisans.js';
+import { type LicenseRecord, licenseState, normalizeBranchCode, ONLINE_MS, UPDATE_LABELS } from '../shared/lisans.js';
 
 export interface Install {
   id: string;
@@ -30,6 +32,12 @@ export interface Install {
   /** "Ben gönderince" dükkânda sahibin gönderdiği derleme */
   hedef: number | null;
   gonderildi: number | null;
+  /** Sahibin verdiği şube kodu ("MRN"); eski kayıtlarda yok */
+  kod?: string | null;
+  /** Sahibin son "Şimdi güncelle" isteğinin anı; kasa nabzın yanıtında alır */
+  guncelleIstek?: number | null;
+  /** Kasanın işlediğini bildirdiği son istek (nabızda `istekAlindi`) */
+  istekAlindi?: number | null;
 }
 
 /** Güncelleme kanalının son derlemesi (surum.json'dan, kısa değişiklik notuyla) */
@@ -79,7 +87,8 @@ export function targetFor(i: Pick<Install, 'mod' | 'hedef'>, release: Release | 
 
 /** Panelin gördüğü satır: anahtar yok; lisans ve güncelleme durumu sade adıyla */
 export function installView(i: Install, release: Release | null, now: number) {
-  const lic = licenseState(i.lisans, { installedAt: i.createdAt, now });
+  // Kasanın son görülmesi onay anıdır: çevrimdışı kasada satış kapanmaz, panel de bunu gösterir (shared/lisans.ts)
+  const lic = licenseState(i.lisans, { installedAt: i.createdAt, now, confirmedAt: i.lastSeen });
   const behind = release != null && i.build != null && i.build < release.build;
   return {
     id: i.id,
@@ -95,6 +104,10 @@ export function installView(i: Install, release: Release | null, now: number) {
     mod: i.mod,
     hedef: i.hedef,
     gonderildi: i.gonderildi,
+    kod: i.kod ?? null,
+    guncelleIstek: i.guncelleIstek ?? null,
+    /** "Şimdi güncelle" istendi, kasa henüz almadı */
+    istekBekliyor: !!i.guncelleIstek && i.istekAlindi !== i.guncelleIstek,
     /** Kanalda daha yeni derleme var ve bu dükkâna henüz gönderilmedi */
     bekleyen: behind && targetFor(i, release) !== release!.build,
   };
@@ -181,6 +194,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       surum: text(body.surum, 40) ?? inst.surum,
       build: intOrNull(body.build) ?? inst.build,
       gunAcik: typeof body.gunAcik === 'boolean' ? body.gunAcik : inst.gunAcik,
+      istekAlindi: intOrNull(body.istekAlindi) ?? inst.istekAlindi ?? null,
       guncelleme:
         g && typeof g.durum === 'string'
           ? { durum: g.durum.slice(0, 20), mesaj: text(g.mesaj, 300) ?? '', yeni: yeni && typeof yeni.surum === 'string' && intOrNull(yeni.build) ? { surum: yeni.surum.slice(0, 40), build: yeni.build as number } : null }
@@ -192,7 +206,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     if (failedNow && inst.guncelleme?.durum !== next.guncelleme?.durum) {
       await deps.notify?.({ kind: 'guncelleme', title: 'Güncelleme sorunu', body: next.guncelleme!.mesaj || 'Yeni sürüm kurulamadı; eski sürüm çalışıyor', at: now, shop: next.ad }).catch(() => undefined);
     }
-    return json({ ok: true, ad: next.ad, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), at: now });
+    return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, at: now });
   }
 
   // ─── Panel ───
@@ -210,7 +224,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     return json({ kurulumlar: rows.map((i) => installView(i, release, now)), enYeni: release });
   }
 
-  if (req.method === 'POST' && (path === 'merkez/kurulum' || path === 'merkez/gonder')) {
+  if (req.method === 'POST' && (path === 'merkez/kurulum' || path === 'merkez/gonder' || path === 'merkez/simdi-guncelle')) {
     if (deps.demo) return fail(403, 'Örnek görünümde değişiklik yapılmaz', 'remote_readonly');
     if (!(await deps.admin())) return fail(401, 'Merkez için üye girişi gerekir', 'unauthorized');
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -221,6 +235,11 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       if (!inst) return fail(404, 'Kurulum bulunamadı', 'not_found');
       const next: Install = { ...inst };
       if ('ad' in body) next.ad = text(body.ad, 60) || null;
+      if ('kod' in body) {
+        const kod = normalizeBranchCode(body.kod);
+        if (kod === undefined) return fail(400, 'Şube kodu yalnız harf, rakam ve tire olabilir; en çok 12 karakter', 'bad_body');
+        next.kod = kod;
+      }
       if (body.mod === 'elle' || body.mod === 'otomatik') next.mod = body.mod;
       if (body.lisans === 'aktif') {
         const bitis = body.bitis == null || body.bitis === '' ? null : String(body.bitis);
@@ -236,10 +255,24 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       return json({ ok: true, kurulum: installView(next, await deps.fetchRelease(), now) });
     }
 
-    // Güncelleme gönder: seçilen dükkânların hedefi kanalın son derlemesi
     const ids = Array.isArray(body.ids) ? body.ids.filter((x): x is string => typeof x === 'string' && ID_RE.test(x)).slice(0, 200) : [];
     if (!ids.length) return fail(400, 'Dükkân seçin', 'bad_body');
     const release = await deps.fetchRelease();
+
+    // Şimdi güncelle: hedef kanalın son derlemesi (okunabildiyse) ve kasaya "hemen denetle" isteği. Kasa bir sonraki
+    // nabızda alır; yeni sürüm gün kapalıyken kurulur, gün açıkken asla (server/sync/merkez.ts takeRemoteUpdate)
+    if (path === 'merkez/simdi-guncelle') {
+      let asked = 0;
+      for (const id of ids) {
+        const inst = await readInstall(deps, id);
+        if (!inst) continue;
+        await writeInstall(deps, { ...inst, guncelleIstek: now, ...(release ? { hedef: release.build, gonderildi: now } : {}) });
+        asked++;
+      }
+      return json({ ok: true, istenen: asked, build: release?.build ?? null });
+    }
+
+    // Güncelleme gönder: seçilen dükkânların hedefi kanalın son derlemesi
     if (!release) return fail(503, 'Güncelleme kanalı okunamadı; biraz sonra yeniden deneyin', 'no_release');
     let sent = 0;
     for (const id of ids) {

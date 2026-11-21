@@ -1,10 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { GRACE_DAYS, licenseState, TRIAL_DAYS } from '@shared/lisans';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { CONFIRM_MS, GRACE_DAYS, licenseState, normalizeBranchCode, TRIAL_DAYS } from '@shared/lisans';
+import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
 /**
- * Merkez: kasanın kaydı (ilk görüşte güven), imzalı nabız, lisans süreleri (deneme, uyarı, kapanma, internetsiz),
- * panelden lisans ve seçerek güncelleme gönderme. Kasa gerçek bulut işleyicisiyle (api/uzaktan.ts) konuşur; Upstash
+ * Merkez: kasanın kaydı (ilk görüşte güven), imzalı nabız, lisans süreleri (deneme, uyarı, kapanma; internetsiz kasada
+ * satış kapanmaz), şube kodu ve lisansın son günü, panelden lisans, seçerek güncelleme gönderme ve "Şimdi güncelle". Kasa gerçek bulut işleyicisiyle (api/uzaktan.ts) konuşur; Upstash
  * yerine bellekte sahte Redis.
  */
 const CLOUD = 'https://merkez.test';
@@ -105,6 +108,28 @@ describe('lisans kuralı (shared/lisans.ts)', () => {
     expect(licenseState(p, { installedAt: at, now: at + 6 * DAY }).message).toMatch(/1 gün sonra yeni satış kapanacak/);
     expect(licenseState(p, { installedAt: at, now: at + 7 * DAY }).state).toBe('kapali');
   });
+  it('bitişe 14 gün kala yalnız uyarı: durum aktif kalır', () => {
+    const rec = { durum: 'aktif' as const, bitis: '2026-11-30' };
+    expect(licenseState(rec, { installedAt: at, now: Date.parse('2026-11-10T12:00:00+03:00') }).soon).toBeUndefined();
+    expect(licenseState(rec, { installedAt: at, now: Date.parse('2026-11-25T12:00:00+03:00') })).toMatchObject({ state: 'aktif', soon: true, message: expect.stringMatching(/30 Kasım 2026 tarihinde bitiyor: 6 gün kaldı/) });
+  });
+  it('çevrimdışı kural: Merkez son 15 dakikada onaylamadıysa satış kapanmaz, yalnız uyarı', () => {
+    const p = { durum: 'pasif' as const, pasifAt: at };
+    const now = at + 30 * DAY;
+    expect(licenseState(p, { installedAt: at, now, confirmedAt: now - 60_000 }).state).toBe('kapali');
+    expect(licenseState(p, { installedAt: at, now, confirmedAt: now - CONFIRM_MS - 1 })).toMatchObject({ state: 'uyari', offline: true });
+    expect(licenseState(p, { installedAt: at, now, confirmedAt: null })).toMatchObject({ state: 'uyari', offline: true });
+    // Hiç bağlanmamış kurulumun bitmiş denemesi de satış kesmez
+    expect(licenseState(null, { installedAt: at, now: at + 60 * DAY, confirmedAt: null }).state).toBe('uyari');
+  });
+  it('şube kodu: büyük harfe çevrilir; harf, rakam ve tire, en çok 12', () => {
+    expect(normalizeBranchCode(' mrn ')).toBe('MRN');
+    expect(normalizeBranchCode('TZL-2')).toBe('TZL-2');
+    expect(normalizeBranchCode('')).toBeNull();
+    expect(normalizeBranchCode(null)).toBeNull();
+    expect(normalizeBranchCode('Şube 1')).toBeUndefined();
+    expect(normalizeBranchCode('A'.repeat(13))).toBeUndefined();
+  });
 });
 
 describe('Merkez: kayıt, nabız, panel', () => {
@@ -168,35 +193,79 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(licenseNow()!.state).toBe('aktif');
   });
 
-  it('pasif lisans: önce uyarı (satış sürer), 7 gün sonra yeni satış kapanır; tahsilat ve raporlar açık', async () => {
-    const { merkezBeat, identity, assertCanSell } = await import('../server/sync/merkez');
+  it("şube kodu ve lisansın son günü Uzaktan'dan verilir; kasa nabızla alır, Yönetim ve fiş başlığı gösterir", async () => {
+    const { merkezBeat, identity, merkezLast } = await import('../server/sync/merkez');
+    const id = identity().id;
+    expect((await panel('POST', 'merkez/kurulum', { id, kod: 'Şube 1' })).status).toBe(400);
+    const res = await panel('POST', 'merkez/kurulum', { id, kod: 'tzl', lisans: 'aktif', bitis: '2099-12-31' });
+    expect(res.json.kurulum).toMatchObject({ kod: 'TZL', lisans: { bitis: '2099-12-31', state: 'aktif' } });
+    await merkezBeat();
+    expect(merkezLast()).toMatchObject({ kod: 'TZL', lisans: { durum: 'aktif', bitis: '2099-12-31' } });
+    const lisans = await h.ok<Record<string, unknown>>('kasa', 'GET', '/sync/lisans');
+    expect(lisans).toMatchObject({ enabled: true, state: 'aktif', ad: 'Tuzla', kod: 'TZL', bitis: '2099-12-31' });
+    const boot = await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap');
+    expect(boot.branch).toEqual({ name: 'Tuzla', code: 'TZL' });
+    // Kod boş bırakılınca silinir; ad kalır
+    await panel('POST', 'merkez/kurulum', { id, kod: '' });
+    await merkezBeat();
+    expect(merkezLast()!.kod).toBeNull();
+    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).branch).toEqual({ name: 'Tuzla', code: null });
+  });
+
+  it('süresi dolmuş lisans (uyarı süresinde) adisyon açmayı, kalem eklemeyi ve tahsilatı durdurmaz', async () => {
+    const { merkezBeat, identity } = await import('../server/sync/merkez');
+    const id = identity().id;
+    const expired = new Date(Date.now() - 2 * DAY).toISOString().slice(0, 10);
+    await panel('POST', 'merkez/kurulum', { id, lisans: 'aktif', bitis: expired });
+    await merkezBeat();
+    expect(await h.ok<{ state: string; message: string }>('kasa', 'GET', '/sync/lisans')).toMatchObject({ state: 'uyari', message: expect.stringMatching(/Lisansın süresi doldu/) });
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: h.boot.products.find((p) => p.name === 'Latte')!.id, size: 'M', qty: 1 }] });
+    const nakit = h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+    expect((await h.call('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: nakit.id, amount: o.total })).status).toBe(200);
+  });
+
+  it('pasif lisans: önce uyarı (satış sürer), 7 gün sonra Merkez onaylıyorsa yeni satış kapanır; tahsilat ve raporlar açık', async () => {
+    const { merkezBeat, identity, assertCanSell, licenseNow } = await import('../server/sync/merkez');
     const id = identity().id;
     await panel('POST', 'merkez/kurulum', { id, lisans: 'pasif' });
     await merkezBeat();
-    const open = await h.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+    const open = await h.call<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
     expect(open.status).toBe(200);
+    const withItem = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${open.json.id}/items`, { items: [{ productId: latte.id, size: 'M', qty: 1 }] });
     const lisans = await h.ok<{ enabled: boolean; state: string; message: string }>('kasa', 'GET', '/sync/lisans');
     expect(lisans).toMatchObject({ enabled: true, state: 'uyari', ad: 'Tuzla' });
-    // 8 gün sonra (internet olmasa da: kasa son kaydı ve kendi saatiyle hesaplar)
+    // 8 gün sonra, internet yokken: kasa son kaydı kendi saatiyle sayar ama Merkez onaylamadığı için satış sürer (uyarı)
     cloudDown = true;
     const later = Date.now() + 8 * DAY;
-    expect(await merkezBeat(later)).toBe(false);
-    expect(() => assertCanSell(later)).toThrow(/yeni satış kapalı/);
-    // Uçlar: 8 gün önce pasife alınmış kayıt (oturum süresi gerçek saatle kalsın)
-    const { getSyncState, setSyncState } = await import('../server/lib/settings');
-    const last = getSyncState<Record<string, unknown>>('merkez.son')!;
-    setSyncState('merkez.son', { ...last, lisans: { durum: 'pasif', pasifAt: Date.now() - 8 * DAY } });
     try {
-      const blocked = await h.call<{ code: string }>('kasa', 'POST', '/orders', { type: 'tezgah' });
-      expect(blocked.status).toBe(403);
-      expect(blocked.json.code).toBe('license_blocked');
-      const items = await h.call<{ code: string }>('kasa', 'POST', `/orders/${(open.json as { id: string }).id}/items`, { items: [] });
-      expect(items.status).toBe(403);
-      // Raporlar açık
-      expect((await h.call('patron', 'GET', '/reports/patron')).status).toBe(200);
+      expect(await merkezBeat(later)).toBe(false);
+      expect(() => assertCanSell(later)).not.toThrow();
+      expect(licenseNow(later)).toMatchObject({ state: 'uyari', offline: true });
     } finally {
       cloudDown = false;
     }
+    // Merkez'e ulaşınca (kayıt hâlâ pasif) yeni satış kapanır
+    expect(await merkezBeat(later)).toBe(true);
+    expect(() => assertCanSell(later)).toThrow(/yeni satış kapalı/);
+    // Uçlar: 8 gün önce pasife alınmış kayıt, Merkez az önce onayladı (oturum süresi gerçek saatle kalsın)
+    const { getSyncState, setSyncState } = await import('../server/lib/settings');
+    const last = getSyncState<Record<string, unknown>>('merkez.son')!;
+    setSyncState('merkez.son', { ...last, lisans: { durum: 'pasif', pasifAt: Date.now() - 8 * DAY }, at: Date.now() });
+    const blocked = await h.call<{ code: string }>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    expect(blocked.status).toBe(403);
+    expect(blocked.json.code).toBe('license_blocked');
+    const items = await h.call<{ code: string }>('kasa', 'POST', `/orders/${open.json.id}/items`, { items: [] });
+    expect(items.status).toBe(403);
+    // Açık adisyonun tahsilatı ve raporlar açık
+    const nakit = h.boot.paymentMethods.find((m) => m.name === 'Nakit')!;
+    expect((await h.call('kasa', 'POST', `/orders/${open.json.id}/payments`, { methodId: nakit.id, amount: withItem.total })).status).toBe(200);
+    expect((await h.call('patron', 'GET', '/reports/patron')).status).toBe(200);
+    // Kasa Merkez'e 15 dakikadır ulaşamıyor: aynı kayıtla satış yeniden açık (çevrimdışı kasa durmaz)
+    setSyncState('merkez.son', { ...last, lisans: { durum: 'pasif', pasifAt: Date.now() - 8 * DAY }, at: Date.now() - CONFIRM_MS - 60_000 });
+    expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(200);
+    expect(await h.ok<{ state: string; offline?: boolean }>('kasa', 'GET', '/sync/lisans')).toMatchObject({ state: 'uyari', offline: true });
     // Sahip yeniden aktif yapınca satış açılır
     await panel('POST', 'merkez/kurulum', { id, lisans: 'aktif', bitis: null });
     await merkezBeat();
@@ -229,6 +298,46 @@ describe('Merkez: kayıt, nabız, panel', () => {
     // Güncelleyicinin sorusu (yalnız bu bilgisayardan) hedefi taşır
     const local = await h.call<{ merkez: unknown }>('kasa', 'GET', '/kasa/guncelleme-durumu', undefined, { 'x-forwarded-for': '127.0.0.1' });
     expect([200, 403]).toContain(local.status);
+  });
+
+  it('Uzaktan\'tan "Şimdi güncelle": kasa nabızda alır, yerel isteği yazar (gün açıkken kurdurmaz), denetim kaydına bir kez yazar', async () => {
+    const { merkezBeat, identity } = await import('../server/sync/merkez');
+    const { env } = await import('../server/env');
+    const { pendingUpdateRequest } = await import('../server/lib/surum');
+    const id = identity().id;
+    const file = join(env.dataDir, 'guncelleme', 'istek.json');
+    const audits = async () => (await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=50')).filter((a) => a.action === 'guncelleme' && a.message.includes("Merkez'den"));
+    expect((await panel('POST', 'merkez/simdi-guncelle', { ids: [] })).status).toBe(400);
+    const before = (await audits()).length;
+    const prevBekci = process.env.LAFPOS_STDIN_CONTROL;
+    process.env.LAFPOS_STDIN_CONTROL = '1';
+    try {
+      const asked = await panel('POST', 'merkez/simdi-guncelle', { ids: [id] });
+      expect(asked.json).toMatchObject({ ok: true, istenen: 1 });
+      expect((await panel('GET', 'merkez/kurulumlar')).json.kurulumlar[0]).toMatchObject({ istekBekliyor: true });
+      // Gün açık (beforeAll): istek denetler ve indirir, hemen kurmaz
+      await merkezBeat();
+      expect(pendingUpdateRequest()).toMatchObject({ by: 'merkez', simdi: false });
+      expect((await audits()).length).toBe(before + 1);
+      expect((await audits())[0]!.message).toMatch(/gün kapalıyken kurulur/);
+      // Aynı istek ikinci nabızda yeniden işlenmez; kasa aldığını bildirir, panel "istendi"yi düşürür
+      rmSync(file, { force: true });
+      await merkezBeat();
+      expect(existsSync(file)).toBe(false);
+      expect((await audits()).length).toBe(before + 1);
+      expect((await panel('GET', 'merkez/kurulumlar')).json.kurulumlar[0].istekBekliyor).toBe(false);
+    } finally {
+      process.env.LAFPOS_STDIN_CONTROL = prevBekci ?? '';
+      rmSync(file, { force: true });
+    }
+    // Windows güncelleyicisi olmayan kurulumda istek yazılmaz, denetim kaydı söyler
+    await new Promise((r) => setTimeout(r, 5));
+    await panel('POST', 'merkez/simdi-guncelle', { ids: [id] });
+    await merkezBeat();
+    expect(existsSync(file)).toBe(false);
+    expect((await audits())[0]!.message).toMatch(/otomatik güncelleyici yok/);
+    // Satış bu sırada sürer
+    expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(200);
   });
 
   it('Merkez kaydı silinirse (Redis sıfırlandı) kasa yeniden kaydolur', async () => {

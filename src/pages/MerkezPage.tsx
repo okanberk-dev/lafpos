@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send } from 'lucide-react';
+import { RefreshCw, Send } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { LicenseState } from '@shared/lisans';
 import { fmtDateTime } from '@shared/time';
@@ -25,11 +25,15 @@ interface Row {
   online: boolean;
   gunAcik: boolean | null;
   guncelleme: { durum: string; mesaj: string; etiket: string } | null;
-  lisans: { durum: 'bekliyor' | 'aktif' | 'pasif'; bitis?: string | null; state: LicenseState; message: string };
+  lisans: { durum: 'bekliyor' | 'aktif' | 'pasif'; bitis?: string | null; state: LicenseState; message: string; soon?: boolean };
   mod: 'elle' | 'otomatik';
   hedef: number | null;
   gonderildi: number | null;
   bekleyen: boolean;
+  /** Şube kodu (eski Merkez göndermez) */
+  kod?: string | null;
+  /** "Şimdi güncelle" istendi, kasa henüz almadı */
+  istekBekliyor?: boolean;
 }
 
 interface Data {
@@ -39,7 +43,8 @@ interface Data {
 }
 
 const LICENSE_TONE: Record<LicenseState, Tone> = { aktif: 'success', deneme: 'info', uyari: 'warning', kapali: 'danger' };
-const licenseLabel = (r: Row) => (r.lisans.durum === 'bekliyor' && r.lisans.state === 'deneme' ? 'Onay bekliyor' : r.lisans.state === 'aktif' ? 'Aktif' : r.lisans.state === 'deneme' ? 'Deneme' : r.lisans.state === 'uyari' ? 'Uyarı' : 'Satış kapalı');
+const licenseTone = (r: Row): Tone => (r.lisans.state === 'aktif' && r.lisans.soon ? 'warning' : LICENSE_TONE[r.lisans.state]);
+const licenseLabel = (r: Row) => (r.lisans.durum === 'bekliyor' && r.lisans.state === 'deneme' ? 'Onay bekliyor' : r.lisans.state === 'aktif' ? (r.lisans.soon ? 'Yakında bitiyor' : 'Aktif') : r.lisans.state === 'deneme' ? 'Deneme' : r.lisans.state === 'uyari' ? 'Uyarı' : 'Satış kapalı');
 const updateTone = (d: string | undefined): Tone => (d === 'geri-dondu' || d === 'hata' ? 'warning' : d === 'guncel' ? 'neutral' : 'info');
 
 export const merkezQuery = { queryKey: ['merkez'], queryFn: () => get<Data>('/merkez/kurulumlar'), refetchInterval: 30_000 };
@@ -48,16 +53,27 @@ export const merkezQuery = { queryKey: ['merkez'], queryFn: () => get<Data>('/me
 function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
   const qc = useQueryClient();
   const [ad, setAd] = useState(row.ad ?? '');
+  const [kod, setKod] = useState(row.kod ?? '');
   const [lisans, setLisans] = useState<Row['lisans']['durum']>(row.lisans.durum);
   const [bitis, setBitis] = useState(row.lisans.bitis ?? '');
   const [mod, setMod] = useState<Row['mod']>(row.mod);
   const save = useMutation({
-    mutationFn: () => post('/merkez/kurulum', { id: row.id, ad, lisans, bitis: lisans === 'aktif' ? bitis || null : undefined, mod }),
+    mutationFn: () => post('/merkez/kurulum', { id: row.id, ad, kod, lisans, bitis: lisans === 'aktif' ? bitis || null : undefined, mod }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: merkezQuery.queryKey });
       toast.ok('Kaydedildi; dükkân birkaç dakika içinde alır');
       onClose();
     },
+  });
+  // Şimdi güncelle: kasa bir sonraki bağlantısında (en geç 5 dakika) yeni sürümü denetler ve indirir; gün açıksa gün
+  // sonundan sonra kurar
+  const update = useMutation({
+    mutationFn: () => post<{ istenen: number }>('/merkez/simdi-guncelle', { ids: [row.id] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: merkezQuery.queryKey });
+      toast.ok('İstendi; dükkân birkaç dakika içinde denetler, gün kapalıyken kurar');
+    },
+    onError: (e) => toast.err(errorMessage(e)),
   });
   return (
     <Modal
@@ -79,6 +95,9 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
       <div className="grid gap-5">
         <Field label="Dükkânın adı">
           <Input value={ad} maxLength={60} onChange={(e) => setAd(e.target.value)} placeholder="Örn. Tuzla" />
+        </Field>
+        <Field label="Şube kodu" hint="Harf, rakam ve tire; en çok 12 karakter. Fişin başlığında yazılır">
+          <Input value={kod} maxLength={12} autoCapitalize="characters" spellCheck={false} onChange={(e) => setKod(e.target.value.toUpperCase())} placeholder="Örn. TZL" />
         </Field>
         <Field label="Lisans">
           <Segmented
@@ -106,7 +125,18 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
             ]}
           />
         </Field>
-        <p className="text-[13px] leading-5 text-muted">Pasif ya da süresi dolan lisansta dükkânda önce uyarı çıkar, 7 gün sonra yeni satış kapanır. Kayıtlar ve raporlar açık kalır</p>
+        <p className="text-[13px] leading-5 text-muted">
+          Bitişe 14 gün kala dükkânda uyarı çıkar. Pasif ya da süresi dolan lisansta önce uyarı, 7 gün sonra yeni satış kapanır; kasa internete ulaşamıyorsa satış hiç kapanmaz, yalnız uyarı
+          kalır. Kayıtlar, raporlar ve tahsilat hep açık
+        </p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-[var(--admin-divider)] pt-4">
+          <Button variant="secondary" icon={<RefreshCw className="size-4" />} loading={update.isPending} disabled={row.istekBekliyor} onClick={() => update.mutate()}>
+            Şimdi güncelle
+          </Button>
+          <span className="min-w-0 flex-[1_1_14rem] text-pretty text-[13px] leading-5 text-muted">
+            {row.istekBekliyor ? 'İstendi; dükkân bir sonraki bağlantısında alacak' : 'Dükkân birkaç dakika içinde yeni sürümü denetler; gün açıksa gün sonundan sonra kurar'}
+          </span>
+        </div>
         {save.isError && <Notice tone="danger">{errorMessage(save.error)}</Notice>}
       </div>
     </Modal>
@@ -177,6 +207,7 @@ function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; sele
           <span className="flex items-center gap-2">
             <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', row.online ? 'bg-[var(--admin-primary)]' : 'bg-[var(--admin-border-strong,#c3cbc6)]')} />
             <span className="truncate font-semibold">{row.ad || 'Adsız dükkân'}</span>
+            {row.kod && <span className="shrink-0 text-[13px] font-medium text-muted">{row.kod}</span>}
           </span>
           <span className="mt-0.5 block text-[13px] text-muted">
             {row.surum ? `Sürüm ${row.surum}` : 'Sürüm bilinmiyor'} · {row.online ? 'çevrimiçi' : row.lastSeen ? `son görülme ${fmtDateTime(row.lastSeen)}` : 'hiç bağlanmadı'}
@@ -184,12 +215,13 @@ function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; sele
         </span>
         <span className="flex flex-wrap items-center gap-1.5">
           {row.bekleyen && <Badge tone="info">Güncelleme gönderilmedi</Badge>}
+          {row.istekBekliyor && <Badge tone="info">Güncelleme istendi</Badge>}
           {row.guncelleme && row.guncelleme.durum !== 'guncel' && (
             <Badge tone={updateTone(row.guncelleme.durum)} title={row.guncelleme.mesaj}>
               {row.guncelleme.etiket}
             </Badge>
           )}
-          <Badge tone={LICENSE_TONE[row.lisans.state]} dot title={row.lisans.message}>
+          <Badge tone={licenseTone(row)} dot title={row.lisans.message}>
             {licenseLabel(row)}
           </Badge>
         </span>
