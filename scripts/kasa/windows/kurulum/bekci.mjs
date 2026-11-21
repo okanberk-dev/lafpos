@@ -13,7 +13,7 @@ import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HEAP_MAX_MB, HEAP_MIN_MB, heapLimitMb, validHeapSetting } from './ayarlar.mjs';
-import { createUpdater, updateMode } from './guncelle.mjs';
+import { channelUrls, createUpdater, updateMode } from './guncelle.mjs';
 
 const APP = dirname(fileURLToPath(import.meta.url));
 /** Kurulum klasörü (app\, node\, baslat.cmd). Çalışma klasörü burası: güncelleme app\ klasörünün adını değiştirir,
@@ -195,6 +195,7 @@ const updater =
         log,
         port: () => Number(envFor().LAFPOS_PORT) || 4000,
         mode: () => updateMode(envFor()),
+        manifestUrls: () => channelUrls(envFor()),
         server: serverControl,
         exit: (code) => {
           stopping = true;

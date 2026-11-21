@@ -30,7 +30,7 @@ permissions:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     defaults:
       run:
         shell: pwsh
@@ -60,6 +60,15 @@ jobs:
           $v = (Get-Content package.json -Raw | ConvertFrom-Json).version.Split('.')
           "LAFPOS_SURUM=$($v[0]).$($v[1]).${{ github.run_number }}" >> $env:GITHUB_ENV
       - run: npm run kurulum:windows
+      # Gerçek kurulum: sessiz kurulum (/S), görevle açılan sunucunun sağlığı, yerel kanaldan bir sonraki derlemeye
+      # güncelleme (Node değişimi dahil: 75 kodu, app ↔ app.eski, node.yeni) ve bozuk derlemede geri dönüş
+      # (scripts/kasa/windows/kurulum/ci-kurulum.mjs). Yayımlamadan önce: kurulamayan dosya Releases'a çıkmaz
+      - name: Kur, güncelle, geri dön (gerçek Windows)
+        timeout-minutes: 25
+        run: |
+          $p = Start-Process "dist/windows/LafPOS-Kurulum-$env:LAFPOS_SURUM.exe" -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Kurulum $($p.ExitCode) koduyla bitti" }
+          node scripts/kasa/windows/kurulum/ci-kurulum.mjs
       # Yalnız main'e push'ta: sabit adlarla yayımla, son 10 sürüm kalır
       - name: Sürümü yayımla
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

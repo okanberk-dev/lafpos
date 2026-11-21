@@ -26,22 +26,16 @@ ortamda henüz koşmadı.
 Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 ("Otomatik güncelleme",
 "İnternet yokken").
 
-- **GitHub Release:** `main`'e ilk push'ta `.github/workflows/windows.yml`'in "Sürümü yayımla" adımı (Actions'ın
-  `GITHUB_TOKEN`'ı, `contents: write`). Releases'ta `LafPOS-Kurulum.exe` ve `.sha256` görünmeli.
-- **Vercel kanalı:** `lafpos` projesinin main derlemesinde `npm run kanal`; ardından
-  `https://lafpos.laffogato.net/guncelleme/surum.json` JSON dönmeli (sayfa değil) ve `build` HEAD commit'inin zamanı
-  olmalı. Vercel'de git geçmişi yoksa betik derlemenin anını kullanır (günlükte "git geçmişi yok"); o zaman aynı
-  commit'in kurulum dosyası kanaldan bir kez daha "güncellenir" (zararsız).
-- **Gerçek Windows'ta:** görev artık `cmd.exe /d /c baslat.cmd` (çalışma klasörü kurulum klasörü); bekçinin 75
-  koduyla yeniden açılması, `app` klasörünün adının sunucu durunca değişebilmesi, deneme bekçisinin `taskkill /T`
-  ile kapanması, Node değişince `node.yeni`'nin yerine geçmesi. İlk kurulumdan sonra bir gün sonu yapıp
-  Ayarlar ve yedek › Sürüm ve güncelleme'de "Güncellendi" görülmeli; `logs\sunucu.log`'da `[güncelleme]` satırları.
+- **Gerçek Windows'ta:** `.github/workflows/windows.yml` her kurulum derlemesinde sessiz kurulum, görevle açılış,
+  yerel kanaldan güncelleme (75 kodu, `app` ↔ `app.eski`, `node.yeni`) ve bozuk derlemede geri dönüşü dener
+  (`scripts/kasa/windows/kurulum/ci-kurulum.mjs`). Kafede ilk kurulumdan sonra bir gün sonu yapıp Ayarlar ve yedek ›
+  Sürüm ve güncelleme'de "Güncellendi" görülmeli.
 - **Siteden kurulum (LafPOS-Kur.cmd):** PowerShell 5.1'de hiç çalıştırılmadı (Linux'ta yalnız üretim, sözdizimi
   denetimi ve e2e). Boş bir Windows 10/11'de: indirme (Edge "sık indirilmiyor" uyarısı, SmartScreen), UAC ile
   yeniden açılma, üç indirme ve doğrulama, görev, güvenlik duvarı, kısayollar, Uygulamalar listesi, "LafPOS'u
   kaldır"; sonra kurulu bilgisayarda ikinci kez çalıştırma (gün açıkken soru, veritabanı kopyası, onarım).
-- **İnternet dönüşü:** kafede interneti kesip bir gün sonu al: Genel bakış'ta "İnternet · Yok · 1 kayıt bekliyor",
-  üst çubukta rozet; interneti aç: en geç bir dakikada "Bekleyenler gönderildi", lafmaliyet'te gün bir kez.
+- **İnternet dönüşü:** uçtan uca denendi (`e2e/internet.mjs`: sahte lafmaliyet ucu kapalıyken satış ve gün sonu,
+  bilgisayarda ve telefonda rozet, uç açılınca gün tam bir kez). Kafede gerçek internetle bir kez bakılır.
 
 ## 2. Uzaktan raporlar: gerçek ortamda deneme
 

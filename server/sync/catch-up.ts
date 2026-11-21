@@ -100,24 +100,30 @@ function onBack() {
   }, wait);
 }
 
-/** Yapılandırılmış dış adreslerin hostu (TCP denemesi için): önce Uzaktan ve lafmaliyet, site en son */
-function probeHosts(): string[] {
-  const hosts: string[] = [];
+/**
+ * Yapılandırılmış dış adreslerin hostu ve portu (TCP denemesi için): önce Uzaktan ve lafmaliyet, site en son. Port
+ * adresteki (yoksa https 443, http 80): kendi portunda çalışan bir uç da (ör. yerel deneme) doğru denenir
+ */
+function probeHosts(): { host: string; port: number }[] {
+  const out = new Map<string, { host: string; port: number }>();
   for (const url of [env.cloudUrl, env.lafmaliyetUrl, env.laffogatoUrl]) {
     try {
-      if (url) hosts.push(new URL(url).hostname);
+      if (!url) continue;
+      const u = new URL(url);
+      const port = Number(u.port) || (u.protocol === 'http:' ? 80 : 443);
+      out.set(`${u.hostname}:${port}`, { host: u.hostname, port });
     } catch {
       /* adres bozuksa denenmez */
     }
   }
-  return [...new Set(hosts)];
+  return [...out.values()];
 }
 
-/** Bir hosta 443'ten TCP bağlantısı kurulabiliyor mu (HTTP isteği yok) */
-export function tcpReachable(host: string, timeoutMs = 5000): Promise<boolean> {
+/** Bir hosta (varsayılan 443) TCP bağlantısı kurulabiliyor mu (HTTP isteği yok) */
+export function tcpReachable(host: string, port = 443, timeoutMs = 5000): Promise<boolean> {
   return new Promise((ok) => {
     try {
-      const sock = connect({ host, port: 443, timeout: timeoutMs });
+      const sock = connect({ host, port, timeout: timeoutMs });
       const done = (v: boolean) => {
         sock.destroy();
         ok(v);
@@ -132,10 +138,10 @@ export function tcpReachable(host: string, timeoutMs = 5000): Promise<boolean> {
 }
 
 /** İnternet yokken dakikada bir: bir hosta bağlanılabiliyorsa internet döndü */
-export async function probeTick(reach: (host: string) => Promise<boolean> = tcpReachable) {
+export async function probeTick(reach: (host: string, port: number) => Promise<boolean> = tcpReachable) {
   if (internetState().state !== 'yok') return;
-  for (const host of probeHosts()) {
-    if (await reach(host)) {
+  for (const { host, port } of probeHosts()) {
+    if (await reach(host, port)) {
       noteReachable();
       return;
     }

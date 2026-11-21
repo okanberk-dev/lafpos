@@ -19,6 +19,27 @@ import { entryData, extractZip, readTarGz, readZip } from './arsiv.mjs';
 
 /** Güncelleme kanalı: önce alan adı, o yoksa Vercel'in kendi adresi */
 export const MANIFEST_URLS = ['https://lafpos.laffogato.net/guncelleme/surum.json', 'https://lafpos.vercel.app/guncelleme/surum.json'];
+const LOOPBACK = new Set(['127.0.0.1', 'localhost', '[::1]']);
+/** Adres izinli mi: HTTPS ya da (yalnız bu bilgisayardaki deneme kanalı için) loopback HTTP */
+export const allowedUrl = (u) => u.protocol === 'https:' || (u.protocol === 'http:' && LOOPBACK.has(u.hostname));
+
+/**
+ * Kanalın adresleri: ayarlar.env'de LAFPOS_GUNCELLEME_KANAL (virgülle) varsa onlar (Windows CI'daki gerçek kurulum
+ * denemesi yerel kanalı böyle gösterir; .github/workflows/windows.yml), yoksa sitenin kanalı. Geçersiz adres düşer
+ */
+export function channelUrls(vars) {
+  const list = String(vars?.LAFPOS_GUNCELLEME_KANAL ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => {
+      try {
+        return allowedUrl(new URL(s));
+      } catch {
+        return false;
+      }
+    });
+  return list.length ? list : MANIFEST_URLS;
+}
 export const FIRST_CHECK_MS = 2 * 60_000;
 export const CHECK_EVERY_MS = 30 * 60_000;
 /** Kurulum hazırken gün açıksa sunucuya (yalnız bu bilgisayardan) bu aralıkla yeniden sorulur */
@@ -321,7 +342,8 @@ export function createUpdater(deps) {
   const platform = deps.platform ?? process.platform;
   const nodeVersion = deps.nodeVersion ?? process.versions.node;
   const execPath = deps.execPath ?? process.execPath;
-  const urls = deps.manifestUrls ?? MANIFEST_URLS;
+  // Adresler her denetimde okunur (ayarlar.env değişince yenisi geçerli)
+  const urls = () => (typeof deps.manifestUrls === 'function' ? deps.manifestUrls() : (deps.manifestUrls ?? MANIFEST_URLS));
   const healthTimeout = deps.healthTimeoutMs ?? HEALTH_TIMEOUT_MS;
   const verifyBinary = deps.verifyBinary ?? (platform === 'win32' ? assertWinX64 : () => {});
   const spawnTrial =
@@ -388,7 +410,7 @@ export function createUpdater(deps) {
   async function get(url, { maxBytes, extraHosts = [], timeoutMs = 60_000, etag } = {}) {
     let target = url;
     for (let hop = 0; hop < 5; hop++) {
-      if (new URL(target).protocol !== 'https:') throw new Error(`Güvensiz adres: ${target}`);
+      if (!allowedUrl(new URL(target))) throw new Error(`Güvensiz adres: ${target}`);
       const headers = { 'user-agent': 'LafPOS-guncelleme', ...(etag && hop === 0 ? { 'if-none-match': etag } : {}) };
       const res = await fetchImpl(target, { headers, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
@@ -420,7 +442,7 @@ export function createUpdater(deps) {
   /** Kanalın manifesti: adresler sırayla; ETag'li (değişmeyen manifest 304) */
   async function fetchManifest() {
     const errors = [];
-    for (const url of urls) {
+    for (const url of urls()) {
       try {
         const res = await get(url, { maxBytes: MAX_BYTES.manifest, timeoutMs: 30_000, etag: etags.get(url) });
         if (res.status === 304 && cached.has(url)) return cached.get(url);

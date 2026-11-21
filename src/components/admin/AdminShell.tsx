@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeftRight, ChevronLeft, Rows4, Search, WifiOff } from 'lucide-react';
 import { Fragment, type ReactNode, useEffect } from 'react';
 import { Link, NavLink, useLocation } from 'react-router';
+import { InternetBadge } from '@/components/InternetBadge';
 import { LafTile } from '@/components/LafMark';
 import { Avatar, RAIL_FADE, useRail } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
@@ -167,6 +168,8 @@ export function AdminShell({ title, children }: { title: string; children: React
         <button type="button" onClick={() => setPalette(true)} className={ROW_ICON} aria-label="Ara ya da git">
           <Search className="size-[18px] shrink-0" aria-hidden="true" />
         </button>
+        {/* İnternet yokken bekleyen kayıtlar (kabuğun telefon şeridindeki rozet; her şey yolundayken boş) */}
+        <InternetBadge compact />
         {/* Canlı bağlantı: sağlıklıyken yalnız ekran okuyucuya; kopunca yazıyla söylenir (renk tek başına durum taşımaz) */}
         <span role="status" aria-live="polite" className="inline-flex shrink-0">
           {live === 'kopuk' ? (

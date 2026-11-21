@@ -26,7 +26,7 @@ export const VIEWPORTS = {
   koyu: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, colorScheme: 'dark' },
 };
 
-async function freePort() {
+export async function freePort() {
   return new Promise((ok, fail) => {
     const s = createServer();
     s.once('error', fail);
@@ -37,14 +37,17 @@ async function freePort() {
   });
 }
 
-/** Derlenmiş arayüzü sunan üretim sunucusunu boş bir veri klasörüyle başlatır (ilk açılışta örnek kurulum yüklenir). */
-export async function startServer() {
+/**
+ * Derlenmiş arayüzü sunan üretim sunucusunu boş bir veri klasörüyle başlatır (ilk açılışta örnek kurulum yüklenir).
+ * `jobs`: arka plan işleri açık (internet kesintisi denemesi); `env`: ek ayarlar (ör. sahte lafmaliyet adresi)
+ */
+export async function startServer({ jobs = false, env: extra = {} } = {}) {
   if (!existsSync(join(ROOT, 'dist/web/index.html'))) throw new Error('Önce arayüzü derleyin: npm run build');
   const dataDir = mkdtempSync(join(tmpdir(), 'lafpos-e2e-'));
   const port = await freePort();
   const child = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
     cwd: ROOT,
-    env: { ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: dataDir, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1' },
+    env: { ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: dataDir, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', ...(jobs ? {} : { LAFPOS_NO_JOBS: '1' }), ...extra },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
