@@ -16,7 +16,10 @@ Son güncelleme: 21 Kasım 2026 (1. madde: kod bitti, gerçek ortam denemesi kal
 
 ## 1. Kurulum dosyası, otomatik güncelleme, internet dönüşü: gerçek ortamda denenecekler
 
-**Durum:** kod bitti (`claude/exe-guncelleme-wip`), Linux'ta denendi; aşağıdakiler gerçek ortamda henüz koşmadı.
+**Durum:** kod bitti (`claude/exe-guncelleme-wip`). Linux'ta denendi: birim testleri, `npm run kurulum:windows`
+(paket denemesi derleme numarasını, gün sorusunu ve durum dosyasını sınar) ve gerçek bekçiyle bir güncelleme
+(yerel kanaldan indirme, klasör değişimi, yeni sürümün deneme açılışı, 75 koduyla çıkış). Aşağıdakiler gerçek
+ortamda henüz koşmadı.
 Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 ("Otomatik güncelleme",
 "İnternet yokken").
 
