@@ -71,11 +71,12 @@ if (DEMO) {
   startDemo().then(render, (e: unknown) => root.render(<DemoFailed error={e} />));
 } else if (REMOTE && !new URLSearchParams(window.location.search).has('uzaktan')) {
   // LafPOS Uzaktan: kafe henüz bağlanmadıysa (yalnız örnek özet var) site tam etkileşimli demoyu açar. Kafe
-  // bağlanınca uzaktan görünüm açılır; ?uzaktan=1 örnek özetle uzaktan görünümde kalır
+  // bağlanınca uzaktan görünüm açılır; ?uzaktan=1 örnek özetle uzaktan görünümde kalır. Üyelik açıksa demoya
+  // dönülmez: üye girişi görünür (program buradan indirilir), demo giriş ekranında bağlantı olarak durur
   root.render(<PageLoading label="LafPOS açılıyor…" />);
   fetch('/api/uzaktan/kurulum')
-    .then((r) => r.json() as Promise<{ demo?: boolean }>)
-    .then((s) => (s.demo ? window.location.replace('/demo/') : render()), render);
+    .then((r) => r.json() as Promise<{ demo?: boolean; member?: string }>)
+    .then((s) => (s.demo && !s.member ? window.location.replace('/demo/') : render()), render);
 } else {
   render();
 }

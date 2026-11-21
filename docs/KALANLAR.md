@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 21 Kasım 2026 (1., 3. ve 4. madde: kod bitti, gerçek ortam denemesi kaldı).
+Son güncelleme: 21 Kasım 2026 (siteden üyelik ve indirme main'de; 1. ve 3. madde: gerçek ortam denemesi kaldı).
 
 ## Main'de olanlar (bitti)
 
@@ -11,6 +11,8 @@ Son güncelleme: 21 Kasım 2026 (1., 3. ve 4. madde: kod bitti, gerçek ortam de
   henüz denenmedi: ilk satış küçük tutarla yapılır, "Cihazın son yanıtları" (Yönetim › Yazarkasa POS) incelenir.
 - lafmobil ve site siparişleri: masa çağrıları ("Garson çağır"), bar istasyonu yedeği, planlı sipariş penceresi
   (`docs/03-ENTEGRASYON.md`).
+- Siteden üyelik ve indirme: lafpos.laffogato.net'te e-posta ve parolayla "Üye girişi" (ilk girişte parola
+  belirlenir), girişten sonra İndir ve anahtarsız web kurucusu (README "Siteden kurulum").
 - Windows 10: boşta düşük kaynak, bellek sınırı, Windows'ta kurulum paketi denemesi (`.github/workflows/windows.yml`,
   `docs/05-KASA-BILGISAYARI.md`).
 
@@ -33,6 +35,10 @@ Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 
   koduyla yeniden açılması, `app` klasörünün adının sunucu durunca değişebilmesi, deneme bekçisinin `taskkill /T`
   ile kapanması, Node değişince `node.yeni`'nin yerine geçmesi. İlk kurulumdan sonra bir gün sonu yapıp
   Ayarlar ve yedek › Sürüm ve güncelleme'de "Güncellendi" görülmeli; `logs\sunucu.log`'da `[güncelleme]` satırları.
+- **Siteden kurulum (LafPOS-Kur.cmd):** PowerShell 5.1'de hiç çalıştırılmadı (Linux'ta yalnız üretim, sözdizimi
+  denetimi ve e2e). Boş bir Windows 10/11'de: indirme (Edge "sık indirilmiyor" uyarısı, SmartScreen), UAC ile
+  yeniden açılma, üç indirme ve doğrulama, görev, güvenlik duvarı, kısayollar, Uygulamalar listesi, "LafPOS'u
+  kaldır"; sonra kurulu bilgisayarda ikinci kez çalıştırma (gün açıkken soru, veritabanı kopyası, onarım).
 - **İnternet dönüşü:** kafede interneti kesip bir gün sonu al: Genel bakış'ta "İnternet · Yok · 1 kayıt bekliyor",
   üst çubukta rozet; interneti aç: en geç bir dakikada "Bekleyenler gönderildi", lafmaliyet'te gün bir kez.
 
@@ -75,25 +81,7 @@ Ayrıntı `docs/07-UZAKTAN-ERISIM.md` §4 "Raporlar" ve "Anlık ciro". Kalanlar:
 - **Redis sıfırlanırsa** kasa günleri gönderilmiş sayar; günlük tarama yalnız değişen günü iter. Yeniden göndermek
   için kasada `sync_state`'teki `cloud.reports` satırı silinir (yönetimde düğmesi yok).
 
-## 4. Site üzerinden üyelik ve indirme
-
-**Durum:** kod bitti (`claude/site-indir`); gerçek Windows'ta henüz koşmadı.
-
-Yapılan: lafpos.laffogato.net'in giriş ekranı "Üye girişi" (LafPOS Uzaktan'ın patron girişi, aynı parola kuralı),
-girişten sonra menüde **İndir** (`/indir`). Sayfa anahtarsız web kurucusuna bağlanır:
-`/guncelleme/LafPOS-Kur.cmd`, kanal derlemesi (`npm run kanal`, `scripts/kasa/windows/kurulum/web-kurucu.mjs`)
-her main derlemesinde yazar. Kurucu Node'u nodejs.org'dan, better-sqlite3'ü GitHub'dan, uygulamayı
-`/guncelleme/`'den surum.json'daki SHA-256 ile doğrulayarak indirir ve `lafpos.nsi` ile aynı düzeni kurar; yeniden
-çalıştırmak onarır ya da günceller. GitHub Releases'taki LafPOS-Kurulum.exe sayfada alternatif. Ayrıntı README
-"Siteden kurulum", `docs/07-UZAKTAN-ERISIM.md` §4. Kalanlar:
-
-- **Gerçek Windows'ta deneme:** PowerShell 5.1'de hiç çalıştırılmadı (Linux'ta yalnız üretim, sözdizimi
-  denetimi ve e2e). Boş bir Windows 10/11'de: indirme (Edge "sık indirilmiyor" uyarısı, SmartScreen), UAC ile
-  yeniden açılma, üç indirme ve doğrulama, görev, güvenlik duvarı, kısayollar, Uygulamalar listesi, "LafPOS'u
-  kaldır"; sonra kurulu bir bilgisayarda ikinci kez çalıştırma (gün açıkken soru, veritabanı kopyası, onarım).
-- **Dükkânların kullanıcıları:** giriş bugün yalnız sahibin hesabı; dükkân kullanıcıları Merkez (2) ile gelir.
-
-## 5. Sahibin yapacakları (kafede)
+## 4. Sahibin yapacakları (kafede)
 
 Başlat › LafPOS › LafPOS ayarları'na (anahtar değerleri Mac'te `~/Downloads/lafpos-kasa-ayarlari.env`; yoksa
 `scripts/vercel/baglanti-kur.sh --yenile`):

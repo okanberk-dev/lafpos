@@ -1,10 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { Download, ExternalLink, MonitorDown, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ExternalLink, MonitorDown, RefreshCw, ShieldCheck } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { fmtDateTime } from '@shared/time';
-import { buttonClass, Ring } from '@/components/ui/Button';
+import { LafTile } from '@/components/LafMark';
+import { Button, buttonClass, Ring } from '@/components/ui/Button';
 import { Card, Notice, PageHeader } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
+import { get } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { type ChannelManifest, channelVersionQuery, RELEASES_URL, WEB_INSTALLER_NAME, WEB_INSTALLER_PATH } from '@/lib/download';
+import { useRemoteSignOut } from '@/lib/remote';
 
 /** Kurulum adımları: sahibin kafede yapacakları, sade Türkçe */
 const STEPS = [
@@ -16,7 +21,7 @@ const STEPS = [
 
 function VersionLine({ m }: { m: ChannelManifest }) {
   return (
-    <p className="mt-2 text-xs text-muted">
+    <p className="text-xs text-muted">
       Son sürüm {m.version} · {fmtDateTime(Date.parse(m.date))}
     </p>
   );
@@ -28,9 +33,17 @@ export function DownloadContent() {
   const manifest = useQuery({ ...channelVersionQuery, retry: false });
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <Card title="Siteden kurulum" subtitle="Önerilen: GitHub hesabı ya da anahtar gerekmez">
+      <Card title="Siteden kurulum" subtitle="Önerilen yol: hesap ya da anahtar gerekmez">
         <div className="p-5">
-          <ol className="space-y-4">
+          {/* Ana eylem kartın başında: önce indirilir, adımlar sonrasını anlatır */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <a href={WEB_INSTALLER_PATH} download={WEB_INSTALLER_NAME} className={buttonClass('primary', 'lg', { ring: true, className: 'max-sm:w-full max-sm:justify-between' })}>
+              LafPOS’u indir
+              <Ring />
+            </a>
+            {manifest.data && <VersionLine m={manifest.data} />}
+          </div>
+          <ol className="mt-5 space-y-4 border-t border-line pt-5">
             {STEPS.map((s, i) => (
               <li key={s.title} className="flex gap-3">
                 <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-sm font-semibold text-[var(--admin-primary)]">
@@ -43,11 +56,6 @@ export function DownloadContent() {
               </li>
             ))}
           </ol>
-          <a href={WEB_INSTALLER_PATH} download={WEB_INSTALLER_NAME} className={buttonClass('primary', 'lg', { ring: true, className: 'mt-6 max-sm:w-full max-sm:justify-between' })}>
-            LafPOS’u indir
-            <Ring />
-          </a>
-          {manifest.data && <VersionLine m={manifest.data} />}
         </div>
       </Card>
       <div className="grid content-start gap-4">
@@ -93,24 +101,58 @@ export default function DownloadPage() {
   );
 }
 
-/** Kafeden henüz veri gelmediğinde (kabuk açılamaz) aynı içerik, kabuksuz */
-export function StandaloneDownloadPage({ onBack }: { onBack?: () => void }) {
+/**
+ * Kabuksuz İndir: kafe henüz bağlanmadıysa (özet yok, kabuk açılamaz) üyenin girişten sonra gördüğü ilk sayfa. Açılış
+ * verisini kendisi sormaz (yeni gözlemci hatalı sorguyu yeniden başlatır, ekran bekleme ekranına dönerdi): durumu
+ * kabuktan alır. Kafe bağlandı mı diye yarım dakikada bir hafif uca bakar; bağlanınca (yok → var) canlı görünüm açılır
+ */
+export function StandaloneDownloadPage({ waiting, retrying, onRetry }: { waiting: boolean; retrying: boolean; onRetry: () => void }) {
+  const signOut = useRemoteSignOut();
+  const status = useQuery({ queryKey: ['uzaktan', 'durum', 'bekle'], queryFn: () => get<{ at: number | null }>('/uzaktan/durum'), enabled: waiting, refetchInterval: 30_000, retry: false });
+  // Yalnız geçiş sayılır: sayfa açıldığında zaten var olan özet yeniden denemeyi tetiklemez (döngü olmaz)
+  const firstAt = useRef<number | null | undefined>(undefined);
+  const at = status.data?.at;
+  useEffect(() => {
+    if (at === undefined) return;
+    if (firstAt.current === undefined) firstAt.current = at;
+    else if (firstAt.current == null && at != null) onRetry();
+  }, [at, onRetry]);
+
   return (
-    <div className="min-h-full bg-bg p-4 sm:p-6">
+    <div className="min-h-full bg-bg px-4 py-6 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-5xl">
-        <div className="flex items-center gap-2 pb-4">
-          <Download aria-hidden="true" className="size-5 text-muted" />
-          <h1 className="text-xl font-bold sm:text-[22px]">Programı indir</h1>
-        </div>
-        <Notice tone="info" role="note" className="mb-4">
-          Kafeden henüz veri gelmedi; program kurulup ayarlar girilince canlı görünüm başlar
-        </Notice>
-        <DownloadContent />
-        {onBack && (
-          <button type="button" onClick={onBack} className={buttonClass('ghost', 'md', { className: 'mt-4' })}>
-            Geri dön
-          </button>
+        <header className="flex items-center gap-3 pb-6">
+          <LafTile size="md" />
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-muted">LafPOS Uzaktan</p>
+            <h1 className="text-[22px] font-bold leading-tight tracking-[-0.03em] sm:text-[28px]">Programı indir</h1>
+          </div>
+          {signOut && (
+            <Button size="md" variant="ghost" onClick={() => void useAuth.getState().logout()}>
+              Çıkış
+            </Button>
+          )}
+        </header>
+        {waiting ? (
+          <Notice tone="info" role="status" className="mb-4" title="Kafe henüz bağlanmadı">
+            Program kurulup ayarlar girilince canlı görünüm burada kendiliğinden açılır
+          </Notice>
+        ) : (
+          <Notice
+            tone="warn"
+            role="status"
+            className="mb-4"
+            title="Canlı görünüm şu an açılamadı"
+            action={
+              <Button size="sm" variant="secondary" loading={retrying} onClick={onRetry}>
+                Yeniden dene
+              </Button>
+            }
+          >
+            Program yine de buradan indirilebilir
+          </Notice>
         )}
+        <DownloadContent />
       </div>
     </div>
   );

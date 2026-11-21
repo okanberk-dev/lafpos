@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect } from 'react';
-import { Button, buttonClass } from './components/ui/Button';
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
+import { Button } from './components/ui/Button';
+import { Navigate, Route, Routes, useLocation } from 'react-router';
 import type { Permission } from '@shared/permissions';
 import { AppShell } from './components/AppShell';
 import { ADMIN_ROUTE_PERMS } from './components/admin/sections';
@@ -66,48 +66,36 @@ function Authed() {
   }, [qc]);
 
   if (boot.isLoading) return <PageLoading label="LafPOS açılıyor…" />;
-  // Uzaktan İndir kafeden veri beklemez: program henüz kurulmadıysa özet de yoktur (kabuksuz aynı sayfa)
-  if (REMOTE && location.pathname === DOWNLOAD_PATH && (boot.isError || !boot.data)) {
+  // Uzaktan görünümde kafe henüz bağlanmadıysa (özet yok) üye doğrudan İndir'i görür: program buradan kurulur, kafe
+  // bağlanınca canlı görünüm kendiliğinden açılır. İndir adresi başka bir açılış hatasında da kabuksuz açılır
+  const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
+  if (REMOTE && (boot.isError || !boot.data) && (noSnapshot || location.pathname === DOWNLOAD_PATH)) {
     return (
       <Suspense fallback={<PageLoading />}>
-        <StandaloneDownloadPage />
+        <StandaloneDownloadPage waiting={noSnapshot} retrying={boot.isFetching} onRetry={() => void boot.refetch()} />
       </Suspense>
     );
   }
   if (boot.isError || !boot.data) {
-    // Uzaktan görünümde giriş çalışır ama kafeden özet gelmemiş olabilir: ağ değil, kasa kurulumu söylenir
-    const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
     return (
       <div className="grid h-full place-items-center p-6">
         {/* Tam ekran durum: büyük boy, Yeniden dene ve Çıkış aynı boyda. Uzaktan giriş parola sormadan giriyorsa Çıkış
             yok: aynı oturum hemen yeniden açılıp bu ekrana dönerdi, Yeniden dene yeter */}
         <ErrorState
           large
-          title={noSnapshot ? 'Kafeden henüz veri gelmedi' : 'Sunucuya bağlanılamadı'}
+          title="Sunucuya bağlanılamadı"
           error={boot.error}
           onRetry={() => void boot.refetch()}
           retrying={boot.isFetching}
           action={
-            <>
-              {/* Program henüz kurulmadıysa özet de yoktur: indirme sayfası buradan açılır */}
-              {noSnapshot && (
-                <Link to={DOWNLOAD_PATH} className={buttonClass('secondary', 'md')}>
-                  Programı indir
-                </Link>
-              )}
-              {remoteSignOut && (
-                <Button size="md" variant="ghost" onClick={() => void useAuth.getState().logout()}>
-                  Çıkış
-                </Button>
-              )}
-            </>
+            remoteSignOut && (
+              <Button size="md" variant="ghost" onClick={() => void useAuth.getState().logout()}>
+                Çıkış
+              </Button>
+            )
           }
         >
-          {noSnapshot
-            ? 'Giriş çalışıyor. Kafedeki kasa bilgisayarında LafPOS açılıp uzaktan erişim satırları ayarlara girilince canlı görünüm birkaç saniyede başlar'
-            : REMOTE
-              ? errorMessage(boot.error)
-              : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
+          {REMOTE ? errorMessage(boot.error) : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
         </ErrorState>
       </div>
     );

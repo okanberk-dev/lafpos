@@ -3,7 +3,7 @@ import { CheckCircle2, CircleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { LafTile } from '@/components/LafMark';
-import { Button } from '@/components/ui/Button';
+import { Button, buttonClass } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
 import { Notice, PageLoading } from '@/components/ui/misc';
 import { errorMessage, post, setToken } from '@/lib/api';
@@ -47,12 +47,16 @@ function SetupChecklist({ s }: { s: RemoteSetup }) {
 }
 
 /**
- * Uzaktan giriş (sitenin "Üye girişi"): patron parolası (Vercel'de LAFPOS_UZAKTAN_PAROLA). PIN'ler kafedeki kasada kalır.
- * İndirme bağlantısı burada yok, yalnız girişten sonra (İndir)
+ * Uzaktan giriş (sitenin "Üye girişi"). Üyelik açıksa (LAFPOS_UYE_EPOSTA) e-posta ve parola: üye ilk girişte parolasını
+ * kendisi belirler, sonra aynı ikiliyle girer. Üyelik kapalıysa eski düzen: patron parolası (LAFPOS_UZAKTAN_PAROLA) ya da
+ * parolasız görünüm. PIN'ler kafedeki kasada kalır. İndirme bağlantısı burada yok, yalnız girişten sonra (İndir)
  */
 export function RemoteLoginPage() {
   const init = useAuth((s) => s.init);
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
+  const [invite, setInvite] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setup = useQuery({ ...remoteSetupQuery, retry: false });
@@ -61,13 +65,15 @@ export function RemoteLoginPage() {
   // gizler (useRemoteSignOut): çıkış bu ekranı açar, bu ekran da aynı oturumu hemen yeniden açardı
   const auto = !!setup.data && remoteAutoEnters(setup.data);
   const autoTried = useRef(false);
+  const member = setup.data?.member;
+  const creating = member === 'new';
 
   /** Oturumu açar; açılamazsa ileti. Parolasız girişte boş gövde gider */
-  const enter = async (body: { parola?: string }) => {
+  const enter = async (body: { eposta?: string; parola?: string; davet?: string }, path = '/uzaktan/giris') => {
     setBusy(true);
     setError(null);
     try {
-      const res = await post<{ token: string }>('/uzaktan/giris', body);
+      const res = await post<{ token: string }>(path, body);
       const demo = !body.parola && !!setup.data?.demo;
       remember('lafpos.demo', demo);
       setToken(res.token);
@@ -76,6 +82,8 @@ export function RemoteLoginPage() {
       if (!useAuth.getState().me) setError('Oturum açılamadı; bağlantıyı kontrol edip yeniden deneyin');
     } catch (err) {
       setError(errorMessage(err));
+      // Üyelik bu arada açılmış olabilir (başka cihazdan): form girişe döner
+      if (path === '/uzaktan/uye') void setup.refetch();
     } finally {
       setBusy(false);
     }
@@ -91,6 +99,14 @@ export function RemoteLoginPage() {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (member) {
+      if (!email.trim() || !password) return setError('E-posta ve parolayı girin');
+      if (creating && !invite.trim()) return setError('Davet kodunu girin');
+      if (creating && password.length < 10) return setError('Parola en az 10 karakter olmalı');
+      if (creating && password !== password2) return setError('İki parola aynı değil');
+      void enter(creating ? { eposta: email.trim(), parola: password, davet: invite.trim() } : { eposta: email.trim(), parola: password }, creating ? '/uzaktan/uye' : '/uzaktan/giris');
+      return;
+    }
     if (!password) {
       setError('Parolayı girin');
       return;
@@ -108,17 +124,21 @@ export function RemoteLoginPage() {
         <LafTile size="lg" />
         {/* Sitenin üye girişi: girişten sonra canlı görünüm ve İndir (Windows programı) açılır */}
         <p className="mt-4 text-sm font-semibold text-muted">LafPOS Uzaktan</p>
-        <h1 className="mt-0.5 text-xl font-bold sm:text-[22px]">Üye girişi</h1>
-        <p className="mt-1 text-pretty text-sm text-muted">Kafenin canlı durumu (patron paneli, masalar, bar, raporlar) ve Windows programının indirilmesi. Yalnız görüntülenir; işlemler kafedeki kasadan yapılır</p>
+        <h1 className="mt-0.5 text-xl font-bold sm:text-[22px]">{creating ? 'Üyeliği oluştur' : 'Üye girişi'}</h1>
+        <p className="mt-1 text-pretty text-sm text-muted">
+          {creating
+            ? 'İlk giriş: e-postanızı ve size verilen davet kodunu yazın, bir parola belirleyin. Sonraki girişlerde yalnız e-posta ve parola sorulur'
+            : 'Kafenin canlı durumu (patron paneli, masalar, bar, raporlar) ve Windows programının indirilmesi. Yalnız görüntülenir; işlemler kafedeki kasadan yapılır'}
+        </p>
         {setup.isError && (
           <Notice tone="danger" role="alert" className="mt-4">
             Bağlantı kurulamadı; internet bağlantısını kontrol edip sayfayı yenileyin
           </Notice>
         )}
         {setup.data && !ready && <SetupChecklist s={setup.data} />}
-        {ready && setup.data && !auto && (
+        {ready && setup.data && !auto && !creating && (
           <p className="mt-3 text-xs text-muted">
-            {setup.data.snapshotAt ? `Kafeden son veri: ${fmtDateTime(setup.data.snapshotAt)}` : 'Kafeden henüz veri gelmedi; kasa bilgisayarına aynı anahtar girilince başlar'}
+            {setup.data.snapshotAt ? `Kafeden son veri: ${fmtDateTime(setup.data.snapshotAt)}` : member ? 'Kafe henüz bağlanmadı; girişten sonra programı indirip kurabilirsiniz' : 'Kafeden henüz veri gelmedi; kasa bilgisayarına aynı anahtar girilince başlar'}
           </p>
         )}
         {auto ? (
@@ -133,12 +153,45 @@ export function RemoteLoginPage() {
           </>
         ) : (
           <>
-            <Field label="Parola" error={error} className="mt-5">
+            {member && (
+              <Field label="E-posta" className="mt-5">
+                <Input
+                  id="eposta"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoFocus={ready}
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError(null);
+                  }}
+                />
+              </Field>
+            )}
+            {creating && (
+              <Field label="Davet kodu" className="mt-3">
+                <Input
+                  id="davet"
+                  autoComplete="one-time-code"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  value={invite}
+                  onChange={(e) => {
+                    setInvite(e.target.value);
+                    setError(null);
+                  }}
+                />
+              </Field>
+            )}
+            <Field label="Parola" hint={creating ? 'En az 10 karakter' : undefined} error={creating ? null : error} className={member ? 'mt-3' : 'mt-5'}>
               <Input
                 id="parola"
                 type="password"
-                autoComplete="current-password"
-                autoFocus={ready}
+                autoComplete={creating ? 'new-password' : 'current-password'}
+                autoFocus={ready && !member}
                 value={password}
                 onChange={(e) => {
                   setPassword(e.target.value);
@@ -146,9 +199,29 @@ export function RemoteLoginPage() {
                 }}
               />
             </Field>
+            {creating && (
+              <Field label="Parola (yeniden)" error={error} className="mt-3">
+                <Input
+                  id="parola2"
+                  type="password"
+                  autoComplete="new-password"
+                  value={password2}
+                  onChange={(e) => {
+                    setPassword2(e.target.value);
+                    setError(null);
+                  }}
+                />
+              </Field>
+            )}
             <Button type="submit" variant="primary" size="lg" block className="mt-4" loading={busy} disabled={!!setup.data && !ready}>
-              Giriş
+              {creating ? 'Üyeliği oluştur' : 'Giriş'}
             </Button>
+            {/* Kafe bağlanmadan önce site demoyu üyeliksiz de açar (tarayıcıdaki örnek kasa, gerçek veri değil) */}
+            {member && setup.data?.demo && (
+              <a href="/demo/" className={buttonClass('ghost', 'lg', { block: true, className: 'mt-2' })}>
+                Demoyu dene
+              </a>
+            )}
           </>
         )}
       </form>

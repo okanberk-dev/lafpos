@@ -3,6 +3,8 @@
  * işleyicisiyle (kafe bağlı değil: örnek gün, parolasız) Vercel'in yönlendirmeleriyle aynı statik sunucudan açılır.
  * Tarama (telefon, tablet, bilgisayar, koyu): ROUTES; giriş yokken İndir giriş ekranına döner, girişten sonra
  * menüde ve açılıyor; kafeden veri gelmemişken de (kabuksuz) açılıyor.
+ * Üyelik (LAFPOS_UYE_EPOSTA, bellekte sahte Redis): ilk girişte parola belirlenir, yanlış parola girmez, doğrusu girer;
+ * kafe bağlanmadan da İndir'e ulaşılır.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -17,6 +19,37 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 /** Uzaktan taranan ekranlar (tests/web-kurucu.test.ts İndir'in burada olduğunu denetler) */
 export const REMOTE_ROUTES = ['/patron', '/raporlar', '/indir'];
 
+/** Üyelik akışının örnek üyesi (gerçek kimse değil) ve sahte Redis'in adresi */
+const MEMBER = { email: 'uye@ornek.test', password: 'ornek-parola-2026', invite: 'ORNK-2026-DAVT' };
+const REDIS_URL = 'https://redis.e2e';
+const redisStore = new Map();
+
+/** Upstash REST'in bellekteki karşılığı: işleyicinin kullandığı komutlar */
+function fakeRedis() {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    if (String(input) !== REDIS_URL) return realFetch(input, init);
+    const [cmd, key, ...rest] = JSON.parse(String(init.body));
+    let result = null;
+    if (cmd === 'GET') result = redisStore.get(key) ?? null;
+    else if (cmd === 'MGET') result = [key, ...rest].map((k) => redisStore.get(k) ?? null);
+    else if (cmd === 'SET') {
+      if (rest.includes('NX') && redisStore.has(key)) result = null;
+      else (redisStore.set(key, rest[0]), (result = 'OK'));
+    } else if (cmd === 'INCR') (redisStore.set(key, String(Number(redisStore.get(key) ?? 0) + 1)), (result = Number(redisStore.get(key))));
+    else if (cmd === 'DEL') (redisStore.delete(key), (result = 1));
+    else if (cmd === 'EXPIRE') result = 1;
+    return new Response(JSON.stringify({ result }), { status: 200 });
+  };
+  return () => (globalThis.fetch = realFetch);
+}
+
+/** Üyeliği açar ya da kapatır: işleyici ortamı her istekte okur */
+function memberMode(on) {
+  const vars = { LAFPOS_UYE_EPOSTA: MEMBER.email, LAFPOS_UYE_DAVET: MEMBER.invite, LAFPOS_CLOUD_SECRET: 'e'.repeat(40), KV_REST_API_URL: REDIS_URL, KV_REST_API_TOKEN: 't' };
+  for (const [k, v] of Object.entries(vars)) on ? (process.env[k] = v) : delete process.env[k];
+}
+
 /** Güncelleme kanalının örneği: İndir sayfası sürümü buradan yazar */
 const MANIFEST = { v: 1, build: 1795100000, version: '0.2.0', date: '2026-11-20T10:00:00.000Z', app: { file: 'lafpos-app-1795100000.zip', sha256: 'a'.repeat(64), size: 1 } };
 
@@ -27,7 +60,8 @@ async function startRemote() {
     env: { ...process.env, VITE_LAFPOS_UZAKTAN: '1' },
   });
   // Kafe bağlı değil: Redis ve anahtar yok, işleyici örnek günü açar
-  for (const k of ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_DEMO']) delete process.env[k];
+  for (const k of ['KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'LAFPOS_CLOUD_SECRET', 'LAFPOS_UZAKTAN_DEMO', 'LAFPOS_UYE_EPOSTA']) delete process.env[k];
+  const restoreFetch = fakeRedis();
   const handler = await tsImport(join(ROOT, 'api/uzaktan.ts'), import.meta.url);
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://x');
@@ -61,7 +95,14 @@ async function startRemote() {
     }
   });
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-  return { base: `http://127.0.0.1:${server.address().port}`, stop: () => new Promise((ok) => server.close(ok)) };
+  return {
+    base: `http://127.0.0.1:${server.address().port}`,
+    stop: () => {
+      restoreFetch();
+      memberMode(false);
+      return new Promise((ok) => server.close(ok));
+    },
+  };
 }
 
 async function open(browser, viewport) {
@@ -69,7 +110,8 @@ async function open(browser, viewport) {
   await context.route(/^https:\/\/laffogato\.net\//, (r) => r.fulfill({ status: 404 }));
   const page = await context.newPage();
   const problems = [];
-  page.on('console', (m) => m.type() === 'error' && problems.push(`konsol: ${m.text().slice(0, 200)}`));
+  // Yanıt kodları aşağıda ayrıca sayılır (beklenenler ayıklanarak); tarayıcının aynı yanıt için yazdığı satır sayılmaz
+  page.on('console', (m) => m.type() === 'error' && !m.text().startsWith('Failed to load resource') && problems.push(`konsol: ${m.text().slice(0, 200)}`));
   page.on('pageerror', (e) => problems.push(`sayfa hatası: ${e.message.slice(0, 200)}`));
   page.on('response', (r) => {
     const u = new URL(r.url());
@@ -88,11 +130,91 @@ async function check(page, viewport, problems) {
   }
 }
 
-/** Örnek günde parolasız giriş kendiliğinden olur; giriş ekranından çıkana dek bekler */
+const installerLink = (page) => page.locator('a[href="/guncelleme/LafPOS-Kur.cmd"]').waitFor({ timeout: 20_000 });
+
+/**
+ * Örnek günde parolasız giriş kendiliğinden olur; giriş ekranından çıkana dek bekler. ?uzaktan=1: kafe bağlı değilken
+ * site demoya (/demo/) döner, bu işaret örnek özetle uzaktan görünümde tutar (src/main.tsx)
+ */
 async function signIn(page, base) {
-  await page.goto(`${base}/giris`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}/giris?uzaktan=1`, { waitUntil: 'domcontentloaded' });
   await page.waitForURL((u) => u.pathname !== '/giris', { timeout: 15_000 });
   await settle(page);
+}
+
+/**
+ * Üyelik: ilk girişte "Üyeliği oluştur" (davet kodu, parola iki kez); kafe bağlanmadığı için girişten sonra doğrudan
+ * İndir ("Kafe henüz bağlanmadı"); ikinci girişte davet sorulmaz, yanlış parola girmez, doğrusu girer. Sayfa sayısını döner
+ */
+async function memberFlow(browser, base, viewport, failures) {
+  const where = (r) => `uzaktan · ${viewport} · üyelik › ${r}`;
+  const shot = (page, name) => page.screenshot({ path: join(ROOT, 'e2e/out', `uzaktan-${viewport}-uyelik-${name}.png`) });
+  redisStore.clear();
+  memberMode(true);
+  let pages = 0;
+  const first = await open(browser, viewport);
+  try {
+    const { page, problems } = first;
+    await page.goto(`${base}/giris`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Üyeliği oluştur' }).waitFor({ timeout: 15_000 });
+    // Kafe bağlı değilken de demoya dönülmez (üye programı buradan indirir); demo bağlantı olarak durur
+    if ((await page.locator('a[href="/demo/"]').count()) !== 1) problems.push('giriş ekranında demo bağlantısı yok');
+    await check(page, viewport, problems);
+    await shot(page, 'olustur');
+    pages++;
+    // İki parola aynı değilse üyelik açılmaz
+    await page.locator('#eposta').fill(MEMBER.email);
+    await page.locator('#davet').fill(MEMBER.invite.toLowerCase());
+    await page.locator('#parola').fill(MEMBER.password);
+    await page.locator('#parola2').fill(`${MEMBER.password}x`);
+    await page.getByRole('button', { name: 'Üyeliği oluştur' }).click();
+    await page.getByText('İki parola aynı değil').waitFor({ timeout: 5_000 });
+    if (redisStore.has(`lafpos:uye:${MEMBER.email}`)) problems.push('parolalar farklıyken üyelik açıldı');
+    await page.locator('#parola2').fill(MEMBER.password);
+    await page.getByRole('button', { name: 'Üyeliği oluştur' }).click();
+    // Kafe bağlı değil: giriş çalışır, canlı görünüm yerine doğrudan İndir açılır
+    await page.getByText('Kafe henüz bağlanmadı').waitFor({ timeout: 15_000 });
+    if (/ornek-parola/.test(redisStore.get(`lafpos:uye:${MEMBER.email}`) ?? 'ornek-parola')) problems.push('parola Redis\'e açık yazıldı ya da üyelik kaydı yok');
+    await installerLink(page).catch(() => problems.push('üye girişinden sonra İndir bağlantısı yok'));
+    if ((await page.getByRole('button', { name: 'Çıkış' }).count()) !== 1) problems.push('üye oturumunda Çıkış yok');
+    await settle(page);
+    await check(page, viewport, problems);
+    await shot(page, 'indir');
+    pages++;
+    for (const p of problems) failures.push(`${where('ilk giriş')}: ${p}`);
+  } catch (e) {
+    failures.push(`${where('ilk giriş')}: ${String(e?.message ?? e).split('\n')[0]}`);
+    await shot(first.page, 'hata-ilk').catch(() => null);
+  } finally {
+    await first.context.close();
+  }
+  const second = await open(browser, viewport);
+  try {
+    const { page, problems } = second;
+    // Yanlış parolanın 401'i beklenir
+    const expected = (p) => p === 'istek 401: /api/uzaktan/giris';
+    await page.goto(`${base}/patron`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: 'Üye girişi' }).waitFor({ timeout: 15_000 });
+    if ((await page.locator('#parola2, #davet').count()) > 0) problems.push('üyelik varken davet kodu ya da parola yeniden soruldu');
+    await page.locator('#eposta').fill(MEMBER.email);
+    await page.locator('#parola').fill('yanlis-parola-1');
+    await page.getByRole('button', { name: 'Giriş' }).click();
+    await page.getByText('E-posta ya da parola yanlış').waitFor({ timeout: 10_000 });
+    await check(page, viewport, problems);
+    await shot(page, 'giris');
+    pages++;
+    await page.locator('#parola').fill(MEMBER.password);
+    await page.getByRole('button', { name: 'Giriş' }).click();
+    await page.getByText('Kafe henüz bağlanmadı').waitFor({ timeout: 15_000 });
+    for (const p of problems.filter((x) => !expected(x))) failures.push(`${where('giriş')}: ${p}`);
+  } catch (e) {
+    failures.push(`${where('giriş')}: ${String(e?.message ?? e).split('\n')[0]}`);
+    await shot(second.page, 'hata-giris').catch(() => null);
+  } finally {
+    await second.context.close();
+    memberMode(false);
+  }
+  return pages;
 }
 
 export async function runRemote(browser) {
@@ -141,9 +263,10 @@ export async function runRemote(browser) {
         // Kafeden veri gelmemiş: kabuk açılamaz, İndir kabuksuz açılır
         problems.length = 0;
         await context.route('**/api/bootstrap', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Kafeden henüz veri gelmedi', code: 'no_snapshot' }) }));
-        await page.goto(`${server.base}/indir`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${server.base}/indir?uzaktan=1`, { waitUntil: 'domcontentloaded' });
+        // Açılış birkaç kez yeniden dener, sonra kabuksuz İndir gelir
+        await installerLink(page).catch(() => problems.push('veri yokken İndir bağlantısı yok'));
         await settle(page);
-        if ((await page.locator('a[href="/guncelleme/LafPOS-Kur.cmd"]').count()) !== 1) problems.push('veri yokken İndir bağlantısı yok');
         await check(page, viewport, problems);
         await page.screenshot({ path: join(ROOT, 'e2e/out', `uzaktan-${viewport}-indir-veri-yok.png`) });
         pages++;
@@ -154,6 +277,7 @@ export async function runRemote(browser) {
       } finally {
         await context.close();
       }
+      pages += await memberFlow(browser, server.base, viewport, failures);
     }
   } finally {
     await server.stop();

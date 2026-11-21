@@ -92,8 +92,19 @@ müşteri telefonları gitmez.
 - **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki
   kasa `https://lafpos.laffogato.net/guncelleme/surum.json`'dan yeni sürümü alır (anahtarsız; ayrıntı
   `docs/05-KASA-BILGISAYARI.md` §6 "Otomatik güncelleme"). `vercel.json` `/guncelleme/*`'ı arayüz sayfasına çevirmez.
-- **Üye girişi ve İndir (siteden kurulum):** giriş ekranı sitenin "Üye girişi"dir (aynı patron girişi); girişten
-  sonra menüde **İndir** (`/indir`, yalnız Uzaktan derlemesinde; kafeden veri gelmemişken de kabuksuz açılır).
+- **Üyelik (e-posta ve parola):** Vercel'de `LAFPOS_UYE_EPOSTA` (virgülle birden çok e-posta) tanımlıysa giriş e-posta
+  ve parolayla çalışır ve gerçek veri yalnız üyeye açılır; parolasız görünüm ve `LAFPOS_UZAKTAN_PAROLA` o zaman
+  kullanılmaz. Parola hiçbir ortam değişkeninde ya da dosyada durmaz: üye ilk girişte ("Üyeliği oluştur") kendisi
+  belirler, Redis'te yalnız scrypt özeti (`lafpos:uye:<e-posta>`) saklanır. İlk girişte davet kodu istenir
+  (`LAFPOS_UYE_DAVET`, gizli, en az 8; büyük-küçük harf, boşluk ve tire fark etmez): e-postayı bilen başkası üyeliği
+  sahipten önce açamaz; kod tanımlı değilse üyelik açılmaz. Üyelik bir kez açılır (sonraki deneme 409); parolayı
+  sıfırlamak için Upstash'te o anahtar silinir, üye davet koduyla yeniden oluşturur. Oturum 30 gün; imzaya parola
+  özeti girer, parola değişince bütün oturumlar düşer. Deneme sınırı aynı (IP başına 15 dakikada 8); yanlış parola ve
+  bilinmeyen e-posta aynı yanıtı alır. Kafe bağlanmadan önce site demoya yönlenmez: giriş ekranı görünür, demo orada
+  "Demoyu dene" bağlantısıdır (`tests/uzaktan-uyelik.test.ts`, `e2e/uzaktan.mjs`).
+- **Üye girişi ve İndir (siteden kurulum):** giriş ekranı sitenin "Üye girişi"dir; girişten sonra menüde **İndir**
+  (`/indir`, yalnız Uzaktan derlemesinde). Kafeden veri gelmemişken üye girişten sonra doğrudan kabuksuz İndir'i görür;
+  sayfa yarım dakikada bir `/api/uzaktan/durum`'a bakar, kafe bağlanınca canlı görünüm kendiliğinden açılır.
   Sayfa kanalın yanındaki anahtarsız web kurucusuna bağlanır: `/guncelleme/LafPOS-Kur.cmd` (`npm run kanal`
   yazar, `scripts/kasa/windows/kurulum/web-kurucu.mjs`; `vercel.json` onu indirme olarak sunar). Dosya herkese
   açıktır ama gizli bir şey taşımaz (`tests/web-kurucu.test.ts`); bağlantı yalnız oturumda görünür. Kurucu cmd ve
@@ -108,7 +119,7 @@ müşteri telefonları gitmez.
 | Nerede | Ne |
 |---|---|
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |
-| Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter); parolayı açmak için `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
+| Vercel › lafpos › Environment Variables | `LAFPOS_CLOUD_SECRET` (en az 32 karakter); üyelik için `LAFPOS_UYE_EPOSTA` ve gizli `LAFPOS_UYE_DAVET` (parola ilk girişte belirlenir); eski düzende parolayı açmak için `LAFPOS_UZAKTAN_PAROLA_GEREKLI=1` ve `LAFPOS_UZAKTAN_PAROLA` (en az 10) |
 | Kafede `ayarlar.env` / `.env` | `LAFPOS_CLOUD_URL=https://lafpos.vercel.app`, `LAFPOS_CLOUD_SECRET` (Vercel'dekiyle aynı) |
 | Vercel › lafpos › Environment Variables (Yemeksepeti) | `YEMEKSEPETI_PLUGIN_SECRET` (Delivery Hero'nun verdiği JWT anahtarı), isteğe bağlı `YEMEKSEPETI_REMOTE_ID`; aktarıcı `docs/PAKET-PLATFORMLARI.md` |
 | Vercel › lafpos › Environment Variables (Getir) | `GETIR_WEBHOOK_SECRET` (bizim ürettiğimiz, en az 16 karakter, `LAFPOS_CLOUD_SECRET`'ten ve Yemeksepeti anahtarından ayrı, ör. `openssl rand -hex 24`; Getir'e `x-api-key` olarak sipariş ve iptal adresleriyle birlikte verilir), isteğe bağlı `GETIR_RESTAURANT_ID`; aktarıcı `docs/PAKET-PLATFORMLARI.md` |

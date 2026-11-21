@@ -53,6 +53,8 @@ export interface RemoteSetup {
   demo?: boolean;
   /** Parolasız görünüm (LAFPOS_UZAKTAN_PAROLA_GEREKLI yoksa): gerçek veri de parola sormadan açılır */
   open?: boolean;
+  /** Üyelik açık (LAFPOS_UYE_EPOSTA): 'new' üye ilk girişte parolasını belirler, 'ready' e-posta ve parolayla girer */
+  member?: 'new' | 'ready';
 }
 
 export const remoteSetupQuery = { queryKey: ['uzaktan', 'kurulum'], queryFn: () => get<RemoteSetup>('/uzaktan/kurulum') };
@@ -62,8 +64,9 @@ export function remoteSetupReady(s: RemoteSetup): boolean {
   return s.secret && s.password && s.redis;
 }
 
-/** Giriş ekranı parola sormadan girer mi: demo ya da kurulumu tamam parolasız görünüm */
+/** Giriş ekranı parola sormadan girer mi: demo ya da kurulumu tamam parolasız görünüm; üyelik açıksa hiç (form görünür) */
 export function remoteAutoEnters(s: RemoteSetup): boolean {
+  if (s.member) return false;
   return !!s.demo || (!!s.open && remoteSetupReady(s));
 }
 

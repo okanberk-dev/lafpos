@@ -236,7 +236,7 @@ describe('siteden kurulum: İndir sayfası', () => {
     const authed = app.indexOf('function Authed()');
     const appFn = app.indexOf('export function App()');
     const route = app.indexOf('{REMOTE && <Route path={DOWNLOAD_PATH} element={<DownloadPage />} />}');
-    const standalone = app.indexOf('<StandaloneDownloadPage />');
+    const standalone = app.indexOf('<StandaloneDownloadPage ');
     expect(authed).toBeGreaterThan(0);
     for (const at of [route, standalone]) {
       expect(at).toBeGreaterThan(authed);

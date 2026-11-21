@@ -49,11 +49,14 @@ dosyası.
 
 ### Siteden kurulum
 
-**1. Girin.** Kafedeki bilgisayarda [lafpos.laffogato.net](https://lafpos.laffogato.net)'i açın, **Üye girişi**
-ekranından girin.
+**1. Girin.** Kafedeki bilgisayarda [lafpos.laffogato.net](https://lafpos.laffogato.net)'i açın. **Üye girişi**
+e-posta ve parola sorar. İlk girişte ekranın adı **Üyeliği oluştur**'dur: e-postanızı ve size verilen **davet
+kodunu** yazın, bir parola belirleyin (en az 10 karakter, iki kez). Sonraki girişlerde yalnız e-posta ve parola
+sorulur; oturum 30 gün açık kalır.
 
-**2. İndirin.** Menüde **İndir**'e, sonra **LafPOS'u indir**'e basın. **LafPOS-Kur.cmd** İndirilenler'e iner.
-Tarayıcı "sık indirilmiyor" derse **Sakla**'ya basın.
+**2. İndirin.** Kafe henüz bağlanmadıysa girişten sonra doğrudan indirme sayfası açılır; bağlandıysa menüde
+**İndir**'e basın. Sonra **LafPOS'u indir**. **LafPOS-Kur.cmd** İndirilenler'e iner. Tarayıcı "sık indirilmiyor"
+derse **Sakla**'ya basın.
 
 **3. Çalıştırın.** Dosyaya çift tıklayın. Windows "Bilgisayarınız korundu" derse **Ek bilgi**'ye, sonra **Yine de
 çalıştır**'a basın. "Değişiklik yapmasına izin verilsin mi?" sorusuna **Evet** deyin.
