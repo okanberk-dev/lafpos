@@ -124,6 +124,8 @@ export interface FakeSite {
   version: string;
   /** Sürüm yanıtındaki karaoke işareti (F1); null: eski site, alan gönderilmez */
   karaokeMarker: string | null;
+  /** Menü işareti (pub:menu); null: eski site, alan yok */
+  menuMarker: string | null;
   /** Sitenin karaoke rezervasyonları; tarih, sorulan güne (`from`) taşınır */
   karaoke: PanelKaraokeFixture[];
   karaokeStatus: number[];
@@ -166,6 +168,7 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     panelMenuVersion: panelMenu.version,
     version: 'v1',
     karaokeMarker: 'k1',
+    menuMarker: null,
     karaoke: siteKaraokeFixture().reservations,
     karaokeStatus: [],
     karaokeDelayMs: 0,
@@ -207,7 +210,8 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
     const expected = `v1=${sign(secret, { timestamp: ts, method: req.method ?? 'GET', url, body: raw })}`;
     if (req.headers['x-laf-signature'] !== expected) return send(401, { error: 'unauthorized' });
 
-    if (call === 'GET /api/pos/orders/version') return send(200, site.karaokeMarker === null ? { version: site.version } : { version: site.version, karaoke: site.karaokeMarker });
+    if (call === 'GET /api/pos/orders/version')
+      return send(200, { version: site.version, ...(site.karaokeMarker === null ? {} : { karaoke: site.karaokeMarker }), ...(site.menuMarker === null ? {} : { menu: site.menuMarker }) });
     if (call === 'GET /api/panel/karaoke') {
       if (site.karaokeDelayMs) await new Promise((r) => setTimeout(r, site.karaokeDelayMs));
       const code = site.karaokeStatus.shift() ?? 200;

@@ -504,12 +504,15 @@ idempotent). İstek giden kutusunda (`outbox`) bekler; internet yoksa artan bekl
 `LAFMALIYET_URL` ve `LAFMALIYET_SYNC_SECRET` yokken hiçbir şey kuyruğa girmez, istek gitmez. Kurulum modunda kapanan
 gün (eğitim günü) hiç gitmez, kurulum modu sonra kapansa da (§4.3).
 
-**Şube (`sube`, 4 Kasım 2026, ekleme).** Marina şubesi açılınca lafmaliyet ciroyu şubeye göre ayırmaya başladı
-(lafmaliyet `docs/SUBE.md`). Paket, kasanın şubesinin kimliğini taşır: Yönetim › Ayarlar'daki `branchId`
-(varsayılan `tuzla`), lafmaliyet'teki kimliğin aynısı (harfle başlar, küçük harf / rakam / tire, 2-24 karakter).
-Panel günü o şubeye yazar; alanı tanımayan ya da şube kırılımı olmayan panel yok sayar ve günü bugünkü gibi
-Tuzla'ya yazar (geri uyumlu). **İkinci bir kasa kurarken ilk iş bu alanı değiştirmektir:** yanlış kimlik, günün
-yanlış şubeye yazılması demektir ve panelde aynı güne iki Z çakışır (§4.2 `z_conflict`).
+**Şube (`sube`, 4 Kasım 2026; 21 Kasım 2026'da güncellendi).** lafmaliyet ciroyu şubeye göre ayırır (lafmaliyet
+`docs/SUBE.md`). Paket, kasanın şubesinin kimliğini taşır: Yönetim › Ayarlar'daki `branchId` (varsayılan `marina`),
+lafmaliyet'teki kimliğin aynısı (harfle başlar, küçük harf / rakam / tire, 2-24 karakter). **Sahibin kararı (21 Kasım
+2026): ilk LafPOS kasası Marina'da, Tuzla ModPOS'ta kalır.** lafmaliyet'te LafPOS'un şubesi tek sabittir
+(`LAFPOS_BRANCH_ID = "marina"`): gün o şubeye yazılır, geçiş günü yalnız o şubenin kasasınındır, kilit ve Z denetimi
+(gün, şube) başına. Paketin `sube`'si bundan başkaysa gün yazılmaz: 409 `wrong_branch` (kasa bunu kalıcı hata sayar ve
+"Şube'yi düzeltip yeniden gönderin" der). Marina'nın ModPOS'u da yedek olarak çekilmeye devam eder (şubenin kasa
+kaynağı lafmaliyet'te ModPOS kalır): geçiş gününden önce o sayılır, sonra LafPOS'un günü; ModPOS'unki saklanır ama
+hesaba girmez. Tuzla da LafPOS'a geçince lafmaliyet'te LafPOS'un şubesi listeye döner (ayrı iş).
 
 ```
 POST {LAFMALIYET_URL}/api/pos/gun
@@ -517,7 +520,7 @@ x-laf-timestamp, x-laf-signature (aynı kural; anahtar: lafmaliyet'te LAFPOS_SYN
 {
   "version": 1,
   "source": "lafpos",
-  "sube": "tuzla",
+  "sube": "marina",
   "date": "2026-10-26",
   "z": {
     "zNo": 128, "receipts": 214, "zTotal": 45210.5,

@@ -123,7 +123,8 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcPavoAutoEod: true,
   rolePermissions: {},
   zNoStart: null,
-  branchId: 'tuzla',
+  // İlk LafPOS kasası Marina'da (sahibin kararı, 21 Kasım 2026; Tuzla ModPOS'ta kalır). Ayarlar › Şube'den değişir
+  branchId: 'marina',
   platforms: PLATFORM_DEFAULTS,
   liveSince: null,
 };

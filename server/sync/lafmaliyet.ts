@@ -396,6 +396,10 @@ function httpErrorText(status: number, json: unknown): string {
  */
 export function pushErrorText(status: number, json: unknown, payload: unknown): string {
   const detail = errorDetail(json);
+  if (status === 409 && (json as { error?: unknown } | null)?.error === 'wrong_branch') {
+    const b = json as { sube?: unknown; expected?: unknown };
+    return `lafmaliyet bu kasanın gün sonunu almıyor: kasa "${String(b.sube)}" şubesine ayarlı, LafPOS'un şubesi "${String(b.expected)}". Yönetim › Ayarlar ve yedek › Şube'yi düzeltip ${RESEND} ile yeniden gönderin`;
+  }
   if (status === 409) {
     const body = (json && typeof json === 'object' ? json : {}) as { zNo?: unknown };
     const sent = (payload as { z?: { zNo?: unknown } } | null)?.z?.zNo;

@@ -423,17 +423,17 @@ describe('yönetim doğrulamaları', () => {
 
 /**
  * Şube kimliği (docs/03-ENTEGRASYON.md §4, 4 Kasım 2026): gün sonu paketi kasanın şubesini taşır, böylece
- * lafmaliyet günü doğru şubenin cirosuna yazar (lafmaliyet docs/SUBE.md). Varsayılan `tuzla`: tek şubeli
- * kurulumda ve eski kayıtlarda bugünkü davranış değişmez.
+ * lafmaliyet günü doğru şubenin cirosuna yazar (lafmaliyet docs/SUBE.md). Varsayılan `marina`: ilk LafPOS kasası
+ * Marina'da (21 Kasım 2026); lafmaliyet LafPOS'un şubesinden başka şubeye ayarlı kasanın gününü reddeder.
  */
 describe('şube kimliği pakete girer', () => {
-  it('varsayılan tuzla, ayar değişince paket onu taşır', async () => {
+  it('varsayılan marina, ayar değişince paket onu taşır', async () => {
     const day = await freshDay();
-    expect((await payloadOf(day.id)).sube).toBe('tuzla');
-
-    await h.ok('patron', 'PUT', '/admin/settings', { branchId: 'marina' });
     expect((await payloadOf(day.id)).sube).toBe('marina');
+
     await h.ok('patron', 'PUT', '/admin/settings', { branchId: 'tuzla' });
+    expect((await payloadOf(day.id)).sube).toBe('tuzla');
+    await h.ok('patron', 'PUT', '/admin/settings', { branchId: 'marina' });
   });
 
   it('geçersiz kimlik ayarlanamaz (lafmaliyet ile aynı kural)', async () => {
@@ -443,6 +443,6 @@ describe('şube kimliği pakete girer', () => {
     }
     // Ayar değişmedi
     const day = await freshDay();
-    expect((await payloadOf(day.id)).sube).toBe('tuzla');
+    expect((await payloadOf(day.id)).sube).toBe('marina');
   });
 });
