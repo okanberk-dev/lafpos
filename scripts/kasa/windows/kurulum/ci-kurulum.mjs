@@ -158,8 +158,15 @@ await until(
 );
 if (installedBuild() !== b1) fail('app klasörü yeni derlemeyi taşımıyor');
 if (!existsSync(join(INSTALL, 'app.eski'))) fail('app.eski yok (eski sürüm saklanmadı)');
-const nodeNow = execFileSync(join(INSTALL, 'node', 'node.exe'), ['-v'], { encoding: 'utf8' }).trim();
-if (nodeNow !== `v${node.version}`) fail(`node.exe ${nodeNow}, beklenen v${node.version} (node.yeni yerine geçmedi)`);
+// Sağlık denetimi yeni sürümün deneme açılışında da (node.yeni ile) geçer: baslat.cmd'nin Node değişimini bekle
+const nodeOf = () => {
+  try {
+    return execFileSync(join(INSTALL, 'node', 'node.exe'), ['-v'], { encoding: 'utf8' }).trim();
+  } catch {
+    return null;
+  }
+};
+const nodeNow = await until(`node.exe v${node.version} olmadı (node.yeni yerine geçmedi)`, () => (nodeOf() === `v${node.version}` ? nodeOf() : null), 90_000);
 if (existsSync(join(INSTALL, 'node.yeni'))) fail('node.yeni kaldı');
 const s1 = await until('durum "Güncellendi" olmadı', () => (status()?.mesaj === 'Güncellendi' ? status() : null), 60_000);
 console.log(`  ${s1.mesaj} · kurulu ${JSON.stringify(s1.kurulu)} · Node ${nodeNow}`);

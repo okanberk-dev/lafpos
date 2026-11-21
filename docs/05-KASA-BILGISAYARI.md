@@ -245,6 +245,20 @@ kullanıcı hesabı önerilir.
   (§2). Git ile: `git pull`, `npm ci`, `npm run build`, ardından sunucuyu yeniden başlatın (Windows'ta Görev
   Zamanlayıcı'da "LafPOS Sunucu"yu Sonlandır › Çalıştır; macOS'ta `launchctl kickstart -k gui/$UID/net.laffogato.lafpos`).
 
+### Bulut yedeği
+
+Günlük yedek (`backups\lafpos-<tarih>.db`) alınınca kasada sıkıştırılıp şifrelenir (AES-256-GCM; anahtar
+`LAFPOS_CLOUD_SECRET`'ten türetilir, buluta hiç gitmez) ve LafPOS Uzaktan'ın verdiği 15 dakikalık imzalı adrese yüklenir
+(Vercel Blob, özel depo `lafpos-yedek`; `server/sync/yedek.ts`, `api/_yedek.ts`). Dükkân başına son 30 yedek kalır;
+gidemezse yarım saatte bir yeniden denenir. Durum ve "Şimdi yedekle": Yönetim › Ayarlar ve yedek › Bulut yedeği.
+
+**Geri yükleme** (yalnız patron, kendi PIN'iyle, gün kapalıyken, Windows kurulumunda): "Buluttan geri yükle" yedeği
+seçtirir; seçilen yedek indirilir, çözülür, SQLite olduğu doğrulanır ve veri klasöründe `geri-yukle\hazir.db` olarak
+bekler. Sunucu kapanır; bekçi açmadan önce mevcut veritabanının kopyasını alır
+(`backups\lafpos-geri-yukleme-oncesi-<an>.db`) ve yedeği yerine koyar (`geri-yukle.mjs`), LafPOS yarım dakikada
+yeniden açılır. **Yeni bilgisayarda:** LafPOS'u kurup ayarlar.env'e aynı `LAFPOS_CLOUD_URL` ve `LAFPOS_CLOUD_SECRET`
+yazılınca eski bilgisayarın yedekleri listede "Kurulum" seçiminden bulunur. Denetim kaydına yazılır.
+
 ### Otomatik güncelleme (anahtarsız)
 
 Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.

@@ -22,6 +22,7 @@ import { runMenuSync } from './sync/menu-sync';
 import { startCloudSync } from './sync/cloud';
 import { startMerkez } from './sync/merkez';
 import { startNotices } from './sync/bildirim';
+import { afterDailyBackup } from './sync/yedek';
 import { startCatchUp } from './sync/catch-up';
 
 /**
@@ -103,13 +104,16 @@ function dailyMaintenance(day: string) {
 async function backupTick() {
   const day = businessDate(Date.now());
   const file = resolve(env.dataDir, 'backups', `lafpos-${day}.db`);
-  if (existsSync(file)) return;
-  try {
-    await backupNow();
-  } catch (e) {
-    console.warn('[yedek] alınamadı:', e instanceof Error ? e.message : e);
+  if (!existsSync(file)) {
+    try {
+      await backupNow();
+    } catch (e) {
+      console.warn('[yedek] alınamadı:', e instanceof Error ? e.message : e);
+    }
+    dailyMaintenance(day);
   }
-  dailyMaintenance(day);
+  // Günün yedeği şifrelenip buluta (Uzaktan kuruluysa; gidemezse yarım saatte bir yeniden)
+  if (existsSync(file)) afterDailyBackup(file, day);
 }
 
 let lastAutoWarn = 0;

@@ -13,7 +13,7 @@ import { NODE_ABI, NODE_VERSION } from './surumler.mjs';
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(HERE, '../../../..');
 /** Bekçiyle pakete giren betikler: bekçi, ayar kuralları, güncelleyici ve arşiv yardımcıları */
-export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs'];
+export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs'];
 /** better-sqlite3 ve yükledikleri: yalnız JavaScript (derleme klasörleri ve kaynak yok) */
 const SQLITE_MODULES = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
 /** Yük içinde Windows ikilisinin yeri (kurulum koyar, güncelleme eskisinden ya da indirilenden taşır) */

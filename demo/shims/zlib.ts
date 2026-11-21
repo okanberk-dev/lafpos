@@ -10,4 +10,9 @@ export function gzip(_data: unknown, done: (err: Error | null, out?: Uint8Array)
   done(new Error(NO_CLOUD));
 }
 
-export default { gzipSync, gzip };
+/** Bulut yedeğinin açılması (server/sync/yedek.ts): demoda çağrılmaz */
+export function gunzipSync(): never {
+  throw new Error('Tarayıcı demosunda bulut yedeği yok');
+}
+
+export default { gzipSync, gzip, gunzipSync };

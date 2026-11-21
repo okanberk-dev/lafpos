@@ -1,4 +1,7 @@
 import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { cloudBackupState, listCloudBackups, restartForRestore, stageRestore, underBekci, uploadBackup } from '../sync/yedek';
+import { cloudEnabled } from '../sync/cloud';
+import { getOpenDay } from '../services/orders';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { tl } from '@shared/money';
@@ -1137,6 +1140,69 @@ adminRoutes.post('/backups', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   const file = await backupNow();
   return c.json({ file });
+});
+
+// ─── Bulut yedeği (server/sync/yedek.ts) ─────────────────────────────────────
+
+adminRoutes.get('/bulut-yedek', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json({ ready: cloudEnabled(), restore: underBekci(), state: cloudBackupState() });
+});
+
+/** Bulut yedekleri (dükkân verilirse onun: bilgisayar değiştiyse eski kurulumun yedekleri) */
+adminRoutes.post('/bulut-yedek/liste-dukkan', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
+  const input = await body(c, z.object({ dukkan: z.string().regex(/^[a-z0-9-]{1,40}$/).optional() }));
+  try {
+    return c.json(await listCloudBackups(input.dukkan));
+  } catch (e) {
+    throw new HttpError(502, e instanceof Error ? e.message : 'Yedekler okunamadı', 'cloud');
+  }
+});
+
+/** Şimdi yedekle: günün yedeği alınır ve buluta yüklenir */
+adminRoutes.post('/bulut-yedek', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
+  const file = await backupNow();
+  try {
+    return c.json(await uploadBackup(file));
+  } catch (e) {
+    throw new HttpError(502, e instanceof Error ? e.message : 'Yedek yüklenemedi', 'cloud');
+  }
+});
+
+/**
+ * Buluttan geri yükle: yalnız patron, kendi PIN'iyle (denetim kaydına yazılır). Açık gün varken yapılmaz (günün
+ * satışları kaybolurdu). Yedek indirilip doğrulanır; sunucu kapanır, bekçi mevcut veritabanının kopyasını alıp yedeği
+ * yerine koyar ve LafPOS'u yeniden açar (Windows kurulumu)
+ */
+adminRoutes.post('/bulut-yedek/geri-yukle', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  if (user.role !== 'patron') throw new HttpError(403, 'Geri yüklemeyi yalnız patron yapar', 'patron_only');
+  if (!underBekci()) throw new HttpError(409, 'Geri yükleme yalnız Windows kurulumunda yapılır', 'not_installed');
+  const input = await body(c, z.object({ pathname: z.string().max(120), pin: z.string().max(12) }));
+  const addr = clientKey(c);
+  assertNotLocked('onay', addr, user.id);
+  const me = db.select({ pinHash: schema.users.pinHash }).from(schema.users).where(eq(schema.users.id, user.id)).get();
+  if (!me || !isValidPin(input.pin) || hashPin(input.pin) !== me.pinHash) {
+    recordFailure('onay', addr, user);
+    throw new HttpError(403, 'PIN hatalı: kendi PIN’inizi yazın', 'pin_invalid');
+  }
+  clearFailures('onay', addr, user.id);
+  if (getOpenDay(db)) throw new HttpError(409, 'Önce gün sonu alın: açık günün satışları geri yüklemede kaybolur', 'day_open');
+  try {
+    await stageRestore(input.pathname, user.id);
+  } catch (e) {
+    throw new HttpError(502, e instanceof Error ? e.message : 'Yedek indirilemedi', 'cloud');
+  }
+  const fx = new Effects();
+  fx.audit(db, { userId: user.id, action: 'yedek', message: `Buluttan geri yükleme: ${input.pathname}` });
+  fx.flush();
+  restartForRestore();
+  return c.json({ ok: true });
 });
 
 // ─── Deneme modu: "Denemeyi bitir, gerçek kullanıma başla" (services/deneme.ts) ──────────────────────────────

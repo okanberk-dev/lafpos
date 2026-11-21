@@ -15,6 +15,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { bildirim, broadcast } from './_bildirim.js';
+import { yedek } from './_yedek.js';
 import { merkez, type Release } from './_merkez.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
@@ -1148,6 +1149,8 @@ async function handle(req: Request): Promise<Response> {
   const bildirimDeps = { redis, admin, signed: (body: string) => secret().length >= 32 && verifyPush(secret(), req, url, body) };
   // Patrona telefon bildirimi (Web Push): kasanın imzalı olayı ve aboneliği
   if (path.startsWith('uzaktan/bildirim')) return bildirim(req, path, bildirimDeps);
+  // Bulut yedeği: kasanın imzalı istekleri (yükleme ve indirme adresi, liste)
+  if (path.startsWith('uzaktan/yedek/')) return yedek(req, path, { signed: bildirimDeps.signed, shop: shopHeader(req) ?? REPORT_SHOP });
   // Merkez: kasanın kaydı ve imzalı nabzı (kendi anahtarıyla), panel (gerçek oturumla); demo ve salt okunur kapısından önce
   if (path.startsWith('merkez/')) {
     const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder';
