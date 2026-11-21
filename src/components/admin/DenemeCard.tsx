@@ -16,15 +16,17 @@ const digits = (v: string) => v.replace(/\D/g, '').slice(0, 6);
 /**
  * Yönetim › Ayarlar ve yedek › Deneme modu (yalnız patron). Yeni kurulum deneme modunda açılır: satışlar eğitimdir.
  * "Denemeyi bitir, gerçek kullanıma başla" önce yedek alır, deneme hareketlerini siler, kurulumu bırakır, örnek
- * PIN'leri kapatır (server/services/deneme.ts). Gerçek kullanım başladıysa ya da deneme modu kapalıysa kart çizilmez.
+ * PIN'leri kapatır (server/services/deneme.ts). Gerçek kullanım başladıysa (`liveSince`) kart çizilmez. Deneme kapanmış
+ * ama geçiş yarım kalmışsa (gerçek gün var) kart "Geçişi tamamla"yı gösterir: hiçbir kayıt silinmez.
  */
 export function DenemeCard() {
   const status = useQuery({ queryKey: ['admin', 'deneme'], queryFn: () => get<DenemeStatusDTO>('/admin/deneme') });
   const [open, setOpen] = useState(false);
   const d = status.data;
-  if (!d || d.liveSince != null || !d.deneme) return null;
+  if (!d || d.liveSince != null) return null;
+  if (d.finalizeOnly) return <FinalizeCard status={d} />;
   const c = d.counts;
-  const blocked = d.dayOpen || d.realDays > 0;
+  const blocked = d.dayOpen;
   return (
     <Card
       title={
@@ -47,11 +49,6 @@ export function DenemeCard() {
             Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin
           </Notice>
         )}
-        {d.realDays > 0 && (
-          <Notice tone="warn" title="Gerçek gün var">
-            Deneme modu dışında kapanmış {n(d.realDays)} gün var; bu kayıtlar silinmez. Yardım için kurulumu yapan kişiye haber verin
-          </Notice>
-        )}
         <div>
           <Button variant="primary" icon={<Rocket className="size-4" />} disabled={blocked} onClick={() => setOpen(true)}>
             Denemeyi bitir, gerçek kullanıma başla
@@ -64,13 +61,50 @@ export function DenemeCard() {
 }
 
 /**
+ * Yarım kalmış geçiş (deneme kapanmış, gerçek gün var, `liveSince` yok): örnek PIN'li hesaplar hâlâ açık olabilir.
+ * "Geçişi tamamla" hiçbir kaydı silmez
+ */
+function FinalizeCard({ status }: { status: DenemeStatusDTO }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card title="Gerçek kullanıma geçiş tamamlanmadı" subtitle="Satışlar gerçek kaydediliyor; geçiş adımı yarım kalmış">
+      <div className="grid gap-3 text-sm">
+        <p className="text-ink-2">
+          Deneme modu kapanmış ama “gerçek kullanıma başla” adımı yapılmamış. Örnek PIN’li hesaplar açık kalmış olabilir. Geçişi tamamlayınca başlangıç kaydedilir, örnek PIN’li hesaplar
+          kapanır; hiçbir satış ya da gün silinmez.
+        </p>
+        {status.samplePinUsers.length > 0 && (
+          <Notice tone="warn" title="Örnek PIN’li hesaplar açık">
+            {status.samplePinUsers.map((u) => u.name).join(', ')}
+          </Notice>
+        )}
+        {status.dayOpen && (
+          <Notice tone="warn" title="Açık bir gün var">
+            Önce Kasa’dan gün sonunu alın, sonra geçişi tamamlayın
+          </Notice>
+        )}
+        <div>
+          <Button variant="primary" icon={<Rocket className="size-4" />} disabled={status.dayOpen} onClick={() => setOpen(true)}>
+            Geçişi tamamla
+          </Button>
+        </div>
+      </div>
+      {open && <FinishDialog status={status} onClose={() => setOpen(false)} />}
+    </Card>
+  );
+}
+
+/**
  * Üstteki "Deneme modu" şeridinin "Denemeyi bitir" düğmesi (yalnız patron; AppShell tembel yükler): durumu sorar,
  * bitirilebiliyorsa kartla aynı pencereyi açar. Açık gün ya da deneme dışı kapanmış gün varsa ne yapılacağını söyler
  */
 export function DenemeFinishLauncher({ onClose }: { onClose: () => void }) {
   const status = useQuery({ queryKey: ['admin', 'deneme'], queryFn: () => get<DenemeStatusDTO>('/admin/deneme') });
   const d = status.data;
-  const blocked = !d ? null : d.liveSince != null || !d.deneme ? 'Gerçek kullanım zaten başlamış' : d.dayOpen ? 'Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin' : d.realDays > 0 ? 'Deneme dışında kapanmış gün var; Yönetim › Ayarlar ve yedek › Deneme modu’na bakın' : null;
+  // Şerit iki durumda da bu pencereyi açar: deneme sürüyorsa "denemeyi bitirin", deneme kapanmış ama geçiş yarımsa
+  // "geçişi tamamlayın" (kartlardaki uyarıyla aynı söz; e2e/flows.mjs deneme şeridinin metnini bekler)
+  const dayOpenText = d?.deneme ? 'Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin' : 'Önce Kasa’dan gün sonunu alın, sonra geçişi tamamlayın';
+  const blocked = !d ? null : d.liveSince != null ? 'Gerçek kullanım zaten başlamış' : d.dayOpen ? dayOpenText : null;
   useEffect(() => {
     if (status.isError) {
       toast.err(errorMessage(status.error));
@@ -91,6 +125,7 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
   const c = status.counts;
+  const finalize = status.finalizeOnly;
   const needNew = status.mustChangeOwnPin;
   const newError = !needNew && !newPin ? null : !/^\d{4,6}$/.test(newPin) ? 'Yeni PIN 4–6 hane rakam' : newPin === pin ? 'Yeni PIN eskisinden farklı olmalı' : null;
   const repeatError = newPin && newPin2 !== newPin ? 'İki PIN aynı değil' : null;
@@ -101,9 +136,10 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
     if (pinError || newError || repeatError) return;
     setBusy(true);
     try {
-      const r = await post<{ already: boolean; backup: string | null; closedUsers: string[] }>('/admin/deneme/bitir', { pin, ...(newPin ? { newPin } : {}) });
+      const r = await post<{ already: boolean; finalized?: boolean; backup: string | null; closedUsers: string[] }>('/admin/deneme/bitir', { pin, ...(newPin ? { newPin } : {}) });
+      const done = r.finalized ? 'Geçiş tamamlandı' : 'Gerçek kullanım başladı';
       if (r.already) toast.info('Gerçek kullanım zaten başlamış; hiçbir şey silinmedi');
-      else toast.ok(r.closedUsers.length ? `Gerçek kullanım başladı. Örnek PIN’li hesaplar kapatıldı: ${r.closedUsers.join(', ')}` : 'Gerçek kullanım başladı');
+      else toast.ok(r.closedUsers.length ? `${done}. Örnek PIN’li hesaplar kapatıldı: ${r.closedUsers.join(', ')}` : done);
       onClose();
       void qc.invalidateQueries();
     } catch (e) {
@@ -118,20 +154,34 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
       open
       persistent
       onClose={() => !busy && onClose()}
-      title="Gerçek kullanıma başla"
-      subtitle="Bu işlem geri alınmaz; öncesinde yedek alınır"
+      title={finalize ? 'Gerçek kullanıma geçişi tamamla' : 'Gerçek kullanıma başla'}
+      subtitle={finalize ? 'Hiçbir kayıt silinmez; öncesinde yedek alınır' : 'Bu işlem geri alınmaz; öncesinde yedek alınır'}
       footer={
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" disabled={busy} onClick={onClose}>
             Vazgeç
           </Button>
           <Button variant="danger" loading={busy} icon={<Rocket className="size-4" />} onClick={() => void submit()}>
-            Denemeyi bitir
+            {finalize ? 'Geçişi tamamla' : 'Denemeyi bitir'}
           </Button>
         </div>
       }
     >
       <div className="grid gap-4 text-sm">
+        {finalize ? (
+          <section>
+            <p className="text-ink-2">
+              Deneme modu daha önce kapanmış, {n(status.realDays)} gün gerçek kaydedilmiş. Bu kayıtlar silinmez. Gerçek kullanımın başlangıcı yazılır
+              {status.samplePinUsers.length > 0 && (
+                <>
+                  {' '}
+                  ve örnek PIN’iyle duran hesaplar kapatılır: <b className="font-semibold text-ink">{status.samplePinUsers.map((u) => u.name).join(', ')}</b>. Personel’den yeni PIN verip açabilirsiniz
+                </>
+              )}
+            </p>
+          </section>
+        ) : (
+          <>
         <section>
           <h3 className="font-semibold">Silinecek deneme kayıtları</h3>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-ink-2">
@@ -165,6 +215,8 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
             )}
           </ul>
         </section>
+          </>
+        )}
         {needNew && (
           <Notice tone="warn" icon={<KeyRound />} title="PIN’iniz hâlâ örnek PIN">
             Herkesin bildiği PIN gerçek kullanımda kalamaz: yeni PIN’inizi seçin

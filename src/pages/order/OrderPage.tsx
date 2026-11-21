@@ -26,6 +26,7 @@ import {
   Trash2,
   UserRound,
   Users,
+  Wallet,
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -397,13 +398,24 @@ export default function OrderPage() {
       else navigate(backPath);
     });
 
+  // Adisyon indirimi sunucudaki ara toplama uygulanır: gönderilmemiş satırlar önce yazılır (ödeme gibi; tezgâhta ödeme
+  // bekleyen olarak), yoksa pencere "Ara toplam ₺0,00" der ve sunucu boş adisyona indirim vermez
+  const openDiscount = () =>
+    void once(async () => {
+      if (pending.length && !(await send(holdOnPay))) return;
+      setDialog('indirim');
+    });
+  // Ödemesi alınmış (yeniden açılmış, tamamı ödenmiş) adisyonda ödeme iptali ödeme penceresindeki "Alınan ödemeler"de;
+  // ödenecek tutar yokken "Öde" kapalı olduğundan pencereye buradan girilir. İptal yetkisi ve onayı pencerede aynı
+  const refundEntry = isOpen && !isOnline && !REMOTE && (can('odeme.iade') || can('odeme.al')) && due <= 0 && order.payments.some((p) => !p.refundedAt);
+
   // Ciro dışı kapanış sunucudaki kalemlere uygulanır: gönderilmemiş satırlar önce gönderilir ya da silinir (sessizce düşmesin)
   const compable = editable && order.paid === 0 && !order.room && (pending.length > 0 || order.items.some((i) => !i.voided && !i.complimentary));
   const compAll = (kind: CompKind) => (pending.length ? toast.warn('Önce gönderilmemiş kalemleri gönderin ya da silin') : setDialog(kind));
   const menuItems: { group: MenuGroup; icon: React.ReactNode; label: string; hint?: string; onClick: () => void; show: boolean; danger?: boolean }[] = [
     { group: 'adisyon', icon: <Merge className="size-5" />, label: 'Masa taşı / birleştir', onClick: () => setDialog('tasi'), show: editable },
     { group: 'adisyon', icon: <Split className="size-5" />, label: 'Hesabı böl / kalem taşı', onClick: () => setDialog('bol'), show: editable && order.items.some((i) => !i.voided) },
-    { group: 'adisyon', icon: <Percent className="size-5" />, label: order.discountType ? 'Adisyon indirimini değiştir' : 'Adisyon indirimi', onClick: () => setDialog('indirim'), show: editable },
+    { group: 'adisyon', icon: <Percent className="size-5" />, label: order.discountType ? 'Adisyon indirimini değiştir' : 'Adisyon indirimi', onClick: openDiscount, show: editable },
     // Kişi sayısı yalnız masada anlamlı (raporlar da yalnız masa adisyonunun kişisini sayar)
     { group: 'adisyon', icon: <Users className="size-5" />, label: `Kişi sayısı: ${order.guests}`, onClick: () => setDialog('kisi'), show: editable && order.type === 'masa' },
     { group: 'adisyon', icon: <UserRound className="size-5" />, label: order.customer ? `Müşteri: ${order.customer.name}` : 'Müşteri ekle', hint: boot.integrations.localStamps ? 'Açık hesap ve damga kartı için' : 'Açık hesap ve sipariş geçmişi için', onClick: () => setDialog('musteri'), show: isOpen && !isOnline },
@@ -418,6 +430,7 @@ export default function OrderPage() {
     { group: 'adisyon', icon: <StickyNote className="size-5" />, label: order.note ? 'Notu değiştir' : 'Not ekle', onClick: () => { setNoteText(order.note ?? ''); setDialog('not'); }, show: editable },
     { group: 'adisyon', icon: <Printer className="size-5" />, label: 'Hesap yazdır', onClick: printBill, show: !isOnline && order.items.some((i) => !i.voided) },
     { group: 'adisyon', icon: <CircleDollarSign className="size-5" />, label: 'Adisyonu kapat', hint: 'Ödenecek tutar yok', onClick: closeZero, show: zeroClose },
+    { group: 'adisyon', icon: <Wallet className="size-5" />, label: 'Alınan ödemeler', hint: 'Ödemeyi iptal etmek için', onClick: () => setDialog('odeme'), show: refundEntry },
     { group: 'adisyon', icon: <RotateCcw className="size-5" />, label: 'Yeniden aç', hint: 'Yetkili onayı ister', onClick: () => setDialog('yenidenac'), show: order.status === 'kapali' && !isOnline },
     // Ciro dışı kapanış (ikram, ödenmez, zayi): ödeme alınmamış adisyonun bütün kalemleri (kısmen ödenmişte kalan kalem kalem yazılır)
     ...COMP_KINDS.map((kind) => ({ group: 'ciro' as const, icon: COMP_ICON[kind], label: COMP_CLOSE_LABEL[kind], hint: COMP_HINT[kind], onClick: () => compAll(kind), show: compable })),
@@ -584,10 +597,18 @@ export default function OrderPage() {
     </>
   ) : isOpen && !isOnline && !REMOTE ? (
     zeroClose ? (
-      <Button size="lg" variant="ink" block loading={sending} onClick={closeZero}>
-        Adisyonu kapat
-      </Button>
+      <>
+        <Button size="lg" variant="ink" block loading={sending} onClick={closeZero}>
+          Adisyonu kapat
+        </Button>
+        {refundEntry && (
+          <Button block icon={<Wallet className="size-4" />} disabled={sending} onClick={() => setDialog('odeme')}>
+            Alınan ödemeler
+          </Button>
+        )}
+      </>
     ) : (
+
       <Button size="lg" variant="ink" block disabled={due <= 0} onClick={() => setDialog('odeme')}>
         <PayLabel action="Öde" amount={due} inline />
       </Button>
@@ -607,7 +628,7 @@ export default function OrderPage() {
   const printIsPrimary = isOpen && !isOnline && !canPay && !zeroClose && !pending.length;
   const quickActions = [
     { key: 'bol', label: 'Böl', icon: <Split />, onClick: () => setDialog('bol'), show: editable && order.items.some((i) => !i.voided && i.qty - i.paidQty > 0) },
-    { key: 'indirim', label: 'İndirim', icon: <Percent />, onClick: () => setDialog('indirim'), show: editable && hasItems },
+    { key: 'indirim', label: 'İndirim', icon: <Percent />, onClick: openDiscount, show: editable && (hasItems || pending.length > 0) },
     { key: 'tasi', label: 'Taşı', icon: <ArrowRightLeft />, onClick: () => setDialog('tasi'), show: editable },
     { key: 'yazdir', label: 'Hesap yazdır', icon: <Printer />, onClick: printBill, show: !isOnline && !REMOTE && hasItems && !printIsPrimary },
     { key: 'islemler', label: 'İşlemler', icon: <MoreHorizontal />, onClick: () => setDialog('menu'), show: !REMOTE, wideOnly: true },

@@ -17,6 +17,7 @@ import {
   busyMessage,
   eodAfter,
   type EodBaseline,
+  eodCopyUnavailable,
   eodSummary,
   type EodReading,
   pairPavo,
@@ -32,7 +33,7 @@ import {
 } from './providers/pavo';
 import { findPavo } from './pavo-bul';
 import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
-import { describe as describePavo, pavoAddress, PavoError, pavoSerial } from './pavo';
+import { describe as describePavo, PAIRING_LOST_MESSAGE, pairingLost, pavoAddress, PavoError, pavoSerial } from './pavo';
 import { type TokenxBasket, TokenxError, type TokenxSale } from './tokenx';
 
 /**
@@ -116,6 +117,14 @@ function loadReceipt(id: string): ReceiptRow {
 
 function recordError(message: string) {
   setSyncState('okc.lastError', { message, at: Date.now() });
+}
+
+/**
+ * Cihaz yeniden çalışıyor (eşleştirme, başarılı bağlantı denemesi, alınan gün sonu): eski "Son hata" artık geçerli
+ * değil, ekranda durmaz. Hata denetim kaydında ve günlükte kalır; burada silinen yalnız durum satırıdır
+ */
+function clearError() {
+  if (getSyncState('okc.lastError')) db.delete(schema.syncState).where(eq(schema.syncState.key, 'okc.lastError')).run();
 }
 
 function publish(orderId: string, kind: string, message?: string, byUserId?: string) {
@@ -861,7 +870,11 @@ export async function testProvider() {
   const provider = providerFor(getSettings().okcProvider);
   if (!provider?.test) throw conflict('Bu sağlayıcı için bağlantı denemesi yok', 'okc_no_test');
   if (!provider.configured()) throw conflict(provider.notConfigured, 'okc_not_configured');
-  return provider.test().catch(deviceError);
+  const out = await provider.test().catch(deviceError);
+  // Pavo: cihaz yanıt verdi ve eşleştirme tutuyor; Token: deneme hatasız bitti
+  const pavoOut = out as { ping?: { ok?: boolean }; paired?: boolean } | null;
+  if (provider.id !== 'pavo' || (pavoOut?.ping?.ok && pavoOut.paired)) clearError();
+  return out;
 }
 
 /** Pavo eşleştirmesi: cihazda onay ekranı açılır, kasiyer onaylayınca LafPOS cihaza satış gönderebilir */
@@ -870,7 +883,11 @@ export async function pairDevice(actor: Actor) {
   if (!pavoProvider.configured()) throw conflict(pavoProvider.notConfigured, 'okc_not_configured');
   const out = await pairPavo().catch(deviceError);
   const fx = new Effects();
-  fx.audit(db, { userId: actor.user.id, action: 'okc.pair', message: `Pavo cihazı eşleştirildi (${pavoProvider.terminalId()})` });
+  tx((t) => {
+    clearError();
+    fx.audit(t, { userId: actor.user.id, action: 'okc.pair', message: `Pavo cihazı eşleştirildi (${pavoProvider.terminalId()})` });
+    fx.emit({ topic: 'okc', kind: 'okc.device', message: 'Pavo cihazı eşleştirildi', byUserId: actor.user.id });
+  });
   fx.flush();
   return out;
 }
@@ -1137,11 +1154,18 @@ function markEodRunning(rec: PavoEodRecord) {
 
 /**
  * Cihazın son gün sonu (taban), gün sonu gönderilmeden hemen önce. Cihaz yanıt verip son gün sonunu vermezse LafPOS'un
- * bildiği son batch; cihaza ulaşılamazsa (bağlantı, zaman aşımı) hata atar: gün sonu gönderilmez
+ * bildiği son batch: hata yanıtı, özetsiz yanıt ya da kopyayı hiç vermeyen cihaz (uç yok, gövde boş; sahada N86
+ * `/PrintEODCopy`'ye HTTP 404 döndü ve gün sonu hiç gönderilemedi). Cihaza ulaşılamazsa (bağlantı, zaman aşımı) ya da
+ * eşleştirme bozulmuşsa (73, 74) hata atar: gün sonu gönderilmez
  */
 async function deviceBaseline(c: NonNullable<ReturnType<typeof pavo>>): Promise<EodBaseline> {
-  const res = await c.eodCopy(undefined, pavoTiming.eodCopyMs);
-  return readEodBaseline(res) ?? { prevBatchNo: getSyncState<string>(EOD_BATCH), prevBatchFrom: 'lafpos' };
+  const stored: EodBaseline = { prevBatchNo: getSyncState<string>(EOD_BATCH), prevBatchFrom: 'lafpos' };
+  try {
+    return readEodBaseline(await c.eodCopy(undefined, pavoTiming.eodCopyMs)) ?? stored;
+  } catch (e) {
+    if (eodCopyUnavailable(e)) return stored;
+    throw e;
+  }
 }
 
 /**
@@ -1202,7 +1226,7 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
     const code = e instanceof PavoError ? e.code : null;
     reading =
       stage === 'baseline'
-        ? { kind: 'failed', code, message: `Cihaz son gün sonunu vermedi (${message}); gün sonu gönderilmedi` }
+        ? { kind: 'failed', code, message: pairingLost(code) ? `${message}; gün sonu gönderilmedi` : `Cihaz son gün sonunu vermedi (${message}); gün sonu gönderilmedi` }
         : // Bağlantı hiç kurulamadıysa gün sonu gitmedi; yanıt gelmediyse (ya da beklenmeyen hata) gitmiş olabilir
           stage === 'start' || (e instanceof PavoError && !e.uncertain)
           ? { kind: 'failed', code, message }
@@ -1214,6 +1238,7 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
       ? { ...tried, ...(reading.summary ?? {}), status: 'ok', message: reading.message, ...cardBasis(dayId, earlier) }
       : { ...tried, status: reading.kind, errorCode: reading.code, message: reading.message };
   if (rec.status !== 'ok') recordError(`Cihaz gün sonu: ${rec.message}`);
+  else clearError();
   saveEod(rec, actorId);
   return rec;
 }
@@ -1285,9 +1310,16 @@ export async function verifyDeviceEod(actor: Actor) {
   const c = pavo()!;
   const busy = busyMessage(c, 'bitince doğrulayın');
   if (busy) throw conflict(busy, 'okc_busy');
-  const res = await c.eodCopy(undefined, pavoTiming.eodCopyMs).catch(deviceError);
+  const res = await c.eodCopy(undefined, pavoTiming.eodCopyMs).catch((e: unknown) => {
+    // Cihaz yanıt verdi ama kopyayı vermedi (uç yok, gövde boş): doğrulanamaz; kasiyer cihazın menüsünden bakar
+    if (eodCopyUnavailable(e)) {
+      throw new HttpError(502, `Cihaz son gün sonunun kopyasını vermiyor (${e.message}); buradan doğrulanamaz. Gün sonunun alınıp alınmadığına cihazın kendi menüsünden bakın`, 'pavo_eod_nocopy');
+    }
+    return deviceError(e);
+  });
   const last = getSyncState<PavoEodRecord>(EOD_LAST);
   const user = actor.user;
+  if (res.HasError && pairingLost(res.ErrorCode)) throw new HttpError(502, PAIRING_LOST_MESSAGE, 'pavo_pairing');
   if (res.HasError) {
     // 5075: cihazda kayıtlı gün sonu yok. Belirsiz deneme de alınmamış demektir: yeniden denenebilir
     if (String(res.ErrorCode ?? '') === '5075') {
