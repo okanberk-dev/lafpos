@@ -43,19 +43,12 @@ Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 
 - **İnternet dönüşü:** kafede interneti kesip bir gün sonu al: Genel bakış'ta "İnternet · Yok · 1 kayıt bekliyor",
   üst çubukta rozet; interneti aç: en geç bir dakikada "Bekleyenler gönderildi", lafmaliyet'te gün bir kez.
 
-## 2. Uzaktan raporlar (lafpos.laffogato.net)
+## 2. Uzaktan raporlar: gerçek ortamda deneme
 
-**Durum:** kod bitti (`claude/uzaktan-raporlar`, PR #58'in üstünde); gerçek Vercel ve Upstash'te henüz koşmadı.
-Ayrıntı `docs/07-UZAKTAN-ERISIM.md` §4 "Raporlar" ve "Anlık ciro". Kalanlar:
-
-- **Gerçek ortamda deneme:** kafede `LAFPOS_CLOUD_URL` tanımlıyken ilk açılışta tarama yaklaşık bir saatte 400
-  günü iter; Uzaktan'da Raporlar › Ciro'nun "Geçen ay"ı kafedekiyle aynı rakamı vermeli. Upstash'te
-  `lafpos:rapor:default:gun:*` anahtarları ve günlük istek sayısı (Upstash › Usage) izlenir.
-- **Uzakta olmayan sekmeler:** hazırlama süresi, adisyon listesi, paket platformları, iptal ve indirim listeleri
-  (kalem kalem), happy hour, lafmaliyet aktarımı ve CSV'ler yalnız kafede. Toplamları (iptal, ikram, ödenmez, zayi,
-  indirim) Ciro ve Personel'de uzakta da var.
-- **Redis sıfırlanırsa** kasa günleri gönderilmiş sayar; günlük tarama yalnız değişen günü iter. Yeniden göndermek
-  için kasada `sync_state`'teki `cloud.reports` satırı silinir (yönetimde düğmesi yok).
+**Durum:** kod main'de (bütün sekmeler, CSV, dükkân bazında, yeniden gönder); gerçek Vercel ve Upstash'te kafe
+verisiyle henüz koşmadı. Kafede `LAFPOS_CLOUD_URL` tanımlanınca ilk açılışta tarama yaklaşık bir saatte 400 günü
+iter; Uzaktan'da Raporlar › Ciro'nun "Geçen ay"ı kafedekiyle aynı rakamı vermeli. Upstash'te
+`lafpos:rapor:<kurulum kimliği>:gun:*` ve `:ek:*` anahtarları ve günlük istek sayısı (Upstash › Usage) izlenir.
 
 ## 3. Sahibin yapacakları (kafede)
 

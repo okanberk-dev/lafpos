@@ -54,10 +54,10 @@ export function remoteNav(items: NavItem[], remote = REMOTE): NavItem[] {
 }
 
 /**
- * Uzakta açılan rapor sekmeleri: günlük özetlerden toplananlar (api/uzaktan.ts). Hazırlama, adisyon listesi, paket
- * platformları, iptal ve indirim listeleri, happy hour ve lafmaliyet aktarımı yalnız kafede
+ * Uzakta açılan rapor sekmeleri: kasanın günlük özetlerinden toplananlar (api/uzaktan.ts, shared/remote-calc.ts). Yalnız
+ * lafmaliyet aktarımı kafede (maliyet ve gönderim kasanın işi)
  */
-export const REMOTE_REPORTS = ['ciro', 'urunler', 'saatlik', 'personel'] as const;
+export const REMOTE_REPORTS = ['ciro', 'urunler', 'saatlik', 'hazirlama', 'adisyon', 'platformlar', 'kayip', 'happy', 'personel'] as const;
 
 /** Gün açıkken kafeden bu kadar süredir veri gelmediyse "kafeden veri gelmiyor" (kasa nabzı 5 dk'da bir iter) */
 export const REMOTE_STALE_MS = 10 * 60_000;
