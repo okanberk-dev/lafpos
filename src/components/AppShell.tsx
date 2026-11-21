@@ -206,7 +206,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       return (
         <div className="flex items-center gap-2">
           <RemoteShopPicker />
-          <Badge tone="blue" title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir">
+          <Badge tone="blue" title="Kafeden gelen canlı özet; 15 sn’de bir yenilenir">
             Uzaktan
           </Badge>
         </div>

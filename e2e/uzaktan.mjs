@@ -38,7 +38,10 @@ function fakeRedis() {
       else (redisStore.set(key, rest[0]), (result = 'OK'));
     } else if (cmd === 'INCR') (redisStore.set(key, String(Number(redisStore.get(key) ?? 0) + 1)), (result = Number(redisStore.get(key))));
     else if (cmd === 'DEL') (redisStore.delete(key), (result = 1));
-    else if (cmd === 'EXPIRE') result = 1;
+    else if (cmd === 'EXPIRE') result = redisStore.has(key) ? 1 : 0;
+    // Dükkânların özet sürümü (hash; kafe bağlı değilken boş)
+    else if (cmd === 'HGETALL') result = Object.entries(JSON.parse(redisStore.get(key) ?? '{}')).flat();
+    else if (cmd === 'HGET') result = JSON.parse(redisStore.get(key) ?? '{}')[rest[0]] ?? null;
     return new Response(JSON.stringify({ result }), { status: 200 });
   };
   return () => (globalThis.fetch = realFetch);
@@ -70,9 +73,11 @@ async function startRemote() {
         const chunks = [];
         for await (const c of req) chunks.push(c);
         const method = req.method ?? 'GET';
-        const r = await handler[method](new Request(`https://lafpos.vercel.app${req.url}`, { method, headers: { authorization: req.headers.authorization ?? '', 'content-type': req.headers['content-type'] ?? 'application/json' }, body: ['GET', 'HEAD'].includes(method) ? undefined : Buffer.concat(chunks) }));
+        // Vercel gibi: koşullu istek (If-None-Match) ve seçili dükkân da işleve gider
+        const pass = Object.fromEntries(['if-none-match', 'x-laf-dukkan'].filter((h) => req.headers[h]).map((h) => [h, String(req.headers[h])]));
+        const r = await handler[method](new Request(`https://lafpos.vercel.app${req.url}`, { method, headers: { authorization: req.headers.authorization ?? '', 'content-type': req.headers['content-type'] ?? 'application/json', ...pass }, body: ['GET', 'HEAD'].includes(method) ? undefined : Buffer.concat(chunks) }));
         res.writeHead(r.status, Object.fromEntries(r.headers));
-        res.end(Buffer.from(await r.arrayBuffer()));
+        res.end(r.status === 304 ? undefined : Buffer.from(await r.arrayBuffer()));
         return;
       }
       if (url.pathname === '/guncelleme/surum.json') {

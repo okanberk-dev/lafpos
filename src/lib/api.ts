@@ -47,17 +47,39 @@ export function setShopHeader(id: string | null) {
   shopHeader = id;
 }
 
+/**
+ * Koşullu GET (yalnız uzaktan görünüm, src/lib/remote.ts açar): yanıtın sürüm etiketi (ETag) adresiyle saklanır,
+ * aynı adres yeniden istenince `If-None-Match` ile gider; özet değişmediyse sunucu 304 döner (Redis'ten özet
+ * okumaz) ve gövde buradan gelir. En çok 64 adres (adisyonlar), en eskisi düşer. Kasada kapalı
+ */
+const CONDITIONAL_MAX = 64;
+let conditional = false;
+const tagged = new Map<string, { tag: string; data: unknown }>();
+export function setConditionalGets(on: boolean) {
+  conditional = on;
+  tagged.clear();
+}
+
 export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { accept: 'application/json' };
   if (shopHeader) headers['x-laf-dukkan'] = shopHeader;
   const token = getToken();
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers['content-type'] = 'application/json';
+  const cacheKey = conditional && method === 'GET' ? `${shopHeader ?? ''} ${path}` : null;
+  const held = cacheKey ? tagged.get(cacheKey) : undefined;
+  if (held) headers['if-none-match'] = held.tag;
   let res: Response;
   try {
     res = await fetch(`/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   } catch {
     throw new ApiError(0, 'Sunucuya ulaşılamadı. Kafe ağı bağlantısını kontrol edin', 'network', {});
+  }
+  if (res.status === 304 && held && cacheKey) {
+    // Değişmedi: aynı nesne döner (sorgu yeniden çizilmez), adres en yeniler arasına geçer
+    tagged.delete(cacheKey);
+    tagged.set(cacheKey, held);
+    return held.data as T;
   }
   let data: unknown = null;
   const text = await res.text();
@@ -70,8 +92,17 @@ export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE'
   }
   if (!res.ok) {
     const d = (data ?? {}) as Record<string, unknown>;
+    if (cacheKey) tagged.delete(cacheKey);
     if (res.status === 401 && path !== '/auth/login') onUnauthorized?.();
     throw new ApiError(res.status, (d.error as string) || statusMessage(res.status), (d.code as string) ?? null, d);
+  }
+  if (cacheKey) {
+    const tag = res.headers.get('etag');
+    tagged.delete(cacheKey);
+    if (tag) {
+      tagged.set(cacheKey, { tag, data });
+      if (tagged.size > CONDITIONAL_MAX) tagged.delete(tagged.keys().next().value!);
+    }
   }
   return data as T;
 }

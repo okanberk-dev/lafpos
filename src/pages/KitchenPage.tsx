@@ -22,7 +22,7 @@ import { onlineRingActive } from '@/lib/siteAlerts';
 import { beep, unlockAudio } from '@/lib/sound';
 import { readKdsTheme, setBarTheme, useTheme } from '@/lib/theme';
 import { toast } from '@/lib/toast';
-import { REMOTE } from '@/lib/remote';
+import { REMOTE, remotePollMs } from '@/lib/remote';
 import { useServiceMode } from '@/lib/serviceMode';
 import { appUrl } from '@/lib/demo';
 
@@ -89,14 +89,15 @@ function KitchenScreen() {
   // Fiş düğmesi istek sürerken kilitlenir (çift dokunuş iki kez göndermesin)
   const [busy, setBusy] = useState<string | null>(null);
 
+  // Uzaktaki özet yalnız aktif fişleri taşır: Hazır ve Geçmiş uzakta boş, yoklanmaz; aktif fişler uzaktan aralığıyla
   const ticketsOf = (v: View) => ({
     queryKey: ['kitchen', activeStation, v],
     queryFn: () => get<KitchenTicket[]>(`/kitchen?${new URLSearchParams({ ...(activeStation ? { station: activeStation } : {}), ...VIEW_QUERY[v] })}`),
-    refetchInterval: 15_000,
+    refetchInterval: REMOTE ? (v === 'aktif' ? remotePollMs(!!boot.day) : 0) : 15_000,
   });
   const tickets = useQuery(ticketsOf(view));
-  // Hazır sekmesinin sayısı her görünümde: teslim bekleyen sipariş barın gözünün önünde kalsın
-  const ready = useQuery(ticketsOf('hazir'));
+  // Hazır sekmesinin sayısı her görünümde: teslim bekleyen sipariş barın gözünün önünde kalsın (uzakta hep boş)
+  const ready = useQuery({ ...ticketsOf('hazir'), enabled: !REMOTE });
 
   useEffect(
     () =>
