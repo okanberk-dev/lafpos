@@ -41,8 +41,15 @@ export function sessionEnded() {
   onUnauthorized?.();
 }
 
+/** Uzaktan görünümün seçili dükkânı (src/lib/remote.ts): her isteğe `x-laf-dukkan` olarak gider; kasada yok */
+let shopHeader: string | null = null;
+export function setShopHeader(id: string | null) {
+  shopHeader = id;
+}
+
 export async function api<T>(method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { accept: 'application/json' };
+  if (shopHeader) headers['x-laf-dukkan'] = shopHeader;
   const token = getToken();
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers['content-type'] = 'application/json';

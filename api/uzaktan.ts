@@ -198,8 +198,40 @@ export function resetReleaseCache() {
   releaseCache = null;
 }
 
-async function snapshot(): Promise<Snapshot | null> {
-  const raw = (await redis('GET', SNAPSHOT_KEY)) as string | null;
+// ─── Dükkânlar: her kurulumun özeti ve raporları kendi anahtarında ──────────
+
+/**
+ * Dükkân kimliği kasanın Merkez kurulum kimliğidir (Merkez'e bağlı olmayan eski kasa: `default`). Kasa itmede
+ * `x-laf-dukkan` başlığını gönderir; uzaktan görünüm seçili dükkânı aynı başlıkla ister. `default` özeti eski anahtarda
+ * kalır (taşınmadan okunur); dükkânların son itme anı `lafpos:dukkanlar`'da (JSON)
+ */
+export const SHOP_RE = /^[a-z0-9-]{1,40}$/;
+const SHOPS_KEY = 'lafpos:dukkanlar';
+export const snapshotKey = (shop: string) => (shop === REPORT_SHOP ? SNAPSHOT_KEY : `${SNAPSHOT_KEY}:${shop}`);
+const shopHeader = (req: Request) => {
+  const v = (req.headers.get('x-laf-dukkan') ?? '').trim();
+  return SHOP_RE.test(v) ? v : null;
+};
+
+async function shopMap(): Promise<Record<string, number>> {
+  const raw = (await redis('GET', SHOPS_KEY)) as string | null;
+  try {
+    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Görünümün dükkânı: istenen (başlık) ya da en son veri gönderen; hiç yoksa `default` */
+async function viewShop(req: Request): Promise<string> {
+  const asked = shopHeader(req);
+  if (asked) return asked;
+  const map = await shopMap();
+  return Object.entries(map).sort((a, b) => b[1] - a[1])[0]?.[0] ?? REPORT_SHOP;
+}
+
+async function snapshot(shop: string = REPORT_SHOP): Promise<Snapshot | null> {
+  const raw = (await redis('GET', snapshotKey(shop))) as string | null;
   return raw ? (JSON.parse(raw) as Snapshot) : null;
 }
 
@@ -537,11 +569,13 @@ function demoNow(): Snapshot | null {
   return shift(base) as Snapshot;
 }
 
-async function realSnapshot(): Promise<Snapshot | null> {
+/** Kafeden gerçek veri geldi mi (herhangi bir dükkân; eski kasa yalnız `default`) */
+async function realSnapshot(): Promise<boolean> {
   try {
-    return await snapshot();
+    if (Object.keys(await shopMap()).length) return true;
+    return !!(await snapshot());
   } catch {
-    return null;
+    return false;
   }
 }
 
@@ -884,19 +918,45 @@ async function storeReports(body: string): Promise<Response> {
 }
 
 /** Raporlar sayfasının uçları; null: rapor yolu değil */
-async function serveReports(path: string, url: URL, demo: Snapshot | null): Promise<Response | null> {
+/** Gerçek oturumun salt okunur uçları: seçili dükkânın raporları, özeti ve dükkân listesi */
+async function viewer(req: Request, path: string, url: URL): Promise<Response> {
+  if (path === 'uzaktan/dukkanlar') return json(await shopList());
+  const shop = await viewShop(req);
+  return (await serveReports(path, url, null, shop)) ?? serve(await snapshot(shop), path, url, false);
+}
+
+/** Dükkân seçicinin listesi: veri gönderen dükkânlar, Merkez'deki adlarıyla (anahtar ya da kimlik bilgisi dönmez) */
+async function shopList(): Promise<{ id: string; ad: string | null; at: number }[]> {
+  const map = await shopMap();
+  const ids = Object.keys(map);
+  if (!ids.length) return [];
+  const raws = (await redis('MGET', ...ids.map((id) => `lafpos:merkez:kurulum:${id}`))) as (string | null)[];
+  return ids
+    .map((id, i) => {
+      let ad: string | null = null;
+      try {
+        ad = raws[i] ? ((JSON.parse(raws[i]!) as { ad?: string | null }).ad ?? null) : null;
+      } catch {
+        ad = null;
+      }
+      return { id, ad, at: map[id]! };
+    })
+    .sort((a, b) => (a.ad ?? '\uffff').localeCompare(b.ad ?? '\uffff', 'tr'));
+}
+
+async function serveReports(path: string, url: URL, demo: Snapshot | null, shop: string = REPORT_SHOP): Promise<Response | null> {
   const kind = /^reports\/(summary|hourly|products|staff)$/.exec(path)?.[1];
   if (!kind) return null;
-  const meta = demo ? null : (((await redis('GET', reportMetaKey(REPORT_SHOP))) as string | null) ?? null);
+  const meta = demo ? null : (((await redis('GET', reportMetaKey(shop))) as string | null) ?? null);
   const live = meta ? (JSON.parse(meta) as { today: string; at: number }) : null;
   const today = demo ? String((demo.patron as { date?: string }).date ?? businessDateOf(demo.at)) : (live?.today ?? businessDateOf(Date.now()));
   const r = reportRange(url, today);
   if (r instanceof Response) return r;
-  const days = demo ? demoDays(demo).filter((d) => d.date >= r.from && d.date <= r.to) : await loadDays(REPORT_SHOP, r);
+  const days = demo ? demoDays(demo).filter((d) => d.date >= r.from && d.date <= r.to) : await loadDays(shop, r);
   const nowMs = demo ? demo.at : (live?.at ?? Date.now());
   if (kind === 'summary') {
     const cmp = remoteComparison(r, nowMs, today);
-    const prev = demo ? [] : await loadDays(REPORT_SHOP, cmp.range);
+    const prev = demo ? [] : await loadDays(shop, cmp.range);
     return json(sumSummary(r, days, prev, nowMs, today));
   }
   if (kind === 'hourly') return json(sumHourly(r, days));
@@ -954,7 +1014,7 @@ async function handle(req: Request): Promise<Response> {
     let memberExists = false;
     if (redisSet) {
       try {
-        snapshotAt = (await snapshot())?.at ?? null;
+        snapshotAt = (await snapshot(await viewShop(req)))?.at ?? null;
         for (const e of members) memberExists ||= !!(await member(e, true));
         redisOk = true;
       } catch {
@@ -1028,9 +1088,13 @@ async function handle(req: Request): Promise<Response> {
       return fail(400, 'Özet okunamadı', 'bad_body');
     }
     // Eski (yeniden gönderilen) özet yenisini ezmez
-    const current = await snapshot();
+    const shop = shopHeader(req) ?? REPORT_SHOP;
+    const current = await snapshot(shop);
     if (current && typeof snap.at === 'number' && snap.at <= current.at) return json({ ok: true, stale: true });
-    await redis('SET', SNAPSHOT_KEY, JSON.stringify(snap), 'EX', 7 * 86400);
+    await redis('SET', snapshotKey(shop), JSON.stringify(snap), 'EX', 7 * 86400);
+    const map = await shopMap();
+    // Dükkânlar listesi yalnız yeni dükkânda ya da saatte bir yazılır (her itmede değil)
+    if (!map[shop] || Date.now() - map[shop] > 3600_000) await redis('SET', SHOPS_KEY, JSON.stringify({ ...map, [shop]: Date.now() }));
     return json({ ok: true });
   }
 
@@ -1076,7 +1140,7 @@ async function handle(req: Request): Promise<Response> {
     const record = email && members.includes(email) ? await member(email) : null;
     if (!record || !memberTokenValid(secret(), auth, record.h)) return fail(401, 'Oturum kapalı. E-posta ve parolanızla yeniden girin', 'unauthorized');
     if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
-    return (await serveReports(path, url, null)) ?? serve(await snapshot(), path, url, false);
+    return viewer(req, path, url);
   }
 
   // Parolasız görünüm (varsayılan): giriş parola sormadan salt okunur oturum açar
@@ -1101,13 +1165,15 @@ async function handle(req: Request): Promise<Response> {
 
   if (!tokenValid(secret(), auth)) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
   if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
-  return (await serveReports(path, url, null)) ?? serve(await snapshot(), path, url, false);
+  return viewer(req, path, url);
 }
 
 /** Salt okunur uçlar: kafeden gelen ya da demo özetinden */
 function serve(snap: Snapshot | null, path: string, url: URL, demo: boolean): Response {
   if (path === 'auth/me') return json(ME);
   if (path === 'uzaktan/durum') return json({ at: snap?.at ?? null, demo });
+  // Örnek günde dükkân seçici yok
+  if (path === 'uzaktan/dukkanlar') return json([]);
   if (!snap) return fail(503, 'Kafeden henüz veri gelmedi; kasa bilgisayarı açık ve LAFPOS_CLOUD_URL tanımlı mı?', 'no_snapshot');
   if (path === 'bootstrap') return json({ ...snap.bootstrap, me: ME });
   if (path === 'reports/patron') return json(snap.patron);

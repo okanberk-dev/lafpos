@@ -84,8 +84,8 @@ müşteri telefonları gitmez.
     7 günlük paketlerle (yaklaşık bir saat); sonra günde bir kez, gün kapalıyken aynı tarama yalnız sonradan değişen
     günü (ör. eski güne ödeme iptali) iter. İnternetsizken gidemeyen gün kuyrukta bekler, durum alanında sayılır
     ("Uzaktan raporu N gün"); internet dönünce catch-up onu bir kez gönderir.
-  - Upstash: gün başına bir anahtar `lafpos:rapor:<dükkân>:gun:<tarih>` (bugün dükkân `default`; Merkez gelince
-    dükkân kimliği), süresi günün kendisinden 420 gün (EXAT); kasanın "bugün"ü `lafpos:rapor:<dükkân>:son`. Okuma
+  - Upstash: gün başına bir anahtar `lafpos:rapor:<dükkân>:gun:<tarih>` (dükkân Merkez'e bağlı kasada kurulum
+    kimliği, bağlı olmayan eski kasada `default`), süresi günün kendisinden 420 gün (EXAT); kasanın "bugün"ü `lafpos:rapor:<dükkân>:son`. Okuma
     parça parça MGET (60 gün). Eski özet (aynı günün önceki kuruluşu) yenisini ezmez.
   - Buluta gitmez: maliyet ve kâr, PIN'ler, müşteri adı ve telefonu (ödenmez kişisi de), iptal ve ikram nedenleri.
     Uzakta yalnız kafede olan sekmeler gizli, CSV yok.
@@ -139,6 +139,11 @@ müşteri telefonları gitmez.
   - **Yeni sürüm hazır:** kanalın `surum.json`'u `not` taşır (son commit'in başlığı, squash'ta PR başlığı;
     `kanal.mjs` `changeNote`). Panel gönderilmemiş dükkânları "Bekleyenleri seç" ile seçer.
   - Redis: `lafpos:merkez:kurulum:<id>`, `lafpos:merkez:kurulumlar` (küme).
+  - **Dükkân bazında görünüm** (`tests/dukkan-raporlar.test.ts`): kasa canlı özeti ve raporları kurulum kimliğiyle
+    iter (`x-laf-dukkan`; özet `lafpos:snapshot:<id>`, eski kasa `lafpos:snapshot`). Kimlik değişince (kasa Merkez'e
+    ilk bağlandığında) rapor gönderimi geçmişi yeni kimlikle baştan iter (yaklaşık bir saat; `default` verisi okunur
+    kalır, 420 günde düşer). Birden çok dükkân veri gönderiyorsa üst çubukta dükkân seçici (adlar Merkez'den); seçim
+    tarayıcıda saklanır, seçilmezse en son veri gönderen dükkân. Dükkânların son itme anı `lafpos:dukkanlar`'da.
 
 | Nerede | Ne |
 |---|---|
