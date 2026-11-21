@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { COMP_LABEL } from '@shared/comp';
 import { fmtDateTime, isCalendarDate } from '@shared/time';
 import { type AppEnv, can, requirePermission, seesStaffOf } from '../lib/auth';
-import { type CsvValue, money, toCsv } from '../lib/csv';
+import { CSV_TYPES, csvRows, toCsv } from '@shared/report-csv';
 import { HttpError, query } from '../lib/http';
 import {
   checksReport,
@@ -70,65 +70,20 @@ reportRoutes.get('/patron', (c) => c.json(patronLive(can(c.get('user'), 'rapor.m
 /** Excel'in Türkçe ayarıyla açılan CSV (server/lib/csv.ts: noktalı virgül, virgüllü ondalık, formül korumalı) */
 reportRoutes.get('/export.csv', (c) => {
   const r = range(c);
-  const type = query(c, z.object({ type: z.enum(['urunler', 'adisyonlar', 'iptal', 'ikram', 'indirim', 'saatlik', 'platformlar']) })).type;
-  let rows: CsvValue[][] = [];
-  if (type === 'urunler') {
-    const rep = productReport(r, can(c.get('user'), 'rapor.maliyet'));
-    rows = [['Ürün', 'Boy', 'Kategori', 'Adet', 'Ciro', 'Pay %', 'İkram adet', 'İptal adet'], ...rep.products.map((p) => [p.name, p.size, p.category, p.qty, money(p.revenue), p.share, p.complimentary, p.voided])];
-  } else if (type === 'adisyonlar') {
-    // Dönemin bütün adisyonları (ekrandaki liste en yenilerle sınırlı)
-    const rep = checksReport(r, null, waiterFor(c));
-    rows = [['No', 'Durum', 'Tür', 'Yer', 'Açılış', 'Kapanış', 'Garson', 'Adet', 'Tutar', 'Ödeme'], ...rep.rows.map((o) => [o.no, o.status, o.type, o.place ?? '', fmtDateTime(o.openedAt), o.closedAt ? fmtDateTime(o.closedAt) : '', o.waiter ?? '', o.qty, money(o.total), o.methods.join(', ')])];
-  } else if (type === 'saatlik') {
-    // İş günü sırasıyla: 05:00'ten başlar, gece yarısından sonraki saatler, gün uzadıysa ertesi günün saatleri en sonda
-    const rep = hourlyReport(r);
-    rows = [['Saat', 'Adisyon', 'Ciro'], ...rep.hours.map((h) => [`${String(h.hour).padStart(2, '0')}:00${h.nextDay ? ' (ertesi gün)' : ''}`, h.orders, money(h.revenue)])];
-  } else if (type === 'platformlar') {
-    // Komisyon sütunları yalnız maliyet yetkisine (ekrandaki gibi); kaçan tutar müşterinin ödeyeceği, ciroya girmez
-    const withCost = can(c.get('user'), 'rapor.maliyet');
-    const rep = platformReport(r, withCost);
-    rows = [
-      ['Platform', 'Sipariş', 'Ciro', 'Ort. sepet', 'Ciro payı %', 'Restoran indirimi', 'Platform kampanyası', 'Platformda tahsil', 'Kasada tahsil', 'Açık sipariş', 'Açık tutar', 'Reddedilen', 'Süresi dolan', 'İptal', 'Kasaya alınmadı', 'Kaçan tutar', ...(withCost ? ['Komisyon oranı % (bugünkü)', 'Tahmini komisyon'] : [])],
-      ...rep.platforms.map((p) => [
-        p.label,
-        p.orders,
-        money(p.revenue),
-        money(p.avgBasket),
-        p.share,
-        money(p.discounts),
-        money(p.platformDiscount),
-        money(p.collectedByPlatform),
-        money(p.collectedAtCounter),
-        p.open.orders,
-        money(p.open.amount),
-        p.missed.rejected,
-        p.missed.expired,
-        p.missed.cancelled,
-        p.missed.unrecorded,
-        money(p.missed.amount),
-        ...(withCost ? [p.commissionPct ?? 0, money(p.commission ?? 0)] : []),
-      ]),
-    ];
-  } else {
-    const rep = itemListReport(r, type, staffFor(c));
-    // İkram listesinde tür (ikram, ödenmez, zayi) Excel'de süzülebilsin; ödenmezde kimin adına yazıldığı Kişi sütununda
-    const kind = type === 'ikram';
-    rows = [
-      ['Zaman', 'Adisyon', 'Yer', 'Ürün', 'Adet', 'Tutar', ...(kind ? ['Tür', 'Kişi'] : []), 'Neden', 'Yapan', 'Onaylayan'],
-      ...rep.rows.map((x) => [
-        fmtDateTime(x.at),
-        x.orderNo,
-        x.place,
-        x.name,
-        x.qty,
-        money(x.value),
-        ...(kind ? [COMP_LABEL[x.compKind ?? 'ikram'], x.person ? `${x.person.name} (${x.person.kind === 'user' ? 'personel' : 'müşteri'})` : ''] : []),
-        x.reason ?? '',
-        x.by ?? '',
-        x.approvedBy ?? '',
-      ]),
-    ];
-  }
+  const type = query(c, z.object({ type: z.enum(CSV_TYPES) })).type;
+  const withCost = can(c.get('user'), 'rapor.maliyet');
+  // Satırlar LafPOS Uzaktan'la ortak (shared/report-csv.ts); adisyonlarda dönemin hepsi (ekrandaki liste en yenilerle sınırlı)
+  const rep =
+    type === 'urunler'
+      ? productReport(r, withCost)
+      : type === 'adisyonlar'
+        ? checksReport(r, null, waiterFor(c))
+        : type === 'saatlik'
+          ? hourlyReport(r)
+          : type === 'platformlar'
+            ? platformReport(r, withCost)
+            : itemListReport(r, type, staffFor(c));
+  const rows = csvRows(type, rep, withCost);
   c.header('content-type', 'text/csv; charset=utf-8');
   c.header('content-disposition', `attachment; filename="lafpos-${type}-${r.from}_${r.to}.csv"`);
   return c.body(toCsv(rows));

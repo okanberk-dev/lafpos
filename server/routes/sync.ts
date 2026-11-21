@@ -1,4 +1,7 @@
 import { Hono } from 'hono';
+import { resendReports } from '../sync/cloud-reports';
+import { cloudEnabled } from '../sync/cloud';
+import { Effects } from '../lib/effects';
 import { licenseNow, merkezLast, merkezSyncState } from '../sync/merkez';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
@@ -50,6 +53,18 @@ syncRoutes.get('/lisans', (c) => {
   const lic = licenseNow();
   const last = merkezLast();
   return c.json({ enabled: !!lic, ...(lic ?? {}), ad: last?.ad ?? null, sonGorusme: last?.at ?? null, ...(can(c.get('user'), 'senkron.yonet') ? { kurulum: merkezSyncState() } : {}) });
+});
+
+/** Uzaktan raporları yeniden gönder: gönderim geçmişi sıfırlanır (denetim kaydına yazılır) */
+syncRoutes.post('/cloud-reports/resend', (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'senkron.yonet');
+  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
+  resendReports();
+  const fx = new Effects();
+  fx.audit(db, { userId: user.id, action: 'senkron', message: 'Uzaktan raporlar yeniden gönderiliyor' });
+  fx.flush();
+  return c.json({ ok: true });
 });
 
 /** Durum alanının internet satırı (giriş yapan herkes): "İnternet yok · N kayıt bekliyor", "Bekleyenler gönderildi" */

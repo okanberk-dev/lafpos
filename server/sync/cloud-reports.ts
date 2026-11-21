@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
 import { and, gte, lte } from 'drizzle-orm';
-import { REMOTE_REPORT_DAYS, REMOTE_SHOP, type RemoteDayReport, type RemoteReportPush } from '@shared/remote-reports';
+import type { ItemListRow } from '@shared/remote-calc';
+import { REMOTE_REPORT_DAYS, REMOTE_SHOP, type RemoteDayExtra, type RemoteDayReport, type RemoteReportPush } from '@shared/remote-reports';
 import { addDays } from '@shared/time';
 import { db, schema } from '../db/client';
 import { env } from '../env';
@@ -10,7 +11,7 @@ import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { remoteShop } from './merkez';
 import { getOpenDay } from '../services/orders';
-import { closingMinutes, hourlyReport, productReport, reportToday, staffReport, summaryReport } from '../services/reports';
+import { checksReport, closingMinutes, crossDayPayments, hourlyReport, itemListReport, platformReport, prepRaw, productReport, refundReport, reportToday, staffReport, summaryReport } from '../services/reports';
 import { cloudEnabled } from './cloud';
 
 /**
@@ -114,7 +115,38 @@ export function buildDayReport(date: string, now = Date.now()): RemoteDayReport 
     hours: h.hours.filter((x) => x.revenue !== 0 || x.orders !== 0 || x.nextDay).map((x) => [x.offset, x.revenue, x.orders]),
     clock: weekday ? weekday.hours.flatMap((v, hour) => (v !== 0 ? [[hour, v] as [number, number]] : [])) : [],
     staff: st.staff.map((x) => [x.userId, x.name, x.orders, x.revenue, x.voids, x.voidValue, x.comps, x.compValue, x.discounts, x.odenmez, x.odenmezValue]),
+    xpay: crossDayPayments(range),
+    x: dayExtra(range, now),
   };
+}
+
+/** Kalem listesinin buluta giden hali: neden yok; ödenmezin müşteri kişisi yalnız "Müşteri" */
+const privateRow = (r: ItemListRow): ItemListRow => ({ ...r, reason: null, person: r.person ? (r.person.kind === 'customer' ? { kind: 'customer', name: 'Müşteri' } : r.person) : null });
+
+/** Günün ek sekmeleri: Raporlar'ın kendi servisleri tek günle, maliyetsiz */
+function dayExtra(range: { from: string; to: string }, now: number): RemoteDayExtra {
+  const prep = prepRaw(range);
+  const list = (kind: 'iptal' | 'ikram' | 'indirim' | 'happy') => itemListReport(range, kind);
+  const ikram = list('ikram');
+  const plat = platformReport(range, false, now);
+  return {
+    prep: { done: prep.done, hand: prep.handoffs },
+    checks: checksReport(range, null).rows,
+    lists: { iptal: list('iptal').rows.map(privateRow), ikram: ikram.rows.map(privateRow), indirim: list('indirim').rows.map(privateRow), happy: list('happy').rows.map(privateRow) },
+    // Müşterilerin ödenmezi tek "Müşteri" satırında
+    odenmez: ikram.odenmezPeople.map((p) => (p.kind === 'customer' ? { kind: 'customer', id: null, name: 'Müşteri', qty: p.qty, amount: p.amount } : p)),
+    refunds: refundReport(range).rows.map((r) => ({ ...r, reason: null })),
+    plat: {
+      rows: plat.platforms.map(({ avgBasket: _a, share: _s, ...r }) => r),
+      pending: plat.pending,
+    },
+  };
+}
+
+/** Ürünlerin bugünkü kategorisi: uzaktaki dönem raporunda kategori kasadaki gibi bugünküdür */
+function categoryMap(): Record<string, string> {
+  const cats = new Map(db.select({ id: schema.categories.id, name: schema.categories.name }).from(schema.categories).all().map((c) => [c.id, c.name]));
+  return Object.fromEntries(db.select({ id: schema.products.id, categoryId: schema.products.categoryId }).from(schema.products).all().map((p) => [p.id, cats.get(p.categoryId) ?? '']));
 }
 
 /** Günün içerik özeti: kuruluş anı (`at`) değişiklik sayılmaz */
@@ -140,6 +172,15 @@ export const reportSyncState = () => {
 /** Bekleyen (gönderilemeyen) gün sayısı: internet rozeti ve Genel bakış */
 export const pendingReportDays = () => (cloudEnabled() ? loadState().queue.length : 0);
 
+/**
+ * Uzaktan raporları baştan gönder (Yönetim › Ağ ve uzaktan erişim): bulutta Redis silinmiş ya da eksikse. Gönderim
+ * geçmişi sıfırlanır; tarama 400 günü dakikada 7 günlük paketlerle yeniden iter (yaklaşık bir saat)
+ */
+export function resendReports() {
+  setSyncState(STATE_KEY, emptyState());
+  void reportTick({ backfill: true });
+}
+
 /** Test için */
 export function resetReportSync() {
   busy = false;
@@ -151,7 +192,7 @@ export function resetReportSync() {
 }
 
 async function pushDays(today: string, days: RemoteDayReport[], at: number): Promise<void> {
-  const body: RemoteReportPush = { v: 1, shop: remoteShop(), today, at, days };
+  const body: RemoteReportPush = { v: 1, shop: remoteShop(), today, at, days, cat: categoryMap() };
   const gz = (await gzipAsync(JSON.stringify(body))).toString('base64');
   const { status } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/rapor`), { gz }, 20_000);
   if (status !== 200) throw new Error(`HTTP ${status}`);

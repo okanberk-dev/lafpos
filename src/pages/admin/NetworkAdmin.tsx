@@ -1,11 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ShieldAlert, WifiOff } from 'lucide-react';
 import { fmtDateTime } from '@shared/time';
 import type { NetAddressDTO, NetworkInfoDTO } from '@shared/types';
 import { Badge, Card, CARD, CODE, DefRow, EmptyState, LABEL, PageHeader, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { QrCode } from '@/components/QrCode';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
-import { get } from '@/lib/api';
+import { errorMessage, get, post } from '@/lib/api';
+import { useCan } from '@/lib/auth';
+import { toast } from '@/lib/toast';
+import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/cn';
 
 /**
@@ -50,6 +53,13 @@ const TAILSCALE_STEPS = [
  */
 export default function NetworkAdmin() {
   const q = useQuery({ queryKey: ['admin', 'network'], queryFn: () => get<NetworkInfoDTO>('/admin/network'), refetchInterval: 15_000 });
+  const can = useCan();
+  // Uzaktaki raporlar silindiyse ya da eksikse: kasa geçmişi baştan gönderir
+  const resend = useMutation({
+    mutationFn: () => post('/sync/cloud-reports/resend'),
+    onSuccess: () => toast.ok('Raporlar yeniden gönderiliyor; yaklaşık bir saat sürer'),
+    onError: (e) => toast.err(errorMessage(e)),
+  });
   const header = <PageHeader title="Ağ ve uzaktan erişim" description="Tablet ve telefonlar kafede Wi-Fi’dan, dışarıdan Tailscale ile bağlanır" />;
   if (!q.data)
     return (
@@ -194,6 +204,14 @@ export default function NetworkAdmin() {
               </DefRow>
               <DefRow label="Son gönderim">{n.cloud.lastSuccessAt ? fmtDateTime(n.cloud.lastSuccessAt) : 'Henüz yok'}</DefRow>
               {n.cloud.lastError && <DefRow label="Son hata">{n.cloud.lastError}</DefRow>}
+              {can('senkron.yonet') && (
+                <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <Button variant="secondary" loading={resend.isPending} onClick={() => resend.mutate()}>
+                    Raporları yeniden gönder
+                  </Button>
+                  <p className={HINT}>Uzaktaki raporlar eksik ya da silinmişse; geçmiş yaklaşık bir saatte baştan gider</p>
+                </div>
+              )}
             </>
           ) : (
             <p className={HINT}>Açmak için kasa bilgisayarına ve Vercel’e aynı anahtar tanımlanır; adımlar sayfanın sonunda</p>

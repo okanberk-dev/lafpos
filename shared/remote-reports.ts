@@ -7,7 +7,9 @@
  * PIN, müşteri adı ve telefonu yoktur (docs/07-UZAKTAN-ERISIM.md §4).
  */
 
-/** Şimdilik tek dükkân; Merkez gelince dükkân kimliği anahtarın parçası olur (`lafpos:rapor:<dükkân>:gun:<tarih>`) */
+import type { CheckRow, CrossPay, ItemListRow, OdenmezPersonRow, PlatformDayRow, PrepDone } from './remote-calc';
+
+/** Merkez'e bağlı olmayan eski kasanın dükkânı; bağlı kasada kurulum kimliği (`lafpos:rapor:<dükkân>:gun:<tarih>`) */
 export const REMOTE_SHOP = 'default';
 
 /** Uzaktan raporların tutulduğu ve bir raporun alabileceği en uzun dönem (gün; kasadaki MAX_RANGE_DAYS ile aynı) */
@@ -66,6 +68,23 @@ export interface RemoteDayReport {
   clock: [number, number][];
   /** Personel: [kimlik, ad, adisyon, ciro, iptal adedi, iptal tutarı, ikram adedi, ikram tutarı, indirim, ödenmez adedi, ödenmez tutarı] */
   staff: [string, string, number, number, number, number, number, number, number, number, number][];
+  /** Gün aşırı ödemeler (shared/remote-calc.ts `CrossPay`); eski kasanın özetinde yok */
+  xpay?: CrossPay[];
+  /** Ek sekmeler (hazırlama, adisyonlar, kalem listeleri, iadeler, platformlar): bulutta ayrı anahtarda tutulur */
+  x?: RemoteDayExtra;
+}
+
+/**
+ * Günün ek verisi. Kasadaki raporun tek günlük çıktısı; dönem için shared/remote-calc.ts ile birleşir. Buluta gitmez:
+ * iptal, ikram, indirim ve iade nedenleri, müşteri adı (ödenmez kişisi "Müşteri"), maliyet ve komisyon
+ */
+export interface RemoteDayExtra {
+  prep: { done: PrepDone[]; hand: number[] };
+  checks: CheckRow[];
+  lists: { iptal: ItemListRow[]; ikram: ItemListRow[]; indirim: ItemListRow[]; happy: ItemListRow[] };
+  odenmez: OdenmezPersonRow[];
+  refunds: { id: string; at: number; orderNo: number | null; method: string; amount: number; reason: null; by: string | null }[];
+  plat: { rows: PlatformDayRow[]; pending: number };
 }
 
 /** Kasanın bir itmesi (`POST /api/uzaktan/rapor`, gzip'li gövde `gz`) */
@@ -76,4 +95,6 @@ export interface RemoteReportPush {
   today: string;
   at: number;
   days: RemoteDayReport[];
+  /** Ürünlerin bugünkü kategorisi (ürün kimliği → kategori adı): dönemde kategori kasadaki gibi bugünküdür */
+  cat?: Record<string, string>;
 }

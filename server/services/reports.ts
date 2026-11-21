@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
 import { odenmezByPerson } from '@shared/comp';
+import { type CrossPay, type PrepDone, prepFrom } from '@shared/remote-calc';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { percentOf, tl } from '@shared/money';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
@@ -404,12 +405,6 @@ export function closingMinutes(date: string): [number, number, number][] {
 
 // ─── Hazırlama süresi (bara gönderilmesinden "Hazır"a) ───────────────────────
 
-/** Sıralı dizide yüzdelik (en yakın sıra) */
-function percentile(sorted: number[], p: number): number {
-  if (!sorted.length) return 0;
-  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1))];
-}
-
 /**
  * Bar ve mutfakta hazırlama süresi: kalemin gönderildiği andan "Hazır"a basıldığı ana (saniye). Ürün, saat ve
  * en yavaş fişler; yoğun saatte kaç barista gerektiğini gösterir. Açık adisyonlar da sayılır (hazırlanmışsa).
@@ -417,25 +412,20 @@ function percentile(sorted: number[], p: number): number {
  * süresi o dokunuşta teslim edilen kalemlerin en son hazır olanından.
  */
 export function prepReport(range: Range) {
+  const { done, handoffs } = prepRaw(range);
+  return { range, ...prepFrom(done, handoffs, hourMemo()) };
+}
+
+/**
+ * Hazırlama raporunun ham verisi: hazırlanan kalemler ve teslim süreleri. LafPOS Uzaktan'a günlük gider; dönem
+ * istatistiği iki yerde de `prepFrom` (shared/remote-calc.ts) ile kurulur
+ */
+export function prepRaw(range: Range): { done: PrepDone[]; handoffs: number[] } {
   const ds = load(range);
   const orderNo = new Map(ds.orders.map((o) => [o.id, o.no]));
   const done = ds.items
     .filter((i) => !i.voided && i.stationId && i.readyAt && i.readyAt >= i.sentAt)
-    .map((i) => ({ id: i.id, orderId: i.orderId, name: i.name, size: i.size, sentAt: i.sentAt, sec: Math.round((i.readyAt! - i.sentAt) / 1000) }));
-  const stats = (secs: number[]) => {
-    const s = [...secs].sort((a, b) => a - b);
-    return { count: s.length, avg: s.length ? Math.round(s.reduce((a, b) => a + b, 0) / s.length) : 0, median: percentile(s, 50), p90: percentile(s, 90), max: s.at(-1) ?? 0 };
-  };
-  const byProduct = new Map<string, { name: string; size: string; secs: number[] }>();
-  for (const d of done) {
-    const key = `${d.name}|${d.size}`;
-    const row = byProduct.get(key) ?? { name: d.name, size: d.size, secs: [] };
-    row.secs.push(d.sec);
-    byProduct.set(key, row);
-  }
-  const hourOf = hourMemo();
-  const hours = Array.from({ length: 24 }, (_, hour) => ({ hour, secs: [] as number[] }));
-  for (const d of done) hours[hourOf(d.sentAt)].secs.push(d.sec);
+    .map((i): PrepDone => [i.name, i.size, i.sentAt, Math.round((i.readyAt! - i.sentAt) / 1000), orderNo.get(i.orderId) ?? 0]);
   // Teslim: aynı adisyonda aynı anda teslim edilen kalemler tek teslimdir. Hiç "Hazır" görmeden teslime geçen kalem
   // (hazır anı teslim anına eşit) sayılmaz
   const handoffs = new Map<string, number>();
@@ -444,14 +434,29 @@ export function prepReport(range: Range) {
     const key = `${i.orderId}|${i.servedAt}`;
     handoffs.set(key, Math.min(handoffs.get(key) ?? Infinity, Math.round((i.servedAt - i.readyAt) / 1000)));
   }
-  return {
-    range,
-    overall: stats(done.map((d) => d.sec)),
-    handoff: stats([...handoffs.values()]),
-    products: [...byProduct.values()].map((r) => ({ name: r.name, size: r.size, ...stats(r.secs) })).sort((a, b) => b.p90 - a.p90 || b.count - a.count),
-    hours: hours.filter((h) => h.secs.length).map((h) => ({ hour: h.hour, ...stats(h.secs) })),
-    slowest: [...done].sort((a, b) => b.sec - a.sec).slice(0, 10).map((d) => ({ orderNo: orderNo.get(d.orderId) ?? 0, name: d.name, size: d.size, sentAt: d.sentAt, sec: d.sec })),
-  };
+  return { done, handoffs: [...handoffs.values()] };
+}
+
+/**
+ * Dönemin, dönemde kapanmış bir adisyona ait olmayan satış ödemeleri (gün aşırı: adisyon başka günde açılmış): adisyonun
+ * günü, kapanmış satış mı, tutar, platform. LafPOS Uzaktan günleri toplarken bunlardan dönemin içine düşenleri
+ * "kapanmış adisyonların ödemesi" sayar (`crossPayIn`); kasada dönem tek seferde okunduğu için aynı sonuç
+ */
+export function crossDayPayments(range: Range): CrossPay[] {
+  const ds = load(range, { items: false });
+  const closedIds = idsOf(ds.orders.filter(isSale));
+  const pays = ds.payments.filter((p) => p.orderId && !p.refundedAt && !closedIds.has(p.orderId));
+  if (!pays.length) return [];
+  const orderIds = [...new Set(pays.map((p) => p.orderId!))];
+  const orders = new Map(db.select().from(schema.orders).where(inArray(schema.orders.id, orderIds)).all().map((o) => [o.id, o]));
+  const dayIds = [...new Set([...orders.values()].map((o) => o.dayId))];
+  const dates = new Map(dayIds.length ? db.select({ id: schema.businessDays.id, date: schema.businessDays.date }).from(schema.businessDays).where(inArray(schema.businessDays.id, dayIds)).all().map((d) => [d.id, d.date]) : []);
+  const channelOf = new Map(db.select({ id: schema.paymentMethods.id, channel: schema.paymentMethods.channel }).from(schema.paymentMethods).all().map((m) => [m.id, m.channel]));
+  return pays.map((p): CrossPay => {
+    const o = orders.get(p.orderId!);
+    const platform = o?.source === 'pos' && o.platform ? o.platform : '';
+    return [o ? (dates.get(o.dayId) ?? '') : '', o && isSale(o) ? 1 : 0, p.amount, platform, platform && channelOf.get(p.methodId) === platform ? 1 : 0, p.orderId!, p.methodName];
+  });
 }
 
 // ─── Personel (maliyet yetkisi: personel tutarları) ─────────────────────────

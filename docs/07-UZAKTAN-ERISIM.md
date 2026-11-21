@@ -87,8 +87,17 @@ müşteri telefonları gitmez.
   - Upstash: gün başına bir anahtar `lafpos:rapor:<dükkân>:gun:<tarih>` (dükkân Merkez'e bağlı kasada kurulum
     kimliği, bağlı olmayan eski kasada `default`), süresi günün kendisinden 420 gün (EXAT); kasanın "bugün"ü `lafpos:rapor:<dükkân>:son`. Okuma
     parça parça MGET (60 gün). Eski özet (aynı günün önceki kuruluşu) yenisini ezmez.
-  - Buluta gitmez: maliyet ve kâr, PIN'ler, müşteri adı ve telefonu (ödenmez kişisi de), iptal ve ikram nedenleri.
-    Uzakta yalnız kafede olan sekmeler gizli, CSV yok.
+  - **Ek sekmeler** (hazırlama süresi, adisyonlar, paket platformları, iptal, ikram, indirim ve ödeme iptali
+    listeleri, happy hour) ve CSV'ler de uzakta: kasa her günün tek günlük çıktısını ayrı anahtarda iter
+    (`lafpos:rapor:<dükkân>:ek:<tarih>`), dönem `shared/remote-calc.ts` ile kasadaki kuralla birleşir; CSV satırları
+    `shared/report-csv.ts`'ten (kasa da aynısını kullanır). Dönemde ürünün kategorisi kasadaki gibi bugünkü (itme
+    bugünkü kategori haritasını taşır); gün aşırı ödeme (adisyon başka günde) dönemin içine düşüyorsa kapanmışların
+    ödemesi ve adisyonun ödeme türü sayılır (`xpay`). Yalnız lafmaliyet aktarımı kafede. Kasadakiyle eşitlik
+    `tests/uzaktan-raporlar.test.ts`.
+  - **Yeniden gönder:** Redis silinir ya da eksik kalırsa Yönetim › Ağ ve uzaktan erişim › LafPOS Uzaktan ›
+    "Raporları yeniden gönder" gönderim geçmişini sıfırlar; tarama 400 günü yaklaşık bir saatte yeniden iter.
+  - Buluta gitmez: maliyet, kâr ve komisyon, PIN'ler, müşteri adı ve telefonu (ödenmez kişisi "Müşteri"), iptal,
+    ikram, indirim ve iade nedenleri.
 - **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki
   kasa `https://lafpos.laffogato.net/guncelleme/surum.json`'dan yeni sürümü alır (anahtarsız; ayrıntı
   `docs/05-KASA-BILGISAYARI.md` §6 "Otomatik güncelleme"). `vercel.json` `/guncelleme/*`'ı arayüz sayfasına çevirmez.

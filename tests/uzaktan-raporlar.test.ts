@@ -213,6 +213,94 @@ describe('uzaktan raporlar', () => {
     expect(t.previous.netSales).toBeGreaterThan(0);
   });
 
+  it('ek sekmeler kasadakiyle aynı: hazırlama, kalem listeleri, adisyonlar, gün aşırı ödeme, bugünkü kategori ve CSV', async () => {
+    const rep = await import('../server/services/reports');
+    const cr = await import('../server/sync/cloud-reports');
+    const { sqlite, db, schema } = await import('../server/db/client');
+    const { GET, POST } = await import('../api/uzaktan');
+    // Gün aşırı ödeme: dünün kapanmış adisyonunun bir ödemesi bugün alınmış gibi (dönem raporunda kapanmışların ödemesi)
+    const days = db.select().from(schema.businessDays).all();
+    const yesterday = days.find((d) => d.date === addDays(today, -1))!;
+    const todayDay = days.find((d) => d.date === today)!;
+    const yOrder = db.select().from(schema.orders).all().find((o) => o.dayId === yesterday.id && o.status === 'kapali')!;
+    const yPay = db.select().from(schema.payments).all().find((p) => p.orderId === yOrder.id)!;
+    sqlite.prepare('UPDATE payments SET day_id = ? WHERE id = ?').run(todayDay.id, yPay.id);
+    // Kategori sonradan değişti: dönemde kasadaki gibi bugünkü kategori
+    const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+    const other = h.boot.categories.find((c) => c.id !== latte.categoryId)!;
+    sqlite.prepare('UPDATE products SET category_id = ? WHERE id = ?').run(other.id, latte.id);
+    // Hazırlama: bugünün bir kalemi barda hazır
+    const item = db.select().from(schema.orderItems).all().find((i) => i.stationId && !i.voided && i.orderId && !i.readyAt)!;
+    if (item) sqlite.prepare('UPDATE order_items SET ready_at = sent_at + 95000 WHERE id = ?').run(item.id);
+    cr.resetReportSync();
+    let turns = 0;
+    do await cr.reportTick({ backfill: true, now: NOW + turns++ * 60_000 });
+    while (cr.reportSyncState().backfilling && turns < 80);
+
+    const { token } = (await (await POST(new Request(`${CLOUD}/api/uzaktan?yol=uzaktan/giris`, { method: 'POST' }))).json()) as { token: string };
+    // CSV baytlarıyla okunur (Response.text() baştaki BOM'u atar)
+    const remote = async (path: string, r: { from: string; to: string }, q = ''): Promise<any> => {
+      const res = await GET(new Request(`${CLOUD}/api/uzaktan?yol=reports/${path}&from=${r.from}&to=${r.to}${q}`, { headers: { authorization: `Bearer ${token}` } }));
+      expect(res.status, path).toBe(200);
+      return path.endsWith('.csv') ? Buffer.from(await res.arrayBuffer()).toString('utf8') : res.json();
+    };
+    const plain = <T,>(x: T) => JSON.parse(JSON.stringify(x)) as T;
+    // Buluta neden ve müşteri adı gitmez: kasanın satırı aynı biçime çevrilerek karşılaştırılır
+    const masked = (rows: { reason: string | null; person: { kind: string; name: string } | null }[]) =>
+      rows.map((r) => ({ ...r, reason: null, person: r.person ? (r.person.kind === 'customer' ? { kind: 'customer', name: 'Müşteri' } : r.person) : null }));
+    const ranges = [
+      { from: today, to: today },
+      { from: addDays(today, -1), to: today },
+      { from: addDays(today, -10), to: today },
+    ];
+    for (const r of ranges) {
+      const s = rep.summaryReport(r, NOW);
+      expect((await remote('summary', r)).reconciliation).toEqual(s.reconciliation);
+      expect(await remote('prep', r)).toEqual(plain(rep.prepReport(r)));
+      for (const kind of ['iptal', 'ikram', 'indirim', 'happy'] as const) {
+        const till = rep.itemListReport(r, kind);
+        const got = await remote('items', r, `&kind=${kind}`);
+        expect(got.rows).toEqual(plain(masked(till.rows)));
+        expect([got.total, got.count]).toEqual([till.total, till.count]);
+        if (kind === 'ikram') expect(got.odenmezPeople).toEqual(plain(till.odenmezPeople.map((p) => (p.kind === 'customer' ? { ...p, id: null, name: 'Müşteri' } : p))));
+      }
+      expect(await remote('checks', r)).toEqual(plain(rep.checksReport(r)));
+      expect(await remote('refunds', r)).toEqual(plain({ ...rep.refundReport(r), rows: rep.refundReport(r).rows.map((x) => ({ ...x, reason: null })) }));
+      const { commission: _c, ...plat } = rep.platformReport(r, false, NOW) as ReturnType<typeof rep.platformReport> & { commission?: number };
+      expect(await remote('platforms', r)).toEqual(plain(plat));
+      const p = await remote('products', r);
+      expect(p.products.find((x: { name: string }) => x.name === 'Latte').category).toBe(other.name);
+    }
+    // Gün aşırı ödeme gerçekten ayrıldı: bugün tek başına açıkta, iki günlük dönemde kapanmışlarda
+    const one = rep.summaryReport({ from: today, to: today }, NOW).reconciliation;
+    const two = rep.summaryReport({ from: addDays(today, -1), to: today }, NOW).reconciliation;
+    expect(one.paidOpen).toBeGreaterThanOrEqual(yPay.amount);
+    expect(two.paidOpen).toBe(one.paidOpen - yPay.amount);
+
+    // CSV: kasadakiyle aynı satırlar (iptal listesinde neden uzakta boş)
+    const { csvRows, toCsv } = await import('@shared/report-csv');
+    const r = { from: addDays(today, -10), to: today };
+    expect(await remote('export.csv', r, '&type=urunler')).toBe(toCsv(csvRows('urunler', (await remote('products', r)) as never)));
+    expect(await remote('export.csv', r, '&type=saatlik')).toBe(toCsv(csvRows('saatlik', rep.hourlyReport(r))));
+    expect(await remote('export.csv', r, '&type=adisyonlar')).toBe(toCsv(csvRows('adisyonlar', rep.checksReport(r, null))));
+    expect(await remote('export.csv', r, '&type=iptal')).toBe(toCsv(csvRows('iptal', { rows: masked(rep.itemListReport(r, 'iptal').rows) })));
+    // Kasanın CSV'si de aynı kurucudan (tek kaynak)
+    const till = await h.call<string>('patron', 'GET', `/reports/export.csv?type=saatlik&from=${r.from}&to=${r.to}`);
+    // Test yardımcısı yanıtı metin okur (BOM düşer)
+    expect(`\uFEFF${till.json}`).toBe(toCsv(csvRows('saatlik', rep.hourlyReport(r))));
+  });
+
+  it('ek veride neden, müşteri adı ve telefonu, maliyet yok; para ve tarih biçimi kasayla aynı', async () => {
+    const cr = await import('../server/sync/cloud-reports');
+    const x = JSON.stringify(cr.buildDayReport(today, NOW));
+    for (const secret of ['Vazgeçti', 'Müdavim', 'Kampanya', 'Müşteri şikâyeti', 'Ayşe', '0530', 'cost', 'margin', 'commission']) expect(x).not.toContain(secret);
+    const { csvCell, csvDateTime } = await import('@shared/report-csv');
+    const { tlPlain } = await import('@shared/money');
+    const { fmtDateTime } = await import('@shared/time');
+    for (const k of [0, 5, 123456, -9900, 100000099]) expect(csvCell({ kurus: k })).toBe(tlPlain(k));
+    for (const ms of [NOW, NOW - 86400_000 * 200, Date.parse('2026-03-29T00:30:00Z')]) expect(csvDateTime(ms)).toBe(fmtDateTime(ms));
+  });
+
   it('kıyas dönemi kasadakiyle aynı kuralla; aynı saate kadar dakika duyarlılığıyla', async () => {
     const { comparison } = await import('../server/services/reports');
     const { remoteComparison, salesUntil } = await import('../api/uzaktan');
@@ -253,7 +341,7 @@ describe('uzaktan raporlar', () => {
     for (const bad of ['Ayşe', 'Yılmaz', '0530', '"cost"', '"margin"', '"costsAt"', '"revenueNet"', 'pin', 'phone', 'Müşteri şikâyeti']) expect(text).not.toContain(bad);
     // Ödenmez yine ciro dışında sayılır, kişisi olmadan
     const d = JSON.parse(days[0]!) as RemoteDayReport;
-    expect(Object.keys(d).sort()).toEqual(['at', 'clock', 'closed', 'closes', 'date', 'hours', 'kdv', 'n', 'pay', 'prod', 's', 'staff', 'types', 'v', 'z']);
+    expect(Object.keys(d).sort()).toEqual(['at', 'clock', 'closed', 'closes', 'date', 'hours', 'kdv', 'n', 'pay', 'prod', 's', 'staff', 'types', 'v', 'xpay', 'z']);
   });
 
   it('dönem denetimi: en çok 400 gün, geçersiz tarih 422, ters dönem çevrilir', async () => {

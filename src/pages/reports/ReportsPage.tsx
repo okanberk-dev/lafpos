@@ -46,7 +46,7 @@ import { staleCostsText } from '@/lib/lafmaliyet';
 import { byBusinessHour, fmtShortDate, hourTitle, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { lossParts, previousShort } from '@/lib/reportLabels';
-import { REMOTE, REMOTE_REPORTS } from '@/lib/remote';
+import { REMOTE, REMOTE_REPORTS, storedShop } from '@/lib/remote';
 
 type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'platformlar' | 'kayip' | 'happy' | 'personel' | 'aktarim';
 type ProductView = 'urun' | 'kategori';
@@ -129,7 +129,9 @@ export default function ReportsPage() {
     busyRef.current = true;
     setBusy(key);
     try {
-      const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}` } }).catch(() => null);
+      // Uzakta seçili dükkânın CSV'si (src/lib/remote.ts dükkân seçici)
+      const shop = REMOTE ? storedShop() : null;
+      const res = await fetch(path, { headers: { authorization: `Bearer ${getToken()}`, ...(shop ? { 'x-laf-dukkan': shop } : {}) } }).catch(() => null);
       if (!res?.ok) {
         // Hata (ör. dönem 400 günden uzun) dosya olarak inmez, sunucunun metniyle bildirilir
         const body = (await res?.json().catch(() => null)) as { error?: string } | null;
@@ -196,9 +198,9 @@ export default function ReportsPage() {
       <StatusTabs label="Rapor" value={current.key} onChange={setReport} tabs={visible.map((r) => ({ value: r.key, label: r.label }))} />
       {current.key === 'ciro' && <SummaryReport range={range} today={today} onOpen={open} />}
       {current.key === 'urunler' && (
-        <ProductsReport range={range} today={today} view={productView} onView={setProductView} onExport={REMOTE ? undefined : () => void exportCsv('urunler')} exporting={busy === 'urunler'} />
+        <ProductsReport range={range} today={today} view={productView} onView={setProductView} onExport={() => void exportCsv('urunler')} exporting={busy === 'urunler'} />
       )}
-      {current.key === 'saatlik' && <HourlyReport range={range} today={today} onExport={REMOTE ? undefined : () => void exportCsv('saatlik')} exporting={busy === 'saatlik'} />}
+      {current.key === 'saatlik' && <HourlyReport range={range} today={today} onExport={() => void exportCsv('saatlik')} exporting={busy === 'saatlik'} />}
       {current.key === 'hazirlama' && <PrepReport range={range} today={today} />}
       {current.key === 'adisyon' && <ChecksReport range={range} today={today} onExport={() => void exportCsv('adisyonlar')} exporting={busy === 'adisyonlar'} />}
       {current.key === 'platformlar' && <PlatformsReport range={range} today={today} onExport={() => void exportCsv('platformlar')} exporting={busy === 'platformlar'} />}
@@ -514,7 +516,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
               </>
             ),
             // Uzakta adisyon listesi yok: karo dokunulmaz
-            onClick: REMOTE ? undefined : () => onOpen('adisyon'),
+            onClick: () => onOpen('adisyon'),
           },
           {
             key: 'urun',
@@ -532,7 +534,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             hue: 'rose',
             value: <KpiAmount value={s.discounts + s.complimentary} />,
             reference: s.discounts + s.complimentary + s.voided ? lossParts(s, tlShort) : 'İndirim ve ikram yok',
-            onClick: REMOTE ? undefined : () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }),
+            onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }),
           },
           {
             key: 'online',
