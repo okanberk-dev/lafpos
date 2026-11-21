@@ -100,6 +100,11 @@ export interface PrivateSettings {
    * ayar ya da senkron yetkisine)
    */
   platforms: Record<PlatformId, PlatformSettings>;
+  /**
+   * Gerçek kullanımın başladığı an ("Denemeyi bitir, gerçek kullanıma başla"; services/deneme.ts). null: kurulum hâlâ
+   * denemede ya da bu işaretten önce kurulmuş. Yazıldıktan sonra deneme verisi silme bir daha çalışmaz
+   */
+  liveSince: number | null;
 }
 
 export const PRIVATE_DEFAULTS: PrivateSettings = {
@@ -120,6 +125,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   zNoStart: null,
   branchId: 'tuzla',
   platforms: PLATFORM_DEFAULTS,
+  liveSince: null,
 };
 
 export type AllSettings = PublicSettings & PrivateSettings;
@@ -137,7 +143,7 @@ export function getSettings(): AllSettings {
 }
 
 /**
- * Kurulum (eğitim) modu: giriş ekranında örnek PIN'ler açık (`demoMode`, kurulum verisi böyle başlar) ya da yazarkasa
+ * Deneme (kurulum, eğitim) modu: giriş ekranında örnek PIN'ler açık (`demoMode`, kurulum verisi böyle başlar) ya da yazarkasa
  * eğitim simülatöründe. Bu modda kapanan gün eğitim günüdür (`business_days.trainingDay`); lafmaliyet'e hiç gitmez,
  * kurulum modu sonradan kapansa da. docs/03-ENTEGRASYON.md §4.3
  */

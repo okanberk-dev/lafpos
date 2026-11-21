@@ -67,6 +67,19 @@ export async function backupNow(): Promise<string> {
   return file;
 }
 
+/**
+ * Adlı tek seferlik yedek (denemeyi bitirmeden önce: `lafpos-deneme-oncesi-<an>.db`). Günlük yedeklerin döngüsüne
+ * girmez, silinmez. Dosya yazılamazsa hata fırlatır: çağıran silme işine geçmez
+ */
+export async function backupNamed(label: string): Promise<string> {
+  const dir = resolve(env.dataDir, 'backups');
+  mkdirSync(dir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+  const file = resolve(dir, `lafpos-${label}-${stamp}.db`);
+  await sqlite.backup(file);
+  return file;
+}
+
 /** Günlük bakımın en son yapıldığı iş günü (yedekten sonra, günde bir) */
 let maintainedOn: string | null = null;
 

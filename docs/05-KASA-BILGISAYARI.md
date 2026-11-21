@@ -94,6 +94,39 @@ Sunucu" çalışıyor; `http://localhost:4000` açılıyor; tablet kafenin ağı
 `C:\ProgramData\LafPOS\logs\sunucu.log` yazılıyor; bilgisayar yeniden başlayınca sunucu ve kasa ekranı
 kendiliğinden geliyor; LafPOS ayarları kaydedilince sunucu yeniden başlıyor.
 
+### İlk açılış: deneme modu, sonra gerçek kullanım
+
+Yeni kurulumda sahte işletme verisi yoktur: adisyon, ödeme, gün, müşteri, rezervasyon, platform siparişi yok
+(`tests/deneme-modu.test.ts`). Yalnız başlamak için gerekenler gelir: rol hesapları (Patron, Müdür, Kasa, Garson,
+Bar ekranı; örnek PIN'li), Bar ve Mutfak istasyonları, tarayıcı yazıcısı, köşkün masa planı ve karaoke odası, ödeme
+türleri, sitenin menüsü (pakette anlık görüntü; site bağlantısı açılınca güncellenir) ve kasaya özgü ürünler (karaoke
+saati, kişi başı ve etkinlik ücreti, yenilebilir bardak, şeker ve bardak seçimi). Örnek kampanya (happy hour) yalnız
+tarayıcı demosunda (`seedIfEmpty({ demo: true })`, ya da `LAFPOS_DEMO_SEED=1`).
+
+Kurulum **deneme modunda** açılır (`docs/03-ENTEGRASYON.md` §4.3): giriş ekranında örnek PIN'ler, yazarkasa eğitim
+simülatöründe, her ekranın üstünde "Deneme modu: yapılan satışlar gerçek sayılmaz" şeridi. Bu sırada kapanan gün
+eğitim günüdür, lafmaliyet'e gitmez. Kafede her şey gönül rahatlığıyla denenir (satış, ödeme, iptal, gün sonu,
+tabletler, yazıcı).
+
+Deneme bitince patron: Yönetim › Ayarlar ve yedek › Deneme modu › **Denemeyi bitir, gerçek kullanıma başla**.
+Yalnız patron görür ve çalıştırır; kendi PIN'iyle onaylar. Açık gün varken (önce gün sonu) ve deneme dışında kapanmış
+gerçek gün varken çalışmaz. Sırasıyla:
+
+1. Veritabanının yedeği alınır: `backups\lafpos-deneme-oncesi-<an>.db` (günlük yedeklerin döngüsüne girmez,
+   silinmez). Yedek alınamazsa hiçbir şey silinmez.
+2. Tek işlemde bütün deneme hareketleri silinir: adisyonlar ve satırları, ödemeler, yazarkasa fişleri, oda
+   sayaçları, iş günleri ve Z'ler, kasa hareketleri, vardiya sayımları, rezervasyonlar, paket platformu
+   siparişleri, müşteriler ve açık hesapları, denetim kaydı, lafmaliyet'e bekleyen kayıtlar, yazarkasanın deneme
+   sayaçları. Kalanlar: menü, personel ve roller, masa planı ve QR kodları, ödeme türleri, istasyonlar, yazıcılar,
+   bütün ayarlar, siteye bekleyen kurulum yazımları.
+3. Örnek PIN'ler kapanır: patron PIN'i hâlâ örnekse aynı pencerede yeni PIN'ini verir; örnek PIN'iyle duran öbür
+   hesaplar kapatılır (Personel'den yeni PIN verilip açılır). Gerçek kullanımda örnek PIN'ler bir daha verilmez.
+4. Kurulum modu kapanır, yazarkasa simülatörden **Kapalı**'ya geçer (Pavo'yu patron Yönetim › Yazarkasa POS'tan
+   seçer), paket platformlarının Deneme modu kapanır. Z numarası baştan (ya da İlk Z numarasından) başlar.
+5. Denetim kaydına tek bir uyarı düşer (`deneme.bitir`: silinen sayılar, yedeğin adı, kapatılan hesaplar).
+
+Bir kez çalışır (`liveSince` ayarı): yeniden basmak hiçbir şey silmez. Sonra kurulum modu yeniden açılmaz.
+
 ### Git ile (yalnız geliştirici; Windows ya da macOS)
 
 Kafedeki kasa bilgisayarına bu yol **kurulmaz**; orada kurulum dosyası kullanılır. `kur.ps1` sunucuyu `npm start`
