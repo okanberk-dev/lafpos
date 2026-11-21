@@ -651,10 +651,11 @@ geçiş gününden önceki (ya da geçiş günü seçilmemişken gelen) gün **d
   sırası gelene kadar gönderim sürer. Yanıtta `answer` (yukarıdaki alanlar) döner. Hata yeniden denenecekse metin
   "Giden kutusunda bekliyor, sonra tekrar denenecek" der; kalıcı retteyse demez (ne yapılacağını `lastError` söyler).
 
-### 4.3 Kurulum modu: eğitim günleri gitmez
+### 4.3 Deneme (kurulum) modu: eğitim günleri gitmez
 
-Kurulum verisi kurulum modunda başlar (`demoMode: true`, örnek PIN'ler; `okcProvider: 'simulator'`, eğitim
-yazarkasası). `demoMode` açıkken **ya da** yazarkasa simülatördeyken:
+Kurulum verisi deneme (kurulum) modunda başlar (`demoMode: true`, örnek PIN'ler; `okcProvider: 'simulator'`, eğitim
+yazarkasası); kasa her ekranda "Deneme modu: yapılan satışlar gerçek sayılmaz" şeridini gösterir (bootstrap
+`integrations.deneme`). `demoMode` açıkken **ya da** yazarkasa simülatördeyken:
 
 - Gün sonu **eğitim günü** olarak işaretlenir (`business_days.trainingDay = true`, gün sonunda yazılır). Eğitim günü
   lafmaliyet'e **hiç** gitmez, kurulum modu sonradan kapansa da: gün sonu ve yeniden sayım kuyruğa koymaz, "Geçmiş
@@ -667,12 +668,19 @@ yazarkasası). `demoMode` açıkken **ya da** yazarkasa simülatördeyken:
   lafmaliyet'e yalnız kurulum modu dışında kapanan gün (`trainingDay = false`) gider. Gün yeniden açılınca işaret
   silinir, yeniden kapanışta yeniden yazılır.
 
-Böylece eğitim günleri lafmaliyet'e düşmez ve LafPOS veritabanını eğitimden temizlemek gerekmez: eğitim günleri
-LafPOS'un kendi raporlarında kalır. Veri klasörünü silmek çözüm değildir: kurulumu (personel, masalar, ödeme türleri)
-de siler ve boş veritabanı örnek PIN'ler ve simülatörle, yani kurulum modunda yeniden başlar.
+Böylece eğitim günleri lafmaliyet'e düşmez. Deneme bitince patron Yönetim › Ayarlar ve yedek › Deneme modu ›
+**Denemeyi bitir, gerçek kullanıma başla** der (`POST /api/admin/deneme/bitir`, yalnız patron, kendi PIN'iyle;
+`server/services/deneme.ts`): önce yedek (`backups/lafpos-deneme-oncesi-<an>.db`), sonra tek işlemde bütün deneme
+hareketleri (adisyon, ödeme, fiş, gün, kasa hareketi, rezervasyon, platform siparişi, müşteri, denetim kaydı,
+lafmaliyet'e bekleyen kayıt) silinir; kurulum kalır. `demoMode` kapanır, simülatör `kapali` olur, patronun örnek PIN'i
+değişir, örnek PIN'li öbür hesaplar kapanır, `liveSince` yazılır ve denetime `deneme.bitir` düşer. Açık gün varken
+409 `day_open`, deneme dışında kapanmış gün (`trainingDay = false`) varken 409 `real_days`; ikinci kez yalnız
+`already: true` döner, hiçbir şey silinmez. Ayrıntı `docs/05-KASA-BILGISAYARI.md` §2 "İlk açılış". Veri klasörünü
+silmek çözüm değildir: kurulumu (personel, masalar, ödeme türleri) de siler ve boş veritabanı yeniden deneme modunda
+başlar.
 
-Patron PIN'i değişince kurulum modu kapanır (Yönetim › Ayarlar'dan da kapatılır); yazarkasa Yönetim › Yazarkasa POS'ta
-`kapali` ya da `tokenx` olur. Kurulum modu kapandıktan sonra açılıp kapanan ilk gerçek gün §8'deki **deneme
+Patron PIN'i değişince kurulum modu kapanır (Yönetim › Ayarlar'dan da kapatılır; yalnız `demoMode`, kayıtlar
+silinmez); yazarkasa Yönetim › Yazarkasa POS'ta `kapali` ya da `tokenx` olur. Kurulum modu kapandıktan sonra açılıp kapanan ilk gerçek gün §8'deki **deneme
 gönderimidir** (gün kurulum modu açıkken açıldıysa sabahki eğitim satışları da onda olur; kurulum modunu gün
 açılmadan kapatın). İmzayı sınamak için kurulum modunda da "Maliyetleri çek" (§4.1) yeterli.
 
@@ -759,8 +767,8 @@ lafmaliyet Kasa formu LafPOS gününü geçiş günü olmadan gösterirdi.
      girecek satırları bir dosyaya döker; site satırlarını o dosyadan 2. adımda alın.
    - Panelin `KARAOKE_SYNC_SECRET`'ı kafe makinesine konmaz (laffogato `docs/LAFPOS.md`).
 2. **Deneme gönderimi**
-   - Eğitim bitti: LafPOS'ta kurulum modu kapalı (patron PIN'i değişince kendiliğinden kapanır), Yönetim › Yazarkasa
-     POS **`kapali`** (eğitim simülatörü değil). ModPOS'la paralel deneme gününde `kapali` kalır, mali fişi ModPOS
+   - Eğitim bitti: LafPOS'ta "Denemeyi bitir, gerçek kullanıma başla" (§4.3) yapıldı; kurulum modu kapalı, Yönetim ›
+     Yazarkasa POS **`kapali`** (eğitim simülatörü değil). ModPOS'la paralel deneme gününde `kapali` kalır, mali fişi ModPOS
      keser; `tokenx` ancak geçiş gününden itibaren ve Token'ın test ortamından sonra açılır (`docs/04-YAZARKASA.md`).
      Simülatörde kalan gün eğitim günüdür ve hiç gitmez (§4.3).
    - Şimdi site satırları LafPOS `.env`'ine girilir: `LAFFOGATO_URL=https://laffogato.net` (varsayılanı yok),
@@ -778,8 +786,8 @@ lafmaliyet Kasa formu LafPOS gününü geçiş günü olmadan gösterirdi.
    - Yalnız ModPOS'ta satılan ürünler (Su (PET), Kuzu Kulağı, Ice Caramel Latte …) için karar: siteye eklenir
      (tercih) ya da LafPOS yerel ürünü olur, `posName` = eski ModPOS adı.
    - LafPOS Yönetim › Ödeme türleri'nde yemek kartı ve platform kanalları (`pluxee` … `yemeksepeti` …) seçili.
-   - Eğitim günleri lafmaliyet'e gitmez (§4.3) ve LafPOS'ta kalabilir; veri klasörü silinmez (kurulumu da siler,
-     LafPOS kurulum moduna döner). lafmaliyet kartında yine de bir eğitim günü görünürse orada silinir.
+   - Eğitim günleri lafmaliyet'e gitmez (§4.3); "Denemeyi bitir" onları LafPOS'tan da siler (öncesinde yedek). Veri
+     klasörü silinmez (kurulumu da siler, LafPOS deneme moduna döner). lafmaliyet kartında yine de bir eğitim günü görünürse orada silinir.
 3. **Geçiş günü**
    - lafmaliyet Ayarlar › LafPOS (kasa) › LafPOS'a geçiş günü girilir (tercihen ayın 1'i). Ay ortasıysa o ayın
      ModPOS ürün listesi geçiş gününden önceki günler için Satışlar'a yüklenir (1-9 Kasım; yükleme o güne kırpar).
