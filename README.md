@@ -35,11 +35,63 @@ Kafede tek süreç olarak:
 npm run build && npm start   # http://<bilgisayar-ip>:4000
 ```
 
-Windows kasa bilgisayarı için tek dosyalık kurulum: `npm run kurulum:windows` →
+Windows kasa bilgisayarı için tek dosyalık kurulum (sahibin adımları aşağıda, "Windows'a kurulum"): `npm run kurulum:windows` →
 `dist/windows/LafPOS-Kurulum-<sürüm>.exe` (Node gerekmez; sunucu açılışta SYSTEM olarak başlar, veri
 `C:\ProgramData\LafPOS`). Kafeye bu kurulur; kasaya giden dosyalar değişince CI onu Windows'ta derleyip dener
 (`.github/workflows/windows.yml`). Git ile otomatik başlatma (`scripts/kasa/windows/kur.ps1`,
 `scripts/kasa/mac/kur.sh`) yalnız geliştirici içindir: `docs/05-KASA-BILGISAYARI.md`.
+
+## Windows'a kurulum
+
+Kafedeki bilgisayara LafPOS bir kez kurulur; sonraki sürümler kendiliğinden gelir. Komut yazmak, anahtar (token)
+oluşturmak gerekmez.
+
+**1. İndirin.** GitHub'a kendi hesabınızla girin, şu sayfayı açın:
+[github.com/okanberk-dev/lafpos/releases/latest](https://github.com/okanberk-dev/lafpos/releases/latest).
+"Assets" altındaki **LafPOS-Kurulum.exe**'ye basın; dosya İndirilenler'e iner.
+
+**2. Çalıştırın.** Dosyaya çift tıklayın. Windows "Bilgisayarınız korundu" derse **Ek bilgi**'ye, sonra
+**Yine de çalıştır**'a basın (dosya imzasız olduğu için böyle der). "Bu uygulamanın değişiklik yapmasına izin
+verilsin mi?" sorusuna **Evet** deyin.
+
+**3. Kurun.** İleri › Kur › Son. LafPOS arka planda çalışmaya başlar ve bilgisayar her açıldığında kendiliğinden
+açılır. Kasa ekranı masaüstündeki **LafPOS Kasa** kısayoluyla açılır. Tabletler ve telefonlar için adres ve
+karekod: Yönetim › Ağ ve uzaktan erişim.
+
+**4. Ayarlar.** Başlat › LafPOS › **LafPOS ayarları**. Not Defteri açılır; size verilen satırları yapıştırıp
+kaydedin (Ctrl+S) ve kapatın. LafPOS birkaç saniye içinde yeni ayarlarla kendiliğinden yeniden başlar.
+
+**Güncellemeler kendiliğinden gelir.** LafPOS yarım saatte bir yeni sürüm var mı diye bakar. Yeni sürümü indirir,
+ama **yalnız gün kapalıyken** (gün sonundan sonra) kurar; satış sırasında hiçbir şey değişmez. Kurmadan önce
+verilerin bir kopyasını alır. Yeni sürüm açılmazsa kendiliğinden eski sürüme döner. Durum Yönetim › Ayarlar ve
+yedek › **Sürüm ve güncelleme** kartında yazar.
+
+**Elle güncelleme.** Beklemek istemezseniz yukarıdaki sayfadan son LafPOS-Kurulum.exe'yi indirip çalıştırın.
+Verileriniz ve ayarlarınız kalır.
+
+**Otomatik güncellemeyi kapatmak.** LafPOS ayarları'nda bir satır ekleyin: `LAFPOS_GUNCELLEME=kapali`. Açmak için
+satırı silin.
+
+**İnternet yokken.** Kasa, masalar, ödeme ve yazarkasa internetsiz çalışır. Bu sırada lafmaliyet'e, siteye ve
+LafPOS Uzaktan'a gidecek kayıtlar bekler; ekranın üstünde "İnternet yok · 3 kayıt bekliyor" yazar. İnternet
+gelince hepsi bir kez gönderilir ve "Bekleyenler gönderildi" yazar. Her sistemin son gönderim saati Yönetim ›
+Genel bakış › Sistem sağlığı'nda.
+
+**Sorun olursa.**
+
+- Kasa ekranı açılmıyor: Başlat › LafPOS › **Sunucuyu yeniden başlat**, bir dakika bekleyin.
+- Hâlâ açılmıyor: bilgisayarı yeniden başlatın.
+- "Sorun var" ya da "Eski sürüme dönüldü" yazıyor: satış etkilenmez; sonraki sürüm gelince yeniden denenir.
+  İsterseniz elle güncelleyin.
+- Ne olduğunu görmek için: Başlat › LafPOS › **Sunucu günlüğü**.
+- Kaldırmak: Ayarlar › Uygulamalar › LafPOS › Kaldır. Veriler ve yedekler silinmez
+  (`C:\ProgramData\LafPOS`).
+
+**Geliştirici notu.** `main`'e her push'ta GitHub Actions kurulum dosyasını Windows'ta derleyip GitHub Release
+olarak yayımlar (`.github/workflows/windows.yml`). Güncelleme kanalını Vercel'deki `lafpos` projesi her derlemede
+yazar (`npm run kanal` → `https://lafpos.laffogato.net/guncelleme/surum.json` ve uygulama zip'i; gizli anahtar
+yok). Kasadaki güncelleyici `scripts/kasa/windows/kurulum/guncelle.mjs`; ayrıntı
+[docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §6.
 
 ## Ortam değişkenleri
 
