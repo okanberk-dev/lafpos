@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { withPanelPrices } from '../server/sync/laffogato-menu';
+import { menuStaleError, withPanelPrices } from '../server/sync/laffogato-menu';
 
 // Fiyatın taze kaynağı imzalı panel: CDN'deki herkese açık menü 5 dk'ya kadar bayat kalabilir
 describe('withPanelPrices', () => {
@@ -23,5 +23,22 @@ describe('withPanelPrices', () => {
   it('panelde olmayan ya da geçersiz fiyatlı kalem değişmez', () => {
     const panel = new Map([['mnu-1', { isActive: true, priceMinor: 0, priceMinorL: 0 }]]);
     expect(withPanelPrices(items, panel)).toEqual(items);
+  });
+});
+
+describe('menuStaleError', () => {
+  const base = { linked: true, auto: true, dayOpenedAt: 0, state: { lastSuccessAt: 0 }, now: 41 * 60_000 };
+  it('gün açıkken 40 dakikadan uzun eşitlenmeyen menü hata', () => {
+    expect(menuStaleError(base)).toMatch(/^Menü 41 dakikadır/);
+  });
+  it('süre içinde, gün kapalı, bağlantı ya da otomatik kapalı, zaten hata varsa yok', () => {
+    expect(menuStaleError({ ...base, now: 40 * 60_000 })).toBeNull();
+    expect(menuStaleError({ ...base, dayOpenedAt: null })).toBeNull();
+    expect(menuStaleError({ ...base, linked: false })).toBeNull();
+    expect(menuStaleError({ ...base, auto: false })).toBeNull();
+    expect(menuStaleError({ ...base, state: { lastSuccessAt: 0, lastError: 'x' } as never })).toBeNull();
+  });
+  it('gün yeni açıldıysa açılıştan sayılır', () => {
+    expect(menuStaleError({ ...base, dayOpenedAt: 30 * 60_000 })).toBeNull();
   });
 });
