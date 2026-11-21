@@ -77,4 +77,12 @@ export function randomUUID(): string {
   return crypto.randomUUID();
 }
 
-export default { createHash, createHmac, randomBytes, randomUUID };
+/** Bulut yedeğinin şifrelemesi (server/sync/yedek.ts) tarayıcı demosunda çalışmaz: Uzaktan bağlı değil, çağrılmaz */
+const noBackup = (): never => {
+  throw new Error('Tarayıcı demosunda bulut yedeği yok');
+};
+export const hkdfSync = noBackup;
+export const createCipheriv = noBackup;
+export const createDecipheriv = noBackup;
+
+export default { createHash, createHmac, randomBytes, randomUUID, hkdfSync, createCipheriv, createDecipheriv };
