@@ -7,7 +7,7 @@ import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
 import { Button } from '@/components/ui/Button';
 import { Segmented } from '@/components/ui/Field';
-import { Badge, Card, EmptyState, ErrorState, SizeTag, Skeleton, Stat } from '@/components/ui/misc';
+import { Badge, Card, EmptyState, ErrorState, Notice, SizeTag, Skeleton, Stat } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { get } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
@@ -19,7 +19,7 @@ import { staleCostsText } from '@/lib/lafmaliyet';
 import { hourBars } from '@/lib/period';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
-import { REMOTE } from '@/lib/remote';
+import { fmtClock, REMOTE, remoteFreshness } from '@/lib/remote';
 
 export interface PatronData {
   now: number;
@@ -50,6 +50,19 @@ export interface PatronData {
   openChecks: { id: string; no: number; place: string; total: number; paid: number; openedAt: number; waiter: string | null; billPrinted: boolean }[];
   alerts: { id: number; at: number; severity: 'uyari' | 'alarm'; action: string; message: string; amount: number | null; orderId: string | null }[];
   anomalies: { level: 'uyari' | 'alarm'; title: string; detail: string }[];
+  /**
+   * Son gün sonu (yalnız LafPOS Uzaktan özetinde, server/sync/cloud.ts): gün kapalıyken kart. Kasa rakamları yalnız
+   * patron rolü kasa rakamlarını görüyorsa (kör kasa)
+   */
+  lastClose?: {
+    date: string;
+    zNo: number;
+    closedAt: number;
+    netSales: number;
+    receipts: number;
+    payments: { name: string; amount: number; count: number }[];
+    cash: { expected: number; counted: number | null; diff: number | null } | null;
+  } | null;
 }
 
 /** Dikkat isteyenlerde ilk bakışta en çok bu kadar satır; gerisi "Tümünü göster"le aynı kartta açılır */
@@ -176,8 +189,12 @@ export default function PatronPage() {
   const hasLastWeek = visibleHours.some((h) => h.compare);
 
   // "Canlı" yalnız rakamlar tazeyken: yenileme düşerse son veri kalır ama saat verinin saatidir, nokta amber
-  const stale = data.isError || now - data.dataUpdatedAt > 3 * (REMOTE ? 10_000 : 60_000);
-  const statusText = joinMeta([d.dayOpen ? 'Gün açık' : 'Gün kapalı', stale ? `son güncelleme ${fmtTime(d.now)}` : `${fmtTime(d.now)} itibarıyla`, stale ? data.isError && 'yenilenemedi' : 'canlı']);
+  // Uzakta ayrıca kafenin kendisi: gün açıkken son itme 10 dakikadan eskiyse kafeden veri gelmiyor
+  const cafeSilent = REMOTE && remoteFreshness(Math.max(now, Date.now()), d.now, d.dayOpen) === 'stale';
+  const stale = data.isError || cafeSilent || now - data.dataUpdatedAt > 3 * (REMOTE ? 10_000 : 60_000);
+  const statusText = REMOTE
+    ? joinMeta([d.dayOpen ? 'Gün açık' : 'Gün kapalı', `son güncelleme ${fmtClock(d.now)}`, cafeSilent ? 'kafeden veri gelmiyor' : data.isError ? 'yenilenemedi' : d.dayOpen && 'canlı'])
+    : joinMeta([d.dayOpen ? 'Gün açık' : 'Gün kapalı', stale ? `son güncelleme ${fmtTime(d.now)}` : `${fmtTime(d.now)} itibarıyla`, stale ? data.isError && 'yenilenemedi' : 'canlı']);
   // Durumu nokta ve yazı birlikte anlatır; sürekli nabız yok
   const dot = <span aria-hidden="true" className={cn('inline-block size-2 shrink-0 rounded-full', stale ? 'bg-[var(--admin-warning)]' : d.dayOpen ? 'bg-[var(--admin-success)]' : 'bg-muted')} />;
   // Hata durumundaki (ErrorState) yeniden denemeyle aynı düğme
@@ -282,6 +299,13 @@ export default function PatronPage() {
       float
     >
       <div className={PAD}>
+        {cafeSilent && (
+          <Notice tone="danger" role="alert" title="Kafeden veri gelmiyor" className="mb-3">
+            Son veri {fmtClock(d.now)}. Gün açık ama kasa bilgisayarı 10 dakikadır itmedi: internet ya da elektrik kesilmiş, bilgisayar kapanmış olabilir. Rakamlar
+            o saattekidir; satış kafede sürer, bağlantı gelince kendiliğinden tazelenir
+          </Notice>
+        )}
+        {REMOTE && !d.dayOpen && d.lastClose && <DayCloseCard c={d.lastClose} />}
         <div className={topGrid(wideTiles)}>
           {/* Karolar: tek sıra kart (telefonda iki sütun) */}
           <div className={tileGrid(wideTiles)}>{tiles}</div>
@@ -599,6 +623,48 @@ export default function PatronPage() {
 }
 
 /** Pano kartının başlığı: başlık ve alt satır solda, sağda yumuşak tonlu dairede ikon (panonun hedef ikonu) */
+/**
+ * Gün sonu kartı (uzaktan, gün kapalıyken): Z, ciro, adisyon, ödemeler ve kasa farkı (fark: sayılan eksi beklenen; eksi
+ * kasada eksik). Kasa rakamları yalnız kör kasa kapalıysa gelir
+ */
+function DayCloseCard({ c }: { c: NonNullable<PatronData['lastClose']> }) {
+  const diff = c.cash?.diff;
+  return (
+    <section aria-label="Son gün sonu" className={cn(PANEL, 'mb-3 p-5')}>
+      <PanelHead title={`Gün sonu · Z ${c.zNo}`} sub={`${fmtDateLong(c.date)} · ${fmtTime(c.closedAt)}`} icon={<Receipt />} />
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div>
+          <div className="text-[13px] text-muted">Z toplamı (ciro, KDV dahil)</div>
+          <div className="tabular mt-1 font-headline text-[26px] font-bold leading-none tracking-[-0.035em]">{tl(c.netSales)}</div>
+          <div className="mt-1.5 text-xs text-muted">{c.receipts} adisyon</div>
+        </div>
+        <div className="sm:col-span-2">
+          {c.payments.length ? (
+            <BarList items={c.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `${p.count} işlem` }))} format={tl} />
+          ) : (
+            <p className="text-sm text-muted">Ödeme alınmadı</p>
+          )}
+        </div>
+      </div>
+      {c.cash && (
+        <p className="mt-4 border-t border-[var(--admin-divider)] pt-3 text-sm">
+          {c.cash.counted == null ? (
+            <>Kasa sayılmadan kapandı · beklenen nakit {tl(c.cash.expected)}</>
+          ) : (
+            <>
+              Kasa farkı{' '}
+              <span className={cn('tabular font-semibold', diff ? (diff < 0 ? 'text-danger-ink' : 'text-warning-ink') : 'text-success-ink')}>
+                {!diff ? 'yok' : `${tl(Math.abs(diff))} ${diff < 0 ? 'eksik' : 'fazla'}`}
+              </span>
+              <span className="text-muted"> · sayılan {tl(c.cash.counted)}, beklenen {tl(c.cash.expected)}</span>
+            </>
+          )}
+        </p>
+      )}
+    </section>
+  );
+}
+
 function PanelHead({ title, sub, icon }: { title: string; sub?: string; icon: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3">

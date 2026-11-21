@@ -46,6 +46,7 @@ import { staleCostsText } from '@/lib/lafmaliyet';
 import { byBusinessHour, fmtShortDate, hourTitle, PERIOD_LABELS, type PeriodKey, periodRange, rangeLabel } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { lossParts, previousShort } from '@/lib/reportLabels';
+import { REMOTE, REMOTE_REPORTS } from '@/lib/remote';
 
 type ReportKey = 'ciro' | 'urunler' | 'saatlik' | 'hazirlama' | 'adisyon' | 'platformlar' | 'kayip' | 'happy' | 'personel' | 'aktarim';
 type ProductView = 'urun' | 'kategori';
@@ -100,6 +101,7 @@ export default function ReportsPage() {
   const [loss, setLoss] = useLocalPref<LossKind>('reports.loss', legacy?.loss ?? 'iptal');
   const top = useRef<HTMLDivElement>(null);
   const open = (key: ReportKey, sub?: { product?: ProductView; loss?: LossKind }) => {
+    if (REMOTE && !(REMOTE_REPORTS as readonly string[]).includes(key)) return;
     if (sub?.product) setProductView(sub.product);
     if (sub?.loss) setLoss(sub.loss);
     setReport(key);
@@ -112,7 +114,9 @@ export default function ReportsPage() {
   const today = currentBusinessDate(boot.day?.date);
   const [custom, setCustom] = useState(() => periodRange('hafta', today));
   const range = period === 'ozel' ? custom : periodRange(period, today);
-  const visible = REPORTS.filter((r) => !r.perm || can(r.perm));
+  // Uzaktan (LafPOS Uzaktan): yalnız günlük özetlerden toplanan sekmeler; Personel orada maliyetsiz satış tablosu
+  // (patronun görünümü), maliyet ve kâr hiçbir sekmede yok
+  const visible = REMOTE ? REPORTS.filter((r) => (REMOTE_REPORTS as readonly string[]).includes(r.key)) : REPORTS.filter((r) => !r.perm || can(r.perm));
   const current = visible.find((r) => r.key === report) ?? visible[0];
   // Dönem değişince açıklamada küçük gösterge (yerelde çoğu istek 50 ms; kısa yüklemede görünmez)
   const fetching = useDelayed(useIsFetching({ queryKey: ['reports'] }) > 0, 300);
@@ -192,9 +196,9 @@ export default function ReportsPage() {
       <StatusTabs label="Rapor" value={current.key} onChange={setReport} tabs={visible.map((r) => ({ value: r.key, label: r.label }))} />
       {current.key === 'ciro' && <SummaryReport range={range} today={today} onOpen={open} />}
       {current.key === 'urunler' && (
-        <ProductsReport range={range} today={today} view={productView} onView={setProductView} onExport={() => void exportCsv('urunler')} exporting={busy === 'urunler'} />
+        <ProductsReport range={range} today={today} view={productView} onView={setProductView} onExport={REMOTE ? undefined : () => void exportCsv('urunler')} exporting={busy === 'urunler'} />
       )}
-      {current.key === 'saatlik' && <HourlyReport range={range} today={today} onExport={() => void exportCsv('saatlik')} exporting={busy === 'saatlik'} />}
+      {current.key === 'saatlik' && <HourlyReport range={range} today={today} onExport={REMOTE ? undefined : () => void exportCsv('saatlik')} exporting={busy === 'saatlik'} />}
       {current.key === 'hazirlama' && <PrepReport range={range} today={today} />}
       {current.key === 'adisyon' && <ChecksReport range={range} today={today} onExport={() => void exportCsv('adisyonlar')} exporting={busy === 'adisyonlar'} />}
       {current.key === 'platformlar' && <PlatformsReport range={range} today={today} onExport={() => void exportCsv('platformlar')} exporting={busy === 'platformlar'} />}
@@ -509,7 +513,8 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                 {s.receipts > 0 && <span className="block">{joinMeta([`Ortalama ${tlShort(s.avgCheck)}`, s.perGuest != null && `kişi başı ${tlShort(s.perGuest)}`])}</span>}
               </>
             ),
-            onClick: () => onOpen('adisyon'),
+            // Uzakta adisyon listesi yok: karo dokunulmaz
+            onClick: REMOTE ? undefined : () => onOpen('adisyon'),
           },
           {
             key: 'urun',
@@ -527,7 +532,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             hue: 'rose',
             value: <KpiAmount value={s.discounts + s.complimentary} />,
             reference: s.discounts + s.complimentary + s.voided ? lossParts(s, tlShort) : 'İndirim ve ikram yok',
-            onClick: () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }),
+            onClick: REMOTE ? undefined : () => onOpen('kayip', { loss: s.complimentary > s.discounts ? 'ikram' : 'indirim' }),
           },
           {
             key: 'online',
@@ -680,7 +685,8 @@ function ProductsReport({
   today: string;
   view: ProductView;
   onView: (v: ProductView) => void;
-  onExport: () => void;
+  /** CSV yok (uzaktan görünüm) */
+  onExport?: () => void;
   exporting: boolean;
 }) {
   const can = useCan();
@@ -704,9 +710,11 @@ function ProductsReport({
           <>
             {/* Ortak arama alanı: dokunmatikte 44 px, fareyle 36; temizle düğmesi ve Escape. Telefonda kendi satırında */}
             <SearchInput dense value={q} onChange={setQ} label="Ürün ara" placeholder="Ürün ara" wrapperClassName="order-last basis-full sm:order-none sm:max-w-xs sm:flex-1 sm:basis-auto" />
-            <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport} className="ml-auto">
-              CSV
-            </Button>
+            {onExport && (
+              <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport} className="ml-auto">
+                CSV
+              </Button>
+            )}
           </>
         )}
       </div>
@@ -858,7 +866,7 @@ interface HourlyData {
 
 const hh = (n: number) => `${String(n).padStart(2, '0')}:00`;
 
-function HourlyReport({ range, today, onExport, exporting }: { range: Range; today: string; onExport: () => void; exporting: boolean }) {
+function HourlyReport({ range, today, onExport, exporting }: { range: Range; today: string; onExport?: () => void; exporting: boolean }) {
   const data = useReport<HourlyData>(['hourly', range], `/reports/hourly?${qs(range)}`);
   return (
     <ReportBody q={data} skeleton={stripSkeleton(4)}>
@@ -897,9 +905,11 @@ function HourlyReport({ range, today, onExport, exporting }: { range: Range; tod
               title="Saat dağılımı"
               subtitle={h.hours.length > 24 ? 'Gün 24 saati aştı; ertesi günün saatleri sonda' : 'Adisyonun açıldığı saate göre'}
               actions={
-                <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>
-                  CSV
-                </Button>
+                onExport && (
+                  <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>
+                    CSV
+                  </Button>
+                )
               }
             >
               <div className="p-4 sm:px-5">
