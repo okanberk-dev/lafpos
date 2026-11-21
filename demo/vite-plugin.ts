@@ -16,6 +16,8 @@ const BUILTINS: Record<string, string> = {
   'node:crypto': at('demo/shims/crypto.ts'),
   'node:events': at('demo/shims/events.ts'),
   'node:fs': at('demo/shims/fs.ts'),
+  'node:http': at('demo/shims/http.ts'),
+  'node:https': at('demo/shims/http.ts'),
   'node:path': at('demo/shims/path.ts'),
   'node:os': at('demo/shims/os.ts'),
   'node:zlib': at('demo/shims/zlib.ts'),

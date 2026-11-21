@@ -14,6 +14,11 @@ NE KURULDU
   bilinir. Canlıya geçmeden Yönetim › Personel'den değiştirin.
 - Fiş yazıcısını (80 mm) Windows'ta varsayılan yazıcı yapın.
 - Güç ayarlarında "ekranı kapatma: hiçbir zaman" seçin; otomatik oturum açma isteğe bağlı.
+- Ağ kartının güç tasarrufunu kapatın, yoksa Windows boşta kartı kapatır ve tabletler bir an bağlantıyı
+  kaybeder: Aygıt Yöneticisi › Ağ bağdaştırıcıları › (Ethernet ya da Wi-Fi kartı) › Özellikler › Güç Yönetimi
+  › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretini kaldırın. Kurulumdaki "Prizdeyken
+  uyku kapalı" seçeneği uykuyu, hazırda bekletmeyi ve USB aygıtlarının (yazıcı, dokunmatik ekran) askıya
+  alınmasını zaten kapatır.
 
 TABLET VE TELEFONLAR (kafenin ağında)
 - Adres: http://<bu bilgisayarın IP adresi>:4000
@@ -45,6 +50,7 @@ KALDIRMA
 - Ayarlar › Uygulamalar › LafPOS › Kaldır. Veriler ve yedekler silinmez.
 
 DAHA ÖNCE GIT İLE KURDUYSANIZ
+- git ile kurulum (kur.ps1) yalnız geliştirici içindir; kafede bu kurulum kullanılır.
 - Önce eski otomatik başlatmayı kaldırın (scripts\kasa\windows\kur.ps1 -Kaldir) ve bilgisayarı yeniden
   başlatın.
 - C:\ProgramData\LafPOS klasörünü oluşturup eski data klasöründeki lafpos.db, lafpos.db-wal (varsa),

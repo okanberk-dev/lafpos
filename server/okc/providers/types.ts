@@ -2,12 +2,12 @@ import type { MethodKind } from '../basket';
 import type { TokenxBasket } from '../tokenx';
 
 /**
- * Yazarkasa sağlayıcılarının ortak sözleşmesi. Her marka (Token, Hugin, ileride Pavo, Ingenico) bir sağlayıcıdır;
+ * Yazarkasa sağlayıcılarının ortak sözleşmesi. Her marka (Token, Pavo, ileride Hugin, Ingenico) bir sağlayıcıdır;
  * adisyon, sepet, kilit, zorla iptal ve sonucun adisyona işlenmesi `service.ts`'te tek yerdedir, sağlayıcı yalnız
  * cihazla konuşur. Sonuç markadan bağımsız `FiscalResult`'tır: mali fiş, bilgi fişi ya da e-belge (VUK 507 cihazları).
  */
 
-export type ProviderId = 'tokenx' | 'hugin' | 'simulator';
+export type ProviderId = 'tokenx' | 'pavo' | 'hugin' | 'simulator';
 
 /**
  * LafPOS'un cihaz sepeti. Biçim TokenX sepetiyle aynıdır: birim fiyat kuruş, adet x1000, KDV oranı x100, kısım no,
@@ -86,6 +86,11 @@ export interface FiscalProvider {
   terminalId(): string | null;
   /** Yönetim ekranında gösterilecek durum (gizli değer içermez) */
   status(): Record<string, unknown>;
+  /**
+   * Sepetin cihaza gidebilir olduğunu sepet kaydı yazılmadan denetler (ör. cihazın bilmediği KDV grubu); gidemezse
+   * okunur mesajla hata fırlatır, kasiyer hatayı görür, adisyon kilitlenmez
+   */
+  validate?(basket: FiscalBasket): void;
   /**
    * Sepeti cihaza yollar. Çekme (pull) sağlayıcısında sepet LafPOS'ta bekler, cihaz kendisi alır. Hata
    * `uncertain: true` taşıyorsa (zaman aşımı, bağlantı koptu) sepet cihaza ulaşmış olabilir: bekleyen kalır ve

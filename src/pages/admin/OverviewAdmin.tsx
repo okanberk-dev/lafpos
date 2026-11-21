@@ -23,7 +23,7 @@ interface SyncStatus {
   menu: { linked: boolean; auto: boolean; state: { lastSuccessAt?: number; lastCheckAt?: number; lastError?: string | null; lastErrorAt?: number } | null };
   online: { configured: boolean; enabled: boolean; open: number; state: { lastSuccessAt?: number; lastError?: string | null } | null; soldOutPush: { pending: number; rejected: number; lastError: string | null } };
   lafmaliyet: { configured: boolean; training: boolean; pending: number; failing: number; pendingDays: string[]; lastError: string | null; push: { lastRunAt?: number; sent?: number; failed?: number } | null };
-  okc: { provider: 'kapali' | 'simulator' | 'tokenx'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
+  okc: { provider: 'kapali' | 'simulator' | 'tokenx' | 'pavo'; mode: string; tokenx: { configured: boolean }; lastError: { message: string; at: number } | null };
 }
 
 const pct = (v: number | null) => (v == null ? null : { text: `${v >= 0 ? '▲' : '▼'} %${Math.abs(v).toLocaleString('tr-TR')}`, good: v >= 0 });
@@ -198,8 +198,8 @@ export default function OverviewAdmin() {
           to: to('/yonetim/yazarkasa'),
           label: 'Yazarkasa',
           tone: s.okc.provider === 'kapali' ? 'neutral' : s.okc.lastError ? 'warning' : s.okc.provider === 'simulator' ? 'info' : 'success',
-          state: s.okc.provider === 'kapali' ? 'Kapalı' : s.okc.provider === 'simulator' ? 'Eğitim cihazı' : 'TokenX',
-          detail: s.okc.lastError ? s.okc.lastError.message : s.okc.provider === 'tokenx' ? `${s.okc.mode === 'liste' ? 'Liste' : 'Anlık'} sepet` : 'Fişler gerçek cihaza gitmiyor',
+          state: s.okc.provider === 'kapali' ? 'Kapalı' : s.okc.provider === 'simulator' ? 'Eğitim cihazı' : s.okc.provider === 'pavo' ? 'Pavo' : 'TokenX',
+          detail: s.okc.lastError ? s.okc.lastError.message : s.okc.provider === 'tokenx' ? `${s.okc.mode === 'liste' ? 'Liste' : 'Anlık'} sepet` : s.okc.provider === 'pavo' ? 'Yerel ağ, kasada ödeme' : 'Fişler gerçek cihaza gitmiyor',
         },
         ...(can('ayar.yonet')
           ? [

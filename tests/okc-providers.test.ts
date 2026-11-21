@@ -43,7 +43,8 @@ describe('Token sonucu → ortak sonuç', () => {
   });
 
   it('kayıt: bilinmeyen sağlayıcı yok sayılır; Token ve eğitim cihazının yetenekleri açık', () => {
-    expect(providerFor('pavo')).toBeNull();
+    expect(providerFor('hugin')).toBeNull();
+    expect(providerFor('pavo')?.capabilities).toMatchObject({ transport: 'push', instant: true, list: false, poll: true });
     expect(providerFor('tokenx')?.capabilities).toMatchObject({ transport: 'push', poll: true, splitPayment: true });
     expect(providerFor('simulator')?.capabilities).toMatchObject({ transport: 'local', poll: false });
   });

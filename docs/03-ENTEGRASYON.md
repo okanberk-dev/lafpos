@@ -116,9 +116,10 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 | --- | --- | --- |
 | `GET /api/panel/menu` | Satışta bilgisinin taze kaynağı (`isActive`, §2.1) | menü senkronunda: herkese açık menü değişince ve elle |
 | `POST /api/panel/menu {id, isActive, actor}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
-| `GET /api/pos/orders/version` | sipariş sürüm sinyali (aşağıda) | 20 sn'de bir, gece de; veritabanına gitmez |
-| `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı | sinyal değişince; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
+| `GET /api/pos/orders/version` | sipariş sürüm sinyali (aşağıda) | gün açıkken 20 sn'de bir, gece en sık 3 dk'da bir; veritabanına gitmez |
+| `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı; yanındaki `calls` masa çağrıları (aşağıda) | sinyal değişince; gün açılınca bir kez; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
 | `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi; 409 ve 404'te liste yeniden çekilir | kullanıcı işlemi |
+| `POST /api/panel/calls/ack {id, actor}` | masa çağrısına "Gördüm" (aşağıda "Masa çağrıları") | kullanıcı işlemi |
 | `GET /api/panel/karaoke?from=<gün>&to=<gün>` | bugünün karaoke rezervasyonları: oda kutusu, masa planı, oda ücreti (§2.4) | `karaoke` işareti değişince, gün açıkken en sık 5 dk'da bir; oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn) |
 
 `actor` LafPOS kullanıcısının adıdır. LafPOS anahtarıyla gelen yazımlar site olay kaydına `lafpos:<ad>` diye düşer.
@@ -126,9 +127,16 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 **Sipariş sürüm sinyali:** `GET /api/pos/orders/version` (imzalı, `LAFPOS_SYNC_SECRET`) → `{ "version": "<metin>",
 "karaoke": "<metin>" }` (`karaoke` laffogato#264'ten beri; karaoke okumasının işareti, §2.4).
 Sitenin veri önbelleğinden (`live:orders` etiketi) gelir, veritabanına dokunmaz; sipariş yazımı etiketi
-düşürünce değer değişir. LafPOS bunu 20 saniyede bir sorar (gece de: gün kapalıyken gelen sipariş ödeme anının iş
-gününe işlenir), değer değişince `GET /api/panel/orders`'ı çeker. Böylece online sipariş Neon kotasını harcamadan yarım
-dakika içinde bar ekranına düşer. Veritabanına dokunmadığı için 5 dakika kuralının (`AGENTS.md` kural 6) dışındadır.
+düşürünce değer değişir. LafPOS bunu gün açıkken 20 saniyede bir sorar, değer değişince `GET /api/panel/orders`'ı
+çeker. Böylece online sipariş Neon kotasını harcamadan yarım dakika içinde bar ekranına düşer. Veritabanına dokunmadığı
+için 5 dakika kuralının (`AGENTS.md` kural 6) dışındadır.
+- **Gece** (açık iş günü yokken) sinyal en sık 3 dakikada bir sorulur (21 Kasım 2026; kasa bilgisayarı ve site gece
+  boşuna çalışmasın). Gece de sorulur, çünkü gün kapalıyken gelen sipariş ödeme anının iş gününe işlenir. Gün açılınca
+  (Kasa › Gün açılışı ya da günü yeniden açma) bir tur hemen döner ve sinyal değişmemiş olsa da liste bir kez çekilir;
+  sonra yeniden 20 saniyede bir.
+- **Hiç iş günü yokken** (ilk kurulum, henüz gün açılmadı) siparişin yazılacağı gün yoktur: zamanlayıcı siteye istek
+  atmaz, elle "Yenile" listeyi alır ama sipariş yazmaz, sürüm kaydedilmez ve Yönetim › Entegrasyon "Gün açılmadı;
+  online siparişler gün açılınca alınır" der. İlk gün açılınca liste hemen çekilir.
 - Sürüm yalnız çekim başarılıysa kaydedilir: başarısız çekim sonraki turda (20 sn) yeniden denenir, art arda
   başarısızlıkta bekleme katlanır (en çok 5 dk). Sipariş kaybolmaz. Sinyal okunamazsa (5xx, bozuk gövde) 5 dakikalık
   çekmeye düşülür.
@@ -184,6 +192,36 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   getirilen sipariş `extStage = 'done'` kapanır.
 - **Aşama:** site 409 (`stale`, sipariş bu arada değişti) ya da 404 (`not_found`, "Sipariş sitede bulunamadı")
   dönerse liste yeniden çekilir.
+- **Bar istasyonu** (21 Kasım 2026): kalem, sitenin `menuItemId`'sine bağlı LafPOS ürününün ya da kategorisinin
+  istasyonuna düşer. Ürün LafPOS'ta yoksa (menü henüz eşitlenmedi, sitede yeni açılan kalem) ya da ürünün ve
+  kategorisinin istasyonu yoksa barın istasyonuna (`kind = 'bar'`, yoksa `mutfak`; menü eşitlemesinin kuralı) düşer:
+  sitede ödenmiş sipariş bar ekranından ve çağrı ekranından kaybolmaz. Ürünü ya da istasyonu boş kalmış kalem (eski
+  sürüm, sonradan eşitlenen menü) sonraki çekimde yeniden bağlanır (ürün, KDV oranı, istasyon); tutar ve iş günü
+  değişmez.
+- **Planlı sipariş** (`scheduledFor`, 21 Kasım 2026): kalemlerin bar ekranına gönderim anı (`order_items.sentAt`)
+  ödeme anı değil, `max(ödeme anı, planlı saat − 30 dk)`'dır; saat sitede değişince yeniden damgalanır. Geceden
+  ödenmiş sabah gel-al'ı bar ekranının ve çağrı ekranının penceresinde (açık günün başı, en az 12 saat; gün yoksa 24
+  saat) ve sesli uyarının 4 saatlik penceresinde (§2.5) saatinde görünür, erken ödenmiş sipariş ödendiği anda
+  "gecikti" diye kızarmaz. Para, iş günü ve ödeme anı (`orders.openedAt`) değişmez. Yalnız saati ya da kaleminin
+  bağlantısı değişen sipariş `online.detail` yayar (`online.updated` cihazın zilini susturur, sipariş hâlâ yeni).
+- **Masa çağrıları** (21 Kasım 2026; laffogato 6 Kas 2026, `src/lib/admin/table-calls-core.ts`): uygulamada masadan
+  "Garson çağır", su, peçete. Site açık çağrıları sipariş listesinin yanında verir: `calls: [{id, tableCode, label,
+  reason, createdAt}]` (en eskisi önce, en çok 50, 15 dakikadan genç ve yanıtlanmamış; misafirin adı yok). **Yeni
+  istek yok:** çağrılar sipariş çekimiyle gelir, sinyal değişince (çağrı yazımı sitenin `live:orders` etiketini
+  düşürür). Okunamayan satır (kimlik, etiket ya da zaman yok) atlanır; bilinmeyen sebep "Çağırıyor" diye görünür; alanı
+  göndermeyen eski site eldeki listeye dokunmaz. Masa siparişlerin kuralıyla bulunur (önce QR kodu, sonra etiket);
+  bulunamazsa sitenin etiketiyle görünür. Liste `sync_state` (`laffogato.calls`) içinde durur ve her başarılı çekimde
+  yenisiyle değişir: listeden düşen çağrı (sitede ya da köşkün panelinde yanıtlandı, süresi geçti) LafPOS'tan da düşer,
+  15 dakikası dolan çağrı liste yenilenmeden de düşer. Yeni çağrı `tables` › `site.call.new` yayar ("Masa 4 · Su
+  istiyor"; yalnız masa ve sebep), cihazlarda çalar (§2.5) ve masa planında masanın kartında mor zil rozeti çıkar.
+  **"Gördüm"** (`POST /api/sync/calls/:id/ack`; `siparis.al` ya da `mutfak.ekran`) çağrıyı sitede yanıtlar (imzalı
+  `POST /api/panel/calls/ack {id, actor}`, gövde tam bu iki alan, `actor` kullanıcının adı en çok 80 karakter; site
+  `lafpos:<ad>` yazar), sonra yerelde düşürür, denetim kaydına yazar (`table.call_ack`) ve `site.call.done` yayar:
+  bütün cihazlarda susar. Site 404 derse (çağrı sitede yok) yine düşer; siteye ulaşılamazsa ya da site başka bir kod
+  dönerse 502 `site_call`, çağrı açık kalır, yeniden denenir. LafPOS'ta yanıtlanan çağrı, yanıttan önce istenmiş bir
+  listede gelse de geri gelmez; daha yeni bir listeden önce istenmiş (ağda gecikmiş) liste yok sayılır. Bilgisayarın
+  saati geri alınırsa (Windows saat eşitlemesi) saklanan an ileride kalır: liste yine işlenir, an bugünün saatine döner
+  (siparişlerin kuralı).
 
 **Tükendi kilidi** (`products.soldOutBy`): LafPOS'un kapattığı ürün (kasadan, bardan, porsiyon bitince) `lafpos`,
 sitenin kapattığı (senkron) `site` diye işaretlenir. Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar;
@@ -337,7 +375,8 @@ açar.
 
 Operatör: "diğerlerine sipariş, karaoke gelince LafPOS'ta da ötsün, ses çıkarsın ki ayarlama yapabilelim". Uyarılar
 yalnız var olan çekimlerden doğar (§2.3 online siparişler, §2.4 karaoke): **yeni uç, yeni alan, yeni istek yok**, sıklık
-değişmez (`AGENTS.md` kural 6); LafPOS siteye hiçbir şey yazmaz, "Gördüm" yalnız o cihazda kalır. Kod:
+değişmez (`AGENTS.md` kural 6); LafPOS siteye yalnız masa çağrısının "Gördüm"ünü yazar (kullanıcı işlemi, §2.3 "Masa
+çağrıları"), siparişin ve karaokenin "Gördüm"ü yalnız o cihazda kalır. Kod:
 `shared/site-alerts.ts`, `src/lib/siteAlerts.ts` (kurallar), `src/components/SiteInbox.tsx` (şerit ve ses),
 `src/lib/sound.ts` (zil); olay türleri `shared/events.ts` `SITE_EVENT`.
 
@@ -347,7 +386,15 @@ değişmez (`AGENTS.md` kural 6); LafPOS siteye hiçbir şey yazmaz, "Gördüm" 
   "Gördüm" (24 saat hatırlanır), sipariş o cihazda açılınca, aşaması değişince (LafPOS'ta, sitede ya da köşkte
   "Hazırlanıyor"), siteden kalkınca ya da ödemesinden 4 saat geçince. Duyan: `siparis.al` ya da `mutfak.ekran`. Liste
   `GET /api/sync/alerts` (aynı yetki; yalnız yerel veritabanı, açık ve sitede hâlâ `new` aşamasındaki siparişler).
-  Bar ekranı online fişte kendi sesini çalmaz (kabuğun zili çalıyorsa).
+  Bar ekranı online fişte kendi sesini çalmaz (kabuğun zili çalıyorsa). Planlı siparişin 4 saati planlı saatinden 30
+  dakika önce başlar (`dueAt`, §2.3 "Planlı sipariş"): geceden ödenmiş sabah siparişi o ana dek çalmaz, saati gelince
+  çalar. Saatinden önce denen "Gördüm" (aşaması ya da masası değişti, ekranda açıldı) onu susturmaz: cihaz "Gördüm"ü
+  planlı siparişte saatiyle hatırlar (`kimlik@dueAt`), saati sitede değişen sipariş yeni saatinde yine çalar.
+- **Masa çağrısı** (§2.3 "Masa çağrıları"): aynı zil, aynı döngüde, masa siparişi gibi tam düzeyde; şeridin başında
+  ("Masa çağrısı · S4 · Su istiyor") ve bildirim "Masa çağrısı · S4 · Su istiyor". "Gördüm" çağrıyı sitede yanıtlar,
+  bütün cihazlarda susar; site yanıtı almazsa çağrı her cihazda açık kalır. Sitede ya da köşkte yanıtlanınca ya da 15
+  dakika dolunca da susar. Duyan ve yanıtlayan: `siparis.al` ya da `mutfak.ekran`; tercihi online siparişle bir.
+  Liste aynı `GET /api/sync/alerts`'in `calls` alanı (yalnız yerel kayıt).
 - **Siteden kalkan sipariş** (§2.3 "Kapanış"): tek sakin nota ve bildirim "Online sipariş #N siteden kalktı".
 - **Karaoke:** aynı iş gününün iki listesi kıyaslanır, günün ilk listesi kıyaslanmaz (sabahtan beri alınanlar çalmasın).
   Yeni rezervasyon (iptal olmayan) bir kez zil, iptal edilen inen ses, saati ya da süresi değişen ve (iki liste de tamsa)
@@ -643,12 +690,12 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | --- | --- | --- |
 | Herkese açık menü | gün açıkken 15 dk (ETag); gece yok; gün açılınca ve kendi Satışta yazımından sonra bir kez; elle | CDN ıskasında okuma (uyanma) |
 | İmzalı menü okuma | senkronda (herkese açık menü değişince) ve elle | küçük okuma |
-| Sipariş sürüm sinyali | 20 sn, gece de; "Online siparişleri çek" kapalıyken yalnız karaoke için, gün açıkken ve planda oda varken | yok (veri önbelleği, veritabanına gitmez) |
-| Online sipariş okuma | sinyal değişince + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
-| Tükendi / aşama yazma | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
+| Sipariş sürüm sinyali | gün açıkken 20 sn, gece en sık 3 dk; hiç iş günü yokken hiç; "Online siparişleri çek" kapalıyken yalnız karaoke için, gün açıkken ve planda oda varken | yok (veri önbelleği, veritabanına gitmez) |
+| Online sipariş okuma (masa çağrıları dahil) | sinyal değişince + gün açılınca bir kez + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
+| Tükendi / aşama yazma, masa çağrısı "Gördüm" | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
 | Karaoke rezervasyonları (§2.4) | `karaoke` işareti değişince ya da gün dönünce, gün açıkken en sık 5 dk ("Online siparişleri çek" kapalıyken de); oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn); gece yok; planda oda yoksa hiç | küçük okuma |
 | Karaoke saat ücreti (§2.4) | Yönetim › Masa planı açılınca (en sık dakikada bir) | küçük okuma (herkese açık uç) |
-| Sesli uyarılar (§2.5) | yeni istek yok: sipariş ve karaoke çekimlerinin listesinden | yok |
+| Sesli uyarılar (§2.5) | yeni istek yok: sipariş (masa çağrıları dahil) ve karaoke çekimlerinin listesinden | yok |
 | lafmaliyet günlük itme | gün sonunda bir kez (+ düzeltme, + elle "Geçmiş günleri gönder"); eğitim günü hiç | yok (lafmaliyet'in kendi veritabanı) |
 | lafmaliyet maliyet okuma | her gün sonunda bir kez (o iş gününde çekilmediyse); + elle | yok |
 

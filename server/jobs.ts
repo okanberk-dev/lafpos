@@ -10,7 +10,7 @@ import { env } from './env';
 import { Effects } from './lib/effects';
 import { bus } from './lib/events';
 import { getSettings } from './lib/settings';
-import { resumePolling } from './okc/service';
+import { deviceEndOfDay, recoverDeviceEod, resumePolling } from './okc/service';
 import { closeDay } from './services/days';
 import { warmProductThumbs } from './services/media';
 import { getOpenDay, isEmptyOrder } from './services/orders';
@@ -64,14 +64,34 @@ export async function backupNow(): Promise<string> {
   return file;
 }
 
+/** Günlük bakımın en son yapıldığı iş günü (yedekten sonra, günde bir) */
+let maintainedOn: string | null = null;
+
+/**
+ * Günlük veritabanı bakımı: WAL ana dosyaya yazılıp -wal sıfırlanır (TRUNCATE; beş dakikalık PASSIVE denetim noktası
+ * dosyayı küçültmez) ve SQLite sorgu istatistiklerini tazeler (`optimize`, yalnız gerekeni)
+ */
+function dailyMaintenance(day: string) {
+  if (maintainedOn === day) return;
+  maintainedOn = day;
+  try {
+    sqlite.pragma('wal_checkpoint(TRUNCATE)');
+    sqlite.pragma('optimize');
+  } catch (e) {
+    console.warn('[bakım] veritabanı bakımı yapılamadı:', e instanceof Error ? e.message : e);
+  }
+}
+
 async function backupTick() {
-  const file = resolve(env.dataDir, 'backups', `lafpos-${businessDate(Date.now())}.db`);
+  const day = businessDate(Date.now());
+  const file = resolve(env.dataDir, 'backups', `lafpos-${day}.db`);
   if (existsSync(file)) return;
   try {
     await backupNow();
   } catch (e) {
     console.warn('[yedek] alınamadı:', e instanceof Error ? e.message : e);
   }
+  dailyMaintenance(day);
 }
 
 let lastAutoWarn = 0;
@@ -104,6 +124,8 @@ function autoDayEndTick() {
   const closed = tx((t) => closeDay(t, null, fx, { countedCash: null, note: 'Otomatik gün sonu' }));
   fx.flush();
   afterDayClosed(closed.id);
+  // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5)
+  void deviceEndOfDay(closed.id, null).catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
 }
 
 /** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi */
@@ -144,6 +166,12 @@ export function startJobs() {
   timers.push(setTimeout(backupTick, 30_000));
   // Yeniden başlatmadan önce yazarkasaya gönderilmiş, sonucu beklenen sepetler sorgulanmaya devam eder
   resumePolling();
+  // Pavo gün sonu sürerken süreç kapandıysa sonuç belirsizdir: alarm, yeniden denemeden önce doğrulama
+  try {
+    recoverDeviceEod();
+  } catch (e) {
+    console.error('[pavo] gün sonu kaydı', e);
+  }
   // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
   timers.push(...startCloudSync());
   // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır

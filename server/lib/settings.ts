@@ -70,14 +70,19 @@ export interface PrivateSettings {
   /** Otomatik gün sonu (ModPOS'taki 06:00 gibi); açık adisyon varsa alınmaz, uyarı düşer */
   autoDayEnd: boolean;
   autoDayEndHour: number;
-  /** Yazarkasa POS bağlantısı: kapalı, TokenX Connect (Cloud) ya da eğitim simülatörü */
-  okcProvider: 'kapali' | 'tokenx' | 'simulator';
+  /** Yazarkasa POS bağlantısı: kapalı, TokenX Connect (Cloud), Pavo (yerel ağ) ya da eğitim simülatörü */
+  okcProvider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
   /** anlik: kasada ödeme (sepet hemen cihaza düşer) · liste: masada ödeme (cihaz açık sepetleri listeler) */
   okcMode: 'anlik' | 'liste';
   /** KDV oranı -> cihazdaki kısım no ("10" -> 1) */
   okcSectionMap: Record<string, number>;
   /** Yemek kartı operatör kimliği -> LafPOS ödeme türü (ör. "1005" -> Multinet) */
   okcOperatorMethods: Record<string, string>;
+  /**
+   * Pavo: LafPOS gün sonundan hemen sonra cihazda banka gün sonu (`/PerformEOD`). Gün sonunu beklemez ve bozmaz;
+   * cihaz yanıt vermezse alarm düşer, yeniden deneme elle (docs/04-YAZARKASA.md §8.5)
+   */
+  okcPavoAutoEod: boolean;
   /** Yönetim › Roller ve yetkiler'de düzenlenen rol yetki setleri; olmayan rol varsayılanını kullanır */
   rolePermissions: RoleMatrix;
   /** İlk Z numarası: geçişte ModPOS'un son Z'si + 1; zincir yalnız yukarı doğru etkilenir (`nextZNo`). null: 1'den */
@@ -110,6 +115,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcMode: 'anlik',
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
+  okcPavoAutoEod: true,
   rolePermissions: {},
   zNoStart: null,
   branchId: 'tuzla',

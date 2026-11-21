@@ -1,19 +1,35 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { allocate, tl } from '@shared/money';
 import type { OrderTotals } from '@shared/order-calc';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
-import { type Actor, need, needDirect, toAuthUser } from '../lib/auth';
+import { type Actor, type AuthUser, need, needDirect, seesCashNumbers, toAuthUser } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
-import { getSettings, getSyncState, setSyncState } from '../lib/settings';
+import { getSettings, getSyncState, setSyncState, trainingMode } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
 import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
 import { type FiscalProvider, type FiscalResult, providerFor } from './providers';
 import type { PendingReceipt } from './providers/types';
+import {
+  busyMessage,
+  eodAfter,
+  type EodBaseline,
+  eodSummary,
+  type EodReading,
+  pairPavo,
+  pavo,
+  type PavoEodSummary,
+  pavoProvider,
+  pavoTiming,
+  readEod,
+  readEodBaseline,
+  usePavoStore,
+} from './providers/pavo';
 import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
+import { describe as describePavo, PavoError } from './pavo';
 import { type TokenxBasket, TokenxError, type TokenxSale } from './tokenx';
 
 /**
@@ -27,16 +43,30 @@ const PENDING = ['gonderildi', 'kilitli'] as const;
 
 export { tokenx, webhookUrl };
 
-export function okcStatus() {
+usePavoStore({
+  getSequence: () => getSyncState<number>('pavo.sequence') ?? 0,
+  setSequence: (n) => setSyncState('pavo.sequence', n),
+  getCert: () => getSyncState<string>('pavo.cert'),
+  setCert: (fp) => setSyncState('pavo.cert', fp),
+});
+
+/**
+ * Yazarkasa durumu. Pavo'nun son banka gün sonu (`pavo.eod`) tutarları yalnız kasa rakamlarını görene (kör kasa:
+ * `kasa.rakam` ya da `rapor.gor`); kullanıcısız çağrıda (sistem sağlığı) tutar gitmez
+ */
+export function okcStatus(user?: AuthUser) {
   const s = getSettings();
   const p = providerFor(s.okcProvider);
+  const eod = getSyncState<PavoEodRecord>(EOD_LAST);
   return {
     provider: s.okcProvider,
     mode: s.okcMode,
     sectionMap: s.okcSectionMap,
     operatorMethods: s.okcOperatorMethods,
+    pavoAutoEod: s.okcPavoAutoEod,
     active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
     tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
+    pavo: { ...pavoProvider.status(), eod: eod ? eodFor(user ?? null, eod) : null },
     lastError: getSyncState<{ message: string; at: number }>('okc.lastError'),
   };
 }
@@ -164,10 +194,13 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       payments: orderPayments(db, orderId),
       remainingDue: order.total - order.paid,
       prior: selection?.length || !order.totals ? undefined : priorOf(orderId, items, order.totals),
-      sectionMap: s.okcSectionMap,
+      // Pavo kısım no değil KDV grubu (KDV10, KDV20) alır: grup orandan çıkar, eşleme gerekmez
+      sectionMap: s.okcProvider === 'pavo' ? new Proxy({}, { get: () => 1 }) : s.okcSectionMap,
       sizeLabels: s.sizeLabels,
       callbackUrl: s.okcProvider === 'tokenx' ? (webhookUrl() ?? undefined) : undefined,
     });
+    // Cihazın kabul etmeyeceği sepet (Pavo'da %0 KDV'li kalem gibi) kayıt yazılmadan reddedilir
+    provider.validate?.(built.basket);
   } catch (e) {
     throw bad(e instanceof Error ? e.message : String(e), 'okc_basket');
   }
@@ -212,7 +245,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
         recordError(message);
         if (!uncertain) {
           publish(orderId, 'okc.error', message, actor.user.id);
-          throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : 'okc_send');
+          throw new HttpError(502, `Yazarkasaya gönderilemedi: ${message}`, e instanceof TokenxError ? `tokenx_${e.code ?? 'hata'}` : e instanceof PavoError ? 'pavo_send' : 'okc_send');
         }
         unknown = message;
       }
@@ -260,6 +293,8 @@ export async function cancelDeviceBasket(actor: Actor, receiptId: string, force 
       if (!provider) throw new Error(`${r.provider} bağlantısı bu sürümde yok`);
       await provider.cancel(pendingOf(r));
     } catch (e) {
+      // Pavo'da gün sonu sürüyor: cihaz meşgul ama ulaşılabilir, sepet "ulaşılamadı" diye iptal sayılmaz
+      if (e instanceof PavoError && e.code === 'EOD_BUSY') throw conflict(e.message, 'okc_busy');
       // Sepet bu arada ödendiyse ya da cihazda yoksa sonucu işlemek için durumu sorgula
       await refreshReceipt(r.id).catch(() => undefined);
       const message = e instanceof Error ? e.message : String(e);
@@ -660,7 +695,7 @@ export async function refreshReceipt(receiptId: string) {
   const r = loadReceipt(receiptId);
   const provider = providerFor(r.provider);
   if (!provider?.poll || !provider.configured() || !PENDING.includes(r.status as (typeof PENDING)[number])) return receiptDTO(r);
-  const out = await provider.poll(pendingOf(r));
+  const out = await provider.poll(pendingOf(r)).catch(deviceError);
   const stillPending = and(eq(schema.fiscalReceipts.id, r.id), inArray(schema.fiscalReceipts.status, [...PENDING]));
   if (out.kind === 'result') applyResult(r.id, out.result, 'sorgu');
   else if (out.kind === 'deleted' || out.kind === 'missing') {
@@ -692,12 +727,19 @@ export async function refreshReceipt(receiptId: string) {
 }
 
 /** Durumu sorgulanabilen sağlayıcılar (sorgu döngüsü yalnız bunların sepetlerine bakar) */
-const POLLED = ['tokenx'] as const;
+const POLLED = ['tokenx', 'pavo'] as const;
 
 // ─── Sorgulama döngüsü ──────────────────────────────────────────────────────
 
 let pollTimer: NodeJS.Timeout | null = null;
 let polling = false;
+
+/** 8 saatten eski bekleyen sepet kendiliğinden sorgulanmaz (elle yenilenir); yalnız onlar kaldıysa döngü durur */
+const POLL_MAX_AGE_MS = 8 * 3600_000;
+
+/** Kendiliğinden sorgulanan sepetler: sorgulanabilir sağlayıcı, bekliyor, 8 saatten yeni */
+const polledNow = () =>
+  and(inArray(schema.fiscalReceipts.provider, [...POLLED]), inArray(schema.fiscalReceipts.status, [...PENDING]), gt(schema.fiscalReceipts.createdAt, Date.now() - POLL_MAX_AGE_MS));
 
 /** Bekleyen (sorgulanabilir) sepet varken 2,5 sn'de bir (liste modunda 10 sn) durum sorar; kalmayınca durur. */
 export function ensurePolling() {
@@ -706,11 +748,7 @@ export function ensurePolling() {
     if (polling) return;
     polling = true;
     try {
-      const pending = db
-        .select()
-        .from(schema.fiscalReceipts)
-        .where(and(inArray(schema.fiscalReceipts.provider, [...POLLED]), inArray(schema.fiscalReceipts.status, [...PENDING])))
-        .all();
+      const pending = db.select().from(schema.fiscalReceipts).where(polledNow()).all();
       if (!pending.length) {
         clearInterval(pollTimer!);
         pollTimer = null;
@@ -719,7 +757,6 @@ export function ensurePolling() {
       const now = Date.now();
       for (const r of pending) {
         const age = now - r.createdAt;
-        if (age > 8 * 3600_000) continue; // 8 saatten eski sepet sorgulanmaz; elle yenilenir
         if (r.mode === 'liste' && (now - r.updatedAt < 10_000 || age < 5_000)) continue;
         await refreshReceipt(r.id).catch((e) => recordError(e instanceof Error ? e.message : String(e)));
       }
@@ -734,11 +771,7 @@ export function ensurePolling() {
  * (webhook yokken sonuç yalnız sorguyla gelir; yoksa adisyon kilitli kalırdı, inceleme 27 Eki 2026)
  */
 export function resumePolling() {
-  const pending = db
-    .select({ id: schema.fiscalReceipts.id })
-    .from(schema.fiscalReceipts)
-    .where(and(inArray(schema.fiscalReceipts.provider, [...POLLED]), inArray(schema.fiscalReceipts.status, [...PENDING])))
-    .get();
+  const pending = db.select({ id: schema.fiscalReceipts.id }).from(schema.fiscalReceipts).where(polledNow()).get();
   if (pending) ensurePolling();
 }
 
@@ -823,7 +856,439 @@ export async function testProvider() {
   const provider = providerFor(getSettings().okcProvider);
   if (!provider?.test) throw conflict('Bu sağlayıcı için bağlantı denemesi yok', 'okc_no_test');
   if (!provider.configured()) throw conflict(provider.notConfigured, 'okc_not_configured');
-  return provider.test();
+  return provider.test().catch(deviceError);
+}
+
+/** Pavo eşleştirmesi: cihazda onay ekranı açılır, kasiyer onaylayınca LafPOS cihaza satış gönderebilir */
+export async function pairDevice(actor: Actor) {
+  if (getSettings().okcProvider !== 'pavo') throw conflict('Eşleştirme yalnız Pavo bağlantısında', 'okc_no_pair');
+  if (!pavoProvider.configured()) throw conflict(pavoProvider.notConfigured, 'okc_not_configured');
+  const out = await pairPavo().catch(deviceError);
+  const fx = new Effects();
+  fx.audit(db, { userId: actor.user.id, action: 'okc.pair', message: `Pavo cihazı eşleştirildi (${pavoProvider.terminalId()})` });
+  fx.flush();
+  return out;
+}
+
+// ─── Pavo banka gün sonu ────────────────────────────────────────────────────
+
+/** Bir LafPOS gününde alınmış başarılı gün sonu (günün kaydında saklı kalır, sonraki deneme ezmez) */
+export interface PavoEodBatch {
+  batchNo: string | null;
+  deviceDateTime: string | null;
+  grandTotalKurus: number | null;
+  /** Denemenin başladığı an (LafPOS saati): sonraki gün sonunun kıyası bundan sonraki kart ödemeleriyle */
+  at: number;
+  trigger: 'otomatik' | 'elle';
+  /** Deneme başlarken LafPOS günü kapalıydı (gün sonundan sonra alınan gün sonu) */
+  dayClosed: boolean;
+}
+
+/**
+ * Cihaz gün sonunun saklanan sonucu (`sync_state` `pavo.eod.<gün>` ve `pavo.eod.last`). Yalnız özet: kart no, işlem
+ * dökümü, slip ve işyeri bilgisi saklanmaz. `ok` alındı · `failed` cihaz alamadı ya da gün sonu gönderilmedi
+ * (yeniden denenebilir) · `unknown` yanıt alınamadı, alınmış olabilir (önce doğrulanır; kendiliğinden yeniden
+ * denenmez) · `running` gün sonu sürüyor (süreç bu sırada kapanırsa açılışta `unknown` olur) · `skipped` denenmedi.
+ */
+export interface PavoEodRecord extends PavoEodSummary {
+  at: number;
+  /** Denemenin bağlı olduğu LafPOS günü (kapanan gün ya da elle denemede açık gün) */
+  dayId: string | null;
+  trigger: 'otomatik' | 'elle';
+  status: 'ok' | 'failed' | 'unknown' | 'running' | 'skipped';
+  errorCode: string | null;
+  message: string | null;
+  /**
+   * LafPOS'un kıyas tutarı (bahşiş dahil, kuruş): günün ilk gün sonunda kapanan günün kart toplamı; aynı günün sonraki
+   * gün sonunda önceki gün sonundan (`dayCardSinceBatch`) sonra alınan kart ödemeleri. Gün açıkken null
+   */
+  dayCardKurus: number | null;
+  /** Kıyas önceki gün sonundan sonraki ödemelerleyse o gün sonunun batch no'su */
+  dayCardSinceBatch?: string | null;
+  /** Deneme başlarken LafPOS günü kapalıydı */
+  dayClosed?: boolean;
+  /** Aynı günün bu denemeden önceki başarılı gün sonları (eskiden yeniye); günün gün sonları ezilmez */
+  earlier?: PavoEodBatch[];
+  /** Denemeden önceki son gün sonunun batch no'su (taban): yanıtı alınamayan deneme bununla doğrulanır */
+  prevBatchNo: string | null;
+  /** Tabanın kaynağı (`EodBaseline`); eski kayıtlarda yok: LafPOS'un bildiği */
+  prevBatchFrom?: EodBaseline['prevBatchFrom'];
+  /** Belirsiz ya da alınamayan deneme cihazdan doğrulandıysa o an */
+  verifiedAt?: number | null;
+}
+
+const EOD_LAST = 'pavo.eod.last';
+/** Son başarılı gün sonunun batch no'su (cihaz okunamazsa tabanın yedeği) */
+const EOD_BATCH = 'pavo.eod.batch';
+const eodDayKey = (dayId: string) => `pavo.eod.${dayId}`;
+
+/** Sonucu bilinmeyen deneme: yanıtı alınamadı ya da süreç gün sonu sürerken kapandı (doğrulanmadan yenisi alınmaz) */
+const unresolved = (rec: PavoEodRecord | null | undefined) => rec?.status === 'unknown' || rec?.status === 'running';
+
+/** Kaydın gününde alınmış başarılı gün sonları: öncekiler ve kaydın kendisi (alındıysa) */
+function batchesOf(rec: PavoEodRecord | null | undefined): PavoEodBatch[] {
+  if (!rec) return [];
+  const list = [...(rec.earlier ?? [])];
+  if (rec.status === 'ok' && !list.some((b) => b.batchNo && b.batchNo === rec.batchNo)) {
+    // Eski kayıtta `dayClosed` yok: kapalı sayılır (otomatik deneme ikinci kez gönderilmez)
+    list.push({ batchNo: rec.batchNo, deviceDateTime: rec.deviceDateTime, grandTotalKurus: rec.grandTotalKurus, at: rec.at, trigger: rec.trigger, dayClosed: rec.dayClosed ?? true });
+  }
+  return list;
+}
+
+/** Blind kasa: kasa rakamlarını görmeyene tutarlar gitmez (sayılar ve durum gider) */
+function eodFor(user: AuthUser | null, rec: PavoEodRecord) {
+  const earlier = rec.earlier ?? [];
+  if (user && seesCashNumbers(user)) return { ...rec, earlier, amountsHidden: false };
+  return {
+    ...rec,
+    earlier: earlier.map((b) => ({ ...b, grandTotalKurus: null })),
+    grandTotalKurus: null,
+    dayCardKurus: null,
+    acquirers: rec.acquirers.map((a) => ({ ...a, totalKurus: null })),
+    amountsHidden: true,
+  };
+}
+function eodSummaryFor(user: AuthUser | null, s: PavoEodSummary | null) {
+  if (!s || (user && seesCashNumbers(user))) return s;
+  return { ...s, grandTotalKurus: null, acquirers: s.acquirers.map((a) => ({ ...a, totalKurus: null })) };
+}
+
+/**
+ * LafPOS'un kıyas tutarı (`PavoEodRecord.dayCardKurus`). Günün ilk gün sonu: kapanmış günün kart toplamı (Z'nin kart
+ * alanı ve kartla alınan bahşiş: bankaya giden tutar). Aynı günün sonraki gün sonu (gün yeniden açılıp kapandı ya da
+ * gün içinde elle alındı): önceki gün sonundan sonra alınan, iade edilmemiş kart ödemeleri; günün bütün kartıyla
+ * kıyaslamak her seferinde yanlış "eksik" uyarısı verirdi. Gün açıksa null
+ */
+function cardBasis(dayId: string | null, earlier: PavoEodBatch[]): { dayCardKurus: number | null; dayCardSinceBatch: string | null } {
+  const none = { dayCardKurus: null, dayCardSinceBatch: null };
+  if (!dayId) return none;
+  const day = db.select({ closedAt: schema.businessDays.closedAt, summary: schema.businessDays.summary }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
+  if (!day?.closedAt || !day.summary) return none;
+  const prev = earlier.at(-1);
+  if (!prev) {
+    const s = day.summary;
+    return { dayCardKurus: (s.byZField?.card ?? 0) + s.payments.filter((p) => p.zField === 'card').reduce((a, p) => a + (p.tips ?? 0), 0), dayCardSinceBatch: null };
+  }
+  const p = schema.payments;
+  const rows = db
+    .select({ amount: p.amount, tip: p.tip })
+    .from(p)
+    .where(and(eq(p.dayId, dayId), isNull(p.refundedAt), isNotNull(p.orderId), eq(p.zField, 'card'), gt(p.createdAt, prev.at)))
+    .all();
+  return { dayCardKurus: rows.reduce((a, r) => a + r.amount + r.tip, 0), dayCardSinceBatch: prev.batchNo };
+}
+
+/** Cihaz gün sonu neden denenmez; null: denenebilir. `auto`: gün kapanınca (ayara bağlı) */
+function eodBlocker(auto: boolean): { message: string; code: string } | null {
+  const s = getSettings();
+  if (s.okcProvider !== 'pavo') return { message: 'Cihazda gün sonu yalnız Pavo bağlantısında', code: 'okc_no_eod' };
+  if (!pavoProvider.configured()) return { message: pavoProvider.notConfigured, code: 'okc_not_configured' };
+  if (trainingMode(s)) return { message: 'Kurulum (eğitim) modunda cihazda banka gün sonu alınmaz', code: 'okc_training' };
+  if (auto && !s.okcPavoAutoEod) return { message: 'Gün kapanınca cihazda gün sonu alma kapalı (Yönetim › Yazarkasa POS)', code: 'okc_eod_off' };
+  if ((getSyncState<number>('pavo.sequence') ?? 0) <= 0) return { message: 'Cihaz eşleştirilmemiş; Yönetim › Yazarkasa POS › Eşleştir', code: 'okc_not_paired' };
+  const busy = busyMessage(pavo()!, 'gün sonu alınmadı');
+  if (busy) return { message: busy, code: 'okc_busy' };
+  return null;
+}
+
+/**
+ * Otomatik deneme (gün kapanınca) neden gönderilmez: son ya da bu günün denemesinin sonucu belirsizse (ikinci gün sonu
+ * belirsizliği büyütür, önce doğrulanır) ya da bu gün için gün kapandıktan sonra gün sonu zaten alındıysa (gün yeniden
+ * açılıp kapandı: kimlik aynı, ikinci gün sonu boş batch açar). Gün içinde (gün açıkken) elle alınan gün sonu engel
+ * değil: kapanışın gün sonu ondan sonraki kart işlemlerini kapatır
+ */
+function autoEodHeld(dayId: string | null): { message: string; code: string } | null {
+  const last = getSyncState<PavoEodRecord>(EOD_LAST);
+  const day = dayId ? getSyncState<PavoEodRecord>(eodDayKey(dayId)) : null;
+  if (unresolved(last) || unresolved(day)) {
+    return { message: 'Önceki gün sonunun sonucu belirsiz; kendiliğinden yeni gün sonu alınmadı. Önce Yönetim › Yazarkasa POS › Doğrula', code: 'okc_eod_unknown' };
+  }
+  const done = batchesOf(day).filter((b) => b.dayClosed);
+  if (done.length) {
+    const b = done.at(-1)!;
+    return {
+      message: `Bu gün için cihaz gün sonu zaten alındı${b.batchNo ? ` (batch ${b.batchNo})` : ''}; yeniden kapanan günde ikinci kez kendiliğinden alınmaz, gerekirse Yönetim › Yazarkasa POS'tan elle alın`,
+      code: 'okc_eod_done',
+    };
+  }
+  return null;
+}
+
+/**
+ * Sonucu saklar, denetim kaydına yazar ve yayar (tek işlem). Atlanan deneme belirsiz ya da süren sonucu ve aynı günün
+ * denenmiş sonucunu ezmez. `verified`: sonuç cihazdan doğrulandı; `note` denetim mesajını verir
+ */
+function saveEod(rec: PavoEodRecord, actorId: string | null, verified = false, note?: { severity: 'info' | 'uyari' | 'alarm'; message: string }) {
+  const skipped = rec.status === 'skipped';
+  const lastPrev = getSyncState<PavoEodRecord>(EOD_LAST);
+  const keepLast = skipped && !!lastPrev && (unresolved(lastPrev) || (lastPrev.dayId === rec.dayId && lastPrev.status !== 'skipped'));
+  const dayKey = rec.dayId ? eodDayKey(rec.dayId) : null;
+  const dayPrev = dayKey ? getSyncState<PavoEodRecord>(dayKey) : null;
+  const keepDay = skipped && !!dayPrev && dayPrev.status !== 'skipped';
+  const where = [rec.batchNo ? `batch ${rec.batchNo}` : '', rec.deviceDateTime ?? ''].filter(Boolean).join(', ');
+  const diff = rec.status === 'ok' && rec.grandTotalKurus != null && rec.dayCardKurus != null ? rec.grandTotalKurus - rec.dayCardKurus : 0;
+  const basis = rec.dayCardSinceBatch
+    ? `LafPOS'ta önceki gün sonundan (batch ${rec.dayCardSinceBatch}) sonra alınan kart ödemelerinden (${tl(rec.dayCardKurus ?? 0)})`
+    : `LafPOS gün sonundaki kart toplamından (${tl(rec.dayCardKurus ?? 0)})`;
+  const banks = rec.acquirers.map((a) => `${a.name}${a.totalKurus != null ? ` ${tl(a.totalKurus)}` : ''}`).join(', ');
+  const audit = note
+    ? note
+    : rec.status === 'ok'
+      ? {
+          severity: (diff ? 'uyari' : 'info') as 'uyari' | 'info',
+          message: `Pavo cihazında banka gün sonu ${verified ? 'doğrulandı' : 'alındı'}${where ? ` (${where})` : ''}${rec.grandTotalKurus != null ? `: ${tl(rec.grandTotalKurus)}` : ''}${banks ? ` · ${banks}` : ''}${
+            diff
+              ? `. Cihazın kart toplamı ${basis} ${tl(Math.abs(diff))} ${diff > 0 ? 'fazla' : 'eksik'}: cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi olabilir`
+              : ''
+          }`,
+        }
+      : rec.status === 'failed'
+        ? { severity: 'alarm' as const, message: `Pavo cihazında banka gün sonu alınamadı: ${rec.message}. Yönetim › Yazarkasa POS'tan yeniden deneyin ya da cihazın menüsünden alın` }
+        : rec.status === 'unknown'
+          ? {
+              severity: 'alarm' as const,
+              message: `Pavo cihazında banka gün sonunun sonucu alınamadı (${rec.message}); gün sonu cihazda alınmış olabilir. Yeniden denemeden önce Yönetim › Yazarkasa POS › Doğrula`,
+            }
+          : { severity: 'info' as const, message: `Pavo cihazında banka gün sonu alınmadı: ${rec.message}` };
+  const fx = new Effects();
+  tx((t) => {
+    if (!keepLast) setSyncState(EOD_LAST, rec);
+    if (dayKey && !keepDay) setSyncState(dayKey, rec);
+    if (rec.status === 'ok' && rec.batchNo) setSyncState(EOD_BATCH, rec.batchNo);
+    fx.audit(t, {
+      userId: actorId,
+      action: 'okc.eod',
+      severity: audit.severity,
+      amount: rec.status === 'ok' ? rec.grandTotalKurus : null,
+      message: audit.message,
+      data: { status: rec.status, trigger: rec.trigger, batchNo: rec.batchNo, errorCode: rec.errorCode, verified },
+    });
+  });
+  fx.emit({ topic: 'okc', kind: 'okc.eod', message: rec.status === 'ok' ? 'Cihazda gün sonu alındı' : (rec.message ?? undefined) });
+  fx.flush();
+}
+
+/**
+ * Gün sonu gönderilmeden hemen önce: "sürüyor" kaydı (son sonuç ve günün kaydı). Süreç gün sonu sürerken kapanırsa
+ * açılışta belirsiz olur (`recoverDeviceEod`); denetim kaydı sonuçla yazılır
+ */
+function markEodRunning(rec: PavoEodRecord) {
+  const fx = new Effects();
+  tx(() => {
+    setSyncState(EOD_LAST, rec);
+    if (rec.dayId) setSyncState(eodDayKey(rec.dayId), rec);
+  });
+  fx.emit({ topic: 'okc', kind: 'okc.eod', message: 'Cihazda gün sonu sürüyor' });
+  fx.flush();
+}
+
+/**
+ * Cihazın son gün sonu (taban), gün sonu gönderilmeden hemen önce. Cihaz yanıt verip son gün sonunu vermezse LafPOS'un
+ * bildiği son batch; cihaza ulaşılamazsa (bağlantı, zaman aşımı) hata atar: gün sonu gönderilmez
+ */
+async function deviceBaseline(c: NonNullable<ReturnType<typeof pavo>>): Promise<EodBaseline> {
+  const res = await c.eodCopy(undefined, pavoTiming.eodCopyMs);
+  return readEodBaseline(res) ?? { prevBatchNo: getSyncState<string>(EOD_BATCH), prevBatchFrom: 'lafpos' };
+}
+
+/**
+ * Pavo cihazında banka gün sonu (kart işlemlerinin batch'i kapanır). LafPOS gün sonundan sonra çağrılır, onu
+ * beklemez: çağıran sonucu beklemeden bırakır (`void ... .catch`), cihaz yanıt vermese de gün kapalı kalır.
+ * Denenmeyen durumlar (bilgi eksik, kurulum modu, cihaz meşgul, eşleştirme yok, otomatik kapalı; otomatikte ayrıca
+ * önceki sonuç belirsiz ya da bu gün için zaten alındı) bilgi kaydıyla atlanır; Pavo seçili değilse hiçbir şey
+ * yazılmaz. Göndermeden önce cihazın son gün sonu okunur (taban) ve "sürüyor" kaydı yazılır. Yanıtı alınamayan
+ * deneme `unknown` kalır, kendiliğinden yeniden denenmez (ikinci gün sonu boş batch açardı; doğrulama
+ * `verifyDeviceEod`).
+ */
+export async function deviceEndOfDay(dayId: string | null, actorId: string | null, opts: { manual?: boolean; print?: boolean } = {}): Promise<PavoEodRecord | null> {
+  if (getSettings().okcProvider !== 'pavo') return null;
+  const earlier = batchesOf(dayId ? getSyncState<PavoEodRecord>(eodDayKey(dayId)) : null);
+  const dayClosed = !!dayId && !!db.select({ closedAt: schema.businessDays.closedAt }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get()?.closedAt;
+  const base: PavoEodRecord = {
+    at: Date.now(),
+    dayId,
+    trigger: opts.manual ? 'elle' : 'otomatik',
+    status: 'skipped',
+    batchNo: null,
+    deviceDateTime: null,
+    grandTotalKurus: null,
+    acquirers: [],
+    errorCode: null,
+    message: null,
+    dayCardKurus: null,
+    dayCardSinceBatch: null,
+    dayClosed,
+    earlier,
+    prevBatchNo: getSyncState<string>(EOD_BATCH),
+    prevBatchFrom: 'lafpos',
+  };
+  const blocked = eodBlocker(!opts.manual) ?? (opts.manual ? null : autoEodHeld(dayId));
+  if (blocked) {
+    const rec = { ...base, errorCode: blocked.code, message: blocked.message };
+    saveEod(rec, actorId);
+    return rec;
+  }
+  let baseline: EodBaseline = { prevBatchNo: base.prevBatchNo, prevBatchFrom: 'lafpos' };
+  // Hata nerede: gönderimden önce (taban okunamadı: gün sonu gitmedi, kesin) ya da gönderimde
+  let stage = 'start' as 'start' | 'baseline' | 'sent';
+  let reading: EodReading;
+  try {
+    const res = await pavo()!.performEod({
+      print: opts.print,
+      timeoutMs: pavoTiming.eodMs,
+      before: async () => {
+        stage = 'baseline';
+        baseline = await deviceBaseline(pavo()!);
+        markEodRunning({ ...base, ...baseline, status: 'running', message: 'Cihazda gün sonu sürüyor; bankalara bağlanıyor' });
+        stage = 'sent';
+      },
+    });
+    reading = readEod(res);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    const code = e instanceof PavoError ? e.code : null;
+    reading =
+      stage === 'baseline'
+        ? { kind: 'failed', code, message: `Cihaz son gün sonunu vermedi (${message}); gün sonu gönderilmedi` }
+        : // Bağlantı hiç kurulamadıysa gün sonu gitmedi; yanıt gelmediyse (ya da beklenmeyen hata) gitmiş olabilir
+          stage === 'start' || (e instanceof PavoError && !e.uncertain)
+          ? { kind: 'failed', code, message }
+          : { kind: 'unknown', code, message };
+  }
+  const tried = { ...base, ...baseline };
+  const rec: PavoEodRecord =
+    reading.kind === 'ok'
+      ? { ...tried, ...(reading.summary ?? {}), status: 'ok', message: reading.message, ...cardBasis(dayId, earlier) }
+      : { ...tried, status: reading.kind, errorCode: reading.code, message: reading.message };
+  if (rec.status !== 'ok') recordError(`Cihaz gün sonu: ${rec.message}`);
+  saveEod(rec, actorId);
+  return rec;
+}
+
+/**
+ * Sunucu açılışında: önceki süreç gün sonu sürerken kapandıysa (`running` kalmış) sonuç bilinmez, gün sonu cihazda
+ * alınmış olabilir. Belirsiz olur ve alarm düşer; yeniden denemeden önce doğrulanır
+ */
+export function recoverDeviceEod() {
+  const last = getSyncState<PavoEodRecord>(EOD_LAST);
+  const day = last?.dayId ? getSyncState<PavoEodRecord>(eodDayKey(last.dayId)) : null;
+  const orphan = last?.status === 'running' ? last : day?.status === 'running' ? day : null;
+  if (!orphan) return;
+  const rec: PavoEodRecord = { ...orphan, status: 'unknown', message: 'LafPOS gün sonu sürerken kapandı; cihazın yanıtı alınamadı' };
+  saveEod(rec, null, false, {
+    severity: 'alarm',
+    message: 'Pavo cihazında banka gün sonu sürerken LafPOS kapandı; sonuç bilinmiyor, gün sonu cihazda alınmış olabilir. Yeniden denemeden önce Yönetim › Yazarkasa POS › Doğrula',
+  });
+}
+
+/**
+ * Elle gün sonunun günü. Son kapanan günün denemesi alınamadı, belirsiz kaldı (doğrulandıktan sonra) ya da atlandıysa
+ * bu onun yenisidir: o güne yazılır (ertesi sabah gün açılmış olsa da). Değilse açık gün, yoksa son kapanan gün
+ */
+function eodDayId(): string | null {
+  const lastClosed =
+    db
+      .select({ id: schema.businessDays.id })
+      .from(schema.businessDays)
+      .where(isNotNull(schema.businessDays.closedAt))
+      .orderBy(desc(schema.businessDays.closedAt))
+      .limit(1)
+      .get()?.id ?? null;
+  const last = getSyncState<PavoEodRecord>(EOD_LAST);
+  if (lastClosed && last && last.status !== 'ok' && last.dayId === lastClosed) return lastClosed;
+  return getOpenDay(db)?.id ?? lastClosed;
+}
+
+/**
+ * Yönetim › Yazarkasa POS › Cihazda gün sonu al (elle ya da başarısız denemenin yenisi). Ayar kapalı olsa da çalışır.
+ * Önceki deneme belirsizse (ya da süreç gün sonu sürerken kapanmışsa) önce doğrulanmalı: belirsiz sonucun üstüne
+ * ikinci gün sonu boş batch açar.
+ */
+export async function runDeviceEod(actor: Actor, opts: { print?: boolean; force?: boolean } = {}) {
+  const blocked = eodBlocker(false);
+  if (blocked) throw conflict(blocked.message, blocked.code);
+  const last = getSyncState<PavoEodRecord>(EOD_LAST);
+  if (unresolved(last) && !opts.force) {
+    throw conflict('Önceki gün sonunun sonucu belirsiz; önce "Doğrula" ile cihazdan kontrol edin', 'okc_eod_unknown');
+  }
+  const rec = (await deviceEndOfDay(eodDayId(), actor.user.id, { manual: true, print: opts.print }))!;
+  if (rec.status === 'skipped') throw conflict(rec.message ?? 'Gün sonu alınmadı', rec.errorCode ?? 'okc_busy');
+  if (rec.status === 'failed') throw new HttpError(502, `Cihazda gün sonu alınamadı: ${rec.message}`, 'pavo_eod');
+  if (rec.status === 'unknown') throw new HttpError(502, `Cihazdan yanıt alınamadı; gün sonu alınmış olabilir. "Doğrula" ile kontrol edin (${rec.message})`, 'pavo_eod_unknown');
+  return eodFor(actor.user, rec);
+}
+
+/**
+ * Doğrula: cihazın son gün sonu (`/PrintEODCopy`, slip basılmaz) sorulur. Son deneme alınamadı, belirsiz ya da
+ * atlandıysa ve cihazdaki gün sonu ondan sonraysa (`eodAfter`: batch no denemeden hemen önce cihazdan okunan tabandan
+ * büyük ve cihaz saati denemeden önce değil; cihazın menüsünden alınmış ya da yanıtı kaybolmuş) sonuç "alındı" olur,
+ * tutarlar cihazınkiyle yazılır.
+ */
+export async function verifyDeviceEod(actor: Actor) {
+  const s = getSettings();
+  if (s.okcProvider !== 'pavo') throw conflict('Cihazda gün sonu yalnız Pavo bağlantısında', 'okc_no_eod');
+  if (!pavoProvider.configured()) throw conflict(pavoProvider.notConfigured, 'okc_not_configured');
+  if ((getSyncState<number>('pavo.sequence') ?? 0) <= 0) throw conflict('Cihaz eşleştirilmemiş; Yönetim › Yazarkasa POS › Eşleştir', 'okc_not_paired');
+  const c = pavo()!;
+  const busy = busyMessage(c, 'bitince doğrulayın');
+  if (busy) throw conflict(busy, 'okc_busy');
+  const res = await c.eodCopy(undefined, pavoTiming.eodCopyMs).catch(deviceError);
+  const last = getSyncState<PavoEodRecord>(EOD_LAST);
+  const user = actor.user;
+  if (res.HasError) {
+    // 5075: cihazda kayıtlı gün sonu yok. Belirsiz deneme de alınmamış demektir: yeniden denenebilir
+    if (String(res.ErrorCode ?? '') === '5075') {
+      if (unresolved(last)) {
+        const rec: PavoEodRecord = { ...last!, status: 'failed', message: 'Doğrulandı: cihazda kayıtlı gün sonu yok', verifiedAt: Date.now() };
+        saveEod(rec, user.id, true, {
+          severity: 'uyari',
+          message: "Pavo cihazında belirsiz kalan banka gün sonu doğrulandı: alınmamış (cihazda kayıtlı gün sonu yok). Yönetim › Yazarkasa POS'tan yeniden deneyin",
+        });
+        return { changed: true, record: eodFor(user, rec), device: null, message: 'Gün sonu alınmamış (cihazda kayıtlı gün sonu yok); yeniden deneyin' };
+      }
+      return { changed: false, record: last ? eodFor(user, last) : null, device: null, message: 'Cihazda kayıtlı gün sonu yok' };
+    }
+    throw new HttpError(502, `Cihaz son gün sonunu vermedi: ${describePavo(res)}`, 'pavo_device');
+  }
+  const device = eodSummary((res.Data as { eodData?: unknown } | null | undefined)?.eodData);
+  if (!device?.batchNo) throw new HttpError(502, 'Cihaz son gün sonunun özetini vermedi', 'pavo_device');
+  const seen = `batch ${device.batchNo}${device.deviceDateTime ? `, ${device.deviceDateTime}` : ''}`;
+  if (last && last.status !== 'ok' && eodAfter(device, last)) {
+    const rec: PavoEodRecord = {
+      ...last,
+      ...device,
+      status: 'ok',
+      errorCode: null,
+      message: 'Gün sonu cihazda alınmış (doğrulandı)',
+      ...cardBasis(last.dayId, last.earlier ?? []),
+      verifiedAt: Date.now(),
+    };
+    saveEod(rec, user.id, true);
+    return { changed: true, record: eodFor(user, rec), device: eodSummaryFor(user, device), message: `Gün sonu cihazda alınmış (${seen})` };
+  }
+  if (unresolved(last)) {
+    // Belirsizlik çözüldü: cihazda bu denemeden sonra gün sonu yok, deneme alınamadı sayılır (yeniden denenebilir)
+    const rec: PavoEodRecord = { ...last!, status: 'failed', message: `Doğrulandı: cihazda bu denemeden sonra gün sonu yok (son: ${seen})`, verifiedAt: Date.now() };
+    saveEod(rec, user.id, true, {
+      severity: 'uyari',
+      message: `Pavo cihazında belirsiz kalan banka gün sonu doğrulandı: alınmamış (cihazdaki son gün sonu ${seen}). Yönetim › Yazarkasa POS'tan yeniden deneyin`,
+    });
+    return { changed: true, record: eodFor(user, rec), device: eodSummaryFor(user, device), message: `Gün sonu alınmamış (cihazdaki son gün sonu ${seen}); yeniden deneyin` };
+  }
+  const message =
+    last && last.status !== 'ok'
+      ? `Cihazdaki son gün sonu (${seen}) bu denemeden önce; gün sonu alınmamış`
+      : last?.batchNo === device.batchNo
+        ? `Cihazdaki son gün sonu LafPOS'takiyle aynı (${seen})`
+        : `Cihazdaki son gün sonu: ${seen}`;
+  return { changed: false, record: last ? eodFor(user, last) : null, device: eodSummaryFor(user, device), message };
+}
+
+/** Cihazın hatası arayüze okunur mesajla döner (beklenmeyen 500 değil) */
+function deviceError(e: unknown): never {
+  if (e instanceof PavoError) throw new HttpError(502, e.message, e.code === 'CERT_CHANGED' ? 'pavo_cert' : 'pavo_device');
+  throw e;
 }
 
 export function receiptActor(userId: string): Actor | null {

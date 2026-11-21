@@ -90,6 +90,7 @@ const ACTION_LABEL: Record<string, string> = {
   'menu.sync': 'Menü eşitleme',
   'okc.apply_failed': 'Yazarkasa işlenemedi',
   'okc.credit_limit': 'Açık hesap sınırı',
+  'okc.eod': 'Cihaz gün sonu (banka)',
   'okc.underpaid': 'Eksik ödeme',
   'online.gone': 'Online sipariş',
   'order.bill': 'Hesap yazdırma',

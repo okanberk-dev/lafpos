@@ -1,3 +1,4 @@
+import { pavoProvider } from './pavo';
 import { tokenxProvider } from './tokenx';
 import type { FiscalProvider, ProviderId } from './types';
 
@@ -16,6 +17,7 @@ export const simulatorProvider: FiscalProvider = {
 
 const PROVIDERS: Partial<Record<ProviderId, FiscalProvider>> = {
   tokenx: tokenxProvider,
+  pavo: pavoProvider,
   simulator: simulatorProvider,
 };
 

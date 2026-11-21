@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bike, CalendarClock, ChefHat, Clock3, Globe, LayoutGrid, List, Lock, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
+import { BellRing, Bike, CalendarClock, ChefHat, Clock3, Globe, LayoutGrid, List, Lock, Mic2, Plus, Receipt, ShoppingBag, Store, Users } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { tlShort } from '@shared/money';
 import { bookingHours, bookingPayment } from '@shared/karaoke';
+import { TABLE_CALL_OPEN_MS, type TableCallDTO, tableCallReasonText } from '@shared/site-alerts';
 import { fmtAgo, fmtElapsed } from '@shared/time';
 import type { FloorOrderSummary, FloorStateDTO, OrderDTO, SiteKaraokeBookingDTO, TableDTO } from '@shared/types';
 import { Button, buttonClass, IconButton } from '@/components/ui/Button';
@@ -74,6 +75,8 @@ export default function FloorPage() {
   // Sitedeki bugünkü karaoke rezervasyonları (odayı tutanlar): sitede tek oda var, her oda masasına aittir
   const siteKaraoke = floor.data?.siteKaraoke ?? [];
   const nextKaraoke = siteKaraoke.find((b) => Date.parse(b.endsAt) > now && !b.session?.active);
+  /** Masadan açık çağrı (uygulamada "Garson çağır", su, peçete): kartta rozet; yanıtı uyarı şeridindeki "Gördüm" */
+  const callOf = (t: TableDTO) => floor.data?.siteCalls?.find((c) => c.tableId === t.id && now - c.createdAt < TABLE_CALL_OPEN_MS);
   /** Masanın kartındaki rezervasyon: yerel (masa) ya da oda için sitedeki sıradaki karaoke */
   const reservationOf = (t: TableDTO) =>
     reservations.find((r) => r.tableId === t.id) ?? (t.kind === 'oda' && nextKaraoke ? { time: String(nextKaraoke.startHour).padStart(2, '0') + ':00', name: nextKaraoke.firstName || 'Karaoke', guests: nextKaraoke.guests, status: 'site' } : undefined);
@@ -293,6 +296,7 @@ export default function FloorPage() {
                   table={t}
                   orders={floor.data?.tables[t.id] ?? []}
                   reservation={reservationOf(t)}
+                  call={callOf(t)}
                   now={now}
                   onClick={() => tapTable(t)}
                   style={{ left: `${t.x}%`, top: `${t.y}%`, width: `${t.w}%`, height: `${t.h}%` }}
@@ -303,7 +307,7 @@ export default function FloorPage() {
           ) : (
             <div key={section?.id} className="lp-enter lp-tiles [--tile-min:9.375rem]">
               {tables.map((t) => (
-                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} now={now} onClick={() => tapTable(t)} className="min-h-28 md:h-32" />
+                <TableTile key={t.id} table={t} orders={floor.data?.tables[t.id] ?? []} reservation={reservationOf(t)} call={callOf(t)} now={now} onClick={() => tapTable(t)} className="min-h-28 md:h-32" />
               ))}
             </div>
           )}
@@ -384,16 +388,21 @@ function Legend({ className, dot, label }: { className: string; dot?: boolean; l
   );
 }
 
+/** Masa kartındaki çağrı hapının kısa sebebi */
+const CALL_SHORT: Record<string, string> = { waiter: 'Garson', water: 'Su', napkin: 'Peçete' };
+
 /**
  * Masa (kitin gemi kartı): boş masa kesikli kenarlı açık kart, dolu masa L'Affogato yeşilinin degradesinde (uzaktan bir
  * bakışta ayrılır), tutar kartın en büyük yazısı. Hesap istendi soldaki ahududu şerit ve "Hesap" hapı (kitin zamanı
  * daralan rengi), kısmen ödendi altta beyaz ilerleme çubuğu ve kalan tutar; yalnız sitede ödenmiş siparişi
- * olan masa mor. Bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil ve nabızlı. Yuvarlak masada içerik ortada.
+ * olan masa mor. Bara gitmiş ve hazır kalemler küçük hap, hazır olan yeşil ve nabızlı. Masadan açık çağrı köşede mor
+ * zil hapı (genişte sebebi: "Su"). Yuvarlak masada içerik ortada.
  */
 function TableTile({
   table,
   orders,
   reservation,
+  call,
   now,
   onClick,
   className,
@@ -402,6 +411,7 @@ function TableTile({
   table: TableDTO;
   orders: FloorOrderSummary[];
   reservation?: { time: string; name: string; guests: number; status: string };
+  call?: TableCallDTO;
   now: number;
   onClick: () => void;
   className?: string;
@@ -452,6 +462,19 @@ function TableTile({
         <span className="truncate font-headline text-[15px] font-bold leading-tight tracking-[-0.02em] @min-[6rem]:text-base">{table.name}</span>
         {!round && <span className="flex-1" />}
         <span className={cn('flex items-center gap-1', soft)}>
+          {/* Masadan çağrı: sitenin mor rengi, zil; dar kartta yalnız ikon (sebep ekran okuyucuda ve ipucunda) */}
+          {call && (
+            <span
+              className="inline-flex h-5 items-center gap-1 rounded-full bg-[var(--admin-hue-violet)] px-1.5 text-[11px] font-semibold text-[var(--admin-surface)]"
+              title={tableCallReasonText(call.reason)}
+            >
+              <BellRing aria-hidden="true" className="size-3 shrink-0" />
+              <span aria-hidden="true" className="hidden @min-[7rem]:inline">
+                {CALL_SHORT[call.reason] ?? 'Çağrı'}
+              </span>
+              <span className="sr-only">Masa çağrısı: {tableCallReasonText(call.reason)}</span>
+            </span>
+          )}
           {billed && (
             <span className="inline-flex h-5 items-center gap-1 rounded-full bg-[var(--admin-signal)] px-1.5 text-[11px] font-semibold text-[var(--admin-surface)]" title="Hesap istendi">
               <Receipt aria-hidden="true" className="size-3 shrink-0" />
@@ -489,7 +512,7 @@ function TableTile({
                 </span>
               )}
               {/* Hazır: yeşil kartta beyaz hap, yeşil yazı ve nabız (kartın kendi yeşilinden ayrılır) */}
-              {ready > 0 && <span className="animate-ring tabular whitespace-nowrap rounded-full bg-white px-2 py-0.5 font-semibold text-[#05432f]">{ready} hazır</span>}
+              {ready > 0 && <span className="animate-ring animate-ring-sm motion-reduce:animate-none tabular whitespace-nowrap rounded-full bg-white px-2 py-0.5 font-semibold text-[#05432f]">{ready} hazır</span>}
             </div>
           )}
           {partial && !round && (

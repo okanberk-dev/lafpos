@@ -3,10 +3,12 @@
 Mali fiş ÖKC'den (yazarkasa POS) kesilir. LafPOS adisyonu cihaza **sepet** olarak gönderir; ödeme ve mali fiş
 cihazda alınır; sonuç (Z no, fiş no, ödeme kalemleri) LafPOS'a döner ve adisyonun ödemesi olarak kaydedilir.
 Kod: `server/okc/` (markadan bağımsız akış `service.ts`, sepet hesabı `basket.ts`, sağlayıcılar `providers/`:
-sözleşme `types.ts`, Token `tokenx.ts` + istemci `../tokenx.ts`, eğitim cihazı `index.ts`), uçlar
+sözleşme `types.ts`, Token `tokenx.ts` + istemci `../tokenx.ts`, Pavo `pavo.ts` + istemci `../pavo.ts`, eğitim cihazı
+`index.ts`), uçlar
 `server/routes/okc.ts`, ekranlar adisyondaki **Yazarkasa** bölümü, `/cihaz` (eğitim cihazı) ve
 Yönetim › Yazarkasa POS. Testler: `tests/okc-basket.test.ts`, `tests/tokenx-client.test.ts`,
-`tests/api-flow.test.ts`, `tests/okc-providers.test.ts`, `tests/audit-yazarkasa.test.ts` (27 Eki 2026 denetimi:
+`tests/api-flow.test.ts`, `tests/okc-providers.test.ts`, `tests/pavo.test.ts` (sahte Pavo cihazı `tests/fake-pavo.ts`),
+`tests/audit-yazarkasa.test.ts` (27 Eki 2026 denetimi:
 birleşen adisyonda fiş iptali, kapanmış güne ait iptal, yanıtı alınamayan gönderim, ödemesiz kapanan fiş, servis
 ve KDV dökümü, açılışta sorgu, denetim kaydı).
 
@@ -17,6 +19,7 @@ ve KDV dökümü, açılışta sorgu, denetim kaydı).
 | `kapali` | Yazarkasa düğmeleri görünmez; ödeme LafPOS'ta alınır, mali fiş ayrıca kesilir |
 | `simulator` (eğitim cihazı) | Sepet `/cihaz` ekranına düşer; orada nakit/kart/yemek kartı seçilip "ödendi" denir. **Gerçek fiş kesilmez**; kurulum ve personel eğitimi içindir. İlk kurulum bununla gelir |
 | `tokenx` | TokenX Connect (Cloud) üzerinden gerçek cihaz |
+| `pavo` | Pavo (N86 ve diğer PavoPay cihazları) kafenin yerel ağında REST ile; yalnız kasada ödeme (§8) |
 
 Gerçek cihazla deneme yapılmaz: önce eğitim cihazı, sonra Token'ın test ortamı, en son canlı cihaz.
 
@@ -35,7 +38,7 @@ tutarına kırpılması `service.ts`'te her marka için aynıdır; yeni marka bu
 |---|---|---|---|
 | **Token · Beko** (300TR, X30TR; 400TR e-belge) | TokenX Connect Cloud | **Bağlı** | Canlı ve test client-id/secret; 300TR ve 400TR'nin Cloud desteği; Cloud'dan iade ve `documentType` değerleri; terminal başına TokenX Connect üyelik ücreti; webhook'ların geldiği IP listesi |
 | **Hugin** (Tiger T300, S1...) | Cloud Link: Hugin TSM bizim HTTPS adresimizi çağırır (`GET /orders`, `GET /orders/{id}`, `POST /orders/{id}/result`, `POST /sales`, `X-ApiKey`) | Belge eksik; para yolu tahminle kurulmaz | Postman koleksiyonu ya da OpenAPI; `/sales` gövdesinin tamamı (ödeme kalemleri ve türleri, Z no, fiş no, cihaz seri no, siparişle bağı); iptal/iade bildirimi; tekrar gönderim ve idempotency; satıştan sonra siparişin listeden düşme kuralı, iki cihaz aynı masayı açarsa kilit; `documentType` değerleri; ödeme kodlarının anlamı (`CHECK`); desteklenen modeller, lisans ve kayıt |
-| **Pavo** (N86, N96, UN20, N6, CT20) | Yerel ağda IP REST (port 4567, cihazda "Eşleştir"), APP-TO-APP, bulut | Yalnız iş ortaklarına belge; VUK 507 cihazları e-Arşiv keser, kafenin e-Arşiv entegratör hesabı gerekir | IP REST / bulut API belgesi; entegratör parmak izimiz; iş ortaklığı sözleşmesi ve ücret; test cihazı; sonuç alanları (e-Arşiv ETTN/no, ödemeler); bölünmüş ödeme, iptal, iade; hangi model ÖKC, hangisi VUK 507 |
+| **Pavo** (N86, N96, UN20, N6, CT20) | Yerel ağda REST (cihazda "Eşleştir"); Intent, Cloud, UniCloud da var | **Bağlı (yerel ağ, Kasım 2026)**; gerçek cihazda ilk satışla doğrulanacak (§8). VUK 507 cihazları e-Arşiv keser, kafenin e-Arşiv hesabı gerekir | §8.4'teki liste: PavoPay REST belgesi, ödeme tipi ve belge türü kodları, `GetSaleResult` yanıtı, iptal ve iade |
 | **Ingenico** (Move5000F, iDE280, A910SF) | GMP-3, Windows DLL (USB/TCP) | Geliştirici ücreti ve her sürümün hash kaydı gerekir | Geliştirici programı, GMPSmartDLL ve belgesi, test cihazı, sürüm başına hash kaydı, bulut/TSM kanalı var mı |
 | **Verifone, Inpos, Profilo, PayGo, Vera** | TSM ya da kablolu | Açık belge yok | TSM/bulut satış API'si var mı; belge, sözleşme, test cihazı |
 | **Hepsi** | | | Güvenlik Taahhütnamesi (GMP-3 §5.3, §5.5: yazılım değişikliği üreticiye bildirilir); masada ödeme için GMP-3 §6.1'e uygunluğun yazılı teyidi |
@@ -148,7 +151,8 @@ Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` �
 Her sonuç denetim kaydına yazılır: gönderim (`okc.send`), ödendi (`okc.paid`), cihazda vazgeçme ya da cihazdan
 silinme (`okc.cancelled`), LafPOS'tan sepet iptali (`okc.delete`, ulaşılamadıysa `okc.force_cancel`), cihaza
 ulaşmayan gönderim (`okc.not_delivered`), fiş iptali (`okc.void`, `okc.void_closed_day`) ve alarmlar
-(`okc.underpaid`, `okc.apply_failed`, `okc.late_paid`). Aynı sonuç ikinci kez gelirse işlem ve kayıt tekrarlanmaz.
+(`okc.underpaid`, `okc.apply_failed`, `okc.late_paid`). Pavo'da cihazın banka gün sonu `okc.eod` (§8.5). Aynı sonuç
+ikinci kez gelirse işlem ve kayıt tekrarlanmaz.
 Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında görünür.
 
 ## 7. Sık sorunlar
@@ -171,3 +175,159 @@ Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında gör�
   alarm verir (`okc.late_paid`): mali fiş cihazdan iptal edilir. Onay penceresi açıkken cihazda fiş kesildiyse
   (sepet ödendi ya da eksik ödenip `hata` oldu) iptal reddedilir (`okc_paid`, `okc_unresolved`): fişi kesilmiş
   sepet hiçbir yoldan "silindi" sayılmaz, fiş iptali ödemesini geri alabilsin.
+
+## 8. Pavo (N86) yerel ağ bağlantısı
+
+Pavo cihazı kafenin ağında bir HTTP sunucusudur; LafPOS (kasa bilgisayarı) satışı ona gönderir, kasiyer ödemeyi
+cihazda (nakit, kart; bölünmüş de) alır, cihaz VUK 507 belgesini keser (e-Arşiv, e-Fatura ya da bilgi fişi; Z yok).
+İnternet ya da bulut gerekmez; cihaz ile kasa bilgisayarı aynı ağda olmalı. Kod: istemci `server/okc/pavo.ts`,
+sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
+
+### 8.1 Kurulum
+
+1. Cihazda Ayarlar › Çevresel Donanımlar › Network Ayarları: REST açık, REST ağı Wi-Fi ya da Ethernet (mobil veri
+   REST'te çalışmaz). Cihazın IP adresini modemden sabitleyin.
+2. Kasa bilgisayarının ayarlarına (`.env` / `C:\ProgramData\LafPOS\ayarlar.env`):
+
+   | Değişken | Ne |
+   |---|---|
+   | `PAVO_URL` | Cihazın adresi ve REST portu, ör. `https://192.168.1.50:4567`. Pavo'nun belgesi 4568 HTTPS, 4567 HTTP der; entegratörlerin kodu N86'da `https://…:4567` kullanır. "Bağlantıyı dene" hangisinin açık olduğunu söyler |
+   | `PAVO_SERIAL` | Cihazın seri numarası (her istekte gider, cihaz kendi seri noyla karşılaştırır) |
+   | `PAVO_FINGERPRINT` | İsteğe bağlı (varsayılan `LafPOS`); eşleştirmede cihaza kaydedilir, her istekte aynısı gider |
+
+3. Yönetim › Yazarkasa POS: bağlantı **Pavo** (ödeme yeri kendiliğinden kasada ödeme), **Eşleştir** (cihazda onay
+   ekranı açılır, kasiyer onaylar; LafPOS en çok 2 dk bekler), **Bağlantıyı dene** (cihaz yanıt veriyor mu, eşleştirme
+   geçerli mi, cihazdaki ödeme araçları).
+4. İlk satışı küçük tutarla deneyin: cihaz gerçek e-Arşiv belgesi keser. "Cihazın son yanıtları" (yönetim
+   sayfasının altında) yanıtın alanlarını gösterir; tanınmayan biçim orada görünür.
+5. **Gün sonu (banka)** kartı: "Gün kapanınca cihazda gün sonu al" varsayılan açık; LafPOS gün sonundan hemen sonra
+   cihaz bankalardaki kart işlemlerini kapatır (§8.5). Cihazın kendi menüsünden gün sonu alınıyorsa kapatın. İlk
+   kurulumda "Cihazda gün sonu al" ile bir kez elle deneyin.
+
+Pavo bulut API anahtarı (PavoPay portalında üretilen, 64 karakterlik) bu bağlantıda kullanılmaz: bulut kanalı ayrıca
+Pavo'nun entegratöre verdiği "App Token"ı ister (§8.4). Anahtar yalnız kafedeki ayar dosyasında durur, depoya girmez.
+
+### 8.2 Akış
+
+- **Eşleştirme** (`/Pairing`): sıra no 1'e döner; LafPOS cihazın sertifikasının parmak izini saklar. Sonraki her
+  istekte gövde gönderilmeden sertifika karşılaştırılır; farklıysa istek gitmez ("Cihazın sertifikası
+  eşleştirmedekinden farklı"): aynı ağdaki başka bir makine kendini cihaz gibi gösteremez. Cihaz değiştiyse ya da
+  uygulaması güncellendiyse yeniden eşleştirilir. Pavo günde bir eşleştirmeyi önerir.
+- **Her istek**: `TransactionHandle` (seri no, parmak izi, sıra no, yerel saat `yyyy-MM-ddTHH:mm:ss.fff`). Sıra no
+  kalıcıdır (`sync_state` `pavo.sequence`) ve istek gitmeden artırılır; yanıtı alınamayan istekten sonra da aynı
+  numara tekrar gitmez (cihaz tekrarı reddeder). Kasa bilgisayarının saati cihazınkinden 5 dakikadan fazla sapmamalı.
+- **Satış** (`/CompleteSale`): sepet Pavo satışına çevrilir (`pavoSale`). Tutarlar TL, KDV dahil; KDV grubu orandan
+  (`KDV10`, `KDV20`); birim `C62` (adet); sipariş no sepet kimliğinden (`pavoOrderNo`, 16 karakter). İndirim ayrı
+  alanla değil kalemin tutarıyla gider: tutar adede tam bölünmüyorsa satır iki olur (n-1 adet ve son adet), fiş
+  toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynıdır. Ödeme bilgisi gönderilmez: kasiyer cihazda seçer. `KDV10` ve
+  `KDV20` dışındaki oranlı kalem (%0, %1) cihaza gitmez: sepet kaydı yazılmadan "%0 KDV'li kalem Pavo'ya
+  gönderilemez; ürünün KDV oranını düzeltin ya da hesabı kasadan alın" (400 `okc_basket`), adisyon kilitlenmez.
+  Cihazın başka grupları bilip bilmediği belgede yok (§8.4).
+- **Bekleme**: cihaz aynı anda tek istek işler; satış ekranı açıkken (yanıt gelene dek) sepet LafPOS'ta "kilitli"
+  görünür ve LafPOS cihaza başka istek göndermez. Cihaz ilk 6 sn içinde reddederse (KDV grubu, eşleştirme) kasiyer
+  hatayı hemen görür, sepet hataya düşer, adisyon kilitli kalmaz.
+- **Sonuç**: cihazın yanıtındaki satış kaydı (`Data` ya da `Data.Sale`): `AddedPayments` (`StatusId` 2 etkin;
+  `PaymentTypeId` 1 nakit, 2 kart; `PaymentAmount` TL) ve `FinancialDocuments` (`InvoiceNo` belge no, `Type.Name`
+  belge türü). Kasiyer vazgeçerse (`HasAbondon`) sepet kapanır, adisyon açık kalır. Hata dönen satışta belge kesilip
+  kesilmediği bir kez `/GetSaleResult` ile sorulur. Yanıt gelmezse (sunucu yeniden başladı, bağlantı koptu) sonuç
+  sipariş no ile `/GetSaleResult`'tan sorulur (en sık 5 sn'de bir). 8 saatten eski bekleyen sepet kendiliğinden
+  sorgulanmaz (yalnız onlar kaldıysa sorgu döngüsü durur); adisyondaki "Yenile" ile elle sorulur.
+- **İptal**: satış cihazın ekranındayken LafPOS'tan silinmez, cihazda vazgeçilir. Ekranda değilse LafPOS cihaza
+  sorar: ödenmişse sonuç işlenir, ödenmemişse cihazda silinecek bir şey yoktur. Cihaza ulaşılamazsa yetkili onayıyla
+  LafPOS'ta iptal sayılır (§7, `okc.force_cancel`). LafPOS cihaza iptal (`/CancelSale`) göndermez: belgenin
+  anlamı belgesiz.
+
+### 8.3 Temkin kuralları (para yolu tahminle kurulmaz)
+
+- Satış kaydı tanınmayan **hatasız** yanıt ödendi sayılmaz; sonuç sorulur. Satış kaydı hiç gelmezse sepet bekler,
+  kasiyer cihaza bakıp iptal eder.
+- Anlamı belgelenmemiş ödeme tipi (1 ve 2 dışı: yemek kartı, havale...) tahminle bir türe yazılmaz: ödemesi
+  LafPOS'a işlenmez, sepet eksik ödenmiş sayılır (`okc.underpaid` alarmı), kalemler yeniden gönderilmez; kalanı
+  yönetici doğru türle kasadan alır.
+- Belge kesilmişse (`InvoiceNo` ya da etkin ödeme var) hata dönen yanıt da ödendi sayılır (ör. yazıcı hatası).
+- Cihazın ham yanıtı sepetin sonucunda (`fiscal_receipts.result.raw`) saklanır; ilk gerçek satıştan sonra alan
+  adları buradan doğrulanır.
+
+### 8.4 Kaynaklar ve Pavo'dan istenecekler
+
+Pavo'nun belge sitesi (docs.pavopay.dev) projeye özel ve kapalı. Doğrulanan: REST bağlantı kuralları ve eşleştirme
+(Pavo'nun REST sayfasının Ağustos 2026 kaydı); satış kaydının biçimi (Pavo'nun satış API'sinin yanıt modeli, bir
+entegratörün açık kodu); banka gün sonu (`/PerformEOD`, `/PrintEODCopy`) ve hata kodları (Pavo'nun REST paketi
+"BKM TechPOS 509 REST V39", örnek istek ve yanıtlarıyla). Entegratör kodundan, belgesiz: `/CompleteSale` ve
+`/GetSaleResult` uç adları ve satış gövdesi, `MainDocumentType: 1`, `KDV{oran}` grup kodu, N86'da port. Pavo'dan
+(info@pavo.com.tr, 0850 611 04 44) istenecekler:
+
+1. N86 / PavoPay (VUK 507) REST belgesine erişim (docs.pavopay.dev) ve hata kodları.
+2. `/CompleteSale` ve `/GetSaleResult` yanıtının tam biçimi; `PaymentTypeId`, `MainDocumentType`, `TaxGroupCode` ve
+   belge türü değerlerinin listesi (`KDV1` ve `KDV0` grubu var mı; yoksa %1'lik ürün nasıl satılır).
+3. Kesilmiş belgenin iptali ve iadesi (e-Arşiv iptali) ve LafPOS'a nasıl bildirildiği.
+4. Bulut kanalı için App Token (kafenin PavoPay API anahtarıyla kullanılır) ve bulutta kalemli satışın seri no ile
+   cihaza gönderilmesi.
+5. Masada ödeme (cihazın açık hesap listesi) desteği.
+6. Banka gün sonunun VUK 507 cihazında (N86) da aynı uçla alındığı; boş batch'te gün sonunun yanıtı.
+
+### 8.5 Gün sonu (banka)
+
+Kartla alınan ödemeler bankada bir "batch"te birikir; cihazın banka gün sonu batch'i kapatır ve para hesaba geçer.
+Gün sonundan sonra o işlemler cihazda iptal edilemez, yalnız iade edilir. LafPOS bunu kendi gün sonuna bağlar ama
+**ona bağımlı kılmaz**: LafPOS günü önce kapanır (tek işlem, Z yazılır), cihaz gün sonu ardından arka planda başlar
+(`deviceEndOfDay`, `server/okc/service.ts`; elle ve otomatik gün sonu ikisi de). Cihaz yanıt vermese, hata dönse ya da
+hiç bağlı olmasa da gün kapalı kalır.
+
+- **İstek** (`/PerformEOD`): `useSummary: true`, `print` (varsayılan false: slip basılmaz), `receiptImage: false`,
+  `printData` kapalı (slip görüntüsü, JSON ve metin istenmez). Yanıt en çok 3 dk beklenir; süre boyunca cihaz meşgul
+  sayılır, yeni satış "Cihazda gün sonu sürüyor" diye reddedilir; bekleyen sepet sorgulanmaz (cihaz satışı hatayla
+  bitirdiyse de belge sorgusu gün sonunun arkasında kuyruğa girmez: yanıt saklanır, gün sonu bitince sorulur), iptali
+  409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal say" yoluna düşmez).
+- **Göndermeden önce** (cihaz meşgul işaretliyken, araya satış girmez): cihazın son gün sonu `/PrintEODCopy` ile
+  okunur (`print: false`) ve denemenin **tabanı** olur (`prevBatchNo`, `prevBatchFrom`: `cihaz`; cihazda kayıtlı gün
+  sonu yoksa `bos`; uç yanıt verip özet vermezse LafPOS'un bildiği son batch, `lafpos`). Cihaz bu soruya yanıt
+  vermezse (bağlantı, zaman aşımı) gün sonu **gönderilmez**: sonuç `failed` ("gün sonu gönderilmedi"), yeniden
+  denenebilir. Ardından "sürüyor" kaydı yazılır (`running`, yönetimde "Sürüyor"); süreç gün sonu sürerken kapanırsa
+  açılışta (`startJobs` › `recoverDeviceEod`) `unknown` olur ve alarm düşer.
+- **Ne zaman atlanır** (bilgi kaydı `okc.eod`, sonuç `skipped`): Pavo bilgileri eksik, kurulum (eğitim) modu, cihaz
+  eşleştirilmemiş, cihazda süren satış var, ya da "Gün kapanınca cihazda gün sonu al" kapalı (`okcPavoAutoEod`;
+  yalnız otomatik denemede). Otomatik denemede ayrıca: son sonuç ya da bu günün sonucu belirsiz / sürüyor ("önce
+  Doğrula", `okc_eod_unknown`), ya da bu gün için gün kapandıktan sonra cihaz gün sonu zaten alınmış
+  (`okc_eod_done`). Yeniden açılan gün aynı kimlikle kapanır: ikinci `/PerformEOD` kendiliğinden gitmez, gerekirse
+  elle alınır. Gün açıkken elle alınan gün sonu kapanışın gün sonunu engellemez (sonraki kart işlemlerini o kapatır).
+  Atlanan deneme belirsiz ya da süren sonucu ve aynı günün sonucunu ezmez. Bağlantı Pavo değilse hiçbir şey yazılmaz
+  (Pavo'suz kurulumda her gün sonunda kayıt gürültü olurdu).
+- **Sonuç** (`sync_state` `pavo.eod.<gün kimliği>` ve `pavo.eod.last`): yalnız özet. Batch no, cihaz saati
+  (`gg.aa.yyyy ss:dd`), genel toplam (TL satırı, kuruş; "1.234,56 TL" `parseTL` ile), banka başına ad, işlem sayısı ve
+  toplam, LafPOS günün kart toplamı (Z'nin kart alanı ve kartla alınan bahşiş). Kart numarası, işlem dökümü, işyeri
+  ve vergi bilgisi, slip **saklanmaz**. Durum: `ok` alındı · `failed` cihaz alamadı (ör. 5085 "Günsonu alınamadı",
+  bağlantı kurulamadı) · `unknown` istek gitti ama yanıt gelmedi (zaman aşımı, bağlantı koptu) ya da özetsiz yazıcı
+  hatası (5066-5072): gün sonu alınmış olabilir · `running` sürüyor · `skipped` denenmedi. Özeti olan yanıt hata
+  taşısa da alındı sayılır. Bir günün başarılı gün sonları ezilmez: günün kaydı öncekileri `earlier`'da (batch no,
+  cihaz saati, toplam, deneme anı, gün kapalı mıydı) taşır.
+- **Denetim kaydı** `okc.eod`: alındıysa bilgi; cihazın genel toplamı LafPOS'un kıyas tutarından farklıysa uyarı
+  (cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi); alınamadı ve belirsiz
+  alarm. Kıyas tutarı (`dayCardKurus`) günün ilk gün sonunda kapanmış günün kart toplamı; aynı günün sonraki gün
+  sonunda önceki gün sonundan (`dayCardSinceBatch`) sonra alınan, iade edilmemiş kart ödemeleri (bahşiş dahil).
+- **Yeniden deneme kendiliğinden yapılmaz.** Belirsiz sonucun üstüne ikinci gün sonu, bankada boş ya da yanlış batch
+  açar. Yönetim › Yazarkasa POS › Gün sonu (banka):
+  - **Cihazda gün sonu al** (`POST /api/okc/eod`, `kasa.gun`): onay sorulur; ayar kapalı olsa da çalışır. Son
+    kapanan günün denemesi alınamadı ya da atlandıysa bu onun yenisidir ve o güne yazılır (ertesi sabah gün açılmış
+    olsa da); değilse açık güne, yoksa son kapanan güne. Son sonuç belirsizse önce doğrulama ister (409
+    `okc_eod_unknown`; cihaz doğrulamaya da yanıt vermiyorsa gövdede `force: true` bu korumayı yalnız o istek için
+    aşar, arayüzde yok). Cihazın hatası 502 (`pavo_eod`, belirsizse `pavo_eod_unknown`).
+  - **Doğrula** (`POST /api/okc/eod/verify`, `kasa.gun`): cihazın son gün sonu `/PrintEODCopy` ile sorulur
+    (`batchNo` yok: son gün sonu; Pavo'da bu ucun varsayılanı slip basmak olduğundan `print: false` açıkça gider).
+    Son deneme alınamadı, belirsiz ya da atlandıysa ve cihazdaki gün sonu ondan sonraysa (`eodAfter`: batch no
+    tabandan büyük, taban `bos` ise her batch; cihaz saati okunabiliyorsa denemeden en çok 6 dk önce, daha eskisi
+    cihazın menüsünden önceden alınmıştır; taban bilinmiyorsa cihaz saati karar verir) sonuç "alındı" olur, tutarlar
+    cihazınki. Taban gönderimden hemen önce cihazdan okunduğu için menüden önceden alınmış gün sonu bu denemenin
+    sonucu sanılmaz. Açılışta belirsize dönen "sürüyor" kaydı da böyle doğrulanır.
+    Cihazın menüsünden alınan gün sonu da böyle LafPOS'a işlenir. Belirsiz deneme cihazda karşılık bulamazsa
+    "alınamadı" olur ve yeniden denenebilir. 5075 "Batch bulunamadı": cihazda kayıtlı gün sonu yok (belirsiz deneme
+    de alınmamış sayılır).
+- **Kör kasa**: son sonuç `GET /api/okc/status` › `pavo.eod`'da; kasa rakamlarını görmeyen (`kasa.rakam` ya da
+  `rapor.gor` yok) durum, batch no ve işlem sayılarını görür, tutarları görmez (`amountsHidden`). Kullanıcısız durum
+  (Genel bakış › Sistem sağlığı) tutar taşımaz.
+- **Testler**: `tests/pavo.test.ts` (sahte cihaz `tests/fake-pavo.ts`: kartla alınan ödemeler açık batch'e girer;
+  `eodMode` `ok`, `fail` 5085, `silent` gün sonu alınır ama yanıt gelmez, `drop` istek işlenmez ve yanıt gelmez;
+  `eodDelayMs` yanıtı geciktirir; `menuEod` cihazın menüsünden gün sonu). Bekleme süreleri `pavoTiming.eodMs` ve
+  `eodCopyMs` (taban ve doğrulama) ile kısalır. Testler yeni gün için bugün kapanan günleri geçmiş tarihe alır (bir
+  iş gününe tek Z).
+
