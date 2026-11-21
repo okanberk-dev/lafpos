@@ -13,6 +13,8 @@ import { refreshSiteKaraoke, siteKaraokeOn, siteKaraokeStatus, siteKaraokeView }
 import { onlineAlertsView, onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
 import { runMenuSync } from '../sync/menu-sync';
 import { internetStatus } from '../sync/catch-up';
+import { menuStaleError } from '../sync/laffogato-menu';
+import { getOpenDay } from '../services/orders';
 import { ackTableCall, tableCallsView } from '../sync/table-calls';
 import { getSettings } from '../lib/settings';
 import { cloudState } from '../sync/cloud';
@@ -26,8 +28,13 @@ export const syncRoutes = new Hono<AppEnv>();
  */
 syncRoutes.get('/status', (c) => {
   const s = getSettings();
+  const state = getSyncState<{ lastSuccessAt?: number; lastError?: string | null }>('laffogato.menu');
+  const day = getOpenDay(db);
+  // Gün açıkken menü sessizce bayatladıysa (yoklama çalışmadı, hata da yazılmadı) hata gibi gösterilir: kasa eski fiyattan
+  // satmasın diye Entegrasyon "Hata" der, yönetim çubuğu sayar
+  const stale = menuStaleError({ linked: siteLinked(), auto: s.menuAutoSync, dayOpenedAt: day ? Math.max(day.openedAt, day.reopenedAt ?? 0) : null, state, now: Date.now() });
   return c.json({
-    menu: { linked: siteLinked(), auto: s.menuAutoSync, state: getSyncState('laffogato.menu') },
+    menu: { linked: siteLinked(), auto: s.menuAutoSync, state: stale ? { ...state, lastError: stale } : state },
     online: onlineStatus(),
     karaoke: siteKaraokeStatus(),
     lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet')),

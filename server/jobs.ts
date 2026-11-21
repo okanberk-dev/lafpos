@@ -33,17 +33,19 @@ const AFTER_WRITE_SYNC_MS = 5_000;
 
 const timers: NodeJS.Timeout[] = [];
 let soonTimer: NodeJS.Timeout | null = null;
+let soonForce = false;
 
 /**
  * Otomatik menü eşitlemesi. Site bağlantısı yoksa (LAFFOGATO_URL) siteye hiçbir istek gitmez: ne menü ne görsel.
  * Açık iş günü yokken (gece) atlanır, gün açılınca bir kez çeker. `anyTime`: LafPOS'un siteye kendi Tükendi / Satışa
  * aç yazımından hemen sonra; site o an zaten uyanık, gece de çalışır.
  */
-export async function menuTick(opts: { anyTime?: boolean } = {}) {
+export async function menuTick(opts: { anyTime?: boolean; force?: boolean } = {}) {
   if (!siteLinked() || !getSettings().menuAutoSync) return;
   if (!opts.anyTime && !getOpenDay(db)) return;
   try {
-    const r = await runMenuSync({ apply: true });
+    // force: ETag'e bakılmaz (CDN'deki liste henüz eskiyse 304 dönerdi); fiyat ve Satışta imzalı panelden tazedir
+    const r = await runMenuSync({ apply: true, force: opts.force });
     if (r.status === 'uygulandi') console.log(`[senkron] site menüsü uygulandı: ${r.preview?.changes.length ?? 0} değişiklik`);
   } catch (e) {
     console.warn('[senkron] site menüsü alınamadı:', e instanceof Error ? e.message : e);
@@ -130,11 +132,14 @@ function autoDayEndTick() {
 }
 
 /** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi */
-export function menuSyncSoon(delayMs = AFTER_WRITE_SYNC_MS) {
+export function menuSyncSoon(delayMs = AFTER_WRITE_SYNC_MS, opts: { force?: boolean } = {}) {
+  if (opts.force) soonForce = true;
   if (soonTimer) return;
   soonTimer = setTimeout(() => {
     soonTimer = null;
-    void menuTick({ anyTime: true });
+    const force = soonForce;
+    soonForce = false;
+    void menuTick({ anyTime: true, force });
   }, delayMs);
 }
 
@@ -200,6 +205,8 @@ export function onJobEvent(e: LiveEvent) {
   if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
   // LafPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
   if (e.topic === 'sync' && e.kind === 'site.menu.written') menuSyncSoon();
+  // Sitenin menü işareti değişti (fiyat ya da Satışta sitede veya lafmaliyet panelinde değişti): hemen, ETag'siz
+  if (e.topic === 'sync' && e.kind === 'site.menu.changed') menuSyncSoon(1_000, { force: true });
   // Gün açıldı: gece atlanan menü yoklaması bir kez
   if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void menuTick();
   // Paket siparişinin aşaması değişti: canlı platforma hemen yazılır (gidemezse 20 sn'lik turda yeniden)
