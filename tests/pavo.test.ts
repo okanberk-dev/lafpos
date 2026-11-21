@@ -799,6 +799,64 @@ describe('akış (sahte cihaz)', () => {
       const verified = await h.ok<{ changed: boolean; record: Eod }>('patron', 'POST', '/okc/eod/verify', {});
       expect(verified).toMatchObject({ changed: true, record: { status: 'failed' } });
     });
+
+    type Okc = { lastError: { message: string } | null; pavo: PavoStatus };
+    const okc = () => h.ok<Okc>('patron', 'GET', '/okc/status');
+
+    it('sahada: cihaz son gün sonunun kopyasını vermezse (HTTP 404, gövdesiz) gün sonu yine alınır; taban LafPOS’un bildiği batch, eski hata silinir', async () => {
+      mods.setSyncState('okc.lastError', { message: 'Cihaz gün sonu: Cihazdan tanınmayan yanıt (HTTP 404)', at: Date.now() - 60_000 });
+      device.eodCopyReply = 'http404';
+      try {
+        const known = mods.getSyncState<string>('pavo.eod.batch');
+        const before = eodRequests().length;
+        const rec = await h.ok<Eod>('patron', 'POST', '/okc/eod', {});
+        expect(rec).toMatchObject({ status: 'ok', prevBatchNo: known, prevBatchFrom: 'lafpos' });
+        expect(eodRequests().length).toBe(before + 1);
+        expect((await okc()).lastError).toBeNull();
+        // Doğrulama kopyasız yapılamaz: okunur ret, beklenmeyen hata değil
+        const v = await h.call<{ code: string; error: string }>('patron', 'POST', '/okc/eod/verify', {});
+        expect(v.status).toBe(502);
+        expect(v.json.code).toBe('pavo_eod_nocopy');
+        expect(v.json.error).toContain('cihazın kendi menüsünden');
+      } finally {
+        device.eodCopyReply = null;
+      }
+    });
+
+    it('cihaz başka programla eşleşmişse (73, 74) gün sonu gönderilmez, açık Türkçe mesaj; yeniden eşleştirince "Son hata" kalkar', async () => {
+      for (const code of ['74', '73']) {
+        device.eodCopyReply = { HasError: true, HasAbondon: false, ErrorCode: code, Message: code === '74' ? 'FingerPrint mismatch' : 'Sequence error', Data: null };
+        const before = eodRequests().length;
+        const r = await h.call<{ code: string; error: string }>('patron', 'POST', '/okc/eod', {});
+        expect(r.status).toBe(502);
+        expect(r.json.error).toContain('başka bir programla eşleştirilmiş');
+        expect(r.json.error).toContain('Eşleştir');
+        expect(eodRequests().length).toBe(before);
+        expect((await okc()).lastError?.message).toContain('başka bir programla eşleştirilmiş');
+      }
+      const v = await h.call<{ code: string; error: string }>('patron', 'POST', '/okc/eod/verify', {});
+      expect(v.json).toMatchObject({ code: 'pavo_pairing' });
+      device.eodCopyReply = null;
+      await h.ok('patron', 'POST', '/okc/pair');
+      expect((await okc()).lastError).toBeNull();
+      expect(await h.ok<Eod>('patron', 'POST', '/okc/eod', {})).toMatchObject({ status: 'ok', prevBatchFrom: 'cihaz' });
+    });
+  });
+
+  it('bağlantı denemesi ödeme araçlarının adlarını getirir: liste Data’da, Data içinde ya da küçük harfli alanlarla', async () => {
+    const names = async () => (await h.ok<{ mediators: { id: number | null; name: string | null }[]; mediatorsNote: string | null }>('patron', 'POST', '/okc/test'));
+    try {
+      device.mediatorsData = { PaymentMediators: [{ PaymentMediatorId: 1, PaymentMediatorName: 'NAKİT' }, { PaymentMediatorId: 3, PaymentMediatorName: 'YEMEK KARTI' }] };
+      expect((await names()).mediators).toEqual([{ id: 1, name: 'NAKİT' }, { id: 3, name: 'YEMEK KARTI' }]);
+      device.mediatorsData = [{ id: 2, name: 'Kredi Kartı' }];
+      expect((await names()).mediators).toEqual([{ id: 2, name: 'Kredi Kartı' }]);
+      device.mediatorsData = { Count: 0 };
+      const none = await names();
+      expect(none.mediators).toEqual([]);
+      expect(none.mediatorsNote).toContain('Count');
+    } finally {
+      device.mediatorsData = [{ Mediator: 1, Name: 'Nakit' }, { Mediator: 2, Name: 'Kredi Kartı' }];
+    }
   });
 });
 

@@ -148,6 +148,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
       localStamps: localStampsOn(),
       siteKaraoke: siteKaraokeOn(),
       deneme: trainingMode(),
+      goLivePending: !trainingMode() && getSettings().liveSince == null,
     },
     serverTime: Date.now(),
   };
