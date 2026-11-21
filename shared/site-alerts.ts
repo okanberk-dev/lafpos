@@ -21,7 +21,8 @@ export interface OnlineAlertDTO {
   openedAt: number;
   /**
    * Uyarı penceresinin ölçüsü (ms): ödeme anı; planlı siparişte (`scheduledFor`) en erken planlı saatten 30 dakika önce.
-   * Geceden ödenmiş sabah siparişi saati gelince yine çalar. Eski sunucu göndermez: `openedAt` geçerli
+   * Geceden ödenmiş sabah siparişi o ana dek çalmaz, saati gelince çalar; saatinden önce denen "Gördüm" onu susturmaz
+   * (src/lib/siteAlerts.ts `onlineAckKeys`). Eski sunucu göndermez: `openedAt` geçerli
    */
   dueAt?: number;
   /** Planlı saat (ISO; sitenin `scheduledFor`), planlı değilse null. Eski sunucu göndermez */

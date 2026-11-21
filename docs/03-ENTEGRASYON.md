@@ -219,7 +219,9 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
   `lafpos:<ad>` yazar), sonra yerelde düşürür, denetim kaydına yazar (`table.call_ack`) ve `site.call.done` yayar:
   bütün cihazlarda susar. Site 404 derse (çağrı sitede yok) yine düşer; siteye ulaşılamazsa ya da site başka bir kod
   dönerse 502 `site_call`, çağrı açık kalır, yeniden denenir. LafPOS'ta yanıtlanan çağrı, yanıttan önce istenmiş bir
-  listede gelse de geri gelmez.
+  listede gelse de geri gelmez; daha yeni bir listeden önce istenmiş (ağda gecikmiş) liste yok sayılır. Bilgisayarın
+  saati geri alınırsa (Windows saat eşitlemesi) saklanan an ileride kalır: liste yine işlenir, an bugünün saatine döner
+  (siparişlerin kuralı).
 
 **Tükendi kilidi** (`products.soldOutBy`): LafPOS'un kapattığı ürün (kasadan, bardan, porsiyon bitince) `lafpos`,
 sitenin kapattığı (senkron) `site` diye işaretlenir. Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar;
@@ -385,7 +387,9 @@ değişmez (`AGENTS.md` kural 6); LafPOS siteye yalnız masa çağrısının "G�
   "Hazırlanıyor"), siteden kalkınca ya da ödemesinden 4 saat geçince. Duyan: `siparis.al` ya da `mutfak.ekran`. Liste
   `GET /api/sync/alerts` (aynı yetki; yalnız yerel veritabanı, açık ve sitede hâlâ `new` aşamasındaki siparişler).
   Bar ekranı online fişte kendi sesini çalmaz (kabuğun zili çalıyorsa). Planlı siparişin 4 saati planlı saatinden 30
-  dakika önce başlar (`dueAt`, §2.3 "Planlı sipariş"): geceden ödenmiş sabah siparişi saati gelince çalar.
+  dakika önce başlar (`dueAt`, §2.3 "Planlı sipariş"): geceden ödenmiş sabah siparişi o ana dek çalmaz, saati gelince
+  çalar. Saatinden önce denen "Gördüm" (aşaması ya da masası değişti, ekranda açıldı) onu susturmaz: cihaz "Gördüm"ü
+  planlı siparişte saatiyle hatırlar (`kimlik@dueAt`), saati sitede değişen sipariş yeni saatinde yine çalar.
 - **Masa çağrısı** (§2.3 "Masa çağrıları"): aynı zil, aynı döngüde, masa siparişi gibi tam düzeyde; şeridin başında
   ("Masa çağrısı · S4 · Su istiyor") ve bildirim "Masa çağrısı · S4 · Su istiyor". "Gördüm" çağrıyı sitede yanıtlar,
   bütün cihazlarda susar; site yanıtı almazsa çağrı her cihazda açık kalır. Sitede ya da köşkte yanıtlanınca ya da 15

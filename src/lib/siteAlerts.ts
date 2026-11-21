@@ -8,8 +8,9 @@ import { ONLINE_ALERT_MAX_AGE_MS, type OnlineAlertDTO, type SiteAlertsDTO, TABLE
  *
  * - Yeni online sipariş (uygulama, web, masa QR): sitenin panelindeki zil gibi 3 saniyede bir çalar; bu cihazda
  *   "Gördüm" denince (24 saat hatırlanır), sipariş açılınca, aşaması değişince (bar "Hazırlanıyor", sitede ya da
- *   köşkte değişti), siteden kalkınca ya da ödemesinden 4 saat geçince susar (planlı sipariş planlı saatinden 30 dk
- *   önce yeniden pencerede, `dueAt`). Masa siparişi daha yüksek.
+ *   köşkte değişti), siteden kalkınca ya da ödemesinden 4 saat geçince susar. Planlı sipariş planlı saatinden 30 dk
+ *   önce (`dueAt`) çalmaya başlar, öncesinde çalmaz; saatinden önce denen "Gördüm" onu susturmaz (`onlineAckKeys`).
+ *   Masa siparişi daha yüksek.
  * - Masadan çağrı (uygulamada "Garson çağır", su, peçete): masa siparişi gibi tam düzeyde, aynı döngüde ve şeridin
  *   başında çalar; "Gördüm" çağrıyı sitede yanıtlar (bütün cihazlarda susar), sitede ya da köşkte yanıtlanınca ya da 15
  *   dakika dolunca da susar. Tercihi online siparişle bir (Araçlar › Sesli uyarılar › Online siparişler).
@@ -117,15 +118,47 @@ export function addAcks(acks: Acks, ids: readonly string[], now: number): Acks {
   return out;
 }
 
+type AlertTiming = Pick<OnlineAlertDTO, 'orderId' | 'openedAt' | 'dueAt'>;
+
+/** Planlı ve saati ödeme anından sonra: uyarının ölçüsü planlı saat (`dueAt`), ödeme anı değil */
+const planned = (o: AlertTiming) => o.dueAt !== undefined && o.dueAt > o.openedAt;
+
 /**
- * Çalan online siparişler, en eskisi önce: yetki ve tercih açık, bu cihazda "Gördüm" denmemiş, ekranda açık değil
- * (`openOrderId`), ödemesinden (planlı siparişte planlı saatinden 30 dk önceden, `dueAt`) 4 saat geçmemiş. Sunucu
- * yalnız açık ve "yeni" aşamadakini gönderir.
+ * Planlı siparişin saati henüz gelmedi (`dueAt` ileride): çalmaz, "Gördüm" yazılmaz. Planlı olmayan siparişin ölçüsü
+ * ödeme anıdır (sitenin saati): cihazın saati biraz geride olsa da hemen çalar.
+ */
+export const notYetDue = (o: AlertTiming, now: number) => planned(o) && (o.dueAt as number) > now;
+
+/**
+ * "Gördüm"ün anahtarı: siparişin kimliği; planlı siparişte uyarı saatiyle (`kimlik@dueAt`). Saati sitede değişen sipariş
+ * yeni saatinde yine çalar; saatinden önce yalnız kimlikle yazılmış "Gördüm" (eski istemci ödeme anında çalardı) onu
+ * susturmaz.
+ */
+export const onlineAckKey = (o: AlertTiming) => (planned(o) ? `${o.orderId}@${o.dueAt}` : o.orderId);
+
+/**
+ * Susturulacak siparişlerin (`ids`) "Gördüm" anahtarları. Saati gelmemiş planlı siparişe yazılmaz (aşaması ya da masası
+ * saatinden önce değişse, ekranda açılsa da saati gelince çalar); listede olmayan kimlik olduğu gibi kalır.
+ */
+export function onlineAckKeys(online: readonly AlertTiming[] | undefined, ids: readonly string[], now: number): string[] {
+  const out: string[] = [];
+  for (const id of ids) {
+    const o = online?.find((x) => x.orderId === id);
+    if (!o) out.push(id);
+    else if (!notYetDue(o, now)) out.push(onlineAckKey(o));
+  }
+  return out;
+}
+
+/**
+ * Çalan online siparişler, en eskisi önce: yetki ve tercih açık, bu cihazda "Gördüm" denmemiş (`onlineAckKey`), ekranda
+ * açık değil (`openOrderId`), saati gelmiş (planlı siparişte planlı saatinden 30 dk önce, `dueAt`) ve üstünden 4 saat
+ * geçmemiş. Sunucu yalnız açık ve "yeni" aşamadakini gönderir.
  */
 export function pendingOnline(data: Pick<SiteAlertsDTO, 'online'> | undefined, acks: Acks, prefs: Pick<AlertPrefs, 'online'>, perms: Pick<AlertPerms, 'online'>, now: number, openOrderId?: string | null): OnlineAlertDTO[] {
   if (!data || !perms.online || !prefs.online) return [];
   return data.online
-    .filter((o) => !acks[o.orderId] && o.orderId !== openOrderId && now - (o.dueAt ?? o.openedAt) < ONLINE_ALERT_MAX_AGE_MS)
+    .filter((o) => !acks[onlineAckKey(o)] && o.orderId !== openOrderId && !notYetDue(o, now) && now - (o.dueAt ?? o.openedAt) < ONLINE_ALERT_MAX_AGE_MS)
     .sort((a, b) => a.openedAt - b.openedAt || (a.orderId < b.orderId ? -1 : 1));
 }
 
@@ -147,7 +180,7 @@ export function ringLevel(pending: readonly Pick<OnlineAlertDTO, 'table'>[], vol
 export interface AlertCue {
   /** Uyarı listesi yeniden okunsun */
   refetch?: boolean;
-  /** Bu siparişin zili bu cihazda sussun (aşaması değişti) */
+  /** Bu siparişin zili bu cihazda sussun (aşaması değişti); sipariş kimliği, anahtarı `onlineAckKeys` verir */
   ack?: string;
   /** Tek seferlik ses (yeni online siparişin zili döngüdedir, burada değil) */
   sound?: 'ring' | 'iptal' | 'tek';

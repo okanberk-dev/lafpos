@@ -17,6 +17,9 @@ import {
   addAcks,
   alertPerms,
   callsTitle,
+  notYetDue,
+  onlineAckKey,
+  onlineAckKeys,
   parseAcks,
   pendingCalls,
   pendingOnline,
@@ -79,6 +82,7 @@ export function SiteInbox() {
     // Yalnız yerel liste; olaylar zaten yeniler. Site bağlantısı yoksa yoklama yok
     refetchInterval: (q) => (q.state.data?.configured ? 60_000 : false),
   });
+  const online = data.data?.online;
   const [acks, setAcks] = useState<Acks>(readAcks);
   const [open, setOpen] = useState(false);
   // Ses kilitliyken tek seferlik bir uyarı çalamadı: şerit sesi açmayı önerir
@@ -131,9 +135,9 @@ export function SiteInbox() {
   }, []);
 
   // Canlı olaylar: liste yenilenir, tek seferlik ses ve bildirim
-  const latest = useRef({ prefs, perms });
+  const latest = useRef({ prefs, perms, online });
   useEffect(() => {
-    latest.current = { prefs, perms };
+    latest.current = { prefs, perms, online };
   });
   useEffect(() => {
     if (!any) return;
@@ -145,11 +149,12 @@ export function SiteInbox() {
       if (handled.has(key)) return;
       handled.add(key);
       if (handled.size > 200) handled.delete(handled.values().next().value as string);
-      const { prefs: p, perms: allowed } = latest.current;
+      const { prefs: p, perms: allowed, online: list } = latest.current;
       const cue = siteEventCue(e, p, allowed);
       if (!cue) return;
       if (cue.refetch) void qc.invalidateQueries({ queryKey: ['site-alerts'] });
-      if (cue.ack) ack([cue.ack]);
+      // Saati gelmemiş planlı siparişe "Gördüm" yazılmaz: saati gelince yine çalar
+      if (cue.ack) ack(onlineAckKeys(list, [cue.ack], Date.now()));
       if (cue.sound) {
         if (!audioUnlocked()) setMissed(true);
         else if (cue.sound === 'ring') ring(p.volume);
@@ -159,12 +164,13 @@ export function SiteInbox() {
     });
   }, [any, qc, ack]);
 
-  // Açılan sipariş bu cihazda görülmüş sayılır: adisyondan çıkınca yeniden çalmaz
+  // Açılan sipariş bu cihazda görülmüş sayılır: adisyondan çıkınca yeniden çalmaz. Saati gelmemiş planlı sipariş saati
+  // gelince sayılır (ekranda hâlâ açıksa); öncesinde çıkılırsa saatinde çalar
   const openOrderId = /^\/adisyon\/([^/]+)/.exec(location.pathname)?.[1] ?? null;
-  const online = data.data?.online;
   useEffect(() => {
-    if (openOrderId && !acks[openOrderId] && online?.some((o) => o.orderId === openOrderId)) ack([openOrderId]);
-  }, [openOrderId, online, acks, ack]);
+    const o = openOrderId ? online?.find((x) => x.orderId === openOrderId) : undefined;
+    if (o && !notYetDue(o, now) && !acks[onlineAckKey(o)]) ack([onlineAckKey(o)]);
+  }, [openOrderId, online, acks, ack, now]);
 
   const pending = pendingOnline(data.data, acks, prefs, perms, now, openOrderId);
   const calls = pendingCalls(data.data, acks, prefs, perms, now);
@@ -292,7 +298,7 @@ export function SiteInbox() {
         ) : first && (
           <button
             type="button"
-            onClick={() => ack(pending.map((o) => o.orderId))}
+            onClick={() => ack(pending.map((o) => onlineAckKey(o)))}
             className="inline-flex min-h-11 shrink-0 items-center rounded-full px-3 font-semibold text-violet-ink underline underline-offset-2 transition-colors duration-150 hover:bg-hover active:bg-press"
           >
             Gördüm
@@ -329,7 +335,7 @@ export function SiteInbox() {
                 </span>
                 <span className="block text-[13px] text-muted">{alertWhen(o, now)}</span>
               </span>
-              <Button size="sm" onClick={() => ack([o.orderId])}>
+              <Button size="sm" onClick={() => ack([onlineAckKey(o)])}>
                 Gördüm
               </Button>
               {canOpen && (
@@ -337,7 +343,7 @@ export function SiteInbox() {
                   size="sm"
                   variant="soft"
                   onClick={() => {
-                    ack([o.orderId]);
+                    ack([onlineAckKey(o)]);
                     setOpen(false);
                     navigate(`/adisyon/${o.orderId}`);
                   }}

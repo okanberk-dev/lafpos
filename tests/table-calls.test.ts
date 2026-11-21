@@ -1,15 +1,16 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { LiveEvent } from '@shared/events';
 import type { SiteAlertsDTO } from '@shared/site-alerts';
 import type { BootstrapDTO, FloorStateDTO } from '@shared/types';
 import { type FakeSite, type PanelCallFixture, panelCall, startFakeSite } from './fake-site';
-import { type Harness, startApp } from './harness';
+import { type Harness, PINS, startApp } from './harness';
 
 /**
  * Masadan çağrılar (lafmobil "Garson çağır", su, peçete; docs/03-ENTEGRASYON.md §2.3 "Masa çağrıları"): sipariş
  * listesinin `calls` alanından gelir (yeni istek yok), masaya siparişlerin kuralıyla düşer (QR kodu, sonra etiket),
  * yeni çağrı cihazlarda çalar (yalnız masa ve sebep), "Gördüm" sitede yanıtlar, denetim kaydına yazar ve her yerden
- * düşürür. Hiç iş günü yokken liste yazılmaz, gün açılınca hemen çekilir.
+ * düşürür. Hiç iş günü yokken liste yazılmaz, gün açılınca (ve yeniden açılınca) hemen çekilir. Bilgisayarın saati geri
+ * giderse liste yine işlenir.
  */
 const SECRET = 'c'.repeat(48);
 let h: Harness;
@@ -68,15 +69,10 @@ describe('hiç iş günü yokken', () => {
     await orders.onlineOrdersTick();
     expect(site.calls.length).toBe(before);
 
-    // Günü açmak hemen bir çekim başlatır (zamanlayıcı açıkken; testler zamanlayıcıyı kapalı başlatır)
-    delete process.env.LAFPOS_NO_JOBS;
-    try {
-      await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
-      await orders.onlineOrdersTick();
-    } finally {
-      process.env.LAFPOS_NO_JOBS = '1';
-    }
-    expect(pulls()).toBe(2);
+    // Günü açmak hemen bir çekim başlatır (zamanlayıcı açıkken; testler zamanlayıcıyı kapalı başlatır): çekimi turu
+    // kimse elle çağırmadan, açma ucunun kancası yapar
+    await withJobs(() => h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 }));
+    await hookPulled(2);
     expect(await online()).toHaveLength(4);
     const after = await h.ok<{ online: { state: { lastError?: string | null } } }>('patron', 'GET', '/sync/status');
     expect(after.online.state.lastError).toBeNull();
@@ -84,7 +80,42 @@ describe('hiç iş günü yokken', () => {
     await orders.onlineOrdersTick();
     expect(pulls()).toBe(2);
   });
+
+  it('gün yeniden açılınca sinyal değişmemiş olsa da bir kez çekilir', async () => {
+    const orders = await import('../server/sync/laffogato-orders');
+    const day = await h.ok<{ day: { id: string } }>('kasa', 'POST', '/cash/day/close', { countedCash: 0 });
+    expect(pulls()).toBe(2);
+    await withJobs(() => h.ok('kasa', 'POST', `/cash/days/${day.day.id}/reopen`, { reason: 'Geç gelen müşteri', approverPin: PINS.mudur }));
+    await hookPulled(3);
+    // Tek çekim: sürüm aynı, sonraki tur yeniden çekmez
+    await orders.onlineOrdersTick();
+    expect(pulls()).toBe(3);
+  });
 });
+
+/** Zamanlayıcı açıkken (gün açma kancası yalnız o zaman çeker; testler zamanlayıcıyı kapalı başlatır) */
+async function withJobs<T>(fn: () => Promise<T>): Promise<T> {
+  delete process.env.LAFPOS_NO_JOBS;
+  try {
+    return await fn();
+  } finally {
+    process.env.LAFPOS_NO_JOBS = '1';
+  }
+}
+
+/** Kancanın çekimi bitti: siteye `n`. sipariş isteği gitti ve tur kapandı (testte tur elle çağrılmaz) */
+async function hookPulled(n: number) {
+  await vi.waitFor(
+    async () => {
+      expect(pulls()).toBe(n);
+      const status = await h.ok<{ online: { state: { lastSuccessAt?: number } } }>('patron', 'GET', '/sync/status');
+      expect(status.online.state.lastSuccessAt).toBeGreaterThanOrEqual(lastSuccess);
+      lastSuccess = status.online.state.lastSuccessAt! + 1;
+    },
+    { timeout: 5000, interval: 20 },
+  );
+}
+let lastSuccess = 0;
 
 const water = panelCall({ id: 'tcl-aaaaaaaaaaaaaaaa', label: 'Masa S4', reason: 'water', createdAt: new Date(Date.now() - 3 * 60_000).toISOString() });
 const waiter = panelCall({ id: 'tcl-bbbbbbbbbbbbbbbb', tableCode: 'b9b9-b9b9b9', label: 'Masa 99', reason: 'waiter', createdAt: new Date(Date.now() - 2 * 60_000).toISOString() });
@@ -197,6 +228,42 @@ describe('masa çağrıları', () => {
     const legacy = await capture(() => syncOnlineOrders());
     expect(legacy.events.some((e) => e.kind === 'site.call.done')).toBe(false);
     expect((await alerts()).calls?.map((c) => c.id)).toEqual([fresh.id]);
+    site.tableCalls = [];
+  });
+
+  it('bilgisayarın saati geri giderse (Windows saat eşitlemesi) liste yine işlenir; ağda gecikmiş eski liste yine yok sayılır', async () => {
+    const { syncOnlineOrders, upsertOnlineOrders } = await import('../server/sync/laffogato-orders');
+    const { parsePanelCalls } = await import('../server/sync/table-calls');
+    const first = panelCall({ id: 'tcl-hhhhhhhhhhhhhhhh', reason: 'water' });
+    site.tableCalls = [first];
+    await syncOnlineOrders();
+    expect((await alerts()).calls?.map((c) => c.id)).toEqual([first.id]);
+
+    // Saat 10 dakika geri: saklanan an ileride kalır
+    const realNow = Date.now.bind(Date);
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => realNow() - 10 * 60_000);
+    try {
+      const second = panelCall({ id: 'tcl-iiiiiiiiiiiiiiii', reason: 'napkin' });
+      site.tableCalls = [second];
+      const { events } = await capture(() => syncOnlineOrders());
+      expect(events.filter((e) => e.kind === 'site.call.new').map((e) => e.message)).toEqual(['S4 · Peçete istiyor']);
+      expect(events.filter((e) => e.kind === 'site.call.done')).toHaveLength(1);
+      expect((await alerts()).calls?.map((c) => c.id)).toEqual([second.id]);
+
+      // An geri alınan saate döndü: sonraki çekim de işlenir
+      const third = panelCall({ id: 'tcl-jjjjjjjjjjjjjjjj', reason: 'waiter' });
+      site.tableCalls = [second, third];
+      const next = await capture(() => syncOnlineOrders());
+      expect(next.events.filter((e) => e.kind === 'site.call.new').map((e) => e.message)).toEqual(['S4 · Garson çağırıyor']);
+      expect((await alerts()).calls?.map((c) => c.id)).toEqual([second.id, third.id]);
+
+      // Daha yeni listeden önce istenmiş (ağda gecikmiş) liste hâlâ yok sayılır
+      const stale = await capture(async () => upsertOnlineOrders([], false, Date.now() - 30_000, parsePanelCalls([first])));
+      expect(stale.events.some((e) => e.kind === 'site.call.new' || e.kind === 'site.call.done')).toBe(false);
+      expect((await alerts()).calls?.map((c) => c.id)).toEqual([second.id, third.id]);
+    } finally {
+      clock.mockRestore();
+    }
     site.tableCalls = [];
   });
 });

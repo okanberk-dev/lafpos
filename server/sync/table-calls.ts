@@ -39,7 +39,10 @@ interface CallsState {
   calls: StoredCall[];
   /** LafPOS'ta yanıtlanan çağrılar (kimlik → an): yanıttan önce istenmiş bir liste onları geri getirmesin */
   acked: Record<string, number>;
-  /** Son işlenen listenin istendiği an: ondan önce istenmiş (ağda gecikmiş) liste yenisini ezmez */
+  /**
+   * Son işlenen listenin istendiği an: ondan önce istenmiş (ağda gecikmiş) liste yenisini ezmez. İleride görünüyorsa
+   * (bilgisayarın saati geri alındı) bekçi değildir: sonraki liste işlenir, damga bugünün saatine döner
+   */
   requestedAt: number;
 }
 
@@ -105,8 +108,10 @@ export function applyTableCalls(
   const now = Date.now();
   const prev = readState(t);
   const asked = Math.min(requestedAt, now);
-  // Bu liste daha yeni bir çekimin listesinden önce istendi: eskidir, sonraki çekim geçerli
-  if (asked < prev.requestedAt) return { added: 0, removed: 0 };
+  // Bu liste daha yeni bir çekimin listesinden önce istendi: eskidir, sonraki çekim geçerli. Saklanan damga ileride
+  // görünüyorsa bilgisayarın saati geri alındı (Windows saat eşitlemesi): liste işlenir, damga bugünün saatine döner;
+  // yoksa saat yetişene dek (yeniden başlatmada da) hiçbir liste işlenmezdi (siparişlerin `changedSince` kuralı)
+  if (asked < prev.requestedAt && prev.requestedAt <= now) return { added: 0, removed: 0 };
   const acked: Record<string, number> = {};
   for (const [id, at] of Object.entries(prev.acked)) if (now - at < TABLE_CALL_OPEN_MS + FUTURE_SKEW_MS) acked[id] = at;
   const before = new Map(prev.calls.map((c) => [c.id, c]));

@@ -8,6 +8,9 @@ import {
   type AlertPrefs,
   alertPerms,
   callsTitle,
+  notYetDue,
+  onlineAckKey,
+  onlineAckKeys,
   onlineRingActive,
   parseAcks,
   parseAlertPrefs,
@@ -53,6 +56,38 @@ describe('online sipariş: kuyruk', () => {
     expect(pendingOnline(planned, {}, prefs(), ALL, NOW).map((o) => o.orderId)).toEqual(['p']);
     expect(pendingOnline(planned, {}, prefs(), ALL, NOW + 4 * 3600_000)).toEqual([]);
     expect(pendingOnline({ online: [order({ orderId: 'p', openedAt: NOW - 30 * 3600_000 })] }, {}, prefs(), ALL, NOW)).toEqual([]);
+  });
+
+  it('acked before dueAt rings at dueAt: planlı sipariş saati gelmeden çalmaz, saatinden önce denen Gördüm saatini susturmaz', () => {
+    const due = NOW + 2 * 3600_000;
+    const p = order({ orderId: 'p', openedAt: NOW - 60_000, dueAt: due, scheduledFor: new Date(due + 30 * 60_000).toISOString() });
+    const data = { online: [p] };
+    // Saati gelmedi: çalmaz, Gördüm yazılmaz (aşaması ya da masası değişse, ekranda açılsa da)
+    expect(notYetDue(p, NOW)).toBe(true);
+    expect(pendingOnline(data, {}, prefs(), ALL, NOW)).toEqual([]);
+    expect(onlineAckKeys(data.online, ['p'], NOW)).toEqual([]);
+    // Saatinden önce denen Gördüm: eski istemci ödeme anında çalar, yalnız kimlikle yazardı
+    const early = addAcks({}, ['p', ...onlineAckKeys(data.online, ['p'], NOW)], NOW);
+    expect(early).toEqual({ p: NOW });
+    expect(pendingOnline(data, early, prefs(), ALL, due - 1)).toEqual([]);
+    expect(pendingOnline(data, early, prefs(), ALL, due).map((o) => o.orderId)).toEqual(['p']);
+    // Saatinde denen Gördüm susturur (anahtar saatiyle)
+    expect(onlineAckKeys(data.online, ['p'], due)).toEqual([`p@${due}`]);
+    const seen = addAcks(early, onlineAckKeys(data.online, ['p'], due), due);
+    expect(pendingOnline(data, seen, prefs(), ALL, due + 60_000)).toEqual([]);
+    // Saati sitede değişti: yeni saatinde yine çalar
+    const moved = { online: [{ ...p, dueAt: due + 3600_000 }] };
+    expect(pendingOnline(moved, seen, prefs(), ALL, due + 60_000)).toEqual([]);
+    expect(pendingOnline(moved, seen, prefs(), ALL, due + 3600_000).map((o) => o.orderId)).toEqual(['p']);
+  });
+
+  it('planlı olmayan sipariş cihazın saati biraz geride olsa da hemen çalar; Gördüm kimlikle, listede olmayan kimlik olduğu gibi', () => {
+    const n = order({ orderId: 'n', openedAt: NOW + 5_000, dueAt: NOW + 5_000 });
+    expect(notYetDue(n, NOW)).toBe(false);
+    expect(onlineAckKey(n)).toBe('n');
+    expect(pendingOnline({ online: [n] }, {}, prefs(), ALL, NOW).map((o) => o.orderId)).toEqual(['n']);
+    expect(onlineAckKeys([n], ['n', 'yok'], NOW)).toEqual(['n', 'yok']);
+    expect(pendingOnline({ online: [n] }, addAcks({}, onlineAckKeys([n], ['n'], NOW), NOW), prefs(), ALL, NOW)).toEqual([]);
   });
 
   it('Gördüm 24 saat hatırlanır; bozuk kayıt düşer', () => {
