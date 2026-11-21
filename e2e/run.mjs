@@ -6,8 +6,9 @@
  *    ekranda 44 px'ten küçük hedef arar; her ekranın görüntüsünü e2e/out/ altına kaydeder.
  * 2. Akışlar: e2e/flows.mjs (telefonda sipariş, ödeme, yönetimde düzenleme).
  * 3. Tarayıcı demosu: e2e/demo.mjs (dist/web/demo; tarama, PIN'siz akışlar, iki sekme).
+ * 4. LafPOS Uzaktan: e2e/uzaktan.mjs (Vercel derlemesi; patron paneli, raporlar ve İndir, girişten önce ve sonra).
  *
- * Seçenekler: --only=tarama|akis|demo  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu,/raporlar#urunler
+ * Seçenekler: --only=tarama|akis|demo|uzaktan  --viewports=telefon,tablet  --roles=patron  --routes=/yonetim/menu,/raporlar#urunler
  *             --targets=warn (küçük hedefleri yalnız raporla)
  * Sorun varsa çıkış kodu 1'dir.
  */
@@ -15,6 +16,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { runDemo } from './demo.mjs';
 import { runFlows } from './flows.mjs';
+import { runRemote } from './uzaktan.mjs';
 import { apiClient, launchBrowser, openContext, overflowReport, ROOT, seedFloor, settle, smallTargets, startServer, VIEWPORTS } from './lib.mjs';
 
 const args = Object.fromEntries(
@@ -316,6 +318,12 @@ try {
       const failed = results.filter((r) => !r.ok).length;
       console.log(`Demo: ${results.length - failed}/${results.length} geçti`);
       if (failed) exitCode = 1;
+    }
+    if (!args.only || args.only === 'uzaktan') {
+      const { failures, pages } = await runRemote(browser);
+      for (const f of failures) console.log(`  HATA   ${f}`);
+      console.log(`Uzaktan: ${pages} ekran, ${failures.length} sorun`);
+      if (failures.length) exitCode = 1;
     }
   } finally {
     await browser.close();

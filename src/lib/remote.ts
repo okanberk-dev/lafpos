@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { get } from './api';
+import { DOWNLOAD_NAV, DOWNLOAD_PATH } from './download';
+import type { NavItem } from './nav';
 
 /**
  * LafPOS Uzaktan: Vercel'deki salt okunur görünüm (vercel.json derlemede VITE_LAFPOS_UZAKTAN=1 verir). Veri kafedeki
@@ -7,8 +9,17 @@ import { get } from './api';
  */
 export const REMOTE = import.meta.env.VITE_LAFPOS_UZAKTAN === '1' && import.meta.env.MODE !== 'demo';
 
-/** Uzakta görünen ekranlar */
-export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar'];
+/** Uzakta görünen ekranlar; İndir (siteden kurulum) yalnız uzakta ve yalnız oturumda */
+export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar', DOWNLOAD_PATH];
+
+/**
+ * Uzaktan görünümün menüsü: kişinin menüsünden uzakta açılan ekranlar, sonunda İndir (yetki istemez, oturum yeter).
+ * Kasada menü aynen kalır
+ */
+export function remoteNav(items: NavItem[], remote = REMOTE): NavItem[] {
+  if (!remote) return items;
+  return [...items.filter((n) => REMOTE_PATHS.includes(n.to)), DOWNLOAD_NAV];
+}
 
 /**
  * Uzakta açılan rapor sekmeleri: günlük özetlerden toplananlar (api/uzaktan.ts). Hazırlama, adisyon listesi, paket
@@ -42,6 +53,8 @@ export interface RemoteSetup {
   demo?: boolean;
   /** Parolasız görünüm (LAFPOS_UZAKTAN_PAROLA_GEREKLI yoksa): gerçek veri de parola sormadan açılır */
   open?: boolean;
+  /** Üyelik açık (LAFPOS_UYE_EPOSTA): 'new' üye ilk girişte parolasını belirler, 'ready' e-posta ve parolayla girer */
+  member?: 'new' | 'ready';
 }
 
 export const remoteSetupQuery = { queryKey: ['uzaktan', 'kurulum'], queryFn: () => get<RemoteSetup>('/uzaktan/kurulum') };
@@ -51,8 +64,9 @@ export function remoteSetupReady(s: RemoteSetup): boolean {
   return s.secret && s.password && s.redis;
 }
 
-/** Giriş ekranı parola sormadan girer mi: demo ya da kurulumu tamam parolasız görünüm */
+/** Giriş ekranı parola sormadan girer mi: demo ya da kurulumu tamam parolasız görünüm; üyelik açıksa hiç (form görünür) */
 export function remoteAutoEnters(s: RemoteSetup): boolean {
+  if (s.member) return false;
   return !!s.demo || (!!s.open && remoteSetupReady(s));
 }
 

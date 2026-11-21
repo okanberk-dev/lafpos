@@ -9,6 +9,7 @@ import { ErrorState, Notice, PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
+import { DOWNLOAD_PATH } from './lib/download';
 import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
 import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from './lib/remote';
@@ -32,6 +33,8 @@ const PatronPage = lazy(() => import('./pages/patron/PatronPage'));
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
 const PickupBoardPage = lazy(() => import('./pages/PickupBoardPage'));
 const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
+const DownloadPage = lazy(() => import('./pages/DownloadPage'));
+const StandaloneDownloadPage = lazy(() => import('./pages/DownloadPage').then((m) => ({ default: m.StandaloneDownloadPage })));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
   const can = useCan();
@@ -63,16 +66,24 @@ function Authed() {
   }, [qc]);
 
   if (boot.isLoading) return <PageLoading label="LafPOS açılıyor…" />;
+  // Uzaktan görünümde kafe henüz bağlanmadıysa (özet yok) üye doğrudan İndir'i görür: program buradan kurulur, kafe
+  // bağlanınca canlı görünüm kendiliğinden açılır. İndir adresi başka bir açılış hatasında da kabuksuz açılır
+  const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
+  if (REMOTE && (boot.isError || !boot.data) && (noSnapshot || location.pathname === DOWNLOAD_PATH)) {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <StandaloneDownloadPage waiting={noSnapshot} retrying={boot.isFetching} onRetry={() => void boot.refetch()} />
+      </Suspense>
+    );
+  }
   if (boot.isError || !boot.data) {
-    // Uzaktan görünümde giriş çalışır ama kafeden özet gelmemiş olabilir: ağ değil, kasa kurulumu söylenir
-    const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
     return (
       <div className="grid h-full place-items-center p-6">
         {/* Tam ekran durum: büyük boy, Yeniden dene ve Çıkış aynı boyda. Uzaktan giriş parola sormadan giriyorsa Çıkış
             yok: aynı oturum hemen yeniden açılıp bu ekrana dönerdi, Yeniden dene yeter */}
         <ErrorState
           large
-          title={noSnapshot ? 'Kafeden henüz veri gelmedi' : 'Sunucuya bağlanılamadı'}
+          title="Sunucuya bağlanılamadı"
           error={boot.error}
           onRetry={() => void boot.refetch()}
           retrying={boot.isFetching}
@@ -84,11 +95,7 @@ function Authed() {
             )
           }
         >
-          {noSnapshot
-            ? 'Giriş çalışıyor. Kafedeki kasa bilgisayarında LafPOS 0.2.0 açılıp uzaktan erişim satırları ayarlara girilince canlı görünüm birkaç saniyede başlar'
-            : REMOTE
-              ? errorMessage(boot.error)
-              : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
+          {REMOTE ? errorMessage(boot.error) : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
         </ErrorState>
       </div>
     );
@@ -132,6 +139,8 @@ function Authed() {
           <Route path="/rezervasyon" element={<Guard perm="rezervasyon.yonet"><ReservationsPage /></Guard>} />
           <Route path="/raporlar/*" element={<Guard perm="rapor.gor"><ReportsPage /></Guard>} />
           <Route path="/patron" element={<Guard perm="patron.panel"><PatronPage /></Guard>} />
+          {/* Siteden kurulum: yalnız LafPOS Uzaktan'da ve girişten sonra (kasada program zaten kurulu) */}
+          {REMOTE && <Route path={DOWNLOAD_PATH} element={<DownloadPage />} />}
           {/* Bölümlerden birini açabilen girer (patron paneli Denetim kaydına, raporcu Genel bakışa); bölümün izni AdminPage'de */}
           <Route path="/yonetim/*" element={<Guard perm={ADMIN_ROUTE_PERMS}><AdminPage /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />

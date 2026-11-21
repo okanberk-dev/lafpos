@@ -149,7 +149,8 @@ describe('güncelleme: arşiv ve kanal', () => {
     try {
       mkdirSync(join(dir, 'build/Release'), { recursive: true });
       writeFileSync(join(dir, 'build/Release/better_sqlite3.node'), Buffer.from('MZikili'));
-      execFileSync('tar', ['-czf', join(dir, 'x.tgz'), '-C', dir, 'build/Release/better_sqlite3.node']);
+      // macOS'un tar'ı genişletilmiş öznitelikleri ayrı "._" girdisi yazar; gerçek arşiv Linux'ta üretilir
+      execFileSync('tar', ['-czf', join(dir, 'x.tgz'), '-C', dir, 'build/Release/better_sqlite3.node'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
       const entries = readTarGz(readFileSync(join(dir, 'x.tgz')));
       expect(entries.map((e: any) => e.name)).toEqual(['build/Release/better_sqlite3.node']);
       expect(entries[0].data.toString()).toBe('MZikili');

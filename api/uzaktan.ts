@@ -11,7 +11,7 @@
  * Kendi içinde: Vercel her dosyayı ayrı derler, göreli içe aktarma çalışma anında kırılabilir. İmza kuralı
  * server/lib/signature.ts ile aynı (tests/cloud-api.test.ts denetler). Ayrıntı: docs/07-UZAKTAN-ERISIM.md
  */
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -96,6 +96,55 @@ export function tokenValid(key: string, token: string, nowMs = Date.now()): bool
   return sameText(sig, createHmac('sha256', key).update(`uzaktan:${passwordTag()}:${exp}.${nonce}`).digest('base64url'));
 }
 
+// ─── Üyelik: e-posta ve parola ───────────────────────────────────────────────
+
+/** Üye oturumu 30 gün: patron telefonda her gün yeniden parola yazmaz; parola değişince hepsi düşer */
+const MEMBER_DAYS = 30;
+const normalizeEmail = (v: unknown) => String(v ?? '').trim().toLowerCase();
+/**
+ * Üye olabilecek e-postalar (LAFPOS_UYE_EPOSTA, virgülle). Tanımlıysa "Üye girişi" e-posta ve parolayla çalışır ve
+ * gerçek veri yalnız üyeye açılır. Parola ortam değişkeninde durmaz: üye ilk girişte kendisi belirler, Redis'te
+ * yalnız özeti (scrypt) saklanır. İlk girişte davet kodu (LAFPOS_UYE_DAVET, en az 8) istenir: e-postayı bilen
+ * başkası üyeliği sahipten önce açamaz. Kod tanımlı değilse üyelik açılmaz.
+ */
+export const memberEmails = () => [...new Set(env('LAFPOS_UYE_EPOSTA').split(',').map(normalizeEmail).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))];
+const memberKey = (email: string) => `lafpos:uye:${email}`;
+const inviteCode = () => env('LAFPOS_UYE_DAVET');
+/** Davet kodu büyük-küçük harf, boşluk ve tireye bakmadan karşılaştırılır (telefonda elle yazılır) */
+const normalizeInvite = (v: unknown) => String(v ?? '').toUpperCase().replace(/[\s-]+/g, '');
+
+export function hashPassword(password: string, salt: Buffer = randomBytes(16)): string {
+  return `s1$${salt.toString('base64url')}$${scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 }).toString('base64url')}`;
+}
+
+export function passwordMatches(stored: string, given: string): boolean {
+  const [kind, salt] = stored.split('$');
+  if (kind !== 's1' || !salt) return false;
+  return sameText(stored, hashPassword(given, Buffer.from(salt, 'base64url')));
+}
+
+/** Üye belirteci: süre.nonce~eposta.imza; imzaya parola özeti girer (parola değişince düşer) */
+const memberSig = (key: string, hash: string, body: string) =>
+  createHmac('sha256', key).update(`uye:${createHash('sha256').update(hash).digest('hex').slice(0, 16)}:${body}`).digest('base64url');
+
+export function issueMemberToken(key: string, email: string, hash: string, nowMs = Date.now()): string {
+  const exp = Math.floor(nowMs / 1000) + MEMBER_DAYS * 86400;
+  const body = `${exp}.${randomBytes(9).toString('base64url')}~${Buffer.from(email).toString('base64url')}`;
+  return `${body}.${memberSig(key, hash, body)}`;
+}
+
+/** Belirteç üye belirteciyse e-postası (imza ayrıca doğrulanır) */
+export function memberTokenEmail(token: string): string | null {
+  const mark = (token.split('.')[1] ?? '').split('~')[1];
+  return mark ? normalizeEmail(Buffer.from(mark, 'base64url').toString('utf8')) : null;
+}
+
+export function memberTokenValid(key: string, token: string, hash: string, nowMs = Date.now()): boolean {
+  const [exp, nonce, sig] = token.split('.');
+  if (!exp || !nonce || !sig || Number(exp) * 1000 < nowMs) return false;
+  return sameText(sig, memberSig(key, hash, `${exp}.${nonce}`));
+}
+
 // ─── Upstash Redis (REST) ────────────────────────────────────────────────────
 
 async function redis(...cmd: (string | number)[]): Promise<unknown> {
@@ -106,6 +155,23 @@ async function redis(...cmd: (string | number)[]): Promise<unknown> {
   const out = (await res.json()) as { result?: unknown; error?: string };
   if (!res.ok || out.error) throw new Error(out.error ?? `redis ${res.status}`);
   return out.result;
+}
+
+interface Member {
+  /** Parolanın özeti (hashPassword) */
+  h: string;
+  at: number;
+}
+
+/** Üye kaydı; oturum denetiminde bir dakika bellekte tutulur (sayfa 10 sn'de bir yenilenir, her istekte Redis'e gidilmez) */
+const memberCache = new Map<string, { at: number; value: Member | null }>();
+async function member(email: string, fresh = false): Promise<Member | null> {
+  const hit = memberCache.get(email);
+  if (!fresh && hit && Date.now() - hit.at < 60_000) return hit.value;
+  const raw = (await redis('GET', memberKey(email))) as string | null;
+  const value = raw ? (JSON.parse(raw) as Member) : null;
+  memberCache.set(email, { at: Date.now(), value });
+  return value;
 }
 
 async function snapshot(): Promise<Snapshot | null> {
@@ -854,14 +920,18 @@ const ME = {
 async function handle(req: Request): Promise<Response> {
   const url = originalUrl(req.url);
   const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/+$/, '');
+  const members = memberEmails();
+  const memberMode = members.length > 0;
   // Kurulum durumu (giriş ekranı gösterir): yalnız var/yok, hiçbir değer dönmez; anahtar olmadan da açıktır
   if (path === 'uzaktan/kurulum') {
     const redisSet = !!((env('KV_REST_API_URL') || env('UPSTASH_REDIS_REST_URL')) && (env('KV_REST_API_TOKEN') || env('UPSTASH_REDIS_REST_TOKEN')));
     let snapshotAt: number | null = null;
     let redisOk = false;
+    let memberExists = false;
     if (redisSet) {
       try {
         snapshotAt = (await snapshot())?.at ?? null;
+        for (const e of members) memberExists ||= !!(await member(e, true));
         redisOk = true;
       } catch {
         redisOk = false;
@@ -869,11 +939,13 @@ async function handle(req: Request): Promise<Response> {
     }
     return json({
       secret: secret().length >= 32,
-      password: !passwordRequired() || env('LAFPOS_UZAKTAN_PAROLA').length >= 10,
+      password: memberMode || !passwordRequired() || env('LAFPOS_UZAKTAN_PAROLA').length >= 10,
       redis: redisOk,
       snapshotAt,
       demo: demoAllowed() && snapshotAt == null,
-      open: !passwordRequired(),
+      open: !memberMode && !passwordRequired(),
+      // Üyelik açıksa: 'new' ilk giriş (üye parolasını belirler), 'ready' e-posta ve parolayla giriş
+      ...(memberMode ? { member: memberExists ? 'ready' : 'new' } : {}),
       yemeksepeti: !!env('YEMEKSEPETI_PLUGIN_SECRET'),
       getir: !!getirKey(),
     });
@@ -882,10 +954,14 @@ async function handle(req: Request): Promise<Response> {
   if (path.startsWith('yemeksepeti/')) return yemeksepeti(req, url, path);
   if (path.startsWith('getir/')) return getir(req, url, path);
   // Kafe bağlanmadıysa demo: anahtar ve parola gerekmez, yalnız örnek gün açılır (kafe itmesi aşağıda, anahtarla)
-  if (path !== 'uzaktan/push' && demoAllowed() && !(await realSnapshot())) {
+  const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const loginPost = req.method === 'POST' && (path === 'uzaktan/giris' || path === 'uzaktan/uye');
+  const login = loginPost ? ((await req.json().catch(() => ({}))) as { eposta?: unknown; parola?: unknown; davet?: unknown }) : null;
+  // Üyelik açıkken üyenin girişi ve oturumu demoya düşmez (kafe bağlanmadan da girer: İndir sayfası için)
+  const memberRequest = memberMode && (path === 'uzaktan/uye' || !!login?.eposta || memberTokenEmail(auth) != null);
+  if (path !== 'uzaktan/push' && !memberRequest && demoAllowed() && !(await realSnapshot())) {
     if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now() });
     if (path === 'uzaktan/giris' && req.method === 'POST') return json({ token: issueToken(demoKey()), me: ME, demo: true });
-    const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
     if (!tokenValid(demoKey(), auth)) return fail(401, 'Oturum kapalı. Yeniden girin', 'unauthorized');
     if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
     const demoSnap = demoNow();
@@ -921,6 +997,43 @@ async function handle(req: Request): Promise<Response> {
     return storeReports(body);
   }
 
+  // Üyelik: ilk girişte üye parolasını belirler (yalnız izinli e-posta, yalnız bir kez), sonra e-posta ve parola
+  if (memberMode && login) {
+    const ip = (req.headers.get('x-forwarded-for') ?? 'yok').split(',')[0]!.trim();
+    const key = `lafpos:giris:${ip}`;
+    const tries = Number(await redis('INCR', key));
+    if (tries === 1) await redis('EXPIRE', key, 900);
+    if (tries > LOGIN_LIMIT) return fail(429, 'Çok fazla deneme; 15 dakika sonra yeniden deneyin', 'rate_limited');
+    const email = normalizeEmail(login.eposta);
+    const password = String(login.parola ?? '');
+    if (!email || !password) return fail(400, 'E-posta ve parolayı girin', 'bad_body');
+    if (path === 'uzaktan/uye') {
+      const invite = normalizeInvite(inviteCode());
+      if (invite.length < 8) return fail(503, 'Üyelik davet kodu tanımlı değil (LAFPOS_UYE_DAVET)', 'not_configured');
+      const given = createHash('sha256').update(normalizeInvite(login.davet)).digest('hex');
+      // E-posta ve kod birlikte denetlenir: yanıt hangisinin yanlış olduğunu söylemez
+      if (!sameText(given, createHash('sha256').update(invite).digest('hex')) || !members.includes(email)) return fail(403, 'E-posta ya da davet kodu yanlış', 'not_allowed');
+      if (password.length < 10 || password.length > 200) return fail(400, 'Parola en az 10 karakter olmalı', 'weak_password');
+      const record: Member = { h: hashPassword(password), at: Date.now() };
+      if ((await redis('SET', memberKey(email), JSON.stringify(record), 'NX')) !== 'OK') return fail(409, 'Bu üyelik zaten açılmış; e-posta ve parolanızla girin', 'member_exists');
+      memberCache.delete(email);
+      await redis('DEL', key);
+      return json({ token: issueMemberToken(secret(), email, record.h), me: ME });
+    }
+    const record = members.includes(email) ? await member(email, true) : null;
+    // Üye yokken de özet hesaplanır: yanıt süresi e-postanın kayıtlı olup olmadığını söylemez
+    if (!passwordMatches(record?.h ?? hashPassword('yok', Buffer.alloc(16)), password) || !record) return fail(401, 'E-posta ya da parola yanlış', 'bad_password');
+    await redis('DEL', key);
+    return json({ token: issueMemberToken(secret(), email, record.h), me: ME });
+  }
+  if (memberMode) {
+    const email = memberTokenEmail(auth);
+    const record = email && members.includes(email) ? await member(email) : null;
+    if (!record || !memberTokenValid(secret(), auth, record.h)) return fail(401, 'Oturum kapalı. E-posta ve parolanızla yeniden girin', 'unauthorized');
+    if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
+    return (await serveReports(path, url, null)) ?? serve(await snapshot(), path, url, false);
+  }
+
   // Parolasız görünüm (varsayılan): giriş parola sormadan salt okunur oturum açar
   if (path === 'uzaktan/giris' && req.method === 'POST' && !passwordRequired()) return json({ token: issueToken(secret()), me: ME });
 
@@ -933,7 +1046,7 @@ async function handle(req: Request): Promise<Response> {
     const tries = Number(await redis('INCR', key));
     if (tries === 1) await redis('EXPIRE', key, 900);
     if (tries > LOGIN_LIMIT) return fail(429, 'Çok fazla deneme; 15 dakika sonra yeniden deneyin', 'rate_limited');
-    const given = String(((await req.json().catch(() => ({}))) as { parola?: unknown }).parola ?? '');
+    const given = String(login?.parola ?? '');
     if (!sameText(createHash('sha256').update(given).digest('hex'), createHash('sha256').update(password).digest('hex'))) {
       return fail(401, 'Parola yanlış', 'bad_password');
     }
@@ -941,7 +1054,6 @@ async function handle(req: Request): Promise<Response> {
     return json({ token: issueToken(secret()), me: ME });
   }
 
-  const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
   if (!tokenValid(secret(), auth)) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
   if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
   return (await serveReports(path, url, null)) ?? serve(await snapshot(), path, url, false);
