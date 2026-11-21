@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect } from 'react';
-import { Button } from './components/ui/Button';
-import { Navigate, Route, Routes, useLocation } from 'react-router';
+import { Button, buttonClass } from './components/ui/Button';
+import { Link, Navigate, Route, Routes, useLocation } from 'react-router';
 import type { Permission } from '@shared/permissions';
 import { AppShell } from './components/AppShell';
 import { ADMIN_ROUTE_PERMS } from './components/admin/sections';
@@ -9,6 +9,7 @@ import { ErrorState, Notice, PageLoading } from './components/ui/misc';
 import { ApiError, errorMessage } from './lib/api';
 import { useAuth, useCan } from './lib/auth';
 import { useBootQuery } from './lib/boot';
+import { DOWNLOAD_PATH } from './lib/download';
 import { useHomePath } from './lib/serviceMode';
 import { onLive, startLive, stopLive } from './lib/live';
 import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from './lib/remote';
@@ -32,6 +33,8 @@ const PatronPage = lazy(() => import('./pages/patron/PatronPage'));
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
 const PickupBoardPage = lazy(() => import('./pages/PickupBoardPage'));
 const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
+const DownloadPage = lazy(() => import('./pages/DownloadPage'));
+const StandaloneDownloadPage = lazy(() => import('./pages/DownloadPage').then((m) => ({ default: m.StandaloneDownloadPage })));
 
 function Guard({ perm, children }: { perm: Permission | Permission[]; children: React.ReactNode }) {
   const can = useCan();
@@ -63,6 +66,14 @@ function Authed() {
   }, [qc]);
 
   if (boot.isLoading) return <PageLoading label="LafPOS açılıyor…" />;
+  // Uzaktan İndir kafeden veri beklemez: program henüz kurulmadıysa özet de yoktur (kabuksuz aynı sayfa)
+  if (REMOTE && location.pathname === DOWNLOAD_PATH && (boot.isError || !boot.data)) {
+    return (
+      <Suspense fallback={<PageLoading />}>
+        <StandaloneDownloadPage />
+      </Suspense>
+    );
+  }
   if (boot.isError || !boot.data) {
     // Uzaktan görünümde giriş çalışır ama kafeden özet gelmemiş olabilir: ağ değil, kasa kurulumu söylenir
     const noSnapshot = REMOTE && boot.error instanceof ApiError && boot.error.code === 'no_snapshot';
@@ -77,15 +88,23 @@ function Authed() {
           onRetry={() => void boot.refetch()}
           retrying={boot.isFetching}
           action={
-            remoteSignOut && (
-              <Button size="md" variant="ghost" onClick={() => void useAuth.getState().logout()}>
-                Çıkış
-              </Button>
-            )
+            <>
+              {/* Program henüz kurulmadıysa özet de yoktur: indirme sayfası buradan açılır */}
+              {noSnapshot && (
+                <Link to={DOWNLOAD_PATH} className={buttonClass('secondary', 'md')}>
+                  Programı indir
+                </Link>
+              )}
+              {remoteSignOut && (
+                <Button size="md" variant="ghost" onClick={() => void useAuth.getState().logout()}>
+                  Çıkış
+                </Button>
+              )}
+            </>
           }
         >
           {noSnapshot
-            ? 'Giriş çalışıyor. Kafedeki kasa bilgisayarında LafPOS 0.2.0 açılıp uzaktan erişim satırları ayarlara girilince canlı görünüm birkaç saniyede başlar'
+            ? 'Giriş çalışıyor. Kafedeki kasa bilgisayarında LafPOS açılıp uzaktan erişim satırları ayarlara girilince canlı görünüm birkaç saniyede başlar'
             : REMOTE
               ? errorMessage(boot.error)
               : 'Kafedeki LafPOS bilgisayarının açık ve aynı ağda olduğundan emin olun'}
@@ -132,6 +151,8 @@ function Authed() {
           <Route path="/rezervasyon" element={<Guard perm="rezervasyon.yonet"><ReservationsPage /></Guard>} />
           <Route path="/raporlar/*" element={<Guard perm="rapor.gor"><ReportsPage /></Guard>} />
           <Route path="/patron" element={<Guard perm="patron.panel"><PatronPage /></Guard>} />
+          {/* Siteden kurulum: yalnız LafPOS Uzaktan'da ve girişten sonra (kasada program zaten kurulu) */}
+          {REMOTE && <Route path={DOWNLOAD_PATH} element={<DownloadPage />} />}
           {/* Bölümlerden birini açabilen girer (patron paneli Denetim kaydına, raporcu Genel bakışa); bölümün izni AdminPage'de */}
           <Route path="/yonetim/*" element={<Guard perm={ADMIN_ROUTE_PERMS}><AdminPage /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />

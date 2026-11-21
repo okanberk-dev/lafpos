@@ -14,7 +14,8 @@ import { navFor } from '@/lib/nav';
 import { useBarEnabled, useServiceMode } from '@/lib/serviceMode';
 import { fold, useShell } from '@/lib/shell';
 import { resolveDark } from '@/lib/bootDark';
-import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
+import { DOWNLOAD_NAV } from '@/lib/download';
+import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { setBarTheme, useTheme } from '@/lib/theme';
 import { confirmLeave } from '@/lib/unsavedGuard';
 import { visibleSections } from './admin/sections';
@@ -90,8 +91,8 @@ function Palette({ onClose }: { onClose: () => void }) {
   const entries = useMemo<Entry[]>(() => {
     const out: Entry[] = [];
     // Paletten her ekran bulunur (self serviste kullanılmayan Masalar da); uzaktan görünümde yalnız oradaki ekranlar
-    for (const n of navFor(mode, { tablesInUse: true, bar })) {
-      if (n.to === '/yonetim' || !n.perms.some((p) => can(p)) || (REMOTE && !REMOTE_PATHS.includes(n.to))) continue;
+    for (const n of remoteNav(navFor(mode, { tablesInUse: true, bar }))) {
+      if (n.to === '/yonetim' || (n !== DOWNLOAD_NAV && !n.perms.some((p) => can(p)))) continue;
       out.push({ id: `ekran:${n.to}`, group: 'Ekranlar', label: n.title, icon: <n.icon />, keywords: n.keywords, run: go(n.to) });
     }
     // Bölümün açıklaması satırda yazılmaz (dar satırda yarım kalırdı), aramada bulunur ("süt" Seçenekler'i bulur)

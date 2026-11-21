@@ -25,7 +25,7 @@ import { SiteInbox } from './SiteInbox';
 import { AlertSoundGroup, DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
-import { REMOTE, REMOTE_PATHS, useRemoteSignOut } from '@/lib/remote';
+import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { TopTabsSlot } from './shellSlots';
 
 function useClock() {
@@ -111,7 +111,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const tablesInUse = useTablesInUse(mode);
   // Bar ekranı ayardan kapalıysa Bar menüde yok (Yönetim › Ayarlar › "Bar ekranı ve Bara gönder")
   const bar = useBarEnabled();
-  const items = visibleNav(can, mode, { tablesInUse, bar }).filter((n) => !REMOTE || REMOTE_PATHS.includes(n.to));
+  const items = remoteNav(visibleNav(can, mode, { tablesInUse, bar }));
   const { tabs, more } = phoneTabs(items);
   const isAt = (to: string) => location.pathname === to || location.pathname.startsWith(`${to}/`);
   // Menüde olmayan ekranın menüdeki yeri (navAlias): adisyon açıkken geldiği ekran (Masalar, Tezgâh satışı ya da

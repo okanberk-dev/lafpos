@@ -46,7 +46,10 @@ function SetupChecklist({ s }: { s: RemoteSetup }) {
   );
 }
 
-/** Uzaktan giriş: patron parolası (Vercel'de LAFPOS_UZAKTAN_PAROLA). PIN'ler kafedeki kasada kalır */
+/**
+ * Uzaktan giriş (sitenin "Üye girişi"): patron parolası (Vercel'de LAFPOS_UZAKTAN_PAROLA). PIN'ler kafedeki kasada kalır.
+ * İndirme bağlantısı burada yok, yalnız girişten sonra (İndir)
+ */
 export function RemoteLoginPage() {
   const init = useAuth((s) => s.init);
   const [password, setPassword] = useState('');
@@ -103,8 +106,10 @@ export function RemoteLoginPage() {
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6">
       <form onSubmit={submit} noValidate className="w-full max-w-sm rounded-3xl border border-line bg-surface p-6 shadow-[var(--shadow-card)]">
         <LafTile size="lg" />
-        <h1 className="mt-4 text-xl font-bold sm:text-[22px]">LafPOS Uzaktan</h1>
-        <p className="mt-1 text-pretty text-sm text-muted">Kafenin canlı durumu: patron paneli, masalar ve bar. Yalnız görüntülenir; işlemler kafedeki kasadan yapılır</p>
+        {/* Sitenin üye girişi: girişten sonra canlı görünüm ve İndir (Windows programı) açılır */}
+        <p className="mt-4 text-sm font-semibold text-muted">LafPOS Uzaktan</p>
+        <h1 className="mt-0.5 text-xl font-bold sm:text-[22px]">Üye girişi</h1>
+        <p className="mt-1 text-pretty text-sm text-muted">Kafenin canlı durumu (patron paneli, masalar, bar, raporlar) ve Windows programının indirilmesi. Yalnız görüntülenir; işlemler kafedeki kasadan yapılır</p>
         {setup.isError && (
           <Notice tone="danger" role="alert" className="mt-4">
             Bağlantı kurulamadı; internet bağlantısını kontrol edip sayfayı yenileyin

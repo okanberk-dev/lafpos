@@ -35,6 +35,27 @@
       ]
     },
     {
+      "source": "/guncelleme/LafPOS-Kur.cmd",
+      "headers": [
+        {
+          "key": "cache-control",
+          "value": "public, max-age=0, must-revalidate"
+        },
+        {
+          "key": "content-type",
+          "value": "application/octet-stream"
+        },
+        {
+          "key": "content-disposition",
+          "value": "attachment; filename=\"LafPOS-Kur.cmd\""
+        },
+        {
+          "key": "x-content-type-options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
       "source": "/guncelleme/(.*)\\.zip",
       "headers": [
         {
