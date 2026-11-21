@@ -296,6 +296,20 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Telefonda patron: deneme şeridindeki "Denemeyi bitir" gün açıkken önce gün sonunu ister, hiçbir şey silinmez',
+      () =>
+        withPage(ctx, 'telefon', 'patron', async (page) => {
+          await go(ctx, page, '/yonetim/genel');
+          const before = await api.call('patron', 'GET', '/admin/deneme');
+          assert(before.deneme && before.dayOpen, 'e2e kurulumu deneme modunda ve gün açık olmalı');
+          await page.getByRole('note').getByRole('button', { name: 'Denemeyi bitir', exact: true }).click();
+          await page.getByText('Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin', { exact: true }).waitFor({ timeout: 8000 });
+          assert((await page.getByRole('dialog', { name: 'Gerçek kullanıma başla' }).count()) === 0, 'gün açıkken bitirme penceresi açıldı');
+          const after = await api.call('patron', 'GET', '/admin/deneme');
+          assert(after.deneme && after.liveSince == null && after.counts.orders === before.counts.orders, 'deneme kayıtları değişti');
+        }),
+    ],
+    [
       'Bilgisayarda patron: Bağlantı bilgileri’nde lafmaliyet adresini ve anahtarını kaydeder; anahtar ekrana geri gelmez',
       () =>
         withPage(ctx, 'bilgisayar', 'patron', async (page) => {

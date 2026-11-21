@@ -147,7 +147,9 @@ simülatöründe, her ekranın üstünde "Deneme modu: yapılan satışlar gerç
 eğitim günüdür, lafmaliyet'e gitmez. Kafede her şey gönül rahatlığıyla denenir (satış, ödeme, iptal, gün sonu,
 tabletler, yazıcı).
 
-Deneme bitince patron: Yönetim › Ayarlar ve yedek › Deneme modu › **Denemeyi bitir, gerçek kullanıma başla**.
+Deneme bitince patron: her ekranın üstündeki deneme şeridinde **Denemeyi bitir** (yalnız patrona görünür; gün açıksa
+önce gün sonunu ister) ya da Yönetim › Ayarlar ve yedek › Deneme modu › **Denemeyi bitir, gerçek kullanıma başla**;
+ikisi aynı pencereyi açar.
 Yalnız patron görür ve çalıştırır; kendi PIN'iyle onaylar. Açık gün varken (önce gün sonu) ve deneme dışında kapanmış
 gerçek gün varken çalışmaz. Sırasıyla:
 

@@ -90,8 +90,8 @@ Dosya açmanız gerekmez; isterseniz Başlat › LafPOS › LafPOS ayarları ayn
 
 **5. Deneyin, sonra gerçek kullanıma başlayın.** LafPOS ilk açılışta **deneme modundadır**: sahte satış ya da
 müşteri yoktur, giriş ekranında örnek PIN'ler durur, her ekranın üstünde "Deneme modu: yapılan satışlar gerçek
-sayılmaz" yazar; deneme satışları hiçbir yere gitmez. Kafede her şeyi deneyin. Bitince gün sonunu alın ve Yönetim ›
-Ayarlar ve yedek › **Denemeyi bitir, gerçek kullanıma başla**'ya basın (yalnız patron): önce yedek alınır, deneme
+sayılmaz" yazar; deneme satışları hiçbir yere gitmez. Kafede her şeyi deneyin. Bitince gün sonunu alın ve ekranın üstündeki deneme şeridinde
+**Denemeyi bitir**'e basın (ya da Yönetim › Ayarlar ve yedek › Denemeyi bitir, gerçek kullanıma başla; yalnız patron): önce yedek alınır, deneme
 kayıtları silinir, menü, personel, masalar ve ayarlar kalır; patron PIN'inizi değiştirirsiniz. Ayrıntı
 [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §2 "İlk açılış".
 

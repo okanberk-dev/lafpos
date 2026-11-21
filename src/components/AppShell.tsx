@@ -1,5 +1,5 @@
 import { ChevronDown, Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, SlidersHorizontal, WifiOff } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
@@ -29,6 +29,10 @@ import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
 import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { TopTabsSlot } from './shellSlots';
+import { Button } from './ui/Button';
+
+/** "Denemeyi bitir" penceresi yalnız patron basınca yüklenir (yönetim kodu kasa ekranının paketine girmez) */
+const DenemeFinish = lazy(() => import('./admin/DenemeCard').then((m) => ({ default: m.DenemeFinishLauncher })));
 
 function useClock() {
   const [now, setNow] = useState(Date.now());
@@ -74,6 +78,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const boot = useBoot();
   const can = useCan();
   const me = useAuth((s) => s.me)!;
+  const [finishing, setFinishing] = useState(false);
+  const closeFinish = useCallback(() => setFinishing(false), []);
   const logout = useAuth((s) => s.logout);
   const live = useLive((s) => s.status);
   const { theme, setTheme } = useTheme();
@@ -371,9 +377,23 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
        * Tarayıcı demosunda yok (demo şeridi zaten var)
        */}
       {!DEMO && boot.integrations.deneme && (
-        <p role="note" className="shrink-0 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border">
-          Deneme modu: yapılan satışlar gerçek sayılmaz
-        </p>
+        <div
+          role="note"
+          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border"
+        >
+          <span>Deneme modu: yapılan satışlar gerçek sayılmaz</span>
+          {/* Çıkış patronun: yedek alınır, deneme kayıtları silinir, PIN'le onaylanır (Ayarlar ve yedek'teki kartla aynı pencere) */}
+          {me.role === 'patron' && (
+            <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
+              Denemeyi bitir
+            </Button>
+          )}
+        </div>
+      )}
+      {finishing && (
+        <Suspense fallback={null}>
+          <DenemeFinish onClose={closeFinish} />
+        </Suspense>
       )}
       <LicenseStrip />
       {notice && <div className="shrink-0">{notice}</div>}
