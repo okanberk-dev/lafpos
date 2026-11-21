@@ -93,6 +93,17 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const [moreOpen, setMoreOpen] = useState(false);
   // Üst çubuğun ortası: ekranın sekmeleri buraya taşınır (Stage)
   const [tabsSlot, setTabsSlot] = useState<HTMLElement | null>(null);
+  // Üst çubuk yalnız ekranın sekmeleri (Masalar'ın bölümleri, Siparişler, Kasa) varken görünür; boşken kaldırılır ve
+  // içerik yukarı yayılır (sahibin isteği, 21 Kas 2026). Durum, arama ve marka o zaman marka rayında
+  const [hasTabs, setHasTabs] = useState(false);
+  useEffect(() => {
+    if (!tabsSlot) return;
+    const sync = () => setHasTabs(tabsSlot.childElementCount > 0);
+    sync();
+    const mo = new MutationObserver(sync);
+    mo.observe(tabsSlot, { childList: true });
+    return () => mo.disconnect();
+  }, [tabsSlot]);
   // Ekran değişince gezinme sayfaları kapanır: kaydedilmemiş değişiklik koruması bağlantının tıklamasını yakalayıp
   // onaydan sonra kendisi gezdiğinde bağlantının onClick'i (sayfayı kapat) çalışmamış olur
   useEffect(() => {
@@ -315,7 +326,12 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
        * İskelet (operatör, 20 Kas 2026: "belli bir iskelet, çerçevelerle ayrım"): üst çubuk, ray ve içerik zeminde
        * --shell-gap (12 px) aralıklı çerçeveli bloklar. Üst çubuk beyaz, ince kenarlı ve köşe 18 (--r-card)
        */}
-      <header className="relative z-30 mx-[var(--shell-gap)] mt-[var(--shell-gap)] hidden h-16 shrink-0 items-center gap-3 rounded-[var(--r-card)] border border-line bg-surface px-3 shadow-[var(--shadow-control)] md:flex lg:gap-4">
+      <header
+        className={cn(
+          'relative z-30 mx-[var(--shell-gap)] mt-[var(--shell-gap)] hidden h-16 shrink-0 items-center gap-3 rounded-[var(--r-card)] border border-line bg-surface px-3 shadow-[var(--shadow-control)] lg:gap-4',
+          hasTabs && 'md:flex',
+        )}
+      >
         <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="flex shrink-0 items-center gap-2.5 rounded-[10px] md:w-[5.25rem] lg:w-auto lg:min-w-[6.25rem]">
           <LafTile size="md" />
           <span className="hidden font-headline text-xl font-bold leading-none tracking-[-0.035em] text-[var(--admin-primary)] lg:inline">L’Affogato</span>
@@ -413,6 +429,39 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
             ))}
           </div>
           <div className="lp-rail-foot">
+            {/*
+             * Üst çubuk yokken durum rayın dibinde tek satırda: nokta ve saat (gün kapalıyken "Kapalı"; dokununca kasa),
+             * genişte yanında arama (Ctrl K da açar). İnternet sorunu varsa rozeti üstünde. Ray kısa kalsın diye öğe değil satır
+             */}
+            {!hasTabs && (
+              <>
+                <span className="flex justify-center empty:hidden">
+                  <InternetBadge compact />
+                </span>
+                <div className="flex items-center gap-1">
+                  {canKasa && !REMOTE ? (
+                    <NavLink
+                      to="/kasa"
+                      title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`}
+                      aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`}
+                      className="lp-rail-item min-h-11 flex-1 flex-row gap-1.5 px-1"
+                    >
+                      {healthDot}
+                      <span className="tabular text-xs">{live === 'kopuk' ? 'Koptu' : boot.day ? fmtTime(now) : 'Kapalı'}</span>
+                    </NavLink>
+                  ) : (
+                    <span role="status" title={liveLabel} className="lp-rail-item min-h-11 flex-1 cursor-default flex-row gap-1.5 px-1">
+                      {healthDot}
+                      <span className="tabular text-xs">{REMOTE ? 'Uzaktan' : live === 'kopuk' ? 'Koptu' : fmtTime(now)}</span>
+                      <span className="sr-only">, {liveLabel}</span>
+                    </span>
+                  )}
+                  <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="lp-rail-item hidden size-9 min-h-0 shrink-0 p-0 lg:flex pointer-coarse:hidden">
+                    <Search aria-hidden="true" className="size-[18px]" />
+                  </button>
+                </div>
+              </>
+            )}
             <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} title="Araçlar: tema, tam ekran, kilit" className="lp-rail-item">
               <span aria-hidden="true" className="lp-rail-icon">
                 <SlidersHorizontal />

@@ -8,7 +8,7 @@
 // çıkar ve görevin başlatıcısı (baslat.cmd) onu yeni sürümle yeniden açar.
 // Veri klasörü: LAFPOS_HOME, yoksa C:\ProgramData\LafPOS. Ayrıntı: docs/05-KASA-BILGISAYARI.md
 import { spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
 import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -245,6 +245,23 @@ function takeRequest() {
 watchFile(REQUEST_FILE, { interval: 2000 }, (cur) => {
   if (cur.mtimeMs) takeRequest();
 });
+
+/**
+ * Kasa kısayolu (LafPOS-Kasa.bat) kurulum klasöründe durur, güncelleme yalnız app\'i değiştirir: yeni sürümün kısayolu
+ * farklıysa yerine konur. Kısayol Chrome'u açıp hemen çıkar (baslat.cmd gibi sürekli çalışmaz), değiştirmek güvenli
+ */
+function syncLauncher() {
+  const src = join(APP, 'LafPOS-Kasa.bat');
+  const dst = join(INSTALL_DIR, 'LafPOS-Kasa.bat');
+  try {
+    if (!existsSync(src) || !existsSync(dst) || readFileSync(src).equals(readFileSync(dst))) return;
+    copyFileSync(src, dst);
+    log('[bekçi] kasa kısayolu yeni sürümle değişti');
+  } catch (e) {
+    log(`[bekçi] kasa kısayolu değiştirilemedi: ${e instanceof Error ? e.message : e}`);
+  }
+}
+if (process.env.LAFPOS_GUNCELLEME_DENEME !== '1') syncLauncher();
 
 log(`[bekçi] LafPOS başlıyor (Node ${process.versions.node}, veri: ${HOME})`);
 start();

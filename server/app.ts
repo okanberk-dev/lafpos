@@ -22,6 +22,8 @@ import { getOpenDay } from './services/orders';
 import { merkezTarget } from './sync/merkez';
 import { db } from './db/client';
 import { installedVersion, isLoopback } from './lib/surum';
+import { getSettings, setSyncState } from './lib/settings';
+import { parsePrinters, pickReceiptPrinter, PRINTERS_KEY } from './lib/yazici';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -53,6 +55,21 @@ export function createApp() {
     if (!isLoopback(clientKey(c))) return c.json({ error: 'Yalnız bu bilgisayardan', code: 'forbidden' }, 403);
     // Merkez'in hedefi: güncelleyici yalnız bu derlemeye kadar kurar (Merkez kapalıysa kanalın son sürümü)
     return c.json({ dayOpen: !!getOpenDay(db), merkez: merkezTarget() });
+  });
+
+  // Kasa kısayolunun yazıcı betiği (app\kasa-yazici.ps1, oturumdaki kullanıcı): bilgisayardaki yazıcıları bildirir, yanıtta
+  // varsayılan yapılacak fiş yazıcısının adı. Oturumsuz; yalnız bu bilgisayardan (lib/yazici.ts)
+  app.post('/api/kasa/yazicilar', async (c) => {
+    if (!isLoopback(clientKey(c))) return c.json({ error: 'Yalnız bu bilgisayardan', code: 'forbidden' }, 403);
+    let raw: unknown = null;
+    try {
+      raw = await c.req.json();
+    } catch {
+      raw = null;
+    }
+    const printers = parsePrinters((raw as { printers?: unknown } | null)?.printers ?? raw);
+    setSyncState(PRINTERS_KEY, { at: Date.now(), printers });
+    return c.json({ name: pickReceiptPrinter(printers, getSettings().receiptPrinter).name });
   });
 
   // Ürün kartındaki görselin küçük kopyası. /api dışında: tarayıcı önbelleğe alır, <img> oturum taşımaz;

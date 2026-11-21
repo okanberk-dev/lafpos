@@ -15,6 +15,7 @@ import { type AppEnv, assertNotLocked, type AuthUser, can, clearFailures, client
 import { checkFinish, denemeStatus, finishDeneme, isSamplePin, isSamplePinHash } from '../services/deneme';
 import { installedVersion, pendingUpdateRequest, readUpdateStatus, writeUpdateRequest } from '../lib/surum';
 import { connectionView, settingsFile, writeEnvEdits } from '../lib/ayar-dosyasi';
+import { pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from '../lib/yazici';
 import { checkConnValue, connField } from '@shared/baglanti';
 import { Effects } from '../lib/effects';
 import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
@@ -26,7 +27,7 @@ import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
-import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
+import { getSettings, getSyncState, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { CUSTOMER_DISPLAY_THEMES } from '@shared/types';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
 import { settingLabel } from '@shared/settings-labels';
@@ -960,6 +961,7 @@ const settingsShape = patchOf(
     odenmezReasons: z.array(z.string().max(40)).max(12),
     zayiReasons: z.array(z.string().max(40)).max(12),
     discountReasons: z.array(z.string().max(40)).max(12),
+    discountPresetPct: z.number().int().min(0).max(100),
     quickCash: z.array(kurus).max(8),
     sizeLabels: z.object({ M: z.string().max(12), L: z.string().max(12) }),
     requireDayOpen: z.boolean(),
@@ -1244,6 +1246,35 @@ adminRoutes.post('/bulut-yedek/geri-yukle', async (c) => {
   fx.flush();
   restartForRestore();
   return c.json({ ok: true });
+});
+
+// ─── Fiş yazıcısı (lib/yazici.ts): kasa betiğinin bildirdiği Windows yazıcıları, seçilen ve kullanılan ────────────
+
+function printerView() {
+  const seen = getSyncState<{ at: number; printers: WinPrinter[] }>(PRINTERS_KEY);
+  const chosen = getSettings().receiptPrinter;
+  const pick = pickReceiptPrinter(seen?.printers ?? [], chosen);
+  return { reportedAt: seen?.at ?? null, printers: seen?.printers ?? [], chosen, effective: pick.name, auto: pick.auto };
+}
+
+adminRoutes.get('/yazici', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json(printerView());
+});
+
+/** Fiş yazıcısını seçer (null: kendiliğinden); kasa ekranı bir sonraki açılışta onu varsayılan yapar */
+adminRoutes.put('/yazici', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  const input = await body(c, z.object({ name: z.string().trim().min(1).max(200).nullable() }));
+  const fx = new Effects();
+  tx((t) => {
+    updateSettings({ receiptPrinter: input.name }, t);
+    fx.audit(t, { userId: user.id, action: 'ayar.yazici', message: input.name ? `Fiş yazıcısı: ${input.name}` : 'Fiş yazıcısı kendiliğinden seçilecek' });
+    fx.emit({ topic: 'settings', kind: 'ayar.yazici', message: 'Fiş yazıcısı değişti', byUserId: user.id });
+  });
+  fx.flush();
+  return c.json(printerView());
 });
 
 // ─── Bağlantı bilgileri: ayarlar dosyasındaki dış sistem adresleri ve anahtarları (lib/ayar-dosyasi.ts) ──────────

@@ -111,7 +111,10 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   üst çubuk: solda L'Af karosu ve ev yeşilinde "L'Affogato" (geniş ekranda), **ortada ekranın sekmeleri** (sayfanın
   `Stage menu`'sü buraya taşınır: Masalar'ın bölümleri, Siparişler'in görünümleri, Kasa'nın günleri; panonun ortalı
   sekmeleri, seçili açık nane zeminde yeşil), sağda durum (canlı nokta, saat, Z; dokununca kasa; kopunca kırmızı, gün
-  kapalıyken amber hap), arama (⌘K) ve kişinin düğmesi (avatar ve aşağı ok; kişinin menüsünü açar). Altında solda
+  kapalıyken amber hap), arama (⌘K) ve kişinin düğmesi (avatar ve aşağı ok; kişinin menüsünü açar). **Üst çubuk yalnız
+  ekranın sekmeleri varken görünür** (sahibin isteği, 21 Kas 2026): sekmesiz ekranda (yönetim, raporlar, patron) kalkar,
+  içerik yukarı yayılır; durum (nokta ve saat, dokununca kasa), internet rozeti ve genişte arama rayın dibinde tek satırda,
+  kişinin menüsü raydaki Araçlar'da. Altında solda
   **marka rayı** (`.lp-rail`, 84 / 100 px, köşe 22, ev yeşilinin degradesi): her ekran ikon üstte kısa ad altta
   (`NavItem.label`), satır 56 px; seçili ekran beyaz karoda, ikonu açık nane karede yeşil, adı yeşil ve kalın (panonun
   seçili rayı); menüde olmayan ekranın yeri de seçili görünür (adisyonun geldiği ekran, Eğitim cihazında Kasa;

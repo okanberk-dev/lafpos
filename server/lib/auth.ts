@@ -322,7 +322,7 @@ export function resolveToken(token: string): AuthUser | null {
 }
 
 /** Oturumsuz uçlar */
-const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health', '/api/kasa/guncelleme-durumu'];
+const PUBLIC_PATHS = ['/api/auth/login', '/api/auth/users', '/api/health', '/api/kasa/guncelleme-durumu', '/api/kasa/yazicilar'];
 
 export const authMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {
   const path = c.req.path;

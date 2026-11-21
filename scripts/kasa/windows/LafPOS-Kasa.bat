@@ -6,6 +6,9 @@ if "%LAFPOS_URL%"=="" set "LAFPOS_URL=http://localhost:4000/"
 rem Sunucu acilana dek bekle (en cok 90 sn); bilgisayar yeni acildiysa sunucu birkac saniye gec gelir.
 rem Denetim 127.0.0.1'e: sunucu IPv4 dinler, Windows'ta localhost once IPv6 (::1) denenip her seferinde ~2 sn kaybettirir
 powershell -NoProfile -Command "$u=($env:LAFPOS_URL -replace '//localhost','//127.0.0.1')+'api/health'; for($i=0;$i -lt 90;$i++){ try { if((Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 $u).StatusCode -eq 200){ exit 0 } } catch {}; Start-Sleep 1 }"
+rem Fis yazicisi: bilgisayardaki yazicilari LafPOS'a bildirir, secilen (ya da tek) fis yazicisini varsayilan yapar;
+rem sessiz yazdirma ona basar. Betik guncellemeyle gelir (app\); yoksa ya da hata verirse kasa yine acilir
+if exist "%~dp0app\kasa-yazici.ps1" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1"
 set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"

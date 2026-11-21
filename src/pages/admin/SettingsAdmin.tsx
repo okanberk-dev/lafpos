@@ -12,6 +12,7 @@ import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/comp
 import { DenemeCard } from '@/components/admin/DenemeCard';
 import { CloudBackupCard } from '@/components/admin/CloudBackupCard';
 import { UpdateCard } from '@/components/admin/UpdateCard';
+import { PrinterCard } from '@/components/admin/PrinterCard';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -37,6 +38,7 @@ type Settings = Record<string, unknown> & {
   odenmezReasons: string[];
   zayiReasons: string[];
   discountReasons: string[];
+  discountPresetPct: number;
   quickCash: number[];
   sizeLabels: { M: string; L: string };
   requireDayOpen: boolean;
@@ -586,8 +588,11 @@ export default function SettingsAdmin() {
           <Field label="Zayi" hint="ör. döküldü, yanlış hazırlandı">
             <LinesTextarea value={s.zayiReasons} format={lines} parse={fromLines} onChange={(zayiReasons) => set({ zayiReasons })} className={LIST_AREA} />
           </Field>
-          <Field label="İndirim">
+          <Field label="İndirim" hint="nedene dokununca hazır yüzde yazılır">
             <LinesTextarea value={s.discountReasons} format={lines} parse={fromLines} onChange={(discountReasons) => set({ discountReasons })} className={LIST_AREA} />
+          </Field>
+          <Field label="Hazır indirim yüzdesi" hint="0 yazılırsa yüzde elle girilir">
+            <NumberInput commitOnChange value={s.discountPresetPct} min={0} max={100} fallback={0} onCommit={(discountPresetPct) => set({ discountPresetPct })} />
           </Field>
         </div>
       </Card>
@@ -646,6 +651,7 @@ export default function SettingsAdmin() {
           )}
         </div>
       </Card>
+      {!REMOTE && <PrinterCard />}
       {!REMOTE && <CloudBackupCard />}
       {!REMOTE && <UpdateCard />}
       {dirty && (

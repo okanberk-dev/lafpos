@@ -24,6 +24,9 @@ Son güncelleme: 21 Kasım 2026.
 - **Bulut yedeği:** günlük şifreli yedek Vercel Blob'a (özel), buluttan geri yükleme sihirbazı (patron, PIN).
 - **Karşılama sihirbazı:** Genel bakış'ta kurulum adımları.
 - **Fiyat işareti:** sitede değişen fiyat, online sipariş ve karaoke kapalıyken de gün açıkken hemen eşitlenir.
+- **Fiş yazıcısı kendiliğinden** (kablolu/USB): kasa kısayolu yazıcıları bildirir, tek fiş yazıcısını varsayılan yapar;
+  Yönetim › Ayarlar ve yedek › Fiş yazıcısı (`docs/05-KASA-BILGISAYARI.md` §3). İndirim nedenleri Öğrenci ve Çalışan,
+  dokununca %15. Sekmesiz ekranda üst çubuk yok (`DESIGN.md` Kabuk).
 - **Her şey programın içinden:** Pavo'nun adresi ve seri no'su Yönetim › Yazarkasa POS'tan (ağda arama, kaydedince
   hemen eşleştirme; `docs/04-YAZARKASA.md` §8.1); lafmaliyet, Uzaktan, site, Token ve paket platformu anahtarları
   Yönetim › Bağlantı bilgileri'nden (hazır satırları yapıştırma da; `docs/05-KASA-BILGISAYARI.md` §2); "Şimdi
@@ -39,6 +42,8 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
   birkaç saniyede yeniden başlattığı ve ekranın "yeni bilgilerle açıldı" dediği.
 - **Pavo:** Yönetim › Yazarkasa POS › Pavo › "Cihazı ağda ara" (ya da IP), seri no, Kaydet, Eşleştir; küçük bir
   deneme satışı ve "Cihazın son yanıtları". Ağda aramanın gerçek N86'yı bulduğu ilk kurulumda görülür.
+- **Fiş yazıcısı:** yazıcı USB ile takılı ve sürücüsü kurulu; kasa ekranını kapatıp açınca Ayarlar ve yedek › Fiş
+  yazıcısı'nda listelenmeli ve "Fiş buradan" yazmalı; "Deneme fişi yazdır" kasa bilgisayarında basılınca kâğıt çıkmalı.
 - **Şimdi güncelle:** bu sürümden sonraki ilk yayında Ayarlar ve yedek › Sürüm ve güncelleme › "Şimdi güncelle";
   gün kapalıyken bir dakika içinde kurulup "Yeni sürüm kuruldu · Yenile" demeli.
 - **Denemeyi bitir:** gün sonu, sonra Yönetim › Ayarlar ve yedek › Denemeyi bitir; yedeğin

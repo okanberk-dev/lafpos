@@ -199,6 +199,8 @@ export interface PublicSettings {
   /** Zayi gerekçeleri (döküldü, yanlış hazırlandı, bozuk; ciro dışı, ayrı raporlanır) */
   zayiReasons: string[];
   discountReasons: string[];
+  /** Hazır indirim nedenine dokununca yazılan yüzde (adisyon ve kalem indirimi); 0: kapalı, yüzde elle */
+  discountPresetPct: number;
   quickCash: number[];
   sizeLabels: { M: string; L: string };
   requireDayOpen: boolean;

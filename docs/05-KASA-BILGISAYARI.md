@@ -221,9 +221,18 @@ Windows'ta Chrome yoksa aynı bayraklarla Edge açılır (`--kiosk <adres> --edg
 | `--autoplay-policy=no-user-gesture-required` | Bar ve sipariş zil sesi ilk dokunuşu beklemeden çalar |
 | `--no-first-run`, `--disable-session-crashed-bubble`, `--noerrdialogs` | Elektrik kesintisinden sonra "geri yükle" balonu çıkmaz |
 
-**İlk yazdırmadan önce bir kez:** Chrome'u kiosksuz açıp (`chrome --user-data-dir=…\LafPOS\chrome`) bir fişi
-yazdırın ve fiş yazıcısını seçin. Chrome kiosk modunda "son kullanılan" yazıcıya basabilir; böylece o fiş
-yazıcısı olur. Yazdırma önizlemesini kapatan Chrome ayarını açmayın: kiosk yazdırma önizlemeyle çalışır.
+**Fiş yazıcısı (kablolu/USB, kendiliğinden):** yazıcıyı USB ile takın; Windows sürücüsünü kurar (kurmazsa
+üreticinin sürücüsü). Kasa kısayolu Chrome'u açmadan önce `app\kasa-yazici.ps1`'i oturumdaki kullanıcı olarak çalıştırır:
+bilgisayardaki yazıcıları LafPOS'a bildirir (`POST /api/kasa/yazicilar`, oturumsuz, yalnız bu bilgisayardan) ve
+LafPOS'un söylediği yazıcıyı o kullanıcının **varsayılan yazıcısı** yapar ("varsayılan yazıcıyı Windows yönetsin"
+kapanır); `--kiosk-printing` fişi, Z'yi ve X'i önizlemesiz ona basar. Hangi yazıcı: Yönetim › Ayarlar ve yedek › **Fiş
+yazıcısı**'nda seçilen; seçilmediyse PDF, XPS, OneNote ve faks dışındaki tek yazıcı, birden çoksa adından fiş yazıcısı
+olduğu anlaşılan tek yazıcı (`server/lib/yazici.ts`, testi `tests/yazici.test.ts`). Kart yazıcıları ve son bildirimi
+gösterir; "Bunu kullan" seçer, "Deneme fişi yazdır" kasa bilgisayarında basılınca seçili yazıcıdan çıkar. Seçim kasa
+ekranının bir sonraki açılışında geçer (Alt+F4, masaüstünde LafPOS Kasa). Betik hata verirse sessizce çıkar, kasa yine
+açılır. Kısayol (`LafPOS-Kasa.bat`) ve betik güncellemeyle gelir: betik `app\`'te, kısayolun yenisini bekçi açılışta
+kurulum klasörüne koyar (kısayol Chrome'u açıp hemen çıktığı için çalışırken değişmez). Chrome bir yazıcıya elle
+basıldıysa "son kullanılan"ı hatırlayabilir: yazdırma önizlemesini kapatan Chrome ayarını açmayın.
 
 Kiosktan çıkmak: **Alt+F4** (macOS'ta Cmd+Q). Personelin bunu kullanmaması için Windows'ta ayrı bir standart
 kullanıcı hesabı önerilir.
