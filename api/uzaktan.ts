@@ -15,6 +15,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import type { RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
 
 const SNAPSHOT_KEY = 'lafpos:snapshot';
 const TOKEN_HOURS = 12;
@@ -454,6 +455,391 @@ async function realSnapshot(): Promise<Snapshot | null> {
   }
 }
 
+// ─── Raporlar: kasanın günlük özetlerinden (server/sync/cloud-reports.ts) ────
+
+/**
+ * Kasa her iş gününün rapor özetini iter (`POST /api/uzaktan/rapor`, imzalı, gzip); gün başına bir anahtar, süresi
+ * günün kendisinden 420 gün (EXAT). Raporlar sayfasının uçları (`reports/summary`, `hourly`, `products`, `staff`)
+ * dönemin günlerini toplar; kural kasadaki server/services/reports.ts ile aynı (tests/uzaktan-raporlar.test.ts iki
+ * tarafı aynı veriyle karşılaştırır). Dükkân kimliği anahtarın parçası: Merkez gelince `default` yerine dükkân
+ */
+export const REPORT_SHOP = 'default';
+export const REPORT_MAX_DAYS = 400;
+const REPORT_KEEP_DAYS = 420;
+const REPORT_PUSH_MAX_DAYS = 31;
+const REPORT_DAY_MAX_BYTES = 256 * 1024;
+const MGET_CHUNK = 60;
+const ROLLOVER_HOUR = 5;
+export const reportDayKey = (shop: string, date: string) => `lafpos:rapor:${shop}:gun:${date}`;
+export const reportMetaKey = (shop: string) => `lafpos:rapor:${shop}:son`;
+
+type DayRep = RemoteDayReport;
+type Range = { from: string; to: string };
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export function isCalendarDate(s: string): boolean {
+  if (!DATE_RE.test(s)) return false;
+  const [y, m, d] = s.split('-').map(Number) as [number, number, number];
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return y >= 1000 && t.getUTCFullYear() === y && t.getUTCMonth() === m - 1 && t.getUTCDate() === d;
+}
+export function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+const dayStartMs = (date: string) => {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return Date.UTC(y, m - 1, d, ROLLOVER_HOUR - 3, 0, 0);
+};
+const dayCount = (r: Range) => Math.round((Date.parse(`${r.to}T00:00:00Z`) - Date.parse(`${r.from}T00:00:00Z`)) / 86400_000) + 1;
+const datesOf = (r: Range) => Array.from({ length: Math.max(0, dayCount(r)) }, (_, i) => addDays(r.from, i));
+/** İstanbul'un iş günü (sabit UTC+3, 05:00 kuralı) */
+export const businessDateOf = (ms: number) => new Date(ms + 3 * 3600_000 - ROLLOVER_HOUR * 3600_000).toISOString().slice(0, 10);
+const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0);
+const change = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
+
+/** server/services/reports.ts `comparison` ile aynı kural (testi iki tarafı karşılaştırır) */
+export function remoteComparison(r: Range, nowMs: number, today: string): { range: Range; label: string; cutoffMs: number | null } {
+  const len = dayCount(r);
+  const [fy, fm, fd] = r.from.split('-').map(Number) as [number, number, number];
+  let range: Range;
+  let label: string;
+  let shiftMs: number;
+  if (fd === 1 && len <= 31 && r.to.slice(0, 7) === r.from.slice(0, 7)) {
+    const prevMonthStart = new Date(Date.UTC(fy, fm - 2, 1)).toISOString().slice(0, 10);
+    const prevMonthDays = new Date(Date.UTC(fy, fm - 1, 0)).getUTCDate();
+    range = { from: prevMonthStart, to: addDays(prevMonthStart, Math.min(len, prevMonthDays) - 1) };
+    label = 'önceki ayın aynı günleri';
+    shiftMs = Date.parse(`${r.from}T00:00:00Z`) - Date.parse(`${prevMonthStart}T00:00:00Z`);
+  } else {
+    const back = Math.ceil(len / 7) * 7;
+    range = { from: addDays(r.from, -back), to: addDays(r.to, -back) };
+    label = back === 7 ? 'geçen haftanın aynı günleri' : `${back / 7} hafta önceki aynı günler`;
+    shiftMs = back * 86400_000;
+  }
+  const partial = r.to === today;
+  if (partial) label += ', aynı saate kadar';
+  return { range, label, cutoffMs: partial ? nowMs - shiftMs : null };
+}
+
+/** Günün `cutoffMs`'e kadar kapanan satışı (dakika duyarlılığıyla); cutoff yoksa bütün gün */
+export function salesUntil(d: DayRep, cutoffMs: number | null): { netSales: number; receipts: number } {
+  if (cutoffMs == null) return { netSales: d.s.rev, receipts: d.s.receipts };
+  const start = dayStartMs(d.date);
+  let netSales = 0;
+  let receipts = 0;
+  for (const [m, sales, n] of d.closes) {
+    if (start + m * 60_000 > cutoffMs) continue;
+    netSales += sales;
+    receipts += n;
+  }
+  return { netSales, receipts };
+}
+
+/** Raporlar › Ciro (`summaryReport`) günlük özetlerden. `prev`: kıyas döneminin günleri */
+export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], nowMs: number, today: string) {
+  const sum = (f: (d: DayRep) => number) => days.reduce((a, d) => a + f(d), 0);
+  const netSales = sum((d) => d.s.rev);
+  const receipts = sum((d) => d.s.receipts);
+  const pays = new Map<string, { name: string; zField: string; amount: number; count: number }>();
+  const types = new Map<string, { type: string; orders: number; amount: number }>();
+  const kdv = new Map<number, { rate: number; gross: number; base: number; kdv: number }>();
+  for (const d of days) {
+    for (const [name, zField, amount, count] of d.pay) {
+      const row = pays.get(name) ?? { name, zField, amount: 0, count: 0 };
+      row.amount += amount;
+      row.count += count;
+      pays.set(name, row);
+    }
+    for (const [type, orders, amount] of d.types) {
+      const row = types.get(type) ?? { type, orders: 0, amount: 0 };
+      row.orders += orders;
+      row.amount += amount;
+      types.set(type, row);
+    }
+    for (const [rate, gross, base, k] of d.kdv) {
+      const row = kdv.get(rate) ?? { rate, gross: 0, base: 0, kdv: 0 };
+      row.gross += gross;
+      row.base += base;
+      row.kdv += k;
+      kdv.set(rate, row);
+    }
+  }
+  const totalPaid = [...pays.values()].reduce((a, p) => a + p.amount, 0);
+  const kdvTotal = [...kdv.values()].reduce((a, k) => a + k.kdv, 0);
+  const paidClosed = sum((d) => d.s.paidClosed);
+  const guests = sum((d) => d.s.guests);
+  const tableSales = sum((d) => d.s.tableSales);
+  const cmp = remoteComparison(range, nowMs, today);
+  const prev = prevDays.map((d) => salesUntil(d, cmp.cutoffMs));
+  const prevNet = prev.reduce((a, p) => a + p.netSales, 0);
+  const prevReceipts = prev.reduce((a, p) => a + p.receipts, 0);
+  const byAmount = <T extends { amount: number }>(a: T, b: T) => b.amount - a.amount;
+  return {
+    range,
+    asOf: nowMs,
+    waterfall: { list: sum((d) => d.s.list), complimentary: sum((d) => d.s.comp), discounts: sum((d) => d.s.disc), service: sum((d) => d.s.svc), revenue: netSales, kdv: kdvTotal, netExKdv: netSales - kdvTotal },
+    kdv: [...kdv.values()].sort((a, b) => a.rate - b.rate),
+    reconciliation: { paidClosed, difference: paidClosed - netSales, paidOpen: sum((d) => d.s.paidOpen) },
+    tableSales,
+    perGuest: guests ? Math.round(tableSales / guests) : null,
+    days: sum((d) => d.n),
+    netSales,
+    gross: sum((d) => d.s.gross),
+    discounts: sum((d) => d.s.disc),
+    complimentary: sum((d) => d.s.comp),
+    odenmez: sum((d) => d.s.odenmez),
+    zayi: sum((d) => d.s.zayi),
+    voided: sum((d) => d.s.voided),
+    receipts,
+    avgCheck: receipts ? Math.round(netSales / receipts) : 0,
+    guests,
+    itemsSold: sum((d) => d.s.items),
+    tips: sum((d) => d.s.tips),
+    byDay: days.map((d) => ({ date: d.date, netSales: d.s.rev, receipts: d.s.receipts, z: d.z, closed: d.closed })),
+    payments: [...pays.values()].sort(byAmount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
+    types: [...types.values()].sort(byAmount),
+    online: { orders: sum((d) => d.s.onlineOrders), amount: sum((d) => d.s.onlineAmount) },
+    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
+  };
+}
+
+const PARTS = [
+  { key: 'sabah', label: 'Sabah', from: 6, to: 12 },
+  { key: 'ogle', label: 'Öğle', from: 12, to: 17 },
+  { key: 'aksam', label: 'Akşam', from: 17, to: 22 },
+  { key: 'gece', label: 'Gece', from: 22, to: 30 },
+];
+
+/** Raporlar › Saatlik (`hourlyReport`): tek günde gün başından geçen saat (ertesi gün sonda), çok günde 24 saat */
+export function sumHourly(range: Range, days: DayRep[]) {
+  const single = range.from === range.to;
+  const offsets = new Map<number, { revenue: number; orders: number }>();
+  for (const d of days) {
+    for (const [raw, revenue, orders] of d.hours) {
+      const off = single ? raw : raw % 24;
+      const row = offsets.get(off) ?? { revenue: 0, orders: 0 };
+      row.revenue += revenue;
+      row.orders += orders;
+      offsets.set(off, row);
+    }
+  }
+  const length = [...offsets.keys()].reduce((a, x) => Math.max(a, x + 1), 24);
+  const hours = Array.from({ length }, (_, offset) => ({ hour: (offset + ROLLOVER_HOUR) % 24, offset, nextDay: offset >= 24, revenue: offsets.get(offset)?.revenue ?? 0, orders: offsets.get(offset)?.orders ?? 0 }));
+  const total = hours.reduce((a, h) => a + h.revenue, 0);
+  const active = hours.filter((h) => h.orders > 0);
+  const weekdayOf = (date: string) => ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+  const week = Array.from({ length: 7 }, (_, i) => ({ weekday: i + 1, days: 0, hours: Array.from({ length: 24 }, () => 0) }));
+  for (const d of days) {
+    const w = week[weekdayOf(d.date) - 1]!;
+    w.days += d.n;
+    for (const [hour, v] of d.clock) w.hours[hour] = (w.hours[hour] ?? 0) + v;
+  }
+  for (const w of week) if (w.days > 1) w.hours = w.hours.map((v) => Math.round(v / w.days));
+  const parts = PARTS.map((p) => {
+    const hs = hours.filter((h) => (h.hour >= p.from && h.hour < p.to) || (p.to > 24 && h.hour < p.to - 24));
+    const revenue = hs.reduce((a, h) => a + h.revenue, 0);
+    return { key: p.key, label: p.label, revenue, orders: hs.reduce((a, h) => a + h.orders, 0), share: pct(revenue, total) };
+  });
+  return {
+    range,
+    total,
+    days: days.reduce((a, d) => a + d.n, 0),
+    hours,
+    parts,
+    busiest: active.length ? active.reduce((a, b) => (b.revenue > a.revenue ? b : a)) : null,
+    quietest: active.length ? active.reduce((a, b) => (b.revenue <= a.revenue ? b : a)) : null,
+    peaks: [...active].sort((a, b) => b.revenue - a.revenue).slice(0, 5),
+    week,
+  };
+}
+
+/** Raporlar › Ürünler (`productReport`, maliyetsiz): kategori ve personel adı en yeni günden */
+export function sumProducts(range: Range, days: DayRep[]) {
+  const rows = new Map<string, { key: string; name: string; size: string; category: string; qty: number; revenue: number; complimentary: number; voided: number }>();
+  for (const d of days) {
+    for (const [key, name, size, category, qty, revenue, comp, voided] of d.prod) {
+      const row = rows.get(key) ?? { key, name, size, category, qty: 0, revenue: 0, complimentary: 0, voided: 0 };
+      row.category = category;
+      row.qty += qty;
+      row.revenue += revenue;
+      row.complimentary += comp;
+      row.voided += voided;
+      rows.set(key, row);
+    }
+  }
+  const list = [...rows.values()].filter((r) => r.qty > 0 || r.complimentary > 0 || r.voided > 0);
+  const total = list.reduce((a, r) => a + r.revenue, 0);
+  const cats = new Map<string, { name: string; qty: number; revenue: number }>();
+  for (const r of list) {
+    const k = r.category || 'Diğer';
+    const c = cats.get(k) ?? { name: k, qty: 0, revenue: 0 };
+    c.qty += r.qty;
+    c.revenue += r.revenue;
+    cats.set(k, c);
+  }
+  return {
+    range,
+    total,
+    service: days.reduce((a, d) => a + d.s.svc, 0),
+    products: list
+      .sort((a, b) => b.revenue - a.revenue)
+      .map((r) => ({ ...r, share: pct(r.revenue, total), avgPrice: r.qty ? Math.round(r.revenue / r.qty) : 0, cost: null, margin: null })),
+    categories: [...cats.values()].sort((a, b) => b.revenue - a.revenue).map((c) => ({ ...c, share: pct(c.revenue, total) })),
+  };
+}
+
+/** Raporlar › Personel (`staffReport`) */
+export function sumStaff(range: Range, days: DayRep[]) {
+  const rows = new Map<string, { userId: string; name: string; orders: number; revenue: number; voids: number; voidValue: number; comps: number; compValue: number; discounts: number; odenmez: number; odenmezValue: number }>();
+  for (const d of days) {
+    for (const [userId, name, orders, revenue, voids, voidValue, comps, compValue, discounts, odenmez, odenmezValue] of d.staff) {
+      const r = rows.get(userId) ?? { userId, name, orders: 0, revenue: 0, voids: 0, voidValue: 0, comps: 0, compValue: 0, discounts: 0, odenmez: 0, odenmezValue: 0 };
+      r.name = name;
+      r.orders += orders;
+      r.revenue += revenue;
+      r.voids += voids;
+      r.voidValue += voidValue;
+      r.comps += comps;
+      r.compValue += compValue;
+      r.discounts += discounts;
+      r.odenmez += odenmez;
+      r.odenmezValue += odenmezValue;
+      rows.set(userId, r);
+    }
+  }
+  return { range, staff: [...rows.values()].sort((a, b) => b.revenue - a.revenue) };
+}
+
+/** İstenen dönem: kasadaki gibi (varsayılan bugün, ters verilirse çevrilir, en çok 400 gün); hatalıysa yanıt */
+export function reportRange(url: URL, today: string): Range | Response {
+  const from = url.searchParams.get('from') ?? today;
+  const to = url.searchParams.get('to') ?? today;
+  if (!isCalendarDate(from) || !isCalendarDate(to)) return fail(422, 'Tarih geçersiz', 'validation');
+  const r = from <= to ? { from, to } : { from: to, to: from };
+  if (dayCount(r) > REPORT_MAX_DAYS) return fail(422, `Rapor dönemi en çok ${REPORT_MAX_DAYS} gün olabilir; daha kısa bir aralık seçin`, 'range_too_long');
+  return r;
+}
+
+/** Dönemin günleri, Redis'ten parça parça MGET (gün yoksa atlanır; iş günü açılmamış tarih) */
+async function loadDays(shop: string, r: Range): Promise<DayRep[]> {
+  const dates = datesOf(r);
+  const out: DayRep[] = [];
+  for (let i = 0; i < dates.length; i += MGET_CHUNK) {
+    const keys = dates.slice(i, i + MGET_CHUNK).map((d) => reportDayKey(shop, d));
+    const raw = ((await redis('MGET', ...keys)) as (string | null)[] | null) ?? [];
+    for (const x of raw) {
+      if (!x) continue;
+      try {
+        out.push(JSON.parse(x) as DayRep);
+      } catch {
+        /* bozuk kayıt atlanır */
+      }
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** Gelen günün biçimi: dizi alanları ve sayılar (kasa kendi biçimini yazar; bozuk kayıt saklanmaz) */
+function validDay(d: unknown): d is DayRep {
+  if (!d || typeof d !== 'object') return false;
+  const x = d as Partial<DayRep>;
+  return (
+    x.v === 1 &&
+    typeof x.date === 'string' &&
+    isCalendarDate(x.date) &&
+    typeof x.at === 'number' &&
+    typeof x.n === 'number' &&
+    !!x.s &&
+    typeof x.s.rev === 'number' &&
+    ['pay', 'types', 'kdv', 'closes', 'prod', 'hours', 'clock', 'staff', 'z'].every((k) => Array.isArray((x as Record<string, unknown>)[k]))
+  );
+}
+
+/** Kasanın itmesi: imzalı, gzip; eski özet (aynı günün daha önce kurulmuşu) yenisini ezmez */
+async function storeReports(body: string): Promise<Response> {
+  let push: RemoteReportPush;
+  try {
+    push = JSON.parse(gunzipSync(Buffer.from((JSON.parse(body) as { gz: string }).gz, 'base64')).toString('utf8')) as RemoteReportPush;
+  } catch {
+    return fail(400, 'Rapor okunamadı', 'bad_body');
+  }
+  if (!push || push.v !== 1 || !/^[a-z0-9-]{1,40}$/.test(String(push.shop)) || !isCalendarDate(String(push.today)) || typeof push.at !== 'number' || !Array.isArray(push.days)) {
+    return fail(400, 'Rapor biçimi geçersiz', 'bad_body');
+  }
+  if (push.days.length > REPORT_PUSH_MAX_DAYS) return fail(413, 'Bir itmede en çok 31 gün', 'too_large');
+  const days = push.days.filter(validDay).filter((d) => JSON.stringify(d).length <= REPORT_DAY_MAX_BYTES);
+  const nowS = Math.floor(Date.now() / 1000);
+  const keys = days.map((d) => reportDayKey(push.shop, d.date));
+  const existing = keys.length ? (((await redis('MGET', ...keys)) as (string | null)[] | null) ?? []) : [];
+  let stored = 0;
+  for (const [i, d] of days.entries()) {
+    const expireAt = Math.floor(dayStartMs(addDays(d.date, REPORT_KEEP_DAYS)) / 1000);
+    if (expireAt <= nowS) continue;
+    const old = existing[i];
+    if (old) {
+      try {
+        if ((JSON.parse(old) as DayRep).at > d.at) continue;
+      } catch {
+        /* bozuksa üzerine yazılır */
+      }
+    }
+    await redis('SET', keys[i]!, JSON.stringify(d), 'EXAT', expireAt);
+    stored += 1;
+  }
+  const meta = (await redis('GET', reportMetaKey(push.shop))) as string | null;
+  const prevAt = meta ? ((JSON.parse(meta) as { at?: number }).at ?? 0) : 0;
+  if (push.at >= prevAt) await redis('SET', reportMetaKey(push.shop), JSON.stringify({ today: push.today, at: push.at }), 'EX', REPORT_KEEP_DAYS * 86400);
+  return json({ ok: true, stored, skipped: push.days.length - stored });
+}
+
+/** Raporlar sayfasının uçları; null: rapor yolu değil */
+async function serveReports(path: string, url: URL, demo: Snapshot | null): Promise<Response | null> {
+  const kind = /^reports\/(summary|hourly|products|staff)$/.exec(path)?.[1];
+  if (!kind) return null;
+  const meta = demo ? null : (((await redis('GET', reportMetaKey(REPORT_SHOP))) as string | null) ?? null);
+  const live = meta ? (JSON.parse(meta) as { today: string; at: number }) : null;
+  const today = demo ? String((demo.patron as { date?: string }).date ?? businessDateOf(demo.at)) : (live?.today ?? businessDateOf(Date.now()));
+  const r = reportRange(url, today);
+  if (r instanceof Response) return r;
+  const days = demo ? demoDays(demo).filter((d) => d.date >= r.from && d.date <= r.to) : await loadDays(REPORT_SHOP, r);
+  const nowMs = demo ? demo.at : (live?.at ?? Date.now());
+  if (kind === 'summary') {
+    const cmp = remoteComparison(r, nowMs, today);
+    const prev = demo ? [] : await loadDays(REPORT_SHOP, cmp.range);
+    return json(sumSummary(r, days, prev, nowMs, today));
+  }
+  if (kind === 'hourly') return json(sumHourly(r, days));
+  if (kind === 'products') return json(sumProducts(r, days));
+  return json(sumStaff(r, days));
+}
+
+/** Demo: örnek günün patron panelinden tek günlük özet (kafe bağlanınca gerçek günler) */
+function demoDays(snap: Snapshot): DayRep[] {
+  const p = snap.patron as { date?: string; netSales?: number; orders?: number; hourly?: number[]; payments?: { name: string; amount: number; count: number }[]; top?: { key: string; name: string; size: string; category: string; qty: number; revenue: number; complimentary: number; voided: number }[]; discounts?: number; complimentary?: number; voided?: number };
+  if (!p.date) return [];
+  const rev = p.netSales ?? 0;
+  return [
+    {
+      v: 1,
+      date: p.date,
+      at: snap.at,
+      n: 1,
+      closed: false,
+      z: [],
+      s: { list: rev + (p.discounts ?? 0) + (p.complimentary ?? 0), gross: rev + (p.discounts ?? 0), comp: p.complimentary ?? 0, disc: p.discounts ?? 0, svc: 0, rev, odenmez: 0, zayi: 0, voided: p.voided ?? 0, receipts: p.orders ?? 0, items: (p.top ?? []).reduce((a, x) => a + x.qty, 0), tips: 0, guests: 0, tableSales: 0, paidClosed: rev, paidOpen: 0, onlineOrders: 0, onlineAmount: 0 },
+      pay: (p.payments ?? []).map((x) => [x.name, '', x.amount, x.count]),
+      types: [],
+      kdv: [],
+      closes: [],
+      prod: (p.top ?? []).map((x) => [x.key, x.name, x.size, x.category, x.qty, x.revenue, x.complimentary, x.voided]),
+      hours: (p.hourly ?? []).flatMap((v, hour) => (v ? [[(hour - ROLLOVER_HOUR + 24) % 24, v, 0] as [number, number, number]] : [])),
+      clock: (p.hourly ?? []).flatMap((v, hour) => (v ? [[hour, v] as [number, number]] : [])),
+      staff: [],
+    },
+  ];
+}
+
 // ─── Uçlar ───────────────────────────────────────────────────────────────────
 
 const ME = {
@@ -461,7 +847,7 @@ const ME = {
   name: 'Patron (uzaktan)',
   role: 'patron',
   color: '#0c0e1b',
-  permissions: ['patron.panel', 'siparis.al', 'mutfak.ekran'],
+  permissions: ['patron.panel', 'siparis.al', 'mutfak.ekran', 'rapor.gor'],
   maxDiscountPct: 0,
 };
 
@@ -502,7 +888,8 @@ async function handle(req: Request): Promise<Response> {
     const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
     if (!tokenValid(demoKey(), auth)) return fail(401, 'Oturum kapalı. Yeniden girin', 'unauthorized');
     if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
-    return serve(demoNow(), path, url, true);
+    const demoSnap = demoNow();
+    return (await serveReports(path, url, demoSnap)) ?? serve(demoSnap, path, url, true);
   }
   if (!secret() || secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
 
@@ -524,6 +911,14 @@ async function handle(req: Request): Promise<Response> {
     if (current && typeof snap.at === 'number' && snap.at <= current.at) return json({ ok: true, stale: true });
     await redis('SET', SNAPSHOT_KEY, JSON.stringify(snap), 'EX', 7 * 86400);
     return json({ ok: true });
+  }
+
+  // Kasanın günlük rapor özetleri: imzalı
+  if (path === 'uzaktan/rapor' && req.method === 'POST') {
+    const body = await req.text();
+    if (body.length > 4_000_000) return fail(413, 'Rapor çok büyük', 'too_large');
+    if (!verifyPush(secret(), req, url, body)) return fail(401, 'İmza geçersiz', 'bad_signature');
+    return storeReports(body);
   }
 
   // Parolasız görünüm (varsayılan): giriş parola sormadan salt okunur oturum açar
@@ -549,7 +944,7 @@ async function handle(req: Request): Promise<Response> {
   const auth = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
   if (!tokenValid(secret(), auth)) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
   if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
-  return serve(await snapshot(), path, url, false);
+  return (await serveReports(path, url, null)) ?? serve(await snapshot(), path, url, false);
 }
 
 /** Salt okunur uçlar: kafeden gelen ya da demo özetinden */

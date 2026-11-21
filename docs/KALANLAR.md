@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 21 Kasım 2026 (1. madde: kod bitti, gerçek ortam denemesi kaldı).
+Son güncelleme: 21 Kasım 2026 (1. ve 3. madde: kod bitti, gerçek ortam denemesi kaldı).
 
 ## Main'de olanlar (bitti)
 
@@ -61,17 +61,19 @@ Verilen kararlar (sahip itiraz etmedi; değişirse burayı güncelle):
 
 ## 3. Uzaktan raporlar (lafpos.laffogato.net)
 
-**Durum:** başlamadı (2 ile birlikte).
+**Durum:** kod bitti (`claude/uzaktan-raporlar`, PR #58'in üstünde); gerçek Vercel ve Upstash'te henüz koşmadı.
+Ayrıntı `docs/07-UZAKTAN-ERISIM.md` §4 "Raporlar" ve "Anlık ciro". Kalanlar:
 
-Bugün Uzaktan'da yalnız bugünün patron paneli, masalar ve bar kuyruğu var; Raporlar sayfası yalnız kafedeki
-bilgisayarda. Yapılacak:
-
-- Kasa her kapanan günün ve gün boyu bugünün rapor özetini buluta gönderir: ciro, ödeme türleri, ürün ürün satış,
-  saatlik dağılım, KDV dökümü, Z, iptal, ikram, indirim, personel satışı. İlk açılışta geçmiş 400 günü yavaş yavaş
-  gönderir; internetsizken kuyrukta bekler.
-- Uzaktan'da kafedekiyle aynı Raporlar sayfası açılır (tarih aralığı seçilir); rakamlar günlük özetlerden toplanır.
-  Merkez'deki her dükkânın raporu ayrı; üstte dükkân seçilir.
-- Buluta gitmez: maliyet ve kâr (lafmaliyet'te), PIN'ler, müşteri adı ve telefonu (`docs/07-UZAKTAN-ERISIM.md` §4).
+- **Gerçek ortamda deneme:** kafede `LAFPOS_CLOUD_URL` tanımlıyken ilk açılışta tarama yaklaşık bir saatte 400
+  günü iter; Uzaktan'da Raporlar › Ciro'nun "Geçen ay"ı kafedekiyle aynı rakamı vermeli. Upstash'te
+  `lafpos:rapor:default:gun:*` anahtarları ve günlük istek sayısı (Upstash › Usage) izlenir.
+- **Merkez'deki dükkân seçici:** anahtarlar dükkân kimliğini taşır (bugün yalnız `default`); Merkez (2) gelince
+  itme kurulumun dükkân kimliğiyle yapılır, Raporlar'ın üstünde dükkân seçilir.
+- **Uzakta olmayan sekmeler:** hazırlama süresi, adisyon listesi, paket platformları, iptal ve indirim listeleri
+  (kalem kalem), happy hour, lafmaliyet aktarımı ve CSV'ler yalnız kafede. Toplamları (iptal, ikram, ödenmez, zayi,
+  indirim) Ciro ve Personel'de uzakta da var.
+- **Redis sıfırlanırsa** kasa günleri gönderilmiş sayar; günlük tarama yalnız değişen günü iter. Yeniden göndermek
+  için kasada `sync_state`'teki `cloud.reports` satırı silinir (yönetimde düğmesi yok).
 
 ## 4. Site üzerinden üyelik ve indirme
 

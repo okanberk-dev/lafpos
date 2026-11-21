@@ -10,6 +10,7 @@ import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { useLive } from '@/lib/live';
+import { REMOTE, REMOTE_PATHS } from '@/lib/remote';
 import { useHomePath } from '@/lib/serviceMode';
 import { useShell } from '@/lib/shell';
 import { ADMIN_GROUPS, type AdminSection, visibleSections } from './sections';
@@ -26,7 +27,7 @@ interface SyncStatus {
 function useCounts(): Partial<Record<AdminSection['key'], number>> {
   const boot = useBoot();
   const can = useCan();
-  const sync = useQuery({ queryKey: ['sync', 'status'], queryFn: () => get<SyncStatus>('/sync/status'), staleTime: 60_000, enabled: can('senkron.yonet') || can('ayar.yonet') });
+  const sync = useQuery({ queryKey: ['sync', 'status'], queryFn: () => get<SyncStatus>('/sync/status'), staleTime: 60_000, enabled: !REMOTE && (can('senkron.yonet') || can('ayar.yonet')) });
   const soldOut = boot.products.filter((p) => !p.active && !p.hidden).length;
   const failing = sync.data ? sync.data.lafmaliyet.failing + sync.data.online.soldOutPush.pending + sync.data.online.soldOutPush.rejected + (sync.data.menu.state?.lastError ? 1 : 0) : 0;
   return { menu: soldOut || undefined, entegrasyon: failing || undefined };
@@ -58,7 +59,8 @@ export function AdminShell({ title, children }: { title: string; children: React
   const location = useLocation();
   const counts = useCounts();
   const home = useHomePath();
-  const sections = visibleSections(can);
+  // Uzaktan görünümde yalnız uzakta açılan bölümler (Raporlar)
+  const sections = visibleSections(can).filter((s) => !REMOTE || REMOTE_PATHS.includes(s.to));
   const atIndex = location.pathname === '/yonetim' || location.pathname === '/yonetim/';
   const strip = useRail<HTMLDivElement>(location.pathname);
 
@@ -134,7 +136,7 @@ export function AdminShell({ title, children }: { title: string; children: React
     <div className="flex w-full items-center gap-0.5 border-t border-[var(--admin-border)] pt-2 max-lg:hidden">
       <Link to={home} className={cn(ROW_ICON, 'min-w-0 flex-1 justify-start gap-2.5 px-2.5 text-[13px] font-medium text-[var(--admin-text-soft)] hover:bg-hover pointer-fine:min-h-9')}>
         <ArrowLeftRight className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">Kasa ekranlarına dön</span>
+        <span className="truncate">{REMOTE ? 'Patron paneline dön' : 'Kasa ekranlarına dön'}</span>
       </Link>
       {/* Aç-kapa düğmesi: adı sabit, durumu aria-pressed ve gri zemin söyler; yalnız fareyle etkili */}
       <button

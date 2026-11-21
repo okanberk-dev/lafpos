@@ -1,17 +1,19 @@
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
-import { eq, inArray } from 'drizzle-orm';
-import type { Permission } from '@shared/permissions';
+import { desc, eq, inArray } from 'drizzle-orm';
+import { effectivePermissions, type Permission } from '@shared/permissions';
 import type { OrderDTO } from '@shared/types';
 import { db, schema } from '../db/client';
 import { env } from '../env';
 import type { AuthUser } from '../lib/auth';
 import { bus } from '../lib/events';
+import { getSettings } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
 import { floorState, kitchenTickets, pickupBoard } from '../services/floor';
 import { patronLive } from '../services/reports';
+import { startReportSync } from './cloud-reports';
 
 /**
  * LafPOS Uzaktan: kafedeki sunucu canlı özetini Vercel'deki uzaktan görünüme iter (patron paneli, salon, açık
@@ -90,6 +92,27 @@ function scrubCustomerNames<T extends { id: number; message: string }>(alerts: T
   });
 }
 
+/**
+ * Son gün sonunun kartı (uzaktan patron paneli, gün kapalıyken): Z, ciro, adisyon, ödemeler ve kasa farkı. Kasa
+ * rakamları (beklenen, sayılan, fark) yalnız patron rolü `kasa.rakam` taşıyorsa (kör kasa kuralı; patron rolü kilitli,
+ * bugün hep taşır). Maliyet ve kâr yok
+ */
+export function lastCloseCard() {
+  const day = db.select().from(schema.businessDays).orderBy(desc(schema.businessDays.closedAt)).all().find((d) => d.closedAt && d.summary);
+  if (!day?.closedAt || !day.summary) return null;
+  const s = day.summary;
+  const numbers = effectivePermissions('patron', null, getSettings().rolePermissions).has('kasa.rakam');
+  return {
+    date: day.date,
+    zNo: day.zNo,
+    closedAt: day.closedAt,
+    netSales: s.netSales,
+    receipts: s.receipts,
+    payments: s.payments.map((p) => ({ name: p.name, amount: p.amount, count: p.count })),
+    cash: numbers ? { expected: s.expectedCash, counted: s.countedCash, diff: s.cashDiff } : null,
+  };
+}
+
 export function buildSnapshot(now = Date.now()) {
   const open = db.select().from(schema.orders).where(eq(schema.orders.status, 'acik')).all();
   // Etiketlerdeki tam ad (Gel-al · Ayşe Yılmaz) yalnız ada iner
@@ -101,7 +124,7 @@ export function buildSnapshot(now = Date.now()) {
     bootstrap: bootstrap(db, VIEWER),
     patron: (() => {
       const live = patronLive(false);
-      return { ...live, alerts: scrubCustomerNames(live.alerts) };
+      return { ...live, alerts: scrubCustomerNames(live.alerts), lastClose: lastCloseCard() };
     })(),
     floor: {
       ...floor,
@@ -209,5 +232,6 @@ export function startCloudSync(): NodeJS.Timeout[] {
   bus.on('event', (e: { topic: string }) => {
     if (e.topic !== 'users') schedule();
   });
-  return [setTimeout(() => schedule(), 5_000), setInterval(() => schedule(true), HEARTBEAT_MS)];
+  // Günlük rapor özetleri (server/sync/cloud-reports.ts): kendi ritmiyle
+  return [setTimeout(() => schedule(), 5_000), setInterval(() => schedule(true), HEARTBEAT_MS), ...startReportSync()];
 }

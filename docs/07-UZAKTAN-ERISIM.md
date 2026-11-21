@@ -49,7 +49,7 @@ LafPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kaf
 ## 4. LafPOS Uzaktan (Vercel): kurulumsuz, salt okunur
 
 Telefona uygulama kurmadan, herhangi bir tarayıcıdan: `https://lafpos.vercel.app`, patron parolasıyla. Patron
-paneli, masalar, açık adisyonların kalemleri ve bar kuyruğu; işlem yapılmaz (iptal, ödeme, Tükendi kafedeki kasadan
+paneli, masalar, açık adisyonların kalemleri, bar kuyruğu ve Raporlar (aşağıda); işlem yapılmaz (iptal, ödeme, Tükendi kafedeki kasadan
 ya da Tailscale ile). Kafedeki sunucu canlı özeti (`server/sync/cloud.ts`) şu ritimle iter:
 
 - **Değişiklikte** (sipariş, ödeme, masa, bar): en sık 15 sn'de bir; aradaki değişiklikler bir sonrakine girer.
@@ -67,6 +67,28 @@ müşteri telefonları gitmez.
   birlikte hemen bir kez itilir (`server/sync/catch-up.ts`, `docs/05-KASA-BILGISAYARI.md` §6 "İnternet yokken").
   Kafede durum alanı "İnternet yok · N kayıt bekliyor", sonra "Bekleyenler gönderildi"; son başarılı itme Yönetim ›
   Genel bakış › Sistem sağlığı › LafPOS Uzaktan'da.
+- **Anlık ciro (patron paneli):** bugünün cirosu, adisyon sayısı ve ortalaması, açık masaların tahsil edilecek
+  tutarı, ödeme türleri, geçen haftanın aynı günüyle "bu saate kadar" kıyas ve saat saat grafik (bugün ve geçen
+  hafta aynı gün), uyarılar (iptal, ikram, indirim sıçraması) canlı özetten gelir: satıştan en geç ~15 sn sonra
+  itilir, sayfa 10 sn'de bir yeniler (yeni yoklama yok). Durum satırı saniyesiyle "son güncelleme 14:05:09" yazar; gün açıkken son
+  veri 10 dakikadan eskiyse (kasa nabzı 5 dk'da bir) "Kafeden veri gelmiyor" uyarısı çıkar (`remoteFreshness`,
+  `src/lib/remote.ts`). Gün kapalıyken son gün sonunun kartı: Z, ciro, adisyon, ödeme türleri ve kasa farkı (beklenen,
+  sayılan; yalnız patron rolü kasa rakamlarını görüyorsa, kör kasa kuralı). Maliyet ve kâr yok.
+- **Raporlar:** kasa her iş gününün rapor özetini ayrıca iter (`server/sync/cloud-reports.ts`,
+  `POST /api/uzaktan/rapor`): ciro ve döküm, ödeme türleri, satış türleri, KDV, ürün ürün satış (maliyetsiz), saatlik
+  dağılım, Z numaraları, iptal, ikram, ödenmez, zayi, indirim, personel satışı ve kapanışların dakikası (bugünü
+  içeren dönemin "aynı saate kadar" kıyası). Rakamlar Raporlar'ın kendi servisleriyle kurulur; Uzaktan'daki Raporlar
+  (Ciro, Ürünler, Saatlik, Personel) dönemin günlerini toplar ve kafedekiyle aynı rakamı verir
+  (`tests/uzaktan-raporlar.test.ts`). Dönem en çok 400 gün; kıyas dönemi 420 günden eskiyse boş görünür.
+  - Ritim: bugün ve dün değişiklikte en sık 5 dk'da bir (değişmeyen gün gitmez); ilk açılışta geçmiş 400 gün dakikada
+    7 günlük paketlerle (yaklaşık bir saat); sonra günde bir kez, gün kapalıyken aynı tarama yalnız sonradan değişen
+    günü (ör. eski güne ödeme iptali) iter. İnternetsizken gidemeyen gün kuyrukta bekler, durum alanında sayılır
+    ("Uzaktan raporu N gün"); internet dönünce catch-up onu bir kez gönderir.
+  - Upstash: gün başına bir anahtar `lafpos:rapor:<dükkân>:gun:<tarih>` (bugün dükkân `default`; Merkez gelince
+    dükkân kimliği), süresi günün kendisinden 420 gün (EXAT); kasanın "bugün"ü `lafpos:rapor:<dükkân>:son`. Okuma
+    parça parça MGET (60 gün). Eski özet (aynı günün önceki kuruluşu) yenisini ezmez.
+  - Buluta gitmez: maliyet ve kâr, PIN'ler, müşteri adı ve telefonu (ödenmez kişisi de), iptal ve ikram nedenleri.
+    Uzakta yalnız kafede olan sekmeler gizli, CSV yok.
 - **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki
   kasa `https://lafpos.laffogato.net/guncelleme/surum.json`'dan yeni sürümü alır (anahtarsız; ayrıntı
   `docs/05-KASA-BILGISAYARI.md` §6 "Otomatik güncelleme"). `vercel.json` `/guncelleme/*`'ı arayüz sayfasına çevirmez.
@@ -111,4 +133,4 @@ adım başlığıyla, `docs/03-ENTEGRASYON.md` §8). Anahtarlar ekrana basılmaz
 | LafPOS Uzaktan "Kafeden henüz veri gelmedi" | Kafede `LAFPOS_CLOUD_URL` ve `LAFPOS_CLOUD_SECRET`, Vercel'de aynı anahtar; Yönetim › Ağ'daki son hata |
 | LafPOS Uzaktan "Upstash Redis bağlı değil" | Vercel › lafpos › Storage'dan Upstash Redis ekleyip yeniden yayınlayın |
 
-Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, bulut `api/uzaktan.ts` ve `server/sync/cloud.ts`; testler `tests/network.test.ts`, `tests/cloud-api.test.ts`.
+Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, bulut `api/uzaktan.ts`, `server/sync/cloud.ts` ve `server/sync/cloud-reports.ts`; testler `tests/network.test.ts`, `tests/cloud-api.test.ts`, `tests/uzaktan-raporlar.test.ts`.
