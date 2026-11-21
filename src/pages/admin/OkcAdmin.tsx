@@ -26,11 +26,15 @@ interface PavoExchange {
 interface PavoEod {
   at: number;
   trigger: 'otomatik' | 'elle';
-  status: 'ok' | 'failed' | 'unknown' | 'skipped';
+  status: 'ok' | 'failed' | 'unknown' | 'running' | 'skipped';
   batchNo: string | null;
   deviceDateTime: string | null;
   grandTotalKurus: number | null;
   dayCardKurus: number | null;
+  /** Kıyas önceki gün sonundan sonraki kart ödemeleriyleyse o gün sonunun batch no'su */
+  dayCardSinceBatch?: string | null;
+  /** Aynı günün önceki başarılı gün sonları (saklı kalır) */
+  earlier: { batchNo: string | null; grandTotalKurus: number | null; at: number }[];
   acquirers: { name: string; count: number | null; totalKurus: number | null }[];
   errorCode: string | null;
   message: string | null;
@@ -148,10 +152,11 @@ LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
   );
 }
 
-const EOD_BADGE: Record<PavoEod['status'], { tone: 'success' | 'danger' | 'warning' | 'neutral'; label: string }> = {
+const EOD_BADGE: Record<PavoEod['status'], { tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral'; label: string }> = {
   ok: { tone: 'success', label: 'Alındı' },
   failed: { tone: 'danger', label: 'Alınamadı' },
   unknown: { tone: 'warning', label: 'Sonuç belirsiz' },
+  running: { tone: 'info', label: 'Sürüyor' },
   skipped: { tone: 'neutral', label: 'Atlandı' },
 };
 
@@ -231,8 +236,13 @@ function PavoEodCard({ s, onAuto, savingAuto }: { s: OkcStatus; onAuto: (v: bool
             <DefRow label="Genel toplam">{eod.amountsHidden ? <span className="font-normal text-[var(--admin-text-mute)]">Gizli</span> : <span className="tabular">{tl(eod.grandTotalKurus!)}</span>}</DefRow>
           )}
           {diff !== 0 && (
-            <DefRow label="LafPOS kart toplamı">
+            <DefRow label={eod.dayCardSinceBatch ? `LafPOS kartı (batch ${eod.dayCardSinceBatch} sonrası)` : 'LafPOS kart toplamı'}>
               <span className="tabular">{tl(eod.dayCardKurus!)}</span>
+            </DefRow>
+          )}
+          {eod.earlier.length > 0 && (
+            <DefRow label="Aynı günün önceki gün sonları">
+              <span className="tabular">{eod.earlier.map((b) => b.batchNo ?? 'batch no yok').join(', ')}</span>
             </DefRow>
           )}
         </div>
@@ -270,7 +280,7 @@ function PavoEodCard({ s, onAuto, savingAuto }: { s: OkcStatus; onAuto: (v: bool
           disabled={savingAuto}
           onChange={onAuto}
           label="Gün kapanınca cihazda gün sonu al"
-          hint="LafPOS gün sonundan hemen sonra; cihaz alamazsa ya da yanıt vermezse alarm düşer, yeniden deneme elle"
+          hint="LafPOS gün sonundan hemen sonra, gün başına bir kez; cihaz alamazsa ya da yanıt vermezse alarm düşer, yeniden deneme elle"
         />
       </div>
       <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-4 max-sm:[&>*]:grow">

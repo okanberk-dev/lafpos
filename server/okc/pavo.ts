@@ -157,12 +157,14 @@ export class PavoClient {
    * Banka gün sonu (`/PerformEOD`): cihaz bankalardaki kart işlemlerini kapatır (batch). Sürerken (en çok 3 dk)
    * `busyWith` gün sonu işaretidir, cihaz satış almaz. Özet istenir (`useSummary`); slip görüntüsü, JSON ve metin
    * istenmez (yanıt küçük kalır, kart numarası taşıyan döküm gelmez). Yanıt alınamazsa gün sonu alınmış olabilir:
-   * yeniden denemeden önce `eodCopy` ile doğrulanır.
+   * yeniden denemeden önce `eodCopy` ile doğrulanır. `before` gün sonu gönderilmeden, cihaz meşgul işaretliyken
+   * çalışır (araya satış girmez): cihazın son gün sonunu okumak, "sürüyor" kaydı. Hata atarsa gün sonu gönderilmez.
    */
-  async performEod(opts: { print?: boolean; timeoutMs?: number } = {}): Promise<PavoResponse> {
+  async performEod(opts: { print?: boolean; timeoutMs?: number; before?: () => Promise<void> | void } = {}): Promise<PavoResponse> {
     if (this.busyWith) throw new PavoError(this.busyWith === PAVO_EOD ? 'Cihazda gün sonu sürüyor' : 'Cihazda süren bir satış var; bitince gün sonu alın');
     this.busyWith = PAVO_EOD;
     try {
+      await opts.before?.();
       return await this.call(
         '/PerformEOD',
         { PerformEOD: { AdditionalInfo: { useSummary: true, print: !!opts.print, receiptImage: false, receiptWidth: '58mm', printData: { receiptJsonEnabled: false, receiptTextEnabled: false } } } },

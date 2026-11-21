@@ -33,13 +33,17 @@ export interface FakePavo {
   silent: boolean;
   /**
    * `/PerformEOD`: `ok` batch kapanır, özet döner · `fail` 5085 "Günsonu alınamadı" (batch açık kalır) · `silent` batch
-   * kapanır ama yanıt gelmez (yanıtı kaybolan gün sonu)
+   * kapanır ama yanıt gelmez (yanıtı kaybolan gün sonu) · `drop` istek işlenmez, batch açık kalır, yanıt gelmez
    */
-  eodMode: 'ok' | 'fail' | 'silent';
+  eodMode: 'ok' | 'fail' | 'silent' | 'drop';
+  /** `ok` gün sonunun yanıtı bu kadar gecikir (bankalara bağlanan cihaz) */
+  eodDelayMs: number;
   /** Kapanmış batch'ler (son gün sonu en sonda) */
   batches: { batchNo: number; dateTime: string; eodData: Record<string, unknown> }[];
   /** Açık batch'e LafPOS dışından kart işlemi (TL) */
   addCardTransaction(amount: number): void;
+  /** Cihazın kendi menüsünden gün sonu (LafPOS'a istek gelmez); `agoMs` kadar önce alınmış gibi */
+  menuEod(agoMs?: number): void;
   close(): Promise<void>;
 }
 
@@ -65,9 +69,8 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
   let open: { amount: number; at: number }[] = [];
 
   /** Pavo'nun örnek yanıtındaki biçim (kart no ve işlem dökümü dahil: LafPOS bunları saklamamalı) */
-  const closeBatch = () => {
+  const closeBatch = (now = Date.now()) => {
     const batchNo = (device.batches.at(-1)?.batchNo ?? 277) + 1;
-    const now = Date.now();
     const total = open.reduce((a, t) => a + t.amount, 0);
     const eodData = {
       isyeriSlipIsim: 'PAVO TEST',
@@ -123,9 +126,13 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
     nextSaleReply: null,
     silent: false,
     eodMode: 'ok',
+    eodDelayMs: 0,
     batches: [],
     addCardTransaction(amount) {
       open.push({ amount: Math.round(amount * 100), at: Date.now() });
+    },
+    menuEod(agoMs = 0) {
+      closeBatch(Date.now() - agoMs);
     },
     pay(orderNo, payments, doc) {
       const sale = device.sales.get(orderNo)!;
@@ -218,9 +225,12 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
     }
     if (path === '/PerformEOD') {
       if (device.eodMode === 'fail') return send(res, { HasAbondon: false, HasError: true, ErrorCode: 5085, Message: 'Günsonu alınamadı', Data: null });
+      if (device.eodMode === 'drop') return; // istek işlenmedi: gün sonu yok, yanıt yok
       const batch = closeBatch();
       if (device.eodMode === 'silent') return; // gün sonu alındı ama yanıt gelmiyor
-      return send(res, ok({ Message: null, Data: { gunSonu: 'Günsonu Tamamlandı', eodData: batch.eodData, eodJson: [], eodText: [], eodImage: '' } }));
+      const reply = ok({ Message: null, Data: { gunSonu: 'Günsonu Tamamlandı', eodData: batch.eodData, eodJson: [], eodText: [], eodImage: '' } });
+      if (device.eodDelayMs > 0) return void setTimeout(() => send(res, reply), device.eodDelayMs);
+      return send(res, reply);
     }
     if (path === '/PrintEODCopy') {
       const want = (body.EODCopy as { batchNo?: number } | undefined)?.batchNo;

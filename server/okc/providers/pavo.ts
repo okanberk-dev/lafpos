@@ -273,10 +273,44 @@ export function eodTimeMs(deviceDateTime: string | null | undefined): number | n
 }
 
 /**
+ * Gün sonu denemesinin kıyas tabanı: denemeden önceki son gün sonu. `cihaz` gün sonu gönderilmeden hemen önce
+ * cihazdan okundu (`/PrintEODCopy`) · `bos` cihazda kayıtlı gün sonu yoktu · `lafpos` cihaz son gün sonunu vermedi
+ * (uç yanıt verdi ama özet yok), LafPOS'un bildiği son batch
+ */
+export interface EodBaseline {
+  prevBatchNo: string | null;
+  prevBatchFrom: 'cihaz' | 'bos' | 'lafpos';
+}
+
+/** `/PrintEODCopy` yanıtından taban; cihaz son gün sonunu vermediyse null (çağıran LafPOS'un bildiğine düşer) */
+export function readEodBaseline(res: PavoResponse): EodBaseline | null {
+  if (res.HasError) return String(res.ErrorCode ?? '') === '5075' ? { prevBatchNo: null, prevBatchFrom: 'bos' } : null;
+  const s = eodSummary(obj(res.Data)?.eodData);
+  return s?.batchNo ? { prevBatchNo: s.batchNo, prevBatchFrom: 'cihaz' } : null;
+}
+
+/**
+ * Cihazdaki gün sonu bu denemenin sonucu olabilir mi. Cihaz saati okunabiliyorsa denemeden en çok 6 dk önce olmalı
+ * (cihaz saati dakika hassasiyetinde ve kasa bilgisayarından en çok 5 dk sapar, Pavo'nun toleransı): daha eskisi
+ * cihazın menüsünden önceden alınmıştır. Batch no denemeden önceki son batch'ten büyük olmalı; deneme öncesinde
+ * cihazda gün sonu yoktuysa her gün sonu sonradır; önceki batch bilinmiyorsa (ya da sayı değilse) cihaz saati karar verir
+ */
+export function eodAfter(device: Pick<PavoEodSummary, 'batchNo' | 'deviceDateTime'>, attempt: { at: number; prevBatchNo: string | null; prevBatchFrom?: EodBaseline['prevBatchFrom'] }): boolean {
+  const at = eodTimeMs(device.deviceDateTime);
+  if (at != null && at < attempt.at - 6 * 60_000) return false;
+  if (attempt.prevBatchFrom === 'bos') return true;
+  if (attempt.prevBatchNo && device.batchNo === attempt.prevBatchNo) return false;
+  const a = Number(device.batchNo);
+  const b = Number(attempt.prevBatchNo);
+  if (attempt.prevBatchNo && device.batchNo && Number.isFinite(a) && Number.isFinite(b)) return a > b;
+  return at != null;
+}
+
+/**
  * Bekleme süreleri (testler kısaltır). `sendWaitMs`: gönderimin ilk saniyeleri beklenir, cihaz satışı hemen
  * reddederse (KDV grubu, eşleştirme) kasiyer görür · `askEveryMs`: cihaz tek istek işler, sonuç sorgusu bekleyen
  * sepet başına en sık bu aralıkla · `eodMs`: banka gün sonunun yanıtı en çok bu kadar beklenir (bankalara bağlanır,
- * dakikalar sürebilir) · `eodCopyMs`: son gün sonunun bilgisi (doğrulama)
+ * dakikalar sürebilir) · `eodCopyMs`: son gün sonunun bilgisi (doğrulama ve gün sonundan hemen önceki taban)
  */
 export const pavoTiming = { sendWaitMs: 6_000, askEveryMs: 5_000, eodMs: 180_000, eodCopyMs: 30_000 };
 
@@ -315,7 +349,12 @@ async function pollOnce(r: PendingReceipt): Promise<PollOutcome> {
       if (reading.kind === 'paid' || reading.kind === 'cancelled') return { kind: 'result', result: reading.result };
       if (reading.kind === 'failed') {
         // Cihaz satışı hatayla bitirdi (kart reddi, kasiyer kapattı). Belge kesilip kesilmediği bir kez sorulur:
-        // kesildiyse ödendi, değilse vazgeçildi
+        // kesildiyse ödendi, değilse vazgeçildi. Cihaz meşgulse (gün sonu, en çok 3 dk; ya da başka satış) sorgu
+        // onun arkasında kuyrukta beklerdi: yanıt saklanır, sepet bekler, cihaz boşalınca sorulur
+        if (c.busyWith) {
+          outcomes.set(r.id, out);
+          return { kind: 'pending', locked: false, lockedBy: null };
+        }
         const again = await ask(c, r.id, orderNo).catch(() => null);
         return again?.kind === 'result' ? again : { kind: 'result', result: cancelledResult(out) };
       }

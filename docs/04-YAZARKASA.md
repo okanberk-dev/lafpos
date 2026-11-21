@@ -276,21 +276,35 @@ hiç bağlı olmasa da gün kapalı kalır.
 
 - **İstek** (`/PerformEOD`): `useSummary: true`, `print` (varsayılan false: slip basılmaz), `receiptImage: false`,
   `printData` kapalı (slip görüntüsü, JSON ve metin istenmez). Yanıt en çok 3 dk beklenir; süre boyunca cihaz meşgul
-  sayılır, yeni satış "Cihazda gün sonu sürüyor" diye reddedilir; bekleyen sepet sorgulanmaz, iptali 409 `okc_busy`
-  alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal say" yoluna düşmez).
+  sayılır, yeni satış "Cihazda gün sonu sürüyor" diye reddedilir; bekleyen sepet sorgulanmaz (cihaz satışı hatayla
+  bitirdiyse de belge sorgusu gün sonunun arkasında kuyruğa girmez: yanıt saklanır, gün sonu bitince sorulur), iptali
+  409 `okc_busy` alır (cihaz meşgul ama ulaşılabilir: "ulaşılamadı, LafPOS'ta iptal say" yoluna düşmez).
+- **Göndermeden önce** (cihaz meşgul işaretliyken, araya satış girmez): cihazın son gün sonu `/PrintEODCopy` ile
+  okunur (`print: false`) ve denemenin **tabanı** olur (`prevBatchNo`, `prevBatchFrom`: `cihaz`; cihazda kayıtlı gün
+  sonu yoksa `bos`; uç yanıt verip özet vermezse LafPOS'un bildiği son batch, `lafpos`). Cihaz bu soruya yanıt
+  vermezse (bağlantı, zaman aşımı) gün sonu **gönderilmez**: sonuç `failed` ("gün sonu gönderilmedi"), yeniden
+  denenebilir. Ardından "sürüyor" kaydı yazılır (`running`, yönetimde "Sürüyor"); süreç gün sonu sürerken kapanırsa
+  açılışta (`startJobs` › `recoverDeviceEod`) `unknown` olur ve alarm düşer.
 - **Ne zaman atlanır** (bilgi kaydı `okc.eod`, sonuç `skipped`): Pavo bilgileri eksik, kurulum (eğitim) modu, cihaz
   eşleştirilmemiş, cihazda süren satış var, ya da "Gün kapanınca cihazda gün sonu al" kapalı (`okcPavoAutoEod`;
-  yalnız otomatik denemede). Bağlantı Pavo değilse hiçbir şey yazılmaz (Pavo'suz kurulumda her gün sonunda kayıt
-  gürültü olurdu).
+  yalnız otomatik denemede). Otomatik denemede ayrıca: son sonuç ya da bu günün sonucu belirsiz / sürüyor ("önce
+  Doğrula", `okc_eod_unknown`), ya da bu gün için gün kapandıktan sonra cihaz gün sonu zaten alınmış
+  (`okc_eod_done`). Yeniden açılan gün aynı kimlikle kapanır: ikinci `/PerformEOD` kendiliğinden gitmez, gerekirse
+  elle alınır. Gün açıkken elle alınan gün sonu kapanışın gün sonunu engellemez (sonraki kart işlemlerini o kapatır).
+  Atlanan deneme belirsiz ya da süren sonucu ve aynı günün sonucunu ezmez. Bağlantı Pavo değilse hiçbir şey yazılmaz
+  (Pavo'suz kurulumda her gün sonunda kayıt gürültü olurdu).
 - **Sonuç** (`sync_state` `pavo.eod.<gün kimliği>` ve `pavo.eod.last`): yalnız özet. Batch no, cihaz saati
   (`gg.aa.yyyy ss:dd`), genel toplam (TL satırı, kuruş; "1.234,56 TL" `parseTL` ile), banka başına ad, işlem sayısı ve
   toplam, LafPOS günün kart toplamı (Z'nin kart alanı ve kartla alınan bahşiş). Kart numarası, işlem dökümü, işyeri
   ve vergi bilgisi, slip **saklanmaz**. Durum: `ok` alındı · `failed` cihaz alamadı (ör. 5085 "Günsonu alınamadı",
   bağlantı kurulamadı) · `unknown` istek gitti ama yanıt gelmedi (zaman aşımı, bağlantı koptu) ya da özetsiz yazıcı
-  hatası (5066-5072): gün sonu alınmış olabilir · `skipped` denenmedi. Özeti olan yanıt hata taşısa da alındı sayılır.
-- **Denetim kaydı** `okc.eod`: alındıysa bilgi; cihazın genel toplamı LafPOS gün sonunun kart toplamından farklıysa
-  uyarı (cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi); alınamadı ve
-  belirsiz alarm.
+  hatası (5066-5072): gün sonu alınmış olabilir · `running` sürüyor · `skipped` denenmedi. Özeti olan yanıt hata
+  taşısa da alındı sayılır. Bir günün başarılı gün sonları ezilmez: günün kaydı öncekileri `earlier`'da (batch no,
+  cihaz saati, toplam, deneme anı, gün kapalı mıydı) taşır.
+- **Denetim kaydı** `okc.eod`: alındıysa bilgi; cihazın genel toplamı LafPOS'un kıyas tutarından farklıysa uyarı
+  (cihazda LafPOS dışı ya da başka güne ait kart işlemi, başka cihazda alınan kart ödemesi); alınamadı ve belirsiz
+  alarm. Kıyas tutarı (`dayCardKurus`) günün ilk gün sonunda kapanmış günün kart toplamı; aynı günün sonraki gün
+  sonunda önceki gün sonundan (`dayCardSinceBatch`) sonra alınan, iade edilmemiş kart ödemeleri (bahşiş dahil).
 - **Yeniden deneme kendiliğinden yapılmaz.** Belirsiz sonucun üstüne ikinci gün sonu, bankada boş ya da yanlış batch
   açar. Yönetim › Yazarkasa POS › Gün sonu (banka):
   - **Cihazda gün sonu al** (`POST /api/okc/eod`, `kasa.gun`): onay sorulur; ayar kapalı olsa da çalışır. Son
@@ -300,8 +314,11 @@ hiç bağlı olmasa da gün kapalı kalır.
     aşar, arayüzde yok). Cihazın hatası 502 (`pavo_eod`, belirsizse `pavo_eod_unknown`).
   - **Doğrula** (`POST /api/okc/eod/verify`, `kasa.gun`): cihazın son gün sonu `/PrintEODCopy` ile sorulur
     (`batchNo` yok: son gün sonu; Pavo'da bu ucun varsayılanı slip basmak olduğundan `print: false` açıkça gider).
-    Son deneme alınamadı, belirsiz ya da atlandıysa ve cihazdaki gün sonu ondan sonraysa (batch no denemeden önce
-    bilinen son batch'ten büyük; o bilinmiyorsa cihaz saati denemeden sonra) sonuç "alındı" olur, tutarlar cihazınki.
+    Son deneme alınamadı, belirsiz ya da atlandıysa ve cihazdaki gün sonu ondan sonraysa (`eodAfter`: batch no
+    tabandan büyük, taban `bos` ise her batch; cihaz saati okunabiliyorsa denemeden en çok 6 dk önce, daha eskisi
+    cihazın menüsünden önceden alınmıştır; taban bilinmiyorsa cihaz saati karar verir) sonuç "alındı" olur, tutarlar
+    cihazınki. Taban gönderimden hemen önce cihazdan okunduğu için menüden önceden alınmış gün sonu bu denemenin
+    sonucu sanılmaz. Açılışta belirsize dönen "sürüyor" kaydı da böyle doğrulanır.
     Cihazın menüsünden alınan gün sonu da böyle LafPOS'a işlenir. Belirsiz deneme cihazda karşılık bulamazsa
     "alınamadı" olur ve yeniden denenebilir. 5075 "Batch bulunamadı": cihazda kayıtlı gün sonu yok (belirsiz deneme
     de alınmamış sayılır).
@@ -309,6 +326,8 @@ hiç bağlı olmasa da gün kapalı kalır.
   `rapor.gor` yok) durum, batch no ve işlem sayılarını görür, tutarları görmez (`amountsHidden`). Kullanıcısız durum
   (Genel bakış › Sistem sağlığı) tutar taşımaz.
 - **Testler**: `tests/pavo.test.ts` (sahte cihaz `tests/fake-pavo.ts`: kartla alınan ödemeler açık batch'e girer;
-  `eodMode` `ok`, `fail` 5085, `silent` gün sonu alınır ama yanıt gelmez). Bekleme süreleri `pavoTiming.eodMs` ve
-  `eodCopyMs` ile kısalır.
+  `eodMode` `ok`, `fail` 5085, `silent` gün sonu alınır ama yanıt gelmez, `drop` istek işlenmez ve yanıt gelmez;
+  `eodDelayMs` yanıtı geciktirir; `menuEod` cihazın menüsünden gün sonu). Bekleme süreleri `pavoTiming.eodMs` ve
+  `eodCopyMs` (taban ve doğrulama) ile kısalır. Testler yeni gün için bugün kapanan günleri geçmiş tarihe alır (bir
+  iş gününe tek Z).
 
