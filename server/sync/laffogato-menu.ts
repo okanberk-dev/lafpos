@@ -178,6 +178,20 @@ function siteItems(menu: SiteMenu): SiteMenuItem[] {
   return menu.categories.flatMap((c) => c.items.map((i) => ({ ...i, categoryKey: i.categoryKey ?? c.key })));
 }
 
+/**
+ * Fiyatın taze kaynağı imzalı panel (sitenin veritabanından, CDN'siz): herkese açık menü CDN'de 5 dakikaya kadar bayat
+ * kalabilir ve sitede (ya da lafmaliyet panelinde) değişen fiyat kasaya geç gelirdi. Panel varsa ve kalemin geçerli bir
+ * fiyatı varsa M / tek boy ve L fiyatı ondan (`priceMinorL` 0 = tek boy); yoksa herkese açık menüdeki
+ */
+export function withPanelPrices<T extends { id: string; priceMinor: number; priceLargeMinor?: number | null }>(items: T[], panel: PanelMenu | null): T[] {
+  if (!panel) return items;
+  return items.map((i) => {
+    const p = panel.get(i.id);
+    if (!p || !Number.isInteger(p.priceMinor) || p.priceMinor <= 0 || !Number.isInteger(p.priceMinorL) || p.priceMinorL < 0) return i;
+    return { ...i, priceMinor: p.priceMinor, priceLargeMinor: p.priceMinorL > 0 ? p.priceMinorL : null };
+  });
+}
+
 export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu | AvailabilityRule | null = null): MenuPreview {
   const rule: AvailabilityRule = panelOrRule instanceof Map || panelOrRule === null ? { panel: panelOrRule } : panelOrRule;
   const panel = rule.panel;
@@ -186,7 +200,7 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu |
   const byExt = new Map(local.map((p) => [p.extId!, p]));
   const cats = new Set(t.select({ k: schema.categories.extKey }).from(schema.categories).where(eq(schema.categories.extSource, 'laffogato')).all().map((c) => c.k));
   const changes: MenuChange[] = [];
-  const items = siteItems(menu);
+  const items = withPanelPrices(siteItems(menu), panel);
   const seen = new Set<string>();
   for (const i of items) {
     seen.add(i.id);
@@ -308,7 +322,7 @@ export function applyMenu(
   let deactivated = 0;
   let reactivated = 0;
   const seen = new Set<string>();
-  const items = siteItems(menu);
+  const items = withPanelPrices(siteItems(menu), panel);
   items.forEach((i, idx) => {
     seen.add(i.id);
     const categoryId = catIdByKey.get(i.categoryKey);
@@ -394,4 +408,27 @@ export function recordMenuSync(result: { etag?: string | null; changes?: number;
     ...(result.error ? { lastError: result.error, lastErrorAt: Date.now() } : { lastError: null, lastSuccessAt: Date.now() }),
     ...(result.changes !== undefined ? { lastChanges: result.changes } : {}),
   });
+}
+
+/** Gün açıkken menünün en çok bu kadar eşitlenmeden kalabileceği süre: iki yoklama (15 dk) ve pay */
+export const MENU_STALE_MS = 40 * 60_000;
+
+/**
+ * Menü sessizce bayatladı mı: bağlantı ve otomatik eşitleme açık, gün açık, son başarılı kontrol (ya da gün açılışı,
+ * hangisi yeniyse) `MENU_STALE_MS`'ten eski ve kayıtlı bir hata yok. Yoklama hiç çalışmadığında hata da yazılmaz;
+ * kasa eski fiyattan satmaya devam eder ve kimse fark etmez. Bu durumda Entegrasyon ve yönetim çubuğu hata gösterir.
+ */
+export function menuStaleError(o: {
+  linked: boolean;
+  auto: boolean;
+  /** Açık günün açılış (ya da yeniden açılış) anı; gün kapalıysa null */
+  dayOpenedAt: number | null;
+  state: { lastSuccessAt?: number; lastError?: string | null } | null;
+  now: number;
+}): string | null {
+  if (!o.linked || !o.auto || o.dayOpenedAt === null || o.state?.lastError) return null;
+  const since = Math.max(o.state?.lastSuccessAt ?? 0, o.dayOpenedAt);
+  const late = o.now - since;
+  if (late <= MENU_STALE_MS) return null;
+  return `Menü ${Math.floor(late / 60_000)} dakikadır siteyle eşitlenmedi: kasa eski fiyattan satıyor olabilir. "Siteyle eşitle" ile deneyin`;
 }
