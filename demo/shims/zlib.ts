@@ -1,6 +1,13 @@
 /** Tarayıcı demosunda `node:zlib`: LafPOS Uzaktan'a özet gönderilmez */
+const NO_CLOUD = 'Demoda uzaktan erişime veri gönderilmez';
+
 export function gzipSync(): never {
-  throw new Error('Demoda uzaktan erişime veri gönderilmez');
+  throw new Error(NO_CLOUD);
 }
 
-export default { gzipSync };
+/** Eşzamansız gzip (server/sync/cloud.ts): demoda hep hata döner */
+export function gzip(_data: unknown, done: (err: Error | null, out?: Uint8Array) => void): void {
+  done(new Error(NO_CLOUD));
+}
+
+export default { gzipSync, gzip };

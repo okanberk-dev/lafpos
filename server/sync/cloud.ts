@@ -1,4 +1,5 @@
-import { gzipSync } from 'node:zlib';
+import { createHash } from 'node:crypto';
+import { gzip } from 'node:zlib';
 import { eq, inArray } from 'drizzle-orm';
 import type { Permission } from '@shared/permissions';
 import type { OrderDTO } from '@shared/types';
@@ -14,11 +15,15 @@ import { patronLive } from '../services/reports';
 
 /**
  * LafPOS Uzaktan: kafedeki sunucu canlı özetini Vercel'deki uzaktan görünüme iter (patron paneli, salon, açık
- * adisyonlar, bar). Kasa yerelde kalır; bulut salt okunur bir kopyadır. Değişiklikte en sık 15 sn'de bir, boşta
- * 5 dk'da bir; gövde gzip, laffogato ile aynı imza kuralı. Maliyet ve kâr gitmez. Ayrıntı: docs/07-UZAKTAN-ERISIM.md
+ * adisyonlar, bar). Kasa yerelde kalır; bulut salt okunur bir kopyadır. Değişiklikte en sık 15 sn'de bir, gün açıkken
+ * 5 dk'da bir nabız; gövde gzip (zlib'in iş havuzunda, ana iş parçacığı beklemez), laffogato ile aynı imza kuralı.
+ * Değişmeyen özet gitmez: gün kapalıyken (gece) nabız yalnız özet değiştiyse iter, en geç saatte bir yine de (bulut
+ * kaydı düşmesin). Maliyet ve kâr gitmez. Ayrıntı: docs/07-UZAKTAN-ERISIM.md
  */
 const MIN_INTERVAL_MS = 15_000;
 const HEARTBEAT_MS = 5 * 60_000;
+/** Özet değişmese de en geç bu kadarda bir itilir: buluttaki kayıt (7 gün) düşmesin, "kafeden son veri" eskimesin */
+const KEEPALIVE_MS = 60 * 60_000;
 
 /** Bulutun gördüğü kişi: patron paneli, salon ve bar; maliyet yok */
 const VIEWER: AuthUser = {
@@ -106,38 +111,83 @@ export function buildSnapshot(now = Date.now()) {
   };
 }
 
+type Snapshot = ReturnType<typeof buildSnapshot>;
+
+/**
+ * Özetin içeriğinin özeti: üç zaman damgası (özetin anı, açılış verisinin ve panelin saati) her seferinde değişir,
+ * içerik saymaz. Aynıysa uzaktan görünüm zaten günceldir
+ */
+export function snapshotHash(snap: Snapshot): string {
+  const content = { ...snap, at: 0, bootstrap: { ...snap.bootstrap, serverTime: 0 }, patron: { ...snap.patron, now: 0 } };
+  return createHash('sha256').update(JSON.stringify(content)).digest('hex');
+}
+
+/** gzip zlib'in iş havuzunda: özet büyüse de kasanın istekleri sıkıştırmayı beklemez */
+const gzipAsync = (text: string) => new Promise<Buffer>((ok, fail) => gzip(text, (err, out) => (err ? fail(err) : ok(out))));
+
 let timer: NodeJS.Timeout | null = null;
 let lastPush = 0;
 let pushing = false;
+/** Sıradaki itme beş dakikalık nabızdan mı (bir olayla aynı sıraya girdiyse de nabız sayılır) */
+let heartbeatQueued = false;
+/** Buluta son giden özetin içerik özeti */
+let lastHash: string | null = null;
 let state: { lastSuccessAt?: number; lastError?: string | null; lastSize?: number } = {};
 
 export const cloudState = () => ({ configured: cloudEnabled(), url: env.cloudUrl || null, ...state });
 
-export async function pushSnapshot(): Promise<boolean> {
-  if (!cloudEnabled() || pushing) return false;
+/** Test için: son gidenin özeti ve durum sıfırlanır */
+export function resetCloudSync() {
+  if (timer) clearTimeout(timer);
+  timer = null;
+  lastPush = 0;
+  pushing = false;
+  heartbeatQueued = false;
+  lastHash = null;
+  state = {};
+}
+
+/** `off`: uzaktan erişim tanımlı değil; `busy`: önceki itme sürüyor (değişikliği sonraki itme ya da nabız taşır) */
+export type PushResult = 'sent' | 'unchanged' | 'failed' | 'off' | 'busy';
+
+/**
+ * Özeti iter. Değişmediyse istek gitmez; gün açıkken nabız (`heartbeat`) yine iter: uzaktan panelin saati ve
+ * adisyon süreleri tazelensin. Gün kapalıyken nabız yalnız değişiklikte, en geç saatte bir
+ */
+export async function pushSnapshot(opts: { heartbeat?: boolean } = {}): Promise<PushResult> {
+  if (!cloudEnabled()) return 'off';
+  if (pushing) return 'busy';
   pushing = true;
   lastPush = Date.now();
   try {
-    const packed = gzipSync(JSON.stringify(buildSnapshot())).toString('base64');
+    const snap = buildSnapshot();
+    const hash = snapshotHash(snap);
+    const keepAlive = Date.now() - (state.lastSuccessAt ?? 0) >= KEEPALIVE_MS;
+    if (hash === lastHash && !keepAlive && !(opts.heartbeat && snap.patron.dayOpen)) return 'unchanged';
+    const packed = (await gzipAsync(JSON.stringify(snap))).toString('base64');
     const { status } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/push`), { gz: packed }, 15_000);
     if (status !== 200) throw new Error(`HTTP ${status}`);
+    lastHash = hash;
     state = { lastSuccessAt: Date.now(), lastError: null, lastSize: packed.length };
-    return true;
+    return 'sent';
   } catch (e) {
     state = { ...state, lastError: e instanceof Error ? e.message : String(e) };
-    return false;
+    return 'failed';
   } finally {
     pushing = false;
   }
 }
 
-/** Değişiklik olunca itme sıraya girer (en sık 15 sn'de bir) */
-function schedule() {
+/** Değişiklik olunca itme sıraya girer (en sık 15 sn'de bir); `heartbeat`: beş dakikalık nabız */
+function schedule(heartbeat = false) {
+  if (heartbeat) heartbeatQueued = true;
   if (timer) return;
   const wait = Math.max(1000, MIN_INTERVAL_MS - (Date.now() - lastPush));
   timer = setTimeout(() => {
     timer = null;
-    void pushSnapshot();
+    const beat = heartbeatQueued;
+    heartbeatQueued = false;
+    void pushSnapshot({ heartbeat: beat });
   }, wait);
 }
 
@@ -147,5 +197,5 @@ export function startCloudSync(): NodeJS.Timeout[] {
   bus.on('event', (e: { topic: string }) => {
     if (e.topic !== 'users') schedule();
   });
-  return [setTimeout(schedule, 5_000), setInterval(schedule, HEARTBEAT_MS)];
+  return [setTimeout(() => schedule(), 5_000), setInterval(() => schedule(true), HEARTBEAT_MS)];
 }

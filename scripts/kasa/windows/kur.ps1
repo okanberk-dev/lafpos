@@ -1,4 +1,7 @@
-# LafPOS kasa bilgisayari kurulumu (Windows 10/11). Ayrinti: docs/05-KASA-BILGISAYARI.md
+# YALNIZ GELISTIRICI ICIN: git deposundan LafPOS (Windows 10/11). Kafedeki kasa bilgisayari buna degil,
+# NSIS kurulum dosyasina kurulur (LafPOS-Kurulum-<surum>.exe; npm run kurulum:windows). Bu betik sunucuyu
+# tsx ile (npm start) calistirir: TypeScript her acilista yeniden derlenir, bellek siniri yok, bekci yok ve
+# data\sunucu.log hic donmez, buyur. Ayrinti: docs/05-KASA-BILGISAYARI.md ("Git ile")
 #   Kur:    powershell -ExecutionPolicy Bypass -File scripts\kasa\windows\kur.ps1
 #   Kaldir: powershell -ExecutionPolicy Bypass -File scripts\kasa\windows\kur.ps1 -Kaldir
 # Oturum acilinca LafPOS sunucusu gorunmeden baslar (Gorev Zamanlayici, cokerse 1 dk sonra yeniden),
@@ -17,6 +20,7 @@ if ($Kaldir) {
   exit 0
 }
 
+Write-Warning "Gelistirici kurulumu (git). Kafedeki kasa bilgisayarina LafPOS-Kurulum-<surum>.exe kurulur: docs/05-KASA-BILGISAYARI.md"
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw "Node.js bulunamadi (22.11 ya da ustu): https://nodejs.org" }
 if (-not (Test-Path "$repo\dist\web\index.html")) { throw "Once derleyin: npm ci; npm run build" }
 New-Item -ItemType Directory -Force "$repo\data" | Out-Null

@@ -19,6 +19,13 @@ SetCompressorDictSize 64
   !error "OUTFILE verilmedi"
 !endif
 
+; Klasör ayırıcı: Windows'taki makensis ters bölü ister (STAGE de ters bölülü gelir), macOS ve Linux'takiler düz bölü
+!ifdef NSIS_WIN32_MAKENSIS
+  !define SEP "\"
+!else
+  !define SEP "/"
+!endif
+
 !define TASK "LafPOS Sunucu"
 !define FIREWALL "LafPOS Sunucu"
 !define PORT 4000
@@ -40,8 +47,8 @@ BrandingText "LafPOS ${VERSION}"
 
 Var DATA ; C:\ProgramData\LafPOS
 
-!define MUI_ICON "${STAGE}/lafpos.ico"
-!define MUI_UNICON "${STAGE}/lafpos.ico"
+!define MUI_ICON "${STAGE}${SEP}lafpos.ico"
+!define MUI_UNICON "${STAGE}${SEP}lafpos.ico"
 !define MUI_ABORTWARNING
 
 !define MUI_WELCOMEPAGE_TITLE "LafPOS kurulumu"
@@ -137,7 +144,7 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   RMDir /r "$INSTDIR\app"
   RMDir /r "$INSTDIR\node"
   SetOutPath "$INSTDIR"
-  File /r "${STAGE}/*"
+  File /r "${STAGE}${SEP}*"
 
   ; Veri klasörü: yalnız SYSTEM (sunucu) ve Yöneticiler. Türkçe Windows'ta grup adı farklı, SID kullanılır
   CreateDirectory "$DATA"
@@ -239,13 +246,17 @@ Section "Prizdeyken uyku kapalı" SecPower
   ; Uyuyan bilgisayara tabletler bağlanamaz. Ekran açık kalsın diye LafPOS ekran kilidi ister
   !insertmacro Run '"$SYSDIR\powercfg.exe" /change standby-timeout-ac 0'
   !insertmacro Run '"$SYSDIR\powercfg.exe" /change hibernate-timeout-ac 0'
+  ; USB'nin seçmeli askıya alınması prizdeyken kapalı (Güç seçenekleri › USB ayarları): fiş yazıcısı, dokunmatik ekran
+  ; ve USB ağ bağdaştırıcısı boşta uyuyup kopmasın. Ağ kartının kendi güç tasarrufu elle kapatılır (BENIOKU)
+  !insertmacro Run '"$SYSDIR\powercfg.exe" /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0'
+  !insertmacro Run '"$SYSDIR\powercfg.exe" /setactive SCHEME_CURRENT'
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SecMain} "Sunucu (açılışta SYSTEM olarak), kasa ekranı, güvenlik duvarında yerel ağ ve Tailscale izni."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecDesktop} "Masaüstüne LafPOS Kasa kısayolu."
   !insertmacro MUI_DESCRIPTION_TEXT ${SecStartup} "Windows'a girilince kasa ekranı tam ekran açılır."
-  !insertmacro MUI_DESCRIPTION_TEXT ${SecPower} "Bilgisayar prizdeyken uykuya ve hazırda bekletmeye geçmez; tabletler sunucuyu hep bulur."
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecPower} "Bilgisayar prizdeyken uykuya ve hazırda bekletmeye geçmez, USB aygıtları (yazıcı, dokunmatik ekran) askıya alınmaz; tabletler sunucuyu hep bulur."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ; Kurulum yönetici olarak çalışır; kasa ekranı Gezgin üzerinden normal kullanıcı olarak açılır

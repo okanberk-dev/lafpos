@@ -64,14 +64,34 @@ export async function backupNow(): Promise<string> {
   return file;
 }
 
+/** Günlük bakımın en son yapıldığı iş günü (yedekten sonra, günde bir) */
+let maintainedOn: string | null = null;
+
+/**
+ * Günlük veritabanı bakımı: WAL ana dosyaya yazılıp -wal sıfırlanır (TRUNCATE; beş dakikalık PASSIVE denetim noktası
+ * dosyayı küçültmez) ve SQLite sorgu istatistiklerini tazeler (`optimize`, yalnız gerekeni)
+ */
+function dailyMaintenance(day: string) {
+  if (maintainedOn === day) return;
+  maintainedOn = day;
+  try {
+    sqlite.pragma('wal_checkpoint(TRUNCATE)');
+    sqlite.pragma('optimize');
+  } catch (e) {
+    console.warn('[bakım] veritabanı bakımı yapılamadı:', e instanceof Error ? e.message : e);
+  }
+}
+
 async function backupTick() {
-  const file = resolve(env.dataDir, 'backups', `lafpos-${businessDate(Date.now())}.db`);
+  const day = businessDate(Date.now());
+  const file = resolve(env.dataDir, 'backups', `lafpos-${day}.db`);
   if (existsSync(file)) return;
   try {
     await backupNow();
   } catch (e) {
     console.warn('[yedek] alınamadı:', e instanceof Error ? e.message : e);
   }
+  dailyMaintenance(day);
 }
 
 let lastAutoWarn = 0;

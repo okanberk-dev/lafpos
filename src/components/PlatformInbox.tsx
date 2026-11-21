@@ -27,8 +27,15 @@ export interface PlatformsData {
   acceptors?: { id: string; name: string }[];
 }
 
+/**
+ * Yoklama (30 sn) yalnız bir platform açıkken (deneme ya da canlı) ya da bekleyen sipariş varken. Yeni sipariş, kabul ve
+ * iptal canlı akışla (`delivery`) zaten yeniler (src/lib/live.ts); platformu olmayan kafede ekran boşta istek atmaz
+ */
+const platformsPoll = (data: PlatformsData | undefined) =>
+  data && (Object.values(data.settings).some((s) => s.mode !== 'kapali') || data.orders.some((o) => o.status === 'bekliyor' || o.cancelPending)) ? 30_000 : false;
+
 export function usePlatforms(enabled = true) {
-  return useQuery({ queryKey: ['platforms'], queryFn: () => get<PlatformsData>('/platforms'), enabled, refetchInterval: 30_000 });
+  return useQuery({ queryKey: ['platforms'], queryFn: () => get<PlatformsData>('/platforms'), enabled, refetchInterval: (q) => platformsPoll(q.state.data) });
 }
 
 const left = (expiresAt: number | null, now: number) => {
@@ -66,8 +73,6 @@ export function PlatformInbox() {
   const can = useCan();
   const allowed = can('paket.yonet');
   const data = usePlatforms(allowed);
-  const [open, setOpen] = useState(false);
-  const now = useTick(1000);
 
   useEffect(() => {
     if (!allowed) return;
@@ -89,6 +94,17 @@ export function PlatformInbox() {
   const cancelOrders = all.filter((o) => o.status !== 'bekliyor' && o.cancelPending);
   const pending = [...waitingOrders, ...cancelOrders];
   if (!allowed || !pending.length) return null;
+  return <PendingStrip waitingOrders={waitingOrders} cancelOrders={cancelOrders} settings={data.data?.settings} />;
+}
+
+/**
+ * Şerit ve pencere: yalnız bekleyen sipariş varken çizilir. Saniyelik geri sayım burada, her ekranın kabuğunda değil:
+ * bekleyen yokken kasa bilgisayarı saniyede bir yeniden çizmez
+ */
+function PendingStrip({ waitingOrders, cancelOrders, settings }: { waitingOrders: PlatformOrderDTO[]; cancelOrders: PlatformOrderDTO[]; settings: PlatformsData['settings'] | undefined }) {
+  const [open, setOpen] = useState(false);
+  const now = useTick(1000);
+  const pending = [...waitingOrders, ...cancelOrders];
   const first = pending[0]!;
   const waiting = waitingOrders.length;
   return (
@@ -118,7 +134,7 @@ export function PlatformInbox() {
       <Modal open={open} onClose={() => setOpen(false)} title={waiting && cancelOrders.length ? 'Platform siparişleri' : waiting ? 'Onay bekleyen platform siparişleri' : 'Platformun iptal ettiği siparişler'} size="md">
         <div className="space-y-3 p-4">
           {pending.map((o) => (
-            <PendingCard key={o.id} order={o} now={now} defaultPrep={data.data?.settings[o.platform].prepMinutes ?? 20} onDone={() => pending.length === 1 && setOpen(false)} />
+            <PendingCard key={o.id} order={o} now={now} defaultPrep={settings?.[o.platform].prepMinutes ?? 20} onDone={() => pending.length === 1 && setOpen(false)} />
           ))}
         </div>
       </Modal>

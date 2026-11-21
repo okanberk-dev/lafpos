@@ -10,6 +10,8 @@ sqlite.pragma('journal_mode = WAL');
 sqlite.pragma('synchronous = NORMAL');
 sqlite.pragma('foreign_keys = ON');
 sqlite.pragma('busy_timeout = 5000');
+// Denetim noktasından sonra -wal dosyası 64 MB'tan büyük kalmaz (yoğun bir gün onu şişirse de disk geri döner)
+sqlite.pragma('journal_size_limit = 67108864');
 
 export const db = drizzle(sqlite, { schema });
 export type DB = typeof db;

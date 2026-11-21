@@ -1,7 +1,9 @@
 // LafPOS sunucu bekçisi (Windows kurulumu). Görev Zamanlayıcı bunu açılışta SYSTEM olarak çalıştırır:
 // ayarlar.env'yi okur, sunucuyu başlatır, düşerse artan beklemeyle (1 sn → 30 sn) yeniden başlatır ve
 // çıktıyı tarihli satırlarla logs/sunucu.log'a yazar. ayarlar.env kaydedilince sunucu yeni ayarlarla yeniden
-// başlar. Bekçi kapanınca sunucu da kapanır (Windows iş nesnesi).
+// başlar. Bekçi kapanınca sunucu da kapanır (Windows iş nesnesi). Sunucunun JavaScript belleği sınırlı
+// (LAFPOS_MAX_HEAP_MB, varsayılan 512): sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer
+// ve bekçi onu yeniden başlatır.
 // Veri klasörü: LAFPOS_HOME, yoksa C:\ProgramData\LafPOS. Ayrıntı: docs/05-KASA-BILGISAYARI.md
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
@@ -16,6 +18,10 @@ const LOG_MAX = 5 * 1024 * 1024;
 const LOG_KEEP = 3;
 /** Sunucu "kapat"tan sonra bu kadar içinde kapanmazsa sonlandırılır */
 const STOP_GRACE_MS = 5000;
+/** Sunucunun V8 yığın sınırı (MB); ayarlar.env'de LAFPOS_MAX_HEAP_MB ile 256-4096 arası değişir */
+const HEAP_MB = 512;
+/** ayarlar.env'nin denetlenme aralığı: kaydettikten birkaç saniye sonra yeniden başlar, boşta disk yoklanmaz */
+const WATCH_MS = 5000;
 mkdirSync(dirname(LOG), { recursive: true });
 
 /** ayarlar.env: ANAHTAR=değer satırları; # yorum. Sunucunun .env okuyucusuyla aynı kurallar */
@@ -100,7 +106,10 @@ function start() {
     setTimeout(start, delay);
     delay = Math.min(delay * 2, 30_000);
   };
-  child = spawn(process.execPath, [join(APP, 'server', 'index.mjs')], { cwd: APP, env: envFor(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  const env = envFor();
+  const heap = Number(env.LAFPOS_MAX_HEAP_MB);
+  const heapMb = Number.isInteger(heap) && heap >= 256 && heap <= 4096 ? heap : HEAP_MB;
+  child = spawn(process.execPath, [`--max-old-space-size=${heapMb}`, join(APP, 'server', 'index.mjs')], { cwd: APP, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   child.stdin.on('error', () => {
     /* sunucu kapanırken yazılamayan "kapat" */
   });
@@ -129,9 +138,15 @@ function stop() {
   setTimeout(() => process.exit(0), STOP_GRACE_MS + 1000).unref();
 }
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGBREAK']) process.on(sig, stop);
+// Kurulum derlemesinin denemesi (derle.mjs) Windows'ta sinyal gönderemez (süreci sonlandırmak kapanış kodunu
+// çalıştırmaz): standart girdiden "kapat" bekçiyi düzgün durdurur. Görev Zamanlayıcı'da tanımsız
+if (process.env.LAFPOS_BEKCI_STDIN === '1') {
+  process.stdin.setEncoding('utf8');
+  process.stdin.on('data', (d) => String(d).includes('kapat') && stop());
+}
 
 // Ayar dosyası kaydedilince (Not Defteri hangi sürüm olursa olsun) sunucu yeni ayarlarla yeniden başlar
-watchFile(ENV_FILE, { interval: 2000 }, (cur, prev) => {
+watchFile(ENV_FILE, { interval: WATCH_MS }, (cur, prev) => {
   if (cur.mtimeMs === prev.mtimeMs || stopping || !child) return;
   log('[bekçi] ayarlar.env değişti; sunucu yeniden başlatılıyor');
   restarting = true;

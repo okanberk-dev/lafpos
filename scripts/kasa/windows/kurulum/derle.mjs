@@ -1,8 +1,10 @@
 // LafPOS Windows kurulum dosyasını derler: dist/windows/LafPOS-Kurulum-<sürüm>.exe
 // Sunucu esbuild ile tek dosyaya paketlenir; yanına Windows için Node (LTS), better-sqlite3'ün win32-x64
 // ikilisi, derlenmiş arayüz, göçler ve menü anlık görüntüsü konur; makensis lafpos.nsi ile kurulumu üretir.
-// Kurulumdan önce aynı paket bu bilgisayarın Node'uyla açılıp denenir (giriş, açılış verisi, arayüz, günlük).
-// Gerekenler: makensis (macOS: brew install makensis, Linux: apt install nsis, Windows: NSIS 3).
+// Kurulumdan önce aynı paket açılıp denenir (giriş, açılış verisi, arayüz, günlük): Windows'ta pakettekinin aynısı
+// (indirilen node.exe ve better-sqlite3'ün Windows ikilisi), macOS ve Linux'ta bu bilgisayarın Node'u ve ikilisiyle.
+// Gerekenler: makensis (macOS: brew install makensis, Linux: apt install nsis, Windows: NSIS 3; PATH'te değilse
+// Program Files\NSIS'te aranır, MAKENSIS ile de verilir). CI'da Windows işi (.github/workflows/ci.yml) her PR'da koşar.
 // Kullanım: npm run kurulum:windows            arayüzü derler, dener, kurulumu üretir
 //           npm run kurulum:windows -- --hizli arayüzü yeniden derlemez, denemeyi atlar
 import { execFileSync, spawn } from 'node:child_process';
@@ -17,9 +19,14 @@ import { build } from 'esbuild';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../../../..');
-/** Windows'a giden Node. Değişirse NODE_ABI de değişir: nodejs.org/dist/index.json'da "modules" */
-const NODE_VERSION = '24.22.1';
+/**
+ * Windows'a giden Node: 24 LTS'in son güvenlik sürümü. Değişince üçü birlikte: NODE_ABI nodejs.org/dist/index.json'da
+ * "modules" (better-sqlite3'ün indirilen ikilisi buna göre), NODE_SHA256 o sürümün SHASUMS256.txt'sinde win-x64.zip
+ */
+const NODE_VERSION = '24.22.3';
 const NODE_ABI = '137';
+const NODE_SHA256 = 'e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f';
+const WIN = process.platform === 'win32';
 const OUT = join(ROOT, 'dist/windows');
 const STAGE = join(OUT, 'stage');
 const APP = join(STAGE, 'app');
@@ -31,6 +38,13 @@ const step = (s) => console.log(`\n▸ ${s}`);
 const run = (cmd, args, env) => execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT, env: env && { ...process.env, ...env } });
 const sha256 = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 const crlf = (s) => s.replace(/\r?\n/g, '\r\n');
+/**
+ * Arşiv açıcı. Windows'ta System32'deki tar (bsdtar: .tar.gz ve .zip açar); PATH'teki Git tar'ı "C:\…" yolunu uzak
+ * makine adresi sanıp düşer
+ */
+const TAR = WIN ? join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
+/** Windows'ta silinen klasördeki dosyayı kapanmakta olan süreç bir an tutabilir (EBUSY): birkaç kez denenir */
+const rmTree = (dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
 async function download(url, file) {
   if (existsSync(file)) return file;
@@ -110,7 +124,7 @@ async function nativeSqlite() {
   const name = `better-sqlite3-v${version}-node-v${NODE_ABI}-win32-x64.tar.gz`;
   const tgz = await download(`https://github.com/WiseLibs/better-sqlite3/releases/download/v${version}/${name}`, join(CACHE, name));
   const dir = join(APP, 'node_modules/better-sqlite3');
-  run('tar', ['-xzf', tgz, '-C', dir]);
+  run(TAR, ['-xzf', tgz, '-C', dir]);
   assertWinX64(join(dir, 'build/Release/better_sqlite3.node'));
 }
 
@@ -123,17 +137,18 @@ async function windowsNode() {
     .split('\n')
     .find((l) => l.trim().endsWith(`  ${zipName}`))
     ?.split(/\s+/)[0];
-  if (!want || sha256(zip) !== want) {
+  // Hem nodejs.org'un listesi hem betikteki sabit: sürüm yükseltilirken özet de bilerek değişir
+  if (want !== NODE_SHA256 || sha256(zip) !== NODE_SHA256) {
     rmSync(zip, { force: true });
-    throw new Error(`${zipName} SHA-256 özeti nodejs.org'dakiyle tutmadı; dosya silindi, yeniden deneyin`);
+    throw new Error(`${zipName} SHA-256 özeti tutmadı (nodejs.org: ${want ?? 'yok'}, betik: ${NODE_SHA256}); dosya silindi, yeniden deneyin`);
   }
   const tmp = mkdtempSync(join(tmpdir(), 'lafpos-node-'));
   const members = [`node-v${NODE_VERSION}-win-x64/node.exe`, `node-v${NODE_VERSION}-win-x64/LICENSE`];
   if (process.platform === 'linux') run('unzip', ['-q', '-o', zip, ...members, '-d', tmp]);
-  else run('tar', ['-xf', zip, '-C', tmp, ...members]);
+  else run(TAR, ['-xf', zip, '-C', tmp, ...members]);
   mkdirSync(join(STAGE, 'node'), { recursive: true });
   for (const m of members) cpSync(join(tmp, m), join(STAGE, 'node', m.split('/').pop()));
-  rmSync(tmp, { recursive: true, force: true });
+  rmTree(tmp);
   assertWinX64(join(STAGE, 'node/node.exe'));
 }
 
@@ -147,20 +162,26 @@ function windowsFiles() {
   writeFileSync(join(STAGE, 'ayarlar.env.ornek'), `\uFEFF${crlf(envSample())}`);
 }
 
-/** Paketi bu bilgisayarın Node'u ve sqlite ikilisiyle bekçi üzerinden açar; Windows'ta çalışacak olanın aynısı */
+/**
+ * Paketi bekçi üzerinden açıp dener. Windows'ta kurulumun taşıyacağı ikili çiftiyle (paketteki node.exe ve
+ * better-sqlite3'ün indirilen Windows ikilisi): gerçekten yüklenen, kafeye gidenin aynısıdır. macOS ve Linux'ta
+ * Windows ikilisi yüklenemez: bu bilgisayarın Node'u ve kendi sqlite ikilisi konur, gerisi aynı paket
+ */
 async function smokeTest() {
-  step('Paket deneniyor (bekçi, göçler, ilk kurulum, giriş, arayüz, günlük)');
+  step(`Paket deneniyor (bekçi, göçler, ilk kurulum, giriş, arayüz, günlük; ${WIN ? `paketteki Node ${NODE_VERSION}` : `bu bilgisayarın Node'u ${process.versions.node}`})`);
   const tmp = mkdtempSync(join(tmpdir(), 'lafpos-deneme-'));
   const home = join(tmp, 'veri');
   try {
     cpSync(APP, join(tmp, 'app'), { recursive: true });
-    cpSync(join(ROOT, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'), join(tmp, 'app/node_modules/better-sqlite3/build/Release/better_sqlite3.node'));
+    if (!WIN) cpSync(join(ROOT, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'), join(tmp, 'app/node_modules/better-sqlite3/build/Release/better_sqlite3.node'));
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
-    const child = spawn(process.execPath, [join(tmp, 'app/bekci.mjs')], {
+    const node = WIN ? join(STAGE, 'node', 'node.exe') : process.execPath;
+    const child = spawn(node, [join(tmp, 'app/bekci.mjs')], {
       cwd: tmp,
-      env: { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1' },
-      stdio: 'ignore',
+      env: { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1', ...(WIN ? { LAFPOS_BEKCI_STDIN: '1' } : {}) },
+      // Windows'ta sinyal yok (kill süreci sonlandırır, bekçi sunucuyu kapatamaz): durdurma standart girdiden
+      stdio: [WIN ? 'pipe' : 'ignore', 'ignore', 'ignore'],
     });
     const fail = (msg) => {
       const log = existsSync(join(home, 'logs/sunucu.log')) ? readFileSync(join(home, 'logs/sunucu.log'), 'utf8') : '(günlük yok)';
@@ -168,7 +189,8 @@ async function smokeTest() {
     };
     try {
       for (let i = 0; ; i++) {
-        if (i > 150) fail('Sunucu 30 sn içinde açılmadı');
+        // İlk açılış göçleri ve kurulum verisini yazar; Windows'ta virüs taraması yeni ikilileri bir süre tutabilir
+        if (i > 300) fail('Sunucu 60 sn içinde açılmadı');
         const ok = await fetch(`${base}/api/health`).then((r) => r.ok, () => false);
         if (ok) break;
         await new Promise((r) => setTimeout(r, 200));
@@ -193,15 +215,15 @@ async function smokeTest() {
       writeFileSync(join(home, 'ayarlar.env'), '\uFEFF# deneme\r\nLAFPOS_SESSION_HOURS=13\r\n');
       const logText = () => (existsSync(join(home, 'logs/sunucu.log')) ? readFileSync(join(home, 'logs/sunucu.log'), 'utf8') : '');
       for (let i = 0; ; i++) {
-        if (i > 100) fail('ayarlar.env değişince sunucu yeniden başlamadı');
+        // Bekçi ayar dosyasına 5 sn'de bir bakar; sunucu kapanıp yeniden açılır
+        if (i > 200) fail('ayarlar.env değişince sunucu 40 sn içinde yeniden başlamadı');
         const restarted = logText().split('LafPOS sunucusu hazır').length > 2;
         if (restarted && (await fetch(`${base}/api/health`).then((r) => r.ok, () => false))) break;
         await new Promise((r) => setTimeout(r, 200));
       }
       console.log('  tamam: ayar değişince sunucu yeni ayarlarla açıldı');
     } finally {
-      child.kill();
-      if (child.exitCode == null) await once(child, 'exit');
+      await stopWatchdog(child);
     }
     const log = readFileSync(join(home, 'logs/sunucu.log'), 'utf8');
     if (!log.includes('LafPOS sunucusu hazır')) throw new Error(`Günlükte sunucunun açıldığı yazmıyor:\n${log}`);
@@ -210,14 +232,39 @@ async function smokeTest() {
     if (existsSync(join(home, 'lafpos.db-wal'))) throw new Error(`Sunucu kapanırken veritabanını kapatmadı (lafpos.db-wal kaldı):\n${log}`);
     console.log('  tamam: bekçi durunca veritabanı düzgün kapandı');
   } finally {
-    rmSync(tmp, { recursive: true, force: true });
+    rmTree(tmp);
   }
+}
+
+/** Bekçiyi düzgün durdurur (sunucu veritabanını kapatır); süresinde kapanmazsa sonlandırır */
+async function stopWatchdog(child) {
+  if (child.exitCode != null || child.signalCode != null) return;
+  const exited = once(child, 'exit');
+  if (WIN) {
+    child.stdin.on('error', () => {});
+    child.stdin.write('kapat\n');
+  } else child.kill();
+  const timer = setTimeout(() => child.kill('SIGKILL'), 15_000);
+  await exited;
+  clearTimeout(timer);
+}
+
+/** makensis: MAKENSIS, PATH, Windows'ta NSIS'in varsayılan klasörleri */
+function findMakensis() {
+  if (process.env.MAKENSIS) return process.env.MAKENSIS;
+  if (WIN) {
+    for (const base of [process.env['ProgramFiles(x86)'], process.env.ProgramFiles]) {
+      const exe = base && join(base, 'NSIS', 'makensis.exe');
+      if (exe && existsSync(exe)) return exe;
+    }
+  }
+  return 'makensis';
 }
 
 function makeInstaller() {
   step('Kurulum dosyası (makensis)');
   const outfile = join(OUT, `LafPOS-Kurulum-${pkg.version}.exe`);
-  const makensis = process.env.MAKENSIS || 'makensis';
+  const makensis = findMakensis();
   // macOS ve Linux'ta makensis Türkçe harfleri ancak UTF-8 yereliyle okur ("Bad text encoding")
   const utf8 = /utf-?8/i.test(process.env.LC_ALL || process.env.LC_CTYPE || process.env.LANG || '');
   const locale = process.platform === 'win32' || utf8 ? undefined : { LC_ALL: process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8' };
@@ -230,7 +277,7 @@ if (!fast || !existsSync(join(ROOT, 'dist/web/index.html'))) {
   step('Arayüz derleniyor');
   run(process.execPath, [join(ROOT, 'node_modules/vite/bin/vite.js'), 'build']);
 }
-rmSync(STAGE, { recursive: true, force: true });
+rmTree(STAGE);
 await bundleServer();
 await nativeSqlite();
 await windowsNode();

@@ -489,7 +489,7 @@ function TableTile({
                 </span>
               )}
               {/* Hazır: yeşil kartta beyaz hap, yeşil yazı ve nabız (kartın kendi yeşilinden ayrılır) */}
-              {ready > 0 && <span className="animate-ring tabular whitespace-nowrap rounded-full bg-white px-2 py-0.5 font-semibold text-[#05432f]">{ready} hazır</span>}
+              {ready > 0 && <span className="animate-ring animate-ring-sm motion-reduce:animate-none tabular whitespace-nowrap rounded-full bg-white px-2 py-0.5 font-semibold text-[#05432f]">{ready} hazır</span>}
             </div>
           )}
           {partial && !round && (
