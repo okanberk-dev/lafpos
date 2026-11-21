@@ -525,13 +525,17 @@ async function pull(now: number, version: string | null) {
  * 3 dakikada bir. Hiç iş günü yokken (ilk kurulum) istek gitmez: sipariş yazılacak gün yok, durum "Gün açılmadı" der,
  * gün açılınca çekilir. Aynı sinyal karaoke işaretini de taşır: "Online siparişleri çek" kapalıyken sipariş çekilmez ama
  * sinyal, sitedeki karaoke rezervasyonları için gün açıkken okunmaya devam eder (§2.4; sinyal sitenin veritabanına
- * gitmez, kural 6'nın istisnası). Masa çağrıları sipariş listesiyle gelir (`calls`): ayrı istek yok.
+ * gitmez, kural 6'nın istisnası). Menü işareti için de: menü otomatik eşitleniyorsa gün açıkken okunur. Masa çağrıları
+ * sipariş listesiyle gelir (`calls`): ayrı istek yok.
  */
 export function onlineOrdersTick(): Promise<void> {
   if (!configured()) return Promise.resolve();
   const ordersOn = getSettings().onlineOrdersSync;
   const dayOpen = !!getOpenDay(db);
-  if (!ordersOn && !(siteKaraokeOn() && dayOpen)) return Promise.resolve();
+  // Menü işareti de bu sinyalle gelir: online sipariş ve karaoke kapalı olsa da gün açıkken menü otomatik eşitleniyorsa
+  // okunur, sitede değişen fiyat 15 dakikalık yoklamayı beklemez (sinyal sitenin veritabanına gitmez, kural 6 istisnası)
+  const menuWatch = getSettings().menuAutoSync && dayOpen;
+  if (!ordersOn && !(siteKaraokeOn() && dayOpen) && !menuWatch) return Promise.resolve();
   if (inflight) return inflight;
   const now = Date.now();
   if (!dayOpen && now - lastTick < NIGHT_TICK_MS) return Promise.resolve();

@@ -23,6 +23,7 @@ Son güncelleme: 21 Kasım 2026.
   sorunları; eşikler Yönetim › Ağ ve uzaktan erişim.
 - **Bulut yedeği:** günlük şifreli yedek Vercel Blob'a (özel), buluttan geri yükleme sihirbazı (patron, PIN).
 - **Karşılama sihirbazı:** Genel bakış'ta kurulum adımları.
+- **Fiyat işareti:** sitede değişen fiyat, online sipariş ve karaoke kapalıyken de gün açıkken hemen eşitlenir.
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -60,10 +61,11 @@ PAVO_SERIAL=<cihazın seri numarası>
 
 - **Personel mesaisi:** 4 Kasım 2026'da sahibin kararıyla kaldırıldı (`docs/02-PLAN.md` "Mesai kaldırıldı"). Yeniden
   istenirse eski tasarım ve tablo (`time_entries`) duruyor; yalnız vardiya kasa sayımı kullanılıyor.
-- **Marina şubesi:** kasada şube ayarı (Yönetim › Ayarlar › Şube) ve Merkez'de ayrı dükkân hazır. lafmaliyet gelen
-  gün sonundaki `sube`'yi okumuyor, hepsini Tuzla'ya yazıyor (`lafmaliyet/src/server/lafpos/ingest.ts`, kilit ve Z
-  denetimi gün başına). Marina LafPOS'a geçecekse önce lafmaliyet'te ayrı PR: şemanın `sube`'yi kabul etmesi, kilidin ve
-  Z denetiminin (gün, şube) olması, tanınmayan şubenin reddedilmesi.
+- **Marina şubesi (karar verildi, 21 Kasım 2026):** önce Marina LafPOS'a geçer, Tuzla ModPOS'ta kalır. LafPOS'un
+  varsayılan şubesi `marina`; lafmaliyet'te LafPOS'un şubesi Marina (`LAFPOS_BRANCH_ID`), başka şubeye ayarlı kasanın
+  günü reddedilir. Marina'nın ModPOS'u yedek olarak çekilmeye devam eder (lafmaliyet'te şubenin kasa kaynağı ModPOS
+  kalır); geçiş gününden sonra sayılan LafPOS'un günüdür. Marina'da LafPOS kurulup denenince lafmaliyet'te geçiş günü
+  seçilir. Tuzla da geçecekse lafmaliyet'te LafPOS'un şubesi listeye döner (ayrı iş).
 - **Stok ve reçete düşümü:** lafmaliyet'in tasarımı aylık sayım ve dönemsel FIFO (`docs/STOK-DEGERLEME.md`); satıştan
   anlık düşüm yok. Kritik stok uyarısı isteniyorsa önce lafmaliyet'te anlık stok tasarımı gerekir.
 - **Merkez için iki aşamalı giriş:** üye girişi davet kodu, parola ve deneme sınırıyla korunuyor. Telefonda doğrulama
@@ -82,14 +84,10 @@ PAVO_SERIAL=<cihazın seri numarası>
 
 ## 4. Sıradaki geliştirmeler (öneri sırası)
 
-1. **Fiyat işareti:** sitede fiyat değişince kasaya hemen gelmesi yalnız online sipariş turu çalışırken (açık gün,
-   online sipariş ya da karaoke açık); öteki durumlarda 15 dakikalık menü çekimini bekler
-   (`server/sync/laffogato-orders.ts` `onlineOrdersTick`). Sürüm sinyali menü için ayrıca okunabilir (20 sn bütçesi).
-2. **baslat.cmd güncellemeyle değişmez:** kurulum klasöründe durur, otomatik güncelleme yalnız `app\`'i değiştirir.
-   21 Kasım'daki Node değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda Node değişimi kilit yüzünden
-   ertelenirse bir sonraki yeniden açılışta tamamlanır (kasa durmaz). Güncelleyici `app\baslat.cmd`'yi kökteki
-   kopyayla karşılaştırıp yenileyebilir.
-3. **Tasarım turu (sürüyor):** ekran ekran ızgara ve hizalama; bu oturumda örnek masa planı, patron ciro kartı ve
+1. **baslat.cmd güncellemeyle değişmez (bilerek):** kurulum klasöründe durur, otomatik güncelleme yalnız `app\`'i
+   değiştirir. Çalışan toplu dosyayı değiştirmek güvenli değil (cmd.exe dosyayı satır satır okur). 21 Kasım'daki Node
+   değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda değişim ertelenirse bir sonraki açılışta tamamlanır.
+2. **Tasarım turu (sürüyor):** ekran ekran ızgara ve hizalama; bu oturumda örnek masa planı, patron ciro kartı ve
    tek boylu üründe boy rozeti düzeldi. Sırada adisyon ürün karoları ve yönetim formları (`DESIGN.md`).
 
 ## Çalışma kuralları (kısa)
