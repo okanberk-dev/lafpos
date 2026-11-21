@@ -3,7 +3,8 @@ import type { MigrationMeta } from 'drizzle-orm/migrator';
 import { drizzle } from 'drizzle-orm/sql-js';
 import * as schema from '../server/db/schema';
 import { bundledMigrations } from './migrations';
-import { currentDb, dbGeneration } from './sqljs';
+import { writeFileSync } from 'node:fs';
+import { currentDb, dbGeneration, exportDatabase } from './sqljs';
 
 /**
  * Tarayıcı demosunda `server/db/client.ts`: better-sqlite3 yerine sql.js (WASM SQLite). İkisi de eşzamanlı; sunucu
@@ -60,6 +61,10 @@ export const sqlite = {
   },
   pragma(_source: string) {},
   close() {},
+  /** Yedek (better-sqlite3 `backup`): dışa aktarılan hâl dosyaya; tarayıcıda disk yok (fs taklidi yazmaz) */
+  async backup(file: string) {
+    writeFileSync(file, exportDatabase());
+  },
   prepare(query: string) {
     // Toplu yazmada (testler) bir kez hazırlanır; veritabanı değişince yeniden
     let stmt: ReturnType<typeof client.prepare> | null = null;

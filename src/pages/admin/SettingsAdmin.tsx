@@ -9,8 +9,10 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Segmented, Select, Textarea, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
 import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/components/admin/ui';
+import { DenemeCard } from '@/components/admin/DenemeCard';
 import { UpdateCard } from '@/components/admin/UpdateCard';
 import { errorMessage, get, post, put } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { draftConflicts, fromLines, rebaseDraft } from '@/lib/settingsDraft';
@@ -171,6 +173,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 
 export default function SettingsAdmin() {
   const boot = useBoot();
+  const patron = useAuth((st) => st.me?.role === 'patron');
   const qc = useQueryClient();
   const data = useQuery({ queryKey: ['admin', 'settings'], queryFn: () => get<Settings>('/admin/settings') });
   const backups = useQuery({ queryKey: ['admin', 'backups'], queryFn: () => get<{ dir: string; files: { name: string; size: number; at: number }[] }>('/admin/backups') });
@@ -315,7 +318,10 @@ export default function SettingsAdmin() {
       <PageHeader title="Ayarlar ve yedek" description={DESCRIPTION} />
       {/* Kayıtlı değerden çizilir: anahtar kapatılınca uyarı ve anahtar kaybolmaz (sayfa zıplamaz), kayıttan önce geri
           açılabilir; kapanacağı söylenir */}
-      {data.data?.demoMode && (
+      {/* Deneme modu ve "gerçek kullanıma başla" yalnız patrona (sunucu da yalnız patrona açar); patron kurulum modunu
+          oradan kapatır, aşağıdaki anahtar öbür yöneticiler için */}
+      {patron && !REMOTE && <DenemeCard />}
+      {data.data?.demoMode && !patron && (
         <Notice tone="warn" title={s.demoMode ? 'Kurulum modu açık' : 'Kurulum modu kaydedince kapanır'}>
           <p>
             {s.demoMode

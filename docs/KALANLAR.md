@@ -98,11 +98,17 @@ LAFMALIYET_URL=https://ladmin.laffogato.net
 LAFMALIYET_SYNC_SECRET=...
 LAFPOS_CLOUD_URL=https://lafpos.laffogato.net
 LAFPOS_CLOUD_SECRET=...
-LAFFOGATO_URL=https://laffogato.net        (kurulum modu kapandıktan sonra)
-LAFFOGATO_SYNC_SECRET=...                  (kurulum modu kapandıktan sonra)
+LAFFOGATO_URL=https://laffogato.net        (deneme bittikten sonra)
+LAFFOGATO_SYNC_SECRET=...                  (deneme bittikten sonra)
 PAVO_URL=https://<cihazın IP adresi>:4567
 PAVO_SERIAL=<cihazın seri numarası>
 ```
+
+LafPOS ilk açılışta deneme modundadır (örnek PIN'ler, eğitim yazarkasası, "Deneme modu" şeridi). Kafede denendikten
+sonra gün sonu alınır ve patron Yönetim › Ayarlar ve yedek › **Denemeyi bitir, gerçek kullanıma başla** der
+(yedek, deneme kayıtları silinir, patron yeni PIN'ini verir; `docs/05-KASA-BILGISAYARI.md` §2 "İlk açılış"). Gerçek
+Windows'ta henüz denenmedi: yedek dosyasının `C:\ProgramData\LafPOS\backups`'a yazılması ve kapanan hesapların
+Personel'den yeni PIN'le açılması ilk kurulumda bakılacak.
 
 Sonra Yönetim › Yazarkasa POS › Pavo › Eşleştir ve küçük bir deneme satışı; lafmaliyet'te geçiş günü
 (`docs/03-ENTEGRASYON.md`).

@@ -61,6 +61,13 @@ karekod: Yönetim › Ağ ve uzaktan erişim.
 **4. Ayarlar.** Başlat › LafPOS › **LafPOS ayarları**. Not Defteri açılır; size verilen satırları yapıştırıp
 kaydedin (Ctrl+S) ve kapatın. LafPOS birkaç saniye içinde yeni ayarlarla kendiliğinden yeniden başlar.
 
+**5. Deneyin, sonra gerçek kullanıma başlayın.** LafPOS ilk açılışta **deneme modundadır**: sahte satış ya da
+müşteri yoktur, giriş ekranında örnek PIN'ler durur, her ekranın üstünde "Deneme modu: yapılan satışlar gerçek
+sayılmaz" yazar; deneme satışları hiçbir yere gitmez. Kafede her şeyi deneyin. Bitince gün sonunu alın ve Yönetim ›
+Ayarlar ve yedek › **Denemeyi bitir, gerçek kullanıma başla**'ya basın (yalnız patron): önce yedek alınır, deneme
+kayıtları silinir, menü, personel, masalar ve ayarlar kalır; patron PIN'inizi değiştirirsiniz. Ayrıntı
+[docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §2 "İlk açılış".
+
 **Güncellemeler kendiliğinden gelir.** LafPOS yarım saatte bir yeni sürüm var mı diye bakar. Yeni sürümü indirir,
 ama **yalnız gün kapalıyken** (gün sonundan sonra) kurar; satış sırasında hiçbir şey değişmez. Kurmadan önce
 verilerin bir kopyasını alır. Yeni sürüm açılmazsa kendiliğinden eski sürüme döner. Durum Yönetim › Ayarlar ve

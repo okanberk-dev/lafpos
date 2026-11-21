@@ -6,8 +6,9 @@ import { posNameKey, posNamesOf, posSlotOf } from '@shared/pos-name';
 import { PAYMENT_CHANNELS } from '@shared/labels';
 import { ALL_PERMISSIONS, effectivePermissions, isPermission, LOCKED_ROLES, type Permission, PERMISSION_GROUPS, PERMISSIONS, type Role, ROLE_DEFAULTS, ROLE_LABELS, rolePermissions, ROLES } from '@shared/permissions';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
-import { backupNow } from '../jobs';
-import { type AppEnv, assertNotLocked, type AuthUser, can, clientKey, hashPin, isValidPin, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
+import { backupNamed, backupNow } from '../jobs';
+import { type AppEnv, assertNotLocked, type AuthUser, can, clearFailures, clientKey, hashPin, isValidPin, recordFailure, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
+import { checkFinish, denemeStatus, finishDeneme, isSamplePin, isSamplePinHash } from '../services/deneme';
 import { installedVersion, readUpdateStatus } from '../lib/surum';
 import { Effects } from '../lib/effects';
 import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
@@ -788,6 +789,8 @@ function assertPatronRemains(t: Tx | DB, changedId: string, next: { role: Role; 
 function pinFree(c: Context<AppEnv>, pin: string, target: { id?: string; name: string }) {
   const actor = c.get('user');
   if (!isValidPin(pin)) throw bad('PIN 4-6 haneli rakam olmalı', 'pin_invalid');
+  // Gerçek kullanımda deneme döneminin örnek PIN'leri verilmez (giriş ekranında ve belgelerde yazıyorlardı)
+  if (getSettings().liveSince != null && isSamplePin(pin)) throw bad('Bu PIN deneme döneminin örnek PIN’i, herkes biliyor: başka bir PIN seçin', 'pin_sample');
   if (actor.role !== 'patron') {
     const addr = clientKey(c);
     assertNotLocked('pin', addr, actor.id);
@@ -832,6 +835,10 @@ adminRoutes.patch('/users/:id', async (c) => {
   if (!target) throw notFound('Personel');
   if ((target.role === 'patron' || input.role === 'patron') && user.role !== 'patron') throw conflict('Patron hesabını yalnız patron değiştirebilir');
   if (input.active === false && target.id === user.id) throw conflict('Kendi hesabınızı kapatamazsınız');
+  // Denemeden sonra örnek PIN'iyle kapatılan hesap yeni PIN'siz açılmaz
+  if (input.active === true && !target.active && !input.pin && getSettings().liveSince != null && isSamplePinHash(target.pinHash)) {
+    throw bad('Bu hesabın PIN’i deneme döneminin örnek PIN’i: açmadan önce yeni PIN verin', 'pin_sample');
+  }
   const next = {
     role: input.role ?? target.role,
     active: input.active ?? target.active,
@@ -1008,6 +1015,8 @@ adminRoutes.put('/settings', async (c) => {
   const warn = input.kitchenWarnMinutes ?? prev.kitchenWarnMinutes;
   const alarm = input.kitchenAlarmMinutes ?? prev.kitchenAlarmMinutes;
   if ((warn !== prev.kitchenWarnMinutes || alarm !== prev.kitchenAlarmMinutes) && alarm <= warn) throw new HttpError(422, 'Bar fişi alarmı uyarıdan uzun olmalı', 'kitchen_alarm');
+  // Gerçek kullanım başladıktan sonra kurulum modu (örnek PIN'ler) geri açılmaz: örnek PIN'li hesaplar kapandı
+  if (input.demoMode === true && !prev.demoMode && prev.liveSince != null) throw new HttpError(422, 'Gerçek kullanım başladı: kurulum modu yeniden açılmaz', 'live');
   const before = serviceModeOf(prev);
   const zFrom = prev.zNoStart;
   // İlk Z numarası yalnız değiştiyse denetlenir ve kayda düşer (aynı değeri yeniden göndermek değişiklik değil)
@@ -1128,5 +1137,46 @@ adminRoutes.post('/backups', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   const file = await backupNow();
   return c.json({ file });
+});
+
+// ─── Deneme modu: "Denemeyi bitir, gerçek kullanıma başla" (services/deneme.ts) ──────────────────────────────
+
+adminRoutes.get('/deneme', (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  if (user.role !== 'patron') throw new HttpError(403, 'Denemeyi yalnız patron bitirir', 'patron_only');
+  return c.json(denemeStatus(user));
+});
+
+/**
+ * Patron kendi PIN'iyle onaylar (deneme sınırı yetkili onayındaki gibi). Sıra: ön koşullar (patron, açık gün yok,
+ * gerçek gün yok, yeni PIN geçerli) → yedek (alınamazsa hiçbir şey silinmez) → tek işlemde silme ve ayarlar. Gerçek
+ * kullanım başladıktan sonra yalnız `already: true` döner, hiçbir şey silinmez
+ */
+adminRoutes.post('/deneme/bitir', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  if (user.role !== 'patron') throw new HttpError(403, 'Denemeyi yalnız patron bitirir', 'patron_only');
+  const input = await body(c, z.object({ pin: z.string().max(12), newPin: z.string().max(12).optional() }));
+  const addr = clientKey(c);
+  assertNotLocked('onay', addr, user.id);
+  const me = db.select({ pinHash: schema.users.pinHash }).from(schema.users).where(eq(schema.users.id, user.id)).get();
+  if (!me || !isValidPin(input.pin) || hashPin(input.pin) !== me.pinHash) {
+    recordFailure('onay', addr, user);
+    throw new HttpError(403, 'PIN hatalı: kendi PIN’inizi yazın', 'pin_invalid');
+  }
+  clearFailures('onay', addr, user.id);
+  const newPin = input.newPin || undefined;
+  if (checkFinish(user, { newPin }).already) return c.json({ already: true, backup: null, deleted: null, closedUsers: [] });
+  let backup: string;
+  try {
+    backup = await backupNamed('deneme-oncesi');
+  } catch (e) {
+    console.error('[deneme] yedek alınamadı', e);
+    throw new HttpError(500, 'Yedek alınamadı; hiçbir şey silinmedi. Diskte yer olduğundan emin olup yeniden deneyin', 'backup_failed');
+  }
+  const result = finishDeneme(user, { newPin }, backup);
+  if (!result.already) sessionsChanged();
+  return c.json(result);
 });
 

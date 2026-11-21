@@ -277,8 +277,29 @@ export interface BootstrapDTO {
     localStamps: boolean;
     /** Sitedeki karaoke rezervasyonları okunuyor mu (site bağlantısı, anahtar ve planda oda; §2.4) */
     siteKaraoke: boolean;
+    /**
+     * Deneme modu (kurulum modu ya da eğitim yazarkasası): satışlar eğitimdir, lafmaliyet'e gitmez. Kabuk her
+     * ekranda "Deneme modu" şeridini gösterir (eski sunucu göndermez: şerit yok)
+     */
+    deneme?: boolean;
   };
   serverTime: number;
+}
+
+/** Yönetim › Ayarlar ve yedek › Deneme modu (GET /api/admin/deneme; yalnız patron) */
+export interface DenemeStatusDTO {
+  deneme: boolean;
+  /** Gerçek kullanımın başladığı an; doluysa deneme verisi silme bir daha çalışmaz */
+  liveSince: number | null;
+  dayOpen: boolean;
+  /** Deneme modu dışında kapanmış gün sayısı: 0 değilse silme yapılmaz */
+  realDays: number;
+  counts: { orders: number; payments: number; days: number; cashMovements: number; reservations: number; customers: number; platformOrders: number; fiscalReceipts: number; audit: number };
+  /** Örnek PIN'iyle duran öbür açık hesaplar (bitirince kapanır) */
+  samplePinUsers: { id: string; name: string; role: string }[];
+  /** Patronun kendi PIN'i örnek PIN: bitirirken yeni PIN zorunlu */
+  mustChangeOwnPin: boolean;
+  okcProvider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';
 }
 
 export interface OrderItemDTO {
