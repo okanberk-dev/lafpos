@@ -1,358 +1,335 @@
-// LafPOS'un otomatik güncellemesi (Windows kurulumu). Bekçi (bekci.mjs) bunu SYSTEM olarak çalıştırır: GitHub'daki
-// son sürümü (okanberk-dev/lafpos › Releases › latest) açılıştan 10 dakika sonra, sonra 6 saatte bir denetler; yenisi
-// varsa kurulum dosyasını veri klasörünün guncelleme\ alt klasörüne indirir, SHA-256 özetini doğrular ve gün kapalıyken
-// (gün sonundan sonra; sunucuya yalnız bu bilgisayardan sorulur) tek seferlik bir Görev Zamanlayıcı göreviyle sessiz
-// kurar (/S). Kurulumu bekçi kendi alt süreci olarak açmaz: kurulum "LafPOS Sunucu" görevini durdurur, görevin iş
-// nesnesindeki her süreç onunla kapanırdı. Kurulum önce veritabanının kopyasını alır, olmazsa güncellemeyi bırakıp eski
-// sürümü yeniden açar; sonunda sunucuyu yeni sürümle başlatır. Yeni sürümün bekçisi tek seferlik görevi ve indirilen
-// dosyayı siler.
-// Ayarlar ayarlar.env'de: LAFPOS_GUNCELLEME (otomatik | kapali; varsayılan otomatik) ve LAFPOS_GUNCELLEME_TOKEN
-// (GitHub'ın salt okunur anahtarı; boşsa hiç denetlenmez). Anahtar günlüğe ve durum dosyasına yazılmaz, sunucuya
-// verilmez. Durum guncelleme\durum.json'da; sunucu onu Yönetim › Ayarlar ve yedek'te gösterir.
-// Bağımlılıksız; bekci.mjs ile pakete girer (derle.mjs). Saf yardımcıların testi tests/guncelleme.test.ts.
-import { execFile } from 'node:child_process';
+// LafPOS'un otomatik güncellemesi (Windows kurulumu). Bekçi (bekci.mjs) bunu SYSTEM olarak çalıştırır; ayar ve anahtar
+// gerekmez. Güncelleme kanalı Vercel'deki lafpos projesidir (kanal.mjs her main derlemesinde yazar): sırayla
+// MANIFEST_URLS'teki surum.json, yalnız HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 30 dk'da
+// bir (ETag: değişmeyen kanal gövde göndermez). Yeni derleme (`build`, HEAD commit'inin zamanı) varsa uygulama yükünü
+// (lafpos-app-<build>.zip) aynı adresten indirir, boyunu ve SHA-256'sını doğrular; Node ya da better-sqlite3 değiştiyse
+// onları açık kaynaklarından (nodejs.org, WiseLibs'in GitHub sürümü) indirip manifestteki özetle doğrular.
+// Kurulum yalnız açık iş günü yokken (sunucuya bu bilgisayardan sorulur): yük app.yeni'ye açılır, sunucu düzgün durur,
+// veritabanının kopyası alınır, app → app.eski ve app.yeni → app olur, yeni sürüm (yeni bekçi ve sunucu) deneme olarak
+// açılır; 60 sn içinde /api/health yeni derlemeyi söylemezse eski klasöre dönülür ve o derleme bir daha denenmez.
+// Başarıda bekçi 75 koduyla çıkar: zamanlanmış görevin başlatıcısı (baslat.cmd) varsa yeni node.exe'yi yerine koyup
+// bekçiyi yeni sürümle yeniden açar. LAFPOS_GUNCELLEME=kapali (ayarlar.env) kapatır.
+// Durum veri klasöründe guncelleme\durum.json; sunucu onu Yönetim › Ayarlar ve yedek'te gösterir.
+// Bağımlılıksız; pakete girer (paket.mjs). Saf yardımcıların ve kurulum akışının testi tests/guncelleme.test.ts.
+import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { once } from 'node:events';
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { entryData, extractZip, readTarGz, readZip } from './arsiv.mjs';
 
-export const REPO = 'okanberk-dev/lafpos';
-export const API_HOST = 'api.github.com';
-export const LATEST_URL = `https://${API_HOST}/repos/${REPO}/releases/latest`;
-/** Sürümdeki iki dosya: adları sabit (iş akışı .github/workflows/windows.yml yükler) */
-export const EXE_ASSET = 'LafPOS-Kurulum.exe';
-export const SHA_ASSET = 'LafPOS-Kurulum.exe.sha256';
-/** Kurulumu SYSTEM olarak çalıştıran tek seferlik görev */
-export const TASK = 'LafPOS Güncelleme';
-export const FIRST_CHECK_MS = 10 * 60_000;
-export const CHECK_EVERY_MS = 6 * 3600_000;
-/** Gün açıkken (ya da sunucuya sorulamadıkça) kurulum bu aralıkla yeniden denenir */
-export const DAY_POLL_MS = 10 * 60_000;
-/** Kurulamayan sürüm en erken bu kadar sonra yeniden denenir (her deneme sunucuyu durdurur, veritabanını kopyalar) */
-export const RETRY_SAME_MS = 24 * 3600_000;
-/** Kurulum bekçiyi bu süre içinde durdurmazsa (başlamadı ya da en başta düştü) sunucu yeniden açılır */
-export const INSTALL_TIMEOUT_MS = 5 * 60_000;
-/** Ayar değişince (anahtar eklendi, güncelleme açıldı) ilk denetim */
-export const AFTER_SETTINGS_MS = 60_000;
-/** Kurulum dosyasının üst sınırı: bundan büyük yanıt indirilmez */
-export const MAX_EXE_BYTES = 300 * 1024 * 1024;
-export const STATES = ['guncel', 'indiriliyor', 'gun-kapaninca', 'kuruluyor', 'hata', 'kapali', 'anahtar-yok'];
-const UA = 'LafPOS';
-const API_VERSION = '2022-11-28';
+/** Güncelleme kanalı: önce alan adı, o yoksa Vercel'in kendi adresi */
+export const MANIFEST_URLS = ['https://lafpos.laffogato.net/guncelleme/surum.json', 'https://lafpos.vercel.app/guncelleme/surum.json'];
+export const FIRST_CHECK_MS = 2 * 60_000;
+export const CHECK_EVERY_MS = 30 * 60_000;
+/** Kurulum hazırken gün açıksa sunucuya (yalnız bu bilgisayardan) bu aralıkla yeniden sorulur */
+export const DAY_POLL_MS = 5 * 60_000;
+/** Yeni sürümün açılıp /api/health'te yeni derlemeyi söylemesi için süre */
+export const HEALTH_TIMEOUT_MS = 60_000;
+/** Bekçinin "beni yeni sürümle yeniden aç" çıkış kodu (baslat.cmd döngüsü) */
+export const RESTART_EXIT_CODE = 75;
+/** İndirmelerin üst sınırı: bundan büyük yanıt indirilmez */
+export const MAX_BYTES = { app: 200 * 2 ** 20, node: 150 * 2 ** 20, sqlite: 50 * 2 ** 20, manifest: 64 * 1024 };
+/** Açık kaynakların izinli yönlendirmesi: GitHub sürüm dosyası imzalı bir depolama adresine yönlenir */
+export const SQLITE_REDIRECT_HOSTS = ['objects.githubusercontent.com', 'release-assets.githubusercontent.com'];
+/** Yük içinde better-sqlite3'ün Windows ikilisi (paket.mjs SQLITE_BINARY ile aynı) */
+export const SQLITE_BINARY = 'node_modules/better-sqlite3/build/Release/better_sqlite3.node';
+/** Güncellemenin aldığı veritabanı kopyalarından tutulan (kurulum dosyasının kopyaları da aynı adla başlar) */
+export const KEEP_UPDATE_BACKUPS = 5;
+export const STATES = ['guncel', 'indiriliyor', 'bekliyor', 'kuruluyor', 'geri-dondu', 'hata', 'kapali'];
+const SHA_RE = /^[0-9a-f]{64}$/;
+const SEMVER_RE = /^\d{1,5}\.\d{1,5}\.\d{1,5}$/;
 
-// ─── Ayar ve sürüm ───────────────────────────────────────────────────────────
+// ─── Ayar ve manifest ────────────────────────────────────────────────────────
 
-/**
- * ayarlar.env'den güncelleme ayarı. LAFPOS_GUNCELLEME "kapali" (kapalı, off, hayir, 0, false) değilse otomatik;
- * anahtar boşsa denetim yapılmaz
- * @param {Record<string, string | undefined>} vars
- */
-export function updateSettings(vars) {
-  const raw = String(vars.LAFPOS_GUNCELLEME ?? '')
+/** ayarlar.env'deki LAFPOS_GUNCELLEME: "kapali" (kapalı, off, hayir, 0, false) değilse otomatik */
+export function updateMode(vars) {
+  const raw = String(vars?.LAFPOS_GUNCELLEME ?? '')
     .trim()
     .toLocaleLowerCase('tr');
-  const off = ['kapali', 'kapalı', 'kapat', 'off', 'hayir', 'hayır', 'no', 'false', '0'].includes(raw);
-  return { mode: off ? 'kapali' : 'otomatik', token: String(vars.LAFPOS_GUNCELLEME_TOKEN ?? '').trim() };
+  return ['kapali', 'kapalı', 'kapat', 'off', 'hayir', 'hayır', 'no', 'false', '0'].includes(raw) ? 'kapali' : 'otomatik';
 }
 
-/** "1.2.3" ya da "v1.2.3" → [1, 2, 3]; değilse null */
-export function parseVersion(v) {
-  const m = /^v?(\d{1,9})\.(\d{1,9})\.(\d{1,9})$/.exec(String(v ?? '').trim());
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
-}
-
-/** a, b'den yeniyse 1, aynıysa 0, eskiyse -1. Anlaşılmayan sürüm hata */
-export function compareVersions(a, b) {
-  const x = parseVersion(a);
-  const y = parseVersion(b);
-  if (!x || !y) throw new Error(`Sürüm anlaşılamadı: ${x ? b : a}`);
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i] ? 1 : -1;
-  return 0;
-}
-
-/** Aday, kurulu sürümden yeni mi (biri anlaşılmazsa hayır: anlaşılmayan sürüm kurulmaz) */
-export function isNewer(candidate, installed) {
-  if (!parseVersion(candidate) || !parseVersion(installed)) return false;
-  return compareVersions(candidate, installed) > 0;
-}
-
-// ─── GitHub ──────────────────────────────────────────────────────────────────
+export const appZipName = (build) => `lafpos-app-${build}.zip`;
+export const nodeZipUrl = (v) => `https://nodejs.org/dist/v${v}/node-v${v}-win-x64.zip`;
+export const sqliteTarUrl = (v, abi) => `https://github.com/WiseLibs/better-sqlite3/releases/download/v${v}/better-sqlite3-v${v}-node-v${abi}-win32-x64.tar.gz`;
 
 /**
- * İsteğin başlıkları. Anahtar yalnız api.github.com'a gider: dosya indirmesi imzalı bir başka adrese yönlenir
- * (objects.githubusercontent.com gibi), anahtar oraya taşınmaz
+ * surum.json → doğrulanmış güncelleme. Uygulama yükünün adresi manifestin adresinden kurulur (aynı host); Node ve
+ * better-sqlite3'ün adresleri sabit kalıptan (manifest yalnız sürüm ve özet verir). Anlaşılmayan alan hata
  */
-export function requestHeaders(url, token, accept) {
-  const headers = { 'User-Agent': UA, Accept: accept };
-  if (new URL(url).host === API_HOST) {
-    headers['X-GitHub-Api-Version'] = API_VERSION;
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
-}
-
-/** GitHub'ın hata yanıtı → sahibine anlaşılır neden */
-export function githubError(status, headers) {
-  const get = (k) => (headers && typeof headers.get === 'function' ? headers.get(k) : headers?.[k]) ?? null;
-  if (status === 401) return 'GitHub anahtarı geçersiz ya da süresi dolmuş (401): ayarlar.env\'deki LAFPOS_GUNCELLEME_TOKEN\'ı yenileyin';
-  if ((status === 403 || status === 429) && get('x-ratelimit-remaining') === '0') return `GitHub'ın istek sınırı doldu (${status}); sonraki denetimde yeniden denenecek`;
-  if (status === 403) return 'GitHub isteği reddetti (403): anahtarın okanberk-dev/lafpos için "Contents: Read-only" izni olmalı';
-  if (status === 404) return 'Sürüm bulunamadı (404): anahtar okanberk-dev/lafpos\'u göremiyor ya da henüz yayınlanmış sürüm yok';
-  return `GitHub yanıt vermedi (${status}); sonraki denetimde yeniden denenecek`;
-}
-
-/** Sürümdeki iki dosya (kurulum ve özeti). İndirme adresi api.github.com'un dosya ucu olmalı */
-export function pickAssets(assets) {
-  const list = Array.isArray(assets) ? assets : [];
-  const find = (name) => {
-    const a = list.find((x) => x && x.name === name);
-    if (!a) throw new Error(`Sürümde ${name} yok`);
-    if (a.state && a.state !== 'uploaded') throw new Error(`${name} henüz yüklenmemiş`);
-    let url;
-    try {
-      url = new URL(String(a.url));
-    } catch {
-      throw new Error(`${name} adresi anlaşılamadı`);
-    }
-    if (url.protocol !== 'https:' || url.host !== API_HOST || !url.pathname.startsWith(`/repos/${REPO}/releases/assets/`)) throw new Error(`${name} adresi beklenmedik: ${url.host}`);
-    const size = Number(a.size);
-    return { name, url: url.href, size: Number.isFinite(size) && size >= 0 ? size : null };
+export function parseManifest(json, manifestUrl) {
+  const m = json && typeof json === 'object' ? json : null;
+  if (!m || m.v !== 1) throw new Error('surum.json anlaşılamadı (v)');
+  const build = m.build;
+  if (!Number.isInteger(build) || build < 1e9 || build > 1e11) throw new Error('surum.json: derleme numarası anlaşılamadı');
+  if (typeof m.version !== 'string' || !SEMVER_RE.test(m.version)) throw new Error('surum.json: sürüm anlaşılamadı');
+  const app = m.app ?? {};
+  if (app.file !== appZipName(build)) throw new Error('surum.json: uygulama yükünün adı beklenmedik');
+  if (!SHA_RE.test(String(app.sha256))) throw new Error('surum.json: uygulama yükünün özeti anlaşılamadı');
+  if (!Number.isInteger(app.size) || app.size <= 0 || app.size > MAX_BYTES.app) throw new Error('surum.json: uygulama yükünün boyu anlaşılamadı');
+  const node = m.node ?? {};
+  if (!SEMVER_RE.test(String(node.version)) || !/^\d{2,4}$/.test(String(node.abi)) || !SHA_RE.test(String(node.sha256))) throw new Error('surum.json: Node bilgisi anlaşılamadı');
+  const sqlite = m.sqlite ?? {};
+  if (!SEMVER_RE.test(String(sqlite.version)) || !SHA_RE.test(String(sqlite.sha256))) throw new Error('surum.json: better-sqlite3 bilgisi anlaşılamadı');
+  const base = new URL(manifestUrl);
+  const url = new URL(app.file, base);
+  if (url.origin !== base.origin) throw new Error('surum.json: uygulama yükü başka adreste');
+  return {
+    build,
+    version: m.version,
+    commit: typeof m.commit === 'string' ? m.commit.slice(0, 40) : '',
+    app: { file: app.file, url: url.href, sha256: app.sha256, size: app.size },
+    node: { version: node.version, abi: String(node.abi), sha256: node.sha256, url: nodeZipUrl(node.version) },
+    sqlite: { version: sqlite.version, sha256: sqlite.sha256, url: sqliteTarUrl(sqlite.version, node.abi) },
   };
-  return { exe: find(EXE_ASSET), sha: find(SHA_ASSET) };
 }
 
-/** releases/latest yanıtı → { version, tag, exe, sha } */
-export function parseRelease(json) {
-  if (!json || typeof json !== 'object') throw new Error('GitHub yanıtı anlaşılamadı');
-  if (json.draft || json.prerelease) throw new Error('Son sürüm taslak ya da ön sürüm; kurulmaz');
-  const tag = String(json.tag_name ?? '');
-  const v = parseVersion(tag);
-  if (!v) throw new Error(`Sürüm etiketi anlaşılamadı: ${tag || '(boş)'}`);
-  return { version: v.join('.'), tag, ...pickAssets(json.assets) };
+/** Yönlendirmeye izin var mı: yalnız HTTPS; aynı host ya da açıkça izin verilen depolama hostu */
+export function redirectAllowed(from, to, extraHosts = []) {
+  let a;
+  let b;
+  try {
+    a = new URL(from);
+    b = new URL(to, from);
+  } catch {
+    return false;
+  }
+  return b.protocol === 'https:' && (b.host === a.host || extraHosts.includes(b.host));
 }
 
-/** .sha256 dosyası ("<64 hex>  LafPOS-Kurulum.exe" ya da yalnız özet) → küçük harf özet; yoksa null */
-export function parseShaFile(text) {
-  const m = /(?:^|\s)([0-9a-fA-F]{64})(?=\s|$)/.exec(String(text ?? ''));
-  return m ? m[1].toLowerCase() : null;
+/** app\package.json → kurulu sürüm; okunamazsa derleme 0 (her derleme yenidir) */
+export function readInstalled(appDir) {
+  try {
+    const p = JSON.parse(readFileSync(join(appDir, 'package.json'), 'utf8'));
+    return {
+      version: typeof p.version === 'string' ? p.version : '',
+      build: Number.isInteger(p.build) ? p.build : 0,
+      sqlite: typeof p.sqlite === 'string' ? p.sqlite : '',
+      nodeAbi: p.nodeAbi != null ? String(p.nodeAbi) : '',
+    };
+  } catch {
+    return { version: '', build: 0, sqlite: '', nodeAbi: '' };
+  }
 }
-
-export async function sha256File(file) {
-  const hash = createHash('sha256');
-  for await (const chunk of createReadStream(file)) hash.update(chunk);
-  return hash.digest('hex');
-}
-
-/** Dosyanın SHA-256 özeti beklenenle aynı mı (dosya yoksa hayır) */
-export async function verifyFile(file, expected) {
-  if (!expected || !existsSync(file)) return false;
-  return (await sha256File(file)) === String(expected).toLowerCase();
-}
-
-/** Metindeki anahtarı gizler (günlük ve durum dosyası) */
-export function redact(text, token) {
-  const s = String(text ?? '');
-  return token && token.length >= 4 ? s.split(token).join('***') : s;
-}
-
-// ─── Durum ve karar ──────────────────────────────────────────────────────────
-
-/** Güncelleme kapalı ya da anahtar yoksa durum; açıksa null */
-export function offState(ayar) {
-  if (ayar.mode === 'kapali') return { durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: LAFPOS_GUNCELLEME=kapali)' };
-  if (!ayar.token) return { durum: 'anahtar-yok', mesaj: 'GitHub anahtarı yok (ayarlar.env: LAFPOS_GUNCELLEME_TOKEN boş); güncelleme denetlenmiyor' };
-  return null;
-}
-
-const BASE = { kurulu: null, sonKontrol: null, yeniSurum: null, durum: 'guncel', mesaj: '' };
-const iso = (ms) => new Date(ms).toISOString();
 
 /**
- * Durum dosyasının bir sonraki hâli (saf). Olaylar:
- * - acilis {kurulu, ayar, now}: bekçi başladı; yarım kalan kurulum (kuruluyor) burada sonuçlanır
- * - ayar {ayar}: ayarlar.env değişti
- * - kontrol {son, now}: GitHub'daki son sürüm
- * - indiriliyor / indirildi {surum}
- * - bekle {neden: 'gun-acik' | 'bilinmiyor'}: kurulum için uygun an değil
- * - kuruluyor {surum, now}
- * - hata {mesaj, now}
+ * Ne kurulacak (saf): manifestteki derleme kurulandan yeni değilse ya da daha önce denenip geri dönüldüyse hiçbir şey.
+ * Node, çalışan Node'dan farklıysa değişir; better-sqlite3 sürümü ya da Node ABI'si değişince yerel modül de
+ */
+export function planUpdate({ installed, nodeVersion, manifest, failed = [] }) {
+  if (!manifest || manifest.build <= installed.build || failed.includes(manifest.build)) return null;
+  return {
+    build: manifest.build,
+    version: manifest.version,
+    node: manifest.node.version !== nodeVersion,
+    sqlite: manifest.sqlite.version !== installed.sqlite || manifest.node.abi !== installed.nodeAbi,
+  };
+}
+
+/** Kurulum için an uygun mu (saf): yalnız sunucu "açık gün yok" derse */
+export function installDecision(dayOpen) {
+  if (dayOpen === false) return 'kur';
+  return dayOpen === true ? 'gun-acik' : 'bilinmiyor';
+}
+
+/** Zip'teki kayıt → app.yeni'deki yeri. Yerel modül yükte olmamalı (eskisinden ya da indirilenden gelir) */
+export function appEntry(name) {
+  if (name === SQLITE_BINARY) throw new Error('Uygulama yükünde better-sqlite3 ikilisi olmamalı');
+  return name;
+}
+
+const pad = (n) => String(n).padStart(2, '0');
+/** Güncellemenin aldığı veritabanı kopyasının adı (yerel saat; kurulum dosyasının kopyalarıyla aynı önek) */
+export function backupName(build, at) {
+  const d = new Date(at);
+  return `lafpos-guncelleme-${build}-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.db`;
+}
+
+/** Tutulacak sayıdan fazla güncelleme kopyası: en eskiler (ada göre değil, verilen zamana göre) */
+export function oldUpdateBackups(files, keep = KEEP_UPDATE_BACKUPS) {
+  const dbs = files.filter((f) => /^lafpos-guncelleme-.*\.db$/.test(f.name)).sort((a, b) => b.at - a.at);
+  return dbs.slice(keep).flatMap((f) => [f.name, `${f.name}-wal`]);
+}
+
+/** İndirme klasöründe artık gerekmeyenler: yarım indirmeler ve kurulmuş ya da eskimiş derlemelerin yükü */
+export function staleDownloads(names, keepBuild) {
+  return names.filter((n) => {
+    if (n.endsWith('.part')) return true;
+    const m = /^lafpos-app-(\d+)\.zip$/.exec(n);
+    return !!m && Number(m[1]) !== keepBuild;
+  });
+}
+
+// ─── Durum ───────────────────────────────────────────────────────────────────
+
+const iso = (ms) => new Date(ms).toISOString();
+const BASE = { durum: 'guncel', mesaj: '', kurulu: null, yeni: null, sonKontrol: null, sonBasariliKontrol: null, sonHata: null, sonKurulum: null, basarisiz: [] };
+const label = (x) => (x ? `${x.surum} (${x.build})` : '');
+
+/**
+ * durum.json'un bir sonraki hâli (saf). Olaylar: acilis {kurulu, mode, now} · kontrol {plan, manifest, now} ·
+ * kontrol-hata {mesaj, now} · indiriliyor {yeni} · hazir {yeni} · gun-acik · kuruluyor {yeni, now} ·
+ * kuruldu {kurulu, now} · geri-dondu {yeni, neden, now} · hata {mesaj, now} · mod {mode}
  */
 export function nextStatus(prev, ev) {
   const p = { ...BASE, ...(prev && typeof prev === 'object' ? prev : {}) };
+  if (!Array.isArray(p.basarisiz)) p.basarisiz = [];
   switch (ev.type) {
     case 'acilis': {
-      const kurulu = ev.kurulu;
-      const base = { ...p, kurulu };
-      const off = offState(ev.ayar);
-      if (p.durum === 'kuruluyor' && p.yeniSurum) {
-        if (parseVersion(kurulu) && parseVersion(p.yeniSurum) && compareVersions(kurulu, p.yeniSurum) >= 0) {
-          return { ...base, ...(off ?? { durum: 'guncel' }), yeniSurum: null, mesaj: `${kurulu} sürümüne güncellendi (${off ? off.mesaj : 'otomatik güncelleme'})`, guncellendi: iso(ev.now) };
-        }
-        return {
-          ...base,
-          durum: 'hata',
-          mesaj: `${p.yeniSurum} kurulamadı, ${kurulu} çalışmaya devam ediyor (veritabanının kopyası alınamamış olabilir). Gün kapalıyken yeniden denenecek, en erken 24 saat sonra; acele ederseniz kurulum dosyasını elle çalıştırın`,
-        };
+      const base = { ...p, kurulu: ev.kurulu, sonHata: null };
+      if (p.durum === 'kuruluyor' && p.yeni) {
+        if (ev.kurulu?.build === p.yeni.build) return { ...base, durum: 'guncel', yeni: null, sonKurulum: iso(ev.now), mesaj: 'Güncellendi' };
+        return { ...base, durum: 'hata', yeni: null, mesaj: 'Kurulum yarıda kaldı (bilgisayar kapanmış olabilir); eski sürüm çalışıyor, yeniden denenecek' };
       }
-      if (off) return { ...base, ...off };
-      // Kurulu sürüm durum dosyasındakinden farklı: elle kuruldu
-      if (p.kurulu && p.kurulu !== kurulu) {
-        const still = p.yeniSurum && isNewer(p.yeniSurum, kurulu) ? p.yeniSurum : null;
-        return { ...base, durum: 'guncel', yeniSurum: still, mesaj: `${kurulu} kurulu; yeni sürüm açılıştan 10 dakika sonra denetlenecek` };
-      }
-      if (!prev || p.durum === 'kapali' || p.durum === 'anahtar-yok') return { ...base, durum: 'guncel', mesaj: 'Yeni sürüm açılıştan 10 dakika sonra denetlenecek' };
-      if (p.durum === 'indiriliyor') return { ...base, mesaj: `${p.yeniSurum ?? 'Yeni sürüm'} indirmesi yarıda kaldı; birkaç dakika içinde yeniden başlayacak` };
+      if (ev.mode === 'kapali') return { ...base, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: LAFPOS_GUNCELLEME=kapali)' };
+      // Elle (kurulum dosyasıyla) daha yeni bir sürüm kurulduysa bekleyen yeni sürüm artık eskidir
+      if (p.yeni && ev.kurulu && p.yeni.build <= ev.kurulu.build) return { ...base, durum: 'guncel', yeni: null, mesaj: 'Güncel' };
+      if (p.durum === 'kapali' || p.durum === 'indiriliyor' || p.durum === 'kuruluyor' || !prev) return { ...base, durum: 'guncel', yeni: null, mesaj: 'Yeni sürüm birkaç dakika içinde denetlenecek' };
       return base;
     }
-    case 'ayar': {
-      const off = offState(ev.ayar);
-      if (off) return { ...p, ...off };
-      if (p.durum === 'kapali' || p.durum === 'anahtar-yok') return { ...p, durum: 'guncel', mesaj: 'Ayar kaydedildi; yeni sürüm bir dakika içinde denetlenecek' };
-      return p;
-    }
+    case 'mod':
+      if (ev.mode === 'kapali') return { ...p, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: LAFPOS_GUNCELLEME=kapali)' };
+      return p.durum === 'kapali' ? { ...p, durum: 'guncel', mesaj: 'Otomatik güncelleme açıldı; yeni sürüm birkaç dakika içinde denetlenecek' } : p;
     case 'kontrol': {
-      const base = { ...p, sonKontrol: iso(ev.now) };
-      if (isNewer(ev.son, p.kurulu)) return { ...base, yeniSurum: ev.son };
-      return { ...base, durum: 'guncel', yeniSurum: null, mesaj: `En son sürüm kurulu (${p.kurulu})` };
+      const base = { ...p, sonKontrol: iso(ev.now), sonBasariliKontrol: iso(ev.now), sonHata: null };
+      if (ev.plan) return base;
+      if (ev.manifest && p.basarisiz.includes(ev.manifest.build) && ev.manifest.build > (p.kurulu?.build ?? 0)) {
+        return { ...base, durum: 'geri-dondu', yeni: null, mesaj: `${label({ surum: ev.manifest.version, build: ev.manifest.build })} kurulunca sorun çıkmıştı; eski sürüm çalışıyor. Bu sürüm bir daha denenmeyecek, sonraki sürüm beklenecek` };
+      }
+      return { ...base, durum: 'guncel', yeni: null, mesaj: 'Güncel' };
     }
+    case 'kontrol-hata':
+      return { ...p, sonKontrol: iso(ev.now), sonHata: { mesaj: String(ev.mesaj ?? '').slice(0, 300), at: iso(ev.now) } };
     case 'indiriliyor':
-      return { ...p, durum: 'indiriliyor', yeniSurum: ev.surum, mesaj: `${ev.surum} indiriliyor` };
-    case 'indirildi':
-      return { ...p, durum: 'gun-kapaninca', yeniSurum: ev.surum, mesaj: `${ev.surum} indirildi ve doğrulandı; gün kapalıyken kurulacak` };
-    case 'bekle':
+      return { ...p, durum: 'indiriliyor', yeni: ev.yeni, mesaj: 'Yeni sürüm indiriliyor' };
+    case 'hazir':
+      return { ...p, durum: 'bekliyor', yeni: ev.yeni, mesaj: 'Yeni sürüm indirildi; gün kapalıyken kurulacak' };
+    case 'gun-acik':
+      return { ...p, durum: 'bekliyor', mesaj: 'Yeni sürüm hazır; gün sonundan sonra kendiliğinden kurulacak' };
+    case 'kuruluyor':
+      return { ...p, durum: 'kuruluyor', yeni: ev.yeni, mesaj: 'Yeni sürüm kuruluyor; sunucu bir dakika kadar kapalı kalır' };
+    case 'kuruldu':
+      return { ...p, durum: 'guncel', kurulu: ev.kurulu, yeni: null, sonKurulum: iso(ev.now), sonHata: null, mesaj: 'Güncellendi' };
+    case 'geri-dondu':
       return {
         ...p,
-        durum: 'gun-kapaninca',
-        mesaj:
-          ev.neden === 'gun-acik'
-            ? `${p.yeniSurum} hazır; gün açık, gün sonundan sonra kurulacak`
-            : `${p.yeniSurum} hazır; sunucuya gün açık mı diye sorulamadı, 10 dakika sonra yeniden sorulacak`,
+        durum: 'geri-dondu',
+        yeni: null,
+        basarisiz: [...p.basarisiz.filter((b) => b !== ev.yeni.build), ev.yeni.build].slice(-20),
+        sonHata: { mesaj: String(ev.neden ?? '').slice(0, 300), at: iso(ev.now) },
+        mesaj: `${label(ev.yeni)} kurulunca sorun çıktı; eski sürüme dönüldü. Bu sürüm bir daha denenmeyecek, sonraki sürüm beklenecek`,
       };
-    case 'kuruluyor':
-      return { ...p, durum: 'kuruluyor', yeniSurum: ev.surum, sonDeneme: { surum: ev.surum, at: iso(ev.now) }, mesaj: `${ev.surum} kuruluyor; sunucu bir iki dakika kapalı kalır` };
     case 'hata':
-      return { ...p, durum: 'hata', mesaj: String(ev.mesaj ?? 'Bilinmeyen hata').slice(0, 400) };
+      return { ...p, durum: 'hata', sonHata: { mesaj: String(ev.mesaj ?? '').slice(0, 300), at: iso(ev.now) }, mesaj: String(ev.mesaj ?? 'Bilinmeyen hata').slice(0, 300) };
     default:
       return p;
   }
 }
 
-/**
- * Kurulum için uygun an mı (saf): yalnız gün kapalıyken (sunucu öyle diyorsa). Kurulamayan sürüm 24 saat beklenir:
- * her deneme sunucuyu durdurur ve veritabanının kopyasını alır
- * @returns {'kur' | 'gun-acik' | 'bilinmiyor' | 'deneme-bekliyor'}
- */
-export function installDecision({ dayOpen, status, surum, now }) {
-  if (dayOpen === true) return 'gun-acik';
-  if (dayOpen !== false) return 'bilinmiyor';
-  const last = status?.sonDeneme;
-  if (last && last.surum === surum && now - Date.parse(last.at) < RETRY_SAME_MS) return 'deneme-bekliyor';
-  return 'kur';
-}
-
-/** Tek seferlik görev (Görev Zamanlayıcı XML'i, NSIS'teki sunucu göreviyle aynı düzen): tetiği yok, elle çalıştırılır */
-export function taskXml(exe, workDir) {
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  return [
-    '<?xml version="1.0" encoding="UTF-16"?>',
-    '<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">',
-    '  <RegistrationInfo><Description>LafPOS güncellemesi: bekçinin indirip doğruladığı kurulumu sessiz çalıştırır (tek seferlik; yeni sürüm bu görevi siler)</Description></RegistrationInfo>',
-    '  <Principals><Principal id="Author"><UserId>S-1-5-18</UserId><RunLevel>HighestAvailable</RunLevel></Principal></Principals>',
-    '  <Settings>',
-    '    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>',
-    '    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>',
-    '    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>',
-    '    <AllowHardTerminate>true</AllowHardTerminate>',
-    '    <StartWhenAvailable>false</StartWhenAvailable>',
-    '    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>',
-    '    <IdleSettings><StopOnIdleEnd>false</StopOnIdleEnd><RestartOnIdle>false</RestartOnIdle></IdleSettings>',
-    '    <AllowStartOnDemand>true</AllowStartOnDemand>',
-    '    <Enabled>true</Enabled>',
-    '    <Hidden>false</Hidden>',
-    '    <RunOnlyIfIdle>false</RunOnlyIfIdle>',
-    '    <WakeToRun>false</WakeToRun>',
-    '    <ExecutionTimeLimit>PT2H</ExecutionTimeLimit>',
-    '    <Priority>5</Priority>',
-    '  </Settings>',
-    '  <Actions Context="Author"><Exec>',
-    `    <Command>"${esc(exe)}"</Command>`,
-    '    <Arguments>/S</Arguments>',
-    `    <WorkingDirectory>${esc(workDir)}</WorkingDirectory>`,
-    '  </Exec></Actions>',
-    '</Task>',
-    '',
-  ].join('\r\n');
-}
-
-/** İndirilen kurulumun adı: LafPOS-Kurulum-<sürüm>.exe */
-export const installerName = (version) => `LafPOS-Kurulum-${version}.exe`;
-const INSTALLER_RE = /^LafPOS-Kurulum-(\d+\.\d+\.\d+)\.exe$/;
-
-/** Klasörde kalmaması gerekenler: yarım indirmeler, görev dosyası ve `keep` dışındaki kurulumlar (saf) */
-export function staleFiles(names, keep) {
-  return names.filter((n) => n.endsWith('.part') || n === 'gorev.xml' || (INSTALLER_RE.test(n) && n !== keep));
-}
-
 // ─── Çalıştırıcı ─────────────────────────────────────────────────────────────
 
-function schtasks(args) {
-  const exe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'schtasks.exe');
-  return new Promise((ok, fail) => {
-    execFile(exe, args, { windowsHide: true, timeout: 60_000 }, (err, _out, stderr) => {
-      if (err) fail(new Error(`schtasks ${args[0]}: ${String(stderr || err.message).trim()}`));
-      else ok();
-    });
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+const errText = (e) => (e instanceof Error ? e.message : String(e));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Dosya Windows x64 ikilisi mi (MZ + PE başlığı, makine 0x8664) */
+export function assertWinX64(file) {
+  const b = readFileSync(file);
+  const pe = b.length > 0x40 ? b.readUInt32LE(0x3c) : 0;
+  if (b.toString('latin1', 0, 2) !== 'MZ' || pe + 6 > b.length || b.toString('latin1', pe, pe + 4) !== 'PE\0\0' || b.readUInt16LE(pe + 4) !== 0x8664) {
+    throw new Error(`${file} Windows x64 ikilisi değil`);
+  }
+}
+
+/** Windows'ta süreç ağacını sonlandırır (deneme bekçisi ve onun sunucusu); başka sistemde SIGKILL */
+function killTree(child) {
+  return new Promise((ok) => {
+    if (child.exitCode != null || child.signalCode != null) return ok();
+    if (process.platform !== 'win32') {
+      child.kill('SIGKILL');
+      return ok();
+    }
+    const exe = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe');
+    execFile(exe, ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, timeout: 30_000 }, () => ok());
   });
 }
+
+/** Windows'ta yeni silinen ya da adı değişen klasördeki dosyayı virüs taraması bir an tutabilir: birkaç kez denenir */
+async function retry(fn, tries = 10) {
+  for (let i = 0; ; i++) {
+    try {
+      return fn();
+    } catch (e) {
+      if (i >= tries - 1) throw e;
+      await sleep(300 * (i + 1));
+    }
+  }
+}
+const rmDir = (dir) => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 
 /**
  * Bekçinin güncelleyicisi.
  * @param {{
- *   home: string,
- *   appDir: string,
- *   settings: () => { mode: string, token: string },
- *   port: () => number,
+ *   installDir: string,          // Program Files\LafPOS (app\, node\ ve baslat.cmd burada)
+ *   home: string,                // veri klasörü (C:\ProgramData\LafPOS)
  *   log: (line: string) => void,
- *   pauseServer?: () => Promise<void>,
- *   resumeServer?: () => void,
+ *   port: () => number,
+ *   mode: () => 'otomatik' | 'kapali',
+ *   server: { stop: () => Promise<void>, start: () => void },
+ *   exit: (code: number) => void,
+ *   manifestUrls?: string[],
  *   fetch?: typeof fetch,
- *   runTask?: (args: string[]) => Promise<void>,
- *   platform?: string,
  *   now?: () => number,
  *   timers?: { setTimeout: typeof setTimeout, clearTimeout: typeof clearTimeout },
+ *   platform?: string,
+ *   nodeVersion?: string,
+ *   execPath?: string,
+ *   healthTimeoutMs?: number,
+ *   verifyBinary?: (file: string) => void,
+ *   spawnTrial?: (nodeExe: string, appDir: string) => import('node:child_process').ChildProcess,
  * }} deps
  */
 export function createUpdater(deps) {
   const dir = join(deps.home, 'guncelleme');
+  const downloads = join(dir, 'indirilen');
   const statusFile = join(dir, 'durum.json');
+  const app = join(deps.installDir, 'app');
+  const appNew = join(deps.installDir, 'app.yeni');
+  const appOld = join(deps.installDir, 'app.eski');
+  const nodeNew = join(deps.installDir, 'node.yeni');
   const fetchImpl = deps.fetch ?? globalThis.fetch;
-  const runTask = deps.runTask ?? schtasks;
-  const platform = deps.platform ?? process.platform;
   const now = deps.now ?? Date.now;
   const timers = deps.timers ?? { setTimeout, clearTimeout };
-  const pauseServer = deps.pauseServer ?? (async () => {});
-  const resumeServer = deps.resumeServer ?? (() => {});
+  const platform = deps.platform ?? process.platform;
+  const nodeVersion = deps.nodeVersion ?? process.versions.node;
+  const execPath = deps.execPath ?? process.execPath;
+  const urls = deps.manifestUrls ?? MANIFEST_URLS;
+  const healthTimeout = deps.healthTimeoutMs ?? HEALTH_TIMEOUT_MS;
+  const verifyBinary = deps.verifyBinary ?? (platform === 'win32' ? assertWinX64 : () => {});
+  const spawnTrial =
+    deps.spawnTrial ??
+    ((nodeExe, appDir) =>
+      spawn(nodeExe, [join(appDir, 'bekci.mjs')], {
+        cwd: deps.installDir,
+        // Deneme bekçisi güncelleme denetlemez; durdurma standart girdiden ("kapat"), Windows'ta sinyal yok
+        env: { ...process.env, LAFPOS_BEKCI_STDIN: '1', LAFPOS_GUNCELLEME_DENEME: '1' },
+        stdio: ['pipe', 'ignore', 'ignore'],
+        windowsHide: true,
+      }));
 
-  let token = '';
   let status = null;
-  let pending = null;
   let busy = false;
-  const handles = { check: null, install: null, timeout: null, cleanup: null };
+  /** İndirilip doğrulanmış, kurulmayı bekleyen güncelleme */
+  let ready = null;
+  const etags = new Map();
+  const cached = new Map();
+  const handles = { check: null, install: null };
 
-  const say = (line) => deps.log(redact(`[güncelleme] ${line}`, token));
-  const readSettings = () => {
-    const s = deps.settings();
-    token = s.token;
-    return s;
+  const say = (line) => deps.log(`[güncelleme] ${line}`);
+  const installed = () => {
+    const i = readInstalled(app);
+    return { ...i, label: { surum: i.version, build: i.build } };
   };
-
-  function installed() {
-    try {
-      return String(JSON.parse(readFileSync(join(deps.appDir, 'package.json'), 'utf8')).version ?? '');
-    } catch {
-      return '';
-    }
-  }
 
   function readStatus() {
     try {
@@ -365,17 +342,17 @@ export function createUpdater(deps) {
 
   function set(ev) {
     const before = status;
-    status = nextStatus(status, ev);
-    if (before && before.durum === status.durum && before.mesaj === status.mesaj && before.sonKontrol === status.sonKontrol && before.yeniSurum === status.yeniSurum) return;
+    status = { ...nextStatus(status, ev), guncellendi: iso(now()) };
     try {
       mkdirSync(dir, { recursive: true });
-      // Önce geçici dosya: yarım yazılmış durum okunmasın
-      writeFileSync(`${statusFile}.tmp`, `${redact(JSON.stringify(status, null, 2), token)}\n`);
+      // Önce geçici dosya: sunucu yarım yazılmış durumu okumasın
+      writeFileSync(`${statusFile}.tmp`, `${JSON.stringify(status, null, 2)}\n`);
       renameSync(`${statusFile}.tmp`, statusFile);
     } catch (e) {
-      say(`durum dosyası yazılamadı: ${e instanceof Error ? e.message : e}`);
+      say(`durum dosyası yazılamadı: ${errText(e)}`);
     }
     if (!before || before.durum !== status.durum || before.mesaj !== status.mesaj) say(status.mesaj);
+    else if (ev.type === 'kontrol-hata') say(`denetlenemedi: ${ev.mesaj}`);
   }
 
   function schedule(key, ms, fn) {
@@ -386,81 +363,105 @@ export function createUpdater(deps) {
     }, ms);
   }
 
-  async function request(url, accept, signal) {
+  /**
+   * HTTPS isteği, yönlendirmeyi kendisi izler (yalnız aynı host ya da `extraHosts`); gövde `maxBytes`'ı aşarsa bırakır.
+   * 304'te `null`
+   */
+  async function get(url, { maxBytes, extraHosts = [], timeoutMs = 60_000, etag } = {}) {
     let target = url;
     for (let hop = 0; hop < 5; hop++) {
-      const u = new URL(target);
-      if (u.protocol !== 'https:') throw new Error(`Güvensiz adres: ${u.protocol}//${u.host}`);
-      const res = await fetchImpl(target, { headers: requestHeaders(target, token, accept), redirect: 'manual', signal });
+      if (new URL(target).protocol !== 'https:') throw new Error(`Güvensiz adres: ${target}`);
+      const headers = { 'user-agent': 'LafPOS-guncelleme', ...(etag && hop === 0 ? { 'if-none-match': etag } : {}) };
+      const res = await fetchImpl(target, { headers, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
       if ([301, 302, 303, 307, 308].includes(res.status)) {
         const loc = res.headers.get('location');
-        await res.body?.cancel().catch(() => {});
-        if (!loc) throw new Error(`Yönlendirme adresi yok (${res.status})`);
+        await res.body?.cancel?.().catch(() => {});
+        if (!loc || !redirectAllowed(target, loc, extraHosts)) throw new Error(`İzin verilmeyen yönlendirme (${res.status}): ${loc ? new URL(loc, target).host : 'adres yok'}`);
         target = new URL(loc, target).href;
         continue;
       }
+      if (res.status === 304) return { status: 304, body: null, etag: res.headers.get('etag') };
       if (!res.ok) {
-        await res.body?.cancel().catch(() => {});
-        throw new Error(githubError(res.status, res.headers));
+        await res.body?.cancel?.().catch(() => {});
+        throw new Error(`${new URL(target).host} yanıt vermedi (${res.status})`);
       }
-      return res;
+      const declared = Number(res.headers.get('content-length'));
+      if (Number.isFinite(declared) && declared > maxBytes) throw new Error(`${new URL(url).pathname.split('/').pop()} beklenenden büyük`);
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of res.body) {
+        size += chunk.length;
+        if (size > maxBytes) throw new Error(`${new URL(url).pathname.split('/').pop()} beklenenden büyük; indirme bırakıldı`);
+        chunks.push(Buffer.from(chunk));
+      }
+      return { status: res.status, body: Buffer.concat(chunks), etag: res.headers.get('etag') };
     }
     throw new Error('Çok fazla yönlendirme');
   }
 
-  async function latestRelease() {
-    const res = await request(LATEST_URL, 'application/vnd.github+json', AbortSignal.timeout(30_000));
-    return parseRelease(await res.json());
-  }
-
-  /** Kurulum dosyasını indirir, özeti ve boyu tutmazsa siler; doğrulanmış dosyanın yolu */
-  async function download(release) {
-    const shaRes = await request(release.sha.url, 'application/octet-stream', AbortSignal.timeout(60_000));
-    const expected = parseShaFile(await shaRes.text());
-    if (!expected) throw new Error(`${SHA_ASSET} okunamadı`);
-    const name = installerName(release.version);
-    const file = join(dir, name);
-    mkdirSync(dir, { recursive: true });
-    if (await verifyFile(file, expected)) return { file, sha: expected };
-    set({ type: 'indiriliyor', surum: release.version });
-    const part = `${file}.part`;
-    const res = await request(release.exe.url, 'application/octet-stream', AbortSignal.timeout(20 * 60_000));
-    const hash = createHash('sha256');
-    let size = 0;
-    const out = createWriteStream(part);
-    try {
-      for await (const chunk of res.body) {
-        size += chunk.length;
-        if (size > MAX_EXE_BYTES) throw new Error('Kurulum dosyası beklenenden büyük; indirme bırakıldı');
-        hash.update(chunk);
-        if (!out.write(chunk)) await once(out, 'drain');
+  /** Kanalın manifesti: adresler sırayla; ETag'li (değişmeyen manifest 304) */
+  async function fetchManifest() {
+    const errors = [];
+    for (const url of urls) {
+      try {
+        const res = await get(url, { maxBytes: MAX_BYTES.manifest, timeoutMs: 30_000, etag: etags.get(url) });
+        if (res.status === 304 && cached.has(url)) return cached.get(url);
+        const json = JSON.parse(res.body.toString('utf8'));
+        const manifest = parseManifest(json, url);
+        if (res.etag) etags.set(url, res.etag);
+        cached.set(url, manifest);
+        return manifest;
+      } catch (e) {
+        errors.push(`${new URL(url).host}: ${errText(e)}`);
       }
-      out.end();
-      await once(out, 'finish');
-    } catch (e) {
-      out.destroy();
-      rmSync(part, { force: true });
-      throw e;
     }
-    const got = hash.digest('hex');
-    if (got !== expected || (release.exe.size != null && size !== release.exe.size)) {
-      rmSync(part, { force: true });
-      throw new Error(`İndirilen kurulumun SHA-256 özeti tutmadı (beklenen ${expected.slice(0, 12)}…, gelen ${got.slice(0, 12)}…); dosya silindi, sonraki denetimde yeniden indirilecek`);
-    }
-    rmSync(file, { force: true });
-    renameSync(part, file);
-    return { file, sha: expected };
+    throw new Error(`Güncelleme kanalına ulaşılamadı (internet yok olabilir) · ${errors.join(' · ')}`);
   }
 
-  function clean(keep) {
+  /** Dosya indirilmiş ve özeti tutuyorsa onu, yoksa indirip doğrular; doğrulanmış dosyanın yolu */
+  async function fetchVerified(url, file, want, { maxBytes, size, extraHosts }) {
+    const path = join(downloads, file);
+    if (existsSync(path) && sha256(readFileSync(path)) === want) return path;
+    mkdirSync(downloads, { recursive: true });
+    const res = await get(url, { maxBytes, extraHosts, timeoutMs: 20 * 60_000 });
+    const got = sha256(res.body);
+    if (got !== want || (size != null && res.body.length !== size)) {
+      throw new Error(`${file} doğrulanamadı (SHA-256 ya da boy tutmadı: beklenen ${want.slice(0, 12)}…, gelen ${got.slice(0, 12)}…); silindi, sonraki denetimde yeniden indirilecek`);
+    }
+    writeFileSync(`${path}.part`, res.body);
+    renameSync(`${path}.part`, path);
+    return path;
+  }
+
+  async function download(m, plan) {
+    const files = {
+      app: await fetchVerified(m.app.url, m.app.file, m.app.sha256, { maxBytes: MAX_BYTES.app, size: m.app.size }),
+    };
+    if (plan.node) files.node = await fetchVerified(m.node.url, `node-v${m.node.version}-win-x64.zip`, m.node.sha256, { maxBytes: MAX_BYTES.node });
+    if (plan.sqlite) {
+      files.sqlite = await fetchVerified(m.sqlite.url, `better-sqlite3-v${m.sqlite.version}-node-v${m.node.abi}-win32-x64.tar.gz`, m.sqlite.sha256, {
+        maxBytes: MAX_BYTES.sqlite,
+        extraHosts: SQLITE_REDIRECT_HOSTS,
+      });
+    }
+    return files;
+  }
+
+  function cleanDownloads(keepBuild) {
     try {
-      for (const n of staleFiles(readdirSync(dir), keep)) rmSync(join(dir, n), { force: true });
+      const names = readdirSync(downloads);
+      const keepNode = ready?.plan.node ? `node-v${ready.manifest.node.version}-win-x64.zip` : null;
+      const keepSqlite = ready?.plan.sqlite ? ready.files.sqlite?.split(/[\\/]/).pop() : null;
+      for (const n of names) {
+        const stale = staleDownloads([n], keepBuild).length > 0 || ((n.startsWith('node-v') || n.startsWith('better-sqlite3-')) && n !== keepNode && n !== keepSqlite);
+        if (stale) rmSync(join(downloads, n), { force: true });
+      }
     } catch {
       /* klasör yok */
     }
   }
 
-  /** Sunucuya (yalnız bu bilgisayardan) gün açık mı diye sorar: true / false; sorulamazsa null */
+  /** Sunucuya (yalnız bu bilgisayardan) açık gün var mı diye sorar: true / false; sorulamazsa null */
   async function askDayOpen() {
     try {
       const res = await fetchImpl(`http://127.0.0.1:${deps.port()}/api/kasa/guncelleme-durumu`, { signal: AbortSignal.timeout(5000) });
@@ -474,108 +475,245 @@ export function createUpdater(deps) {
 
   async function check() {
     if (busy) return;
+    if (deps.mode() === 'kapali') {
+      set({ type: 'mod', mode: 'kapali' });
+      return;
+    }
     busy = true;
     try {
-      const s = readSettings();
-      if (offState(s)) {
-        set({ type: 'ayar', ayar: s });
-        return;
+      const manifest = await fetchManifest();
+      const inst = installed();
+      const plan = planUpdate({ installed: inst, nodeVersion, manifest, failed: status?.basarisiz ?? [] });
+      set({ type: 'kontrol', plan, manifest, now: now() });
+      if (!plan) {
+        ready = null;
+        cleanDownloads(null);
+      } else if (!ready || ready.plan.build !== plan.build) {
+        const yeni = { surum: plan.version, build: plan.build };
+        set({ type: 'indiriliyor', yeni });
+        const files = await download(manifest, plan);
+        ready = { manifest, plan, files, yeni };
+        cleanDownloads(plan.build);
+        set({ type: 'hazir', yeni });
       }
-      const release = await latestRelease();
-      set({ type: 'kontrol', son: release.version, now: now() });
-      if (!isNewer(release.version, status.kurulu)) {
-        pending = null;
-        clean(null);
-        return;
-      }
-      const got = await download(release);
-      clean(installerName(release.version));
-      pending = { version: release.version, ...got };
-      set({ type: 'indirildi', surum: release.version });
     } catch (e) {
-      set({ type: 'hata', mesaj: e instanceof Error ? e.message : String(e), now: now() });
+      const msg = errText(e);
+      // Kanala ulaşılamaması hata değildir (internetsiz kasa çalışır): durum korunur, son denetimin sonucu yazılır
+      if (status?.durum === 'indiriliyor') set({ type: 'hata', mesaj: `Yeni sürüm indirilemedi: ${msg}`, now: now() });
+      else set({ type: 'kontrol-hata', mesaj: msg, now: now() });
     } finally {
       busy = false;
       schedule('check', CHECK_EVERY_MS, check);
     }
-    if (pending) await tryInstall();
+    if (ready) await tryInstall();
   }
 
   async function tryInstall() {
-    if (!pending || busy) return;
-    const s = readSettings();
-    if (offState(s)) {
-      set({ type: 'ayar', ayar: s });
-      return;
-    }
-    const decision = installDecision({ dayOpen: await askDayOpen(), status, surum: pending.version, now: now() });
-    if (decision !== 'kur') {
-      if (decision !== 'deneme-bekliyor') set({ type: 'bekle', neden: decision });
-      schedule('install', DAY_POLL_MS, tryInstall);
-      return;
-    }
+    if (!ready || busy) return;
+    if (deps.mode() === 'kapali') return;
     if (platform !== 'win32') {
       set({ type: 'hata', mesaj: 'Otomatik kurulum yalnız Windows kurulumunda yapılır', now: now() });
       return;
     }
-    const job = pending;
+    const decision = installDecision(await askDayOpen());
+    if (decision !== 'kur') {
+      if (decision === 'gun-acik') set({ type: 'gun-acik' });
+      schedule('install', DAY_POLL_MS, tryInstall);
+      return;
+    }
     busy = true;
     try {
-      // Dosya indirildikten sonra değişmediyse (SYSTEM'in klasörü; yine de son anda bakılır)
-      if (!(await verifyFile(job.file, job.sha))) {
-        pending = null;
-        rmSync(job.file, { force: true });
-        throw new Error('Kurulum dosyası indirildikten sonra değişmiş; silindi, sonraki denetimde yeniden indirilecek');
-      }
-      set({ type: 'kuruluyor', surum: job.version, now: now() });
-      // Sunucu düzgün kapanır: veritabanı ana dosyaya yazılır, kurulumun aldığı kopya tek dosya olur
-      await pauseServer();
-      const xml = join(dir, 'gorev.xml');
-      writeFileSync(xml, Buffer.from(`\uFEFF${taskXml(job.file, dir)}`, 'utf16le'));
-      try {
-        await runTask(['/Create', '/TN', TASK, '/XML', xml, '/RU', 'SYSTEM', '/F']);
-        await runTask(['/Run', '/TN', TASK]);
-      } catch (e) {
-        resumeServer();
-        throw e;
-      }
-      say(`${job.version} kurulumu başladı; kurulum sunucuyu yeni sürümle yeniden başlatacak`);
-      // Kurulum bu bekçiyi durdurur; durdurmadıysa başlamamış ya da en başta düşmüştür
-      schedule('timeout', INSTALL_TIMEOUT_MS, () => {
-        resumeServer();
-        set({ type: 'hata', mesaj: `${job.version} kurulumu 5 dakikada başlamadı; sunucu eski sürümle yeniden açıldı. En erken 24 saat sonra yeniden denenecek`, now: now() });
-      });
-    } catch (e) {
-      set({ type: 'hata', mesaj: `${job.version} kurulamadı: ${e instanceof Error ? e.message : String(e)}`, now: now() });
+      await install(ready);
     } finally {
       busy = false;
     }
   }
 
-  /** Yeni sürümün ilk açılışında: tek seferlik görev ve indirilen dosya silinir (kurulum çoktan bitmiştir) */
-  async function cleanupAfterInstall() {
-    if (platform === 'win32') await runTask(['/Delete', '/TN', TASK, '/F']).catch(() => {});
-    clean(status?.yeniSurum && isNewer(status.yeniSurum, status.kurulu) ? installerName(status.yeniSurum) : null);
+  /** Yükü app.yeni'ye (ve gerekirse node.exe'yi node.yeni'ye) açar; sunucu bu sırada çalışmaya devam eder */
+  function prepare({ manifest, plan, files }) {
+    rmDir(appNew);
+    rmDir(nodeNew);
+    const zip = readFileSync(files.app);
+    if (sha256(zip) !== manifest.app.sha256) throw new Error('Uygulama yükü indirildikten sonra değişmiş; silindi');
+    extractZip(zip, appNew, appEntry);
+    const bin = join(appNew, ...SQLITE_BINARY.split('/'));
+    mkdirSync(join(bin, '..'), { recursive: true });
+    if (plan.sqlite) {
+      const entry = readTarGz(readFileSync(files.sqlite)).find((e) => e.name === 'build/Release/better_sqlite3.node');
+      if (!entry) throw new Error('better-sqlite3 arşivinde ikili yok');
+      writeFileSync(bin, entry.data);
+    } else {
+      copyFileSync(join(app, ...SQLITE_BINARY.split('/')), bin);
+    }
+    verifyBinary(bin);
+    if (plan.node) {
+      const buf = readFileSync(files.node);
+      const prefix = `node-v${manifest.node.version}-win-x64/`;
+      mkdirSync(nodeNew, { recursive: true });
+      for (const e of readZip(buf)) {
+        if (e.name === `${prefix}node.exe` || e.name === `${prefix}LICENSE`) writeFileSync(join(nodeNew, e.name.slice(prefix.length)), entryData(buf, e));
+      }
+      if (!existsSync(join(nodeNew, 'node.exe'))) throw new Error('Node arşivinde node.exe yok');
+      verifyBinary(join(nodeNew, 'node.exe'));
+    }
+    const staged = readInstalled(appNew);
+    if (staged.build !== plan.build || !existsSync(join(appNew, 'bekci.mjs')) || !existsSync(join(appNew, 'server', 'index.mjs'))) throw new Error('Uygulama yükü eksik');
+  }
+
+  /** Veritabanının kopyası (sunucu durduktan sonra: tek dosya, tutarlı); eski güncelleme kopyaları seyreltilir */
+  function backupDb(build) {
+    const db = join(deps.home, 'lafpos.db');
+    if (!existsSync(db)) return null;
+    const backups = join(deps.home, 'backups');
+    mkdirSync(backups, { recursive: true });
+    const target = join(backups, backupName(build, now()));
+    copyFileSync(db, target);
+    if (existsSync(`${db}-wal`)) copyFileSync(`${db}-wal`, `${target}-wal`);
+    try {
+      const files = readdirSync(backups).map((name) => ({ name, at: statSync(join(backups, name)).mtimeMs }));
+      for (const name of oldUpdateBackups(files)) rmSync(join(backups, name), { force: true });
+    } catch {
+      /* seyreltme olmazsa kopyalar kalır */
+    }
+    return target;
+  }
+
+  /** Yeni sürüm (bekçi ve sunucu) deneme olarak açılır; /api/health yeni derlemeyi söyleyince tamam */
+  async function trial(nodeExe, build) {
+    const child = spawnTrial(nodeExe, app);
+    let exited = false;
+    child.on('exit', () => {
+      exited = true;
+    });
+    child.on('error', () => {
+      exited = true;
+    });
+    child.stdin?.on('error', () => {});
+    let ok = false;
+    const deadline = now() + healthTimeout;
+    while (!exited && now() < deadline) {
+      try {
+        const res = await fetchImpl(`http://127.0.0.1:${deps.port()}/api/health`, { signal: AbortSignal.timeout(3000) });
+        const body = res.ok ? await res.json() : null;
+        if (body?.build === build) {
+          ok = true;
+          break;
+        }
+      } catch {
+        /* henüz açılmadı */
+      }
+      await sleep(1000);
+    }
+    // Deneme düzgün kapanır (sunucu veritabanını kapatır); kapanmazsa ağacıyla sonlandırılır
+    if (!exited) {
+      const done = new Promise((r) => child.once('exit', r));
+      try {
+        child.stdin?.write('kapat\n');
+      } catch {
+        /* kapanmış */
+      }
+      const timedOut = await Promise.race([done.then(() => false), sleep(15_000).then(() => true)]);
+      if (timedOut) await killTree(child);
+    }
+    return ok;
+  }
+
+  async function install(job) {
+    const { plan } = job;
+    const yeni = job.yeni;
+    try {
+      prepare(job);
+    } catch (e) {
+      rmDir(appNew);
+      rmDir(nodeNew);
+      ready = null;
+      set({ type: 'hata', mesaj: `Yeni sürüm hazırlanamadı: ${errText(e)}`, now: now() });
+      return;
+    }
+    // Hazırlık sürerken gün açılmış olabilir
+    if ((await askDayOpen()) !== false) {
+      rmDir(appNew);
+      rmDir(nodeNew);
+      set({ type: 'gun-acik' });
+      schedule('install', DAY_POLL_MS, tryInstall);
+      return;
+    }
+    set({ type: 'kuruluyor', yeni, now: now() });
+    await deps.server.stop();
+    let backup;
+    try {
+      backup = backupDb(plan.build);
+      if (backup) say(`veritabanının kopyası: ${backup}`);
+    } catch (e) {
+      rmDir(appNew);
+      rmDir(nodeNew);
+      deps.server.start();
+      set({ type: 'hata', mesaj: `Veritabanının kopyası alınamadı, güncelleme bırakıldı: ${errText(e)}`, now: now() });
+      return;
+    }
+    try {
+      rmDir(appOld);
+      await retry(() => renameSync(app, appOld));
+      try {
+        await retry(() => renameSync(appNew, app));
+      } catch (e) {
+        await retry(() => renameSync(appOld, app));
+        throw e;
+      }
+    } catch (e) {
+      rmDir(appNew);
+      rmDir(nodeNew);
+      deps.server.start();
+      set({ type: 'hata', mesaj: `Dosyalar değiştirilemedi, eski sürüm çalışıyor: ${errText(e)}`, now: now() });
+      return;
+    }
+    const nodeExe = plan.node ? join(nodeNew, 'node.exe') : execPath;
+    let ok = false;
+    try {
+      ok = await trial(nodeExe, plan.build);
+    } catch (e) {
+      say(`deneme açılamadı: ${errText(e)}`);
+    }
+    if (ok) {
+      ready = null;
+      set({ type: 'kuruldu', kurulu: yeni, now: now() });
+      say(`${yeni.surum} (${yeni.build}) kuruldu; bekçi yeni sürümle yeniden açılıyor`);
+      deps.exit(RESTART_EXIT_CODE);
+      return;
+    }
+    // Geri dönüş: yeni klasör kenara, eskisi yerine; yeni Node silinir
+    try {
+      rmDir(`${app}.bozuk`);
+      await retry(() => renameSync(app, `${app}.bozuk`));
+      await retry(() => renameSync(appOld, app));
+      rmDir(`${app}.bozuk`);
+    } catch (e) {
+      say(`geri dönüş sırasında hata: ${errText(e)}`);
+    }
+    rmDir(nodeNew);
+    ready = null;
+    set({ type: 'geri-dondu', yeni, neden: `Yeni sürüm ${Math.round(healthTimeout / 1000)} sn içinde açılmadı`, now: now() });
+    deps.server.start();
   }
 
   return {
-    /** Bekçi açılınca: durum dosyası hemen yazılır, ilk denetim 10 dakika sonra (yarım indirmede 1 dakika) */
+    /** Bekçi açılınca: durum dosyası hemen yazılır, ilk denetim 2 dakika sonra */
     start() {
-      const prev = readStatus();
-      const s = readSettings();
-      set({ type: 'acilis', kurulu: installed(), ayar: s, now: now() });
-      if (prev?.durum === 'kuruluyor') schedule('cleanup', 2 * 60_000, cleanupAfterInstall);
-      if (!offState(s)) schedule('check', prev?.durum === 'indiriliyor' ? AFTER_SETTINGS_MS : FIRST_CHECK_MS, check);
+      status = readStatus();
+      set({ type: 'acilis', kurulu: installed().label, mode: deps.mode(), now: now() });
+      cleanDownloads(null);
+      // Kurulumdan sonra kalan yarım klasörler (başarıda app.eski elle geri dönüş için bir sonraki güncellemeye kadar durur)
+      rmDir(appNew);
+      if (deps.mode() !== 'kapali') schedule('check', FIRST_CHECK_MS, check);
     },
-    /** ayarlar.env değişti: kapatma hemen yazılır; açılınca (anahtar eklendi) bir dakika içinde denetlenir */
+    /** ayarlar.env değişti: kapatma hemen yazılır; açılınca bir dakika içinde denetlenir */
     poke() {
-      const s = readSettings();
-      const wasOff = !status || status.durum === 'kapali' || status.durum === 'anahtar-yok';
-      set({ type: 'ayar', ayar: s });
-      if (offState(s)) {
-        for (const key of ['check', 'install']) if (handles[key]) timers.clearTimeout(handles[key]);
+      const mode = deps.mode();
+      set({ type: 'mod', mode });
+      if (mode === 'kapali') {
+        for (const key of Object.keys(handles)) if (handles[key]) timers.clearTimeout(handles[key]);
         handles.check = handles.install = null;
-      } else if (wasOff) schedule('check', AFTER_SETTINGS_MS, check);
+      } else if (!handles.check && !busy) schedule('check', 60_000, check);
     },
     stop() {
       for (const key of Object.keys(handles)) if (handles[key]) timers.clearTimeout(handles[key]);
