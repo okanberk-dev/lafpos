@@ -325,9 +325,14 @@ export function OrderDiscountModal({ order, open, onClose, act }: { order: Order
                   onClick={() => {
                     setReason(r);
                     setError(null);
+                    // Hazır nedenin yüzdesi (Öğrenci, Çalışan %15) kendiliğinden yazılır: tek dokunuş, sonra Uygula
+                    if (boot.settings.discountPresetPct > 0) {
+                      setType('percent');
+                      setValue(String(boot.settings.discountPresetPct));
+                    }
                   }}
                 >
-                  {r}
+                  {boot.settings.discountPresetPct > 0 ? `${r} %${boot.settings.discountPresetPct}` : r}
                 </Chip>
               ))}
             </div>

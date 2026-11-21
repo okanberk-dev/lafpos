@@ -14,6 +14,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(HERE, '../../../..');
 /** Bekçiyle pakete giren betikler: bekçi, ayar kuralları, güncelleyici ve arşiv yardımcıları */
 export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs'];
+/** Kasa kısayolunun güncellemeyle gelen parçaları: kaynak (bu klasöre göre) → app\ içindeki adı (CRLF yazılır) */
+export const KASA_LAUNCHER = [
+  ['kasa-yazici.ps1', 'kasa-yazici.ps1'],
+  ['../LafPOS-Kasa.bat', 'LafPOS-Kasa.bat'],
+];
 /** better-sqlite3 ve yükledikleri: yalnız JavaScript (derleme klasörleri ve kaynak yok) */
 const SQLITE_MODULES = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
 /** Yük içinde Windows ikilisinin yeri (kurulum koyar, güncelleme eskisinden ya da indirilenden taşır) */
@@ -77,6 +82,9 @@ export async function stageApp({ appDir, webDir, build: buildNo, commit, root = 
   const skip = ['demo', 'guncelleme'].map((d) => join(resolve(webDir), d));
   cpSync(webDir, join(appDir, 'dist/web'), { recursive: true, filter: (src) => !skip.some((d) => src === d || src.startsWith(d + sep)) });
   for (const f of KASA_SCRIPTS) cpSync(join(HERE, f), join(appDir, f));
+  // Kasa kısayolunun parçaları güncellemeyle gelsin: yazıcı betiği (kısayol app\'ten çağırır) ve kısayolun kendisi (bekçi
+  // açılışta kurulum klasöründekiyle değiştirir; kısayol Chrome'u açıp hemen çıktığı için çalışırken değişmez)
+  for (const [from, to] of KASA_LAUNCHER) writeFileSync(join(appDir, to), readFileSync(join(HERE, from), 'utf8').replace(/\r?\n/g, '\r\n'));
   for (const name of SQLITE_MODULES) {
     const src = join(root, 'node_modules', name);
     cpSync(src, join(appDir, 'node_modules', name), { recursive: true, filter: (p) => !/^[\\/](build|deps|src|test)([\\/]|$)/.test(p.slice(src.length)) });

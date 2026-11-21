@@ -544,8 +544,20 @@ function ItemSheet({
             {/* Hazır neden: kitin mürekkep çipi (adisyon indirimi, iptal ve ret nedeniyle aynı) */}
             <div className="flex flex-wrap gap-1.5">
               {reasons.map((r) => (
-                <Chip key={r} tone="ink" on={reason === r} onClick={() => setReason(r)}>
-                  {r}
+                <Chip
+                  key={r}
+                  tone="ink"
+                  on={reason === r}
+                  onClick={() => {
+                    setReason(r);
+                    // Hazır indirim nedeni (Öğrenci, Çalışan) yüzdesini de yazar: tek dokunuş, sonra Uygula
+                    if (mode === 'indirim' && boot.settings.discountPresetPct > 0) {
+                      setDiscType('percent');
+                      setDiscValue(String(boot.settings.discountPresetPct));
+                    }
+                  }}
+                >
+                  {mode === 'indirim' && boot.settings.discountPresetPct > 0 ? `${r} %${boot.settings.discountPresetPct}` : r}
                 </Chip>
               ))}
             </div>

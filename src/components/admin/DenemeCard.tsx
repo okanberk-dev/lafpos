@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlaskConical, KeyRound, Rocket } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DenemeStatusDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Field';
@@ -61,6 +61,26 @@ export function DenemeCard() {
       {open && <FinishDialog status={d} onClose={() => setOpen(false)} />}
     </Card>
   );
+}
+
+/**
+ * Üstteki "Deneme modu" şeridinin "Denemeyi bitir" düğmesi (yalnız patron; AppShell tembel yükler): durumu sorar,
+ * bitirilebiliyorsa kartla aynı pencereyi açar. Açık gün ya da deneme dışı kapanmış gün varsa ne yapılacağını söyler
+ */
+export function DenemeFinishLauncher({ onClose }: { onClose: () => void }) {
+  const status = useQuery({ queryKey: ['admin', 'deneme'], queryFn: () => get<DenemeStatusDTO>('/admin/deneme') });
+  const d = status.data;
+  const blocked = !d ? null : d.liveSince != null || !d.deneme ? 'Gerçek kullanım zaten başlamış' : d.dayOpen ? 'Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin' : d.realDays > 0 ? 'Deneme dışında kapanmış gün var; Yönetim › Ayarlar ve yedek › Deneme modu’na bakın' : null;
+  useEffect(() => {
+    if (status.isError) {
+      toast.err(errorMessage(status.error));
+      onClose();
+    } else if (blocked) {
+      toast.warn(blocked);
+      onClose();
+    }
+  }, [status.isError, status.error, blocked, onClose]);
+  return d && !blocked ? <FinishDialog status={d} onClose={onClose} /> : null;
 }
 
 function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: () => void }) {

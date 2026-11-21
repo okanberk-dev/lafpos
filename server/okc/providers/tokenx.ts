@@ -42,7 +42,7 @@ export const tokenxProvider: FiscalProvider = {
   label: 'Token (Beko) · TokenX Connect',
   capabilities: { transport: 'push', instant: true, list: true, splitPayment: true, cancel: true, poll: true, docKinds: ['okc_fis', 'bilgi_fisi', 'e_arsiv'] },
   configured: () => !!tokenx(),
-  notConfigured: 'TokenX bilgileri ayarlar dosyasında eksik (TOKENX_AUTH_URL, TOKENX_BASKET_URL, TOKENX_CLIENT_ID, TOKENX_CLIENT_SECRET, TOKENX_TERMINAL_ID)',
+  notConfigured: 'TokenX bilgileri eksik; Yönetim › Bağlantı bilgileri › Token yazarkasa (TOKENX_AUTH_URL, TOKENX_BASKET_URL, TOKENX_CLIENT_ID, TOKENX_CLIENT_SECRET, TOKENX_TERMINAL_ID)',
   terminalId: () => tokenx()?.terminalId || null,
   status() {
     const c = tokenx();

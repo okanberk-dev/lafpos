@@ -22,7 +22,9 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   compReasons: ['Müdavim', 'Doğum günü', 'Gecikme özrü', 'Personel', 'Tadım'],
   odenmezReasons: ['Personel yemeği', 'Patron hesabı', 'Müşteri şikâyeti', 'Deneme'],
   zayiReasons: ['Döküldü', 'Yanlış hazırlandı', 'Bozuk / bayat', 'Müşteri iade etti'],
-  discountReasons: ['Öğrenci', 'Personel', 'Müdavim', 'Kampanya', 'Şikâyet telafisi'],
+  // Sahibin kararı (21 Kasım 2026): yalnız öğrenci ve çalışan indirimi, ikisi de %15; nedene dokununca yüzde kendiliğinden
+  discountReasons: ['Öğrenci', 'Çalışan'],
+  discountPresetPct: 15,
   quickCash: [10000, 20000, 50000, 100000, 200000],
   sizeLabels: { M: 'Orta', L: 'Büyük' },
   requireDayOpen: true,
@@ -83,6 +85,17 @@ export interface PrivateSettings {
    * cihaz yanıt vermezse alarm düşer, yeniden deneme elle (docs/04-YAZARKASA.md §8.5)
    */
   okcPavoAutoEod: boolean;
+  /**
+   * Pavo cihazının adresi ve seri numarası, Yönetim › Yazarkasa POS'tan girilir (`PUT /api/okc/pavo`). null: ayarlar
+   * dosyasındaki PAVO_URL ve PAVO_SERIAL (eski kurulumlar). Gizli değer değildir: cihaz yerel ağda, kimliği eşleştirme
+   * ve sertifika izidir (docs/04-YAZARKASA.md §8.1)
+   */
+  pavoDevice: { url: string; serial: string } | null;
+  /**
+   * Fiş yazıcısı (Windows yazıcısının adı; Yönetim › Ayarlar ve yedek). Kasa kısayolu kasa ekranını açmadan bunu
+   * kullanıcının varsayılan yazıcısı yapar. null: bilgisayardaki tek fiş yazıcısı kendiliğinden (lib/yazici.ts)
+   */
+  receiptPrinter: string | null;
   /** Yönetim › Roller ve yetkiler'de düzenlenen rol yetki setleri; olmayan rol varsayılanını kullanır */
   rolePermissions: RoleMatrix;
   /** İlk Z numarası: geçişte ModPOS'un son Z'si + 1; zincir yalnız yukarı doğru etkilenir (`nextZNo`). null: 1'den */
@@ -121,6 +134,8 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
   okcPavoAutoEod: true,
+  pavoDevice: null,
+  receiptPrinter: null,
   rolePermissions: {},
   zNoStart: null,
   // İlk LafPOS kasası Marina'da (sahibin kararı, 21 Kasım 2026; Tuzla ModPOS'ta kalır). Ayarlar › Şube'den değişir
@@ -204,19 +219,31 @@ const ADDED_PERMISSIONS: { permission: Permission; like: Permission[] }[] = [
 const SETTINGS_UPGRADES_KEY = 'ayar-guncellemeleri';
 
 /**
- * Tek seferlik ayar düzeltmeleri (açılışta): kayıtlı Ödenmez gerekçelerinden "Zayi" düşer, çünkü zayi artık ayrı
- * türdür (zayiReasons); kalsaydı personel dökülen ürünü ödenmez diye kapatır, zayi raporu eksik kalırdı. Patron
- * sonradan yeniden yazarsa dokunulmaz.
+ * Tek seferlik ayar düzeltmeleri (açılışta), her biri bir kez:
+ * - `zayi-nedeni`: kayıtlı Ödenmez gerekçelerinden "Zayi" düşer, çünkü zayi artık ayrı türdür (zayiReasons); kalsaydı
+ *   personel dökülen ürünü ödenmez diye kapatır, zayi raporu eksik kalırdı.
+ * - `indirim-ogrenci-calisan`: sahibin kararı (21 Kasım 2026): indirim nedenleri yalnız Öğrenci ve Çalışan, ikisi de %15
+ *   (`discountPresetPct`). Kayıtlı eski liste bir kez yenisiyle değişir.
+ * Patron sonradan yeniden yazarsa dokunulmaz.
  */
 export function upgradeStoredSettings() {
   const done = new Set(getSyncState<string[]>(SETTINGS_UPGRADES_KEY) ?? []);
-  if (done.has('zayi-nedeni')) return;
-  const current = getSettings().odenmezReasons;
-  const kept = current.filter((r) => r.trim().toLocaleLowerCase('tr-TR') !== 'zayi');
-  tx((t) => {
-    if (kept.length !== current.length) updateSettings({ odenmezReasons: kept }, t);
-    setSyncState(SETTINGS_UPGRADES_KEY, [...done, 'zayi-nedeni']);
-  });
+  if (!done.has('zayi-nedeni')) {
+    const current = getSettings().odenmezReasons;
+    const kept = current.filter((r) => r.trim().toLocaleLowerCase('tr-TR') !== 'zayi');
+    tx((t) => {
+      if (kept.length !== current.length) updateSettings({ odenmezReasons: kept }, t);
+      done.add('zayi-nedeni');
+      setSyncState(SETTINGS_UPGRADES_KEY, [...done]);
+    });
+  }
+  if (!done.has('indirim-ogrenci-calisan')) {
+    tx((t) => {
+      updateSettings({ discountReasons: PUBLIC_DEFAULTS.discountReasons, discountPresetPct: PUBLIC_DEFAULTS.discountPresetPct }, t);
+      done.add('indirim-ogrenci-calisan');
+      setSyncState(SETTINGS_UPGRADES_KEY, [...done]);
+    });
+  }
 }
 const ADDED_KEY = 'rol-yetki-eklemeleri';
 

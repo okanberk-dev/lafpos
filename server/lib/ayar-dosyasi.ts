@@ -1,0 +1,130 @@
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
+import { env } from '../env';
+
+/**
+ * Ayarlar dosyası (Windows kurulumunda C:\ProgramData\LafPOS\ayarlar.env): dış sistemlerin adresleri ve anahtarları
+ * burada durur, veritabanında değil (veritabanı buluta yedeklenir; yedeğin şifresi de bu dosyadaki anahtardan). Yönetim
+ * › Bağlantı bilgileri bu dosyaya yazar; bekçi (scripts/kasa/windows/kurulum/bekci.mjs) dosyanın değiştiğini 5 sn'de
+ * görür ve sunucuyu yeni ayarlarla yeniden başlatır. Dosyanın öbür satırları ve yorumları korunur, BOM ve satır sonu
+ * (CRLF) da: sahip dosyayı Not Defteri'nde açınca aynı düzeni görür.
+ *
+ * Yalnız Windows kurulumunda (bekçi altında) ya da LAFPOS_AYAR_DOSYASI verilince yazılır; git ile çalışan sunucuda
+ * ve tarayıcı demosunda `.env` elle düzenlenir.
+ */
+
+export interface SettingsFile {
+  path: string;
+  /** Bekçi dosyanın değiştiğini görüp sunucuyu yeniden başlatır; değilse yeni değerler elle yeniden başlatınca geçer */
+  restart: 'otomatik' | 'elle';
+}
+
+export function settingsFile(): SettingsFile | null {
+  const bekci = process.env.LAFPOS_STDIN_CONTROL === '1';
+  const explicit = process.env.LAFPOS_AYAR_DOSYASI?.trim();
+  if (explicit) return { path: resolve(explicit), restart: bekci ? 'otomatik' : 'elle' };
+  // Eski bekçi dosyanın yolunu söylemez: veri klasörü kurulumun klasörüdür (LAFPOS_DATA_DIR = C:\ProgramData\LafPOS)
+  if (bekci) return { path: resolve(env.dataDir, 'ayarlar.env'), restart: 'otomatik' };
+  return null;
+}
+
+/** Dosyanın satırları → anahtarlar (bekçinin okuyucusuyla aynı kurallar: # yorum, tırnak soyulur, son yazılan geçer) */
+export function readEnvText(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const raw of text.replace(/^\uFEFF/, '').split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 1) continue;
+    let value = line.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+    out[line.slice(0, eq).trim()] = value;
+  }
+  return out;
+}
+
+const HEADER = '# Yönetim › Bağlantı bilgileri';
+
+/**
+ * Değişiklikleri dosyanın metnine işler (saf). Değer: yeni değer; null: satır kaldırılır. Etkin satır yerinde değişir
+ * (aynı anahtarın sonraki tekrarları düşer); etkin satır yoksa örnek dosyadaki yorumlu satırın (`# ANAHTAR=`) altına,
+ * o da yoksa dosyanın sonuna, başlık satırının altına eklenir. BOM ve satır sonu korunur
+ */
+export function applyEnvEdits(text: string, edits: Record<string, string | null>): string {
+  const bom = text.startsWith('\uFEFF');
+  const body = bom ? text.slice(1) : text;
+  const eol = body.includes('\r\n') ? '\r\n' : '\n';
+  const lines = body.length ? body.split(/\r?\n/) : [];
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  const done = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    const eq = t.indexOf('=');
+    const key = !t.startsWith('#') && eq > 0 ? t.slice(0, eq).trim() : null;
+    if (key && key in edits) {
+      if (done.has(key)) continue;
+      done.add(key);
+      const v = edits[key];
+      if (v != null) out.push(`${key}=${v}`);
+      continue;
+    }
+    out.push(line);
+  }
+  for (const [key, v] of Object.entries(edits)) {
+    if (done.has(key) || v == null) continue;
+    const template = out.findIndex((l) => new RegExp(`^#\\s*${key}=`).test(l.trim()));
+    if (template >= 0) {
+      out.splice(template + 1, 0, `${key}=${v}`);
+    } else {
+      if (!out.includes(HEADER)) {
+        if (out.length && out[out.length - 1]!.trim() !== '') out.push('');
+        out.push(HEADER);
+      }
+      out.push(`${key}=${v}`);
+    }
+  }
+  return `${bom ? '\uFEFF' : ''}${out.join(eol)}${eol}`;
+}
+
+function readFile(path: string): string {
+  try {
+    return existsSync(path) ? readFileSync(path, 'utf8') : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Dosyaya yazar: önce geçici dosya, sonra yerine (bekçi yarım dosya okumasın) */
+export function writeEnvEdits(file: SettingsFile, edits: Record<string, string | null>) {
+  const before = readFile(file.path);
+  // Yeni dosya Not Defteri'nde Türkçe karakterleri doğru göstersin (Windows): BOM ve CRLF
+  const base = before || (process.platform === 'win32' ? '\uFEFF\r\n' : '');
+  const next = applyEnvEdits(base, edits);
+  writeFileSync(`${file.path}.yeni`, next, { mode: 0o600 });
+  renameSync(`${file.path}.yeni`, file.path);
+}
+
+/**
+ * Bağlantı bilgilerinin görünümü: düz alanların değeri, gizli alanların yalnız tanımlı olup olmadığı. `pending`: dosya
+ * çalışan sunucunun ayarlarından farklı (yeniden başlama bekleniyor ya da elle başlatılmalı)
+ */
+export function connectionView() {
+  const file = settingsFile();
+  const vars = file ? readEnvText(readFile(file.path)) : {};
+  const running = (key: string) => (process.env[key] ?? '').trim();
+  const pendingKeys = file ? CONN_FIELDS.filter((f) => (vars[f.key] ?? '').trim() !== running(f.key)).map((f) => f.key) : [];
+  return {
+    available: !!file,
+    restart: file?.restart ?? null,
+    pending: pendingKeys.length > 0,
+    groups: CONN_GROUPS.map((g) => ({
+      id: g.id,
+      fields: g.fields.map((f) => {
+        const v = (file ? vars[f.key] : process.env[f.key])?.trim() ?? '';
+        return { key: f.key, set: v !== '', value: f.kind === 'secret' || !v ? null : v };
+      }),
+    })),
+  };
+}

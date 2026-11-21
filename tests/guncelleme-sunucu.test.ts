@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Harness, startApp } from './harness';
@@ -66,5 +66,43 @@ describe('Ayarlar ve yedek › Sürüm ve güncelleme', () => {
 
   it('garson göremez', async () => {
     expect((await h.call('garson', 'GET', '/admin/guncelleme')).status).toBe(403);
+  });
+});
+
+describe('Ayarlar ve yedek › Şimdi güncelle', () => {
+  const file = () => join(process.env.LAFPOS_DATA_DIR!, 'guncelleme', 'istek.json');
+  afterAll(() => {
+    delete process.env.LAFPOS_STDIN_CONTROL;
+  });
+
+  it('Windows kurulumu (bekçi) değilse 409; istek dosyası yazılmaz', async () => {
+    delete process.env.LAFPOS_STDIN_CONTROL;
+    const r = await h.call<{ code: string }>('patron', 'POST', '/admin/guncelleme', {});
+    expect(r).toMatchObject({ status: 409, json: { code: 'not_installed' } });
+    expect(existsSync(file())).toBe(false);
+    expect((await h.ok<{ canRequest: boolean }>('patron', 'GET', '/admin/guncelleme')).canRequest).toBe(false);
+  });
+
+  it('bekçi altında istek dosyası yazılır, bekçi alana dek ekranda bekler; denetim kaydına düşer', async () => {
+    process.env.LAFPOS_STDIN_CONTROL = '1';
+    expect((await h.call('garson', 'POST', '/admin/guncelleme', {})).status).toBe(403);
+    const r = await h.ok<{ canRequest: boolean; request: { simdi: boolean } | null }>('mudur', 'POST', '/admin/guncelleme', {});
+    expect(r.canRequest).toBe(true);
+    expect(r.request).toMatchObject({ simdi: false });
+    expect(JSON.parse(readFileSync(file(), 'utf8'))).toMatchObject({ simdi: false, at: expect.any(Number) });
+    const audit = await h.ok<{ action: string }[]>('patron', 'GET', '/admin/audit?limit=5');
+    expect(audit.some((a) => a.action === 'guncelleme')).toBe(true);
+    // Bekçi aldı (dosyayı sildi): istek ekrandan kalkar
+    rmSync(file());
+    expect((await h.ok<{ request: unknown }>('patron', 'GET', '/admin/guncelleme')).request).toBeNull();
+  });
+
+  it('gün açıkken hemen kurmayı yalnız patron seçer; gün kapalıyken "şimdi" ayrıca işaretlenmez', async () => {
+    process.env.LAFPOS_STDIN_CONTROL = '1';
+    const s = await h.ok<{ dayOpen: boolean }>('patron', 'GET', '/admin/guncelleme');
+    if (!s.dayOpen) await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+    expect(await h.call('mudur', 'POST', '/admin/guncelleme', { simdi: true })).toMatchObject({ status: 403, json: { code: 'patron_only' } });
+    const r = await h.ok<{ request: { simdi: boolean }; dayOpen: boolean }>('patron', 'POST', '/admin/guncelleme', { simdi: true });
+    expect(r).toMatchObject({ dayOpen: true, request: { simdi: true } });
   });
 });

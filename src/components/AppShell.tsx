@@ -1,5 +1,5 @@
 import { ChevronDown, Expand, Lock, LogOut, MoreHorizontal, Search, Shrink, SlidersHorizontal, WifiOff } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
@@ -29,6 +29,10 @@ import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
 import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
 import { TopTabsSlot } from './shellSlots';
+import { Button } from './ui/Button';
+
+/** "Denemeyi bitir" penceresi yalnız patron basınca yüklenir (yönetim kodu kasa ekranının paketine girmez) */
+const DenemeFinish = lazy(() => import('./admin/DenemeCard').then((m) => ({ default: m.DenemeFinishLauncher })));
 
 function useClock() {
   const [now, setNow] = useState(Date.now());
@@ -74,6 +78,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const boot = useBoot();
   const can = useCan();
   const me = useAuth((s) => s.me)!;
+  const [finishing, setFinishing] = useState(false);
+  const closeFinish = useCallback(() => setFinishing(false), []);
   const logout = useAuth((s) => s.logout);
   const live = useLive((s) => s.status);
   const { theme, setTheme } = useTheme();
@@ -87,6 +93,17 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const [moreOpen, setMoreOpen] = useState(false);
   // Üst çubuğun ortası: ekranın sekmeleri buraya taşınır (Stage)
   const [tabsSlot, setTabsSlot] = useState<HTMLElement | null>(null);
+  // Üst çubuk yalnız ekranın sekmeleri (Masalar'ın bölümleri, Siparişler, Kasa) varken görünür; boşken kaldırılır ve
+  // içerik yukarı yayılır (sahibin isteği, 21 Kas 2026). Durum, arama ve marka o zaman marka rayında
+  const [hasTabs, setHasTabs] = useState(false);
+  useEffect(() => {
+    if (!tabsSlot) return;
+    const sync = () => setHasTabs(tabsSlot.childElementCount > 0);
+    sync();
+    const mo = new MutationObserver(sync);
+    mo.observe(tabsSlot, { childList: true });
+    return () => mo.disconnect();
+  }, [tabsSlot]);
   // Ekran değişince gezinme sayfaları kapanır: kaydedilmemiş değişiklik koruması bağlantının tıklamasını yakalayıp
   // onaydan sonra kendisi gezdiğinde bağlantının onClick'i (sayfayı kapat) çalışmamış olur
   useEffect(() => {
@@ -309,7 +326,12 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
        * İskelet (operatör, 20 Kas 2026: "belli bir iskelet, çerçevelerle ayrım"): üst çubuk, ray ve içerik zeminde
        * --shell-gap (12 px) aralıklı çerçeveli bloklar. Üst çubuk beyaz, ince kenarlı ve köşe 18 (--r-card)
        */}
-      <header className="relative z-30 mx-[var(--shell-gap)] mt-[var(--shell-gap)] hidden h-16 shrink-0 items-center gap-3 rounded-[var(--r-card)] border border-line bg-surface px-3 shadow-[var(--shadow-control)] md:flex lg:gap-4">
+      <header
+        className={cn(
+          'relative z-30 mx-[var(--shell-gap)] mt-[var(--shell-gap)] hidden h-16 shrink-0 items-center gap-3 rounded-[var(--r-card)] border border-line bg-surface px-3 shadow-[var(--shadow-control)] lg:gap-4',
+          hasTabs && 'md:flex',
+        )}
+      >
         <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="flex shrink-0 items-center gap-2.5 rounded-[10px] md:w-[5.25rem] lg:w-auto lg:min-w-[6.25rem]">
           <LafTile size="md" />
           <span className="hidden font-headline text-xl font-bold leading-none tracking-[-0.035em] text-[var(--admin-primary)] lg:inline">L’Affogato</span>
@@ -371,9 +393,23 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
        * Tarayıcı demosunda yok (demo şeridi zaten var)
        */}
       {!DEMO && boot.integrations.deneme && (
-        <p role="note" className="shrink-0 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border">
-          Deneme modu: yapılan satışlar gerçek sayılmaz
-        </p>
+        <div
+          role="note"
+          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border"
+        >
+          <span>Deneme modu: yapılan satışlar gerçek sayılmaz</span>
+          {/* Çıkış patronun: yedek alınır, deneme kayıtları silinir, PIN'le onaylanır (Ayarlar ve yedek'teki kartla aynı pencere) */}
+          {me.role === 'patron' && (
+            <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
+              Denemeyi bitir
+            </Button>
+          )}
+        </div>
+      )}
+      {finishing && (
+        <Suspense fallback={null}>
+          <DenemeFinish onClose={closeFinish} />
+        </Suspense>
       )}
       <LicenseStrip />
       {notice && <div className="shrink-0">{notice}</div>}
@@ -393,12 +429,55 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
             ))}
           </div>
           <div className="lp-rail-foot">
-            <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} title="Araçlar: tema, tam ekran, kilit" className="lp-rail-item">
-              <span aria-hidden="true" className="lp-rail-icon">
-                <SlidersHorizontal />
-              </span>
-              <span className="lp-rail-label">Araçlar</span>
-            </button>
+            {/*
+             * Üst çubuk yokken durum rayın dibinde tek satırda: nokta ve saat (gün kapalıyken "Kapalı"; dokununca kasa),
+             * genişte yanında arama (Ctrl K da açar). İnternet sorunu varsa rozeti üstünde. Ray kısa kalsın diye öğe değil satır
+             */}
+            {!hasTabs && (
+              <>
+                <span className="flex justify-center empty:hidden">
+                  <InternetBadge compact />
+                </span>
+                <div className="flex items-center gap-1">
+                  {canKasa && !REMOTE ? (
+                    <NavLink
+                      to="/kasa"
+                      title={boot.day ? `Kasa ve gün sonu · ${liveLabel}` : `Gün kapalı; kasada açılır · ${liveLabel}`}
+                      aria-label={`${liveLabel}, ${boot.day ? `Z ${boot.day.zNo} açık` : 'gün kapalı'}; kasa ve gün sonu`}
+                      className="lp-rail-item min-h-11 flex-1 flex-row gap-1.5 px-1"
+                    >
+                      {healthDot}
+                      <span className="tabular text-xs">{live === 'kopuk' ? 'Koptu' : boot.day ? fmtTime(now) : 'Kapalı'}</span>
+                    </NavLink>
+                  ) : (
+                    <span role="status" title={liveLabel} className="lp-rail-item min-h-11 flex-1 cursor-default flex-row gap-1.5 px-1">
+                      {healthDot}
+                      <span className="tabular text-xs">{REMOTE ? 'Uzaktan' : live === 'kopuk' ? 'Koptu' : fmtTime(now)}</span>
+                      <span className="sr-only">, {liveLabel}</span>
+                    </span>
+                  )}
+                  <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="lp-rail-item hidden size-9 min-h-0 shrink-0 p-0 lg:flex pointer-coarse:hidden">
+                    <Search aria-hidden="true" className="size-[18px]" />
+                  </button>
+                </div>
+              </>
+            )}
+            {/* Üst çubuk yokken kimin oturumda olduğu burada: kişinin avatarı ve adı (menüsünü açar); varken Araçlar */}
+            {hasTabs ? (
+              <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} title="Araçlar: tema, tam ekran, kilit" className="lp-rail-item">
+                <span aria-hidden="true" className="lp-rail-icon">
+                  <SlidersHorizontal />
+                </span>
+                <span className="lp-rail-label">Araçlar</span>
+              </button>
+            ) : (
+              <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} title={`${me.name} · ${roleLabel} · Araçlar`} className="lp-rail-item">
+                <span className="lp-rail-icon">{avatar('xs')}</span>
+                <span aria-hidden="true" className="lp-rail-label max-w-full truncate">
+                  {me.name.split(' ')[0]}
+                </span>
+              </button>
+            )}
             {!REMOTE && (
               <button type="button" onClick={lock} title={DEMO ? 'Oturum kapanır; başka bir rolle devam edilir' : 'Oturum kapanır; sıradaki kişi PIN’iyle girer'} className="lp-rail-item">
                 <span aria-hidden="true" className="lp-rail-icon">

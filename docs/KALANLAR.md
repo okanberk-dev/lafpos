@@ -24,14 +24,28 @@ Son güncelleme: 21 Kasım 2026.
 - **Bulut yedeği:** günlük şifreli yedek Vercel Blob'a (özel), buluttan geri yükleme sihirbazı (patron, PIN).
 - **Karşılama sihirbazı:** Genel bakış'ta kurulum adımları.
 - **Fiyat işareti:** sitede değişen fiyat, online sipariş ve karaoke kapalıyken de gün açıkken hemen eşitlenir.
+- **Fiş yazıcısı kendiliğinden** (kablolu/USB): kasa kısayolu yazıcıları bildirir, tek fiş yazıcısını varsayılan yapar;
+  Yönetim › Ayarlar ve yedek › Fiş yazıcısı (`docs/05-KASA-BILGISAYARI.md` §3). İndirim nedenleri Öğrenci ve Çalışan,
+  dokununca %15. Sekmesiz ekranda üst çubuk yok (`DESIGN.md` Kabuk).
+- **Her şey programın içinden:** Pavo'nun adresi ve seri no'su Yönetim › Yazarkasa POS'tan (ağda arama, kaydedince
+  hemen eşleştirme; `docs/04-YAZARKASA.md` §8.1); lafmaliyet, Uzaktan, site, Token ve paket platformu anahtarları
+  Yönetim › Bağlantı bilgileri'nden (hazır satırları yapıştırma da; `docs/05-KASA-BILGISAYARI.md` §2); "Şimdi
+  güncelle" düğmesi (§6).
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
 Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internetle görülür.
 
-- **İlk kurulum:** LafPOS-Kurulum.exe (ya da sitede İndir) ile kurulum; Başlat › LafPOS › LafPOS ayarları'na
-  bağlantı satırları (aşağıda). Genel bakış'taki Kurulum kartı adımları sırayla gösterir.
-- **Pavo:** Yönetim › Yazarkasa POS › Pavo › Eşleştir; küçük bir deneme satışı ve "Cihazın son yanıtları".
+- **İlk kurulum:** LafPOS-Kurulum.exe (ya da sitede İndir) ile kurulum; Yönetim › Bağlantı bilgileri › "Hazır
+  satırları yapıştır"a bağlantı satırları (aşağıda; "deneme bittikten sonra" notlu satırlar o an atlanır). Genel
+  bakış'taki Kurulum kartı adımları sırayla gösterir. İlk gerçek Windows'ta bakılacak: kaydedince bekçinin sunucuyu
+  birkaç saniyede yeniden başlattığı ve ekranın "yeni bilgilerle açıldı" dediği.
+- **Pavo:** Yönetim › Yazarkasa POS › Pavo › "Cihazı ağda ara" (ya da IP), seri no, Kaydet, Eşleştir; küçük bir
+  deneme satışı ve "Cihazın son yanıtları". Ağda aramanın gerçek N86'yı bulduğu ilk kurulumda görülür.
+- **Fiş yazıcısı:** yazıcı USB ile takılı ve sürücüsü kurulu; kasa ekranını kapatıp açınca Ayarlar ve yedek › Fiş
+  yazıcısı'nda listelenmeli ve "Fiş buradan" yazmalı; "Deneme fişi yazdır" kasa bilgisayarında basılınca kâğıt çıkmalı.
+- **Şimdi güncelle:** bu sürümden sonraki ilk yayında Ayarlar ve yedek › Sürüm ve güncelleme › "Şimdi güncelle";
+  gün kapalıyken bir dakika içinde kurulup "Yeni sürüm kuruldu · Yenile" demeli.
 - **Denemeyi bitir:** gün sonu, sonra Yönetim › Ayarlar ve yedek › Denemeyi bitir; yedeğin
   `C:\ProgramData\LafPOS\backups`'a yazıldığı ve kapanan hesapların Personel'den yeni PIN'le açıldığı görülür.
 - **İnternet:** kafede interneti kesip bir gün sonu; üst çubukta "İnternet yok · 1 kayıt bekliyor", internet gelince
@@ -43,8 +57,14 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
   Ekle); Yönetim › Ağ › "Deneme bildirimi gönder".
 - **Bulut yedeği:** ilk gün sonundan sonra Ayarlar ve yedek › Bulut yedeği'nde "Son yedek" dolmalı.
 
-Kafedeki ayarlar.env satırları (değerler Mac'te `~/Downloads/lafpos-kasa-ayarlari.env`; yoksa
-`scripts/vercel/baglanti-kur.sh --yenile`):
+Kafedeki bağlantı satırları (Yönetim › Bağlantı bilgileri'ne yapıştırılır). **Anahtarlar 21 Kasım 2026'da yenilendi:**
+Vercel kayıtlarında kasanın 20 Kasım'daki istekleri siteden ve lafmaliyet'ten 401 almıştı (kasadaki anahtarlar
+Vercel'dekilerle uyuşmuyordu), LafPOS Uzaktan'a imzalı istek hiç gelmemişti. Üç projede anahtar yeniden üretildi
+(laffogato ve lafmaliyet `LAFPOS_SYNC_SECRET`, lafpos `LAFPOS_CLOUD_SECRET`; üretim yeniden yayımlandı) ve yeni satırlar
+sahibe dosya olarak verildi (`lafpos-kasa-ayarlari.env`, 21 Kasım). Mac'teki eski `~/Downloads/lafpos-kasa-ayarlari.env`
+**geçersiz**. Dosya kaybolursa anahtarlar yeniden üretilir (`scripts/vercel/baglanti-kur.sh --yenile` ya da Vercel'de
+elle) ve kasaya yeniden yapıştırılır; Vercel'deki değerler "sensitive", geri okunamaz. Kasa bağlanınca doğrulama: Yönetim
+› Genel bakış › Sistem sağlığı ve Site ve lafmaliyet sayfasındaki durum satırları.
 
 ```
 LAFMALIYET_URL=https://ladmin.laffogato.net

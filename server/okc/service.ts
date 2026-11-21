@@ -7,7 +7,7 @@ import { env } from '../env';
 import { type Actor, type AuthUser, need, needDirect, seesCashNumbers, toAuthUser } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
-import { getSettings, getSyncState, setSyncState, trainingMode } from '../lib/settings';
+import { getSettings, getSyncState, setSyncState, trainingMode, updateSettings } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
 import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
@@ -26,10 +26,13 @@ import {
   pavoTiming,
   readEod,
   readEodBaseline,
+  reconfigurePavo,
+  usePavoConfig,
   usePavoStore,
 } from './providers/pavo';
+import { findPavo } from './pavo-bul';
 import { fromTokenxSale, tokenx, tokenxProvider, webhookUrl } from './providers/tokenx';
-import { describe as describePavo, PavoError } from './pavo';
+import { describe as describePavo, pavoAddress, PavoError, pavoSerial } from './pavo';
 import { type TokenxBasket, TokenxError, type TokenxSale } from './tokenx';
 
 /**
@@ -49,6 +52,8 @@ usePavoStore({
   getCert: () => getSyncState<string>('pavo.cert'),
   setCert: (fp) => setSyncState('pavo.cert', fp),
 });
+// Cihazın adresi ve seri no'su yönetimden girildiyse o, yoksa ayarlar dosyası (PAVO_URL, PAVO_SERIAL)
+usePavoConfig(() => getSettings().pavoDevice);
 
 /**
  * Yazarkasa durumu. Pavo'nun son banka gün sonu (`pavo.eod`) tutarları yalnız kasa rakamlarını görene (kör kasa:
@@ -868,6 +873,53 @@ export async function pairDevice(actor: Actor) {
   fx.audit(db, { userId: actor.user.id, action: 'okc.pair', message: `Pavo cihazı eşleştirildi (${pavoProvider.terminalId()})` });
   fx.flush();
   return out;
+}
+
+/**
+ * Pavo cihazının adresi ve seri numarası (Yönetim › Yazarkasa POS › Pavo). Adres "192.168.1.50" gibi de yazılır
+ * (`pavoAddress`: şema yoksa https, port yoksa 4567). Adres ya da seri no değişince eşleştirme sıfırlanır (sıra no ve
+ * sertifika izi): başka cihazın sertifikasına güvenilmez, yeniden "Eşleştir" gerekir. Cihazda süren satış ya da gün
+ * sonu varken ve LafPOS'ta cihaz sonucunu bekleyen sepet varken değişmez (sonuç eski cihazdan sorulur)
+ */
+export function setPavoDevice(actor: Actor, input: { address: string; serial: string }) {
+  const url = pavoAddress(input.address);
+  if (!url) throw bad('Cihaz adresi anlaşılamadı; örnek: 192.168.1.50 ya da 192.168.1.50:4567', 'pavo_address');
+  const serial = pavoSerial(input.serial);
+  if (!serial) throw bad('Seri numarası anlaşılamadı; cihazda Terminal Ayarları › Seri Numarası (PAV ile başlar)', 'pavo_serial');
+  const c = pavo();
+  if (c?.busyWith) throw conflict(busyMessage(c, 'bitince değiştirin') ?? 'Cihaz meşgul', 'okc_busy');
+  const before = pavoProvider.status() as { url: string | null; serial: string | null };
+  const changed = before.url !== url || before.serial !== serial;
+  if (changed) {
+    const waiting = db
+      .select({ id: schema.fiscalReceipts.id })
+      .from(schema.fiscalReceipts)
+      .where(and(eq(schema.fiscalReceipts.provider, 'pavo'), inArray(schema.fiscalReceipts.status, [...PENDING])))
+      .limit(1)
+      .all();
+    if (waiting.length) throw conflict('Cihazda sonucu beklenen bir hesap var; o sonuçlanınca (ya da adisyonda iptal edilince) değiştirin', 'okc_pending');
+  }
+  const fx = new Effects();
+  tx((t) => {
+    updateSettings({ pavoDevice: { url, serial } }, t);
+    if (changed) {
+      // Yeni cihaz (ya da yeni adres): eşleştirme yeniden yapılır
+      t.delete(schema.syncState).where(inArray(schema.syncState.key, ['pavo.sequence', 'pavo.cert'])).run();
+    }
+    fx.audit(t, {
+      userId: actor.user.id,
+      action: 'okc.pavo_device',
+      message: changed ? `Pavo cihazı: ${url} · seri no ${serial}${before.url ? ` (önceki ${before.url} · ${before.serial})` : ''}; eşleştirme gerekli` : `Pavo cihazının bilgileri yeniden kaydedildi (${url})`,
+    });
+    fx.emit({ topic: 'okc', kind: 'okc.device', message: 'Pavo cihazının bilgileri değişti', byUserId: actor.user.id });
+  });
+  reconfigurePavo();
+  fx.flush();
+}
+
+/** Yerel ağda Pavo arar (cihaza yalnız `/Ping` gider; seri no yazıldıysa onunla, tutup tutmadığı görünür) */
+export async function findPavoDevices(serial?: string | null) {
+  return findPavo({ serial: (serial && pavoSerial(serial)) || '' });
 }
 
 // ─── Pavo banka gün sonu ────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { BadgePercent, BarChart3, Bike, ClipboardList, Coffee, CreditCard, Gauge, LayoutGrid, MonitorPlay, MonitorSmartphone, PlugZap, Settings2, ShieldCheck, Users, Wifi } from 'lucide-react';
+import { BadgePercent, BarChart3, Bike, ClipboardList, Coffee, CreditCard, Gauge, KeyRound, LayoutGrid, MonitorPlay, MonitorSmartphone, PlugZap, Settings2, ShieldCheck, Users, Wifi } from 'lucide-react';
 import type { Permission } from '@shared/permissions';
 
 /** Kenar çubuğu grupları (Innex §3 fikir 1: büyük harfli gruplar) */
@@ -34,9 +34,10 @@ export const ADMIN_SECTIONS: AdminSection[] = [
   { key: 'odeme', to: '/yonetim/odeme', label: 'Ödeme türleri', desc: 'Nakit, kart, yemek kartları, açık hesap', icon: CreditCard, group: 'salon', perm: ['ayar.yonet'], keywords: 'pluxee multinet sodexo' },
   { key: 'personel', to: '/yonetim/personel', label: 'Personel', desc: 'PIN, rol, kişiye özel yetki, indirim sınırı', icon: Users, group: 'ekip', perm: ['personel.yonet'], keywords: 'kullanıcı garson kasiyer pin' },
   { key: 'roller', to: '/yonetim/roller', label: 'Roller ve yetkiler', desc: 'Rol başına yetki seti, kör kasa, kasadan tükendi', icon: ShieldCheck, group: 'ekip', perm: ['personel.yonet'], keywords: 'pozisyon yetki kasiyer kör kasa' },
-  { key: 'yazarkasa', to: '/yonetim/yazarkasa', label: 'Yazarkasa POS', desc: 'TokenX Connect, eğitim cihazı, kısım eşlemesi', icon: MonitorSmartphone, group: 'baglanti', perm: ['ayar.yonet'], keywords: 'ökc tokenx fiş' },
+  { key: 'yazarkasa', to: '/yonetim/yazarkasa', label: 'Yazarkasa POS', desc: 'Pavo eşleştirme, Token, eğitim cihazı, kısım eşlemesi', icon: MonitorSmartphone, group: 'baglanti', perm: ['ayar.yonet'], keywords: 'ökc tokenx pavo eşleştir fiş' },
   { key: 'entegrasyon', to: '/yonetim/entegrasyon', label: 'Site ve lafmaliyet', desc: 'Menü eşitleme, online siparişler, gün sonu gönderimi', icon: PlugZap, group: 'baglanti', perm: ['senkron.yonet', 'ayar.yonet'], keywords: 'laffogato senkron' },
   { key: 'platformlar', to: '/yonetim/platformlar', label: 'Paket platformları', desc: 'Yemeksepeti, Getir, Trendyol Go, Migros ve hazırlık süresi', icon: Bike, group: 'baglanti', perm: ['senkron.yonet', 'ayar.yonet'], keywords: 'yemeksepeti getir trendyol uber eats migros paket kurye deneme siparişi' },
+  { key: 'baglanti-bilgileri', to: '/yonetim/baglanti-bilgileri', label: 'Bağlantı bilgileri', desc: 'lafmaliyet, Uzaktan, site, Token ve platform adresleri, anahtarları', icon: KeyRound, group: 'baglanti', perm: ['ayar.yonet'], keywords: 'anahtar şifre adres env ayarlar dosyası lafmaliyet uzaktan bulut token getir trendyol yemeksepeti kurulum bilgileri' },
   { key: 'ag', to: '/yonetim/ag', label: 'Ağ ve uzaktan erişim', desc: 'Tablet ve telefon adresi, karekod, Tailscale ile dışarıdan canlı erişim', icon: Wifi, group: 'baglanti', perm: ['ayar.yonet', 'patron.panel'], keywords: 'tablet telefon ip adres karekod qr tailscale uzaktan internet vpn' },
   { key: 'ayarlar', to: '/yonetim/ayarlar', label: 'Ayarlar ve yedek', desc: 'Servis modu, işletme, kilit, gün sonu, yedekler', icon: Settings2, group: 'sistem', perm: ['ayar.yonet'], keywords: 'yedek tema servis modu self servis yarı self numaratör' },
   { key: 'denetim', to: '/yonetim/denetim', label: 'Denetim kaydı', desc: 'İptal, ikram, indirim, kasa ve gün sonu izi', icon: ClipboardList, group: 'sistem', perm: ['ayar.yonet', 'patron.panel'], keywords: 'log alarm uyarı' },

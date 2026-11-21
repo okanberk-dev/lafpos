@@ -32,13 +32,33 @@ const store: PavoStore = {
   setCert: (fp) => need().setCert(fp),
 };
 
+/**
+ * Cihazın adresi ve seri numarası nereden: yönetimden girilen (ayarlar, `service.ts` bağlar) yoksa ayarlar dosyası
+ * (PAVO_URL, PAVO_SERIAL). Kaynak verilmediyse yalnız ortam okunur (sağlayıcı listesi testlerde ayarsız yüklenir)
+ */
+export type PavoSource = 'panel' | 'dosya';
+let panelConfig: () => { url: string; serial: string } | null = () => null;
+export function usePavoConfig(fn: () => { url: string; serial: string } | null) {
+  panelConfig = fn;
+  client = undefined;
+}
+
 let client: PavoClient | null | undefined;
+let clientSource: PavoSource | null = null;
 export function pavo(): PavoClient | null {
   if (client === undefined) {
-    const cfg = PavoClient.configFromEnv(process.env);
+    const fingerprint = (process.env.PAVO_FINGERPRINT ?? '').trim() || 'LafPOS';
+    const panel = panelConfig();
+    const cfg = panel ? { url: panel.url, serial: panel.serial, fingerprint } : PavoClient.configFromEnv(process.env);
     client = cfg ? new PavoClient(cfg, store) : null;
+    clientSource = cfg ? (panel ? 'panel' : 'dosya') : null;
   }
   return client;
+}
+/** Cihazın bilgileri yönetimden değişti: istemci yeni adresle kurulur (çağıran cihazın boşta olduğunu denetler) */
+export function reconfigurePavo() {
+  client = undefined;
+  lastAsked.clear();
 }
 /** Testler için: ortam değişince istemci yeniden kurulur */
 export function resetPavo(next?: PavoClient | null) {
@@ -373,12 +393,13 @@ export const pavoProvider: FiscalProvider = {
   label: 'Pavo · yerel ağ',
   capabilities: { transport: 'push', instant: true, list: false, splitPayment: true, cancel: true, poll: true, docKinds: ['e_arsiv', 'e_fatura', 'bilgi_fisi'] },
   configured: () => !!pavo(),
-  notConfigured: 'Pavo bilgileri ayarlar dosyasında eksik (PAVO_URL, PAVO_SERIAL)',
+  notConfigured: 'Pavo cihazının adresi ve seri numarası girilmedi (Yönetim › Yazarkasa POS › Pavo)',
   terminalId: () => pavo()?.cfg.serial ?? null,
   status() {
     const c = pavo();
     return {
       configured: !!c,
+      source: c ? clientSource : null,
       url: c?.cfg.url ?? null,
       serial: c?.cfg.serial ?? null,
       paired: store.getSequence() > 0,

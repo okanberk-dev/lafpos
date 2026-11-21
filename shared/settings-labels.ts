@@ -19,6 +19,7 @@ export const SETTING_LABEL: Record<string, string> = {
   odenmezReasons: 'Ödenmez nedenleri',
   zayiReasons: 'Zayi nedenleri',
   discountReasons: 'İndirim nedenleri',
+  discountPresetPct: 'Hazır indirim yüzdesi',
   quickCash: 'Hızlı nakit',
   sizeLabels: 'Boy adları',
   requireDayOpen: 'Gün açık olmalı',

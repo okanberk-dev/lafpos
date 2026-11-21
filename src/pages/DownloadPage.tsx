@@ -16,7 +16,7 @@ const STEPS = [
   { title: 'İndirin', text: `${WEB_INSTALLER_NAME} dosyası İndirilenler klasörüne iner. Tarayıcı “sık indirilmiyor” derse Sakla’ya basın.` },
   { title: 'Çift tıklayın', text: 'Windows “Bilgisayarınız korundu” derse Ek bilgi’ye, sonra Yine de çalıştır’a basın. İzin sorusuna Evet deyin.' },
   { title: 'Bekleyin', text: 'Kurulum programı internetten indirip doğrular ve kurar; birkaç dakika sürer. Bitince kasa ekranı açılır.' },
-  { title: 'Ayarları girin', text: 'Başlat › LafPOS › LafPOS ayarları. Size verilen satırları yapıştırıp kaydedin (Ctrl+S).' },
+  { title: 'Bilgileri girin', text: 'Patron PIN’iyle girin, Yönetim › Bağlantı bilgileri’nde size verilen satırları yapıştırıp kaydedin. Pavo’yu Yönetim › Yazarkasa POS’tan eşleştirin.' },
 ];
 
 function VersionLine({ m }: { m: ChannelManifest }) {

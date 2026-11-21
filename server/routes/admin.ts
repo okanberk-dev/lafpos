@@ -13,7 +13,10 @@ import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNamed, backupNow } from '../jobs';
 import { type AppEnv, assertNotLocked, type AuthUser, can, clearFailures, clientKey, hashPin, isValidPin, recordFailure, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
 import { checkFinish, denemeStatus, finishDeneme, isSamplePin, isSamplePinHash } from '../services/deneme';
-import { installedVersion, readUpdateStatus } from '../lib/surum';
+import { installedVersion, pendingUpdateRequest, readUpdateStatus, writeUpdateRequest } from '../lib/surum';
+import { connectionView, settingsFile, writeEnvEdits } from '../lib/ayar-dosyasi';
+import { pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from '../lib/yazici';
+import { checkConnValue, connField } from '@shared/baglanti';
 import { Effects } from '../lib/effects';
 import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
@@ -24,7 +27,7 @@ import { siteKaraokePrice } from '../sync/laffogato-karaoke';
 import { reopenWithSite, type SiteWrite } from '../sync/laffogato-orders';
 import { dropSiteSoldOut, enqueueSiteTables, flushSiteOutbox, retireTableCode } from '../sync/site-outbox';
 import { generateTableCode, tableQrUrl } from '@shared/table-qr';
-import { getSettings, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
+import { getSettings, getSyncState, PRIVATE_DEFAULTS, PUBLIC_DEFAULTS, updateSettings } from '../lib/settings';
 import { CUSTOMER_DISPLAY_THEMES } from '@shared/types';
 import { SERVICE_MODE_LABEL, SERVICE_MODES, serviceModeOf } from '@shared/service-mode';
 import { settingLabel } from '@shared/settings-labels';
@@ -958,6 +961,7 @@ const settingsShape = patchOf(
     odenmezReasons: z.array(z.string().max(40)).max(12),
     zayiReasons: z.array(z.string().max(40)).max(12),
     discountReasons: z.array(z.string().max(40)).max(12),
+    discountPresetPct: z.number().int().min(0).max(100),
     quickCash: z.array(kurus).max(8),
     sizeLabels: z.object({ M: z.string().max(12), L: z.string().max(12) }),
     requireDayOpen: z.boolean(),
@@ -1113,10 +1117,34 @@ adminRoutes.get('/network', (c) => {
   return c.json({ ...networkInfo(), cloud });
 });
 
-/** Sürüm ve otomatik güncelleme (Ayarlar ve yedek kartı; salt okunur) */
+/**
+ * Sürüm ve otomatik güncelleme (Ayarlar ve yedek kartı). `canRequest`: "Şimdi güncelle" yalnız Windows kurulumunda
+ * (bekçi güncelleyicisi); `request`: bekçinin henüz almadığı istek; `dayOpen`: düğme gün açıkken onay ister
+ */
 adminRoutes.get('/guncelleme', (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
-  return c.json({ installed: installedVersion(), status: readUpdateStatus() });
+  return c.json({ installed: installedVersion(), status: readUpdateStatus(), canRequest: underBekci(), request: pendingUpdateRequest(), dayOpen: !!getOpenDay(db) });
+});
+
+/**
+ * "Şimdi güncelle": güncelleyiciye (bekçi) hemen denetlemesini söyler; yeni sürüm varsa indirip kurar. Gün kapalıyken
+ * hemen, açıkken gün sonunda kurar; `simdi` gün açıkken de hemen kurar (yalnız patron: LafPOS bir dakika kadar kapanır,
+ * tabletler bekler). Otomatik güncelleme kapalı olsa da çalışır. Denetim kaydına yazılır
+ */
+adminRoutes.post('/guncelleme', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  const input = await body(c, z.object({ simdi: z.boolean().optional() }));
+  if (!underBekci()) throw new HttpError(409, 'Elle güncelleme yalnız Windows kurulumunda yapılır; bu sunucu elle güncellenir', 'not_installed');
+  const dayOpen = !!getOpenDay(db);
+  const simdi = input.simdi === true && dayOpen;
+  if (simdi && user.role !== 'patron') throw new HttpError(403, 'Gün açıkken hemen kurmayı yalnız patron seçer', 'patron_only');
+  writeUpdateRequest({ at: Date.now(), by: user.id, simdi });
+  const fx = new Effects();
+  fx.audit(db, { userId: user.id, action: 'guncelleme', message: simdi ? 'Elle güncelleme istendi: gün açıkken hemen kurulacak' : 'Elle güncelleme istendi' });
+  fx.emit({ topic: 'settings', kind: 'guncelleme', message: 'Güncelleme denetleniyor', byUserId: user.id });
+  fx.flush();
+  return c.json({ installed: installedVersion(), status: readUpdateStatus(), canRequest: true, request: pendingUpdateRequest(), dayOpen });
 });
 
 adminRoutes.get('/backups', (c) => {
@@ -1218,6 +1246,77 @@ adminRoutes.post('/bulut-yedek/geri-yukle', async (c) => {
   fx.flush();
   restartForRestore();
   return c.json({ ok: true });
+});
+
+// ─── Fiş yazıcısı (lib/yazici.ts): kasa betiğinin bildirdiği Windows yazıcıları, seçilen ve kullanılan ────────────
+
+function printerView() {
+  const seen = getSyncState<{ at: number; printers: WinPrinter[] }>(PRINTERS_KEY);
+  const chosen = getSettings().receiptPrinter;
+  const pick = pickReceiptPrinter(seen?.printers ?? [], chosen);
+  return { reportedAt: seen?.at ?? null, printers: seen?.printers ?? [], chosen, effective: pick.name, auto: pick.auto };
+}
+
+adminRoutes.get('/yazici', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json(printerView());
+});
+
+/** Fiş yazıcısını seçer (null: kendiliğinden); kasa ekranı bir sonraki açılışta onu varsayılan yapar */
+adminRoutes.put('/yazici', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  const input = await body(c, z.object({ name: z.string().trim().min(1).max(200).nullable() }));
+  const fx = new Effects();
+  tx((t) => {
+    updateSettings({ receiptPrinter: input.name }, t);
+    fx.audit(t, { userId: user.id, action: 'ayar.yazici', message: input.name ? `Fiş yazıcısı: ${input.name}` : 'Fiş yazıcısı kendiliğinden seçilecek' });
+    fx.emit({ topic: 'settings', kind: 'ayar.yazici', message: 'Fiş yazıcısı değişti', byUserId: user.id });
+  });
+  fx.flush();
+  return c.json(printerView());
+});
+
+// ─── Bağlantı bilgileri: ayarlar dosyasındaki dış sistem adresleri ve anahtarları (lib/ayar-dosyasi.ts) ──────────
+
+/** Görünüm: ayar yetkisi; gizli anahtarların değeri hiç dönmez, yalnız tanımlı mı */
+adminRoutes.get('/baglanti', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json(connectionView());
+});
+
+/**
+ * Yazma: yalnız patron (dış sistemin adresi ve anahtarı: yanlış adrese satış verisi gidebilir). Gövdede yalnız
+ * değişenler: değer yazılır, boş ya da null satırı kaldırır. Bilinmeyen anahtar 400. Denetim kaydına anahtarların adı
+ * (adresin yenisi de) yazılır, gizli değer yazılmaz. Bekçi dosyanın değiştiğini görüp sunucuyu yeniden başlatır
+ */
+adminRoutes.put('/baglanti', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'ayar.yonet');
+  if (user.role !== 'patron') throw new HttpError(403, 'Bağlantı bilgilerini yalnız patron değiştirir', 'patron_only');
+  const file = settingsFile();
+  if (!file) throw new HttpError(409, 'Bu kurulumda bağlantı bilgileri ayarlar dosyasından (.env) elle girilir', 'not_installed');
+  const input = await body(c, z.object({ values: z.record(z.string().max(80), z.string().max(600).nullable()) }));
+  const edits: Record<string, string | null> = {};
+  for (const [key, raw] of Object.entries(input.values)) {
+    const field = connField(key);
+    if (!field) throw bad(`Bilinmeyen ayar: ${key}`, 'unknown_key');
+    const r = checkConnValue(field, raw ?? '');
+    if ('error' in r) throw bad(r.error, 'invalid_value');
+    edits[key] = r.value;
+  }
+  if (!Object.keys(edits).length) return c.json({ ...connectionView(), changed: [] as string[] });
+  try {
+    writeEnvEdits(file, edits);
+  } catch (e) {
+    throw new HttpError(500, `Ayarlar dosyasına yazılamadı: ${e instanceof Error ? e.message : String(e)}`, 'write_failed');
+  }
+  const said = Object.entries(edits).map(([k, v]) => (v == null ? `${k} kaldırıldı` : connField(k)!.kind === 'url' ? `${k}=${v}` : `${k} değişti`));
+  const fx = new Effects();
+  fx.audit(db, { userId: user.id, action: 'ayar.baglanti', message: `Bağlantı bilgileri: ${said.join(', ')}`, data: { keys: Object.keys(edits) } });
+  fx.emit({ topic: 'settings', kind: 'ayar.baglanti', message: 'Bağlantı bilgileri değişti; LafPOS yeniden başlıyor', byUserId: user.id });
+  fx.flush();
+  return c.json({ ...connectionView(), changed: Object.keys(edits) });
 });
 
 // ─── Deneme modu: "Denemeyi bitir, gerçek kullanıma başla" (services/deneme.ts) ──────────────────────────────

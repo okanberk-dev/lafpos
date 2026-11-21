@@ -81,13 +81,17 @@ verilsin mi?" sorusuna **Evet** deyin.
 açılır. Kasa ekranı masaüstündeki **LafPOS Kasa** kısayoluyla açılır. Tabletler ve telefonlar için adres ve
 karekod: Yönetim › Ağ ve uzaktan erişim.
 
-**4. Ayarlar.** Başlat › LafPOS › **LafPOS ayarları**. Not Defteri açılır; size verilen satırları yapıştırıp
-kaydedin (Ctrl+S) ve kapatın. LafPOS birkaç saniye içinde yeni ayarlarla kendiliğinden yeniden başlar.
+**4. Bilgileri girin (programın içinden).** Kasa ekranında patron PIN'inizle girin, **Yönetim › Bağlantı
+bilgileri**'ni açın. Size verilen satırları "Hazır satırları yapıştır" kutusuna yapıştırıp **Satırları kaydet**'e
+basın (ya da her bağlantının kartını tek tek doldurun). LafPOS birkaç saniye içinde yeni bilgilerle kendiliğinden
+yeniden başlar. Pavo yazarkasa: **Yönetim › Yazarkasa POS** › Pavo'yu seçin, **Cihazı ağda ara**'ya basın (ya da
+cihazın IP adresini yazın), seri numarasını yazıp **Kaydet**, sonra **Eşleştir** ve cihazdaki onay ekranını onaylayın.
+Dosya açmanız gerekmez; isterseniz Başlat › LafPOS › LafPOS ayarları aynı dosyayı Not Defteri'nde açar.
 
 **5. Deneyin, sonra gerçek kullanıma başlayın.** LafPOS ilk açılışta **deneme modundadır**: sahte satış ya da
 müşteri yoktur, giriş ekranında örnek PIN'ler durur, her ekranın üstünde "Deneme modu: yapılan satışlar gerçek
-sayılmaz" yazar; deneme satışları hiçbir yere gitmez. Kafede her şeyi deneyin. Bitince gün sonunu alın ve Yönetim ›
-Ayarlar ve yedek › **Denemeyi bitir, gerçek kullanıma başla**'ya basın (yalnız patron): önce yedek alınır, deneme
+sayılmaz" yazar; deneme satışları hiçbir yere gitmez. Kafede her şeyi deneyin. Bitince gün sonunu alın ve ekranın üstündeki deneme şeridinde
+**Denemeyi bitir**'e basın (ya da Yönetim › Ayarlar ve yedek › Denemeyi bitir, gerçek kullanıma başla; yalnız patron): önce yedek alınır, deneme
 kayıtları silinir, menü, personel, masalar ve ayarlar kalır; patron PIN'inizi değiştirirsiniz. Ayrıntı
 [docs/05-KASA-BILGISAYARI.md](docs/05-KASA-BILGISAYARI.md) §2 "İlk açılış".
 
@@ -96,11 +100,14 @@ ama **yalnız gün kapalıyken** (gün sonundan sonra) kurar; satış sırasınd
 verilerin bir kopyasını alır. Yeni sürüm açılmazsa kendiliğinden eski sürüme döner. Durum Yönetim › Ayarlar ve
 yedek › **Sürüm ve güncelleme** kartında yazar.
 
-**Elle güncelleme.** Beklemek istemezseniz LafPOS-Kur.cmd'yi yeniden çalıştırın ya da yukarıdaki sayfadan son
+**Şimdi güncelle.** Beklemek istemezseniz Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme › **Şimdi güncelle**.
+LafPOS yeni sürüm var mı hemen bakar; varsa indirip kurar. Gün kapalıysa hemen kurulur; gün açıkken size sorar
+(kurulum sırasında LafPOS bir dakika kadar kapanır, tabletler bekler, açık adisyonlar kaybolmaz). Kurulum bitince kart
+"Yeni sürüm kuruldu · Yenile" der. Kurulum dosyasıyla elle güncelleme de çalışır: yukarıdaki sayfadan son
 LafPOS-Kurulum.exe'yi indirip çalıştırın. Verileriniz ve ayarlarınız kalır.
 
 **Otomatik güncellemeyi kapatmak.** LafPOS ayarları'nda bir satır ekleyin: `LAFPOS_GUNCELLEME=kapali`. Açmak için
-satırı silin.
+satırı silin. Kapalıyken de "Şimdi güncelle" çalışır.
 
 **İnternet yokken.** Kasa, masalar, ödeme ve yazarkasa internetsiz çalışır. Bu sırada lafmaliyet'e, siteye ve
 LafPOS Uzaktan'a gidecek kayıtlar bekler; ekranın üstünde "İnternet yok · 3 kayıt bekliyor" yazar. İnternet
@@ -140,7 +147,7 @@ panelinki `LAFMALIYET_SYNC_SECRET`'a yazılır; ikisi de sitenin `KARAOKE_SYNC_S
 | `LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET` | lafmaliyet'e günlük satış/Z itme, maliyet çekme (`https://ladmin.laffogato.net`); paneldeki `LAFPOS_SYNC_SECRET`. Boşken gün sonu gitmez (elle aktarım); kurulum modunda kapanan gün (eğitim günü) hiç gitmez |
 | `LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET` | LafPOS Uzaktan (Vercel, salt okunur canlı özet; `docs/07-UZAKTAN-ERISIM.md` §4); Vercel'deki `LAFPOS_CLOUD_SECRET` |
 | `TOKENX_*` | Yazarkasa POS (Token ÖKC) bağlantısı, bkz. `docs/04-YAZARKASA.md` |
-| `PAVO_URL`, `PAVO_SERIAL`, `PAVO_FINGERPRINT` | Yazarkasa POS (Pavo N86, kafenin ağında), bkz. `docs/04-YAZARKASA.md` §8 |
+| `PAVO_URL`, `PAVO_SERIAL`, `PAVO_FINGERPRINT` | Yazarkasa POS (Pavo N86, kafenin ağında); adres ve seri no artık Yönetim › Yazarkasa POS'tan girilir, bu satırlar eski kurulumlar için. Bkz. `docs/04-YAZARKASA.md` §8 |
 | `LAFPOS_PUBLIC_URL`, `TOKENX_WEBHOOK_SECRET` | Yazarkasa sonucunun webhook ile gelmesi (yoksa LafPOS sorar) |
 
 ## Komutlar

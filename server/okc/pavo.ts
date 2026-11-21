@@ -92,6 +92,35 @@ export function certFingerprint(raw: Buffer): string {
   );
 }
 
+/** Cihazın REST portu yazılmazsa: N86'da entegratörlerin kullandığı (docs/04-YAZARKASA.md §8.1) */
+export const PAVO_DEFAULT_PORT = 4567;
+
+/**
+ * Yönetimde yazılan cihaz adresi → istemcinin adresi. "192.168.1.50", "192.168.1.50:4568" ya da
+ * "http://192.168.1.50:4567" kabul edilir; şema yazılmazsa https, port yazılmazsa 4567. Yol, kullanıcı adı, sorgu
+ * kabul edilmez; anlaşılmayan adres null
+ */
+export function pavoAddress(input: string): string | null {
+  const raw = input.trim();
+  if (!raw || raw.length > 200 || /\s/.test(raw)) return null;
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//i.exec(raw)?.[1]?.toLowerCase() ?? null;
+  if (scheme && scheme !== 'http' && scheme !== 'https') return null;
+  const rest = scheme ? raw.slice(scheme.length + 3) : raw;
+  const host = rest.replace(/\/+$/, '');
+  // Yalnız ad ya da IPv4 ve isteğe bağlı port: yol, kullanıcı ve sorgu yok
+  const m = /^([a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?)(?::(\d{1,5}))?$/i.exec(host);
+  if (!m) return null;
+  const port = m[2] ? Number(m[2]) : PAVO_DEFAULT_PORT;
+  if (port < 1 || port > 65535) return null;
+  return `${scheme ?? 'https'}://${m[1]!.toLowerCase()}:${port}`;
+}
+
+/** Cihazın seri numarası: fişin altında ve cihazın ayarlarında yazan harf ve rakamlar */
+export function pavoSerial(input: string): string | null {
+  const s = input.trim().toUpperCase();
+  return /^[A-Z0-9][A-Z0-9._-]{2,39}$/.test(s) ? s : null;
+}
+
 /** Gün sonu sürerken `busyWith` bu değeri taşır (sipariş no'ları `LP` ile başlar, karışmaz) */
 export const PAVO_EOD = 'GUNSONU';
 
@@ -115,8 +144,8 @@ export class PavoClient {
   }
 
   /** Bağlantı denemesi (eşleştirmesiz çalışır) */
-  ping(): Promise<PavoResponse> {
-    return this.call('/Ping', {}, { timeoutMs: 10_000, sequence: 'none' });
+  ping(timeoutMs = 10_000): Promise<PavoResponse> {
+    return this.call('/Ping', {}, { timeoutMs, sequence: 'none' });
   }
 
   /**

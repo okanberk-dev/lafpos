@@ -208,9 +208,8 @@ export async function runDemo(browser) {
           await settle(page);
           await page.getByRole('button', { name: 'İşlemler' }).click();
           await page.getByRole('button', { name: /^Adisyon indirimi/ }).click();
-          await page.getByRole('button', { name: '1', exact: true }).click();
-          await page.getByRole('button', { name: '0', exact: true }).click();
-          await page.getByRole('button', { name: 'Öğrenci', exact: true }).click();
+          // Hazır neden (Öğrenci %15) yüzdeyi kendisi yazar
+          await page.getByRole('button', { name: 'Öğrenci %15', exact: true }).click();
           await page.getByRole('button', { name: 'Uygula', exact: true }).click();
           const approve = page.getByRole('button', { name: 'Müdür onaylasın' });
           await approve.waitFor({ timeout: 8000 });

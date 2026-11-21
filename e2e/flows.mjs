@@ -296,6 +296,41 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Telefonda patron: deneme şeridindeki "Denemeyi bitir" gün açıkken önce gün sonunu ister, hiçbir şey silinmez',
+      () =>
+        withPage(ctx, 'telefon', 'patron', async (page) => {
+          await go(ctx, page, '/yonetim/genel');
+          const before = await api.call('patron', 'GET', '/admin/deneme');
+          assert(before.deneme && before.dayOpen, 'e2e kurulumu deneme modunda ve gün açık olmalı');
+          await page.getByRole('note').getByRole('button', { name: 'Denemeyi bitir', exact: true }).click();
+          await page.getByText('Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin', { exact: true }).waitFor({ timeout: 8000 });
+          assert((await page.getByRole('dialog', { name: 'Gerçek kullanıma başla' }).count()) === 0, 'gün açıkken bitirme penceresi açıldı');
+          const after = await api.call('patron', 'GET', '/admin/deneme');
+          assert(after.deneme && after.liveSince == null && after.counts.orders === before.counts.orders, 'deneme kayıtları değişti');
+        }),
+    ],
+    [
+      'Bilgisayarda patron: Bağlantı bilgileri’nde lafmaliyet adresini ve anahtarını kaydeder; anahtar ekrana geri gelmez',
+      () =>
+        withPage(ctx, 'bilgisayar', 'patron', async (page) => {
+          await go(ctx, page, '/yonetim/baglanti-bilgileri');
+          // İç kart (dış yaprak da başlığı içerir: sonuncusu kart)
+          const card = page.locator('section', { has: page.getByRole('heading', { name: 'lafmaliyet', exact: true }) }).last();
+          await card.locator('input[name=LAFMALIYET_URL]').fill('https://ladmin.e2e.example');
+          await card.locator('input[name=LAFMALIYET_SYNC_SECRET]').fill('e2e-anahtar-1234567890');
+          await card.getByRole('button', { name: 'Kaydet', exact: true }).click();
+          await card.getByText('Tanımlı', { exact: true }).waitFor({ timeout: 8000 });
+          const view = await api.call('patron', 'GET', '/admin/baglanti');
+          const fields = view.groups.flatMap((g) => g.fields);
+          assert(fields.find((f) => f.key === 'LAFMALIYET_URL')?.value === 'https://ladmin.e2e.example', 'adres kaydedilmedi');
+          const secret = fields.find((f) => f.key === 'LAFMALIYET_SYNC_SECRET');
+          assert(secret?.set === true && secret.value === null, 'anahtar kaydedilmedi ya da değeri geri döndü');
+          assert((await card.locator('input[name=LAFMALIYET_SYNC_SECRET]').inputValue()) === '', 'anahtar alanda kaldı');
+          const audit = await api.call('patron', 'GET', '/admin/audit?limit=5');
+          assert(audit.some((a) => a.action === 'ayar.baglanti' && !a.message.includes('e2e-anahtar')), 'denetim kaydı yok ya da anahtarı içeriyor');
+        }),
+    ],
+    [
       'Bilgisayarda patron: Personel çekmecesinde indirim sınırını değiştirir',
       () =>
         withPage(ctx, 'bilgisayar', 'patron', async (page) => {

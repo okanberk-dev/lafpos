@@ -75,12 +75,14 @@ ister. Eşleştirme ve hash o programa bağlı olduğundan ayrı sürümlenir.
 | `TOKENX_WEBHOOK_SECRET` | Webhook'un `Authorization: Bearer` anahtarı, en az 16 karakter |
 
 Değerler yalnız kasa bilgisayarındaki `.env` dosyasında durur; depoya girmez. Windows kurulum dosyasıyla
-kurulan bilgisayarda bu dosya `C:\ProgramData\LafPOS\ayarlar.env`: Başlat › LafPOS › LafPOS ayarları açar,
-kaydedip kapatınca sunucu yeniden başlar.
+kurulan bilgisayarda bu dosya `C:\ProgramData\LafPOS\ayarlar.env` ve **Yönetim › Bağlantı bilgileri › Token
+yazarkasa**'dan yazılır (patron; gizli değer ekrana geri gelmez); kaydedince sunucu birkaç saniyede yeniden başlar
+(`docs/05-KASA-BILGISAYARI.md` §2 "Bağlantı bilgileri"). Başlat › LafPOS › LafPOS ayarları dosyayı Not Defteri'nde
+de açar.
 
 ## 3. Kurulum adımları
 
-1. `.env`'yi doldurun, LafPOS'u yeniden başlatın.
+1. Yönetim › Bağlantı bilgileri › Token yazarkasa'yı doldurun (LafPOS kendiliğinden yeniden başlar).
 2. Yönetim › Yazarkasa POS: sağlayıcı **TokenX**, mod **Anlık** ya da **Liste**.
 3. **Bağlantıyı dene**: jeton alınır, terminal ve kısımlar okunur; hata Türkçe gösterilir (`STATUS_TEXT`).
 4. **KDV → kısım eşlemesi**: cihazdaki kısımlar okunup oranına göre otomatik eşlenir (`autoSectionMap`);
@@ -187,17 +189,28 @@ sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
 
 1. Cihazda Ayarlar › Çevresel Donanımlar › Network Ayarları: REST açık, REST ağı Wi-Fi ya da Ethernet (mobil veri
    REST'te çalışmaz). Cihazın IP adresini modemden sabitleyin.
-2. Kasa bilgisayarının ayarlarına (`.env` / `C:\ProgramData\LafPOS\ayarlar.env`):
+2. Yönetim › Yazarkasa POS: bağlantı **Pavo** (ödeme yeri kendiliğinden kasada ödeme). Pavo kartında cihazın **IP
+   adresi** ve **seri numarası** yazılır (21 Kasım 2026'dan beri ayar dosyası gerekmez). Seri no cihazda Terminal
+   Ayarları › Terminal Bilgileri › Seri Numarası'dır (N86'da `PAV86…`, 12 karakter); aynı ekrandaki Terminal ID
+   (bankanın terminal no'su) REST'te kullanılmaz. Adres `192.168.1.50` gibi
+   yazılır: şema yoksa `https`, port yoksa `4567` (`pavoAddress`); `192.168.1.50:4568` ya da `http://…` da kabul.
+   **Cihazı ağda ara** kasanın yerel ağında (yalnız özel adresler, `/24`, en çok üç ağ) 4567 ve 4568 portlarını
+   yoklar, açık bulduğuna `/Ping` gönderir (`server/okc/pavo-bul.ts`); yanıt veren adresler listelenir, tek cihaz
+   bulunursa adres kendiliğinden yazılır. Seri no yazılıysa `/Ping` onunla gider ve "Seri no tutuyor" görünür. Kaydet
+   (`PUT /api/okc/pavo`, `ayar.yonet`) yeniden başlatma istemez; adres ya da seri no değiştiyse eşleştirme sıfırlanır
+   (sıra no ve sertifika izi silinir), denetim kaydına `okc.pavo_device` düşer. Cihazda süren satış ya da gün sonu
+   varken (409 `okc_busy`) ve cihaz sonucunu bekleyen sepet varken (409 `okc_pending`) cihaz değişmez.
 
-   | Değişken | Ne |
+   | Ayar | Ne |
    |---|---|
-   | `PAVO_URL` | Cihazın adresi ve REST portu, ör. `https://192.168.1.50:4567`. Pavo'nun belgesi 4568 HTTPS, 4567 HTTP der; entegratörlerin kodu N86'da `https://…:4567` kullanır. "Bağlantıyı dene" hangisinin açık olduğunu söyler |
-   | `PAVO_SERIAL` | Cihazın seri numarası (her istekte gider, cihaz kendi seri noyla karşılaştırır) |
+   | Yönetimden (`pavoDevice` ayarı) | Cihazın adresi ve seri no'su; varsa geçerli olan budur |
+   | `PAVO_URL`, `PAVO_SERIAL` | Eski kurulumların ayar dosyası satırları; yönetimden girilmediyse kullanılır ("Kaynak: Ayarlar dosyası") |
    | `PAVO_FINGERPRINT` | İsteğe bağlı (varsayılan `LafPOS`); eşleştirmede cihaza kaydedilir, her istekte aynısı gider |
 
-3. Yönetim › Yazarkasa POS: bağlantı **Pavo** (ödeme yeri kendiliğinden kasada ödeme), **Eşleştir** (cihazda onay
-   ekranı açılır, kasiyer onaylar; LafPOS en çok 2 dk bekler), **Bağlantıyı dene** (cihaz yanıt veriyor mu, eşleştirme
-   geçerli mi, cihazdaki ödeme araçları).
+   Pavo'nun belgesi 4568 HTTPS, 4567 HTTP der; entegratörlerin kodu N86'da `https://…:4567` kullanır. "Cihazı ağda
+   ara" ve "Bağlantıyı dene" hangisinin açık olduğunu söyler.
+3. **Eşleştir** (cihazda onay ekranı açılır, kasiyer onaylar; LafPOS en çok 2 dk bekler), **Bağlantıyı dene** (cihaz
+   yanıt veriyor mu, eşleştirme geçerli mi, cihazdaki ödeme araçları). Testler: `tests/pavo-panel.test.ts`.
 4. İlk satışı küçük tutarla deneyin: cihaz gerçek e-Arşiv belgesi keser. "Cihazın son yanıtları" (yönetim
    sayfasının altında) yanıtın alanlarını gösterir; tanınmayan biçim orada görünür.
 5. **Gün sonu (banka)** kartı: "Gün kapanınca cihazda gün sonu al" varsayılan açık; LafPOS gün sonundan hemen sonra
@@ -205,7 +218,8 @@ sağlayıcı `server/okc/providers/pavo.ts`, testler `tests/pavo.test.ts`.
    kurulumda "Cihazda gün sonu al" ile bir kez elle deneyin.
 
 Pavo bulut API anahtarı (PavoPay portalında üretilen, 64 karakterlik) bu bağlantıda kullanılmaz: bulut kanalı ayrıca
-Pavo'nun entegratöre verdiği "App Token"ı ister (§8.4). Anahtar yalnız kafedeki ayar dosyasında durur, depoya girmez.
+Pavo'nun entegratöre verdiği "App Token"ı ister (§8.4). Cihazın adresi ve seri no'su gizli değildir (cihaz yerel ağda,
+kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoya girmez.
 
 ### 8.2 Akış
 
