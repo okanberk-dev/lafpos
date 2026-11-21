@@ -14,6 +14,7 @@
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { bildirim, broadcast } from './_bildirim.js';
 import { merkez, type Release } from './_merkez.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
@@ -1134,6 +1135,19 @@ async function handle(req: Request): Promise<Response> {
   const login = loginPost ? ((await req.json().catch(() => ({}))) as { eposta?: unknown; parola?: unknown; davet?: unknown }) : null;
   // Üyelik açıkken üyenin girişi ve oturumu demoya düşmez (kafe bağlanmadan da girer: İndir sayfası için)
   const memberRequest = memberMode && (path === 'uzaktan/uye' || !!login?.eposta || memberTokenEmail(auth) != null);
+  /** Gerçek oturum (üye ya da parolalı giriş): Merkez paneli ve bildirim aboneliği. Parolasız görünümde hiç */
+  const admin = async () => {
+    if (secret().length < 32) return false;
+    if (memberMode) {
+      const email = memberTokenEmail(auth);
+      const record = email && members.includes(email) ? await member(email) : null;
+      return !!record && memberTokenValid(secret(), auth, record.h);
+    }
+    return passwordRequired() && tokenValid(secret(), auth);
+  };
+  const bildirimDeps = { redis, admin, signed: (body: string) => secret().length >= 32 && verifyPush(secret(), req, url, body) };
+  // Patrona telefon bildirimi (Web Push): kasanın imzalı olayı ve aboneliği
+  if (path.startsWith('uzaktan/bildirim')) return bildirim(req, path, bildirimDeps);
   // Merkez: kasanın kaydı ve imzalı nabzı (kendi anahtarıyla), panel (gerçek oturumla); demo ve salt okunur kapısından önce
   if (path.startsWith('merkez/')) {
     const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder';
@@ -1141,18 +1155,10 @@ async function handle(req: Request): Promise<Response> {
     return merkez(req, url, path, {
       redis,
       verify: (key: string, r: Request, u: URL, body: string) => verifyPush(key, r, u, body),
-      admin: async () => {
-        if (secret().length < 32) return false;
-        if (memberMode) {
-          const email = memberTokenEmail(auth);
-          const record = email && members.includes(email) ? await member(email) : null;
-          return !!record && memberTokenValid(secret(), auth, record.h);
-        }
-        // Parolasız görünümde (bağlantıyı bilen herkes) Merkez açılmaz
-        return passwordRequired() && tokenValid(secret(), auth);
-      },
+      admin,
       demo,
       fetchRelease: () => latestRelease(url.origin),
+      notify: (n) => broadcast(bildirimDeps, n).then(() => undefined),
     });
   }
   if (path !== 'uzaktan/push' && !memberRequest && demoAllowed() && !(await realSnapshot())) {

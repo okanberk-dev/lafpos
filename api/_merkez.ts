@@ -50,6 +50,8 @@ export interface MerkezDeps {
   demo: boolean;
   fetchRelease: () => Promise<Release | null>;
   now?: () => number;
+  /** Patrona bildirim (api/_bildirim.ts): güncelleme sorun çıkarıp eski sürüme dönünce */
+  notify?: (n: { kind: string; title: string; body: string; at: number; shop?: string | null }) => Promise<void>;
 }
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -185,6 +187,11 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
           : inst.guncelleme,
     };
     await writeInstall(deps, next);
+    // Güncelleme sorun çıkardı (eski sürüme dönüldü): patrona bir kez haber
+    const failedNow = next.guncelleme?.durum === 'geri-dondu' || next.guncelleme?.durum === 'hata';
+    if (failedNow && inst.guncelleme?.durum !== next.guncelleme?.durum) {
+      await deps.notify?.({ kind: 'guncelleme', title: 'Güncelleme sorunu', body: next.guncelleme!.mesaj || 'Yeni sürüm kurulamadı; eski sürüm çalışıyor', at: now, shop: next.ad }).catch(() => undefined);
+    }
     return json({ ok: true, ad: next.ad, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), at: now });
   }
 

@@ -12,7 +12,8 @@ let since = 0;
 let lastOkAt: number | null = null;
 let lastFailAt: number | null = null;
 let lastError: string | null = null;
-const listeners = new Set<() => void>();
+/** Dönüş dinleyicileri: kesintinin başladığı anı alır (bildirim süreyi yazar) */
+const listeners = new Set<(downSince: number) => void>();
 
 const NETWORK_CODES = new Set([
   'ENOTFOUND',
@@ -43,13 +44,14 @@ export function isNetworkError(e: unknown): boolean {
 /** Dışarıdan yanıt geldi */
 export function noteReachable(now = Date.now()) {
   const back = state === 'yok';
+  const downSince = since;
   lastOkAt = now;
   lastError = null;
   if (state !== 'var') {
     state = 'var';
     since = now;
   }
-  if (back) for (const fn of listeners) fn();
+  if (back) for (const fn of listeners) fn(downSince);
 }
 
 /** Ağ hatası: dışarıya ulaşılamadı */
@@ -63,7 +65,7 @@ export function noteUnreachable(e: unknown, now = Date.now()) {
 }
 
 /** İnternet dönünce çağrılacak iş (kaldırmak için dönen fonksiyon) */
-export function onInternetBack(fn: () => void): () => void {
+export function onInternetBack(fn: (downSince: number) => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }

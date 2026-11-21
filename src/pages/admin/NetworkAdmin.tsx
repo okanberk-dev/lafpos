@@ -3,6 +3,7 @@ import { ShieldAlert, WifiOff } from 'lucide-react';
 import { fmtDateTime } from '@shared/time';
 import type { NetAddressDTO, NetworkInfoDTO } from '@shared/types';
 import { Badge, Card, CARD, CODE, DefRow, EmptyState, LABEL, PageHeader, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
+import { NotifyCard } from '@/components/admin/NotifyCard';
 import { QrCode } from '@/components/QrCode';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
@@ -227,6 +228,12 @@ export default function NetworkAdmin() {
             <span className="break-all">{window.location.origin}</span>
           </DefRow>
         </Card>
+        {/* Uzaktan kuruluysa: telefon bildirimleri tam genişlikte (iki sütunlu ızgaranın altı) */}
+        {n.cloud?.configured && (
+          <div className="lg:col-span-2">
+            <NotifyCard />
+          </div>
+        )}
       </div>
 
       <SetupNotes>
