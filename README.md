@@ -44,7 +44,27 @@ Windows kasa bilgisayarı için tek dosyalık kurulum (sahibin adımları aşağ
 ## Windows'a kurulum
 
 Kafedeki bilgisayara LafPOS bir kez kurulur; sonraki sürümler kendiliğinden gelir. Komut yazmak, anahtar (token)
-oluşturmak gerekmez.
+oluşturmak gerekmez. İki yol var: siteden kurulum (en kolayı, GitHub hesabı gerekmez) ya da GitHub'daki kurulum
+dosyası.
+
+### Siteden kurulum
+
+**1. Girin.** Kafedeki bilgisayarda [lafpos.laffogato.net](https://lafpos.laffogato.net)'i açın, **Üye girişi**
+ekranından girin.
+
+**2. İndirin.** Menüde **İndir**'e, sonra **LafPOS'u indir**'e basın. **LafPOS-Kur.cmd** İndirilenler'e iner.
+Tarayıcı "sık indirilmiyor" derse **Sakla**'ya basın.
+
+**3. Çalıştırın.** Dosyaya çift tıklayın. Windows "Bilgisayarınız korundu" derse **Ek bilgi**'ye, sonra **Yine de
+çalıştır**'a basın. "Değişiklik yapmasına izin verilsin mi?" sorusuna **Evet** deyin.
+
+**4. Bekleyin.** Siyah bir pencere açılır; program internetten indirilir, doğrulanır ve kurulur (birkaç dakika).
+Bitince kasa ekranı açılır; pencereyi Enter'la kapatın. Sonra aşağıdaki **4. Ayarlar** adımı.
+
+Dosyayı yeniden çalıştırmak LafPOS'u onarır ya da son sürüme günceller; verileriniz ve ayarlarınız kalır. Gün
+açıkken çalıştırırsanız önce sorar.
+
+### Kurulum dosyasıyla (GitHub)
 
 **1. İndirin.** GitHub'a kendi hesabınızla girin, şu sayfayı açın:
 [github.com/okanberk-dev/lafpos/releases/latest](https://github.com/okanberk-dev/lafpos/releases/latest).
@@ -66,8 +86,8 @@ ama **yalnız gün kapalıyken** (gün sonundan sonra) kurar; satış sırasınd
 verilerin bir kopyasını alır. Yeni sürüm açılmazsa kendiliğinden eski sürüme döner. Durum Yönetim › Ayarlar ve
 yedek › **Sürüm ve güncelleme** kartında yazar.
 
-**Elle güncelleme.** Beklemek istemezseniz yukarıdaki sayfadan son LafPOS-Kurulum.exe'yi indirip çalıştırın.
-Verileriniz ve ayarlarınız kalır.
+**Elle güncelleme.** Beklemek istemezseniz LafPOS-Kur.cmd'yi yeniden çalıştırın ya da yukarıdaki sayfadan son
+LafPOS-Kurulum.exe'yi indirip çalıştırın. Verileriniz ve ayarlarınız kalır.
 
 **Otomatik güncellemeyi kapatmak.** LafPOS ayarları'nda bir satır ekleyin: `LAFPOS_GUNCELLEME=kapali`. Açmak için
 satırı silin.

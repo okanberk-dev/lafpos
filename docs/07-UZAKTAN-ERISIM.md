@@ -92,6 +92,18 @@ müşteri telefonları gitmez.
 - **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki
   kasa `https://lafpos.laffogato.net/guncelleme/surum.json`'dan yeni sürümü alır (anahtarsız; ayrıntı
   `docs/05-KASA-BILGISAYARI.md` §6 "Otomatik güncelleme"). `vercel.json` `/guncelleme/*`'ı arayüz sayfasına çevirmez.
+- **Üye girişi ve İndir (siteden kurulum):** giriş ekranı sitenin "Üye girişi"dir (aynı patron girişi); girişten
+  sonra menüde **İndir** (`/indir`, yalnız Uzaktan derlemesinde; kafeden veri gelmemişken de kabuksuz açılır).
+  Sayfa kanalın yanındaki anahtarsız web kurucusuna bağlanır: `/guncelleme/LafPOS-Kur.cmd` (`npm run kanal`
+  yazar, `scripts/kasa/windows/kurulum/web-kurucu.mjs`; `vercel.json` onu indirme olarak sunar). Dosya herkese
+  açıktır ama gizli bir şey taşımaz (`tests/web-kurucu.test.ts`); bağlantı yalnız oturumda görünür. Kurucu cmd ve
+  PowerShell 5.1 iki dilli tek dosyadır: yönetici izni ister, kanalın surum.json'unu okur (okunamazsa içine gömülü
+  derlemeyi kullanır), Node'u nodejs.org'dan, better-sqlite3'ün Windows ikilisini GitHub'dan, uygulama yükünü
+  kanaldan SHA-256 ile doğrulayarak indirir, `lafpos.nsi` ile aynı klasörleri, görevi, güvenlik duvarını,
+  kısayolları ve Uygulamalar kaydını yazar. Yeniden çalıştırmak onarır ya da son sürüme günceller (gün açıksa
+  sorar, önce veritabanının kopyasını alır). Kurulum dosyasının Kaldir.exe'si yoksa kaldırma
+  `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (LafPOS-Kurulum.exe) GitHub Releases'ta kalır: depo özel ve
+  Vercel NSIS derleyemez.
 
 | Nerede | Ne |
 |---|---|

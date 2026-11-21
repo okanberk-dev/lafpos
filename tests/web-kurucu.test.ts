@@ -248,4 +248,9 @@ describe('siteden kurulum: İndir sayfası', () => {
     expect(login).not.toMatch(/LafPOS-Kur|guncelleme\/|download|indir'/i);
     expect(login).toContain('Üye girişi');
   });
+
+  it('İndir uzaktan e2e taramasında (telefon, tablet, bilgisayar, koyu; girişten önce ve sonra)', () => {
+    expect(read('e2e/uzaktan.mjs')).toMatch(/REMOTE_ROUTES = \[[^\]]*'\/indir'/);
+    expect(read('e2e/run.mjs')).toMatch(/await runRemote\(browser\)/);
+  });
 });

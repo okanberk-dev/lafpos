@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 21 Kasım 2026 (1. ve 3. madde: kod bitti, gerçek ortam denemesi kaldı).
+Son güncelleme: 21 Kasım 2026 (1., 3. ve 4. madde: kod bitti, gerçek ortam denemesi kaldı).
 
 ## Main'de olanlar (bitti)
 
@@ -77,16 +77,21 @@ Ayrıntı `docs/07-UZAKTAN-ERISIM.md` §4 "Raporlar" ve "Anlık ciro". Kalanlar:
 
 ## 4. Site üzerinden üyelik ve indirme
 
-**Durum:** başlamadı (2 ile birlikte; sahibin isteği, 21 Kasım 2026).
+**Durum:** kod bitti (`claude/site-indir`); gerçek Windows'ta henüz koşmadı.
 
-Sahibin isteği: lafpos.laffogato.net'te üyelikle giriş ve bir indirme sayfası; Windows programı doğrudan siteden
-kurulsun.
+Yapılan: lafpos.laffogato.net'in giriş ekranı "Üye girişi" (LafPOS Uzaktan'ın patron girişi, aynı parola kuralı),
+girişten sonra menüde **İndir** (`/indir`). Sayfa anahtarsız web kurucusuna bağlanır:
+`/guncelleme/LafPOS-Kur.cmd`, kanal derlemesi (`npm run kanal`, `scripts/kasa/windows/kurulum/web-kurucu.mjs`)
+her main derlemesinde yazar. Kurucu Node'u nodejs.org'dan, better-sqlite3'ü GitHub'dan, uygulamayı
+`/guncelleme/`'den surum.json'daki SHA-256 ile doğrulayarak indirir ve `lafpos.nsi` ile aynı düzeni kurar; yeniden
+çalıştırmak onarır ya da günceller. GitHub Releases'taki LafPOS-Kurulum.exe sayfada alternatif. Ayrıntı README
+"Siteden kurulum", `docs/07-UZAKTAN-ERISIM.md` §4. Kalanlar:
 
-- Giriş Merkez'in sahip hesabıyla (dükkânların kullanıcıları sonra, Merkez üzerinden).
-- İndirme anahtar istemez. Depo özel ve Vercel NSIS kurulumunu derleyemez: anahtarsız küçük bir web kurucusu
-  (ör. `LafPOS-Kur.cmd`/`.ps1` ya da CI'ın derleyip güncelleme kanalına koyduğu küçük bir başlatıcı exe) Node'u
-  nodejs.org'dan, uygulama zip'ini `/guncelleme/`'den sha256 doğrulamasıyla indirir ve `lafpos.nsi` ile aynı
-  düzeni ve görevleri kurar. Tam kurulum dosyası GitHub Releases'ta kalır.
+- **Gerçek Windows'ta deneme:** PowerShell 5.1'de hiç çalıştırılmadı (Linux'ta yalnız üretim, sözdizimi
+  denetimi ve e2e). Boş bir Windows 10/11'de: indirme (Edge "sık indirilmiyor" uyarısı, SmartScreen), UAC ile
+  yeniden açılma, üç indirme ve doğrulama, görev, güvenlik duvarı, kısayollar, Uygulamalar listesi, "LafPOS'u
+  kaldır"; sonra kurulu bir bilgisayarda ikinci kez çalıştırma (gün açıkken soru, veritabanı kopyası, onarım).
+- **Dükkânların kullanıcıları:** giriş bugün yalnız sahibin hesabı; dükkân kullanıcıları Merkez (2) ile gelir.
 
 ## 5. Sahibin yapacakları (kafede)
 
