@@ -178,6 +178,20 @@ function siteItems(menu: SiteMenu): SiteMenuItem[] {
   return menu.categories.flatMap((c) => c.items.map((i) => ({ ...i, categoryKey: i.categoryKey ?? c.key })));
 }
 
+/**
+ * Fiyatın taze kaynağı imzalı panel (sitenin veritabanından, CDN'siz): herkese açık menü CDN'de 5 dakikaya kadar bayat
+ * kalabilir ve sitede (ya da lafmaliyet panelinde) değişen fiyat kasaya geç gelirdi. Panel varsa ve kalemin geçerli bir
+ * fiyatı varsa M / tek boy ve L fiyatı ondan (`priceMinorL` 0 = tek boy); yoksa herkese açık menüdeki
+ */
+export function withPanelPrices<T extends { id: string; priceMinor: number; priceLargeMinor?: number | null }>(items: T[], panel: PanelMenu | null): T[] {
+  if (!panel) return items;
+  return items.map((i) => {
+    const p = panel.get(i.id);
+    if (!p || !Number.isInteger(p.priceMinor) || p.priceMinor <= 0 || !Number.isInteger(p.priceMinorL) || p.priceMinorL < 0) return i;
+    return { ...i, priceMinor: p.priceMinor, priceLargeMinor: p.priceMinorL > 0 ? p.priceMinorL : null };
+  });
+}
+
 export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu | AvailabilityRule | null = null): MenuPreview {
   const rule: AvailabilityRule = panelOrRule instanceof Map || panelOrRule === null ? { panel: panelOrRule } : panelOrRule;
   const panel = rule.panel;
@@ -186,7 +200,7 @@ export function previewMenu(t: Tx | DB, menu: SiteMenu, panelOrRule: PanelMenu |
   const byExt = new Map(local.map((p) => [p.extId!, p]));
   const cats = new Set(t.select({ k: schema.categories.extKey }).from(schema.categories).where(eq(schema.categories.extSource, 'laffogato')).all().map((c) => c.k));
   const changes: MenuChange[] = [];
-  const items = siteItems(menu);
+  const items = withPanelPrices(siteItems(menu), panel);
   const seen = new Set<string>();
   for (const i of items) {
     seen.add(i.id);
@@ -308,7 +322,7 @@ export function applyMenu(
   let deactivated = 0;
   let reactivated = 0;
   const seen = new Set<string>();
-  const items = siteItems(menu);
+  const items = withPanelPrices(siteItems(menu), panel);
   items.forEach((i, idx) => {
     seen.add(i.id);
     const categoryId = catIdByKey.get(i.categoryKey);
