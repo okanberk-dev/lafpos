@@ -5,6 +5,7 @@
 // derlemesinden ayrı derlenir. `build` HEAD commit'inin unix zamanı: aynı commit'in kurulum dosyası (GitHub Release)
 // ve kanalı aynı numarayı taşır. Manifestte zip'in SHA-256'sı ve boyu, Node ve better-sqlite3'ün sürümü ve özeti
 // (surumler.mjs) bulunur; güncelleyici (guncelle.mjs) bunlarla doğrular. Aynı sunucu kodu zaten açık demoda (/demo).
+// Yanına siteden kurulumun web kurucusu LafPOS-Kur.cmd yazılır (web-kurucu.mjs).
 // Kullanım: node scripts/kasa/windows/kurulum/kanal.mjs   (dist/web'in kendisi önce derlenmiş olmalı)
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -14,6 +15,7 @@ import { join } from 'node:path';
 import { filesOf, zipFiles } from './arsiv.mjs';
 import { buildInfo, ROOT, sqliteVersion, stageApp } from './paket.mjs';
 import { NODE_ABI, NODE_SHA256, NODE_VERSION, sqliteSha256 } from './surumler.mjs';
+import { WEB_INSTALLER_NAME, webInstaller } from './web-kurucu.mjs';
 
 const OUT = join(ROOT, 'dist/web/guncelleme');
 
@@ -51,6 +53,8 @@ async function main() {
     mkdirSync(OUT, { recursive: true });
     writeFileSync(join(OUT, manifest.app.file), zip);
     writeFileSync(join(OUT, 'surum.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    // Siteden kurulum (LafPOS Uzaktan › İndir): aynı derlemenin özetleriyle anahtarsız web kurucusu (web-kurucu.mjs)
+    writeFileSync(join(OUT, WEB_INSTALLER_NAME), webInstaller({ manifest }));
     console.log(`✓ dist/web/guncelleme/${manifest.app.file} · ${(zip.length / 2 ** 20).toFixed(1)} MB · SHA-256 ${manifest.app.sha256}`);
   } finally {
     rmSync(tmp, { recursive: true, force: true });
