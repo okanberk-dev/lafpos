@@ -121,7 +121,8 @@ describe('bulut yedeği', () => {
   });
 
   it('bekçi: önce mevcut veritabanının kopyası, sonra yedek yerine; -wal silinir; bekleyen yoksa dokunmaz', async () => {
-    const { applyPendingRestore } = await import('../scripts/kasa/windows/kurulum/geri-yukle.mjs');
+    const file = '../scripts/kasa/windows/kurulum/geri-yukle.mjs';
+    const { applyPendingRestore } = (await import(file)) as { applyPendingRestore: (home: string, now?: Date) => string | null };
     const home = mkdtempSync(join(tmpdir(), 'lafpos-geri-'));
     try {
       expect(applyPendingRestore(home)).toBeNull();
