@@ -409,3 +409,26 @@ export function recordMenuSync(result: { etag?: string | null; changes?: number;
     ...(result.changes !== undefined ? { lastChanges: result.changes } : {}),
   });
 }
+
+/** Gün açıkken menünün en çok bu kadar eşitlenmeden kalabileceği süre: iki yoklama (15 dk) ve pay */
+export const MENU_STALE_MS = 40 * 60_000;
+
+/**
+ * Menü sessizce bayatladı mı: bağlantı ve otomatik eşitleme açık, gün açık, son başarılı kontrol (ya da gün açılışı,
+ * hangisi yeniyse) `MENU_STALE_MS`'ten eski ve kayıtlı bir hata yok. Yoklama hiç çalışmadığında hata da yazılmaz;
+ * kasa eski fiyattan satmaya devam eder ve kimse fark etmez. Bu durumda Entegrasyon ve yönetim çubuğu hata gösterir.
+ */
+export function menuStaleError(o: {
+  linked: boolean;
+  auto: boolean;
+  /** Açık günün açılış (ya da yeniden açılış) anı; gün kapalıysa null */
+  dayOpenedAt: number | null;
+  state: { lastSuccessAt?: number; lastError?: string | null } | null;
+  now: number;
+}): string | null {
+  if (!o.linked || !o.auto || o.dayOpenedAt === null || o.state?.lastError) return null;
+  const since = Math.max(o.state?.lastSuccessAt ?? 0, o.dayOpenedAt);
+  const late = o.now - since;
+  if (late <= MENU_STALE_MS) return null;
+  return `Menü ${Math.floor(late / 60_000)} dakikadır siteyle eşitlenmedi: kasa eski fiyattan satıyor olabilir. "Siteyle eşitle" ile deneyin`;
+}

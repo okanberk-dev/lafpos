@@ -51,6 +51,10 @@ kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada 
 - **Fiyatın taze kaynağı imzalı panel listesidir** (anahtar varsa, `GET /api/panel/menu`; `withPanelPrices`): CDN'deki
   herkese açık menü 5 dakikaya kadar bayat olabilir, kasa eski fiyattan satmasın. Panel alınamazsa herkese açık menünün
   fiyatı.
+- **Sessiz bayatlama uyarısı** (`menuStaleError`): gün açıkken, bağlantı ve otomatik eşitleme açıkken menü 40 dakikadır
+  (iki yoklama ve pay; gün açılışından önce sayılmaz) başarıyla kontrol edilmediyse ve kayıtlı hata yoksa
+  `GET /api/sync/status` bunu menünün hatası olarak verir: Entegrasyon "Hata" der, yönetim çubuğu sayar. Yoklama hiç
+  çalışmazsa hata yazılmaz ve kasa eski fiyattan satmaya devam ederdi.
 - Yalnız satıştaki kalemleri içerir ve dakikalarca bayat kalabilir. **Satışta bilgisinde karar imzalı panel
   listesinindir** (anahtar varsa, §2.3 `GET /api/panel/menu`; her kalemi satışta olsun olmasın veritabanından taze
   verir): herkese açık listede görünen ama panelde kapalı kalem kapanır, listede görünmeyen ama panelde açık kalem
