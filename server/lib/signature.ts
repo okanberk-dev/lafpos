@@ -1,4 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
+import { isNetworkError, noteReachable, noteUnreachable } from './internet';
 
 /**
  * laffogato ↔ lafmaliyet panel bağlantısının imza kuralı (laffogato `src/lib/panel/karaoke-sync-core.ts`).
@@ -58,7 +59,15 @@ export async function signedFetch(
   const raw = body === undefined ? '' : JSON.stringify(body);
   const headers: Record<string, string> = { accept: 'application/json', ...signedHeaders(secret, method, url, raw) };
   if (raw) headers['content-type'] = 'application/json';
-  const res = await fetch(url, { method, headers, body: raw || undefined, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
+  let res: Response;
+  try {
+    res = await fetch(url, { method, headers, body: raw || undefined, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' });
+  } catch (e) {
+    // İnternet durumu (server/lib/internet.ts): yanıt hiç gelmediyse "yok"
+    if (isNetworkError(e)) noteUnreachable(e);
+    throw e;
+  }
+  noteReachable();
   let json: unknown = null;
   try {
     json = await res.json();

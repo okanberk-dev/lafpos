@@ -20,6 +20,7 @@ const BUILTINS: Record<string, string> = {
   'node:https': at('demo/shims/http.ts'),
   'node:path': at('demo/shims/path.ts'),
   'node:os': at('demo/shims/os.ts'),
+  'node:net': at('demo/shims/net.ts'),
   'node:zlib': at('demo/shims/zlib.ts'),
   '@hono/node-server/serve-static': at('demo/shims/serve-static.ts'),
 };

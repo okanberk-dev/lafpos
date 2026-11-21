@@ -20,6 +20,7 @@ import { onlineOrdersTick } from './sync/laffogato-orders';
 import { flushSiteOutbox } from './sync/site-outbox';
 import { runMenuSync } from './sync/menu-sync';
 import { startCloudSync } from './sync/cloud';
+import { startCatchUp } from './sync/catch-up';
 
 /**
  * Menü yoklaması 15 dakikada bir (ETag). Herkese açık menü CDN'den gelir ama CDN'deki kopya eskiyince istek sitenin
@@ -174,6 +175,8 @@ export function startJobs() {
   }
   // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
   timers.push(...startCloudSync());
+  // İnternet dönüşü: bekleyenler beklemeden bir kez gider; internet yokken dakikada bir TCP denemesi (HTTP yok)
+  timers.push(...startCatchUp());
   // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır
   timers.push(
     setInterval(() => {

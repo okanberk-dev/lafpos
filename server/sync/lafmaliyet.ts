@@ -408,6 +408,8 @@ export function pushErrorText(status: number, json: unknown, payload: unknown): 
 
 interface PushState {
   lastRunAt?: number;
+  /** En son başarılı gönderim (Genel bakış › Sistem sağlığı) */
+  lastSuccessAt?: number;
   sent?: number;
   failed?: number;
   /** En son gönderilen günün yanıtı */
@@ -471,7 +473,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
   }
   if (sent || failed) {
     const prev = getSyncState<PushState>('lafmaliyet.push') ?? {};
-    setSyncState('lafmaliyet.push', { ...prev, lastRunAt: Date.now(), sent, failed, ...(lastAnswer ? { lastAnswer } : {}) } satisfies PushState);
+    setSyncState('lafmaliyet.push', { ...prev, lastRunAt: Date.now(), sent, failed, ...(sent ? { lastSuccessAt: Date.now() } : {}), ...(lastAnswer ? { lastAnswer } : {}) } satisfies PushState);
     bus.publish({ topic: 'sync', kind: 'lafmaliyet.push' });
   }
   return { sent, failed };
@@ -700,7 +702,7 @@ export function lafmaliyetStatus(withCost = false) {
     failing: pending.filter((p) => p.attempts > 0 || p.lastError).length,
     pendingDays: pending.map((p) => p.dedupeKey),
     lastError: pending.find((p) => p.lastError)?.lastError ?? null,
-    push: push ? { lastRunAt: push.lastRunAt, sent: push.sent, failed: push.failed } : null,
+    push: push ? { lastRunAt: push.lastRunAt, lastSuccessAt: push.lastSuccessAt, sent: push.sent, failed: push.failed } : null,
     answer: push?.lastAnswer ?? null,
     backfill: { ...range, unsent: range.from && range.from <= range.to ? unsentClosedDays(range.from, range.to).length : null },
     ...(withCost ? { costsAt: costs?.at || null, costsError: costs?.lastError ? { message: costs.lastError, at: costs.lastErrorAt ?? null } : null } : {}),

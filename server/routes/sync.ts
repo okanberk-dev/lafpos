@@ -12,8 +12,10 @@ import { reportRange } from './reports';
 import { refreshSiteKaraoke, siteKaraokeOn, siteKaraokeStatus, siteKaraokeView } from '../sync/laffogato-karaoke';
 import { onlineAlertsView, onlineStatus, refreshOnlineOrders, setAvailability, setOnlineStage } from '../sync/laffogato-orders';
 import { runMenuSync } from '../sync/menu-sync';
+import { internetStatus } from '../sync/catch-up';
 import { ackTableCall, tableCallsView } from '../sync/table-calls';
 import { getSettings } from '../lib/settings';
+import { cloudState } from '../sync/cloud';
 import { eq } from 'drizzle-orm';
 
 export const syncRoutes = new Hono<AppEnv>();
@@ -30,7 +32,15 @@ syncRoutes.get('/status', (c) => {
     karaoke: siteKaraokeStatus(),
     lafmaliyet: lafmaliyetStatus(can(c.get('user'), 'rapor.maliyet')),
     okc: okcStatus(),
+    internet: internetStatus(),
+    cloud: (({ lastSize: _size, ...cloud }) => cloud)(cloudState()),
   });
+});
+
+/** Durum alanının internet satırı (giriş yapan herkes): "İnternet yok · N kayıt bekliyor", "Bekleyenler gönderildi" */
+syncRoutes.get('/internet', (c) => {
+  const s = internetStatus();
+  return c.json({ configured: s.configured, state: s.state, pending: s.pending.total, sent: s.sent });
 });
 
 syncRoutes.put('/settings', async (c) => {

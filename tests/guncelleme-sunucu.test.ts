@@ -32,7 +32,7 @@ describe('güncelleyicinin soruları', () => {
     for (const addr of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
       const r = await fromAddr(addr, '/kasa/guncelleme-durumu');
       expect(r.status).toBe(200);
-      expect(Object.keys(await r.json())).toEqual(['dayOpen']);
+      expect(Object.keys((await r.json()) as object)).toEqual(['dayOpen']);
     }
     for (const addr of ['192.168.1.20', '100.101.7.9', null]) expect((await fromAddr(addr, '/kasa/guncelleme-durumu')).status).toBe(403);
   });
