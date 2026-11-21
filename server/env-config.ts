@@ -26,6 +26,11 @@ export function configFrom(vars: Record<string, string | undefined>) {
     /** LafPOS Uzaktan (Vercel): canlı özetin gittiği adres ve imza anahtarı (Vercel'deki LAFPOS_CLOUD_SECRET) */
     cloudUrl: (vars.LAFPOS_CLOUD_URL ?? '').replace(/\/$/, ''),
     cloudSecret: (vars.LAFPOS_CLOUD_SECRET ?? '').trim(),
+    /**
+     * Merkez (dükkânlar, lisans, seçerek güncelleme): varsayılan LafPOS Uzaktan'ın adresi. LAFPOS_MERKEZ_URL=0 kapatır;
+     * ikisi de yoksa lisans uygulanmaz ve güncelleme kanalın son sürümünü izler (server/sync/merkez.ts)
+     */
+    merkezUrl: vars.LAFPOS_MERKEZ_URL?.trim() === '0' ? '' : (vars.LAFPOS_MERKEZ_URL ?? vars.LAFPOS_CLOUD_URL ?? '').trim().replace(/\/+$/, ''),
 
     /**
      * Trendyol Go Yemek (Uber Eats Türkiye): satıcı panelinden satıcı no, API anahtarı ve gizli anahtar; yalnız kasa

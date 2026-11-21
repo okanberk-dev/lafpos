@@ -116,6 +116,30 @@ müşteri telefonları gitmez.
   `LafPOS-Kaldir.ps1` ile. Tam kurulum dosyası (LafPOS-Kurulum.exe) GitHub Releases'ta kalır: depo özel ve
   Vercel NSIS derleyemez.
 
+- **Merkez (`/merkez`): dükkânlar, lisans, seçerek güncelleme** (`api/_merkez.ts`, kasada `server/sync/merkez.ts`,
+  kural `shared/lisans.ts`, `tests/merkez.test.ts`). Yalnız gerçek oturumla (üye ya da parolalı giriş); parolasız
+  görünümde kapalı, kafe bağlanmadan örnek satır salt okunur.
+  - **Kayıt:** kasa ilk açılışta kurulum kimliği ve gizli anahtar üretir (`sync_state` `merkez.kimlik`, deneme bitirme
+    silmez). Merkez adresi `LAFPOS_MERKEZ_URL`, yoksa `LAFPOS_CLOUD_URL`; `LAFPOS_MERKEZ_URL=0` kapatır. İnternete ilk
+    çıktığında `POST /api/merkez/kayit` (ilk görüşte güven; aynı kimliğe başka anahtar 409), Merkez'de "Onay bekliyor".
+    Sonra 5 dakikada bir `POST /api/merkez/nabiz`, kurulumun anahtarıyla imzalı (`x-laf-kurulum` + imza başlıkları):
+    sürüm, güncelleme durumu, gün açık mı. Kayıt Merkez'de silinirse (404) kasa bir sonraki nabızda yeniden kaydolur.
+  - **Lisans:** onaysız kurulum kuruluştan 14 gün deneme; aktif lisans bitiş gününün sonuna (İstanbul) kadar, bitişsiz
+    süresiz; pasif ya da süresi dolmuşta önce uyarı (kasada amber şerit), 7 gün sonra yeni satış kapanır
+    (`POST /orders` ve kalem ekleme 403 `license_blocked`); tahsilat, kayıtlar ve raporlar açık. Kasa son yanıtı
+    (`merkez.son`) saklar ve kendi saatiyle hesaplar: internet ya da Merkez yokken durmaz. Merkez adresi yoksa lisans
+    uygulanmaz. Durum Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de.
+  - **Seçerek güncelleme:** dükkân "Ben gönderince" (varsayılan) ya da "Otomatik". Panelde dükkânlar seçilip
+    "Güncelleme gönder": hedef kanalın son derlemesi olur. Nabzın yanıtı hedefi taşır; güncelleyici
+    (`guncelle.mjs` `merkezCap`) kanalda daha yeni derleme görünce sunucuya (`/api/kasa/guncelleme-durumu`, yalnız bu
+    bilgisayardan; Merkez'le imzalı konuşan sunucudur) sorar ve yalnız hedefe kadar kurar. Sunucuya ulaşamazsa son
+    bildiği kararda kalır; Merkez kapalıysa kanalın son sürümünü izler (eski davranış). Durum "Yeni sürüm … hazır;
+    Merkez'den gönderilince kurulacak". Panel satırı kasanın bildirdiği durumu gösterir: "İndiriliyor", "Gün kapanınca
+    kurulacak", "Kuruldu", "Sorun çıktı, eski sürüme döndü".
+  - **Yeni sürüm hazır:** kanalın `surum.json`'u `not` taşır (son commit'in başlığı, squash'ta PR başlığı;
+    `kanal.mjs` `changeNote`). Panel gönderilmemiş dükkânları "Bekleyenleri seç" ile seçer.
+  - Redis: `lafpos:merkez:kurulum:<id>`, `lafpos:merkez:kurulumlar` (küme).
+
 | Nerede | Ne |
 |---|---|
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { licenseNow, merkezLast, merkezSyncState } from '../sync/merkez';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
 import { type AppEnv, can, requirePermission } from '../lib/auth';
@@ -42,6 +43,13 @@ syncRoutes.get('/status', (c) => {
     internet: internetStatus(),
     cloud: (({ lastSize: _size, ...cloud }) => cloud)(cloudState()),
   });
+});
+
+/** Merkez lisansı (giriş yapan herkes): kasa şeridi ve Yönetim; Merkez kapalıysa `enabled: false` */
+syncRoutes.get('/lisans', (c) => {
+  const lic = licenseNow();
+  const last = merkezLast();
+  return c.json({ enabled: !!lic, ...(lic ?? {}), ad: last?.ad ?? null, sonGorusme: last?.at ?? null, ...(can(c.get('user'), 'senkron.yonet') ? { kurulum: merkezSyncState() } : {}) });
 });
 
 /** Durum alanının internet satırı (giriş yapan herkes): "İnternet yok · N kayıt bekliyor", "Bekleyenler gönderildi" */

@@ -14,6 +14,7 @@
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { merkez, type Release } from './_merkez.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
 
@@ -172,6 +173,29 @@ async function member(email: string, fresh = false): Promise<Member | null> {
   const value = raw ? (JSON.parse(raw) as Member) : null;
   memberCache.set(email, { at: Date.now(), value });
   return value;
+}
+
+/** Güncelleme kanalının son derlemesi (aynı sitenin statik surum.json'u); bir dakika bellekte */
+let releaseCache: { at: number; value: Release | null } | null = null;
+async function latestRelease(origin: string): Promise<Release | null> {
+  if (releaseCache && Date.now() - releaseCache.at < 60_000) return releaseCache.value;
+  let value: Release | null = null;
+  try {
+    const res = await fetch(`${origin}/guncelleme/surum.json`, { signal: AbortSignal.timeout(5000) });
+    const m = res.ok ? ((await res.json()) as { version?: unknown; build?: unknown; date?: unknown; not?: unknown }) : null;
+    if (m && typeof m.version === 'string' && Number.isInteger(m.build)) {
+      value = { version: m.version, build: m.build as number, date: typeof m.date === 'string' ? m.date : '', not: typeof m.not === 'string' ? m.not.slice(0, 300) : null };
+    }
+  } catch {
+    value = null;
+  }
+  releaseCache = { at: Date.now(), value };
+  return value;
+}
+
+/** Testler: kanalın önbelleğini boşaltır */
+export function resetReleaseCache() {
+  releaseCache = null;
 }
 
 async function snapshot(): Promise<Snapshot | null> {
@@ -959,6 +983,27 @@ async function handle(req: Request): Promise<Response> {
   const login = loginPost ? ((await req.json().catch(() => ({}))) as { eposta?: unknown; parola?: unknown; davet?: unknown }) : null;
   // Üyelik açıkken üyenin girişi ve oturumu demoya düşmez (kafe bağlanmadan da girer: İndir sayfası için)
   const memberRequest = memberMode && (path === 'uzaktan/uye' || !!login?.eposta || memberTokenEmail(auth) != null);
+  // Merkez: kasanın kaydı ve imzalı nabzı (kendi anahtarıyla), panel (gerçek oturumla); demo ve salt okunur kapısından önce
+  if (path.startsWith('merkez/')) {
+    const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder';
+    const demo = panel && !memberRequest && demoAllowed() && !(await realSnapshot()) && tokenValid(demoKey(), auth);
+    return merkez(req, url, path, {
+      redis,
+      verify: (key: string, r: Request, u: URL, body: string) => verifyPush(key, r, u, body),
+      admin: async () => {
+        if (secret().length < 32) return false;
+        if (memberMode) {
+          const email = memberTokenEmail(auth);
+          const record = email && members.includes(email) ? await member(email) : null;
+          return !!record && memberTokenValid(secret(), auth, record.h);
+        }
+        // Parolasız görünümde (bağlantıyı bilen herkes) Merkez açılmaz
+        return passwordRequired() && tokenValid(secret(), auth);
+      },
+      demo,
+      fetchRelease: () => latestRelease(url.origin),
+    });
+  }
   if (path !== 'uzaktan/push' && !memberRequest && demoAllowed() && !(await realSnapshot())) {
     if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now() });
     if (path === 'uzaktan/giris' && req.method === 'POST') return json({ token: issueToken(demoKey()), me: ME, demo: true });

@@ -1,0 +1,232 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Send } from 'lucide-react';
+import { useState } from 'react';
+import type { LicenseState } from '@shared/lisans';
+import { fmtDateTime } from '@shared/time';
+import { Button } from '@/components/ui/Button';
+import { Field, Input, Segmented } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
+import { Badge, Card, EmptyState, ErrorState, Notice, PageHeader, Skeleton } from '@/components/ui/misc';
+import { Stage } from '@/components/ui/Stage';
+import { errorMessage, get, post } from '@/lib/api';
+import { cn } from '@/lib/cn';
+import { toast } from '@/lib/toast';
+
+type Tone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+
+interface Row {
+  id: string;
+  ad: string | null;
+  surum: string | null;
+  build: number | null;
+  createdAt: number;
+  lastSeen: number | null;
+  online: boolean;
+  gunAcik: boolean | null;
+  guncelleme: { durum: string; mesaj: string; etiket: string } | null;
+  lisans: { durum: 'bekliyor' | 'aktif' | 'pasif'; bitis?: string | null; state: LicenseState; message: string };
+  mod: 'elle' | 'otomatik';
+  hedef: number | null;
+  gonderildi: number | null;
+  bekleyen: boolean;
+}
+
+interface Data {
+  kurulumlar: Row[];
+  enYeni: { version: string; build: number; date: string; not: string | null } | null;
+  demo?: boolean;
+}
+
+const LICENSE_TONE: Record<LicenseState, Tone> = { aktif: 'success', deneme: 'info', uyari: 'warning', kapali: 'danger' };
+const licenseLabel = (r: Row) => (r.lisans.durum === 'bekliyor' && r.lisans.state === 'deneme' ? 'Onay bekliyor' : r.lisans.state === 'aktif' ? 'Aktif' : r.lisans.state === 'deneme' ? 'Deneme' : r.lisans.state === 'uyari' ? 'Uyarı' : 'Satış kapalı');
+const updateTone = (d: string | undefined): Tone => (d === 'geri-dondu' || d === 'hata' ? 'warning' : d === 'guncel' ? 'neutral' : 'info');
+
+export const merkezQuery = { queryKey: ['merkez'], queryFn: () => get<Data>('/merkez/kurulumlar'), refetchInterval: 30_000 };
+
+/** Bir dükkânın ayarları: ad, lisans, güncellemenin nasıl gideceği */
+function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [ad, setAd] = useState(row.ad ?? '');
+  const [lisans, setLisans] = useState<Row['lisans']['durum']>(row.lisans.durum);
+  const [bitis, setBitis] = useState(row.lisans.bitis ?? '');
+  const [mod, setMod] = useState<Row['mod']>(row.mod);
+  const save = useMutation({
+    mutationFn: () => post('/merkez/kurulum', { id: row.id, ad, lisans, bitis: lisans === 'aktif' ? bitis || null : undefined, mod }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: merkezQuery.queryKey });
+      toast.ok('Kaydedildi; dükkân birkaç dakika içinde alır');
+      onClose();
+    },
+  });
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={row.ad || 'Adsız dükkân'}
+      subtitle={`Kuruluş ${fmtDateTime(row.createdAt)}`}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Vazgeç
+          </Button>
+          <Button variant="primary" loading={save.isPending} onClick={() => save.mutate()}>
+            Kaydet
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-5">
+        <Field label="Dükkânın adı">
+          <Input value={ad} maxLength={60} onChange={(e) => setAd(e.target.value)} placeholder="Örn. Tuzla" />
+        </Field>
+        <Field label="Lisans">
+          <Segmented
+            value={lisans}
+            onChange={setLisans}
+            options={[
+              { value: 'bekliyor', label: 'Onay bekliyor' },
+              { value: 'aktif', label: 'Aktif' },
+              { value: 'pasif', label: 'Pasif' },
+            ]}
+          />
+        </Field>
+        {lisans === 'aktif' && (
+          <Field label="Son gün" hint="Boş bırakılırsa süresiz">
+            <Input type="date" value={bitis} onChange={(e) => setBitis(e.target.value)} />
+          </Field>
+        )}
+        <Field label="Güncelleme" hint={mod === 'otomatik' ? 'Yeni sürüm çıkınca kendiliğinden gider' : 'Siz gönderince gider'}>
+          <Segmented
+            value={mod}
+            onChange={setMod}
+            options={[
+              { value: 'elle', label: 'Ben gönderince' },
+              { value: 'otomatik', label: 'Otomatik' },
+            ]}
+          />
+        </Field>
+        <p className="text-[13px] leading-5 text-muted">Pasif ya da süresi dolan lisansta dükkânda önce uyarı çıkar, 7 gün sonra yeni satış kapanır. Kayıtlar ve raporlar açık kalır</p>
+        {save.isError && <Notice tone="danger">{errorMessage(save.error)}</Notice>}
+      </div>
+    </Modal>
+  );
+}
+
+/** Dükkân satırı: seçim kutusu, ad ve durum; satıra basınca ayarlar */
+function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; selected: boolean; onToggle: () => void; onOpen: () => void; readOnly: boolean }) {
+  return (
+    <li className="flex items-center gap-1 border-b border-[var(--admin-divider)] last:border-b-0">
+      <label className="grid size-11 shrink-0 cursor-pointer place-items-center pl-2" title="Seç">
+        <input type="checkbox" checked={selected} disabled={readOnly} onChange={onToggle} aria-label={`${row.ad || 'Adsız dükkân'} seç`} className="size-5 accent-[var(--admin-primary)] pointer-fine:size-4" />
+      </label>
+      <button type="button" onClick={onOpen} disabled={readOnly} className="flex min-h-[64px] min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1.5 py-3 pr-5 text-left disabled:cursor-default">
+        <span className="min-w-0 flex-[1_1_12rem]">
+          <span className="flex items-center gap-2">
+            <span aria-hidden="true" className={cn('size-2 shrink-0 rounded-full', row.online ? 'bg-[var(--admin-primary)]' : 'bg-[var(--admin-border-strong,#c3cbc6)]')} />
+            <span className="truncate font-semibold">{row.ad || 'Adsız dükkân'}</span>
+          </span>
+          <span className="mt-0.5 block text-[13px] text-muted">
+            {row.surum ? `Sürüm ${row.surum}` : 'Sürüm bilinmiyor'} · {row.online ? 'çevrimiçi' : row.lastSeen ? `son görülme ${fmtDateTime(row.lastSeen)}` : 'hiç bağlanmadı'}
+          </span>
+        </span>
+        <span className="flex flex-wrap items-center gap-1.5">
+          {row.bekleyen && <Badge tone="info">Güncelleme gönderilmedi</Badge>}
+          {row.guncelleme && row.guncelleme.durum !== 'guncel' && (
+            <Badge tone={updateTone(row.guncelleme.durum)} title={row.guncelleme.mesaj}>
+              {row.guncelleme.etiket}
+            </Badge>
+          )}
+          <Badge tone={LICENSE_TONE[row.lisans.state]} dot title={row.lisans.message}>
+            {licenseLabel(row)}
+          </Badge>
+        </span>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * LafPOS Uzaktan › Merkez: dükkânlar, lisans ve seçerek güncelleme (api/_merkez.ts). Yeni kurulum internete ilk
+ * çıktığında "Onay bekliyor" olarak gelir; sahip ad ve lisans verir, dükkânları seçip güncelleme gönderir
+ */
+export default function MerkezPage() {
+  const qc = useQueryClient();
+  const q = useQuery(merkezQuery);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<Row | null>(null);
+  const d = q.data;
+  const readOnly = !!d?.demo;
+  const rows = d?.kurulumlar ?? [];
+  const waiting = rows.filter((r) => r.bekleyen);
+  const send = useMutation({
+    mutationFn: (ids: string[]) => post<{ gonderilen: number }>('/merkez/gonder', { ids }),
+    onSuccess: (r) => {
+      setPicked(new Set());
+      void qc.invalidateQueries({ queryKey: merkezQuery.queryKey });
+      toast.ok(`${r.gonderilen} dükkâna gönderildi; gün kapanınca kurulur`);
+    },
+    onError: (e) => toast.err(errorMessage(e)),
+  });
+  const toggle = (id: string) =>
+    setPicked((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  return (
+    <Stage leafLabel="Merkez" float>
+      <div className="lp-leaf-pad grid gap-[var(--grid-gap)]">
+        <PageHeader
+          title="Merkez"
+          subtitle="Dükkânlar, lisanslar ve güncellemeler"
+          actions={
+            <Button variant="primary" ring disabled={!picked.size || readOnly} loading={send.isPending} onClick={() => send.mutate([...picked])}>
+              <Send aria-hidden="true" className="size-4" />
+              {picked.size ? `Güncelleme gönder (${picked.size})` : 'Güncelleme gönder'}
+            </Button>
+          }
+        />
+        {readOnly && <Notice tone="info">Örnek görünüm: kafe bağlanınca gerçek dükkânlar burada görünür</Notice>}
+        {d?.enYeni && waiting.length > 0 && (
+          <Notice
+            tone="info"
+            title={`Yeni sürüm hazır: ${d.enYeni.version}`}
+            action={
+              !readOnly && (
+                <Button size="sm" variant="secondary" onClick={() => setPicked(new Set(waiting.map((r) => r.id)))}>
+                  Bekleyenleri seç
+                </Button>
+              )
+            }
+          >
+            {d.enYeni.not ? `${d.enYeni.not} · ` : ''}
+            {waiting.length} dükkâna henüz gönderilmedi
+          </Notice>
+        )}
+        <Card title="Dükkânlar" subtitle={rows.length ? `${rows.length} kurulum · ${rows.filter((r) => r.online).length} çevrimiçi` : undefined}>
+          {q.isPending ? (
+            <div className="grid gap-3 p-5">
+              <Skeleton className="h-12" />
+              <Skeleton className="h-12" />
+            </div>
+          ) : q.isError && !d ? (
+            <ErrorState compact title="Dükkânlar alınamadı" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
+          ) : rows.length === 0 ? (
+            <EmptyState compact title="Henüz dükkân yok">
+              LafPOS kurulan bilgisayar internete bağlanınca burada "Onay bekliyor" olarak görünür
+            </EmptyState>
+          ) : (
+            <ul>
+              {rows.map((r) => (
+                <ShopRow key={r.id} row={r} selected={picked.has(r.id)} onToggle={() => toggle(r.id)} onOpen={() => setEditing(r)} readOnly={readOnly} />
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+      {editing && <EditDialog row={editing} onClose={() => setEditing(null)} />}
+    </Stage>
+  );
+}

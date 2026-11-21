@@ -20,6 +20,7 @@ import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
 import { InternetBadge } from './InternetBadge';
 import { LafTile } from './LafMark';
+import { LicenseStrip } from './LicenseStrip';
 import { PlatformInbox } from './PlatformInbox';
 import { SiteInbox } from './SiteInbox';
 import { AlertSoundGroup, DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
@@ -370,6 +371,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           Deneme modu: yapılan satışlar gerçek sayılmaz
         </p>
       )}
+      <LicenseStrip />
       {notice && <div className="shrink-0">{notice}</div>}
       <div className="flex min-h-0 flex-1 md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)]">
         {/* Tablet ve bilgisayar: marka rayı (panonun menüsü). Ekranlar ikon ve kısa adla; dipte Araçlar ve Kilitle */}

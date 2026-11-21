@@ -116,14 +116,30 @@ export function readInstalled(appDir) {
  * Ne kurulacak (saf): manifestteki derleme kurulandan yeni değilse ya da daha önce denenip geri dönüldüyse hiçbir şey.
  * Node, çalışan Node'dan farklıysa değişir; better-sqlite3 sürümü ya da Node ABI'si değişince yerel modül de
  */
-export function planUpdate({ installed, nodeVersion, manifest, failed = [] }) {
-  if (!manifest || manifest.build <= installed.build || failed.includes(manifest.build)) return null;
+export function planUpdate({ installed, nodeVersion, manifest, failed = [], cap = Infinity }) {
+  if (!manifest || manifest.build <= installed.build || failed.includes(manifest.build) || manifest.build > cap) return null;
   return {
     build: manifest.build,
     version: manifest.version,
     node: manifest.node.version !== nodeVersion,
     sqlite: manifest.sqlite.version !== installed.sqlite || manifest.node.abi !== installed.nodeAbi,
   };
+}
+
+/**
+ * Merkez'in sınırı (saf): kurulacak en yeni derleme. Sunucu Merkez açık derse onun hedefi (hedef yoksa kurulu derleme:
+ * yerinde kalınır); Merkez kapalıysa sınır yok (kanalın son sürümü). Sunucuya ulaşılamazsa son bilinen karar geçerli:
+ * Merkez'e ulaşılamayan kasa son bildiği hedefte kalır. `merkez`: durum.json'a yazılacak son karar
+ */
+export function merkezCap({ server, last, installedBuild }) {
+  const m = server?.merkez;
+  if (m && typeof m.enabled === 'boolean') {
+    const hedef = Number.isInteger(m.hedef) ? m.hedef : null;
+    if (!m.enabled) return { cap: Infinity, merkez: { acik: false, hedef: null } };
+    return { cap: hedef ?? installedBuild ?? 0, merkez: { acik: true, hedef } };
+  }
+  if (last?.acik) return { cap: (Number.isInteger(last.hedef) ? last.hedef : null) ?? installedBuild ?? 0, merkez: last };
+  return { cap: Infinity, merkez: last ?? null };
 }
 
 /** Kurulum için an uygun mu (saf): yalnız sunucu "açık gün yok" derse */
@@ -163,7 +179,7 @@ export function staleDownloads(names, keepBuild) {
 // ─── Durum ───────────────────────────────────────────────────────────────────
 
 const iso = (ms) => new Date(ms).toISOString();
-const BASE = { durum: 'guncel', mesaj: '', kurulu: null, yeni: null, sonKontrol: null, sonBasariliKontrol: null, sonHata: null, sonKurulum: null, basarisiz: [] };
+const BASE = { durum: 'guncel', mesaj: '', kurulu: null, yeni: null, sonKontrol: null, sonBasariliKontrol: null, sonHata: null, sonKurulum: null, basarisiz: [], merkez: null };
 const label = (x) => (x ? `${x.surum} (${x.build})` : '');
 
 /**
@@ -191,8 +207,10 @@ export function nextStatus(prev, ev) {
       if (ev.mode === 'kapali') return { ...p, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: LAFPOS_GUNCELLEME=kapali)' };
       return p.durum === 'kapali' ? { ...p, durum: 'guncel', mesaj: 'Otomatik güncelleme açıldı; yeni sürüm birkaç dakika içinde denetlenecek' } : p;
     case 'kontrol': {
-      const base = { ...p, sonKontrol: iso(ev.now), sonBasariliKontrol: iso(ev.now), sonHata: null };
+      const base = { ...p, sonKontrol: iso(ev.now), sonBasariliKontrol: iso(ev.now), sonHata: null, merkez: ev.merkez ?? p.merkez };
       if (ev.plan) return base;
+      // Kanalda yeni sürüm var ama Merkez bu dükkâna henüz göndermedi
+      if (ev.held && ev.manifest) return { ...base, durum: 'guncel', yeni: null, mesaj: `Yeni sürüm ${label({ surum: ev.manifest.version, build: ev.manifest.build })} hazır; Merkez'den gönderilince kurulacak` };
       if (ev.manifest && p.basarisiz.includes(ev.manifest.build) && ev.manifest.build > (p.kurulu?.build ?? 0)) {
         return { ...base, durum: 'geri-dondu', yeni: null, mesaj: `${label({ surum: ev.manifest.version, build: ev.manifest.build })} kurulunca sorun çıkmıştı; eski sürüm çalışıyor. Bu sürüm bir daha denenmeyecek, sonraki sürüm beklenecek` };
       }
@@ -461,16 +479,25 @@ export function createUpdater(deps) {
     }
   }
 
-  /** Sunucuya (yalnız bu bilgisayardan) açık gün var mı diye sorar: true / false; sorulamazsa null */
-  async function askDayOpen() {
+  /**
+   * Sunucuya (yalnız bu bilgisayardan) sorar: açık gün var mı ve Merkez'in hedefi (Merkez'le imzalı konuşan sunucudur,
+   * server/sync/merkez.ts). Sorulamazsa null
+   */
+  async function askServer() {
     try {
       const res = await fetchImpl(`http://127.0.0.1:${deps.port()}/api/kasa/guncelleme-durumu`, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) return null;
       const body = await res.json();
-      return typeof body?.dayOpen === 'boolean' ? body.dayOpen : null;
+      return body && typeof body === 'object' ? body : null;
     } catch {
       return null;
     }
+  }
+
+  /** Açık gün var mı: true / false; sorulamazsa null */
+  async function askDayOpen() {
+    const body = await askServer();
+    return typeof body?.dayOpen === 'boolean' ? body.dayOpen : null;
   }
 
   async function check() {
@@ -483,8 +510,13 @@ export function createUpdater(deps) {
     try {
       const manifest = await fetchManifest();
       const inst = installed();
-      const plan = planUpdate({ installed: inst, nodeVersion, manifest, failed: status?.basarisiz ?? [] });
-      set({ type: 'kontrol', plan, manifest, now: now() });
+      // Sunucuya yalnız kanalda daha yeni ve denenmemiş derleme varsa sorulur (Merkez'in hedefi o zaman gerekir)
+      const failed = status?.basarisiz ?? [];
+      const newer = manifest.build > (inst.build ?? 0) && !failed.includes(manifest.build);
+      const { cap, merkez } = newer ? merkezCap({ server: await askServer(), last: status?.merkez, installedBuild: inst.build }) : { cap: Infinity, merkez: status?.merkez ?? null };
+      const plan = planUpdate({ installed: inst, nodeVersion, manifest, failed: status?.basarisiz ?? [], cap });
+      const held = !plan && manifest.build > (inst.build ?? 0) && manifest.build > cap && !(status?.basarisiz ?? []).includes(manifest.build);
+      set({ type: 'kontrol', plan, manifest, now: now(), merkez, held });
       if (!plan) {
         ready = null;
         cleanDownloads(null);
