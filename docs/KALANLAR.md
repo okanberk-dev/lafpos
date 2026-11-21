@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 21 Kasım 2026.
+Son güncelleme: 21 Kasım 2026 (1. madde: kod bitti, gerçek ortam denemesi kaldı).
 
 ## Main'de olanlar (bitti)
 
@@ -14,45 +14,24 @@ Son güncelleme: 21 Kasım 2026.
 - Windows 10: boşta düşük kaynak, bellek sınırı, Windows'ta kurulum paketi denemesi (`.github/workflows/windows.yml`,
   `docs/05-KASA-BILGISAYARI.md`).
 
-## 1. Kurulum dosyası, otomatik güncelleme, internet dönüşü
+## 1. Kurulum dosyası, otomatik güncelleme, internet dönüşü: gerçek ortamda denenecekler
 
-**Durum:** yarım. Başlangıcı GitHub'da `claude/exe-guncelleme-wip` dalında (doğrulanmadı):
-`scripts/kasa/windows/kurulum/guncelle.mjs` (güncelleyici yardımcıları, 587 satır) ve `arsiv.mjs` (zip açma).
-Bu dal main'den (#54) sonraki duruma göre `main`'le birleştirilip aşağıdaki tarife göre tamamlanır; henüz
-bekçiye, derle.mjs'e, CI'a, vercel.json'a ve README'ye bağlanmadı, testi yok.
+**Durum:** kod bitti (`claude/exe-guncelleme-wip`), Linux'ta denendi; aşağıdakiler gerçek ortamda henüz koşmadı.
+Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 ("Otomatik güncelleme",
+"İnternet yokken").
 
-Sahibin isteği: "Uygulama Windows'a exe olarak kurulsun; README'de basitçe anlat; GitHub'a her yüklemede kasa
-kendiliğinden güncellensin; ben anahtar (token) oluşturmayayım; internet yokken de çalışsın; internet gelince o
-sürede yapılan satışlar gönderilsin ve sistemde görünsün."
-
-- **İlk kurulum dosyası:** main'e her push'ta GitHub Actions (windows-latest) `LafPOS-Kurulum.exe` ve
-  `LafPOS-Kurulum.exe.sha256`'yı sabit adlarla GitHub Release olarak yayımlar (`gh release create`,
-  `permissions: contents: write`). Sürüm: `package.json`'ın major.minor'u + çalıştırma no. Sahip exe'yi bir kez
-  Releases'tan indirir.
-- **Güncelleme kanalı (gizli anahtar yok):** Vercel'deki `lafpos` projesi main'i zaten kendisi yayımlıyor. Onun
-  derlemesi `dist/web/guncelleme/surum.json` ve `lafpos-app-<build>.zip` üretir: kurulumun `app/` yükü, `node.exe` ve
-  `better_sqlite3.node` hariç. `build` = HEAD commit'inin unix zamanı (`git log -1 --format=%ct`); aynı commit'in
-  GitHub ve Vercel derlemesi aynı numarayı taşır. Manifestte zip'in sha256'sı ve boyutu, Node ve better-sqlite3
-  sürümleri ve sha256'ları (derle.mjs sabitlerinden) bulunur. `vercel.json` SPA yönlendirmesi `/guncelleme/*`'ı
-  `index.html`'e çevirmemeli. Paketin açık adreste durması yeni bir şey açmaz: aynı sunucu kodu zaten herkese açık
-  demoda (`/demo`).
-- **Kasadaki güncelleyici (bekçi):** ayar gerekmez. Sırayla
-  `https://lafpos.laffogato.net/guncelleme/surum.json`, `https://lafpos.vercel.app/guncelleme/surum.json`; yalnız
-  HTTPS, başka hosta yönlendirme reddedilir; açılıştan 2 dk sonra, sonra 30 dk'da bir (ETag). Yeni build varsa
-  indirir, sha256 ve boyutu doğrular, **yalnız açık iş günü yokken** kurar: veritabanı yedeği, sunucuyu düzgün durdur,
-  `app` → `app.eski`, yeni zip'i aç, sağlık denetimi (60 sn), olmazsa geri dön ve o build'i bir daha deneme. Node ya
-  da better-sqlite3 değiştiyse açık kaynaklarından (nodejs.org, WiseLibs) indirip manifestteki sha256 ile doğrular;
-  çalışan `node.exe`'nin yerine geçmek için zamanlanmış görev küçük bir başlatıcıdan (`baslat.cmd`) çalışır.
-  `LAFPOS_GUNCELLEME=kapali` kapatır. Durum `C:\ProgramData\LafPOS\guncelleme\durum.json`'da; Yönetim › Ayarlar ve
-  yedek'te sürüm ve durum görünür.
-- **İnternet yokken:** kasa yerel sunucudur, satış, masa, ödeme ve Pavo internetsiz çalışır. Açılışta ve arayüzde
-  interneti bekleyen bir şey kalmamalı.
-- **İnternet gelince:** lafmaliyet gün sonu, site outbox'ı, Uzaktan özeti ve online sipariş çekimi kuyrukta bekleyeni
-  kaybetmeden ve iki kez göndermeden yollar; bağlantı dönünce aralık beklemeden bir kez eşitler (`AGENTS.md` kural 6'nın
-  istek bütçesi içinde). Durum alanında "İnternet yok · N kayıt bekliyor" ve sonra "Bekleyenler gönderildi" görünür,
-  her sistemin son başarılı gönderim saati Genel bakış › Sistem sağlığı'nda.
-- **README:** "Windows'a kurulum" bölümü (indirme, SmartScreen "Ek bilgi › Yine de çalıştır", kurulum, ayarlar,
-  güncellemeler, elle güncelleme, kapatma, internetsiz çalışma, sorun giderme, geliştirici notu).
+- **GitHub Release:** `main`'e ilk push'ta `.github/workflows/windows.yml`'in "Sürümü yayımla" adımı (Actions'ın
+  `GITHUB_TOKEN`'ı, `contents: write`). Releases'ta `LafPOS-Kurulum.exe` ve `.sha256` görünmeli.
+- **Vercel kanalı:** `lafpos` projesinin main derlemesinde `npm run kanal`; ardından
+  `https://lafpos.laffogato.net/guncelleme/surum.json` JSON dönmeli (sayfa değil) ve `build` HEAD commit'inin zamanı
+  olmalı. Vercel'de git geçmişi yoksa betik derlemenin anını kullanır (günlükte "git geçmişi yok"); o zaman aynı
+  commit'in kurulum dosyası kanaldan bir kez daha "güncellenir" (zararsız).
+- **Gerçek Windows'ta:** görev artık `cmd.exe /d /c baslat.cmd` (çalışma klasörü kurulum klasörü); bekçinin 75
+  koduyla yeniden açılması, `app` klasörünün adının sunucu durunca değişebilmesi, deneme bekçisinin `taskkill /T`
+  ile kapanması, Node değişince `node.yeni`'nin yerine geçmesi. İlk kurulumdan sonra bir gün sonu yapıp
+  Ayarlar ve yedek › Sürüm ve güncelleme'de "Güncellendi" görülmeli; `logs\sunucu.log`'da `[güncelleme]` satırları.
+- **İnternet dönüşü:** kafede interneti kesip bir gün sonu al: Genel bakış'ta "İnternet · Yok · 1 kayıt bekliyor",
+  üst çubukta rozet; interneti aç: en geç bir dakikada "Bekleyenler gönderildi", lafmaliyet'te gün bir kez.
 
 ## 2. Merkez: dükkânlar, lisans, seçerek güncelleme
 
@@ -91,7 +70,20 @@ bilgisayarda. Yapılacak:
   Merkez'deki her dükkânın raporu ayrı; üstte dükkân seçilir.
 - Buluta gitmez: maliyet ve kâr (lafmaliyet'te), PIN'ler, müşteri adı ve telefonu (`docs/07-UZAKTAN-ERISIM.md` §4).
 
-## 4. Sahibin yapacakları (kafede)
+## 4. Site üzerinden üyelik ve indirme
+
+**Durum:** başlamadı (2 ile birlikte; sahibin isteği, 21 Kasım 2026).
+
+Sahibin isteği: lafpos.laffogato.net'te üyelikle giriş ve bir indirme sayfası; Windows programı doğrudan siteden
+kurulsun.
+
+- Giriş Merkez'in sahip hesabıyla (dükkânların kullanıcıları sonra, Merkez üzerinden).
+- İndirme anahtar istemez. Depo özel ve Vercel NSIS kurulumunu derleyemez: anahtarsız küçük bir web kurucusu
+  (ör. `LafPOS-Kur.cmd`/`.ps1` ya da CI'ın derleyip güncelleme kanalına koyduğu küçük bir başlatıcı exe) Node'u
+  nodejs.org'dan, uygulama zip'ini `/guncelleme/`'den sha256 doğrulamasıyla indirir ve `lafpos.nsi` ile aynı
+  düzeni ve görevleri kurar. Tam kurulum dosyası GitHub Releases'ta kalır.
+
+## 5. Sahibin yapacakları (kafede)
 
 Başlat › LafPOS › LafPOS ayarları'na (anahtar değerleri Mac'te `~/Downloads/lafpos-kasa-ayarlari.env`; yoksa
 `scripts/vercel/baglanti-kur.sh --yenile`):
