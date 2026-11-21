@@ -17,8 +17,22 @@ export interface PendingLine {
   priceOverride?: number | null;
 }
 
+/**
+ * Kasaya ulaşamayan gönderim (sunucu yeniden başlıyor, Wi-Fi koptu): kimliği ve satırlarıyla tablette bekler; bağlantı
+ * gelince aynı kimlikle yeniden gönderilir. Sunucu aynı kimliği bir kez yazar: ilk deneme aslında ulaşıp yanıtı
+ * kaybolduysa kalemler iki kez yazılmaz
+ */
+export interface SendBatch {
+  id: string;
+  lines: PendingLine[];
+  hold: boolean;
+  at: number;
+}
+
 interface CartState {
   byOrder: Record<string, PendingLine[]>;
+  batches: Record<string, SendBatch>;
+  setBatch: (orderId: string, batch: SendBatch | null) => void;
   add: (orderId: string, line: Omit<PendingLine, 'key'>) => void;
   update: (orderId: string, key: string, patch: Partial<PendingLine>) => void;
   remove: (orderId: string, key: string) => void;
@@ -49,6 +63,14 @@ export const useCart = create<CartState>()(
   persist(
     (set) => ({
       byOrder: {},
+      batches: {},
+      setBatch: (orderId, batch) =>
+        set((s) => {
+          const next = { ...s.batches };
+          if (batch) next[orderId] = batch;
+          else delete next[orderId];
+          return { batches: next };
+        }),
       add: (orderId, line) =>
         set((s) => {
           const lines = s.byOrder[orderId] ?? [];
@@ -107,3 +129,18 @@ export function usePending(orderId: string): PendingLine[] {
   return useCart((s) => s.byOrder[orderId]) ?? EMPTY;
 }
 const EMPTY: PendingLine[] = [];
+
+export function useBatch(orderId: string): SendBatch | undefined {
+  return useCart((s) => s.batches?.[orderId]);
+}
+
+/** Gönderimin tek seferlik kimliği (sunucu aynı kimliği bir kez yazar) */
+export function newBatchId(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/** Kasaya hiç ulaşılamadı mı (yanıt yok ya da sunucu yeniden başlıyor): gönderim kuyrukta bekler */
+export function unreachable(e: unknown): boolean {
+  const status = (e as { status?: unknown })?.status;
+  return status === 0 || status === 502 || status === 503 || status === 504;
+}

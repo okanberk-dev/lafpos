@@ -324,7 +324,8 @@ describe('ekran (kaynak)', () => {
     expect(page).toContain('const holdOnPay = holdsUntilPaid(order);');
     expect(page.match(/if \(await send\(holdOnPay\)\) setDialog\('odeme'\);/g)?.length).toBe(2);
     expect(page).toMatch(/const sendOnly = \(\) =>\s*void once\(async \(\) => \{\s*if \(promptNumarator\('send'\)\) return;\s*await send\(\);/);
-    expect(page).toContain('...(hold ? { hold: true } : {}),');
+    // Ödeme bekletme işareti gönderim kaydından (kasaya ulaşamayan gönderim aynı işaretle yeniden gider)
+    expect(page).toContain('...(batch.hold ? { hold: true } : {}),');
   });
 
   it('sepette "Ödeme bekliyor" grubu en üstte; "Ödemeden gönder" sipariş yetkisiyle', () => {

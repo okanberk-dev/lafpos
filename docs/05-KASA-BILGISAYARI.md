@@ -226,6 +226,11 @@ kullanıcı hesabı önerilir.
 - Aynı ağdaki cihazlar: `http://<kasa-ip>:4000`; adres ve karekod Yönetim › Ağ ve uzaktan erişim'de. Chrome
   menüsünden "Ana ekrana ekle" ile uygulama gibi açılır.
 - Bar ekranı tableti: rol "Mutfak / Bar" olan personelle girilir, açılışta bar ekranı gelir.
+- **Kasa yeniden başlarken sipariş kaybolmaz:** gönderilmemiş kalemler tablette saklanır. Gönderim kasaya
+  ulaşamazsa (kasa yeniden başlıyor, Wi-Fi koptu) adisyonda "Kasaya ulaşılamıyor: N ürün bekliyor" yazar; tablet
+  3 saniyede bir kasaya bakar ve dönünce aynı gönderim kimliğiyle kendiliğinden gönderir. Kasa aynı kimliği bir kez
+  yazar: ilk deneme ulaşıp yanıtı kaybolduysa kalem ikinci kez yazılmaz (`src/lib/cart.ts` SendBatch,
+  `tests/cevrimdisi.test.ts`, e2e akışı "kasa yeniden başlarken").
 - Patronun dışarıdan erişimi: Tailscale (`docs/07-UZAKTAN-ERISIM.md`). LafPOS'u modemden port açarak internete
   açmayın.
 

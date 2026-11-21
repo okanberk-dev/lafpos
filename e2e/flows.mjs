@@ -86,6 +86,43 @@ export async function runFlows(ctx) {
         }),
     ],
     [
+      'Tablette garson: kasa yeniden başlarken gönderilen sipariş tablette bekler, kasa dönünce kendiliğinden ve tam bir kez gider',
+      () =>
+        withPage(
+          ctx,
+          'tablet',
+          'garson',
+          async (page) => {
+            assert(simple, 'seçeneksiz tek boy ürün bulunamadı');
+            const o = await api.call('garson', 'POST', '/orders', { type: 'tezgah' });
+            await go(ctx, page, `/adisyon/${o.id}`);
+            // Kasa düştü: ilk gönderim kasaya ulaşır ve yazılır ama yanıt tablete hiç dönmez; sağlık sorusu da yanıtsız
+            let reached = 0;
+            await page.route('**/api/health', (r) => r.abort('connectionrefused'));
+            await page.route(`**/api/orders/${o.id}/items`, async (r) => {
+              if (r.request().method() !== 'POST') return r.fallback();
+              reached++;
+              await r.fetch();
+              await r.abort('connectionreset');
+            });
+            await page.getByPlaceholder('Ürün ara').fill(simple.name);
+            await page.getByRole('button', { name: new RegExp(`^${simple.shortName || simple.name}`) }).first().click();
+            await page.getByRole('button', { name: /^Bara gönder \(1\)/ }).first().click();
+            await page.getByText(/^Kasaya ulaşılamıyor: 1 ürün bekliyor/).waitFor({ timeout: 8000 });
+            await page.screenshot({ path: `${ROOT}/e2e/out/tablet-garson-kasaya-ulasilamiyor.png` });
+            assert(reached === 1, `ilk gönderim kasaya ${reached} kez ulaştı`);
+            // Kasa döndü: tablet 3 sn içinde aynı kimlikle yeniden gönderir; kasa kalemi ikinci kez yazmaz
+            await page.unroute(`**/api/orders/${o.id}/items`);
+            await page.unroute('**/api/health');
+            await page.getByText(/^Kasaya ulaşılamıyor/).waitFor({ state: 'detached', timeout: 15_000 });
+            const order = await api.call('garson', 'GET', `/orders/${o.id}`);
+            const qty = order.items.reduce((a, i) => a + i.qty, 0);
+            assert(qty === 1, `adisyonda ${qty} adet var (bir olmalı)`);
+          },
+          [/konsol: Failed to load resource/, /istek \d+: (GET \/api\/health|POST \/api\/orders\/[^/]+\/items)/],
+        ),
+    ],
+    [
       'Telefonda garson: kalemsiz masada ve karaoke odasında sepet çubuğu durur, sepetten "Masayı boşalt" ve "Başlat"a ulaşılır; geçişte odak kaybolmaz; gönderilmemiş ürünle tutar kesilmez',
       async () => {
         const table = seed.tables[7];
