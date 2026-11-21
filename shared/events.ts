@@ -30,6 +30,9 @@ export type LiveTopic =
  * - `reservations` › `site.karaoke.new`, `site.karaoke.cancelled`, `site.karaoke.moved`: bugünün site karaoke
  *   listesinde yeni, iptal edilen, saati değişen ya da günden kalkan rezervasyon, `message` "Karaoke 20:00 · 2 sa ·
  *   4 kişi". Listenin değiştiğini söyleyen `site.karaoke` de yayılır (ekranlar yenilenir).
+ * - `tables` › `site.call.new`: masadan yeni çağrı (uygulamada "Garson çağır", su, peçete; sipariş listesinin `calls`
+ *   alanı), `message` "Masa 4 · Su istiyor", `tableId` eşlenen masa. `site.call.done`: çağrı yanıtlandı (LafPOS'ta
+ *   "Gördüm", sitede ya da köşkün panelinde) ya da süresi geçip listeden düştü; ses yok, ekranlar yenilenir.
  */
 export const SITE_EVENT = {
   onlineNew: 'online.new',
@@ -39,6 +42,8 @@ export const SITE_EVENT = {
   karaokeNew: 'site.karaoke.new',
   karaokeCancelled: 'site.karaoke.cancelled',
   karaokeMoved: 'site.karaoke.moved',
+  callNew: 'site.call.new',
+  callDone: 'site.call.done',
 } as const;
 
 export type SiteEventKind = (typeof SITE_EVENT)[keyof typeof SITE_EVENT];

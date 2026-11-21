@@ -1,6 +1,6 @@
 import { type LiveEvent, SITE_EVENT } from '@shared/events';
 import type { Permission } from '@shared/permissions';
-import { ONLINE_ALERT_MAX_AGE_MS, type OnlineAlertDTO, type SiteAlertsDTO } from '@shared/site-alerts';
+import { ONLINE_ALERT_MAX_AGE_MS, type OnlineAlertDTO, type SiteAlertsDTO, TABLE_CALL_OPEN_MS, type TableCallDTO } from '@shared/site-alerts';
 
 /**
  * Diğer sistemlerden gelen uyarıların kuralları (DOM'a dokunmaz; çizim ve ses src/components/SiteInbox.tsx'te,
@@ -8,7 +8,12 @@ import { ONLINE_ALERT_MAX_AGE_MS, type OnlineAlertDTO, type SiteAlertsDTO } from
  *
  * - Yeni online sipariş (uygulama, web, masa QR): sitenin panelindeki zil gibi 3 saniyede bir çalar; bu cihazda
  *   "Gördüm" denince (24 saat hatırlanır), sipariş açılınca, aşaması değişince (bar "Hazırlanıyor", sitede ya da
- *   köşkte değişti), siteden kalkınca ya da ödemesinden 4 saat geçince susar. Masa siparişi daha yüksek.
+ *   köşkte değişti), siteden kalkınca ya da ödemesinden 4 saat geçince susar. Planlı sipariş planlı saatinden 30 dk
+ *   önce (`dueAt`) çalmaya başlar, öncesinde çalmaz; saatinden önce denen "Gördüm" onu susturmaz (`onlineAckKeys`).
+ *   Masa siparişi daha yüksek.
+ * - Masadan çağrı (uygulamada "Garson çağır", su, peçete): masa siparişi gibi tam düzeyde, aynı döngüde ve şeridin
+ *   başında çalar; "Gördüm" çağrıyı sitede yanıtlar (bütün cihazlarda susar), sitede ya da köşkte yanıtlanınca ya da 15
+ *   dakika dolunca da susar. Tercihi online siparişle bir (Araçlar › Sesli uyarılar › Online siparişler).
  * - Siteden kalkan sipariş: tek sakin nota ve bildirim.
  * - Sitedeki karaoke: yeni rezervasyon bir kez zil, iptal inen ses, saati değişen tek nota; üçü de bildirimle.
  */
@@ -113,15 +118,57 @@ export function addAcks(acks: Acks, ids: readonly string[], now: number): Acks {
   return out;
 }
 
+type AlertTiming = Pick<OnlineAlertDTO, 'orderId' | 'openedAt' | 'dueAt'>;
+
+/** Planlı ve saati ödeme anından sonra: uyarının ölçüsü planlı saat (`dueAt`), ödeme anı değil */
+const planned = (o: AlertTiming) => o.dueAt !== undefined && o.dueAt > o.openedAt;
+
 /**
- * Çalan online siparişler, en eskisi önce: yetki ve tercih açık, bu cihazda "Gördüm" denmemiş, ekranda açık değil
- * (`openOrderId`), ödemesinden 4 saat geçmemiş. Sunucu yalnız açık ve "yeni" aşamadakini gönderir.
+ * Planlı siparişin saati henüz gelmedi (`dueAt` ileride): çalmaz, "Gördüm" yazılmaz. Planlı olmayan siparişin ölçüsü
+ * ödeme anıdır (sitenin saati): cihazın saati biraz geride olsa da hemen çalar.
+ */
+export const notYetDue = (o: AlertTiming, now: number) => planned(o) && (o.dueAt as number) > now;
+
+/**
+ * "Gördüm"ün anahtarı: siparişin kimliği; planlı siparişte uyarı saatiyle (`kimlik@dueAt`). Saati sitede değişen sipariş
+ * yeni saatinde yine çalar; saatinden önce yalnız kimlikle yazılmış "Gördüm" (eski istemci ödeme anında çalardı) onu
+ * susturmaz.
+ */
+export const onlineAckKey = (o: AlertTiming) => (planned(o) ? `${o.orderId}@${o.dueAt}` : o.orderId);
+
+/**
+ * Susturulacak siparişlerin (`ids`) "Gördüm" anahtarları. Saati gelmemiş planlı siparişe yazılmaz (aşaması ya da masası
+ * saatinden önce değişse, ekranda açılsa da saati gelince çalar); listede olmayan kimlik olduğu gibi kalır.
+ */
+export function onlineAckKeys(online: readonly AlertTiming[] | undefined, ids: readonly string[], now: number): string[] {
+  const out: string[] = [];
+  for (const id of ids) {
+    const o = online?.find((x) => x.orderId === id);
+    if (!o) out.push(id);
+    else if (!notYetDue(o, now)) out.push(onlineAckKey(o));
+  }
+  return out;
+}
+
+/**
+ * Çalan online siparişler, en eskisi önce: yetki ve tercih açık, bu cihazda "Gördüm" denmemiş (`onlineAckKey`), ekranda
+ * açık değil (`openOrderId`), saati gelmiş (planlı siparişte planlı saatinden 30 dk önce, `dueAt`) ve üstünden 4 saat
+ * geçmemiş. Sunucu yalnız açık ve "yeni" aşamadakini gönderir.
  */
 export function pendingOnline(data: Pick<SiteAlertsDTO, 'online'> | undefined, acks: Acks, prefs: Pick<AlertPrefs, 'online'>, perms: Pick<AlertPerms, 'online'>, now: number, openOrderId?: string | null): OnlineAlertDTO[] {
   if (!data || !perms.online || !prefs.online) return [];
   return data.online
-    .filter((o) => !acks[o.orderId] && o.orderId !== openOrderId && now - o.openedAt < ONLINE_ALERT_MAX_AGE_MS)
+    .filter((o) => !acks[onlineAckKey(o)] && o.orderId !== openOrderId && !notYetDue(o, now) && now - (o.dueAt ?? o.openedAt) < ONLINE_ALERT_MAX_AGE_MS)
     .sort((a, b) => a.openedAt - b.openedAt || (a.orderId < b.orderId ? -1 : 1));
+}
+
+/**
+ * Çalan masa çağrıları, en eskisi önce: yetki ve online tercihi açık, 15 dakikası dolmamış, bu cihazda "Gördüm"e
+ * basılmamış (basınca sitede yanıtlanır; site ulaşılamazsa bu cihazda yine susar, ötekilerde çalar).
+ */
+export function pendingCalls(data: Pick<SiteAlertsDTO, 'calls'> | undefined, acks: Acks, prefs: Pick<AlertPrefs, 'online'>, perms: Pick<AlertPerms, 'online'>, now: number): TableCallDTO[] {
+  if (!data?.calls || !perms.online || !prefs.online) return [];
+  return data.calls.filter((c) => !acks[c.id] && now - c.createdAt < TABLE_CALL_OPEN_MS).sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
 }
 
 /** Zilin düzeyi: cihazın ses düzeyi, bekleyenlerden biri masa siparişiyse tam, değilse biraz kısık */
@@ -133,7 +180,7 @@ export function ringLevel(pending: readonly Pick<OnlineAlertDTO, 'table'>[], vol
 export interface AlertCue {
   /** Uyarı listesi yeniden okunsun */
   refetch?: boolean;
-  /** Bu siparişin zili bu cihazda sussun (aşaması değişti) */
+  /** Bu siparişin zili bu cihazda sussun (aşaması değişti); sipariş kimliği, anahtarı `onlineAckKeys` verir */
   ack?: string;
   /** Tek seferlik ses (yeni online siparişin zili döngüdedir, burada değil) */
   sound?: 'ring' | 'iptal' | 'tek';
@@ -162,6 +209,12 @@ export function siteEventCue(e: Pick<LiveEvent, 'topic' | 'kind' | 'message' | '
         return null;
     }
   }
+  // Masadan çağrı: zil döngüdedir (bekleyen listesi), burada bildirim ve yenileme
+  if (e.topic === 'tables' && perms.online) {
+    if (e.kind === SITE_EVENT.callNew) return { refetch: true, ...(prefs.online && e.message ? { toast: { tone: 'info', text: `Masa çağrısı · ${e.message}` } } : {}) };
+    if (e.kind === SITE_EVENT.callDone) return { refetch: true };
+    return null;
+  }
   if (e.topic === 'reservations' && perms.karaoke && prefs.karaoke && e.message) {
     if (e.kind === SITE_EVENT.karaokeNew) return { ...sound('ring'), toast: { tone: 'info', text: `Yeni rezervasyon · ${e.message}` } };
     if (e.kind === SITE_EVENT.karaokeCancelled) return { ...sound('iptal'), toast: { tone: 'warn', text: `Rezervasyon iptal · ${e.message}` } };
@@ -172,6 +225,9 @@ export function siteEventCue(e: Pick<LiveEvent, 'topic' | 'kind' | 'message' | '
 
 /** Şeridin başlığı: "Yeni online sipariş" / "3 yeni online sipariş" */
 export const pendingTitle = (n: number) => (n === 1 ? 'Yeni online sipariş' : `${n} yeni online sipariş`);
+
+/** Çağrı varken şeridin başlığı: "Masa çağrısı" / "2 masa çağrısı" */
+export const callsTitle = (n: number) => (n === 1 ? 'Masa çağrısı' : `${n} masa çağrısı`);
 
 // ─── Bar ekranıyla çift ses olmasın ─────────────────────────────────────────
 

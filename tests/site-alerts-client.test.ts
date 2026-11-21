@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { karaokeAlertText, type OnlineAlertDTO } from '@shared/site-alerts';
+import { karaokeAlertText, type OnlineAlertDTO, type TableCallDTO, tableCallText } from '@shared/site-alerts';
 import { BELL_PARTIALS, RING_NOTES_HZ, ringMotif } from '../src/lib/bell';
 import {
   ACK_KEEP_MS,
@@ -7,9 +7,14 @@ import {
   ALERT_PREFS_DEFAULT,
   type AlertPrefs,
   alertPerms,
+  callsTitle,
+  notYetDue,
+  onlineAckKey,
+  onlineAckKeys,
   onlineRingActive,
   parseAcks,
   parseAlertPrefs,
+  pendingCalls,
   pendingOnline,
   pendingTitle,
   ringLevel,
@@ -46,6 +51,45 @@ describe('online sipariş: kuyruk', () => {
     expect(pendingOnline(undefined, {}, prefs(), ALL, NOW)).toEqual([]);
   });
 
+  it('planlı sipariş: 4 saat planlı saatinden 30 dk önce başlar (dueAt); eski sunucuda ödeme anı', () => {
+    const planned = { online: [order({ orderId: 'p', openedAt: NOW - 30 * 3600_000, dueAt: NOW - 60_000 })] };
+    expect(pendingOnline(planned, {}, prefs(), ALL, NOW).map((o) => o.orderId)).toEqual(['p']);
+    expect(pendingOnline(planned, {}, prefs(), ALL, NOW + 4 * 3600_000)).toEqual([]);
+    expect(pendingOnline({ online: [order({ orderId: 'p', openedAt: NOW - 30 * 3600_000 })] }, {}, prefs(), ALL, NOW)).toEqual([]);
+  });
+
+  it('acked before dueAt rings at dueAt: planlı sipariş saati gelmeden çalmaz, saatinden önce denen Gördüm saatini susturmaz', () => {
+    const due = NOW + 2 * 3600_000;
+    const p = order({ orderId: 'p', openedAt: NOW - 60_000, dueAt: due, scheduledFor: new Date(due + 30 * 60_000).toISOString() });
+    const data = { online: [p] };
+    // Saati gelmedi: çalmaz, Gördüm yazılmaz (aşaması ya da masası değişse, ekranda açılsa da)
+    expect(notYetDue(p, NOW)).toBe(true);
+    expect(pendingOnline(data, {}, prefs(), ALL, NOW)).toEqual([]);
+    expect(onlineAckKeys(data.online, ['p'], NOW)).toEqual([]);
+    // Saatinden önce denen Gördüm: eski istemci ödeme anında çalar, yalnız kimlikle yazardı
+    const early = addAcks({}, ['p', ...onlineAckKeys(data.online, ['p'], NOW)], NOW);
+    expect(early).toEqual({ p: NOW });
+    expect(pendingOnline(data, early, prefs(), ALL, due - 1)).toEqual([]);
+    expect(pendingOnline(data, early, prefs(), ALL, due).map((o) => o.orderId)).toEqual(['p']);
+    // Saatinde denen Gördüm susturur (anahtar saatiyle)
+    expect(onlineAckKeys(data.online, ['p'], due)).toEqual([`p@${due}`]);
+    const seen = addAcks(early, onlineAckKeys(data.online, ['p'], due), due);
+    expect(pendingOnline(data, seen, prefs(), ALL, due + 60_000)).toEqual([]);
+    // Saati sitede değişti: yeni saatinde yine çalar
+    const moved = { online: [{ ...p, dueAt: due + 3600_000 }] };
+    expect(pendingOnline(moved, seen, prefs(), ALL, due + 60_000)).toEqual([]);
+    expect(pendingOnline(moved, seen, prefs(), ALL, due + 3600_000).map((o) => o.orderId)).toEqual(['p']);
+  });
+
+  it('planlı olmayan sipariş cihazın saati biraz geride olsa da hemen çalar; Gördüm kimlikle, listede olmayan kimlik olduğu gibi', () => {
+    const n = order({ orderId: 'n', openedAt: NOW + 5_000, dueAt: NOW + 5_000 });
+    expect(notYetDue(n, NOW)).toBe(false);
+    expect(onlineAckKey(n)).toBe('n');
+    expect(pendingOnline({ online: [n] }, {}, prefs(), ALL, NOW).map((o) => o.orderId)).toEqual(['n']);
+    expect(onlineAckKeys([n], ['n', 'yok'], NOW)).toEqual(['n', 'yok']);
+    expect(pendingOnline({ online: [n] }, addAcks({}, onlineAckKeys([n], ['n'], NOW), NOW), prefs(), ALL, NOW)).toEqual([]);
+  });
+
   it('Gördüm 24 saat hatırlanır; bozuk kayıt düşer', () => {
     const acks = addAcks({ eski: NOW - ACK_KEEP_MS - 1 }, ['a', 'b'], NOW);
     expect(acks).toEqual({ a: NOW, b: NOW });
@@ -75,6 +119,31 @@ describe('online sipariş: kuyruk', () => {
     expect(of(['rezervasyon.yonet'])).toEqual({ online: false, karaoke: true });
     expect(of(['siparis.al'])).toEqual({ online: true, karaoke: true });
     expect(of(['paket.yonet'])).toEqual({ online: false, karaoke: false });
+  });
+});
+
+describe('masa çağrısı: kuyruk', () => {
+  const call = (c: Partial<TableCallDTO> & { id: string }): TableCallDTO => ({ label: 'S4', reason: 'water', tableId: 't1', createdAt: NOW - 60_000, ...c });
+  const data = { calls: [call({ id: 'tcl-b', createdAt: NOW - 30_000 }), call({ id: 'tcl-a', createdAt: NOW - 120_000, reason: 'waiter' })] };
+
+  it('en eskisi önce; bu cihazda Gördüm, 15 dakika ya da kapalı yetki ve tercih susturur; eski sunucu alanı göndermez', () => {
+    expect(pendingCalls(data, {}, prefs(), ALL, NOW).map((c) => c.id)).toEqual(['tcl-a', 'tcl-b']);
+    expect(pendingCalls(data, { 'tcl-a': NOW }, prefs(), ALL, NOW).map((c) => c.id)).toEqual(['tcl-b']);
+    expect(pendingCalls(data, {}, prefs(), ALL, NOW - 30_000 + 15 * 60_000).map((c) => c.id)).toEqual([]);
+    expect(pendingCalls(data, {}, prefs(), ALL, NOW - 31_000 + 15 * 60_000).map((c) => c.id)).toEqual(['tcl-b']);
+    expect(pendingCalls(data, {}, prefs({ online: false }), ALL, NOW)).toEqual([]);
+    expect(pendingCalls(data, {}, prefs(), { online: false }, NOW)).toEqual([]);
+    expect(pendingCalls({}, {}, prefs(), ALL, NOW)).toEqual([]);
+    expect(pendingCalls(undefined, {}, prefs(), ALL, NOW)).toEqual([]);
+  });
+
+  it('metin yalnız masa ve sebep; bilinmeyen sebep "Çağırıyor"; şeridin başlığı', () => {
+    expect(tableCallText({ label: 'Masa 4', reason: 'water' })).toBe('Masa 4 · Su istiyor');
+    expect(tableCallText({ label: 'S4', reason: 'waiter' })).toBe('S4 · Garson çağırıyor');
+    expect(tableCallText({ label: 'S4', reason: 'napkin' })).toBe('S4 · Peçete istiyor');
+    expect(tableCallText({ label: 'S4', reason: 'bill' })).toBe('S4 · Çağırıyor');
+    expect(callsTitle(1)).toBe('Masa çağrısı');
+    expect(callsTitle(2)).toBe('2 masa çağrısı');
   });
 });
 
@@ -109,6 +178,17 @@ describe('olay → ses ve bildirim', () => {
     expect(siteEventCue(ev('reservations', 'site.karaoke'), prefs(), ALL)).toBeNull();
     expect(siteEventCue(ev('orders', 'order.sent'), prefs(), ALL)).toBeNull();
     expect(siteEventCue(ev('kitchen', 'ticket.new', 'online'), prefs(), ALL)).toBeNull();
+  });
+
+  it('masa çağrısı: yeni çağrı liste yenilenir ve bildirim (zili döngü çalar); yanıtlanan yalnız yenilenir', () => {
+    const tables = (kind: string, message?: string) => ({ topic: 'tables' as const, kind, message });
+    expect(siteEventCue(tables('site.call.new', 'S4 · Su istiyor'), prefs(), ALL)).toEqual({ refetch: true, toast: { tone: 'info', text: 'Masa çağrısı · S4 · Su istiyor' } });
+    expect(siteEventCue(tables('site.call.new', 'S4 · Su istiyor'), prefs({ online: false }), ALL)).toEqual({ refetch: true });
+    expect(siteEventCue(tables('site.call.done'), prefs(), ALL)).toEqual({ refetch: true });
+    expect(siteEventCue(tables('site.call.new', 'S4 · Su istiyor'), prefs(), { online: false, karaoke: true })).toBeNull();
+    // Masa planının öteki olayları uyarı değildir
+    expect(siteEventCue(tables('online.sync'), prefs(), ALL)).toBeNull();
+    expect(siteEventCue(tables('table.updated'), prefs(), ALL)).toBeNull();
   });
 
   it('bar ekranı online fişte çift ses çalmaz: kabuğun zili açıkken işaret', () => {
