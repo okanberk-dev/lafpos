@@ -18,6 +18,7 @@ import { toast } from '@/lib/toast';
 import { useReadyAlerts } from '@/lib/readyAlert';
 import { useWakeLock } from '@/lib/wakelock';
 import { CommandPalette } from './CommandPalette';
+import { InternetBadge } from './InternetBadge';
 import { LafTile } from './LafMark';
 import { PlatformInbox } from './PlatformInbox';
 import { SiteInbox } from './SiteInbox';
@@ -191,6 +192,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     }
     return (
       <div className="flex items-center gap-1 text-xs">
+        <InternetBadge compact />
         {conn}
         {day}
       </div>
@@ -309,6 +311,13 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         </NavLink>
         <div ref={setTabsSlot} className="lp-topnav flex min-w-0 flex-1 items-center justify-center" />
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* İnternet yokken bekleyen kayıtlar ve dönünce "Bekleyenler gönderildi" (her şey yolundayken boş) */}
+          <span className="hidden xl:inline-flex">
+            <InternetBadge />
+          </span>
+          <span className="inline-flex xl:hidden">
+            <InternetBadge compact />
+          </span>
           {healthPill}
           <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:size-11">
             <Search className="size-5" />

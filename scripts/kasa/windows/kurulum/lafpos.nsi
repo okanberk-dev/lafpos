@@ -1,7 +1,8 @@
 ; LafPOS Windows kurulumu (NSIS 3). Derleme: npm run kurulum:windows (derle.mjs STAGE ve VERSION verir).
 ; Kurar: Program Files\LafPOS (Node, sunucu, arayüz, kasa kısayolu), veri C:\ProgramData\LafPOS (yalnız SYSTEM
 ; ve yöneticiler), açılışta SYSTEM olarak çalışan "LafPOS Sunucu" görevi, güvenlik duvarında yerel ağ ve
-; Tailscale izni. Güncellemede önce veritabanını kopyalar. Kaldırma verilere dokunmaz.
+; Tailscale izni. Görev bekçiyi başlatıcıdan (baslat.cmd) açar; bekçi yeni sürümü kendiliğinden kurar (guncelle.mjs).
+; Bu dosyayla elle güncellemede önce veritabanını kopyalar. Kaldırma verilere dokunmaz.
 ; Ayrıntı: docs/05-KASA-BILGISAYARI.md
 
 Unicode true
@@ -140,9 +141,14 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
     ${EndIf}
   ${EndIf}
 
-  ; Uygulama klasörlerinde veri yok; eski sürümün dosyaları kalmasın
+  ; Uygulama klasörlerinde veri yok; eski sürümün ve otomatik güncellemenin bıraktığı klasörler kalmasın
   RMDir /r "$INSTDIR\app"
   RMDir /r "$INSTDIR\node"
+  RMDir /r "$INSTDIR\app.eski"
+  RMDir /r "$INSTDIR\app.yeni"
+  RMDir /r "$INSTDIR\app.bozuk"
+  RMDir /r "$INSTDIR\node.eski"
+  RMDir /r "$INSTDIR\node.yeni"
   SetOutPath "$INSTDIR"
   File /r "${STAGE}${SEP}*"
 
@@ -184,9 +190,11 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   !insertmacro TaskLine '    <RestartOnFailure><Interval>PT1M</Interval><Count>255</Count></RestartOnFailure>'
   !insertmacro TaskLine '  </Settings>'
   !insertmacro TaskLine '  <Actions Context="Author"><Exec>'
-  !insertmacro TaskLine '    <Command>"$INSTDIR\node\node.exe"</Command>'
-  !insertmacro TaskLine '    <Arguments>"$INSTDIR\app\bekci.mjs"</Arguments>'
-  !insertmacro TaskLine '    <WorkingDirectory>$INSTDIR\app</WorkingDirectory>'
+  ; Bekçi başlatıcıdan açılır (baslat.cmd): otomatik güncelleme yeni sürümü kurunca bekçi 75 koduyla çıkar, başlatıcı
+  ; gerekirse yeni node.exe'yi yerine koyup onu yeniden açar. Çalışma klasörü kurulum klasörü (app\ taşınabilsin)
+  !insertmacro TaskLine '    <Command>$SYSDIR\cmd.exe</Command>'
+  !insertmacro TaskLine '    <Arguments>/d /c "$\"$INSTDIR\baslat.cmd$\""</Arguments>'
+  !insertmacro TaskLine '    <WorkingDirectory>$INSTDIR</WorkingDirectory>'
   !insertmacro TaskLine '  </Exec></Actions>'
   !insertmacro TaskLine '</Task>'
   FileClose $9
@@ -281,6 +289,12 @@ Section "Uninstall"
 
   RMDir /r "$INSTDIR\app"
   RMDir /r "$INSTDIR\node"
+  RMDir /r "$INSTDIR\app.eski"
+  RMDir /r "$INSTDIR\app.yeni"
+  RMDir /r "$INSTDIR\app.bozuk"
+  RMDir /r "$INSTDIR\node.eski"
+  RMDir /r "$INSTDIR\node.yeni"
+  Delete "$INSTDIR\baslat.cmd"
   Delete "$INSTDIR\LafPOS-Kasa.bat"
   Delete "$INSTDIR\yonet.ps1"
   Delete "$INSTDIR\lafpos.ico"

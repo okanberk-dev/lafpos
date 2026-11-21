@@ -9,11 +9,13 @@ import { Button } from '@/components/ui/Button';
 import { Field, Input, NumberInput, Segmented, Select, Textarea, Toggle } from '@/components/ui/Field';
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
 import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/components/admin/ui';
+import { UpdateCard } from '@/components/admin/UpdateCard';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { draftConflicts, fromLines, rebaseDraft } from '@/lib/settingsDraft';
 import { toast } from '@/lib/toast';
+import { REMOTE } from '@/lib/remote';
 import { useUnsavedGuard } from '@/lib/unsavedGuard';
 
 type Settings = Record<string, unknown> & {
@@ -637,6 +639,7 @@ export default function SettingsAdmin() {
           )}
         </div>
       </Card>
+      {!REMOTE && <UpdateCard />}
       {dirty && (
         // Kaydet şeridi zeminde yüzen kart (kartların hizasında, köşe 18, hafif kalkık gölge): kenara taşan negatif pay
         // yok, telefonda kabın 8 px payını aşmaz. Ev çubuğu payını telefonda altındaki sekme çubuğu (AppShell) alır

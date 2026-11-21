@@ -128,14 +128,14 @@ describe('demo: yayın ayarları', () => {
     expect(demo).toBeGreaterThanOrEqual(0);
     expect(demo).toBeLessThan(all);
   });
-  it('olmayan derleme dosyası sayfaya düşmez (404): yeni sürümde eski sekme yenilenir', () => {
-    expect(vercel.rewrites.find((r) => r.destination === '/index.html')?.source).toBe('/((?!api/|assets/).*)');
+  it('olmayan derleme dosyası ve güncelleme kanalı sayfaya düşmez (404): yeni sürümde eski sekme yenilenir', () => {
+    expect(vercel.rewrites.find((r) => r.destination === '/index.html')?.source).toBe('/((?!api/|assets/|guncelleme/).*)');
   });
   it('demo yalnız Vercel derlemesinde; kasa derlemesine ve Windows paketine girmez', () => {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> };
-    expect(vercel.buildCommand).toMatch(/npm run build && npm run build:demo$/);
+    expect(vercel.buildCommand).toMatch(/npm run build && npm run build:demo && npm run kanal$/);
     expect(pkg.scripts.build).not.toContain('demo');
     expect(pkg.scripts['build:demo']).toBe('vite build --mode demo');
-    expect(readFileSync(join(root, 'scripts/kasa/windows/kurulum/derle.mjs'), 'utf8')).toMatch(/filter: \(src\) => !src\.startsWith\(join\(ROOT, 'dist\/web\/demo'\)\)/);
+    expect(readFileSync(join(root, 'scripts/kasa/windows/kurulum/paket.mjs'), 'utf8')).toMatch(/\['demo', 'guncelleme'\]\.map\(\(d\) => join\(resolve\(webDir\), d\)\)/);
   });
 });

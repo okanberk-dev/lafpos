@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "VITE_LAFPOS_UZAKTAN=1 npm run build && npm run build:demo",
+  "buildCommand": "VITE_LAFPOS_UZAKTAN=1 npm run build && npm run build:demo && npm run kanal",
   "outputDirectory": "dist/web",
   "installCommand": "npm ci",
   "regions": [
@@ -20,8 +20,28 @@
       "destination": "/demo/index.html"
     },
     {
-      "source": "/((?!api/|assets/).*)",
+      "source": "/((?!api/|assets/|guncelleme/).*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/guncelleme/surum.json",
+      "headers": [
+        {
+          "key": "cache-control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/guncelleme/(.*)\\.zip",
+      "headers": [
+        {
+          "key": "cache-control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
     }
   ],
   "functions": {

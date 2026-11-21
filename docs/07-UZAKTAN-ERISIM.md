@@ -63,6 +63,14 @@ ya da Tailscale ile). Kafedeki sunucu canlı özeti (`server/sync/cloud.ts`) şu
 Bulut özeti Upstash Redis'te tutar (`api/uzaktan.ts`), ekran 10 sn'de bir yenilenir. Maliyet ve kâr, PIN'ler,
 müşteri telefonları gitmez.
 
+- **İnternet yokken** itme gidemez; özet kaybolmaz, bir sonraki itme son hâli taşır. İnternet gelince bekleyenlerle
+  birlikte hemen bir kez itilir (`server/sync/catch-up.ts`, `docs/05-KASA-BILGISAYARI.md` §6 "İnternet yokken").
+  Kafede durum alanı "İnternet yok · N kayıt bekliyor", sonra "Bekleyenler gönderildi"; son başarılı itme Yönetim ›
+  Genel bakış › Sistem sağlığı › LafPOS Uzaktan'da.
+- **Güncelleme kanalı da bu projede:** aynı derleme `dist/web/guncelleme/`'yi yazar (`npm run kanal`): kafedeki
+  kasa `https://lafpos.laffogato.net/guncelleme/surum.json`'dan yeni sürümü alır (anahtarsız; ayrıntı
+  `docs/05-KASA-BILGISAYARI.md` §6 "Otomatik güncelleme"). `vercel.json` `/guncelleme/*`'ı arayüz sayfasına çevirmez.
+
 | Nerede | Ne |
 |---|---|
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |

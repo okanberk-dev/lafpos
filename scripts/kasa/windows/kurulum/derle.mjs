@@ -1,6 +1,7 @@
 // LafPOS Windows kurulum dosyasını derler: dist/windows/LafPOS-Kurulum-<sürüm>.exe
-// Sunucu esbuild ile tek dosyaya paketlenir; yanına Windows için Node (LTS), better-sqlite3'ün win32-x64
-// ikilisi, derlenmiş arayüz, göçler ve menü anlık görüntüsü konur; makensis lafpos.nsi ile kurulumu üretir.
+// Uygulama yükü (paket.mjs: tek dosyalık sunucu, arayüz, göçler, menü anlık görüntüsü, bekçi ve güncelleyici) güncelleme
+// kanalınınkiyle aynıdır; yanına Windows için Node (LTS) ve better-sqlite3'ün win32-x64 ikilisi (surumler.mjs'teki
+// özetlerle doğrulanır) ve başlatıcı (baslat.cmd) konur; makensis lafpos.nsi ile kurulumu üretir.
 // Kurulumdan önce aynı paket açılıp denenir (giriş, açılış verisi, arayüz, günlük): Windows'ta pakettekinin aynısı
 // (indirilen node.exe ve better-sqlite3'ün Windows ikilisi), macOS ve Linux'ta bu bilgisayarın Node'u ve ikilisiyle.
 // Gerekenler: makensis (macOS: brew install makensis, Linux: apt install nsis, Windows: NSIS 3; PATH'te değilse
@@ -14,20 +15,13 @@ import { once } from 'node:events';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir, totalmem } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build } from 'esbuild';
 import { envSample, heapLimitMb } from './ayarlar.mjs';
+import { buildInfo, ROOT, SQLITE_BINARY, sqliteVersion, stageApp } from './paket.mjs';
+import { NODE_ABI, NODE_SHA256, NODE_VERSION, nodeZipName, nodeZipUrl, sqliteSha256, sqliteTarName, sqliteTarUrl } from './surumler.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(HERE, '../../../..');
-/**
- * Windows'a giden Node: 24 LTS'in son güvenlik sürümü. Değişince üçü birlikte: NODE_ABI nodejs.org/dist/index.json'da
- * "modules" (better-sqlite3'ün indirilen ikilisi buna göre), NODE_SHA256 o sürümün SHASUMS256.txt'sinde win-x64.zip
- */
-const NODE_VERSION = '24.22.3';
-const NODE_ABI = '137';
-const NODE_SHA256 = 'e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f';
 const WIN = process.platform === 'win32';
 const OUT = join(ROOT, 'dist/windows');
 const STAGE = join(OUT, 'stage');
@@ -35,6 +29,14 @@ const APP = join(STAGE, 'app');
 const CACHE = join(ROOT, 'node_modules/.cache/lafpos-windows');
 const fast = process.argv.includes('--hizli');
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+/** Derleme numarası (HEAD commit'inin zamanı): güncelleme kanalıyla aynı */
+const BUILD = buildInfo();
+/**
+ * Kurulum dosyasının sürümü (Windows'un Uygulamalar listesinde): CI LAFPOS_SURUM ile package.json'ın major.minor'u +
+ * çalıştırma no verir (.github/workflows/windows.yml); yoksa package.json'ınki
+ */
+const VERSION = process.env.LAFPOS_SURUM || pkg.version;
+if (!/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(VERSION)) throw new Error(`LAFPOS_SURUM anlaşılmadı: ${VERSION}`);
 
 const step = (s) => console.log(`\n▸ ${s}`);
 const run = (cmd, args, env) => execFileSync(cmd, args, { stdio: 'inherit', cwd: ROOT, env: env && { ...process.env, ...env } });
@@ -80,51 +82,32 @@ function freePort() {
 }
 
 async function bundleServer() {
-  step('Sunucu tek dosyaya paketleniyor');
-  await build({
-    entryPoints: [join(ROOT, 'server/index.ts')],
-    outfile: join(APP, 'server/index.mjs'),
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    target: 'node22',
-    tsconfig: join(ROOT, 'tsconfig.server.json'),
-    external: ['better-sqlite3'],
-    // Paketin içindeki CommonJS bağımlılıklar require'ı bulsun
-    banner: { js: "import { createRequire as __lafposRequire } from 'node:module'; const require = __lafposRequire(import.meta.url);" },
-    legalComments: 'none',
-    logLevel: 'warning',
-  });
-  // Sunucu ROOT'u paketin bir üstü sayar (server/env.ts): göçler, menü ve arayüz app/ altında
-  cpSync(join(ROOT, 'drizzle'), join(APP, 'drizzle'), { recursive: true });
-  mkdirSync(join(APP, 'server/db'), { recursive: true });
-  cpSync(join(ROOT, 'server/db/menu-snapshot.json'), join(APP, 'server/db/menu-snapshot.json'));
-  // Tarayıcı demosu (dist/web/demo) yalnız Vercel'de; kasaya girmez
-  cpSync(join(ROOT, 'dist/web'), join(APP, 'dist/web'), { recursive: true, filter: (src) => !src.startsWith(join(ROOT, 'dist/web/demo')) });
-  // Bekçi ve onun ayar kuralları (bellek sınırı)
-  for (const f of ['bekci.mjs', 'ayarlar.mjs']) cpSync(join(HERE, f), join(APP, f));
-  writeFileSync(join(APP, 'package.json'), `${JSON.stringify({ name: 'lafpos', version: pkg.version, private: true, type: 'module' }, null, 2)}\n`);
+  step(`Uygulama yükü (sunucu tek dosyada, arayüz, bekçi, güncelleyici; derleme ${BUILD.build})`);
+  const meta = await stageApp({ appDir: APP, webDir: join(ROOT, 'dist/web'), ...BUILD });
+  if (meta.version !== pkg.version) throw new Error('package.json sürümü okunamadı');
+  // Zamanlanmış görev bekçiyi bu başlatıcıdan açar: güncelleme node.exe'yi değiştirdiyse yenisini yerine koyar
+  writeFileSync(join(STAGE, 'baslat.cmd'), crlf(readFileSync(join(HERE, 'baslat.cmd'), 'utf8')));
 }
 
 async function nativeSqlite() {
   step('better-sqlite3 (win32-x64, Node ABI ' + NODE_ABI + ')');
-  for (const name of ['better-sqlite3', 'bindings', 'file-uri-to-path']) {
-    const src = join(ROOT, 'node_modules', name);
-    cpSync(src, join(APP, 'node_modules', name), { recursive: true, filter: (p) => !/^[\\/](build|deps|src|test)([\\/]|$)/.test(p.slice(src.length)) });
+  const version = sqliteVersion();
+  const want = sqliteSha256(version);
+  const tgz = await download(sqliteTarUrl(version), join(CACHE, sqliteTarName(version)));
+  if (sha256(tgz) !== want) {
+    rmSync(tgz, { force: true });
+    throw new Error(`${sqliteTarName(version)} SHA-256 özeti tutmadı (surumler.mjs: ${want}); dosya silindi, yeniden deneyin`);
   }
-  const { version } = JSON.parse(readFileSync(join(ROOT, 'node_modules/better-sqlite3/package.json'), 'utf8'));
-  const name = `better-sqlite3-v${version}-node-v${NODE_ABI}-win32-x64.tar.gz`;
-  const tgz = await download(`https://github.com/WiseLibs/better-sqlite3/releases/download/v${version}/${name}`, join(CACHE, name));
   const dir = join(APP, 'node_modules/better-sqlite3');
   run(TAR, ['-xzf', tgz, '-C', dir]);
-  assertWinX64(join(dir, 'build/Release/better_sqlite3.node'));
+  assertWinX64(join(APP, SQLITE_BINARY));
 }
 
 async function windowsNode() {
   step(`Node ${NODE_VERSION} (win-x64)`);
-  const zipName = `node-v${NODE_VERSION}-win-x64.zip`;
+  const zipName = nodeZipName();
   const sums = await download(`https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt`, join(CACHE, `SHASUMS256-v${NODE_VERSION}.txt`));
-  const zip = await download(`https://nodejs.org/dist/v${NODE_VERSION}/${zipName}`, join(CACHE, zipName));
+  const zip = await download(nodeZipUrl(), join(CACHE, zipName));
   const want = readFileSync(sums, 'utf8')
     .split('\n')
     .find((l) => l.trim().endsWith(`  ${zipName}`))
@@ -198,6 +181,15 @@ async function smokeTest() {
       // Arayüzün yedek sayfası API'yi yutmasın: bilinmeyen uç JSON hata döner (girişsiz 401)
       const unknown = await fetch(`${base}/api/olmayan-uc`);
       if (unknown.ok || !unknown.headers.get('content-type')?.includes('json')) fail(`Bilinmeyen API ucu JSON hata vermedi (${unknown.status})`);
+      // Güncelleyicinin iki sorusu: sunucunun derlemesi ve (yalnız bu bilgisayardan) açık gün var mı
+      const health = await (await fetch(`${base}/api/health`)).json();
+      if (health.build !== BUILD.build) fail(`/api/health derleme numarasını vermedi (${health.build}, beklenen ${BUILD.build})`);
+      const day = await (await fetch(`${base}/api/kasa/guncelleme-durumu`)).json();
+      if (day.dayOpen !== false) fail(`Güncelleme durumu ucu açık gün yokken dayOpen: false demedi (${JSON.stringify(day)})`);
+      const durum = join(home, 'guncelleme/durum.json');
+      const st = existsSync(durum) ? JSON.parse(readFileSync(durum, 'utf8')) : null;
+      if (st?.kurulu?.build !== BUILD.build) fail(`Bekçinin güncelleyicisi durum dosyasını yazmadı (${durum})`);
+      console.log(`  tamam: derleme ${BUILD.build}, güncelleme durumu "${st.durum}"`);
       const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '1897' }) });
       if (!login.ok) fail(`Örnek PIN'le giriş olmadı (${login.status})`);
       const { token } = await login.json();
@@ -262,12 +254,12 @@ function findMakensis() {
 
 function makeInstaller() {
   step('Kurulum dosyası (makensis)');
-  const outfile = join(OUT, `LafPOS-Kurulum-${pkg.version}.exe`);
+  const outfile = join(OUT, `LafPOS-Kurulum-${VERSION}.exe`);
   const makensis = findMakensis();
   // macOS ve Linux'ta makensis Türkçe harfleri ancak UTF-8 yereliyle okur ("Bad text encoding")
   const utf8 = /utf-?8/i.test(process.env.LC_ALL || process.env.LC_CTYPE || process.env.LANG || '');
   const locale = process.platform === 'win32' || utf8 ? undefined : { LC_ALL: process.platform === 'darwin' ? 'en_US.UTF-8' : 'C.UTF-8' };
-  run(makensis, ['-V2', '-INPUTCHARSET', 'UTF8', `-DVERSION=${pkg.version}`, `-DSTAGE=${STAGE}`, `-DOUTFILE=${outfile}`, join(HERE, 'lafpos.nsi')], locale);
+  run(makensis, ['-V2', '-INPUTCHARSET', 'UTF8', `-DVERSION=${VERSION}`, `-DSTAGE=${STAGE}`, `-DOUTFILE=${outfile}`, join(HERE, 'lafpos.nsi')], locale);
   const mb = (statSync(outfile).size / 1024 / 1024).toFixed(1);
   console.log(`\n✓ ${outfile}\n  ${mb} MB · SHA-256 ${sha256(outfile)}`);
 }

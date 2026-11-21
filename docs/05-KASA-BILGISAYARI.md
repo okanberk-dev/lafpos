@@ -20,15 +20,16 @@ sessizce çıkar. Neden tek sistem: `docs/06-TEK-SISTEM.md`.
 
 ### Windows: kurulum dosyası (önerilen)
 
-`LafPOS-Kurulum-<sürüm>.exe` GitHub'daki sürüm sayfasından (Releases) indirilir; Node, Git ya da komut satırı
-gerekmez. Dosya imzasız olduğu için Windows "Bilgisayarınız korundu" der: **Ek bilgi › Yine de çalıştır**.
-Kurulum yönetici izni ister ve şunları yapar:
+`LafPOS-Kurulum.exe` GitHub'daki sürüm sayfasından (Releases › Latest; `main`'e her push'ta yayımlanır) bir kez
+indirilir; Node, Git ya da komut satırı gerekmez, sahibin adımları README'de ("Windows'a kurulum"). Sonraki
+sürümleri kasa kendisi alır (§6). Dosya imzasız olduğu için Windows "Bilgisayarınız korundu" der: **Ek bilgi ›
+Yine de çalıştır**. Kurulum yönetici izni ister ve şunları yapar:
 
 | | |
 |---|---|
 | Uygulama | `C:\Program Files\LafPOS`: Node 24 LTS (24.22.3), sunucu, arayüz, kasa kısayolu. Yalnız yöneticiler değiştirir |
 | Veri | `C:\ProgramData\LafPOS`: veritabanı, `secret.key`, günlük yedekler (`backups\`), `ayarlar.env`, sunucu günlüğü (`logs\`). Yalnız SYSTEM ve yöneticiler açar |
-| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar. Sunucunun JavaScript belleği sınırlı (`--max-old-space-size`): varsayılan bilgisayarın belleğinin dörtte biri, en az 1024, en çok 4096 MB (8 GB'lık bilgisayarda 2048). Bir sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi yeniden açar; taban, uzun dönem raporunun (bir yıl, iki dönem birden) sığması için. Gerekirse `ayarlar.env`'de `LAFPOS_MAX_HEAP_MB` (256-4096; örnek dosyada açıklamalı, yorumlu satır); bekçi seçilen sınırı günlüğe yazar |
+| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Görev bekçiyi başlatıcıdan açar (`baslat.cmd`, çalışma klasörü kurulum klasörü): otomatik güncelleme bekçiyi 75 koduyla kapatınca başlatıcı onu yeni sürümle yeniden açar, güncelleme Node'u da değiştirdiyse önce `node.yeni`'yi `node`'un yerine koyar. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar. Sunucunun JavaScript belleği sınırlı (`--max-old-space-size`): varsayılan bilgisayarın belleğinin dörtte biri, en az 1024, en çok 4096 MB (8 GB'lık bilgisayarda 2048). Bir sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi yeniden açar; taban, uzun dönem raporunun (bir yıl, iki dönem birden) sığması için. Gerekirse `ayarlar.env`'de `LAFPOS_MAX_HEAP_MB` (256-4096; örnek dosyada açıklamalı, yorumlu satır); bekçi seçilen sınırı günlüğe yazar |
 | Güvenlik duvarı | TCP 4000 yalnız kafenin ağına ve Tailscale'e (`100.64.0.0/10`) açık |
 | Kısayollar | Masaüstünde ve Başlangıç'ta "LafPOS Kasa" (seçilebilir); Başlat › LafPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır |
 | Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyku, hazırda bekletme ve USB'nin seçmeli askıya alınması prizdeyken kapanır (`powercfg`; uyuyan bilgisayara tablet bağlanamaz, uyuyan USB'deki fiş yazıcısı ve dokunmatik ekran kopar). Ağ kartının güç tasarrufu elle kapatılır: Aygıt Yöneticisi › Ağ bağdaştırıcıları › kart › Güç Yönetimi › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretsiz (BENIOKU'da da yazar) |
@@ -38,7 +39,7 @@ Kurulum yönetici izni ister ve şunları yapar:
   ayarlarla yeniden başlatır.
   İlk kurulumda site bağlantısı kapalıdır (`LAFFOGATO_URL` satırı yorumlu): LafPOS siteye hiç bağlanmaz, menü
   kurulumdaki gibi kalır. Açmak için `docs/03-ENTEGRASYON.md` §8 (açılış sırası).
-- **Güncelleme:** yeni kurulum dosyasını çalıştırın. Sunucuyu durdurur, veritabanını
+- **Güncelleme:** kendiliğinden (§6). Elle: yeni kurulum dosyasını çalıştırın. Sunucuyu durdurur, veritabanını
   `backups\lafpos-guncelleme-<tarih>.db` olarak kopyalar, uygulamayı değiştirir, sunucuyu başlatır; veri ve
   ayarlar kalır. **27 Ekim 2026'dan önceki kurulumu güncellerken:** eski `ayarlar.env`'de
   `LAFFOGATO_URL=https://laffogato.net` satırı yorumsuz durur (o günkü örnek dosyadan gelir) ve güncelleme ayar
@@ -64,20 +65,26 @@ tek dosyaya paketler, nodejs.org'dan Node'u ve better-sqlite3'ün Windows ikilis
 açıp dener (göçler, ilk kurulum, giriş, açılış verisi, arayüz, ayar değişince yeniden başlama, düzgün kapanış:
 `-wal` kalmaz), sonra `dist/windows/LafPOS-Kurulum-<sürüm>.exe`'yi üretir. Deneme Windows'ta kafeye gidecek
 çiftle koşar (paketteki `node.exe` ve indirilen `better_sqlite3.node`); macOS ve Linux'ta Windows ikilisi
-yüklenemediği için bu bilgisayarın Node'u ve kendi sqlite ikilisi konur, gerisi aynı paket. Windows'a giden Node
-betiğin başında: `NODE_VERSION` (24 LTS'in son güvenlik sürümü), `NODE_ABI` (nodejs.org/dist/index.json'da
-"modules"; better-sqlite3'ün ikilisi buna göre iner) ve `NODE_SHA256` (o sürümün `SHASUMS256.txt`'sindeki
-`win-x64.zip` özeti; indirilen zip hem listeye hem bu sabite uymalı). Üçü birlikte değişir. Sunucuya çalışırken
-diskten dosya okuyan yeni bir şey eklenirse (göç, anlık görüntü gibi) betikte pakete de eklenir.
+yüklenemediği için bu bilgisayarın Node'u ve kendi sqlite ikilisi konur, gerisi aynı paket. Windows'a giden iki ikili
+`scripts/kasa/windows/kurulum/surumler.mjs`'te: `NODE_VERSION` (24 LTS'in son güvenlik sürümü), `NODE_ABI`
+(nodejs.org/dist/index.json'da "modules"; better-sqlite3'ün ikilisi buna göre iner) ve `NODE_SHA256` (o sürümün
+`SHASUMS256.txt`'sindeki `win-x64.zip` özeti; indirilen zip hem listeye hem bu sabite uymalı) birlikte değişir;
+`SQLITE_SHA256` better-sqlite3'ün sürümüne göre Windows ikilisinin (`…-node-v<ABI>-win32-x64.tar.gz`) özetidir,
+kilit dosyası better-sqlite3'ü yükseltince yeni satır eklenir (yoksa kurulum ve güncelleme kanalı derlenmez).
+Kurulum dosyası ile güncelleme kanalı aynı uygulama yükünü kurar (`paket.mjs`: tek dosyalık sunucu, arayüz,
+göçler, menü anlık görüntüsü, bekçi ve güncelleyici); sunucuya çalışırken diskten dosya okuyan yeni bir şey
+eklenirse (göç, anlık görüntü gibi) orada pakete de eklenir.
 
-**CI'da Windows** (`.github/workflows/windows.yml`, Linux denetiminden ayrı iş akışı): kasaya giden dosyalara
-dokunan PR'da ve `main`'e itmede (`scripts/kasa/windows/**`, `server/**`, `drizzle/**`, `package.json`, kilit
-dosyası, iş akışının kendisi; Actions'tan elle de başlatılır) `windows-latest` üzerinde Node 22 ile `npm ci`, NSIS
-(imajda yoksa `choco install nsis`) ve `npm run kurulum:windows` koşar: kurulum dosyası gerçek Windows'ta derlenir
-ve paket kafeye gidecek ikililerle açılıp denenir. Linux işiyle paralel, onu beklemez. İndirilen Node ve sqlite
-ikilisi `actions/cache`'te durur (anahtar `derle.mjs` ve kilit dosyası). Kurulum dosyasını çalıştırmaz: görev,
-güvenlik duvarı ve kiosk ilk gerçek kurulumda denenir (aşağıda). Özel depoda Windows dakikası Actions kotasından iki
-kat düşer; yalnız arayüze dokunan PR bu yüzden onu koşmaz (paketteki arayüz Linux işinde derlenip taranır).
+**CI'da Windows** (`.github/workflows/windows.yml`, Linux denetiminden ayrı iş akışı): `main`'e her push'ta,
+kasaya giden dosyalara dokunan PR'da (`scripts/kasa/windows/**`, `server/**`, `drizzle/**`, `package.json`, kilit
+dosyası, iş akışının kendisi) ve Actions'tan elle `windows-latest` üzerinde Node 22 ile `npm ci`, NSIS (imajda yoksa
+`choco install nsis`) ve `npm run kurulum:windows` koşar: kurulum dosyası gerçek Windows'ta derlenir ve paket
+kafeye gidecek ikililerle açılıp denenir. `main`'e push'ta ardından GitHub Release yayımlanır: etiket
+`v<major.minor>.<çalıştırma no>`, sabit adlı iki dosya (`LafPOS-Kurulum.exe`, `LafPOS-Kurulum.exe.sha256`),
+`--latest`; son 10 sürüm kalır (`permissions: contents: write`, iş akışının kendi `GITHUB_TOKEN`'ı; ayrıca anahtar
+yok). Linux işiyle paralel, onu beklemez. İndirilen Node ve sqlite ikilisi `actions/cache`'te durur. Kurulum
+dosyasını çalıştırmaz: görev, güvenlik duvarı ve kiosk ilk gerçek kurulumda denenir (aşağıda). Özel depoda Windows
+dakikası Actions kotasından iki kat düşer; yalnız arayüze dokunan PR bu yüzden onu koşmaz.
 
 **İlk gerçek Windows kurulumunda bakılacaklar.** Kurulum dosyası macOS'ta derlendi; paket Node 24.22.1 ile
 satış akışından geçti, görev XML'i ve Windows ikilileri denetlendi (21 Kasım 2026'da Node 24.22.3'e geçildi:
@@ -188,8 +195,64 @@ kullanıcı hesabı önerilir.
 - Günlük yedekten sonra veritabanı bakımı (günde bir): WAL ana dosyaya yazılıp `lafpos.db-wal` sıfırlanır
   (`wal_checkpoint(TRUNCATE)`) ve SQLite sorgu istatistiklerini tazeler (`PRAGMA optimize`). Gün içinde beş
   dakikada bir PASSIVE denetim noktası; `journal_size_limit` 64 MB: yoğun bir günün şişirdiği `-wal` diski geri verir.
-- Güncelleme: kurulum dosyasıyla yeni sürümü çalıştırın (§2). Git ile: `git pull`, `npm ci`, `npm run build`, ardından sunucuyu yeniden başlatın (Windows'ta Görev
+- Güncelleme (kurulum dosyasıyla kurulmuş kasa): kendiliğinden, aşağıda. Elle: yeni kurulum dosyasını çalıştırın
+  (§2). Git ile: `git pull`, `npm ci`, `npm run build`, ardından sunucuyu yeniden başlatın (Windows'ta Görev
   Zamanlayıcı'da "LafPOS Sunucu"yu Sonlandır › Çalıştır; macOS'ta `launchctl kickstart -k gui/$UID/net.laffogato.lafpos`).
+
+### Otomatik güncelleme (anahtarsız)
+
+Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
+
+- **Kanal:** Vercel'deki `lafpos` projesi her `main` derlemesinde `npm run kanal`'ı koşar
+  (`scripts/kasa/windows/kurulum/kanal.mjs`): `dist/web/guncelleme/surum.json` ve `lafpos-app-<build>.zip`.
+  Zip kurulumun `app\` yüküdür (`node.exe` ve `better_sqlite3.node` hariç), kasa arayüzü Uzaktan derlemesinden
+  ayrı derlenir. `build` HEAD commit'inin unix zamanı (`git log -1 --format=%ct`; Vercel'de git geçmişi yoksa
+  derlemenin anı): aynı commit'in kurulum dosyası ve kanalı aynı numarayı taşır, kurulu derleme
+  `app\package.json`'da. Manifest zip'in SHA-256'sını ve boyunu, Node ve better-sqlite3'ün sürümünü ve
+  özetini (`surumler.mjs`) taşır. `vercel.json` `/guncelleme/*`'ı `index.html`'e çevirmez; `surum.json` her
+  istekte yeniden doğrulanır (ETag), zip değişmez önbellekte. Paketin açık adreste durması yeni bir şey açmaz:
+  aynı sunucu kodu herkese açık demoda (`/demo`).
+- **Kasadaki güncelleyici** (`guncelle.mjs`, bekçinin içinde): sırayla
+  `https://lafpos.laffogato.net/guncelleme/surum.json`, `https://lafpos.vercel.app/guncelleme/surum.json`; yalnız
+  HTTPS, başka hosta yönlendirme reddedilir (better-sqlite3'ün GitHub dosyası yalnız GitHub'ın depolama hostlarına).
+  Açılıştan 2 dk sonra, sonra 30 dk'da bir. Yeni derleme varsa zip'i indirip boyunu ve SHA-256'sını doğrular; Node
+  ya da better-sqlite3 değiştiyse nodejs.org'dan ve WiseLibs'in GitHub sürümünden indirip manifestteki özetle
+  doğrular. İndirilenler `C:\ProgramData\LafPOS\guncelleme\indirilen`.
+- **Kurulum yalnız açık iş günü yokken:** güncelleyici sunucuya `GET /api/kasa/guncelleme-durumu` ile sorar
+  (oturumsuz, yalnız bu bilgisayardan: yerel ağ ve Tailscale 403; yanıtta yalnız `dayOpen`). Gün açıksa 5 dk'da
+  bir yeniden sorar. Sıra: yük `app.yeni`'ye açılır (yerel modül eskisinden ya da indirilenden, yeni Node
+  `node.yeni`'ye), sunucu düzgün durur, veritabanı `backups\lafpos-guncelleme-<build>-<tarih>.db` olarak
+  kopyalanır (son 5 güncelleme kopyası kalır), `app` → `app.eski`, `app.yeni` → `app`; yeni sürüm (bekçi ve
+  sunucu) deneme olarak açılır. 60 sn içinde `/api/health` yeni derlemeyi söylerse deneme düzgün kapanır, bekçi 75
+  koduyla çıkar, başlatıcı onu yeni sürümle açar. Söylemezse `app.eski` geri gelir, sunucu eski sürümle açılır ve
+  o derleme bir daha denenmez (durum "Eski sürüme dönüldü"). `app.eski` elle geri dönüş için bir sonraki
+  güncellemeye kadar durur.
+- **Kapatma:** `ayarlar.env`'de `LAFPOS_GUNCELLEME=kapali`.
+- **Durum:** `C:\ProgramData\LafPOS\guncelleme\durum.json` (bekçi yazar, sunucu okur); Yönetim › Ayarlar ve yedek ›
+  "Sürüm ve güncelleme" kartı kurulu sürümü, durumu, son denetimi ve son güncellemeyi gösterir (salt okunur).
+  Kanala ulaşılamaması hata sayılmaz: kart son denetimin sonucunu yazar.
+- Testler: `tests/guncelleme.test.ts` (manifest, karar, durum, kurulum ve geri dönüş akışı),
+  `tests/guncelleme-sunucu.test.ts` (sunucunun iki ucu ve kart). Kurulum derlemesinin denemesi
+  (`npm run kurulum:windows`) derleme numarasını, gün sorusunu ve durum dosyasını da sınar.
+
+### İnternet yokken ve internet gelince
+
+Kasa yerel sunucudur: satış, masa, ödeme ve Pavo internetsiz çalışır; açılışta ve arayüzde interneti bekleyen bir
+şey yoktur (yazı tipleri ve görseller pakette, site menüsü kurulumda gelir).
+
+- Dışarı gidecek kayıtlar kaybolmaz: lafmaliyet gün sonu ve sitenin Satışta yazımları giden kutusunda (`outbox`),
+  LafPOS Uzaktan özeti bir sonraki itmede, online siparişler bir sonraki çekimde.
+- İnternetin durumu yeni istek atmadan izlenir (`server/lib/internet.ts`): imzalı her isteğin sonucu yazılır, ağ
+  hatası "yok", yanıt gelen istek (hata koduyla da) "var". İnternet yokken dakikada bir yapılandırılmış hostlardan
+  birine yalnız TCP bağlantısı denenir (HTTP isteği yok).
+- İnternet gelince (`server/sync/catch-up.ts`) giden kutusunun artan beklemesi (6 saate kadar) beklenmez, bir kez
+  gönderilir: lafmaliyet, site, Uzaktan özeti ve online sipariş çekimi (kendi bütçesiyle). İki dönüş eşitlemesi
+  arasında en az 5 dakika (AGENTS.md kural 6). Tam bir kez: gönderimler kendi sırasıyla (aynı anda iki kez
+  çalışmaz), gönderilen satır `sentAt` alır, kalıcı reddedilen kayıt yeniden denenmez (`tests/internet-donusu.test.ts`).
+- Durum alanında (üst çubuk) "İnternet yok · N kayıt bekliyor", hepsi gidince yarım saat "Bekleyenler gönderildi";
+  her şey yolundayken ve dış bağlantı kurulmamış kasada rozet yok. Yönetim › Genel bakış › Sistem sağlığı'nda
+  "İnternet" satırı ve her sistemin son başarılı gönderimi (site menüsü, online siparişler, lafmaliyet, LafPOS
+  Uzaktan).
 
 ## 7. Boşta kaynak kullanımı
 
