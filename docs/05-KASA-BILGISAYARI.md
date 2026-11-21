@@ -10,7 +10,7 @@ sessizce çıkar. Neden tek sistem: `docs/06-TEK-SISTEM.md`.
 | | |
 |---|---|
 | Bilgisayar | Windows 10/11 (önerilen) ya da macOS; SSD, 8 GB bellek yeter |
-| Yazılım | Google Chrome (güncel; yoksa Windows'un Edge'i kullanılır). Kurulum dosyasıyla başka bir şey gerekmez; git ile kurulumda Node.js 24 LTS (22.11 ile 24 arası) ve Git |
+| Yazılım | Google Chrome (güncel; yoksa Windows'un Edge'i kullanılır). Kurulum dosyasıyla başka bir şey gerekmez (geliştiricinin git ile kurulumunda Node.js 24 LTS, 22.11 ile 24 arası, ve Git) |
 | Fiş yazıcısı | 80 mm termal; Windows'ta **varsayılan yazıcı** yapılır, kağıt 80 mm |
 | Para çekmecesi | Yazıcıya bağlı; açılması yazıcı sürücüsünün "belge yazdırılınca çekmeceyi aç" ayarıyla (tarayıcı çekmece açamaz) |
 | Ağ | Kasa bilgisayarına sabit IP (modemde DHCP rezervasyonu); tablet ve telefonlar aynı ağda |
@@ -26,15 +26,16 @@ Kurulum yönetici izni ister ve şunları yapar:
 
 | | |
 |---|---|
-| Uygulama | `C:\Program Files\LafPOS`: Node 24 LTS, sunucu, arayüz, kasa kısayolu. Yalnız yöneticiler değiştirir |
+| Uygulama | `C:\Program Files\LafPOS`: Node 24 LTS (24.22.3), sunucu, arayüz, kasa kısayolu. Yalnız yöneticiler değiştirir |
 | Veri | `C:\ProgramData\LafPOS`: veritabanı, `secret.key`, günlük yedekler (`backups\`), `ayarlar.env`, sunucu günlüğü (`logs\`). Yalnız SYSTEM ve yöneticiler açar |
-| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar |
+| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar. Sunucunun JavaScript belleği sınırlı (`--max-old-space-size`): varsayılan bilgisayarın belleğinin dörtte biri, en az 1024, en çok 4096 MB (8 GB'lık bilgisayarda 2048). Bir sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi yeniden açar; taban, uzun dönem raporunun (bir yıl, iki dönem birden) sığması için. Gerekirse `ayarlar.env`'de `LAFPOS_MAX_HEAP_MB` (256-4096; örnek dosyada açıklamalı, yorumlu satır); bekçi seçilen sınırı günlüğe yazar |
 | Güvenlik duvarı | TCP 4000 yalnız kafenin ağına ve Tailscale'e (`100.64.0.0/10`) açık |
 | Kısayollar | Masaüstünde ve Başlangıç'ta "LafPOS Kasa" (seçilebilir); Başlat › LafPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır |
-| Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyuyan bilgisayara tablet bağlanamaz |
+| Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyku, hazırda bekletme ve USB'nin seçmeli askıya alınması prizdeyken kapanır (`powercfg`; uyuyan bilgisayara tablet bağlanamaz, uyuyan USB'deki fiş yazıcısı ve dokunmatik ekran kopar). Ağ kartının güç tasarrufu elle kapatılır: Aygıt Yöneticisi › Ağ bağdaştırıcıları › kart › Güç Yönetimi › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretsiz (BENIOKU'da da yazar) |
 
 - **Ayarlar** (site, lafmaliyet, yazarkasa anahtarları): Başlat › LafPOS › LafPOS ayarları. `ayarlar.env`
-  Not Defteri'nde açılır; kaydedince (Ctrl+S) bekçi değişikliği görür ve sunucuyu yeni ayarlarla yeniden başlatır.
+  Not Defteri'nde açılır; kaydedince (Ctrl+S) bekçi değişikliği (5 sn'de bir bakar) görür ve sunucuyu yeni
+  ayarlarla yeniden başlatır.
   İlk kurulumda site bağlantısı kapalıdır (`LAFFOGATO_URL` satırı yorumlu): LafPOS siteye hiç bağlanmaz, menü
   kurulumdaki gibi kalır. Açmak için `docs/03-ENTEGRASYON.md` §8 (açılış sırası).
 - **Güncelleme:** yeni kurulum dosyasını çalıştırın. Sunucuyu durdurur, veritabanını
@@ -57,21 +58,40 @@ Kurulum yönetici izni ister ve şunları yapar:
   Windows Güvenliği › Uygulama ve tarayıcı denetimi'nden bakın. Kalıcı çözüm kod imzası.
 
 **Kurulum dosyasını derlemek** (macOS, Linux ya da Windows): `npm run kurulum:windows`; gereken NSIS
-(`brew install makensis`, `apt install nsis`). Betik (`scripts/kasa/windows/kurulum/derle.mjs`) arayüzü derler,
-sunucuyu esbuild'le tek dosyaya paketler, nodejs.org'dan Node'u (SHA-256 denetimiyle) ve better-sqlite3'ün
-Windows ikilisini indirir, paketi bu bilgisayarın Node'uyla bekçi üzerinden açıp dener (giriş, açılış verisi,
-arayüz, günlük), sonra `dist/windows/LafPOS-Kurulum-<sürüm>.exe`'yi üretir. Windows'a giden Node sürümü betiğin
-başında (`NODE_VERSION`, `NODE_ABI`). Sunucuya çalışırken diskten dosya okuyan yeni bir şey eklenirse (göç,
-anlık görüntü gibi) betikte pakete de eklenir.
+(`brew install makensis`, `apt install nsis`; Windows'ta NSIS 3, PATH'te değilse `Program Files\NSIS`'te aranır,
+`MAKENSIS` ile de verilir). Betik (`scripts/kasa/windows/kurulum/derle.mjs`) arayüzü derler, sunucuyu esbuild'le
+tek dosyaya paketler, nodejs.org'dan Node'u ve better-sqlite3'ün Windows ikilisini indirir, paketi bekçi üzerinden
+açıp dener (göçler, ilk kurulum, giriş, açılış verisi, arayüz, ayar değişince yeniden başlama, düzgün kapanış:
+`-wal` kalmaz), sonra `dist/windows/LafPOS-Kurulum-<sürüm>.exe`'yi üretir. Deneme Windows'ta kafeye gidecek
+çiftle koşar (paketteki `node.exe` ve indirilen `better_sqlite3.node`); macOS ve Linux'ta Windows ikilisi
+yüklenemediği için bu bilgisayarın Node'u ve kendi sqlite ikilisi konur, gerisi aynı paket. Windows'a giden Node
+betiğin başında: `NODE_VERSION` (24 LTS'in son güvenlik sürümü), `NODE_ABI` (nodejs.org/dist/index.json'da
+"modules"; better-sqlite3'ün ikilisi buna göre iner) ve `NODE_SHA256` (o sürümün `SHASUMS256.txt`'sindeki
+`win-x64.zip` özeti; indirilen zip hem listeye hem bu sabite uymalı). Üçü birlikte değişir. Sunucuya çalışırken
+diskten dosya okuyan yeni bir şey eklenirse (göç, anlık görüntü gibi) betikte pakete de eklenir.
+
+**CI'da Windows** (`.github/workflows/windows.yml`, Linux denetiminden ayrı iş akışı): kasaya giden dosyalara
+dokunan PR'da ve `main`'e itmede (`scripts/kasa/windows/**`, `server/**`, `drizzle/**`, `package.json`, kilit
+dosyası, iş akışının kendisi; Actions'tan elle de başlatılır) `windows-latest` üzerinde Node 22 ile `npm ci`, NSIS
+(imajda yoksa `choco install nsis`) ve `npm run kurulum:windows` koşar: kurulum dosyası gerçek Windows'ta derlenir
+ve paket kafeye gidecek ikililerle açılıp denenir. Linux işiyle paralel, onu beklemez. İndirilen Node ve sqlite
+ikilisi `actions/cache`'te durur (anahtar `derle.mjs` ve kilit dosyası). Kurulum dosyasını çalıştırmaz: görev,
+güvenlik duvarı ve kiosk ilk gerçek kurulumda denenir (aşağıda). Özel depoda Windows dakikası Actions kotasından iki
+kat düşer; yalnız arayüze dokunan PR bu yüzden onu koşmaz (paketteki arayüz Linux işinde derlenip taranır).
 
 **İlk gerçek Windows kurulumunda bakılacaklar.** Kurulum dosyası macOS'ta derlendi; paket Node 24.22.1 ile
-satış akışından geçti, görev XML'i ve Windows ikilileri denetlendi. Windows'a özgü adımlar (kurulum, görev,
-güvenlik duvarı, kiosk) henüz gerçek bir Windows'ta koşmadı. İlk kurulumda: Görev Zamanlayıcı'da "LafPOS
+satış akışından geçti, görev XML'i ve Windows ikilileri denetlendi (21 Kasım 2026'da Node 24.22.3'e geçildi:
+aynı ABI 137, güvenlik sürümü). Paketin Windows'ta açılması artık CI'da denenir; kurulumun kendisi (görev,
+güvenlik duvarı, güç ayarları, kiosk) henüz gerçek bir Windows'ta koşmadı. İlk kurulumda: Görev Zamanlayıcı'da "LafPOS
 Sunucu" çalışıyor; `http://localhost:4000` açılıyor; tablet kafenin ağından bağlanıyor;
 `C:\ProgramData\LafPOS\logs\sunucu.log` yazılıyor; bilgisayar yeniden başlayınca sunucu ve kasa ekranı
 kendiliğinden geliyor; LafPOS ayarları kaydedilince sunucu yeniden başlıyor.
 
-### Git ile (geliştirici; Windows ya da macOS)
+### Git ile (yalnız geliştirici; Windows ya da macOS)
+
+Kafedeki kasa bilgisayarına bu yol **kurulmaz**; orada kurulum dosyası kullanılır. `kur.ps1` sunucuyu `npm start`
+ile (tsx: TypeScript her açılışta yeniden derlenir) çalıştırır: bekçi, bellek sınırı ve günlük dönmesi yoktur,
+`data/sunucu.log` sınırsız büyür. Geliştiricinin kendi bilgisayarında denemek içindir.
 
 ```bash
 git clone https://github.com/RiosenBeq/lafpos.git
@@ -165,5 +185,21 @@ kullanıcı hesabı önerilir.
 
 - Yedekler veri klasörünün `backups/`'ında günlük alınır (Yönetim › Ayarlar ve yedek): kurulum dosyasıyla
   `C:\ProgramData\LafPOS\backups`, git ile `data/backups/`. Haftada bir harici diske ya da buluta kopyalayın.
+- Günlük yedekten sonra veritabanı bakımı (günde bir): WAL ana dosyaya yazılıp `lafpos.db-wal` sıfırlanır
+  (`wal_checkpoint(TRUNCATE)`) ve SQLite sorgu istatistiklerini tazeler (`PRAGMA optimize`). Gün içinde beş
+  dakikada bir PASSIVE denetim noktası; `journal_size_limit` 64 MB: yoğun bir günün şişirdiği `-wal` diski geri verir.
 - Güncelleme: kurulum dosyasıyla yeni sürümü çalıştırın (§2). Git ile: `git pull`, `npm ci`, `npm run build`, ardından sunucuyu yeniden başlatın (Windows'ta Görev
   Zamanlayıcı'da "LafPOS Sunucu"yu Sonlandır › Çalıştır; macOS'ta `launchctl kickstart -k gui/$UID/net.laffogato.lafpos`).
+
+## 7. Boşta kaynak kullanımı
+
+Kasa bilgisayarı gün boyu açık; LafPOS boşta işlemci ve bellek yemesin diye:
+
+- **Sunucu:** JavaScript belleği bilgisayarın belleğinin dörtte biriyle sınırlı (1024-4096 MB; bekçi, §2). LafPOS
+  Uzaktan'a (`docs/07-UZAKTAN-ERISIM.md` §4) özet değişmediyse gitmez: gün kapalıyken (gece) beş dakikalık nabız
+  yalnız değişiklikte ya da son itmenin üstünden 15 dakika geçtiyse gider (boşta 15 dakikada bir); gün açıkken
+  nabız sürer. Özet zlib'in iş havuzunda sıkıştırılır, kasanın istekleri beklemez.
+- **Kasa ekranı:** paket platformu şeridinin saniyelik geri sayımı yalnız onay bekleyen sipariş varken işler;
+  platform listesi yalnız bir platform açıkken (deneme ya da canlı) ya da bekleyen sipariş varken 30 sn'de bir
+  yoklanır, yeni sipariş canlı akışla zaten gelir. "Hazır" nabzı (salon kartı, teslim ekranı) yalnız transform
+  ve opacity canlandırır: ekran kartında döner, kare kare yeniden boyanmaz; hareket azaltmada durur.

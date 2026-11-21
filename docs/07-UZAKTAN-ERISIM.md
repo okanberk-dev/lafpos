@@ -50,9 +50,18 @@ LafPOS'un Windows kurulumu güvenlik duvarında 4000 numaralı portu yalnız kaf
 
 Telefona uygulama kurmadan, herhangi bir tarayıcıdan: `https://lafpos.vercel.app`, patron parolasıyla. Patron
 paneli, masalar, açık adisyonların kalemleri ve bar kuyruğu; işlem yapılmaz (iptal, ödeme, Tükendi kafedeki kasadan
-ya da Tailscale ile). Kafedeki sunucu canlı özeti değişiklikte en sık 15 sn'de bir, boşta 5 dk'da bir iter
-(`server/sync/cloud.ts`); bulut onu Upstash Redis'te tutar (`api/uzaktan.ts`), ekran 10 sn'de bir yenilenir.
-Maliyet ve kâr, PIN'ler, müşteri telefonları gitmez.
+ya da Tailscale ile). Kafedeki sunucu canlı özeti (`server/sync/cloud.ts`) şu ritimle iter:
+
+- **Değişiklikte** (sipariş, ödeme, masa, bar): en sık 15 sn'de bir; aradaki değişiklikler bir sonrakine girer.
+- **Değişmeyen özet gitmez:** içerik aynıysa istek atılmaz (özetin, açılış verisinin ve panelin saati değişiklik
+  sayılmaz). Sunucu 5 dk'da bir nabızla bakar.
+- **Gün açıkken** nabız özet değişmese de iter: uzaktan panelin saati ve adisyon süreleri 5 dk'da bir tazelenir.
+- **Gün kapalıyken** (gece) nabız değişmeyen özeti yalnız son itmenin üstünden 15 dk geçtiyse iter: boşta 15 dk'da
+  bir (bir değişiklikten sonraki ilk boş itme, nabız 5 dk'da bir baktığı için 15-20 dk içinde). Uzaktan sayfadaki
+  "… itibarıyla" saati son itmenin saatidir.
+
+Bulut özeti Upstash Redis'te tutar (`api/uzaktan.ts`), ekran 10 sn'de bir yenilenir. Maliyet ve kâr, PIN'ler,
+müşteri telefonları gitmez.
 
 | Nerede | Ne |
 |---|---|

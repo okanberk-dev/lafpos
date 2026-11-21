@@ -1,0 +1,60 @@
+# Kafenin kasa bilgisayarı Windows: kurulum dosyası (NSIS) Windows'ta derlenir ve paket kafeye gidecek ikililerle
+# (paketteki Node 24 ve better-sqlite3'ün Windows ikilisi) bekçi üzerinden açılıp denenir: göçler, giriş, açılış
+# verisi, arayüz, bellek sınırı, ayar değişince yeniden başlama, düzgün kapanış (scripts/kasa/windows/kurulum/derle.mjs).
+# Linux denetiminden (ci.yml) ayrı ve yalnız kasaya giden dosyalar değişince: özel depoda Windows dakikası iki kat
+# sayılır (docs/05-KASA-BILGISAYARI.md). Sunucu ortak kodu (shared/) pakete gömer; ayar örneği .env.example'dan
+# üretilir. Gerekirse Actions › Windows kurulumu › Run workflow ile elle
+name: Windows kurulumu
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/kasa/windows/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'drizzle/**'
+      - '.env.example'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/windows.yml'
+  pull_request:
+    paths:
+      - 'scripts/kasa/windows/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'drizzle/**'
+      - '.env.example'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/windows.yml'
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      # Depo LF ile gelsin (Windows runner'ı varsayılan CRLF'e çevirir); .bat ve .ps1 .gitattributes'la CRLF kalır
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # derle.mjs makensis'i PATH'te ya da Program Files\NSIS'te arar; imajda yoksa kurulur
+      - name: NSIS
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe") -and -not (Test-Path "$env:ProgramFiles\NSIS\makensis.exe")) {
+            choco install nsis -y --no-progress
+          }
+      # İndirilen Node zip'i ve better-sqlite3 ikilisi: npm ci node_modules'u sildiği için ondan sonra geri gelir
+      - uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/lafpos-windows
+          key: lafpos-windows-${{ hashFiles('scripts/kasa/windows/kurulum/derle.mjs', 'package-lock.json') }}
+      - run: npm run kurulum:windows

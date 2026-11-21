@@ -663,16 +663,56 @@
   }
 }
 
+/*
+ * Hazır nabzı: öğenin kenarından dışa büyüyüp sönen halka. Halka sözde öğede (::after), canlanan yalnız transform ve
+ * opacity: kompozitörde döner, kare kare yeniden boyanmaz (box-shadow canlandırmak kasa bilgisayarında her kareyi
+ * boyuyordu). Halka öğenin zemininin kopyasının (::before) arkasında: küçükken öğenin altında kalır, büyüdükçe kenardan
+ * çıkar. `animate-ring-sm`: küçük hap (salon kartındaki "2 hazır"), halka daha küçükten başlar
+ */
 @keyframes lp-pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 var(--ring-ready);
+  from {
+    transform: scale(0.92);
+    opacity: 1;
   }
-  100% {
-    box-shadow: 0 0 0 10px transparent;
+  to {
+    transform: none;
+    opacity: 0;
+  }
+}
+@keyframes lp-pulse-ring-sm {
+  from {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  to {
+    transform: none;
+    opacity: 0;
   }
 }
 .animate-ring {
+  position: relative;
+  isolation: isolate;
+}
+.animate-ring::before,
+.animate-ring::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.animate-ring::before {
+  z-index: -1;
+  background: inherit;
+}
+.animate-ring::after {
+  z-index: -2;
+  box-shadow: 0 0 0 10px var(--ring-ready);
+  opacity: 0;
   animation: lp-pulse-ring 1.4s ease-out infinite;
+}
+.animate-ring-sm::after {
+  animation-name: lp-pulse-ring-sm;
 }
 
 @keyframes lp-slide-up {
@@ -745,8 +785,9 @@
   .skeleton {
     animation: none;
   }
-  .animate-ring {
+  .animate-ring::after {
     animation: none;
+    opacity: 1;
     box-shadow: 0 0 0 3px var(--ring-ready);
   }
 }

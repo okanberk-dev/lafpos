@@ -37,8 +37,9 @@ npm run build && npm start   # http://<bilgisayar-ip>:4000
 
 Windows kasa bilgisayarı için tek dosyalık kurulum: `npm run kurulum:windows` →
 `dist/windows/LafPOS-Kurulum-<sürüm>.exe` (Node gerekmez; sunucu açılışta SYSTEM olarak başlar, veri
-`C:\ProgramData\LafPOS`). Git ile otomatik başlatma ve kiosk Chrome: `docs/05-KASA-BILGISAYARI.md`
-(`scripts/kasa/windows/kur.ps1`, `scripts/kasa/mac/kur.sh`).
+`C:\ProgramData\LafPOS`). Kafeye bu kurulur; kasaya giden dosyalar değişince CI onu Windows'ta derleyip dener
+(`.github/workflows/windows.yml`). Git ile otomatik başlatma (`scripts/kasa/windows/kur.ps1`,
+`scripts/kasa/mac/kur.sh`) yalnız geliştirici içindir: `docs/05-KASA-BILGISAYARI.md`.
 
 ## Ortam değişkenleri
 
@@ -69,5 +70,5 @@ panelinki `LAFMALIYET_SYNC_SECRET`'a yazılır; ikisi de sitenin `KARAOKE_SYNC_S
 | `npm test` | birim ve API testleri (Vitest): para, adisyon hesabı, imza, yazarkasa sepeti, uçtan uca API akışı, renk kontrastı, arayüz kuralları, skill'ler |
 | `npm run e2e` | gerçek tarayıcı (sistemdeki Chrome): her rol, her ekran telefon, tablet, bilgisayar ve koyu temada; akışlar (telefonda sipariş, tablette ödeme, yönetimde düzenleme, komut paleti). Önce `npm run build`; görüntüler `e2e/out/` |
 | `npm run typecheck` | TypeScript denetimi (sunucu + arayüz) |
-| `npm run kurulum:windows` | Windows kurulum dosyası (`dist/windows/`); NSIS gerekir (`brew install makensis`) |
+| `npm run kurulum:windows` | Windows kurulum dosyası (`dist/windows/`); NSIS gerekir (`brew install makensis`, `apt install nsis`; Windows'ta NSIS 3) |
 | `npm run db:generate` | şema değişince SQL göçü üret |
