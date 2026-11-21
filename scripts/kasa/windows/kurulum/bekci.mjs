@@ -4,6 +4,8 @@
 // başlar. Bekçi kapanınca sunucu da kapanır (Windows iş nesnesi). Sunucunun JavaScript belleği sınırlı
 // (LAFPOS_MAX_HEAP_MB; varsayılan bilgisayarın belleğinin dörtte biri, 1024-4096 MB, ayarlar.mjs): sızıntı kasa
 // bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi onu yeniden başlatır.
+// Otomatik güncelleme (guncelle.mjs) de burada çalışır: yeni sürümü gün kapalıyken kurar, başarıda bekçi 75 koduyla
+// çıkar ve görevin başlatıcısı (baslat.cmd) onu yeni sürümle yeniden açar.
 // Veri klasörü: LAFPOS_HOME, yoksa C:\ProgramData\LafPOS. Ayrıntı: docs/05-KASA-BILGISAYARI.md
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
@@ -11,8 +13,13 @@ import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HEAP_MAX_MB, HEAP_MIN_MB, heapLimitMb, validHeapSetting } from './ayarlar.mjs';
+import { createUpdater, updateMode } from './guncelle.mjs';
 
 const APP = dirname(fileURLToPath(import.meta.url));
+/** Kurulum klasörü (app\, node\, baslat.cmd). Çalışma klasörü burası: güncelleme app\ klasörünün adını değiştirir,
+ * Windows çalışan bir sürecin içinde durduğu klasörü taşıtmaz */
+const INSTALL_DIR = dirname(APP);
+process.chdir(INSTALL_DIR);
 const HOME = process.env.LAFPOS_HOME || join(process.env.ProgramData || 'C:\\ProgramData', 'LafPOS');
 const ENV_FILE = join(HOME, 'ayarlar.env');
 const LOG = join(HOME, 'logs', 'sunucu.log');
@@ -86,6 +93,10 @@ let stopping = false;
 /** Ayar değişikliğiyle bilerek durduruldu: beklemeden ve hata sayılmadan yeniden başlar */
 let restarting = false;
 let delay = 1000;
+/** Güncelleme sunucuyu durdurdu: düşünce yeniden başlatılmaz */
+let paused = false;
+/** Sunucu durunca çağrılır (güncellemenin "durdur"u bekler) */
+let onStopped = null;
 /** Günlüğe son yazılan bellek sınırı: yalnız değişince yeniden yazılır */
 let loggedHeap = null;
 
@@ -96,7 +107,16 @@ function start() {
     if (done) return;
     done = true;
     child = null;
+    if (onStopped) {
+      const cb = onStopped;
+      onStopped = null;
+      cb();
+    }
     if (stopping) process.exit(0);
+    if (paused) {
+      log('[bekçi] sunucu güncelleme için durduruldu');
+      return;
+    }
     if (restarting) {
       restarting = false;
       log('[bekçi] sunucu yeni ayarlarla başlıyor');
@@ -150,9 +170,44 @@ if (process.env.LAFPOS_BEKCI_STDIN === '1') {
   process.stdin.on('data', (d) => String(d).includes('kapat') && stop());
 }
 
+/** Güncellemenin sunucuyu durdurup yeniden açması */
+const serverControl = {
+  stop: () =>
+    new Promise((resolve) => {
+      paused = true;
+      if (!child) return resolve();
+      onStopped = resolve;
+      stopChild();
+    }),
+  start: () => {
+    paused = false;
+    if (!child && !stopping) start();
+  },
+};
+
+// Deneme bekçisi (güncellemenin yeni sürümü sınadığı) güncelleme denetlemez
+const updater =
+  process.env.LAFPOS_GUNCELLEME_DENEME === '1'
+    ? null
+    : createUpdater({
+        installDir: INSTALL_DIR,
+        home: HOME,
+        log,
+        port: () => Number(envFor().LAFPOS_PORT) || 4000,
+        mode: () => updateMode(envFor()),
+        server: serverControl,
+        exit: (code) => {
+          stopping = true;
+          log(`[bekçi] yeni sürümle yeniden açılıyor (kod ${code})`);
+          process.exit(code);
+        },
+      });
+
 // Ayar dosyası kaydedilince (Not Defteri hangi sürüm olursa olsun) sunucu yeni ayarlarla yeniden başlar
 watchFile(ENV_FILE, { interval: WATCH_MS }, (cur, prev) => {
-  if (cur.mtimeMs === prev.mtimeMs || stopping || !child) return;
+  if (cur.mtimeMs === prev.mtimeMs || stopping) return;
+  updater?.poke();
+  if (!child || paused) return;
   log('[bekçi] ayarlar.env değişti; sunucu yeniden başlatılıyor');
   restarting = true;
   stopChild();
@@ -160,3 +215,8 @@ watchFile(ENV_FILE, { interval: WATCH_MS }, (cur, prev) => {
 
 log(`[bekçi] LafPOS başlıyor (Node ${process.versions.node}, veri: ${HOME})`);
 start();
+try {
+  updater?.start();
+} catch (e) {
+  log(`[güncelleme] başlatılamadı: ${e instanceof Error ? e.message : e}`);
+}

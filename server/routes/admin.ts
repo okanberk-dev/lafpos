@@ -8,6 +8,7 @@ import { ALL_PERMISSIONS, effectivePermissions, isPermission, LOCKED_ROLES, type
 import { type DB, db, schema, type Tx, tx } from '../db/client';
 import { backupNow } from '../jobs';
 import { type AppEnv, assertNotLocked, type AuthUser, can, clientKey, hashPin, isValidPin, recordPinChoice, requirePermission, sessionsChanged } from '../lib/auth';
+import { installedVersion, readUpdateStatus } from '../lib/surum';
 import { Effects } from '../lib/effects';
 import { bad, body, clockTime, conflict, HttpError, kurus, notFound, patchFields, patchOf, query } from '../lib/http';
 import { ulid } from '../lib/ids';
@@ -1097,6 +1098,12 @@ adminRoutes.get('/network', (c) => {
   if (!can(user, 'ayar.yonet')) requirePermission(user, 'patron.panel');
   const { lastSize: _size, ...cloud } = cloudState();
   return c.json({ ...networkInfo(), cloud });
+});
+
+/** Sürüm ve otomatik güncelleme (Ayarlar ve yedek kartı; salt okunur) */
+adminRoutes.get('/guncelleme', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json({ installed: installedVersion(), status: readUpdateStatus() });
 });
 
 adminRoutes.get('/backups', (c) => {

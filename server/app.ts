@@ -3,7 +3,7 @@ import { relative, resolve } from 'node:path';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { env } from './env';
-import { type AppEnv, authMiddleware } from './lib/auth';
+import { type AppEnv, authMiddleware, clientKey } from './lib/auth';
 import { constraintError, HttpError } from './lib/http';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
@@ -18,6 +18,9 @@ import { reportRoutes } from './routes/reports';
 import { reservationRoutes } from './routes/reservations';
 import { syncRoutes } from './routes/sync';
 import { productImage, thumbFor } from './services/media';
+import { getOpenDay } from './services/orders';
+import { db } from './db/client';
+import { installedVersion, isLoopback } from './lib/surum';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -41,7 +44,14 @@ export function createApp() {
   });
   app.use('/api/*', authMiddleware);
 
-  app.get('/api/health', (c) => c.json({ ok: true, time: Date.now() }));
+  // Derleme numarası: güncelleyici yeni sürümün gerçekten açıldığını buradan anlar (guncelle.mjs)
+  app.get('/api/health', (c) => c.json({ ok: true, time: Date.now(), build: installedVersion().build }));
+  // Güncelleyicinin (bekçi) sorusu: açık iş günü var mı. Oturumsuz; yalnız bu bilgisayardan (yerel ağdaki ya da
+  // Tailscale'deki cihaz 403 alır), yanıtta gün açık mı dışında bir şey yok
+  app.get('/api/kasa/guncelleme-durumu', (c) => {
+    if (!isLoopback(clientKey(c))) return c.json({ error: 'Yalnız bu bilgisayardan', code: 'forbidden' }, 403);
+    return c.json({ dayOpen: !!getOpenDay(db) });
+  });
 
   // Ürün kartındaki görselin küçük kopyası. /api dışında: tarayıcı önbelleğe alır, <img> oturum taşımaz;
   // görseller sitede de herkese açık. Adres değişince arayüz ?v= ile yenisini ister

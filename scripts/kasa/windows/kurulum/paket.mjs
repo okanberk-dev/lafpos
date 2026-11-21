@@ -30,7 +30,16 @@ export function buildInfo(root = ROOT) {
     if (!/^\d{9,11}$/.test(fromEnv)) throw new Error(`LAFPOS_BUILD anlaşılmadı: ${fromEnv}`);
     return { build: Number(fromEnv), commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '' };
   }
-  const out = execFileSync('git', ['log', '-1', '--format=%ct %H'], { cwd: root, encoding: 'utf8' }).trim();
+  let out;
+  try {
+    out = execFileSync('git', ['log', '-1', '--format=%ct %H'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch (e) {
+    // Vercel derlemesinde git geçmişi yoksa derlemenin anı: her kanal derlemesi bir öncekinden büyük kalır (kurulum
+    // dosyasıyla aynı commit'te kanal bir kez "yeni" görünür ve aynı kodu yeniden kurar; zararsız)
+    if (!process.env.VERCEL) throw e;
+    console.warn('git geçmişi yok; derleme numarası derlemenin anından');
+    return { build: Math.floor(Date.now() / 1000), commit: process.env.VERCEL_GIT_COMMIT_SHA || '' };
+  }
   const [ct, commit] = out.split(' ');
   const build = Number(ct);
   if (!Number.isInteger(build) || build <= 0) throw new Error(`git commit zamanı okunamadı: ${out}`);
