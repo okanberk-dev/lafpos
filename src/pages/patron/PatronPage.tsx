@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronRight, CreditCard, Receipt, RotateCcw, Wallet } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, ChevronRight, CreditCard, Receipt, RotateCcw } from 'lucide-react';
 import { Fragment, type ReactNode, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
@@ -310,11 +310,11 @@ export default function PatronPage() {
           {/* Karolar: tek sıra kart (telefonda iki sütun) */}
           <div className={tileGrid(wideTiles)}>{tiles}</div>
 
-          {/* Marka ciro kartı (panonun kart kartı): beyaz kartın içinde ev yeşili degrade, beyaz iri rakam */}
+          {/* Marka ciro kartı: zeminde tek başına ev yeşili degrade, beyaz iri rakam (kart içinde kart yok; başlığı kartın
+              kendisi söyler) */}
           <section aria-label="Bugünkü ciro" className="flex flex-col gap-4 [grid-area:ciro]">
-            <div className={cn(PANEL, 'p-5')}>
-              <PanelHead title="Bugünkü ciro" sub="Kapanan adisyonlar, KDV dahil" icon={<Wallet />} />
-              <div className="@container relative mt-4 overflow-hidden rounded-[var(--r-tile)] bg-[image:var(--brand-card)] p-5 text-white shadow-[0_18px_36px_-20px_rgb(6_74_54/0.75)]">
+            <div>
+              <div className="@container relative overflow-hidden rounded-[var(--r-card)] bg-[image:var(--brand-card)] p-6 text-white shadow-[0_18px_36px_-20px_rgb(6_74_54/0.75)]">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-headline text-lg font-bold italic tracking-[-0.02em]">L’Affogato</span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white/90">
@@ -322,7 +322,7 @@ export default function PatronPage() {
                     {stale ? 'Son güncelleme' : 'Canlı'}
                   </span>
                 </div>
-                <div className="mt-5 text-[13px] text-white/90">Net ciro</div>
+                <div className="mt-5 text-[13px] text-white/90">Bugünkü ciro · KDV dahil</div>
                 <div className="tabular mt-1 whitespace-nowrap font-headline text-[length:min(40px,15cqi)] font-bold leading-none tracking-[-0.035em]">{tl(d.netSales)}</div>
                 <div className="mt-5 flex items-center justify-between gap-3 text-[13px] text-white/90">
                   <span className="tabular">{d.orders > 0 ? `${d.orders} adisyon · ortalama ${tlShort(d.avgCheck)}` : 'Henüz kapanan adisyon yok'}</span>

@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { SetupCard } from '@/components/admin/SetupCard';
 import { AlertTriangle, BadgePercent, ChevronRight, Cloud, Globe, HardDrive, Info, MonitorSmartphone, PlugZap, ReceiptText, ShieldAlert, ShoppingBag, TurkishLira, Utensils, Wifi } from 'lucide-react';
 import { type ReactNode, useEffect } from 'react';
 import { Link } from 'react-router';
@@ -286,6 +287,8 @@ export default function OverviewAdmin() {
         }
       />
       <div className="space-y-4">
+        {/* Yeni kurulumda adım adım karşılama; bitince kaybolur */}
+        <SetupCard />
         {livePending ? <KpiStripSkeleton /> : cells.length > 0 && <KpiStrip cells={cells} />}
         {liveFailed && <ErrorState className={CARD} title="Bugünün rakamları alınamadı" error={live.error} onRetry={() => void live.refetch()} retrying={live.isFetching} />}
 
