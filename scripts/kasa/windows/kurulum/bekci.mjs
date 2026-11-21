@@ -13,6 +13,7 @@ import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HEAP_MAX_MB, HEAP_MIN_MB, heapLimitMb, validHeapSetting } from './ayarlar.mjs';
+import { applyPendingRestore } from './geri-yukle.mjs';
 import { channelUrls, createUpdater, updateMode } from './guncelle.mjs';
 
 const APP = dirname(fileURLToPath(import.meta.url));
@@ -128,6 +129,13 @@ function start() {
     setTimeout(start, delay);
     delay = Math.min(delay * 2, 30_000);
   };
+  // Buluttan geri yükleme bekliyorsa sunucu açılmadan veritabanı değişir (önce kopyası alınır)
+  try {
+    const restored = applyPendingRestore(HOME);
+    if (restored) log(`[bekçi] ${restored}`);
+  } catch (e) {
+    log(`[bekçi] geri yükleme uygulanamadı: ${e instanceof Error ? e.message : e}`);
+  }
   const env = envFor();
   const heapMb = heapLimitMb(env.LAFPOS_MAX_HEAP_MB, totalmem());
   const raw = env.LAFPOS_MAX_HEAP_MB;

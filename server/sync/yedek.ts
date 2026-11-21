@@ -1,0 +1,137 @@
+import * as nodeCrypto from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import * as zlib from 'node:zlib';
+import { env } from '../env';
+import { getSyncState, setSyncState } from '../lib/settings';
+import { signedFetch } from '../lib/signature';
+import { cloudEnabled } from './cloud';
+import { remoteShop } from './merkez';
+
+/**
+ * Otomatik bulut yedeği (docs/05-KASA-BILGISAYARI.md §6 "Bulut yedeği"): günlük veritabanı yedeği kasada sıkıştırılıp
+ * şifrelenir (AES-256-GCM; anahtar LAFPOS_CLOUD_SECRET'ten türetilir, buluta hiç gitmez) ve LafPOS Uzaktan'ın verdiği
+ * kısa süreli imzalı adrese yüklenir (Vercel Blob, özel depo; api/_yedek.ts). Blob anahtarı yalnız buluttadır.
+ *
+ * Geri yükleme (Yönetim › Ayarlar ve yedek › Bulut yedeği): seçilen yedek indirilir, şifresi çözülür, SQLite olduğu
+ * doğrulanır ve veri klasöründe `geri-yukle/hazir.db` olarak bekler. Sunucu kapanır; bekçi (Windows kurulumu) yeniden
+ * açmadan önce mevcut veritabanının kopyasını alır ve hazır yedeği yerine koyar (scripts/kasa/windows/kurulum/geri-yukle.mjs).
+ * Kurulum yeni bilgisayardaysa ayarlar.env'e aynı LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET yazılınca eski yedekler
+ * görünür (dükkân kimliği yedeklerin klasörüdür; listede kurulumun eski kimliği de seçilebilir).
+ */
+const MAGIC = Buffer.from('LPY1');
+const STATE = 'yedek.bulut';
+
+export interface CloudBackupState {
+  lastAt: number | null;
+  lastName: string | null;
+  lastSize: number | null;
+  lastError: string | null;
+  /** Son başarılı yüklemenin iş günü: günde bir yüklenir */
+  lastDay: string | null;
+}
+
+export const cloudBackupState = (): CloudBackupState => ({ lastAt: null, lastName: null, lastSize: null, lastError: null, lastDay: null, ...(getSyncState<Partial<CloudBackupState>>(STATE) ?? {}) });
+const saveState = (patch: Partial<CloudBackupState>) => setSyncState(STATE, { ...cloudBackupState(), ...patch });
+
+const keyFor = (secret: string, salt: Buffer) => Buffer.from(nodeCrypto.hkdfSync('sha256', secret, salt, 'lafpos-yedek-v1', 32));
+
+/** Veritabanını sıkıştırıp şifreler: LPY1 | tuz (16) | iv (12) | etiket (16) | şifreli gzip */
+export function sealBackup(db: Buffer, secret: string): Buffer {
+  const salt = nodeCrypto.randomBytes(16);
+  const iv = nodeCrypto.randomBytes(12);
+  const cipher = nodeCrypto.createCipheriv('aes-256-gcm', keyFor(secret, salt), iv);
+  const body = Buffer.concat([cipher.update(zlib.gzipSync(db, { level: 6 })), cipher.final()]);
+  return Buffer.concat([MAGIC, salt, iv, cipher.getAuthTag(), body]);
+}
+
+/** Şifreyi çözer ve SQLite olduğunu doğrular; anahtar yanlışsa ya da dosya bozuksa Türkçe hata */
+export function openBackup(buf: Buffer, secret: string): Buffer {
+  if (buf.length < 48 || !buf.subarray(0, 4).equals(MAGIC)) throw new Error('Yedek dosyası tanınmadı');
+  const salt = buf.subarray(4, 20);
+  const iv = buf.subarray(20, 32);
+  const tag = buf.subarray(32, 48);
+  let db: Buffer;
+  try {
+    const decipher = nodeCrypto.createDecipheriv('aes-256-gcm', keyFor(secret, salt), iv);
+    decipher.setAuthTag(tag);
+    db = zlib.gunzipSync(Buffer.concat([decipher.update(buf.subarray(48)), decipher.final()]));
+  } catch {
+    throw new Error('Yedeğin şifresi çözülemedi: bu yedek başka bir anahtarla alınmış (LAFPOS_CLOUD_SECRET) ya da bozuk');
+  }
+  if (!db.subarray(0, 16).equals(Buffer.from('SQLite format 3\0'))) throw new Error('Yedeğin içinden veritabanı çıkmadı');
+  return db;
+}
+
+async function cloud<T>(path: string, body: unknown): Promise<T> {
+  const res = await signedFetch(env.cloudSecret, 'POST', new URL(`/api/uzaktan/yedek/${path}`, env.cloudUrl), body, 20_000, { 'x-laf-dukkan': remoteShop() });
+  const json = (res.json ?? {}) as T & { error?: string };
+  if (res.status !== 200) throw new Error(json.error ?? `Bulut yanıt vermedi (${res.status})`);
+  return json;
+}
+
+/** Yerel yedek dosyasını şifreleyip buluta yükler */
+export async function uploadBackup(file: string, day: string | null = null): Promise<{ name: string; size: number }> {
+  if (!cloudEnabled()) throw new Error('LafPOS Uzaktan kurulu değil');
+  try {
+    const sealed = sealBackup(readFileSync(file), env.cloudSecret);
+    const { url, pathname } = await cloud<{ url: string; pathname: string }>('yukle', { boyut: sealed.length });
+    const res = await fetch(url, { method: 'PUT', body: new Uint8Array(sealed), headers: { 'content-type': 'application/octet-stream' }, signal: AbortSignal.timeout(10 * 60_000) });
+    if (!res.ok) throw new Error(`Yedek yüklenemedi (${res.status})`);
+    saveState({ lastAt: Date.now(), lastName: pathname, lastSize: sealed.length, lastError: null, ...(day ? { lastDay: day } : {}) });
+    return { name: pathname, size: sealed.length };
+  } catch (e) {
+    saveState({ lastError: e instanceof Error ? e.message : String(e) });
+    throw e;
+  }
+}
+
+let lastTryAt = 0;
+let busy = false;
+
+/** Günlük yedekten sonra: bugün yüklenmediyse yükler; gidemezse yarım saatte bir yeniden dener */
+export function afterDailyBackup(file: string, day: string, now = Date.now()) {
+  if (!cloudEnabled() || busy || cloudBackupState().lastDay === day || now - lastTryAt < 30 * 60_000) return;
+  lastTryAt = now;
+  busy = true;
+  void uploadBackup(file, day)
+    .catch((e) => console.warn('[bulut yedeği]', e instanceof Error ? e.message : e))
+    .finally(() => (busy = false));
+}
+
+export interface CloudBackup {
+  pathname: string;
+  size: number;
+  at: number;
+}
+
+export const listCloudBackups = (dukkan?: string) => cloud<{ shop: string; dukkanlar: string[]; yedekler: CloudBackup[] }>('liste', dukkan ? { dukkan } : {});
+
+/** Kurulum Windows bekçisiyle mi çalışıyor (geri yükleme ancak onunla: veritabanı sunucu dururken değişir) */
+export const underBekci = () => process.env.LAFPOS_STDIN_CONTROL === '1';
+
+/**
+ * Seçilen yedeği indirir, çözer, doğrular ve `geri-yukle/hazir.db` olarak bırakır; sunucu kapanınca bekçi yerine koyar
+ */
+export async function stageRestore(pathname: string, byUserId: string): Promise<void> {
+  const { url } = await cloud<{ url: string }>('indir', { pathname });
+  const res = await fetch(url, { signal: AbortSignal.timeout(10 * 60_000) });
+  if (!res.ok) throw new Error(`Yedek indirilemedi (${res.status})`);
+  const db = openBackup(Buffer.from(await res.arrayBuffer()), env.cloudSecret);
+  const dir = resolve(env.dataDir, 'geri-yukle');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(resolve(dir, 'hazir.db.part'), db);
+  renameSync(resolve(dir, 'hazir.db.part'), resolve(dir, 'hazir.db'));
+  writeFileSync(resolve(dir, 'istek.json'), JSON.stringify({ pathname, by: byUserId, at: Date.now() }));
+}
+
+let restart = () => process.emit('SIGTERM');
+/** Testler: yeniden başlatmayı yakalar */
+export function setRestartHook(fn: () => void) {
+  restart = fn as typeof restart;
+}
+
+/** Sunucuyu düzgün kapatır (kapanış işleyicisi veritabanını kapatır); bekçi hazır yedeği yerine koyup yeniden açar */
+export function restartForRestore() {
+  setTimeout(() => restart(), 500).unref();
+}

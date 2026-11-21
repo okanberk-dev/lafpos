@@ -10,6 +10,7 @@ import { Field, Input, NumberInput, Segmented, Select, Textarea, Toggle } from '
 import { ErrorState, ListSkeleton, Notice, Skeleton } from '@/components/ui/misc';
 import { Badge, Card, CARD, CODE, EmptyState, IconBox, PageHeader } from '@/components/admin/ui';
 import { DenemeCard } from '@/components/admin/DenemeCard';
+import { CloudBackupCard } from '@/components/admin/CloudBackupCard';
 import { UpdateCard } from '@/components/admin/UpdateCard';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -645,6 +646,7 @@ export default function SettingsAdmin() {
           )}
         </div>
       </Card>
+      {!REMOTE && <CloudBackupCard />}
       {!REMOTE && <UpdateCard />}
       {dirty && (
         // Kaydet şeridi zeminde yüzen kart (kartların hizasında, köşe 18, hafif kalkık gölge): kenara taşan negatif pay
