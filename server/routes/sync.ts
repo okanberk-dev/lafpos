@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { notify, notifySettings, pendingNotices, setNotifySettings } from '../sync/bildirim';
 import { resendReports } from '../sync/cloud-reports';
 import { cloudEnabled } from '../sync/cloud';
 import { Effects } from '../lib/effects';
@@ -6,7 +7,7 @@ import { licenseNow, merkezLast, merkezSyncState } from '../sync/merkez';
 import { z } from 'zod';
 import { db, schema } from '../db/client';
 import { type AppEnv, can, requirePermission } from '../lib/auth';
-import { body, HttpError, isoDate } from '../lib/http';
+import { body, HttpError, isoDate, patchOf } from '../lib/http';
 import { getSyncState, updateSettings } from '../lib/settings';
 import { okcStatus } from '../okc/service';
 import { backfillDays, buildDayPayload, lafmaliyetStatus, pullCosts, pushDayNow, salesCsv } from '../sync/lafmaliyet';
@@ -53,6 +54,31 @@ syncRoutes.get('/lisans', (c) => {
   const lic = licenseNow();
   const last = merkezLast();
   return c.json({ enabled: !!lic, ...(lic ?? {}), ad: last?.ad ?? null, sonGorusme: last?.at ?? null, ...(can(c.get('user'), 'senkron.yonet') ? { kurulum: merkezSyncState() } : {}) });
+});
+
+/** Telefon bildirimleri: ayar (eşikler) ve deneme bildirimi */
+syncRoutes.get('/bildirim', (c) => {
+  requirePermission(c.get('user'), 'senkron.yonet');
+  return c.json({ ready: cloudEnabled(), settings: notifySettings(), pending: pendingNotices() });
+});
+
+syncRoutes.put('/bildirim', async (c) => {
+  const user = c.get('user');
+  requirePermission(user, 'senkron.yonet');
+  const tlMax = z.number().int().min(0).max(100_000_000);
+  const input = await body(c, patchOf(z.object({ enabled: z.boolean(), voidMin: tlMax, compMin: tlMax, cashDiffMin: tlMax, internetMin: z.number().int().min(1).max(24 * 60), pavo: z.boolean() })));
+  setNotifySettings(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)));
+  const fx = new Effects();
+  fx.audit(db, { userId: user.id, action: 'ayar', message: 'Telefon bildirimi ayarları değişti' });
+  fx.flush();
+  return c.json({ ok: true, settings: notifySettings() });
+});
+
+syncRoutes.post('/bildirim/dene', async (c) => {
+  requirePermission(c.get('user'), 'senkron.yonet');
+  if (!cloudEnabled()) throw new HttpError(409, 'LafPOS Uzaktan kurulu değil', 'not_configured');
+  await notify({ kind: 'deneme', title: 'LafPOS deneme bildirimi', body: 'Kasadan gönderildi; bu bildirimi görüyorsanız telefon hazır' });
+  return c.json({ ok: true, pending: pendingNotices() });
 });
 
 /** Uzaktan raporları yeniden gönder: gönderim geçmişi sıfırlanır (denetim kaydına yazılır) */

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Send } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { LicenseState } from '@shared/lisans';
 import { fmtDateTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
@@ -9,6 +9,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Badge, Card, EmptyState, ErrorState, Notice, PageHeader, Skeleton } from '@/components/ui/misc';
 import { Stage } from '@/components/ui/Stage';
 import { errorMessage, get, post } from '@/lib/api';
+import { disablePush, enablePush, pushState, type PushState } from '@/lib/push';
 import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 
@@ -109,6 +110,58 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
         {save.isError && <Notice tone="danger">{errorMessage(save.error)}</Notice>}
       </div>
     </Modal>
+  );
+}
+
+const PUSH_TEXT: Record<PushState, string> = {
+  acik: 'Bu telefon bildirim alıyor: büyük iptal ve ikram, kasa farkı, uzun internet kesintisi, güncelleme ve Pavo gün sonu sorunları',
+  kapali: 'Önemli olaylar bu telefona bildirim olarak gelsin. Eşikler kasada: Yönetim › Ağ ve uzaktan erişim',
+  'ana-ekran': 'iPhone’da önce Paylaş › Ana Ekrana Ekle ile siteyi ana ekrana ekleyin, oradan açıp bildirimleri açın',
+  engelli: 'Bu tarayıcıda bildirim izni kapalı; telefonun ayarlarından açın',
+  desteklenmiyor: 'Bu tarayıcı bildirim desteklemiyor',
+};
+
+/** Bu telefonda bildirimler: aç, deneme gönder, kapat */
+function PushCard({ readOnly }: { readOnly: boolean }) {
+  const [state, setState] = useState<PushState | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void pushState().then(setState, () => setState('desteklenmiyor'));
+  }, []);
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast.ok(ok);
+    } catch (e) {
+      toast.err(e instanceof Error ? e.message : errorMessage(e));
+    } finally {
+      setBusy(false);
+      setState(await pushState().catch(() => 'desteklenmiyor' as const));
+    }
+  };
+  if (!state) return null;
+  return (
+    <Card title="Telefon bildirimleri" actions={state === 'acik' ? <Badge tone="success" dot>Açık</Badge> : undefined}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 p-5">
+        <p className="min-w-0 flex-[1_1_16rem] text-pretty text-sm text-muted">{PUSH_TEXT[state]}</p>
+        {state === 'kapali' && (
+          <Button variant="primary" loading={busy} disabled={readOnly} onClick={() => void run(enablePush, 'Bildirimler bu telefonda açıldı')}>
+            Bu telefonda aç
+          </Button>
+        )}
+        {state === 'acik' && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" loading={busy} onClick={() => void run(() => post('/uzaktan/bildirim/dene'), 'Deneme bildirimi gönderildi')}>
+              Deneme gönder
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => void run(disablePush, 'Bildirimler bu telefonda kapandı')}>
+              Kapat
+            </Button>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -225,6 +278,7 @@ export default function MerkezPage() {
             </ul>
           )}
         </Card>
+        <PushCard readOnly={readOnly} />
       </div>
       {editing && <EditDialog row={editing} onClose={() => setEditing(null)} />}
     </Stage>

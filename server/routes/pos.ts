@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
+import { afterLoss, lossOf } from '../sync/bildirim';
 import { assertCanSell } from '../sync/merkez';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
@@ -169,7 +170,10 @@ posRoutes.post('/orders/:id/release', (c) => {
 posRoutes.post('/orders/:id/items/:itemId/void', async (c) => {
   const input = await body(c, z.object({ qty: z.number().int().min(1).optional(), reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
+  const before = lossOf('iptal', c.req.param('id')).value;
   write((t, fx) => orders.voidItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason }));
+  // Büyük iptal patronun telefonuna (eşik Yönetim'de; Uzaktan kurulu değilse hiçbir şey)
+  afterLoss('iptal', c.req.param('id'), before, actor.user.id);
   return c.json(dto(c, c.req.param('id')));
 });
 
@@ -191,16 +195,20 @@ posRoutes.post('/orders/:id/items/:itemId/comp', async (c) => {
     z.object({ qty: z.number().int().min(1).optional(), reason, undo: z.boolean().optional(), kind: z.enum(['ikram', 'odenmez', 'zayi']).optional(), person: compPerson, ...approver }),
   );
   const actor = actorFrom(c, input.approverPin);
+  const before = lossOf('ikram', c.req.param('id')).value;
   write((t, fx) =>
     orders.compItem(t, actor, fx, c.req.param('id'), { itemId: c.req.param('itemId'), qty: input.qty, reason: input.reason, undo: input.undo, kind: input.kind, person: input.person }),
   );
+  if (!input.undo) afterLoss('ikram', c.req.param('id'), before, actor.user.id);
   return c.json(dto(c, c.req.param('id')));
 });
 
 posRoutes.post('/orders/:id/comp', async (c) => {
   const input = await body(c, z.object({ kind: z.enum(['ikram', 'odenmez', 'zayi']), reason, person: compPerson, ...approver }));
   const actor = actorFrom(c, input.approverPin);
+  const before = lossOf('ikram', c.req.param('id')).value;
   write((t, fx) => orders.compOrder(t, actor, fx, c.req.param('id'), { kind: input.kind, reason: input.reason, person: input.person }));
+  afterLoss('ikram', c.req.param('id'), before, actor.user.id);
   return c.json(dto(c, c.req.param('id')));
 });
 

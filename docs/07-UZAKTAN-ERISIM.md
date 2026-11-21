@@ -154,6 +154,15 @@ müşteri telefonları gitmez.
     kalır, 420 günde düşer). Birden çok dükkân veri gönderiyorsa üst çubukta dükkân seçici (adlar Merkez'den); seçim
     tarayıcıda saklanır, seçilmezse en son veri gönderen dükkân. Dükkânların son itme anı `lafpos:dukkanlar`'da.
 
+- **Telefon bildirimleri** (Web Push; `api/_bildirim.ts`, kasada `server/sync/bildirim.ts`, `tests/bildirim.test.ts`):
+  kasa önemli olayı imzalı iter (`POST /api/uzaktan/bildirim`), site abonelere bildirim atar. Olaylar: tek seferde
+  eşik üstü iptal ya da ikram (varsayılan ₺500), gün sonunda kasa farkı (₺100), uzun internet kesintisi (15 dakika;
+  dönünce süresiyle), Pavo gün sonu alınamadı; güncelleme sorununu (eski sürüme dönüş) Merkez nabızdan kendisi görür.
+  Eşikler ve aç/kapa kasada Yönetim › Ağ ve uzaktan erişim › Telefon bildirimleri; internet yokken olay kuyrukta
+  bekler (en çok 20, 24 saat). Telefonda patron Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" der
+  (iPhone'da önce Ana Ekrana Ekle); abonelik yalnız gerçek oturumla. Bildirimde neden, müşteri adı ve maliyet yok.
+  Anahtarlar `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (Vercel); servis çalışanı `public/sw.js` (önbellek tutmaz).
+
 | Nerede | Ne |
 |---|---|
 | Vercel › lafpos › Storage | Upstash Redis (ücretsiz plan yeter; `KV_REST_API_URL`, `KV_REST_API_TOKEN` kendiliğinden gelir) |

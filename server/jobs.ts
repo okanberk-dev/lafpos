@@ -21,6 +21,7 @@ import { flushSiteOutbox } from './sync/site-outbox';
 import { runMenuSync } from './sync/menu-sync';
 import { startCloudSync } from './sync/cloud';
 import { startMerkez } from './sync/merkez';
+import { startNotices } from './sync/bildirim';
 import { startCatchUp } from './sync/catch-up';
 
 /**
@@ -195,6 +196,8 @@ export function startJobs() {
   // LafPOS Uzaktan (Vercel): tanımlıysa canlı özet
   timers.push(...startCloudSync());
   timers.push(...startMerkez());
+  // İnternet dönünce bekleyen bildirimler ve uzun kesinti haberi
+  startNotices();
   // İnternet dönüşü: bekleyenler beklemeden bir kez gider; internet yokken dakikada bir TCP denemesi (HTTP yok)
   timers.push(...startCatchUp());
   // WAL'deki işlemler beş dakikada bir ana dosyaya yazılır: lafpos.db'yi kopyalayan son satışları da alır
