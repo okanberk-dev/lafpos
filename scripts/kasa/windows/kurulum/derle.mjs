@@ -181,6 +181,15 @@ async function smokeTest() {
       // Arayüzün yedek sayfası API'yi yutmasın: bilinmeyen uç JSON hata döner (girişsiz 401)
       const unknown = await fetch(`${base}/api/olmayan-uc`);
       if (unknown.ok || !unknown.headers.get('content-type')?.includes('json')) fail(`Bilinmeyen API ucu JSON hata vermedi (${unknown.status})`);
+      // Güncelleyicinin iki sorusu: sunucunun derlemesi ve (yalnız bu bilgisayardan) açık gün var mı
+      const health = await (await fetch(`${base}/api/health`)).json();
+      if (health.build !== BUILD.build) fail(`/api/health derleme numarasını vermedi (${health.build}, beklenen ${BUILD.build})`);
+      const day = await (await fetch(`${base}/api/kasa/guncelleme-durumu`)).json();
+      if (day.dayOpen !== false) fail(`Güncelleme durumu ucu açık gün yokken dayOpen: false demedi (${JSON.stringify(day)})`);
+      const durum = join(home, 'guncelleme/durum.json');
+      const st = existsSync(durum) ? JSON.parse(readFileSync(durum, 'utf8')) : null;
+      if (st?.kurulu?.build !== BUILD.build) fail(`Bekçinin güncelleyicisi durum dosyasını yazmadı (${durum})`);
+      console.log(`  tamam: derleme ${BUILD.build}, güncelleme durumu "${st.durum}"`);
       const login = await fetch(`${base}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: '1897' }) });
       if (!login.ok) fail(`Örnek PIN'le giriş olmadı (${login.status})`);
       const { token } = await login.json();
