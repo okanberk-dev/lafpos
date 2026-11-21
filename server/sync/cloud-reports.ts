@@ -188,6 +188,8 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     const liveDates = live ? [today, addDays(today, -1), ...st.queue] : [];
     if (live) lastLiveAt = now;
     const dates = [...new Set([...liveDates, ...batch])].filter((d) => d >= oldest && d <= today);
+    // Boş tur (canlı bakışın sırası gelmedi, tarama bitti): veritabanına yazılmaz
+    if (!dates.length && st.sweptAt === sweptBefore) return { sent: 0, queued: st.queue.length };
     const changed: { date: string; hash: string; report: RemoteDayReport }[] = [];
     for (const date of dates) {
       const report = buildDayReport(date, now);
