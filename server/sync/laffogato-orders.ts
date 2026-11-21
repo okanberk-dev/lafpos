@@ -476,6 +476,8 @@ const RETRY_FIRST_MS = 20_000;
 export const NIGHT_TICK_MS = 3 * 60_000;
 
 let lastVersion: string | null = null;
+/** Sitenin menü işareti (`menu`; laffogato pub:menu): değişince fiyat ya da Satışta sitede değişti, menü hemen eşitlenir */
+let lastMenuMarker: string | null = null;
 let versionSupported = true;
 let lastFullPull = 0;
 let pullFailures = 0;
@@ -545,7 +547,15 @@ export function onlineOrdersTick(): Promise<void> {
       if (versionSupported) {
         const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'GET', new URL(`${env.laffogatoUrl}/api/pos/orders/version`));
         const v = (json as { version?: unknown } | null)?.version;
-        if (status === 200) karaoke = (json as { karaoke?: unknown } | null)?.karaoke;
+        if (status === 200) {
+          karaoke = (json as { karaoke?: unknown } | null)?.karaoke;
+          // Menü işareti (eski sitede yok): sitede ya da panelde fiyat / Satışta değişince 15 dk'lık yoklama beklenmez
+          const menu = (json as { menu?: unknown } | null)?.menu;
+          if (typeof menu === 'string' && menu) {
+            if (lastMenuMarker !== null && menu !== lastMenuMarker) new Effects().emit({ topic: 'sync', kind: 'site.menu.changed' }).flush();
+            lastMenuMarker = menu;
+          }
+        }
         if (status === 404) versionSupported = false;
         else if (status === 200 && typeof v === 'string' && v) {
           const safety = now - lastFullPull >= ORDERS_SAFETY_PULL_MS && dayOpen;
