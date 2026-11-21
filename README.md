@@ -37,9 +37,9 @@ npm run build && npm start   # http://<bilgisayar-ip>:4000
 
 Windows kasa bilgisayarı için tek dosyalık kurulum: `npm run kurulum:windows` →
 `dist/windows/LafPOS-Kurulum-<sürüm>.exe` (Node gerekmez; sunucu açılışta SYSTEM olarak başlar, veri
-`C:\ProgramData\LafPOS`). Kafeye bu kurulur; CI her PR'da onu Windows'ta derleyip dener. Git ile otomatik
-başlatma (`scripts/kasa/windows/kur.ps1`, `scripts/kasa/mac/kur.sh`) yalnız geliştirici içindir:
-`docs/05-KASA-BILGISAYARI.md`.
+`C:\ProgramData\LafPOS`). Kafeye bu kurulur; kasaya giden dosyalar değişince CI onu Windows'ta derleyip dener
+(`.github/workflows/windows.yml`). Git ile otomatik başlatma (`scripts/kasa/windows/kur.ps1`,
+`scripts/kasa/mac/kur.sh`) yalnız geliştirici içindir: `docs/05-KASA-BILGISAYARI.md`.
 
 ## Ortam değişkenleri
 

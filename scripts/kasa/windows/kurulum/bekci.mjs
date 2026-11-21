@@ -2,13 +2,15 @@
 // ayarlar.env'yi okur, sunucuyu başlatır, düşerse artan beklemeyle (1 sn → 30 sn) yeniden başlatır ve
 // çıktıyı tarihli satırlarla logs/sunucu.log'a yazar. ayarlar.env kaydedilince sunucu yeni ayarlarla yeniden
 // başlar. Bekçi kapanınca sunucu da kapanır (Windows iş nesnesi). Sunucunun JavaScript belleği sınırlı
-// (LAFPOS_MAX_HEAP_MB, varsayılan 512): sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer
-// ve bekçi onu yeniden başlatır.
+// (LAFPOS_MAX_HEAP_MB; varsayılan bilgisayarın belleğinin dörtte biri, 1024-4096 MB, ayarlar.mjs): sızıntı kasa
+// bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi onu yeniden başlatır.
 // Veri klasörü: LAFPOS_HOME, yoksa C:\ProgramData\LafPOS. Ayrıntı: docs/05-KASA-BILGISAYARI.md
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
+import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { HEAP_MAX_MB, HEAP_MIN_MB, heapLimitMb, validHeapSetting } from './ayarlar.mjs';
 
 const APP = dirname(fileURLToPath(import.meta.url));
 const HOME = process.env.LAFPOS_HOME || join(process.env.ProgramData || 'C:\\ProgramData', 'LafPOS');
@@ -18,8 +20,6 @@ const LOG_MAX = 5 * 1024 * 1024;
 const LOG_KEEP = 3;
 /** Sunucu "kapat"tan sonra bu kadar içinde kapanmazsa sonlandırılır */
 const STOP_GRACE_MS = 5000;
-/** Sunucunun V8 yığın sınırı (MB); ayarlar.env'de LAFPOS_MAX_HEAP_MB ile 256-4096 arası değişir */
-const HEAP_MB = 512;
 /** ayarlar.env'nin denetlenme aralığı: kaydettikten birkaç saniye sonra yeniden başlar, boşta disk yoklanmaz */
 const WATCH_MS = 5000;
 mkdirSync(dirname(LOG), { recursive: true });
@@ -86,6 +86,8 @@ let stopping = false;
 /** Ayar değişikliğiyle bilerek durduruldu: beklemeden ve hata sayılmadan yeniden başlar */
 let restarting = false;
 let delay = 1000;
+/** Günlüğe son yazılan bellek sınırı: yalnız değişince yeniden yazılır */
+let loggedHeap = null;
 
 function start() {
   const startedAt = Date.now();
@@ -107,8 +109,11 @@ function start() {
     delay = Math.min(delay * 2, 30_000);
   };
   const env = envFor();
-  const heap = Number(env.LAFPOS_MAX_HEAP_MB);
-  const heapMb = Number.isInteger(heap) && heap >= 256 && heap <= 4096 ? heap : HEAP_MB;
+  const heapMb = heapLimitMb(env.LAFPOS_MAX_HEAP_MB, totalmem());
+  const raw = env.LAFPOS_MAX_HEAP_MB;
+  const heapNote = `${heapMb} MB${raw && !validHeapSetting(raw) ? ` (LAFPOS_MAX_HEAP_MB=${raw} ${HEAP_MIN_MB}-${HEAP_MAX_MB} arasında değil, yok sayıldı)` : ''}`;
+  if (heapNote !== loggedHeap) log(`[bekçi] sunucunun bellek sınırı ${heapNote}`);
+  loggedHeap = heapNote;
   child = spawn(process.execPath, [`--max-old-space-size=${heapMb}`, join(APP, 'server', 'index.mjs')], { cwd: APP, env, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   child.stdin.on('error', () => {
     /* sunucu kapanırken yazılamayan "kapat" */

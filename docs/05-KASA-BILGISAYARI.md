@@ -28,7 +28,7 @@ Kurulum yönetici izni ister ve şunları yapar:
 |---|---|
 | Uygulama | `C:\Program Files\LafPOS`: Node 24 LTS (24.22.3), sunucu, arayüz, kasa kısayolu. Yalnız yöneticiler değiştirir |
 | Veri | `C:\ProgramData\LafPOS`: veritabanı, `secret.key`, günlük yedekler (`backups\`), `ayarlar.env`, sunucu günlüğü (`logs\`). Yalnız SYSTEM ve yöneticiler açar |
-| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar. Sunucunun JavaScript belleği 512 MB'la sınırlı (`--max-old-space-size`): bir sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi yeniden açar. Gerekirse `ayarlar.env`'de `LAFPOS_MAX_HEAP_MB` (256-4096) |
+| Sunucu | Görev Zamanlayıcı'da "LafPOS Sunucu": Windows açılınca SYSTEM olarak, kimse oturum açmasa da; süre sınırı yok, pilde de çalışır. Bekçi (`app\bekci.mjs`) düşen sunucuyu 1-30 sn içinde yeniden başlatır; bekçi düşerse görevin beş dakikalık güvence tetiği yeniden açar. Sunucunun JavaScript belleği sınırlı (`--max-old-space-size`): varsayılan bilgisayarın belleğinin dörtte biri, en az 1024, en çok 4096 MB (8 GB'lık bilgisayarda 2048). Bir sızıntı kasa bilgisayarının belleğini bitirmez, sınıra varan sunucu düşer ve bekçi yeniden açar; taban, uzun dönem raporunun (bir yıl, iki dönem birden) sığması için. Gerekirse `ayarlar.env`'de `LAFPOS_MAX_HEAP_MB` (256-4096; örnek dosyada açıklamalı, yorumlu satır); bekçi seçilen sınırı günlüğe yazar |
 | Güvenlik duvarı | TCP 4000 yalnız kafenin ağına ve Tailscale'e (`100.64.0.0/10`) açık |
 | Kısayollar | Masaüstünde ve Başlangıç'ta "LafPOS Kasa" (seçilebilir); Başlat › LafPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır |
 | Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyku, hazırda bekletme ve USB'nin seçmeli askıya alınması prizdeyken kapanır (`powercfg`; uyuyan bilgisayara tablet bağlanamaz, uyuyan USB'deki fiş yazıcısı ve dokunmatik ekran kopar). Ağ kartının güç tasarrufu elle kapatılır: Aygıt Yöneticisi › Ağ bağdaştırıcıları › kart › Güç Yönetimi › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretsiz (BENIOKU'da da yazar) |
@@ -70,12 +70,14 @@ betiğin başında: `NODE_VERSION` (24 LTS'in son güvenlik sürümü), `NODE_AB
 `win-x64.zip` özeti; indirilen zip hem listeye hem bu sabite uymalı). Üçü birlikte değişir. Sunucuya çalışırken
 diskten dosya okuyan yeni bir şey eklenirse (göç, anlık görüntü gibi) betikte pakete de eklenir.
 
-**CI'da Windows** (`.github/workflows/ci.yml`, `windows` işi): her PR'da ve `main`'e her itmede `windows-latest`
-üzerinde Node 22 ile `npm ci`, NSIS (imajda yoksa `choco install nsis`) ve `npm run kurulum:windows` koşar:
-kurulum dosyası gerçek Windows'ta derlenir ve paket kafeye gidecek ikililerle açılıp denenir. Linux işiyle
-paralel, onu beklemez. İndirilen Node ve sqlite ikilisi `actions/cache`'te durur (anahtar `derle.mjs` ve kilit
-dosyası). Kurulum dosyasını çalıştırmaz: görev, güvenlik duvarı ve kiosk ilk gerçek kurulumda denenir (aşağıda).
-Özel depoda Windows dakikası Actions kotasından iki kat düşer.
+**CI'da Windows** (`.github/workflows/windows.yml`, Linux denetiminden ayrı iş akışı): kasaya giden dosyalara
+dokunan PR'da ve `main`'e itmede (`scripts/kasa/windows/**`, `server/**`, `drizzle/**`, `package.json`, kilit
+dosyası, iş akışının kendisi; Actions'tan elle de başlatılır) `windows-latest` üzerinde Node 22 ile `npm ci`, NSIS
+(imajda yoksa `choco install nsis`) ve `npm run kurulum:windows` koşar: kurulum dosyası gerçek Windows'ta derlenir
+ve paket kafeye gidecek ikililerle açılıp denenir. Linux işiyle paralel, onu beklemez. İndirilen Node ve sqlite
+ikilisi `actions/cache`'te durur (anahtar `derle.mjs` ve kilit dosyası). Kurulum dosyasını çalıştırmaz: görev,
+güvenlik duvarı ve kiosk ilk gerçek kurulumda denenir (aşağıda). Özel depoda Windows dakikası Actions kotasından iki
+kat düşer; yalnız arayüze dokunan PR bu yüzden onu koşmaz (paketteki arayüz Linux işinde derlenip taranır).
 
 **İlk gerçek Windows kurulumunda bakılacaklar.** Kurulum dosyası macOS'ta derlendi; paket Node 24.22.1 ile
 satış akışından geçti, görev XML'i ve Windows ikilileri denetlendi (21 Kasım 2026'da Node 24.22.3'e geçildi:
@@ -193,9 +195,10 @@ kullanıcı hesabı önerilir.
 
 Kasa bilgisayarı gün boyu açık; LafPOS boşta işlemci ve bellek yemesin diye:
 
-- **Sunucu:** JavaScript belleği 512 MB'la sınırlı (bekçi, §2). LafPOS Uzaktan'a (`docs/07-UZAKTAN-ERISIM.md`)
-  özet değişmediyse gitmez: gün kapalıyken (gece) beş dakikalık nabız yalnız değişiklikte, en geç saatte bir
-  gider; gün açıkken nabız sürer. Özet zlib'in iş havuzunda sıkıştırılır, kasanın istekleri beklemez.
+- **Sunucu:** JavaScript belleği bilgisayarın belleğinin dörtte biriyle sınırlı (1024-4096 MB; bekçi, §2). LafPOS
+  Uzaktan'a (`docs/07-UZAKTAN-ERISIM.md` §4) özet değişmediyse gitmez: gün kapalıyken (gece) beş dakikalık nabız
+  yalnız değişiklikte ya da son itmenin üstünden 15 dakika geçtiyse gider (boşta 15 dakikada bir); gün açıkken
+  nabız sürer. Özet zlib'in iş havuzunda sıkıştırılır, kasanın istekleri beklemez.
 - **Kasa ekranı:** paket platformu şeridinin saniyelik geri sayımı yalnız onay bekleyen sipariş varken işler;
   platform listesi yalnız bir platform açıkken (deneme ya da canlı) ya da bekleyen sipariş varken 30 sn'de bir
   yoklanır, yeni sipariş canlı akışla zaten gelir. "Hazır" nabzı (salon kartı, teslim ekranı) yalnız transform

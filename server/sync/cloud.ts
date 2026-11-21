@@ -17,13 +17,19 @@ import { patronLive } from '../services/reports';
  * LafPOS Uzaktan: kafedeki sunucu canlı özetini Vercel'deki uzaktan görünüme iter (patron paneli, salon, açık
  * adisyonlar, bar). Kasa yerelde kalır; bulut salt okunur bir kopyadır. Değişiklikte en sık 15 sn'de bir, gün açıkken
  * 5 dk'da bir nabız; gövde gzip (zlib'in iş havuzunda, ana iş parçacığı beklemez), laffogato ile aynı imza kuralı.
- * Değişmeyen özet gitmez: gün kapalıyken (gece) nabız yalnız özet değiştiyse iter, en geç saatte bir yine de (bulut
- * kaydı düşmesin). Maliyet ve kâr gitmez. Ayrıntı: docs/07-UZAKTAN-ERISIM.md
+ * Değişmeyen özet gitmez: gün kapalıyken (gece) nabız yalnız özet değiştiyse ya da son itmenin üstünden 15 dk
+ * geçtiyse iter (boşta 15 dk'da bir: uzaktan sayfanın "itibarıyla" saati eskimesin, bulut kaydı düşmesin). Maliyet ve
+ * kâr gitmez. Ayrıntı ve aralıkların belgesi: docs/07-UZAKTAN-ERISIM.md §4 (tests/cloud-push.test.ts ikisini tutar)
  */
-const MIN_INTERVAL_MS = 15_000;
-const HEARTBEAT_MS = 5 * 60_000;
-/** Özet değişmese de en geç bu kadarda bir itilir: buluttaki kayıt (7 gün) düşmesin, "kafeden son veri" eskimesin */
-const KEEPALIVE_MS = 60 * 60_000;
+export const MIN_INTERVAL_MS = 15_000;
+export const HEARTBEAT_MS = 5 * 60_000;
+/** Özet değişmese de bu kadarda bir itilir: uzaktan görünümdeki saat eskimesin, buluttaki kayıt (7 gün) düşmesin */
+export const KEEPALIVE_MS = 15 * 60_000;
+/**
+ * Zamanlayıcı payı: boşta itmeler nabızla aynı anda başlar; 15. dakikadaki nabız birkaç ms erken düşse de itsin (payı
+ * olmasa bir sonraki nabza, 20. dakikaya kalırdı)
+ */
+const KEEPALIVE_SLACK_MS = 30_000;
 
 /** Bulutun gördüğü kişi: patron paneli, salon ve bar; maliyet yok */
 const VIEWER: AuthUser = {
@@ -132,6 +138,8 @@ let pushing = false;
 let heartbeatQueued = false;
 /** Buluta son giden özetin içerik özeti */
 let lastHash: string | null = null;
+/** Son başarılı itmenin başladığı an: nabızla aynı ritimde ölçülür (bitiş anı ağın süresi kadar kayardı) */
+let lastSentAt = 0;
 let state: { lastSuccessAt?: number; lastError?: string | null; lastSize?: number } = {};
 
 export const cloudState = () => ({ configured: cloudEnabled(), url: env.cloudUrl || null, ...state });
@@ -144,6 +152,7 @@ export function resetCloudSync() {
   pushing = false;
   heartbeatQueued = false;
   lastHash = null;
+  lastSentAt = 0;
   state = {};
 }
 
@@ -152,22 +161,25 @@ export type PushResult = 'sent' | 'unchanged' | 'failed' | 'off' | 'busy';
 
 /**
  * Özeti iter. Değişmediyse istek gitmez; gün açıkken nabız (`heartbeat`) yine iter: uzaktan panelin saati ve
- * adisyon süreleri tazelensin. Gün kapalıyken nabız yalnız değişiklikte, en geç saatte bir
+ * adisyon süreleri tazelensin. Gün kapalıyken nabız yalnız değişiklikte ya da son itmenin üstünden 15 dk geçtiyse
+ * (boşta 15 dk'da bir)
  */
 export async function pushSnapshot(opts: { heartbeat?: boolean } = {}): Promise<PushResult> {
   if (!cloudEnabled()) return 'off';
   if (pushing) return 'busy';
   pushing = true;
-  lastPush = Date.now();
+  const startedAt = Date.now();
+  lastPush = startedAt;
   try {
     const snap = buildSnapshot();
     const hash = snapshotHash(snap);
-    const keepAlive = Date.now() - (state.lastSuccessAt ?? 0) >= KEEPALIVE_MS;
+    const keepAlive = startedAt - lastSentAt >= KEEPALIVE_MS - KEEPALIVE_SLACK_MS;
     if (hash === lastHash && !keepAlive && !(opts.heartbeat && snap.patron.dayOpen)) return 'unchanged';
     const packed = (await gzipAsync(JSON.stringify(snap))).toString('base64');
     const { status } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/push`), { gz: packed }, 15_000);
     if (status !== 200) throw new Error(`HTTP ${status}`);
     lastHash = hash;
+    lastSentAt = startedAt;
     state = { lastSuccessAt: Date.now(), lastError: null, lastSize: packed.length };
     return 'sent';
   } catch (e) {

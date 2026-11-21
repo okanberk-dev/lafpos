@@ -4,7 +4,8 @@
 // Kurulumdan önce aynı paket açılıp denenir (giriş, açılış verisi, arayüz, günlük): Windows'ta pakettekinin aynısı
 // (indirilen node.exe ve better-sqlite3'ün Windows ikilisi), macOS ve Linux'ta bu bilgisayarın Node'u ve ikilisiyle.
 // Gerekenler: makensis (macOS: brew install makensis, Linux: apt install nsis, Windows: NSIS 3; PATH'te değilse
-// Program Files\NSIS'te aranır, MAKENSIS ile de verilir). CI'da Windows işi (.github/workflows/ci.yml) her PR'da koşar.
+// Program Files\NSIS'te aranır, MAKENSIS ile de verilir). CI'da .github/workflows/windows.yml, kasaya giden dosyalar
+// değişince koşar.
 // Kullanım: npm run kurulum:windows            arayüzü derler, dener, kurulumu üretir
 //           npm run kurulum:windows -- --hizli arayüzü yeniden derlemez, denemeyi atlar
 import { execFileSync, spawn } from 'node:child_process';
@@ -12,10 +13,11 @@ import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
+import { tmpdir, totalmem } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { envSample, heapLimitMb } from './ayarlar.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '../../../..');
@@ -77,17 +79,6 @@ function freePort() {
   });
 }
 
-/** .env.example'dan Windows ayar dosyası: sunucu ve veri yolu satırları kurulumun işi, çıkar */
-function envSample() {
-  const lines = readFileSync(join(ROOT, '.env.example'), 'utf8').split('\n');
-  lines[0] = "# LafPOS ayarları (Windows kurulumu). Kaydedip Not Defteri'ni kapatınca sunucu yeniden başlar.";
-  return lines
-    .filter((l) => !/^#?\s*LAFPOS_(PORT|HOST|DATA_DIR)=/.test(l))
-    .join('\n')
-    .replace('data/secret.key', 'C:\\ProgramData\\LafPOS\\secret.key')
-    .replace("yalnız kasa bilgisayarındaki .env'de durur", 'yalnız bu dosyada durur');
-}
-
 async function bundleServer() {
   step('Sunucu tek dosyaya paketleniyor');
   await build({
@@ -110,7 +101,8 @@ async function bundleServer() {
   cpSync(join(ROOT, 'server/db/menu-snapshot.json'), join(APP, 'server/db/menu-snapshot.json'));
   // Tarayıcı demosu (dist/web/demo) yalnız Vercel'de; kasaya girmez
   cpSync(join(ROOT, 'dist/web'), join(APP, 'dist/web'), { recursive: true, filter: (src) => !src.startsWith(join(ROOT, 'dist/web/demo')) });
-  cpSync(join(HERE, 'bekci.mjs'), join(APP, 'bekci.mjs'));
+  // Bekçi ve onun ayar kuralları (bellek sınırı)
+  for (const f of ['bekci.mjs', 'ayarlar.mjs']) cpSync(join(HERE, f), join(APP, f));
   writeFileSync(join(APP, 'package.json'), `${JSON.stringify({ name: 'lafpos', version: pkg.version, private: true, type: 'module' }, null, 2)}\n`);
 }
 
@@ -159,7 +151,7 @@ function windowsFiles() {
   writeFileSync(join(STAGE, 'yonet.ps1'), crlf(readFileSync(join(HERE, 'yonet.ps1'), 'utf8')));
   // Eski Not Defteri UTF-8'i BOM'la tanır
   writeFileSync(join(STAGE, 'BENIOKU.txt'), `\uFEFF${crlf(readFileSync(join(HERE, 'BENIOKU.txt'), 'utf8'))}`);
-  writeFileSync(join(STAGE, 'ayarlar.env.ornek'), `\uFEFF${crlf(envSample())}`);
+  writeFileSync(join(STAGE, 'ayarlar.env.ornek'), `\uFEFF${crlf(envSample(readFileSync(join(ROOT, '.env.example'), 'utf8')))}`);
 }
 
 /**
@@ -177,9 +169,12 @@ async function smokeTest() {
     const port = await freePort();
     const base = `http://127.0.0.1:${port}`;
     const node = WIN ? join(STAGE, 'node', 'node.exe') : process.execPath;
+    const env = { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1', ...(WIN ? { LAFPOS_BEKCI_STDIN: '1' } : {}) };
+    // Bellek sınırı ayar dosyasından gelsin: gerçek ortam değişkeni dosyadakini ezerdi
+    delete env.LAFPOS_MAX_HEAP_MB;
     const child = spawn(node, [join(tmp, 'app/bekci.mjs')], {
       cwd: tmp,
-      env: { ...process.env, LAFPOS_HOME: home, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_NO_JOBS: '1', ...(WIN ? { LAFPOS_BEKCI_STDIN: '1' } : {}) },
+      env,
       // Windows'ta sinyal yok (kill süreci sonlandırır, bekçi sunucuyu kapatamaz): durdurma standart girdiden
       stdio: [WIN ? 'pipe' : 'ignore', 'ignore', 'ignore'],
     });
@@ -210,10 +205,13 @@ async function smokeTest() {
       const data = boot.ok ? await boot.json() : null;
       if (!data?.products?.length) fail('Açılış verisinde ürün yok (menü anlık görüntüsü yüklenmedi)');
       console.log(`  tamam: ${data.products.length} ürün, ${data.tables?.length ?? 0} masa`);
-
-      // ayarlar.env kaydedilince bekçi sunucuyu yeni ayarlarla yeniden başlatır
-      writeFileSync(join(home, 'ayarlar.env'), '\uFEFF# deneme\r\nLAFPOS_SESSION_HOURS=13\r\n');
       const logText = () => (existsSync(join(home, 'logs/sunucu.log')) ? readFileSync(join(home, 'logs/sunucu.log'), 'utf8') : '');
+      // Ayarsız bellek sınırı bilgisayarın belleğinden (dörtte biri, 1024-4096 MB)
+      const heapDefault = heapLimitMb(undefined, totalmem());
+      if (!logText().includes(`bellek sınırı ${heapDefault} MB`)) fail(`Bekçi varsayılan bellek sınırını (${heapDefault} MB) yazmadı`);
+
+      // ayarlar.env kaydedilince bekçi sunucuyu yeni ayarlarla (bellek sınırı dahil) yeniden başlatır
+      writeFileSync(join(home, 'ayarlar.env'), '\uFEFF# deneme\r\nLAFPOS_SESSION_HOURS=13\r\nLAFPOS_MAX_HEAP_MB=768\r\n');
       for (let i = 0; ; i++) {
         // Bekçi ayar dosyasına 5 sn'de bir bakar; sunucu kapanıp yeniden açılır
         if (i > 200) fail('ayarlar.env değişince sunucu 40 sn içinde yeniden başlamadı');
@@ -221,7 +219,8 @@ async function smokeTest() {
         if (restarted && (await fetch(`${base}/api/health`).then((r) => r.ok, () => false))) break;
         await new Promise((r) => setTimeout(r, 200));
       }
-      console.log('  tamam: ayar değişince sunucu yeni ayarlarla açıldı');
+      if (!logText().includes('bellek sınırı 768 MB')) fail('ayarlar.env\'deki LAFPOS_MAX_HEAP_MB bekçiye geçmedi');
+      console.log(`  tamam: ayar değişince sunucu yeni ayarlarla açıldı (bellek sınırı ${heapDefault} → 768 MB)`);
     } finally {
       await stopWatchdog(child);
     }
