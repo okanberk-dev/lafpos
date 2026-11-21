@@ -39,7 +39,7 @@ kurulumda yazar, güncelleme dokunmaz: bu sürümden önce kurulmuş bir kasada 
 
 `GET {LAFFOGATO_URL}/api/mobile/v1/menu` · `If-None-Match: <son ETag>` · anahtar gerekmez.
 
-- CDN'den gelir (`s-maxage=300, stale-while-revalidate=3600`). CDN'deki kopya eskiyince istek sitenin veritabanını
+- CDN'den gelir (`s-maxage=60, stale-while-revalidate=60`; 21 Kasım 2026'da sitenin kodundan doğrulandı). CDN'deki kopya eskiyince istek sitenin veritabanını
   okur (laffogato `listMenuItems`); Neon 5 dakika boşta kalınca uyuduğu için her ıska bir uyanmadır, gece
   uyanmaları en büyük israftır.
 - 304 gelirse değişiklik yok. 200 gelirse fark hesaplanır.

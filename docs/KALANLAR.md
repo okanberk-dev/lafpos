@@ -3,50 +3,46 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 21 Kasım 2026 (siteden üyelik ve indirme main'de; 1. ve 3. madde: gerçek ortam denemesi kaldı).
+Son güncelleme: 21 Kasım 2026.
 
 ## Main'de olanlar (bitti)
 
-- Pavo N86 yazarkasa: satış, sonuç, iptal, eşleştirme, banka gün sonu (`docs/04-YAZARKASA.md` §8). Gerçek cihazla
-  henüz denenmedi: ilk satış küçük tutarla yapılır, "Cihazın son yanıtları" (Yönetim › Yazarkasa POS) incelenir.
-- lafmobil ve site siparişleri: masa çağrıları ("Garson çağır"), bar istasyonu yedeği, planlı sipariş penceresi
-  (`docs/03-ENTEGRASYON.md`).
-- Merkez: dükkânlar, lisans, seçerek güncelleme ve dükkân bazında uzaktan görünüm (`docs/07-UZAKTAN-ERISIM.md` §4).
-- Siteden üyelik ve indirme: lafpos.laffogato.net'te e-posta ve parolayla "Üye girişi" (ilk girişte parola
-  belirlenir), girişten sonra İndir ve anahtarsız web kurucusu (README "Siteden kurulum").
-- Windows 10: boşta düşük kaynak, bellek sınırı, Windows'ta kurulum paketi denemesi (`.github/workflows/windows.yml`,
-  `docs/05-KASA-BILGISAYARI.md`).
+- **Kasa:** Pavo N86 (satış, iptal, eşleştirme, banka gün sonu; `docs/04-YAZARKASA.md` §8), lafmobil masa çağrıları,
+  Windows 10'da düşük kaynak, deneme modu ve "Denemeyi bitir, gerçek kullanıma başla".
+- **Kurulum ve güncelleme:** LafPOS-Kurulum.exe her main push'unda GitHub Release; anahtarsız otomatik güncelleme
+  (`/guncelleme/`, gün kapalıyken); Windows CI'da gerçek kurulum, güncelleme (75 kodu, `app.eski`, `node.yeni`) ve
+  geri dönüş denemesi (`ci-kurulum.mjs`); Vercel kanalının derleme numarası commit zamanı (doğrulandı).
+- **Site:** lafpos.laffogato.net'te e-posta, parola ve davet koduyla üyelik; İndir ve anahtarsız web kurucusu.
+- **Merkez** (`/merkez`): dükkânlar, kayıt ve imza, lisans (14 gün deneme, uyarı, 7 gün sonra satış kapanır,
+  internetsiz son kayıt), seçerek güncelleme gönderme, dükkân bazında uzaktan görünüm ve dükkân seçici.
+- **Uzaktan raporlar:** bütün sekmeler ve CSV kasadakiyle birebir (`shared/remote-calc.ts`, `shared/report-csv.ts`),
+  gün aşırı ödeme ve bugünkü kategori, "Raporları yeniden gönder".
+- **Sağlamlık:** internet kesintisi e2e (`e2e/internet.mjs`), telefonda Yönetim şeridinde internet rozeti; tabletler
+  kasaya ulaşamayınca siparişi bekletip kendiliğinden ve tam bir kez gönderir (`SendBatch`).
+- **Patrona telefon bildirimi** (Web Push): büyük iptal ve ikram, kasa farkı, internet kesintisi, güncelleme ve Pavo
+  sorunları; eşikler Yönetim › Ağ ve uzaktan erişim.
+- **Bulut yedeği:** günlük şifreli yedek Vercel Blob'a (özel), buluttan geri yükleme sihirbazı (patron, PIN).
+- **Karşılama sihirbazı:** Genel bakış'ta kurulum adımları.
 
-## 1. Kurulum dosyası, otomatik güncelleme, internet dönüşü: gerçek ortamda denenecekler
+## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
-**Durum:** kod bitti (`claude/exe-guncelleme-wip`). Linux'ta denendi: birim testleri, `npm run kurulum:windows`
-(paket denemesi derleme numarasını, gün sorusunu ve durum dosyasını sınar) ve gerçek bekçiyle bir güncelleme
-(yerel kanaldan indirme, klasör değişimi, yeni sürümün deneme açılışı, 75 koduyla çıkış). Aşağıdakiler gerçek
-ortamda henüz koşmadı.
-Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 ("Otomatik güncelleme",
-"İnternet yokken").
+Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internetle görülür.
 
-- **Gerçek Windows'ta:** `.github/workflows/windows.yml` her kurulum derlemesinde sessiz kurulum, görevle açılış,
-  yerel kanaldan güncelleme (75 kodu, `app` ↔ `app.eski`, `node.yeni`) ve bozuk derlemede geri dönüşü dener
-  (`scripts/kasa/windows/kurulum/ci-kurulum.mjs`). Kafede ilk kurulumdan sonra bir gün sonu yapıp Ayarlar ve yedek ›
-  Sürüm ve güncelleme'de "Güncellendi" görülmeli.
-- **Siteden kurulum (LafPOS-Kur.cmd):** PowerShell 5.1'de hiç çalıştırılmadı (Linux'ta yalnız üretim, sözdizimi
-  denetimi ve e2e). Boş bir Windows 10/11'de: indirme (Edge "sık indirilmiyor" uyarısı, SmartScreen), UAC ile
-  yeniden açılma, üç indirme ve doğrulama, görev, güvenlik duvarı, kısayollar, Uygulamalar listesi, "LafPOS'u
-  kaldır"; sonra kurulu bilgisayarda ikinci kez çalıştırma (gün açıkken soru, veritabanı kopyası, onarım).
-- **İnternet dönüşü:** uçtan uca denendi (`e2e/internet.mjs`: sahte lafmaliyet ucu kapalıyken satış ve gün sonu,
-  bilgisayarda ve telefonda rozet, uç açılınca gün tam bir kez). Kafede gerçek internetle bir kez bakılır.
+- **İlk kurulum:** LafPOS-Kurulum.exe (ya da sitede İndir) ile kurulum; Başlat › LafPOS › LafPOS ayarları'na
+  bağlantı satırları (aşağıda). Genel bakış'taki Kurulum kartı adımları sırayla gösterir.
+- **Pavo:** Yönetim › Yazarkasa POS › Pavo › Eşleştir; küçük bir deneme satışı ve "Cihazın son yanıtları".
+- **Denemeyi bitir:** gün sonu, sonra Yönetim › Ayarlar ve yedek › Denemeyi bitir; yedeğin
+  `C:\ProgramData\LafPOS\backups`'a yazıldığı ve kapanan hesapların Personel'den yeni PIN'le açıldığı görülür.
+- **İnternet:** kafede interneti kesip bir gün sonu; üst çubukta "İnternet yok · 1 kayıt bekliyor", internet gelince
+  "Bekleyenler gönderildi" ve lafmaliyet'te gün bir kez.
+- **Uzaktan raporlar:** kafe bağlanınca tarama yaklaşık bir saatte 400 günü iter; Raporlar › Ciro "Geçen ay"
+  kafedekiyle aynı olmalı. Upstash › Usage'de günlük istek sayısı izlenir (uzaktan ekran gün boyu açık kalırsa
+  ücretsiz kotaya yaklaşabilir).
+- **Telefon bildirimi:** Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" (iPhone'da önce Ana Ekrana
+  Ekle); Yönetim › Ağ › "Deneme bildirimi gönder".
+- **Bulut yedeği:** ilk gün sonundan sonra Ayarlar ve yedek › Bulut yedeği'nde "Son yedek" dolmalı.
 
-## 2. Uzaktan raporlar: gerçek ortamda deneme
-
-**Durum:** kod main'de (bütün sekmeler, CSV, dükkân bazında, yeniden gönder); gerçek Vercel ve Upstash'te kafe
-verisiyle henüz koşmadı. Kafede `LAFPOS_CLOUD_URL` tanımlanınca ilk açılışta tarama yaklaşık bir saatte 400 günü
-iter; Uzaktan'da Raporlar › Ciro'nun "Geçen ay"ı kafedekiyle aynı rakamı vermeli. Upstash'te
-`lafpos:rapor:<kurulum kimliği>:gun:*` ve `:ek:*` anahtarları ve günlük istek sayısı (Upstash › Usage) izlenir.
-
-## 3. Sahibin yapacakları (kafede)
-
-Başlat › LafPOS › LafPOS ayarları'na (anahtar değerleri Mac'te `~/Downloads/lafpos-kasa-ayarlari.env`; yoksa
+Kafedeki ayarlar.env satırları (değerler Mac'te `~/Downloads/lafpos-kasa-ayarlari.env`; yoksa
 `scripts/vercel/baglanti-kur.sh --yenile`):
 
 ```
@@ -60,14 +56,37 @@ PAVO_URL=https://<cihazın IP adresi>:4567
 PAVO_SERIAL=<cihazın seri numarası>
 ```
 
-LafPOS ilk açılışta deneme modundadır (örnek PIN'ler, eğitim yazarkasası, "Deneme modu" şeridi). Kafede denendikten
-sonra gün sonu alınır ve patron Yönetim › Ayarlar ve yedek › **Denemeyi bitir, gerçek kullanıma başla** der
-(yedek, deneme kayıtları silinir, patron yeni PIN'ini verir; `docs/05-KASA-BILGISAYARI.md` §2 "İlk açılış"). Gerçek
-Windows'ta henüz denenmedi: yedek dosyasının `C:\ProgramData\LafPOS\backups`'a yazılması ve kapanan hesapların
-Personel'den yeni PIN'le açılması ilk kurulumda bakılacak.
+## 2. Sahibin kararını bekleyenler (sormadan yapılmaz)
 
-Sonra Yönetim › Yazarkasa POS › Pavo › Eşleştir ve küçük bir deneme satışı; lafmaliyet'te geçiş günü
-(`docs/03-ENTEGRASYON.md`).
+- **Personel mesaisi:** 4 Kasım 2026'da sahibin kararıyla kaldırıldı (`docs/02-PLAN.md` "Mesai kaldırıldı"). Yeniden
+  istenirse eski tasarım ve tablo (`time_entries`) duruyor; yalnız vardiya kasa sayımı kullanılıyor.
+- **Marina şubesi:** kasada şube ayarı (Yönetim › Ayarlar › Şube) ve Merkez'de ayrı dükkân hazır. lafmaliyet gelen
+  gün sonundaki `sube`'yi okumuyor, hepsini Tuzla'ya yazıyor (`lafmaliyet/src/server/lafpos/ingest.ts`, kilit ve Z
+  denetimi gün başına). Marina LafPOS'a geçecekse önce lafmaliyet'te ayrı PR: şemanın `sube`'yi kabul etmesi, kilidin ve
+  Z denetiminin (gün, şube) olması, tanınmayan şubenin reddedilmesi.
+- **Stok ve reçete düşümü:** lafmaliyet'in tasarımı aylık sayım ve dönemsel FIFO (`docs/STOK-DEGERLEME.md`); satıştan
+  anlık düşüm yok. Kritik stok uyarısı isteniyorsa önce lafmaliyet'te anlık stok tasarımı gerekir.
+- **Merkez için iki aşamalı giriş:** üye girişi davet kodu, parola ve deneme sınırıyla korunuyor. Telefonda doğrulama
+  uygulaması (TOTP) eklenebilir; sahip kullanmak isterse.
+- **Kod imzası:** sertifika alınırsa izlenecek yol `docs/05-KASA-BILGISAYARI.md` §2 "Kod imzası"; alınmazsa
+  "Yine de çalıştır" anlatımı kalır.
+- **Vercel planı:** ekip ücretli planda görünüyor (21 Kasım faturası günde ~0,4 $, LafPOS'un payı çok küçük). Kafe
+  bağlanınca bir ay sonra Vercel › Usage ve Upstash › Usage bir kez bakılır.
+
+## 3. Dış bilgi gelince yapılacaklar
+
+- **Pavo bulut kanalı (UniCloud) ve masada ödeme listesi:** Pavo App Token ve belgeleri gelmeden tahmin yürütülmez
+  (`docs/04-YAZARKASA.md` §8.4).
+- **Yemeksepeti ve Getir canlı denemesi:** platformların verdiği anahtarlar ve test restoranı gerekir
+  (`docs/PAKET-PLATFORMLARI.md`); aktarıcılar hazır.
+
+## 4. Sıradaki geliştirmeler (öneri sırası)
+
+1. **Fiyat işareti:** sitede fiyat değişince kasaya hemen gelmesi yalnız online sipariş turu çalışırken (açık gün,
+   online sipariş ya da karaoke açık); öteki durumlarda 15 dakikalık menü çekimini bekler
+   (`server/sync/laffogato-orders.ts` `onlineOrdersTick`). Sürüm sinyali menü için ayrıca okunabilir (20 sn bütçesi).
+2. **Tasarım turu (sürüyor):** ekran ekran ızgara ve hizalama; bu oturumda örnek masa planı, patron ciro kartı ve
+   tek boylu üründe boy rozeti düzeldi. Sırada adisyon ürün karoları ve yönetim formları (`DESIGN.md`).
 
 ## Çalışma kuralları (kısa)
 
