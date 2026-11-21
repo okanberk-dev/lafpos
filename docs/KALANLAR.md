@@ -57,8 +57,14 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
   Ekle); Yönetim › Ağ › "Deneme bildirimi gönder".
 - **Bulut yedeği:** ilk gün sonundan sonra Ayarlar ve yedek › Bulut yedeği'nde "Son yedek" dolmalı.
 
-Kafedeki bağlantı satırları (Yönetim › Bağlantı bilgileri'ne yapıştırılır; değerler Mac'te `~/Downloads/lafpos-kasa-ayarlari.env`; yoksa
-`scripts/vercel/baglanti-kur.sh --yenile`):
+Kafedeki bağlantı satırları (Yönetim › Bağlantı bilgileri'ne yapıştırılır). **Anahtarlar 21 Kasım 2026'da yenilendi:**
+Vercel kayıtlarında kasanın 20 Kasım'daki istekleri siteden ve lafmaliyet'ten 401 almıştı (kasadaki anahtarlar
+Vercel'dekilerle uyuşmuyordu), LafPOS Uzaktan'a imzalı istek hiç gelmemişti. Üç projede anahtar yeniden üretildi
+(laffogato ve lafmaliyet `LAFPOS_SYNC_SECRET`, lafpos `LAFPOS_CLOUD_SECRET`; üretim yeniden yayımlandı) ve yeni satırlar
+sahibe dosya olarak verildi (`lafpos-kasa-ayarlari.env`, 21 Kasım). Mac'teki eski `~/Downloads/lafpos-kasa-ayarlari.env`
+**geçersiz**. Dosya kaybolursa anahtarlar yeniden üretilir (`scripts/vercel/baglanti-kur.sh --yenile` ya da Vercel'de
+elle) ve kasaya yeniden yapıştırılır; Vercel'deki değerler "sensitive", geri okunamaz. Kasa bağlanınca doğrulama: Yönetim
+› Genel bakış › Sistem sağlığı ve Site ve lafmaliyet sayfasındaki durum satırları.
 
 ```
 LAFMALIYET_URL=https://ladmin.laffogato.net
