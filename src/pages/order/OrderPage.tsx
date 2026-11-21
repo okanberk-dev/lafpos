@@ -43,7 +43,7 @@ import { Badge, type BadgeTone, EmptyState, ErrorState, PageLoading } from '@/co
 import { get, patch, post, put } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
 import { sendableOptions, soldOutDefault, useBoot } from '@/lib/boot';
-import { type PendingLine, restoreLines, useCart, usePending } from '@/lib/cart';
+import { newBatchId, type PendingLine, restoreLines, unreachable, useBatch, useCart, usePending } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { joinMeta } from '@/lib/text';
 import { previewTotals } from '@/lib/estimate';
@@ -117,6 +117,7 @@ export default function OrderPage() {
   const now = useTick(30_000);
   const { order, isLoading, isError, error, refetch, isFetching, act } = useOrder(id);
   const pending = usePending(id);
+  const waitingBatch = useBatch(id);
   const cart = useCart();
   const [tab, setTab] = useState<'menu' | 'adisyon'>(REMOTE ? 'adisyon' : 'menu');
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -178,6 +179,26 @@ export default function OrderPage() {
   // ve güncel sorulur. Önbellek sayfa yeniden yüklenince ya da Patron'dan açılınca boştur, Masalar kapalıyken eskir
   const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), enabled: blank && !!order?.tableId && can('siparis.al') });
 
+  // Bekleyen gönderim (kasaya ulaşılamadı): kasa dönünce kendiliğinden, aynı kimlikle. 3 sn'de bir sağlık sorusu; tablet
+  // yenilense de kayıt sepetle birlikte saklı kalır
+  const resending = useRef(false);
+  const sendRef = useRef<((hold?: boolean) => Promise<boolean>) | null>(null);
+  useEffect(() => {
+    if (!waitingBatch || REMOTE) return;
+    const timer = setInterval(async () => {
+      if (resending.current) return;
+      const up = await fetch('/api/health', { cache: 'no-store' }).then((r) => r.ok, () => false);
+      if (!up) return;
+      resending.current = true;
+      try {
+        if (await sendRef.current?.(waitingBatch.hold)) toast.ok('Bekleyen sipariş kasaya gönderildi');
+      } finally {
+        resending.current = false;
+      }
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [waitingBatch]);
+
   if (isLoading) return <PageLoading />;
   if (!order) {
     const home = (
@@ -232,29 +253,53 @@ export default function OrderPage() {
    * (adisyon kapanınca) bara gider. "Bara gönder" hemen gönderir
    */
   const send = async (hold = false): Promise<boolean> => {
-    if (!pending.length) return false;
+    // Kasaya ulaşamayan önceki gönderim önce, aynı kimlik ve satırlarla (sunucu bir kez yazar); yenisi ondan sonra
+    const waiting = useCart.getState().batches?.[order.id];
+    const lines = waiting?.lines ?? pending;
+    if (!lines.length) return false;
+    const batch = waiting ?? { id: newBatchId(), lines, hold, at: Date.now() };
+    if (!waiting) cart.setBatch(order.id, batch);
     // Yalnız gönderilen adetler sepetten düşer: istek sürerken eklenen ya da "Geri al"la geri konan satır beklemede kalır
-    const sent = new Map(pending.map((l) => [l.key, l.qty]));
+    const sent = new Map(lines.map((l) => [l.key, l.qty]));
+    const count = lines.reduce((a, l) => a + l.qty, 0);
     // Pencerenin önseçtiği, sonra tükenen Normal süt gitmez: o grup boş gider, sunucu süt yazmaz (gitse 409 alır, bütün
     // satırlar takılırdı)
     setSending(true);
-    const res = await act(
-      (pin) =>
-        post<OrderDTO>(`/orders/${order.id}/items`, {
-          items: pending.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: sendableOptions(boot, l.productId, l.options), note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
-          ...(hold ? { hold: true } : {}),
+    let queued = false;
+    const res = await act(async (pin) => {
+      try {
+        return await post<OrderDTO>(`/orders/${order.id}/items`, {
+          items: lines.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: sendableOptions(boot, l.productId, l.options), note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
+          ...(batch.hold ? { hold: true } : {}),
+          clientBatchId: batch.id,
           approverPin: pin,
-        }),
-      // Ödeme bekleyende bildirim yok: ödeme penceresi açılır, bara ödeme alınınca gider. Bar kapalıysa "kaydedildi"
-      hold ? undefined : `${pendingCount} ürün ${barOn ? 'gönderildi' : 'kaydedildi'}`,
-    );
+        });
+      } catch (e) {
+        // Kasa yeniden başlıyor ya da Wi-Fi koptu: satırlar tablette bekler, bağlantı gelince kendiliğinden gider
+        if (unreachable(e)) {
+          queued = true;
+          return null as unknown as OrderDTO;
+        }
+        throw e;
+      }
+    });
     setSending(false);
+    if (queued) {
+      if (!waiting) toast.warn('Kasaya ulaşılamadı; bağlantı gelince kendiliğinden gönderilecek');
+      return false;
+    }
+    // Kasa reddetti (ör. ürün tükendi): bekleyen kayıt düşer, satırlar sepette kalır, düzeltip yeniden gönderilir
+    cart.setBatch(order.id, null);
     if (!res) return false;
+    // Ödeme bekleyende bildirim yok: ödeme penceresi açılır, bara ödeme alınınca gider. Bar kapalıysa "kaydedildi"
+    if (!batch.hold) toast.ok(`${count} ürün ${barOn ? 'gönderildi' : 'kaydedildi'}`);
     cart.consume(order.id, sent);
     qc.invalidateQueries({ queryKey: ['kitchen'] });
     if (!wide) showView('adisyon');
     return true;
   };
+
+  sendRef.current = send;
 
   // Tezgâhta tek ekran: "Öde" kalemleri ödeme bekleyen olarak yazar ve ödemeyi açar; ödeme alınınca kalemler kendiliğinden
   // bara gider, satış kapanınca ekran yeni satışa hazırdır ("Bara gönder" hemen gönderir)
@@ -637,6 +682,11 @@ export default function OrderPage() {
 
   const right = (
     <div className="flex min-h-0 flex-1 flex-col bg-surface">
+      {waitingBatch && (
+        <p role="status" className="mx-3 mb-2 rounded-xl border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] px-3 py-2 text-[13px] font-medium leading-5 text-ink md:mx-0">
+          Kasaya ulaşılamıyor: {waitingBatch.lines.reduce((a, l) => a + l.qty, 0)} ürün bekliyor, bağlantı gelince kendiliğinden gönderilecek
+        </p>
+      )}
       {isOnline && <OnlineOrderBar order={order} act={act} />}
       {!REMOTE && (can('mutfak.ekran') || can('siparis.al')) && <ReadyBar order={order} name={call ? callText(call) : `${title} #${orderNo}`} />}
       {table?.kind === 'oda' && (order.room || editable) && <RoomBox order={order} table={table} editable={editable} act={act} now={now} onClosed={() => navigate(backPath)} />}

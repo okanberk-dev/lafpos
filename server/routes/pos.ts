@@ -1,9 +1,9 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, like, lt } from 'drizzle-orm';
 import { afterLoss, lossOf } from '../sync/bildirim';
 import { assertCanSell } from '../sync/merkez';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
-import { db, schema, tx } from '../db/client';
+import { db, schema, type Tx, tx } from '../db/client';
 import { type AppEnv, actorFrom, blindOrder, can, needDirect, requirePermission } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { body, isoDateTime, kurus, query } from '../lib/http';
@@ -130,6 +130,19 @@ posRoutes.put('/orders/:id/numarator', async (c) => {
   return c.json(dto(c, c.req.param('id')));
 });
 
+/**
+ * Gönderim kimliği ilk kez mi geliyor: aynı işlemde kaydedilir (yazımla birlikte ya hep ya hiç). Bir günden eski
+ * kimlikler silinir (tablet en çok birkaç dakika bekletir)
+ */
+function firstSend(t: Tx, orderId: string, batchId: string): boolean {
+  const key = `gonderim:${batchId}`;
+  if (t.select({ key: schema.syncState.key }).from(schema.syncState).where(eq(schema.syncState.key, key)).get()) return false;
+  const now = Date.now();
+  t.insert(schema.syncState).values({ key, value: { orderId, at: now }, updatedAt: now }).run();
+  t.delete(schema.syncState).where(and(like(schema.syncState.key, 'gonderim:%'), lt(schema.syncState.updatedAt, now - 24 * 3600_000))).run();
+  return true;
+}
+
 const optionPick = z.object({ itemId: z.string(), qty: z.number().int().min(0).max(9).optional() });
 
 posRoutes.post('/orders/:id/items', async (c) => {
@@ -152,11 +165,19 @@ posRoutes.post('/orders/:id/items', async (c) => {
         .max(60),
       /** Tezgâh satışında "Öde": kalemler ödeme alınınca bara gider (holdsUntilPaid) */
       hold: z.boolean().optional(),
+      /**
+       * Tabletin gönderim kimliği: kasaya ulaşamayan gönderim aynı kimlikle yeniden gelir; ilk deneme yazılıp yanıtı
+       * kaybolduysa ikinci kez yazılmaz (src/lib/cart.ts SendBatch)
+       */
+      clientBatchId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
       ...approver,
     }),
   );
   const actor = actorFrom(c, input.approverPin);
-  write((t, fx) => orders.addItems(t, actor, fx, c.req.param('id'), input.items, { hold: input.hold ?? false }));
+  write((t, fx) => {
+    if (input.clientBatchId && !firstSend(t, c.req.param('id'), input.clientBatchId)) return;
+    orders.addItems(t, actor, fx, c.req.param('id'), input.items, { hold: input.hold ?? false });
+  });
   return c.json(dto(c, c.req.param('id')));
 });
 
