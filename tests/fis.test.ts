@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, type FC } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { BootstrapDTO, OrderDTO, ZSummary } from '@shared/types';
@@ -11,7 +11,10 @@ import { type Harness, startApp } from './harness';
 let h: Harness;
 let order: OrderDTO;
 
-const print = () => import('../src/lib/print');
+// Fiş arayüz kodudur (tsconfig.app.json, DOM ve JSX): sunucu tsconfig'i onu türlemesin diye yol değişkenle
+type Props = Record<string, unknown>;
+const PRINT = '../src/lib/print';
+const print = () => import(/* @vite-ignore */ PRINT) as Promise<{ BillReceipt: FC<Props>; ZReceipt: FC<Props>; TestReceipt: FC<Props> }>;
 const sizeLabel = (s: string) => s;
 
 async function bill(boot: BootstrapDTO, o: OrderDTO = order): Promise<string> {
