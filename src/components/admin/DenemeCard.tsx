@@ -101,7 +101,7 @@ function FinalizeCard({ status }: { status: DenemeStatusDTO }) {
 export function DenemeFinishLauncher({ onClose }: { onClose: () => void }) {
   const status = useQuery({ queryKey: ['admin', 'deneme'], queryFn: () => get<DenemeStatusDTO>('/admin/deneme') });
   const d = status.data;
-  const blocked = !d ? null : d.liveSince != null ? 'Gerçek kullanım zaten başlamış' : d.dayOpen ? 'Önce Kasa’dan gün sonunu alın, sonra devam edin' : null;
+  const blocked = !d ? null : d.liveSince != null ? 'Gerçek kullanım zaten başlamış' : d.dayOpen ? (d.finalizeOnly ? 'Önce Kasa’dan gün sonunu alın, sonra geçişi tamamlayın' : 'Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin') : null;
   useEffect(() => {
     if (status.isError) {
       toast.err(errorMessage(status.error));
