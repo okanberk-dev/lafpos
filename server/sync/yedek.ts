@@ -19,7 +19,8 @@ import { remoteShop } from './merkez';
  * Kurulum yeni bilgisayardaysa ayarlar.env'e aynı LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET yazılınca eski yedekler
  * görünür (dükkân kimliği yedeklerin klasörüdür; listede kurulumun eski kimliği de seçilebilir).
  */
-const MAGIC = Buffer.from('LPY1');
+/** Dosyanın imzası; yükleme anında kurulur (tarayıcı demosunda Buffer yok, modül yine yüklenir) */
+const magic = () => Buffer.from('LPY1');
 const STATE = 'yedek.bulut';
 
 export interface CloudBackupState {
@@ -42,12 +43,12 @@ export function sealBackup(db: Buffer, secret: string): Buffer {
   const iv = nodeCrypto.randomBytes(12);
   const cipher = nodeCrypto.createCipheriv('aes-256-gcm', keyFor(secret, salt), iv);
   const body = Buffer.concat([cipher.update(zlib.gzipSync(db, { level: 6 })), cipher.final()]);
-  return Buffer.concat([MAGIC, salt, iv, cipher.getAuthTag(), body]);
+  return Buffer.concat([magic(), salt, iv, cipher.getAuthTag(), body]);
 }
 
 /** Şifreyi çözer ve SQLite olduğunu doğrular; anahtar yanlışsa ya da dosya bozuksa Türkçe hata */
 export function openBackup(buf: Buffer, secret: string): Buffer {
-  if (buf.length < 48 || !buf.subarray(0, 4).equals(MAGIC)) throw new Error('Yedek dosyası tanınmadı');
+  if (buf.length < 48 || !buf.subarray(0, 4).equals(magic())) throw new Error('Yedek dosyası tanınmadı');
   const salt = buf.subarray(4, 20);
   const iv = buf.subarray(20, 32);
   const tag = buf.subarray(32, 48);
