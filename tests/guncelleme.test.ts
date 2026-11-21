@@ -283,6 +283,26 @@ async function setup(opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: stri
   return { updater, installDir, home, app, log, events, exits, requests, status, opts };
 }
 
+describe('güncelleme: deneme kanalı (Windows CI)', () => {
+  it('LAFPOS_GUNCELLEME_KANAL: HTTPS ya da yalnız bu bilgisayar; geçersizse sitenin kanalı', async () => {
+    const { channelUrls, MANIFEST_URLS } = await load('guncelle.mjs');
+    expect(channelUrls({})).toEqual(MANIFEST_URLS);
+    expect(channelUrls({ LAFPOS_GUNCELLEME_KANAL: 'http://127.0.0.1:8765/guncelleme/surum.json' })).toEqual(['http://127.0.0.1:8765/guncelleme/surum.json']);
+    expect(channelUrls({ LAFPOS_GUNCELLEME_KANAL: 'https://a.test/s.json, http://kotu.test/s.json, javascript:1' })).toEqual(['https://a.test/s.json']);
+    expect(channelUrls({ LAFPOS_GUNCELLEME_KANAL: 'http://192.168.1.5/s.json' })).toEqual(MANIFEST_URLS);
+  });
+
+  it('Windows CI gerçek kurulumu dener: sessiz kurulum, güncelleme, geri dönüş (iş akışı ve betik)', () => {
+    const wf = readFileSync(join(__dirname, '../.github/workflows/windows.yml'), 'utf8');
+    expect(wf).toMatch(/-ArgumentList '\/S' -Wait/);
+    expect(wf).toContain('node scripts/kasa/windows/kurulum/ci-kurulum.mjs');
+    // Kurulamayan dosya yayımlanmaz: deneme yayımlamadan önce
+    expect(wf.indexOf('ci-kurulum.mjs')).toBeLessThan(wf.indexOf('Sürümü yayımla'));
+    const ci = readFileSync(join(__dirname, '../scripts/kasa/windows/kurulum/ci-kurulum.mjs'), 'utf8');
+    for (const s of ['LAFPOS_GUNCELLEME_KANAL', 'app.eski', 'node.yeni', 'geri-dondu', 'Güncellendi']) expect(ci).toContain(s);
+  });
+});
+
 describe('güncelleme: Merkez hedefi', () => {
   it('Merkez açık ve bu dükkâna gönderilmediyse yeni sürüm indirilmez; "Merkez\'den gönderilince" yazar', async () => {
     const t = await setup({ merkez: { enabled: true, hedef: null } });

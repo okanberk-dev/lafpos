@@ -56,7 +56,15 @@ Yine de çalıştır**. Kurulum yönetici izni ister ve şunları yapar:
   çalıştırır; standart kullanıcının yazabildiği bir klasörde kasiyer hesabı SYSTEM yetkisi alabilirdi.
 - **Açılmıyorsa:** imzasız dosyada Windows "Bilgisayarınız korundu" der (Ek bilgi › Yine de çalıştır). Windows
   11'de Akıllı Uygulama Denetimi açıksa imzasız dosyalar (kurulum ve `better_sqlite3.node`) engellenir:
-  Windows Güvenliği › Uygulama ve tarayıcı denetimi'nden bakın. Kalıcı çözüm kod imzası.
+  Windows Güvenliği › Uygulama ve tarayıcı denetimi'nden bakın. Kalıcı çözüm kod imzası (aşağıda).
+- **Kod imzası (sertifika alınırsa):** bugün dosya imzasızdır ve "Yine de çalıştır" adımı gerekir. Uyarının hiç
+  çıkmaması için bir kod imzalama sertifikası gerekir; en kolayı Microsoft'un **Azure Trusted Signing** hizmeti
+  (aylık ücretli, kimlik doğrulaması şirket adına yapılır) ya da bir sertifika sağlayıcısının (Sectigo, DigiCert)
+  EV/OV kod imzalama sertifikası (yıllık ücretli, donanım anahtarıyla gelir). Sertifika alınınca yapılacaklar:
+  `.github/workflows/windows.yml`'de "Sürümü yayımla"dan önce bir imzalama adımı (Trusted Signing için
+  `azure/trusted-signing-action`; anahtarlar depo sırlarına), imzalanacaklar `LafPOS-Kurulum.exe` ve paketteki
+  `node.exe` dışındaki ikililer (`better_sqlite3.node`, Kaldir.exe). İmzalı dosyada SmartScreen itibarı birkaç
+  yüz indirmede oluşur; EV sertifika uyarıyı hemen kaldırır.
 
 **Kurulum dosyasını derlemek** (macOS, Linux ya da Windows): `npm run kurulum:windows`; gereken NSIS
 (`brew install makensis`, `apt install nsis`; Windows'ta NSIS 3, PATH'te değilse `Program Files\NSIS`'te aranır,
@@ -239,8 +247,8 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
 - **Kanal:** Vercel'deki `lafpos` projesi her `main` derlemesinde `npm run kanal`'ı koşar
   (`scripts/kasa/windows/kurulum/kanal.mjs`): `dist/web/guncelleme/surum.json` ve `lafpos-app-<build>.zip`.
   Zip kurulumun `app\` yüküdür (`node.exe` ve `better_sqlite3.node` hariç), kasa arayüzü Uzaktan derlemesinden
-  ayrı derlenir. `build` HEAD commit'inin unix zamanı (`git log -1 --format=%ct`; Vercel'de git geçmişi yoksa
-  derlemenin anı): aynı commit'in kurulum dosyası ve kanalı aynı numarayı taşır, kurulu derleme
+  ayrı derlenir. `build` HEAD commit'inin unix zamanı (`git log -1 --format=%ct`; Vercel derlemesi HEAD commit'ini
+  görür, 21 Kasım 2026'da doğrulandı; git geçmişi hiç yoksa derlemenin anı): aynı commit'in kurulum dosyası ve kanalı aynı numarayı taşır, kurulu derleme
   `app\package.json`'da. Manifest zip'in SHA-256'sını ve boyunu, Node ve better-sqlite3'ün sürümünü ve
   özetini (`surumler.mjs`) taşır. `vercel.json` `/guncelleme/*`'ı `index.html`'e çevirmez; `surum.json` her
   istekte yeniden doğrulanır (ETag), zip değişmez önbellekte. Paketin açık adreste durması yeni bir şey açmaz:
@@ -269,6 +277,9 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
   (`npm run kurulum:windows`) derleme numarasını, gün sorusunu ve durum dosyasını da sınar.
 
 ### İnternet yokken ve internet gelince
+
+Uçtan uca denemesi `e2e/internet.mjs` (sahte lafmaliyet ucu kapalı ve açık). İnternetin dönüşü yapılandırılmış
+adreslerin kendi portuna TCP ile denenir (adreste port yoksa https 443).
 
 Kasa yerel sunucudur: satış, masa, ödeme ve Pavo internetsiz çalışır; açılışta ve arayüzde interneti bekleyen bir
 şey yoktur (yazı tipleri ve görseller pakette, site menüsü kurulumda gelir).
