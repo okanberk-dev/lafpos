@@ -11,6 +11,7 @@ Son güncelleme: 21 Kasım 2026 (siteden üyelik ve indirme main'de; 1. ve 3. ma
   henüz denenmedi: ilk satış küçük tutarla yapılır, "Cihazın son yanıtları" (Yönetim › Yazarkasa POS) incelenir.
 - lafmobil ve site siparişleri: masa çağrıları ("Garson çağır"), bar istasyonu yedeği, planlı sipariş penceresi
   (`docs/03-ENTEGRASYON.md`).
+- Merkez: dükkânlar, lisans, seçerek güncelleme ve dükkân bazında uzaktan görünüm (`docs/07-UZAKTAN-ERISIM.md` §4).
 - Siteden üyelik ve indirme: lafpos.laffogato.net'te e-posta ve parolayla "Üye girişi" (ilk girişte parola
   belirlenir), girişten sonra İndir ve anahtarsız web kurucusu (README "Siteden kurulum").
 - Windows 10: boşta düşük kaynak, bellek sınırı, Windows'ta kurulum paketi denemesi (`.github/workflows/windows.yml`,
@@ -42,14 +43,7 @@ Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 
 - **İnternet dönüşü:** kafede interneti kesip bir gün sonu al: Genel bakış'ta "İnternet · Yok · 1 kayıt bekliyor",
   üst çubukta rozet; interneti aç: en geç bir dakikada "Bekleyenler gönderildi", lafmaliyet'te gün bir kez.
 
-## 2. Merkez: dükkân bazında raporlar
-
-**Durum:** Merkez main'de (dükkânlar, kayıt ve imza, lisans, seçerek güncelleme; `docs/07-UZAKTAN-ERISIM.md` §4
-"Merkez"). Kalan: uzaktan raporlar ve anlık ciro dükkân bazında olsun. Redis anahtarlarındaki `default` yerine dükkân
-kimliği (kurulum kimliği), itme kurulumun kimliğiyle; mevcut `default` verisi ilk onaylanan dükkâna taşınır; Raporlar
-ve patron panelinin üstünde dükkân seçici.
-
-## 3. Uzaktan raporlar (lafpos.laffogato.net)
+## 2. Uzaktan raporlar (lafpos.laffogato.net)
 
 **Durum:** kod bitti (`claude/uzaktan-raporlar`, PR #58'in üstünde); gerçek Vercel ve Upstash'te henüz koşmadı.
 Ayrıntı `docs/07-UZAKTAN-ERISIM.md` §4 "Raporlar" ve "Anlık ciro". Kalanlar:
@@ -57,15 +51,13 @@ Ayrıntı `docs/07-UZAKTAN-ERISIM.md` §4 "Raporlar" ve "Anlık ciro". Kalanlar:
 - **Gerçek ortamda deneme:** kafede `LAFPOS_CLOUD_URL` tanımlıyken ilk açılışta tarama yaklaşık bir saatte 400
   günü iter; Uzaktan'da Raporlar › Ciro'nun "Geçen ay"ı kafedekiyle aynı rakamı vermeli. Upstash'te
   `lafpos:rapor:default:gun:*` anahtarları ve günlük istek sayısı (Upstash › Usage) izlenir.
-- **Merkez'deki dükkân seçici:** anahtarlar dükkân kimliğini taşır (bugün yalnız `default`); Merkez (2) gelince
-  itme kurulumun dükkân kimliğiyle yapılır, Raporlar'ın üstünde dükkân seçilir.
 - **Uzakta olmayan sekmeler:** hazırlama süresi, adisyon listesi, paket platformları, iptal ve indirim listeleri
   (kalem kalem), happy hour, lafmaliyet aktarımı ve CSV'ler yalnız kafede. Toplamları (iptal, ikram, ödenmez, zayi,
   indirim) Ciro ve Personel'de uzakta da var.
 - **Redis sıfırlanırsa** kasa günleri gönderilmiş sayar; günlük tarama yalnız değişen günü iter. Yeniden göndermek
   için kasada `sync_state`'teki `cloud.reports` satırı silinir (yönetimde düğmesi yok).
 
-## 4. Sahibin yapacakları (kafede)
+## 3. Sahibin yapacakları (kafede)
 
 Başlat › LafPOS › LafPOS ayarları'na (anahtar değerleri Mac'te `~/Downloads/lafpos-kasa-ayarlari.env`; yoksa
 `scripts/vercel/baglanti-kur.sh --yenile`):

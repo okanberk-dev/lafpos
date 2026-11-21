@@ -8,6 +8,7 @@ import { env } from '../env';
 import { bus } from '../lib/events';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
+import { remoteShop } from './merkez';
 import { getOpenDay } from '../services/orders';
 import { closingMinutes, hourlyReport, productReport, reportToday, staffReport, summaryReport } from '../services/reports';
 import { cloudEnabled } from './cloud';
@@ -43,12 +44,16 @@ interface State {
   cursor: string | null;
   /** Son tam taramanın bittiği an (0: hiç bitmedi) */
   sweptAt: number;
+  /** Gönderimin dükkân kimliği; değişince (kasa Merkez'e bağlandı) geçmiş yeni kimlikle baştan gider */
+  shop: string;
 }
 
-const emptyState = (): State => ({ sent: {}, queue: [], cursor: null, sweptAt: 0 });
+const emptyState = (): State => ({ sent: {}, queue: [], cursor: null, sweptAt: 0, shop: remoteShop() });
 
 function loadState(): State {
   const s = getSyncState<Partial<State>>(STATE_KEY);
+  // Eski durum (alan yok) `default` dükkânındır; Merkez'e bağlanan kasa geçmişi kendi kimliğiyle yeniden iter
+  if ((s?.shop ?? REMOTE_SHOP) !== remoteShop()) return emptyState();
   return { ...emptyState(), ...(s ?? {}), sent: { ...(s?.sent ?? {}) }, queue: [...(s?.queue ?? [])] };
 }
 
@@ -146,7 +151,7 @@ export function resetReportSync() {
 }
 
 async function pushDays(today: string, days: RemoteDayReport[], at: number): Promise<void> {
-  const body: RemoteReportPush = { v: 1, shop: REMOTE_SHOP, today, at, days };
+  const body: RemoteReportPush = { v: 1, shop: remoteShop(), today, at, days };
   const gz = (await gzipAsync(JSON.stringify(body))).toString('base64');
   const { status } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/rapor`), { gz }, 20_000);
   if (status !== 200) throw new Error(`HTTP ${status}`);

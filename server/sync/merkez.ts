@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { type LicenseRecord, type LicenseView, licenseState, salesAllowed } from '@shared/lisans';
+import { REMOTE_SHOP } from '@shared/remote-reports';
 import { db } from '../db/client';
 import { env } from '../env';
 import { getOpenDay } from '../services/orders';
@@ -49,6 +50,12 @@ export function identity(now = Date.now()): Identity {
 }
 
 export const merkezLast = () => getSyncState<MerkezLast>(LAST);
+
+/**
+ * Uzaktan özet ve raporların dükkân kimliği: Merkez'e bağlı kasada kurulum kimliği, değilse `default` (eski anahtarlar).
+ * Kimlik değişince rapor gönderimi geçmişi baştan iter (server/sync/cloud-reports.ts)
+ */
+export const remoteShop = () => (merkezEnabled() ? identity().id : REMOTE_SHOP);
 
 /** Kasanın şimdiki lisans durumu; Merkez kapalıysa null (uygulanmaz) */
 export function licenseNow(now = Date.now()): LicenseView | null {

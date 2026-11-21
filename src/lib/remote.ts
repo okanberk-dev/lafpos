@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { get } from './api';
+import { get, setShopHeader } from './api';
 import { DOWNLOAD_NAV, DOWNLOAD_PATH, MERKEZ_NAV, MERKEZ_PATH } from './download';
 import type { NavItem } from './nav';
 
@@ -8,6 +8,38 @@ import type { NavItem } from './nav';
  * sunucunun ittiği canlı özetten gelir; işlem düğmeleri gizlidir, canlı bağlantı yerine kısa aralıkla yenilenir.
  */
 export const REMOTE = import.meta.env.VITE_LAFPOS_UZAKTAN === '1' && import.meta.env.MODE !== 'demo';
+
+// ─── Dükkân seçici (Merkez'e bağlı birden çok kasa) ─────────────────────────
+
+const SHOP_STORE = 'lafpos.dukkan';
+export interface RemoteShop {
+  id: string;
+  ad: string | null;
+  at: number;
+}
+
+export function storedShop(): string | null {
+  try {
+    return localStorage.getItem(SHOP_STORE);
+  } catch {
+    return null;
+  }
+}
+
+/** Seçimi saklar ve isteklere ekler; null: en son veri gönderen dükkân */
+export function chooseShop(id: string | null) {
+  try {
+    if (id) localStorage.setItem(SHOP_STORE, id);
+    else localStorage.removeItem(SHOP_STORE);
+  } catch {
+    /* depolama kapalı: seçim yalnız bu sekmede */
+  }
+  setShopHeader(id);
+}
+
+if (REMOTE) setShopHeader(storedShop());
+
+export const remoteShopsQuery = { queryKey: ['uzaktan', 'dukkanlar'], queryFn: () => get<RemoteShop[]>('/uzaktan/dukkanlar'), staleTime: 5 * 60_000 };
 
 /** Uzakta görünen ekranlar; İndir (siteden kurulum) yalnız uzakta ve yalnız oturumda */
 export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar', MERKEZ_PATH, DOWNLOAD_PATH];

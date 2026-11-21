@@ -22,6 +22,7 @@ import { InternetBadge } from './InternetBadge';
 import { LafTile } from './LafMark';
 import { LicenseStrip } from './LicenseStrip';
 import { PlatformInbox } from './PlatformInbox';
+import { RemoteShopPicker } from './RemoteShopPicker';
 import { SiteInbox } from './SiteInbox';
 import { AlertSoundGroup, DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, ToolsDrawer } from './ToolsDrawer';
 import { Segmented } from './ui/Field';
@@ -186,9 +187,12 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   const status = () => {
     if (REMOTE) {
       return (
-        <Badge tone="blue" title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir">
-          Uzaktan
-        </Badge>
+        <div className="flex items-center gap-2">
+          <RemoteShopPicker />
+          <Badge tone="blue" title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir">
+            Uzaktan
+          </Badge>
+        </div>
       );
     }
     return (
