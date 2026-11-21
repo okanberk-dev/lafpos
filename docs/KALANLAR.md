@@ -85,7 +85,11 @@ PAVO_SERIAL=<cihazın seri numarası>
 1. **Fiyat işareti:** sitede fiyat değişince kasaya hemen gelmesi yalnız online sipariş turu çalışırken (açık gün,
    online sipariş ya da karaoke açık); öteki durumlarda 15 dakikalık menü çekimini bekler
    (`server/sync/laffogato-orders.ts` `onlineOrdersTick`). Sürüm sinyali menü için ayrıca okunabilir (20 sn bütçesi).
-2. **Tasarım turu (sürüyor):** ekran ekran ızgara ve hizalama; bu oturumda örnek masa planı, patron ciro kartı ve
+2. **baslat.cmd güncellemeyle değişmez:** kurulum klasöründe durur, otomatik güncelleme yalnız `app\`'i değiştirir.
+   21 Kasım'daki Node değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda Node değişimi kilit yüzünden
+   ertelenirse bir sonraki yeniden açılışta tamamlanır (kasa durmaz). Güncelleyici `app\baslat.cmd`'yi kökteki
+   kopyayla karşılaştırıp yenileyebilir.
+3. **Tasarım turu (sürüyor):** ekran ekran ızgara ve hizalama; bu oturumda örnek masa planı, patron ciro kartı ve
    tek boylu üründe boy rozeti düzeldi. Sırada adisyon ürün karoları ve yönetim formları (`DESIGN.md`).
 
 ## Çalışma kuralları (kısa)
