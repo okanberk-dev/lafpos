@@ -63,12 +63,12 @@ export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
     let sort = 0;
     // Salon: 2 sıra x 4 masa + bar tezgâhı
     for (let i = 0; i < 8; i++) {
-      tables.push({ id: ulid(), sectionId: sections[0].id, name: `S${i + 1}`, seats: i % 3 === 0 ? 4 : 2, shape: i % 3 === 0 ? 'rect' : 'square', x: 3 + (i % 4) * 24.5, y: i < 4 ? 5 : 40, w: i % 3 === 0 ? 22 : 19, h: 28, sort: sort++ });
+      tables.push({ id: ulid(), sectionId: sections[0].id, name: `S${i + 1}`, seats: i % 3 === 0 ? 4 : 2, shape: i % 3 === 0 ? 'rect' : 'square', x: 3 + (i % 4) * 24.5, y: i < 4 ? 5 : 40, w: 22, h: 28, sort: sort++ });
     }
-    tables.push({ id: ulid(), sectionId: sections[0].id, name: 'Bar', seats: 6, shape: 'bar', x: 3, y: 76, w: 70, h: 18, sort: sort++ });
+    tables.push({ id: ulid(), sectionId: sections[0].id, name: 'Bar', seats: 6, shape: 'bar', x: 3, y: 76, w: 71, h: 18, sort: sort++ });
     // Bahçe: 12 yuvarlak masa
     for (let i = 0; i < 12; i++) {
-      tables.push({ id: ulid(), sectionId: sections[1].id, name: `B${i + 1}`, seats: 4, shape: 'round', x: 4 + (i % 4) * 24.5, y: 3 + Math.floor(i / 4) * 33, w: 17, h: 28, sort: sort++ });
+      tables.push({ id: ulid(), sectionId: sections[1].id, name: `B${i + 1}`, seats: 4, shape: 'round', x: 3 + (i % 4) * 24.5, y: 3 + Math.floor(i / 4) * 33, w: 22, h: 28, sort: sort++ });
     }
     // Üst kat: 4 masa
     for (let i = 0; i < 4; i++) {
