@@ -36,6 +36,15 @@ export interface FakePavo {
    * kapanır ama yanıt gelmez (yanıtı kaybolan gün sonu) · `drop` istek işlenmez, batch açık kalır, yanıt gelmez
    */
   eodMode: 'ok' | 'fail' | 'silent' | 'drop';
+  /**
+   * `/PrintEODCopy`'nin yanıtı: `null` normal · `http404` gövdesiz HTTP 404 (sahada N86, uç yok) · nesne: bu JSON yanıt
+   * (ör. eşleştirmesi bozulmuş cihazın 74'ü)
+   */
+  eodCopyReply: null | 'http404' | Record<string, unknown>;
+  /** `/Ping` JSON yerine bu HTTP koduyla gövdesiz yanıt verir (seri no'suz Ping'i reddeden cihaz) */
+  pingHttpStatus: number | null;
+  /** `/PaymentMediators`'ın `Data`'sı (biçimi belgesiz; farklı biçimler denenir) */
+  mediatorsData: unknown;
   /** `ok` gün sonunun yanıtı bu kadar gecikir (bankalara bağlanan cihaz) */
   eodDelayMs: number;
   /** Kapanmış batch'ler (son gün sonu en sonda) */
@@ -127,6 +136,9 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
     silent: false,
     eodMode: 'ok',
     eodDelayMs: 0,
+    eodCopyReply: null,
+    pingHttpStatus: null,
+    mediatorsData: [{ Mediator: 1, Name: 'Nakit' }, { Mediator: 2, Name: 'Kredi Kartı' }],
     batches: [],
     addCardTransaction(amount) {
       open.push({ amount: Math.round(amount * 100), at: Date.now() });
@@ -181,6 +193,10 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
     if (device.silent) return; // yanıt yok
     if (req.method !== 'POST') return send(res, err('405', 'Yalnız POST'));
     if (busy) return send(res, err('9001', 'Cihaz meşgul'));
+    if (path === '/Ping' && device.pingHttpStatus) {
+      res.writeHead(device.pingHttpStatus);
+      return res.end();
+    }
     const h = (body.TransactionHandle ?? {}) as { SerialNumber?: string; Fingerprint?: string; TransactionSequence?: number; TransactionDate?: string };
     if (h.SerialNumber !== serial) return send(res, err('2001', 'Seri numarası eşleşmiyor'));
     const at = Date.parse(h.TransactionDate ?? '');
@@ -195,7 +211,7 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
     if (typeof h.TransactionSequence !== 'number' || h.TransactionSequence <= lastSeq) return send(res, err('2004', 'İşlem sıra numarası geçersiz'));
     lastSeq = h.TransactionSequence;
 
-    if (path === '/PaymentMediators') return send(res, ok({ Data: [{ Mediator: 1, Name: 'Nakit' }, { Mediator: 2, Name: 'Kredi Kartı' }] }));
+    if (path === '/PaymentMediators') return send(res, ok({ Data: device.mediatorsData }));
     if (path === '/CompleteSale') {
       const sale = body.Sale as Record<string, unknown>;
       const orderNo = String(sale.OrderNo);
@@ -232,6 +248,11 @@ export async function startFakePavo(opts: { serial?: string; tls?: { key: string
       if (device.eodDelayMs > 0) return void setTimeout(() => send(res, reply), device.eodDelayMs);
       return send(res, reply);
     }
+    if (path === '/PrintEODCopy' && device.eodCopyReply === 'http404') {
+      res.writeHead(404);
+      return res.end();
+    }
+    if (path === '/PrintEODCopy' && device.eodCopyReply && device.eodCopyReply !== 'http404') return send(res, device.eodCopyReply);
     if (path === '/PrintEODCopy') {
       const want = (body.EODCopy as { batchNo?: number } | undefined)?.batchNo;
       const batch = want == null ? device.batches.at(-1) : device.batches.find((b) => b.batchNo === want);

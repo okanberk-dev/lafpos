@@ -108,12 +108,11 @@ describe('Denemeyi bitir', () => {
     expect(getSettings().liveSince).toBeNull();
   });
 
-  it('gerçek (deneme dışı) gün varken silmez', async () => {
+  it('gerçek (deneme dışı) gün varken durum "yalnız geçişi tamamla" der; hiçbir şey silinmez (tamamlama tests/saha-duzeltmeleri.test.ts)', async () => {
     const { db, schema, eq } = await mod();
     const d = db.select().from(schema.businessDays).get()!;
     db.update(schema.businessDays).set({ trainingDay: false }).where(eq(schema.businessDays.id, d.id)).run();
-    const r = await h.call<{ code: string }>('patron', 'POST', '/admin/deneme/bitir', { pin: PINS.patron, newPin: '482915' });
-    expect(r.json.code).toBe('real_days');
+    expect(await h.ok<DenemeStatusDTO>('patron', 'GET', '/admin/deneme')).toMatchObject({ realDays: 1, finalizeOnly: true });
     db.update(schema.businessDays).set({ trainingDay: true }).where(eq(schema.businessDays.id, d.id)).run();
   });
 
