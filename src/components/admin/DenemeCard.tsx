@@ -101,7 +101,10 @@ function FinalizeCard({ status }: { status: DenemeStatusDTO }) {
 export function DenemeFinishLauncher({ onClose }: { onClose: () => void }) {
   const status = useQuery({ queryKey: ['admin', 'deneme'], queryFn: () => get<DenemeStatusDTO>('/admin/deneme') });
   const d = status.data;
-  const blocked = !d ? null : d.liveSince != null ? 'Gerçek kullanım zaten başlamış' : d.dayOpen ? (d.finalizeOnly ? 'Önce Kasa’dan gün sonunu alın, sonra geçişi tamamlayın' : 'Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin') : null;
+  // Şerit iki durumda da bu pencereyi açar: deneme sürüyorsa "denemeyi bitirin", deneme kapanmış ama geçiş yarımsa
+  // "geçişi tamamlayın" (kartlardaki uyarıyla aynı söz; e2e/flows.mjs deneme şeridinin metnini bekler)
+  const dayOpenText = d?.deneme ? 'Önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin' : 'Önce Kasa’dan gün sonunu alın, sonra geçişi tamamlayın';
+  const blocked = !d ? null : d.liveSince != null ? 'Gerçek kullanım zaten başlamış' : d.dayOpen ? dayOpenText : null;
   useEffect(() => {
     if (status.isError) {
       toast.err(errorMessage(status.error));
