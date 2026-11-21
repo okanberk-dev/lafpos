@@ -23,7 +23,16 @@ if %deneme% GEQ 20 exit /b 0
 ping -n 2 127.0.0.1 >nul
 goto nodetekrar
 :nodeyeni
+rem Yeni Node'u deneyen surec de yeni cikti: node.yeni de bir an kilitli olabilir, 20 saniyeye kadar yeniden denenir
+set deneme=0
+:yenitekrar
 move "node.yeni" "node" >nul 2>&1
-rem Tasima yarim kaldiysa eski Node geri gelir: sunucu Node'suz kalmasin
+if exist "node\node.exe" exit /b 0
+set /a deneme+=1
+if %deneme% GEQ 20 goto geridon
+ping -n 2 127.0.0.1 >nul
+goto yenitekrar
+:geridon
+rem Tasima olmadiysa eski Node geri gelir: sunucu Node'suz kalmasin (node.yeni sonraki acilista yeniden denenir)
 if not exist "node\node.exe" if exist "node.eski\node.exe" move "node.eski" "node" >nul 2>&1
 exit /b 0
