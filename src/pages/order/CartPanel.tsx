@@ -24,6 +24,16 @@ import { OdenmezModal } from './OdenmezModal';
 import { TypedAmount } from './TypedAmount';
 import { CART_GROUP_LABEL, type CartGroupKey, groupCartItems } from './cartGroups';
 
+/**
+ * Boy rozeti yalnız iki boyu olan üründe (ya da Büyük seçildiyse): tek boylu üründe "Orta" bilgi taşımaz, Türk kahvesinin
+ * "Orta" şekeriyle aynı satırda iki kez okunuyordu
+ */
+function twoSizes(boot: { products: { id: string; priceL: number | null }[] }, productId: string | null | undefined, size: string): size is 'M' | 'L' {
+  if (size === 'TEK') return false;
+  if (size === 'L') return true;
+  return boot.products.find((p) => p.id === productId)?.priceL != null;
+}
+
 // Kalemin bardaki durumu, bar ekranıyla aynı dil: hazırlanıyor mavi, hazır yeşil (amber yalnız zamana); ikon ve yazı da var
 /** Grup başlığının noktası: barda kobalt (hazırlanıyor), hazır yeşil, teslim nötr, iptal kırmızı; Gönderilmedi amber */
 const GROUP_DOT: Record<CartGroupKey, string> = {
@@ -169,7 +179,7 @@ export function CartPanel({
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-medium">
                           {name}
-                          {l.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[l.size]}</SizeTag>}
+                          {twoSizes(boot, l.productId, l.size) && <SizeTag>{boot.settings.sizeLabels[l.size]}</SizeTag>}
                         </span>
                         {(text || l.note) && <span className="block truncate text-xs text-ink-2">{[text, l.note && `Not: ${l.note}`].filter(Boolean).join(' · ')}</span>}
                         {problem && (
@@ -219,7 +229,7 @@ export function CartPanel({
                     <span className="min-w-0 flex-1">
                       <span className={cn('block text-sm font-medium leading-snug', i.voided && 'text-muted line-through')}>
                         {i.name}
-                        {i.size !== 'TEK' && <SizeTag>{boot.settings.sizeLabels[i.size]}</SizeTag>}
+                        {twoSizes(boot, i.productId, i.size) && <SizeTag>{boot.settings.sizeLabels[i.size]}</SizeTag>}
                       </span>
                       {/* Seçenekler soluk tek satır, not ayrı satırda: kalem bir bakışta okunur, çip kalabalığı yok */}
                       {i.optionsText && <span className="mt-0.5 block text-xs text-ink-2">{i.optionsText}</span>}
