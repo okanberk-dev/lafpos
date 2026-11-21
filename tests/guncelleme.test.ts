@@ -192,7 +192,7 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-async function setup(opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: string; redirect?: string } = {}) {
+async function setup(opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: string; redirect?: string; merkez?: { enabled: boolean; hedef: number | null }; serverDown?: boolean } = {}) {
   const { zipFiles } = await load('arsiv.mjs');
   const { createUpdater } = await load('guncelle.mjs');
   const base = mkdtempSync(join(tmpdir(), 'lafpos-guncelleme-'));
@@ -220,7 +220,10 @@ async function setup(opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: stri
   let trialRunning = false;
   const fetchImpl = async (url: string) => {
     requests.push(url);
-    if (url.endsWith('/api/kasa/guncelleme-durumu')) return Response.json({ dayOpen: opts.dayOpen ?? false });
+    if (url.endsWith('/api/kasa/guncelleme-durumu')) {
+      if (opts.serverDown) throw new Error('ECONNREFUSED');
+      return Response.json({ dayOpen: opts.dayOpen ?? false, ...(opts.merkez ? { merkez: opts.merkez } : {}) });
+    }
     if (url.endsWith('/api/health')) {
       if (!trialRunning) throw new Error('ECONNREFUSED');
       return Response.json({ ok: true, build: opts.healthy === false ? BUILD_OLD : BUILD_NEW });
@@ -277,8 +280,63 @@ async function setup(opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: stri
     spawnTrial,
   });
   const status = () => JSON.parse(readFileSync(join(home, 'guncelleme/durum.json'), 'utf8'));
-  return { updater, installDir, home, app, log, events, exits, requests, status };
+  return { updater, installDir, home, app, log, events, exits, requests, status, opts };
 }
+
+describe('güncelleme: Merkez hedefi', () => {
+  it('Merkez açık ve bu dükkâna gönderilmediyse yeni sürüm indirilmez; "Merkez\'den gönderilince" yazar', async () => {
+    const t = await setup({ merkez: { enabled: true, hedef: null } });
+    t.updater.start();
+    await t.updater.check();
+    expect(t.requests.some((u) => u.endsWith('.zip'))).toBe(false);
+    expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_OLD);
+    expect(t.status()).toMatchObject({ durum: 'guncel', merkez: { acik: true, hedef: null } });
+    expect(t.status().mesaj).toMatch(/Merkez'den gönderilince kurulacak/);
+  });
+
+  it('Merkez eski bir derlemeyi hedef gösterirse yeni sürüm kurulmaz; hedef yeni derlemeyse kurulur', async () => {
+    const t = await setup({ merkez: { enabled: true, hedef: BUILD_OLD } });
+    t.updater.start();
+    await t.updater.check();
+    expect(t.events).toEqual([]);
+    t.opts.merkez = { enabled: true, hedef: BUILD_NEW };
+    await t.updater.check();
+    expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_NEW);
+    expect(t.exits).toEqual([75]);
+  });
+
+  it('Merkez kapalıysa kanalın son sürümü kurulur (eski davranış)', async () => {
+    const t = await setup({ merkez: { enabled: false, hedef: null } });
+    t.updater.start();
+    await t.updater.check();
+    expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_NEW);
+  });
+
+  it('sunucuya ulaşılamazsa son bilinen Merkez kararında kalır', async () => {
+    const t = await setup({ merkez: { enabled: true, hedef: null } });
+    t.updater.start();
+    await t.updater.check();
+    t.opts.serverDown = true;
+    await t.updater.check();
+    expect(t.requests.some((u) => u.endsWith('.zip'))).toBe(false);
+    expect(t.status().merkez).toEqual({ acik: true, hedef: null });
+  });
+
+  it('merkezCap (saf): hedef yoksa kurulu derlemede kalınır, sunucu yoksa son karar', async () => {
+    const { merkezCap, planUpdate } = await load('guncelle.mjs');
+    expect(merkezCap({ server: { merkez: { enabled: true, hedef: null } }, last: null, installedBuild: 5 }).cap).toBe(5);
+    expect(merkezCap({ server: { merkez: { enabled: true, hedef: 9 } }, last: null, installedBuild: 5 }).cap).toBe(9);
+    expect(merkezCap({ server: { merkez: { enabled: false, hedef: null } }, last: { acik: true, hedef: 6 }, installedBuild: 5 }).cap).toBe(Infinity);
+    expect(merkezCap({ server: null, last: { acik: true, hedef: 6 }, installedBuild: 5 }).cap).toBe(6);
+    expect(merkezCap({ server: null, last: null, installedBuild: 5 }).cap).toBe(Infinity);
+    // Eski sunucu (Merkez alanı yok): sınır yok
+    expect(merkezCap({ server: { dayOpen: false }, last: null, installedBuild: 5 }).cap).toBe(Infinity);
+    const m = { build: 10, version: '0.3.0', node: { version: '24.22.3', abi: '137' }, sqlite: { version: '12.11.1' } };
+    const inst = { build: 5, sqlite: '12.11.1', nodeAbi: '137' };
+    expect(planUpdate({ installed: inst, nodeVersion: '24.22.3', manifest: m, cap: 9 })).toBeNull();
+    expect(planUpdate({ installed: inst, nodeVersion: '24.22.3', manifest: m, cap: 10 })).toMatchObject({ build: 10 });
+  });
+});
 
 describe('güncelleme: kurulum akışı', () => {
   it('gün kapalıyken: yedek, klasör değişimi, deneme; başarıda bekçi 75 koduyla yeniden açılır', async () => {

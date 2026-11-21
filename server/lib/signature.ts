@@ -54,10 +54,11 @@ export async function signedFetch(
   url: URL,
   body?: unknown,
   timeoutMs = 8000,
+  extraHeaders: Record<string, string> = {},
 ): Promise<{ status: number; json: unknown }> {
   if (secret.length < MIN_SECRET_LENGTH) throw new Error('İmza anahtarı tanımlı değil');
   const raw = body === undefined ? '' : JSON.stringify(body);
-  const headers: Record<string, string> = { accept: 'application/json', ...signedHeaders(secret, method, url, raw) };
+  const headers: Record<string, string> = { accept: 'application/json', ...extraHeaders, ...signedHeaders(secret, method, url, raw) };
   if (raw) headers['content-type'] = 'application/json';
   let res: Response;
   try {

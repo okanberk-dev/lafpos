@@ -3,6 +3,7 @@ import { fmtDateTime } from '@shared/time';
 import { Badge, Card, DefRow, type Tone } from '@/components/admin/ui';
 import { ErrorState, Skeleton } from '@/components/ui/misc';
 import { get } from '@/lib/api';
+import { licenseQuery } from '@/components/LicenseStrip';
 
 type UpdateState = 'guncel' | 'indiriliyor' | 'bekliyor' | 'kuruluyor' | 'geri-dondu' | 'hata' | 'kapali';
 interface UpdateData {
@@ -42,6 +43,8 @@ export function UpdateCard() {
   const d = q.data;
   const st = d?.status;
   const state = st ? STATE[st.durum] : null;
+  // Merkez (dükkânlar, lisans): kapalıysa satır yok
+  const lic = useQuery(licenseQuery).data;
   return (
     <Card
       title="Sürüm ve güncelleme"
@@ -77,6 +80,15 @@ export function UpdateCard() {
             </>
           ) : (
             <p className="mt-2 text-[13px] leading-5 text-[var(--admin-text-mute)]">Otomatik güncelleme yalnız Windows kurulumunda çalışır; bu sunucu elle güncellenir</p>
+          )}
+          {lic?.enabled && (
+            <>
+              <DefRow label="Lisans">{lic.message}</DefRow>
+              <DefRow label="Merkez">
+                {lic.ad ? `${lic.ad} · ` : ''}
+                {lic.sonGorusme ? `son bağlantı ${fmtDateTime(lic.sonGorusme)}` : 'Henüz bağlanmadı; internet gelince kendini bildirir'}
+              </DefRow>
+            </>
           )}
         </div>
       ) : null}

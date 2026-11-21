@@ -42,28 +42,12 @@ Tarif ve yerleri: README "Windows'a kurulum", `docs/05-KASA-BILGISAYARI.md` §6 
 - **İnternet dönüşü:** kafede interneti kesip bir gün sonu al: Genel bakış'ta "İnternet · Yok · 1 kayıt bekliyor",
   üst çubukta rozet; interneti aç: en geç bir dakikada "Bekleyenler gönderildi", lafmaliyet'te gün bir kez.
 
-## 2. Merkez: dükkânlar, lisans, seçerek güncelleme
+## 2. Merkez: dükkân bazında raporlar
 
-**Durum:** başlamadı (1'in üstüne kurulur).
-
-Sahibin isteği: "Yazılımı güncellediğimde uzaktan açıp güncelleme gönder diyebileyim, hangi dükkânların
-kullandığına bakayım, tek tek seçip gönderebileyim; lisans tanımlaması da olsun."
-
-Verilen kararlar (sahip itiraz etmedi; değişirse burayı güncelle):
-
-- Panel `https://lafpos.laffogato.net/merkez`, LafPOS Uzaktan'ın patron parolasıyla (`LAFPOS_UZAKTAN_PAROLA`,
-  Vercel). Veri Upstash Redis'te (lafpos projesine bağlı).
-- Her kurulum ilk açılışta bir kurulum kimliği ve gizli anahtar üretir, internete ilk çıktığında Merkez'e kendini
-  bildirir (ilk görüşte güven), Merkez'de "Onay bekliyor" görünür. Dükkânda kimse anahtar girmez.
-- Sahip dükkâna ad verir, lisansı "Aktif (şu tarihe kadar)" ya da "Pasif" yapar. Onaysız kurulum 14 gün deneme
-  modunda çalışır. Pasif ya da süresi dolan lisans önce uyarı gösterir, 7 gün sonra yeni satışı kapatır; kayıtlar ve
-  raporlar açık kalır. Son geçerli lisans kasada saklanır: internet ya da Merkez yokken kasa durmaz.
-- Merkez listesi: dükkân adı, kurulu sürüm, son görülme, çevrimiçi mi, güncelleme durumu ("İndiriliyor", "Gün
-  kapanınca kurulacak", "Kuruldu", "Sorun çıktı, eski sürüme döndü"). Dükkânlar seçilip "Güncelleme gönder";
-  dükkân başına "otomatik güncelle" ya da "ben gönderince" (varsayılan: ben gönderince). Yeni sürüm main'e girince
-  Merkez'de "Yeni sürüm hazır" ve kısa değişiklik notuyla görünür.
-- Güncelleyici bu durumda genel manifest yerine Merkez'e kendi kurulum kimliğiyle imzalı sorar ("hangi build'i
-  çalıştırayım"), Merkez yoksa son bildiği hedefte kalır.
+**Durum:** Merkez main'de (dükkânlar, kayıt ve imza, lisans, seçerek güncelleme; `docs/07-UZAKTAN-ERISIM.md` §4
+"Merkez"). Kalan: uzaktan raporlar ve anlık ciro dükkân bazında olsun. Redis anahtarlarındaki `default` yerine dükkân
+kimliği (kurulum kimliği), itme kurulumun kimliğiyle; mevcut `default` verisi ilk onaylanan dükkâna taşınır; Raporlar
+ve patron panelinin üstünde dükkân seçici.
 
 ## 3. Uzaktan raporlar (lafpos.laffogato.net)
 

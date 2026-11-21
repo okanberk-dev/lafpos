@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { get } from './api';
-import { DOWNLOAD_NAV, DOWNLOAD_PATH } from './download';
+import { DOWNLOAD_NAV, DOWNLOAD_PATH, MERKEZ_NAV, MERKEZ_PATH } from './download';
 import type { NavItem } from './nav';
 
 /**
@@ -10,7 +10,7 @@ import type { NavItem } from './nav';
 export const REMOTE = import.meta.env.VITE_LAFPOS_UZAKTAN === '1' && import.meta.env.MODE !== 'demo';
 
 /** Uzakta görünen ekranlar; İndir (siteden kurulum) yalnız uzakta ve yalnız oturumda */
-export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar', DOWNLOAD_PATH];
+export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar', MERKEZ_PATH, DOWNLOAD_PATH];
 
 /**
  * Uzaktan görünümün menüsü: kişinin menüsünden uzakta açılan ekranlar, sonunda İndir (yetki istemez, oturum yeter).
@@ -18,7 +18,7 @@ export const REMOTE_PATHS = ['/patron', '/masalar', '/mutfak', '/raporlar', DOWN
  */
 export function remoteNav(items: NavItem[], remote = REMOTE): NavItem[] {
   if (!remote) return items;
-  return [...items.filter((n) => REMOTE_PATHS.includes(n.to)), DOWNLOAD_NAV];
+  return [...items.filter((n) => REMOTE_PATHS.includes(n.to)), MERKEZ_NAV, DOWNLOAD_NAV];
 }
 
 /**

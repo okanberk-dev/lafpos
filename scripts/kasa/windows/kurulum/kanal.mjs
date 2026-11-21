@@ -20,17 +20,33 @@ import { WEB_INSTALLER_NAME, webInstaller } from './web-kurucu.mjs';
 const OUT = join(ROOT, 'dist/web/guncelleme');
 
 /** Kanalın manifesti (saf; guncelle.mjs parseManifest okur) */
-export function manifestFor({ build, commit, version, zip, sqlite }) {
+export function manifestFor({ build, commit, version, zip, sqlite, not = null }) {
   return {
     v: 1,
     build,
     version,
     commit,
+    // Merkez'deki "Yeni sürüm hazır" satırının kısa notu (main'e giren PR'ın başlığı)
+    ...(not ? { not } : {}),
     date: new Date(build * 1000).toISOString(),
     app: { file: `lafpos-app-${build}.zip`, sha256: createHash('sha256').update(zip).digest('hex'), size: zip.length },
     node: { version: NODE_VERSION, abi: NODE_ABI, sha256: NODE_SHA256 },
     sqlite: { version: sqlite, sha256: sqliteSha256(sqlite) },
   };
+}
+
+/**
+ * Sürümün kısa notu: son commit'in başlığı (squash birleştirmede PR başlığı, sondaki "(#61)" düşer). Vercel'de git
+ * geçmişi yoksa VERCEL_GIT_COMMIT_MESSAGE'ın ilk satırı
+ */
+export function changeNote(env = process.env) {
+  let subject = '';
+  try {
+    subject = execFileSync('git', ['log', '-1', '--format=%s'], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    subject = String(env.VERCEL_GIT_COMMIT_MESSAGE ?? '').split('\n')[0].trim();
+  }
+  return subject.replace(/\s*\(#\d+\)$/, '').slice(0, 200) || null;
 }
 
 async function main() {
@@ -48,7 +64,7 @@ async function main() {
     const appDir = join(tmp, 'app');
     const meta = await stageApp({ appDir, webDir: web, ...info });
     const zip = zipFiles(filesOf(appDir));
-    const manifest = manifestFor({ ...info, version: meta.version, zip, sqlite });
+    const manifest = manifestFor({ ...info, version: meta.version, zip, sqlite, not: changeNote() });
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
     writeFileSync(join(OUT, manifest.app.file), zip);

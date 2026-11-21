@@ -1,4 +1,4 @@
-import { Download } from 'lucide-react';
+import { Building2, Download } from 'lucide-react';
 import type { NavItem } from './nav';
 
 /**
@@ -19,6 +19,17 @@ export const DOWNLOAD_NAV: NavItem = {
   icon: Download,
   perms: [],
   keywords: 'kurulum windows program indir kur',
+};
+
+/** Merkez (dükkânlar, lisans, güncelleme gönderme): yalnız Uzaktan'da, oturumla; panel uçları gerçek girişi ister */
+export const MERKEZ_PATH = '/merkez';
+export const MERKEZ_NAV: NavItem = {
+  to: MERKEZ_PATH,
+  label: 'Merkez',
+  title: 'Merkez: dükkânlar ve lisans',
+  icon: Building2,
+  perms: [],
+  keywords: 'merkez dükkan şube lisans güncelleme gönder',
 };
 
 /** Güncelleme kanalının manifesti (kanal.mjs): yalnız sayfanın yazdığı alanlar */

@@ -19,6 +19,7 @@ import { reservationRoutes } from './routes/reservations';
 import { syncRoutes } from './routes/sync';
 import { productImage, thumbFor } from './services/media';
 import { getOpenDay } from './services/orders';
+import { merkezTarget } from './sync/merkez';
 import { db } from './db/client';
 import { installedVersion, isLoopback } from './lib/surum';
 
@@ -50,7 +51,8 @@ export function createApp() {
   // Tailscale'deki cihaz 403 alır), yanıtta gün açık mı dışında bir şey yok
   app.get('/api/kasa/guncelleme-durumu', (c) => {
     if (!isLoopback(clientKey(c))) return c.json({ error: 'Yalnız bu bilgisayardan', code: 'forbidden' }, 403);
-    return c.json({ dayOpen: !!getOpenDay(db) });
+    // Merkez'in hedefi: güncelleyici yalnız bu derlemeye kadar kurar (Merkez kapalıysa kanalın son sürümü)
+    return c.json({ dayOpen: !!getOpenDay(db), merkez: merkezTarget() });
   });
 
   // Ürün kartındaki görselin küçük kopyası. /api dışında: tarayıcı önbelleğe alır, <img> oturum taşımaz;

@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
+import { assertCanSell } from '../sync/merkez';
 import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { db, schema, tx } from '../db/client';
@@ -81,6 +82,8 @@ posRoutes.get('/orders', (c) => {
 posRoutes.get('/orders/:id', (c) => c.json(dto(c, c.req.param('id'))));
 
 posRoutes.post('/orders', async (c) => {
+  // Lisans kapalıysa yeni adisyon açılmaz (Merkez); açık adisyonun tahsilatı sürer
+  assertCanSell();
   const input = await body(
     c,
     z.object({
@@ -129,6 +132,7 @@ posRoutes.put('/orders/:id/numarator', async (c) => {
 const optionPick = z.object({ itemId: z.string(), qty: z.number().int().min(0).max(9).optional() });
 
 posRoutes.post('/orders/:id/items', async (c) => {
+  assertCanSell();
   const input = await body(
     c,
     z.object({

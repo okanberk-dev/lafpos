@@ -17,7 +17,7 @@ const OUT = join(ROOT, 'dist/uzaktan-e2e');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2' };
 
 /** Uzaktan taranan ekranlar (tests/web-kurucu.test.ts İndir'in burada olduğunu denetler) */
-export const REMOTE_ROUTES = ['/patron', '/raporlar', '/indir'];
+export const REMOTE_ROUTES = ['/patron', '/raporlar', '/merkez', '/indir'];
 
 /** Üyelik akışının örnek üyesi (gerçek kimse değil) ve sahte Redis'in adresi */
 const MEMBER = { email: 'uye@ornek.test', password: 'ornek-parola-2026', invite: 'ORNK-2026-DAVT' };
