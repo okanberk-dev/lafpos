@@ -207,6 +207,7 @@ const ROUTES = {
     '/yonetim/yazarkasa',
     '/yonetim/entegrasyon',
     '/yonetim/platformlar',
+    '/yonetim/baglanti-bilgileri',
     '/yonetim/ag',
     '/yonetim/ayarlar',
     '/yonetim/denetim',

@@ -20,6 +20,7 @@ const OkcAdmin = lazy(() => import('./OkcAdmin'));
 const IntegrationAdmin = lazy(() => import('./IntegrationAdmin'));
 const PlatformsAdmin = lazy(() => import('./PlatformsAdmin'));
 const NetworkAdmin = lazy(() => import('./NetworkAdmin'));
+const ConnectionsAdmin = lazy(() => import('./ConnectionsAdmin'));
 const AuditAdmin = lazy(() => import('./AuditAdmin'));
 const DisplayAdmin = lazy(() => import('./DisplayAdmin'));
 
@@ -35,6 +36,7 @@ const PAGES: Record<string, ReactNode> = {
   yazarkasa: <OkcAdmin />,
   entegrasyon: <IntegrationAdmin />,
   platformlar: <PlatformsAdmin />,
+  'baglanti-bilgileri': <ConnectionsAdmin />,
   ag: <NetworkAdmin />,
   ayarlar: <SettingsAdmin />,
   denetim: <AuditAdmin />,

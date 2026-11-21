@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bike, ChevronRight, PackageSearch, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { Link } from 'react-router';
 import { tl } from '@shared/money';
 import {
   AUTO_ACCEPT_MAX_DEFAULT,
@@ -30,19 +31,15 @@ import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { toast } from '@/lib/toast';
 
-/** Ayar adları kitin eş genişlikli kodu (`CODE`) ile, virgülle */
-function Env({ names }: { names: string[] }) {
-  return (
-    <>
-      {names.map((n, i) => (
-        <span key={n}>
-          {i > 0 && ', '}
-          <code className={CODE}>{n}</code>
-        </span>
-      ))}
-    </>
-  );
-}
+/** Anahtarların girildiği yer: Yönetim › Bağlantı bilgileri (ayarlar dosyasına yazılır, LafPOS kendiliğinden yeniden başlar) */
+const KEYS_LINK = (
+  <Link to="/yonetim/baglanti-bilgileri" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">
+    Yönetim › Bağlantı bilgileri
+  </Link>
+);
+
+/** Vercel'deki ayar adı kitin eş genişlikli koduyla */
+const Env = ({ name }: { name: string }) => <code className={CODE}>{name}</code>;
 
 /**
  * Gerçek bağlantı için gerekenler (calisma/arastirma/paket-platformlari, 27 Ekim 2026; docs/PAKET-PLATFORMLARI.md).
@@ -51,25 +48,21 @@ function Env({ names }: { names: string[] }) {
 const LIVE_NEEDS: Record<PlatformId, ReactNode> = {
   yemeksepeti: (
     <>
-      Delivery Hero’dan POS entegrasyonu: middleware adresi, kullanıcı adı, parola, restoranın POS kimliği ve JWT anahtarı. Kasa bilgisayarının{' '}
-      <code className={CODE}>.env</code> dosyasına <Env names={['YEMEKSEPETI_MW_URL', 'YEMEKSEPETI_USERNAME', 'YEMEKSEPETI_PASSWORD', 'YEMEKSEPETI_REMOTE_ID']} />, Vercel’e{' '}
-      <Env names={['YEMEKSEPETI_PLUGIN_SECRET']} /> yazılır; LafPOS yeniden başlatılınca Canlı seçilir. Siparişler LafPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker.
+      Delivery Hero’dan POS entegrasyonu: middleware adresi, kullanıcı adı, parola ve restoranın POS kimliği {KEYS_LINK}’ne, JWT anahtarı Vercel’e (<Env name="YEMEKSEPETI_PLUGIN_SECRET" />) yazılır;
+      LafPOS yeniden açılınca Canlı seçilir. Siparişler LafPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker.
     </>
   ),
   getir: (
     <>
-      Getir’den POS entegrasyonu: test ve canlı için uygulama anahtarı ve restoran anahtarı. Kasa bilgisayarının <code className={CODE}>.env</code> dosyasına{' '}
-      <Env names={['GETIR_APP_SECRET_KEY', 'GETIR_RESTAURANT_SECRET_KEY']} /> (test ortamı için <Env names={['GETIR_API_URL']} />), Vercel’e bizim ürettiğimiz{' '}
-      <Env names={['GETIR_WEBHOOK_SECRET']} /> yazılır; Getir’e sipariş ve iptal adresleri bu anahtarla verilir. LafPOS yeniden başlatılınca Canlı seçilir. Siparişler
-      LafPOS Uzaktan’a gelir, kasa 20 saniyede bir çeker, yedek olarak Getir’den de okur. Getir’in yemek işi Uber’e geçti: siparişler ileride Trendyol Go’dan da
-      gelebilir.
+      Getir’den POS entegrasyonu: test ve canlı için uygulama anahtarı ve restoran anahtarı {KEYS_LINK}’ne (test ortamı için API adresi de), Vercel’e bizim ürettiğimiz{' '}
+      <Env name="GETIR_WEBHOOK_SECRET" /> yazılır; Getir’e sipariş ve iptal adresleri bu anahtarla verilir. LafPOS yeniden açılınca Canlı seçilir. Siparişler LafPOS Uzaktan’a
+      gelir, kasa 20 saniyede bir çeker, yedek olarak Getir’den de okur. Getir’in yemek işi Uber’e geçti: siparişler ileride Trendyol Go’dan da gelebilir.
     </>
   ),
   trendyol: (
     <>
-      Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar kasa bilgisayarının <code className={CODE}>.env</code> dosyasına (
-      <Env names={['TRENDYOL_SUPPLIER_ID', 'TRENDYOL_API_KEY', 'TRENDYOL_API_SECRET']} />) yazılır; LafPOS yeniden başlatılınca Canlı seçilir. Uber Eats Türkiye
-      siparişleri de buradan gelir, kasa 20 saniyede bir yoklar.
+      Satıcı panelinden satıcı no, API anahtarı ve gizli anahtar {KEYS_LINK}’ne yazılır; LafPOS yeniden açılınca Canlı seçilir. Uber Eats Türkiye siparişleri de buradan gelir, kasa
+      20 saniyede bir yoklar.
     </>
   ),
   migros: 'Belgeler herkese açık değil; Migros Yemek ile görüşme gerekir.',

@@ -192,7 +192,9 @@ afterEach(() => {
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 
-async function setup(opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: string; redirect?: string; merkez?: { enabled: boolean; hedef: number | null }; serverDown?: boolean } = {}) {
+async function setup(
+  opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: string; redirect?: string; merkez?: { enabled: boolean; hedef: number | null }; serverDown?: boolean; mode?: 'otomatik' | 'kapali' } = {},
+) {
   const { zipFiles } = await load('arsiv.mjs');
   const { createUpdater } = await load('guncelle.mjs');
   const base = mkdtempSync(join(tmpdir(), 'lafpos-guncelleme-'));
@@ -259,7 +261,7 @@ async function setup(opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: stri
     home,
     log: (l: string) => log.push(l),
     port: () => 4000,
-    mode: () => 'otomatik',
+    mode: () => opts.mode ?? 'otomatik',
     server: {
       stop: async () => {
         events.push('durdur');
@@ -403,6 +405,45 @@ describe('güncelleme: kurulum akışı', () => {
     expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_OLD);
     expect(t.status()).toMatchObject({ durum: 'bekliyor', yeni: { build: BUILD_NEW } });
     expect(existsSync(join(t.home, `guncelleme/indirilen/lafpos-app-${BUILD_NEW}.zip`))).toBe(true);
+  });
+
+  it('"Şimdi güncelle" gün açıkken hemen kurar (patron onayladı); onaysız istek gün kapanınca kurar', async () => {
+    const wait = await setup({ dayOpen: true });
+    wait.updater.start();
+    await wait.updater.requestNow();
+    expect(wait.events).toEqual([]);
+    expect(wait.status()).toMatchObject({ durum: 'bekliyor', yeni: { build: BUILD_NEW } });
+    expect(wait.status().sonIstek).toEqual(expect.any(String));
+    // İndirilmiş sürüm "şimdi kur" ile kanala yeniden sormadan kurulur
+    const before = wait.requests.filter((u) => u.endsWith('.zip')).length;
+    await wait.updater.requestNow({ force: true });
+    expect(wait.requests.filter((u) => u.endsWith('.zip')).length).toBe(before);
+    expect(wait.events).toEqual(['durdur', 'deneme']);
+    expect(wait.exits).toEqual([75]);
+    expect(JSON.parse(readFileSync(join(wait.app, 'package.json'), 'utf8')).build).toBe(BUILD_NEW);
+  });
+
+  it('otomatik güncelleme kapalıyken kendiliğinden denetlemez; "Şimdi güncelle" denetler ve kurar', async () => {
+    const t = await setup({ mode: 'kapali' });
+    t.updater.start();
+    await t.updater.check();
+    expect(t.requests).toEqual([]);
+    expect(t.status().durum).toBe('kapali');
+    await t.updater.requestNow();
+    expect(t.requests).toContain('https://kanal.test/guncelleme/surum.json');
+    expect(t.exits).toEqual([75]);
+    expect(t.status()).toMatchObject({ durum: 'guncel', mesaj: 'Güncellendi', kurulu: { build: BUILD_NEW } });
+  });
+
+  it('kurulacak sürüm yoksa elle istek "Güncel" der; sonraki otomatik denetim kapalı kalır', async () => {
+    const t = await setup({ mode: 'kapali', merkez: { enabled: true, hedef: null } });
+    t.updater.start();
+    await t.updater.requestNow({ force: true });
+    expect(t.events).toEqual([]);
+    expect(t.status().mesaj).toContain("Merkez'den gönderilince");
+    const before = t.requests.length;
+    await t.updater.check();
+    expect(t.requests.length).toBe(before);
   });
 
   it('özet tutmazsa kurulmaz ve dosya saklanmaz', async () => {

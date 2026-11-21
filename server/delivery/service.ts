@@ -75,7 +75,7 @@ export function savePlatformSettings(t: Tx, actor: Actor, fx: Effects, platform:
     // Canlı mod yalnız bağdaştırıcısı olan ve anahtarı .env'de tanımlı platformda (server/delivery/registry.ts)
     const a = adapterFor(platform);
     if (!a) throw conflict(`${PLATFORM_LABEL[platform]} için canlı bağlantı henüz yok`, 'not_supported');
-    if (!a.configured()) throw conflict(`${PLATFORM_LABEL[platform]} anahtarları .env'de tanımlı değil (docs/PAKET-PLATFORMLARI.md)`, 'not_configured');
+    if (!a.configured()) throw conflict(`${PLATFORM_LABEL[platform]} anahtarları tanımlı değil (Yönetim › Bağlantı bilgileri)`, 'not_configured');
   }
   const all = platformSettings();
   const before = all[platform];

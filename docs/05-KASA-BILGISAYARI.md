@@ -34,9 +34,11 @@ Yine de çalıştır**. Kurulum yönetici izni ister ve şunları yapar:
 | Kısayollar | Masaüstünde ve Başlangıç'ta "LafPOS Kasa" (seçilebilir); Başlat › LafPOS: kasa, tarayıcıda aç, ayarlar, sunucuyu yeniden başlat, sunucu günlüğü, kurulum notları, kaldır |
 | Güç | "Prizdeyken uyku kapalı" (seçilebilir): uyku, hazırda bekletme ve USB'nin seçmeli askıya alınması prizdeyken kapanır (`powercfg`; uyuyan bilgisayara tablet bağlanamaz, uyuyan USB'deki fiş yazıcısı ve dokunmatik ekran kopar). Ağ kartının güç tasarrufu elle kapatılır: Aygıt Yöneticisi › Ağ bağdaştırıcıları › kart › Güç Yönetimi › "Güç tasarrufu için bilgisayarın bu aygıtı kapatmasına izin ver" işaretsiz (BENIOKU'da da yazar) |
 
-- **Ayarlar** (site, lafmaliyet, yazarkasa anahtarları): Başlat › LafPOS › LafPOS ayarları. `ayarlar.env`
-  Not Defteri'nde açılır; kaydedince (Ctrl+S) bekçi değişikliği (5 sn'de bir bakar) görür ve sunucuyu yeni
-  ayarlarla yeniden başlatır.
+- **Ayarlar** (site, lafmaliyet, LafPOS Uzaktan, Token ve paket platformu anahtarları): programın içinden,
+  **Yönetim › Bağlantı bilgileri** (aşağıda). Dosyanın kendisi `C:\ProgramData\LafPOS\ayarlar.env`; Başlat › LafPOS ›
+  LafPOS ayarları onu Not Defteri'nde de açar. Kaydedince (panelden ya da Ctrl+S) bekçi değişikliği (5 sn'de bir
+  bakar) görür ve sunucuyu yeni ayarlarla yeniden başlatır. Pavo'nun adresi ve seri no'su bu dosyada değil, Yönetim ›
+  Yazarkasa POS'ta (`docs/04-YAZARKASA.md` §8.1).
   İlk kurulumda site bağlantısı kapalıdır (`LAFFOGATO_URL` satırı yorumlu): LafPOS siteye hiç bağlanmaz, menü
   kurulumdaki gibi kalır. Açmak için `docs/03-ENTEGRASYON.md` §8 (açılış sırası).
 - **Güncelleme:** kendiliğinden (§6). Elle: yeni kurulum dosyasını çalıştırın. Sunucuyu durdurur, veritabanını
@@ -65,6 +67,35 @@ Yine de çalıştır**. Kurulum yönetici izni ister ve şunları yapar:
   `azure/trusted-signing-action`; anahtarlar depo sırlarına), imzalanacaklar `LafPOS-Kurulum.exe` ve paketteki
   `node.exe` dışındaki ikililer (`better_sqlite3.node`, Kaldir.exe). İmzalı dosyada SmartScreen itibarı birkaç
   yüz indirmede oluşur; EV sertifika uyarıyı hemen kaldırır.
+
+### Bağlantı bilgileri (Yönetim › Bağlantı bilgileri)
+
+Kurulumdan sonra sahibin dosya açması gerekmez: dış sistemlerin adresleri ve anahtarları programın içinden girilir.
+Kod: katalog `shared/baglanti.ts`, dosya yazımı `server/lib/ayar-dosyasi.ts`, uçlar `GET`/`PUT /api/admin/baglanti`,
+ekran `src/pages/admin/ConnectionsAdmin.tsx`, testler `tests/baglanti.test.ts` (e2e akışı da yazar).
+
+- **Ne yazılır:** yalnız katalogdaki anahtarlar: lafmaliyet (`LAFMALIYET_URL`, `LAFMALIYET_SYNC_SECRET`), LafPOS
+  Uzaktan (`LAFPOS_CLOUD_URL`, `LAFPOS_CLOUD_SECRET`), site (`LAFFOGATO_URL`, `LAFFOGATO_SYNC_SECRET`; deneme
+  bittikten sonra, `docs/03-ENTEGRASYON.md` §8), Token (`TOKENX_*`, `LAFPOS_PUBLIC_URL`), Yemeksepeti, Getir ve
+  Trendyol Go. Bilinmeyen anahtar 400. Adres http(s) olmalı, gizli anahtarın en kısa boyu denetlenir (Uzaktan ve site
+  32, webhook 16), boşluk, tırnak ve satır sonu kabul edilmez; boş değer satırı kaldırır.
+- **Neden veritabanında değil:** veritabanı buluta yedeklenir ve yedeğin şifresi `LAFPOS_CLOUD_SECRET`'ten türer;
+  anahtarlar dosyada kalır, veritabanı dosyası tek başına sızarsa anahtar sızmaz.
+- **Yetki:** görmek ayar yetkisiyle (`ayar.yonet`), yazmak yalnız patron (yanlış adrese satış verisi gidebilir).
+  Gizli anahtarların değeri hiçbir yanıtta dönmez, yalnız "tanımlı" bilgisi; alan boş gelir, yazılırsa değişir.
+  Denetim kaydına `ayar.baglanti` düşer: anahtarların adı ve adreslerin yenisi, gizli değer değil.
+- **Dosya:** etkin satır yerinde değişir (aynı anahtarın tekrarı düşer), yoksa örnek dosyadaki yorumlu satırın
+  (`# ANAHTAR=`) altına, o da yoksa sona "Yönetim › Bağlantı bilgileri" başlığıyla eklenir. Öbür satırlar, yorumlar,
+  BOM ve CRLF korunur; önce geçici dosyaya yazılıp yerine konur. Bekçi dosyanın yerini sunucuya `LAFPOS_AYAR_DOSYASI`
+  ile söyler (eski bekçide veri klasöründeki `ayarlar.env`).
+- **Yeniden başlama:** bekçi dosyanın değiştiğini görüp sunucuyu yeni ayarlarla açar (birkaç saniye, tabletler bekler).
+  Ekran dosya ile çalışan sunucunun ayarları aynı olana dek "LafPOS yeni bilgilerle yeniden başlıyor" der
+  (`pending`), sonra "yeni bilgilerle açıldı".
+- **Hazır satırları yapıştır:** sahibe verilen ayar satırları (`lafpos-kasa-ayarlari.env`) olduğu gibi yapıştırılır;
+  bilinen anahtarlar tek kayıtta yazılır, `PAVO_URL` ve `PAVO_SERIAL` Pavo'nun ayarına gider, satır sonundaki
+  "(deneme bittikten sonra)" gibi notlar düşer, tanınmayan satırlar söylenir.
+- Git ile çalışan sunucuda ve tarayıcı demosunda panelden yazılmaz (`.env` elle); e2e sunucusu veri klasöründe bir
+  `ayarlar.env` ile açılır (`LAFPOS_AYAR_DOSYASI`).
 
 **Kurulum dosyasını derlemek** (macOS, Linux ya da Windows): `npm run kurulum:windows`; gereken NSIS
 (`brew install makensis`, `apt install nsis`; Windows'ta NSIS 3, PATH'te değilse `Program Files\NSIS`'te aranır,
@@ -287,9 +318,17 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
   koduyla çıkar, başlatıcı onu yeni sürümle açar. Söylemezse `app.eski` geri gelir, sunucu eski sürümle açılır ve
   o derleme bir daha denenmez (durum "Eski sürüme dönüldü"). `app.eski` elle geri dönüş için bir sonraki
   güncellemeye kadar durur.
-- **Kapatma:** `ayarlar.env`'de `LAFPOS_GUNCELLEME=kapali`.
+- **Şimdi güncelle** (Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme; `POST /api/admin/guncelleme`, `ayar.yonet`):
+  sunucu `guncelleme\istek.json` yazar, bekçi 2 sn'de bir bakar, dosyayı siler ve güncelleyiciye iletir
+  (`requestNow`): kanala hemen sorar, yeni sürüm varsa indirir ve kurar. Gün kapalıysa hemen kurulur; gün açıkken
+  patron onaylarsa (`simdi`, LafPOS bir dakika kadar kapanır, tabletler bekler) hemen, onaysız istek gün sonundan sonra.
+  Otomatik güncelleme kapalıyken de çalışır (kapalıyken kendiliğinden denetim olmaz, yalnız düğmeyle). Merkez'in
+  hedefi ve sorun çıkmış sürümler geçerli kalır. İki dakikada alınmayan istek beklenmez (bekçi çalışmıyor), bekçi de
+  10 dakikadan eski isteği yok sayar. Kurulum bitince kart yeni derlemeyi görür ve "Yenile" önerir. Denetim kaydına
+  `guncelleme` düşer. Yalnız Windows kurulumunda (bekçi); git ile çalışan sunucuda düğme yok.
+- **Kapatma:** `ayarlar.env`'de `LAFPOS_GUNCELLEME=kapali` (düğme yine çalışır).
 - **Durum:** `C:\ProgramData\LafPOS\guncelleme\durum.json` (bekçi yazar, sunucu okur); Yönetim › Ayarlar ve yedek ›
-  "Sürüm ve güncelleme" kartı kurulu sürümü, durumu, son denetimi ve son güncellemeyi gösterir (salt okunur).
+  "Sürüm ve güncelleme" kartı kurulu sürümü, durumu, son denetimi ve son güncellemeyi gösterir; düğmesi "Şimdi güncelle".
   Kanala ulaşılamaması hata sayılmaz: kart son denetimin sonucunu yazar.
 - Testler: `tests/guncelleme.test.ts` (manifest, karar, durum, kurulum ve geri dönüş akışı),
   `tests/guncelleme-sunucu.test.ts` (sunucunun iki ucu ve kart). Kurulum derlemesinin denemesi

@@ -83,6 +83,12 @@ export interface PrivateSettings {
    * cihaz yanıt vermezse alarm düşer, yeniden deneme elle (docs/04-YAZARKASA.md §8.5)
    */
   okcPavoAutoEod: boolean;
+  /**
+   * Pavo cihazının adresi ve seri numarası, Yönetim › Yazarkasa POS'tan girilir (`PUT /api/okc/pavo`). null: ayarlar
+   * dosyasındaki PAVO_URL ve PAVO_SERIAL (eski kurulumlar). Gizli değer değildir: cihaz yerel ağda, kimliği eşleştirme
+   * ve sertifika izidir (docs/04-YAZARKASA.md §8.1)
+   */
+  pavoDevice: { url: string; serial: string } | null;
   /** Yönetim › Roller ve yetkiler'de düzenlenen rol yetki setleri; olmayan rol varsayılanını kullanır */
   rolePermissions: RoleMatrix;
   /** İlk Z numarası: geçişte ModPOS'un son Z'si + 1; zincir yalnız yukarı doğru etkilenir (`nextZNo`). null: 1'den */
@@ -121,6 +127,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
   okcPavoAutoEod: true,
+  pavoDevice: null,
   rolePermissions: {},
   zNoStart: null,
   // İlk LafPOS kasası Marina'da (sahibin kararı, 21 Kasım 2026; Tuzla ModPOS'ta kalır). Ayarlar › Şube'den değişir

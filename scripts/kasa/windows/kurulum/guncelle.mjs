@@ -200,13 +200,13 @@ export function staleDownloads(names, keepBuild) {
 // ─── Durum ───────────────────────────────────────────────────────────────────
 
 const iso = (ms) => new Date(ms).toISOString();
-const BASE = { durum: 'guncel', mesaj: '', kurulu: null, yeni: null, sonKontrol: null, sonBasariliKontrol: null, sonHata: null, sonKurulum: null, basarisiz: [], merkez: null };
+const BASE = { durum: 'guncel', mesaj: '', kurulu: null, yeni: null, sonKontrol: null, sonBasariliKontrol: null, sonHata: null, sonKurulum: null, sonIstek: null, basarisiz: [], merkez: null };
 const label = (x) => (x ? `${x.surum} (${x.build})` : '');
 
 /**
  * durum.json'un bir sonraki hâli (saf). Olaylar: acilis {kurulu, mode, now} · kontrol {plan, manifest, now} ·
  * kontrol-hata {mesaj, now} · indiriliyor {yeni} · hazir {yeni} · gun-acik · kuruluyor {yeni, now} ·
- * kuruldu {kurulu, now} · geri-dondu {yeni, neden, now} · hata {mesaj, now} · mod {mode}
+ * kuruldu {kurulu, now} · geri-dondu {yeni, neden, now} · hata {mesaj, now} · mod {mode} · istek {simdi, now}
  */
 export function nextStatus(prev, ev) {
   const p = { ...BASE, ...(prev && typeof prev === 'object' ? prev : {}) };
@@ -224,6 +224,9 @@ export function nextStatus(prev, ev) {
       if (p.durum === 'kapali' || p.durum === 'indiriliyor' || p.durum === 'kuruluyor' || !prev) return { ...base, durum: 'guncel', yeni: null, mesaj: 'Yeni sürüm birkaç dakika içinde denetlenecek' };
       return base;
     }
+    case 'istek':
+      // Yönetim › Ayarlar ve yedek › "Şimdi güncelle": güncelleyici isteği aldı, kanala bakıyor
+      return { ...p, sonIstek: iso(ev.now), mesaj: ev.simdi ? 'Yeni sürüm denetleniyor; varsa hemen kurulacak' : 'Yeni sürüm denetleniyor' };
     case 'mod':
       if (ev.mode === 'kapali') return { ...p, durum: 'kapali', mesaj: 'Otomatik güncelleme kapalı (ayarlar.env: LAFPOS_GUNCELLEME=kapali)' };
       return p.durum === 'kapali' ? { ...p, durum: 'guncel', mesaj: 'Otomatik güncelleme açıldı; yeni sürüm birkaç dakika içinde denetlenecek' } : p;
@@ -364,6 +367,12 @@ export function createUpdater(deps) {
   const etags = new Map();
   const cached = new Map();
   const handles = { check: null, install: null };
+  /**
+   * Elle istek ("Şimdi güncelle"): otomatik güncelleme kapalıyken de denetler ve kurar; `force` gün açıkken de kurar
+   * (patron onayladı). İstek kurulumla, kurulacak sürüm yoksa ya da kurulum hatayla bitince düşer
+   */
+  let manual = null;
+  const off = () => deps.mode() === 'kapali' && !manual;
 
   const say = (line) => deps.log(`[güncelleme] ${line}`);
   const installed = () => {
@@ -524,7 +533,7 @@ export function createUpdater(deps) {
 
   async function check() {
     if (busy) return;
-    if (deps.mode() === 'kapali') {
+    if (off()) {
       set({ type: 'mod', mode: 'kapali' });
       return;
     }
@@ -541,6 +550,7 @@ export function createUpdater(deps) {
       set({ type: 'kontrol', plan, manifest, now: now(), merkez, held });
       if (!plan) {
         ready = null;
+        manual = null;
         cleanDownloads(null);
       } else if (!ready || ready.plan.build !== plan.build) {
         const yeni = { surum: plan.version, build: plan.build };
@@ -552,24 +562,26 @@ export function createUpdater(deps) {
       }
     } catch (e) {
       const msg = errText(e);
+      manual = null;
       // Kanala ulaşılamaması hata değildir (internetsiz kasa çalışır): durum korunur, son denetimin sonucu yazılır
       if (status?.durum === 'indiriliyor') set({ type: 'hata', mesaj: `Yeni sürüm indirilemedi: ${msg}`, now: now() });
       else set({ type: 'kontrol-hata', mesaj: msg, now: now() });
     } finally {
       busy = false;
-      schedule('check', CHECK_EVERY_MS, check);
+      // Otomatik güncelleme kapalıyken elle denetim sonraki denetimi kurmaz
+      if (deps.mode() !== 'kapali') schedule('check', CHECK_EVERY_MS, check);
     }
     if (ready) await tryInstall();
   }
 
   async function tryInstall() {
     if (!ready || busy) return;
-    if (deps.mode() === 'kapali') return;
+    if (off()) return;
     if (platform !== 'win32') {
       set({ type: 'hata', mesaj: 'Otomatik kurulum yalnız Windows kurulumunda yapılır', now: now() });
       return;
     }
-    const decision = installDecision(await askDayOpen());
+    const decision = manual?.force ? 'kur' : installDecision(await askDayOpen());
     if (decision !== 'kur') {
       if (decision === 'gun-acik') set({ type: 'gun-acik' });
       schedule('install', DAY_POLL_MS, tryInstall);
@@ -681,11 +693,12 @@ export function createUpdater(deps) {
       rmDir(appNew);
       rmDir(nodeNew);
       ready = null;
+      manual = null;
       set({ type: 'hata', mesaj: `Yeni sürüm hazırlanamadı: ${errText(e)}`, now: now() });
       return;
     }
-    // Hazırlık sürerken gün açılmış olabilir
-    if ((await askDayOpen()) !== false) {
+    // Hazırlık sürerken gün açılmış olabilir (elle "şimdi kur" isteği gün açıkken de kurar)
+    if (!manual?.force && (await askDayOpen()) !== false) {
       rmDir(appNew);
       rmDir(nodeNew);
       set({ type: 'gun-acik' });
@@ -702,6 +715,7 @@ export function createUpdater(deps) {
       rmDir(appNew);
       rmDir(nodeNew);
       deps.server.start();
+      manual = null;
       set({ type: 'hata', mesaj: `Veritabanının kopyası alınamadı, güncelleme bırakıldı: ${errText(e)}`, now: now() });
       return;
     }
@@ -718,6 +732,7 @@ export function createUpdater(deps) {
       rmDir(appNew);
       rmDir(nodeNew);
       deps.server.start();
+      manual = null;
       set({ type: 'hata', mesaj: `Dosyalar değiştirilemedi, eski sürüm çalışıyor: ${errText(e)}`, now: now() });
       return;
     }
@@ -746,6 +761,7 @@ export function createUpdater(deps) {
     }
     rmDir(nodeNew);
     ready = null;
+    manual = null;
     set({ type: 'geri-dondu', yeni, neden: `Yeni sürüm ${Math.round(healthTimeout / 1000)} sn içinde açılmadı`, now: now() });
     deps.server.start();
   }
@@ -759,6 +775,21 @@ export function createUpdater(deps) {
       // Kurulumdan sonra kalan yarım klasörler (başarıda app.eski elle geri dönüş için bir sonraki güncellemeye kadar durur)
       rmDir(appNew);
       if (deps.mode() !== 'kapali') schedule('check', FIRST_CHECK_MS, check);
+    },
+    /**
+     * Elle istek (Yönetim › Ayarlar ve yedek › "Şimdi güncelle"; sunucu guncelleme\istek.json yazar, bekçi buraya iletir):
+     * hemen denetler, yeni sürüm varsa indirir ve kurar. Otomatik güncelleme kapalıyken de çalışır. `force`: gün açıkken
+     * de kurar; değilse gün kapanınca. Merkez'in hedefi ve sorun çıkmış (bir daha denenmeyecek) sürümler geçerli kalır
+     */
+    async requestNow({ force = false } = {}) {
+      manual = { force: !!force };
+      set({ type: 'istek', simdi: !!force, now: now() });
+      if (handles.check) timers.clearTimeout(handles.check);
+      handles.check = null;
+      if (busy) return;
+      // Sürüm zaten indirilmiş ve bekliyorsa kanala yeniden sormadan kurulur
+      if (ready) return tryInstall();
+      await check();
     },
     /** ayarlar.env değişti: kapatma hemen yazılır; açılınca bir dakika içinde denetlenir */
     poke() {

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { env, ROOT } from '../env';
 
@@ -38,6 +38,8 @@ export interface UpdateStatus {
   sonBasariliKontrol: string | null;
   sonHata: { mesaj: string; at: string } | null;
   sonKurulum: string | null;
+  /** Son "Şimdi güncelle" isteğini güncelleyicinin aldığı an */
+  sonIstek: string | null;
   guncellendi: string | null;
 }
 
@@ -62,8 +64,39 @@ export function readUpdateStatus(dataDir = env.dataDir): UpdateStatus | null {
     sonBasariliKontrol: str(raw.sonBasariliKontrol),
     sonHata: hata && typeof hata.mesaj === 'string' ? { mesaj: hata.mesaj.slice(0, 400), at: str(hata.at) ?? '' } : null,
     sonKurulum: str(raw.sonKurulum),
+    sonIstek: str(raw.sonIstek),
     guncellendi: str(raw.guncellendi),
   };
+}
+
+/** "Şimdi güncelle" isteği: bekçi (bekci.mjs) dosyayı 2 sn'de bir arar, alınca siler */
+export interface UpdateRequest {
+  at: number;
+  by: string;
+  /** Gün açıkken de hemen kur (patron onayladı); değilse gün kapanınca */
+  simdi: boolean;
+}
+
+const requestFile = (dataDir: string) => resolve(dataDir, 'guncelleme', 'istek.json');
+
+export function writeUpdateRequest(req: UpdateRequest, dataDir = env.dataDir) {
+  mkdirSync(resolve(dataDir, 'guncelleme'), { recursive: true });
+  const file = requestFile(dataDir);
+  writeFileSync(`${file}.tmp`, JSON.stringify(req));
+  renameSync(`${file}.tmp`, file);
+}
+
+/**
+ * Henüz alınmamış istek (bekçi 2 sn'de bir alıp siler); yoksa null. İki dakikada alınmayan istek beklenmez: bekçi
+ * çalışmıyor demektir, ekran düğmeyi yeniden açar (bekçi de 10 dakikadan eski isteği yok sayar)
+ */
+export function pendingUpdateRequest(dataDir = env.dataDir, now = Date.now()): UpdateRequest | null {
+  try {
+    const r = JSON.parse(readFileSync(requestFile(dataDir), 'utf8')) as Partial<UpdateRequest>;
+    return typeof r.at === 'number' && now - r.at < 120_000 ? { at: r.at, by: String(r.by ?? ''), simdi: r.simdi === true } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Bağlantının bu bilgisayardan mı geldiği (güncelleyicinin sorusu yalnız buradan yanıtlanır) */

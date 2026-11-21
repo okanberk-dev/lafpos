@@ -86,8 +86,9 @@ function pipe(stream) {
 }
 
 // Gerçek ortam değişkeni dosyadakini ezer (sunucunun .env kuralı); veri klasörü ve üretim modu sabit.
-// Her başlatmada dosya yeniden okunur: ayar değişikliği yeniden başlatmayla geçerli olur
-const envFor = () => ({ ...readEnvFile(ENV_FILE), ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: HOME, LAFPOS_STDIN_CONTROL: '1' });
+// Her başlatmada dosya yeniden okunur: ayar değişikliği yeniden başlatmayla geçerli olur. Sunucu dosyanın yerini
+// LAFPOS_AYAR_DOSYASI'ndan bilir: Yönetim › Bağlantı bilgileri oraya yazar, bekçi değişikliği görüp yeniden başlatır
+const envFor = () => ({ ...readEnvFile(ENV_FILE), ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: HOME, LAFPOS_STDIN_CONTROL: '1', LAFPOS_AYAR_DOSYASI: ENV_FILE });
 
 let child = null;
 let stopping = false;
@@ -222,6 +223,29 @@ watchFile(ENV_FILE, { interval: WATCH_MS }, (cur, prev) => {
   stopChild();
 });
 
+/**
+ * "Şimdi güncelle" (Yönetim › Ayarlar ve yedek): sunucu guncelleme\istek.json yazar, bekçi 2 sn'de bir bakar, dosyayı
+ * siler ve isteği güncelleyiciye iletir. 10 dakikadan eski istek (bekçi kapalıyken yazılmış) yok sayılır
+ */
+const REQUEST_FILE = join(HOME, 'guncelleme', 'istek.json');
+function takeRequest() {
+  if (!updater || stopping || !existsSync(REQUEST_FILE)) return;
+  let req = null;
+  try {
+    req = JSON.parse(readFileSync(REQUEST_FILE, 'utf8'));
+  } catch {
+    req = null;
+  }
+  rmSync(REQUEST_FILE, { force: true });
+  const fresh = req && typeof req.at === 'number' && Date.now() - req.at < 10 * 60_000;
+  if (!fresh) return;
+  log(`[bekçi] elle güncelleme isteği${req.simdi === true ? ' (şimdi kur)' : ''}`);
+  updater.requestNow({ force: req.simdi === true }).catch((e) => log(`[güncelleme] istek işlenemedi: ${e instanceof Error ? e.message : e}`));
+}
+watchFile(REQUEST_FILE, { interval: 2000 }, (cur) => {
+  if (cur.mtimeMs) takeRequest();
+});
+
 log(`[bekçi] LafPOS başlıyor (Node ${process.versions.node}, veri: ${HOME})`);
 start();
 try {
@@ -229,3 +253,5 @@ try {
 } catch (e) {
   log(`[güncelleme] başlatılamadı: ${e instanceof Error ? e.message : e}`);
 }
+// Bekçi kapalıyken yazılmış taze istek (ör. kullanıcı bastı, bilgisayar yeniden başladı) açılışta işlenir
+takeRequest();

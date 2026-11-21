@@ -130,7 +130,7 @@ function pollTarget(platform: PlatformId): { a: PlatformAdapter; intake: boolean
 function realAdapter(row: Pick<PlatformRow, 'platform' | 'payload'>): PlatformAdapter | null {
   if (row.payload.simulated) return null;
   const a = adapterFor(row.platform);
-  if (!a?.configured()) throw new HttpError(409, `${PLATFORM_LABEL[row.platform]} bağlantısı tanımlı değil (anahtarlar .env'de yok): bu siparişi platform uygulamasından yönetin`, 'platform_off');
+  if (!a?.configured()) throw new HttpError(409, `${PLATFORM_LABEL[row.platform]} bağlantısı tanımlı değil (anahtarlar Yönetim › Bağlantı bilgileri'nde yok): bu siparişi platform uygulamasından yönetin`, 'platform_off');
   return a;
 }
 

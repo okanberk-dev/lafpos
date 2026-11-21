@@ -47,7 +47,8 @@ export async function startServer({ jobs = false, env: extra = {} } = {}) {
   const port = await freePort();
   const child = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
     cwd: ROOT,
-    env: { ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: dataDir, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', ...(jobs ? {} : { LAFPOS_NO_JOBS: '1' }), ...extra },
+    // Ayarlar dosyası veri klasöründe (Windows kurulumundaki ayarlar.env gibi): Yönetim › Bağlantı bilgileri yazabilsin
+    env: { ...process.env, NODE_ENV: 'production', LAFPOS_DATA_DIR: dataDir, LAFPOS_PORT: String(port), LAFPOS_HOST: '127.0.0.1', LAFPOS_AYAR_DOSYASI: join(dataDir, 'ayarlar.env'), ...(jobs ? {} : { LAFPOS_NO_JOBS: '1' }), ...extra },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';

@@ -6,6 +6,7 @@ import { body, conflict } from '../lib/http';
 import { getSettings, updateSettings } from '../lib/settings';
 import {
   cancelDeviceBasket,
+  findPavoDevices,
   handleTokenxWebhook,
   okcStatus,
   pairDevice,
@@ -13,6 +14,7 @@ import {
   refreshReceipt,
   runDeviceEod,
   sendOrderToDevice,
+  setPavoDevice,
   simulatorBaskets,
   simulatorCancel,
   simulatorComplete,
@@ -80,6 +82,24 @@ okcRoutes.post('/test', async (c) => {
 okcRoutes.post('/pair', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   return c.json(await pairDevice(actorFrom(c)));
+});
+
+/**
+ * Pavo cihazının adresi ve seri numarası: yönetimden girilir (ayarlar dosyasına gerek yok). Değişince eşleştirme
+ * sıfırlanır; cihaz meşgulken ya da sonucu beklenen sepet varken 409
+ */
+okcRoutes.put('/pavo', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  const input = await body(c, z.object({ address: z.string().max(200), serial: z.string().max(60) }));
+  setPavoDevice(actorFrom(c), input);
+  return c.json(okcStatus(c.get('user')));
+});
+
+/** Yerel ağda Pavo arar: REST portu açık ve `/Ping`'e yanıt veren adresler (birkaç saniye sürer) */
+okcRoutes.post('/pavo/find', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  const input = await body(c, z.object({ serial: z.string().max(60).nullish() }));
+  return c.json(await findPavoDevices(input.serial));
 });
 
 /** Webhook adresini Token'a kaydeder (LAFPOS_PUBLIC_URL ve TOKENX_WEBHOOK_SECRET gerekir) */

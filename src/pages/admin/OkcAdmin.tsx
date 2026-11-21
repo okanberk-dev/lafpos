@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Landmark, Link2, PlugZap, Save, ShieldCheck, Webhook, XCircle } from 'lucide-react';
+import { CheckCircle2, Landmark, Link2, Pencil, PlugZap, Radar, Save, ShieldCheck, Webhook, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { tl } from '@shared/money';
@@ -49,7 +49,18 @@ interface OkcStatus {
   pavoAutoEod: boolean;
   active: { label: string; configured: boolean; capabilities: { instant: boolean; list: boolean; splitPayment: boolean; docKinds: string[] } } | null;
   tokenx: { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean };
-  pavo: { configured: boolean; url: string | null; serial: string | null; paired: boolean; certificate: string | null; busy: string | null; exchanges: PavoExchange[]; eod: PavoEod | null };
+  pavo: {
+    configured: boolean;
+    /** Bilgiler nereden: yönetimden girilen (`panel`) ya da eski kurulumun ayarlar dosyası (`dosya`) */
+    source: 'panel' | 'dosya' | null;
+    url: string | null;
+    serial: string | null;
+    paired: boolean;
+    certificate: string | null;
+    busy: string | null;
+    exchanges: PavoExchange[];
+    eod: PavoEod | null;
+  };
   lastError: { message: string; at: number } | null;
 }
 interface TestResult {
@@ -63,6 +74,13 @@ interface PavoTest {
   paired: boolean;
   pairingHint: string | null;
   mediators: { id: number | null; name: string | null }[];
+}
+/** Ağda arama: yanıt veren Pavo adresleri */
+interface PavoFind {
+  subnets: string[];
+  scanned: number;
+  candidates: { url: string; ok: boolean; message: string | null }[];
+  ms: number;
 }
 type Provider = OkcStatus['provider'];
 type Mode = OkcStatus['mode'];
@@ -110,20 +128,143 @@ const STEPS = [
   'Cihazda fiş iptal edilirse LafPOS ödemesi geri alınır, adisyon yeniden açılır ve patron paneline alarm düşer',
 ];
 
-/** Pavo kurulumu: Pavo seçiliyse kartının altında (bilgiler eksikse açık) */
+/** Yazılan adresin kısa hâli: varsayılan şema ve port gösterilmez (192.168.1.50) */
+const shortAddress = (url: string | null) => (url ?? '').replace(/^https:\/\//, '').replace(/:4567$/, '');
+
+/**
+ * Pavo cihazının adresi ve seri numarası (yönetimden; ayarlar dosyasına gerek yok). "Cihazı ağda ara" kasanın ağında
+ * Pavo'nun REST portunu açık tutan ve yanıt veren cihazları listeler, dokununca adres alana yazılır. Kaydedince adres ya
+ * da seri no değiştiyse eşleştirme sıfırlanır (sunucu); sıradaki adım "Eşleştir"
+ */
+function PavoDeviceForm({ s, onCancel }: { s: OkcStatus; onCancel?: () => void }) {
+  const qc = useQueryClient();
+  const [address, setAddress] = useState(() => shortAddress(s.pavo.url));
+  const [serial, setSerial] = useState(s.pavo.serial ?? '');
+  const [doing, setDoing] = useState<'save' | 'find' | null>(null);
+  const [found, setFound] = useState<(PavoFind & { serial: boolean }) | null>(null);
+  const [error, setError] = useState<{ field: 'address' | 'serial' | null; message: string } | null>(null);
+
+  const save = async () => {
+    if (doing) return;
+    if (!address.trim()) return setError({ field: 'address', message: 'Cihazın IP adresini yazın' });
+    if (!serial.trim()) return setError({ field: 'serial', message: 'Seri numarasını yazın' });
+    setDoing('save');
+    setError(null);
+    try {
+      const next = await put<OkcStatus>('/okc/pavo', { address, serial });
+      qc.setQueryData(['okc', 'status'], next);
+      toast.ok(next.pavo.paired ? 'Pavo cihazının bilgileri kaydedildi' : 'Pavo cihazı kaydedildi; şimdi Eşleştir’e basın');
+      onCancel?.();
+    } catch (e) {
+      const code = (e as { code?: string | null }).code;
+      setError({ field: code === 'pavo_address' ? 'address' : code === 'pavo_serial' ? 'serial' : null, message: errorMessage(e) });
+    } finally {
+      setDoing(null);
+      void qc.invalidateQueries({ queryKey: ['okc', 'status'] });
+    }
+  };
+  const find = async () => {
+    if (doing) return;
+    setDoing('find');
+    setFound(null);
+    try {
+      // Seri no yazıldıysa cihaz onu denetler: hangi cihazın bu olduğu listede görünür
+      const r = await post<PavoFind>('/okc/pavo/find', { serial: serial.trim() || null });
+      setFound({ ...r, serial: !!serial.trim() });
+      // Tek cihaz bulunduysa adresi kendiliğinden yazar; birden çoksa kasiyer seçer
+      const match = r.candidates.filter((c) => c.ok);
+      const pick = r.candidates.length === 1 ? r.candidates[0] : match.length === 1 ? match[0] : null;
+      if (pick) setAddress(shortAddress(pick.url));
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setDoing(null);
+    }
+  };
+
+  return (
+    <form
+      className="max-w-2xl space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void save();
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Cihazın IP adresi" hint="Port yazılmazsa 4567" error={error?.field === 'address' ? error.message : null}>
+          <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.50" inputMode="url" autoCapitalize="none" spellCheck={false} className="tabular" />
+        </Field>
+        <Field label="Seri numarası" hint="Cihazda Terminal Ayarları › Seri Numarası (PAV ile başlar; Terminal ID değil)" error={error?.field === 'serial' ? error.message : null}>
+          <Input value={serial} onChange={(e) => setSerial(e.target.value.toUpperCase())} placeholder="PAV860…" autoCapitalize="characters" spellCheck={false} className="tabular" />
+        </Field>
+      </div>
+      {error && !error.field && (
+        <Notice tone="danger" className="text-[13px] [overflow-wrap:anywhere]">
+          {error.message}
+        </Notice>
+      )}
+      {found && (
+        <div className="space-y-2 rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-4 ring-1 ring-inset ring-[var(--admin-border)]">
+          {found.candidates.length ? (
+            <>
+              <p className="text-xs font-medium text-[var(--admin-text-mute)]">Ağda bulunan Pavo cihazları</p>
+              <ul className="divide-y divide-[var(--admin-divider)]">
+                {found.candidates.map((c) => (
+                  <li key={c.url} className="flex flex-wrap items-center gap-2.5 py-1.5">
+                    <span className="min-w-0 flex-1 text-sm">
+                      <span className="tabular block font-medium text-[var(--admin-text)] [overflow-wrap:anywhere]">{shortAddress(c.url)}</span>
+                      {/* Seri no yazılıysa cihaz onu denetledi: tutuyorsa onay, tutmuyorsa cihazın sözü */}
+                      {found.serial && (
+                        <span className={cn('block text-xs', c.ok ? 'text-[var(--admin-success)]' : 'text-[var(--admin-text-mute)]')}>
+                          {c.ok ? 'Seri no tutuyor' : `Cihaz: ${c.message ?? 'seri no tutmuyor'}`}
+                        </span>
+                      )}
+                    </span>
+                    <Button size="sm" variant="soft" onClick={() => setAddress(shortAddress(c.url))} disabled={shortAddress(c.url) === address.trim()}>
+                      {shortAddress(c.url) === address.trim() ? 'Seçildi' : 'Bunu kullan'}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-sm text-[var(--admin-text-soft)]">
+              {found.scanned
+                ? `Ağda Pavo bulunamadı (${found.subnets.join(', ')} tarandı). Cihaz açık ve kasayla aynı ağda mı, cihazda REST açık mı bakın; adresi cihazın Network Ayarları’ndan da okuyabilirsiniz`
+                : 'Bu bilgisayarın yerel ağ adresi bulunamadı; cihazın adresini Network Ayarları’ndan okuyup yazın'}
+            </p>
+          )}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2 max-sm:[&>*]:grow">
+        <Button type="submit" variant="primary" icon={<Save className="size-4" />} loading={doing === 'save'} disabled={!!doing && doing !== 'save'}>
+          Kaydet
+        </Button>
+        <Button icon={<Radar className="size-4" />} loading={doing === 'find'} disabled={!!doing && doing !== 'find'} onClick={() => void find()}>
+          Cihazı ağda ara
+        </Button>
+        {onCancel && (
+          <Button variant="ghost" disabled={!!doing} onClick={onCancel}>
+            Vazgeç
+          </Button>
+        )}
+      </div>
+      {doing === 'find' && <p className="text-xs text-muted">Ağ taranıyor; birkaç saniye sürer</p>}
+    </form>
+  );
+}
+
+/** Pavo kurulumu: cihazın kendi ayarları (Pavo seçiliyse kartının altında; bilgiler eksikse açık) */
 function PavoSetup({ open }: { open?: boolean }) {
   return (
     <SetupNotes open={open}>
       <p>
-        Cihaz ve kasa bilgisayarı aynı ağda olmalı (Wi-Fi ya da kablo). Cihazda Ayarlar › Çevresel Donanımlar › Network Ayarları’nda REST açık olmalı; cihazın IP adresi
-        modemden sabitlenirse adres değişmez. Bilgiler kasa bilgisayarının ayarlarına (<code className={CODE}>.env</code>) yazılır, LafPOS yeniden başlar:
+        Cihaz ve kasa bilgisayarı aynı ağda olmalı (Wi-Fi ya da kablo). Cihazda Ayarlar › Çevresel Donanımlar › Network Ayarları’nda REST açık olmalı ve REST ağı Wi-Fi ya da
+        Ethernet seçili olmalı (mobil veride çalışmaz). Cihazın IP adresini modemden sabitlerseniz adres değişmez.
       </p>
-      <pre className="overflow-x-auto rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-3 font-mono text-xs leading-5 text-[var(--admin-text)] ring-1 ring-inset ring-[var(--admin-border)]">{`PAVO_URL=https://192.168.1.50:4567   (cihazın IP adresi ve REST portu)
-PAVO_SERIAL=                          (cihazın seri numarası)
-PAVO_FINGERPRINT=LafPOS               (isteğe bağlı; eşleştirmede cihaza kaydedilir)`}</pre>
       <p>
-        Sonra “Eşleştir”e basıp cihazdaki onay ekranını onaylayın, “Bağlantıyı dene” ile doğrulayın. İlk satışı küçük bir tutarla deneyin: cihaz gerçek e-Arşiv belgesi keser. Pavo
-        günde bir eşleştirmeyi önerir. Ayrıntı: <code className={CODE}>docs/04-YAZARKASA.md</code>
+        Adresi ve seri numarasını yukarıya yazın (ya da “Cihazı ağda ara”), “Eşleştir”e basıp cihazdaki onay ekranını onaylayın, “Bağlantıyı dene” ile doğrulayın. İlk satışı küçük
+        bir tutarla deneyin: cihaz gerçek e-Arşiv belgesi keser. Pavo günde bir eşleştirmeyi önerir. Ayrıntı: <code className={CODE}>docs/04-YAZARKASA.md</code>
       </p>
     </SetupNotes>
   );
@@ -134,17 +275,12 @@ function TokenSetup({ open }: { open?: boolean }) {
   return (
     <SetupNotes open={open}>
       <p>
-        TokenX Connect bilgileri kasa bilgisayarının ayarlarına (<code className={CODE}>.env</code>) yazılır, sonra “Bağlantıyı dene”:
+        TokenX Connect bilgileri (kimlik ve sepet adresi, uygulama kimliği ve anahtarı, terminal, masada ödeme için şube, webhook anahtarı) Token’dan alınır ve{' '}
+        <Link to="/yonetim/baglanti-bilgileri" className="font-semibold text-[var(--admin-primary)] underline underline-offset-2">
+          Yönetim › Bağlantı bilgileri
+        </Link>
+        ’ne yazılır; LafPOS birkaç saniyede yeni bilgilerle açılır, sonra “Bağlantıyı dene”.
       </p>
-      <pre className="overflow-x-auto rounded-[var(--r-tile)] bg-[var(--admin-surface-2)] p-3 font-mono text-xs leading-5 text-[var(--admin-text)] ring-1 ring-inset ring-[var(--admin-border)]">{`TOKENX_AUTH_URL=     (Token’ın verdiği kimlik adresi)
-TOKENX_BASKET_URL=   (sepet API adresi)
-TOKENX_SETTINGS_URL= (client-settings adresi)
-TOKENX_CLIENT_ID=
-TOKENX_CLIENT_SECRET=
-TOKENX_TERMINAL_ID=  (cihazdaki QR’da, AV/AT ile başlar)
-TOKENX_BRANCH_ID=    (masada ödeme modu için)
-TOKENX_WEBHOOK_SECRET= (en az 16 karakter)
-LAFPOS_PUBLIC_URL=   (webhook için; yoksa durum sorgulanır)`}</pre>
       <p>
         Ayrıntı ve diğer markalar için üreticiden istenecekler: <code className={CODE}>docs/04-YAZARKASA.md</code>
       </p>
@@ -313,6 +449,8 @@ export default function OkcAdmin() {
   // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
   const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | null>(null);
   const [checking, setChecking] = useState<'test' | 'webhook' | 'pair' | null>(null);
+  // Pavo'nun adresi ve seri no'su kayıtlıyken form kapalı durur; "Adresi değiştir" açar
+  const [editDevice, setEditDevice] = useState(false);
 
   useEffect(() => {
     if (status.data && !mapDirty) setMap(Object.fromEntries(Object.entries(status.data.sectionMap).map(([k, v]) => [k, String(v)])));
@@ -511,19 +649,24 @@ export default function OkcAdmin() {
             }
             bodyClassName="space-y-4 text-sm"
           >
-            {!s.pavo.configured ? (
-              <p className="flex items-center gap-2">
-                <XCircle aria-hidden="true" className="size-5 shrink-0 text-[var(--admin-danger-ink)]" />
-                Cihazın adresi ya da seri numarası eksik; kurulum adımları aşağıda
-              </p>
+            {!s.pavo.configured || editDevice ? (
+              <>
+                {!s.pavo.configured && <p className="text-muted">Cihazın IP adresini ve seri numarasını yazın ya da cihazı ağda arayın; sonra Eşleştir</p>}
+                <PavoDeviceForm s={s} onCancel={s.pavo.configured ? () => setEditDevice(false) : undefined} />
+              </>
             ) : (
               <div className="max-w-2xl">
                 <DefRow label="Cihaz adresi">
-                  <span className="break-all">{s.pavo.url}</span>
+                  <span className="tabular break-all">{shortAddress(s.pavo.url)}</span>
                 </DefRow>
                 <DefRow label="Seri no">
                   <span className="tabular break-all">{s.pavo.serial}</span>
                 </DefRow>
+                {s.pavo.source === 'dosya' && (
+                  <DefRow label="Kaynak">
+                    <span className="font-normal text-[var(--admin-text-mute)]">Ayarlar dosyası (değiştirince buradaki geçerli olur)</span>
+                  </DefRow>
+                )}
                 {s.pavo.certificate && (
                   <DefRow label="Sertifika izi">
                     <span className="tabular break-all text-xs">{s.pavo.certificate.slice(0, 23)}…</span>
@@ -570,12 +713,23 @@ export default function OkcAdmin() {
               </div>
             )}
             <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-4 max-sm:[&>*]:grow">
-              <Button icon={<Link2 className="size-4" />} loading={checking === 'pair'} disabled={!s.pavo.configured || !!checking} onClick={() => void runPavo('pair')}>
+              <Button
+                variant={s.pavo.configured && !s.pavo.paired ? 'primary' : 'secondary'}
+                icon={<Link2 className="size-4" />}
+                loading={checking === 'pair'}
+                disabled={!s.pavo.configured || !!checking}
+                onClick={() => void runPavo('pair')}
+              >
                 Eşleştir
               </Button>
               <Button icon={<PlugZap className="size-4" />} loading={checking === 'test'} disabled={!s.pavo.configured || !!checking} onClick={() => void runPavo('test')}>
                 Bağlantıyı dene
               </Button>
+              {s.pavo.configured && !editDevice && (
+                <Button variant="ghost" icon={<Pencil className="size-4" />} disabled={!!checking || !!s.pavo.busy} onClick={() => setEditDevice(true)}>
+                  Adresi değiştir
+                </Button>
+              )}
             </div>
             {checking === 'pair' && <p className="text-xs text-muted">Cihazdaki onay ekranını onaylayın (en çok 2 dakika beklenir)</p>}
           </Card>
@@ -756,7 +910,7 @@ export default function OkcAdmin() {
       {s.provider !== 'tokenx' && <TokenSetup />}
       {s.provider !== 'pavo' && (
         <SetupNotes summary="Pavo kurulumu">
-          <p>Pavo (N86 ve diğer PavoPay cihazları) kafenin ağında bağlanır: cihazın IP adresi ve seri numarası kasa bilgisayarının ayarlarına yazılır, yukarıdan Pavo seçilip cihaz eşleştirilir. Ayrıntı: <code className={CODE}>docs/04-YAZARKASA.md</code></p>
+          <p>Pavo (N86 ve diğer PavoPay cihazları) kafenin ağında bağlanır: yukarıdan Pavo seçilir, cihazın IP adresi ve seri numarası yazılır (ya da cihaz ağda aranır), cihaz eşleştirilir. Ayrıntı: <code className={CODE}>docs/04-YAZARKASA.md</code></p>
         </SetupNotes>
       )}
 
