@@ -70,6 +70,7 @@ const ACTION_LABEL: Record<string, string> = {
   'day.reopen': 'Günü yeniden açma',
   'delivery.done': 'Teslim',
   'delivery.undo': 'Teslimi geri alma',
+  'deneme.bitir': 'Gerçek kullanıma başlama',
   'floor.layout': 'Masa planı',
   'item.comp': 'İkram',
   'item.discount': 'Kalem indirimi',

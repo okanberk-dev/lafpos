@@ -114,7 +114,7 @@ async function startServer() {
     openDatabase();
     runMigrations();
   }
-  const fresh = seedIfEmpty();
+  const fresh = seedIfEmpty({ demo: true });
   upgradeRoleSets();
   upgradeStoredSettings();
   (await import('../server/sync/option-profile')).upgradeOptionProfiles();

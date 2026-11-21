@@ -8,7 +8,11 @@ import { updateSettings } from '../lib/settings';
 import { applyMenu, type SiteMenu } from '../sync/laffogato-menu';
 import { db, runMigrations, schema, tx } from './client';
 
-/** Kurulum modunda giriş ekranında görünen örnek PIN'ler. Canlıya geçmeden Yönetim › Personel'den değiştirin. */
+/**
+ * Deneme modunda giriş ekranında görünen örnek personel ve PIN'leri: kafede her rolü denemek için. "Denemeyi bitir,
+ * gerçek kullanıma başla" (services/deneme.ts) patronun PIN'ini değiştirtir, örnek PIN'iyle kalan öbür hesapları
+ * kapatır; gerçek kullanımda bu PIN'ler bir daha verilmez.
+ */
 export const DEMO_USERS = [
   { name: 'Patron', role: 'patron', pin: '1897', color: '#1e4031' },
   { name: 'Müdür', role: 'mudur', pin: '2468', color: '#6b1a2b' },
@@ -17,7 +21,18 @@ export const DEMO_USERS = [
   { name: 'Bar ekranı', role: 'mutfak', pin: '3333', color: '#5e8f45' },
 ] as const;
 
-export function seedIfEmpty(): boolean {
+/**
+ * Boş veritabanına kurulum verisini yükler. Kafe kurulumunda (`LafPOS-Kurulum.exe`, `npm start`) yalnız işletmenin
+ * başlamak için gerektirdiği kurulum gelir: rol hesapları (örnek PIN'li), istasyonlar, yazıcı, köşkün masa planı ve
+ * karaoke odası, ödeme türleri, sitenin menüsü (anlık görüntü; site bağlantısı kurulunca güncellenir) ve kasaya özgü
+ * ürünler (karaoke saati, yenilebilir bardak, şeker ve bardak seçimi). Adisyon, ödeme, gün, müşteri, rezervasyon gibi
+ * hiçbir hareket yazılmaz (tests/deneme-modu.test.ts). Kurulum deneme modunda açılır (`demoMode`, eğitim yazarkasası).
+ *
+ * `demo: true` (tarayıcı demosu, `LAFPOS_DEMO_SEED=1`): ayrıca örnek kampanya (kapalı "Öğle kahvesi" happy hour'u).
+ * Demonun ilk gününün satışları ayrıca demo/scenario.ts'ten gerçek uçlarla girilir.
+ */
+export function seedIfEmpty(opts: { demo?: boolean } = {}): boolean {
+  const demo = opts.demo ?? (typeof process !== 'undefined' && process.env?.LAFPOS_DEMO_SEED === '1');
   const row = db.select({ n: sql<number>`count(*)` }).from(schema.users).get();
   if ((row?.n ?? 0) > 0) return false;
 
@@ -140,12 +155,16 @@ export function seedIfEmpty(): boolean {
       }
     }
 
-    t.insert(schema.happyHours)
-      .values({ id: ulid(), name: 'Öğle kahvesi', days: [1, 2, 3, 4, 5], start: '12:00', end: '14:00', percent: 10, categoryIds: [], productIds: [], active: false })
-      .run();
+    // Örnek kampanya yalnız demoda: kafede kampanyayı işletme kendisi kurar (Yönetim › Menü › Happy hour)
+    if (demo) {
+      t.insert(schema.happyHours)
+        .values({ id: ulid(), name: 'Öğle kahvesi', days: [1, 2, 3, 4, 5], start: '12:00', end: '14:00', percent: 10, categoryIds: [], productIds: [], active: false })
+        .run();
+    }
   });
   // İşletme self servis (kullanıcı kararı, 27 Ekim 2026): yeni kurulum satış ekranında açılır; masaya servis ve yarı
-  // self Yönetim › Ayarlar › Servis modu'ndan. Var olan kurulumun ayarına dokunulmaz
+  // self Yönetim › Ayarlar › Servis modu'ndan. Var olan kurulumun ayarına dokunulmaz. Deneme modu: örnek PIN'ler ve
+  // eğitim yazarkasası; patron "Denemeyi bitir, gerçek kullanıma başla" ile kapatır
   updateSettings({ demoMode: true, okcProvider: 'simulator', serviceMode: 'self' });
   return true;
 }

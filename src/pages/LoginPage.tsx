@@ -137,8 +137,8 @@ export function LoginPage() {
             {/* Ortak tuş takımı; fiziksel klavye de girer (rakam, Backspace, Delete, Enter) */}
             <Numpad size="lg" keyboard onKey={press} confirm={{ label: 'Giriş', disabled: pin.length < 4 || busy, onPress: () => press('ok') }} />
             {info.data?.demoPins && (
-              // Kurulum modu: örnek PIN'e dokunmak o kişiyle oturum açar
-              <Notice tone="warn" className="mt-4" title="Kurulum modu: örnek PIN’ler">
+              // Deneme modu: örnek PIN'e dokunmak o kişiyle oturum açar
+              <Notice tone="warn" className="mt-4" title="Deneme modu: örnek PIN’ler">
                 {/* Gövde ikonun altından başlar (kitin ikon payı 16 + 12 px): telefonda örnek PIN'ler iki satıra sığar */}
                 <div className="-ml-7">
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -158,7 +158,7 @@ export function LoginPage() {
                       </button>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs">Canlıya geçmeden önce Yönetim › Personel’den PIN’leri değiştirip kurulum modunu kapatın</p>
+                  <p className="mt-2 text-xs">Deneme bitince patron Yönetim › Ayarlar ve yedek › “Denemeyi bitir, gerçek kullanıma başla” der; örnek PIN’ler kapanır</p>
                 </div>
               </Notice>
             )}

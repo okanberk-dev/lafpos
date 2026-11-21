@@ -9,7 +9,7 @@ import { upgradeOptionProfiles } from './sync/option-profile';
 import { startJobs, stopJobs } from './jobs';
 
 runMigrations();
-if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi');
+if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi; LafPOS deneme modunda (satışlar gerçek sayılmaz)');
 upgradeRoleSets();
 upgradeStoredSettings();
 upgradeOptionProfiles();

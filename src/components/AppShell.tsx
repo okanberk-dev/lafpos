@@ -361,6 +361,15 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       {!REMOTE && <PlatformInbox />}
       {/* Diğer sistemlerin uyarıları: online sipariş zili ve karaoke (laffogato, lafmobil); ilk dokunuş sesi açar */}
       {!REMOTE && <SiteInbox />}
+      {/*
+       * Deneme modu (yeni kurulum; patron Yönetim › Ayarlar ve yedek'ten bitirir): her ekranda sakin, ince bir şerit.
+       * Tarayıcı demosunda yok (demo şeridi zaten var)
+       */}
+      {!DEMO && boot.integrations.deneme && (
+        <p role="note" className="shrink-0 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border">
+          Deneme modu: yapılan satışlar gerçek sayılmaz
+        </p>
+      )}
       {notice && <div className="shrink-0">{notice}</div>}
       <div className="flex min-h-0 flex-1 md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)]">
         {/* Tablet ve bilgisayar: marka rayı (panonun menüsü). Ekranlar ikon ve kısa adla; dipte Araçlar ve Kilitle */}

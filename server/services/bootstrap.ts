@@ -3,7 +3,7 @@ import type { BootstrapDTO, MeDTO, OptionGroupDTO, ProductDTO } from '@shared/ty
 import { type DB, schema, type Tx } from '../db/client';
 import { type AuthUser, can } from '../lib/auth';
 import { env } from '../env';
-import { getPublicSettings, getSettings } from '../lib/settings';
+import { getPublicSettings, getSettings, trainingMode } from '../lib/settings';
 import { siteKaraokeOn } from '../sync/laffogato-karaoke';
 import { localStampsOn, siteSigned } from '../sync/laffogato-link';
 import { dayToDTO } from './days';
@@ -147,6 +147,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
       laffogatoUrl: env.laffogatoUrl,
       localStamps: localStampsOn(),
       siteKaraoke: siteKaraokeOn(),
+      deneme: trainingMode(),
     },
     serverTime: Date.now(),
   };
