@@ -16,8 +16,10 @@ Son güncelleme: 21 Kasım 2026.
 
 ## 1. Kurulum dosyası, otomatik güncelleme, internet dönüşü
 
-**Durum:** yapılıyor (yerel dal `wip/exe-guncelleme`, henüz push edilmedi). Dal kaybolursa aşağıdaki tarife göre
-baştan yapılır.
+**Durum:** yarım. Başlangıcı GitHub'da `claude/exe-guncelleme-wip` dalında (doğrulanmadı):
+`scripts/kasa/windows/kurulum/guncelle.mjs` (güncelleyici yardımcıları, 587 satır) ve `arsiv.mjs` (zip açma).
+Bu dal main'den (#54) sonraki duruma göre `main`'le birleştirilip aşağıdaki tarife göre tamamlanır; henüz
+bekçiye, derle.mjs'e, CI'a, vercel.json'a ve README'ye bağlanmadı, testi yok.
 
 Sahibin isteği: "Uygulama Windows'a exe olarak kurulsun; README'de basitçe anlat; GitHub'a her yüklemede kasa
 kendiliğinden güncellensin; ben anahtar (token) oluşturmayayım; internet yokken de çalışsın; internet gelince o
