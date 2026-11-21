@@ -462,12 +462,22 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
                 </div>
               </>
             )}
-            <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} title="Araçlar: tema, tam ekran, kilit" className="lp-rail-item">
-              <span aria-hidden="true" className="lp-rail-icon">
-                <SlidersHorizontal />
-              </span>
-              <span className="lp-rail-label">Araçlar</span>
-            </button>
+            {/* Üst çubuk yokken kimin oturumda olduğu burada: kişinin avatarı ve adı (menüsünü açar); varken Araçlar */}
+            {hasTabs ? (
+              <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} title="Araçlar: tema, tam ekran, kilit" className="lp-rail-item">
+                <span aria-hidden="true" className="lp-rail-icon">
+                  <SlidersHorizontal />
+                </span>
+                <span className="lp-rail-label">Araçlar</span>
+              </button>
+            ) : (
+              <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={toolsOpen} aria-label={`${me.name} menüsü · Araçlar`} title={`${me.name} · ${roleLabel} · Araçlar`} className="lp-rail-item">
+                <span className="lp-rail-icon">{avatar('xs')}</span>
+                <span aria-hidden="true" className="lp-rail-label max-w-full truncate">
+                  {me.name.split(' ')[0]}
+                </span>
+              </button>
+            )}
             {!REMOTE && (
               <button type="button" onClick={lock} title={DEMO ? 'Oturum kapanır; başka bir rolle devam edilir' : 'Oturum kapanır; sıradaki kişi PIN’iyle girer'} className="lp-rail-item">
                 <span aria-hidden="true" className="lp-rail-icon">
