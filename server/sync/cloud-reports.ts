@@ -145,8 +145,8 @@ export function resetReportSync() {
   setSyncState(STATE_KEY, emptyState());
 }
 
-async function pushDays(today: string, days: RemoteDayReport[]): Promise<void> {
-  const body: RemoteReportPush = { v: 1, shop: REMOTE_SHOP, today, at: Date.now(), days };
+async function pushDays(today: string, days: RemoteDayReport[], at: number): Promise<void> {
+  const body: RemoteReportPush = { v: 1, shop: REMOTE_SHOP, today, at, days };
   const gz = (await gzipAsync(JSON.stringify(body))).toString('base64');
   const { status } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/rapor`), { gz }, 20_000);
   if (status !== 200) throw new Error(`HTTP ${status}`);
@@ -201,7 +201,7 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
       const chunk = changed.slice(i, i + BACKFILL_BATCH);
       if (!failed.size) {
         try {
-          await pushDays(today, chunk.map((c) => c.report));
+          await pushDays(today, chunk.map((c) => c.report), now);
           for (const c of chunk) st.sent[c.date] = c.hash;
           sent += chunk.length;
           state = { lastSuccessAt: Date.now(), lastError: null, sentDays: (state.sentDays ?? 0) + chunk.length };
