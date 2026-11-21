@@ -544,7 +544,9 @@ export function createUpdater(deps) {
       // Sunucuya yalnız kanalda daha yeni ve denenmemiş derleme varsa sorulur (Merkez'in hedefi o zaman gerekir)
       const failed = status?.basarisiz ?? [];
       const newer = manifest.build > (inst.build ?? 0) && !failed.includes(manifest.build);
-      const { cap, merkez } = newer ? merkezCap({ server: await askServer(), last: status?.merkez, installedBuild: inst.build }) : { cap: Infinity, merkez: status?.merkez ?? null };
+      // Elle istek (kafede patron "Şimdi güncelle"ye bastı) Merkez'in tutmasını aşar: kanalın son sürümü kurulur
+      const { cap, merkez } =
+        newer && !manual ? merkezCap({ server: await askServer(), last: status?.merkez, installedBuild: inst.build }) : { cap: Infinity, merkez: status?.merkez ?? null };
       const plan = planUpdate({ installed: inst, nodeVersion, manifest, failed: status?.basarisiz ?? [], cap });
       const held = !plan && manifest.build > (inst.build ?? 0) && manifest.build > cap && !(status?.basarisiz ?? []).includes(manifest.build);
       set({ type: 'kontrol', plan, manifest, now: now(), merkez, held });
@@ -779,7 +781,8 @@ export function createUpdater(deps) {
     /**
      * Elle istek (Yönetim › Ayarlar ve yedek › "Şimdi güncelle"; sunucu guncelleme\istek.json yazar, bekçi buraya iletir):
      * hemen denetler, yeni sürüm varsa indirir ve kurar. Otomatik güncelleme kapalıyken de çalışır. `force`: gün açıkken
-     * de kurar; değilse gün kapanınca. Merkez'in hedefi ve sorun çıkmış (bir daha denenmeyecek) sürümler geçerli kalır
+     * de kurar; değilse gün kapanınca. Kafedeki elle istek Merkez'in tutmasını aşar (kanalın son sürümü); sorun çıkmış (bir
+     * daha denenmeyecek) sürümler geçerli kalır
      */
     async requestNow({ force = false } = {}) {
       manual = { force: !!force };

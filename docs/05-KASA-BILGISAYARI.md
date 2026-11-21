@@ -333,8 +333,9 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
   sunucu `guncelleme\istek.json` yazar, bekçi 2 sn'de bir bakar, dosyayı siler ve güncelleyiciye iletir
   (`requestNow`): kanala hemen sorar, yeni sürüm varsa indirir ve kurar. Gün kapalıysa hemen kurulur; gün açıkken
   patron onaylarsa (`simdi`, LafPOS bir dakika kadar kapanır, tabletler bekler) hemen, onaysız istek gün sonundan sonra.
-  Otomatik güncelleme kapalıyken de çalışır (kapalıyken kendiliğinden denetim olmaz, yalnız düğmeyle). Merkez'in
-  hedefi ve sorun çıkmış sürümler geçerli kalır. İki dakikada alınmayan istek beklenmez (bekçi çalışmıyor), bekçi de
+  Otomatik güncelleme kapalıyken de çalışır (kapalıyken kendiliğinden denetim olmaz, yalnız düğmeyle). Kafede basılan
+  düğme Merkez'in tutmasını aşar (kanalın son sürümü; Merkez'de dükkân "elle"deyken otomatik denetim kurmaz, düğme kurar);
+  sorun çıkmış sürüm bir daha denenmez. İki dakikada alınmayan istek beklenmez (bekçi çalışmıyor), bekçi de
   10 dakikadan eski isteği yok sayar. Kurulum bitince kart yeni derlemeyi görür ve "Yenile" önerir. Denetim kaydına
   `guncelleme` düşer. Yalnız Windows kurulumunda (bekçi); git ile çalışan sunucuda düğme yok.
 - **Kapatma:** `ayarlar.env`'de `LAFPOS_GUNCELLEME=kapali` (düğme yine çalışır).

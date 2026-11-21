@@ -435,12 +435,25 @@ describe('güncelleme: kurulum akışı', () => {
     expect(t.status()).toMatchObject({ durum: 'guncel', mesaj: 'Güncellendi', kurulu: { build: BUILD_NEW } });
   });
 
-  it('kurulacak sürüm yoksa elle istek "Güncel" der; sonraki otomatik denetim kapalı kalır', async () => {
-    const t = await setup({ mode: 'kapali', merkez: { enabled: true, hedef: null } });
+  it('Merkez bu dükkâna göndermediyse otomatik denetim kurmaz; kafede "Şimdi güncelle" Merkez’i aşıp kurar', async () => {
+    const t = await setup({ merkez: { enabled: true, hedef: null } });
     t.updater.start();
-    await t.updater.requestNow({ force: true });
+    await t.updater.check();
     expect(t.events).toEqual([]);
     expect(t.status().mesaj).toContain("Merkez'den gönderilince");
+    await t.updater.requestNow();
+    expect(t.events).toEqual(['durdur', 'deneme']);
+    expect(t.exits).toEqual([75]);
+  });
+
+  it('kurulacak sürüm yoksa elle istek "Güncel" der; otomatik kapalıyken sonraki denetim yapılmaz', async () => {
+    const t = await setup({ mode: 'kapali', healthy: false });
+    t.updater.start();
+    await t.updater.requestNow({ force: true });
+    // Yeni sürüm açılmadı: eski sürüme dönüldü, o derleme bir daha denenmez
+    expect(t.status().durum).toBe('geri-dondu');
+    await t.updater.requestNow();
+    expect(t.status().mesaj).toContain('bir daha denenmeyecek');
     const before = t.requests.length;
     await t.updater.check();
     expect(t.requests.length).toBe(before);
