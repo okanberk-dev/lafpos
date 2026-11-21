@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { setSetupHidden, setupSteps } from '../services/kurulum';
 import { cloudBackupState, listCloudBackups, restartForRestore, stageRestore, underBekci, uploadBackup } from '../sync/yedek';
 import { cloudEnabled } from '../sync/cloud';
 import { getOpenDay } from '../services/orders';
@@ -1140,6 +1141,20 @@ adminRoutes.post('/backups', async (c) => {
   requirePermission(c.get('user'), 'ayar.yonet');
   const file = await backupNow();
   return c.json({ file });
+});
+
+// ─── Karşılama sihirbazı (services/kurulum.ts) ───────────────────────────────
+
+adminRoutes.get('/kurulum', (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  return c.json(setupSteps());
+});
+
+adminRoutes.put('/kurulum', async (c) => {
+  requirePermission(c.get('user'), 'ayar.yonet');
+  const input = await body(c, z.object({ hidden: z.boolean() }));
+  setSetupHidden(input.hidden);
+  return c.json(setupSteps());
 });
 
 // ─── Bulut yedeği (server/sync/yedek.ts) ─────────────────────────────────────
