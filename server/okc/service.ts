@@ -52,6 +52,8 @@ usePavoStore({
   setSequence: (n) => setSyncState('pavo.sequence', n),
   getCert: () => getSyncState<string>('pavo.cert'),
   setCert: (fp) => setSyncState('pavo.cert', fp),
+  getFingerprint: () => getSyncState<string>('pavo.fingerprint'),
+  setFingerprint: (fp) => setSyncState('pavo.fingerprint', fp),
 });
 // Cihazın adresi ve seri no'su yönetimden girildiyse o, yoksa ayarlar dosyası (PAVO_URL, PAVO_SERIAL)
 usePavoConfig(() => getSettings().pavoDevice);
@@ -70,10 +72,13 @@ export function okcStatus(user?: AuthUser) {
     sectionMap: s.okcSectionMap,
     operatorMethods: s.okcOperatorMethods,
     pavoAutoEod: s.okcPavoAutoEod,
+    auto: s.okcAuto,
     active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
     tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
     pavo: { ...pavoProvider.status(), eod: eod ? eodFor(user ?? null, eod) : null },
     lastError: getSyncState<{ message: string; at: number }>('okc.lastError'),
+    /** Son hata cihazın başka programla eşleştiği (73/74): ekranda doğrudan "Yeniden eşleştir" */
+    pairingLost: !!getSyncState<{ message: string }>('okc.lastError')?.message?.includes(PAIRING_LOST_MESSAGE),
   };
 }
 

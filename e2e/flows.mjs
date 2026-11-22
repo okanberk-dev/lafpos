@@ -233,6 +233,39 @@ export async function runFlows(ctx) {
       },
     ],
     [
+      'Yazarkasa tek dokunuşla (eğitim cihazı): "Ödemeyi al" sepeti cihaza yollar, ayrı gönder adımı yok; cihaz ödeyince adisyon kapanır',
+      async () => {
+        const card = seed.boot.paymentMethods.find((m) => m.kind === 'kart');
+        assert(card, 'kart ödeme türü yok');
+        await api.call('patron', 'PUT', '/okc/settings', { provider: 'simulator', mode: 'anlik', auto: true });
+        try {
+          const o0 = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
+          const o = await api.call('kasa', 'POST', `/orders/${o0.id}/items`, { items: [{ productId: simple.id, qty: 1 }] });
+          await withPage(ctx, 'bilgisayar', 'kasa', async (page) => {
+            await go(ctx, page, `/adisyon/${o.id}`);
+            await page.getByRole('button', { name: /^Öde · / }).click();
+            const dialog = page.getByRole('dialog', { name: /^Ödeme · / });
+            await dialog.waitFor({ timeout: 8000 });
+            // Ayrı "Yazarkasaya gönder" düğmesi yok
+            assert((await dialog.getByRole('button', { name: /yazarkasaya gönder$/ }).count()) === 0, 'otomatik gönderimde ayrı gönder düğmesi görünüyor');
+            await dialog.getByRole('button', { name: card.name, exact: true }).click();
+            await dialog.getByText('Yazarkasaya gider; ödemeyi cihazdan alın').waitFor({ timeout: 8000 });
+            await dialog.getByRole('button', { name: new RegExp(`${card.name} al$`) }).click();
+            await dialog.getByText('Cihazda ödeme bekleniyor…').waitFor({ timeout: 8000 });
+            await page.screenshot({ path: `${ROOT}/e2e/out/bilgisayar-kasa-cihazda-bekliyor.png` });
+            const receipts = await api.call('kasa', 'GET', `/okc/orders/${o.id}/receipts`);
+            assert(receipts.length === 1 && receipts[0].status === 'gonderildi', `tek sepet gitmedi: ${JSON.stringify(receipts.map((r) => r.status))}`);
+            await api.call('kasa', 'POST', `/okc/simulator/baskets/${receipts[0].id}/pay`, { payments: [{ type: 3, amount: receipts[0].amount }] });
+            await page.getByRole('heading', { name: 'Adisyon kapandı' }).waitFor({ timeout: 10000 });
+          });
+          const done = await api.call('patron', 'GET', `/orders/${o.id}`);
+          assert(done.status === 'kapali' && done.payments.filter((p) => !p.refundedAt).length === 1, `cihaz ödemesi bir kez yazılmadı: ${done.status}`);
+        } finally {
+          await api.call('patron', 'PUT', '/okc/settings', { provider: 'kapali' });
+        }
+      },
+    ],
+    [
       'Tablette kasiyer: hesabı nakit alır, adisyon kapanır',
       () =>
         withPage(ctx, 'tablet', 'kasa', async (page) => {

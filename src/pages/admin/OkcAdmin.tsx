@@ -47,6 +47,8 @@ interface OkcStatus {
   sectionMap: Record<string, number>;
   operatorMethods: Record<string, string>;
   pavoAutoEod: boolean;
+  /** Ödemeyi alınca cihaza gönder (kasada ödeme) */
+  auto: boolean;
   active: { label: string; configured: boolean; capabilities: { instant: boolean; list: boolean; splitPayment: boolean; docKinds: string[] } } | null;
   tokenx: { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean };
   pavo: {
@@ -56,12 +58,17 @@ interface OkcStatus {
     url: string | null;
     serial: string | null;
     paired: boolean;
+    /** Kurulumun Pavo kimliği (salt okunur): `kurulum` ilk eşleştirmede üretildi, `eski` önceki kurulum, `dosya` ayarlar dosyası */
+    fingerprint: string;
+    fingerprintSource: 'dosya' | 'kurulum' | 'eski' | 'yok';
     certificate: string | null;
     busy: string | null;
     exchanges: PavoExchange[];
     eod: PavoEod | null;
   };
   lastError: { message: string; at: number } | null;
+  /** Son hata: cihaz başka programla eşleşmiş (73/74); ekranda doğrudan "Yeniden eşleştir" */
+  pairingLost: boolean;
 }
 interface TestResult {
   terminal: { terminalId?: string; branchId?: string; merchantId?: string; error?: string };
@@ -451,7 +458,7 @@ export default function OkcAdmin() {
   const [pavoTest, setPavoTest] = useState<PavoTest | null>(null);
   // Ayar kaydı (bağlantı, ödeme yeri, eşleme) ile Token'a giden istek (deneme, webhook) ayrı izlenir: bulut yanıt
   // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
-  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | null>(null);
+  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | 'auto' | null>(null);
   const [checking, setChecking] = useState<'test' | 'webhook' | 'pair' | null>(null);
   // Pavo'nun adresi ve seri no'su kayıtlıyken form kapalı durur; "Adresi değiştir" açar
   const [editDevice, setEditDevice] = useState(false);
@@ -562,6 +569,12 @@ export default function OkcAdmin() {
     await save({ mode: v }, `Ödeme yeri: ${MODE_LABEL[v]}`);
     setSaving(null);
   };
+  const setAuto = async (v: boolean) => {
+    if (v === s.auto || saving) return;
+    setSaving('auto');
+    await save({ auto: v }, v ? 'Ödeme alınınca hesap cihaza kendiliğinden gidecek' : 'Hesap cihaza “Yazarkasaya gönder” ile gidecek');
+    setSaving(null);
+  };
   const setAutoEod = async (v: boolean) => {
     if (v === s.pavoAutoEod || saving) return;
     setSaving('eod');
@@ -634,6 +647,18 @@ export default function OkcAdmin() {
             <p className="mt-1.5 text-xs text-muted">{s.provider === 'tokenx' ? `${MODE_HINT[s.mode].what}; ${MODE_HINT[s.mode].token}` : MODE_HINT[s.mode].what}</p>
           </div>
         )}
+        {s.provider !== 'kapali' && s.mode === 'anlik' && (
+          <div className="max-w-2xl border-t border-[var(--admin-divider)] pt-4">
+            <Toggle
+              block
+              checked={s.auto}
+              disabled={saving === 'auto'}
+              onChange={(v) => void setAuto(v)}
+              label="Ödemeyi alınca cihaza gönder"
+              hint="Ödeme penceresinde “Ödemeyi al”a basınca hesap kendiliğinden cihaza gider; kapalıyken “Yazarkasaya gönder” ile"
+            />
+          </div>
+        )}
       </Card>
 
       {s.provider === 'pavo' && (
@@ -671,6 +696,14 @@ export default function OkcAdmin() {
                     <span className="font-normal text-[var(--admin-text-mute)]">Ayarlar dosyası (değiştirince buradaki geçerli olur)</span>
                   </DefRow>
                 )}
+                <DefRow label="Program kimliği">
+                  <span className="tabular break-all">
+                    {s.pavo.fingerprint}
+                    <span className="font-normal text-[var(--admin-text-mute)]">
+                      {s.pavo.fingerprintSource === 'yok' ? ' · ilk eşleştirmede kuruluma özel kimlik üretilir' : s.pavo.fingerprintSource === 'dosya' ? ' · ayarlar dosyasından' : s.pavo.fingerprintSource === 'eski' ? ' · önceki eşleştirmeden' : ''}
+                    </span>
+                  </span>
+                </DefRow>
                 {s.pavo.certificate && (
                   <DefRow label="Sertifika izi">
                     <span className="tabular break-all text-xs">{s.pavo.certificate.slice(0, 23)}…</span>
@@ -686,6 +719,13 @@ export default function OkcAdmin() {
             {s.lastError && (
               <Notice tone="danger" title={`Son hata · ${fmtDateTime(s.lastError.at)}`} className="text-[13px]">
                 {s.lastError.message}
+                {s.pairingLost && s.pavo.configured && (
+                  <div className="mt-2">
+                    <Button size="sm" variant="primary" icon={<Link2 className="size-4" />} loading={checking === 'pair'} disabled={!!checking} onClick={() => void runPavo('pair')}>
+                      Yeniden eşleştir
+                    </Button>
+                  </div>
+                )}
               </Notice>
             )}
             {pavoTest && (

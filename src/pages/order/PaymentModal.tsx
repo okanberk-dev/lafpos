@@ -5,7 +5,7 @@ import { COMP_CLOSE_LABEL, COMP_CONFIRM_LABEL, COMP_DONE_TOAST, COMP_HINT, COMP_
 import { parseTL, splitEven, suggestCash, tl, tlShort } from '@shared/money';
 import { amountForItems, itemPayLines, unpaidLineAmount } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
-import type { CompKind, CompPersonKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
+import type { BootstrapDTO, CompKind, CompPersonKind, OrderDTO, PaymentMethodDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { Chip, Input, Segmented, Stepper } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
@@ -13,7 +13,9 @@ import { applyNumpadKey, Numpad, useNumpadKeys } from '@/components/ui/Numpad';
 import { Badge, Notice } from '@/components/ui/misc';
 import { typeOverPrefill } from '@/lib/numpad';
 import { promptDialog } from '@/components/ui/Confirm';
-import { ApiError, post, put } from '@/lib/api';
+import { deviceRoute } from '@shared/odeme-fisi';
+import { printAfterPayment, printsAfterPayment } from '@/lib/after-payment';
+import { ApiError, errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -25,7 +27,7 @@ import { callFor, numaratorLabel } from '@shared/service-mode';
 import { useServiceMode } from '@/lib/serviceMode';
 import { CustomerModal } from './CustomerModal';
 import { OdenmezModal } from './OdenmezModal';
-import { OkcPanel, useOkcReceipts } from './OkcPanel';
+import { amountPaidHereOf, OkcPanel, type ReceiptDTO, useOkcReceipts } from './OkcPanel';
 import { ReasonModal } from './TableOps';
 import { TypedAmount } from './TypedAmount';
 
@@ -46,6 +48,22 @@ const typedField = (on: boolean) =>
 
 /** Ödeme türünün ikonu (karonun içinde, türün renginde): nakit banknot, kart, yemek kartı çatal bıçak, havale banka */
 const PAY_ICON: Record<PaymentMethodDTO['kind'], LucideIcon> = { nakit: Banknote, kart: CreditCard, yemek: UtensilsCrossed, havale: Landmark, cari: NotebookPen, online: Globe, diger: Wallet };
+
+/**
+ * Cihazda ödenen sepetin işyeri nüshası: sepetin fiş ve Z no'su ile adisyonun güncel hâli sunucudan okunur. Yazdırma
+ * ödemeyi bozmaz (hata sessiz); her cihaz fişi bir kez (`printAfterPayment`)
+ */
+async function printDeviceCopy(boot: BootstrapDTO, orderId: string) {
+  if (!printsAfterPayment(boot, true)) return;
+  try {
+    const [receipts, order] = await Promise.all([get<ReceiptDTO[]>(`/okc/orders/${orderId}/receipts`), get<OrderDTO>(`/orders/${orderId}`)]);
+    const r = receipts.find((x) => x.status === 'tamamlandi');
+    if (!r) return;
+    printAfterPayment({ key: `okc:${r.id}`, boot, order, paymentIds: r.paymentIds ?? [], device: { receiptNo: r.receiptNo, zNo: r.zNo, docKind: r.docKind, docId: r.docId } });
+  } catch {
+    // Fiş basılamadı: ödeme yine alınmıştır
+  }
+}
 
 /** Bölüm etiketi (Ödeme türü, Verilen, Ciro dışı kapat): 13 px, gri */
 const SECTION = 'mb-2 text-[13px] font-medium text-muted';
@@ -121,21 +139,46 @@ export function PaymentModal({
    * değiştirmez. Güncel `open` ve `onDone` ref'ten okunur: dinleyici her çizimde yeniden kurulmaz
    */
   const okcSentHere = useRef<string | null>(null);
-  const latest = useRef({ open, onDone });
+  /**
+   * "Ödemeyi al" sepeti cihaza yolladı (otomatik gönderim): sonuç gelince sonuç ekranı (para üstü) bununla çizilir.
+   * Cihaz reddeder ya da iptal ederse `deviceError` sade nedeni ve "Yeniden dene"yi gösterir
+   */
+  const autoSent = useRef<{ amount: number; given: number | null; methodName: string } | null>(null);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
+  const latest = useRef({ open, onDone, boot });
   useEffect(() => {
-    latest.current = { open, onDone };
+    latest.current = { open, onDone, boot };
   });
   useEffect(() => {
     let seen: number | null = null;
     return onLive((e) => {
       if (e.topic !== 'okc' || e.orderId !== order.id) return;
-      if (e.kind === 'okc.cancelled') okcSentHere.current = null;
+      if (e.kind === 'okc.cancelled' || e.kind === 'okc.error') {
+        // Bu ekranın otomatik gönderdiği sepet cihazda reddedildi ya da iptal edildi: neden pencerede, ödeme yeniden denenir
+        if (autoSent.current) setDeviceError(e.kind === 'okc.cancelled' ? 'Ödeme cihazda iptal edildi' : (e.message ?? 'Yazarkasa ödemeyi almadı'));
+        if (e.kind === 'okc.cancelled') {
+          okcSentHere.current = null;
+          autoSent.current = null;
+        }
+        return;
+      }
       if (e.kind !== 'okc.paid' || e.seq === seen) return;
-      const { open: shown, onDone: done } = latest.current;
-      if (!shown && okcSentHere.current !== order.id) return;
+      const { open: shown, onDone: done, boot: b } = latest.current;
+      const mine = okcSentHere.current === order.id;
+      if (!shown && !mine) return;
       seen = e.seq;
       okcSentHere.current = null;
+      const auto = autoSent.current;
+      autoSent.current = null;
+      setDeviceError(null);
       const closed = !!e.message?.includes('kapandı');
+      // İşyeri nüshası yalnız sepeti gönderen ekranda (kasa bilgisayarında, yazıcı varsa); her cihaz fişi bir kez
+      if (mine) void printDeviceCopy(b, order.id);
+      // Otomatik gönderimde sonuç ekranı pencerede (para üstü ve "Yeni satış"); öteki durumlar bugünkü gibi
+      if (shown && auto) {
+        setResult({ change: auto.given != null ? Math.max(0, auto.given - auto.amount) : 0, closed, amount: auto.amount, tip: 0, method: auto.methodName, share: null });
+        return;
+      }
       toast.ok(e.message ?? 'Yazarkasada ödendi');
       // Kapalı pencerede adisyonu kapatmayan cihaz ödemesi yalnız bildirilir: açık başka pencere (İşlemler) kapanmasın
       if (shown || closed) done(closed);
@@ -157,6 +200,7 @@ export function PaymentModal({
     setResult(null);
     setComp(null);
     setCustomerOpen(false);
+    setDeviceError(null);
     // Yalnız pencere açılınca sıfırla
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -209,6 +253,21 @@ export function PaymentModal({
   const cariOver = method?.kind === 'cari' && !!cust && cust.creditLimit != null && cariAfter > cust.creditLimit;
   // Hesap bölünmüş ve ödenmemiş pay varken yalnız Paylaş: pay dışı ödeme payları düşürmez (sunucu da reddeder)
   const splitBlocks = !!split && split.shares.length > 0 && mode !== 'paylas';
+  // Otomatik gönderim (Yönetim › Yazarkasa POS › "Ödemeyi alınca cihaza gönder"): bu ödeme cihaza mı gider
+  const route = deviceRoute({
+    provider: boot.integrations.okc.provider,
+    mode: boot.integrations.okc.mode,
+    auto: !!boot.integrations.okc.auto,
+    canSend: can('odeme.al'),
+    methodKind: method?.kind ?? null,
+    tip,
+    payMode: mode,
+    splitActive: !!split && split.shares.length > 0,
+    amount,
+    remaining,
+    pickedCount: picked.length,
+    amountPaidHere: amountPaidHereOf(order, okc.data),
+  });
   const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending && !(mode === 'paylas' && sharesDirty);
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
@@ -277,8 +336,38 @@ export function PaymentModal({
     setSplitBusy(null);
   };
 
-  const pay = async () => {
+  /**
+   * Sepeti cihaza yollar (otomatik gönderim). Çift dokunuş ve yeniden deneme tek sepettir: süren istek düğmeyi kilitler,
+   * sunucu bekleyen sepet varken ikincisini yazmaz (okc_pending: zaten cihazda bekliyor, hata sayılmaz). Yanıtı
+   * alınamayan gönderimde (okc_unknown) sepet bekleyen kalır, sonuç sorgulanır
+   */
+  const payOnDevice = async () => {
+    if (!method || busy) return;
+    setBusy(true);
+    setDeviceError(null);
+    okcSentHere.current = order.id;
+    autoSent.current = { amount, given: method.kind === 'nakit' && given != null ? given : null, methodName: method.name };
+    try {
+      await post(`/okc/orders/${order.id}/send`, { items: mode === 'kalem' ? picked : null });
+    } catch (e) {
+      const code = e instanceof ApiError ? e.code : null;
+      if (code !== 'okc_pending' && code !== 'okc_unknown') {
+        okcSentHere.current = null;
+        autoSent.current = null;
+        setDeviceError(errorMessage(e));
+      }
+    } finally {
+      setBusy(false);
+      void qc.invalidateQueries({ queryKey: ['okc', order.id] });
+      void qc.invalidateQueries({ queryKey: ['order', order.id] });
+    }
+  };
+
+  /** `withoutDevice`: cihaz reddettikten ya da ulaşılamadıktan sonra ödeme yazarkasasız LafPOS'a yazılır (bugünkü yetki kuralı) */
+  const pay = async (withoutDevice = false) => {
     if (!method || !valid) return;
+    if (route.send && !withoutDevice) return payOnDevice();
+    setDeviceError(null);
     setBusy(true);
     const sharing = mode === 'paylas' && !!split;
     const items = mode === 'kalem' ? picked : null;
@@ -311,6 +400,10 @@ export function PaymentModal({
     setBusy(false);
     if (!res) return;
     attempt.current = null;
+    // İşyeri nüshası (ve yazarkasasız kurulumda bilgi fişi): bu ödemenin kayıtları, her ödeme bir kez
+    const before = new Set(order.payments.map((p) => p.id));
+    const fresh = res.order.payments.filter((p) => !before.has(p.id) && !p.refundedAt).map((p) => p.id);
+    if (fresh.length) printAfterPayment({ key: `odeme:${fresh.join(',')}`, boot, order: res.order, paymentIds: fresh });
     // Parçalı ödeme sürüyorsa pencere açık kalır: kalan tutara (ya da sıradaki paya) dönülür
     prefillAmount(res.order.total - res.order.paid);
     setSelection({});
@@ -438,6 +531,7 @@ export function PaymentModal({
       order={order}
       amount={amount}
       items={mode === 'kalem' ? picked : null}
+      auto={route.on}
       onSend={() => {
         okcSentHere.current = order.id;
       }}
@@ -483,8 +577,15 @@ export function PaymentModal({
     </p>
   ) : (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-      {(changeNote != null || tipNote) && (
+      {(changeNote != null || tipNote || deviceError || (route.on && method)) && (
         <div className="min-w-0 sm:flex-1">
+          {deviceError ? (
+            <p role="alert" className="text-sm font-medium text-[var(--admin-danger-ink)]">
+              {deviceError}
+            </p>
+          ) : (
+            route.on && method && !payStep && <p className="text-xs text-muted">{route.send ? 'Yazarkasaya gider; ödemeyi cihazdan alın' : route.reason}</p>
+          )}
           {changeNote != null && changeNote > 0 && (
             <p className="text-sm text-ink-2">
               Para üstü <span className="tabular font-headline text-lg font-bold text-ink">{tl(changeNote)}</span>
@@ -507,8 +608,14 @@ export function PaymentModal({
         loading={busy}
         onClick={() => void pay()}
       >
-        {payLabel}
+        {deviceError && route.send ? 'Yeniden dene' : payLabel}
       </Button>
+      {/* Cihaz almadıysa ödeme yazarkasasız da yazılabilir (mali fiş ayrıca kesilir); bugünkü yetki kuralı */}
+      {deviceError && route.send && (
+        <Button size="xl" variant="secondary" block className="whitespace-normal leading-tight sm:w-auto" disabled={!valid || busy} onClick={() => void pay(true)}>
+          Cihazsız kaydet
+        </Button>
+      )}
     </div>
   );
 
