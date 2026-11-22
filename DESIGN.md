@@ -52,7 +52,7 @@
 | Kuyu `--k-well` / `--k-well-2` | `#f4f5f7` / `#e9ebef` | `#262423` / `#2e2c2b` | Kart içi karo, basılı durum |
 | Mürekkep `--k-ink` / `--k-ink-2` | `#171a26` / `#3b3f4c` | `#fbfaf9` / `#d7d4d1` | Başlık ve rakam / gövde |
 | İkincil `--k-mute` | `#666a78` | `#a3a09d` | Etiket; kartta ve kuyuda ≥ 4.5:1 |
-| Soluk `--k-faint` | `#a2a6b2` | `#6f6c69` | Kuruş, ek; yalnız iri yazı ve süs |
+| Soluk `--k-faint` | `#828693` | `#6f6c69` | Kuruş, ek; yalnız iri yazı ve süs |
 | Ayraç `--k-line` | `#e3e5ea` | `#2e2c2b` | Satır arası, alan kenarı |
 | Seçili `--k-select` / `--k-on-select` | `#171a26` / `#ffffff` | `#fbfaf9` / `#171a26` | Sekme, segment, alt menü |
 | Nane `--k-mint` / `-soft` / `-ink` | `#4fdc86` / `#dbf7e5` / `#0b5a34` | `#4ade80` / `#12301c` / `#86efac` | Artış hapı, grafik vurgusu |

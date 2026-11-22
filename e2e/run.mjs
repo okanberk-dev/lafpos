@@ -312,7 +312,7 @@ async function sweep(server, api, seed, browser) {
         }
         const overflow = await overflowReport(page);
         if (overflow.page > 1) problems.push(`sayfa ${overflow.page} px yatay taşıyor`);
-        for (const o of overflow.items) problems.push(`taşan öğe: ${o.text} (sol ${o.left}, sağ ${o.right})`);
+        for (const o of overflow.items) problems.push(`${o.kind ?? 'taşan öğe'}: ${o.text} (sol ${o.left}, sağ ${o.right})`);
         if (VIEWPORTS[viewport].hasTouch) {
           const small = await smallTargets(page);
           if (small.length) (strictTargets ? problems : warnings).push(...small.map((s) => `${where}: küçük hedef ${s}`).slice(0, strictTargets ? 0 : 50));

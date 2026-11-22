@@ -327,7 +327,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
     // Tema: üç seçenek (Cihaz bir dokunuşta kaybolmasın); bar ekranında bu cihazın bar tercihi
     <div className={cn(drawerRow, 'flex-wrap gap-y-2 hover:pl-0.5')} style={{ animationDelay: `${120 + items.length * 35}ms` }}>
       <DrawerLabel hint={onBar ? 'Bu cihazda saklanır' : undefined}>{onBar ? 'Bar teması' : 'Tema'}</DrawerLabel>
-      <span className="[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:#0a5c44] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)] [--hover:rgb(255_255_255/0.08)]">
+      <span className="[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:var(--admin-surface)] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)]">
         {onBar ? (
           <Segmented<KdsTheme>
             label="Bar ekranı teması"

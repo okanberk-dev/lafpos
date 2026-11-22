@@ -213,7 +213,7 @@ export function CustomerDisplayView({
               <p className="tabular whitespace-nowrap font-headline font-extrabold leading-none tracking-[-0.035em]" style={totalSize(amount)}>
                 {/* LafPOS Keel: tutar iri, kuruş soluk */}
                 {amount.slice(0, -3)}
-                <span className="opacity-45">{amount.slice(-3)}</span>
+                <span className="opacity-50">{amount.slice(-3)}</span>
               </p>
             </div>
             {messages.length > 0 && (

@@ -1772,17 +1772,18 @@ html[class~='dark'] {
   /* Araçlar çekmecesi: perde gibi yukarıdan iner, çizgiler kayar; satırları sırayla gelir (ToolsDrawer.tsx) */
   /* Araçlar çekmecesi sade gece (18 Kas 2026, "daha minimalist"): kayan dalga çizgileri yok, yalnız üstte yumuşak yeşil ışık */
   /*
-   * Araçlar çekmecesi (pano): marka rayının ev yeşili degradesinde, sağ üstte yumuşak nane ışığı; raydan açılır, rayla
-   * aynı yüzey. Yazı beyaz, soluk yazı rayın soluğu (5.1:1), çizgi ve yüzey yarı saydam beyaz, odak açık nane
+   * Araçlar çekmecesi (LafPOS Keel): uygulamanın yüzeyinde (açıkta beyaz, gecede koyu gri), yazılar uygulamanın
+   * mürekkebinde; çizgi ve kuyu nötr, vurgu ve odak ev yeşili. Her boyda aynı belirteçler: açık temada beyaz zeminde
+   * beyaz yazı kalmaz (22 Kas 2026'da ray beyaz olunca yazılar görünmüyordu)
    */
   .lp-drawer {
-    --band-muted: var(--rail-mute);
-    --band-line: rgb(255 255 255 / 0.16);
-    --band-2: rgb(255 255 255 / 0.1);
-    --band-accent: #b9f3d9;
-    background:
-      radial-gradient(110% 70% at 88% 0%, rgb(127 240 192 / 0.16) 0%, transparent 60%) 0 0 / 100% 100% no-repeat,
-      var(--rail-bg);
+    --band-text: var(--admin-text);
+    --band-muted: var(--admin-text-mute);
+    --band-line: var(--admin-divider);
+    --band-2: var(--admin-panel);
+    --band-accent: var(--admin-primary);
+    --focus: var(--admin-primary);
+    background: var(--admin-surface);
     animation: lp-drawer-in 520ms var(--ease-out) backwards;
   }
   .lp-drawer-row {
@@ -1800,13 +1801,6 @@ html[class~='dark'] {
     .lp-drawer {
       max-height: 90dvh;
       border-radius: 1.75rem 1.75rem 0 0;
-      --band-text: var(--admin-text);
-      --band-muted: var(--admin-text-mute);
-      --band-line: var(--admin-divider);
-      --band-2: var(--admin-panel);
-      --band-accent: var(--admin-primary);
-      --focus: var(--admin-primary);
-      background: var(--admin-surface);
       box-shadow: 0 -24px 60px -24px rgb(0 0 0 / 0.45);
       animation: lp-sheet-in 420ms var(--ease-out) backwards;
     }

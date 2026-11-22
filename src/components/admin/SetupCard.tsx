@@ -54,7 +54,7 @@ export function SetupCard() {
                 aria-hidden="true"
                 className={cn(
                   'grid size-7 shrink-0 place-items-center rounded-full text-[13px] font-semibold',
-                  s.done ? 'bg-[var(--admin-primary)] text-white' : s.key === next ? 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'bg-[var(--admin-surface-2)] text-muted',
+                  s.done ? 'bg-[var(--admin-primary)] text-[var(--admin-on-primary)]' : s.key === next ? 'bg-[var(--admin-primary-soft)] text-[var(--admin-primary)]' : 'bg-[var(--admin-surface-2)] text-muted',
                 )}
               >
                 {s.done ? <Check className="size-4" /> : i + 1}

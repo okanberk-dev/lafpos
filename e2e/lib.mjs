@@ -219,7 +219,103 @@ export async function overflowReport(page) {
       if (bad.some((b) => b.el.contains(el))) continue;
       bad.push({ el, text: `${describe(el)} yatay kayıyor (${el.scrollWidth - el.clientWidth} px)`, right: Math.round(r.right), left: Math.round(r.left) });
     }
-    return { page: document.documentElement.scrollWidth - vw, items: bad.slice(0, 8).map(({ text, right, left }) => ({ text, right, left })) };
+    /*
+     * Okunmayan yazı (22 Kas 2026: ray beyaz olunca Araçlar çekmecesi, giriş kartı ve sepet çubuğunda beyaz zeminde
+     * beyaz yazı kaldı; hiçbir denetim görmedi). Ekranda görünen her yazının rengi, altındaki gerçek zeminle
+     * karşılaştırılır (yarı saydam katmanlar üst üste bindirilir); 3:1'in altı hata. Kapalı (disabled) denetimler,
+     * fotoğraf üstü yazılar ve başka bir katmanın (pencere perdesi) altında kalanlar sayılmaz.
+     */
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 1;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    const memo = new Map();
+    const rgba = (css) => {
+      if (memo.has(css)) return memo.get(css);
+      cx.clearRect(0, 0, 1, 1);
+      cx.fillStyle = '#000';
+      cx.fillStyle = css;
+      cx.fillRect(0, 0, 1, 1);
+      const d = cx.getImageData(0, 0, 1, 1).data;
+      const a = d[3] / 255;
+      // Tuval renkleri alfa ile çarpılmış saklar: geri böl
+      const out = a ? [d[0], d[1], d[2], a] : [0, 0, 0, 0];
+      memo.set(css, out);
+      return out;
+    };
+    const over = (top, under) => {
+      const a = top[3] + under[3] * (1 - top[3]);
+      if (!a) return [0, 0, 0, 0];
+      return [0, 1, 2].map((i) => (top[i] * top[3] + under[i] * under[3] * (1 - top[3])) / a).concat(a);
+    };
+    const lum = (c) => {
+      const f = (v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+    };
+    const STOP = /rgba?\([^)]*\)|color\([^)]*\)|oklab\([^)]*\)|oklch\([^)]*\)|#[0-9a-f]{3,8}\b/gi;
+    /** Öğenin kendi zemin katmanı: düz renk, degradenin ortalama rengi; fotoğraf varsa null (bilinmez) */
+    const layer = (st) => {
+      let c = rgba(st.backgroundColor);
+      const img = st.backgroundImage;
+      if (img && img !== 'none') {
+        if (img.includes('url(')) return null;
+        const stops = (img.match(STOP) ?? []).map(rgba).filter((x) => x[3] > 0.5);
+        if (stops.length) c = over([0, 1, 2].map((i) => stops.reduce((n, x) => n + x[i], 0) / stops.length).concat(1), c);
+      }
+      return c;
+    };
+    const faint = [];
+    const seen = new Set();
+    const vh = window.innerHeight;
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const el = node.parentElement;
+      if (!el || seen.has(el) || !node.nodeValue.trim()) continue;
+      if (el.closest('svg, .sr-only, [data-contrast-ok], :disabled, [aria-disabled="true"], option, script, style, noscript')) continue;
+      range.selectNodeContents(node);
+      const r = range.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > vh || r.right < 0 || r.left > vw) continue;
+      const st = getComputedStyle(el);
+      if (st.visibility === 'hidden' || st.display === 'none') continue;
+      // Üstünde başka katman varsa (pencere perdesi, açık çekmece) bu yazı zaten görünmüyor
+      const hit = document.elementFromPoint(Math.min(vw - 1, Math.max(0, r.left + r.width / 2)), Math.min(vh - 1, Math.max(0, r.top + r.height / 2)));
+      if (!hit || !(hit === el || el.contains(hit) || hit.contains(el))) continue;
+      seen.add(el);
+      const fill = st.webkitTextFillColor && st.webkitTextFillColor !== 'currentcolor' ? st.webkitTextFillColor : st.color;
+      let fg = rgba(fill);
+      let bg = [0, 0, 0, 0];
+      let unknown = false;
+      const stack = [];
+      for (let p = el; p; p = p.parentElement) {
+        const ps = p === el ? st : getComputedStyle(p);
+        const l = layer(ps);
+        if (!l) {
+          unknown = true;
+          break;
+        }
+        stack.push({ l, o: Number(ps.opacity) });
+        if (l[3] >= 0.999 && Number(ps.opacity) >= 0.999) break;
+      }
+      if (unknown) continue;
+      // Katmanları alttan üste bindir; saydamlık (opacity) hem zemini hem yazıyı soldurur
+      let alpha = 1;
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const { l, o } = stack[i];
+        alpha *= o;
+        bg = over([l[0], l[1], l[2], l[3] * alpha], bg);
+      }
+      if (bg[3] < 0.999) bg = over(bg, [255, 255, 255, 1]);
+      fg = over([fg[0], fg[1], fg[2], fg[3] * alpha], bg);
+      const [hi, lo] = [lum(fg), lum(bg)].sort((a, b) => b - a);
+      const ratio = (hi + 0.05) / (lo + 0.05);
+      if (ratio >= 3) continue;
+      const hex = (c) => `#${[0, 1, 2].map((i) => Math.round(c[i]).toString(16).padStart(2, '0')).join('')}`;
+      faint.push({ kind: 'okunmayan yazı', text: `${describe(el)} ${ratio.toFixed(1)}:1 (yazı ${hex(fg)}, zemin ${hex(bg)})`, right: Math.round(r.right), left: Math.round(r.left) });
+    }
+    return {
+      page: document.documentElement.scrollWidth - vw,
+      items: [...bad.slice(0, 8).map(({ text, right, left }) => ({ text, right, left })), ...faint.slice(0, 8)],
+    };
   });
 }
 

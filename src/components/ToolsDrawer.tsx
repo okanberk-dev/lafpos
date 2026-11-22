@@ -71,7 +71,7 @@ export function ToolsDrawer({ open, onClose, subtitle, children, foot }: { open:
             onClick={onClose}
             aria-label="Kapat"
             title="Kapat"
-            className="grid size-11 shrink-0 place-items-center rounded-full bg-[var(--band-2)] text-[var(--band-text)] transition-colors duration-150 hover:bg-[rgb(255_255_255/0.18)]"
+            className="grid size-11 shrink-0 place-items-center rounded-full bg-[var(--band-2)] text-[var(--band-text)] transition-colors duration-150 hover:bg-[var(--admin-border-strong)]"
           >
             <X aria-hidden="true" className="size-5" />
           </button>
@@ -122,7 +122,7 @@ export function DrawerArrow() {
 
 /** Çekmecedeki kit denetimi (Segmented) bantta: zemin yarı saydam, seçili açık yazı (Tema satırıyla aynı) */
 const BAND_CONTROLS =
-  '[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:#0a5c44] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)] [--hover:rgb(255_255_255/0.08)]';
+  '[--admin-surface:var(--band-2)] [--surface-2:var(--band-2)] [--admin-border:var(--band-line)] [--admin-border-strong:var(--band-line)] [--admin-ink-fill:var(--band-text)] [--admin-on-ink:var(--admin-surface)] [--shadow-action:none] [--admin-text:var(--band-text)] [--admin-text-soft:var(--band-muted)] [--ink:var(--band-text)] [--ink-2:var(--band-muted)]';
 
 /**
  * Çekmecenin anahtar satırı: bütün satır dokunulur (`role="switch"`), sağda bantın renginde anahtar (açıkken açık nane
@@ -133,7 +133,7 @@ export function DrawerSwitch({ on, onChange, label, hint, style }: { on: boolean
     <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className={drawerRow} style={style}>
       <DrawerLabel hint={hint}>{label}</DrawerLabel>
       <span aria-hidden="true" className={cn('relative h-[26px] w-[46px] shrink-0 rounded-full ring-1 ring-inset transition-colors duration-200', on ? 'bg-[var(--band-accent)] ring-transparent' : 'bg-[var(--band-2)] ring-[var(--band-muted)]')}>
-        <span className={cn('absolute left-[3px] top-[3px] size-5 rounded-full transition-transform duration-200 motion-reduce:transition-none', on ? 'translate-x-5 bg-[#0a5c44]' : 'bg-[var(--band-muted)]')} />
+        <span className={cn('absolute left-[3px] top-[3px] size-5 rounded-full transition-transform duration-200 motion-reduce:transition-none', on ? 'translate-x-5 bg-[var(--admin-surface)]' : 'bg-[var(--band-muted)]')} />
       </span>
     </button>
   );
