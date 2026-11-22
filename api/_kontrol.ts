@@ -390,7 +390,7 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
   // sonuçla kendi adını gönderir ve geçmişe o yazılır)
   const adlar: OzetAdlari = { personel: adHaritasi([...kisi].map(([pid, p]): [string, string] => [pid, String(p.ad)])) };
   const ad = typeof body.ad === 'string' ? ozetAdi(body.ad) : '';
-  if (ad && veri.id && (d.tur === 'urun.satis' || d.tur === 'secenek.satis')) adlar[d.tur === 'urun.satis' ? 'urun' : 'secenek'] = adHaritasi([[veri.id, ad]]);
+  if (ad && veri.id && (d.tur === 'urun.satis' || d.tur === 'urun.gorunum' || d.tur === 'secenek.satis')) adlar[d.tur === 'secenek.satis' ? 'secenek' : 'urun'] = adHaritasi([[veri.id, ad]]);
   const temel = { id: `k_${randomBytes(18).toString('base64url')}`, tur: d.tur, veri: d.veri, at: now, kim, kurulum: id, rol: ben.rol };
   const kayit: KomutKaydi = { ...temel, ozet: komutOzeti(d.tur, d.veri, adlar), imza: komutImzasi(deps.secret, temel) };
   await deps.redis('HSET', komutKey(id), kayit.id, JSON.stringify(kayit));

@@ -31,6 +31,8 @@ import {
   UYE_ROLLERI,
   type UyeRolu,
   uyeYapabilir,
+  type SecenekGrubu,
+  type UrunGorunum,
 } from '@shared/kontrol';
 import { ALL_PERMISSIONS, type Role, ROLES, rolePermissions } from '@shared/permissions';
 import { serviceModeOf } from '@shared/service-mode';
@@ -206,7 +208,7 @@ function yerelOzet(tur: KomutTuru, veri: KomutVerisi): string {
     if (tur === 'personel.duzenle' || tur === 'personel.pin') {
       const u = db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, id)).get();
       if (u) adlar.personel = { [id]: u.name };
-    } else if (tur === 'urun.satis') {
+    } else if (tur === 'urun.satis' || tur === 'urun.gorunum') {
       const p = db.select({ name: schema.products.name }).from(schema.products).where(eq(schema.products.id, id)).get();
       if (p) adlar.urun = { [id]: ozetAdi(p.name) };
     } else if (tur === 'secenek.satis') {
@@ -274,6 +276,18 @@ function istekOf(tur: KomutTuru, veri: KomutVerisi, pin: string | null): Istek {
     }
     case 'ayar.servis':
       return { method: 'PUT', yol: '/api/admin/settings', govde: { serviceMode: (veri as AyarServis).mod } };
+    case 'urun.gorunum': {
+      const v = veri as UrunGorunum;
+      return { method: 'PATCH', yol: `/api/admin/products/${id(v)}`, govde: { hidden: !v.gorunur } };
+    }
+    case 'secenek.grubu': {
+      const v = veri as SecenekGrubu;
+      return {
+        method: 'POST',
+        yol: '/api/admin/option-groups',
+        govde: { name: v.ad, kind: 'single', required: v.zorunlu, maxSelect: 1, items: v.ogeler.map((o) => ({ name: o.ad, price: o.fiyat, isDefault: o.varsayilan })), productIds: v.urunler },
+      };
+    }
   }
 }
 
