@@ -47,10 +47,27 @@ export function sendDisplay(code: string, state: Outgoing) {
 export function useCustomerDisplay(boot: BootstrapDTO, order: OrderDTO | undefined, pending: PendingLine[], label: string) {
   const [code] = useDisplayCode();
   useEffect(() => {
-    if (!code || !order || order.status !== 'acik') return;
+    if (!code || !order) return;
+    // Adisyon bu ekrandayken kapandı (ödeme cihazdan geldi, başka ekran kapattı): ekranda sipariş duruyorsa teşekkür
+    // (ödeme penceresi ayrıca gönderdiyse aynı teşekkür; ekran zaten teşekkürdeyse dokunulmaz)
+    if (order.status === 'kapali' && lastKind === 'order') {
+      if (pendingOrder) clearTimeout(pendingOrder);
+      pendingOrder = null;
+      sendDisplay(code, { kind: 'thanks', total: order.total });
+      return;
+    }
+    if (order.status !== 'acik') return;
     const state = displayOrder(boot, order, pending, label);
-    // Boş adisyon (satış sonrası yeni satış) ekrandaki "teşekkürler"i ezmesin
-    if (!state) return;
+    // Boş adisyon (satış sonrası yeni satış) ekrandaki "teşekkürler"i ezmesin; ama ekranda sipariş duruyorsa (son kalem
+    // silindi) karşılamaya döner (saha, 22 Kas 2026)
+    if (!state) {
+      if (lastKind === 'order') {
+        if (pendingOrder) clearTimeout(pendingOrder);
+        pendingOrder = null;
+        sendDisplay(code, { kind: 'idle' });
+      }
+      return;
+    }
     if (pendingOrder) clearTimeout(pendingOrder);
     pendingOrder = setTimeout(() => sendDisplay(code, state), 300);
   }, [code, order, pending, boot, label]);

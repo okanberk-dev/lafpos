@@ -15,6 +15,11 @@ const THANKS_MS = 10_000;
 const THANKS_CALL_MS = 15_000;
 /** Son görünüm bu cihazda saklanır: sonraki açılışta ilk kare doğru temada (ayar gelmeden; bootDark okur) */
 const CONFIG_KEY = DISPLAY_CONFIG_KEY;
+/** Bu kadar süre kasadan yanıt gelmezse (bağlantı koptu, sunucu yeniden başladı) sayfa sessizce yenilenir */
+const STALE_RELOAD_MS = 90_000;
+/** Yenilemeler arası en az süre (sunucu uzun süre kapalıysa ekran sürekli yanıp sönmesin) */
+const RELOAD_GAP_MS = 5 * 60_000;
+const RELOAD_KEY = 'lafpos.musteri.yenileme';
 
 function cachedConfig(): DisplayConfigDTO | undefined {
   try {
@@ -59,7 +64,31 @@ export default function CustomerDisplayPage() {
   // Oturumsuz ekran: canlı bağlantı yok, sık yoklanır (yalnız bellekten okunan küçük bir yanıt)
   const q = useQuery({ queryKey: ['display', code], queryFn: () => get<DisplayStateDTO>(`/public/display/${code}`), refetchInterval: 1_500 });
 
-  const s = q.data;
+  // Sağlamlık: yanıt uzun süre gelmezse ya da kasa yeni sürüme geçtiyse sessizce yenilenir; bu arada son durum ve
+  // karşılama ekranı görünmeye devam eder (son ayarlar yerelde)
+  const health = useQuery({ queryKey: ['display-health'], queryFn: () => get<{ build?: number | null }>('/health'), refetchInterval: 60_000, retry: false });
+  const [firstBuild] = useState<{ v: number | null | undefined }>(() => ({ v: undefined }));
+  if (health.data && firstBuild.v === undefined) firstBuild.v = health.data.build ?? null;
+  useEffect(() => {
+    const reload = () => {
+      try {
+        const last = Number(sessionStorage.getItem(RELOAD_KEY) ?? 0);
+        if (Date.now() - last < RELOAD_GAP_MS) return;
+        sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+      } catch {
+        /* depolama yoksa yine yenile */
+      }
+      window.location.reload();
+    };
+    const lastOk = Math.max(q.dataUpdatedAt, health.dataUpdatedAt);
+    if (lastOk && now - lastOk > STALE_RELOAD_MS) reload();
+    const b = health.data?.build;
+    if (typeof b === 'number' && typeof firstBuild.v === 'number' && b !== firstBuild.v) reload();
+  }, [now, q.dataUpdatedAt, health.dataUpdatedAt, health.data, firstBuild]);
+
+  const raw = q.data;
+  // Boş sepet karşılamaya döner: adisyondaki son kalem silinip adisyonda kalınınca eski sipariş görünmeye devam ediyordu
+  const s: DisplayStateDTO | undefined = raw?.kind === 'order' && raw.lines.length === 0 ? { kind: 'idle', at: raw.at } : raw;
   // Teşekkürün süresi bu cihazın saatiyle, teşekkürü ilk gördüğü andan sayılır: tablet ile kasanın saati yerel ağda
   // kolayca 15 sn'den fazla kayar (ileride olan ekran teşekkürü hiç göstermiyor, geride olan bir sonraki siparişe dek
   // tutuyordu). Açılışta zaten duran teşekkür (ekran yeniden yüklendi) sunucunun anına göre de eskiyebilir; yine de en

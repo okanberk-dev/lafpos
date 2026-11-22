@@ -32,7 +32,9 @@ const ReportsPage = lazy(() => import('./pages/reports/ReportsPage'));
 const PatronPage = lazy(() => import('./pages/patron/PatronPage'));
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'));
 const PickupBoardPage = lazy(() => import('./pages/PickupBoardPage'));
-const CustomerDisplayPage = lazy(() => import('./pages/CustomerDisplayPage'));
+// Müşteri ekranı pakete gömülü (ayrı parça değil): güncellemeden sonra parçanın adı değişince ya da sunucu geç açılınca
+// ekran "Yükleniyor"da kalıyordu (saha, 22 Kas 2026)
+import CustomerDisplayPage from './pages/CustomerDisplayPage';
 const DownloadPage = lazy(() => import('./pages/DownloadPage'));
 const MerkezPage = lazy(() => import('./pages/MerkezPage'));
 const KontrolPage = lazy(() => import('./pages/kontrol/KontrolPage'));
