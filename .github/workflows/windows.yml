@@ -24,6 +24,11 @@ on:
       - '.github/workflows/windows.yml'
   workflow_dispatch:
 
+# PR'da yeni push eski koşuyu iptal eder; main'deki koşu (Release yayımlar) yarıda kesilmez, sıraya girer
+concurrency:
+  group: windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: write
 

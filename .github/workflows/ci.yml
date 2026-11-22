@@ -7,6 +7,11 @@ on:
     branches: [main]
   pull_request:
 
+# Aynı dalda yeni push gelince eski koşu iptal: Actions dakikası boşa gitmesin
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   denetim:
     runs-on: ubuntu-latest
