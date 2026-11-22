@@ -37,6 +37,12 @@ export interface RemoteDaySummary {
   paidOpen: number;
   onlineOrders: number;
   onlineAmount: number;
+  /**
+   * Yazarkasadan geçmeyen kart ve nakit (shared/order-calc.ts `offDeviceTotals`). Eski kasanın özetinde yok, patron
+   * rolü kasa rakamlarını görmüyorsa (kör kasa) gitmez: dönemin bir günü taşımıyorsa uzakta satır yazmaz
+   * (shared/remote-calc.ts `sumOffDevice`)
+   */
+  off?: { card: number; cash: number };
 }
 
 export interface RemoteDayReport {

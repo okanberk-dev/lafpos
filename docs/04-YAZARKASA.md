@@ -154,6 +154,43 @@ kapalıysa, yenileniyorsa, kilitliyse ya da canlı bağlantı (SSE) kopuksa nüs
   (aynı döküm `okc.paid` olayıyla zaten her ekrana gider); adisyonun öteki ödemeleri gitmez.
 - Testler: `tests/isyeri-nushasi.test.ts`.
 
+### 4.2 Yazarkasadan geçmeyen (X, Z, patron paneli, Uzaktan; Kasım 2026)
+
+Sahip gün içinde cihazdan geçmeyen satışı görür: satış ödemelerinden mali fişi yazarkasada kesilmeyenlerin **kart** ve
+**nakit** toplamı. Tanım tek yerde: `shared/order-calc.ts` › `offDeviceTotals` (saf işlev, kuruş).
+
+- Ödeme cihazdan geçmiştir, ancak bir yazarkasa fişinin ödemesiyse: cihaz belgeyi kesip sonucu LafPOS'a işleyince ödemenin
+  kimliği fişin `paymentIds`'ine yazılır (§6; eksik ödenen `hata` fişinin işlenen ödemeleri de). Eğitim cihazının fişi de
+  sayılır: eğitimde satır gerçek kullanımdaki gibi çalışır (eğitim günü lafmaliyet'e gitmez).
+- Geri kalan kart ve nakit sayılır: "LafPOS'a yaz (fiş ayrıca)", "cihazsız kaydet", cihaz reddedince "Başka yoldan aldım",
+  kısmi tutar, paylaşımlı hesabın payı, yazarkasa bağlantısı kapalıyken alınan. Bunların mali fişi cihazda ayrıca kesilir.
+- Tür, ödemenin Z alanından: `cash` nakit, `card` kart. Yemek kartı (mali fiş değil bilgi fişi kesilir; Pavo'da cihaza
+  hiç gitmez), havale, açık hesap, online ve diğer girmez; Z'de kendi satırlarındadır.
+- Bahşiş girmez (satış değil; mali fiş satış tutarına kesilir). Kısmi ödemede her ödeme ayrı sayılır: hesabın LafPOS'ta
+  alınan kısmı girer, aynı hesabın cihazdan geçen kısmı girmez. İptal edilen ödeme (cihazda fişi iptal edilen dahil) ve
+  açık hesap tahsilatı girmez.
+- Değişmez: X ve Z'nin kart ve nakit alanı = cihazdan geçen + yazarkasadan geçmeyen.
+- Bilinen sınır: alarm düşen iki durumda (cihazda eksik ödenen fiş, `okc.underpaid`; LafPOS'ta iptal sayılıp cihazda
+  ödenen sepet, `okc.late_paid`) kalanı kasadan alınan tutar yazarkasadan geçmeyen görünür, oysa fişi cihazda kesilmiştir.
+  LafPOS hangi kasa ödemesinin o fişe düştüğünü bilmez; alarm durumu ayrıca söyler.
+
+| Nerede | Ne görünür |
+|---|---|
+| Kasa › Ara rapor (X) ve Z ekranı | Ödeme türleri kartında "Yazarkasadan geçmeyen": Kart, Nakit ve tek cümle açıklama |
+| X ve Z fişi | "Yazarkasadan geçmeyen" başlığı altında Kart ve Nakit |
+| Patron paneli › Gün içi | Bugünün toplamı, altında kart ve nakit; dokununca neyi saydığı yazar; ikisi de sıfırsa "yok" |
+| Raporlar › Ciro (kafede ve Uzaktan'da) | Ödeme türleri kartının altında dönemin kartı ve nakdi |
+| LafPOS Uzaktan › Patron paneli | Gün içi satırı; gün kapalıyken gün sonu kartında |
+
+**Kör kasa:** `kasa.rakam` ya da `rapor.gor` yetkisi olmayan bu rakamı görmez: X ve Z özeti ona hiç gitmez, patron paneli
+verilmiş olsa da satır gelmez. Buluta yalnız patron rolü kasa rakamlarını görüyorsa gider (gün sonu kartının kasa farkıyla
+aynı kural; patron rolü kilitli olduğundan bugün hep gider).
+
+**Eski kayıt:** bu sürümden önce kapanan Z'de alan yoktur; ekran, fiş ve gün sonu kartı satırı yazmaz (₺0 göstermez).
+Uzakta dönemin bir günü eski kasadan geldiyse dönem toplamı yazılmaz (`shared/remote-calc.ts` › `sumOffDevice`); kasa
+güncellenince günlük tarama geçmiş günleri yeni alanla yeniden iter (yaklaşık bir saat), sonra satır görünür. lafmaliyet'e
+gitmez (sözleşmede yok). Testler: `tests/yazarkasadan-gecmeyen.test.ts`, `tests/report-reconciliation.test.ts`.
+
 ## 5. Sepet nasıl hesaplanır (`basket.ts`)
 
 - Tutarlar kuruş; `taxPercent` oran × 100, `quantity` adet × 1000, kısım KDV oranından.

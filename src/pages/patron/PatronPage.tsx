@@ -3,6 +3,7 @@ import { AlertOctagon, AlertTriangle, BarChart3, ChevronRight, RotateCcw } from 
 import { type CSSProperties, Fragment, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { tl, tlShort } from '@shared/money';
+import type { OffDeviceTotals } from '@shared/order-calc';
 import { fmtAgo, fmtDateLong, fmtTime, TZ } from '@shared/time';
 import { agoText, dayLabel, type PatronStats, statsSource, summaryCompares, todayStats, topCompare } from '@shared/today-stats';
 import { ColumnChart } from '@/components/charts';
@@ -37,6 +38,11 @@ export interface PatronData {
   hourlyNextDay?: number[];
   hourlyLastWeekNextDay?: number[];
   payments: { name: string; amount: number; count: number; share: number }[];
+  /**
+   * Bugün yazarkasadan geçmeyen kart ve nakit (shared/order-calc.ts `offDeviceTotals`). Yalnız kasa rakamlarını görene
+   * (kör kasa); eski sunucu ve uzaktan demo özeti göndermez: satır yazılmaz, ₺0 gösterilmez
+   */
+  offDevice?: OffDeviceTotals;
   discounts: number;
   complimentary: number;
   /** Eski sunucu ve uzaktan demo özeti (api/demo-ozet.json) göndermez */
@@ -63,6 +69,8 @@ export interface PatronData {
     netSales: number;
     receipts: number;
     payments: { name: string; amount: number; count: number }[];
+    /** Eski Z'de ve kör kasada yok */
+    offDevice?: OffDeviceTotals;
     cash: { expected: number; counted: number | null; diff: number | null } | null;
   } | null;
 }
@@ -385,6 +393,7 @@ export default function PatronPage() {
                 {loss > 0 ? <Amount k={loss} /> : <Faint>yok</Faint>}
               </Row>
               <Row label="İptal">{d.voided > 0 ? <Amount k={d.voided} /> : <Faint>yok</Faint>}</Row>
+              {d.offDevice && <OffDeviceRow off={d.offDevice} />}
               {d.online.orders > 0 && (
                 <Row
                   label={
@@ -607,6 +616,7 @@ function DayCloseGroup({ c }: { c: NonNullable<PatronData['lastClose']> }) {
       ) : (
         <QuietRow>Ödeme alınmadı</QuietRow>
       )}
+      {c.offDevice && <OffDeviceRow off={c.offDevice} />}
       {c.cash && (
         <Row label="Kasa farkı" sub={c.cash.counted == null ? `Sayılmadan kapandı · beklenen nakit ${tl(c.cash.expected)}` : `sayılan ${tl(c.cash.counted)}, beklenen ${tl(c.cash.expected)}`}>
           {c.cash.counted == null ? (
@@ -617,5 +627,22 @@ function DayCloseGroup({ c }: { c: NonNullable<PatronData['lastClose']> }) {
         </Row>
       )}
     </Group>
+  );
+}
+
+/**
+ * Yazarkasadan geçmeyen (gün içi ve gün sonu kartı): mali fişi yazarkasada kesilmeyen kart ve nakit, bahşiş hariç
+ * (shared/order-calc.ts `offDeviceTotals`). Dokununca neyi saydığı açılır; ikisi de sıfırsa "yok"
+ */
+function OffDeviceRow({ off }: { off: OffDeviceTotals }) {
+  const total = off.card + off.cash;
+  return (
+    <Row
+      label="Yazarkasadan geçmeyen"
+      sub={total > 0 ? <Pairs parts={[`kart ${tlShort(off.card)}`, `nakit ${tlShort(off.cash)}`]} /> : undefined}
+      detail="Cihaza gitmeden LafPOS’a yazılan kart ve nakit, bahşiş hariç (kısmi tutar, kişi payı, “Başka yoldan aldım”, yazarkasa kapalıyken alınan); mali fişi yazarkasada ayrıca kesilir"
+    >
+      {total > 0 ? <Amount k={total} /> : <Faint>yok</Faint>}
+    </Row>
   );
 }

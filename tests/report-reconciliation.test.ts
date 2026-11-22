@@ -5,7 +5,8 @@ import { type Harness, PINS, startApp } from './harness';
 /**
  * Raporlar asla birbirini tutmazlık etmez: gerçekçi bir gün (nakit, kart, yemek kartı, kalem ve adisyon indirimi,
  * ikram, gönderildikten sonra iptal, servis ücreti, bahşiş, ödeme iptali ve yeniden ödeme, paylaşımlı hesap)
- * sonrasında ciro; özet, ürün, kategori, saatlik, gün, patron paneli ve Z'de aynı; döküm ve KDV kuruşu kuruşuna.
+ * sonrasında ciro; özet, ürün, kategori, saatlik, gün, patron paneli ve Z'de aynı; döküm ve KDV kuruşu kuruşuna;
+ * yazarkasadan geçmeyen kart ve nakit özet, patron ve Z'de aynı.
  */
 let h: Harness;
 const MUDUR = PINS.mudur;
@@ -84,11 +85,12 @@ describe('rapor mutabakatı', () => {
       kdv: { gross: number; base: number; kdv: number }[];
       reconciliation: { difference: number; paidClosed: number; paidOpen: number };
       tips: number;
+      offDevice: { card: number; cash: number };
     }>('mudur', 'GET', '/reports/summary');
     const products = await h.ok<{ total: number; service: number; categories: { revenue: number }[]; products: { qty: number; complimentary: number; voided: number }[] }>('mudur', 'GET', '/reports/products');
     const hourly = await h.ok<{ total: number; hours: { revenue: number; orders: number }[]; parts: { orders: number }[]; week: { days: number; hours: number[] }[] }>('mudur', 'GET', '/reports/hourly');
     const saatlik = (await h.call<string>('mudur', 'GET', '/reports/export.csv?type=saatlik')).json.replace(/^\uFEFF/, '').trim().split('\r\n').slice(1);
-    const patron = await h.ok<{ netSales: number; orders: number; avgCheck: number; voided: number }>('patron', 'GET', '/reports/patron');
+    const patron = await h.ok<{ netSales: number; orders: number; avgCheck: number; voided: number; offDevice?: { card: number; cash: number } }>('patron', 'GET', '/reports/patron');
     const voids = await h.ok<{ total: number; rows: { qty: number }[] }>('mudur', 'GET', '/reports/items?kind=iptal');
     const staff = await h.ok<{ staff: { orders: number; revenue: number; voids: number; voidValue: number }[] }>('patron', 'GET', '/reports/staff');
     const checks = await h.ok<{ count: number; rows: { status: string; total: number }[] }>('mudur', 'GET', '/reports/checks');
@@ -153,7 +155,17 @@ describe('rapor mutabakatı', () => {
     // Z aynı rakamı yazar
     const closed = await h.ok<{
       day: { id: string };
-      summary: { netSales: number; receipts: number; voided: number; topProducts: { qty: number }[]; kdv: { gross: number }[]; tips: number; payments: { amount: number }[] };
+      summary: {
+        netSales: number;
+        receipts: number;
+        voided: number;
+        topProducts: { qty: number }[];
+        kdv: { gross: number }[];
+        tips: number;
+        payments: { amount: number }[];
+        byZField: Record<string, number>;
+        offDevice: { card: number; cash: number };
+      };
     }>('mudur', 'POST', '/cash/day/close', { countedCash: null });
     expect(closed.summary.netSales).toBe(N);
     expect(closed.summary.receipts).toBe(summary.receipts);
@@ -164,6 +176,13 @@ describe('rapor mutabakatı', () => {
     expect(closed.summary.kdv.reduce((x, k) => x + k.gross, 0)).toBe(N);
     expect(closed.summary.payments.reduce((x, p) => x + p.amount, 0)).toBe(N);
     expect(closed.summary.tips).toBe(2500);
+    // Yazarkasadan geçmeyen: bu günde yazarkasa yok, Z'nin kart ve nakdi kadar (bahşiş, iptal edilen ödeme ve yemek
+    // kartı hariç); özet = patron = Z (cihazlı gün: tests/yazarkasadan-gecmeyen.test.ts)
+    expect(closed.summary.offDevice).toEqual({ card: closed.summary.byZField.card, cash: closed.summary.byZField.cash });
+    expect(closed.summary.offDevice.card).toBeGreaterThan(0);
+    expect(closed.summary.offDevice.cash).toBeGreaterThan(0);
+    expect(summary.offDevice).toEqual(closed.summary.offDevice);
+    expect(patron.offDevice).toEqual(summary.offDevice);
   });
 
   it('kıyas dönemi hizalı: hafta haftayla, ayın başı önceki ayın aynı günleriyle, bugün aynı saate kadar', async () => {

@@ -94,15 +94,21 @@ function scrubCustomerNames<T extends { id: number; message: string }>(alerts: T
 }
 
 /**
- * Son gün sonunun kartı (uzaktan patron paneli, gün kapalıyken): Z, ciro, adisyon, ödemeler ve kasa farkı. Kasa
- * rakamları (beklenen, sayılan, fark) yalnız patron rolü `kasa.rakam` taşıyorsa (kör kasa kuralı; patron rolü kilitli,
- * bugün hep taşır). Maliyet ve kâr yok
+ * Uzaktaki görünüm patronundur: kasa rakamları (kasa farkı, yazarkasadan geçmeyen) yalnız patron rolü `kasa.rakam`
+ * taşıyorsa buluta gider (kör kasa kuralı; patron rolü kilitli, bugün hep taşır)
+ */
+export const patronSeesCash = () => effectivePermissions('patron', null, getSettings().rolePermissions).has('kasa.rakam');
+
+/**
+ * Son gün sonunun kartı (uzaktan patron paneli, gün kapalıyken): Z, ciro, adisyon, ödemeler, yazarkasadan geçmeyen ve
+ * kasa farkı. Kasa rakamları (beklenen, sayılan, fark, yazarkasadan geçmeyen) yalnız `patronSeesCash`; eski Z'de
+ * yazarkasadan geçmeyen yok (kart satırı yazmaz). Maliyet ve kâr yok
  */
 export function lastCloseCard() {
   const day = db.select().from(schema.businessDays).orderBy(desc(schema.businessDays.closedAt)).all().find((d) => d.closedAt && d.summary);
   if (!day?.closedAt || !day.summary) return null;
   const s = day.summary;
-  const numbers = effectivePermissions('patron', null, getSettings().rolePermissions).has('kasa.rakam');
+  const numbers = patronSeesCash();
   return {
     date: day.date,
     zNo: day.zNo,
@@ -110,6 +116,7 @@ export function lastCloseCard() {
     netSales: s.netSales,
     receipts: s.receipts,
     payments: s.payments.map((p) => ({ name: p.name, amount: p.amount, count: p.count })),
+    ...(numbers && s.offDevice ? { offDevice: s.offDevice } : {}),
     cash: numbers ? { expected: s.expectedCash, counted: s.countedCash, diff: s.cashDiff } : null,
   };
 }
@@ -124,7 +131,7 @@ export function buildSnapshot(now = Date.now()) {
     at: now,
     bootstrap: bootstrap(db, VIEWER),
     patron: (() => {
-      const live = patronLive(false);
+      const live = patronLive(false, patronSeesCash());
       return { ...live, alerts: scrubCustomerNames(live.alerts), lastClose: lastCloseCard() };
     })(),
     floor: {

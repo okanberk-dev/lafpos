@@ -93,12 +93,14 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   Kafede durum alanı "İnternet yok · N kayıt bekliyor", sonra "Bekleyenler gönderildi"; son başarılı itme Yönetim ›
   Genel bakış › Sistem sağlığı › LafPOS Uzaktan'da.
 - **Anlık ciro (patron paneli):** bugünün cirosu, adisyon sayısı ve ortalaması, açık masaların tahsil edilecek
-  tutarı, ödeme türleri, geçen haftanın aynı günüyle "bu saate kadar" kıyas ve saat saat grafik (bugün ve geçen
+  tutarı, ödeme türleri, yazarkasadan geçmeyen kart ve nakit (Gün içi; kör kasa kuralıyla, `docs/04-YAZARKASA.md`
+  §4.2), geçen haftanın aynı günüyle "bu saate kadar" kıyas ve saat saat grafik (bugün ve geçen
   hafta aynı gün), uyarılar (iptal, ikram, indirim sıçraması) canlı özetten gelir: satıştan en geç ~15 sn sonra
   itilir, sayfa gün açıkken 15 sn'de bir koşullu yeniler (yeni yoklama yok; özet değişmediyse 304). Durum satırı saniyesiyle "son güncelleme 14:05:09" yazar; gün açıkken son
   veri 10 dakikadan eskiyse (kasa nabzı 5 dk'da bir) "Kafeden veri gelmiyor" uyarısı çıkar (`remoteFreshness`,
-  `src/lib/remote.ts`). Gün kapalıyken son gün sonunun kartı: Z, ciro, adisyon, ödeme türleri ve kasa farkı (beklenen,
-  sayılan; yalnız patron rolü kasa rakamlarını görüyorsa, kör kasa kuralı). Maliyet ve kâr yok.
+  `src/lib/remote.ts`). Gün kapalıyken son gün sonunun kartı: Z, ciro, adisyon, ödeme türleri, yazarkasadan geçmeyen ve
+  kasa farkı (beklenen, sayılan; kasa rakamları yalnız patron rolü kasa rakamlarını görüyorsa, kör kasa kuralı; bu alandan
+  önce kapanan Z'de yazarkasadan geçmeyen satırı yok). Maliyet ve kâr yok.
 - **"Bugün" kıyasları (patron paneli, kafede ve Uzaktan'da aynı; 22 Kasım 2026):** ciro kartında adisyon, ortalama
   adisyon ve masada oturan kişi; altında **Kıyas** kartı: dün, geçen hafta aynı gün ve geçen ay aynı gün (takvimde aynı
   gün; "22 Ekim Perşembe" gibi tarih ve gün adı yazılı). Her satır tutar, adisyon, fark (₺, işaretli) ve değişim
@@ -131,7 +133,8 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     kendiliğinden kapanır. Gün raporu da yoksa (kafe bağlı değil, demo özeti) kart özetin iki rakamıyla çizilir: dünün gün
     sonu toplamı ve geçen haftanın bu saati (`summaryCompares`).
 - **Raporlar:** kasa her iş gününün rapor özetini ayrıca iter (`server/sync/cloud-reports.ts`,
-  `POST /api/uzaktan/rapor`): ciro ve döküm, ödeme türleri, satış türleri, KDV, ürün ürün satış (maliyetsiz), saatlik
+  `POST /api/uzaktan/rapor`): ciro ve döküm, ödeme türleri, yazarkasadan geçmeyen kart ve nakit (`s.off`; eski kasanın
+  gününde yok, dönemde böyle bir gün varsa Ciro satırı yazmaz, `sumOffDevice`), satış türleri, KDV, ürün ürün satış (maliyetsiz), saatlik
   dağılım, Z numaraları, iptal, ikram, ödenmez, zayi, indirim, personel satışı ve kapanışların dakikası (bugünü
   içeren dönemin "aynı saate kadar" kıyası). Rakamlar Raporlar'ın kendi servisleriyle kurulur; Uzaktan'daki Raporlar
   (Ciro, Ürünler, Saatlik, Personel) dönemin günlerini toplar ve kafedekiyle aynı rakamı verir
