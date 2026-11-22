@@ -12,7 +12,7 @@ hiç istek atmaz; kasa ModPOS'ken laffogato ve lafmaliyet bugünkü gibi çalı�
 
 | Veri | Sahibi | LafPOS'ta |
 | --- | --- | --- |
-| Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır; sitenin kapattığını kasiyer açamaz (§2.3 Tükendi kilidi) |
+| Satış fiyatı (M, L), Satışta/Tükendi, KDV oranı, ürün adı, kategori, görsel, alerjen | laffogato | salt okunur kopya; Tükendi değişikliği önce siteye yazılır (internet yokken kasada hemen geçerli, siteye giden kutusundan gider); sitenin kapattığını kasiyer açamaz (§2.3 Tükendi kilidi) |
 | Seçenekler (süt, kavrum, şurup, ekstra shot, şeker) ve fiyatları | laffogato (kod sabiti; panelde düzenlenmez, site koduyla değişir) | menüyle birlikte gelir, salt okunur; kasaya özel seçenek LafPOS'ta yerel gruptur. Seçeneğin kasadaki Tükendi'si (`option_items.soldOut`) yalnız LafPOS'ta, siteye gitmez (§2.3 Seçenek tükendi) |
 | POS'a özel alanlar: istasyon, kısa ad, düğme rengi, POS sırası, gizli, porsiyon sayacı, `posName` | LafPOS | senkron dokunmaz |
 | POS'a özel ürünler (karaoke saati, kampanya) | LafPOS | `extSource` boş |
@@ -157,7 +157,7 @@ Uyum, iki projenin sabitlediği vektörlerle `tests/signature.test.ts`'te doğru
 | Uç | LafPOS kullanımı | Sıklık |
 | --- | --- | --- |
 | `GET /api/panel/menu` | Satışta bilgisinin ve fiyatın taze kaynağı (`isActive`, §2.1) | menü senkronunda: herkese açık menü değişince, `menu` işareti değişince (gün açıkken en sık 60 sn, gece yok) ve elle |
-| `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
+| `POST /api/panel/menu {id, isActive, actor, branch}` | POS'ta Tükendi / Satışa aç ve porsiyon sayacının doldurulması → önce site, 2xx gelince yerel; Tükendi / Satışa aç'ta siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen, yazım giden kutusundan (aşağıda "İnternet yokken Tükendi"); porsiyon sayacı sıfıra inince Tükendi, hazırlanmadan iptal edilen kalemle sıfırdan dönünce Satışta (`actor: LafPOS porsiyon`, giden kutusundan) | kullanıcı işlemi ya da porsiyon |
 | `GET /api/pos/orders/version` | sipariş sürüm sinyali (aşağıda) | gün açıkken 20 sn'de bir, gece en sık 3 dk'da bir; veritabanına gitmez |
 | `GET /api/panel/orders` | online siparişler (masa, gel-al, kurye): bar ekranı ve masa planı; yanındaki `calls` masa çağrıları (aşağıda) | sinyal değişince; gün açılınca bir kez; gün açıkken 15 dk'da bir güvenlik çekimi; elle "Yenile" (en sık 30 sn); sinyal yoksa 5 dk'da bir |
 | `POST /api/panel/orders/stage {id, action, from, actor}` | Hazırlanıyor / Hazır / Teslim edildi; 409 ve 404'te liste yeniden çekilir | kullanıcı işlemi |
@@ -302,6 +302,24 @@ yazılır; o tarihin günü henüz açılmadıysa gün açılınca oraya taşın
 sitenin kapattığı (senkron) `site` diye işaretlenir. Kasiyer (`urun.tukendi`) yalnız LafPOS'un kapattığını açar;
 sitenin kapattığı kasada "Sitede satışta değil" diye görünür, düğmesi yoktur, sunucu 403 `site_closed` döner. Menü
 yetkisi olan (`menu.yonet`) hepsini açar: açış önce siteye yazılır, denetim kaydına "sitede kapatılmıştı" düşer.
+
+**İnternet yokken Tükendi** (Tükenen ürünler penceresi, Yönetim › Ürünler; `POST /api/sync/products/:id/availability`):
+kasada elle Tükendi / Satışa aç internetsiz de çalışır. Siteye ulaşılamazsa (ağ hatası, 8 sn'lik zaman aşımı; ya da
+site 5xx/429 dönerse) değişiklik yerelde hemen geçerli olur, yazım giden kutusuna kimin bastığıyla girer (aşağıda
+"Porsiyon": ürün başına tek kayıt, son istenen durum) ve yanıt `{ site: 'kuyrukta', neden: 'internet' | 'site' }`
+olur. İnternetin olmadığı zaten biliniyorsa (son dış istek ağ hatası aldı, `server/lib/internet.ts`) istek hiç
+denenmez: kasiyer her dokunuşta zaman aşımını beklemez. Kasiyere kısa uyarı: "Americano tükendi. İnternet yok: kasada
+uygulandı, site internet gelince güncellenecek" (site 5xx'te "Site şu an yanıt vermiyor: ... site düzelince
+güncellenecek"; `shared/tukendi.ts`). Üst çubuktaki "İnternet yok · N kayıt bekliyor" rozeti bekleyen yazımı sayar
+(yazım kuyruğa girince her cihazda hemen yenilenir). Arada aynı ürüne yeni bir değişiklik gelirse eski bekleyen
+düşer, siteye yalnız sonuncusu gider; siteye doğrudan yazılan değişiklik de aynı ürünün bekleyenini düşürür. İnternet
+gelince (`server/sync/catch-up.ts`) yazımlar kayıt sırasıyla ve tam bir kez gider; o ana dek menü eşitlemesi ürünün
+Satışta bilgisine dokunmaz (site görüntüsü yazımdan eskidir). Site açıkça reddederse (4xx) yerelde de hiçbir şey
+değişmez, 502 `site_menu` (bugünkü gibi); kuyruktaki yazımı site sonradan reddederse yazım "site reddetti" diye
+Entegrasyon'da kalır, sitenin durumu geçerlidir. Tükendi kilidi internetsiz de geçerlidir: sitenin kapattığını kasiyer
+açamaz (403), menü yetkisi olan açar, açış kuyruktan gider. Porsiyon doldurma (Yönetim › Ürünler) kuyruğa girmez:
+önce site, site yanıt vermezse hiçbir alan kaydedilmez (aşağıda "Porsiyon"). Seçeneğin Tükendi'si zaten yalnız
+LafPOS'tadır. Testler: `tests/internetsiz-tukendi.test.ts`.
 
 **Seçenek tükendi** (`option_items.soldOut`, göç 0013): yulaf sütü bitince kasiyer ya da bar (`urun.tukendi`, menü
 yetkisi olan da) Tükenen ürünler › Seçenekler'den seçeneği Tükendi yapar ve açar (`POST /api/option-items/:id/sold-out
@@ -787,7 +805,7 @@ Bağlantı sonradan kurulduysa (`enqueueDay` yapılandırma yokken kuyruğa koym
 | İmzalı menü okuma | senkronda (herkese açık menü değişince, `menu` işareti değişince: gün açıkken en sık 60 sn, gece yok) ve elle | küçük okuma |
 | Sipariş sürüm sinyali | gün açıkken 20 sn, gece en sık 3 dk; hiç iş günü yokken hiç; "Online siparişleri çek" kapalıyken yalnız karaoke için, gün açıkken ve planda oda varken | yok (veri önbelleği, veritabanına gitmez) |
 | Online sipariş okuma (masa çağrıları dahil; kasanın şubesinin, §2 "Şube") | sinyal değişince + gün açılınca bir kez + gün açıkken 15 dk'da bir güvenlik + elle (en sık 30 sn); sinyal yoksa 5 dk | küçük okuma |
-| Tükendi / aşama yazma, masa çağrısı "Gördüm" | kullanıcı işlemi; porsiyon Tükendi'si giden kutusundan | tek yazım |
+| Tükendi / aşama yazma, masa çağrısı "Gördüm" | kullanıcı işlemi; porsiyon Tükendi'si ve internetsiz basılan Tükendi / Satışa aç giden kutusundan (internet yokken istek denenmez, internet gelince tek yazım) | tek yazım |
 | Karaoke rezervasyonları (§2.4) | `karaoke` işareti değişince ya da gün dönünce, gün açıkken en sık 5 dk ("Online siparişleri çek" kapalıyken de); oda kutusu açılınca ve sayaç dururken liste geride kaldıysa; elle (en sık 30 sn); gece yok; planda oda yoksa hiç | küçük okuma |
 | Karaoke saat ücreti (§2.4) | Yönetim › Masa planı açılınca (en sık dakikada bir) | küçük okuma (herkese açık uç) |
 | Sesli uyarılar (§2.5) | yeni istek yok: sipariş (masa çağrıları dahil) ve karaoke çekimlerinin listesinden | yok |

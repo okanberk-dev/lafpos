@@ -3,6 +3,7 @@ import { Ban, CircleCheck, Coffee, ExternalLink, Eye, EyeOff, Globe, Pencil, Plu
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { netMarginPct, parseTL, tl } from '@shared/money';
+import { type AvailabilityResultDTO, availabilityNotice } from '@shared/tukendi';
 import type { ProductDTO } from '@shared/types';
 import { newGroupDraft, OptionGroupEditor } from '@/components/admin/OptionGroupEditor';
 import { ActionMenu, ActionRow, ActionRows, Badge, Card, CARD, CODE, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, SetupNotes, StatusTabs, TableSkeleton } from '@/components/admin/ui';
@@ -141,8 +142,9 @@ export default function MenuAdmin() {
 
   const availability = async (p: ProductDTO, active: boolean) => {
     try {
-      const r = await post<{ site: string }>(`/sync/products/${p.id}/availability`, { active });
-      toast.ok(`${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'anahtar_yok' ? '; site anahtarı yok, yalnız LafPOS' : r.site === 'baglanti_yok' ? '; site bağlantısı kurulmadı, yalnız LafPOS' : r.site === 'kuyrukta' ? '; internet gelince siteye yazılacak' : ''}`);
+      const r = await post<AvailabilityResultDTO>(`/sync/products/${p.id}/availability`, { active });
+      const notice = availabilityNotice(p.name, active, r, { admin: true });
+      toast[notice.tone](notice.text);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));

@@ -374,6 +374,10 @@ Kasa yerel sunucudur: satış, masa, ödeme ve Pavo internetsiz çalışır; aç
 
 - Dışarı gidecek kayıtlar kaybolmaz: lafmaliyet gün sonu ve sitenin Satışta yazımları giden kutusunda (`outbox`),
   LafPOS Uzaktan özeti bir sonraki itmede, online siparişler bir sonraki çekimde.
+- Elle Tükendi / Satışa aç internetsiz de çalışır: kasada hemen geçerli, kasiyer "İnternet yok: kasada uygulandı, site
+  internet gelince güncellenecek" uyarısını görür, sitenin yazımı giden kutusunda bekler (aynı ürüne yeni değişiklik
+  gelirse yalnız sonuncusu gider). İnternetin olmadığı biliniyorken siteye hiç denenmez, dokunuş beklemez. Sitenin
+  açık reddi (4xx) ve Tükendi kilidi bugünkü gibi (`docs/03-ENTEGRASYON.md` §2.3 "İnternet yokken Tükendi").
 - İnternetin durumu yeni istek atmadan izlenir (`server/lib/internet.ts`): imzalı her isteğin sonucu yazılır, ağ
   hatası "yok", yanıt gelen istek (hata koduyla da) "var". İnternet yokken dakikada bir yapılandırılmış hostlardan
   birine yalnız TCP bağlantısı denenir (HTTP isteği yok).

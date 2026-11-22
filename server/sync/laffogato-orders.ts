@@ -3,11 +3,13 @@ import { SITE_EVENT } from '@shared/events';
 import { ONLINE_ALERT_MAX_AGE_MS, type OnlineAlertDTO } from '@shared/site-alerts';
 import { normalizeTableCode } from '@shared/table-qr';
 import { businessDate } from '@shared/time';
+import type { AvailabilityResultDTO, SiteQueueReason, SiteWrite } from '@shared/tukendi';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
+import { internetState } from '../lib/internet';
 import { getSettings, getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
@@ -604,19 +606,27 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
   fx.flush();
 }
 
-/** `kuyrukta`: siteye ulaşılamadı (internet yok, site 5xx/429); yazım giden kutusunda, internet gelince gider */
-export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok' | 'kuyrukta';
+/**
+ * Sitenin sonucu (shared/tukendi.ts; arayüz de aynı türü okur). `kuyrukta`: siteye ulaşılamadı (internet yok, site
+ * 5xx/429); yazım giden kutusunda, internet gelince gider
+ */
+export type { SiteQueueReason, SiteWrite };
 type ProductRow = typeof schema.products.$inferSelect;
 
 /**
  * Siteye bağlı üründe Satışta bilgisini siteye yazar (site Satışta bilgisinin sahibi). 2xx gelmezse ya da siteye
- * ulaşılamazsa 502 atar: çağıran yerelde de değiştirmez. Bağlı değilse, adres ya da anahtar yoksa istek gitmez,
- * sonuç bunu söyler.
+ * ulaşılamazsa 502 atar: çağıran yerelde de değiştirmez. `queueOffline`: siteye ulaşılamazsa (ağ hatası, zaman aşımı,
+ * 5xx, 429) atmaz, `kuyrukta` döner; çağıran yerelde uygular, yazımı giden kutusuna koyar. İnternetin olmadığı zaten
+ * biliniyorsa istek hiç denenmez: kasiyer her dokunuşta 8 sn'lik zaman aşımını beklemez. Sitenin açık reddi (4xx) her
+ * durumda 502. Bağlı değilse, adres ya da anahtar yoksa istek gitmez, sonuç bunu söyler.
  */
 export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'extId'>, active: boolean, actorName: string, opts: { queueOffline?: boolean } = {}): Promise<SiteWrite> {
   if (p.extSource !== 'laffogato' || !p.extId) return 'bagli_degil';
   if (!siteLinked()) return 'baglanti_yok';
   if (!configured()) return 'anahtar_yok';
+  // Son dış istek ağ hatası aldı: internetin dönüşü TCP denemesiyle ya da başka bir isteğin yanıtıyla anlaşılır, giden
+  // kutusu o zaman gönderir (server/sync/catch-up.ts). Siteye yeni bir istek gitmez (AGENTS.md kural 6)
+  if (opts.queueOffline && internetState().state === 'yok') return 'kuyrukta';
   const res = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80), branch: siteBranch() }).catch(() => null);
   // İnternet yok ya da site geçici olarak yanıt vermiyor: çağıran isterse yazım kuyruğa girer (kalıcı ret girmez)
   const offline = !res || res.status >= 500 || res.status === 429;
@@ -628,11 +638,14 @@ export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'e
 
 /**
  * Ürünü Tükendi / Satışa açık yapar. Siteye bağlı üründe önce site güncellenir, 2xx gelince yerelde kaydedilir.
- * Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir. Açılan ürünün bekleyen Tükendi yazımı giden kutusundan düşer.
- * Tükendi kilidi: sitenin kapattığı ürünü ("Sitede satışta değil", `soldOutBy = 'site'`) kasiyer açamaz; menü
- * yetkisi olan (`manager`) açar, denetim kaydına "sitede kapatılmıştı" diye düşer.
+ * Siteye ulaşılamazsa (internet yok: ağ hatası, zaman aşımı; ya da site 5xx/429) beklemez: yerelde hemen geçerli,
+ * yazım giden kutusuna girer (`kuyrukta`, `neden`), internet gelince sırayla ve bir kez gider. Aynı ürünün bekleyen
+ * yazımı varsa yenisi onun yerini alır: siteye son istenen durum gider. Site açıkça reddederse (4xx) 502, yerelde de
+ * değişmez. Anahtar yoksa yalnız LafPOS'ta değişir ve bu bildirilir. Tükendi kilidi: sitenin kapattığı ürünü
+ * ("Sitede satışta değil", `soldOutBy = 'site'`) kasiyer internet olsa da olmasa da açamaz; menü yetkisi olan
+ * (`manager`) açar, denetim kaydına "sitede kapatılmıştı" diye düşer.
  */
-export function setAvailability(productId: string, active: boolean, actor: { name: string; manager: boolean }): Promise<{ site: SiteWrite }> {
+export function setAvailability(productId: string, active: boolean, actor: { name: string; manager: boolean }): Promise<AvailabilityResultDTO> {
   return withSiteMenuLock(async () => {
     const p = db.select().from(schema.products).where(eq(schema.products.id, productId)).get();
     if (!p) throw notFound('Ürün');
@@ -640,26 +653,33 @@ export function setAvailability(productId: string, active: boolean, actor: { nam
     if (siteClosed && !actor.manager) throw new HttpError(403, `${p.name} sitede satışta değil; yalnız menü yetkisi olan biri satışa açabilir`, 'site_closed');
     // İnternet kesikken elle Tükendi / Satışa aç beklemez: yerelde hemen geçerli, siteye giden kutusundan gider
     const site = await writeSiteAvailability(p, active, actor.name, { queueOffline: true });
+    // Ağ hatası interneti "yok" yazar (server/lib/signature.ts); yanıt gelen 5xx/429 "var": kasiyere "internet yok"
+    // denmez, "site yanıt vermiyor" denir
+    const neden: SiteQueueReason | undefined = site === 'kuyrukta' ? (internetState().state === 'yok' ? 'internet' : 'site') : undefined;
     const fx = new Effects();
     tx((t) => {
       t.update(schema.products)
         .set({ active, soldOutBy: active ? null : 'lafpos', portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
         .where(eq(schema.products.id, productId))
         .run();
-      // Kuyruktaki yazım aynı ürünün bekleyen yazımının yerini alır; doğrudan yazıldıysa açılan ürünün bekleyeni düşer
+      // Kuyruktaki yazım aynı ürünün bekleyen yazımının yerini alır. Siteye doğrudan yazıldıysa (ya da siteye hiç
+      // gitmeyecekse) bekleyen yazım eskidi, iki yönde de düşer: site aynı değişikliği iki kez almaz
       if (site === 'kuyrukta') enqueueSiteAvailability(t, p, active, actor.name);
-      else if (active) dropSiteSoldOut(t, p.extId);
+      else dropSiteSoldOut(t, p.extId);
       fx.audit(t, {
         action: active ? 'product.available' : 'product.sold_out',
         entity: 'product',
         entityId: productId,
-        message: `${actor.name}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : site === 'kuyrukta' ? ' (site: kuyrukta)' : ''}`,
+        message: `${actor.name}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : site === 'kuyrukta' ? ` (site: kuyrukta, ${neden === 'internet' ? 'internet yok' : 'site yanıt vermedi'})` : ''}`,
       });
     });
     fx.emit({ topic: 'menu', kind: active ? 'product.available' : 'product.sold_out' });
     if (site === 'guncellendi') fx.emit({ topic: 'sync', kind: 'site.menu.written' });
+    // Bekleyen yazım: üst çubuğun "İnternet yok · N kayıt bekliyor"u ve Entegrasyon her cihazda hemen sayar (gönderim
+    // tetiklenmez: site az önce yanıt vermedi, internet gelince catch-up gönderir)
+    if (site === 'kuyrukta') fx.emit({ topic: 'sync', kind: 'site.menu.queued' });
     fx.flush();
-    return { site };
+    return neden ? { site, neden } : { site };
   });
 }
 

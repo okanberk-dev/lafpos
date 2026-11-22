@@ -109,6 +109,10 @@ export function karaokeOn(day: string, rows: PanelKaraokeFixture[]): PanelKaraok
 export interface FakeSite {
   url: string;
   close: () => Promise<void>;
+  /** İnternet yok: her istek yanıtsız kapanır (fetch "fetch failed" verir, LafPOS ağ hatası sayar) */
+  offline: boolean;
+  /** İnternet yokken gelen, yanıtsız kapanan istekler: "POST /api/panel/menu" gibi */
+  dropped: string[];
   /** Herkese açık menü (ETag gövdeden üretilir, If-None-Match tutarsa 304) */
   menu: SiteMenuFixture;
   /** İmzalı panel menüsünde Satışta bilgisi: kimlik → isActive (fikstürde hepsi true) */
@@ -173,6 +177,8 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
   const site: FakeSite = {
     url: '',
     close: async () => undefined,
+    offline: false,
+    dropped: [],
     menu: siteMenuFixture(),
     panelActive: new Map(panelMenu.items.map((i) => [i.id, i.isActive])),
     panelPrices: new Map(),
@@ -205,6 +211,10 @@ export async function startFakeSite(secret: string): Promise<FakeSite> {
   };
 
   const server: Server = createServer(async (req, res) => {
+    if (site.offline) {
+      site.dropped.push(`${req.method} ${new URL(req.url ?? '/', 'http://site.test').pathname}`);
+      return req.socket.destroy();
+    }
     const raw = await readBody(req);
     const url = new URL(req.url ?? '/', 'http://site.test');
     const call = `${req.method} ${url.pathname}`;
