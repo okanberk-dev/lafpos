@@ -239,6 +239,27 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     isteğe bağlı `GETIR_RESTAURANT_ID`. Kurulum durumu `GET /api/uzaktan/kurulum`'da `getir: true|false` (değer asla).
   - **Sonraki:** Migros Yemek (belge herkese açık değil; görüşme gerekir).
 
+## Anahtarlar buluttan
+
+Sahibin tek adımı: **Trendyol panelinden değerleri Vercel'e yapıştırın, gerisi kendiliğinden.** Kasada Bağlantı
+bilgilerine platform anahtarı girmek gerekmez.
+
+1. Trendyol satıcı paneli › Hesap Bilgileri › Entegrasyon Bilgileri: satıcı no, API Key, API Secret.
+2. Vercel › `lafpos` projesi › Settings › Environment Variables, ortam **Production**, gizliler **Sensitive**:
+   `TRENDYOL_SUPPLIER_ID`, `TRENDYOL_API_KEY`, `TRENDYOL_API_SECRET`, `TRENDYOL_EXECUTOR_EMAIL` (panelde işlemi yapan
+   kullanıcının e-postası). Yemeksepeti bilgileri gelince: `YEMEKSEPETI_MW_URL`, `YEMEKSEPETI_USERNAME`,
+   `YEMEKSEPETI_PASSWORD`, `YEMEKSEPETI_REMOTE_ID`. Sonra Deployments › son yayın › Redeploy (ortam yayınla geçer).
+3. Kasa en geç 10 dakika içinde çeker; Yönetim › Bağlantı bilgileri'nde Trendyol kartı "Kaynak: bulut · son çekim
+   SS:DD" der. Platform Kapalı kalır: Yönetim › Paket platformları'ndan açmak sahibin kararı.
+
+Nasıl çalışır: kasa `GET /api/uzaktan/anahtarlar`'ı kafe anahtarıyla (`LAFPOS_CLOUD_SECRET`, gelen kutusu uçlarıyla
+aynı imza) açılışta ve 10 dakikada bir çeker. Uç yalnız Vercel ortamını okur, Redis'e dokunmaz; yanlış imzada 401,
+her yanıtta `cache-control: no-store`. Bulutta dolu olan değer kasadaki yerel değeri ezer, bulutta boşsa yerel kalır.
+Değer değişince kasa veri klasöründeki `platform-anahtarlari.json`'a (yalnız sahibine okunur) yazar, bağdaştırıcıyı
+yeniden başlatmadan kurar ve denetim kaydına değersiz bir satır düşer ("Trendyol anahtarları buluttan güncellendi").
+Değerler arayüzde, günlükte, denetim kaydında, veritabanında, bulut özetinde ve depoda hiç yazılmaz. İnternet yokken
+kasa son çekilen değerlerle sürer (`tests/platform-anahtar-bulut.test.ts`).
+
 ## Otomatik kabul
 İsteğe bağlı ve **varsayılan kapalı**, platform başına (Yönetim › Paket platformları, platform kartında "Otomatik
 kabul"; ayar `PlatformSettings.autoAccept`, `autoAcceptUserId`, `autoAcceptMaxKurus`, ayar JSON'unda durur). Açarken

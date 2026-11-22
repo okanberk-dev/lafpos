@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
+import { CLOUD_KEYS, CONN_FIELDS, CONN_GROUPS } from '@shared/baglanti';
 import { env } from '../env';
+import { cloudKeys, pullState } from './platform-anahtar';
 
 /**
  * Ayarlar dosyası (Windows kurulumunda C:\ProgramData\LafPOS\ayarlar.env): dış sistemlerin adresleri ve anahtarları
@@ -115,6 +116,9 @@ export function connectionView() {
   const vars = file ? readEnvText(readFile(file.path)) : {};
   const running = (key: string) => (process.env[key] ?? '').trim();
   const pendingKeys = file ? CONN_FIELDS.filter((f) => (vars[f.key] ?? '').trim() !== running(f.key)).map((f) => f.key) : [];
+  // Buluttan gelen platform anahtarları (#75 İş 2): bulutta dolu olan yereli ezer; değeri hiç dönmez, yalnız kaynak
+  const cloud = cloudKeys();
+  const pull = pullState();
   return {
     available: !!file,
     restart: file?.restart ?? null,
@@ -122,9 +126,12 @@ export function connectionView() {
     groups: CONN_GROUPS.map((g) => ({
       id: g.id,
       fields: g.fields.map((f) => {
+        if (cloud.values[f.key]) return { key: f.key, set: true, value: null, source: 'bulut' as const };
         const v = (file ? vars[f.key] : process.env[f.key])?.trim() ?? '';
-        return { key: f.key, set: v !== '', value: f.kind === 'secret' || !v ? null : v };
+        return { key: f.key, set: v !== '', value: f.kind === 'secret' || !v ? null : v, ...(CLOUD_KEYS.includes(f.key) && v ? { source: 'yerel' as const } : {}) };
       }),
     })),
+    /** Son çekim: başarılı çekimin anı (yerel kopyadan), son denemenin sonucu */
+    bulut: { at: cloud.at, ok: pull.ok, error: pull.error },
   };
 }

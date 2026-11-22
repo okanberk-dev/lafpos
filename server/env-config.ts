@@ -66,6 +66,8 @@ export function configFrom(vars: Record<string, string | undefined>) {
       apiSecret: (vars.TRENDYOL_API_SECRET ?? '').trim(),
       apiUrl: ((vars.TRENDYOL_API_URL ?? '').trim() || 'https://api.tgoapps.com').replace(/\/+$/, ''),
       agentName: (vars.TRENDYOL_AGENT_NAME ?? '').trim() || 'LafPOS',
+      /** `x-executor-user`: işlemi yapan satıcı paneli kullanıcısının e-postası; boşsa entegratör adı */
+      executorEmail: (vars.TRENDYOL_EXECUTOR_EMAIL ?? '').trim(),
     },
   };
 }

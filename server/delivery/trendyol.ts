@@ -54,6 +54,8 @@ export interface TrendyolConfig {
   apiUrl: string;
   /** User-Agent ve x-agentname'deki entegratör adı */
   agentName: string;
+  /** `x-executor-user`: satıcı paneli kullanıcısının e-postası (TRENDYOL_EXECUTOR_EMAIL); boşsa entegratör adı */
+  executorEmail?: string;
 }
 
 export const trendyolConfigured = (c: TrendyolConfig) => !!(c.supplierId && c.apiKey && c.apiSecret);
@@ -296,7 +298,7 @@ function headersFor(c: TrendyolConfig): Record<string, string> {
     authorization: `Basic ${btoa(`${c.apiKey}:${c.apiSecret}`)}`,
     'user-agent': `${c.supplierId} - ${c.agentName}`,
     'x-agentname': c.agentName,
-    'x-executor-user': c.agentName,
+    'x-executor-user': c.executorEmail || c.agentName,
     'content-type': 'application/json',
     accept: 'application/json',
   };
