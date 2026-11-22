@@ -6,3 +6,9 @@ import { createContext } from 'react';
  * sekmeler sahnenin başında yatay hap şeridi olarak kalır
  */
 export const TopTabsSlot = createContext<HTMLElement | null>(null);
+
+/**
+ * Sekmeleri üst çubuğa taşıyan sahne kabuğa bunu çizimden önce (useLayoutEffect) bildirir; dönen işlev bildirimi geri
+ * alır. Üst çubuk boyamadan önce açılır ya da kapanır: sayfa çizildikten sonra çubuğun gelip içeriği itmesi (kayma) olmaz
+ */
+export const TopTabsClaim = createContext<(() => () => void) | null>(null);

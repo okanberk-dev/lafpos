@@ -30,7 +30,7 @@ import { AlertSoundGroup, DrawerArrow, DrawerGroup, DrawerLabel, drawerRow, Tool
 import { Segmented } from './ui/Field';
 import { Avatar, Badge } from './ui/misc';
 import { REMOTE, remoteNav, useRemoteSignOut } from '@/lib/remote';
-import { TopTabsSlot } from './shellSlots';
+import { TopTabsClaim, TopTabsSlot } from './shellSlots';
 import { Button } from './ui/Button';
 
 /** "Denemeyi bitir" penceresi yalnız patron basınca yüklenir (yönetim kodu kasa ekranının paketine girmez) */
@@ -98,16 +98,14 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   // Üst çubuğun ortası: ekranın sekmeleri buraya taşınır (Stage)
   const [tabsSlot, setTabsSlot] = useState<HTMLElement | null>(null);
   // Üst çubuk yalnız ekranın sekmeleri (Masalar'ın bölümleri, Siparişler, Kasa) varken görünür; boşken kaldırılır ve
-  // içerik yukarı yayılır (sahibin isteği, 21 Kas 2026). Durum, arama ve marka o zaman marka rayında
-  const [hasTabs, setHasTabs] = useState(false);
-  useEffect(() => {
-    if (!tabsSlot) return;
-    const sync = () => setHasTabs(tabsSlot.childElementCount > 0);
-    sync();
-    const mo = new MutationObserver(sync);
-    mo.observe(tabsSlot, { childList: true });
-    return () => mo.disconnect();
-  }, [tabsSlot]);
+  // içerik yukarı yayılır (sahibin isteği, 21 Kas 2026). Durum ve arama o zaman marka rayında. Sekmeleri taşıyan sahne
+  // bunu çizimden önce bildirir (TopTabsClaim): çubuk sayfa çizildikten sonra gelip içeriği itmez
+  const [tabClaims, setTabClaims] = useState(0);
+  const claimTopTabs = useCallback(() => {
+    setTabClaims((n) => n + 1);
+    return () => setTabClaims((n) => n - 1);
+  }, []);
+  const hasTabs = tabClaims > 0;
   // Ekran değişince gezinme sayfaları kapanır: kaydedilmemiş değişiklik koruması bağlantının tıklamasını yakalayıp
   // onaydan sonra kendisi gezdiğinde bağlantının onClick'i (sayfayı kapat) çalışmamış olur
   useEffect(() => {
@@ -321,63 +319,10 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   );
 
   return (
-    // Kitin kabuğu: üstte buzlu çubuk (marka, ana ekranlar, durum, Araçlar), altında ekranın sahnesi. Telefonda üst şerit
-    // ve alt sekme çubuğu. Yatay telefonda çentik yanlarda: kök kapsayıcı yan güvenli alanı bırakır
+    // Kitin kabuğu: tablette ve bilgisayarda solda tam boy marka rayı (marka, ana ekranlar, durum, Araçlar), sağında
+    // sekmeler varken üst çubuk, uyarı şeritleri ve ekranın sahnesi. Telefonda üst şerit ve alt sekme çubuğu. Yatay
+    // telefonda çentik yanlarda: kök kapsayıcı yan güvenli alanı bırakır
     <div className="flex h-full flex-col bg-bg pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
-      {/*
-       * Tablet ve bilgisayar: üst çubuk (pano). Solda L'Af karosu ve ev yeşilinde L'Affogato; ortada ekranın sekmeleri
-       * (sayfa sahnesi buraya taşır, TopTabsSlot); sağda durum (saat ve Z), arama ve kişinin düğmesi (avatar ve ok)
-       */}
-      {/*
-       * İskelet (operatör, 20 Kas 2026: "belli bir iskelet, çerçevelerle ayrım"): üst çubuk, ray ve içerik zeminde
-       * --shell-gap (12 px) aralıklı çerçeveli bloklar. Üst çubuk beyaz, ince kenarlı ve köşe 18 (--r-card)
-       */}
-      <header
-        className={cn(
-          'relative z-30 mx-[var(--shell-gap)] mt-[var(--shell-gap)] hidden h-16 shrink-0 items-center gap-3 rounded-[var(--r-card)] border border-line bg-surface px-3 shadow-[var(--shadow-control)] lg:gap-4',
-          hasTabs && 'md:flex',
-        )}
-      >
-        <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="flex shrink-0 items-center gap-2.5 rounded-[10px] md:w-[5.25rem] lg:w-auto lg:min-w-[6.25rem]">
-          <LafTile size="md" />
-          <span className="hidden font-headline text-xl font-bold leading-none tracking-[-0.035em] text-[var(--admin-primary)] lg:inline">L’Affogato</span>
-        </NavLink>
-        <div ref={setTabsSlot} className="lp-topnav flex min-w-0 flex-1 items-center justify-center" />
-        <div className="flex shrink-0 items-center gap-1.5">
-          {/* İnternet yokken bekleyen kayıtlar ve dönünce "Bekleyenler gönderildi" (her şey yolundayken boş) */}
-          <span className="hidden xl:inline-flex">
-            <InternetBadge />
-          </span>
-          <span className="inline-flex xl:hidden">
-            <InternetBadge compact />
-          </span>
-          {/* Uzakta iki ve daha çok dükkân: seçici tablet ve bilgisayarda da (telefonda üst şeritte) */}
-          {REMOTE && <RemoteShopPicker />}
-          {healthPill}
-          <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:size-11">
-            <Search className="size-5" />
-          </button>
-          {/*
-           * Kişinin düğmesi (panonun avatarı ve oku): kişinin menüsünü (Araçlar çekmecesi) açar. Ana eylemle yarışmasın diye
-           * kenarsız; geniş ekranda adı ve rolü yanında
-           */}
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            aria-expanded={toolsOpen}
-            aria-label={`${me.name} menüsü · Araçlar`}
-            className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl pl-1 pr-2 text-ink transition-colors duration-150 hover:bg-hover"
-          >
-            {avatar('md')}
-            <span className="hidden min-w-0 flex-col items-start leading-tight 2xl:flex">
-              <span className="max-w-36 truncate text-[13.5px] font-semibold">{me.name}</span>
-              <span className="text-xs text-muted">{roleLabel}</span>
-            </span>
-            <ChevronDown aria-hidden="true" className="size-4 text-muted" />
-          </button>
-        </div>
-      </header>
-
       {/* Telefon: üst şerit (adisyon, bar ve yönetimde yok: onların kendi şeridi var) */}
       {!fullBleed && (
         // Ana ekrandan açılan uygulamada çentik ve durum çubuğu payı
@@ -393,53 +338,13 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           </button>
         </header>
       )}
-      {!REMOTE && <PlatformInbox />}
-      {/* Diğer sistemlerin uyarıları: online sipariş zili ve karaoke (laffogato, lafmobil); ilk dokunuş sesi açar */}
-      {!REMOTE && <SiteInbox />}
-      {/*
-       * Deneme modu (yeni kurulum; patron Yönetim › Ayarlar ve yedek'ten bitirir): her ekranda sakin, ince bir şerit.
-       * Gecede renkli zemin siyah sahnede parlar: şerit nötr yüzeyde, bilgi rengi yalnız küçük noktada.
-       * Tarayıcı demosunda yok (demo şeridi zaten var)
-       */}
-      {!DEMO && boot.integrations.deneme && (
-        <div
-          role="note"
-          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border dark:border-[var(--admin-border)] dark:bg-surface dark:text-ink-2"
-        >
-          <span className="inline-flex items-center gap-2">
-            <span aria-hidden="true" className="hidden size-1.5 shrink-0 rounded-full bg-[var(--admin-info)] dark:inline-block" />
-            Deneme modu: yapılan satışlar gerçek sayılmaz
-          </span>
-          {/* Çıkış patronun: yedek alınır, deneme kayıtları silinir, PIN'le onaylanır (Ayarlar ve yedek'teki kartla aynı pencere) */}
-          {me.role === 'patron' && (
-            <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
-              Denemeyi bitir
-            </Button>
-          )}
-        </div>
-      )}
-      {/* Deneme kapanmış ama geçiş yarım (eski sürümde PIN değişince): yalnız patrona, aynı pencereyle tamamlanır */}
-      {!DEMO && !REMOTE && !boot.integrations.deneme && boot.integrations.goLivePending && me.role === 'patron' && (
-        <div
-          role="note"
-          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border"
-        >
-          <span>Gerçek kullanıma geçiş tamamlanmadı</span>
-          <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
-            Geçişi tamamla
-          </Button>
-        </div>
-      )}
-      {finishing && (
-        <Suspense fallback={null}>
-          <DenemeFinish onClose={closeFinish} />
-        </Suspense>
-      )}
-      <LicenseStrip />
-      {notice && <div className="shrink-0">{notice}</div>}
       <div className="flex min-h-0 flex-1 md:gap-[var(--shell-gap)] md:p-[var(--shell-gap)]">
         {/* Tablet ve bilgisayar: marka rayı (panonun menüsü). Ekranlar ikon ve kısa adla; dipte Araçlar ve Kilitle */}
         <nav aria-label="Ekranlar" className="lp-rail">
+          {/* Marka karosu rayın başında (her ekranda aynı yerde; ana ekrana götürür) */}
+          <NavLink to="/" title="L'Affogato · LafPOS" aria-label="Ana ekran" className="lp-rail-brand">
+            <LafTile size="md" />
+          </NavLink>
           <div className="lp-rail-list">
             {items.map((n) => (
               // Seçili görünüm data-on'da: menüde olmayan ekranın yeri de (adisyonun geldiği ekran, Eğitim cihazında Kasa)
@@ -520,12 +425,111 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
             )}
           </div>
         </nav>
-        {/* Alt sekme çubuğu yokken (tek ekranlı rol: kuryenin Siparişler'i) ev çubuğu payını ana alan bırakır */}
-        <main className={cn('min-h-0 min-w-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>
-          <TopTabsSlot.Provider value={tabsSlot}>
-            <div className="h-full">{children}</div>
-          </TopTabsSlot.Provider>
-        </main>
+        {/*
+         * Rayın sağındaki sütun: üst çubuk, uyarı şeritleri ve ekran. Çubuk ve şeritler (platform siparişi, site zili,
+         * deneme, lisans) yalnız bu sütunda açılıp kapanır: sol ray hiçbir ekranda ve hiçbir uyarıda yerinden oynamaz
+         */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col md:gap-[var(--shell-gap)]">
+              {/*
+               * Tablet ve bilgisayar: üst çubuk (pano), rayın sağındaki sütunda: ortada ekranın sekmeleri (sayfa sahnesi
+               * buraya taşır, TopTabsSlot); sağda durum (saat ve Z), arama ve kişinin düğmesi (avatar ve ok). İskelet
+               * (operatör, 20 Kas 2026: "belli bir iskelet, çerçevelerle ayrım"): ray, üst çubuk ve içerik zeminde
+               * --shell-gap (12 px) aralıklı çerçeveli bloklar. Çubuk rayın üstünü kaplamaz: açılıp kapanınca ray kaymaz
+               */}
+          <header
+            className={cn(
+              'relative z-30 hidden h-16 shrink-0 items-center gap-3 rounded-[var(--r-card)] border border-line bg-surface px-3 shadow-[var(--shadow-control)] lg:gap-4',
+              hasTabs && 'md:flex',
+            )}
+          >
+            <div ref={setTabsSlot} className="lp-topnav flex min-w-0 flex-1 items-center justify-center" />
+            <div className="flex shrink-0 items-center gap-1.5">
+              {/* İnternet yokken bekleyen kayıtlar ve dönünce "Bekleyenler gönderildi" (her şey yolundayken boş) */}
+              <span className="hidden xl:inline-flex">
+                <InternetBadge />
+              </span>
+              <span className="inline-flex xl:hidden">
+                <InternetBadge compact />
+              </span>
+              {/* Uzakta iki ve daha çok dükkân: seçici tablet ve bilgisayarda da (telefonda üst şeritte) */}
+              {REMOTE && <RemoteShopPicker />}
+              {healthPill}
+              <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:size-11">
+                <Search className="size-5" />
+              </button>
+              {/*
+               * Kişinin düğmesi (panonun avatarı ve oku): kişinin menüsünü (Araçlar çekmecesi) açar. Ana eylemle yarışmasın diye
+               * kenarsız; geniş ekranda adı ve rolü yanında
+               */}
+              <button
+                type="button"
+                onClick={() => setMenuOpen(true)}
+                aria-expanded={toolsOpen}
+                aria-label={`${me.name} menüsü · Araçlar`}
+                className="inline-flex h-11 shrink-0 items-center gap-2 rounded-xl pl-1 pr-2 text-ink transition-colors duration-150 hover:bg-hover"
+              >
+                {avatar('md')}
+                <span className="hidden min-w-0 flex-col items-start leading-tight 2xl:flex">
+                  <span className="max-w-36 truncate text-[13.5px] font-semibold">{me.name}</span>
+                  <span className="text-xs text-muted">{roleLabel}</span>
+                </span>
+                <ChevronDown aria-hidden="true" className="size-4 text-muted" />
+              </button>
+            </div>
+          </header>
+          {!REMOTE && <PlatformInbox />}
+          {/* Diğer sistemlerin uyarıları: online sipariş zili ve karaoke (laffogato, lafmobil); ilk dokunuş sesi açar */}
+          {!REMOTE && <SiteInbox />}
+          {/*
+           * Deneme modu (yeni kurulum; patron Yönetim › Ayarlar ve yedek'ten bitirir): her ekranda sakin, ince bir şerit.
+           * Gecede renkli zemin siyah sahnede parlar: şerit nötr yüzeyde, bilgi rengi yalnız küçük noktada.
+           * Tarayıcı demosunda yok (demo şeridi zaten var)
+           */}
+          {!DEMO && boot.integrations.deneme && (
+            <div
+              role="note"
+              className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:rounded-xl md:border dark:border-[var(--admin-border)] dark:bg-surface dark:text-ink-2"
+            >
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden="true" className="hidden size-1.5 shrink-0 rounded-full bg-[var(--admin-info)] dark:inline-block" />
+                Deneme modu: yapılan satışlar gerçek sayılmaz
+              </span>
+              {/* Çıkış patronun: yedek alınır, deneme kayıtları silinir, PIN'le onaylanır (Ayarlar ve yedek'teki kartla aynı pencere) */}
+              {me.role === 'patron' && (
+                <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
+                  Denemeyi bitir
+                </Button>
+              )}
+            </div>
+          )}
+          {/* Deneme kapanmış ama geçiş yarım (eski sürümde PIN değişince): yalnız patrona, aynı pencereyle tamamlanır */}
+          {!DEMO && !REMOTE && !boot.integrations.deneme && boot.integrations.goLivePending && me.role === 'patron' && (
+            <div
+              role="note"
+              className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:rounded-xl md:border"
+            >
+              <span>Gerçek kullanıma geçiş tamamlanmadı</span>
+              <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
+                Geçişi tamamla
+              </Button>
+            </div>
+          )}
+          {finishing && (
+            <Suspense fallback={null}>
+              <DenemeFinish onClose={closeFinish} />
+            </Suspense>
+          )}
+          <LicenseStrip />
+          {notice && <div className="shrink-0">{notice}</div>}
+          {/* Alt sekme çubuğu yokken (tek ekranlı rol: kuryenin Siparişler'i) ev çubuğu payını ana alan bırakır */}
+          <main className={cn('min-h-0 min-w-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-[env(safe-area-inset-bottom)]')}>
+            <TopTabsClaim.Provider value={claimTopTabs}>
+              <TopTabsSlot.Provider value={tabsSlot}>
+                <div className="h-full">{children}</div>
+              </TopTabsSlot.Provider>
+            </TopTabsClaim.Provider>
+          </main>
+        </div>
       </div>
       {/* Telefon: alt sekmeler; ev çubuğu payı alt boşluğa eklenir. Etkin sekme açık nane hapta (yan menünün seçimi) */}
       {showTabs && (

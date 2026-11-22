@@ -148,7 +148,9 @@ export default function OrdersPage() {
         <div role="tablist" aria-label="Sipariş listesi" className="lp-menu">
           {tabOptions.map((o) => (
             <button key={o.value} type="button" role="tab" aria-selected={tab === o.value} onClick={() => setTab(o.value)} className="lp-menu-item">
-              <span className="min-w-0 flex-1 truncate">{o.label}</span>
+              <span className="min-w-0 flex-1 truncate" data-text={o.label}>
+                {o.label}
+              </span>
               {!!o.count && <span className="n">{o.count}</span>}
             </button>
           ))}

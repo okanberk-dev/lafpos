@@ -275,6 +275,9 @@ async function sweep(server, api, seed, browser) {
       if (viewport.startsWith('koyu') && role !== 'patron') continue;
       const token = role === 'giris' ? null : api.tokens[role];
       const { context, page, problems } = await openContext(browser, viewport, token);
+      // Kayma denetimi (sahibin isteği, 22 Kas 2026): tablette ve bilgisayarda marka rayı (sol menü) ve ekranlarının
+      // yeri her ekranda aynı olmalı; üst çubuk, uyarı şeritleri ve sekmeler yalnız sağ sütunda açılıp kapanır
+      let railAt = null;
       for (const entry of ROUTES[role]) {
         const route = typeof entry === 'string' ? entry : entry.path;
         const extra = typeof entry === 'string' ? null : entry;
@@ -294,6 +297,19 @@ async function sweep(server, api, seed, browser) {
         const where = `${viewport} · ${role} · ${route}${extra ? ` › ${extra.name}` : ''}`;
         const landed = new URL(page.url()).pathname;
         if (!landed.startsWith(LANDS[route] ?? target.split('?')[0])) problems.push(`yönlendirildi: ${landed}`);
+        const rail = await page.evaluate(() => {
+          const nav = document.querySelector('nav.lp-rail');
+          if (!nav || !nav.offsetParent) return null;
+          const r = nav.getBoundingClientRect();
+          const first = nav.querySelector('.lp-rail-list > *')?.getBoundingClientRect();
+          return { top: Math.round(r.top), left: Math.round(r.left), width: Math.round(r.width), height: Math.round(r.height), item: first ? Math.round(first.top) : null };
+        });
+        if (rail) {
+          if (!railAt) railAt = { ...rail, route };
+          else if (rail.top !== railAt.top || rail.left !== railAt.left || rail.width !== railAt.width || rail.height !== railAt.height || rail.item !== railAt.item) {
+            problems.push(`sol ray kaydı (${railAt.route} → bu ekran): üst ${railAt.top}→${rail.top}, sol ${railAt.left}→${rail.left}, en ${railAt.width}→${rail.width}, boy ${railAt.height}→${rail.height}, ilk ekran ${railAt.item}→${rail.item}`);
+          }
+        }
         const overflow = await overflowReport(page);
         if (overflow.page > 1) problems.push(`sayfa ${overflow.page} px yatay taşıyor`);
         for (const o of overflow.items) problems.push(`taşan öğe: ${o.text} (sol ${o.left}, sağ ${o.right})`);

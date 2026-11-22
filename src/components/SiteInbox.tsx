@@ -251,7 +251,7 @@ export function SiteInbox() {
       <div
         role="region"
         aria-label="Sitenin uyarıları"
-        className="flex min-h-11 w-full shrink-0 items-center gap-1 border-b border-violet-line bg-violet-soft py-0.5 pl-3 pr-1.5 text-sm text-ink md:mx-3 md:mt-3 md:w-auto md:rounded-[1.25rem] md:border md:pl-2"
+        className="flex min-h-11 w-full shrink-0 items-center gap-1 border-b border-violet-line bg-violet-soft py-0.5 pl-3 pr-1.5 text-sm text-ink md:w-auto md:rounded-[1.25rem] md:border md:pl-2"
       >
         {firstCall ? (
           <button type="button" onClick={() => setOpen(true)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 text-left transition-[filter] duration-150 hover:brightness-[0.98] active:brightness-95">

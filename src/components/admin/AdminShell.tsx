@@ -92,7 +92,7 @@ export function AdminShell({ title, children }: { title: string; children: React
     return (
       <NavLink key={sec.key} to={sec.to} className="lp-menu-item">
         {icon && <sec.icon aria-hidden="true" />}
-        <span className="min-w-0 flex-1 truncate">
+        <span className="min-w-0 flex-1 truncate" data-text={sec.label}>
           {sec.label}
           {c && <span className="sr-only">, {c.text}</span>}
         </span>

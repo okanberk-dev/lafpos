@@ -1,6 +1,6 @@
-import { createContext, type ReactNode, useContext, useState } from 'react';
+import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { TopTabsSlot } from '@/components/shellSlots';
+import { TopTabsClaim, TopTabsSlot } from '@/components/shellSlots';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/hooks';
 
@@ -130,6 +130,9 @@ export function Stage({
   const wide = useMediaQuery('(min-width: 48rem)');
   const menuNode = menu ? <div className="lp-side-menu">{menu}</div> : null;
   const menuOnTop = !!menuNode && !headerInLeaf && wide && !!topTabs;
+  // Üst çubuk boyamadan önce açılsın (kayma olmasın): sekmeler oraya taşınacaksa kabuğa çizimden önce bildirilir
+  const claimTopTabs = useContext(TopTabsClaim);
+  useLayoutEffect(() => (menuOnTop && claimTopTabs ? claimTopTabs() : undefined), [menuOnTop, claimTopTabs]);
   return (
     <div className={cn('lp-stage', side && 'lp-split', side && headerInLeaf && 'lp-nav', className)}>
       {bar && <div className="lp-glass">{bar}</div>}

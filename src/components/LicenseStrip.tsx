@@ -43,7 +43,7 @@ export function LicenseStrip() {
     <p
       role={closed ? 'alert' : 'status'}
       className={cn(
-        'shrink-0 border-b px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border',
+        'shrink-0 border-b px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:rounded-xl md:border',
         closed ? 'border-[var(--admin-danger-line)] bg-[var(--admin-danger-soft)]' : 'border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)]',
       )}
     >

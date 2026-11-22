@@ -865,6 +865,23 @@
   .lp-rail-list::-webkit-scrollbar {
     display: none;
   }
+  /* Rayın başındaki marka karosu (ana ekrana götürür): her ekranda aynı yerde */
+  .lp-rail-brand {
+    display: grid;
+    flex: none;
+    place-items: center;
+    min-height: 3rem;
+    margin-bottom: 2px;
+    border-radius: 14px;
+    transition: background-color 150ms var(--ease-out);
+  }
+  .lp-rail-brand:hover {
+    background: rgb(255 255 255 / 0.08);
+  }
+  .lp-rail-brand:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
   .lp-rail-foot {
     display: flex;
     flex-direction: column;
@@ -945,11 +962,15 @@
   /* Alçak ekranda (yatay tablet, dizüstü) satır bir boy sık: ekranların çoğu kaydırmadan sığar */
   @media (min-width: 48rem) and (max-height: 50rem) {
     .lp-rail-item {
-      min-height: 3.375rem;
+      min-height: 3.25rem;
       gap: 2px;
     }
     .lp-rail-icon {
       height: 1.75rem;
+    }
+    /* Marka karosu bir boy sıkı: 1280 × 800'de patronun dokuz ekranı ve dipteki durum satırı kaydırmadan sığar */
+    .lp-rail-brand {
+      min-height: 2.75rem;
     }
   }
   /*
@@ -968,6 +989,12 @@
     }
     .lp-rail-icon {
       height: 1.5rem;
+    }
+    .lp-rail-brand {
+      min-height: 2.5rem;
+    }
+    .lp-rail-brand > * {
+      transform: scale(0.82);
     }
   }
 
@@ -1447,6 +1474,7 @@
       box-shadow: var(--shadow-leaf);
       scrollbar-width: thin;
       scrollbar-color: var(--admin-border-strong) transparent;
+      scrollbar-gutter: stable;
       animation: lp-leaf-in 800ms var(--ease-out) 60ms backwards;
     }
     .dark .lp-body > .lp-side-extra {
@@ -1524,6 +1552,20 @@
   .lp-menu-item:focus-visible {
     outline-offset: 2px;
   }
+  /*
+   * Seçili öğe kalınlaşınca (500 → 600) yazı genişler; yatay şeritte yanındakiler her seçimde 1-2 px kayardı. Adın
+   * görünmez kalın kopyası (data-text) genişliği baştan ayırır; kopya ekran okuyucuya gitmez (alternatif metni boş)
+   */
+  .lp-menu-item > [data-text]::after {
+    content: attr(data-text) / '';
+    display: block;
+    height: 0;
+    overflow: hidden;
+    visibility: hidden;
+    font-weight: 600;
+    user-select: none;
+    pointer-events: none;
+  }
   @media (min-width: 64rem) {
     .lp-menu.lp-menu-col {
       flex-direction: column;
@@ -1597,6 +1639,9 @@
     box-shadow: var(--shadow-leaf);
     scrollbar-width: thin;
     scrollbar-color: var(--admin-border-strong) transparent;
+    /* Kasa bilgisayarı Windows: klasik kaydırma çubuğu içerik uzayınca çıkar ve içeriği yana iterdi (bölümden bölüme
+       geçişte kayma). Yeri hep ayrılır; kaplamalı çubuklu cihazda (telefon, Mac) etkisi yok */
+    scrollbar-gutter: stable;
     animation: lp-leaf-in 800ms var(--ease-out) backwards;
   }
   @media (min-width: 48rem) {
