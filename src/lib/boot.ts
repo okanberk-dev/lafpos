@@ -2,10 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { happyHourPercentAt, happyHourUnit } from '@shared/order-calc';
 import type { BootstrapDTO, OptionGroupDTO, OptionItemDTO, ProductDTO, SelectedOption, Size } from '@shared/types';
 import { get } from './api';
+import { REMOTE, REMOTE_SLOW_POLL_MS } from './remote';
 
-/** Açılış verisi: menü, masa planı, ödeme türleri, ayarlar. Menü/ayar olaylarında yenilenir. */
+/**
+ * Açılış verisi: menü, masa planı, ödeme türleri, ayarlar. Menü/ayar olaylarında yenilenir; uzakta canlı olay yok,
+ * 5 dk'da bir sorulur (değişmediyse 304)
+ */
 export function useBootQuery() {
-  return useQuery({ queryKey: ['bootstrap'], queryFn: () => get<BootstrapDTO>('/bootstrap'), staleTime: 5 * 60_000 });
+  return useQuery({ queryKey: ['bootstrap'], queryFn: () => get<BootstrapDTO>('/bootstrap'), staleTime: 5 * 60_000, refetchInterval: REMOTE ? REMOTE_SLOW_POLL_MS : false });
 }
 
 export function useBoot(): BootstrapDTO {

@@ -52,8 +52,10 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
 - **İnternet:** kafede interneti kesip bir gün sonu; üst çubukta "İnternet yok · 1 kayıt bekliyor", internet gelince
   "Bekleyenler gönderildi" ve lafmaliyet'te gün bir kez.
 - **Uzaktan raporlar:** kafe bağlanınca tarama yaklaşık bir saatte 400 günü iter; Raporlar › Ciro "Geçen ay"
-  kafedekiyle aynı olmalı. Upstash › Usage'de günlük istek sayısı izlenir (uzaktan ekran gün boyu açık kalırsa
-  ücretsiz kotaya yaklaşabilir).
+  kafedekiyle aynı olmalı. Upstash › Usage'de günlük komut sayısı izlenir: uzaktan ekranın yoklaması koşullu (özet
+  değişmediyse 304, tek küçük okuma), tek ekran gün boyu açıkken (12 saat açık gün, 12 saat gece) ekran ve kasanın
+  itmesi günde ~5 bin komut (eskiden ~27 bin; `docs/07-UZAKTAN-ERISIM.md` §4 "Upstash bütçesi"). Merkez nabzı ve
+  rapor itmesi bunun üstüne; ilk tam günde toplam bu düzeyde kalmalı.
 - **Telefon bildirimi:** Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" (iPhone'da önce Ana Ekrana
   Ekle); Yönetim › Ağ › "Deneme bildirimi gönder".
 - **Bulut yedeği:** ilk gün sonundan sonra Ayarlar ve yedek › Bulut yedeği'nde "Son yedek" dolmalı.

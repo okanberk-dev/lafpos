@@ -19,7 +19,7 @@ import { staleCostsText } from '@/lib/lafmaliyet';
 import { hourBars } from '@/lib/period';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
-import { fmtClock, REMOTE, remoteFreshness } from '@/lib/remote';
+import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
 
 export interface PatronData {
   now: number;
@@ -137,7 +137,9 @@ export default function PatronPage() {
   const now = useTick(30_000);
   const [table, setTable] = useState(false);
   const [allAttention, setAllAttention] = useState(false);
-  const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: REMOTE ? 10_000 : 60_000 });
+  // Uzakta gün açıkken 15 sn, kapalıyken 60 sn; değişmeyen özet 304 (src/lib/remote.ts)
+  const poll = (dayOpen: boolean | undefined) => (REMOTE ? remotePollMs(dayOpen) : 60_000);
+  const data = useQuery({ queryKey: ['patron'], queryFn: () => get<PatronData>('/reports/patron'), refetchInterval: (q) => poll(q.state.data?.dayOpen) });
 
   // Satış ve kasa olaylarında yenile; uyarılar anında bildirim olarak düşer
   useEffect(
@@ -191,7 +193,7 @@ export default function PatronPage() {
   // "Canlı" yalnız rakamlar tazeyken: yenileme düşerse son veri kalır ama saat verinin saatidir, nokta amber
   // Uzakta ayrıca kafenin kendisi: gün açıkken son itme 10 dakikadan eskiyse kafeden veri gelmiyor
   const cafeSilent = REMOTE && remoteFreshness(Math.max(now, Date.now()), d.now, d.dayOpen) === 'stale';
-  const stale = data.isError || cafeSilent || now - data.dataUpdatedAt > 3 * (REMOTE ? 10_000 : 60_000);
+  const stale = data.isError || cafeSilent || now - data.dataUpdatedAt > 3 * poll(d.dayOpen);
   const statusText = REMOTE
     ? joinMeta([d.dayOpen ? 'Gün açık' : 'Gün kapalı', `son güncelleme ${fmtClock(d.now)}`, cafeSilent ? 'kafeden veri gelmiyor' : data.isError ? 'yenilenemedi' : d.dayOpen && 'canlı'])
     : joinMeta([d.dayOpen ? 'Gün açık' : 'Gün kapalı', stale ? `son güncelleme ${fmtTime(d.now)}` : `${fmtTime(d.now)} itibarıyla`, stale ? data.isError && 'yenilenemedi' : 'canlı']);

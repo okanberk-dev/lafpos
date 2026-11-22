@@ -19,7 +19,7 @@ import { cn } from '@/lib/cn';
 import { useFinePointer, useLocalPref, useMediaQuery, useTick } from '@/lib/hooks';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
-import { REMOTE } from '@/lib/remote';
+import { REMOTE, remotePollMs } from '@/lib/remote';
 import { openCounterSale } from '@/lib/counter';
 
 export default function FloorPage() {
@@ -32,7 +32,7 @@ export default function FloorPage() {
   const [choose, setChoose] = useState<{ table: TableDTO; orders: FloorOrderSummary[] } | null>(null);
   const [takeaway, setTakeaway] = useState<null | 'gelal' | 'paket'>(null);
   const now = useTick(30_000);
-  const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), refetchInterval: REMOTE ? 10_000 : 60_000 });
+  const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), refetchInterval: REMOTE ? remotePollMs(!!boot.day) : 60_000 });
 
   const section = boot.sections.find((s) => s.id === sectionId) ?? boot.sections[0];
   const tables = boot.tables.filter((t) => t.sectionId === section?.id);
