@@ -1,9 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FlaskConical, KeyRound, Rocket } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { DenemeStatusDTO } from '@shared/types';
+import type { DayRangeDTO, DenemeStatusDTO } from '@shared/types';
 import { Button } from '@/components/ui/Button';
-import { Field, Input } from '@/components/ui/Field';
+import { Field, Input, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Notice } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
@@ -12,12 +12,17 @@ import { Badge, Card } from './ui';
 
 const n = (v: number) => v.toLocaleString('tr-TR');
 const digits = (v: string) => v.replace(/\D/g, '').slice(0, 6);
+const dayMonth = new Intl.DateTimeFormat('tr-TR', { timeZone: 'UTC', day: 'numeric', month: 'long' });
+const fmtDay = (date: string) => dayMonth.format(new Date(`${date}T12:00:00Z`));
+/** "3 gün (14 Kasım – 16 Kasım)" */
+const rangeText = (r: DayRangeDTO) => `${n(r.days)} gün` + (r.from && r.to ? (r.from === r.to ? ` (${fmtDay(r.from)})` : ` (${fmtDay(r.from)} – ${fmtDay(r.to)})`) : '');
 
 /**
  * Yönetim › Ayarlar ve yedek › Deneme modu (yalnız patron). Yeni kurulum deneme modunda açılır: satışlar eğitimdir.
  * "Denemeyi bitir, gerçek kullanıma başla" önce yedek alır, deneme hareketlerini siler, kurulumu bırakır, örnek
  * PIN'leri kapatır (server/services/deneme.ts). Gerçek kullanım başladıysa (`liveSince`) kart çizilmez. Deneme kapanmış
- * ama geçiş yarım kalmışsa (gerçek gün var) kart "Geçişi tamamla"yı gösterir: hiçbir kayıt silinmez.
+ * ama geçiş yarım kalmışsa (gerçek gün var) kart "Geçişi tamamla"yı gösterir: deneme günleri silinir, gerçek günler kalır
+ * (bugünden önceki gerçek görünen günler isteğe bağlı silinir).
  */
 export function DenemeCard() {
   const status = useQuery({ queryKey: ['admin', 'deneme'], queryFn: () => get<DenemeStatusDTO>('/admin/deneme') });
@@ -62,16 +67,16 @@ export function DenemeCard() {
 
 /**
  * Yarım kalmış geçiş (deneme kapanmış, gerçek gün var, `liveSince` yok): örnek PIN'li hesaplar hâlâ açık olabilir.
- * "Geçişi tamamla" hiçbir kaydı silmez
+ * "Geçişi tamamla" deneme günlerini siler; gerçek günler kalır (pencerede seçenek)
  */
 function FinalizeCard({ status }: { status: DenemeStatusDTO }) {
   const [open, setOpen] = useState(false);
   return (
-    <Card title="Gerçek kullanıma geçiş tamamlanmadı" subtitle="Satışlar gerçek kaydediliyor; geçiş adımı yarım kalmış">
+    <Card title="Gerçek kullanıma geçiş tamamlanmadı" subtitle="Gün açmadan önce geçişi tamamlayın">
       <div className="grid gap-3 text-sm">
         <p className="text-ink-2">
-          Deneme modu kapanmış ama “gerçek kullanıma başla” adımı yapılmamış. Örnek PIN’li hesaplar açık kalmış olabilir. Geçişi tamamlayınca başlangıç kaydedilir, örnek PIN’li hesaplar
-          kapanır; hiçbir satış ya da gün silinmez.
+          Deneme modu kapanmış ama “gerçek kullanıma başla” adımı yapılmamış. Geçişi tamamlayınca deneme günleri silinir, başlangıç kaydedilir, örnek PIN’li hesaplar kapanır. Ne
+          silineceğini açılan pencere tek tek yazar; önce yedek alınır.
         </p>
         {status.samplePinUsers.length > 0 && (
           <Notice tone="warn" title="Örnek PIN’li hesaplar açık">
@@ -124,8 +129,17 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
   const [newPin2, setNewPin2] = useState('');
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
+  const early = status.finalizeOnly ? status.earlyRealDays : null;
+  // Gerçek kullanım hiç başlamadıysa ve gerçek görünen günlerin hepsi bugünden önceyse onlar da denemeydi: varsayılan işaretli
+  const [purgeReal, setPurgeReal] = useState(early != null);
   const c = status.counts;
   const finalize = status.finalizeOnly;
+  const trial = status.trialDays;
+  const gone: DayRangeDTO | null = !finalize
+    ? null
+    : purgeReal && early
+      ? { days: trial.days + early.days, from: [trial.from, early.from].filter(Boolean).sort()[0] ?? null, to: [trial.to, early.to].filter(Boolean).sort().at(-1) ?? null }
+      : trial;
   const needNew = status.mustChangeOwnPin;
   const newError = !needNew && !newPin ? null : !/^\d{4,6}$/.test(newPin) ? 'Yeni PIN 4–6 hane rakam' : newPin === pin ? 'Yeni PIN eskisinden farklı olmalı' : null;
   const repeatError = newPin && newPin2 !== newPin ? 'İki PIN aynı değil' : null;
@@ -136,8 +150,8 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
     if (pinError || newError || repeatError) return;
     setBusy(true);
     try {
-      const r = await post<{ already: boolean; finalized?: boolean; backup: string | null; closedUsers: string[] }>('/admin/deneme/bitir', { pin, ...(newPin ? { newPin } : {}) });
-      const done = r.finalized ? 'Geçiş tamamlandı' : 'Gerçek kullanım başladı';
+      const r = await post<{ already: boolean; finalized?: boolean; purged?: { days: number }; backup: string | null; closedUsers: string[] }>('/admin/deneme/bitir', { pin, ...(newPin ? { newPin } : {}), ...(finalize && early && purgeReal ? { purgeReal: true } : {}) });
+      const done = r.finalized ? (r.purged?.days ? `Geçiş tamamlandı: ${n(r.purged.days)} deneme günü silindi` : 'Geçiş tamamlandı') : 'Gerçek kullanım başladı';
       if (r.already) toast.info('Gerçek kullanım zaten başlamış; hiçbir şey silinmedi');
       else toast.ok(r.closedUsers.length ? `${done}. Örnek PIN’li hesaplar kapatıldı: ${r.closedUsers.join(', ')}` : done);
       onClose();
@@ -155,7 +169,7 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
       persistent
       onClose={() => !busy && onClose()}
       title={finalize ? 'Gerçek kullanıma geçişi tamamla' : 'Gerçek kullanıma başla'}
-      subtitle={finalize ? 'Hiçbir kayıt silinmez; öncesinde yedek alınır' : 'Bu işlem geri alınmaz; öncesinde yedek alınır'}
+      subtitle={finalize && gone && gone.days === 0 ? 'Hiçbir kayıt silinmez; öncesinde yedek alınır' : 'Bu işlem geri alınmaz; öncesinde yedek alınır'}
       footer={
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="secondary" disabled={busy} onClick={onClose}>
@@ -169,17 +183,43 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
     >
       <div className="grid gap-4 text-sm">
         {finalize ? (
-          <section>
-            <p className="text-ink-2">
-              Deneme modu daha önce kapanmış, {n(status.realDays)} gün gerçek kaydedilmiş. Bu kayıtlar silinmez. Gerçek kullanımın başlangıcı yazılır
-              {status.samplePinUsers.length > 0 && (
-                <>
-                  {' '}
-                  ve örnek PIN’iyle duran hesaplar kapatılır: <b className="font-semibold text-ink">{status.samplePinUsers.map((u) => u.name).join(', ')}</b>. Personel’den yeni PIN verip açabilirsiniz
-                </>
-              )}
-            </p>
-          </section>
+          <>
+            <section>
+              <h3 className="font-semibold">Silinecek günler</h3>
+              <p className="mt-1.5 text-ink-2">
+                {gone && gone.days > 0 ? (
+                  <>
+                    <b className="tabular font-semibold text-ink">{rangeText(gone)}</b> silinir: o günlerin adisyonları, ödemeleri, kasa hareketleri, vardiya sayımları, yazarkasa fişleri ve
+                    Z raporları. Raporlarda ve lafmaliyet’te görünmezler.
+                  </>
+                ) : (
+                  'Silinecek deneme günü yok.'
+                )}
+              </p>
+              {trial.days > 0 && <p className="tabular mt-1 text-[13px] text-muted">Deneme günleri: {rangeText(trial)}</p>}
+            </section>
+            {early && (
+              <Toggle
+                block
+                checked={purgeReal}
+                onChange={setPurgeReal}
+                label="Bugünden önceki gerçek görünen günler de denemeydi, onları da sil"
+                hint={`${rangeText(early)} gerçek kaydedilmiş görünüyor. Gerçek satışa bugün başlıyorsanız işaretli bırakın`}
+              />
+            )}
+            <section>
+              <h3 className="font-semibold">Kalacaklar</h3>
+              <p className="mt-1.5 text-ink-2">
+                {!early || !purgeReal ? `Gerçek günler (${n(status.realDays)}) ve kayıtları. ` : ''}Menü ve fiyatlar, personel ve roller, masa planı, ödeme türleri, yazıcılar, müşteriler ve
+                bütün ayarlar.
+              </p>
+            </section>
+            {status.samplePinUsers.length > 0 && (
+              <p className="text-ink-2">
+                Örnek PIN’iyle duran hesaplar kapatılır: <b className="font-semibold text-ink">{status.samplePinUsers.map((u) => u.name).join(', ')}</b>. Personel’den yeni PIN verip açabilirsiniz
+              </p>
+            )}
+          </>
         ) : (
           <>
         <section>

@@ -1331,14 +1331,14 @@ adminRoutes.get('/deneme', (c) => {
 
 /**
  * Patron kendi PIN'iyle onaylar (deneme sınırı yetkili onayındaki gibi). Sıra: ön koşullar (patron, açık gün yok,
- * gerçek gün yok, yeni PIN geçerli) → yedek (alınamazsa hiçbir şey silinmez) → tek işlemde silme ve ayarlar. Gerçek
+ * yeni PIN geçerli; `purgeReal` yalnız bütün gerçek günler bugünden önceyse) → yedek (alınamazsa hiçbir şey silinmez) → tek işlemde silme ve ayarlar. Gerçek
  * kullanım başladıktan sonra yalnız `already: true` döner, hiçbir şey silinmez
  */
 adminRoutes.post('/deneme/bitir', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
   if (user.role !== 'patron') throw new HttpError(403, 'Denemeyi yalnız patron bitirir', 'patron_only');
-  const input = await body(c, z.object({ pin: z.string().max(12), newPin: z.string().max(12).optional() }));
+  const input = await body(c, z.object({ pin: z.string().max(12), newPin: z.string().max(12).optional(), purgeReal: z.boolean().optional() }));
   const addr = clientKey(c);
   assertNotLocked('onay', addr, user.id);
   const me = db.select({ pinHash: schema.users.pinHash }).from(schema.users).where(eq(schema.users.id, user.id)).get();
@@ -1348,7 +1348,8 @@ adminRoutes.post('/deneme/bitir', async (c) => {
   }
   clearFailures('onay', addr, user.id);
   const newPin = input.newPin || undefined;
-  if (checkFinish(user, { newPin }).already) return c.json({ already: true, backup: null, deleted: null, closedUsers: [] });
+  const purgeReal = input.purgeReal === true;
+  if (checkFinish(user, { newPin, purgeReal }).already) return c.json({ already: true, backup: null, deleted: null, closedUsers: [] });
   let backup: string;
   try {
     backup = await backupNamed('deneme-oncesi');
@@ -1356,7 +1357,7 @@ adminRoutes.post('/deneme/bitir', async (c) => {
     console.error('[deneme] yedek alınamadı', e);
     throw new HttpError(500, 'Yedek alınamadı; hiçbir şey silinmedi. Diskte yer olduğundan emin olup yeniden deneyin', 'backup_failed');
   }
-  const result = finishDeneme(user, { newPin }, backup);
+  const result = finishDeneme(user, { newPin, purgeReal }, backup);
   if (!result.already) sessionsChanged();
   return c.json(result);
 });
