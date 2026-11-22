@@ -403,8 +403,10 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
                 <span className="flex justify-center empty:hidden">
                   <InternetBadge compact />
                 </span>
-                {/* Satır rayın içinde kalır: durum yazısı sığmazsa kısalır; uzaktan görünümde arama düğmesi yok (yazı uzun; Ctrl K açar) */}
-                <div className="flex min-w-0 items-center gap-1">
+                {/* Durum ve arama alt alta: yan yana sığmıyor, saat "1…" diye kısalıyordu (22 Kas 2026). Arama düğmesi yalnız
+                    geniş ve yüksek ekranda (fareyle; alçak ekranda ray listesi kesilmesin, Ctrl K yine açar); uzaktan
+                    görünümde yok */}
+                <div className="flex min-w-0 flex-col items-stretch">
                   {canKasa && !REMOTE ? (
                     <NavLink
                       to="/kasa"
@@ -423,7 +425,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
                     </span>
                   )}
                   {!REMOTE && (
-                    <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="lp-rail-item hidden size-9 min-h-0 shrink-0 p-0 lg:flex pointer-coarse:hidden">
+                    <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="lp-rail-item hidden h-9 min-h-0 w-full shrink-0 p-0 [@media(min-width:64rem)_and_(min-height:860px)_and_(pointer:fine)]:flex">
                       <Search aria-hidden="true" className="size-[18px]" />
                     </button>
                   )}
