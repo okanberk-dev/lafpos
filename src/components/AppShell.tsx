@@ -345,6 +345,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           <span className="inline-flex xl:hidden">
             <InternetBadge compact />
           </span>
+          {/* Uzakta iki ve daha çok dükkân: seçici tablet ve bilgisayarda da (telefonda üst şeritte) */}
+          {REMOTE && <RemoteShopPicker />}
           {healthPill}
           <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:size-11">
             <Search className="size-5" />
