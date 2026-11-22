@@ -374,7 +374,7 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
   }
   const hedefRoller = d.tur === 'personel.ekle' ? [veri.rol] : d.tur.startsWith('personel.') ? [hedef?.rol, veri.rol] : [];
   if (!uyeYapabilir(ben.rol, d.tur, hedefRoller)) {
-    return fail(403, d.tur === 'rol.yetki' ? 'Rol yetkilerini yalnız sahip değiştirebilir' : 'Patron hesabına yalnız sahip dokunabilir', 'not_allowed');
+    return fail(403, d.tur === 'rol.yetki' ? 'Rol yetkilerini yalnız sahip değiştirebilir' : d.tur === 'gun.sonu' ? 'Gün sonunu uzaktan yalnız sahip alır' : 'Patron hesabına yalnız sahip dokunabilir', 'not_allowed');
   }
 
   // Kuyruğun son payı sahibin: yönetici kuyruğu doldurup sahibin acil işlemini bekletemez
@@ -395,6 +395,13 @@ async function komutEkle(req: Request, deps: KontrolDeps, ben: KontrolOturumu, n
   const kayit: KomutKaydi = { ...temel, ozet: komutOzeti(d.tur, d.veri, adlar), imza: komutImzasi(deps.secret, temel) };
   await deps.redis('HSET', komutKey(id), kayit.id, JSON.stringify(kayit));
   await deps.redis('SET', varKey(id), '1');
+  // "Gün sonu al ve güncelle": gün kapanınca yeni sürüm hemen kurulsun diye Merkez'in "Şimdi güncelle" isteği de yazılır
+  // (kurulum kaydının yalnız `guncelleIstek` alanı; kasa bir sonraki nabızda alır, gün kapalıyken kurar)
+  if (d.tur === 'gun.sonu' && body.guncelle === true) {
+    const k = `lafpos:merkez:kurulum:${id}`;
+    const inst = parse<Record<string, unknown>>(await deps.redis('GET', k));
+    if (inst && typeof inst === 'object') await deps.redis('SET', k, JSON.stringify({ ...inst, guncelleIstek: now }));
+  }
   return json({ ok: true, komut: satir(kayit) } satisfies KomutYaniti);
 }
 

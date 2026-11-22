@@ -374,6 +374,23 @@ describe('Uzaktan yönetim: kasa', () => {
     expect(komutDogrula('secenek.grubu', { ...grup, ogeler: [{ ad: 'A', fiyat: 0, varsayilan: true }, { ad: 'B', fiyat: 0, varsayilan: true }] })).toMatchObject({ ok: false });
   });
 
+  it('gun.sonu: kasa kendi ucuyla sayımsız gün sonu alır; yalnız sahip; açık adisyon varsa ret', async () => {
+    const { uyeYapabilir } = await import('@shared/kontrol');
+    expect(uyeYapabilir('yonetici', 'gun.sonu')).toBe(false);
+    expect(uyeYapabilir('sahip', 'gun.sonu')).toBe(true);
+    await h.call('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
+    const o = await h.ok<{ id: string }>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+    await h.ok('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: latte.id, qty: 1 }] });
+    const [ret] = await uygula(komut('gun.sonu', { not: '' }));
+    expect(ret).toMatchObject({ durum: 'reddedildi' });
+    expect(ret!.mesaj).toMatch(/Açık adisyon/);
+    await h.ok('mudur', 'POST', `/orders/${o.id}/cancel`, { reason: 'deneme' });
+    const [ok] = await uygula(komut('gun.sonu', { not: '' }));
+    expect(ok, JSON.stringify(ok)).toMatchObject({ durum: 'uygulandi' });
+    expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(409);
+  });
+
   it('kasada uzaktan yönetim kapalıyken her işlem reddedilir; anahtarı yalnız patron değiştirir, kayda düşer', async () => {
     const mudur = await h.call<{ code: string }>('mudur', 'PUT', '/admin/settings', { remoteControl: false });
     expect(mudur.status).toBe(403);

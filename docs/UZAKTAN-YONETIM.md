@@ -59,6 +59,7 @@ ekranındakiyle birebir aynıdır (ayrı iş kuralı yazılmaz):
 | `ayar.servis` | `PUT /api/admin/settings` `{ serviceMode }` |
 | `urun.gorunum` | `PATCH /api/admin/products/:id` `{ hidden }` (siteden gelen üründe de: kasa alanı) |
 | `urun.ekle` | `POST /api/admin/products` `{ categoryId, name, price, kdvRate, groupIds }` |
+| `gun.sonu` | `POST /api/cash/day/close` `{ countedCash: null, note }` (yalnız sahip; sistem kapanışı gibi; `guncelle: true` ise Merkez'in "Şimdi güncelle" isteği de yazılır) |
 | `secenek.duzenle` | `PUT /api/admin/option-groups/:id` (grubun bugünkü seçenekleri ve bağları + yenileri; yalnız ekleme) |
 | `secenek.grubu` | `POST /api/admin/option-groups` `{ name, kind: 'single', required, maxSelect: 1, items, productIds }` |
 

@@ -20,7 +20,7 @@ import { SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode } from './service-m
 export const KONTROL_SURUM = 1;
 
 /** Kasanın kabul ettiği komutlar (beyaz liste). Kasa bu listenin dışındaki hiçbir şeyi uygulamaz */
-export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu', 'urun.ekle', 'secenek.duzenle'] as const;
+export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu', 'urun.ekle', 'secenek.duzenle', 'gun.sonu'] as const;
 export type KomutTuru = (typeof KOMUT_TURLERI)[number];
 
 export const KOMUT_ETIKET: Record<KomutTuru, string> = {
@@ -35,6 +35,7 @@ export const KOMUT_ETIKET: Record<KomutTuru, string> = {
   'secenek.grubu': 'Seçenek grubu ekleme',
   'urun.ekle': 'Ürün ekleme',
   'secenek.duzenle': 'Seçenek grubuna ekleme',
+  'gun.sonu': 'Gün sonu (Z)',
 };
 
 /**
@@ -115,6 +116,10 @@ export interface SecenekDuzenle {
   ogeler: { ad: string; fiyat: number }[];
   urunler: string[];
 }
+/** Uzaktan gün sonu (Z): sayımsız kapanış (sayım sonra Kasa › Geçmiş günler › Kasa föyü); açık adisyon varsa kasa reddeder */
+export interface GunSonu {
+  not: string;
+}
 /** Yeni seçenek grubu (tek seçim) ve bağlanacağı ürünler: "Latte çeşidi: Klasik, Spanish +₺50…". Fiyat kuruş */
 export interface SecenekGrubu {
   ad: string;
@@ -135,6 +140,7 @@ export interface KomutVerileri {
   'secenek.grubu': SecenekGrubu;
   'urun.ekle': UrunEkle;
   'secenek.duzenle': SecenekDuzenle;
+  'gun.sonu': GunSonu;
 }
 export type KomutVerisi = KomutVerileri[KomutTuru];
 
@@ -275,6 +281,8 @@ export interface KomutIstegi {
   tur: KomutTuru;
   veri: unknown;
   ad?: string;
+  /** Yalnız `gun.sonu`: gün kapanınca yeni sürüm hemen kurulsun (Merkez'in "Şimdi güncelle" isteği) */
+  guncelle?: boolean;
 }
 /** `POST /api/kontrol/komut` yanıtı */
 export interface KomutYaniti {
@@ -428,6 +436,10 @@ export function komutDogrula(tur: unknown, veri: unknown): Dogrulama {
       if (!Array.isArray(veri.urunler) || veri.urunler.length > 200 || veri.urunler.some((u) => typeof u !== 'string' || !ID_RE.test(u))) return { ok: false, hata: 'Ürünler anlaşılamadı' };
       return { ok: true, tur: t, veri: { ad: name, zorunlu: veri.zorunlu, ogeler, urunler: [...new Set(veri.urunler as string[])] } };
     }
+    case 'gun.sonu': {
+      const not = typeof veri.not === 'string' ? veri.not.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 200) : '';
+      return { ok: true, tur: t, veri: { not } };
+    }
     case 'secenek.duzenle': {
       if (typeof veri.grup !== 'string' || !ID_RE.test(veri.grup)) return { ok: false, hata: 'Seçenek grubu anlaşılamadı' };
       if (!Array.isArray(veri.ogeler) || veri.ogeler.length > 30) return { ok: false, hata: 'En çok 30 seçenek eklenir' };
@@ -473,7 +485,7 @@ export const anahtarImzaMetni = (kurulum: string, anahtar: string) => `lafpos-ko
 export function uyeYapabilir(rol: UyeRolu, tur: KomutTuru, hedefRoller: (Role | undefined)[] = []): boolean {
   if (rol === 'sahip') return true;
   if (rol === 'izleyici') return false;
-  if (tur === 'rol.yetki') return false;
+  if (tur === 'rol.yetki' || tur === 'gun.sonu') return false;
   if (tur.startsWith('personel.') && hedefRoller.some((r) => r === 'patron')) return false;
   return true;
 }
@@ -529,6 +541,8 @@ export function komutOzeti<T extends KomutTuru>(tur: T, veri: KomutVerileri[T], 
       const v = veri as UrunGorunum;
       return `${v.gorunur ? 'Kasada göster' : 'Kasada gizle'}: ${adlar.urun?.[v.id] ?? 'ürün'}`;
     }
+    case 'gun.sonu':
+      return 'Gün sonu (Z) al';
     case 'secenek.duzenle': {
       const v = veri as SecenekDuzenle;
       return `Seçenek grubuna ekle: ${[v.ogeler.map((o) => o.ad).join(', '), v.urunler.length ? `${v.urunler.length} ürün` : ''].filter(Boolean).join('; ')}`;
