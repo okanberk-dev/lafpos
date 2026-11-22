@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { allocate, tl } from '@shared/money';
 import type { OrderTotals } from '@shared/order-calc';
+import type { ZSummary } from '@shared/types';
 import { db, schema, tx } from '../db/client';
 import { env } from '../env';
 import { type Actor, type AuthUser, need, needDirect, seesCashNumbers, toAuthUser } from '../lib/auth';
@@ -9,6 +10,7 @@ import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { getSettings, getSyncState, okcAutoOn, setSyncState, trainingMode, updateSettings } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
+import { enqueueDay } from '../sync/lafmaliyet';
 import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
 import { type FiscalProvider, type FiscalResult, providerFor } from './providers';
@@ -1156,6 +1158,14 @@ function saveEod(rec: PavoEodRecord, actorId: string | null, verified = false, n
   });
   fx.emit({ topic: 'okc', kind: 'okc.eod', message: rec.status === 'ok' ? 'Cihazda gün sonu alındı' : (rec.message ?? undefined) });
   fx.flush();
+  // Kapanmış günün banka gün sonu sonucu lafmaliyet'e de gider (Pavo - LafPOS kıyası): gün paketi yeniden kuyruğa girer
+  if (rec.dayId && !skipped && rec.status !== 'running' && rec.dayClosed !== false) {
+    try {
+      enqueueDay(rec.dayId);
+    } catch (e) {
+      console.warn('[pavo] gün sonu lafmaliyet', e instanceof Error ? e.message : e);
+    }
+  }
 }
 
 /**
@@ -1231,7 +1241,8 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
   let reading: EodReading;
   try {
     const res = await pavo()!.performEod({
-      print: opts.print,
+      // Gün kapanınca cihaz da kendi gün sonu slibini basar (sahibin isteği: iki yerden kâğıt, kayıt için; ayar okcPavoEodFis)
+      print: opts.print ?? (!opts.manual && getSettings().okcPavoEodFis),
       timeoutMs: pavoTiming.eodMs,
       before: async () => {
         stage = 'baseline';
@@ -1408,10 +1419,22 @@ export interface PavoEodSlip {
   deviceDateTime: string | null;
   grandTotalKurus: number | null;
   acquirers: PavoEodSummary['acquirers'];
-  /** LafPOS'un kıyas tutarı; kasa rakamlarını görmeyene null */
+  /** LafPOS'un kıyas tutarı (kapanan günün kart toplamı); kayıt kâğıdı olduğundan kör kasada da basılır */
   dayCardKurus: number | null;
+  /** Kapanan günün Z özeti (LafPOS gün sonu kâğıdı banka gün sonuyla birlikte basılır); gün kapalı değilse null */
+  z: { date: string; zNo: number; closedAt: number | null; summary: ZSummary } | null;
   trigger: 'otomatik' | 'elle';
   at: number;
+}
+
+function zOf(dayId: string | null): PavoEodSlip['z'] {
+  if (!dayId) return null;
+  const d = db
+    .select({ date: schema.businessDays.date, zNo: schema.businessDays.zNo, closedAt: schema.businessDays.closedAt, summary: schema.businessDays.summary })
+    .from(schema.businessDays)
+    .where(eq(schema.businessDays.id, dayId))
+    .get();
+  return d?.closedAt && d.summary && d.zNo != null ? { date: d.date, zNo: d.zNo, closedAt: d.closedAt, summary: d.summary } : null;
 }
 
 /** Bu süreden eski gün sonunun kâğıdı basılmaz (kasa ekranı ertesi gün açıldığında eski kâğıt çıkmasın) */
@@ -1422,7 +1445,7 @@ const EOD_SLIP_MAX_AGE_MS = 12 * 60 * 60 * 1000;
  * aynı kâğıdı basmaz). Ayar kapalıysa, son deneme başarısızsa ya da gün sonu eskiyse null. Tutarlar cihazın kendi
  * slibindekilerle aynı; LafPOS kıyası yalnız kasa rakamlarını görene
  */
-export function takeEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip | null {
+export function takeEodSlip(_user: AuthUser, now = Date.now()): PavoEodSlip | null {
   const s = getSettings();
   if (s.okcProvider !== 'pavo' || !s.okcPavoEodFis) return null;
   const rec = getSyncState<PavoEodRecord>(EOD_LAST);
@@ -1434,8 +1457,9 @@ export function takeEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip | nul
     deviceDateTime: rec.deviceDateTime,
     grandTotalKurus: rec.grandTotalKurus,
     acquirers: rec.acquirers,
-    dayCardKurus: seesCashNumbers(user) ? rec.dayCardKurus : null,
+    dayCardKurus: rec.dayCardKurus,
     trigger: rec.trigger,
     at: rec.at,
+    z: zOf(rec.dayId),
   };
 }

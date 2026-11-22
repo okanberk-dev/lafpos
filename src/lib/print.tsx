@@ -15,6 +15,8 @@ export interface BankEodSlip {
   dayCardKurus: number | null;
   trigger: 'otomatik' | 'elle';
   at: number;
+  /** Kapanan günün Z'si (eski sunucuda yok): banka gün sonuyla birlikte basılır */
+  z?: { date: string; zNo: number; closedAt: number | null; summary: ZSummary } | null;
 }
 import { callFor, callText, numaratorLabel, serviceModeOf } from '@shared/service-mode';
 
@@ -404,12 +406,21 @@ export function BankEodReceipt({ boot, slip }: { boot: BootstrapDTO; slip: BankE
         <span>TOPLAM</span>
         <span className="rc-r">{slip.grandTotalKurus != null ? `${tlPlain(slip.grandTotalKurus)} TL` : '-'}</span>
       </div>
-      {slip.dayCardKurus != null && (
+      <Hr />
+      {/* Kayıt için kıyas: Pavo'nun (bankanın) kart toplamı ile LafPOS'ta kartla alınan; fark çıkmamalı */}
+      <div className="rc-caption">PAVO - LAFPOS KARŞILAŞTIRMA</div>
+      <Row l="Pavo kart toplamı" r={slip.grandTotalKurus != null ? tlPlain(slip.grandTotalKurus) : '-'} />
+      <Row l="LafPOS kart toplamı" r={slip.dayCardKurus != null ? tlPlain(slip.dayCardKurus) : '-'} />
+      {diff != null ? (
         <>
-          <Hr />
-          <Row l="LafPOS kart toplamı" r={tlPlain(slip.dayCardKurus)} />
-          {diff != null && <Row strong l="FARK" r={tlPlain(diff)} />}
+          <Row strong l="FARK" r={tlPlain(diff)} />
+          <div className="rc-total">
+            <span>{diff === 0 ? 'UYUMLU' : 'FARK VAR!'}</span>
+            <span className="rc-r">{diff === 0 ? 'OK' : diff > 0 ? 'Pavo fazla' : 'Pavo eksik'}</span>
+          </div>
         </>
+      ) : (
+        <Row strong l="Karşılaştırılamadı" />
       )}
       <Hr />
       <div className="rc-foot">Pavo cihazının banka gün sonu özetidir</div>

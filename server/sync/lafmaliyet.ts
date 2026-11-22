@@ -242,9 +242,34 @@ export function buildDayPayload(dayId: string) {
     .from(schema.payments)
     .where(and(eq(schema.payments.dayId, day.id), eq(schema.payments.zField, 'card'), isNull(schema.payments.refundedAt)))
     .all();
+  // Pavo banka gün sonu ve LafPOS kıyası (gün kapandıktan sonra gelir; gelince gün yeniden gönderilir, okc/service.ts
+  // saveEod). Pavo yoksa ya da henüz denenmediyse alan gitmez; eski panel bilmediği alanı yok sayar
+  const eod = getSyncState<{
+    status: string;
+    batchNo: string | null;
+    at: number;
+    grandTotalKurus: number | null;
+    dayCardKurus: number | null;
+    message: string | null;
+    acquirers: { name: string; count: number | null; totalKurus: number | null }[];
+  }>(`pavo.eod.${day.id}`);
+  const bankPos =
+    eod && eod.status !== 'skipped'
+      ? {
+          status: eod.status,
+          batchNo: eod.batchNo,
+          at: new Date(eod.at).toISOString(),
+          pavoCard: eod.grandTotalKurus != null ? toTL(eod.grandTotalKurus) : null,
+          lafposCard: eod.dayCardKurus != null ? toTL(eod.dayCardKurus) : null,
+          diff: eod.grandTotalKurus != null && eod.dayCardKurus != null ? toTL(eod.grandTotalKurus - eod.dayCardKurus) : null,
+          acquirers: eod.acquirers.map((a) => ({ name: a.name, count: a.count, total: a.totalKurus != null ? toTL(a.totalKurus) : null })),
+          message: eod.message,
+        }
+      : null;
   return {
     version: 1,
     source: 'lafpos',
+    ...(bankPos ? { bankPos } : {}),
     // Kasanın şubesi (lafmaliyet docs/SUBE.md): panel günü bu şubeye yazar. Eski panel alanı yok sayar ve günü
     // Tuzla'ya yazar (geri uyumlu, docs/03-ENTEGRASYON.md §4)
     sube: getSettings().branchId,
