@@ -13,7 +13,6 @@ import { EmptyState } from './ui/misc';
  * kendi adımları var.
  */
 
-const compact = new Intl.NumberFormat('tr-TR', { notation: 'compact', maximumFractionDigits: 1 });
 
 /**
  * 1-2-2,5-5 dizisinden adım: eksen değerleri yuvarlak olsun (100, 200, 250…). 2,5 yalnız onluk ve üstünde (25, 250);
@@ -82,7 +81,6 @@ export function ColumnChart({
   height = 220,
   ariaLabel,
   unitDivisor = 100,
-  tickFormat,
   empty: emptyProp,
   emptyLabel = 'Bu dönemde satış yok',
   emptyHint,
@@ -97,7 +95,7 @@ export function ColumnChart({
   ariaLabel: string;
   /** Eksen adımının birimi: kuruştan liraya 100 (varsayılan), saniyeden dakikaya 60 */
   unitDivisor?: number;
-  /** Eksen etiketi ham değerden ("4 dk"); verilmezse gösterim biriminde kısa sayı ("30 B") */
+  /** Eski dikey eksenin etiketi; Keel grafiğinde dikey eksen yok, değer çipte ve ipucunda (çağıranlar bozulmasın diye durur) */
   tickFormat?: (raw: number) => string;
   /** Boş durum sayfadan: değerler sıfıra yuvarlansa da veri varsa (1 saniyelik hazırlama) grafik çizilir */
   empty?: boolean;
@@ -131,18 +129,25 @@ export function ColumnChart({
   const maxAt = data.reduce((best, d, i) => (d.value > (data[best]?.value ?? 0) ? i : best), 0);
   const pinned = highlight === 'max' ? maxAt : highlight;
   const pin = pinned != null && pinned >= 0 && pinned < data.length && data[pinned].value > 0 ? pinned : null;
-  const padL = 44;
-  const padR = 8;
-  // Vurgulu sütunun hapına yer: en yüksek sütunun üstünde de sığar
-  const padT = pin != null ? 34 : 10;
-  const padB = 24;
+  const padL = 6;
+  const padR = 6;
+  // Vurgulu sütunun yüzen çipine yer (değer ve altında etiket): en yüksek sütunun üstünde de sığar
+  const padT = pin != null ? 56 : 10;
+  // Eksen hapları (22 px) ve çubuklarla arasındaki boşluk
+  const padB = 34;
   const plotW = Math.max(0, width - padL - padR);
   const plotH = height - padT - padB;
   const band = data.length ? plotW / data.length : 0;
-  const barW = Math.max(3, Math.min(36, band * 0.62));
-  const y = (v: number) => padT + plotH - (v / max) * plotH;
-  const ticks = scale.ticks;
-  const labelEvery = Math.max(1, Math.ceil(28 / Math.max(1, band)));
+  // Keel'in ince çubukları: her sütun yan yana ince şeritler (en çok 6); dar bantta şerit azalır, en az bir şerit kalır
+  const stripeW = band >= 48 ? 3 : 2;
+  const stripeGap = stripeW;
+  const stripes = Math.max(1, Math.min(6, Math.floor((band * 0.8 + stripeGap) / (stripeW + stripeGap))));
+  const barW = stripes * stripeW + (stripes - 1) * stripeGap;
+  const base = padT + plotH;
+  const y = (v: number) => base - (v / max) * plotH;
+  // Eksen etiketi hap içinde; haplar üst üste binmesin diye en geniş etikete göre seyreltilir
+  const pillW = (t: string) => Math.max(26, t.length * 6.4 + 14);
+  const labelEvery = Math.max(1, Math.ceil((Math.max(0, ...data.map((d) => pillW(d.label))) + 6) / Math.max(1, band)));
 
   const comparePath = useMemo(() => {
     if (!hasCompare) return '';
@@ -248,53 +253,53 @@ export function ColumnChart({
       >
         {width > 0 && (
           <svg width={width} height={height} aria-hidden="true" className="block">
-            {ticks.map((t) => (
-              <g key={t}>
-                <line x1={padL} x2={width - padR} y1={y(t)} y2={y(t)} stroke="var(--chart-grid)" strokeWidth={1} />
-                <text x={padL - 6} y={y(t) + 4} textAnchor="end" fontSize={11} fill="var(--muted)" className="tabular">
-                  {tickFormat ? tickFormat(t) : compact.format(t / unitDivisor)}
-                </text>
-              </g>
-            ))}
+            {/* Taban: kesik ince çizgi (Keel'de ızgara ve dikey eksen yok; değerler çipte, ipucunda ve gizli tabloda) */}
+            <line x1={padL} x2={width - padR} y1={base + 0.5} y2={base + 0.5} stroke="var(--k-line-strong)" strokeWidth={1} strokeDasharray="1 4" strokeLinecap="round" />
             {data.map((d, i) => {
-              const x = padL + band * i + (band - barW) / 2;
-              const top = y(d.value);
-              const h = padT + plotH - top;
-              const r = Math.max(0, Math.min(barRadius, h, barW / 2));
-              const path =
-                h <= 0
-                  ? ''
-                  : `M${x},${padT + plotH} L${x},${top + r} Q${x},${top} ${x + r},${top} L${x + barW - r},${top} Q${x + barW},${top} ${x + barW},${top + r} L${x + barW},${padT + plotH} Z`;
-              // Vurgu: üzerine gelinen sütun, yoksa sabit vurgulu sütun; ötekiler açık nane
+              const x0 = padL + band * i + (band - barW) / 2;
+              const h = d.value > 0 ? Math.max(3, base - y(d.value)) : 1.5;
+              // Vurgu: üzerine gelinen sütun, yoksa sabit vurgulu sütun nane; ötekiler gri bağlam
               const on = active != null ? active === i : pin === i;
+              const r = Math.min(barRadius, 1.5, stripeW / 2);
+              const w = pillW(d.label);
+              const cx = padL + band * i + band / 2;
+              const px = Math.min(Math.max(0, cx - w / 2), Math.max(0, width - w));
               return (
                 <g key={i}>
-                  {path && <path d={path} fill={on ? 'var(--chart-hi)' : 'var(--chart-soft)'} />}
+                  {Array.from({ length: stripes }, (_, k) => (
+                    <rect key={k} x={x0 + k * (stripeW + stripeGap)} y={base - h} width={stripeW} height={h} rx={r} fill={on ? 'var(--chart-hi)' : 'var(--chart-soft)'} opacity={d.value > 0 || on ? 1 : 0.55} />
+                  ))}
                   {i % labelEvery === 0 && (
-                    <text x={padL + band * i + band / 2} y={height - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">
-                      {d.label}
-                    </text>
+                    <>
+                      <rect x={px} y={height - 23} width={w} height={22} rx={11} fill={on ? 'var(--chart-hi)' : 'var(--k-well-2)'} />
+                      <text x={px + w / 2} y={height - 8} textAnchor="middle" fontSize={11} fontWeight={500} fill={on ? 'var(--chart-on-hi)' : 'var(--k-ink-2)'} className="tabular">
+                        {d.label}
+                      </text>
+                    </>
                   )}
                 </g>
               );
             })}
-            {hasCompare && <path d={comparePath} fill="none" stroke="var(--chart-context)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
-            {/* Vurgulu sütunun hapı ve tepesindeki beyaz nokta (üzerine gelinince ipucu bu işi yapar) */}
+            {hasCompare && <path d={comparePath} fill="none" stroke="var(--chart-context)" strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" />}
+            {/* Vurgulu sütunun yüzen çipi (Keel): beyaz kart, iri değer ve altında etiket; üzerine gelinince ipucu bu işi yapar */}
             {active == null &&
               pin != null &&
               (() => {
                 const cx = padL + band * pin + band / 2;
-                const top = y(data[pin].value);
                 const text = (pillFormat ?? format)(data[pin].value);
-                const w = Math.max(34, text.length * 6.6 + 18);
-                const left = Math.min(Math.max(padL - 6, cx - w / 2), width - padR - w);
+                const cap = data[pin].title ?? data[pin].label;
+                const w = Math.max(60, Math.max(text.length * 8.4, cap.length * 5.9) + 24);
+                const left = Math.min(Math.max(0, cx - w / 2), Math.max(0, width - w));
+                const top = Math.max(2, y(data[pin].value) - 52);
                 return (
-                  <g>
-                    <rect x={left} y={top - 30} width={w} height={22} rx={8} fill="var(--chart-hi)" />
-                    <text x={left + w / 2} y={top - 15} textAnchor="middle" fontSize={11.5} fontWeight={600} fill="var(--chart-on-hi)" className="tabular">
+                  <g style={{ filter: 'drop-shadow(0 10px 18px rgb(23 26 38 / 0.16))' }}>
+                    <rect x={left} y={top} width={w} height={44} rx={10} fill="var(--surface-raised)" />
+                    <text x={left + w / 2} y={top + 19} textAnchor="middle" fontSize={14.5} fontWeight={600} fill="var(--ink)" className="tabular">
                       {text}
                     </text>
-                    {barW >= 10 && <circle cx={cx} cy={top + Math.min(6, barW / 2 - 1)} r={Math.min(4, barW / 2 - 2)} fill="var(--surface)" stroke="var(--chart-hi)" strokeWidth={1.5} />}
+                    <text x={left + w / 2} y={top + 35} textAnchor="middle" fontSize={10.5} fill="var(--muted)">
+                      {cap}
+                    </text>
                   </g>
                 );
               })()}
