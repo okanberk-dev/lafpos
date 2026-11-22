@@ -193,7 +193,7 @@ afterEach(() => {
 });
 
 async function setup(
-  opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: string; redirect?: string; merkez?: { enabled: boolean; hedef: number | null }; serverDown?: boolean; mode?: 'otomatik' | 'kapali' } = {},
+  opts: { dayOpen?: boolean; healthy?: boolean; zipSha?: string; redirect?: string; merkez?: { enabled: boolean; hedef: number | null }; serverDown?: boolean; mode?: 'otomatik' | 'kapali'; channelBuild?: number } = {},
 ) {
   const { zipFiles } = await load('arsiv.mjs');
   const { createUpdater } = await load('guncelle.mjs');
@@ -232,7 +232,7 @@ async function setup(
     }
     if (url === 'https://kanal.test/guncelleme/surum.json') {
       if (opts.redirect) return new Response(null, { status: 302, headers: { location: opts.redirect } });
-      return Response.json(surum, { headers: { etag: '"1"' } });
+      return Response.json(opts.channelBuild ? { ...surum, build: opts.channelBuild, app: { ...surum.app, file: `lafpos-app-${opts.channelBuild}.zip` } } : surum, { headers: { etag: '"1"' } });
     }
     if (url === `https://kanal.test/guncelleme/lafpos-app-${BUILD_NEW}.zip`) return new Response(new Uint8Array(zip));
     return new Response('yok', { status: 404 });
@@ -327,6 +327,28 @@ describe('güncelleme: Merkez hedefi', () => {
     expect(t.exits).toEqual([75]);
   });
 
+  it('gönderilen derleme indirildikten sonra kanal ilerlerse gönderilen kurulur, yenisi kendiliğinden kurulmaz', async () => {
+    const t = await setup({ merkez: { enabled: true, hedef: BUILD_NEW }, dayOpen: true });
+    t.updater.start();
+    await t.updater.check();
+    expect(t.status().durum).toBe('bekliyor');
+    // Gönderimden sonra main'e başka PR girdi; gün kapandı
+    t.opts.channelBuild = BUILD_NEW + 1;
+    t.opts.dayOpen = false;
+    await t.updater.check();
+    expect(t.requests.some((u) => u.endsWith(`lafpos-app-${BUILD_NEW + 1}.zip`))).toBe(false);
+    expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_NEW);
+  });
+
+  it('gönderilen derleme kanaldan düştüyse ve indirilmediyse kanalın yenisi kurulmaz; "yeniden gönderin" yazar', async () => {
+    const t = await setup({ merkez: { enabled: true, hedef: BUILD_OLD + 1 } });
+    t.updater.start();
+    await t.updater.check();
+    expect(t.requests.some((u) => u.endsWith('.zip'))).toBe(false);
+    expect(JSON.parse(readFileSync(join(t.app, 'package.json'), 'utf8')).build).toBe(BUILD_OLD);
+    expect(t.status().mesaj).toMatch(/kanalda yok.*yeniden gönderin/);
+  });
+
   it('Merkez kapalıysa kanalın son sürümü kurulur (eski davranış)', async () => {
     const t = await setup({ merkez: { enabled: false, hedef: null } });
     t.updater.start();
@@ -347,9 +369,14 @@ describe('güncelleme: Merkez hedefi', () => {
   it('merkezCap (saf): hedef yoksa kurulu derlemede kalınır, sunucu yoksa son karar', async () => {
     const { merkezCap, planUpdate } = await load('guncelle.mjs');
     expect(merkezCap({ server: { merkez: { enabled: true, hedef: null } }, last: null, installedBuild: 5 }).cap).toBe(5);
+    // İzin gönderilen derlemeye bağlı: sonradan kanala giren, gönderilmemiş derleme kendiliğinden kurulmaz (son denetim
+    // bulgu 3). Kanal ilerlerse indirilmiş yük tutulur (check). Kurulu derlemeden yeni olmayan hedef izin değildir
     expect(merkezCap({ server: { merkez: { enabled: true, hedef: 9 } }, last: null, installedBuild: 5 }).cap).toBe(9);
+    expect(merkezCap({ server: { merkez: { enabled: true, hedef: 5 } }, last: null, installedBuild: 5 }).cap).toBe(5);
+    expect(merkezCap({ server: { merkez: { enabled: true, hedef: 4 } }, last: null, installedBuild: 5 }).cap).toBe(5);
     expect(merkezCap({ server: { merkez: { enabled: false, hedef: null } }, last: { acik: true, hedef: 6 }, installedBuild: 5 }).cap).toBe(Infinity);
     expect(merkezCap({ server: null, last: { acik: true, hedef: 6 }, installedBuild: 5 }).cap).toBe(6);
+    expect(merkezCap({ server: null, last: { acik: true, hedef: 5 }, installedBuild: 5 }).cap).toBe(5);
     expect(merkezCap({ server: null, last: null, installedBuild: 5 }).cap).toBe(Infinity);
     // Eski sunucu (Merkez alanı yok): sınır yok
     expect(merkezCap({ server: { dayOpen: false }, last: null, installedBuild: 5 }).cap).toBe(Infinity);
@@ -357,6 +384,18 @@ describe('güncelleme: Merkez hedefi', () => {
     const inst = { build: 5, sqlite: '12.11.1', nodeAbi: '137' };
     expect(planUpdate({ installed: inst, nodeVersion: '24.22.3', manifest: m, cap: 9 })).toBeNull();
     expect(planUpdate({ installed: inst, nodeVersion: '24.22.3', manifest: m, cap: 10 })).toMatchObject({ build: 10 });
+  });
+});
+
+describe('güncelleme: temizlik hata fırlatmaz (bulgu 16)', () => {
+  it('kurulumun hata ve geri dönüş yollarında ve açılışta klasör silme korumalı (yalnız hazırlık fırlatabilir)', () => {
+    const src = readFileSync(join(__dirname, '../scripts/kasa/windows/kurulum/guncelle.mjs'), 'utf8');
+    const body = (from: string, to: string) => src.slice(src.indexOf(from), src.indexOf(to, src.indexOf(from)));
+    const install = body('async function install(job)', '\n  return {');
+    const start = body('    start() {', '\n    },');
+    expect(install).not.toMatch(/\brmDir\(/);
+    expect(start).not.toMatch(/\brmDir\(/);
+    expect(install).toMatch(/rmDirSafe\(/);
   });
 });
 

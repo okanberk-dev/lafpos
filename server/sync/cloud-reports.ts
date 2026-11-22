@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { gzip } from 'node:zlib';
-import { and, gte, lte } from 'drizzle-orm';
+import { and, gte, isNull, lt, lte } from 'drizzle-orm';
 import type { ItemListRow } from '@shared/remote-calc';
 import { REMOTE_REPORT_DAYS, REMOTE_SHOP, type RemoteDayExtra, type RemoteDayReport, type RemoteReportPush } from '@shared/remote-reports';
-import { addDays } from '@shared/time';
+import { addDays, businessDayStartMs } from '@shared/time';
 import { db, schema } from '../db/client';
 import { env } from '../env';
 import { bus } from '../lib/events';
@@ -72,7 +72,7 @@ function daysOn(date: string) {
  */
 export function buildDayReport(date: string, now = Date.now()): RemoteDayReport | null {
   const days = daysOn(date);
-  if (!days.count) return null;
+  if (!days.count) return platformOnlyDay(date, now);
   const range = { from: date, to: date };
   const s = summaryReport(range, now);
   const p = productReport(range, false);
@@ -120,6 +120,82 @@ export function buildDayReport(date: string, now = Date.now()): RemoteDayReport 
   };
 }
 
+/**
+ * İş günü açılmamış tarihte gelen ve kabul edilmeden kapanan platform siparişleri (ret, süresi dolan, bekleyen):
+ * kasadaki Paket platformları raporu onları geldiği ana göre sayar, uzakta da görünsün. Satışı olmayan boş gün
+ * (`n: 0`), yalnız platform verisiyle; yoksa null
+ */
+function platformOnlyDay(date: string, now: number): RemoteDayReport | null {
+  const loose = db
+    .select({ payload: schema.platformOrders.payload })
+    .from(schema.platformOrders)
+    .where(and(isNull(schema.platformOrders.orderId), gte(schema.platformOrders.receivedAt, businessDayStartMs(date)), lt(schema.platformOrders.receivedAt, businessDayStartMs(addDays(date, 1)))))
+    .all();
+  if (!loose.some((r) => !r.payload.test)) return null;
+  const plat = platformReport({ from: date, to: date }, false, now);
+  const zero = { list: 0, gross: 0, comp: 0, disc: 0, svc: 0, rev: 0, odenmez: 0, zayi: 0, voided: 0, receipts: 0, items: 0, tips: 0, guests: 0, tableSales: 0, paidClosed: 0, paidOpen: 0, onlineOrders: 0, onlineAmount: 0 };
+  return {
+    v: 1,
+    date,
+    at: now,
+    n: 0,
+    closed: true,
+    z: [],
+    s: zero,
+    pay: [],
+    types: [],
+    kdv: [],
+    closes: [],
+    prod: [],
+    hours: [],
+    clock: [],
+    staff: [],
+    xpay: [],
+    x: {
+      prep: { done: [], hand: [] },
+      checks: [],
+      lists: { iptal: [], ikram: [], indirim: [], happy: [] },
+      odenmez: [],
+      refunds: [],
+      plat: { rows: plat.platforms.map(({ avgBasket: _a, share: _s, ...r }) => r), pending: plat.pending },
+    },
+  };
+}
+
+/**
+ * Günün ek verisinin buluttaki sınırı (Upstash değer sınırı; bulut 900 KB'ı geçeni saklamaz). Aşan günün en uzun
+ * listeleri kısaltılır (önce happy hour, sonra indirim, adisyonlar, ikram, iptal: en eski satırlar düşer); düşen
+ * satırların sayısı ve tutarı `cut`'ta kalır, uzaktaki toplamlar kasadakiyle aynı çıkar, liste "kısaltıldı" der
+ */
+export const EXTRA_LIMIT_BYTES = 850 * 1024;
+export function fitExtra(x: RemoteDayExtra, limit = EXTRA_LIMIT_BYTES): RemoteDayExtra {
+  let size = JSON.stringify(x).length;
+  if (size <= limit) return x;
+  const out: RemoteDayExtra = { ...x, lists: { ...x.lists }, checks: [...x.checks], cut: {} };
+  const cut = out.cut!;
+  for (const kind of ['happy', 'indirim', 'checks', 'ikram', 'iptal'] as const) {
+    while (size > limit) {
+      const list = (kind === 'checks' ? out.checks : out.lists[kind]) as unknown as { at?: number; value?: number }[];
+      if (!list.length) break;
+      const avg = JSON.stringify(list).length / list.length;
+      const drop = Math.min(list.length, Math.ceil((size - limit) / Math.max(1, avg)) + 1);
+      const kept = list.slice(0, list.length - drop);
+      const gone = list.slice(list.length - drop);
+      if (kind === 'checks') {
+        out.checks = kept as RemoteDayExtra['checks'];
+        cut.checks = (cut.checks ?? 0) + gone.length;
+      } else {
+        out.lists[kind] = kept as ItemListRow[];
+        const c = cut[kind] ?? { count: 0, value: 0 };
+        cut[kind] = { count: c.count + gone.length, value: c.value + gone.reduce((a, r) => a + (r.value ?? 0), 0) };
+      }
+      size = JSON.stringify(out).length;
+    }
+    if (size <= limit) break;
+  }
+  return out;
+}
+
 /** Kalem listesinin buluta giden hali: neden yok; ödenmezin müşteri kişisi yalnız "Müşteri" */
 const privateRow = (r: ItemListRow): ItemListRow => ({ ...r, reason: null, person: r.person ? (r.person.kind === 'customer' ? { kind: 'customer', name: 'Müşteri' } : r.person) : null });
 
@@ -129,7 +205,7 @@ function dayExtra(range: { from: string; to: string }, now: number): RemoteDayEx
   const list = (kind: 'iptal' | 'ikram' | 'indirim' | 'happy') => itemListReport(range, kind);
   const ikram = list('ikram');
   const plat = platformReport(range, false, now);
-  return {
+  return fitExtra({
     prep: { done: prep.done, hand: prep.handoffs },
     checks: checksReport(range, null).rows,
     lists: { iptal: list('iptal').rows.map(privateRow), ikram: ikram.rows.map(privateRow), indirim: list('indirim').rows.map(privateRow), happy: list('happy').rows.map(privateRow) },
@@ -140,7 +216,7 @@ function dayExtra(range: { from: string; to: string }, now: number): RemoteDayEx
       rows: plat.platforms.map(({ avgBasket: _a, share: _s, ...r }) => r),
       pending: plat.pending,
     },
-  };
+  });
 }
 
 /** Ürünlerin bugünkü kategorisi: uzaktaki dönem raporunda kategori kasadaki gibi bugünküdür */
@@ -160,6 +236,8 @@ export function dayHash(r: RemoteDayReport): string {
 const gzipAsync = (text: string) => new Promise<Buffer>((ok, fail) => gzip(text, (err, out) => (err ? fail(err) : ok(out))));
 
 let busy = false;
+/** Durumun kuşağı: "yeniden gönder" sıfırlayınca artar; ağ beklerken sıfırlanan tur eski durumu yazmaz */
+let generation = 0;
 let lastLiveAt = 0;
 let liveTimer: NodeJS.Timeout | null = null;
 let state: { lastSuccessAt?: number; lastError?: string | null; sentDays?: number } = {};
@@ -177,12 +255,15 @@ export const pendingReportDays = () => (cloudEnabled() ? loadState().queue.lengt
  * geçmişi sıfırlanır; tarama 400 günü dakikada 7 günlük paketlerle yeniden iter (yaklaşık bir saat)
  */
 export function resendReports() {
+  // Süren tur bitince eski durumu geri yazmasın: kuşak değişir, o tur yazmadan çıkar
+  generation += 1;
   setSyncState(STATE_KEY, emptyState());
   void reportTick({ backfill: true });
 }
 
 /** Test için */
 export function resetReportSync() {
+  generation += 1;
   busy = false;
   lastLiveAt = 0;
   if (liveTimer) clearTimeout(liveTimer);
@@ -191,11 +272,14 @@ export function resetReportSync() {
   setSyncState(STATE_KEY, emptyState());
 }
 
-async function pushDays(today: string, days: RemoteDayReport[], at: number): Promise<void> {
+/** Gönderim; bulutun saklamadığı günler (sınırı aştı) döner */
+async function pushDays(today: string, days: RemoteDayReport[], at: number): Promise<{ date: string; why: string }[]> {
   const body: RemoteReportPush = { v: 1, shop: remoteShop(), today, at, days, cat: categoryMap() };
   const gz = (await gzipAsync(JSON.stringify(body))).toString('base64');
-  const { status } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/rapor`), { gz }, 20_000);
+  const { status, json } = await signedFetch(env.cloudSecret, 'POST', new URL(`${env.cloudUrl}/api/uzaktan/rapor`), { gz }, 20_000);
   if (status !== 200) throw new Error(`HTTP ${status}`);
+  const skipped = (json as { skippedDates?: unknown } | null)?.skippedDates;
+  return Array.isArray(skipped) ? skipped.filter((x): x is { date: string; why: string } => !!x && typeof (x as { date?: unknown }).date === 'string') : [];
 }
 
 export type ReportTickResult = { sent: number; queued: number } | 'off' | 'busy';
@@ -213,6 +297,7 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
   try {
     const now = opts.now ?? Date.now();
     const st = loadState();
+    const myGen = generation;
     const today = reportToday(now);
     const oldest = addDays(today, -(REMOTE_REPORT_DAYS - 1));
     const live = !opts.backfill || now - lastLiveAt >= LIVE_MIN_MS - 5_000;
@@ -249,12 +334,15 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
       const chunk = changed.slice(i, i + BACKFILL_BATCH);
       if (!failed.size) {
         try {
-          await pushDays(today, chunk.map((c) => c.report), now);
+          const skipped = await pushDays(today, chunk.map((c) => c.report), now);
+          if (myGen !== generation) return { sent, queued: st.queue.length };
+          // Bulutun saklamadığı gün de gönderildi sayılır (her 5 dk'da aynı büyük gün yeniden gitmesin); ekranda yazar
           for (const c of chunk) st.sent[c.date] = c.hash;
           sent += chunk.length;
-          state = { lastSuccessAt: Date.now(), lastError: null, sentDays: (state.sentDays ?? 0) + chunk.length };
+          state = { lastSuccessAt: Date.now(), lastError: skipped.length ? `Gün çok büyük, bulut saklamadı: ${skipped.map((x) => x.date).join(', ')}` : null, sentDays: (state.sentDays ?? 0) + chunk.length };
           continue;
         } catch (e) {
+          if (myGen !== generation) return { sent, queued: st.queue.length };
           state = { ...state, lastError: e instanceof Error ? e.message : String(e) };
         }
       }
@@ -267,6 +355,8 @@ export async function reportTick(opts: { backfill?: boolean; now?: number } = {}
     if (live) st.queue = liveDates.filter((d, i) => failed.has(d) && liveDates.indexOf(d) === i);
     else st.queue = [...new Set([...st.queue, ...[...failed].filter((d) => !batch.includes(d))])];
     for (const d of Object.keys(st.sent)) if (d < oldest) delete st.sent[d];
+    // Bu sırada durum sıfırlandıysa ("Yeniden gönder") eski durum yazılmaz; sıfır durumla tarama baştan başlar
+    if (myGen !== generation) return { sent, queued: st.queue.length };
     setSyncState(STATE_KEY, st);
     return { sent, queued: st.queue.length };
   } finally {
@@ -288,7 +378,7 @@ function scheduleLive() {
 export function startReportSync(): NodeJS.Timeout[] {
   if (!cloudEnabled()) return [];
   bus.on('event', (e: { topic: string }) => {
-    if (e.topic === 'orders' || e.topic === 'payments' || e.topic === 'cash' || e.topic === 'settings') scheduleLive();
+    if (e.topic === 'orders' || e.topic === 'payments' || e.topic === 'cash' || e.topic === 'settings' || e.topic === 'delivery') scheduleLive();
   });
   // Tarama dakikada bir paket (bitince yalnız günde bir kez yeniden başlar); her turda bugün ve dün de bakılır
   return [setTimeout(() => void reportTick({ backfill: true }), 20_000), setInterval(() => void reportTick({ backfill: true }), BACKFILL_MS)];

@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge, Card } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
 import { Field, NumberInput, Toggle } from '@/components/ui/Field';
-import { Skeleton } from '@/components/ui/misc';
+import { ErrorState, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { toast } from '@/lib/toast';
 
@@ -49,7 +49,9 @@ export function NotifyCard() {
       subtitle="Önemli olaylar patronun telefonuna; telefonda LafPOS Uzaktan › Merkez'den açılır"
       actions={d ? d.ready ? s?.enabled ? <Badge tone="success" dot>Açık</Badge> : <Badge>Kapalı</Badge> : <Badge>Uzaktan kurulu değil</Badge> : undefined}
     >
-      {!s ? (
+      {q.isError ? (
+        <ErrorState title="Bildirim ayarları alınamadı" error={q.error} onRetry={() => void q.refetch()} retrying={q.isFetching} />
+      ) : !s ? (
         <Skeleton className="h-32" />
       ) : (
         <div className="grid gap-4">

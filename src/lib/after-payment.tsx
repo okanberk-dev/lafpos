@@ -1,6 +1,10 @@
+import { useEffect, useRef } from 'react';
 import { afterPaymentPrints, isKasaHost, printOnce } from '@shared/odeme-fisi';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
+import { get } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { deviceCopyListener } from '@/lib/device-copies';
+import { onLive } from '@/lib/live';
 import { BillReceipt, printNow, PrintCut, StoreCopyReceipt } from '@/lib/print';
 
 /** Bu sekmede basılmış ödemeler (cihaz sepeti ya da ödeme kimliği): aynı ödeme ikinci kez basılmaz */
@@ -50,4 +54,34 @@ export function printAfterPayment(opts: {
       {plan.infoSlip && <BillReceipt order={order} boot={boot} sizeLabel={sizeLabel} />}
     </>,
   );
+}
+
+type DeviceReceipt = { id: string; status: string; paymentIds?: string[]; receiptNo: number | null; zNo: number | null; docKind: string | null; docId: string | null };
+
+/**
+ * Cihazda ödenen sepetin işyeri nüshası: sepetin fiş ve Z no'su ile adisyonun güncel hâli sunucudan okunur. Yazdırma
+ * ödemeyi bozmaz (hata sessiz); her cihaz fişi bir kez (`printAfterPayment`)
+ */
+export async function printDeviceCopy(boot: BootstrapDTO, orderId: string) {
+  if (!printsAfterPayment(boot, true)) return;
+  try {
+    const [receipts, order] = await Promise.all([get<DeviceReceipt[]>(`/okc/orders/${orderId}/receipts`), get<OrderDTO>(`/orders/${orderId}`)]);
+    const r = receipts.find((x) => x.status === 'tamamlandi');
+    if (!r) return;
+    printAfterPayment({ key: `okc:${r.id}`, boot, order, paymentIds: r.paymentIds ?? [], device: { receiptNo: r.receiptNo, zNo: r.zNo, docKind: r.docKind, docId: r.docId } });
+  } catch {
+    // Fiş basılamadı: ödeme yine alınmıştır
+  }
+}
+
+/**
+ * Uygulama düzeyinde (AppShell) cihaz ödemelerinin nüshası: sepeti bu sekme gönderdiyse ödeme penceresi ya da adisyon
+ * ekranı kapanmış olsa da basılır (`markDeviceSent`)
+ */
+export function useDeviceCopies(boot: BootstrapDTO) {
+  const ref = useRef(boot);
+  useEffect(() => {
+    ref.current = boot;
+  });
+  useEffect(() => onLive(deviceCopyListener((orderId) => void printDeviceCopy(ref.current, orderId))), []);
 }

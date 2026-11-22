@@ -24,6 +24,7 @@ import { ulid } from '../lib/ids';
 import { getSettings, updateSettings } from '../lib/settings';
 import { loadSaleProduct } from '../services/menu';
 import * as orders from '../services/orders';
+import { assertCanSell } from '../sync/merkez';
 import { sampleOrder } from './simulator';
 
 /**
@@ -382,6 +383,8 @@ export function expirePlatformOrders(t: Tx, fx: Effects, now = Date.now()): numb
  */
 export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: string, prepMinutes?: number, opts: { notifiedStatus?: string | null; auto?: boolean } = {}) {
   if (!user.permissions.has('paket.yonet')) throw new HttpError(403, 'Platform siparişini paket yetkisi olan kabul eder', 'forbidden');
+  // Lisans kapalıysa platform siparişi de yeni satıştır: hiçbir şey yazılmadan durur (sipariş bekler, platform reddeder)
+  assertCanSell();
   const row = loadRow(t, id);
   const now = Date.now();
   if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');

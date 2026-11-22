@@ -7,12 +7,15 @@ import { upgradeRoleSets, upgradeStoredSettings } from './lib/settings';
 import { env } from './env';
 import { upgradeOptionProfiles } from './sync/option-profile';
 import { startJobs, stopJobs } from './jobs';
+import { recordRestoreResult } from './sync/yedek';
 
 runMigrations();
 if (seedIfEmpty()) console.log('İlk kurulum: köşk masa planı, site menüsü ve örnek personel yüklendi; LafPOS deneme modunda (satışlar gerçek sayılmaz)');
 upgradeRoleSets();
 upgradeStoredSettings();
 upgradeOptionProfiles();
+// Bekçinin buluttan geri yükleme sonucu denetim kaydına (bir kez)
+recordRestoreResult();
 
 const app = createApp();
 

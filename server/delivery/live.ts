@@ -9,6 +9,8 @@ import { type AuditEntry, Effects } from '../lib/effects';
 import { conflict, HttpError } from '../lib/http';
 import { getSettings, getSyncState, setSyncState, trainingMode } from '../lib/settings';
 import { requireCurrentDay } from '../services/orders';
+import { salesAllowed } from '@shared/lisans';
+import { licenseNow } from '../sync/merkez';
 import { type PlatformAdapter, PlatformHttpError, type PlatformNotify, type PollResult } from './adapter';
 import { deciding, manualDecision } from './locks';
 import { adapterFor } from './registry';
@@ -357,6 +359,9 @@ export function autoAcceptBlocker(row: PlatformRow, now = Date.now()): string | 
     if (!p.simulated || !getSettings().demoMode) return 'platform Deneme modunda';
   } else return 'platform kapalı';
   if (p.preAccepted) return 'platformun tabletinde kabul edilmiş';
+  // Lisans kapalı (Merkez): otomatik kabul yarıda kalmasın, sipariş beklesin (platform kendisi reddeder)
+  const lic = licenseNow(now);
+  if (lic && !salesAllowed(lic)) return 'lisans kapalı';
   if (row.notifiedStatus != null) return 'platformda zaten kabul edilmiş';
   if (manualDecision.has(row.id) || (row.lastError && !row.lastError.startsWith(AUTO_SKIP_PREFIX))) return 'kasada karar denendi';
   if (p.scheduledFor != null || p.scheduledUnknown) return 'ileri tarihli sipariş';

@@ -34,7 +34,9 @@ beforeAll(async () => {
       const [cmd, key, ...rest] = JSON.parse(String(init!.body)) as string[];
       let result: unknown = null;
       if (cmd === 'GET') result = store.get(key!) ?? null;
-      if (cmd === 'SET') (store.set(key!, rest[0]!), (result = 'OK'));
+      if (cmd === 'MGET') result = [key!, ...rest].map((k) => store.get(k) ?? null);
+      if (cmd === 'SCARD') result = 0;
+      if (cmd === 'SET') result = rest.includes('NX') && store.has(key!) ? null : (store.set(key!, rest[0]!), 'OK');
       if (cmd === 'INCR') (store.set(key!, String(Number(store.get(key!) ?? 0) + 1)), (result = Number(store.get(key!))));
       if (cmd === 'DEL') (store.delete(key!), (result = 1));
       return new Response(JSON.stringify({ result }));
@@ -127,7 +129,7 @@ describe('telefon bildirimi', () => {
     expect(kasa?.payload.body).toMatch(/beklenen .*sayılan/);
   });
 
-  it('Merkez: güncelleme eski sürüme dönünce patrona bir kez', async () => {
+  it('Merkez: güncelleme eski sürüme dönünce onaylı dükkânın patronuna bir kez, sabit metinle', async () => {
     pushed.length = 0;
     const { identity, merkezBeat } = await import('../server/sync/merkez');
     const { env } = await import('../server/env');
@@ -136,11 +138,18 @@ describe('telefon bildirimi', () => {
     const { join } = await import('node:path');
     const dir = join(env.dataDir, 'guncelleme');
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'durum.json'), JSON.stringify({ durum: 'geri-dondu', mesaj: 'Yeni sürüm açılmadı; eski sürüm çalışıyor' }));
+    writeFileSync(join(dir, 'durum.json'), JSON.stringify({ durum: 'guncel', mesaj: 'Güncel' }));
     expect(identity().id).toBeTruthy();
     expect(await merkezBeat()).toBe(true);
+    // Onay bekleyen kurulumdan bildirim gitmez: sahip lisansı verir
+    const t = await token();
+    expect((await cloud('POST', 'merkez/kurulum', { id: identity().id, lisans: 'aktif', ad: 'Marina' }, t)).status).toBe(200);
+    writeFileSync(join(dir, 'durum.json'), JSON.stringify({ durum: 'geri-dondu', mesaj: 'Yeni sürüm açılmadı; ayrıntı https://ornek.test' }));
     expect(await merkezBeat()).toBe(true);
-    expect(pushed.filter((p) => p.payload.title.startsWith('Güncelleme sorunu'))).toHaveLength(1);
+    expect(await merkezBeat()).toBe(true);
+    const sent = pushed.filter((p) => p.payload.title.startsWith('Güncelleme sorunu'));
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.payload).toMatchObject({ title: 'Güncelleme sorunu · Marina', body: 'Yeni sürüm kurulamadı; eski sürüm çalışıyor' });
     Object.assign(env, { merkezUrl: '' });
   });
 

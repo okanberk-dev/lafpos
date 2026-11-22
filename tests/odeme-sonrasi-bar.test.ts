@@ -319,13 +319,14 @@ describe('tezgâh satışında "Öde": ödeme alınınca bara', () => {
 describe('ekran (kaynak)', () => {
   const page = readFileSync(new URL('../src/pages/order/OrderPage.tsx', import.meta.url), 'utf8');
   const cart = readFileSync(new URL('../src/pages/order/CartPanel.tsx', import.meta.url), 'utf8');
+  const outbox = readFileSync(new URL('../src/lib/outbox.ts', import.meta.url), 'utf8');
 
   it('"Öde" tezgâh satışında bekletir, "Bara gönder" hemen gönderir', () => {
     expect(page).toContain('const holdOnPay = holdsUntilPaid(order);');
     expect(page.match(/if \(await send\(holdOnPay\)\) setDialog\('odeme'\);/g)?.length).toBe(2);
     expect(page).toMatch(/const sendOnly = \(\) =>\s*void once\(async \(\) => \{\s*if \(promptNumarator\('send'\)\) return;\s*await send\(\);/);
     // Ödeme bekletme işareti gönderim kaydından (kasaya ulaşamayan gönderim aynı işaretle yeniden gider)
-    expect(page).toContain('...(batch.hold ? { hold: true } : {}),');
+    expect(outbox).toContain('...(batch.hold ? { hold: true } : {}),');
   });
 
   it('sepette "Ödeme bekliyor" grubu en üstte; "Ödemeden gönder" sipariş yetkisiyle', () => {

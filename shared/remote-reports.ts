@@ -85,6 +85,16 @@ export interface RemoteDayExtra {
   odenmez: OdenmezPersonRow[];
   refunds: { id: string; at: number; orderNo: number | null; method: string; amount: number; reason: null; by: string | null }[];
   plat: { rows: PlatformDayRow[]; pending: number };
+  /**
+   * Kasada sınırı aşınca kısaltılan listeler (server/sync/cloud-reports.ts `fitExtra`): düşen satırların sayısı ve
+   * tutarı; uzakta toplamlara eklenir, liste "kısaltıldı" der
+   */
+  cut?: { iptal?: ListCut; ikram?: ListCut; indirim?: ListCut; happy?: ListCut; checks?: number };
+}
+
+export interface ListCut {
+  count: number;
+  value: number;
 }
 
 /** Kasanın bir itmesi (`POST /api/uzaktan/rapor`, gzip'li gövde `gz`) */

@@ -99,8 +99,11 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
         <Field label="Şube kodu" hint="Harf, rakam ve tire; en çok 12 karakter. Fişin başlığında yazılır">
           <Input value={kod} maxLength={12} autoCapitalize="characters" spellCheck={false} onChange={(e) => setKod(e.target.value.toUpperCase())} placeholder="Örn. TZL" />
         </Field>
-        <Field label="Lisans">
+        {/* Düğme grubu <label> (Field) içine girmez: etikete dokunmak ilk düğmeye tıklardı (SettingsAdmin gibi) */}
+        <div>
+          <div className="mb-1.5 text-[13px] font-medium text-ink-2">Lisans</div>
           <Segmented
+            label="Lisans"
             value={lisans}
             onChange={setLisans}
             options={[
@@ -109,14 +112,16 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
               { value: 'pasif', label: 'Pasif' },
             ]}
           />
-        </Field>
+        </div>
         {lisans === 'aktif' && (
           <Field label="Son gün" hint="Boş bırakılırsa süresiz">
             <Input type="date" value={bitis} onChange={(e) => setBitis(e.target.value)} />
           </Field>
         )}
-        <Field label="Güncelleme" hint={mod === 'otomatik' ? 'Yeni sürüm çıkınca kendiliğinden gider' : 'Siz gönderince gider'}>
+        <div>
+          <div className="mb-1.5 text-[13px] font-medium text-ink-2">Güncelleme</div>
           <Segmented
+            label="Güncelleme"
             value={mod}
             onChange={setMod}
             options={[
@@ -124,7 +129,8 @@ function EditDialog({ row, onClose }: { row: Row; onClose: () => void }) {
               { value: 'otomatik', label: 'Otomatik' },
             ]}
           />
-        </Field>
+          <p className="mt-1.5 text-[13px] leading-5 text-muted">{mod === 'otomatik' ? 'Yeni sürüm çıkınca kendiliğinden gider' : 'Siz gönderince gider'}</p>
+        </div>
         <p className="text-[13px] leading-5 text-muted">
           Bitişe 14 gün kala dükkânda uyarı çıkar. Pasif ya da süresi dolan lisansta önce uyarı, 7 gün sonra yeni satış kapanır; kasa internete ulaşamıyorsa satış hiç kapanmaz, yalnız uyarı
           kalır. Kayıtlar, raporlar ve tahsilat hep açık

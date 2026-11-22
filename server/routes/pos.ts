@@ -345,8 +345,19 @@ posRoutes.post('/orders/:id/reopen', async (c) => {
 posRoutes.post('/orders/:id/cancel', async (c) => {
   const input = await body(c, z.object({ reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
-  write((t, fx) => orders.cancelOrder(t, actor, fx, c.req.param('id'), input.reason));
-  return c.json(dto(c, c.req.param('id')));
+  const id = c.req.param('id');
+  const before = lossOf('iptal', id).value;
+  write((t, fx) => orders.cancelOrder(t, actor, fx, id, input.reason));
+  // Adisyonun toptan iptali de büyük iptal bildirimi: onaysız kapanan (az önce girilmiş, hazırlanmamış ya da boş)
+  // adisyon hariç; denetim kaydının önemi onu söyler
+  const audit = db
+    .select({ severity: schema.auditLog.severity })
+    .from(schema.auditLog)
+    .where(and(eq(schema.auditLog.orderId, id), eq(schema.auditLog.action, 'order.cancel')))
+    .orderBy(desc(schema.auditLog.at))
+    .get();
+  if (audit && audit.severity !== 'info') afterLoss('iptal', id, before, actor.user.id);
+  return c.json(dto(c, id));
 });
 
 posRoutes.post('/orders/:id/delivery', async (c) => {

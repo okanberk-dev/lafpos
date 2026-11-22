@@ -6,7 +6,8 @@ export function gzipSync(): never {
 }
 
 /** Eşzamansız gzip (server/sync/cloud.ts): demoda hep hata döner */
-export function gzip(_data: unknown, done: (err: Error | null, out?: Uint8Array) => void): void {
+export function gzip(_data: unknown, a: unknown, b?: unknown): void {
+  const done = (typeof a === 'function' ? a : b) as (err: Error | null, out?: Uint8Array) => void;
   done(new Error(NO_CLOUD));
 }
 

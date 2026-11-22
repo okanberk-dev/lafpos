@@ -156,9 +156,10 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   belirler, Redis'te yalnız scrypt özeti (`lafpos:uye:<e-posta>`) saklanır. İlk girişte davet kodu istenir
   (`LAFPOS_UYE_DAVET`, gizli, en az 8; büyük-küçük harf, boşluk ve tire fark etmez): e-postayı bilen başkası üyeliği
   sahipten önce açamaz; kod tanımlı değilse üyelik açılmaz. Üyelik bir kez açılır (sonraki deneme 409); parolayı
-  sıfırlamak için Upstash'te o anahtar silinir, üye davet koduyla yeniden oluşturur. Oturum 30 gün; imzaya parola
+  sıfırlamak için Upstash'te o anahtar silinir, üye giriş ekranında "İlk kez mi giriyorsunuz? Üyeliği oluştur"a
+  basıp davet koduyla yeniden oluşturur (başka üye varken de). Oturum 30 gün; imzaya parola
   özeti girer, parola değişince bütün oturumlar düşer. Deneme sınırı aynı (IP başına 15 dakikada 8); yanlış parola ve
-  bilinmeyen e-posta aynı yanıtı alır. Kafe bağlanmadan önce site demoya yönlenmez: giriş ekranı görünür, demo orada
+  bilinmeyen e-posta aynı yanıtı alır ve aynı sürede (her yolda tek parola özeti). Kafe bağlanmadan önce site demoya yönlenmez: giriş ekranı görünür, demo orada
   "Demoyu dene" bağlantısıdır (`tests/uzaktan-uyelik.test.ts`, `e2e/uzaktan.mjs`).
 - **Üye girişi ve İndir (siteden kurulum):** giriş ekranı sitenin "Üye girişi"dir; girişten sonra menüde **İndir**
   (`/indir`, yalnız Uzaktan derlemesinde). Kafeden veri gelmemişken üye girişten sonra doğrudan kabuksuz İndir'i görür;
@@ -175,24 +176,35 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   Vercel NSIS derleyemez.
 
 - **Merkez (`/merkez`): dükkânlar, lisans, seçerek güncelleme** (`api/_merkez.ts`, kasada `server/sync/merkez.ts`,
-  kural `shared/lisans.ts`, `tests/merkez.test.ts`). Yalnız gerçek oturumla (üye ya da parolalı giriş); parolasız
-  görünümde kapalı, kafe bağlanmadan örnek satır salt okunur.
-  - **Kayıt:** kasa ilk açılışta kurulum kimliği ve gizli anahtar üretir (`sync_state` `merkez.kimlik`, deneme bitirme
-    silmez). Merkez adresi `LAFPOS_MERKEZ_URL`, yoksa `LAFPOS_CLOUD_URL`; `LAFPOS_MERKEZ_URL=0` kapatır. İnternete ilk
-    çıktığında `POST /api/merkez/kayit` (ilk görüşte güven; aynı kimliğe başka anahtar 409), Merkez'de "Onay bekliyor".
-    Sonra 5 dakikada bir `POST /api/merkez/nabiz`, kurulumun anahtarıyla imzalı (`x-laf-kurulum` + imza başlıkları):
-    sürüm, güncelleme durumu, gün açık mı. Kayıt Merkez'de silinirse (404) kasa bir sonraki nabızda yeniden kaydolur.
+  kural `shared/lisans.ts`, `tests/merkez.test.ts`, `tests/denetim-merkez.test.ts`). Yalnız gerçek oturumla (üye ya
+  da parolalı giriş); parolasız görünümde menüde yok ve uçları 403 `remote_admin` (oturum düşmez), kafe bağlanmadan
+  örnek satır salt okunur.
+  - **Kayıt:** kasa ilk açılışta gizli anahtar üretir, kurulum kimliği anahtarın özetidir (sha256'nın ilk 24'ü;
+    `sync_state` `merkez.kimlik`, deneme bitirme silmez): kimliği gören başkası onu kendi anahtarıyla kaydedemez.
+    Merkez adresi `LAFPOS_MERKEZ_URL`, yoksa `LAFPOS_CLOUD_URL`; `LAFPOS_MERKEZ_URL=0` kapatır, `LAFPOS_CLOUD_SECRET`
+    yoksa da kapalıdır. İnternete ilk çıktığında `POST /api/merkez/kayit`, kafenin ortak anahtarıyla
+    (`LAFPOS_CLOUD_SECRET`) imzalı: dışarıdan kimse kurulum açamaz; aynı kimliğe başka anahtar 409 (kasa o zaman yeni
+    kimlik üretir), IP başına saatte 10 kayıt, onay bekleyen en çok 50 (429). Merkez'de "Onay bekliyor". Sonra 5
+    dakikada bir `POST /api/merkez/nabiz`, kurulumun kendi anahtarıyla imzalı (`x-laf-kurulum` + imza başlıkları):
+    sürüm, güncelleme durumu, gün açık mı. Nabız yalnız kendi alanlarını ayrı anahtara yazar
+    (`lafpos:merkez:durum:<id>`): panelin aynı anda verdiği lisans ya da hedef ezilmez. Güncelleme sorunu bildirimi
+    yalnız onaylı (aktif) dükkândan, sabit metinle ve kurulum başına 6 saatte en çok bir kez gider. Kayıt Merkez'de
+    silinirse (panelde "Kaydı sil" ya da Redis sıfırlandı; 404) kasa bir sonraki nabızda yeniden kaydolur.
   - **Lisans:** onaysız kurulum kuruluştan 14 gün deneme; aktif lisans bitiş gününün (Uzaktan'da "Son gün")
     sonuna (İstanbul) kadar, bitişsiz süresiz. Bitişe 14 gün kala yalnız uyarı ("Lisans … tarihinde bitiyor"; kasada
     ayar yetkisi olana amber şerit, panelde "Yakında bitiyor"). Pasif ya da süresi dolmuşta önce uyarı (kasada amber
-    şerit), 7 gün sonra yeni satış kapanır (`POST /orders` ve kalem ekleme 403 `license_blocked`); tahsilat, kayıtlar
-    ve raporlar her durumda açık. Kasa son yanıtı (`merkez.son`) saklar ve kendi saatiyle hesaplar.
+    şerit), 7 gün sonra yeni satış kapanır (adisyon açma, kalem ekleme, platform siparişi kabulü 403
+    `license_blocked`; otomatik kabul "lisans kapalı" deyip siparişi bekletir); tahsilat, kalem taşıma, sitede ödenmiş
+    online sipariş, kayıtlar ve raporlar her durumda açık. Kasa son yanıtı (`merkez.son`) saklar ve kendi saatiyle
+    hesaplar.
     **Çevrimdışı kural (kesin): internetsiz kasada satış hiç kapanmaz.** Satışın kapanması için kasanın lisans
     kaydını Merkez'den son 15 dakikada (`CONFIRM_MS`, üç nabız) almış olması gerekir; değilse süresi dolmuş lisans en
     çok uyarıdır ("kasa Merkez'e ulaşamıyor, satış sürüyor"). Böylece sahibin uzattığı lisansı henüz alamamış kasa
     durmaz; bedeli, internetten kopan kasanın kapanmamasıdır. Panel aynı kuralı kasanın son görülmesiyle hesaplar
-    (`shared/lisans.ts` `licenseState` `confirmedAt`). Merkez adresi yoksa lisans uygulanmaz. Durum Yönetim › Ayarlar
-    ve yedek › Sürüm ve güncelleme'de (lisans, son günü, şube kodu).
+    (`shared/lisans.ts` `licenseState` `confirmedAt`). **Lisans zorlayıcı değildir:** Merkez adresi yoksa
+    (`LAFPOS_MERKEZ_URL=0`, `LAFPOS_CLOUD_URL` ya da `LAFPOS_CLOUD_SECRET` tanımsız) lisans uygulanmaz; kasanın
+    ayarlar.env'ine erişen kişi kapatabilir. Durum Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de (lisans, son
+    günü, şube kodu).
   - **Şube kodu:** sahip dükkânın ayarlarında verir ("TZL"; büyük harf, rakam ve tire, en çok 12). Nabzın yanıtıyla
     kasaya gider (`kod`), Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de ve fişin başlığında ("Şube Tuzla · TZL",
     bootstrap `branch`) görünür. lafmaliyet'in şube kimliğinden (`branchId`) ayrıdır, sistemler arasında gitmez.
@@ -200,15 +212,21 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     kanalın son derlemesi olur, kasa bir sonraki nabızda alır ve kasadaki "Şimdi güncelle"nin isteğini yazar; gün
     açıkken kurdurmaz (`docs/05-KASA-BILGISAYARI.md` §6). Panelde kasa alana kadar "Güncelleme istendi".
   - **Seçerek güncelleme:** dükkân "Ben gönderince" (varsayılan) ya da "Otomatik". Panelde dükkânlar seçilip
-    "Güncelleme gönder": hedef kanalın son derlemesi olur. Nabzın yanıtı hedefi taşır; güncelleyici
+    "Güncelleme gönder": hedef kanalın o anki son derlemesi olur. Nabzın yanıtı hedefi taşır; güncelleyici
     (`guncelle.mjs` `merkezCap`) kanalda daha yeni derleme görünce sunucuya (`/api/kasa/guncelleme-durumu`, yalnız bu
-    bilgisayardan; Merkez'le imzalı konuşan sunucudur) sorar ve yalnız hedefe kadar kurar. Sunucuya ulaşamazsa son
+    bilgisayardan; Merkez'le imzalı konuşan sunucudur) sorar. Gönderilen hedef "kurulabilir" iznidir, üst sınır değil:
+    kanal yalnız son derlemeyi tutar, hedef kurulu derlemeden yeniyse kasa gün kapanınca kanalda o an olanı kurar
+    (gönderimden sonra main'e yeni PR girse de). Hedef kurulu derlemeyi geçmiyorsa beklenir. Sunucuya ulaşamazsa son
     bildiği kararda kalır; Merkez kapalıysa kanalın son sürümünü izler (eski davranış). Durum "Yeni sürüm … hazır;
     Merkez'den gönderilince kurulacak". Panel satırı kasanın bildirdiği durumu gösterir: "İndiriliyor", "Gün kapanınca
     kurulacak", "Kuruldu", "Sorun çıktı, eski sürüme döndü".
   - **Yeni sürüm hazır:** kanalın `surum.json`'u `not` taşır (son commit'in başlığı, squash'ta PR başlığı;
     `kanal.mjs` `changeNote`). Panel gönderilmemiş dükkânları "Bekleyenleri seç" ile seçer.
-  - Redis: `lafpos:merkez:kurulum:<id>`, `lafpos:merkez:kurulumlar` (küme).
+  - **Bildirim:** güncelleme sorunu (eski sürüme dönüş, hata) yalnız lisansı aktif dükkândan, sabit metinle ("Yeni
+    sürüm kurulamadı; eski sürüm çalışıyor") ve sahibin verdiği adla; bir kurulumdan 6 saatte en çok bir kez. Kasanın
+    yazdığı ileti yalnız panelde görünür. Bilinmeyen güncelleme durumu "bilinmiyor" olarak saklanır.
+  - Redis: `lafpos:merkez:kurulum:<id>` (panelin alanları), `lafpos:merkez:durum:<id>` (nabzın alanları),
+    `lafpos:merkez:kurulumlar` ve `lafpos:merkez:bekleyen` (küme). Panel listesi 100 kimlikte bir okunur.
   - **Dükkân bazında görünüm** (`tests/dukkan-raporlar.test.ts`): kasa canlı özeti ve raporları kurulum kimliğiyle
     iter (`x-laf-dukkan`; özet `lafpos:snapshot:<id>`, eski kasa `lafpos:snapshot`). Kimlik değişince (kasa Merkez'e
     ilk bağlandığında) rapor gönderimi geçmişi yeni kimlikle baştan iter (yaklaşık bir saat; `default` verisi okunur
