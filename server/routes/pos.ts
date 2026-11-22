@@ -360,6 +360,17 @@ posRoutes.post('/orders/:id/cancel', async (c) => {
   return c.json(dto(c, id));
 });
 
+/** Kapanmış siparişi iptal: ödemeler iptal, adisyon iptal (orders.cancelClosedOrder); büyük iptal bildirimi */
+posRoutes.post('/orders/:id/cancel-closed', async (c) => {
+  const input = await body(c, z.object({ reason, ...approver }));
+  const actor = actorFrom(c, input.approverPin);
+  const id = c.req.param('id');
+  const before = lossOf('iptal', id).value;
+  write((t, fx) => orders.cancelClosedOrder(t, actor, fx, id, input.reason));
+  afterLoss('iptal', id, before, actor.user.id);
+  return c.json(dto(c, id));
+});
+
 posRoutes.post('/orders/:id/delivery', async (c) => {
   const input = await body(c, z.object({ deliveryStatus: z.enum(['hazirlaniyor', 'hazir', 'yolda', 'teslim']).optional(), courierId: z.string().nullish() }));
   const actor = actorFrom(c);

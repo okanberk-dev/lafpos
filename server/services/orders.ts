@@ -1808,6 +1808,27 @@ export function cancelOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, r
   return updated;
 }
 
+/**
+ * Kapanmış siparişi iptal (sahip, 22 Kas 2026: verilen sipariş bazen iptal edilir; Siparişler › kapananlarda uzun basış
+ * ve dökümdeki düğme): bugünün kapanmış POS adisyonunun alınan ödemeleri iptal edilir (adisyon açılır), sonra adisyon
+ * kalemleriyle iptal edilir; tek işlemde, tek nedenle. Yetkili onayı ister (ödeme iptali ve kalem iptali yetkisi).
+ * Yazarkasada kesilmiş fiş LafPOS'tan iptal edilmez: ekran bunu söyler, fiş cihazdan iptal edilir
+ */
+export function cancelClosedOrder(t: Tx, actor: Actor, fx: Effects, orderId: string, reason: string): OrderRow {
+  const o = loadOrder(t, orderId);
+  if (o.status !== 'kapali') throw conflict('Yalnız kapanmış sipariş bu yolla iptal edilir');
+  assertPosOrder(o);
+  const day = requireOpenDay(t);
+  if (o.dayId !== day.id) throw conflict('Önceki günün siparişi iptal edilemez', 'day_closed');
+  const why = reason.trim();
+  if (!why) throw bad('İptal nedeni yazılmalı', 'reason_required');
+  need(actor, 'odeme.iade', 'Kapanmış siparişi iptal etmek yetkili onayı gerektirir');
+  for (const p of orderPayments(t, orderId).filter((p) => !p.refundedAt)) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: why });
+  // Ödemesiz kapanmış adisyon (ikram, ödenmez): önce açılır
+  if (loadOrder(t, orderId).status === 'kapali') reopenOrder(t, actor, fx, orderId, why);
+  return cancelOrder(t, actor, fx, orderId, why);
+}
+
 // ─── Bar / mutfak durumları ──────────────────────────────────────────────────
 
 const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazirlaniyor', hazirlaniyor: 'hazir', hazir: 'servis' };
