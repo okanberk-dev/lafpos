@@ -13,8 +13,9 @@ Son güncelleme: 21 Kasım 2026.
   (`/guncelleme/`, gün kapalıyken); Windows CI'da gerçek kurulum, güncelleme (75 kodu, `app.eski`, `node.yeni`) ve
   geri dönüş denemesi (`ci-kurulum.mjs`); Vercel kanalının derleme numarası commit zamanı (doğrulandı).
 - **Site:** lafpos.laffogato.net'te e-posta, parola ve davet koduyla üyelik; İndir ve anahtarsız web kurucusu.
-- **Merkez** (`/merkez`): dükkânlar, kayıt ve imza, lisans (14 gün deneme, uyarı, 7 gün sonra satış kapanır,
-  internetsiz son kayıt), seçerek güncelleme gönderme, dükkân bazında uzaktan görünüm ve dükkân seçici.
+- **Merkez** (`/merkez`): dükkânlar, kayıt ve imza, lisans (14 gün deneme, bitişe 14 gün kala uyarı, süresi dolunca
+  uyarı, 7 gün sonra satış kapanır; internetsiz kasada satış hiç kapanmaz, yalnız uyarı), şube kodu, seçerek
+  güncelleme gönderme ve dükkân bazında "Şimdi güncelle", dükkân bazında uzaktan görünüm ve dükkân seçici.
 - **Uzaktan raporlar:** bütün sekmeler ve CSV kasadakiyle birebir (`shared/remote-calc.ts`, `shared/report-csv.ts`),
   gün aşırı ödeme ve bugünkü kategori, "Raporları yeniden gönder".
 - **Sağlamlık:** internet kesintisi e2e (`e2e/internet.mjs`), telefonda Yönetim şeridinde internet rozeti; tabletler

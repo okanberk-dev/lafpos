@@ -12,6 +12,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   businessPhone: '',
   receiptHeader: "L'Affogato · Since 1897, Bologna",
   receiptFooter: 'Bizi tercih ettiğiniz için teşekkürler\nlaffogato.net',
+  // Fişte müşteri adı varsayılan kapalı: kişisel veri fişe ancak patron açınca yazılır
+  receiptCustomerName: false,
   serviceRate: 0,
   autoLockMinutes: 0,
   keepAwake: true,

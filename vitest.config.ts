@@ -3,6 +3,8 @@ import { defineConfig } from 'vitest/config';
 import { lafposDemo } from './demo/vite-plugin';
 
 export default defineConfig({
+  // Arayüz bileşenini (ör. fiş, src/lib/print.tsx) sunucuda çizen testler için: uygulamanın derlemesi gibi otomatik JSX
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: {
       '@shared': fileURLToPath(new URL('./shared', import.meta.url)),

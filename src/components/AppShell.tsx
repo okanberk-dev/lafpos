@@ -406,6 +406,18 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           )}
         </div>
       )}
+      {/* Deneme kapanmış ama geçiş yarım (eski sürümde PIN değişince): yalnız patrona, aynı pencereyle tamamlanır */}
+      {!DEMO && !REMOTE && !boot.integrations.deneme && boot.integrations.goLivePending && me.role === 'patron' && (
+        <div
+          role="note"
+          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border"
+        >
+          <span>Gerçek kullanıma geçiş tamamlanmadı</span>
+          <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
+            Geçişi tamamla
+          </Button>
+        </div>
+      )}
       {finishing && (
         <Suspense fallback={null}>
           <DenemeFinish onClose={closeFinish} />

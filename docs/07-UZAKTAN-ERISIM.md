@@ -158,11 +158,23 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
     çıktığında `POST /api/merkez/kayit` (ilk görüşte güven; aynı kimliğe başka anahtar 409), Merkez'de "Onay bekliyor".
     Sonra 5 dakikada bir `POST /api/merkez/nabiz`, kurulumun anahtarıyla imzalı (`x-laf-kurulum` + imza başlıkları):
     sürüm, güncelleme durumu, gün açık mı. Kayıt Merkez'de silinirse (404) kasa bir sonraki nabızda yeniden kaydolur.
-  - **Lisans:** onaysız kurulum kuruluştan 14 gün deneme; aktif lisans bitiş gününün sonuna (İstanbul) kadar, bitişsiz
-    süresiz; pasif ya da süresi dolmuşta önce uyarı (kasada amber şerit), 7 gün sonra yeni satış kapanır
-    (`POST /orders` ve kalem ekleme 403 `license_blocked`); tahsilat, kayıtlar ve raporlar açık. Kasa son yanıtı
-    (`merkez.son`) saklar ve kendi saatiyle hesaplar: internet ya da Merkez yokken durmaz. Merkez adresi yoksa lisans
-    uygulanmaz. Durum Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de.
+  - **Lisans:** onaysız kurulum kuruluştan 14 gün deneme; aktif lisans bitiş gününün (Uzaktan'da "Son gün")
+    sonuna (İstanbul) kadar, bitişsiz süresiz. Bitişe 14 gün kala yalnız uyarı ("Lisans … tarihinde bitiyor"; kasada
+    ayar yetkisi olana amber şerit, panelde "Yakında bitiyor"). Pasif ya da süresi dolmuşta önce uyarı (kasada amber
+    şerit), 7 gün sonra yeni satış kapanır (`POST /orders` ve kalem ekleme 403 `license_blocked`); tahsilat, kayıtlar
+    ve raporlar her durumda açık. Kasa son yanıtı (`merkez.son`) saklar ve kendi saatiyle hesaplar.
+    **Çevrimdışı kural (kesin): internetsiz kasada satış hiç kapanmaz.** Satışın kapanması için kasanın lisans
+    kaydını Merkez'den son 15 dakikada (`CONFIRM_MS`, üç nabız) almış olması gerekir; değilse süresi dolmuş lisans en
+    çok uyarıdır ("kasa Merkez'e ulaşamıyor, satış sürüyor"). Böylece sahibin uzattığı lisansı henüz alamamış kasa
+    durmaz; bedeli, internetten kopan kasanın kapanmamasıdır. Panel aynı kuralı kasanın son görülmesiyle hesaplar
+    (`shared/lisans.ts` `licenseState` `confirmedAt`). Merkez adresi yoksa lisans uygulanmaz. Durum Yönetim › Ayarlar
+    ve yedek › Sürüm ve güncelleme'de (lisans, son günü, şube kodu).
+  - **Şube kodu:** sahip dükkânın ayarlarında verir ("TZL"; büyük harf, rakam ve tire, en çok 12). Nabzın yanıtıyla
+    kasaya gider (`kod`), Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de ve fişin başlığında ("Şube Tuzla · TZL",
+    bootstrap `branch`) görünür. lafmaliyet'in şube kimliğinden (`branchId`) ayrıdır, sistemler arasında gitmez.
+  - **Şimdi güncelle (uzaktan):** dükkânın ayarlarında "Şimdi güncelle" (`POST /api/merkez/simdi-guncelle`): hedef
+    kanalın son derlemesi olur, kasa bir sonraki nabızda alır ve kasadaki "Şimdi güncelle"nin isteğini yazar; gün
+    açıkken kurdurmaz (`docs/05-KASA-BILGISAYARI.md` §6). Panelde kasa alana kadar "Güncelleme istendi".
   - **Seçerek güncelleme:** dükkân "Ben gönderince" (varsayılan) ya da "Otomatik". Panelde dükkânlar seçilip
     "Güncelleme gönder": hedef kanalın son derlemesi olur. Nabzın yanıtı hedefi taşır; güncelleyici
     (`guncelle.mjs` `merkezCap`) kanalda daha yeni derleme görünce sunucuya (`/api/kasa/guncelleme-durumu`, yalnız bu

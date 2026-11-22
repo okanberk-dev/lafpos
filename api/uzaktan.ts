@@ -1361,7 +1361,7 @@ async function handle(req: Request): Promise<Response> {
   if (path.startsWith('uzaktan/yedek/')) return yedek(req, path, { signed: bildirimDeps.signed, shop: shopHeader(req) ?? REPORT_SHOP });
   // Merkez: kasanın kaydı ve imzalı nabzı (kendi anahtarıyla), panel (gerçek oturumla); demo ve salt okunur kapısından önce
   if (path.startsWith('merkez/')) {
-    const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder';
+    const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder' || path === 'merkez/simdi-guncelle';
     // Önce jeton (Redis'siz): gerçek oturumun her yoklaması sürüm okumaz
     const demo = panel && !memberRequest && demoAllowed() && tokenValid(demoKey(), auth) && !(await realData(versions));
     return merkez(req, url, path, {

@@ -68,6 +68,7 @@ export function denemeStatus(user: AuthUser): DenemeStatusDTO {
     liveSince: s.liveSince,
     dayOpen: !!getOpenDay(db),
     realDays: realDayCount(db),
+    finalizeOnly: s.liveSince == null && realDayCount(db) > 0,
     counts: countRows(db),
     samplePinUsers: sample.filter((u) => u.id !== user.id).map((u) => ({ id: u.id, name: u.name, role: u.role })),
     mustChangeOwnPin: !!me && isSamplePinHash(me.pinHash),
@@ -80,11 +81,15 @@ export interface FinishInput {
   newPin?: string;
 }
 
-/** Ön koşullar: yalnız patron, açık gün yok, gerçek gün yok. Silmeden önce ve işlemin içinde yeniden denetlenir */
-function assertCanFinish(t: Tx | DB, user: AuthUser) {
+/**
+ * Ön koşullar: yalnız patron, açık gün yok. Silmeden önce ve işlemin içinde yeniden denetlenir. Gerçek gün varsa
+ * (`finalize`) hiçbir kayıt silinmez: geçiş yarım kalmış demektir (eski sürümde patron PIN'i değişince deneme sessizce
+ * kapanıyor, sonraki gün gerçek kaydediliyordu); yalnız başlangıç yazılır ve örnek PIN'li hesaplar kapanır
+ */
+function assertCanFinish(t: Tx | DB, user: AuthUser): { finalize: boolean } {
   if (user.role !== 'patron') throw new HttpError(403, 'Denemeyi yalnız patron bitirir', 'patron_only');
   if (getOpenDay(t)) throw conflict('Açık bir gün var: önce Kasa’dan gün sonunu alın, sonra denemeyi bitirin', 'day_open');
-  if (realDayCount(t) > 0) throw conflict('Deneme modu dışında kapanmış (gerçek) gün var; kayıtlar silinmez', 'real_days');
+  return { finalize: realDayCount(t) > 0 };
 }
 
 export function checkFinish(user: AuthUser, input: FinishInput) {
@@ -104,6 +109,8 @@ export function checkFinish(user: AuthUser, input: FinishInput) {
 
 export interface FinishResult {
   already: boolean;
+  /** Yarım kalmış geçiş tamamlandı: hiçbir kayıt silinmedi */
+  finalized?: boolean;
   backup: string | null;
   deleted: DenemeCounts | null;
   closedUsers: string[];
@@ -118,7 +125,8 @@ export function finishDeneme(user: AuthUser, input: FinishInput, backup: string)
   const result = tx((t): FinishResult => {
     // Yedek alınırken başka bir istek bitirmiş olabilir
     if (getSettings().liveSince != null) return { already: true, backup: null, deleted: null, closedUsers: [] };
-    assertCanFinish(t, user);
+    const { finalize } = assertCanFinish(t, user);
+    if (finalize) return finalizeLive(t, user, input, backup, fx);
     const deleted = countRows(t);
 
     // Hareketler: önce bağlı kayıtlar, sonra adisyon ve gün (yabancı anahtar sırası)
@@ -176,4 +184,32 @@ export function finishDeneme(user: AuthUser, input: FinishInput, backup: string)
   }
   fx.flush();
   return result;
+}
+
+/**
+ * Yarım kalmış geçişin tamamlanması (gerçek gün var): hiçbir hareket silinmez. Patronun yeni PIN'i, örnek PIN'iyle
+ * kalan öbür hesapların kapanması, `liveSince` ve denetim kaydı; deneme ayarları (eğitim yazarkasası, platformların
+ * Deneme modu) gerçeğe döner
+ */
+function finalizeLive(t: Tx, user: AuthUser, input: FinishInput, backup: string, fx: Effects): FinishResult {
+  if (input.newPin) t.update(schema.users).set({ pinHash: hashPin(input.newPin) }).where(eq(schema.users.id, user.id)).run();
+  const others = samplePinUsers(t).filter((u) => u.id !== user.id);
+  if (others.length) {
+    const ids = others.map((u) => u.id);
+    t.update(schema.users).set({ active: false }).where(inArray(schema.users.id, ids)).run();
+    t.delete(schema.sessions).where(inArray(schema.sessions.userId, ids)).run();
+  }
+  const s = getSettings();
+  const platforms = Object.fromEntries(Object.entries(s.platforms).map(([id, p]) => [id, p.mode === 'deneme' ? { ...p, mode: 'kapali' as const } : p])) as typeof s.platforms;
+  updateSettings({ demoMode: false, liveSince: Date.now(), platforms, ...(s.okcProvider === 'simulator' ? { okcProvider: 'kapali' as const } : {}) }, t);
+  const closedUsers = others.map((u) => u.name);
+  const days = realDayCount(t);
+  fx.audit(t, {
+    userId: user.id,
+    action: 'deneme.bitir',
+    severity: 'uyari',
+    message: `${user.name} gerçek kullanıma geçişi tamamladı: deneme daha önce kapanmıştı, ${days} gerçek gün var; hiçbir kayıt silinmedi, yedek ${backup}${closedUsers.length ? `. Örnek PIN'iyle kalan hesaplar kapatıldı: ${closedUsers.join(', ')}` : ''}`,
+    data: { finalize: true, realDays: days, backup, closedUsers },
+  });
+  return { already: false, finalized: true, backup, deleted: null, closedUsers };
 }

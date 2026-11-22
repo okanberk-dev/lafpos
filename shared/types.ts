@@ -181,6 +181,8 @@ export interface PublicSettings {
   businessPhone: string;
   receiptHeader: string;
   receiptFooter: string;
+  /** Adisyonda (hesap fişi) bağlı müşterinin adı yazılsın mı (varsayılan kapalı; müşteri yoksa hiç yazılmaz) */
+  receiptCustomerName: boolean;
   serviceRate: number;
   autoLockMinutes: number;
   /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */
@@ -269,6 +271,11 @@ export interface BootstrapDTO {
   happyHours: HappyHourDTO[];
   users: UserLite[];
   day: BusinessDayDTO | null;
+  /**
+   * Merkez'deki dükkân adı ve şube kodu (LafPOS Uzaktan › Merkez'den; server/sync/merkez.ts). Fişin başlığında yazılır.
+   * Merkez'e bağlı değilse ya da henüz verilmediyse null (eski sunucu göndermez)
+   */
+  branch?: { name: string | null; code: string | null } | null;
   integrations: {
     okc: { provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator'; mode: 'anlik' | 'liste' };
     laffogatoPanel: boolean;
@@ -284,6 +291,11 @@ export interface BootstrapDTO {
      * ekranda "Deneme modu" şeridini gösterir (eski sunucu göndermez: şerit yok)
      */
     deneme?: boolean;
+    /**
+     * Deneme kapanmış ama "gerçek kullanıma başla" hiç tamamlanmamış (`liveSince` yok): eski sürümde patron PIN'i
+     * değişince deneme sessizce kapanıyordu. Patron "Geçişi tamamla" ile bitirir (kayıt silinmez)
+     */
+    goLivePending?: boolean;
   };
   serverTime: number;
 }
@@ -296,6 +308,11 @@ export interface DenemeStatusDTO {
   dayOpen: boolean;
   /** Deneme modu dışında kapanmış gün sayısı: 0 değilse silme yapılmaz */
   realDays: number;
+  /**
+   * Yarım kalmış geçiş: gerçek kullanım başlamamış (`liveSince` yok) ama gerçek gün var. "Geçişi tamamla" hiçbir kaydı
+   * silmez; yalnız başlangıcı yazar, örnek PIN'li hesapları kapatır
+   */
+  finalizeOnly: boolean;
   counts: { orders: number; payments: number; days: number; cashMovements: number; reservations: number; customers: number; platformOrders: number; fiscalReceipts: number; audit: number };
   /** Örnek PIN'iyle duran öbür açık hesaplar (bitirince kapanır) */
   samplePinUsers: { id: string; name: string; role: string }[];

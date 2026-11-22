@@ -876,8 +876,8 @@ adminRoutes.patch('/users/:id', async (c) => {
   });
   // Oturumu kapanan ya da yetkisi değişen kişinin açık canlı akışı hemen kapanır ya da yeni yetkiyle süzülür
   sessionsChanged();
-  // Patron PIN'ini değiştirince kurulum modu kapanır (örnek PIN'ler giriş ekranından kalkar)
-  if (input.pin && target.role === 'patron' && getSettings().demoMode) updateSettings({ demoMode: false });
+  // PIN değişikliği modu değiştirmez: deneme yalnız "Denemeyi bitir"le biter (sahada patronun PIN değişikliği denemeyi
+  // sessizce kapatıyordu; örnek PIN'li hesaplar açık, sonraki gün gerçek sayılıp bankada gün sonu alınıyordu)
   changed('users', 'user.updated', user.id, { action: 'user.update', message: `${user.name} ${target.name} hesabını güncelledi${input.pin ? ' (PIN değişti)' : ''}` });
   return c.json({ ok: true });
 });
@@ -951,6 +951,7 @@ const settingsShape = patchOf(
     businessPhone: z.string().max(30),
     receiptHeader: z.string().max(300),
     receiptFooter: z.string().max(300),
+    receiptCustomerName: z.boolean(),
     serviceRate: z.number().int().min(0).max(30),
     autoLockMinutes: z.number().int().min(0).max(120),
     keepAwake: z.boolean(),
