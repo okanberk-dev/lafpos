@@ -237,6 +237,8 @@ export async function runFlows(ctx) {
       async () => {
         const card = seed.boot.paymentMethods.find((m) => m.kind === 'kart');
         assert(card, 'kart ödeme türü yok');
+        const was = await api.call('patron', 'GET', '/okc/status');
+        // Eğitim cihazında varsayılan kapalı: bu akış açar, sonunda önceki hâline döner
         await api.call('patron', 'PUT', '/okc/settings', { provider: 'simulator', mode: 'anlik', auto: true });
         try {
           const o0 = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
@@ -261,7 +263,7 @@ export async function runFlows(ctx) {
           const done = await api.call('patron', 'GET', `/orders/${o.id}`);
           assert(done.status === 'kapali' && done.payments.filter((p) => !p.refundedAt).length === 1, `cihaz ödemesi bir kez yazılmadı: ${done.status}`);
         } finally {
-          await api.call('patron', 'PUT', '/okc/settings', { provider: 'kapali' });
+          await api.call('patron', 'PUT', '/okc/settings', { provider: was.provider, mode: was.mode, auto: null });
         }
       },
     ],

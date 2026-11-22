@@ -7,7 +7,7 @@ import { env } from '../env';
 import { type Actor, type AuthUser, need, needDirect, seesCashNumbers, toAuthUser } from '../lib/auth';
 import { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
-import { getSettings, getSyncState, setSyncState, trainingMode, updateSettings } from '../lib/settings';
+import { getSettings, getSyncState, okcAutoOn, setSyncState, trainingMode, updateSettings } from '../lib/settings';
 import { orderItems, orderPayments } from '../services/dto';
 import { addExternalPayments, assertNoActiveRoom, fiscalHeldQty, freeQty, getOpenDay, loadOrder, mergeSelection, refundExternalPayments, splitActive } from '../services/orders';
 import { basketByRate, buildBasket, clampPayments, type MethodKind } from './basket';
@@ -72,7 +72,7 @@ export function okcStatus(user?: AuthUser) {
     sectionMap: s.okcSectionMap,
     operatorMethods: s.okcOperatorMethods,
     pavoAutoEod: s.okcPavoAutoEod,
-    auto: s.okcAuto,
+    auto: okcAutoOn(s),
     active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
     tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
     pavo: { ...pavoProvider.status(), eod: eod ? eodFor(user ?? null, eod) : null },

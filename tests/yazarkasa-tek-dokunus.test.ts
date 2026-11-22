@@ -104,13 +104,20 @@ describe('sunucu akışı (eğitim cihazı)', () => {
   };
   const receipts = (id: string) => h.ok<Receipt[]>('kasa', 'GET', `/okc/orders/${id}/receipts`);
 
-  it('ayar varsayılan açık; kapatılınca açılış verisi de kapalı söyler', async () => {
-    expect((await h.ok<{ auto: boolean }>('patron', 'GET', '/okc/status')).auto).toBe(true);
-    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).integrations.okc).toMatchObject({ provider: 'simulator', mode: 'anlik', auto: true });
-    expect((await h.call('kasa', 'PUT', '/okc/settings', { auto: false })).status).toBe(403);
-    expect((await h.ok<{ auto: boolean }>('patron', 'PUT', '/okc/settings', { auto: false })).auto).toBe(false);
-    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).integrations.okc.auto).toBe(false);
-    await h.ok('patron', 'PUT', '/okc/settings', { auto: true });
+  it('ayar gerçek cihazda varsayılan açık, eğitim cihazında kapalı; elle seçilen değer kalır, açılış verisi de söyler', async () => {
+    const auto = async () => (await h.ok<{ auto: boolean }>('patron', 'GET', '/okc/status')).auto;
+    expect(await auto()).toBe(false);
+    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).integrations.okc).toMatchObject({ provider: 'simulator', mode: 'anlik', auto: false });
+    expect((await h.ok<{ auto: boolean }>('patron', 'PUT', '/okc/settings', { provider: 'tokenx' })).auto).toBe(true);
+    expect((await h.ok<{ auto: boolean }>('patron', 'PUT', '/okc/settings', { provider: 'pavo' })).auto).toBe(true);
+    await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator', mode: 'anlik' });
+    expect((await h.call('kasa', 'PUT', '/okc/settings', { auto: true })).status).toBe(403);
+    expect((await h.ok<{ auto: boolean }>('patron', 'PUT', '/okc/settings', { auto: true })).auto).toBe(true);
+    expect((await h.ok<BootstrapDTO>('kasa', 'GET', '/bootstrap')).integrations.okc.auto).toBe(true);
+    // Elle kapatılan gerçek cihazda da kapalı kalır
+    await h.ok('patron', 'PUT', '/okc/settings', { auto: false, provider: 'pavo' });
+    expect(await auto()).toBe(false);
+    await h.ok('patron', 'PUT', '/okc/settings', { provider: 'simulator', mode: 'anlik', auto: true });
   });
 
   it('mutlu yol: tek dokunuş sepeti cihaza yollar, cihaz ödeyince ödeme bir kez yazılır ve adisyon kapanır', async () => {

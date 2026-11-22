@@ -164,8 +164,8 @@ export function PaymentModal({
       }
       if (e.kind !== 'okc.paid' || e.seq === seen) return;
       const { open: shown, onDone: done, boot: b } = latest.current;
+      if (!shown && okcSentHere.current !== order.id) return;
       const mine = okcSentHere.current === order.id;
-      if (!shown && !mine) return;
       seen = e.seq;
       okcSentHere.current = null;
       const auto = autoSent.current;

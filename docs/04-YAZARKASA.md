@@ -103,8 +103,9 @@ de açar.
 
 ### 4.1 Tek dokunuş: "Ödemeyi al" cihaza gönderir (Kasım 2026)
 
-Yönetim › Yazarkasa POS › **Ödemeyi alınca cihaza gönder** (`okcAuto`, varsayılan açık; yalnız kasada ödemede
-görünür). Açıkken ödeme penceresinde ayrı "Yazarkasaya gönder" düğmesi yoktur: kasiyer türü seçip **Ödemeyi al**'a
+Yönetim › Yazarkasa POS › **Ödemeyi alınca cihaza gönder** (`okcAuto`; yalnız kasada ödemede görünür). Varsayılan
+gerçek cihazda (Pavo, Token) açık, eğitim cihazında kapalı: deneme modunda nakit satış eğitim cihazını beklemez;
+elle açılır ya da kapatılır, seçilen değer bağlantı değişse de kalır (`okcAutoOn`). Açıkken ödeme penceresinde ayrı "Yazarkasaya gönder" düğmesi yoktur: kasiyer türü seçip **Ödemeyi al**'a
 basınca hesap (ya da seçilen kalemler) aynı uçla (`POST /api/okc/orders/:id/send`) cihaza gider, pencere "Cihazda ödeme
 bekleniyor" der. Ödeme türü cihazda seçilir: Pavo'ya ödeme bilgisi gönderilmez (§8.2, belgede yok), Token sepetinin
 ödeme alanı (`paymentItems`) da sahada denenmediği için kullanılmaz. Cihaz ödeyince

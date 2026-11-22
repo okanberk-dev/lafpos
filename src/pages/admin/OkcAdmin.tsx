@@ -655,7 +655,7 @@ export default function OkcAdmin() {
               disabled={saving === 'auto'}
               onChange={(v) => void setAuto(v)}
               label="Ödemeyi alınca cihaza gönder"
-              hint="Ödeme penceresinde “Ödemeyi al”a basınca hesap kendiliğinden cihaza gider; kapalıyken “Yazarkasaya gönder” ile"
+              hint={`Ödeme penceresinde “Ödemeyi al”a basınca hesap kendiliğinden cihaza gider; kapalıyken “Yazarkasaya gönder” ile${s.provider === 'simulator' ? '. Eğitim cihazında varsayılan kapalı' : ''}`}
             />
           </div>
         )}
