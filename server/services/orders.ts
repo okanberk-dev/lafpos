@@ -25,6 +25,7 @@ import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
 import { getSettings } from '../lib/settings';
 import { localStampsOn } from '../sync/laffogato-link';
+import { assertCanSell } from '../sync/merkez';
 import { enqueueSiteAvailability, enqueueSiteSoldOut } from '../sync/site-outbox';
 import { calcFor, calcInputFor, orderItems, orderPayments, orderToDTO } from './dto';
 import {
@@ -275,8 +276,11 @@ export interface CreateOrderInput {
  * `staleOk`: yalnız hesap bölme (kalem taşıma) için. Taşınan kalemler o günün satışıdır, yeni satış değil: dünden açık
  * kalan günde de hesap bölünebilsin, yoksa adisyon kapanmaz ve gün sonu alınamaz. İstemciden gelmez (rota gövdesi değil).
  */
-export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrderInput, opts: { staleOk?: boolean } = {}): OrderRow {
+export function createOrder(t: Tx, actor: Actor, fx: Effects, input: CreateOrderInput, opts: { staleOk?: boolean; allowUnlicensed?: boolean } = {}): OrderRow {
   needDirect(actor, 'siparis.al');
+  // Lisans kapalıysa yeni satış açılmaz (Merkez): kasa ekranı, platform kabulü ve otomatik kabul aynı yoldan.
+  // `allowUnlicensed`: yeni satış olmayan iş (kalem taşıma)
+  if (!opts.allowUnlicensed) assertCanSell();
   const day = opts.staleOk ? requireOpenDay(t) : requireCurrentDay(t);
   if (input.type === 'masa') {
     if (!input.tableId) throw bad('Masa seçilmeli');
@@ -366,9 +370,10 @@ export function addItems(
   fx: Effects,
   orderId: string,
   lines: AddItemLine[],
-  { platformPrice = false, hold = false }: { platformPrice?: boolean; hold?: boolean } = {},
+  { platformPrice = false, hold = false, allowUnlicensed = false }: { platformPrice?: boolean; hold?: boolean; allowUnlicensed?: boolean } = {},
 ): OrderRow {
   needDirect(actor, 'siparis.al');
+  if (!allowUnlicensed) assertCanSell();
   const o = loadOrder(t, orderId);
   assertOpen(o);
   assertPosOrder(o);
@@ -1242,7 +1247,8 @@ export function transferItems(
           guests: 1,
           newCheck: true,
         },
-        { staleOk: true },
+        // Kalem taşımak yeni satış değil: lisans kapalıyken de açık adisyon bölünebilir
+        { staleOk: true, allowUnlicensed: true },
       );
     // Masasız ayrı hesap (yarı self) aynı masaya gider: masa no yeni hesaba da yazılır
     if (!existing && !tableId && source.numarator) {

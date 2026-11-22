@@ -87,8 +87,11 @@ export function originalUrl(raw: string): URL {
 
 // ─── Oturum belirteci: süre.nonce.imza ───────────────────────────────────────
 
-/** İmzaya parolanın özeti de girer: parola değişince bütün uzaktan oturumlar düşer */
-const passwordTag = () => createHash('sha256').update(`uzaktan-parola:${env('LAFPOS_UZAKTAN_PAROLA')}`).digest('hex').slice(0, 16);
+/**
+ * İmzaya parolanın özeti ve görünümün kipi de girer: parola değişince ya da parola zorunlu olunca (ya da kalkınca)
+ * bütün uzaktan oturumlar düşer. Parolasız görünümde herkese verilen jeton, parola açılınca yönetici oturumu olmaz
+ */
+const passwordTag = () => createHash('sha256').update(`uzaktan-parola:${passwordRequired() ? 'gerekli' : 'acik'}:${env('LAFPOS_UZAKTAN_PAROLA')}`).digest('hex').slice(0, 16);
 
 export function issueToken(key: string, nowMs = Date.now()): string {
   const exp = Math.floor(nowMs / 1000) + TOKEN_HOURS * 3600;
@@ -122,6 +125,10 @@ const normalizeInvite = (v: unknown) => String(v ?? '').toUpperCase().replace(/[
 export function hashPassword(password: string, salt: Buffer = randomBytes(16)): string {
   return `s1$${salt.toString('base64url')}$${scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 }).toString('base64url')}`;
 }
+
+/** Üye yokken karşılaştırılan sahte özet: bir kez (ilk gerektiğinde) hesaplanır, sonra her yol tek scrypt yapar */
+let dummy: string | null = null;
+export const dummyHash = () => (dummy ??= hashPassword('yok', Buffer.alloc(16)));
 
 export function passwordMatches(stored: string, given: string): boolean {
   const [kind, salt] = stored.split('$');
@@ -253,6 +260,8 @@ export interface SnapVersion {
   b?: string;
   /** Gün açık mı (bilgi; görünüm aralığını kendisi seçer) */
   o?: boolean;
+  /** Açık iş gününün tarihi: uzaktaki raporların "bugün"ü (serveReports) */
+  d?: string | null;
   /** Özetin son yazıldığı ya da süresinin uzatıldığı an (sunucu saati) */
   w?: number;
 }
@@ -373,7 +382,8 @@ async function storeSnapshot(shop: string, snap: Snapshot): Promise<Response> {
     await redis('SET', snapshotKey(shop), JSON.stringify(snap), 'EX', SNAPSHOT_TTL_S);
     w = now;
   }
-  const version: SnapVersion = { at: typeof snap.at === 'number' ? snap.at : now, ...sums, w };
+  const day = (snap.bootstrap as { day?: { date?: unknown } | null } | undefined)?.day?.date;
+  const version: SnapVersion = { at: typeof snap.at === 'number' ? snap.at : now, ...sums, d: typeof day === 'string' ? day : null, w };
   await redis('HSET', VERSIONS_KEY, shop, JSON.stringify(version));
   return json({ ok: true, ...(write ? {} : { unchanged: true }) });
 }
@@ -851,6 +861,8 @@ export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], now
   const prev = prevDays.map((d) => salesUntil(d, cmp.cutoffMs));
   const prevNet = prev.reduce((a, p) => a + p.netSales, 0);
   const prevReceipts = prev.reduce((a, p) => a + p.receipts, 0);
+  // Kıyas dönemi uzakta saklanan 400 günün dışına taşıyorsa yarım toplamla kıyas yapılmaz (kasa bütün dönemi okur)
+  const prevMissing = cmp.range.from < oldestRemoteDay(today);
   const byAmount = <T extends { amount: number }>(a: T, b: T) => b.amount - a.amount;
   return {
     range,
@@ -873,13 +885,21 @@ export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], now
     guests,
     itemsSold: sum((d) => d.s.items),
     tips: sum((d) => d.s.tips),
-    byDay: days.map((d) => ({ date: d.date, netSales: d.s.rev, receipts: d.s.receipts, z: d.z, closed: d.closed })),
+    // Satışı olmayan (yalnız platform kaydı taşıyan, `n: 0`) gün kasadaki gibi gün listesine girmez
+    byDay: days.filter((d) => d.n > 0).map((d) => ({ date: d.date, netSales: d.s.rev, receipts: d.s.receipts, z: d.z, closed: d.closed })),
     payments: [...pays.values()].sort(byAmount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
     types: [...types.values()].sort(byAmount),
     online: { orders: sum((d) => d.s.onlineOrders), amount: sum((d) => d.s.onlineAmount) },
-    previous: { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
+    previous: prevMissing
+      ? { range: cmp.range, label: 'kıyas dönemi uzakta saklanmıyor', netSales: null, receipts: null, change: null, unavailable: true }
+      : { range: cmp.range, label: cmp.label, netSales: prevNet, receipts: prevReceipts, change: change(netSales, prevNet) },
+    // Seçilen dönemin bir kısmı uzakta saklanmıyor: sayfa "uzakta yalnız … sonrası var" der
+    ...(range.from < oldestRemoteDay(today) ? { availableFrom: oldestRemoteDay(today) } : {}),
   };
 }
+
+/** Uzakta saklanan en eski gün: kasa yalnız son 400 günü iter (server/sync/cloud-reports.ts ile aynı sınır) */
+export const oldestRemoteDay = (today: string) => addDays(today, -(REPORT_MAX_DAYS - 1));
 
 const PARTS = [
   { key: 'sabah', label: 'Sabah', from: 6, to: 12 },
@@ -1055,14 +1075,23 @@ async function storeReports(body: string): Promise<Response> {
   if (push.days.length > REPORT_PUSH_MAX_DAYS) return fail(413, 'Bir itmede en çok 31 gün', 'too_large');
   // Ek sekmelerin verisi ayrı anahtarda (Ciro ve Ürünler her açılışta onu okumaz)
   const extras = new Map<string, RemoteDayExtra>();
+  /** Saklanmayan günler ve neden (kasa ekranda gösterir): gün özeti ya da ek veri sınırı aştı */
+  const skippedDates: { date: string; why: 'day' | 'extra' }[] = [];
   const days = push.days
     .filter(validDay)
     .map((d) => {
       const { x, ...rest } = d;
-      if (x && typeof x === 'object' && JSON.stringify(x).length <= REPORT_EXTRA_MAX_BYTES) extras.set(d.date, x);
+      if (x && typeof x === 'object') {
+        if (JSON.stringify(x).length <= REPORT_EXTRA_MAX_BYTES) extras.set(d.date, x);
+        else skippedDates.push({ date: d.date, why: 'extra' });
+      }
       return rest as DayRep;
     })
-    .filter((d) => JSON.stringify(d).length <= REPORT_DAY_MAX_BYTES);
+    .filter((d) => {
+      if (JSON.stringify(d).length <= REPORT_DAY_MAX_BYTES) return true;
+      skippedDates.push({ date: d.date, why: 'day' });
+      return false;
+    });
   const nowS = Math.floor(Date.now() / 1000);
   const keys = days.map((d) => reportDayKey(push.shop, d.date));
   // Kasanın "bugün"ü ve günlerin eski hâli tek okumada
@@ -1081,13 +1110,15 @@ async function storeReports(body: string): Promise<Response> {
     }
     await redis('SET', keys[i]!, JSON.stringify(d), 'EXAT', expireAt);
     const x = extras.get(d.date);
+    // Ek veri gelmediyse (sınırı aştı) aynı günün eski ek verisi silinir: sekmeler Ciro'yla çelişen eski listeyi göstermez
     if (x) await redis('SET', reportExtraKey(push.shop, d.date), JSON.stringify(x), 'EXAT', expireAt);
+    else await redis('DEL', reportExtraKey(push.shop, d.date));
     stored += 1;
   }
   const prevAt = meta ? ((JSON.parse(meta) as { at?: number }).at ?? 0) : 0;
   const cat = push.cat && typeof push.cat === 'object' ? push.cat : undefined;
   if (push.at >= prevAt) await redis('SET', reportMetaKey(push.shop), JSON.stringify({ today: push.today, at: push.at, ...(cat ? { cat } : {}) }), 'EX', REPORT_KEEP_DAYS * 86400);
-  return json({ ok: true, stored, skipped: push.days.length - stored });
+  return json({ ok: true, stored, skipped: push.days.length - stored, skippedDates });
 }
 
 /**
@@ -1181,12 +1212,25 @@ async function serveReports(path: string, url: URL, demo: Snapshot | null, shop:
     }
   };
   const explicit = url.searchParams.has('from') && url.searchParams.has('to');
+  // Kasanın son itmesinin sürümü (nabız dahil; gün açıkken 5, kapalıyken 15 dakikada bir): rapor itmesi yalnız değişen
+  // günde gider, "bugün" ve kıyasın "aynı saate kadar"ı onunla kasanın şimdiki zamanına yakın kalır (tek küçük komut)
+  // Yalnız Ciro (kıyas) ve dönemi verilmemiş istek için: öteki sekmelerde verilen dönemin günleri yeter
+  const pulseP = kind === 'summary' || !explicit ? redis('HGET', VERSIONS_KEY, shop).then(parseVersion, () => null) : Promise.resolve(null);
   let live = explicit ? null : readMeta((await redis('GET', reportMetaKey(shop))) as string | null);
-  const r = reportRange(url, live?.today ?? businessDateOf(Date.now()));
+  const clock = (pulse: SnapVersion | null) => {
+    const nowMs = pulse ? Math.max(live?.at ?? 0, pulse.at) : (live?.at ?? Date.now());
+    // Açık gün yoksa kasadaki gibi saatin iş günü; sürüm gün tarihini taşımıyorsa (eski) rapor itmesinin günü
+    const today = pulse ? (pulse.o ? (pulse.d ?? live?.today ?? businessDateOf(nowMs)) : businessDateOf(nowMs)) : (live?.today ?? businessDateOf(Date.now()));
+    return { nowMs, today };
+  };
+  const pulse = explicit ? null : await pulseP;
+  const r = reportRange(url, clock(pulse).today);
   if (r instanceof Response) return r;
   const dates = datesOf(r);
-  // Kıyas dönemi yalnız dönemden çıkar (bugün ve saat yalnız etiketi ve kesimi belirler)
-  const prevDates = kind === 'summary' ? datesOf(remoteComparison(r, 0, '').range) : [];
+  // Kıyas dönemi yalnız dönemden çıkar (bugün ve saat yalnız etiketi ve kesimi belirler). Uzakta saklanmayan (kasa
+  // yalnız son 400 günü iter) kıyas dönemi okunmaz: sumSummary "kıyas yok" der
+  const cmpRange = kind === 'summary' ? remoteComparison(r, 0, '').range : null;
+  const prevDates = cmpRange && cmpRange.from >= oldestRemoteDay(clock(pulse).today) ? datesOf(cmpRange) : [];
   const extraDates = EXTRA_KINDS.has(kind) ? dates : [];
   const raws = await mgetAll([
     ...(explicit ? [reportMetaKey(shop)] : []),
@@ -1195,18 +1239,23 @@ async function serveReports(path: string, url: URL, demo: Snapshot | null, shop:
     ...extraDates.map((d) => reportExtraKey(shop, d)),
   ]);
   if (explicit) live = readMeta(raws.shift());
+  const { nowMs, today } = clock(explicit ? await pulseP : pulse);
   const days = byDate(parsed<DayRep>(raws.slice(0, dates.length)));
   const prev = byDate(parsed<DayRep>(raws.slice(dates.length, dates.length + prevDates.length)));
   const extras = parsed<RemoteDayExtra>(raws.slice(dates.length + prevDates.length));
-  return reportOf(kind, url, r, days, prev, extras, live?.at ?? Date.now(), live?.today ?? businessDateOf(Date.now()), live?.cat);
+  return reportOf(kind, url, r, days, prev, extras, nowMs, today, live?.cat, true);
 }
 
-function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep[], extras: RemoteDayExtra[], nowMs: number, today: string, cat?: Record<string, string>): Response {
-  if (kind === 'summary') return json(sumSummary(r, days, prev, nowMs, today));
-  if (kind === 'hourly') return json(sumHourly(r, days));
-  if (kind === 'products') return json(sumProducts(r, days, cat));
-  if (kind === 'staff') return json(sumStaff(r, days));
-  return serveExtra(kind, url, r, days, extras, cat);
+function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep[], extras: RemoteDayExtra[], nowMs: number, today: string, cat?: Record<string, string>, remote = false): Response {
+  // Dönemin bir kısmı uzakta saklanmıyor (kasa yalnız son 400 günü iter): her JSON yanıt en eski günü taşır, sayfa
+  // "uzakta yalnız … sonrası var" der. 422 değil: dönemin kalan kısmı yine işe yarar
+  const avail = remote && r.from < oldestRemoteDay(today) ? oldestRemoteDay(today) : null;
+  const out = (data: object) => json(avail ? { ...data, availableFrom: avail } : data);
+  if (kind === 'summary') return out(sumSummary(r, days, prev, nowMs, today));
+  if (kind === 'hourly') return out(sumHourly(r, days));
+  if (kind === 'products') return out(sumProducts(r, days, cat));
+  if (kind === 'staff') return out(sumStaff(r, days));
+  return serveExtra(kind, url, r, days, extras, cat, out);
 }
 
 const PLATFORM_ORDER = ['yemeksepeti', 'getir', 'trendyol', 'migros'];
@@ -1217,12 +1266,20 @@ const istanbulHour = (ms: number) => Number(istanbulHourFmt.format(new Date(ms))
  * Ek sekmeler (hazırlama, kalem listeleri, adisyonlar, iadeler, platformlar, CSV): günlük veri shared/remote-calc.ts
  * ile kasadaki dönem raporunun kuralıyla birleşir. Eski kasanın günlerinde ek veri yoksa o günler boş sayılır
  */
-function serveExtra(kind: string, url: URL, r: Range, days: DayRep[], extras: RemoteDayExtra[], cat?: Record<string, string>): Response {
+function serveExtra(kind: string, url: URL, r: Range, days: DayRep[], extras: RemoteDayExtra[], cat?: Record<string, string>, out: (data: object) => Response = json): Response {
+  // Kasada sınırı aşınca kısaltılan listeler: düşen satırlar toplamda sayılır, liste "kısaltıldı" der
   const items = (k: 'iptal' | 'ikram' | 'indirim' | 'happy') => {
     const rows = mergeRows<ItemListRow>(extras.map((x) => x.lists?.[k] ?? []));
-    return { range: r, total: rows.reduce((a, x) => a + x.value, 0), count: rows.length, rows, odenmezPeople: k === 'ikram' ? mergeOdenmez(extras.map((x) => x.odenmez ?? [])) : [] };
+    const cut = extras.map((x) => x.cut?.[k]).filter((c) => c != null);
+    const total = rows.reduce((a, x) => a + x.value, 0) + cut.reduce((a, c) => a + c.value, 0);
+    const count = rows.length + cut.reduce((a, c) => a + c.count, 0);
+    return { range: r, total, count, rows, odenmezPeople: k === 'ikram' ? mergeOdenmez(extras.map((x) => x.odenmez ?? [])) : [], ...(cut.length ? { truncated: true } : {}) };
   };
-  const checks = (limit: number | null) => ({ range: r, ...mergeChecks(extras.map((x) => (x.checks ?? []) as CheckRow[]), limit, days.flatMap((d) => d.xpay ?? [])) });
+  const checks = (limit: number | null) => {
+    const merged = mergeChecks(extras.map((x) => (x.checks ?? []) as CheckRow[]), limit, days.flatMap((d) => d.xpay ?? []));
+    const cut = extras.reduce((a, x) => a + (x.cut?.checks ?? 0), 0);
+    return { range: r, ...merged, count: merged.count + cut, ...(cut ? { truncated: true } : {}) };
+  };
   const platforms = () => {
     const cross = crossPayIn(days.flatMap((d) => d.xpay ?? []), r.from, r.to).byPlatform;
     const lists = extras.map((x) => x.plat?.rows ?? []);
@@ -1237,19 +1294,19 @@ function serveExtra(kind: string, url: URL, r: Range, days: DayRep[], extras: Re
   };
   if (kind === 'prep') {
     const done = extras.flatMap((x) => x.prep?.done ?? []);
-    return json({ range: r, ...prepFrom(done, extras.flatMap((x) => x.prep?.hand ?? []), istanbulHour) });
+    return out({ range: r, ...prepFrom(done, extras.flatMap((x) => x.prep?.hand ?? []), istanbulHour) });
   }
   if (kind === 'items') {
     const k = url.searchParams.get('kind');
     if (k !== 'iptal' && k !== 'ikram' && k !== 'indirim' && k !== 'happy') return fail(400, 'Liste türü anlaşılamadı', 'bad_query');
-    return json(items(k));
+    return out(items(k));
   }
-  if (kind === 'checks') return json(checks(300));
+  if (kind === 'checks') return out(checks(300));
   if (kind === 'refunds') {
     const rows = mergeRows<RemoteDayExtra['refunds'][number]>(extras.map((x) => x.refunds ?? []));
-    return json({ range: r, total: rows.reduce((a, x) => a + x.amount, 0), count: rows.length, rows });
+    return out({ range: r, total: rows.reduce((a, x) => a + x.amount, 0), count: rows.length, rows });
   }
-  if (kind === 'platforms') return json(platforms());
+  if (kind === 'platforms') return out(platforms());
   // CSV: kasadaki satırlar (shared/report-csv.ts); maliyet ve komisyon yok
   const type = url.searchParams.get('type') ?? '';
   if (!(CSV_TYPES as readonly string[]).includes(type)) return fail(400, 'CSV türü anlaşılamadı', 'bad_query');
@@ -1354,7 +1411,9 @@ async function handle(req: Request): Promise<Response> {
     }
     return passwordRequired() && tokenValid(secret(), auth);
   };
-  const bildirimDeps = { redis, admin, signed: (body: string) => secret().length >= 32 && verifyPush(secret(), req, url, body) };
+  /** Geçerli ama yönetici olmayan oturum (parolasız görünüm): Merkez ve bildirim uçları 403 der, oturum düşmez */
+  const viewerSession = async () => secret().length >= 32 && !memberMode && !passwordRequired() && tokenValid(secret(), auth);
+  const bildirimDeps = { redis, admin, viewer: viewerSession, signed: (body: string) => secret().length >= 32 && verifyPush(secret(), req, url, body) };
   // Patrona telefon bildirimi (Web Push): kasanın imzalı olayı ve aboneliği
   if (path.startsWith('uzaktan/bildirim')) return bildirim(req, path, bildirimDeps);
   // Bulut yedeği: kasanın imzalı istekleri (yükleme ve indirme adresi, liste)
@@ -1367,7 +1426,9 @@ async function handle(req: Request): Promise<Response> {
     return merkez(req, url, path, {
       redis,
       verify: (key: string, r: Request, u: URL, body: string) => verifyPush(key, r, u, body),
+      signedShared: bildirimDeps.signed,
       admin,
+      viewer: viewerSession,
       demo,
       fetchRelease: () => latestRelease(url.origin),
       notify: (n) => broadcast(bildirimDeps, n).then(() => undefined),
@@ -1432,9 +1493,11 @@ async function handle(req: Request): Promise<Response> {
       await redis('DEL', key);
       return json({ token: issueMemberToken(secret(), email, record.h), me: ME });
     }
-    const record = members.includes(email) ? await member(email, true) : null;
-    // Üye yokken de özet hesaplanır: yanıt süresi e-postanın kayıtlı olup olmadığını söylemez
-    if (!passwordMatches(record?.h ?? hashPassword('yok', Buffer.alloc(16)), password) || !record) return fail(401, 'E-posta ya da parola yanlış', 'bad_password');
+    // Listede olmayan e-postada da kayıt sorulur ve her yolda tam bir parola özeti hesaplanır: yanıt süresi e-postanın
+    // kayıtlı olup olmadığını söylemez
+    const found = await member(email, true);
+    const record = members.includes(email) ? found : null;
+    if (!passwordMatches(record?.h ?? dummyHash(), password) || !record) return fail(401, 'E-posta ya da parola yanlış', 'bad_password');
     await redis('DEL', key);
     return json({ token: issueMemberToken(secret(), email, record.h), me: ME });
   }

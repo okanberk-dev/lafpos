@@ -410,7 +410,10 @@ interface Summary {
   payments: { name: string; amount: number; count: number; share: number }[];
   types: { type: string; orders: number; amount: number }[];
   online: { orders: number; amount: number };
-  previous: { netSales: number; receipts: number; change: number | null; label: string; range?: { from: string; to: string } };
+  /** Uzakta kıyas dönemi saklanmıyorsa (400 günden eski) `unavailable`; rakamlar null */
+  previous: { netSales: number | null; receipts: number | null; change: number | null; label: string; range?: { from: string; to: string }; unavailable?: boolean };
+  /** Uzakta: dönemin bir kısmı saklanmıyor, en eski gün */
+  availableFrom?: string;
   asOf: number;
   waterfall: { list: number; complimentary: number; discounts: number; service: number; revenue: number; kdv: number; netExKdv: number };
   kdv: { rate: number; gross: number; base: number; kdv: number }[];
@@ -433,6 +436,11 @@ function useReport<T>(key: unknown[], path: string) {
  * gösterilmez (yanlış rakam gibi okunur), neden ve yeniden dene; arka plan yenilemesi düşerse rakamlar kalır, saati
  * söylenir. Dönem değişirken eski rakamlar soluk ve `aria-busy`
  */
+const availableFrom = (d: unknown) => {
+  const v = d && typeof d === 'object' ? (d as { availableFrom?: unknown }).availableFrom : undefined;
+  return typeof v === 'string' ? v : null;
+};
+
 function ReportBody<T>({ q, skeleton, children }: { q: UseQueryResult<T>; skeleton: ReactNode; children: (data: T) => ReactNode }) {
   const slow = useDelayed(q.isPlaceholderData, 150);
   if (q.isPending) return <>{skeleton}</>;
@@ -442,6 +450,12 @@ function ReportBody<T>({ q, skeleton, children }: { q: UseQueryResult<T>; skelet
       {q.isError && (
         <Notice tone="warn" role="status" className="mb-3 text-[13px]">
           Rapor yenilenemedi; rakamlar {fmtTime(q.dataUpdatedAt)} itibarıyla. Bağlantı gelince yeniden deneyin
+        </Notice>
+      )}
+      {/* Uzakta: dönemin bir kısmı 400 günlük saklama sınırının dışında (api/uzaktan.ts `availableFrom`) */}
+      {availableFrom(q.data) && (
+        <Notice tone="info" role="status" className="mb-3 text-[13px]">
+          Uzakta yalnız {fmtShortDate(availableFrom(q.data)!)} {availableFrom(q.data)!.slice(0, 4)} sonrası var; daha eskisi kafedeki kasada
         </Notice>
       )}
       {children(q.data)}
@@ -499,18 +513,18 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
             value: <KpiAmount value={s.netSales} />,
             delta: deltaOf(s.previous.change),
             // Kıyas döneminde satış yoksa yüzde hesaplanamaz: "veri yok" değil, o dönem satış yoktu
-            reference: <span title={compared}>{s.previous.change == null ? `${prev} satış yoktu` : `${prev}: ${tlShort(s.previous.netSales)}`}</span>,
+            reference: <span title={compared}>{s.previous.unavailable ? 'Kıyas yok (uzakta saklanmıyor)' : s.previous.change == null ? `${prev} satış yoktu` : `${prev}: ${tlShort(s.previous.netSales ?? 0)}`}</span>,
           },
           {
             key: 'adisyon',
             label: 'Adisyon',
             icon: <ReceiptText />,
             value: fmtN(s.receipts),
-            delta: deltaOf(changeOf(s.receipts, s.previous.receipts)),
+            delta: deltaOf(s.previous.receipts == null ? null : changeOf(s.receipts, s.previous.receipts)),
             reference: (
               <>
                 <span className="block" title={compared}>
-                  {s.previous.receipts ? `${prev}: ${fmtN(s.previous.receipts)}` : `${prev} adisyon yoktu`}
+                  {s.previous.unavailable ? 'Kıyas yok' : s.previous.receipts ? `${prev}: ${fmtN(s.previous.receipts)}` : `${prev} adisyon yoktu`}
                 </span>
                 {s.receipts > 0 && <span className="block">{joinMeta([`Ortalama ${tlShort(s.avgCheck)}`, s.perGuest != null && `kişi başı ${tlShort(s.perGuest)}`])}</span>}
               </>
@@ -1218,6 +1232,8 @@ function PrepReport({ range, today }: { range: Range; today: string }) {
 interface ChecksData {
   /** Dönemin bütün adisyonları; `rows` en yenileriyle sınırlı */
   count: number;
+  /** Uzakta: çok yoğun günün listesi kasada kısaltıldı (sayı tam) */
+  truncated?: boolean;
   rows: { id: string; no: number; status: string; type: string; place: string | null; openedAt: number; closedAt: number | null; waiter: string | null; qty: number; total: number; methods: string[] }[];
 }
 type CheckRow = ChecksData['rows'][number];
@@ -1253,11 +1269,11 @@ function ChecksReport({ range, today, onExport, exporting }: { range: Range; tod
   ];
   return (
     <ReportBody q={data} skeleton={<TableSkeleton />}>
-      {({ rows, count }) => (
+      {({ rows, count, truncated }) => (
         <Card
           flush
           title="Adisyonlar"
-          subtitle={count ? (rows.length < count ? `${fmtN(count)} adisyon · ekranda en yeni ${fmtN(rows.length)}, hepsi CSV’de` : `${fmtN(count)} adisyon`) : undefined}
+          subtitle={count ? (truncated ? `${fmtN(count)} adisyon · liste kısaltıldı, hepsi kafedeki kasada` : rows.length < count ? `${fmtN(count)} adisyon · ekranda en yeni ${fmtN(rows.length)}, hepsi CSV’de` : `${fmtN(count)} adisyon`) : undefined}
           actions={
             count > 0 ? (
               <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>
@@ -1472,6 +1488,8 @@ interface ItemsData {
   }[];
   /** Kişi bazında ödenmez (yalnız ikram listesinde): kişi, adet, tutar */
   odenmezPeople: OdenmezPersonDTO[];
+  /** Uzakta: çok yoğun günün listesi kasada kısaltıldı (toplam ve sayı tam) */
+  truncated?: boolean;
 }
 
 /** Ödenmez kişisinin türü sözle: tablo ve satır kartı */
@@ -1571,7 +1589,7 @@ function ItemsReport({ range, today, kind, onExport, exporting }: { range: Range
           <Card
             flush
             title={ITEM_TITLES[kind]}
-            subtitle={d.count ? (happy ? `${fmtN(d.count)} kalem · verilen indirim ${tl(d.total)}` : `${fmtN(d.count)} kayıt · ${tl(d.total)}`) : undefined}
+            subtitle={d.count ? `${happy ? `${fmtN(d.count)} kalem · verilen indirim ${tl(d.total)}` : `${fmtN(d.count)} kayıt · ${tl(d.total)}`}${d.truncated ? ' · liste kısaltıldı' : ''}` : undefined}
             actions={
               onExport && d.count > 0 ? (
                 <Button size="sm" icon={<Download className="size-4" />} loading={exporting} onClick={onExport}>

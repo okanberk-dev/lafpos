@@ -29,6 +29,8 @@ export interface BildirimDeps {
   redis: (...cmd: (string | number)[]) => Promise<unknown>;
   /** Gerçek oturum (abone olmak için) */
   admin: () => Promise<boolean>;
+  /** Geçerli ama yönetici olmayan oturum (parolasız görünüm): 401 yerine 403, uzaktan oturum düşmez */
+  viewer?: () => Promise<boolean>;
   /** Kasanın imzası (gönderim için) */
   signed: (body: string) => boolean;
 }
@@ -121,7 +123,10 @@ export async function bildirim(req: Request, path: string, deps: BildirimDeps): 
   }
 
   // Abonelik: gerçek oturumla
-  if (!(await deps.admin())) return fail(401, 'Bildirimler için üye girişi gerekir', 'unauthorized');
+  if (!(await deps.admin())) {
+    if (await deps.viewer?.()) return fail(403, 'Bildirimler için üye girişi gerekir', 'remote_admin');
+    return fail(401, 'Bildirimler için üye girişi gerekir', 'unauthorized');
+  }
   if (path === 'uzaktan/bildirim/abone' && req.method === 'POST') {
     if (!pushConfigured()) return fail(503, 'Bildirim anahtarı tanımlı değil (VAPID_PUBLIC_KEY)', 'not_configured');
     const sub = ((await req.json().catch(() => ({}))) as { abonelik?: unknown }).abonelik;

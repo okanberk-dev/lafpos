@@ -39,7 +39,14 @@ export async function enablePush(): Promise<void> {
   const reg = await registration();
   await navigator.serviceWorker.ready;
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(publicKey) }));
-  await post('/uzaktan/bildirim/abone', { abonelik: sub.toJSON() });
+  try {
+    await post('/uzaktan/bildirim/abone', { abonelik: sub.toJSON() });
+  } catch (e) {
+    // Site aboneliği yazamadı (geçici hata, oturum düştü): tarayıcıdaki abonelik de bırakılır, yoksa kart "Açık" der ama
+    // hiçbir bildirim gelmez. Yeniden "Bu telefonda aç" denebilir
+    await sub.unsubscribe().catch(() => undefined);
+    throw e;
+  }
 }
 
 export async function disablePush(): Promise<void> {

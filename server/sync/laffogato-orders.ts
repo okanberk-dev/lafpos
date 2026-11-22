@@ -443,6 +443,8 @@ export function upsertOnlineOrders(
         }
         continue;
       }
+      // Lisans denetimi bilerek yok: sitede ödenmiş sipariş yeni satış değil (tahsil edilmez, ciroya girmez); lisans
+      // kapalıyken de müşterinin parasını aldığı sipariş hazırlanır
       const id = ulid(now);
       const paidAt = Date.parse(o.paidAt) || now;
       const dueAt = onlineDueAt(paidAt, scheduledFor);

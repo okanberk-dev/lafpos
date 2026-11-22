@@ -116,14 +116,25 @@ export function normalizeBranchCode(v: unknown): string | null | undefined {
 }
 
 /** Kasanın bildirdiği güncelleme durumunun Merkez'deki adı */
-export const UPDATE_LABELS: Record<string, string> = {
+export const UPDATE_LABELS: Readonly<Record<string, string>> = Object.freeze({
   guncel: 'Kuruldu',
   indiriliyor: 'İndiriliyor',
   bekliyor: 'Gün kapanınca kurulacak',
   kuruluyor: 'Kuruluyor',
+  deneniyor: 'Yeni sürüm deneniyor',
   'geri-dondu': 'Sorun çıktı, eski sürüme döndü',
   hata: 'Sorun çıktı',
   kapali: 'Güncelleme kapalı',
+  bilinmiyor: 'Durum bilinmiyor',
+});
+
+/**
+ * Durumun adı; bilinmeyen durum kendi metniyle. Yalnız tablonun kendi alanları okunur (`__proto__` gibi bir metin
+ * nesne döndürüp paneli düşürmesin) ve sonuç hep metindir
+ */
+export const updateLabel = (durum: unknown): string => {
+  const d = String(durum ?? '');
+  return Object.hasOwn(UPDATE_LABELS, d) ? UPDATE_LABELS[d]! : d;
 };
 
 /** Merkez'e son 10 dakikada (kasa nabzı 5 dk'da bir) haber veren kurulum çevrimiçi sayılır */
