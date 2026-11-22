@@ -332,9 +332,11 @@ export interface DenemeStatusDTO {
   trialDays: DayRangeDTO;
   /**
    * Bugünden önceki gerçek görünen günler: bütün gerçek günler bugünden önceyse ve gerçek kullanım hiç başlamadıysa
-   * pencere "onları da sil" seçeneğini (varsayılan işaretli) gösterir; yoksa null
+   * pencere "onları da sil" seçeneğini (varsayılan işaretsiz) gösterir; yoksa null
    */
   earlyRealDays: DayRangeDTO | null;
+  /** Gerçek olduğu kanıtlı (Pavo fişi, lafmaliyet'e gönderim) ya da kanıtlı günden sonraki, silinmeye önerilmeyen gerçek gün sayısı */
+  provenRealDays?: number;
   counts: { orders: number; payments: number; days: number; cashMovements: number; reservations: number; customers: number; platformOrders: number; fiscalReceipts: number; audit: number };
   /** Örnek PIN'iyle duran öbür açık hesaplar (bitirince kapanır) */
   samplePinUsers: { id: string; name: string; role: string }[];

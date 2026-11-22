@@ -48,6 +48,22 @@ describe('Pavo: ret ve ulaşılamayan cihaz', () => {
     expect(closed.payments).toHaveLength(1);
   });
 
+  it('paylaşımlı hesap (hiç pay alınmamış) Pavo’ya bütün olarak tek sepetle gider; cihazda iki ödeme, adisyon kapanır', async () => {
+    const product = h.boot.products.find((p) => p.name === 'Türk Kahvesi')!;
+    let o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product.id, qty: 2 }] });
+    await h.ok('kasa', 'PUT', `/orders/${o.id}/split`, { people: 2 });
+    const sent = await h.ok<Sent & { receipt: { amount: number } }>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: null });
+    expect(sent.receipt.amount).toBe(o.total);
+    const half = o.total / 2;
+    device.pay(pavoOrderNo(sent.receipt.id), [{ type: 2, amount: half / 100 }, { type: 2, amount: half / 100 }], { invoiceNo: 'LAF2026000000102' });
+    await new Promise((res) => setTimeout(res, 50));
+    await h.ok('kasa', 'POST', `/okc/receipts/${sent.receipt.id}/refresh`);
+    const closed = await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`);
+    expect(closed.status).toBe('kapali');
+    expect(closed.paid).toBe(o.total);
+  });
+
   it('kasiyer cihazda vazgeçerse sepet kapanır, ödeme yazılmaz', async () => {
     const o = await newOrder();
     const sent = await h.ok<Sent>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: null });

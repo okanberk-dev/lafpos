@@ -149,8 +149,9 @@ describe('ilk Z numarası', () => {
     expect(zAudits()).toHaveLength(1);
   });
 
-  it('müdür (ayar yetkisi) ileri alabilir; son Z üstü kabul edilir', async () => {
-    const r = await putZ(1300, 'mudur');
+  it('müdür (ayar yetkisi olsa da) değiştiremez; patron ileri alabilir, son Z üstü kabul edilir', async () => {
+    expect((await putZ(1300, 'mudur')).status).toBe(403);
+    const r = await putZ(1300);
     expect(r.status).toBe(200);
     expect(await h.ok<ZChain>('patron', 'GET', '/admin/settings/z')).toEqual({ lastZ: 1202, nextZ: 1300 });
     expect(zAudits()[0]?.data).toEqual({ from: 1201, to: 1300 });

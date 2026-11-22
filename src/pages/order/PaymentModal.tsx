@@ -12,9 +12,10 @@ import { Modal } from '@/components/ui/Modal';
 import { applyNumpadKey, Numpad, useNumpadKeys } from '@/components/ui/Numpad';
 import { Badge, Notice } from '@/components/ui/misc';
 import { typeOverPrefill } from '@/lib/numpad';
-import { promptDialog } from '@/components/ui/Confirm';
-import { deviceRoute } from '@shared/odeme-fisi';
-import { printAfterPayment, printsAfterPayment } from '@/lib/after-payment';
+import { confirmDialog, promptDialog } from '@/components/ui/Confirm';
+import { deviceResult, deviceRoute, offDeviceLabel, okcPanelAuto } from '@shared/odeme-fisi';
+import { printAfterPayment } from '@/lib/after-payment';
+import { markDeviceSent, unmarkDeviceSent } from '@/lib/device-copies';
 import { ApiError, errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -48,22 +49,6 @@ const typedField = (on: boolean) =>
 
 /** Ödeme türünün ikonu (karonun içinde, türün renginde): nakit banknot, kart, yemek kartı çatal bıçak, havale banka */
 const PAY_ICON: Record<PaymentMethodDTO['kind'], LucideIcon> = { nakit: Banknote, kart: CreditCard, yemek: UtensilsCrossed, havale: Landmark, cari: NotebookPen, online: Globe, diger: Wallet };
-
-/**
- * Cihazda ödenen sepetin işyeri nüshası: sepetin fiş ve Z no'su ile adisyonun güncel hâli sunucudan okunur. Yazdırma
- * ödemeyi bozmaz (hata sessiz); her cihaz fişi bir kez (`printAfterPayment`)
- */
-async function printDeviceCopy(boot: BootstrapDTO, orderId: string) {
-  if (!printsAfterPayment(boot, true)) return;
-  try {
-    const [receipts, order] = await Promise.all([get<ReceiptDTO[]>(`/okc/orders/${orderId}/receipts`), get<OrderDTO>(`/orders/${orderId}`)]);
-    const r = receipts.find((x) => x.status === 'tamamlandi');
-    if (!r) return;
-    printAfterPayment({ key: `okc:${r.id}`, boot, order, paymentIds: r.paymentIds ?? [], device: { receiptNo: r.receiptNo, zNo: r.zNo, docKind: r.docKind, docId: r.docId } });
-  } catch {
-    // Fiş basılamadı: ödeme yine alınmıştır
-  }
-}
 
 /** Bölüm etiketi (Ödeme türü, Verilen, Ciro dışı kapat): 13 px, gri */
 const SECTION = 'mb-2 text-[13px] font-medium text-muted';
@@ -105,7 +90,7 @@ export function PaymentModal({
   const [busy, setBusy] = useState(false);
   /** Hesabı bölme ya da paylaşımı kaldırma sürüyor (ödeme düğmesinin göstergesinden ayrı) */
   const [splitBusy, setSplitBusy] = useState<'set' | 'clear' | null>(null);
-  const [result, setResult] = useState<{ change: number; closed: boolean; amount: number; tip: number; method: string; share: string | null } | null>(null);
+  const [result, setResult] = useState<{ change: number | null; closed: boolean; amount: number; tip: number; method: string; share: string | null } | null>(null);
   /** Ciro dışı kapanış: gerekçe penceresi açık olan tür */
   const [comp, setComp] = useState<CompKind | null>(null);
   /** Açık hesap için müşteri bu pencerenin içinden eklenir (İşlemler menüsü pencerenin arkasında kalır) */
@@ -154,8 +139,9 @@ export function PaymentModal({
     return onLive((e) => {
       if (e.topic !== 'okc' || e.orderId !== order.id) return;
       if (e.kind === 'okc.cancelled' || e.kind === 'okc.error') {
-        // Bu ekranın otomatik gönderdiği sepet cihazda reddedildi ya da iptal edildi: neden pencerede, ödeme yeniden denenir
-        if (autoSent.current) setDeviceError(e.kind === 'okc.cancelled' ? 'Ödeme cihazda iptal edildi' : (e.message ?? 'Yazarkasa ödemeyi almadı'));
+        // Bu ekranın otomatik gönderdiği sepet cihazda reddedildi ya da iptal edildi: neden pencerede, ödeme yeniden denenir.
+        // LafPOS'tan "Sepeti iptal et" (olayı yapan kullanıcı belli) müşteri reddi değildir: uyarı çıkmaz
+        if (autoSent.current && !(e.kind === 'okc.cancelled' && e.byUserId)) setDeviceError(e.kind === 'okc.cancelled' ? 'Müşteri cihazda ödemeden vazgeçti' : (e.message ?? 'Yazarkasa ödemeyi almadı'));
         if (e.kind === 'okc.cancelled') {
           okcSentHere.current = null;
           autoSent.current = null;
@@ -163,20 +149,20 @@ export function PaymentModal({
         return;
       }
       if (e.kind !== 'okc.paid' || e.seq === seen) return;
-      const { open: shown, onDone: done, boot: b } = latest.current;
+      const { open: shown, onDone: done } = latest.current;
       if (!shown && okcSentHere.current !== order.id) return;
-      const mine = okcSentHere.current === order.id;
       seen = e.seq;
       okcSentHere.current = null;
       const auto = autoSent.current;
       autoSent.current = null;
       setDeviceError(null);
       const closed = !!e.message?.includes('kapandı');
-      // İşyeri nüshası yalnız sepeti gönderen ekranda (kasa bilgisayarında, yazıcı varsa); her cihaz fişi bir kez
-      if (mine) void printDeviceCopy(b, order.id);
+      // İşyeri nüshası uygulama düzeyinde basılır (useDeviceCopies): pencere ya da adisyon ekranı kapanmış olsa da
       // Otomatik gönderimde sonuç ekranı pencerede (para üstü ve "Yeni satış"); öteki durumlar bugünkü gibi
       if (shown && auto) {
-        setResult({ change: auto.given != null ? Math.max(0, auto.given - auto.amount) : 0, closed, amount: auto.amount, tip: 0, method: auto.methodName, share: null });
+        // Para üstü ve tür cihazın gerçek ödemelerinden (müşteri cihazda başka türle ödemiş olabilir)
+        const r = deviceResult(auto, e.paid);
+        setResult({ change: r.change, closed, amount: auto.amount, tip: 0, method: r.method, share: null });
         return;
       }
       toast.ok(e.message ?? 'Yazarkasada ödendi');
@@ -267,8 +253,9 @@ export function PaymentModal({
     remaining,
     pickedCount: picked.length,
     amountPaidHere: amountPaidHereOf(order, okc.data),
+    nothingPaid: order.paid === 0,
   });
-  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending && !(mode === 'paylas' && sharesDirty);
+  const valid = !!method && amount > 0 && !overRemaining && (change == null || change >= 0) && !cariBlocked && !tipBlocked && !cariOver && !splitBlocks && !devicePending && !(mode === 'paylas' && sharesDirty) && !route.block;
   // Ciro dışı kapanış (İşlemler menüsüyle aynı kural): ödeme alınmamış, oda sayaçsız, ücretli kalemi olan açık adisyon
   const compable = order.status === 'acik' && order.paid === 0 && !order.room && order.items.some((i) => !i.voided && !i.complimentary);
   /** Ödenmezde kişi zorunlu (OdenmezModal), ikram ve zayide kişi sorulmaz */
@@ -346,6 +333,7 @@ export function PaymentModal({
     setBusy(true);
     setDeviceError(null);
     okcSentHere.current = order.id;
+    markDeviceSent(order.id);
     autoSent.current = { amount, given: method.kind === 'nakit' && given != null ? given : null, methodName: method.name };
     try {
       await post(`/okc/orders/${order.id}/send`, { items: mode === 'kalem' ? picked : null });
@@ -353,6 +341,7 @@ export function PaymentModal({
       const code = e instanceof ApiError ? e.code : null;
       if (code !== 'okc_pending' && code !== 'okc_unknown') {
         okcSentHere.current = null;
+        unmarkDeviceSent(order.id);
         autoSent.current = null;
         setDeviceError(errorMessage(e));
       }
@@ -367,6 +356,15 @@ export function PaymentModal({
   const pay = async (withoutDevice = false) => {
     if (!method || !valid) return;
     if (route.send && !withoutDevice) return payOnDevice();
+    // Para yazarkasada alınmadı: cihazsız kart (ya da cihaz reddinden sonra her tür) onaysız yazılmaz
+    if (withoutDevice || offDevice?.confirm) {
+      const ok = await confirmDialog({
+        title: 'Para yazarkasada alınmadı',
+        body: `${tl(amount + tip)} · ${method.name}. Yalnız nakit ya da başka POS’tan aldıysanız kaydedin; mali fişi ayrıca kesin`,
+        confirmLabel: 'Başka yoldan alındı, kaydet',
+      });
+      if (!ok) return;
+    }
     setDeviceError(null);
     setBusy(true);
     const sharing = mode === 'paylas' && !!split;
@@ -473,14 +471,19 @@ export function PaymentModal({
             {result.tip > 0 && ` · ${tl(result.tip)} bahşiş dahil`}
           </p>
           {/* Para üstü kasiyerin ilk işi: en üstte, nötr kutuda mürekkep kenarla (amber zamanın rengidir) */}
-          {result.change > 0 && (
+          {result.change == null && (
+            <p role="status" className="mt-5 rounded-xl border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] p-3 text-sm font-medium text-ink">
+              Para üstünü cihazın fişinden verin
+            </p>
+          )}
+          {result.change != null && result.change > 0 && (
             <div className="mt-5 rounded-xl border border-[var(--admin-ink-fill)] bg-surface p-4">
               <div className="text-[13px] font-medium text-ink-2">Para üstü</div>
               <div className="tabular font-headline text-5xl font-bold tracking-tight">{tl(result.change)}</div>
             </div>
           )}
           {call && (
-            <div className={cn('rounded-xl border border-line bg-surface-2 p-4', result.change > 0 ? 'mt-3' : 'mt-5')}>
+            <div className={cn('rounded-xl border border-line bg-surface-2 p-4', result.change !== 0 ? 'mt-3' : 'mt-5')}>
               <div className="text-[13px] font-medium text-muted">{call.kind === 'masa' ? 'Masaya götürülecek' : 'Sipariş numarası'}</div>
               <div className="tabular font-headline text-5xl font-bold tracking-tight">{call.kind === 'masa' ? numaratorLabel(call.value) : call.value}</div>
               {call.kind === 'numara' && <div className="mt-1 text-xs text-muted">Hazır olunca çağrı ekranında görünür</div>}
@@ -518,8 +521,12 @@ export function PaymentModal({
               ? 'Tutar girin'
               : !method
                 ? 'Ödeme türü seçin'
-                : null;
-  const payLabel = payStep ?? (method?.kind === 'cari' ? `${tl(amount)} açık hesaba yaz` : `${tl(amount + tip)} ${method?.name ?? ''} al`);
+                : route.block
+                  ? 'Önce hesabı bahşişsiz alın'
+                  : null;
+  // Otomatik gönderim açıkken cihaza gitmeyen nakit, kart ya da yemek ödemesi düğmede söylenir (kart ve yemekte onay)
+  const offDevice = offDeviceLabel(route, method, amount + tip);
+  const payLabel = payStep ?? (method?.kind === 'cari' ? `${tl(amount)} açık hesaba yaz` : (offDevice?.label ?? `${tl(amount + tip)} ${method?.name ?? ''} al`));
   // Para üstü ve bahşiş notu yalnız düğme tutarı gösterirken (eksik adım varken "Para üstü" yanıltır)
   const changeNote = !payStep && change != null && change !== 0 ? change : null;
   const tipNote = !payStep && tip > 0 && method?.kind !== 'cari';
@@ -531,9 +538,10 @@ export function PaymentModal({
       order={order}
       amount={amount}
       items={mode === 'kalem' ? picked : null}
-      auto={route.on}
+      auto={okcPanelAuto(route.on, split, order.paid)}
       onSend={() => {
         okcSentHere.current = order.id;
+        markDeviceSent(order.id);
       }}
     />
   );
@@ -584,7 +592,18 @@ export function PaymentModal({
               {deviceError}
             </p>
           ) : (
-            route.on && method && !payStep && <p className="text-xs text-muted">{route.send ? 'Yazarkasaya gider; ödemeyi cihazdan alın' : route.reason}</p>
+            route.on &&
+            method &&
+            (!payStep || route.block) &&
+            (route.send ? (
+              <p className="text-xs text-muted">Yazarkasaya gider; ödemeyi cihazdan alın</p>
+            ) : (
+              route.reason && (
+                <p role="status" className="rounded-lg border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] px-2.5 py-1.5 text-sm font-medium text-ink">
+                  {route.reason}
+                </p>
+              )
+            ))
           )}
           {changeNote != null && changeNote > 0 && (
             <p className="text-sm text-ink-2">
@@ -612,8 +631,8 @@ export function PaymentModal({
       </Button>
       {/* Cihaz almadıysa ödeme yazarkasasız da yazılabilir (mali fiş ayrıca kesilir); bugünkü yetki kuralı */}
       {deviceError && route.send && (
-        <Button size="xl" variant="secondary" block className="whitespace-normal leading-tight sm:w-auto" disabled={!valid || busy} onClick={() => void pay(true)}>
-          Cihazsız kaydet
+        <Button size="xl" variant="ghost" block className="whitespace-normal leading-tight sm:w-auto" disabled={!valid || busy} onClick={() => void pay(true)}>
+          Başka yoldan aldım
         </Button>
       )}
     </div>

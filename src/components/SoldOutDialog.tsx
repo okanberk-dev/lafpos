@@ -57,7 +57,7 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
     setBusy(id);
     try {
       const r = await post<{ site: string }>(`/sync/products/${id}/availability`, { active });
-      toast.ok(`${name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : ''}`);
+      toast.ok(`${name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'kuyrukta' ? '; internet gelince siteye yazılacak' : ''}`);
       await qc.invalidateQueries({ queryKey: ['bootstrap'] });
     } catch (e) {
       toast.err(errorMessage(e));

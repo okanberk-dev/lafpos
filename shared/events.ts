@@ -66,6 +66,8 @@ export interface LiveEvent {
   forUserId?: string;
   /** "Hazır" uyarısı paket platformu siparişinde: paket siparişlerini yöneten her cihazda çalar (`readyAlertFor`) */
   platform?: PlatformId;
+  /** okc.paid: cihazın yazdığı ödemeler (tür, ad, tutar); sonuç ekranı para üstünü bundan hesaplar */
+  paid?: { kind: string; name: string; amount: number }[];
 }
 
 /**
