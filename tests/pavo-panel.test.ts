@@ -48,6 +48,11 @@ describe('ağda arama', () => {
       expect(withSerial.candidates).toEqual([{ url: device.url, ok: true, message: 'Pong' }]);
       // Yoklama sıra no göndermez, cihaz eşleşmiş sayılmaz
       expect(device.requests.map((x) => x.path).every((p) => p === '/Ping')).toBe(true);
+      // Sahada: /Ping'i JSON'suz (gövdesiz HTTP hatası) yanıtlayan cihaz elenmez; adres "doğrulanamadı" adayı olur
+      device.pingHttpStatus = 400;
+      const odd = await findPavo({ hosts: ['127.0.0.1'], ports: [port], connectMs: 500, pingMs: 1500 });
+      expect(odd.candidates).toEqual([{ url: device.url, ok: false, unrecognized: true, message: expect.stringContaining('HTTP 400') }]);
+      device.pingHttpStatus = null;
     } finally {
       await device.close();
     }

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { upstashFetch } from './fake-upstash';
 
 /**
  * LafPOS Uzaktan üyeliği (api/uzaktan.ts): LAFPOS_UYE_EPOSTA tanımlıyken "Üye girişi" e-posta ve parolayla çalışır.
@@ -16,19 +17,8 @@ beforeAll(() => {
   for (const k of KEYS) before[k] = process.env[k];
   for (const k of KEYS) delete process.env[k];
   Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UYE_EPOSTA: ` ${EMAIL.toUpperCase()} `, LAFPOS_UYE_DAVET: INVITE, KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
-  vi.stubGlobal('fetch', async (_input: string | URL | Request, init?: RequestInit) => {
-    const [cmd, key, ...rest] = JSON.parse(String(init!.body)) as string[];
-    let result: unknown = null;
-    if (cmd === 'GET') result = store.get(key!) ?? null;
-    if (cmd === 'SET') {
-      if (rest.includes('NX') && store.has(key!)) result = null;
-      else (store.set(key!, rest[0]!), (result = 'OK'));
-    }
-    if (cmd === 'INCR') (store.set(key!, String(Number(store.get(key!) ?? 0) + 1)), (result = Number(store.get(key!))));
-    if (cmd === 'DEL') (store.delete(key!), (result = 1));
-    if (cmd === 'EXPIRE') result = 1;
-    return new Response(JSON.stringify({ result }), { status: 200 });
-  });
+  const redis = upstashFetch(store);
+  vi.stubGlobal('fetch', async (_input: string | URL | Request, init?: RequestInit) => redis(init));
 });
 afterAll(() => {
   vi.unstubAllGlobals();

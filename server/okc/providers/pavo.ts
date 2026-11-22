@@ -1,6 +1,6 @@
 import { parseTL } from '@shared/money';
 import type { MethodKind } from '../basket';
-import { describe, PAVO_EOD, PavoClient, PavoError, type PavoResponse, type PavoSale, type PavoSaleItem, type PavoStore } from '../pavo';
+import { describe, PAIRING_LOST_MESSAGE, pairingLost, PAVO_EOD, PavoClient, PavoError, type PavoResponse, type PavoSale, type PavoSaleItem, type PavoStore } from '../pavo';
 import type { DocKind, FiscalBasket, FiscalPayment, FiscalProvider, FiscalResult, PendingReceipt, PollOutcome } from './types';
 
 /**
@@ -217,6 +217,42 @@ export function readSale(res: PavoResponse): SaleReading {
   return { kind: 'open' };
 }
 
+// ─── Ödeme araçları ────────────────────────────────────────────────────────
+
+const MEDIATOR_ID_KEYS = ['Mediator', 'Id', 'PaymentMediatorId', 'MediatorId', 'PaymentMediator', 'PaymentTypeId', 'Type', 'Code'];
+const MEDIATOR_NAME_KEYS = ['Name', 'Description', 'MediatorName', 'PaymentMediatorName', 'DisplayName', 'Title', 'Label', 'Text'];
+const pick = <T>(o: Obj, keys: string[], read: (v: unknown) => T | null): T | null => {
+  // Alan adı büyük ya da küçük harfle başlayabilir (`Name`, `name`)
+  const lower = new Map(Object.keys(o).map((k) => [k.toLowerCase(), k]));
+  for (const k of keys) {
+    const real = lower.get(k.toLowerCase());
+    const v = real ? read(o[real]) : null;
+    if (v != null) return v;
+  }
+  return null;
+};
+
+/**
+ * `/PaymentMediators` yanıtından ödeme araçları (no ve ad). Yanıtın biçimi belgesiz: liste `Data`'nın kendisi, `Data`'nın
+ * bir alanı (ör. `Data.PaymentMediators`) ya da kabukta `Data` dışında bir alan olabilir; ilk bulunan dizi okunur. Öğe
+ * nesne (no ve ad alanları) ya da yalnız ad olabilir. Tanınmayan biçim boş liste (çağıran alan adlarını gösterir)
+ */
+export function readMediators(res: PavoResponse): { id: number | null; name: string | null }[] {
+  const lists = (v: unknown): unknown[][] => (Array.isArray(v) ? [v] : obj(v) ? Object.values(obj(v)!).filter(Array.isArray) : []);
+  const rest = Object.fromEntries(Object.entries(res).filter(([k]) => !['Data', 'Errors', 'TransactionHandle'].includes(k)));
+  for (const list of [...lists(res.Data), ...lists(rest)]) {
+    const out = list
+      .map((m) => {
+        const o = obj(m);
+        if (o) return { id: pick(o, MEDIATOR_ID_KEYS, num), name: pick(o, MEDIATOR_NAME_KEYS, (v) => (typeof v === 'string' ? str(v) : null))?.slice(0, 60) ?? null };
+        return typeof m === 'string' && m.trim() ? { id: null, name: m.trim().slice(0, 60) } : null;
+      })
+      .filter((m): m is { id: number | null; name: string | null } => !!m && (m.id != null || m.name != null));
+    if (out.length) return out.slice(0, 40);
+  }
+  return [];
+}
+
 // ─── Banka gün sonu ────────────────────────────────────────────────────────
 
 /** Gün sonunun LafPOS'ta saklanan özeti: kart no, işlem dökümü, slip görüntüsü saklanmaz */
@@ -302,11 +338,23 @@ export interface EodBaseline {
   prevBatchFrom: 'cihaz' | 'bos' | 'lafpos';
 }
 
-/** `/PrintEODCopy` yanıtından taban; cihaz son gün sonunu vermediyse null (çağıran LafPOS'un bildiğine düşer) */
+/**
+ * `/PrintEODCopy` yanıtından taban; cihaz son gün sonunu vermediyse null (çağıran LafPOS'un bildiğine düşer).
+ * Eşleştirme bozulmuşsa (73, 74) hata: gün sonu da reddedilirdi, gönderilmez; kasiyer yeniden eşleştirir
+ */
 export function readEodBaseline(res: PavoResponse): EodBaseline | null {
+  if (res.HasError && pairingLost(res.ErrorCode)) throw new PavoError(PAIRING_LOST_MESSAGE, String(res.ErrorCode), false, res);
   if (res.HasError) return String(res.ErrorCode ?? '') === '5075' ? { prevBatchNo: null, prevBatchFrom: 'bos' } : null;
   const s = eodSummary(obj(res.Data)?.eodData);
   return s?.batchNo ? { prevBatchNo: s.batchNo, prevBatchFrom: 'cihaz' } : null;
+}
+
+/**
+ * Cihaz yanıt verdi ama son gün sonunun kopyasını vermedi: uç bu cihazda yok ya da gövde boş (sahada N86: HTTP 404,
+ * gövdesiz). Zaman aşımı ve kopan bağlantı bu değildir (yanıt yok: cihaza ulaşılamıyor olabilir)
+ */
+export function eodCopyUnavailable(e: unknown): e is PavoError {
+  return e instanceof PavoError && /^HTTP_\d+$/.test(e.code ?? '');
 }
 
 /**
@@ -466,12 +514,14 @@ export const pavoProvider: FiscalProvider = {
     if (busy) throw new PavoError(busy);
     const ping = await c.ping();
     const mediators = await c.paymentMediators().catch((e: unknown) => ({ HasError: true, Message: e instanceof Error ? e.message : String(e) }) as PavoResponse);
-    const list = Array.isArray(mediators.Data) ? (mediators.Data as unknown[]).map(obj).filter((o): o is Obj => !!o) : [];
+    const list = mediators.HasError ? [] : readMediators(mediators);
     return {
       ping: { ok: !ping.HasError, message: ping.HasError ? describe(ping) : (ping.Message ?? null) },
       paired: !mediators.HasError,
-      pairingHint: mediators.HasError ? `Eşleştirme gerekli: ${describe(mediators)}` : null,
-      mediators: list.map((m) => ({ id: num(m.Mediator ?? m.Id ?? m.PaymentMediatorId), name: str(m.Name ?? m.Description ?? m.MediatorName) })),
+      pairingHint: mediators.HasError ? (pairingLost(mediators.ErrorCode) ? describe(mediators) : `Eşleştirme gerekli: ${describe(mediators)}`) : null,
+      mediators: list,
+      // Cihaz yanıt verdi ama liste tanınmadı: yanıtın alan adları (değer değil) destek için görünür
+      mediatorsNote: !mediators.HasError && !list.length ? `Cihaz ödeme araçlarını tanınan biçimde vermedi${c.exchanges[0]?.dataKeys.length ? ` (alanlar: ${c.exchanges[0].dataKeys.join(', ')})` : ''}` : null,
     };
   },
 };

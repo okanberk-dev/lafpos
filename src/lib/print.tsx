@@ -3,13 +3,16 @@ import { create } from 'zustand';
 import { COMP_LABEL } from '@shared/comp';
 import { tlPlain } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
-import type { BootstrapDTO, OrderDTO } from '@shared/types';
+import type { BootstrapDTO, OrderDTO, PublicSettings } from '@shared/types';
 import type { ZSummary } from '@shared/types';
 import { callFor, callText, numaratorLabel, serviceModeOf } from '@shared/service-mode';
 
 /**
- * Tarayıcıdan 80 mm termal yazıcıya çıktı. İçerik `.print-area`ya çizilir, `window.print()` çağrılır;
- * sayfanın geri kalanı yazdırmada gizlidir (index.css @media print).
+ * Tarayıcıdan 80 mm termal yazıcıya çıktı (kasa bilgisayarında kiosk Chrome, XP-80C gibi). İçerik `.print-area`ya
+ * çizilir, `window.print()` çağrılır; sayfanın geri kalanı yazdırmada gizlidir. Fişin bütün görünümü index.css'teki
+ * `.rc-*` sınıflarındadır: 80 mm kâğıtta 72 mm ortalı yazı alanı, yalnız siyah (gri ve zemin termal kâğıtta noktalı
+ * basılır), sistemin eş aralıklı yazısı (yazdırma anında yüklenmesi gereken yazı tipi yok), sütunlu rakam. Tutarlar
+ * sunucunun DTO'sundan gelir; burada yeni hesap yok
  */
 const usePrint = create<{ content: ReactNode | null; sheet: boolean; set: (c: ReactNode | null, sheet?: boolean) => void }>((set) => ({ content: null, sheet: false, set: (content, sheet = false) => set({ content, sheet }) }));
 
@@ -32,49 +35,96 @@ export function PrintHost() {
   return <div className={sheet ? 'print-area print-sheet hidden print:block' : 'print-area hidden print:block'}>{content}</div>;
 }
 
-const Row = ({ l, r, bold }: { l: ReactNode; r?: ReactNode; bold?: boolean }) => (
-  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontWeight: bold ? 700 : 400 }}>
-    <span>{l}</span>
-    {r !== undefined && <span style={{ whiteSpace: 'nowrap' }}>{r}</span>}
+/** İki sütunlu satır: solda metin (uzunsa alt satıra kayar, kesilmez), sağda tutar (kırılmaz, sağa yaslı) */
+const Row = ({ l, r, strong, small }: { l: ReactNode; r?: ReactNode; strong?: boolean; small?: boolean }) => (
+  <div className={['rc-row', strong ? 'rc-strong' : '', small ? 'rc-small' : ''].filter(Boolean).join(' ')}>
+    <span className="rc-l">{l}</span>
+    {r !== undefined && <span className="rc-r">{r}</span>}
   </div>
 );
-const Hr = () => <div style={{ borderTop: '1px dashed #000', margin: '4px 0' }} />;
+/** Bölüm ayıracı: kesik çizgi */
+const Hr = () => <div className="rc-hr" aria-hidden="true" />;
+
+/** Merkez'deki dükkân adı ve şube kodu (Merkez'e bağlı değilse yok): "Şube Marina · MRN" */
+const branchLine = (boot: BootstrapDTO) => {
+  const b = boot.branch;
+  if (!b || (!b.name && !b.code)) return null;
+  return `Şube ${[b.name, b.code].filter(Boolean).join(' · ')}`;
+};
 
 function Header({ boot, title }: { boot: BootstrapDTO; title: string }) {
+  const s = boot.settings;
+  const branch = branchLine(boot);
   return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 15, fontWeight: 700 }}>{boot.settings.businessName}</div>
-      {boot.settings.receiptHeader && <div style={{ whiteSpace: 'pre-line' }}>{boot.settings.receiptHeader}</div>}
-      {boot.settings.businessAddress && <div>{boot.settings.businessAddress}</div>}
-      <div style={{ marginTop: 4, fontWeight: 700 }}>{title}</div>
+    <div className="rc-head">
+      <div className="rc-name">{s.businessName}</div>
+      {s.receiptHeader && <div className="rc-sub rc-pre">{s.receiptHeader}</div>}
+      {s.businessAddress && <div className="rc-sub">{s.businessAddress}</div>}
+      {s.businessPhone && <div className="rc-sub">Tel {s.businessPhone}</div>}
+      {branch && <div className="rc-sub">{branch}</div>}
+      <div className="rc-title">{title}</div>
     </div>
   );
 }
 
-/** Adisyon / hesap fişi. Mali değeri yoktur: mali fiş ÖKC'den (yazarkasa) kesilir. */
-/** Adisyon (bilgi fişi). `share`: paylaşımlı hesapta kişinin payı da basılır */
+/** KDV dökümü (fiyatlar KDV dahil; tutarlar sunucunun hesabı) */
+const KdvRows = ({ rows }: { rows: { rate: number; base: number; kdv: number }[] }) =>
+  rows.length ? (
+    <div className="rc-block">
+      <Row small l="KDV oranı / matrah" r="KDV" />
+      {rows.map((k) => (
+        <Row key={k.rate} small l={`%${k.rate} / ${tlPlain(k.base)}`} r={tlPlain(k.kdv)} />
+      ))}
+    </div>
+  ) : null;
+
+/** Fişte müşteri adı yalnız ayar açıkken (Yönetim › Ayarlar › İşletme ve fiş; varsayılan kapalı) ve adisyonda müşteri varsa */
+export const receiptCustomerName = (order: Pick<OrderDTO, 'customer'>, settings: Pick<PublicSettings, 'receiptCustomerName'>): string | null =>
+  settings.receiptCustomerName && order.customer?.name ? order.customer.name : null;
+
+/**
+ * Adisyon (hesap fişi, bilgi fişi). Mali değeri yoktur: mali fiş ÖKC'den (yazarkasa) kesilir. `share`: paylaşımlı
+ * hesapta kişinin payı da basılır
+ */
 export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO; boot: BootstrapDTO; sizeLabel: (s: string) => string; share?: { no: number; of: number; amount: number } }) {
   const t = order.totals;
   const live = order.items.filter((i) => !i.voided);
   // Self ve yarı self servis: müşterinin numarası ya da masası fişte büyük (numara çağrılınca alır)
   const call = order.tableName ? null : callFor(order, serviceModeOf(boot.settings));
   const place = order.tableName ?? (order.numarator ? numaratorLabel(order.numarator) : order.type === 'tezgah' ? 'Tezgâh' : order.type === 'gelal' ? 'Gel-al' : 'Paket');
+  const customer = receiptCustomerName(order, boot.settings);
+  const payments = (order.payments ?? []).filter((p) => !p.refundedAt);
   return (
-    <div>
+    <div className="rc">
       <Header boot={boot} title="ADİSYON" />
-      {call && <div style={{ textAlign: 'center', fontSize: 26, fontWeight: 700, margin: '4px 0' }}>{callText(call)}</div>}
+      {call && <div className="rc-call">{callText(call)}</div>}
+      <div className="rc-block">
+        <Row strong l={place} r={`No ${order.no}`} />
+        <Row l="Tarih" r={fmtDateTime(Date.now())} />
+        {order.waiterName && <Row l={`Garson ${order.waiterName}`} r={`${order.guests} kişi`} />}
+        {customer && <Row l={`Müşteri ${customer}`} />}
+      </div>
       <Hr />
-      <Row l={`${place} · #${order.no}`} r={fmtDateTime(Date.now())} />
-      {order.waiterName && <Row l={`Garson: ${order.waiterName}`} r={`${order.guests} kişi`} />}
-      {order.customer && <Row l={`Müşteri: ${order.customer.name}`} />}
-      <Hr />
-      {live.map((i) => (
-        <div key={i.id} style={{ marginBottom: 2 }}>
-          <Row l={`${i.qty} x ${i.name}${i.size !== 'TEK' ? ` ${sizeLabel(i.size)}` : ''}`} r={i.complimentary ? COMP_LABEL[i.compKind ?? 'ikram'].toLocaleUpperCase('tr-TR') : tlPlain(i.qty * i.unitPrice)} />
-          {i.optionsText && <div style={{ paddingLeft: 12, fontSize: 10 }}>{i.optionsText}</div>}
-          {i.discount > 0 && <Row l={<span style={{ paddingLeft: 12 }}>İndirim</span>} r={`-${tlPlain(i.discount)}`} />}
-        </div>
-      ))}
+      <div className="rc-items">
+        {live.map((i) => (
+          <div key={i.id} className="rc-item">
+            <span className="rc-qty">{i.qty}x</span>
+            <span className="rc-item-name">
+              {i.name}
+              {i.size !== 'TEK' ? ` ${sizeLabel(i.size)}` : ''}
+            </span>
+            <span className="rc-r">{i.complimentary ? COMP_LABEL[i.compKind ?? 'ikram'].toLocaleUpperCase('tr-TR') : tlPlain(i.qty * i.unitPrice)}</span>
+            {i.optionsText && <span className="rc-item-sub">{i.optionsText}</span>}
+            {i.note && <span className="rc-item-sub">Not: {i.note}</span>}
+            {i.discount > 0 && (
+              <>
+                <span className="rc-item-sub rc-item-sub-l">İndirim{i.discountReason ? ` (${i.discountReason})` : ''}</span>
+                <span className="rc-r">-{tlPlain(i.discount)}</span>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
       <Hr />
       {t.lineDiscounts + t.orderDiscount > 0 && (
         <>
@@ -83,71 +133,83 @@ export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO
         </>
       )}
       {t.service > 0 && <Row l={`Servis %${order.serviceRate}`} r={tlPlain(t.service)} />}
-      <Row l="TOPLAM" r={`${tlPlain(t.total)} TL`} bold />
+      <div className="rc-total">
+        <span>TOPLAM</span>
+        <span className="rc-r">{tlPlain(t.total)} TL</span>
+      </div>
+      {payments.length > 0 && (
+        <div className="rc-block">
+          {payments.map((p) => (
+            <Row key={p.id} l={p.methodName} r={tlPlain(p.amount)} />
+          ))}
+        </div>
+      )}
       {order.paid > 0 && order.paid < order.total && (
         <>
           <Row l="Ödenen" r={tlPlain(order.paid)} />
-          <Row l="Kalan" r={tlPlain(order.total - order.paid)} bold />
+          <Row strong l="Kalan" r={`${tlPlain(order.total - order.paid)} TL`} />
         </>
       )}
       {share && (
         <>
           <Hr />
-          <Row l={`PAYINIZ (${share.no}/${share.of})`} r={`${tlPlain(share.amount)} TL`} bold />
-          <div style={{ fontSize: 10 }}>Hesap {share.of} kişiye eşit bölündü</div>
+          <Row strong l={`PAYINIZ (${share.no}/${share.of})`} r={`${tlPlain(share.amount)} TL`} />
+          <div className="rc-small">Hesap {share.of} kişiye eşit bölündü</div>
         </>
       )}
-      <div style={{ marginTop: 4, fontSize: 10 }}>
-        {t.kdv.map((k) => (
-          <Row key={k.rate} l={`KDV %${k.rate} matrah ${tlPlain(k.base)}`} r={tlPlain(k.kdv)} />
-        ))}
-      </div>
       <Hr />
-      <div style={{ textAlign: 'center', fontSize: 10 }}>
-        <div style={{ fontWeight: 700 }}>BİLGİ FİŞİDİR · MALİ DEĞERİ YOKTUR</div>
-        {boot.settings.receiptFooter && <div style={{ whiteSpace: 'pre-line', marginTop: 4 }}>{boot.settings.receiptFooter}</div>}
+      <KdvRows rows={t.kdv} />
+      <div className="rc-foot">
+        <div className="rc-strong">BİLGİ FİŞİDİR · MALİ DEĞERİ YOKTUR</div>
+        {boot.settings.receiptFooter && <div className="rc-pre rc-foot-note">{boot.settings.receiptFooter}</div>}
       </div>
     </div>
   );
 }
 
-/** Gün sonu (Z) çıktısı */
+/** Gün sonu (Z) ya da gün açıkken ara rapor (X) çıktısı: X'te kapanış anı yoktur */
 export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO; date: string; zNo: number; s: ZSummary; closedAt: number | null }) {
   return (
-    <div>
-      <Header boot={boot} title={`GÜN SONU · Z ${zNo}`} />
-      <Hr />
-      <Row l="İş günü" r={date} />
-      <Row l="Yazdırma" r={fmtDateTime(closedAt ?? Date.now())} />
+    <div className="rc">
+      <Header boot={boot} title={closedAt ? `GÜN SONU · Z ${zNo}` : 'ARA RAPOR (X)'} />
+      <div className="rc-block">
+        <Row l="İş günü" r={date} />
+        {closedAt && <Row l="Kapanış" r={fmtDateTime(closedAt)} />}
+        <Row l="Yazdırma" r={fmtDateTime(Date.now())} />
+      </div>
       <Hr />
       <Row l="Brüt satış" r={tlPlain(s.gross)} />
       <Row l="İndirim" r={`-${tlPlain(s.discounts)}`} />
       {s.service > 0 && <Row l="Servis" r={tlPlain(s.service)} />}
-      <Row l="NET CİRO" r={tlPlain(s.netSales)} bold />
+      <div className="rc-total">
+        <span>NET CİRO</span>
+        <span className="rc-r">{tlPlain(s.netSales)} TL</span>
+      </div>
       <Row l="Adisyon / kişi" r={`${s.receipts} / ${s.guests}`} />
       <Hr />
+      <div className="rc-caption">Ödemeler</div>
       {s.payments.map((p) => (
         <Row key={p.methodId} l={`${p.name} (${p.count})`} r={tlPlain(p.amount)} />
       ))}
       {s.tips > 0 && <Row l="Bahşiş" r={tlPlain(s.tips)} />}
       <Hr />
-      {s.kdv.map((k) => (
-        <Row key={k.rate} l={`KDV %${k.rate} matrah ${tlPlain(k.base)}`} r={tlPlain(k.kdv)} />
-      ))}
+      <KdvRows rows={s.kdv} />
       <Hr />
+      <div className="rc-caption">Ciro dışı</div>
       <Row l="İkram" r={tlPlain(s.complimentary - (s.odenmez ?? 0) - (s.zayi ?? 0))} />
       {(s.odenmez ?? 0) > 0 && <Row l="Ödenmez" r={tlPlain(s.odenmez ?? 0)} />}
       {(s.zayi ?? 0) > 0 && <Row l="Zayi" r={tlPlain(s.zayi ?? 0)} />}
       <Row l={`İptal (${s.voidAfterSendCount} hazırlandıktan sonra)`} r={tlPlain(s.voided)} />
       <Hr />
+      <div className="rc-caption">Kasa</div>
       <Row l="Açılış nakiti" r={tlPlain(s.openingCash)} />
       <Row l="Kasa girişi" r={tlPlain(s.cashIn)} />
       <Row l="Harcama" r={`-${tlPlain(s.cashOut)}`} />
       <Row l="Teslim" r={`-${tlPlain(s.handedOver)}`} />
       {s.cariCollections > 0 && <Row l="Açık hesap tahsilatı" r={tlPlain(s.cariCollections)} />}
-      <Row l="Beklenen nakit" r={tlPlain(s.expectedCash)} bold />
+      <Row strong l="Beklenen nakit" r={tlPlain(s.expectedCash)} />
       {s.countedCash != null && <Row l="Sayılan nakit" r={tlPlain(s.countedCash)} />}
-      {s.cashDiff != null && <Row l="FARK" r={tlPlain(s.cashDiff)} bold />}
+      {s.cashDiff != null && <Row strong l="FARK" r={tlPlain(s.cashDiff)} />}
       {s.onlineOrders > 0 && (
         <>
           <Hr />
@@ -155,7 +217,45 @@ export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO;
         </>
       )}
       <Hr />
-      <div style={{ textAlign: 'center', fontSize: 10 }}>LafPOS yönetim raporudur, mali Z değildir</div>
+      <div className="rc-foot">LafPOS yönetim raporudur, mali Z değildir</div>
+    </div>
+  );
+}
+
+/**
+ * Deneme fişi (Yönetim › Ayarlar ve yedek › Fiş yazıcısı): fişlerle aynı düzen. Kenardan kenara çizgi ve sağa yaslı
+ * tutar kâğıdın iki yanının da basıldığını, uzun ad kesilmeden alta kaydığını gösterir
+ */
+export function TestReceipt({ boot, printer }: { boot: BootstrapDTO; printer: string | null }) {
+  return (
+    <div className="rc">
+      <Header boot={boot} title="DENEME FİŞİ" />
+      <div className="rc-block">
+        <Row l="Tarih" r={fmtDateTime(Date.now())} />
+        {printer && <Row l={`Yazıcı ${printer}`} />}
+      </div>
+      <Hr />
+      <div className="rc-items">
+        <div className="rc-item">
+          <span className="rc-qty">1x</span>
+          <span className="rc-item-name">Örnek ürün</span>
+          <span className="rc-r">0,00</span>
+        </div>
+        <div className="rc-item">
+          <span className="rc-qty">12x</span>
+          <span className="rc-item-name">Uzun adlı örnek ürün: satıra sığmayan ad kesilmez, alta kayar</span>
+          <span className="rc-r">0,00</span>
+          <span className="rc-item-sub">Seçenek ve not girintili yazılır</span>
+        </div>
+      </div>
+      <div className="rc-total">
+        <span>TOPLAM</span>
+        <span className="rc-r">0,00 TL</span>
+      </div>
+      <div className="rc-foot">
+        <div className="rc-strong">Yazıcı çalışıyor</div>
+        <div className="rc-foot-note">Kalın çizgiler kenardan kenara basıldıysa kâğıt genişliği doğru</div>
+      </div>
     </div>
   );
 }

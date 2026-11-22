@@ -70,7 +70,10 @@ export interface PavoExchange {
   ok: boolean;
   errorCode: string | null;
   message: string | null;
-  /** Yanıttaki `Data`'nın üst düzey alanları: belgesiz yanıt biçimini tanımak için */
+  /**
+   * Yanıttaki `Data`'nın üst düzey alanları: belgesiz yanıt biçimini tanımak için. `Data` dizi ise ilk öğesinin
+   * alanları (`[]` önekiyle), `Data` yoksa yanıtın kabuk dışındaki üst düzey alanları (`.` önekiyle)
+   */
   dataKeys: string[];
 }
 
@@ -237,14 +240,13 @@ export class PavoClient {
   }
 
   private note(path: string, res: PavoResponse | null, error?: string) {
-    const data = res?.Data;
     this.exchanges.unshift({
       at: Date.now(),
       path,
       ok: !!res && !res.HasError,
       errorCode: res ? code(res) : null,
       message: res ? (res.Message ?? null) : (error ?? null),
-      dataKeys: data && typeof data === 'object' && !Array.isArray(data) ? Object.keys(data).slice(0, 40) : [],
+      dataKeys: res ? shapeOf(res) : [],
     });
     this.exchanges.length = Math.min(this.exchanges.length, 10);
   }
@@ -318,13 +320,40 @@ export class PavoClient {
   }
 }
 
+/** Kabuğun bilinen alanları: yanıtın biçimi özetlenirken sayılmaz */
+const ENVELOPE = new Set(['HasError', 'HasAbondon', 'ErrorCode', 'Message', 'Errors', 'Data', 'TransactionHandle']);
+
+/** Yanıtın biçimi (değer değil, yalnız alan adları): `PavoExchange.dataKeys` */
+function shapeOf(res: PavoResponse): string[] {
+  const data = res.Data;
+  const keys = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v) : []);
+  if (Array.isArray(data)) return keys(data[0]).map((k) => `[].${k}`).slice(0, 40);
+  if (data && typeof data === 'object') return Object.keys(data).slice(0, 40);
+  return Object.keys(res)
+    .filter((k) => !ENVELOPE.has(k))
+    .map((k) => `.${k}`)
+    .slice(0, 40);
+}
+
 function code(res: PavoResponse): string | null {
   return res.ErrorCode == null || res.ErrorCode === '' ? null : String(res.ErrorCode);
 }
 
+/**
+ * Eşleştirmenin bozulduğunu söyleyen cihaz kodları (sahada görüldü, Kasım 2026): 73 sıra no hatası, 74 kimlik
+ * (FingerPrint) tutmuyor. İkisi de cihaz başka bir programla (başka POS, Pavo'nun kendi uygulaması) yeniden
+ * eşleştirilince gelir; LafPOS'tan yeniden eşleştirince düzelir (sıra no 1'den başlar, kimlik yeniden kaydedilir)
+ */
+const PAIRING_LOST = new Set(['73', '74']);
+export function pairingLost(errorCode: string | number | null | undefined): boolean {
+  return errorCode != null && PAIRING_LOST.has(String(errorCode));
+}
+export const PAIRING_LOST_MESSAGE = 'Cihaz başka bir programla eşleştirilmiş; Yönetim › Yazarkasa POS’ta “Eşleştir”e basıp cihazdaki onayı verin, sonra yeniden deneyin';
+
 export function describe(res: PavoResponse): string {
   const c = code(res);
-  return [res.Message?.trim() || 'Cihaz hata döndürdü', c ? `(kod ${c})` : ''].filter(Boolean).join(' ');
+  const said = [res.Message?.trim() || 'Cihaz hata döndürdü', c ? `(kod ${c})` : ''].filter(Boolean).join(' ');
+  return pairingLost(c) ? `${PAIRING_LOST_MESSAGE}. Cihazın yanıtı: ${said}` : said;
 }
 
 // ─── Satış gövdesi ─────────────────────────────────────────────────────────

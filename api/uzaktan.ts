@@ -41,7 +41,8 @@ interface Snapshot {
 
 const env = (k: string) => (process.env[k] ?? '').trim();
 const secret = () => env('LAFPOS_CLOUD_SECRET');
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', ...extra } });
 const fail = (status: number, error: string, code: string) => json({ error, code }, status);
 
 // ─── İmza (server/lib/signature.ts ile aynı kural) ───────────────────────────
@@ -179,6 +180,24 @@ async function member(email: string, fresh = false): Promise<Member | null> {
   return value;
 }
 
+/** Üyeliklerden biri açılmış mı (kurulum durumu): bütün üye kayıtları tek MGET'te, önbellek tazelenir */
+async function anyMember(emails: string[]): Promise<boolean> {
+  if (!emails.length) return false;
+  const raws = ((await redis('MGET', ...emails.map(memberKey))) as (string | null)[] | null) ?? [];
+  let found = false;
+  emails.forEach((email, i) => {
+    let value: Member | null = null;
+    try {
+      value = raws[i] ? (JSON.parse(raws[i]!) as Member) : null;
+    } catch {
+      value = null;
+    }
+    memberCache.set(email, { at: Date.now(), value });
+    found ||= !!value;
+  });
+  return found;
+}
+
 /** Güncelleme kanalının son derlemesi (aynı sitenin statik surum.json'u); bir dakika bellekte */
 let releaseCache: { at: number; value: Release | null } | null = null;
 async function latestRelease(origin: string): Promise<Release | null> {
@@ -210,6 +229,7 @@ export function resetReleaseCache() {
  * kalır (taşınmadan okunur); dükkânların son itme anı `lafpos:dukkanlar`'da (JSON)
  */
 export const SHOP_RE = /^[a-z0-9-]{1,40}$/;
+/** Bu sürümden önceki dükkân listesi (JSON, saatte bir yazılırdı): yalnız geçişte okunur, artık yazılmaz */
 const SHOPS_KEY = 'lafpos:dukkanlar';
 export const snapshotKey = (shop: string) => (shop === REPORT_SHOP ? SNAPSHOT_KEY : `${SNAPSHOT_KEY}:${shop}`);
 const shopHeader = (req: Request) => {
@@ -217,27 +237,152 @@ const shopHeader = (req: Request) => {
   return SHOP_RE.test(v) ? v : null;
 };
 
-async function shopMap(): Promise<Record<string, number>> {
-  const raw = (await redis('GET', SHOPS_KEY)) as string | null;
+/**
+ * Dükkânların özet sürümü: Redis hash'i, alan dükkân kimliği, değer küçük bir JSON. Uzaktan ekranın her yoklaması
+ * yalnız bunu okur (HGETALL, tek komut): dükkân listesi, en son veri gönderen dükkân ve özetin sürümü aynı okumada.
+ * Sürüm değişmediyse yanıt 304, büyük özet Redis'ten hiç okunmaz. Kasa itince yazılır (HSET; dükkânlar birbirinin
+ * alanını ezmez). Ayrıntı: docs/07-UZAKTAN-ERISIM.md §4 "Upstash bütçesi"
+ */
+export const VERSIONS_KEY = 'lafpos:surum';
+export interface SnapVersion {
+  /** Kasanın son itmesinin anı (nabız dahil): görünümün sürümü */
+  at: number;
+  /** Saklanan özetin içerik özeti (üç zaman damgası hariç): aynıysa özet yeniden yazılmaz */
+  h?: string;
+  /** Açılış verisinin içerik özeti: menü, masa planı, gün değişmedikçe bootstrap 304 */
+  b?: string;
+  /** Gün açık mı (bilgi; görünüm aralığını kendisi seçer) */
+  o?: boolean;
+  /** Özetin son yazıldığı ya da süresinin uzatıldığı an (sunucu saati) */
+  w?: number;
+}
+interface Versions {
+  map: Record<string, SnapVersion>;
+  /** Kayıt bu sürümden önceki biçimde (yalnız geçiş): sürüm yok, 304 yok, özet her istekte okunur */
+  legacy: boolean;
+  /** Geçişte eski kasanın özeti okunduysa (aynı istekte yeniden okunmaz) */
+  snap?: Snapshot | null;
+}
+/** Özetin Redis'teki ömrü; değişmeyen özetin süresi günde bir uzatılır (yeniden yazılmaz) */
+const SNAPSHOT_TTL_S = 7 * 86400;
+const SNAPSHOT_REFRESH_MS = 86_400_000;
+
+export function parseVersion(raw: unknown): SnapVersion | null {
+  if (typeof raw !== 'string') return null;
   try {
-    return raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    const v = JSON.parse(raw) as SnapVersion;
+    return v && typeof v === 'object' && typeof v.at === 'number' ? v : null;
   } catch {
-    return {};
+    return null;
   }
 }
 
+/** HGETALL yanıtı: Upstash REST alan ve değeri sırayla dizi olarak döner (nesne biçimi de okunur) */
+function hashEntries(raw: unknown): [string, unknown][] {
+  if (Array.isArray(raw)) {
+    const out: [string, unknown][] = [];
+    for (let i = 0; i + 1 < raw.length; i += 2) out.push([String(raw[i]), raw[i + 1]]);
+    return out;
+  }
+  return raw && typeof raw === 'object' ? Object.entries(raw) : [];
+}
+
+async function loadVersions(): Promise<Versions> {
+  const map: Record<string, SnapVersion> = {};
+  for (const [shop, raw] of hashEntries(await redis('HGETALL', VERSIONS_KEY))) {
+    const v = parseVersion(raw);
+    if (v && SHOP_RE.test(shop)) map[shop] = v;
+  }
+  if (Object.keys(map).length) return { map, legacy: false };
+  // Bu sürümden önce yazılmış kayıt (kasa bir sonraki itmesinde sürümü yazar): eski dükkân listesi ve eski kasanın özeti
+  // tek MGET'te. Kafe hiç bağlanmadıysa (demo) ikisi de boş: istek başına iki küçük komut
+  const [rawShops, rawSnap] = ((await redis('MGET', SHOPS_KEY, SNAPSHOT_KEY)) as (string | null)[] | null) ?? [];
+  let old: Record<string, number> = {};
+  try {
+    old = rawShops ? (JSON.parse(rawShops) as Record<string, number>) : {};
+  } catch {
+    old = {};
+  }
+  for (const [shop, at] of Object.entries(old)) if (SHOP_RE.test(shop) && typeof at === 'number') map[shop] = { at };
+  let snap: Snapshot | null = null;
+  try {
+    snap = rawSnap ? (JSON.parse(rawSnap) as Snapshot) : null;
+  } catch {
+    snap = null;
+  }
+  if (snap && !map[REPORT_SHOP]) map[REPORT_SHOP] = { at: typeof snap.at === 'number' ? snap.at : 0 };
+  return { map, legacy: Object.keys(map).length > 0, snap };
+}
+
 /** Görünümün dükkânı: istenen (başlık) ya da en son veri gönderen; hiç yoksa `default` */
-async function viewShop(req: Request): Promise<string> {
+function viewShop(req: Request, versions: Versions): string {
   const asked = shopHeader(req);
   if (asked) return asked;
-  const map = await shopMap();
-  return Object.entries(map).sort((a, b) => b[1] - a[1])[0]?.[0] ?? REPORT_SHOP;
+  return Object.entries(versions.map).sort((a, b) => b[1].at - a[1].at)[0]?.[0] ?? REPORT_SHOP;
 }
 
 async function snapshot(shop: string = REPORT_SHOP): Promise<Snapshot | null> {
   const raw = (await redis('GET', snapshotKey(shop))) as string | null;
   return raw ? (JSON.parse(raw) as Snapshot) : null;
 }
+
+/**
+ * Özetin içerik özetleri. `h`: üç zaman damgası (özetin anı, açılış verisinin ve panelin saati) hariç bütün özet;
+ * kasadaki `snapshotHash` ile aynı kural (server/sync/cloud.ts). `b`: yalnız açılış verisi (saatsiz)
+ */
+export function snapshotSums(snap: Snapshot): { h: string; b: string; o: boolean } {
+  const sha = (v: unknown) => createHash('sha256').update(JSON.stringify(v) ?? '').digest('hex').slice(0, 32);
+  const boot = snap.bootstrap && typeof snap.bootstrap === 'object' ? { ...snap.bootstrap, serverTime: 0 } : snap.bootstrap;
+  const patron = snap.patron && typeof snap.patron === 'object' ? { ...snap.patron, now: 0 } : snap.patron;
+  return { h: sha({ ...snap, at: 0, bootstrap: boot, patron }), b: sha(boot), o: !!(snap.patron as { dayOpen?: unknown } | undefined)?.dayOpen };
+}
+
+/**
+ * Değişmeyen özet yeniden yazılmaz, sürümü ilerler: sunulurken zaman damgaları sürümün anına çekilir (kasanın nabzı
+ * özeti yeniden yazsaydı gelecek değerler). Panelin "son güncelleme"si ve kafenin sessizlik uyarısı böyle aynı kalır
+ */
+function freshen(snap: Snapshot, v: SnapVersion | null | undefined): Snapshot {
+  if (!v || typeof snap.at !== 'number' || !(v.at > snap.at)) return snap;
+  const has = (o: unknown, k: string) => !!o && typeof o === 'object' && k in o;
+  const boot = has(snap.bootstrap, 'serverTime') ? { ...snap.bootstrap, serverTime: v.at } : snap.bootstrap;
+  const patron = has(snap.patron, 'now') ? { ...snap.patron, now: v.at } : snap.patron;
+  return { ...snap, at: v.at, bootstrap: boot, patron };
+}
+
+/**
+ * Kasanın itmesini saklar. Önce dükkânın sürümü okunur (tek küçük okuma; eskiden bütün özet okunurdu): eski ya da
+ * yeniden gönderilen özet yenisini ezmez. İçerik aynıysa (kasanın gün açıkken 5 dakikalık nabzı) özet yeniden yazılmaz,
+ * yalnız sürüm ilerler; süresi günde bir uzatılır (yoksa yazılır). Sürüm özetten sonra yazılır: görünüm sürümü görünce
+ * özet hep yerindedir. Sürümü olmayan dükkân (bu sürümden önce itmiş) bir kez özetin kendisinden denetlenir
+ */
+async function storeSnapshot(shop: string, snap: Snapshot): Promise<Response> {
+  const prev = parseVersion(await redis('HGET', VERSIONS_KEY, shop));
+  const prevAt = prev ? prev.at : ((await snapshot(shop))?.at ?? null);
+  if (prevAt != null && typeof snap.at === 'number' && snap.at <= prevAt) return json({ ok: true, stale: true });
+  const sums = snapshotSums(snap);
+  const now = Date.now();
+  const same = !!prev && prev.h === sums.h;
+  let w = prev?.w ?? 0;
+  if (same && now - w > SNAPSHOT_REFRESH_MS) {
+    // EXPIRE 0: anahtar yok (silinmiş): aşağıda yeniden yazılır
+    if (Number(await redis('EXPIRE', snapshotKey(shop), SNAPSHOT_TTL_S)) === 1) w = now;
+    else w = 0;
+  }
+  const write = !same || w === 0;
+  if (write) {
+    await redis('SET', snapshotKey(shop), JSON.stringify(snap), 'EX', SNAPSHOT_TTL_S);
+    w = now;
+  }
+  const version: SnapVersion = { at: typeof snap.at === 'number' ? snap.at : now, ...sums, w };
+  await redis('HSET', VERSIONS_KEY, shop, JSON.stringify(version));
+  return json({ ok: true, ...(write ? {} : { unchanged: true }) });
+}
+
+/** İstek boyunca bir kez: aynı istekte demo kapısı ve görünüm sürümü ayrı ayrı okumaz */
+const once = <T>(f: () => Promise<T>) => {
+  let p: Promise<T> | null = null;
+  return () => (p ??= f());
+};
 
 // ─── Platform aktarıcıları: gelen kutusu (Yemeksepeti ve Getir ortak) ───────
 
@@ -573,11 +718,10 @@ function demoNow(): Snapshot | null {
   return shift(base) as Snapshot;
 }
 
-/** Kafeden gerçek veri geldi mi (herhangi bir dükkân; eski kasa yalnız `default`) */
-async function realSnapshot(): Promise<boolean> {
+/** Kafeden gerçek veri geldi mi (herhangi bir dükkân; eski kasa yalnız `default`): istekteki sürüm okumasından */
+async function realData(versions: () => Promise<Versions>): Promise<boolean> {
   try {
-    if (Object.keys(await shopMap()).length) return true;
-    return !!(await snapshot());
+    return Object.keys((await versions()).map).length > 0;
   } catch {
     return false;
   }
@@ -855,24 +999,31 @@ export function reportRange(url: URL, today: string): Range | Response {
   return r;
 }
 
-/** Dönemin günleri, Redis'ten parça parça MGET (gün yoksa atlanır; iş günü açılmamış tarih) */
-async function loadDays(shop: string, r: Range): Promise<DayRep[]> {
-  const dates = datesOf(r);
-  const out: DayRep[] = [];
-  for (let i = 0; i < dates.length; i += MGET_CHUNK) {
-    const keys = dates.slice(i, i + MGET_CHUNK).map((d) => reportDayKey(shop, d));
-    const raw = ((await redis('MGET', ...keys)) as (string | null)[] | null) ?? [];
-    for (const x of raw) {
-      if (!x) continue;
-      try {
-        out.push(JSON.parse(x) as DayRep);
-      } catch {
-        /* bozuk kayıt atlanır */
-      }
+/** Anahtarlar parça parça MGET (60'ar): yanıt anahtarların sırasıyla, olmayan null */
+async function mgetAll(keys: string[]): Promise<(string | null)[]> {
+  const out: (string | null)[] = [];
+  for (let i = 0; i < keys.length; i += MGET_CHUNK) {
+    const part = keys.slice(i, i + MGET_CHUNK);
+    const raw = ((await redis('MGET', ...part)) as (string | null)[] | null) ?? [];
+    for (let j = 0; j < part.length; j++) out.push(raw[j] ?? null);
+  }
+  return out;
+}
+
+/** Okunan kayıtlar (gün yoksa atlanır: iş günü açılmamış tarih; bozuk kayıt atlanır) */
+function parsed<T>(raws: (string | null)[]): T[] {
+  const out: T[] = [];
+  for (const x of raws) {
+    if (!x) continue;
+    try {
+      out.push(JSON.parse(x) as T);
+    } catch {
+      /* bozuk kayıt atlanır */
     }
   }
-  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+  return out;
 }
+const byDate = (days: DayRep[]) => days.sort((a, b) => (a.date < b.date ? -1 : 1));
 
 /** Gelen günün biçimi: dizi alanları ve sayılar (kasa kendi biçimini yazar; bozuk kayıt saklanmaz) */
 function validDay(d: unknown): d is DayRep {
@@ -914,7 +1065,8 @@ async function storeReports(body: string): Promise<Response> {
     .filter((d) => JSON.stringify(d).length <= REPORT_DAY_MAX_BYTES);
   const nowS = Math.floor(Date.now() / 1000);
   const keys = days.map((d) => reportDayKey(push.shop, d.date));
-  const existing = keys.length ? (((await redis('MGET', ...keys)) as (string | null)[] | null) ?? []) : [];
+  // Kasanın "bugün"ü ve günlerin eski hâli tek okumada
+  const [meta, ...existing] = await mgetAll([reportMetaKey(push.shop), ...keys]);
   let stored = 0;
   for (const [i, d] of days.entries()) {
     const expireAt = Math.floor(dayStartMs(addDays(d.date, REPORT_KEEP_DAYS)) / 1000);
@@ -932,25 +1084,61 @@ async function storeReports(body: string): Promise<Response> {
     if (x) await redis('SET', reportExtraKey(push.shop, d.date), JSON.stringify(x), 'EXAT', expireAt);
     stored += 1;
   }
-  const meta = (await redis('GET', reportMetaKey(push.shop))) as string | null;
   const prevAt = meta ? ((JSON.parse(meta) as { at?: number }).at ?? 0) : 0;
   const cat = push.cat && typeof push.cat === 'object' ? push.cat : undefined;
   if (push.at >= prevAt) await redis('SET', reportMetaKey(push.shop), JSON.stringify({ today: push.today, at: push.at, ...(cat ? { cat } : {}) }), 'EX', REPORT_KEEP_DAYS * 86400);
   return json({ ok: true, stored, skipped: push.days.length - stored });
 }
 
-/** Raporlar sayfasının uçları; null: rapor yolu değil */
-/** Gerçek oturumun salt okunur uçları: seçili dükkânın raporları, özeti ve dükkân listesi */
-async function viewer(req: Request, path: string, url: URL): Promise<Response> {
-  if (path === 'uzaktan/dukkanlar') return json(await shopList());
-  const shop = await viewShop(req);
-  return (await serveReports(path, url, null, shop)) ?? serve(await snapshot(shop), path, url, false);
+/**
+ * Gerçek oturumun salt okunur uçları: seçili dükkânın raporları, canlı özeti ve dükkân listesi. Oturum bilgisi ve
+ * bar ekranının boş sekmeleri Redis'e gitmez; dükkânı başlıkta gelen rapor sürüm okumaz
+ */
+async function viewer(req: Request, path: string, url: URL, versions: () => Promise<Versions>): Promise<Response> {
+  if (path === 'auth/me') return json(ME);
+  if (path === 'uzaktan/dukkanlar') return json(await shopList(await versions()));
+  // Özet yalnız aktif fişleri taşır: bar ekranının Geçmiş ve Hazır sekmesi uzakta boş
+  if (path === 'kitchen' && (url.searchParams.get('history') === '1' || url.searchParams.get('ready') === '1')) return json([]);
+  const asked = shopHeader(req);
+  if (asked && REPORT_RE.test(path)) return (await serveReports(path, url, null, asked))!;
+  const vs = await versions();
+  const shop = viewShop(req, vs);
+  return (await serveReports(path, url, null, shop)) ?? serveLive(req, path, url, shop, vs);
+}
+
+/** Koşullu yanıtın sürüm etiketi; biçim değişirse ETAG_V artar (eski etiketler tutmaz) */
+const ETAG_V = 1;
+const LIVE_TAGGED = /^(reports\/patron|floor|kitchen|kitchen\/board|orders\/[A-Za-z0-9]+)$/;
+/** Canlı ucun etiketi: özetin sürümü; açılış verisinin kendi içerik özeti (menü, masa ve gün değişmedikçe aynı) */
+export function liveTag(path: string, shop: string, v: SnapVersion): string | null {
+  if (path === 'bootstrap') return `"${ETAG_V}.${shop}.${v.b ? `b${v.b}` : `a${v.at}`}"`;
+  return LIVE_TAGGED.test(path) ? `"${ETAG_V}.${shop}.${v.at}"` : null;
+}
+const notModified = (req: Request, tag: string) =>
+  (req.headers.get('if-none-match') ?? '')
+    .split(',')
+    .some((t) => t.trim().replace(/^W\//, '') === tag);
+
+/**
+ * Canlı özetin uçları (patron paneli, salon, bar, adisyon, açılış verisi). İstemcinin etiketi sürümle aynıysa 304:
+ * yalnız sürüm okunmuştur, özet okunmaz. Değiştiyse özet okunur, zaman damgaları sürüme çekilir (`freshen`).
+ * Sürüm var ama özet yoksa (7 gün itme olmadı, süresi doldu) sürüm silinir: kasa bir sonraki itmede özeti yazar
+ */
+async function serveLive(req: Request, path: string, url: URL, shop: string, vs: Versions): Promise<Response> {
+  const v = vs.legacy ? null : (vs.map[shop] ?? null);
+  if (path === 'uzaktan/durum' && v) return json({ at: v.at, demo: false });
+  const tag = v ? liveTag(path, shop, v) : null;
+  if (tag && notModified(req, tag)) return new Response(null, { status: 304, headers: { etag: tag, 'cache-control': 'no-store' } });
+  const snap = vs.legacy && shop === REPORT_SHOP && vs.snap ? vs.snap : await snapshot(shop);
+  if (!snap && v) await redis('HDEL', VERSIONS_KEY, shop);
+  const res = serve(snap ? freshen(snap, v) : null, path, url, false);
+  if (tag && res.status === 200) res.headers.set('etag', tag);
+  return res;
 }
 
 /** Dükkân seçicinin listesi: veri gönderen dükkânlar, Merkez'deki adlarıyla (anahtar ya da kimlik bilgisi dönmez) */
-async function shopList(): Promise<{ id: string; ad: string | null; at: number }[]> {
-  const map = await shopMap();
-  const ids = Object.keys(map);
+async function shopList(vs: Versions): Promise<{ id: string; ad: string | null; at: number }[]> {
+  const ids = Object.keys(vs.map);
   if (!ids.length) return [];
   const raws = (await redis('MGET', ...ids.map((id) => `lafpos:merkez:kurulum:${id}`))) as (string | null)[];
   return ids
@@ -961,49 +1149,64 @@ async function shopList(): Promise<{ id: string; ad: string | null; at: number }
       } catch {
         ad = null;
       }
-      return { id, ad, at: map[id]! };
+      return { id, ad, at: vs.map[id]!.at };
     })
     .sort((a, b) => (a.ad ?? '\uffff').localeCompare(b.ad ?? '\uffff', 'tr'));
 }
 
+const REPORT_RE = /^reports\/(summary|hourly|products|staff|prep|items|checks|refunds|platforms|export\.csv)$/;
+/** Ek sekmeler: günlerin yanında ek verisini de okur */
+const EXTRA_KINDS = new Set(['prep', 'items', 'checks', 'refunds', 'platforms', 'export.csv']);
+type ReportMeta = { today: string; at: number; cat?: Record<string, string> };
+
+/**
+ * Raporlar sayfasının uçları; null: rapor yolu değil. Kasanın "bugün"ü, dönemin ve kıyas döneminin günleri ve ek
+ * sekmelerin verisi tek okumada (60 anahtarlık MGET parçaları; Ciro'nun bugünü tek komut). Dönem verilmediyse
+ * varsayılan dönem kasanın bugünü olduğundan önce o okunur
+ */
 async function serveReports(path: string, url: URL, demo: Snapshot | null, shop: string = REPORT_SHOP): Promise<Response | null> {
-  const kind = /^reports\/(summary|hourly|products|staff|prep|items|checks|refunds|platforms|export\.csv)$/.exec(path)?.[1];
+  const kind = REPORT_RE.exec(path)?.[1];
   if (!kind) return null;
-  const meta = demo ? null : (((await redis('GET', reportMetaKey(shop))) as string | null) ?? null);
-  const live = meta ? (JSON.parse(meta) as { today: string; at: number; cat?: Record<string, string> }) : null;
-  const today = demo ? String((demo.patron as { date?: string }).date ?? businessDateOf(demo.at)) : (live?.today ?? businessDateOf(Date.now()));
-  const r = reportRange(url, today);
-  if (r instanceof Response) return r;
-  const days = demo ? demoDays(demo).filter((d) => d.date >= r.from && d.date <= r.to) : await loadDays(shop, r);
-  const nowMs = demo ? demo.at : (live?.at ?? Date.now());
-  if (kind === 'summary') {
-    const cmp = remoteComparison(r, nowMs, today);
-    const prev = demo ? [] : await loadDays(shop, cmp.range);
-    return json(sumSummary(r, days, prev, nowMs, today));
+  if (demo) {
+    const today = String((demo.patron as { date?: string }).date ?? businessDateOf(demo.at));
+    const r = reportRange(url, today);
+    if (r instanceof Response) return r;
+    return reportOf(kind, url, r, demoDays(demo).filter((d) => d.date >= r.from && d.date <= r.to), [], [], demo.at, today);
   }
-  if (kind === 'hourly') return json(sumHourly(r, days));
-  if (kind === 'products') return json(sumProducts(r, days, live?.cat));
-  if (kind === 'staff') return json(sumStaff(r, days));
-  const extras = demo ? [] : await loadExtras(shop, r);
-  return serveExtra(kind, url, r, days, extras, live?.cat);
+  const readMeta = (raw: string | null | undefined): ReportMeta | null => {
+    try {
+      return raw ? (JSON.parse(raw) as ReportMeta) : null;
+    } catch {
+      return null;
+    }
+  };
+  const explicit = url.searchParams.has('from') && url.searchParams.has('to');
+  let live = explicit ? null : readMeta((await redis('GET', reportMetaKey(shop))) as string | null);
+  const r = reportRange(url, live?.today ?? businessDateOf(Date.now()));
+  if (r instanceof Response) return r;
+  const dates = datesOf(r);
+  // Kıyas dönemi yalnız dönemden çıkar (bugün ve saat yalnız etiketi ve kesimi belirler)
+  const prevDates = kind === 'summary' ? datesOf(remoteComparison(r, 0, '').range) : [];
+  const extraDates = EXTRA_KINDS.has(kind) ? dates : [];
+  const raws = await mgetAll([
+    ...(explicit ? [reportMetaKey(shop)] : []),
+    ...dates.map((d) => reportDayKey(shop, d)),
+    ...prevDates.map((d) => reportDayKey(shop, d)),
+    ...extraDates.map((d) => reportExtraKey(shop, d)),
+  ]);
+  if (explicit) live = readMeta(raws.shift());
+  const days = byDate(parsed<DayRep>(raws.slice(0, dates.length)));
+  const prev = byDate(parsed<DayRep>(raws.slice(dates.length, dates.length + prevDates.length)));
+  const extras = parsed<RemoteDayExtra>(raws.slice(dates.length + prevDates.length));
+  return reportOf(kind, url, r, days, prev, extras, live?.at ?? Date.now(), live?.today ?? businessDateOf(Date.now()), live?.cat);
 }
 
-/** Ek sekmelerin günlük verisi (ayrı anahtarlar), tarih sırasıyla */
-async function loadExtras(shop: string, r: Range): Promise<RemoteDayExtra[]> {
-  const dates = datesOf(r);
-  const out: RemoteDayExtra[] = [];
-  for (let i = 0; i < dates.length; i += MGET_CHUNK) {
-    const raw = ((await redis('MGET', ...dates.slice(i, i + MGET_CHUNK).map((d) => reportExtraKey(shop, d)))) as (string | null)[] | null) ?? [];
-    for (const x of raw) {
-      if (!x) continue;
-      try {
-        out.push(JSON.parse(x) as RemoteDayExtra);
-      } catch {
-        /* bozuk kayıt atlanır */
-      }
-    }
-  }
-  return out;
+function reportOf(kind: string, url: URL, r: Range, days: DayRep[], prev: DayRep[], extras: RemoteDayExtra[], nowMs: number, today: string, cat?: Record<string, string>): Response {
+  if (kind === 'summary') return json(sumSummary(r, days, prev, nowMs, today));
+  if (kind === 'hourly') return json(sumHourly(r, days));
+  if (kind === 'products') return json(sumProducts(r, days, cat));
+  if (kind === 'staff') return json(sumStaff(r, days));
+  return serveExtra(kind, url, r, days, extras, cat);
 }
 
 const PLATFORM_ORDER = ['yemeksepeti', 'getir', 'trendyol', 'migros'];
@@ -1099,6 +1302,8 @@ async function handle(req: Request): Promise<Response> {
   const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/+$/, '');
   const members = memberEmails();
   const memberMode = members.length > 0;
+  // Dükkânların sürümü istekte en çok bir kez okunur (demo kapısı, dükkân seçimi ve koşullu yanıt aynı okumadan)
+  const versions = once(loadVersions);
   // Kurulum durumu (giriş ekranı gösterir): yalnız var/yok, hiçbir değer dönmez; anahtar olmadan da açıktır
   if (path === 'uzaktan/kurulum') {
     const redisSet = !!((env('KV_REST_API_URL') || env('UPSTASH_REDIS_REST_URL')) && (env('KV_REST_API_TOKEN') || env('UPSTASH_REDIS_REST_TOKEN')));
@@ -1107,8 +1312,11 @@ async function handle(req: Request): Promise<Response> {
     let memberExists = false;
     if (redisSet) {
       try {
-        snapshotAt = (await snapshot(await viewShop(req)))?.at ?? null;
-        for (const e of members) memberExists ||= !!(await member(e, true));
+        const vs = await versions();
+        const shop = viewShop(req, vs);
+        // Özetin anı sürümden; yalnız geçişte (eski biçim) özetin kendisinden
+        snapshotAt = !vs.map[shop] ? null : !vs.legacy ? vs.map[shop]!.at : ((shop === REPORT_SHOP && vs.snap ? vs.snap : await snapshot(shop))?.at ?? null);
+        memberExists = await anyMember(members);
         redisOk = true;
       } catch {
         redisOk = false;
@@ -1153,8 +1361,9 @@ async function handle(req: Request): Promise<Response> {
   if (path.startsWith('uzaktan/yedek/')) return yedek(req, path, { signed: bildirimDeps.signed, shop: shopHeader(req) ?? REPORT_SHOP });
   // Merkez: kasanın kaydı ve imzalı nabzı (kendi anahtarıyla), panel (gerçek oturumla); demo ve salt okunur kapısından önce
   if (path.startsWith('merkez/')) {
-    const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder';
-    const demo = panel && !memberRequest && demoAllowed() && !(await realSnapshot()) && tokenValid(demoKey(), auth);
+    const panel = path === 'merkez/kurulumlar' || path === 'merkez/kurulum' || path === 'merkez/gonder' || path === 'merkez/simdi-guncelle';
+    // Önce jeton (Redis'siz): gerçek oturumun her yoklaması sürüm okumaz
+    const demo = panel && !memberRequest && demoAllowed() && tokenValid(demoKey(), auth) && !(await realData(versions));
     return merkez(req, url, path, {
       redis,
       verify: (key: string, r: Request, u: URL, body: string) => verifyPush(key, r, u, body),
@@ -1164,7 +1373,9 @@ async function handle(req: Request): Promise<Response> {
       notify: (n) => broadcast(bildirimDeps, n).then(() => undefined),
     });
   }
-  if (path !== 'uzaktan/push' && !memberRequest && demoAllowed() && !(await realSnapshot())) {
+  // Gerçek oturumun jetonu (kafe anahtarıyla imzalı) demoya düşmez: kafe bağlıyken verilmiştir, kapı Redis'e sormaz
+  const realToken = secret().length >= 32 && tokenValid(secret(), auth);
+  if (path !== 'uzaktan/push' && !memberRequest && !realToken && demoAllowed() && !(await realData(versions))) {
     if (path === 'health') return json({ ok: true, remote: true, demo: true, time: Date.now() });
     if (path === 'uzaktan/giris' && req.method === 'POST') return json({ token: issueToken(demoKey()), me: ME, demo: true });
     if (!tokenValid(demoKey(), auth)) return fail(401, 'Oturum kapalı. Yeniden girin', 'unauthorized');
@@ -1187,15 +1398,7 @@ async function handle(req: Request): Promise<Response> {
     } catch {
       return fail(400, 'Özet okunamadı', 'bad_body');
     }
-    // Eski (yeniden gönderilen) özet yenisini ezmez
-    const shop = shopHeader(req) ?? REPORT_SHOP;
-    const current = await snapshot(shop);
-    if (current && typeof snap.at === 'number' && snap.at <= current.at) return json({ ok: true, stale: true });
-    await redis('SET', snapshotKey(shop), JSON.stringify(snap), 'EX', 7 * 86400);
-    const map = await shopMap();
-    // Dükkânlar listesi yalnız yeni dükkânda ya da saatte bir yazılır (her itmede değil)
-    if (!map[shop] || Date.now() - map[shop] > 3600_000) await redis('SET', SHOPS_KEY, JSON.stringify({ ...map, [shop]: Date.now() }));
-    return json({ ok: true });
+    return storeSnapshot(shopHeader(req) ?? REPORT_SHOP, snap);
   }
 
   // Kasanın günlük rapor özetleri: imzalı
@@ -1240,7 +1443,7 @@ async function handle(req: Request): Promise<Response> {
     const record = email && members.includes(email) ? await member(email) : null;
     if (!record || !memberTokenValid(secret(), auth, record.h)) return fail(401, 'Oturum kapalı. E-posta ve parolanızla yeniden girin', 'unauthorized');
     if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
-    return viewer(req, path, url);
+    return viewer(req, path, url, versions);
   }
 
   // Parolasız görünüm (varsayılan): giriş parola sormadan salt okunur oturum açar
@@ -1263,9 +1466,9 @@ async function handle(req: Request): Promise<Response> {
     return json({ token: issueToken(secret()), me: ME });
   }
 
-  if (!tokenValid(secret(), auth)) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
+  if (!realToken) return fail(401, 'Oturum kapalı. Parolayla yeniden girin', 'unauthorized');
   if (req.method !== 'GET') return fail(403, 'Uzaktan görünüm salt okunur: işlemler kafedeki kasadan yapılır', 'remote_readonly');
-  return viewer(req, path, url);
+  return viewer(req, path, url, versions);
 }
 
 /** Salt okunur uçlar: kafeden gelen ya da demo özetinden */

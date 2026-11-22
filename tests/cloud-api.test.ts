@@ -2,6 +2,7 @@ import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
+import { upstashFetch } from './fake-upstash';
 
 /**
  * LafPOS Uzaktan (api/uzaktan.ts): kafedeki sunucunun imzalı itmesi, patron parolasıyla giriş, salt okunur
@@ -10,6 +11,7 @@ import { type Harness, startApp } from './harness';
 const SECRET = 'x'.repeat(40);
 const PASSWORD = 'kahve-parola-123';
 const store = new Map<string, string>();
+const redis = upstashFetch(store);
 let h: Harness;
 
 beforeAll(async () => {
@@ -19,14 +21,7 @@ beforeAll(async () => {
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     if (String(input) !== 'https://redis.test') return realFetch(input, init);
-    const [cmd, key, ...rest] = JSON.parse(String(init!.body)) as string[];
-    let result: unknown = null;
-    if (cmd === 'GET') result = store.get(key!) ?? null;
-    if (cmd === 'SET') (store.set(key!, rest[0]!), (result = 'OK'));
-    if (cmd === 'INCR') (store.set(key!, String(Number(store.get(key!) ?? 0) + 1)), (result = Number(store.get(key!))));
-    if (cmd === 'DEL') (store.delete(key!), (result = 1));
-    if (cmd === 'EXPIRE') result = 1;
-    return new Response(JSON.stringify({ result }), { status: 200 });
+    return redis(init);
   });
 });
 afterAll(() => {

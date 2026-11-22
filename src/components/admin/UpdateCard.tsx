@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, RotateCw } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { fmtDateTime } from '@shared/time';
+import { fmtDateLong, fmtDateTime } from '@shared/time';
 import { Badge, Card, DefRow, type Tone } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
@@ -154,6 +154,8 @@ export function UpdateCard() {
           {lic?.enabled && (
             <>
               <DefRow label="Lisans">{lic.message}</DefRow>
+              {lic.bitis && <DefRow label="Lisans son günü">{fmtDateLong(lic.bitis)}</DefRow>}
+              {lic.kod && <DefRow label="Şube kodu">{lic.kod}</DefRow>}
               <DefRow label="Merkez">
                 {lic.ad ? `${lic.ad} · ` : ''}
                 {lic.sonGorusme ? `son bağlantı ${fmtDateTime(lic.sonGorusme)}` : 'Henüz bağlanmadı; internet gelince kendini bildirir'}

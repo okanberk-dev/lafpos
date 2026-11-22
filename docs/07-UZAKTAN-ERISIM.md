@@ -60,8 +60,33 @@ ya da Tailscale ile). Kafedeki sunucu canlı özeti (`server/sync/cloud.ts`) şu
   bir (bir değişiklikten sonraki ilk boş itme, nabız 5 dk'da bir baktığı için 15-20 dk içinde). Uzaktan sayfadaki
   "… itibarıyla" saati son itmenin saatidir.
 
-Bulut özeti Upstash Redis'te tutar (`api/uzaktan.ts`), ekran 10 sn'de bir yenilenir. Maliyet ve kâr, PIN'ler,
-müşteri telefonları gitmez.
+Bulut özeti Upstash Redis'te tutar (`api/uzaktan.ts`), ekran gün açıkken 15 sn'de bir, kapalıyken 60 sn'de bir
+yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri telefonları gitmez.
+
+- **Upstash bütçesi** (`tests/uzaktan-kota.test.ts`): ekran gün boyu açık kalsa da ücretsiz planın komut sınırına
+  yaklaşmasın diye:
+  - **Sürüm kaydı:** her dükkânın özet sürümü tek bir hash'te (`lafpos:surum`, alan dükkân kimliği; kasanın son
+    itmesinin anı, içerik özeti, açılış verisinin özeti, gün açık mı). Görünümün her yoklaması yalnız bunu okur
+    (HGETALL, tek komut): dükkân listesi, en son veri gönderen dükkân ve sürüm aynı okumada. Eskiden istek başına
+    dükkân listesi iki kez ve bütün özet (~100 KB) okunurdu.
+  - **Koşullu yanıt (ETag, 304):** canlı uçlar (`reports/patron`, `floor`, `kitchen`, `kitchen/board`, `orders/<id>`)
+    sürümle, `bootstrap` açılış verisinin kendi özetiyle etiketlenir. İstemci (`src/lib/api.ts`, yalnız Uzaktan
+    derlemesinde) etiketi adresle saklar ve `If-None-Match` ile sorar; sürüm aynıysa 304 döner, özet Redis'ten
+    okunmaz, ekran aynı nesneyi tutar. `auth/me` ve bar ekranının boş Hazır ve Geçmiş sekmeleri Redis'e hiç gitmez.
+  - **Değişmeyen özet yeniden yazılmaz:** kasanın gün açıkken 5 dakikalık nabzı içerik aynıysa yalnız sürümü
+    ilerletir (HGET + HSET); özetin saatleri sunulurken sürümün anına çekilir, "son güncelleme" ve "Kafeden veri
+    gelmiyor" uyarısı eskisi gibi çalışır. Özetin süresi (7 gün) günde bir uzatılır; özet silinmişse sürüm düşer ve
+    kasanın bir sonraki itmesi yazar. Eski ya da yeniden gönderilen özetin denetimi de yalnız sürümü okur.
+  - **Yoklama:** gün açıkken 15 sn (kasa en sık 15 sn'de bir iter: satıştan ekrana en geç ~30 sn), gün kapalıyken
+    60 sn, açılış verisi ve menüdeki Masalar 5 dk. Sekme gizliyken (telefon kilitli, başka sekme) hiç sorulmaz,
+    görünür olunca bir kez yenilenir. Salon ve adisyon da 15 sn; bar ekranında yalnız aktif fişler yoklanır.
+  - **Raporlar:** kasanın "bugün"ü, dönemin ve kıyas döneminin günleri ve ek sekmelerin verisi tek MGET'te (60
+    anahtarlık parçalar); kasanın rapor itmesinde de "bugün" günlerle birlikte okunur.
+  - Bir saat açık Patron paneli (gün açık, tek dükkân): sakin saatte (yalnız nabız) 1116 komut yerine 276, her
+    dakika satışta 1260 yerine 480, gece (gün kapalı) 1092 yerine 72; Redis'ten okunan veri saatte ~38 MB yerine
+    ~1,3 MB (sakin). Kafe bağlanmadan (demo) istek başına iki küçük komut.
+  - Geçiş: bu sürümden önce yazılmış kayıt (`lafpos:dukkanlar`, eski kasanın `lafpos:snapshot`'ı) sürüm yokken
+    okunmaya devam eder (koşullu yanıt yok); kasanın ilk itmesi sürümü yazar, `lafpos:dukkanlar` artık yazılmaz.
 
 - **İnternet yokken** itme gidemez; özet kaybolmaz, bir sonraki itme son hâli taşır. İnternet gelince bekleyenlerle
   birlikte hemen bir kez itilir (`server/sync/catch-up.ts`, `docs/05-KASA-BILGISAYARI.md` §6 "İnternet yokken").
@@ -70,7 +95,7 @@ müşteri telefonları gitmez.
 - **Anlık ciro (patron paneli):** bugünün cirosu, adisyon sayısı ve ortalaması, açık masaların tahsil edilecek
   tutarı, ödeme türleri, geçen haftanın aynı günüyle "bu saate kadar" kıyas ve saat saat grafik (bugün ve geçen
   hafta aynı gün), uyarılar (iptal, ikram, indirim sıçraması) canlı özetten gelir: satıştan en geç ~15 sn sonra
-  itilir, sayfa 10 sn'de bir yeniler (yeni yoklama yok). Durum satırı saniyesiyle "son güncelleme 14:05:09" yazar; gün açıkken son
+  itilir, sayfa gün açıkken 15 sn'de bir koşullu yeniler (yeni yoklama yok; özet değişmediyse 304). Durum satırı saniyesiyle "son güncelleme 14:05:09" yazar; gün açıkken son
   veri 10 dakikadan eskiyse (kasa nabzı 5 dk'da bir) "Kafeden veri gelmiyor" uyarısı çıkar (`remoteFreshness`,
   `src/lib/remote.ts`). Gün kapalıyken son gün sonunun kartı: Z, ciro, adisyon, ödeme türleri ve kasa farkı (beklenen,
   sayılan; yalnız patron rolü kasa rakamlarını görüyorsa, kör kasa kuralı). Maliyet ve kâr yok.
@@ -133,11 +158,23 @@ müşteri telefonları gitmez.
     çıktığında `POST /api/merkez/kayit` (ilk görüşte güven; aynı kimliğe başka anahtar 409), Merkez'de "Onay bekliyor".
     Sonra 5 dakikada bir `POST /api/merkez/nabiz`, kurulumun anahtarıyla imzalı (`x-laf-kurulum` + imza başlıkları):
     sürüm, güncelleme durumu, gün açık mı. Kayıt Merkez'de silinirse (404) kasa bir sonraki nabızda yeniden kaydolur.
-  - **Lisans:** onaysız kurulum kuruluştan 14 gün deneme; aktif lisans bitiş gününün sonuna (İstanbul) kadar, bitişsiz
-    süresiz; pasif ya da süresi dolmuşta önce uyarı (kasada amber şerit), 7 gün sonra yeni satış kapanır
-    (`POST /orders` ve kalem ekleme 403 `license_blocked`); tahsilat, kayıtlar ve raporlar açık. Kasa son yanıtı
-    (`merkez.son`) saklar ve kendi saatiyle hesaplar: internet ya da Merkez yokken durmaz. Merkez adresi yoksa lisans
-    uygulanmaz. Durum Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de.
+  - **Lisans:** onaysız kurulum kuruluştan 14 gün deneme; aktif lisans bitiş gününün (Uzaktan'da "Son gün")
+    sonuna (İstanbul) kadar, bitişsiz süresiz. Bitişe 14 gün kala yalnız uyarı ("Lisans … tarihinde bitiyor"; kasada
+    ayar yetkisi olana amber şerit, panelde "Yakında bitiyor"). Pasif ya da süresi dolmuşta önce uyarı (kasada amber
+    şerit), 7 gün sonra yeni satış kapanır (`POST /orders` ve kalem ekleme 403 `license_blocked`); tahsilat, kayıtlar
+    ve raporlar her durumda açık. Kasa son yanıtı (`merkez.son`) saklar ve kendi saatiyle hesaplar.
+    **Çevrimdışı kural (kesin): internetsiz kasada satış hiç kapanmaz.** Satışın kapanması için kasanın lisans
+    kaydını Merkez'den son 15 dakikada (`CONFIRM_MS`, üç nabız) almış olması gerekir; değilse süresi dolmuş lisans en
+    çok uyarıdır ("kasa Merkez'e ulaşamıyor, satış sürüyor"). Böylece sahibin uzattığı lisansı henüz alamamış kasa
+    durmaz; bedeli, internetten kopan kasanın kapanmamasıdır. Panel aynı kuralı kasanın son görülmesiyle hesaplar
+    (`shared/lisans.ts` `licenseState` `confirmedAt`). Merkez adresi yoksa lisans uygulanmaz. Durum Yönetim › Ayarlar
+    ve yedek › Sürüm ve güncelleme'de (lisans, son günü, şube kodu).
+  - **Şube kodu:** sahip dükkânın ayarlarında verir ("TZL"; büyük harf, rakam ve tire, en çok 12). Nabzın yanıtıyla
+    kasaya gider (`kod`), Yönetim › Ayarlar ve yedek › Sürüm ve güncelleme'de ve fişin başlığında ("Şube Tuzla · TZL",
+    bootstrap `branch`) görünür. lafmaliyet'in şube kimliğinden (`branchId`) ayrıdır, sistemler arasında gitmez.
+  - **Şimdi güncelle (uzaktan):** dükkânın ayarlarında "Şimdi güncelle" (`POST /api/merkez/simdi-guncelle`): hedef
+    kanalın son derlemesi olur, kasa bir sonraki nabızda alır ve kasadaki "Şimdi güncelle"nin isteğini yazar; gün
+    açıkken kurdurmaz (`docs/05-KASA-BILGISAYARI.md` §6). Panelde kasa alana kadar "Güncelleme istendi".
   - **Seçerek güncelleme:** dükkân "Ben gönderince" (varsayılan) ya da "Otomatik". Panelde dükkânlar seçilip
     "Güncelleme gönder": hedef kanalın son derlemesi olur. Nabzın yanıtı hedefi taşır; güncelleyici
     (`guncelle.mjs` `merkezCap`) kanalda daha yeni derleme görünce sunucuya (`/api/kasa/guncelleme-durumu`, yalnız bu
@@ -152,7 +189,8 @@ müşteri telefonları gitmez.
     iter (`x-laf-dukkan`; özet `lafpos:snapshot:<id>`, eski kasa `lafpos:snapshot`). Kimlik değişince (kasa Merkez'e
     ilk bağlandığında) rapor gönderimi geçmişi yeni kimlikle baştan iter (yaklaşık bir saat; `default` verisi okunur
     kalır, 420 günde düşer). Birden çok dükkân veri gönderiyorsa üst çubukta dükkân seçici (adlar Merkez'den); seçim
-    tarayıcıda saklanır, seçilmezse en son veri gönderen dükkân. Dükkânların son itme anı `lafpos:dukkanlar`'da.
+    tarayıcıda saklanır, seçilmezse en son veri gönderen dükkân. Dükkânların son itme anı sürüm kaydında
+    (`lafpos:surum`, yukarıda "Upstash bütçesi").
 
 - **Telefon bildirimleri** (Web Push; `api/_bildirim.ts`, kasada `server/sync/bildirim.ts`, `tests/bildirim.test.ts`):
   kasa önemli olayı imzalı iter (`POST /api/uzaktan/bildirim`), site abonelere bildirim atar. Olaylar: tek seferde

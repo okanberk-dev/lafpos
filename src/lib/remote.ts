@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { get, setShopHeader } from './api';
+import { get, setConditionalGets, setShopHeader } from './api';
 import { DOWNLOAD_NAV, DOWNLOAD_PATH, MERKEZ_NAV, MERKEZ_PATH } from './download';
 import type { NavItem } from './nav';
 
@@ -8,6 +8,19 @@ import type { NavItem } from './nav';
  * sunucunun ittiği canlı özetten gelir; işlem düğmeleri gizlidir, canlı bağlantı yerine kısa aralıkla yenilenir.
  */
 export const REMOTE = import.meta.env.VITE_LAFPOS_UZAKTAN === '1' && import.meta.env.MODE !== 'demo';
+
+/**
+ * Uzaktaki canlı ekranların yoklama aralığı. Kasa değişikliği en sık 15 sn'de bir iter (server/sync/cloud.ts
+ * MIN_INTERVAL_MS): daha sık sormak yeni veri getirmez. Satıştan ekrana en geç ~30 sn. Gün kapalıyken (gece kasa
+ * 15 dk'da bir iter) 60 sn. Sekme gizliyken hiç sorulmaz (TanStack Query `refetchIntervalInBackground` kapalı, görünür
+ * olunca bir kez yenilenir). Her yoklama koşulludur (`setConditionalGets`): özet değişmediyse sunucu 304 döner, Redis'te
+ * yalnız küçük sürüm kaydı okunur (docs/07-UZAKTAN-ERISIM.md §4 "Upstash bütçesi")
+ */
+export const REMOTE_POLL_MS = 15_000;
+export const REMOTE_IDLE_POLL_MS = 60_000;
+/** Ağır değişen veri uzakta 5 dk'da bir: açılış verisi (menü, masa planı, gün) ve menüdeki Masalar; değişmediyse 304 */
+export const REMOTE_SLOW_POLL_MS = 5 * 60_000;
+export const remotePollMs = (dayOpen: boolean | undefined) => (dayOpen === false ? REMOTE_IDLE_POLL_MS : REMOTE_POLL_MS);
 
 // ─── Dükkân seçici (Merkez'e bağlı birden çok kasa) ─────────────────────────
 
@@ -37,7 +50,10 @@ export function chooseShop(id: string | null) {
   setShopHeader(id);
 }
 
-if (REMOTE) setShopHeader(storedShop());
+if (REMOTE) {
+  setShopHeader(storedShop());
+  setConditionalGets(true);
+}
 
 export const remoteShopsQuery = { queryKey: ['uzaktan', 'dukkanlar'], queryFn: () => get<RemoteShop[]>('/uzaktan/dukkanlar'), staleTime: 5 * 60_000 };
 

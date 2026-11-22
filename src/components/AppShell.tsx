@@ -206,7 +206,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
       return (
         <div className="flex items-center gap-2">
           <RemoteShopPicker />
-          <Badge tone="blue" title="Kafeden gelen canlı özet; 10 sn’de bir yenilenir">
+          <Badge tone="blue" title="Kafeden gelen canlı özet; 15 sn’de bir yenilenir">
             Uzaktan
           </Badge>
         </div>
@@ -404,6 +404,18 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
               Denemeyi bitir
             </Button>
           )}
+        </div>
+      )}
+      {/* Deneme kapanmış ama geçiş yarım (eski sürümde PIN değişince): yalnız patrona, aynı pencereyle tamamlanır */}
+      {!DEMO && !REMOTE && !boot.integrations.deneme && boot.integrations.goLivePending && me.role === 'patron' && (
+        <div
+          role="note"
+          className="flex shrink-0 flex-wrap items-center justify-center gap-x-3 gap-y-1 border-b border-[var(--admin-info-line)] bg-[var(--admin-info-soft)] px-4 py-1.5 text-center text-[13px] font-medium leading-5 text-ink md:mx-[var(--shell-gap)] md:mt-2 md:rounded-xl md:border"
+        >
+          <span>Gerçek kullanıma geçiş tamamlanmadı</span>
+          <Button size="sm" variant="soft" onClick={() => setFinishing(true)}>
+            Geçişi tamamla
+          </Button>
         </div>
       )}
       {finishing && (

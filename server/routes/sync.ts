@@ -49,11 +49,22 @@ syncRoutes.get('/status', (c) => {
   });
 });
 
-/** Merkez lisansı (giriş yapan herkes): kasa şeridi ve Yönetim; Merkez kapalıysa `enabled: false` */
+/**
+ * Merkez lisansı (giriş yapan herkes): kasa şeridi ve Yönetim; Merkez kapalıysa `enabled: false`. Şube kodu ve lisansın
+ * son günü Uzaktan › Merkez'den gelir (nabzın yanıtı)
+ */
 syncRoutes.get('/lisans', (c) => {
   const lic = licenseNow();
   const last = merkezLast();
-  return c.json({ enabled: !!lic, ...(lic ?? {}), ad: last?.ad ?? null, sonGorusme: last?.at ?? null, ...(can(c.get('user'), 'senkron.yonet') ? { kurulum: merkezSyncState() } : {}) });
+  return c.json({
+    enabled: !!lic,
+    ...(lic ?? {}),
+    ad: last?.ad ?? null,
+    kod: last?.kod ?? null,
+    bitis: last?.lisans.durum === 'aktif' ? (last.lisans.bitis ?? null) : null,
+    sonGorusme: last?.at ?? null,
+    ...(can(c.get('user'), 'senkron.yonet') ? { kurulum: merkezSyncState() } : {}),
+  });
 });
 
 /** Telefon bildirimleri: ayar (eşikler) ve deneme bildirimi */

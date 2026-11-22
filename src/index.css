@@ -1842,8 +1842,124 @@
   }
 }
 
-/* 80 mm termal yazıcı için fiş çıktısı (tarayıcıdan yazdırma) */
+/*
+ * 80 mm termal yazıcı için fiş çıktısı (tarayıcıdan yazdırma; src/lib/print.tsx). XP-80C gibi yazıcıların basabildiği
+ * alan 80 mm kâğıdın ortasındaki 72 mm'dir: alan kâğıt genişliğinde, iki yanda 4 mm boşlukla yazı 72 mm'de kalır.
+ * Termal kâğıtta gri ve zemin rengi noktalı (dither) basılır: yalnız siyah yazı ve siyah çizgi. Yazı sistemin eş
+ * aralıklı yazısı (Windows'ta Consolas): yazdırma anında yüklenmesi gereken yazı tipi yok, rakamlar alt alta hizalı
+ */
+.print-area .rc {
+  font-variant-numeric: tabular-nums lining-nums;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.rc-head {
+  text-align: center;
+}
+.rc-name {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.rc-sub {
+  font-size: 11px;
+}
+.rc-pre {
+  white-space: pre-line;
+}
+.rc-title {
+  margin: 2mm 0 1.5mm;
+  padding: 0.8mm 0;
+  border-top: 2px solid #000;
+  border-bottom: 2px solid #000;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+.rc-call {
+  margin: 1mm 0 2mm;
+  text-align: center;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.rc-block + .rc-block {
+  margin-top: 1mm;
+}
+.rc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2mm;
+}
+.rc-l {
+  min-width: 0;
+}
+.rc-r {
+  flex: none;
+  white-space: nowrap;
+  text-align: right;
+}
+.rc-strong {
+  font-weight: 700;
+}
+.rc-small {
+  font-size: 10.5px;
+}
+.rc-caption {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.rc-hr {
+  margin: 1.5mm 0;
+  border-top: 1px dashed #000;
+}
+/* Kalem: adet, ad (uzunsa alta kayar), tutar; seçenek, not ve kalem indirimi adın hizasında, girintili */
+.rc-item {
+  display: grid;
+  grid-template-columns: 4.5ch minmax(0, 1fr) auto;
+  column-gap: 1.5mm;
+  align-items: baseline;
+}
+.rc-item + .rc-item {
+  margin-top: 0.8mm;
+}
+.rc-qty {
+  font-weight: 700;
+}
+.rc-item-sub {
+  grid-column: 2 / 4;
+  padding-left: 2ch;
+  font-size: 10.5px;
+}
+.rc-item-sub.rc-item-sub-l {
+  grid-column: 2 / 3;
+}
+.rc-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 2mm;
+  margin: 1.5mm 0;
+  padding: 1mm 0;
+  border-top: 2px solid #000;
+  border-bottom: 2px solid #000;
+  font-size: 16px;
+  font-weight: 700;
+}
+.rc-foot {
+  margin-top: 2mm;
+  text-align: center;
+  font-size: 11px;
+}
+.rc-foot-note {
+  margin-top: 1mm;
+}
+
 @media print {
+  /* Kâğıt boyu: genişlik 80 mm, uzunluk içerik kadar (sürücünün rulo kâğıdı); kenar boşluğu alanın kendi dolgusunda */
   @page {
     size: 80mm auto;
     margin: 0;
@@ -1858,12 +1974,19 @@
   .print-area {
     position: absolute;
     inset: 0 auto auto 0;
-    width: 76mm;
-    padding: 2mm;
-    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-    font-size: 11px;
+    box-sizing: border-box;
+    width: 80mm;
+    padding: 2mm 4mm 6mm;
+    font-family: ui-monospace, Consolas, 'Lucida Console', 'SF Mono', Menlo, 'Courier New', monospace;
+    font-size: 12px;
     color: #000;
     background: #fff;
+  }
+  .print-area .rc * {
+    color: #000 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
   }
   /*
    * A4 sayfa (masa kartları, Yönetim › Masa planı): fiş kuralının üstüne sayfa boyu ve yazı. Adlandırılmış sayfa

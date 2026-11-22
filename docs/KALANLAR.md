@@ -13,8 +13,9 @@ Son güncelleme: 21 Kasım 2026.
   (`/guncelleme/`, gün kapalıyken); Windows CI'da gerçek kurulum, güncelleme (75 kodu, `app.eski`, `node.yeni`) ve
   geri dönüş denemesi (`ci-kurulum.mjs`); Vercel kanalının derleme numarası commit zamanı (doğrulandı).
 - **Site:** lafpos.laffogato.net'te e-posta, parola ve davet koduyla üyelik; İndir ve anahtarsız web kurucusu.
-- **Merkez** (`/merkez`): dükkânlar, kayıt ve imza, lisans (14 gün deneme, uyarı, 7 gün sonra satış kapanır,
-  internetsiz son kayıt), seçerek güncelleme gönderme, dükkân bazında uzaktan görünüm ve dükkân seçici.
+- **Merkez** (`/merkez`): dükkânlar, kayıt ve imza, lisans (14 gün deneme, bitişe 14 gün kala uyarı, süresi dolunca
+  uyarı, 7 gün sonra satış kapanır; internetsiz kasada satış hiç kapanmaz, yalnız uyarı), şube kodu, seçerek
+  güncelleme gönderme ve dükkân bazında "Şimdi güncelle", dükkân bazında uzaktan görünüm ve dükkân seçici.
 - **Uzaktan raporlar:** bütün sekmeler ve CSV kasadakiyle birebir (`shared/remote-calc.ts`, `shared/report-csv.ts`),
   gün aşırı ödeme ve bugünkü kategori, "Raporları yeniden gönder".
 - **Sağlamlık:** internet kesintisi e2e (`e2e/internet.mjs`), telefonda Yönetim şeridinde internet rozeti; tabletler
@@ -51,8 +52,10 @@ Kod hazır ve denendi; aşağıdakiler yalnız gerçek cihaz ve gerçek internet
 - **İnternet:** kafede interneti kesip bir gün sonu; üst çubukta "İnternet yok · 1 kayıt bekliyor", internet gelince
   "Bekleyenler gönderildi" ve lafmaliyet'te gün bir kez.
 - **Uzaktan raporlar:** kafe bağlanınca tarama yaklaşık bir saatte 400 günü iter; Raporlar › Ciro "Geçen ay"
-  kafedekiyle aynı olmalı. Upstash › Usage'de günlük istek sayısı izlenir (uzaktan ekran gün boyu açık kalırsa
-  ücretsiz kotaya yaklaşabilir).
+  kafedekiyle aynı olmalı. Upstash › Usage'de günlük komut sayısı izlenir: uzaktan ekranın yoklaması koşullu (özet
+  değişmediyse 304, tek küçük okuma), tek ekran gün boyu açıkken (12 saat açık gün, 12 saat gece) ekran ve kasanın
+  itmesi günde ~5 bin komut (eskiden ~27 bin; `docs/07-UZAKTAN-ERISIM.md` §4 "Upstash bütçesi"). Merkez nabzı ve
+  rapor itmesi bunun üstüne; ilk tam günde toplam bu düzeyde kalmalı.
 - **Telefon bildirimi:** Uzaktan › Merkez › Telefon bildirimleri › "Bu telefonda aç" (iPhone'da önce Ana Ekrana
   Ekle); Yönetim › Ağ › "Deneme bildirimi gönder".
 - **Bulut yedeği:** ilk gün sonundan sonra Ayarlar ve yedek › Bulut yedeği'nde "Son yedek" dolmalı.

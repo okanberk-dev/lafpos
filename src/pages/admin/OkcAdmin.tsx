@@ -74,12 +74,14 @@ interface PavoTest {
   paired: boolean;
   pairingHint: string | null;
   mediators: { id: number | null; name: string | null }[];
+  /** Cihaz yanıt verdi ama ödeme araçları tanınan biçimde gelmedi (alan adlarıyla) */
+  mediatorsNote?: string | null;
 }
 /** Ağda arama: yanıt veren Pavo adresleri */
 interface PavoFind {
   subnets: string[];
   scanned: number;
-  candidates: { url: string; ok: boolean; message: string | null }[];
+  candidates: { url: string; ok: boolean; message: string | null; unrecognized?: boolean }[];
   ms: number;
 }
 type Provider = OkcStatus['provider'];
@@ -214,7 +216,9 @@ function PavoDeviceForm({ s, onCancel }: { s: OkcStatus; onCancel?: () => void }
                     <span className="min-w-0 flex-1 text-sm">
                       <span className="tabular block font-medium text-[var(--admin-text)] [overflow-wrap:anywhere]">{shortAddress(c.url)}</span>
                       {/* Seri no yazılıysa cihaz onu denetledi: tutuyorsa onay, tutmuyorsa cihazın sözü */}
-                      {found.serial && (
+                      {c.unrecognized ? (
+                        <span className="block text-xs text-[var(--admin-text-mute)]">{c.message}; seçip “Bağlantıyı dene” ile doğrulayın</span>
+                      ) : found.serial && (
                         <span className={cn('block text-xs', c.ok ? 'text-[var(--admin-success)]' : 'text-[var(--admin-text-mute)]')}>
                           {c.ok ? 'Seri no tutuyor' : `Cihaz: ${c.message ?? 'seri no tutmuyor'}`}
                         </span>
@@ -249,7 +253,7 @@ function PavoDeviceForm({ s, onCancel }: { s: OkcStatus; onCancel?: () => void }
           </Button>
         )}
       </div>
-      {doing === 'find' && <p className="text-xs text-muted">Ağ taranıyor; birkaç saniye sürer</p>}
+      {doing === 'find' && <p className="text-xs text-muted">Ağ taranıyor; 15-20 saniye sürebilir</p>}
     </form>
   );
 }
@@ -695,6 +699,7 @@ export default function OkcAdmin() {
                   {pavoTest.ping.ok ? 'Cihaz yanıt veriyor' : `Cihaz yanıtı: ${pavoTest.ping.message ?? 'hata'}`}
                 </p>
                 {pavoTest.pairingHint && <p className="text-[var(--admin-danger-ink)] [overflow-wrap:anywhere]">{pavoTest.pairingHint}</p>}
+                {pavoTest.mediatorsNote && <p className="text-[13px] text-muted [overflow-wrap:anywhere]">{pavoTest.mediatorsNote}</p>}
                 {pavoTest.mediators.length > 0 && (
                   <div>
                     <p className="text-xs font-medium text-[var(--admin-text-mute)]">Cihazdaki ödeme araçları</p>
