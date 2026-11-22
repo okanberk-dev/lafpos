@@ -272,7 +272,7 @@ async function sweep(server, api, seed, browser) {
 
   for (const viewport of viewports) {
     for (const role of roles) {
-      if (viewport === 'koyu' && role !== 'patron') continue;
+      if (viewport.startsWith('koyu') && role !== 'patron') continue;
       const token = role === 'giris' ? null : api.tokens[role];
       const { context, page, problems } = await openContext(browser, viewport, token);
       for (const entry of ROUTES[role]) {
