@@ -51,7 +51,7 @@ beforeAll(async () => {
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
   Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
   const { env } = await import('../server/env');
-  Object.assign(env, { merkezUrl: CLOUD });
+  Object.assign(env, { merkezUrl: CLOUD, cloudSecret: SECRET });
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -138,7 +138,10 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const { licenseNow } = await import('../server/sync/merkez');
     Object.assign(env, { merkezUrl: '' });
     expect(licenseNow()).toBeNull();
-    Object.assign(env, { merkezUrl: CLOUD });
+    // Kafenin ortak anahtarı yoksa da (kayıt imzalanamaz)
+    Object.assign(env, { merkezUrl: CLOUD, cloudSecret: '' });
+    expect(licenseNow()).toBeNull();
+    Object.assign(env, { merkezUrl: CLOUD, cloudSecret: SECRET });
   });
 
   it('kasa ilk nabızda kaydolur, "Onay bekliyor"da görünür; anahtar panele dönmez', async () => {
@@ -159,24 +162,27 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const { identity } = await import('../server/sync/merkez');
     const { POST } = await api();
     const me = identity();
-    const stolen = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/kayit`, { method: 'POST', body: JSON.stringify({ id: me.id, anahtar: 'x'.repeat(40) }) }));
+    const { signedHeaders } = await import('../server/lib/signature');
+    // İmzasız kayıt hiç işlenmez; kafenin anahtarıyla imzalı olsa da kayıtlı kimliğe başka anahtar yazılamaz
+    const stolenBody = JSON.stringify({ id: me.id, anahtar: 'x'.repeat(40) });
+    expect((await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/kayit`, { method: 'POST', body: stolenBody }))).status).toBe(401);
+    const stolen = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/kayit`, { method: 'POST', body: stolenBody, headers: signedHeaders(SECRET, 'POST', new URL(`${CLOUD}/api/merkez/kayit`), stolenBody) }));
     expect(stolen.status).toBe(409);
     const unsigned = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/nabiz`, { method: 'POST', headers: { 'x-laf-kurulum': me.id }, body: '{}' }));
     expect(unsigned.status).toBe(401);
-    const { signedHeaders } = await import('../server/lib/signature');
     const body = '{"surum":"9.9.9"}';
     const forged = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/nabiz`, { method: 'POST', headers: { 'x-laf-kurulum': me.id, ...signedHeaders('y'.repeat(40), 'POST', new URL(`${CLOUD}/api/merkez/nabiz`), body) }, body }));
     expect(forged.status).toBe(401);
   });
 
-  it('panel yalnız gerçek oturumla: jetonsuz ve parolasız görünümde kapalı', async () => {
+  it('panel yalnız gerçek oturumla: jetonsuz 401, parolasız görünümde 403 (oturum düşmez)', async () => {
     expect((await panel('GET', 'merkez/kurulumlar', undefined, 'yok')).status).toBe(401);
     delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
     try {
       const { POST } = await api();
       const open = (await (await POST(new Request(`${CLOUD}/api/uzaktan?yol=uzaktan/giris`, { method: 'POST' }))).json()) as { token: string };
-      expect((await panel('GET', 'merkez/kurulumlar', undefined, open.token)).status).toBe(401);
-      expect((await panel('POST', 'merkez/gonder', { ids: ['a'.repeat(24)] }, open.token)).status).toBe(401);
+      expect((await panel('GET', 'merkez/kurulumlar', undefined, open.token)).status).toBe(403);
+      expect((await panel('POST', 'merkez/gonder', { ids: ['a'.repeat(24)] }, open.token)).status).toBe(403);
     } finally {
       process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI = '1';
     }

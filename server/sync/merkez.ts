@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { type LicenseRecord, type LicenseView, licenseState, normalizeBranchCode, salesAllowed } from '@shared/lisans';
 import { REMOTE_SHOP } from '@shared/remote-reports';
 import { db, tx } from '../db/client';
@@ -7,7 +7,7 @@ import { getOpenDay } from '../services/orders';
 import { Effects } from '../lib/effects';
 import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
-import { signedFetch } from '../lib/signature';
+import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { installedVersion, readUpdateStatus, writeUpdateRequest } from '../lib/surum';
 import { underBekci } from './yedek';
 
@@ -49,13 +49,26 @@ export interface MerkezLast {
   at: number;
 }
 
-export const merkezEnabled = () => !!env.merkezUrl;
+/** Merkez açık: adres ve kafenin ortak anahtarı (kayıt onunla imzalı; anahtarsız kasada lisans uygulanmaz) */
+export const merkezEnabled = () => !!env.merkezUrl && env.cloudSecret.length >= MIN_SECRET_LENGTH;
 
-/** Kurulum kimliği: ilk okumada üretilir ve hep aynı kalır (yedekten dönüşte de; gün sonu verisiyle birlikte) */
+/** Kurulum kimliği anahtarın özetidir (api/_merkez.ts installIdFor ile aynı): kimliği bilen başkası onu kaydedemez */
+export const installIdFor = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 24);
+
+/**
+ * Kurulum kimliği: ilk okumada üretilir ve hep aynı kalır (yedekten dönüşte de; gün sonu verisiyle birlikte). Henüz
+ * kaydolmamış eski (rastgele) kimlik anahtardan türeyen kimliğe geçer; kayıtlı eski kimlik kaldıkça kullanılır
+ */
 export function identity(now = Date.now()): Identity {
   const existing = getSyncState<Identity>(IDENTITY);
-  if (existing?.id && existing.key) return existing;
-  const fresh: Identity = { id: randomBytes(12).toString('hex'), key: randomBytes(32).toString('base64url'), createdAt: now, registered: false };
+  if (existing?.id && existing.key) {
+    if (existing.registered || existing.id === installIdFor(existing.key)) return existing;
+    const migrated = { ...existing, id: installIdFor(existing.key) };
+    setSyncState(IDENTITY, migrated);
+    return migrated;
+  }
+  const key = randomBytes(32).toString('base64url');
+  const fresh: Identity = { id: installIdFor(key), key, createdAt: now, registered: false };
   setSyncState(IDENTITY, fresh);
   return fresh;
 }
@@ -162,14 +175,15 @@ export async function merkezBeat(now = Date.now()): Promise<boolean> {
   const inst = installedVersion();
   try {
     if (!me.registered) {
-      const res = await fetch(new URL('/api/merkez/kayit', env.merkezUrl), {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt }),
-        signal: AbortSignal.timeout(8000),
-        redirect: 'error',
-      });
-      if (!res.ok) throw new Error(`Merkez kaydı alınmadı (${res.status})`);
+      // Kayıt kafenin ortak anahtarıyla imzalı (dışarıdan kimse kurulum açamaz); kurulumun kendi anahtarı içinde
+      const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/merkez/kayit', env.merkezUrl), { id: me.id, anahtar: me.key, surum: inst.version, build: inst.build, kurulus: me.createdAt }, 8000);
+      if (res.status === 409) {
+        // Kimlik başkasınca alınmış (eski rastgele kimlik): yeni anahtar ve ondan türeyen kimlik; sonraki nabız kaydolur
+        const key = randomBytes(32).toString('base64url');
+        setSyncState(IDENTITY, { ...me, id: installIdFor(key), key, registered: false });
+        throw new Error('Kimlik başkasınca alınmıştı; yeni kimlik üretildi');
+      }
+      if (res.status !== 200) throw new Error(`Merkez kaydı alınmadı (${res.status})`);
       setSyncState(IDENTITY, { ...me, registered: true });
     }
     const upd = readUpdateStatus();
