@@ -25,6 +25,7 @@ import { Link } from 'react-router';
 import { COMP_LABEL } from '@shared/comp';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { tl, tlShort } from '@shared/money';
+import type { OffDeviceTotals } from '@shared/order-calc';
 import type { PlatformId } from '@shared/platforms';
 import type { CompKind, CompPersonKind, OdenmezPersonDTO } from '@shared/types';
 import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
@@ -405,6 +406,11 @@ interface Summary {
   avgCheck: number;
   itemsSold: number;
   tips: number;
+  /**
+   * Yazarkasadan geçmeyen kart ve nakit, bahşiş hariç (shared/order-calc.ts `offDeviceTotals`). Uzakta dönemin bir
+   * günü eski kasadan geldiyse yok: satır yazılmaz, ₺0 gösterilmez
+   */
+  offDevice?: OffDeviceTotals;
   days: number;
   byDay: { date: string; netSales: number; receipts: number }[];
   payments: { name: string; amount: number; count: number; share: number }[];
@@ -586,6 +592,13 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
                     </EmptyState>
                   )}
                   {s.tips > 0 && <p className="mt-3 text-xs text-muted">Bahşiş {tl(s.tips)} (ciro dışı)</p>}
+                  {/* Mali fişi yazarkasada kesilmeyen kart ve nakit (X ve Z'deki satırın dönem toplamı) */}
+                  {s.offDevice && s.payments.length > 0 && (
+                    <p className={cn('text-pretty text-xs text-muted', s.tips > 0 ? 'mt-1.5' : 'mt-3')}>
+                      Yazarkasadan geçmeyen: kart <span className="tabular font-medium text-ink-2">{tl(s.offDevice.card)}</span>, nakit{' '}
+                      <span className="tabular font-medium text-ink-2">{tl(s.offDevice.cash)}</span> (cihaza gitmeden LafPOS’a yazılan, bahşiş hariç)
+                    </p>
+                  )}
                 </div>
               </Card>
             </div>

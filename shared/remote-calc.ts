@@ -202,6 +202,32 @@ export function crossPayIn(pays: CrossPay[], from: string, to: string) {
   return { closed, byPlatform };
 }
 
+// ─── Yazarkasadan geçmeyen ──────────────────────────────────────────────────
+
+/** Gün raporunun yazarkasadan geçmeyen alanı (`RemoteDaySummary.off`; tür burada yeniden yazılır, içe aktarma yok) */
+export interface OffDeviceDay {
+  n: number;
+  s: { off?: { card: number; cash: number } };
+}
+
+/**
+ * Dönemin yazarkasadan geçmeyen kart ve nakdi, günlük özetlerden: kasadaki dönem raporunun `offDevice`'ıyla aynı
+ * rakam (kural shared/order-calc.ts `offDeviceTotals`, günler toplanır). İş günü olan bir gün alanı taşımıyorsa
+ * (eski kasa itti ya da patron kasa rakamlarını görmüyor) null: uzakta satır yazmaz, yarım toplam ya da ₺0 gösterilmez.
+ * İş günü olmayan (yalnız platform kaydı taşıyan, `n: 0`) gün sayılmaz
+ */
+export function sumOffDevice(days: readonly OffDeviceDay[]): { card: number; cash: number } | null {
+  let card = 0;
+  let cash = 0;
+  for (const d of days) {
+    if (d.n <= 0) continue;
+    if (!d.s.off) return null;
+    card += d.s.off.card;
+    cash += d.s.off.cash;
+  }
+  return { card, cash };
+}
+
 // ─── Patron panelinin kıyas girdisi, gün raporlarından ──────────────────────
 
 /**

@@ -100,7 +100,7 @@ Kabul: kabul ölçütlerinin ilk üçü (bkz. geliştirilmiş prompt).
 ### Dalga 2: bar/mutfak ekranı, kasa, çıktılar
 
 1. Bar/mutfak ekranı: istasyon filtresi, süre renkleri, hazırlanıyor/hazır/servis, ses, iptal fişi, geçmiş
-2. Kasa: gün aç, harcama/teslim/giriş, X raporu, Z (ödeme türü, KDV, iptal/ikram/indirim, banknot sayımı, fark)
+2. Kasa: gün aç, harcama/teslim/giriş, X raporu, Z (ödeme türü, yazarkasadan geçmeyen kart ve nakit, KDV, iptal/ikram/indirim, banknot sayımı, fark)
 3. Çıktılar: adisyon, mutfak fişi, Z; 80 mm tarayıcı yazdırma ve ESC/POS ağ yazıcısı
 
 ### Dalga 3: entegrasyon

@@ -4,7 +4,7 @@ import { type CrossPay, type PrepDone, prepFrom } from '@shared/remote-calc';
 import { type PatronStats, statsDates } from '@shared/today-stats';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { netOfKdv, percentOf, tl } from '@shared/money';
-import { calcOrder, type OrderTotals } from '@shared/order-calc';
+import { calcOrder, offDeviceTotals, type OrderTotals } from '@shared/order-calc';
 import { PLATFORM_LABEL, PLATFORMS, type PlatformId } from '@shared/platforms';
 import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, fmtDateShort, istanbulParts } from '@shared/time';
 import type { CompKind } from '@shared/types';
@@ -13,7 +13,7 @@ import { auditForViewer } from '../delivery/commission';
 import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
 import { trainingMode } from '../lib/settings';
 import { addonCostOf, addonSiteIds, costMap, costsAt } from '../sync/lafmaliyet';
-import { onlineCounted } from './days';
+import { deviceReceipts, onlineCounted } from './days';
 import { getOpenDay } from './orders';
 
 /**
@@ -187,6 +187,8 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
   const tableOrders = closed.filter((o) => o.type === 'masa');
   const tableGuests = tableOrders.reduce((a, o) => a + o.guests, 0);
   const tableSales = tableOrders.reduce((a, o) => a + totalsOf(o).total, 0);
+  // Yazarkasadan geçmeyen kart ve nakit: X ve Z'nin kuralı (shared/order-calc.ts), dönemin günlerinin ödemeleriyle
+  const offDevice = offDeviceTotals(ds.payments, deviceReceipts(db, ds.days.map((d) => d.id)));
   return {
     range,
     asOf: nowMs,
@@ -217,6 +219,8 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     guests: closed.filter((o) => o.type === 'masa').reduce((a, o) => a + o.guests, 0),
     itemsSold,
     tips: salesPays.reduce((a, p) => a + p.tip, 0),
+    /** Yazarkasadan geçmeyen kart ve nakit (bahşiş hariç); rapor gören kasa rakamlarını da görür (`seesCashNumbers`) */
+    offDevice,
     byDay: [...byDay.values()],
     payments: [...payMap.values()].sort((a, b) => b.amount - a.amount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),
     types: [...types.values()].sort((a, b) => b.amount - a.amount),
@@ -891,7 +895,11 @@ function productCloses(date: string, keys: string[]): [number, number, number, n
   return [...rows.values()].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
 }
 
-export function patronLive(withCost: boolean) {
+/**
+ * Patron paneli. `withCost`: maliyet ve kâr (`rapor.maliyet`). `cashNumbers`: kasa rakamlarını gören (kör kasa kuralı,
+ * `seesCashNumbers`; uzaktaki özet için patron rolünün `kasa.rakam`ı): yazarkasadan geçmeyen tutar yalnız ona gider
+ */
+export function patronLive(withCost: boolean, cashNumbers = false) {
   const now = Date.now();
   const openDay = getOpenDay(db);
   const today = currentBusinessDate(openDay?.date, now);
@@ -956,6 +964,7 @@ export function patronLive(withCost: boolean) {
     hourlyNextDay: todayHours.next,
     hourlyLastWeekNextDay: lastWeekHours.next,
     payments: summary.payments,
+    ...(cashNumbers ? { offDevice: summary.offDevice } : {}),
     discounts: summary.discounts,
     complimentary: summary.complimentary,
     odenmez: summary.odenmez,

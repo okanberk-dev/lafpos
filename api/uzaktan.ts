@@ -20,7 +20,7 @@ import { yedek } from './_yedek.js';
 import { merkez, type Release } from './_merkez.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
-import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports } from '../shared/remote-calc.js';
+import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
 import { CLOUD_KEYS, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
 
@@ -905,6 +905,8 @@ export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], now
   // Kıyas dönemi uzakta saklanan 400 günün dışına taşıyorsa yarım toplamla kıyas yapılmaz (kasa bütün dönemi okur)
   const prevMissing = cmp.range.from < oldestRemoteDay(today);
   const byAmount = <T extends { amount: number }>(a: T, b: T) => b.amount - a.amount;
+  // Yazarkasadan geçmeyen: dönemin bir günü taşımıyorsa (eski kasa) alan yok, sayfa satırı yazmaz
+  const offDevice = sumOffDevice(days);
   return {
     range,
     asOf: nowMs,
@@ -926,6 +928,7 @@ export function sumSummary(range: Range, days: DayRep[], prevDays: DayRep[], now
     guests,
     itemsSold: sum((d) => d.s.items),
     tips: sum((d) => d.s.tips),
+    ...(offDevice ? { offDevice } : {}),
     // Satışı olmayan (yalnız platform kaydı taşıyan, `n: 0`) gün kasadaki gibi gün listesine girmez
     byDay: days.filter((d) => d.n > 0).map((d) => ({ date: d.date, netSales: d.s.rev, receipts: d.s.receipts, z: d.z, closed: d.closed })),
     payments: [...pays.values()].sort(byAmount).map((p) => ({ ...p, share: pct(p.amount, totalPaid) })),

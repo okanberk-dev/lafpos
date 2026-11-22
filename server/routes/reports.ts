@@ -2,7 +2,7 @@ import { type Context, Hono } from 'hono';
 import { z } from 'zod';
 import { COMP_LABEL } from '@shared/comp';
 import { fmtDateTime, isCalendarDate } from '@shared/time';
-import { type AppEnv, can, requirePermission, seesStaffOf } from '../lib/auth';
+import { type AppEnv, can, requirePermission, seesCashNumbers, seesStaffOf } from '../lib/auth';
 import { CSV_TYPES, csvRows, toCsv } from '@shared/report-csv';
 import { HttpError, query } from '../lib/http';
 import {
@@ -65,7 +65,8 @@ reportRoutes.get('/platforms', (c) => c.json(platformReport(range(c), can(c.get(
 /** Garsona göre toplanan adisyon listesi personel tutarıdır: maliyet yetkisi olmayana yalnız kendi adisyonlarının garsonu */
 const waiterFor = (c: Context<AppEnv>) => (waiterId: string | null) => seesStaffOf(c.get('user'), waiterId);
 reportRoutes.get('/checks', (c) => c.json(checksReport(range(c), 300, waiterFor(c))));
-reportRoutes.get('/patron', (c) => c.json(patronLive(can(c.get('user'), 'rapor.maliyet'))));
+/** Yazarkasadan geçmeyen tutar kasa rakamıdır: kör kasada (patron paneli verilmiş olsa da) gitmez */
+reportRoutes.get('/patron', (c) => c.json(patronLive(can(c.get('user'), 'rapor.maliyet'), seesCashNumbers(c.get('user')))));
 
 /** Excel'in Türkçe ayarıyla açılan CSV (server/lib/csv.ts: noktalı virgül, virgüllü ondalık, formül korumalı) */
 reportRoutes.get('/export.csv', (c) => {

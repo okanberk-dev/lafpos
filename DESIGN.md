@@ -209,7 +209,7 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
   satış yoksa "satış yok", veri yoksa "veri yok", yalnız gün sonu toplamı biliniyorsa tutarın yanında "gün sonu". Satıra
   dokununca ayrıntı açılır (tarih ve gün adı, gün sonu toplamı, adisyon, ₺ fark). Öteki kartlar aynı dilde (`Group`,
   `Row`): Gün boyu (birikimli, saatlik ya da tablo; sakin yazı sekmeleri), Gün içi (açık adisyon, indirim ve ikram, iptal,
-  online, masadaki kişi), Ödeme türleri (Kasa ve Raporlar), Hafta ve ay (gün sonu tahminiyle), Açık adisyonlar, Dikkat
+  yazarkasadan geçmeyen, online, masadaki kişi), Ödeme türleri (Kasa ve Raporlar), Hafta ve ay (gün sonu tahminiyle), Açık adisyonlar, Dikkat
   isteyenler, En çok satanlar. Kart başına tek başlık satırı; ikon karosu, tekrar eden kenarlık ve gölge yok (gecede kart
   kenarsız, açık temada panonun saç teli ve yumuşak gölgesi). Yerleşim `.lp-patron`: telefonda ve dik tablette tek sütun
   (ciro, kıyas, grafik, gün içi, ödemeler, hafta ve ay, sonra listeler), 1024'ten iki, 1440'tan üç sütun. Kıyasın verisi

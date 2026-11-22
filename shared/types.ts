@@ -1,4 +1,4 @@
-import type { OrderTotals, SplitState } from './order-calc';
+import type { OffDeviceTotals, OrderTotals, SplitState } from './order-calc';
 import type { Permission, Role } from './permissions';
 import type { PlatformId } from './platforms';
 import type { ServiceMode } from './service-mode';
@@ -650,6 +650,11 @@ export interface ZSummary {
   netSales: number;
   payments: { methodId: string; name: string; zField: ZField; channel: string | null; count: number; amount: number; tips: number }[];
   byZField: Record<ZField, number>;
+  /**
+   * Yazarkasadan geçmeyen kart ve nakit (bahşiş hariç; shared/order-calc.ts `offDeviceTotals`): `byZField`'ın kart ve
+   * nakdinin, mali fişi yazarkasada kesilmemiş kısmı. Eski Z'lerde yok: ekran ve fiş satırı yazmaz, sıfır göstermez
+   */
+  offDevice?: OffDeviceTotals;
   kdv: { rate: number; gross: number; base: number; kdv: number }[];
   tips: number;
   cariSales: number;

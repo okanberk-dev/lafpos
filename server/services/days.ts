@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { odenmezByPerson } from '@shared/comp';
 import { tl } from '@shared/money';
-import { calcOrder } from '@shared/order-calc';
+import { calcOrder, offDeviceTotals } from '@shared/order-calc';
 import { addDays, businessDate, businessDayStartMs } from '@shared/time';
 import type { BusinessDayDTO, ShiftCountDTO } from '@shared/types';
 import { nextZNo } from '@shared/z-no';
@@ -173,6 +173,21 @@ export function collectCustomerPayment(
 
 const Z_FIELDS: ZField[] = ['cash', 'card', 'meal_card', 'online', 'other'];
 
+/**
+ * Günlerin ödemelerine ait yazarkasa fişleri: "yazarkasadan geçmeyen"in girdisi (shared/order-calc.ts
+ * `offDeviceTotals`). Yalnız ödemesi LafPOS'a işlenmiş (`paymentIds` dolu) fişler; fiş, ödemesinin adisyonundadır
+ * (birleştirmede ikisi birlikte taşınır, gün aşırı ödemede de). Adisyonlar alt sorguyla seçilir: uzun dönemde kimlik
+ * listesi SQLite'ın değişken sınırına takılmaz (günler en çok 400)
+ */
+export function deviceReceipts(t: Tx | DB, dayIds: string[]): { paymentIds: string[] }[] {
+  const orderIds = t.select({ id: schema.payments.orderId }).from(schema.payments).where(inArray(schema.payments.dayId, dayIds));
+  return t
+    .select({ paymentIds: schema.fiscalReceipts.paymentIds })
+    .from(schema.fiscalReceipts)
+    .where(and(inArray(schema.fiscalReceipts.orderId, orderIds), sql`${schema.fiscalReceipts.paymentIds} <> '[]'`))
+    .all();
+}
+
 /** Günün özeti. Gün açıkken ara rapor (X), kapanışta Z olarak saklanır. */
 export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   const orders = t.select().from(schema.orders).where(eq(schema.orders.dayId, day.id)).all();
@@ -270,6 +285,8 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   const expectedCash = day.openingCash + cashSales + cashCollections + cashIn - cashOut - handedOver;
   const cariSales = salesPays.filter((p) => methods.find((m) => m.id === p.methodId)?.kind === 'cari').reduce((a, p) => a + p.amount, 0);
   const online = orders.filter(onlineCounted);
+  // Kart ve nakdin mali fişi yazarkasada kesilmeyen kısmı: cihaz fişinden gelen ödemeler düşülür
+  const offDevice = offDeviceTotals(salesPays, deviceReceipts(t, [day.id]));
 
   return {
     orders: posOrders.length,
@@ -287,6 +304,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
     netSales,
     payments: [...payMap.values()].sort((a, b) => b.amount - a.amount),
     byZField,
+    offDevice,
     kdv: [...kdv.entries()].sort((a, b) => a[0] - b[0]).map(([rate, v]) => ({ rate, ...v })),
     tips: salesPays.reduce((a, p) => a + p.tip, 0),
     cariSales,

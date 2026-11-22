@@ -12,7 +12,7 @@ import { signedFetch } from '../lib/signature';
 import { remoteShop } from './merkez';
 import { getOpenDay } from '../services/orders';
 import { checksReport, closingMinutes, crossDayPayments, hourlyReport, itemListReport, platformReport, prepRaw, productReport, refundReport, reportToday, staffReport, summaryReport } from '../services/reports';
-import { cloudEnabled } from './cloud';
+import { cloudEnabled, patronSeesCash } from './cloud';
 
 /**
  * LafPOS Uzaktan raporları (docs/07-UZAKTAN-ERISIM.md §4 "Raporlar"). Kasa her iş gününün rapor özetini buluta iter:
@@ -105,6 +105,8 @@ export function buildDayReport(date: string, now = Date.now()): RemoteDayReport 
       paidOpen: s.reconciliation.paidOpen,
       onlineOrders: s.online.orders,
       onlineAmount: s.online.amount,
+      // Kasa rakamı: patron rolü kasa rakamlarını görmüyorsa (kör kasa) buluta gitmez
+      ...(patronSeesCash() ? { off: s.offDevice } : {}),
     },
     pay: s.payments.map((x) => [x.name, x.zField, x.amount, x.count]),
     types: s.types.map((t) => [t.type, t.orders, t.amount]),

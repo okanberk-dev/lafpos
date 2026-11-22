@@ -270,6 +270,15 @@ export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO;
         <Row key={p.methodId} l={`${p.name} (${p.count})`} r={tlPlain(p.amount)} />
       ))}
       {s.tips > 0 && <Row l="Bahşiş" r={tlPlain(s.tips)} />}
+      {/* Mali fişi yazarkasada kesilmeyen kart ve nakit, bahşiş hariç; eski Z'de alan yok, satır da basılmaz */}
+      {s.offDevice && (
+        <>
+          <Hr />
+          <div className="rc-caption">Yazarkasadan geçmeyen</div>
+          <Row l="Kart" r={tlPlain(s.offDevice.card)} />
+          <Row l="Nakit" r={tlPlain(s.offDevice.cash)} />
+        </>
+      )}
       <Hr />
       <KdvRows rows={s.kdv} />
       <Hr />
