@@ -115,9 +115,10 @@ export interface PrivateSettings {
   zNoStart: number | null;
   /**
    * Bu kasanın şubesi: lafmaliyet'teki şube kimliği (`tuzla`, `marina`; lafmaliyet docs/SUBE.md). Gün sonu paketine
-   * konur ki panel günü doğru şubeye yazsın (docs/03-ENTEGRASYON.md §4). Tek şubeli kurulumda varsayılan `tuzla`
-   * yeter; ikinci bir kasa kurulurken Yönetim › Ayarlar'dan değiştirilir. Boş bırakılamaz: panel şubesiz günü
-   * bugünkü gibi Tuzla'ya yazar, bu da yanlış şubeye ciro demektir.
+   * konur ki panel günü doğru şubeye yazsın (docs/03-ENTEGRASYON.md §4). Varsayılan `marina` (ilk LafPOS kasası
+   * Marina'da); başka şubenin kasası kurulurken Yönetim › Ayarlar'dan değiştirilir (yalnız patron). Boş bırakılamaz:
+   * panel şubesiz günü bugünkü gibi Tuzla'ya yazar, bu da yanlış şubeye ciro demektir. Platform anahtarlarının Vercel
+   * adındaki şube de bundan gelir (`subeEtiketi`: 'tuzla' → 'TUZLA'; docs/PAKET-PLATFORMLARI.md "Anahtarlar buluttan").
    */
   branchId: string;
   /**
