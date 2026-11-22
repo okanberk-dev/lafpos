@@ -67,9 +67,10 @@ export function Delta({ value, size = 'md' }: { value: number; size?: 'sm' | 'md
   return (
     <span
       className={cn(
-        'tabular inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full font-medium',
-        size === 'md' ? 'min-h-6 px-2 text-[13px] leading-5' : 'min-h-5 px-1.5 text-xs leading-4',
-        flat ? 'bg-surface-3 text-ink-2' : up ? 'bg-success-soft text-success-ink' : 'bg-danger-soft text-danger-ink',
+        // Keel'in değişim hapı: karolardaki `KPill` ile aynı ölçü ve renk (artış dolu nane, düşüş yumuşak kırmızı)
+        'tabular inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full font-medium leading-none',
+        size === 'md' ? 'h-[22px] px-2 text-[11.5px]' : 'h-5 px-1.5 text-[11px]',
+        flat ? 'bg-[var(--k-well-2)] text-[var(--k-ink-2)]' : up ? 'bg-[var(--k-mint)] text-[#0b3d22]' : 'bg-[var(--k-neg-soft)] text-[var(--k-neg-ink)]',
       )}
     >
       {!flat && <Arrow aria-hidden="true" className="size-3 stroke-[2.25]" />}

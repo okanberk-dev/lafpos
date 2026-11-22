@@ -190,8 +190,8 @@
    * Grafik (pano): vurgulu sütun ev yeşili (kartta 6:1), öteki sütunlar açık nane (süs tonu; değer ipucunda ve gizli
    * tabloda), kıyas gri çizgi
    */
-  --admin-chart-line: #0a6e52;
-  --chart-soft: #bfe8d4;
+  --admin-chart-line: #17a35c;
+  --chart-soft: var(--k-chart-bar);
   --chart-on-accent: #ffffff;
   /*
    * Sekmeler ve alt menü: seçili sekme açık nane zeminde yeşil (5.4:1); üst çubuğun sekmesi, telefonun alt sekmesi,
@@ -266,6 +266,9 @@
   /* Odak halkası: ev yeşili, 2 px dışarıda; dolu düğmenin etrafında boşlukla ayrılır */
   --focus: var(--admin-primary);
   --chart-accent: var(--admin-chart-line);
+  /* Vurgulu sütun ve çubuk dolgusu (Keel'in nanesi; patron panelindeki ince çubuklarla aynı) ve üstündeki yazı */
+  --chart-hi: var(--k-mint);
+  --chart-on-hi: #0b3d22;
   /* Kıyas çizgisi (geçen hafta): gri ama kartta 3:1 (WCAG 1.4.11 grafik nesnesi) */
   --chart-context: #7a837e;
   --chart-grid: #e8ede9;
@@ -387,7 +390,7 @@ html[class~='dark'] {
   --admin-hue-green: #34d399;
   --admin-hue-green-soft: #10301f;
   --admin-chart-line: #bce1ff;
-  --chart-soft: #2b3946;
+  --chart-soft: var(--k-chart-bar);
   --chart-on-accent: #0c1a26;
   /* Marka rayı gecede de ev yeşili (açık temanın rayından bir ton derin); yazı beyaz (8:1), seçili karo beyaz üstünde yeşil */
   --rail: #1e1c1b;

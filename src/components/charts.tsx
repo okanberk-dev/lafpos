@@ -3,8 +3,10 @@ import { cn } from '@/lib/cn';
 import { EmptyState } from './ui/misc';
 
 /**
- * Grafikler (dataviz kuralları; pano ölçüleri, 20 Kasım 2026): tek seri, sütunlar açık nane ve tek vurgulu sütun ev
- * yeşili (en yüksek değer ya da sayfanın seçtiği; üstünde değer hapı ve beyaz nokta, panonun "+37,8%" hapı), kıyas
+ * Grafikler (dataviz kuralları; LafPOS Keel, 22 Kasım 2026): raporlar, yönetim özeti ve patron paneli aynı dili kullanır.
+ * Tek seri, sütunlar gri bağlam (`--chart-soft`) ve tek vurgulu sütun nane (`--chart-hi`: en yüksek değer ya da
+ * sayfanın seçtiği; üstünde nane değer hapı ve beyaz nokta), çizgi ve lejant `--chart-accent`, ödeme türleri her yerde
+ * aynı renkte (`--k-pay-*`), değişim hapı tek (`Delta`/`KPill`), kıyas
  * serisi gri ve ince, tek eksen, sütun en çok 36 px, uçları 6 px yuvarlak ve tabanda düz, ızgara 1 px ve geride. Değer ipucu
  * fareyle üzerine gelince, dokunmatikte dokununca ya da parmak yana kayınca (başka yere dokunana dek durur), klavyede
  * oklarla açılır; ekran okuyucu aynı değerleri gizli tablodan okur. Renkler CSS değişkenlerinden gelir, koyu temada
@@ -215,7 +217,7 @@ export function ColumnChart({
       {hasCompare && (
         <div className="mb-2 flex flex-wrap gap-4 text-xs text-ink-2">
           <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--chart-accent)' }} />
+            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: 'var(--chart-hi)' }} />
             {seriesLabel}
           </span>
           <span className="inline-flex items-center gap-1.5">
@@ -267,7 +269,7 @@ export function ColumnChart({
               const on = active != null ? active === i : pin === i;
               return (
                 <g key={i}>
-                  {path && <path d={path} fill={on ? 'var(--chart-accent)' : 'var(--chart-soft)'} />}
+                  {path && <path d={path} fill={on ? 'var(--chart-hi)' : 'var(--chart-soft)'} />}
                   {i % labelEvery === 0 && (
                     <text x={padL + band * i + band / 2} y={height - 6} textAnchor="middle" fontSize={11} fill="var(--muted)">
                       {d.label}
@@ -288,11 +290,11 @@ export function ColumnChart({
                 const left = Math.min(Math.max(padL - 6, cx - w / 2), width - padR - w);
                 return (
                   <g>
-                    <rect x={left} y={top - 30} width={w} height={22} rx={8} fill="var(--chart-accent)" />
-                    <text x={left + w / 2} y={top - 15} textAnchor="middle" fontSize={11.5} fontWeight={600} fill="var(--chart-on-accent)" className="tabular">
+                    <rect x={left} y={top - 30} width={w} height={22} rx={8} fill="var(--chart-hi)" />
+                    <text x={left + w / 2} y={top - 15} textAnchor="middle" fontSize={11.5} fontWeight={600} fill="var(--chart-on-hi)" className="tabular">
                       {text}
                     </text>
-                    {barW >= 10 && <circle cx={cx} cy={top + Math.min(6, barW / 2 - 1)} r={Math.min(4, barW / 2 - 2)} fill="var(--surface)" stroke="var(--chart-accent)" strokeWidth={1.5} />}
+                    {barW >= 10 && <circle cx={cx} cy={top + Math.min(6, barW / 2 - 1)} r={Math.min(4, barW / 2 - 2)} fill="var(--surface)" stroke="var(--chart-hi)" strokeWidth={1.5} />}
                   </g>
                 );
               })()}
@@ -312,7 +314,7 @@ export function ColumnChart({
             <div className="font-semibold text-ink">{tip.title ?? tip.label}</div>
             <div className="mt-1 flex items-center justify-between gap-3 text-ink-2">
               <span className="inline-flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-sm" style={{ background: 'var(--chart-accent)' }} />
+                <span className="h-2 w-2 rounded-sm" style={{ background: 'var(--chart-hi)' }} />
                 {seriesLabel}
               </span>
               <span className="tabular font-semibold text-ink">{format(tip.value)}</span>
@@ -363,7 +365,8 @@ export function BarList({
   max,
   className,
 }: {
-  items: { key: string; label: string; value: number; sub?: string }[];
+  /** `color`: çubuğun rengi (ödeme türü gibi anlamı olan renk); verilmezse grafiğin vurgusu */
+  items: { key: string; label: string; value: number; sub?: string; color?: string }[];
   format: (v: number) => string;
   max?: number;
   className?: string;
@@ -381,7 +384,7 @@ export function BarList({
             </span>
           </div>
           <div className="h-2 w-full rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
-            <div className="h-2 rounded-[var(--r-track)] transition-[width] group-hover:brightness-110" style={{ width: `${it.value > 0 ? Math.max(1, (it.value / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+            <div className="h-2 rounded-[var(--r-track)] transition-[width] group-hover:brightness-110" style={{ width: `${it.value > 0 ? Math.max(1, (it.value / top) * 100) : 0}%`, background: it.color ?? 'var(--chart-hi)' }} />
           </div>
         </li>
       ))}

@@ -30,6 +30,7 @@ import type { PlatformId } from '@shared/platforms';
 import type { CompKind, CompPersonKind, OdenmezPersonDTO } from '@shared/types';
 import { BUSINESS_HOURS, businessHourIndex, currentBusinessDate, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
 import { BarList, ColumnChart } from '@/components/charts';
+import { PAY_KINDS, payKind } from '../patron/TodayStats';
 import { Button } from '@/components/ui/Button';
 import { AdminShell } from '@/components/admin/AdminShell';
 import { ADMIN_SECTIONS } from '@/components/admin/sections';
@@ -272,6 +273,8 @@ function useSizeName() {
 }
 
 const Dash = () => <span className="text-muted">—</span>;
+/** Ödeme türünün rengi: patron panelindeki gösterge ve X/Z çubuğuyla aynı (nakit, kart, yemek kartı, diğer) */
+const PAY_COLOR = Object.fromEntries(PAY_KINDS.map((k) => [k.key, k.color])) as Record<(typeof PAY_KINDS)[number]['key'], string>;
 
 const alignCls = (a?: 'left' | 'right' | 'center') => (a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left');
 const hideCls = (c: { hideBelow?: 'lg' | 'xl' }) => (c.hideBelow === 'lg' ? 'hidden lg:table-cell' : c.hideBelow === 'xl' ? 'hidden xl:table-cell' : '');
@@ -585,7 +588,7 @@ function SummaryReport({ range, today, onOpen }: { range: Range; today: string; 
               <Card flush title="Ödeme türleri">
                 <div className="p-4 sm:px-5">
                   {s.payments.length ? (
-                    <BarList items={s.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')} · ${p.count} işlem` }))} format={tl} />
+                    <BarList items={s.payments.map((p) => ({ key: p.name, label: p.name, value: p.amount, sub: `%${p.share.toLocaleString('tr-TR')} · ${p.count} işlem`, color: PAY_COLOR[payKind(p)] }))} format={tl} />
                   ) : (
                     <EmptyState compact icon={<CreditCard />} title={emptyTitle(range, today, 'ödeme')}>
                       Adisyonlar kapandıkça ödeme türleri burada toplanır
@@ -806,7 +809,7 @@ function ProductsReport({
               cell: (p) => (
                 <div className="flex items-center gap-3">
                   <div aria-hidden="true" className="h-2 min-w-10 flex-1 rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
-                    <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / top) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+                    <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / top) * 100) : 0}%`, background: 'var(--chart-hi)' }} />
                   </div>
                   <span className="min-w-24 shrink-0 text-right font-semibold whitespace-nowrap">{tl(p.revenue)}</span>
                 </div>
@@ -1000,7 +1003,7 @@ const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 const WEEKDAY_LONG = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
 /** Tek renk, açıktan koyuya 5 basamak (sıfır boş kalır); en açık basamak koyu temada da boş hücreden ayrılır */
 const HEAT_STEPS = [24, 40, 58, 76, 94];
-const heat = (pct: number) => `color-mix(in oklab, var(--chart-accent) ${pct}%, var(--admin-surface))`;
+const heat = (pct: number) => `color-mix(in oklab, var(--chart-hi) ${pct}%, var(--admin-surface))`;
 
 /**
  * Haftanın günü × saat ısı haritası: personel planı için hangi gün hangi saat yoğun (sütunlar iş günü sırasıyla). Gün
@@ -1438,7 +1441,7 @@ function PlatformsReport({ range, today, onExport, exporting }: { range: Range; 
                       </span>
                     </div>
                     <div aria-hidden="true" className="mt-2 h-2 rounded-[var(--r-track)]" style={{ background: 'var(--chart-track)' }}>
-                      <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-accent)' }} />
+                      <div className="h-2 rounded-[var(--r-track)]" style={{ width: `${p.revenue > 0 ? Math.max(1, (p.revenue / max) * 100) : 0}%`, background: 'var(--chart-hi)' }} />
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 xl:grid-cols-4">
                       <Metric label="Sipariş" value={p.orders.toLocaleString('tr-TR')} hint={p.orders ? `ortalama ${tlShort(p.avgBasket)}` : null} />
