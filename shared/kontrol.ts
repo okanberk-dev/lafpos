@@ -20,7 +20,7 @@ import { SERVICE_MODE_LABEL, SERVICE_MODES, type ServiceMode } from './service-m
 export const KONTROL_SURUM = 1;
 
 /** Kasanın kabul ettiği komutlar (beyaz liste). Kasa bu listenin dışındaki hiçbir şeyi uygulamaz */
-export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu', 'urun.ekle'] as const;
+export const KOMUT_TURLERI = ['personel.ekle', 'personel.duzenle', 'personel.pin', 'rol.yetki', 'urun.satis', 'secenek.satis', 'ayar.servis', 'urun.gorunum', 'secenek.grubu', 'urun.ekle', 'secenek.duzenle'] as const;
 export type KomutTuru = (typeof KOMUT_TURLERI)[number];
 
 export const KOMUT_ETIKET: Record<KomutTuru, string> = {
@@ -34,6 +34,7 @@ export const KOMUT_ETIKET: Record<KomutTuru, string> = {
   'urun.gorunum': 'Ürün kasada göster / gizle',
   'secenek.grubu': 'Seçenek grubu ekleme',
   'urun.ekle': 'Ürün ekleme',
+  'secenek.duzenle': 'Seçenek grubuna ekleme',
 };
 
 /**
@@ -105,6 +106,15 @@ export interface UrunEkle {
   kdv: number;
   gruplar: string[];
 }
+/**
+ * Var olan seçenek grubuna yalnız ekleme: yeni seçenekler ve gruba bağlanacak ürünler (var olan seçenek ve bağlar
+ * olduğu gibi kalır). "Bardak: Cam, Karton" grubuna "Yenilebilir bardak +₺80" ve bütün içecekler gibi
+ */
+export interface SecenekDuzenle {
+  grup: string;
+  ogeler: { ad: string; fiyat: number }[];
+  urunler: string[];
+}
 /** Yeni seçenek grubu (tek seçim) ve bağlanacağı ürünler: "Latte çeşidi: Klasik, Spanish +₺50…". Fiyat kuruş */
 export interface SecenekGrubu {
   ad: string;
@@ -124,6 +134,7 @@ export interface KomutVerileri {
   'urun.gorunum': UrunGorunum;
   'secenek.grubu': SecenekGrubu;
   'urun.ekle': UrunEkle;
+  'secenek.duzenle': SecenekDuzenle;
 }
 export type KomutVerisi = KomutVerileri[KomutTuru];
 
@@ -417,6 +428,21 @@ export function komutDogrula(tur: unknown, veri: unknown): Dogrulama {
       if (!Array.isArray(veri.urunler) || veri.urunler.length > 200 || veri.urunler.some((u) => typeof u !== 'string' || !ID_RE.test(u))) return { ok: false, hata: 'Ürünler anlaşılamadı' };
       return { ok: true, tur: t, veri: { ad: name, zorunlu: veri.zorunlu, ogeler, urunler: [...new Set(veri.urunler as string[])] } };
     }
+    case 'secenek.duzenle': {
+      if (typeof veri.grup !== 'string' || !ID_RE.test(veri.grup)) return { ok: false, hata: 'Seçenek grubu anlaşılamadı' };
+      if (!Array.isArray(veri.ogeler) || veri.ogeler.length > 30) return { ok: false, hata: 'En çok 30 seçenek eklenir' };
+      const ogeler: SecenekDuzenle['ogeler'] = [];
+      for (const o of veri.ogeler as unknown[]) {
+        if (!isRecord(o)) return { ok: false, hata: 'Seçenek anlaşılamadı' };
+        const oad = ad(o.ad);
+        if (oad.length < 1 || oad.length > 40) return { ok: false, hata: 'Seçenek adı 1-40 karakter olmalı' };
+        if (!Number.isInteger(o.fiyat) || (o.fiyat as number) < 0 || (o.fiyat as number) > 10_000_000) return { ok: false, hata: 'Seçenek fiyatı kuruş olarak tam sayı olmalı' };
+        ogeler.push({ ad: oad, fiyat: o.fiyat as number });
+      }
+      if (!Array.isArray(veri.urunler) || veri.urunler.length > 300 || veri.urunler.some((u) => typeof u !== 'string' || !ID_RE.test(u))) return { ok: false, hata: 'Ürünler anlaşılamadı' };
+      if (!ogeler.length && !veri.urunler.length) return { ok: false, hata: 'Değişiklik yok' };
+      return { ok: true, tur: t, veri: { grup: veri.grup, ogeler, urunler: [...new Set(veri.urunler as string[])] } };
+    }
     case 'urun.ekle': {
       const name = ad(veri.ad);
       if (name.length < 1 || name.length > 80) return { ok: false, hata: 'Ürün adı 1-80 karakter olmalı' };
@@ -502,6 +528,10 @@ export function komutOzeti<T extends KomutTuru>(tur: T, veri: KomutVerileri[T], 
     case 'urun.gorunum': {
       const v = veri as UrunGorunum;
       return `${v.gorunur ? 'Kasada göster' : 'Kasada gizle'}: ${adlar.urun?.[v.id] ?? 'ürün'}`;
+    }
+    case 'secenek.duzenle': {
+      const v = veri as SecenekDuzenle;
+      return `Seçenek grubuna ekle: ${[v.ogeler.map((o) => o.ad).join(', '), v.urunler.length ? `${v.urunler.length} ürün` : ''].filter(Boolean).join('; ')}`;
     }
     case 'urun.ekle': {
       const v = veri as UrunEkle;

@@ -59,6 +59,7 @@ ekranındakiyle birebir aynıdır (ayrı iş kuralı yazılmaz):
 | `ayar.servis` | `PUT /api/admin/settings` `{ serviceMode }` |
 | `urun.gorunum` | `PATCH /api/admin/products/:id` `{ hidden }` (siteden gelen üründe de: kasa alanı) |
 | `urun.ekle` | `POST /api/admin/products` `{ categoryId, name, price, kdvRate, groupIds }` |
+| `secenek.duzenle` | `PUT /api/admin/option-groups/:id` (grubun bugünkü seçenekleri ve bağları + yenileri; yalnız ekleme) |
 | `secenek.grubu` | `POST /api/admin/option-groups` `{ name, kind: 'single', required, maxSelect: 1, items, productIds }` |
 
 İç isteğin kimliği: `server/lib/auth.ts`'te süreç içi `WeakMap<Request, AuthUser>`; kimlik doğrulama ara katmanı
