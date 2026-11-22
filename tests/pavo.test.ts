@@ -551,6 +551,12 @@ describe('akış (sahte cihaz)', () => {
       }
       expect(audits()[0]).toMatchObject({ severity: 'info', amount: eod.grandTotalKurus });
       expect(audits()[0]!.message).toContain('batch 000278');
+
+      // Fiş yazıcısı kâğıdı: batch başına bir kez, ilk soran kasa ekranına; kör kasada LafPOS kıyası gitmez
+      expect((await h.call('garson', 'POST', '/okc/eod/slip', {})).status).toBe(403);
+      const first = await h.ok<{ slip: { batchNo: string; grandTotalKurus: number; dayCardKurus: number | null } | null }>('kasa', 'POST', '/okc/eod/slip', {});
+      expect(first.slip).toMatchObject({ batchNo: '000278', grandTotalKurus: eod.grandTotalKurus, dayCardKurus: null, trigger: 'otomatik' });
+      expect((await h.ok<{ slip: unknown }>('patron', 'POST', '/okc/eod/slip', {})).slip).toBeNull();
     });
 
     it('yeniden açılıp kapanan gün için cihaz gün sonu kendiliğinden ikinci kez alınmaz; ilk batch saklı kalır, elle alınan ikincisi yalnız sonraki kart ödemeleriyle kıyaslanır', async () => {

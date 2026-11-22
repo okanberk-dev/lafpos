@@ -100,6 +100,8 @@ export interface PrivateSettings {
    * beklenmedik davranırsa Yönetim › Yazarkasa POS'tan kapatılır: ödeme türünü kasiyer cihazda seçer
    */
   okcPavoOdemeSecili: boolean;
+  /** Pavo: cihazda banka gün sonu alınınca kasa ekranı fiş yazıcısından da gün sonu kâğıdı basar (batch başına bir kez) */
+  okcPavoEodFis: boolean;
   /**
    * Ödemeyi alınca cihaza gönder (kasada ödeme): ödeme penceresinde "Ödemeyi al" sepeti kendiliğinden cihaza yollar,
    * ayrı "Yazarkasaya gönder" adımı olmaz. Kapalıysa bugünkü akış (docs/04-YAZARKASA.md §4.1). null: varsayılan,
@@ -158,6 +160,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcOperatorMethods: {},
   okcPavoAutoEod: true,
   okcPavoOdemeSecili: true,
+  okcPavoEodFis: true,
   okcAuto: null,
   pavoDevice: null,
   receiptPrinter: null,

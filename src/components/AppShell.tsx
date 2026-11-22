@@ -4,7 +4,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
-import { useDeviceCopies } from '@/lib/after-payment';
+import { useBankEodSlip, useDeviceCopies } from '@/lib/after-payment';
 import { useBoot } from '@/lib/boot';
 import { useBuildWatch, useRemoteBuildWatch } from '@/lib/buildWatch';
 import { useOutbox } from '@/lib/outbox';
@@ -84,6 +84,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   // Cihaz ödemesinin işyeri nüshası (kasa ekranında): ödeme penceresi kapanmış olsa da; olay kaçtıysa açılışta ve canlı
   // bağlantı yeniden kurulunca sunucuda bekleyenler basılır
   useDeviceCopies(boot);
+  useBankEodSlip(boot);
   const can = useCan();
   const me = useAuth((s) => s.me)!;
   const [finishing, setFinishing] = useState(false);

@@ -5,6 +5,17 @@ import { tlPlain } from '@shared/money';
 import { fmtDateTime } from '@shared/time';
 import type { BootstrapDTO, OrderDTO, PublicSettings } from '@shared/types';
 import type { ZSummary } from '@shared/types';
+
+/** Sunucunun verdiği banka gün sonu kâğıdı (`server/okc/service.ts` `PavoEodSlip`) */
+export interface BankEodSlip {
+  batchNo: string;
+  deviceDateTime: string | null;
+  grandTotalKurus: number | null;
+  acquirers: { name: string; count: number | null; totalKurus: number | null }[];
+  dayCardKurus: number | null;
+  trigger: 'otomatik' | 'elle';
+  at: number;
+}
 import { callFor, callText, numaratorLabel, serviceModeOf } from '@shared/service-mode';
 
 /**
@@ -331,6 +342,42 @@ export function ZReceipt({ boot, date, zNo, s, closedAt }: { boot: BootstrapDTO;
       )}
       <Hr />
       <div className="rc-foot">LafPOS yönetim raporudur, mali Z değildir</div>
+    </div>
+  );
+}
+
+/** Cihazda alınan banka gün sonunun kâğıdı (`POST /okc/eod/slip`): bankalar, işlem sayısı, toplam; varsa LafPOS kıyası */
+export function BankEodReceipt({ boot, slip }: { boot: BootstrapDTO; slip: BankEodSlip }) {
+  const diff = slip.grandTotalKurus != null && slip.dayCardKurus != null ? slip.grandTotalKurus - slip.dayCardKurus : null;
+  return (
+    <div className="rc">
+      <Header boot={boot} title="BANKA GÜN SONU · PAVO" />
+      <div className="rc-block">
+        <Row l="Batch" r={slip.batchNo} />
+        {slip.deviceDateTime && <Row l="Cihaz saati" r={slip.deviceDateTime} />}
+        <Row l="Alınış" r={slip.trigger === 'otomatik' ? 'Gün kapanınca' : 'Elle'} />
+        <Row l="Yazdırma" r={fmtDateTime(Date.now())} />
+      </div>
+      <Hr />
+      <div className="rc-caption">Bankalar</div>
+      {slip.acquirers.length ? (
+        slip.acquirers.map((a, i) => <Row key={`${a.name}-${i}`} l={`${a.name}${a.count != null ? ` (${a.count})` : ''}`} r={a.totalKurus != null ? tlPlain(a.totalKurus) : '-'} />)
+      ) : (
+        <Row l="İşlem yok" />
+      )}
+      <div className="rc-total">
+        <span>TOPLAM</span>
+        <span className="rc-r">{slip.grandTotalKurus != null ? `${tlPlain(slip.grandTotalKurus)} TL` : '-'}</span>
+      </div>
+      {slip.dayCardKurus != null && (
+        <>
+          <Hr />
+          <Row l="LafPOS kart toplamı" r={tlPlain(slip.dayCardKurus)} />
+          {diff != null && <Row strong l="FARK" r={tlPlain(diff)} />}
+        </>
+      )}
+      <Hr />
+      <div className="rc-foot">Pavo cihazının banka gün sonu özetidir</div>
     </div>
   );
 }

@@ -73,6 +73,7 @@ export function okcStatus(user?: AuthUser) {
     operatorMethods: s.okcOperatorMethods,
     pavoAutoEod: s.okcPavoAutoEod,
     pavoOdemeSecili: s.okcPavoOdemeSecili,
+    pavoEodFis: s.okcPavoEodFis,
     auto: okcAutoOn(s),
     active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
     tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
@@ -1004,6 +1005,8 @@ export interface PavoEodRecord extends PavoEodSummary {
 }
 
 const EOD_LAST = 'pavo.eod.last';
+/** Kâğıdı fiş yazıcısına verilmiş son gün sonunun batch no'su (`takeEodSlip`) */
+const EOD_SLIP = 'pavo.eod.fis';
 /** Son başarılı gün sonunun batch no'su (cihaz okunamazsa tabanın yedeği) */
 const EOD_BATCH = 'pavo.eod.batch';
 const eodDayKey = (dayId: string) => `pavo.eod.${dayId}`;
@@ -1398,3 +1401,41 @@ export function receiptActor(userId: string): Actor | null {
 }
 
 export { env as okcEnv };
+
+/** Fiş yazıcısına basılacak banka gün sonu kâğıdı (`takeEodSlip`) */
+export interface PavoEodSlip {
+  batchNo: string;
+  deviceDateTime: string | null;
+  grandTotalKurus: number | null;
+  acquirers: PavoEodSummary['acquirers'];
+  /** LafPOS'un kıyas tutarı; kasa rakamlarını görmeyene null */
+  dayCardKurus: number | null;
+  trigger: 'otomatik' | 'elle';
+  at: number;
+}
+
+/** Bu süreden eski gün sonunun kâğıdı basılmaz (kasa ekranı ertesi gün açıldığında eski kâğıt çıkmasın) */
+const EOD_SLIP_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+/**
+ * Son başarılı banka gün sonunun kâğıdı: batch başına bir kez, ilk soran ekrana (iki sekme ya da iki kasa ekranı
+ * aynı kâğıdı basmaz). Ayar kapalıysa, son deneme başarısızsa ya da gün sonu eskiyse null. Tutarlar cihazın kendi
+ * slibindekilerle aynı; LafPOS kıyası yalnız kasa rakamlarını görene
+ */
+export function takeEodSlip(user: AuthUser, now = Date.now()): PavoEodSlip | null {
+  const s = getSettings();
+  if (s.okcProvider !== 'pavo' || !s.okcPavoEodFis) return null;
+  const rec = getSyncState<PavoEodRecord>(EOD_LAST);
+  if (!rec || rec.status !== 'ok' || !rec.batchNo || now - rec.at > EOD_SLIP_MAX_AGE_MS) return null;
+  if (getSyncState<string>(EOD_SLIP) === rec.batchNo) return null;
+  setSyncState(EOD_SLIP, rec.batchNo);
+  return {
+    batchNo: rec.batchNo,
+    deviceDateTime: rec.deviceDateTime,
+    grandTotalKurus: rec.grandTotalKurus,
+    acquirers: rec.acquirers,
+    dayCardKurus: seesCashNumbers(user) ? rec.dayCardKurus : null,
+    trigger: rec.trigger,
+    at: rec.at,
+  };
+}
