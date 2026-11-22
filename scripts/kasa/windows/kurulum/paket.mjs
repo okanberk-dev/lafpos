@@ -17,6 +17,7 @@ export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.
 /** Kasa kısayolunun güncellemeyle gelen parçaları: kaynak (bu klasöre göre) → app\ içindeki adı (CRLF yazılır) */
 export const KASA_LAUNCHER = [
   ['kasa-yazici.ps1', 'kasa-yazici.ps1'],
+  ['kasa-hazirla.ps1', 'kasa-hazirla.ps1'],
   ['../LafPOS-Kasa.bat', 'LafPOS-Kasa.bat'],
 ];
 /** better-sqlite3 ve yükledikleri: yalnız JavaScript (derleme klasörleri ve kaynak yok) */

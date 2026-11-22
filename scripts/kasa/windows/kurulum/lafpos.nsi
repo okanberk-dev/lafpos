@@ -222,6 +222,7 @@ Section "LafPOS sunucusu ve kasa ekranı" SecMain
   CreateShortcut "$SMPROGRAMS\LafPOS\LafPOS ayarları.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" ayarlar' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Site, lafmaliyet ve yazarkasa ayarları"
   CreateShortcut "$SMPROGRAMS\LafPOS\Sunucuyu yeniden başlat.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" yeniden-baslat' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED
   CreateShortcut "$SMPROGRAMS\LafPOS\Sunucu günlüğü.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\yonet.ps1" gunluk' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED
+  CreateShortcut "$SMPROGRAMS\LafPOS\Kasa hazırlığı.lnk" "$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "$INSTDIR\app\kasa-hazirla.ps1"' "$INSTDIR\lafpos.ico" 0 SW_SHOWMINIMIZED "" "Ekran, Windows Update, ağ kartı, otomatik oturum"
   CreateShortcut "$SMPROGRAMS\LafPOS\Kurulum notları.lnk" "$INSTDIR\BENIOKU.txt"
   CreateShortcut "$SMPROGRAMS\LafPOS\LafPOS'u kaldır.lnk" "$INSTDIR\Kaldir.exe"
 
