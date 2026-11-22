@@ -4,56 +4,78 @@ import { networkError, type PlatformAdapter, PlatformHttpError, type PlatformNot
 
 /**
  * Trendyol Go Yemek (Uber Eats Türkiye siparişleri de buradan gelir) bağdaştırıcısı: yalnız yoklama (platform
- * kasayı aramaz), kasadan doğrudan. Kaynak: developers.tgoapps.com (Yetkilendirme; Yemek › Sipariş entegrasyonu ›
- * Sipariş paketlerini çekme, Paket modelleri, Paket durumu güncelleme; Uber Eats geçişi değişiklikleri); özet
- * calisma/arastirma/paket-platformlari/README.md (calisma-notlari dalı).
+ * kasayı aramaz), kasadan doğrudan. Kaynak: developers.tgoapps.com (Canlı-Test Ortam Bilgileri, Authorization; Yemek ›
+ * Sipariş Entegrasyonu › Sipariş Paketlerini Çekme, Paket Modelleri, Siparişi Kabul Etme, Sipariş Hazırlığının Bitmesi,
+ * Siparişin Yola Çıkması, Siparişin Teslim Edilmesi, Sipariş İptali; Uber Eats geçişi), 22 Kasım 2026'da okundu (#74).
  *
- * - Kimlik: Basic (API anahtarı:gizli anahtar), `User-Agent: "<satıcı no> - <entegratör>"`, `x-agentname`,
- *   `x-executor-user`. Uç başına 10 saniyede 50 istek: 20 saniyelik yoklama bunun çok altında.
- * - Sipariş: `GET /integrator/order/meal/suppliers/{id}/packages` (durum ve değişiklik zamanı süzgeci, sayfa 50).
- * - Akış: `PUT …/packages/{paketId}/picked` (kabul, hazırlık süresi) → `/invoiced` (hazır) → kendi kuryemizde
- *   `/manual-shipped` ve `/manual-delivered`; ret ve iptal `/unsupplied` (neden kodu).
+ * - Adres: canlı `https://api.tgoapis.com` (IP izni gerekmez), test `https://stageapi.tgoapis.com` (IP izni ister).
+ * - Kimlik: Basic (API anahtarı:gizli anahtar), `User-Agent: "<satıcı no> - SelfIntegration"` (yazılım bizim),
+ *   `x-agentname`, `x-executor-user` (işlemi yapanın e-postası). Uç başına 10 saniyede 50 istek: 20 saniyelik yoklama
+ *   bunun çok altında.
+ * - Sipariş: `GET /integrator/order/meal/suppliers/{id}/packages` (`packageStatuses` virgüllü, değişiklik zamanı
+ *   süzgeci, sayfa 50); tek paket `GET …/packages/{paketId}`.
+ * - Akış: `PUT …/packages/picked` `{ packageId, preparationTime }` (kabul) → `PUT …/packages/invoiced`
+ *   `{ packageId, actualDate }` (hazır) → kendi kuryemizde `PUT …/packages/{paketId}/manual-shipped` ve
+ *   `/manual-delivered` `{ actualDate }`; ret ve iptal `PUT …/packages/unsupplied` `{ packageId, itemIdList, reasonId }`
+ *   (tam iptalde paketin bütün `packageItemId`'leri).
+ * - Paket modelleri: model 1 kendi kuryemiz (`deliveryType: STORE`), model 2 Trendyol Go kuryesi (`GO`); `appName`
+ *   `Galaxy` ise sipariş GetirYemek by Uber Eats'ten gelmiştir (Getir siparişleri de bu API'den akar).
  *
- * Alan adları ve yollar bu dosyanın başındaki sabitlerde toplandı: canlıya geçmeden önce Trendyol'un test ortamında
- * (IP izni) bir tur atılır, uyuşmayan ad yalnız burada değişir. Para TL ondalık gelir, kuruşa çevrilir.
+ * Alan adları ve yollar bu dosyanın başındaki sabitlerde toplandı: canlıya geçmeden önce test ortamında (IP izniyle) ya
+ * da panelden test siparişiyle bir tur atılır. Para TL ondalık gelir, kuruşa çevrilir.
  */
 
-export const TRENDYOL_DEFAULT_URL = 'https://api.tgoapps.com';
+export const TRENDYOL_DEFAULT_URL = 'https://api.tgoapis.com';
+export const TRENDYOL_STAGE_URL = 'https://stageapi.tgoapis.com';
 
-/** Uç yolları (satıcı no ile) */
+/** Uç yolları (satıcı no ile); kabul, hazır ve ret yolunda paket kimliği yok, gövdededir */
 export const TRENDYOL_PATHS = {
   packages: (supplierId: string) => `/integrator/order/meal/suppliers/${encodeURIComponent(supplierId)}/packages`,
-  picked: (supplierId: string, packageId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/${encodeURIComponent(packageId)}/picked`,
-  invoiced: (supplierId: string, packageId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/${encodeURIComponent(packageId)}/invoiced`,
+  one: (supplierId: string, packageId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/${encodeURIComponent(packageId)}`,
+  picked: (supplierId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/picked`,
+  invoiced: (supplierId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/invoiced`,
   shipped: (supplierId: string, packageId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/${encodeURIComponent(packageId)}/manual-shipped`,
   delivered: (supplierId: string, packageId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/${encodeURIComponent(packageId)}/manual-delivered`,
-  unsupplied: (supplierId: string, packageId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/${encodeURIComponent(packageId)}/unsupplied`,
+  unsupplied: (supplierId: string) => `${TRENDYOL_PATHS.packages(supplierId)}/unsupplied`,
 };
 
 /** Paket durumları (packageStatus): yeni sipariş `Created`; platformun iptali `Cancelled`; bizim iptalimiz `UnSupplied` */
 export const TRENDYOL_STATUS = { created: 'Created', cancelled: 'Cancelled', unsupplied: 'UnSupplied' } as const;
 
 /**
- * Ret / iptal neden kodları (`unsupplied`, 621-627). Kasadaki ret nedenleri (shared/platforms.ts REJECT_REASONS) bu
- * kodlara eşlenir; belgedeki sıra: 621 ürün yok, 622 yoğunluk, 623 kapalı / kapanıyor, 624 adres, 625 müşteri
- * istedi, 626 ödeme sorunu, 627 diğer. Test ortamında doğrulanır.
+ * Restoran kaynaklı iptal nedenleri (`unsupplied` `reasonId`, belge: Paket Modelleri): 621 tedarik problemi, 622 mağaza
+ * kapalı, 623 mağaza siparişi hazırlayamıyor, 624 yüksek yoğunluk / kurye yok (yalnız model 1), 626 alan dışı (yalnız
+ * model 1), 627 sipariş karışıklığı. Kasadaki ret nedenleri (shared/platforms.ts REJECT_REASONS) böyle eşlenir;
+ * "diğer" kodu yok, 623 gider.
  */
 export const TRENDYOL_REASON_CODES: Record<string, number> = {
   'Ürün tükendi': 621,
-  'Çok yoğunuz': 622,
-  'Kapanmak üzereyiz': 623,
-  'Adres hizmet alanı dışında': 624,
+  'Çok yoğunuz': 623,
+  'Kapanmak üzereyiz': 622,
+  'Adres hizmet alanı dışında': 626,
 };
-export const TRENDYOL_REASON_OTHER = 627;
+export const TRENDYOL_REASON_OTHER = 623;
+/** Yalnız model 1'de (kendi kuryemiz) geçerli kodların kendi kuryemizdeki karşılığı */
+const OWN_COURIER_REASON: Record<string, number> = { 'Çok yoğunuz': 624 };
+const OWN_COURIER_ONLY = new Set([624, 626]);
+
+/** Kasadaki ret nedeni → belgedeki `reasonId`; 624 ve 626 yalnız kendi kuryemizin siparişinde, ötekinde 623 */
+export function trendyolReasonId(reason: string, courier: PlatformCourier): number {
+  const own = courier === 'restoran';
+  const id = (own ? OWN_COURIER_REASON[reason] : undefined) ?? TRENDYOL_REASON_CODES[reason] ?? TRENDYOL_REASON_OTHER;
+  return !own && OWN_COURIER_ONLY.has(id) ? TRENDYOL_REASON_OTHER : id;
+}
 
 export interface TrendyolConfig {
   supplierId: string;
   apiKey: string;
   apiSecret: string;
-  /** Canlı `https://api.tgoapps.com`; test ortamı Trendyol'un verdiği adres */
+  /** Canlı `https://api.tgoapis.com`; test ortamı `https://stageapi.tgoapis.com` */
   apiUrl: string;
-  /** User-Agent ve x-agentname'deki entegratör adı */
+  /** x-agentname ve User-Agent'taki entegratör adı (yazılım bizim: `SelfIntegration`) */
   agentName: string;
+  /** x-executor-user: işlemi yapanın e-postası; boşsa entegratör adı gider */
+  executorEmail?: string;
 }
 
 export const trendyolConfigured = (c: TrendyolConfig) => !!(c.supplierId && c.apiKey && c.apiSecret);
@@ -68,21 +90,31 @@ export interface TrendyolPromotion {
   sellerCoverageRatio?: number;
 }
 
+/** Satırın bir birimi: iptal (`unsupplied` `itemIdList`) bu kimlikle; kampanyalar birimde */
+export interface TrendyolLineItem {
+  packageItemId?: string | number;
+  lineItemId?: string | number;
+  isCancelled?: boolean;
+  coupon?: TrendyolPromotion | null;
+  promotions?: TrendyolPromotion[] | null;
+}
+
 export interface TrendyolLine {
   id?: number | string;
   lineId?: number | string;
   productId?: number | string;
   name?: string;
-  /** Birim fiyat (TL) */
+  /** Birim fiyat (TL), seçenekler dahil (belgedeki örneklerde totalPrice = Σ price × birim) */
   price?: number;
+  unitSellingPrice?: number;
   unitPrice?: number;
   quantity?: number;
-  /** Bazı sürümlerde adet yerine satırın birimleri (`items`) gelir */
-  items?: unknown[];
+  /** Satırın birimleri: adet iptal edilmemiş birim sayısıdır */
+  items?: TrendyolLineItem[];
   modifierProducts?: { name?: string; price?: number; modifierProducts?: { name?: string; price?: number }[] }[];
   extraIngredients?: { name?: string; price?: number }[];
   removedIngredients?: { name?: string }[];
-  promotions?: TrendyolPromotion[];
+  promotions?: TrendyolPromotion[] | null;
   note?: string;
 }
 
@@ -117,11 +149,19 @@ export interface TrendyolPackage {
     phone?: string;
   };
   lines?: TrendyolLine[];
-  /** `paymentType`: PAY_WITH_CREDIT_CARD (online), PAY_WITH_CASH, PAY_WITH_MULTINET… (kapıda) */
-  payment?: { paymentType?: string; cardType?: string } | string;
+  /**
+   * `paymentType`: `PAY_WITH_CARD` online (yemek kartıysa `mealCard` dolu); `PAY_WITH_ON_DELIVERY` kapıda, türü
+   * `onDelivery`'de (CASH, CARD, SODEXO_CARD…)
+   */
+  payment?: { paymentType?: string; cardType?: string; mealCard?: unknown; onDelivery?: unknown } | string;
   /** Müşterinin ödediği (TL) */
   totalPrice?: number;
-  promotions?: TrendyolPromotion[];
+  coupon?: TrendyolPromotion | null;
+  promotions?: TrendyolPromotion[] | null;
+  /** Panelden oluşturulan test siparişi */
+  testPackage?: boolean;
+  /** `Trendyol`, `TrendyolGo` ya da `Galaxy` (GetirYemek by Uber Eats) */
+  userInformation?: { appName?: string } | null;
 }
 
 export interface TrendyolPage {
@@ -156,7 +196,8 @@ function promotionParts(p: TrendyolPromotion): { value: number; sellerRatio: num
 
 /**
  * Tanınan online ödeme türleri (Trendyol uygulamasında kartla ya da cüzdanla ödenmiş). Burada olmayan ve kapıda
- * sayılmayan tür online sayılır ama doğrulanır (`verify`): kendi kuryemizin siparişinde kapıda ödemeyse kasa açık verir
+ * sayılmayan tür online sayılır ama doğrulanır (`verify`): kendi kuryemizin siparişinde kapıda ödemeyse kasa açık verir.
+ * Belgedeki kapıda ödeme `PAY_WITH_ON_DELIVERY`'dir (aşağıda ayrıca)
  */
 export const TRENDYOL_ONLINE_PAYMENTS: ReadonlySet<string> = new Set(['PAY_WITH_CREDIT_CARD', 'PAY_WITH_DEBIT_CARD', 'PAY_WITH_CARD', 'PAY_WITH_WALLET', 'PAY_ONLINE', 'ONLINE', 'CREDIT_CARD', 'DEBIT_CARD']);
 
@@ -169,21 +210,44 @@ export function paymentOf(pkg: TrendyolPackage): { online: boolean; label: strin
   const raw = given.toUpperCase();
   const cardType = typeof pkg.payment === 'object' && pkg.payment ? text(pkg.payment.cardType) : null;
   if (!raw) return { online: true, label: 'Online', missing: true };
+  // Belge: kapıda ödeme PAY_WITH_ON_DELIVERY, türü onDelivery'de (dize; nesne gelirse dize alanlarından biri)
+  if (raw.includes('ON_DELIVERY')) {
+    const od = typeof pkg.payment === 'object' && pkg.payment ? pkg.payment.onDelivery : null;
+    const sub = (typeof od === 'string' ? od : od && typeof od === 'object' ? Object.values(od).find((v): v is string => typeof v === 'string' && !!v.trim()) : '') ?? '';
+    return { online: false, label: onDeliveryLabel(sub.trim().toUpperCase()) };
+  }
   if (raw.includes('CASH') || raw.includes('NAKIT')) return { online: false, label: 'Kapıda nakit' };
-  const cards: [string, string][] = [
-    ['MULTINET', 'Multinet'],
-    ['PLUXEE', 'Pluxee'],
-    ['SODEXO', 'Pluxee'],
-    ['EDENRED', 'Edenred'],
-    ['TICKET', 'Edenred'],
-    ['SETCARD', 'Setcard'],
-    ['METROPOL', 'Metropol'],
-    ['TOKENFLEX', 'Tokenflex'],
-  ];
-  for (const [key, label] of cards) if (raw.includes(key)) return { online: false, label: `Kapıda ${label}` };
+  const voucher = voucherName(raw);
+  if (voucher) return { online: false, label: `Kapıda ${voucher}` };
   if (raw.includes('DOOR') || raw.includes('KAPIDA')) return { online: false, label: `Kapıda ${cardType ?? 'kart'}` };
+  const meal = typeof pkg.payment === 'object' && pkg.payment ? pkg.payment.mealCard : null;
+  if (meal != null && meal !== false && meal !== '' && TRENDYOL_ONLINE_PAYMENTS.has(raw)) return { online: true, label: 'Online yemek kartı' };
   const label = `Online ${cardType ?? 'kart'}`.trim();
   return TRENDYOL_ONLINE_PAYMENTS.has(raw) ? { online: true, label } : { online: true, label, verify: true, raw: given };
+}
+
+const VOUCHERS: [string, string][] = [
+  ['MULTINET', 'Multinet'],
+  ['PLUXEE', 'Pluxee'],
+  ['SODEXO', 'Pluxee'],
+  ['EDENRED', 'Edenred'],
+  ['TICKET', 'Edenred'],
+  ['SETCARD', 'Setcard'],
+  ['METROPOL', 'Metropol'],
+  ['TOKENFLEX', 'Tokenflex'],
+  ['PAYEKART', 'Paye'],
+  ['IWALLET', 'iWallet'],
+];
+const voucherName = (raw: string) => VOUCHERS.find(([key]) => raw.includes(key))?.[1] ?? null;
+
+/** `onDelivery` türü → kasadaki ad: CASH nakit, CARD kart, yemek kartları adıyla (`_CODE` ise "kod") */
+function onDeliveryLabel(sub: string): string {
+  if (!sub) return 'Kapıda ödeme';
+  if (sub === 'CASH' || sub.includes('NAKIT')) return 'Kapıda nakit';
+  const voucher = voucherName(sub);
+  if (voucher) return `Kapıda ${voucher}${sub.endsWith('_CODE') ? ' kod' : ''}`;
+  if (sub === 'CARD' || sub.includes('CARD')) return 'Kapıda kart';
+  return 'Kapıda ödeme';
 }
 
 /** Kim götürür: GO → platform kuryesi; STORE → gel-al ya da kendi kuryemiz */
@@ -192,16 +256,28 @@ export function courierOf(pkg: TrendyolPackage): PlatformCourier {
   return pkg.storePickupSelected ? 'gelal' : 'restoran';
 }
 
+/** Belge: model 1'de apartman, kat ve kapı "TGO Yemek" dolgusu gelir (gerçek adres address1'de), model 2'de hepsi */
+const FILLER = /TGO\s*Yemek/i;
+const real = (v: unknown): string | null => {
+  const t = text(v);
+  return t && !FILLER.test(t) ? t : null;
+};
+
 function addressOf(pkg: TrendyolPackage): string | null {
   const a = pkg.address;
   if (!a) return null;
-  const detail = [a.apartmentNumber && `Apt ${a.apartmentNumber}`, a.floor && `Kat ${a.floor}`, a.doorNumber && `Daire ${a.doorNumber}`].filter(Boolean).join(' ');
-  const parts = [a.address1, a.address2, detail, a.addressDescription, a.neighborhood, a.district, a.city].map(text).filter(Boolean);
+  const apt = real(a.apartmentNumber);
+  const floor = real(a.floor);
+  const door = real(a.doorNumber);
+  const detail = [apt && `Apt ${apt}`, floor && `Kat ${floor}`, door && `Daire ${door}`].filter(Boolean).join(' ');
+  const parts = [a.address1, a.address2, detail, a.addressDescription, a.neighborhood, a.district, a.city].map(real).filter(Boolean);
   return parts.length ? parts.join(', ') : null;
 }
 
 /**
- * Trendyol paketi → LafPOS'un tek biçimi. Satırın birim fiyatı ürün + seçenek + ekstra; kampanyalar restoranın payı
+ * Trendyol paketi → LafPOS'un tek biçimi. Satırın birim fiyatı `price` (belgede seçenekler dahil: örneklerde
+ * totalPrice = Σ price × birim; `modifierProducts[].price` yalnız bilgi, eklenmez); adet iptal edilmemiş birim sayısı.
+ * Kampanyalar satırda, birimde (`items[].promotions`, `coupon`) ve pakette (`promotions`, `coupon`); restoranın payı
  * oranında adisyon indirimi, kalanı platformun. Paketin `totalPrice`'ı (müşterinin ödediği) varsa esas odur:
  * kampanya alanı farklı anlaşılmışsa fark platform indirimine yazılır, böylece müşteri toplamı = kalemler − bizden −
  * platformdan eşitliği bozulmaz (kasa platformun ödeyeceği tutarı kalemler − bizden diye hesaplar).
@@ -212,8 +288,9 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
   const lines: PlatformOrderPayload['lines'] = [];
   let restaurantDiscount = 0;
   let platformDiscount = 0;
-  const addPromotions = (list: TrendyolPromotion[] | undefined, times = 1) => {
+  const addPromotions = (list: (TrendyolPromotion | null | undefined)[] | null | undefined, times = 1) => {
     for (const p of list ?? []) {
+      if (!p || typeof p !== 'object') continue;
       const { value, sellerRatio } = promotionParts(p);
       const total = value * times;
       const ours = Math.round(total * sellerRatio);
@@ -222,27 +299,25 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
     }
   };
   for (const l of pkg.lines ?? []) {
-    const qty = Math.max(1, Math.round(typeof l.quantity === 'number' ? l.quantity : Array.isArray(l.items) && l.items.length ? l.items.length : 1));
-    const base = toKurus(l.unitPrice ?? l.price);
+    const units = Array.isArray(l.items) ? l.items.filter((i) => i && typeof i === 'object') : [];
+    const active = units.filter((i) => i.isCancelled !== true);
+    // Birimlerin hepsi iptal edilmişse satır yok
+    if (units.length && !active.length) continue;
+    const qty = Math.max(1, Math.round(units.length ? active.length : typeof l.quantity === 'number' ? l.quantity : 1));
+    // Liste fiyatı (seçenekler dahil); indirimler kampanya alanlarından düşülür
+    const unitPrice = toKurus(l.price ?? l.unitSellingPrice ?? l.unitPrice);
     const modifiers: string[] = [];
-    let extra = 0;
     for (const m of l.modifierProducts ?? []) {
       if (text(m.name)) modifiers.push(m.name!.trim());
-      extra += toKurus(m.price);
-      for (const mm of m.modifierProducts ?? []) {
-        if (text(mm.name)) modifiers.push(mm.name!.trim());
-        extra += toKurus(mm.price);
-      }
+      for (const mm of m.modifierProducts ?? []) if (text(mm.name)) modifiers.push(mm.name!.trim());
     }
-    for (const e of l.extraIngredients ?? []) {
-      if (text(e.name)) modifiers.push(`+${e.name!.trim()}`);
-      extra += toKurus(e.price);
-    }
+    for (const e of l.extraIngredients ?? []) if (text(e.name)) modifiers.push(`+${e.name!.trim()}`);
     for (const r of l.removedIngredients ?? []) if (text(r.name)) modifiers.push(`−${r.name!.trim()}`);
-    lines.push({ externalId: l.productId != null ? String(l.productId) : null, name: text(l.name) ?? 'Ürün', qty, unitPrice: base + extra, modifiers, note: text(l.note) });
+    lines.push({ externalId: l.productId != null ? String(l.productId) : null, name: text(l.name) ?? 'Ürün', qty, unitPrice, modifiers, note: text(l.note) });
     addPromotions(l.promotions, qty);
+    for (const i of active) addPromotions([...(i.promotions ?? []), i.coupon]);
   }
-  addPromotions(pkg.promotions);
+  addPromotions([...(pkg.promotions ?? []), pkg.coupon]);
   const subtotal = lines.reduce((a, l) => a + l.unitPrice * l.qty, 0);
   restaurantDiscount = Math.min(restaurantDiscount, subtotal);
   platformDiscount = Math.min(platformDiscount, subtotal - restaurantDiscount);
@@ -262,9 +337,12 @@ export function fromTrendyolPackage(pkg: TrendyolPackage, now = Date.now()): Pla
   // online sayılır (tahmin; elle kabulde de öyle): tahsilat Trendyol'dan doğrulanmalı, otomatik kabul edilmez
   if (pay.missing && courier !== 'platform') amountReview ??= 'Ödeme türü gelmedi: tahsilatı Trendyol\'dan doğrulayın';
   if (pay.verify && courier !== 'platform') amountReview ??= `Ödeme türü tanınmadı (${pay.raw}): tahsilatı Trendyol'dan doğrulayın`;
+  // Panelden oluşturulan test siparişi gerçek satış değildir: otomatik kabul edilmez, notta işaretli
+  if (pkg.testPackage === true) amountReview = 'Trendyol test siparişi: otomatik kabul edilmez';
   const name = [text(pkg.customer?.firstName), text(pkg.customer?.lastName)].filter(Boolean).join(' ') || text(pkg.address?.fullName);
   const phone = text(pkg.address?.phone) ?? text(pkg.callCenterPhone);
-  const noteParts = [text(pkg.customerNote), pkg.pinCode ? `Teslim PIN ${pkg.pinCode}` : null].filter(Boolean);
+  const getir = text(pkg.userInformation?.appName)?.toLowerCase() === 'galaxy';
+  const noteParts = [pkg.testPackage === true ? 'Test siparişi' : null, getir ? 'Getir (Uber) siparişi' : null, text(pkg.customerNote), pkg.pinCode ? `Teslim PIN ${pkg.pinCode}` : null].filter(Boolean);
   return {
     platform: 'trendyol',
     simulated: false,
@@ -296,7 +374,7 @@ function headersFor(c: TrendyolConfig): Record<string, string> {
     authorization: `Basic ${btoa(`${c.apiKey}:${c.apiSecret}`)}`,
     'user-agent': `${c.supplierId} - ${c.agentName}`,
     'x-agentname': c.agentName,
-    'x-executor-user': c.agentName,
+    'x-executor-user': c.executorEmail || c.agentName,
     'content-type': 'application/json',
     accept: 'application/json',
   };
@@ -342,7 +420,7 @@ async function put(c: TrendyolConfig, path: string, body: unknown): Promise<void
 export async function fetchPackages(c: TrendyolConfig, status: string, startMs: number, endMs: number, maxPages = 10): Promise<TrendyolPackage[]> {
   const out: TrendyolPackage[] = [];
   for (let page = 0; page < maxPages; page++) {
-    const q = new URLSearchParams({ packageStatus: status, packageModificationStartDate: String(startMs), packageModificationEndDate: String(endMs), page: String(page), size: '50' });
+    const q = new URLSearchParams({ packageStatuses: status, packageModificationStartDate: String(startMs), packageModificationEndDate: String(endMs), page: String(page), size: '50' });
     const { status: code, json } = await trendyolRequest(c, 'GET', `${TRENDYOL_PATHS.packages(c.supplierId)}?${q}`);
     if (code !== 200) throw new TrendyolHttpError(code, explain(code, json));
     const body = json as TrendyolPage | TrendyolPackage[] | null;
@@ -353,6 +431,23 @@ export async function fetchPackages(c: TrendyolConfig, status: string, startMs: 
     if (page + 1 >= totalPages || content.length === 0) break;
   }
   return out;
+}
+
+/**
+ * Tam iptal için paketin iptal edilmemiş birimlerinin `packageItemId`'leri (belge: Sipariş İptali), tek paket ucundan.
+ * Yanıt paket ya da sayfa (`{ content: [paket] }`) olabilir. Okunamazsa ret düşer: kimliksiz iptal gönderilmez.
+ */
+export async function packageItemIds(c: TrendyolConfig, packageId: string): Promise<string[]> {
+  const { status, json } = await trendyolRequest(c, 'GET', TRENDYOL_PATHS.one(c.supplierId, packageId));
+  if (status !== 200) throw new TrendyolHttpError(status, explain(status, json));
+  const body = json as (TrendyolPackage & TrendyolPage) | null;
+  const pkg = Array.isArray(body?.content) ? (body.content.find((p) => p && String(p.id) === packageId) ?? body.content[0]) : body;
+  const ids: string[] = [];
+  for (const l of Array.isArray(pkg?.lines) ? pkg.lines : []) {
+    for (const i of Array.isArray(l?.items) ? l.items : []) if (i && i.isCancelled !== true && i.packageItemId != null && String(i.packageItemId)) ids.push(String(i.packageItemId));
+  }
+  if (!ids.length) throw new TrendyolHttpError(502, 'paket kalemleri okunamadı');
+  return ids;
 }
 
 /** Yoklama penceresi: son başarılı yoklamadan 10 dk önceye kadar (kaçan değişiklik yakalanır); ilk kez 2 saat */
@@ -381,21 +476,24 @@ export function trendyolAdapter(c: TrendyolConfig): PlatformAdapter {
       }
       return { orders, cancelled: cancelled.map((p) => String(p.id)), invalid };
     },
-    accept: (order, prepMinutes) => put(c, TRENDYOL_PATHS.picked(c.supplierId, order.externalId), { preparationTime: prepMinutes }),
-    reject: (order, reason) => put(c, TRENDYOL_PATHS.unsupplied(c.supplierId, order.externalId), { reasonCode: TRENDYOL_REASON_CODES[reason] ?? TRENDYOL_REASON_OTHER }),
+    accept: (order, prepMinutes) => put(c, TRENDYOL_PATHS.picked(c.supplierId), { packageId: order.externalId, preparationTime: prepMinutes }),
+    async reject(order, reason) {
+      const itemIdList = await packageItemIds(c, order.externalId);
+      await put(c, TRENDYOL_PATHS.unsupplied(c.supplierId), { packageId: order.externalId, itemIdList, reasonId: trendyolReasonId(reason, order.courier) });
+    },
     async notify(order, status: PlatformNotify, courier) {
       const id = order.externalId;
       if (status === 'hazir') {
-        await put(c, TRENDYOL_PATHS.invoiced(c.supplierId, id), {});
+        await put(c, TRENDYOL_PATHS.invoiced(c.supplierId), { packageId: id, actualDate: Date.now() });
         return true;
       }
       // Platform kuryesi alınca ve teslim edince platform kendi yazar; kendi kuryemiz ve gel-al bizden
       if (courier === 'platform') return false;
       if (status === 'yolda') {
-        await put(c, TRENDYOL_PATHS.shipped(c.supplierId, id), {});
+        await put(c, TRENDYOL_PATHS.shipped(c.supplierId, id), { actualDate: Date.now() });
         return true;
       }
-      await put(c, TRENDYOL_PATHS.delivered(c.supplierId, id), {});
+      await put(c, TRENDYOL_PATHS.delivered(c.supplierId, id), { actualDate: Date.now() });
       return true;
     },
   };

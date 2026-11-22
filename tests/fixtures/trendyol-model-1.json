@@ -1,0 +1,260 @@
+{
+  "page": 0,
+  "size": 50,
+  "totalPages": 1,
+  "totalCount": 1,
+  "content": [
+    {
+      "id": "4dc2e9573983ce9fb97aa905df33f06fc3717b775a1d8391de1ca3750a9de6a4",
+      "supplierId": 107385,
+      "storeId": 153,
+      "orderCode": "1E1",
+      "storePickupSelected": false,
+      "deliveryType": "STORE",
+      "packageCreationDate": 1783520347138,
+      "packageModificationDate": 1783520347146,
+      "preparationTime": 0,
+      "orderId": "1001199521762",
+      "orderNumber": "1199521762",
+      "totalPrice": 602.7,
+      "callCenterPhone": "0212 365 34 03",
+      "customer": {
+        "id": 35018440,
+        "firstName": "Oms",
+        "lastName": "M"
+      },
+      "payment": {
+        "paymentType": "PAY_WITH_CARD",
+        "mealCard": null,
+        "onDelivery": null
+      },
+      "address": {
+        "firstName": "Oms",
+        "lastName": "Meal",
+        "company": "TRENDYOL",
+        "address1": "Gündoğdu Koleji Yanı",
+        "address2": "İş Adresi",
+        "city": "İstanbul",
+        "cityCode": 34,
+        "cityId": 34,
+        "district": "Kadıköy",
+        "districtId": 34,
+        "neighborhoodId": 34,
+        "neighborhood": "Caferağa",
+        "apartmentNumber": "TGO Yemek",
+        "floor": "2TGO Yemek",
+        "doorNumber": "TGO Yemek",
+        "addressDescription": "Kadıköy - ISA2",
+        "postalCode": "34710",
+        "countryCode": "TR",
+        "latitude": "36.983687",
+        "longitude": "35.3272959",
+        "phone": "5554443322",
+        "countryPhoneCode": "+90",
+        "pinCode": "673985557"
+      },
+      "packageStatus": "Created",
+      "lines": [
+        {
+          "price": 145,
+          "unitSellingPrice": 145,
+          "items": [
+            {
+              "packageItemId": "1000008723596",
+              "lineItemId": 1000008181985,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            },
+            {
+              "packageItemId": "1000008723597",
+              "lineItemId": 1000008181986,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            }
+          ],
+          "productId": 203695,
+          "name": "Big King Menü",
+          "description": "Big King® + Patates Kızartması (Orta) + Kutu İçecek",
+          "isClaimRateExceeded": false,
+          "modifierProducts": [
+            {
+              "name": "Big King",
+              "price": 0,
+              "productId": 319239,
+              "modifierGroupId": 226881,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Patates Kızartması (Kova)",
+              "price": 30,
+              "productId": 318489,
+              "modifierGroupId": 40826,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Coca-Cola (33 cl.)",
+              "price": 0,
+              "productId": 317888,
+              "modifierGroupId": 41552,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Sprite",
+              "price": 30.5,
+              "productId": 317823,
+              "modifierGroupId": 41552,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            }
+          ],
+          "extraIngredients": [],
+          "removedIngredients": []
+        },
+        {
+          "price": 75,
+          "unitSellingPrice": 75,
+          "items": [
+            {
+              "packageItemId": "1000008723598",
+              "lineItemId": 1000008181987,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            },
+            {
+              "packageItemId": "1000008723599",
+              "lineItemId": 1000008181988,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            }
+          ],
+          "productId": 6850,
+          "name": "Çiğ Köfte Menü (600 gr.)",
+          "description": "Çiğ köfte ve içecek",
+          "isClaimRateExceeded": false,
+          "modifierProducts": [
+            {
+              "name": "Çiğ Köfte Sos (18 gr.)",
+              "price": 5,
+              "productId": 315251,
+              "modifierGroupId": 47081,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Çok Acı Sos (18 gr.)",
+              "price": 0,
+              "productId": 315253,
+              "modifierGroupId": 47078,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Ayran (küçük)",
+              "price": 0,
+              "productId": 1373581,
+              "modifierGroupId": 166392,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Sprite",
+              "price": 30.5,
+              "productId": 317823,
+              "modifierGroupId": 41552,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            }
+          ],
+          "extraIngredients": [],
+          "removedIngredients": []
+        },
+        {
+          "price": 81.35,
+          "unitSellingPrice": 81.35,
+          "items": [
+            {
+              "packageItemId": "1000008723600",
+              "lineItemId": 1000008181989,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            },
+            {
+              "packageItemId": "1000008723601",
+              "lineItemId": 1000008181990,
+              "isCancelled": false,
+              "coupon": null,
+              "promotions": []
+            }
+          ],
+          "productId": 228287,
+          "name": "Tavuklu Salatalı Pilav",
+          "description": "300 gr. pilav ve tavuk",
+          "isClaimRateExceeded": false,
+          "modifierProducts": [
+            {
+              "name": "Salata",
+              "price": 0,
+              "productId": 21431,
+              "modifierGroupId": 21431,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            },
+            {
+              "name": "Sprite",
+              "price": 30.5,
+              "productId": 317823,
+              "modifierGroupId": 41552,
+              "modifierProducts": [],
+              "extraIngredients": [],
+              "removedIngredients": [],
+              "isClaimRateExceeded": false
+            }
+          ],
+          "extraIngredients": [],
+          "removedIngredients": []
+        }
+      ],
+      "customerNote": "Servis İstiyorum",
+      "lastModifiedDate": 1783520347000,
+      "isCourierNearby": false,
+      "cancelInfo": null,
+      "eta": "15 - 36 dk",
+      "testPackage": false,
+      "pickupEtaState": "",
+      "estimatedPickupTimeMin": 0,
+      "estimatedPickupTimeMax": 0,
+      "coupon": null,
+      "promotions": null,
+      "userInformation": {
+        "appName": "Trendyol"
+      },
+      "totalDeliveryPrice": 15.99
+    }
+  ]
+}

@@ -45,10 +45,16 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
   - **Trendyol Go Yemek** (`server/delivery/trendyol.ts`; Uber Eats Türkiye siparişleri de buradan): yalnız yoklama,
     kasadan doğrudan, 20 saniyede bir (`server/delivery/live.ts` `liveTick`; art arda hatada bekleme 5 dakikaya
     kadar, ilk ve her 15. hata denetim kaydına). `.env`: `TRENDYOL_SUPPLIER_ID`, `TRENDYOL_API_KEY`,
-    `TRENDYOL_API_SECRET`; test ortamı için `TRENDYOL_API_URL`, entegratör adı `TRENDYOL_AGENT_NAME` (boşsa LafPOS).
+    `TRENDYOL_API_SECRET`, işlemi yapanın e-postası `TRENDYOL_EXECUTOR_EMAIL` (`x-executor-user`). Adres canlı
+    `https://api.tgoapis.com` (IP izni gerekmez); test ortamı için `TRENDYOL_API_URL=https://stageapi.tgoapis.com`
+    (IP izni yalnız testte). Yazılım bizim: `User-Agent: "<satıcı no> - SelfIntegration"` (`TRENDYOL_AGENT_NAME`,
+    boşsa SelfIntegration). Paketler `packageStatuses` süzgeciyle çekilir (virgüllü çoklu durum).
     Yeni paketler (`Created`) onay şeridine düşer; platformun iptali (`Cancelled`) bekleyen kaydı kapatır, kabul edilmiş
     adisyonu platform ödemesini geri alıp iptal eder (kasada alınmış ödeme varsa durur, alarm düşer).
-    **Kabul ve ret önce platforma** (`picked` hazırlık süresiyle, `unsupplied` neden koduyla): platform reddederse
+    **Kabul ve ret önce platforma** (`PUT …/packages/picked` `{ packageId, preparationTime }`; ret
+    `PUT …/packages/unsupplied` `{ packageId, itemIdList, reasonId }`, birim kimlikleri `GET …/packages/{packageId}`'den,
+    iptal edilmemiş bütün `packageItemId`'ler; neden kodları 621 ürün tükendi, 622 kapanmak üzereyiz, 623 çok yoğunuz ve
+    diğer, kendi kuryemizde çok yoğunuz 624 ve adres dışı 626): platform reddederse
     502 `platform_unreachable`, yerelde yapılmaz; kasiyer yeniden dener ya da platform uygulamasından karar verir.
     Kabulden önce adisyon yerelde denenip geri alınır (gün açık, ürün tükenmemiş, porsiyon yetiyor): kasada
     açılamayacak sipariş platforma "kabul" diye gitmez. Platform kabul edip adisyon yine de açılamazsa (arada son
@@ -56,8 +62,9 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     yeniden deneme platforma ikinci kez gitmez, patrona alarm (`platform.accept_failed`). Aynı siparişe iki ekrandan
     aynı anda karar verilmez (409 `busy`). Anahtar `.env`'den kaldırılmışsa gerçek siparişe yerelde karar verilmez
     (409 `platform_off`).
-    Teslim aşamaları (`POST /orders/:id/delivery`) sırayla platforma yazılır: hazır → `invoiced`; kendi kuryemizde
-    yolda → `manual-shipped`, teslim → `manual-delivered` (platform kuryesinde yolda ve teslimi platform yazar).
+    Teslim aşamaları (`POST /orders/:id/delivery`) sırayla platforma yazılır: hazır → `PUT …/packages/invoiced`
+    `{ packageId, actualDate }`; kendi kuryemizde yolda → `…/packages/{packageId}/manual-shipped`, teslim →
+    `…/manual-delivered` (`{ actualDate }`; platform kuryesinde yolda ve teslimi platform yazar).
     Yazılamayan `platform_orders.notified_status` ve `last_error` ile kalır, sonraki turda yeniden denenir; ilk
     hata denetim kaydına uyarı. Platform kalıcı olarak reddederse (400, 404, 409, 410, 422) o siparişin aşamaları
     yeniden denenmez (`notify_parked_at`), patrona alarm: aşama platform uygulamasından işaretlenir; kasada iptal yine
@@ -71,16 +78,25 @@ lafmaliyet'te ayrı PR ile Komisyon ekranı bu alanı tercih eder; o güne dek a
     alınamıyorsa (kapanmış güne ait) iptal yetkisi olan kişi şeritten "iptali kayda al" der
     (`POST /api/platforms/orders/:id/cancel-close`): kayıt kapanır, para yerinde kalır, patrona alarm.
     İleri tarihli siparişin saati adisyona geçer (mutfak fişi ve sipariş şeridi) ve onay kartında görünür.
-    Ödeme türü (`payment.paymentType`): nakit, yemek kartı ve "kapıda" türleri kapıda; tanınan online türler
-    (`TRENDYOL_ONLINE_PAYMENTS`: `PAY_WITH_CREDIT_CARD` ve benzerleri) online. Tanınmayan tür online sayılır (tahsilat
+    Ödeme türü (`payment.paymentType`): belgede online `PAY_WITH_CARD` (`mealCard` doluysa "Online yemek kartı"),
+    kapıda `PAY_WITH_ON_DELIVERY` ve türü `onDelivery`'de (CASH nakit, CARD kart, SODEXO / MULTINET / EDENRED /
+    SETCARD / METROPOL / TOKENFLEX / PAYEKART / IWALLET adıyla): kapıda ödeme online sayılmaz, kendi kuryemizde kasada
+    tahsil edilir. Eski adlar (nakit, yemek kartı, "kapıda") da kapıda; tanınan online türler
+    (`TRENDYOL_ONLINE_PAYMENTS`) online. Tanınmayan tür online sayılır (tahsilat
     davranışı değişmez) ama kendi kuryemizin siparişinde işaretlenir: "Ödeme türü tanınmadı (X): tahsilatı Trendyol'dan
     doğrulayın", otomatik kabul edilmez.
     Ağ hataları kasada Türkçe görünür ("bağlantı kurulamadı", "yanıt gelmedi"); çevrilemeyen paket ötekileri
     durdurmaz, atlanıp bir kez denetim kaydına düşer (`platform.package_invalid`). Yönetim'deki "açık sipariş"
     adisyonu açık kabul edilmiş siparişlerdir.
-    Uç yolları, durum adları ve neden kodları `trendyol.ts`'in başındaki sabitlerde: canlıya geçmeden Trendyol'un test
-    ortamında bir tur atılır (IP izni; `developers.tgoapps.com` bu depodan erişilemediği için alan adları araştırma
-    notundan yazıldı), uyuşmayan ad yalnız orada değişir.
+    Fiyat: satırın `price`'ı seçenekleri içerir (belgedeki örneklerde `totalPrice` = Σ `price` × birim);
+    `modifierProducts[].price` eklenmez, adet iptal edilmemiş birim (`items`) sayısıdır. Kampanyalar satırda, birimde
+    (`items[].promotions`, `coupon`) ve pakette (`promotions`, `coupon`). Adreste "TGO Yemek" dolgusu yazılmaz (model 1'de
+    apartman, kat, kapı; model 2'de bütün alanlar). Panelden gelen test paketi (`testPackage`) notta "Test siparişi"
+    ile işaretli, otomatik kabul edilmez; `userInformation.appName = Galaxy` GetirYemek by Uber Eats siparişidir, notta
+    "Getir (Uber) siparişi". Uber Eats geçişi (5 karakterli kod, `pinCode`) şimdilik yalnız Bilecik mağazalarında.
+    Uç yolları, durum adları ve neden kodları `trendyol.ts`'in başındaki sabitlerde; resmi belgeye (developers.tgoapps.com,
+    22 Kasım 2026) göre yazıldı (#74). Canlıya geçmeden test ortamında (IP izniyle) ya da panelden test siparişiyle bir tur
+    atılır.
   - **Ürün eşleme** (Yönetim › Paket platformları › Ürün eşleme, `platform_products`): platformdan gelen her kalem
     (platform ürün kimliğiyle) listelenir; kasadaki ürüne bağlanan kalem adı değişse de doğru ürüne düşer,
     bağlanmayan ada göre eşlenir, kasada yoksa kabulde "Platform ürünü" satırı olur. Bağlanan ürün sonradan menüden

@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { PlatformOrderDTO, PlatformProductDTO } from '@shared/platforms';
+import type { PlatformOrderDTO, PlatformOrderPayload, PlatformProductDTO } from '@shared/platforms';
 import type { OrderDTO } from '@shared/types';
 import { type FakeTrendyol, startFakeTrendyol } from './fake-trendyol';
 import { startApp, type Harness } from './harness';
@@ -17,7 +18,7 @@ let live: typeof import('../server/delivery/live');
 
 beforeAll(async () => {
   fake = await startFakeTrendyol(KEYS);
-  h = await startApp({ TRENDYOL_SUPPLIER_ID: KEYS.supplierId, TRENDYOL_API_KEY: KEYS.apiKey, TRENDYOL_API_SECRET: KEYS.apiSecret, TRENDYOL_API_URL: fake.url });
+  h = await startApp({ TRENDYOL_SUPPLIER_ID: KEYS.supplierId, TRENDYOL_API_KEY: KEYS.apiKey, TRENDYOL_API_SECRET: KEYS.apiSecret, TRENDYOL_API_URL: fake.url, TRENDYOL_EXECUTOR_EMAIL: 'kasa@ornek.test' });
   live = await import('../server/delivery/live');
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
 });
@@ -45,20 +46,21 @@ function pkg(over: Partial<TrendyolPackage> = {}, now = Date.now()): TrendyolPac
     customer: { firstName: 'A***', lastName: 'K***' },
     address: { address1: 'TGO Yemek', phone: '0850 000 00 00' },
     callCenterPhone: '0850 210 7555',
-    lines: [{ productId: 55, name: 'Latte', price: 190, quantity: 1, modifierProducts: [{ name: 'Yulaf sütü', price: 10 }] }],
-    payment: { paymentType: 'PAY_WITH_CREDIT_CARD' },
+    // Belgedeki gibi: `price` seçenekleri içerir (190 + yulaf 10), birimler `items`'ta
+    lines: [{ productId: 55, name: 'Latte', price: 200, unitSellingPrice: 200, items: [{ packageItemId: `pi-${id}`, isCancelled: false }], modifierProducts: [{ name: 'Yulaf sütü', price: 10 }] }],
+    payment: { paymentType: 'PAY_WITH_CARD', mealCard: null, onDelivery: null },
     totalPrice: 200,
     ...over,
   };
 }
 
 describe('paket → tek biçim', () => {
-  it('GO siparişi: platform kuryesi, online ödeme, seçenek fiyatı birim fiyata, kampanyalar paylara', async () => {
+  it('GO siparişi: platform kuryesi, online ödeme, seçenek fiyatı birim fiyata eklenmez (price içerir), kampanyalar paylara', async () => {
     const { fromTrendyolPackage } = await import('../server/delivery/trendyol');
     const p = fromTrendyolPackage(
       pkg({
         lines: [
-          { productId: 1, name: 'Latte', price: 190, quantity: 2, modifierProducts: [{ name: 'Yulaf sütü', price: 10 }], extraIngredients: [{ name: 'Tarçın', price: 0 }], removedIngredients: [{ name: 'Şeker' }], promotions: [{ name: 'İkinci kahve', amount: { value: 20, sellerCoverageRatio: 0.5 } }] },
+          { productId: 1, name: 'Latte', price: 200, quantity: 2, modifierProducts: [{ name: 'Yulaf sütü', price: 10 }], extraIngredients: [{ name: 'Tarçın', price: 0 }], removedIngredients: [{ name: 'Şeker' }], promotions: [{ name: 'İkinci kahve', amount: { value: 20, sellerCoverageRatio: 0.5 } }] },
           { productId: 2, name: 'Cheesecake', price: 150, items: [{}], note: 'Çatalsız' },
         ],
         promotions: [{ name: 'Trendyol kuponu', amount: { value: 30, sellerCoverageRatio: 0 } }],
@@ -102,6 +104,97 @@ describe('paket → tek biçim', () => {
     const p = fromTrendyolPackage({ id: '9', lines: [{ name: 'Çay', price: '12,50' as unknown as number }], totalPrice: 999 });
     expect(p.lines[0]).toMatchObject({ externalId: null, qty: 1, unitPrice: 1250 });
     expect([p.subtotal, p.customerTotal, p.platformDiscount, p.code]).toEqual([1250, 1250, 0, '9']);
+  });
+});
+
+/** Belgedeki örnek yanıtlar (Sipariş Paketlerini Çekme: model 1 kendi kuryemiz, model 2 Trendyol Go kuryesi) */
+const docPage = (n: 1 | 2) => JSON.parse(readFileSync(new URL(`./fixtures/trendyol-model-${n}.json`, import.meta.url), 'utf8')) as { content: TrendyolPackage[] };
+const docPkg = (n: 1 | 2, over: Partial<TrendyolPackage> = {}): TrendyolPackage => ({ ...docPage(n).content[0]!, ...over });
+
+describe('belgedeki örnekler (developers.tgoapps.com)', () => {
+  it('model 1: price seçenekleri içerir; kalemler totalPrice\'a eşit, sahte platform indirimi yok; adres TGO Yemek dolgusuz', async () => {
+    const { fromTrendyolPackage } = await import('../server/delivery/trendyol');
+    const p = fromTrendyolPackage(docPkg(1));
+    expect(p).toMatchObject({ courier: 'restoran', platformCollects: true, paymentLabel: 'Online kart', code: '1E1', subtotal: 60270, customerTotal: 60270, restaurantDiscount: 0, platformDiscount: 0 });
+    expect(p.amountReview).toBeUndefined();
+    expect(p.lines.map((l) => [l.name, l.qty, l.unitPrice])).toEqual([
+      ['Big King Menü', 2, 14500],
+      ['Çiğ Köfte Menü (600 gr.)', 2, 7500],
+      ['Tavuklu Salatalı Pilav', 2, 8135],
+    ]);
+    expect(p.lines[0]!.modifiers).toEqual(['Big King', 'Patates Kızartması (Kova)', 'Coca-Cola (33 cl.)', 'Sprite']);
+    expect(p.customer).toEqual({ name: 'Oms M', phone: '5554443322', address: 'Gündoğdu Koleji Yanı, İş Adresi, Kadıköy - ISA2, Caferağa, Kadıköy, İstanbul' });
+    expect(p.note).toBe('Servis İstiyorum');
+  });
+
+  it('model 2: Trendyol Go kuryesi, 371,50 TL; bütün adres alanları dolgu', async () => {
+    const { fromTrendyolPackage } = await import('../server/delivery/trendyol');
+    const p = fromTrendyolPackage(docPkg(2));
+    expect(p).toMatchObject({ courier: 'platform', platformCollects: true, subtotal: 37150, customerTotal: 37150, restaurantDiscount: 0, platformDiscount: 0 });
+    expect(p.lines.map((l) => [l.qty, l.unitPrice])).toEqual([
+      [1, 9100],
+      [1, 15925],
+      [1, 12125],
+    ]);
+    // Aynı paket kendi kuryemizde olsa da dolgu adres yazılmaz
+    expect(fromTrendyolPackage(docPkg(2, { deliveryType: 'STORE' })).customer.address).toBeNull();
+  });
+
+  it('kapıda ödeme (PAY_WITH_ON_DELIVERY): online sayılmaz, kendi kuryemizde kasada tahsil edilir; yemek kartı online', async () => {
+    const { fromTrendyolPackage, paymentOf } = await import('../server/delivery/trendyol');
+    const cash = fromTrendyolPackage(docPkg(1, { payment: { paymentType: 'PAY_WITH_ON_DELIVERY', mealCard: null, onDelivery: 'CASH' } }));
+    expect(cash).toMatchObject({ courier: 'restoran', platformCollects: false, paymentLabel: 'Kapıda nakit' });
+    expect(cash.amountReview).toBeUndefined();
+    // Trendyol Go kuryesi kapıda alır: tahsilat platformun
+    expect(fromTrendyolPackage(docPkg(2, { payment: { paymentType: 'PAY_WITH_ON_DELIVERY', onDelivery: 'CARD' } }))).toMatchObject({ platformCollects: true, paymentLabel: 'Kapıda kart' });
+    const on = (onDelivery: unknown) => paymentOf({ id: 1, payment: { paymentType: 'PAY_WITH_ON_DELIVERY', onDelivery } });
+    expect(on('SODEXO_CODE')).toEqual({ online: false, label: 'Kapıda Pluxee kod' });
+    expect(on('MULTINET_CARD')).toEqual({ online: false, label: 'Kapıda Multinet' });
+    expect(on({ type: 'TOKENFLEX_MOBILE' })).toEqual({ online: false, label: 'Kapıda Tokenflex' });
+    expect(on('IWALLET_CODE')).toEqual({ online: false, label: 'Kapıda iWallet kod' });
+    expect(on(null)).toEqual({ online: false, label: 'Kapıda ödeme' });
+    expect(paymentOf({ id: 1, payment: { paymentType: 'PAY_WITH_CARD', mealCard: 'MULTINET' } })).toEqual({ online: true, label: 'Online yemek kartı' });
+  });
+
+  it('kampanyalar birimde ve pakette (coupon); iptal edilmiş birim sayılmaz; test paketi ve Getir (Galaxy) işaretli', async () => {
+    const { fromTrendyolPackage } = await import('../server/delivery/trendyol');
+    const base = docPkg(2);
+    const line = base.lines![0]!;
+    const p = fromTrendyolPackage({
+      ...base,
+      lines: [
+        {
+          ...line,
+          items: [
+            { packageItemId: 'a', isCancelled: false, promotions: [{ name: 'Restoran indirimi', amount: { value: 10, sellerCoverageRatio: 1 } }] },
+            { packageItemId: 'b', isCancelled: true, promotions: [{ name: 'Restoran indirimi', amount: { value: 10, sellerCoverageRatio: 1 } }] },
+          ],
+        },
+      ],
+      coupon: { name: 'Trendyol kuponu', amount: { value: 20, sellerCoverageRatio: 0 } },
+      totalPrice: 61,
+    });
+    expect(p.lines).toHaveLength(1);
+    expect([p.lines[0]!.qty, p.subtotal, p.restaurantDiscount, p.platformDiscount, p.customerTotal]).toEqual([1, 9100, 1000, 2000, 6100]);
+    const test = fromTrendyolPackage(docPkg(2, { testPackage: true }));
+    expect(test.note).toMatch(/^Test siparişi/);
+    expect(test.amountReview).toMatch(/test siparişi/i);
+    expect(fromTrendyolPackage(docPkg(2, { userInformation: { appName: 'Galaxy' } })).note).toMatch(/Getir/);
+  });
+
+  it('adres, durum süzgeci ve neden kodları belgedeki gibi', async () => {
+    const { TRENDYOL_DEFAULT_URL, trendyolReasonId } = await import('../server/delivery/trendyol');
+    expect(TRENDYOL_DEFAULT_URL).toBe('https://api.tgoapis.com');
+    const { configFrom } = await import('../server/env-config');
+    expect(configFrom({}).trendyol).toMatchObject({ apiUrl: 'https://api.tgoapis.com', agentName: 'SelfIntegration', executorEmail: '' });
+    // 621 tedarik, 622 mağaza kapalı, 623 hazırlayamıyor, 624 ve 626 yalnız kendi kuryemizde
+    expect(trendyolReasonId('Ürün tükendi', 'platform')).toBe(621);
+    expect(trendyolReasonId('Kapanmak üzereyiz', 'platform')).toBe(622);
+    expect(trendyolReasonId('Çok yoğunuz', 'platform')).toBe(623);
+    expect(trendyolReasonId('Çok yoğunuz', 'restoran')).toBe(624);
+    expect(trendyolReasonId('Adres hizmet alanı dışında', 'restoran')).toBe(626);
+    expect(trendyolReasonId('Adres hizmet alanı dışında', 'platform')).toBe(623);
+    expect(trendyolReasonId('Müşteri vazgeçti', 'gelal')).toBe(623);
   });
 });
 
@@ -161,7 +254,10 @@ describe('canlı bağlantı', () => {
     expect((await byExt(createdExt)).status).toBe('bekliyor');
     const ok = await h.ok<{ orderId: string; prepMinutes: number }>('kasa', 'POST', `/platforms/orders/${row.id}/accept`, { prepMinutes: 20 });
     expect(fake.count(`PUT ${createdExt} picked`)).toBe(2);
-    expect(fake.bodies.picked?.at(-1)).toEqual({ preparationTime: 20 });
+    // Belge: PUT …/packages/picked, paket kimliği gövdede
+    expect(fake.bodies.picked?.at(-1)).toEqual({ packageId: createdExt, preparationTime: 20 });
+    // Başlıklar: işlemi yapanın e-postası, yazılım bizim (SelfIntegration)
+    expect(fake.lastHeaders).toMatchObject({ 'x-executor-user': 'kasa@ornek.test', 'x-agentname': 'SelfIntegration', 'user-agent': '777 - SelfIntegration' });
     const o = await h.ok<OrderDTO>('kasa', 'GET', `/orders/${ok.orderId}`);
     expect(o).toMatchObject({ type: 'paket', platform: 'trendyol', status: 'acik' });
     expect(o.items[0]).toMatchObject({ name: 'Latte', unitPrice: 20000 });
@@ -175,6 +271,9 @@ describe('canlı bağlantı', () => {
     await h.ok('kasa', 'POST', `/orders/${row.orderId}/delivery`, { deliveryStatus: 'hazir' });
     await live.reconcileNotifications();
     expect(fake.count(`PUT ${createdExt} invoiced`)).toBe(1);
+    const invoiced = fake.bodies.invoiced?.at(-1) as { packageId: string; actualDate: number };
+    expect(invoiced.packageId).toBe(createdExt);
+    expect(Math.abs(invoiced.actualDate - Date.now())).toBeLessThan(60_000);
     await h.ok('kasa', 'POST', `/orders/${row.orderId}/delivery`, { deliveryStatus: 'yolda' });
     await live.reconcileNotifications();
     expect(fake.count(`PUT ${createdExt} manual-shipped`)).toBe(0);
@@ -184,7 +283,8 @@ describe('canlı bağlantı', () => {
   });
 
   it('kendi kuryemiz: kabulden doğrudan teslime geçince invoiced, manual-shipped, manual-delivered sırayla; hata yeniden denenir', async () => {
-    const p = pkg({ deliveryType: 'STORE', storePickupSelected: false, payment: { paymentType: 'PAY_WITH_CASH' }, address: { address1: 'Aydınlı Mh.', phone: '0 5** *** ** 90' } });
+    // Belgedeki kapıda ödeme: PAY_WITH_ON_DELIVERY + onDelivery CASH (eskiden online sayılıp kasada tahsil edilmiyordu)
+    const p = pkg({ deliveryType: 'STORE', storePickupSelected: false, payment: { paymentType: 'PAY_WITH_ON_DELIVERY', mealCard: null, onDelivery: 'CASH' }, address: { address1: 'Aydınlı Mh.', phone: '0 5** *** ** 90' } });
     fake.packages.push(p);
     await live.pollPlatform('trendyol');
     const row = await byExt(String(p.id));
@@ -216,8 +316,26 @@ describe('canlı bağlantı', () => {
     await live.pollPlatform('trendyol');
     const row = await byExt(String(p.id));
     await h.ok('kasa', 'POST', `/platforms/orders/${row.id}/reject`, { reason: 'Çok yoğunuz' });
-    expect(fake.bodies.unsupplied?.at(-1)).toEqual({ reasonCode: 622 });
+    // Belge: PUT …/packages/unsupplied; tam iptalde paketin bütün packageItemId'leri; Trendyol Go kuryesinde
+    // "Çok yoğunuz" 623 (624 yalnız kendi kuryemizde), 622 mağaza kapalı demek
+    expect(fake.count(`GET ${p.id}`)).toBe(1);
+    expect(fake.bodies.unsupplied?.at(-1)).toEqual({ packageId: String(p.id), itemIdList: [`pi-${p.id}`], reasonId: 623 });
     expect((await byExt(String(p.id))).status).toBe('ret');
+
+    // Tek paket yanıtı sayfa biçiminde de okunur; iptal edilmiş birim gitmez; kalemi okunamayan paket reddedilmez
+    const { trendyolAdapter } = await import('../server/delivery/trendyol');
+    const adapter = trendyolAdapter({ ...KEYS, apiUrl: fake.url, agentName: 'SelfIntegration', executorEmail: '' });
+    // Yoklamaya düşmesinler (Created değil): yalnız tek paket okunur
+    const r2 = pkg({ packageStatus: 'Picking', lines: [{ productId: 55, name: 'Latte', price: 200, items: [{ packageItemId: 'x1' }, { packageItemId: 'x2', isCancelled: true }, { packageItemId: 'x3' }] }] });
+    fake.packages.push(r2);
+    fake.wrapOne = true;
+    await adapter.reject({ externalId: String(r2.id), courier: 'restoran' } as PlatformOrderPayload, 'Çok yoğunuz');
+    fake.wrapOne = false;
+    expect(fake.bodies.unsupplied?.at(-1)).toEqual({ packageId: String(r2.id), itemIdList: ['x1', 'x3'], reasonId: 624 });
+    const bare = pkg({ packageStatus: 'Picking', lines: [{ productId: 55, name: 'Latte', price: 200, quantity: 1 }] });
+    fake.packages.push(bare);
+    await expect(adapter.reject({ externalId: String(bare.id), courier: 'platform' } as PlatformOrderPayload, 'Diğer')).rejects.toThrow(/kalemleri okunamadı/);
+    expect(fake.count(`PUT ${bare.id} unsupplied`)).toBe(0);
 
     const q = pkg();
     fake.packages.push(q);

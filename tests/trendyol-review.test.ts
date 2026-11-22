@@ -48,13 +48,13 @@ function pkg(over: Partial<TrendyolPackage> = {}, now = Date.now()): TrendyolPac
     packageCreationDate: now - 60_000,
     packageModificationDate: now - 30_000,
     customer: { firstName: 'A***', lastName: 'K***' },
-    lines: [{ productId: 55, name: 'Latte', price: 200, quantity: 1 }],
-    payment: { paymentType: 'PAY_WITH_CREDIT_CARD' },
+    lines: [{ productId: 55, name: 'Latte', price: 200, items: [{ packageItemId: `pi-${id}` }] }],
+    payment: { paymentType: 'PAY_WITH_CARD' },
     totalPrice: 200,
     ...over,
   };
 }
-const ownCourierCash = { deliveryType: 'STORE', storePickupSelected: false, payment: { paymentType: 'PAY_WITH_CASH' }, address: { address1: 'Aydınlı Mh.', phone: '0 5** *** ** 90' } } as const;
+const ownCourierCash = { deliveryType: 'STORE', storePickupSelected: false, payment: { paymentType: 'PAY_WITH_ON_DELIVERY', onDelivery: 'CASH' }, address: { address1: 'Aydınlı Mh.', phone: '0 5** *** ** 90' } } as const;
 
 /** Paketi platforma koyar, yoklar, kaydını döner */
 async function arrive(over: Partial<TrendyolPackage> = {}) {
@@ -136,7 +136,8 @@ describe('Trendyol Go gözden geçirme bulguları', () => {
     await h.ok('patron', 'POST', `/orders/${a.orderId}/cancel`, { reason: 'Müşteri vazgeçti' });
     await live.reconcileNotifications();
     expect(fake.count(`PUT ${first.p.id} unsupplied`)).toBe(1);
-    expect(fake.bodies.unsupplied?.at(-1)).toEqual({ reasonCode: 627 });
+    // Belgede "diğer" kodu yok: 623 (mağaza siparişi hazırlayamıyor); 627 sipariş karışıklığı demek
+    expect(fake.bodies.unsupplied?.at(-1)).toEqual({ packageId: String(first.p.id), itemIdList: [`pi-${first.p.id}`], reasonId: 623 });
     expect((await byExt(first.p.id)).status).toBe('iptal');
     expect((await audit()).some((x) => x.action === 'platform.cancel_sent' && x.orderId === a.orderId)).toBe(true);
 
