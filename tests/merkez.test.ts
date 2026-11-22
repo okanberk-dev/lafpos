@@ -346,6 +346,24 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(200);
   });
 
+  it('geçmiş ciro (LafPOS öncesi günler) nabızla kasaya gelir; kasanın kendi patron panelinin kıyasına girer, silinince düşer', async () => {
+    const { merkezBeat, identity } = await import('../server/sync/merkez');
+    const { addDays } = await import('@shared/time');
+    const id = identity().id;
+    const today = (await h.ok<{ date: string }>('patron', 'GET', '/reports/patron')).date;
+    const dun = addDays(today, -1);
+    const up = await panel('POST', 'merkez/gecmis', { id, kaynak: 'ModPOS', gunler: [{ date: dun, ciro: 46205, adisyon: 3, closes: [[300, 6205, 1], [600, 40000, 2]] }] });
+    expect(up.status).toBe(200);
+    await merkezBeat();
+    const p = await h.ok<{ stats: { days: Record<string, { closes: number[][] }>; daily: [string, number, number][] } }>('patron', 'GET', '/reports/patron');
+    expect(p.stats.days[dun]!.closes).toEqual([[300, 6205, 1], [600, 40000, 2]]);
+    expect(p.stats.daily).toContainEqual([dun, 46205, 3]);
+    await panel('POST', 'merkez/gecmis', { id, gunler: [] });
+    await merkezBeat();
+    const after = await h.ok<{ stats: { days: Record<string, unknown> } }>('patron', 'GET', '/reports/patron');
+    expect(after.stats.days[dun]).toBeUndefined();
+  });
+
   it('Merkez kaydı silinirse (Redis sıfırlandı) kasa yeniden kaydolur', async () => {
     const { merkezBeat, identity } = await import('../server/sync/merkez');
     const id = identity().id;

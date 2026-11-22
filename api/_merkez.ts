@@ -25,7 +25,7 @@
  */
 import { createHash } from 'node:crypto';
 import { type LicenseRecord, licenseState, normalizeBranchCode, ONLINE_MS, UPDATE_LABELS, updateLabel } from '../shared/lisans.js';
-import { HISTORY_FLAG_HASH, type HistoryStore, historyFlag, historyKey, parseHistory } from '../shared/gecmis.js';
+import { HISTORY_FLAG_HASH, type HistoryStore, historyFlag, historyKey, parseHistory, readHistory } from '../shared/gecmis.js';
 import { NABIZ_KONTROL_PAYI, nabizAnahtarlari, nabizKontrol } from './_kontrol.js';
 
 export interface Install {
@@ -287,7 +287,8 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     const raw = await req.text();
     if (raw.length > BEAT_MAX) return fail(413, 'Nabız çok büyük', 'too_large');
     // Kurulum, nabız kaydı ve uzaktan yönetimin işaretleri (kuyruk, özet, teslim) tek okumada
-    const [rawInst, rawBeat, ...kontrolOnce] = ((await deps.redis('MGET', installKey(id), statusKey(id), ...nabizAnahtarlari(id))) as (string | null)[] | null) ?? [];
+    // Geçmiş ciro (shared/gecmis.ts) de aynı okumada: kasa kendi patron panelinde LafPOS öncesi günleri görsün
+    const [rawInst, rawBeat, rawGecmis, ...kontrolOnce] = ((await deps.redis('MGET', installKey(id), statusKey(id), historyKey(id), ...nabizAnahtarlari(id))) as (string | null)[] | null) ?? [];
     const inst = merged(rawInst, rawBeat);
     if (!inst) return fail(404, 'Kurulum kayıtlı değil', 'not_registered');
     if (!deps.verify(inst.key, req, url, raw)) return fail(401, 'İmza geçersiz', 'bad_signature');
@@ -331,7 +332,12 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
         await deps.notify({ kind: 'guncelleme', title: 'Güncelleme sorunu', body, at: now, shop: next.ad }).catch(() => undefined);
       }
     }
-    return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, at: now, ...(kontrol ? { kontrol } : {}) });
+    // Geçmiş ciro yalnız kasadakinden farklıysa gider (kasa elindekinin anını `gecmisAt` ile söyler); kayıt silindiyse null
+    const gecmisDays = readHistory(rawGecmis);
+    const gecmisAt = gecmisDays ? ((JSON.parse(rawGecmis!) as HistoryStore).at ?? 0) : null;
+    const kasaGecmisAt = intOrNull(body.gecmisAt);
+    const gecmis = (gecmisAt ?? 0) !== (kasaGecmisAt ?? 0) && 'gecmisAt' in body ? { gecmis: gecmisDays ? { at: gecmisAt, gunler: gecmisDays } : null } : {};
+    return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, at: now, ...gecmis, ...(kontrol ? { kontrol } : {}) });
   }
 
   // ─── Panel ───

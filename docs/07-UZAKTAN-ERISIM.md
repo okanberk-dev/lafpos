@@ -322,4 +322,5 @@ Dükkân LafPOS'a geçmeden önceki günlerini (ör. ModPOS) kaybetmesin diye o 
 
 Gövde: `{ id, kaynak, gunler: [{ date, ciro, adisyon, kart?: [tutar, adet], nakit?, yemek?, closes?: [[dakika, kuruş,
 adisyon]] }] }` (tutarlar kuruş, dakika 05:00'ten). Boş `gunler` kaydı siler. Kasanın kendi ekranındaki (kafe içi)
-patron paneli bu günleri görmez; yalnız LafPOS Uzaktan görür.
+patron paneli de bu günleri görür: kayıt Merkez nabzının yanıtıyla kasaya gelir (yalnız değişince; kasa elindekinin
+anını `gecmisAt` ile söyler), kasada `sync_state` `merkez.gecmis`'te durur ve `patronStats`'a katılır.

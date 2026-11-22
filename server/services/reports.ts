@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte } from 'drizzle-orm';
 import { odenmezByPerson } from '@shared/comp';
 import { type CrossPay, type PrepDone, prepFrom } from '@shared/remote-calc';
+import { GECMIS_KEY, type HistoryDay, mergeHistoryStats } from '@shared/gecmis';
+import { getSyncState } from '../lib/settings';
 import { type PatronStats, statsDates } from '@shared/today-stats';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { netOfKdv, percentOf, tl } from '@shared/money';
@@ -867,7 +869,9 @@ function patronStats(today: string, top: { key: string }[], guests: number): Pat
     row[1] += totalsOf(o).total;
     if (o.total > 0) row[2] += 1;
   }
-  return { v: 1, guests, days, daily: [...byDate.values()], topPrev: productCloses(addDays(today, -7), top.slice(0, 5).map((t) => t.key)) };
+  const stats: PatronStats = { v: 1, guests, days, daily: [...byDate.values()], topPrev: productCloses(addDays(today, -7), top.slice(0, 5).map((t) => t.key)) };
+  // LafPOS öncesi günler (Merkez'den, shared/gecmis.ts): kıyas günü LafPOS'ta yoksa ya da cirosu küçükse geçmiş geçer
+  return mergeHistoryStats(stats, today, getSyncState<{ gunler: HistoryDay[] }>(GECMIS_KEY)?.gunler ?? null);
 }
 
 /**

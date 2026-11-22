@@ -12,6 +12,8 @@ import type { RemoteDayReport } from './remote-reports.js';
 import type { PatronStats } from './today-stats.js';
 
 export const historyKey = (shop: string) => `lafpos:gecmis:${shop}`;
+/** Kasada Merkez'den gelen geçmişin sync_state anahtarı (server/sync/merkez.ts yazar, reports.ts okur) */
+export const GECMIS_KEY = 'merkez.gecmis';
 /**
  * İşaret: dükkânın geçmişi var ve en son ne zaman yüklendi. Uzaktan'ın her istekte zaten okuduğu sürüm karmasında
  * (api/uzaktan.ts `VERSIONS_KEY`) ayrı alanda durur: geçmişi olmayan dükkânda tek ek Redis komutu çalışmaz, geçmişi
