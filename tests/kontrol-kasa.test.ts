@@ -357,6 +357,15 @@ describe('Uzaktan yönetim: kasa', () => {
     const cup = db.select().from(schema.products).where(eq(schema.products.name, 'Meyveli Cup')).get()!;
     expect(cup).toMatchObject({ price: 25000, kdvRate: 10, active: true, categoryId: latte.categoryId });
     expect(db.select().from(schema.productOptionGroups).where(and(eq(schema.productOptionGroups.productId, cup.id), eq(schema.productOptionGroups.groupId, g.id))).get()).toBeTruthy();
+    // secenek.duzenle: var olan gruba yalnız ekleme (eski seçenekler ve bağlar kalır; aynı adlı seçenek ikinci kez eklenmez)
+    const [duz] = await uygula(komut('secenek.duzenle', { grup: g.id, ogeler: [{ ad: 'Yenilebilir bardak', fiyat: 8000 }, { ad: 'klasik', fiyat: 0 }], urunler: [cup.id] }));
+    expect(duz).toMatchObject({ durum: 'uygulandi' });
+    expect(db.select().from(schema.optionItems).where(and(eq(schema.optionItems.groupId, g.id), eq(schema.optionItems.active, true))).all().map((o) => [o.name, o.price])).toEqual([
+      ['Klasik', 0],
+      ['Spanish Latte', 5000],
+      ['Yenilebilir bardak', 8000],
+    ]);
+    expect(db.select().from(schema.productOptionGroups).where(eq(schema.productOptionGroups.groupId, g.id)).all().map((r) => r.productId).sort()).toEqual([latte.id, cup.id].sort());
     await uygula(komut('urun.gorunum', { id: latte.id, gorunur: true }));
     expect(db.select().from(schema.products).where(eq(schema.products.id, latte.id)).get()!.hidden).toBe(false);
     // Doğrulama: fiyat kuruş tam sayı, tek varsayılan

@@ -33,6 +33,7 @@ import {
   uyeYapabilir,
   type SecenekGrubu,
   type UrunEkle,
+  type SecenekDuzenle,
   type UrunGorunum,
 } from '@shared/kontrol';
 import { ALL_PERMISSIONS, type Role, ROLES, rolePermissions } from '@shared/permissions';
@@ -280,6 +281,32 @@ function istekOf(tur: KomutTuru, veri: KomutVerisi, pin: string | null): Istek {
     case 'urun.gorunum': {
       const v = veri as UrunGorunum;
       return { method: 'PATCH', yol: `/api/admin/products/${id(v)}`, govde: { hidden: !v.gorunur } };
+    }
+    case 'secenek.duzenle': {
+      // Yalnız ekleme: grubun bugünkü hali ve bağları kasadan okunur, yenileri eklenir (PUT tam listeyi ister)
+      const v = veri as SecenekDuzenle;
+      const g = db.select().from(schema.optionGroups).where(eq(schema.optionGroups.id, v.grup)).get();
+      if (!g) return { method: 'PUT', yol: `/api/admin/option-groups/${encodeURIComponent(v.grup)}`, govde: {} };
+      const items = db.select().from(schema.optionItems).where(eq(schema.optionItems.groupId, g.id)).orderBy(asc(schema.optionItems.sort)).all().filter((i) => i.active);
+      const linked = db.select({ id: schema.productOptionGroups.productId }).from(schema.productOptionGroups).where(eq(schema.productOptionGroups.groupId, g.id)).all().map((r) => r.id);
+      const have = new Set(items.map((i) => i.name.toLocaleLowerCase('tr')));
+      return {
+        method: 'PUT',
+        yol: `/api/admin/option-groups/${encodeURIComponent(g.id)}`,
+        govde: {
+          name: g.name,
+          kind: g.kind,
+          required: g.required,
+          maxSelect: g.maxSelect,
+          sort: g.sort,
+          active: g.active,
+          items: [
+            ...items.map((i) => ({ id: i.id, name: i.name, price: i.price, isDefault: i.isDefault, maxQty: i.maxQty, active: i.active })),
+            ...v.ogeler.filter((o) => !have.has(o.ad.toLocaleLowerCase('tr'))).map((o) => ({ name: o.ad, price: o.fiyat })),
+          ],
+          productIds: [...new Set([...linked, ...v.urunler])],
+        },
+      };
     }
     case 'urun.ekle': {
       const v = veri as UrunEkle;
