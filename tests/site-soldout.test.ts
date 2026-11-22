@@ -227,3 +227,38 @@ describe('site Satışta yazımını reddeder', () => {
     expect((await status()).rejected).toBe(0);
   });
 });
+
+describe('internet kesikken elle Tükendi', () => {
+  it('site ulaşılamazsa Tükendi yerelde hemen geçerli, siteye kuyruktan gider; kalıcı ret yine değiştirmez', async () => {
+    const { flushSiteOutbox } = await import('../server/sync/site-outbox');
+    const p = await product('mnu-0006');
+    expect(p.active).toBe(true);
+    // Site kalıcı olarak reddederse (409) bugünkü gibi: yerelde de değişmez
+    site.menuPostStatus.push(409);
+    const bad = await h.call<{ code: string }>('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: false });
+    expect(bad.status).toBe(502);
+    expect((await product('mnu-0006')).active).toBe(true);
+
+    // İnternet yok (site 503): Tükendi hemen geçerli, yazım kuyrukta (kimin bastığıyla)
+    site.menuPostStatus.push(503);
+    const r = await h.ok<{ site: string }>('kasa', 'POST', `/sync/products/${p.id}/availability`, { active: false });
+    expect(r.site).toBe('kuyrukta');
+    expect((await product('mnu-0006')).active).toBe(false);
+    const rows = (await pending()).filter((x) => x.dedupeKey === 'menu:mnu-0006');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.payload).toMatchObject({ id: 'mnu-0006', isActive: false });
+    expect((rows[0]!.payload as { actor: string }).actor).not.toBe('LafPOS porsiyon');
+    // Biten ürün satılmaz
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const add = await h.call('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: p.id, qty: 1, ...(p.priceL != null ? { size: 'M' } : {}) }] });
+    expect(add.status).toBe(409);
+    // Eşitleme bekleyen yazımı geri almaz
+    await syncMenu();
+    expect((await product('mnu-0006')).active).toBe(false);
+    // İnternet gelince gider
+    expect(await flushSiteOutbox()).toEqual({ sent: 1, failed: 0 });
+    expect(site.menuPosts.at(-1)).toMatchObject({ id: 'mnu-0006', isActive: false });
+    const audit = await h.ok<{ action: string; message: string }[]>('patron', 'GET', '/admin/audit?limit=20');
+    expect(audit.find((a) => a.action === 'product.sold_out')?.message).toMatch(/site: kuyrukta/);
+  });
+});

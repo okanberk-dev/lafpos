@@ -13,7 +13,7 @@ import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
 import { siteKaraokeOn, siteKaraokeTick } from './laffogato-karaoke';
 import { requireSiteSigned, siteBranch, siteLinked, siteSigned, unknownSiteListVersion, wrongSiteBranch } from './laffogato-link';
-import { dropSiteSoldOut, siteOutboxStatus, siteTablesPushStatus, withSiteMenuLock } from './site-outbox';
+import { dropSiteSoldOut, enqueueSiteAvailability, siteOutboxStatus, siteTablesPushStatus, withSiteMenuLock } from './site-outbox';
 import { applyTableCalls, type PanelCall, parsePanelCalls } from './table-calls';
 
 /**
@@ -602,7 +602,8 @@ export async function setOnlineStage(orderId: string, action: 'preparing' | 'rea
   fx.flush();
 }
 
-export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok';
+/** `kuyrukta`: siteye ulaşılamadı (internet yok, site 5xx/429); yazım giden kutusunda, internet gelince gider */
+export type SiteWrite = 'guncellendi' | 'bagli_degil' | 'anahtar_yok' | 'baglanti_yok' | 'kuyrukta';
 type ProductRow = typeof schema.products.$inferSelect;
 
 /**
@@ -610,14 +611,16 @@ type ProductRow = typeof schema.products.$inferSelect;
  * ulaşılamazsa 502 atar: çağıran yerelde de değiştirmez. Bağlı değilse, adres ya da anahtar yoksa istek gitmez,
  * sonuç bunu söyler.
  */
-export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'extId'>, active: boolean, actorName: string): Promise<SiteWrite> {
+export async function writeSiteAvailability(p: Pick<ProductRow, 'extSource' | 'extId'>, active: boolean, actorName: string, opts: { queueOffline?: boolean } = {}): Promise<SiteWrite> {
   if (p.extSource !== 'laffogato' || !p.extId) return 'bagli_degil';
   if (!siteLinked()) return 'baglanti_yok';
   if (!configured()) return 'anahtar_yok';
-  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80), branch: siteBranch() }).catch(() => {
-    throw new HttpError(502, "Siteye ulaşılamadı; LafPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
-  });
-  if (status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
+  const res = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { id: p.extId, isActive: active, actor: actorName.slice(0, 80), branch: siteBranch() }).catch(() => null);
+  // İnternet yok ya da site geçici olarak yanıt vermiyor: çağıran isterse yazım kuyruğa girer (kalıcı ret girmez)
+  const offline = !res || res.status >= 500 || res.status === 429;
+  if (offline && opts.queueOffline) return 'kuyrukta';
+  if (!res) throw new HttpError(502, "Siteye ulaşılamadı; LafPOS'ta da değiştirilmedi. İnternet gelince yeniden deneyin", 'site_menu');
+  if (res.status !== 200) throw new HttpError(502, `Site Satışta bilgisini kabul etmedi (HTTP ${res.status}); LafPOS'ta da değiştirilmedi`, 'site_menu');
   return 'guncellendi';
 }
 
@@ -633,19 +636,22 @@ export function setAvailability(productId: string, active: boolean, actor: { nam
     if (!p) throw notFound('Ürün');
     const siteClosed = active && !p.active && p.soldOutBy === 'site';
     if (siteClosed && !actor.manager) throw new HttpError(403, `${p.name} sitede satışta değil; yalnız menü yetkisi olan biri satışa açabilir`, 'site_closed');
-    const site = await writeSiteAvailability(p, active, actor.name);
+    // İnternet kesikken elle Tükendi / Satışa aç beklemez: yerelde hemen geçerli, siteye giden kutusundan gider
+    const site = await writeSiteAvailability(p, active, actor.name, { queueOffline: true });
     const fx = new Effects();
     tx((t) => {
       t.update(schema.products)
         .set({ active, soldOutBy: active ? null : 'lafpos', portionsLeft: active && p.portionsLeft === 0 ? null : p.portionsLeft, updatedAt: Date.now() })
         .where(eq(schema.products.id, productId))
         .run();
-      if (active) dropSiteSoldOut(t, p.extId);
+      // Kuyruktaki yazım aynı ürünün bekleyen yazımının yerini alır; doğrudan yazıldıysa açılan ürünün bekleyeni düşer
+      if (site === 'kuyrukta') enqueueSiteAvailability(t, p, active, actor.name);
+      else if (active) dropSiteSoldOut(t, p.extId);
       fx.audit(t, {
         action: active ? 'product.available' : 'product.sold_out',
         entity: 'product',
         entityId: productId,
-        message: `${actor.name}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : ''}`,
+        message: `${actor.name}: ${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${siteClosed ? ' (sitede kapatılmıştı)' : ''}${site === 'guncellendi' ? ' (site ve uygulama da güncellendi)' : site === 'kuyrukta' ? ' (site: kuyrukta)' : ''}`,
       });
     });
     fx.emit({ topic: 'menu', kind: active ? 'product.available' : 'product.sold_out' });

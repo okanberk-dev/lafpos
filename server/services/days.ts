@@ -11,7 +11,7 @@ import { type Actor, counterpartFor, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
-import { getSettings, trainingMode } from '../lib/settings';
+import { getSettings, trainingDayNow } from '../lib/settings';
 import { getOpenDay, isEmptyOrder, requireCurrentDay, requireOpenDay } from './orders';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
@@ -395,7 +395,7 @@ export function closeDay(
       note: input.note?.trim() || null,
       summary,
       // Kurulum modunda kapanan gün eğitim günüdür: lafmaliyet'e hiç gitmez (kurulum modu sonra kapansa da)
-      trainingDay: trainingMode(),
+      trainingDay: trainingDayNow(),
     })
     .where(eq(schema.businessDays.id, day.id))
     .run();

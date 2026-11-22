@@ -11,6 +11,7 @@ import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
 import { auditForViewer } from '../delivery/commission';
 import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
+import { trainingMode } from '../lib/settings';
 import { addonCostOf, addonSiteIds, costMap, costsAt } from '../sync/lafmaliyet';
 import { onlineCounted } from './days';
 import { getOpenDay } from './orders';
@@ -841,18 +842,24 @@ function salesUntil(date: string, elapsedMs: number) {
  */
 function patronStats(today: string, top: { key: string }[], guests: number): PatronStats {
   const { curves, dailyFrom, dailyTo } = statsDates(today);
+  // Gerçek kullanımda deneme günleri (eğitimde ya da işaretten önce kapanmış) kıyasa girmez: "Dün", "Geçen hafta" ve
+  // "Ay başından" gerçek satışla kıyaslanır. Kurulum modunda bütün günler denemedir, kıyas aralarında yapılır
+  const live = !trainingMode();
+  const trial = (d: { trainingDay: boolean | null; closedAt: number | null }) => live && d.closedAt != null && d.trainingDay !== false;
   const days: PatronStats['days'] = {};
   for (const date of curves) {
-    const rows = db.select({ closedAt: schema.businessDays.closedAt }).from(schema.businessDays).where(eq(schema.businessDays.date, date)).all();
+    const rows = db.select({ closedAt: schema.businessDays.closedAt, trainingDay: schema.businessDays.trainingDay }).from(schema.businessDays).where(eq(schema.businessDays.date, date)).all().filter((r) => !trial(r));
     if (rows.length) days[date] = { open: rows.some((r) => r.closedAt == null), closes: closingMinutes(date) };
   }
   const ds = load({ from: dailyFrom, to: dailyTo }, ORDERS_ONLY);
   const dates = dayOf(ds);
   const byDate = new Map<string, [string, number, number]>();
-  for (const d of ds.days) byDate.set(d.date, [d.date, 0, 0]);
+  const skip = new Set(ds.days.filter(trial).map((d) => d.id));
+  for (const d of ds.days) if (!skip.has(d.id)) byDate.set(d.date, [d.date, 0, 0]);
   for (const o of ds.orders) {
-    if (!isSale(o)) continue;
-    const row = byDate.get(dates.get(o.dayId)!)!;
+    if (!isSale(o) || skip.has(o.dayId)) continue;
+    const row = byDate.get(dates.get(o.dayId)!);
+    if (!row) continue;
     row[1] += totalsOf(o).total;
     if (o.total > 0) row[2] += 1;
   }

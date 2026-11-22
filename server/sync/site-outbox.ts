@@ -83,13 +83,13 @@ export function withSiteMenuLock<T>(fn: () => Promise<T>): Promise<T> {
  * Porsiyon sayacının değiştirdiği Satışta bilgisini giden kutusuna koyar; çağıranın işleminde (adisyon kalemiyle tek
  * işlem). Aynı ürünün bekleyen yazımının yerini alır: siteye son durum gider.
  */
-export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean): boolean {
+export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean, actor = 'LafPOS porsiyon'): boolean {
   if (!siteSigned() || p.extSource !== 'laffogato' || !p.extId) return false;
   const key = keyOf(p.extId);
   const now = Date.now();
   t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
   t.insert(schema.outbox)
-    .values({ target: 'laffogato', kind: 'menu.isActive', dedupeKey: key, payload: { id: p.extId, isActive: active, actor: 'LafPOS porsiyon' }, createdAt: now, nextAttemptAt: now })
+    .values({ target: 'laffogato', kind: 'menu.isActive', dedupeKey: key, payload: { id: p.extId, isActive: active, actor: actor.slice(0, 80) }, createdAt: now, nextAttemptAt: now })
     .run();
   return true;
 }

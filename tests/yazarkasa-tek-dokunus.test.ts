@@ -1,7 +1,9 @@
 import { createElement, type FC } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { afterPaymentPrints, deviceRoute, type DeviceRouteInput, isKasaHost, printOnce } from '@shared/odeme-fisi';
+import { afterPaymentPrints, deviceResult, deviceRoute, type DeviceRouteInput, isKasaHost, offDeviceLabel, okcPanelAuto, printOnce } from '@shared/odeme-fisi';
+import type { LiveEvent } from '@shared/events';
+import { deviceCopyListener, markDeviceSent, resetDeviceSent, unmarkDeviceSent } from '../src/lib/device-copies';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
@@ -45,7 +47,6 @@ describe('ödeme cihaza gider mi (deviceRoute)', () => {
   it('kısmi tutar, bahşiş, paylaşım, açık hesap ve LafPOS’ta alınmış ödeme LafPOS’a yazılır; nedeni söylenir', () => {
     const cases: Partial<DeviceRouteInput>[] = [
       { amount: 5000 },
-      { tip: 500 },
       { payMode: 'paylas' },
       { splitActive: true },
       { methodKind: 'cari' },
@@ -62,6 +63,69 @@ describe('ödeme cihaza gider mi (deviceRoute)', () => {
     }
     // Token ve simülatörde yemek kartı cihazda alınır
     expect(deviceRoute({ ...base, methodKind: 'yemek' }).send).toBe(true);
+  });
+
+  it('bahşişli nakit ya da kart sessizce LafPOS’a yazılmaz: düğme kapanır, hesap bahşişsiz cihazdan alınır', () => {
+    for (const methodKind of ['nakit', 'kart'] as const) {
+      expect(deviceRoute({ ...base, provider: 'pavo', methodKind, tip: 500 })).toMatchObject({ on: true, send: false, block: true, reason: expect.stringMatching(/Bahşişi ayrı alın/) });
+    }
+  });
+
+  it('cihaza gitmeyen kart düğmede söylenir ve onay ister; nakitte "LafPOS’a yaz"; havale ve gönderim kapalıyken değişmez', () => {
+    const kart = { kind: 'kart', name: 'Kart' };
+    expect(offDeviceLabel({ on: true, send: false }, kart, 25000)).toEqual({ label: '₺250,00 Kart: cihazsız kaydet', confirm: true });
+    expect(offDeviceLabel({ on: true, send: false }, { kind: 'nakit', name: 'Nakit' }, 25000)).toMatchObject({ confirm: false, label: expect.stringMatching(/LafPOS’a yaz/) });
+    expect(offDeviceLabel({ on: true, send: true }, kart, 25000)).toBeNull();
+    expect(offDeviceLabel({ on: false, send: false }, kart, 25000)).toBeNull();
+    expect(offDeviceLabel({ on: true, send: false }, { kind: 'havale', name: 'Havale' }, 25000)).toBeNull();
+  });
+});
+
+describe('otomatik gönderimin ret yolları', () => {
+  it('(a) paylaşımlı hesap, hiç pay alınmamış: Yazarkasa bölümü elle gönderir, neden "LafPOS’a yazılır" demez', () => {
+    const split = { shares: [20000, 20000] };
+    expect(okcPanelAuto(true, split, 0)).toBe(false);
+    expect(okcPanelAuto(true, split, 20000)).toBe(true);
+    expect(okcPanelAuto(true, null, 0)).toBe(true);
+    expect(okcPanelAuto(false, split, 0)).toBe(false);
+    const r = deviceRoute({ ...base, provider: 'pavo', payMode: 'paylas', splitActive: true, amount: 20000, remaining: 40000, nothingPaid: true });
+    expect(r).toMatchObject({ on: true, send: false });
+    expect(r.reason).toMatch(/Yazarkasa bölümünden bütün hesabı/);
+    expect(r.reason).not.toMatch(/LafPOS’a yazılır/);
+  });
+
+  it('(b) cihaz sonucu para üstünü belirler: Nakit 500 seçilip kartla ödenirse para üstü 0, bölünmüşte de 0', () => {
+    const sent = { amount: 32000, given: 50000, methodName: 'Nakit' };
+    expect(deviceResult(sent, [{ kind: 'kart', name: 'Kart', amount: 32000 }])).toEqual({ change: 0, method: 'Kart' });
+    expect(deviceResult(sent, [{ kind: 'nakit', name: 'Nakit', amount: 20000 }, { kind: 'kart', name: 'Kart', amount: 12000 }])).toEqual({ change: 0, method: '₺200,00 Nakit + ₺120,00 Kart' });
+    expect(deviceResult(sent, [{ kind: 'nakit', name: 'Nakit', amount: 32000 }])).toEqual({ change: 18000, method: 'Nakit' });
+    // Cihazın ödemeleri bilinmiyorsa (eski sunucu) para üstü yazılmaz
+    expect(deviceResult(sent, undefined).change).toBeNull();
+    expect(deviceResult({ ...sent, given: null, methodName: 'Kart' }, undefined).change).toBe(0);
+  });
+
+  it('(c) cihaz ödeyince nüsha bir kez basılır: pencere kapalı ya da başka adisyona geçilmiş olsa da', () => {
+    resetDeviceSent();
+    const printed: string[] = [];
+    const listen = deviceCopyListener((id) => printed.push(id));
+    const paid = (orderId: string): Pick<LiveEvent, 'topic' | 'kind' | 'orderId'> => ({ topic: 'okc', kind: 'okc.paid', orderId });
+    markDeviceSent('o1');
+    // Kasiyer başka adisyona geçti: dinleyici uygulama düzeyinde, adisyondan bağımsız
+    listen(paid('o2'));
+    listen(paid('o1'));
+    listen(paid('o1'));
+    expect(printed).toEqual(['o1']);
+    // Cihazda iptal edilen sepetin kaydı düşer; gönderim hatası da düşürür
+    markDeviceSent('o3');
+    listen({ topic: 'okc', kind: 'okc.cancelled', orderId: 'o3' });
+    listen(paid('o3'));
+    markDeviceSent('o4');
+    unmarkDeviceSent('o4');
+    listen(paid('o4'));
+    // Süresi geçmiş kayıt basılmaz
+    markDeviceSent('o5', Date.now() - 11 * 60_000);
+    listen(paid('o5'));
+    expect(printed).toEqual(['o1']);
   });
 });
 
@@ -160,6 +224,28 @@ describe('sunucu akışı (eğitim cihazı)', () => {
     await h.ok('kasa', 'POST', `/okc/simulator/baskets/${retry.receipt.id}/pay`, { payments: [{ type: 3, amount: o.total }] });
     expect((await h.ok<OrderDTO>('kasa', 'GET', `/orders/${o.id}`)).status).toBe('kapali');
     expect((await receipts(o.id)).map((r) => r.status).sort()).toEqual(['iptal', 'tamamlandi']);
+  });
+
+  it('paylaşımlı hesap (hiç pay alınmamış) bütün olarak tek sepetle gider; cihazın ödemeleri okc.paid olayıyla gelir', async () => {
+    const { bus } = await import('../server/lib/events');
+    const events: LiveEvent[] = [];
+    const on = (e: LiveEvent) => events.push(e);
+    bus.on('event', on);
+    const o = await newOrder(4);
+    await h.ok('kasa', 'PUT', `/orders/${o.id}/split`, { people: 2 });
+    const sent = await h.ok<Sent>('kasa', 'POST', `/okc/orders/${o.id}/send`, { items: null });
+    expect(sent.receipt.amount).toBe(o.total);
+    const half = Math.floor(o.total / 2);
+    await h.ok('kasa', 'POST', `/okc/simulator/baskets/${sent.receipt.id}/pay`, { payments: [{ type: 1, amount: half }, { type: 3, amount: o.total - half }] });
+    bus.off('event', on);
+    expect((await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`)).status).toBe('kapali');
+    const paid = events.find((e) => e.kind === 'okc.paid' && e.orderId === o.id)!;
+    expect(paid.paid?.map((p) => [p.kind, p.amount])).toEqual([
+      ['nakit', half],
+      ['kart', o.total - half],
+    ]);
+    // Kasiyer LafPOS'ta Nakit 500 seçmişti: cihazda bölünmüş ödemede para üstü yok
+    expect(deviceResult({ amount: o.total, given: o.total + 50000, methodName: 'Nakit' }, paid.paid).change).toBe(0);
   });
 
   it('kısmi ödeme: LafPOS’ta tutar alınmışsa hesabın bütünü cihaza gitmez; kalem seçilerek gider', async () => {
