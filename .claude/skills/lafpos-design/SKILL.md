@@ -5,7 +5,10 @@ description: LafPOS tasarım sistemi (Keel dili) kontrol listesi. Bir ekran, kar
 
 # LafPOS tasarım kontrol listesi (Keel dili)
 
-Kaynak: `DESIGN.md` §0 ve `src/styles/keel.css`. Her arayüz değişikliği bu listeye uyar. Uymayan bir ihtiyaç çıkarsa
+> **Kaynak:** bu repoda yazıldı (22 Kasım 2026, sahibin isteği); görsel dil Behance "Keel: Fintech SaaS Dashboard"
+> incelemesinden. Bu projede tek doğru kaynak `DESIGN.md` §0 ve `src/styles/keel.css`'tir.
+
+Her arayüz değişikliği bu listeye uyar. Uymayan bir ihtiyaç çıkarsa
 önce `DESIGN.md` §0 ve `src/styles/keel.css` güncellenir, sonra bileşen yazılır.
 
 ## Önce
