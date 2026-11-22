@@ -23,8 +23,8 @@ import { getOpenDay } from './services/orders';
 import { merkezTarget } from './sync/merkez';
 import { db } from './db/client';
 import { installedVersion, isLoopback } from './lib/surum';
-import { getSettings, setSyncState } from './lib/settings';
-import { parsePrinters, pickReceiptPrinter, PRINTERS_KEY } from './lib/yazici';
+import { getSettings, getSyncState, setSyncState } from './lib/settings';
+import { parsePrinters, pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from './lib/yazici';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -71,8 +71,12 @@ export function createApp() {
     } catch {
       raw = null;
     }
-    const printers = parsePrinters((raw as { printers?: unknown } | null)?.printers ?? raw);
-    setSyncState(PRINTERS_KEY, { at: Date.now(), printers });
+    const reported = parsePrinters((raw as { printers?: unknown } | null)?.printers ?? raw);
+    // Boş liste (Windows yazıcı sorgusu açılışta ya da kurulumda zaman aşımına uğradı) bilinen listeyi silmez: silseydi
+    // seçili fiş yazıcısı "Seçilmedi"ye düşer, ödeme sonrası fişler basılmazdı (saha, 22 Kas 2026)
+    const known = getSyncState<{ at: number; printers: WinPrinter[] }>(PRINTERS_KEY);
+    const printers = reported.length || !known?.printers?.length ? reported : known.printers;
+    setSyncState(PRINTERS_KEY, { at: reported.length ? Date.now() : (known?.at ?? Date.now()), printers });
     return c.json({ name: pickReceiptPrinter(printers, getSettings().receiptPrinter).name });
   });
 

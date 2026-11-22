@@ -82,4 +82,12 @@ describe('uçlar', () => {
     const audit = await h.ok<{ action: string }[]>('patron', 'GET', '/admin/audit?limit=5');
     expect(audit.some((a) => a.action === 'ayar.yazici')).toBe(true);
   });
+
+  it('boş liste (yazıcı sorgusu zaman aşımı, kurulum) bilinen listeyi ve seçimi silmez', async () => {
+    await h.ok('patron', 'PUT', '/admin/yazici', { name: 'HP LaserJet' });
+    expect(await (await fromAddr('127.0.0.1', { printers: [] })).json()).toEqual({ name: 'HP LaserJet' });
+    const v = await h.ok<{ printers: { name: string }[]; effective: string | null }>('patron', 'GET', '/admin/yazici');
+    expect(v.effective).toBe('HP LaserJet');
+    expect(v.printers.map((x) => x.name)).toEqual(['POS-80C', 'HP LaserJet']);
+  });
 });
