@@ -1,3 +1,4 @@
+import { PaymentBar } from '@/pages/patron/TodayStats';
 import { Check, ClipboardCopy, Download, Printer, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { tl } from '@shared/money';
@@ -126,7 +127,10 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
           {summary.payments.length === 0 ? (
             <EmptyState compact title={day.closedAt ? 'Bu gün ödeme alınmadı' : 'Henüz ödeme alınmadı'} />
           ) : (
-            <ul className="divide-y divide-[var(--admin-divider)] text-sm">
+            <>
+              {/* Dağılım bir bakışta (patron panelindeki çubukla aynı gruplar: nakit, kart, yemek kartı, diğer) */}
+              <PaymentBar payments={summary.payments} className="mx-4 mb-2 mt-1" />
+              <ul className="divide-y divide-[var(--admin-divider)] text-sm">
               {summary.payments.map((p) => (
                 <li key={p.methodId} className="flex justify-between gap-3 px-4 py-2">
                   <span className="min-w-0">
@@ -157,6 +161,7 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
                 </>
               )}
             </ul>
+            </>
           )}
         </Card>
         <Card title="Satış ve kasa dökümü">

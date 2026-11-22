@@ -494,6 +494,23 @@ export function payKind(p: { name: string; zField?: string }): (typeof PAY_KINDS
   return /kart|kredi|banka|pos/i.test(p.name) ? 'kart' : 'diger';
 }
 
+/** Dağılım çubuğu (yatay yığılmış): patron panelinde ve kasanın X/Z raporunda aynı gruplar ve renkler; ödeme yoksa çizilmez */
+export function PaymentBar({ payments, className }: { payments: { name: string; zField?: string; amount: number }[]; className?: string }) {
+  const total = payments.reduce((a, p) => a + Math.max(0, p.amount), 0);
+  if (total <= 0) return null;
+  const shown = PAY_KINDS.map((k) => {
+    const amount = payments.filter((p) => payKind(p) === k.key).reduce((a, r) => a + Math.max(0, r.amount), 0);
+    return { ...k, share: Math.round((amount / total) * 1000) / 10 };
+  }).filter((g) => g.share > 0);
+  return (
+    <div role="img" aria-label={`Ödeme dağılımı: ${shown.map((g) => `${g.label} yüzde ${g.share.toLocaleString('tr-TR')}`).join(', ')}`} className={cn('flex h-3.5 gap-[3px]', className)}>
+      {shown.map((g) => (
+        <span key={g.key} title={`${g.label} %${g.share.toLocaleString('tr-TR')}`} className="h-full min-w-2 rounded-full" style={{ flexGrow: g.share, flexBasis: 0, background: g.color }} />
+      ))}
+    </div>
+  );
+}
+
 export function PaymentMix({ payments }: { payments: { name: string; zField?: string; amount: number; count: number }[] }) {
   const total = payments.reduce((a, p) => a + Math.max(0, p.amount), 0);
   const groups = PAY_KINDS.map((k) => {
@@ -508,14 +525,9 @@ export function PaymentMix({ payments }: { payments: { name: string; zField?: st
       </ul>
     );
   }
-  const shown = groups.filter((g) => g.share > 0);
   return (
     <>
-      <div role="img" aria-label={`Ödeme dağılımı: ${shown.map((g) => `${g.label} yüzde ${g.share.toLocaleString('tr-TR')}`).join(', ')}`} className="mb-1.5 mt-2 flex h-3.5 w-full gap-[3px]">
-        {shown.map((g) => (
-          <span key={g.key} className="h-full min-w-2 rounded-full" style={{ flexGrow: g.share, flexBasis: 0, background: g.color }} />
-        ))}
-      </div>
+      <PaymentBar payments={payments} className="mb-1.5 mt-2" />
       <ul className={ROWS}>
         {groups.map((g) => (
           <Row

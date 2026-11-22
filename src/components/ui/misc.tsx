@@ -341,9 +341,17 @@ export function Stat({ label, value, hint, tone, strong, className }: { label: R
       <div className="text-[13px] font-medium text-muted">{label}</div>
       <div
         style={fitFigure(value)}
-        className={cn('tabular mt-2 whitespace-nowrap font-headline font-bold leading-[0.9] tracking-[-0.045em]', strong ? 'text-[length:min(40px,var(--fit,17cqi))]' : 'text-[length:min(30px,var(--fit,17cqi))]')}
+        className={cn('tabular mt-2 whitespace-nowrap font-headline font-semibold leading-[0.9] tracking-[-0.04em]', strong ? 'text-[length:min(40px,var(--fit,17cqi))]' : 'text-[length:min(30px,var(--fit,17cqi))]')}
       >
-        {value}
+        {/* LafPOS Keel (DESIGN.md §0): rakam iri, kuruş soluk (tutar metinse sondaki ",00" ayrılır) */}
+        {typeof value === 'string' && /,\d{2}$/.test(value) ? (
+          <>
+            {value.slice(0, -3)}
+            <span className="text-[var(--k-faint)]">{value.slice(-3)}</span>
+          </>
+        ) : (
+          value
+        )}
       </div>
       {hint && <div className="mt-1 text-xs text-muted">{hint}</div>}
     </div>
