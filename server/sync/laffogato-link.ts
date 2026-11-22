@@ -16,6 +16,22 @@ export const siteSigned = () => siteLinked() && env.laffogatoPanelSecret.length 
 export const SITE_NOT_LINKED = 'Site bağlantısı kurulmadı';
 
 /**
+ * İmzalı isteklerin şubesi: bu kasanın şubesi (Yönetim › Ayarlar › Şube kimliği, varsayılan `marina`). Site şubelidir
+ * (laffogato #279): GET'te `?branch=`, POST / PUT gövdesinde `branch`; sipariş, çağrı, Satışta ve masa kodları o
+ * şubenindir. docs/03-ENTEGRASYON.md §2.3 "Şube"
+ */
+export const siteBranch = () => getSettings().branchId;
+
+/**
+ * Yanıtın `branch` alanı bu kasanın şubesi değilse onu döner (liste okunmaz). Alanı göndermeyen eski site ya da
+ * okunamayan değer null: bugünkü davranış
+ */
+export function wrongSiteBranch(raw: unknown): string | null {
+  if (typeof raw !== 'string' || !raw) return null;
+  return raw === siteBranch() ? null : raw.slice(0, 24);
+}
+
+/**
  * İmzalı listelerin (`GET /api/panel/orders`, `GET /api/panel/menu`) LafPOS'un okuduğu biçim sürümü (laffogato
  * `PANEL_ORDERS_VERSION`, `PANEL_MENU_VERSION`). Alanı hiç göndermeyen eski site tanınır; başka her değer (2, "1",
  * null) LafPOS'un bilmediği biçimdir, liste okunmaz. docs/03-ENTEGRASYON.md §2.3

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, like, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, like, ne, or, sql } from 'drizzle-orm';
 import { businessDate } from '@shared/time';
 import type { DayRangeDTO, DenemeStatusDTO } from '@shared/types';
 import { type DB, db, schema, type Tx, tx } from '../db/client';
@@ -75,18 +75,53 @@ function closedDays(t: Tx | DB): DayRow[] {
 }
 
 /**
+ * Gerçek olduğu kanıtlı günler: gerçek yazarkasa fişi (simülatör dışı sağlayıcı, durumu ne olursa olsun) kesilmiş,
+ * lafmaliyet'e gönderilmiş (`exportedAt`) ya da giden kutusundaki `gun:<tarih>` kaydı gönderilmiş gün. Bunlar
+ * "gerçek görünen ama deneme olan gün" sayılmaz, silinmeye hiç önerilmez
+ */
+function provenDayIds(t: Tx | DB, days: DayRow[]): Set<string> {
+  if (!days.length) return new Set();
+  const ids = days.map((d) => d.id);
+  const proven = new Set<string>();
+  for (const d of t.select({ id: schema.businessDays.id }).from(schema.businessDays).where(and(inArray(schema.businessDays.id, ids), isNotNull(schema.businessDays.exportedAt))).all()) proven.add(d.id);
+  const fiscal = t
+    .select({ dayId: schema.orders.dayId })
+    .from(schema.fiscalReceipts)
+    .innerJoin(schema.orders, eq(schema.orders.id, schema.fiscalReceipts.orderId))
+    .where(and(inArray(schema.orders.dayId, ids), ne(schema.fiscalReceipts.provider, 'simulator')))
+    .all();
+  for (const r of fiscal) if (r.dayId) proven.add(r.dayId);
+  const keys = days.map((d) => `gun:${d.date}`);
+  const sent = new Set(
+    t
+      .select({ key: schema.outbox.dedupeKey })
+      .from(schema.outbox)
+      .where(and(eq(schema.outbox.target, 'lafmaliyet'), inArray(schema.outbox.dedupeKey, keys), isNotNull(schema.outbox.sentAt)))
+      .all()
+      .map((r) => r.key),
+  );
+  for (const d of days) if (sent.has(`gun:${d.date}`)) proven.add(d.id);
+  return proven;
+}
+
+/**
  * Geçişi tamamlarken silinecek günler. Deneme günü: eğitimde kapanmış (`trainingDay` true) ya da işaret tutulmadan
  * önce kapanmış (null: LafPOS o zaman canlıda değildi); ikisi de lafmaliyet'e hiç gitmez. Gerçek görünen günler
  * (`trainingDay` false) yalnız hepsi bugünden önceyse ve gerçek kullanım hiç başlamadıysa silinebilir: patron PIN'i
- * değişince deneme sessizce kapanıp sonraki deneme günleri "gerçek" kaydedilmişti (Marina, Kasım 2026)
+ * değişince deneme sessizce kapanıp sonraki deneme günleri "gerçek" kaydedilmişti (Marina, Kasım 2026). Gerçek olduğu
+ * kanıtlı gün (Pavo fişi, lafmaliyet'e gönderim) ve ondan sonraki hiçbir gün önerilmez: dün kapanmış ilk gerçek gün
+ * ertesi sabah silinmez
  */
 function finalizeDays(t: Tx | DB, now = Date.now()) {
   const days = closedDays(t);
   const trial = days.filter((d) => d.trainingDay !== false);
   const real = days.filter((d) => d.trainingDay === false);
   const today = businessDate(now);
-  const earlyReal = getSettings().liveSince == null && real.length > 0 && real.every((d) => d.date < today) ? real : null;
-  return { trial, earlyReal };
+  const proven = provenDayIds(t, real);
+  const firstProven = real.filter((d) => proven.has(d.id)).map((d) => d.date).sort()[0];
+  const early = real.filter((d) => !proven.has(d.id) && (firstProven == null || d.date < firstProven));
+  const earlyReal = getSettings().liveSince == null && early.length > 0 && real.every((d) => d.date < today) ? early : null;
+  return { trial, earlyReal, keptReal: real.length - early.length };
 }
 
 function rangeOf(days: DayRow[]): DayRangeDTO {
@@ -107,6 +142,7 @@ export function denemeStatus(user: AuthUser): DenemeStatusDTO {
     finalizeOnly: s.liveSince == null && realDayCount(db) > 0,
     trialDays: rangeOf(fd.trial),
     earlyRealDays: fd.earlyReal ? rangeOf(fd.earlyReal) : null,
+    provenRealDays: fd.earlyReal ? fd.keptReal : 0,
     counts: countRows(db),
     samplePinUsers: sample.filter((u) => u.id !== user.id).map((u) => ({ id: u.id, name: u.name, role: u.role })),
     mustChangeOwnPin: !!me && isSamplePinHash(me.pinHash),
@@ -298,7 +334,8 @@ function purgeDays(t: Tx, days: DayRow[], realDays: number): PurgeCounts {
 
   const kept = new Set(closedDays(t).map((d) => d.date));
   const keys = [...new Set(days.map((d) => d.date))].filter((date) => !kept.has(date)).map((date) => `gun:${date}`);
-  if (keys.length) c.outbox = t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'lafmaliyet'), inArray(schema.outbox.dedupeKey, keys))).run().changes;
+  // Gönderilmiş kayıt iz olarak kalır (lafmaliyet o günü almıştır; LafPOS'tan silmek orada silmez)
+  if (keys.length) c.outbox = t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'lafmaliyet'), inArray(schema.outbox.dedupeKey, keys), isNull(schema.outbox.sentAt))).run().changes;
   return c;
 }
 
@@ -306,8 +343,8 @@ const dateTr = (d: string | null) => (d ? d.split('-').reverse().join('.') : '')
 
 /**
  * Yarım kalmış geçişin tamamlanması (deneme kapanmış, gerçek gün var, `liveSince` yok). Deneme günleri ve bütün
- * hareketleri silinir; `purgeReal` işaretliyse bugünden önceki gerçek görünen günler de (o günler lafmaliyet'e hiç
- * gitmez). Gerçek kalan günlere ve onlara bağlı kayıtlara dokunulmaz. Patronun yeni PIN'i, örnek PIN'iyle kalan öbür
+ * hareketleri silinir; `purgeReal` işaretliyse bugünden önceki, gerçek olduğu kanıtlanmamış (Pavo fişi yok, lafmaliyet'e
+ * gönderilmemiş) gerçek görünen günler de. Gerçek kalan günlere ve onlara bağlı kayıtlara dokunulmaz. Patronun yeni PIN'i, örnek PIN'iyle kalan öbür
  * hesapların kapanması, `liveSince` ve denetim kaydı; deneme ayarları (eğitim yazarkasası, platformların Deneme modu)
  * gerçeğe döner. Yedek çağıran tarafından önce alınmıştır
  */

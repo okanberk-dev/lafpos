@@ -34,7 +34,8 @@ beforeAll(async () => {
       return json({ result: cmd === 'GET' ? (redis.get(key!) ?? null) : 'OK' });
     }
     if (!url.startsWith(SITE)) return realFetch(input, init);
-    const path = url.slice(SITE.length);
+    // Sorgu (`?branch=`, imzalı isteğin şubesi) yol eşlemesine katılmaz
+    const path = url.slice(SITE.length).split('?')[0]!;
     return (await site(path, init)) ?? json({ error: 'not_found' }, 404);
   });
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 100000 });

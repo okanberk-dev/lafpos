@@ -4,7 +4,9 @@ import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
+import { useDeviceCopies } from '@/lib/after-payment';
 import { useBoot } from '@/lib/boot';
+import { useOutbox } from '@/lib/outbox';
 import { cn } from '@/lib/cn';
 import { DEMO } from '@/lib/demo';
 import { useLive } from '@/lib/live';
@@ -76,6 +78,8 @@ const AVATAR = { xs: 'size-7 text-[11px]', sm: 'size-8 text-[11px]', md: 'size-9
  */
 export function AppShell({ children, notice }: { children: ReactNode; notice?: ReactNode }) {
   const boot = useBoot();
+  // Cihaz ödemesinin işyeri nüshası: sepeti bu sekme gönderdiyse ödeme penceresi kapanmış olsa da
+  useDeviceCopies(boot);
   const can = useCan();
   const me = useAuth((s) => s.me)!;
   const [finishing, setFinishing] = useState(false);
@@ -112,6 +116,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   }, [location.pathname, setMenuOpen]);
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
+  // Kasaya ulaşamayan gönderimler kasa dönünce kendiliğinden gider (hangi ekranda olunursa olsun)
+  useOutbox(boot);
   useReadyAlerts();
   const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
@@ -345,6 +351,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           <span className="inline-flex xl:hidden">
             <InternetBadge compact />
           </span>
+          {/* Uzakta iki ve daha çok dükkân: seçici tablet ve bilgisayarda da (telefonda üst şeritte) */}
+          {REMOTE && <RemoteShopPicker />}
           {healthPill}
           <button type="button" onClick={() => setPalette(true)} title="Ara ya da git (Ctrl K)" aria-label="Ara ya da git" className="grid size-10 place-items-center rounded-xl text-ink-2 transition-colors duration-150 hover:bg-hover hover:text-ink pointer-coarse:size-11">
             <Search className="size-5" />

@@ -40,6 +40,7 @@ export const SETTING_LABEL: Record<string, string> = {
   alertCashDiffKurus: 'Kasa farkı alarmı',
   backupKeep: 'Yedek süresi',
   autoDayEnd: 'Otomatik gün sonu',
+  branchId: 'Şube kimliği',
   autoDayEndHour: 'Gün sonu saati',
   serviceMode: 'Servis modu',
   tipsEnabled: 'Bahşiş',

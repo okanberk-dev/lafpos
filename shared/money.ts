@@ -83,6 +83,20 @@ export function splitKdv(gross: Kurus, ratePct: number): { net: Kurus; kdv: Kuru
   return { net, kdv: gross - net };
 }
 
+/** KDV dahil tutarın KDV hariç karşılığı (matrah): netOfKdv(20000, 10) = 18182 */
+export function netOfKdv(gross: Kurus, ratePct: number): Kurus {
+  return splitKdv(gross, ratePct).net;
+}
+
+/**
+ * KDV hariç brüt marj yüzdesi: fiyat KDV dahil, maliyet KDV hariç (lafmaliyet `costMinor`, docs/03-ENTEGRASYON.md §4.1).
+ * Fiyat 200 TL (%10 KDV), maliyet 60 TL → net 181,82 TL, marj %67 (KDV dahil fiyattan %70 görünürdü). Net fiyat yoksa null
+ */
+export function netMarginPct(gross: Kurus, ratePct: number, cost: Kurus): number | null {
+  const net = netOfKdv(gross, ratePct);
+  return net > 0 ? Math.round(((net - cost) / net) * 100) : null;
+}
+
 /**
  * Toplamı ağırlıklara göre kuruşu kuruşuna dağıtır (en büyük kalan yöntemi). Dağıtılan parçaların toplamı
  * her zaman `total`a eşittir. Ağırlıkların hepsi sıfırsa eşit dağıtır.

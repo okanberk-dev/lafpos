@@ -11,7 +11,7 @@ import { type Actor, counterpartFor, need, needDirect } from '../lib/auth';
 import type { Effects } from '../lib/effects';
 import { bad, conflict, HttpError, notFound } from '../lib/http';
 import { ulid } from '../lib/ids';
-import { getSettings, trainingMode } from '../lib/settings';
+import { getSettings, trainingDayNow } from '../lib/settings';
 import { getOpenDay, isEmptyOrder, requireCurrentDay, requireOpenDay } from './orders';
 
 type DayRow = typeof schema.businessDays.$inferSelect;
@@ -56,6 +56,14 @@ export function openDay(t: Tx, actor: Actor, fx: Effects, input: { openingCash: 
   fx.emit({ topic: 'settings', kind: 'day.opened', byUserId: actor.user.id });
   return t.select().from(schema.businessDays).where(eq(schema.businessDays.id, day.id)).get()!;
 }
+
+/**
+ * "Online (sitede ödendi)" toplamına giren online sipariş: sitede iptal ya da iade edildiği (`closed`), kasada
+ * ödendiği (`paidAtTill`) ya da başka şubenin olduğu bilinen sipariş girmez; site ve lafmaliyet'in online kanalı onu
+ * saymaz. Sonucu bilinmeyen (eski site) ve tamamlanan sayılır. docs/03-ENTEGRASYON.md §2.3 "Kapanış"
+ */
+export const onlineCounted = (o: { source: string; extOutcome?: string | null }) =>
+  o.source === 'laffogato' && (o.extOutcome == null || o.extOutcome === 'completed');
 
 /**
  * Gün açılmadan gelen online siparişler (sitede ödendi) geçici olarak son, kapanmış güne yazılır
@@ -261,7 +269,7 @@ export function computeSummary(t: Tx | DB, day: DayRow): ZSummary {
   const handedOver = moves.filter((m) => m.kind === 'teslim').reduce((a, m) => a + m.amount, 0);
   const expectedCash = day.openingCash + cashSales + cashCollections + cashIn - cashOut - handedOver;
   const cariSales = salesPays.filter((p) => methods.find((m) => m.id === p.methodId)?.kind === 'cari').reduce((a, p) => a + p.amount, 0);
-  const online = orders.filter((o) => o.source === 'laffogato');
+  const online = orders.filter(onlineCounted);
 
   return {
     orders: posOrders.length,
@@ -387,7 +395,7 @@ export function closeDay(
       note: input.note?.trim() || null,
       summary,
       // Kurulum modunda kapanan gün eğitim günüdür: lafmaliyet'e hiç gitmez (kurulum modu sonra kapansa da)
-      trainingDay: trainingMode(),
+      trainingDay: trainingDayNow(),
     })
     .where(eq(schema.businessDays.id, day.id))
     .run();

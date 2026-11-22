@@ -144,3 +144,57 @@ export function unreachable(e: unknown): boolean {
   const status = (e as { status?: unknown })?.status;
   return status === 0 || status === 502 || status === 503 || status === 504;
 }
+
+/**
+ * Kasaya ulaşamayan yeni gönderim kuyruğa girer: satırlar sepetten gönderim kaydına geçer (bekleyen gönderim donmuş bir
+ * kopya değil, tek yer). Kuyruktayken sepette silinen ya da azaltılan satır artık gönderimi değiştirmez ve "silindi"
+ * sanılıp kasa dönünce bara gitmez; garson yalnız "N ürün bekliyor"u görür (denetim bulgu 20/28)
+ */
+export function queueBatch(orderId: string, batch: SendBatch) {
+  const st = useCart.getState();
+  st.setBatch(orderId, batch);
+  st.consume(orderId, new Map(batch.lines.map((l) => [l.key, l.qty])));
+}
+
+/** Kuyruktaki gönderim kasaya yazıldı: kayıt düşer (yalnız aynı gönderimse) */
+export function dropBatch(orderId: string, batchId: string) {
+  if (useCart.getState().batches?.[orderId]?.id === batchId) useCart.getState().setBatch(orderId, null);
+}
+
+/** Kasa kuyruktaki gönderimi reddetti (ör. ürün tükendi): kayıt düşer, satırlar sepete geri konur; düzeltip yeniden gönderilir */
+export function returnBatch(orderId: string, batch: SendBatch) {
+  dropBatch(orderId, batch.id);
+  useCart.setState((st) => {
+    const current = st.byOrder[orderId] ?? [];
+    const keys = new Map(current.map((l) => [l.key, l]));
+    const merged = current.map((l) => {
+      const back = batch.lines.find((b) => b.key === l.key);
+      return back ? { ...l, qty: Math.min(99, l.qty + back.qty) } : l;
+    });
+    return { byOrder: { ...st.byOrder, [orderId]: [...merged, ...batch.lines.filter((b) => !keys.has(b.key))] } };
+  });
+}
+
+/** Aynı adisyonun gönderimi aynı anda iki yerden (arka plan döngüsü ve "Gönder") gitmez */
+const inFlight = new Set<string>();
+export const claimSend = (orderId: string) => (inFlight.has(orderId) ? false : (inFlight.add(orderId), true));
+export const releaseSend = (orderId: string) => void inFlight.delete(orderId);
+
+/**
+ * Kuyruktaki bir gönderimi dener (uygulama düzeyindeki döngü, src/lib/outbox.ts): `send` isteği yapar. Ulaşıldıysa
+ * kayıt düşer; kasa reddettiyse satırlar sepete döner; yine ulaşılamadıysa bekler. Başka yer gönderiyorsa 'busy'
+ */
+export async function flushBatch(orderId: string, batch: SendBatch, send: () => Promise<unknown>): Promise<'sent' | 'queued' | 'rejected' | 'busy'> {
+  if (!claimSend(orderId)) return 'busy';
+  try {
+    await send();
+    dropBatch(orderId, batch.id);
+    return 'sent';
+  } catch (e) {
+    if (unreachable(e)) return 'queued';
+    returnBatch(orderId, batch);
+    return 'rejected';
+  } finally {
+    releaseSend(orderId);
+  }
+}

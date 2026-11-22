@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { notify, notifySettings, pendingNotices, setNotifySettings } from '../sync/bildirim';
+import { type NotifySettings, notify, notifySettings, pendingNotices, setNotifySettings } from '../sync/bildirim';
+import { tl } from '@shared/money';
 import { resendReports } from '../sync/cloud-reports';
 import { cloudEnabled } from '../sync/cloud';
 import { Effects } from '../lib/effects';
@@ -78,12 +79,37 @@ syncRoutes.put('/bildirim', async (c) => {
   requirePermission(user, 'senkron.yonet');
   const tlMax = z.number().int().min(0).max(100_000_000);
   const input = await body(c, patchOf(z.object({ enabled: z.boolean(), voidMin: tlMax, compMin: tlMax, cashDiffMin: tlMax, internetMin: z.number().int().min(1).max(24 * 60), pavo: z.boolean() })));
-  setNotifySettings(Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)));
+  const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)) as Partial<NotifySettings>;
+  const old = notifySettings();
+  const next = { ...old, ...patch };
+  // Bildirim tam da büyük iptali ve kasa farkını patrona haber vermek için: kapatmak ya da eşiği yükseltmek yalnız
+  // patronun işi. Müdür eşiği düşürebilir (daha çok bildirim)
+  if (weakens(old, next) && user.role !== 'patron') throw new HttpError(403, 'Bildirimi kapatmayı ya da eşiği yükseltmeyi yalnız patron yapar', 'forbidden');
+  setNotifySettings(patch);
   const fx = new Effects();
-  fx.audit(db, { userId: user.id, action: 'ayar', message: 'Telefon bildirimi ayarları değişti' });
+  fx.audit(db, { userId: user.id, action: 'ayar', severity: user.role === 'patron' ? 'info' : 'uyari', message: `Telefon bildirimi ayarları değişti: ${notifyDiff(old, next)}` });
   fx.flush();
   return c.json({ ok: true, settings: notifySettings() });
 });
+
+/** Ayar bildirimi azaltıyor mu: kapanıyor, bir eşik yükseliyor ya da Pavo bildirimi kapanıyor */
+function weakens(a: NotifySettings, b: NotifySettings) {
+  return (a.enabled && !b.enabled) || b.voidMin > a.voidMin || b.compMin > a.compMin || b.cashDiffMin > a.cashDiffMin || b.internetMin > a.internetMin || (a.pavo && !b.pavo);
+}
+
+/** Denetim kaydı için değişenler, eskisi → yenisi */
+function notifyDiff(a: NotifySettings, b: NotifySettings) {
+  const onOff = (v: boolean) => (v ? 'açık' : 'kapalı');
+  const parts = [
+    a.enabled !== b.enabled && `bildirim ${onOff(a.enabled)} → ${onOff(b.enabled)}`,
+    a.voidMin !== b.voidMin && `iptal eşiği ${tl(a.voidMin)} → ${tl(b.voidMin)}`,
+    a.compMin !== b.compMin && `ikram eşiği ${tl(a.compMin)} → ${tl(b.compMin)}`,
+    a.cashDiffMin !== b.cashDiffMin && `kasa farkı eşiği ${tl(a.cashDiffMin)} → ${tl(b.cashDiffMin)}`,
+    a.internetMin !== b.internetMin && `internet ${a.internetMin} → ${b.internetMin} dk`,
+    a.pavo !== b.pavo && `Pavo ${onOff(a.pavo)} → ${onOff(b.pavo)}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(', ') : 'değişiklik yok';
+}
 
 syncRoutes.post('/bildirim/dene', async (c) => {
   requirePermission(c.get('user'), 'senkron.yonet');

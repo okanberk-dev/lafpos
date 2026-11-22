@@ -130,8 +130,8 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
   const early = status.finalizeOnly ? status.earlyRealDays : null;
-  // Gerçek kullanım hiç başlamadıysa ve gerçek görünen günlerin hepsi bugünden önceyse onlar da denemeydi: varsayılan işaretli
-  const [purgeReal, setPurgeReal] = useState(early != null);
+  // Gerçek görünen günleri silmek bilinçli bir seçim: varsayılan işaretsiz (dün kapanmış ilk gerçek gün ertesi sabah silinmesin)
+  const [purgeReal, setPurgeReal] = useState(false);
   const c = status.counts;
   const finalize = status.finalizeOnly;
   const trial = status.trialDays;
@@ -190,7 +190,7 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
                 {gone && gone.days > 0 ? (
                   <>
                     <b className="tabular font-semibold text-ink">{rangeText(gone)}</b> silinir: o günlerin adisyonları, ödemeleri, kasa hareketleri, vardiya sayımları, yazarkasa fişleri ve
-                    Z raporları. Raporlarda ve lafmaliyet’te görünmezler.
+                    Z raporları. LafPOS raporlarında görünmezler; lafmaliyet’e gönderilmiş bir gün orada kalır.
                   </>
                 ) : (
                   'Silinecek deneme günü yok.'
@@ -204,7 +204,7 @@ function FinishDialog({ status, onClose }: { status: DenemeStatusDTO; onClose: (
                 checked={purgeReal}
                 onChange={setPurgeReal}
                 label="Bugünden önceki gerçek görünen günler de denemeydi, onları da sil"
-                hint={`${rangeText(early)} gerçek kaydedilmiş görünüyor. Gerçek satışa bugün başlıyorsanız işaretli bırakın`}
+                hint={`${rangeText(early)} gerçek kaydedilmiş görünüyor ama Pavo fişi yok, lafmaliyet’e de gitmemiş. Yalnız bu günlerde gerçek satış yapmadıysanız işaretleyin${status.provenRealDays ? `. Pavo fişli ya da lafmaliyet’e gitmiş ${n(status.provenRealDays)} gün silinmez` : ''}`}
               />
             )}
             <section>

@@ -34,10 +34,71 @@ import { startCatchUp } from './sync/catch-up';
 export const MENU_SYNC_INTERVAL_MS = 15 * 60_000;
 /** LafPOS'un siteye kendi Satışta yazımından sonra eşitleme gecikmesi: art arda yazımlar tek eşitlemede toplanır */
 const AFTER_WRITE_SYNC_MS = 5_000;
+/**
+ * Sitenin menü işaretiyle tetiklenen ETag'siz eşitlemeler arası en az süre (imzalı panel okuması da yapar): art arda
+ * düzenlemeler (lafmaliyet'ten 30 ürünün fiyatı) sonda tek eşitlemede toplanır. docs/03-ENTEGRASYON.md §2.1
+ */
+export const MARKER_SYNC_MIN_MS = 60_000;
+/** LafPOS'un kendi yazımından sonraki eşitleme, bu kadar yeni bir eşitleme varsa atlanır (sinyal onu zaten izler) */
+const RECENT_SYNC_MS = 20_000;
+/** CDN'deki herkese açık liste bayatsa (s-maxage=60 + swr=60) bir kez ETag'siz yeniden eşitleme */
+export const CDN_REFRESH_MS = 2 * 60_000;
 
 const timers: NodeJS.Timeout[] = [];
-let soonTimer: NodeJS.Timeout | null = null;
-let soonForce = false;
+/** Bekleyen tek menü eşitlemesi: yeni istek en erken olanla birleşir (zorunluluk ve gece izni toplanır) */
+let pendingSync: { at: number; force: boolean; anyTime: boolean; timer: NodeJS.Timeout } | null = null;
+let lastSyncAt = 0;
+let lastMarkerSyncAt = 0;
+/** Gece (açık gün yokken) menü işareti değişti: gün açılınca bir kez ETag'siz eşitlenir */
+let menuDirty = false;
+/** CDN bayatlığı için yeniden eşitleme bir kez kuruldu: yine bayatsa 15 dakikalık yoklama bekler (döngü yok) */
+let cdnRetried = false;
+
+/** Testler için: zamanlayıcının menü belleğini sıfırlar */
+export function resetMenuScheduler() {
+  if (pendingSync) clearTimeout(pendingSync.timer);
+  pendingSync = null;
+  lastSyncAt = 0;
+  lastMarkerSyncAt = 0;
+  menuDirty = false;
+  cdnRetried = false;
+}
+
+/** Testler için: bekleyen eşitleme (an ve ETag'siz mi) */
+export const pendingMenuSync = () => (pendingSync ? { at: pendingSync.at, force: pendingSync.force } : null);
+export const menuSyncDirty = () => menuDirty;
+
+function scheduleMenuSync(at: number, force: boolean, anyTime: boolean) {
+  if (pendingSync) {
+    if (pendingSync.at <= at) {
+      pendingSync.force ||= force;
+      pendingSync.anyTime ||= anyTime;
+      return;
+    }
+    clearTimeout(pendingSync.timer);
+    force ||= pendingSync.force;
+    anyTime ||= pendingSync.anyTime;
+  }
+  const timer = setTimeout(() => void runScheduledSync(), Math.max(0, at - Date.now()));
+  pendingSync = { at, force, anyTime, timer };
+}
+
+/** Bekleyen eşitlemeyi çalıştırır (zamanlayıcı ya da test) */
+export async function runScheduledSync() {
+  const job = pendingSync;
+  if (!job) return;
+  clearTimeout(job.timer);
+  pendingSync = null;
+  const now = Date.now();
+  // Gün bu arada kapandı: işaret eşitlemesi gün açılışına kalır
+  if (!job.anyTime && !getOpenDay(db)) {
+    if (job.force) menuDirty = true;
+    return;
+  }
+  lastSyncAt = now;
+  if (job.force) lastMarkerSyncAt = now;
+  await menuTick({ anyTime: job.anyTime, force: job.force });
+}
 
 /**
  * Otomatik menü eşitlemesi. Site bağlantısı yoksa (LAFFOGATO_URL) siteye hiçbir istek gitmez: ne menü ne görsel.
@@ -51,6 +112,11 @@ export async function menuTick(opts: { anyTime?: boolean; force?: boolean } = {}
     // force: ETag'e bakılmaz (CDN'deki liste henüz eskiyse 304 dönerdi); fiyat ve Satışta imzalı panelden tazedir
     const r = await runMenuSync({ apply: true, force: opts.force });
     if (r.status === 'uygulandi') console.log(`[senkron] site menüsü uygulandı: ${r.preview?.changes.length ?? 0} değişiklik`);
+    // CDN'deki liste bayat (sitede yeniden açılan ürün listede yok): bir kez, CDN yenilenince ETag'siz
+    if (r.cdnStale && !cdnRetried) {
+      cdnRetried = true;
+      scheduleMenuSync(Date.now() + CDN_REFRESH_MS, true, false);
+    } else if (r.status === 'uygulandi' && !r.cdnStale) cdnRetried = false;
   } catch (e) {
     console.warn('[senkron] site menüsü alınamadı:', e instanceof Error ? e.message : e);
   }
@@ -151,16 +217,38 @@ function autoDayEndTick() {
   void deviceEndOfDay(closed.id, null).catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
 }
 
-/** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi */
+/** LafPOS'un siteye Satışta yazımından birkaç saniye sonra bir menü eşitlemesi (site o an uyanık; gece de) */
 export function menuSyncSoon(delayMs = AFTER_WRITE_SYNC_MS, opts: { force?: boolean } = {}) {
-  if (opts.force) soonForce = true;
-  if (soonTimer) return;
-  soonTimer = setTimeout(() => {
-    soonTimer = null;
-    const force = soonForce;
-    soonForce = false;
-    void menuTick({ anyTime: true, force });
-  }, delayMs);
+  scheduleMenuSync(Date.now() + delayMs, !!opts.force, true);
+}
+
+/**
+ * LafPOS siteye Satışta yazdı: 5 sn sonra bir eşitleme. Bekleyen bir eşitleme varsa ya da son 20 sn'de eşitlendiyse
+ * atlanır (işaret eşitlemesi onu kapsar)
+ */
+export function onSiteMenuWritten(now = Date.now()) {
+  if (pendingSync || now - lastSyncAt < RECENT_SYNC_MS) return;
+  menuSyncSoon();
+}
+
+/**
+ * Sitenin menü işareti değişti (fiyat ya da Satışta sitede veya lafmaliyet panelinde): gün açıkken 1 sn sonra ETag'siz,
+ * işaret eşitlemeleri arası en az 60 sn (art arda değişiklik sonda tek eşitleme). Gece eşitleme yok: gün açılınca bir kez
+ * (`menuDirty`). Site her yayında (deploy) işaretleri yeniler; bu da gece istek doğurmaz.
+ */
+export function onSiteMenuChanged(now = Date.now()) {
+  if (!getOpenDay(db)) {
+    menuDirty = true;
+    return;
+  }
+  scheduleMenuSync(Math.max(now + 1_000, lastMarkerSyncAt + MARKER_SYNC_MIN_MS), true, false);
+}
+
+/** Gün açıldı: gece atlanan yoklama bir kez; gece menü işareti değiştiyse ETag'siz */
+export function onMenuDayOpened() {
+  const force = menuDirty;
+  menuDirty = false;
+  return menuTick({ force });
 }
 
 /** Paket platformları: kabul süresi geçen bekleyen sipariş platformda iptal olmuştur */
@@ -229,11 +317,12 @@ export function startJobs() {
 export function onJobEvent(e: LiveEvent) {
   if (e.topic === 'sync' && e.kind === 'availability.push') void flushSiteOutbox();
   // LafPOS siteye Satışta yazdı: site o an uyanık, menü de eşitlenir (sonraki yoklama 15 dk sonra)
-  if (e.topic === 'sync' && e.kind === 'site.menu.written') menuSyncSoon();
-  // Sitenin menü işareti değişti (fiyat ya da Satışta sitede veya lafmaliyet panelinde değişti): hemen, ETag'siz
-  if (e.topic === 'sync' && e.kind === 'site.menu.changed') menuSyncSoon(1_000, { force: true });
+  if (e.topic === 'sync' && e.kind === 'site.menu.written') onSiteMenuWritten();
+  // Sitenin menü işareti değişti (fiyat ya da Satışta sitede veya lafmaliyet panelinde değişti): gün açıkken ETag'siz,
+  // en sık 60 sn'de bir; gece gün açılışına kalır
+  if (e.topic === 'sync' && e.kind === 'site.menu.changed') onSiteMenuChanged();
   // Gün açıldı: gece atlanan menü yoklaması bir kez
-  if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void menuTick();
+  if (e.topic === 'cash' && (e.kind === 'day.opened' || e.kind === 'day.reopened')) void onMenuDayOpened();
   // Paket siparişinin aşaması değişti: canlı platforma hemen yazılır (gidemezse 20 sn'lik turda yeniden)
   if (e.topic === 'delivery' && e.kind === 'delivery.status' && process.env.LAFPOS_NO_JOBS !== '1') void reconcileNotifications().catch(() => undefined);
 }
@@ -242,6 +331,5 @@ export function stopJobs() {
   for (const t of timers) clearTimeout(t);
   timers.length = 0;
   bus.off('event', onJobEvent);
-  if (soonTimer) clearTimeout(soonTimer);
-  soonTimer = null;
+  resetMenuScheduler();
 }

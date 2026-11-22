@@ -228,8 +228,8 @@ export default function NetworkAdmin() {
             <span className="break-all">{window.location.origin}</span>
           </DefRow>
         </Card>
-        {/* Uzaktan kuruluysa: telefon bildirimleri tam genişlikte (iki sütunlu ızgaranın altı) */}
-        {n.cloud?.configured && (
+        {/* Uzaktan kuruluysa: telefon bildirimleri tam genişlikte (iki sütunlu ızgaranın altı); uçları senkron.yonet ister */}
+        {n.cloud?.configured && can('senkron.yonet') && (
           <div className="lg:col-span-2">
             <NotifyCard />
           </div>

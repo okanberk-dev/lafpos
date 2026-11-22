@@ -6,7 +6,7 @@ import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { HttpError, notFound } from '../lib/http';
 import { signedFetch } from '../lib/signature';
-import { requireSiteSigned, siteSigned } from './laffogato-link';
+import { requireSiteSigned, siteBranch, siteSigned } from './laffogato-link';
 
 /**
  * Masadan çağrılar (uygulamada "Garson çağır", su, peçete; laffogato `src/lib/admin/table-calls-core.ts`). Site açık
@@ -167,10 +167,12 @@ export async function ackTableCall(id: string, actor: { id: string; name: string
   const call = state.calls.find((c) => c.id === id);
   if (!call) throw notFound('Çağrı');
   const name = actor.name.trim().slice(0, ACTOR_MAX).trim() || 'LafPOS';
-  const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/calls/ack`), { id, actor: name }).catch(() => {
+  const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/calls/ack`), { id, actor: name, branch: siteBranch() }).catch(() => {
     throw new HttpError(502, 'Siteye ulaşılamadı; çağrı sitede açık kaldı. İnternet gelince yeniden deneyin', 'site_call');
   });
-  if (status !== 200 && status !== 404) throw new HttpError(502, `Site çağrının yanıtını kabul etmedi (HTTP ${status})`, 'site_call');
+  // Başka şubenin çağrısı (409 `wrong_branch`, §2.3 "Şube"): yeniden denenmez, kart düşer (sitede yok gibi)
+  const otherBranch = status === 409 && (json as { error?: unknown } | null)?.error === 'wrong_branch';
+  if (status !== 200 && status !== 404 && !otherBranch) throw new HttpError(502, `Site çağrının yanıtını kabul etmedi (HTTP ${status})`, 'site_call');
   const fx = new Effects();
   const first = tx((t) => {
     const s = readState(t);
@@ -182,7 +184,7 @@ export async function ackTableCall(id: string, actor: { id: string; name: string
       action: 'table.call_ack',
       entity: 'table',
       entityId: call.tableId,
-      message: `${actor.name}: masa çağrısını gördü (${tableCallText(toDTO(call))})${status === 404 ? '; çağrı sitede yoktu' : ''}`,
+      message: `${actor.name}: masa çağrısını gördü (${tableCallText(toDTO(call))})${status === 404 ? '; çağrı sitede yoktu' : otherBranch ? '; çağrı başka şubenin, ekrandan kalktı' : ''}`,
     });
     return true;
   });

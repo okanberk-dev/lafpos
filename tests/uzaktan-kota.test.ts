@@ -210,7 +210,12 @@ describe('uzaktan ekran: Upstash komutu', () => {
     const { GET } = await api();
     const res = await GET(new Request(`${CLOUD}/api/uzaktan?yol=reports/summary&from=2026-11-20&to=2026-11-20`, { headers: { authorization: `Bearer ${token}`, 'x-laf-dukkan': 'default' } }));
     expect(res.status).toBe(200);
-    // Ciro: bugün, kıyas günü ve kasanın "bugün"ü aynı komutta
+    // Ciro: bugün, kıyas günü ve kasanın "bugün"ü aynı MGET'te; kasanın son nabzı (sürüm) tek küçük HGET: "bugün" ve
+    // "aynı saate kadar" kıyası kasanın şimdiki zamanıyla (denetim bulgu 9)
+    expect(cmds()).toEqual(['HGET', 'MGET']);
+    log.length = 0;
+    // Öteki sekmeler verilen dönemin günleriyle yetinir: tek MGET
+    expect((await GET(new Request(`${CLOUD}/api/uzaktan?yol=reports/products&from=2026-11-20&to=2026-11-20`, { headers: { authorization: `Bearer ${token}`, 'x-laf-dukkan': 'default' } }))).status).toBe(200);
     expect(cmds()).toEqual(['MGET']);
   });
 });

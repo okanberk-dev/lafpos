@@ -4,7 +4,7 @@ import { env } from '../env';
 import { Effects } from '../lib/effects';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
-import { siteSigned } from './laffogato-link';
+import { siteBranch, siteSigned } from './laffogato-link';
 
 /**
  * Siteye giden Satışta yazımları (`POST /api/panel/menu`). Porsiyon sayacının değiştirdiği Satışta bilgisi giden
@@ -83,13 +83,13 @@ export function withSiteMenuLock<T>(fn: () => Promise<T>): Promise<T> {
  * Porsiyon sayacının değiştirdiği Satışta bilgisini giden kutusuna koyar; çağıranın işleminde (adisyon kalemiyle tek
  * işlem). Aynı ürünün bekleyen yazımının yerini alır: siteye son durum gider.
  */
-export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean): boolean {
+export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean, actor = 'LafPOS porsiyon'): boolean {
   if (!siteSigned() || p.extSource !== 'laffogato' || !p.extId) return false;
   const key = keyOf(p.extId);
   const now = Date.now();
   t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, key), isNull(schema.outbox.sentAt))).run();
   t.insert(schema.outbox)
-    .values({ target: 'laffogato', kind: 'menu.isActive', dedupeKey: key, payload: { id: p.extId, isActive: active, actor: 'LafPOS porsiyon' }, createdAt: now, nextAttemptAt: now })
+    .values({ target: 'laffogato', kind: 'menu.isActive', dedupeKey: key, payload: { id: p.extId, isActive: active, actor: actor.slice(0, 80) }, createdAt: now, nextAttemptAt: now })
     .run();
   return true;
 }
@@ -169,7 +169,7 @@ async function sendDue(): Promise<{ sent: number; failed: number }> {
       continue;
     }
     try {
-      const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), payload);
+      const { status } = await signedFetch(env.laffogatoPanelSecret, 'POST', new URL(`${env.laffogatoUrl}/api/panel/menu`), { ...payload, branch: siteBranch() });
       if (status === 200) {
         db.update(schema.outbox).set({ sentAt: Date.now(), lastError: null, attempts: row.attempts + 1 }).where(eq(schema.outbox.id, row.id)).run();
         sent++;
@@ -217,7 +217,8 @@ async function sendTables(row: typeof schema.outbox.$inferSelect): Promise<'sent
   const now = Date.now();
   const state = (): TablesPushState => (getSyncState<TablesPushState>(TABLES_PUSH_STATE) ?? {});
   try {
-    const { status } = await signedFetch(env.laffogatoPanelSecret, 'PUT', new URL(`${env.laffogatoUrl}/api/panel/tables`), row.payload);
+    // Liste bu kasanın şubesinin (gövdede `branch`, §2.3 "Şube"); sitede başka şubede duran kod 409 `wrong_branch`
+    const { status, json } = await signedFetch(env.laffogatoPanelSecret, 'PUT', new URL(`${env.laffogatoUrl}/api/panel/tables`), { ...(row.payload as object), branch: siteBranch() });
     if (status === 200) {
       db.update(schema.outbox).set({ sentAt: now, lastError: null, attempts: row.attempts + 1 }).where(eq(schema.outbox.id, row.id)).run();
       setSyncState(TABLES_PUSH_STATE, { ...state(), lastSentAt: now, lastTriedAt: now, unsupported: false, lastError: null });
@@ -230,7 +231,10 @@ async function sendTables(row: typeof schema.outbox.$inferSelect): Promise<'sent
       return 'skipped';
     }
     if (PERMANENT.has(status)) {
-      const lastError = `Site masa kodlarını reddetti (HTTP ${status})`;
+      const wrong = status === 409 && (json as { error?: unknown } | null)?.error === 'wrong_branch';
+      const lastError = wrong
+        ? `Site masa kodlarını reddetti: bir kod sitede başka şubenin masası (${String((json as { field?: unknown }).field ?? '')}). Sitenin panelinde Masalar › masa › Düzenle › Şube'den düzeltip yeniden gönderin`
+        : `Site masa kodlarını reddetti (HTTP ${status})`;
       db.update(schema.outbox).set({ attempts: row.attempts + 1, lastError, nextAttemptAt: PARKED }).where(eq(schema.outbox.id, row.id)).run();
       setSyncState(TABLES_PUSH_STATE, { ...state(), lastTriedAt: now, unsupported: false, lastError });
       return 'failed';

@@ -51,7 +51,7 @@ beforeAll(async () => {
   await h.ok('kasa', 'POST', '/cash/day/open', { openingCash: 0 });
   Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
   const { env } = await import('../server/env');
-  Object.assign(env, { merkezUrl: CLOUD });
+  Object.assign(env, { merkezUrl: CLOUD, cloudSecret: SECRET });
   const realFetch = globalThis.fetch;
   vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -138,7 +138,10 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const { licenseNow } = await import('../server/sync/merkez');
     Object.assign(env, { merkezUrl: '' });
     expect(licenseNow()).toBeNull();
-    Object.assign(env, { merkezUrl: CLOUD });
+    // Kafenin ortak anahtarı yoksa da (kayıt imzalanamaz)
+    Object.assign(env, { merkezUrl: CLOUD, cloudSecret: '' });
+    expect(licenseNow()).toBeNull();
+    Object.assign(env, { merkezUrl: CLOUD, cloudSecret: SECRET });
   });
 
   it('kasa ilk nabızda kaydolur, "Onay bekliyor"da görünür; anahtar panele dönmez', async () => {
@@ -159,24 +162,27 @@ describe('Merkez: kayıt, nabız, panel', () => {
     const { identity } = await import('../server/sync/merkez');
     const { POST } = await api();
     const me = identity();
-    const stolen = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/kayit`, { method: 'POST', body: JSON.stringify({ id: me.id, anahtar: 'x'.repeat(40) }) }));
+    const { signedHeaders } = await import('../server/lib/signature');
+    // İmzasız kayıt hiç işlenmez; kafenin anahtarıyla imzalı olsa da kayıtlı kimliğe başka anahtar yazılamaz
+    const stolenBody = JSON.stringify({ id: me.id, anahtar: 'x'.repeat(40) });
+    expect((await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/kayit`, { method: 'POST', body: stolenBody }))).status).toBe(401);
+    const stolen = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/kayit`, { method: 'POST', body: stolenBody, headers: signedHeaders(SECRET, 'POST', new URL(`${CLOUD}/api/merkez/kayit`), stolenBody) }));
     expect(stolen.status).toBe(409);
     const unsigned = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/nabiz`, { method: 'POST', headers: { 'x-laf-kurulum': me.id }, body: '{}' }));
     expect(unsigned.status).toBe(401);
-    const { signedHeaders } = await import('../server/lib/signature');
     const body = '{"surum":"9.9.9"}';
     const forged = await POST(new Request(`${CLOUD}/api/uzaktan?yol=merkez/nabiz`, { method: 'POST', headers: { 'x-laf-kurulum': me.id, ...signedHeaders('y'.repeat(40), 'POST', new URL(`${CLOUD}/api/merkez/nabiz`), body) }, body }));
     expect(forged.status).toBe(401);
   });
 
-  it('panel yalnız gerçek oturumla: jetonsuz ve parolasız görünümde kapalı', async () => {
+  it('panel yalnız gerçek oturumla: jetonsuz 401, parolasız görünümde 403 (oturum düşmez)', async () => {
     expect((await panel('GET', 'merkez/kurulumlar', undefined, 'yok')).status).toBe(401);
     delete process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI;
     try {
       const { POST } = await api();
       const open = (await (await POST(new Request(`${CLOUD}/api/uzaktan?yol=uzaktan/giris`, { method: 'POST' }))).json()) as { token: string };
-      expect((await panel('GET', 'merkez/kurulumlar', undefined, open.token)).status).toBe(401);
-      expect((await panel('POST', 'merkez/gonder', { ids: ['a'.repeat(24)] }, open.token)).status).toBe(401);
+      expect((await panel('GET', 'merkez/kurulumlar', undefined, open.token)).status).toBe(403);
+      expect((await panel('POST', 'merkez/gonder', { ids: ['a'.repeat(24)] }, open.token)).status).toBe(403);
     } finally {
       process.env.LAFPOS_UZAKTAN_PAROLA_GEREKLI = '1';
     }
@@ -348,5 +354,35 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect(identity().registered).toBe(false);
     expect(await merkezBeat()).toBe(true);
     expect(store.has(`lafpos:merkez:kurulum:${id}`)).toBe(true);
+  });
+
+  it('kayıtlı eski (rastgele) kimlik: kayıt silinse de aynı kimlikle, adı ve lisansıyla döner; dükkân kimliği değişmez', async () => {
+    const { merkezBeat, identity, remoteShop, merkezLast, licenseNow } = await import('../server/sync/merkez');
+    const { setSyncState } = await import('../server/lib/settings');
+    const { randomBytes } = await import('node:crypto');
+    const oldId = randomBytes(12).toString('hex');
+    const key = randomBytes(32).toString('base64url');
+    const createdAt = Date.now() - 30 * DAY;
+    setSyncState('merkez.kimlik', { id: oldId, key, createdAt, registered: true });
+    const inst = { id: oldId, key, ad: 'Marina', createdAt, lastSeen: null, surum: null, build: null, guncelleme: null, gunAcik: null, lisans: { durum: 'aktif', bitis: null }, mod: 'elle', hedef: null, gonderildi: null, kod: 'MRN' };
+    store.set(`lafpos:merkez:kurulum:${oldId}`, JSON.stringify(inst));
+    expect(await merkezBeat()).toBe(true);
+    expect(remoteShop()).toBe(oldId);
+    // Lisansı aktif kurulum silinmez
+    expect((await panel('POST', 'merkez/sil', { id: oldId })).status).toBe(400);
+    expect(store.has(`lafpos:merkez:kurulum:${oldId}`)).toBe(true);
+    // Pasife alınıp silinir: kasa sonraki nabızlarda aynı kimlikle, adı, kodu ve lisansıyla döner
+    expect((await panel('POST', 'merkez/kurulum', { id: oldId, lisans: 'pasif' })).status).toBe(200);
+    expect((await panel('POST', 'merkez/sil', { id: oldId })).status).toBe(200);
+    expect(await merkezBeat()).toBe(false);
+    expect(identity().id).toBe(oldId);
+    expect(await merkezBeat()).toBe(true);
+    expect(remoteShop()).toBe(oldId);
+    expect(merkezLast()).toMatchObject({ ad: 'Marina', kod: 'MRN', lisans: { durum: 'pasif' } });
+    // Pasif yeniden aktif: satış açık
+    expect((await panel('POST', 'merkez/kurulum', { id: oldId, lisans: 'aktif' })).status).toBe(200);
+    await merkezBeat();
+    expect(licenseNow()?.state).not.toBe('kapali');
+    expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(200);
   });
 });

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, CircleCheck, Coffee, ExternalLink, Eye, EyeOff, Globe, Pencil, Plus, RefreshCw, Save, Star, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { parseTL, tl } from '@shared/money';
+import { netMarginPct, parseTL, tl } from '@shared/money';
 import type { ProductDTO } from '@shared/types';
 import { newGroupDraft, OptionGroupEditor } from '@/components/admin/OptionGroupEditor';
 import { ActionMenu, ActionRow, ActionRows, Badge, Card, CARD, CODE, type Column, DataTable, EmptyState, PageHeader, QuickLook, SearchField, SetupNotes, StatusTabs, TableSkeleton } from '@/components/admin/ui';
@@ -142,7 +142,7 @@ export default function MenuAdmin() {
   const availability = async (p: ProductDTO, active: boolean) => {
     try {
       const r = await post<{ site: string }>(`/sync/products/${p.id}/availability`, { active });
-      toast.ok(`${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'anahtar_yok' ? '; site anahtarı yok, yalnız LafPOS' : r.site === 'baglanti_yok' ? '; site bağlantısı kurulmadı, yalnız LafPOS' : ''}`);
+      toast.ok(`${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'anahtar_yok' ? '; site anahtarı yok, yalnız LafPOS' : r.site === 'baglanti_yok' ? '; site bağlantısı kurulmadı, yalnız LafPOS' : r.site === 'kuyrukta' ? '; internet gelince siteye yazılacak' : ''}`);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
@@ -666,9 +666,12 @@ function ProductDrawer({
               </div>
               {/* Site ürününde KDV formda yok (sitede değişir): oran burada okunur */}
               <div className="text-xs text-[var(--admin-text-mute)]">%{product.kdvRate} KDV dahil</div>
+              {/* Maliyet KDV hariç (lafmaliyet): marj KDV hariç fiyattan, M / tek boy fiyatıyla (maliyet M'nin; L'nin
+                  maliyeti ayrı tutulmaz). Raporlar › Ürünler'in brüt kârıyla aynı kural */}
               {can('rapor.maliyet') && product.cost != null && (
                 <div className="text-xs text-[var(--admin-text-mute)]">
-                  maliyet {tl(product.cost)} · marj %{Math.round(((product.price - product.cost) / product.price) * 100)}
+                  maliyet {tl(product.cost)}
+                  {netMarginPct(product.price, product.kdvRate, product.cost) != null && ` · KDV hariç marj %${netMarginPct(product.price, product.kdvRate, product.cost)}${product.priceL != null ? ' (M)' : ''}`}
                 </div>
               )}
             </div>

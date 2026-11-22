@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { compReasonText } from '@shared/comp';
 import { allocate } from '@shared/money';
 import { calcOrder } from '@shared/order-calc';
-import { posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
+import { PLATFORM_FEE_POS_NAME, posNameKey, posSlotOf, soldPosName } from '@shared/pos-name';
 import { addDays, businessDate, isCalendarDate } from '@shared/time';
 import type { SelectedOption } from '@shared/types';
 import { db, schema, tx } from '../db/client';
@@ -12,7 +12,7 @@ import { money, toCsv } from '../lib/csv';
 import { Effects } from '../lib/effects';
 import { bus } from '../lib/events';
 import { conflict, HttpError, notFound } from '../lib/http';
-import { getSettings, getSyncState, setSyncState, trainingMode } from '../lib/settings';
+import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { computeSummary, lafmaliyetZ } from '../services/days';
 
@@ -34,7 +34,7 @@ export interface SaleLine {
 }
 
 type ItemRow = typeof schema.orderItems.$inferSelect;
-type AddonKey = 'extraShot' | 'syrup' | 'milk';
+export type AddonKey = 'extraShot' | 'syrup' | 'milk';
 
 /** Seçenek eklerinin lafmaliyet'teki ürün adları (ModPOS'taki adlarla aynı) */
 const ADDON_NAMES: Record<AddonKey, string> = { extraShot: 'EXTRA SHOT', syrup: 'SYRUP', milk: 'ALTERNATIF SÜT' };
@@ -63,7 +63,7 @@ export function addonsOf(options: SelectedOption[]): { key: AddonKey; qty: numbe
 }
 
 /** Eklerin site kimlikleri: önce sabit kimlik (yerelde varsa), yoksa `extras` kategorisinde ada göre */
-function addonSiteIds(): Record<AddonKey, string | null> {
+export function addonSiteIds(): Record<AddonKey, string | null> {
   const linked = db
     .select({ name: schema.products.name, extId: schema.products.extId, categoryKey: schema.categories.extKey })
     .from(schema.products)
@@ -74,6 +74,23 @@ function addonSiteIds(): Record<AddonKey, string | null> {
   const extras = linked.filter((p) => p.categoryKey === 'extras');
   const find = (key: AddonKey, re: RegExp) => (ids.has(ADDON_SITE_IDS[key]) ? ADDON_SITE_IDS[key] : (extras.find((e) => re.test(e.name.toLocaleLowerCase('tr-TR')))?.extId ?? null));
   return { extraShot: find('extraShot', /shot/), syrup: find('syrup', /şurup|syrup/), milk: find('milk', /süt/) };
+}
+
+/**
+ * Kalemin eklerinin reçete maliyeti (KDV hariç, kuruş; Raporlar › Ürünler ve patron panelinin brüt kârı). Gün sonunun
+ * kuralıyla: ekler `addonsOf`, kimlik `addonSiteIds`, maliyet ekin M birim maliyeti × kalem adedi × ek adedi. Maliyeti
+ * bilinmeyen ek 0 sayılır, `partial` işaretlenir (lafmaliyet reçetesiz ürüne 0 gönderir, LafPOS saklamaz)
+ */
+export function addonCostOf(i: { options: SelectedOption[]; qty: number }, costs: Record<string, number>, ids: Record<AddonKey, string | null>): { cost: number; partial: boolean } {
+  let cost = 0;
+  let partial = false;
+  for (const op of addonsOf(i.options)) {
+    const id = ids[op.key];
+    const unit = id ? costs[`${id}:M`] : undefined;
+    if (unit == null) partial = true;
+    else cost += unit * i.qty * op.qty;
+  }
+  return { cost, partial };
 }
 
 interface Part {
@@ -92,8 +109,11 @@ function itemParts(i: ItemRow, value: number, addonIds: Record<AddonKey, string 
   const weights = [i.unitPrice - addons.reduce((a, op) => a + op.price * op.qty, 0), ...addons.map((op) => op.price * op.qty)];
   const shares = allocate(value, weights);
   const size = i.size === 'L' ? 'L' : i.size === 'M' ? 'M' : 'TEK';
+  const posName = soldPosName(i.posName, i.name, size, getSettings().posSizeSuffix);
+  // Platform ücreti hizmettir (mal maliyeti yok, KDV hizmet oranıyla); ürünün işareti oda sayacı için bilerek kapalı
+  const isService = i.isService || posNameKey(posName) === posNameKey(PLATFORM_FEE_POS_NAME);
   return [
-    { posName: soldPosName(i.posName, i.name, size, getSettings().posSizeSuffix), siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService: i.isService },
+    { posName, siteMenuId: i.extProductId, slot: posSlotOf(i.extProductId, size), qty: i.qty, value: shares[0] ?? value, isService },
     ...addons.map((op, k) => ({
       posName: ADDON_NAMES[op.key],
       siteMenuId: addonIds[op.key],
@@ -295,7 +315,7 @@ const notConfigured = () => conflict('lafmaliyet bağlantısı tanımlı değil 
  * modundaysa ya da gün eğitim günüyse hiçbir şey yapmaz ve `null` döner; koyunca günün anahtarını (`gun:<tarih>`).
  */
 export function enqueueDay(dayId: string): string | null {
-  if (!configured() || trainingMode()) return null;
+  if (!configured() || trainingDayNow()) return null;
   const day = db.select({ trainingDay: schema.businessDays.trainingDay }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (day && !realDay(day)) return null;
   const payload = buildDayPayload(dayId);
@@ -500,7 +520,7 @@ function dayRow(key: string) {
  */
 export async function pushDayNow(dayId: string) {
   if (!configured()) throw notConfigured();
-  if (trainingMode()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  if (trainingDayNow()) throw conflict(TRAINING_MESSAGE, 'training_mode');
   const day = db.select({ trainingDay: schema.businessDays.trainingDay }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (!day) throw notFound('Gün');
   if (!realDay(day)) throw conflict(trainingDayMessage(day), 'training_day');
@@ -564,7 +584,7 @@ export const BACKFILL_MAX_DAYS = 400;
  */
 export function backfillDays(input: { from: string; to: string }, actor: { id: string | null; name: string }) {
   if (!configured()) throw notConfigured();
-  if (trainingMode()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  if (trainingDayNow()) throw conflict(TRAINING_MESSAGE, 'training_mode');
   const today = businessDate(Date.now());
   if (input.from > input.to) throw new HttpError(422, 'Başlangıç günü bitiş gününden sonra olamaz', 'range');
   if (input.to > today) throw new HttpError(422, 'Bitiş günü bugünden sonra olamaz', 'range');

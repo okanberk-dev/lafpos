@@ -8,7 +8,8 @@ import { type Harness, startApp } from './harness';
  * Site isteği sahte `fetch`'e gider, ağ yok; zamanlayıcı gerçek (`startJobs`), saat sahte.
  */
 let h: Harness;
-const urlOf = (input: unknown) => (input instanceof Request ? input.url : String(input));
+// Sorgu (`?branch=`, imzalı isteğin şubesi) yol eşlemesine katılmaz
+const urlOf = (input: unknown) => (input instanceof Request ? input.url : String(input)).split('?')[0]!;
 const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
   const url = urlOf(input);
   if (url.endsWith('/api/mobile/v1/menu')) return new Response(null, { status: 304, headers: { etag: '"m1"' } });

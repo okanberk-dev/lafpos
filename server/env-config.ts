@@ -33,10 +33,6 @@ export function configFrom(vars: Record<string, string | undefined>) {
     merkezUrl: vars.LAFPOS_MERKEZ_URL?.trim() === '0' ? '' : (vars.LAFPOS_MERKEZ_URL ?? vars.LAFPOS_CLOUD_URL ?? '').trim().replace(/\/+$/, ''),
 
     /**
-     * Trendyol Go Yemek (Uber Eats Türkiye): satıcı panelinden satıcı no, API anahtarı ve gizli anahtar; yalnız kasa
-     * bilgisayarının .env'inde. Üçü de yoksa canlı mod seçilemez (server/delivery/trendyol.ts)
-     */
-    /**
      * Yemeksepeti (Delivery Hero POS middleware): siparişler LafPOS Uzaktan aktarıcısına (Vercel) iter, kasa oradan çeker
      * (LAFPOS_CLOUD_URL ve LAFPOS_CLOUD_SECRET de gerekir); kabul, ret ve aşama kasadan middleware'e
      */
@@ -60,13 +56,19 @@ export function configFrom(vars: Record<string, string | undefined>) {
       /** Canlı https://food-external-api-gateway.getirapi.com; test ortamı https://food-external-api-gateway.development.getirapi.com */
       apiUrl: ((vars.GETIR_API_URL ?? '').trim() || 'https://food-external-api-gateway.getirapi.com').replace(/\/+$/, ''),
     },
+    /**
+     * Trendyol Go Yemek (Uber Eats Türkiye): satıcı panelinden satıcı no, API anahtarı ve gizli anahtar; yalnız kasa
+     * bilgisayarının .env'inde. Üçü de yoksa canlı mod seçilemez (server/delivery/trendyol.ts)
+     */
     trendyol: {
       supplierId: (vars.TRENDYOL_SUPPLIER_ID ?? '').trim(),
       apiKey: (vars.TRENDYOL_API_KEY ?? '').trim(),
       apiSecret: (vars.TRENDYOL_API_SECRET ?? '').trim(),
-      apiUrl: ((vars.TRENDYOL_API_URL ?? '').trim() || 'https://api.tgoapps.com').replace(/\/+$/, ''),
-      agentName: (vars.TRENDYOL_AGENT_NAME ?? '').trim() || 'LafPOS',
-      /** `x-executor-user`: işlemi yapan satıcı paneli kullanıcısının e-postası; boşsa entegratör adı */
+      /** Canlı https://api.tgoapis.com; test ortamı https://stageapi.tgoapis.com (IP izni ister) */
+      apiUrl: ((vars.TRENDYOL_API_URL ?? '').trim() || 'https://api.tgoapis.com').replace(/\/+$/, ''),
+      /** Yazılım bizim: User-Agent "<satıcı no> - SelfIntegration", x-agentname SelfIntegration */
+      agentName: (vars.TRENDYOL_AGENT_NAME ?? '').trim() || 'SelfIntegration',
+      /** x-executor-user: işlemi yapanın e-postası (satıcı panelindeki kullanıcı) */
       executorEmail: (vars.TRENDYOL_EXECUTOR_EMAIL ?? '').trim(),
     },
   };

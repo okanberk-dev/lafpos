@@ -479,13 +479,13 @@ export default function SettingsAdmin() {
               </div>
               <Field
                 label="Şube kimliği"
-                hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır. Paneldeki kimliğin aynısı olmalı (Ayarlar › Şubeler); tek şubeli kurulumda tuzla kalır"
+                hint="Bu kasanın şubesi: gün sonu lafmaliyet'te bu şubenin cirosuna yazılır; sitenin online siparişleri, masa çağrıları ve Tükendi'si bu şube adına okunur ve yazılır. Paneldeki kimliğin aynısı olmalı (bugün marina)"
                 error={branchError}
               >
                 <Input
                   value={s.branchId}
                   onChange={(e) => set({ branchId: e.target.value.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9-]/g, '').slice(0, 24) })}
-                  placeholder="tuzla"
+                  placeholder="marina"
                   autoCapitalize="none"
                   spellCheck={false}
                   className="sm:max-w-60"

@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db, schema, tx } from '../db/client';
 import { Effects } from '../lib/effects';
 import { requireSiteLinked } from './laffogato-link';
-import { applyMenu, fetchPanelMenu, fetchPublicMenu, type MenuPreview, type PanelMenu, previewMenu, recordMenuSync } from './laffogato-menu';
+import { applyMenu, cdnStale, fetchPanelMenu, fetchPublicMenu, type MenuPreview, type PanelMenu, previewMenu, recordMenuSync } from './laffogato-menu';
 import { settleSiteWrites, withSiteMenuLock } from './site-outbox';
 
 let running: Promise<unknown> | null = null;
@@ -22,6 +22,8 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
   result?: { created: number; updated: number; deactivated: number; reactivated: number };
   /** İmzalı panel alınamadı: fiyat ve ürünler uygulandı, Satışta bilgisi değişmedi */
   warning?: string;
+  /** CDN'deki herkese açık liste bayat: ETag yazılmadı, çağıran kısa süre sonra bir kez ETag'siz yeniden eşitler */
+  cdnStale?: boolean;
 }> {
   // Bağlantı yoksa (LAFFOGATO_URL) hiçbir istek gitmez; durum kaydına hata da yazılmaz, "kurulmadı" hata değildir
   requireSiteLinked();
@@ -50,6 +52,7 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
         const keep = panelError !== null;
         const held = keep ? new Set<string>() : settleSiteWrites(db, panel);
         const preview = previewMenu(db, fetched.menu, { panel, keep, held });
+        const stale = cdnStale(db.select({ extId: schema.products.extId }).from(schema.products).where(eq(schema.products.extSource, 'laffogato')).all(), fetched.menu, panel);
         const warning = panelError ? `Satışta bilgisi alınamadı, ürünlerin Satışta durumu değişmedi: ${panelError}` : null;
         if (!opts.apply) return { status: 'onizleme' as const, preview, ...(warning ? { warning } : {}) };
         const fx = new Effects();
@@ -65,11 +68,12 @@ export async function runMenuSync(opts: { apply: boolean; force?: boolean; userI
           }
           return r;
         });
-        recordMenuSync(warning ? { changes: preview.changes.length, error: warning } : { etag: fetched.etag, changes: preview.changes.length });
+        // CDN bayatsa ETag yazılmaz: sonraki yoklama (ya da kısa süre sonraki ETag'siz eşitleme) taze listeyi alır
+        recordMenuSync(warning ? { changes: preview.changes.length, error: warning } : { ...(stale ? {} : { etag: fetched.etag }), changes: preview.changes.length });
         fx.emit({ topic: 'menu', kind: 'menu.synced' });
         fx.emit({ topic: 'sync', kind: 'menu.synced' });
         fx.flush();
-        return { status: 'uygulandi' as const, preview, result, ...(warning ? { warning } : {}) };
+        return { status: 'uygulandi' as const, preview, result, ...(warning ? { warning } : {}), ...(stale ? { cdnStale: true } : {}) };
       });
     } catch (e) {
       recordMenuSync({ error: e instanceof Error ? e.message : String(e) });

@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import { tl } from '@shared/money';
+import { PLATFORM_FEE_POS_NAME } from '@shared/pos-name';
 import type { Permission } from '@shared/permissions';
 import {
   ACCEPT_SECONDS,
@@ -24,6 +25,7 @@ import { ulid } from '../lib/ids';
 import { getSettings, updateSettings } from '../lib/settings';
 import { loadSaleProduct } from '../services/menu';
 import * as orders from '../services/orders';
+import { assertCanSell } from '../sync/merkez';
 import { sampleOrder } from './simulator';
 
 /**
@@ -211,14 +213,14 @@ function feeProductId(t: Tx): string {
       t.insert(schema.categories).values({ id, name: 'Platform ücretleri', color: '#616367', sort: 999, customizable: false, active: false, stationId: null }).run();
       return id;
     })();
-  const existing = t.select({ id: schema.products.id, categoryId: schema.products.categoryId, stationId: schema.products.stationId }).from(schema.products).where(eq(schema.products.posName, 'PLATFORM ÜCRETİ')).get();
+  const existing = t.select({ id: schema.products.id, categoryId: schema.products.categoryId, stationId: schema.products.stationId }).from(schema.products).where(eq(schema.products.posName, PLATFORM_FEE_POS_NAME)).get();
   if (existing) {
     const cat = t.select({ stationId: schema.categories.stationId }).from(schema.categories).where(eq(schema.categories.id, existing.categoryId)).get();
     if (existing.stationId || cat?.stationId) t.update(schema.products).set({ stationId: null, categoryId: stationless }).where(eq(schema.products.id, existing.id)).run();
     return existing.id;
   }
   const id = ulid();
-  t.insert(schema.products).values({ id, categoryId: stationless, stationId: null, name: 'Platform ücreti', description: 'Paket platformunun teslimat ya da ambalaj ücreti', price: 0, kdvRate: 20, hidden: true, posName: 'PLATFORM ÜCRETİ', sort: 999 }).run();
+  t.insert(schema.products).values({ id, categoryId: stationless, stationId: null, name: 'Platform ücreti', description: 'Paket platformunun teslimat ya da ambalaj ücreti', price: 0, kdvRate: 20, hidden: true, posName: PLATFORM_FEE_POS_NAME, sort: 999 }).run();
   return id;
 }
 
@@ -382,6 +384,8 @@ export function expirePlatformOrders(t: Tx, fx: Effects, now = Date.now()): numb
  */
 export function acceptPlatformOrder(t: Tx, user: AuthUser, fx: Effects, id: string, prepMinutes?: number, opts: { notifiedStatus?: string | null; auto?: boolean } = {}) {
   if (!user.permissions.has('paket.yonet')) throw new HttpError(403, 'Platform siparişini paket yetkisi olan kabul eder', 'forbidden');
+  // Lisans kapalıysa platform siparişi de yeni satıştır: hiçbir şey yazılmadan durur (sipariş bekler, platform reddeder)
+  assertCanSell();
   const row = loadRow(t, id);
   const now = Date.now();
   if (row.status !== 'bekliyor') throw conflict('Sipariş artık onay beklemiyor', 'not_pending');
