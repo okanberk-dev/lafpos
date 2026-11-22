@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn';
 import { fold } from '@/lib/shell';
 import { joinMeta } from '@/lib/text';
 import { toast } from '@/lib/toast';
+import { MenuDuzeni } from './MenuDuzeni';
 import { BekliyorRozeti, NEDEN, type SekmeProps } from './ortak';
 import { satisGorunumu, secenekGruplari, urunSatirlari } from './yardimci';
 
@@ -73,7 +74,21 @@ export function MenuSekmesi({ genel, neden, bekleyen, uygulanan, gonder }: Sekme
     />
   );
 
+  const gizle = async (id: string, ad: string) => {
+    setMesgul(`gizle:${id}`);
+    try {
+      await gonder({ tur: 'urun.gorunum', veri: { id, gorunur: false }, ad });
+      toast.ok(`${ad} kasada gizlenecek`);
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setMesgul(null);
+    }
+  };
+  const gizleNeden = neden('urun.gorunum');
+
   return (
+    <div className="flex flex-col gap-[var(--grid-gap)]">
     <Card
       title="Satışta ve tükendi"
       subtitle={secenekListesi ? `${tukenenSecenek} seçenek tükendi` : `${tukenenUrun} ürün tükendi`}
@@ -166,6 +181,8 @@ export function MenuSekmesi({ genel, neden, bekleyen, uygulanan, gonder }: Sekme
                     disabled={!!urunNeden || d.bekliyor || mesgul === anahtar}
                     title={urunNeden ?? (d.bekliyor ? 'İstek kasaya ulaşınca uygulanır; iptal Geçmiş’te' : undefined)}
                     onChange={(v) => void degistir(anahtar, 'urun.satis', u.id, u.ad, v)}
+                    onGizle={gizleNeden ? undefined : () => void gizle(u.id, u.ad)}
+                    gizleMesgul={mesgul === `gizle:${u.id}`}
                   />
                 );
               })}
@@ -174,6 +191,8 @@ export function MenuSekmesi({ genel, neden, bekleyen, uygulanan, gonder }: Sekme
         </>
       )}
     </Card>
+    <MenuDuzeni neden={neden} gonder={gonder} />
+    </div>
   );
 }
 
@@ -187,6 +206,8 @@ function SatisSatiri({
   disabled,
   title,
   onChange,
+  onGizle,
+  gizleMesgul,
 }: {
   ad: string;
   alt: string | null;
@@ -196,6 +217,9 @@ function SatisSatiri({
   disabled: boolean;
   title?: string;
   onChange: (satista: boolean) => void;
+  /** Ürünü kasanın ekranında gizle (çift ürün); silmez */
+  onGizle?: () => void;
+  gizleMesgul?: boolean;
 }) {
   return (
     <li className="flex min-h-14 items-center gap-3 px-5 py-2" title={title}>
@@ -207,6 +231,11 @@ function SatisSatiri({
           {bekliyor && <BekliyorRozeti />}
         </span>
       </span>
+      {onGizle && (
+        <Button size="sm" variant="ghost" className="shrink-0" loading={gizleMesgul} onClick={onGizle} aria-label={`${ad}: kasada gizle`}>
+          Gizle
+        </Button>
+      )}
       <Toggle
         checked={satista}
         disabled={disabled}
