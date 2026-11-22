@@ -114,7 +114,7 @@ function HeroAmount({ k }: { k: number }) {
   const dots = int.split('.').length - 1;
   const units = 0.64 * (int.length - dots + 1) + 0.3 * dots + (cents ? 0.85 : 0);
   return (
-    <p className="tabular whitespace-nowrap font-headline font-bold leading-none tracking-[-0.04em] text-ink" style={{ fontSize: `min(5.5rem, calc(100cqi / ${units.toFixed(2)}))` }}>
+    <p className="tabular whitespace-nowrap font-headline font-bold leading-none tracking-[-0.04em] text-ink dark:font-medium dark:tracking-[-0.05em]" style={{ fontSize: `min(5.5rem, calc(100cqi / ${units.toFixed(2)}))` }}>
       <span className="sr-only">Bugünkü ciro {tl(k)}</span>
       <span aria-hidden="true">
         <span className="text-muted">₺</span>

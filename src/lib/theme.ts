@@ -24,7 +24,7 @@ const systemDark = () => window.matchMedia('(prefers-color-scheme: dark)').match
 function apply(theme: Theme, force: ForcedTheme) {
   const dark = resolveDark(theme, force, systemDark());
   document.documentElement.classList.toggle('dark', dark);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#000000' : '#f1f4f2');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#050302' : '#f1f4f2');
 }
 
 export const useTheme = create<{

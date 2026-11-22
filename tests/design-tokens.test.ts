@@ -370,7 +370,7 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     // Araçlar ve kişinin düğmesi: ana eylemin mürekkebi ve ok halkası yok
     expect(shell).not.toMatch(/<Ring \/>|buttonClass\('primary'/);
     // Telefonun alt sekmesi de açık nane hapta
-    expect(shell).toContain("on ? 'bg-[var(--menu-active-bg)] text-[var(--menu-active-ink)]'");
+    expect(shell).toContain("on ? 'bg-[var(--menu-active-bg)] font-semibold text-[var(--menu-active-ink)]'");
     // Sekmenin seçimi açık nane zeminde yeşil, kalın; renk geçişi ve gölge yok
     const selected = css.slice(css.indexOf("  .lp-menu-item:is([aria-current='page']"));
     const rule = selected.slice(0, selected.indexOf('}'));
