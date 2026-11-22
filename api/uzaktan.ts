@@ -1214,7 +1214,8 @@ async function serveReports(path: string, url: URL, demo: Snapshot | null, shop:
   const explicit = url.searchParams.has('from') && url.searchParams.has('to');
   // Kasanın son itmesinin sürümü (nabız dahil; gün açıkken 5, kapalıyken 15 dakikada bir): rapor itmesi yalnız değişen
   // günde gider, "bugün" ve kıyasın "aynı saate kadar"ı onunla kasanın şimdiki zamanına yakın kalır (tek küçük komut)
-  const pulseP = redis('HGET', VERSIONS_KEY, shop).then(parseVersion, () => null);
+  // Yalnız Ciro (kıyas) ve dönemi verilmemiş istek için: öteki sekmelerde verilen dönemin günleri yeter
+  const pulseP = kind === 'summary' || !explicit ? redis('HGET', VERSIONS_KEY, shop).then(parseVersion, () => null) : Promise.resolve(null);
   let live = explicit ? null : readMeta((await redis('GET', reportMetaKey(shop))) as string | null);
   const clock = (pulse: SnapVersion | null) => {
     const nowMs = pulse ? Math.max(live?.at ?? 0, pulse.at) : (live?.at ?? Date.now());
