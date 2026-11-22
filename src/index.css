@@ -143,12 +143,12 @@
    * Eylem dolgusu: ekranın ana eylemi (Öde, Kaydet, Giriş) ve seçim (çip, sekme, segment). Pano: markanın rengi
    * (panonun mavisinin yerine ev yeşili), beyaz yazı 6.2:1. Ad eski ("ink"), rolü aynı
    */
-  --admin-ink-fill: #0a6e52;
-  --admin-ink-fill-hover: #075a43;
+  --admin-ink-fill: #171a26;
+  --admin-ink-fill-hover: #2b2f3e;
   --admin-on-ink: #ffffff;
   /* Ok halkası: ana düğmenin sağında açık nane daire ve içinde koyu yeşil çapraz ok (yeşil düğmede 5.4:1) */
-  --ok-ring: #d8f6e8;
-  --ok-arrow: #075a43;
+  --ok-ring: #4fdc86;
+  --ok-arrow: #0b3d22;
   /* Ahududu: zamanı daralan (hesap istendi, onay bekleyen sipariş; kitin --signal'ı, canlı) */
   --admin-signal: #c8175d;
   --admin-signal-soft: #fce4ee;
@@ -206,13 +206,13 @@
    * Marka rayı (geniş ekranın sol sütunu): ev yeşilinin degradesi; --rail en açık durağı (yazının karşıtlığı buna göre).
    * Rayın içindeki yazı beyaz (7.2:1), ikinci yazı #E3F2EA (6.2:1), soluk yazı #B9E3CF (5.1:1)
    */
-  --rail: #0b6449;
-  --rail-bg: linear-gradient(180deg, #0b6449 0%, #095a42 58%, #074a37 100%);
-  --rail-text: #ffffff;
-  --rail-soft: #e3f2ea;
-  --rail-mute: #b9e3cf;
-  --rail-active-bg: #ffffff;
-  --rail-active-ink: #0a6e52;
+  --rail: #ffffff;
+  --rail-bg: #ffffff;
+  --rail-text: #171a26;
+  --rail-soft: #3b3f4c;
+  --rail-mute: #5f6371;
+  --rail-active-bg: #171a26;
+  --rail-active-ink: #ffffff;
   /* Kart (zemindeki yüzen kart): kenarsız, yumuşak gölge; beyaz yaprağın içinde saç teli kenarlı, gölgesiz */
   --card-line: var(--admin-border);
   --card-shadow: none;
@@ -339,17 +339,17 @@ html[class~='dark'] {
   --laf-bean: #e8c877;
   --admin-primary-hover: #6ee7b7;
   /* Odak halkası bir ton açık yeşil: her yüzeyde 9:1, ana eylemin yeşil dolgusuna karşı da 3:1 */
-  --focus: #8ff0c0;
+  --focus: #1f9d5f;
   --admin-on-primary: #04261a;
   --admin-primary-soft: #10301f;
   --admin-primary-soft-hover: #163d28;
   --admin-neutral-soft: #2b2928;
   /* Ana eylem (Öde, Kaydet, Hepsi hazır): ev yeşili dolgu, üstünde beyaz (4.6:1); halka açık nane, ok derin yeşil */
-  --admin-ink-fill: #0a8560;
-  --admin-ink-fill-hover: #08744f;
-  --admin-on-ink: #ffffff;
-  --ok-ring: #dff7ea;
-  --ok-arrow: #075a43;
+  --admin-ink-fill: #fbfaf9;
+  --admin-ink-fill-hover: #e6e3e0;
+  --admin-on-ink: #171a26;
+  --ok-ring: #171a26;
+  --ok-arrow: #4ade80;
   --admin-signal: #ff8cc0;
   --admin-signal-soft: #3d1529;
   --admin-signal-line: #8f3d62;
@@ -390,13 +390,14 @@ html[class~='dark'] {
   --chart-soft: #2b3946;
   --chart-on-accent: #0c1a26;
   /* Marka rayı gecede de ev yeşili (açık temanın rayından bir ton derin); yazı beyaz (8:1), seçili karo beyaz üstünde yeşil */
-  --rail: #0a5c44;
-  --rail-bg: linear-gradient(180deg, #0a5c44 0%, #084c38 58%, #063d2d 100%);
-  --rail-soft: #e3f2ea;
-  --rail-mute: #b9e3cf;
+  --rail: #1e1c1b;
+  --rail-bg: #1e1c1b;
+  --rail-text: #fbfaf9;
+  --rail-soft: #d7d4d1;
+  --rail-mute: #a3a09d;
   --rail-active-bg: #fbfaf9;
-  --rail-active-ink: #0a6e52;
-  --rail-active-icon: #d3eee0;
+  --rail-active-ink: #171a26;
+  --rail-active-icon: #fbfaf9;
   /* Kart içindeki kart (yüzey üstünde yüzey) saç teliyle ayrılır; zemindeki kart kenarsız (aşağıda .lp-float) */
   --card-line: var(--admin-border);
   --glass: rgb(30 28 27 / 0.82);
@@ -855,7 +856,7 @@ html[class~='dark'] {
       border-radius: var(--r-stage);
       background: var(--rail-bg);
       color: var(--rail-text);
-      --focus: #ffffff;
+      --focus: var(--k-ink);
     }
   }
   @media (min-width: 64rem) {
@@ -888,7 +889,7 @@ html[class~='dark'] {
     transition: background-color 150ms var(--ease-out);
   }
   .lp-rail-brand:hover {
-    background: rgb(255 255 255 / 0.08);
+    background: var(--hover);
   }
   .lp-rail-brand:focus-visible {
     outline: 2px solid var(--focus);
@@ -900,7 +901,7 @@ html[class~='dark'] {
     gap: 2px;
     margin-top: auto;
     padding-top: 8px;
-    border-top: 1px solid rgb(255 255 255 / 0.16);
+    border-top: 1px solid var(--k-line);
   }
   .lp-rail-item {
     display: flex;
@@ -943,24 +944,24 @@ html[class~='dark'] {
     white-space: nowrap;
   }
   .lp-rail-item:hover {
-    background: rgb(255 255 255 / 0.1);
+    background: var(--hover);
     color: var(--rail-text);
   }
   .lp-rail-item:active {
-    background: rgb(255 255 255 / 0.16);
+    background: var(--press);
   }
   .lp-rail-item:focus-visible {
-    outline: 2px solid #ffffff;
+    outline: 2px solid var(--k-ink);
     outline-offset: -2px;
   }
   .lp-rail-item:is([aria-current='page'], [data-on]) {
     background: var(--rail-active-bg);
     color: var(--rail-active-ink);
-    font-weight: 700;
-    box-shadow: 0 6px 14px -8px rgb(2 30 21 / 0.55);
+    font-weight: 600;
+    box-shadow: none;
   }
   .lp-rail-item:is([aria-current='page'], [data-on]) .lp-rail-icon {
-    background: var(--admin-primary-soft);
+    background: transparent;
   }
   .dark .lp-rail-item:is([aria-current='page'], [data-on]) .lp-rail-icon {
     background: var(--rail-active-icon);

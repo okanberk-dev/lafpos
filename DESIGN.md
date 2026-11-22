@@ -31,8 +31,10 @@
    ve 500-600 ağırlıkta, sıkı aralıklı; kuruş ve ek bilgi soluk. Etiket küçük (13 px) ve soluk.
 2. **Kart kenarsız ve gölgesizdir.** Soğuk açık gri zeminde beyaz kart, köşe 18 (operatör, 20 Kas 2026: "radiusu biraz azalt"; gecede 20); ayrım ton farkıyla. Kart içinde kart
    yok: iç gruplama kuyu (karo, köşe 14, `--k-well`). Gölge yalnız yüzen yüzeyde (menü, pencere, telefonun alt doku).
-3. **Mürekkep seçer, yeşil yaptırır.** Seçili durum (sekme, segment, alt menü) lacivert-siyah mürekkep dolgu ve beyaz
-   yazı. Ana eylem (Öde, Kaydet, Bara gönder) L'Affogato'nun ev yeşili; ekranda tek ana eylem. Marka rayı ev yeşili kalır.
+3. **Mürekkep seçer ve yaptırır.** Seçili durum (sekme, segment, alt menü, sol menüdeki ekran) ve ana eylem (Öde,
+   Kaydet, Bara gönder) lacivert-siyah mürekkep dolgu, beyaz yazı; ana eylemin ok halkası nane (Keel'in koyu düğmesi).
+   Ekranda tek ana eylem. Sol menü (ray) beyaz ve sade; marka yalnız L'Af karosunda, bağlantı ve olumlu durumda yeşil.
+   Gecede dolgu tersine döner (açık dolgu, mürekkep yazı).
 4. **Renk yalnız anlam taşır.** Artış nane, düşüş kırmızı, uyarı kehribar, bilgi mavi; hepsi yumuşak zeminli hap, yanında
    ok ya da işaret. Süs için renk kullanılmaz.
 5. **Grafik sade.** Izgara yok ya da çok soluk; gri bağlam çubukları, vurgulanan aralık nane; değer küçük hapta; eksen

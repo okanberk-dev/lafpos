@@ -146,13 +146,15 @@ describe('koyu tema: gece', () => {
     expect(contrast(get('focus'), get('admin-ink-fill')), 'odak / ana eylem').toBeGreaterThanOrEqual(3);
   });
 
-  it('marka kimliği ev yeşili: ray ve ana eylem açık temanın yeşiliyle aynı tonda, bordo yok', () => {
+  it('LafPOS Keel (DESIGN.md §0): ray nötr yüzey, seçili ekran ve ana eylem ters dolgu; bağlantı ve seçim ev yeşili, bordo yok', () => {
     for (const t of ['rail-text', 'rail-soft', 'rail-mute']) expect(contrast(get(t), get('rail')), `${t} / ray`).toBeGreaterThanOrEqual(4.5);
     expect(contrast(get('rail-active-ink'), get('rail-active-bg')), 'seçili karo').toBeGreaterThanOrEqual(4.5);
     expect(contrast(get('rail-active-ink'), get('rail-active-icon')), 'seçili karonun ikonu').toBeGreaterThanOrEqual(3);
     const house = light['admin-primary']!;
-    expect(hueGap(get('rail'), house), 'ray ev yeşili').toBeLessThan(12);
-    expect(hueGap(get('admin-ink-fill'), house), 'ana eylem ev yeşili').toBeLessThan(12);
+    // Ray kartla aynı nötr yüzey (sade yan menü); ana eylem gecede açık dolgu, üstünde mürekkep
+    expect(get('rail')).toBe(get('admin-surface'));
+    expect(get('admin-ink-fill')).toBe(get('rail-active-bg'));
+    expect(chroma(get('admin-ink-fill')), 'ana eylem nötr').toBeLessThan(0.03);
     expect(hueGap(get('admin-primary'), house), 'bağlantı ve seçim ev yeşili').toBeLessThan(12);
     // Bordo (ton 330-355°, doygun) hiçbir koyu belirteçte yok; ahududu sinyal ve gül (parlak pembe) bordo değildir
     for (const [name, value] of Object.entries(dark)) {
@@ -206,7 +208,7 @@ describe('koyu tema: gece', () => {
     expect(light['admin-surface']).toBe('#ffffff');
     expect(light['admin-primary']).toBe('#0a6e52');
     expect(light['admin-text']).toBe('#171a26');
-    expect(light['admin-ink-fill']).toBe('#0a6e52');
-    expect(light['rail']).toBe('#0b6449');
+    expect(light['admin-ink-fill']).toBe('#171a26');
+    expect(light['rail']).toBe('#ffffff');
   });
 });

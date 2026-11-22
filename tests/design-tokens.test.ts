@@ -145,11 +145,13 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     expect(adminLight('admin-text-soft')).toBe('#3b3f4c');
     expect(adminLight('admin-text-mute')).toBe('#5f6371');
     // Eylem ve seçim dolgusu markanın rengi (panonun mavisinin yerine ev yeşili); halka açık nane
-    expect(adminLight('admin-ink-fill')).toBe(adminLight('admin-primary'));
-    expect(adminLight('ok-ring')).toBe('#d8f6e8');
-    expect(posDark('admin-ink-fill')).toBe('#0a8560');
+    // LafPOS Keel (22 Kas 2026): ana eylem mürekkep dolgu (Keel'in koyu düğmesi); bağlantı ve seçim ev yeşili kalır
+    expect(adminLight('admin-ink-fill')).toBe('#171a26');
+    expect(adminLight('ok-ring')).toBe('#4fdc86');
+    expect(posDark('admin-ink-fill')).toBe('#fbfaf9');
     // Marka rayı ev yeşilinin degradesi
-    expect(css).toMatch(/--rail-bg:\s*linear-gradient\(180deg, #0b6449/);
+    // Sade yan menü (LafPOS Keel, 22 Kas 2026): ray kartla aynı beyaz yüzey, degrade yok
+    expect(css).toMatch(/--rail-bg:\s*#ffffff;/);
     // Zamanı daralan: canlı ahududu (kitin magentası)
     expect(adminLight('admin-signal')).toBe('#c8175d');
     // Dolu masa L'Affogato yeşilinin degradesi
