@@ -8,10 +8,12 @@ import { Button } from '@/components/ui/Button';
 import { confirmDialog, type ConfirmOptions } from '@/components/ui/Confirm';
 import { Field, Input, Label, Toggle } from '@/components/ui/Field';
 import { ErrorState, Notice, Skeleton } from '@/components/ui/misc';
+import { UpdateCard } from '@/components/admin/UpdateCard';
 import { Badge, Card, CARD, CODE, DefRow, PageHeader, Segmented, SetupNotes, TONE_SOFT } from '@/components/admin/ui';
 import { errorMessage, get, post, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
+import { REMOTE } from '@/lib/remote';
 import { toast } from '@/lib/toast';
 
 interface PavoExchange {
@@ -629,6 +631,8 @@ export default function OkcAdmin() {
   return (
     <div className="space-y-4">
       {header}
+      {/* Program güncellemesi burada da (sahibin isteği): kasada Pavo ile uğraşırken Ayarlar ve yedek'e gitmeden "Şimdi güncelle" */}
+      {!REMOTE && <UpdateCard />}
       {/* Bağlantı ve ödeme yeri tek seçimli ray (Paket platformlarındaki mod seçimi gibi): oklar gezer, seçim Enter ya da
           dokunuşla; telefonda ray tam genişlik, sığmayan seçenek alt satıra iner */}
       <Card title="Bağlantı" bodyClassName="space-y-4">
