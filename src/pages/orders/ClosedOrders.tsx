@@ -1,6 +1,6 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Bike, Globe, Printer, ReceiptText, ShoppingBag, Store, UtensilsCrossed } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Bike, Globe, Printer, ReceiptText, ShoppingBag, Store, Trash2, UtensilsCrossed } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CLOSED_PAGE_DEFAULT, type ClosedOrderDetailDTO, type ClosedOrderRow, type ClosedOrdersDTO, HISTORY_QUERY_MAX } from '@shared/history';
 import { tl } from '@shared/money';
@@ -10,7 +10,10 @@ import { Button } from '@/components/ui/Button';
 import { Input, SearchInput } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Badge, EmptyState, ErrorState, FLOAT_CARD, Notice, Skeleton } from '@/components/ui/misc';
-import { get } from '@/lib/api';
+import { promptDialog } from '@/components/ui/Confirm';
+import { errorMessage, get, post } from '@/lib/api';
+import { withApproval } from '@/lib/approval';
+import { toast } from '@/lib/toast';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
@@ -20,6 +23,60 @@ import { useServiceMode } from '@/lib/serviceMode';
 import { joinMeta } from '@/lib/text';
 
 /** "2026-11-22" → "22 Kasım 2026" */
+/**
+ * Kapanmış siparişi iptal (uzun basış ve dökümdeki düğme): neden sorulur, yetkili onayı (PIN) istenir; ödemeler ve adisyon
+ * tek işlemde iptal edilir (server orders.cancelClosedOrder). Yalnız bugünün kasa siparişi
+ */
+async function cancelClosed(id: string, label: string, total: number, fiscal: boolean): Promise<boolean> {
+  const reason = await promptDialog({
+    title: 'Siparişi iptal et',
+    body: `${label} · ${tl(total)}. Alınan ödemeler ve ürünler iptal edilir; ciroya sayılmaz, denetim kaydına yazılır${fiscal ? '. Yazarkasada kesilen fiş cihazdan ayrıca iptal edilmeli' : ''}`,
+    label: 'Neden',
+    placeholder: 'Ör. müşteri vazgeçti',
+    maxLength: 200,
+    required: 'İptal nedenini yazın',
+    confirmLabel: 'Siparişi iptal et',
+    tone: 'danger',
+  });
+  if (!reason) return false;
+  try {
+    const done = await withApproval((pin) => post(`/orders/${id}/cancel-closed`, { reason, approverPin: pin }));
+    if (!done) return false;
+    toast.ok('Sipariş iptal edildi');
+    return true;
+  } catch (e) {
+    toast.err(errorMessage(e));
+    return false;
+  }
+}
+
+/** Uzun basış (yarım saniye): dokunmatikte ve farede; uzun basıştan sonra gelen tıklama yutulur */
+function useLongPress(onLong: () => void, ms = 550) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fired = useRef(false);
+  const clear = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  return {
+    fired,
+    handlers: {
+      onPointerDown: () => {
+        fired.current = false;
+        clear();
+        timer.current = setTimeout(() => {
+          fired.current = true;
+          onLong();
+        }, ms);
+      },
+      onPointerUp: clear,
+      onPointerLeave: clear,
+      onPointerCancel: clear,
+      onContextMenu: (e: { preventDefault: () => void }) => e.preventDefault(),
+    },
+  };
+}
+
 const fmtDay = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
 /**
@@ -40,6 +97,7 @@ export function ClosedOrders() {
   }, [search]);
   const [date, setDate] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   const list = useInfiniteQuery({
     queryKey: ['orders', 'kapanan', date, q],
@@ -113,7 +171,20 @@ export function ClosedOrders() {
         <>
           <div className={cn('lp-cards animate-fade', list.isFetching && !list.isFetchingNextPage && 'opacity-70')}>
             {rows.map((r) => (
-              <ClosedCard key={r.id} r={r} mode={mode} onOpen={() => setOpenId(r.id)} />
+              <ClosedCard
+                key={r.id}
+                r={r}
+                mode={mode}
+                onOpen={() => setOpenId(r.id)}
+                onCancel={
+                  isToday && r.source === 'pos' && !r.extPaid
+                    ? () => {
+                        const { name, head } = orderCardName(r, mode);
+                        void cancelClosed(r.id, head ? name : `${name} #${r.extNo ?? r.no}`, r.total, r.receiptNo != null).then((ok) => ok && void qc.invalidateQueries({ queryKey: ['orders'] }));
+                      }
+                    : undefined
+                }
+              />
             ))}
           </div>
           {list.hasNextPage && (
@@ -124,12 +195,14 @@ export function ClosedOrders() {
           {list.isError && <Notice tone="danger">Liste yenilenemedi; bağlantı gelince yeniden denenir</Notice>}
         </>
       )}
-      <ClosedDetail id={openId} onClose={() => setOpenId(null)} />
+      <ClosedDetail id={openId} today={today} onClose={() => setOpenId(null)} />
     </div>
   );
 }
 
-function ClosedCard({ r, mode, onOpen }: { r: ClosedOrderRow; mode: ReturnType<typeof useServiceMode>; onOpen: () => void }) {
+function ClosedCard({ r, mode, onOpen, onCancel }: { r: ClosedOrderRow; mode: ReturnType<typeof useServiceMode>; onOpen: () => void; onCancel?: () => void }) {
+  // Uzun basınca "Siparişi iptal et" (bugünün kasa siparişi); kısa dokunuş dökümü açar
+  const long = useLongPress(() => onCancel?.());
   const Icon = r.source === 'laffogato' ? Globe : r.type === 'paket' ? Bike : r.type === 'gelal' ? ShoppingBag : r.type === 'masa' ? UtensilsCrossed : Store;
   const { name, head } = orderCardName(r, mode);
   const hasBadges = !!r.platform || r.extPaid || r.methods.length > 0 || r.receiptNo != null || r.voided > 0 || r.comped > 0 || !!r.customerName;
@@ -137,7 +210,15 @@ function ClosedCard({ r, mode, onOpen }: { r: ClosedOrderRow; mode: ReturnType<t
     <button
       type="button"
       data-order-card=""
-      onClick={onOpen}
+      {...(onCancel ? long.handlers : {})}
+      aria-description={onCancel ? 'Uzun basınca iptal' : undefined}
+      onClick={() => {
+        if (long.fired.current) {
+          long.fired.current = false;
+          return;
+        }
+        onOpen();
+      }}
       className="flex flex-col rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface p-4 text-left shadow-[var(--card-shadow)] transition-[border-color,box-shadow] duration-150 hover:shadow-[var(--shadow-lift)] active:bg-press"
     >
       <span className="flex w-full items-start gap-3">
@@ -175,7 +256,8 @@ function ClosedCard({ r, mode, onOpen }: { r: ClosedOrderRow; mode: ReturnType<t
 }
 
 /** Kapanan adisyonun dökümü (salt okunur): kalemler, toplamlar, ödemeler ve yazarkasa fişleri */
-function ClosedDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
+function ClosedDetail({ id, today, onClose }: { id: string | null; today: string; onClose: () => void }) {
+  const qc = useQueryClient();
   const boot = useBoot();
   const mode = useServiceMode();
   const navigate = useNavigate();
@@ -204,6 +286,22 @@ function ClosedDetail({ id, onClose }: { id: string | null; onClose: () => void 
             <Button variant="primary" className="flex-1" icon={<Printer className="size-4" />} onClick={() => printNow(<BillReceipt order={o} boot={boot} sizeLabel={sizeLabel} />)}>
               Hesabı yeniden yazdır
             </Button>
+            {d && d.date === today && o.status === 'kapali' && o.source === 'pos' && !o.extPaid && (
+              <Button
+                variant="danger"
+                className="basis-full"
+                icon={<Trash2 className="size-4" />}
+                onClick={() =>
+                  void cancelClosed(o.id, title, o.total, d.receipts.some((r) => !r.cancelled)).then((ok) => {
+                    if (!ok) return;
+                    void qc.invalidateQueries({ queryKey: ['orders'] });
+                    onClose();
+                  })
+                }
+              >
+                Siparişi iptal et
+              </Button>
+            )}
           </div>
         ) : undefined
       }
