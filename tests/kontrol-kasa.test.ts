@@ -326,6 +326,39 @@ describe('Uzaktan yönetim: kasa', () => {
     expect((await settings()).serviceMode).toBe('masa');
   });
 
+  it('urun.gorunum ve secenek.grubu: çift ürün kasada gizlenir; Latte çeşidi grubu açılır ve ürüne bağlanır', async () => {
+    const latte = h.boot.products.find((p) => p.name === 'Latte')!;
+    const { db, schema } = await import('../server/db/client');
+    const { and, eq } = await import('drizzle-orm');
+    const grup = {
+      ad: 'Latte çeşidi',
+      zorunlu: false,
+      ogeler: [
+        { ad: 'Klasik', fiyat: 0, varsayilan: true },
+        { ad: 'Spanish Latte', fiyat: 5000, varsayilan: false },
+      ],
+      urunler: [latte.id],
+    };
+    const [gizle, ekle] = await uygula(komut('urun.gorunum', { id: latte.id, gorunur: false }), komut('secenek.grubu', grup));
+    expect(gizle).toMatchObject({ durum: 'uygulandi', ozet: 'Kasada gizle: Latte' });
+    expect(ekle).toMatchObject({ durum: 'uygulandi' });
+    expect(db.select().from(schema.products).where(eq(schema.products.id, latte.id)).get()).toMatchObject({ hidden: true, active: true });
+    const g = db.select().from(schema.optionGroups).where(eq(schema.optionGroups.name, 'Latte çeşidi')).get()!;
+    expect(g).toMatchObject({ kind: 'single', required: false, maxSelect: 1 });
+    const ogeler = db.select().from(schema.optionItems).where(eq(schema.optionItems.groupId, g.id)).all();
+    expect(ogeler.map((o) => [o.name, o.price, o.isDefault])).toEqual([
+      ['Klasik', 0, true],
+      ['Spanish Latte', 5000, false],
+    ]);
+    expect(db.select().from(schema.productOptionGroups).where(and(eq(schema.productOptionGroups.productId, latte.id), eq(schema.productOptionGroups.groupId, g.id))).get()).toBeTruthy();
+    await uygula(komut('urun.gorunum', { id: latte.id, gorunur: true }));
+    expect(db.select().from(schema.products).where(eq(schema.products.id, latte.id)).get()!.hidden).toBe(false);
+    // Doğrulama: fiyat kuruş tam sayı, tek varsayılan
+    const { komutDogrula } = await import('@shared/kontrol');
+    expect(komutDogrula('secenek.grubu', { ...grup, ogeler: [{ ad: 'X', fiyat: 1.5 }] })).toMatchObject({ ok: false });
+    expect(komutDogrula('secenek.grubu', { ...grup, ogeler: [{ ad: 'A', fiyat: 0, varsayilan: true }, { ad: 'B', fiyat: 0, varsayilan: true }] })).toMatchObject({ ok: false });
+  });
+
   it('kasada uzaktan yönetim kapalıyken her işlem reddedilir; anahtarı yalnız patron değiştirir, kayda düşer', async () => {
     const mudur = await h.call<{ code: string }>('mudur', 'PUT', '/admin/settings', { remoteControl: false });
     expect(mudur.status).toBe(403);
