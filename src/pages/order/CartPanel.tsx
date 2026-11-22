@@ -1,3 +1,4 @@
+import { SwipeRow } from '@/components/ui/SwipeRow';
 import { ArrowRightLeft, Check, ChefHat, CircleDot, Droplets, Gift, HandCoins, Percent, StickyNote, Undo2, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { COMP_LABEL, compReasonsOf } from '@shared/comp';
@@ -159,7 +160,8 @@ export function CartPanel({
                 return (
                   // Dar hesap kartında (telefon, tablet) ad, seçenek ve not ilk satırın tamamını alır; adet ve tutar altta.
                   // Bilgisayarda tek satır. Odak sırası geniş düzenin sırası (adet, ad, tutar)
-                  <li key={l.key} className="animate-in flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 lg:flex-nowrap">
+                  // Sola kaydırınca satır silinir (SwipeRow); adet düğmesi de siler
+                  <SwipeRow key={l.key} onRemove={() => cart.remove(order.id, l.key)} className="animate-in" rowClassName="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-2 lg:flex-nowrap">
                     <Stepper
                       quiet
                       value={l.qty}
@@ -190,7 +192,7 @@ export function CartPanel({
                       </span>
                     </button>
                     <span className="tabular ml-auto whitespace-nowrap text-right text-sm font-semibold">{tl(unit * l.qty)}</span>
-                  </li>
+                  </SwipeRow>
                 );
               })}
             </ul>
