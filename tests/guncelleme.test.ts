@@ -365,6 +365,18 @@ describe('güncelleme: Merkez hedefi', () => {
   });
 });
 
+describe('güncelleme: temizlik hata fırlatmaz (bulgu 16)', () => {
+  it('kurulumun hata ve geri dönüş yollarında ve açılışta klasör silme korumalı (yalnız hazırlık fırlatabilir)', () => {
+    const src = readFileSync(join(__dirname, '../scripts/kasa/windows/kurulum/guncelle.mjs'), 'utf8');
+    const body = (from: string, to: string) => src.slice(src.indexOf(from), src.indexOf(to, src.indexOf(from)));
+    const install = body('async function install(job)', '\n  return {');
+    const start = body('    start() {', '\n    },');
+    expect(install).not.toMatch(/\brmDir\(/);
+    expect(start).not.toMatch(/\brmDir\(/);
+    expect(install).toMatch(/rmDirSafe\(/);
+  });
+});
+
 describe('güncelleme: kurulum akışı', () => {
   it('gün kapalıyken: yedek, klasör değişimi, deneme; başarıda bekçi 75 koduyla yeniden açılır', async () => {
     const t = await setup();

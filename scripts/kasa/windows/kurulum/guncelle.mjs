@@ -689,14 +689,26 @@ export function createUpdater(deps) {
     return ok;
   }
 
+  /**
+   * Hata ve geri dönüş yollarındaki temizlik: silinemeyen klasör (Windows'ta kısa süre kilitli node.exe) günlüğe yazılır,
+   * fırlatmaz. Fırlatsaydı sunucu yeniden açılmaz, durum yazılmaz ve yakalanmayan ret bekçiyi kapatırdı
+   */
+  const rmDirSafe = (dir) => {
+    try {
+      rmDir(dir);
+    } catch (e) {
+      say(`temizlenemedi: ${dir}: ${errText(e)}`);
+    }
+  };
+
   async function install(job) {
     const { plan } = job;
     const yeni = job.yeni;
     try {
       prepare(job);
     } catch (e) {
-      rmDir(appNew);
-      rmDir(nodeNew);
+      rmDirSafe(appNew);
+      rmDirSafe(nodeNew);
       ready = null;
       manual = null;
       set({ type: 'hata', mesaj: `Yeni sürüm hazırlanamadı: ${errText(e)}`, now: now() });
@@ -704,8 +716,8 @@ export function createUpdater(deps) {
     }
     // Hazırlık sürerken gün açılmış olabilir (elle "şimdi kur" isteği gün açıkken de kurar)
     if (!manual?.force && (await askDayOpen()) !== false) {
-      rmDir(appNew);
-      rmDir(nodeNew);
+      rmDirSafe(appNew);
+      rmDirSafe(nodeNew);
       set({ type: 'gun-acik' });
       schedule('install', DAY_POLL_MS, tryInstall);
       return;
@@ -717,15 +729,15 @@ export function createUpdater(deps) {
       backup = backupDb(plan.build);
       if (backup) say(`veritabanının kopyası: ${backup}`);
     } catch (e) {
-      rmDir(appNew);
-      rmDir(nodeNew);
+      rmDirSafe(appNew);
+      rmDirSafe(nodeNew);
       deps.server.start();
       manual = null;
       set({ type: 'hata', mesaj: `Veritabanının kopyası alınamadı, güncelleme bırakıldı: ${errText(e)}`, now: now() });
       return;
     }
     try {
-      rmDir(appOld);
+      rmDirSafe(appOld);
       await retry(() => renameSync(app, appOld));
       try {
         await retry(() => renameSync(appNew, app));
@@ -734,8 +746,8 @@ export function createUpdater(deps) {
         throw e;
       }
     } catch (e) {
-      rmDir(appNew);
-      rmDir(nodeNew);
+      rmDirSafe(appNew);
+      rmDirSafe(nodeNew);
       deps.server.start();
       manual = null;
       set({ type: 'hata', mesaj: `Dosyalar değiştirilemedi, eski sürüm çalışıyor: ${errText(e)}`, now: now() });
@@ -757,14 +769,14 @@ export function createUpdater(deps) {
     }
     // Geri dönüş: yeni klasör kenara, eskisi yerine; yeni Node silinir
     try {
-      rmDir(`${app}.bozuk`);
+      rmDirSafe(`${app}.bozuk`);
       await retry(() => renameSync(app, `${app}.bozuk`));
       await retry(() => renameSync(appOld, app));
-      rmDir(`${app}.bozuk`);
+      rmDirSafe(`${app}.bozuk`);
     } catch (e) {
       say(`geri dönüş sırasında hata: ${errText(e)}`);
     }
-    rmDir(nodeNew);
+    rmDirSafe(nodeNew);
     ready = null;
     manual = null;
     set({ type: 'geri-dondu', yeni, neden: `Yeni sürüm ${Math.round(healthTimeout / 1000)} sn içinde açılmadı`, now: now() });
@@ -778,7 +790,7 @@ export function createUpdater(deps) {
       set({ type: 'acilis', kurulu: installed().label, mode: deps.mode(), now: now() });
       cleanDownloads(null);
       // Kurulumdan sonra kalan yarım klasörler (başarıda app.eski elle geri dönüş için bir sonraki güncellemeye kadar durur)
-      rmDir(appNew);
+      rmDirSafe(appNew);
       if (deps.mode() !== 'kapali') schedule('check', FIRST_CHECK_MS, check);
     },
     /**
