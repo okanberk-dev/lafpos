@@ -682,7 +682,8 @@ const userShape = z.object({
   name: z.string().min(1).max(40),
   role: z.enum(ROLES),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#245c43'),
-  maxDiscountPct: z.number().int().min(0).max(100).default(10),
+  // Varsayılan %15: hazır indirim nedenleri (Öğrenci, Çalışan) %15; barista onaysız uygulayabilsin
+  maxDiscountPct: z.number().int().min(0).max(100).default(15),
   permGrant: permList.default([]),
   permRevoke: permList.default([]),
 });

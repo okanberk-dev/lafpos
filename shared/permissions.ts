@@ -62,6 +62,8 @@ export const ROLE_DEFAULTS: Record<Role, Permission[]> = {
   kasiyer: [
     'siparis.al',
     'siparis.ikram',
+    // Barista da indirim uygular (sahibin isteği, 22 Kas 2026); oranı kişinin indirim sınırı kadar, üstü yetkili onayı ister
+    'siparis.indirim',
     'masa.islem',
     'odeme.al',
     'kasa.gun',

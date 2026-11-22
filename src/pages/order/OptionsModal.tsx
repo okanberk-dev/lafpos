@@ -237,7 +237,6 @@ export function OptionsModal({
                         ) : (
                           i.price > 0 && <span className={cn('tabular ml-1', on ? 'text-primary/80' : 'text-muted')}>+{tlCompact(i.price)}</span>
                         )}
-                        {i.allergens.includes('nuts') && <span className="ml-1 text-[11px] text-[var(--admin-warning)]">(kuruyemiş)</span>}
                       </button>
                     );
                   })}
