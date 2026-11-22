@@ -55,6 +55,13 @@ describe('sepet → Pavo satışı', () => {
     expect(() => pavoSale(basket(100), 'LP1')).toThrow("%1 KDV'li kalem");
     expect(pavoSale(basket(1000), 'LP1').AddedSaleItems[0]!.TaxGroupCode).toBe('KDV10');
   });
+
+  it('kasada seçilen ödeme türü cihazda hazır gelir: kart Mediator 2, nakit 1, tutar fişin toplamı; tür yoksa alan yok', () => {
+    const b = { basketID: 'b', items: [{ name: 'Latte', price: 20000, sectionNo: 1, taxPercent: 1000, quantity: 2000 }] };
+    expect(pavoSale({ ...b, odemeTuru: 'kart' as const }, 'LP1').PaymentInformations).toEqual([{ Mediator: 2, Amount: 400, CurrencyCode: 'TRY', ExchangeRate: 1 }]);
+    expect(pavoSale({ ...b, odemeTuru: 'nakit' as const }, 'LP1').PaymentInformations).toEqual([{ Mediator: 1, Amount: 400, CurrencyCode: 'TRY', ExchangeRate: 1 }]);
+    expect(pavoSale(b, 'LP1')).not.toHaveProperty('PaymentInformations');
+  });
 });
 
 describe('banka gün sonu yanıtı → özet', () => {

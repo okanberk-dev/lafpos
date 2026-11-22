@@ -331,7 +331,10 @@ kimliği eşleştirme ve sertifika izi); veritabanındaki ayarlarda durur, depoy
 - **Satış** (`/CompleteSale`): sepet Pavo satışına çevrilir (`pavoSale`). Tutarlar TL, KDV dahil; KDV grubu orandan
   (`KDV10`, `KDV20`); birim `C62` (adet); sipariş no sepet kimliğinden (`pavoOrderNo`, 16 karakter). İndirim ayrı
   alanla değil kalemin tutarıyla gider: tutar adede tam bölünmüyorsa satır iki olur (n-1 adet ve son adet), fiş
-  toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynıdır. Ödeme bilgisi gönderilmez: kasiyer cihazda seçer. `KDV10` ve
+  toplamı LafPOS'un hesabıyla kuruşu kuruşuna aynıdır. Kasada seçilen tür (nakit, kart) `PaymentInformations`
+  (`Mediator` 1 nakit, 2 kart; tutar fişin toplamı) ile gider, cihaz o türle açılır (Yönetim › Yazarkasa POS › "Ödeme türü
+  cihazda hazır gelsin", varsayılan açık; alan adları entegratörlerin açık kodundan, ilk gerçek satışta doğrulanacak).
+  Yemek kartı ve öteki türlerde ödeme bilgisi gönderilmez: kasiyer cihazda seçer. `KDV10` ve
   `KDV20` dışındaki oranlı kalem (%0, %1) cihaza gitmez: sepet kaydı yazılmadan "%0 KDV'li kalem Pavo'ya
   gönderilemez; ürünün KDV oranını düzeltin ya da hesabı kasadan alın" (400 `okc_basket`), adisyon kilitlenmez.
   Cihazın başka grupları bilip bilmediği belgede yok (§8.4).

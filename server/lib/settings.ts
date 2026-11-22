@@ -94,6 +94,12 @@ export interface PrivateSettings {
    */
   okcPavoAutoEod: boolean;
   /**
+   * Pavo: cihaza giden satışta ödeme türü önceden seçili (kasada "Kredi kartı al" → cihaz kartla açılır, nakitte nakitle).
+   * Pavo'nun `PaymentInformations` alanı (Mediator 1 nakit, 2 kart; entegratörlerin açık kodu, belge kapalı). Cihaz
+   * beklenmedik davranırsa Yönetim › Yazarkasa POS'tan kapatılır: ödeme türünü kasiyer cihazda seçer
+   */
+  okcPavoOdemeSecili: boolean;
+  /**
    * Ödemeyi alınca cihaza gönder (kasada ödeme): ödeme penceresinde "Ödemeyi al" sepeti kendiliğinden cihaza yollar,
    * ayrı "Yazarkasaya gönder" adımı olmaz. Kapalıysa bugünkü akış (docs/04-YAZARKASA.md §4.1). null: varsayılan,
    * gerçek cihazda (Token, Pavo) açık, eğitim cihazında kapalı (deneme modunda nakit satış eğitim cihazını beklemesin;
@@ -150,6 +156,7 @@ export const PRIVATE_DEFAULTS: PrivateSettings = {
   okcSectionMap: { '1': 3, '10': 1, '20': 2 },
   okcOperatorMethods: {},
   okcPavoAutoEod: true,
+  okcPavoOdemeSecili: true,
   okcAuto: null,
   pavoDevice: null,
   receiptPrinter: null,
