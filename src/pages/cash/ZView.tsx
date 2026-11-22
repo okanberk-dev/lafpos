@@ -1,6 +1,7 @@
 import { PaymentBar } from '@/pages/patron/TodayStats';
-import { Check, ClipboardCopy, Download, Printer, Send } from 'lucide-react';
+import { Check, ClipboardCopy, Download, MessageCircle, Printer, Send } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
+import { dayText } from '@shared/gun-sonu-metni';
 import { tl } from '@shared/money';
 import { fmtDateLong, fmtDateTime, fmtTime, istanbulParts } from '@shared/time';
 import type { BusinessDayDTO, ZSummary } from '@shared/types';
@@ -45,6 +46,7 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
   const boot = useBoot();
   const can = useCan();
   const [copied, setCopied] = useState(false);
+  const [waCopied, setWaCopied] = useState(false);
   const [sending, setSending] = useState(false);
   const copy = async () => {
     if (!lafmaliyet) return;
@@ -95,6 +97,23 @@ export function ZView({ day, summary, lafmaliyet, title, children }: { day: Busi
           <h2 className="text-base font-semibold">{title ?? `Z ${day.zNo}`}</h2>
           {showMeta && <p className="text-pretty text-[13px] text-muted">{joinMeta([fmtDateLong(day.date), `açılış ${at(day.openedAt)}`, day.closedAt && `kapanış ${at(day.closedAt)}`])}</p>}
         </div>
+        {day.closedAt && (
+          <Button
+            icon={waCopied ? <Check className="size-4" /> : <MessageCircle className="size-4" />}
+            onClick={() => {
+              const text = dayText({ branch: boot.settings.businessName, date: day.date, zNo: day.zNo, s: summary });
+              void navigator.clipboard.writeText(text).then(
+                () => {
+                  setWaCopied(true);
+                  setTimeout(() => setWaCopied(false), 2000);
+                },
+                () => toast.err('Panoya kopyalanamadı'),
+              );
+            }}
+          >
+            {waCopied ? 'Kopyalandı' : 'WhatsApp için kopyala'}
+          </Button>
+        )}
         <Button icon={<Printer className="size-4" />} onClick={() => printNow(<ZReceipt boot={boot} date={day.date} zNo={day.zNo} s={summary} closedAt={day.closedAt} />)}>
           Yazdır
         </Button>
