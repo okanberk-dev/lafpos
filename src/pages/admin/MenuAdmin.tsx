@@ -142,7 +142,7 @@ export default function MenuAdmin() {
   const availability = async (p: ProductDTO, active: boolean) => {
     try {
       const r = await post<{ site: string }>(`/sync/products/${p.id}/availability`, { active });
-      toast.ok(`${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'anahtar_yok' ? '; site anahtarı yok, yalnız LafPOS' : r.site === 'baglanti_yok' ? '; site bağlantısı kurulmadı, yalnız LafPOS' : ''}`);
+      toast.ok(`${p.name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'anahtar_yok' ? '; site anahtarı yok, yalnız LafPOS' : r.site === 'baglanti_yok' ? '; site bağlantısı kurulmadı, yalnız LafPOS' : r.site === 'kuyrukta' ? '; internet gelince siteye yazılacak' : ''}`);
       refresh();
     } catch (e) {
       toast.err(errorMessage(e));
