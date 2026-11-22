@@ -43,10 +43,6 @@ const TYPES = [
   { type: 3, label: 'Kredi kartı', icon: CreditCard },
   { type: 7, label: 'Yemek kartı', icon: Utensils },
 ];
-/** Cihazın büyük tuşu: köşe 14, basınca bir ton koyu; istek sürerken kilitli */
-const KEY = 'flex items-center justify-center gap-2 rounded-xl font-semibold transition-[background-color,filter,opacity] duration-150 active:brightness-90 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:brightness-100';
-const INK_KEY = 'bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)] hover:bg-[var(--admin-ink-fill-hover)]';
-const PLAIN_KEY = 'bg-surface-3 text-ink hover:bg-[var(--admin-border)]';
 
 /**
  * Eğitim cihazı: Token ÖKC'nin LafPOS içindeki benzeri. Ayar "simülatör" iken kasadan gönderilen sepetler burada
@@ -225,13 +221,13 @@ export default function DevicePage() {
                 {!split ? (
                   <div className="grid grid-cols-2 gap-2">
                     {TYPES.map((t) => (
-                      <button key={t.type} disabled={!!busy} aria-busy={busy === 'pay' || undefined} onClick={() => pay([{ type: t.type, amount: current.amount }])} className={cn(KEY, INK_KEY, 'h-14')}>
-                        <t.icon aria-hidden="true" className="size-5" /> {t.label}
-                      </button>
+                      <Button key={t.type} variant="ink" size="xl" ring={false} block icon={<t.icon aria-hidden="true" className="size-5" />} disabled={!!busy} aria-busy={busy === 'pay' || undefined} onClick={() => pay([{ type: t.type, amount: current.amount }])} className="h-14 pointer-coarse:h-14">
+                        {t.label}
+                      </Button>
                     ))}
-                    <button disabled={!!busy} onClick={() => setSplit([{ type: 3, amount: '' }, { type: 1, amount: '' }])} className={cn(KEY, PLAIN_KEY, 'h-14')}>
-                      <Split aria-hidden="true" className="size-5" /> Böl
-                    </button>
+                    <Button variant="secondary" size="xl" block icon={<Split aria-hidden="true" className="size-5" />} disabled={!!busy} onClick={() => setSplit([{ type: 3, amount: '' }, { type: 1, amount: '' }])} className="h-14 pointer-coarse:h-14">
+                      Böl
+                    </Button>
                     <Button variant="dangerGhost" block icon={<XCircle className="size-4" />} className="col-span-2" disabled={!!busy} onClick={() => cancel(current.id)}>
                       Ödemeden vazgeç
                     </Button>
@@ -260,17 +256,20 @@ export default function DevicePage() {
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <button className={cn(KEY, PLAIN_KEY, 'h-12 font-medium')} onClick={() => setSplit(null)}>
+                      <Button variant="secondary" size="xl" block onClick={() => setSplit(null)}>
                         Geri
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="ink"
+                        size="xl"
+                        ring={false}
+                        block
                         disabled={splitTotal !== current.amount || !!busy}
                         aria-busy={busy === 'pay' || undefined}
-                        className={cn(KEY, INK_KEY, 'h-12 disabled:bg-surface-3 disabled:text-muted disabled:opacity-100')}
                         onClick={() => pay(split.map((s) => ({ type: s.type, amount: parseTL(s.amount) ?? 0 })).filter((s) => s.amount > 0))}
                       >
                         Öde ve fiş bas
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}

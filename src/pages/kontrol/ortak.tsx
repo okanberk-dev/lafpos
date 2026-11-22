@@ -86,7 +86,7 @@ export function FormAlti({ formId, bekle, etiket, onClose, kapali, kilitli }: { 
       <Button onClick={onClose} disabled={kilitli}>
         Vazgeç
       </Button>
-      <Button type="submit" form={formId} variant="primary" loading={bekle} disabled={kapali} className="whitespace-normal leading-tight max-sm:flex-1">
+      <Button type="submit" form={formId} variant="primary" loading={bekle} disabled={kapali} wrap className="max-sm:flex-1">
         {etiket}
       </Button>
     </div>

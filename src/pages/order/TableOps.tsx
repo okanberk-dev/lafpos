@@ -444,7 +444,7 @@ export function ReasonModal({
       <Button onClick={onClose} disabled={busy}>
         Vazgeç
       </Button>
-      <Button variant={danger ? 'danger' : 'primary'} className="whitespace-normal leading-tight" loading={busy} onClick={() => void confirm()}>
+      <Button variant={danger ? 'danger' : 'primary'} wrap loading={busy} onClick={() => void confirm()}>
         {confirmLabel}
       </Button>
     </div>

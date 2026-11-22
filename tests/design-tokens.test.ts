@@ -258,7 +258,7 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
 
   it('ortak kit köşeyi belirteçten okur (kapsül sabit değil)', () => {
     const button = src('components/ui/Button.tsx');
-    expect(button.match(/rounded-\[var\(--r-btn\)\]/g)?.length).toBe(4);
+    expect(button.match(/rounded-\[var\(--r-btn\)\]/g)?.length).toBe(8); // dört ölçü, sabit ve uzayan (wrap) merdivende
     expect(button).not.toMatch(/rounded-full/);
     const field = src('components/ui/Field.tsx');
     // Seçim çipi düğmeyle aynı köşede (pano: 12)

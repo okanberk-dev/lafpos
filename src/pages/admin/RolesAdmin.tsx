@@ -3,7 +3,7 @@ import { Check, Lock, RotateCcw, Save } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { type Permission, PERMISSIONS, type Role } from '@shared/permissions';
 import { Badge, CARD, PageHeader, TableSkeleton } from '@/components/admin/ui';
-import { Button } from '@/components/ui/Button';
+import { Button, IconButton } from '@/components/ui/Button';
 import { Field, Select } from '@/components/ui/Field';
 import { ErrorState } from '@/components/ui/misc';
 import { errorMessage, get, put } from '@/lib/api';
@@ -195,21 +195,18 @@ export default function RolesAdmin() {
                         {r.locked ? (
                           <span aria-hidden="true" className="size-8 pointer-coarse:size-11" />
                         ) : (
-                          <button
-                            type="button"
+                          <IconButton
+                            label={`${r.label}: varsayılana dön`}
+                            title="Varsayılana dön"
+                            size="sm"
                             onClick={() => reset(r)}
                             disabled={same}
                             aria-hidden={same || undefined}
                             tabIndex={same ? -1 : undefined}
-                            aria-label={`${r.label}: varsayılana dön`}
-                            title="Varsayılana dön"
-                            className={cn(
-                              'grid size-8 place-items-center rounded-[var(--r-btn)] text-[var(--admin-primary)] transition-colors hover:bg-[var(--admin-primary-soft)] active:bg-[var(--admin-primary-soft)] pointer-coarse:size-11',
-                              same && 'invisible',
-                            )}
+                            className={cn('text-[var(--admin-primary)] hover:bg-[var(--admin-primary-soft)] hover:text-[var(--admin-primary)] active:bg-[var(--admin-primary-soft)]', same && 'invisible')}
                           >
                             <RotateCcw className="size-4" aria-hidden="true" />
-                          </button>
+                          </IconButton>
                         )}
                       </span>
                     </th>

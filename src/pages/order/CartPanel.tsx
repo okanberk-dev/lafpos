@@ -206,15 +206,9 @@ export function CartPanel({
               <span className="tabular font-normal">· {g.items.reduce((a, i) => a + i.qty, 0)}</span>
               {/* Ödeme bekleyen: ödeme alınınca kendiliğinden bara gider; kasiyer isterse ödemeden gönderir */}
               {g.key === 'odeme' && order.status === 'acik' && !REMOTE && can('siparis.al') && (
-                <button
-                  type="button"
-                  onClick={() => void sendHeldNow()}
-                  disabled={sendingHeld}
-                  aria-busy={sendingHeld || undefined}
-                  className="-my-2 ml-auto inline-flex min-h-11 items-center rounded-full px-2.5 text-[13px] font-semibold text-primary transition-colors duration-150 hover:bg-hover active:bg-press disabled:opacity-60 pointer-fine:min-h-8"
-                >
+                <Button variant="ghost" size="sm" onClick={() => void sendHeldNow()} disabled={sendingHeld} aria-busy={sendingHeld || undefined} className="-my-2 ml-auto px-2.5 font-semibold text-primary hover:text-primary">
                   Ödemeden gönder
-                </button>
+                </Button>
               )}
             </h3>
             {g.key === 'odeme' && <p className="px-4 pb-1.5 text-xs text-muted">Ödeme alınınca bara ve mutfağa gider</p>}

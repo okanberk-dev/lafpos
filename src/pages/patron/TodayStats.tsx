@@ -4,6 +4,7 @@ import { tl, tlShort } from '@shared/money';
 import { fmtTime } from '@shared/time';
 import { changeText, type Compare, dayLabel, monthName, type Period, type StatsMode, type todayStats } from '@shared/today-stats';
 import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/Button';
 
 /**
  * Patron panelinin gruplanmış listesi (sahibin örneği, 22 Kas 2026: telefonun koyu "gruplanmış liste"si) ve "Bugün"
@@ -172,10 +173,10 @@ export function CompareGroup({ compares, mode, today, now, fresh, chart, classNa
       label="Kıyas"
       meta={
         onOpen ? (
-          <button type="button" onClick={onOpen} className="-my-2 inline-flex min-h-11 items-center gap-1 rounded-full px-2 font-medium text-ink hover:bg-hover">
+          <Button variant="ghost" size="sm" onClick={onOpen} className="-my-2 gap-1 px-2 text-ink">
             Döküm
             <ChevronRight aria-hidden="true" className="size-4" />
-          </button>
+          </Button>
         ) : (
           fresh
         )

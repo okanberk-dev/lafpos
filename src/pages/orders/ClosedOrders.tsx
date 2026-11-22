@@ -227,7 +227,7 @@ function ClosedCard({ r, mode, onOpen, onCancel }: { r: ClosedOrderRow; mode: Re
           <Icon aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-semibold">
+          <span className="block truncate font-semibold" title={typeof name === 'string' ? name : undefined}>
             {name}
             {!head && <span className="tabular font-normal text-muted"> #{r.extNo ?? r.no}</span>}
           </span>
@@ -236,7 +236,7 @@ function ClosedCard({ r, mode, onOpen, onCancel }: { r: ClosedOrderRow; mode: Re
         <span className="tabular text-right font-semibold">{tl(r.total)}</span>
       </span>
       {r.summary && (
-        <span className="mt-2 block truncate text-sm text-ink-2">
+        <span className="mt-2 line-clamp-2 text-sm text-ink-2" title={r.more > 0 ? `${r.summary} +${r.more}` : r.summary}>
           {r.summary}
           {r.more > 0 && <span className="text-muted"> +{r.more}</span>}
         </span>

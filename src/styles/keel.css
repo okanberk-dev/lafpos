@@ -132,50 +132,7 @@
   .k-inverse .k-cap {
     color: var(--k-inv-mute);
   }
-  /* Mürekkep düğme (Keel'in "+ Add scenario"su) ve yanındaki sade düğme: 44 px, köşe 12 */
-  .k-ink-btn,
-  .k-ghost-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 2.75rem;
-    padding: 0 18px;
-    border-radius: var(--k-r-control);
-    font: 500 0.9375rem/1 var(--font-sans);
-    white-space: nowrap;
-    transition:
-      opacity 150ms var(--ease-out),
-      background-color 150ms var(--ease-out);
-  }
-  .k-ink-btn {
-    background: var(--k-select);
-    color: var(--k-on-select);
-  }
-  .k-ink-btn:hover {
-    opacity: 0.9;
-  }
-  .k-ghost-btn {
-    background: var(--k-surface);
-    color: var(--k-ink);
-  }
-  .k-ghost-btn:hover {
-    background: var(--k-well);
-  }
-  /* Yuvarlak ok düğmesi (Keel kartlarının sağ üstündeki ↗): 44 px dokunma alanı */
-  .k-round {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 2.75rem;
-    height: 2.75rem;
-    border-radius: 999px;
-    border: 1px solid var(--k-line-strong);
-    color: var(--k-ink);
-    transition: background-color 150ms var(--ease-out);
-  }
-  .k-round:hover {
-    background: var(--k-well);
-  }
+  /* Panodaki düğmeler ortak Button/IconButton'dan gelir (components/ui/Button.tsx); burada ayrı düğme sınıfı yok */
   /*
    * Ciro bloğu: bilgisayarda zeminde kartsız (Keel'in "Projected Cash"i); telefonda ve tablette beyaz kart, sağ altta
    * nane ışığı (Keel'in mobil kartı), karolar kuyu tonunda

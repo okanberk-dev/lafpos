@@ -621,7 +621,8 @@ export function PaymentModal({
         variant="ink"
         size="xl"
         block
-        className="whitespace-normal leading-tight sm:ml-auto sm:w-auto sm:min-w-[22rem]"
+        wrap
+        className="sm:ml-auto sm:w-auto sm:min-w-[22rem]"
         disabled={!valid || !!splitBusy}
         loading={busy}
         onClick={() => void pay()}
@@ -630,7 +631,7 @@ export function PaymentModal({
       </Button>
       {/* Cihaz almadıysa ödeme yazarkasasız da yazılabilir (mali fiş ayrıca kesilir); bugünkü yetki kuralı */}
       {deviceError && route.send && (
-        <Button size="xl" variant="ghost" block className="whitespace-normal leading-tight sm:w-auto" disabled={!valid || busy} onClick={() => void pay(true)}>
+        <Button size="xl" variant="ghost" block wrap className="sm:w-auto" disabled={!valid || busy} onClick={() => void pay(true)}>
           Başka yoldan aldım
         </Button>
       )}

@@ -563,8 +563,8 @@ export default function OrderPage() {
         <IconButton label="Gönderilmemişleri sil" disabled={sending} onClick={discardPending}>
           <Trash2 className="size-4" />
         </IconButton>
-        <Button loading={sending} icon={sendIcon} onClick={sendOnly} className="min-w-0">
-          <span className="truncate">{sendLabel}</span>
+        <Button wrap loading={sending} icon={sendIcon} onClick={sendOnly} className="min-w-0">
+          {sendLabel}
         </Button>
       </div>
       <Button size="lg" variant="ink" block loading={sending} onClick={() => void sendAndPay()}>

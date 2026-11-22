@@ -468,3 +468,19 @@ describe('raporlar KPI etiketleri', () => {
     expect(lossParts({ discounts: 1000, complimentary: 20000, odenmez: 5000, zayi: 0, voided: 3000 }, fmt)).toBe('İndirim ₺10 · ikram ₺150 · ödenmez ₺50 · iptal ₺30');
   });
 });
+
+describe('Button wrap: uzun etiket alt satıra iner, düğme uzar', () => {
+  it('uzayan merdivende sabit yükseklik yok (dokunmatikte de), yazı satıra iner', () => {
+    const src = readFileSync(join(__dirname, '../src/components/ui/Button.tsx'), 'utf8');
+    const block = /const wrapSizes[^{]*\{([\s\S]*?)\n\};/.exec(src)?.[1] ?? '';
+    const sizes = [...block.matchAll(/^\s*(sm|md|lg|xl): '([^']*)'/gm)];
+    expect(sizes.map((m) => m[1])).toEqual(['sm', 'md', 'lg', 'xl']);
+    for (const [, , cls] of sizes) {
+      expect(cls.split(' ').filter((c) => /(^|:)h-\d/.test(c))).toEqual([]);
+      expect(cls).toMatch(/(^| )min-h-/);
+      expect(cls).toMatch(/pointer-coarse:min-h-/);
+    }
+    expect(src).toMatch(/const WRAP = 'whitespace-normal/);
+    expect(src).toContain('opts.wrap ? cn(wrapSizes[size], WRAP) : sizes[size]');
+  });
+});

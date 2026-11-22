@@ -219,7 +219,7 @@ export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderD
             loading={busy}
             onClick={send}
             disabled={order.total - order.paid <= 0}
-            className="h-auto min-h-11 whitespace-normal py-2 leading-tight"
+            wrap
           >
             {items?.length ? 'Seçilen kalemleri' : 'Hesabı'} yazarkasaya gönder
           </Button>

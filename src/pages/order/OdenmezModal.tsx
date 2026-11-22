@@ -143,7 +143,7 @@ export function OdenmezModal({
           <Button onClick={onClose} disabled={busy}>
             Vazgeç
           </Button>
-          <Button variant="primary" className="whitespace-normal leading-tight" loading={busy} onClick={() => void confirm()}>
+          <Button variant="primary" wrap loading={busy} onClick={() => void confirm()}>
             {confirmLabel(qty)}
           </Button>
         </div>
