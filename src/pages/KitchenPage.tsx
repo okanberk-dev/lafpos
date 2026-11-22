@@ -3,7 +3,6 @@ import { AlarmClock, Ban, Bell, BellOff, CheckCheck, ChefHat, CircleCheck, Circl
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { KITCHEN_HISTORY_MAX } from '@shared/history';
 import { kitchenTotals } from '@shared/kitchen';
-import { ORDER_TYPE_LABEL } from '@shared/labels';
 import { PLATFORM_COLOR, PLATFORM_LABEL } from '@shared/platforms';
 import { ticketHead } from '@shared/service-mode';
 import { fmtTime } from '@shared/time';
@@ -449,6 +448,12 @@ function KitchenScreen() {
             const note = t.platform && t.note?.startsWith(t.label) ? t.note.slice(t.label.length).replace(/^\s*·\s*/, '') || null : t.note;
             // Bu fişin bir isteği sürerken fişin öteki düğmeleri de kilitli (çift dokunuş iki kez göndermesin)
             const ticketBusy = !!busy && busy.startsWith(`${t.key}:`);
+            // Geçmiş: bekleme süresi siparişten hazıra (hazır anı bilinmeyen site siparişinde yok); geri alma adımı "Hazır"ı
+            // bekleyenlere döndürecekse bar yetkisi ister (sunucu da denetler)
+            const past = history ? t.history : undefined;
+            const waited = past?.readyAt != null ? Math.max(0, past.readyAt - t.sentAt) : null;
+            const back = history ? undoStep(live) : null;
+            const canUndo = !!back && (back.status === 'hazir' || canBar);
             return (
               // Fiş: başlık nötr; gecikince süre rozeti ve kenar renklenir (amber uyarı, kırmızı alarm). Alarm 1-2 m'den
               // de görünsün: kırmızı halka, başlık zemini ve dolu süre rozeti (koyuda yumuşak halka zeminde kayboluyordu)
@@ -488,7 +493,7 @@ function KitchenScreen() {
                     <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted">
                       {head.showNo && <span className="tabular">#{t.orderNo}</span>}
                       {t.waiterName && !t.platform && <span className="min-w-0 truncate">{t.waiterName}</span>}
-                      <span className="tabular">{fmtTime(t.sentAt)}</span>
+                      {!history && <span className="tabular">{fmtTime(t.sentAt)}</span>}
                       {t.paid && !online && !history && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-[var(--admin-success-soft)] px-2 py-px text-xs font-semibold text-[var(--admin-success)]">
                           <CircleCheck aria-hidden="true" className="size-3.5" />
@@ -502,6 +507,14 @@ function KitchenScreen() {
                       <Ban aria-hidden="true" className="size-4 md:size-[18px]" />
                       İptal edildi
                     </span>
+                  ) : history ? (
+                    waited != null && (
+                      <span className={cn(PILL, 'bg-surface-3 text-ink-2')} title="Siparişten hazıra geçen süre">
+                        <Clock aria-hidden="true" className="size-4 md:size-[18px]" />
+                        <span className="sr-only">Bekleme</span>
+                        {mmss(waited)}
+                      </span>
+                    )
                   ) : (
                     <span
                       className={cn(
@@ -515,6 +528,37 @@ function KitchenScreen() {
                     </span>
                   )}
                 </header>
+                {/* Geçmiş künyesi: sipariş, hazır ve teslim saati; hazırlayan ve teslim eden (karışıklıkta kim, ne zaman) */}
+                {history && (
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-b border-[var(--admin-divider)] px-3 py-2 text-sm md:text-base">
+                    <dt className="text-muted">Sipariş</dt>
+                    <dd className="tabular">{fmtTime(t.sentAt)}</dd>
+                    {past?.readyAt != null && (
+                      <>
+                        <dt className="text-muted">Hazır</dt>
+                        <dd className="tabular min-w-0 truncate">
+                          {fmtTime(past.readyAt)}
+                          {past.readyBy && <span className="text-ink-2"> · {past.readyBy}</span>}
+                        </dd>
+                      </>
+                    )}
+                    {past?.servedAt != null && (
+                      <>
+                        <dt className="text-muted">Teslim</dt>
+                        <dd className="tabular min-w-0 truncate">
+                          {fmtTime(past.servedAt)}
+                          {past.servedBy && <span className="text-ink-2"> · {past.servedBy}</span>}
+                        </dd>
+                      </>
+                    )}
+                    {past && past.servedAt == null && t.items.some((i) => !i.voided && i.status === 'hazir') && (
+                      <>
+                        <dt className="text-muted">Durum</dt>
+                        <dd className="font-semibold text-[var(--admin-success)]">Teslim bekliyor</dd>
+                      </>
+                    )}
+                  </dl>
+                )}
                 {(note || t.scheduledFor) && (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-[var(--admin-divider)] px-3 py-2 text-sm md:text-base">
                     {t.scheduledFor && <span className="font-semibold text-[var(--admin-warning)]">Saat {fmtTime(Date.parse(t.scheduledFor))}</span>}
@@ -528,7 +572,7 @@ function KitchenScreen() {
                         // Hazır sekmesinde kaleme dokunmak bir şey yapmaz: teslim fişin düğmesiyle, geri alma Geçmiş'ten.
                         // Geçmiş'te bir adım geri: teslim edilmiş kalem "Hazır"a (hazır anı korunur), hazır kalem
                         // "Hazırlanıyor"a
-                        disabled={i.voided || online || REMOTE || readyView}
+                        disabled={i.voided || online || REMOTE || readyView || (history && i.status === 'hazir' && !canBar)}
                         onClick={() => setStatus([i.id], history ? (i.status === 'servis' ? 'hazir' : 'hazirlaniyor') : undefined)}
                         className={cn('flex w-full items-start gap-3 px-3 py-3 text-left transition-colors duration-150 md:py-3.5', !i.voided && !online && 'active:bg-press', i.voided && 'bg-[var(--admin-danger-soft)]')}
                       >
@@ -552,11 +596,25 @@ function KitchenScreen() {
                     </li>
                   ))}
                 </ul>
-                <footer className={cn('mt-auto flex gap-2 border-t border-[var(--admin-divider)] p-2', (REMOTE || cancelled) && 'hidden')}>
+                <footer className={cn('mt-auto flex gap-2 border-t border-[var(--admin-divider)] p-2', (REMOTE || cancelled || (history && (online || (!canUndo && !historyHandIds(t).length)))) && 'hidden')}>
                   {/* Ortak düğme: istek sürerken kilitli ve yükleniyor; ana eylem 48 px, 16 px yazı (uzaktan okunur). Site
                       siparişinde de kasa fişinin sözü ve oranı: 322 px kartta "Hazır (siteye bildir)" kırpılıyordu, nereye
                       bildirildiğini başlıktaki mor Online ve bildirim söyler */}
-                  {online ? (
+                  {history ? (
+                    <>
+                      {canUndo && (
+                        <Button size="lg" className={FOOT} icon={<Undo2 className="size-4" />} disabled={ticketBusy} loading={busy === `${t.key}:undo`} onClick={() => void undo(live, name, `${t.key}:undo`)}>
+                          Geri al
+                        </Button>
+                      )}
+                      {/* Teslimi geri alınan eski sipariş Hazır sekmesine dönmez (30 dk): Geçmiş'ten yeniden teslim edilir */}
+                      {historyHandIds(t).length > 0 && (
+                        <Button variant="success" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(historyHandIds(t), name, `${t.key}:deliver`)}>
+                          Teslim edildi
+                        </Button>
+                      )}
+                    </>
+                  ) : online ? (
                     <>
                       {!allStarted && (
                         <Button size="lg" className={FOOT} disabled={ticketBusy} loading={busy === `${t.key}:start`} onClick={() => onlineStage(t.orderId, 'preparing', `${t.key}:start`)}>
@@ -572,18 +630,6 @@ function KitchenScreen() {
                     <Button variant="success" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(live.filter((i) => i.status === 'hazir').map((i) => i.id), name, `${t.key}:deliver`)}>
                       Teslim edildi
                     </Button>
-                  ) : history ? (
-                    <>
-                      <Button size="lg" className={FOOT} icon={<Undo2 className="size-4" />} disabled={ticketBusy} loading={busy === `${t.key}:undo`} onClick={() => void undo(live, `${t.key}:undo`)}>
-                        Geri al
-                      </Button>
-                      {/* Teslimi geri alınan eski sipariş Hazır sekmesine dönmez (30 dk): Geçmiş'ten yeniden teslim edilir */}
-                      {historyHandIds(t).length > 0 && (
-                        <Button variant="success" size="lg" className={FOOT} icon={<PackageCheck className="size-5" />} disabled={ticketBusy} loading={busy === `${t.key}:deliver`} onClick={() => void deliver(historyHandIds(t), name, `${t.key}:deliver`)}>
-                          Teslim edildi
-                        </Button>
-                      )}
-                    </>
                   ) : (
                     <>
                       {!allStarted && (

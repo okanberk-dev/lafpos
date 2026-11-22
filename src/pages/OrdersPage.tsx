@@ -21,6 +21,7 @@ import { useTick } from '@/lib/hooks';
 import { fmtPhone, joinMeta, telHref } from '@/lib/text';
 import { toast } from '@/lib/toast';
 import { PlatformBadge } from '@/components/PlatformBadge';
+import { ClosedOrders } from './orders/ClosedOrders';
 
 type Tab = 'acik' | 'online' | 'paket' | 'kapanan';
 
@@ -60,7 +61,6 @@ export default function OrdersPage() {
   // Yalnız paket yetkisi olan (kurye) kendi işinde açılır: Açık'taki tezgâh satışlarında yapabileceği bir şey yok
   const [tab, setTab] = useState<Tab>(() => (canHand ? 'acik' : 'paket'));
   const open = useQuery({ queryKey: ['orders', 'acik'], queryFn: () => get<OrderDTO[]>('/orders?status=acik&limit=200'), refetchInterval: 60_000 });
-  const closed = useQuery({ queryKey: ['orders', 'kapali'], queryFn: () => get<OrderDTO[]>('/orders?status=kapali&limit=300'), enabled: tab === 'kapanan' });
   // Önce ödenmiş (kapanmış) tezgâh ve gel-al satışı hazır olunca teslim bekler (self servis): Açık'ta da görünür. Sunucu
   // bar ekranının Hazır sekmesinin koşuluyla süzer (`ready=1`: son 30 dakikada hazır, açık günün); yalnız teslim edebilene
   const paidReady = useQuery({
@@ -98,7 +98,7 @@ export default function OrdersPage() {
   const awaitingHand = canHand ? (paidReady.data ?? []) : [];
   const openPos = all.filter((o) => o.type !== 'masa' && o.source === 'pos');
   // Liste sorgusu: boş durum yalnız veri gelip boşsa; yüklenirken iskelet, alınamazsa hata (sahte "yok" değil)
-  const list = tab === 'kapanan' ? closed : open;
+  const list = open;
   const rows =
     tab === 'acik'
       ? [...awaitingHand, ...openPos]
@@ -106,16 +106,14 @@ export default function OrdersPage() {
         ? all.filter((o) => o.source === 'laffogato')
         : tab === 'paket'
           ? all.filter((o) => o.type === 'paket' || o.type === 'gelal')
-          : (closed.data ?? []);
+          : [];
   const couriers = boot.users.filter((u) => u.active && (u.role === 'kurye' || u.role === 'garson'));
   // Boş durum ekranın sözüyle ve bu kişinin yapabileceğiyle: self modlarda satış Satış ekranından açılır, kurye açmaz.
   // Paket yalnız paket yetkisiyle açılır (Masalar'da düğmesi de yalnız ona; garson yalnız gel-al açar)
   const opens = can('siparis.al');
   const opensPaket = can('paket.yonet');
   const empty =
-    tab === 'kapanan'
-      ? { title: 'Bugün kapanan adisyon yok', body: 'Ödemesi alınan adisyonlar gün boyunca burada listelenir' }
-      : tab === 'online'
+    tab === 'online'
         ? { title: 'Açık online sipariş yok', body: 'Uygulama ve web siparişleri hazırlanırken burada görünür' }
         : tab === 'paket'
           ? {
@@ -187,14 +185,17 @@ export default function OrdersPage() {
           {boot.integrations.laffogatoUrl ? 'Site bağlantı anahtarı tanımlı olmadığı için uygulama ve web siparişleri buraya düşmüyor' : 'Site bağlantısı kurulmadığı için uygulama ve web siparişleri buraya düşmüyor'}
         </Notice>
       )}
-      {list.isPending ? (
+      {/* Kapanan: aramalı, sayfalı ve ayrıntılı ayrı liste (sunucu `GET /history/orders`) */}
+      {tab === 'kapanan' ? (
+        <ClosedOrders />
+      ) : list.isPending ? (
         <div role="status" aria-label="Siparişler yükleniyor…" className="lp-cards">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} className="h-[92px] rounded-2xl" />
           ))}
         </div>
       ) : list.isError && !list.data ? (
-        <ErrorState className={FLOAT_CARD} title={tab === 'kapanan' ? 'Kapanan adisyonlar alınamadı' : 'Siparişler alınamadı'} error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
+        <ErrorState className={FLOAT_CARD} title="Siparişler alınamadı" error={list.error} retrying={list.isFetching} onRetry={() => void list.refetch()} />
       ) : rows.length === 0 ? (
         <EmptyState art="fis" title={empty.title} className={FLOAT_CARD}>
           {empty.body}
@@ -214,7 +215,7 @@ export default function OrdersPage() {
             // Self modlarda kasanın tezgâh ve gel-al siparişinin çağrı numarası ("No 34"; müşteri onunla bekler), adıyla;
             // paket platformunun gel-al'ında platformun kısa kodu (müşteri LafPOS numarasını bilmez, çağrı ekranı gibi)
             const { name, head } = orderCardName(o, mode);
-            const paidAhead = o.status === 'kapali' && tab !== 'kapanan';
+            const paidAhead = o.status === 'kapali';
             const itemCount = o.items.filter((i) => !i.voided).reduce((a, i) => a + i.qty, 0);
             const methods = [...new Set(o.payments.filter((p) => !p.refundedAt).map((p) => p.methodName))];
             const hasBadges = paidAhead || !!o.platform || o.extPaid || o.extStage === 'gone' || awaitingPay || pendingKitchen > 0 || readyIds.length > 0 || !!o.deliveryStatus || methods.length > 0;
