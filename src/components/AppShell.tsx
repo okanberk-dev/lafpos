@@ -4,6 +4,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router';
 import { ROLE_LABELS } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
+import { useDeviceCopies } from '@/lib/after-payment';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
 import { DEMO } from '@/lib/demo';
@@ -76,6 +77,8 @@ const AVATAR = { xs: 'size-7 text-[11px]', sm: 'size-8 text-[11px]', md: 'size-9
  */
 export function AppShell({ children, notice }: { children: ReactNode; notice?: ReactNode }) {
   const boot = useBoot();
+  // Cihaz ödemesinin işyeri nüshası: sepeti bu sekme gönderdiyse ödeme penceresi kapanmış olsa da
+  useDeviceCopies(boot);
   const can = useCan();
   const me = useAuth((s) => s.me)!;
   const [finishing, setFinishing] = useState(false);
