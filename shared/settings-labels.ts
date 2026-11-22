@@ -12,6 +12,7 @@ export const SETTING_LABEL: Record<string, string> = {
   receiptCustomerName: 'Fişte müşteri adı',
   receiptStoreCopy: 'Ödeme sonrası işyeri nüshası',
   receiptInfoSlip: 'Müşteriye bilgi fişi',
+  receiptDirect: 'Fişi doğrudan yazıcıya gönder',
   serviceRate: 'Servis ücreti',
   autoLockMinutes: 'Otomatik kilit',
   keepAwake: 'Ekran kararmasın',

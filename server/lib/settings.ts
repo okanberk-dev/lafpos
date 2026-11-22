@@ -19,6 +19,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   receiptStoreCopy: true,
   // Varsayılan 2 nüsha: müşteri (büyük sipariş no) ve işyeri (kalem dökümü); yazarkasa bağlıyken de
   receiptInfoSlip: true,
+  // Fiş, Z ve X ağdaki fiş yazıcısına doğrudan (ESC/POS): yazdırma penceresi açılmaz; olmazsa tarayıcıdan basılır
+  receiptDirect: true,
   serviceRate: 0,
   autoLockMinutes: 0,
   keepAwake: true,

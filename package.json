@@ -30,6 +30,7 @@
     "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.14",
+    "html-to-image": "1.11.11",
     "lucide-react": "^1.61.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

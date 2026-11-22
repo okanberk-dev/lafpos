@@ -35,7 +35,7 @@ export function PrinterCard() {
   const [savingOpt, setSavingOpt] = useState(false);
   const d = q.data;
   /** Ödeme sonrası fişler (ayar, herkese giden: kasa ekranı ödemeden sonra ona bakar) */
-  const setOpt = async (patch: { receiptStoreCopy?: boolean; receiptInfoSlip?: boolean }, done: string) => {
+  const setOpt = async (patch: { receiptStoreCopy?: boolean; receiptInfoSlip?: boolean; receiptDirect?: boolean }, done: string) => {
     if (savingOpt) return;
     setSavingOpt(true);
     try {
@@ -61,6 +61,16 @@ export function PrinterCard() {
       toast.err(errorMessage(e));
     } finally {
       setSaving(null);
+    }
+  };
+  /** Deneme fişi de ayardaki yoldan: doğrudan basılamadıysa söylenir (tarayıcıdan basıldı) */
+  const testPrint = async () => {
+    try {
+      const how = await printNow(<TestReceipt boot={boot} printer={d?.effective ?? null} />);
+      if (how === 'direct') toast.ok('Deneme fişi yazıcıya doğrudan gönderildi');
+      else if (boot.settings.receiptDirect) toast.warn('Yazıcıya doğrudan ulaşılamadı; fiş tarayıcıdan basıldı. Yazıcının ağ adresini ve açık olduğunu kontrol edin');
+    } catch (e) {
+      toast.err(errorMessage(e));
     }
   };
   const real = (d?.printers ?? []).filter((p) => !VIRTUAL.test(`${p.name} ${p.driver ?? ''} ${p.port ?? ''}`));
@@ -124,7 +134,7 @@ export function PrinterCard() {
             </>
           )}
           <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-3 max-sm:[&>*]:grow">
-            <Button icon={<Printer className="size-4" />} onClick={() => printNow(<TestReceipt boot={boot} printer={d.effective} />)}>
+            <Button icon={<Printer className="size-4" />} onClick={() => void testPrint()}>
               Deneme fişi yazdır
             </Button>
             {d.chosen && (
@@ -133,9 +143,21 @@ export function PrinterCard() {
               </Button>
             )}
           </div>
-          <p className="text-xs text-[var(--admin-text-mute)]">Deneme fişini kasa bilgisayarında basın: telefonda ya da tablette basılırsa o cihazın yazdırma penceresi açılır</p>
+          <p className="text-xs text-[var(--admin-text-mute)]">
+            {boot.settings.receiptDirect
+              ? 'Doğrudan basmada fiş hangi cihazdan istenirse istensin bu yazıcıdan çıkar; yazıcıya ulaşılamazsa o cihazın yazdırma penceresi açılır'
+              : 'Deneme fişini kasa bilgisayarında basın: telefonda ya da tablette basılırsa o cihazın yazdırma penceresi açılır'}
+          </p>
           {/* Ödemeden sonra kendiliğinden çıkanlar: yalnız kasa bilgisayarında ve yazıcı bulunmuşken (yoksa sessizce atlanır) */}
           <div className="space-y-2 border-t border-[var(--admin-divider)] pt-3">
+            <Toggle
+              block
+              checked={boot.settings.receiptDirect}
+              disabled={savingOpt}
+              onChange={(v) => void setOpt({ receiptDirect: v }, v ? 'Fişler doğrudan yazıcıya gidecek' : 'Fişler tarayıcının yazdırmasıyla basılacak')}
+              label="Fişi doğrudan yazıcıya gönder (yazdırma penceresi açılmaz)"
+              hint="ağdaki fiş yazıcısına (IP adresli port); ulaşılamazsa fiş tarayıcıdan basılır, kaybolmaz. Masa kartları hep tarayıcıdan"
+            />
             <Toggle
               block
               checked={boot.settings.receiptStoreCopy}

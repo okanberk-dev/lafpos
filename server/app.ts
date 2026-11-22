@@ -2,10 +2,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { z } from 'zod';
 import { env } from './env';
-import { type AppEnv, authMiddleware, clientKey } from './lib/auth';
+import { type AppEnv, authMiddleware, can, clientKey } from './lib/auth';
+import { escposRaster, printerAddress, RASTER_MAX_HEIGHT, RASTER_WIDTH, sendRaw } from './lib/escpos';
 import { activityMiddleware, busyNow } from './lib/mesgul';
-import { constraintError, HttpError } from './lib/http';
+import { body, constraintError, HttpError } from './lib/http';
 import { adminRoutes } from './routes/admin';
 import { authRoutes } from './routes/auth';
 import { cashRoutes } from './routes/cash';
@@ -81,6 +83,37 @@ export function createApp() {
     const printers = !reported.length && known?.printers?.length ? known.printers : keep && !reported.some((p) => p.name === keep.name) ? [...reported, keep] : reported;
     setSyncState(PRINTERS_KEY, { at: reported.length ? Date.now() : (known?.at ?? Date.now()), printers });
     return c.json({ name: pickReceiptPrinter(printers, getSettings().receiptPrinter).name });
+  });
+
+  // Fişi yazdırma penceresi açmadan basar (lib/escpos.ts): arayüzün çizdiği 1 bitlik görüntü seçili fiş yazıcısının ağ
+  // adresine (portu IP'li Standard TCP/IP, RAW 9100) gider, her istek ayrı kesilir. Oturum gerekir; bu bilgisayardan ya
+  // da ödeme alan veya ayar yöneten kişiden. Adres yoksa ya da yazıcıya ulaşılamazsa hata döner: arayüz tarayıcıdan basar
+  app.post('/api/kasa/fis', async (c) => {
+    const user = c.get('user');
+    if (!isLoopback(clientKey(c)) && !can(user, 'odeme.al') && !can(user, 'ayar.yonet')) throw new HttpError(403, 'Bu işlem için yetkiniz yok', 'forbidden');
+    const maxBytes = (RASTER_WIDTH / 8) * RASTER_MAX_HEIGHT;
+    if (Number(c.req.header('content-length') ?? 0) > maxBytes * 1.4 + 1024) throw new HttpError(422, 'Fiş görüntüsü çok büyük', 'too_large');
+    const input = await body(
+      c,
+      z.object({
+        width: z.literal(RASTER_WIDTH),
+        height: z.number().int().min(1).max(RASTER_MAX_HEIGHT),
+        data: z.string().max(Math.ceil(maxBytes / 3) * 4).regex(/^[A-Za-z0-9+/]*={0,2}$/),
+      }),
+    );
+    const bits = Uint8Array.from(atob(input.data), (ch) => ch.charCodeAt(0));
+    if (bits.length !== (input.width / 8) * input.height) throw new HttpError(422, 'Fiş görüntüsünün boyu tutmuyor', 'validation');
+    const seen = getSyncState<{ at: number; printers: WinPrinter[] }>(PRINTERS_KEY);
+    const name = pickReceiptPrinter(seen?.printers ?? [], getSettings().receiptPrinter).name;
+    const addr = printerAddress(seen?.printers.find((p) => p.name === name)?.port);
+    if (!name || !addr) throw new HttpError(409, 'Fiş yazıcısının ağ adresi yok', 'no_printer_address');
+    try {
+      await sendRaw(addr, escposRaster({ width: input.width, height: input.height, bits }));
+    } catch (e) {
+      console.warn('[fiş yazıcısı]', addr.host, e instanceof Error ? e.message : e);
+      throw new HttpError(502, 'Fiş yazıcısına ulaşılamadı', 'printer_unreachable');
+    }
+    return c.json({ ok: true, printer: name });
   });
 
   // Ürün kartındaki görselin küçük kopyası. /api dışında: tarayıcı önbelleğe alır, <img> oturum taşımaz;

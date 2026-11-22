@@ -2027,7 +2027,8 @@ html[class~='dark'] {
  * Termal kâğıtta gri ve zemin rengi noktalı (dither) basılır: yalnız siyah yazı ve siyah çizgi. Yazı sistemin eş
  * aralıklı yazısı (Windows'ta Consolas): yazdırma anında yüklenmesi gereken yazı tipi yok, rakamlar alt alta hizalı
  */
-.print-area .rc {
+.print-area .rc,
+.rc-raster .rc {
   font-variant-numeric: tabular-nums lining-nums;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -2161,7 +2162,35 @@ html[class~='dark'] {
   height: 0;
 }
 
+/*
+ * Doğrudan basma için ekran dışında çizilen fiş (src/lib/print.tsx `directPrint`): basılabilir alan kadar (72 mm ≈ 272
+ * CSS px; 576 noktaya ölçeklenir), yazdırmadaki `.print-area` ile aynı yazı ve yalnız siyah. Alt boşluk az: yazıcı
+ * kesmeden önce kâğıdı bıçağa kadar ilerletir
+ */
+.rc-raster {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  box-sizing: content-box;
+  width: 272px;
+  padding: 2mm 0 3mm;
+  font-family: ui-monospace, Consolas, 'Lucida Console', 'SF Mono', Menlo, 'Courier New', monospace;
+  font-size: 12px;
+  color: #000;
+  background: #fff;
+  pointer-events: none;
+}
+.rc-raster .rc * {
+  color: #000 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
 @media print {
+  .rc-raster {
+    display: none;
+  }
   /* Kâğıt boyu: genişlik 80 mm, uzunluk içerik kadar (sürücünün rulo kâğıdı); kenar boşluğu alanın kendi dolgusunda */
   @page {
     size: 80mm auto;
