@@ -3,7 +3,7 @@ import { odenmezByPerson } from '@shared/comp';
 import { type CrossPay, type PrepDone, prepFrom } from '@shared/remote-calc';
 import { type PatronStats, statsDates } from '@shared/today-stats';
 import { ORDER_TYPE_LABEL } from '@shared/labels';
-import { percentOf, tl } from '@shared/money';
+import { netOfKdv, percentOf, tl } from '@shared/money';
 import { calcOrder, type OrderTotals } from '@shared/order-calc';
 import { PLATFORM_LABEL, PLATFORMS, type PlatformId } from '@shared/platforms';
 import { addDays, businessDate, businessDayStartMs, currentBusinessDate, DAY_ROLLOVER_HOUR, fmtDateShort, istanbulParts } from '@shared/time';
@@ -11,7 +11,8 @@ import type { CompKind } from '@shared/types';
 import { db, schema } from '../db/client';
 import { auditForViewer } from '../delivery/commission';
 import { PRE_ACCEPTED_TTL_MS, platformSettings } from '../delivery/service';
-import { costMap, costsAt } from '../sync/lafmaliyet';
+import { addonCostOf, addonSiteIds, costMap, costsAt } from '../sync/lafmaliyet';
+import { onlineCounted } from './days';
 import { getOpenDay } from './orders';
 
 /**
@@ -156,8 +157,9 @@ export function summaryReport(range: Range, nowMs = Date.now()) {
     row.amount += totalsOf(o).total;
     types.set(o.type, row);
   }
-  // Online sipariş sitede ödenmiş gelir, X/Z gibi her aşamada (hazırlanan da) sayılır; ciroya girmez
-  const online = ds.orders.filter((o) => o.source === 'laffogato');
+  // Online sipariş sitede ödenmiş gelir, X/Z gibi her aşamada (hazırlanan da) sayılır; ciroya girmez. Sitede iptal ya da
+  // iade edildiği ya da kasada ödendiği bilinen girmez (Z'nin kuralı)
+  const online = ds.orders.filter(onlineCounted);
   const cmp = comparison(range, nowMs, reportToday(nowMs));
   const prev = load(cmp.range, ORDERS_ONLY);
   const prevClosed = prev.orders.filter((o) => isSale(o) && (cmp.cutoffMs == null || (o.closedAt ?? o.openedAt) <= cmp.cutoffMs));
@@ -232,7 +234,13 @@ export function productReport(range: Range, withCost: boolean) {
   const products = new Map(db.select().from(schema.products).all().map((p) => [p.id, p]));
   const categories = new Map(db.select().from(schema.categories).all().map((c) => [c.id, c]));
   const costs = withCost ? costMap() : {};
-  const rows = new Map<string, { key: string; name: string; size: string; categoryId: string | null; category: string; qty: number; revenue: number; revenueNet: number; cost: number | null; complimentary: number; voided: number }>();
+  // Eklerin (şurup, ekstra shot, alternatif süt) kimlikleri gün sonunun kuralıyla: ciroları ana ürünün satırında, reçete
+  // maliyetleri de oraya eklenir (lafmaliyet ekleri ayrı ürün sayar, kendi maliyetiyle)
+  const addonIds = withCost ? addonSiteIds() : null;
+  const rows = new Map<
+    string,
+    { key: string; name: string; size: string; categoryId: string | null; category: string; qty: number; revenue: number; revenueNet: number; cost: number | null; costPartial?: boolean; complimentary: number; voided: number }
+  >();
   for (const i of ds.items) {
     // Satış ve ikram kapanmış adisyondan, iptal adedi bütün POS adisyonlarından (X/Z gibi)
     if (i.voided ? !voided.has(i) : !closedIds.has(i.orderId)) continue;
@@ -250,6 +258,8 @@ export function productReport(range: Range, withCost: boolean) {
         revenue: 0,
         revenueNet: 0,
         cost: withCost ? 0 : null,
+        // Yalnız maliyet yetkisine: bir ekin maliyeti bilinmiyor (o ek 0 sayıldı)
+        ...(withCost ? { costPartial: false } : {}),
         complimentary: 0,
         voided: 0,
       };
@@ -259,11 +269,16 @@ export function productReport(range: Range, withCost: boolean) {
       row.qty += i.qty;
       const net = totals.get(i.orderId)?.lineNet[i.id] ?? 0;
       row.revenue += net;
-      row.revenueNet += Math.round((net * 100) / (100 + i.kdvRate));
+      row.revenueNet += netOfKdv(net, i.kdvRate);
       if (withCost && row.cost != null) {
         const unit = p?.extId ? costs[`${p.extId}:${i.size === 'L' ? 'L' : 'M'}`] : undefined;
         if (unit == null) row.cost = null;
-        else row.cost += unit * i.qty;
+        else {
+          // Eklerin maliyeti: bilinmeyen ek 0 sayılır, satır "maliyet eksik" işaretlenir (ana ürünün maliyeti bilinir)
+          const addons = addonCostOf(i, costs, addonIds!);
+          row.cost += unit * i.qty + addons.cost;
+          if (addons.partial) row.costPartial = true;
+        }
       }
     }
     rows.set(key, row);

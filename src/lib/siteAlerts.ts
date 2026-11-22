@@ -205,6 +205,9 @@ export function siteEventCue(e: Pick<LiveEvent, 'topic' | 'kind' | 'message' | '
         return { refetch: true };
       case SITE_EVENT.onlineDone:
         return { refetch: true, ...(on && e.message ? { ...sound('tek'), toast: { tone: 'info', text: e.message } } : {}) };
+      // Sitede kasada ödendi işaretlenen sipariş: bara düşmez, personel adisyon olarak çalar (tek fiş)
+      case SITE_EVENT.onlineTill:
+        return on && e.message ? { ...sound('tek'), toast: { tone: 'warn', text: e.message } } : null;
       default:
         return null;
     }

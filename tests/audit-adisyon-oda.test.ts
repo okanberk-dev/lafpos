@@ -442,7 +442,7 @@ describe('porsiyon sayacı', () => {
     expect(seen.some((e) => e.topic === 'menu' && e.kind === 'product.available')).toBe(true);
     expect(seen.some((e) => e.topic === 'sync' && e.kind === 'availability.push' && e.message === cake.id)).toBe(true);
     // Porsiyonla tükenen ürün sitede de yeniden satışa açılır: bekleyen Tükendi'nin yerine Satışta gider
-    expect(bodies).toEqual([{ id: cake.extId, isActive: true, actor: 'LafPOS porsiyon' }]);
+    expect(bodies).toEqual([{ id: cake.extId, isActive: true, actor: 'LafPOS porsiyon', branch: 'marina' }]);
 
     // Geri dönen porsiyon satılır; bar hazırlamaya başladıktan sonraki iptal fire sayılır, porsiyon dönmez
     o = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: cake.id, qty: 1 }] });

@@ -52,7 +52,7 @@ describe('porsiyon biter: Tükendi giden kutusundan siteye', () => {
     expect(await pending()).toEqual([expect.objectContaining({ kind: 'menu.isActive', dedupeKey: 'menu:mnu-0005' })]);
     const { flushSiteOutbox } = await import('../server/sync/site-outbox');
     expect(await flushSiteOutbox()).toEqual({ sent: 1, failed: 0 });
-    expect(site.menuPosts.at(-1)).toEqual({ id: 'mnu-0005', isActive: false, actor: 'LafPOS porsiyon' });
+    expect(site.menuPosts.at(-1)).toEqual({ id: 'mnu-0005', isActive: false, actor: 'LafPOS porsiyon', branch: 'marina' });
     expect(await pending()).toHaveLength(0);
   });
 

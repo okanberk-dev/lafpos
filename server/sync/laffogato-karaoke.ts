@@ -16,7 +16,7 @@ import { HttpError } from '../lib/http';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { getOpenDay } from '../services/orders';
-import { requireSiteSigned, siteLinked, siteSigned } from './laffogato-link';
+import { requireSiteSigned, siteBranch, siteLinked, siteSigned } from './laffogato-link';
 
 /**
  * Sitedeki karaoke rezervasyonları (laffogato `GET /api/panel/karaoke`, F1): oda sitede rezerveyken kasada boş
@@ -215,6 +215,8 @@ function pullOnce(now: number): Promise<SiteKaraokeDTO> {
     const url = new URL(`${env.laffogatoUrl}/api/panel/karaoke`);
     url.searchParams.set('from', day);
     url.searchParams.set('to', day);
+    // Oda Tuzla'nın: başka şube adına site boş liste verir (§2.3 "Şube")
+    url.searchParams.set('branch', siteBranch());
     const before = readState();
     const fail = (status: number | null, message: string, closed = false): never => {
       setSyncState(STATE_KEY, { ...before, lastError: message, lastErrorAt: Date.now(), lastStatus: status, closed } satisfies KaraokeState);

@@ -26,7 +26,8 @@ export type LiveTopic =
  * - `orders` › `online.new`: yeni online sipariş, `message` "Online sipariş: Masa 4 · Ayşe" (bar için ayrıca
  *   `kitchen` › `ticket.new`, `message: 'online'`). `online.updated`: aşaması ya da masası sitede değişti.
  *   `online.stage`: LafPOS aşamayı siteye yazdı. `online.done`: siteden kalktı, `message` "Online sipariş #N siteden
- *   kalktı".
+ *   kalktı". `online.till`: sitede kasada ödendi işaretlenen sipariş (LafPOS'a yazılmaz, bara düşmez), `message`
+ *   "Online sipariş #N kasada ödendi; adisyon olarak çalın".
  * - `reservations` › `site.karaoke.new`, `site.karaoke.cancelled`, `site.karaoke.moved`: bugünün site karaoke
  *   listesinde yeni, iptal edilen, saati değişen ya da günden kalkan rezervasyon, `message` "Karaoke 20:00 · 2 sa ·
  *   4 kişi". Listenin değiştiğini söyleyen `site.karaoke` de yayılır (ekranlar yenilenir).
@@ -39,6 +40,7 @@ export const SITE_EVENT = {
   onlineUpdated: 'online.updated',
   onlineStage: 'online.stage',
   onlineDone: 'online.done',
+  onlineTill: 'online.till',
   karaokeNew: 'site.karaoke.new',
   karaokeCancelled: 'site.karaoke.cancelled',
   karaokeMoved: 'site.karaoke.moved',

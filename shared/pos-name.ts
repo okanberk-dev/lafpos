@@ -80,3 +80,10 @@ export function posNamesOf(product: { name: string; posName: string | null; pric
 export function posSlotOf(extProductId: string | null, size: PosSize): 'M' | 'L' | null {
   return extProductId ? (size === 'L' ? 'L' : 'M') : null;
 }
+
+/**
+ * Paket platformunun teslimat ya da ambalaj ücretinin gizli ürünü (server/delivery/service.ts `feeProductId`). Ürün
+ * bilerek hizmet işaretsizdir (oda sayacı karışmasın) ama lafmaliyet'e hizmet satırı olarak gider: mal maliyeti yoktur
+ * (docs/03-ENTEGRASYON.md §4)
+ */
+export const PLATFORM_FEE_POS_NAME = 'PLATFORM ÜCRETİ';
