@@ -306,3 +306,20 @@ adım başlığıyla, `docs/03-ENTEGRASYON.md` §8). Anahtarlar ekrana basılmaz
 | LafPOS Uzaktan "Upstash Redis bağlı değil" | Vercel › lafpos › Storage'dan Upstash Redis ekleyip yeniden yayınlayın |
 
 Kod: adresler `server/lib/network.ts`, sayfa `src/pages/admin/NetworkAdmin.tsx`, bulut `api/uzaktan.ts`, `server/sync/cloud.ts` ve `server/sync/cloud-reports.ts`; testler `tests/network.test.ts`, `tests/cloud-api.test.ts`, `tests/uzaktan-raporlar.test.ts`.
+
+## Geçmiş ciro (LafPOS'tan önceki kasa programı)
+
+Dükkân LafPOS'a geçmeden önceki günlerini (ör. ModPOS) kaybetmesin diye o günlerin cirosu buluta bir kez yüklenir
+(`shared/gecmis.ts`, `POST merkez/gecmis`; yalnız panelin sahibi). Kayıt dükkân başına tek anahtarda durur
+(`lafpos:gecmis:<kurulum>`), kasaya gitmez. LafPOS Uzaktan'da:
+
+- Patron panelinin kıyasları (dün, geçen hafta bugün, geçen ay bugün; hafta ve ay toplamı) ve Raporlar o günleri görür.
+- Gün yalnız ciro, adisyon, ödeme türü ve kapanış dakikasını taşır; ürün, personel ve KDV kırılımı yoktur.
+- Aynı tarihte LafPOS'un da gün raporu varsa cirosu büyük olan geçer (geçiş gününde LafPOS'ta yalnız deneme satışı
+  olur); iki kaynak toplanmaz.
+- Ek Redis komutu yok: kayıt gün raporlarıyla aynı MGET'te okunur; yeni kasanın özetinde yalnız geçmişi olan dükkânda,
+  işlev örneği başına bir kez.
+
+Gövde: `{ id, kaynak, gunler: [{ date, ciro, adisyon, kart?: [tutar, adet], nakit?, yemek?, closes?: [[dakika, kuruş,
+adisyon]] }] }` (tutarlar kuruş, dakika 05:00'ten). Boş `gunler` kaydı siler. Kasanın kendi ekranındaki (kafe içi)
+patron paneli bu günleri görmez; yalnız LafPOS Uzaktan görür.

@@ -23,6 +23,8 @@ import { merkez, type Release } from './_merkez.js';
 import { davetGecerli, davetKey, davetOzeti, davetRolu, EPOSTA_RE, kontrol, type KontrolOturumu, normalizeDavet, normalizeEposta, type UyeKaydi, uyeKey } from './_kontrol.js';
 import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
+import { fillHistory, type HistoryDay, historyFlag, historyKey, historyReport, historyStatsDay, mergeHistoryStats, readHistory } from '../shared/gecmis.js';
+import type { PatronStats } from '../shared/today-stats';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom, reportStatsDates, type StatsDayReport, type StatsPatron, statsFromReports, sumOffDevice } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
 import { CLOUD_KEYS, subeEtiketi, subeKeyName } from '../shared/baglanti.js';
@@ -288,6 +290,8 @@ export interface SnapVersion {
 }
 interface Versions {
   map: Record<string, SnapVersion>;
+  /** Geçmiş cirosu yüklenmiş dükkânlar: dükkân → yükleme anı (shared/gecmis.ts `historyFlag`) */
+  gecmis?: Record<string, number>;
   /** Kayıt bu sürümden önceki biçimde (yalnız geçiş): sürüm yok, 304 yok, özet her istekte okunur */
   legacy: boolean;
   /** Geçişte eski kasanın özeti okunduysa (aynı istekte yeniden okunmaz) */
@@ -319,11 +323,17 @@ function hashEntries(raw: unknown): [string, unknown][] {
 
 async function loadVersions(): Promise<Versions> {
   const map: Record<string, SnapVersion> = {};
+  const gecmis: Record<string, number> = {};
+  const flag = historyFlag('');
   for (const [shop, raw] of hashEntries(await redis('HGETALL', VERSIONS_KEY))) {
+    if (shop.startsWith(flag)) {
+      if (Number(raw) > 0) gecmis[shop.slice(flag.length)] = Number(raw);
+      continue;
+    }
     const v = parseVersion(raw);
     if (v && SHOP_RE.test(shop)) map[shop] = v;
   }
-  if (Object.keys(map).length) return { map, legacy: false };
+  if (Object.keys(map).length) return { map, gecmis, legacy: false };
   // Bu sürümden önce yazılmış kayıt (kasa bir sonraki itmesinde sürümü yazar): eski dükkân listesi ve eski kasanın özeti
   // tek MGET'te. Kafe hiç bağlanmadıysa (demo) ikisi de boş: istek başına iki küçük komut
   const [rawShops, rawSnap] = ((await redis('MGET', SHOPS_KEY, SNAPSHOT_KEY)) as (string | null)[] | null) ?? [];
@@ -1228,7 +1238,7 @@ async function serveLive(req: Request, path: string, url: URL, shop: string, vs:
   const snap = vs.legacy && shop === REPORT_SHOP && vs.snap ? vs.snap : await snapshot(shop);
   if (!snap && v) await redis('HDEL', VERSIONS_KEY, shop);
   const fresh = snap ? freshen(snap, v) : null;
-  const res = serve(fresh && path === 'reports/patron' ? await withStats(shop, fresh) : fresh, path, url, false);
+  const res = serve(fresh && path === 'reports/patron' ? await withStats(shop, fresh, vs.gecmis?.[shop]) : fresh, path, url, false);
   if (tag && res.status === 200) res.headers.set('etag', tag);
   return res;
 }
@@ -1245,22 +1255,50 @@ const STATS_CACHE_MS = 30 * 60_000;
 /** Dükkân ve kasanın bugünü → geçmiş günlerin kıyasa giren alanları (raporun tamamı bellekte tutulmaz) */
 export const statsDayCache = new Map<string, { at: number; days: StatsDayReport[] }>();
 
-async function statsDays(shop: string, today: string): Promise<StatsDayReport[]> {
-  const key = `${shop}|${today}`;
+/**
+ * Dükkânın geçmiş cirosu (shared/gecmis.ts; sahibin Merkez'den bir kez yüklediği, LafPOS'tan önceki günler). `stamp`
+ * sürüm karmasındaki işaret (yükleme anı): işaret yoksa okunmaz, varsa kayıt işlev örneğinin belleğinde işaret
+ * değişene dek durur (dükkân başına tek GET). Okuma düşerse geçmiş yok sayılır, bir sonraki istekte yeniden denenir
+ */
+export const historyCache = new Map<string, { stamp: number; days: HistoryDay[] | null }>();
+async function historyOf(shop: string, stamp: number | undefined): Promise<HistoryDay[] | null> {
+  if (!stamp) return null;
+  const hit = historyCache.get(shop);
+  if (hit && hit.stamp === stamp) return hit.days;
+  try {
+    const days = readHistory((await redis('GET', historyKey(shop))) as string | null);
+    historyCache.set(shop, { stamp, days });
+    return days;
+  } catch {
+    return null;
+  }
+}
+
+async function statsDays(shop: string, today: string, stamp: number | undefined): Promise<StatsDayReport[]> {
+  const key = `${shop}|${today}|${stamp ?? 0}`;
   const hit = statsDayCache.get(key);
   if (hit && Date.now() - hit.at < STATS_CACHE_MS) return hit.days;
-  const raws = await mgetAll(reportStatsDates(today).all.map((d) => reportDayKey(shop, d)));
-  const days = parsed<DayRep>(raws).map((r): StatsDayReport => ({ date: r.date, n: r.n, closed: r.closed, s: { rev: r.s.rev, receipts: r.s.receipts }, closes: r.closes, hours: r.hours }));
+  const dates = reportStatsDates(today).all;
+  // Geçmiş cirosu olan dükkânda kayıt aynı MGET'te okunur (ek komut yok)
+  const raws = await mgetAll([...dates.map((d) => reportDayKey(shop, d)), ...(stamp ? [historyKey(shop)] : [])]);
+  const history = stamp ? readHistory(raws.pop()) : null;
+  const own = parsed<DayRep>(raws).map((r): StatsDayReport => ({ date: r.date, n: r.n, closed: r.closed, s: { rev: r.s.rev, receipts: r.s.receipts }, closes: r.closes, hours: r.hours }));
+  const days = fillHistory(dates, own, history, today, historyStatsDay);
   for (const k of statsDayCache.keys()) if (k.startsWith(`${shop}|`)) statsDayCache.delete(k);
   statsDayCache.set(key, { at: Date.now(), days });
   return days;
 }
 
-async function withStats(shop: string, snap: Snapshot): Promise<Snapshot> {
+async function withStats(shop: string, snap: Snapshot, stamp?: number): Promise<Snapshot> {
   const patron = snap.patron as Partial<StatsPatron> & { stats?: unknown };
-  if (!patron || typeof patron !== 'object' || patron.stats || typeof patron.date !== 'string' || !isCalendarDate(patron.date)) return snap;
+  if (!patron || typeof patron !== 'object' || typeof patron.date !== 'string' || !isCalendarDate(patron.date)) return snap;
   try {
-    const stats = statsFromReports(patron as StatsPatron, await statsDays(shop, patron.date));
+    // Yeni kasa kıyas girdisini kendi kurar; ona yalnız geçmiş ciro (LafPOS'tan önceki günler) katılır
+    if (patron.stats) {
+      const history = await historyOf(shop, stamp);
+      return history ? { ...snap, patron: { ...snap.patron, stats: mergeHistoryStats(patron.stats as PatronStats, patron.date, history) } } : snap;
+    }
+    const stats = statsFromReports(patron as StatsPatron, await statsDays(shop, patron.date, stamp));
     return { ...snap, patron: { ...snap.patron, stats } };
   } catch {
     return snap;
@@ -1337,11 +1375,14 @@ async function serveReports(path: string, url: URL, demo: Snapshot | null, shop:
     ...dates.map((d) => reportDayKey(shop, d)),
     ...prevDates.map((d) => reportDayKey(shop, d)),
     ...extraDates.map((d) => reportExtraKey(shop, d)),
+    // Geçmiş ciro (LafPOS'tan önceki günler; shared/gecmis.ts): aynı MGET'te, ek komut yok
+    historyKey(shop),
   ]);
+  const history = readHistory(raws.pop());
   if (explicit) live = readMeta(raws.shift());
   const { nowMs, today } = clock(explicit ? await pulseP : pulse);
-  const days = byDate(parsed<DayRep>(raws.slice(0, dates.length)));
-  const prev = byDate(parsed<DayRep>(raws.slice(dates.length, dates.length + prevDates.length)));
+  const days = byDate(fillHistory(dates, parsed<DayRep>(raws.slice(0, dates.length)), history, today, historyReport));
+  const prev = byDate(fillHistory(prevDates, parsed<DayRep>(raws.slice(dates.length, dates.length + prevDates.length)), history, today, historyReport));
   const extras = parsed<RemoteDayExtra>(raws.slice(dates.length + prevDates.length));
   return reportOf(kind, url, r, days, prev, extras, nowMs, today, live?.cat, true);
 }
