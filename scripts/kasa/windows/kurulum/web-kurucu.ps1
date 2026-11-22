@@ -390,6 +390,8 @@ try {
   Set-Content -LiteralPath (Join-Path $menu 'LafPOS (tarayıcıda).url') -Value $url -Encoding ASCII
   Kisayol (Join-Path $masaustu 'LafPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
   Kisayol (Join-Path $baslangic 'LafPOS Kasa.lnk') $kasa '' 'Kasa ekranı (tam ekran)' 7
+  # Kasa ve müşteri ekranının bekçisi: pencere kapanırsa yeniden açar (kasa-yazici.ps1 -Bekci; kurulum-yenile.mjs ile aynı)
+  Kisayol (Join-Path $baslangic 'LafPOS Kasa Bekcisi.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'app\kasa-yazici.ps1') + '" -Bekci -BekciSurum 2') 'Kasa ve müşteri ekranı açık kalsın' 7
 
   # Prizdeyken uyku kapalı: uyuyan bilgisayara tabletler bağlanamaz; USB aygıtları (yazıcı, dokunmatik) askıya alınmaz
   $powercfg = Join-Path $Sys 'powercfg.exe'

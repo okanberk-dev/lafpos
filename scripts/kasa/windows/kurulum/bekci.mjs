@@ -8,13 +8,14 @@
 // çıkar ve görevin başlatıcısı (baslat.cmd) onu yeni sürümle yeniden açar.
 // Veri klasörü: LAFPOS_HOME, yoksa C:\ProgramData\LafPOS. Ayrıntı: docs/05-KASA-BILGISAYARI.md
 import { spawn } from 'node:child_process';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile } from 'node:fs';
 import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HEAP_MAX_MB, HEAP_MIN_MB, heapLimitMb, validHeapSetting } from './ayarlar.mjs';
 import { applyPendingRestore, recoverMissingDb } from './geri-yukle.mjs';
-import { channelUrls, createUpdater, updateMode } from './guncelle.mjs';
+import { channelUrls, createUpdater, readInstalled, updateMode } from './guncelle.mjs';
+import { refreshInstall } from './kurulum-yenile.mjs';
 
 const APP = dirname(fileURLToPath(import.meta.url));
 /** Kurulum klasörü (app\, node\, baslat.cmd). Çalışma klasörü burası: güncelleme app\ klasörünün adını değiştirir,
@@ -253,22 +254,6 @@ watchFile(REQUEST_FILE, { interval: 2000 }, (cur) => {
   if (cur.mtimeMs) takeRequest();
 });
 
-/**
- * Kasa kısayolu (LafPOS-Kasa.bat) kurulum klasöründe durur, güncelleme yalnız app\'i değiştirir: yeni sürümün kısayolu
- * farklıysa yerine konur. Kısayol Chrome'u açıp hemen çıkar (baslat.cmd gibi sürekli çalışmaz), değiştirmek güvenli
- */
-function syncLauncher() {
-  const src = join(APP, 'LafPOS-Kasa.bat');
-  const dst = join(INSTALL_DIR, 'LafPOS-Kasa.bat');
-  try {
-    if (!existsSync(src) || !existsSync(dst) || readFileSync(src).equals(readFileSync(dst))) return;
-    copyFileSync(src, dst);
-    log('[bekçi] kasa kısayolu yeni sürümle değişti');
-  } catch (e) {
-    log(`[bekçi] kasa kısayolu değiştirilemedi: ${e instanceof Error ? e.message : e}`);
-  }
-}
-if (process.env.LAFPOS_GUNCELLEME_DENEME !== '1') syncLauncher();
 
 log(`[bekçi] LafPOS başlıyor (Node ${process.versions.node}, veri: ${HOME})`);
 start();
@@ -276,6 +261,14 @@ try {
   updater?.start();
 } catch (e) {
   log(`[güncelleme] başlatılamadı: ${e instanceof Error ? e.message : e}`);
+}
+// Güncelleme yalnız app\ ve node\'u değiştirir: kök dosyalar (kasa kısayolu, yönetim betiği...) ve Başlat menüsü,
+// masaüstü, Başlangıç kısayolları burada yeni sürümle yenilenir; yapılamayan kalırsa durum.json'a uyarı (panelde
+// "Kurulumu yenileyin"). Deneme bekçisinde updater yok, dokunulmaz
+if (updater) {
+  refreshInstall({ appDir: APP, installDir: INSTALL_DIR, home: HOME, build: readInstalled(APP).build, log, setWarning: (w) => updater.setInstallWarning(w) }).catch((e) =>
+    log(`[kurulum] yenilenemedi: ${e instanceof Error ? e.message : e}`),
+  );
 }
 // Bekçi kapalıyken yazılmış taze istek (ör. kullanıcı bastı, bilgisayar yeniden başladı) açılışta işlenir
 takeRequest();

@@ -23,6 +23,8 @@ interface UpdateData {
     sonHata: { mesaj: string; at: string } | null;
     sonKurulum: string | null;
     sonIstek?: string | null;
+    /** Güncelleme kurulumun kök dosyalarını ya da kısayollarını yenileyemedi */
+    kurulumUyari?: string | null;
   } | null;
   /** "Şimdi güncelle" yalnız Windows kurulumunda (bekçinin güncelleyicisi) */
   canRequest?: boolean;
@@ -139,6 +141,7 @@ export function UpdateCard() {
               )}
               <DefRow label="Son denetim">{at(st.sonBasariliKontrol) ?? 'Henüz yok'}</DefRow>
               {st.sonKurulum && <DefRow label="Son güncelleme">{at(st.sonKurulum)}</DefRow>}
+              {st.kurulumUyari && <Notice tone="warn">{st.kurulumUyari}</Notice>}
               {st.sonHata && (
                 <p className="mt-2 text-[13px] leading-5 text-[var(--admin-text-mute)] [overflow-wrap:anywhere]">
                   {at(st.sonHata.at) ? `${at(st.sonHata.at)} · ` : ''}

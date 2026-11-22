@@ -8,16 +8,19 @@ import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { ROOT_DIR } from './kurulum-yenile.mjs';
 import { NODE_ABI, NODE_VERSION } from './surumler.mjs';
+import { shellFiles } from './web-kurucu.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const ROOT = resolve(HERE, '../../../..');
 /** Bekçiyle pakete giren betikler: bekçi, ayar kuralları, güncelleyici ve arşiv yardımcıları */
-export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs'];
+export const KASA_SCRIPTS = ['bekci.mjs', 'ayarlar.mjs', 'guncelle.mjs', 'arsiv.mjs', 'geri-yukle.mjs', 'kurulum-yenile.mjs'];
 /** Kasa kısayolunun güncellemeyle gelen parçaları: kaynak (bu klasöre göre) → app\ içindeki adı (CRLF yazılır) */
 export const KASA_LAUNCHER = [
   ['kasa-yazici.ps1', 'kasa-yazici.ps1'],
   ['kasa-hazirla.ps1', 'kasa-hazirla.ps1'],
+  ['kisayollar.ps1', 'kisayollar.ps1'],
   ['../LafPOS-Kasa.bat', 'LafPOS-Kasa.bat'],
 ];
 /** better-sqlite3 ve yükledikleri: yalnız JavaScript (derleme klasörleri ve kaynak yok) */
@@ -86,6 +89,10 @@ export async function stageApp({ appDir, webDir, build: buildNo, commit, root = 
   // Kasa kısayolunun parçaları güncellemeyle gelsin: yazıcı betiği (kısayol app\'ten çağırır) ve kısayolun kendisi (bekçi
   // açılışta kurulum klasöründekiyle değiştirir; kısayol Chrome'u açıp hemen çıktığı için çalışırken değişmez)
   for (const [from, to] of KASA_LAUNCHER) writeFileSync(join(appDir, to), readFileSync(join(HERE, from), 'utf8').replace(/\r?\n/g, '\r\n'));
+  // Kurulum klasörünün kök dosyaları (kurulumdakinin aynısı, web-kurucu.mjs shellFiles): bekçi açılışta farklı olanları
+  // yerine koyar (kurulum-yenile.mjs). Kaldırma betiği yalnız siteden kurulumun; güncellemeyle gelmez
+  mkdirSync(join(appDir, ROOT_DIR), { recursive: true });
+  for (const [name, data] of Object.entries(shellFiles(root))) if (name !== 'LafPOS-Kaldir.ps1') writeFileSync(join(appDir, ROOT_DIR, name), data);
   for (const name of SQLITE_MODULES) {
     const src = join(root, 'node_modules', name);
     cpSync(src, join(appDir, 'node_modules', name), { recursive: true, filter: (p) => !/^[\\/](build|deps|src|test)([\\/]|$)/.test(p.slice(src.length)) });

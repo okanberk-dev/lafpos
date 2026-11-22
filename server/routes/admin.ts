@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, isNull, like, lte, or, sql } from 'drizzle-orm';
 import { setSetupHidden, setupSteps } from '../services/kurulum';
+import { effectiveUpdateChoice } from '../sync/merkez';
 import { cloudBackupState, listCloudBackups, restartForRestore, stageRestore, underBekci, uploadBackup } from '../sync/yedek';
 import { cloudEnabled } from '../sync/cloud';
 import { getOpenDay } from '../services/orders';
@@ -1194,19 +1195,21 @@ adminRoutes.post('/guncelleme', async (c) => {
  * Kasadaki güncelleme teklifi (kabuktaki pencere; `UpdateOffer`): yeni sürüm indirilmiş ve gün açıkken bekliyorsa kasada
  * iki seçenek sorulur: "Şimdi güncelle" (satış ve ödeme yokken hemen kurulur, LafPOS kendiliğinden yeniden açılır; açık
  * masalar veritabanında, gönderilmemiş sepet ve oturum cihazda durur) ya da "Gün sonunda güncelle" (gün kapanınca).
- * Kasayı yöneten (gün açıp kapatan) ya da ayar yetkisi olan görür ve seçer
+ * Kasayı yöneten (gün açıp kapatan) ya da ayar yetkisi olan görür ve seçer. Sahip sürümü Merkez'den gönderdiyse sorulmaz:
+ * seçim kendiliğinden "gün sonunda" (`secimKaynak: 'merkez'`); kasada yine "Şimdi güncelle" seçilebilir
  */
 const canDecideUpdate = (user: AuthUser) => can(user, 'ayar.yonet') || can(user, 'kasa.gun');
 function updateOffer() {
   const status = readUpdateStatus();
-  const choice = getSyncState<UpdateChoiceRecord>(UPDATE_CHOICE_KEY);
   const yeni = status?.yeni ?? null;
+  const choice = effectiveUpdateChoice(yeni);
   return {
     installed: installedVersion(),
     durum: status?.durum ?? null,
     mesaj: status?.mesaj ?? null,
     yeni,
-    secim: yeni && choice?.build === yeni.build ? choice.secim : null,
+    secim: choice?.secim ?? null,
+    secimKaynak: choice?.kaynak ?? null,
     dayOpen: !!getOpenDay(db),
     canRequest: underBekci(),
     mesgul: busyNow(),
