@@ -247,6 +247,15 @@ müşterinin adı yalnız Yönetim › Ayarlar › İşletme ve fiş › "Fişte
 Kiosktan çıkmak: **Alt+F4** (macOS'ta Cmd+Q). Personelin bunu kullanmaması için Windows'ta ayrı bir standart
 kullanıcı hesabı önerilir.
 
+### Müşteri ekranı ikinci ekranda (kendiliğinden)
+
+Kasa bilgisayarına ikinci bir ekran takılıysa kasa kısayolu (`LafPOS-Kasa.bat` → `app\kasa-yazici.ps1`) müşteri
+ekranını o ekranda tam ekran açar (`/musteri-ekrani?ekran=kasa`, ayrı Chrome profili `LafPOS\chrome-musteri`); zaten
+açıksa yeniden açmaz. Kasa penceresi (Windows'ta, sunucunun çalıştığı bilgisayarda) bu ekrana kendiliğinden yansıtır:
+adisyon açıkken kalemler ve tutar, ödemeden sonra teşekkür. İkinci ekranda Windows masaüstü görünüyorsa: ekranın
+Windows'ta "Genişlet" modunda olduğuna bakın (Win + P › Genişlet) ve kasa kısayolunu kapatıp yeniden açın. Görünüm ve
+metinler Yönetim › Müşteri ekranı'ndan.
+
 ## 4. Uygulamanın kasa ayarları
 
 - **Ekran kararmasın** (Yönetim › Ayarlar › Kasa ve gün, varsayılan açık): LafPOS ekran kilidi ister (Screen

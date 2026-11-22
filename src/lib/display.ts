@@ -9,8 +9,15 @@ type Outgoing = { kind: 'idle' } | Omit<Extract<DisplayStateDTO, { kind: 'order'
 
 /** Bu cihazın yansıttığı müşteri ekranının adı; boşsa yansıtmaz (cihaz başına, Adisyon › İşlemler'den) */
 export function useDisplayCode() {
-  return useLocalPref<string>('display.code', '');
+  return useLocalPref<string>('display.code', KASA_PC ? 'kasa' : '');
 }
+
+/**
+ * Kasa bilgisayarının kendisi (Windows'ta sunucunun çalıştığı bilgisayardaki kasa penceresi): ikinci ekranda açılan
+ * müşteri ekranına (`/musteri-ekrani?ekran=kasa`; kasa-yazici.ps1 açar) kendiliğinden yansıtır. Başka cihazlar
+ * (tablet, telefon) eskisi gibi Adisyon › İşlemler'den seçer; kasa da oradan kapatabilir
+ */
+const KASA_PC = typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(window.location.hostname) && /Windows/i.test(window.navigator.userAgent) && import.meta.env.MODE !== 'demo';
 
 /** Son gönderilen durum: adisyondan çıkınca yalnız adisyon gösteriliyorsa "hoş geldiniz"e dönülür */
 let lastKind: Outgoing['kind'] = 'idle';
