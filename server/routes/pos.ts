@@ -361,6 +361,17 @@ posRoutes.post('/orders/:id/cancel', async (c) => {
   return c.json(dto(c, id));
 });
 
+/** Kalem kalem iade (orders.refundItems): seçilen adetler iade, kalan aynı ödeme türleriyle; büyük iptal bildirimi */
+posRoutes.post('/orders/:id/refund-items', async (c) => {
+  const input = await body(c, z.object({ items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).min(1).max(100), reason, ...approver }));
+  const actor = actorFrom(c, input.approverPin);
+  const id = c.req.param('id');
+  const before = lossOf('iptal', id).value;
+  write((t, fx) => orders.refundItems(t, actor, fx, id, { items: input.items, reason: input.reason }));
+  afterLoss('iptal', id, before, actor.user.id);
+  return c.json(dto(c, id));
+});
+
 /** Kapanmış siparişi iptal: ödemeler iptal, adisyon iptal (orders.cancelClosedOrder); büyük iptal bildirimi */
 /**
  * En çok satanlar (satış ekranı): son 7 ya da 30 günün ürün kimlikleri, adede göre; oturumu olan herkes okur (tutar

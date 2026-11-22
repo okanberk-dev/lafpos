@@ -619,14 +619,17 @@ export function refundReport(range: Range) {
   const ds = load(range);
   const orders = new Map(ds.orders.map((o) => [o.id, o]));
   const users = new Map(db.select({ id: schema.users.id, name: schema.users.name }).from(schema.users).all().map((u) => [u.id, u.name]));
+  // Kalem iadesinde ödeme iptal edilip kalan aynı türle yeniden yazılır (orders.refundItems): iade tutarı net gösterilir
+  const rewritten = new Map<string, number>();
+  for (const p of ds.payments) if (!p.refundedAt && p.note?.startsWith('İade sonrası: ')) rewritten.set(p.note.slice('İade sonrası: '.length), p.amount);
   const rows = ds.payments
-    .filter((p) => p.refundedAt)
+    .filter((p) => p.refundedAt && p.amount - (rewritten.get(p.id) ?? 0) > 0)
     .map((p) => ({
       id: p.id,
       at: p.refundedAt!,
       orderNo: p.orderId ? (orders.get(p.orderId)?.no ?? null) : null,
       method: p.methodName,
-      amount: p.amount,
+      amount: p.amount - (rewritten.get(p.id) ?? 0),
       reason: p.refundReason,
       by: p.refundedBy ? (users.get(p.refundedBy) ?? null) : null,
     }))

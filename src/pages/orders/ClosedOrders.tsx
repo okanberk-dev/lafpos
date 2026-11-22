@@ -1,9 +1,10 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bike, Globe, Printer, ReceiptText, ShoppingBag, Store, Trash2, UtensilsCrossed } from 'lucide-react';
+import { Bike, Globe, Minus, Plus, Printer, ReceiptText, ShoppingBag, Store, Trash2, Undo2, UtensilsCrossed } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { CLOSED_PAGE_DEFAULT, type ClosedOrderDetailDTO, type ClosedOrderRow, type ClosedOrdersDTO, HISTORY_QUERY_MAX } from '@shared/history';
 import { tl } from '@shared/money';
+import type { OrderDTO } from '@shared/types';
 import { fmtTime } from '@shared/time';
 import { PlatformBadge } from '@/components/PlatformBadge';
 import { Button } from '@/components/ui/Button';
@@ -258,6 +259,7 @@ function ClosedCard({ r, mode, onOpen, onCancel }: { r: ClosedOrderRow; mode: Re
 /** Kapanan adisyonun dökümü (salt okunur): kalemler, toplamlar, ödemeler ve yazarkasa fişleri */
 function ClosedDetail({ id, today, onClose }: { id: string | null; today: string; onClose: () => void }) {
   const qc = useQueryClient();
+  const [iade, setIade] = useState(false);
   const boot = useBoot();
   const mode = useServiceMode();
   const navigate = useNavigate();
@@ -286,6 +288,11 @@ function ClosedDetail({ id, today, onClose }: { id: string | null; today: string
             <Button variant="primary" className="flex-1" icon={<Printer className="size-4" />} onClick={() => printNow(<BillReceipt order={o} boot={boot} sizeLabel={sizeLabel} />)}>
               Hesabı yeniden yazdır
             </Button>
+            {d && d.date === today && o.status === 'kapali' && o.source === 'pos' && !o.extPaid && (
+              <Button variant="secondary" className="basis-full" icon={<Undo2 className="size-4" />} onClick={() => setIade(true)}>
+                Kalem iade et
+              </Button>
+            )}
             {d && d.date === today && o.status === 'kapali' && o.source === 'pos' && !o.extPaid && (
               <Button
                 variant="danger"
@@ -400,6 +407,85 @@ function ClosedDetail({ id, today, onClose }: { id: string | null; today: string
           )}
         </div>
       )}
+      {o && (
+        <IadePenceresi
+          open={iade}
+          order={o}
+          fiscal={!!d?.receipts.some((r) => !r.cancelled)}
+          onClose={() => setIade(false)}
+          onDone={() => {
+            setIade(false);
+            void qc.invalidateQueries({ queryKey: ['orders'] });
+          }}
+        />
+      )}
+    </Modal>
+  );
+}
+
+/**
+ * Kalem kalem iade (sahip, 22 Kas 2026): kalemleri adetle seç, neden yaz; yetkili onayıyla tek işlemde iade
+ * (`POST /orders/:id/refund-items`): kalan aynı ödeme türleriyle yeniden yazılır, nakit iade kasadan düşer
+ */
+function IadePenceresi({ open, order, fiscal, onClose, onDone }: { open: boolean; order: OrderDTO; fiscal: boolean; onClose: () => void; onDone: () => void }) {
+  const [adet, setAdet] = useState<Record<string, number>>({});
+  const [neden, setNeden] = useState('');
+  const [busy, setBusy] = useState(false);
+  const kalemler = order.items.filter((i) => !i.voided && !i.complimentary);
+  const secili = kalemler.filter((i) => (adet[i.id] ?? 0) > 0);
+  const tutar = secili.reduce((a, i) => a + (adet[i.id] ?? 0) * i.unitPrice, 0);
+  const degis = (id: string, d: number, max: number) => setAdet((a) => ({ ...a, [id]: Math.max(0, Math.min(max, (a[id] ?? 0) + d)) }));
+  const gonder = async () => {
+    if (!secili.length) return toast.err('İade edilecek kalemi seçin');
+    if (!neden.trim()) return toast.err('İade nedenini yazın');
+    setBusy(true);
+    try {
+      const done = await withApproval((pin) => post(`/orders/${order.id}/refund-items`, { items: secili.map((i) => ({ itemId: i.id, qty: adet[i.id] })), reason: neden.trim(), approverPin: pin }));
+      if (done) {
+        toast.ok(`${tl(tutar)} iade edildi`);
+        setAdet({});
+        setNeden('');
+        onDone();
+      }
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Kalem iade et"
+      subtitle={fiscal ? 'Yazarkasada kesilen fişin iadesi cihazdan ayrıca yapılır; kart iadesi banka POS’undan' : 'Nakit iade kasadan çıkış sayılır'}
+      footer={
+        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:justify-end">
+          <Button onClick={onClose}>Vazgeç</Button>
+          <Button variant="danger" loading={busy} disabled={!secili.length} onClick={() => void gonder()}>
+            {secili.length ? `${tl(tutar)} iade et` : 'İade et'}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3 p-5">
+        <ul className="divide-y divide-[var(--admin-divider)] rounded-[var(--r-tile)] border border-[var(--admin-border)]">
+          {kalemler.map((i) => (
+            <li key={i.id} className="flex min-h-14 items-center gap-3 px-3">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{i.name}</span>
+                <span className="block text-xs text-muted">
+                  {i.qty} adet · {tl(i.unitPrice)}
+                </span>
+              </span>
+              <Button variant="ghost" aria-label={`${i.name} bir azalt`} icon={<Minus className="size-4" />} disabled={!(adet[i.id] ?? 0)} onClick={() => degis(i.id, -1, i.qty)} />
+              <span className="tabular w-6 text-center font-semibold">{adet[i.id] ?? 0}</span>
+              <Button variant="ghost" aria-label={`${i.name} bir artır`} icon={<Plus className="size-4" />} disabled={(adet[i.id] ?? 0) >= i.qty} onClick={() => degis(i.id, 1, i.qty)} />
+            </li>
+          ))}
+        </ul>
+        <Input value={neden} onChange={(e) => setNeden(e.target.value)} maxLength={200} placeholder="İade nedeni (ör. müşteri vazgeçti)" aria-label="İade nedeni" />
+      </div>
     </Modal>
   );
 }
