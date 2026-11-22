@@ -128,21 +128,25 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 
 ## 3. Kasa ekranları (masalar, adisyon, bar, kasa, patron)
 
-- **Kabuk** (`src/components/AppShell.tsx`; panonun kabuğu, "menüsüne kadar 1:1"): tablette ve bilgisayarda (md+) 64 px
-  üst çubuk: solda L'Af karosu ve ev yeşilinde "L'Affogato" (geniş ekranda), **ortada ekranın sekmeleri** (sayfanın
-  `Stage menu`'sü buraya taşınır: Masalar'ın bölümleri, Siparişler'in görünümleri, Kasa'nın günleri; panonun ortalı
-  sekmeleri, seçili açık nane zeminde yeşil), sağda durum (canlı nokta, saat, Z; dokununca kasa; kopunca kırmızı, gün
-  kapalıyken amber hap), arama (⌘K) ve kişinin düğmesi (avatar ve aşağı ok; kişinin menüsünü açar). **Üst çubuk yalnız
-  ekranın sekmeleri varken görünür** (sahibin isteği, 21 Kas 2026): sekmesiz ekranda (yönetim, raporlar, patron) kalkar,
-  içerik yukarı yayılır; durum (nokta ve saat, dokununca kasa), internet rozeti ve genişte arama rayın dibinde tek satırda,
-  kişinin menüsü raydaki Araçlar'da. Altında solda
-  **marka rayı** (`.lp-rail`, 84 / 100 px, köşe 22, ev yeşilinin degradesi): her ekran ikon üstte kısa ad altta
-  (`NavItem.label`), satır 56 px; seçili ekran beyaz karoda, ikonu açık nane karede yeşil, adı yeşil ve kalın (panonun
-  seçili rayı); menüde olmayan ekranın yeri de seçili görünür (adisyonun geldiği ekran, Eğitim cihazında Kasa;
-  `data-on`). Dipte ince çizginin altında **Araçlar** (kişinin menüsü: tema, tam ekran, ekranlar) ve **Kilitle**
-  (oturumu kapatır; uzaktan görünümde Çıkış). Ray sığmazsa kendi içinde kayar, dip yerinde kalır. Telefonda ray yok: üst
-  şerit (karo, ekranın adı, arama, bağlantı ve gün, kişi) ve alt sekme çubuğu (etkin sekmenin ikonu açık nane hapta,
-  yeşil). Platform siparişi onay bekliyorsa üst çubuğun altında ahududu hap şerit.
+- **Kabuk** (`src/components/AppShell.tsx`; panonun kabuğu, "menüsüne kadar 1:1"): tablette ve bilgisayarda (md+)
+  solda **tam boy marka rayı** (`.lp-rail`, 84 / 100 px, köşe 22, ev yeşilinin degradesi; başında L'Af karosu, ana
+  ekrana götürür), sağ sütunda 64 px **üst çubuk**: **ortada ekranın sekmeleri** (sayfanın `Stage menu`'sü buraya
+  taşınır: Masalar'ın bölümleri, Siparişler'in görünümleri, Kasa'nın günleri; panonun ortalı sekmeleri, seçili açık
+  nane zeminde yeşil), sağda durum (canlı nokta, saat, Z; dokununca kasa; kopunca kırmızı, gün kapalıyken amber hap),
+  arama (⌘K) ve kişinin düğmesi (avatar ve aşağı ok; kişinin menüsünü açar). **Üst çubuk yalnız ekranın sekmeleri
+  varken görünür** (sahibin isteği, 21 Kas 2026): sekmesiz ekranda (yönetim, raporlar, patron) kalkar, içerik yukarı
+  yayılır; durum (nokta ve saat, dokununca kasa), internet rozeti ve genişte arama rayın dibinde tek satırda, kişinin
+  menüsü raydaki Araçlar'da. **Kayma yok** (sahibin isteği, 22 Kas 2026): üst çubuk ve uyarı şeritleri (platform
+  siparişi, site zili, deneme, lisans) yalnız sağ sütunda açılıp kapanır, ray hiçbir ekranda ve hiçbir uyarıda yerinden
+  oynamaz (e2e taraması her ekranda rayın yerini karşılaştırır); çubuğun açılıp kapanması çizimden önce belirlenir
+  (`TopTabsClaim`); seçili sekmenin kalın yazısı genişliği önceden ayırır (`data-text`); yaprakta `scrollbar-gutter:
+  stable`. Rayda her ekran ikon üstte kısa ad altta (`NavItem.label`), satır 56 px (alçak ekranda 52 ve 44); seçili
+  ekran beyaz karoda, ikonu açık nane karede yeşil, adı yeşil ve kalın (panonun seçili rayı); menüde olmayan ekranın
+  yeri de seçili görünür (adisyonun geldiği ekran, Eğitim cihazında Kasa; `data-on`). Dipte ince çizginin altında
+  **Araçlar** (kişinin menüsü: tema, tam ekran, ekranlar) ve **Kilitle** (oturumu kapatır; uzaktan görünümde Çıkış).
+  Ray sığmazsa kendi içinde kayar, dip yerinde kalır. Telefonda ray yok: üst şerit (karo, ekranın adı, arama,
+  bağlantı ve gün, kişi) ve alt sekme çubuğu (etkin sekmenin ikonu açık nane hapta, yeşil). Platform siparişi onay
+  bekliyorsa üst çubuğun altında ahududu hap şerit.
 - **Araçlar çekmecesi** (`src/components/ToolsDrawer.tsx`): tam ekran gece zemini, üstte yumuşak yeşil ışık, yukarıdan
   perde gibi iner; satırlar ölçülü (18 px yarı kalın, 56 px), sırayla gelir, üstüne gelince ve etkin ekranda küçük ok
   halkası belirir. İki grup: Ekranlar; Bu cihaz ve oturum (Ekranı kilitle, tema Açık / Koyu / Cihaz ya da bar teması,

@@ -7,6 +7,7 @@ import { Field, Input, Toggle } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Notice } from '@/components/ui/misc';
 import { errorMessage, get, post } from '@/lib/api';
+import { useBoot } from '@/lib/boot';
 import { toast } from '@/lib/toast';
 import { Badge, Card } from './ui';
 
@@ -27,7 +28,12 @@ const rangeText = (r: DayRangeDTO) => `${n(r.days)} gün` + (r.from && r.to ? (r
 export function DenemeCard() {
   const status = useQuery({ queryKey: ['admin', 'deneme'], queryFn: () => get<DenemeStatusDTO>('/admin/deneme') });
   const [open, setOpen] = useState(false);
+  // Açılış verisi kartın çizileceğini önceden söyler (deneme ya da yarım geçiş): yüklenirken yeri ayrılır, kart sonradan
+  // gelip sayfayı aşağı itmez (Ayarlar'da kayma)
+  const boot = useBoot();
+  const expected = boot.integrations.deneme || boot.integrations.goLivePending;
   const d = status.data;
+  if (!d && expected && status.isPending) return <div aria-hidden="true" className="skeleton h-[26rem] rounded-[var(--r-card)] sm:h-[22rem]" />;
   if (!d || d.liveSince != null) return null;
   if (d.finalizeOnly) return <FinalizeCard status={d} />;
   const c = d.counts;

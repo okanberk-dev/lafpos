@@ -228,7 +228,9 @@ export default function FloorPage() {
           <div role="tablist" aria-label="Bölümler" className="lp-menu">
             {boot.sections.map((sec) => (
               <button key={sec.id} type="button" role="tab" aria-selected={sec.id === section?.id} onClick={() => setSectionId(sec.id)} className="lp-menu-item">
-                <span className="min-w-0 flex-1 truncate">{sec.name}</span>
+                <span className="min-w-0 flex-1 truncate" data-text={sec.name}>
+                  {sec.name}
+                </span>
                 {!!counts.get(sec.id) && <span className="n">{counts.get(sec.id)}</span>}
               </button>
             ))}

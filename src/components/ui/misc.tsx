@@ -388,7 +388,8 @@ export function useRail<T extends HTMLElement>(selected: unknown) {
   useLayoutEffect(() => {
     const rail = ref.current;
     if (!rail || rail.scrollWidth <= rail.clientWidth + 1) return;
-    const el = rail.querySelector('[aria-selected=true], [aria-checked=true]');
+    // Seçili öğe: sekme (aria-selected), seçim (aria-checked) ya da bağlantı (aria-current; yönetimin tablet şeridi)
+    const el = rail.querySelector('[aria-selected=true], [aria-checked=true], [aria-current=page]');
     if (!el) return;
     const r = rail.getBoundingClientRect();
     const e = el.getBoundingClientRect();

@@ -271,12 +271,16 @@ export default function CashPage() {
               }}
               className="lp-menu-item"
             >
-              <span className="min-w-0 flex-1 truncate">{label}</span>
+              <span className="min-w-0 flex-1 truncate" data-text={label}>
+                {label}
+              </span>
             </button>
           ))}
         {simulator && (
           <Link to="/cihaz" className="lp-menu-item">
-            <span className="min-w-0 flex-1 truncate">Eğitim cihazı</span>
+            <span className="min-w-0 flex-1 truncate" data-text="Eğitim cihazı">
+              Eğitim cihazı
+            </span>
             <MonitorSmartphone aria-hidden="true" className="size-4 shrink-0" />
           </Link>
         )}

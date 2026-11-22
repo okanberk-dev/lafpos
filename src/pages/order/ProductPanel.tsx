@@ -197,7 +197,9 @@ function CategoryItem({ active, count, name, favorite, strip, onClick }: { activ
     <button ref={ref} type="button" role="tab" aria-selected={active} onClick={onClick} className={cn('lp-menu-item focus-visible:-outline-offset-2', strip && 'snap-start')}>
       <Icon aria-hidden="true" />
       {/* Şeritte yer dar: sık kullanılanlar yıldızla "Sık" */}
-      <span className="min-w-0 flex-1 truncate">{favorite && strip ? 'Sık' : name}</span>
+      <span className="min-w-0 flex-1 truncate" data-text={favorite && strip ? 'Sık' : name}>
+        {favorite && strip ? 'Sık' : name}
+      </span>
       {!strip && <span className="n">{count}</span>}
     </button>
   );
