@@ -83,11 +83,14 @@ export interface Compare {
 }
 
 export interface Period {
-  key: 'hafta' | 'ay';
+  /** `son7`: bugün dahil son 7 gün ↔ ondan önceki 7 gün (bugünün kıyas günü aynı saate kadar) */
+  key: 'hafta' | 'ay' | 'son7';
   label: string;
   cur: Sales & { from: string; to: string; days: number };
   prev: Sales & { from: string; to: string; days: number };
   change: number | null;
+  /** Önceki döneme göre ₺ fark (kuruş); önceki dönemde iş günü yoksa null */
+  diff: number | null;
   /** Geçen ayda bugünün günü yoksa önceki ayın tamamı */
   wholePrev: boolean;
 }
@@ -167,6 +170,7 @@ export const dayLabel = (date: string) => {
 export const monthName = (date: string) => MONTHS[Number(date.slice(5, 7)) - 1]!;
 
 /** Kıyas satırlarının adı (sahibin örneğindeki gibi kısa): bugünle aynı haftagünü, geçen ayın aynı günü */
+export const PERIOD_LABELS: Record<Period['key'], string> = { hafta: 'Hafta başından', ay: 'Ay başından', son7: 'Son 7 gün' };
 export const COMPARE_LABELS: Record<Compare['key'], string> = { dun: 'Dün', hafta: 'Geçen hafta bugün', ay: 'Geçen ay bugün' };
 
 /**
@@ -261,7 +265,7 @@ export function todayStats(t: TodayInput, s: PatronStats, nowMs: number) {
     const curTo = withToday ? t.date : yesterday;
     return {
       key,
-      label: key === 'hafta' ? 'Hafta başından' : 'Ay başından',
+      label: PERIOD_LABELS[key],
       cur: { ...cur, from, to: curTo },
       prev: {
         ...before,
@@ -269,12 +273,19 @@ export function todayStats(t: TodayInput, s: PatronStats, nowMs: number) {
         to: prevSame && withToday ? prevSame : prevEnd,
       },
       change: before.days ? change(cur.netSales, before.netSales) : null,
+      diff: before.days ? cur.netSales - before.netSales : null,
       wholePrev: !prevSame,
     };
   };
   const ws = weekStart(t.date);
   const pm = prevMonth(t.date);
-  const periods = [period('hafta', ws, addDays(ws, -7), addDays(t.date, -7), addDays(t.date, -7)), period('ay', monthStart(t.date), pm.start, lastMonth, addDays(pm.start, pm.days - 1))].filter(
+  const weekAgo = addDays(t.date, -7);
+  const periods = [
+    period('hafta', ws, addDays(ws, -7), weekAgo, weekAgo),
+    period('ay', monthStart(t.date), pm.start, lastMonth, addDays(pm.start, pm.days - 1)),
+    // Son 7 gün (bugün dahil) ↔ önceki 7 gün: geçmiş tam günler `daily`'de hep var (statsDates en az 28 gün geriye gider)
+    period('son7', addDays(t.date, -6), addDays(t.date, -13), weekAgo, weekAgo),
+  ].filter(
     (p): p is Period => p != null,
   );
 

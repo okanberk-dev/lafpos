@@ -156,7 +156,7 @@ describe('patron "Bugün" kıyasları', () => {
     // Hafta ve ay başından bugüne = Raporlar › Ciro o dönem; kıyas = Raporlar'ın kıyas dönemi (aynı saate kadar)
     for (const p of r.periods) {
       const range = {
-        from: p.key === 'hafta' ? weekStart(today) : monthStart(today),
+        from: p.key === 'hafta' ? weekStart(today) : p.key === 'ay' ? monthStart(today) : addDays(today, -6),
         to: today,
       };
       const s = rep.summaryReport(range, d.now);
@@ -170,7 +170,7 @@ describe('patron "Bugün" kıyasları', () => {
       });
       expect(p.change).toBe(s.previous.change);
     }
-    expect(r.periods.map((p) => p.key)).toEqual(['hafta', 'ay']);
+    expect(r.periods.map((p) => p.key)).toEqual(['hafta', 'ay', 'son7']);
 
     // En çok satanlar: geçen hafta tam gün = Raporlar › Ürünler o gün
     const lwProducts = rep.productReport({ from: addDays(today, -7), to: addDays(today, -7) }, false).products;
