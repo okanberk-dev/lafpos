@@ -764,6 +764,12 @@ export const syncState = sqliteTable('sync_state', {
 export type FiscalStatus = 'gonderildi' | 'kilitli' | 'tamamlandi' | 'iptal' | 'hata' | 'silindi' | 'fis_iptal';
 
 /**
+ * Cihaz ödemesinin işyeri nüshası (fiş yazıcısından çıkan kısa kayıt, docs/04-YAZARKASA.md §4.1): `bekliyor` basılacak,
+ * `basiliyor` bir kasa ekranı aldı ve basıyor, `basildi` basıldı onayı geldi
+ */
+export type StoreCopyState = 'bekliyor' | 'basiliyor' | 'basildi';
+
+/**
  * Cihaza (ör. Token ÖKC, TokenX Connect) gönderilen sepetler. `id` sepetin kimliğidir (basketID, UUID).
  * Ödeme ve mali fiş cihazda olur; sonuç (Z no, fiş no, ödeme kalemleri) buraya ve adisyonun ödemelerine yazılır.
  */
@@ -792,8 +798,17 @@ export const fiscalReceipts = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
     completedAt: integer('completed_at'),
+    /**
+     * İşyeri nüshası: sepeti nüsha basan kasa ekranı gönderdiyse `bekliyor` yazılır; cihaz ödeyince (tamamlandi) bir kasa
+     * ekranı alır, basar ve "basıldı" der. null: nüsha istenmedi (telefondan ya da yazıcısız ekrandan giden sepet, eski kayıt)
+     */
+    storeCopy: text('store_copy').$type<StoreCopyState>(),
+    /** Nüshayı alan ekranın anahtarı: "basıldı" onayı yalnız bununla kabul edilir */
+    storeCopyClaim: text('store_copy_claim'),
+    /** Nüshanın son durum değişikliği (alındığı ya da basıldığı an); alınıp süresinde basılmayan nüsha yeniden verilir */
+    storeCopyAt: integer('store_copy_at'),
   },
-  (t) => [index('fiscal_order_idx').on(t.orderId), index('fiscal_status_idx').on(t.status)],
+  (t) => [index('fiscal_order_idx').on(t.orderId), index('fiscal_status_idx').on(t.status), index('fiscal_store_copy_idx').on(t.storeCopy)],
 );
 
 /**

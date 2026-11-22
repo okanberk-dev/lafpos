@@ -139,8 +139,12 @@ function publish(orderId: string, kind: string, message?: string, byUserId?: str
   fx.flush();
 }
 
-/** Adisyonu (ya da seçilen kalemleri) cihaza gönderir. */
-export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null): Promise<ReceiptDTO> {
+/**
+ * Adisyonu (ya da seçilen kalemleri) cihaza gönderir. `storeCopy`: sepeti gönderen ekran ödemeden sonra işyeri nüshası
+ * basan kasa ekranı (fiş yazıcısı var, ayar açık); cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar
+ * (`store-copy.ts`)
+ */
+export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null, opts: { storeCopy?: boolean } = {}): Promise<ReceiptDTO> {
   needDirect(actor, 'odeme.al');
   const s = getSettings();
   if (s.okcProvider === 'kapali') throw conflict('Yazarkasa POS bağlantısı kapalı (Yönetim › Yazarkasa POS)', 'okc_off');
@@ -239,6 +243,7 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       items: built.lines,
       basket: built.basket,
       sentBy: actor.user.id,
+      storeCopy: opts.storeCopy ? 'bekliyor' : null,
       createdAt: now,
       updatedAt: now,
     })
@@ -497,10 +502,11 @@ export function applyResult(receiptId: string, result: FiscalResult, source: Res
         });
         return out;
       });
-      // Cihazın gerçek ödemeleri olayla gider: sonuç ekranı para üstünü LafPOS'taki seçimden değil bundan hesaplar
+      // Cihazın gerçek ödemeleri olayla gider: sonuç ekranı para üstünü LafPOS'taki seçimden değil bundan hesaplar.
+      // Fişin kimliği de gider: kasa ekranı işyeri nüshasını onunla alır (store-copy.ts)
       const methods = new Map(db.select({ id: schema.paymentMethods.id, kind: schema.paymentMethods.kind, name: schema.paymentMethods.name }).from(schema.paymentMethods).all().map((m) => [m.id, m]));
       const paid = payments.map((p) => ({ kind: methods.get(p.methodId)?.kind ?? 'diger', name: methods.get(p.methodId)?.name ?? 'Yazarkasa', amount: p.amount }));
-      fx.emit({ topic: 'okc', kind: 'okc.paid', orderId: r.orderId, message: res.closed ? 'Yazarkasada ödendi, adisyon kapandı' : 'Yazarkasada ödendi', paid });
+      fx.emit({ topic: 'okc', kind: 'okc.paid', orderId: r.orderId, receiptId: r.id, message: res.closed ? 'Yazarkasada ödendi, adisyon kapandı' : 'Yazarkasada ödendi', paid });
       fx.flush();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

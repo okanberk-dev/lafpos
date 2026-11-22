@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { afterPaymentPrints, deviceResult, deviceRoute, type DeviceRouteInput, isKasaHost, offDeviceLabel, okcPanelAuto, printOnce } from '@shared/odeme-fisi';
 import type { LiveEvent } from '@shared/events';
-import { deviceCopyListener, markDeviceSent, resetDeviceSent, unmarkDeviceSent } from '../src/lib/device-copies';
+import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from '../src/lib/store-copies';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { type Harness, startApp } from './harness';
 
@@ -104,28 +104,30 @@ describe('otomatik gönderimin ret yolları', () => {
     expect(deviceResult({ ...sent, given: null, methodName: 'Kart' }, undefined).change).toBe(0);
   });
 
-  it('(c) cihaz ödeyince nüsha bir kez basılır: pencere kapalı ya da başka adisyona geçilmiş olsa da', () => {
-    resetDeviceSent();
+  it('(c) cihaz ödeyince nüsha bir kez basılır: pencere kapalı ya da başka adisyona geçilmiş olsa da', async () => {
+    // Sunucu sahtesi: bekleyen nüshalar, atomik alma (ayrıntı ve gerçek sunucu: tests/isyeri-nushasi.test.ts)
+    const waiting = new Set(['r1']);
+    const confirmed: string[] = [];
+    const api: StoreCopyApi = {
+      pending: async () => [...waiting].map((id) => ({ id })),
+      claim: async (id) => (waiting.delete(id) ? ({ receiptId: id, claim: `k-${id}` } as ClaimedStoreCopy) : null),
+      printed: async (id, claim) => {
+        confirmed.push(`${id}:${claim}`);
+      },
+    };
     const printed: string[] = [];
-    const listen = deviceCopyListener((id) => printed.push(id));
-    const paid = (orderId: string): Pick<LiveEvent, 'topic' | 'kind' | 'orderId'> => ({ topic: 'okc', kind: 'okc.paid', orderId });
-    markDeviceSent('o1');
-    // Kasiyer başka adisyona geçti: dinleyici uygulama düzeyinde, adisyondan bağımsız
-    listen(paid('o2'));
-    listen(paid('o1'));
-    listen(paid('o1'));
-    expect(printed).toEqual(['o1']);
-    // Cihazda iptal edilen sepetin kaydı düşer; gönderim hatası da düşürür
-    markDeviceSent('o3');
-    listen({ topic: 'okc', kind: 'okc.cancelled', orderId: 'o3' });
-    listen(paid('o3'));
-    markDeviceSent('o4');
-    unmarkDeviceSent('o4');
-    listen(paid('o4'));
-    // Süresi geçmiş kayıt basılmaz
-    markDeviceSent('o5', Date.now() - 11 * 60_000);
-    listen(paid('o5'));
-    expect(printed).toEqual(['o1']);
+    const queue = storeCopyQueue(api, async (copies) => {
+      printed.push(...copies.map((c) => c.receiptId));
+    });
+    // Dinleyici uygulama düzeyinde: kasiyer başka adisyona geçse de olaydaki fiş basılır, ikinci olay basmaz
+    await queue.onEvent({ topic: 'okc', kind: 'okc.paid', receiptId: 'r1' });
+    await queue.onEvent({ topic: 'okc', kind: 'okc.paid', receiptId: 'r1' });
+    // Başka ekranın aldığı ya da nüsha istenmeyen fiş basılmaz
+    await queue.onEvent({ topic: 'okc', kind: 'okc.paid', receiptId: 'r2' });
+    // Cihazda iptal edilen sepet nüshaya dokunmaz
+    expect(queue.onEvent({ topic: 'okc', kind: 'okc.cancelled' })).toBeNull();
+    expect(printed).toEqual(['r1']);
+    expect(confirmed).toEqual(['r1:k-r1']);
   });
 });
 

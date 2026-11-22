@@ -92,6 +92,7 @@ const ACTION_LABEL: Record<string, string> = {
   'okc.apply_failed': 'Yazarkasa işlenemedi',
   'okc.credit_limit': 'Açık hesap sınırı',
   'okc.eod': 'Cihaz gün sonu (banka)',
+  'okc.store_copy': 'İşyeri nüshası',
   'okc.underpaid': 'Eksik ödeme',
   'online.gone': 'Online sipariş',
   'online.line_cancelled': 'Online kalem iptali',
