@@ -8,8 +8,11 @@ import { useLocalPref } from './hooks';
 type Outgoing = { kind: 'idle' } | Omit<Extract<DisplayStateDTO, { kind: 'order' }>, 'at'> | Omit<Extract<DisplayStateDTO, { kind: 'thanks' }>, 'at'>;
 
 /** Bu cihazın yansıttığı müşteri ekranının adı; boşsa yansıtmaz (cihaz başına, Adisyon › İşlemler'den) */
-export function useDisplayCode() {
-  return useLocalPref<string>('display.code', KASA_PC ? 'kasa' : '');
+export function useDisplayCode(): [string, (v: string) => void] {
+  const [code, setCode] = useLocalPref<string>('display.code', KASA_PC ? 'kasa' : '');
+  // Kasa bilgisayarı her zaman kendi müşteri ekranına yansıtır (sahibin isteği, 22 Kas 2026): eskiden kapatılmış
+  // ("") tercih yansıtmayı sessizce durduruyordu
+  return [KASA_PC && !code ? 'kasa' : code, setCode];
 }
 
 /**
@@ -29,6 +32,12 @@ let pendingOrder: ReturnType<typeof setTimeout> | null = null;
 /** Gönderimler sırayla: önce çıkan istek sonra çıkanı (teşekkürü) ezmesin */
 let queue: Promise<unknown> = Promise.resolve();
 
+/** Ekranda durması gereken son adisyon görüntüsü: tazeleme bununla yeniden gönderir */
+let lastSent: { code: string; state: Outgoing } | null = null;
+let refresher: ReturnType<typeof setInterval> | null = null;
+/** Adisyon görüntüsü bu aralıkla yeniden gönderilir: bir gönderim düştüyse (ağ, sunucu yeniden açıldı) ekran düzelir */
+const REFRESH_MS = 10_000;
+
 export function sendDisplay(code: string, state: Outgoing) {
   if (pendingOrder) {
     clearTimeout(pendingOrder);
@@ -36,7 +45,16 @@ export function sendDisplay(code: string, state: Outgoing) {
   }
   if (!code) return;
   lastKind = state.kind;
+  lastSent = { code, state };
   queue = queue.then(() => put(`/display/${code}`, state)).catch(() => null);
+  if (!refresher && typeof window !== 'undefined') {
+    refresher = setInterval(() => {
+      // Yalnız adisyon görüntüsü tazelenir: teşekkür ve karşılama tek seferlik (teşekkür uzamasın)
+      if (lastSent?.state.kind !== 'order' || lastKind !== 'order') return;
+      const { code: c, state: s } = lastSent;
+      queue = queue.then(() => put(`/display/${c}`, s)).catch(() => null);
+    }, REFRESH_MS);
+  }
 }
 
 /**
