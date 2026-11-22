@@ -40,8 +40,9 @@ export function PctPill({ value }: { value: number | null | undefined }) {
 export function KpiTile({ value, label, pill, className }: { value: ReactNode; label: ReactNode; pill?: ReactNode; className?: string }) {
   return (
     <div className={cn('k-tile min-w-0 rounded-[var(--k-r-tile)] px-4 py-3.5', className)}>
-      <div className="flex min-h-8 items-start justify-between gap-2">
-        <span className="tabular min-w-0 truncate font-headline text-[26px] font-medium leading-8 tracking-[-0.035em] text-ink">{value}</span>
+      {/* Rakam asla kısalmaz ("₺26…" olmaz): hap yanına sığmazsa rakamın altına iner */}
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <span className="tabular whitespace-nowrap font-headline text-[26px] font-medium leading-8 tracking-[-0.035em] text-ink">{value}</span>
         {pill}
       </div>
       <p className="mt-1 truncate text-[13px] leading-5 text-muted">{label}</p>
