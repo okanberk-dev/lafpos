@@ -181,6 +181,9 @@ export function pavoSale(basket: FiscalBasket, orderNo: string, appVersion = '1'
     ExchangeRate: 1,
     SendResponseBeforePrint: false,
     AddedSaleItems: items,
+    // Kasada seçilen ödeme türü cihazda hazır gelir (Mediator 1 nakit, 2 kart; yanıttaki PaymentTypeId ile aynı); yoksa
+    // kasiyer cihazda seçer. Tutar fişin toplamı: bölünmüş ödeme cihazda yapılmaz
+    ...(basket.odemeTuru ? { PaymentInformations: [{ Mediator: basket.odemeTuru === 'kart' ? 2 : 1, Amount: tl(total), CurrencyCode: 'TRY', ExchangeRate: 1 }] } : {}),
   };
 }
 

@@ -44,6 +44,8 @@ okcRoutes.put('/settings', async (c) => {
       operatorMethods: z.record(z.string().regex(/^\d{1,6}$/), z.string()).optional(),
       /** Pavo: gün kapanınca cihazda banka gün sonu */
       pavoAutoEod: z.boolean().optional(),
+      /** Pavo: ödeme türü cihazda önceden seçili */
+      pavoOdemeSecili: z.boolean().optional(),
       /** Ödemeyi alınca cihaza gönder (kasada ödeme); null: varsayılan (gerçek cihazda açık, eğitim cihazında kapalı) */
       auto: z.boolean().nullable().optional(),
     }),
@@ -68,6 +70,7 @@ okcRoutes.put('/settings', async (c) => {
         ...(input.sectionMap ? { okcSectionMap: input.sectionMap } : {}),
         ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
         ...(input.pavoAutoEod !== undefined ? { okcPavoAutoEod: input.pavoAutoEod } : {}),
+        ...(input.pavoOdemeSecili !== undefined ? { okcPavoOdemeSecili: input.pavoOdemeSecili } : {}),
         ...(input.auto !== undefined ? { okcAuto: input.auto } : {}),
       },
       t,
@@ -154,10 +157,12 @@ okcRoutes.post('/orders/:id/send', async (c) => {
       items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).nullish(),
       /** Gönderen ekran ödemeden sonra işyeri nüshası basan kasa ekranı: cihaz ödeyince nüsha sunucuda bekler */
       storeCopy: z.boolean().optional(),
+      /** Kasada seçilen ödeme türü: Pavo'da cihazda önceden seçili gelir */
+      odeme: z.enum(['nakit', 'kart']).optional(),
     }),
   );
   const actor = actorFrom(c);
-  const receipt = await sendOrderToDevice(actor, c.req.param('id'), input.items?.length ? input.items : null, { storeCopy: input.storeCopy });
+  const receipt = await sendOrderToDevice(actor, c.req.param('id'), input.items?.length ? input.items : null, { storeCopy: input.storeCopy, odeme: input.odeme });
   return c.json({ receipt, order: blindOrder(c.get('user'), getOrderDTO(db, c.req.param('id'))) });
 });
 

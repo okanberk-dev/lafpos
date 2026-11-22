@@ -47,6 +47,8 @@ interface OkcStatus {
   sectionMap: Record<string, number>;
   operatorMethods: Record<string, string>;
   pavoAutoEod: boolean;
+  /** Pavo: ödeme türü cihazda önceden seçili (yoksa eski sunucu: açık sayılır) */
+  pavoOdemeSecili?: boolean;
   /** Ödemeyi alınca cihaza gönder (kasada ödeme) */
   auto: boolean;
   active: { label: string; configured: boolean; capabilities: { instant: boolean; list: boolean; splitPayment: boolean; docKinds: string[] } } | null;
@@ -458,7 +460,7 @@ export default function OkcAdmin() {
   const [pavoTest, setPavoTest] = useState<PavoTest | null>(null);
   // Ayar kaydı (bağlantı, ödeme yeri, eşleme) ile Token'a giden istek (deneme, webhook) ayrı izlenir: bulut yanıt
   // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
-  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | 'auto' | null>(null);
+  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | 'auto' | 'secili' | null>(null);
   const [checking, setChecking] = useState<'test' | 'webhook' | 'pair' | null>(null);
   // Pavo'nun adresi ve seri no'su kayıtlıyken form kapalı durur; "Adresi değiştir" açar
   const [editDevice, setEditDevice] = useState(false);
@@ -575,6 +577,12 @@ export default function OkcAdmin() {
     await save({ auto: v }, v ? 'Ödeme alınınca hesap cihaza kendiliğinden gidecek' : 'Hesap cihaza “Yazarkasaya gönder” ile gidecek');
     setSaving(null);
   };
+  const setSecili = async (v: boolean) => {
+    if (saving) return;
+    setSaving('secili');
+    await save({ pavoOdemeSecili: v }, v ? 'Kasada seçilen ödeme türü cihazda hazır gelecek' : 'Ödeme türü cihazda seçilecek');
+    setSaving(null);
+  };
   const setAutoEod = async (v: boolean) => {
     if (v === s.pavoAutoEod || saving) return;
     setSaving('eod');
@@ -657,6 +665,17 @@ export default function OkcAdmin() {
               label="Ödemeyi alınca cihaza gönder"
               hint={`Ödeme penceresinde “Ödemeyi al”a basınca hesap kendiliğinden cihaza gider; kapalıyken “Yazarkasaya gönder” ile${s.provider === 'simulator' ? '. Eğitim cihazında varsayılan kapalı' : ''}`}
             />
+            {s.provider === 'pavo' && (
+              <Toggle
+                block
+                className="mt-3"
+                checked={s.pavoOdemeSecili !== false}
+                disabled={saving === 'secili'}
+                onChange={(v) => void setSecili(v)}
+                label="Ödeme türü cihazda hazır gelsin"
+                hint="Kasada “Kredi kartı al” denince cihaz doğrudan kartla, “Nakit al” denince nakitle açılır; kasiyer cihazda tür seçmez. Cihaz beklenmedik davranırsa kapatın"
+              />
+            )}
           </div>
         )}
       </Card>

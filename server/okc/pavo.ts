@@ -384,4 +384,6 @@ export interface PavoSale {
   ExchangeRate: number;
   SendResponseBeforePrint: boolean;
   AddedSaleItems: PavoSaleItem[];
+  /** Önceden seçili ödeme (Mediator 1 nakit, 2 kart; entegratörlerin açık kodundan, belge kapalı): cihaz o türle açılır */
+  PaymentInformations?: { Mediator: number; Amount: number; CurrencyCode: 'TRY'; ExchangeRate: number }[];
 }

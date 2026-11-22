@@ -72,6 +72,7 @@ export function okcStatus(user?: AuthUser) {
     sectionMap: s.okcSectionMap,
     operatorMethods: s.okcOperatorMethods,
     pavoAutoEod: s.okcPavoAutoEod,
+    pavoOdemeSecili: s.okcPavoOdemeSecili,
     auto: okcAutoOn(s),
     active: p ? { label: p.label, configured: p.configured(), capabilities: p.capabilities } : null,
     tokenx: tokenxProvider.status() as { configured: boolean; terminalId: string | null; branchId: string | null; webhookUrl: string | null; webhookSecret: boolean },
@@ -144,7 +145,7 @@ function publish(orderId: string, kind: string, message?: string, byUserId?: str
  * basan kasa ekranı (fiş yazıcısı var, ayar açık); cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar
  * (`store-copy.ts`)
  */
-export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null, opts: { storeCopy?: boolean } = {}): Promise<ReceiptDTO> {
+export async function sendOrderToDevice(actor: Actor, orderId: string, selection: { itemId: string; qty: number }[] | null, opts: { storeCopy?: boolean; odeme?: 'nakit' | 'kart' } = {}): Promise<ReceiptDTO> {
   needDirect(actor, 'odeme.al');
   const s = getSettings();
   if (s.okcProvider === 'kapali') throw conflict('Yazarkasa POS bağlantısı kapalı (Yönetim › Yazarkasa POS)', 'okc_off');
@@ -222,6 +223,8 @@ export async function sendOrderToDevice(actor: Actor, orderId: string, selection
       sizeLabels: s.sizeLabels,
       callbackUrl: s.okcProvider === 'tokenx' ? (webhookUrl() ?? undefined) : undefined,
     });
+    // Pavo: kasada seçilen ödeme türü (nakit, kart) cihazda önceden seçili gelir; ayar kapalıysa kasiyer cihazda seçer
+    if (s.okcProvider === 'pavo' && s.okcPavoOdemeSecili && opts.odeme) built = { ...built, basket: { ...built.basket, odemeTuru: opts.odeme } };
     // Cihazın kabul etmeyeceği sepet (Pavo'da %0 KDV'li kalem gibi) kayıt yazılmadan reddedilir
     provider.validate?.(built.basket);
   } catch (e) {
