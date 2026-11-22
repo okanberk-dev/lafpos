@@ -129,7 +129,7 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     expect(posLight('bg')).toBe('#f1f4f2');
     expect(posLight('primary')).toBe('#0a6e52');
     expect(posLight('ink')).toBe('#0f1513');
-    expect(posDark('primary')).toBe('#34d399');
+    expect(posDark('primary')).toBe('#4ccb85');
   });
 
   it('pano paleti (DESIGN.md §2 tablosu; 20 Kas 2026): tek zemin, beyaz kart, ev yeşili eylem, canlı durum renkleri', () => {
@@ -147,7 +147,7 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     // Eylem ve seçim dolgusu markanın rengi (panonun mavisinin yerine ev yeşili); halka açık nane
     expect(adminLight('admin-ink-fill')).toBe(adminLight('admin-primary'));
     expect(adminLight('ok-ring')).toBe('#d8f6e8');
-    expect(posDark('admin-ink-fill')).toBe('#34d399');
+    expect(posDark('admin-ink-fill')).toBe('#0f7d47');
     // Marka rayı ev yeşilinin degradesi
     expect(css).toMatch(/--rail-bg:\s*linear-gradient\(180deg, #0b6449/);
     // Zamanı daralan: canlı ahududu (kitin magentası)
