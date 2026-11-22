@@ -60,3 +60,56 @@ export function useBuildWatch(enabled: boolean) {
     if (enabled && live === 'canli') void checkBuild().catch(() => undefined);
   }, [enabled, live]);
 }
+
+/** Uzaktan'da (Vercel) yayımlanan sürüm: index.html'in ana betiği; dosya adı derlemenin özetini taşır */
+const mainScript = (html: string) => /<script[^>]+type="module"[^>]+src="([^"]+)"/.exec(html)?.[1] ?? null;
+const REMOTE_POLL_MS = 5 * 60_000;
+let remoteReloading = false;
+
+/** Sayfanın yüklendiği ana betik ile sitedeki son index.html'inki farklıysa (yeni yayın) sayfa yenilenir */
+async function checkRemote() {
+  if (remoteReloading || document.visibilityState !== 'visible') return;
+  const own = [...document.querySelectorAll<HTMLScriptElement>('script[type="module"][src]')].map((s) => new URL(s.src, location.href).pathname);
+  if (!own.length) return;
+  const res = await fetch('/', { cache: 'no-store', headers: { accept: 'text/html' } });
+  if (!res.ok) return;
+  const latest = mainScript(await res.text());
+  if (!latest || own.includes(new URL(latest, location.href).pathname)) return;
+  remoteReloading = true;
+  const reload = () => {
+    if (modalOpen()) {
+      setTimeout(reload, 2000);
+      return;
+    }
+    try {
+      sessionStorage.setItem(MARK, '1');
+    } catch {
+      /* depolama yoksa yine yenile */
+    }
+    window.location.reload();
+  };
+  reload();
+}
+
+/**
+ * LafPOS Uzaktan (sahibin isteği, 22 Kas 2026: "ben girince direk yenilensin"): ekrana dönüldüğünde (sekme, uygulama
+ * öne gelince) ve açıkken 5 dakikada bir sitedeki son yayına bakılır; yeniyse sayfa kendiliğinden yenilenir. Yalnız
+ * statik index.html okunur (Redis ve işlev çağrısı yok); açık pencere (onay, düzenleme) kapanana dek beklenir
+ */
+export function useRemoteBuildWatch(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
+    const run = () => void checkRemote().catch(() => undefined);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') run();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', run);
+    const t = setInterval(run, REMOTE_POLL_MS);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', run);
+      clearInterval(t);
+    };
+  }, [enabled]);
+}
