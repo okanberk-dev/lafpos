@@ -1241,8 +1241,8 @@ export async function deviceEndOfDay(dayId: string | null, actorId: string | nul
   let reading: EodReading;
   try {
     const res = await pavo()!.performEod({
-      // Gün kapanınca cihaz da kendi gün sonu slibini basar (sahibin isteği: iki yerden kâğıt, kayıt için; ayar okcPavoEodFis)
-      print: opts.print ?? (!opts.manual && getSettings().okcPavoEodFis),
+      // Gün sonunda (gün kapanınca ya da elle) cihaz kendi gün sonu slibini bir kez basar (sahibin isteği; ayar okcPavoEodFis). Doğrulama (eodCopy) basmaz
+      print: opts.print ?? getSettings().okcPavoEodFis,
       timeoutMs: pavoTiming.eodMs,
       before: async () => {
         stage = 'baseline';
