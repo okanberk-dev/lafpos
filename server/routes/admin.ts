@@ -988,7 +988,7 @@ const settingsShape = patchOf(
     // küçük harf / rakam / tire, 2-24 karakter. Yanlış yazılırsa gün yanlış şubeye gider
     branchId: z.string().regex(/^[a-z][a-z0-9-]{1,23}$/, 'Şube kimliği harfle başlamalı; küçük harf, rakam ve tire'),
     autoDayEnd: z.boolean(),
-    autoDayEndHour: z.number().int().min(0).max(23),
+    autoDayEndHour: z.number().min(0).max(23.5).multipleOf(0.5),
     serviceMode: z.enum(SERVICE_MODES),
     tipsEnabled: z.boolean(),
     barEnabled: z.boolean(),

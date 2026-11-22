@@ -80,6 +80,7 @@ export interface PrivateSettings {
   backupKeep: number;
   /** Otomatik gün sonu (ModPOS'taki 06:00 gibi); açık adisyon varsa alınmaz, uyarı düşer */
   autoDayEnd: boolean;
+  /** Saat; yarım saat için .5 (22.5 = 22:30) */
   autoDayEndHour: number;
   /** Yazarkasa POS bağlantısı: kapalı, TokenX Connect (Cloud), Pavo (yerel ağ) ya da eğitim simülatörü */
   okcProvider: 'kapali' | 'tokenx' | 'pavo' | 'simulator';

@@ -151,8 +151,9 @@ const parseQuickCash = (text: string) => fromLines(text).map((x) => parseTL(x) ?
 const formatQuickCash = (a: number[]) => a.map((k) => String(k / 100)).join('\n');
 /** Satır listesi alanı: en az altı satır, içerik uzadıkça büyür (destekleyen tarayıcıda); liste kaydırmada saklanmaz */
 const LIST_AREA = 'min-h-36 field-sizing-content';
-/** Otomatik gün sonunun saati: 00:00-23:00 */
-const HOURS = Array.from({ length: 24 }, (_, h) => h);
+/** Otomatik gün sonunun saati: 00:00-23:30, yarım saatte bir (22.5 = 22:30) */
+const HOURS = Array.from({ length: 48 }, (_, i) => i / 2);
+const hourLabel = (h: number) => `${String(Math.floor(h)).padStart(2, '0')}:${h % 1 ? '30' : '00'}`;
 /** Kaydet tek yerde: değişiklik olunca altta yapışkan şeritte (DESIGN §5); başlıkta ikinci birincil düğme yok */
 const DESCRIPTION = 'Fiş, kasa, uyarılar ve nedenler; değişiklik yapınca Kaydet altta çıkar';
 
@@ -471,7 +472,7 @@ export default function SettingsAdmin() {
                   <Select value={String(s.autoDayEndHour)} disabled={!s.autoDayEnd} aria-label="Otomatik gün sonu saati" onChange={(e) => set({ autoDayEndHour: Number(e.target.value) })} className="tabular w-28">
                     {HOURS.map((h) => (
                       <option key={h} value={h}>
-                        {`${String(h).padStart(2, '0')}:00`}
+                        {hourLabel(h)}
                       </option>
                     ))}
                   </Select>
