@@ -880,7 +880,8 @@ html[class~='dark'] {
       width: 5.25rem;
       min-height: 0;
       padding: 10px 7px;
-      border-radius: var(--r-stage);
+      /* Köşe kartlarla aynı (sahip, 22 Kas 2026: ray öteki kartlardan daha yuvarlaktı) */
+      border-radius: var(--r-card);
       /* İçerik rayın yuvarlak kutusundan taşmaz (dar rayda uzun yazı, alçak ekranda dip) */
       overflow: hidden;
       background: var(--rail-bg);
@@ -963,6 +964,11 @@ html[class~='dark'] {
     height: 1.875rem;
     border-radius: 0.625rem;
     transition: background-color 150ms var(--ease-out);
+  }
+  /* Avatarlı satır (Uzaktan'da kişi): avatar kutudan taşıp adın üstüne binmesin (sahip, 22 Kas 2026) */
+  .lp-rail-icon.lp-rail-avatar {
+    height: auto;
+    padding-block: 1px;
   }
   .lp-rail-icon > svg {
     width: 1.375rem;
