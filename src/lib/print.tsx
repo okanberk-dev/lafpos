@@ -50,13 +50,12 @@ export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Pr
 }
 
 /**
- * Birkaç fişi ayrı yazdırma işleri olarak basar: termal yazıcı her işin sonunda kâğıdı keser (aynı işteki sayfa sonunda
- * ikinci sayfa basılmadı; saha, 22 Kas 2026). Kiosk Chrome önceki iş bitmeden gelen `window.print()`'i yutar: her iş
- * `afterprint` olayıyla (en çok 6 sn) biter, sonraki 1,5 sn sonra gönderilir
+ * Birkaç fişi ayrı yazdırma işleri olarak basar: termal yazıcı her işin sonunda keser (saha, 22 Kas 2026: iki nüsha
+ * böyle ayrı kâğıt çıkıyor). Her iş `afterprint` olayıyla (en çok 6 sn) biter, sonraki kısa bir aradan sonra gider
  */
 export async function printEach(parts: ReactNode[]): Promise<void> {
   for (let i = 0; i < parts.length; i++) {
-    if (i > 0) await new Promise((r) => setTimeout(r, 1500));
+    if (i > 0) await new Promise((r) => setTimeout(r, 300));
     const finished = new Promise<void>((done) => {
       const t = setTimeout(done, 6000);
       window.addEventListener(

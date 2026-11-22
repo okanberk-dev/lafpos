@@ -75,7 +75,10 @@ export function createApp() {
     // Boş liste (Windows yazıcı sorgusu açılışta ya da kurulumda zaman aşımına uğradı) bilinen listeyi silmez: silseydi
     // seçili fiş yazıcısı "Seçilmedi"ye düşer, ödeme sonrası fişler basılmazdı (saha, 22 Kas 2026)
     const known = getSyncState<{ at: number; printers: WinPrinter[] }>(PRINTERS_KEY);
-    const printers = reported.length || !known?.printers?.length ? reported : known.printers;
+    const chosen = getSettings().receiptPrinter;
+    const keep = known?.printers?.find((p) => p.name === chosen);
+    // Seçili yazıcı bu bildirimde yoksa (ağ yazıcısı açılışta henüz bağlanmadı) listede kalır: seçim "Seçilmedi"ye düşmez
+    const printers = !reported.length && known?.printers?.length ? known.printers : keep && !reported.some((p) => p.name === keep.name) ? [...reported, keep] : reported;
     setSyncState(PRINTERS_KEY, { at: reported.length ? Date.now() : (known?.at ?? Date.now()), printers });
     return c.json({ name: pickReceiptPrinter(printers, getSettings().receiptPrinter).name });
   });
