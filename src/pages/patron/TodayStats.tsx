@@ -476,11 +476,11 @@ export function CumulativeChart({ s }: { s: Stats }) {
  * çubuk, altında her türün tutarı ve payı; tür adı ve yüzde yazıyla da var (renk tek başına bilgi taşımaz). Birden çok
  * ödeme türü olan grubun satırı dokununca türleri açar. Gruplama Z raporunun alanından (`zField`)
  */
-const PAY_KINDS = [
-  { key: 'nakit', label: 'Nakit', color: 'var(--admin-primary)' },
-  { key: 'kart', label: 'Kart', color: 'var(--admin-blue)' },
-  { key: 'yemek', label: 'Yemek kartı', color: 'var(--admin-warning)' },
-  { key: 'diger', label: 'Diğer', color: 'var(--chart-context)' },
+export const PAY_KINDS = [
+  { key: 'nakit', label: 'Nakit', color: 'var(--k-pay-nakit)' },
+  { key: 'kart', label: 'Kart', color: 'var(--k-pay-kart)' },
+  { key: 'yemek', label: 'Yemek kartı', color: 'var(--k-pay-yemek)' },
+  { key: 'diger', label: 'Diğer', color: 'var(--k-pay-diger)' },
 ] as const;
 const MEAL_NAME = /yemek|multinet|pluxee|sodexo|ticket|edenred|setcard|metropol|paye/i;
 /** Türün grubu: önce Z alanı; alan yoksa (eski özet, örnek gün) ödeme türünün adından */

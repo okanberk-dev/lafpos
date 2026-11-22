@@ -36,6 +36,11 @@
   --k-warn-ink: #7a4b00;
   --k-info-soft: #e1ebff;
   --k-info-ink: #1d47b8;
+  /* Ödeme türleri (dağılım çubuğu ve gösterge): nakit, kart, yemek kartı, diğer */
+  --k-pay-nakit: #0a6e52;
+  --k-pay-kart: #2459e0;
+  --k-pay-yemek: #b45309;
+  --k-pay-diger: #7a7f8c;
   /* Grafik: bağlam çubuğu (gri), vurgulu aralık (nane), değer hapı */
   --k-chart-bar: #c9ccd4;
   --k-chart-hi: #17a35c;
@@ -79,8 +84,116 @@
   --k-warn-ink: #f7c768;
   --k-info-soft: #1b2733;
   --k-info-ink: #bce1ff;
+  --k-pay-nakit: #34d399;
+  --k-pay-kart: #8cb4ff;
+  --k-pay-yemek: #f7b93e;
+  --k-pay-diger: #8e8a86;
   --k-chart-bar: #44413f;
   --k-chart-hi: #bce1ff;
   --k-r-card: 1.25rem;
   --k-shadow-float: 0 16px 40px -18px rgb(0 0 0 / 0.7);
+}
+
+/*
+ * Keel bileşen sınıfları (patron paneli; src/pages/patron/KeelPanel.tsx). `components` katmanında: Tailwind yardımcıları
+ * (bg-*, text-*) gerektiğinde üstüne yazar
+ */
+@layer components {
+  /* Küçük karo: zeminde beyaz; kart içinde (telefonun ciro kartı) kuyu tonunda */
+  .k-tile {
+    background: var(--k-surface);
+  }
+  /* Kartın soluk yazısı (soru satırı, etiket, yüzde): ters kartta o zemine göre */
+  .k-cap {
+    color: var(--k-mute);
+  }
+  /*
+   * Ters kart (Keel'in koyu kartı): açık temada mürekkep zemin ve beyaz yazı, gecede açık zemin ve mürekkep yazı. Ödeme
+   * renkleri ve soluk yazı bu zemine göre yeniden tanımlanır (hepsi zeminde en az 3:1, yazı 4.5:1)
+   */
+  .k-inverse {
+    background: var(--k-select);
+    color: var(--k-on-select);
+    --k-pay-nakit: #4fdc86;
+    --k-pay-kart: #8cb4ff;
+    --k-pay-yemek: #f7b93e;
+    --k-pay-diger: #9aa0ad;
+    --k-inv-mute: #a9adba;
+    --k-inv-track: rgb(255 255 255 / 0.12);
+  }
+  .dark .k-inverse {
+    --k-pay-nakit: #0a8560;
+    --k-pay-kart: #2459e0;
+    --k-pay-yemek: #b45309;
+    --k-pay-diger: #6b6f7c;
+    --k-inv-mute: #5b5f6c;
+    --k-inv-track: rgb(23 26 38 / 0.1);
+  }
+  .k-inverse .k-cap {
+    color: var(--k-inv-mute);
+  }
+  /* Mürekkep düğme (Keel'in "+ Add scenario"su) ve yanındaki sade düğme: 44 px, köşe 12 */
+  .k-ink-btn,
+  .k-ghost-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 2.75rem;
+    padding: 0 18px;
+    border-radius: var(--k-r-control);
+    font: 500 0.9375rem/1 var(--font-sans);
+    white-space: nowrap;
+    transition:
+      opacity 150ms var(--ease-out),
+      background-color 150ms var(--ease-out);
+  }
+  .k-ink-btn {
+    background: var(--k-select);
+    color: var(--k-on-select);
+  }
+  .k-ink-btn:hover {
+    opacity: 0.9;
+  }
+  .k-ghost-btn {
+    background: var(--k-surface);
+    color: var(--k-ink);
+  }
+  .k-ghost-btn:hover {
+    background: var(--k-well);
+  }
+  /* Yuvarlak ok düğmesi (Keel kartlarının sağ üstündeki ↗): 44 px dokunma alanı */
+  .k-round {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--k-line-strong);
+    color: var(--k-ink);
+    transition: background-color 150ms var(--ease-out);
+  }
+  .k-round:hover {
+    background: var(--k-well);
+  }
+  /*
+   * Ciro bloğu: bilgisayarda zeminde kartsız (Keel'in "Projected Cash"i); telefonda ve tablette beyaz kart, sağ altta
+   * nane ışığı (Keel'in mobil kartı), karolar kuyu tonunda
+   */
+  .k-hero {
+    min-width: 0;
+    padding: 4px 4px 0;
+  }
+  @media (max-width: 63.99rem) {
+    .k-hero {
+      padding: 18px 18px 18px;
+      border-radius: var(--r-group);
+      background:
+        radial-gradient(120% 90% at 100% 100%, color-mix(in oklab, var(--k-mint) 34%, transparent) 0%, transparent 62%),
+        var(--k-surface);
+    }
+    .k-hero .k-tile {
+      background: color-mix(in oklab, var(--k-well) 86%, transparent);
+    }
+  }
 }

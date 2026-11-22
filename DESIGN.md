@@ -79,6 +79,12 @@ Ana eylem ve marka belirteçleri (`--admin-ink-fill`, `--rail-*`) aşağıdaki �
 - **Boş durum:** tek cümle ve sıradaki adım; sıfır yerine "veri yok" / "satış yok".
 - **Uyarı:** yumuşak zeminli şerit ya da kart satırı; ikon + kısa metin + tek eylem. Dikkat isteyenler listenin sonunda.
 - **Pencere:** bilgisayarda ortada kart (köşe 18); telefonda alttan açılan pencere (üst köşeler 28, tutamaç).
+- **Patron paneli (Keel panosu birebir; `src/pages/patron/KeelPanel.tsx`):** en üstte "Bugünkü ciro" etiketi ve dev
+  rakam (kuruş soluk), yanında mürekkep "Raporlar" düğmesi; altında dört karo (fiş sayısı, ortalama sepet, açık hesap,
+  tahmin ya da hafta; köşede değişim hapı). Sağda mini grafikli beyaz kart (bugün, dün, geçen hafta aynı saat) ve koyu
+  kart (ödeme türleri yarım halka göstergede, tür tür tutar ve yüzde). Altında ince çubuklu "Gün boyu" grafiği (gri
+  bağlam, nane vurgu, yüzen değer çipi, hap eksen), Kıyas, Dönem kıyası, Gün içi; en altta açık adisyonlar, en çok
+  satanlar ve dikkat isteyenler. Telefonda ciro bloğu nane ışıklı kartta, sağ üstte yuvarlak ok; sıra aynı.
 - **Mobil:** üst şeritte marka karosu ve ekranın adı; altta yüzen dok (etkin sekme mürekkep dolgu); içerik tek sütun.
 
 ## 1. İlkeler
