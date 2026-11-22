@@ -116,12 +116,12 @@ function HeroAmount({ k }: { k: number }) {
   const dots = int.split('.').length - 1;
   const units = 0.64 * (int.length - dots + 1) + 0.3 * dots + (cents ? 0.85 : 0);
   return (
-    <p className="tabular whitespace-nowrap font-headline font-bold leading-none tracking-[-0.04em] text-ink dark:font-medium dark:tracking-[-0.05em]" style={{ fontSize: `min(5.5rem, calc(100cqi / ${units.toFixed(2)}))` }}>
+    <p className="tabular whitespace-nowrap font-headline font-medium leading-none tracking-[-0.045em] text-ink" style={{ fontSize: `min(4.75rem, calc(100cqi / ${units.toFixed(2)}))` }}>
       <span className="sr-only">Bugünkü ciro {tl(k)}</span>
       <span aria-hidden="true">
-        <span className="text-muted">₺</span>
+        <span className="text-[var(--k-faint)]">₺</span>
         {int}
-        {cents && <span className="text-[0.5em] font-semibold tracking-[-0.02em] text-muted">{frac}</span>}
+        {cents && <span className="text-[var(--k-faint)]">{frac}</span>}
       </span>
     </p>
   );

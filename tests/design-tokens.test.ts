@@ -126,24 +126,24 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
   }
 
   it('kasa ekranları da pano (20 Kas 2026): tek açık gri zemin, yeşilimsi mürekkep, ev yeşili', () => {
-    expect(posLight('bg')).toBe('#f1f4f2');
+    expect(posLight('bg')).toBe('#eceef1');
     expect(posLight('primary')).toBe('#0a6e52');
-    expect(posLight('ink')).toBe('#0f1513');
+    expect(posLight('ink')).toBe('#171a26');
     expect(posDark('primary')).toBe('#34d399');
   });
 
   it('pano paleti (DESIGN.md §2 tablosu; 20 Kas 2026): tek zemin, beyaz kart, ev yeşili eylem, canlı durum renkleri', () => {
     // Üst çubuk ve sahne tek zeminde (panonun gri zemini, hafif yeşil); kartlar beyaz
-    expect(adminLight('admin-bg')).toBe('#f1f4f2');
+    expect(adminLight('admin-bg')).toBe('#eceef1');
     expect(adminLight('admin-stage')).toBe(adminLight('admin-bg'));
     expect(adminLight('admin-surface')).toBe('#ffffff');
-    expect(adminLight('admin-surface-2')).toBe('#f7f9f8');
-    expect(adminLight('admin-panel')).toBe('#edf1ee');
+    expect(adminLight('admin-surface-2')).toBe('#f4f5f7');
+    expect(adminLight('admin-panel')).toBe('#e9ebef');
     expect(adminLight('admin-primary')).toBe('#0a6e52');
     expect(adminLight('admin-primary-hover')).toBe('#075a43');
-    expect(adminLight('admin-text')).toBe('#0f1513');
-    expect(adminLight('admin-text-soft')).toBe('#3f4a45');
-    expect(adminLight('admin-text-mute')).toBe('#58635e');
+    expect(adminLight('admin-text')).toBe('#171a26');
+    expect(adminLight('admin-text-soft')).toBe('#3b3f4c');
+    expect(adminLight('admin-text-mute')).toBe('#5f6371');
     // Eylem ve seçim dolgusu markanın rengi (panonun mavisinin yerine ev yeşili); halka açık nane
     expect(adminLight('admin-ink-fill')).toBe(adminLight('admin-primary'));
     expect(adminLight('ok-ring')).toBe('#d8f6e8');
@@ -155,7 +155,7 @@ describe('yönetim paneli (LafPOS Sahne)', () => {
     // Dolu masa L'Affogato yeşilinin degradesi
     expect(css).toMatch(/--table-busy:\s*linear-gradient\(155deg, #0e7a5a/);
     // Alanın kenarı panoda bir ton yumuşak, kartta yine 3:1'in üstünde (3.3:1)
-    expect(adminLight('admin-border-field')).toBe('#868f8a');
+    expect(adminLight('admin-border-field')).toBe('#838895');
     expect(adminLight('admin-blue')).toBe('#2459e0');
     expect(adminLight('admin-gold-fill')).toBe('#f2c94c');
     expect(adminLight('admin-bordo')).toBe('#9d2543');
@@ -242,7 +242,8 @@ describe('köşe ve gölge belirteçleri, sahne', () => {
     });
     expect(block('@theme')).toMatchObject({ 'radius-lg': '0.5rem', 'radius-xl': '0.625rem', 'radius-2xl': '0.875rem', 'radius-3xl': '1.125rem' });
     // Zeminde yüzen kartın yumuşak gölgesi: ev yeşilinin gecesi
-    expect(block('@theme')['shadow-card']).toMatch(/rgb\(15 35 28/);
+    // LafPOS Keel (DESIGN.md §0): kart gölgesiz, zeminden ton farkıyla ayrılır
+    expect(block('@theme')['shadow-card']).toBe('none');
   });
 
   it('kurumsal yüzey yok: yönetim ve raporlar kasayla aynı sahnede (Stage), köşeler küçülmez', () => {

@@ -316,7 +316,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
           here ? 'bg-[var(--menu-active-bg)] font-semibold text-[var(--menu-active-ink)]' : 'bg-[var(--admin-surface-2)] text-[var(--admin-text)] active:bg-press',
         )}
       >
-        <span aria-hidden="true" className={cn('grid size-11 place-items-center rounded-[0.875rem]', here ? 'bg-[var(--admin-surface)]' : 'bg-[var(--admin-panel)]')}>
+        <span aria-hidden="true" className={cn('grid size-11 place-items-center rounded-[0.875rem]', here ? 'bg-[color-mix(in_oklab,var(--menu-active-ink)_16%,transparent)]' : 'bg-[var(--admin-panel)]')}>
           <n.icon className="size-[22px]" />
         </span>
         <span className="max-w-full truncate">{n.label}</span>
