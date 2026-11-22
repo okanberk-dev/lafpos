@@ -1,6 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { signedHeaders } from '../server/lib/signature';
+import { upstashFetch } from './fake-upstash';
 
 /**
  * Uzaktan görünüm dükkân bazında (api/uzaktan.ts): kasa `x-laf-dukkan` ile iter, görünüm seçili dükkânı okur; Merkez'e
@@ -17,17 +18,8 @@ beforeAll(() => {
   for (const k of KEYS) before[k] = process.env[k];
   delete process.env.LAFPOS_UYE_EPOSTA;
   Object.assign(process.env, { LAFPOS_CLOUD_SECRET: SECRET, LAFPOS_UZAKTAN_PAROLA: PASSWORD, LAFPOS_UZAKTAN_PAROLA_GEREKLI: '1', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't', LAFPOS_UZAKTAN_DEMO: '0' });
-  vi.stubGlobal('fetch', async (_i: string, init?: RequestInit) => {
-    const [cmd, key, ...rest] = JSON.parse(String(init!.body)) as string[];
-    let result: unknown = null;
-    if (cmd === 'GET') result = store.get(key!) ?? null;
-    if (cmd === 'MGET') result = [key, ...rest].map((k) => store.get(k!) ?? null);
-    if (cmd === 'SET') (store.set(key!, rest[0]!), (result = 'OK'));
-    if (cmd === 'INCR') (store.set(key!, String(Number(store.get(key!) ?? 0) + 1)), (result = Number(store.get(key!))));
-    if (cmd === 'DEL') (store.delete(key!), (result = 1));
-    if (cmd === 'EXPIRE') result = 1;
-    return new Response(JSON.stringify({ result }), { status: 200 });
-  });
+  const redis = upstashFetch(store);
+  vi.stubGlobal('fetch', async (_i: string, init?: RequestInit) => redis(init));
 });
 afterAll(() => {
   vi.unstubAllGlobals();

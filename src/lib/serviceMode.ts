@@ -5,7 +5,7 @@ import { get } from './api';
 import { useCan } from './auth';
 import { useBootQuery } from './boot';
 import { homePath } from './nav';
-import { REMOTE } from './remote';
+import { REMOTE, REMOTE_SLOW_POLL_MS } from './remote';
 
 /** İşletmenin servis modu (açılış verisinden; ayar değişince canlı olayla yenilenir) */
 export function useServiceMode(): ServiceMode {
@@ -33,6 +33,7 @@ export function useTablesInUse(mode: ServiceMode): boolean {
   const { data: boot } = useBootQuery();
   const can = useCan();
   const enabled = mode === 'self' && !!boot?.tables.length && can('siparis.al');
-  const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), enabled, staleTime: 30_000, refetchInterval: REMOTE ? 10_000 : false });
+  // Uzakta salon ekranı kendi aralığıyla yeniler; menü için seyrek bakmak yeter (aynı sorgu, ikinci yoklama olmaz)
+  const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), enabled, staleTime: 30_000, refetchInterval: REMOTE ? REMOTE_SLOW_POLL_MS : false });
   return enabled && Object.values(floor.data?.tables ?? {}).some((list) => list.length > 0);
 }

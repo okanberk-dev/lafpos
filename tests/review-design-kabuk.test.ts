@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { environmentManager, QueryClient, QueryObserver } from '@tanstack/react-query';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { remoteAutoEnters, type RemoteSetup, remoteSignOutFor } from '../src/lib/remote';
+import { upstashFetch } from './fake-upstash';
 
 /**
  * Tasarım geçişinin incelemesi (4 Kas 2026): giriş ve kilit ekranı, uygulama kabuğu, komut paleti, uzaktan giriş.
@@ -20,14 +21,7 @@ describe('uzaktan görünüm: "Çıkış" yalnız parola soran girişte', () => 
     Object.assign(process.env, { LAFPOS_CLOUD_SECRET: 'u'.repeat(40), LAFPOS_UZAKTAN_PAROLA: 'kahve-parola-123', KV_REST_API_URL: 'https://redis.test', KV_REST_API_TOKEN: 't' });
     vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
       if (String(input) !== 'https://redis.test') throw new Error(`beklenmeyen istek: ${String(input)}`);
-      const [cmd, key, ...rest] = JSON.parse(String(init!.body)) as string[];
-      let result: unknown = null;
-      if (cmd === 'GET') result = store.get(key!) ?? null;
-      if (cmd === 'SET') (store.set(key!, rest[0]!), (result = 'OK'));
-      if (cmd === 'INCR') (store.set(key!, String(Number(store.get(key!) ?? 0) + 1)), (result = Number(store.get(key!))));
-      if (cmd === 'DEL') (store.delete(key!), (result = 1));
-      if (cmd === 'EXPIRE') result = 1;
-      return new Response(JSON.stringify({ result }), { status: 200 });
+      return upstashFetch(store)(init);
     });
   });
   afterAll(() => {

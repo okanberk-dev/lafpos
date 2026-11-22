@@ -4,7 +4,7 @@ import type { OrderDTO } from '@shared/types';
 import { ApiError, errorMessage, get } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { toast } from '@/lib/toast';
-import { REMOTE } from '@/lib/remote';
+import { REMOTE, REMOTE_POLL_MS } from '@/lib/remote';
 
 const isOrder = (x: unknown): x is OrderDTO => !!x && typeof x === 'object' && 'items' in x && 'totals' in x;
 
@@ -14,7 +14,7 @@ const isOrder = (x: unknown): x is OrderDTO => !!x && typeof x === 'object' && '
  */
 export function useOrder(id: string) {
   const qc = useQueryClient();
-  const query = useQuery({ queryKey: ['order', id], queryFn: () => get<OrderDTO>(`/orders/${id}`), refetchInterval: REMOTE ? 10_000 : 60_000 });
+  const query = useQuery({ queryKey: ['order', id], queryFn: () => get<OrderDTO>(`/orders/${id}`), refetchInterval: REMOTE ? REMOTE_POLL_MS : 60_000 });
 
   const setOrder = useCallback((o: OrderDTO) => qc.setQueryData(['order', o.id], o), [qc]);
 
