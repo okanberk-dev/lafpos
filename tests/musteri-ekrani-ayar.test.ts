@@ -29,9 +29,9 @@ const full = (over: Partial<DisplayConfigDTO> = {}) => ({
 });
 
 describe('müşteri ekranı ayarı', () => {
-  it('ekran oturumsuz okur: varsayılan gece teması, sitenin sloganı, işletme adı', async () => {
+  it('ekran oturumsuz okur: varsayılan açık tema, sitenin sloganı, işletme adı', async () => {
     const c = await h.ok<DisplayConfigDTO>('', 'GET', '/public/display-config');
-    expect(c.theme).toBe('gece');
+    expect(c.theme).toBe('porselen');
     expect(c.welcomeTitle).toBe('Hoş geldiniz');
     expect(c.welcomeSubtitle).toBe('Drink it. Eat the cup.');
     expect(c.messages).toEqual([]);
