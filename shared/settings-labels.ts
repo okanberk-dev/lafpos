@@ -9,6 +9,7 @@ export const SETTING_LABEL: Record<string, string> = {
   businessPhone: 'Telefon',
   receiptHeader: 'Fiş üstü',
   receiptFooter: 'Fiş altı',
+  receiptCustomerName: 'Fişte müşteri adı',
   serviceRate: 'Servis ücreti',
   autoLockMinutes: 'Otomatik kilit',
   keepAwake: 'Ekran kararmasın',

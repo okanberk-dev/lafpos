@@ -28,6 +28,7 @@ type Settings = Record<string, unknown> & {
   businessPhone: string;
   receiptHeader: string;
   receiptFooter: string;
+  receiptCustomerName: boolean;
   serviceRate: number;
   autoLockMinutes: number;
   keepAwake: boolean;
@@ -407,6 +408,13 @@ export default function SettingsAdmin() {
             <Field label="Fiş altı" hint="adisyona “mali değeri yoktur” kendiliğinden yazılır">
               <Textarea value={s.receiptFooter} onChange={(e) => set({ receiptFooter: e.target.value })} />
             </Field>
+            <Toggle
+              block
+              checked={s.receiptCustomerName}
+              onChange={(v) => set({ receiptCustomerName: v })}
+              label="Fişte müşteri adı"
+              hint="adisyona müşteri bağlıysa adı hesap fişine yazılır"
+            />
             {/* Boy ayarları bir arada, kendi bölümünde: kasadaki boy adı ve lafmaliyet'e giden adın boy eki, her alan kendi
                 etiketiyle */}
             <Group title="Boylar">

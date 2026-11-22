@@ -234,6 +234,16 @@ açılır. Kısayol (`LafPOS-Kasa.bat`) ve betik güncellemeyle gelir: betik `ap
 kurulum klasörüne koyar (kısayol Chrome'u açıp hemen çıktığı için çalışırken değişmez). Chrome bir yazıcıya elle
 basıldıysa "son kullanılan"ı hatırlayabilir: yazdırma önizlemesini kapatan Chrome ayarını açmayın.
 
+**Fişin düzeni** (`src/lib/print.tsx`, `src/index.css` `.rc-*`): adisyon, X/Z ve deneme fişi aynı düzende. Başlıkta
+işletme adı, fiş üstü, adres, telefon ve Merkez'den gelen şube (dükkân adı ve şube kodu), kalın çizgiler arasında fişin
+adı; sonra yer ve adisyon no, tarih, garson. Kalemler adet, ad (uzun ad kesilmez, alta kayar) ve tutar sütununda;
+seçenek, not ve kalem indirimi girintili. Ara toplam ve indirim, kalın çizgiler arasında TOPLAM, ödemeler, kalan, KDV
+dökümü ve alt yazı. Yazdırma alanı 80 mm, iki yanda 4 mm boşlukla yazı 72 mm (XP-80C'nin basabildiği genişlik); yalnız
+siyah yazı ve çizgi (termal kâğıtta gri ve zemin noktalı basılır), sistemin eş aralıklı yazısı (Consolas; yazdırma
+anında yüklenecek yazı tipi yok), sütunlu rakam. Tutarlar sunucunun hesabıdır; fiş yeniden hesaplamaz. Adisyona bağlı
+müşterinin adı yalnız Yönetim › Ayarlar › İşletme ve fiş › "Fişte müşteri adı" açıkken basılır (varsayılan kapalı;
+`tests/fis.test.ts`).
+
 Kiosktan çıkmak: **Alt+F4** (macOS'ta Cmd+Q). Personelin bunu kullanmaması için Windows'ta ayrı bir standart
 kullanıcı hesabı önerilir.
 
@@ -338,6 +348,14 @@ Kasa yeni sürümü kendisi alır; sahibin anahtar ya da ayar girmesi gerekmez.
   sorun çıkmış sürüm bir daha denenmez. İki dakikada alınmayan istek beklenmez (bekçi çalışmıyor), bekçi de
   10 dakikadan eski isteği yok sayar. Kurulum bitince kart yeni derlemeyi görür ve "Yenile" önerir. Denetim kaydına
   `guncelleme` düşer. Yalnız Windows kurulumunda (bekçi); git ile çalışan sunucuda düğme yok.
+- **Uzaktan'dan Şimdi güncelle** (LafPOS Uzaktan › Merkez › dükkân › "Şimdi güncelle"; `POST /api/merkez/simdi-guncelle`):
+  Merkez dükkânın hedefini kanalın son derlemesi yapar ve isteğin anını (`guncelleIstek`) saklar. Kasa bunu bir sonraki
+  nabzın yanıtında alır (en geç 5 dakika; ayrı istek yok) ve kasadaki düğmenin yazdığı `istek.json`'un aynısını yazar,
+  her zaman `simdi: false`: uzaktan istek gün açıkken asla kurdurmaz, yeni sürüm gün kapalıysa hemen, açıksa gün
+  sonundan sonra kurulur. Her istek bir kez işlenir (`sync_state` `merkez.istek`) ve denetim kaydına `guncelleme`
+  (kullanıcısız, "Merkez'den güncelleme istendi") yazılır; kasa sonraki nabızda aldığını bildirir (`istekAlindi`),
+  panelde "Güncelleme istendi" rozeti düşer. Bekçisiz kurulumda istek yazılmaz, denetim kaydı bunu söyler
+  (`server/sync/merkez.ts` `takeRemoteUpdate`, `tests/merkez.test.ts`).
 - **Kapatma:** `ayarlar.env`'de `LAFPOS_GUNCELLEME=kapali` (düğme yine çalışır).
 - **Durum:** `C:\ProgramData\LafPOS\guncelleme\durum.json` (bekçi yazar, sunucu okur); Yönetim › Ayarlar ve yedek ›
   "Sürüm ve güncelleme" kartı kurulu sürümü, durumu, son denetimi ve son güncellemeyi gösterir; düğmesi "Şimdi güncelle".

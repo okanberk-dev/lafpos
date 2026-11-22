@@ -6,6 +6,7 @@ import { env } from '../env';
 import { getPublicSettings, getSettings, trainingMode } from '../lib/settings';
 import { siteKaraokeOn } from '../sync/laffogato-karaoke';
 import { localStampsOn, siteSigned } from '../sync/laffogato-link';
+import { merkezBranch } from '../sync/merkez';
 import { dayToDTO } from './days';
 import { getOpenDay } from './orders';
 
@@ -140,6 +141,7 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
       .all()
       .map((u) => ({ id: u.id, name: u.name, role: u.role, color: u.color, active: u.active })),
     day: dayToDTO(t, getOpenDay(t)),
+    branch: merkezBranch(),
     integrations: {
       okc: { provider: getSettings().okcProvider, mode: getSettings().okcMode },
       laffogatoPanel: siteSigned(),

@@ -181,6 +181,8 @@ export interface PublicSettings {
   businessPhone: string;
   receiptHeader: string;
   receiptFooter: string;
+  /** Adisyonda (hesap fişi) bağlı müşterinin adı yazılsın mı (varsayılan kapalı; müşteri yoksa hiç yazılmaz) */
+  receiptCustomerName: boolean;
   serviceRate: number;
   autoLockMinutes: number;
   /** Kasa, bar ve tablet ekranı kararmasın (Screen Wake Lock) */
@@ -269,6 +271,11 @@ export interface BootstrapDTO {
   happyHours: HappyHourDTO[];
   users: UserLite[];
   day: BusinessDayDTO | null;
+  /**
+   * Merkez'deki dükkân adı ve şube kodu (LafPOS Uzaktan › Merkez'den; server/sync/merkez.ts). Fişin başlığında yazılır.
+   * Merkez'e bağlı değilse ya da henüz verilmediyse null (eski sunucu göndermez)
+   */
+  branch?: { name: string | null; code: string | null } | null;
   integrations: {
     okc: { provider: 'kapali' | 'tokenx' | 'pavo' | 'simulator'; mode: 'anlik' | 'liste' };
     laffogatoPanel: boolean;

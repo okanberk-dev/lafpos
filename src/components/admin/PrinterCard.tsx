@@ -8,7 +8,7 @@ import { ErrorState, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
 import { cn } from '@/lib/cn';
-import { printNow } from '@/lib/print';
+import { printNow, TestReceipt } from '@/lib/print';
 import { toast } from '@/lib/toast';
 
 interface PrinterView {
@@ -20,19 +20,6 @@ interface PrinterView {
 }
 
 const VIRTUAL = /pdf|xps|onenote|fax|faks|send to|document writer|anydesk|teamviewer|microsoft print/i;
-
-/** Deneme fişi: 80 mm, işletme adı ve an; kasa bilgisayarında basılınca seçili yazıcıdan çıkar */
-function TestReceipt({ name, printer }: { name: string; printer: string | null }) {
-  return (
-    <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.4, textAlign: 'center' }}>
-      <div style={{ fontWeight: 700, fontSize: 15 }}>{name}</div>
-      <div>Deneme fişi</div>
-      <div>{fmtDateTime(Date.now())}</div>
-      {printer && <div>{printer}</div>}
-      <div style={{ marginTop: 8 }}>Yazıcı çalışıyor</div>
-    </div>
-  );
-}
 
 /**
  * Yönetim › Ayarlar ve yedek › Fiş yazıcısı (Windows kurulumu; server/lib/yazici.ts). Kasa ekranı açılırken kısayol
@@ -120,7 +107,7 @@ export function PrinterCard() {
             </>
           )}
           <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-3 max-sm:[&>*]:grow">
-            <Button icon={<Printer className="size-4" />} onClick={() => printNow(<TestReceipt name={boot.settings.businessName} printer={d.effective} />)}>
+            <Button icon={<Printer className="size-4" />} onClick={() => printNow(<TestReceipt boot={boot} printer={d.effective} />)}>
               Deneme fişi yazdır
             </Button>
             {d.chosen && (
