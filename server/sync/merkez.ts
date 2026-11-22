@@ -169,6 +169,22 @@ export function parseBeat(json: unknown, now: number): MerkezLast | null {
 }
 
 /**
+ * Bekleyen yeni sürüm için geçerli seçim. Kasada yapılan seçim (Şimdi / Gün sonunda) önce gelir. Seçim yoksa ve sürümü
+ * sahip Merkez'den gönderdiyse (Merkez'in hedefi bu derleme ya da daha yenisi: "Güncelleme gönder", "Şimdi güncelle",
+ * otomatik mod) kasiyere sorulmaz: gün sonunda kurulur (gün zaten kapalıysa güncelleyici hemen kurar, guncelle.mjs
+ * installDecision). Kasadaki "Şimdi güncelle" (gün açıkken hemen kur, `simdi: true`) değişmez. Seçim yoksa null (kasada
+ * sorulur: Merkez kapalı ya da sürüm Merkez'den gönderilmedi)
+ */
+export function effectiveUpdateChoice(yeni: { build: number } | null | undefined): { secim: UpdateChoiceRecord['secim']; kaynak: 'kasa' | 'merkez' } | null {
+  if (!yeni) return null;
+  const choice = getSyncState<UpdateChoiceRecord>(UPDATE_CHOICE_KEY);
+  if (choice?.build === yeni.build) return { secim: choice.secim, kaynak: 'kasa' };
+  const hedef = merkezEnabled() ? (merkezLast()?.hedef ?? null) : null;
+  if (hedef != null && yeni.build <= hedef) return { secim: 'gunsonu', kaynak: 'merkez' };
+  return null;
+}
+
+/**
  * Sahibin Uzaktan › Merkez'den "Şimdi güncelle" isteği (nabzın yanıtında `guncelleIstek`): kasadaki "Şimdi güncelle"
  * düğmesinin yazdığı isteğin aynısını yazar (guncelleme/istek.json; bekçi alır, güncelleyici hemen denetler ve
  * indirir). Uzaktan istek hiçbir zaman gün açıkken kurdurmaz (`simdi: false`): yeni sürüm gün kapalıysa hemen, açıksa
@@ -294,7 +310,6 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
       setSyncState(IDENTITY, { ...me, registered: true, everRegistered: true });
     }
     const upd = readUpdateStatus();
-    const choice = getSyncState<UpdateChoiceRecord>(UPDATE_CHOICE_KEY);
     const url = new URL('/api/merkez/nabiz', env.merkezUrl);
     const kontrol = await kontrolNabzi(now);
     const body = {
@@ -302,7 +317,12 @@ export async function merkezBeat(now = Date.now(), ek = false): Promise<boolean>
       build: inst.build,
       gunAcik: !!getOpenDay(db),
       // `secim`: kasada bekleyen sürüm için yapılan seçim (Şimdi / Gün sonunda); yoksa null (panel "seçim bekliyor" der)
-      guncelleme: upd ? { durum: upd.durum, mesaj: upd.mesaj, yeni: upd.yeni, secim: upd.yeni && choice?.build === upd.yeni.build ? choice.secim : null } : null,
+      // `kurulumUyari`: kök dosyalar ya da kısayollar güncellemeyle yenilenemedi (panelde "Kurulumu yenileyin"). Merkez'den
+      // gönderilen sürümde seçim kendiliğinden "gün sonunda" (effectiveUpdateChoice). `sonKurulum`: son kurulumun anı (panel
+      // "Kuruldu 22:41"); çalışan derleme `build` (sunucunun kendi paketinden, yeniden açıldıktan sonra doğrulanmış)
+      guncelleme: upd
+        ? { durum: upd.durum, mesaj: upd.mesaj, yeni: upd.yeni, secim: effectiveUpdateChoice(upd.yeni)?.secim ?? null, kurulumUyari: upd.kurulumUyari, sonKurulum: upd.sonKurulum }
+        : null,
       // Panel "Kasa aldı" desin: işlenen son "Şimdi güncelle" isteği
       istekAlindi: getSyncState<number>(HANDLED_REQUEST),
       // Güncelleyici yalnız gönderilen derlemeyi kurar (guncelle.mjs merkezCap): Merkez hedefi kanalın sonuna taşımasın

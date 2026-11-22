@@ -50,7 +50,7 @@ describe('bekçinin bellek sınırı', () => {
     expect(bekci).toMatch(/heapLimitMb\(env\.LAFPOS_MAX_HEAP_MB, totalmem\(\)\)/);
     expect(bekci).not.toMatch(/\b512\b/);
     const derle = read('scripts/kasa/windows/kurulum/derle.mjs');
-    expect(read('scripts/kasa/windows/kurulum/paket.mjs')).toMatch(/KASA_SCRIPTS = \['bekci\.mjs', 'ayarlar\.mjs', 'guncelle\.mjs', 'arsiv\.mjs', 'geri-yukle\.mjs'\]/);
+    expect(read('scripts/kasa/windows/kurulum/paket.mjs')).toMatch(/KASA_SCRIPTS = \['bekci\.mjs', 'ayarlar\.mjs', 'guncelle\.mjs', 'arsiv\.mjs', 'geri-yukle\.mjs', 'kurulum-yenile\.mjs'\]/);
     // Paketin denemesi ayarsız varsayılanı ve ayar dosyasından gelen sınırı günlükte arar
     expect(derle).toContain('LAFPOS_MAX_HEAP_MB=768');
   });

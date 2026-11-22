@@ -25,8 +25,8 @@ const KEY = ['guncelleme', 'teklif'];
  * Kasada güncelleme teklifi (sahibin isteği, 22 Kas 2026): yeni sürüm indirilmiş ve gün açıkken bekliyorsa iki seçenek
  * sorulur. "Şimdi güncelle": satış ve ödeme yokken hemen kurulur, LafPOS kendiliğinden yeniden açılır ve herkes kaldığı
  * yerden devam eder (src/lib/buildWatch.ts). "Gün sonunda güncelle": gün kapatılınca kurulur (eski davranış). Seçim
- * sürüme bağlıdır ve kasada saklanır; Merkez'den "Güncellemeyi şimdi gönder" de aynı pencereyi çıkarır. Kasayı yöneten
- * (gün açıp kapatan) ya da ayar yetkisi olan görür
+ * sürüme bağlıdır ve kasada saklanır. Sahip sürümü Merkez'den gönderdiyse sorulmaz: kendiliğinden gün sonunda kurulur
+ * (server/sync/merkez.ts effectiveUpdateChoice). Kasayı yöneten (gün açıp kapatan) ya da ayar yetkisi olan görür
  */
 export function UpdateOffer() {
   const can = useCan();

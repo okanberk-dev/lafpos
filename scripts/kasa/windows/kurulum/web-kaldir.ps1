@@ -24,6 +24,7 @@ Start-Sleep -Seconds 2
 
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonDesktopDirectory')) 'LafPOS Kasa.lnk') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'LafPOS Kasa.lnk') -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonStartup')) 'LafPOS Kasa Bekcisi.lnk') -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath (Join-Path ([Environment]::GetFolderPath('CommonPrograms')) 'LafPOS') -Recurse -Force -ErrorAction SilentlyContinue
 
 foreach ($ad in @('app', 'node', 'app.eski', 'app.yeni', 'app.bozuk', 'node.eski', 'node.yeni', 'kurulum.gecici', 'baslat.cmd', 'LafPOS-Kasa.bat', 'yonet.ps1', 'lafpos.ico', 'BENIOKU.txt', 'ayarlar.env.ornek', 'LafPOS-Kaldir.ps1')) {

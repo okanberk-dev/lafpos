@@ -9,6 +9,10 @@ powershell -NoProfile -Command "$u=($env:LAFPOS_URL -replace '//localhost','//12
 rem Fis yazicisi: bilgisayardaki yazicilari LafPOS'a bildirir, secilen (ya da tek) fis yazicisini varsayilan yapar;
 rem sessiz yazdirma ona basar. Betik guncellemeyle gelir (app\); yoksa ya da hata verirse kasa yine acilir
 if exist "%~dp0app\kasa-yazici.ps1" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1"
+rem Kasa penceresi: betik acar (zaten aciksa ikincisini acmaz; ayni betigin bekcisi kapanan pencereyi 15 sn'de yeniden
+rem acar). Betik yoksa ya da tarayici bulamazsa asagidaki eski yol
+if exist "%~dp0app\kasa-yazici.ps1" powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0app\kasa-yazici.ps1" -KasaAc
+if exist "%~dp0app\kasa-yazici.ps1" if not errorlevel 1 exit /b 0
 set "CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
 if not exist "%CHROME%" set "CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"

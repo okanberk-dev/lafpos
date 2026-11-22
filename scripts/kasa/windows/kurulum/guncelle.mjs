@@ -212,13 +212,14 @@ export function staleDownloads(names, keepBuild) {
 // ─── Durum ───────────────────────────────────────────────────────────────────
 
 const iso = (ms) => new Date(ms).toISOString();
-const BASE = { durum: 'guncel', mesaj: '', kurulu: null, yeni: null, sonKontrol: null, sonBasariliKontrol: null, sonHata: null, sonKurulum: null, sonIstek: null, basarisiz: [], merkez: null };
+const BASE = { durum: 'guncel', mesaj: '', kurulu: null, yeni: null, sonKontrol: null, sonBasariliKontrol: null, sonHata: null, sonKurulum: null, sonIstek: null, basarisiz: [], merkez: null, kurulumUyari: null };
 const label = (x) => (x ? `${x.surum} (${x.build})` : '');
 
 /**
  * durum.json'un bir sonraki hâli (saf). Olaylar: acilis {kurulu, mode, now} · kontrol {plan, manifest, now} ·
  * kontrol-hata {mesaj, now} · indiriliyor {yeni} · hazir {yeni} · gun-acik · kuruluyor {yeni, now} ·
- * kuruldu {kurulu, now} · geri-dondu {yeni, neden, now} · hata {mesaj, now} · mod {mode} · istek {simdi, now}
+ * kuruldu {kurulu, now} · geri-dondu {yeni, neden, now} · hata {mesaj, now} · mod {mode} · istek {simdi, now} ·
+ * kurulum {uyari} (kök dosyalar ya da kısayollar yenilenemedi: kurulum-yenile.mjs; null: sorun yok)
  */
 export function nextStatus(prev, ev) {
   const p = { ...BASE, ...(prev && typeof prev === 'object' ? prev : {}) };
@@ -279,6 +280,8 @@ export function nextStatus(prev, ev) {
         sonHata: { mesaj: String(ev.neden ?? '').slice(0, 300), at: iso(ev.now) },
         mesaj: `${label(ev.yeni)} kurulunca sorun çıktı; eski sürüme dönüldü. Bu sürüm bir daha denenmeyecek, sonraki sürüm beklenecek`,
       };
+    case 'kurulum':
+      return { ...p, kurulumUyari: typeof ev.uyari === 'string' && ev.uyari ? ev.uyari.slice(0, 300) : null };
     case 'hata':
       return { ...p, durum: 'hata', sonHata: { mesaj: String(ev.mesaj ?? '').slice(0, 300), at: iso(ev.now) }, mesaj: String(ev.mesaj ?? 'Bilinmeyen hata').slice(0, 300) };
     default:
@@ -851,6 +854,11 @@ export function createUpdater(deps) {
         for (const key of Object.keys(handles)) if (handles[key]) timers.clearTimeout(handles[key]);
         handles.check = handles.install = null;
       } else if (!handles.check && !busy) schedule('check', 60_000, check);
+    },
+    /** Kurulumun kök dosyaları ya da kısayolları yenilenemedi (kurulum-yenile.mjs): panelde "Kurulumu yenileyin" */
+    setInstallWarning(uyari) {
+      if ((status?.kurulumUyari ?? null) === (uyari ?? null)) return;
+      set({ type: 'kurulum', uyari });
     },
     stop() {
       for (const key of Object.keys(handles)) if (handles[key]) timers.clearTimeout(handles[key]);

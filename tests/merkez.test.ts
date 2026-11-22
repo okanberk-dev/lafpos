@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { existsSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CONFIRM_MS, GRACE_DAYS, licenseState, normalizeBranchCode, TRIAL_DAYS } from '@shared/lisans';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
@@ -306,6 +306,27 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect([200, 403]).toContain(local.status);
   });
 
+  it('kurulum yenilenemediyse (kurulumUyari) nabızla panele gider; uyarı kalkınca panelden de kalkar', async () => {
+    const { merkezBeat, identity } = await import('../server/sync/merkez');
+    const { env } = await import('../server/env');
+    const id = identity().id;
+    const file = join(env.dataDir, 'guncelleme', 'durum.json');
+    mkdirSync(join(env.dataDir, 'guncelleme'), { recursive: true });
+    const uyari = "Kurulumu yenileyin (LafPOS-Kur.cmd'yi yeniden çalıştırın): baslat.cmd eski kaldı";
+    try {
+      writeFileSync(file, JSON.stringify({ durum: 'guncel', mesaj: 'Güncel', kurulumUyari: uyari }));
+      await merkezBeat();
+      let row = (await panel('GET', 'merkez/kurulumlar')).json.kurulumlar.find((k: { id: string }) => k.id === id);
+      expect(row.guncelleme).toMatchObject({ durum: 'guncel', kurulumUyari: uyari });
+      writeFileSync(file, JSON.stringify({ durum: 'guncel', mesaj: 'Güncel', kurulumUyari: null }));
+      await merkezBeat();
+      row = (await panel('GET', 'merkez/kurulumlar')).json.kurulumlar.find((k: { id: string }) => k.id === id);
+      expect(row.guncelleme.kurulumUyari).toBeNull();
+    } finally {
+      rmSync(file, { force: true });
+    }
+  });
+
   it('Uzaktan\'tan "Şimdi güncelle": kasa nabızda alır, yerel isteği yazar (gün açıkken kurdurmaz), denetim kaydına bir kez yazar', async () => {
     const { merkezBeat, identity } = await import('../server/sync/merkez');
     const { env } = await import('../server/env');
@@ -344,6 +365,69 @@ describe('Merkez: kayıt, nabız, panel', () => {
     expect((await audits())[0]!.message).toMatch(/otomatik güncelleyici yok/);
     // Satış bu sırada sürer
     expect((await h.call('kasa', 'POST', '/orders', { type: 'tezgah' })).status).toBe(200);
+  });
+
+  it('Merkez\'den gönderilen sürüm kasiyere sorulmaz: gün sonunda kurulur; panel adımları gösterir (aldı, kuruluyor, kurulamadı)', async () => {
+    const { merkezBeat, identity, merkezTarget, effectiveUpdateChoice } = await import('../server/sync/merkez');
+    const { env } = await import('../server/env');
+    const { getSyncState, setSyncState } = await import('../server/lib/settings');
+    const { UPDATE_CHOICE_KEY } = await import('../server/lib/surum');
+    const id = identity().id;
+    const hedef = merkezTarget().hedef!;
+    expect(hedef).toBeGreaterThan(0);
+    const file = join(env.dataDir, 'guncelleme', 'durum.json');
+    mkdirSync(join(env.dataDir, 'guncelleme'), { recursive: true });
+    const status = (over: Record<string, unknown>) => writeFileSync(file, JSON.stringify({ durum: 'bekliyor', mesaj: 'Yeni sürüm hazır', yeni: { surum: '0.3.1', build: hedef }, ...over }));
+    const row = async () => (await panel('GET', 'merkez/kurulumlar')).json.kurulumlar.find((k: { id: string }) => k.id === id);
+    const prevChoice = getSyncState(UPDATE_CHOICE_KEY);
+    // Seçim kaydı silinemez (NOT NULL): başka derlemenin seçimi "seçim yok" demektir
+    const none = { build: 1, secim: 'simdi', at: 0, by: '' };
+    try {
+      setSyncState(UPDATE_CHOICE_KEY, none);
+      status({});
+      // Gün açık, kasada seçim yapılmadı: soru yok, seçim kendiliğinden gün sonu
+      const offer = await h.ok<{ secim: string | null; secimKaynak: string | null; dayOpen: boolean }>('patron', 'GET', '/admin/guncelleme/teklif');
+      expect(offer).toMatchObject({ secim: 'gunsonu', secimKaynak: 'merkez', dayOpen: true });
+      await merkezBeat();
+      expect((await row()).guncelleme).toMatchObject({ etiket: 'Gün sonunda kurulacak' });
+      expect((await row()).gonderim).toEqual({ etiket: 'Kasa aldı · gün sonunda kurulacak', ton: 'info' });
+      // Kasada "Şimdi güncelle" seçilirse o geçerli (mevcut davranış)
+      setSyncState(UPDATE_CHOICE_KEY, { build: hedef, secim: 'simdi', at: Date.now(), by: 'Patron' });
+      expect(effectiveUpdateChoice({ build: hedef })).toEqual({ secim: 'simdi', kaynak: 'kasa' });
+      setSyncState(UPDATE_CHOICE_KEY, none);
+      // Merkez'in göndermediği (daha yeni) derleme kasada sorulur
+      expect(effectiveUpdateChoice({ build: hedef + 1 })).toBeNull();
+      status({ durum: 'kuruluyor', mesaj: 'Yeni sürüm kuruluyor' });
+      await merkezBeat();
+      expect((await row()).gonderim).toEqual({ etiket: 'Kuruluyor', ton: 'info' });
+      status({ durum: 'geri-dondu', mesaj: '0.3.1 kurulunca sorun çıktı; eski sürüme dönüldü', yeni: null });
+      await merkezBeat();
+      expect((await row()).gonderim).toEqual({ etiket: 'Kurulamadı: 0.3.1 kurulunca sorun çıktı; eski sürüme dönüldü', ton: 'warning' });
+    } finally {
+      rmSync(file, { force: true });
+      setSyncState(UPDATE_CHOICE_KEY, prevChoice ?? none);
+    }
+  });
+
+  it('gönderimin adımları (deliveryStatus): gönderildi, kasa aldı, kuruluyor, kuruldu (çalışan derleme), kurulamadı; eski kasa', async () => {
+    const { deliveryStatus } = await import('../api/_merkez');
+    const at = Date.parse('2026-11-22T19:20:00.000Z'); // 22:20 İstanbul
+    const base = { hedef: BUILD + 900, gonderildi: at, build: BUILD + 500, surum: '0.3.0', guncelleme: { durum: 'guncel', mesaj: 'Güncel', yeni: null, secim: null } };
+    expect(deliveryStatus({ ...base, hedef: null })).toBeNull();
+    expect(deliveryStatus(base)).toEqual({ etiket: 'Gönderildi 22:20', ton: 'info' });
+    const yeni = { surum: '0.3.1', build: BUILD + 900 };
+    expect(deliveryStatus({ ...base, guncelleme: { durum: 'indiriliyor', mesaj: '', yeni, secim: null } })!.etiket).toBe('Kasa aldı · indiriliyor');
+    expect(deliveryStatus({ ...base, guncelleme: { durum: 'bekliyor', mesaj: '', yeni, secim: 'gunsonu' } })!.etiket).toBe('Kasa aldı · gün sonunda kurulacak');
+    // Eski kasa: seçim alanı yok, eski etiket
+    expect(deliveryStatus({ ...base, guncelleme: { durum: 'bekliyor', mesaj: '', yeni } })!.etiket).toMatch(/^Kasa aldı · /);
+    expect(deliveryStatus({ ...base, guncelleme: { durum: 'kuruluyor', mesaj: '', yeni, secim: 'gunsonu' } })!.etiket).toBe('Kuruluyor');
+    // Kuruldu yalnız çalışan derleme gönderilene varınca; an kasanın son kurulumu (22:41)
+    const done = Date.parse('2026-11-22T19:41:00.000Z');
+    expect(deliveryStatus({ ...base, build: BUILD + 900, surum: '0.3.1', guncelleme: { durum: 'guncel', mesaj: 'Güncellendi', yeni: null, secim: null, sonKurulum: done } })).toEqual({ etiket: 'Kuruldu 22:41 · sürüm 0.3.1', ton: 'success' });
+    expect(deliveryStatus({ ...base, build: BUILD + 900, surum: '0.3.1', guncelleme: null })!.etiket).toBe('Kuruldu · sürüm 0.3.1');
+    // Durum "güncel" dese de çalışan derleme eskiyse kurulmuş sayılmaz
+    expect(deliveryStatus({ ...base, guncelleme: { durum: 'guncel', mesaj: 'Güncellendi', yeni: null, sonKurulum: done } })!.etiket).toBe('Gönderildi 22:20');
+    expect(deliveryStatus({ ...base, guncelleme: { durum: 'hata', mesaj: 'Yeni sürüm indirilemedi: ağ yok', yeni: null } })).toEqual({ etiket: 'Kurulamadı: Yeni sürüm indirilemedi: ağ yok', ton: 'warning' });
   });
 
   it('geçmiş ciro (LafPOS öncesi günler) nabızla kasaya gelir; kasanın kendi patron panelinin kıyasına girer, silinince düşer', async () => {

@@ -25,6 +25,7 @@
  */
 import { createHash } from 'node:crypto';
 import { type LicenseRecord, licenseState, normalizeBranchCode, ONLINE_MS, UPDATE_LABELS, updateLabel } from '../shared/lisans.js';
+import { fmtTime } from '../shared/time.js';
 import { HISTORY_FLAG_HASH, type HistoryStore, historyFlag, historyKey, parseHistory, readHistory } from '../shared/gecmis.js';
 import { NABIZ_KONTROL_PAYI, nabizAnahtarlari, nabizKontrol } from './_kontrol.js';
 
@@ -38,7 +39,9 @@ export interface Install {
   surum: string | null;
   build: number | null;
   /** `secim`: kasadaki seçim (Şimdi / Gün sonunda); null: yeni kasa, seçim yapılmadı; alan yoksa eski kasa */
-  guncelleme: { durum: string; mesaj: string; yeni: { surum: string; build: number } | null; secim?: 'simdi' | 'gunsonu' | null } | null;
+  /** `kurulumUyari`: kasanın kök dosyaları ya da kısayolları güncellemeyle yenilenemedi (null/yok: sorun yok) */
+  /** `sonKurulum`: kasanın son kurulum anı (ms; nabızda ISO), eski kasada yok */
+  guncelleme: { durum: string; mesaj: string; yeni: { surum: string; build: number } | null; secim?: 'simdi' | 'gunsonu' | null; kurulumUyari?: string | null; sonKurulum?: number | null } | null;
   gunAcik: boolean | null;
   lisans: LicenseRecord;
   mod: 'elle' | 'otomatik';
@@ -129,6 +132,11 @@ async function readInstall(deps: MerkezDeps, id: string): Promise<Install | null
 /** Panelin yazması: kurulum kaydı (nabzın alanları ayrı anahtarda; burada kalan eski değerleri onlar ezer) */
 const writeInstall = (deps: MerkezDeps, i: Install) => deps.redis('SET', installKey(i.id), JSON.stringify(i));
 
+/** ISO zaman → ms (anlaşılmazsa null) */
+const isoMs = (v: unknown) => {
+  const ms = typeof v === 'string' && v.length <= 40 ? Date.parse(v) : NaN;
+  return Number.isFinite(ms) ? ms : null;
+};
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : null);
 const intOrNull = (v: unknown) => (Number.isInteger(v) && (v as number) > 0 ? (v as number) : null);
 
@@ -155,6 +163,30 @@ export function updateStatusLabel(g: NonNullable<Install['guncelleme']>): string
   return updateLabel(g.durum);
 }
 
+/**
+ * Merkez'den gönderilen güncellemenin yolculuğu (dükkân satırı): "Gönderildi 22:20" → "Kasa aldı · gün sonunda
+ * kurulacak" → "Kuruluyor" → "Kuruldu 22:41 · sürüm 0.3.1" ya da "Kurulamadı: <mesaj>". "Kuruldu" yalnız kasanın
+ * çalışan derlemesi (yeniden açılan sunucunun nabızda bildirdiği `build`) gönderilen derlemeye vardığında. Gönderim
+ * yoksa null. Eski kasa (seçim alanı yok) da aynı adımları görür; yalnız "kasa aldı"nın ardı eski etiketle
+ */
+export function deliveryStatus(i: Pick<Install, 'hedef' | 'gonderildi' | 'build' | 'surum' | 'guncelleme'>): { etiket: string; ton: 'info' | 'success' | 'warning' } | null {
+  if (i.hedef == null || i.gonderildi == null) return null;
+  const g = i.guncelleme;
+  if (i.build != null && i.build >= i.hedef) {
+    const at = g?.sonKurulum && g.sonKurulum >= i.gonderildi ? ` ${fmtTime(g.sonKurulum)}` : '';
+    return { etiket: `Kuruldu${at}${i.surum ? ` · sürüm ${i.surum}` : ''}`, ton: 'success' };
+  }
+  if (g && (g.durum === 'hata' || g.durum === 'geri-dondu')) return { etiket: `Kurulamadı: ${g.mesaj || updateLabel(g.durum)}`.slice(0, 160), ton: 'warning' };
+  if (g?.durum === 'kuruluyor') return { etiket: 'Kuruluyor', ton: 'info' };
+  if (g?.yeni && g.yeni.build <= i.hedef && g.yeni.build > (i.build ?? 0)) {
+    if (g.durum === 'indiriliyor') return { etiket: 'Kasa aldı · indiriliyor', ton: 'info' };
+    if (g.secim === 'simdi') return { etiket: 'Kasa aldı · şimdi kurulacak', ton: 'info' };
+    if (g.secim === 'gunsonu') return { etiket: 'Kasa aldı · gün sonunda kurulacak', ton: 'info' };
+    return { etiket: `Kasa aldı · ${updateStatusLabel(g).toLocaleLowerCase('tr-TR')}`, ton: 'info' };
+  }
+  return { etiket: `Gönderildi ${fmtTime(i.gonderildi)}`, ton: 'info' };
+}
+
 export function installView(i: Install, release: Release | null, now: number) {
   // Kasanın son görülmesi onay anıdır: çevrimdışı kasada satış kapanmaz, panel de bunu gösterir (shared/lisans.ts)
   const lic = licenseState(i.lisans, { installedAt: i.createdAt, now, confirmedAt: i.lastSeen });
@@ -168,7 +200,9 @@ export function installView(i: Install, release: Release | null, now: number) {
     lastSeen: i.lastSeen,
     online: i.lastSeen != null && now - i.lastSeen < ONLINE_MS,
     gunAcik: i.gunAcik,
-    guncelleme: i.guncelleme ? { durum: String(i.guncelleme.durum), mesaj: String(i.guncelleme.mesaj ?? ''), yeni: i.guncelleme.yeni ?? null, secim: i.guncelleme.secim ?? null, etiket: updateStatusLabel(i.guncelleme) } : null,
+    guncelleme: i.guncelleme ? { durum: String(i.guncelleme.durum), mesaj: String(i.guncelleme.mesaj ?? ''), yeni: i.guncelleme.yeni ?? null, secim: i.guncelleme.secim ?? null, etiket: updateStatusLabel(i.guncelleme), kurulumUyari: i.guncelleme.kurulumUyari ?? null } : null,
+    /** Merkez'den gönderilen güncellemenin adımı (deliveryStatus); gönderim yoksa null */
+    gonderim: deliveryStatus(i),
     lisans: { ...i.lisans, ...lic },
     mod: i.mod,
     hedef: i.hedef,
@@ -311,7 +345,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       kesinHedef: body.kesinHedef === true,
       guncelleme:
         g && typeof g === 'object'
-          ? { durum, mesaj: text(g.mesaj, 300) ?? '', yeni: yeni && typeof yeni.surum === 'string' && intOrNull(yeni.build) ? { surum: yeni.surum.slice(0, 40), build: yeni.build as number } : null, ...('secim' in g ? { secim: g.secim === 'simdi' || g.secim === 'gunsonu' ? (g.secim as 'simdi' | 'gunsonu') : null } : {}) }
+          ? { durum, mesaj: text(g.mesaj, 300) ?? '', yeni: yeni && typeof yeni.surum === 'string' && intOrNull(yeni.build) ? { surum: yeni.surum.slice(0, 40), build: yeni.build as number } : null, ...('secim' in g ? { secim: g.secim === 'simdi' || g.secim === 'gunsonu' ? (g.secim as 'simdi' | 'gunsonu') : null } : {}), kurulumUyari: text(g.kurulumUyari, 300) || null, sonKurulum: isoMs(g.sonKurulum) }
           : inst.guncelleme,
     };
     // Nabız yalnız kendi alanlarını yazar (tek komut): panelin aynı anda verdiği lisans ya da hedef ezilmez

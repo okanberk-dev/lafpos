@@ -25,7 +25,9 @@ interface Row {
   lastSeen: number | null;
   online: boolean;
   gunAcik: boolean | null;
-  guncelleme: { durum: string; mesaj: string; etiket: string } | null;
+  guncelleme: { durum: string; mesaj: string; etiket: string; kurulumUyari?: string | null } | null;
+  /** Gönderilen güncellemenin adımı: Gönderildi → Kasa aldı → Kuruluyor → Kuruldu / Kurulamadı (api/_merkez.ts deliveryStatus) */
+  gonderim?: { etiket: string; ton: Tone } | null;
   lisans: { durum: 'bekliyor' | 'aktif' | 'pasif'; bitis?: string | null; state: LicenseState; message: string; soon?: boolean };
   mod: 'elle' | 'otomatik';
   hedef: number | null;
@@ -223,10 +225,21 @@ function ShopRow({ row, selected, onToggle, onOpen, readOnly }: { row: Row; sele
         <span className="flex flex-wrap items-center gap-1.5">
           {row.bekleyen && <Badge tone="info">Güncelleme gönderilmedi</Badge>}
           {row.istekBekliyor && <Badge tone="info">Güncelleme istendi</Badge>}
-          {/* Her dükkânın güncelleme durumu hep görünür: Güncel / Kasada seçim bekliyor / Gün sonunda kurulacak / Sorun çıktı */}
-          {row.guncelleme && (
+          {/* Gönderilen güncelleme varsa onun adımı (Gönderildi 22:20 → Kasa aldı · gün sonunda kurulacak → Kuruluyor →
+              Kuruldu 22:41 · sürüm … / Kurulamadı: …); yoksa güncelleme durumu: Güncel / Kasada seçim bekliyor / Sorun çıktı */}
+          {row.gonderim ? (
+            <Badge tone={row.gonderim.ton} title={row.guncelleme?.mesaj} className="max-w-full whitespace-normal">
+              {row.gonderim.etiket}
+            </Badge>
+          ) : row.guncelleme && (
             <Badge tone={updateTone(row.guncelleme.durum)} title={row.guncelleme.mesaj}>
               {row.guncelleme.etiket}
+            </Badge>
+          )}
+          {/* Güncelleme kurulumun kök dosyalarını ya da kısayollarını yenileyemedi: kasada LafPOS-Kur.cmd yeniden çalıştırılır */}
+          {row.guncelleme?.kurulumUyari && (
+            <Badge tone="warning" title={row.guncelleme.kurulumUyari}>
+              Kurulumu yenileyin
             </Badge>
           )}
           <Badge tone={licenseTone(row)} dot title={row.lisans.message}>

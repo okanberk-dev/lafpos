@@ -41,6 +41,8 @@ export interface UpdateStatus {
   /** Son "Şimdi güncelle" isteğini güncelleyicinin aldığı an */
   sonIstek: string | null;
   guncellendi: string | null;
+  /** Kurulumun kök dosyaları ya da kısayolları yenilenemedi (bekçi, kurulum-yenile.mjs): "Kurulumu yenileyin" */
+  kurulumUyari: string | null;
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : null);
@@ -66,6 +68,7 @@ export function readUpdateStatus(dataDir = env.dataDir): UpdateStatus | null {
     sonKurulum: str(raw.sonKurulum),
     sonIstek: str(raw.sonIstek),
     guncellendi: str(raw.guncellendi),
+    kurulumUyari: str(raw.kurulumUyari)?.slice(0, 300) || null,
   };
 }
 
