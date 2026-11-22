@@ -45,3 +45,41 @@ describe('dükkân seçici (bulgu 29)', () => {
     expect(shell).toMatch(/\{REMOTE && <RemoteShopPicker \/>\}\s*\{healthPill\}/);
   });
 });
+
+describe('çevrimdışı gönderim kuyruğu (bulgu 17/20/27/28)', () => {
+  it('kuyruğa giren satırlar sepetten çıkar: sonra silmek ya da azaltmak gönderimi değiştirmez', async () => {
+    const { useCart, queueBatch, flushBatch } = await import('../src/lib/cart');
+    const o = 'o-kuyruk';
+    useCart.getState().add(o, { productId: 'latte', size: 'TEK', qty: 2, options: [], note: '' });
+    const lines = useCart.getState().byOrder[o]!;
+    queueBatch(o, { id: 'b1', lines, hold: false, at: 1 });
+    expect(useCart.getState().byOrder[o]).toBeUndefined();
+    // Garson "Gönderilmemişleri sil" der: kuyruktaki gönderim sepette değil, ona dokunulmaz ve sessizce gitmez sanılmaz
+    useCart.getState().clear(o);
+    let posted = 0;
+    const offline = Object.assign(new Error('yok'), { status: 0 });
+    expect(await flushBatch(o, useCart.getState().batches[o]!, async () => { throw offline; })).toBe('queued');
+    expect(await flushBatch(o, useCart.getState().batches[o]!, async () => { posted++; })).toBe('sent');
+    expect(posted).toBe(1);
+    expect(useCart.getState().batches[o]).toBeUndefined();
+  });
+
+  it('kasa reddederse satırlar sepete döner; aynı adisyon iki yerden aynı anda gönderilmez', async () => {
+    const { useCart, queueBatch, flushBatch, claimSend, releaseSend } = await import('../src/lib/cart');
+    const o = 'o-ret';
+    useCart.getState().add(o, { productId: 'latte', size: 'TEK', qty: 1, options: [], note: '' });
+    queueBatch(o, { id: 'b2', lines: useCart.getState().byOrder[o]!, hold: false, at: 1 });
+    expect(claimSend(o)).toBe(true);
+    expect(await flushBatch(o, useCart.getState().batches[o]!, async () => undefined)).toBe('busy');
+    releaseSend(o);
+    const rejected = Object.assign(new Error('tükendi'), { status: 409 });
+    expect(await flushBatch(o, useCart.getState().batches[o]!, async () => { throw rejected; })).toBe('rejected');
+    expect(useCart.getState().batches[o]).toBeUndefined();
+    expect(useCart.getState().byOrder[o]?.[0]?.qty).toBe(1);
+  });
+
+  it('yeniden deneme uygulama düzeyinde (adisyon ekranından çıkınca da), adisyon ekranında ayrı döngü yok', () => {
+    expect(src('src/pages/order/OrderPage.tsx')).not.toMatch(/setInterval/);
+    expect(src('src/components/AppShell.tsx')).toMatch(/useOutbox\(boot\)/);
+  });
+});

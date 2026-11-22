@@ -43,8 +43,9 @@ import { Textarea, Toggle } from '@/components/ui/Field';
 import { Badge, type BadgeTone, EmptyState, ErrorState, PageLoading } from '@/components/ui/misc';
 import { get, patch, post, put } from '@/lib/api';
 import { useAuth, useCan } from '@/lib/auth';
-import { sendableOptions, soldOutDefault, useBoot } from '@/lib/boot';
-import { newBatchId, type PendingLine, restoreLines, unreachable, useBatch, useCart, usePending } from '@/lib/cart';
+import { soldOutDefault, useBoot } from '@/lib/boot';
+import { claimSend, dropBatch, newBatchId, type PendingLine, queueBatch, releaseSend, restoreLines, returnBatch, unreachable, useBatch, useCart, usePending } from '@/lib/cart';
+import { batchBody } from '@/lib/outbox';
 import { cn } from '@/lib/cn';
 import { joinMeta } from '@/lib/text';
 import { previewTotals } from '@/lib/estimate';
@@ -180,25 +181,8 @@ export default function OrderPage() {
   // ve güncel sorulur. Önbellek sayfa yeniden yüklenince ya da Patron'dan açılınca boştur, Masalar kapalıyken eskir
   const floor = useQuery({ queryKey: ['floor'], queryFn: () => get<FloorStateDTO>('/floor'), enabled: blank && !!order?.tableId && can('siparis.al') });
 
-  // Bekleyen gönderim (kasaya ulaşılamadı): kasa dönünce kendiliğinden, aynı kimlikle. 3 sn'de bir sağlık sorusu; tablet
-  // yenilense de kayıt sepetle birlikte saklı kalır
-  const resending = useRef(false);
-  const sendRef = useRef<((hold?: boolean) => Promise<boolean>) | null>(null);
-  useEffect(() => {
-    if (!waitingBatch || REMOTE) return;
-    const timer = setInterval(async () => {
-      if (resending.current) return;
-      const up = await fetch('/api/health', { cache: 'no-store' }).then((r) => r.ok, () => false);
-      if (!up) return;
-      resending.current = true;
-      try {
-        if (await sendRef.current?.(waitingBatch.hold)) toast.ok('Bekleyen sipariş kasaya gönderildi');
-      } finally {
-        resending.current = false;
-      }
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [waitingBatch]);
+  // Bekleyen gönderim (kasaya ulaşılamadı) kasa dönünce kendiliğinden gider: uygulama düzeyindeki döngü (src/lib/outbox.ts,
+  // AppShell), adisyondan çıkılsa da. Burada ayrı döngü yok: ikisi aynı anda göndermesin
 
   if (isLoading) return <PageLoading />;
   if (!order) {
@@ -254,12 +238,14 @@ export default function OrderPage() {
    * (adisyon kapanınca) bara gider. "Bara gönder" hemen gönderir
    */
   const send = async (hold = false): Promise<boolean> => {
-    // Kasaya ulaşamayan önceki gönderim önce, aynı kimlik ve satırlarla (sunucu bir kez yazar); yenisi ondan sonra
+    // Kasaya ulaşamayan önceki gönderim önce, aynı kimlik ve satırlarla (sunucu bir kez yazar); yenisi ondan sonra. Kuyruktaki
+    // satırlar sepette değil (queueBatch): sepette sonradan silinen ya da azaltılan satır onu değiştirmez
     const waiting = useCart.getState().batches?.[order.id];
     const lines = waiting?.lines ?? pending;
     if (!lines.length) return false;
+    // Arka plan döngüsü bu adisyonu şu an gönderiyor: ikinci istek gitmez
+    if (!claimSend(order.id)) return false;
     const batch = waiting ?? { id: newBatchId(), lines, hold, at: Date.now() };
-    if (!waiting) cart.setBatch(order.id, batch);
     // Yalnız gönderilen adetler sepetten düşer: istek sürerken eklenen ya da "Geri al"la geri konan satır beklemede kalır
     const sent = new Map(lines.map((l) => [l.key, l.qty]));
     const count = lines.reduce((a, l) => a + l.qty, 0);
@@ -267,40 +253,45 @@ export default function OrderPage() {
     // satırlar takılırdı)
     setSending(true);
     let queued = false;
-    const res = await act(async (pin) => {
-      try {
-        return await post<OrderDTO>(`/orders/${order.id}/items`, {
-          items: lines.map((l) => ({ productId: l.productId, size: l.size, qty: l.qty, options: sendableOptions(boot, l.productId, l.options), note: l.note || null, ...(l.priceOverride != null ? { priceOverride: l.priceOverride } : {}) })),
-          ...(batch.hold ? { hold: true } : {}),
-          clientBatchId: batch.id,
-          approverPin: pin,
-        });
-      } catch (e) {
-        // Kasa yeniden başlıyor ya da Wi-Fi koptu: satırlar tablette bekler, bağlantı gelince kendiliğinden gider
-        if (unreachable(e)) {
-          queued = true;
-          return null as unknown as OrderDTO;
+    let res: OrderDTO | null = null;
+    try {
+      res = await act(async (pin) => {
+        try {
+          return await post<OrderDTO>(`/orders/${order.id}/items`, batchBody(boot, batch, pin));
+        } catch (e) {
+          // Kasa yeniden başlıyor ya da Wi-Fi koptu: satırlar tablette bekler, bağlantı gelince kendiliğinden gider
+          if (unreachable(e)) {
+            queued = true;
+            return null as unknown as OrderDTO;
+          }
+          throw e;
         }
-        throw e;
-      }
-    });
-    setSending(false);
+      });
+    } finally {
+      releaseSend(order.id);
+      setSending(false);
+    }
     if (queued) {
-      if (!waiting) toast.warn('Kasaya ulaşılamadı; bağlantı gelince kendiliğinden gönderilecek');
+      if (!waiting) {
+        queueBatch(order.id, batch);
+        toast.warn('Kasaya ulaşılamadı; bağlantı gelince kendiliğinden gönderilecek');
+      }
       return false;
     }
-    // Kasa reddetti (ör. ürün tükendi): bekleyen kayıt düşer, satırlar sepette kalır, düzeltip yeniden gönderilir
-    cart.setBatch(order.id, null);
-    if (!res) return false;
+    // Kasa reddetti (ör. ürün tükendi): bekleyen kayıt düşer, satırlar sepette kalır (kuyruktaysa sepete döner), düzeltip
+    // yeniden gönderilir
+    if (!res) {
+      if (waiting) returnBatch(order.id, waiting);
+      return false;
+    }
+    if (waiting) dropBatch(order.id, waiting.id);
     // Ödeme bekleyende bildirim yok: ödeme penceresi açılır, bara ödeme alınınca gider. Bar kapalıysa "kaydedildi"
     if (!batch.hold) toast.ok(`${count} ürün ${barOn ? 'gönderildi' : 'kaydedildi'}`);
-    cart.consume(order.id, sent);
+    if (!waiting) cart.consume(order.id, sent);
     qc.invalidateQueries({ queryKey: ['kitchen'] });
     if (!wide) showView('adisyon');
     return true;
   };
-
-  sendRef.current = send;
 
   // Tezgâhta tek ekran: "Öde" kalemleri ödeme bekleyen olarak yazar ve ödemeyi açar; ödeme alınınca kalemler kendiliğinden
   // bara gider, satış kapanınca ekran yeni satışa hazırdır ("Bara gönder" hemen gönderir)

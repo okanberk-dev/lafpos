@@ -5,6 +5,7 @@ import { ROLE_LABELS } from '@shared/permissions';
 import { fmtTime } from '@shared/time';
 import { useAuth, useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
+import { useOutbox } from '@/lib/outbox';
 import { cn } from '@/lib/cn';
 import { DEMO } from '@/lib/demo';
 import { useLive } from '@/lib/live';
@@ -112,6 +113,8 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
   }, [location.pathname, setMenuOpen]);
   useAutoLock(boot.settings.autoLockMinutes);
   useWakeLock(boot.settings.keepAwake);
+  // Kasaya ulaşamayan gönderimler kasa dönünce kendiliğinden gider (hangi ekranda olunursa olsun)
+  useOutbox(boot);
   useReadyAlerts();
   const [full, setFull] = useState(() => typeof document !== 'undefined' && !!document.fullscreenElement);
   useEffect(() => {
