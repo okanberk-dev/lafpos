@@ -1829,6 +1829,52 @@ export function cancelClosedOrder(t: Tx, actor: Actor, fx: Effects, orderId: str
   return cancelOrder(t, actor, fx, orderId, why);
 }
 
+/** İade sonrası yeniden yazılan ödemenin notu: iade raporu net tutarı bununla bulur (`refundReport`) */
+export const REFUND_REWRITE = 'İade sonrası: ';
+
+/**
+ * Kalem kalem iade (sahip, 22 Kas 2026): bugünün kapanmış kasa siparişinde seçilen kalemler (adet seçerek) iade edilir.
+ * Tek işlemde: alınan ödemeler iptal (adisyon açılır), seçilen adetler iptal (iade nedeniyle), kalan tutar aynı ödeme
+ * türleriyle sırayla yeniden yazılır ve adisyon yeniden kapanır. Nakit iade böylece kasanın beklenen nakdinden düşer
+ * (kasadan çıkış), kart iadesi raporda iade satırıdır. Yeniden yazılan ödeme iptal edilenin kimliğini notunda taşır:
+ * iade raporu net iade tutarını gösterir. Yetkili onayı (ödeme iptali ve kalem iptali) ve zorunlu neden.
+ */
+export function refundItems(t: Tx, actor: Actor, fx: Effects, orderId: string, input: { items: { itemId: string; qty: number }[]; reason: string }): OrderRow {
+  const o = loadOrder(t, orderId);
+  if (o.status !== 'kapali') throw conflict('Yalnız kapanmış sipariş iade edilir');
+  assertPosOrder(o);
+  const day = requireOpenDay(t);
+  if (o.dayId !== day.id) throw conflict('Önceki günün siparişi iade edilemez', 'day_closed');
+  const why = input.reason.trim();
+  if (!why) throw bad('İade nedeni yazılmalı', 'reason_required');
+  if (!input.items.length) throw bad('İade edilecek kalemi seçin', 'items_required');
+  need(actor, 'odeme.iade', 'İade yetkili onayı gerektirir');
+  const pays = orderPayments(t, orderId).filter((p) => !p.refundedAt);
+  for (const p of pays) refundPayment(t, actor, fx, orderId, { paymentId: p.id, reason: `İade: ${why}` });
+  if (loadOrder(t, orderId).status === 'kapali') reopenOrder(t, actor, fx, orderId, `İade: ${why}`);
+  for (const sel of input.items) voidItem(t, actor, fx, orderId, { itemId: sel.itemId, qty: sel.qty, reason: `İade: ${why}` });
+  let left = loadOrder(t, orderId).total;
+  for (const p of pays) {
+    if (left <= 0) break;
+    const amount = Math.min(p.amount, left);
+    addPayment(t, actor, fx, orderId, { methodId: p.methodId!, amount, tip: amount === p.amount ? p.tip : 0, customerId: p.customerId, note: `${REFUND_REWRITE}${p.id}` });
+    left -= amount;
+  }
+  if (left > 0) throw conflict('İade sonrası kalan tutar ödemelerle karşılanamadı; işlem geri alındı', 'refund_mismatch');
+  const after = loadOrder(t, orderId);
+  // Hiç kalem kalmadıysa sipariş iptal olur (bütünü iade)
+  if (after.status === 'acik' && after.total === 0) return cancelOrder(t, actor, fx, orderId, `İade: ${why}`);
+  fx.audit(t, {
+    userId: actor.user.id,
+    action: 'order.refund_items',
+    severity: 'alarm',
+    orderId,
+    amount: o.total - after.total,
+    message: `${actor.user.name} #${o.no} siparişte ${tl(o.total - after.total)} iade etti (${why})`,
+  });
+  return after;
+}
+
 // ─── Bar / mutfak durumları ──────────────────────────────────────────────────
 
 const NEXT: Record<string, 'hazirlaniyor' | 'hazir' | 'servis'> = { yeni: 'hazirlaniyor', hazirlaniyor: 'hazir', hazir: 'servis' };

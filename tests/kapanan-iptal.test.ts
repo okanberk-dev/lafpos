@@ -51,3 +51,30 @@ describe('kapanmış siparişi iptal', () => {
     expect((await h.call('mudur', 'POST', `/orders/${open.id}/cancel-closed`, { reason: 'X' })).status).toBe(409);
   });
 });
+
+describe('kalem kalem iade', () => {
+  it('seçilen adet iade edilir; kalan aynı ödeme türüyle yeniden yazılır, sipariş kapalı kalır; rapor net iadeyi gösterir', async () => {
+    const o = await h.ok<OrderDTO>('kasa', 'POST', '/orders', { type: 'tezgah' });
+    const withItems = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Latte').id, qty: 3 }] });
+    await h.ok('kasa', 'POST', `/orders/${o.id}/payments`, { methodId: method('nakit').id, amount: withItems.total });
+    const item = withItems.items[0]!;
+    const unit = item.unitPrice;
+    const denied = await h.call<{ code: string }>('kasa', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: item.id, qty: 1 }], reason: 'Soğuk geldi' });
+    expect(denied.json.code).toBe('approval_required');
+    const after = await h.ok<OrderDTO>('kasa', 'POST', `/orders/${o.id}/refund-items`, { items: [{ itemId: item.id, qty: 1 }], reason: 'Soğuk geldi', approverPin: PINS.mudur });
+    expect(after.status).toBe('kapali');
+    expect(after.total).toBe(withItems.total - unit);
+    const full = await h.ok<OrderDTO>('patron', 'GET', `/orders/${o.id}`);
+    const live = full.payments.filter((p) => !p.refundedAt);
+    expect(live.every((p) => p.methodName === 'Nakit')).toBe(true);
+    expect(live.reduce((a, p) => a + p.amount, 0)).toBe(after.total);
+    const refunds = await h.ok<{ total: number; rows: { amount: number }[] }>('patron', 'GET', '/reports/refunds');
+    expect(refunds.rows.some((r) => r.amount === unit)).toBe(true);
+  });
+
+  it('bütün kalemler iade edilirse sipariş iptal olur', async () => {
+    const o = await paidOrder('kart');
+    const after = await h.ok<OrderDTO>('mudur', 'POST', `/orders/${o.id}/refund-items`, { items: o.items.map((i) => ({ itemId: i.id, qty: i.qty })), reason: 'Yanlış sipariş' });
+    expect(after.status).toBe('iptal');
+  });
+});
