@@ -10,6 +10,8 @@ export const SETTING_LABEL: Record<string, string> = {
   receiptHeader: 'Fiş üstü',
   receiptFooter: 'Fiş altı',
   receiptCustomerName: 'Fişte müşteri adı',
+  receiptStoreCopy: 'Ödeme sonrası işyeri nüshası',
+  receiptInfoSlip: 'Müşteriye bilgi fişi',
   serviceRate: 'Servis ücreti',
   autoLockMinutes: 'Otomatik kilit',
   keepAwake: 'Ekran kararmasın',

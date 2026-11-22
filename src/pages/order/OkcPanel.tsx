@@ -53,11 +53,22 @@ export function useOkcReceipts(order: OrderDTO, enabled = true) {
 }
 
 /**
- * Ödeme penceresindeki "Yazarkasa POS'a gönder" bölümü. Adisyon (ya da seçilen kalemler) cihaza sepet olarak
+ * Adisyonda LafPOS'ta tutar olarak alınmış (kalem taşımayan, iptal edilmemiş, tamamlanmış bir cihaz fişinden gelmeyen)
+ * ödeme var mı: hesabın bütünü cihaza gidemez (sunucunun `okc_partial` kuralı birebir)
+ */
+export function amountPaidHereOf(order: OrderDTO, receipts: ReceiptDTO[] | undefined): boolean {
+  if (!receipts) return false;
+  const deviceIds = new Set(receipts.filter((r) => r.status === 'tamamlandi').flatMap((r) => r.paymentIds ?? []));
+  return order.payments.some((p) => !p.refundedAt && !p.items?.length && !deviceIds.has(p.id));
+}
+
+/**
+ * Ödeme penceresindeki "Yazarkasa POS'a gönder" bölümü. `auto`: "Ödemeyi al" sepeti kendiliğinden cihaza yollar
+ * (Yönetim › Yazarkasa POS); ayrı gönder düğmesi yok, kutu yalnız bekleyen sepeti ve son sonucu gösterir. Adisyon (ya da seçilen kalemler) cihaza sepet olarak
  * gider; ödeme ve mali fiş cihazda alınır, sonuç gelince adisyon kendiliğinden kapanır. "Ödendi" sonucunu ödeme
  * penceresi karşılar (pencere Kapat'la kapatılmış olsa da); `onSend` sepetin bu cihazdan gittiğini ona bildirir.
  */
-export function OkcPanel({ order, items, onSend }: { order: OrderDTO; amount: number; items: { itemId: string; qty: number }[] | null; onSend?: () => void }) {
+export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderDTO; amount: number; items: { itemId: string; qty: number }[] | null; onSend?: () => void; auto?: boolean }) {
   const boot = useBoot();
   const can = useCan();
   const qc = useQueryClient();
@@ -144,8 +155,7 @@ export function OkcPanel({ order, items, onSend }: { order: OrderDTO; amount: nu
   // okc_partial'ın kendisi: kalem taşımayan, iptal edilmemiş ve tamamlanmış bir cihaz fişinden gelmeyen ödeme (cihazın
   // ödemesi de kalem taşımayabilir; hangisinin cihazdan geldiğini fişin paymentIds'i söyler)
   const splitOpen = !!order.split?.shares.length;
-  const deviceIds = new Set((receipts.data ?? []).filter((r) => r.status === 'tamamlandi').flatMap((r) => r.paymentIds ?? []));
-  const amountPaidHere = !!receipts.data && order.payments.some((p) => !p.refundedAt && !p.items?.length && !deviceIds.has(p.id));
+  const amountPaidHere = amountPaidHereOf(order, receipts.data);
   const blocked = items?.length
     ? splitOpen
       ? 'Hesap kişilere bölünmüş: payları “Paylaş”tan alın ya da paylaşımı kaldırın'
@@ -193,6 +203,8 @@ export function OkcPanel({ order, items, onSend }: { order: OrderDTO; amount: nu
             </Button>
           </div>
         </div>
+      ) : auto ? (
+        <p className="text-[13px] text-ink-2">Ödemeyi alınca hesap cihaza kendiliğinden gider; ödeme ve mali fiş cihazda alınır</p>
       ) : blocked ? (
         <p className="text-[13px] text-ink-2">{blocked}</p>
       ) : (

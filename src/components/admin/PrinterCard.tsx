@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { fmtDateTime } from '@shared/time';
 import { Badge, Card } from '@/components/admin/ui';
 import { Button } from '@/components/ui/Button';
+import { Toggle } from '@/components/ui/Field';
 import { ErrorState, Skeleton } from '@/components/ui/misc';
 import { errorMessage, get, put } from '@/lib/api';
 import { useBoot } from '@/lib/boot';
@@ -31,7 +32,23 @@ export function PrinterCard() {
   const boot = useBoot();
   const q = useQuery({ queryKey: ['admin', 'yazici'], queryFn: () => get<PrinterView>('/admin/yazici') });
   const [saving, setSaving] = useState<string | null>(null);
+  const [savingOpt, setSavingOpt] = useState(false);
   const d = q.data;
+  /** Ödeme sonrası fişler (ayar, herkese giden: kasa ekranı ödemeden sonra ona bakar) */
+  const setOpt = async (patch: { receiptStoreCopy?: boolean; receiptInfoSlip?: boolean }, done: string) => {
+    if (savingOpt) return;
+    setSavingOpt(true);
+    try {
+      await put('/admin/settings', patch);
+      await qc.invalidateQueries({ queryKey: ['bootstrap'] });
+      void qc.invalidateQueries({ queryKey: ['admin', 'settings'] });
+      toast.ok(done);
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setSavingOpt(false);
+    }
+  };
 
   const choose = async (name: string | null) => {
     if (saving) return;
@@ -117,6 +134,25 @@ export function PrinterCard() {
             )}
           </div>
           <p className="text-xs text-[var(--admin-text-mute)]">Deneme fişini kasa bilgisayarında basın: telefonda ya da tablette basılırsa o cihazın yazdırma penceresi açılır</p>
+          {/* Ödemeden sonra kendiliğinden çıkanlar: yalnız kasa bilgisayarında ve yazıcı bulunmuşken (yoksa sessizce atlanır) */}
+          <div className="space-y-2 border-t border-[var(--admin-divider)] pt-3">
+            <Toggle
+              block
+              checked={boot.settings.receiptStoreCopy}
+              disabled={savingOpt}
+              onChange={(v) => void setOpt({ receiptStoreCopy: v }, v ? 'Ödemeden sonra işyeri nüshası çıkacak' : 'İşyeri nüshası çıkmayacak')}
+              label="Ödeme sonrası işyeri nüshası"
+              hint="kısa kayıt: adisyon no, toplam, ödeme türleri, yazarkasa fiş no; kalem dökümü yok"
+            />
+            <Toggle
+              block
+              checked={boot.settings.receiptInfoSlip}
+              disabled={savingOpt}
+              onChange={(v) => void setOpt({ receiptInfoSlip: v }, v ? 'Ödemeden sonra müşteriye bilgi fişi çıkacak' : 'Müşteriye bilgi fişi çıkmayacak')}
+              label="Müşteriye bilgi fişi"
+              hint={boot.integrations.okc.provider === 'kapali' ? 'yazarkasa bağlı değilken; “mali değeri yoktur” yazar' : 'yazarkasa bağlıyken basılmaz: müşterinin fişini cihaz keser'}
+            />
+          </div>
         </div>
       ) : null}
     </Card>

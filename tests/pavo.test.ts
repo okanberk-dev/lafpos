@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { OrderDTO } from '@shared/types';
 import { PavoClient, PavoError, type PavoStore } from '../server/okc/pavo';
-import { eodAfter, eodSummary, eodTimeMs, pavoOrderNo, pavoSale, pavoTiming, readEod, readEodBaseline, readSale } from '../server/okc/providers/pavo';
+import { eodAfter, eodCopyUnavailable, eodSummary, eodTimeMs, pavoOrderNo, pavoSale, pavoTiming, readEod, readEodBaseline, readSale } from '../server/okc/providers/pavo';
 import { type FakePavo, startFakePavo } from './fake-pavo';
 import { type Harness, startApp } from './harness';
 
@@ -818,6 +818,23 @@ describe('akış (sahte cihaz)', () => {
         expect(v.status).toBe(502);
         expect(v.json.code).toBe('pavo_eod_nocopy');
         expect(v.json.error).toContain('cihazın kendi menüsünden');
+      } finally {
+        device.eodCopyReply = null;
+      }
+    });
+
+    it('cihaz kopya ucunda iç hata verirse (HTTP 500) gün sonu gönderilmez; 405 ve 501 kopya yok sayılır', async () => {
+      expect(eodCopyUnavailable(new PavoError('x', 'HTTP_500', true))).toBe(false);
+      expect(eodCopyUnavailable(new PavoError('x', 'HTTP_503', true))).toBe(false);
+      expect(eodCopyUnavailable(new PavoError('x', 'HTTP_400', true))).toBe(false);
+      for (const code of ['HTTP_404', 'HTTP_405', 'HTTP_501', 'HTTP_200', 'HTTP_204']) expect(eodCopyUnavailable(new PavoError('x', code, true))).toBe(true);
+      expect(eodCopyUnavailable(new PavoError('x', null, true))).toBe(false);
+      device.eodCopyReply = 'http500';
+      try {
+        const before = eodRequests().length;
+        const r = await h.call<{ code: string; error: string }>('patron', 'POST', '/okc/eod', {});
+        expect(r.status).toBe(502);
+        expect(eodRequests().length).toBe(before);
       } finally {
         device.eodCopyReply = null;
       }

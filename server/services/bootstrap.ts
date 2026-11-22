@@ -3,7 +3,8 @@ import type { BootstrapDTO, MeDTO, OptionGroupDTO, ProductDTO } from '@shared/ty
 import { type DB, schema, type Tx } from '../db/client';
 import { type AuthUser, can } from '../lib/auth';
 import { env } from '../env';
-import { getPublicSettings, getSettings, trainingMode } from '../lib/settings';
+import { getPublicSettings, getSettings, getSyncState, okcAutoOn, trainingMode } from '../lib/settings';
+import { pickReceiptPrinter, PRINTERS_KEY, type WinPrinter } from '../lib/yazici';
 import { siteKaraokeOn } from '../sync/laffogato-karaoke';
 import { localStampsOn, siteSigned } from '../sync/laffogato-link';
 import { merkezBranch } from '../sync/merkez';
@@ -143,7 +144,8 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
     day: dayToDTO(t, getOpenDay(t)),
     branch: merkezBranch(),
     integrations: {
-      okc: { provider: getSettings().okcProvider, mode: getSettings().okcMode },
+      okc: { provider: getSettings().okcProvider, mode: getSettings().okcMode, auto: okcAutoOn() },
+      receiptPrinter: receiptPrinterKnown(),
       laffogatoPanel: siteSigned(),
       lafmaliyetPush: !!env.lafmaliyetUrl && env.lafmaliyetToken.length >= 32,
       laffogatoUrl: env.laffogatoUrl,
@@ -154,4 +156,13 @@ export function bootstrap(t: Tx | DB, user: AuthUser): BootstrapDTO {
     },
     serverTime: Date.now(),
   };
+}
+
+/**
+ * Kasa bilgisayarında fiş yazıcısı var mı: kasa kısayolu (Windows) yazıcıları bildirdi ve kullanılacak biri belli.
+ * Ödeme sonrası işyeri nüshası ve bilgi fişi yalnız o zaman kendiliğinden basılır (yazıcı yoksa sessizce atlanır)
+ */
+function receiptPrinterKnown(): boolean {
+  const seen = getSyncState<{ printers: WinPrinter[] }>(PRINTERS_KEY);
+  return !!seen && !!pickReceiptPrinter(seen.printers ?? [], getSettings().receiptPrinter).name;
 }

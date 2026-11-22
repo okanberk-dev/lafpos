@@ -17,8 +17,13 @@ import type { DocKind, FiscalBasket, FiscalPayment, FiscalProvider, FiscalResult
  * Sıra no ve sertifika izi veritabanında (`sync_state`). Depo `service.ts`'ten verilir: bu modül yüklenirken
  * veritabanına dokunmaz (sağlayıcı listesi testlerde ortam hazırlanmadan da yüklenebilir)
  */
-let backing: PavoStore | null = null;
-export function usePavoStore(s: PavoStore) {
+/** Kurulumun Pavo kimliği (fingerprint) de kalıcı saklanır; eski testlerin deposu onu tutmayabilir */
+export interface PavoBacking extends PavoStore {
+  getFingerprint?(): string | null;
+  setFingerprint?(fp: string): void;
+}
+let backing: PavoBacking | null = null;
+export function usePavoStore(s: PavoBacking) {
   backing = s;
 }
 const need = (): PavoStore => {
@@ -43,13 +48,58 @@ export function usePavoConfig(fn: () => { url: string; serial: string } | null) 
   client = undefined;
 }
 
+/** Eski kurulumların (kimlik saklanmadan eşleştirilmiş) ve ortamda tanımsızken eşleştirilmemiş kurulumun kimliği */
+export const LEGACY_FINGERPRINT = 'LafPOS';
+/** Pavo kimliği biçimi: kısa, harf-rakam-tire (docs/04-YAZARKASA.md §8.1) */
+export const FINGERPRINT_RE = /^[A-Za-z0-9-]{1,32}$/;
+
+/** Kuruluma özel yeni kimlik: `LafPOS-` ve 6 harf-rakam (karışmasın diye 0/O, 1/I yok) */
+export function newFingerprint(rand: (n: number) => number = (n) => Math.floor(Math.random() * n)): string {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let tail = '';
+  for (let i = 0; i < 6; i++) tail += abc[rand(abc.length)];
+  return `${LEGACY_FINGERPRINT}-${tail}`;
+}
+
+/**
+ * Cihaza giden Pavo kimliği (`TransactionHandle.Fingerprint`). Sıra: ayarlar dosyasındaki `PAVO_FINGERPRINT`; yoksa
+ * kurulumun saklanan kimliği; o da yoksa ve cihaz daha önce eşleştirildiyse eski kimlik `LafPOS` (eşleştirme bozulmasın
+ * diye saklanır, sonra hep o gider); hiç eşleştirilmemişse eşleştirmeye dek `LafPOS` (ilk eşleştirmede yenisi üretilir)
+ */
+export function pavoFingerprint(): { value: string; source: 'dosya' | 'kurulum' | 'eski' | 'yok' } {
+  const fromEnv = (process.env.PAVO_FINGERPRINT ?? '').trim();
+  if (fromEnv) return { value: fromEnv, source: 'dosya' };
+  const stored = backing?.getFingerprint?.() ?? null;
+  if (stored) return { value: stored, source: stored === LEGACY_FINGERPRINT ? 'eski' : 'kurulum' };
+  const paired = !!backing && (backing.getSequence() > 0 || !!backing.getCert());
+  if (paired) {
+    backing?.setFingerprint?.(LEGACY_FINGERPRINT);
+    return { value: LEGACY_FINGERPRINT, source: 'eski' };
+  }
+  return { value: LEGACY_FINGERPRINT, source: 'yok' };
+}
+
+/**
+ * Eşleştirmeden hemen önce: ortamda tanımlı değilse ve kurulumun kimliği yoksa yenisi üretilir ve saklanır (bir kez;
+ * yeniden eşleştirmede aynısı kalır). Eski eşleştirilmiş kurulum `pavoFingerprint`te `LafPOS`'u saklamıştır
+ */
+function ensureFingerprint(): string {
+  const now = pavoFingerprint();
+  if (now.source !== 'yok' || !backing?.setFingerprint) return now.value;
+  const fp = newFingerprint();
+  backing.setFingerprint(fp);
+  client = undefined;
+  return fp;
+}
+
 let client: PavoClient | null | undefined;
 let clientSource: PavoSource | null = null;
 export function pavo(): PavoClient | null {
   if (client === undefined) {
-    const fingerprint = (process.env.PAVO_FINGERPRINT ?? '').trim() || 'LafPOS';
+    const fingerprint = pavoFingerprint().value;
     const panel = panelConfig();
-    const cfg = panel ? { url: panel.url, serial: panel.serial, fingerprint } : PavoClient.configFromEnv(process.env);
+    const fromFile = panel ? null : PavoClient.configFromEnv(process.env);
+    const cfg = panel ? { url: panel.url, serial: panel.serial, fingerprint } : fromFile ? { ...fromFile, fingerprint } : null;
     client = cfg ? new PavoClient(cfg, store) : null;
     clientSource = cfg ? (panel ? 'panel' : 'dosya') : null;
   }
@@ -350,11 +400,12 @@ export function readEodBaseline(res: PavoResponse): EodBaseline | null {
 }
 
 /**
- * Cihaz yanıt verdi ama son gün sonunun kopyasını vermedi: uç bu cihazda yok ya da gövde boş (sahada N86: HTTP 404,
- * gövdesiz). Zaman aşımı ve kopan bağlantı bu değildir (yanıt yok: cihaza ulaşılamıyor olabilir)
+ * Cihaz yanıt verdi ama son gün sonunun kopyasını vermedi: uç bu cihazda yok (404, 405, 501) ya da başarılı yanıtın
+ * gövdesi boş (2xx; sahada N86: HTTP 404, gövdesiz). Cihazın iç hatası (500, 503...) kopya yok sayılmaz: cihaz bozuk
+ * durumda olabilir, gün sonu gönderilmez (#72 incelemesi). Zaman aşımı ve kopan bağlantı da bu değildir
  */
 export function eodCopyUnavailable(e: unknown): e is PavoError {
-  return e instanceof PavoError && /^HTTP_\d+$/.test(e.code ?? '');
+  return e instanceof PavoError && /^HTTP_(404|405|501|2\d\d)$/.test(e.code ?? '');
 }
 
 /**
@@ -451,6 +502,8 @@ export const pavoProvider: FiscalProvider = {
       url: c?.cfg.url ?? null,
       serial: c?.cfg.serial ?? null,
       paired: store.getSequence() > 0,
+      fingerprint: pavoFingerprint().value,
+      fingerprintSource: pavoFingerprint().source,
       certificate: store.getCert(),
       busy: c?.busyWith ?? null,
       exchanges: c?.exchanges ?? [],
@@ -528,10 +581,12 @@ export const pavoProvider: FiscalProvider = {
 
 /** Yönetim › Yazarkasa POS › Eşleştir */
 export async function pairPavo() {
-  const c = pavo();
+  let c = pavo();
   if (!c) throw new Error(pavoProvider.notConfigured);
   const busy = busyMessage(c, 'bitince eşleştirin');
   if (busy) throw new PavoError(busy);
+  // İlk eşleştirme kurulumun kimliğini üretir (istemci yeni kimlikle kurulur); sonrakiler aynısını kullanır
+  if (c.cfg.fingerprint !== ensureFingerprint()) c = pavo()!;
   const res = await c.pair();
   return { ok: true, message: res.Message ?? null, certificate: store.getCert() };
 }
