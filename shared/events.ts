@@ -70,6 +70,11 @@ export interface LiveEvent {
   platform?: PlatformId;
   /** okc.paid: cihazın yazdığı ödemeler (tür, ad, tutar); sonuç ekranı para üstünü bundan hesaplar */
   paid?: { kind: string; name: string; amount: number }[];
+  /**
+   * okc.paid: ödenen cihaz sepetinin (fişin) kimliği. Kasa ekranı işyeri nüshasını bununla sunucudan alır
+   * (`/okc/store-copies/:id/claim`); eski sürümün olayında yok, ekran o zaman bekleyen nüshaları sorar
+   */
+  receiptId?: string;
 }
 
 /**

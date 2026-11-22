@@ -16,11 +16,26 @@ import { callFor, callText, numaratorLabel, serviceModeOf } from '@shared/servic
  */
 const usePrint = create<{ content: ReactNode | null; sheet: boolean; set: (c: ReactNode | null, sheet?: boolean) => void }>((set) => ({ content: null, sheet: false, set: (content, sheet = false) => set({ content, sheet }) }));
 
-/** `sheet`: 80 mm fiş değil A4 sayfa (masa kartları); index.css `.print-sheet` */
-export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}) {
+/**
+ * `sheet`: 80 mm fiş değil A4 sayfa (masa kartları); index.css `.print-sheet`. Dönen söz yazdırma komutu verilince
+ * biter (kiosk Chrome'da `window.print()` fişi yazıcıya gönderip döner): işyeri nüshasının "basıldı" onayı bundan sonra
+ * gider. Yazdırılamazsa reddedilir
+ */
+export function printNow(content: ReactNode, opts: { sheet?: boolean } = {}): Promise<void> {
   usePrint.getState().set(content, !!opts.sheet);
   // İçerik çizilsin diye bir kare bekle
-  requestAnimationFrame(() => setTimeout(() => window.print(), 30));
+  return new Promise((done, fail) =>
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        try {
+          window.print();
+          done();
+        } catch (e) {
+          fail(e);
+        }
+      }, 30),
+    ),
+  );
 }
 
 export function PrintHost() {

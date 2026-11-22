@@ -7,6 +7,7 @@ import type { OrderDTO } from '@shared/types';
 import { Button, IconButton } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Badge } from '@/components/ui/misc';
+import { deviceCopyHere } from '@/lib/after-payment';
 import { ApiError, errorMessage, get, post } from '@/lib/api';
 import { withApproval } from '@/lib/approval';
 import { useCan } from '@/lib/auth';
@@ -95,7 +96,8 @@ export function OkcPanel({ order, items, onSend, auto = false }: { order: OrderD
     // İstek gitmeden: yanıtı kaybolan sepet de cihaza ulaşmış olabilir (okc_unknown), ödenirse sonuç bu cihazda karşılanır
     onSend?.();
     try {
-      await post(`/okc/orders/${order.id}/send`, { items });
+      // Nüsha basan kasa ekranıysa cihaz ödeyince işyeri nüshası sunucuda bekler (useDeviceCopies basar)
+      await post(`/okc/orders/${order.id}/send`, { items, storeCopy: deviceCopyHere(boot) });
       await qc.invalidateQueries({ queryKey: ['okc', order.id] });
       toast.info(provider === 'simulator' ? 'Sepet eğitim cihazına gönderildi' : boot.integrations.okc.mode === 'anlik' ? 'Sepet yazarkasaya gönderildi; ödemeyi cihazdan alın' : 'Sepet cihaz listesine eklendi');
     } catch (e) {

@@ -148,6 +148,13 @@
       "when": 1795317422587,
       "tag": "0020_site_sozlesme",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1795347629549,
+      "tag": "0021_isyeri_nushasi",
+      "breakpoints": true
     }
   ]
 }

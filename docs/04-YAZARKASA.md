@@ -129,9 +129,30 @@ bugünkü gibi. Ayar kapalıysa ya da bağlantı masada ödemedeyse pencere bug�
 no'su varsa, kasiyer; kalem dökümü yok; `StoreCopyReceipt`, `src/lib/print.tsx`). Yazarkasasız kurulumda isteğe bağlı
 **müşteriye bilgi fişi** ("mali değeri yoktur") de basılır. Ayarlar Yönetim › Ayarlar ve yedek › Fiş yazıcısı kartında:
 "Ödeme sonrası işyeri nüshası" (`receiptStoreCopy`, varsayılan açık), "Müşteriye bilgi fişi" (`receiptInfoSlip`,
-varsayılan kapalı). Her ödeme için tam bir kez ve yalnız ödemeyi alan ekranda (cihaz ödemesinde sepeti gönderen
-ekran); yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir fiş yazıcısı bildirdiyse
-(`integrations.receiptPrinter`); yoksa sessizce atlanır.
+varsayılan kapalı). Her ödeme için tam bir kez; yalnız kasa bilgisayarının ekranında (`localhost`) ve kasa kısayolu bir
+fiş yazıcısı bildirdiyse (`integrations.receiptPrinter`); yoksa sessizce atlanır. LafPOS'ta alınan ödemenin nüshasını
+ödemeyi alan ekran basar.
+
+**Cihaz ödemesinin işyeri nüshası sunucuda bekler** (22 Kasım 2026; sunucu `server/okc/store-copy.ts`, ekran
+`src/lib/store-copies.ts`). Eskiden nüshayı yalnız canlı olay (`okc.paid`) bastırıyordu: ödeme anında kasa ekranı
+kapalıysa, yenileniyorsa, kilitliyse ya da canlı bağlantı (SSE) kopuksa nüsha hiç çıkmıyordu.
+
+- Sepeti nüsha basan kasa ekranı gönderirse (`POST /api/okc/orders/:id/send`, `storeCopy: true`) fişe "bekliyor"
+  yazılır (`fiscal_receipts.store_copy`). Telefondan ya da yazıcısız ekrandan giden sepetin nüshası yoktur (eskisi gibi).
+- Cihaz ödeyince `okc.paid` olayı fişin kimliğini (`receiptId`) taşır; kasa ekranı nüshayı bu kimlikle alır
+  (`POST /api/okc/store-copies/:id/claim`), basar ve "basıldı" der (`…/printed`; denetim kaydı `okc.store_copy`,
+  geç basıldıysa "ödemeden 12 dk sonra"). Fiş kimliği taşımayan eski olayda ekran bekleyenleri sorar.
+- Olay kaçtıysa kasa ekranı açılınca (giriş, sayfa yenileme) ve canlı bağlantı yeniden kurulunca bekleyenleri sorar
+  (`GET /api/okc/store-copies`) ve her birini basar; birden çoksa tek yazdırmada, aralarında kâğıt kesilir. Nüsha
+  ödemenin saatini yazar. Görünmeyen sekme (arkada ya da simge durumunda; tarayıcı orada yazdırmayı bekletir) nüsha
+  almaz, görünür olunca sorar.
+- Alma atomiktir: iki sekme ya da iki cihaz aynı nüshayı isterse yalnız biri alır, öbürü 409 `copy_taken` alır ve
+  basmaz. Alınıp 2 dk içinde "basıldı" denmeyen nüsha (ekran basarken kapandı) yeniden verilir; denetim kaydı iki kez
+  basılmış olabileceğini yazar.
+- Yalnız açık günün ödemeleri: gün kapanınca bekleyen nüsha basılmaz. "Ödeme sonrası işyeri nüshası" kapalıysa hiçbiri;
+  fişi iptal edilen ödemenin nüshası da basılmaz. Uçlar `odeme.al` ister. Kör kasada nüsha yine bu fişin ödemesini yazar
+  (aynı döküm `okc.paid` olayıyla zaten her ekrana gider); adisyonun öteki ödemeleri gitmez.
+- Testler: `tests/isyeri-nushasi.test.ts`.
 
 ## 5. Sepet nasıl hesaplanır (`basket.ts`)
 
@@ -185,8 +206,8 @@ Token sonucu `fromTokenxSale` ile ortak sonuca çevrilir (`0` → `paid`, `99` �
 Her sonuç denetim kaydına yazılır: gönderim (`okc.send`), ödendi (`okc.paid`), cihazda vazgeçme ya da cihazdan
 silinme (`okc.cancelled`), LafPOS'tan sepet iptali (`okc.delete`, ulaşılamadıysa `okc.force_cancel`), cihaza
 ulaşmayan gönderim (`okc.not_delivered`), fiş iptali (`okc.void`, `okc.void_closed_day`) ve alarmlar
-(`okc.underpaid`, `okc.apply_failed`, `okc.late_paid`). Pavo'da cihazın banka gün sonu `okc.eod` (§8.5). Aynı sonuç
-ikinci kez gelirse işlem ve kayıt tekrarlanmaz.
+(`okc.underpaid`, `okc.apply_failed`, `okc.late_paid`). Pavo'da cihazın banka gün sonu `okc.eod` (§8.5). İşyeri
+nüshası basılınca `okc.store_copy` (§4.1). Aynı sonuç ikinci kez gelirse işlem ve kayıt tekrarlanmaz.
 Son hata Genel bakış › Sistem sağlığı'nda ve Yazarkasa sayfasında görünür.
 
 ## 7. Sık sorunlar

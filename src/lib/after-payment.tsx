@@ -1,22 +1,16 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef } from 'react';
 import { afterPaymentPrints, isKasaHost, printOnce } from '@shared/odeme-fisi';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
-import { get } from '@/lib/api';
+import { ApiError, get, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { deviceCopyListener } from '@/lib/device-copies';
-import { onLive } from '@/lib/live';
+import { onLive, useLive } from '@/lib/live';
 import { BillReceipt, printNow, PrintCut, StoreCopyReceipt } from '@/lib/print';
+import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from '@/lib/store-copies';
 
-/** Bu sekmede basılmış ödemeler (cihaz sepeti ya da ödeme kimliği): aynı ödeme ikinci kez basılmaz */
+/** Bu sekmede basılmış LafPOS ödemeleri (ödeme kimliği): aynı ödeme ikinci kez basılmaz */
 const once = printOnce();
 
 const DOC_LABEL: Record<string, string> = { okc_fis: 'fiş', bilgi_fisi: 'bilgi fişi', e_arsiv: 'e-Arşiv', e_fatura: 'e-Fatura' };
-
-/** Bu ekranda ödemeden sonra bir şey basılır mı (basılmayacaksa cihaz fişi için sunucuya sorulmaz) */
-export function printsAfterPayment(boot: BootstrapDTO, viaDevice: boolean): boolean {
-  const plan = plannedPrints(boot, viaDevice);
-  return plan.storeCopy || plan.infoSlip;
-}
 
 const plannedPrints = (boot: BootstrapDTO, viaDevice: boolean) =>
   afterPaymentPrints({
@@ -28,60 +22,114 @@ const plannedPrints = (boot: BootstrapDTO, viaDevice: boolean) =>
   });
 
 /**
- * Ödemeden sonra fiş yazıcısından çıkanlar (yalnız ödemeyi alan ekranda çağrılır): kısa işyeri nüshası ve yazarkasasız
- * kurulumda müşteriye bilgi fişi. Kasa ekranı değilse ya da yazıcı yoksa sessizce hiçbir şey olmaz. `key` her ödeme
- * için tektir (cihaz sepeti ya da ödeme kimliği)
+ * Bu ekran cihaz ödemesinin işyeri nüshasını basar mı (kasa ekranı, fiş yazıcısı, ayar açık). Sepet cihaza
+ * gönderilirken sunucuya söylenir (`storeCopy`): cihaz ödeyince nüsha sunucuda bekler, bir kasa ekranı tam bir kez basar
  */
-export function printAfterPayment(opts: {
-  key: string;
-  boot: BootstrapDTO;
-  order: OrderDTO;
-  paymentIds: string[];
-  device?: { receiptNo: number | null; zNo: number | null; docKind: string | null; docId: string | null } | null;
-}) {
+export function deviceCopyHere(boot: BootstrapDTO): boolean {
+  return plannedPrints(boot, true).storeCopy;
+}
+
+/**
+ * LafPOS'ta alınan ödemeden sonra fiş yazıcısından çıkanlar (yalnız ödemeyi alan ekranda çağrılır): kısa işyeri nüshası
+ * ve yazarkasasız kurulumda müşteriye bilgi fişi. Kasa ekranı değilse ya da yazıcı yoksa sessizce hiçbir şey olmaz.
+ * `key` her ödeme için tektir (ödeme kimlikleri). Cihaz ödemesinin nüshası ayrı yoldan: `useDeviceCopies`
+ */
+export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order: OrderDTO; paymentIds: string[] }) {
   const { boot, order } = opts;
-  const plan = plannedPrints(boot, !!opts.device);
+  const plan = plannedPrints(boot, false);
   if (!plan.storeCopy && !plan.infoSlip) return;
   if (!once(opts.key)) return;
   const payments = order.payments.filter((p) => opts.paymentIds.includes(p.id));
   const cashier = payments.find((p) => p.userName)?.userName ?? useAuth.getState().me?.name ?? null;
   const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
-  const device = opts.device ? { receiptNo: opts.device.receiptNo, zNo: opts.device.zNo, docId: opts.device.docId, docLabel: opts.device.docKind ? (DOC_LABEL[opts.device.docKind] ?? null) : null } : null;
-  printNow(
+  void printNow(
     <>
-      {plan.storeCopy && <StoreCopyReceipt order={order} boot={boot} payments={payments} device={device} cashier={cashier} />}
+      {plan.storeCopy && <StoreCopyReceipt order={order} boot={boot} payments={payments} cashier={cashier} />}
       {plan.storeCopy && plan.infoSlip && <PrintCut />}
       {plan.infoSlip && <BillReceipt order={order} boot={boot} sizeLabel={sizeLabel} />}
+    </>,
+  ).catch(() => undefined);
+}
+
+/**
+ * Sunucudan alınan cihaz ödemesi nüshaları tek yazdırmada (aralarında kâğıt kesilir). Fiş ve Z no'su cihazdan, saat
+ * ödemenin anı (nüsha geç basılsa da), kasiyer ödemeyi alan kişi (görünmüyorsa bu ekrandaki kişi)
+ */
+export function printStoreCopies(boot: BootstrapDTO, copies: ClaimedStoreCopy[]): Promise<void> {
+  const me = useAuth.getState().me?.name ?? null;
+  return printNow(
+    <>
+      {copies.map((c, i) => (
+        <Fragment key={c.receiptId}>
+          {i > 0 && <PrintCut />}
+          <StoreCopyReceipt
+            order={c.order}
+            boot={boot}
+            payments={c.payments}
+            device={{ receiptNo: c.device.receiptNo, zNo: c.device.zNo, docId: c.device.docId, docLabel: c.device.docKind ? (DOC_LABEL[c.device.docKind] ?? null) : null }}
+            cashier={c.payments.find((p) => p.userName)?.userName ?? me}
+            at={c.at}
+          />
+        </Fragment>
+      ))}
     </>,
   );
 }
 
-type DeviceReceipt = { id: string; status: string; paymentIds?: string[]; receiptNo: number | null; zNo: number | null; docKind: string | null; docId: string | null };
+/** Nüshanın sunucu uçları (server/routes/okc.ts › store-copies) */
+const storeCopyApi: StoreCopyApi = {
+  pending: () => get<{ id: string }[]>('/okc/store-copies'),
+  claim: async (id) => {
+    try {
+      return await post<ClaimedStoreCopy>(`/okc/store-copies/${encodeURIComponent(id)}/claim`);
+    } catch (e) {
+      // Başka ekran aldı, basıldı ya da artık basılmayacak
+      if (e instanceof ApiError && (e.code === 'copy_taken' || e.status === 404)) return null;
+      throw e;
+    }
+  },
+  printed: async (id, claim) => {
+    try {
+      await post(`/okc/store-copies/${encodeURIComponent(id)}/printed`, { claim });
+    } catch (e) {
+      // Nüsha bu arada başka ekrana verildi: onay yeniden denenmez
+      if (e instanceof ApiError && (e.code === 'copy_taken' || e.status === 404)) return;
+      throw e;
+    }
+  },
+};
 
 /**
- * Cihazda ödenen sepetin işyeri nüshası: sepetin fiş ve Z no'su ile adisyonun güncel hâli sunucudan okunur. Yazdırma
- * ödemeyi bozmaz (hata sessiz); her cihaz fişi bir kez (`printAfterPayment`)
- */
-export async function printDeviceCopy(boot: BootstrapDTO, orderId: string) {
-  if (!printsAfterPayment(boot, true)) return;
-  try {
-    const [receipts, order] = await Promise.all([get<DeviceReceipt[]>(`/okc/orders/${orderId}/receipts`), get<OrderDTO>(`/orders/${orderId}`)]);
-    const r = receipts.find((x) => x.status === 'tamamlandi');
-    if (!r) return;
-    printAfterPayment({ key: `okc:${r.id}`, boot, order, paymentIds: r.paymentIds ?? [], device: { receiptNo: r.receiptNo, zNo: r.zNo, docKind: r.docKind, docId: r.docId } });
-  } catch {
-    // Fiş basılamadı: ödeme yine alınmıştır
-  }
-}
-
-/**
- * Uygulama düzeyinde (AppShell) cihaz ödemelerinin nüshası: sepeti bu sekme gönderdiyse ödeme penceresi ya da adisyon
- * ekranı kapanmış olsa da basılır (`markDeviceSent`)
+ * Uygulama düzeyinde (AppShell) cihaz ödemelerinin işyeri nüshası: yalnız nüsha basan kasa ekranında ve ödeme alabilen
+ * kişide. Ödeme penceresi ya da adisyon ekranı kapanmış olsa da basılır; olay kaçtıysa (ekran kapalı, yenileniyor,
+ * kilitli ya da canlı bağlantı kopuk) açılışta ve bağlantı yeniden kurulunca (`src/lib/store-copies.ts`)
  */
 export function useDeviceCopies(boot: BootstrapDTO) {
+  const canTake = useAuth((s) => !!s.me?.permissions.includes('odeme.al'));
+  const active = canTake && deviceCopyHere(boot);
   const ref = useRef(boot);
   useEffect(() => {
     ref.current = boot;
   });
-  useEffect(() => onLive(deviceCopyListener((orderId) => void printDeviceCopy(ref.current, orderId))), []);
+  useEffect(() => {
+    if (!active) return;
+    // Görünmeyen sekme (simge durumunda, arkada) yazdıramaz: nüsha almaz, görünür olunca sorar
+    const visible = () => document.visibilityState === 'visible';
+    const queue = storeCopyQueue(storeCopyApi, (copies) => printStoreCopies(ref.current, copies), { ready: visible });
+    void queue.sync();
+    const offLive = onLive((e) => void queue.onEvent(e));
+    // Canlı bağlantı yeniden kuruldu: kopukken ödenenlerin nüshası
+    const offStatus = useLive.subscribe((s, prev) => {
+      if (s.status === 'canli' && prev.status !== 'canli') void queue.sync();
+    });
+    const onVisible = () => {
+      if (visible()) void queue.sync();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      offLive();
+      offStatus();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [active]);
 }

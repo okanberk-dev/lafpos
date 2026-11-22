@@ -26,6 +26,7 @@ import {
   verifyDeviceEod,
   webhookUrl,
 } from '../okc/service';
+import { claimStoreCopy, pendingStoreCopies, storeCopyPrinted } from '../okc/store-copy';
 import { getOrderDTO } from '../services/orders';
 
 export const okcRoutes = new Hono<AppEnv>();
@@ -147,10 +148,34 @@ okcRoutes.post('/webhook/register', async (c) => {
 });
 
 okcRoutes.post('/orders/:id/send', async (c) => {
-  const input = await body(c, z.object({ items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).nullish() }));
+  const input = await body(
+    c,
+    z.object({
+      items: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1) })).nullish(),
+      /** Gönderen ekran ödemeden sonra işyeri nüshası basan kasa ekranı: cihaz ödeyince nüsha sunucuda bekler */
+      storeCopy: z.boolean().optional(),
+    }),
+  );
   const actor = actorFrom(c);
-  const receipt = await sendOrderToDevice(actor, c.req.param('id'), input.items?.length ? input.items : null);
+  const receipt = await sendOrderToDevice(actor, c.req.param('id'), input.items?.length ? input.items : null, { storeCopy: input.storeCopy });
   return c.json({ receipt, order: blindOrder(c.get('user'), getOrderDTO(db, c.req.param('id'))) });
+});
+
+// ─── İşyeri nüshası (cihaz ödemesi; okc/store-copy.ts) ─────────────────────────
+
+/** Basılmayı bekleyen nüshalar: kasa ekranı açılınca ve canlı bağlantı yeniden kurulunca sorar */
+okcRoutes.get('/store-copies', (c) => {
+  requirePermission(c.get('user'), 'odeme.al');
+  return c.json(pendingStoreCopies());
+});
+
+/** Nüshayı bu ekran alır (atomik); başka ekran aldıysa 409 copy_taken */
+okcRoutes.post('/store-copies/:id/claim', (c) => c.json(claimStoreCopy(actorFrom(c), c.req.param('id'))));
+
+/** Nüsha basıldı (alışın anahtarıyla) */
+okcRoutes.post('/store-copies/:id/printed', async (c) => {
+  const input = await body(c, z.object({ claim: z.string().min(1).max(64) }));
+  return c.json(storeCopyPrinted(actorFrom(c), c.req.param('id'), input.claim));
 });
 
 okcRoutes.get('/orders/:id/receipts', (c) => c.json(receiptsForOrder(c.req.param('id'))));

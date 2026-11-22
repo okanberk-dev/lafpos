@@ -14,8 +14,7 @@ import { Badge, Notice } from '@/components/ui/misc';
 import { typeOverPrefill } from '@/lib/numpad';
 import { confirmDialog, promptDialog } from '@/components/ui/Confirm';
 import { deviceResult, deviceRoute, offDeviceLabel, okcPanelAuto } from '@shared/odeme-fisi';
-import { printAfterPayment } from '@/lib/after-payment';
-import { markDeviceSent, unmarkDeviceSent } from '@/lib/device-copies';
+import { deviceCopyHere, printAfterPayment } from '@/lib/after-payment';
 import { ApiError, errorMessage, get, post, put } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -333,15 +332,14 @@ export function PaymentModal({
     setBusy(true);
     setDeviceError(null);
     okcSentHere.current = order.id;
-    markDeviceSent(order.id);
     autoSent.current = { amount, given: method.kind === 'nakit' && given != null ? given : null, methodName: method.name };
     try {
-      await post(`/okc/orders/${order.id}/send`, { items: mode === 'kalem' ? picked : null });
+      // Nüsha basan kasa ekranıysa cihaz ödeyince işyeri nüshası sunucuda bekler (useDeviceCopies basar)
+      await post(`/okc/orders/${order.id}/send`, { items: mode === 'kalem' ? picked : null, storeCopy: deviceCopyHere(boot) });
     } catch (e) {
       const code = e instanceof ApiError ? e.code : null;
       if (code !== 'okc_pending' && code !== 'okc_unknown') {
         okcSentHere.current = null;
-        unmarkDeviceSent(order.id);
         autoSent.current = null;
         setDeviceError(errorMessage(e));
       }
@@ -541,7 +539,6 @@ export function PaymentModal({
       auto={okcPanelAuto(route.on, split, order.paid)}
       onSend={() => {
         okcSentHere.current = order.id;
-        markDeviceSent(order.id);
       }}
     />
   );
