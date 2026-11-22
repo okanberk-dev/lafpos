@@ -39,8 +39,8 @@
   /* Grafik: bağlam çubuğu (gri), vurgulu aralık (nane), değer hapı */
   --k-chart-bar: #c9ccd4;
   --k-chart-hi: #17a35c;
-  /* Köşeler: kart 20, karo 14, denetim 12, hap */
-  --k-r-card: 1.25rem;
+  /* Köşeler: kart 18 (operatör, 20 Kas 2026: "radiusu biraz azalt"; gecede 20), karo 14, denetim 12, hap */
+  --k-r-card: 1.125rem;
   --k-r-tile: 0.875rem;
   --k-r-control: 0.75rem;
   --k-r-pill: 999px;
@@ -81,5 +81,6 @@
   --k-info-ink: #bce1ff;
   --k-chart-bar: #44413f;
   --k-chart-hi: #bce1ff;
+  --k-r-card: 1.25rem;
   --k-shadow-float: 0 16px 40px -18px rgb(0 0 0 / 0.7);
 }

@@ -29,7 +29,7 @@
 
 1. **Tek rakam konuşur.** Her ekranda bir kahraman rakam (bugünün cirosu, adisyon toplamı); gerisi onu açıklar. Rakam iri
    ve 500-600 ağırlıkta, sıkı aralıklı; kuruş ve ek bilgi soluk. Etiket küçük (13 px) ve soluk.
-2. **Kart kenarsız ve gölgesizdir.** Soğuk açık gri zeminde beyaz kart, köşe 20; ayrım ton farkıyla. Kart içinde kart
+2. **Kart kenarsız ve gölgesizdir.** Soğuk açık gri zeminde beyaz kart, köşe 18 (operatör, 20 Kas 2026: "radiusu biraz azalt"; gecede 20); ayrım ton farkıyla. Kart içinde kart
    yok: iç gruplama kuyu (karo, köşe 14, `--k-well`). Gölge yalnız yüzen yüzeyde (menü, pencere, telefonun alt doku).
 3. **Mürekkep seçer, yeşil yaptırır.** Seçili durum (sekme, segment, alt menü) lacivert-siyah mürekkep dolgu ve beyaz
    yazı. Ana eylem (Öde, Kaydet, Bara gönder) L'Affogato'nun ev yeşili; ekranda tek ana eylem. Marka rayı ev yeşili kalır.
@@ -56,7 +56,7 @@
 | Nane `--k-mint` / `-soft` / `-ink` | `#4fdc86` / `#dbf7e5` / `#0b5a34` | `#4ade80` / `#12301c` / `#86efac` | Artış hapı, grafik vurgusu |
 | Düşüş `--k-neg-soft` / `-ink` | `#ffe2df` / `#b3261e` | `#3d1a1b` / `#ff8a80` | Düşüş ve hata hapı |
 | Uyarı, bilgi | `--k-warn-*`, `--k-info-*` | aynı adlar | Yumuşak zeminli hap |
-| Köşe | kart 20 · karo 14 · denetim 12 · hap | aynı | `--k-r-card/tile/control/pill` |
+| Köşe | kart 18 · karo 14 · denetim 12 · hap | kart 20 | `--k-r-card/tile/control/pill` |
 | Boşluk | kart içi 20 · kartlar arası 12 | aynı | 4'ün katları |
 | Rakam | kahraman 44-72 px / 500 · KPI 28 px / 600 | aynı | `--k-num-hero`, `--k-num-kpi`; aralık −0,035 em |
 
@@ -78,7 +78,7 @@ Ana eylem ve marka belirteçleri (`--admin-ink-fill`, `--rail-*`) aşağıdaki �
   ve altında tutar + yüzde satırları (patron panelinin Ödeme türleri kartı).
 - **Boş durum:** tek cümle ve sıradaki adım; sıfır yerine "veri yok" / "satış yok".
 - **Uyarı:** yumuşak zeminli şerit ya da kart satırı; ikon + kısa metin + tek eylem. Dikkat isteyenler listenin sonunda.
-- **Pencere:** bilgisayarda ortada kart (köşe 20); telefonda alttan açılan pencere (üst köşeler 28, tutamaç).
+- **Pencere:** bilgisayarda ortada kart (köşe 18); telefonda alttan açılan pencere (üst köşeler 28, tutamaç).
 - **Mobil:** üst şeritte marka karosu ve ekranın adı; altta yüzen dok (etkin sekme mürekkep dolgu); içerik tek sütun.
 
 ## 1. İlkeler

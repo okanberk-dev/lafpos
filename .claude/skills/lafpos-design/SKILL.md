@@ -14,7 +14,7 @@ Kaynak: `DESIGN.md` §0 ve `src/styles/keel.css`. Her arayüz değişikliği bu 
 
 ## Kontrol listesi
 - [ ] **Hiyerarşi:** ekranda tek kahraman rakam; etiket 13 px soluk, rakam iri ve 500-600 ağırlık, kuruş soluk.
-- [ ] **Kart:** beyaz, kenarsız, gölgesiz, köşe 20; zeminden ton farkıyla ayrılır. Kart içinde kart yerine kuyu (karo, köşe 14).
+- [ ] **Kart:** beyaz, kenarsız, gölgesiz, köşe 18 (gecede 20); zeminden ton farkıyla ayrılır. Kart içinde kart yerine kuyu (karo, köşe 14).
 - [ ] **Seçili durum:** sekme, segment ve alt menüde mürekkep dolgu + beyaz yazı (`--k-select`). Ana eylem ev yeşili; ekranda tek ana eylem.
 - [ ] **Renk yalnız anlam:** artış nane, düşüş kırmızı, uyarı kehribar, bilgi mavi; hepsi yumuşak zeminli hap. Renk tek başına bilgi taşımaz (ok, işaret, yazı).
 - [ ] **Grafik:** ızgarasız ya da çok soluk; gri bağlam çubukları, vurgulu aralık nane; değer hapı; eksen etiketi 12 px soluk.

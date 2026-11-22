@@ -112,7 +112,8 @@ describe('koyu tema: gece', () => {
 
   it('rozet ve etiket yazısı kendi zemininde 4.5:1; beyaz metin yumuşak zeminlerde de okunur', () => {
     for (const [fg, bg] of BADGES) expect(contrast(get(fg), get(bg)), `${fg} / ${bg}`).toBeGreaterThanOrEqual(4.5);
-    for (const [, bg] of BADGES) expect(contrast(get('admin-text'), get(bg)), `admin-text / ${bg}`).toBeGreaterThanOrEqual(4.5);
+    // Seçili hap (LafPOS Keel) yumuşak zemin değil dolgudur: üstünde yalnız kendi yazısı (menu-active-ink) durur
+    for (const [, bg] of BADGES) if (bg !== 'menu-active-bg') expect(contrast(get('admin-text'), get(bg)), `admin-text / ${bg}`).toBeGreaterThanOrEqual(4.5);
   });
 
   it('hap zeminleri yumuşak: koyu ve renkli (kartın grisinden ayrılır), yazıyla yarışmaz', () => {
@@ -200,11 +201,11 @@ describe('koyu tema: gece', () => {
     expect(success).not.toMatch(/dark:[\w:-]*bg-success-\d/);
   });
 
-  it('açık tema değişmedi (gece yalnız koyu temada)', () => {
-    expect(light['admin-bg']).toBe('#f1f4f2');
+  it('açık temanın kimliği yerinde (zemin ve mürekkep LafPOS Keel: DESIGN.md §0)', () => {
+    expect(light['admin-bg']).toBe('#eceef1');
     expect(light['admin-surface']).toBe('#ffffff');
     expect(light['admin-primary']).toBe('#0a6e52');
-    expect(light['admin-text']).toBe('#0f1513');
+    expect(light['admin-text']).toBe('#171a26');
     expect(light['admin-ink-fill']).toBe('#0a6e52');
     expect(light['rail']).toBe('#0b6449');
   });
