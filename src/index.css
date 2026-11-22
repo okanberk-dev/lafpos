@@ -2055,6 +2055,24 @@ html[class~='dark'] {
   font-weight: 700;
   letter-spacing: 0.12em;
 }
+.rc-big {
+  margin: 1.5mm 0 2.5mm;
+  padding: 1.5mm 0 2mm;
+  border-bottom: 2px solid #000;
+  text-align: center;
+}
+.rc-big-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.rc-big-no {
+  font-size: 56px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
 .rc-call {
   margin: 1mm 0 2mm;
   text-align: center;

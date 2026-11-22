@@ -113,7 +113,8 @@ export function afterPaymentPrints(i: {
   viaDevice: boolean;
 }): { storeCopy: boolean; infoSlip: boolean } {
   if (!i.printer || !i.kasaScreen) return { storeCopy: false, infoSlip: false };
-  return { storeCopy: !!i.settings.receiptStoreCopy, infoSlip: !!i.settings.receiptInfoSlip && i.provider === 'kapali' && !i.viaDevice };
+  // Müşteri nüshası yazarkasa bağlıyken de (saha, 22 Kas 2026: sipariş numarası çağrı için; "mali değeri yoktur" yazar)
+  return { storeCopy: !!i.settings.receiptStoreCopy, infoSlip: !!i.settings.receiptInfoSlip };
 }
 
 /** Her ödeme için tam bir kez: aynı anahtar (cihaz fişi ya da ödeme kimliği) ikinci kez basılmaz */

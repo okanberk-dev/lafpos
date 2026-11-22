@@ -101,7 +101,7 @@ export const receiptCustomerName = (order: Pick<OrderDTO, 'customer'>, settings:
  * Adisyon (hesap fişi, bilgi fişi). Mali değeri yoktur: mali fiş ÖKC'den (yazarkasa) kesilir. `share`: paylaşımlı
  * hesapta kişinin payı da basılır
  */
-export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO; boot: BootstrapDTO; sizeLabel: (s: string) => string; share?: { no: number; of: number; amount: number } }) {
+export function BillReceipt({ order, boot, sizeLabel, share, copy }: { order: OrderDTO; boot: BootstrapDTO; sizeLabel: (s: string) => string; share?: { no: number; of: number; amount: number }; /** Ödemeden sonra müşteri nüshası: sipariş no en büyük öğe, "mali değeri yoktur" */ copy?: boolean }) {
   const t = order.totals;
   const live = order.items.filter((i) => !i.voided);
   // Self ve yarı self servis: müşterinin numarası ya da masası fişte büyük (numara çağrılınca alır)
@@ -111,8 +111,16 @@ export function BillReceipt({ order, boot, sizeLabel, share }: { order: OrderDTO
   const payments = (order.payments ?? []).filter((p) => !p.refundedAt);
   return (
     <div className="rc">
-      <Header boot={boot} title="ADİSYON" />
-      {call && <div className="rc-call">{callText(call)}</div>}
+      <Header boot={boot} title={copy ? 'MÜŞTERİ NÜSHASI' : 'ADİSYON'} />
+      {copy ? (
+        // Müşteri nüshası: çağrı için sipariş numarası kâğıdın en büyük öğesi
+        <div className="rc-big">
+          <div className="rc-big-label">{order.tableName ? 'MASA' : 'SİPARİŞ NO'}</div>
+          <div className="rc-big-no">{order.tableName ?? (call ? callText(call).replace(/^No /, '') : String(order.no))}</div>
+        </div>
+      ) : (
+        call && <div className="rc-call">{callText(call)}</div>
+      )}
       <div className="rc-block">
         <Row strong l={place} r={`No ${order.no}`} />
         <Row l="Tarih" r={fmtDateTime(Date.now())} />
@@ -215,6 +223,24 @@ export function StoreCopyReceipt({
         <Row strong l={place} r={`No ${order.no}`} />
         <Row l="Tarih" r={fmtDateTime(at)} />
         {cashier && <Row l={`Kasiyer ${cashier}`} />}
+      </div>
+      <Hr />
+      {/* Bar ve hazırlık için kalem dökümü (seçenekler girintili) */}
+      <div className="rc-items">
+        {order.items
+          .filter((i) => !i.voided)
+          .map((i) => (
+            <div key={i.id} className="rc-item">
+              <span className="rc-qty">{i.qty}x</span>
+              <span className="rc-item-name">
+                {i.name}
+                {i.size && i.size !== 'TEK' ? ` ${boot.settings.sizeLabels?.[i.size as 'M' | 'L'] ?? i.size}` : ''}
+              </span>
+              <span className="rc-r">{tlPlain(i.qty * i.unitPrice)}</span>
+              {i.optionsText && <span className="rc-item-sub">{i.optionsText}</span>}
+              {i.note && <span className="rc-item-sub">Not: {i.note}</span>}
+            </div>
+          ))}
       </div>
       <Hr />
       <Row l="Adisyon toplamı" r={tlPlain(order.total)} />
