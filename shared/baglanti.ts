@@ -101,6 +101,7 @@ export const CONN_GROUPS: ConnGroup[] = [
       { key: 'TRENDYOL_SUPPLIER_ID', label: 'Satıcı no', kind: 'text' },
       { key: 'TRENDYOL_API_KEY', label: 'API anahtarı', kind: 'secret' },
       { key: 'TRENDYOL_API_SECRET', label: 'Gizli anahtar', kind: 'secret' },
+      { key: 'TRENDYOL_EXECUTOR_EMAIL', label: 'İşlemi yapan e-posta', kind: 'text', hint: 'Satıcı panelindeki kullanıcı', optional: true },
       { key: 'TRENDYOL_API_URL', label: 'API adresi', kind: 'url', hint: 'Boşsa canlı', optional: true },
     ],
   },
@@ -109,6 +110,31 @@ export const CONN_GROUPS: ConnGroup[] = [
 export const CONN_FIELDS: ConnField[] = CONN_GROUPS.flatMap((g) => g.fields);
 const BY_KEY = new Map(CONN_FIELDS.map((f) => [f.key, f]));
 export const connField = (key: string): ConnField | undefined => BY_KEY.get(key);
+
+/**
+ * Buluttan gelen platform anahtarları (#75 İş 2): sahip bunları bir kez Vercel'deki LafPOS Uzaktan projesine girer, kasa
+ * imzalı uçtan (`GET /api/uzaktan/anahtarlar`) açılışta ve 10 dakikada bir çeker (server/sync/platform-anahtar.ts).
+ * Bulutta dolu olan yerel değeri ezer, bulutta boşsa yerel kalır. Ad listesi sabit: uç yalnız bunları verir
+ */
+export const CLOUD_KEY_GROUPS = [
+  { id: 'trendyol', label: 'Trendyol', keys: ['TRENDYOL_SUPPLIER_ID', 'TRENDYOL_API_KEY', 'TRENDYOL_API_SECRET', 'TRENDYOL_EXECUTOR_EMAIL'] },
+  { id: 'yemeksepeti', label: 'Yemeksepeti', keys: ['YEMEKSEPETI_MW_URL', 'YEMEKSEPETI_USERNAME', 'YEMEKSEPETI_PASSWORD', 'YEMEKSEPETI_REMOTE_ID'] },
+] as const;
+export const CLOUD_KEYS: readonly string[] = CLOUD_KEY_GROUPS.flatMap((g) => g.keys);
+
+/** Buluttan gelen değerlerin süzgeci: yalnız listedeki anahtarlar, dolu ve alanın kuralına uyanlar */
+export function cleanCloudKeys(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const key of CLOUD_KEYS) {
+    const v = (raw as Record<string, unknown>)[key];
+    const field = connField(key);
+    if (typeof v !== 'string' || !field) continue;
+    const r = checkConnValue(field, v);
+    if ('value' in r && r.value) out[key] = r.value;
+  }
+  return out;
+}
 
 /**
  * Yazılacak değerin denetimi: boş değer "kaldır" demektir (null). Satır sonu, boşluk ve tırnak kabul edilmez (dosyada tek

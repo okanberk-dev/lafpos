@@ -21,6 +21,7 @@ import { gunzipSync } from 'node:zlib';
 import type { RemoteDayExtra, RemoteDayReport, RemoteReportPush } from '../shared/remote-reports';
 import { type CheckRow, crossPayIn, type ItemListRow, mergeChecks, mergeOdenmez, mergePlatforms, mergeRows, prepFrom } from '../shared/remote-calc.js';
 import { CSV_TYPES, type CsvType, csvRows, toCsv } from '../shared/report-csv.js';
+import { CLOUD_KEYS } from '../shared/baglanti.js';
 
 const SNAPSHOT_KEY = 'lafpos:snapshot';
 const TOKEN_HOURS = 12;
@@ -393,6 +394,22 @@ const once = <T>(f: () => Promise<T>) => {
   let p: Promise<T> | null = null;
   return () => (p ??= f());
 };
+
+// ─── Platform anahtarları (#75 İş 2) ─────────────────────────────────────────
+
+/**
+ * Sahip Trendyol ve Yemeksepeti değerlerini bir kez bu projenin ortamına girer (Production, Sensitive); kasa onları
+ * `GET /api/uzaktan/anahtarlar` ile kafe anahtarıyla imzalı çeker (açılışta ve 10 dakikada bir). Yanıt yalnız dolu
+ * olanları taşır; değerler Redis'e, özete ve günlüğe girmez. Yanlış imza 401, her yanıt `cache-control: no-store`
+ */
+export async function platformKeys(req: Request, url: URL): Promise<Response> {
+  if (secret().length < 32) return fail(503, 'LafPOS Uzaktan kurulmamış (LAFPOS_CLOUD_SECRET)', 'not_configured');
+  if (req.method !== 'GET') return fail(405, 'Yalnız GET', 'method_not_allowed');
+  if (!verifyPush(secret(), req, url, '')) return fail(401, 'İmza geçersiz', 'bad_signature');
+  const anahtarlar: Record<string, string> = {};
+  for (const key of CLOUD_KEYS) if (env(key)) anahtarlar[key] = env(key);
+  return json({ anahtarlar });
+}
 
 // ─── Platform aktarıcıları: gelen kutusu (Yemeksepeti ve Getir ortak) ───────
 
@@ -1392,6 +1409,8 @@ async function handle(req: Request): Promise<Response> {
       getir: !!getirKey(),
     });
   }
+  // Platform anahtarları: kasanın imzalı çekimi; yalnız Vercel ortamı, Redis'e dokunmaz
+  if (path === 'uzaktan/anahtarlar') return platformKeys(req, url);
   // Platform aktarıcıları: makineden makineye, demo ve parola kapısından önce
   if (path.startsWith('yemeksepeti/')) return yemeksepeti(req, url, path);
   if (path.startsWith('getir/')) return getir(req, url, path);

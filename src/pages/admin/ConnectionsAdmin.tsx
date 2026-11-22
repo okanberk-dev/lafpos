@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ClipboardPaste, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { checkConnValue, CONN_GROUPS, type ConnGroup, connField, parseEnvLines } from '@shared/baglanti';
+import { checkConnValue, CLOUD_KEY_GROUPS, CONN_GROUPS, type ConnGroup, connField, parseEnvLines } from '@shared/baglanti';
+import { fmtTime } from '@shared/time';
 import { Button } from '@/components/ui/Button';
 import { confirmDialog } from '@/components/ui/Confirm';
 import { Field, Input, Textarea } from '@/components/ui/Field';
@@ -17,7 +18,9 @@ interface ConnView {
   available: boolean;
   restart: 'otomatik' | 'elle' | null;
   pending: boolean;
-  groups: { id: string; fields: { key: string; set: boolean; value: string | null }[] }[];
+  groups: { id: string; fields: { key: string; set: boolean; value: string | null; source?: 'bulut' | 'yerel' }[] }[];
+  /** Platform anahtarlarının buluttan son çekimi (#75 İş 2) */
+  bulut?: { at: number | null; ok: boolean | null; error: string | null };
 }
 type FieldState = ConnView['groups'][number]['fields'][number];
 
@@ -31,7 +34,17 @@ const savedText = (v: ConnView) => (v.restart === 'otomatik' ? 'Kaydedildi; LafP
  * ("Tanımlı" yazar; yazılırsa değişir, boş bırakılırsa aynen kalır). Kaydet yalnız değişen alanları gönderir; adresi
  * silmek satırı kaldırır. "Bağlantıyı kaldır" kartın bütün satırlarını siler
  */
-function GroupCard({ group, state, editable, onSaved }: { group: ConnGroup; state: FieldState[]; editable: boolean; onSaved: (v: ConnView) => void }) {
+/** Platform kartında anahtarların kaynağı: bulut (Vercel'deki LafPOS Uzaktan) ya da yerel, ve son çekimin saati */
+function cloudLine(state: FieldState[], bulut: ConnView['bulut']): string {
+  const fromCloud = state.some((s) => s.source === 'bulut');
+  const fromLocal = state.some((s) => s.source === 'yerel');
+  const source = fromCloud && fromLocal ? 'Kaynak: bulut ve yerel' : fromCloud ? 'Kaynak: bulut' : fromLocal ? 'Kaynak: yerel' : 'Bulutta tanımlı değil';
+  const at = bulut?.at ? `son çekim ${fmtTime(bulut.at)}` : 'buluttan henüz çekilmedi';
+  return `${source} · ${at}${bulut?.ok === false && bulut.error ? ` · ${bulut.error}` : ''}`;
+}
+
+function GroupCard({ group, state, editable, onSaved, bulut }: { group: ConnGroup; state: FieldState[]; editable: boolean; onSaved: (v: ConnView) => void; bulut?: ConnView['bulut'] }) {
+  const cloudGroup = CLOUD_KEY_GROUPS.some((g) => g.id === group.id);
   const initial = () => Object.fromEntries(group.fields.map((f) => [f.key, f.kind === 'secret' ? '' : (state.find((s) => s.key === f.key)?.value ?? '')]));
   const [draft, setDraft] = useState<Record<string, string>>(initial);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -99,9 +112,15 @@ function GroupCard({ group, state, editable, onSaved }: { group: ConnGroup; stat
           void save();
         }}
       >
+        {cloudGroup && (
+          <p className="text-[13px] text-[var(--admin-text-soft)]" data-bulut-kaynak>
+            {cloudLine(state, bulut)}
+          </p>
+        )}
         {group.fields.map((f) => {
           const st = fieldOf(f.key);
           const secret = f.kind === 'secret';
+          const cloud = st?.source === 'bulut';
           return (
             <Field key={f.key} label={f.label} hint={f.hint} error={errors[f.key] ?? null}>
               <Input
@@ -113,7 +132,7 @@ function GroupCard({ group, state, editable, onSaved }: { group: ConnGroup; stat
                   if (errors[f.key]) setErrors({ ...errors, [f.key]: '' });
                 }}
                 disabled={!editable || !!busy}
-                placeholder={secret ? (st?.set ? 'Tanımlı · değiştirmek için yazın' : 'Tanımlı değil') : (f.placeholder ?? '')}
+                placeholder={cloud ? 'Buluttan · tanımlı' : secret ? (st?.set ? 'Tanımlı · değiştirmek için yazın' : 'Tanımlı değil') : (f.placeholder ?? '')}
                 autoComplete={secret ? 'new-password' : 'off'}
                 autoCapitalize="none"
                 spellCheck={false}
@@ -280,7 +299,7 @@ export default function ConnectionsAdmin() {
       {editable && <PasteCard onSaved={onSaved} />}
       <div className="grid items-start gap-4 lg:grid-cols-2">
         {CONN_GROUPS.map((g) => (
-          <GroupCard key={g.id} group={g} state={d.groups.find((x) => x.id === g.id)?.fields ?? []} editable={editable} onSaved={onSaved} />
+          <GroupCard key={g.id} group={g} state={d.groups.find((x) => x.id === g.id)?.fields ?? []} editable={editable} onSaved={onSaved} bulut={d.bulut} />
         ))}
       </div>
     </div>
