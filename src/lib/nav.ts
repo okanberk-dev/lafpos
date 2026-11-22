@@ -62,9 +62,12 @@ export function navFor(mode: ServiceMode, opts: { tablesInUse?: boolean; bar?: b
   return out;
 }
 
+/** Ekran kişiye açık mı: yetki istemeyen ekran (uzakta Merkez ve İndir; oturum yeter) herkese. Menü ve palet aynı kural */
+export const navAllowed = (n: NavItem, can: (p: Permission) => boolean) => n.perms.length === 0 || n.perms.some((p) => can(p));
+
 /** Kişinin yetkisine göre süzülmüş menü */
 export function visibleNav(can: (p: Permission) => boolean, mode: ServiceMode, opts: { tablesInUse?: boolean; bar?: boolean } = {}): NavItem[] {
-  return navFor(mode, opts).filter((n) => n.perms.some((p) => can(p)));
+  return navFor(mode, opts).filter((n) => navAllowed(n, can));
 }
 
 /**

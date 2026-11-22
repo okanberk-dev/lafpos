@@ -1,5 +1,7 @@
 import { eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { tl } from '@shared/money';
+import { lineGross } from '@shared/order-calc';
 import { fmtTime } from '@shared/time';
 import { db, schema } from '../db/client';
 import { env } from '../env';
@@ -44,19 +46,25 @@ export function setNotifySettings(patch: Partial<NotifySettings>) {
 }
 
 export interface Notice {
+  /** Kuyruktaki kaydın kimliği (eski kayıtta yok: an, tür ve başlıkla eşlenir) */
+  id?: string;
   kind: 'iptal' | 'ikram' | 'kasa-farki' | 'internet' | 'pavo' | 'deneme';
   title: string;
   body: string;
   at: number;
 }
 
+const sameNotice = (a: Notice, b: Notice) => (a.id || b.id ? a.id === b.id : a.at === b.at && a.kind === b.kind && a.title === b.title);
+const fresh = (q: Notice) => Date.now() - q.at < QUEUE_TTL_MS;
+
 /** Bildirim gidebilir mi: Uzaktan kurulu ve ayar açık */
 export const notifyReady = () => cloudEnabled() && notifySettings().enabled;
 
 async function send(n: Notice): Promise<boolean> {
   const shop = getSettings().businessName || null;
+  const { id: _id, ...notice } = n;
   try {
-    const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/uzaktan/bildirim', env.cloudUrl), { ...n, shop }, 8000);
+    const res = await signedFetch(env.cloudSecret, 'POST', new URL('/api/uzaktan/bildirim', env.cloudUrl), { ...notice, shop }, 8000);
     return res.status === 200;
   } catch {
     return false;
@@ -66,22 +74,49 @@ async function send(n: Notice): Promise<boolean> {
 /** Olayı gönderir; gidemezse kuyruğa alır. Kasa işlemini hiç bekletmez (çağıran beklemez) */
 export async function notify(n: Omit<Notice, 'at'> & { at?: number }): Promise<void> {
   if (!notifyReady()) return;
-  const notice: Notice = { ...n, at: n.at ?? Date.now() };
+  const notice: Notice = { ...n, id: randomUUID(), at: n.at ?? Date.now() };
   if (await send(notice)) return;
-  const queue = (getSyncState<Notice[]>(QUEUE) ?? []).filter((q) => Date.now() - q.at < QUEUE_TTL_MS);
+  const queue = (getSyncState<Notice[]>(QUEUE) ?? []).filter(fresh);
   setSyncState(QUEUE, [...queue, notice].slice(-QUEUE_MAX));
 }
 
-/** Kuyruktakileri sırayla gönderir (internet dönünce); gidemeyen kalır */
-export async function flushNotices(): Promise<number> {
-  const queue = (getSyncState<Notice[]>(QUEUE) ?? []).filter((q) => Date.now() - q.at < QUEUE_TTL_MS);
+let flushing: Promise<number> | null = null;
+let flushAgain = false;
+
+/**
+ * Kuyruktakileri sırayla gönderir (internet dönünce); gidemeyen kalır. Tek seferde bir boşaltma (internet gidip
+ * gelince ikinci çağrı süreni bekler, sonra bir tur daha): aynı bildirim iki kez gitmez. Kuyruk her gönderimden sonra
+ * yeniden okunur ve yalnız giden silinir: boşaltma sürerken kuyruğa giren yeni bildirim kaybolmaz
+ */
+export function flushNotices(): Promise<number> {
+  if (flushing) {
+    flushAgain = true;
+    return flushing;
+  }
+  flushing = (async () => {
+    let total = 0;
+    try {
+      do {
+        flushAgain = false;
+        total += await flushOnce();
+      } while (flushAgain);
+    } finally {
+      flushing = null;
+    }
+    return total;
+  })();
+  return flushing;
+}
+
+async function flushOnce(): Promise<number> {
+  const queue = (getSyncState<Notice[]>(QUEUE) ?? []).filter(fresh);
   if (!queue.length || !notifyReady()) return 0;
   let sent = 0;
   for (const n of queue) {
     if (!(await send(n))) break;
     sent++;
+    setSyncState(QUEUE, (getSyncState<Notice[]>(QUEUE) ?? []).filter((q) => fresh(q) && !sameNotice(q, n)));
   }
-  setSyncState(QUEUE, queue.slice(sent));
   return sent;
 }
 
@@ -114,7 +149,8 @@ export function lossOf(kind: 'iptal' | 'ikram', orderId: string): { value: numbe
   const o = db.select().from(schema.orders).where(eq(schema.orders.id, orderId)).get();
   if (!o) return { value: 0, no: 0, place: null };
   const items = db.select().from(schema.orderItems).where(eq(schema.orderItems.orderId, orderId)).all();
-  const value = items.filter((i) => (kind === 'iptal' ? i.voided : i.complimentary && !i.voided)).reduce((a, i) => a + i.qty * i.unitPrice, 0);
+  // Denetim kaydının tutarıyla aynı kural (lineGross): bildirim ve kayıt aynı rakamı söyler
+  const value = items.filter((i) => (kind === 'iptal' ? i.voided : i.complimentary && !i.voided)).reduce((a, i) => a + lineGross(i), 0);
   const place = o.tableId ? (db.select({ name: schema.tables.name }).from(schema.tables).where(eq(schema.tables.id, o.tableId)).get()?.name ?? null) : null;
   return { value, no: o.no, place };
 }
