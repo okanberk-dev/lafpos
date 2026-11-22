@@ -15,6 +15,12 @@ interface LoginInfo {
   demoPins: { name: string; pin: string }[] | null;
 }
 
+/** Saate göre selam (İstanbul saati): giriş kartında saatin üstünde */
+function greeting(ms: number): string {
+  const h = Number(fmtTime(ms).slice(0, 2));
+  return h >= 5 && h < 11 ? 'Günaydın' : h >= 11 && h < 18 ? 'İyi günler' : h >= 18 && h < 23 ? 'İyi akşamlar' : 'İyi geceler';
+}
+
 export function LoginPage() {
   const login = useAuth((s) => s.login);
   const navigate = useNavigate();
@@ -80,7 +86,11 @@ export function LoginPage() {
     // olunca bu kartın yazıları görünmez kalmıştı (22 Kas 2026)
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6 lg:p-10">
       <div className="grid w-full max-w-5xl items-stretch gap-3 lg:min-h-[580px] lg:grid-cols-[1fr_minmax(380px,430px)] lg:gap-5">
-        <section className="relative flex items-center justify-between gap-4 overflow-hidden rounded-[var(--r-card)] k-inverse px-4 py-3.5 shadow-[var(--shadow-lift)] [--band-muted:var(--k-inv-mute)] [--band-text:var(--k-on-select)] sm:px-5 lg:h-full lg:flex-col lg:items-stretch lg:justify-between lg:rounded-[var(--r-stage)] lg:p-9">
+        <section className="relative isolate flex items-center justify-between gap-4 overflow-hidden rounded-[var(--r-card)] k-inverse px-4 py-3.5 shadow-[var(--shadow-lift)] [--band-muted:var(--k-inv-mute)] [--band-text:var(--k-on-select)] sm:px-5 lg:h-full lg:flex-col lg:items-stretch lg:justify-between lg:rounded-[var(--r-stage)] lg:p-9">
+          {/* Süs: sağ üstte yumuşak nane ışıltı ve ince halkalar (Keel'in koyu kartındaki derinlik); yazının altında kalır */}
+          <div aria-hidden="true" className="pointer-events-none absolute -right-28 -top-28 -z-10 size-[380px] rounded-full [background:radial-gradient(closest-side,color-mix(in_oklab,var(--k-mint)_30%,transparent),transparent)]" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-24 -z-10 hidden size-[420px] rounded-full border border-[color-mix(in_oklab,var(--k-on-select)_8%,transparent)] lg:block" />
+          <div aria-hidden="true" className="pointer-events-none absolute -bottom-56 -left-40 -z-10 hidden size-[560px] rounded-full border border-[color-mix(in_oklab,var(--k-on-select)_5%,transparent)] lg:block" />
           <div className="flex items-center gap-3">
             <LafTile className="shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)]" />
             <span className="min-w-0">
@@ -89,7 +99,12 @@ export function LoginPage() {
             </span>
           </div>
           <div className="shrink-0 text-right lg:text-left">
-            <div className="tabular font-headline text-3xl font-light leading-none tracking-[-0.04em] lg:text-[112px]">{fmtTime(now)}</div>
+            <div className="mb-3 hidden text-[15px] font-medium text-[var(--band-muted)] lg:block">{greeting(now)}</div>
+            <div className="tabular font-headline text-3xl font-light leading-none tracking-[-0.04em] lg:text-[112px]">
+              {fmtTime(now).slice(0, 2)}
+              <span className="text-[var(--band-muted)]">:</span>
+              {fmtTime(now).slice(3)}
+            </div>
             <div className="mt-1 hidden text-sm text-[var(--band-muted)] sm:block lg:mt-4 lg:text-base">{fmtDateLong(today)}</div>
           </div>
           {!!users.length && (
@@ -131,7 +146,7 @@ export function LoginPage() {
               <h1 className="font-headline text-2xl font-bold tracking-[-0.035em] sm:text-[28px]">Hoş geldiniz</h1>
               <p className="mt-1 text-[13px] text-muted">Devam etmek için PIN kodunuzu girin</p>
             </div>
-            <PinDots filled={pin.length} className="mb-2 justify-start" />
+            <PinDots filled={pin.length} className="mb-2 justify-start gap-3.5 [&>span]:size-3.5" />
             <div role="alert" className="mb-3 min-h-5 text-balance text-[13px] font-medium text-[var(--admin-danger-ink)]">
               {error}
             </div>
