@@ -1,10 +1,10 @@
-import { Fragment, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { afterPaymentPrints, isKasaHost, printOnce } from '@shared/odeme-fisi';
 import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { ApiError, get, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { onLive, useLive } from '@/lib/live';
-import { BankEodReceipt, type BankEodSlip, BillReceipt, printNow, PrintCut, StoreCopyReceipt } from '@/lib/print';
+import { BankEodReceipt, type BankEodSlip, BillReceipt, printEach, printNow, StoreCopyReceipt } from '@/lib/print';
 import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from '@/lib/store-copies';
 
 /** Bu sekmede basılmış LafPOS ödemeleri (ödeme kimliği): aynı ödeme ikinci kez basılmaz */
@@ -42,14 +42,11 @@ export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order
   const payments = order.payments.filter((p) => opts.paymentIds.includes(p.id));
   const cashier = payments.find((p) => p.userName)?.userName ?? useAuth.getState().me?.name ?? null;
   const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
-  void printNow(
-    <>
-      {/* Önce müşteri nüshası (büyük sipariş no), sonra işyeri nüshası (kalem dökümü; bar için) */}
-      {plan.infoSlip && <BillReceipt order={order} boot={boot} sizeLabel={sizeLabel} copy />}
-      {plan.storeCopy && plan.infoSlip && <PrintCut />}
-      {plan.storeCopy && <StoreCopyReceipt order={order} boot={boot} payments={payments} cashier={cashier} />}
-    </>,
-  ).catch(() => undefined);
+  // Önce müşteri nüshası (büyük sipariş no), sonra işyeri nüshası (kalem dökümü; bar için): ayrı kâğıtlar
+  void printEach([
+    ...(plan.infoSlip ? [<BillReceipt key="m" order={order} boot={boot} sizeLabel={sizeLabel} copy />] : []),
+    ...(plan.storeCopy ? [<StoreCopyReceipt key="i" order={order} boot={boot} payments={payments} cashier={cashier} />] : []),
+  ]).catch(() => undefined);
 }
 
 /**
@@ -58,29 +55,21 @@ export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order
  */
 export function printStoreCopies(boot: BootstrapDTO, copies: ClaimedStoreCopy[]): Promise<void> {
   const me = useAuth.getState().me?.name ?? null;
-  return printNow(
-    <>
-      {copies.map((c, i) => (
-        <Fragment key={c.receiptId}>
-          {i > 0 && <PrintCut />}
-          {/* Cihaz ödemesinde de müşteri nüshası (ayar açıksa) ve işyeri nüshası */}
-          {plannedPrints(boot, true).infoSlip && (
-            <>
-              <BillReceipt order={c.order} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} copy />
-              <PrintCut />
-            </>
-          )}
-          <StoreCopyReceipt
-            order={c.order}
-            boot={boot}
-            payments={c.payments}
-            device={{ receiptNo: c.device.receiptNo, zNo: c.device.zNo, docId: c.device.docId, docLabel: c.device.docKind ? (DOC_LABEL[c.device.docKind] ?? null) : null }}
-            cashier={c.payments.find((p) => p.userName)?.userName ?? me}
-            at={c.at}
-          />
-        </Fragment>
-      ))}
-    </>,
+  const info = plannedPrints(boot, true).infoSlip;
+  // Her nüsha ayrı yazdırma işi: yazıcı her birinin sonunda keser (müşteri nüshası, sonra işyeri nüshası)
+  return printEach(
+    copies.flatMap((c) => [
+      ...(info ? [<BillReceipt key={`${c.receiptId}-m`} order={c.order} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} copy />] : []),
+      <StoreCopyReceipt
+        key={`${c.receiptId}-i`}
+        order={c.order}
+        boot={boot}
+        payments={c.payments}
+        device={{ receiptNo: c.device.receiptNo, zNo: c.device.zNo, docId: c.device.docId, docLabel: c.device.docKind ? (DOC_LABEL[c.device.docKind] ?? null) : null }}
+        cashier={c.payments.find((p) => p.userName)?.userName ?? me}
+        at={c.at}
+      />,
+    ]),
   );
 }
 
