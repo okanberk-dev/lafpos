@@ -133,14 +133,15 @@ describe('otomatik gönderimin ret yolları', () => {
 
 describe('ödeme sonrası fişler', () => {
   const settings = { receiptStoreCopy: true, receiptInfoSlip: false };
-  it('yalnız kasa ekranında ve yazıcı varken; bilgi fişi yalnız yazarkasasız kurulumda ve ayar açıkken', () => {
+  it('yalnız kasa ekranında ve yazıcı varken; müşteri nüshası ayar açıkken yazarkasa bağlıyken de (2 nüsha)', () => {
     expect(afterPaymentPrints({ settings, printer: true, kasaScreen: true, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: true, infoSlip: false });
     expect(afterPaymentPrints({ settings, printer: false, kasaScreen: true, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: false, infoSlip: false });
     expect(afterPaymentPrints({ settings, printer: true, kasaScreen: false, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: false, infoSlip: false });
     expect(afterPaymentPrints({ settings: { receiptStoreCopy: false, receiptInfoSlip: false }, printer: true, kasaScreen: true, provider: 'kapali', viaDevice: false })).toEqual({ storeCopy: false, infoSlip: false });
     const info = { receiptStoreCopy: true, receiptInfoSlip: true };
     expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true, provider: 'kapali', viaDevice: false })).toEqual({ storeCopy: true, infoSlip: true });
-    expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true, provider: 'simulator', viaDevice: false })).toEqual({ storeCopy: true, infoSlip: false });
+    expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true, provider: 'simulator', viaDevice: false })).toEqual({ storeCopy: true, infoSlip: true });
+    expect(afterPaymentPrints({ settings: info, printer: true, kasaScreen: true, provider: 'pavo', viaDevice: true })).toEqual({ storeCopy: true, infoSlip: true });
     expect(isKasaHost('localhost') && isKasaHost('127.0.0.1')).toBe(true);
     expect(isKasaHost('192.168.1.20')).toBe(false);
   });
@@ -278,10 +279,10 @@ describe('sunucu akışı (eğitim cihazı)', () => {
 describe('işyeri nüshası çıktısı', () => {
   type Props = Record<string, unknown>;
   const PRINT = '../src/lib/print';
-  it('kalem dökümü yok; adisyon no, toplam, ödeme türü, yazarkasa fiş ve Z no, kasiyer', async () => {
+  it('kalem dökümü (bar için); adisyon no, toplam, ödeme türü, yazarkasa fiş ve Z no, kasiyer', async () => {
     const { StoreCopyReceipt } = (await import(/* @vite-ignore */ PRINT)) as { StoreCopyReceipt: FC<Props> };
     const boot = { settings: { businessName: "L'Affogato" }, branch: null } as unknown as BootstrapDTO;
-    const order = { no: 42, tableName: 'Masa 3', numarator: null, type: 'masa', total: 25000, paid: 25000, items: [{ name: 'Türk Kahvesi' }], payments: [] } as unknown as OrderDTO;
+    const order = { no: 42, tableName: 'Masa 3', numarator: null, type: 'masa', total: 25000, paid: 25000, items: [{ id: 'i1', name: 'Türk Kahvesi', qty: 1, unitPrice: 25000, size: 'TEK', voided: false, optionsText: 'Orta şekerli' }], payments: [] } as unknown as OrderDTO;
     const html = renderToStaticMarkup(
       createElement(StoreCopyReceipt, { order, boot, payments: [{ id: 'p1', methodName: 'Kredi kartı', amount: 25000, tip: 0 }], device: { receiptNo: 17, zNo: 5, docId: null, docLabel: 'fiş' }, cashier: 'Ayşe', at: 0 }),
     );
@@ -294,6 +295,7 @@ describe('işyeri nüshası çıktısı', () => {
     expect(html).toContain('>17<');
     expect(html).toContain('Z no');
     expect(html).toContain('Kasiyer Ayşe');
-    expect(html).not.toContain('Türk Kahvesi');
+    expect(html).toContain('Türk Kahvesi');
+    expect(html).toContain('Orta şekerli');
   });
 });

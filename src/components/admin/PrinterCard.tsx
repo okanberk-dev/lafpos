@@ -142,15 +142,15 @@ export function PrinterCard() {
               disabled={savingOpt}
               onChange={(v) => void setOpt({ receiptStoreCopy: v }, v ? 'Ödemeden sonra işyeri nüshası çıkacak' : 'İşyeri nüshası çıkmayacak')}
               label="Ödeme sonrası işyeri nüshası"
-              hint="kısa kayıt: adisyon no, toplam, ödeme türleri, yazarkasa fiş no; kalem dökümü yok"
+              hint="bar ve hazırlık için: adisyon no, kalemler ve seçenekler, toplam, ödeme türleri, yazarkasa fiş no"
             />
             <Toggle
               block
               checked={boot.settings.receiptInfoSlip}
               disabled={savingOpt}
               onChange={(v) => void setOpt({ receiptInfoSlip: v }, v ? 'Ödemeden sonra müşteriye bilgi fişi çıkacak' : 'Müşteriye bilgi fişi çıkmayacak')}
-              label="Müşteriye bilgi fişi"
-              hint={boot.integrations.okc.provider === 'kapali' ? 'yazarkasa bağlı değilken; “mali değeri yoktur” yazar' : 'yazarkasa bağlıyken basılmaz: müşterinin fişini cihaz keser'}
+              label="Ödeme sonrası müşteri nüshası"
+              hint="sipariş numarası çok büyük (çağrı için), kalemler; yazarkasa bağlıyken de basılır, “mali değeri yoktur” yazar"
             />
           </div>
         </div>

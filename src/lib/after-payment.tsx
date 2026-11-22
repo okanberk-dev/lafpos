@@ -44,9 +44,10 @@ export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order
   const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
   void printNow(
     <>
-      {plan.storeCopy && <StoreCopyReceipt order={order} boot={boot} payments={payments} cashier={cashier} />}
+      {/* Önce müşteri nüshası (büyük sipariş no), sonra işyeri nüshası (kalem dökümü; bar için) */}
+      {plan.infoSlip && <BillReceipt order={order} boot={boot} sizeLabel={sizeLabel} copy />}
       {plan.storeCopy && plan.infoSlip && <PrintCut />}
-      {plan.infoSlip && <BillReceipt order={order} boot={boot} sizeLabel={sizeLabel} />}
+      {plan.storeCopy && <StoreCopyReceipt order={order} boot={boot} payments={payments} cashier={cashier} />}
     </>,
   ).catch(() => undefined);
 }
@@ -62,6 +63,13 @@ export function printStoreCopies(boot: BootstrapDTO, copies: ClaimedStoreCopy[])
       {copies.map((c, i) => (
         <Fragment key={c.receiptId}>
           {i > 0 && <PrintCut />}
+          {/* Cihaz ödemesinde de müşteri nüshası (ayar açıksa) ve işyeri nüshası */}
+          {plannedPrints(boot, true).infoSlip && (
+            <>
+              <BillReceipt order={c.order} boot={boot} sizeLabel={(s) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s} copy />
+              <PrintCut />
+            </>
+          )}
           <StoreCopyReceipt
             order={c.order}
             boot={boot}

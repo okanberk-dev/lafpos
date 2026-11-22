@@ -17,7 +17,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
   // Ödemeden sonra fiş yazıcısından kısa işyeri nüshası (kalem dökümü yok); müşteriye bilgi fişi yalnız yazarkasasız
   // kurulumda ve ayar açılınca (mali fişi yazarkasa basar)
   receiptStoreCopy: true,
-  receiptInfoSlip: false,
+  // Varsayılan 2 nüsha: müşteri (büyük sipariş no) ve işyeri (kalem dökümü); yazarkasa bağlıyken de
+  receiptInfoSlip: true,
   serviceRate: 0,
   autoLockMinutes: 0,
   keepAwake: true,
