@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { COMP_LABEL } from '@shared/comp';
 import { afterPaymentPrints, isKasaHost, printOnce } from '@shared/odeme-fisi';
-import type { BootstrapDTO, OrderDTO } from '@shared/types';
+import type { BootstrapDTO, CompKind, OrderDTO } from '@shared/types';
 import { ApiError, get, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { onLive, useLive } from '@/lib/live';
@@ -46,6 +47,23 @@ export function printAfterPayment(opts: { key: string; boot: BootstrapDTO; order
   void printEach([
     ...(plan.infoSlip ? [<BillReceipt key="m" order={order} boot={boot} sizeLabel={sizeLabel} copy />] : []),
     ...(plan.storeCopy ? [<StoreCopyReceipt key="i" order={order} boot={boot} payments={payments} cashier={cashier} />] : []),
+  ]).catch(() => undefined);
+}
+
+/**
+ * Ciro dışı kapanıştan (ikram, ödenmez, zayi) sonra fiş yazıcısından ödemedeki gibi iki ayrı kâğıt: müşteri nüshası ve
+ * kalemli işyeri nüshası (bar için; altta kapanış türü). Ödeme sonrası fiş ayarlarına bağlı, kasa ekranında ve yazıcı varken
+ */
+export function printAfterComp(opts: { boot: BootstrapDTO; order: OrderDTO; kind: CompKind }) {
+  const { boot, order } = opts;
+  const plan = plannedPrints(boot, false);
+  if (!plan.storeCopy && !plan.infoSlip) return;
+  if (!once(`ciro-disi:${order.id}:${order.closedAt ?? ''}`)) return;
+  const cashier = useAuth.getState().me?.name ?? null;
+  const sizeLabel = (s: string) => boot.settings.sizeLabels[s as 'M' | 'L'] ?? s;
+  void printEach([
+    ...(plan.infoSlip ? [<BillReceipt key="m" order={order} boot={boot} sizeLabel={sizeLabel} copy />] : []),
+    ...(plan.storeCopy ? [<StoreCopyReceipt key="i" order={order} boot={boot} payments={[]} cashier={cashier} comp={COMP_LABEL[opts.kind]} />] : []),
   ]).catch(() => undefined);
 }
 
