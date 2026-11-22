@@ -1246,8 +1246,8 @@ html[class~='dark'] {
     gap: 6px;
     min-width: 6.25rem;
     padding: 9px 14px 10px;
-    border: 1px solid var(--hs-line, var(--admin-border));
-    border-radius: var(--r-tile);
+    border: 1px solid var(--hs-line, transparent);
+    border-radius: var(--k-r-tile);
     background: var(--admin-surface);
     box-shadow: var(--shadow-card);
   }
@@ -1256,8 +1256,9 @@ html[class~='dark'] {
   }
   .lp-hs > b {
     color: var(--admin-text);
-    font: 700 var(--hs-size, 1.375rem) / 1 var(--font-headline);
-    letter-spacing: -0.03em;
+    /* LafPOS Keel: karo rakamı 500 ağırlık, sıkı aralık (patron panelinin karolarıyla aynı) */
+    font: 500 var(--hs-size, 1.375rem) / 1 var(--font-headline);
+    letter-spacing: -0.035em;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
