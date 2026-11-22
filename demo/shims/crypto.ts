@@ -85,4 +85,23 @@ export const hkdfSync = noBackup;
 export const createCipheriv = noBackup;
 export const createDecipheriv = noBackup;
 
-export default { createHash, createHmac, randomBytes, randomUUID, hkdfSync, createCipheriv, createDecipheriv };
+/**
+ * Uzaktan yönetimin PIN şifresi (server/sync/kontrol.ts, RSA-OAEP) tarayıcı demosunda yok: modülü yalnız Merkez açıkken
+ * nabız yükler, demoda Merkez hiç açılmaz. Adlar derleme çözülsün diye var
+ */
+const noRemote = (): never => {
+  throw new Error('Tarayıcı demosunda uzaktan yönetim yok');
+};
+export const generateKeyPairSync = noRemote;
+export const privateDecrypt = noRemote;
+export const constants = { RSA_PKCS1_OAEP_PADDING: 4 } as const;
+
+/** Sabit zamanlı karşılaştırma (Node'unki gibi: uzunluklar farklıysa hata) */
+export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) throw new RangeError('Input buffers must have the same byte length');
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0;
+}
+
+export default { createHash, createHmac, randomBytes, randomUUID, hkdfSync, createCipheriv, createDecipheriv, generateKeyPairSync, privateDecrypt, constants, timingSafeEqual };

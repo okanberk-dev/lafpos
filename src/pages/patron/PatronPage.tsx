@@ -21,6 +21,7 @@ import { hourBars } from '@/lib/period';
 import { toast } from '@/lib/toast';
 import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
 import { Amount, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs } from './TodayStats';
+import { UzaktanYonetimKarti } from '@/pages/kontrol/UzaktanYonetimKarti';
 
 export interface PatronData {
   now: number;
@@ -600,6 +601,7 @@ export default function PatronPage() {
             </Group>
           </div>
         </div>
+        {REMOTE && <UzaktanYonetimKarti className="mt-4" />}
       </div>
     </Stage>
   );

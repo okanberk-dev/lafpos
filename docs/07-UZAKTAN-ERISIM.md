@@ -85,6 +85,15 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   - Bir saat açık Patron paneli (gün açık, tek dükkân): sakin saatte (yalnız nabız) 1116 komut yerine 276, her
     dakika satışta 1260 yerine 480, gece (gün kapalı) 1092 yerine 72; Redis'ten okunan veri saatte ~38 MB yerine
     ~1,3 MB (sakin). Kafe bağlanmadan (demo) istek başına iki küçük komut.
+  - **Uzaktan yönetim** (`api/_kontrol.ts`, `docs/UZAKTAN-YONETIM.md`, `tests/kontrol-bulut.test.ts`): Merkez nabzının
+    komut sayısı artmaz (komut yokken yine MGET + SET + MGET). Kuyruk işareti `lafpos:kontrol:var:<kurulum>`, kasa
+    özetinin parmak izi `…:ozet:<kurulum>` ve kasaya giden son komutun anı `…:teslim:<kurulum>` (kasaya ulaşan komut
+    iptal edilmez) kurulum kaydıyla aynı MGET'te; kuyruk (HASH `…:komut:<kurulum>`) yalnız işaret varsa okunur. Özet
+    (`…:durum:<kurulum>`, en çok 64 KB) ve sonuçlar (LIST `…:gecmis:<kurulum>`, en çok 100 satır) yalnız değişince
+    yazılır; saatlik sayaç `…:sayac:<kurulum>:<saat>` (2 saat). Panelin `kontrol/durum` yoklaması MGET + LRANGE
+    (bekleyen varken + HVALS); bir komut GET + HLEN + INCR + HSET + SET. Panel üyeleri: `lafpos:uye:<e-posta>` (rol
+    yalnız davetle eklenende), `lafpos:uye-davet:<e-posta>` (kodun özeti, 7 gün), `lafpos:uyeler` (küme); rol oturumun
+    zaten okuduğu üye kaydından gelir, ek okuma yok.
   - Geçiş: bu sürümden önce yazılmış kayıt (`lafpos:dukkanlar`, eski kasanın `lafpos:snapshot`'ı) sürüm yokken
     okunmaya devam eder (koşullu yanıt yok); kasanın ilk itmesi sürümü yazar, `lafpos:dukkanlar` artık yazılmaz.
 
@@ -170,7 +179,10 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   basıp davet koduyla yeniden oluşturur (başka üye varken de). Oturum 30 gün; imzaya parola
   özeti girer, parola değişince bütün oturumlar düşer. Deneme sınırı aynı (IP başına 15 dakikada 8); yanlış parola ve
   bilinmeyen e-posta aynı yanıtı alır ve aynı sürede (her yolda tek parola özeti). Kafe bağlanmadan önce site demoya yönlenmez: giriş ekranı görünür, demo orada
-  "Demoyu dene" bağlantısıdır (`tests/uzaktan-uyelik.test.ts`, `e2e/uzaktan.mjs`).
+  "Demoyu dene" bağlantısıdır (`tests/uzaktan-uyelik.test.ts`, `e2e/uzaktan.mjs`). Ortamdaki e-posta sahiptir; sahip
+  panelden başkasını da ekler (Uzaktan yönetim › Panel erişimi: yönetici ya da yalnız görür): kişiye bir kez görünen
+  kişisel davet kodu verilir (7 gün), ilk girişte o kodla parolasını belirler. Kaldırılanın kaydı silinir, oturumu en
+  geç bir dakikada düşer; ortamdaki e-posta panelden değişmez (`tests/kontrol-bulut.test.ts`).
 - **Üye girişi ve İndir (siteden kurulum):** giriş ekranı sitenin "Üye girişi"dir; girişten sonra menüde **İndir**
   (`/indir`, yalnız Uzaktan derlemesinde). Kafeden veri gelmemişken üye girişten sonra doğrudan kabuksuz İndir'i görür;
   sayfa yarım dakikada bir `/api/uzaktan/durum`'a bakar, kafe bağlanınca canlı görünüm kendiliğinden açılır.
@@ -186,9 +198,9 @@ yenilenir (aşağıda "Upstash bütçesi"). Maliyet ve kâr, PIN'ler, müşteri 
   Vercel NSIS derleyemez.
 
 - **Merkez (`/merkez`): dükkânlar, lisans, seçerek güncelleme** (`api/_merkez.ts`, kasada `server/sync/merkez.ts`,
-  kural `shared/lisans.ts`, `tests/merkez.test.ts`, `tests/denetim-merkez.test.ts`). Yalnız gerçek oturumla (üye ya
-  da parolalı giriş); parolasız görünümde menüde yok ve uçları 403 `remote_admin` (oturum düşmez), kafe bağlanmadan
-  örnek satır salt okunur.
+  kural `shared/lisans.ts`, `tests/merkez.test.ts`, `tests/denetim-merkez.test.ts`). Yalnız sahibin oturumuyla
+  (ortamdaki üye ya da parolalı giriş); parolasız görünümde ve panele eklenen yönetici ya da izleyicide uçları 403
+  `remote_admin` (oturum düşmez), kafe bağlanmadan örnek satır salt okunur.
   - **Kayıt:** kasa ilk açılışta gizli anahtar üretir, kurulum kimliği anahtarın özetidir (sha256'nın ilk 24'ü;
     `sync_state` `merkez.kimlik`, deneme bitirme silmez): kimliği gören başkası onu kendi anahtarıyla kaydedemez.
     Merkez adresi `LAFPOS_MERKEZ_URL`, yoksa `LAFPOS_CLOUD_URL`; `LAFPOS_MERKEZ_URL=0` kapatır, `LAFPOS_CLOUD_SECRET`

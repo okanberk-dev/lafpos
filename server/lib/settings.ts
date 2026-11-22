@@ -60,6 +60,8 @@ export const PUBLIC_DEFAULTS: PublicSettings = {
     showClock: true,
     showOptions: true,
   },
+  // Uzaktan yönetim açık: sahip LafPOS Uzaktan'dan personel, PIN, Tükendi ve servis modunu yönetir; patron kasadan kapatır
+  remoteControl: true,
 };
 
 /** Yalnız sunucuda kullanılan ayarlar */

@@ -47,9 +47,11 @@ function SetupChecklist({ s }: { s: RemoteSetup }) {
 }
 
 /**
- * Uzaktan giriş (sitenin "Üye girişi"). Üyelik açıksa (LAFPOS_UYE_EPOSTA) e-posta ve parola: üye ilk girişte parolasını
- * kendisi belirler, sonra aynı ikiliyle girer. Üyelik kapalıysa eski düzen: patron parolası (LAFPOS_UZAKTAN_PAROLA) ya da
- * parolasız görünüm. PIN'ler kafedeki kasada kalır. İndirme bağlantısı burada yok, yalnız girişten sonra (İndir)
+ * Uzaktan giriş (sitenin "Üye girişi"). Üyelik açıksa (LAFPOS_UYE_EPOSTA) e-posta ve parola: üye ilk girişte davet
+ * koduyla parolasını kendisi belirler, sonra aynı ikiliyle girer. İlk giriş formu üyelik hiç açılmamışken kendiliğinden,
+ * sonra "Davet kodum var" ile açılır (sahibin panelden davet ettiği yönetici ve izleyici). Üyelik kapalıysa eski düzen:
+ * patron parolası (LAFPOS_UZAKTAN_PAROLA) ya da parolasız görünüm. PIN'ler kafedeki kasada kalır. İndirme bağlantısı
+ * burada yok, yalnız girişten sonra (İndir)
  */
 export function RemoteLoginPage() {
   const init = useAuth((s) => s.init);
@@ -66,7 +68,9 @@ export function RemoteLoginPage() {
   const auto = !!setup.data && remoteAutoEnters(setup.data);
   const autoTried = useRef(false);
   const member = setup.data?.member;
-  const creating = member === 'new';
+  // Davet edilen kişi: üyelik açık ('ready') ama kendi üyeliği yok; kodla ilk girişi yapar
+  const [davetKodum, setDavetKodum] = useState(false);
+  const creating = member === 'new' || (!!member && davetKodum);
 
   /** Oturumu açar; açılamazsa ileti. Parolasız girişte boş gövde gider */
   const enter = async (body: { eposta?: string; parola?: string; davet?: string }, path = '/uzaktan/giris') => {
@@ -216,6 +220,23 @@ export function RemoteLoginPage() {
             <Button type="submit" variant="primary" size="lg" block className="mt-4" loading={busy} disabled={!!setup.data && !ready}>
               {creating ? 'Üyeliği oluştur' : 'Giriş'}
             </Button>
+            {/* Panelden davet edilen kişi ilk girişi kodla yapar; üyelik hiç açılmamışken form zaten ilk giriş */}
+            {member === 'ready' && (
+              <Button
+                variant="ghost"
+                size="lg"
+                block
+                className="mt-2"
+                onClick={() => {
+                  setDavetKodum((x) => !x);
+                  setError(null);
+                  setPassword('');
+                  setPassword2('');
+                }}
+              >
+                {davetKodum ? 'Hesabım var, giriş yap' : 'Davet kodum var'}
+              </Button>
+            )}
             {/* Kafe bağlanmadan önce site demoyu üyeliksiz de açar (tarayıcıdaki örnek kasa, gerçek veri değil) */}
             {member && setup.data?.demo && (
               <a href="/demo/" className={buttonClass('ghost', 'lg', { block: true, className: 'mt-2' })}>

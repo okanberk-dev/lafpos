@@ -229,6 +229,12 @@ export interface PublicSettings {
   barEnabled: boolean;
   /** İki ekranlı kasanın müşteriye dönük ekranı (`/musteri-ekrani`): görünüm ve metinler, Yönetim › Müşteri ekranı */
   customerDisplay: CustomerDisplaySettings;
+  /**
+   * Uzaktan yönetim (docs/UZAKTAN-YONETIM.md; varsayılan açık): LafPOS Uzaktan'dan personel, PIN, roller, Tükendi ve
+   * servis modu değişiklikleri. Kapalıyken kasa uzaktan gelen her işlemi reddeder. Yalnız patron değiştirir (Yönetim ›
+   * Ağ ve uzaktan erişim)
+   */
+  remoteControl: boolean;
 }
 
 /** Müşteri ekranının teması: gece (koyu, varsayılan), porselen (açık, sitenin zemini), yeşil (marka yüzeyi) */

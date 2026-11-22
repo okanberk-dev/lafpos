@@ -16,10 +16,16 @@
  * Redis: `lafpos:merkez:kurulum:<id>` (JSON; panelin alanları: ad, lisans, mod, hedef), `lafpos:merkez:durum:<id>`
  * (JSON; nabzın alanları: son görülme, sürüm, güncelleme durumu), `lafpos:merkez:kurulumlar` (kimlik kümesi),
  * `lafpos:merkez:bekleyen` (onay bekleyenler). Nabız ve panel ayrı anahtara yazar: biri ötekinin değişikliğini ezmez.
- * Panel uçları yalnız gerçek oturumla (üye ya da parolalı giriş); parolasız görünümde Merkez kapalıdır (403).
+ * Panel uçları yalnız sahibin gerçek oturumuyla (ortamdaki üye ya da parolalı giriş); parolasız görünümde ve panele
+ * davet edilen yönetici ya da izleyicide Merkez kapalıdır (403).
+ *
+ * Uzaktan yönetim (api/_kontrol.ts) de bu nabızla gider: kasa isteğe `kontrol` eklerse sonuçları ve özeti alınır, yanıta
+ * kuyruktaki komutlar eklenir. Kuyruk işareti ve özetin parmak izi nabzın ilk MGET'inde okunur: komut yokken nabzın
+ * Redis komut sayısı aynı kalır; `kontrol` göndermeyen eski kasa yanıtta yeni alan görmez.
  */
 import { createHash } from 'node:crypto';
 import { type LicenseRecord, licenseState, normalizeBranchCode, ONLINE_MS, UPDATE_LABELS, updateLabel } from '../shared/lisans.js';
+import { NABIZ_KONTROL_PAYI, nabizAnahtarlari, nabizKontrol } from './_kontrol.js';
 
 export interface Install {
   id: string;
@@ -96,6 +102,8 @@ const PENDING_MAX = 50;
 const NOTIFY_EVERY_S = 6 * 3600;
 /** Panelin listesi Redis'ten bu kadar kimlikle parça parça okunur */
 const LIST_CHUNK = 100;
+/** Nabzın gövdesi; uzaktan yönetimin özeti ve sonuçları için pay eklenir */
+const BEAT_MAX = 20_000 + NABIZ_KONTROL_PAYI;
 
 /** Kurulum kimliği anahtarın özetidir: kimliği bilen başkası onu kendi anahtarıyla kaydedemez (server/sync/merkez.ts) */
 export const installIdFor = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 24);
@@ -188,7 +196,8 @@ function demoInstalls(release: Release | null, now: number) {
 /** Panel kapısı: yönetici oturumu yoksa yanıt. Geçerli ama yetkisiz oturum (parolasız görünüm) 403 alır, 401 değil */
 async function gate(deps: MerkezDeps): Promise<Response | null> {
   if (await deps.admin()) return null;
-  if (await deps.viewer?.()) return fail(403, 'Merkez için üye girişi gerekir', 'remote_admin');
+  // Geçerli oturum ama sahip değil: panele eklenen yönetici ya da izleyici, parolasız görünüm
+  if (await deps.viewer?.()) return fail(403, 'Merkez’i yalnız panelin sahibi açar (sahibin üye girişi)', 'remote_admin');
   return fail(401, 'Merkez için üye girişi gerekir', 'unauthorized');
 }
 
@@ -264,8 +273,10 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     const id = req.headers.get('x-laf-kurulum') ?? '';
     if (!ID_RE.test(id)) return fail(400, 'Kurulum kimliği yok', 'bad_body');
     const raw = await req.text();
-    if (raw.length > 20_000) return fail(413, 'Nabız çok büyük', 'too_large');
-    const inst = await readInstall(deps, id);
+    if (raw.length > BEAT_MAX) return fail(413, 'Nabız çok büyük', 'too_large');
+    // Kurulum, nabız kaydı ve uzaktan yönetimin işaretleri (kuyruk, özet, teslim) tek okumada
+    const [rawInst, rawBeat, ...kontrolOnce] = ((await deps.redis('MGET', installKey(id), statusKey(id), ...nabizAnahtarlari(id))) as (string | null)[] | null) ?? [];
+    const inst = merged(rawInst, rawBeat);
     if (!inst) return fail(404, 'Kurulum kayıtlı değil', 'not_registered');
     if (!deps.verify(inst.key, req, url, raw)) return fail(401, 'İmza geçersiz', 'bad_signature');
     let body: Record<string, unknown>;
@@ -292,6 +303,9 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     };
     // Nabız yalnız kendi alanlarını yazar (tek komut): panelin aynı anda verdiği lisans ya da hedef ezilmez
     await deps.redis('SET', statusKey(id), JSON.stringify(beat));
+    // Uzaktan yönetim yalnız `kontrol` gönderen kasada. Bir aksaklık lisans nabzını düşürmez: alan yanıtta olmaz, kasa
+    // bildirmediği sonuçları saklar ve sonraki nabızda yeniden gönderir
+    const kontrol = await nabizKontrol(deps.redis, id, body.kontrol, kontrolOnce, now).catch(() => null);
     // Yanıt panelin son yazdığı kayıttan (kanal okunurken değişmiş olabilir)
     const release = await deps.fetchRelease();
     const fresh = await readInstall(deps, id);
@@ -305,7 +319,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
         await deps.notify({ kind: 'guncelleme', title: 'Güncelleme sorunu', body, at: now, shop: next.ad }).catch(() => undefined);
       }
     }
-    return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, at: now });
+    return json({ ok: true, ad: next.ad, kod: next.kod ?? null, lisans: next.lisans, mod: next.mod, hedef: targetFor(next, release), guncelleIstek: next.guncelleIstek ?? null, at: now, ...(kontrol ? { kontrol } : {}) });
   }
 
   // ─── Panel ───

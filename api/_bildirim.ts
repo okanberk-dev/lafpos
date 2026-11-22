@@ -124,7 +124,7 @@ export async function bildirim(req: Request, path: string, deps: BildirimDeps): 
 
   // Abonelik: gerçek oturumla
   if (!(await deps.admin())) {
-    if (await deps.viewer?.()) return fail(403, 'Bildirimler için üye girişi gerekir', 'remote_admin');
+    if (await deps.viewer?.()) return fail(403, 'Bildirimleri yalnız panelin sahibi açar (sahibin üye girişi)', 'remote_admin');
     return fail(401, 'Bildirimler için üye girişi gerekir', 'unauthorized');
   }
   if (path === 'uzaktan/bildirim/abone' && req.method === 'POST') {

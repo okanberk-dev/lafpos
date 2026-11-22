@@ -225,7 +225,7 @@ describe('siteden kurulum: İndir sayfası', () => {
     expect(remoteNav(POS_NAV, false)).toEqual(POS_NAV);
     const remote = remoteNav(POS_NAV, true);
     expect(remote.at(-1)).toBe(DOWNLOAD_NAV);
-    expect(remote.map((n) => n.to)).toEqual(['/masalar', '/mutfak', '/raporlar', '/patron', '/merkez', '/indir']);
+    expect(remote.map((n) => n.to)).toEqual(['/masalar', '/mutfak', '/raporlar', '/patron', '/merkez', '/uzaktan-yonetim', '/indir']);
     expect(DOWNLOAD_NAV.label).toBe('İndir');
     expect(WEB_INSTALLER_URL).toBe(`https://lafpos.laffogato.net${WEB_INSTALLER_PATH}`);
     expect(WEB_INSTALLER_PATH.endsWith(WEB_INSTALLER_NAME)).toBe(true);
