@@ -81,7 +81,7 @@ export interface PatronData {
 /** Dikkat isteyenlerde ilk bakışta en çok bu kadar satır; gerisi "Tümünü göster"le aynı kartta açılır */
 const ATTENTION_ROWS = 4;
 /** Kıyas kartının mini grafiğinde blokların altındaki kısa adlar (satırlarda tam adı yazar) */
-const COMPARE_SHORT = { dun: 'Dün', hafta: 'Geçen hafta', ay: 'Geçen ay' } as const;
+const COMPARE_SHORT = { dun: 'Dün', hafta: 'G. hafta', ay: 'G. ay' } as const;
 
 /** Pano yaprağının iç payı: telefonda kart kenara yakın, geniş ekranda biraz içeride */
 const PAD = 'px-1 pb-8 pt-1 md:px-2 md:pt-2';
