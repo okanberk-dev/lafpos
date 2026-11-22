@@ -3,12 +3,31 @@
 # (--kiosk-printing) varsayilan yaziciya basar: kablolu (USB) fis yazicisi kurulup tek basina takiliysa hic secim
 # gerekmez. Yazici Yonetim > Ayarlar ve yedek > Fis yazicisi'ndan da secilir. Hata olursa sessizce cikar: kasa ekrani
 # yine acilir. Ayrinti: docs/05-KASA-BILGISAYARI.md. Yalniz ASCII (Windows PowerShell 5.1 BOM'suz dosyayi ANSI okur).
-param([string]$Url = $env:LAFPOS_URL)
+param([string]$Url = $env:LAFPOS_URL, [switch]$Bekci)
 $ErrorActionPreference = 'Stop'
 
 # Musteri ekrani (22 Kas 2026): bilgisayara ikinci ekran takiliysa musteri ekrani orada tam ekran acilir (ayri Chrome
-# profili; kasa penceresinden bagimsiz, kasa kapatilip acilsa da kalir). Zaten aciksa yeniden acilmaz; ikinci ekran yoksa
-# hicbir sey yapmaz. Betik guncellemeyle gelir (app\); LafPOS-Kasa.bat her acilista calistirir. Hata kasayi durdurmaz.
+# profili; kasa penceresinden bagimsiz). Bu betik -Bekci ile arka planda bir kez daha baslar ve 15 sn'de bir bakar:
+# pencere kapandiysa ya da ikinci ekran sonradan takildiysa yeniden acar (tek bekci). Ekran olcegi (%125) pencereyi
+# birinci ekrana dusurmesin diye surec DPI'ya duyarli yapilir (Screen.Bounds gercek piksel). Sahadaki gecici bekci
+# (%LocalAppData%\LafPOS-MusteriEkrani, Baslangic'ta "LafPOS Musteri Ekrani") kapatilir: iki pencere acilmaz.
+# Betik guncellemeyle gelir (app\); LafPOS-Kasa.bat her acilista calistirir. Hata kasayi durdurmaz. Yalniz ASCII.
+try {
+  Add-Type -Namespace LafPos -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();' -ErrorAction SilentlyContinue
+  [LafPos.Dpi]::SetProcessDPIAware() | Out-Null
+} catch { }
+
+function Get-DisplayExe {
+  $candidates = @(
+    (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Google\Chrome\Application\chrome.exe'),
+    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
+    (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
+  )
+  return $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+}
+
 function Start-CustomerDisplay([string]$base) {
   try {
     Add-Type -AssemblyName System.Windows.Forms
@@ -16,14 +35,7 @@ function Start-CustomerDisplay([string]$base) {
     if (-not $second) { return }
     $running = Get-CimInstance -ClassName Win32_Process -Filter "Name='chrome.exe' OR Name='msedge.exe'" | Where-Object { $_.CommandLine -like '*chrome-musteri*' } | Select-Object -First 1
     if ($running) { return }
-    $candidates = @(
-      (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
-      (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe'),
-      (Join-Path $env:LOCALAPPDATA 'Google\Chrome\Application\chrome.exe'),
-      (Join-Path ${env:ProgramFiles(x86)} 'Microsoft\Edge\Application\msedge.exe'),
-      (Join-Path $env:ProgramFiles 'Microsoft\Edge\Application\msedge.exe')
-    )
-    $exe = $candidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    $exe = Get-DisplayExe
     if (-not $exe) { return }
     $b = $second.Bounds
     $profileDir = Join-Path $env:LOCALAPPDATA 'LafPOS\chrome-musteri'
@@ -33,15 +45,41 @@ function Start-CustomerDisplay([string]$base) {
       ('--user-data-dir="' + $profileDir + '"'),
       ('--window-position=' + $b.X + ',' + $b.Y),
       ('--window-size=' + $b.Width + ',' + $b.Height),
-      '--no-first-run', '--no-default-browser-check', '--disable-pinch', '--overscroll-history-navigation=0', '--autoplay-policy=no-user-gesture-required'
+      '--no-first-run', '--no-default-browser-check', '--disable-pinch', '--overscroll-history-navigation=0', '--autoplay-policy=no-user-gesture-required',
+      '--disable-session-crashed-bubble', '--disable-features=Translate'
     )
     Start-Process -FilePath $exe -ArgumentList $chromeArgs | Out-Null
   } catch { }
 }
+
+function Stop-TemporaryDisplayWatcher {
+  try {
+    $lnk = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\LafPOS Musteri Ekrani.lnk'
+    if (Test-Path $lnk) { Remove-Item -LiteralPath $lnk -Force }
+    Get-CimInstance -ClassName Win32_Process -Filter "Name='powershell.exe' OR Name='pwsh.exe'" | Where-Object { $_.CommandLine -like '*LafPOS-MusteriEkrani*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  } catch { }
+}
+
+$displayBase = $Url
+if (-not $displayBase) { $displayBase = 'http://localhost:4000/' }
+$displayBase = ($displayBase -replace '//localhost', '//127.0.0.1').TrimEnd('/')
+
+if ($Bekci) {
+  # Arka plan bekcisi: musteri ekrani penceresini acik tutar (kasa bilgisayari kapanana dek)
+  while ($true) {
+    Start-CustomerDisplay $displayBase
+    Start-Sleep -Seconds 15
+  }
+}
+
 try {
-  $displayBase = $Url
-  if (-not $displayBase) { $displayBase = 'http://localhost:4000/' }
-  Start-CustomerDisplay (($displayBase -replace '//localhost', '//127.0.0.1').TrimEnd('/'))
+  Stop-TemporaryDisplayWatcher
+  Start-CustomerDisplay $displayBase
+  $me = $MyInvocation.MyCommand.Path
+  $watching = Get-CimInstance -ClassName Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.CommandLine -like '*kasa-yazici.ps1*-Bekci*' } | Select-Object -First 1
+  if ($me -and -not $watching) {
+    Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $me + '"'), '-Bekci') | Out-Null
+  }
 } catch { }
 
 try {
