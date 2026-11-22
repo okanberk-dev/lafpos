@@ -75,11 +75,12 @@ export function LoginPage() {
   const today = businessDate(now);
   const users = info.data?.users ?? [];
   return (
-    // Pano girişi: açık gri zeminde solda ev yeşilinin degradesinde marka kartı (logo, işletme, iri saat, tarih ve ekip;
-    // panonun kredi kartı), sağda beyaz PIN kartı. Telefonda marka ve saat yeşil şerit olarak kartın üstünde
+    // Pano girişi (Keel): açık gri zeminde solda ters kart (mürekkep zemin; logo, işletme, iri saat, tarih ve ekip),
+    // sağda beyaz PIN kartı. Telefonda marka ve saat şerit olarak kartın üstünde. Zemin belirteçten gelir: ray beyaz
+    // olunca bu kartın yazıları görünmez kalmıştı (22 Kas 2026)
     <div className="flex min-h-full items-center justify-center bg-bg p-3 sm:p-6 lg:p-10">
       <div className="grid w-full max-w-5xl items-stretch gap-3 lg:min-h-[580px] lg:grid-cols-[1fr_minmax(380px,430px)] lg:gap-5">
-        <section className="relative flex items-center justify-between gap-4 overflow-hidden rounded-[var(--r-card)] bg-[image:var(--rail-bg)] px-4 py-3.5 text-white shadow-[0_24px_48px_-28px_rgb(6_74_54/0.8)] [--band-muted:var(--rail-mute)] [--band-text:#ffffff] sm:px-5 lg:h-full lg:flex-col lg:items-stretch lg:justify-between lg:rounded-[var(--r-stage)] lg:p-9">
+        <section className="relative flex items-center justify-between gap-4 overflow-hidden rounded-[var(--r-card)] k-inverse px-4 py-3.5 shadow-[var(--shadow-lift)] [--band-muted:var(--k-inv-mute)] [--band-text:var(--k-on-select)] sm:px-5 lg:h-full lg:flex-col lg:items-stretch lg:justify-between lg:rounded-[var(--r-stage)] lg:p-9">
           <div className="flex items-center gap-3">
             <LafTile className="shadow-[inset_0_0_0_1px_rgb(255_255_255/0.14)]" />
             <span className="min-w-0">

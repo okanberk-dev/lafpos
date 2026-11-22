@@ -665,7 +665,7 @@ export default function OrderPage() {
           cartLead ? 'border-transparent bg-[var(--admin-ink-fill)] text-[var(--admin-on-ink)] shadow-[0_10px_24px_-14px_rgb(6_74_54/0.8)] active:brightness-95' : 'border-line bg-surface-2 active:bg-press',
         )}
       >
-        <span aria-hidden="true" className={cn('relative grid size-9 shrink-0 place-items-center rounded-xl', cartLead ? 'bg-white/15' : 'bg-surface-3 text-ink')}>
+        <span aria-hidden="true" className={cn('relative grid size-9 shrink-0 place-items-center rounded-xl', cartLead ? 'bg-[color-mix(in_oklab,var(--admin-on-ink)_15%,transparent)]' : 'bg-surface-3 text-ink')}>
           <ShoppingBag className="size-[18px]" />
           {/* Gönderilmemiş adet amber sayaçta: yumuşak zemin, koyu amber yazı (iki temada da okunur) */}
           {pendingCount > 0 && (
@@ -675,7 +675,7 @@ export default function OrderPage() {
           )}
         </span>
         <span aria-hidden="true" className="min-w-0 flex-1 leading-tight">
-          <span className={cn('block truncate text-xs', cartLead ? 'text-white/85' : 'text-muted')}>{itemCount > 0 ? `${itemCount} ürün` : 'Sepet boş'}</span>
+          <span className={cn('block truncate text-xs', cartLead ? 'opacity-85' : 'text-muted')}>{itemCount > 0 ? `${itemCount} ürün` : 'Sepet boş'}</span>
           <span className="tabular block whitespace-nowrap font-headline text-lg font-bold">{tlShort(cartTotal)}</span>
         </span>
         <span aria-hidden="true" className={cn('inline-flex shrink-0 items-center gap-0.5 text-sm font-semibold', !cartLead && 'text-ink')}>

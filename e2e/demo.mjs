@@ -94,7 +94,7 @@ async function sweep(base, browser) {
         }
         const overflow = await overflowReport(page);
         if (overflow.page > 1) problems.push(`sayfa ${overflow.page} px yatay taşıyor`);
-        for (const o of overflow.items) problems.push(`taşan öğe: ${o.text} (sol ${o.left}, sağ ${o.right})`);
+        for (const o of overflow.items) problems.push(`${o.kind ?? 'taşan öğe'}: ${o.text} (sol ${o.left}, sağ ${o.right})`);
         if (VIEWPORTS[viewport].hasTouch) {
           const small = await smallTargets(page);
           if (small.length) problems.push(`44 px altı ${small.length} hedef: ${small.slice(0, 6).join(', ')}`);
