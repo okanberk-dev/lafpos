@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, ChevronDown } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from 'lucide-react';
 import { type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react';
 import { tl, tlShort } from '@shared/money';
 import { fmtTime } from '@shared/time';
@@ -164,11 +164,32 @@ function missing(c: Compare, today: string) {
  * toplamı, adisyon ve ₺ fark. `fresh`: başlığın sağındaki canlılık ("Az önce"); `chart`: satırların üstündeki mini
  * grafik (patron panelinde kıyas yalnız bu kartta)
  */
-export function CompareGroup({ compares, mode, today, now, fresh, chart, className, stack }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode; chart?: ReactNode; className?: string; stack?: boolean }) {
+export function CompareGroup({ compares, mode, today, now, fresh, chart, className, stack, onOpen }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode; chart?: ReactNode; className?: string; stack?: boolean; /** Verilirse karta (grafiğe ve "Döküm"e) dokununca ayrıntılı döküm açılır */ onOpen?: () => void }) {
   const title = mode === 'live' ? `Kıyas · ${fmtTime(now)} itibarıyla` : mode === 'closed' ? 'Kıyas · gün sonu' : 'Kıyas · gün açılmadı';
   return (
-    <Group title={title} label="Kıyas" meta={fresh} flush className={className}>
-      {chart}
+    <Group
+      title={title}
+      label="Kıyas"
+      meta={
+        onOpen ? (
+          <button type="button" onClick={onOpen} className="-my-2 inline-flex min-h-11 items-center gap-1 rounded-full px-2 font-medium text-ink hover:bg-hover">
+            Döküm
+            <ChevronRight aria-hidden="true" className="size-4" />
+          </button>
+        ) : (
+          fresh
+        )
+      }
+      flush
+      className={className}
+    >
+      {onOpen && chart ? (
+        <button type="button" onClick={onOpen} aria-label="Kıyas dökümünü aç" className="block w-full text-left">
+          {chart}
+        </button>
+      ) : (
+        chart
+      )}
       <ul className={ROWS}>
       {compares.map((c) => {
         const v = c.value;

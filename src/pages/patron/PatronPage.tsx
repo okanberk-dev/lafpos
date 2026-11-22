@@ -23,6 +23,7 @@ import { fmtClock, REMOTE, remoteFreshness, remotePollMs } from '@/lib/remote';
 import { Amount, CompareGroup, CumulativeChart, Delta, Faint, Group, PeriodGroup, QuietRow, Row, ROW_BUTTON, ROW_STATIC, ViewTabs, GROUP, PaymentMix } from './TodayStats';
 import { UzaktanYonetimKarti } from '@/pages/kontrol/UzaktanYonetimKarti';
 import { CompareBars, HeroNumber, KPill, KpiTile, PaymentGaugeCard, PctPill, ThinBars } from './KeelPanel';
+import { KiyasDokum } from './KiyasDokum';
 
 export interface PatronData {
   now: number;
@@ -133,6 +134,7 @@ function HeroAmount({ k }: { k: number }) {
 type ChartView = 'birikimli' | 'saatlik' | 'tablo';
 
 export default function PatronPage() {
+  const [dokum, setDokum] = useState(false);
   const can = useCan();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -448,10 +450,12 @@ export default function PatronPage() {
                   now={d.now}
                   fresh={ago ?? stamp}
                   stack
+                  onOpen={() => setDokum(true)}
                   chart={<CompareBars today={d.netSales} items={kiyas.compares.map((c) => ({ key: c.key, label: COMPARE_SHORT[c.key], value: c.value ? c.value.netSales : null }))} />}
                 />
                 <PaymentGaugeCard payments={d.payments} />
               </div>
+              <KiyasDokum open={dokum} onClose={() => setDokum(false)} mode={kiyas.mode} now={d.now} today={{ date: d.date, netSales: d.netSales, receipts: d.orders }} compares={kiyas.compares} periods={st?.periods} />
             </div>
 
             <Group title="Gün içi" style={order(7)}>
