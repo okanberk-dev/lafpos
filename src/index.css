@@ -27,6 +27,19 @@
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
+/*
+ * Dokunmatik: telefon ve tablet (birincil giriş parmak) ve dokunmatik ekranı olan kasa bilgisayarı (fare de bağlı
+ * olduğundan tarayıcı birincil girişi "fare" sayar; main.tsx `data-touch` koyar). İkisinde de 44 px dokunma alanı,
+ * sahibin isteği (22 Kas 2026: "kasa bilgisayarını dokunmatik kullanıyoruz")
+ */
+@custom-variant pointer-coarse {
+  @media (pointer: coarse) {
+    @slot;
+  }
+  &:where([data-touch], [data-touch] *) {
+    @slot;
+  }
+}
 
 /*
  * LafPOS Pano (20 Kasım 2026, operatör: "Modern Financial Dashboard UI'ı bu tasarım metrikleriyle bizim renklerimize

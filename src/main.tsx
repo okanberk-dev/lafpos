@@ -41,6 +41,13 @@ const queryClient = new QueryClient({
   },
 });
 
+// Dokunmatik ekranlı bilgisayar (kasa): fare de bağlı olsa dokunmatik ölçüler açılır (index.css `pointer-coarse`)
+try {
+  if (navigator.maxTouchPoints > 0 || window.matchMedia('(any-pointer: coarse)').matches) document.documentElement.dataset.touch = '';
+} catch {
+  /* eski tarayıcı: fare ölçüleri */
+}
+
 const root = createRoot(document.getElementById('root')!);
 
 function render() {
