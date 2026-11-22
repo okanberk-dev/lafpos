@@ -117,6 +117,8 @@ const productPos = z.object({
   portionsLeft: z.number().int().min(0).max(9999).nullish(),
   barcode: z.string().max(40).nullish(),
   sort: z.number().int().optional(),
+  // Kasadaki görsel (uzaktan `urun.gorsel`): yalnız https; küçük kopya yalnız sitenin adresinden çekilir (services/media.ts)
+  image: z.string().max(300).regex(/^https:\/\//).nullish(),
 });
 
 type ProductRow = typeof schema.products.$inferSelect;
