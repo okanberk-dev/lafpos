@@ -153,13 +153,16 @@ cashRoutes.post('/day/close', async (c) => {
     z.object({ countedCash: kurus.nullable(), cashCounts: z.record(z.string(), z.number().int().min(0)).nullish(), note: z.string().max(500).nullish() }),
   );
   const actor = actorFrom(c);
-  const day = write((t, fx) => closeDay(t, actor, fx, input));
+  // Uzaktan gün sonu (kontrol komutu `gun.sonu`): kasada kişi yok, sistem kapanışı gibi yazılır (otomatik gün sonuyla
+  // aynı; kim istediği notta ve uzaktan denetim kaydında)
+  const remote = actor.user.id === 'uzaktan';
+  const day = write((t, fx) => closeDay(t, remote ? null : actor, fx, input));
   // Gün lafmaliyet'e gider (bağlıysa, kurulum modunda değilse); maliyetler günde bir yenilenir
   afterDayClosed(day.id);
   // Kasa farkı eşiği geçtiyse patronun telefonuna
   afterDayClose(day.summary, day.zNo);
   // Pavo: cihazda banka gün sonu; beklenmez, cihaz yanıt vermese de gün kapalı kalır (docs/04-YAZARKASA.md §8.5)
-  void deviceEndOfDay(day.id, actor.user.id)
+  void deviceEndOfDay(day.id, remote ? null : actor.user.id)
     .then(afterDeviceEod)
     .catch((e) => console.warn('[pavo] gün sonu', e instanceof Error ? e.message : e));
   if (!seesNumbers(c.get('user'))) return c.json({ day: dayToDTO(db, day), summary: null, lafmaliyet: null, blind: true });

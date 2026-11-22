@@ -44,7 +44,39 @@ export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: Se
     }
   };
 
+  const gunKapali = neden('gun.sonu');
+  const gunSonu = async () => {
+    const ok = await confirmDialog({
+      title: 'Gün sonu alınsın ve güncelleme kurulsun mu',
+      body: 'Kasa en geç 5 dakikada gün sonunu (Z) sayımsız alır: Pavo banka gün sonu, lafmaliyet ve e-postalar kendiliğinden gider. Açık adisyon varsa kasa reddeder, nedeni Geçmiş’te yazar. Gün kapanınca yeni sürüm kurulur (LafPOS bir dakika kadar kapanır). Kasa sayımını sonra Kasa › Geçmiş günler › Kasa föyü’nden girin',
+      confirmLabel: 'Gün sonu al ve güncelle',
+      tone: 'primary',
+    });
+    if (!ok) return;
+    setBekle(true);
+    try {
+      await gonder({ tur: 'gun.sonu', veri: { not: '' }, guncelle: true });
+      toast.ok('Gün sonu isteği kasaya gidiyor; en geç 5 dakikada uygulanır');
+    } catch (e) {
+      toast.err(errorMessage(e));
+    } finally {
+      setBekle(false);
+    }
+  };
+
   return (
+    <>
+    <Card
+      title="Gün sonu ve güncelleme"
+      subtitle={panel.kasa?.gunAcik === false ? 'Gün kapalı' : 'Kasada gün açık'}
+      actions={
+        <Button variant="primary" disabled={!!gunKapali || panel.kasa?.gunAcik === false} title={gunKapali ?? undefined} loading={bekle} onClick={() => void gunSonu()}>
+          Gün sonu al ve güncelle
+        </Button>
+      }
+    >
+      <p className="px-5 py-4 text-sm text-muted">Kafede kimse gün sonu almadıysa buradan alınır; ardından yeni LafPOS sürümü kendiliğinden kurulur. Yalnız panelin sahibi.</p>
+    </Card>
     <Card
       title="Servis modu"
       subtitle="İşletmenin siparişi nasıl aldığı: açılış ekranı, menü ve tezgâh satışının akışı"
@@ -83,5 +115,6 @@ export function KasaSekmesi({ panel, durum, genel, neden, bekleyen, gonder }: Se
       </fieldset>
       <p className={cn('border-t border-[var(--admin-divider)] px-5 py-3', NOT)}>Ödeme kuralları ve bara gidiş her modda aynıdır; değişen açılış ekranı, menü ve tezgâh satışının akışıdır</p>
     </Card>
+    </>
   );
 }

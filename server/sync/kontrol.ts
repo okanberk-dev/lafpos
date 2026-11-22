@@ -34,6 +34,7 @@ import {
   type SecenekGrubu,
   type UrunEkle,
   type SecenekDuzenle,
+  type GunSonu,
   type UrunGorunum,
 } from '@shared/kontrol';
 import { ALL_PERMISSIONS, type Role, ROLES, rolePermissions } from '@shared/permissions';
@@ -282,6 +283,9 @@ function istekOf(tur: KomutTuru, veri: KomutVerisi, pin: string | null): Istek {
       const v = veri as UrunGorunum;
       return { method: 'PATCH', yol: `/api/admin/products/${id(v)}`, govde: { hidden: !v.gorunur } };
     }
+    case 'gun.sonu':
+      // Kasanın kendi gün sonu ucu: Pavo banka gün sonu, lafmaliyet gönderimi ve bildirimler aynı (sayımsız kapanış)
+      return { method: 'POST', yol: '/api/cash/day/close', govde: { countedCash: null, note: `Uzaktan gün sonu${(veri as GunSonu).not ? `: ${(veri as GunSonu).not}` : ''}` } };
     case 'secenek.duzenle': {
       // Yalnız ekleme: grubun bugünkü hali ve bağları kasadan okunur, yenileri eklenir (PUT tam listeyi ister)
       const v = veri as SecenekDuzenle;
@@ -473,7 +477,7 @@ async function komutIsle(raw: unknown, now: number): Promise<Islem> {
   // Rol kapısı kasada da: bulutun gördüğü özet eski olabilir (kuyrukta bekleyen rol değişikliği, yeni patron). Hedefin
   // rolü şimdiki kayıttan; önceki komutlar sırayla uygulandığından aynı yanıttaki değişiklik de görülür
   if (uye === 'izleyici') return red('Yalnız görme yetkisi olan üye değişiklik yapamaz');
-  if (!uyeYapabilir(uye, d.tur, hedefRolleri(d.tur, d.veri))) return red(d.tur === 'rol.yetki' ? 'Rol yetkilerini yalnız sahip değiştirebilir' : 'Patron hesabına yalnız sahip dokunabilir');
+  if (!uyeYapabilir(uye, d.tur, hedefRolleri(d.tur, d.veri))) return red(d.tur === 'rol.yetki' ? 'Rol yetkilerini yalnız sahip değiştirebilir' : d.tur === 'gun.sonu' ? 'Gün sonunu uzaktan yalnız sahip alır' : 'Patron hesabına yalnız sahip dokunabilir');
   let pin: string | null = null;
   if (d.tur === 'personel.ekle' || d.tur === 'personel.pin') {
     pin = pinCoz((d.veri as PersonelEkle | PersonelPin).pin);
