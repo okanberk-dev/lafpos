@@ -14,6 +14,7 @@ import {
   receiptsForOrder,
   refreshReceipt,
   runDeviceEod,
+  takeEodSlip,
   sendOrderToDevice,
   setPavoDevice,
   simulatorBaskets,
@@ -46,6 +47,7 @@ okcRoutes.put('/settings', async (c) => {
       pavoAutoEod: z.boolean().optional(),
       /** Pavo: ödeme türü cihazda önceden seçili */
       pavoOdemeSecili: z.boolean().optional(),
+      pavoEodFis: z.boolean().optional(),
       /** Ödemeyi alınca cihaza gönder (kasada ödeme); null: varsayılan (gerçek cihazda açık, eğitim cihazında kapalı) */
       auto: z.boolean().nullable().optional(),
     }),
@@ -71,6 +73,7 @@ okcRoutes.put('/settings', async (c) => {
         ...(input.operatorMethods ? { okcOperatorMethods: input.operatorMethods } : {}),
         ...(input.pavoAutoEod !== undefined ? { okcPavoAutoEod: input.pavoAutoEod } : {}),
         ...(input.pavoOdemeSecili !== undefined ? { okcPavoOdemeSecili: input.pavoOdemeSecili } : {}),
+        ...(input.pavoEodFis !== undefined ? { okcPavoEodFis: input.pavoEodFis } : {}),
         ...(input.auto !== undefined ? { okcAuto: input.auto } : {}),
       },
       t,
@@ -101,6 +104,15 @@ okcRoutes.post('/eod', async (c) => {
   requirePermission(c.get('user'), 'kasa.gun');
   const input = await body(c, z.object({ print: z.boolean().optional(), force: z.boolean().optional() }));
   return c.json(await runDeviceEod(actorFrom(c), input));
+});
+
+/**
+ * Cihazda alınan son banka gün sonunun kâğıdı (fiş yazıcısı): batch başına bir kez, yalnız ilk soran kasa ekranına
+ * verilir; basılacak bir şey yoksa `slip: null`
+ */
+okcRoutes.post('/eod/slip', (c) => {
+  requirePermission(c.get('user'), 'odeme.al');
+  return c.json({ slip: takeEodSlip(c.get('user')) });
 });
 
 /** Cihazın son gün sonunu sorar (slip basılmaz); belirsiz ya da alınamayan deneme cihazdakine göre düzelir */

@@ -4,7 +4,7 @@ import type { BootstrapDTO, OrderDTO } from '@shared/types';
 import { ApiError, get, post } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { onLive, useLive } from '@/lib/live';
-import { BillReceipt, printNow, PrintCut, StoreCopyReceipt } from '@/lib/print';
+import { BankEodReceipt, type BankEodSlip, BillReceipt, printNow, PrintCut, StoreCopyReceipt } from '@/lib/print';
 import { type ClaimedStoreCopy, type StoreCopyApi, storeCopyQueue } from '@/lib/store-copies';
 
 /** Bu sekmede basılmış LafPOS ödemeleri (ödeme kimliği): aynı ödeme ikinci kez basılmaz */
@@ -133,6 +133,51 @@ export function useDeviceCopies(boot: BootstrapDTO) {
     const onVisible = () => {
       if (visible()) void queue.sync();
     };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      offLive();
+      offStatus();
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [active]);
+}
+
+/**
+ * Pavo'da banka gün sonu alınınca (gün kapanınca ya da elle) fiş yazıcısından gün sonu kâğıdı: işyeri nüshası basan
+ * kasa ekranında. Sunucu kâğıdı batch başına bir kez, ilk soran ekrana verir; olay kaçtıysa açılışta, bağlantı yeniden
+ * kurulunca ve sekme görünür olunca sorulur. Ayar: Yönetim › Yazarkasa POS › "Gün sonu kâğıdı fiş yazıcısından da çıksın"
+ */
+export function useBankEodSlip(boot: BootstrapDTO) {
+  const canTake = useAuth((s) => !!s.me?.permissions.includes('odeme.al'));
+  const active = canTake && deviceCopyHere(boot);
+  const ref = useRef(boot);
+  useEffect(() => {
+    ref.current = boot;
+  });
+  useEffect(() => {
+    if (!active) return;
+    const visible = () => document.visibilityState === 'visible';
+    let busy = false;
+    const ask = async () => {
+      if (busy || !visible()) return;
+      busy = true;
+      try {
+        const { slip } = await post<{ slip: BankEodSlip | null }>('/okc/eod/slip', {});
+        if (slip) await printNow(<BankEodReceipt boot={ref.current} slip={slip} />);
+      } catch {
+        // Sessiz: cihazın kendi slibi var, gün sonu sonucu Yönetim › Yazarkasa POS'ta
+      } finally {
+        busy = false;
+      }
+    };
+    void ask();
+    const offLive = onLive((e) => {
+      if (e.topic === 'okc' && e.kind === 'okc.eod') void ask();
+    });
+    const offStatus = useLive.subscribe((s, prev) => {
+      if (s.status === 'canli' && prev.status !== 'canli') void ask();
+    });
+    const onVisible = () => void ask();
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       offLive();

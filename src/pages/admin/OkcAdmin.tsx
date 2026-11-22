@@ -49,6 +49,8 @@ interface OkcStatus {
   pavoAutoEod: boolean;
   /** Pavo: ödeme türü cihazda önceden seçili (yoksa eski sunucu: açık sayılır) */
   pavoOdemeSecili?: boolean;
+  /** Pavo: banka gün sonu kâğıdı fiş yazıcısından da (yoksa eski sunucu) */
+  pavoEodFis?: boolean;
   /** Ödemeyi alınca cihaza gönder (kasada ödeme) */
   auto: boolean;
   active: { label: string; configured: boolean; capabilities: { instant: boolean; list: boolean; splitPayment: boolean; docKinds: string[] } } | null;
@@ -313,7 +315,7 @@ const EOD_BADGE: Record<PavoEod['status'], { tone: 'success' | 'danger' | 'warni
  * Pavo banka gün sonu: cihaz bankalardaki kart işlemlerini kapatır (batch). Son sonuç (durum, batch, cihaz saati,
  * toplam ve banka satırları), gün kapanınca otomatik alma anahtarı, elle alma ve doğrulama. Tutarlar kör kasada gelmez
  */
-function PavoEodCard({ s, onAuto, savingAuto }: { s: OkcStatus; onAuto: (v: boolean) => void; savingAuto: boolean }) {
+function PavoEodCard({ s, onAuto, savingAuto, onFis, savingFis }: { s: OkcStatus; onAuto: (v: boolean) => void; savingAuto: boolean; onFis: (v: boolean) => void; savingFis: boolean }) {
   const qc = useQueryClient();
   const [running, setRunning] = useState<'eod' | 'verify' | null>(null);
   const eod = s.pavo.eod;
@@ -431,6 +433,17 @@ function PavoEodCard({ s, onAuto, savingAuto }: { s: OkcStatus; onAuto: (v: bool
           label="Gün kapanınca cihazda gün sonu al"
           hint="LafPOS gün sonundan hemen sonra, gün başına bir kez; cihaz alamazsa ya da yanıt vermezse alarm düşer, yeniden deneme elle"
         />
+        {s.pavoEodFis !== undefined && (
+          <Toggle
+            block
+            className="mt-3"
+            checked={s.pavoEodFis}
+            disabled={savingFis}
+            onChange={onFis}
+            label="Gün sonu kâğıdı fiş yazıcısından da çıksın"
+            hint="Cihazda banka gün sonu alınınca kasa ekranı fiş yazıcısından bankalar ve toplamla bir kâğıt basar (her gün sonunda bir kez)"
+          />
+        )}
       </div>
       <div className="flex flex-wrap gap-2 border-t border-[var(--admin-divider)] pt-4 max-sm:[&>*]:grow">
         <Button icon={<Landmark className="size-4" />} loading={running === 'eod'} disabled={!ready || !!running || !!s.pavo.busy} onClick={() => void run('eod')}>
@@ -460,7 +473,7 @@ export default function OkcAdmin() {
   const [pavoTest, setPavoTest] = useState<PavoTest | null>(null);
   // Ayar kaydı (bağlantı, ödeme yeri, eşleme) ile Token'a giden istek (deneme, webhook) ayrı izlenir: bulut yanıt
   // vermezse deneme 10–40 sn sürer, o arada bağlantıyı kapatmak ya da eşlemeyi kaydetmek beklemez, dokunuş yutulmaz
-  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | 'auto' | 'secili' | null>(null);
+  const [saving, setSaving] = useState<'map' | 'provider' | 'mode' | 'eod' | 'auto' | 'secili' | 'fis' | null>(null);
   const [checking, setChecking] = useState<'test' | 'webhook' | 'pair' | null>(null);
   // Pavo'nun adresi ve seri no'su kayıtlıyken form kapalı durur; "Adresi değiştir" açar
   const [editDevice, setEditDevice] = useState(false);
@@ -581,6 +594,12 @@ export default function OkcAdmin() {
     if (saving) return;
     setSaving('secili');
     await save({ pavoOdemeSecili: v }, v ? 'Kasada seçilen ödeme türü cihazda hazır gelecek' : 'Ödeme türü cihazda seçilecek');
+    setSaving(null);
+  };
+  const setEodFis = async (v: boolean) => {
+    if (v === s.pavoEodFis || saving) return;
+    setSaving('fis');
+    await save({ pavoEodFis: v }, v ? 'Gün sonu kâğıdı fiş yazıcısından da çıkacak' : 'Gün sonu kâğıdı yalnız cihazdan çıkacak');
     setSaving(null);
   };
   const setAutoEod = async (v: boolean) => {
@@ -797,7 +816,7 @@ export default function OkcAdmin() {
             </div>
             {checking === 'pair' && <p className="text-xs text-muted">Cihazdaki onay ekranını onaylayın (en çok 2 dakika beklenir)</p>}
           </Card>
-          {s.pavo.configured && <PavoEodCard s={s} onAuto={(v) => void setAutoEod(v)} savingAuto={saving === 'eod'} />}
+          {s.pavo.configured && <PavoEodCard s={s} onAuto={(v) => void setAutoEod(v)} savingAuto={saving === 'eod'} onFis={(v) => void setEodFis(v)} savingFis={saving === 'fis'} />}
           {s.pavo.exchanges.length > 0 && (
             // Destek için: cihazın son yanıtlarının özeti (gövde değil); belgesiz yanıt biçimi buradan tanınır
             <SetupNotes summary="Cihazın son yanıtları">
