@@ -1240,7 +1240,7 @@ adminRoutes.post('/bulut-yedek/geri-yukle', async (c) => {
   clearFailures('onay', addr, user.id);
   if (getOpenDay(db)) throw new HttpError(409, 'Önce gün sonu alın: açık günün satışları geri yüklemede kaybolur', 'day_open');
   try {
-    await stageRestore(input.pathname, user.id);
+    await stageRestore(input.pathname, user.id, user.name);
   } catch (e) {
     throw new HttpError(502, e instanceof Error ? e.message : 'Yedek indirilemedi', 'cloud');
   }

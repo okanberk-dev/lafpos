@@ -347,9 +347,14 @@ describe('güncelleme: Merkez hedefi', () => {
   it('merkezCap (saf): hedef yoksa kurulu derlemede kalınır, sunucu yoksa son karar', async () => {
     const { merkezCap, planUpdate } = await load('guncelle.mjs');
     expect(merkezCap({ server: { merkez: { enabled: true, hedef: null } }, last: null, installedBuild: 5 }).cap).toBe(5);
-    expect(merkezCap({ server: { merkez: { enabled: true, hedef: 9 } }, last: null, installedBuild: 5 }).cap).toBe(9);
+    // Gönderilen derleme kurulma iznidir, üst sınır değil: kanal yalnız son derlemeyi tutar; kanal ilerlese de kurulur
+    // (denetim bulgu 13/18). Kurulu derlemeden yeni olmayan hedef izin değildir: yerinde kalınır
+    expect(merkezCap({ server: { merkez: { enabled: true, hedef: 9 } }, last: null, installedBuild: 5 }).cap).toBe(Infinity);
+    expect(merkezCap({ server: { merkez: { enabled: true, hedef: 5 } }, last: null, installedBuild: 5 }).cap).toBe(5);
+    expect(merkezCap({ server: { merkez: { enabled: true, hedef: 4 } }, last: null, installedBuild: 5 }).cap).toBe(5);
     expect(merkezCap({ server: { merkez: { enabled: false, hedef: null } }, last: { acik: true, hedef: 6 }, installedBuild: 5 }).cap).toBe(Infinity);
-    expect(merkezCap({ server: null, last: { acik: true, hedef: 6 }, installedBuild: 5 }).cap).toBe(6);
+    expect(merkezCap({ server: null, last: { acik: true, hedef: 6 }, installedBuild: 5 }).cap).toBe(Infinity);
+    expect(merkezCap({ server: null, last: { acik: true, hedef: 5 }, installedBuild: 5 }).cap).toBe(5);
     expect(merkezCap({ server: null, last: null, installedBuild: 5 }).cap).toBe(Infinity);
     // Eski sunucu (Merkez alanı yok): sınır yok
     expect(merkezCap({ server: { dayOpen: false }, last: null, installedBuild: 5 }).cap).toBe(Infinity);

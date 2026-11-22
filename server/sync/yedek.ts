@@ -1,8 +1,10 @@
 import * as nodeCrypto from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import * as zlib from 'node:zlib';
+import { db, tx } from '../db/client';
 import { env } from '../env';
+import { Effects } from '../lib/effects';
 import { getSyncState, setSyncState } from '../lib/settings';
 import { signedFetch } from '../lib/signature';
 import { cloudEnabled } from './cloud';
@@ -114,16 +116,73 @@ export const underBekci = () => process.env.LAFPOS_STDIN_CONTROL === '1';
 /**
  * Seçilen yedeği indirir, çözer, doğrular ve `geri-yukle/hazir.db` olarak bırakır; sunucu kapanınca bekçi yerine koyar
  */
-export async function stageRestore(pathname: string, byUserId: string): Promise<void> {
+export async function stageRestore(pathname: string, byUserId: string, byName = ''): Promise<void> {
   const { url } = await cloud<{ url: string }>('indir', { pathname });
   const res = await fetch(url, { signal: AbortSignal.timeout(10 * 60_000) });
   if (!res.ok) throw new Error(`Yedek indirilemedi (${res.status})`);
   const db = openBackup(Buffer.from(await res.arrayBuffer()), env.cloudSecret);
   const dir = resolve(env.dataDir, 'geri-yukle');
   mkdirSync(dir, { recursive: true });
-  writeFileSync(resolve(dir, 'hazir.db.part'), db);
-  renameSync(resolve(dir, 'hazir.db.part'), resolve(dir, 'hazir.db'));
-  writeFileSync(resolve(dir, 'istek.json'), JSON.stringify({ pathname, by: byUserId, at: Date.now() }));
+  // Önce istek (kim, adıyla: eski yedekte kullanıcı olmayabilir), sonra hazır yedek: yeniden adlandırma onay anıdır.
+  // Bekçi yalnız taze istekle yerine koyar (geri-yukle.mjs); yarıda kalırsa hiçbir dosya bırakılmaz
+  try {
+    writeFileSync(resolve(dir, 'istek.json'), JSON.stringify({ pathname, by: byUserId, byName, at: Date.now() }));
+    writeFileSync(resolve(dir, 'hazir.db.part'), db);
+    renameSync(resolve(dir, 'hazir.db.part'), resolve(dir, 'hazir.db'));
+  } catch (e) {
+    for (const f of ['hazir.db', 'hazir.db.part', 'istek.json']) rmSync(resolve(dir, f), { force: true });
+    throw e;
+  }
+}
+
+interface RestoreResult {
+  at: number;
+  copy?: string;
+  hata?: string;
+  pathname?: string | null;
+  by?: string | null;
+  byName?: string | null;
+  requestedAt?: number | null;
+  done?: boolean;
+}
+
+/**
+ * Açılışta (göçlerden sonra): bekçinin geri yükleme sonucu (geri-yukle/son.json) denetim kaydına bir kez yazılır. Rota
+ * isteği o anki veritabanına yazar, ama o veritabanı yerine konan yedekle değişir: iz yeni veritabanında da kalsın
+ * (kural 4). Bekçinin uygulamadığı hazır yedek (bekçisiz açılış, iptal) silinir: günler sonra yerine konamaz
+ */
+export function recordRestoreResult(): void {
+  const dir = resolve(env.dataDir, 'geri-yukle');
+  const file = resolve(dir, 'son.json');
+  const ready = resolve(dir, 'hazir.db');
+  const fx = new Effects();
+  if (existsSync(ready)) {
+    let req: { pathname?: string; by?: string; byName?: string } = {};
+    try {
+      req = JSON.parse(readFileSync(resolve(dir, 'istek.json'), 'utf8')) as typeof req;
+    } catch {
+      req = {};
+    }
+    for (const f of ['hazir.db', 'istek.json']) rmSync(resolve(dir, f), { force: true });
+    fx.audit(db, { userId: req.by ?? null, action: 'yedek', severity: 'uyari', message: `Buluttan geri yükleme yapılmadı: hazır yedek sunucu açılırken yerine konmamıştı, silindi${req.pathname ? ` (${req.pathname})` : ''}` });
+    fx.flush();
+  }
+  if (!existsSync(file)) return;
+  let r: RestoreResult;
+  try {
+    r = JSON.parse(readFileSync(file, 'utf8')) as RestoreResult;
+  } catch {
+    return;
+  }
+  if (r.done) return;
+  const who = r.byName ? ` (${r.byName})` : '';
+  const what = r.pathname ?? 'bilinmeyen yedek';
+  const message = r.hata ? `Buluttan geri yükleme yapılmadı${who}: ${what}; ${r.hata}` : `Buluttan geri yüklendi${who}: ${what}; önceki veritabanı ${r.copy ?? '?'}`;
+  tx((t) => {
+    fx.audit(t, { userId: r.by ?? null, action: 'yedek', severity: 'uyari', message, data: { pathname: r.pathname ?? null, copy: r.copy ?? null, hata: r.hata ?? null, requestedAt: r.requestedAt ?? null, appliedAt: r.at } });
+  });
+  writeFileSync(file, JSON.stringify({ ...r, done: true }));
+  fx.flush();
 }
 
 let restart = () => process.emit('SIGTERM');

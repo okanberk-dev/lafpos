@@ -113,6 +113,9 @@ describe('bulut yedeği', () => {
       const { env } = await import('../server/env');
       const ready = join(env.dataDir, 'geri-yukle', 'hazir.db');
       expect(readFileSync(ready).subarray(0, 15).toString()).toBe('SQLite format 3');
+      // İstek (kim, hangi yedek, adıyla) hazır yedekten önce yazılır: bekçi yalnız taze istekle yerine koyar
+      const istek = JSON.parse(readFileSync(join(env.dataDir, 'geri-yukle', 'istek.json'), 'utf8')) as { pathname: string; by: string; byName: string; at: number };
+      expect(istek).toMatchObject({ pathname, by: expect.any(String), byName: expect.any(String) });
       await new Promise((r) => setTimeout(r, 700));
       expect(emit).toHaveBeenCalledTimes(1);
     } finally {
@@ -130,15 +133,68 @@ describe('bulut yedeği', () => {
       writeFileSync(join(home, 'lafpos.db-wal'), 'eski-wal');
       mkdirSync(join(home, 'geri-yukle'));
       writeFileSync(join(home, 'geri-yukle', 'hazir.db'), 'yeni');
-      writeFileSync(join(home, 'geri-yukle', 'istek.json'), '{}');
-      expect(applyPendingRestore(home, new Date(2026, 10, 21, 14, 5, 9))).toMatch(/geri yüklendi/);
+      const when = new Date(2026, 10, 21, 14, 5, 9);
+      writeFileSync(join(home, 'geri-yukle', 'istek.json'), JSON.stringify({ pathname: 'yedek/a.db.gz', by: 'u1', byName: 'Patron', at: when.getTime() - 2000 }));
+      expect(applyPendingRestore(home, when)).toMatch(/geri yüklendi/);
       expect(readFileSync(join(home, 'lafpos.db'), 'utf8')).toBe('yeni');
       expect(existsSync(join(home, 'lafpos.db-wal'))).toBe(false);
       expect(readFileSync(join(home, 'backups', 'lafpos-geri-yukleme-oncesi-20261121-140509.db'), 'utf8')).toBe('eski');
       expect(readFileSync(join(home, 'backups', 'lafpos-geri-yukleme-oncesi-20261121-140509.db-wal'), 'utf8')).toBe('eski-wal');
       expect(readdirSync(join(home, 'geri-yukle'))).toEqual(['son.json']);
+      // Kim, hangi yedek: sunucu açılışta denetim kaydına yazar (eski veritabanına yazılan satır yerine konunca gider)
+      expect(JSON.parse(readFileSync(join(home, 'geri-yukle', 'son.json'), 'utf8'))).toMatchObject({ pathname: 'yedek/a.db.gz', by: 'u1', byName: 'Patron' });
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  it('bekçi: isteği eski ya da yok olan hazır yedek günler sonra yerine konmaz, iptal edilir (bulgu 14)', async () => {
+    const file = '../scripts/kasa/windows/kurulum/geri-yukle.mjs';
+    const { applyPendingRestore } = (await import(file)) as { applyPendingRestore: (home: string, now?: Date) => string | null };
+    const home = mkdtempSync(join(tmpdir(), 'lafpos-geri-'));
+    try {
+      const now = new Date(2026, 10, 24, 9, 0, 0);
+      for (const istek of [null, JSON.stringify({ pathname: 'yedek/a.db.gz', by: 'u1', at: now.getTime() - 3 * 86400_000 }), '{bozuk']) {
+        writeFileSync(join(home, 'lafpos.db'), 'canli');
+        mkdirSync(join(home, 'geri-yukle'), { recursive: true });
+        writeFileSync(join(home, 'geri-yukle', 'hazir.db'), 'eski-yedek');
+        if (istek) writeFileSync(join(home, 'geri-yukle', 'istek.json'), istek);
+        expect(applyPendingRestore(home, now)).toMatch(/iptal/);
+        expect(readFileSync(join(home, 'lafpos.db'), 'utf8')).toBe('canli');
+        expect(existsSync(join(home, 'geri-yukle', 'hazir.db'))).toBe(false);
+        expect(JSON.parse(readFileSync(join(home, 'geri-yukle', 'son.json'), 'utf8'))).toMatchObject({ hata: expect.any(String) });
+        // Bir sonraki açılışta yapacak bir şey yok
+        expect(applyPendingRestore(home, now)).toBeNull();
+      }
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('sunucu açılışta geri yüklemeyi denetim kaydına bir kez yazar; kalan hazır yedeği siler (bulgu 6/21)', async () => {
+    const { env } = await import('../server/env');
+    const { recordRestoreResult } = await import('../server/sync/yedek');
+    const { db, schema } = await import('../server/db/client');
+    const { desc } = await import('drizzle-orm');
+    const dir = join(env.dataDir, 'geri-yukle');
+    mkdirSync(dir, { recursive: true });
+    rmSync(join(dir, 'hazir.db'), { force: true });
+    rmSync(join(dir, 'istek.json'), { force: true });
+    writeFileSync(join(dir, 'son.json'), JSON.stringify({ at: 1, copy: 'backups/x.db', pathname: 'yedek/a.db.gz', by: 'u-yok', byName: 'Ayşe', requestedAt: 0 }));
+    const last = () => db.select().from(schema.auditLog).orderBy(desc(schema.auditLog.at)).limit(1).get();
+    recordRestoreResult();
+    const row = last()!;
+    expect(row).toMatchObject({ action: 'yedek', severity: 'uyari', userId: 'u-yok' });
+    expect(row.message).toMatch(/yedek\/a\.db\.gz/);
+    expect(row.message).toMatch(/Ayşe/);
+    const count = () => db.select().from(schema.auditLog).all().filter((r) => r.action === 'yedek').length;
+    const n = count();
+    recordRestoreResult();
+    expect(count()).toBe(n);
+    // Bekçi uygulamadıysa (bekçisiz açılış ya da ertelendi) hazır yedek kalmaz: günler sonra yerine konamaz
+    writeFileSync(join(dir, 'hazir.db'), 'eski');
+    recordRestoreResult();
+    expect(existsSync(join(dir, 'hazir.db'))).toBe(false);
+    expect(last()!.message).toMatch(/yapılmadı/);
   });
 });

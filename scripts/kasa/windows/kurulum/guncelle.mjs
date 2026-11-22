@@ -148,18 +148,21 @@ export function planUpdate({ installed, nodeVersion, manifest, failed = [], cap 
 }
 
 /**
- * Merkez'in sınırı (saf): kurulacak en yeni derleme. Sunucu Merkez açık derse onun hedefi (hedef yoksa kurulu derleme:
- * yerinde kalınır); Merkez kapalıysa sınır yok (kanalın son sürümü). Sunucuya ulaşılamazsa son bilinen karar geçerli:
- * Merkez'e ulaşılamayan kasa son bildiği hedefte kalır. `merkez`: durum.json'a yazılacak son karar
+ * Merkez'in sınırı (saf): kurulacak en yeni derleme. Sunucu Merkez açık derse hedefi kurulma iznidir, üst sınır değil:
+ * kanal yalnız son derlemeyi tutar, gönderilen derleme gün kapanmadan kanaldan düşebilir. Kurulu derlemeden yeni hedef
+ * gönderilmişse kanalın son derlemesi kurulur; hedef yoksa ya da kurulu derlemeden yeni değilse yerinde kalınır.
+ * Merkez kapalıysa sınır yok (kanalın son sürümü). Sunucuya ulaşılamazsa son bilinen karar geçerli: Merkez'e
+ * ulaşılamayan kasa son bildiği hedefle karar verir. `merkez`: durum.json'a yazılacak son karar
  */
+const allowed = (hedef, installedBuild) => (hedef != null && hedef > (installedBuild ?? 0) ? Infinity : (installedBuild ?? 0));
 export function merkezCap({ server, last, installedBuild }) {
   const m = server?.merkez;
   if (m && typeof m.enabled === 'boolean') {
     const hedef = Number.isInteger(m.hedef) ? m.hedef : null;
     if (!m.enabled) return { cap: Infinity, merkez: { acik: false, hedef: null } };
-    return { cap: hedef ?? installedBuild ?? 0, merkez: { acik: true, hedef } };
+    return { cap: allowed(hedef, installedBuild), merkez: { acik: true, hedef } };
   }
-  if (last?.acik) return { cap: (Number.isInteger(last.hedef) ? last.hedef : null) ?? installedBuild ?? 0, merkez: last };
+  if (last?.acik) return { cap: allowed(Number.isInteger(last.hedef) ? last.hedef : null, installedBuild), merkez: last };
   return { cap: Infinity, merkez: last ?? null };
 }
 
