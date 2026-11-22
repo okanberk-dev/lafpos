@@ -221,3 +221,61 @@ describe('Geçişi tamamla: bugünden önceki gerçek görünen günler de denem
     expect(await outboxKeys()).toEqual(['laffogato:menu:x', 'lafmaliyet:gun:2026-11-20']);
   });
 });
+
+describe('Geçişi tamamla: gerçek olduğu kanıtlı gün silinmeye önerilmez', () => {
+  /** Günün ilk adisyonuna gerçek Pavo fişi (tamamlanmış) */
+  async function pavoReceipt(dayId: string) {
+    const { db, schema, eq } = await mod();
+    const o = db.select().from(schema.orders).where(eq(schema.orders.dayId, dayId)).get()!;
+    const now = Date.now();
+    db.insert(schema.fiscalReceipts)
+      .values({ id: `fr-${dayId}`, orderId: o.id, provider: 'pavo', mode: 'anlik', status: 'tamamlandi', amount: o.total, items: [], basket: {}, createdAt: now, updatedAt: now, completedAt: now })
+      .run();
+  }
+
+  it('dün kapanmış Pavo fişli ilk gerçek gün, ertesi sabah earlyReal\'e girmez ve silinemez', async () => {
+    const { db, schema, eq, count, updateSettings } = await mod();
+    updateSettings({ liveSince: null });
+    // Önceki senaryodan kalan bugünkü gerçek gün (dün kapanmış gibi) ve 20 Kasım
+    const today = businessDate(Date.now());
+    const yesterday = db.select().from(schema.businessDays).all().find((d) => d.date === today)!;
+    db.update(schema.businessDays).set({ date: '2026-11-21' }).where(eq(schema.businessDays.id, yesterday.id)).run();
+    await pavoReceipt(yesterday.id);
+
+    let st = await h.ok<DenemeStatusDTO>('patron', 'GET', '/admin/deneme');
+    // Yalnız kanıtsız 20 Kasım önerilir; Pavo fişli 21 Kasım değil
+    expect(st.earlyRealDays).toEqual({ days: 1, from: '2026-11-20', to: '2026-11-20' });
+    expect(st.provenRealDays).toBe(1);
+
+    // Kanıtlı günden sonraki kanıtsız gün de önerilmez: 21 Kasım 19'una taşınınca 20 Kasım ondan sonra kalır
+    db.update(schema.businessDays).set({ date: '2026-11-19' }).where(eq(schema.businessDays.id, yesterday.id)).run();
+    st = await h.ok<DenemeStatusDTO>('patron', 'GET', '/admin/deneme');
+    expect(st.earlyRealDays).toBeNull();
+    const bad = await h.call<{ code: string }>('patron', 'POST', PATH, { pin: NEW_PIN, purgeReal: true });
+    expect(bad.status).toBe(422);
+    expect(bad.json.code).toBe('purge_not_allowed');
+    expect(count(schema.businessDays)).toBe(2);
+    expect(count(schema.fiscalReceipts)).toBe(1);
+  });
+
+  it('lafmaliyet\'e gönderilmiş gün (exportedAt ya da gönderilmiş gun: kaydı) önerilmez; işaretli silmede yalnız kanıtsız gün gider', async () => {
+    const { db, schema, eq, count, updateSettings } = await mod();
+    updateSettings({ liveSince: null });
+    const days = db.select().from(schema.businessDays).all();
+    const pavoDay = days.find((d) => d.date === '2026-11-19')!;
+    const other = days.find((d) => d.date === '2026-11-20')!;
+    db.update(schema.businessDays).set({ date: '2026-11-21' }).where(eq(schema.businessDays.id, pavoDay.id)).run();
+    db.update(schema.businessDays).set({ exportedAt: Date.now() }).where(eq(schema.businessDays.id, other.id)).run();
+    expect((await h.ok<DenemeStatusDTO>('patron', 'GET', '/admin/deneme')).earlyRealDays).toBeNull();
+    db.update(schema.businessDays).set({ exportedAt: null }).where(eq(schema.businessDays.id, other.id)).run();
+    db.update(schema.outbox).set({ sentAt: Date.now() }).where(eq(schema.outbox.dedupeKey, 'gun:2026-11-20')).run();
+    expect((await h.ok<DenemeStatusDTO>('patron', 'GET', '/admin/deneme')).earlyRealDays).toBeNull();
+    db.update(schema.outbox).set({ sentAt: null }).where(eq(schema.outbox.dedupeKey, 'gun:2026-11-20')).run();
+
+    const r = await h.ok<{ purged: { days: number; realDays: number } }>('patron', 'POST', PATH, { pin: NEW_PIN, purgeReal: true });
+    expect(r.purged).toMatchObject({ days: 1, realDays: 1 });
+    // Pavo fişli gün ve fişi kaldı
+    expect(db.select().from(schema.businessDays).all().map((d) => d.date)).toEqual(['2026-11-21']);
+    expect(count(schema.fiscalReceipts)).toBe(1);
+  });
+});
