@@ -589,6 +589,12 @@ export const orderItems = sqliteTable(
     startedAt: integer('started_at'),
     readyAt: integer('ready_at'),
     servedAt: integer('served_at'),
+    /**
+     * Bar ekranında "Hazır" ve "Teslim edildi" diyen kişi (bar geçmişi: hazırlayan, teslim eden). Geri alınınca silinir;
+     * site ve platform akışının kendiliğinden ilerlettiği kalemde boş
+     */
+    readyBy: text('ready_by'),
+    servedBy: text('served_by'),
     paidQty: integer('paid_qty').notNull().default(0),
     isService: bool('is_service').notNull().default(false),
     /** Site kimliği (mnu-0011): lafmaliyet eşlemesi için */
