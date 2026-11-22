@@ -193,10 +193,11 @@ describe('auth-51: yetkili onayı ve giriş PIN taraması', () => {
       const full = await h.ok<OrderDTO>('indirimci', 'POST', `/orders/${o.id}/items`, { items: [{ productId: product('Türk Kahvesi').id, qty: 1 }] });
       const pct = { type: 'percent', value: 50, reason: 'deneme' };
       const wrong = await h.call<{ error: string; code: string }>('indirimci', 'POST', `/orders/${full.id}/discount`, { ...pct, approverPin: '9876' });
-      const forbidden = await h.call<{ error: string; code: string }>('indirimci', 'POST', `/orders/${full.id}/discount`, { ...pct, approverPin: PINS.kasa });
+      // İndirim yetkisi olmayan kişi: garson (kasiyer/barista 22 Kas 2026'dan beri indirim uygular)
+      const forbidden = await h.call<{ error: string; code: string }>('indirimci', 'POST', `/orders/${full.id}/discount`, { ...pct, approverPin: PINS.garson });
       expect(wrong.status).toBe(403);
       expect(forbidden).toEqual(wrong);
-      expect(forbidden.json.error).not.toContain('Kasa');
+      expect(forbidden.json.error).not.toContain('Garson');
       // Yetkisi olan yetkili onaylar
       expect((await h.call('indirimci', 'POST', `/orders/${full.id}/discount`, { ...pct, approverPin: PINS.mudur })).status).toBe(200);
       await h.ok('indirimci', 'POST', `/orders/${full.id}/cancel`, { reason: 'deneme', approverPin: PINS.mudur });
