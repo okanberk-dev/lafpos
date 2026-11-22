@@ -201,3 +201,107 @@ export function crossPayIn(pays: CrossPay[], from: string, to: string) {
   }
   return { closed, byPlatform };
 }
+
+// ─── Patron panelinin kıyas girdisi, gün raporlarından ──────────────────────
+
+/**
+ * Gün raporunun bu işlevin okuduğu alanları (`RemoteDayReport`'un alt kümesi; tür burada yeniden yazılır: bu dosya
+ * çalışma anında başka dosya içe aktarmaz, api/uzaktan.ts bunu `.js` uzantısıyla alır)
+ */
+export interface StatsDayReport {
+  date: string;
+  n: number;
+  closed: boolean;
+  s: { rev: number; receipts: number };
+  closes?: [number, number, number][];
+  hours?: [number, number, number][];
+}
+
+/** Kasanın gönderdiği patron özetinden bu işlevin okuduğu alanlar */
+export interface StatsPatron {
+  date: string;
+  dayOpen: boolean;
+  netSales: number;
+  orders: number;
+  hourly?: number[];
+  hourlyNextDay?: number[];
+  lastClose?: { date?: string } | null;
+}
+
+/** shared/today-stats.ts `PatronStats` ile aynı biçim (tests/today-stats-rapor.test.ts iki türü birbirine atar) */
+export interface ReportStats {
+  v: 1;
+  guests: number;
+  days: Record<string, { open: boolean; closes: [number, number, number][]; grain?: 'saat' | 'gun' }>;
+  daily: [string, number, number][];
+  topPrev: [number, number, number, number][];
+  src: 'rapor';
+}
+
+const DAY_START_HOUR = 5;
+const plusDays = (date: string, days: number) => {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+};
+
+/**
+ * Kıyas için okunacak geçmiş günler: dün, 7/14/21/28 gün önce, geçen ayın aynı günü ve hafta/ay kıyasının tam günleri
+ * (geçen haftanın Pazartesi'sinden ya da önceki ayın 1'inden düne). shared/today-stats.ts `statsDates` ile aynı küme,
+ * bugün hariç (test iki tarafı karşılaştırır)
+ */
+export function reportStatsDates(today: string): { curves: string[]; dailyFrom: string; dailyTo: string; all: string[] } {
+  const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+  const prevDays = new Date(Date.UTC(y, m - 1, 0)).getUTCDate();
+  const lastMonth = d > prevDays ? null : new Date(Date.UTC(y, m - 2, d)).toISOString().slice(0, 10);
+  const curves = [...new Set([-1, -7, -14, -21, -28].map((n) => plusDays(today, n)).concat(lastMonth ? [lastMonth] : []))];
+  const weekday = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7;
+  const ws = plusDays(today, -weekday - 7);
+  const pm = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 10);
+  const dailyFrom = ws < pm ? ws : pm;
+  const dailyTo = plusDays(today, -1);
+  const all = new Set(curves);
+  for (let x = dailyFrom; x <= dailyTo; x = plusDays(x, 1)) all.add(x);
+  return { curves, dailyFrom, dailyTo, all: [...all].sort() };
+}
+
+/**
+ * Gün raporunun satışı kapanış dakikalarına: dakikası varsa o (`closes`); yoksa saatlik kırılım, satış saatin son
+ * dakikasına yazılır ("aynı saate kadar" yalnız tamamlanan saatleri sayar, süren saati saymaz); o da yoksa gün sonu
+ * toplamı tek satırda (ekran "gün sonu" notuyla yazar, gün sürerken yüzde hesaplamaz)
+ */
+export function reportCloses(r: StatsDayReport): { closes: [number, number, number][]; grain?: 'saat' | 'gun' } {
+  if (r.closes?.length || r.s.rev === 0) return { closes: r.closes ?? [] };
+  if (r.hours?.length) return { closes: r.hours.map(([off, rev, n]) => [off * 60 + 59, rev, n]), grain: 'saat' };
+  return { closes: [[0, r.s.rev, r.s.receipts]], grain: 'gun' };
+}
+
+/**
+ * Eski kasa (patron özetinde `stats` yok) için kıyas girdisi, bulutta zaten duran gün raporlarından. Kural kasadaki
+ * `patronStats` ile aynı: kıyas günlerinin kapanış dakikaları ve geçmiş tam günlerin toplamı; hesap yine
+ * shared/today-stats.ts `todayStats`. Kasadan farkı: bugünün eğrisi özetin saatlik dizisinden (saat başı duyarlılığı),
+ * masadaki kişi ve en çok satanların geçen haftası yok (0 ve boş; ekran o satırları yazmaz), deneme günleri gün
+ * raporunda işaretli değil (Raporlar sayfasındaki gibi sayılır)
+ */
+export function statsFromReports(patron: StatsPatron, reports: (StatsDayReport | null | undefined)[]): ReportStats {
+  const today = patron.date;
+  const byDate = new Map<string, StatsDayReport>();
+  for (const r of reports) if (r && r.n > 0 && r.date < today) byDate.set(r.date, r);
+  const { curves, dailyFrom, dailyTo } = reportStatsDates(today);
+  const days: ReportStats['days'] = {};
+  for (const date of curves) {
+    const r = byDate.get(date);
+    if (r) days[date] = { open: !r.closed, ...reportCloses(r) };
+  }
+  // Bugün: gün açıksa ya da bugünün günü kapandıysa (satış var ya da son gün sonu bugünün) iş günü vardır
+  const hourly = (patron.hourly ?? []).flatMap((v, hour) => (v ? [[((hour - DAY_START_HOUR + 24) % 24) * 60, v, 0] as [number, number, number]] : []));
+  const next = (patron.hourlyNextDay ?? []).flatMap((v, i) => (v ? [[(24 + i) * 60, v, 0] as [number, number, number]] : []));
+  if (patron.dayOpen || patron.netSales > 0 || patron.orders > 0 || patron.lastClose?.date === today) {
+    days[today] = { open: patron.dayOpen, closes: [...hourly, ...next].sort((a, b) => a[0] - b[0]), grain: 'saat' };
+  }
+  const daily: ReportStats['daily'] = [];
+  for (let x = dailyFrom; x <= dailyTo; x = plusDays(x, 1)) {
+    const r = byDate.get(x);
+    if (r) daily.push([x, r.s.rev, r.s.receipts]);
+  }
+  return { v: 1, guests: 0, days, daily, topPrev: [], src: 'rapor' };
+}

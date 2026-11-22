@@ -44,8 +44,9 @@ const variants: Record<ButtonVariant, string> = {
   dangerOutline:
     'border border-[var(--admin-danger-line)] bg-surface text-[var(--admin-danger-ink)] hover:border-[var(--admin-danger)] hover:bg-[var(--admin-danger-soft)] active:bg-[var(--admin-danger-soft)] active:brightness-95',
   dangerGhost: 'bg-transparent text-[var(--admin-danger-ink)] hover:bg-[var(--admin-danger-soft)] active:bg-[var(--admin-danger-soft)] active:brightness-95',
-  // Koyuda doygun yeşil blok barın en parlak öğesi olmasın: bir ton koyu (beyaz yazı 7:1)
-  success: 'bg-success-600 font-semibold text-white hover:bg-success-700 active:bg-success-700 active:brightness-95 dark:bg-success-700 dark:enabled:hover:bg-success-600',
+  // Gecede ana eylemin belirteci (ham yeşil ölçek değil): barın "Hepsi hazır"ı Öde ve Kaydet'le aynı ev yeşili dolgu
+  success:
+    'bg-success-600 font-semibold text-white hover:bg-success-700 active:bg-success-700 active:brightness-95 dark:bg-[var(--admin-ink-fill)] dark:text-[var(--admin-on-ink)] dark:enabled:hover:bg-[var(--admin-ink-fill-hover)] dark:active:bg-[var(--admin-ink-fill-hover)]',
   // Pirinç dolgu ve üstündeki mürekkep iki temada aynı (#E8C877 üstünde #2E2113, ~10:1)
   gold: 'bg-gold-fill font-semibold text-on-gold hover:brightness-95 active:brightness-90',
   warn: 'border border-[var(--admin-warning-line)] bg-[var(--admin-warning-soft)] text-[var(--admin-warning)] hover:border-[var(--admin-warning)] active:brightness-95',

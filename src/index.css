@@ -216,11 +216,6 @@
   /* Marka karosu (uygulama ikonu, sitenin altbilgisi): radyal yeşil, krem harf, pirinç çekirdek; iki temada aynı */
   --brand-tile: radial-gradient(120% 120% at 50% 18%, #23876a 0%, #1d6d56 48%, #0c3b2d 100%);
   --brand-cream: #fbf6f1;
-  /*
-   * Marka ciro kartı (patron paneli; panonun kredi kartı): ev yeşili degrade ve sağ üstte hafif ışık, beyaz yazı en açık
-   * durakta 5.3:1; iki temada aynı
-   */
-  --brand-card: radial-gradient(120% 90% at 100% 0%, rgb(255 255 255 / 0.12) 0%, transparent 55%), linear-gradient(135deg, #0b7556 0%, #0a6e52 45%, #075a43 100%);
   /* Geniş marka yüzeyi (müşteri ekranının ev yeşili teması): karodan bir ton koyu, krem yazı 6:1 */
   --brand-panel: radial-gradient(130% 90% at 18% 0%, #1d6d56 0%, #155240 46%, #0c3b2d 100%);
   /* Bayrak çizgisi (sitenin TricoloreRule'u): yeşil, porselen, bordo; yalnız marka anlarında */
@@ -299,128 +294,134 @@
 }
 
 /*
- * Koyu tema: bordo gece (sahibin isteği, 22 Kas 2026: "koyu bordo tonlarda, İtalya renklerine uyumlu"). Zemin siyaha yakın
- * şarap, yüzeyler katman katman bir ton açık bordo (gölge yerine ton farkı), kenar ince ve sıcak; metin sıcak krem. Ana
- * eylem ve marka rayı İtalyan yeşili (bordo üstünde yeşil ve krem: bayrağın üç rengi). Tehlike bordodan ayrılan parlak
- * mercan, başarı nane-turkuaz (eylem yeşilinden ayrı), uyarı kehribar, bilgi soğuk mavi. Çiftler: tests/koyu-tema.test.ts
+ * Koyu tema: gece (sahibin isteği, 22 Kas 2026: bordo yerine "daha estetik, farklı"; örneği telefonun koyu gruplanmış
+ * listesi). Zemin saf siyah, yüzeyler nötr koyu gri katmanlar (kart, kart içi alan, kuyu, yüzen yüzey); kart kenarsız ve
+ * gölgesiz, zeminden tonla ayrılır; ayraç ince nötr çizgi. Metin kırık beyaz, ikincil ve üçüncül nötr gri. Renk yalnız
+ * anlam taşıyan yerde: marka rayı ve ana eylem ev yeşili (açık temayla aynı kimlik), artış ve başarı yeşil, düşüş ve
+ * tehlike mercan, uyarı kehribar, bilgi mavi; hepsi yumuşak koyu hap zeminiyle. Çiftler: tests/koyu-tema.test.ts
  */
 .dark {
   --shadow-card: none;
-  --shadow-lift: 0 2px 10px rgb(8 2 4 / 0.5);
-  --shadow-pop: 0 30px 60px -20px rgb(8 2 4 / 0.75), 0 0 0 1px rgb(245 237 227 / 0.07);
-  --shadow-leaf: 0 0 0 1px rgb(245 237 227 / 0.05);
+  --shadow-lift: 0 2px 10px rgb(0 0 0 / 0.5);
+  --shadow-pop: 0 30px 60px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.08);
+  --shadow-leaf: none;
   --shadow-control: none;
   --shadow-action: none;
   --rim: 0 0 0 0 transparent;
-  /* Ton merdiveni: zemin en koyu şarap, yaprak ve kart bir ton, kart içi alan iki ton, kuyu üç ton açık */
-  --admin-bg: #150b0e;
-  --admin-stage: #150b0e;
-  --admin-surface: #231318;
-  --admin-surface-2: #2a171d;
-  --admin-panel: #341d24;
-  --admin-border: #3d2329;
-  --admin-border-strong: #4e2f36;
-  --admin-divider: #2e1a1f;
-  --admin-border-field: #94767c;
-  /* Sıcak krem mürekkep (saf beyaz değil): kuyuda bile gövde 13:1, soluk 6:1 */
-  --admin-text: #f5ede3;
-  --admin-text-soft: #ddccc2;
-  --admin-text-mute: #b49e99;
-  /* İtalyan yeşili (bayrağın #009246'sının gecede açılmışı): bağlantı, seçim, odak; dolguda üstünde koyu yeşil */
-  --admin-primary: #4ccb85;
+  /* Ton merdiveni (nötr, renksiz): zemin siyah, kart, kart içi alan, kuyu; yüzen yüzey (menü, bildirim) en açık */
+  --admin-bg: #000000;
+  --admin-stage: #000000;
+  --admin-surface: #1c1c1e;
+  --admin-surface-2: #232325;
+  --admin-panel: #2a2a2c;
+  --admin-border: #38383a;
+  --admin-border-strong: #48484a;
+  --admin-divider: #38383a;
+  --admin-border-field: #7c7c7f;
+  /* Kırık beyaz mürekkep; ikincil ve soluk nötr gri (kuyuda bile soluk 5:1) */
+  --admin-text: #f5f5f7;
+  --admin-text-soft: #d1d1d6;
+  --admin-text-mute: #9e9ea4;
+  /* Ev yeşilinin gecede açılmışı: bağlantı, seçim, grafik; dolguda üstünde koyu yeşil */
+  --admin-primary: #34d399;
   --laf-bean: #e8c877;
-  --admin-primary-hover: #74d9a0;
-  /* Odak halkası bir ton açık yeşil: her bordo yüzeyde 7:1, ana eylemin yeşil dolgusuna karşı da 3:1 */
-  --focus: #86e3ab;
-  --admin-on-primary: #0b2416;
-  --admin-primary-soft: #12301f;
-  --admin-primary-soft-hover: #183d28;
-  --admin-neutral-soft: #341d24;
-  /* Ana eylem (Öde, Kaydet): derin İtalyan yeşili dolgu, üstünde krem (4.8:1); halka açık nane, ok derin yeşil */
-  --admin-ink-fill: #0f7d47;
-  --admin-ink-fill-hover: #0c6b3c;
-  --admin-on-ink: #fbf6ef;
-  --ok-ring: #e3f4e8;
-  --ok-arrow: #0a6b3c;
+  --admin-primary-hover: #6ee7b7;
+  /* Odak halkası bir ton açık yeşil: her yüzeyde 9:1, ana eylemin yeşil dolgusuna karşı da 3:1 */
+  --focus: #8ff0c0;
+  --admin-on-primary: #04261a;
+  --admin-primary-soft: #10301f;
+  --admin-primary-soft-hover: #163d28;
+  --admin-neutral-soft: #2a2a2c;
+  /* Ana eylem (Öde, Kaydet, Hepsi hazır): ev yeşili dolgu, üstünde beyaz (4.6:1); halka açık nane, ok derin yeşil */
+  --admin-ink-fill: #0a8560;
+  --admin-ink-fill-hover: #08744f;
+  --admin-on-ink: #ffffff;
+  --ok-ring: #dff7ea;
+  --ok-arrow: #075a43;
   --admin-signal: #ff8cc0;
-  --admin-signal-soft: #46162e;
-  --admin-signal-line: #9a4570;
-  --admin-blue: #93b4ff;
-  --admin-blue-soft: #1a2347;
-  --admin-blue-line: #45589e;
+  --admin-signal-soft: #3d1529;
+  --admin-signal-line: #8f3d62;
+  --admin-blue: #8cb4ff;
+  --admin-blue-soft: #162544;
+  --admin-blue-line: #3f5aa6;
   --admin-gold: #f2c94c;
   --admin-gold-fill: #f2c94c;
   --admin-gold-ink: #2e2113;
-  --admin-bordo: #f6e3e7;
-  --admin-bordo-soft: #4c1f2b;
+  /* İmza yüzeyinin gece karşılığı nötr: gecede bordo yok */
+  --admin-bordo: #e5e5ea;
+  --admin-bordo-soft: #2a2a2c;
   --admin-accent: #b39dfa;
   --admin-accent-ink: #c9b8ff;
-  --admin-accent-soft: #2b1d47;
-  --admin-info: #7dd3fc;
-  --admin-info-soft: #10283a;
-  --admin-success: #4dd9c0;
-  --admin-success-soft: #0e2f2a;
-  --admin-warning: #f5b83d;
-  --admin-warning-soft: #33230b;
-  --admin-danger: #ff6f5e;
-  --admin-danger-ink: #ff8a7a;
-  --admin-danger-soft: #4a1714;
-  --admin-hue-blue: #93b4ff;
-  --admin-hue-blue-soft: #1a2347;
-  --admin-hue-amber: #f5b83d;
-  --admin-hue-amber-soft: #33230b;
+  --admin-accent-soft: #291f45;
+  --admin-info: #6cc8ff;
+  --admin-info-soft: #0f2a3d;
+  /* Artış ve başarı: canlı yeşil, koyu yeşilimsi hap zemini */
+  --admin-success: #4ade80;
+  --admin-success-soft: #12301c;
+  --admin-warning: #f7b93e;
+  --admin-warning-soft: #33250b;
+  /* Düşüş ve tehlike: mercan, koyu kırmızımsı hap zemini */
+  --admin-danger: #ff5a4f;
+  --admin-danger-ink: #ff7b72;
+  --admin-danger-soft: #3d1a1b;
+  --admin-hue-blue: #8cb4ff;
+  --admin-hue-blue-soft: #162544;
+  --admin-hue-amber: #f7b93e;
+  --admin-hue-amber-soft: #33250b;
   --admin-hue-rose: #ff8cc0;
-  --admin-hue-rose-soft: #46162e;
+  --admin-hue-rose-soft: #3d1529;
   --admin-hue-violet: #c9b8ff;
-  --admin-hue-violet-soft: #2b1d47;
-  --admin-hue-green: #4ccb85;
-  --admin-hue-green-soft: #12301f;
-  --admin-chart-line: #4ccb85;
-  --chart-soft: #2f4a38;
-  --chart-on-accent: #0b2416;
-  /* Marka rayı gecede derin İtalyan yeşili; yazı beyaz (8.3:1), seçili karo krem üstünde yeşil */
-  --rail: #0e5a36;
-  --rail-bg: linear-gradient(180deg, #0e5a36 0%, #0b4a2c 58%, #083b23 100%);
-  --rail-soft: #e9f3ec;
-  --rail-mute: #bfe0cb;
-  --rail-active-bg: #f5ede3;
-  --rail-active-ink: #0b6b3e;
-  --rail-active-icon: #d6ecdc;
-  /* Gecede kart tonla ayrılır: kenar sıcak saç teli, gölge yok */
+  --admin-hue-violet-soft: #291f45;
+  --admin-hue-green: #34d399;
+  --admin-hue-green-soft: #10301f;
+  --admin-chart-line: #34d399;
+  --chart-soft: #1f4034;
+  --chart-on-accent: #04261a;
+  /* Marka rayı gecede de ev yeşili (açık temanın rayından bir ton derin); yazı beyaz (8:1), seçili karo beyaz üstünde yeşil */
+  --rail: #0a5c44;
+  --rail-bg: linear-gradient(180deg, #0a5c44 0%, #084c38 58%, #063d2d 100%);
+  --rail-soft: #e3f2ea;
+  --rail-mute: #b9e3cf;
+  --rail-active-bg: #f5f5f7;
+  --rail-active-ink: #0a6e52;
+  --rail-active-icon: #d3eee0;
+  /* Kart içindeki kart (yüzey üstünde yüzey) saç teliyle ayrılır; zemindeki kart kenarsız (aşağıda .lp-float) */
   --card-line: var(--admin-border);
-  --glass: rgb(35 19 24 / 0.82);
-  --glass-line: rgb(245 237 227 / 0.07);
-  --frost: rgb(21 11 14 / 0.84);
-  --menu-rule: rgb(245 237 227 / 0.12);
-  --band: #0e0609;
-  --band-2: #1f1015;
-  --band-line: #3d2329;
-  --band-text: #f5ede3;
-  --band-muted: #bfa9a4;
-  --band-accent: #4ccb85;
+  --glass: rgb(28 28 30 / 0.82);
+  --glass-line: rgb(255 255 255 / 0.06);
+  --frost: rgb(0 0 0 / 0.8);
+  --menu-rule: rgb(255 255 255 / 0.12);
+  --band: #0a0a0b;
+  --band-2: #1c1c1e;
+  --band-line: #38383a;
+  --band-text: #f5f5f7;
+  --band-muted: #a1a1a6;
+  --band-accent: #34d399;
+  /* Bandın ışığı gecede kısık: siyah zeminde yeşil hâle yalnız bir iz */
+  --band-glow: radial-gradient(120% 90% at 18% 0%, rgb(18 184 134 / 0.16) 0%, rgb(10 110 82 / 0.07) 38%, transparent 70%);
   /* Kıyas çizgisi kartta en az 3:1 (WCAG 1.4.11 grafik nesnesi) */
-  --chart-context: #8f7a7e;
-  --chart-grid: #341d24;
+  --chart-context: #8e8e93;
+  --chart-grid: #2a2a2c;
   /* Durum rengi yumuşak zemine karışık: koyu zeminde seçilir, yazıyla yarışmaz */
-  --admin-primary-line: #2a7a4f;
-  --admin-success-line: #2a7a6c;
+  --admin-primary-line: #1f7a5a;
+  --admin-success-line: #23703f;
   --admin-warning-line: #8a6a1c;
-  --admin-danger-line: #a3463c;
-  --admin-rose-line: #9a4570;
+  --admin-danger-line: #96423f;
+  --admin-rose-line: #8f3d62;
   --admin-violet-line: #5f4fa8;
-  --admin-info-line: #2d6a8a;
-  /* Karartma şarap siyahı ve yoğun, yüzen yüzey (menü, bildirim) bir ton açık */
-  --scrim: rgb(8 2 4 / 0.68);
-  --scrim-soft: rgb(8 2 4 / 0.5);
-  --surface-raised: #2e1a1f;
-  --hover: rgb(245 237 227 / 0.06);
-  --press: rgb(245 237 227 / 0.1);
+  --admin-info-line: #2b6a8c;
+  /* Karartma siyah ve yoğun, yüzen yüzey (menü, bildirim) bir ton açık */
+  --scrim: rgb(0 0 0 / 0.7);
+  --scrim-soft: rgb(0 0 0 / 0.5);
+  --surface-raised: #2c2c2e;
+  --hover: rgb(255 255 255 / 0.06);
+  --press: rgb(255 255 255 / 0.1);
   --hover-solid: color-mix(in oklab, var(--admin-surface) 93%, var(--admin-text));
-  --ring-ready: rgb(76 203 133 / 0.5);
-  /* Kadranda şimdiki saat: İtalyan yeşili */
-  --dial-now: #4ccb85;
+  --ring-ready: rgb(52 211 153 / 0.5);
+  /* Kadranda şimdiki saat: ev yeşili */
+  --dial-now: #34d399;
   /* Çizimlerin diski (Illustration): espresso kontur okunsun diye porselen, bir ton kırık (gece ekranında parlamasın) */
-  --illustration-disk: #ece2d6;
+  --illustration-disk: #ece5d8;
   color-scheme: dark;
 }
 
@@ -442,6 +443,8 @@
   --r-leaf: 1.125rem;
   --r-glass: 1.125rem;
   --r-tile: 0.75rem;
+  /* Gruplanmış liste kartı (patron paneli; sahibin örneği: geniş köşe, ferah iç boşluk): rayın köşesiyle aynı */
+  --r-group: 1.375rem;
   --table-head-bg: transparent;
 }
 
@@ -661,7 +664,7 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23675e56' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   .dark .select-arrow {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b49e99' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239e9ea4' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   }
   /* Yükleme iskeleti: içeriğin yerini tutan soluk blok (spinner yerine, Operate) */
   .skeleton {
@@ -1255,25 +1258,53 @@
   }
 
   /*
-   * Patron panosu (PatronPage): telefonda önce ciro kartı, sonra karolar, grafik ve ödemeler; tablette karolar üstte, ciro
-   * ve grafik yan yana, ödemeler tam en; geniş ekranda karolar üstte, altında ciro, grafik ve ödemeler üç sütun
+   * Patron paneli (PatronPage; sahibin örneği: telefonun gruplanmış listesi). Üç sütun yığını: A bugünün cirosu, kıyas,
+   * hafta ve ay; B gün boyu grafik, gün içi satırlar, ödeme türleri; C açık adisyonlar, dikkat isteyenler, en çok
+   * satanlar. Telefonda ve dik tablette tek sütun, sıra `--o` ile (ciro, kıyas, grafik, gün içi, ödemeler, hafta ve ay,
+   * sonra C); yatay tablette ve dizüstünde (1024+) A ve B yan yana, C altında iki sütun; geniş ekranda (1440+) üç sütun.
+   * Satır (etiket, tutar, hap) dar sütunda kırılmasın diye iki sütun 1024'ten önce açılmaz
    */
-  .lp-board {
+  .lp-patron {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'ciro' 'tiles' 'chart' 'pay';
+    align-items: start;
     gap: var(--grid-gap);
   }
-  @media (min-width: 48rem) {
-    .lp-board {
+  .lp-patron-col {
+    display: contents;
+  }
+  .lp-patron-col > * {
+    order: var(--o, 0);
+    min-width: 0;
+  }
+  @media (min-width: 64rem) {
+    .lp-patron {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-template-areas: 'tiles tiles' 'ciro chart' 'pay pay';
+    }
+    .lp-patron-col {
+      display: flex;
+      flex-direction: column;
+      gap: var(--grid-gap);
+      min-width: 0;
+    }
+    .lp-patron-col > * {
+      order: 0;
+    }
+    .lp-patron-col[data-col='c'] {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
     }
   }
-  @media (min-width: 80rem) {
-    .lp-board {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 0.95fr);
-      grid-template-areas: 'tiles tiles tiles' 'ciro chart pay';
+  @media (min-width: 90rem) {
+    .lp-patron {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 1fr);
+    }
+    .lp-patron-col[data-col='c'] {
+      display: flex;
+      grid-column: auto;
+      align-items: stretch;
     }
   }
 
@@ -1606,8 +1637,9 @@
       padding: 4px 8px 28px;
     }
   }
+  /* Gecede zemindeki kart kenarsız ve gölgesiz: siyah zeminden yalnız tonla ayrılır (gruplanmış liste) */
   .dark :is(.lp-bare, .lp-float) {
-    --card-line: var(--admin-border);
+    --card-line: transparent;
     --card-shadow: none;
   }
   .lp-leaf-pad {

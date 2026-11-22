@@ -186,3 +186,36 @@ describe('patron "Bugün" kıyasları', () => {
     expect(rep.patronLive(false).stats).toEqual(d.stats);
   });
 });
+
+describe('eski kasa yolu: kıyas girdisi bulutun gün raporlarından', () => {
+  it('kasanın kendi girdisiyle aynı kıyas, dönem ve tahmin (yeni rakam yok)', async () => {
+    const d = await h.ok<Patron & { hourly: number[]; hourlyNextDay?: number[] }>('patron', 'GET', '/reports/patron');
+    const { buildDayReport } = await import('../server/sync/cloud-reports');
+    const { reportStatsDates, statsFromReports } = await import('@shared/remote-calc');
+    const { statsSource } = await import('@shared/today-stats');
+    // Kasanın buluta ittiği gün raporları (LafPOS Uzaktan'da duran veri); iş günü olmayan tarih null
+    const reports = reportStatsDates(d.date).all.map((date) => buildDayReport(date, d.now));
+    expect(reports.filter(Boolean).length).toBeGreaterThanOrEqual(4);
+    // Eski kasanın özeti: `stats` yok
+    const { stats: fromKasa, ...old } = d;
+    const fromReports: PatronStats = statsFromReports(old, reports);
+    expect(statsSource(old)).toBe('ozet');
+    expect(statsSource({ stats: fromReports })).toBe('rapor');
+    expect(statsSource(d)).toBe('kasa');
+
+    const kasa = todayStats(d, fromKasa, d.now);
+    const rapor = todayStats(old, fromReports, d.now);
+    expect(rapor.mode).toBe('live');
+    expect(rapor.compares).toEqual(kasa.compares);
+    expect(rapor.compares.every((c) => c.grain === 'dakika')).toBe(true);
+    expect(rapor.periods).toEqual(kasa.periods);
+    expect(rapor.forecast).toEqual(kasa.forecast);
+    // Eğri: geçen hafta dakikasıyla aynı; bugün özetin saatlik dizisinden, saat başlarında aynı toplam
+    expect(rapor.curve.lastWeek).toEqual(kasa.curve.lastWeek);
+    expect(rapor.curve.today).toEqual(kasa.curve.today);
+    expect(rapor.curve.todayNow).toBe(d.netSales);
+    // Kasadan eksik kalanlar açıkça boş: masadaki kişi ve en çok satanların geçen haftası
+    expect(rapor.guests).toBe(0);
+    expect(fromReports.topPrev).toEqual([]);
+  });
+});

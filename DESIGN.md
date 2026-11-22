@@ -53,53 +53,53 @@
 
 | Rol | Açık | Koyu |
 |---|---|---|
-| Zemin (üst çubuk ve sahne tek) | `#F1F4F2` | şarap gecesi `#150B0E` |
-| Kart, yaprak | `#FFFFFF` | `#231318` (yüzen yüzey `#2E1A1F`) |
-| Kart içi hafif alan / taş (segment rayı, tuş, kuyu) | `#F7F9F8` / `#EDF1EE` | `#2A171D` / `#341D24` |
-| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E3E8E4` / `#D2D9D4` / `#EDF1EE` / `#868F8A` (kartta 3.3:1) | `#3D2329` / `#4E2F36` / `#2E1A1F` / `#94767C` (kuyuda 3.8:1) |
-| Mürekkep / gövde / etiket | `#0F1513` / `#3F4A45` / `#58635E` | sıcak krem `#F5EDE3` / `#DDCCC2` / `#B49E99` (kuyuda 13.4 / 6.2:1) |
-| Ana eylem ve seçim (eylem dolgusu, `--admin-ink-fill`) | ev yeşili `#0A6E52`, üstünde `#FFFFFF` (6.2:1) | derin İtalyan yeşili `#0F7D47`, üstünde krem `#FBF6EF` (4.8:1) |
-| Ok halkası (ana düğmenin sağı) | açık nane `#D8F6E8`, ok `#075A43` | açık nane `#E3F4E8`, ok `#0A6B3C` |
-| Marka rayı | `linear-gradient(180deg, #0B6449 → #095A42 → #074A37)`; yazı `#FFFFFF`, ikinci `#E3F2EA`, soluk `#B9E3CF` (en açık durakta 5.1:1); seçili karo `#FFFFFF` üstünde `#0A6E52` | İtalyan yeşili `#0E5A36 → #0B4A2C → #083B23` (beyaz 8.3:1); seçili karo krem `#F5EDE3` üstünde `#0B6B3E`, ikon karosu `#D6ECDC` |
-| Seçili sekme (açık nane) | `#DDF5EA` üstünde `#0A6E52` (5.4:1) | `#12301F` üstünde `#4CCB85` |
-| Marka ciro kartı | `linear-gradient(135deg, #0B7556 → #0A6E52 → #075A43)` ve sağ üstte hafif ışık, beyaz yazı | aynı |
-| Derin yeşil (bağlantı, olumlu, odak halkası) | `#0A6E52`, yumuşak `#DDF5EA` | İtalyan yeşili `#4CCB85` (zeminde 9.4:1), yumuşak `#12301F`; odak halkası bir ton açık `#86E3AB` |
+| Zemin (üst çubuk ve sahne tek) | `#F1F4F2` | siyah `#000000` |
+| Kart, yaprak | `#FFFFFF` | nötr `#1C1C1E` (yüzen yüzey `#2C2C2E`) |
+| Kart içi hafif alan / taş (segment rayı, tuş, kuyu) | `#F7F9F8` / `#EDF1EE` | `#232325` / `#2A2A2C` |
+| Saç teli / ince çizgi / satır ayracı / alan kenarı | `#E3E8E4` / `#D2D9D4` / `#EDF1EE` / `#868F8A` (kartta 3.3:1) | `#38383A` / `#48484A` / `#38383A` / `#7C7C7F` (yüzen yüzeyde 3.4:1) |
+| Mürekkep / gövde / etiket | `#0F1513` / `#3F4A45` / `#58635E` | kırık beyaz `#F5F5F7` / `#D1D1D6` / `#9E9EA4` (kartta 15.6 / 6.4:1) |
+| Ana eylem ve seçim (eylem dolgusu, `--admin-ink-fill`) | ev yeşili `#0A6E52`, üstünde `#FFFFFF` (6.2:1) | ev yeşili `#0A8560`, üstünde beyaz (4.6:1) |
+| Ok halkası (ana düğmenin sağı) | açık nane `#D8F6E8`, ok `#075A43` | açık nane `#DFF7EA`, ok `#075A43` |
+| Marka rayı | `linear-gradient(180deg, #0B6449 → #095A42 → #074A37)`; yazı `#FFFFFF`, ikinci `#E3F2EA`, soluk `#B9E3CF` (en açık durakta 5.1:1); seçili karo `#FFFFFF` üstünde `#0A6E52` | ev yeşili `#0A5C44 → #084C38 → #063D2D` (beyaz 8:1); seçili karo `#F5F5F7` üstünde `#0A6E52`, ikon karosu `#D3EEE0` |
+| Seçili sekme (açık nane) | `#DDF5EA` üstünde `#0A6E52` (5.4:1) | `#10301F` üstünde `#34D399` |
+| Derin yeşil (bağlantı, olumlu, odak halkası) | `#0A6E52`, yumuşak `#DDF5EA` | açık ev yeşili `#34D399` (kartta 8.9:1), yumuşak `#10301F`; odak halkası bir ton açık `#8FF0C0` |
 | Dolu masa | yeşil degrade `#0E7A5A → #086348 → #05432F`, beyaz yazı | aynı |
-| Zamanı daralan (ahududu) | `#C8175D` zemin `#FCE4EE` | `#FF8CC0` zemin `#46162E` |
-| Mavi (hazırlanıyor, bilgi) | `#2459E0` zemin `#E6EEFF` | `#93B4FF` zemin `#1A2347` |
-| Mor (online sipariş) | `#6D28D9` zemin `#F1EAFF` | `#C9B8FF` zemin `#2B1D47` |
-| Turuncu (uyarı, gecikme) / kırmızı (hata, iptal) | `#B45309` / `#C81E1E` | kehribar `#F5B83D` / parlak mercan `#FF8A7A` zemin `#4A1714` |
-| Grafik | vurgulu sütun ev yeşili `#0A6E52`, öteki sütunlar açık nane `#BFE8D4`, değer hapı ev yeşili üstünde beyaz | `#4CCB85` / `#2F4A38` |
+| Zamanı daralan (ahududu) | `#C8175D` zemin `#FCE4EE` | `#FF8CC0` zemin `#3D1529` |
+| Mavi (hazırlanıyor, bilgi) | `#2459E0` zemin `#E6EEFF` | `#8CB4FF` zemin `#162544` |
+| Mor (online sipariş) | `#6D28D9` zemin `#F1EAFF` | `#C9B8FF` zemin `#291F45` |
+| Turuncu (uyarı, gecikme) / kırmızı (hata, iptal) | `#B45309` / `#C81E1E` | kehribar `#F7B93E` zemin `#33250B` / mercan `#FF7B72` zemin `#3D1A1B`; artış ve başarı yeşil `#4ADE80` zemin `#12301C` |
+| Grafik | vurgulu sütun ev yeşili `#0A6E52`, öteki sütunlar açık nane `#BFE8D4`, değer hapı ev yeşili üstünde beyaz | `#34D399` / `#1F4034` |
 | Pirinç (ödül) | dolgu `#F2C94C` üstünde `#2E2113`, metin `#765923` | dolgu aynı, metin `#F2C94C` |
-| Bant (Araçlar, bildirim) | `#0B100E` + yeşil hâle | `#0E0609` |
+| Bant (Araçlar, bildirim) | `#0B100E` + yeşil hâle | `#0A0A0B`, hâle kısık |
 | Marka karosu (uygulama ikonu) | `radial-gradient(#23876A → #1D6D56 → #0C3B2D)`, krem `#FBF6F1`, pirinç `#E8C877` | aynı |
 
 - **Panonun rengi ev yeşili:** panonun mavisi (ray, seçili sekme, ana düğme, segment, değer hapı, grafik) LafPOS'ta ev
   yeşilidir; açık mavi tonlar açık nane. Bütün çiftler iki temada AA (`tests/design-tokens.test.ts`).
 - Değer adları `--admin-*` (`:root` açık, `.dark` koyu); ortak adlar (`--bg`, `--ink`, `--primary`, `--focus`...) onlara
-  çözülür; panonun adları: `--rail*`, `--card-line`, `--card-shadow`, `--chart-soft`, `--brand-card`. Tailwind anlam
+  çözülür; panonun adları: `--rail*`, `--card-line`, `--card-shadow`, `--chart-soft`. Tailwind anlam
   adları iki temada doğru tonu verir: `text-signal-ink`, `bg-signal-soft`, `text-blue-ink`, `bg-warning-soft`... Ham
   ölçekler (`danger-600`, `success-600`...) koyuda değişmez; yalnız beyaz yazılı dolu yüzeyde kalır, `tests/ui-rules.test.ts`
   izinli listeyle tutar.
-- **Koyu tema: bordo gece** (sahibin isteği, 22 Kasım 2026: "koyu bordo tonlarda, İtalya renklerine uyumlu"). L'Affogato
-  İtalyan kafesi: zemin siyaha yakın şarap (ton 340-345°, kırmızıya kaçmaz), üstünde krem metin ve İtalyan yeşili eylem;
-  bayrağın üç rengi (yeşil `#009246`, krem, kırmızı) gecede böyle okunur. Kurallar:
-  - **Ton merdiveni:** zemin `--admin-bg` `#150B0E` → kart `--admin-surface` `#231318` → kart içi alan `--admin-surface-2`
-    `#2A171D` → kuyu `--admin-panel` `#341D24`; yüzen yüzey `--surface-raised` `#2E1A1F`. Gölge yok, katmanı ton farkı ve
-    sıcak saç teli (`--admin-border` `#3D2329`) ayırır.
-  - **Metin** saf beyaz değil, sıcak krem: `--admin-text` `#F5EDE3`, `--admin-text-soft` `#DDCCC2`, `--admin-text-mute`
-    `#B49E99` (en açık yüzeyde de 4.5:1 üstü).
-  - **Yeşil iki rolde:** bağlantı, seçim ve grafik açık İtalyan yeşili `--admin-primary` `#4CCB85`; ana eylem dolgusu
-    (Öde, Kaydet, Tezgâh satışı) derin İtalyan yeşili `--admin-ink-fill` `#0F7D47` üstünde krem. Marka rayı ve dolu masa
-    yeşil degradede kalır; bordo üstünde yeşil kimliği taşır.
-  - **Durum renkleri bordodan ayrılır:** tehlike parlak mercan `--admin-danger-ink` `#FF8A7A` (bordo zeminle karışmaz,
-    "alarm" yalnız gerçek hatada), başarı nane-turkuaz `--admin-success` `#4DD9C0` (eylem yeşilinden 20° ayrı), uyarı
-    kehribar `#F5B83D`, bilgi soğuk mavi `--admin-info` `#7DD3FC`, zamanı daralan ahududu `#FF8CC0`.
-  - Bileşen sabit renk yazmaz; her şey `.dark` belirteçlerinden. Müşteri ekranının "gece" paleti aynı değerlerde, ayracı
-    üç renk (yeşil, krem, kırmızı). Bar ekranı, çağrı ekranı, Uzaktan ve Merkez aynı belirteçleri okur.
-  - Ölçü `tests/koyu-tema.test.ts`: her metin ve durum rengi her yüzeyde 4.5:1, rozet yazısı kendi zemininde 4.5:1, eylem
-    dolgusu, alan kenarı ve odak halkası her yüzeyde 3:1; bordonun tonu, yeşilin bayrağa yakınlığı ve durum renklerinin
-    ayrılığı da denetlenir. Açık tema değişmez.
+- **Koyu tema: gece** (sahibin isteği, 22 Kasım 2026: bordo geceyi beğenmedi, "daha estetik, farklı"; örneği telefonun
+  koyu gruplanmış listesi). Nötr ve sakin: renk yalnız anlam taşıyan yerde. Kurallar:
+  - **Ton merdiveni (renksiz gri):** zemin `--admin-bg` siyah `#000000` → kart `--admin-surface` `#1C1C1E` → kart içi alan
+    `--admin-surface-2` `#232325` → kuyu `--admin-panel` `#2A2A2C`; yüzen yüzey `--surface-raised` `#2C2C2E`. Gölge yok.
+    Zemindeki kart (pano, bar ekranı) **kenarsız**: siyahtan yalnız tonla ayrılır (`--card-line` şeffaf); yüzey üstündeki
+    kart ve alan ince nötr saç teliyle (`--admin-border` `#38383A`). Satır ayracı aynı ince çizgi.
+  - **Metin** kırık beyaz `--admin-text` `#F5F5F7`; ikincil `#D1D1D6`, soluk `#9E9EA4` (yüzen yüzeyde de 5:1).
+  - **Kimlik ev yeşili** (açık temayla aynı ton; bordo yok): marka rayı ve dolu masa yeşil degradede, ana eylem dolgusu
+    (Öde, Kaydet, Tezgâh satışı, barın "Hepsi hazır"ı) `--admin-ink-fill` `#0A8560` üstünde beyaz; bağlantı, seçim ve grafik
+    açık ev yeşili `--admin-primary` `#34D399`. İnce üç renk ayraç (yeşil, beyaz, mercan) yalnız müşteri ekranında, marka
+    ayrıntısı olarak.
+  - **Durum renkleri canlı, zeminleri yumuşak hap:** artış ve başarı yeşil `#4ADE80` (zemin `#12301C`), düşüş ve tehlike
+    mercan `#FF7B72` (zemin `#3D1A1B`), uyarı kehribar `#F7B93E`, bilgi mavi `#6CC8FF`, zamanı daralan ahududu `#FF8CC0`.
+    Yön ve durum hep ok, işaret ya da yazıyla birlikte; renk tek başına taşımaz.
+  - Deneme şeridi gecede nötr yüzeyde durur (bilgi rengi yalnız küçük noktada); bandın yeşil hâlesi kısık.
+  - Bileşen sabit renk yazmaz; her şey `.dark` belirteçlerinden. Müşteri ekranının "gece" paleti aynı değerlerde. Bar
+    ekranı, çağrı ekranı, Uzaktan ve Merkez aynı belirteçleri okur.
+  - Ölçü `tests/koyu-tema.test.ts`: zemin ve yüzeyler renksiz (kanal farkı en çok 3/255), her metin ve durum rengi her
+    yüzeyde 4.5:1, rozet yazısı kendi zemininde 4.5:1, eylem dolgusu, alan kenarı ve odak halkası her yüzeyde 3:1; yeşilin
+    açık temanın tonunda olduğu ve hiçbir koyu belirtecin bordo olmadığı da denetlenir. Açık tema değişmez.
 - **Odak halkası** 2 px ev yeşili, 2 px dışarıda; rayda beyaz, bantta açık yeşil. Alan odakta ev yeşili kenar ve 3 px
   açık nane hâle.
 
@@ -109,10 +109,11 @@
   (`--r-stage`), yaprak, kart, üst çubuk ve cam çubuk 18 (`--r-leaf`, `--r-card`, `--r-glass`), kart içindeki karo ve ürün
   karosu 12 (`--r-tile`), alan ve düğme 10 (`--r-control`, `--r-btn`), rozet ve süzgeç çipi 6 (`--r-chip`); Tailwind'in
   `rounded-lg/xl/2xl/3xl`'i 8/10/14/18. Segment, adet seçici ve iz hap. Sütun grafiğinin üst köşesi 6, yatay çubuk hap.
-  `.surface-soft` müşteri ekranının yönetimdeki önizlemesinde aynı merdiveni çizer.
+  `.surface-soft` müşteri ekranının yönetimdeki önizlemesinde aynı merdiveni çizer. Patron panelinin gruplanmış liste
+  kartı rayın köşesinde (`--r-group` 22): geniş köşe, ferah iç boşluk.
 - **Gölge** ev yeşilinin gecesi (`#0F231C`): zeminde yüzen kart `--shadow-card` (1 px ve 28 px yumuşak), yaprak
-  `--shadow-leaf`, açılan ve yüzen parça (pencere, menü) `--shadow-pop`. Koyuda kart gölgesiz, ayrımı bordo ton merdiveni
-  ve sıcak saç teli yapar.
+  `--shadow-leaf`, açılan ve yüzen parça (pencere, menü) `--shadow-pop`. Koyuda kart gölgesiz; ayrımı nötr ton merdiveni
+  yapar (zemindeki kart kenarsız).
 - **Boşluk:** 4'ün katları; kabuk payı 12, kartlar arası 16, kart iç payı 20, sahnede başlık satırıyla yaprak arası 16.
 - **Hareket:** üzerine gelme 160 ms, durum 280 ms, açılış 620-1000 ms; hep `--ease-out` (0.16, 1, 0.3, 1). Basılı ölçek
   0.97; kart üstüne gelince 2 px kalkar; ok halkası üstüne gelince ve odakta 45° döner.
@@ -194,14 +195,22 @@ standı (kategoride ürün yok), fincan (adisyon boş), espresso (bekleyen fiş 
 - **Bar ekranı ve "Bara gönder" ayarı** (Yönetim › Ayarlar, varsayılan açık; operatör 20 Kas 2026): kapalıyken kalem
   hiçbir istasyona gitmez (istasyonsuz yazılır, teslim sayılır), adisyonda "Bara gönder (N)" yerine "Kaydet (N)" (onay
   ikonu), Bar rayda, telefon sekmelerinde ve komut paletinde yok; adres elle açılırsa "Bar ekranı kapalı" notu.
-- **Patron paneli** (panonun kendisi): başlık satırında selamlama (günün saatine göre "Günaydın / İyi günler / İyi
-  akşamlar, <ad>", ad ev yeşilinde), canlılık cümlesi ve sağda tarih. Zeminde yüzen kartlar: karolar (dünkü ciro, açık
-  adisyon, indirim ve ikram, iptal, online); **marka ciro kartı** (panonun kredi kartı: beyaz kartın içinde ev yeşili
-  degrade, "L'Affogato" ve Canlı, iri net ciro, adisyon sayısı ve ortalama, Z no); geçen haftayla kıyas (fark, değişim
-  rozeti, günün ciro eğrisi); "Bugün saat saat" (yumuşak karoda ikon, Grafik / Tablo segmenti, en yoğun saat ev yeşili ve
-  değer hapı); ödeme türleri (ortada toplam tahsilat, döküm, Kasa ve Raporlar); açık adisyonlar (panonun ödeme geçmişi
-  tablosu: yer ve garson, açılış, durum noktası ve yazısı, kalan); dikkat isteyenler ve en çok satanlar. Telefonda önce
-  ciro kartı, sonra karolar, grafik ve ödemeler (`.lp-board`).
+- **Patron paneli** (sahibin örneği, 22 Kasım 2026: telefonun gruplanmış listesi; `src/pages/patron`). En üstte
+  **bugünün cirosu** kartsız, zeminde, ekranın en büyük öğesi (Inter kalın, tablo rakamı; ₺ işareti ve kuruş soluk; boyu
+  kabın enine göre, telefonda "₺357" ekranın yarısını doldurur); altında küçük satır "KDV dahil · N adisyon · ortalama ₺X"
+  ve canlılık (nokta ve yazı: "Gün açık · az önce", "3 dk önce", eskiyse "son güncelleme 11:41"). Hemen altında **Kıyas**
+  kartı: başlık satırı solda "Kıyas · 11:40 itibarıyla" (gün kapandıysa "Kıyas · gün sonu"), sağda soluk canlılık; ince
+  ayraçlı satırlar "Dün", "Geçen hafta bugün", "Geçen ay bugün": solda soluk etiket, sağda yarı kalın tutar (aynı saate
+  kadar) ve **değişim hapı** (tam yuvarlak, yumuşak zemin; düşüş ok aşağı ve "%63,4", artış ok yukarı ve "+%83,1"). O gün
+  satış yoksa "satış yok", veri yoksa "veri yok", yalnız gün sonu toplamı biliniyorsa tutarın yanında "gün sonu". Satıra
+  dokununca ayrıntı açılır (tarih ve gün adı, gün sonu toplamı, adisyon, ₺ fark). Öteki kartlar aynı dilde (`Group`,
+  `Row`): Gün boyu (birikimli, saatlik ya da tablo; sakin yazı sekmeleri), Gün içi (açık adisyon, indirim ve ikram, iptal,
+  online, masadaki kişi), Ödeme türleri (Kasa ve Raporlar), Hafta ve ay (gün sonu tahminiyle), Açık adisyonlar, Dikkat
+  isteyenler, En çok satanlar. Kart başına tek başlık satırı; ikon karosu, tekrar eden kenarlık ve gölge yok (gecede kart
+  kenarsız, açık temada panonun saç teli ve yumuşak gölgesi). Yerleşim `.lp-patron`: telefonda ve dik tablette tek sütun
+  (ciro, kıyas, grafik, gün içi, ödemeler, hafta ve ay, sonra listeler), 1024'ten iki, 1440'tan üç sütun. Kıyasın verisi
+  üç yoldan gelir (`shared/today-stats.ts` `StatsSource`): kasa, eski kasada bulutun gün raporları, ikisi de yoksa özetin
+  iki rakamı.
 - **Kasa, Siparişler, Rezervasyon, Müşteriler, Eğitim cihazı:** aynı sahne; görünüm sekmeleri (Bugün / Geçmiş günler;
   Açık / Online / Paket ve gel-al / Kapanan) üst çubuğun ortasında, içerik yaprakta; Müşteriler iki yaprak (liste, kayıt).
 - **Bar ekranı:** sahnede üstte cam çubuk (karo, "Bar ve mutfak", sekmeler, araçlar), altında sayaç şeridi (34 px rakam)
@@ -335,7 +344,7 @@ görünüm"de 32). Kurumsal 6 px yüzey (4 Kasım 2026) kalktı: yönetim ve rap
 
 ### LafPOS'un eklemeleri (Innex ve Area Board kitine göre)
 
-1. **Koyu tema:** aynı roller bordo gece değerleriyle (§2 "Koyu tema: bordo gece"), her çift AA'da test ediliyor.
+1. **Koyu tema:** aynı roller nötr gece değerleriyle (§2 "Koyu tema: gece"), her çift AA'da test ediliyor.
 2. **⌘K komut paleti** (Innex §1.2 önerisi): ekranlara, yönetim bölümlerine, ürünlere ve personele atlar;
    "Yerel ürün ekle", "Personel ekle", tema, kilit gibi eylemler. Türkçe harfleri katlayarak arar
    ("cay" Çay'ı, "sut" Süt'ü bulur). Kasa ekranlarında da çalışır (Ctrl K ya da sol menüdeki büyüteç).
@@ -468,8 +477,8 @@ Panonun ölçüleriyle her parça tek tek elden geçti; davranış ve erişilebi
   bugünkü rezervasyonlar); adisyonun hesabı `--cart-w` 320-440 **hep sağda**. Orta sütun kalan yeri alır
   (`minmax(0, 1fr)`); sabit sütun hiçbir ekranda yer değiştirmez, darda gizlenir ya da şeride döner.
 - **Dört sayfa kalıbı** (başkası yok):
-  1. **Pano** (`Stage float`): başlık satırı, altında zeminde yüzen kartlar; patron panosunda `.lp-board` (telefonda tek
-     sütun, tablette iki, geniş ekranda üç). Patron, raporlar, siparişler, kasa, rezervasyonlar.
+  1. **Pano** (`Stage float`): başlık satırı, altında zeminde yüzen kartlar; patron panelinde `.lp-patron` (telefonda ve
+     dik tablette tek sütun, 1024'ten iki, 1440'tan üç). Patron, raporlar, siparişler, kasa, rezervasyonlar.
   2. **Liste** (`Stage` yaprak ve `aside`): başlık satırı, altında çerçeveli beyaz yaprak, geniş ekranda (lg) sağda
      ikinci dizin kartı. Masalar.
   3. **Alt menülü** (`Stage headerInLeaf`): iki sütunlu ızgara, solda alt menü kartı, sağda içerik (başlık içeriğin

@@ -1,175 +1,257 @@
-import { ArrowDownRight, ArrowUpRight, CalendarRange, LineChart } from 'lucide-react';
-import { type KeyboardEvent, type PointerEvent, type ReactNode, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, ChevronDown } from 'lucide-react';
+import { type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react';
 import { tl, tlShort } from '@shared/money';
 import { fmtTime } from '@shared/time';
-import { type Compare, dayLabel, monthName, type Period, type todayStats } from '@shared/today-stats';
-import { Badge } from '@/components/ui/misc';
+import { changeText, type Compare, dayLabel, monthName, type Period, type StatsMode, type todayStats } from '@shared/today-stats';
 import { cn } from '@/lib/cn';
 
 /**
- * Patron panelinin "Bugün" kıyasları (shared/today-stats.ts hesaplar): dün, geçen hafta ve geçen ayın aynı günü; gün
- * boyu birikimli ciro (bugün ve geçen hafta aynı gün); hafta ve ay başından bugüne; gün sonu tahmini. Fark hep yazıyla:
- * ok, işaret ve yüzde (renk tek başına değil). Veri yoksa "veri yok", ₺0 değil.
+ * Patron panelinin gruplanmış listesi (sahibin örneği, 22 Kas 2026: telefonun koyu "gruplanmış liste"si) ve "Bugün"
+ * kıyasları (shared/today-stats.ts hesaplar). Kart: geniş köşe, ferah iç boşluk; gecede kenarsız ve gölgesiz (siyah
+ * zeminden tonla ayrılır), açık temada panonun saç teli ve yumuşak gölgesi. İlk satır başlık (solda ad, sağda soluk not),
+ * altında ince ayraçlı satırlar: solda soluk etiket, sağda yarı kalın tutar ve değişim hapı. Fark hep yazıyla: ok,
+ * işaret ve yüzde (renk tek başına değil). Veri yoksa "veri yok", satış yoksa "satış yok"; ₺0 yazılmaz.
  */
 export type Stats = ReturnType<typeof todayStats>;
 
-const PANEL = 'min-w-0 rounded-[var(--r-card)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]';
-const pctText = (v: number) => `%${Math.abs(v).toLocaleString('tr-TR')}`;
-const signed = (k: number) => `${k > 0 ? '+' : k < 0 ? '−' : ''}${tl(Math.abs(k))}`;
+export const GROUP = 'min-w-0 rounded-[var(--r-group)] border border-[var(--card-line)] bg-surface shadow-[var(--card-shadow)]';
+/** Satır ayracı: kartın iç boşluğundan iç boşluğuna ince çizgi */
+const ROWS = 'divide-y divide-[var(--admin-divider)]';
+const ROW = 'flex min-h-[52px] w-full items-center justify-between gap-3 py-2.5 text-left';
+/** Dokunulan satır (açılan ayrıntı, adisyona giden satır): üzerine gelme zemini kartın iç boşluğuna taşar, yazı hizası aynı kalır */
+export const ROW_BUTTON = cn(ROW, '-mx-2 w-[calc(100%+1rem)] rounded-[var(--r-tile)] px-2 transition-colors duration-150 hover:bg-hover focus-visible:-outline-offset-2 active:bg-press');
 
-/** Değişim rozeti: ok, işaret ve yüzde; sıfır "değişmedi"; hesaplanamıyorsa nedeni */
-export function Delta({ value, base, size = 'md' }: { value: number | null; base?: number | null; size?: 'sm' | 'md' }) {
-  if (value == null) return <span className="whitespace-nowrap text-xs text-muted">{base === 0 ? 'o gün satış yoktu' : 'kıyas yok'}</span>;
-  if (value === 0) return <Badge>değişmedi</Badge>;
-  const up = value > 0;
-  const Arrow = up ? ArrowUpRight : ArrowDownRight;
+/** Gruplanmış liste kartı: başlık satırı (solda ad, sağda soluk not ya da küçük denetim) ve içerik */
+export function Group({ title, meta, label, children, footer, className, flush, style }: { title: ReactNode; meta?: ReactNode; label?: string; children: ReactNode; footer?: ReactNode; className?: string; flush?: boolean; style?: CSSProperties }) {
   return (
-    <Badge tone={up ? 'success' : 'danger'} className={cn('tabular gap-0.5 font-semibold', size === 'md' && 'text-[13px]')}>
-      <Arrow aria-hidden="true" className="size-3.5" />
-      {up ? '+' : '−'}
-      {pctText(value)}
-      <span className="sr-only">{up ? ' arttı' : ' azaldı'}</span>
-    </Badge>
+    <section aria-label={label ?? (typeof title === 'string' ? title : undefined)} style={style} className={cn(GROUP, 'px-5 pb-2 pt-4', className)}>
+      <header className="flex min-h-7 flex-wrap items-center justify-between gap-x-3 gap-y-2 pb-1.5">
+        <h3 className="text-sm font-semibold leading-5 tracking-normal text-ink-2">{title}</h3>
+        {meta != null && meta !== false && <div className="tabular flex shrink-0 items-center gap-2 text-[13px] leading-5 text-muted">{meta}</div>}
+      </header>
+      {flush ? children : <ul className={ROWS}>{children}</ul>}
+      {footer && <div className="pb-3 pt-2">{footer}</div>}
+    </section>
   );
 }
 
-function Head({ title, sub, icon }: { title: string; sub?: ReactNode; icon: ReactNode }) {
+/**
+ * Kartın başlığındaki görünüm seçici (grafik türü): sakin yazı düğmeleri, seçili olan nötr hap içinde ve kalın. Dokunma
+ * hedefi 44 px (hap içeride 28 px); seçim `aria-pressed` ve ağırlıkla, renkle değil
+ */
+export function ViewTabs<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h3 className="text-base font-semibold leading-6 tracking-[-0.015em]">{title}</h3>
-        {sub && <p className="text-[13px] text-muted">{sub}</p>}
-      </div>
-      <span aria-hidden="true" className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--admin-primary-soft)] text-[var(--admin-primary)] [&>svg]:size-[18px]">
-        {icon}
-      </span>
+    <div role="group" aria-label={label} className="-my-2 -mr-2 flex items-center">
+      {options.map((o) => (
+        <button key={o.value} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)} className="group inline-flex min-h-9 items-center px-0.5 focus-visible:-outline-offset-2 pointer-coarse:min-h-11">
+          <span className={cn('inline-flex min-h-7 items-center rounded-full px-2.5 text-[13px] leading-5 transition-colors duration-150', value === o.value ? 'bg-surface-3 font-semibold text-ink' : 'text-muted group-hover:text-ink')}>{o.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
 
-/** Kıyas satırının olmayan veri yazısı: tarih takvimde yoksa ayın adıyla, iş günü yoksa "veri yok" */
+/** Soluk tek satır: boş durum ("Açık adisyon yok") */
+export function QuietRow({ children }: { children: ReactNode }) {
+  return <li className="flex min-h-[52px] items-center py-2.5 text-sm text-muted">{children}</li>;
+}
+
+/**
+ * Değişim hapı (sahibin örneği): tam yuvarlak, yumuşak zemin; düşüşte ok aşağı ve "%63,4", artışta ok yukarı ve
+ * "+%83,1"; sıfır nötr "%0". Yön ok, işaret ve gizli yazıyla (renk tek başına değil)
+ */
+export function Delta({ value, size = 'md' }: { value: number; size?: 'sm' | 'md' }) {
+  const up = value > 0;
+  const flat = value === 0;
+  const Arrow = up ? ArrowUp : ArrowDown;
+  return (
+    <span
+      className={cn(
+        'tabular inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap rounded-full font-medium',
+        size === 'md' ? 'min-h-6 px-2 text-[13px] leading-5' : 'min-h-5 px-1.5 text-xs leading-4',
+        flat ? 'bg-surface-3 text-ink-2' : up ? 'bg-success-soft text-success-ink' : 'bg-danger-soft text-danger-ink',
+      )}
+    >
+      {!flat && <Arrow aria-hidden="true" className="size-3 stroke-[2.25]" />}
+      {changeText(value)}
+      <span className="sr-only">{flat ? ' değişmedi' : up ? ' arttı' : ' azaldı'}</span>
+    </span>
+  );
+}
+
+/** Satırın sağındaki soluk not ("satış yok", "veri yok", "gün sonu") */
+export const Faint = ({ children }: { children: ReactNode }) => <span className="whitespace-nowrap text-sm text-muted">{children}</span>;
+
+/**
+ * Liste satırı: solda soluk etiket, sağda değer (tutar, hap, not). `detail` verilirse satır dokunulunca açılır
+ * (ayrıntı satırın altında; kart sade kalır, bilgi kaybolmaz)
+ */
+export function Row({ label, sub, children, detail }: { label: ReactNode; sub?: ReactNode; children: ReactNode; detail?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const body = (
+    <>
+      <span className="min-w-0">
+        <span className="block text-[15px] leading-5 text-muted">{label}</span>
+        {sub && <span className="mt-0.5 block text-xs leading-4 text-muted">{sub}</span>}
+      </span>
+      <span className="flex min-w-0 shrink-0 items-center gap-2">
+        {children}
+        {detail && <ChevronDown aria-hidden="true" className={cn('size-4 text-muted transition-transform duration-200', open && 'rotate-180')} />}
+      </span>
+    </>
+  );
+  if (!detail) return <li className={ROW}>{body}</li>;
+  return (
+    <li>
+      <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen((v) => !v)} className={ROW_BUTTON}>
+        {body}
+      </button>
+      <div id={id} hidden={!open} className="pb-3 text-[13px] leading-5 text-ink-2">
+        {detail}
+      </div>
+    </li>
+  );
+}
+
+/** Ayrıntı satırları: solda soluk ad, sağda değer */
+export function Facts({ items, note }: { items: [string, ReactNode][]; note?: ReactNode }) {
+  return (
+    <>
+      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1">
+        {items.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-muted">{k}</dt>
+            <dd className="tabular text-right font-medium text-ink">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {note && <p className="mt-1.5 text-xs text-muted">{note}</p>}
+    </>
+  );
+}
+
+/** Tutar: yarı kalın, tablo rakamı; kuruşu yoksa kısa ("₺975") */
+export const ROW_STATIC = ROW;
+
+export const Amount = ({ k }: { k: number }) => <span className="tabular whitespace-nowrap text-[15px] font-semibold leading-5 text-ink">{tlShort(k)}</span>;
+
+const signed = (k: number) => `${k > 0 ? '+' : k < 0 ? '−' : ''}${tl(Math.abs(k))}`;
+
+/** Kıyas gününün olmayan verisi: tarih takvimde yoksa ayın adıyla, iş günü yoksa nedeni */
 function missing(c: Compare, today: string) {
   if (c.date == null) {
     const m = Number(today.slice(5, 7));
     return `${monthName(`2000-${String(((m + 10) % 12) + 1).padStart(2, '0')}-01`)} ayında ${Number(today.slice(8))} yok`;
   }
-  return 'Veri yok · kafe kapalıydı ya da LafPOS kullanılmıyordu';
+  return 'O gün kafe kapalıydı ya da LafPOS kullanılmıyordu';
 }
 
-/** Dün, geçen hafta aynı gün, geçen ay aynı gün: tutar, fark ve gün sonu */
-export function CompareCard({ s, today, now }: { s: Stats; today: string; now: number }) {
-  const sub = s.mode === 'live' ? `Saat ${fmtTime(now)} itibarıyla; o günler de aynı saate kadar` : s.mode === 'closed' ? 'Gün kapandı: tam gün kıyası' : 'Bugün gün açılmadı: o günlerin gün sonu';
+/**
+ * Kıyas (sahibin örneğiyle aynı yapı): "Dün", "Geçen hafta bugün", "Geçen ay bugün"; sağda aynı saate kadarki tutar ve
+ * değişim hapı. O gün satış yoksa "satış yok", veri yoksa "veri yok". Satıra dokununca tarih ve gün adı, gün sonu
+ * toplamı, adisyon ve ₺ fark. `fresh`: başlığın sağındaki canlılık ("Az önce")
+ */
+export function CompareGroup({ compares, mode, today, now, fresh }: { compares: Compare[]; mode: StatsMode; today: string; now: number; fresh: ReactNode }) {
+  const title = mode === 'live' ? `Kıyas · ${fmtTime(now)} itibarıyla` : mode === 'closed' ? 'Kıyas · gün sonu' : 'Kıyas · gün açılmadı';
   return (
-    <section aria-label="Kıyas" className={cn(PANEL, 'p-5')}>
-      <Head title="Kıyas" sub={sub} icon={<CalendarRange />} />
-      <ul className="mt-3 divide-y divide-[var(--admin-divider)]">
-        {s.compares.map((c) => (
-          <li key={c.key} className="py-3 last:pb-0">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 text-sm">
-                <span className="font-semibold">{c.label}</span>
-                {c.date && <span className="text-muted"> · {dayLabel(c.date)}</span>}
-              </span>
-              {c.value && s.mode !== 'none' && <Delta value={c.change} base={c.value.netSales} />}
-            </div>
-            {c.value ? (
+    <Group title={title} label="Kıyas" meta={fresh}>
+      {compares.map((c) => {
+        const v = c.value;
+        const empty = !!v && v.netSales === 0 && v.receipts === 0;
+        // Gün sürerken tutar aynı saate kadar; yalnız gün sonu toplamı bilinen günde not düşülür
+        const dayEnd = mode === 'live' && c.grain === 'gun';
+        const facts: [string, ReactNode][] = [];
+        if (v && c.date) {
+          if (mode === 'live' && !dayEnd) facts.push(['Aynı saate kadar', `${tl(v.netSales)} · ${v.receipts} adisyon`]);
+          if (c.full) facts.push(['Gün sonu', `${tl(c.full.netSales)} · ${c.full.receipts} adisyon`]);
+          if (c.diff != null && c.diff !== 0) facts.push(['Fark', signed(c.diff)]);
+        }
+        const note = !v ? missing(c, today) : dayEnd ? 'O günün yalnız gün sonu toplamı biliniyor; gün sürerken yüzde hesaplanmaz' : mode === 'live' && c.grain === 'saat' ? 'O gün saat saat biliniyor: tamamlanan saatlere kadar' : undefined;
+        return (
+          <Row
+            key={c.key}
+            label={c.label}
+            detail={
               <>
-                <div className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3">
-                  <span className="tabular whitespace-nowrap font-headline text-[22px] font-bold leading-tight tracking-[-0.03em]">{tl(c.value.netSales)}</span>
-                  {c.diff != null && c.diff !== 0 && (
-                    <span className="tabular whitespace-nowrap text-[13px] font-medium text-ink-2">
-                      <span className="sr-only">Fark </span>
-                      {signed(c.diff)}
-                    </span>
-                  )}
-                </div>
-                <div className="tabular mt-0.5 text-xs text-muted">
-                  {c.value.receipts} adisyon
-                  {s.mode === 'live' && c.full && (
-                    <>
-                      {' · '}
-                      <span className="whitespace-nowrap">
-                        gün sonu {tlShort(c.full.netSales)}, {c.full.receipts} adisyon
-                      </span>
-                    </>
-                  )}
-                </div>
+                {c.date && <p className="mb-1.5 font-medium text-ink">{dayLabel(c.date)}</p>}
+                {facts.length > 0 && <Facts items={facts} />}
+                {note && <p className={cn('text-xs text-muted', facts.length > 0 && 'mt-1.5')}>{note}</p>}
               </>
+            }
+          >
+            {!v ? (
+              <Faint>veri yok</Faint>
+            ) : empty ? (
+              <Faint>satış yok</Faint>
             ) : (
-              <p className="mt-1 text-[13px] text-muted">{missing(c, today)}</p>
+              <>
+                <Amount k={v.netSales} />
+                {c.change != null ? <Delta value={c.change} /> : dayEnd && <span className="whitespace-nowrap text-xs text-muted">gün sonu</span>}
+              </>
             )}
-          </li>
-        ))}
-      </ul>
-    </section>
+          </Row>
+        );
+      })}
+    </Group>
   );
 }
 
 const rangeText = (from: string, to: string) => {
   const [, fm, fd] = from.split('-');
   const [, tm, td] = to.split('-');
-  return fm === tm ? `${Number(fd)}-${Number(td)} ${monthName(from)}` : `${Number(fd)} ${monthName(from)} - ${Number(td)} ${monthName(to)}`;
+  return from === to ? `${Number(fd)} ${monthName(from)}` : fm === tm ? `${Number(fd)}-${Number(td)} ${monthName(from)}` : `${Number(fd)} ${monthName(from)} - ${Number(td)} ${monthName(to)}`;
 };
 const DAY_NAMES = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 const weekdayOf = (date: string) => DAY_NAMES[new Date(`${date}T12:00:00Z`).getUTCDay()]!;
 
 function PeriodRow({ p }: { p: Period }) {
-  const prevName = p.key === 'hafta' ? 'Geçen hafta' : p.wholePrev ? `${monthName(p.prev.from)} (tamamı)` : `Geçen ay`;
+  const prevName = p.key === 'hafta' ? 'Geçen hafta' : p.wholePrev ? `${monthName(p.prev.from)} (tamamı)` : 'Geçen ay';
   return (
-    <li className="py-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="min-w-0 text-sm">
-          <span className="font-semibold">{p.label}</span>
-          <span className="text-muted"> · {rangeText(p.cur.from, p.cur.to)}</span>
-        </span>
-        <Delta value={p.change} base={p.prev.days ? p.prev.netSales : null} />
-      </div>
-      <div className="tabular mt-1 font-headline text-[22px] font-bold leading-tight tracking-[-0.03em]">{tl(p.cur.netSales)}</div>
-      <div className="tabular mt-0.5 text-xs text-muted">
-        {p.cur.receipts} adisyon · {p.cur.days} gün
-        {' · '}
-        <span className="whitespace-nowrap">{p.prev.days ? `${prevName} ${tlShort(p.prev.netSales)} (${rangeText(p.prev.from, p.prev.to)}, ${p.prev.days} gün)` : `${prevName}: veri yok`}</span>
-      </div>
-    </li>
+    <Row
+      label={p.label}
+      detail={
+        <Facts
+          items={[
+            [rangeText(p.cur.from, p.cur.to), `${tl(p.cur.netSales)} · ${p.cur.receipts} adisyon · ${p.cur.days} gün`],
+            [p.prev.days ? `${prevName} · ${rangeText(p.prev.from, p.prev.to)}` : prevName, p.prev.days ? `${tl(p.prev.netSales)} · ${p.prev.days} gün` : 'veri yok'],
+          ]}
+        />
+      }
+    >
+      <Amount k={p.cur.netSales} />
+      {p.change != null && <Delta value={p.change} />}
+    </Row>
   );
 }
 
 /** Hafta ve ay başından bugüne, gün sonu tahmini */
-export function PeriodCard({ s, today }: { s: Stats; today: string }) {
+export function PeriodGroup({ s, today }: { s: Stats; today: string }) {
   const f = s.forecast;
   return (
-    <section aria-label="Dönem ve tahmin" className={cn(PANEL, 'p-5')}>
-      <Head
-        title="Hafta ve ay"
-        sub={s.mode === 'live' ? 'Bugün dahil; önceki dönemin aynı günü aynı saate kadar' : s.mode === 'closed' ? 'Bugün dahil, tam gün' : 'Düne kadar'}
-        icon={<CalendarRange />}
-      />
-      <ul className="mt-1 divide-y divide-[var(--admin-divider)]">
-        {s.periods.map((p) => (
-          <PeriodRow key={p.key} p={p} />
-        ))}
-        {!s.periods.length && <li className="py-3 text-[13px] text-muted">Hafta ve ay bugün başlıyor; kıyas ilk satışla</li>}
-        {s.mode === 'live' && (
-          <li className="pb-0 pt-3">
-            <div className="text-sm font-semibold">Gün sonu tahmini</div>
-            {f ? (
-              <>
-                <div className="tabular mt-1 font-headline text-[22px] font-bold leading-tight tracking-[-0.03em]">
-                  {tl(f.value)} <span className="font-sans text-xs font-medium text-muted">tahmini</span>
-                </div>
-                <p className="mt-0.5 text-xs text-muted">
-                  {f.share >= 95
-                    ? `Son ${f.days} ${weekdayOf(today)} bu saatte günü neredeyse bitirmişti; gün sonu bugünkü ciroya yakın`
-                    : `Son ${f.days} ${weekdayOf(today)} bu saate kadar gün sonu cirosunun %${f.share.toLocaleString('tr-TR')} kadarını yapmıştı; bugünkü ciro bu paya bölündü`}
-                </p>
-              </>
-            ) : (
-              <p className="mt-1 text-[13px] text-muted">Tahmin için erken ya da geçmiş {weekdayOf(today)} verisi az (en az 2 gün gerekir)</p>
-            )}
-          </li>
-        )}
-      </ul>
-    </section>
+    <Group title="Hafta ve ay" meta={s.mode === 'none' ? 'düne kadar' : 'bugün dahil'}>
+      {s.periods.map((p) => (
+        <PeriodRow key={p.key} p={p} />
+      ))}
+      {!s.periods.length && <QuietRow>Hafta ve ay bugün başlıyor; kıyas ilk satışla</QuietRow>}
+      {s.mode === 'live' && (
+        <Row
+          label="Gün sonu tahmini"
+          detail={
+            <p className="text-xs text-muted">
+              {f
+                ? f.share >= 95
+                  ? `Son ${f.days} ${weekdayOf(today)} bu saatte günü neredeyse bitirmişti; gün sonu bugünkü ciroya yakın`
+                  : `Son ${f.days} ${weekdayOf(today)} bu saate kadar gün sonu cirosunun %${f.share.toLocaleString('tr-TR')} kadarını yapmıştı; bugünkü ciro bu paya bölündü`
+                : `Tahmin için erken ya da geçmiş ${weekdayOf(today)} verisi az (en az 2 gün gerekir)`}
+            </p>
+          }
+        >
+          {/* Tahmin kuruşuyla yazılmaz (sahte kesinlik): liraya yuvarlanır */}
+          {f ? <Amount k={Math.round(f.value / 100) * 100} /> : <Faint>henüz yok</Faint>}
+        </Row>
+      )}
+    </Group>
   );
 }
 
@@ -204,7 +286,7 @@ function niceTop(max: number) {
  * Gün boyu ciro: bugün (gün sürerken şu ana kadar) ve geçen haftanın aynı günü birikimli, üst üste. Tek eksen; bugün ev
  * yeşili düz, geçen hafta gri kesikli; açıklama üstte, uçlarda ad; dokununca ya da oklarla saatin iki değeri
  */
-export function CumulativeCard({ s, now }: { s: Stats; now: number }) {
+export function CumulativeChart({ s }: { s: Stats }) {
   const c = s.curve;
   const [ref, w] = useWidth();
   const [hover, setHover] = useState<number | null>(null);
@@ -226,8 +308,8 @@ export function CumulativeCard({ s, now }: { s: Stats; now: number }) {
   const top = niceTop(max);
 
   const H = 220;
-  const padL = 48;
-  const padR = 64;
+  const padL = 44;
+  const padR = 60;
   const padT = 12;
   const padB = 26;
   const plotW = Math.max(40, w - padL - padR);
@@ -272,25 +354,23 @@ export function CumulativeCard({ s, now }: { s: Stats; now: number }) {
   };
 
   return (
-    <section aria-label="Gün boyu ciro" className={cn(PANEL, 'flex flex-col p-5')}>
-      <Head title="Gün boyu ciro" sub="Saat saat birikerek; geçen haftanın aynı günüyle" icon={<LineChart />} />
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2">
+    <div className="pb-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-2">
         <span className="inline-flex items-center gap-1.5">
           <svg aria-hidden="true" width="18" height="6">
             <line x1="1" y1="3" x2="17" y2="3" stroke="var(--chart-accent)" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
           Bugün
-          {s.mode === 'live' && c.todayNow != null ? ` · ${fmtTime(now)} itibarıyla ${tl(c.todayNow)}` : ''}
         </span>
         {c.lastWeek ? (
           <span className="inline-flex items-center gap-1.5">
             <svg aria-hidden="true" width="18" height="6">
               <line x1="1" y1="3" x2="17" y2="3" stroke="var(--chart-context)" strokeWidth="2" strokeDasharray="4 3" />
             </svg>
-            Geçen hafta aynı gün
+            Geçen hafta bugün
           </span>
         ) : (
-          <span className="text-muted">Geçen haftanın aynı günü: veri yok</span>
+          <span className="text-muted">Geçen hafta bugün: veri yok</span>
         )}
       </div>
       <div ref={ref} className="relative mt-2 min-h-[220px]">
@@ -301,7 +381,7 @@ export function CumulativeCard({ s, now }: { s: Stats; now: number }) {
             <>
               <svg
                 role="img"
-                aria-label="Gün boyu birikimli ciro, bugün ve geçen hafta aynı gün; ayrıntı aşağıdaki tabloda"
+                aria-label="Gün boyu birikimli ciro, bugün ve geçen hafta bugün; ayrıntı aşağıdaki tabloda"
                 width={w}
                 height={H}
                 tabIndex={0}
@@ -343,7 +423,7 @@ export function CumulativeCard({ s, now }: { s: Stats; now: number }) {
               {hv && (
                 <div
                   aria-live="polite"
-                  className="pointer-events-none absolute top-1 z-10 rounded-[var(--r-tile)] border border-[var(--card-line)] bg-surface px-3 py-2 text-xs shadow-[var(--card-shadow)]"
+                  className="pointer-events-none absolute top-1 z-10 rounded-[var(--r-tile)] bg-raised px-3 py-2 text-xs shadow-[var(--shadow-lift)]"
                   style={x(hv.h) > w / 2 ? { right: w - x(hv.h) + 8 } : { left: x(hv.h) + 8 }}
                 >
                   <div className="font-semibold">Saat {clock(hv.h)} itibarıyla</div>
@@ -362,7 +442,7 @@ export function CumulativeCard({ s, now }: { s: Stats; now: number }) {
             <tr>
               <th scope="col">Saat</th>
               <th scope="col">Bugün</th>
-              <th scope="col">Geçen hafta aynı gün</th>
+              <th scope="col">Geçen hafta bugün</th>
             </tr>
           </thead>
           <tbody>
@@ -376,6 +456,6 @@ export function CumulativeCard({ s, now }: { s: Stats; now: number }) {
           </tbody>
         </table>
       )}
-    </section>
+    </div>
   );
 }
