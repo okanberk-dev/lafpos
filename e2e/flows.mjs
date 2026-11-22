@@ -1017,7 +1017,7 @@ export async function runFlows(ctx) {
       },
     ],
     [
-      'Tablette bar: Hazır sekmesinde siparişi teslim eder, çağrı ekranından düşer; Geri al geri getirir; Geçmiş\'ten yeniden teslim eder',
+      'Tablette bar: Hazır sekmesinde siparişi teslim eder, çağrı ekranından düşer; Geri al geri getirir; Geçmiş\'ten yeniden teslim eder ve numarayla bulur',
       async () => {
         const latte = seed.boot.products.find((p) => p.name === 'Latte');
         const o = await api.call('kasa', 'POST', '/orders', { type: 'tezgah' });
@@ -1062,6 +1062,11 @@ export async function runFlows(ctx) {
           assert(!smallPast.length, `44 px altı: ${smallPast.join(', ')}`);
           await past.getByRole('button', { name: 'Teslim edildi', exact: true }).click();
           await past.getByRole('button', { name: 'Teslim edildi', exact: true }).waitFor({ state: 'detached', timeout: 8000 });
+          // Künye: hazırlayan ve teslim eden görünür; numarayla aranınca yalnız bu fiş kalır
+          await past.getByText('Teslim', { exact: true }).waitFor({ timeout: 8000 });
+          await page.getByRole('searchbox', { name: 'Bugünkü fişlerde ara' }).fill(`#${o.no}`);
+          await page.getByRole('status').filter({ hasText: /fiş bulundu/ }).waitFor({ timeout: 8000 });
+          assert((await page.locator('article', { hasText: `Tezgâh #${o.no}` }).count()) === 1, 'aranan fiş Geçmiş\'te yok');
         });
         assert(!(await onBoard()), 'Geçmiş\'ten teslim edilen sipariş çağrı ekranında');
         const handed = await api.call('kasa', 'GET', `/orders/${o.id}`);

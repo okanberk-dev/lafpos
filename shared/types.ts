@@ -553,6 +553,8 @@ export interface KitchenTicketItem {
   sentAt: number;
   startedAt: number | null;
   readyAt: number | null;
+  /** Teslim anı (bar geçmişi; eski sunucu göndermez) */
+  servedAt?: number | null;
 }
 
 export interface KitchenTicket {
@@ -576,6 +578,12 @@ export interface KitchenTicket {
    * ödendi ya da ikram (tezgâh satışı ödeme alınınca bara düşer): fişte "Ödendi"; eski sunucu göndermez
    */
   paid?: boolean;
+  /**
+   * Bar geçmişi (`GET /kitchen?history=1`; öteki görünümlerde ve eski sunucuda yok): fişin hazır olduğu an (kalemlerin
+   * en geçi; sitenin kendi akışında ilerleyen online siparişte bilinmez, null), hepsi teslim edildiyse teslim anı,
+   * "Hazır" ve "Teslim edildi" diyenlerin adı
+   */
+  history?: { readyAt: number | null; servedAt: number | null; readyBy: string | null; servedBy: string | null };
   items: KitchenTicketItem[];
 }
 
