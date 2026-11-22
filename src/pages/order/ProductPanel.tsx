@@ -1,10 +1,13 @@
+import { useQuery } from '@tanstack/react-query';
 import { SlidersHorizontal, Star, Tag } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { tlShort } from '@shared/money';
+import { searchProducts } from '@shared/urun-arama';
 import type { ProductDTO, Size } from '@shared/types';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/Field';
 import { EmptyState } from '@/components/ui/misc';
+import { get } from '@/lib/api';
 import { asksOptions, productGroups, useBoot } from '@/lib/boot';
 import { categoryIcon } from '@/lib/categoryIcon';
 import { cn } from '@/lib/cn';
@@ -81,10 +84,14 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
   const showFavorites = favorites.length > 0;
   const current = categoryId === FAVORITES && !showFavorites ? (categories[0]?.id ?? '') : categoryId;
 
+  // Arama: Türkçe karakter ve yazım hatası toleranslı, Türkçe ↔ İngilizce karşılıklı, ikizler tek sonuç (shared/urun-arama.ts)
+  const found = useMemo(() => searchProducts(visible.map((p) => ({ ...p, site: p.extSource === 'laffogato' })), q), [q, visible]);
+  // En çok satanlar: son 7 günün satışına göre, her zaman açık (arama yokken ızgaranın üstünde)
+  const top = useQuery({ queryKey: ['top-products'], queryFn: () => get<{ ids: string[] }>('/top-products?days=7'), refetchInterval: 5 * 60_000, staleTime: 60_000 });
+  const topProducts = useMemo(() => (top.data?.ids ?? []).map((id) => visible.find((p) => p.id === id)).filter((p): p is ProductDTO => !!p).slice(0, 6), [top.data, visible]);
   const list = useMemo(() => {
     if (q.trim()) {
-      const k = fold(q.trim());
-      return visible.filter((p) => fold(`${p.name} ${p.shortName ?? ''} ${p.barcode ?? ''}`).includes(k)).slice(0, 60);
+      return found.exact;
     }
     if (current === FAVORITES) return favorites;
     return visible.filter((p) => p.categoryId === current);
@@ -152,10 +159,37 @@ export function ProductPanel({ onQuickAdd, onCustomize }: { onQuickAdd: (p: Prod
             'lp-enter lp-tiles scroll-thin min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1 md:px-1 md:pb-2 xl:pt-3.5',
           )}
         >
+          {!q.trim() && topProducts.length > 0 && (
+            <section aria-label="En çok satanlar" className="col-span-full">
+              <h3 className="mb-1.5 px-1 text-[13px] font-semibold text-muted">En çok satanlar</h3>
+              <div className="flex flex-wrap gap-2">
+                {topProducts.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => (p.optionGroupIds?.length ? onCustomize(p, 'M') : onQuickAdd(p, 'M'))}
+                    className="min-h-12 max-w-full truncate rounded-full bg-[var(--k-well-2)] px-4 text-sm font-medium text-ink transition-colors hover:bg-hover active:bg-press"
+                  >
+                    {p.shortName || p.name}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           {list.map((p) => (
             <ProductTile key={p.id} p={p} withImage={withImages} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
           ))}
-          {list.length === 0 && (
+          {q.trim() && found.similar.length > 0 && (
+            <section aria-label="Benzer ürünler" className="col-span-full">
+              <h3 className="mb-1.5 px-1 text-[13px] font-semibold text-muted">Benzer ürünler</h3>
+              <div className="lp-tiles">
+                {found.similar.map((p) => (
+                  <ProductTile key={p.id} p={p} withImage={withImages} onQuickAdd={onQuickAdd} onCustomize={onCustomize} />
+                ))}
+              </div>
+            </section>
+          )}
+          {list.length === 0 && found.similar.length === 0 && (
             <div className="col-span-full rounded-[var(--r-tile)] border border-[var(--admin-border)] bg-surface">
               {q.trim() ? (
                 <EmptyState

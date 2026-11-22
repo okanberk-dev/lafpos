@@ -8,7 +8,8 @@ import { type AppEnv, actorFrom, blindOrder, can, needDirect, requirePermission 
 import { Effects } from '../lib/effects';
 import { body, isoDateTime, kurus, query } from '../lib/http';
 import { CLOSED_PAGE_DEFAULT, CLOSED_PAGE_MAX, HISTORY_QUERY_MAX, KITCHEN_HISTORY_MAX } from '@shared/history';
-import { isCalendarDate } from '@shared/time';
+import { addDays, isCalendarDate } from '@shared/time';
+import { productReport, reportToday } from '../services/reports';
 import { afterDelivery } from '../delivery/service';
 import { bootstrap } from '../services/bootstrap';
 import { orderToDTO } from '../services/dto';
@@ -361,6 +362,22 @@ posRoutes.post('/orders/:id/cancel', async (c) => {
 });
 
 /** Kapanmış siparişi iptal: ödemeler iptal, adisyon iptal (orders.cancelClosedOrder); büyük iptal bildirimi */
+/**
+ * En çok satanlar (satış ekranı): son 7 ya da 30 günün ürün kimlikleri, adede göre; oturumu olan herkes okur (tutar
+ * dönmez). Gün içinde yenilenir (ekran 5 dakikada bir sorar); ürün raporunun hesabı, yeni kayıt yok
+ */
+posRoutes.get('/top-products', (c) => {
+  const days = c.req.query('days') === '30' ? 30 : 7;
+  const to = reportToday();
+  const rows = productReport({ from: addDays(to, -(days - 1)), to }, false).products;
+  const qty = new Map<string, number>();
+  for (const r of rows) {
+    const id = r.key.split('|')[0]!;
+    qty.set(id, (qty.get(id) ?? 0) + r.qty);
+  }
+  return c.json({ days, ids: [...qty.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([id]) => id) });
+});
+
 posRoutes.post('/orders/:id/cancel-closed', async (c) => {
   const input = await body(c, z.object({ reason, ...approver }));
   const actor = actorFrom(c, input.approverPin);
