@@ -279,3 +279,23 @@ describe('Geçişi tamamla: gerçek olduğu kanıtlı gün silinmeye önerilmez'
     expect(count(schema.fiscalReceipts)).toBe(1);
   });
 });
+
+describe('Bugün kıyası: deneme günü gerçek satış gibi sayılmaz', () => {
+  it('geçen haftanın aynı günü deneme günüyse (trainingDay true) patron kıyasına girmez', async () => {
+    const { updateSettings, getSettings } = await mod();
+    const { addDays } = await import('@shared/time');
+    updateSettings({ demoMode: false, okcProvider: 'kapali' });
+    const today = businessDate(Date.now());
+    const lastWeek = addDays(today, -7);
+    const yesterday = addDays(today, -1);
+    await makeDay(lastWeek, true, undefined, 'patron');
+    await makeDay(yesterday, false, undefined, 'patron');
+    expect(getSettings().demoMode).toBe(false);
+    const rep = await import('../server/services/reports');
+    const stats = rep.patronLive(false).stats;
+    // Deneme günü ne eğrisiyle ne günlük toplamıyla görünür; gerçek gün görünür
+    expect(stats.days[lastWeek]).toBeUndefined();
+    expect(stats.daily.map((d) => d[0])).not.toContain(lastWeek);
+    expect(stats.daily.find((d) => d[0] === yesterday)?.[1]).toBeGreaterThan(0);
+  });
+});
