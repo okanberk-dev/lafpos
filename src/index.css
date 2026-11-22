@@ -2174,9 +2174,13 @@ html[class~='dark'] {
   .print-area * {
     visibility: visible;
   }
+  /*
+   * Fiş alanı akışta (mutlak konumda değil): Chrome mutlak konumlu kutuyu sayfalara bölmez, ilk sayfadan taşan kısmı
+   * keserdi. İki nüsha tek yazdırmada arada sayfa sonuyla (.rc-cut) basılır; ikinci window.print() kiosk Chrome'da
+   * yutuluyordu (saha, 22 Kas 2026). Uygulamanın geri kalanı yazdırmada display ile kaldırılır, önüne boş sayfa düşmez
+   */
   .print-area {
-    position: absolute;
-    inset: 0 auto auto 0;
+    position: static;
     box-sizing: border-box;
     width: 80mm;
     padding: 2mm 4mm 6mm;
@@ -2204,7 +2208,7 @@ html[class~='dark'] {
     font-size: 14px;
     page: sheet;
   }
-  html:has(.print-sheet) #root > :not(.print-sheet) {
+  html:has(.print-area) #root > :not(.print-area) {
     display: none;
   }
   @page sheet {

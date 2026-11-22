@@ -90,4 +90,11 @@ describe('uçlar', () => {
     expect(v.effective).toBe('HP LaserJet');
     expect(v.printers.map((x) => x.name)).toEqual(['POS-80C', 'HP LaserJet']);
   });
+
+  it('seçili ağ yazıcısı bir bildirimde yoksa (açılışta henüz bağlanmadı) seçim korunur', async () => {
+    await fromAddr('127.0.0.1', { printers: [{ Name: 'KASA', PortName: '192.168.1.249' }, { Name: 'Microsoft Print to PDF' }] });
+    await h.ok('patron', 'PUT', '/admin/yazici', { name: 'KASA' });
+    expect(await (await fromAddr('127.0.0.1', { printers: [{ Name: 'Microsoft Print to PDF' }, { Name: 'OneNote' }] })).json()).toEqual({ name: 'KASA' });
+    expect((await h.ok<{ effective: string | null }>('patron', 'GET', '/admin/yazici')).effective).toBe('KASA');
+  });
 });
