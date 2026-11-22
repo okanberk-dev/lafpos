@@ -3,7 +3,7 @@
 Bu dosya, işi başka bir oturumun (ya da başka bir Claude'un) kaldığı yerden sürdürmesi içindir. Önce `AGENTS.md`'yi
 oku; kurallar orada. Bitirdiğin maddeyi buradan sil, yarım bıraktığını "Durum" satırıyla güncelle.
 
-Son güncelleme: 21 Kasım 2026.
+Son güncelleme: 22 Kasım 2026.
 
 ## Main'de olanlar (bitti)
 
@@ -32,6 +32,14 @@ Son güncelleme: 21 Kasım 2026.
   hemen eşleştirme; `docs/04-YAZARKASA.md` §8.1); lafmaliyet, Uzaktan, site, Token ve paket platformu anahtarları
   Yönetim › Bağlantı bilgileri'nden (hazır satırları yapıştırma da; `docs/05-KASA-BILGISAYARI.md` §2); "Şimdi
   güncelle" düğmesi (§6).
+
+- **22 Kasım 2026 (#89-#102):** koyu tema "gece" (finans paneli dili) ve patron panelinde Kıyas; kaymalar (sol ray
+  sabit); işyeri nüshası kaçmaz; internetsiz Tükendi; X/Z ve Uzaktan'da "Yazarkasadan geçmeyen"; telefonda yüzen alt
+  menü ve alttan açılan Daha; **Uzaktan yönetim** (personel, PIN, roller, Tükendi, servis modu, panel erişimi;
+  `docs/UZAKTAN-YONETIM.md`); patron panelinde dönem kıyası (hafta, ay, son 7 gün), ödeme dağılımı ve yeni sıra; **kasa
+  güncellemesinde seçim** (Şimdi güncelle / Gün sonunda güncelle, kaldığı yerden devam; `docs/05-KASA-BILGISAYARI.md`
+  §6); **tasarım sistemi LafPOS Keel** (`DESIGN.md` §0, `src/styles/keel.css`, `.claude/skills/lafpos-design`).
+  Marina Merkez'de otomatik güncellemede.
 
 ## 1. Kafede ilk kurulumda bakılacaklar (sahibin ya da kafedeki birinin)
 
@@ -110,14 +118,18 @@ PAVO_SERIAL=<cihazın seri numarası>
 1. **baslat.cmd güncellemeyle değişmez (bilerek):** kurulum klasöründe durur, otomatik güncelleme yalnız `app\`'i
    değiştirir. Çalışan toplu dosyayı değiştirmek güvenli değil (cmd.exe dosyayı satır satır okur). 21 Kasım'daki Node
    değişimi yeniden denemesi yeni kurulumlarda var; eski kurulumda değişim ertelenirse bir sonraki açılışta tamamlanır.
-2. **Tasarım turu (sürüyor):** ekran ekran ızgara ve hizalama; bu oturumda örnek masa planı, patron ciro kartı ve
-   tek boylu üründe boy rozeti düzeldi. Sırada adisyon ürün karoları ve yönetim formları (`DESIGN.md`).
+2. **Tasarım turu:** dil LafPOS Keel'e geçti (`DESIGN.md` §0); yeni ekran ve değişiklikler `lafpos-design` kontrol
+   listesine uyar. Sırada ekran ekran ince ayar: adisyon ürün karoları, yönetim formları, raporların grafikleri.
 3. **Yemeksepeti ve Getir gelen kutusu şubeye ayrılmalı (ikinci şubeden önce):** platform anahtarları şubeye göre
    (`docs/PAKET-PLATFORMLARI.md` › Anahtarlar buluttan) ama LafPOS Uzaktan'daki gelen kutusu (`lafpos:ys:*`, Getir'inki)
    bütün şubelerde ortak; aktarıcı her şubenin `YEMEKSEPETI_<ŞUBE>_REMOTE_ID`'sini kabul eder, kasa başka restoranın
    siparişini atlar. İkinci şube LafPOS üzerinden Yemeksepeti'ne (ya da Getir'e) geçmeden önce kutu şubeye ayrılmalı
    (kasa yalnız kendi şubesinin kutusunu çeker ve siler). Şube başına ayrı kafe anahtarı da aynı işte düşünülür (bugün
    `LAFPOS_CLOUD_SECRET` ortak; `?sube=` yanlışlık önlemi, yetki sınırı değil).
+
+4. **Merkez için iki aşamalı giriş (TOTP):** isteğe bağlı; sahip isterse.
+5. **Geçişi tamamla ile silinen deneme günleri Uzaktan'da kalıyor:** kasa silinenleri bildirsin, bulut raporlarını
+   kaldırsın (geriye uyumlu).
 
 ## Çalışma kuralları (kısa)
 
