@@ -14,6 +14,7 @@ kalanından önce gelir. `tests/skills.test.ts` ön bilgiyi, kaynağı, lisansla
 | `restaurant-pos` | POS özelliğini ürün mimarı gözüyle planlamak: modüllerin LafPOS'taki yeri, para, yetki, denetim, çevrimdışı ve mali kurallar, geliştirme sırası, alınmayanlar | Operatörün yapıştırdığı "Restaurant POS Development Skill" (4 Kas 2026), uyarlanarak alındı | belirtilmedi (metin kopyalanmadı) |
 | `restaurant-operations` | İşletme işleri: menü metni, maliyet yüzdesi ve kâr kaçağı, haftalık malzeme tahmini, Google yorumu yanıtı, iş ilanı, LafPOS akışlarıyla eğitim belgesi | Operatörün yapıştırdığı "Restaurant Operations" (4 Kas 2026), uyarlanarak alındı | belirtilmedi (metin kopyalanmadı) |
 | `web-interface-guidelines` | Arayüzü sade ve hatasız tutmak: erişilebilirlik, odak, form, dokunma, taşma, metin denetimi | [vercel-labs/web-interface-guidelines](https://github.com/vercel-labs/web-interface-guidelines) `command.md` @ `434b7f9` | MIT |
+| `lafpos-design` | LafPOS Keel tasarım kontrol listesi: kart, seçili durum, renk, grafik, form, tablo, telefon, koyu tema (`DESIGN.md` §0) | Bu repo (22 Kasım 2026) | Projenin kendisi |
 
 ## Kararlar (26 Ekim 2026, operatör)
 

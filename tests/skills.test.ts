@@ -29,6 +29,7 @@ describe('proje skill\'leri', () => {
     expect(skills.sort()).toEqual([
       'build-admin-panel',
       'impeccable',
+      'lafpos-design',
       'restaurant-operations',
       'restaurant-pos',
       'validate-data',

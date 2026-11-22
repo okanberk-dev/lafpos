@@ -146,6 +146,7 @@ describe('uygulama kabuğu', () => {
     expect(shell).toMatch(/const showTabs = tabs\.length > 1 \|\| meTab;/);
     expect(shell).toMatch(/<main className=\{cn\('min-h-0 min-w-0 flex-1 overflow-hidden', !showTabs && 'max-md:pb-\[env\(safe-area-inset-bottom\)\]'\)\}>/);
     // Çubuk çizilince payı çubuğun kendisi alır (ikisi birden değil)
-    expect(shell).toMatch(/\{showTabs && \(\s*<nav aria-label="Ekranlar" className="[^"]*pb-\[max\(0\.25rem,env\(safe-area-inset-bottom\)\)\]/);
+    // Alt menü yüzen dok (22 Kas 2026): ev çubuğu payı dokun alt boşluğunda
+    expect(shell).toMatch(/\{showTabs && \(\s*<nav\s+aria-label="Ekranlar"\s+className="[^"]*mb-\[max\(0\.5rem,env\(safe-area-inset-bottom\)\)\]/);
   });
 });
