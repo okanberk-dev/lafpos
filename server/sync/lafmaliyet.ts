@@ -12,7 +12,7 @@ import { money, toCsv } from '../lib/csv';
 import { Effects } from '../lib/effects';
 import { bus } from '../lib/events';
 import { conflict, HttpError, notFound } from '../lib/http';
-import { getSettings, getSyncState, setSyncState, trainingMode } from '../lib/settings';
+import { getSettings, getSyncState, setSyncState, trainingDayNow, trainingMode } from '../lib/settings';
 import { MIN_SECRET_LENGTH, signedFetch } from '../lib/signature';
 import { computeSummary, lafmaliyetZ } from '../services/days';
 
@@ -295,7 +295,7 @@ const notConfigured = () => conflict('lafmaliyet bağlantısı tanımlı değil 
  * modundaysa ya da gün eğitim günüyse hiçbir şey yapmaz ve `null` döner; koyunca günün anahtarını (`gun:<tarih>`).
  */
 export function enqueueDay(dayId: string): string | null {
-  if (!configured() || trainingMode()) return null;
+  if (!configured() || trainingDayNow()) return null;
   const day = db.select({ trainingDay: schema.businessDays.trainingDay }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (day && !realDay(day)) return null;
   const payload = buildDayPayload(dayId);
@@ -500,7 +500,7 @@ function dayRow(key: string) {
  */
 export async function pushDayNow(dayId: string) {
   if (!configured()) throw notConfigured();
-  if (trainingMode()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  if (trainingDayNow()) throw conflict(TRAINING_MESSAGE, 'training_mode');
   const day = db.select({ trainingDay: schema.businessDays.trainingDay }).from(schema.businessDays).where(eq(schema.businessDays.id, dayId)).get();
   if (!day) throw notFound('Gün');
   if (!realDay(day)) throw conflict(trainingDayMessage(day), 'training_day');
@@ -564,7 +564,7 @@ export const BACKFILL_MAX_DAYS = 400;
  */
 export function backfillDays(input: { from: string; to: string }, actor: { id: string | null; name: string }) {
   if (!configured()) throw notConfigured();
-  if (trainingMode()) throw conflict(TRAINING_MESSAGE, 'training_mode');
+  if (trainingDayNow()) throw conflict(TRAINING_MESSAGE, 'training_mode');
   const today = businessDate(Date.now());
   if (input.from > input.to) throw new HttpError(422, 'Başlangıç günü bitiş gününden sonra olamaz', 'range');
   if (input.to > today) throw new HttpError(422, 'Bitiş günü bugünden sonra olamaz', 'range');

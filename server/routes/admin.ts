@@ -1015,6 +1015,9 @@ function sameSetting(a: unknown, b: unknown): boolean {
   return canonical(a) === canonical(b);
 }
 
+/** Yalnız patronun değiştirebildiği ayarlar (mali ve defter sonucu) */
+const PATRON_SETTINGS = ['branchId', 'zNoStart', 'autoDayEnd', 'demoMode'] as const;
+
 adminRoutes.put('/settings', async (c) => {
   const user = c.get('user');
   requirePermission(user, 'ayar.yonet');
@@ -1028,6 +1031,15 @@ adminRoutes.put('/settings', async (c) => {
   if ((warn !== prev.kitchenWarnMinutes || alarm !== prev.kitchenAlarmMinutes) && alarm <= warn) throw new HttpError(422, 'Bar fişi alarmı uyarıdan uzun olmalı', 'kitchen_alarm');
   // Gerçek kullanım başladıktan sonra kurulum modu (örnek PIN'ler) geri açılmaz: örnek PIN'li hesaplar kapandı
   if (input.demoMode === true && !prev.demoMode && prev.liveSince != null) throw new HttpError(422, 'Gerçek kullanım başladı: kurulum modu yeniden açılmaz', 'live');
+  // Mali ve defter sonucunu değiştiren ayarlar yalnız patronda: şube kimliği (yanlışı lafmaliyet'te 409 wrong_branch,
+  // günler birikir), ilk Z numarası, otomatik gün sonu, kurulum modu. Değişmeyen değeri yeniden göndermek serbest
+  // (bütün formu gönderen kayıt müdürde de çalışır)
+  const was0 = prev as unknown as Record<string, unknown>;
+  const sent0 = input as Record<string, unknown>;
+  const patronChanged = PATRON_SETTINGS.filter((k) => sent0[k] !== undefined && !sameSetting(sent0[k], was0[k]));
+  if (patronChanged.length && user.role !== 'patron') {
+    throw new HttpError(403, `${patronChanged.map(settingLabel).join(', ')} yalnız patron değiştirir`, 'patron_only');
+  }
   const before = serviceModeOf(prev);
   const zFrom = prev.zNoStart;
   // İlk Z numarası yalnız değiştiyse denetlenir ve kayda düşer (aynı değeri yeniden göndermek değişiklik değil)
@@ -1055,6 +1067,20 @@ adminRoutes.put('/settings', async (c) => {
         entityId: 'serviceMode',
         message: `${user.name} servis modunu değiştirdi: ${SERVICE_MODE_LABEL[before]} → ${SERVICE_MODE_LABEL[input.serviceMode]}`,
         data: { from: before, to: input.serviceMode },
+      });
+    }
+    // Patron ayarları (ilk Z numarası aşağıda kendi kaydına düşer): eski → yeni, önemli kayıt
+    for (const k of patronChanged) {
+      if (k === 'zNoStart') continue;
+      const show = (v: unknown) => (v === true ? 'açık' : v === false ? 'kapalı' : v == null || v === '' ? 'boş' : String(v));
+      fx.audit(t, {
+        userId: user.id,
+        action: `settings.${k}`,
+        severity: 'uyari',
+        entity: 'settings',
+        entityId: k,
+        message: `${user.name} ${settingLabel(k)} ayarını değiştirdi: ${show(was0[k])} → ${show(sent0[k])}`,
+        data: { from: was0[k] ?? null, to: sent0[k] ?? null },
       });
     }
     if (zChanged) {
