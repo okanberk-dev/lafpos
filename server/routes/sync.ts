@@ -221,7 +221,9 @@ syncRoutes.post('/online/:orderId/stage', async (c) => {
 
 /**
  * Tükendi / Satışa aç: kasiyer de yapabilir (müşteri beklerken menü yöneticisi aranmasın). Sitenin kapattığını
- * yalnız menü yetkisi olan açar (Tükendi kilidi, `products.soldOutBy`)
+ * yalnız menü yetkisi olan açar (Tükendi kilidi, `products.soldOutBy`). İnternet yokken de çalışır: yerelde hemen
+ * geçerli, siteye giden kutusundan gider (`site: 'kuyrukta'`, `neden: 'internet' | 'site'`); sitenin açık reddi (4xx)
+ * 502, hiçbir şey değişmez
  */
 syncRoutes.post('/products/:id/availability', async (c) => {
   const user = c.get('user');

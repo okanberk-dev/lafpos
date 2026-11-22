@@ -13,7 +13,8 @@ interface InternetInfo {
 
 /**
  * Durum alanının internet rozeti (server/sync/catch-up.ts): kasa internetsiz de satar, rozet yalnız dışarı gidecek
- * kayıt beklerken görünür ("İnternet yok · 3 kayıt bekliyor"), internet dönüp hepsi gidince yarım saat "Bekleyenler
+ * kayıt beklerken görünür ("İnternet yok · 3 kayıt bekliyor"; gün sonu, internetsiz basılan Tükendi / Satışa aç gibi
+ * giden kutusundaki her yazım bir kayıt), internet dönüp hepsi gidince yarım saat "Bekleyenler
  * gönderildi" der. Dış bağlantı kurulmamış kasada ve her şey yolundayken hiçbir şey çizilmez. Canlı akışın `sync`
  * olayı sorguyu yeniler; ayrıca dakikada bir. `compact`: telefonun üst şeridi (ikon ve sayı, tam metin ipucunda)
  */

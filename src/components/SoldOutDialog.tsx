@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { PackageSearch } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { type AvailabilityResultDTO, availabilityNotice } from '@shared/tukendi';
 import { errorMessage, post } from '@/lib/api';
 import { useCan } from '@/lib/auth';
 import { useBoot } from '@/lib/boot';
@@ -15,7 +16,8 @@ type Tab = 'urun' | 'secenek';
 
 /**
  * Kasadan ve bardan "tükendi" (ModPOS "Ürünü Satışa Kapatma" yetkisi gibi, `urun.tukendi`). Siteden gelen ürün
- * sitede ve uygulamada da tükenir; tükenenler listenin başında. Sitenin kapattığı ürünü ("Sitede satışta değil")
+ * sitede ve uygulamada da tükenir; internet yokken kasada hemen geçerli olur, site internet gelince güncellenir
+ * (shared/tukendi.ts); tükenenler listenin başında. Sitenin kapattığı ürünü ("Sitede satışta değil")
  * yalnız menü yetkisi olan açar: kasiyerde düğmesi yok, sunucu da reddeder. Seçenekler sekmesi (yulaf sütü bitti)
  * yalnız LafPOS'ta değişir: seçenek penceresinde gri görünür, kasa satışı almaz.
  */
@@ -56,8 +58,10 @@ export function SoldOutDialog({ open, onClose }: { open: boolean; onClose: () =>
   const set = async (id: string, name: string, active: boolean) => {
     setBusy(id);
     try {
-      const r = await post<{ site: string }>(`/sync/products/${id}/availability`, { active });
-      toast.ok(`${name} ${active ? 'satışa açıldı' : 'tükendi'}${r.site === 'guncellendi' ? '; site ve uygulama da güncellendi' : r.site === 'kuyrukta' ? '; internet gelince siteye yazılacak' : ''}`);
+      const r = await post<AvailabilityResultDTO>(`/sync/products/${id}/availability`, { active });
+      // İnternet yoksa uyarı tonunda: "İnternet yok: kasada uygulandı, site internet gelince güncellenecek"
+      const notice = availabilityNotice(name, active, r);
+      toast[notice.tone](notice.text);
       await qc.invalidateQueries({ queryKey: ['bootstrap'] });
     } catch (e) {
       toast.err(errorMessage(e));

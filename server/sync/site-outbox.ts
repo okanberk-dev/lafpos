@@ -11,8 +11,10 @@ import { siteBranch, siteSigned } from './laffogato-link';
  * kutusunda bekler (`outbox`: target 'laffogato', kind 'menu.isActive', tekil anahtar `menu:<extId>`, son istenen
  * durum): son porsiyonu satılan ürün sitede de Tükendi olur, hazırlanmadan iptal edilen kalemle porsiyonu geri dönen
  * ürün sitede yeniden satışa açılır. İnternet yokken satış durmaz, gönderilemeyen yazım kaybolmaz, artan beklemeyle
- * yeniden denenir. Ürün bu arada başka yoldan açılır ya da kapanırsa kayıt düşer. Elle "Tükendi / Satışa aç" ve
- * porsiyon doldurma beklemez, doğrudan yazar; hepsi ve menü eşitlemesi aynı kilitle sıralanır.
+ * yeniden denenir. Ürün bu arada başka yoldan açılır ya da kapanırsa kayıt düşer. Elle "Tükendi / Satışa aç" önce
+ * doğrudan yazar; siteye ulaşılamazsa (internet yok ya da site 5xx/429) yerelde hemen geçerli olur ve yazımı da buraya
+ * girer (kimin bastığıyla; aynı ürünün bekleyeninin yerini alır), internet gelince gider (server/sync/catch-up.ts).
+ * Porsiyon doldurma doğrudan yazar. Hepsi ve menü eşitlemesi aynı kilitle sıralanır.
  */
 
 const keyOf = (extId: string) => `menu:${extId}`;
@@ -80,8 +82,9 @@ export function withSiteMenuLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Porsiyon sayacının değiştirdiği Satışta bilgisini giden kutusuna koyar; çağıranın işleminde (adisyon kalemiyle tek
- * işlem). Aynı ürünün bekleyen yazımının yerini alır: siteye son durum gider.
+ * Porsiyon sayacının ya da internet yokken elle Tükendi / Satışa aç'ın değiştirdiği Satışta bilgisini giden kutusuna
+ * koyar; çağıranın işleminde (adisyon kalemiyle ya da ürünün yazımıyla tek işlem). Aynı ürünün bekleyen yazımının
+ * yerini alır: siteye yalnız son istenen durum gider. Yeni kayıt sona girer: kutu kayıt sırasıyla gönderilir.
  */
 export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | null; extId: string | null }, active: boolean, actor = 'LafPOS porsiyon'): boolean {
   if (!siteSigned() || p.extSource !== 'laffogato' || !p.extId) return false;
@@ -97,7 +100,10 @@ export function enqueueSiteAvailability(t: Tx | DB, p: { extSource: string | nul
 /** Porsiyonu biten siteye bağlı ürünün Tükendi'si */
 export const enqueueSiteSoldOut = (t: Tx | DB, p: { extSource: string | null; extId: string | null }) => enqueueSiteAvailability(t, p, false);
 
-/** Ürünün Satışta bilgisi siteye doğrudan yazıldı (yönetici açtı, porsiyon dolduruldu): bekleyen yazımı düşer */
+/**
+ * Ürünün Satışta bilgisi siteye doğrudan yazıldı (elle Tükendi ya da Satışa aç, porsiyon dolduruldu): aynı ürünün
+ * bekleyen yazımı (hangi yönde olursa olsun) eskidi, düşer
+ */
 export function dropSiteSoldOut(t: Tx | DB, extId: string | null) {
   if (!extId) return;
   t.delete(schema.outbox).where(and(eq(schema.outbox.target, 'laffogato'), eq(schema.outbox.dedupeKey, keyOf(extId)), isNull(schema.outbox.sentAt))).run();
