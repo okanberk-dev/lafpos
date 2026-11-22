@@ -453,8 +453,14 @@ function cancelledResult(res: PavoResponse | null): FiscalResult {
 /** Sonucu sipariş no ile sorar */
 async function ask(c: PavoClient, receiptId: string, orderNo: string): Promise<PollOutcome> {
   lastAsked.set(receiptId, Date.now());
-  const reading = readSale(await c.saleResult(orderNo));
+  const res = await c.saleResult(orderNo);
+  const reading = readSale(res);
   if (reading.kind === 'paid' || reading.kind === 'cancelled') return { kind: 'result', result: reading.result };
+  // Cihaz bu satışla meşgul değilken "satış yok / başarısız" diyorsa (kart reddedildi, satış cihazdan düştü) satış
+  // bitmiştir: sepet vazgeçildi sayılır, ödeme penceresi yeniden göndermeye hazır olur. Sahada (22 Kas 2026) kart reddinden
+  // sonra sepet "Cihazda ödeme bekleniyor"da kalıyor, kasiyer elle iptal edip yeniden gönderiyordu. Belge kesilmişse yanıt
+  // "ödendi" okunur (yukarıda); ağ hatası buraya gelmez (istek fırlatır, sepet bekler)
+  if (reading.kind === 'failed' && c.busyWith !== orderNo) return { kind: 'result', result: cancelledResult(res) };
   return { kind: 'pending', locked: false, lockedBy: null };
 }
 
