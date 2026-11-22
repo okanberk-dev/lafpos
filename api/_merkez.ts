@@ -25,6 +25,7 @@
  */
 import { createHash } from 'node:crypto';
 import { type LicenseRecord, licenseState, normalizeBranchCode, ONLINE_MS, UPDATE_LABELS, updateLabel } from '../shared/lisans.js';
+import { HISTORY_FLAG_HASH, type HistoryStore, historyFlag, historyKey, parseHistory } from '../shared/gecmis.js';
 import { NABIZ_KONTROL_PAYI, nabizAnahtarlari, nabizKontrol } from './_kontrol.js';
 
 export interface Install {
@@ -353,7 +354,7 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
     return json({ kurulumlar: rows.map((i) => installView(i, release, now)), enYeni: release });
   }
 
-  if (req.method === 'POST' && (path === 'merkez/kurulum' || path === 'merkez/gonder' || path === 'merkez/simdi-guncelle' || path === 'merkez/sil')) {
+  if (req.method === 'POST' && (path === 'merkez/kurulum' || path === 'merkez/gonder' || path === 'merkez/simdi-guncelle' || path === 'merkez/sil' || path === 'merkez/gecmis')) {
     if (deps.demo) return fail(403, 'Örnek görünümde değişiklik yapılmaz', 'remote_readonly');
     const denied = await gate(deps);
     if (denied) return denied;
@@ -374,6 +375,24 @@ export async function merkez(req: Request, url: URL, path: string, deps: MerkezD
       await deps.redis('SREM', SET_KEY, id);
       await deps.redis('SREM', PENDING_KEY, id);
       return json({ ok: true });
+    }
+
+    // Geçmiş ciro (shared/gecmis.ts): dükkânın LafPOS'tan önceki kasa programında kalan günleri. Bulutta ayrı anahtarda
+    // durur, kasaya gitmez; boş liste kaydı siler. Uzaktan'ın kıyasları ve raporları o günleri de görür
+    if (path === 'merkez/gecmis') {
+      const id = String(body.id ?? '');
+      if (!ID_RE.test(id) || !(await readInstall(deps, id))) return fail(404, 'Kurulum bulunamadı', 'not_found');
+      const days = parseHistory(body.gunler);
+      if (typeof days === 'string') return fail(400, days, 'bad_body');
+      if (!days.length) {
+        await deps.redis('DEL', historyKey(id));
+        await deps.redis('HDEL', HISTORY_FLAG_HASH, historyFlag(id));
+        return json({ ok: true, gun: 0, ciro: 0 });
+      }
+      const store: HistoryStore = { v: 1, kaynak: text(body.kaynak, 40) || 'Önceki kasa programı', at: Date.now(), gunler: days };
+      await deps.redis('SET', historyKey(id), JSON.stringify(store));
+      await deps.redis('HSET', HISTORY_FLAG_HASH, historyFlag(id), String(store.at));
+      return json({ ok: true, gun: days.length, ciro: days.reduce((a, d) => a + d.ciro, 0), ilk: days[0]!.date, son: days[days.length - 1]!.date });
     }
 
     if (path === 'merkez/kurulum') {
