@@ -375,6 +375,7 @@ try {
   Kisayol (Join-Path $menu 'LafPOS ayarları.lnk') $ps ($yonet + 'ayarlar') 'Site, lafmaliyet ve yazarkasa ayarları' 7
   Kisayol (Join-Path $menu 'Sunucuyu yeniden başlat.lnk') $ps ($yonet + 'yeniden-baslat') '' 7
   Kisayol (Join-Path $menu 'Sunucu günlüğü.lnk') $ps ($yonet + 'gunluk') '' 7
+  Kisayol (Join-Path $menu 'Kasa hazırlığı.lnk') $ps ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + (Join-Path $Kur 'app\kasa-hazirla.ps1') + '"') 'Ekran, Windows Update, ağ kartı, otomatik oturum' 7
   Kisayol (Join-Path $menu 'Kurulum notları.lnk') (Join-Path $Kur 'BENIOKU.txt') '' '' 1
   $kaldirExe = Join-Path $Kur 'Kaldir.exe'
   $kaldirPs = Join-Path $Kur 'LafPOS-Kaldir.ps1'

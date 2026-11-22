@@ -72,6 +72,30 @@ if ($Bekci) {
   }
 }
 
+# Kasa hazirligi kisayolu (Baslat > LafPOS > Kasa hazirligi) ve eski kasa programi uyarisi (haftada en cok bir kez)
+try {
+  $hazirla = Join-Path $PSScriptRoot 'kasa-hazirla.ps1'
+  if (Test-Path $hazirla) {
+    $menu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\LafPOS'
+    $lnk = Join-Path $menu 'Kasa hazirligi.lnk'
+    if (-not (Test-Path $lnk)) {
+      if (-not (Test-Path $menu)) { New-Item -ItemType Directory -Path $menu -Force | Out-Null }
+      $sh = New-Object -ComObject WScript.Shell
+      $s = $sh.CreateShortcut($lnk)
+      $s.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+      $s.Arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $hazirla + '"'
+      $s.Description = 'Bilgisayar acilinca her sey kendiliginden calissin: ekran, Windows Update, ag karti, otomatik oturum'
+      $s.Save()
+    }
+    $isaret = Join-Path $env:LOCALAPPDATA 'LafPOS\modpos-uyari.txt'
+    $son = if (Test-Path $isaret) { (Get-Item $isaret).LastWriteTime } else { [datetime]::MinValue }
+    if (((Get-Date) - $son).TotalDays -ge 7) {
+      New-Item -ItemType File -Path $isaret -Force | Out-Null
+      Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', ('"' + $hazirla + '"'), '-SadeceModpos') | Out-Null
+    }
+  }
+} catch { }
+
 try {
   Stop-TemporaryDisplayWatcher
   Start-CustomerDisplay $displayBase
