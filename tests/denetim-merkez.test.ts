@@ -305,3 +305,50 @@ describe('son denetim: gönderilen güncelleme geçişte kaybolmaz', () => {
     expect(installView({ ...base, mod: 'otomatik', hedef: null, build: 63, kesinHedef: true }, rel(86), Date.now()).bekleyen).toBe(false);
   });
 });
+
+describe('#71 dönemindeki kasa (rastgele kimlik, tek anahtardaki kayıt, eski nabız gövdesi)', () => {
+  // Eski kasa: kimlik anahtarın özeti değil, kayıt imzasız açılmış; nabızda `kesinHedef` ve `istekAlindi` yok
+  const ID = '0123456789abcdef01234567';
+  const KEY = 'k'.repeat(43);
+  const seed = (extra: object) => {
+    store.set(
+      `lafpos:merkez:kurulum:${ID}`,
+      JSON.stringify({ id: ID, key: KEY, ad: 'Marina', kod: 'MRN', createdAt: 1, lastSeen: 2, surum: '0.2.0', build: 1000, gunAcik: true, lisans: { durum: 'aktif' }, mod: 'elle', hedef: null, gonderildi: null, guncelleme: null, ...extra }),
+    );
+    sets.set('lafpos:merkez:kurulumlar', new Set([ID]));
+  };
+  const oldBeat = (key = KEY) => {
+    const body = JSON.stringify({ surum: '0.2.0', build: 1000, gunAcik: true, guncelleme: { durum: 'bekliyor', mesaj: 'Yeni sürüm hazır; gün sonundan sonra kendiliğinden kurulacak', yeni: { surum: '0.2.0', build: 1500 } } });
+    return call('POST', 'merkez/nabiz', { body, headers: { 'x-laf-kurulum': ID, ...signedHeaders(key, 'POST', new URL(`${ORIGIN}/api/merkez/nabiz`), body) } });
+  };
+
+  it('nabız 200 döner, lisans ve şube aynen; gönderilen derleme kanaldan düştüyse hedef kanalın son derlemesi', async () => {
+    // Sahip 1500'ü gönderdi, kanal 2000'e ilerledi: eski kasa hedefi üst sınır sayar, 2000'i kurabilmeli
+    seed({ hedef: 1500, gonderildi: 5 });
+    const res = await oldBeat();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, ad: 'Marina', kod: 'MRN', lisans: { durum: 'aktif' }, mod: 'elle', hedef: 2000 });
+    // Panelin kaydı yerinde; nabzın alanları ayrı anahtarda ve eski kasa `kesinHedef` taşımıyor
+    expect(JSON.parse(store.get(`lafpos:merkez:kurulum:${ID}`)!)).toMatchObject({ key: KEY, hedef: 1500, lisans: { durum: 'aktif' } });
+    expect(JSON.parse(store.get(`lafpos:merkez:durum:${ID}`)!)).toMatchObject({ build: 1000, gunAcik: true, kesinHedef: false, guncelleme: { durum: 'bekliyor', yeni: { build: 1500 } } });
+    // Sonraki nabızlar da aynı yanıtı alır (ayrı anahtardan birleşen kayıtla)
+    expect(await (await oldBeat()).json()).toMatchObject({ ok: true, hedef: 2000 });
+  });
+
+  it('kanalın son derlemesi gönderildiyse hedef o; hiç gönderilmediyse kurulu kalır; yanlış anahtar 401', async () => {
+    seed({ hedef: 2000, gonderildi: 5 });
+    expect(await (await oldBeat()).json()).toMatchObject({ ok: true, hedef: 2000 });
+    seed({ hedef: null });
+    store.delete(`lafpos:merkez:durum:${ID}`);
+    expect(await (await oldBeat()).json()).toMatchObject({ ok: true, hedef: null });
+    expect((await oldBeat('y'.repeat(43))).status).toBe(401);
+  });
+
+  it('panelde çevrimiçi ve "Gün kapanınca kurulacak" görünür', async () => {
+    seed({ hedef: 1500, gonderildi: 5 });
+    await oldBeat();
+    const list = (await (await call('GET', 'merkez/kurulumlar', { token: await adminToken() })).json()) as { kurulumlar: { id: string; online: boolean; guncelleme: { etiket: string } | null; bekleyen: boolean }[] };
+    expect(list.kurulumlar).toHaveLength(1);
+    expect(list.kurulumlar[0]).toMatchObject({ id: ID, online: true, bekleyen: false, guncelleme: { etiket: 'Gün kapanınca kurulacak' } });
+  });
+});
